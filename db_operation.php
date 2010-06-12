@@ -66,6 +66,9 @@ class db_access {
     return ( $table_exist );
   } // function table_exist
 
+/******************************************************************************\
+  Funktion create_user_table ($tablename)
+\******************************************************************************/
 
   function create_user_table ($tablename) {
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
@@ -73,13 +76,12 @@ class db_access {
 
     $db_check = mysql_select_db ($this->db_name)
        or die ("[read_table] Auswahl der Datenbank fehlgeschlagen");
-
+     // gelesen
     $query = "CREATE TABLE IF NOT EXISTS ".$tablename."_read (
-        `lfd` bigint(20) unsigned NOT NULL auto_increment,
-        `zeit` timestamp NOT NULL default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP,
-        `nachnum` bigint(20) NOT NULL,
-        `gelesen` datetime NOT NULL default '0000-00-00 00:00:00',
-        `kategorie` tinyint(1) NULL,
+        `lfd` bigint(20) unsigned NOT NULL auto_increment COMMENT 'Laufende Nummer',
+        `zeit` timestamp NOT NULL default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP COMMENT 'Zeitpunkt der letzte Änderung',
+        `nachnum` bigint(20) NOT NULL COMMENT 'Fremdschlüssel der Erledigten Nachricht',
+        `gelesen` datetime NOT NULL default '0000-00-00 00:00:00' COMMENT 'Zeitpunkt wann die Nachricht gelesen wurde',
         PRIMARY KEY  (`lfd`)
       ) ENGINE=MyISAM DEFAULT CHARSET=latin1 AUTO_INCREMENT=1 ;";
 
@@ -87,15 +89,36 @@ class db_access {
     if (!$result) {
        die('Ungueltige Abfrage: ' . mysql_error());
     }
-
+     // erledigt
     $query = "CREATE TABLE IF NOT EXISTS ".$tablename."_erl (
-        `lfd` bigint(20) unsigned NOT NULL auto_increment,
-        `zeit` timestamp NOT NULL default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP,
-        `nachnum` bigint(20) NOT NULL,
-        `gelesen` datetime NOT NULL default '0000-00-00 00:00:00',
-        `kategorie` tinyint(1) NULL,
+        `lfd` bigint(20) unsigned NOT NULL auto_increment COMMENT 'Laufende Nummer',
+        `zeit` timestamp NOT NULL default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP COMMENT 'Zeitpunkt der letzte Änderung',
+        `nachnum` bigint(20) NOT NULL COMMENT 'Fremdschlüssel der Erledigten Nachricht',
+        `erledigt` datetime NOT NULL default '0000-00-00 00:00:00' COMMENT 'Zeitpunkt wann die Nachricht gelesen wurde',
         PRIMARY KEY  (`lfd`)
       ) ENGINE=MyISAM DEFAULT CHARSET=latin1 AUTO_INCREMENT=1 ;";
+
+    $result = mysql_query($query);
+    if (!$result) {
+       die('Ungueltige Abfrage: ' . mysql_error());
+    }
+     // Kategorien
+    $query = "CREATE TABLE IF NOT EXISTS ".$tablename."_katego (
+        `lfd` bigint(20) unsigned NOT NULL auto_increment COMMENT 'Laufende Nummer',
+        `kategorie` varchar(10) NOT NULL COMMENT 'Benutzer definierte Kategorien',
+        `beschreibung` varchar (254) NULL COMMENT 'Beschreibung zur Kategorie',
+        PRIMARY KEY  (`lfd`)
+      ) ENGINE=MyISAM DEFAULT CHARSET=latin1 AUTO_INCREMENT=1 ;";
+
+    $result = mysql_query($query);
+    if (!$result) {
+       die('Ungueltige Abfrage: ' . mysql_error());
+    }
+     // Zuordnung Kategorien <--> Meldung
+    $query = "CREATE TABLE IF NOT EXISTS ".$tablename."_kategolink (
+             `msg` bigint(20) NOT NULL,
+          `katego` bigint(20) NOT NULL
+           ) ENGINE=MyISAM DEFAULT CHARSET=latin1 ;";
 
     $result = mysql_query($query);
     if (!$result) {

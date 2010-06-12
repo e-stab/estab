@@ -4,9 +4,11 @@
 \******************************************************************************/ 
 $conf_4f_db ["server"]        = "localhost"; 
 $conf_4f_db ["user"]          = "root"; 
-$conf_4f_db ["password"]      = ""; 
+$conf_4f_db ["password"]      = "bastian"; 
 $conf_4f_tbl ["prefix"]       = "nv_" ; 
 $conf_4f_tbl ["benutzer"]     = "nv_benutzer"; 
+$conf_4f_tbl ["masterkatego"] = "nv_masterkatego"; 
+$conf_4f_tbl ["masterkategolk"] = "nv_masterkategolink"; 
 $conf_4f_tbl ["nachrichten"]  = "nv_nachrichten"; 
 $conf_4f_tbl ["protokoll"]    = "nv_protokoll"; 
 $conf_4f_tbl ["anhang"]       = "nv_anhang"; 

@@ -10,18 +10,23 @@
    (C) Hajo Landmesser IuK Kreis Heinsberg
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
-                              
-include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
+
+include ("../dbcfg.inc.php");
+include ("../e_cfg.inc.php");
 include ("../para.inc.php");
 
   function pre_html ($art, $titel, $cssstr){
     include ("../para.inc.php");
-       echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
-       echo "<html>\n";
-       echo "<head>\n";
-       echo "<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=iso\">";
+    echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
+    echo "<html>\n";
+    echo "<head>\n";
+    echo "<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=iso\">\n";
    switch ($art){
      case "N":
+        echo"<script type=\"text/javascript\">";
+        echo "function FensterOeffnen (Adresse) {MeinFenster = window.open(Adresse, \"Zweitfenster\", \"width=500,height=400,left=100,top=100,menubar=no,location=no,resizable=no,status=no,toolbar=no\");  MeinFenster.focus();}";
+        echo "</script>";
+
      break;
      case "status":
        echo "<meta http-equiv=\"pragma\" content=\"no cache\">\n";
@@ -49,7 +54,7 @@ include ("../para.inc.php");
        echo "<meta http-equiv=\"refresh\" content=\"".$cfg ["itv"] ["si2liste"]."\">\n";
      break;
      default:
-echo "<big><big><big>DEFAULT PRE_HTML !!!</big></big></big><br>";
+       echo "<big><big><big>DEFAULT PRE_HTML !!!</big></big></big><br>";
        echo "<meta http-equiv=\"pragma\" content=\"no cache\">\n";
      break;
    }//switch
@@ -60,9 +65,13 @@ echo "<big><big><big>DEFAULT PRE_HTML !!!</big></big></big><br>";
    echo "</head>\n";
   }
 
+  /****************************************************************************\
+  | Umwandlung von $datum -->
+  | Formateingang: TTMM
+  |                JJJJ -> aktuelle Systemjahr
+  | Formatausgang: JJJJ-MM-TT
+  \****************************************************************************/
   function convtodate ($datum){
-    /* Datum ~= TTMM, Zeit == ~= HHMM */
-  //  echo "Datum=".$datum."  Zeit=".$zeit."<br>";
     $tag    = substr ($datum, 0, 2);
     $monat  = substr ($datum, 2, 2);
     $jahr   = date ("Y");
@@ -70,6 +79,11 @@ echo "<big><big><big>DEFAULT PRE_HTML !!!</big></big></big><br>";
     return $date ;
   }
 
+  /****************************************************************************\
+  | Umwandlung von $zeit
+  | Formateingang: hhmm
+  | Formatausgang: hh:mm
+  \****************************************************************************/
   function convtotime ($zeit){
     /* Datum ~= TTMM, Zeit == ~= HHMM */
   //  echo "Datum=".$datum."  Zeit=".$zeit."<br>";
@@ -79,9 +93,13 @@ echo "<big><big><big>DEFAULT PRE_HTML !!!</big></big></big><br>";
     return $time;
   }
 
+  /****************************************************************************\
+  | Umwandlung von $datum und $zeit
+  | Formateingang: Datum TTMM
+  |                Zeit  hhmm
+  | Formatausgang: YYYY-MM-TT hh:mm:00
+  \****************************************************************************/
   function convtodatetime ($datum, $zeit){
-    /* Datum ~= TTMM, Zeit == ~= HHMM */
-  //  echo "Datum=".$datum."  Zeit=".$zeit."<br>";
     $tag    = substr ($datum, 0, 2);
     $monat  = substr ($datum, 2, 2);
     $stunde = substr ($zeit, 0, 2);
@@ -94,6 +112,10 @@ echo "<big><big><big>DEFAULT PRE_HTML !!!</big></big></big><br>";
   /****************************************************************************\
   | Umwandlung von Datum und Zeit ==> Datetimeformat
   | Formateingang: YYYY-MM-TT HH:mm:ss
+  | Formatausgang:
+  |       arr.datum = TTMM
+  |       arr.zeit  = hhmm
+  |       arr.stak  = TThhmm
   \****************************************************************************/
   function convdatetimeto ($datetime){
     list ($datum, $zeit) = explode (" ",$datetime);
@@ -105,19 +127,135 @@ echo "<big><big><big>DEFAULT PRE_HTML !!!</big></big></big><br>";
     return $arr;
   }
 
-
+  /****************************************************************************\
+  | Umwandlung von datetime ->
+  | Formateingang: YYYY-MM-TT hh:mm:ss
+  | Formatausgang:
+  |       arr.datum =  YYYY-MM-TT
+  |       arr.zeit  =  hh:mm:ss
+  \****************************************************************************/
   function convdbdatetimeto ($datetime){
     list ($datum, $zeit) = explode (" ",$datetime);
-    list ($jahr, $monat, $tag) = explode ("-", $datum);
-    list ($stunde, $minute, $sekunde) = explode (":", $zeit);
+    //list ($jahr, $monat, $tag) = explode ("-", $datum);
+    //list ($stunde, $minute, $sekunde) = explode (":", $zeit);
     $arr [datum] = $datum;
     $arr [zeit]  = $zeit;
     return $arr;
   }
 
+  /****************************************************************************\
+  | Umwandlung von conv_time_datetime ->
+  | Formateinausgang:
+  |       arr.datum =  TThhmmMMMjjjj
+  |       arr.zeit  =  TThhmm
+  |       arr.zeit  =  hhmm
+  | Formatausgang: YYYY-MM-TT hh:mm:ss
+  \****************************************************************************/
+  function conv_time_datetime($data){
+    $tak_monate = array (
+         "01" => 'jan',
+         "02" => 'feb',
+         "03" => 'mar',
+         "04" => 'apr',
+         "05" => 'mai',
+         "06" => 'jun',
+         "07" => 'jul',
+         "08" => 'aug',
+         "09" => 'sep',
+         "10" => 'oct',
+         "11" => 'nov',
+         "12" => 'dec' );
+    $rew_tak_monate = array (
+         "jan" => '01',
+         "feb" => '02',
+         "mar" => '03',
+         "apr" => '04',
+         "mai" => '05',
+         "may" => '05',
+         "jun" => '06',
+         "jul" => '07',
+         "aug" => '08',
+         "sep" => '09',
+         "okt" => '10',
+         "oct" => '10',
+         "nov" => '11',
+         "dez" => '12',
+         "dec" => '12' );
+
+    $laenge = strlen ($data);
+//echo "tools181 --- länge = ".$laenge." und time = ".$data."<br>";
+    switch ( $laenge ){
+      case 13:// TThhmmMMMJJJJ
+          $tag    = substr ($data, 0, 2);
+          $stunde = substr ($data, 2, 2);
+          $minute = substr ($data, 4, 2);
+          $monat  = substr ($data, 6, 3);
+          $jahr   = substr ($data, 9, 4);
+          $monat = $rew_tak_monate [$monat];
+
+//echo "<br>tag=".$tag."  stunde=".$stunde."  minute=".$minute."  monat=".$monat."  jahr=".$jahr."<br>";
+          if ( (($tag    >= 1) and ($tag    <= 31)) and
+               (($monat  >= 1) and ($monat  <= 12)) and
+               (($jahr   >= 2000) and ($jahr <= 9999)) and
+               (($minute >= 0) and ($minute <= 59)) and
+               (($stunde >= 0) and ($stunde <= 23)) ) {
+          $monat = $tak_monate [$monat];
+//echo "<br>tag=".$tag."  stunde=".$stunde."  minute=".$minute."  monat=".$monat."  jahr=".$jahr."<br>";
+            $data = $tag.$stunde.$minute.$monat.$jahr ;
+            $l_data = true ;
+          } else {
+            $l_data = false;
+          }
+      break;
+      case 6: // TThhmm
+          $tag    = substr ($data, 0, 2);
+          $stunde = substr ($data, 2, 2);
+          $minute = substr ($data, 4, 2);
+          $monat = $tak_monate [date ("m")];
+          $jahr = date ("Y");
+
+          if ( (($tag    >= 1) and ($tag    <= 31)) and
+//               (($monat  >= 1) and ($monat  <= 12)) and
+//               (($jahr   >= 2000) and ($jahr <= 9999) and
+               (($minute >= 0) and ($minute <= 59)) and
+               (($stunde >= 0) and ($stunde <= 23))) {
+            $data = $tag.$stunde.$minute.$monat.$jahr ;
+            $l_data = true ;
+          } else {
+            $data = $data;
+            $l_data = false;
+          }
+      break;
+      case 4: // hhmm
+          $stunde = substr ($data, 0, 2);
+          $minute = substr ($data, 2, 2);
+//          $monat = date("m");
+
+//echo "tools223 --- stunde  = "; var_dump ($stunde); echo "<br>";
+//echo "tools224 --- minute  = "; var_dump ($minute); echo "<br>";
+          if ( (($minute >= 0) and ($minute <= 59)) and
+               (($stunde >= 0) and ($stunde <= 23))) {
+            $tag   = date ("d");
+            $monat = $tak_monate [date ("m")];
+            $jahr  = date ("Y");
+            $data = $tag.$stunde.$minute.$monat.$jahr ;
+            $l_data = true ;
+          } else {
+            $l_data = false;
+          }
+      break;
+      default: $l_data = false;
+    }
+    $back = array ("l_data" => $l_data, "data" => $data);
+// echo "tools240 --- data = "; var_dump ( $back ); echo "<br>";
+    return ( $back );
+  } //conv_time_datetime
+
+
 
   function getoutqueuecount (){
-    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
+    include ("../dbcfg.inc.php");
+    include ("../e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
     $query = "SELECT count(*) FROM `".$conf_4f_tbl ["nachrichten"]."` WHERE ((`04_richtung` = \"A\") AND
                                                   (`03_datum` = 0) AND
@@ -128,7 +266,8 @@ echo "<big><big><big>DEFAULT PRE_HTML !!!</big></big></big><br>";
 
   function getviewerqueuecount (){
 //    include ("../config.inc.php");
-    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
+    include ("../dbcfg.inc.php");
+    include ("../e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
     $query = "SELECT count(*) FROM `".$conf_4f_tbl ["nachrichten"]."`
               WHERE ( (  `15_quitdatum`    = 0 ) AND
@@ -149,7 +288,6 @@ echo "<big><big><big>DEFAULT PRE_HTML !!!</big></big></big><br>";
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
     $query = "SELECT count(*) FROM `".$conf_4f_tbl ["nachrichten"]."`
               WHERE ( `16_empf` like '%".$_SESSION ["vStab_funktion"]."%' ) ;";
-
     $result = $dbaccess->query_table_wert ($query);
     $gesamtmeldungen = $result[0];
 
@@ -422,7 +560,7 @@ bersichtlich dargestellt werden.
       echo "<table style=\"text-align: left; background-color: rgb(150, 150, 150); height: 32px;\" border=\"3\" cellpadding=\"5\" cellspacing=\"5\">\n";
       echo "<tbody>\n";
       echo "<tr>";
-      echo "<td><b>Benutzer</b></td><td><b>Krzel</b></td><td><b>Rolle</b></td><td><b>Funktion</b></td>";
+      echo "<td><b>Benutzer</b></td><td><b>K&uuml;rzel</b></td><td><b>Rolle</b></td><td><b>Funktion</b></td>";
       echo "</tr>";
       foreach ($benutzer as $user){
         echo "<tr>";
@@ -546,14 +684,48 @@ bersichtlich dargestellt werden.
     return $fktcopycolor;
   }
 
+
+  /****************************************************************************\
+  | Umwandlung von conv_datetime_takzeit ->
+  | Formateinausgang:  YYYY-MM-TT hh:mm:ss
+  | Formatausgang   :  TThhmmMMYYYY
+  \****************************************************************************/
   function konv_datetime_taktime ($datetime){
     include ("../config.inc.php");
     // Datenbankzeit konvertiert in taktische Zeit
     // yyyy-MM-tt hh:mm:ss ==> tthhmmMMMyyyy
-    list ($datum, $zeit) = explode (" ",$datetime);
-    list ($yyyy, $MM, $tt) = explode ("-", $datum);
-    list ($hh, $mm, $ss) = explode (":", $zeit);
-    return ($tt.$hh.$mm.$tak_monate[$MM].$yyyy);
+    if (strlen ($datetime) == 19 ){
+      list ($datum, $zeit) = explode (" ",$datetime);
+      list ($yyyy, $MM, $tt) = explode ("-", $datum);
+      list ($hh, $mm, $ss) = explode (":", $zeit);
+      return ($tt.$hh.$mm.$tak_monate[$MM].$yyyy);
+    } else {
+      return ("");
+    }
   }
+
+
+  /****************************************************************************\
+  | Umwandlung von Taktischerzeit nach Datetime
+  | Formateinausgang:  YYYY-MM-TT hh:mm:ss
+  | Formatausgang   :  TThhmmMMYYYY
+  \****************************************************************************/
+  function konv_taktime_datetime ($taktime){
+    include ("../config.inc.php");
+    // taktische Zeit konvertiert in Datenbankzeit
+    // yyyy-MM-tt hh:mm:ss ==> tthhmmMMMyyyy
+    if (strlen ($taktime) == 13){
+      $tag    = substr ($taktime, 0, 2);
+      $stunde = substr ($taktime, 2, 2);
+      $minute = substr ($taktime, 4, 2);
+      $monat  = substr ($taktime, 6, 3);
+      $jahr   = substr ($taktime, 9, 4);
+      $monat = $rew_tak_monate [$monat];
+      return ($jahr."-".$monat."-".$tag." ".$stunde.":".$minute.":00" );
+    } else {
+      return ("");
+    }
+  }
+
 
 ?>

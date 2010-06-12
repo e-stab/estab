@@ -134,7 +134,6 @@ class make_dbconf {
     $this->preconf ['tbl_pre']   = $conf_4f_tbl ["prefix"] ;
     $this->preconf ['anschrift'] = $conf_4f     ["anschrift"] ;
     $this->preconf ['hoheit']    = $conf_4f     ["hoheit"] ;
-
   }
 
 /****************************************************************************\
@@ -158,15 +157,18 @@ class make_dbconf {
 
     $fileline [3]  = "$"."conf_4f_tbl [\"prefix\"]       = \"".$values ['tbl_pre']."\" ; \r\n";
     $fileline [4]  = "$"."conf_4f_tbl [\"benutzer\"]     = \"".$values ['tbl_pre']."benutzer\"; \r\n";
-    $fileline [5]  = "$"."conf_4f_tbl [\"nachrichten\"]  = \"".$values ['tbl_pre']."nachrichten\"; \r\n";
-    $fileline [6]  = "$"."conf_4f_tbl [\"protokoll\"]    = \"".$values ['tbl_pre']."protokoll\"; \r\n";
-    $fileline [7]  = "$"."conf_4f_tbl [\"anhang\"]       = \"".$values ['tbl_pre']."anhang\"; \r\n";
-    $fileline [8]  = "$"."conf_4f_tbl [\"usrtblprefix\"] = \"usr_\"; \r\n";
-    $fileline [9] = "$"."conf_tbl    [\"bhp50\"]        = \"".$values ['tbl_pre']."bhp50\"; \r\n";
-    $fileline [10] = "$"."conf_tbl    [\"komplan\"]      = \"".$values ['tbl_pre']."komplan\"; \r\n";
-    $fileline [11] = "$"."conf_tbl    [\"etb\"]          = \"".$values ['tbl_pre']."etb\"; \r\n";
+    $fileline [5]  = "$"."conf_4f_tbl [\"masterkatego\"] = \"".$values ['tbl_pre']."masterkatego\"; \r\n";
+    $fileline [6]  = "$"."conf_4f_tbl [\"masterkategolk\"] = \"".$values ['tbl_pre']."masterkategolink\"; \r\n";
 
-    $fileline [12] = "$"."conf_tbl    [\"tbb\"]          = \"".$values ['tbl_pre']."tbb\"; \r\n";
+    $fileline [7]  = "$"."conf_4f_tbl [\"nachrichten\"]  = \"".$values ['tbl_pre']."nachrichten\"; \r\n";
+    $fileline [8]  = "$"."conf_4f_tbl [\"protokoll\"]    = \"".$values ['tbl_pre']."protokoll\"; \r\n";
+    $fileline [9]  = "$"."conf_4f_tbl [\"anhang\"]       = \"".$values ['tbl_pre']."anhang\"; \r\n";
+    $fileline [10]  = "$"."conf_4f_tbl [\"usrtblprefix\"] = \"usr_\"; \r\n";
+    $fileline [11] = "$"."conf_tbl    [\"bhp50\"]        = \"".$values ['tbl_pre']."bhp50\"; \r\n";
+    $fileline [12] = "$"."conf_tbl    [\"komplan\"]      = \"".$values ['tbl_pre']."komplan\"; \r\n";
+    $fileline [13] = "$"."conf_tbl    [\"etb\"]          = \"".$values ['tbl_pre']."etb\"; \r\n";
+
+    $fileline [14] = "$"."conf_tbl    [\"tbb\"]          = \"".$values ['tbl_pre']."tbb\"; \r\n";
 
 
 /*
@@ -552,24 +554,6 @@ class make_econf {
   }
 
 } //class  make_econf
-  switch ($_GET ["task"]){
-    case "datenbank"    : $titel = "DB-Parameter einstellen."; break;
-    case "einsatz_neu"  : $titel = "Einsatz anlegen."; break;
-    case "einsatz_ende" : $titel = "Einsatz abschliessen."; break;
-  }
-
-  echo "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0 Transitional//EN\">";
-  echo "<HTML>";
-  echo "<HEAD>";
-  echo "<META HTTP-EQUIV=\"CONTENT-TYPE\" CONTENT=\"text/html; charset=iso\">";
-  echo "<TITLE>".$titel."</TITLE>";
-  echo "<META NAME=\"GENERATOR\" CONTENT=\"OpenOffice.org 2.0  (Linux)\">";
-  echo "<META NAME=\"AUTHOR\" CONTENT=\"Hajo Landmesser\">";
-  echo "<META NAME=\"CREATED\" CONTENT=\"20070327;15421200\">";
-  echo "<META NAME=\"CHANGEDBY\" CONTENT=\"hajo\">";
-  echo "<META NAME=\"CHANGED\" CONTENT=\"20080612;18052200\">";
-  echo "</HEAD>";
-  echo "<BODY LANG=\"de-DE\">";
 
   set_time_limit ( 30 );
 
@@ -605,20 +589,41 @@ class make_econf {
   }
 
   if  ( $_GET ["task"] == "einsatz_neu" ) {
+//  echo "1-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!<br>";
     $e = new make_econf ($conf_4f_db, $conf_4f_tbl, $conf_tbl, $conf_4f);
-
+//  echo "2-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!<br>";
     if (isset($_GET["absenden_x"])) {
+//  echo "3-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!<br>";
       $e->write_efkt_file ($_GET);
+//  echo "4-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!<br>";
       header("Location: ".$conf_urlroot.$conf_web ["pre_path"]."/create_db.php");
     }
     if ( isset($_GET["abbrechen_x"]) ){
       header("Location: ".$conf_urlroot.$conf_web ["pre_path"]."/admin.php");
     }
-
+//  echo "5-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!<br>";
     $e->menue ();
-
-
   }
+
+  switch ($_GET ["task"]){
+    case "datenbank"    : $titel = "DB-Parameter einstellen."; break;
+    case "einsatz_neu"  : $titel = "Einsatz anlegen."; break;
+    case "einsatz_ende" : $titel = "Einsatz abschliessen."; break;
+  }
+
+  echo "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0 Transitional//EN\">";
+  echo "<HTML>";
+  echo "<HEAD>";
+  echo "<META HTTP-EQUIV=\"CONTENT-TYPE\" CONTENT=\"text/html; charset=iso\">";
+  echo "<TITLE>".$titel."</TITLE>";
+  echo "<META NAME=\"GENERATOR\" CONTENT=\"OpenOffice.org 2.0  (Linux)\">";
+  echo "<META NAME=\"AUTHOR\" CONTENT=\"Hajo Landmesser\">";
+  echo "<META NAME=\"CREATED\" CONTENT=\"20070327;15421200\">";
+  echo "<META NAME=\"CHANGEDBY\" CONTENT=\"hajo\">";
+  echo "<META NAME=\"CHANGED\" CONTENT=\"20080612;18052200\">";
+  echo "</HEAD>";
+  echo "<BODY LANG=\"de-DE\">";
+
 
   if  ( $_GET ["task"] == "einsatz_ende" ) {
     $e = new make_econf ($conf_4f_db, $conf_4f_tbl, $conf_tbl, $conf_4f);

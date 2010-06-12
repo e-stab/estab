@@ -23,6 +23,7 @@ class fileupload extends file_upload {
 
   function get_next_filename_from_db () {
     include ("../../dbcfg.inc.php");
+    include ("../../e_cfg.inc.php");
     include ("../../db_operation.php");
     $db = new db_access ($conf_4f_db  ["server"],
                          $conf_4f_db  ["datenbank"],
@@ -36,6 +37,7 @@ class fileupload extends file_upload {
 /*36*/
   function save_in_db ($data) {
     include ("../../dbcfg.inc.php");
+    include ("../../e_cfg.inc.php");
     include ("../../db_operation.php");
     include ("../protokoll.php");
     $db = new db_access ($conf_4f_db  ["server"],
@@ -90,6 +92,7 @@ class fileupload extends file_upload {
 
   function scan4nextfilename (){
     include ("../../config.inc.php");
+    include ("../../e_cfg.inc.php");
     include ("../../dbcfg.inc.php");
     $filenames = $this->readDirectory ( $conf_4f ["ablage_dir"] );
 
@@ -336,8 +339,16 @@ $status = $_SESSION ["UPLOAD"];
           $my_upload->the_file = $_FILES['upload']['name'];
 
             if ( debug == true ){ echo "003 name    =".$my_upload->the_file."<br>";}
+
           $my_upload->http_error = $_FILES['upload']['error'];
+
             if ( debug == true ){ echo "004 error   =".$my_upload->http_error."<br>";}
+            if ( debug == true ){ echo "004a _FILES ="; var_dump ($_FILES); echo"<br><br>";}
+
+          if ($my_upload->http_error != 0){
+            $errortxt = $my_upload->error_text($my_upload->http_error);
+            echo "<big><big><b>".$errortxt."</b></big></big>";
+          }
 
           $my_upload->replace = true ; //(isset($_POST['replace'])) ? $_POST['replace'] : "n"; // because only a checked checkboxes is true
 

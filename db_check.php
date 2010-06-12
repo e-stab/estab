@@ -226,6 +226,48 @@ $old_error_handler = set_error_handler("myErrorHandler");
   echo "</td>";
   echo "</tr>";
 
+  /******  Masterkategorie*******************************************************/
+  echo "<tr>";
+  echo "<td>";
+  echo "<big><big>Tabelle: <b>".$conf_4f_tbl ["masterkatego"]."</b></big></big>";
+  echo "</td><td>";
+  if (cmp_tablename ($tables, $conf_4f_tbl ["masterkatego"])) {
+    echo "<p><img src=\"".$conf_menue ["symbole"]."/greenlight.gif\" alt=\"keine Fehler\"></p>";
+  } else {
+    echo "<p><img src=\"".$conf_menue ["symbole"]."/redlight.gif\" alt=\"schwerer Fehler\"></p>";
+  }
+
+
+  echo "</td>";
+  echo "<td>";
+  echo "<big><b>";
+  outerrormsg ($db_errno, $db_errtxt);
+  echo "</b></big>";
+  echo "</td>";
+  echo "</tr>";
+
+  /******  Masterkategorielink*******************************************************/
+  echo "<tr>";
+  echo "<td>";
+  echo "<big><big>Tabelle: <b>".$conf_4f_tbl ["masterkategolk"]."</b></big></big>";
+  echo "</td><td>";
+  if (cmp_tablename ($tables, $conf_4f_tbl ["masterkategolk"])) {
+    echo "<p><img src=\"".$conf_menue ["symbole"]."/greenlight.gif\" alt=\"keine Fehler\"></p>";
+  } else {
+    echo "<p><img src=\"".$conf_menue ["symbole"]."/redlight.gif\" alt=\"schwerer Fehler\"></p>";
+  }
+
+
+  echo "</td>";
+  echo "<td>";
+  echo "<big><b>";
+  outerrormsg ($db_errno, $db_errtxt);
+  echo "</b></big>";
+  echo "</td>";
+  echo "</tr>";
+
+
+
   /******  Nachrichten **********************************************************/
   echo "<tr>";
   echo "<td>";

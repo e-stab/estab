@@ -1,15 +1,14 @@
 <?php
-/*
+
 // umdefinieren der Konstanten - nur in PHP 4
 define("FATAL", E_USER_ERROR);
 define("ERROR", E_USER_WARNING);
 define("WARNING", E_USER_NOTICE);
 
 // die Stufe für dieses Skript einstellen
-error_reporting(FATAL | ERROR | WARNING);
-*/
-// Fehlerbehandlungsfunktion
+error_reporting(E_ALL);
 
+// Fehlerbehandlungsfunktion
 
 function myErrorHandler($errno, $errstr, $errfile, $errline)
 {
@@ -76,14 +75,33 @@ function outerrormsg ($errno, $errtxt) {
     }
 }
 
+
 /*-----------------------------------------------------------------------------\
 
 
 \-----------------------------------------------------------------------------*/
 
-//$old_error_handler = set_error_handler("myErrorHandler");
+$old_error_handler = set_error_handler("myErrorHandler");
 
   include "./dbcfg.inc.php"; include "./e_cfg.inc.php";
+
+
+  echo "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0 Transitional//EN\">";
+  echo "<HTML>";
+  echo "<HEAD>";
+  echo "<META HTTP-EQUIV=\"CONTENT-TYPE\" CONTENT=\"text/html; charset=iso\">";
+  echo "<TITLE>Datenbanktabellen anlegen</TITLE>";
+  echo "<META NAME=\"GENERATOR\" CONTENT=\"OpenOffice.org 2.0  (Linux)\">";
+  echo "<META NAME=\"AUTHOR\" CONTENT=\"Hajo Landmesser\">";
+  echo "<META NAME=\"CREATED\" CONTENT=\"20070327;15421200\">";
+  echo "<META NAME=\"CHANGEDBY\" CONTENT=\"hajo\">";
+  echo "<META NAME=\"CHANGED\" CONTENT=\"20080620;18052200\">";
+  echo "</HEAD>";
+  echo "<BODY>\n";
+
+
+  echo "<FORM action=\"./admin.php\" method=\"get\" target=\"_self\">\n"; 
+
 
   echo "<big><big>";
   $link = mysql_connect(  $conf_4f_db ["server"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
@@ -100,13 +118,11 @@ function outerrormsg ($errno, $errtxt) {
      die('Ung&uuml;ltige Abfrage: ' . mysql_error());
   } else {
     echo 'Datenbank wurde angelegt oder war schon vorhanden';
-    echo "<br>";
+    echo "<br>\n";
   }
 
 
-
   include "./create_dir.php";
-
 
 
   // benutze Datenbank vStab_db
@@ -115,7 +131,7 @@ function outerrormsg ($errno, $errtxt) {
      die ('Kann Datenbank nicht benutzen : ' . mysql_error());
   } else {
     echo 'Datenbank wurde ausgew&auml;hlt';
-    echo "<br>";
+    echo "<br>\n";
   }
 
   $query = "CREATE TABLE IF NOT EXISTS `".$conf_4f_tbl ["nachrichten"]."` (
@@ -148,6 +164,7 @@ function outerrormsg ($errno, $errtxt) {
     `15_quitzeichen` char(3) NOT NULL default '',
     `16_empf` tinytext NULL,
     `17_vermerke` longtext NULL,
+    `20_master_katego` bigint(20),
     `x00_status` smallint(6) NOT NULL default '0',
     `x01_abschluss` binary(1) NOT NULL default 'f',
     `x02_sperre` binary(1) NOT NULL default 'f',
@@ -164,7 +181,7 @@ function outerrormsg ($errno, $errtxt) {
      die('Ung&uuml;ltige Abfrage: ' . mysql_error());
   } else {
     echo 'Mailstabelle wurde angelegt.';
-    echo "<br>";
+    echo "<br>\n";
   }
 
   $query = "CREATE TABLE IF NOT EXISTS `".$conf_4f_tbl ["benutzer"]."` (
@@ -179,13 +196,48 @@ function outerrormsg ($errno, $errtxt) {
   ) ENGINE=MyISAM DEFAULT CHARSET=latin1;";
 
 
+
   $result = mysql_query($query, $link);
   if (!$result) {
      die('Ungültige Abfrage: ' . mysql_error());
   } else {
     echo 'Benutzertabelle wurde angelegt.';
-    echo "<br>";
+    echo "<br>\n";
   }
+
+
+  $query = "CREATE TABLE IF NOT EXISTS `".$conf_4f_tbl ["masterkatego"]."` (
+        `lfd` bigint(20) unsigned NOT NULL auto_increment COMMENT 'Laufende Nummer',
+        `kategorie` varchar(10) NOT NULL COMMENT 'Benutzer definierte Kategorien',
+        `beschreibung` varchar (254) NULL COMMENT 'Beschreibung zur Kategorie',
+        PRIMARY KEY  (`lfd`)
+      ) ENGINE=MyISAM DEFAULT CHARSET=latin1 AUTO_INCREMENT=1 ;";
+
+  $result = mysql_query($query, $link);
+  if (!$result) {
+     die('Ung&uuml;ltige Abfrage: ' . mysql_error());
+  } else {
+    echo 'Masterkategorietabelle wurde angelegt.';
+    echo "<br>\n";
+  }
+
+
+  $query = "CREATE TABLE IF NOT EXISTS `".$conf_4f_tbl ["masterkategolk"]."` (
+             `msg` bigint(20) NOT NULL,
+          `katego` bigint(20) NOT NULL,
+	   PRIMARY KEY  (`msg`)
+           ) ENGINE=MyISAM DEFAULT CHARSET=latin1 ;";
+
+  $result = mysql_query($query, $link);
+  if (!$result) {
+     die('Ung&uuml;ltige Abfrage: ' . mysql_error());
+  } else {
+    echo 'Masterkategorietabelle wurde angelegt.';
+    echo "<br>\n";
+  }
+
+
+
 
   $query = "CREATE TABLE IF NOT EXISTS `".$conf_4f_tbl ["protokoll"]."` (
     `p_lfd` bigint(20) NOT NULL auto_increment,
@@ -200,7 +252,7 @@ function outerrormsg ($errno, $errtxt) {
      die('Ung&uuml;ltige Abfrage: ' . mysql_error());
   } else {
     echo 'Protokolltabelle wurde angelegt.';
-    echo "<br>";
+    echo "<br>\n";
   }
 
 
@@ -220,7 +272,7 @@ function outerrormsg ($errno, $errtxt) {
      die('Ung&uuml;ltige Abfrage: ' . mysql_error());
   } else {
     echo 'Anhangtabelle wurde angelegt.';
-    echo "<br>";
+    echo "<br>\n";
   }
 
   $query = "CREATE TABLE IF NOT EXISTS `".$conf_tbl ["etb"]."` (
@@ -239,7 +291,7 @@ function outerrormsg ($errno, $errtxt) {
      die('Ung&uuml;ltige Abfrage: ' . mysql_error());
   } else {
     echo "Einsatztagebuch wurde angelegt.";
-    echo "<br>";
+    echo "<br>\n";
   }
 
 
@@ -267,7 +319,7 @@ $query = "CREATE TABLE IF NOT EXISTS `".$conf_tbl ["komplan"]."` (
      die('Ung&uuml;ltige Abfrage: ' . mysql_error());
   } else {
     echo "Komunikationsplan wurde angelegt.";
-    echo "<br>";
+    echo "<br>\n";
   }
 
 $query = "CREATE TABLE IF NOT EXISTS `".$conf_tbl ["bhp50"]."` (
@@ -315,7 +367,7 @@ $query = "CREATE TABLE IF NOT EXISTS `".$conf_tbl ["bhp50"]."` (
      die('Ung&uuml;ltige Abfrage: ' . mysql_error());
   } else {
     echo "BHP 50 wurde angelegt.";
-    echo "<br>";
+    echo "<br>\n";
   }
 
 
@@ -324,122 +376,18 @@ $query = "CREATE TABLE IF NOT EXISTS `".$conf_tbl ["bhp50"]."` (
 
 
 
-
-
-
-
-
-
-
-
-
-/* SET SQL_MODE="NO_AUTO_VALUE_ON_ZERO";
-
---
--- Datenbank: `bhp50_db`
---
-
--- --------------------------------------------------------
-
---
--- Tabellenstruktur f�r Tabelle `benutzer`
---
-
-CREATE TABLE `benutzer` (
-  `benutzer` varchar(50) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `kuerzel` varchar(6) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `funktion` varchar(10) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `rolle` varchar(15) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `sid` varchar(50) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `ip` varchar(15) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  PRIMARY KEY (`kuerzel`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci;
-
---
--- Daten f�r Tabelle `benutzer`
---
-
-
--- --------------------------------------------------------
-
---
--- Tabellenstruktur f�r Tabelle `patienten`
---
-
-CREATE TABLE `patienten` (
-  `lfd` int(11) NOT NULL AUTO_INCREMENT,
-  `patid` varchar(6) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `name` varchar(30) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `vorname` varchar(30) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `geschlecht` set('m','w') COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `nation` varchar(20) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `gebdat` date NOT NULL DEFAULT '0000-00-00',
-  `fundort` varchar(128) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `datum` date NOT NULL DEFAULT '0000-00-00',
-  `sicht_1` smallint(6) NOT NULL DEFAULT '0',
-  `sicht_1_arzt` varchar(30) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `sicht_1_zeit` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
-  `sicht_2` smallint(6) NOT NULL DEFAULT '0',
-  `sicht_2_arzt` varchar(30) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `sicht_2_zeit` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
-  `sicht_3` smallint(6) NOT NULL DEFAULT '0',
-  `sicht_3_arzt` varchar(30) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `sicht_3_zeit` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
-  `sicht_4` smallint(6) NOT NULL DEFAULT '0',
-  `sicht_4_arzt` varchar(30) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `sicht_4_zeit` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
-  `diagnose` text COLLATE latin1_german1_ci NOT NULL,
-  `trans` binary(1) NOT NULL DEFAULT 'f',
-  `trans_ligend` binary(1) NOT NULL DEFAULT 'f',
-  `trans_sitzend` binary(1) NOT NULL DEFAULT 'f',
-  `trans_mitarzt` binary(1) NOT NULL DEFAULT ' ',
-  `trans_isoliert` binary(1) NOT NULL DEFAULT ' ',
-  `trans_mittel` varchar(30) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `trans_ziel` varchar(30) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `sd_wohnort` varchar(30) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `sd_strasse` varchar(30) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `sd_religion` varchar(10) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `sd_verbleib` varchar(128) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `sd_bemerk` text COLLATE latin1_german1_ci NOT NULL,
-  PRIMARY KEY (`lfd`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci AUTO_INCREMENT=1 ;
-
---
--- Daten f�r Tabelle `patienten`
---
-
-
--- --------------------------------------------------------
-
---
--- Tabellenstruktur f�r Tabelle `protokoll`
---
-
-CREATE TABLE `protokoll` (
-  `p_lfd` bigint(20) NOT NULL AUTO_INCREMENT,
-  `p_zeit` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `p_was` varchar(30) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `p_ereignis` text COLLATE latin1_german1_ci NOT NULL,
-  PRIMARY KEY (`p_lfd`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci AUTO_INCREMENT=1 ;
-
---
--- Daten f�r Tabelle `protokoll`
---
-
-*/
-
-
-
-
-
-
-
   echo 'Ich habe fertig.';
+  echo "</big></big>\n";
 
-  echo "</big></big>";
+
+  echo "<br>\n";
+  echo "<input type=\"submit\" value=\" OK \">\n";
+
+  echo "</FORM>\n";
+  echo "</BODY></HTML>\n";
 
   mysql_close($link);
+
 
 
 ?>

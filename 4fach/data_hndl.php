@@ -41,8 +41,6 @@ if (validate){
 function check_save_user () {
   $error_userlogin = false;
 
-
-
   // Als allererstes Pruefen wir mal die Formulardaten auf Vollstaedigkeit
 //echo "check_save_user GET="; var_dump ($_GET);    echo "#<br><br>\n";
 
@@ -247,39 +245,44 @@ function check_and_save ($data){
             INSERT INTO tabelle SET spalten_name=ausdruck, spalten_name=ausdruck, ...
       ******************************************************************************************************/
        $data ["16_empf"] .= $redcopy2."_rt,";
+
+       if ($data ["01_datum"] == "" ) { $data ["01_datum"] = date ("Hi") ; }
+       if ($data ["12_abfzeit"] == "" ) { $data ["12_abfzeit"] = date ("Hi") ; }
+
       if (validate){
          /*----------------------------------------------------*/
-         $vali = new vali_data_form ( $data ) ;
-         $result = $vali->validatethis (); //checkdata ();
-         if (!$result) {
-           $form = new nachrichten4fach ($data, $data["task"], "");
-           exit ;
-         }
-         /*----------------------------------------------------*/
+        if (debug){
+        echo "DATAHNDL286=";
+        var_dump ($data); echo "<br>";
+        }
+                 $vali = new vali_data_form ( $data ) ;
+                 $result = $vali->validatethis (); //checkdata ();
+        if (debug){
+        echo "DATAHNDL292=";
+        echo "<b>RESULT</b>";
+        var_dump ($result); echo "<br>";
+        echo "<b>vali-data</b>";
+        var_dump ($vali->i_data); echo "<br>";
+        echo "<b>DATA</b>";
+        var_dump ($data); echo "<br>";
+        echo "<b>vali-VALIDATE</b>";
+        var_dump ($vali->validate); echo "<br>";
+        }
+
+        $data = $vali->i_data ;
+
+        if (!$result) {
+          $form = new nachrichten4fach ($data, $data["task"], $vali->validate);
+          exit ;
+        }
+        /*----------------------------------------------------*/
       }
 
-       if ($data ["01_datum"] == "" ) {
-         $data ["01_datum"] = date ("dm") ;
-       }  else {
-         $data ["01_datum"] = $data ["01_datum"] ;
-       }
-
-       if ($data ["01_zeit"] == "" ) {
-         $data ["01_zeit"] = date ("Hi") ;
-       }  else {
-         $data ["01_zeit"] = $data ["01_zeit"] ;
-       }
-
-       if ($data ["12_abfzeit"] == "" ) {
-         $data ["12_abfzeit"] = convtodatetime ( date ("dm"),   date ("Hi") )  ;
-       }  else {
-         $data ["12_abfzeit"] = convtodatetime ( date ("dm"),   $data ["12_abfzeit"]) ;
-       }
 
        $nachweis_E = get_last_nachw_num ("E") + 1;
        $query = "INSERT into `".$conf_4f_tbl ["nachrichten"]."` SET
             `01_medium`       = \"".$data ["01_medium"]      ."\",
-            `01_datum`        = \"".convtodatetime ($data ["01_datum"], $data ["01_zeit"]) ."\",
+            `01_datum`        = \"".konv_taktime_datetime ($data ["01_datum"])."\",
             `01_zeichen`      = \"".$data ["01_zeichen"]     ."\",
             `04_richtung`     = \"E\",
             `04_nummer`       = \"".$nachweis_E              ."\",
@@ -292,7 +295,7 @@ function check_and_save ($data){
             `11_gesprnotiz`   = \"".$data ["11_gesprnotiz"]  ."\",
             `12_anhang`       = \"".$data ["12_anhang"]      ."\",
             `12_inhalt`       = \"".$data ["12_inhalt"]      ."\",
-            `12_abfzeit`      = \"".$data ["12_abfzeit"]     ."\",
+            `12_abfzeit`      = \"".konv_taktime_datetime ($data ["12_abfzeit"])     ."\",
             `13_abseinheit`   = \"".$data ["13_abseinheit"]  ."\",
             `14_zeichen`      = \"".$data ["14_zeichen"]     ."\",
             `14_funktion`     = \"".$data ["14_funktion"]."\",
@@ -300,7 +303,7 @@ function check_and_save ($data){
             `x00_status`      = \"4\",
             `x01_abschluss`   = \"f\"";
 
-// echo "query[FM-Eingang]===".$query."<br>";
+        if (debug){  echo "query[FM-Eingang]===".$query."<br>";}
 
         $result = $dbaccess->query_table_iu ($query);
 
@@ -320,20 +323,6 @@ function check_and_save ($data){
             Daten in Datenbank mit einem INSERT
             INSERT INTO tabelle SET spalten_name=ausdruck, spalten_name=ausdruck, ...
       ******************************************************************************************************/
-      if (validate){
-         /*----------------------------------------------------*/
-
-         $vali = new vali_data_form ( $data ) ;
-         $result = $vali->validatethis (); //checkdata ();
-         if (!$result) {
-           $form = new nachrichten4fach ($data, $data["task"], "");
-           exit ;
-         }
-         /*----------------------------------------------------*/
-      }
-
-
-
        $data ["16_empf"] = $redcopy2."_rt,";
 
        for (  $i = 1 ; $i <= 5 ; $i++ ){
@@ -345,38 +334,48 @@ function check_and_save ($data){
            if ( $data ["16_gncopy"] == "16_".$i.$j."_gn" ) {
              $data ["16_empf"] .= $empf_matrix [$i][$j]["fkt"]."_gn,";
            }
-
          }
        }
 
-       if ($data ["01_datum"] == "" ) {
-         $data ["01_datum"] = date ("dm") ;
-       }  else {
-         $data ["01_datum"] = $data ["01_datum"] ;
-       }
+       if ($data ["01_datum"] == "" ) { $data ["01_datum"] = date ("Hi") ; }
+       if ($data ["12_abfzeit"] == "" ) { $data ["12_abfzeit"] = date ("Hi") ; }
+       if ($data ["15_quitdatum"] == "" ) { $data ["15_quitdatum"] = date ("Hi") ; }
 
-       if ($data ["01_zeit"] == "" ) {
-         $data ["01_zeit"] = date ("Hi") ;
-       }  else {
-         $data ["01_zeit"] = $data ["01_zeit"] ;
-       }
+        if (validate){
+           /*----------------------------------------------------*/
+          if (debug){
+            echo "DATAHNDL368=";
+            var_dump ($data); echo "<br>";
+          }
+          $vali = new vali_data_form ( $data ) ;
+          $result = $vali->validatethis (); //checkdata ();
+          if (debug){
+            echo "DATAHNDL374=";
+            echo "<b>RESULT</b>";
+            var_dump ($result); echo "<br>";
 
-       if ($data ["12_abfzeit"] == "" ) {
-         $data ["12_abfzeit"] = convtodatetime ( date ("dm"),   date ("Hi") )  ;
-       }  else {
-         $data ["12_abfzeit"] = convtodatetime ( date ("dm"),   $data ["12_abfzeit"]) ;
-       }
+            echo "<b>vali-data</b>";
+            var_dump ($vali->i_data); echo "<br>";
 
-       if ($data ["15_quitdatum"] == "" ) {
-         $data ["15_quitdatum"] = convtodatetime ( date ("dm"),   date ("Hi") )  ;
-       }  else {
-         $data ["15_quitdatum"] = convtodatetime ( date ("dm"),   $data ["15_quitdatum"]) ;
-       }
+            echo "<b>vali-VALIDATE</b>";
+            var_dump ($vali->validate); echo "<br>";
+          }
+          $data = $vali->i_data ;
+          if (debug){
+            echo "<b>DATA</b>";
+            var_dump ($data); echo "<br>";
+          }
+          if (!$result) {
+           $form = new nachrichten4fach ($data, $data["task"], $vali->validate);
+           exit ;
+          }
+          /*----------------------------------------------------*/
+        }
 
        $nachweis_E = get_last_nachw_num ("E") + 1;
        $query = "INSERT into `".$conf_4f_tbl ["nachrichten"]."` SET
             `01_medium`       = \"".$data ["01_medium"]      ."\",
-            `01_datum`        = \"".convtodatetime ($data ["01_datum"], $data ["01_zeit"])."\",
+            `01_datum`        = \"".konv_taktime_datetime ($data ["01_datum"])."\",
             `01_zeichen`      = \"".$data ["01_zeichen"]     ."\",
             `04_richtung`     = \"E\",
             `04_nummer`       = \"".$nachweis_E              ."\",
@@ -389,18 +388,20 @@ function check_and_save ($data){
             `11_gesprnotiz`   = \"".$data ["11_gesprnotiz"]  ."\",
             `12_anhang`       = \"".$data ["12_anhang"]      ."\",
             `12_inhalt`       = \"".$data ["12_inhalt"]      ."\",
-            `12_abfzeit`      = \"".$data ["12_abfzeit"]     ."\",
+            `12_abfzeit`      = \"".konv_taktime_datetime ($data ["12_abfzeit"])     ."\",
             `13_abseinheit`   = \"".$data ["13_abseinheit"]  ."\",
             `14_zeichen`      = \"".$data ["14_zeichen"]     ."\",
             `14_funktion`     = \"".$data ["14_funktion"]    ."\",
-            `15_quitdatum`    = \"".$data ["15_quitdatum"]   ."\",
+            `15_quitdatum`    = \"".konv_taktime_datetime ($data ["15_quitdatum"])   ."\",
             `15_quitzeichen`  =  \"".$data ["15_quitzeichen"]."\",
             `16_empf`         =  \"".$data ["16_empf"]."\",
             `17_vermerke`     =  \"".$data ["17_vermerke"]."\",
             `x00_status`      = \"8\",
             `x01_abschluss`   = \"t\"";
 
-// echo "query[FM-Eingang_Sichter]===".$query."<br>";
+       if (debug){
+         echo "query[FM-Eingang_Sichter]===".$query."<br>";
+       }
        $result = $dbaccess->query_table_iu ($query);
        protokolleintrag ("FM-Eingang-Sichter",$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
     break;
@@ -415,24 +416,63 @@ function check_and_save ($data){
             INSERT INTO tabelle SET spalten_name=ausdruck, spalten_name=ausdruck, ...
 */
 //       $nachweis_A       = get_last_nachw_num ("A") + 1;
+/*
         $datum            = date ("dm");
         if ($data ["12_abfzeit"] == "" ) {
           $data ["12_abfzeit"] = convtodatetime ( date ("dm"),   date ("Hi") )  ;
         }  else {
           $data ["12_abfzeit"] = convtodatetime ( date ("dm"),   $data ["12_abfzeit"]) ;
         }
+*/
+/*      if (validate){
 
-      if (validate){
-         /*----------------------------------------------------*/
          $vali = new vali_data_form ( $data ) ;
          $result = $vali->validatethis ();
          if (!$result) {
            $form = new nachrichten4fach ($data, $data["task"], "");
            exit ;
          }
+      }
+*/
+
+
+      if ($data ["12_abfzeit"] == "" ) { $data ["12_abfzeit"] = date ("Hi") ; }
+
+      if (validate){
+         /*----------------------------------------------------*/
+        if (debug){
+          echo "DATAHNDL506=";
+          var_dump ($data); echo "<br><br>";
+        }
+        $vali = new vali_data_form ( $data ) ;
+        $result = $vali->validatethis (); //checkdata ();
+        if (debug){
+          echo "<b>DATA</b>";
+          var_dump ($data); echo "<br>";
+
+          echo "DATAHNDL 453=";
+          echo "<b>RESULT</b>";
+          var_dump ($result); echo "<br><br>";
+
+          echo "<b>vali-data</b>";
+          var_dump ($vali->i_data); echo "<br><br>";
+
+          echo "<b>vali-VALIDATE</b>";
+          var_dump ($vali->validate); echo "<br>";
+        }
+
+        $data = $vali->i_data ;
+
+         if (!$result) {
+           $form = new nachrichten4fach ($data, $data["task"], $vali->validate);
+           exit ;
+         }
          /*----------------------------------------------------*/
       }
 
+      if ($data ["02_zeit"] == "" ) {
+        $data ["02_zeit"] = convtodatetime ( date ("dm"),   date ("Hi") )  ;
+      }
 
 
        $data ["16_empf"] = $redcopy2."_rt,".$data ["14_funktion"]."_gn"; // Der Verfasser bekommt den gruenen
@@ -441,7 +481,7 @@ function check_and_save ($data){
                 `x01_abschluss`   = \"f\"";
        $nachweis_A       = get_last_nachw_num ("A") + 1;
        $query = "INSERT into `".$conf_4f_tbl ["nachrichten"]."` SET
-            `02_zeit`         = \"".convtodatetime ( date ("dm"),   date ("Hi"))     ."\",
+            `02_zeit`         = \"".$data ["02_zeit"]    ."\",
             `02_zeichen`      = \"\",
             `04_nummer`       = \"".$nachweis_A              ."\",
             `04_richtung`     = \"A\",
@@ -453,7 +493,7 @@ function check_and_save ($data){
             `11_gesprnotiz`   = \"".$data ["11_gesprnotiz"]  ."\",
             `12_anhang`       = \"".$data ["12_anhang"]      ."\",
             `12_inhalt`       = \"".$data ["12_inhalt"]      ."\",
-            `12_abfzeit`      = \"".$data ["12_abfzeit"]     ."\",
+            `12_abfzeit`      = \"".konv_taktime_datetime ($data ["12_abfzeit"])    ."\",
             `13_abseinheit`   = \"".$data ["13_abseinheit"]  ."\",
             `14_zeichen`      = \"".$data ["14_zeichen"]     ."\",
             `14_funktion`     = \"".$data ["14_funktion"]    ."\",
@@ -461,12 +501,14 @@ function check_and_save ($data){
             `x00_status`      = \"2\",
             `x01_abschluss`   = \"f\"; ";
 
-//echo "query[Stab schreiben]===".$query."<br>";
+// echo "query[Stab schreiben]===".$query."<br>";
+
        $result = $dbaccess->query_table_iu ($query);
        protokolleintrag ("Stab-schreiben",$query);
        $query = "SELECT ".$conf_4f_tbl ["nachrichten"].".`00_lfd` FROM `".$conf_4f_tbl ["nachrichten"]."`
                  WHERE `04_nummer` = \"".$nachweis_A."\" AND `04_richtung` = \"A\" ;";
 //echo "query[Stab schreiben2]===".$query."<br>";
+
        $result = $dbaccess->query_table_wert ($query);
        $lfd = $result [0] ;
 //echo "result[Stab schreiben2]==="; var_dump ($lfd); echo"<br>";
@@ -474,9 +516,59 @@ function check_and_save ($data){
 
 
     break;
-
+    /****************************************************************************\
+      SSSSS TTTTT AAAAA BBBB        GGGGG EEEEE SSSSS PPPP  RRRR  N   N  OOO  TTTTT IIIII
+      S       T   A   A B   B       G     E     S     P   P R   R NN  N O   O   T     I
+      SSSSS   T   AAAAA BBBB        G GGG EEEE  SSSSS PPPP  RRRR  N N N O   O   T     I
+          S   T   A   A B   B       G   G E         S P     R  R  N  NN O   O   T     I
+      SSSSS   T   A   A BBBB  _____ GGGG  EEEEE SSSSS P     R   R N   N  OOO    T   IIIII
+    \****************************************************************************/
     case "Stab_gesprnoti":
-       $datum            = date ("dm");
+
+
+      if ($data ["01_datum"] == "" )     { $data ["01_datum"]     = date ("Hi") ; }
+      if ($data ["12_abfzeit"] == "" )   { $data ["12_abfzeit"]   = date ("Hi") ; }
+      if ($data ["15_quitdatum"] == "" ) { $data ["15_quitdatum"] = date ("Hi") ; }
+
+      if (validate){
+         /*----------------------------------------------------*/
+        if (debug){
+          echo "DATAHNDL532====";
+          var_dump ($data); echo "<br><br>";
+        }
+
+        $vali = new vali_data_form ( $data ) ;
+        $result = $vali->validatethis (); //checkdata ();
+
+        if (debug){
+          echo "<b>DATA</b>";
+          var_dump ($data); echo "<br>";
+
+          echo "DATAHNDL512=";
+          echo "<b>RESULT</b>";
+          var_dump ($result); echo "<br><br>";
+
+          echo "<b>vali-data</b>";
+          var_dump ($vali->i_data); echo "<br><br>";
+
+          echo "<b>vali-VALIDATE</b>";
+          var_dump ($vali->validate); echo "<br>";
+        }
+
+        $data = $vali->i_data ;
+
+         if (!$result) {
+           $form = new nachrichten4fach ($data, $data["task"], $vali->validate);
+           exit ;
+         }
+         /*----------------------------------------------------*/
+      }
+
+      if ($data ["02_zeit"] == "" ) {
+        $data ["02_zeit"] = convtodatetime ( date ("dm"),   date ("Hi") )  ;
+      }
+/**************************************************************************************/
+/*       $datum = date ("dm");
        if ($data ["12_abfzeit"] == "" ) {
          $data ["12_abfzeit"] = convtodatetime ( date ("dm"),   date ("Hi") )  ;
        }  else {
@@ -488,7 +580,7 @@ function check_and_save ($data){
        }  else {
          $data ["15_quitdatum"] = convtodatetime ( date ("dm"),   $data ["15_quitdatum"]) ;
        }
-
+*/
 
        for (  $i = 1 ; $i <= 5 ; $i++ ){
          for ( $j = 1 ; $j <= 5 ; $j++ ){
@@ -506,7 +598,7 @@ function check_and_save ($data){
        $nachweis_E     = get_last_nachw_num ("E") + 1; // E weil Gspraechsnotiz als Eingang
        $data ["16_empf"] .= $redcopy2."_rt,".$data ["14_funktion"]."_gn"; // Der Verfasser bekommt den gruenen
        $query = "INSERT into `".$conf_4f_tbl ["nachrichten"]."` SET
-            `01_datum`        = \"".convtodatetime ( date ("dm"),   date ("Hi")) ."\",
+            `01_datum`        = \"".konv_taktime_datetime ($data ["01_datum"])."\",
             `01_zeichen`      = \"".$data ["01_zeichen"]     ."\",
             `04_nummer`       = \"".$nachweis_E              ."\",
             `04_richtung`     = \"E\",
@@ -518,13 +610,13 @@ function check_and_save ($data){
             `11_gesprnotiz`   = \"".$data ["11_gesprnotiz"]  ."\",
             `12_anhang`       = \"".$data ["12_anhang"]      ."\",
             `12_inhalt`       = \"".$data ["12_inhalt"]      ."\",
-            `12_abfzeit`      = \"".$data ["12_abfzeit"]     ."\",
+            `12_abfzeit`      = \"".konv_taktime_datetime ($data ["12_abfzeit"])     ."\",
 
             `13_abseinheit`   = \"".$data ["13_abseinheit"]  ."\",
             `14_zeichen`      = \"".$data ["14_zeichen"]     ."\",
             `14_funktion`     = \"".$data ["14_funktion"]    ."\",
 
-            `15_quitdatum`    = \"".$data ["15_quitdatum"]   ."\",
+            `15_quitdatum`    = \"".konv_taktime_datetime ($data ["15_quitdatum"])   ."\",
             `15_quitzeichen`  =  \"".$data ["15_quitzeichen"]."\",
             `16_empf`         = \"".$data ["16_empf"]        ."\",
             `17_vermerke`     =  \"".$data ["17_vermerke"]."\",
@@ -550,7 +642,7 @@ function check_and_save ($data){
 /*
           02_zeit;      02_zeichen;       03_datum;       03_zeichen;       04_richtung;       04_nummer;         05_gegenstelle
           06_bef_vermerk;        06_bef_ausw;
-*/
+
        if ($data ["03_datum"] == "" ) {
          $data ["03_datum"] = date ("dm") ;
        }  else {
@@ -561,8 +653,45 @@ function check_and_save ($data){
        }  else {
          $data ["03_zeit"] = $data ["03_zeit"] ;
        }
+*/
+      if ($data ["03_datum"] == "" ) { $data ["03_datum"] = date ("Hi") ; }
+
+      if (validate){
+         /*----------------------------------------------------*/
+        if (debug){
+          echo "DATAHNDL658=";
+          var_dump ($data); echo "<br><br>";
+        }
+        $vali = new vali_data_form ( $data ) ;
+        $result = $vali->validatethis (); //checkdata ();
+        if (debug){
+          echo "<b>DATA</b>";
+          var_dump ($data); echo "<br>";
+
+          echo "DATAHNDL667=";
+          echo "<b>RESULT</b>";
+          var_dump ($result); echo "<br><br>";
+
+          echo "<b>vali-data</b>";
+          var_dump ($vali->i_data); echo "<br><br>";
+
+          echo "<b>vali-VALIDATE</b>";
+          var_dump ($vali->validate); echo "<br>";
+        }
+
+        $data = $vali->i_data ;
+
+         if (!$result) {
+           $form = new nachrichten4fach ($data, $data["task"], $vali->validate);
+           exit ;
+         }
+         /*----------------------------------------------------*/
+      }
+
+
+
        $query = "UPDATE `".$conf_4f_tbl ["nachrichten"]."` SET
-            `03_datum`        = \"".convtodatetime ($data ["03_datum"], $data ["03_zeit"]) ."\",
+            `03_datum`        = \"".konv_taktime_datetime ($data ["03_datum"]) ."\",
             `03_zeichen`      = \"".$data ["03_zeichen"]  ."\",
             `05_gegenstelle`  = \"".$data ["05_gegenstelle"] ."\",
             `06_befweg`       = \"".$data ["06_befweg"]."\",
@@ -840,7 +969,9 @@ function check_and_save ($data){
   function set_msg_done ($lfd) {
 
     include ("../config.inc.php");
-    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
+    include ("../dbcfg.inc.php");
+    include ("../e_cfg.inc.php");
+
      // Gibt es einen Eintrag zu der Nachricht mit der Nummer $lfd
     $dbaccess = new db_access ($conf_4f_db ["server"],
                                $conf_4f_db ["datenbank"],
@@ -850,18 +981,13 @@ function check_and_save ($data){
 
     $tblusername   = $conf_4f_tbl ["usrtblprefix"].strtolower ($_SESSION["vStab_funktion"])."_".strtolower ($_SESSION["vStab_kuerzel"]);
     $query = "SELECT count(*) FROM $tblusername"."_erl WHERE `nachnum` = $lfd;";
-//  echo "query(legere_nuntium)=".$query."<br>";
     $result = $dbaccess->query_table_wert ($query);
-//  echo "queryresult=";var_dump ($result); echo "<br>";
     if ($result [0] == 0){
        $query = "INSERT into ".$tblusername."_erl SET
             `nachnum`      = \"".$lfd."\",
-            `gelesen`      = \"".convtodatetime (date ("dmY"), date ("Hi"))."\"";
-
-// echo "query[STAB_lesen]===".$query."<br>";
-
+            `erledigt`     = \"".convtodatetime (date ("dmY"), date ("Hi"))."\"";
        $result = $dbaccess->query_table_iu ($query);
-        protokolleintrag ("Stab_".$_SESSION["vStab_funktion"]." gelesen_".$lfd,$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
+       protokolleintrag ("Stab_".$_SESSION["vStab_funktion"]." gelesen_".$lfd,$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
 
     }
   }
@@ -884,21 +1010,18 @@ function unset_msg_done ($lfd) {
                                $conf_4f_db ["user"],
                                $conf_4f_db ["password"] );
 
-    $tblusername   = $conf_4f_tbl ["usrtblprefix"].strtolower ($_SESSION["vStab_funktion"])."_".strtolower ($_SESSION["vStab_kuerzel"]);
+    $tblusername   = $conf_4f_tbl ["usrtblprefix"].
+                     strtolower ($_SESSION["vStab_funktion"])."_".
+                     strtolower ($_SESSION["vStab_kuerzel"]);
 
     $query = "SELECT count(*) FROM $tblusername"."_erl WHERE `nachnum` = $lfd;";
 
-//  echo "query(unset_msg_read)=".$query."<br>";
     $result = $dbaccess->query_table_wert ($query);
-//  echo "queryresult=";var_dump ($result); echo "<br>";
     if ($result [0] != 0){
        $query = "DELETE FROM ".$tblusername."_erl
                         WHERE ".$tblusername."_erl.nachnum = $lfd;";
-
-// echo "query[unset_msg_read]===".$query."<br>";
-
        $result = $dbaccess->query_table_iu ($query);
-        protokolleintrag ("Stab_".$_SESSION["vStab_funktion"]." unerledigt_".$lfd,$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
+       protokolleintrag ("Stab_".$_SESSION["vStab_funktion"]." unerledigt_".$lfd,$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
 
     }
   }
@@ -915,27 +1038,30 @@ function unset_msg_done ($lfd) {
 
  ==> Liste der gelesenen Nachrichten
 \*****************************************************************************/
-function list_of_readed_msg (){
-  include ("../config.inc.php");
-  include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
+  function list_of_readed_msg (){
 
-  $dbaccess = new db_access ($conf_4f_db ["server"],
-                             $conf_4f_db ["datenbank"],
-                             $conf_4f_tbl ["benutzer"],
-                             $conf_4f_db ["user"],
-                             $conf_4f_db ["password"] );
+    include ("../config.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
 
-  $tblusername   = $conf_4f_tbl ["usrtblprefix"].strtolower ($_SESSION["vStab_funktion"])."_".strtolower ($_SESSION["vStab_kuerzel"]);
+    $dbaccess = new db_access ($conf_4f_db ["server"],
+                               $conf_4f_db ["datenbank"],
+                               $conf_4f_tbl ["benutzer"],
+                               $conf_4f_db ["user"],
+                               $conf_4f_db ["password"] );
 
-  $query = "select ".$conf_4f_tbl ["nachrichten"].".00_lfd from ".$conf_4f_tbl ["nachrichten"].", ".$tblusername."_read
+    $tblusername   = $conf_4f_tbl ["usrtblprefix"].
+                     strtolower ($_SESSION["vStab_funktion"])."_".
+                     strtolower ($_SESSION["vStab_kuerzel"]);
 
- where ".$conf_4f_tbl ["nachrichten"].".00_lfd = ".$tblusername."_read.nachnum ;";
+    $query = "select ".$conf_4f_tbl ["nachrichten"].".00_lfd from ".
+              $conf_4f_tbl ["nachrichten"].", ".$tblusername."_read where ".
+              $conf_4f_tbl ["nachrichten"].".00_lfd = ".$tblusername."_read.nachnum ;";
 
-//echo "query(list_of_readed_msg)=".$query."<br>";
-  $result = $dbaccess->query_usrtable ($query);
-//echo "<br><br>queryresult=";var_dump ($result); echo "<br>";
-  return ($result);
-}
+  //echo "query(list_of_readed_msg)=".$query."<br>";
+    $result = $dbaccess->query_usrtable ($query);
+  //echo "<br><br>queryresult=";var_dump ($result); echo "<br>";
+    return ($result);
+  }
 
 /*****************************************************************************\
  select nv_nachrichten.00_lfd
@@ -947,8 +1073,10 @@ function list_of_readed_msg (){
  ==> Liste der erledigten Nachrichten
 \*****************************************************************************/
 function list_of_done_msg (){
+
   include ("../config.inc.php");
-  include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
+  include ("../dbcfg.inc.php");
+  include ("../e_cfg.inc.php");
 
   $dbaccess = new db_access ($conf_4f_db ["server"],
                              $conf_4f_db ["datenbank"],
@@ -956,20 +1084,22 @@ function list_of_done_msg (){
                              $conf_4f_db ["user"],
                              $conf_4f_db ["password"] );
 
-  $tblusername   = $conf_4f_tbl ["usrtblprefix"].strtolower ($_SESSION["vStab_funktion"])."_".strtolower ($_SESSION["vStab_kuerzel"]);
+  $tblusername   = $conf_4f_tbl ["usrtblprefix"].
+                   strtolower ($_SESSION["vStab_funktion"])."_".
+                   strtolower ($_SESSION["vStab_kuerzel"]);
 
-  $query = "select ".$conf_4f_tbl ["nachrichten"].".00_lfd from ".$conf_4f_tbl ["nachrichten"].", ".$tblusername."_erl
+  $query = "select ".$conf_4f_tbl ["nachrichten"].".00_lfd from ".
+           $conf_4f_tbl ["nachrichten"].", ".$tblusername."_erl where ".
+           $conf_4f_tbl ["nachrichten"].".00_lfd = ".$tblusername."_erl.nachnum ;";
 
-        where ".$conf_4f_tbl ["nachrichten"].".00_lfd = ".$tblusername."_erl.nachnum ;";
-
-//echo "query(list_of_done_msg)=".$query."<br>";
   $result = $dbaccess->query_usrtable ($query);
-//echo "<br><br>queryresult=";var_dump ($result); echo "<br>";
+
   return ($result);
 }
 
 
   function get_flt_gelesen (){
+
     include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"],
                                $conf_4f_db ["datenbank"],
@@ -998,16 +1128,48 @@ function list_of_done_msg (){
     $tblusername_r = $tblusername."_read";
     $tblusername_e = $tblusername."_erl";
 
-      $query_e = "SELECT COUNT(*) FROM ".$conf_4f_tbl ["nachrichten"]."
-                  WHERE (`".$conf_4f_tbl ["nachrichten"]."`.`04_nummer` IN ( select `".$tblusername_e."`.`nachnum` from `".$tblusername_e."` where 1))";
+    $query_e = "SELECT COUNT(*) FROM ".$conf_4f_tbl ["nachrichten"]."
+                WHERE (`".$conf_4f_tbl ["nachrichten"]."`.`04_nummer` IN ( select `".$tblusername_e."`.`nachnum` from `".$tblusername_e."` where 1))";
 
-      $result = $dbaccess->query_table_wert ($query_e);
-      $flt_erledigte = $result [0];
-
-
+    $result = $dbaccess->query_table_wert ($query_e);
+    $flt_erledigte = $result [0];
   }
 
+/*****************************************************************************\
+ get_msg_by_lfd ( $lfd )
+\*****************************************************************************/
+  function get_msg_by_lfd ( $lfd ){
 
+    include ("../dbcfg.inc.php");
+    include ("../e_cfg.inc.php");
 
+    $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
+    $query = "SELECT * FROM `".$conf_4f_tbl ["nachrichten"]."` where 00_lfd = ".$lfd; //$_GET["00_lfd"];
+    $result = $dbaccess->query_table ($query);
+    $data = $result [1];
+
+    if ($data ["01_datum"] == "0000-00-00 00:00:00")     { $data["01_datum"] = ""; }
+    if ($data ["02_zeit"] == "0000-00-00 00:00:00")      { $data ["02_zeit"] = ""; }
+    if ($data ["03_datum"] == "0000-00-00 00:00:00")     { $data ["03_datum"] = ""; }
+    if ($data ["12_abfzeit"] == "0000-00-00 00:00:00")   { $data ["12_abfzeit"] = ""; }
+    if ($data ["15_quitdatum"] == "0000-00-00 00:00:00") { $data ["15_quitdatum"] = ""; }
+
+     //  Umwandlung Datenbankdatum --> taktischer Zeit falls erforderlich
+    if (strlen ($data["01_datum"]) != ""){
+      $data["01_datum"]   = konv_datetime_taktime ($data["01_datum"]);
+    }
+    if (strlen ($data["02_zeit"]) != ""){
+      $data["02_zeit"]   = konv_datetime_taktime ($data["02_zeit"]);
+    }
+    if (strlen ($data["12_abfzeit"]) != ""){
+      $data["12_abfzeit"] = konv_datetime_taktime ($data["12_abfzeit"]);
+    }
+    if (strlen ($data["15_quitdatum"]) != ""){
+      $data["15_quitdatum"] = konv_datetime_taktime ($data["15_quitdatum"]);
+    }
+
+    return ($data);
+
+  }
 
 ?>

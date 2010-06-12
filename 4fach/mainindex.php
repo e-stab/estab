@@ -12,7 +12,7 @@
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
 
-define ("debug",false);
+define ("debug", false);
 define ("create_vordrucke", true);
 
 session_start ();
@@ -26,10 +26,31 @@ if ( debug == true ){
   echo "SESSION="; print_r ($_SESSION); echo "#<br>\n";
 }
 
+  /*GET=array(18) {
+      ["kategorien"]=>  string(3) "BR1"
+      ["katego_absenden_x"]=>  string(2) "28"
+      ["katego_absenden_y"]=>  string(2) "10"
+      ["01_medium"]=>  string(0) ""
+      ["04_richtung"]=>  string(1) "A"
+      ["04_nummer"]=>  string(1) "3"
+      ["06_befwegausw"]=>  string(0) ""
+      ["07_durchspruch"]=>  string(0) ""
+      ["08_befhinwausw"]=>  string(0) ""
+      ["10_anschrift"]=>  string(6) "LtS HS"
+      ["11_gesprnotiz"]=>  string(0) ""
+      ["12_inhalt"]=>  string(40) "ABC Zug alarmieren und zum BR entsenden."
+      ["12_abfzeit"]=>  string(13) "271700aug2008" ["13_abseinheit"]=>  string(5) "EL HS"
+      ["14_zeichen"]=>  string(2) "ew"
+      ["14_funktion"]=>  string(2) "S3"
+      ["00_lfd"]=>  string(1) "3"
+      ["task"]=>  string(10) "Stab_lesen" } #
+    */
+
+
 if (debug){
-error_reporting(E_ALL);
+  error_reporting(E_ALL ^ E_NOTICE); //E_ALL);
 } else {
-error_reporting(FATAL | ERROR | WARNING);
+  error_reporting(FATAL | ERROR | WARNING);
 }
 
 include ("../config.inc.php");    // Konfigurationseinstellungen und Vorgaben
@@ -41,6 +62,7 @@ include ("4fachform.php");            // Formular Behandlung 4fach Vordruck
 include ("liste.php");                // erzeuge Ausgabelisten
 include ("data_hndl.php");            // Schnittstelle zur Datenbank
 include ("menue.php");                // erzeuge Men
+
 
 /**********************************************************************\
   Es gab noch keinen Kontakt ==> Begruessung
@@ -72,6 +94,23 @@ $weiterantwort = false;
     unset ($_SESSION["sw_data"]);
   }
 
+  /****************************************************************************\
+    Für die Listendarstellung erforderliche Einstellungen
+
+  \****************************************************************************/
+  if (isset($_GET ["ktgotyp"])){
+    if ( $_GET ["ktgo"] == "alle") {
+      unset ($_SESSION ["kategotyp"]);
+      unset ($_SESSION ["katego"]);
+    } else {
+      $_SESSION ["kategotyp"] = $_GET ["ktgotyp"];
+      $_SESSION ["katego"]    = $_GET ["ktgo"];
+      $_SESSION["filter_start"] = 0 ;
+      $_SESSION["filter_position"] = 0;
+    }
+  }
+
+
 
   /**********************************************************************\
     Überprüfe ob die Listendarstellung geaendert werden soll
@@ -92,12 +131,12 @@ $weiterantwort = false;
 
   \**********************************************************************/
   if (isset($_GET["filter_suche_reset"])){ unset ($_SESSION["flt_search"]); }
-  if (isset($_GET["filter_suche"])){ 
+  if (isset($_GET["filter_suche"])){
     if ($_SESSION["flt_search"] != $_GET ["flt_search"]){
       $_SESSION["filter_start"] = 0 ;
-      $_SESSION["filter_position"] = 0;      
+      $_SESSION["filter_position"] = 0;
     }
-    $_SESSION["flt_search"] = $_GET ["flt_search"]; 
+    $_SESSION["flt_search"] = $_GET ["flt_search"];
   }
 
   if ( (isset ($_GET["filter_submit"])) OR
@@ -111,24 +150,46 @@ $weiterantwort = false;
       $_SESSION["filter_darstellung"] = 1;
       $_SESSION["filter_gelesen"] = 0;
       $_SESSION["filter_erledigt"] = 0;
-      $_SESSION["filter_anzahl"] = $_GET["filter_anzahl"];
+      if (isset ($_GET["filter_anzahl"])) {
+        $_SESSION["filter_anzahl"] = $_GET["filter_anzahl"];
+      } else {
+        $_SESSION["filter_anzahl"] = 5;
+      }
       $_SESSION["filter_start"] = 0 ;
       $_SESSION["filter_position"] = 0;
 
     } else {
 
       if ($_GET["filter_darstellung"] == "on") { $_SESSION["filter_darstellung"] = 1;
-
+/*
         if ($_GET["filter_gelesen"] == "on") {
           $_SESSION["filter_gelesen"] = 1;
         } else {
           $_SESSION["filter_gelesen"] = 0;
         }
+*/
+
         if ($_GET["filter_erledigt"] == "on") {
-          $_SESSION["filter_erledigt"] = 1;
+          if ($_SESSION["filter_erledigt"] == 0 ) {
+            $_SESSION["filter_erledigt"] = 1;
+            $_SESSION["filter_anzahl"] = $_GET["filter_anzahl"];
+            $_SESSION["filter_start"] = 0 ;
+            $_SESSION["filter_position"] = 0;
+          } else { // $_SESSION["filter_erledigt"] == 1
+            $_SESSION["filter_erledigt"] = 1;
+          }
         } else {
-          $_SESSION["filter_erledigt"] = 0;
+          if ($_SESSION["filter_erledigt"] == 0) {
+            $_SESSION["filter_erledigt"] = 0;
+          } else {
+            $_SESSION["filter_erledigt"] = 0;
+            $_SESSION["filter_anzahl"] = $_GET["filter_anzahl"];
+            $_SESSION["filter_start"] = 0 ;
+            $_SESSION["filter_position"] = 0;
+
+          }
         }
+
 
         if (isset ($_GET["filter_anzahl"])) {
           $_SESSION["filter_anzahl"] = $_GET["filter_anzahl"]; }
@@ -138,6 +199,7 @@ $weiterantwort = false;
       } else {
         unset ($_SESSION["filter_darstellung"]);
         unset ($_SESSION["filter_anzahl"]);
+        unset ($_SESSION ["global_katego"]);
       }
     } //else if (!isset ( $_SESSION["filter_darstellung"] )){
     /*          $_SESSION[flt_navi]
@@ -151,9 +213,10 @@ $weiterantwort = false;
     if (isset($_GET[flt_for_x]))   { $_SESSION[flt_navi] = "for";}
     if (isset($_GET[flt_end_x]))   { $_SESSION[flt_navi] = "end";}
 
-    header("Location: ".$conf_4f ["MainURL"]);
-    exit;
+//    header("Location: ".$conf_4f ["MainURL"]);
+//    exit;
   } // Listendarstellung aendern
+
 
   /************************************************************************\
 
@@ -200,7 +263,7 @@ $weiterantwort = false;
 //    unset ($_GET);
     if (!$error) {
       $_SESSION["menue"] = "ROLLE";  //   führt zu fehlern bei der menüdarstellung
-//      header("Location: ".$conf_4f ["MainURL"]);
+      header("Location: ".$conf_4f ["MainURL"]);
     }
     // Wenn Benutzer OK ==> SESSION [menue]=ROLLE ; $_SESSION [ROLLE]= Stab, Fernmelder...
   }
@@ -235,9 +298,9 @@ $weiterantwort = false;
          ) {
     $returndata = $_GET;
 
-    if ( debug == true ){ echo "### 143 Daten kommen vom Formular und können gespeichert werden";  echo "<br>\n";}
+    if ( debug == true ){ echo "### 240 Daten kommen vom Formular und können gespeichert werden";  echo "<br>\n";}
 
-    if ( ( $_GET ["11_gesprnotiz"] == "on" ) and ( !$_SESSION ['gesprnoti'] ) ){
+    if ( ( $_GET ["11_gesprnotiz"] == "on" ) and ( !$_SESSION ["gesprnoti"] ) ){
         // Bei Gesprächsnotiz 2. Vorlage für Sichtung
 
         if ( debug == true ){ echo "### Gesprächsnotiz == 2. Sichtung";  echo "<br>\n";}
@@ -247,26 +310,32 @@ $weiterantwort = false;
         $formdata ["11_gesprnotiz"]   = "t";
         $formdata ["16_empf"]         = $redcopy2."_rt,".$_SESSION ["vStab_funktion"]."_gn" ;
         $formdata ["15_quitzeichen"]  = $_SESSION ["vStab_kuerzel"];
+        $formdata ["task"]            = "Stab_gesprnoti";
         $form = new nachrichten4fach ($formdata, "Stab_gesprnoti", "");
-        $_SESSION ['gesprnoti'] = true;
+        $_SESSION ["gesprnoti"] = true;
         $gesprnotizsichter = true ;
     } else {
-      if (isset ($_SESSION ['gesprnoti'])) { unset ( $_SESSION ['gesprnoti'] ); }
 
-      if ( debug == true ){ echo "### 161 check and save";  echo "<br>\n";}
+      if ( debug == true ){ echo "### 256 check and save";  echo "<br>\n";}
 
       check_and_save ($returndata);
       // verhindert das erneute Speichern bei Betaetigung von F5
-
+      if (isset ($_SESSION ['gesprnoti'])) { unset ( $_SESSION ['gesprnoti'] ); }
       if (create_vordrucke){
         include ("../bak/backup.php");
       }
 
       if ( !$weiterantwort ){
-        header("Location: ".$conf_4f ["MainURL"]);
+        header("Location:".$_SERVER["PHP_SELF"]);
+//         header("Location: ".$conf_4f ["MainURL"], false);
+  echo "<big><big>header!!!===".$_SERVER["PHP_SELF"]."</big></big><br>";
+        exit;
       }
     }
-  } elseif ( ($_GET["task"] == "FM-Ausgang_Sichter") and ($_GET ["abbrechen_x"]) ) {
+  } elseif ( ( ($_GET["task"] == "FM-Ausgang_Sichter") OR
+               ($_GET["task"] == "FM-Ausgang")
+             ) and
+             ($_GET ["abbrechen_x"]) ) {
 
       /************************************************************************\
 
@@ -292,6 +361,7 @@ $weiterantwort = false;
 /**********************************************************************\
 Daten kommen vom Formular und sollen als Antwort dienen.
 \**********************************************************************/
+
     // A N T W O R T
   if ( ( isset ($_GET["antwort_x"]) ) and ( $_GET["task"] == "Stab_lesen" ) ) {
       //  A N T W O R T  --  "Stab_lesen"
@@ -301,8 +371,10 @@ Daten kommen vom Formular und sollen als Antwort dienen.
     $formdata = $_GET ;
     $aushilfe = $formdata ["10_anschrift"];
     $formdata ["10_anschrift"] =  $formdata ["13_abseinheit"]."  ".$formdata["14_funktion"];
+
     $formdata ["13_abseinheit"] = $aushilfe ;
-    $formdata ["13_abseinheit"]  = $conf_4f     ["anschrift"]; //$_SESSION["vStab_rolle"];
+    $formdata ["12_abfzeit"] = "" ;
+//    $formdata ["13_abseinheit"]  = $conf_4f     ["anschrift"]; //$_SESSION["vStab_rolle"];
     $formdata ["14_zeichen"]     = $_SESSION["vStab_kuerzel"];
     $formdata ["14_funktion"]    = $_SESSION["vStab_funktion"];
     $formdata ["12_inhalt"] = "Zitat: von ".$formdata["04_richtung"]." ".$formdata["04_nummer"]." \n\"".$formdata ["12_inhalt"]."\"\n";
@@ -325,7 +397,9 @@ Daten kommen vom Formular und sollen als Antwort dienen.
     $formdata ["12_inhalt"] = "Zitat: von ".$formdata["04_richtung"]." ".$formdata["04_nummer"]." \n\"".$formdata ["12_inhalt"]."\"\n";
     $formdata ["04_richtung"] = "";
     $formdata ["04_nummer"] = "";
+    $formdata ["11_gesprnotiz"] = "";
     $formdata ["13_abseinheit"]  = $conf_4f     ["anschrift"];
+    $formdata ["12_abfzeit"] = "" ;
     $formdata ["14_zeichen"]     = $_SESSION["vStab_kuerzel"];
     $formdata ["14_funktion"]    = $_SESSION["vStab_funktion"];
     $form = new nachrichten4fach ($formdata, "Stab_schreiben", "");
@@ -335,7 +409,7 @@ Daten kommen vom Formular und sollen als Antwort dienen.
 
     if ( debug == true ){ echo "### 236 _SESSION [sw_data]";  echo "<br>\n";}
 
-    $formdata = $_GET ;
+//    $formdata = $_GET ;
     $formdata = $_SESSION ["sw_data"] ;
     if  (( isset ($formdata["antwort_x"]) ) and
         ( ( $formdata["task"] == "FM-Ausgang" ) or
@@ -348,6 +422,8 @@ Daten kommen vom Formular und sollen als Antwort dienen.
       $formdata ["01_zeichen"]  = $_SESSION ["vStab_kuerzel"];
       $formdata ["10_anschrift"] =  $formdata ["13_abseinheit"]."  ".$formdata["14_funktion"];
       $formdata ["13_abseinheit"] = $aushilfe ;
+
+      $formdata ["12_abfzeit"] = "" ;
 
       $formdata ["12_inhalt"] = "Zitat: von ".$formdata["04_richtung"]." ".$formdata["04_nummer"]." \n\"".$formdata ["12_inhalt"]."\"\n";
       $formdata ["04_richtung"] = "";
@@ -379,6 +455,8 @@ Daten kommen vom Formular und sollen als Antwort dienen.
       $aushilfe = $formdata ["10_anschrift"];
       $formdata ["10_anschrift"] =  $formdata ["13_abseinheit"]."  ".$formdata["14_funktion"];
       $formdata ["13_abseinheit"] = $aushilfe ;
+
+      $formdata ["12_abfzeit"] = "" ;
 
       $formdata ["12_inhalt"] = "Zitat: von ".$formdata["04_richtung"]." ".$formdata["04_nummer"]." \n\n\"".$formdata ["12_inhalt"]."\"\n\n";
       $formdata ["04_richtung"] = "";
@@ -511,23 +589,78 @@ $formdata = ""; // setze die Formulardaten zurck
 ))       ) {
 
     if ( debug == true ){ echo "### 413 Stab_lesen - Menue und Liste ";  echo "<br>\n";}
-/*
-     $css = "a:link    { color:#000000; text-decoration:none; font-weight:bolder ; font-size:normal; }\n".
-            "a:visited { color:#000000; text-decoration:none; font-weight:lighter; font-size:small ; }\n".
-            "a:hover   { color:#000000; text-decoration:none; }\n".  //font-weight:lighter; }\n".
-            "a:active  { color:#0000EE; background-color:#FFFF99;}\n"; // font-weight:lighter  ; }\n".
-            "a:focus   { color:#0000EE; background-color:#FFFF99;}\n"; // font-weight:lighter ; }";
-*/
-     $css = "a:link    { color:#000000; text-decoration:none; font-weight:bolder ; font-size:normal; }\n".
+
+
+/*     $css = "a:link    { color:#000000; text-decoration:none; font-weight:bolder ; font-size:normal; }\n".
             "a:visited { color:#000000; text-decoration:none; font-weight:bolder ; font-size:normal; }\n".
             "a:hover   { color:#000000; text-decoration:none; }\n".  //font-weight:lighter; }\n".
-            "a:active  { color:#0000EE; background-color:#FFFF99;}\n"; // font-weight:lighter  ; }\n".
+            "a:active  { color:#0000EE; background-color:#FFFF99;}\n". // font-weight:lighter  ; }\n".
             "a:focus   { color:#0000EE; background-color:#FFFF99;}\n"; // font-weight:lighter ; }";
+*/
+
+     $csskatego = "html { font-size: 100%; }
+                a:link, a:visited, a:active {    text-decoration:    none;    color:              #333399; }
+                a:hover { text-decoration:    underline; color:              #cc0000; }
+                a img {   border:             0; }
+        /******************************************************************************/
+        /* specific elements */
+        /* topmenu */
+        ul#topmenu { font-weight:bold; list-style-type:none; margin:0; padding:0; }
+        ul#topmenu li { float:left; margin:0; padding:0; vertical-align: middle; }
+          #topmenu img {vertical-align:middle; margin-right:0.1em; }
+
+        /* default tab styles */
+        .tab,
+        .tabcaution,
+        .tabactive {display: block; margin: 0.2em 0.2em 0 0.2em; padding: 0.2em 0.2em 0 0.2em; white-space: nowrap; }
+
+        /* disabled tabs */
+        span.tab {color: #666666; }
+
+        /* disabled drop/empty tabs */
+        span.tabcaution { color: #ff6666; }
+
+        /* enabled drop/empty tabs */
+        a.tabcaution {color:  #FF0000;  }
+        a.tabcaution:hover { color: #FFFFFF; background-color:   #FF0000; }
+
+        #topmenu { margin-top: 0.5em; padding: 0.1em 0.3em 0.1em 0.3em; }
+
+ul#topmenu li {
+    border-bottom:      1pt solid black;
+}
+
+/* default tab styles */
+.tab, .tabcaution, .tabactive {
+    background-color:   #E5E5E5;
+    border:             1pt solid #D5D5D5;
+    border-bottom:      0;
+    border-top-left-radius: 0.4em;
+    border-top-right-radius: 0.4em;
+}
+
+/* enabled hover/active tabs */
+a.tab:hover,
+a.tabcaution:hover,
+.tabactive,
+.tabactive:hover {
+    margin:             0;
+    padding:            0.2em 0.4em 0.2em 0.4em;
+    text-decoration:    none;
+}
+
+a.tab:hover,
+.tabactive {
+    background-color:   #ffffff;
+}
+
+/* to be able to cancel the bottom border, use <li class=\"active\"> */
+ul#topmenu li.active {
+     border-bottom:      1pt solid #ffffff;
+}";
 
 
-
-
-      pre_html ("stabliste","Stab lesen ".$conf_4f ["NameVersion"],$css); // Normaler Seitenaufbau mit Auffrischung
+      pre_html ("stabliste","Stab lesen ".$conf_4f ["NameVersion"],$css.$csskatego); // Normaler Seitenaufbau mit Auffrischung
       echo "<body>";
 //echo "\n<!-- Vor Menueaufruf und liste -->";
       menue ();
@@ -543,15 +676,11 @@ $formdata = ""; // setze die Formulardaten zurck
 \**********************************************************************/
   if (( $_GET["stab"] == "meldung")){
 
-    if ( debug == true ){ echo "### 441 Stab Meldung lesen - Darstellung der Meldung ber die laufende Nummer ";  echo "<br>\n";}
+    if ( debug == true ){ echo "### 654 Stab Meldung lesen - Darstellung der Meldung ber die laufende Nummer ";  echo "<br>\n";}
 
     set_msg_read ($_GET["00_lfd"]);
-    $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
-    $query = "SELECT * FROM `".$conf_4f_tbl ["nachrichten"]."` where 00_lfd = ".$_GET["00_lfd"];
-  //echo "query===".$query."<br>";
-    $result = $dbaccess->query_table ($query);
-  //var_dump ($result); echo "<br>";
-    $formdata = $result [1];
+    $formdata = get_msg_by_lfd ($_GET["00_lfd"]);
+
     $form = new nachrichten4fach ($formdata, "Stab_lesen", "");
   }
 
@@ -564,11 +693,13 @@ $formdata = ""; // setze die Formulardaten zurck
   if (( $_GET["sichter"] == "meldung")){
 
     if ( debug == true ){ echo "### 458 Stab Meldung sichten - Darstellung der Meldung ber die laufende Nummer ";  echo "<br>\n";}
-
+/*
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
     $query = "SELECT * FROM `".$conf_4f_tbl ["nachrichten"]."` where 00_lfd = ".$_GET["00_lfd"];
     $result = $dbaccess->query_table ($query);
     $formdata = $result [1];
+*/
+    $formdata = get_msg_by_lfd ($_GET["00_lfd"]);
     $formdata ["15_quitzeichen"]  = $_SESSION ["vStab_kuerzel"];
     $form = new nachrichten4fach ($formdata, "Stab_sichten", "");
   }
@@ -690,9 +821,13 @@ $formdata = ""; // setze die Formulardaten zurck
       $query = "UPDATE ".$conf_4f_tbl ["nachrichten"]." SET x02_sperre = \"t\", x03_sperruser = \"".$_SESSION [vStab_kuerzel]."\" where 00_lfd = ".$_GET["00_lfd"];
       $result = $dbaccess->query_table_iu ($query);
       // Jetzt holen wir uns den kompletten, gesperrten Eintrag
+/*
       $query = "SELECT * FROM ".$conf_4f_tbl ["nachrichten"]." where 00_lfd = ".$_GET["00_lfd"];
       $result = $dbaccess->query_table ($query);
       $formdata = $result [1]; // Das [1] enthaelt die Daten
+*/
+      $formdata = get_msg_by_lfd ($_GET["00_lfd"]);
+
       // Voreinstellungen fuer den Befoerderungsvermerk
       $formdata ["03_zeichen"]  = $_SESSION ["vStab_kuerzel"];
 
@@ -751,6 +886,7 @@ $formdata = ""; // setze die Formulardaten zurck
   }
 
 
+
 /**********************************************************************\
 
 
@@ -760,10 +896,13 @@ $formdata = ""; // setze die Formulardaten zurck
 
     if ( debug == true ){ echo "### 651 FM & Si Adminmeldung ";  echo "<br>\n";}
 
+    $formdata = get_msg_by_lfd ($_GET["00_lfd"]);
+/*
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
     $query = "SELECT * FROM `".$conf_4f_tbl ["nachrichten"]."` where 00_lfd = ".$_GET["00_lfd"];
     $result = $dbaccess->query_table ($query);
     $formdata = $result [1];
+*/
     switch  ($_GET["fm"]) {
       case "FM-Adminmeldung" :
         $form = new nachrichten4fach ($formdata, "FM-Admin", "");
@@ -894,6 +1033,7 @@ if ( ( !isset($form) ) and ( $menue1 != "anhang" ) and ( $menue1 != "upload" ) )
   menue ();
 }
 
+
 /**********************************************************************\
 
 \**********************************************************************/
@@ -911,27 +1051,6 @@ if ( debug == true ){
   //echo "SERVER="; var_dump ($_SERVER); echo "#<br><br>\n";
   echo "SESSION="; print_r ($_SESSION); echo "#<br>\n";
 }
-/*
-
-
-[16:23:20] Marc Rawer (FK EM S1/4) : -------- die übersicht von S1 wird nur beim drücken des buttons "lesen" aktualisiert - sollte automatisch geschehen
-[16:23:55] Marc Rawer (FK EM S1/4) : -------- Visuelle oder besser noch akustische information über neue nachricht im eingang wäre nötig
-[16:24:28] Marc Rawer (FK EM S1/4) : -------- farben sollten den farben des papierblocks an der entsprechenden Stelle entsprechen (FeMe Eingang)
-[16:24:45] Marc Rawer (FK EM S1/4) : -------- Farben sollten konfigurierbar sein (thema 1- seite grün oder blau?)
-[16:25:23] Marc Rawer (FK EM S1/4) : - Vorrangstufen: sollten irgendwo erklärt sein (linker frame, klein?) und konfigurierbar sein (bei uns: sofort/blitz)
-[16:25:52] Marc Rawer (FK EM S1/4) : - sichter: blauen zettel beim S2 ankreuzen macht keinen Sinn - sollte nicht möglich sein
-[16:26:58] Marc Rawer (FK EM S1/4) : - sichter: der radiobutton für grün sollte std-mässig beim S2 sein, damit grün (="kümmerer") auf jeden Fall vergeben wird. Sonst kann es zum Vergessen einer Meldung führen
-[16:27:47] Marc Rawer (FK EM S1/4) : - Vorschlag für Sichter ansicht: rechten frame 2teilen:
-oben: Neue Nachrichten (zum sichten)
-unten: zweite Sichtung
-[16:28:06] Marc Rawer (FK EM S1/4) : das wär mal alles soweit. sag mir welche ich davon ins forum aufnehmen soll, dann mach ich das heute abend
-
-
-*/
-
-
-
-
 
 ?>
 </body>

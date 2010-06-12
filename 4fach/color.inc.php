@@ -41,7 +41,7 @@ switch (colorschema){
     $this->bg_color_aktv_must = "rgb(240, 20, 20)"; // rot
   break;
   case "aknz":
-     // Blau Blatt oben
+     // weißes Blatt oben
     $this->bg_color_fm_a   = "rgb(200, 200, 200)"; // rosa Fernmelder aktiv
     $this->bg_color_fmp_a  = "rgb(255, 255, 255)"; // hell grün Fernmelderpflichtfeld  aktiv
     $this->bg_color_nw_a   = "rgb(255, 204,  51)";  // orange

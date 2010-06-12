@@ -12,7 +12,8 @@
 \*****************************************************************************/
 
 include ("../config.inc.php");
-include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
+include ("../dbcfg.inc.php");
+include ("../e_cfg.inc.php");
 
 
 /*****************************************************************************\
@@ -32,18 +33,59 @@ class nachrichten4fach {
     function nachrichten4fach ($formulardaten, $task, $errorselect){
       $this->task = $task ;
       $this->formdata = $formulardaten ;
+
       $this->lfd = $this->formdata ["00_lfd"];
+      if ($errorselect != ""){
+        $this->errorselect = $errorselect;
+      } else {
+
+
+          // errorselect zurücksetzen
+         $this->errorselect ["01_medium"]   = true ;
+         $this->errorselect ["01_datum"]   = true ;
+
+         $this->errorselect ["01_zeichen"]   = true ;
+         $this->errorselect ["02_zeit"]   = true ;
+         $this->errorselect ["02_zeichen"]   = true ;
+         $this->errorselect ["03_datum"]   = true ;
+         $this->errorselect ["03_zeit"]   = true ;
+         $this->errorselect ["03_zeichen"]   = true ;
+         //     $this->errorselect ["04_nummer"]   = true ;
+         //     $this->errorselect ["04_richtung"]   = true ;
+         $this->errorselect ["05_gegenstelle"]   = true ;
+         $this->errorselect ["06_befweg"]   = true ;
+         $this->errorselect ["06_befwegausw"]   = true ;
+         $this->errorselect ["07_durchspruch"]   = true ;
+         $this->errorselect ["08_befhinweis"]   = true ;
+         $this->errorselect ["08_befhinwausw"]   = true ;
+         $this->errorselect ["10_anschrift"]   = true ;
+         $this->errorselect ["12_inhalt"]   = true ;
+         $this->errorselect ["12_abfzeit"]   = true ;
+         $this->errorselect ["13_abseinheit"]   = true ;
+         $this->errorselect ["14_zeichen"]   = true ;
+         $this->errorselect ["14_funktion"]   = true ;
+         $this->errorselect ["15_quitdatum"]   = true ;
+         $this->errorselect ["15_quitzeichen"]   = true ;
+         $this->errorselect ["17_vermerke"]   = true ;
+      }
       if ($this->formdata ["01_datum"] == "0000-00-00 00:00:00") { $this->formdata["01_datum"] = ""; }
       if ($this->formdata ["02_zeit"] == "0000-00-00 00:00:00") { $this->formdata ["02_zeit"] = ""; }
       if ($this->formdata ["03_datum"] == "0000-00-00 00:00:00") { $this->formdata ["03_datum"] = ""; }
       if ($this->formdata ["12_abfzeit"] == "0000-00-00 00:00:00") { $this->formdata ["12_abfzeit"] = ""; }
       if ($this->formdata ["15_quitdatum"] == "0000-00-00 00:00:00") { $this->formdata ["15_quitdatum"] = ""; }
-      if ($this->formdata ["11_gesprnotiz"] == "t") {
+
+      if ( ($this->formdata ["11_gesprnotiz"] == "t") OR
+           ($this->formdata ["11_gesprnotiz"] == "1") OR
+           ($this->formdata ["11_gesprnotiz"] == "on") ) {
+
         $this->formdata   ["11_gesprnotiz"] = true;
       } else {
         $this->formdata ["11_gesprnotiz"] = false;
       }
-//      $this->init_vf () ; // setze die Farben des 4fach Vordrucks
+
+      if (debug){
+        echo "<br><big>4fach data 035="; var_dump ($this->formdata); echo "</big><br>";
+      }
       $this->plot_form () ;
     }
 
@@ -65,7 +107,7 @@ class nachrichten4fach {
   var $rbl_bg_color ;  // weiss
   var $bg_color_aktv_must ; // rot
 
-
+//   <script src="./js/tooltip.js" type="text/javascript"></script>
 
 
   var $feldbg ;
@@ -224,7 +266,19 @@ class nachrichten4fach {
       break;
 
       case "Stab_sichten" :
+        for ($i=15;$i<=17;$i++){
+          $this->bg [$i] = $this->feldbg [$i]["a"] ;
+          $this->feld [$i] = true;
+        }
+      break;
       case "Stab_gesprnoti":
+        $this->bg [1] = $this->feldbg [1]["a"] ;
+        $this->feld [1] = true;
+
+        for ($i=7;$i<=14;$i++){
+          $this->bg [$i] = $this->feldbg [$i]["a"] ;
+          $this->feld [$i] = true;
+        }
         for ($i=15;$i<=17;$i++){
           $this->bg [$i] = $this->feldbg [$i]["a"] ;
           $this->feld [$i] = true;
@@ -331,6 +385,21 @@ class nachrichten4fach {
     }
   } // list_anhang ()
 
+/*****************************************************************************\
+   Funktion    :  showerrorinfo
+   Beschreibung:  Ausgabe Fehlermeldung Info
+
+   (C) Hajo Landmesser IuK Kreis Heinsberg
+   mailto://hajo.landmesser@iuk-heinsberg.de
+\*****************************************************************************/
+  function showerrorinfo ($errorat)
+  {   include ("../config.inc.php");
+    echo "<a href=\"../language/german/helptext.php?Errorart=".$errorat.
+         "\" onclick=\"FensterOeffnen(this.href); return false\"><img src=\"".
+         $conf_design_path."/060.png\" alt=\"Fehler\" width=\"24\"height=\"24\" title=\"Fehler\"></a>";
+  }
+
+
 
   var $formbgcolor ; // Hintergrundfarbe
 
@@ -345,8 +414,9 @@ class nachrichten4fach {
   function plot_form (){
     include ("../config.inc.php");
     include ("../para.inc.php");
-    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
-
+    include ("../dbcfg.inc.php");
+    include ("../e_cfg.inc.php");
+    include ("../fkt_rolle.inc.php");
     include ("color.inc.php");
 
     $this->ziele (); // Ziele und Farben   $fktmsgbgcolor
@@ -361,13 +431,19 @@ class nachrichten4fach {
     $this->feldbgcolor ();
     $this->get_access_by_task ($this->task);
 
+    if (debug){
+      echo "<big><big>TASK TASK TASK===".$this->task."</big></big><br><b>";
+    }
+
     pre_html ("N","Formular ".$this->task." ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"], ""); // Normaler Seitenaufbau ohne Auffrischung
     echo "<body style=\"text-align: left; background-color: rgb(255,255,255); \">\n"; //".$this->formbgcolor.";\">\n";
-    echo "<body style=\"text-align: left; background-color: ".$formbgcolor.";\">\n";
-    echo "<form style=\"\" method=\"get\" action=\"".$conf_4f ["MainURL"]."\" name=\"4fach\">";
+//    echo "<body style=\"text-align: left; background-color: ".$formbgcolor.";\">\n";
 
-    echo "<a href=\"javascript:window.print()\">Diese Seite drucken</a>";
+//    include_once ("../language/german/helptext.php");
+    include_once ("./katego.php");
 
+
+    echo "<FORM style=\"\" method=\"get\" action=\"katgoedt.php\" name=\"kategorie\">";
     switch ($this->task){
       case "FM-Eingang"         : $ueberschrift = "* * *   A N N A H M E  * * *"; break;
       case "FM-Eingang_Sichter" : $ueberschrift = "* * *   A N N A H M E / Sichtung  * * *"; break;
@@ -379,8 +455,201 @@ class nachrichten4fach {
       case "Sichter"            : $ueberschrift = "* * *   S I C H T U N G   * * *"; break;
       case "Nachweis"           : $ueberschrift = "* * *   N A C H W E I S U N G   * * *"; break;
     }
-    echo "<big><big><big><b>".$ueberschrift."</b></big></big></big><br>\n";
-    echo "\n\n<!-- ********** TABLE   001 Gesamte Tabelle *********** -->\n";
+
+
+    echo "<input type=\"hidden\" name=\"kate_todo\" value=\"speichern\">\n";
+//    echo "<input type=\"hidden\" name=\"kate_tbl\" value=\"".$this->db_tablname."\">\n";
+//    echo "<input type=\"hidden\" name=\"kate_dbtbl\" value=\"".$this->dbtyp."\">\n";
+    echo "<input type=\"hidden\" name=\"msglfd\" value=\"".$this->formdata["00_lfd"]."\">\n";
+
+    echo "<TABLE BORDER=\"0\" CELLSPACING=\"10\">";
+    echo "<TBODY>";
+    echo "<TR>";
+    echo "<TD>";
+      // Druckersymbol
+    echo "<a href=\"javascript:window.print()\">
+          <img src=\"".$conf_design_path."/115.gif\" alt=\"Drucken\" width=\"32\"height=\"32\" border=\"0\" title=\"Drucken\"></a>";
+    echo "</TD>";
+
+    if ( $this->task == "Stab_lesen"){
+      echo "<TD>";
+      $katego1 = new  kategorien ("master");
+      $katearr1 = $katego1->db_get_kategobymsg ($this->formdata["00_lfd"]);
+      echo"<a ";
+        // Ist die Funktion berechtigt globale Kategorien zu ändern?
+        //
+      $berechtigt = ($_SESSION ["vStab_funktion"] == $redcopy2) OR
+                    ($_SESSION ["vStab_funktion"] == "Si");
+      if ($berechtigt) {
+        echo "href=\"katgoedt.php?dbtyp=master&fkt=edit&msgno=".$this->formdata["00_lfd"]."\"";
+      }
+      echo ">
+          <img src=\"".$conf_design_path."/116.jpg\"
+               alt=\"".$katearr1["beschreibung"]."\"
+               width=\"32\"
+               height=\"32\"
+               border=\"0\"
+               title=\"".$katearr1["beschreibung"]."\"></a>";
+      echo "</TD>";
+      echo "<TD>";
+      if ( $katearr1["kategorie"] != ""){
+        echo "<big><big><b>".$katearr1["kategorie"]."</b></big></big>";
+      }
+      if ($berechtigt) {
+        $katego1->pulldown_kategorien ($katearr1["lfd"],true);
+      }
+      echo "</TD>\n";
+      echo "<TD>\n";
+
+      $katego2 = new  kategorien ("user");
+      $katearr2 = $katego2->db_get_kategobymsg ($this->formdata["00_lfd"]);
+
+      echo"<a href=\"katgoedt.php?dbtyp=user&fkt=edit&msgno=".$this->formdata["00_lfd"]."\">
+          <img src=\"".$conf_design_path."/118.jpg\"
+               alt=\"".$katearr2["beschreibung"]."\"
+               width=\"32\"
+               height=\"32\"
+               border=\"0\"
+               title=\"".$katearr2["beschreibung"]."\"></a>\n";
+
+      echo "</TD>\n";
+      echo "<TD>\n";
+      if ($katearr2["kategorie"] != "" ){
+        echo "<big><big><b>".$katearr2["kategorie"]."</b></big></big>";
+      }
+      $katego2->pulldown_kategorien ($katearr2["lfd"],true);
+
+      echo "</TD>";
+      echo "<TD>";
+      echo "<input type=\"image\" name=\"4fachkatego_absenden\" src=\"".$conf_design_path."/119.jpg\">\n";
+      echo "</TD>\n";
+    }
+//    echo "</TR>\n";
+
+    echo "</FORM>\n" ;
+
+//    echo "<TD>\n";
+
+    echo "<FORM style=\"\" method=\"get\" action=\"".$conf_4f ["MainURL"]."\" name=\"4fach\">\n";
+//    echo "<table style=\"text-align: left; background-color: rgb(255, 255, 255);\" border=\"1\" cellpadding=\"1\" cellspacing=\"0\">\n";
+//    echo "<TABLE>\n";
+//    echo "<TBODY>\n";
+
+//echo "-----------------------------------------------------------------------<br>";
+//echo "Task=".$this->task."     04Richtung=".$this->formdata["04_richtung"]."<br>";
+//echo "-----------------------------------------------------------------------<br>";
+/*
+                                04Richtung      Antwort Weiterleitung
+
+FM      FM-Eingang_Sichter              -       -         -
+FM      FM-Eingang                      -       -         -
+FM      FM-Ausgang                      A       X         -
+
+Si      Stab_sichten                    E       -         -
+Si      Stab_sichten                    A       -         -
+Si      SI-Admin                        E       -         -
+Si      SI-Admin                        A       -         -
+
+Stab    Stab_lesen                      E       X         X
+Stab    Stab_lesen                      A       -         X
+
+Stab    Stab_schreiben                  -       -         -
+                                                2         2
+
+
+*/
+//echo "TASK TASK TASK===".$this->task."<br><b>";
+    switch ($this->task){
+      case "Stab_lesen":
+//        echo "<tr>";
+        echo "<td>\n";
+        echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
+        echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
+        echo "<input type=\"image\" name=\"gelesen\" src=\"".$conf_design_path."/010.jpg\">\n";
+        echo "</td>";
+
+        if ($this->formdata["04_richtung"]=="E"){
+          echo "<td>\n";
+          echo "<input type=\"image\" name=\"antwort\" src=\"".$conf_design_path."/028.jpg\">\n";
+          echo "</td><td>\n";
+          echo "<input type=\"image\" name=\"weiterleiten\" src=\"".$conf_design_path."/029.jpg\">\n";
+          echo "</td>";
+        } elseif ($this->formdata["04_richtung"]=="A"){
+          echo "<td>\n";
+          echo "<input type=\"image\" name=\"weiterleiten\" src=\"".$conf_design_path."/029.jpg\">\n";
+          echo "</td>";
+        }
+//        echo "</tr>\n";
+      break;
+
+      case "FM-Eingang":
+      case "FM-Eingang_Sichter":
+      case "Stab_schreiben":
+      case "FM-Eingang_Anhang":
+      case "Stab_gesprnoti":
+//        echo "<tr>";
+        echo "<td>\n";
+        echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
+        echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
+        echo "<input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/003.jpg\">\n";
+        echo "</td><td>\n";
+        echo "<input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/001.jpg\">\n";
+        echo "</td>\n";
+      break;
+
+      case "FM-Ausgang":
+      case "FM-Ausgang_Sichter":
+//        echo "<tr>";
+        echo "<td>\n";
+        echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
+        echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
+        echo "<input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/003.jpg\">\n";
+        echo "</td><td>\n";
+        echo "<input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/001.jpg\">\n";
+
+        echo "</td>";
+/*
+        echo "<td>\n";
+        echo "<input type=\"image\" name=\"anhang\" src=\"".$conf_design_path."/005.jpg\">\n";
+        echo "</td>\n";
+*/
+        if ($this->formdata["04_richtung"]=="A"){
+          echo "<td>\n";
+          echo "<input type=\"image\" name=\"antwort\" src=\"".$conf_design_path."/028.jpg\">\n";
+          echo "</td>";
+  //        echo "<td>\n";
+  //        echo "<input type=\"image\" name=\"weiterleiten\" src=\"".$conf_design_path."/029.jpg\">\n";
+  //        echo "</td>\n";
+        }
+
+//        echo "</tr>\n";
+      break;
+      case "Stab_sichten":
+      case "SI-Admin":
+//        echo "<tr>";
+        echo "<td>\n";
+        echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
+        echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
+        echo "<input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/003.jpg\">\n";
+        echo "</td><td>\n";
+        echo "<input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/001.jpg\">\n";
+        echo "</td>";
+//        echo "<td>\n";
+      break;
+   } // switch
+//    echo "</tbody>\n</table>\n";
+
+
+
+//    echo "</TD>\n";
+    echo "</TR>\n";
+    echo "</TBODY>\n";
+    echo "</TABLE>\n";
+
+
+
+
+    echo "\n\n\n\n\n\n\n\n\n<!-- ********** TABLE   001 Gesamte Tabelle *********** -->\n";
 
     echo "<!-- H A U P T T A B E L L E  -->";
 
@@ -401,7 +670,9 @@ class nachrichten4fach {
     */
     // Zeile, Spalte 1,1    EINGANG    1  1   Eingang
     echo "<td style=\"width: 230px; background-color: ".$this->bg[1].";\"><!--002-->\n";
-    echo "<div style=\"text-align: center; width: 200px;\">EINGANG</div>\n";
+    echo "<div style=\"text-align: center; width: 200px;\">EINGANG";
+    echo "</div>\n";
+
     echo "</td><!--002-->\n";
     // Zeile, Spalte 1,2    AUSGANG    2  2   Ausgang Annahmevermerk Befoerderungsvermerk
     echo "<td style=\"text-align: center; background-color: ".$this->bg[2]."; width: 427px;\"><!--003-->\nAUSGANG</td><!--003-->\n";
@@ -422,17 +693,13 @@ class nachrichten4fach {
       $param = "";
     }
 
-    if  ($this->formdata["01_datum"] != "" ) {
-      $arr = convdatetimeto ($this->formdata["01_datum"]);
-      $this->formdata["01_datum"] = $arr [datum];
-      $this->formdata["01_zeit"] = $arr [zeit];
-    } else {
-        $this->formdata["01_datum"] ="";
-        $this->formdata["01_zeit"] = "";
-    }
-
     echo "<td style=\"background-color: ".$this->bg[1]."; width: 230px; text-align: center; vertical-align: top;\"><!--005-->\n";
     echo "<div style=\"text-align: center;\">Aufnahmevermerk<br></div>\n";
+
+    if ( ( $this->errorselect ["01_medium"] == false ) AND ($this->feld [1]) ) {
+      $this->showerrorinfo ("01_medium");
+    }
+
     if ($this->formdata["01_medium"]=="Fe") {$sel = "checked=\"checked\"";} else {$sel = "";}
     echo "<input name=\"01_medium\" value=\"Fe\" type=\"radio\" ".$param.$sel.">Fe";
     if ($this->formdata["01_medium"]=="Fu") {$sel = "checked=\"checked\"";} else {$sel = "";}
@@ -447,24 +714,35 @@ class nachrichten4fach {
 /*468*/
     if (!$this->feld [1]){
       if ( ( $this->formdata["01_datum"] != "") or
-           ( $this->formdata["01_zeit"]  != "" ) or
+//del           ( $this->formdata["01_zeit"]  != "" ) or
            ( $this->formdata["01_zeichen"] != "" ) ) {
         if ( posttakzeit ) {
           echo "<div style=\"text-align: center;\"><b>";
-          $takzeit = konv_datetime_taktime (convtodatetime ($this->formdata["01_datum"], $this->formdata["01_zeit"]) );
-          echo $takzeit."&nbsp; &nbsp;".$this->formdata["01_zeichen"];
+//del          $takzeit = konv_datetime_taktime (convtodatetime ($this->formdata["01_datum"], $this->formdata["01_zeit"]) );
+//          $takzeit = konv_datetime_taktime ($this->formdata["01_datum"]);
+
+          echo $this->formdata["01_datum"]."&nbsp; &nbsp;".$this->formdata["01_zeichen"];
           echo "</b></div>";
         } else {
         echo "<div style=\"text-align: center;\"><b>";
-        echo $this->formdata["01_datum"]."&nbsp; &nbsp;".$this->formdata["01_zeit"]."&nbsp; &nbsp;".$this->formdata["01_zeichen"];
+        echo $this->formdata["01_datum"]."&nbsp; &nbsp;".$this->formdata["01_zeichen"];//."&nbsp; &nbsp;".$this->formdata["01_zeit"]
         echo "</b></div>";
         }
       } else {
         echo "<br>";
       }
     } else {
-      echo "<input maxlength=\"4\" size=\"4\" name=\"01_datum\" value=\"".$this->formdata["01_datum"]."\">\n";
-      echo "<input maxlength=\"4\" size=\"4\" name=\"01_zeit\" value=\"".$this->formdata["01_zeit"]."\">\n";
+
+    if ( $this->errorselect ["01_datum"] == false ){
+      $this->showerrorinfo ("01_datum");
+    }
+
+      echo "<input maxlength=\"13\" size=\"13\" name=\"01_datum\" value=\"".$this->formdata["01_datum"]."\">\n";
+//del      echo "<input maxlength=\"4\" size=\"4\" name=\"01_zeit\" value=\"".$this->formdata["01_zeit"]."\">\n";
+
+    if ( $this->errorselect ["01_zeichen"] == false ){
+      $this->showerrorinfo ("01_zeichen");    }
+
       echo "<input maxlength=\"3\" size=\"3\" name=\"01_zeichen\" value=\"".$this->formdata["01_zeichen"]."\">\n";
     }
 //    echo "<br>\n";
@@ -478,14 +756,14 @@ class nachrichten4fach {
     02_zeit
     02_zeichen
     \****************************************************************************/
-
+/*
     if ($this->formdata["02_zeit"] != "" ) {
       $arr = convdatetimeto ($this->formdata["02_zeit"]);
       $this->formdata["02_zeit"] = $arr [zeit];
     }   else {
       $this->formdata["02_zeit"] = "";
     }
-
+*/
     echo "<td style=\"width: 427px; background-color: ".$this->bg[2].";\"><!--006-->\n";
     echo "\n\n<!-- ********** TABLE   AUSGANG  *********** -->\n";
     echo "<table style=\"text-align: \"center\"; background-color: ".$this->rbl_bg_color."; width: 400px; height: 80px; margin-left: auto; margin-right: auto;\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\">\n";
@@ -505,13 +783,21 @@ class nachrichten4fach {
         echo "<br>";
       }
     } else {
-    echo "<input maxlength=\"4\" size=\"4\" name=\"02_zeit\" value=\"".$this->formdata["02_zeit"]."\">&nbsp;\n
-          <input maxlength=\"3\" size=\"3\" name=\"02_zeichen\" value=\"".$this->formdata["02_zeichen"]."\"><br>\n";
+      if ( $this->errorselect ["02_zeit"] == false ){
+      $this->showerrorinfo ("02_zeit");      }
+
+      echo "<input maxlength=\"13\" size=\"13\" name=\"02_zeit\" value=\"".$this->formdata["02_zeit"]."\">&nbsp;\n";
+
+      if ( $this->errorselect ["02_zeichen"] == false ){
+      $this->showerrorinfo ("02_zeichen");      }
+
+      echo "<input maxlength=\"3\" size=\"3\" name=\"02_zeichen\" value=\"".$this->formdata["02_zeichen"]."\"><br>\n";
     }
+
     echo "<div style=\"text-align: center;\">";
     echo "&nbsp;Uhrzeit &nbsp; &nbsp;Zeichen</td>\n";
     echo "</div>";
-
+/*
       if  ($this->formdata["03_datum"] != "" ) {
         $arr = convdatetimeto ($this->formdata["03_datum"]);
         $this->formdata["03_datum"] = $arr [datum];
@@ -520,31 +806,38 @@ class nachrichten4fach {
         $this->formdata["03_datum"] ="";
         $this->formdata["03_zeit"] = "";
      }
-
+*/
     echo "<td style=\"height: 80px; width: 220px; background-color: ".$this->bg[3]."; text-align: center; vertical-align: top;\">\n";
     echo "<div style=\"text-align: center;\">Bef&ouml;rderungsvermerk<br></div>\n";
 
 
     if (!$this->feld [3]){
       if ( ( $this->formdata["03_datum"]   != "") or
-           ( $this->formdata["03_zeit"]    != "" ) or
+//           ( $this->formdata["03_zeit"]    != "" ) or
            ( $this->formdata["03_zeichen"] != "" ) ) {
         if ( posttakzeit ) {
           echo "<div style=\"text-align: center;\"><b>";
-          $takzeit = konv_datetime_taktime (convtodatetime ($this->formdata["03_datum"], $this->formdata["03_zeit"]) );
+          $takzeit = konv_datetime_taktime ($this->formdata["03_datum"]);
           echo $takzeit."&nbsp; &nbsp;".$this->formdata["03_zeichen"];
           echo "</b></div>";
         } else {
           echo "<div style=\"text-align: center;\"><b>";
-          echo $this->formdata["03_datum"]."&nbsp; &nbsp;".$this->formdata["03_zeit"]."&nbsp; &nbsp;".$this->formdata["03_zeichen"];
+          echo $this->formdata["03_datum"]."&nbsp; &nbsp;".$this->formdata["03_zeichen"];
           echo "</b></div>";
         }
       }else {
         echo "<br>";
       }
     } else {
-      echo "<input maxlength=\"4\" size=\"4\" name=\"03_datum\" value=\"".$this->formdata["03_datum"]."\">\n";
-      echo "<input maxlength=\"4\" size=\"4\" name=\"03_zeit\" value=\"".$this->formdata["03_zeit"]."\">\n";
+      if ( $this->errorselect ["03_datum"] == false ){
+      $this->showerrorinfo ("03_datum");      }
+
+      echo "<input maxlength=\"13\" size=\"13\" name=\"03_datum\" value=\"".$this->formdata["03_datum"]."\">\n";
+//      echo "<input maxlength=\"4\" size=\"4\" name=\"03_zeit\" value=\"".$this->formdata["03_zeit"]."\">\n";
+
+      if ( $this->errorselect ["03_zeichen"] == false ){
+      $this->showerrorinfo ("03_zeichen");      }
+
       echo "<input maxlength=\"3\" size=\"3\" name=\"03_zeichen\" value=\"".$this->formdata["03_zeichen"]."\"><br>\n";
     }
 
@@ -777,8 +1070,6 @@ class nachrichten4fach {
     echo "</td>\n";
     echo "</tr>\n";
 
-echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*********************************************-->";
-
     echo "<tr>\n";
     echo "<td style=\"text-align: left; background-color: ".$this->rbl_bg_color."\" align=\"left\" valign=\"top\">\n";
     echo "<table style=\"text-align: left; background-color: ".$this->rbl_bg_color."; width: 819px; height: 100px;\" border=\"1\" cellpadding=\"1\" cellspacing=\"0\">\n";
@@ -814,7 +1105,13 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
     // Zeile, Spalte 6,2   Anschrift      512 10  Anschrift
     10_anschrift
     \****************************************************************************/
-    echo "<td style=\"width: 600px; background-color: ".$this->bg[10].";\">Anschrift<br>\n";
+    echo "<td style=\"width: 600px; background-color: ".$this->bg[10].";\">";
+
+    echo "Anschrift:";
+    if ( $this->errorselect ["10_anschrift"] == false ){
+      $this->showerrorinfo ("10_anschrift");    }
+
+    echo "<br>\n";
 
     if (!$this->feld[10]) {
       echo "<input type=\"hidden\" name=\"10_anschrift\" value=\"".$this->formdata["10_anschrift"]."\">\n";
@@ -835,7 +1132,11 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
     // Zeile, Spalte 6,3   Gesprächsnotiz    1024 11  Gesprächsnotiz
     11_gesprnotiz
     \****************************************************************************/
+
     if (((($this->formdata["11_gesprnotiz"]) != "" )) or (!$this->feld[11])) {
+      if ( $this->formdata["11_gesprnotiz"] ){$this->formdata["11_gesprnotiz"]= "on"; }
+
+      echo "<input type=\"hidden\" name=\"11_gesprnotiz\" value=\"".$this->formdata["11_gesprnotiz"]."\">\n";
       $param = " disabled ";}
     else {
       $param = "";}
@@ -843,7 +1144,8 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
     echo "<td style=\"width: 110px; background-color: ".$this->bg[11].";\">Gespr&auml;chsnotiz<br>\n";
     echo "<div style=\"text-align: center;\">";
 
-    if ($this->formdata["11_gesprnotiz"]) {$sel = "checked=\"checked\"";} else {$sel = "";}
+    if ($this->formdata["11_gesprnotiz"] == "on") {$sel = "checked=\"checked\"";} else {$sel = "";}
+
     echo "<input name=\"11_gesprnotiz\" type=\"checkbox\" ".$param.$sel."><br>\n";
 
     echo "</div>\n";
@@ -871,7 +1173,14 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
     else {
       $param = "";}
 
-    echo "<td valign=\"TOP\" style=\"background-color: ".$this->bg[12].";\">Inhalt/Text:<br>\n";
+    echo "<td valign=\"TOP\" style=\"background-color: ".$this->bg[12].";\">";
+    echo "Inhalt/Text:";
+
+    if ( $this->errorselect ["12_inhalt"] == false ){
+      $this->showerrorinfo ("12_inhalt");
+    }
+
+    echo "<br>\n";
 
     if  ($this->feld[12]) {
       echo "<div style=\"text-align: center;\">";
@@ -883,7 +1192,7 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
       echo nl2br ( $this->formdata["12_inhalt"]) ;
       echo "</div>";
     }
-      // Sind Anhge definiert? Wenn ja, anzeigen.
+      // Sind Anhaege definiert? Wenn ja, anzeigen.
     if ($this->formdata["12_anhang"] != ""){
       echo "<input type=\"hidden\" name=\"12_anhang\" value=\"".$this->formdata["12_anhang"]."\">\n";
       $this->list_anhang ();
@@ -906,19 +1215,23 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
     // Zeile, Spalte 8,1     2048 12  Inhalt, Abfassungszeit
     \****************************************************************************/
 
-    echo "<td style=\"width: 135px; background-color: ".$this->bg[12].";\">Abfassungszeit:</td>\n";
+    echo "<td style=\"width: 135px; background-color: ".$this->bg[12].";\">Abfassungszeit:";
+    if ( $this->errorselect ["12_abfzeit"] == false ){
+      $this->showerrorinfo ("12_abfzeit");    }
+
+    echo "</td>\n";
 
     /****************************************************************************\
     // Zeile, Spalte 8,2     4096 13  Absender, Einheit
     12_abfzeit
     \****************************************************************************/
-    if  ($this->formdata["12_abfzeit"] != "" ) {
+/*    if  ($this->formdata["12_abfzeit"] != "" ) {
         $arr = convdatetimeto ($this->formdata["12_abfzeit"]);
         $this->formdata["12_abfzeit"] = $arr [zeit];
     }   else {
         $this->formdata["12_abfzeit"] = "";
     }
-
+*/
     echo "<td style=\"width: 600px; background-color: ".$this->bg[13].";\">\n";
 
     if (!$this->feld [12]){
@@ -927,7 +1240,7 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
       echo "<input type=\"hidden\" name=\"12_abfzeit\" value=\"".$this->formdata["12_abfzeit"]."\">\n";
       echo "</div>\n";
     } else {
-      echo "<input maxlength=\"4\" size=\"4\" name=\"12_abfzeit\" value=\"".$this->formdata["12_abfzeit"]."\">";
+      echo "<input maxlength=\"13\" size=\"13\" name=\"12_abfzeit\" value=\"".$this->formdata["12_abfzeit"]."\">";
     }
 
     echo "</td>\n";
@@ -944,7 +1257,10 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
     echo "<tbody>\n";
     echo "<tr>\n";
     // Zeile, Spalte 9,1    4096  13  Absender, Einheit
-    echo "<td style=\"width: 100px; background-color: ".$this->bg[13].";\">Absender</td>\n";
+    echo "<td style=\"width: 100px; background-color: ".$this->bg[13].";\">Absender";
+    if ( $this->errorselect ["13_abseinheit"] == false ){
+      $this->showerrorinfo ("13_abseinheit");    }
+    echo "</td>\n";
 
     /****************************************************************************\
     // Zeile, Spalte 9,2    8192  14  Zeichen Funktion
@@ -954,6 +1270,7 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
 
     if (!$this->feld [13]){
       echo "<b><big>".$this->formdata["13_abseinheit"]."</big></b>" ;
+      echo "<br>";
       echo "<input type=\"hidden\" name=\"13_abseinheit\" value=\"".$this->formdata["13_abseinheit"]."\">\n";
     }
     else {
@@ -962,7 +1279,7 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
               name=\"13_abseinheit\" value=\"".$this->formdata["13_abseinheit"]."\">";
       echo "</div>\n";
     }
-    echo "<br>\n";
+
     echo "Einheit/Einrichtung/Stelle";
     echo "</td>\n";
 
@@ -1020,16 +1337,10 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
     15_quitdatum
     15_quitzeichen
     \****************************************************************************/
-    echo "<td style=\"width: 109px; background-color: ".$this->bg[15].";\">Quittung:<br></td>\n";
+    echo "<td style=\"width: 109px; background-color: ".$this->bg[15].";\">Quittung:";
+
+    echo "</td>\n";
     echo "<td style=\"width: 289px; background-color: ".$this->bg[15].";\">\n";
-
-    if  ($this->formdata["15_quitdatum"] != "" ) {
-        $arr = convdatetimeto ($this->formdata["15_quitdatum"]);
-
-        $this->formdata["15_quitdatum"] = $arr [zeit];
-    }   else {
-        $this->formdata["15_quitdatum"] = "";
-    }
 
     if (!$this->feld [15]){
       echo "<div style=\"text-align: left;\">";
@@ -1037,7 +1348,11 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
       echo "</div>\n";
 
     } else {
-    echo "<input maxlength=\"4\" size=\"4\" name=\"15_quitdatum\" value=\"".$this->formdata["15_quitdatum"]."\">&nbsp;\n";
+    if ( $this->errorselect ["15_quitdatum"] == false ){
+      $this->showerrorinfo ("15_quitdatum");    }
+    echo "<input maxlength=\"13\" size=\"13\" name=\"15_quitdatum\" value=\"".$this->formdata["15_quitdatum"]."\">&nbsp;\n";
+    if ( $this->errorselect ["15_quitzeichen"] == false ){
+      $this->showerrorinfo ("15_quitzeichen");    }
     echo "<input maxlength=\"3\" size=\"3\" name=\"15_quitzeichen\" value=\"".$this->formdata["15_quitzeichen"]."\"><br>\n";
     }
 
@@ -1196,106 +1511,14 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
     echo "</tbody>\n";
     echo "</table>\n";
 
-    echo "<table style=\"text-align: left; background-color: rgb(255, 255, 255);\" border=\"1\" cellpadding=\"1\" cellspacing=\"0\">\n";
-    echo "<tbody>\n";
-
-//echo "-----------------------------------------------------------------------<br>";
-//echo "Task=".$this->task."     04Richtung=".$this->formdata["04_richtung"]."<br>";
-//echo "-----------------------------------------------------------------------<br>";
-/*
-                                04Richtung      Antwort Weiterleitung
-
-FM      FM-Eingang_Sichter              -       -         -
-FM      FM-Eingang                      -       -         -
-FM      FM-Ausgang                      A       X         -
-
-Si      Stab_sichten                    E       -         -
-Si      Stab_sichten                    A       -         -
-Si      SI-Admin                        E       -         -
-Si      SI-Admin                        A       -         -
-
-Stab    Stab_lesen                      E       X         X
-Stab    Stab_lesen                      A       -         X
-
-Stab    Stab_schreiben                  -       -         -
-                                                2         2
 
 
-*/
-//echo "TASK TASK TASK===".$this->task."<br><b>";
-    switch ($this->task){
-      case "Stab_lesen":
-        echo "<tr><td>\n";
-        echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
-        echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
-        echo "<input type=\"image\" name=\"gelesen\" src=\"".$conf_design_path."/010.jpg\">\n";
-        echo "</td>";
-
-        if ($this->formdata["04_richtung"]=="E"){
-          echo "<td>\n";
-          echo "<input type=\"image\" name=\"antwort\" src=\"".$conf_design_path."/028.jpg\">\n";
-          echo "</td><td>\n";
-          echo "<input type=\"image\" name=\"weiterleiten\" src=\"".$conf_design_path."/029.jpg\">\n";
-          echo "</td>";
-        } elseif ($this->formdata["04_richtung"]=="A"){
-          echo "<td>\n";
-          echo "<input type=\"image\" name=\"weiterleiten\" src=\"".$conf_design_path."/029.jpg\">\n";
-          echo "</td>";
-        }
-        echo "</tr>\n";
-      break;
-
-      case "FM-Eingang":
-      case "FM-Eingang_Sichter":
-      case "Stab_schreiben":
-      case "FM-Eingang_Anhang":
-      case "Stab_gesprnoti":
-        echo "<tr><td>\n";
-        echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
-        echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
-        echo "<input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/003.jpg\">\n";
-        echo "</td><td>\n";
-        echo "<input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/001.jpg\">\n";
-        echo "</td><td>\n";
-      break;
-
-      case "FM-Ausgang":
-      case "FM-Ausgang_Sichter":
-        echo "<tr><td>\n";
-        echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
-        echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
-        echo "<input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/003.jpg\">\n";
-        echo "</td><td>\n";
-        echo "<input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/001.jpg\">\n";
-        echo "</td><td>\n";
-        echo "<input type=\"image\" name=\"anhang\" src=\"".$conf_design_path."/005.jpg\">\n";
-        echo "</td>\n";
-
-        if ($this->formdata["04_richtung"]=="A"){
-          echo "<td>\n";
-          echo "<input type=\"image\" name=\"antwort\" src=\"".$conf_design_path."/028.jpg\">\n";
-          echo "</td>";
-  //        echo "<td>\n";
-  //        echo "<input type=\"image\" name=\"weiterleiten\" src=\"".$conf_design_path."/029.jpg\">\n";
-  //        echo "</td>\n";
-        }
-
-        echo "</tr>\n";
-      break;
-      case "Stab_sichten":
-      case "SI-Admin":
-        echo "<tr><td>\n";
-        echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
-        echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
-        echo "<input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/003.jpg\">\n";
-        echo "</td><td>\n";
-        echo "<input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/001.jpg\">\n";
-        echo "</td><td>\n";
-      break;
 
 
-   } // switch
-    echo "</tbody>\n</table>\n";
+
+
+
+
     echo "<br>\n";
     echo "</form>\n";
     //echo "TASK=".$this->task."<br>";

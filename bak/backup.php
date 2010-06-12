@@ -13,6 +13,7 @@
 \*****************************************************************************/
 
 define ("debug",false);
+define ("outputtyp","jpg"); // png, jpg
 
 class vordruckasimg {
 
@@ -559,9 +560,11 @@ class vordruckasimg {
 //      header ("Content-type: image/png");
 //      imagepng($this->image);
         // Datenbankname und Nachweisung
+
       $filename = $conf_4f ["vordruck_dir"]."/".$conf_4f_db ["datenbank"]." ".
-                  $this->db_dataset ["04_nummer"]." ".$this->db_dataset ["04_richtung"].".png" ;
-      imagepng($this->image, $filename);
+                  $this->db_dataset ["04_nummer"]." ".$this->db_dataset ["04_richtung"] ;
+      if (outputtyp == "png") { imagepng($this->image, $filename.".png"); }
+      if (outputtyp == "jpg") { imagejpeg($this->image, $filename.".jpg"); }
 //    }
     imagedestroy($this->image);
   }

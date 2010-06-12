@@ -7,7 +7,7 @@
    Beschreibung:
      Zentrale Konfigurationsdatei
 
-   (C) 2006-2007 Hajo Landmesser IuK Kreis Heinsberg
+   (C) 2006-2008 Hajo Landmesser IuK Kreis Heinsberg
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
 
@@ -32,7 +32,7 @@
       // URL des Servers
     $conf_urlroot  = "http://".$_SERVER ["SERVER_NAME"]; //"http://1service.no-ip.org";
 
-      // Wurzelverzeichnis fuer den Webserver
+      // Wurzelverzeichnis fr den Webserver
       // unter Linux /srv/www/htdocs
       // unter Windows C:\Progra~1\Apache\htdocs
       // u.U. muss mit dir /X der Kurzname 8.3 ermittelt und eingetragen werden
@@ -66,7 +66,7 @@
     $conf_4f ["Titelkurz"]        =  "eStab";
     $conf_4f ["SubTitel"]["env"]  =  " - elektronischer Nachrichtenvordruck";
     $conf_4f ["SubTitel"]["etb"]  =  "Einsatztagebuch";
-    $conf_4f ["Version"]          =  "v0.9.10 15jun2008";
+    $conf_4f ["Version"]          =  "v0.9.11 11.10.2008 ";
 
       // Programm information und Versionsnummer
     $conf_4f ["NameVersion"][0]   = "<big><big><b>".$conf_4f ["Titelkurz"]." ".
