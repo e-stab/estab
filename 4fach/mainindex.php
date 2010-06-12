@@ -26,6 +26,12 @@ if ( debug == true ){
   echo "SESSION="; print_r ($_SESSION); echo "#<br>\n";
 }
 
+if (debug){
+error_reporting(E_ALL);
+} else {
+error_reporting(FATAL | ERROR | WARNING);
+}
+
 include ("../config.inc.php");    // Konfigurationseinstellungen und Vorgaben
 include ("../dbcfg.inc.php");    // Datenbankparameter
 include ("../fkt_rolle.inc.php"); // Mitspieler
@@ -39,7 +45,7 @@ include ("menue.php");                // erzeuge Men
 /**********************************************************************\
   Es gab noch keinen Kontakt ==> Begruessung
 \**********************************************************************/
-if (isset ( $_GET [m2_parameter_x] )) {
+if (isset ( $_GET ["m2_parameter_x"] )) {
 /*  echo "<html><head><title>Parameter einstellen</title>";
   echo "<script type=\"text/javascript\">";
   echo "ParaFenster = window.open(\"./edt_para.php\", \"ParaFenster\", \"width=500,height=500,left=50,top=50\");";
@@ -86,13 +92,19 @@ $weiterantwort = false;
 
   \**********************************************************************/
   if (isset($_GET["filter_suche_reset"])){ unset ($_SESSION["flt_search"]); }
-  if (isset($_GET["filter_suche"])){ $_SESSION["flt_search"] = $_GET ["flt_search"]; }
+  if (isset($_GET["filter_suche"])){ 
+    if ($_SESSION["flt_search"] != $_GET ["flt_search"]){
+      $_SESSION["filter_start"] = 0 ;
+      $_SESSION["filter_position"] = 0;      
+    }
+    $_SESSION["flt_search"] = $_GET ["flt_search"]; 
+  }
 
   if ( (isset ($_GET["filter_submit"])) OR
-       (isset($_GET[flt_start_x])) OR
-       (isset($_GET[flt_back_x])) OR
-       (isset($_GET[flt_for_x])) OR
-       (isset($_GET[flt_end_x]))
+       (isset($_GET["flt_start_x"])) OR
+       (isset($_GET["flt_back_x"])) OR
+       (isset($_GET["flt_for_x"])) OR
+       (isset($_GET["flt_end_x"]))
      ) { // es soll was geändert werden
 
     if (!isset ( $_SESSION["filter_darstellung"] )){
@@ -146,7 +158,7 @@ $weiterantwort = false;
   /************************************************************************\
 
   \************************************************************************/
-  if ( isset ($_GET [action]) ){
+  if ( isset ($_GET ["action"]) ){
     // gelesen
     if ($_GET [action] == "gelesen")
       if ($_GET [todo] == "set"){
@@ -168,13 +180,13 @@ $weiterantwort = false;
   /**********************************************************************\
     Es gab noch keinen Kontakt ==> Begruessung
   \**********************************************************************/
-  if (!isset ( $_SESSION [menue] ))
+  if (!isset ( $_SESSION ["menue"] ))
      { $_SESSION ['menue'] = "WELCOME"; }
 
   /**********************************************************************\
     Der Anmelde Button wurde gedrueckt
   \**********************************************************************/
-  if ( $_GET[login] == "Anmelden" )  {
+  if ( $_GET["login"] == "Anmelden" )  {
     $_SESSION ['menue'] = "LOGIN"; }
 
   /**********************************************************************\
@@ -185,10 +197,10 @@ $weiterantwort = false;
       (isset ($_GET["funktion"])) and
       ($_SESSION["menue"] == "LOGIN")){
     $error = check_save_user ();
-    unset ($_GET);
+//    unset ($_GET);
     if (!$error) {
       $_SESSION["menue"] = "ROLLE";  //   führt zu fehlern bei der menüdarstellung
-      header("Location: ".$conf_4f ["MainURL"]);
+//      header("Location: ".$conf_4f ["MainURL"]);
     }
     // Wenn Benutzer OK ==> SESSION [menue]=ROLLE ; $_SESSION [ROLLE]= Stab, Fernmelder...
   }
@@ -202,7 +214,7 @@ $weiterantwort = false;
 ***********************************************************************/
 
   // Abbruch der Gesprächsnotiz beim Sichten
-  if ( ( $_GET["abbrechen_x"] ) and ( $_SESSION ['gesprnoti'] ) ){
+  if ( ( $_GET["abbrechen_x"] ) and ( $_SESSION ["gesprnoti"] ) ){
     unset ( $_SESSION ['gesprnoti'] );
   }
 

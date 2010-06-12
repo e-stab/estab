@@ -20,7 +20,7 @@ function menue (){
        ( !isset ( $_SESSION ["menue"]))) { reset_cookie (); }
 
   include ("../config.inc.php");
-  include ("../dbcfg.inc.php");
+  include ("../dbcfg.inc.php");  include ("../e_cfg.inc.php");
   include ("../fkt_rolle.inc.php");
 
 

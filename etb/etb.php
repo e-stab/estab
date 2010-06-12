@@ -149,6 +149,7 @@ class etb_liste {
 if (debug == true){ echo "D A T E N  W E R D E N  G E S P E I C H E R N<br>";}
 
     include ("../dbcfg.inc.php");
+    include ("../e_cfg.inc.php");
     $this->set_db_para ($conf_4f_db  ["server"],
                         $conf_4f_db  ["datenbank"],
                         $conf_tbl    ["etb"],
@@ -169,6 +170,7 @@ if (debug == true){ echo "D A T E N  W E R D E N  G E S P E I C H E R N<br>";}
 \*****************************************************************************/
   function create_etbtitel_tbl(){
     include ("../dbcfg.inc.php");
+    include ("../e_cfg.inc.php");
     $this->set_db_para ($conf_4f_db  ["server"],
                                $conf_4f_db  ["datenbank"],
                                $conf_tbl    ["etb"],
@@ -199,6 +201,7 @@ if (debug == true){ echo "D A T E N  W E R D E N  G E S P E I C H E R N<br>";}
 \*****************************************************************************/
   function etb_tableexist () {
     include ("../dbcfg.inc.php");
+    include ("../e_cfg.inc.php");
     $this->set_db_para ($conf_4f_db  ["server"],
                         $conf_4f_db  ["datenbank"],
                         $conf_tbl    ["etb"],
@@ -231,6 +234,7 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
   function read_out_etbtitel (){
       if (debug == true){echo "read_out_etbtitel<br>";}
     include ("../dbcfg.inc.php");
+    include ("../e_cfg.inc.php");
     $this->set_db_para ($conf_4f_db  ["server"],
                         $conf_4f_db  ["datenbank"],
                         $conf_tbl    ["etb"],
@@ -333,6 +337,7 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
 \*****************************************************************************/
   function etb_getdate ( ){
     include ("../dbcfg.inc.php");
+    include ("../e_cfg.inc.php");
     $this->set_db_para ($conf_4f_db  ["server"],
                                $conf_4f_db  ["datenbank"],
                                $conf_tbl    ["etb"],
@@ -355,6 +360,7 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
     if (debug == true){     echo "D A T E N  W E R D E N  G E S P E I C H E R N<br>";}
 
     include ("../dbcfg.inc.php");
+    include ("../e_cfg.inc.php");
     $this->set_db_para ($conf_4f_db  ["server"],
                         $conf_4f_db  ["datenbank"],
                         $conf_tbl    ["etb"],

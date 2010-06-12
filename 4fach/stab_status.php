@@ -8,7 +8,7 @@ class stab_status {
   Aktive Benutzer in der Benutzertabelle
 \**************************************************************************/
   function get_aktiv_user ($fkt){
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
                          $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
 
@@ -27,7 +27,7 @@ class stab_status {
   Anzahl aller Nachrichten pro Funktion
 \**************************************************************************/
   function get_all ($fkt){
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
                          $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
     $query_where_arg1 = "( `16_empf` like \"%".$fkt."%\" )";
@@ -44,7 +44,7 @@ class stab_status {
   Anzahl aller Nachrichten pro Funktion
 \**************************************************************************/
   function get_all_gelesen ($fkt, $kzl){
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
   echo "get_all_gelesen = ".$fkt." kzl= ".$kzl."#<br>";
     $tblusername   = $conf_4f_tbl ["usrtblprefix"].strtolower ($fkt).
                      "_".strtolower ($kzl);
@@ -73,7 +73,7 @@ class stab_status {
   Anzahl aller Nachrichten pro Funktion
 \**************************************************************************/
   function get_all_erledigt ($fkt, $kzl){
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
                          $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
     $query_where_arg1 = "( `16_empf` like \"%".$fkt."%\" )";
@@ -91,7 +91,7 @@ class stab_status {
     echo "\n\n\n<!-- ANFANG file:stab_status.php fkt:createlist -->";
     include ("../config.inc.php");
     include ("../para.inc.php");
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
     include ("../fkt_rolle.inc.php");
 
     $tblusername   = $conf_4f_tbl ["usrtblprefix"].strtolower ($_SESSION["vStab_funktion"]).
@@ -229,7 +229,7 @@ class stab_status {
     include ("../config.inc.php");
     include ("../db_operation.php");
     include ("../para.inc.php");
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
     include ("../fkt_rolle.inc.php");
 
 

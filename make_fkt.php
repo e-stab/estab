@@ -1,6 +1,8 @@
 <?php
 
 
+
+
 /****************************************************************************\
 
 \****************************************************************************/
@@ -13,7 +15,6 @@ var_dump ($values);
 echo "<br><br><br>";
 */
   }
-
 
 
 /****************************************************************************\
@@ -50,27 +51,27 @@ echo "<br><br><br>";
       $matrix .= "$zeile => array ( \r\n";
       for ($spalte = 1; $spalte <= 4; $spalte ++){
 
-        if ($values[pos_.$zeile.$spalte] == ""){ $values[rolle.$zeile.$spalte] = "leer"; }
+        if ($values["pos_".$zeile.$spalte] == ""){ $values["rolle".$zeile.$spalte] = "leer"; }
 
         $matrix .= "\t $spalte => array (";
 
-        if ($values[pos_.$zeile.$spalte] == ""){ $matrix .= "\"typ\" => \"t\", "; }
+        if ($values["pos_".$zeile.$spalte] == ""){ $matrix .= "\"typ\" => \"t\", "; }
         else { $matrix .=  "\"typ\" => \"cb\", "; }
 
-        if ($values[rolle.$zeile.$spalte] == "leer"){ $matrix .= "\"typ\" => \"t\", "; }
+        if ($values["rolle".$zeile.$spalte] == "leer"){ $matrix .= "\"typ\" => \"t\", "; }
         else { $matrix .=  "\"typ\" => \"cb\", "; }
 
-        $matrix .= "\"fkt\" => \"".$values[pos_.$zeile.$spalte]."\", ".
-                   "\"rolle\" => \"".$values[rolle.$zeile.$spalte]."\", ".
+        $matrix .= "\"fkt\" => \"".$values["pos_".$zeile.$spalte]."\", ".
+                   "\"rolle\" => \"".$values["rolle".$zeile.$spalte]."\", ".
                    "\"mode\" => \"ro\" ";
 
         if ($spalte != 4){ $matrix .= "),\r\n"; } else { $matrix .= ")\r\n"; }
 
-        if ( ( $values[rolle.$zeile.$spalte] != "leer" ) and ( $values[pos_.$zeile.$spalte] != "alle") ){
-          $anmelde_arr [$user_count] = array ("fkt" => $values[pos_.$zeile.$spalte], "rolle" => $values[rolle.$zeile.$spalte] );
+        if ( ( $values["rolle".$zeile.$spalte] != "leer" ) and ( $values["pos_".$zeile.$spalte] != "alle") ){
+          $anmelde_arr [$user_count] = array ("fkt" => $values["pos_".$zeile.$spalte], "rolle" => $values["rolle".$zeile.$spalte] );
           $user_count ++;
         }
-        if (isset ($values[lagerot] )){ $roter_durchschlag = $values[pos_.$values[lagerot]]; }
+        if (isset ($values["lagerot"] )){ $roter_durchschlag = $values["pos_".$values["lagerot"]]; }
       }
       if ($zeile != 5){ $matrix .= "),\r\n"; } else { $matrix .= ")\r\n"; }
     }
@@ -78,7 +79,7 @@ echo "<br><br><br>";
 
     $counter = 1;
     foreach ($anmelde_arr as $anmelde){
-       if ( $anmelde [rolle] == "Stab" ){ $anm_arr [$counter++] = $anmelde ; }
+       if ( $anmelde ["rolle"] == "Stab" ){ $anm_arr [$counter++] = $anmelde ; }
     }
 
     sort ($anm_arr);
@@ -87,14 +88,14 @@ echo "<br><br><br>";
         $anm_arr [$counter++]= array ("fkt" => "A/W", "rolle" => "Fernmelder")    ;
 
     foreach ($anmelde_arr as $anmelde){
-       if ($anmelde [rolle] == "FB"){ $anm_arr [$counter++] = $anmelde ; }
+       if ($anmelde ["rolle"] == "FB"){ $anm_arr [$counter++] = $anmelde ; }
     }
 
     $anmelde_str = "";
     $user_count = 1 ;
     foreach ($anm_arr as $anm){
-      $anmelde_str .= "\t$"."conf_empf [$user_count] = array (\"fkt\" => \"".$anm[fkt]."\", ".
-                  "\"rolle\" => \"".$anm [rolle]."\" ); \r\n";
+      $anmelde_str .= "\t$"."conf_empf [$user_count] = array (\"fkt\" => \"".$anm["fkt"]."\", ".
+                  "\"rolle\" => \"".$anm ["rolle"]."\" ); \r\n";
       $user_count++;
     }
 
@@ -102,7 +103,9 @@ echo "<br><br><br>";
 
     $postfile = "\r\n\r\n\r\n?>";
 
+
     $filename =  $conf_web ["srvroot"].$conf_web ["pre_path"]."/fkt_rolle.inc.php";
+
     $fhndl = fopen ( $filename, "w+");
 
     fwrite ($fhndl, $prefile);
@@ -145,11 +148,11 @@ echo "<br><br><br>";
                      Fb   - Fachberater
 \****************************************************************************/
   function cellentry ($zeile, $spalte, $entry, $isredcopy2) {
-    if ($readonly) {
+/*    if ($readonly) {
       $param = " readonly ";}
     else {
       $param = "";}
-
+*/
     if ($isredcopy2) { // Hintergrundfarbe des Feldes umstellen
       echo "<td style=\"font-size:18px; font-weight:900; text-align: center; width: 275px; background-color: rgb(255, 0, 0);\">\n";
     } else {
@@ -160,12 +163,12 @@ echo "<br><br><br>";
     echo "<input name=\"lagerot\" type=\"radio\"".$sel." value=\"".$zeile.$spalte."\">\n";
 
     echo "<input style=\"font-size:18px; font-weight:900;\" maxlength=\"6\" size=\"6\" name=pos_".$zeile.$spalte.
-         " value=\"".$entry [fkt]."\"".$param.">\n";
+         " value=\"".$entry ["fkt"]."\">\n";
 
     if ($entry["rolle"]=="Stab") {$sel = "checked=\"checked\"";} else {$sel = "";}
-    echo "<input name=\"rolle".$zeile.$spalte."\" value=\"Stab\" type=\"radio\" ".$param.$sel.">Stab";
+    echo "<input name=\"rolle".$zeile.$spalte."\" value=\"Stab\" type=\"radio\" ".$sel.">Stab";
     if ($entry["rolle"]=="FB") {$sel = "checked=\"checked\"";} else {$sel = "";}
-    echo "<input name=\"rolle".$zeile.$spalte."\" value=\"FB\" type=\"radio\" ".$param.$sel.">FB";
+    echo "<input name=\"rolle".$zeile.$spalte."\" value=\"FB\" type=\"radio\" ".$sel.">FB";
 
 /*    if ($entry["rolle"]=="leer") {$sel = "checked=\"checked\"";} else {$sel = "";}
     echo "<input name=\"rolle".$zeile.$spalte."\" value=\"leer\" type=\"radio\" ".$param.$sel.">leer";
@@ -178,7 +181,7 @@ echo "<br><br><br>";
 \****************************************************************************/
   function fkt_matrix ($fkts, $redcopy2){
 
-  include ("./config.inc.php");
+    include ("./config.inc.php");
 
 // echo "<br><br>"; print_r ($fkts); echo"<br><br>";
 
@@ -189,7 +192,7 @@ echo "<br><br><br>";
       echo "<td align=\"center\">";
       for ($spalte=1; $spalte <= 4; $spalte ++) {
         echo "<td align=\"center\">";
-        if ( ($fkts [$zeile][$spalte][fkt] == $redcopy2) and
+        if ( ($fkts [$zeile][$spalte]["fkt"] == $redcopy2) and
              ($redcopy2 != "") ) {
           cellentry ( $zeile, $spalte, $fkts [$zeile][$spalte], true); }
         else {
@@ -244,23 +247,14 @@ echo "<br><br><br>";
           m&ouml;glichen Empf&auml;nger im Stab festgelegt werden, die durch die Sichtung ausgew&auml;hlt werden
           k&ouml;nnen.<br><br><big><b>WICHTIG !!!<br><br>Im laufenden Betrieb k&ouml;nnen
           Empf&auml;nger hinzugef&uuml;gt werden.<br>Im Betrieb sollten<i> keine Empf&auml;nger
-          gel&ouml;scht</i> werden, da diese dann nicht mehr erreicht wird.</b></big><br><br>
-          Die Funktionsbezeichnungen d&uuml;rfen 6 Stellen nicht &uuml;berschreiten. Sonderzeichen sind <i>nicht</i> erlaubt!<br>Die Stabsfunktionen
-          LS, S1, S2, S3, S4, S5 und S6 m&uuml;ssen erhalten bleiben.<br> Das Feld \"<b>alle</b>\" unten rechts
-          muss erhalten bleiben!</FONT></FONT></P>";
+          gel&ouml;scht oder umbenannt</i> werden, da diese dann nicht mehr erreicht wird.<br>
+          !!! Funktionsk&uuml;rzel \"Si\" und \"A/W\" d&uuml;rfen nicht verwendet werden !!!</b></big><br><br>
+          Die Funktionsbezeichnungen d&uuml;rfen 6 Stellen nicht &uuml;berschreiten.
+          <b>Sonderzeichen</b> sind <i>nicht</i> erlaubt!</FONT></FONT></P>";
     fkt_matrix ( $empf_matrix , $redcopy2) ;
     post_html ();
 
-/****************************************************************************\
 
-\****************************************************************************/
-/*
-echo "<br><br>\n";
-echo "GET="; var_dump ($_GET);    echo "#<br><br>\n";
-echo "POST="; var_dump ($_POST);   echo "#<br><br>\n";
-echo "COOKIE="; var_dump ($_COOKIE); echo "#<br><br>\n";
-//echo "SERVER="; var_dump ($_SERVER); echo "#<br><br>\n";
-echo "SESSION="; print_r ($_SESSION); echo "#<br>\n";
-*/
+
 
 ?>

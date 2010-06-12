@@ -12,7 +12,7 @@
 \*****************************************************************************/
 
 include ("../config.inc.php");
-include ("../dbcfg.inc.php");
+include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
 
 
 /*****************************************************************************\
@@ -157,6 +157,9 @@ class nachrichten4fach {
           $this->bg [$i] = $this->feldbg [$i]["a"] ;
           $this->feld [$i] = true;
         }
+        $this->bg   [11] = $this->feldbg [11]["i"] ;
+        $this->feld [11] = false;
+
       break;
       case "FM-Eingang_Sichter" :
       case "FM-Eingang_Anhang_Sichter"  :
@@ -169,8 +172,8 @@ class nachrichten4fach {
           $this->feld [$i] = true;
         }
         // Ausser Gespraechsnotiz
-        $this->bg [11] = $this->feldbg [11]["i"] ;
-        $this->feld [11] = true;
+        $this->bg [11]   = $this->feldbg [11]["i"] ;
+        $this->feld [11] = false;
 
       break;
       // Weitergabe einer Meldung durch den Fernmelder
@@ -313,7 +316,7 @@ class nachrichten4fach {
     // Listet unter Inhalt eventuelle Anhangsdateien als href auf
   function list_anhang (){
     include ("../config.inc.php");
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
       // in 12_anhang stehen die Anhangdateien mit ";" getrennt.
     echo "<br>";
     $anhaenge = split(";", $this->formdata ["12_anhang"]);
@@ -342,7 +345,7 @@ class nachrichten4fach {
   function plot_form (){
     include ("../config.inc.php");
     include ("../para.inc.php");
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
 
     include ("color.inc.php");
 
@@ -1246,6 +1249,7 @@ Stab    Stab_schreiben                  -       -         -
       case "FM-Eingang_Sichter":
       case "Stab_schreiben":
       case "FM-Eingang_Anhang":
+      case "Stab_gesprnoti":
         echo "<tr><td>\n";
         echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
         echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";

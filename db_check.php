@@ -1,6 +1,7 @@
 <?php
 
 include ("./dbcfg.inc.php");
+include ("./e_cfg.inc.php");
 include ("./config.inc.php");
 
 
@@ -32,7 +33,7 @@ define("ERROR", E_USER_WARNING);
 define("WARNING", E_USER_NOTICE);
 
 // die Stufe für dieses Skript einstellen
-error_reporting(FATAL | ERROR | WARNING);
+error_reporting(E_ALL); //FATAL | ERROR | WARNING);
 
 // Fehlerbehandlungsfunktion
 function myErrorHandler($errno, $errstr, $errfile, $errline)
@@ -91,6 +92,9 @@ function outerrormsg ($errno, $errtxt) {
       break;
       case 1045 :
          echo "Benutzer oder Passwort zur Anmeldung am SQL-Server falsch.";
+      break;
+       case 1046 :
+         echo "Es ist keine Datenbank ausgewählt.";
       break;
       case 1049 :
          echo "<p>Datenbank nicht vorhanden <a href=\"./4fach/create_db.php\">Datenbank anlegen</a></p>";

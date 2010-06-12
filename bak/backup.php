@@ -569,9 +569,10 @@ class vordruckasimg {
 } // class
 
 
-require_once  ("../dbcfg.inc.php");     // Datenbankparameter
+include  ("../dbcfg.inc.php");     // Datenbankparameter
+include  ("../e_cfg.inc.php");     // Datenbankparameter
 require_once  ("../db_operation.php");  // Datenbank operationen
-require_once ("../4fach/tools.php") ;
+require_once  ("../4fach/tools.php") ;
 
 //  pre_html ("N","Erstellen der Backupvordrucke");
 //  echo "<body>";
@@ -580,13 +581,33 @@ require_once ("../4fach/tools.php") ;
 
 //    do {
 //      echo "...";
+set_time_limit ( 0 );
+
+  if (isset($_GET["anz"])){
+    echo "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0 Transitional//EN\">";
+    echo "<HTML>";
+    echo "<HEAD>";
+    echo "<META HTTP-EQUIV=\"CONTENT-TYPE\" CONTENT=\"text/html; charset=iso\">";
+    echo "<TITLE>Einsatz abschliessen.</TITLE>";
+    echo "<META NAME=\"GENERATOR\" CONTENT=\"OpenOffice.org 2.0  (Linux)\">";
+    echo "<META NAME=\"AUTHOR\" CONTENT=\"Hajo Landmesser\">";
+    echo "<META NAME=\"CREATED\" CONTENT=\"20070327;15421200\">";
+    echo "<META NAME=\"CHANGEDBY\" CONTENT=\"hajo\">";
+    echo "<META NAME=\"CHANGED\" CONTENT=\"20080612;18052200\">";
+    echo "<meta http-equiv=\"cache-control\" content=\"no-cache\">";
+    echo "<meta http-equiv=\"pragma\" content=\"no-cache\">";
+    echo "</HEAD>";
+    echo "<BODY>";
+  }
+
+
       if (isset ( $_GET["anz"] )){ $anzahl = $_GET["anz"]; } else { $anzahl = 5 ; }
 
       $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
       $query = "SELECT * FROM `".$conf_4f_tbl ["nachrichten"]."` where ((`x04_druck` = 'f') and (`x01_abschluss` = 't')) LIMIT $anzahl";
         if (debug) { echo "query===".$query."<br>"; }
       $result = $dbaccess->query_table ($query);
-        if (debug) { var_dump ($result); echo "<br>"; }
+        if (debug) { echo "result==="; var_dump ($result); echo "<br>"; }
       $dbdata = $result ; //[1];
 
       if ( $dbdata != "" ) {
@@ -600,12 +621,14 @@ require_once ("../4fach/tools.php") ;
           if (debug) { echo "query===".$query."<br>"; }
 
           $res = $dbaccess->query_table_iu ($query);
-//          echo "<a><big>Nachweisung: ".$formdata ["04_nummer"]." ".$formdata ["04_richtung"]."<br></big></a>";
+          if (isset($_GET["anz"])){
+//            echo "Nachweisung: ".$formdata ["04_nummer"]." ".$formdata ["04_richtung"]."<br>";
+          }
         }
       }
+      if (isset($_GET["anz"])){
+        echo "<big><big>Habe bis zu ".$anzahl." Vordrucke als Grafik erzeugt</big></big>";
+        echo "</BODY></HTML>";
+      }
 
-//    } while ($result != "");
-//   echo "</body>";
-//   echo "</html>";
-  //UPDATE`nv_nachrichten` SET `x04_druck` = 'f' WHERE 1
 ?>

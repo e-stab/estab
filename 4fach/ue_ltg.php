@@ -121,7 +121,7 @@ class Listen {
     echo "\n\n\n<!-- ANFANG file:ue_ltg.php fkt:createlist -->";
     include ("../config.inc.php");
     include ("../para.inc.php");
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
 
 
         $this->darstellungs_art ( "Stab_lesen" );
@@ -590,7 +590,7 @@ var_dump ($this->formdata); echo "<br>";
     // Listet unter Inhalt eventuelle Anhangsdateien als href auf
   function list_anhang (){
     include ("../config.inc.php");
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
       // in 12_anhang stehen die Anhangdateien mit ";" getrennt.
     echo "<br>";
     $anhaenge = split(";", $this->formdata ["12_anhang"]);
@@ -619,7 +619,7 @@ var_dump ($this->formdata); echo "<br>";
   function plot_form (){
     include ("../config.inc.php");
     include ("../para.inc.php");
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
 
     $this->ziele (); // Ziele und Farben   $fktmsgbgcolor
 

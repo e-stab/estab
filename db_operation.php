@@ -33,6 +33,16 @@ class db_access {
   }
 
 
+  function db_connection_check (){
+    $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
+       or die ("[table_exist] Konnte keine Verbindung zur Datenbank herstellen");
+
+    $result = mysql_ping  ($db);
+
+    return ($result);
+  }
+
+
 
   function table_exist ($tablename) {
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)

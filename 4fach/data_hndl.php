@@ -52,7 +52,7 @@ function check_save_user () {
     $GETkuerzel = strtolower ( $_GET ["kuerzel"]);
 
 //    include ("../config.inc.php");
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
      /* Die Daten in der Datenbank vorhanden?
         Also suchen wird erst mal nach dem Krzel in der Datenbank  */
     $dbaccess = new db_access ($conf_4f_db  ["server"],
@@ -206,7 +206,7 @@ echo "ip_gleich="; var_dump ($ip_gleich); echo "<br>";
 function check_and_save ($data){
 
   include ("../config.inc.php");
-  include ("../dbcfg.inc.php");
+  include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
   include ("../fkt_rolle.inc.php");
 
   if ($data ["11_gesprnotiz"] == "on") {
@@ -422,7 +422,6 @@ function check_and_save ($data){
           $data ["12_abfzeit"] = convtodatetime ( date ("dm"),   $data ["12_abfzeit"]) ;
         }
 
-
       if (validate){
          /*----------------------------------------------------*/
          $vali = new vali_data_form ( $data ) ;
@@ -465,6 +464,15 @@ function check_and_save ($data){
 //echo "query[Stab schreiben]===".$query."<br>";
        $result = $dbaccess->query_table_iu ($query);
        protokolleintrag ("Stab-schreiben",$query);
+       $query = "SELECT ".$conf_4f_tbl ["nachrichten"].".`00_lfd` FROM `".$conf_4f_tbl ["nachrichten"]."`
+                 WHERE `04_nummer` = \"".$nachweis_A."\" AND `04_richtung` = \"A\" ;";
+//echo "query[Stab schreiben2]===".$query."<br>";
+       $result = $dbaccess->query_table_wert ($query);
+       $lfd = $result [0] ;
+//echo "result[Stab schreiben2]==="; var_dump ($lfd); echo"<br>";
+       set_msg_read ($lfd) ;
+
+
     break;
 
     case "Stab_gesprnoti":
@@ -528,6 +536,13 @@ function check_and_save ($data){
 
        $result = $dbaccess->query_table_iu ($query);
        protokolleintrag ("Stab-gesprnoti",$query);
+       $query = "SELECT ".$conf_4f_tbl ["nachrichten"].".`00_lfd` FROM `".$conf_4f_tbl ["nachrichten"]."`
+                 WHERE `04_nummer` = \"".$nachweis_E."\" AND `04_richtung` = \"E\" ;";
+//echo "query[Stab schreiben2]===".$query."<br>";
+       $result = $dbaccess->query_table_wert ($query);
+       $lfd = $result [0];
+//echo "result[Stab schreiben2]==="; var_dump ($lfd); echo"<br>";
+       set_msg_read ($lfd) ;
 
     break;
 
@@ -729,7 +744,7 @@ function check_and_save ($data){
   function legere_nuntium ($lfd) {
 
     include ("../config.inc.php");
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
      // Gibt es einen Eintrag zu der Nachricht mit der Nummer $lfd
     $dbaccess = new db_access ($conf_4f_db ["server"],
                                $conf_4f_db ["datenbank"],
@@ -753,7 +768,7 @@ function check_and_save ($data){
   function set_msg_read ($lfd) {
 
     include ("../config.inc.php");
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
      // Gibt es einen Eintrag zu der Nachricht mit der Nummer $lfd
     $dbaccess = new db_access ($conf_4f_db ["server"],
                                $conf_4f_db ["datenbank"],
@@ -788,7 +803,7 @@ function check_and_save ($data){
   function unset_msg_read ($lfd) {
 
     include ("../config.inc.php");
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
      // Gibt es einen Eintrag zu der Nachricht mit der Nummer $lfd
     $dbaccess = new db_access ($conf_4f_db ["server"],
                                $conf_4f_db ["datenbank"],
@@ -825,7 +840,7 @@ function check_and_save ($data){
   function set_msg_done ($lfd) {
 
     include ("../config.inc.php");
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
      // Gibt es einen Eintrag zu der Nachricht mit der Nummer $lfd
     $dbaccess = new db_access ($conf_4f_db ["server"],
                                $conf_4f_db ["datenbank"],
@@ -861,7 +876,7 @@ function check_and_save ($data){
 function unset_msg_done ($lfd) {
 
     include ("../config.inc.php");
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
      // Gibt es einen Eintrag zu der Nachricht mit der Nummer $lfd
     $dbaccess = new db_access ($conf_4f_db ["server"],
                                $conf_4f_db ["datenbank"],
@@ -902,7 +917,7 @@ function unset_msg_done ($lfd) {
 \*****************************************************************************/
 function list_of_readed_msg (){
   include ("../config.inc.php");
-  include ("../dbcfg.inc.php");
+  include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
 
   $dbaccess = new db_access ($conf_4f_db ["server"],
                              $conf_4f_db ["datenbank"],
@@ -933,7 +948,7 @@ function list_of_readed_msg (){
 \*****************************************************************************/
 function list_of_done_msg (){
   include ("../config.inc.php");
-  include ("../dbcfg.inc.php");
+  include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
 
   $dbaccess = new db_access ($conf_4f_db ["server"],
                              $conf_4f_db ["datenbank"],
@@ -955,7 +970,7 @@ function list_of_done_msg (){
 
 
   function get_flt_gelesen (){
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"],
                                $conf_4f_db ["datenbank"],
                                $conf_4f_tbl ["benutzer"],
@@ -972,7 +987,7 @@ function list_of_done_msg (){
   }
 
   function get_flt_erledigt (){
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"],
                                $conf_4f_db ["datenbank"],
                                $conf_4f_tbl ["benutzer"],

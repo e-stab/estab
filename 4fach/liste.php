@@ -166,7 +166,9 @@ class Listen {
         echo "</form>";
         echo "\n<form action=\"".$conf_4f ["MainURL"]."\" method=\"get\" target=\"mainframe\">\n";
         echo "<td>";
-        echo "<p>Suchbegriff: <input name=\"flt_search\" type=\"text\" size=\"30\" maxlength=\"30\"></p>";
+        if (isset ($_SESSION ["flt_search"]) ) { $defvalue = $_SESSION ["flt_search"] ;} 
+        else {$defvalue = "";}
+        echo "<p>Suchbegriff: <input name=\"flt_search\" value=\"".$defvalue."\" type=\"text\" size=\"30\" maxlength=\"30\"></p>";
         echo "</td>";
         echo "<td>";
         echo "<input name=\"filter_suche\" value=\"suchen\" type=\"submit\">\n";
@@ -209,7 +211,7 @@ class Listen {
     echo "\n\n\n<!-- ANFANG file:liste.php fkt:createlist -->";
     include ("../config.inc.php");
     include ("../para.inc.php");
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
 
     $tblusername   = $conf_4f_tbl ["usrtblprefix"].strtolower ($_SESSION["vStab_funktion"]).
                      "_".strtolower ($_SESSION["vStab_kuerzel"]);
@@ -349,7 +351,7 @@ class Listen {
     echo "\n\n\n<!-- ANFANG file:liste.php fkt:createlist -->";
     include ("../config.inc.php");
     include ("../para.inc.php");
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
 
 
 
@@ -600,7 +602,7 @@ echo "liste.php 208 resultusrtbl===="; var_dump($resultusrtbl);echo "<br><br>";
              echo "<td>";
              if (($row["12_abfzeit"] != "")) {
                $arr    = convdatetimeto ($row["12_abfzeit"]);
-               $abzeit = $arr [stak];
+               $abzeit = $arr ["stak"];
                echo "<a href=\"mainindex.php?stab=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\"><big>".$abzeit."</big></a>\n";
              } else {
                echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";

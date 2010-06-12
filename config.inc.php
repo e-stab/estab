@@ -32,7 +32,7 @@
       // URL des Servers
     $conf_urlroot  = "http://".$_SERVER ["SERVER_NAME"]; //"http://1service.no-ip.org";
 
-      // Wurzelverzeichnis fr den Webserver
+      // Wurzelverzeichnis fuer den Webserver
       // unter Linux /srv/www/htdocs
       // unter Windows C:\Progra~1\Apache\htdocs
       // u.U. muss mit dir /X der Kurzname 8.3 ermittelt und eingetragen werden
@@ -66,7 +66,7 @@
     $conf_4f ["Titelkurz"]        =  "eStab";
     $conf_4f ["SubTitel"]["env"]  =  " - elektronischer Nachrichtenvordruck";
     $conf_4f ["SubTitel"]["etb"]  =  "Einsatztagebuch";
-    $conf_4f ["Version"]          =  "v0.9.09 23mai08 ";
+    $conf_4f ["Version"]          =  "v0.9.10 15jun2008";
 
       // Programm information und Versionsnummer
     $conf_4f ["NameVersion"][0]   = "<big><big><b>".$conf_4f ["Titelkurz"]." ".
@@ -99,6 +99,7 @@
     $conf_4f ["MainURL"]         = $conf_urlroot.$conf_web ["pre_path"]."/4fach/mainindex.php";
 
   include "dbcfg.inc.php"; // wegen des Datenbanknamens  $conf_4f_db ["datenbank"]
+  include "e_cfg.inc.php";
 
     $conf_4f ["ablage_dir"] = $conf_web ["srvroot"].
                               $conf_web ["pre_path"]."/".
@@ -116,6 +117,10 @@
                               $conf_web ["pre_path"]."/".
                               $conf_4f_db ["datenbank"].
                               $conf_4f ["vordruck"];
+
+    $conf_4f ["einsatzende_dir"] = $conf_web ["srvroot"].
+                              $conf_web ["pre_path"]."/".
+                              $conf_4f_db ["datenbank"] ;
 
 
     // Listendarstellungen Darstellung des Inhaltes

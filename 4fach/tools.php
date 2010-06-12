@@ -11,7 +11,7 @@
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
                               
-include ("../dbcfg.inc.php");
+include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
 include ("../para.inc.php");
 
   function pre_html ($art, $titel, $cssstr){
@@ -99,9 +99,9 @@ echo "<big><big><big>DEFAULT PRE_HTML !!!</big></big></big><br>";
     list ($datum, $zeit) = explode (" ",$datetime);
     list ($jahr, $monat, $tag) = explode ("-", $datum);
     list ($stunde, $minute, $sekunde) = explode (":", $zeit);
-    $arr [datum] = $tag.$monat;
-    $arr [zeit]  = $stunde.$minute;
-    $arr [stak]  = $tag.$stunde.$minute;
+    $arr ["datum"] = $tag.$monat;
+    $arr ["zeit"]  = $stunde.$minute;
+    $arr ["stak"]  = $tag.$stunde.$minute;
     return $arr;
   }
 
@@ -117,7 +117,7 @@ echo "<big><big><big>DEFAULT PRE_HTML !!!</big></big></big><br>";
 
 
   function getoutqueuecount (){
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
     $query = "SELECT count(*) FROM `".$conf_4f_tbl ["nachrichten"]."` WHERE ((`04_richtung` = \"A\") AND
                                                   (`03_datum` = 0) AND
@@ -128,7 +128,7 @@ echo "<big><big><big>DEFAULT PRE_HTML !!!</big></big></big><br>";
 
   function getviewerqueuecount (){
 //    include ("../config.inc.php");
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
     $query = "SELECT count(*) FROM `".$conf_4f_tbl ["nachrichten"]."`
               WHERE ( (  `15_quitdatum`    = 0 ) AND
@@ -144,7 +144,7 @@ echo "<big><big><big>DEFAULT PRE_HTML !!!</big></big></big><br>";
 
   function getreadedcount (){
     include ("../config.inc.php");
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
 
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
     $query = "SELECT count(*) FROM `".$conf_4f_tbl ["nachrichten"]."`
@@ -189,7 +189,7 @@ echo "<big><big><big>DEFAULT PRE_HTML !!!</big></big></big><br>";
 
   function sichter_online (){
 //    include ("../config.inc.php");
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
     $query = "SELECT count(*) FROM `".$conf_4f_tbl ["benutzer"]."` WHERE ( ( `funktion` = \"Si\" ) AND ( `aktiv` = 1 ));";
     $result = $dbaccess->query_table_wert ($query);
@@ -203,7 +203,7 @@ bersichtlich dargestellt werden.
 ******************************************************************************/
   function systemstatus ($direction){
 
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
     include ("../fkt_rolle.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
     $query = "SELECT * FROM `".$conf_4f_tbl ["benutzer"]."` where 1";
@@ -401,7 +401,7 @@ bersichtlich dargestellt werden.
 ********************************************************************************************************/
   function benutzerstatus ($what){ // kann sein "anzeige" oder mit "verlinkt"
 //    include ("../config.inc.php");
-    include ("../dbcfg.inc.php");
+    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
     $query = "SELECT * FROM `".$conf_4f_tbl ["benutzer"]."` where 1 order by aktiv DESC, kuerzel";
     $result = $dbaccess->query_table ($query);
@@ -504,7 +504,7 @@ bersichtlich dargestellt werden.
 
 \*****************************************************************************/
    function get_last_nachw_num ($direction){
-     include ("../dbcfg.inc.php");
+     include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
      $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
      if ( Nachweisung == "getrennt" ) {
        $query = "SELECT max(04_nummer)FROM ".$conf_4f_tbl ["nachrichten"]." WHERE `04_richtung` = \"$direction\" ";

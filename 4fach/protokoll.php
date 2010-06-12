@@ -23,7 +23,7 @@ Aufruf:
 \***********************************************************************************/
 
   function protokolleintrag ($was, $daten){
-     include ("../dbcfg.inc.php");
+     include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
      include ("../config.inc.php");
 
      $query = "INSERT INTO ".$conf_4f_tbl["protokoll"]." SET
