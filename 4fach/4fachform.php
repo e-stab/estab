@@ -11,9 +11,9 @@
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
 
-include ("../config.inc.php");
-include ("../dbcfg.inc.php");
-include ("../e_cfg.inc.php");
+include ("../4fcfg/config.inc.php");
+include ("../4fcfg/dbcfg.inc.php");
+include ("../4fcfg/e_cfg.inc.php");
 
 
 /*****************************************************************************\
@@ -40,7 +40,7 @@ class nachrichten4fach {
       } else {
 
 
-          // errorselect zurücksetzen
+          // errorselect zurï¿½cksetzen
          $this->errorselect ["01_medium"]   = true ;
          $this->errorselect ["01_datum"]   = true ;
 
@@ -84,7 +84,7 @@ class nachrichten4fach {
       }
 
       if (debug){
-        echo "<br><big>4fach data 035="; var_dump ($this->formdata); echo "</big><br>";
+        echo "<br><big>4fach data 087="; var_dump ($this->formdata); echo "</big><br>";
       }
       $this->plot_form () ;
     }
@@ -98,7 +98,7 @@ class nachrichten4fach {
 
   var $fktmsgbgcolor ;  // Hintergrundfarbe
   var $bg_color_fm_a  ; // rosa Fernmelder aktiv
-  var $bg_color_fmp_a ; // hell grün Fernmelderpflichtfeld  aktiv
+  var $bg_color_fmp_a ; // hell grï¿½n Fernmelderpflichtfeld  aktiv
   var $bg_color_nw_a  ;  // orange
   var $bg_color_tx_a  ; // hell blau
   var $bg_color_si_a  ; // hell violett
@@ -134,13 +134,13 @@ class nachrichten4fach {
     $this->feldbg [ 1]["i"] = $this->bg_color_inaktv;
     $this->feldbg [ 2]["a"] = $this->bg_color_fm_a;
     $this->feldbg [ 2]["i"] = $this->bg_color_inaktv;
-    $this->feldbg [ 3]["a"] = $this->bg_color_fm_a;
+    $this->feldbg [ 3]["a"] = $this->bg_color_fmp_a; //mpr corrected script for Ausgang
     $this->feldbg [ 3]["i"] = $this->bg_color_inaktv;
     $this->feldbg [ 4]["a"] = $this->bg_color_fm_a;
     $this->feldbg [ 4]["i"] = $this->bg_color_inaktv;
-    $this->feldbg [ 5]["a"] = $this->bg_color_fm_a;
+    $this->feldbg [ 5]["a"] = $this->bg_color_fmp_a; //mpr corrected script for Ausgang
     $this->feldbg [ 5]["i"] = $this->bg_color_inaktv;
-    $this->feldbg [ 6]["a"] = $this->bg_color_fm_a;
+    $this->feldbg [ 6]["a"] = $this->bg_color_fmp_a; //mpr corrected script for Ausgang
     $this->feldbg [ 6]["i"] = $this->bg_color_inaktv;
 
     $this->feldbg [ 7]["a"] = $this->bg_color_tx_a;
@@ -316,7 +316,7 @@ class nachrichten4fach {
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
   function ziele (){
-  include ("../fkt_rolle.inc.php");
+  include ("../4fcfg/fkt_rolle.inc.php");
 
     for ($i=1; $i <= 5 ; $i++){
       for ($j=1; $j <= 4 ; $j++){
@@ -327,6 +327,9 @@ class nachrichten4fach {
         $this->empfarray [$i][$j]["rolle"]   = $empf_matrix [$i][$j]["rolle"];
       }
     }
+
+// echo "<big>ZIELE 1 16_empf ==="; var_dump ($this->formdata ["16_empf"]); echo "</big><br>";
+    
     $empf_text  = $this->formdata ["16_empf"] ; // Zeile mit den Empfaengern aus der DB
       // Wandel die Textzeile mit den Empfaengern in ein ARRAY um
     $empf_array_color = explode (",",$empf_text);
@@ -357,6 +360,9 @@ class nachrichten4fach {
       }
     }
   $this->redcopy2 = $redcopy2;
+
+// echo "<big>ZIELE 2 ==="; var_dump ($this->empfarray); echo "</big><br>";
+
   }
 
 
@@ -369,8 +375,9 @@ class nachrichten4fach {
 \*****************************************************************************/
     // Listet unter Inhalt eventuelle Anhangsdateien als href auf
   function list_anhang (){
-    include ("../config.inc.php");
-    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
+    include ("../4fcfg/config.inc.php");
+    include ("../4fcfg/dbcfg.inc.php");
+    include ("../4fcfg/e_cfg.inc.php");
       // in 12_anhang stehen die Anhangdateien mit ";" getrennt.
     echo "<br>";
     $anhaenge = split(";", $this->formdata ["12_anhang"]);
@@ -386,6 +393,234 @@ class nachrichten4fach {
   } // list_anhang ()
 
 /*****************************************************************************\
+   Funktion    : show_menue_buttons ()
+   Beschreibung:
+
+   (C) Hajo Landmesser IuK Kreis Heinsberg
+   mailto://hajo.landmesser@iuk-heinsberg.de
+\*****************************************************************************/
+  function show_menue_buttons ($umfang, $ordnum){
+    include ("../4fcfg/config.inc.php");
+    include ("../4fcfg/fkt_rolle.inc.php");
+
+    echo "<TABLE BORDER=\"0\" CELLSPACING=\"0\" CELLPEDDING=\"0\">\n";
+    echo "<TBODY>\n";
+    echo "<TR>\n";
+    echo "<TD>\n";
+    if ($umfang == 2){
+      echo "<TABLE BORDER=\"0\" CELLSPACING=\"10\" CELLPEDDING=\"10\">\n";
+      echo "<input type=\"hidden\" name=\"kate_todo\" value=\"speichern\">\n";
+  //    echo "<input type=\"hidden\" name=\"kate_tbl\" value=\"".$this->db_tablname."\">\n";
+  //    echo "<input type=\"hidden\" name=\"kate_dbtbl\" value=\"".$this->dbtyp."\">\n";
+      echo "<input type=\"hidden\" name=\"msglfd\" value=\"".$this->formdata["00_lfd"]."\">\n";
+
+      echo "<TBODY>\n";
+      echo "<TR>\n";
+      echo "<TD>\n";
+        // Druckersymbol
+      echo "<a href=\"javascript:window.print()\">
+            <img src=\"".$conf_design_path."/print.gif\" alt=\"Drucken\" width=\"32\"height=\"32\" border=\"0\" title=\"Drucken\"></a>\n";
+      echo "</TD>\n";
+
+      if ( $this->task == "Stab_lesen"){
+        echo "<TD>";
+          // MASTER KATEGORIE
+        $katego1 = new  kategorien ("master");
+        $katearr1 = $katego1->db_get_kategobymsg ($this->formdata["00_lfd"]);
+        echo"<a ";
+          // Ist die Funktion berechtigt globale Kategorien zu aendern?
+          //
+        $berechtigt = ($_SESSION ["vStab_funktion"] == $redcopy2) OR
+                      ($_SESSION ["vStab_funktion"] == "Si");
+        if ($berechtigt) {
+          echo "href=\"katgoedt.php?dbtyp=master&fkt=edit&msgno=".$this->formdata["00_lfd"]."\"";
+        }
+        echo ">
+            <img src=\"".$conf_design_path."/folder_global.gif\"
+                 alt=\"globale Ordner verwalten (falls berechtigt)\"
+                 width=\"32\"
+                 height=\"32\"
+                 border=\"0\"
+                 title=\"globale Ordner verwalten (falls berechtigt)\"></a>";
+        echo "</TD>";
+
+          // Schreibe die augenblickliche Masterkategorie hin
+        if ( $katearr1["kategorie"] != ""){
+          echo "<TD>";
+          $color = "red";
+          echo"<a><img src=\"./createbutton.php?icontext=".$katearr1["kategorie"]."&color=".$color."\" alt=\"".$katearr1["beschreibung"]."\"></a>";
+          echo "</TD>";
+        }
+
+        echo "<TD>";
+
+        if ($berechtigt) {
+          $katego1->pulldown_kategorien ($katearr1["lfd"], true, $ordnum);
+        }
+        echo "</TD>\n";
+        echo "<TD>\n";
+         // BENUTZER KATEGORIE
+        $katego2 = new  kategorien ("user");
+
+        $katearr2 = $katego2->db_get_kategobymsg ($this->formdata["00_lfd"]);
+
+        echo"<a href=\"katgoedt.php?dbtyp=user&fkt=edit&msgno=".$this->formdata["00_lfd"]."\">
+            <img src=\"".$conf_design_path."/folder_local.gif\"
+                 alt=\"pers&ouml;nliche Ordner verwalten\"
+                 width=\"32\"
+                 height=\"32\"
+                 border=\"0\"
+                 title=\"pers&ouml;nliche Ordner verwalten\"></a>\n";
+
+        echo "</TD>\n";
+        echo "<TD>\n";
+//                 title=\"pers&ouml;nliche Ordner verwalten\"></a>";
+        echo "</TD>";
+        echo "<TD>";
+
+        if ($katearr2["kategorie"] != "" ){
+          $color = "green";
+          echo"<a><img src=\"./createbutton.php?icontext=".$katearr2["kategorie"]."&color=".$color."\" alt=\"".$katearr2["beschreibung"]."\"></a>";
+        }
+        echo "</TD>";
+        echo "<TD>";
+        $katego2->pulldown_kategorien ($katearr2["lfd"], true, $ordnum);
+
+        echo "</TD>";
+        echo "<TD>";
+        echo "<input type=\"image\" name=\"4fachkatego_absenden\" src=\"button.php?type=menue&m_text=<=zuordnen&m_fs=10&m_form=rund\" alt=\"zuordnen\">\n";
+        echo "</TD>\n";
+      }
+      echo "</TR>\n";
+      echo "</TBODY>\n";
+      echo "</TABLE>\n";
+    }
+    echo "</TD>";
+
+    echo "<TD>";
+
+      echo "<TABLE>\n";      echo "<TBODY>\n";
+      echo "<TR>\n";
+          //echo "-----------------------------------------------------------------------<br>";
+          //echo "Task=".$this->task."     04Richtung=".$this->formdata["04_richtung"]."<br>";
+          //echo "-----------------------------------------------------------------------<br>";
+          /*
+                                          04Richtung      Antwort Weiterleitung
+
+          FM      FM-Eingang_Sichter              -       -         -
+          FM      FM-Eingang                      -       -         -
+          FM      FM-Ausgang                      A       X         -
+
+          Si      Stab_sichten                    E       -         -
+          Si      Stab_sichten                    A       -         -
+          Si      SI-Admin                        E       -         -
+          Si      SI-Admin                        A       -         -
+
+          Stab    Stab_lesen                      E       X         X
+          Stab    Stab_lesen                      A       -         X
+
+          Stab    Stab_schreiben                  -       -         -
+                                                          2         2
+
+
+          */
+          //echo "TASK TASK TASK===".$this->task."<br><b>";
+
+      switch ($this->task){
+        case "Stab_lesen":
+  //        echo "<tr>";
+          echo "<td>\n";
+          echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
+          echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
+          echo "<input type=\"image\" name=\"gelesen\" src=\"button.php?type=menue&m_text=gelesen/OK&m_fs=10&m_form=rund\" alt=\"gelesen\">\n";
+          echo "</td>";
+
+          if ($this->formdata["04_richtung"]=="E"){
+            echo "<td>\n";
+            echo "<input type=\"image\" name=\"antwort\" src=\"button.php?type=menue&m_text=Antwort&m_fs=10&m_form=spitz\" alt=\"antworten\">\n";
+            echo "</td><td>\n";
+            echo "<input type=\"image\" name=\"weiterleiten\" src=\"button.php?type=menue&m_text=Weiterleiten&m_fs=10&m_form=spitz\" alt=\"weiterleiten\">\n";
+            echo "</td>";
+          } elseif ($this->formdata["04_richtung"]=="A"){
+            echo "<td>\n";
+            echo "<input type=\"image\" name=\"weiterleiten\" src=\"button.php?type=menue&m_text=Weiterleiten&m_fs=10&m_form=spitz\" alt=\"weiterleiten\">\n";
+            echo "</td>";
+          }
+  //        echo "</tr>\n";
+        break;
+
+        case "FM-Eingang":
+        case "FM-Eingang_Sichter":
+        case "Stab_schreiben":
+        case "FM-Eingang_Anhang":
+        case "FM-Eingang_Anhang_Sichter":
+        case "Stab_gesprnoti":
+          echo "<td>\n";
+          echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
+          echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
+            // Anhï¿½nge
+          echo "<input type=\"image\" name=\"anhang_plus\" src=\"".$conf_design_path."/attachment.gif\" alt=\"Anhang anfuegen\">\n";
+          echo "</TD>\n";
+          echo "<td>\n";
+          echo "<input type=\"image\" name=\"absenden\" src=\"button.php?type=menue&m_text=absenden&m_fs=10&m_form=rund\" alt=\"absenden\">\n";
+          echo "</td><td>\n";
+          echo "<input type=\"image\" name=\"abbrechen\" src=\"button.php?type=menue&m_text=abbrechen&m_fs=10&m_form=rund\" alt=\"abbrechen\">\n";
+          echo "</td>\n";
+        break;
+
+        case "FM-Ausgang":
+        case "FM-Ausgang_Sichter":
+  //        echo "<tr>";
+          echo "<td>\n";
+          echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
+          echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
+          echo "<input type=\"image\" name=\"absenden\" src=\"button.php?type=menue&m_text=absenden&m_fs=10&m_form=rund\" alt=\"absenden\">\n";
+          echo "</td><td>\n";
+          echo "<input type=\"image\" name=\"abbrechen\" src=\"button.php?type=menue&m_text=abbrechen&m_fs=10&m_form=rund\" alt=\"abbrechen\">\n";
+
+          echo "</td>";
+  /*
+          echo "<td>\n";
+          echo "<input type=\"image\" name=\"anhang\" src=\"".$conf_design_path."/attachment.gif\">\n";
+          echo "</td>\n";
+  */
+          if ($this->formdata["04_richtung"]=="A"){
+            echo "<td>\n";
+            echo "<input type=\"image\" name=\"antwort\" src=\"button.php?type=menue&m_text=Antwort&m_fs=10&m_form=spitz\" alt=\"antworten\">\n";
+            echo "</td>";
+    //        echo "<td>\n";
+    //        echo "<input type=\"image\" name=\"weiterleiten\" src=\"".$conf_design_path."/029.jpg\">\n";
+    //        echo "</td>\n";
+          }
+
+  //        echo "</tr>\n";
+        break;
+        case "Stab_sichten":
+        case "SI-Admin":
+  //        echo "<tr>";
+          echo "<td>\n";
+          echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
+          echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
+          echo "<input type=\"image\" name=\"absenden\" src=\"button.php?type=menue&m_text=absenden&m_fs=10&m_form=rund\" alt=\"absenden\">\n";
+          echo "</td><td>\n";
+          echo "<input type=\"image\" name=\"abbrechen\" src=\"button.php?type=menue&m_text=abbrechen&m_fs=10&m_form=rund\" alt=\"abbrechen\">\n";
+          echo "</td>";
+  //        echo "<td>\n";
+        break;
+     } // switch
+     echo "</TR>";
+     echo "</tbody>\n";
+     echo "</table>\n";
+//     echo "</FORM>\n";
+
+    echo "</TD>\n";
+    echo "</TR>\n";
+    echo "</TBODY>\n";
+    echo "</TABLE>\n";
+  }
+
+
+/*****************************************************************************\
    Funktion    :  showerrorinfo
    Beschreibung:  Ausgabe Fehlermeldung Info
 
@@ -393,10 +628,10 @@ class nachrichten4fach {
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
   function showerrorinfo ($errorat)
-  {   include ("../config.inc.php");
+  {   include ("../4fcfg/config.inc.php");
     echo "<a href=\"../language/german/helptext.php?Errorart=".$errorat.
          "\" onclick=\"FensterOeffnen(this.href); return false\"><img src=\"".
-         $conf_design_path."/060.png\" alt=\"Fehler\" width=\"24\"height=\"24\" title=\"Fehler\"></a>";
+         $conf_design_path."/warning.gif\" alt=\"Fehler\" width=\"24\"height=\"24\" title=\"Fehler\"></a>";
   }
 
 
@@ -412,12 +647,13 @@ class nachrichten4fach {
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
   function plot_form (){
-    include ("../config.inc.php");
-    include ("../para.inc.php");
-    include ("../dbcfg.inc.php");
-    include ("../e_cfg.inc.php");
-    include ("../fkt_rolle.inc.php");
-    include ("color.inc.php");
+
+    include ("../4fcfg/config.inc.php");
+    include ("../4fcfg/para.inc.php");
+    include ("../4fcfg/dbcfg.inc.php");
+    include ("../4fcfg/e_cfg.inc.php");
+    include ("../4fcfg/fkt_rolle.inc.php");
+    include ("../4fcfg/color.inc.php");
 
     $this->ziele (); // Ziele und Farben   $fktmsgbgcolor
 
@@ -436,228 +672,41 @@ class nachrichten4fach {
     }
 
     pre_html ("N","Formular ".$this->task." ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"], ""); // Normaler Seitenaufbau ohne Auffrischung
-    echo "<body style=\"text-align: left; background-color: rgb(255,255,255); \">\n"; //".$this->formbgcolor.";\">\n";
+    echo "<body style=\"text-align: left; background-color: rgb(220,220,255); \">\n"; //".$this->formbgcolor.";\">\n";
 //    echo "<body style=\"text-align: left; background-color: ".$formbgcolor.";\">\n";
 
 //    include_once ("../language/german/helptext.php");
     include_once ("./katego.php");
 
 
-    echo "<FORM style=\"\" method=\"get\" action=\"katgoedt.php\" name=\"kategorie\">";
-    switch ($this->task){
-      case "FM-Eingang"         : $ueberschrift = "* * *   A N N A H M E  * * *"; break;
-      case "FM-Eingang_Sichter" : $ueberschrift = "* * *   A N N A H M E / Sichtung  * * *"; break;
-      case "FM-Eingang_Anhang"  : $ueberschrift = "* * *   A N N A H M E  * * *"; break;
-      case "FM-Ausgang"         : $ueberschrift = "* * *   W E I T E R G A B E   * * *"; break;
-      case "FM-Admin"           : $ueberschrift = "* * *   A D M I N I S T R A T I O N   * * *"; break;
-      case "Stab_schreiben"     : $ueberschrift = "* * *   T E X T verfassen.   * * *"; break;
-      case "Stab_lesen"         : $ueberschrift = "* * *   N A C H R I C H T lesen   * * *"; break;
-      case "Sichter"            : $ueberschrift = "* * *   S I C H T U N G   * * *"; break;
-      case "Nachweis"           : $ueberschrift = "* * *   N A C H W E I S U N G   * * *"; break;
-    }
 
-
-    echo "<input type=\"hidden\" name=\"kate_todo\" value=\"speichern\">\n";
-//    echo "<input type=\"hidden\" name=\"kate_tbl\" value=\"".$this->db_tablname."\">\n";
-//    echo "<input type=\"hidden\" name=\"kate_dbtbl\" value=\"".$this->dbtyp."\">\n";
-    echo "<input type=\"hidden\" name=\"msglfd\" value=\"".$this->formdata["00_lfd"]."\">\n";
-
-    echo "<TABLE BORDER=\"0\" CELLSPACING=\"10\">";
-    echo "<TBODY>";
-    echo "<TR>";
-    echo "<TD>";
-      // Druckersymbol
-    echo "<a href=\"javascript:window.print()\">
-          <img src=\"".$conf_design_path."/115.gif\" alt=\"Drucken\" width=\"32\"height=\"32\" border=\"0\" title=\"Drucken\"></a>";
-    echo "</TD>";
-
-    if ( $this->task == "Stab_lesen"){
-      echo "<TD>";
-      $katego1 = new  kategorien ("master");
-      $katearr1 = $katego1->db_get_kategobymsg ($this->formdata["00_lfd"]);
-      echo"<a ";
-        // Ist die Funktion berechtigt globale Kategorien zu ändern?
-        //
-      $berechtigt = ($_SESSION ["vStab_funktion"] == $redcopy2) OR
-                    ($_SESSION ["vStab_funktion"] == "Si");
-      if ($berechtigt) {
-        echo "href=\"katgoedt.php?dbtyp=master&fkt=edit&msgno=".$this->formdata["00_lfd"]."\"";
-      }
-      echo ">
-          <img src=\"".$conf_design_path."/116.jpg\"
-               alt=\"".$katearr1["beschreibung"]."\"
-               width=\"32\"
-               height=\"32\"
-               border=\"0\"
-               title=\"".$katearr1["beschreibung"]."\"></a>";
-      echo "</TD>";
-      echo "<TD>";
-      if ( $katearr1["kategorie"] != ""){
-        echo "<big><big><b>".$katearr1["kategorie"]."</b></big></big>";
-      }
-      if ($berechtigt) {
-        $katego1->pulldown_kategorien ($katearr1["lfd"],true);
-      }
-      echo "</TD>\n";
-      echo "<TD>\n";
-
-      $katego2 = new  kategorien ("user");
-      $katearr2 = $katego2->db_get_kategobymsg ($this->formdata["00_lfd"]);
-
-      echo"<a href=\"katgoedt.php?dbtyp=user&fkt=edit&msgno=".$this->formdata["00_lfd"]."\">
-          <img src=\"".$conf_design_path."/118.jpg\"
-               alt=\"".$katearr2["beschreibung"]."\"
-               width=\"32\"
-               height=\"32\"
-               border=\"0\"
-               title=\"".$katearr2["beschreibung"]."\"></a>\n";
-
-      echo "</TD>\n";
-      echo "<TD>\n";
-      if ($katearr2["kategorie"] != "" ){
-        echo "<big><big><b>".$katearr2["kategorie"]."</b></big></big>";
-      }
-      $katego2->pulldown_kategorien ($katearr2["lfd"],true);
-
-      echo "</TD>";
-      echo "<TD>";
-      echo "<input type=\"image\" name=\"4fachkatego_absenden\" src=\"".$conf_design_path."/119.jpg\">\n";
-      echo "</TD>\n";
-    }
-//    echo "</TR>\n";
-
-    echo "</FORM>\n" ;
-
-//    echo "<TD>\n";
+    /*
+        switch ($this->task){
+          case "FM-Eingang"         : $ueberschrift = "* * *   A N N A H M E  * * *"; break;
+          case "FM-Eingang_Sichter" : $ueberschrift = "* * *   A N N A H M E / Sichtung  * * *"; break;
+          case "FM-Eingang_Anhang"  : $ueberschrift = "* * *   A N N A H M E  * * *"; break;
+          case "FM-Ausgang"         : $ueberschrift = "* * *   W E I T E R G A B E   * * *"; break;
+          case "FM-Admin"           : $ueberschrift = "* * *   A D M I N I S T R A T I O N   * * *"; break;
+          case "Stab_schreiben"     : $ueberschrift = "* * *   T E X T verfassen.   * * *"; break;
+          case "Stab_lesen"         : $ueberschrift = "* * *   N A C H R I C H T lesen   * * *"; break;
+          case "Sichter"            : $ueberschrift = "* * *   S I C H T U N G   * * *"; break;
+          case "Nachweis"           : $ueberschrift = "* * *   N A C H W E I S U N G   * * *"; break;
+        }
+    */
 
     echo "<FORM style=\"\" method=\"get\" action=\"".$conf_4f ["MainURL"]."\" name=\"4fach\">\n";
-//    echo "<table style=\"text-align: left; background-color: rgb(255, 255, 255);\" border=\"1\" cellpadding=\"1\" cellspacing=\"0\">\n";
-//    echo "<TABLE>\n";
-//    echo "<TBODY>\n";
 
-//echo "-----------------------------------------------------------------------<br>";
-//echo "Task=".$this->task."     04Richtung=".$this->formdata["04_richtung"]."<br>";
-//echo "-----------------------------------------------------------------------<br>";
-/*
-                                04Richtung      Antwort Weiterleitung
-
-FM      FM-Eingang_Sichter              -       -         -
-FM      FM-Eingang                      -       -         -
-FM      FM-Ausgang                      A       X         -
-
-Si      Stab_sichten                    E       -         -
-Si      Stab_sichten                    A       -         -
-Si      SI-Admin                        E       -         -
-Si      SI-Admin                        A       -         -
-
-Stab    Stab_lesen                      E       X         X
-Stab    Stab_lesen                      A       -         X
-
-Stab    Stab_schreiben                  -       -         -
-                                                2         2
-
-
-*/
-//echo "TASK TASK TASK===".$this->task."<br><b>";
-    switch ($this->task){
-      case "Stab_lesen":
-//        echo "<tr>";
-        echo "<td>\n";
-        echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
-        echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
-        echo "<input type=\"image\" name=\"gelesen\" src=\"".$conf_design_path."/010.jpg\">\n";
-        echo "</td>";
-
-        if ($this->formdata["04_richtung"]=="E"){
-          echo "<td>\n";
-          echo "<input type=\"image\" name=\"antwort\" src=\"".$conf_design_path."/028.jpg\">\n";
-          echo "</td><td>\n";
-          echo "<input type=\"image\" name=\"weiterleiten\" src=\"".$conf_design_path."/029.jpg\">\n";
-          echo "</td>";
-        } elseif ($this->formdata["04_richtung"]=="A"){
-          echo "<td>\n";
-          echo "<input type=\"image\" name=\"weiterleiten\" src=\"".$conf_design_path."/029.jpg\">\n";
-          echo "</td>";
-        }
-//        echo "</tr>\n";
-      break;
-
-      case "FM-Eingang":
-      case "FM-Eingang_Sichter":
-      case "Stab_schreiben":
-      case "FM-Eingang_Anhang":
-      case "Stab_gesprnoti":
-//        echo "<tr>";
-        echo "<td>\n";
-        echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
-        echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
-        echo "<input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/003.jpg\">\n";
-        echo "</td><td>\n";
-        echo "<input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/001.jpg\">\n";
-        echo "</td>\n";
-      break;
-
-      case "FM-Ausgang":
-      case "FM-Ausgang_Sichter":
-//        echo "<tr>";
-        echo "<td>\n";
-        echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
-        echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
-        echo "<input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/003.jpg\">\n";
-        echo "</td><td>\n";
-        echo "<input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/001.jpg\">\n";
-
-        echo "</td>";
-/*
-        echo "<td>\n";
-        echo "<input type=\"image\" name=\"anhang\" src=\"".$conf_design_path."/005.jpg\">\n";
-        echo "</td>\n";
-*/
-        if ($this->formdata["04_richtung"]=="A"){
-          echo "<td>\n";
-          echo "<input type=\"image\" name=\"antwort\" src=\"".$conf_design_path."/028.jpg\">\n";
-          echo "</td>";
-  //        echo "<td>\n";
-  //        echo "<input type=\"image\" name=\"weiterleiten\" src=\"".$conf_design_path."/029.jpg\">\n";
-  //        echo "</td>\n";
-        }
-
-//        echo "</tr>\n";
-      break;
-      case "Stab_sichten":
-      case "SI-Admin":
-//        echo "<tr>";
-        echo "<td>\n";
-        echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
-        echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
-        echo "<input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/003.jpg\">\n";
-        echo "</td><td>\n";
-        echo "<input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/001.jpg\">\n";
-        echo "</td>";
-//        echo "<td>\n";
-      break;
-   } // switch
-//    echo "</tbody>\n</table>\n";
-
-
-
-//    echo "</TD>\n";
-    echo "</TR>\n";
-    echo "</TBODY>\n";
-    echo "</TABLE>\n";
-
-
-
+    $this->show_menue_buttons (2, "oben");
 
     echo "\n\n\n\n\n\n\n\n\n<!-- ********** TABLE   001 Gesamte Tabelle *********** -->\n";
 
     echo "<!-- H A U P T T A B E L L E  -->";
 
-    echo "<table style=\"text-align: left; background-color: ".$this->rbl_bg_color."; width: 800px;\" border=\"1\" cellpadding=\"0\" cellspacing=\"0\">\n";
+    echo "<table style=\"text-align: left; background-color: ".$this->rbl_bg_color."; width: 810px;\" border=\"1\" cellpadding=\"0\" cellspacing=\"0\">\n";
     echo "<tbody>\n";
 
     echo "<tr><!-- 1. Zeile der Tabelle -->\n";
-    echo "<td style=\"height: 113px; width: 800px;\">\n";
+    echo "<td style=\"height: 113px; width: 860px;\">\n";
 
     echo "\n\n<!-- ********** TABLE   Eingang | Ausgang | Nachweisnummer  *********** -->\n";
 
@@ -752,7 +801,7 @@ Stab    Stab_schreiben                  -       -         -
 
     /****************************************************************************\
     | Zeile, Spalte 2 , 2+3  2   2   Ausgang Annahmevermerk +
-    |                         4  3   Ausgang Beförderungsvermerk
+    |                         4  3   Ausgang Befï¿½rderungsvermerk
     02_zeit
     02_zeichen
     \****************************************************************************/
@@ -937,11 +986,11 @@ Stab    Stab_schreiben                  -       -         -
 
     echo "<tbody>\n";
     echo "<tr>\n";
-    // Zeile, Spalte 4 , 1   32   6   Beförderungsweg
+    // Zeile, Spalte 4 , 1   32   6   Befï¿½rderungsweg
     echo "<td style=\"width: 131px; background-color: ".$this->bg[6].";\">Bef&ouml;rderungsweg:</td>\n";
 
     /****************************************************************************\
-    // Zeile, Spalte 4 , 2   32   6   Beförderungsweg
+    // Zeile, Spalte 4 , 2   32   6   Befï¿½rderungsweg
     06_befweg
     \****************************************************************************/
 
@@ -957,7 +1006,7 @@ Stab    Stab_schreiben                  -       -         -
     echo "</td>";
 
     /****************************************************************************\
-    // Zeile, Spalte 4 , 3   32   6   Beförderungsweg
+    // Zeile, Spalte 4 , 3   32   6   Befï¿½rderungsweg
     06_befwegausw
     \****************************************************************************/
     if (!$this->feld[6]) {
@@ -1018,13 +1067,13 @@ Stab    Stab_schreiben                  -       -         -
     echo "<input name=\"07_durchspruch\" value=\"S\" type=\"radio\" ".$param.$sel.">Spruch</td>\n";
 
     /****************************************************************************\
-    // Zeile, Spalte 5,2   128    8   Beförderungshinweis
+    // Zeile, Spalte 5,2   128    8   Befï¿½rderungshinweis
     \****************************************************************************/
 
     echo "<td style=\"text-align: left; width: 140px; background-color: ".$this->bg[8].";\">Bef&ouml;rderungshinweis:<br>Tel.</td>\n";
 
     /****************************************************************************\
-    // Zeile, Spalte 5,3   128    8   Beförderungshinweis
+    // Zeile, Spalte 5,3   128    8   Befï¿½rderungshinweis
     08_befhinweis
     \****************************************************************************/
     echo "<td style=\"width: 294px; background-color: ".$this->bg[8].";\">\n";
@@ -1037,7 +1086,7 @@ Stab    Stab_schreiben                  -       -         -
     }
     echo "</td>\n";
     /****************************************************************************\
-    // Zeile, Spalte 5,4   128    8   Beförderungshinweis
+    // Zeile, Spalte 5,4   128    8   Befï¿½rderungshinweis
     08_befhinwausw
     \****************************************************************************/
 
@@ -1087,7 +1136,7 @@ Stab    Stab_schreiben                  -       -         -
       echo $this->formdata["09_vorrangstufe"];
       echo "</big></big></b></div>";
     } else {
-      echo "<select ".$param." name=\"09_vorrangstufe\">\n";
+      echo "<select ".$param." name=\"09_vorrangstufe\" style=\"text-align: center; background-color:".$this->bg[9]."; font-size:xx-large; font-weight:bold;\">\n";
       if ($this->formdata["09_vorrangstufe"]=="") {$sel = " selected ";} else {$sel = "";}
       echo "<option ".$sel."></option>\n";
       if ($this->formdata["09_vorrangstufe"]=="eee") {$sel = " selected ";} else {$sel = "";}
@@ -1095,7 +1144,7 @@ Stab    Stab_schreiben                  -       -         -
       if ($this->formdata["09_vorrangstufe"]=="sss") {$sel = " selected ";} else {$sel = "";}
       echo "<option ".$sel.">sss</option>\n";
       if ($this->formdata["09_vorrangstufe"]=="bbb") {$sel = " selected ";} else {$sel = "";}
-      echo "<option ".$sel.">bbb</option>\n";
+      echo "<option ".$sel." >bbb</option>\n";
       if ($this->formdata["09_vorrangstufe"]=="aaa") {$sel = " selected ";} else {$sel = "";}
       echo "<option ".$sel.">aaa</option>\n";
     }
@@ -1129,7 +1178,7 @@ Stab    Stab_schreiben                  -       -         -
     echo "</td>\n";
 
     /****************************************************************************\
-    // Zeile, Spalte 6,3   Gesprächsnotiz    1024 11  Gesprächsnotiz
+    // Zeile, Spalte 6,3   Gesprï¿½chsnotiz    1024 11  Gesprï¿½chsnotiz
     11_gesprnotiz
     \****************************************************************************/
 
@@ -1383,7 +1432,7 @@ Stab    Stab_schreiben                  -       -         -
       case "FM-Admin":
       case "FM-Ausgang_Sichter":
       case "SI-Admin":
-
+// echo "<big><br>IM FORMULAR empfarray switch FM-Ausgang_Sichter===";var_dump ($this->empfarray); echo "<br></big>";
         for ($m=1; $m<=5; $m++){ // Zeilen
           echo "<tr>";
           for ($n=1; $n<=4; $n++){  // Spalten
@@ -1441,7 +1490,7 @@ Stab    Stab_schreiben                  -       -         -
           } // for $n
           echo "</tr>\n";
         } // for $m
-    break;
+      break;
 
       case "Stab_lesen":
       case "Stab_schreiben":
@@ -1481,7 +1530,7 @@ Stab    Stab_schreiben                  -       -         -
       } // for $n
       echo "</tr>\n";
     } // for $m
-       break;
+   break;
 
     } // switsch $this->task
 
@@ -1511,19 +1560,10 @@ Stab    Stab_schreiben                  -       -         -
     echo "</tbody>\n";
     echo "</table>\n";
 
+    $this->show_menue_buttons (2, "unten");
 
+    echo "</FORM>\n";
 
-
-
-
-
-
-
-    echo "<br>\n";
-    echo "</form>\n";
-    //echo "TASK=".$this->task."<br>";
-    echo "</body>\n";
-    echo "</html>\n";
   } // function plot_form
 
 } // class

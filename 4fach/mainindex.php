@@ -26,42 +26,61 @@ if ( debug == true ){
   echo "SESSION="; print_r ($_SESSION); echo "#<br>\n";
 }
 
-  /*GET=array(18) {
-      ["kategorien"]=>  string(3) "BR1"
-      ["katego_absenden_x"]=>  string(2) "28"
-      ["katego_absenden_y"]=>  string(2) "10"
-      ["01_medium"]=>  string(0) ""
-      ["04_richtung"]=>  string(1) "A"
-      ["04_nummer"]=>  string(1) "3"
-      ["06_befwegausw"]=>  string(0) ""
-      ["07_durchspruch"]=>  string(0) ""
-      ["08_befhinwausw"]=>  string(0) ""
-      ["10_anschrift"]=>  string(6) "LtS HS"
-      ["11_gesprnotiz"]=>  string(0) ""
-      ["12_inhalt"]=>  string(40) "ABC Zug alarmieren und zum BR entsenden."
-      ["12_abfzeit"]=>  string(13) "271700aug2008" ["13_abseinheit"]=>  string(5) "EL HS"
-      ["14_zeichen"]=>  string(2) "ew"
-      ["14_funktion"]=>  string(2) "S3"
-      ["00_lfd"]=>  string(1) "3"
-      ["task"]=>  string(10) "Stab_lesen" } #
-    */
-
-
 if (debug){
   error_reporting(E_ALL ^ E_NOTICE); //E_ALL);
 } else {
   error_reporting(FATAL | ERROR | WARNING);
 }
 
-include ("../config.inc.php");    // Konfigurationseinstellungen und Vorgaben
-include ("../dbcfg.inc.php");    // Datenbankparameter
-include ("../fkt_rolle.inc.php"); // Mitspieler
+include ("../4fcfg/config.inc.php");    // Konfigurationseinstellungen und Vorgaben
+include ("../4fcfg/dbcfg.inc.php");    // Datenbankparameter
+include ("../4fcfg/fkt_rolle.inc.php"); // Mitspieler
 include ("protokoll.php");            // Protokolllierung in der Datenbank
-include ("../db_operation.php");  // Datenbank operationen
+include ("db_operation.php");  // Datenbank operationen
 include ("4fachform.php");            // Formular Behandlung 4fach Vordruck
 include ("liste.php");                // erzeuge Ausgabelisten
 include ("data_hndl.php");            // Schnittstelle zur Datenbank
-include ("menue.php");                // erzeuge Men
+//include ("menue.php");                // erzeuge Men
+
+
+
+
+/*!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*/
+
+
+  $db = mysql_connect($conf_4f_db   ["server"],$conf_4f_db   ["user"], $conf_4f_db   ["password"] );
+    //  or die ("[table_exist] Konnte keine Verbindung zur Datenbank herstellen");
+  $result = mysql_ping  ($db);
+
+  if ($result == false){
+    echo "<h1>Es besteht keine Verbindung zur Datenbank.</h1>";
+    echo "<big><b>M&ouml;gliche Ursachen:<br></b>";
+    echo " 1. Datenbankserver ist nicht erreichbar weil aus.<br>";
+    echo " 2. Netzwerkfehler, wenn DB-Server auf anderem Server.<br>";
+    echo " 3. Benutzer oder Passwort stimmen nicht.<br><br>";
+    echo "Bitte unter \"administrative Massnahme\" - \"Datenbankparameter eingeben\" die Parameter einstellen.";
+    echo "</big>";
+    exit;
+  }
+  if (isset($db)){
+    mysql_close($db);
+  }
+
+/**********************************************************************\
+\**********************************************************************/
+
+
+  function resetframeset ($rootpath) {
+    pre_html ("reset","Framereset ".$conf_4f ["NameVersion"],""); // Normaler Seitenaufbau mit Auffrischung
+    echo "<body onLoad=\"FramesVeraendern('".$rootpath."/4fach/counter.php','counter','".$rootpath."/4fach/vorgaben.php','vorgaben','".$rootpath."/4fach/mainindex.php','mainframe')\">";
+    exit;
+  }
+
+
+  if (isset ($_GET ["reset_record"])){
+//    echo "RESET DATENSATZ ".$_GET ["reset_record"]."<br>";// !!!!!!!!!!!!!!!!!!!!!!
+    reset_record_lock ($_GET ["reset_record"]);
+  }
 
 
 /**********************************************************************\
@@ -82,7 +101,7 @@ if (isset ( $_GET ["m2_parameter_x"] )) {
 /*******************************************************************
 ANTWORT % WEITERLEITUNG
 *******************************************************************/
-$weiterantwort = false;
+  $weiterantwort = false;
   if ( ( (isset($_GET["weiterleiten_x"])) or
          (isset($_GET["antwort_x"])) ) and
          ( ( $_GET["task"] == "FM-Ausgang" ) or
@@ -98,19 +117,58 @@ $weiterantwort = false;
     Für die Listendarstellung erforderliche Einstellungen
 
   \****************************************************************************/
-  if (isset($_GET ["ktgotyp"])){
-    if ( $_GET ["ktgo"] == "alle") {
-      unset ($_SESSION ["kategotyp"]);
-      unset ($_SESSION ["katego"]);
+  if (isset($_GET ["ma_ktgotyp"])){
+    if ( $_GET ["ma_ktgo"] == "alle") {
+      unset ($_SESSION ["ma_kategotyp"]);
+      unset ($_SESSION ["ma_katego"]);
     } else {
-      $_SESSION ["kategotyp"] = $_GET ["ktgotyp"];
-      $_SESSION ["katego"]    = $_GET ["ktgo"];
+      $_SESSION ["ma_kategotyp"] = $_GET ["ma_ktgotyp"];
+      $_SESSION ["ma_katego"]    = $_GET ["ma_ktgo"];
+      $_SESSION["filter_start"] = 0 ;
+      $_SESSION["filter_position"] = 0;
+    }
+  }
+  if (isset($_GET ["us_ktgotyp"])){
+    if ( $_GET ["us_ktgo"] == "alle") {
+      unset ($_SESSION ["us_kategotyp"]);
+      unset ($_SESSION ["us_katego"]);
+    } else {
+      $_SESSION ["us_kategotyp"] = $_GET ["us_ktgotyp"];
+      $_SESSION ["us_katego"]    = $_GET ["us_ktgo"];
       $_SESSION["filter_start"] = 0 ;
       $_SESSION["filter_position"] = 0;
     }
   }
 
 
+  if (isset ( $_GET ["4fachkatego_absenden_x"])) {
+    include ("../4fach/katgoedt.php");
+    exit;
+  }
+
+
+  // Aufruf von Anhang vom 4fach Vordruck aus ==> es könnte schon Inhalt im Vormular vorhanden sein
+  if ( isset ($_GET["anhang_plus_x"])) {
+    $_SESSION ["anhang_menue"] = "100";
+    // header("Location: ".$_SERVER ["DOCUMENT_ROOT"]."/4fach/anhang.php");
+    include ("anhang.php");
+    exit;
+  }
+
+  /**********************************************************************\
+    --- S T A B und F M Z   s c h r e i b e n   m i t  A n h a n g ---
+
+    Oeffnet ein Fenster in dem Anhaenge ausgewaehlt werdn koennen
+  \**********************************************************************/
+  if ( ( isset ( $_GET["stab_anhang_x"] ) or  isset ( $_GET["fm_anhang_x"] )
+       ) and  ( !isset( $_GET["ah_auswahl_x"] ) ) )  {
+
+      if ( debug == true ){ echo "### mainindex 547 ( _GET[stab_anhang_x] ) or isset ( _GET[fm_anhang_x] ) ) and ( !isset( _GET[ah_auswahl_x] ) ";  echo "<br>\n";}
+    $_SESSION [anhang_menue] = 100;
+    include ("anhang.php");
+    $menue1 = "anhang";
+    exit;
+  }
 
   /**********************************************************************\
     Überprüfe ob die Listendarstellung geaendert werden soll
@@ -130,7 +188,61 @@ $weiterantwort = false;
   ["filter_suche"]=>  string(6) "suchen" } #
 
   \**********************************************************************/
+  if (!isset ( $_SESSION["filter_darstellung"])){
+    $_SESSION["filter_darstellung"] = 1;
+    $_SESSION["filter_erledigt"]    = 0;
+    $_SESSION["filter_unerledigt"]  = 1;
+    $_SESSION["filter_anzahl"]      = 5;
+    $_SESSION["filter_start"]       = 0 ;
+    $_SESSION["filter_position"]    = 0;
+  }
+  // filtern EIN / AUS
+  if ( (isset ($_GET["filter_darstellung_aus_x"])) or
+       (isset ($_GET["filter_darstellung_ein_x"])) ){
+
+    if ( ($_SESSION["filter_darstellung"] == 1) and (isset ($_GET["filter_darstellung_aus_x"])) ) {
+      $_SESSION["filter_darstellung"] = 0;
+    } elseif ( ($_SESSION["filter_darstellung"] == 0) and (isset ($_GET["filter_darstellung_ein_x"])) ){
+      $_SESSION["filter_darstellung"] = 1;
+    }
+  }
+
+  // erledigte SICHTAR UNSICHTBAR
+  if ( (isset ($_GET["filter_erledigt_aus_x"])) or
+       (isset ($_GET["filter_erledigt_ein_x"])) ){
+
+    if ( ($_SESSION["filter_erledigt"] == 1) and (isset($_GET["filter_erledigt_aus_x"])) ) {
+      $_SESSION["filter_erledigt"] = 0;
+    } elseif ( ($_SESSION["filter_erledigt"] == 0) and (isset ($_GET["filter_erledigt_ein_x"])) ){
+      $_SESSION["filter_erledigt"] = 1;
+    }
+  }
+  // unerledigte SICHTBAR UNSICHTBAR
+  if ( (isset ($_GET["filter_unerledigt_aus_x"])) or
+       (isset ($_GET["filter_unerledigt_ein_x"])) ){
+
+    if ( ($_SESSION["filter_unerledigt"] == 1) and (isset($_GET["filter_unerledigt_aus_x"])) ) {
+      $_SESSION["filter_unerledigt"] = 0;
+    } elseif ( ($_SESSION["filter_unerledigt"] == 0) and (isset ($_GET["filter_unerledigt_ein_x"])) ){
+      $_SESSION["filter_unerledigt"] = 1;
+    }
+  }
+
+  // finde Menü
+  if ( (isset ($_GET["flt_find_mask_aus_x"])) or
+       (isset ($_GET["flt_find_mask_ein_x"])) ){
+
+    if ( ($_SESSION["flt_find_mask"] == 1) and (isset($_GET["flt_find_mask_aus_x"])) ) {
+      unset ($_SESSION["flt_search"]);
+      $_SESSION["flt_find_mask"] = 0;
+    } elseif ( ($_SESSION["flt_find_mask"] == 0) and (isset ($_GET["flt_find_mask_ein_x"])) ){
+      $_SESSION["flt_find_mask"] = 1;
+    }
+  }
+
+
   if (isset($_GET["filter_suche_reset"])){ unset ($_SESSION["flt_search"]); }
+
   if (isset($_GET["filter_suche"])){
     if ($_SESSION["flt_search"] != $_GET ["flt_search"]){
       $_SESSION["filter_start"] = 0 ;
@@ -139,83 +251,14 @@ $weiterantwort = false;
     $_SESSION["flt_search"] = $_GET ["flt_search"];
   }
 
-  if ( (isset ($_GET["filter_submit"])) OR
-       (isset($_GET["flt_start_x"])) OR
-       (isset($_GET["flt_back_x"])) OR
-       (isset($_GET["flt_for_x"])) OR
-       (isset($_GET["flt_end_x"]))
-     ) { // es soll was geändert werden
-
-    if (!isset ( $_SESSION["filter_darstellung"] )){
-      $_SESSION["filter_darstellung"] = 1;
-      $_SESSION["filter_gelesen"] = 0;
-      $_SESSION["filter_erledigt"] = 0;
-      if (isset ($_GET["filter_anzahl"])) {
-        $_SESSION["filter_anzahl"] = $_GET["filter_anzahl"];
-      } else {
-        $_SESSION["filter_anzahl"] = 5;
-      }
-      $_SESSION["filter_start"] = 0 ;
-      $_SESSION["filter_position"] = 0;
-
-    } else {
-
-      if ($_GET["filter_darstellung"] == "on") { $_SESSION["filter_darstellung"] = 1;
-/*
-        if ($_GET["filter_gelesen"] == "on") {
-          $_SESSION["filter_gelesen"] = 1;
-        } else {
-          $_SESSION["filter_gelesen"] = 0;
-        }
-*/
-
-        if ($_GET["filter_erledigt"] == "on") {
-          if ($_SESSION["filter_erledigt"] == 0 ) {
-            $_SESSION["filter_erledigt"] = 1;
-            $_SESSION["filter_anzahl"] = $_GET["filter_anzahl"];
-            $_SESSION["filter_start"] = 0 ;
-            $_SESSION["filter_position"] = 0;
-          } else { // $_SESSION["filter_erledigt"] == 1
-            $_SESSION["filter_erledigt"] = 1;
-          }
-        } else {
-          if ($_SESSION["filter_erledigt"] == 0) {
-            $_SESSION["filter_erledigt"] = 0;
-          } else {
-            $_SESSION["filter_erledigt"] = 0;
-            $_SESSION["filter_anzahl"] = $_GET["filter_anzahl"];
-            $_SESSION["filter_start"] = 0 ;
-            $_SESSION["filter_position"] = 0;
-
-          }
-        }
+  if (isset ($_GET["filter_anzahl_x"])) {
+    $_SESSION["filter_anzahl"] = $_GET["filter_anzahl"]; }
 
 
-        if (isset ($_GET["filter_anzahl"])) {
-          $_SESSION["filter_anzahl"] = $_GET["filter_anzahl"]; }
-        else {
-          $_SESSION["filter_anzahl"] = 5;
-        }
-      } else {
-        unset ($_SESSION["filter_darstellung"]);
-        unset ($_SESSION["filter_anzahl"]);
-        unset ($_SESSION ["global_katego"]);
-      }
-    } //else if (!isset ( $_SESSION["filter_darstellung"] )){
-    /*          $_SESSION[flt_navi]
-            if (isset($_GET[flt_navi])) {  }
-            if (isset($_GET[flt_back_x])) {
-            if (isset($_GET[flt_for_x])) {
-            if (isset($_GET[flt_end_x])) {
-    */
     if (isset($_GET[flt_start_x])) { $_SESSION[flt_navi] = "start";}
     if (isset($_GET[flt_back_x]))  { $_SESSION[flt_navi] = "back";}
     if (isset($_GET[flt_for_x]))   { $_SESSION[flt_navi] = "for";}
     if (isset($_GET[flt_end_x]))   { $_SESSION[flt_navi] = "end";}
-
-//    header("Location: ".$conf_4f ["MainURL"]);
-//    exit;
-  } // Listendarstellung aendern
 
 
   /************************************************************************\
@@ -230,10 +273,12 @@ $weiterantwort = false;
         unset_msg_read ( $_GET["00_lfd"] );
       }
     // erledigt
-        if ($_GET [action] == "erledigt")
+    if ($_GET [action] == "erledigt")
       if ($_GET [todo] == "set"){
+        //echo "!!! erledigt set !!!<br>";
         set_msg_done ( $_GET["00_lfd"] );
       } else {
+        //echo "!!! erledigt unset !!!<br>";
         unset_msg_done ( $_GET["00_lfd"] );
       }
   }
@@ -244,28 +289,70 @@ $weiterantwort = false;
     Es gab noch keinen Kontakt ==> Begruessung
   \**********************************************************************/
   if (!isset ( $_SESSION ["menue"] ))
-     { $_SESSION ['menue'] = "WELCOME"; }
+     { $_SESSION ["menue"] = "WELCOME"; }
 
   /**********************************************************************\
     Der Anmelde Button wurde gedrueckt
   \**********************************************************************/
   if ( $_GET["login"] == "Anmelden" )  {
-    $_SESSION ['menue'] = "LOGIN"; }
+    $_SESSION ["menue"] = "LOGIN"; }
 
   /**********************************************************************\
     Es kommen Anmeldedaten die geprueft und gespeichert werden muessen
   \**********************************************************************/
-  if ((isset ($_GET["benutzer"])) AND
+  $doppelkennwort = true;
+  if (
+     ((isset ($_GET["benutzer"])) AND
       (isset ($_GET["kuerzel"] )) AND
-      (isset ($_GET["funktion"])) and
-      ($_SESSION["menue"] == "LOGIN")){
-    $error = check_save_user ();
-//    unset ($_GET);
-    if (!$error) {
-      $_SESSION["menue"] = "ROLLE";  //   führt zu fehlern bei der menüdarstellung
-      header("Location: ".$conf_4f ["MainURL"]);
-    }
+      (isset ($_GET["funktion"])) AND
+      ($_SESSION["menue"] == "LOGIN")) )
+    // Es wurden beide Kennworte gesetzt
+    if (
+         ( ($_GET["2teskennwort"] == "Yes") and
+           (isset ($_GET["kennwort1"])) and
+           (isset ($_GET["kennwort2"])) and
+           ($_GET["kennwort1"] != "") and
+           ($_GET["kennwort2"] != "") and
+           ($_GET["kennwort1"] == $_GET["kennwort2"]) ) OR
+
+         ( ($_GET["2teskennwort"] != "Yes") AND
+           (isset ($_GET["kennwort1"])) )
+       )  {
+      if (debug) echo "mainindex 320 <br> ";
+      $error = check_save_user ();
+      if (!$error) {
+        $_SESSION["menue"] = "ROLLE";  //   führt zu fehlern bei der menüdarstellung
+        if (debug) echo "mainindex 324 <br> ";
+//        exit;
+        resetframeset ($conf_urlroot.$conf_web ["pre_path"]);
+      }
     // Wenn Benutzer OK ==> SESSION [menue]=ROLLE ; $_SESSION [ROLLE]= Stab, Fernmelder...
+  } else {
+    if (debug) echo "mainindex 330 <br> ";
+    if (  ($_GET["2teskennwort"] == "Yes") and
+          (isset ($_GET["kennwort1"])) and
+          (isset ($_GET["kennwort2"])) and
+          ($_GET["kennwort1"] != "") and
+          ($_GET["kennwort2"] != "") and
+          ($_GET["kennwort1"] != $_GET["kennwort2"]) ) {
+          // Kennwort1 ungleich Kennwort2
+      if (isset ($_GET["benutzer"])) { $menuename     = $_GET["benutzer"]; }
+      if (isset ($_GET["kuerzel"] )) { $menuekuerzel  = $_GET["kuerzel"]; }
+      if (isset ($_GET["funktion"])) { $menuefunktion = $_GET["funktion"]; }
+      $doppelkennwort = true;
+      if (debug) echo "mainindex 342 <br> ";
+    } else {
+//      if (($_GET["kennwort1"] != "") AND ($_GET["kennwort2"] != "")) {
+        if (isset ($_GET["benutzer"])) { $menuename     = $_GET["benutzer"]; }
+        if (isset ($_GET["kuerzel"] )) { $menuekuerzel  = $_GET["kuerzel"]; }
+        if (isset ($_GET["funktion"])) { $menuefunktion = $_GET["funktion"]; }
+        $doppelkennwort = false;
+        if (debug) echo "mainindex 349 <br> ";
+//      } else {
+//        $doppelkennwort = true;
+//        if (debug) echo "mainindex 352 <br> ";
+//      }
+    }
   }
 
   $gesprnotizsichter = false ; // Voreinstellung fuer dieses Skript
@@ -298,9 +385,12 @@ $weiterantwort = false;
          ) {
     $returndata = $_GET;
 
-    if ( debug == true ){ echo "### 240 Daten kommen vom Formular und können gespeichert werden";  echo "<br>\n";}
+    if ( debug == true ){ echo "### 388 Daten kommen vom Formular und können gespeichert werden";  echo "<br>\n";}
 
-    if ( ( $_GET ["11_gesprnotiz"] == "on" ) and ( !$_SESSION ["gesprnoti"] ) ){
+    if ( ( $_GET ["11_gesprnotiz"] == "on" ) and
+         ( !$_SESSION ["gesprnoti"] ) and
+         ( $_GET ["task"] != "SI-Admin" ) and
+         ( $_GET ["task"] != "Stab_sichten" ) ){
         // Bei Gesprächsnotiz 2. Vorlage für Sichtung
 
         if ( debug == true ){ echo "### Gesprächsnotiz == 2. Sichtung";  echo "<br>\n";}
@@ -319,17 +409,21 @@ $weiterantwort = false;
       if ( debug == true ){ echo "### 256 check and save";  echo "<br>\n";}
 
       check_and_save ($returndata);
+
       // verhindert das erneute Speichern bei Betaetigung von F5
       if (isset ($_SESSION ['gesprnoti'])) { unset ( $_SESSION ['gesprnoti'] ); }
       if (create_vordrucke){
-        include ("../bak/backup.php");
+        include ("../4fbak/backup.php");
       }
 
       if ( !$weiterantwort ){
-        header("Location:".$_SERVER["PHP_SELF"]);
+        resetframeset ($conf_urlroot.$conf_web ["pre_path"]);
+//exit;
+
+//        header("Location:".$_SERVER["PHP_SELF"]);
 //         header("Location: ".$conf_4f ["MainURL"], false);
-  echo "<big><big>header!!!===".$_SERVER["PHP_SELF"]."</big></big><br>";
-        exit;
+//  echo "<big><big>header!!!===".$_SERVER["PHP_SELF"]."</big></big><br>";
+//        exit;
       }
     }
   } elseif ( ( ($_GET["task"] == "FM-Ausgang_Sichter") OR
@@ -407,7 +501,7 @@ Daten kommen vom Formular und sollen als Antwort dienen.
 
   if (isset ($_SESSION ["sw_data"] )) {
 
-    if ( debug == true ){ echo "### 236 _SESSION [sw_data]";  echo "<br>\n";}
+    if ( debug == true ){ echo "### 461 _SESSION [sw_data]";  echo "<br>\n";}
 
 //    $formdata = $_GET ;
     $formdata = $_SESSION ["sw_data"] ;
@@ -506,53 +600,8 @@ $formdata = ""; // setze die Formulardaten zurck
     $form = new nachrichten4fach ($formdata, "Stab_schreiben", "");
   }
 
-/**********************************************************************\
-  --- S T A B   s c h r e i b e n   m i t  A n h a n g ---
 
-  Oeffnet ein Fenster in dem Anhaenge ausgewaehlt werdn koennen
-\**********************************************************************/
-  if (
-       ( isset ( $_GET["stab_anhang_x"] ) or
-         isset ( $_GET["fm_anhang_x"] )
-       ) and
 
-       ( !isset( $_GET["ah_auswahl_x"] )
-       )
-     )
-  {
-      if ( debug == true ){ echo "### 345 ( $_GET[stab_anhang_x] ) or isset ( $_GET[fm_anhang_x] ) ) and ( !isset( $_GET[ah_auswahl_x] ) ";  echo "<br>\n";}
-  //  include ("anhang.php");
-    $menue1 = "anhang";
-  }
-
-/**********************************************************************\
-  --- S T A B   s c h r e i b e n   m i t  A n h a n g ---
-
-  Anhang ausgewaehlt und kann in Vordruck uebernommen werde
-\**********************************************************************/
-  if ( ($_SESSION ["vStab_rolle"]== "Stab") and
-       (isset ($_GET["ah_auswahl_x"])) ){
-
-    if ( debug == true ){ echo "### 358 Anhang ausgewaehlt und kann in Vordruck uebernommen werden ";  echo "<br>\n";}
-
-    $keys = array_keys ($_GET);
-    $ahkey = array ();
-    foreach ($keys as $key){
-      list($lfd, $num) = split("_", $key);
-      if ($lfd == "lfd") { $ahkey [] = "lfd_".$num;}
-    }
-    $anhang = "";
-    foreach ($ahkey as $anh){
-      $anhang .= $_GET [$anh].";";
-    }
-    $formdata ["12_anhang"]      = $anhang;
-    $formdata ["12_inhalt"]      .= $anhang;
-    // $formdata ["12_abfzeit"]     = convtodatetime (date("dm"), date ("Hi"));
-    $formdata ["13_abseinheit"]  = $conf_4f     ["anschrift"]; // $_SESSION["vStab_rolle"];
-    $formdata ["14_zeichen"]     = $_SESSION["vStab_kuerzel"];
-    $formdata ["14_funktion"]    = $_SESSION["vStab_funktion"];
-    $form = new nachrichten4fach ($formdata, "Stab_schreiben", "");
-  }
 
 /**********************************************************************\
   --- S T A B   l e s e n  ---
@@ -588,7 +637,7 @@ $formdata = ""; // setze die Formulardaten zurck
          )
 ))       ) {
 
-    if ( debug == true ){ echo "### 413 Stab_lesen - Menue und Liste ";  echo "<br>\n";}
+    if ( debug == true ){ echo "### 665 Stab_lesen - Menue und Liste ";  echo "<br>\n";}
 
 
 /*     $css = "a:link    { color:#000000; text-decoration:none; font-weight:bolder ; font-size:normal; }\n".
@@ -661,9 +710,9 @@ ul#topmenu li.active {
 
 
       pre_html ("stabliste","Stab lesen ".$conf_4f ["NameVersion"],$css.$csskatego); // Normaler Seitenaufbau mit Auffrischung
-      echo "<body>";
+      echo "<body bgcolor=\"#DCDCFF\">";
 //echo "\n<!-- Vor Menueaufruf und liste -->";
-      menue ();
+//HL      menue ();
       $list = new listen ("Stab_lesen", "");
       $list->createlist ();
 //echo "\n<!-- danach Menue und liste -->";
@@ -676,11 +725,10 @@ ul#topmenu li.active {
 \**********************************************************************/
   if (( $_GET["stab"] == "meldung")){
 
-    if ( debug == true ){ echo "### 654 Stab Meldung lesen - Darstellung der Meldung ber die laufende Nummer ";  echo "<br>\n";}
+    if ( debug == true ){ echo "### 753 Stab Meldung lesen - Darstellung der Meldung ber die laufende Nummer ";  echo "<br>\n";}
 
     set_msg_read ($_GET["00_lfd"]);
     $formdata = get_msg_by_lfd ($_GET["00_lfd"]);
-
     $form = new nachrichten4fach ($formdata, "Stab_lesen", "");
   }
 
@@ -733,9 +781,9 @@ ul#topmenu li.active {
             "a:active { color:#0000EE; background-color:#FFFF99; }\n".
             "a:focus { color:#0000EE; background-color:#FFFF99;  }";
         pre_html ("siliste","Sichterliste ".$conf_4f ["NameVersion"],$css); // Normaler Seitenaufbau mit Auffrischung
-        echo "<body>";
+        echo "<body bgcolor=\"#DCDCFF\">";
 
-        menue ();
+//HL        menue ();
         $list = new listen ("Stab_sichten", "STSI");
         $list->createlist ();
    }
@@ -794,8 +842,8 @@ ul#topmenu li.active {
           "a:active { color:#0000EE; background-color:#FFFF99; }\n".
           "a:focus { color:#0000EE; background-color:#FFFF99;  }";
     pre_html ("fmdliste","FMD Ausgang ".$conf_4f ["Titelkurz"]."".$conf_4f ["Version"],$css); // Normaler Seitenaufbau mit Auffrischung
-    echo "<body>";
-    menue ();
+    echo "<body bgcolor=\"#DCDCFF\">";
+//HL    menue ();
     $list = new listen ("FMA", "");
     $list->createlist ();
   }
@@ -840,8 +888,13 @@ ul#topmenu li.active {
       }
       } else {
       if (( $_SESSION ["vStab_kuerzel"] != $result[1][x03_sperruser] )){
-       // Kruezel sind gleich
-       echo "<a><big><big><big>Datensatz ist im Zugriff von <b>".$result[1][x03_sperruser]."!</b><br></big></big></big>";;
+        // Kruezel sind gleich
+        echo "<big><big><big>Datensatz ist im Zugriff von <b>".$result[1][x03_sperruser]."!</b><br></big></big></big>";
+        echo "<br><br><br><br><br><br>";
+        echo "!!!Achtung!!!<br>";
+        echo "Datensatzfreischaltung nur auf Anordnung des Betriebsstellenleiters.<br>";
+        echo"<a href=\"./mainindex.php?reset_record=".$_GET["00_lfd"]."\">
+             <img src=\"./createbutton.php?icontext=Datensatz freigeben&color=red\" alt=\"Datensatz freigeben\"></a>";
       }
     }
   }
@@ -861,9 +914,9 @@ ul#topmenu li.active {
               "a:active { color:#0000EE; background-color:#FFFF99; font-weight:bold; }\n".
               "a:focus { color:#0000EE; background-color:#FFFF99; font-weight:bold; }";
         pre_html ("si2liste","Stab lesen ".$conf_4f ["NameVersion"],$css); // Normaler Seitenaufbau mit Auffrischung
-        echo "<body>";
+        echo "<body bgcolor=\"#DCDCFF\">";
 
-        menue ();
+//HL        menue ();
         $list = new listen ("FMADMIN", "");
         $list->createlist ();
   }
@@ -878,9 +931,9 @@ ul#topmenu li.active {
               "a:active { color:#0000EE; background-color:#FFFF99; font-weight:bold; }\n".
               "a:focus { color:#0000EE; background-color:#FFFF99; font-weight:bold; }";
         pre_html ("si2liste","Stab lesen ".$conf_4f ["NameVersion"],$css); // Normaler Seitenaufbau mit Auffrischung
-        echo "<body>";
+        echo "<body bgcolor=\"#DCDCFF\">";
 
-        menue ();
+//HL        menue ();
         $list = new listen ("SIADMIN", "");
         $list->createlist ();
   }
@@ -918,89 +971,59 @@ ul#topmenu li.active {
 
 \**********************************************************************/
     // Anhang auswaehlen
-  if ( ( isset ($_GET["fm_anhang_x"]) ) or ( isset ($_GET["stab_anhang_x"]) )  or
+/*  if ( ( isset ($_GET["fm_anhang_x"]) ) or ( isset ($_GET["stab_anhang_x"]) )  or
        ( $_SESSION ["UPLOAD"] == "fileselect" ) ){
-    if ( debug == true ){
-      echo "Zeile 429 Auswahlanhang<br>";
-    }
-    if ($_SESSION ["UPLOAD"] == "fileselect"){
-      $_SESSION ["UPLOAD"] = "upload"; }
+    if ( debug == true ){ echo "Zeile 947 Auswahlanhang<br>"; }
+
+    if ($_SESSION ["UPLOAD"] == "fileselect"){ $_SESSION ["UPLOAD"] = "upload"; }
+
+    $_SESSION [anhang] = "select_attechment";
+
     include ("anhang.php");
     $menue1 = "anhang";
+    if ( debug == true ){ echo "Zeile 953 Nach Anhang.php<br>"; }
+    exit;
   }
 
 /**********************************************************************\
 
 \**********************************************************************/
     // Anhang auswaehlen
+/*
   if ( isset ( $_GET["ah_upload_x"] ) ){
 
     $_SESSION ["UPLOAD"] = "fileselect";
 
-    if ( debug == true ){ echo "### 691 FM Admin - Anhang auswaehlen ";  echo "<br>\n";}
+    if ( debug == true ){ echo "### 964 FM Admin - Anhang auswaehlen ";  echo "<br>\n";}
 
-/*
+
     echo "<script type=\"text/javascript\">\n";
-    echo "var Neufenster = window.open(\"./upload/upload.php\",\"AnderesFenster\",\"width=900,height=600, resizable=yes, menubar=no, scrollbars=yes\");\n";
+    echo "var Neufenster = window.open(\"./upload.php\",\"AnderesFenster\",\"width=900,height=600, resizable=yes, menubar=no, scrollbars=yes\");\n";
     echo "</script>\n";
+
+//  include ($conf_web ["srvroot"]."/kats/4fach/upload.php");
+//   resetframeset ($conf_urlroot.$conf_web ["pre_path"]);
+
+ header("Location: ".$conf_urlroot.$conf_web ["pre_path"]."/4fach/upload.php");
+  }
 */
-//  include ("./upload/upload.php");
-
- header("Location: upload/upload.php");
-  }
 
 
 /**********************************************************************\
-
-\**********************************************************************/
-    // Anhang ausgewaelt und kann in Vordruck uebernommen werden
-  if ( ($_SESSION ["vStab_rolle"]== "Fernmelder") and
-       (isset ($_GET["ah_auswahl_x"])) ){
-
-    if ( debug == true ){ echo "### 711 Anhang in Vordruck uebernehmen ";  echo "<br>\n";}
-
-
-    $keys = array_keys ($_GET);
-    $ahkey = array ();
-    foreach ($keys as $key){
-      list($lfd, $num) = split("_", $key);
-      if ($lfd == "lfd") { $ahkey [] = "lfd_".$num;}
-    }
-    $anhang = "";
-    foreach ($ahkey as $anh){
-      $anhang .= $_GET [$anh].";";
-    }
-    $formdata ["12_anhang"]   = $anhang;
-    $formdata ["12_inhalt"]  .= $anhang;
-    $formdata ["01_zeichen"]  = $_SESSION ["vStab_kuerzel"];
-    $formdata ["10_anschrift"]  = $conf_4f ["anschrift"];
-    if (sichter_online()) {
-      $form = new nachrichten4fach ($formdata, "FM-Eingang_Anhang", "");
-    } else {
-      $formdata ["15_quitzeichen"]  = $_SESSION ["vStab_kuerzel"];
-      $formdata ["16_empf"]         = "";
-      $form = new nachrichten4fach ($formdata, "FM-Eingang_Anhang_Sichter", "");
-    }
-  }
-
-
-/**********************************************************************\
-
+   A B M E L D E N
 \**********************************************************************/
   if (isset ($_GET["m2_abmelden_x"])) {
-
     if ( debug == true ){ echo "### 743 m2_abmelden_x ";  echo "<br>\n";}
 
+     include_once ("./logoff.php");
+
      $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
-     //$query = "DELETE FROM `benutzer` WHERE `kuerzel` = \"".$_SESSION[vStab_kuerzel]."\"";
      $query = "UPDATE ".$conf_4f_tbl ["benutzer"]." SET
                    `aktiv` = \"0\",
                    `sid`   = \"\",
                    `ip`    = \"\"
                WHERE `kuerzel` = \"".$_SESSION["vStab_kuerzel"]."\";";
-//  echo "<br>query===".$query."<br>";
      $result = $dbaccess->query_table_iu ($query);
-
      protokolleintrag ("Abmelden", $_SESSION[vStab_benutzer].";".$_SESSION[vStab_kuerzel].";".$_SESSION[vStab_funktion].";".$_SESSION[vStab_rolle].";".session_id().";".$_SERVER[REMOTE_ADDR]);
 
      // Session beenden - SESSION zurcksetzen -
@@ -1009,29 +1032,100 @@ ul#topmenu li.active {
        setcookie(session_name(), '', time()-42000, '/');
      }
      session_destroy ();
-     //$_SESSION [menue] = "WELCOME";
-     header("Location: ".$conf_4f ["MainURL"]);
-     exit;
+
+     $_SESSION [menue] = "WELCOME";
+     resetframeset ($conf_urlroot.$conf_web ["pre_path"]);
+
   } // isset ($_GET["m2auswahl"]
 
 
-/**********************************************************************\
+  /**********************************************************************\
 
-\**********************************************************************/
-if ( ( !isset($form) ) and ( $menue1 != "anhang" ) and ( $menue1 != "upload" ) ) {
-//echo "mainindex-menue<br>";
+  \**********************************************************************/
+  if ($_SESSION ["menue"] == "LOGIN" or $_SESSION ["menue"] == "WELCOME" ) {
 
-/*
-  $css = "a:link { color:#000000; text-decoration:none; font-weight:bold; }\n".
-        "a:visited { color:#EE0000; text-decoration:none; font-weight:bold; }\n".
-        "a:hover { color:#EE0000; text-decoration:none; background-color:#FFFF99; font-weight:bold; }\n".
-        "a:active { color:#0000EE; background-color:#FFFF99; font-weight:bold; }\n".
-        "a:focus { color:#0000EE; background-color:#FFFF99; font-weight:bold; }";
-  pre_html ("U_Liste60","Stab lesen ".$conf_4f ["NameVersion"],$css); // Normaler Seitenaufbau mit Auffrischung
-  echo "<body>";*/
+    echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
+    echo "<html>\n";
+    echo "<head>\n";
+    echo "</head>\n";
 
-  menue ();
-}
+    echo "<body bgcolor=\"#DCDCFF\">";
+    echo "<form action=\"".$conf_4f ["MainURL"]."\" method=\"get\" target=\"mainframe\">\n";
+    echo "<!-- Formularelemente und andere Elemente innerhalb des Formulars -->\n";
+
+    echo "<table border=\"1\" cellspacing=\"1\" cellpeding=\"1\">\n";
+    echo "<tbody>";
+    echo "<tr>\n";
+    echo "<td>\n";
+
+    echo "<table border=\"1\" cellspacing=\"1\" cellpeding=\"1\">\n";
+    echo "<tbody>";
+    echo "<tr>\n";
+    switch ($_SESSION ["menue"]) {
+      case "WELCOME" : // nicht angemeldet ==> nur login Button
+               echo "<td>\n";
+               foreach ( $conf_4f ['NameVersion'] as $titel ) {
+                 echo $titel;
+               }
+               echo "</td>\n";
+               echo "</tr>\n<tr>\n";
+  //             echo "<td>\n";
+  //             echo "<input type=\"submit\" name=\"login\" value=\"Anmelden\">\n";
+  //             echo "<input type=\"hidden\" name=\"login\" value=\"Anmelden\">\n";
+  //             echo "<input type=\"image\" name=\"login\" src=\"".$conf_design_path."/logon.gif\">\n";
+  //             echo "</td>\n";
+      break;
+      case "LOGIN" : // Anmeldeformular
+              echo "<td>\nName, Vorname:</td>\n<td>\n<input style=\"font-size:20px; font-weight:900;\" type=\"text\" size=\"32\" value=\"".$menuename."\" maxlength=\"32\" name=\"benutzer\"></td>\n";
+              echo "<td>\n<a><img src=\"null.gif\" alt=\"leer\"></a>\n</td>\n";
+              echo "</tr>\n<tr>\n";
+              echo "<td>\nK&uuml;rzel:</td>\n<td>\n<input style=\"font-size:20px; font-weight:900;\" type=\"text\" size=\"3\" maxlength=\"3\" value=\"".$menuekuerzel."\" name=\"kuerzel\"></td>\n";
+              echo "<td>\n<a><img src=\"null.gif\" alt=\"leer\"></a>\n</td>\n";
+              echo "</tr>\n<tr>\n";
+              echo "<td>\nFunktion:</td>\n<td>\n<select style=\"font-size:20px; font-weight:900;\" name=\"funktion\">\n";
+              for ($i=1; $i <= count ($conf_empf); $i++ ){
+                if ($menuefunktion == $conf_empf[$i]["fkt"]){ $sel = "selected"; }else{ $sel = ""; }
+                echo "<option ".$sel.">".$conf_empf[$i]["fkt"]."</option>\n";
+              }
+              echo "</select>\n";
+              echo "</td>\n";
+              echo "<td>\n<a><img src=\"null.gif\" alt=\"leer\"></a>\n</td>\n";
+              echo "</tr>\n<tr>\n";
+
+              echo "<td>";
+              echo "Kennwort:" ;
+              echo "</td><td>";
+              echo "<input name=\"kennwort1\" type=\"password\" size=\"32\" maxlength=\"32\">";
+              echo "</td>\n";
+              if (  //($menuename == "") and ($menuekuerzel == "") and ($menuefunktion == "")){
+                   $doppelkennwort ) {
+                echo "<td>\n<a><img src=\"null.gif\" alt=\"leer\"></a>\n</td>\n";
+
+                echo "<input type=\"hidden\" name=\"2teskennwort\" value=\"Yes\">\n";
+                echo "</tr>\n<tr>\n";
+                echo "<td>";
+                echo "Kennwort:" ;
+                echo "</td><td>";
+                echo "<input name=\"kennwort2\" type=\"password\" size=\"32\" maxlength=\"32\">";
+                echo "</td>\n";
+              }
+              echo "<td>\n<input type=\"submit\" name=\"anmelden\" value=\"Anmelden\">\n";
+              echo "</td>\n";
+
+      break;
+    }
+    echo "</tr>\n";
+    echo "</tbody>";
+    echo "</table>";
+    echo "</td>\n";
+    echo "</tr>\n";
+    echo "</tbody>";
+    echo "</table>";
+    echo "</form>";
+
+//    $_SESSION["menue"] = "NORMAL";
+
+  }
 
 
 /**********************************************************************\

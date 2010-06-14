@@ -1,15 +1,17 @@
 <?php
 
-include_once ("katego.php");
-include_once ("../config.inc.php");
-include ("../fkt_rolle.inc.php");  
+include_once ("../4fach/katego.php");
+include_once ("../4fcfg/config.inc.php");
+include      ("../4fcfg/fkt_rolle.inc.php");
 
-define ("debug", false);
+
 
 session_start ();
 
+ define ("debug", false);
+
 if ( debug == true ){
-  echo "<br><br>\n";
+  echo "<br>12 In KATEGOEDT.PHP<br>\n";
   echo "GET="; var_dump ($_GET);    echo "#<br><br>\n";
   echo "POST="; var_dump ($_POST);   echo "#<br><br>\n";
   echo "COOKIE="; var_dump ($_COOKIE); echo "#<br><br>\n";
@@ -17,59 +19,99 @@ if ( debug == true ){
   echo "SESSION="; print_r ($_SESSION); echo "#<br>\n";
 }
 
-
     $berechtigt = ($_SESSION ["vStab_funktion"] == $redcopy2) OR
                   ($_SESSION ["vStab_funktion"] == "Si");
 
     if ( ( isset ( $_GET ["4fachkatego_absenden_x"] )) ) {
+
+
+        // So als erstes muessen wir mal rauskriegen was überhaupt geändert worden ist.
+        $om  = $_GET [kategorien_master];
+        $ou  = $_GET [kategorien_user];
+
+        $kmo = $_GET [kategorien_master_oben];
+        $kuo = $_GET [kategorien_user_oben];
+
+        $kmu = $_GET [kategorien_master_unten];
+        $kuu = $_GET [kategorien_user_unten];
+        $neu_m = "";
+        $neu_u = "";
+
+        if (( $kmo != $om ) OR ( $kmu != $om )) { // Master wurde geändert
+          if ( $kmo != $om ) { $neu_m = $kmo; }
+          elseif ( $kmu != $om ) { $neu_m = $kmu; }
+        } else { $neu_m = $om; }
+
+        if (( $kuo != $ou ) OR ( $kuu != $ou )) { // User wurde geändert
+          if ( $kuo != $ou ) { $neu_u = $kuo; }
+          elseif ( $kuu != $ou ) { $neu_u = $kuu; }
+        } else { $neu_u = $ou; }
+
+
+        if (debug){
+          echo "om    =".$om."<br>" ;
+          echo "ou    =".$ou."<br>" ;
+          echo "kmo   =".$kmo."<br>" ;
+          echo "kuo   =".$kuo."<br>" ;
+          echo "kmu   =".$kmu."<br>" ;
+          echo "kuu   =".$kuu."<br>" ;
+          echo "neu_m =".$neu_m."<br>" ;
+          echo "neu_u =".$neu_u."<br>" ;
+        }
+
       if ($berechtigt) {
-        if (debug) echo "21--<br>";
+        if (debug) echo "26--<br>";
         $katego = new kategorien ("master");
           // kategorien_master in Tabelle suchen
         $result=$katego->db_get_kategobymsg ( $_GET["msglfd"] );
-        if (debug) {echo "025 RESULT="; var_dump ($result); echo"<br>";}
+        if (debug) {echo "030 RESULT="; var_dump ($result); echo"<br>";}
         if ($result == false) {
           // für die Nachrichtennummer gibt es keinen Kategorieeintrag
-          if (debug) echo "30-- db_get_kategobymsg ( _GET[msglfd] ) == false<br>";
+          if (debug) echo "33-- db_get_kategobymsg ( _GET[msglfd] ) == false<br>";
           // insert da es noch keinen Eintrag gibt
-          if ($_GET ["kategorien_master"] != "") {
-            if (debug) echo "33-- _GET [kategorie_master] !=<br>";
-            $katego->dblk_neu ( $_GET["msglfd"], $_GET["kategorien_master"] );
+          if ($neu_m != "") {
+            if (debug) echo "36-- _GET [kategorie_master] !=<br>";
+            $katego->dblk_neu ( $_GET["msglfd"], $neu_m );
           }
         } ELSE {
             // Kategorie muss geändert werden
-          if (debug) echo "37-- db_get_kategobymsg ( _GET[msglfd] ) == TRUE<br>";
+          if (debug) echo "41 -- db_get_kategobymsg ( _GET[msglfd] ) == TRUE<br>";
           // insert da es noch keinen Eintrag gibt
-          if ($_GET ["kategorien_master"] != "") {
-            $katego->dblk_aendern ( $_GET["msglfd"], $_GET["kategorien_master"] );
+          if ($neu_m != "") {
+            $katego->dblk_aendern ( $_GET["msglfd"], $neu_m );
           } ELSE {
             $katego->dblk_loeschen ( $_GET["msglfd"] );
           }
         }
       }
-      if (debug) echo "46--<br>";
+      if (debug) echo "50--<br>";
       $katego = new kategorien ("user");
         // kategorien_user in Tabelle suchen
       $result=$katego->db_get_kategobymsg ( $_GET["msglfd"] );
-      if (debug) {echo "050 RESULT="; var_dump ($result); echo"<br>";}
+      if (debug) {echo "054 RESULT="; var_dump ($result); echo"<br>";}
       if ($result == false) {
         // für die Nachrichtennummer gibt es keinen Kategorieeintrag
-        if (debug) echo "53-- db_get_kategobymsg ( _GET[msglfd] ) == false<br>";
+        if (debug) echo "57-- db_get_kategobymsg ( _GET[msglfd] ) == false<br>";
         // insert da es noch keinen Eintrag gibt
-        if ($_GET ["kategorien_user"] != "") {
-          $katego->dblk_neu ( $_GET["msglfd"], $_GET["kategorien_user"] );
+        if ($neu_u != "") {
+          $katego->dblk_neu ( $_GET["msglfd"], $neu_u );
         }
+//         ELSEIF ($neu_o != "") {
+//          $katego->dblk_neu ( $_GET["msglfd"], $neu_o );
+//        }
       } ELSE {
-          // Kategorie muss geändert werden
-        if (debug) echo "60-- db_get_kategobymsg ( _GET[msglfd] ) == TRUE<br>";
+        // Kategorie muss geändert werden
         // insert da es noch keinen Eintrag gibt
-        if ($_GET ["kategorien_user"] != "") {
-          $katego->dblk_aendern ( $_GET["msglfd"], $_GET["kategorien_user"] );
+        if ($neu_u != "") {
+          if (debug) echo "66-- db_get_kategobymsg ( _GET[msglfd] ) == TRUE<br>";
+          $katego->dblk_aendern ( $_GET["msglfd"], $neu_u );
+        } ELSE {
+            $katego->dblk_loeschen ( $_GET["msglfd"] );
         }
       }
 
       include_once ("4fachform.php"); // Formular Behandlung 4fach Vordruck
-      include_once ("../db_operation.php"); // Datenbank operationen
+      include_once ("db_operation.php"); // Datenbank operationen
       include_once ("data_hndl.php"); // Schnittstelle zur Datenbank
 
       $formdata = get_msg_by_lfd ($_GET["msglfd"]);
@@ -141,7 +183,8 @@ if ( debug == true ){
        // Liste mit eingabemöglichkeit
       $katego->liste_kategorien ();
       $katego->eingabezeile ("neu","","","");
-//          if (!debug) header("Location: ".$_SERVER['PHP_SELF']);
+//          if (!debug)
+      header("Location: ".$_SERVER['PHP_SELF']);
     }
 
 
@@ -176,7 +219,7 @@ if ( debug == true ){
       if (debug) echo "110--<br>";
       // 4fachVordruck
       include_once ("4fachform.php"); // Formular Behandlung 4fach Vordruck
-      include_once ("../db_operation.php"); // Datenbank operationen
+      include_once ("db_operation.php"); // Datenbank operationen
       include_once ("data_hndl.php"); // Schnittstelle zur Datenbank
 
       $formdata = get_msg_by_lfd ($_SESSION ["kat_msgno"]);
@@ -205,7 +248,7 @@ if ( debug == true ){
          ( $_GET ["kategorie"] != "" ) AND
          ( isset ( $_GET ["beschreibung"] )) AND
          ( isset ( $_GET ["katego_absenden_x"] )) ) {
-       if (debug) echo "202--<br>";
+       if (debug) echo "245--<br>";
             // INSERT
        if ( $_GET ["kategorie"] != "") {
          $katego = new kategorien ($_SESSION ["kat_tbl"]);
@@ -226,7 +269,8 @@ if ( debug == true ){
       unset ($_SESSION ["kat_no"]);
 */
 
-      if (!debug) header("Location: ".$_SERVER['PHP_SELF']."?dbtyp=".$_SESSION ["kat_tbl"]."&fkt=edit&msgno=".$_SESSION ["kat_msgno"]);
+//      if (!debug)
+      header("Location: ".$_SERVER['PHP_SELF']."?dbtyp=".$_SESSION ["kat_tbl"]."&fkt=edit&msgno=".$_SESSION ["kat_msgno"]);
     }
 
     /*GET=array(3) {
@@ -241,7 +285,22 @@ if ( debug == true ){
             // DELETE
        $katego = new kategorien ($_GET ["dbtyp"]);
        $katego->db_delete ( $_GET ["lfd"] );
-       if (!debug) header("Location: ".$_SERVER['PHP_SELF']."?dbtyp=".$_GET ["dbtyp"]."&fkt=edit&msgno=".$_SESSION ["kat_msgno"]);
+       switch ($_GET ["dbtyp"]) {
+         case "master":
+           if (isset ($_SESSION["ma_katego"])) {
+             unset ($_SESSION["ma_katego"]);
+             unset ($_SESSION["ma_kategotyp"]);
+           }
+         break;
+         case "user":
+           if (isset ($_SESSION["us_katego"])) {
+             unset ($_SESSION["us_katego"]);
+             unset ($_SESSION["us_kategotyp"]);
+           }
+         breake;
+       }
+       //if (!debug)
+       header("Location: ".$_SERVER['PHP_SELF']."?dbtyp=".$_GET ["dbtyp"]."&fkt=edit&msgno=".$_SESSION ["kat_msgno"]);
     }
 
 ?>

@@ -8,9 +8,9 @@
 
 <?php
 
-include ("../config.inc.php");    // Konfigurationseinstellungen und Vorgaben
-include ("../dbcfg.inc.php");     // Datenbankparameter
-include ("../db_operation.php");  // Datenbank operationen
+include ("../4fcfg/config.inc.php");    // Konfigurationseinstellungen und Vorgaben
+include ("../4fcfg/dbcfg.inc.php");     // Datenbankparameter
+include ("./db_operation.php");  // Datenbank operationen
 
 
   $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);

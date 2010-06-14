@@ -11,15 +11,30 @@
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
 
-include ("../dbcfg.inc.php");
-include ("../e_cfg.inc.php");
-include ("../para.inc.php");
+include ("../4fcfg/dbcfg.inc.php");
+include ("../4fcfg/e_cfg.inc.php");
+include ("../4fcfg/para.inc.php");
 
   function pre_html ($art, $titel, $cssstr){
-    include ("../para.inc.php");
+    include ("../4fcfg/para.inc.php");
     echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
     echo "<html>\n";
     echo "<head>\n";
+
+    echo "<script language=\"JavaScript\">\n";
+    echo "<!--\n";
+    echo "function FramesVeraendern(url1, frameziel1, url2, frameziel2, url3, frameziel3)";
+    echo "{";
+    echo "    Frame1 = eval(\"parent.\"+frameziel1);";
+    echo "    Frame2 = eval(\"parent.\"+frameziel2);";
+    echo "    Frame3 = eval(\"parent.\"+frameziel3);";
+    echo "    Frame1.location.href = url1; ";
+    echo "    Frame2.location.href = url2; ";
+    echo "    Frame3.location.href = url3; ";
+    echo "}";
+    echo "//-->\n";
+    echo "</script>\n";
+
     echo "<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=iso\">\n";
    switch ($art){
      case "N":
@@ -52,6 +67,9 @@ include ("../para.inc.php");
        echo "<meta http-equiv=\"pragma\" content=\"no cache\">\n";
        echo "<meta http-equiv=\"expires\" content=\"0\">\n";
        echo "<meta http-equiv=\"refresh\" content=\"".$cfg ["itv"] ["si2liste"]."\">\n";
+     break;
+     case "reset":
+       echo "<meta http-equiv=\"pragma\" content=\"no cache\">\n";
      break;
      default:
        echo "<big><big><big>DEFAULT PRE_HTML !!!</big></big></big><br>";
@@ -254,8 +272,8 @@ include ("../para.inc.php");
 
 
   function getoutqueuecount (){
-    include ("../dbcfg.inc.php");
-    include ("../e_cfg.inc.php");
+    include ("../4fcfg/dbcfg.inc.php");
+    include ("../4fcfg/e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
     $query = "SELECT count(*) FROM `".$conf_4f_tbl ["nachrichten"]."` WHERE ((`04_richtung` = \"A\") AND
                                                   (`03_datum` = 0) AND
@@ -266,8 +284,8 @@ include ("../para.inc.php");
 
   function getviewerqueuecount (){
 //    include ("../config.inc.php");
-    include ("../dbcfg.inc.php");
-    include ("../e_cfg.inc.php");
+    include ("../4fcfg/dbcfg.inc.php");
+    include ("../4fcfg/e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
     $query = "SELECT count(*) FROM `".$conf_4f_tbl ["nachrichten"]."`
               WHERE ( (  `15_quitdatum`    = 0 ) AND
@@ -282,8 +300,9 @@ include ("../para.inc.php");
 
 
   function getreadedcount (){
-    include ("../config.inc.php");
-    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
+    include ("../4fcfg/config.inc.php");
+    include ("../4fcfg/dbcfg.inc.php");
+    include ("../4fcfg/e_cfg.inc.php");
 
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
     $query = "SELECT count(*) FROM `".$conf_4f_tbl ["nachrichten"]."`
@@ -299,6 +318,54 @@ include ("../para.inc.php");
 
     return $gesamtmeldungen-$gelesenemeldungen;
   }
+
+  function getdonecount (){
+    include ("../4fcfg/config.inc.php");
+    include ("../4fcfg/dbcfg.inc.php");
+    include ("../4fcfg/e_cfg.inc.php");
+
+    $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
+    $query = "SELECT count(*) FROM `".$conf_4f_tbl ["nachrichten"]."`
+              WHERE ( `16_empf` like '%".$_SESSION ["vStab_funktion"]."%' ) ;";
+    $result = $dbaccess->query_table_wert ($query);
+    $gesamtmeldungen = $result[0];
+    $fkttblname  = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($_SESSION["vStab_funktion"]);
+
+    $query = "SELECT count(*) FROM `".$fkttblname."_erl"."`
+              WHERE 1 ;";
+
+    $query = "SELECT count(*) FROM `nv_nachrichten`,`".$fkttblname."_erl`
+              WHERE
+               (
+                 ( `16_empf` like '%".$_SESSION ["vStab_funktion"]."%' ) AND
+                 ( ".$conf_4f_tbl ["nachrichten"].".00_lfd = ".$fkttblname."_erl.nachnum )
+               ) ;";
+
+   $result = $dbaccess->query_table_wert ($query);
+   $erledigtmeldungen = $result[0];
+   return $gesamtmeldungen-$erledigtmeldungen;
+  }
+
+//343
+/**************************************************************************************\
+  Funktion: einhorn
+
+  bist du der letzte deiner Art?
+\**************************************************************************************/
+  function einhorn ($fkt){
+    include ("../4fcfg/config.inc.php");
+    include ("../4fcfg/dbcfg.inc.php");
+    include ("../4fcfg/e_cfg.inc.php");
+    $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
+
+    $query = "SELECT count(*) FROM `".$conf_4f_tbl ["benutzer"]."` WHERE
+         ( (`funktion` = \"".$fkt."\") AND 
+           (`aktiv` != \"0\" )); ";
+    $result = $dbaccess->query_table_wert ($query);
+
+    if ($result[0] > 1) { return (false); }   
+    else { return (true);}
+  } // funktion einhorn
 
 
 
@@ -327,7 +394,8 @@ include ("../para.inc.php");
 
   function sichter_online (){
 //    include ("../config.inc.php");
-    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
+    include ("../4fcfg/dbcfg.inc.php");
+    include ("../4fcfg/e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
     $query = "SELECT count(*) FROM `".$conf_4f_tbl ["benutzer"]."` WHERE ( ( `funktion` = \"Si\" ) AND ( `aktiv` = 1 ));";
     $result = $dbaccess->query_table_wert ($query);
@@ -341,15 +409,16 @@ bersichtlich dargestellt werden.
 ******************************************************************************/
   function systemstatus ($direction){
 
-    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
-    include ("../fkt_rolle.inc.php");
+    include ("../4fcfg/dbcfg.inc.php");
+    include ("../4fcfg/e_cfg.inc.php");
+    include ("../4fcfg/fkt_rolle.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
     $query = "SELECT * FROM `".$conf_4f_tbl ["benutzer"]."` where 1";
     $result = $dbaccess->query_table ($query);
     $benutzer = $result ;
-    $aktiv    = " rgb(100, 250,  20); color:&000000; ";
-    $inaktiv  = " rgb(250,  60,  30); color:&FFFF00; ";
-    $self     = " rgb( 50, 180, 220); color:&ffffff; ";
+    $aktiv    = " rgb(100, 250,  20); color:&000000; "; // was (100, 250,  20)
+    $inaktiv  = " rgb(200, 200, 200); color:&FFFF00; "; // was (250,  60,  30)
+    $self     = " rgb(250,  60,  30); color:&ffffff; "; // was ( 50, 180, 220);
 
     $fernm_aw = 0;
 
@@ -394,7 +463,14 @@ bersichtlich dargestellt werden.
 
       echo "<td style=\"background-color: ".$userstatus ["FB"]["Pol"] ." font-weight:bold;\">Pol</td>\n";
 
+      if ($fernm_aw > 0) {
+        echo "<td style=\"background-color: ".$userstatus ["Fernmelder"]["A/W"]." font-weight:bold;\">".$fernm_aw." A/W</td>\n";
+      } else {  // keiner aktiv ==> einer inaktiv
+         echo "<td style=\"background-color: ".$userstatus ["Fernmelder"]["A/W"]." font-weight:bold;\">A/W</td>\n";
+      }
+
       // Zeige wenigstens einen inaktiven Fermelder an
+/*
       if ($fernm_aw > 0) {
         for ($i=1; $i <= $fernm_aw; $i++) {
            echo "<td style=\"background-color: ".$userstatus ["Fernmelder"]["A/W"]." font-weight:bold;\">A/W</td>\n";
@@ -402,7 +478,7 @@ bersichtlich dargestellt werden.
       } else {  // keiner aktiv ==> einer inaktiv
          echo "<td style=\"background-color: ".$userstatus ["Fernmelder"]["A/W"]." font-weight:bold;\">A/W</td>\n";
       }
-
+*/
       echo "</tr>";
       echo "</tbody></table>\n";
       echo "</fieldset>\n";
@@ -504,11 +580,11 @@ bersichtlich dargestellt werden.
           $tableisset = true;
 
           if ($fernm_aw > 0) {
-            for ($j=1; $j <= $fernm_aw; $j++) {
+//            for ($j=1; $j <= $fernm_aw; $j++) {
               echo "<tr>";
-              echo "<td style=\"background-color: ".$userstatus ["Fernmelder"]["A/W"]." height:".$zellenhoehe."; font-size:9pt; font-weight:bold;\">A/W</td>\n";
+              echo "<td style=\"background-color: ".$userstatus ["Fernmelder"]["A/W"]." height:".$zellenhoehe."; font-size:9pt; font-weight:bold;\">".$fernm_aw." A/W</td>\n";
               echo "</tr>";
-            }
+//            }
           } else {  // keiner aktiv ==> einer inaktiv
             echo "<!-- 007 liste.php -->\n";
             echo "<tr>";
@@ -530,7 +606,7 @@ bersichtlich dargestellt werden.
     echo "<!-- 009 liste.php -->\n";
     echo "</tbody>";
     echo "</table>\n";
-    showsrvtime ($direction);
+
     }
   }
 
@@ -539,16 +615,17 @@ bersichtlich dargestellt werden.
 ********************************************************************************************************/
   function benutzerstatus ($what){ // kann sein "anzeige" oder mit "verlinkt"
 //    include ("../config.inc.php");
-    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
+    include ("../4fcfg/dbcfg.inc.php");
+    include ("../4fcfg/e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
     $query = "SELECT * FROM `".$conf_4f_tbl ["benutzer"]."` where 1 order by aktiv DESC, kuerzel";
     $result = $dbaccess->query_table ($query);
     $benutzer = $result ;
 
-    $aktiv    = " rgb(100, 250,  20); color:&000000; ";
-    $inaktiv  = " rgb(250,  60,  30); color:&FFFF00; ";
-    $self     = " rgb( 50, 180, 220); color:&ffffff; ";
-    $abgemldt = " rgb(240, 240, 240); color:&a0a0a0; ";
+        $aktiv    = " rgb(100, 250,  20); color:&000000; "; // was (100, 250,  20)
+    $inaktiv  = " rgb(200, 200, 200); color:&FFFF00; "; // was (250,  60,  30)
+    $self     = " rgb(250,  60,  30); color:&ffffff; "; // was ( 50, 180, 220);
+    $abgemldt = " rgb(200, 200, 200); color:&a0a0a0; "; // was ( 240, 240, 240);
 
     $fernm_aw = 0;
     $leitstelle    = 0;
@@ -615,7 +692,7 @@ bersichtlich dargestellt werden.
 
 \*****************************************************************************/
   function rollenfinder ( $funktion ){
-    include ("../fkt_rolle.inc.php");
+    include ("../4fcfg/fkt_rolle.inc.php");
     $rolle = "";
     for ($i=1; $i <= count ($conf_empf); $i++ ) {
       if ( ( strcmp($conf_empf[$i]["fkt"], $funktion) ) == 0 ) {
@@ -625,7 +702,7 @@ bersichtlich dargestellt werden.
   }
 
   function fktpos_finder ($fkt) {
-    include ("../fkt_rolle.inc.php");
+    include ("../4fcfg/fkt_rolle.inc.php");
     $result = array ( 0, 0);
     for ($i=1; $i <= count ($conf_empf); $i++){
       if ($conf_empf [$i][2] == $fkt){
@@ -642,7 +719,8 @@ bersichtlich dargestellt werden.
 
 \*****************************************************************************/
    function get_last_nachw_num ($direction){
-     include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
+     include ("../4fcfg/dbcfg.inc.php");
+     include ("../4fcfg/e_cfg.inc.php");
      $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
      if ( Nachweisung == "getrennt" ) {
        $query = "SELECT max(04_nummer)FROM ".$conf_4f_tbl ["nachrichten"]." WHERE `04_richtung` = \"$direction\" ";
@@ -691,7 +769,7 @@ bersichtlich dargestellt werden.
   | Formatausgang   :  TThhmmMMYYYY
   \****************************************************************************/
   function konv_datetime_taktime ($datetime){
-    include ("../config.inc.php");
+    include ("../4fcfg/config.inc.php");
     // Datenbankzeit konvertiert in taktische Zeit
     // yyyy-MM-tt hh:mm:ss ==> tthhmmMMMyyyy
     if (strlen ($datetime) == 19 ){
@@ -711,7 +789,7 @@ bersichtlich dargestellt werden.
   | Formatausgang   :  TThhmmMMYYYY
   \****************************************************************************/
   function konv_taktime_datetime ($taktime){
-    include ("../config.inc.php");
+    include ("../4fcfg/config.inc.php");
     // taktische Zeit konvertiert in Datenbankzeit
     // yyyy-MM-tt hh:mm:ss ==> tthhmmMMMyyyy
     if (strlen ($taktime) == 13){

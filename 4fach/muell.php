@@ -15,7 +15,7 @@
     <TR>
       <TD>
         <a href="javascript:window.print()">
-        <img src="http://1service.no-ip.org/intern/kats/4fach/design/second/115.gif" alt="Drucken" width="32"height="32" border="0" title="Drucken">
+        <img src="http://1service.no-ip.org/intern/kats/4fach/design/second/print.gif" alt="Drucken" width="32"height="32" border="0" title="Drucken">
         </a>
       </TD>
         </FORM>
@@ -24,10 +24,10 @@
       <td>
         <input type="hidden" name="00_lfd" value="">
         <input type="hidden" name="task" value="Stab_schreiben">
-        <input type="image" name="absenden" src="http://1service.no-ip.org/intern/kats/4fach/design/second/003.jpg">
+        <input type="image" name="absenden" src="http://1service.no-ip.org/intern/kats/4fach/design/second/send.gif">
       </td>
       <td>
-        <input type="image" name="abbrechen" src="http://1service.no-ip.org/intern/kats/4fach/design/second/001.jpg">
+        <input type="image" name="abbrechen" src="http://1service.no-ip.org/intern/kats/4fach/design/second/cancel.gif">
       </td>
       <td>
   </tbody>

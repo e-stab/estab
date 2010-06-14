@@ -1,7 +1,7 @@
 <?php
 
-include ("../config.inc.php");  // Konfigurationseinstellungen und Vorgaben
-include ("../db_operation.php");        // Datenbank operationen
+include ("../4fcfg/config.inc.php");  // Konfigurationseinstellungen und Vorgaben
+include ("db_operation.php");        // Datenbank operationen
 include ("liste.php");          // erzeuge Ausgabelisten
 include ("data_hndl.php");      // propritäre  Datenbankoperationen
 include ("menue.php");          // erzeuge Menüs
@@ -25,9 +25,7 @@ include ("menue.php");          // erzeuge Menüs
         $list->createlist ();
         $list = new listen ("FmNwA", "");
         $list->createlist ();
-
       }
-
     }
   }
 

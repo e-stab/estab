@@ -36,10 +36,10 @@ class kategorien {
   KONSTRUKTOR
 ********************************************************************************/
   function kategorien ($table) {
-    include ("../config.inc.php");
-    include ("../dbcfg.inc.php");
-    include ("../e_cfg.inc.php");
-    include ("../fkt_rolle.inc.php");
+    include ("../4fcfg/config.inc.php");
+    include ("../4fcfg/dbcfg.inc.php");
+    include ("../4fcfg/e_cfg.inc.php");
+    include ("../4fcfg/fkt_rolle.inc.php");
     $this->redcopy2  = $redcopy2 ;
 
     if (!isset ($_SESSION ["vStab_funktion"])) session_start ();
@@ -247,7 +247,7 @@ WHERE nv_masterkategolink.msg = 100)
    Funktion: liste_kategorien ()
 ********************************************************************************/
   function liste_kategorien (){
-    include ("../config.inc.php");
+    include ("../4fcfg/config.inc.php");
     $this->lese_kategorien (); // hole die Liste der Kategorien
     if ($this->result != NULL) {
       if (debug) print_r ($this->result);
@@ -277,11 +277,11 @@ WHERE nv_masterkategolink.msg = 100)
           echo "<TR>";
           echo "<TD align=\"center\">";
           echo "<a href=\"".$_SERVER['PHP_SELF']."?kate_todo=editrecord&lfd=".$this->result[$i][lfd]."&dbtyp=".$this->dbtyp."\">";
-          echo "<img class=\"icon\" width=\"16\" height=\"16\" src=\"".$conf_design_path."/112.png\" alt=\"editieren\" title=\"Edit\" border=\"0\" /></a>";
+          echo "<img class=\"icon\" width=\"16\" height=\"16\" src=\"".$conf_design_path."/edit.gif\" alt=\"editieren\" title=\"Edit\" border=\"0\" /></a>";
           echo "</TD>";
           echo "<TD align=\"center\">";
           echo "<a href=\"".$_SERVER['PHP_SELF']."?kate_todo=deleterecord&lfd=".$this->result[$i][lfd]."&dbtyp=".$this->dbtyp."\">";
-          echo "<img class=\"icon\" width=\"16\" height=\"16\" src=\"".$conf_design_path."/113.png\" alt=\"l&ouml;schen\" title=\"L&ouml;schen\" border=\"0\" /></a>";
+          echo "<img class=\"icon\" width=\"16\" height=\"16\" src=\"".$conf_design_path."/delete.gif\" alt=\"l&ouml;schen\" title=\"L&ouml;schen\" border=\"0\" /></a>";
           echo "</TD>";
           echo "</TR>";
           echo "</TBODY>";
@@ -300,7 +300,7 @@ WHERE nv_masterkategolink.msg = 100)
    Funktion: zeige_kategorien ()
 ********************************************************************************/
   function zeige_kategorien ($lfd){
-    include ("../config.inc.php");
+    include ("../4fcfg/config.inc.php");
     $this->db_get ($lfd); // hole die Liste der Kategorien
 
     if ($this->result != NULL) {
@@ -315,31 +315,37 @@ WHERE nv_masterkategolink.msg = 100)
 /*******************************************************************************
    Funktion: pulldown_kategorien ()
 ********************************************************************************/
-  function pulldown_kategorien ($katego_no, $mit_leer){
-    include ("../config.inc.php");
+  function pulldown_kategorien ($katego_no, $mit_leer, $ordnum){
+    include ("../4fcfg/config.inc.php");
 
     $this->lese_kategorien (); // hole die Liste der Kategorien
-
     if ($this->result != NULL) {
-//      if (debug) print_r ($this->result);
-      echo "\n<select ".$param." name=\"kategorien_".$this->dbtyp."\">\n";
+      //if (debug) print_r ($this->result);
+      echo "\n<select ".$param." name=\"kategorien_".$this->dbtyp."_".$ordnum."\">\n";
       if ($mit_leer) {
-        if ($katego_no == "") {$sel = " selected ";} else {$sel = "";}
-        echo "<option ".$sel.">  </option>\n";
+        if ($katego_no == "") {
+          $sel = " selected ";
+        } else {$sel = "";}
+        echo "<option value=\"\" ".$sel.">  </option>\n";
       }
+      $kategoselected = "";
       foreach ($this->result as $katego){
-        if ($katego_no == $katego["lfd"]) {$sel = " selected ";} else {$sel = "";}
-        echo "<option ".$sel.">".$katego["kategorie"]."</option>\n";
+        if ($katego_no == $katego["lfd"]) {
+          $sel = " selected ";
+          $kategoselected = $katego["kategorie"];
+        } else {$sel = "";}
+        echo "<option value=\"".$katego["kategorie"]."\" ".$sel.">".$katego["kategorie"]."</option>\n";
       }
       echo "</select>\n";
     }
+    echo "<input type=\"hidden\" name=\"kategorien_".$this->dbtyp."\" value=\"".$kategoselected."\">\n";
   }
 
 /*******************************************************************************\
 
 \*******************************************************************************/
   function eingabezeile ($posttask, $lfd, $kategorie, $beschreibung){
-    include ("../config.inc.php");
+    include ("../4fcfg/config.inc.php");
     echo "<FORM action=\"".$_SERVER['PHP_SELF']."\" method=\"get\" target=\"_self\">\n";
     echo "<TABLE border=\"1\" cellspacing=\"5\" cellpeding=\"5\">\n";
     echo "<THEAD>\n";
@@ -363,8 +369,8 @@ WHERE nv_masterkategolink.msg = 100)
     echo "<input style=\"font-size:16px; font-weight:900;\" maxlength=\"254\" size=\"50\" name=\"beschreibung\" value=\"".$beschreibung."\">\n";
     echo "</TD>\n";
     echo "<TD align=\"center\">";
-    echo "<input type=\"image\" name=\"katego_absenden\" src=\"".$conf_design_path."/120.gif\" alt=\"OK\">\n";
-    echo "<input type=\"image\" name=\"katego_abbrechen\" src=\"".$conf_design_path."/001.jpg\" alt=\"Abbrechen\">\n";
+    echo "<input type=\"image\" name=\"katego_absenden\" src=\"".$conf_design_path."/ok.gif\" alt=\"OK\">\n";
+    echo "<input type=\"image\" name=\"katego_abbrechen\" src=\"".$conf_design_path."/cancel.gif\" alt=\"Abbrechen\">\n";
     echo "</TD>";
     echo "</TR>\n";
     echo "</TBODY>\n";
@@ -470,7 +476,7 @@ if (debug) echo "QUERY dblk_neu=".$this->sqlquery."<br>";
                        WHERE `".$this->db_tablname."`.`kategorie` = \"".$kategorie."\")
                     WHERE `msg` = \"".$msg_no."\";";
 
-if (debug) {echo "<br><br>QUERY====="; var_dump ($this->sqlquery);echo "<br><br>";}
+if (debug) {echo "<br><br>dblk_aendern_QUERY====="; var_dump ($this->sqlquery);echo "<br><br>";}
 
     $query_result = mysql_query ($this->sqlquery, $this->db_hndl) or
        die("[query_table] <br>$this->sqlquery<br>103-".mysql_error()." ".mysql_errno());

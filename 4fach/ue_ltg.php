@@ -1,20 +1,21 @@
 <?php
 
-include ("../config.inc.php");  // Konfigurationseinstellungen und Vorgaben
-include ("../db_operation.php");        // Datenbank operationen
-include ("data_hndl.php");      // propritäre  Datenbankoperationen
-include ("menue.php");          // erzeuge Menüs
+include ("../4fcfg/config.inc.php");            // Konfigurationseinstellungen und Vorgaben
+include ("../4fach/db_operation.php");          // Datenbank operationen
+include ("../4fach/data_hndl.php");             // propritäre  Datenbankoperationen
+include ("../4fcfg/para.inc.php");              // propritäre  Datenbankoperationen
 
-define ("inhalt_limit",false);
+
+define ("inhalt_limit",true);
 
 /*****************************************************************************\
    Datei: ue_ltg.php
 
-   benötigte Dateien:
+   benötigte Dateien:  keine
 
    Beschreibung:
 
-
+   Erzeugt eine Liste aller Meldungen mit Sichtung.
 
    (C) Hajo Landmesser IuK Kreis Heinsberg
    mailto://hajo.landmesser@iuk-heinsberg.de
@@ -30,6 +31,7 @@ class Listen {
      FMNWA  - Fernmelde Nachweis Ausgang
      ADMIN  - Administrative Liste
 \******************************************************************************/
+
 
   var $listenart;
   var $benutzer;
@@ -65,9 +67,10 @@ class Listen {
 \******************************************************************************/
   function get_list (){
     echo "\n\n\n<!-- ANFANG file:liste.php fkt:createlist -->";
-    include ("../config.inc.php");
-    include ("../para.inc.php");
-    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
+    include ("../4fcfg/config.inc.php");
+    include ("../4fcfg/para.inc.php");
+    include ("../4fcfg/dbcfg.inc.php");
+    include ("../4fcfg/e_cfg.inc.php");
 
     $tblusername   = $conf_4f_tbl ["usrtblprefix"].strtolower ($_SESSION["vStab_funktion"]).
                      "_".strtolower ($_SESSION["vStab_kuerzel"]);
@@ -102,7 +105,7 @@ class Listen {
       $query_where_arg2 = "";
     }
 
-    $query_orderby_arg = "`12_abfzeit` DESC, `09_vorrangstufe` DESC ";
+    $query_orderby_arg = "`04_nummer` DESC, `09_vorrangstufe` DESC ";
 
     if (isset ($_SESSION["ueb_flt_search"])) {
       $query_search = "(".
@@ -198,97 +201,141 @@ class Listen {
 //    echo "listenart =".$this->listenart."- benutzer = ".$this->benutzer."<br>";
   }
 
+
+/******************************************************************************\
+  Funktion:  listen_navi ()
+SELECT * FROM `nv_nachrichten` WHERE `00_lfd` IN
+
+(SELECT msg FROM `nv_masterkategolink` WHERE `katego` = (
+
+SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
+
+\******************************************************************************/
+
+  function  listen_navi (){
+    include ("../4fcfg/config.inc.php");
+    echo "<input type=\"image\" name=\"ueb_flt_start\" src=\"".$conf_design_path."/go_start.gif\" alt=\"Anfang\">\n";
+    echo "<input type=\"image\" name=\"ueb_flt_back\"  src=\"".$conf_design_path."/go_back.gif\" alt=\"zurueck\">\n";
+    echo "<input type=\"image\" name=\"ueb_flt_for\"   src=\"".$conf_design_path."/go_forward.gif\" alt=\"vor\">\n";
+    echo "<input type=\"image\" name=\"ueb_flt_end\"   src=\"".$conf_design_path."/go_end.gif\" alt=\"Ende\">\n";
+  }
+
+
 /******************************************************************************\
 
 \******************************************************************************/
   function darstellungs_art ( ){
 
-    include ("../config.inc.php");
+    include ("../4fcfg/config.inc.php");
 
-    if ( debug ) { echo "\n\n\n<!-- ANFANG file:ue_ltg.php fkt:darstellungsart -->"; }
+    if ( debug ) { echo "\n\n\n<!-- ANFANG file:liste.php fkt:darstellungsart -->"; }
+
     echo "\n<form action=\"".$_SERVER ["PHP_SELF"]."\" method=\"get\" target=\"_self\">\n";
-    echo "<fieldset>\n";
-
-
-//    echo "\n<form action=\"".$conf_4f ["MainURL"]."\" method=\"get\" target=\"mainframe\">\n";
-//        echo "<fieldset>\n";
     echo "<table><tbody>";
     echo "<tr>";
-    echo "<td>";
-    if ( (isset ($_SESSION["ueb_flt_anzahl"])) and ( $_SESSION["ueb_flt_anzahl"] == "5"))
-      {$sel = "checked=\"checked\"";} else {$sel = "";}
+
+      echo "<td>";
+      echo "<big><b>".($_SESSION["ueb_flt_start"]+1)."|".($_SESSION["ueb_flt_start"]+$_SESSION["ueb_flt_anzahl"])."|<big>".($_SESSION["ueb_flt_rescount"])."</big></b></big>";
+      echo "</td>";
+      echo "<td>";
+      echo "Meldung/Seite:<br>\n";
+
+        // Voreinstellung für die Meldungen pro Seite
+      if ( !(isset ($_SESSION["ueb_flt_anzahl"])) OR
+          ( $_SESSION["ueb_flt_anzahl"] == "" )
+       ){$_SESSION["ueb_flt_anzahl"] = 5; }
+
+      echo "<table border=\"0\" ><tbody>";
+      echo "<tr>";
+
+      echo "<td>";
+      echo "<div  style=\"border-top-color:#DCDCFF; border-left-color:#DCDCFF; border-right-color:#DCDCFF; border-bottom-color:#000000; border-width:1px; border-style:solid; padding:0px\">";
+        for ($pps=5; $pps <=25; $pps+=5){
+          if ( $_SESSION["ueb_flt_anzahl"] == $pps )  {
+            echo "<a href=\"".$_SERVER ["PHP_SELF"]."?ueb_flt_anzahl_x=1&ueb_flt_anzahl=".$pps."\"><img src=\"button.php?type=icon&status=AUS&text=".$pps."&bg=blue\" border=\"0\" alt=\"Anzahl".$pps."EIN\"></a>";
+          } else {
+            echo "<a href=\"".$_SERVER ["PHP_SELF"]."?ueb_flt_anzahl_x=1&ueb_flt_anzahl=".$pps."\"><img src=\"button.php?type=icon&status=EIN&text=".$pps."&bg=lighterblue\" border=\"0\" alt=\"Anzahl".$pps."AUS\"></a>";
+          }
+        }
+      echo "</div>";
+      echo "</td>";
+
+      echo "</tr>";
+      echo "</tbody></table>";
+      echo "</td>";
 /*
-    if ($_SESSION [ueb_flt_darstellung] == 0)  {
-      echo "<input name=\"ueb_flt_darstellung\" type=\"checkbox\">\n";
-    } else {
-      echo "<input name=\"ueb_flt_darstellung\" type=\"checkbox\" checked=\"checked\">\n";
-    }
-    echo "<td>";
-    echo "filtern" ;
-    echo "</td>";
+      echo "<td>";
+
+      if ($_SESSION ["ueb_flt_unerl"] == 0)  {
+        echo "<div>";
+        echo "<input type=\"image\" name=\"ueb_flt_unerledigt_ein\" src=\"button.php?type=push&textpos=buttom&status=AUS&text=un-\" alt=\"unerledigte\">\n";
+        echo "</div>";
+      } else {
+        echo "<div>";
+        echo "<input type=\"image\" name=\"ueb_flt_unerledigt_aus\" src=\"button.php?type=push&textpos=buttom&status=EIN&text=un-\" alt=\"unerledigte\">\n";
+        echo "</div>";
+      }
+      echo "</td>";
+
+      echo "<td>";
+      if ($_SESSION ["ueb_flt_erl"] == 0)  {
+        echo "<div>";
+        echo "<input type=\"image\" name=\"ueb_flt_erledigt_ein\" src=\"button.php?type=push&textpos=buttom&status=AUS&text=erledigt\" alt=\"erledigte\">\n";
+        echo "</div>";
+      } else {
+        echo "<div>";
+        echo "<input type=\"image\" name=\"ueb_flt_erledigt_aus\" src=\"button.php?type=push&textpos=buttom&status=EIN&text=erledigt\" alt=\"erledigte\">\n";
+        echo "</div>";
+      }
+      echo "</td>";
 */
-    echo "<input type=\"hidden\" name=\"ueb_flt_darstellung\" value=\"on\">\n";
-    echo "<td>";
-    echo "<big><b>".($_SESSION[ueb_flt_start]+1)."|".($_SESSION[ueb_flt_start]+$_SESSION[ueb_flt_anzahl])."|<big>".($_SESSION["ueb_flt_rescount"])."</big></b></big>";
-    echo "</td>";
-    echo "<td>";
-    echo "Meldung/Seite:\n";
-    echo "</td>";
-    echo "<td>";
-    echo "<select size=\"1\" name=\"ueb_flt_anzahl\">";
+      echo "<td>";
+      if ($_SESSION ["ueb_flt_find_mask"] == 0)  {
+        echo "<div>";
+        echo "<input type=\"image\" name=\"ueb_flt_find_mask_ein\" src=\"button.php?type=push&textpos=buttom&status=AUS&text=finden\" alt=\"finden\">\n";
+        echo "</div>";
+      } else {
+        echo "<div>";
+        echo "<input type=\"image\" name=\"ueb_flt_find_mask_aus\" src=\"button.php?type=push&textpos=buttom&status=EIN&text=finden\" alt=\"finden\">\n";
+        echo "</div>";
+      }
+      echo "</td>";
 
-    if ( ( $_SESSION["ueb_flt_anzahl"] == "5"))
-      {$sel = "selected";} else {$sel = "";}
-    echo "<option $sel>5</option>";
 
-    if ( ( $_SESSION["ueb_flt_anzahl"] == "10"))
-      {$sel = "selected";} else {$sel = "";}
-    echo "<option $sel>10</option>";
-
-    if ( ( $_SESSION["ueb_flt_anzahl"] == "15"))
-      {$sel = "selected";} else {$sel = "";}
-    echo "<option $sel>15</option>";
-
-    if ( ( $_SESSION["ueb_flt_anzahl"] == "20"))
-      {$sel = "selected";} else {$sel = "";}
-    echo "<option $sel>20</option>";
-
-    if ( ( $_SESSION["ueb_flt_anzahl"] == "25"))
-      {$sel = "selected";} else {$sel = "";}
-    echo "<option $sel>25</option>";
-    echo "</select>";
-    echo "</td>";
+    echo "<!-- ue_ltg.php 426 -->";
+    //        echo "</form>";
 
     echo "<td>";
-    echo "&nbsp;&nbsp;&nbsp;";
-    echo "<input type=\"image\" name=\"ueb_flt_start\" src=\"".$conf_design_path."/102.gif\" alt=\"anfang\">\n";
-    echo "<input type=\"image\" name=\"ueb_flt_back\" src=\"".$conf_design_path."/101.gif\" alt=\"zurueck\">\n";
-    echo "<input type=\"image\" name=\"ueb_flt_for\" src=\"".$conf_design_path."/104.gif\" alt=\"vor\">\n";
-    echo "<input type=\"image\" name=\"ueb_flt_end\" src=\"".$conf_design_path."/103.gif\" alt=\"ende\">\n";
-    echo "</td>";
-    //echo "&nbsp;&nbsp;&nbsp;";
-    echo "<td>";
-    echo "<input name=\"ueb_flt_submit\" value=\"einstellen\" type=\"submit\">\n";
-    echo "</td>";
-    echo "</form>";
-    echo "\n<form action=\"".$_SERVER ["PHP_SELF"]."\" method=\"get\" target=\"mainframe\">\n";
-    echo "<td>";
-    if (isset ($_SESSION ["ueb_flt_search"]) ) { $defvalue = $_SESSION ["ueb_flt_search"] ;}
-    else {$defvalue = "";}
-    echo "<p>Suchbegriff: <input name=\"ueb_flt_search\" value=\"".$defvalue."\" type=\"text\" size=\"30\" maxlength=\"30\"></p>";
-    echo "</td>";
-    echo "<td>";
-    echo "<input name=\"ueb_flt_suche\" value=\"suchen\" type=\"submit\">\n";
-    echo "</td>";
 
-    echo "<td>";
-    echo "<input name=\"ueb_flt_suche_reset\" value=\"reset\" type=\"submit\">\n";
+
+    echo "<table><tbody>";
+    echo "<tr>";
+
+
+    if ($_SESSION["ueb_flt_find_mask"] == 1){
+      echo "\n<form action=\"".$_SERVER ["PHP_SELF"]."\" method=\"get\" target=\"_self\">\n";
+      echo "<td>";
+      if (isset ($_SESSION ["ueb_flt_search"]) ) { $defvalue = $_SESSION ["ueb_flt_search"] ;}
+      else {$defvalue = "";}
+      echo "<div>";
+      echo "<p>Suchbegriff: <input name=\"ueb_flt_search\" value=\"".$defvalue."\" type=\"text\" size=\"30\" maxlength=\"30\"></p>";
+      echo "<div>";
+      echo "</td>";
+      echo "<td>";
+      echo "<input name=\"ueb_flt_suche\" value=\"suchen\" type=\"submit\">\n";
+      echo "</td>";
+    //          echo "</form>";
+      echo "</div>";
+    }
+
+    echo "</tr>";
+    echo "</tbody></table>";
+
+
     echo "</td>";
 
     echo "</tr>";
     echo "</tbody></table>";
-    echo "</fieldset>\n";
-
   }
 
 
@@ -298,17 +345,27 @@ class Listen {
 \******************************************************************************/
   function createlist (){
     echo "\n\n\n<!-- ANFANG file:ue_ltg.php fkt:createlist -->";
-    include ("../config.inc.php");
-    include ("../para.inc.php");
-    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
-    include ("../fkt_rolle.inc.php");
-    
+    include ("../4fcfg/config.inc.php");
+    include ("../4fcfg/para.inc.php");
+    include ("../4fcfg/dbcfg.inc.php");
+    include ("../4fcfg/e_cfg.inc.php");
+    include ("../4fcfg/fkt_rolle.inc.php");
+
+    echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
+    echo "<html>\n";
+    echo "<head>\n";
+    echo "</head>\n";
+
+    echo "<body bgcolor=\"#DCDCFF\">";
+
     $result = $this->get_list ();
     $this->darstellungs_art ( "Stab_lesen" );
 
+    $this->listen_navi ();
+
     if  ($result != ""){
       echo "<table style=\"text-align: center; background-color: rgb(250,250, 250); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
-      echo "<tr style=\"background-color: rgb(250,250,0); color:fm=meldung&0000FF; font-weight:bold;\">\n";
+      echo "<tr style=\"background-color: rgb(240,240,200); color:fm=meldung&0000FF; font-weight:bold;\">\n";
       echo "<td>Vorst</td>\n";
       echo "<td>E/A</td>\n";
       echo "<td>Nw-Nr.</td>\n";
@@ -418,14 +475,17 @@ class Listen {
            if ( ( $conf_empf [$i]["fkt"] != "Si" ) and ( $conf_empf [$i]["fkt"] != "A/W" ) ) {
              switch ($empfcolor [$conf_empf [$i][fkt]]) {
                case "rt":
-                 echo "<td style=\"text-align: center; background-color: rgb(255, 0, 0); \">";
+                                 echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["rt"]."; \">";
+                                 echo "X";
                break;
                case "gn":
-                 echo "<td style=\"text-align: center; background-color: rgb(0, 255, 0); \">";
-               break;
+                 echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["gn"]."; \">";
+                                 echo "X";
+                                break;
                case "bl":
-                 echo "<td style=\"text-align: center; background-color: rgb(0, 0, 255); \">";
-               break;
+                 echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["bl"]."; \">";
+                         echo "X";
+                           break;
                default:
                  echo "<td style=\"text-align: center; background-color: rgb(250, 250, 250); \">";
                  echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
@@ -453,9 +513,10 @@ class Listen {
     }
     echo "</tbody></table>";
 
+    $this->listen_navi ();
 
+    echo "<!-- ENDE file:ue_ltg.php fkt:createlist -->";
 
-  echo "<!-- ENDE file:ue_ltg.php fkt:createlist -->";
   }
 
 
@@ -706,7 +767,7 @@ var_dump ($this->formdata); echo "<br>";
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
   function ziele (){
-  include ("../fkt_rolle.inc.php");
+  include ("../4fcfg/fkt_rolle.inc.php");
 
     for ($i=1; $i <= 5 ; $i++){
       for ($j=1; $j <= 4 ; $j++){
@@ -759,8 +820,9 @@ var_dump ($this->formdata); echo "<br>";
 \*****************************************************************************/
     // Listet unter Inhalt eventuelle Anhangsdateien als href auf
   function list_anhang (){
-    include ("../config.inc.php");
-    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
+    include ("../4fcfg/config.inc.php");
+    include ("../4fcfg/dbcfg.inc.php");
+        include ("../4fcfg/e_cfg.inc.php");
       // in 12_anhang stehen die Anhangdateien mit ";" getrennt.
     echo "<br>";
     $anhaenge = split(";", $this->formdata ["12_anhang"]);
@@ -787,9 +849,10 @@ var_dump ($this->formdata); echo "<br>";
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
   function plot_form (){
-    include ("../config.inc.php");
-    include ("../para.inc.php");
-    include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
+    include ("../4fcfg/config.inc.php");
+    include ("../4fcfg/para.inc.php");
+    include ("../4fcfg/dbcfg.inc.php");
+    include ("../4fcfg/e_cfg.inc.php");
 
     $this->ziele (); // Ziele und Farben   $fktmsgbgcolor
 
@@ -804,8 +867,10 @@ var_dump ($this->formdata); echo "<br>";
     $this->get_access_by_task ($this->task);
 
     pre_html ("N","Formular ".$this->task." ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"], ""); // Normaler Seitenaufbau ohne Auffrischung
+
     echo "<body style=\"text-align: left; background-color: rgb(255,255,255); \">\n"; //".$this->formbgcolor.";\">\n";
     echo "<body style=\"text-align: left; background-color: ".$formbgcolor.";\">\n";
+
     echo "<form style=\"\" method=\"get\" action=\"".$_SERVER ["PHP_SELF"]."\" name=\"4fach\">";
 
     echo "<a href=\"javascript:window.print()\">Diese Seite drucken</a>";
@@ -1641,15 +1706,15 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
       echo "<tr><td>\n";
       echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
       echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
-      echo "<input type=\"image\" name=\"ablesen\" src=\"".$conf_design_path."/010.jpg\">\n";
+      echo "<input type=\"image\" name=\"ablesen\" src=\"".$conf_design_path."/isread.gif\">\n";
       echo "</td></tr>\n";
     } else {
       echo "<tr><td>\n";
       echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
       echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
-      echo "<input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/003.jpg\">\n";
+      echo "<input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/send.gif\">\n";
       echo "</td><td>\n";
-      echo "<input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/001.jpg\">\n";
+      echo "<input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/cancel.gif\">\n";
       echo "</td></tr>\n";
     }
     echo "</tbody>\n</table>\n";
@@ -1662,20 +1727,21 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
 
 } // class
 
+/*############################################################################
+##############################################################################*/
+
+define ("debug", false);
 
   session_start ();
 
-
-    define ("debug",false);
-
-    if ( debug == true ){
-      echo "<br><br>\n";
-      echo "GET="; var_dump ($_GET);    echo "#<br><br>\n";
-      echo "POST="; var_dump ($_POST);   echo "#<br><br>\n";
-      echo "COOKIE="; var_dump ($_COOKIE); echo "#<br><br>\n";
-      //echo "SERVER="; var_dump ($_SERVER); echo "#<br><br>\n";
-      echo "SESSION="; print_r ($_SESSION); echo "#<br>\n";
-    }
+  if ( debug == true ){
+    echo "<br><br>\n";
+    echo "GET="; var_dump ($_GET);    echo "#<br><br>\n";
+    echo "POST="; var_dump ($_POST);   echo "#<br><br>\n";
+    echo "COOKIE="; var_dump ($_COOKIE); echo "#<br><br>\n";
+    //echo "SERVER="; var_dump ($_SERVER); echo "#<br><br>\n";
+    echo "SESSION="; print_r ($_SESSION); echo "#<br>\n";
+  }
 
 
 
@@ -1683,11 +1749,11 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
   /**********************************************************************\
     Überprüfe ob die Listendarstellung geaendert werden soll
 
-  ["flt_darstellung"]=> string(2) "on"
-  ["flt_anzahl"]=> string(2) "10"
-  ["flt_gelesen"]=> string(2) "on"
-  ["flt_erledigt"]=> string(2) "on"
-  ["flt_submit"]=> string(10) "einstellen" }
+  ["filter_darstellung"]=> string(2) "on"
+  ["filter_anzahl"]=> string(2) "10"
+  ["filter_gelesen"]=> string(2) "on"
+  ["filter_erledigt"]=> string(2) "on"
+  ["filter_submit"]=> string(10) "einstellen" }
 
   ["flt_start_x"]=>  string(2) "23" ["flt_start_y"]=>  string(1) "6"
   ["flt_back_x"]=>  string(2) "18" ["flt_back_y"]=>  string(2) "12"
@@ -1695,15 +1761,60 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
   ["flt_end_x"]=>  string(1) "9" ["flt_end_y"]=>  string(1) "7"
 
   ["flt_search"]=>  string(4) "test"
-  ["flt_suche"]=>  string(6) "suchen" } #
+  ["filter_suche"]=>  string(6) "suchen" } #
 
   \**********************************************************************/
+  if (!isset ( $_SESSION["ueb_flt_darstellung"])){
+    $_SESSION["ueb_flt_darstellung"] = 1;
+    $_SESSION["ueb_flt_erledigt"]    = 0;
+    $_SESSION["ueb_flt_unerledigt"]  = 1;
+    $_SESSION["ueb_flt_anzahl"]      = 5;
+    $_SESSION["ueb_flt_start"]       = 0 ;
+    $_SESSION["ueb_flt_position"]    = 0;
+  }
+/*
+  // filtern EIN / AUS
+  if ( (isset ($_GET["ueb_flt_darstellung_aus_x"])) or
+       (isset ($_GET["ueb_flt_darstellung_ein_x"])) ){
 
-  if (!isset ( $_SESSION["ueb_flt_darstellung"] )){
+    if ( ($_SESSION["ueb_flt_darstellung"] == 1) and (isset ($_GET["ueb_flt_darstellung_aus_x"])) ) {
+      $_SESSION["ueb_flt_darstellung"] = 0;
+    } elseif ( ($_SESSION["ueb_flt_darstellung"] == 0) and (isset ($_GET["ueb_flt_darstellung_ein_x"])) ){
       $_SESSION["ueb_flt_darstellung"] = 1;
-      $_SESSION["ueb_flt_anzahl"] = 10;
-      $_SESSION["ueb_flt_start"] = 0 ;
-      $_SESSION["ueb_flt_position"] = 0;
+    }
+  }
+
+  // erledigte SICHTAR UNSICHTBAR
+  if ( (isset ($_GET["ueb_flt_erledigt_aus_x"])) or
+       (isset ($_GET["ueb_flt_erledigt_ein_x"])) ){
+
+    if ( ($_SESSION["ueb_flt_erledigt"] == 1) and (isset($_GET["ueb_flt_erledigt_aus_x"])) ) {
+      $_SESSION["ueb_flt_erledigt"] = 0;
+    } elseif ( ($_SESSION["ueb_flt_erledigt"] == 0) and (isset ($_GET["ueb_flt_erledigt_ein_x"])) ){
+      $_SESSION["ueb_flt_erledigt"] = 1;
+    }
+  }
+  // unerledigte SICHTBAR UNSICHTBAR
+  if ( (isset ($_GET["ueb_flt_unerledigt_aus_x"])) or
+       (isset ($_GET["ueb_flt_unerledigt_ein_x"])) ){
+
+    if ( ($_SESSION["ueb_flt_unerledigt"] == 1) and (isset($_GET["ueb_flt_unerledigt_aus_x"])) ) {
+      $_SESSION["ueb_flt_unerledigt"] = 0;
+    } elseif ( ($_SESSION["ueb_flt_unerledigt"] == 0) and (isset ($_GET["ueb_flt_unerledigt_ein_x"])) ){
+      $_SESSION["ueb_flt_unerledigt"] = 1;
+    }
+  }
+*/
+  // finde Menü
+  if ( (isset ($_GET["ueb_flt_find_mask_aus_x"])) or
+       (isset ($_GET["ueb_flt_find_mask_ein_x"])) ){
+
+    if ( ($_SESSION["ueb_flt_find_mask"] == 1) and (isset($_GET["ueb_flt_find_mask_aus_x"])) ) {
+      unset ($_SESSION["ueb_flt_search"]);
+      $_SESSION["ueb_flt_find_mask"] = 0;
+    } elseif ( ($_SESSION["ueb_flt_find_mask"] == 0) and (isset ($_GET["ueb_flt_find_mask_ein_x"])) ){
+      $_SESSION["ueb_flt_find_mask"] = 1;
+    }
   }
 
   if (isset($_GET["ueb_flt_suche_reset"])){ unset ($_SESSION["ueb_flt_search"]); }
@@ -1716,45 +1827,23 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
     $_SESSION["ueb_flt_search"] = $_GET ["ueb_flt_search"];
   }
 
-  if ( (isset($_GET["ueb_flt_submit"])) OR
-       (isset($_GET["ueb_flt_start_x"])) OR
-       (isset($_GET["ueb_flt_back_x"])) OR
-       (isset($_GET["ueb_flt_for_x"])) OR
-       (isset($_GET["ueb_flt_end_x"]))
-     ) { // es soll was geändert werden
+  if (isset ($_GET["ueb_flt_anzahl_x"])) {
+    $_SESSION["ueb_flt_anzahl"] = $_GET["ueb_flt_anzahl"]; }
 
-    if (!isset ( $_SESSION["ueb_flt_darstellung"] )){
-      $_SESSION["ueb_flt_darstellung"] = 1;
-      $_SESSION["ueb_flt_anzahl"] = $_GET["ueb_flt_anzahl"];
-      $_SESSION["ueb_flt_start"] = 0 ;
-      $_SESSION["ueb_flt_position"] = 0;
+  if (isset($_GET[ueb_flt_start_x])) { $_SESSION[ueb_flt_navi] = "start";}
+  if (isset($_GET[ueb_flt_back_x]))  { $_SESSION[ueb_flt_navi] = "back";}
+  if (isset($_GET[ueb_flt_for_x]))   { $_SESSION[ueb_flt_navi] = "for";}
+  if (isset($_GET[ueb_flt_end_x]))   { $_SESSION[ueb_flt_navi] = "end";}
 
-    } else {
-      if ($_GET["ueb_flt_darstellung"] == "on") { $_SESSION["ueb_flt_darstellung"] = 1;
 
-        if (isset ($_GET["ueb_flt_anzahl"])) {
-          $_SESSION["ueb_flt_anzahl"] = $_GET["ueb_flt_anzahl"]; }
-        else {
-          $_SESSION["ueb_flt_anzahl"] = 5;
-        }
-      } else {
-        unset ($_SESSION["ueb_flt_darstellung"]);
-        unset ($_SESSION["ueb_flt_anzahl"]);
-      }
-    } //else if (!isset ( $_SESSION["flt_darstellung"] )){
 
-    if (isset($_GET[ueb_flt_start_x])) { $_SESSION[ueb_flt_navi] = "start";}
-    if (isset($_GET[ueb_flt_back_x]))  { $_SESSION[ueb_flt_navi] = "back";}
-    if (isset($_GET[ueb_flt_for_x]))   { $_SESSION[ueb_flt_navi] = "for";}
-    if (isset($_GET[ueb_flt_end_x]))   { $_SESSION[ueb_flt_navi] = "end";}
-
-    header("Location: ".$_SERVER ["PHP_SELF"]);
-    exit;
-  } // Listendarstellung aendern
+  /**********************************************************************\
+    Überprüfe ob die Listendarstellung geaendert werden soll
+  \**********************************************************************/
 
 
 /**********************************************************************\
-  --- S T A B   M e l d u n g   l e s e n ---
+  ---  M e l d u n g   l e s e n ---
 
   Darstellung der Meldung ber die laufende Nummer
 \**********************************************************************/

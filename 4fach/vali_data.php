@@ -2,12 +2,7 @@
 
 class vali_data_form {
 
-//include ("../valimatrix.inc.php");
-//  include ("../config.inc.php");
-//  include ("../fkt_rolle.inc.php");
-
-
-  var $i_data ;        // Daten des Formulars
+  var $i_data ;      // Daten des Formulars
   var $validate ;    // Pruefungsergebnis
 
   /*****************************************************************************\
@@ -16,7 +11,7 @@ class vali_data_form {
   function vali_data_form ($data){
     $this->i_data = $data ;
     $this->reset_validate() ;
-   //    $this->validatethis ();
+     //    $this->validatethis ();
   }
 
   /*****************************************************************************\
@@ -30,7 +25,7 @@ class vali_data_form {
      $this->validate ["02_zeit"]   = false ;
      $this->validate ["02_zeichen"]   = false ;
      $this->validate ["03_datum"]   = false ;
-     $this->validate ["03_zeit"]   = false ;
+//     $this->validate ["03_zeit"]   = false ;
      $this->validate ["03_zeichen"]   = false ;
      //     $this->validate ["04_nummer"]   = false ;
      //     $this->validate ["04_richtung"]   = false ;
@@ -244,8 +239,8 @@ class vali_data_form {
   \*****************************************************************************/
   function checkdata (){
 
-    include ("../config.inc.php");
-    include ("../fkt_rolle.inc.php");
+    include ("../4fcfg/config.inc.php");
+    include ("../4fcfg/fkt_rolle.inc.php");
     $task = $this->i_data["task"] ;
     $zw = false;
     switch ($task) {
@@ -304,7 +299,7 @@ class vali_data_form {
                 $this->validate["03_zeichen"] &&
                 $this->validate["15_quitzeichen"] &&
                 $this->validate["15_quitdatum"]);
-        break ; 
+        break ;
       case "Stab_sichten":
          $zw = ($this->validate["15_quitzeichen"] &&
                 $this->validate["15_quitdatum"] );

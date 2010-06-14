@@ -136,10 +136,10 @@ class Listen {
           echo "<table style=\"text-align: center; background-color: rgb(255,255,255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
           echo "<tr style=\"background-color: rgb(240,240,200); color:#000000; font-weight:bold;\">\n";
           echo "<td align=\"center\">";
-          echo "<p><img src=\"".$conf_design_path."020.png\" alt=\"gelesen\"></p>";
+          echo "<p><img src=\"".$conf_design_path."mail_unread.gif\" alt=\"gelesen\"></p>";
           echo "</td>\n"; // schon gelesen ?
           echo "<td align=\"center\">";
-          echo "<p><img src=\"".$conf_design_path."023.png\" alt=\"gelesen\"></p>";
+          echo "<p><img src=\"".$conf_design_path."info.gif\" alt=\"gelesen\"></p>";
           echo "</td>\n"; // Eigene Meldungen !!!
           echo "<td>Vorrang</td>\n";
           echo "<td>E/A</td>\n";
@@ -166,7 +166,7 @@ class Listen {
 //         echo "queryresult=";var_dump ($result); echo "<br>";
              if ( $result [0] == 1 ){
                echo "<td align=\"center\">";
-               echo "<p><img src=\"".$conf_design_path."021.png\" alt=\"gelesen\"></p>";
+               echo "<p><img src=\"".$conf_design_path."000.gif\" alt=\"gelesen\"></p>";
 //               echo "<big>R</big>";
                echo "</td>\n";
 
@@ -179,7 +179,7 @@ class Listen {
              // Eigene Nachrichten?
              if ($_SESSION ["vStab_funktion"] == $row ["14_funktion"]){
                echo "<td align=\"center\">";
-               echo "<p><img src=\"".$conf_design_path."022.png\" alt=\"gelesen\"></p>";
+               echo "<p><img src=\"".$conf_design_path."transport.gif\" alt=\"gelesen\"></p>";
 //               echo "<big>R</big>";
                echo "</td>\n";
 

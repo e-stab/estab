@@ -51,8 +51,8 @@
     imagestring($img,$font_size,$xpos,$ypos,$icontext,$textcol);
 
 
-    header("Content-Type: image/jpeg");
-    imagejpeg($img);
+    header("Content-Type: image/png");
+    imagepng($img);
     imagedestroy($img);
   }
 

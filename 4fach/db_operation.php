@@ -70,7 +70,7 @@ class db_access {
   Funktion create_user_table ($tablename)
 \******************************************************************************/
 
-  function create_user_table ($tablename) {
+  function create_user_table ($tablename, $fkttblname) {
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("create_user_table [connect] Konnte keine Verbindung zur Datenbank herstellen");
 
@@ -84,13 +84,20 @@ class db_access {
         `gelesen` datetime NOT NULL default '0000-00-00 00:00:00' COMMENT 'Zeitpunkt wann die Nachricht gelesen wurde',
         PRIMARY KEY  (`lfd`)
       ) ENGINE=MyISAM DEFAULT CHARSET=latin1 AUTO_INCREMENT=1 ;";
-
     $result = mysql_query($query);
     if (!$result) {
-       die('Ungueltige Abfrage: ' . mysql_error());
+       die('89 db_oper Ungueltige Abfrage: ' . mysql_error());
     }
-     // erledigt
-    $query = "CREATE TABLE IF NOT EXISTS ".$tablename."_erl (
+
+     $query = "ALTER TABLE `".$tablename."_read` ADD INDEX ( `nachnum` ) ";
+     $result = mysql_query($query);
+    if (!$result) {
+       die('95 db_oper Ungueltige Abfrage: ' . mysql_error());
+    }
+
+     // erledigte bezogen auf die Funktion
+
+    $query = "CREATE TABLE IF NOT EXISTS ".$fkttblname."_erl (
         `lfd` bigint(20) unsigned NOT NULL auto_increment COMMENT 'Laufende Nummer',
         `zeit` timestamp NOT NULL default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP COMMENT 'Zeitpunkt der letzte Änderung',
         `nachnum` bigint(20) NOT NULL COMMENT 'Fremdschlüssel der Erledigten Nachricht',
@@ -100,8 +107,17 @@ class db_access {
 
     $result = mysql_query($query);
     if (!$result) {
-       die('Ungueltige Abfrage: ' . mysql_error());
+       die('110 db_Oper Ungueltige Abfrage: ' . mysql_error());
     }
+
+
+     $query = "ALTER TABLE `".$fkttblname."_erl` ADD INDEX ( `nachnum` ) ";
+     $result = mysql_query($query);
+    if (!$result) {
+       die('117 db_oper Ungueltige Abfrage: ' . mysql_error());
+    }
+
+
      // Kategorien
     $query = "CREATE TABLE IF NOT EXISTS ".$tablename."_katego (
         `lfd` bigint(20) unsigned NOT NULL auto_increment COMMENT 'Laufende Nummer',
@@ -112,8 +128,11 @@ class db_access {
 
     $result = mysql_query($query);
     if (!$result) {
-       die('Ungueltige Abfrage: ' . mysql_error());
+       die('131 db_oper Ungueltige Abfrage: ' . mysql_error());
     }
+
+
+
      // Zuordnung Kategorien <--> Meldung
     $query = "CREATE TABLE IF NOT EXISTS ".$tablename."_kategolink (
              `msg` bigint(20) NOT NULL,
@@ -205,8 +224,8 @@ class db_access {
 
     $query_result = mysql_query ($this->sqlquery, $db) or
        die("[query_table_iu] ".mysql_error()." ".mysql_errno());
-
     mysql_close ($db);
+    return ($query_result);
   } // function query_table_iu
 
 

@@ -23,8 +23,10 @@ Aufruf:
 \***********************************************************************************/
 
   function protokolleintrag ($was, $daten){
-     include ("../dbcfg.inc.php"); include ("../e_cfg.inc.php");
-     include ("../config.inc.php");
+     include ("../4fcfg/dbcfg.inc.php");
+     include ("../4fcfg/e_cfg.inc.php");
+     require_once ("../4fach/tools.php");
+     include ("../4fcfg/config.inc.php");
 
      $query = "INSERT INTO ".$conf_4f_tbl["protokoll"]." SET
                    p_zeit          = \"".convtodatetime (date("dm"), date ("Hi"))."\",
