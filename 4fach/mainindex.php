@@ -22,7 +22,6 @@ if ( debug == true ){
   echo "GET="; var_dump ($_GET);    echo "#<br><br>\n";
   echo "POST="; var_dump ($_POST);   echo "#<br><br>\n";
   echo "COOKIE="; var_dump ($_COOKIE); echo "#<br><br>\n";
-  //echo "SERVER="; var_dump ($_SERVER); echo "#<br><br>\n";
   echo "SESSION="; print_r ($_SESSION); echo "#<br>\n";
 }
 
@@ -40,16 +39,8 @@ include ("db_operation.php");  // Datenbank operationen
 include ("4fachform.php");            // Formular Behandlung 4fach Vordruck
 include ("liste.php");                // erzeuge Ausgabelisten
 include ("data_hndl.php");            // Schnittstelle zur Datenbank
-//include ("menue.php");                // erzeuge Men
-
-
-
-
-/*!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*/
-
 
   $db = mysql_connect($conf_4f_db   ["server"],$conf_4f_db   ["user"], $conf_4f_db   ["password"] );
-    //  or die ("[table_exist] Konnte keine Verbindung zur Datenbank herstellen");
   $result = mysql_ping  ($db);
 
   if ($result == false){
@@ -78,7 +69,6 @@ include ("data_hndl.php");            // Schnittstelle zur Datenbank
 
 
   if (isset ($_GET ["reset_record"])){
-//    echo "RESET DATENSATZ ".$_GET ["reset_record"]."<br>";// !!!!!!!!!!!!!!!!!!!!!!
     reset_record_lock ($_GET ["reset_record"]);
   }
 
@@ -87,12 +77,6 @@ include ("data_hndl.php");            // Schnittstelle zur Datenbank
   Es gab noch keinen Kontakt ==> Begruessung
 \**********************************************************************/
 if (isset ( $_GET ["m2_parameter_x"] )) {
-/*  echo "<html><head><title>Parameter einstellen</title>";
-  echo "<script type=\"text/javascript\">";
-  echo "ParaFenster = window.open(\"./edt_para.php\", \"ParaFenster\", \"width=500,height=500,left=50,top=50\");";
-  echo "ParaFenster.focus();";
-  echo "</script>";
-*/
   include ("./edt_para.php");
   $para = new parametrierung ();
 }
@@ -115,7 +99,6 @@ ANTWORT % WEITERLEITUNG
 
   /****************************************************************************\
     Für die Listendarstellung erforderliche Einstellungen
-
   \****************************************************************************/
   if (isset($_GET ["ma_ktgotyp"])){
     if ( $_GET ["ma_ktgo"] == "alle") {
@@ -172,21 +155,6 @@ ANTWORT % WEITERLEITUNG
 
   /**********************************************************************\
     Überprüfe ob die Listendarstellung geaendert werden soll
-
-  ["filter_darstellung"]=> string(2) "on"
-  ["filter_anzahl"]=> string(2) "10"
-  ["filter_gelesen"]=> string(2) "on"
-  ["filter_erledigt"]=> string(2) "on"
-  ["filter_submit"]=> string(10) "einstellen" }
-
-  ["flt_start_x"]=>  string(2) "23" ["flt_start_y"]=>  string(1) "6"
-  ["flt_back_x"]=>  string(2) "18" ["flt_back_y"]=>  string(2) "12"
-  ["flt_for_x"]=>  string(2) "16" ["flt_for_y"]=>  string(2) "12"
-  ["flt_end_x"]=>  string(1) "9" ["flt_end_y"]=>  string(1) "7"
-
-  ["flt_search"]=>  string(4) "test"
-  ["filter_suche"]=>  string(6) "suchen" } #
-
   \**********************************************************************/
   if (!isset ( $_SESSION["filter_darstellung"])){
     $_SESSION["filter_darstellung"] = 1;
@@ -253,8 +221,6 @@ ANTWORT % WEITERLEITUNG
 
   if (isset ($_GET["filter_anzahl_x"])) {
     $_SESSION["filter_anzahl"] = $_GET["filter_anzahl"]; }
-
-
     if (isset($_GET[flt_start_x])) { $_SESSION[flt_navi] = "start";}
     if (isset($_GET[flt_back_x]))  { $_SESSION[flt_navi] = "back";}
     if (isset($_GET[flt_for_x]))   { $_SESSION[flt_navi] = "for";}
@@ -323,7 +289,6 @@ ANTWORT % WEITERLEITUNG
       if (!$error) {
         $_SESSION["menue"] = "ROLLE";  //   führt zu fehlern bei der menüdarstellung
         if (debug) echo "mainindex 324 <br> ";
-//        exit;
         resetframeset ($conf_urlroot.$conf_web ["pre_path"]);
       }
     // Wenn Benutzer OK ==> SESSION [menue]=ROLLE ; $_SESSION [ROLLE]= Stab, Fernmelder...
@@ -342,16 +307,11 @@ ANTWORT % WEITERLEITUNG
       $doppelkennwort = true;
       if (debug) echo "mainindex 342 <br> ";
     } else {
-//      if (($_GET["kennwort1"] != "") AND ($_GET["kennwort2"] != "")) {
         if (isset ($_GET["benutzer"])) { $menuename     = $_GET["benutzer"]; }
         if (isset ($_GET["kuerzel"] )) { $menuekuerzel  = $_GET["kuerzel"]; }
         if (isset ($_GET["funktion"])) { $menuefunktion = $_GET["funktion"]; }
         $doppelkennwort = false;
         if (debug) echo "mainindex 349 <br> ";
-//      } else {
-//        $doppelkennwort = true;
-//        if (debug) echo "mainindex 352 <br> ";
-//      }
     }
   }
 
@@ -406,24 +366,19 @@ ANTWORT % WEITERLEITUNG
         $gesprnotizsichter = true ;
     } else {
 
-      if ( debug == true ){ echo "### 256 check and save";  echo "<br>\n";}
+      if ( debug == true ){ echo "### 369 check and save";  echo "<br>\n";}
 
       check_and_save ($returndata);
 
       // verhindert das erneute Speichern bei Betaetigung von F5
       if (isset ($_SESSION ['gesprnoti'])) { unset ( $_SESSION ['gesprnoti'] ); }
       if (create_vordrucke){
+        if ( debug == true ){ echo "### 376 create vordruck";  echo "<br>\n";}
         include ("../4fbak/backup.php");
       }
 
       if ( !$weiterantwort ){
         resetframeset ($conf_urlroot.$conf_web ["pre_path"]);
-//exit;
-
-//        header("Location:".$_SERVER["PHP_SELF"]);
-//         header("Location: ".$conf_4f ["MainURL"], false);
-//  echo "<big><big>header!!!===".$_SERVER["PHP_SELF"]."</big></big><br>";
-//        exit;
       }
     }
   } elseif ( ( ($_GET["task"] == "FM-Ausgang_Sichter") OR
@@ -468,7 +423,6 @@ Daten kommen vom Formular und sollen als Antwort dienen.
 
     $formdata ["13_abseinheit"] = $aushilfe ;
     $formdata ["12_abfzeit"] = "" ;
-//    $formdata ["13_abseinheit"]  = $conf_4f     ["anschrift"]; //$_SESSION["vStab_rolle"];
     $formdata ["14_zeichen"]     = $_SESSION["vStab_kuerzel"];
     $formdata ["14_funktion"]    = $_SESSION["vStab_funktion"];
     $formdata ["12_inhalt"] = "Zitat: von ".$formdata["04_richtung"]." ".$formdata["04_nummer"]." \n\"".$formdata ["12_inhalt"]."\"\n";
@@ -502,8 +456,6 @@ Daten kommen vom Formular und sollen als Antwort dienen.
   if (isset ($_SESSION ["sw_data"] )) {
 
     if ( debug == true ){ echo "### 461 _SESSION [sw_data]";  echo "<br>\n";}
-
-//    $formdata = $_GET ;
     $formdata = $_SESSION ["sw_data"] ;
     if  (( isset ($formdata["antwort_x"]) ) and
         ( ( $formdata["task"] == "FM-Ausgang" ) or
@@ -542,7 +494,7 @@ Daten kommen vom Formular und sollen als Antwort dienen.
 
     if (   (isset ($formdata["weiterleiten_x"])) and ( ($_GET["task"] == "FM-Ausgang" ) or ($_GET["task"] == "FM-Ausgang_Sichter") ) ) {
 
-          //  W E I T E R L E I T U N G  --  "FM-Ausgang"  or "FM-Ausgang_Sichter"
+        //  W E I T E R L E I T U N G  --  "FM-Ausgang"  or "FM-Ausgang_Sichter"
 
       if ( debug == true ){ echo "### 277 WEITERLEITUNG - FM-Ausgang(_Sichter)";  echo "<br>\n";}
 
@@ -566,10 +518,7 @@ Daten kommen vom Formular und sollen als Antwort dienen.
         $form = new nachrichten4fach ($formdata, "FM-Eingang_Sichter", "");
       }
     }
-//    unset ($_SESSION ["sw_data"]);
   }
-/*++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
-
 
 
 /**********************************************************************
@@ -592,9 +541,7 @@ $formdata = ""; // setze die Formulardaten zurck
   if ( (isset ( $_GET["stab_schreiben_x"] )) and !$gesprnotizsichter ) {
 
     if ( debug == true ){ echo "### 322 _GET[stab_schreiben_x] )) and !$gesprnotizsichter ";  echo "<br>\n";}
-
-  //  $formdata ["12_abfzeit"]     = convtodatetime (date("dm"), date ("Hi"));
-    $formdata ["13_abseinheit"]  = $conf_4f     ["anschrift"]; //$_SESSION["vStab_rolle"];
+    $formdata ["13_abseinheit"]  = $conf_4f     ["anschrift"];
     $formdata ["14_zeichen"]     = $_SESSION["vStab_kuerzel"];
     $formdata ["14_funktion"]    = $_SESSION["vStab_funktion"];
     $form = new nachrichten4fach ($formdata, "Stab_schreiben", "");
@@ -608,7 +555,6 @@ $formdata = ""; // setze die Formulardaten zurck
 
   Menue und Liste
 \**********************************************************************/
-//echo "\n<!-- Vor Menue und liste -->";
    if ( ( ($_SESSION ["vStab_rolle"] == "Stab" ) or
           ($_SESSION ["ROLLE"] == "Stab" ) or
           ($_SESSION ["vStab_rolle"] == "FB" ) or
@@ -634,18 +580,10 @@ $formdata = ""; // setze die Formulardaten zurck
           ( !(isset ($_SESSION["sw_data"] ) ) ) and
           ( $_SESSION ["UPLOAD"] != "fileupload" ) and
           ( $_SESSION ["UPLOAD"] != "upload" )
-         )
-))       ) {
+         )))
+         ) {
 
     if ( debug == true ){ echo "### 665 Stab_lesen - Menue und Liste ";  echo "<br>\n";}
-
-
-/*     $css = "a:link    { color:#000000; text-decoration:none; font-weight:bolder ; font-size:normal; }\n".
-            "a:visited { color:#000000; text-decoration:none; font-weight:bolder ; font-size:normal; }\n".
-            "a:hover   { color:#000000; text-decoration:none; }\n".  //font-weight:lighter; }\n".
-            "a:active  { color:#0000EE; background-color:#FFFF99;}\n". // font-weight:lighter  ; }\n".
-            "a:focus   { color:#0000EE; background-color:#FFFF99;}\n"; // font-weight:lighter ; }";
-*/
 
      $csskatego = "html { font-size: 100%; }
                 a:link, a:visited, a:active {    text-decoration:    none;    color:              #333399; }
@@ -711,11 +649,8 @@ ul#topmenu li.active {
 
       pre_html ("stabliste","Stab lesen ".$conf_4f ["NameVersion"],$css.$csskatego); // Normaler Seitenaufbau mit Auffrischung
       echo "<body bgcolor=\"#DCDCFF\">";
-//echo "\n<!-- Vor Menueaufruf und liste -->";
-//HL      menue ();
       $list = new listen ("Stab_lesen", "");
       $list->createlist ();
-//echo "\n<!-- danach Menue und liste -->";
    }
 
 /**********************************************************************\
@@ -741,12 +676,6 @@ ul#topmenu li.active {
   if (( $_GET["sichter"] == "meldung")){
 
     if ( debug == true ){ echo "### 458 Stab Meldung sichten - Darstellung der Meldung ber die laufende Nummer ";  echo "<br>\n";}
-/*
-    $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
-    $query = "SELECT * FROM `".$conf_4f_tbl ["nachrichten"]."` where 00_lfd = ".$_GET["00_lfd"];
-    $result = $dbaccess->query_table ($query);
-    $formdata = $result [1];
-*/
     $formdata = get_msg_by_lfd ($_GET["00_lfd"]);
     $formdata ["15_quitzeichen"]  = $_SESSION ["vStab_kuerzel"];
     $form = new nachrichten4fach ($formdata, "Stab_sichten", "");
@@ -782,8 +711,6 @@ ul#topmenu li.active {
             "a:focus { color:#0000EE; background-color:#FFFF99;  }";
         pre_html ("siliste","Sichterliste ".$conf_4f ["NameVersion"],$css); // Normaler Seitenaufbau mit Auffrischung
         echo "<body bgcolor=\"#DCDCFF\">";
-
-//HL        menue ();
         $list = new listen ("Stab_sichten", "STSI");
         $list->createlist ();
    }
@@ -843,7 +770,6 @@ ul#topmenu li.active {
           "a:focus { color:#0000EE; background-color:#FFFF99;  }";
     pre_html ("fmdliste","FMD Ausgang ".$conf_4f ["Titelkurz"]."".$conf_4f ["Version"],$css); // Normaler Seitenaufbau mit Auffrischung
     echo "<body bgcolor=\"#DCDCFF\">";
-//HL    menue ();
     $list = new listen ("FMA", "");
     $list->createlist ();
   }
@@ -869,11 +795,6 @@ ul#topmenu li.active {
       $query = "UPDATE ".$conf_4f_tbl ["nachrichten"]." SET x02_sperre = \"t\", x03_sperruser = \"".$_SESSION [vStab_kuerzel]."\" where 00_lfd = ".$_GET["00_lfd"];
       $result = $dbaccess->query_table_iu ($query);
       // Jetzt holen wir uns den kompletten, gesperrten Eintrag
-/*
-      $query = "SELECT * FROM ".$conf_4f_tbl ["nachrichten"]." where 00_lfd = ".$_GET["00_lfd"];
-      $result = $dbaccess->query_table ($query);
-      $formdata = $result [1]; // Das [1] enthaelt die Daten
-*/
       $formdata = get_msg_by_lfd ($_GET["00_lfd"]);
 
       // Voreinstellungen fuer den Befoerderungsvermerk
@@ -883,7 +804,6 @@ ul#topmenu li.active {
         $form = new nachrichten4fach ($formdata, "FM-Ausgang", "");
       } else {
         $formdata ["15_quitzeichen"]  = $_SESSION ["vStab_kuerzel"];
-      //          $formdata ["16_empf"]     = "";
         $form = new nachrichten4fach ($formdata, "FM-Ausgang_Sichter", "");
       }
       } else {
@@ -915,8 +835,6 @@ ul#topmenu li.active {
               "a:focus { color:#0000EE; background-color:#FFFF99; font-weight:bold; }";
         pre_html ("si2liste","Stab lesen ".$conf_4f ["NameVersion"],$css); // Normaler Seitenaufbau mit Auffrischung
         echo "<body bgcolor=\"#DCDCFF\">";
-
-//HL        menue ();
         $list = new listen ("FMADMIN", "");
         $list->createlist ();
   }
@@ -932,8 +850,6 @@ ul#topmenu li.active {
               "a:focus { color:#0000EE; background-color:#FFFF99; font-weight:bold; }";
         pre_html ("si2liste","Stab lesen ".$conf_4f ["NameVersion"],$css); // Normaler Seitenaufbau mit Auffrischung
         echo "<body bgcolor=\"#DCDCFF\">";
-
-//HL        menue ();
         $list = new listen ("SIADMIN", "");
         $list->createlist ();
   }
@@ -950,12 +866,6 @@ ul#topmenu li.active {
     if ( debug == true ){ echo "### 651 FM & Si Adminmeldung ";  echo "<br>\n";}
 
     $formdata = get_msg_by_lfd ($_GET["00_lfd"]);
-/*
-    $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
-    $query = "SELECT * FROM `".$conf_4f_tbl ["nachrichten"]."` where 00_lfd = ".$_GET["00_lfd"];
-    $result = $dbaccess->query_table ($query);
-    $formdata = $result [1];
-*/
     switch  ($_GET["fm"]) {
       case "FM-Adminmeldung" :
         $form = new nachrichten4fach ($formdata, "FM-Admin", "");
@@ -966,47 +876,6 @@ ul#topmenu li.active {
       break;
     }
   }
-
-/**********************************************************************\
-
-\**********************************************************************/
-    // Anhang auswaehlen
-/*  if ( ( isset ($_GET["fm_anhang_x"]) ) or ( isset ($_GET["stab_anhang_x"]) )  or
-       ( $_SESSION ["UPLOAD"] == "fileselect" ) ){
-    if ( debug == true ){ echo "Zeile 947 Auswahlanhang<br>"; }
-
-    if ($_SESSION ["UPLOAD"] == "fileselect"){ $_SESSION ["UPLOAD"] = "upload"; }
-
-    $_SESSION [anhang] = "select_attechment";
-
-    include ("anhang.php");
-    $menue1 = "anhang";
-    if ( debug == true ){ echo "Zeile 953 Nach Anhang.php<br>"; }
-    exit;
-  }
-
-/**********************************************************************\
-
-\**********************************************************************/
-    // Anhang auswaehlen
-/*
-  if ( isset ( $_GET["ah_upload_x"] ) ){
-
-    $_SESSION ["UPLOAD"] = "fileselect";
-
-    if ( debug == true ){ echo "### 964 FM Admin - Anhang auswaehlen ";  echo "<br>\n";}
-
-
-    echo "<script type=\"text/javascript\">\n";
-    echo "var Neufenster = window.open(\"./upload.php\",\"AnderesFenster\",\"width=900,height=600, resizable=yes, menubar=no, scrollbars=yes\");\n";
-    echo "</script>\n";
-
-//  include ($conf_web ["srvroot"]."/kats/4fach/upload.php");
-//   resetframeset ($conf_urlroot.$conf_web ["pre_path"]);
-
- header("Location: ".$conf_urlroot.$conf_web ["pre_path"]."/4fach/upload.php");
-  }
-*/
 
 
 /**********************************************************************\
@@ -1069,11 +938,6 @@ ul#topmenu li.active {
                }
                echo "</td>\n";
                echo "</tr>\n<tr>\n";
-  //             echo "<td>\n";
-  //             echo "<input type=\"submit\" name=\"login\" value=\"Anmelden\">\n";
-  //             echo "<input type=\"hidden\" name=\"login\" value=\"Anmelden\">\n";
-  //             echo "<input type=\"image\" name=\"login\" src=\"".$conf_design_path."/logon.gif\">\n";
-  //             echo "</td>\n";
       break;
       case "LOGIN" : // Anmeldeformular
               echo "<td>\nName, Vorname:</td>\n<td>\n<input style=\"font-size:20px; font-weight:900;\" type=\"text\" size=\"32\" value=\"".$menuename."\" maxlength=\"32\" name=\"benutzer\"></td>\n";

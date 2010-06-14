@@ -1,12 +1,19 @@
 <?php
+/*****************************************************************************\
+   Datei: anhang.php
 
+   benoetigte Dateien:
+
+   Beschreibung:
+
+   (C) Hajo Landmesser IuK Kreis Heinsberg
+   mailto://hajo.landmesser@iuk-heinsberg.de
+\*****************************************************************************/
 
 /*****************************************************************************\
     Auswahl einer Anhangdatei
     Datei auf den Server hochladen
-
-
-*****************************************************************************/
+******************************************************************************/
 
 include ("./upload_class.php");
 
@@ -57,15 +64,11 @@ class fileupload extends file_upload {
     $this->loesche_reservierungen ($db, $conf_4f_tbl ["anhang"]);
       // Dateinamen aus abgebrochene Reservierrungen
     $frei_res = $this->res_abgebr ($db, $conf_4f_tbl ["anhang"]);
-
-//    echo "frei_res===".$frei_res."<br>";
     if ($frei_res) {
       $this->fs_nextfilename = $frei_res;
     }else{
-      //
       $this->next_filename ($db, $conf_4f_tbl ["anhang"], $conf_4f[hoheit]);
     }
-//    $filename = $this->fs_nextfilename;
   }
 
   /***************************************************************************\
@@ -78,29 +81,17 @@ class fileupload extends file_upload {
     $query = "SELECT * FROM ".$tbl."
               WHERE ((`id` = \"".session_id()."\")AND
                      (`status` = \"8\"));";
-// echo "anhang.php - 81 - loesche_res... query ===".$query."<br>";
-
     $result = $db->query_table ($query);
-// echo "anhang.php - 84 - loesche_res... result =="; var_dump ($result);echo "<br>";
-
-
     $query = "UPDATE ".$tbl."
               SET   `status` = \"4\",
                     `id` = \"\"
               WHERE ((`id` = \"".session_id()."\")AND
                      (`status` = \"8\"));";
-// echo "anhang.php - 92 - loesche_res... query ===".$query."<br>";
-
     $result = $db->query_table_iu ($query);
-// echo "anhang.php - 95 - loesche_res... result =="; var_dump ($result);echo "<br>";
-
     $query = "SELECT * FROM ".$tbl."
               WHERE ((`id` = \"".session_id()."\")AND
                      (`status` = \"8\"));";
-// echo "anhang.php - 100 - loesche_res... query ===".$query."<br>";
-
     $result = $db->query_table ($query);
-// echo "anhang.php - 103 - loesche_res... result =="; var_dump ($result);echo "<br>";
   }
 
   /***************************************************************************\
@@ -114,16 +105,13 @@ class fileupload extends file_upload {
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
     include_once ("./db_operation.php");
-//echo "anhang.php - 117 - reset_reservation <br>";
     $db = new db_access ($conf_4f_db  ["server"],
                          $conf_4f_db  ["datenbank"],
                          $conf_4f_tbl ["anhang"],
                          $conf_4f_db  ["user"],
                          $conf_4f_db  ["password"]);
-      //setze alte Reservierungen auf status = 4  für eigene Session ID
     $this->loesche_reservierungen ($db, $conf_4f_tbl ["anhang"]);
   }
-
 
   /***************************************************************************\
     Funktion:     res_filename_db
@@ -144,25 +132,19 @@ class fileupload extends file_upload {
     $query = "SELECT `status`
               FROM ".$conf_4f_tbl ["anhang"]."
               WHERE ".$conf_4f_tbl ["anhang"].".filename =\"".$filename."\";";
-// echo "anhang.php 129 -- Query ===".$query."<br>";
     $result = $db->query_table ($query);
     if ($result != ""){
       $status_abfrage = $result [1][status];}
     else {
       $status_abfrage = NULL;
     }
-
-// echo "anhang.php 137 -- RESULT=="; var_dump ($result); echo "<br>";
       // Nicht in der Datenbank => anlegen
     if ($status_abfrage == "") {
       $query = "INSERT INTO ".$conf_4f_tbl ["anhang"]."
                 SET `filename` = \"".$filename."\",
                     `status`   = \"8\",
                     `id`       = \"".session_id()."\";";
-// echo "anhang.php 144 -- Query ===".$query."<br>";
       $result = $db->query_table_iu ($query);
-//      echo "anhang.php 99 -- RESULT=="; var_dump ($result); echo "<br>";
-
     } elseif ($status_abfrage == "4") {
 
       $query = "UPDATE ".$conf_4f_tbl ["anhang"]."
@@ -170,12 +152,9 @@ class fileupload extends file_upload {
                       `id`     = \"".session_id()."\"
                 WHERE ((`filename` = \"".$filename."\") AND
                        (`status` = \"4\"));";
-// echo "anhang.php 155 -- Query ===".$query."<br>";
     $result = $db->query_table_iu ($query);
     }
   }
-
-
 
   /***************************************************************************\
     Funktion:     res_abgebr
@@ -186,9 +165,7 @@ class fileupload extends file_upload {
   function res_abgebr ($db, $tbl){
       // Abgebrochene Uploads
     $query = "SELECT  min(filename) as filename FROM ".$tbl." WHERE `status` = 4 GROUP BY filename";
-//echo "anhang.php 125 -- Query ===".$query."<br>";
     $result = $db->query_table ($query);
-//echo "anhang.php 126 : result==="; var_dump ($result); echo "<br>";
     if ($result != "") {return ($result[1][filename]);}
     else {
       return ("");
@@ -204,9 +181,7 @@ class fileupload extends file_upload {
   function next_filename ($db, $tbl, $hoheit){
       // Dateiname mit der höchsten Zahl
     $query = "SELECT MAX(filename) as filename,status FROM ".$tbl." WHERE 1 GROUP BY `filename` ";
-    // echo "anhang.php 102 -- Query ===".$query."<br>";
     $result = $db->query_table ($query);
-    // echo "anhang.php 104 : result==="; var_dump ($result); echo "<br>";
     if ($result != ""){
       $filename = $result [1][filename];
       $status   = $result [1][status];
@@ -216,7 +191,6 @@ class fileupload extends file_upload {
     }
     if ($filename != ""){
       $hoheitlen = strlen ( $hoheit );
- //    list($filename, $extention) = explode (".",$file);
       $filelen = strlen ($filename);
       $filehoheit = substr ( $filename, 0, $hoheitlen );
       if (strtoupper ( $hoheit ) == strtoupper ( $filehoheit ) ) {
@@ -274,9 +248,6 @@ class fileupload extends file_upload {
                       `status`   = '8' ; ";
       }
     }
-
-//    echo "RESULT=79=="; var_dump($result); echo "<br>";
-
     $query = "SELECT * FROM ".$conf_4f_tbl ["anhang"]." WHERE 1 ";
 
     if (debug) echo "anhang.php 41 -- Query ===".$query."<br>";
@@ -311,8 +282,6 @@ class fileupload extends file_upload {
     }else {
       $status =  $result [1][status];
     }
-// echo "anhang.php 233 -- Result==="; var_dump($result[1]); echo "<br>";
-// echo "anhang.php 234 -- status==="; var_dump($status); echo "<br>";
       // status == 8 ==> aktualisieren
     if ($status == "8") {
     $query = "UPDATE ".$conf_4f_tbl ["anhang"]." SET
@@ -378,27 +347,9 @@ class fileupload extends file_upload {
 
     $nextfile = $this->get_next_filename_from_db ();
 
-
-//    $this->change_status_in_db ("get", "HS0001", 0);
-
-//    exit;
-//##################################################################################
-//    $filenames = $this->readDirectory ( $conf_4f ["ablage_dir"] );
-
     $hoheit = $conf_4f[hoheit];
     $hoheitlen = strlen ( $hoheit );
     $highest = 0;
-/*
-    foreach ($filenames as $file){
-      list($filename, $extention) = explode (".",$file);
-      $filelen = strlen ($filename);
-      $filehoheit = substr ( $filename, 0, $hoheitlen );
-      if (strtoupper ( $hoheit ) == strtoupper ( $filehoheit ) ) {
-        $nummer = substr ( $filename, $hoheitlen, ($filelen - $hoheitlen) );
-        if ($nummer > $highest){ $highest = $nummer; }
-      }
-    }
-*/
 
     $nextnum = $highest + 1 ;
     $expo = intval (log10 ($nextnum) )+1;
@@ -426,7 +377,7 @@ class fileupload extends file_upload {
     return ($tt.$hh.$mm.$tak_monate[$MM].$yyyy);
   }
 
-/*91*/
+
 /*****************************************************************************\
 
 \*****************************************************************************/
@@ -447,7 +398,6 @@ class fileupload extends file_upload {
   function convtaktodatetime ($taktime){
     include ("../4fcfg/config.inc.php");
     /* Datum ~= TTMM, Zeit == ~= HHMM */
-//    echo "Takische Zeit=".$taktime."<br>";
     $tag    = substr ($taktime, 0, 2);
     $stunde = substr ($taktime, 2, 2);
     $minute = substr ($taktime, 4, 2);
@@ -526,6 +476,8 @@ class fileupload extends file_upload {
   }
 
 } // class fileupload
+
+
 /*************************************************************************************************************
                                 S T E U E R U N G
 **************************************************************************************************************/
@@ -542,16 +494,12 @@ define ("debug", false);
     include_once ("./4fachform.php");            // Formular Behandlung 4fach Vordruck
     include_once ("./tools.php");
 
-// echo "anhang.php - 467 - <big><big><big>SESSION[anhang_menue]=".$_SESSION["anhang_menue"]."</big></big></big><br>\n";
-
-
 if ( debug == true ){
   echo "<br><br>\n";
   echo "------ Anhang.PHP 261 an Anfang ------";     echo "#<br><br>\n";
   echo "GET     ="; var_dump ($_GET);    echo "#<br><br>\n";
   echo "POST    ="; var_dump ($_POST);   echo "#<br><br>\n";
   echo "COOKIE  ="; var_dump ($_COOKIE); echo "#<br><br>\n";
-  // echo "SERVER  ="; var_dump ($_SERVER); echo "#<br><br>\n";
   echo "SESSION ="; var_dump ($_SESSION); echo "#<br><br>\n";
   echo "FILES   ="; var_dump ($_FILES); echo "#<br><br>\n";
 }
@@ -602,7 +550,6 @@ if ( debug == true ){
     $inhalt = "\n\r";
     foreach ($ahkey as $anh){
       $db_data = readrecord_from_db($_GET [$anh]);
-//      echo "anh=".$anh. "  _GET[anh]=".$_GET [$anh].   "  db_data:";var_dump ($db_data); echo "<br><br><br>";
       $anhang .= $_GET [$anh].";";
       $anhang_date = konv_datetime_taktime ($db_data[1]["date"]);
       $inhalt .= $_GET [$anh]." - ".$db_data[1]["comment"]." - ".$anhang_date."\n";
@@ -612,7 +559,7 @@ if ( debug == true ){
     $formdata ["12_anhang"]   = $anhang;
     $formdata ["12_inhalt"]  .= $inhalt;
 
-    $formdata ["13_abseinheit"]  = $conf_4f     ["anschrift"]; // $_SESSION["vStab_rolle"];
+    $formdata ["13_abseinheit"]  = $conf_4f     ["anschrift"];
     $formdata ["14_zeichen"]     = $_SESSION["vStab_kuerzel"];
     $formdata ["14_funktion"]    = $_SESSION["vStab_funktion"];
     $form = new nachrichten4fach ($formdata, "Stab_schreiben", "");
@@ -641,7 +588,6 @@ if ( debug == true ){
     $inhalt = "\n\r";
     foreach ($ahkey as $anh){
       $db_data = readrecord_from_db($_GET [$anh]);
-//      echo "anh=>".$anh."<  _GET[anh]=>".$_GET [$anh]."<  db_data:>";var_dump ($db_data); echo "<<br><br><br>";
       $anhang .= $_GET [$anh].";";
       $anhang_date = konv_datetime_taktime ($db_data[1]["date"]);
       $inhalt .= $_GET [$anh]." - ".$db_data[1]["comment"]." - ".$anhang_date."\n";
@@ -652,9 +598,6 @@ if ( debug == true ){
     $formdata ["12_inhalt"]  .= $inhalt;
     $formdata ["01_zeichen"]  = $_SESSION ["vStab_kuerzel"];
     $formdata ["10_anschrift"]  = $conf_4f ["anschrift"];
-
-//    echo "formdata:"; var_dump ($formdata); echo "<br>";
-
     if (sichter_online()) {
       $form = new nachrichten4fach ($formdata, "FM-Eingang_Anhang", "");
     } else {
@@ -696,7 +639,6 @@ include_once ("./db_operation.php");  // Datenbank operationen
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
     $query = "SELECT * FROM `".$conf_4f_tbl ["anhang"]."` where `status` = 1 ORDER BY filename DESC";
     $result = $dbaccess->query_table ($query);
-// echo "readFiles_from_db - 667 - Result==";var_dump ($result[1]); echo "<br>";
     return ($result);
   }
 
@@ -739,9 +681,7 @@ include_once ("./db_operation.php");  // Datenbank operationen
 \**********************************************************************/
   function anhang_menue (){
     include ("../4fcfg/config.inc.php");
-//    echo "<big><big><big>ANHANGmenü</big></big></big><br>\n";
     echo "<form name=\"uploadform\" enctype=\"multipart/form-data\" method=\"get\" action=\"anhang.php\">\n"; // action=\"".$_SERVER['PHP_SELF']."\">";
-//  echo "<form action=\"".$conf_4f ["MainURL"]."\" method=\"get\" target=\"mainframe\">\n";
     echo "<!-- anhang.php Formularelemente und andere Elemente innerhalb des Formulars -->\n";
 
     echo "<table border=\"1\" cellspacing=\"2\" cellpeding=\"3\">\n";
@@ -758,14 +698,12 @@ include_once ("./db_operation.php");  // Datenbank operationen
 
     echo "<table border=\"1\" cellspacing=\"2\" cellpeding=\"3\">\n";
 
-$files = readDirectory ();
+    $files = readDirectory ();
 
-// echo "files=="; var_dump($files); echo "<br>";
 
     $db_file_data = readFiles_from_db();
     if ($db_file_data != NULL){
       $i = 0;
-      // first colum discrips the table.
       echo "<TR>";
       echo "<TH>";
       echo "Auswahl";
@@ -786,10 +724,7 @@ $files = readDirectory ();
       echo "Datum/Zeit";
       echo "</TH>";
       echo "</TR>";
-
       foreach ($db_file_data as $file){
-//        echo "<br>";var_dump($file);
-//        echo "<br>";
         echo "<tr>\n";
           // checkbox
         echo "<td>\n";
@@ -826,39 +761,28 @@ $files = readDirectory ();
 \***********************************************************************/
 
   function fileselect () {
-
     $instanz = new fileupload ();
     $instanz->pre_html("Upload");
-
-
     $instanz->get_next_filename_from_db();
-//     $instanz->scan4nextfilename();
-
     $data["newfilename"]  =  $instanz->fs_nextfilename;
     $data["kuerzel"]      =  $_SESSION["vStab_kuerzel"];
     $data["time"]         =  date("dHiMY");
     $instanz->res_filename_db ($data["newfilename"]);
     $instanz->fileselectform ($data);
-
     $instanz->post_html ();
     $_SESSION ["anhang_submenue"] =  110;
-
   }
 
   /****************************************************************************\
     Funktion: file_unselect
   \****************************************************************************/
   function file_unselect (){
-// echo "anhang.php - 839 - file_unselect<br>";
     $instanz = new fileupload ();
     $instanz->reset_reservation ();
-
   }
 
-
-
-
   /***************************************************************************\
+
   \***************************************************************************/
   function store_formdata () {
     $_SESSION["01_medium"]       = $_GET["01_medium"];
@@ -994,7 +918,6 @@ $files = readDirectory ();
 
         if ( (isset ($_POST["absenden_x"] )) OR
              (isset ($_POST["abbrechen_x"]))){
-// echo "_SESSION[anhang_menue] == 110 und ABBRECHEN_x <br>";
 
           fileselectwindow ();
         }

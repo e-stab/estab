@@ -5,7 +5,6 @@
       echo "<big><big>$_GET[sub]</big></big>\n";
     }
     echo "<br><br>";
-
     if (isset ($_GET[info])){
       echo "<big><big>$_GET[info]</big></big>\n";
     }

@@ -6,12 +6,11 @@
 
    Beschreibung:
 
-
-
    (C) Hajo Landmesser IuK Kreis Heinsberg
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
-/**********************************************************************************\
+
+/*****************************************************************************\
   function protokolleintrag ();
        p_zeit,         - Zeitstempel
        p_was,        -  Art des Ereignis
@@ -19,8 +18,7 @@
 
 Aufruf:
 
-
-\***********************************************************************************/
+\*****************************************************************************/
 
   function protokolleintrag ($was, $daten){
      include ("../4fcfg/dbcfg.inc.php");
@@ -32,7 +30,6 @@ Aufruf:
                    p_zeit          = \"".convtodatetime (date("dm"), date ("Hi"))."\",
                    p_was        = \"".$was."\",
                    p_ereignis = \"".mysql_escape_string ($daten)."\"";
-//echo "protokoll".$query."<br>";
       $result = "";
       $db = mysql_connect($conf_4f_db["server"],$conf_4f_db["user"], $conf_4f_db["password"])
             or die ("900 - Konnte keine Verbindung zur Protokolldatenbank herstellen");

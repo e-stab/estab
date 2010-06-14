@@ -1,10 +1,10 @@
-<?php
+<?php 
 /******************************************************************************\ 
               Definitionen fuer den Datenbankzugriff                              
 \******************************************************************************/ 
 $conf_4f_db   ["server"]        = "localhost"; 
 $conf_4f_db   ["user"]          = "root"; 
-$conf_4f_db   ["password"]      = ""; 
+$conf_4f_db   ["password"]      = "geheim"; 
 $conf_4f_tbl  ["prefix"]        = "nv_" ; 
 $conf_4f_tbl  ["benutzer"]      = "nv_benutzer"; 
 $conf_4f_tbl  ["masterkatego"]  = "nv_masterkatego"; 
@@ -18,8 +18,7 @@ $conf_tbl     ["bhp50"]         = "nv_bhp50";
 $conf_tbl     ["komplan"]       = "nv_komplan"; 
 $conf_tbl     ["etb"]           = "nv_etb"; 
 $conf_tbl     ["tbb"]           = "nv_tbb"; 
-
-
+
 
 
 ?>

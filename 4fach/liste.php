@@ -8,8 +8,6 @@ include ("katego.php");
 
    Beschreibung:
 
-
-
    (C) Hajo Landmesser IuK Kreis Heinsberg
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
@@ -39,8 +37,6 @@ class Listen extends kategorien {
 /******************************************************************************\
 
 \******************************************************************************/
-
-
   function explodereceiver ( $empf) {
     $receiver = explode (",",$empf);
     for ($i=0; $i < count( $receiver ); $i++ ) {
@@ -58,14 +54,11 @@ class Listen extends kategorien {
   function listen ($welche, $user){
     $this->listenart = $welche;
     $this->benutzer  = $user;
-
     $this->flt_status        = $_SESSION["filter_darstellung"] ;
     $this->flt_msg_pro_seite = $_SESSION["filter_anzahl"] ;
     $this->flt_start_msg     = $_SESSION["startmit"];
     $this->flt_gelesen       = $_SESSION["gelesene"] ;
     $this->flt_erledigt      = $_SESSION["erledigte"] ;
-
-//    echo "listenart =".$this->listenart."- benutzer = ".$this->benutzer."<br>";
   }
 
 /******************************************************************************\
@@ -94,27 +87,11 @@ class Listen extends kategorien {
         SSSSS    T    A   A BBBB   l
       \*************************************************************************/
       case "Stab_lesen":  // ******  S T A B    l e s e n *****
-        if ( debug ) { echo "\n\n\n<!-- ANFANG file:liste.php fkt:darstellungsart -->"; }
+          if ( debug ) { echo "\n\n\n<!-- ANFANG file:liste.php fkt:darstellungsart -->"; }
 
-        echo "\n<form action=\"".$conf_4f ["MainURL"]."\" method=\"get\" target=\"mainframe\">\n";
-//        echo "<fieldset>\n";
-        echo "<table><tbody>";
-        echo "<tr>";
-
-/*
-        echo "<td>";
-        if ($_SESSION [filter_darstellung] == 0)  {
-          echo "<div>";
-          echo "<input type=\"image\" name=\"filter_darstellung_ein\" src=\"button.php?type=push&textpos=right&status=AUS&text=filtern\" alt=\"Filtern EIN\">\n";
-          echo "</div>";
-
-        } else {
-          echo "<div>";
-          echo "<input type=\"image\" name=\"filter_darstellung_aus\" src=\"button.php?type=push&textpos=buttom&status=EIN&text=filtern\" alt=\"Filtern AUS\">\n";
-          echo "</div>";
-          echo "</td>";
-*/
-
+          echo "\n<form action=\"".$conf_4f ["MainURL"]."\" method=\"get\" target=\"mainframe\">\n";
+          echo "<table><tbody>";
+          echo "<tr>";
           echo "<td>";
           echo "<big><b>".($_SESSION[filter_start]+1)."|".($_SESSION[filter_start]+$_SESSION[filter_anzahl])."|<big>".($_SESSION["filter_rescount"])."</big></b></big>";
           echo "</td>";
@@ -140,36 +117,10 @@ class Listen extends kategorien {
             }
           echo "</div>";
           echo "</td>";
-
           echo "</tr>";
           echo "</tbody></table>";
-
-
           echo "</td>";
-/* Wurde an dieser Stelle entfernt und durch listen_navi () ersetzt
-   Kann gelöscht werden
           echo "<td>";
-          echo "&nbsp;&nbsp;&nbsp;";
-          echo "<input type=\"image\" name=\"flt_start\" src=\"".$conf_design_path."/go_start.gif\" alt=\"Anfang\">\n";
-          echo "<input type=\"image\" name=\"flt_back\" src=\"".$conf_design_path."/go_back.gif\" alt=\"zurueck\">\n";
-          echo "<input type=\"image\" name=\"flt_for\" src=\"".$conf_design_path."/go_forward.gif\" alt=\"vor\">\n";
-          echo "<input type=\"image\" name=\"flt_end\" src=\"".$conf_design_path."/go_end.gif\" alt=\"Ende\">\n";
-          echo "</td>";
-          //echo "&nbsp;&nbsp;&nbsp;";
-*/
-/*
-          echo "<td>";
-          if ($_SESSION [filter_gelesen] == 0)  {
-            echo "<input name=\"filter_gelesen\" type=\"checkbox\">\n";
-          } else {
-            echo "<input name=\"filter_gelesen\" type=\"checkbox\" checked=\"checked\">\n";
-          }
-          echo "gelesene&nbsp;\n";
-          echo "</td>";
-*/
-
-          echo "<td>";
-
           if ($_SESSION [filter_unerledigt] == 0)  {
             echo "<div>";
             echo "<input type=\"image\" name=\"filter_unerledigt_ein\" src=\"button.php?type=push&textpos=buttom&status=AUS&text=un-\" alt=\"unerledigte\">\n";
@@ -180,7 +131,6 @@ class Listen extends kategorien {
             echo "</div>";
           }
           echo "</td>";
-
           echo "<td>";
           if ($_SESSION [filter_erledigt] == 0)  {
             echo "<div>";
@@ -192,16 +142,6 @@ class Listen extends kategorien {
             echo "</div>";
           }
           echo "</td>";
-
-/*
-          if ($_SESSION [filter_erledigt] == 0)  {
-            echo "<input name=\"filter_erledigt\" type=\"checkbox\">\n";
-          } else {
-            echo "<input name=\"filter_erledigt\" type=\"checkbox\" checked=\"checked\">\n";
-          }
-          echo "erledigte&nbsp;\n";
-          echo "</td>";
-*/
           echo "<td>";
           if ($_SESSION [flt_find_mask] == 0)  {
             echo "<div>";
@@ -214,24 +154,10 @@ class Listen extends kategorien {
           }
           echo "</td>";
 
-
-//        }
-/*
-        echo "<td>";
-        echo "<input name=\"filter_submit\" value=\"einstellen\" type=\"submit\">\n";
-        echo "</td>";
-
-*/
         echo "<!-- liste.php 233 -->";
-//        echo "</form>";
-
         echo "<td>";
-
-
         echo "<table><tbody>";
         echo "<tr>";
-
-
         if ($_SESSION["flt_find_mask"] == 1){
           echo "\n<form action=\"".$conf_4f ["MainURL"]."\" method=\"get\" target=\"mainframe\">\n";
           echo "<td>";
@@ -244,20 +170,13 @@ class Listen extends kategorien {
           echo "<td>";
           echo "<input name=\"filter_suche\" value=\"suchen\" type=\"submit\">\n";
           echo "</td>";
-//          echo "</form>";
           echo "</div>";
         }
-
         echo "</tr>";
         echo "</tbody></table>";
-
-
         echo "</td>";
-
         echo "</tr>";
         echo "</tbody></table>";
-
-//        echo "</fieldset>\n";
       break;
 
 
@@ -273,9 +192,7 @@ class Listen extends kategorien {
       case "SIADMIN":  // ***************  SICHTER ADMINISTRATOR  *********************
       case "FMADMIN":
         if ( debug ) { echo "\n\n\n<!--  210 file:liste.php fkt:darstellungsart -->"; }
-
         echo "\n<form action=\"".$conf_4f ["MainURL"]."\" method=\"get\" target=\"mainframe\">\n";
-//        echo "<fieldset>\n";
         echo "<table><tbody>";
         echo "<tr>";
         echo "<td>";
@@ -322,26 +239,12 @@ class Listen extends kategorien {
           echo "</td>";
 
           echo "<td>";
-//          echo "&nbsp;&nbsp;&nbsp;";
           echo "<input type=\"image\" name=\"flt_start\" src=\"".$conf_design_path."/go_start.gif\" alt=\"Anfang\">\n";
           echo "<input type=\"image\" name=\"flt_back\" src=\"".$conf_design_path."/go_back.gif\" alt=\"zurueck\">\n";
           echo "<input type=\"image\" name=\"flt_for\" src=\"".$conf_design_path."/go_forward.gif\" alt=\"vor\">\n";
           echo "<input type=\"image\" name=\"flt_end\" src=\"".$conf_design_path."/go_end.gif\" alt=\"Ende\">\n";
           echo "</td>";
-          //echo "&nbsp;&nbsp;&nbsp;";
-  /*
           echo "<td>";
-          if ($_SESSION [filter_gelesen] == 0)  {
-            echo "<input name=\"filter_gelesen\" type=\"checkbox\">\n";
-          } else {
-            echo "<input name=\"filter_gelesen\" type=\"checkbox\" checked=\"checked\">\n";
-          }
-          echo "gelesene&nbsp;\n";
-          echo "</td>";
-  */
-
-          echo "<td>";
-
           if ($_SESSION [filter_erledigt] == 0)  {
             echo "<input name=\"filter_erledigt\" type=\"checkbox\">\n";
           } else {
@@ -353,7 +256,6 @@ class Listen extends kategorien {
         echo "<td>";
         echo "<input name=\"filter_submit\" value=\"einstellen\" type=\"submit\">\n";
         echo "</td>";
-//        echo "</form>";
         echo "\n<form action=\"".$conf_4f ["MainURL"]."\" method=\"get\" target=\"mainframe\">\n";
         echo "<td>";
         if (isset ($_SESSION ["flt_search"]) ) { $defvalue = $_SESSION ["flt_search"] ;}
@@ -370,29 +272,20 @@ class Listen extends kategorien {
 
         echo "</tr>";
         echo "</tbody></table>";
-//        echo "</fieldset>\n";
-
       break;
-
-
     }
-
-
-//    echo "</form>\n";
-
     if ( debug ) { echo "<!-- ENDE file:liste.php fkt:darstellungsart -->\n"; }
   }
 
-/******************************************************************************\
-  Funktion:  listen_navi ()
-SELECT * FROM `nv_nachrichten` WHERE `00_lfd` IN
+  /******************************************************************************\
+    Funktion:  listen_navi ()
+  SELECT * FROM `nv_nachrichten` WHERE `00_lfd` IN
 
-(SELECT msg FROM `nv_masterkategolink` WHERE `katego` = (
+  (SELECT msg FROM `nv_masterkategolink` WHERE `katego` = (
 
-SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
+  SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
 
-\******************************************************************************/
-
+  \******************************************************************************/
   function  listen_navi (){
     include ("../4fcfg/config.inc.php");
     echo "<input type=\"image\" name=\"flt_start\" src=\"".$conf_design_path."/go_start.gif\" alt=\"Anfang\">\n";
@@ -402,15 +295,15 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
   }
 
 
-/******************************************************************************\
-  Funktion:  kategoliste
-SELECT * FROM `nv_nachrichten` WHERE `00_lfd` IN
+  /******************************************************************************\
+    Funktion:  kategoliste
+  SELECT * FROM `nv_nachrichten` WHERE `00_lfd` IN
 
-(SELECT msg FROM `nv_masterkategolink` WHERE `katego` = (
+  (SELECT msg FROM `nv_masterkategolink` WHERE `katego` = (
 
-SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
+  SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
 
-\******************************************************************************/
+  \******************************************************************************/
 
   var $db_server;
   var $db_benutzer;
@@ -456,8 +349,6 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
       $this->db_tablname   = $this->db_tbl."_katego";
       $this->db_tablnamelk = $this->db_tbl."_kategolink";
     }
-// $this->db_master_katego = $conf_4f_tbl ["masterkatego"] ;
-
     $this->db_server   = $conf_4f_db ["server"];
     $this->db_benutzer = $conf_4f_db ["user"];
     $this->db_passwort = $conf_4f_db ["password"];
@@ -473,10 +364,6 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
 
     $db_check = mysql_select_db ($this->db_name, $this->db_hndl)
        or die ("[read_table] Auswahl der Datenbank fehlgeschlagen");
-/*
-    $result = mysql_ping  ($this->db_hndl);
-    return ($result);
-*/
   }
 
 
@@ -494,9 +381,6 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
         $this->masterresult[$i] = mysql_fetch_assoc($query_result);
       }
       mysql_free_result($query_result);
-
-  //echo "<br>RESULT:"; var_dump ($this->masterresult); echo "<br>";
-
       $this->set_katego_para ("user");
       $this->sqlquery = "SELECT * FROM `".$this->db_tablname."` WHERE 1  ORDER BY `kategorie`;";
       $query_result = mysql_query ($this->sqlquery, $this->db_hndl) or
@@ -507,20 +391,11 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
         $this->userresult[$i] = mysql_fetch_assoc($query_result);
       }
       mysql_free_result($query_result);
-
-  //echo "<br>RESULT:"; var_dump ($this->userresult); echo "<br>";
-
       $mastercount = COUNT($this->masterresult) ;
       $usercount   = COUNT($this->userresult) ;
       if (isset ($_SESSION [global_katego])) {
         $kategoselected = $_SESSION [global_katego];
       }
-
-        // MASTER Kategorie
-//                 style=\"border-top-color:#DCDCFF; border-left-color:#DCDCFF; border-right-color:#DCDCFF; border-bottom-color:#000000; border-width:1px; border-style:solid; padding:0px\"
-//      echo "<div style=\"background-color:#FFC8C8; border-bottom-color:#FFC8C8; border-top-color:#FFC8C8; border-right-color:#FFC8C8; border-left-color:#FFC8C8; border-width:2px; border-style:solid; padding:5px;\">\n";
-
-
       if ($mastercount != 0){
         echo "<div style=\"height:20px; background-color:#FFC8C8; border-top-color:#FFC8C8; border-left-color:#FFC8C8; border-right-color:#FFC8C8; border-bottom-color:#000000; border-width:2px; border-style:solid; padding-top:10px; padding-bottom:0px;\">\n";
         if (!isset($_SESSION [ma_katego])){$color = "red";}else{$color = "lightred";}
@@ -532,9 +407,7 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
 
         for ($i=1; $i<= $mastercount; $i++) {
           if ( $this->masterresult[$i]["kategorie"] == "" ) {
-            //echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
             echo "<a><img src=\"null.gif\" alt=\"leer\"></a>\n";
-
           } else {
             if ( ($_SESSION [ma_katego] == $this->masterresult[$i]["kategorie"]) AND
                  ($_SESSION [ma_kategotyp] == "global") ){$color = "red";}else{$color = "lightred";}
@@ -547,12 +420,6 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
         }
         echo "</div>";
       }
-
-
-
-        // BENUTZER Kategorie
-//      echo "<div style=\"background-color:#C8FFC8; border-top-color:#C8FFC8;border-bottom-color:#C8FFC8; border-right-color:#C8FFC8; border-left-color:#C8FFC8; border-bottom-color:#000000; border-width:1px; border-style:solid; padding-bottom:0px;padding:5px\">";
-
       if ($usercount != 0){
         echo "<div style=\"height:19px; background-color:#C8FFC8; border-top-color:#C8FFC8; border-left-color:#C8FFC8; border-right-color:#C8FFC8; border-bottom-color:#000000; border-width:2px; border-style:solid; padding-top:10px; padding-bottom:1px; margin-bottom:10px;\">\n";
         if (!isset($_SESSION [us_katego])){$color = "green";}else{$color = "lightgreen";}
@@ -577,78 +444,11 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
         }
         echo "</div>";   //echo "<p>";
       }
-
     }
   }
 
 
 
-/******************************************************************************\
-  Funktion: get_list ()
-  SESSION=Array (
-
-     [filter_gelesen] => 1    zeige gelesene
-     [filter_erledigt] => 1   zeige erledigte
-     [filter_start] => 1
-     [filter_position] => 1
-     [filter_darstellung] => 1
-     [filter_anzahl] => 5 ) #
-
-     $katego === leer , "global" oder "user"
-
-
-      SELECT
-        nv_nachrichten.`00_lfd`,
-        nv_nachrichten.`09_vorrangstufe`,
-        nv_nachrichten.`04_richtung`,
-        nv_nachrichten.`04_nummer`,
-        nv_nachrichten.`10_anschrift`,
-        nv_nachrichten.`12_abfzeit`,
-        nv_nachrichten.`12_inhalt`,
-        nv_nachrichten.`13_abseinheit`,
-        nv_nachrichten.`14_funktion`,
-        nv_nachrichten.`16_empf`,
-        nv_nachrichten.`X00_status`,
-        nv_nachrichten.`x01_abschluss`,
-        nv_masterkatego.`kategorie` as "Masterkatego",
-        usr_s2_mk_katego.`kategorie` as "UserKatego"
-
-      FROM
-        `nv_nachrichten`,
-        `usr_s2_mk_kategolink`,
-        `usr_s2_mk_katego`,
-        `nv_masterkategolink`,
-        `nv_masterkatego`
-
-      WHERE
-        (( `nv_nachrichten`.`16_empf` like "%S2%" ) OR ( `nv_nachrichten`.`16_empf` like "%alle%" )) AND (`nv_nachrichten`.`00_lfd` NOT IN ( select `usr_s2_mk_erl`.`nachnum` from `usr_s2_mk_erl` where 1))
-
-        AND (`nv_nachrichten`.`00_lfd` = `usr_s2_mk_kategolink`.`msg`)
-        AND (`usr_s2_mk_katego`.`lfd`  = `usr_s2_mk_kategolink`.`katego`)
-        AND (`usr_s2_mk_katego`.`kategorie` = "EA1")
-
-        AND (`nv_nachrichten`.`00_lfd` = `nv_masterkategolink`.`msg`)
-        AND (`nv_masterkatego`.`lfd`  = `nv_masterkategolink`.`katego`)
-        AND (`nv_masterkatego`.`kategorie` = "Allg")
-
-
-      ORDER BY `12_abfzeit` DESC, `09_vorrangstufe` DESC
-
-
-
-   --> Masterkatego = "Alle"
-      GET=array(2) { ["ma_ktgotyp"]=>  string(6) "global" ["ma_ktgo"]=>  string(4) "alle" } #
-
-   --> Masterkatego = "Allg"
-      GET=array(2) { ["ma_ktgotyp"]=>  string(6) "global" ["ma_ktgo"]=>  string(4) "Allg" } #
-
-   --> Userkatego = "Alle"
-      GET=array(2) { ["us_ktgotyp"]=>  string(4) "user" ["us_ktgo"]=>  string(4) "alle" } #
-
-   --> Userkatego = "EA1"
-      GET=array(2) { ["us_ktgotyp"]=>  string(4) "user" ["us_ktgo"]=>  string(3) "EA1" } #
-
-\******************************************************************************/
   function get_list (){
     echo "\n\n\n<!-- ANFANG file:liste.php fkt:createlist -->";
     include ("../4fcfg/config.inc.php");
@@ -679,44 +479,6 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
 
     $query_from_arg   = $conf_4f_tbl ["nachrichten"] ;
       // Kategorien Master und User die im Query erscheinen müssen
-/*
-    if (  ($_SESSION["filter_darstellung"] == "1" ) AND
-         !(isset($_SESSION[flt_search])) ) {
-      if (isset($_SESSION[ma_kategotyp])) {
-          $query_select_ma_arg .= ",".$conf_4f_tbl ["masterkatego"].".`kategorie`";
-          $query_from_ma_arg .= ",".$conf_4f_tbl ["masterkatego"].",".$conf_4f_tbl ["masterkategolk"];
-      }
-      if (isset($_SESSION[us_kategotyp])) {
-          $query_select_us_arg .= ",".$tblusername."_katego.`kategorie`";
-          $query_from_us_arg .= ",".$tblusername."_katego, ".$tblusername."_kategolink ";
-      }
-    }
-
-
-    if (  ($_SESSION["filter_darstellung"] == "1" ) AND
-         !(isset($_SESSION[flt_search])) ) {
-      $query_select_ma_arg .= ",".$conf_4f_tbl ["masterkatego"].".`kategorie`";
-      $query_from_ma_arg .= ",".$conf_4f_tbl ["masterkatego"].",".$conf_4f_tbl ["masterkategolk"];
-      $query_select_us_arg .= ",".$tblusername."_katego.`kategorie`";
-      $query_from_us_arg .= ",".$tblusername."_katego, ".$tblusername."_kategolink ";
-    }
-*/
-
-
-/*
-   --> Masterkatego = "Alle"
-      GET=array(2) { ["ma_ktgotyp"]=>  string(6) "global" ["ma_ktgo"]=>  string(4) "alle" } #
-
-   --> Masterkatego = "Allg"
-      GET=array(2) { ["ma_ktgotyp"]=>  string(6) "global" ["ma_ktgo"]=>  string(4) "Allg" } #
-
-   --> Userkatego = "Alle"
-      GET=array(2) { ["us_ktgotyp"]=>  string(4) "user" ["us_ktgo"]=>  string(4) "alle" } #
-
-   --> Userkatego = "EA1"
-      GET=array(2) { ["us_ktgotyp"]=>  string(4) "user" ["us_ktgo"]=>  string(3) "EA1" } #
-*/
-       // $_GET["ma_ktgotyp"]
 
     if (  ($_SESSION["filter_darstellung"] == "1" ) AND !(isset($_SESSION[flt_search])) ) {
 
@@ -731,18 +493,9 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
           $query_from_us_arg .= ",".$tblusername."_katego, ".$tblusername."_kategolink ";
       }
     }
-/*
-echo "<br>query_select_ma_arg=-=".$query_select_ma_arg."<br>";
-echo "<br>query_from_ma_arg=-=".$query_from_ma_arg."<br>";
-echo "<br>query_select_us_arg=-=".$query_select_us_arg."<br>";
-echo "<br>query_from_us_arg=-=".$query_from_us_arg."<br>";
-*/
       // Für wenn sind die Meldungen bestimmt
     $query_where_arg1 = "(( `".$conf_4f_tbl ["nachrichten"]."`.`16_empf` like \"%".$_SESSION["vStab_funktion"]."%\" ) OR
                           ( `".$conf_4f_tbl ["nachrichten"]."`.`16_empf` like \"%alle%\" ))";
-
-//    if ($_SESSION [filter_erledigt] != 1){$donewhat = " NOT ";} else {$donewhat = " ";}
-
     if ($_SESSION["filter_darstellung"] == "1" ){
       if ($_SESSION [filter_gelesen]  == 1){
         $query_where_arg2 = " AND (`".$conf_4f_tbl ["nachrichten"]."`.`00_lfd` ".$readwhat." IN
@@ -750,27 +503,18 @@ echo "<br>query_from_us_arg=-=".$query_from_us_arg."<br>";
       } else {
         $query_where_arg2 = "";
       }
-
       if ( ($_SESSION [filter_erledigt] == 1) OR ($_SESSION [filter_unerledigt] == 1) ) {
-
         $query_where_arg3 = " AND ((";
-
         if ($_SESSION [filter_erledigt] == 1){
           $query_where_arg3 .= "(`".$conf_4f_tbl ["nachrichten"]."`.`00_lfd` ".$donewhat." IN
                     ( select `".$fkttblname."_erl`.`nachnum` from `".$fkttblname."_erl` where 1))";}
-
         if ( ($_SESSION [filter_erledigt] == 1) AND
              ($_SESSION [filter_unerledigt] == 1) ) { $query_where_arg3 .= ") OR ("; }
-
         if ($_SESSION [filter_unerledigt] == 1){
           $query_where_arg3 .= "(`".$conf_4f_tbl ["nachrichten"]."`.`00_lfd` ".$donewhat." NOT IN
                     ( select `".$fkttblname."_erl`.`nachnum` from `".$fkttblname."_erl` where 1))";}
-
         $query_where_arg3 .= " ))";
       } else {$query_where_arg3 = " ";}
-
-
-
       $query_where_arg4 = "";
       if (isset($_SESSION[ma_katego])){
         $query_where_arg4 = " AND (".$conf_4f_tbl ["nachrichten"].".`00_lfd` = `".$conf_4f_tbl ["masterkategolk"]."`.`msg`)".
@@ -783,18 +527,10 @@ echo "<br>query_from_us_arg=-=".$query_from_us_arg."<br>";
                             " AND (`".$tblusername."_katego`.`lfd` = `".$tblusername."_kategolink`.`katego`)".
                             " AND  (`".$tblusername."_katego`.`kategorie` = \"".$_SESSION["us_katego"]."\")";
       }
-
     } else {
      $query_where_arg2 = "";  $query_where_arg3 ="";   $query_where_arg4 = "";
     }
-
-//    $query_orderby_arg = "`12_abfzeit` DESC, `09_vorrangstufe` DESC ";
     $query_orderby_arg = "`04_nummer` DESC, `09_vorrangstufe` DESC ";
-/*
-echo "<br><big>query_where_arg3=-= ".$query_where_arg3."</big><br>";
-echo "<br><big>query_where_arg4=-= ".$query_where_arg4."</big><br>";
-echo "<br><big>query_where_arg5=-= ".$query_where_arg5."</big><br>";
-*/
     if (isset ($_SESSION["flt_search"])) {
       $query_search = "(".
           "(".$conf_4f_tbl ["nachrichten"].".`04_nummer` LIKE \"%".$_SESSION["flt_search"]."%\") OR ".
@@ -808,9 +544,6 @@ echo "<br><big>query_where_arg5=-= ".$query_where_arg5."</big><br>";
 
       $query = "SELECT ".$query_select_arg.$query_select_ma_arg.$query_select_us_arg." FROM ".$query_from_arg.$query_from_ma_arg.$query_from_us_arg." WHERE ".
                $query_where_arg1." AND ".$query_search." ORDER BY ".$query_orderby_arg ;
-
-//      unset ($_SESSION["flt_search"]);
-
     } else {
       $query_search = "";
       $querycount = "SELECT COUNT(*) FROM ".$query_from_arg.$query_from_ma_arg.$query_from_us_arg." WHERE ".
@@ -863,18 +596,13 @@ echo "<br><big>query_where_arg5=-= ".$query_where_arg5."</big><br>";
         }
         unset ($_SESSION [flt_navi]);
       }
-// FehlerHL     if ($_SESSION["filter_anzahl"] == ""){$_SESSION["filter_anzahl"] = 5 ;}
       $query .= " LIMIT ".$_SESSION["filter_start"].",".$_SESSION["filter_anzahl"];
     }
       // Zunächst holen wir alls Meldungen mit den entsprechenden Kriterien
     $query = $query_select.$query;
     if ( debug == true ){ echo "<big>"; echo "QUERY [get_list] =:=".$query;echo "</big><br><br>"; }
-
     $result = $dbaccess->query_table ($query);
-
-//    if ( debug == true ){ echo "<big>RESULT [get_list] ="; var_dump ($result); echo "</big><br>"; }
     return ($result);
-
   }
 
 
@@ -891,16 +619,11 @@ echo "<br><big>query_where_arg5=-= ".$query_where_arg5."</big><br>";
     switch ($this->listenart){
 
       case "FMA":           /***** F M A ****/
-
         $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
                              $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
-
         $query = "SELECT `00_lfd`,`07_durchspruch`, `08_befhinweis`, `08_befhinwausw`,`09_vorrangstufe`, `10_anschrift`, `12_abfzeit`, `12_inhalt` FROM `".$conf_4f_tbl ["nachrichten"]."`
                   WHERE ((`04_richtung` = \"A\") AND (`03_datum` = 0) AND (`03_zeichen` = \"\")) order by `09_vorrangstufe` DESC, `12_abfzeit` ; ";
         $result = $dbaccess->query_table ($query);
-
-//        echo "<big><big><big>Nachrichten im Ausgang zur Bef&ouml;rderung!</big></big></big>";
-
         if ($result != "" ){
           echo "<table style=\"text-align: center; background-color: rgb(255, 255, 255); \" border=\"1\" cellpadding=\"10\" cellspacing=\"1\">\n<tbody>\n";
           echo "<tr style=\"background-color: rgb(0,0,0); color:#FFFFFF; font-weight:bold;\">\n";
@@ -909,7 +632,6 @@ echo "<br><big>query_where_arg5=-= ".$query_where_arg5."</big><br>";
           echo "<td>Anschr</td>\n";
           echo "<td>Inhalt</td>\n";
           echo "</tr>";
-
           foreach ($result as $row){
             if ( ( $row["09_vorrangstufe"] != "" ) and ($row["09_vorrangstufe"] != "eee")){
               echo "<tr style=\"background-color: rgb(255,255,100); color:#FFFFFF; font-weight:bold;\">\n";
@@ -924,26 +646,18 @@ echo "<br><big>query_where_arg5=-= ".$query_where_arg5."</big><br>";
         } else {// if $result != ""
           echo "<big><big><big>Zur Zeit keine Meldung im Ausgang</big></big></big>";
         }
-
       break;
-
 
       case "Stab_lesen":  // ******  S T A B    l e s e n *****
         /*
           Hole die Liste der gelesenen und der erledigten Nachrichten
         */
         $result = $this->get_list ("global");
-
         $this->darstellungs_art ( $this->listenart );
-
         $dbschongelesen = list_of_readed_msg () ;
         $dbschonerledigt = list_of_done_msg () ;
-//        echo "<big><big><big>"; //Nachrichten im Eingang!</big></big></big>";
         $this->kategoliste ();
-
         $this->listen_navi () ;  //Navigationsbutton
-
-
         if  ($result != "") {
           echo "<table style=\"text-align: center; background-color: rgb(255,255,255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
           echo "<tr style=\"background-color: rgb(240,240,200); color:#000000; font-weight:bold;\">\n";
@@ -959,24 +673,15 @@ echo "<br><big>query_where_arg5=-= ".$query_where_arg5."</big><br>";
           echo "<th align=\"center\">";
           echo "<p><img src=\"".$conf_design_path."/transport.gif\" alt=\"Transportstatus\"></p>";
           echo "</td>\n";
-
           echo "<th>Vorrang</th>\n";
-
           echo "<th>E/A</th>\n";
-
           echo "<th>Num</th>\n";
-
           echo "<th>Von</th>";
-
           echo "<th>An</th>";
-
           echo "<th>Abfasszeit</th>\n";
-
           echo "<th>Inhalt</th>\n";
-
           echo "</tr>";
           // zeilenweise Anzeige der Datenbankanfrage
-
           foreach ($result as $row){
              $hilf = $this->explodereceiver ( $row ["16_empf"] );
              $receivercolor = $hilf [ $_SESSION [vStab_funktion] ]; // Empfaenger dieser Zeile
@@ -988,20 +693,15 @@ echo "<br><big>query_where_arg5=-= ".$query_where_arg5."</big><br>";
                default:    $receiverbackground = $cfg ["lbg"] ["dflt"];
              }
              echo "<tr style=\"background-color: ".$receiverbackground."; color:#FFFFFF; font-weight:bold;\">\n";
-
              // Liegt eine Vorrangstufe vor!!!
              $vorrang = ( ( $row["09_vorrangstufe"] != "") and ( $row["09_vorrangstufe"] != "eee" ) );
-
              // 1. Spalte schon gelesen?
-
              $schongelesen = false;
-
              if ($dbschongelesen != "") {
                if ( in_array ( $row["00_lfd"], $dbschongelesen ) ) {
                  $schongelesen = true;
                }
              }
-
 
              if ( $vorrang ){
                if ( $schongelesen ){
@@ -1050,7 +750,6 @@ echo "<br><big>query_where_arg5=-= ".$query_where_arg5."</big><br>";
                  echo "</td>\n";
              }
 
-
                // Status für ausgehende Nachrichten
              echo "<td align=\"center\">";
              if ( ( $row["04_richtung"] == "A") ){
@@ -1073,7 +772,6 @@ echo "<br><big>query_where_arg5=-= ".$query_where_arg5."</big><br>";
              }
              echo "</td>\n";
 
-
              echo "<td>";
               // Vorrangstufe
              if ( ( $row["09_vorrangstufe"] != "") and ( $row["09_vorrangstufe"] != "eee" ) ) {
@@ -1085,8 +783,6 @@ echo "<br><big>query_where_arg5=-= ".$query_where_arg5."</big><br>";
              echo "<td>"; if (($row["04_richtung"] != "")) { echo "<a href=\"mainindex.php?stab=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["04_richtung"]."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
               // Nachweisnummer
              echo "<td>"; if (($row["04_nummer"] != "")) { echo "<a href=\"mainindex.php?stab=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["04_nummer"]."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
-
-/**********************************/
               // Muss der Absender oder die Absendende Einheit unter von / an
              if ($row["04_richtung"] == "A" ) { // von = 14_funktion an=10_anschrift
                 // Ausgang VON
@@ -1125,8 +821,6 @@ echo "<br><big>query_where_arg5=-= ".$query_where_arg5."</big><br>";
                }
                echo "</td>\n";
              }
-
-/**********************************/
              echo "<td>";
              if (($row["12_abfzeit"] != "")) {
                $arr    = convdatetimeto ($row["12_abfzeit"]);
@@ -1144,20 +838,16 @@ echo "<br><big>query_where_arg5=-= ".$query_where_arg5."</big><br>";
                echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
              }
              echo "</td>\n";
-
              echo "</tr>";
-
           }  // foreach $result
         }
         echo "</tbody></table>";
-
         $this->listen_navi () ;  //Navigationsbutton
-
       break;
 
 
       case "Stab_sichten":   /*********** S t a b   s i c h t e n ************/
-        if (debug){echo "<big><b>---Stab_sichten---878</b></big><br>";}
+        if (debug){echo "<big><b>---Stab_sichten---850</b></big><br>";}
         $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
                              $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
         $query = "SELECT `00_lfd`,`07_durchspruch`,
@@ -1176,9 +866,6 @@ echo "<br><big>query_where_arg5=-= ".$query_where_arg5."</big><br>";
                   order by `09_vorrangstufe` DESC, `12_abfzeit`; ";
 
         $result = $dbaccess->query_table ($query);
-
-
-//        echo "<big><big><big>Nachrichten zur Sichtung!</big></big></big>";
         if ($result != "" ){
           echo "<table style=\"text-align: center; background-color: rgb(255, 255, 255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
           echo "<tr style=\"background-color: rgb(240,240,200); color:#000000; font-weight:bold;\">\n";
@@ -1233,9 +920,6 @@ echo "<br><big>query_where_arg5=-= ".$query_where_arg5."</big><br>";
                                WHERE 1 order by 04_nummer DESC, 09_vorrangstufe DESC ; ";          //
 
         $result = $dbaccess->query_table ($query);
-
-//        echo "<big><big><big>Alle Nachrichten! </big></big></big>";
-
         if  ($result != ""){
           echo "<table style=\"text-align: center; background-color: rgb(250,250, 250); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
           echo "<tr style=\"background-color: rgb(240,240,200); color:fm=meldung&0000FF; font-weight:bold;\">\n";
@@ -1256,8 +940,6 @@ echo "<br><big>query_where_arg5=-= ".$query_where_arg5."</big><br>";
           echo "</tr>";
 
           foreach ($result as $row){
-//            echo "row ==> ";   var_dump ($row); echo "<br><br>";
-
              // VORRANGSTUFE
              if ( ( $row["09_vorrangstufe"] != "") and ( $row["09_vorrangstufe"] != "eee" ) ){
                echo "<tr style=\"background-color: rgb(255,255,0); color:fm=meldung&FFFFFF; font-weight:bold;\">\n";
@@ -1322,21 +1004,21 @@ echo "<br><big>query_where_arg5=-= ".$query_where_arg5."</big><br>";
              for ( $i=1; $i<= count ($conf_empf); $i++ ) {
                if ( ( $conf_empf [$i]["fkt"] != "Si" ) and ( $conf_empf [$i]["fkt"] != "A/W" ) ) {
                  switch ($empfcolor [$conf_empf [$i][fkt]]) {
-                                        case "rt":
-                                         echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["rt"]."; \">";
-                                         echo "X";
-                                        break;
-                                        case "gn":
-                                         echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["gn"]."; \">";
-                                         echo "X";
-                                        break;
-                                        case "bl":
-                                         echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["bl"]."; \">";
-                                         echo "X";
-                                        break;
-                                        default:
-                                         echo "<td style=\"text-align: center; background-color: rgb(250, 250, 250); \">";
-                                         echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
+                  case "rt":
+                   echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["rt"]."; \">";
+                   echo "X";
+                  break;
+                  case "gn":
+                   echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["gn"]."; \">";
+                   echo "X";
+                  break;
+                  case "bl":
+                   echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["bl"]."; \">";
+                   echo "X";
+                  break;
+                  default:
+                   echo "<td style=\"text-align: center; background-color: rgb(250, 250, 250); \">";
+                   echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
                  }
                  echo "</td>";
                }
@@ -1358,35 +1040,16 @@ echo "<br><big>query_where_arg5=-= ".$query_where_arg5."</big><br>";
         echo "</tbody></table>";
       break; // case SIADMIN
 
-
-
       case "FmNwE":  // *****  F M N W E ingang ******
-
         $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
                              $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
         $query = "SELECT `00_lfd`,`09_vorrangstufe`,`04_richtung`, `04_nummer`, `10_anschrift`,
                          `12_abfzeit`, `12_inhalt`, `13_abseinheit`, `x01_abschluss`
                   FROM `".$conf_4f_tbl ["nachrichten"]."`
                   WHERE 04_richtung = \"E\" order by 04_nummer ASC ; ";
-// echo "query=".$query."<br>";
         $result = $dbaccess->query_table ($query);
-/*
-        pre_html ("N","Nachweis E ".$conf_4f ["NameVersion"]); // Normaler Seitenaufbau ohne Auffrischung
-
-        echo "<style type=\"text/css\">";
-        echo "body { font-family:Arial,sans-serif; }";
-
-        echo "a:link { color:#EE0000; text-decoration:none; font-weight:bold; }";
-        echo "a:visited { color:#EEAAAA; text-decoration:none; font-weight:bold; }";
-        echo "a:hover { color:#EE0000; text-decoration:none; background-color:#FFFF99; font-weight:normal; }";
-        echo "a:active { color:#0000EE; background-color:#FFFF99; font-weight:normal; }";
-        echo "a:focus { color:#00AA00; background-color:#FFFF77; font-weight:normal; }";
-        echo "</style>";
-*/
         echo "<p align=\"center\"><big><big><big><b>Nachweisung Eingang</b></big></big></big></p>";
-
         if ( $result != "" ){
-
           echo "<table style=\"text-align: center; background-color: rgb(255,255,255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
           echo "<tr style=\"background-color: rgb(240,240,200); color:#000000; font-weight:bold;\">\n";
           echo "<td>Vorrang</td>\n";
@@ -1399,7 +1062,6 @@ echo "<br><big>query_where_arg5=-= ".$query_where_arg5."</big><br>";
           if  ( $result != "" ) {
             foreach ($result as $row){
                echo "<td>";
-
                if ( ( $row["09_vorrangstufe"] != "") and
                     ( $row["09_vorrangstufe"] != "eee" ) ) {
                  echo "<a>".$row["09_vorrangstufe"]."</a>\n" ;
@@ -1447,24 +1109,8 @@ echo "<br><big>query_where_arg5=-= ".$query_where_arg5."</big><br>";
                          `12_abfzeit`, `12_inhalt`, `13_abseinheit`, `x01_abschluss`
                   FROM `".$conf_4f_tbl ["nachrichten"]."`
                   WHERE 04_richtung = \"A\" order by 04_nummer ASC ; ";
-// echo "query=".$query."<br>";
         $result = $dbaccess->query_table ($query);
-
-/*
-        pre_html ("N","Nachweis A".$conf_4f ["NameVersion"]); // Normaler Seitenaufbau mit Auffrischung
-
-        echo "<style type=\"text/css\">";
-        echo "body { font-family:Arial,sans-serif; }";
-
-        echo "a:link { color:#EE0000; text-decoration:none; font-weight:bold; }";
-        echo "a:visited { color:#EEAAAA; text-decoration:none; font-weight:bold; }";
-        echo "a:hover { color:#EE0000; text-decoration:none; background-color:#FFFF99; font-weight:normal; }";
-        echo "a:active { color:#0000EE; background-color:#FFFF99; font-weight:normal; }";
-        echo "a:focus { color:#00AA00; background-color:#FFFF77; font-weight:normal; }";
-        echo "</style>";
-*/
         echo "<p align=\"center\"><big><big><big><b>Nachweisung Ausgang</b></big></big></big></p>";
-
         if ( $result != "" ){
           echo "<table style=\"text-align: center; background-color: rgb(255,255,255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
           echo "<tr style=\"background-color: rgb(240,240,200); color:#000000; font-weight:bold;\">\n";
@@ -1523,24 +1169,8 @@ echo "<br><big>query_where_arg5=-= ".$query_where_arg5."</big><br>";
                          `04_nummer`, `10_anschrift`, `12_inhalt`, `13_abseinheit`,`14_zeichen`, `x01_abschluss`
                   FROM `".$conf_4f_tbl ["nachrichten"]."`
                   WHERE 1 order by 04_nummer ASC ; ";
-// echo "query=".$query."<br>";
         $result = $dbaccess->query_table ($query);
-
-/*
-        pre_html ("N","Nachweis A ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"]); // Normaler Seitenaufbau mit Auffrischung
-
-        echo "<style type=\"text/css\">";
-        echo "body { font-family:Arial,sans-serif; }";
-
-        echo "a:link { color:#EE0000; text-decoration:none; font-weight:bold; }";
-        echo "a:visited { color:#EEAAAA; text-decoration:none; font-weight:bold; }";
-        echo "a:hover { color:#EE0000; text-decoration:none; background-color:#FFFF99; font-weight:normal; }";
-        echo "a:active { color:#0000EE; background-color:#FFFF99; font-weight:normal; }";
-        echo "a:focus { color:#00AA00; background-color:#FFFF77; font-weight:normal; }";
-        echo "</style>";
-*/
         echo "<p align=\"center\"><big><big><big><b>Nachweisung Eingang / Ausgang</b></big></big></big></p>";
-
         if ( $result != "" ){
           echo "<table style=\"text-align: center; background-color: rgb(255,255,255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
           echo "<tr style=\"background-color: rgb(240,240,200); color:#000000; font-weight:bold;\">\n";
@@ -1549,10 +1179,10 @@ echo "<br><big>query_where_arg5=-= ".$query_where_arg5."</big><br>";
           echo "<td>Num</td>\n";
           echo "<td>Von/An</td>";
           echo "<td>Aufnahme</td>\n";
-          echo "<td>Aufn.Z</td>\n";
+//          echo "<td>Aufn.Z</td>\n";
           echo "<td>Annahme</td>\n";
           echo "<td>Bef&ouml;rder</td>\n";
-          echo "<td>Verfasser</td>\n";
+//          echo "<td>Verfasser</td>\n";
           echo "<td>Inhalt</td>\n";
           echo "</tr>";
           if  ($result != "") {
@@ -1588,6 +1218,16 @@ echo "<br><big>query_where_arg5=-= ".$query_where_arg5."</big><br>";
                }
                echo "</td>";
 // Aufn. Zeichen
+                 // Aufn. Zeichen
+/*              echo "<td>";
+               if (($row["01_zeichen"] != "")) {
+                 echo "<a>".$row["01_zeichen"]."</a>\n"; }
+               else {
+                 echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
+               }
+               echo "</td>\n";
+*/
+/*
                echo "<td>";
                if (($row["01_zeichen"] != "")) {
                  echo "<a>".$row["01_zeichen"]."</a>\n"; }
@@ -1595,6 +1235,7 @@ echo "<br><big>query_where_arg5=-= ".$query_where_arg5."</big><br>";
                  echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
                }
                echo "</td>\n";
+*/
                echo "<td>";
                if (($row["02_zeit"] != "") and ( $row["02_zeit"] != "0000-00-00 00:00:00" )) {
                  $arr    = convdatetimeto ($row["02_zeit"]);
@@ -1614,15 +1255,15 @@ echo "<br><big>query_where_arg5=-= ".$query_where_arg5."</big><br>";
                  echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
                }
                echo "</td>\n";
-// Verfasser
-               echo "<td>";
+                 // Verfasser
+/*               echo "<td>";
                if (($row["14_zeichen"] != "")) {
                  echo "<a>".$row["14_zeichen"]."</a>\n"; }
                else {
                  echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
                }
                echo "</td>\n";
-
+*/
                echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { echo "<a>".$row["12_inhalt"]."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
                echo "</tr>";
             }  // foreach $result
@@ -1632,8 +1273,6 @@ echo "<br><big>query_where_arg5=-= ".$query_where_arg5."</big><br>";
           echo "<big><big><big>Keine Daten vorhanden!</big></big></big>";
         }
       break;
-
-
     } // switch
   echo "<!-- ENDE file:liste.php fkt:createlist -->";
   }

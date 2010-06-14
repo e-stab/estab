@@ -3,7 +3,7 @@
 include ("../4fcfg/config.inc.php");            // Konfigurationseinstellungen und Vorgaben
 include ("../4fach/db_operation.php");          // Datenbank operationen
 include ("../4fach/data_hndl.php");             // propritäre  Datenbankoperationen
-include ("../4fcfg/para.inc.php");              // propritäre  Datenbankoperationen
+include ("../4fcfg/para.inc.php");              //
 
 
 define ("inhalt_limit",true);
@@ -1365,18 +1365,14 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
     // Zeile, Spalte 7,1  Inhalt   2048   12  Inhalt, Abfassungszeit
     12_inhalt
     \****************************************************************************/
-
     echo "<table style=\"text-align: left; width: 820px; height: 216px;\" border=\"1\" cellpadding=\"1\" cellspacing=\"0\">\n";
     echo "<tbody>\n";
     echo "<tr>\n";
-
     if  (!$this->feld[12]) {
       $param = " readonly ";}
     else {
       $param = "";}
-
     echo "<td valign=\"TOP\" style=\"background-color: ".$this->bg[12].";\">Inhalt/Text:<br>\n";
-
     if  ($this->feld[12]) {
       echo "<div style=\"text-align: center;\">";
       echo "<textarea style=\"font-size:18px; font-weight:900;\" cols=\"65\" rows=\"10\" name=\"12_inhalt\"".$param.">".$this->formdata["12_inhalt"];
@@ -1417,8 +1413,7 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
     12_abfzeit
     \****************************************************************************/
     if  ($this->formdata["12_abfzeit"] != "" ) {
-        $arr = convdatetimeto ($this->formdata["12_abfzeit"]);
-        $this->formdata["12_abfzeit"] = $arr [zeit];
+        $this->formdata["12_abfzeit"] = konv_datetime_taktime ($this->formdata["12_abfzeit"]);
     }   else {
         $this->formdata["12_abfzeit"] = "";
     }

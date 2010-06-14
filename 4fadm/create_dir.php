@@ -1,11 +1,36 @@
 <?php
+/*****************************************************************************\
+   Datei: create_dir.php
 
+   benoetigte Dateien: config.inc.php, protokoll.php, db_operation.php,
+                      4fachform.php, liste.php, data_hndl.php, menue.php
+   Beschreibung:
+           HAUPTSTEUERUNGSDATEI
+
+   (C) Hajo Landmesser IuK Kreis Heinsberg
+   mailto://hajo.landmesser@iuk-heinsberg.de
+\*****************************************************************************/
 
   include "../4fcfg/config.inc.php";
 
-
   // Hauptverzeichnis Datenbankname = Verzeichnisname
   $mainpath = $conf_web ["srvroot"].$conf_web ["pre_path"].$conf_4f ["data"]."/".$conf_4f_db ["datenbank"] ;
+    // Ist das 4fdata Verzeichnis vorhanden
+  if ( ( $conf_web ["srvroot"]  != "" ) and
+       ( $conf_web ["pre_path"] != "")  ){
+    // Ist das Verzeichnis schon vorhanden?
+    $ismaindir  = is_dir  ( $conf_web ["srvroot"].$conf_web ["pre_path"].$conf_4f ["data"] );
+    $ismainfile = is_file ( $conf_web ["srvroot"].$conf_web ["pre_path"].$conf_4f ["data"] );
+  }
+    // Wenn das 4fdata Verzeichnis nicht vorhanden ist lege es an
+  if ( !$ismaindir and !$ismainfile ){
+    $success = mkdir ( $conf_web ["srvroot"].$conf_web ["pre_path"].$conf_4f ["data"] ) ;
+  }
+  if ( $success ) {
+    chmod ( $conf_web ["srvroot"].$conf_web ["pre_path"].$conf_4f ["data"], 0777);
+    echo "-4fdata-Verzeichnis wurde angelegt(\"".$conf_web ["srvroot"].$conf_web ["pre_path"].$conf_4f ["data"]."\")";
+    echo "<br>";
+  }
 
   if ( ( $conf_web ["srvroot"]  != "" ) and
        ( $conf_web ["pre_path"] != "")  and
@@ -13,6 +38,8 @@
     // Ist das Verzeichnis schon vorhanden?
     $isdir  = is_dir  ( $mainpath );
     $isfile = is_file ( $mainpath );
+    $ismaindir  = is_dir  ( $conf_web ["srvroot"].$conf_web ["pre_path"].$conf_4f ["data"] );
+    $ismainfile = is_file ( $conf_web ["srvroot"].$conf_web ["pre_path"].$conf_4f ["data"] );
 /*
     if ( $isdir ){ echo "isdir<br>"; } else { echo "!isdir<br>"; }
     if ( $isfile){ echo "isfile<br>"; } else { echo "!isfile<br>"; }

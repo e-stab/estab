@@ -1,10 +1,18 @@
 <?php
+/*****************************************************************************\
+   Datei: katgoedt.php
+
+   benoetigte Dateien:
+
+   Beschreibung:
+
+   (C) Hajo Landmesser IuK Kreis Heinsberg
+   mailto://hajo.landmesser@iuk-heinsberg.de
+\*****************************************************************************/
 
 include_once ("../4fach/katego.php");
 include_once ("../4fcfg/config.inc.php");
 include      ("../4fcfg/fkt_rolle.inc.php");
-
-
 
 session_start ();
 
@@ -15,16 +23,11 @@ if ( debug == true ){
   echo "GET="; var_dump ($_GET);    echo "#<br><br>\n";
   echo "POST="; var_dump ($_POST);   echo "#<br><br>\n";
   echo "COOKIE="; var_dump ($_COOKIE); echo "#<br><br>\n";
-  //echo "SERVER="; var_dump ($_SERVER); echo "#<br><br>\n";
   echo "SESSION="; print_r ($_SESSION); echo "#<br>\n";
 }
-
     $berechtigt = ($_SESSION ["vStab_funktion"] == $redcopy2) OR
                   ($_SESSION ["vStab_funktion"] == "Si");
-
     if ( ( isset ( $_GET ["4fachkatego_absenden_x"] )) ) {
-
-
         // So als erstes muessen wir mal rauskriegen was überhaupt geändert worden ist.
         $om  = $_GET [kategorien_master];
         $ou  = $_GET [kategorien_user];
@@ -96,9 +99,6 @@ if ( debug == true ){
         if ($neu_u != "") {
           $katego->dblk_neu ( $_GET["msglfd"], $neu_u );
         }
-//         ELSEIF ($neu_o != "") {
-//          $katego->dblk_neu ( $_GET["msglfd"], $neu_o );
-//        }
       } ELSE {
         // Kategorie muss geändert werden
         // insert da es noch keinen Eintrag gibt
@@ -121,14 +121,8 @@ if ( debug == true ){
       unset ($_SESSION ["kat_msgno"]);
       unset ($_SESSION ["kat_tbl"]);
       unset ($_SESSION ["kat_no"]);
-
     }
 
-
-    /*GET=array(3) {
-      ["dbtyp"] =>  string(6) "master"
-      ["fkt"]   =>  string(4) "edit"
-      ["msgno"] =>  string(1) "1" } #*/
     if ( ( isset ( $_GET ["dbtyp"] )) AND
          ( isset ( $_GET ["msgno"] )) AND
          ( $_GET ["fkt"] == "edit" )) {
@@ -139,13 +133,8 @@ if ( debug == true ){
       $katego = new kategorien ($_SESSION ["kat_tbl"]);
       $katego->liste_kategorien ();
       $katego->eingabezeile ("neu","","","");
-
     }
 
-    /*GET=array(3) {
-      ["kate_todo"] =>  string(10) "editrecord"
-      ["lfd"]       =>  string(1) "1"
-      ["dbtyp"]     =>  string(6) "master" } #*/
     if ( ( isset ( $_GET ["dbtyp"] )) AND
          ( isset ( $_GET ["lfd"] )) AND
          ( $_GET ["kate_todo"] == "editrecord" )) {
@@ -159,16 +148,6 @@ if ( debug == true ){
                              $katego->result ["beschreibung"]);
     }
 
-
-    /*GET=array(8) {
-      ["kate_todo"]=>  string(6) "update"
-      ["kate_tbl"]=>  string(15) "nv_masterkatego"
-      ["kate_dbtbl"]=>  string(6) "master"
-      ["lfd"]=>  string(1) "1"
-      ["kategorie"]=>  string(3) "EA1"
-      ["beschreibung"]=>  string(18) "Einsatzabschnitt 1"
-      ["katego_absenden_x"]=>  string(2) "20"
-      ["katego_absenden_y"]=>  string(2) "11" } #*/
     if ( ( isset ( $_GET ["kate_dbtbl"] )) AND
          ( isset ( $_GET ["lfd"] )) AND
          ( $_GET ["kate_todo"] == "update" ) AND
@@ -187,30 +166,6 @@ if ( debug == true ){
       header("Location: ".$_SERVER['PHP_SELF']);
     }
 
-
-    //OK und leer
-    /*GET=array(8) {
-      ["kate_todo"]=>  string(3) "neu"
-      ["kate_tbl"]=>  string(15) "nv_masterkatego"
-      ["kate_dbtbl"]=>  string(6) "master"
-      ["lfd"]=>  string(0) ""
-      ["kategorie"]=>  string(0) ""
-      ["beschreibung"]=>  string(0) ""
-
-      ["katego_absenden_x"]=>  string(2) "16"
-      ["katego_absenden_y"]=>  string(2) "14" } #*/
-
-    // abbrechen
-    /*GET=array(8) {
-      ["kate_todo"]=>  string(3) "neu"
-      ["kate_tbl"]=>  string(15) "nv_masterkatego"
-      ["kate_dbtbl"]=>  string(6) "master"
-      ["lfd"]=>  string(0) ""
-      ["kategorie"]=>  string(0) ""
-      ["beschreibung"]=>  string(0) ""
-
-      ["katego_abbrechen_x"]=>  string(2) "36"
-      ["katego_abbrechen_y"]=>  string(1) "5" } #*/
     if ( ( isset ( $_GET ["katego_abbrechen_x"]  )) OR
          ( ( isset ( $_GET ["katego_absenden_x"] )) AND
            ( $_GET ["lfd"] == "" ) AND
@@ -232,16 +187,6 @@ if ( debug == true ){
 
 
     }
-
-    /* GET=array(8) {
-      ["kate_todo"]=>  string(3) "neu"
-      ["kate_tbl"]=>  string(15) "nv_masterkatego"
-      ["kate_dbtbl"]=>  string(6) "master"
-      ["lfd"]=>  string(0) ""
-      ["kategorie"]=>  string(3) "EA4"
-      ["beschreibung"]=>  string(45) "Einsatzabschnitt 4 Instandsetzung, Abstützung"
-      ["katego_absenden_x"]=>  string(2) "26"
-      ["katego_absenden_y"]=>  string(1) "7" } #*/
     if ( ( isset ( $_GET ["kate_dbtbl"] )) AND
          ( $_GET ["kate_todo"] == "neu" ) AND
          ( isset ( $_GET ["lfd"] )) AND
@@ -254,30 +199,8 @@ if ( debug == true ){
          $katego = new kategorien ($_SESSION ["kat_tbl"]);
          $katego->db_neu($_GET ["kategorie"], $_GET ["beschreibung"] );
        }
-/*
-      // 4fachVordruck
-      include_once ("4fachform.php"); // Formular Behandlung 4fach Vordruck
-      include_once ("../db_operation.php"); // Datenbank operationen
-      include_once ("data_hndl.php"); // Schnittstelle zur Datenbank
-
-      $formdata = get_msg_by_lfd ($_SESSION ["kat_msgno"]);
-
-      $form = new nachrichten4fach ($formdata, "Stab_lesen", "");
-       // $_SESSION löschen
-      unset ($_SESSION ["kat_msgno"]);
-      unset ($_SESSION ["kat_tbl"]);
-      unset ($_SESSION ["kat_no"]);
-*/
-
-//      if (!debug)
       header("Location: ".$_SERVER['PHP_SELF']."?dbtyp=".$_SESSION ["kat_tbl"]."&fkt=edit&msgno=".$_SESSION ["kat_msgno"]);
     }
-
-    /*GET=array(3) {
-      ["kate_todo"]=>  string(12) "deleterecord"
-      ["lfd"]=>  string(1) "2"
-      ["dbtyp"]=>  string(6) "master" } #
-    */
     if ( ( isset ( $_GET ["dbtyp"] )) AND
          ( $_GET ["kate_todo"] == "deleterecord" ) AND
          ( isset ( $_GET ["lfd"] )) ) {

@@ -29,7 +29,6 @@ class db_access {
     $this->db_table  = $newdb_table ;
     $this->db_user   = $newdb_user ;
     $this->db_pw     = $newdb_pw ;
-    // echo "Datenbankparameter = ".$this->db_server." - ".$this->db_name." - ".$this->db_table." - ".$this->db_user." - ".$this->db_pw."<br>";
   }
 
 

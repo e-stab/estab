@@ -183,48 +183,76 @@ $old_error_handler = set_error_handler("myErrorHandler");
     echo "<br>\n";
   }
 
+    // Ist die Tabelle FKTMTX vorhanden
 
-  $query = "CREATE TABLE IF NOT EXISTS `".$conf_4f_tbl ["empfmtx"]."` (
-              `mtx_lfd` bigint(11) unsigned NOT NULL auto_increment,
-              `mtx_x` int(11) NOT NULL,
-              `mtx_y` int(11) NOT NULL,
-              `mtx_typ` set('cb','t') character set latin1 collate latin1_general_ci NOT NULL,
-              `mtx_fkt` varchar(6) NOT NULL,
-              `mtx_rolle` set('Stab','FB') character set latin1 collate latin1_general_ci NOT NULL,
-              `mtx_mode` set('ro','rw') NOT NULL,
-              `mtx_rc2` tinyint(1) NOT NULL default '0',
-              `mtx_auto` tinyint(1) NOT NULL default '0',
-              PRIMARY KEY  (`mtx_lfd`)
-            ) ENGINE=MyISAM  DEFAULT CHARSET=latin1 AUTO_INCREMENT=1 ;";
+  $result = mysql_list_tables($conf_4f_db ["datenbank"]);
 
-
-  $result = mysql_query($query, $link);
   if (!$result) {
-     die('Ung&uuml;ltige Abfrage: ' . mysql_error());
-  } else {
-    echo 'Funktionsmatrixtabelle wurde angelegt.';
-    echo "<br>\n";
+    echo "DB Fehler, Tabellen können nicht angezeigt werden\n";
+    echo 'MySQL Fehler: ' . mysql_error();
+    exit;
   }
+  $fktmtxtable = false;
+  while ($row = mysql_fetch_row($result)) {
+    if ( $conf_4f_tbl ["empfmtx"] == $row [0] ) { $fktmtxtable = true; }
+  }
+  mysql_free_result($result);
 
-  $query2 = "";
-  $query1 = "INSERT INTO `".$conf_4f_tbl ["empfmtx"]."` (`mtx_x`, `mtx_y`, `mtx_typ`, `mtx_fkt`, `mtx_rolle`, `mtx_mode`) VALUES ";
-  for ($x=1; $x<=4; $x++) {
-    for ($y=1; $y<=5; $y++) {
-       $query2 .= " ($x, $y, '', '', '', '')";
-       if ( ($x == 4) and ( $y == 5 )) { $query2 .= "; "; } else { $query2 .= ", "; }
+/*
+    echo "<b><big>fktmtxtable===";
+    if ($fktmtxtable == true) {echo "TRUE";} else {echo "FALSE";};
+    echo "</big></b><br>";
+*/
+
+    // Wenn die Tabelle nicht da ist
+  if (!$fktmtxtable){
+    /*
+        erstelle Tab
+    */
+    $query = "CREATE TABLE IF NOT EXISTS `".$conf_4f_tbl ["empfmtx"]."` (
+                `mtx_lfd` bigint(11) unsigned NOT NULL auto_increment,
+                `mtx_x` int(11) NOT NULL,
+                `mtx_y` int(11) NOT NULL,
+                `mtx_typ` set('cb','t') character set latin1 collate latin1_general_ci NOT NULL,
+                `mtx_fkt` varchar(6) NOT NULL,
+                `mtx_rolle` set('Stab','FB') character set latin1 collate latin1_general_ci NOT NULL,
+                `mtx_mode` set('ro','rw') NOT NULL,
+                `mtx_rc2`  binary(1) NOT NULL default 'f',
+                `mtx_auto` binary(1) NOT NULL default 'f',
+                PRIMARY KEY  (`mtx_lfd`)
+              ) ENGINE=MyISAM  DEFAULT CHARSET=latin1 AUTO_INCREMENT=1 ;";
+
+
+    $result = mysql_query($query, $link);
+    if (!$result) {
+       die('Ung&uuml;ltige Abfrage: ' . mysql_error());
+    } else {
+      echo 'Funktionsmatrixtabelle wurde angelegt.';
+      echo "<br>\n";
+    }
+
+    $query2 = "";
+    $query1 = "INSERT INTO `".$conf_4f_tbl ["empfmtx"]."` (`mtx_x`, `mtx_y`, `mtx_typ`, `mtx_fkt`, `mtx_rolle`, `mtx_mode`) VALUES ";
+    for ($x=1; $x<=4; $x++) {
+      for ($y=1; $y<=5; $y++) {
+         $query2 .= " ($x, $y, '', '', '', '')";
+         if ( ($x == 4) and ( $y == 5 )) { $query2 .= "; "; } else { $query2 .= ", "; }
+      }
+    }
+
+    $query = $query1.$query2 ;
+
+
+    $result = mysql_query($query, $link);
+    if (!$result) {
+       die('Ung&uuml;ltige Abfrage: ' . mysql_error());
+    } else {
+      echo 'Funktionsmatrixtabelle wurde gef&uuml;lt.';
+      echo "<br>\n";
     }
   }
 
-  $query = $query1.$query2 ;
 
-
-  $result = mysql_query($query, $link);
-  if (!$result) {
-     die('Ung&uuml;ltige Abfrage: ' . mysql_error());
-  } else {
-    echo 'Funktionsmatrixtabelle wurde gef&uuml;lt.';
-    echo "<br>\n";
-  }
 
 
   $query = "CREATE TABLE IF NOT EXISTS `".$conf_4f_tbl ["benutzer"]."` (

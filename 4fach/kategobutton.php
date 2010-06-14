@@ -52,27 +52,16 @@
 
       imageline  ( $img  , $width-1, $height-1, $width-1, 0, $black  ); // linke oben nach unten
       imageline  ( $img  , $width-2, $height-1, $width-2, 0, $black  ); // linke oben nach unten
-
-
-//      imagerectangle  ( $img , 0, 0, $width-1  , $height-1, $black  ) ;
-
     } else {
       imagerectangle  ( $img , 0, 0, $width-1  , $height-1, $black  ) ;
-//      imagerectangle  ( $img , 1, 1, $width-2 , $height-2, $black  ) ;
     }
     $xpos= $height/2 ;//$i*imagefontwidth($font_size);
     $ypos= ($height-$font_size)/2-1;
-
     imagestring($img,$font_size,$xpos,$ypos,$icontext,$textcol);
-
-
     header("Content-Type: image/png");
     imagepng($img);
     imagedestroy($img);
   }
-
-
-
   if (isset ( $_GET ["icontext"] )) {
     $icontext = $_GET ["icontext"];
   } else {

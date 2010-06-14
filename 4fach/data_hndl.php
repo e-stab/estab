@@ -41,14 +41,9 @@ if (validate){
 \*******************************************************************************/
 function check_save_user () {
   $error_userlogin = false;
-
   // Als allererstes Pruefen wir mal die Formulardaten auf Vollstaedigkeit
-//echo "check_save_user GET="; var_dump ($_GET);    echo "#<br><br>\n";
   if ($_GET ["kennwort1"] != "" ){
-
     if ( ( $_GET [kuerzel] != "" ) AND ( $_GET [benutzer] != ""  ) ) {
-
-
       include ("../4fcfg/dbcfg.inc.php");
       include ("../4fcfg/e_cfg.inc.php");
        /* Die Daten in der Datenbank vorhanden?
@@ -61,131 +56,81 @@ function check_save_user () {
 
       // Daten sind in $_GET vorhanden
       $GETkuerzel = strtolower ( $_GET ["kuerzel"]);
-
       $query = "SELECT * FROM ".$conf_4f_tbl ["benutzer"]." WHERE `kuerzel` LIKE \"".$GETkuerzel."\";";
-  //    echo "query1=".$query."<br>";
-
       $result = $dbaccess->query_table ($query);
-
       if ( ( count ($result) > 0 ) AND ( $result != "" ) ){
-
-
-  //      echo "<big><big>Kürzel in der Datenbank vorhanden.</big></big><br>";
-          /* OHa - ein Eintrag ist vorhanden
-             Zwei Moeglichkeiten -
-             1. der Benutzer ist identisch ==> Daten koennen uebernommen werden
-             oder
-             2. es wird versucht sich unter anderem Namen mit gleichem Krzel anzumelden
-                 ==> Benutzer muss ein neues Kruezel waehlen.
-          */
-
         $db_result = $result [1];
+        $user_eq = ( $_GET["benutzer"] == $db_result ["benutzer"] );
+        $kuerzel_eq = ( $GETkuerzel == $db_result ["kuerzel"] );
+        $passwd_eq = ( $_GET["kennwort1"] == $db_result ["password"] );
 
-  //  echo " Ergebnis aus der Datenbank:"; var_dump ($db_result); echo "<br>";
+        $db_gleich  = ( $user_eq  AND $kuerzel_eq AND $passwd_eq);
+        $sd_gleich  = ( ( $_SESSION ["vStab_benutzer"] == $db_result [1]["benutzer"] ) AND
+                        ( $_SESSION ["vStab_kuerzel"]  == $db_result [1]["kuerzel"] ) AND
+                        ( $_SESSION ["vStab_funktion"] == $db_result [1]["benutzer"] )  );
 
-  //      if ($_GET["kennwort1"] == $db_result["password"]){
+        $sid_gleich = ( ( session_id() == $db_result ["sid"] ));
+        $ip_gleich   = ( ( $_SERVER [REMOTE_ADDR] == $db_result ["ip"] ));
 
-
-          $user_eq = ( $_GET["benutzer"] == $db_result ["benutzer"] );
-          $kuerzel_eq = ( $GETkuerzel == $db_result ["kuerzel"] );
-          $passwd_eq = ( $_GET["kennwort1"] == $db_result ["password"] );
-
-          $db_gleich  = ( $user_eq  AND $kuerzel_eq AND $passwd_eq);
-          $sd_gleich  = ( ( $_SESSION ["vStab_benutzer"] == $db_result [1]["benutzer"] ) AND
-                          ( $_SESSION ["vStab_kuerzel"]  == $db_result [1]["kuerzel"] ) AND
-                          ( $_SESSION ["vStab_funktion"] == $db_result [1]["benutzer"] )  );
-
-          $sid_gleich = ( ( session_id() == $db_result ["sid"] ));
-          $ip_gleich   = ( ( $_SERVER [REMOTE_ADDR] == $db_result ["ip"] ));
-  /*
-
-    echo "GET Kennwort1 =".$_GET["kennwort1"]."<br>";
-    echo "DB  Passwort  =".$db_result ["password"]."<br>";
-    echo "passwd_eq="; var_dump ($passwd_eq); echo "<br>";
-    echo "db_gleich="; var_dump ($db_gleich); echo "<br>";
-
-    echo "GET-benutzer=";  var_dump ( $_GET["benutzer"] ); echo "<br>";
-    echo "result-benutzer=";  var_dump ( $db_result ["benutzer"] ); echo "<br>";
-    echo "<br>";
-    echo " sd_gleich="; var_dump ($s_gleich); echo "<br>";
-    echo "ip_gleich="; var_dump ($ip_gleich); echo "<br>";
-  */
-
-      /*************************************************************************************
-
-      **********************************************************************************+++*/
-          /* Anzumeldender Benutzer ist gleich mit einem Datenbank Benutzer der angemeldet ist
-             ==> Browser ist abgestrzt
-             ==> Andere IP Adresse
-           */
-
-          if (  $db_gleich  ) {
-            /*** Wiederanmeldung ***/
-            if ($db_result ["aktiv"] == 1 ){
-              $query = "UPDATE ".$conf_4f_tbl ["benutzer"]."
-                        SET   `SID` = \"".session_id()."\",
-                               `ip` = \"".$_SERVER [REMOTE_ADDR]."\",
-                            `fwdip` = \"".$_SERVER[HTTP_X_FORWARDED_FOR]."\",
-                            `aktiv` = \"1\" WHERE `kuerzel` = \"".$GETkuerzel."\";";
-           // echo "113 Query=".$query."<br>";
-              $result = $dbaccess->query_table_iu ($query);
-              $_SESSION [menue] = "ROLLE";  // Starte Menue im Rollenmodus
-              $rolle = rollenfinder ( $_GET["funktion"] );
-              $_SESSION ["vStab_benutzer"] = $_GET["benutzer"];
-              $_SESSION ["vStab_kuerzel"]  = $GETkuerzel;
-              $_SESSION ["vStab_funktion"] = $_GET["funktion"];
-              $_SESSION ["vStab_rolle"]    = $rolle;
-              $_SESSION [menue] = "ROLLE";  // Starte Menu im Rollenmodus
-              $_SESSION [ROLLE] = $rolle;
-              protokolleintrag ("Sessiondaten neu setzen", $_SESSION[vStab_benutzer].";".$_SESSION[vStab_kuerzel].";".$_SESSION[vStab_funktion].";".$_SESSION[vStab_rolle].";".session_id().";".$_SERVER[REMOTE_ADDR]);
-            }
-            /***
-              Wiederanmeldung nach Abmeldung
-              g.g. Funktionswechsel ==> neue Datenbank fr Krzel und neuer Funktion ***/
-            if ($db_result ["aktiv"] == 0 ){
-              $rolle = rollenfinder ( $_GET["funktion"] );
-              $query = "UPDATE ".$conf_4f_tbl ["benutzer"]."
-                       SET `funktion` = \"".$_GET ["funktion"]."\",
-                           `rolle`    = \"".$rolle."\",
-                           `SID`      = \"".session_id()."\",
-                           `ip`       = \"".$_SERVER [REMOTE_ADDR]."\",
-                           `fwdip`    = \"".$_SERVER[HTTP_X_FORWARDED_FOR]."\",
-                           `aktiv`    = \"1\" WHERE kuerzel = \"".$GETkuerzel."\";";
-           // echo "136 Query=".$query."<br>";
-              $result = $dbaccess->query_table_iu ($query);
-               // Tabelle fr die Benutzerfunktion anlegen
-              if ($_GET ["funktion"] != "A/W"){
-                $usertablename = $conf_4f_tbl ["usrtblprefix"].strtolower ($_GET ["funktion"])."_".strtolower ( $_GET ["kuerzel"]);
-                $fkttblname  = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($_GET ["funktion"]);
-                $dbaccess->create_user_table ($usertablename, $fkttblname);
-              }
-              $rolle = rollenfinder ( $_GET["funktion"] );
-              $_SESSION [ROLLE] = $rolle;
-              $_SESSION ["vStab_benutzer"] = $_GET["benutzer"];
-              $_SESSION ["vStab_kuerzel"]  = $GETkuerzel;
-              $_SESSION ["vStab_funktion"] = $_GET["funktion"];
-              $_SESSION ["vStab_rolle"]    = $rolle;
-              $_SESSION ["menue"] = "ROLLE";  // Starte Menu im Rollenmodus
-              $_SESSION ["ROLLE"] = $rolle;
-              protokolleintrag ("Funktion Ummelden", $_SESSION[vStab_benutzer].";".$_SESSION[vStab_kuerzel].";".$_SESSION[vStab_funktion].";".$_SESSION[vStab_rolle].";".session_id().";".$_SERVER[REMOTE_ADDR]);
-            }
-          } ELSE { // $db_gleich
-            if (!$passwd_eq){
-              $infotext = "Passwort falsch !!<br>Das Passwort stimmen nicht überein.";
-              errorwindow( "Benutzeranmeldung", $infotext );
-              $error_userlogin = true;
-            }
+        if (  $db_gleich  ) {
+          /*** Wiederanmeldung ***/
+          if ($db_result ["aktiv"] == 1 ){
+            $query = "UPDATE ".$conf_4f_tbl ["benutzer"]."
+                      SET   `SID` = \"".session_id()."\",
+                             `ip` = \"".$_SERVER [REMOTE_ADDR]."\",
+                          `fwdip` = \"".$_SERVER[HTTP_X_FORWARDED_FOR]."\",
+                          `aktiv` = \"1\" WHERE `kuerzel` = \"".$GETkuerzel."\";";
+            $result = $dbaccess->query_table_iu ($query);
+            $_SESSION [menue] = "ROLLE";  // Starte Menue im Rollenmodus
+            $rolle = rollenfinder ( $_GET["funktion"] );
+            $_SESSION ["vStab_benutzer"] = $_GET["benutzer"];
+            $_SESSION ["vStab_kuerzel"]  = $GETkuerzel;
+            $_SESSION ["vStab_funktion"] = $_GET["funktion"];
+            $_SESSION ["vStab_rolle"]    = $rolle;
+            $_SESSION [menue] = "ROLLE";  // Starte Menu im Rollenmodus
+            $_SESSION [ROLLE] = $rolle;
+            protokolleintrag ("Sessiondaten neu setzen", $_SESSION[vStab_benutzer].";".$_SESSION[vStab_kuerzel].";".$_SESSION[vStab_funktion].";".$_SESSION[vStab_rolle].";".session_id().";".$_SERVER[REMOTE_ADDR]);
           }
-          if ($kuerzel_eq and !$user_eq) {
-            // Kürzel in Datenbank vorhanden -- Benutzername passt NICHT dazu !!!
-            $infotext = "Kürzel schon vorhanden !!!<br>Benutzername stimmt nicht mit den gespeicherten Daten überein.";
+          if ($db_result ["aktiv"] == 0 ){
+            $rolle = rollenfinder ( $_GET["funktion"] );
+            $query = "UPDATE ".$conf_4f_tbl ["benutzer"]."
+                     SET `funktion` = \"".$_GET ["funktion"]."\",
+                         `rolle`    = \"".$rolle."\",
+                         `SID`      = \"".session_id()."\",
+                         `ip`       = \"".$_SERVER [REMOTE_ADDR]."\",
+                         `fwdip`    = \"".$_SERVER[HTTP_X_FORWARDED_FOR]."\",
+                         `aktiv`    = \"1\" WHERE kuerzel = \"".$GETkuerzel."\";";
+            $result = $dbaccess->query_table_iu ($query);
+             // Tabelle fr die Benutzerfunktion anlegen
+            if ($_GET ["funktion"] != "A/W"){
+              $usertablename = $conf_4f_tbl ["usrtblprefix"].strtolower ($_GET ["funktion"])."_".strtolower ( $_GET ["kuerzel"]);
+              $fkttblname  = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($_GET ["funktion"]);
+              $dbaccess->create_user_table ($usertablename, $fkttblname);
+            }
+            $rolle = rollenfinder ( $_GET["funktion"] );
+            $_SESSION [ROLLE] = $rolle;
+            $_SESSION ["vStab_benutzer"] = $_GET["benutzer"];
+            $_SESSION ["vStab_kuerzel"]  = $GETkuerzel;
+            $_SESSION ["vStab_funktion"] = $_GET["funktion"];
+            $_SESSION ["vStab_rolle"]    = $rolle;
+            $_SESSION ["menue"] = "ROLLE";  // Starte Menu im Rollenmodus
+            $_SESSION ["ROLLE"] = $rolle;
+            protokolleintrag ("Funktion Ummelden", $_SESSION[vStab_benutzer].";".$_SESSION[vStab_kuerzel].";".$_SESSION[vStab_funktion].";".$_SESSION[vStab_rolle].";".session_id().";".$_SERVER[REMOTE_ADDR]);
+          }
+        } ELSE { // $db_gleich
+          if (!$passwd_eq){
+            $infotext = "Passwort falsch !!<br>Das Passwort stimmen nicht überein.";
             errorwindow( "Benutzeranmeldung", $infotext );
             $error_userlogin = true;
           }
-
-
-
-        }  else { // nicht in der Datenbank
+        }
+        if ($kuerzel_eq and !$user_eq) {
+          // Kürzel in Datenbank vorhanden -- Benutzername passt NICHT dazu !!!
+          $infotext = "Kürzel schon vorhanden !!!<br>Benutzername stimmt nicht mit den gespeicherten Daten überein.";
+          errorwindow( "Benutzeranmeldung", $infotext );
+          $error_userlogin = true;
+        }
+      }  else { // nicht in der Datenbank
            /**********************************************************************
                      Es sind keine Daten in der Datenbank ==> Neuer Benutzer
                      Setze die Daten im Session Cookie und in der Datenbank.
@@ -206,25 +151,15 @@ function check_save_user () {
                           `fwdip`    = \"".$_SERVER[HTTP_X_FORWARDED_FOR]."\",
                           `password` = \"".$_GET["kennwort1"]."\",
                           `aktiv`    = \"1\"";
-        // echo "181 Query=".$query."<br>";
           $result = $dbaccess->query_table_iu ($query);
-
           protokolleintrag ("Anmelden", $_SESSION[vStab_benutzer].";".$_SESSION[vStab_kuerzel].";".$_SESSION[vStab_funktion].";".$_SESSION[vStab_rolle].";".session_id().";".$_SERVER[REMOTE_ADDR]);
-
           if ($_SESSION ["vStab_funktion"] != "A/W"){
             $usertablename = $conf_4f_tbl ["usrtblprefix"].strtolower ($_GET ["funktion"])."_".strtolower ( $_GET ["kuerzel"]);
             $fkttblname  = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($_SESSION["vStab_funktion"]);
-    //        $usertablename = $conf_4f_tbl ["usrtblprefix"].$_SESSION ["vStab_kuerzel"]."_".$_SESSION ["vStab_funktion"] ;
             $dbaccess->create_user_table ($usertablename, $fkttblname);
           }
           $_SESSION [menue] = "ROLLE";  // Starte Menu im Rollenmodus
           $_SESSION [ROLLE] = $rolle;
-  /*
-        } else {
-          echo "<big><big><big>204 - Passwort ungleich</big></big></big>";
-          $error_userlogin = false;
-        }
-  */
       } // ( ( count ($result) > 0 ) AND ( $result != "" ) ){
     }  else {  // if $GET [kuerzel und benutzer] == ""
       $_SESSION [menue] = "LOGIN";
@@ -459,25 +394,6 @@ function check_and_save ($data){
             Daten in Datenbank mit einem INSERT
             INSERT INTO tabelle SET spalten_name=ausdruck, spalten_name=ausdruck, ...
 */
-//       $nachweis_A       = get_last_nachw_num ("A") + 1;
-/*
-        $datum            = date ("dm");
-        if ($data ["12_abfzeit"] == "" ) {
-          $data ["12_abfzeit"] = convtodatetime ( date ("dm"),   date ("Hi") )  ;
-        }  else {
-          $data ["12_abfzeit"] = convtodatetime ( date ("dm"),   $data ["12_abfzeit"]) ;
-        }
-*/
-/*      if (validate){
-
-         $vali = new vali_data_form ( $data ) ;
-         $result = $vali->validatethis ();
-         if (!$result) {
-           $form = new nachrichten4fach ($data, $data["task"], "");
-           exit ;
-         }
-      }
-*/
 
 
       if ($data ["12_abfzeit"] == "" ) { $data ["12_abfzeit"] = date ("Hi") ; }
@@ -555,10 +471,7 @@ function check_and_save ($data){
 
        $result = $dbaccess->query_table_wert ($query);
        $lfd = $result [0] ;
-//echo "result[Stab schreiben2]==="; var_dump ($lfd); echo"<br>";
        set_msg_read ($lfd) ;
-
-
     break;
     /****************************************************************************\
       SSSSS TTTTT AAAAA BBBB        GGGGG EEEEE SSSSS PPPP  RRRR  N   N  OOO  TTTTT IIIII
@@ -568,8 +481,6 @@ function check_and_save ($data){
       SSSSS   T   A   A BBBB  _____ GGGG  EEEEE SSSSS P     R   R N   N  OOO    T   IIIII
     \****************************************************************************/
     case "Stab_gesprnoti":
-
-
       if ($data ["01_datum"] == "" )     { $data ["01_datum"]     = date ("Hi") ; }
       if ($data ["12_abfzeit"] == "" )   { $data ["12_abfzeit"]   = date ("Hi") ; }
       if ($data ["15_quitdatum"] == "" ) { $data ["15_quitdatum"] = date ("Hi") ; }
@@ -611,24 +522,9 @@ function check_and_save ($data){
       if ($data ["02_zeit"] == "" ) {
         $data ["02_zeit"] = convtodatetime ( date ("dm"),   date ("Hi") )  ;
       }
-/**************************************************************************************/
-/*       $datum = date ("dm");
-       if ($data ["12_abfzeit"] == "" ) {
-         $data ["12_abfzeit"] = convtodatetime ( date ("dm"),   date ("Hi") )  ;
-       }  else {
-         $data ["12_abfzeit"] = convtodatetime ( date ("dm"),   $data ["12_abfzeit"]) ;
-       }
-
-       if ($data ["15_quitdatum"] == "" ) {
-         $data ["15_quitdatum"] = convtodatetime ( date ("dm"),   date ("Hi") )  ;
-       }  else {
-         $data ["15_quitdatum"] = convtodatetime ( date ("dm"),   $data ["15_quitdatum"]) ;
-       }
-*/
 
        for (  $i = 1 ; $i <= 5 ; $i++ ){
          for ( $j = 1 ; $j <= 5 ; $j++ ){
-// echo "2="; var_dump ($empf_matrix); echo "<br><br>IJ = ".$empf_matrix[$i][$j]["fkt"]."<br>";
            if ( isset ( $data ["16_".$i.$j] ) ) {
              list ($ord, $pos, $fkt) = explode ("_", $data ["16_".$i.$j]);
              $data ["16_empf"] .= $empf_matrix [$i][$j]["fkt"]."_".$fkt.",";
@@ -677,10 +573,8 @@ function check_and_save ($data){
        protokolleintrag ("Stab-gesprnoti",$query);
        $query = "SELECT ".$conf_4f_tbl ["nachrichten"].".`00_lfd` FROM `".$conf_4f_tbl ["nachrichten"]."`
                  WHERE `04_nummer` = \"".$nachweis_E."\" AND `04_richtung` = \"E\" ;";
-//echo "query[Stab schreiben2]===".$query."<br>";
        $result = $dbaccess->query_table_wert ($query);
        $lfd = $result [0];
-//echo "result[Stab schreiben2]==="; var_dump ($lfd); echo"<br>";
        set_msg_read ($lfd) ;
 
     break;
@@ -719,7 +613,6 @@ function check_and_save ($data){
            $form = new nachrichten4fach ($data, $data["task"], $vali->validate);
            exit ;
          }
-         /*----------------------------------------------------*/
       }
 
 
@@ -735,16 +628,11 @@ function check_and_save ($data){
             `x02_sperre`      = \"f\",
             `x03_sperruser`   = \"\"
              WHERE `00_lfd` = \"".$data ["00_lfd"]."\"";
-//echo "query[FM AUSGANG]===".$query."<br>";
        $result = $dbaccess->query_table_iu ($query);
        protokolleintrag ("FM-Ausgang",$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
     break;
 
     case "FM-Ausgang_Sichter":
-/*
-          02_zeit;      02_zeichen;       03_datum;       03_zeichen;       04_richtung;       04_nummer;         05_gegenstelle
-          06_bef_vermerk;        06_bef_ausw;
-*/
 
       if ($data ["15_quitdatum"] == "" ) { $data ["15_quitdatum"] = date ("Hi") ; }
 
@@ -753,7 +641,6 @@ function check_and_save ($data){
 
        for (  $i = 1 ; $i <= 5 ; $i++ ){
          for ( $j = 1 ; $j <= 5 ; $j++ ){
-// echo "DHNDL 16_empf 2="; var_dump ($empf_matrix); echo "<br><br>IJ = ".$empf_matrix[$i][$j]["fkt"]."<br>";
            if ( isset ( $data ["16_".$i.$j] ) ) {
              list ($ord, $pos, $fkt) = explode ("_", $data ["16_".$i.$j]);
              $data ["16_empf"] .= $empf_matrix [$i][$j]["fkt"]."_".$fkt.",";
@@ -767,7 +654,6 @@ function check_and_save ($data){
       if ($data ["03_datum"] == "" ) { $data ["03_datum"] = date ("Hi") ; }
 
       if (validate){
-         /*----------------------------------------------------*/
         if (debug){
           echo "DATAHNDL FM-Ausgang_Sichter =";
           var_dump ($data); echo "<br><br>";
@@ -795,10 +681,7 @@ function check_and_save ($data){
            $form = new nachrichten4fach ($data, $data["task"], $vali->validate);
            exit ;
          }
-         /*----------------------------------------------------*/
       }
-
-
       $query = "UPDATE `".$conf_4f_tbl ["nachrichten"]."` SET
             `03_datum`        = \"".konv_taktime_datetime ($data ["03_datum"])."\",
             `03_zeichen`      = \"".$data ["03_zeichen"]  ."\",
@@ -814,7 +697,6 @@ function check_and_save ($data){
             `x02_sperre`      = \"f\",
             `x03_sperruser`   = \"\"
              WHERE `00_lfd` = \"".$data ["00_lfd"]."\";";
-//echo "query[FM AUSGANG Sichter]===".$query."<br>";
        $result = $dbaccess->query_table_iu ($query);
         protokolleintrag ("FM-Ausgang-Sichter",$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
     break;
@@ -831,7 +713,6 @@ function check_and_save ($data){
 
        for (  $i = 1 ; $i <= 5 ; $i++ ){
          for ( $j = 1 ; $j <= 5 ; $j++ ){
-// echo "2="; var_dump ($empf_matrix); echo "<br><br>IJ = ".$empf_matrix[$i][$j]["fkt"]."<br>";
            if ( isset ( $data ["16_".$i.$j] ) ) {
              list ($ord, $pos, $fkt) = explode ("_", $data ["16_".$i.$j]);
              $data ["16_empf"] .= $empf_matrix [$i][$j]["fkt"]."_".$fkt.",";
@@ -858,7 +739,6 @@ function check_and_save ($data){
             `x02_sperre`      = \"f\",
             `x03_sperruser`   = \"\"
              WHERE `00_lfd` = \"".$data ["00_lfd"]."\";";
-// echo "query[Stab sichten]===".$query."<br>";
        $result = $dbaccess->query_table_iu ($query);
         protokolleintrag ("Stab_sichten",$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
     break;
@@ -882,17 +762,9 @@ function check_and_save ($data){
        $convdate ['03_datum']     = convdbdatetimeto ($db_datum ['03_datum']);
        $convdate ['12_abfzeit']   = convdbdatetimeto ($db_datum ['12_abfzeit']);
        $convdate ['15_quitdatum'] = convdbdatetimeto ($db_datum ['15_quitdatum']);
- /*
-       echo "<br><br>";
-       var_dump ($db_datum);
-       echo "<br><br>";
-       var_dump ($convdate);
-       echo "<br><br>";
- */
        $data ["16_empf"] = $redcopy2."_rt,";
        for (  $i = 1 ; $i <= 5 ; $i++ ){
          for ( $j = 1 ; $j <= 5 ; $j++ ){
-// echo "2="; var_dump ($empf_matrix); echo "<br><br>IJ = ".$empf_matrix[$i][$j]["fkt"]."<br>";
            if ( isset ( $data ["16_".$i.$j] ) ) {
              list ($ord, $pos, $fkt) = explode ("_", $data ["16_".$i.$j]);
              $data ["16_empf"] .= $empf_matrix [$i][$j]["fkt"]."_".$fkt.",";
@@ -911,7 +783,6 @@ function check_and_save ($data){
             `16_empf`         =  \"".$data ["16_empf"]."\",
             `17_vermerke`     =  \"".$data ["17_vermerke"]."\"
              WHERE `00_lfd` = \"".$data ["00_lfd"]."\"";
-//echo "query[FM-Admin]===".$query."<br>";
        $result = $dbaccess->query_table_iu ($query);
        if ($data["task"] == "FM-Admin") {
          protokolleintrag ("++ FM-Admin",$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
@@ -942,9 +813,7 @@ function check_and_save ($data){
                                $conf_4f_db ["password"] );
     $tblusername   = $conf_4f_tbl ["usrtblprefix"].strtolower ($_SESSION["vStab_funktion"])."_".strtolower ($_SESSION["vStab_kuerzel"]);
     $query = "SELECT count(*) FROM $tblusername"."_read WHERE `nachnum` = $lfd;";
-  //  echo "query(legere_nuntium)=".$query."<br>";
     $result = $dbaccess->query_table_wert ($query);
-  //  echo "queryresult=";var_dump ($result); echo "<br>";
     return ($result [0]);
   }
 
@@ -968,16 +837,11 @@ function check_and_save ($data){
 
     $tblusername   = $conf_4f_tbl ["usrtblprefix"].strtolower ($_SESSION["vStab_funktion"])."_".strtolower ($_SESSION["vStab_kuerzel"]);
     $query = "SELECT count(*) FROM $tblusername"."_read WHERE `nachnum` = $lfd;";
-//  echo "query(legere_nuntium)=".$query."<br>";
     $result = $dbaccess->query_table_wert ($query);
-//  echo "queryresult=";var_dump ($result); echo "<br>";
     if ($result [0] == 0){
        $query = "INSERT into ".$tblusername."_read SET
             `nachnum`      = \"".$lfd."\",
             `gelesen`      = \"".convtodatetime (date ("dmY"), date ("Hi"))."\"";
-
-// echo "query[STAB_lesen]===".$query."<br>";
-
        $result = $dbaccess->query_table_iu ($query);
         protokolleintrag ("Stab_".$_SESSION["vStab_funktion"]." gelesen_".$lfd,$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
 
@@ -1002,23 +866,14 @@ function check_and_save ($data){
                                $conf_4f_tbl ["benutzer"],
                                $conf_4f_db ["user"],
                                $conf_4f_db ["password"] );
-
     $tblusername   = $conf_4f_tbl ["usrtblprefix"].strtolower ($_SESSION["vStab_funktion"])."_".strtolower ($_SESSION["vStab_kuerzel"]);
-
     $query = "SELECT count(*) FROM $tblusername"."_read WHERE `nachnum` = $lfd;";
-
-//  echo "query(unset_msg_read)=".$query."<br>";
     $result = $dbaccess->query_table_wert ($query);
-//  echo "queryresult=";var_dump ($result); echo "<br>";
     if ($result [0] != 0){
        $query = "DELETE FROM ".$tblusername."_read
                         WHERE ".$tblusername."_read.nachnum = $lfd;";
-
-// echo "query[unset_msg_read]===".$query."<br>";
-
        $result = $dbaccess->query_table_iu ($query);
         protokolleintrag ("Stab_".$_SESSION["vStab_funktion"]." ungelesen_".$lfd,$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
-
     }
   }
 
@@ -1042,23 +897,14 @@ function check_and_save ($data){
                                $conf_4f_tbl ["benutzer"],
                                $conf_4f_db ["user"],
                                $conf_4f_db ["password"] );
-
-//    $tblusername = $conf_4f_tbl ["usrtblprefix"].strtolower ($_SESSION["vStab_funktion"])."_".strtolower ($_SESSION["vStab_kuerzel"]);
     $fkttblname  = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($_SESSION["vStab_funktion"]);
-
     $query = "SELECT count(*) FROM $fkttblname"."_erl WHERE `nachnum` = $lfd;";
-//echo "QUERY  993 data_hndl = ".$query."<br>";
     $result = $dbaccess->query_table_wert ($query);
-
     if ($result [0] == 0){
        $query = "INSERT into ".$fkttblname."_erl SET
             `nachnum`      = \"".$lfd."\",
             `erledigt`     = \"".convtodatetime (date ("dmY"), date ("Hi"))."\"";
-
-//echo "QUERY 1001 data_hndl = ".$query."<br>";
-
        $result = $dbaccess->query_table_iu ($query);
-
        protokolleintrag ("Stab_".$_SESSION["vStab_funktion"]." erledigt_".$lfd,$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
     }
   }
@@ -1082,20 +928,14 @@ function unset_msg_done ($lfd) {
                                $conf_4f_tbl ["benutzer"],
                                $conf_4f_db ["user"],
                                $conf_4f_db ["password"] );
-
-//    $tblusername   = $conf_4f_tbl ["usrtblprefix"].strtolower ($_SESSION["vStab_funktion"])."_".strtolower ($_SESSION["vStab_kuerzel"]);
-
     $fkttblname  = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($_SESSION["vStab_funktion"]);
-
     $query = "SELECT count(*) FROM $fkttblname"."_erl WHERE `nachnum` = $lfd;";
-
     $result = $dbaccess->query_table_wert ($query);
     if ($result [0] != 0){
        $query = "DELETE FROM ".$fkttblname."_erl
                         WHERE ".$fkttblname."_erl.nachnum = $lfd;";
        $result = $dbaccess->query_table_iu ($query);
        protokolleintrag ("Stab_".$_SESSION["vStab_funktion"]." unerledigt_".$lfd,$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
-
     }
   }
 
@@ -1130,10 +970,7 @@ function unset_msg_done ($lfd) {
     $query = "select ".$conf_4f_tbl ["nachrichten"].".00_lfd from ".
               $conf_4f_tbl ["nachrichten"].", ".$tblusername."_read where ".
               $conf_4f_tbl ["nachrichten"].".00_lfd = ".$tblusername."_read.nachnum ;";
-
-  //echo "query(list_of_readed_msg)=".$query."<br>";
     $result = $dbaccess->query_usrtable ($query);
-  //echo "<br><br>queryresult=";var_dump ($result); echo "<br>";
     return ($result);
   }
 
@@ -1157,17 +994,11 @@ function list_of_done_msg (){
                              $conf_4f_tbl ["benutzer"],
                              $conf_4f_db ["user"],
                              $conf_4f_db ["password"] );
-
-//  $tblusername   = $conf_4f_tbl ["usrtblprefix"].strtolower ($_SESSION["vStab_funktion"])."_".strtolower ($_SESSION["vStab_kuerzel"]);
-
   $fkttblname  = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($_SESSION["vStab_funktion"]);
-
   $query = "select ".$conf_4f_tbl ["nachrichten"].".00_lfd from ".
            $conf_4f_tbl ["nachrichten"].", ".$fkttblname."_erl where ".
            $conf_4f_tbl ["nachrichten"].".00_lfd = ".$fkttblname."_erl.nachnum ;";
-
   $result = $dbaccess->query_usrtable ($query);
-
   return ($result);
 }
 

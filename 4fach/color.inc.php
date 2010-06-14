@@ -1,8 +1,7 @@
 <?php
 
-define ("colorschema",iuk);
-/*// iuk, thw, aknz
-*/
+define ("colorschema",aknz);
+/*// iuk, thw, aknz     */
 
 switch (colorschema){
   case "alt":   //  alte Einstellung

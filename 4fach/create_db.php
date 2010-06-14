@@ -1,16 +1,14 @@
 <?php
-/*
-// umdefinieren der Konstanten - nur in PHP 4
-define("FATAL", E_USER_ERROR);
-define("ERROR", E_USER_WARNING);
-define("WARNING", E_USER_NOTICE);
+/*****************************************************************************\
+   Datei: create_db.php
 
-// die Stufe für dieses Skript einstellen
-error_reporting(FATAL | ERROR | WARNING);
-*/
-// Fehlerbehandlungsfunktion
+   benoetigte Dateien:
 
+   Beschreibung:
 
+   (C) Hajo Landmesser IuK Kreis Heinsberg
+   mailto://hajo.landmesser@iuk-heinsberg.de
+\*****************************************************************************/
 
 function myErrorHandler($errno, $errstr, $errfile, $errline)
 {
@@ -29,7 +27,6 @@ function myErrorHandler($errno, $errstr, $errfile, $errline)
     echo "<b>WARNING</b> [$errno] $errstr<br />\n";
     break;
   default:
-//    echo "Unkown error type: [$errno] $errstr<br />\n";
     break;
   }
 }
@@ -315,123 +312,6 @@ $query = "CREATE TABLE IF NOT EXISTS `".$conf_tbl ["bhp50"]."` (
     echo "BHP 50 wurde angelegt.";
     echo "<br>";
   }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/* SET SQL_MODE="NO_AUTO_VALUE_ON_ZERO";
-
---
--- Datenbank: `bhp50_db`
---
-
--- --------------------------------------------------------
-
---
--- Tabellenstruktur f�r Tabelle `benutzer`
---
-
-CREATE TABLE `benutzer` (
-  `benutzer` varchar(50) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `kuerzel` varchar(6) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `funktion` varchar(10) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `rolle` varchar(15) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `sid` varchar(50) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `ip` varchar(15) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  PRIMARY KEY (`kuerzel`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci;
-
---
--- Daten f�r Tabelle `benutzer`
---
-
-
--- --------------------------------------------------------
-
---
--- Tabellenstruktur f�r Tabelle `patienten`
---
-
-CREATE TABLE `patienten` (
-  `lfd` int(11) NOT NULL AUTO_INCREMENT,
-  `patid` varchar(6) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `name` varchar(30) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `vorname` varchar(30) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `geschlecht` set('m','w') COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `nation` varchar(20) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `gebdat` date NOT NULL DEFAULT '0000-00-00',
-  `fundort` varchar(128) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `datum` date NOT NULL DEFAULT '0000-00-00',
-  `sicht_1` smallint(6) NOT NULL DEFAULT '0',
-  `sicht_1_arzt` varchar(30) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `sicht_1_zeit` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
-  `sicht_2` smallint(6) NOT NULL DEFAULT '0',
-  `sicht_2_arzt` varchar(30) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `sicht_2_zeit` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
-  `sicht_3` smallint(6) NOT NULL DEFAULT '0',
-  `sicht_3_arzt` varchar(30) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `sicht_3_zeit` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
-  `sicht_4` smallint(6) NOT NULL DEFAULT '0',
-  `sicht_4_arzt` varchar(30) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `sicht_4_zeit` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
-  `diagnose` text COLLATE latin1_german1_ci NOT NULL,
-  `trans` binary(1) NOT NULL DEFAULT 'f',
-  `trans_ligend` binary(1) NOT NULL DEFAULT 'f',
-  `trans_sitzend` binary(1) NOT NULL DEFAULT 'f',
-  `trans_mitarzt` binary(1) NOT NULL DEFAULT ' ',
-  `trans_isoliert` binary(1) NOT NULL DEFAULT ' ',
-  `trans_mittel` varchar(30) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `trans_ziel` varchar(30) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `sd_wohnort` varchar(30) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `sd_strasse` varchar(30) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `sd_religion` varchar(10) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `sd_verbleib` varchar(128) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `sd_bemerk` text COLLATE latin1_german1_ci NOT NULL,
-  PRIMARY KEY (`lfd`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci AUTO_INCREMENT=1 ;
-
---
--- Daten f�r Tabelle `patienten`
---
-
-
--- --------------------------------------------------------
-
---
--- Tabellenstruktur f�r Tabelle `protokoll`
---
-
-CREATE TABLE `protokoll` (
-  `p_lfd` bigint(20) NOT NULL AUTO_INCREMENT,
-  `p_zeit` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `p_was` varchar(30) COLLATE latin1_german1_ci NOT NULL DEFAULT '',
-  `p_ereignis` text COLLATE latin1_german1_ci NOT NULL,
-  PRIMARY KEY (`p_lfd`)
-) ENGINE=MyISAM DEFAULT CHARSET=latin1 COLLATE=latin1_german1_ci AUTO_INCREMENT=1 ;
-
---
--- Daten f�r Tabelle `protokoll`
---
-
-*/
-
-
-
-
-
-
 
   echo 'Ich habe fertig.';
 

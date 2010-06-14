@@ -24,7 +24,8 @@
     $conf_4f["sounds"] = true ;
 
     /* getrennt : Eingang und Ausgang zählen für sich
-      gemeinsam : Eingang und Ausgang zählen zusammen */
+      gemeinsam : Eingang und Ausgang zählen zusammen
+    */
     define ("Nachweisung", "gemeinsam");
 
     /*
@@ -36,7 +37,7 @@
     $conf_pre_dir =  ""; // mit führendem /
 
       // URL des Servers
-    $conf_urlroot  = "http://".$_SERVER ["SERVER_NAME"].":".$_SERVER ["SERVER_PORT"]; //"http://1service.no-ip.org";
+    $conf_urlroot  = "http://".$_SERVER ["SERVER_NAME"].":".$_SERVER ["SERVER_PORT"];
 
       // Wurzelverzeichnis fr den Webserver
       // unter Linux /srv/www/htdocs
@@ -74,9 +75,9 @@
     $conf_4f ["Titelkurz"]        =  "eStab";
     $conf_4f ["SubTitel"]["env"]  =  " - elektronischer Nachrichtenvordruck";
     $conf_4f ["SubTitel"]["etb"]  =  "Einsatztagebuch";
-    $conf_4f ["Version"]          =  "v0.9.12 xx.MM.JJJJ ";
+    $conf_4f ["Version"]          =  "v0.9.20 25.09.2009 ";
       // Hier kann die eigene Dienststelle eingetragen werden Zeilenumbruch mit <br>
-    $conf_4f ["Stelle"]           =  "Einsatzleitung<br>des Kreises Heinsberg" ;
+    $conf_4f ["Stelle"]           =  "Einsatzleitung Kreis Heinsberg" ;
       // Programm information und Versionsnummer
     $conf_4f ["NameVersion"][0]   = "<big><big><b>".$conf_4f ["Titelkurz"]." ".
                                     $conf_4f ["SubTitel"]["env"]."</b><br>".
@@ -93,8 +94,11 @@
     $conf_4f ["NameVersion"][7]   = "Nachweisung Eingang / Ausgang       <br>\n";
     $conf_4f ["NameVersion"][8]   = "ETB Einsatztagebuch                 <br>\n";
     $conf_4f ["NameVersion"][9]   = "Kategorisierung                     <br>\n";
-    $conf_4f ["NameVersion"][10]  = "(C) 2005-2009 HaJo Landmesser<br>eMail: 4fach-info@IuK-Heinsberg.de <br>\n";
-    $conf_4f ["NameVersion"][11]  = "Infos, Forum unter  http://KatS.IuK-Heinsberg.de <br>\n";
+    $conf_4f ["NameVersion"][10]  = "Nachrichtenvordrucke als PDF-Datei  <br>\n";
+    $conf_4f ["NameVersion"][11]  = "lade-/speicherbare Funktionsmatrix Teil 1 <br>\n";
+
+    $conf_4f ["NameVersion"][12]  = "(C) 2005-2009 HaJo Landmesser<br>eMail: 4fach-info@IuK-Heinsberg.de <br>\n";
+    $conf_4f ["NameVersion"][13]  = "Infos, Forum unter  http://KatS.IuK-Heinsberg.de <br>\n";
 
 
 /*******************************************************************************/

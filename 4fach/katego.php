@@ -58,8 +58,6 @@ class kategorien {
       $this->db_tablname   = $this->db_tbl."_katego";
       $this->db_tablnamelk = $this->db_tbl."_kategolink";
     }
-//    $this->db_master_katego = $conf_4f_tbl ["masterkatego"] ;
-
     $this->db_server   = $conf_4f_db ["server"];
     $this->db_benutzer = $conf_4f_db ["user"];
     $this->db_passwort = $conf_4f_db ["password"];
@@ -125,9 +123,6 @@ class kategorien {
                         FROM `".$this->db_tablnamelk."`
                         WHERE `".$this->db_tablnamelk."`.`msg` = '".$lfd."')
                         LIMIT 1;";
-
-//    echo "QUERY====".$this->sqlquery."<br><br><br>";
-
     $query_result = mysql_query ($this->sqlquery, $this->db_hndl) or
        die("[query_table] <br>$this->sqlquery<br>133-".mysql_error()." ".mysql_errno());
 
@@ -173,14 +168,10 @@ class kategorien {
                           WHERE 1 ;";
       break;
     }
-//    echo "QUERY===".$this->sqlquery."<br><br>";
-
     $query_result = mysql_query ($this->sqlquery, $this->db_hndl) or
        die("[query_table] <br>$query<br>103-".mysql_error()." ".mysql_errno());
 
     $this->resultcount = mysql_num_rows($query_result);
-
-//    echo "COUNT===".$this->resultcount."<br><br>";
 
     for ( $i=0; $i< $this->resultcount; $i++ ){
       $this->result[$i] = mysql_fetch_assoc($query_result);
@@ -189,17 +180,6 @@ class kategorien {
     mysql_free_result($query_result);
   }
 
-
-/*
-Kategorie bei gegebener Nachrichtennummer
-
-SELECT katego, beschreibung FROM nv_masterkatego, nv_masterkategolink
-WHERE nv_masterkatego.lfd =
-(SELECT katego
-FROM nv_masterkategolink
-WHERE nv_masterkategolink.msg = 100)
-
-*/
 
 
 /*******************************************************************************
@@ -210,9 +190,6 @@ WHERE nv_masterkategolink.msg = 100)
                     SET   `kategorie` = \"".$kategorie."\",
                           `beschreibung` = \"".$beschreibung."\"
                     WHERE `lfd` = \"".$lfd."\";";
-
-//echo "<br><br>QUERY==="; var_dump ($this->sqlquery);echo "<br><br>";
-
     $query_result = mysql_query ($this->sqlquery, $this->db_hndl) or
        die("[query_table] <br>$this->sqlquery<br>103-".mysql_error()." ".mysql_errno());
   }
@@ -320,7 +297,6 @@ WHERE nv_masterkategolink.msg = 100)
 
     $this->lese_kategorien (); // hole die Liste der Kategorien
     if ($this->result != NULL) {
-      //if (debug) print_r ($this->result);
       echo "\n<select ".$param." name=\"kategorien_".$this->dbtyp."_".$ordnum."\">\n";
       if ($mit_leer) {
         if ($katego_no == "") {
@@ -419,7 +395,6 @@ WHERE nv_masterkategolink.msg = 100)
         break;
         case "deleterecord":
             $this->db_delete( $katego_lfd );
-//            if (!debug) header("Location: ".$_SERVER['PHP_SELF']);
         break;
         case "editrecord":
           $this->db_get ( $katego_lfd );
@@ -431,7 +406,6 @@ WHERE nv_masterkategolink.msg = 100)
         break;
         case "update":
           $this->db_aendern ($katego_lfd, $kategorie, $beschreibung );
-//          if (!debug) header("Location: ".$_SERVER['PHP_SELF']);
         break;
         case "pulldown":
           $this->pulldown_kategorien ("zeigen");

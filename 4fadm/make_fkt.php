@@ -1,26 +1,21 @@
 <?php
-
-
-
+define ("debug", false);
 /****************************************************************************\
 
 \****************************************************************************/
   function check_fkt ($values){
-/*
-    echo "<br><br><br>";
-    var_export ($values);
-    echo "<br><br><br>";
-    var_dump ($values);
-    echo "<br><br><br>";
-*/
+
+//    echo "VALUES="; var_dump ($values); echo "<br><br><br>";
+
     foreach ($values as $key => $val){
-//      echo $key." - ".$val."<br>";
+      if (debug) echo "KEY = ".$key." - VAL =".$val."<br>";
+
       list ($pos,$xy) = explode ('_',$key);
       if ( ($pos == "pos") and ($val != "") )
         if (strlen ($xy) == 2){
           $x = substr ($xy, 0, 1);
           $y = substr ($xy, 1, 1);
-//          echo "pos=".$pos." x=".$x." y=".$y." val=".$val."<br>";
+//          echo "<b>##POS=".$pos." x=".$x." y=".$y." val=".$val."</b><br>";
         }
 //      $suchmuster = "\!\"§\$\%\&/()=?";
 //      preg_match($suchmuster, $val, $treffer, PREG_OFFSET_CAPTURE, 3);
@@ -33,7 +28,7 @@
 /****************************************************************************\
 
 \****************************************************************************/
-  function write_fkt_file ($values){
+  function write_fkt_file ($values, $filename){
 
     include ("../4fcfg/config.inc.php");
     include ("../4fcfg/fkt_rolle.inc.php");
@@ -121,9 +116,6 @@
 
     $postfile = "\r\n\r\n\r\n?>";
 
-
-    $filename =  $conf_web ["srvroot"].$conf_web ["pre_path"]."/4fcfg/fkt_rolle.inc.php";
-
     $fhndl = fopen ( $filename, "w+");
 
     fwrite ($fhndl, $prefile);
@@ -148,15 +140,15 @@
     include_once ("../4fach/db_operation.php");
 
 //    include ("../4fcfg/fkt_rolle.inc.php");
+//    echo "<br><br><br>"; echo "VALUES dbsave=";print_r ($values); echo "<br><br><br>";
 
-//     echo "<br><br><br>"; echo "VALUES dbsave=";print_r ($values); echo "<br><br><br>";
     $lagekopie = "";
     foreach ($values as $key => $val){
 //      echo "<br>KEY===".$key." - ".$val." +++ ";
         // lagerot
       if ($key == "lagerot"){
-        $rotkopiex = substr ($xy, 0, 1);
-        $rotkopiey = substr ($xy, 1, 1);
+        $rotkopiex = substr ($val, 0, 1);
+        $rotkopiey = substr ($val, 1, 1);
       } else {
           // key zerlegen in links der Schlüssel - rechts die Position
         list ($left,$right) = explode ('_',$key);
@@ -184,88 +176,39 @@
     $fktquery = "INSERT INTO `".$conf_4f_tbl   ["empfmtx"]."` (`mtx_x`, `mtx_y`, `mtx_typ`, `mtx_fkt`, `mtx_rolle`, `mtx_mode`, `mtx_rc2`, `mtx_auto`) VALUES ";
     for ($zeile = 1; $zeile <= 5; $zeile ++) {
       for ($spalte = 1; $spalte <= 4; $spalte ++){
-        if ($rolle[$zeile][$spalte] == "Stab"){ $typ="\"cb\""; } else { $typ="\"t\""; }
-        if (($rotkopiex == $zeile) and ($rotkopiey == $spalte)){ $redcpy = 1; } else { $redcpy = 0; }
-        if ( $stasi [$zeile][$spalte] == 1 ) { $autosichter = 1; } else { $autosichter = 0; }
-        $fktquery .= "(".$zeile.",".$spalte.",".$typ.",\"".$pos[$zeile][$spalte]."\",\"".$rolle[$zeile][$spalte]."\",\"ro\",".$redcpy.",".$autosichter.")" ;
+        if (($rolle[$zeile][$spalte] == "Stab") OR
+            ($rolle[$zeile][$spalte] == "FB")){ $typ="\"cb\""; } else { $typ="\"t\""; }
+        if (($rotkopiex == $zeile) and ($rotkopiey == $spalte)){ $redcpy = "1"; } else { $redcpy = "0"; }
+        if ( $stasi [$zeile][$spalte] == 1 ) { $autosichter = "1" ; } else { $autosichter = "0"; }
 
+        if ($pos[$zeile][$spalte] != ""){
+          $fktquery .= "(".$zeile.",
+                       ".$spalte.",
+                       ".$typ.",
+                       \"".$pos[$zeile][$spalte]."\",
+                       \"".$rolle[$zeile][$spalte]."\",
+                       \"ro\",
+                       \"".$redcpy."\",
+                       \"".$autosichter."\")" ;
+        } else {
+          $fktquery .= "(".$zeile.",".$spalte.", \"t\",\"\" ,\"\" , \"ro\", \"0\", \"0\")" ;
+        }
         if (( $zeile == 5) and ($spalte == 4)) { $fktquery .= ""; } else { $fktquery .= ","; }
+/*
+        echo "Write in DB = ".
+             $zeile.",
+           ".$spalte.",
+           ".$typ.",
+           ".$pos[$zeile][$spalte].",
+           ".$rolle[$zeile][$spalte].",
+           \"ro\",
+           ".$redcpy.",
+           ".$autosichter."<br>" ;
+*/
 
-        echo $zeile.",".$spalte.",".$typ.",".$pos[$zeile][$spalte].",".$rolle[$zeile][$spalte].",\"ro\",".$redcpy.",".$autosichter."<br>"  ;
       }
     }
-/*
-INSERT INTO `nv_empfmtx` (`mtx_lfd`, `mtx_x`, `mtx_y`, `mtx_typ`, `mtx_fkt`, `mtx_rolle`, `mtx_mode`, `mtx_rc2`, `mtx_auto`) VALUES
-(1, 1, 1, '', '', '', '', 0, 0),
-(2, 1, 2, '', '', '', '', 0, 0),
-(3, 1, 3, '', '', '', '', 0, 0),
-(4, 1, 4, '', '', '', '', 0, 0),
-(5, 1, 5, '', '', '', '', 0, 0),
-(6, 2, 1, '', '', '', '', 0, 0),
-(7, 2, 2, '', '', '', '', 0, 0),
-(8, 2, 3, '', '', '', '', 0, 0),
-(9, 2, 4, '', '', '', '', 0, 0),
-(10, 2, 5, '', '', '', '', 0, 0),
-(11, 3, 1, '', '', '', '', 0, 0),
-(12, 3, 2, '', '', '', '', 0, 0),
-(13, 3, 3, '', '', '', '', 0, 0),
-(14, 3, 4, '', '', '', '', 0, 0),
-(15, 3, 5, '', '', '', '', 0, 0),
-(16, 4, 1, '', '', '', '', 0, 0),
-(17, 4, 2, '', '', '', '', 0, 0),
-(18, 4, 3, '', '', '', '', 0, 0),
-(19, 4, 4, '', '', '', '', 0, 0),
-(20, 4, 5, '', '', '', '', 0, 0);
 
------------------------------------------------------------------------------------------------------------
-
-
-
-$empf_matrix = array (
-1 => array (
-	 1 => array ("typ" => "cb", "typ" => "cb", "fkt" => "LS", "rolle" => "Stab", "mode" => "ro" ),
-	 2 => array ("typ" => "t", "typ" => "t", "fkt" => "", "rolle" => "leer", "mode" => "ro" ),
-	 3 => array ("typ" => "t", "typ" => "t", "fkt" => "", "rolle" => "leer", "mode" => "ro" ),
-	 4 => array ("typ" => "t", "typ" => "t", "fkt" => "", "rolle" => "leer", "mode" => "ro" )
-),
-2 => array (
-	 1 => array ("typ" => "cb", "typ" => "cb", "fkt" => "S1", "rolle" => "Stab", "mode" => "ro" ),
-	 2 => array ("typ" => "t", "typ" => "t", "fkt" => "", "rolle" => "leer", "mode" => "ro" ),
-	 3 => array ("typ" => "t", "typ" => "t", "fkt" => "", "rolle" => "leer", "mode" => "ro" ),
-	 4 => array ("typ" => "t", "typ" => "t", "fkt" => "", "rolle" => "leer", "mode" => "ro" )
-),
-3 => array (
-	 1 => array ("typ" => "cb", "typ" => "cb", "fkt" => "S2", "rolle" => "Stab", "mode" => "ro" ),
-	 2 => array ("typ" => "t", "typ" => "t", "fkt" => "", "rolle" => "leer", "mode" => "ro" ),
-	 3 => array ("typ" => "t", "typ" => "t", "fkt" => "", "rolle" => "leer", "mode" => "ro" ),
-	 4 => array ("typ" => "t", "typ" => "t", "fkt" => "", "rolle" => "leer", "mode" => "ro" )
-),
-4 => array (
-	 1 => array ("typ" => "cb", "typ" => "cb", "fkt" => "S3", "rolle" => "Stab", "mode" => "ro" ),
-	 2 => array ("typ" => "cb", "typ" => "cb", "fkt" => "LNA", "rolle" => "FB", "mode" => "ro" ),
-	 3 => array ("typ" => "t", "typ" => "t", "fkt" => "", "rolle" => "leer", "mode" => "ro" ),
-	 4 => array ("typ" => "t", "typ" => "t", "fkt" => "", "rolle" => "leer", "mode" => "ro" )
-),
-5 => array (
-	 1 => array ("typ" => "cb", "typ" => "cb", "fkt" => "S4", "rolle" => "Stab", "mode" => "ro" ),
-	 2 => array ("typ" => "cb", "typ" => "cb", "fkt" => "OrgRD", "rolle" => "FB", "mode" => "ro" ),
-	 3 => array ("typ" => "t", "typ" => "t", "fkt" => "", "rolle" => "leer", "mode" => "ro" ),
-	 4 => array ("typ" => "t", "typ" => "t", "fkt" => "", "rolle" => "leer", "mode" => "ro" )
-)
-);
-
-	$conf_empf [1] = array ("fkt" => "LS", "rolle" => "Stab" );
-	$conf_empf [2] = array ("fkt" => "S1", "rolle" => "Stab" );
-	$conf_empf [3] = array ("fkt" => "S2", "rolle" => "Stab" );
-	$conf_empf [4] = array ("fkt" => "S3", "rolle" => "Stab" );
-	$conf_empf [5] = array ("fkt" => "S4", "rolle" => "Stab" );
-	$conf_empf [6] = array ("fkt" => "Si", "rolle" => "Stab" );
-	$conf_empf [7] = array ("fkt" => "A/W", "rolle" => "Fernmelder" );
-	$conf_empf [8] = array ("fkt" => "LNA", "rolle" => "FB" );
-	$conf_empf [9] = array ("fkt" => "OrgRD", "rolle" => "FB" );
-
-    $redcopy2 = "S2" ;
-*/
 
     $dbaccess = new db_access ($conf_4f_db  ["server"],
                                $conf_4f_db  ["datenbank"],
@@ -275,17 +218,16 @@ $empf_matrix = array (
 
     $query = "TRUNCATE TABLE ".$conf_4f_tbl   ["empfmtx"].";" ;
 
-    echo "query=".$query."<br><br>";
+//    echo "query=".$query."<br><br>";
 
     $result = $dbaccess->query_table_iu ($query);
 
-    echo "fktquery=".$fktquery."<br>";
+//    echo "<b> FKTQUERY===".$fktquery."</b><br>";
 
-    $result = $dbaccess->query_table ($fktquery);
+    $result = $dbaccess->query_table_iu ($fktquery);
 
-
-
-    exit;
+//    echo "<b>Nach DBaccess-query</b><br>";
+//    exit;
   }
 
 
@@ -297,6 +239,8 @@ $empf_matrix = array (
     echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
     echo "<html>\n";
     echo "<head>\n";
+      // Hier kann noch Java rein    
+    echo "<script type = \"text/javascript\" src = \"../js/prototype.js\"></script>";
     echo "<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=utf-8\">";
     echo "<title>".$titel."</title>\n";
     echo "</head>\n";
@@ -318,19 +262,30 @@ $empf_matrix = array (
             fkt    : LS, S1 .. S6 ...
             rolle  : Stab - Stabsmitglied
                      Fb   - Fachberater
+
+                    ( $zeile, $spalte, $fkts [$zeile][$spalte], true, $stasi[$zeile][$spalte])
 \****************************************************************************/
-  function cellentry ($zeile, $spalte, $entry, $isredcopy2, $stasicpy) {
+  function cellentry ($zeile, $spalte, $entry, $isredcopy2) {
 
     include ("../4fcfg/config.inc.php");
+
+//    if ($entry[auto] == "1") {$isstasi = "t";} else {$isstasi = "f";};
+/*
+    echo "zeile  ===".$zeile."<br>";
+    echo "spalte ===".$spalte."<br>";
+    echo "entry  ===".$entry."<br>";
+    echo "isred  ===".$isredcopy2."<br>";
+    echo "isstasi===".$isstasi."<br>";
+*/
 
     if ($isredcopy2) { // Hintergrundfarbe des Feldes umstellen
        // rot
        $bgcolor = "rgb(255, 0, 0)";
     } else {
-      if ($stasicpy) { // Hintergrundfarbe des Feldes umstellen bei der standard Sichtung
+      if ($entry[auto] == 1) { // Hintergrundfarbe des Feldes umstellen bei der standard Sichtung
          // blau
-        $bgcolor = "rgb(  0,   0, 200)";
-      } else {
+        $bgcolor = "rgb(  100,   100, 255)";
+      } elseif ($entry[auto] == 0) {
          //
         $bgcolor = "rgb(204, 204, 152)";
       }
@@ -341,7 +296,7 @@ $empf_matrix = array (
       echo "<td style=\"font-size:18px; font-weight:900; text-align: center; width: 10px; background-color: ".$bgcolor.";\">\n";
       echo "<a><img src=\"".$conf_design_path."/null.gif\" alt=\"leer\"></a>\n";
     } else {
-      if ($stasicpy) { // Hintergrundfarbe des Feldes umstellen bei der standard Sichtung
+      if ($entry[auto] == 1) { // Hintergrundfarbe des Feldes umstellen bei der standard Sichtung
          // blau
         echo "<td style=\"font-size:18px; font-weight:800; text-align: center; width: 10px; background-color: ".$bgcolor.";\">\n";
       } else {
@@ -349,29 +304,34 @@ $empf_matrix = array (
         echo "<td style=\"font-size:18px; font-weight:800; text-align: center; width: 10px; background-color: ".$bgcolor.";\">\n";
       }
        // Autosichtung
-      echo "<input type=\"checkbox\" name=\"stasi_".$zeile.$spalte."\" value=\"salami_".$zeile.$spalte."\">";
+      if ($entry[auto] == 1) {
+        echo "<!-- ".$isstasi." -->";
+        echo "<input type=\"checkbox\" name=\"stasi_".$zeile.$spalte."\" value=\"salami_".$zeile.$spalte."\" id=\"fktmtx_".$zeile.$spalte."_as\" checked=\"checked\" >";
+      } elseif ($entry[auto] == 0) {
+        echo "<input type=\"checkbox\" name=\"stasi_".$zeile.$spalte."\" value=\"salami_".$zeile.$spalte."\" id=\"fktmtx_".$zeile.$spalte."_as\" >";
+      }
     }
-    echo "</td>";
+    echo "</td>\n";
 
     echo "<td style=\"font-size:18px; font-weight:800; text-align: center; width: 10px; background-color: ".$bgcolor.";\">\n";
-      // Radiobutton für die Rotkopie
+      // Radiobutton fÃ¼r die Rotkopie
     if ( $isredcopy2 ) {$sel = "checked=\"checked\"";} else {$sel = "";}
-    echo "<input name=\"lagerot\" type=\"radio\"".$sel." value=\"".$zeile.$spalte."\">\n";
+    echo "<input name=\"lagerot\" type=\"radio\"".$sel." value=\"".$zeile.$spalte."\" id=\"fktmtx_".$zeile.$spalte."_rk\" >\n";
     echo "</td>";
       // Funktionsbezeichnung (LS, S1...S6, OrglRD, LNA)
     echo "<td style=\"font-size:18px; font-weight:800; text-align: center; width: 10px; background-color: ".$bgcolor.";\">\n";
     echo "<input style=\"font-size:18px; font-weight:900;\" maxlength=\"6\" size=\"6\" name=pos_".$zeile.$spalte.
-         " value=\"".$entry ["fkt"]."\">\n";
+         " value=\"".$entry ["fkt"]."\" id=\"fktmtx_".$zeile.$spalte."_fkt\" >\n";
     echo "</td>";
       //  Stab oder
     echo "<td style=\"font-size:18px; font-weight:800; text-align: center; width: 100px; background-color: ".$bgcolor.";\">\n";
     if ($entry["rolle"]=="Stab") {$sel = "checked=\"checked\"";} else {$sel = "";}
-    echo "<input name=\"rolle_".$zeile.$spalte."\" value=\"Stab\" type=\"radio\" ".$sel.">Stab";
+    echo "<input name=\"rolle_".$zeile.$spalte."\" value=\"Stab\" type=\"radio\" ".$sel."  id=\"fktmtx_".$zeile.$spalte."_stab\" >Stab";
     echo "</td>";
       // Fachberater
     echo "<td style=\"font-size:18px; font-weight:800; text-align: center; width: 100px; background-color: ".$bgcolor.";\">\n";
     if ($entry["rolle"]=="FB") {$sel = "checked=\"checked\"";} else {$sel = "";}
-    echo "<input name=\"rolle_".$zeile.$spalte."\" value=\"FB\" type=\"radio\" ".$sel.">FB";
+    echo "<input name=\"rolle_".$zeile.$spalte."\" value=\"FB\" type=\"radio\" ".$sel." id=\"fktmtx_".$zeile.$spalte."_fb\">FB";
 
     echo "</td>";
   }
@@ -383,21 +343,26 @@ $empf_matrix = array (
 
     include ("../4fcfg/config.inc.php");
 
-// echo "<br><br>"; print_r ($fkts); echo"<br><br>";
+// echo "<br><br>FKTS==="; var_dump ($fkts); echo"<br><br>";
 
-    echo "<form style=\"\" method=\"get\" action=\"".$_SERVER ['PHP_SELF']."\" name=\"Funktionseditor\">";
+    echo "<form style=\"\" method=\"get\" action=\"".$_SERVER ['PHP_SELF']."\" name=\"Funktionseditor\">\n";
     echo "<table style=\"text-align: center; background-color: rgb(255,255,255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
-    echo "</td>\n"; // schon gelesen ?
+//    echo "</td>\n";
     for ($zeile=1; $zeile <= 5; $zeile ++){
-      echo "<td align=\"center\">";
+
+      echo "<tr>\n";// align=\"center\">";
+
       for ($spalte=1; $spalte <= 4; $spalte ++) {
-        echo "<td align=\"center\">";
+
+        echo "<td align=\"center\">\n";
+
         if ( ($fkts [$zeile][$spalte]["fkt"] == $redcopy2) and
              ($redcopy2 != "") ) {
-          cellentry ( $zeile, $spalte, $fkts [$zeile][$spalte], true, $stasi[$zeile][$spalte]); }
+          cellentry ( $zeile, $spalte, $fkts [$zeile][$spalte], true); } //, $stasi[$zeile][$spalte]); }
         else {
-          cellentry ( $zeile, $spalte, $fkts [$zeile][$spalte], false, $stasi[$zeile][$spalte]); }
-        echo "</td>";
+          cellentry ( $zeile, $spalte, $fkts [$zeile][$spalte], false); } //, $stasi[$zeile][$spalte]); }
+        echo "</td>\n";
+
       }
       echo "</tr>";
     }
@@ -411,6 +376,11 @@ $empf_matrix = array (
     echo "<input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/send.gif\">\n";
     echo "</td><td>\n";
     echo "<input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/cancel.gif\">\n";
+    echo "</td><td>\n";
+    echo "<input type=\"image\" name=\"laden\" src=\"".$conf_design_path."/load.gif\">\n";
+    echo "</td><td>\n";
+    echo "<input type=\"image\" name=\"speichern\" src=\"".$conf_design_path."/save.gif\">\n";
+
     echo "</td></tr>\n";
     echo "</tbody>";
     echo "</table>";
@@ -428,15 +398,27 @@ $empf_matrix = array (
 
 \****************************************************************************/
 
+if ( debug == true ){
+  echo "<br><br>\n";
+  echo "GET="; var_dump ($_GET);    echo "#<br><br>\n";
+  echo "POST="; var_dump ($_POST);   echo "#<br><br>\n";
+  echo "COOKIE="; var_dump ($_COOKIE); echo "#<br><br>\n";
+  echo "SESSION="; print_r ($_SESSION); echo "#<br>\n";
+}
+
+    // Gibt es eine default Datei?
+  define ("defaultfile","default.fkt");
+  if (file_exists (filename) ){
+
+  }
 
 
   if (isset($_GET ["absenden_x"] ) ){
     $check = check_fkt ($_GET);
-
     if ($check) {
-      write_fkt_file ($_GET);
+//      write_fkt_file ($_GET);
+      write_fkt_db   ($_GET);
     }
-
     header("Location: ".$conf_urlroot.$conf_web ["pre_path"]."/4fadm/admin.php");
   }
 
@@ -444,6 +426,21 @@ $empf_matrix = array (
     header("Location: ".$conf_urlroot.$conf_web ["pre_path"]."/4fadm/admin.php");
   }
 
+  if (isset($_GET ["speichern_x"] ) ){
+    $check = check_fkt ($_GET);
+    if ($check) {
+      $filename =  $conf_web ["srvroot"].$conf_web ["pre_path"]."/4fcfg/deault.fkt.php";
+      write_fkt_file ($_GET, $filename);
+      write_fkt_db   ($_GET);
+    }
+    header("Location: ".$conf_urlroot.$conf_web ["pre_path"]."/4fadm/admin.php");
+  }
+
+  if (isset($_GET ["laden_x"] ) ){
+       //     echo "<b>datei laden !!!<br></b>";
+     $filename =  $conf_web ["srvroot"].$conf_web ["pre_path"]."/4fcfg/deault.fkt.php";
+     include ($filename);
+  }
 
     pre_html ("Funktionsbearbeitung");
     echo "<P><FONT FACE=\"Arial Black\"><FONT SIZE=4>Funktionseditor

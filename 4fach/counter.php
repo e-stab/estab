@@ -18,11 +18,7 @@ include ("tools.php");
 include ("db_operation.php");
 include ("../4fcfg/config.inc.php");
 pre_html ("status", "Status","");
-
-
 echo "<body bgcolor=\"#ECECFF\">";
-
-
 
 /****************************************************************************
   O u t q u e u e c o u n t e r
@@ -108,8 +104,5 @@ showsrvtime ("vertikal");
 echo "</body>";
 
 echo "</html>";
-
-
-
 
 ?>

@@ -92,7 +92,6 @@ class createbutton {
         $this->text   = $_GET [text];
         $this->textpos= $_GET [textpos];
         $this->create_push_button ();
-        // if (isset($_GET [])){$this-> = ;}else{ $this-> = ;}
       break;
       case "radio":
          // einzelne Schalterwerte in swt speichern
@@ -103,7 +102,6 @@ class createbutton {
         if (isset($_GET [bg]       )){$this->bg        = $_GET [bg]       ;}else{ $this->bg        = lighterblue;}    // Hintergrundfarbe
         if (isset($_GET [textcol]  )){$this->textcol   = $_GET [textcol]  ;}else{ $this->textcol   = black;}// Text farbe
         if (isset($_GET [bordercol])){$this->bordercol = $_GET [bordercol];}else{ $this->bordercol = black;}// Linienfarbe
-//        if (isset($_GET [form]     )){$this->form      = ;}else{ $this-> = ;}$this->form   = $_GET [form];    // rund eckig
         $this->color  = $_GET [color];
         if (isset ($_GET [font_size])) {$this->font_size = $_GET [font_size] ;}
         $this->text   = $_GET [text];
@@ -166,27 +164,20 @@ class createbutton {
       "blue"       "red"      "yellow"      "green"
       "lightblue"  "lightred" "lightyellow" "lightgreen"
 
-********************************************************************************/
+  ********************************************************************************/
   function create_icon_button (){
 
     $this->height = imagefontheight($this->font_size)*1.5;
     $fontwidth    = imagefontwidth ($this->font_size)*strlen($this->text);
     $this->width  = $fontwidth + $this->height;
-
-//echo "this->width  =".$this->width."<br>";
-//echo "this->height =".$this->height."<br>";
-//echo "".."<br>";
     $this->img = imagecreate($this->width, $this->height);
     $this->set_color ();
-
       // Hintergrundfrage
     imagefill  ( $this->img, 1, 1, $this->get_color ($this->bg) );
-
     $len=strlen($this->text);
       // Rahmen
     if ($this->status == "EIN"){
       imagerectangle  ( $this->img , 0, 0, $this->width-1 , $this->height-1, $this->get_color ($this->bordercol) ) ;
-//      imagerectangle  ( $this->img , 1, 1, $this->width-2 , $this->height-2, $this->get_color ($this->bordercol) ) ;
     } elseif ($this->status == "AUS") {
       imageline ( $this->img ,   0, $this->height-1, 0, 0 , $this->get_color ($this->bordercol) );
       imageline ( $this->img ,   0, 0, $this->width-1,  0, $this->get_color ($this->bordercol) );
@@ -194,10 +185,7 @@ class createbutton {
     }
     $xpos= ($this->width - $fontwidth) / 2 ;//$i*imagefontwidth($font_size);
     $ypos= ($this->height - imagefontheight($this->font_size) ) / 2 ;
-
     imagestring($this->img, $this->font_size, $xpos, $ypos, $this->text, $this->get_color ($this->textcol) );
-
-
     header("Content-Type: image/png");
     imagepng($this->img);
     imagedestroy($this->img);
@@ -343,10 +331,10 @@ class createbutton {
 
 
 
-  var $m_form ;	// Form des Tasters rund, spitz, eckig
+  var $m_form ; // Form des Tasters rund, spitz, eckig
   var $m_text ; // Text des Tasters
-  var $m_bg ;	// Hintergrundfarbe im mittleren Bereich
-  var $m_bc ;	// Randfarbe
+  var $m_bg ;   // Hintergrundfarbe im mittleren Bereich
+  var $m_bc ;   // Randfarbe
   var $m_pc ;   // Farbe der Umgebung
   var $m_font ; // Zeichensatz
   var $m_fs ;   // Schriftgrösse
@@ -369,13 +357,6 @@ class createbutton {
     $this->height = $txt_dy + 5 ;
     $this->width  = $txt_dx + $ober + $mittel ;
     if ( $this->m_width > $this->width ){ $this->width = $this->m_width ;}
-/*
-echo "ober         =".$ober."<br>";
-echo "mittel       =".$mittel."<br>";
-echo "unter        =".$unter."<br>";
-echo "this->height =".$this->height."<br>";
-echo "this->width  =".$this->width."<br>";
-*/
     $this->img   = imagecreate($this->width, $this->height);
     $this->set_color ($this->oncol);
 
@@ -453,8 +434,6 @@ echo "this->width  =".$this->width."<br>";
 
 
 define ("debug", false);
-
-/*******************************************************************************/
   if (isset ($_GET["type"])){
     switch ($_GET["type"]){
       case "tumbler":
@@ -521,7 +500,6 @@ if ( debug == true ){
   echo "GET="; var_dump ($_GET);    echo "#<br><br>\n";
   echo "POST="; var_dump ($_POST);   echo "#<br><br>\n";
   echo "COOKIE="; var_dump ($_COOKIE); echo "#<br><br>\n";
-  //echo "SERVER="; var_dump ($_SERVER); echo "#<br><br>\n";
   echo "SESSION="; print_r ($_SESSION); echo "#<br>\n";
 }
 

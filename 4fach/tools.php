@@ -370,6 +370,8 @@ include ("../4fcfg/para.inc.php");
 
 
   function showsrvtime ($dir){
+      // setze die Zeitzone
+    date_default_timezone_set  ( "Europe/Berlin" );	
     echo "<table align=\"center\" style=\"text-align:center; background-color: \"\"; height: 52px;\" border=\"1\" cellpadding=\"1\" cellspacing=\"2\">\n";
     echo "<tbody>";
       $hour = date ("H");

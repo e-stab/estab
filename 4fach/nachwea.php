@@ -4,7 +4,7 @@ include ("../4fcfg/config.inc.php");  // Konfigurationseinstellungen und Vorgabe
 include ("db_operation.php");        // Datenbank operationen
 include ("liste.php");          // erzeuge Ausgabelisten
 include ("data_hndl.php");      // propritäre  Datenbankoperationen
-include ("menue.php");          // erzeuge Menüs
+//include ("menue.php");          // erzeuge Menüs
 
 
   if ( isset ($_GET) ) {
