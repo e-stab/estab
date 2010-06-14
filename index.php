@@ -2,7 +2,9 @@
 
 define ("showmenue", true);
 
-include "menue.inc.php";
+
+//include ("./4fcfg/config.inc.php");
+include ("menue.inc.php");
 
     echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
     echo "<html>\n";
@@ -77,12 +79,12 @@ include "menue.inc.php";
 
       echo "</td>\n";
     }
-    echo "</tbody>\n";
-    echo "</table>\n";
+//    echo "</tbody>\n";
+//    echo "</table>\n";
 
     if (showmenue){
-      echo "<table style=\"background-color: rgb(150, 150, 150); text-align: left; margin-left: auto; margin-right: auto;\" border=\"1\" cellpadding=\"3\" cellspacing=\"3\">\n";
-      echo "<tbody>\n";
+//      echo "<table style=\"background-color: rgb(150, 150, 150); text-align: left; margin-left: auto; margin-right: auto;\" border=\"1\" cellpadding=\"3\" cellspacing=\"3\">\n";
+//      echo "<tbody>\n";
 
       for ($m=1;$m <= count ($zusatz_menue);$m++){
 
@@ -127,10 +129,9 @@ include "menue.inc.php";
 
         echo "</td>\n";
       }
-      echo "</tbody>\n";
-      echo "</table>\n";
     }
-
+  echo "</tbody>\n";
+  echo "</table>\n";
     echo "</body>\n";
     echo "</head>\n";
 

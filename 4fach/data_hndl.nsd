@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<root text="DATA_HNDL" comment="" type="sub" style="nice">
+ <children>
+
+<alternative text="&#34;( ( $_GET [kuerzel] != &#34;&#34;&#34;&#34; ) AND &#34;,&#34;  ( $_GET [benutzer] != &#34;&#34;&#34;&#34;  ) )&#34;" comment="" color="FFFFFF">
+ <qTrue>
+
+<instruction text="&#34;$query = &#34;&#34;SELECT * FROM &#34;&#34;.$conf_4f_tbl [&#34;&#34;benutzer&#34;&#34;].&#34;&#34; WHERE `kuerzel` LIKE \&#34;&#34;&#34;&#34;.$GETkuerzel.&#34;&#34;\&#34;&#34;;&#34;&#34;;&#34;" comment="" color="FFFFFF" rotated="0"></instruction>
+<alternative text="&#34;( ( count ($result) &#62; 0 ) AND &#34;,&#34;( $result != &#34;&#34;&#34;&#34; ) )&#34;" comment="" color="FFFFFF">
+ <qTrue>
+
+<instruction text="&#34;$user_eq = ( $_GET[&#34;&#34;benutzer&#34;&#34;] == $db_result [&#34;&#34;benutzer&#34;&#34;] ); &#34;,&#34;$kuerzel_eq = ( $GETkuerzel == $db_result [&#34;&#34;kuerzel&#34;&#34;] );&#34;,&#34;$passwd_eq = ( $GET[&#34;&#34;kennwort1&#34;&#34;] == $db_result [&#34;&#34;password&#34;&#34;] );&#34;,,&#34;$db_gleich  = ( $user_eq  AND $kuerzel_eq AND $passwd_eg );&#34;" comment="&#34;Eingabe und Datenbankwerte bsind gleich&#34;" color="FF8080" rotated="0"></instruction>
+<alternative text="&#34;(  $db_gleich  )&#34;" comment="" color="FFFFFF">
+ <qTrue>
+
+<alternative text="&#34;($db_result [&#34;&#34;aktiv&#34;&#34;] == 1 )&#34;" comment="" color="FFFFFF">
+ <qTrue>
+
+<instruction text="&#34;$query = &#34;&#34;UPDATE &#34;&#34;.$conf_4f_tbl [&#34;&#34;benutzer&#34;&#34;].&#34;&#34;&#34;,&#34;                      SET   `SID` = \&#34;&#34;&#34;&#34;.session_id().&#34;&#34;\&#34;&#34;,&#34;,&#34;                             `ip` = \&#34;&#34;&#34;&#34;.$_SERVER [REMOTE_ADDR].&#34;&#34;\&#34;&#34;,&#34;,&#34;                          `fwdip` = \&#34;&#34;&#34;&#34;.$_SERVER[HTTP_X_FORWARDED_FOR].&#34;&#34;\&#34;&#34;,&#34;,&#34;                          `aktiv` = \&#34;&#34;1\&#34;&#34; WHERE `kuerzel` = \&#34;&#34;&#34;&#34;.$GETkuerzel.&#34;&#34;\&#34;&#34;;&#34;&#34;;&#34;" comment="" color="FFFFFF" rotated="0"></instruction>
+<instruction text="&#34;$_SESSION [menue] = &#34;&#34;ROLLE&#34;&#34;;  // Starte Menue im Rollenmodus&#34;,&#34;$rolle = rollenfinder ( $_GET[&#34;&#34;funktion&#34;&#34;] );&#34;,&#34;$_SESSION [&#34;&#34;vStab_benutzer&#34;&#34;] = $_GET[&#34;&#34;benutzer&#34;&#34;];&#34;,&#34;$_SESSION [&#34;&#34;vStab_kuerzel&#34;&#34;]  = $GETkuerzel;&#34;,&#34;$_SESSION [&#34;&#34;vStab_funktion&#34;&#34;] = $_GET[&#34;&#34;funktion&#34;&#34;];&#34;,&#34;$_SESSION [&#34;&#34;vStab_rolle&#34;&#34;]    = $rolle;&#34;,&#34;$_SESSION [menue] = &#34;&#34;ROLLE&#34;&#34;;  // Starte Menu im Rollenmodus&#34;,&#34;$_SESSION [ROLLE] = $rolle;&#34;,&#34;protokolleintrag (&#34;&#34;Sessiondaten neu setzen&#34;&#34;, $_SESSION[vStab_benutzer].&#34;&#34;;&#34;&#34;.&#34;,&#34;$_SESSION[vStab_kuerzel].&#34;&#34;;&#34;&#34;.&#34;,&#34;$_SESSION[vStab_funktion].&#34;&#34;;&#34;&#34;.&#34;,&#34;$_SESSION[vStab_rolle].&#34;&#34;;&#34;&#34;.session_id().&#34;&#34;;&#34;&#34;.&#34;,$_SERVER[REMOTE_ADDR]);" comment="" color="FFFFFF" rotated="0"></instruction>
+ </qTrue>
+ <qFalse>
+
+ </qFalse>
+</alternative>
+<alternative text="&#34;($db_result [&#34;&#34;aktiv&#34;&#34;] == 0 )&#34;" comment="" color="FFFFFF">
+ <qTrue>
+
+<instruction text="&#34;$query = &#34;&#34;UPDATE &#34;&#34;.$conf_4f_tbl [&#34;&#34;benutzer&#34;&#34;].&#34;&#34;&#34;,&#34;                     SET `funktion` = \&#34;&#34;&#34;&#34;.$_GET [&#34;&#34;funktion&#34;&#34;].&#34;&#34;\&#34;&#34;,&#34;,&#34;                         `rolle`    = \&#34;&#34;&#34;&#34;.$rolle.&#34;&#34;\&#34;&#34;,&#34;,&#34;                         `SID`      = \&#34;&#34;&#34;&#34;.session_id().&#34;&#34;\&#34;&#34;,&#34;,&#34;                         `ip`       = \&#34;&#34;&#34;&#34;.$_SERVER [REMOTE_ADDR].&#34;&#34;\&#34;&#34;,&#34;,&#34;                         `fwdip`    = \&#34;&#34;&#34;&#34;.$_SERVER[HTTP_X_FORWARDED_FOR].&#34;&#34;\&#34;&#34;,&#34;,&#34;                         `aktiv`    = \&#34;&#34;1\&#34;&#34; WHERE kuerzel = \&#34;&#34;&#34;&#34;.$GETkuerzel.&#34;&#34;\&#34;&#34;;&#34;&#34;;&#34;" comment="" color="FFFFFF" rotated="0"></instruction>
+<alternative text="&#34;($_GET [&#34;&#34;funktion&#34;&#34;] != &#34;&#34;A/W&#34;&#34;)&#34;" comment="" color="FFFFFF">
+ <qTrue>
+
+<instruction text="&#34;$dbaccess-&#62;create_user_table ($usertablename, $fkttblname); &#34;" comment="" color="FFFFFF" rotated="0"></instruction>
+<instruction text="&#34;$_SESSION [ROLLE] = $rolle;&#34;,&#34;            $_SESSION [&#34;&#34;vStab_benutzer&#34;&#34;] = $_GET[&#34;&#34;benutzer&#34;&#34;];&#34;,&#34;            $_SESSION [&#34;&#34;vStab_kuerzel&#34;&#34;]  = $GETkuerzel;&#34;,&#34;            $_SESSION [&#34;&#34;vStab_funktion&#34;&#34;] = $_GET[&#34;&#34;funktion&#34;&#34;];&#34;,&#34;            $_SESSION [&#34;&#34;vStab_rolle&#34;&#34;]    = $rolle;&#34;,&#34;            $_SESSION [&#34;&#34;menue&#34;&#34;] = &#34;&#34;ROLLE&#34;&#34;;  // Starte Menu im Rollenmodus&#34;,&#34;            $_SESSION [&#34;&#34;ROLLE&#34;&#34;] = $rolle;&#34;,&#34;            protokolleintrag (&#34;&#34;Funktion Ummelden&#34;&#34;,&#34;,&#34;$_SESSION[vStab_benutzer].&#34;&#34;;&#34;&#34;.&#34;,&#34;$_SESSION[vStab_kuerzel].&#34;&#34;;&#34;&#34;.&#34;,&#34;$_SESSION[vStab_funktion].&#34;&#34;;&#34;&#34;.&#34;,&#34;$_SESSION[vStab_rolle].&#34;&#34;;&#34;&#34;.session_id().&#34;&#34;;&#34;&#34;.&#34;,$_SERVER[REMOTE_ADDR]);" comment="" color="FFFFFF" rotated="0"></instruction>
+ </qTrue>
+ <qFalse>
+
+ </qFalse>
+</alternative>
+ </qTrue>
+ <qFalse>
+
+ </qFalse>
+</alternative>
+ </qTrue>
+ <qFalse>
+
+<alternative text="passwd_eq" comment="" color="FF8080">
+ <qTrue>
+
+ </qTrue>
+ <qFalse>
+
+<instruction text="&#34;$infotext = &#34;&#34;Passwort falsch !!!&#60;br&#62;&#34;,&#34;   Benutzername stimmt nicht mit den gespeicherten Daten überein.&#34;&#34;;&#34;" comment="" color="FF8080" rotated="0"></instruction>
+<instruction text="&#34;errorwindow( &#34;&#34;Benutzeranmeldung&#34;&#34;, $infotext );&#34;,&#34;$error_userlogin = true;&#34;" comment="" color="FF8080" rotated="0"></instruction>
+ </qFalse>
+</alternative>
+ </qFalse>
+</alternative>
+<alternative text="&#34;($kuerzel_eq and !$user_eq)&#34;" comment="" color="FFFFFF">
+ <qTrue>
+
+<instruction text="&#34;$infotext = &#34;&#34;Kürzel schon vorhanden !!!&#60;br&#62;Benutzername stimmt nicht mit den gespeicherten Daten überein.&#34;&#34;;&#34;,&#34;          errorwindow( &#34;&#34;Benutzeranmeldung&#34;&#34;, $infotext );&#34;,&#34;          $error_userlogin = true;&#34;" comment="" color="FFFFFF" rotated="0"></instruction>
+ </qTrue>
+ <qFalse>
+
+ </qFalse>
+</alternative>
+ </qTrue>
+ <qFalse>
+
+<instruction text="&#34;$rolle = rollenfinder ( $_GET[&#34;&#34;funktion&#34;&#34;] );&#34;,&#34;        $_SESSION [&#34;&#34;vStab_benutzer&#34;&#34;] = $_GET[&#34;&#34;benutzer&#34;&#34;];&#34;,&#34;        $_SESSION [&#34;&#34;vStab_kuerzel&#34;&#34;]  = $GETkuerzel;&#34;,&#34;        $_SESSION [&#34;&#34;vStab_funktion&#34;&#34;] = $_GET[&#34;&#34;funktion&#34;&#34;];&#34;,&#34;        $_SESSION [&#34;&#34;vStab_rolle&#34;&#34;]    = $rolle;&#34;,,&#34;        $query = &#34;&#34;INSERT into &#34;&#34;.$conf_4f_tbl [&#34;&#34;benutzer&#34;&#34;].&#34;&#34; SET&#34;,&#34;                        `benutzer` = \&#34;&#34;&#34;&#34;.$_GET[&#34;&#34;benutzer&#34;&#34;].&#34;&#34;\&#34;&#34;,&#34;,&#34;                        `kuerzel`  = \&#34;&#34;&#34;&#34;.$GETkuerzel.&#34;&#34;\&#34;&#34;,&#34;,&#34;                        `funktion` = \&#34;&#34;&#34;&#34;.$_GET[&#34;&#34;funktion&#34;&#34;].&#34;&#34;\&#34;&#34;,&#34;,&#34;                        `rolle`    = \&#34;&#34;&#34;&#34;.$rolle.&#34;&#34;\&#34;&#34;,&#34;,&#34;                        `sid`      = \&#34;&#34;&#34;&#34;.session_id()  .&#34;&#34;\&#34;&#34;,&#34;,&#34;                        `ip`       = \&#34;&#34;&#34;&#34;.$_SERVER[REMOTE_ADDR].&#34;&#34;\&#34;&#34;,&#34;,&#34;                        `fwdip`    = \&#34;&#34;&#34;&#34;.$_SERVER[HTTP_X_FORWARDED_FOR].&#34;&#34;\&#34;&#34;,&#34;,&#34;                        `password` = \&#34;&#34;&#34;&#34;.$_GET[&#34;&#34;kennwort1&#34;&#34;].&#34;&#34;\&#34;&#34;,&#34;,&#34;                        `aktiv`    = \&#34;&#34;1\&#34;&#34;&#34;&#34;;&#34;" comment="" color="FFFFFF" rotated="0"></instruction>
+<alternative text="&#34;($_SESSION [&#34;&#34;vStab_funktion&#34;&#34;] != &#34;&#34;A/W&#34;&#34;)&#34;" comment="" color="FFFFFF">
+ <qTrue>
+
+<instruction text="&#34;$usertablename = $conf_4f_tbl [&#34;&#34;usrtblprefix&#34;&#34;].&#34;,&#34;                             strtolower ($_GET [&#34;&#34;funktion&#34;&#34;]).&#34;&#34;_&#34;&#34;.&#34;,&#34;                              strtolower ( $_GET [&#34;&#34;kuerzel&#34;&#34;]);&#34;" comment="" color="FFFFFF" rotated="0"></instruction>
+<instruction text="&#34;$fkttblname  = $conf_4f_tbl [&#34;&#34;usrtblprefix&#34;&#34;].&#34;&#34;_fkt_&#34;&#34;.&#34;,&#34;                       strtolower ($_SESSION[&#34;&#34;vStab_funktion&#34;&#34;]);&#34;" comment="" color="FFFFFF" rotated="0"></instruction>
+<instruction text="&#34;$dbaccess-&#62;create_user_table ($usertablename, $fkttblname);&#34;" comment="" color="FFFFFF" rotated="0"></instruction>
+ </qTrue>
+ <qFalse>
+
+ </qFalse>
+</alternative>
+ </qFalse>
+</alternative>
+ </qTrue>
+ <qFalse>
+
+<instruction text="&#34;$_SESSION [menue] = &#34;&#34;LOGIN&#34;&#34;;&#34;,&#34;$infotext = &#34;&#34;Keine Daten eingegeben !!!&#34;&#34;;&#34;,&#34;errorwindow( &#34;&#34;Benutzeranmeldung&#34;&#34;, $infotext );&#34;,&#34;$error_userlogin = true;&#34;" comment="" color="FFFFFF" rotated="0"></instruction>
+ </qFalse>
+</alternative>
+ </children>
+</root>

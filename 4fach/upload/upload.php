@@ -324,7 +324,7 @@ $status = $_SESSION ["UPLOAD"];
         $my_upload->upload_dir = $conf_4f ["ablage_dir"]."/" ; // "files" is the folder for the uploaded files (you have to create this folder)
           if ( debug == true ){ echo "Upload-Dir:".$my_upload->upload_dir."<br>";}
 
-        $my_upload->extensions = array(".jpg",".tif",".gif",".avi",".png", ".zip", ".pdf"); // specify the allowed extensions here
+        $my_upload->extensions = array(".jpg",".tif",".gif",".avi",".png", ".zip", ".pdf", ".xia"); // specify the allowed extensions here
           // $my_upload->extensions = "de"; // use this to switch the messages into an other language (translate first!!!)
 
         $my_upload->max_length_filename = 100; // change this value to fit your field length in your database (standard 100)
