@@ -55,5 +55,9 @@ include ("./4fcfg/config.inc.php");
     $menue[6]["text"] = "Infosammunlung BOS";
     $menue[6]["pic"]  = $conf_menue ["symbole"]."merke32.gif";
     $menue[6]["link"] = "./stabinfo/index.php";
+	
+	$zusatz_menue[2]["text"] = "Kurzanleitung zur eStab Installation & Nutzung";
+    $zusatz_menue[2]["pic"]  = $conf_menue ["symbole"]."icon_handbuch.gif";
+    $zusatz_menue[2]["link"] = "./Handbuch_eStab.pdf";
 
 ?>

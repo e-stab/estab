@@ -235,7 +235,8 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
     echo "<tr>";
 
       echo "<td>";
-      echo "<big><b>".($_SESSION["ueb_flt_start"]+1)."|".($_SESSION["ueb_flt_start"]+$_SESSION["ueb_flt_anzahl"])."|<big>".($_SESSION["ueb_flt_rescount"])."</big></b></big>";
+	  echo "<big><b>".($_SESSION["ueb_flt_start"]+1)."|".($_SESSION["ueb_flt_start"]+$_SESSION["ueb_flt_anzahl"])."|<big>".($_SESSION["ueb_flt_rescount"])."</big></b></big>";
+      echo "<br><img src=\"http://localhost:80/kats/4fach/design/HS/timer.gif\">";
       echo "</td>";
       echo "<td>";
       echo "Meldung/Seite:<br>\n";
@@ -354,6 +355,7 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
     echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
     echo "<html>\n";
     echo "<head>\n";
+	echo "<meta http-equiv=\"refresh\" content=\"10\">\n";
     echo "</head>\n";
 
     echo "<body bgcolor=\"#DCDCFF\">";
@@ -1763,7 +1765,7 @@ define ("debug", false);
     $_SESSION["ueb_flt_darstellung"] = 1;
     $_SESSION["ueb_flt_erledigt"]    = 0;
     $_SESSION["ueb_flt_unerledigt"]  = 1;
-    $_SESSION["ueb_flt_anzahl"]      = 5;
+    $_SESSION["ueb_flt_anzahl"]      = 15;
     $_SESSION["ueb_flt_start"]       = 0 ;
     $_SESSION["ueb_flt_position"]    = 0;
   }
