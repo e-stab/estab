@@ -183,5 +183,13 @@
          "dez" => '12',
          "dec" => '12'
     );
+/*****************************************************************/
+//    Tabellenfarben
+/*****************************************************************/
+
+$color_data_table = "#E0E0E0";
+$color_button = 	"#E0E0E0";
+$color_button_ok = 	"#A0FFA0"; // auch für "Absenden"
+$color_button_nok =	"#FFA0A0";
 
 ?>

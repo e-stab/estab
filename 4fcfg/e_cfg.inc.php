@@ -2,9 +2,9 @@
 /******************************************************************************\ 
               Definitionen fuer den Einsatz                                        
 \******************************************************************************/ 
-$conf_4f_db ["datenbank"]     = "estab_test"; 
-$conf_4f     ["anschrift"]    = "FüSt THW"; 
-$conf_4f     ["hoheit"]       = "EM"; 
+$conf_4f_db ["datenbank"]     = "estab_20100410"; 
+$conf_4f     ["anschrift"]    = "EL HS"; 
+$conf_4f     ["hoheit"]       = "HS"; 
 
 
 

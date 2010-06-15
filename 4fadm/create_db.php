@@ -85,6 +85,7 @@ $old_error_handler = set_error_handler("myErrorHandler");
 
   include "../4fcfg/dbcfg.inc.php";
   include "../4fcfg/e_cfg.inc.php";
+  include "../4fcfg/config.inc.php";
 
   echo "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0 Transitional//EN\">";
   echo "<HTML>";
@@ -100,6 +101,16 @@ $old_error_handler = set_error_handler("myErrorHandler");
   echo "<BODY>\n";
 
   echo "<FORM action=\"../4fadm/admin.php\" method=\"get\" target=\"_self\">\n";
+
+  echo "<fieldset>";
+  echo "<legend>Aktion:</legend>\n";
+  echo "<table border=\"1\" cellpadding=\"5\" cellspacing=\"0\" bgcolor=$color_data_table>\n";
+  echo "<tr>\n";
+  echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/ok.gif\"></td>\n";
+  echo "</td></tr>\n";
+  echo "</table>\n";
+  echo "</fieldset>\n";
+  echo "<br>";
 
 
   echo "<big><big>";
@@ -135,7 +146,7 @@ $old_error_handler = set_error_handler("myErrorHandler");
 
   $query = "CREATE TABLE IF NOT EXISTS `".$conf_4f_tbl ["nachrichten"]."` (
     `00_lfd` bigint(20) NOT NULL auto_increment,
-    `01_medium` set('Fe','Fu','Me','FAX','FS','eMail') NOT NULL default '',
+    `01_medium` set('Fe','Fu','Me','FAX','FS','@') NOT NULL default '',
     `01_datum` datetime NOT NULL default '0000-00-00 00:00:00',
     `01_zeichen` char(3) NOT NULL default '',
     `02_zeit` datetime NOT NULL default '0000-00-00 00:00:00',
@@ -146,10 +157,10 @@ $old_error_handler = set_error_handler("myErrorHandler");
     `04_nummer` bigint(20) NOT NULL default '0',
     `05_gegenstelle` varchar(128) NOT NULL default '',
     `06_befweg` varchar(128) NOT NULL default '',
-    `06_befwegausw` set('Fe','Fu','Me','FAX','FS','eMail') NOT NULL default '',
+    `06_befwegausw` set('Fe','Fu','Me','FAX','FS','@') NOT NULL default '',
     `07_durchspruch` set('D','S') NOT NULL default '',
     `08_befhinweis` varchar(128) NOT NULL default '',
-    `08_befhinwausw` set('Fe','Fu','Me','FAX','FS','eMail') NOT NULL default '',
+    `08_befhinwausw` set('Fe','Fu','Me','FAX','FS','@') NOT NULL default '',
     `09_vorrangstufe` set('eee','sss','bbb','aaa') NOT NULL default '',
     `10_anschrift` varchar(255) NOT NULL default '',
     `11_gesprnotiz` binary(1) NOT NULL default 'f',
@@ -372,6 +383,29 @@ $old_error_handler = set_error_handler("myErrorHandler");
   }
 
 
+  $query = "CREATE TABLE IF NOT EXISTS `".$conf_tbl ["ubb"]."` (
+  `ubb_lfd-nr` INT NOT NULL auto_increment,
+  `ubb_time`   DATETIME NOT NULL ,
+  `ubb_wo`     TEXT NOT NULL ,
+  `ubb_wervon` TEXT NOT NULL,
+  `ubb_weran`  TEXT NOT NULL,
+  `ubb_was`    TEXT NOT NULL,
+  `ubb_sonst`  TEXT NOT NULL,
+  `ubb_benutzer` varchar(50) NOT NULL default '',
+  `ubb_kuerzel` varchar(6) NOT NULL default '',
+  `ubb_funktion` varchar(10) NOT NULL default '',
+   PRIMARY KEY  (`ubb_lfd-nr`)
+  ) ENGINE = MYISAM AUTO_INCREMENT=1;";
+
+  $result = mysql_query($query, $link);
+  if (!$result) {
+     die('Ung&uuml;ltige Abfrage: ' . mysql_error().'query='.$query  );
+  } else {
+    echo "Einsatztagebuch wurde angelegt.";
+    echo "<br>\n";
+  }
+
+
 
 $query = "CREATE TABLE IF NOT EXISTS `".$conf_tbl ["komplan"]."` (
   `lfd` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -447,18 +481,10 @@ $query = "CREATE TABLE IF NOT EXISTS `".$conf_tbl ["bhp50"]."` (
     echo "<br>\n";
   }
 
-
-
-
-
-
-
   echo 'Ich habe fertig.';
   echo "</big></big>\n";
 
-
   echo "<br>\n";
-  echo "<input type=\"submit\" value=\" OK \">\n";
 
   echo "</FORM>\n";
   echo "</BODY></HTML>\n";

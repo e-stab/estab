@@ -410,11 +410,8 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
     echo "<table style=\"text-align: left;\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\">\n";
     echo "<tbody>\n";
     echo "<tr>\n";
-    echo "<td>\n";
-    echo "<input type=\"image\" name=\"absenden\" alt=\"absenden\" tabindex=\"3\" src=\"".$conf_design_path."/send.gif\">\n";
-    echo "</td><td>\n";
-    echo "<input type=\"image\" name=\"abbrechen\" alt=\"abbrechen\" tabindex=\"4\" src=\"".$conf_design_path."/cancel.gif\">\n";
-    echo "</td>\n";
+    echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"absenden\" alt=\"absenden\" tabindex=\"3\" src=\"".$conf_design_path."/ok.gif\"></td>\n";
+    echo "<td bgcolor=$color_button_nok><input type=\"image\" name=\"abbrechen\" alt=\"abbrechen\" tabindex=\"4\" src=\"".$conf_design_path."/cancel.gif\"></td>\n";
     echo "</tr>\n";
     echo "</tbody>\n";
     echo "</table>\n";
@@ -488,11 +485,8 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
       echo "<table style=\"text-align: left;\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\">\n";
       echo "<tbody>\n";
       echo "<tr>\n";
-      echo "<td>\n";
-      echo "<input type=\"image\" name=\"absenden\" alt=\"absenden\" tabindex=\"3\" src=\"".$conf_design_path."/send.gif\">\n";
-      echo "</td><td>\n";
-      echo "<input type=\"image\" name=\"abbrechen\" alt=\"abbrechen\" tabindex=\"4\" src=\"".$conf_design_path."/cancel.gif\">\n";
-      echo "</td>\n";
+      echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"absenden\" alt=\"absenden\" tabindex=\"3\" src=\"".$conf_design_path."/ok.gif\"></td>\n";
+      echo "<td bgcolor=$color_button_nok><input type=\"image\" name=\"abbrechen\" alt=\"abbrechen\" tabindex=\"4\" src=\"".$conf_design_path."/cancel.gif\"></td>\n";
       echo "</tr>\n";
       echo "</tbody>\n";
       echo "</table>\n";
