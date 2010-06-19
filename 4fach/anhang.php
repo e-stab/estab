@@ -64,6 +64,7 @@ class fileupload extends file_upload {
     $this->loesche_reservierungen ($db, $conf_4f_tbl ["anhang"]);
       // Dateinamen aus abgebrochene Reservierrungen
     $frei_res = $this->res_abgebr ($db, $conf_4f_tbl ["anhang"]);
+//echo "FREIRES===";var_dump($frei_res); echo "<br>";
     if ($frei_res) {
       $this->fs_nextfilename = $frei_res;
     }else{
@@ -180,15 +181,25 @@ class fileupload extends file_upload {
   \***************************************************************************/
   function next_filename ($db, $tbl, $hoheit){
       // Dateiname mit der höchsten Zahl
-    $query = "SELECT MAX(filename) as filename,status FROM ".$tbl." WHERE 1 GROUP BY `filename` ";
+    $query = "SELECT MAX(filename) as filename,status FROM ".$tbl." WHERE 1 GROUP BY `status` ";
+//echo "QUERY==="; var_dump($query); echo "<br>";
     $result = $db->query_table ($query);
-    if ($result != ""){
-      $filename = $result [1][filename];
-      $status   = $result [1][status];
+//echo "RESULT==="; var_dump($result); echo "<br>";
+
+    if ($result != "") {
+      if ( ($result[2] != NULL) && ($result [2][filename] > $result [1][filename])){
+        $filename = $result [2][filename];
+        $status   = $result [2][status];
+      } else {
+        $filename = $result [1][filename];
+        $status   = $result [1][status];
+    }
     } else {
       $filename = "";
       $status   = "";
     }
+
+
     if ($filename != ""){
       $hoheitlen = strlen ( $hoheit );
       $filelen = strlen ($filename);
@@ -210,6 +221,7 @@ class fileupload extends file_upload {
     }
       // Filename == hoheit + Nullen + Nächste Zahl
     $this->fs_nextfilename = $hoheit.$fillzero.$nextnum ;
+//echo "FS_NEXTFILENAME==="; var_dump($this->fs_nextfilename); echo "<br>";
   }
 
 
@@ -421,11 +433,10 @@ class fileupload extends file_upload {
   function fileselectform ($predata) {
     include ("../4fcfg/config.inc.php");
     echo "<form name=\"uploadform\" enctype=\"multipart/form-data\" method=\"post\" action=\"".$_SERVER['PHP_SELF']."\">\n";
-    echo "<table style=\"text-align: left; width: 745px; height: 170px;\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\">\n";
+	echo "<fieldset>\n";
+    echo "<legend><big>Anhang hochladen</big></legend>\n";
+    echo "<table style=\"text-align: left; width: 745px; height: 170px;\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" bgcolor=\"#E0E0E0\">\n";
     echo "<tbody>\n";
-    echo "<tr>\n";
-    echo "<td><big><big style=\"font-weight: bold;\">Anhang hochladen</big></big></td>\n";
-    echo "</tr>\n";
     echo "<tr>\n";
     echo "<td>\n";
     echo "<table style=\"text-align: left; width: 740px; height: 143px;\" border=\"1\" cellpadding=\"1\" cellspacing=\"1\">\n";
@@ -436,7 +447,7 @@ class fileupload extends file_upload {
     echo "  <input type=\"hidden\" name=\"fs_nextfilename\" value=\"".$predata["newfilename"]."\">\n";
     echo "</tr>\n";
     echo "<tr>\n";
-    echo "  <td style=\"width: 167px;\">Dateiname:</td>\n";
+    echo "  <td style=\"width: 167px;\">Datei:</td>\n";
     echo "  <td style=\"width: 769px;\">";
     echo "  <input style=\"font-size:18px; font-weight:900; font-weight: bold;\" name=\"upload\" type=\"file\" size=\"60\">";
     echo "  </td>\n";
@@ -459,12 +470,20 @@ class fileupload extends file_upload {
     echo "</td>\n";
     echo "<td></td>\n";
     echo "</tr>\n";
-    echo "<tr><td>\n";
-    echo "<input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/send.gif\">\n";
-    echo "<input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/cancel.gif\">\n";
-    echo "</td></tr>\n";
     echo "</tbody>\n";
     echo "</table>\n";
+	echo "</fieldset>\n";
+	
+	echo "<fieldset>";
+    echo "<legend>Aktion:</legend>\n";
+    echo "<table border=\"1\" cellpadding=\"2\" cellspacing=\"0\" bgcolor=\"#E0E0E0\">\n";
+    echo "<tr>\n";
+    echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/ok.gif\"></td>\n";
+    echo "<td bgcolor=$color_button_nok><input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/cancel.gif\"></td>\n";
+    echo "</td></tr>\n";
+    echo "</table>\n";
+	echo "</fieldset>\n";
+	
     echo "</form>";
   }
 
@@ -684,50 +703,39 @@ include_once ("./db_operation.php");  // Datenbank operationen
     echo "<form name=\"uploadform\" enctype=\"multipart/form-data\" method=\"get\" action=\"anhang.php\">\n"; // action=\"".$_SERVER['PHP_SELF']."\">";
     echo "<!-- anhang.php Formularelemente und andere Elemente innerhalb des Formulars -->\n";
 
-    echo "<table border=\"1\" cellspacing=\"2\" cellpeding=\"3\">\n";
-
-    echo "<tr><td>\n";
+	echo "<fieldset>";
+    echo "<legend>Aktion:</legend>\n";
+    echo "<table border=\"1\" cellspacing=\"2\" cellpeding=\"3\" bgcolor=\"#E0E0E0\">\n";
+    echo "<tr>";
     echo "<input type=\"hidden\" name=\"anhang\" value=\"ah_auswahl\">\n";
-    echo "<input type=\"image\" name=\"ah_auswahl\" src=\"".$conf_design_path."/send.gif\">\n";
-    echo "</td><td>\n";
-    echo "<input type=\"image\" name=\"ah_abbrechen\" src=\"".$conf_design_path."/cancel.gif\">\n";
-    echo "</td><td>\n";
-    echo "<input type=\"image\" name=\"ah_upload\" src=\"".$conf_design_path."/upload.gif\">\n";
-    echo "</td></tr>\n";
+    echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"ah_auswahl\" src=\"".$conf_design_path."/ok.gif\"></td>\n";
+    echo "<td bgcolor=$color_button_nok><input type=\"image\" name=\"ah_abbrechen\" src=\"".$conf_design_path."/cancel.gif\"></td>\n";
+    echo "<td bgcolor=$color_button><input type=\"image\" name=\"ah_upload\" src=\"".$conf_design_path."/upload.gif\"></td>\n";
+    echo "</tr>\n";
     echo "</table>";
+	echo "</fieldset>\n";
 
-    echo "<table border=\"1\" cellspacing=\"2\" cellpeding=\"3\">\n";
+ 	echo "<fieldset>";
+    echo "<legend>Liste der verfügbaren Dateien</legend>\n";
+    echo "<table border=\"1\" cellspacing=\"2\" cellpeding=\"3\" bgcolor=\"#E0E0E0\">\n";
 
     $files = readDirectory ();
-
 
     $db_file_data = readFiles_from_db();
     if ($db_file_data != NULL){
       $i = 0;
       echo "<TR>";
-      echo "<TH>";
-      echo "Auswahl";
-      echo "</TH>";
-      echo "<TH>";
-      echo "Vorschau";
-      echo "</TH>";
-      echo "<TH>";
-      echo "Dateiname";
-      echo "</TH>";
-      echo "<TH>";
-      echo "Bemerkung";
-      echo "</TH>";
-      echo "<TH>";
-      echo "org. Dateiname";
-      echo "</TH>";
-      echo "<TH>";
-      echo "Datum/Zeit";
-      echo "</TH>";
+      echo "<TH>Auswahl</TH>";
+      echo "<TH>Vorschau</TH>";
+      echo "<TH>Dateiname</TH>";
+      echo "<TH>Bemerkung</TH>";
+      echo "<TH>org. Dateiname</TH>";
+      echo "<TH>Datum/Zeit</TH>";
       echo "</TR>";
       foreach ($db_file_data as $file){
         echo "<tr>\n";
           // checkbox
-        echo "<td>\n";
+        echo "<td style=\"text-align:center;\">\n";
         echo "<input type=\"checkbox\" name=\"lfd_".$i."\" value=\"".$file[filename].".".$file["fileext"]."\">\n";
         echo "</td>\n";
           // Preview, if posible
@@ -737,11 +745,11 @@ include_once ("./db_operation.php");  // Datenbank operationen
             $conf_4f ["ablage_dir"]."/".$file["filename"].".".$file["fileext"]."&width=250\"></a></td>\n";
         echo "</td>\n";
           // filename
-        echo "<td> <a href=\"".$conf_4f ["ablage_uri"]."/".$file[filename].".".$file["fileext"]."\" target=\"_blank\">$file[filename]</a></td>\n";
+        echo "<td style=\"text-align:center;\"> <a href=\"".$conf_4f ["ablage_uri"]."/".$file[filename].".".$file["fileext"]."\" target=\"_blank\">$file[filename]</a></td>\n";
           // commend belong to the attechmant
         echo "<td> <a href=\"".$conf_4f ["ablage_uri"]."/".$file[filename].".".$file["fileext"]."\" target=\"_blank\">$file[comment]</a></td>\n";
           // org Dateiname
-        echo "<td> <a href=\"".$conf_4f ["ablage_uri"]."/".$file[filename].".".$file["fileext"]."\" target=\"_blank\">$file[org_filename]</a></td>\n";
+        echo "<td> <a href=\"".$conf_4f ["ablage_uri"]."/".$file[filename].".".$file["fileext"]."\" target=\"_blank\">localh$file[org_filename]</a></td>\n";
           // time when the attetchment was edit
         echo "<td> <a href=\"".$conf_4f ["ablage_uri"]."/".$file[filename].".".$file["fileext"]."\" target=\"_blank\">$file[date]</a></td>\n";
         echo "</tr>\n";
@@ -749,6 +757,7 @@ include_once ("./db_operation.php");  // Datenbank operationen
       }
     }
     echo "</table>\n";
+	echo "</fieldset>";
     echo "</form>\n";
   }
 
@@ -842,47 +851,29 @@ include_once ("./db_operation.php");  // Datenbank operationen
       $my_upload->extensions = array(".jpg",".tif",".gif",".avi",".png",".bmp",".zip",".pdf",".doc",".xls",".odt",".txt", ".xia"); // Erlaubte Dateierweiterungen
       $my_upload->max_length_filename = 100; // change this value to fit your field length in your database (standard 100)
       $my_upload->rename_file = true;
-      if (isset($_POST["absenden_x"])) {
-          if ( debug == true ){ echo "001 is set POST absender_x<br>";}
-        $my_upload->the_temp_file = $_FILES['upload']['tmp_name'];
-
-          if ( debug == true ){ echo "002 tmpname =".$my_upload->the_temp_file."<br>";}
-        $my_upload->the_file = $_FILES['upload']['name'];
-
-          if ( debug == true ){ echo "003 name    =".$my_upload->the_file."<br>";}
-
-        $my_upload->http_error = $_FILES['upload']['error'];
-
-          if ( debug == true ){ echo "004 error   =".$my_upload->http_error."<br>";}
-          if ( debug == true ){ echo "004a _FILES ="; var_dump ($_FILES); echo"<br><br>";}
-
-        if ($my_upload->http_error != 0){
+      if (isset($_POST["absenden_x"])) {							if ( debug == true ){ echo "001 is set POST absender_x<br>";}
+        $my_upload->the_temp_file = $_FILES['upload']['tmp_name'];	if ( debug == true ){ echo "002 tmpname =".$my_upload->the_temp_file."<br>";}
+        $my_upload->the_file = $_FILES['upload']['name'];			if ( debug == true ){ echo "003 name    =".$my_upload->the_file."<br>";}
+        $my_upload->http_error = $_FILES['upload']['error'];		if ( debug == true ){ echo "004 error   =".$my_upload->http_error."<br>";}
+																	if ( debug == true ){ echo "004a _FILES ="; var_dump ($_FILES); echo"<br><br>";}
+		if ($my_upload->http_error != 0){
           $errortxt = $my_upload->error_text($my_upload->http_error);
           echo "<big><big><b>".$errortxt."</b></big></big>";
         }
-
         $my_upload->replace = true ; //(isset($_POST['replace'])) ? $_POST['replace'] : "n"; // because only a checked checkboxes is true
-
         $my_upload->do_filename_check = false; // (isset($_POST['check'])) ? $_POST['check'] : "n"; // use this boolean to check for a valid filename
 
-        $new_name = (isset($_POST['fs_nextfilename'])) ? $_POST['fs_nextfilename'] : "";
-          if ( debug == true ){ echo "005 newname   =".$new_name."<br>";}
+        $new_name = (isset($_POST['fs_nextfilename'])) ? $_POST['fs_nextfilename'] : "";	if ( debug == true ){ echo "005 newname   =".$new_name."<br>";}
 
         if ($my_upload->upload($new_name)) { // new name is an additional filename information, use this to rename the uploaded file
-          $full_path = $my_upload->upload_dir.$my_upload->file_copy;
-
-            if ( debug == true ){ echo "006 full_path   =".$full_path."<br>";}
-
-          $info = $my_upload->get_uploaded_file_info($full_path);
-            if ( debug == true ){ echo "007 info        =".$info."<br>";}
-
+          $full_path = $my_upload->upload_dir.$my_upload->file_copy;	if ( debug == true ){ echo "006 full_path   =".$full_path."<br>";}
+          $info = $my_upload->get_uploaded_file_info($full_path);		if ( debug == true ){ echo "007 info        =".$info."<br>";}
           $data["filename"]     = basename ($full_path); //$_POST ["fs_nextfilename"] ;
           $data["org_filename"] = $_FILES["upload"]["name"];
           $data["comment"]      = $_POST ["fs_comment"];
           $data["kuerzel"]      = $_POST ["fs_shortname"];
           $data["time"]         = $my_upload->convtaktodatetime ($_POST ["fs_timestamp"]);
-          $data["md5hash"]      = md5_file($full_path);
-            if (debug){echo "data==="; var_dump($data); echo "<br>";}
+          $data["md5hash"]      = md5_file($full_path);					if (debug){echo "data==="; var_dump($data); echo "<br>";}
           $my_upload->save_in_db ($data);
         }
       }
@@ -923,9 +914,7 @@ include_once ("./db_operation.php");  // Datenbank operationen
         }
     break;
 
-
-
-    case 999: // 110 UPLOAD Menue
+    case 999: // ??
         if (debug) echo "anhang.php 670 -- anhang_menue == 110 --> UPLOADMENUE<br>";
         if ( isset ($_GET ["ah_upload_x"])){
           fileselect ();
@@ -939,7 +928,7 @@ include_once ("./db_operation.php");  // Datenbank operationen
           fileselectwindow ();
         }
     break;
-
+	
     default;
       echo "<big><big><big>Kein Menüpunkt !!!</big></big></big><br>" ;
   }

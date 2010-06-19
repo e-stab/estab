@@ -10,7 +10,7 @@ define("ERROR", E_USER_WARNING);
 define("WARNING", E_USER_NOTICE);
 
 // die Stufe für dieses Skript einstellen
-error_reporting(E_ALL); //FATAL | ERROR | WARNING);
+error_reporting(E_ALL); 
 
 // Fehlerbehandlungsfunktion
 function myErrorHandler($errno, $errstr, $errfile, $errline)
@@ -30,7 +30,6 @@ function myErrorHandler($errno, $errstr, $errfile, $errline)
     echo "<b>WARNING</b> [$errno] $errstr<br />\n";
     break;
   default:
-//    echo "Unkown error type: [$errno] $errstr<br />\n";
     break;
   }
 }
@@ -94,7 +93,6 @@ $old_error_handler = set_error_handler("myErrorHandler");
     echo "GET="; var_dump ($_GET);    echo "#<br><br>\n";
     echo "POST="; var_dump ($_POST);   echo "#<br><br>\n";
     echo "COOKIE="; var_dump ($_COOKIE); echo "#<br><br>\n";
-    //echo "SERVER="; var_dump ($_SERVER); echo "#<br><br>\n";
     echo "SESSION="; var_dump ($_SESSION); echo "#<br>\n";
   }
 
@@ -148,8 +146,6 @@ class make_dbconf {
     "              Definitionen fuer den Datenbankzugriff                              \r\n".
     "\******************************************************************************"."/ \r\n";
 
-//echo ""; var_dump($values); exit;
-
     $fileline [0]  = "$"."conf_4f_db   [\"server\"]        = \"".$values ['serveradr']."\"; \r\n";
     $fileline [1]  = "$"."conf_4f_db   [\"user\"]          = \"".$values ['db_user']."\"; \r\n";
     $fileline [2]  = "$"."conf_4f_db   [\"password\"]      = \"".$values ['db_userpw']."\"; \r\n";
@@ -158,14 +154,14 @@ class make_dbconf {
     $fileline [5]  = "$"."conf_4f_tbl  [\"masterkatego\"]  = \"".$values ['tbl_pre']."masterkatego\"; \r\n";
     $fileline [6]  = "$"."conf_4f_tbl  [\"masterkategolk\"]= \"".$values ['tbl_pre']."masterkategolink\"; \r\n";
     $fileline [7]  = "$"."conf_4f_tbl  [\"nachrichten\"]   = \"".$values ['tbl_pre']."nachrichten\"; \r\n";
-    $fileline [8] = "$"."conf_4f_tbl   [\"empfmtx\"]       = \"".$values ['tbl_pre']."empfmtx\"; \r\n";
+    $fileline [8]  = "$"."conf_4f_tbl  [\"empfmtx\"]       = \"".$values ['tbl_pre']."empfmtx\"; \r\n";
     $fileline [9]  = "$"."conf_4f_tbl  [\"protokoll\"]     = \"".$values ['tbl_pre']."protokoll\"; \r\n";
-    $fileline [10]  = "$"."conf_4f_tbl [\"anhang\"]        = \"".$values ['tbl_pre']."anhang\"; \r\n";
+    $fileline [10] = "$"."conf_4f_tbl  [\"anhang\"]        = \"".$values ['tbl_pre']."anhang\"; \r\n";
     $fileline [11] = "$"."conf_4f_tbl  [\"usrtblprefix\"]  = \"usr_\"; \r\n";
     $fileline [12] = "$"."conf_tbl     [\"bhp50\"]         = \"".$values ['tbl_pre']."bhp50\"; \r\n";
     $fileline [13] = "$"."conf_tbl     [\"komplan\"]       = \"".$values ['tbl_pre']."komplan\"; \r\n";
     $fileline [14] = "$"."conf_tbl     [\"etb\"]           = \"".$values ['tbl_pre']."etb\"; \r\n";
-    $fileline [15] = "$"."conf_tbl     [\"tbb\"]           = \"".$values ['tbl_pre']."tbb\"; \r\n";
+    $fileline [15] = "$"."conf_tbl     [\"ubb\"]           = \"".$values ['tbl_pre']."ubb\"; \r\n";
 
 
 
@@ -201,7 +197,7 @@ class make_dbconf {
         2 => array ('text' => "<b>Passwort</b> :",
                     'feld' => "name=\"db_userpw\" type=\"text\" size=\"30\" maxlength=\"30\""
                     ),
-        3 => array ('text' => "<b>Tabellenprefix</b><br>Zeichenfolge die den<br>Tabellennamen vorangestellt wird :",
+        3 => array ('text' => "<b>Tabellenpr&auml;fix</b><br>Zeichenfolge die den<br>Tabellennamen vorangestellt wird :",
                     'feld' => "name=\"tbl_pre\" type=\"text\" size=\"30\" maxlength=\"30\" value=\"".$this->preconf ['tbl_pre']."\""
                     )
       );
@@ -235,32 +231,14 @@ class make_dbconf {
     }
     echo "</table>\n";
     echo "</fieldset>\n";
-/*
-    echo "<fieldset>\n";
-    echo "<legend>Vordruckparameter</legend>\n";
-    echo "<table border=\"2\" cellpadding=\"5\" cellspacing=\"0\" bgcolor=\"#E0E0E0\">\n";
 
-    $i = 0;
-    foreach ($vordruckmenue as $menueitem){
-      echo "<tr>\n";
-      echo "<td align=\"right\">".$menueitem ['text']."</td>\n";
-      echo "<td><input ".$menueitem ['feld']."></td>\n";
-      echo "</tr>\n";
-      $i++;
-    }
-    echo "</table>\n";
-    echo "</fieldset>\n";
-*/
     echo "<fieldset>\n";
+    echo "<legend>Aktion:</legend>\n";
     echo "<table border=\"2\" cellpadding=\"5\" cellspacing=\"0\" bgcolor=\"#E0E0E0\">\n";
     echo "<tr>\n";
-    echo "<td align=\"right\">Formular:</td>\n";
-    echo "<td>\n";
     echo "<input type=\"hidden\" name=\"task\" value=\"datenbank\">\n";
-    echo "<input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/send.gif\">\n";
-    echo "<input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/cancel.gif\">\n";
-
-    echo "</td>\n";
+    echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/ok.gif\"></td>\n";
+    echo "<td bgcolor=$color_button_nok><input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/cancel.gif\"></td>\n";
     echo "</tr>\n";
     echo "</fieldset>\n";
     echo "</table>\n";
@@ -300,8 +278,6 @@ class make_econf {
     "              Definitionen fuer den Einsatz                                        \r\n".
     "\******************************************************************************"."/ \r\n";
 
-//echo ""; var_dump($values); exit;
-
     $fileline [1]  = "$"."conf_4f_db [\"datenbank\"]     = \"".$values ['db_dbname']."\"; \r\n";
 
     $fileline [2] = "$"."conf_4f     [\"anschrift\"]    = \"".$values ['anschrift']."\"; \r\n";
@@ -338,20 +314,16 @@ class make_econf {
     echo "<title>Konfiguration erzeugen</title>\n";
     echo "</head>\n";
     echo "<body>\n";
-//    echo "<h1>Einsatzdaten festlegen!</h1>\n";
     echo "<form action=\"".$_SERVER['PHP_SELF']."\" method=\"get\">\n";
     echo "<fieldset>\n";
     echo "<legend>Einsatzdaten</legend>\n";
 
-//    $db_con_is_ok = $dbaccess->db_connection_check ();
 
     $db = mysql_connect($conf_4f_db ["server"],$conf_4f_db ["user"], $conf_4f_db ["password"]);
-//       or die ("[table_exist] Konnte keine Verbindung zur Datenbank herstellen");
 
     $db_con_is_ok = mysql_ping  ($db);
 
     echo "<table border=\"2\" cellpadding=\"5\" cellspacing=\"0\" bgcolor=\"#E0E0E0\">\n";
-
 
     echo "<tr>\n";
     echo "<td align=\"right\"><b>Einsatzname/<br>Datenbankname</b> :</td>\n";
@@ -384,7 +356,6 @@ class make_econf {
     echo "<fieldset>\n";
     echo "<legend>Vordruckparameter</legend>\n";
     echo "<table border=\"2\" cellpadding=\"5\" cellspacing=\"0\" bgcolor=\"#E0E0E0\">\n";
-
     $vordruckmenue = array (
         0 => array ('text' => "<b>Anschrift :</b>",
                     'feld' => "name=\"anschrift\" type=\"text\" size=\"10\" maxlength=\"30\" value=\"".$this->preconf ['anschrift']."\"",
@@ -396,7 +367,7 @@ class make_econf {
                     )
       );
 
-    $i = 0;
+	$i = 0;
     foreach ($vordruckmenue as $menueitem){
       echo "<tr>\n";
       echo "<td align=\"right\">".$menueitem ['text']."</td>\n";
@@ -405,20 +376,17 @@ class make_econf {
       echo "</tr>\n";
       $i++;
     }
+
     echo "</table>\n";
     echo "</fieldset>\n";
 
     echo "<fieldset>\n";
+    echo "<legend>Aktion:</legend>\n";
     echo "<table border=\"2\" cellpadding=\"5\" cellspacing=\"0\" bgcolor=\"#E0E0E0\">\n";
     echo "<tr>\n";
-    echo "<td align=\"right\">Formular:</td>\n";
-    echo "<td>\n";
-
     echo "<input type=\"hidden\" name=\"task\" value=\"einsatz_neu\">\n";
-    echo "<input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/send.gif\">\n";
-    echo "<input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/cancel.gif\">\n";
-
-    echo "</td>\n";
+    echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/ok.gif\"></td>\n";
+    echo "<td bgcolor=$color_button_nok><input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/cancel.gif\"></td>\n";
     echo "</tr>\n";
     echo "</fieldset>\n";
     echo "</table>\n";
@@ -576,19 +544,14 @@ class make_econf {
   }
 
   if  ( $_GET ["task"] == "einsatz_neu" ) {
-//  echo "1-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!<br>";
     $e = new make_econf ($conf_4f_db, $conf_4f_tbl, $conf_tbl, $conf_4f);
-//  echo "2-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!<br>";
     if (isset($_GET["absenden_x"])) {
-//  echo "3-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!<br>";
       $e->write_efkt_file ($_GET);
-//  echo "4-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!<br>";
       header("Location: ".$conf_urlroot.$conf_web ["pre_path"]."/4fadm/create_db.php");
     }
     if ( isset($_GET["abbrechen_x"]) ){
       header("Location: ".$conf_urlroot.$conf_web ["pre_path"]."/4fadm/admin.php");
     }
-//  echo "5-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!<br>";
     $e->menue ();
   }
 
@@ -614,7 +577,6 @@ class make_econf {
 
   if  ( $_GET ["task"] == "einsatz_ende" ) {
     $e = new make_econf ($conf_4f_db, $conf_4f_tbl, $conf_tbl, $conf_4f);
-//    echo "<FORM >";
 
     $e->schliesse_einsatz ();
 
@@ -627,7 +589,6 @@ class make_econf {
     echo "GET="; var_dump ($_GET);    echo "#<br><br>\n";
     echo "POST="; var_dump ($_POST);   echo "#<br><br>\n";
     echo "COOKIE="; var_dump ($_COOKIE); echo "#<br><br>\n";
-    //echo "SERVER="; var_dump ($_SERVER); echo "#<br><br>\n";
     echo "SESSION="; var_dump ($_SESSION); echo "#<br>\n";
   }
 

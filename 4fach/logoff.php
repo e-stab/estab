@@ -44,15 +44,15 @@ if (debug){
                       (  `03_zeichen`     != \"\" ) )
               order by `09_vorrangstufe` DESC, `12_abfzeit`; ";
 
-echo "<br>QUERY ===".$query;  echo "<br>";
+    if (debug) {echo "<br>QUERY ===".$query;  echo "<br>";}
 
     $result = $dbaccess->query_table ($query);
 
-if ($result != NULL) {
+if (($result != NULL) && (debug)) {
   echo "<br>RESULT ===";  print_r ($result); echo "<br>";
 }
 
-    if ($result != "" ){
+    if (($result != NULL) && (debug)){
       echo "<table style=\"text-align: center; background-color: rgb(255, 255, 255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
       echo "<tr style=\"background-color: rgb(240,240,200); color:#000000; font-weight:bold;\">\n";
       echo "<td>ZEIT</td>\n";
@@ -77,6 +77,6 @@ if ($result != NULL) {
     }
   }
 
-  check_sichter_logout ();
+//  check_sichter_logout ();
 //exit;
 ?>

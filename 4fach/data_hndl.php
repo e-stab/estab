@@ -400,25 +400,15 @@ function check_and_save ($data){
 
       if (validate){
          /*----------------------------------------------------*/
-        if (debug){
-          echo "DATAHNDL506=";
-          var_dump ($data); echo "<br><br>";
+        if (debug){ echo "DATAHNDL506="; var_dump ($data); echo "<br><br>";
         }
         $vali = new vali_data_form ( $data ) ;
         $result = $vali->validatethis (); //checkdata ();
-        if (debug){
-          echo "<b>DATA</b>";
-          var_dump ($data); echo "<br>";
-
-          echo "DATAHNDL 453=";
-          echo "<b>RESULT</b>";
-          var_dump ($result); echo "<br><br>";
-
-          echo "<b>vali-data</b>";
-          var_dump ($vali->i_data); echo "<br><br>";
-
-          echo "<b>vali-VALIDATE</b>";
-          var_dump ($vali->validate); echo "<br>";
+        if (debug){ 
+            echo "<b>DATA</b>"; var_dump ($data); echo "<br>";
+          echo "DATAHNDL 453="; echo "<b>RESULT</b>"; var_dump ($result); echo "<br><br>";
+          echo "<b>vali-data</b>"; var_dump ($vali->i_data); echo "<br><br>";
+          echo "<b>vali-VALIDATE</b>"; var_dump ($vali->validate); echo "<br>";
         }
 
         $data = $vali->i_data ;
@@ -461,7 +451,7 @@ function check_and_save ($data){
             `x00_status`      = \"2\",
             `x01_abschluss`   = \"f\"; ";
 
-// echo "query[Stab schreiben]===".$query."<br>";
+       if (debug) { echo "datahndl.php 464 ==>query[Stab schreiben]===".$query."<br>";}
 
        $result = $dbaccess->query_table_iu ($query);
        protokolleintrag ("Stab-schreiben",$query);

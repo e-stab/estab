@@ -40,7 +40,7 @@ class nachrichten4fach {
       } else {
 
 
-          // errorselect zur�cksetzen
+          // errorselect zuruecksetzen
          $this->errorselect ["01_medium"]   = true ;
          $this->errorselect ["01_datum"]   = true ;
 
@@ -50,8 +50,6 @@ class nachrichten4fach {
          $this->errorselect ["03_datum"]   = true ;
          $this->errorselect ["03_zeit"]   = true ;
          $this->errorselect ["03_zeichen"]   = true ;
-         //     $this->errorselect ["04_nummer"]   = true ;
-         //     $this->errorselect ["04_richtung"]   = true ;
          $this->errorselect ["05_gegenstelle"]   = true ;
          $this->errorselect ["06_befweg"]   = true ;
          $this->errorselect ["06_befwegausw"]   = true ;
@@ -107,9 +105,6 @@ class nachrichten4fach {
   var $rbl_bg_color ;  // weiss
   var $bg_color_aktv_must ; // rot
 
-//   <script src="./js/tooltip.js" type="text/javascript"></script>
-
-
   var $feldbg ;
   var $redcopy2;
 
@@ -130,7 +125,6 @@ class nachrichten4fach {
        $this->feldbg [13]["a"] = $this->bg_color_tx_a;
     }
 
-//    $this->feldbg [ 1]["a"] = $this->bg_color_fm_a;
     $this->feldbg [ 1]["i"] = $this->bg_color_inaktv;
     $this->feldbg [ 2]["a"] = $this->bg_color_fm_a;
     $this->feldbg [ 2]["i"] = $this->bg_color_inaktv;
@@ -220,8 +214,6 @@ class nachrichten4fach {
       break;
       // Weitergabe einer Meldung durch den Fernmelder
       case "FM-Ausgang" :
-//        $this->bg [2] = $this->feldbg [2]["a"] ;
-//        $this->feld [2] = true;
         $this->bg [3] = $this->feldbg [3]["a"] ;
         $this->feld [3] = true;
         $this->bg [5] = $this->feldbg [5]["a"] ;
@@ -232,8 +224,6 @@ class nachrichten4fach {
 
       // Weitergabe einer Meldung durch den Fernmelder mit Sichterfunktion
       case "FM-Ausgang_Sichter" :
-//        $this->bg [2] = $this->feldbg [2]["a"] ;
-//        $this->feld [2] = true;
         $this->bg [3] = $this->feldbg [3]["a"] ;
         $this->feld [3] = true;
         $this->bg [5] = $this->feldbg [5]["a"] ;
@@ -254,10 +244,6 @@ class nachrichten4fach {
       break;
 
       case "Stab_lesen" :
-   /*   for ($i=7;$i<=17;$i++){
-          $this->bg [$i] = $this->feldbg [$i]["i"] ;
-          $this->feld [$i] = false;
-        } */
         for ($i=1;$i<=17;$i++){
           $this->bg [$i] = $this->formbgcolor ;
           $this->feld [$i] = false;
@@ -309,7 +295,7 @@ class nachrichten4fach {
   var $empfarray ;
 
 /*****************************************************************************\
-   Funktion    :
+   Funktion    : ziele ()
    Beschreibung:
 
    (C) Hajo Landmesser IuK Kreis Heinsberg
@@ -325,11 +311,10 @@ class nachrichten4fach {
         $this->empfarray [$i][$j]["typ"]     = $empf_matrix [$i][$j]["typ"];
         $this->empfarray [$i][$j]["fkt"]     = $empf_matrix [$i][$j]["fkt"];
         $this->empfarray [$i][$j]["rolle"]   = $empf_matrix [$i][$j]["rolle"];
+        $this->empfarray [$i][$j]["auto"]    = $empf_matrix [$i][$j]["auto"];
       }
     }
 
-// echo "<big>ZIELE 1 16_empf ==="; var_dump ($this->formdata ["16_empf"]); echo "</big><br>";
-    
     $empf_text  = $this->formdata ["16_empf"] ; // Zeile mit den Empfaengern aus der DB
       // Wandel die Textzeile mit den Empfaengern in ein ARRAY um
     $empf_array_color = explode (",",$empf_text);
@@ -360,8 +345,6 @@ class nachrichten4fach {
       }
     }
   $this->redcopy2 = $redcopy2;
-
-// echo "<big>ZIELE 2 ==="; var_dump ($this->empfarray); echo "</big><br>";
 
   }
 
@@ -403,19 +386,19 @@ class nachrichten4fach {
     include ("../4fcfg/config.inc.php");
     include ("../4fcfg/fkt_rolle.inc.php");
 
-    echo "<TABLE BORDER=\"0\" CELLSPACING=\"0\" CELLPEDDING=\"0\">\n";
+//    echo "<fieldset>";
+//    echo "<legend>Aktion:</legend>\n";
+//    echo "<TABLE BORDER=\"1\" CELLSPACING=\"2\" CELLPEDDING=\"0\" bgcolor=$color_data_table >\n";
+    echo "<TABLE>\n";
     echo "<TBODY>\n";
     echo "<TR>\n";
     echo "<TD>\n";
     if ($umfang == 2){
-      echo "<TABLE BORDER=\"0\" CELLSPACING=\"10\" CELLPEDDING=\"10\">\n";
+          echo "<TABLE BORDER=\"0\" CELLSPACING=\"1\" CELLPEDDING=\"0\">\n";
       echo "<input type=\"hidden\" name=\"kate_todo\" value=\"speichern\">\n";
-  //    echo "<input type=\"hidden\" name=\"kate_tbl\" value=\"".$this->db_tablname."\">\n";
-  //    echo "<input type=\"hidden\" name=\"kate_dbtbl\" value=\"".$this->dbtyp."\">\n";
       echo "<input type=\"hidden\" name=\"msglfd\" value=\"".$this->formdata["00_lfd"]."\">\n";
-
-      echo "<TBODY>\n";
       echo "<TR>\n";
+      echo "<TBODY>\n";
       echo "<TD>\n";
         // Druckersymbol
       echo "<a href=\"javascript:window.print()\">
@@ -429,7 +412,6 @@ class nachrichten4fach {
         $katearr1 = $katego1->db_get_kategobymsg ($this->formdata["00_lfd"]);
         echo"<a ";
           // Ist die Funktion berechtigt globale Kategorien zu aendern?
-          //
         $berechtigt = ($_SESSION ["vStab_funktion"] == $redcopy2) OR
                       ($_SESSION ["vStab_funktion"] == "Si");
         if ($berechtigt) {
@@ -474,10 +456,8 @@ class nachrichten4fach {
 
         echo "</TD>\n";
         echo "<TD>\n";
-//                 title=\"pers&ouml;nliche Ordner verwalten\"></a>";
         echo "</TD>";
         echo "<TD>";
-
         if ($katearr2["kategorie"] != "" ){
           $color = "green";
           echo"<a><img src=\"./createbutton.php?icontext=".$katearr2["kategorie"]."&color=".$color."\" alt=\"".$katearr2["beschreibung"]."\"></a>";
@@ -485,11 +465,8 @@ class nachrichten4fach {
         echo "</TD>";
         echo "<TD>";
         $katego2->pulldown_kategorien ($katearr2["lfd"], true, $ordnum);
-
         echo "</TD>";
-        echo "<TD>";
-        echo "<input type=\"image\" name=\"4fachkatego_absenden\" src=\"button.php?type=menue&m_text=<=zuordnen&m_fs=10&m_form=rund\" alt=\"zuordnen\">\n";
-        echo "</TD>\n";
+        echo "<TD><input type=\"image\" name=\"4fachkatego_absenden\" src=\"button.php?type=menue&m_text=<=zuordnen&m_fs=10&m_form=rund\" alt=\"zuordnen\"></TD>\n";
       }
       echo "</TR>\n";
       echo "</TBODY>\n";
@@ -498,12 +475,10 @@ class nachrichten4fach {
     echo "</TD>";
 
     echo "<TD>";
-
-      echo "<TABLE>\n";      echo "<TBODY>\n";
-      echo "<TR>\n";
-          //echo "-----------------------------------------------------------------------<br>";
-          //echo "Task=".$this->task."     04Richtung=".$this->formdata["04_richtung"]."<br>";
-          //echo "-----------------------------------------------------------------------<br>";
+//    echo "<TABLE BORDER=\"1\" CELLSPACING=\"1\" CELLPEDDING=\"1\">\n";
+        echo "<TABLE>\n";
+    echo "<TBODY>\n";
+    echo "<TR>\n";
           /*
                                           04Richtung      Antwort Weiterleitung
 
@@ -521,14 +496,10 @@ class nachrichten4fach {
 
           Stab    Stab_schreiben                  -       -         -
                                                           2         2
-
-
           */
-          //echo "TASK TASK TASK===".$this->task."<br><b>";
 
       switch ($this->task){
-        case "Stab_lesen":
-  //        echo "<tr>";
+      case "Stab_lesen":
           echo "<td>\n";
           echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
           echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
@@ -536,17 +507,11 @@ class nachrichten4fach {
           echo "</td>";
 
           if ($this->formdata["04_richtung"]=="E"){
-            echo "<td>\n";
-            echo "<input type=\"image\" name=\"antwort\" src=\"button.php?type=menue&m_text=Antwort&m_fs=10&m_form=spitz\" alt=\"antworten\">\n";
-            echo "</td><td>\n";
-            echo "<input type=\"image\" name=\"weiterleiten\" src=\"button.php?type=menue&m_text=Weiterleiten&m_fs=10&m_form=spitz\" alt=\"weiterleiten\">\n";
-            echo "</td>";
+            echo "<td><input type=\"image\" name=\"antwort\" src=\"button.php?type=menue&m_text=Antwort&m_fs=10&m_form=spitz\" alt=\"antworten\"></td>\n";
+            echo "<td><input type=\"image\" name=\"weiterleiten\" src=\"button.php?type=menue&m_text=Weiterleiten&m_fs=10&m_form=spitz\" alt=\"weiterleiten\"></td>\n";
           } elseif ($this->formdata["04_richtung"]=="A"){
-            echo "<td>\n";
-            echo "<input type=\"image\" name=\"weiterleiten\" src=\"button.php?type=menue&m_text=Weiterleiten&m_fs=10&m_form=spitz\" alt=\"weiterleiten\">\n";
-            echo "</td>";
+            echo "<td><input type=\"image\" name=\"weiterleiten\" src=\"button.php?type=menue&m_text=Weiterleiten&m_fs=10&m_form=spitz\" alt=\"weiterleiten\"></td>\n";
           }
-  //        echo "</tr>\n";
         break;
 
         case "FM-Eingang":
@@ -558,65 +523,44 @@ class nachrichten4fach {
           echo "<td>\n";
           echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
           echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
-            // Anh�nge
+            // Anhänge
           echo "<input type=\"image\" name=\"anhang_plus\" src=\"".$conf_design_path."/attachment.gif\" alt=\"Anhang anfuegen\">\n";
-          echo "</TD>\n";
-          echo "<td>\n";
-          echo "<input type=\"image\" name=\"absenden\" src=\"button.php?type=menue&m_text=absenden&m_fs=10&m_form=rund\" alt=\"absenden\">\n";
-          echo "</td><td>\n";
-          echo "<input type=\"image\" name=\"abbrechen\" src=\"button.php?type=menue&m_text=abbrechen&m_fs=10&m_form=rund\" alt=\"abbrechen\">\n";
           echo "</td>\n";
+          echo "<td><input type=\"image\" name=\"absenden\" src=\"button.php?type=menue&m_text=absenden&m_fs=10&m_form=rund\" alt=\"absenden\"></td>\n";
+          echo "<td><input type=\"image\" name=\"abbrechen\" src=\"button.php?type=menue&m_text=abbrechen&m_fs=10&m_form=rund\" alt=\"abbrechen\"></td>\n";
         break;
 
         case "FM-Ausgang":
         case "FM-Ausgang_Sichter":
-  //        echo "<tr>";
           echo "<td>\n";
           echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
           echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
           echo "<input type=\"image\" name=\"absenden\" src=\"button.php?type=menue&m_text=absenden&m_fs=10&m_form=rund\" alt=\"absenden\">\n";
-          echo "</td><td>\n";
-          echo "<input type=\"image\" name=\"abbrechen\" src=\"button.php?type=menue&m_text=abbrechen&m_fs=10&m_form=rund\" alt=\"abbrechen\">\n";
-
-          echo "</td>";
-  /*
-          echo "<td>\n";
-          echo "<input type=\"image\" name=\"anhang\" src=\"".$conf_design_path."/attachment.gif\">\n";
           echo "</td>\n";
-  */
+          echo "<td><input type=\"image\" name=\"abbrechen\" src=\"button.php?type=menue&m_text=abbrechen&m_fs=10&m_form=rund\" alt=\"abbrechen\"></td>\n";
           if ($this->formdata["04_richtung"]=="A"){
-            echo "<td>\n";
-            echo "<input type=\"image\" name=\"antwort\" src=\"button.php?type=menue&m_text=Antwort&m_fs=10&m_form=spitz\" alt=\"antworten\">\n";
-            echo "</td>";
-    //        echo "<td>\n";
-    //        echo "<input type=\"image\" name=\"weiterleiten\" src=\"".$conf_design_path."/029.jpg\">\n";
-    //        echo "</td>\n";
+            echo "<td><input type=\"image\" name=\"antwort\" src=\"button.php?type=menue&m_text=Antwort&m_fs=10&m_form=spitz\" alt=\"antworten\"></td>\n";
           }
 
-  //        echo "</tr>\n";
         break;
         case "Stab_sichten":
         case "SI-Admin":
-  //        echo "<tr>";
           echo "<td>\n";
           echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
           echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
           echo "<input type=\"image\" name=\"absenden\" src=\"button.php?type=menue&m_text=absenden&m_fs=10&m_form=rund\" alt=\"absenden\">\n";
-          echo "</td><td>\n";
-          echo "<input type=\"image\" name=\"abbrechen\" src=\"button.php?type=menue&m_text=abbrechen&m_fs=10&m_form=rund\" alt=\"abbrechen\">\n";
-          echo "</td>";
-  //        echo "<td>\n";
+          echo "</td>\n";
+          echo "<td><input type=\"image\" name=\"abbrechen\" src=\"button.php?type=menue&m_text=abbrechen&m_fs=10&m_form=rund\" alt=\"abbrechen\"></td>\n";
         break;
      } // switch
-     echo "</TR>";
-     echo "</tbody>\n";
-     echo "</table>\n";
-//     echo "</FORM>\n";
-
+    echo "</TR>";
+    echo "</tbody>\n";
+    echo "</table>\n";
     echo "</TD>\n";
     echo "</TR>\n";
     echo "</TBODY>\n";
     echo "</TABLE>\n";
+//    echo "</fieldset>\n";
   }
 
 
@@ -675,22 +619,6 @@ class nachrichten4fach {
     echo "<body style=\"text-align: left; background-color: rgb(220,220,255); \">\n"; //".$this->formbgcolor.";\">\n";
 
     include_once ("./katego.php");
-
-
-
-    /*
-        switch ($this->task){
-          case "FM-Eingang"         : $ueberschrift = "* * *   A N N A H M E  * * *"; break;
-          case "FM-Eingang_Sichter" : $ueberschrift = "* * *   A N N A H M E / Sichtung  * * *"; break;
-          case "FM-Eingang_Anhang"  : $ueberschrift = "* * *   A N N A H M E  * * *"; break;
-          case "FM-Ausgang"         : $ueberschrift = "* * *   W E I T E R G A B E   * * *"; break;
-          case "FM-Admin"           : $ueberschrift = "* * *   A D M I N I S T R A T I O N   * * *"; break;
-          case "Stab_schreiben"     : $ueberschrift = "* * *   T E X T verfassen.   * * *"; break;
-          case "Stab_lesen"         : $ueberschrift = "* * *   N A C H R I C H T lesen   * * *"; break;
-          case "Sichter"            : $ueberschrift = "* * *   S I C H T U N G   * * *"; break;
-          case "Nachweis"           : $ueberschrift = "* * *   N A C H W E I S U N G   * * *"; break;
-        }
-    */
 
     echo "<FORM style=\"\" method=\"get\" action=\"".$conf_4f ["MainURL"]."\" name=\"4fach\">\n";
     $this->show_menue_buttons (2, "oben");

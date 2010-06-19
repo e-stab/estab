@@ -11,12 +11,10 @@
 \******************************************************************************/
 //              lfd-Nr      PosForm  Fkt
 //                       Spalte,Zeile          Roll
-    include ("../4fcfg/config.inc.php");
+    include      ("../4fcfg/config.inc.php");
     include_once ("../4fcfg/dbcfg.inc.php");
     include_once ("../4fcfg/e_cfg.inc.php");
 //    include_once ("../4fach/db_operation.php");
-
-define ("debug", false);
 
 // echo "<h1>fkt_rolle.inc.php</h1>";
 /*

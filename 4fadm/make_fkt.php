@@ -5,8 +5,6 @@ define ("debug", false);
 \****************************************************************************/
   function check_fkt ($values){
 
-//    echo "VALUES="; var_dump ($values); echo "<br><br><br>";
-
     foreach ($values as $key => $val){
       if (debug) echo "KEY = ".$key." - VAL =".$val."<br>";
 
@@ -15,10 +13,7 @@ define ("debug", false);
         if (strlen ($xy) == 2){
           $x = substr ($xy, 0, 1);
           $y = substr ($xy, 1, 1);
-//          echo "<b>##POS=".$pos." x=".$x." y=".$y." val=".$val."</b><br>";
         }
-//      $suchmuster = "\!\"§\$\%\&/()=?";
-//      preg_match($suchmuster, $val, $treffer, PREG_OFFSET_CAPTURE, 3);
     }
 
     return (true);
@@ -32,9 +27,6 @@ define ("debug", false);
 
     include ("../4fcfg/config.inc.php");
     include ("../4fcfg/fkt_rolle.inc.php");
-
-// echo "VALUE=="; print_r ($values); echo "<br><br><br>";
-
 
     $prefile = "<"."?"."php \r\n".
       "/"."******************************************************************************\ \r\n".
@@ -88,8 +80,6 @@ define ("debug", false);
     }
     $matrix .= ");\r\n \r\n";
 
-// echo "NICHT leer UND NICHT alle" ;print_r ($anmelde_arr); echo "<br>";
-
     $counter = 1;
     foreach ($anmelde_arr as $anmelde){
        if ( $anmelde ["rolle"] == "Stab" ){ $anm_arr [$counter++] = $anmelde ; }
@@ -139,12 +129,8 @@ define ("debug", false);
     include ("../4fcfg/e_cfg.inc.php");
     include_once ("../4fach/db_operation.php");
 
-//    include ("../4fcfg/fkt_rolle.inc.php");
-//    echo "<br><br><br>"; echo "VALUES dbsave=";print_r ($values); echo "<br><br><br>";
-
     $lagekopie = "";
     foreach ($values as $key => $val){
-//      echo "<br>KEY===".$key." - ".$val." +++ ";
         // lagerot
       if ($key == "lagerot"){
         $rotkopiex = substr ($val, 0, 1);
@@ -165,13 +151,8 @@ define ("debug", false);
           case "stasi": $stasi [$x][$y] = 1;  break;
         }
       } // else key == lagerot
-//      echo "+++<br>";
 
     } // foreach
-
-//     echo "<br>"; echo "pos   dbsave=";print_r ($pos); echo "<br>";
-//     echo "<br>"; echo "rolle dbsave=";print_r ($rolle); echo "<br>";
-//     echo "<br>"; echo "stasi dbsave=";print_r ($stasi); echo "<br>";
 
     $fktquery = "INSERT INTO `".$conf_4f_tbl   ["empfmtx"]."` (`mtx_x`, `mtx_y`, `mtx_typ`, `mtx_fkt`, `mtx_rolle`, `mtx_mode`, `mtx_rc2`, `mtx_auto`) VALUES ";
     for ($zeile = 1; $zeile <= 5; $zeile ++) {
@@ -194,19 +175,8 @@ define ("debug", false);
           $fktquery .= "(".$zeile.",".$spalte.", \"t\",\"\" ,\"\" , \"ro\", \"0\", \"0\")" ;
         }
         if (( $zeile == 5) and ($spalte == 4)) { $fktquery .= ""; } else { $fktquery .= ","; }
-/*
-        echo "Write in DB = ".
-             $zeile.",
-           ".$spalte.",
-           ".$typ.",
-           ".$pos[$zeile][$spalte].",
-           ".$rolle[$zeile][$spalte].",
-           \"ro\",
-           ".$redcpy.",
-           ".$autosichter."<br>" ;
-*/
 
-      }
+		}
     }
 
 
@@ -218,16 +188,10 @@ define ("debug", false);
 
     $query = "TRUNCATE TABLE ".$conf_4f_tbl   ["empfmtx"].";" ;
 
-//    echo "query=".$query."<br><br>";
-
     $result = $dbaccess->query_table_iu ($query);
-
-//    echo "<b> FKTQUERY===".$fktquery."</b><br>";
 
     $result = $dbaccess->query_table_iu ($fktquery);
 
-//    echo "<b>Nach DBaccess-query</b><br>";
-//    exit;
   }
 
 
@@ -269,15 +233,6 @@ define ("debug", false);
 
     include ("../4fcfg/config.inc.php");
 
-//    if ($entry[auto] == "1") {$isstasi = "t";} else {$isstasi = "f";};
-/*
-    echo "zeile  ===".$zeile."<br>";
-    echo "spalte ===".$spalte."<br>";
-    echo "entry  ===".$entry."<br>";
-    echo "isred  ===".$isredcopy2."<br>";
-    echo "isstasi===".$isstasi."<br>";
-*/
-
     if ($isredcopy2) { // Hintergrundfarbe des Feldes umstellen
        // rot
        $bgcolor = "rgb(255, 0, 0)";
@@ -286,8 +241,9 @@ define ("debug", false);
          // blau
         $bgcolor = "rgb(  100,   100, 255)";
       } elseif ($entry[auto] == 0) {
-         //
+         // normal
         $bgcolor = "rgb(204, 204, 152)";
+        $bgcolor = "#E0E0E0";
       }
     }
 
@@ -343,11 +299,11 @@ define ("debug", false);
 
     include ("../4fcfg/config.inc.php");
 
-// echo "<br><br>FKTS==="; var_dump ($fkts); echo"<br><br>";
 
     echo "<form style=\"\" method=\"get\" action=\"".$_SERVER ['PHP_SELF']."\" name=\"Funktionseditor\">\n";
+	echo "<fieldset>\n";
+    echo "<legend>Stabsfunktionen:</legend>\n";
     echo "<table style=\"text-align: center; background-color: rgb(255,255,255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
-//    echo "</td>\n";
     for ($zeile=1; $zeile <= 5; $zeile ++){
 
       echo "<tr>\n";// align=\"center\">";
@@ -358,32 +314,39 @@ define ("debug", false);
 
         if ( ($fkts [$zeile][$spalte]["fkt"] == $redcopy2) and
              ($redcopy2 != "") ) {
-          cellentry ( $zeile, $spalte, $fkts [$zeile][$spalte], true); } //, $stasi[$zeile][$spalte]); }
+          cellentry ( $zeile, $spalte, $fkts [$zeile][$spalte], true); } 
         else {
-          cellentry ( $zeile, $spalte, $fkts [$zeile][$spalte], false); } //, $stasi[$zeile][$spalte]); }
+          cellentry ( $zeile, $spalte, $fkts [$zeile][$spalte], false); } 
         echo "</td>\n";
 
       }
       echo "</tr>";
-    }
+    }	
     echo "</tbody>";
     echo "</table>";
+	echo "</fieldset>\n";
 
-    echo "<table style=\"text-align: center; background-color: rgb(255,255,255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
-    echo "<tr><td>\n";
-//    echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
-//    echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
-    echo "<input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/send.gif\">\n";
-    echo "</td><td>\n";
-    echo "<input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/cancel.gif\">\n";
-    echo "</td><td>\n";
-    echo "<input type=\"image\" name=\"laden\" src=\"".$conf_design_path."/load.gif\">\n";
-    echo "</td><td>\n";
-    echo "<input type=\"image\" name=\"speichern\" src=\"".$conf_design_path."/save.gif\">\n";
+	echo "<fieldset>\n";
+    echo "<legend>Aktion:</legend>\n";
+    echo "<table style=\"text-align: center; background-color: #E0E0E0; \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
+    echo "<tr>\n";
+    echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/ok.gif\"></td>\n";
+    echo "<td bgcolor=$color_button_nok><input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/cancel.gif\"></td>\n";
+    echo "<td bgcolor=$color_button><input type=\"image\" name=\"laden\" src=\"".$conf_design_path."/load.gif\"></td>\n";
+    echo "<td bgcolor=$color_button><input type=\"image\" name=\"speichern\" src=\"".$conf_design_path."/save.gif\"></td>\n";
+	echo "</fieldset>\n";
 
     echo "</td></tr>\n";
     echo "</tbody>";
     echo "</table>";
+
+	if (isset($_GET ["laden_x"] ) ){
+		echo "Einstellungen geladen.";
+	}
+	if (isset($_GET ["speichern_x"] ) ){
+		echo "Einstellungen gespeichert.";
+	}
+
     echo "</form>";
   }
 
@@ -409,14 +372,11 @@ if ( debug == true ){
     // Gibt es eine default Datei?
   define ("defaultfile","default.fkt");
   if (file_exists (filename) ){
-
   }
-
 
   if (isset($_GET ["absenden_x"] ) ){
     $check = check_fkt ($_GET);
     if ($check) {
-//      write_fkt_file ($_GET);
       write_fkt_db   ($_GET);
     }
     header("Location: ".$conf_urlroot.$conf_web ["pre_path"]."/4fadm/admin.php");
@@ -432,12 +392,10 @@ if ( debug == true ){
       $filename =  $conf_web ["srvroot"].$conf_web ["pre_path"]."/4fcfg/deault.fkt.php";
       write_fkt_file ($_GET, $filename);
       write_fkt_db   ($_GET);
-    }
-    header("Location: ".$conf_urlroot.$conf_web ["pre_path"]."/4fadm/admin.php");
+   }
   }
 
   if (isset($_GET ["laden_x"] ) ){
-       //     echo "<b>datei laden !!!<br></b>";
      $filename =  $conf_web ["srvroot"].$conf_web ["pre_path"]."/4fcfg/deault.fkt.php";
      include ($filename);
   }
@@ -455,8 +413,5 @@ if ( debug == true ){
           <b>Sonderzeichen</b> sind <i>nicht</i> erlaubt!</FONT></FONT></P>";
     fkt_matrix ( $empf_matrix , $redcopy2) ;
     post_html ();
-
-
-
 
 ?>

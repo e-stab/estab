@@ -1,17 +1,19 @@
-<html>
-
-<head>
-  <title>Grafikerzeugung zur&uumlcksetzen</title>
-</head>
-
-<body>
-
 <?php
 
 include ("../4fcfg/config.inc.php");    // Konfigurationseinstellungen und Vorgaben
 include ("../4fcfg/dbcfg.inc.php");     // Datenbankparameter
 include ("./db_operation.php");  // Datenbank operationen
 
+echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
+echo "<html>\n";
+echo "<head>\n";
+echo "<meta content=\"text/html; charset=ISO-8859-1\" http-equiv=\"content-type\">\n";
+echo "<title>Grafikerzeugung zur&uumlcksetze</title>";
+echo "</head>";
+echo "<body>";
+
+echo "<P align=center><FONT FACE=\"Arial Black\"><FONT SIZE=4>Datenbank Verbindungspr&uuml;fung:</FONT></FONT></P>";
+echo "<br>\n";
 
   $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
 
