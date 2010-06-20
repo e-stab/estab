@@ -433,7 +433,7 @@ class fileupload extends file_upload {
   function fileselectform ($predata) {
     include ("../4fcfg/config.inc.php");
     echo "<form name=\"uploadform\" enctype=\"multipart/form-data\" method=\"post\" action=\"".$_SERVER['PHP_SELF']."\">\n";
-	echo "<fieldset>\n";
+    echo "<fieldset>\n";
     echo "<legend><big>Anhang hochladen</big></legend>\n";
     echo "<table style=\"text-align: left; width: 745px; height: 170px;\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" bgcolor=\"#E0E0E0\">\n";
     echo "<tbody>\n";
@@ -472,9 +472,9 @@ class fileupload extends file_upload {
     echo "</tr>\n";
     echo "</tbody>\n";
     echo "</table>\n";
-	echo "</fieldset>\n";
-	
-	echo "<fieldset>";
+        echo "</fieldset>\n";
+
+        echo "<fieldset>";
     echo "<legend>Aktion:</legend>\n";
     echo "<table border=\"1\" cellpadding=\"2\" cellspacing=\"0\" bgcolor=\"#E0E0E0\">\n";
     echo "<tr>\n";
@@ -482,8 +482,8 @@ class fileupload extends file_upload {
     echo "<td bgcolor=$color_button_nok><input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/cancel.gif\"></td>\n";
     echo "</td></tr>\n";
     echo "</table>\n";
-	echo "</fieldset>\n";
-	
+        echo "</fieldset>\n";
+
     echo "</form>";
   }
 
@@ -515,7 +515,7 @@ define ("debug", false);
 
 if ( debug == true ){
   echo "<br><br>\n";
-  echo "------ Anhang.PHP 261 an Anfang ------";     echo "#<br><br>\n";
+  echo "------ Anhang.PHP 518 an Anfang ------";     echo "#<br><br>\n";
   echo "GET     ="; var_dump ($_GET);    echo "#<br><br>\n";
   echo "POST    ="; var_dump ($_POST);   echo "#<br><br>\n";
   echo "COOKIE  ="; var_dump ($_COOKIE); echo "#<br><br>\n";
@@ -554,9 +554,12 @@ if ( debug == true ){
   Anhang ausgewaehlt und kann in Vordruck uebernommen werde
 \**********************************************************************/
   if ( ($_SESSION ["vStab_rolle"]== "Stab") and
-       (isset ($_GET["ah_auswahl_x"])) ){
+       ( (isset ($_GET["ah_auswahl_x"])) OR
+         (isset ($_GET["ah_abbrechen_x"]))
+       )
+      ){
 
-    if ( debug == true ){ echo "### 358 Anhang ausgewaehlt und kann in Vordruck uebernommen werden ";  echo "<br>\n";}
+    if ( debug == true ){ echo "### 559 Anhang ausgewaehlt und kann in Vordruck uebernommen werden ";  echo "<br>\n";}
 
     $keys = array_keys ($_GET);
     $ahkey = array ();
@@ -575,12 +578,14 @@ if ( debug == true ){
     }
     $formdata = restore_formdata ();
 
-    $formdata ["12_anhang"]   = $anhang;
-    $formdata ["12_inhalt"]  .= $inhalt;
+    if (isset ($_GET["ah_auswahl_x"])) {
+      $formdata ["12_anhang"]   = $anhang;
+      $formdata ["12_inhalt"]  .= $inhalt;
 
-    $formdata ["13_abseinheit"]  = $conf_4f     ["anschrift"];
-    $formdata ["14_zeichen"]     = $_SESSION["vStab_kuerzel"];
-    $formdata ["14_funktion"]    = $_SESSION["vStab_funktion"];
+      $formdata ["13_abseinheit"]  = $conf_4f     ["anschrift"];
+      $formdata ["14_zeichen"]     = $_SESSION["vStab_kuerzel"];
+      $formdata ["14_funktion"]    = $_SESSION["vStab_funktion"];
+    }
     $form = new nachrichten4fach ($formdata, "Stab_schreiben", "");
     exit;
 
@@ -593,7 +598,10 @@ if ( debug == true ){
 \**********************************************************************/
     // Anhang ausgewaelt und kann in Vordruck uebernommen werden
   if ( ( ($_SESSION ["vStab_rolle"]== "Fernmelder")  )and
-       (isset ($_GET["ah_auswahl_x"])) ){
+       ( (isset ($_GET["ah_auswahl_x"])) OR
+         (isset ($_GET["ah_abbrechen_x"]))
+       )
+      ){
 
     if ( debug == true ){ echo "### 417 anhang.php Vordruck aufrufen mit Daten füllen ";  echo "<br>\n";}
 
@@ -612,16 +620,23 @@ if ( debug == true ){
       $inhalt .= $_GET [$anh]." - ".$db_data[1]["comment"]." - ".$anhang_date."\n";
     }
     $formdata = restore_formdata ();
+    if ( debug == true ){
+      echo "<b>anhang.php 623 restore_formdata</b>";
+      echo "<br>\n";
+      print_r ($formdata); echo "<br>";
+    }
 
-    $formdata ["12_anhang"]   = $anhang;
-    $formdata ["12_inhalt"]  .= $inhalt;
-    $formdata ["01_zeichen"]  = $_SESSION ["vStab_kuerzel"];
-    $formdata ["10_anschrift"]  = $conf_4f ["anschrift"];
+    if (isset ($_GET["ah_auswahl_x"])) {
+      $formdata ["12_anhang"]   = $anhang;
+      $formdata ["12_inhalt"]  .= $inhalt;
+      $formdata ["01_zeichen"]  = $_SESSION ["vStab_kuerzel"];
+      $formdata ["10_anschrift"]  = $conf_4f ["anschrift"];
+    }
     if (sichter_online()) {
       $form = new nachrichten4fach ($formdata, "FM-Eingang_Anhang", "");
     } else {
       $formdata ["15_quitzeichen"]  = $_SESSION ["vStab_kuerzel"];
-      $formdata ["16_empf"]         = "";
+//      $formdata ["16_empf"]         = $_SESSION ["16_empf"]; //"";
       $form = new nachrichten4fach ($formdata, "FM-Eingang_Anhang_Sichter", "");
     }
     exit;
@@ -703,7 +718,7 @@ include_once ("./db_operation.php");  // Datenbank operationen
     echo "<form name=\"uploadform\" enctype=\"multipart/form-data\" method=\"get\" action=\"anhang.php\">\n"; // action=\"".$_SERVER['PHP_SELF']."\">";
     echo "<!-- anhang.php Formularelemente und andere Elemente innerhalb des Formulars -->\n";
 
-	echo "<fieldset>";
+        echo "<fieldset>";
     echo "<legend>Aktion:</legend>\n";
     echo "<table border=\"1\" cellspacing=\"2\" cellpeding=\"3\" bgcolor=\"#E0E0E0\">\n";
     echo "<tr>";
@@ -713,9 +728,9 @@ include_once ("./db_operation.php");  // Datenbank operationen
     echo "<td bgcolor=$color_button><input type=\"image\" name=\"ah_upload\" src=\"".$conf_design_path."/upload.gif\"></td>\n";
     echo "</tr>\n";
     echo "</table>";
-	echo "</fieldset>\n";
+        echo "</fieldset>\n";
 
- 	echo "<fieldset>";
+        echo "<fieldset>";
     echo "<legend>Liste der verfügbaren Dateien</legend>\n";
     echo "<table border=\"1\" cellspacing=\"2\" cellpeding=\"3\" bgcolor=\"#E0E0E0\">\n";
 
@@ -757,7 +772,7 @@ include_once ("./db_operation.php");  // Datenbank operationen
       }
     }
     echo "</table>\n";
-	echo "</fieldset>";
+        echo "</fieldset>";
     echo "</form>\n";
   }
 
@@ -812,11 +827,23 @@ include_once ("./db_operation.php");  // Datenbank operationen
     $_SESSION["13_abseinheit"]   = $_GET["13_abseinheit"];
     $_SESSION["14_zeichen"]      = $_GET["14_zeichen"];
     $_SESSION["14_funktion"]     = $_GET["14_funktion"];
+    $_SESSION["15_quitdatum"]    = $_GET["15_quitdatum"];
+    $_SESSION["15_quitzeichen"]  = $_GET["15_quitzeichen"];
+    $_SESSION["16_gncopy"]       = $_GET["16_gncopy"];
+    for ($m=1; $m<=5; $m++){
+      for ($n=1; $n<=4; $n++){
+        if (isset ($_GET["16_".$m.$n])) $_SESSION["16_".$m.$n] = $_GET["16_".$m.$n] ;
+//        echo "key==="."16_".$m.$n."  SESSION=====".$_SESSION["16_".$m.$n]."<br>";
+      }
+    }
+    $_SESSION["17_vermerke"] = $_GET["17_vermerke"];
   }
 
   /***************************************************************************\
   \***************************************************************************/
   function restore_formdata () {
+    include ("../4fcfg/fkt_rolle.inc.php");
+
     if (isset ($_SESSION["01_medium"])){       $data["01_medium"]       = $_SESSION["01_medium"];       unset ($_SESSION["01_medium"]);  }
     if (isset ($_SESSION["01_datum"])){        $data["01_datum"]        = $_SESSION["01_datum"];        unset ($_SESSION["01_datum"]);  }
     if (isset ($_SESSION["01_zeichen"])){      $data["01_zeichen"]      = $_SESSION["01_zeichen"];      unset ($_SESSION["01_zeichen"]);  }
@@ -835,6 +862,27 @@ include_once ("./db_operation.php");  // Datenbank operationen
     if (isset ($_SESSION["13_abseinheit"])){   $data["13_abseinheit"]   = $_SESSION["13_abseinheit"];   unset ($_SESSION["13_abseinheit"]);  }
     if (isset ($_SESSION["14_zeichen"])){      $data["14_zeichen"]      = $_SESSION["14_zeichen"];      unset ($_SESSION["14_zeichen"]);  }
     if (isset ($_SESSION["14_funktion"])){     $data["14_funktion"]     = $_SESSION["14_funktion"];     unset ($_SESSION["14_funktion"]);  }
+    if (isset ($_SESSION["15_quitdatum"])){    $data["15_quitdatum"]    = $_SESSION["15_quitdatum"];    unset ($_SESSION["15_quitdatum"]); }
+    if (isset ($_SESSION["15_quitzeichen"])){  $data["15_quitzeichen"]  = $_SESSION["15_quitzeichen"];  unset ($_SESSION["15_quitzeichen"]); }
+
+    if (isset ($_SESSION["16_gncopy"])){
+      list ($gncopyord, $gncopypos, $gncopyfkt) = explode ("_", $_SESSION["16_gncopy"]);
+    }
+    for ($m=1; $m<=5; $m++){
+      for ($n=1; $n<=4; $n++){
+        if ( isset ( $_SESSION ["16_".$m.$n] ) ) {
+           list ($ord, $pos, $fkt) = explode ("_", $_SESSION ["16_".$m.$n]);
+           $data ["16_empf"] .= $empf_matrix [$m][$n]["fkt"]."_".$fkt.",";
+//           echo "SESSION====".$_SESSION ["16_".$m.$n]." data=== ".$data ["16_empf"]."<br>";
+           unset ($_SESSION ["16_".$m.$n]);
+        }
+        if ((isset ($_SESSION["16_gncopy"])) && ($m.$n == $gncopypos)) {
+          $data ["16_empf"] .= $empf_matrix [$m][$n]["fkt"]."_".$gncopyfkt.",";
+          unset ($_SESSION["16_gncopy"]);
+        }
+      }
+    }
+    if (isset ($_SESSION["17_vermerke"])){     $data["17_vermerke"]     = $_SESSION["17_vermerke"];     unset ($_SESSION["17_vermerke"]); }
     return $data;
   }
 
@@ -851,29 +899,29 @@ include_once ("./db_operation.php");  // Datenbank operationen
       $my_upload->extensions = array(".jpg",".tif",".gif",".avi",".png",".bmp",".zip",".pdf",".doc",".xls",".odt",".txt", ".xia"); // Erlaubte Dateierweiterungen
       $my_upload->max_length_filename = 100; // change this value to fit your field length in your database (standard 100)
       $my_upload->rename_file = true;
-      if (isset($_POST["absenden_x"])) {							if ( debug == true ){ echo "001 is set POST absender_x<br>";}
-        $my_upload->the_temp_file = $_FILES['upload']['tmp_name'];	if ( debug == true ){ echo "002 tmpname =".$my_upload->the_temp_file."<br>";}
-        $my_upload->the_file = $_FILES['upload']['name'];			if ( debug == true ){ echo "003 name    =".$my_upload->the_file."<br>";}
-        $my_upload->http_error = $_FILES['upload']['error'];		if ( debug == true ){ echo "004 error   =".$my_upload->http_error."<br>";}
-																	if ( debug == true ){ echo "004a _FILES ="; var_dump ($_FILES); echo"<br><br>";}
-		if ($my_upload->http_error != 0){
+      if (isset($_POST["absenden_x"])) {                                if ( debug == true ){ echo "001 is set POST absender_x<br>";}
+        $my_upload->the_temp_file = $_FILES['upload']['tmp_name'];      if ( debug == true ){ echo "002 tmpname =".$my_upload->the_temp_file."<br>";}
+        $my_upload->the_file = $_FILES['upload']['name'];               if ( debug == true ){ echo "003 name    =".$my_upload->the_file."<br>";}
+        $my_upload->http_error = $_FILES['upload']['error'];            if ( debug == true ){ echo "004 error   =".$my_upload->http_error."<br>";}
+                                                                        if ( debug == true ){ echo "004a _FILES ="; var_dump ($_FILES); echo"<br><br>";}
+                if ($my_upload->http_error != 0){
           $errortxt = $my_upload->error_text($my_upload->http_error);
           echo "<big><big><b>".$errortxt."</b></big></big>";
         }
         $my_upload->replace = true ; //(isset($_POST['replace'])) ? $_POST['replace'] : "n"; // because only a checked checkboxes is true
         $my_upload->do_filename_check = false; // (isset($_POST['check'])) ? $_POST['check'] : "n"; // use this boolean to check for a valid filename
 
-        $new_name = (isset($_POST['fs_nextfilename'])) ? $_POST['fs_nextfilename'] : "";	if ( debug == true ){ echo "005 newname   =".$new_name."<br>";}
+        $new_name = (isset($_POST['fs_nextfilename'])) ? $_POST['fs_nextfilename'] : "";        if ( debug == true ){ echo "005 newname   =".$new_name."<br>";}
 
         if ($my_upload->upload($new_name)) { // new name is an additional filename information, use this to rename the uploaded file
-          $full_path = $my_upload->upload_dir.$my_upload->file_copy;	if ( debug == true ){ echo "006 full_path   =".$full_path."<br>";}
-          $info = $my_upload->get_uploaded_file_info($full_path);		if ( debug == true ){ echo "007 info        =".$info."<br>";}
+          $full_path = $my_upload->upload_dir.$my_upload->file_copy;    if ( debug == true ){ echo "006 full_path   =".$full_path."<br>";}
+          $info = $my_upload->get_uploaded_file_info($full_path);               if ( debug == true ){ echo "007 info        =".$info."<br>";}
           $data["filename"]     = basename ($full_path); //$_POST ["fs_nextfilename"] ;
           $data["org_filename"] = $_FILES["upload"]["name"];
           $data["comment"]      = $_POST ["fs_comment"];
           $data["kuerzel"]      = $_POST ["fs_shortname"];
           $data["time"]         = $my_upload->convtaktodatetime ($_POST ["fs_timestamp"]);
-          $data["md5hash"]      = md5_file($full_path);					if (debug){echo "data==="; var_dump($data); echo "<br>";}
+          $data["md5hash"]      = md5_file($full_path);                                 if (debug){echo "data==="; var_dump($data); echo "<br>";}
           $my_upload->save_in_db ($data);
         }
       }
@@ -888,14 +936,14 @@ include_once ("./db_operation.php");  // Datenbank operationen
   switch ($_SESSION["anhang_menue"]){
 
     case 100: // Auswahlmenue
-        if (debug) echo "anhang.php 663 -- Auswahlmenue<br>";
+        if (debug) echo "anhang.php 891 -- Auswahlmenue<br>";
         store_formdata();
         anhang_menue ();
         $_SESSION["anhang_menue"] = 110;
     break;
 
     case 110: // UPLOAD Menue
-        if (debug) echo "anhang.php 789 -- anhang_menue == 110 --> UPLOADMENUE<br>";
+        if (debug) echo "anhang.php 898 -- anhang_menue == 110 --> UPLOADMENUE<br>";
 
         if ( isset ($_GET ["ah_upload_x"])){
           fileselect ();
@@ -904,6 +952,7 @@ include_once ("./db_operation.php");  // Datenbank operationen
         if ( isset ($_GET ["ah_abbrechen_x"])){
           unset ($_SESSION["anhang_menue"]);
           unset ($_SESSION["anhang"]);
+          $_SESSION["anhang_result"] = "abbrechen" ;
           header("Location: ".$conf_4f ["MainURL"]);
         }
 
@@ -915,7 +964,7 @@ include_once ("./db_operation.php");  // Datenbank operationen
     break;
 
     case 999: // ??
-        if (debug) echo "anhang.php 670 -- anhang_menue == 110 --> UPLOADMENUE<br>";
+        if (debug) echo "anhang.php 918 -- anhang_menue == 110 --> UPLOADMENUE<br>";
         if ( isset ($_GET ["ah_upload_x"])){
           fileselect ();
         }
@@ -928,7 +977,7 @@ include_once ("./db_operation.php");  // Datenbank operationen
           fileselectwindow ();
         }
     break;
-	
+
     default;
       echo "<big><big><big>Kein Menüpunkt !!!</big></big></big><br>" ;
   }
@@ -937,7 +986,7 @@ include_once ("./db_operation.php");  // Datenbank operationen
 
 if ( debug == true ){
   echo "<br><br>\n";
-  echo "------ anhang.php 692------";
+  echo "------ anhang.php 985------";
   echo "GET     ="; var_dump ($_GET);    echo "#<br><br>\n";
   echo "POST    ="; var_dump ($_POST);   echo "#<br><br>\n";
   echo "COOKIE  ="; var_dump ($_COOKIE); echo "#<br><br>\n";

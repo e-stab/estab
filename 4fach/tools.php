@@ -394,8 +394,8 @@ include ("../4fcfg/para.inc.php");
   }
 
   /************************************************************************\
-     Function: sichter_online()
-     prüft ob ein Sichter angemeldet ist
+     Function: get_autosichter_targets($ausnahme)
+     ermittelt die Ziele für die Autosichtung
   \************************************************************************/
   function get_autosichter_targets($ausnahme) {
     include ("../4fcfg/dbcfg.inc.php");

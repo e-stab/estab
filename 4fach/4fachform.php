@@ -1248,8 +1248,6 @@ class nachrichten4fach {
                 echo "<input maxlength=\"8\" size=\"8\" value=\"".$this->empfarray [$m][$n]["fkt"]."\" name=\"16_empf_sonst_".$m.$n."\" ".$param."></td>\n";
               break;
             }
-
-
           } // for $n
           echo "</tr>\n";
         } // for $m

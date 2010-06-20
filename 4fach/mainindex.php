@@ -12,13 +12,18 @@
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
 
-define ("debug", false);
+define ("debug", false);              // true = gibt debuginformationen aus
 
-define ("create_vordrucke", true);
+define ("create_vordrucke", true);   // Erstellt PDF und PNG Dokumente für die Rückfallebene
 
 session_start ();
 
+/*
 $pre_01medium = "Fu";
+
+Für Narc beim Southside Festival zum schnelleren Eintragen von Nachrichten
+Weiter unten wird bei einem Nachrichteneingang das Medium Fe Fu Me Fax @
+*/
 
 if ( debug){
   echo "<br><br>\n";
@@ -722,9 +727,9 @@ ul#topmenu li.active {
 \**********************************************************************/
   if (isset ($_GET["fm_eingang_x"])){
 
-    if ( debug == true ){ echo "### 509 Fernmelder Eingang ";  echo "<br>\n";}
+    if ( debug == true ){ echo "### 730 Fernmelder Eingang ";  echo "<br>\n";}
 
-    if ($pre_01medium != "") { $formdata ["01_medium"]   = $pre_01medium;}
+//    if ($pre_01medium != "") { $formdata ["01_medium"]   = $pre_01medium;}
 
     $formdata ["01_zeichen"]  = $_SESSION ["vStab_kuerzel"];
     $formdata ["10_anschrift"]  = $conf_4f ["anschrift"];
