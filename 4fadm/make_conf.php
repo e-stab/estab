@@ -341,11 +341,13 @@ class make_econf {
 
     echo "<td>";
     echo "<p><b>Keine Sonderzeichen oder Umlaute</b><br>Beispiel: <b>\"e_15jun2006\"</b></p>";
-    echo "<p><img src=\"".$conf_menue ["symbole"]."/redlight.gif\" alt=\"schwerer Fehler\">".
-         " Es besteht keine Verbindung zur Datenbank.<br>Bitte unter \"Datenbankparameter eingeben\" die Parameter prüfen</p>";
-
-    echo "<p><img src=\"".$conf_menue ["symbole"]."/greenlight.gif\" alt=\"keine Fehler\">".
-         "Verbindung zur Datenbank ist in Ordnung.<br>Die Datenbank kann angelegt werden.</p>";
+    if (!$db_con_is_ok) {
+      echo "<p><img src=\"".$conf_menue ["symbole"]."/redlight.gif\" alt=\"schwerer Fehler\">".
+           " Es besteht keine Verbindung zur Datenbank.<br>Bitte unter \"Datenbankparameter eingeben\" die Parameter prüfen</p>";
+    } else {
+      echo "<p><img src=\"".$conf_menue ["symbole"]."/greenlight.gif\" alt=\"keine Fehler\">".
+           "Verbindung zur Datenbank ist in Ordnung.<br>Die Datenbank kann angelegt werden.</p>";
+    }
     echo "</td>";
 
     echo "</tr>\n";
@@ -367,7 +369,7 @@ class make_econf {
                     )
       );
 
-	$i = 0;
+        $i = 0;
     foreach ($vordruckmenue as $menueitem){
       echo "<tr>\n";
       echo "<td align=\"right\">".$menueitem ['text']."</td>\n";

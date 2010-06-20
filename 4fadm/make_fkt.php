@@ -176,7 +176,7 @@ define ("debug", false);
         }
         if (( $zeile == 5) and ($spalte == 4)) { $fktquery .= ""; } else { $fktquery .= ","; }
 
-		}
+                }
     }
 
 
@@ -301,7 +301,7 @@ define ("debug", false);
 
 
     echo "<form style=\"\" method=\"get\" action=\"".$_SERVER ['PHP_SELF']."\" name=\"Funktionseditor\">\n";
-	echo "<fieldset>\n";
+        echo "<fieldset>\n";
     echo "<legend>Stabsfunktionen:</legend>\n";
     echo "<table style=\"text-align: center; background-color: rgb(255,255,255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
     for ($zeile=1; $zeile <= 5; $zeile ++){
@@ -321,12 +321,12 @@ define ("debug", false);
 
       }
       echo "</tr>";
-    }	
+    }   
     echo "</tbody>";
     echo "</table>";
-	echo "</fieldset>\n";
+        echo "</fieldset>\n";
 
-	echo "<fieldset>\n";
+        echo "<fieldset>\n";
     echo "<legend>Aktion:</legend>\n";
     echo "<table style=\"text-align: center; background-color: #E0E0E0; \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
     echo "<tr>\n";
@@ -334,18 +334,18 @@ define ("debug", false);
     echo "<td bgcolor=$color_button_nok><input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/cancel.gif\"></td>\n";
     echo "<td bgcolor=$color_button><input type=\"image\" name=\"laden\" src=\"".$conf_design_path."/load.gif\"></td>\n";
     echo "<td bgcolor=$color_button><input type=\"image\" name=\"speichern\" src=\"".$conf_design_path."/save.gif\"></td>\n";
-	echo "</fieldset>\n";
+        echo "</fieldset>\n";
 
     echo "</td></tr>\n";
     echo "</tbody>";
     echo "</table>";
 
-	if (isset($_GET ["laden_x"] ) ){
-		echo "Einstellungen geladen.";
-	}
-	if (isset($_GET ["speichern_x"] ) ){
-		echo "Einstellungen gespeichert.";
-	}
+        if (isset($_GET ["laden_x"] ) ){
+                echo "Einstellungen geladen.";
+        }
+        if (isset($_GET ["speichern_x"] ) ){
+                echo "Einstellungen gespeichert.";
+        }
 
     echo "</form>";
   }

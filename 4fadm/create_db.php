@@ -109,9 +109,6 @@ $old_error_handler = set_error_handler("myErrorHandler");
   echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/ok.gif\"></td>\n";
   echo "</td></tr>\n";
   echo "</table>\n";
-  echo "</fieldset>\n";
-  echo "<br>";
-
 
   echo "<big><big>";
   $link = mysql_connect(  $conf_4f_db ["server"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
@@ -483,8 +480,7 @@ $query = "CREATE TABLE IF NOT EXISTS `".$conf_tbl ["bhp50"]."` (
 
   echo 'Ich habe fertig.';
   echo "</big></big>\n";
-
-  echo "<br>\n";
+  echo "</fieldset>\n";
 
   echo "</FORM>\n";
   echo "</BODY></HTML>\n";
