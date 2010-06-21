@@ -243,8 +243,56 @@ define ("debug", false);
     echo "<script type = \"text/javascript\" src = \"../js/prototype.js\"></script>";
     echo "<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=utf-8\">";
     echo "<title>".$titel."</title>\n";
-    echo "</head>\n";
-    echo "<body>";
+
+    echo "<script type='text/javascript'>\n";
+    echo "<!--\n";
+        echo " var color_err =     '#FF4500'\n";
+    echo " var color_warning = '#FFD700'\n";
+    echo " var color_ok =      '#32CD32'\n";
+    echo " var color_empty =   '#ffffff'\n";
+	 echo " var Felder = new Array(";
+	 for ($zeile=1; $zeile <= 5; $zeile ++)
+	 {
+	 	for ($spalte=1; $spalte <= 4; $spalte ++)
+	 	{
+	 		echo ("'fktmtx_".$zeile.$spalte."_fkt'");
+	 		if( ($zeile < 5) || ($spalte < 4) )
+	 			echo(",");
+	 	}
+	 }
+	 echo ")\n";
+	 echo " \n";
+    echo " function isValid(x) {\n";
+    echo "   var RegExp = /^(\\w*)$/\n"; 
+    echo "   var result = x.match(RegExp)\n";
+    echo "   return !(result);\n";
+    echo " }\n\n";
+
+    echo "function checkInput(ident) {\n";
+    echo "   var check = 0\n";
+    echo "   if (document.getElementById){\n";
+    echo "      document.getElementById(ident).value = document.getElementById(ident).value.toUpperCase();\n";
+    echo "\n";
+    echo "   for (var i = 0; i < Felder.length; i++) {\n";
+    echo "      if (Felder[i] != ident) {\n";
+    echo "        if( document.getElementById(ident).value == document.getElementById(Felder[i]).value) {\n";
+    echo "          check = 1;\n";
+    echo "        }\n";
+    echo "      }\n";
+    echo "   }\n\n";
+    	
+    echo "   if (( check == 1 ) || (isValid(document.getElementById(ident).value))) {\n";
+    echo "      document.getElementById(ident).style.backgroundColor=color_err;\n";
+    echo "   } else {\n";
+    echo "      document.getElementById(ident).style.backgroundColor=color_ok;\n";
+    echo "   }\n";
+    echo "  }\n";
+    echo " }\n";
+
+    echo " -->\n";
+    echo " </script>\n";
+    echo " </head>\n";
+    echo " <body>";
   }
 
 /****************************************************************************\
@@ -321,7 +369,7 @@ define ("debug", false);
       // Funktionsbezeichnung (LS, S1...S6, OrglRD, LNA)
     echo "<td style=\"font-size:18px; font-weight:800; text-align: center; width: 10px; background-color: ".$bgcolor.";\">\n";
     echo "<input style=\"font-size:18px; font-weight:900;\" maxlength=\"6\" size=\"6\" name=pos_".$zeile.$spalte.
-         " value=\"".$entry ["fkt"]."\" id=\"fktmtx_".$zeile.$spalte."_fkt\" >\n";
+         " value=\"".$entry ["fkt"]."\" id=\"fktmtx_".$zeile.$spalte."_fkt\" onkeyup=\"checkInput('fktmtx_".$zeile.$spalte."_fkt')\">\n";
     echo "</td>";
       //  Stab oder
     echo "<td style=\"font-size:18px; font-weight:800; text-align: center; width: 100px; background-color: ".$bgcolor.";\">\n";
