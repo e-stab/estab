@@ -267,7 +267,13 @@ define ("debug", false);
     echo "   var result = x.match(RegExp)\n";
     echo "   return !(result);\n";
     echo " }\n\n";
-
+    
+    echo "function checkAll() {\n";
+    echo "   for (var i = 0; i < Felder.length; i++) {\n";
+    echo "       checkInput(Felder[i]);\n";
+    echo "   }\n";
+    echo "}\n";
+   
     echo "function checkInput(ident) {\n";
     echo "   var check = 0\n";
     echo "   if (document.getElementById){\n";
@@ -282,7 +288,14 @@ define ("debug", false);
     echo "   }\n\n";
     	
     echo "   if (( check == 1 ) || (isValid(document.getElementById(ident).value))) {\n";
-    echo "      document.getElementById(ident).style.backgroundColor=color_err;\n";
+
+    //echo "      if ( document.getElementById(ident).value == "") {\n";
+	 echo "      if ( document.getElementById(ident).value == '') {\n";    
+    echo "          document.getElementById(ident).style.backgroundColor=color_empty;\n";
+    echo "      } else {\n";    
+    echo "		     document.getElementById(ident).style.backgroundColor=color_err;\n";
+    echo "      }\n";
+
     echo "   } else {\n";
     echo "      document.getElementById(ident).style.backgroundColor=color_ok;\n";
     echo "   }\n";
@@ -292,7 +305,7 @@ define ("debug", false);
     echo " -->\n";
     echo " </script>\n";
     echo " </head>\n";
-    echo " <body>";
+    echo " <body onload='checkAll()'>";
   }
 
 /****************************************************************************\
