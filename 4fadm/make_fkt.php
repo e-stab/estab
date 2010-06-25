@@ -274,8 +274,17 @@ define ("debug", false);
     echo "   }\n";
     echo "}\n";
    
+    echo "function checkForm() {\n";
+    echo "   return false;\n";
+    echo "   for (var i = 0; i < Felder.length; i++) {\n";
+    echo "       if(checkInput(Felder[i])) return false;\n";
+    echo "   }\n";
+    echo "   return true;\n";
+    echo "}\n";
+   
     echo "function checkInput(ident) {\n";
     echo "   var check = 0\n";
+    echo "   var ret = true\n";
     echo "   if (document.getElementById){\n";
     echo "      document.getElementById(ident).value = document.getElementById(ident).value.toUpperCase();\n";
     echo "\n";
@@ -289,17 +298,18 @@ define ("debug", false);
     	
     echo "   if (( check == 1 ) || (isValid(document.getElementById(ident).value))) {\n";
 
-    //echo "      if ( document.getElementById(ident).value == "") {\n";
 	 echo "      if ( document.getElementById(ident).value == '') {\n";    
     echo "          document.getElementById(ident).style.backgroundColor=color_empty;\n";
     echo "      } else {\n";    
     echo "		     document.getElementById(ident).style.backgroundColor=color_err;\n";
+    echo "          ret = false;\n";
     echo "      }\n";
 
     echo "   } else {\n";
     echo "      document.getElementById(ident).style.backgroundColor=color_ok;\n";
     echo "   }\n";
     echo "  }\n";
+    echo "  return ret;\n";
     echo " }\n";
 
     echo " -->\n";
@@ -406,7 +416,7 @@ define ("debug", false);
 
 // echo "<br><br>FKTS==="; var_dump ($fkts); echo"<br><br>";
 
-    echo "<form style=\"\" method=\"get\" action=\"".$_SERVER ['PHP_SELF']."\" name=\"Funktionseditor\">\n";
+    echo "<form style=\"\" method=\"get\" action=\"".$_SERVER ['PHP_SELF']."\" name=\"Funktionseditor\" onsubmit='return checkForm()'>\n";
     echo "<table style=\"text-align: center; background-color: rgb(255,255,255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
 //    echo "</td>\n";
     for ($zeile=1; $zeile <= 5; $zeile ++){
