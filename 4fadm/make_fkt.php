@@ -17,7 +17,7 @@ define ("debug", false);
           $y = substr ($xy, 1, 1);
 //          echo "<b>##POS=".$pos." x=".$x." y=".$y." val=".$val."</b><br>";
         }
-//      $suchmuster = "\!\"§\$\%\&/()=?";
+//      $suchmuster = "\!\"ï¿½\$\%\&/()=?";
 //      preg_match($suchmuster, $val, $treffer, PREG_OFFSET_CAPTURE, 3);
     }
 
@@ -53,7 +53,7 @@ define ("debug", false);
     $fix = "\r\n\r\n";
 
     $anmelde = "\r\n\r\n";
-    $user_count = 0; // Für die Anmeldeliste
+    $user_count = 0; // Fï¿½r die Anmeldeliste
     $matrix = "$"."empf_matrix = array ( \r\n";
     for ($zeile = 1; $zeile <= 5; $zeile ++) {
       $matrix .= "$zeile => array ( \r\n";
@@ -150,7 +150,7 @@ define ("debug", false);
         $rotkopiex = substr ($val, 0, 1);
         $rotkopiey = substr ($val, 1, 1);
       } else {
-          // key zerlegen in links der Schlüssel - rechts die Position
+          // key zerlegen in links der Schlï¿½ssel - rechts die Position
         list ($left,$right) = explode ('_',$key);
           /* left kann sein
               1. pos
@@ -243,8 +243,24 @@ define ("debug", false);
     echo "<script type = \"text/javascript\" src = \"../js/prototype.js\"></script>";
     echo "<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=utf-8\">";
     echo "<title>".$titel."</title>\n";
-    echo "</head>\n";
-    echo "<body>";
+ 
+    echo "<script type='text/javascript'>\n";
+	echo "<!--\n";
+	echo " var Felder = new Array(";
+	for ($zeile=1; $zeile <= 5; $zeile ++)
+	{
+		for ($spalte=1; $spalte <= 4; $spalte ++)
+		{
+			echo ("'fktmtx_".$zeile.$spalte."_fkt'");
+			if( ($zeile < 5) || ($spalte < 4) ) echo(",");
+		}
+	}
+	echo ");\n";
+	echo "-->\n";
+	echo "</script>\n";
+    echo "<script type='text/javascript'  src='jsFormular.js'></script>\n";
+    echo " </head>\n";
+    echo " <body onload='checkAll()'>";
   }
 
 /****************************************************************************\
@@ -321,7 +337,7 @@ define ("debug", false);
       // Funktionsbezeichnung (LS, S1...S6, OrglRD, LNA)
     echo "<td style=\"font-size:18px; font-weight:800; text-align: center; width: 10px; background-color: ".$bgcolor.";\">\n";
     echo "<input style=\"font-size:18px; font-weight:900;\" maxlength=\"6\" size=\"6\" name=pos_".$zeile.$spalte.
-         " value=\"".$entry ["fkt"]."\" id=\"fktmtx_".$zeile.$spalte."_fkt\" >\n";
+         " value=\"".$entry ["fkt"]."\" id=\"fktmtx_".$zeile.$spalte."_fkt\" onkeyup=\"checkInput('fktmtx_".$zeile.$spalte."_fkt')\" onchange=\"checkAll()\">\n";
     echo "</td>";
       //  Stab oder
     echo "<td style=\"font-size:18px; font-weight:800; text-align: center; width: 100px; background-color: ".$bgcolor.";\">\n";
