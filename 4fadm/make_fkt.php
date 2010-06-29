@@ -45,7 +45,7 @@ define ("debug", false);
     $fix = "\r\n\r\n";
 
     $anmelde = "\r\n\r\n";
-    $user_count = 0; // F�r die Anmeldeliste
+    $user_count = 0; // Für die Anmeldeliste
     $matrix = "$"."empf_matrix = array ( \r\n";
     for ($zeile = 1; $zeile <= 5; $zeile ++) {
       $matrix .= "$zeile => array ( \r\n";
@@ -136,7 +136,7 @@ define ("debug", false);
         $rotkopiex = substr ($val, 0, 1);
         $rotkopiey = substr ($val, 1, 1);
       } else {
-          // key zerlegen in links der Schl�ssel - rechts die Position
+          // key zerlegen in links der Schlüssel - rechts die Position
         list ($left,$right) = explode ('_',$key);
           /* left kann sein
               1. pos
@@ -270,7 +270,7 @@ define ("debug", false);
     echo "</td>\n";
 
     echo "<td style=\"font-size:18px; font-weight:800; text-align: center; width: 10px; background-color: ".$bgcolor.";\">\n";
-      // Radiobutton für die Rotkopie
+      // Radiobutton fÃ¼r die Rotkopie
     if ( $isredcopy2 ) {$sel = "checked=\"checked\"";} else {$sel = "";}
     echo "<input name=\"lagerot\" type=\"radio\"".$sel." value=\"".$zeile.$spalte."\" id=\"fktmtx_".$zeile.$spalte."_rk\" >\n";
     echo "</td>";
