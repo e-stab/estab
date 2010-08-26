@@ -15,6 +15,7 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
 <HTML>
 <HEAD>
+<link REL="SHORTCUT ICON" HREF="../favicon.ico" />
 <META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=ISO-8859-1">
 <META NAME="Author" CONTENT="Hajo Landmesser">
 <META NAME="Generator" CONTENT="self">
