@@ -1,0 +1,49 @@
+- EmpfängerMatrix sichern
+- automatische Sichtung beim abmelden des Sichters
+- automatischer Sichter
+- Aktualisierungsprüfung mit kats.iuk-heinsberg.de
+- Adressverwaltung
+- Eingabeprüfung bei Adresse mit Ajaxmethoden
+- umfangreicher Kategorieneditor 
+- Verfahren zur umstruktorierung der Führungsstelle. S1, S4 ==> S14
+- Schnittstelle zu einem Trustcenter zu Kryptografie und Zertifizierung
+- virtuelle Poststelle
+- automatische Verarbeitung von Faxen zu Anhängen an Nachrichtenvordrucken
+
+================================================================================================
+
+Verbesserungsvorschläge basierend auf 0.9.20:
+
+1) hotfix für 0.9.20
+- Einsatz anlegen:
+. keine _ - / ,etc zulassen ;
+. Umlaute machen Probleme in der Listen aller Meldungen & beim
+- Empfängermatrix:
+. keine _ - / ,etc zulassen ;
+. Umlaute machen Probleme in der Listen aller Meldungen & beim
+. keine funktion doppelt vergeben
+- Text beim bearbeiten der Empfängermatrix abändern und o.g. Regeln beschreiben
+
+2) patch für 0.9.20
+X beim anhängen: Button "absenden" => "ok"
+- beim anhängen: Button "abbrechen" => zurück zur geöffneten Meldung, nicht zur Meldungsübersicht!
+X beim hochladen: Button "absenden" => "ok"
+X beim Anmelden: Button "Anmelden" unter Kennwort verschieben und umebenen in "OK"
+X beim bearbeiten der empfängermagtrix: Button "absenden" => "ok" 
+- PDF oder PNG anlegen, nicht beides
+- 2te Sichtung aus der Tabelle heraus durch klick auf das Feld für das Kreuz wer die Nachricht erhalten soll
+X unter localhost/kats link zum PDF de Bedienungsanleitung anlegen
+X Liste aller Meldungen: alle 10s aktualisieren
+X Listen: Standartansicht: 15 Meldungen
+
+
+
+3) features für 0.9.21
+- Liste aller Meldungen: alle 10s aktualisieren
+- Weiterleitung einer Funktion an eine andere S6 => S1?
+- pdf previews möglich?
+- PDFs automatisch hochladen
+. Beschreibung: "pdf upload"
+. estab sucht alle 10s in htdocs\kats\pdfupload nach .pdf files
+. diese files werden mit dem user kürzel "pdf" hochgeladen
+. Zeitstempel automatisch. nach upload wird datei gelöscht / oder: nur wenn datei sich geändert haben werden sie hochgeladen

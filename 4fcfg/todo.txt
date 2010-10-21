@@ -1,0 +1,15 @@
+Wie du weisst bin ich dabei gerade eine spec für die integration von fax und mail zu schreiben. Dabei ist mir aufgefallen, dass die farbgebung der felder etwas verwirrend ist.
+[12:47:25] Marc Rawer (FK EM S1/4): Es sollte klar für den benutzer  sein: was sind inaktive felder, was sind pfilchtfelder und was sind kann-felder.
+[12:48:02] Marc Rawer (FK EM S1/4): meine idee wäre, dass man bei der konfiguration verschiedene farbschemata festlegen kann. Jedes Farbschema besteht aus folgenden Dingen:
+[12:48:38] Marc Rawer (FK EM S1/4): 1. Grundfarbe 1. Blatt
+2. Grundfarbe 2. Blatt
+3. Grundfarbe Nachweisung
+4. Grundfarbe FeMe-Nachweis
+[12:49:04] Marc Rawer (FK EM S1/4): Die Grundfarben sollten Pastelltöne sein, die einen guten kontrast zu schwarzer scrift bieten
+[12:49:57] Marc Rawer (FK EM S1/4): In jedem Blatt gibt es dann:
+- Feldfarbe inaktives Feld
+- Feldfarbe kann-Feld (etwas heller)
+- Feldfarbe Pflichtfeld (stark heller)
+[12:50:51] Marc Rawer (FK EM S1/4): [Es wäre auch möglich diese Farben aus der Hintergrundfarbe zu generieren, so würde man vielleciht dem Benutzer erlauben weniger Fehlfarben zu produzieren, bräuchte aber einen vernünftigen Algorithmus]
+[12:51:24] Marc Rawer (FK EM S1/4): Leider war es mir bisher nicht möglich das umzusetzen, derwel die aktuelle Implementierung sich etwas verwirrend gestaltet...
+[12:52:08] Marc Rawer (FK EM S1/4): Übrigens gibt es bei meiner Version (176) 2 mal eine config.inc.php. Die sollte aber nur in /cfg/ sein.
