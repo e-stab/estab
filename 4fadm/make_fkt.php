@@ -361,7 +361,7 @@ define ("debug", false);
 
 // echo "<br><br>FKTS==="; var_dump ($fkts); echo"<br><br>";
 
-    echo "<form style=\"\" method=\"get\" action=\"".$_SERVER ['PHP_SELF']."\" name=\"Funktionseditor\">\n";
+    echo "<form style=\"\" method=\"get\" action=\"".$_SERVER ['PHP_SELF']."\" name=\"Funktionseditor\" onsubmit='return checkForm()'>\n";
     echo "<table style=\"text-align: center; background-color: rgb(255,255,255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
 //    echo "</td>\n";
     for ($zeile=1; $zeile <= 5; $zeile ++){
