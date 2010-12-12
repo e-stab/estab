@@ -173,8 +173,15 @@ class make_dbconf {
 
     $filename =  $conf_web ["srvroot"].$conf_web ["pre_path"]."/4fcfg/dbcfg.inc.php";
 
-    $fhndl = fopen ( $filename, "w+");
 
+    if (!$fhndl = fopen ( $filename, "w+")) {
+         echo "<script type=\"text/javascript\">";
+         echo "alert(\"Kann die Datei $filename nicht zum schreiben öffnen. Bitte prüfen sie die Dateirechte.\");";
+         echo "</script>";
+//         echo "<h2>Kann die Datei $filename nicht zum schreiben öffnen.</h2>";
+//         echo "<h2>Bitte prüfen sie die Dateirechte.</h2>";
+//         exit;
+    }
     fwrite ($fhndl, $prefile);
 
     for ($i=0; $i <= count ($fileline); $i++){
@@ -182,6 +189,7 @@ class make_dbconf {
     }
 
     fwrite ($fhndl, $postfile);
+
     fclose ($fhndl);
   }
 
