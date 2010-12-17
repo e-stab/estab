@@ -97,8 +97,8 @@
     $conf_4f ["NameVersion"][10]  = "Nachrichtenvordrucke als PDF-Datei  <br>\n";
     $conf_4f ["NameVersion"][11]  = "lade-/speicherbare Funktionsmatrix Teil 1 <br>\n";
 
-    $conf_4f ["NameVersion"][12]  = "(C) 2005-2010 HaJo Landmesser<br>eMail: 4fach-info@IuK-Heinsberg.de <br>\n";
-    $conf_4f ["NameVersion"][13]  = "Infos, Forum unter  http://KatS.IuK-Heinsberg.de <br>\n";
+    $conf_4f ["NameVersion"][12]  = "(C) 2005-2010 HaJo Landmesser<br>eMail: info@eStab.de <br>\n";
+    $conf_4f ["NameVersion"][13]  = "Infos, Forum unter  http://www.eStab.de <br>\n";
 
 
 /*******************************************************************************/
@@ -110,7 +110,7 @@
 
 /*******************************************************************************/
 
-    $conf_4f ["MainURL"]         = $conf_urlroot.$conf_web ["pre_path"]."/4fach/mainindex.php";
+    $conf_4f ["MainURL"]    = $conf_urlroot.$conf_web ["pre_path"]."/4fach/mainindex.php";
 
   include "dbcfg.inc.php"; // wegen des Datenbanknamens  $conf_4f_db ["datenbank"]
   include "e_cfg.inc.php";
@@ -183,5 +183,13 @@
          "dez" => '12',
          "dec" => '12'
     );
+/*****************************************************************/
+//    Tabellenfarben
+/*****************************************************************/
+
+$color_data_table = "#E0E0E0";
+$color_button =         "#E0E0E0";
+$color_button_ok =      "#A0FFA0"; // auch für "Absenden"
+$color_button_nok =     "#FFA0A0";
 
 ?>

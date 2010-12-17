@@ -9,6 +9,7 @@ include ("menue.inc.php");
     echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
     echo "<html>\n";
     echo "<head>\n";
+    echo "<link REL=\"SHORTCUT ICON\" HREF=\"favicon.ico\" />";
     echo "<meta content=\"text/html; charset=ISO-8859-1\" http-equiv=\"content-type\">\n";
     echo "<title>".$conf_menue ["titel"]."</title>\n";
     echo "</head>\n";

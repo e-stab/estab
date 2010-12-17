@@ -58,6 +58,6 @@ include ("./4fcfg/config.inc.php");
 	
 	$zusatz_menue[2]["text"] = "Kurzanleitung zur eStab Installation & Nutzung";
     $zusatz_menue[2]["pic"]  = $conf_menue ["symbole"]."icon_handbuch.gif";
-    $zusatz_menue[2]["link"] = "./Handbuch_eStab.pdf";
+    $zusatz_menue[2]["link"] = "./doku/Handbuch_eStab.pdf";
 
 ?>

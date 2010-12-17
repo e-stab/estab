@@ -1,0 +1,49 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<FRAME GUID="2FB25471-B62C-4EE6-BD43-F819C095ACF8" FORMAT="0000" APP_VERSION="2.2.0.8" CHECKSUM="EAE0429904E934F0">
+  <PROJECT FORMAT="1.00" NAME="mainframe" AUTHOR="hajo" CREATED="2010.06.12 15:08:34" MODIFIED="2010.06.12 15:14:28">
+    <DIAGRAMS>
+      <DIAGRAM FORMAT="1.00" ID="0" NAME="Hauptprogramm 1" CREATED="2010.06.12 15:08:48" MODIFIED="2010.06.12 15:14:28">
+        <LAYOUT FORMAT="1.00" COLUMNS="2" ROWS="5">
+          <ENTRIES>
+            <ENTRY COLUMN="0" ROW="0" ANCHOR="True">
+              <FIGURE SUBTYPE="PapTitle" FORMAT="1.00" ID="0">
+                <TEXT><![CDATA[Hauptprogramm 1]]></TEXT>
+              </FIGURE>
+            </ENTRY>
+            <ENTRY COLUMN="0" ROW="1">
+              <FIGURE SUBTYPE="PapStart" FORMAT="1.00" ID="1">
+                <TEXT><![CDATA[Start]]></TEXT>
+              </FIGURE>
+            </ENTRY>
+            <ENTRY COLUMN="0" ROW="2">
+              <FIGURE SUBTYPE="PapActivity" FORMAT="1.00" ID="4">
+                <TEXT><![CDATA[debug = false]]></TEXT>
+              </FIGURE>
+            </ENTRY>
+            <ENTRY COLUMN="0" ROW="3">
+              <FIGURE SUBTYPE="PapCondition" FORMAT="1.00" ID="5">
+                <TEXT><![CDATA[debug == true]]></TEXT>
+              </FIGURE>
+            </ENTRY>
+            <ENTRY COLUMN="0" ROW="4">
+              <FIGURE SUBTYPE="PapEnd" FORMAT="1.00" ID="2">
+                <TEXT><![CDATA[Ende]]></TEXT>
+              </FIGURE>
+            </ENTRY>
+            <ENTRY COLUMN="1" ROW="3">
+              <FIGURE SUBTYPE="PapOutput" FORMAT="1.00" ID="9">
+                <TEXT><![CDATA[Ausgabe von GET, POST, COCKIE und SESSION]]></TEXT>
+              </FIGURE>
+            </ENTRY>
+          </ENTRIES>
+        </LAYOUT>
+        <CONNECTIONS>
+          <CONNECTION FORMAT="1.00" ID="15" FROM="5" TO="2" TEXT="nein" />
+          <CONNECTION FORMAT="1.00" ID="14" FROM="4" TO="5" TEXT="" />
+          <CONNECTION FORMAT="1.00" ID="8" FROM="5" TO="9" TEXT="ja" />
+          <CONNECTION FORMAT="1.00" ID="13" FROM="1" TO="4" TEXT="" />
+        </CONNECTIONS>
+      </DIAGRAM>
+    </DIAGRAMS>
+  </PROJECT>
+</FRAME>

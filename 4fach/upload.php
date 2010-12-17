@@ -212,10 +212,10 @@ class fileupload extends file_upload {
     echo "</td>\n";
     echo "<td></td>\n";
     echo "</tr>\n";
-    echo "<tr><td>\n";
-    echo "<input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/send.gif\">\n";
-    echo "<input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/cancel.gif\">\n";
-    echo "</td></tr>\n";
+    echo "<tr>\n";
+    echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/ok.gif\"></td>\n";
+    echo "<td bgcolor=$color_button_nok><input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/cancel.gif\"></td>\n";
+    echo "</tr>\n";
     echo "</tbody>\n";
     echo "</table>\n";
     echo "</form>";

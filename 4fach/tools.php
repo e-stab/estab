@@ -103,8 +103,7 @@ include ("../4fcfg/para.inc.php");
   | Formatausgang: hh:mm
   \****************************************************************************/
   function convtotime ($zeit){
-    /* Datum ~= TTMM, Zeit == ~= HHMM */
-  //  echo "Datum=".$datum."  Zeit=".$zeit."<br>";
+    // Datum ~= TTMM, Zeit == ~= HHMM
     $stunde = substr ($zeit, 0, 2);
     $minute = substr ($zeit, 2, 2);
     $time = $stunde.":".$minute.":00";
@@ -154,8 +153,6 @@ include ("../4fcfg/para.inc.php");
   \****************************************************************************/
   function convdbdatetimeto ($datetime){
     list ($datum, $zeit) = explode (" ",$datetime);
-    //list ($jahr, $monat, $tag) = explode ("-", $datum);
-    //list ($stunde, $minute, $sekunde) = explode (":", $zeit);
     $arr [datum] = $datum;
     $arr [zeit]  = $zeit;
     return $arr;
@@ -201,7 +198,6 @@ include ("../4fcfg/para.inc.php");
          "dec" => '12' );
 
     $laenge = strlen ($data);
-//echo "tools181 --- länge = ".$laenge." und time = ".$data."<br>";
     switch ( $laenge ){
       case 13:// TThhmmMMMJJJJ
           $tag    = substr ($data, 0, 2);
@@ -211,14 +207,12 @@ include ("../4fcfg/para.inc.php");
           $jahr   = substr ($data, 9, 4);
           $monat = $rew_tak_monate [$monat];
 
-//echo "<br>tag=".$tag."  stunde=".$stunde."  minute=".$minute."  monat=".$monat."  jahr=".$jahr."<br>";
           if ( (($tag    >= 1) and ($tag    <= 31)) and
                (($monat  >= 1) and ($monat  <= 12)) and
                (($jahr   >= 2000) and ($jahr <= 9999)) and
                (($minute >= 0) and ($minute <= 59)) and
                (($stunde >= 0) and ($stunde <= 23)) ) {
           $monat = $tak_monate [$monat];
-//echo "<br>tag=".$tag."  stunde=".$stunde."  minute=".$minute."  monat=".$monat."  jahr=".$jahr."<br>";
             $data = $tag.$stunde.$minute.$monat.$jahr ;
             $l_data = true ;
           } else {
@@ -233,8 +227,6 @@ include ("../4fcfg/para.inc.php");
           $jahr = date ("Y");
 
           if ( (($tag    >= 1) and ($tag    <= 31)) and
-//               (($monat  >= 1) and ($monat  <= 12)) and
-//               (($jahr   >= 2000) and ($jahr <= 9999) and
                (($minute >= 0) and ($minute <= 59)) and
                (($stunde >= 0) and ($stunde <= 23))) {
             $data = $tag.$stunde.$minute.$monat.$jahr ;
@@ -247,10 +239,7 @@ include ("../4fcfg/para.inc.php");
       case 4: // hhmm
           $stunde = substr ($data, 0, 2);
           $minute = substr ($data, 2, 2);
-//          $monat = date("m");
 
-//echo "tools223 --- stunde  = "; var_dump ($stunde); echo "<br>";
-//echo "tools224 --- minute  = "; var_dump ($minute); echo "<br>";
           if ( (($minute >= 0) and ($minute <= 59)) and
                (($stunde >= 0) and ($stunde <= 23))) {
             $tag   = date ("d");
@@ -265,7 +254,6 @@ include ("../4fcfg/para.inc.php");
       default: $l_data = false;
     }
     $back = array ("l_data" => $l_data, "data" => $data);
-// echo "tools240 --- data = "; var_dump ( $back ); echo "<br>";
     return ( $back );
   } //conv_time_datetime
 
@@ -283,7 +271,6 @@ include ("../4fcfg/para.inc.php");
   }
 
   function getviewerqueuecount (){
-//    include ("../config.inc.php");
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
@@ -346,7 +333,6 @@ include ("../4fcfg/para.inc.php");
    return $gesamtmeldungen-$erledigtmeldungen;
   }
 
-//343
 /**************************************************************************************\
   Funktion: einhorn
 
@@ -371,7 +357,7 @@ include ("../4fcfg/para.inc.php");
 
   function showsrvtime ($dir){
       // setze die Zeitzone
-    date_default_timezone_set  ( "Europe/Berlin" );	
+    date_default_timezone_set  ( "Europe/Berlin" );     
     echo "<table align=\"center\" style=\"text-align:center; background-color: \"\"; height: 52px;\" border=\"1\" cellpadding=\"1\" cellspacing=\"2\">\n";
     echo "<tbody>";
       $hour = date ("H");
@@ -394,8 +380,11 @@ include ("../4fcfg/para.inc.php");
     echo "</table>";
   }
 
+  /************************************************************************\
+     Function: sichter_online()
+     prüft ob ein Sichter angemeldet ist
+  \************************************************************************/
   function sichter_online (){
-//    include ("../config.inc.php");
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
@@ -404,13 +393,41 @@ include ("../4fcfg/para.inc.php");
     return ($result[0] > 0);
   }
 
+  /************************************************************************\
+     Function: get_autosichter_targets($ausnahme)
+     ermittelt die Ziele für die Autosichtung
+  \************************************************************************/
+  function get_autosichter_targets($ausnahme) {
+    include ("../4fcfg/dbcfg.inc.php");
+    include ("../4fcfg/e_cfg.inc.php");
+    include ("../4fcfg/fkt_rolle.inc.php");
+    $db = mysql_connect($conf_4f_db  ["server"],$conf_4f_db ["user"], $conf_4f_db  ["password"])
+       or die ("[query_table] Konnte keine Verbindung zur Datenbank herstellen");
+    $db_check = mysql_select_db ($conf_4f_db  ["datenbank"])
+       or die ("[query_table] Auswahl der Datenbank fehlgeschlagen");
+    $query = "SELECT
+                 mtx_fkt as `fkt` FROM ".$conf_4f_tbl ["empfmtx"]
+              ." WHERE `mtx_auto` = 1 ;" ;
+    $query_result = mysql_query ($query, $db) or
+       die("[query_table] <br>$query<br>103-".mysql_error()." ".mysql_errno());
+    $resultcount = mysql_num_rows($query_result);
+    $result = NULL;
+    for ($i=1;$i<=$resultcount;$i++){
+      $fkt = mysql_fetch_assoc($query_result);
+      if ($fkt[fkt] != $ausnahme){
+        $result .= $fkt[fkt]."_bl,";
+      }
+    }
+    mysql_free_result($query_result);
+
+    return ($result);
+  }
 
 /******************************************************************************
 Gibt eine Tabelle aus in der alle angemeldeten Rollen und Funktionen
 bersichtlich dargestellt werden.
 ******************************************************************************/
   function systemstatus ($direction){
-
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
     include ("../4fcfg/fkt_rolle.inc.php");
@@ -430,8 +447,7 @@ bersichtlich dargestellt werden.
 
     if ((count ($benutzer) > 0) and ($benutzer != "")){
       foreach ($benutzer as $user){
-        if ($user[aktiv] == 1 ) {
-          $userstatus [$user[rolle]]  [$user[funktion]]  = $aktiv;}
+        if ($user[aktiv] == 1 ) {          $userstatus [$user[rolle]]  [$user[funktion]]  = $aktiv;}
 
         if ( ($user ["funktion"] == "A/W") AND ($user["aktiv"] == 1) ){ $fernm_aw ++;}
       }
@@ -471,16 +487,6 @@ bersichtlich dargestellt werden.
          echo "<td style=\"background-color: ".$userstatus ["Fernmelder"]["A/W"]." font-weight:bold;\">A/W</td>\n";
       }
 
-      // Zeige wenigstens einen inaktiven Fermelder an
-/*
-      if ($fernm_aw > 0) {
-        for ($i=1; $i <= $fernm_aw; $i++) {
-           echo "<td style=\"background-color: ".$userstatus ["Fernmelder"]["A/W"]." font-weight:bold;\">A/W</td>\n";
-        }
-      } else {  // keiner aktiv ==> einer inaktiv
-         echo "<td style=\"background-color: ".$userstatus ["Fernmelder"]["A/W"]." font-weight:bold;\">A/W</td>\n";
-      }
-*/
       echo "</tr>";
       echo "</tbody></table>\n";
       echo "</fieldset>\n";
@@ -491,10 +497,6 @@ bersichtlich dargestellt werden.
     if ($direction == "vertikal") {
       $zellenbreite = "50";
       $zellenhoehe  = "20";
-/*
-      echo "<table align=\"center\" style=\"text-align:center; width:$width; background-color: rgb(150, 150, 150);  font-size:9pt; height: 32px;\" border=\"0\" cellpadding=\"1\" cellspacing=\"1\">\n";
-      echo "<tbody>\n";
-*/
 
 /******************************************************************************\
   1. erste Zeile doppelt oder einfach
@@ -582,11 +584,9 @@ bersichtlich dargestellt werden.
           $tableisset = true;
 
           if ($fernm_aw > 0) {
-//            for ($j=1; $j <= $fernm_aw; $j++) {
-              echo "<tr>";
-              echo "<td style=\"background-color: ".$userstatus ["Fernmelder"]["A/W"]." height:".$zellenhoehe."; font-size:9pt; font-weight:bold;\">".$fernm_aw." A/W</td>\n";
-              echo "</tr>";
-//            }
+          echo "<tr>";
+          echo "<td style=\"background-color: ".$userstatus ["Fernmelder"]["A/W"]." height:".$zellenhoehe."; font-size:9pt; font-weight:bold;\">".$fernm_aw." A/W</td>\n";
+          echo "</tr>";
           } else {  // keiner aktiv ==> einer inaktiv
             echo "<!-- 007 liste.php -->\n";
             echo "<tr>";
@@ -616,7 +616,6 @@ bersichtlich dargestellt werden.
    Benutzerstatus
 ********************************************************************************************************/
   function benutzerstatus ($what){ // kann sein "anzeige" oder mit "verlinkt"
-//    include ("../config.inc.php");
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
@@ -624,7 +623,7 @@ bersichtlich dargestellt werden.
     $result = $dbaccess->query_table ($query);
     $benutzer = $result ;
 
-        $aktiv    = " rgb(100, 250,  20); color:&000000; "; // was (100, 250,  20)
+    $aktiv    = " rgb(100, 250,  20); color:&000000; "; // was (100, 250,  20)
     $inaktiv  = " rgb(200, 200, 200); color:&FFFF00; "; // was (250,  60,  30)
     $self     = " rgb(250,  60,  30); color:&ffffff; "; // was ( 50, 180, 220);
     $abgemldt = " rgb(200, 200, 200); color:&a0a0a0; "; // was ( 240, 240, 240);
@@ -743,10 +742,7 @@ bersichtlich dargestellt werden.
     $timestr = date ("His");
     echo "<!--  fehlermeldung ".$timestr."   -->";
     echo "<script type=\"text/javascript\">\n";
-//    echo "<!--\n";
-
     echo "var Neufenster = window.open(\"./info.php?sub=$lokation&info=".$parameter."\",\"AnderesFenster\",\"width=640,height=480, resizable=yes, scrollbars=yes\");\n";
-//    echo "//-->\n";
     echo "</script>\n";
   }
 

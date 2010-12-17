@@ -262,11 +262,13 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
 
 \*****************************************************************************/
   function etb_pre_html (){
-    echo "<!-- etb_pre_html -->\n";
     echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
     echo "<html>\n";
     echo "<head>\n";
     echo "  <meta content=\"text/html; charset=ISO-8859-1\" http-equiv=\"content-type\">\n";
+    if (!$this->etb_authorized) {
+      echo "<meta http-equiv=\"refresh\" content=\"10\">\n";
+    }
     echo "  <title>ETB-Eintrag</title>\n";
     echo "</head>\n";
     echo "<body>\n";
@@ -328,6 +330,7 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
     echo "</td>";
     echo "</tr>";
     echo "</table>";
+//    echo "<img src=\"http://localhost:80/kats/4fach/design/HS/timer.gif\">";
     echo "</form>";
   }
 
@@ -410,11 +413,8 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
     echo "<table style=\"text-align: left;\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\">\n";
     echo "<tbody>\n";
     echo "<tr>\n";
-    echo "<td>\n";
-    echo "<input type=\"image\" name=\"absenden\" alt=\"absenden\" tabindex=\"3\" src=\"".$conf_design_path."/send.gif\">\n";
-    echo "</td><td>\n";
-    echo "<input type=\"image\" name=\"abbrechen\" alt=\"abbrechen\" tabindex=\"4\" src=\"".$conf_design_path."/cancel.gif\">\n";
-    echo "</td>\n";
+    echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"absenden\" alt=\"absenden\" tabindex=\"3\" src=\"".$conf_design_path."/ok.gif\"></td>\n";
+    echo "<td bgcolor=$color_button_nok><input type=\"image\" name=\"abbrechen\" alt=\"abbrechen\" tabindex=\"4\" src=\"".$conf_design_path."/cancel.gif\"></td>\n";
     echo "</tr>\n";
     echo "</tbody>\n";
     echo "</table>\n";
@@ -488,11 +488,8 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
       echo "<table style=\"text-align: left;\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\">\n";
       echo "<tbody>\n";
       echo "<tr>\n";
-      echo "<td>\n";
-      echo "<input type=\"image\" name=\"absenden\" alt=\"absenden\" tabindex=\"3\" src=\"".$conf_design_path."/send.gif\">\n";
-      echo "</td><td>\n";
-      echo "<input type=\"image\" name=\"abbrechen\" alt=\"abbrechen\" tabindex=\"4\" src=\"".$conf_design_path."/cancel.gif\">\n";
-      echo "</td>\n";
+      echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"absenden\" alt=\"absenden\" tabindex=\"3\" src=\"".$conf_design_path."/ok.gif\"></td>\n";
+      echo "<td bgcolor=$color_button_nok><input type=\"image\" name=\"abbrechen\" alt=\"abbrechen\" tabindex=\"4\" src=\"".$conf_design_path."/cancel.gif\"></td>\n";
       echo "</tr>\n";
       echo "</tbody>\n";
       echo "</table>\n";
@@ -629,7 +626,7 @@ if (debug == true){    echo ">etb_authorized ->"; var_dump ($etbobj->etb_authori
       $etbobj->speichen_etb_eintrag ($_GET);
       header("Location: ".$_SERVER["PHP_SELF"]);
     }
-
+        
     if (isset ( $_GET ["etb_eintrag_x"] ) ) {
         if (debug == true){ echo "M A R K E  0 0 4<br>";}
       $etbobj->etb_eintragsmenue ("");

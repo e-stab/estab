@@ -4,28 +4,27 @@ include ("../4fcfg/dbcfg.inc.php");
 include ("../4fcfg/e_cfg.inc.php");
 include ("../4fcfg/config.inc.php");
 
+echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
+echo "<html>\n";
+echo "<head>\n";
+echo "<meta content=\"text/html; charset=ISO-8859-1\" http-equiv=\"content-type\">\n";
+echo "<title>Datenbankverbindung prüfen</title>";
+echo "</head>";
+echo "<body>";
 
-?>
+echo "<FORM action=\"../4fadm/admin.php\" method=\"get\" target=\"_self\">\n";
+echo "<fieldset>";
+echo "<legend>Aktion:</legend>\n";
+echo "<table border=\"1\" cellpadding=\"2\" cellspacing=\"0\" bgcolor=\"#E0E0E0\">\n";
+echo "<tr>\n";
+echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/ok.gif\"></td>\n";
+echo "</td></tr>\n";
+echo "</table>\n";
+echo "</fieldset>\n";
+echo "<br>";
 
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
-<HTML>
-<HEAD>
-        <META HTTP-EQUIV="CONTENT-TYPE" CONTENT="text/html; charset=utf-8">
-        <TITLE></TITLE>
-        <META NAME="GENERATOR" CONTENT="vi">
-        <META NAME="AUTHOR" CONTENT="Hajo Landmesser">
-        <META NAME="CREATED" CONTENT="20070327;15421200">
-        <META NAME="CHANGEDBY" CONTENT="hajo">
-        <META NAME="CHANGED" CONTENT="222206aug2007">
-</HEAD>
-<BODY LANG="de-DE" DIR="LTR">
-<P ALIGN=CENTER STYLE="font-weight: medium"><FONT FACE="Arial Black">
-        <FONT SIZE=5 STYLE="font-size: 20pt">Datenbank Verbindungspr&uuml;fung:</FONT></FONT></P>
-<P><BR><BR>
-</P>
-
-<?php
-
+echo "<P align=center><FONT FACE=\"Arial Black\"><FONT SIZE=4>Datenbank Verbindungspr&uuml;fung:</FONT></FONT></P>";
+echo "<br>\n";
 
 // umdefinieren der Konstanten - nur in PHP 4
 define("FATAL", E_USER_ERROR);
@@ -57,10 +56,6 @@ function myErrorHandler($errno, $errstr, $errfile, $errline)
     break;
   }
 }
-
-
-
-
 
 // Funktion zum Test der Fehlerbehandlung
 function scale_by_log($vect, $scale)
@@ -108,8 +103,6 @@ function outerrormsg ($errno, $errtxt) {
     }
 }
 
-
-
 function cmp_tablename ($tables, $cmp_table) {
   $result = false;
   foreach ($tables as $table) {
@@ -120,7 +113,6 @@ function cmp_tablename ($tables, $cmp_table) {
 
 // auf die benutzerdefinierte Fehlerbehandlung umstellen
 $old_error_handler = set_error_handler("myErrorHandler");
-
 
   echo "<table>";
   echo "<tbody>";
@@ -348,9 +340,9 @@ $old_error_handler = set_error_handler("myErrorHandler");
   /******  Betriebbuch ***********************************************************/
   echo "<tr>";
   echo "<td>";
-  echo "<big><big>Tabelle: <b>".$conf_tbl ["tbb"]."</b></big></big>";
+  echo "<big><big>Tabelle: <b>".$conf_tbl ["ubb"]."</b></big></big>";
   echo "</td><td>";
-  if (cmp_tablename ($tables, $conf_tbl ["tbb"])) {
+  if (cmp_tablename ($tables, $conf_tbl ["ubb"])) {
     echo "<p><img src=\"".$conf_menue ["symbole"]."/greenlight.gif\" alt=\"keine Fehler\"></p>";
   } else {
     echo "<p><img src=\"".$conf_menue ["symbole"]."/redlight.gif\" alt=\"schwerer Fehler\"></p>";
@@ -401,15 +393,17 @@ $old_error_handler = set_error_handler("myErrorHandler");
   echo "</tr>";
 
 
-
-
   echo "<tbody>";
   echo "</table>";
 
   mysql_close ($db_hndl);
-  //  echo "mysqlerror=".mysql_errno()." ----- ".mysql_error()."<br>";
-
-//   $conf_4f_db ["datenbank"]     = "nv_db";
+  
+  if (isset($_GET["abbrechen_x"])) {
+     header("Location: ".$conf_urlroot.$conf_web ["pre_path"]."/4fadm/admin.php");
+  }
+  
+  echo "</FORM>";
+  
 ?>
 </BODY>
 </HTML>

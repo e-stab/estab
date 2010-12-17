@@ -77,7 +77,16 @@ Organisationen</a></big></td>
     </tr>
 
 
-  
+    <tr>
+
+      <td style="width: 157px;" align="undefined" valign="undefined">
+      <big style="font-weight: bold;">
+      <a href="HB_abt_2009/Handbuch_Bezirksabteilung.html" target="mainframe">Abt. K&ouml;ln</a></big></td>
+
+    </tr>
+
+
+
   </tbody>
 </table>
 

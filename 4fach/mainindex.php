@@ -12,12 +12,20 @@
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
 
-define ("debug", false);
-define ("create_vordrucke", true);
+define ("debug", false);              // true = gibt debuginformationen aus
+
+define ("create_vordrucke", true);   // Erstellt PDF und PNG Dokumente für die Rückfallebene
 
 session_start ();
 
-if ( debug == true ){
+/*
+$pre_01medium = "Fu";
+
+Für Narc beim Southside Festival zum schnelleren Eintragen von Nachrichten
+Weiter unten wird bei einem Nachrichteneingang das Medium Fe Fu Me Fax @
+*/
+
+if ( debug){
   echo "<br><br>\n";
   echo "GET="; var_dump ($_GET);    echo "#<br><br>\n";
   echo "POST="; var_dump ($_POST);   echo "#<br><br>\n";
@@ -26,19 +34,20 @@ if ( debug == true ){
 }
 
 if (debug){
-  error_reporting(E_ALL ^ E_NOTICE); //E_ALL);
+  error_reporting(E_ALL ^ E_NOTICE);
 } else {
   error_reporting(FATAL | ERROR | WARNING);
 }
 
 include ("../4fcfg/config.inc.php");    // Konfigurationseinstellungen und Vorgaben
-include ("../4fcfg/dbcfg.inc.php");    // Datenbankparameter
+include ("../4fcfg/dbcfg.inc.php");             // Datenbankparameter
 include ("../4fcfg/fkt_rolle.inc.php"); // Mitspieler
-include ("protokoll.php");            // Protokolllierung in der Datenbank
-include ("db_operation.php");  // Datenbank operationen
-include ("4fachform.php");            // Formular Behandlung 4fach Vordruck
-include ("liste.php");                // erzeuge Ausgabelisten
-include ("data_hndl.php");            // Schnittstelle zur Datenbank
+include ("protokoll.php");                              // Protokolllierung in der Datenbank
+include ("db_operation.php");                   // Datenbank operationen
+include ("4fachform.php");                              // Formular Behandlung 4fach Vordruck
+include ("liste.php");                                  // erzeuge Ausgabelisten
+include ("data_hndl.php");                              // Schnittstelle zur Datenbank
+
 
   $db = mysql_connect($conf_4f_db   ["server"],$conf_4f_db   ["user"], $conf_4f_db   ["password"] );
   $result = mysql_ping  ($db);
@@ -133,7 +142,6 @@ ANTWORT % WEITERLEITUNG
   // Aufruf von Anhang vom 4fach Vordruck aus ==> es könnte schon Inhalt im Vormular vorhanden sein
   if ( isset ($_GET["anhang_plus_x"])) {
     $_SESSION ["anhang_menue"] = "100";
-    // header("Location: ".$_SERVER ["DOCUMENT_ROOT"]."/4fach/anhang.php");
     include ("anhang.php");
     exit;
   }
@@ -160,7 +168,7 @@ ANTWORT % WEITERLEITUNG
     $_SESSION["filter_darstellung"] = 1;
     $_SESSION["filter_erledigt"]    = 0;
     $_SESSION["filter_unerledigt"]  = 1;
-    $_SESSION["filter_anzahl"]      = 5;
+    $_SESSION["filter_anzahl"]      = 15;
     $_SESSION["filter_start"]       = 0 ;
     $_SESSION["filter_position"]    = 0;
   }
@@ -241,10 +249,8 @@ ANTWORT % WEITERLEITUNG
     // erledigt
     if ($_GET [action] == "erledigt")
       if ($_GET [todo] == "set"){
-        //echo "!!! erledigt set !!!<br>";
-        set_msg_done ( $_GET["00_lfd"] );
+         set_msg_done ( $_GET["00_lfd"] );
       } else {
-        //echo "!!! erledigt unset !!!<br>";
         unset_msg_done ( $_GET["00_lfd"] );
       }
   }
@@ -717,19 +723,22 @@ ul#topmenu li.active {
 
 /**********************************************************************\
   --- F e r n m e l d e r   E i n g a n g  ---
-
+      Es wurde der "Eingang"-Button beim Fernmelder betätigt.
 \**********************************************************************/
   if (isset ($_GET["fm_eingang_x"])){
 
-    if ( debug == true ){ echo "### 509 Fernmelder Eingang ";  echo "<br>\n";}
+    if ( debug == true ){ echo "### 730 Fernmelder Eingang ";  echo "<br>\n";}
+
+//    if ($pre_01medium != "") { $formdata ["01_medium"]   = $pre_01medium;}
 
     $formdata ["01_zeichen"]  = $_SESSION ["vStab_kuerzel"];
     $formdata ["10_anschrift"]  = $conf_4f ["anschrift"];
+
     if (sichter_online()) {
      $form = new nachrichten4fach ($formdata, "FM-Eingang", "");
     } else {
      $formdata ["15_quitzeichen"]  = $_SESSION ["vStab_kuerzel"];
-     $formdata ["16_empf"]         = "";
+     $formdata ["16_empf"]         = get_autosichter_targets();
      $form = new nachrichten4fach ($formdata, "FM-Eingang_Sichter", "");
     }
   }
@@ -796,14 +805,14 @@ ul#topmenu li.active {
       $result = $dbaccess->query_table_iu ($query);
       // Jetzt holen wir uns den kompletten, gesperrten Eintrag
       $formdata = get_msg_by_lfd ($_GET["00_lfd"]);
-
       // Voreinstellungen fuer den Befoerderungsvermerk
       $formdata ["03_zeichen"]  = $_SESSION ["vStab_kuerzel"];
-
       if (sichter_online()) {
         $form = new nachrichten4fach ($formdata, "FM-Ausgang", "");
       } else {
         $formdata ["15_quitzeichen"]  = $_SESSION ["vStab_kuerzel"];
+        $formdata ["16_empf"]  .= ",".get_autosichter_targets($formdata["14_funktion"]);
+
         $form = new nachrichten4fach ($formdata, "FM-Ausgang_Sichter", "");
       }
       } else {
@@ -905,7 +914,7 @@ ul#topmenu li.active {
      $_SESSION [menue] = "WELCOME";
      resetframeset ($conf_urlroot.$conf_web ["pre_path"]);
 
-  } // isset ($_GET["m2auswahl"]
+  } // isset ($_GET["m2_abmelden_x"]
 
 
   /**********************************************************************\
@@ -921,7 +930,6 @@ ul#topmenu li.active {
     echo "<body bgcolor=\"#DCDCFF\">";
     echo "<form action=\"".$conf_4f ["MainURL"]."\" method=\"get\" target=\"mainframe\">\n";
     echo "<!-- Formularelemente und andere Elemente innerhalb des Formulars -->\n";
-
     echo "<table border=\"1\" cellspacing=\"1\" cellpeding=\"1\">\n";
     echo "<tbody>";
     echo "<tr>\n";
@@ -941,10 +949,8 @@ ul#topmenu li.active {
       break;
       case "LOGIN" : // Anmeldeformular
               echo "<td>\nName, Vorname:</td>\n<td>\n<input style=\"font-size:20px; font-weight:900;\" type=\"text\" size=\"32\" value=\"".$menuename."\" maxlength=\"32\" name=\"benutzer\"></td>\n";
-              echo "<td>\n<a><img src=\"null.gif\" alt=\"leer\"></a>\n</td>\n";
               echo "</tr>\n<tr>\n";
               echo "<td>\nK&uuml;rzel:</td>\n<td>\n<input style=\"font-size:20px; font-weight:900;\" type=\"text\" size=\"3\" maxlength=\"3\" value=\"".$menuekuerzel."\" name=\"kuerzel\"></td>\n";
-              echo "<td>\n<a><img src=\"null.gif\" alt=\"leer\"></a>\n</td>\n";
               echo "</tr>\n<tr>\n";
               echo "<td>\nFunktion:</td>\n<td>\n<select style=\"font-size:20px; font-weight:900;\" name=\"funktion\">\n";
               for ($i=1; $i <= count ($conf_empf); $i++ ){
@@ -953,28 +959,21 @@ ul#topmenu li.active {
               }
               echo "</select>\n";
               echo "</td>\n";
-              echo "<td>\n<a><img src=\"null.gif\" alt=\"leer\"></a>\n</td>\n";
               echo "</tr>\n<tr>\n";
 
-              echo "<td>";
-              echo "Kennwort:" ;
-              echo "</td><td>";
-              echo "<input name=\"kennwort1\" type=\"password\" size=\"32\" maxlength=\"32\">";
-              echo "</td>\n";
-              if (  //($menuename == "") and ($menuekuerzel == "") and ($menuefunktion == "")){
-                   $doppelkennwort ) {
-                echo "<td>\n<a><img src=\"null.gif\" alt=\"leer\"></a>\n</td>\n";
-
+              echo "<td>Kennwort:</td>";
+              echo "<td><input name=\"kennwort1\" type=\"password\" size=\"32\" maxlength=\"32\"></td>\n";
+              if ( $doppelkennwort ) {
                 echo "<input type=\"hidden\" name=\"2teskennwort\" value=\"Yes\">\n";
-                echo "</tr>\n<tr>\n";
-                echo "<td>";
-                echo "Kennwort:" ;
-                echo "</td><td>";
-                echo "<input name=\"kennwort2\" type=\"password\" size=\"32\" maxlength=\"32\">";
-                echo "</td>\n";
+                echo "</tr>\n";
+                echo "<tr>\n";
+                echo "<td>Kennwort:</td>" ;
+                echo "<td><input name=\"kennwort2\" type=\"password\" size=\"32\" maxlength=\"32\"></td>\n";
               }
-              echo "<td>\n<input type=\"submit\" name=\"anmelden\" value=\"Anmelden\">\n";
-              echo "</td>\n";
+              echo "<tr>";
+                          echo "<td align=\"center\" bgcolor=$color_button_ok><input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/ok.gif\"></td>";
+                          echo "<td>\n<a><img src=\"null.gif\" alt=\"leer\"></a>\n</td>\n";
+                          echo "</tr>\n";
 
       break;
     }
@@ -986,8 +985,6 @@ ul#topmenu li.active {
     echo "</tbody>";
     echo "</table>";
     echo "</form>";
-
-//    $_SESSION["menue"] = "NORMAL";
 
   }
 
@@ -1006,7 +1003,6 @@ if ( debug == true ){
   echo "GET="; var_dump ($_GET);    echo "#<br><br>\n";
   echo "POST="; var_dump ($_POST);   echo "#<br><br>\n";
   echo "COOKIE="; var_dump ($_COOKIE); echo "#<br><br>\n";
-  //echo "SERVER="; var_dump ($_SERVER); echo "#<br><br>\n";
   echo "SESSION="; print_r ($_SESSION); echo "#<br>\n";
 }
 

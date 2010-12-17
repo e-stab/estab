@@ -222,14 +222,12 @@ class createbutton {
         // schalterhöhe + Texthöhe
         // Breiteste Schalter oder Text
       case "top":
-
       break;
 
         // drunter
         // schalterhöhe + Texthöhe
         // Breiteste Schalter oder Text
       case "buttom":
-
         $this->height = $switchheight + $fontheight ;
         if ($switchwidth >= $fontwidth){ $this->width = $switchwidth; } else { $this->width = $fontwidth;}
         // x/y Position der oberen linken Ecke des Schalters
@@ -238,7 +236,6 @@ class createbutton {
         // x/y Position des Textes
         $xpos_txt = 1 ;
         $ypos_txt = $switchheight + 1 ;
-
       break;
 
         // links daneben
@@ -248,7 +245,6 @@ class createbutton {
         // x/y Position der oberen linken Ecke des Schalters
         $xpos_img = 0 ;
         $ypos_img = 0 ;
-
         // x/y Position des Textes
         $xpos_txt = 0 ;
         $ypos_txt = 0 ;
@@ -261,14 +257,12 @@ class createbutton {
         $this->height = $this->fontheight ;
         if ($this->height < $switchheight){ $this->height = $switchheight ; }
         $this->width = $switchwidth + $fontwidth ;// + $this->height;
-
         // x/y Position der oberen linken Ecke des Schalters
         $xpos_img = 0 ; // links
         $ypos_img = 0 ; // oben
         // x/y Position des Textes
         $xpos_txt = $xpos_img + $switchwidth + 1 ;
         $ypos_txt = ($this->height - $this->font_size) /2 - 4 ;
-
       break;
 
       default ;

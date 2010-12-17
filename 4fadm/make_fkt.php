@@ -245,19 +245,19 @@ define ("debug", false);
     echo "<title>".$titel."</title>\n";
  
     echo "<script type='text/javascript'>\n";
-	echo "<!--\n";
-	echo " var Felder = new Array(";
-	for ($zeile=1; $zeile <= 5; $zeile ++)
-	{
-		for ($spalte=1; $spalte <= 4; $spalte ++)
-		{
-			echo ("'fktmtx_".$zeile.$spalte."_fkt'");
-			if( ($zeile < 5) || ($spalte < 4) ) echo(",");
-		}
-	}
-	echo ");\n";
-	echo "-->\n";
-	echo "</script>\n";
+        echo "<!--\n";
+        echo " var Felder = new Array(";
+        for ($zeile=1; $zeile <= 5; $zeile ++)
+        {
+                for ($spalte=1; $spalte <= 4; $spalte ++)
+                {
+                        echo ("'fktmtx_".$zeile.$spalte."_fkt'");
+                        if( ($zeile < 5) || ($spalte < 4) ) echo(",");
+                }
+        }
+        echo ");\n";
+        echo "-->\n";
+        echo "</script>\n";
     echo "<script type='text/javascript'  src='jsFormular.js'></script>\n";
     echo " </head>\n";
     echo " <body onload='checkAll()'>";

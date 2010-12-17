@@ -329,6 +329,7 @@ class kategorien {
     echo "<TH>Kategorie</TH>\n";
     echo "<TH>Beschreibung</TH>\n";
     echo "<TH>Aktion</TH>\n";
+    echo "<TH>Aktion</TH>\n";
     echo "</TR>\n";
     echo "</THEAD>\n";
     echo "<TBODY>";
@@ -344,8 +345,10 @@ class kategorien {
     echo "<TD>\n";
     echo "<input style=\"font-size:16px; font-weight:900;\" maxlength=\"254\" size=\"50\" name=\"beschreibung\" value=\"".$beschreibung."\">\n";
     echo "</TD>\n";
-    echo "<TD align=\"center\">";
+    echo "<TD align=\"center\" bgcolor=$color_button_ok>";
     echo "<input type=\"image\" name=\"katego_absenden\" src=\"".$conf_design_path."/ok.gif\" alt=\"OK\">\n";
+        echo "</TD>";
+        echo "<TD align=\"center\" bgcolor=$color_button_nok>";
     echo "<input type=\"image\" name=\"katego_abbrechen\" src=\"".$conf_design_path."/cancel.gif\" alt=\"Abbrechen\">\n";
     echo "</TD>";
     echo "</TR>\n";

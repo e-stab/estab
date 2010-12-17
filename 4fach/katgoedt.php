@@ -163,7 +163,7 @@ if ( debug == true ){
       $katego->liste_kategorien ();
       $katego->eingabezeile ("neu","","","");
 //          if (!debug)
-      header("Location: ".$_SERVER['PHP_SELF']);
+//      header("Location: ".$_SERVER['PHP_SELF']);
     }
 
     if ( ( isset ( $_GET ["katego_abbrechen_x"]  )) OR
