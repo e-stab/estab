@@ -97,7 +97,7 @@
     $conf_4f ["NameVersion"][10]  = "Nachrichtenvordrucke als PDF-Datei  <br>\n";
     $conf_4f ["NameVersion"][11]  = "lade-/speicherbare Funktionsmatrix Teil 1 <br>\n";
 
-    $conf_4f ["NameVersion"][12]  = "(C) 2005-2009 HaJo Landmesser<br>eMail: 4fach-info@IuK-Heinsberg.de <br>\n";
+    $conf_4f ["NameVersion"][12]  = "(C) 2005-2010 HaJo Landmesser<br>eMail: 4fach-info@IuK-Heinsberg.de <br>\n";
     $conf_4f ["NameVersion"][13]  = "Infos, Forum unter  http://KatS.IuK-Heinsberg.de <br>\n";
 
 
