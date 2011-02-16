@@ -55,7 +55,7 @@ $result = mysql_query ("SELECT 04_richtung, 04_nummer FROM  $tabelle ORDER BY 00
 if(Nachweisung == "gemeinsam")
          {
          ?>
-         <script type="text/javascript">
+<script type="text/javascript">
          function checkForm() {
          var strFehler='';
          if (document.forms[0].ea_nummer.value < <? echo $nummer[0]++; ?>)
@@ -66,8 +66,8 @@ if(Nachweisung == "gemeinsam")
          return(false);
          }
          }
-         </script>
-         <?
+</script>
+<?php
          echo"<form action='' onsubmit='return checkForm()' method=get>";
          echo"<fieldset>";
          echo"<legend>Nachrichtennummer nach Systemausfall setzen</legend>";
@@ -99,7 +99,8 @@ elseif(Nachweisung == "getrennt")
                          }
                  }
 
-         ?><script type="text/javascript">
+?>
+<script type="text/javascript">
          function checkForm() {
          var strFehler='';
          if (document.forms[0].e_nummer.value < <? echo $nummer[$e_nummer]++; ?>)
@@ -113,8 +114,8 @@ elseif(Nachweisung == "getrennt")
          return(false);
          }
          }
-         </script>
-         <?
+</script>
+<?php
          //Formular schreiben
          echo"<form action='' onsubmit='return checkForm()' method=get>";
          echo"<fieldset>";
@@ -172,5 +173,3 @@ if($protokoll)
 
 echo "<br><br><br><a href=admin.php>Zurück zur Administrations Übersicht</a>";
 ?>
-
-
