@@ -31,7 +31,7 @@ include ("./4fcfg/config.inc.php");
     $menue[3]["pic"]  = $conf_menue ["symbole"]."nw.png";
     $menue[3]["link"] = "./4fach/nachwea.php?nwalle";
 
-        $menue[5]["text"] = "Liste aller Meldungen";
+    $menue[5]["text"] = "Liste aller Meldungen";
     $menue[5]["pic"]  = $conf_menue ["symbole"]."all_msg.png";
     $menue[5]["link"] = "./4fach/ue_ltg.php";
 

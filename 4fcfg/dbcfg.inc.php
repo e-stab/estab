@@ -4,7 +4,7 @@
 \******************************************************************************/ 
 $conf_4f_db   ["server"]        = "localhost"; 
 $conf_4f_db   ["user"]          = "root"; 
-$conf_4f_db   ["password"]      = "geheim"; 
+$conf_4f_db   ["password"]      = ""; 
 $conf_4f_tbl  ["prefix"]        = "nv_" ; 
 $conf_4f_tbl  ["benutzer"]      = "nv_benutzer"; 
 $conf_4f_tbl  ["masterkatego"]  = "nv_masterkatego"; 
