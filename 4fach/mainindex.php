@@ -73,7 +73,6 @@ include ("data_hndl.php");                              // Schnittstelle zur Dat
   function resetframeset ($rootpath) {
     pre_html ("reset","Framereset ".$conf_4f ["NameVersion"],""); // Normaler Seitenaufbau mit Auffrischung
     echo "<body onLoad=\"FramesVeraendern('".$rootpath."/4fach/counter.php','counter','".$rootpath."/4fach/vorgaben.php','vorgaben','".$rootpath."/4fach/mainindex.php','mainframe')\">";
-    exit;
   }
 
 
@@ -109,6 +108,7 @@ ANTWORT % WEITERLEITUNG
   /****************************************************************************\
     Für die Listendarstellung erforderliche Einstellungen
   \****************************************************************************/
+    // Kategorie Master
   if (isset($_GET ["ma_ktgotyp"])){
     if ( $_GET ["ma_ktgo"] == "alle") {
       unset ($_SESSION ["ma_kategotyp"]);
@@ -120,6 +120,19 @@ ANTWORT % WEITERLEITUNG
       $_SESSION["filter_position"] = 0;
     }
   }
+    // Kategorie FUNKTION
+  if (isset($_GET ["fk_ktgotyp"])){
+    if ( $_GET ["fk_ktgo"] == "alle") {
+      unset ($_SESSION ["fk_kategotyp"]);
+      unset ($_SESSION ["fk_katego"]);
+    } else {
+      $_SESSION ["fk_kategotyp"] = $_GET ["fk_ktgotyp"];
+      $_SESSION ["fk_katego"]    = $_GET ["fk_ktgo"];
+      $_SESSION["filter_start"] = 0 ;
+      $_SESSION["filter_position"] = 0;
+    }
+  }
+    // Kategorie USER
   if (isset($_GET ["us_ktgotyp"])){
     if ( $_GET ["us_ktgo"] == "alle") {
       unset ($_SESSION ["us_kategotyp"]);
@@ -135,7 +148,6 @@ ANTWORT % WEITERLEITUNG
 
   if (isset ( $_GET ["4fachkatego_absenden_x"])) {
     include ("../4fach/katgoedt.php");
-    exit;
   }
 
 
@@ -295,7 +307,7 @@ ANTWORT % WEITERLEITUNG
       if (!$error) {
         $_SESSION["menue"] = "ROLLE";  //   führt zu fehlern bei der menüdarstellung
         if (debug) echo "mainindex 324 <br> ";
-        resetframeset ($conf_urlroot.$conf_web ["pre_path"]);
+        resetframeset ($conf_urlroot.$conf_web["pre_path"]);
       }
     // Wenn Benutzer OK ==> SESSION [menue]=ROLLE ; $_SESSION [ROLLE]= Stab, Fernmelder...
   } else {
@@ -351,7 +363,7 @@ ANTWORT % WEITERLEITUNG
          ) {
     $returndata = $_GET;
 
-    if ( debug == true ){ echo "### 388 Daten kommen vom Formular und können gespeichert werden";  echo "<br>\n";}
+    if ( debug == true ){ echo "### 370 Daten kommen vom Formular und können gespeichert werden";  echo "<br>\n";}
 
     if ( ( $_GET ["11_gesprnotiz"] == "on" ) and
          ( !$_SESSION ["gesprnoti"] ) and
@@ -738,7 +750,7 @@ ul#topmenu li.active {
      $form = new nachrichten4fach ($formdata, "FM-Eingang", "");
     } else {
      $formdata ["15_quitzeichen"]  = $_SESSION ["vStab_kuerzel"];
-     $formdata ["16_empf"]         = get_autosichter_targets();
+     $formdata ["16_empf"]         = get_autosichter_targets("");
      $form = new nachrichten4fach ($formdata, "FM-Eingang_Sichter", "");
     }
   }

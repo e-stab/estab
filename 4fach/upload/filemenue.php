@@ -19,7 +19,7 @@ function readDirectory($pfad)
 
 
 
-$files = readDirectory ("/srv/www/htdocs/intern/kats_entw/4fach/upload/");
+$files = readDirectory ($_SERVER["DOCUMENT_ROOT"]."/".$conf_web ["pre_path"]."4fach/upload/");
 
 foreach ($files as $file){
   echo $file."<br>";

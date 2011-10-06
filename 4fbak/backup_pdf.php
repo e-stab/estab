@@ -13,11 +13,11 @@
 \*****************************************************************************/
 
 define ("debug",false);
-define('FPDF_FONTPATH',$_SERVER ["DOCUMENT_ROOT"]."/kats/4fbak/fpdf/font/");
+define('FPDF_FONTPATH',$_SERVER ["DOCUMENT_ROOT"]."/".$conf_web["pre_path"]."4fbak/fpdf/font/");
 
 @ini_set('memory_limit', '32M');
 
-require_once ($_SERVER ["DOCUMENT_ROOT"]."/kats/4fbak/fpdf.php");
+require ($_SERVER ["DOCUMENT_ROOT"]."/".$conf_web["pre_path"]."4fbak/fpdf.php");
 // require_once ("./fpdf/ellipse/ellipse.php");
 
 
@@ -937,7 +937,7 @@ class vordruckaspdf extends PDF_Ellipse {
     $this->Cell(0,10,'VS - Nur für den Dienstgebrauch',0,0,'C');
 
     //Logo
-    $this->Image($_SERVER ["DOCUMENT_ROOT"]."/kats/4fbak/logo.png",
+    $this->Image($_SERVER ["DOCUMENT_ROOT"]."/".$conf_web["pre_path"]."4fbak/logo.png",
                 $this->point [60][0]+10,
                 $this->point [60][1]+5,
                 20);
@@ -980,6 +980,7 @@ class vordruckaspdf extends PDF_Ellipse {
   function main(){
     include ("../4fcfg/config.inc.php");    // Konfigurationseinstellungen und Vorgaben
     include ("../4fcfg/dbcfg.inc.php");     // Datenbankparameter
+    include ("../4fcfg/e_cfg.inc.php");     // Datenbankname
 
     // Schriftart definieren
     $this->SetFont('helvetica','',12);

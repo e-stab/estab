@@ -313,7 +313,7 @@ $old_error_handler = set_error_handler("myErrorHandler");
   if (!$result) {
      die('Ung&uuml;ltige Abfrage: ' . mysql_error());
   } else {
-    echo 'Masterkategorietabelle wurde angelegt.';
+    echo 'Masterkategorielinktabelle wurde angelegt.';
     echo "<br>\n";
   }
 
@@ -376,6 +376,25 @@ $old_error_handler = set_error_handler("myErrorHandler");
      die('Ung&uuml;ltige Abfrage: ' . mysql_error());
   } else {
     echo "Einsatztagebuch wurde angelegt.";
+    echo "<br>\n";
+  }
+
+  $query = "CREATE TABLE IF NOT EXISTS `".$conf_tbl ["tbb"]."` (
+  `tbb_lfd-nr` INT NOT NULL auto_increment,
+  `tbb_time` DATETIME NOT NULL ,
+  `tbb_aktion` TEXT NOT NULL ,
+  `tbb_bemerk` TEXT NOT NULL,
+  `tbb_benutzer` varchar(50) NOT NULL default '',
+  `tbb_kuerzel` varchar(6) NOT NULL default '',
+  `tbb_funktion` varchar(10) NOT NULL default '',
+   PRIMARY KEY  (`tbb_lfd-nr`)
+  ) ENGINE = MYISAM AUTO_INCREMENT=1;";
+
+  $result = mysql_query($query, $link);
+  if (!$result) {
+     die('Ung&uuml;ltige Abfrage: ' . mysql_error());
+  } else {
+    echo "Technisches Betriebsbuch wurde angelegt.";
     echo "<br>\n";
   }
 

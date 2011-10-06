@@ -2,6 +2,7 @@
 
 include ("../4fcfg/config.inc.php");    // Konfigurationseinstellungen und Vorgaben
 include ("../4fcfg/dbcfg.inc.php");     // Datenbankparameter
+include ("../4fcfg/e_cfg.inc.php");
 include ("./db_operation.php");  // Datenbank operationen
 
 echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";

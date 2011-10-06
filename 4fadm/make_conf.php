@@ -10,7 +10,7 @@ define("ERROR", E_USER_WARNING);
 define("WARNING", E_USER_NOTICE);
 
 // die Stufe für dieses Skript einstellen
-error_reporting(E_ALL); 
+error_reporting(E_ALL);
 
 // Fehlerbehandlungsfunktion
 function myErrorHandler($errno, $errstr, $errfile, $errline)
@@ -161,13 +161,14 @@ class make_dbconf {
     $fileline [12] = "$"."conf_tbl     [\"bhp50\"]         = \"".$values ['tbl_pre']."bhp50\"; \r\n";
     $fileline [13] = "$"."conf_tbl     [\"komplan\"]       = \"".$values ['tbl_pre']."komplan\"; \r\n";
     $fileline [14] = "$"."conf_tbl     [\"etb\"]           = \"".$values ['tbl_pre']."etb\"; \r\n";
-    $fileline [15] = "$"."conf_tbl     [\"ubb\"]           = \"".$values ['tbl_pre']."ubb\"; \r\n";
+    $fileline [15] = "$"."conf_tbl     [\"tbb\"]           = \"".$values ['tbl_pre']."tbb\"; \r\n";
+    $fileline [16] = "$"."conf_tbl     [\"ubb\"]           = \"".$values ['tbl_pre']."ubb\"; \r\n";
 
 
 
     $postfile = "\r\r\n\r\n\n?>";
 
-    $filename =  $conf_web ["srvroot"].$conf_web ["pre_path"]."/4fcfg/dbcfg.inc.php";
+    $filename =  $conf_web ["srvroot"].$conf_web ["pre_path"]."4fcfg/dbcfg.inc.php";
 
     $fhndl = fopen ( $filename, "w+");
 
@@ -271,7 +272,7 @@ class make_econf {
 \****************************************************************************/
   function write_efkt_file ($values){
 
-  include ("../4fcfg/config.inc.php");
+  require ("../4fcfg/config.inc.php");
 
     $prefile = "<"."?"."php \r\n".
     "/"."******************************************************************************\ \r\n".
@@ -286,7 +287,24 @@ class make_econf {
 
     $postfile = "\r\r\n\r\n\n?>";
 
-    $filename =  $conf_web ["srvroot"].$conf_web ["pre_path"]."/4fcfg/e_cfg.inc.php";
+    $a=explode("/",$_SERVER["PHP_SELF"]);
+// echo "a="; var_dump($a); echo "<br>";
+    $i = 1;
+    $b = "";
+    while ( ($a[$i] != "4fadm") AND ($i <= count ($a)) AND ($a[$i] != "") ){
+      $b .= $a[$i]."/";
+      $i++;
+    }
+// echo "<big> b=".$b." </big><br>";
+// echo "<big> PRE_DIR=".$conf_pre_dir." </big><br>";
+
+    if ($b != ""){
+      $conf_pre_dir =  $b; // mit führendem /
+    } else {
+      $conf_pre_dir =  "";
+    }
+
+    $filename =  $_SERVER["DOCUMENT_ROOT"]."/".$conf_pre_dir."4fcfg/e_cfg.inc.php";
 
     $fhndl = fopen ( $filename, "w+");
 
@@ -298,6 +316,59 @@ class make_econf {
 
     fwrite ($fhndl, $postfile);
     fclose ($fhndl);
+  }
+/****************************************************************************\
+
+\****************************************************************************/
+  function write_dfkt_file ($values){
+
+//  include ("../4fcfg/config.inc.php");
+
+    $prefile = "<"."?"."php \r\n".
+    "/"."******************************************************************************\ \r\n".
+    "              Definitionen fuer die Verzeichnisse                                        \r\n".
+    "\******************************************************************************"."/ \r\n";
+
+    $fileline [1]  = "/** Verzeichnis zwischen Root und eStab**/\r\n\r\n";
+
+     /* Zwischen dem Documentroot des Webservers (htdocs) und dem Kats-
+        Verzeichnis eventuell vorhandenes Verzeichnis.*/
+    $a=explode("/",$_SERVER["PHP_SELF"]);
+// echo "a="; var_dump($a); echo "<br>";
+    $i = 1;
+    $b = "";
+    while ( ($a[$i] != "4fadm") AND ($i <= count ($a)) AND ($a[$i] != "") ){
+      $b .= $a[$i]."/";
+      $i++;
+    }
+// echo "<big> b=".$b." </big><br>";
+// echo "<big> PRE_DIR=".$conf_pre_dir." </big><br>";
+
+    if ($b != ""){
+      $conf_pre_dir =  $b; // mit führendem /
+    } else {
+      $conf_pre_dir =  "";
+    }
+
+// echo "<big> PRE_DIR=".$conf_pre_dir." </big><br>";
+
+    $fileline [2] = "$"."conf_web [\"pre_path\"] = \"".$conf_pre_dir."\"; \r\n";
+
+    $postfile = "\r\r\n\r\n\n?>";
+
+    $filename =  $_SERVER["DOCUMENT_ROOT"]."/".$conf_pre_dir."4fcfg/d_cfg.inc.php";
+
+    $fhndl = fopen ( $filename, "w+");
+
+    fwrite ($fhndl, $prefile);
+
+    for ($i=0; $i <= count ($fileline); $i++){
+      fwrite ($fhndl, $fileline [$i]);
+    }
+
+    fwrite ($fhndl, $postfile);
+    fclose ($fhndl);
+// exit;
   }
 
 
@@ -536,7 +607,7 @@ class make_econf {
 
     if (isset($_GET["absenden_x"])) {
       $a->write_dbfkt_file ($_GET);
-      header("Location: ".$conf_urlroot.$conf_web ["pre_path"]."/4fadm/admin.php");
+      header("Location: ".$conf_urlroot.$conf_web ["pre_path"]."4fadm/admin.php");
     }
     if ( isset($_GET["abbrechen_x"]) ){
       header("Location: ".$conf_urlroot.$conf_web ["pre_path"]."/4fadm/admin.php");
@@ -546,15 +617,16 @@ class make_econf {
   }
 
   if  ( $_GET ["task"] == "einsatz_neu" ) {
-    $e = new make_econf ($conf_4f_db, $conf_4f_tbl, $conf_tbl, $conf_4f);
+    $einsatz_neu = new make_econf ($conf_4f_db, $conf_4f_tbl, $conf_tbl, $conf_4f);
     if (isset($_GET["absenden_x"])) {
-      $e->write_efkt_file ($_GET);
+      $einsatz_neu->write_dfkt_file ($_GET);
+      $einsatz_neu->write_efkt_file ($_GET);
       header("Location: ".$conf_urlroot.$conf_web ["pre_path"]."/4fadm/create_db.php");
     }
     if ( isset($_GET["abbrechen_x"]) ){
       header("Location: ".$conf_urlroot.$conf_web ["pre_path"]."/4fadm/admin.php");
     }
-    $e->menue ();
+    $einsatz_neu->menue ();
   }
 
   switch ($_GET ["task"]){
@@ -578,9 +650,9 @@ class make_econf {
 
 
   if  ( $_GET ["task"] == "einsatz_ende" ) {
-    $e = new make_econf ($conf_4f_db, $conf_4f_tbl, $conf_tbl, $conf_4f);
+    $einsatz_ende = new make_econf ($conf_4f_db, $conf_4f_tbl, $conf_tbl, $conf_4f);
 
-    $e->schliesse_einsatz ();
+    $einsatz_ende->schliesse_einsatz ();
 
   }
 

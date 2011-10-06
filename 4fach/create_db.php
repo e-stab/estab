@@ -238,7 +238,7 @@ function outerrormsg ($errno, $errtxt) {
   }
 
 
-
+/*
 $query = "CREATE TABLE IF NOT EXISTS `".$conf_tbl ["komplan"]."` (
   `lfd` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `stelle` varchar(255) NOT NULL,
@@ -312,7 +312,7 @@ $query = "CREATE TABLE IF NOT EXISTS `".$conf_tbl ["bhp50"]."` (
     echo "BHP 50 wurde angelegt.";
     echo "<br>";
   }
-
+*/
   echo 'Ich habe fertig.';
 
   echo "</big></big>";

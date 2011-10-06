@@ -17,30 +17,30 @@ $empf_matrix = array (
 1 => array ( 
 	 1 => array ("typ" => "cb", "typ" => "cb", "fkt" => "LS", "rolle" => "Stab", "mode" => "ro" ),
 	 2 => array ("typ" => "cb", "typ" => "cb", "fkt" => "S5", "rolle" => "Stab", "mode" => "ro" ),
-	 3 => array ("typ" => "cb", "typ" => "cb", "fkt" => "THW", "rolle" => "FB", "mode" => "ro" ),
+	 3 => array ("typ" => "t", "typ" => "t", "fkt" => "", "rolle" => "leer", "mode" => "ro" ),
 	 4 => array ("typ" => "t", "typ" => "t", "fkt" => "", "rolle" => "leer", "mode" => "ro" )
 ),
 2 => array ( 
 	 1 => array ("typ" => "cb", "typ" => "cb", "fkt" => "S1", "rolle" => "Stab", "mode" => "ro" ),
 	 2 => array ("typ" => "cb", "typ" => "cb", "fkt" => "S6", "rolle" => "Stab", "mode" => "ro" ),
-	 3 => array ("typ" => "cb", "typ" => "cb", "fkt" => "Pol", "rolle" => "FB", "mode" => "ro" ),
+	 3 => array ("typ" => "t", "typ" => "t", "fkt" => "", "rolle" => "leer", "mode" => "ro" ),
 	 4 => array ("typ" => "t", "typ" => "t", "fkt" => "", "rolle" => "leer", "mode" => "ro" )
 ),
 3 => array ( 
 	 1 => array ("typ" => "cb", "typ" => "cb", "fkt" => "S2", "rolle" => "Stab", "mode" => "ro" ),
-	 2 => array ("typ" => "cb", "typ" => "cb", "fkt" => "LNA", "rolle" => "FB", "mode" => "ro" ),
-	 3 => array ("typ" => "cb", "typ" => "cb", "fkt" => "Bd", "rolle" => "FB", "mode" => "ro" ),
+	 2 => array ("typ" => "cb", "typ" => "cb", "fkt" => "POL", "rolle" => "FB", "mode" => "ro" ),
+	 3 => array ("typ" => "t", "typ" => "t", "fkt" => "", "rolle" => "leer", "mode" => "ro" ),
 	 4 => array ("typ" => "t", "typ" => "t", "fkt" => "", "rolle" => "leer", "mode" => "ro" )
 ),
 4 => array ( 
 	 1 => array ("typ" => "cb", "typ" => "cb", "fkt" => "S3", "rolle" => "Stab", "mode" => "ro" ),
-	 2 => array ("typ" => "cb", "typ" => "cb", "fkt" => "OrglRD", "rolle" => "FB", "mode" => "ro" ),
-	 3 => array ("typ" => "cb", "typ" => "cb", "fkt" => "BPol", "rolle" => "FB", "mode" => "ro" ),
+	 2 => array ("typ" => "cb", "typ" => "cb", "fkt" => "THW", "rolle" => "FB", "mode" => "ro" ),
+	 3 => array ("typ" => "t", "typ" => "t", "fkt" => "", "rolle" => "leer", "mode" => "ro" ),
 	 4 => array ("typ" => "t", "typ" => "t", "fkt" => "", "rolle" => "leer", "mode" => "ro" )
 ),
 5 => array ( 
 	 1 => array ("typ" => "cb", "typ" => "cb", "fkt" => "S4", "rolle" => "Stab", "mode" => "ro" ),
-	 2 => array ("typ" => "cb", "typ" => "cb", "fkt" => "Bs", "rolle" => "FB", "mode" => "ro" ),
+	 2 => array ("typ" => "cb", "typ" => "cb", "fkt" => "SAN", "rolle" => "FB", "mode" => "ro" ),
 	 3 => array ("typ" => "t", "typ" => "t", "fkt" => "", "rolle" => "leer", "mode" => "ro" ),
 	 4 => array ("typ" => "t", "typ" => "t", "fkt" => "", "rolle" => "leer", "mode" => "ro" )
 )
@@ -55,13 +55,9 @@ $empf_matrix = array (
 	$conf_empf [7] = array ("fkt" => "S6", "rolle" => "Stab" ); 
 	$conf_empf [8] = array ("fkt" => "Si", "rolle" => "Stab" ); 
 	$conf_empf [9] = array ("fkt" => "A/W", "rolle" => "Fernmelder" ); 
-	$conf_empf [10] = array ("fkt" => "THW", "rolle" => "FB" ); 
-	$conf_empf [11] = array ("fkt" => "Pol", "rolle" => "FB" ); 
-	$conf_empf [12] = array ("fkt" => "LNA", "rolle" => "FB" ); 
-	$conf_empf [13] = array ("fkt" => "Bd", "rolle" => "FB" ); 
-	$conf_empf [14] = array ("fkt" => "OrglRD", "rolle" => "FB" ); 
-	$conf_empf [15] = array ("fkt" => "BPol", "rolle" => "FB" ); 
-	$conf_empf [16] = array ("fkt" => "Bs", "rolle" => "FB" ); 
+	$conf_empf [10] = array ("fkt" => "POL", "rolle" => "FB" ); 
+	$conf_empf [11] = array ("fkt" => "THW", "rolle" => "FB" ); 
+	$conf_empf [12] = array ("fkt" => "SAN", "rolle" => "FB" ); 
 
     $redcopy2 = "S2" ;
 

@@ -194,17 +194,6 @@ define ("debug", false);
           $fktquery .= "(".$zeile.",".$spalte.", \"t\",\"\" ,\"\" , \"ro\", \"0\", \"0\")" ;
         }
         if (( $zeile == 5) and ($spalte == 4)) { $fktquery .= ""; } else { $fktquery .= ","; }
-/*
-        echo "Write in DB = ".
-             $zeile.",
-           ".$spalte.",
-           ".$typ.",
-           ".$pos[$zeile][$spalte].",
-           ".$rolle[$zeile][$spalte].",
-           \"ro\",
-           ".$redcpy.",
-           ".$autosichter."<br>" ;
-*/
 
       }
     }
@@ -239,28 +228,26 @@ define ("debug", false);
     echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
     echo "<html>\n";
     echo "<head>\n";
-      // Hier kann noch Java rein    
-    echo "<script type = \"text/javascript\" src = \"../js/prototype.js\"></script>";
+      // Hier ist Java drin
     echo "<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=utf-8\">";
     echo "<title>".$titel."</title>\n";
- 
+
     echo "<script type='text/javascript'>\n";
-        echo "<!--\n";
-        echo " var Felder = new Array(";
-        for ($zeile=1; $zeile <= 5; $zeile ++)
-        {
-                for ($spalte=1; $spalte <= 4; $spalte ++)
-                {
-                        echo ("'fktmtx_".$zeile.$spalte."_fkt'");
-                        if( ($zeile < 5) || ($spalte < 4) ) echo(",");
-                }
-        }
-        echo ");\n";
-        echo "-->\n";
-        echo "</script>\n";
+    echo "<!--\n";
+    echo " var Felder = new Array(";
+    for ($zeile=1; $zeile <= 5; $zeile ++)
+    {
+      for ($spalte=1; $spalte <= 4; $spalte ++) {
+        echo ("'fktmtx_".$zeile.$spalte."_fkt'");
+        if( ($zeile < 5) || ($spalte < 4) ) echo(",");
+      }
+    }
+    echo ");\n";
+    echo "-->\n";
+    echo "</script>\n";
     echo "<script type='text/javascript'  src='jsFormular.js'></script>\n";
     echo " </head>\n";
-    echo " <body onload='checkAll()'>";
+    echo " <body onload=\"checkAll();\">";
   }
 
 /****************************************************************************\
@@ -361,7 +348,7 @@ define ("debug", false);
 
 // echo "<br><br>FKTS==="; var_dump ($fkts); echo"<br><br>";
 
-    echo "<form style=\"\" method=\"get\" action=\"".$_SERVER ['PHP_SELF']."\" name=\"Funktionseditor\" onsubmit='return checkForm()'>\n";
+    echo "<form style=\"\" method=\"get\" action=\"".$_SERVER ['PHP_SELF']."\" name=\"Funktionseditor\" onsubmit=\"return checkForm();\">\n";
     echo "<table style=\"text-align: center; background-color: rgb(255,255,255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
 //    echo "</td>\n";
     for ($zeile=1; $zeile <= 5; $zeile ++){

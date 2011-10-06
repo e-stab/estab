@@ -317,6 +317,7 @@ class Listen extends kategorien {
   var $sqlquery;
   var $db_hndl ;
   var $masterresult ;
+  var $fktresult ;
   var $userresult ;
   var $resultcount ;
 
@@ -338,17 +339,29 @@ class Listen extends kategorien {
     $this->stab_fkt  = $_SESSION ["vStab_funktion"] ;
     $this->dbtyp = $table;
 
-    if ($table == "master") {
-      $this->db_master_katego = $conf_4f_tbl ["masterkatego"] ;
-      $this->db_tablname      = $conf_4f_tbl ["masterkatego"] ;
-      $this->db_tablnamelk    = $conf_4f_tbl ["masterkategolk"];
-    } else {
-      $this->db_tbl = $conf_4f_tbl ["usrtblprefix"].
-                    strtolower ($_SESSION["vStab_funktion"])."_".
-                    strtolower ($_SESSION["vStab_kuerzel"]) ;
-      $this->db_tablname   = $this->db_tbl."_katego";
-      $this->db_tablnamelk = $this->db_tbl."_kategolink";
+    switch  ($table) {
+       case "master":
+            $this->db_master_katego = $conf_4f_tbl ["masterkatego"] ;
+            $this->db_tablname      = $conf_4f_tbl ["masterkatego"] ;
+            $this->db_tablnamelk    = $conf_4f_tbl ["masterkategolk"];
+       break;
+       case "fkt":
+        $this->db_tbl = $conf_4f_tbl ["usrtblprefix"]."_fkt_".
+                              strtolower ($_SESSION["vStab_funktion"]);
+        $this->db_tablname   = $this->db_tbl."_katego";
+        $this->db_tablnamelk = $this->db_tbl."_kategolink";
+       break;
+       case "user":
+            $this->db_tbl = $conf_4f_tbl ["usrtblprefix"].
+                          strtolower ($_SESSION["vStab_funktion"])."_".
+                          strtolower ($_SESSION["vStab_kuerzel"]) ;
+            $this->db_tablname   = $this->db_tbl."_katego";
+            $this->db_tablnamelk = $this->db_tbl."_kategolink";
+       break;
+
     }
+
+
     $this->db_server   = $conf_4f_db ["server"];
     $this->db_benutzer = $conf_4f_db ["user"];
     $this->db_passwort = $conf_4f_db ["password"];
@@ -366,38 +379,70 @@ class Listen extends kategorien {
        or die ("[read_table] Auswahl der Datenbank fehlgeschlagen");
   }
 
+  /***********************************************************************************
 
+  ***********************************************************************************/
   function kategoliste (){
     if ($_SESSION["filter_darstellung"] == "1" ){
       include ("../4fcfg/config.inc.php");
 
-      $this->set_katego_para ("master");
+      $this->set_katego_para ("master");   // MASTER
       $this->sqlquery = "SELECT * FROM `".$this->db_tablname."` WHERE 1  ORDER BY `kategorie`;";
       $query_result = mysql_query ($this->sqlquery, $this->db_hndl) or
-         die("[query_table] <br>$this->sqlquery<br>103-".mysql_error()." ".mysql_errno());
+         die("[query_table_MASTER] <br>$this->sqlquery<br>103-".mysql_error()." ".mysql_errno());
       $this->resultcount = mysql_num_rows($query_result);
       $this->masterresult = NULL;
       for ($i=1; $i<=$this->resultcount; $i++){
         $this->masterresult[$i] = mysql_fetch_assoc($query_result);
       }
       mysql_free_result($query_result);
-      $this->set_katego_para ("user");
+
+
+      $this->set_katego_para ("fkt");     // FUNKTION
+      $this->sqlquery = "SELECT * FROM `".$this->db_tablname."` WHERE 1  ORDER BY `kategorie`;";
+
+      $query_result = mysql_query ($this->sqlquery, $this->db_hndl) or
+         die("[query_table_FUNKTION405] <br>$this->sqlquery<br>-".mysql_error()." ".mysql_errno());
+      $this->resultcount = mysql_num_rows($query_result);
+      $this->fktresult = NULL ;
+      for ($i=1; $i<=$this->resultcount; $i++){
+        $this->fktresult[$i] = mysql_fetch_assoc($query_result);
+      }
+      mysql_free_result($query_result);
+
+
+      $this->set_katego_para ("user");     // USER
       $this->sqlquery = "SELECT * FROM `".$this->db_tablname."` WHERE 1  ORDER BY `kategorie`;";
       $query_result = mysql_query ($this->sqlquery, $this->db_hndl) or
-         die("[query_table] <br>$this->sqlquery<br>103-".mysql_error()." ".mysql_errno());
+         die("[query_table_USER] <br>$this->sqlquery<br>103-".mysql_error()." ".mysql_errno());
       $this->resultcount = mysql_num_rows($query_result);
       $this->userresult = NULL ;
       for ($i=1; $i<=$this->resultcount; $i++){
         $this->userresult[$i] = mysql_fetch_assoc($query_result);
       }
       mysql_free_result($query_result);
+
+
       $mastercount = COUNT($this->masterresult) ;
+      $fktcount    = COUNT($this->fktresult) ;
       $usercount   = COUNT($this->userresult) ;
+
       if (isset ($_SESSION [global_katego])) {
         $kategoselected = $_SESSION [global_katego];
       }
+
+        // MASTER KATEGORIE
       if ($mastercount != 0){
-        echo "<div style=\"height:20px; background-color:#FFC8C8; border-top-color:#FFC8C8; border-left-color:#FFC8C8; border-right-color:#FFC8C8; border-bottom-color:#000000; border-width:2px; border-style:solid; padding-top:10px; padding-bottom:0px;\">\n";
+        echo "<div style=\"height:20px;
+                           background-color:#FFC8C8;
+                           border-top-color:#FFC8C8;
+                           border-left-color:#FFC8C8;
+                           border-right-color:#FFC8C8;
+                           border-bottom-color:#000000;
+                           border-width:2px;
+                           border-style:solid;
+                           padding-top:10px;
+                           padding-bottom:0px;\">\n";
         if (!isset($_SESSION [ma_katego])){$color = "red";}else{$color = "lightred";}
             echo"<a href=\"".$conf_4f ["MainURL"]."?ma_ktgotyp=global&ma_ktgo=alle\">
               <img src=\"./kategobutton.php?icontext=ALLE&color=".$color."\"
@@ -420,8 +465,46 @@ class Listen extends kategorien {
         }
         echo "</div>";
       }
+
+        // FUNKTIONS KATEGORIE
+      if ($fktcount != 0){
+        echo "<div style=\"height:20px;
+                           background-color:#C8C8FF;
+                           border-top-color:#C8C8FF;
+                           border-left-color:#C8C8FF;
+                           border-right-color:#C8C8FF;
+                           border-bottom-color:#000000;
+                           border-width:2px;
+                           border-style:solid;
+                           padding-top:10px;
+                           padding-bottom:1px;
+                           margin-bottom:0px;\">\n";
+        if (!isset($_SESSION [fk_katego])){$color = "blue";}else{$color = "lightblue";}
+
+        echo "<a href=\"".$conf_4f ["MainURL"]."?fk_ktgotyp=fkt&fk_ktgo=alle\">";
+        echo "<img src=\"./kategobutton.php?icontext=ALLE&color=".$color."\"
+                   alt=\"Alle\"
+                   border=\"0\"
+                   title=\"Alle\">"; //</a>";
+        for ($i=1; $i<= $fktcount; $i++) {
+          if ( $this->fktresult[$i]["kategorie"] == "" ) {
+            echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
+          } else {
+            if ( ($_SESSION [fk_katego] == $this->fktresult[$i]["kategorie"]) AND
+                 ($_SESSION [fk_kategotyp] == "fkt" ) ){$color = "blue";}else{$color = "lightblue";}
+              echo"<a href=\"".$conf_4f ["MainURL"]."?fk_ktgotyp=fkt&fk_ktgo=".$this->fktresult[$i]["kategorie"]."\">
+              <img src=\"./kategobutton.php?icontext=".$this->fktresult[$i]["kategorie"]."&color=".$color."\"
+                   alt=\"".$this->fktresult[$i]["beschreibung"]."\"
+                   border=\"0\"
+                   title=\"".$this->fktresult[$i]["beschreibung"]."\"></a>";
+          }
+        }
+        echo "</div>";   //echo "<p>";
+      }
+
+        // USER KATEGORIE
       if ($usercount != 0){
-        echo "<div style=\"height:19px; background-color:#C8FFC8; border-top-color:#C8FFC8; border-left-color:#C8FFC8; border-right-color:#C8FFC8; border-bottom-color:#000000; border-width:2px; border-style:solid; padding-top:10px; padding-bottom:1px; margin-bottom:10px;\">\n";
+        echo "<div style=\"height:20px; background-color:#C8FFC8; border-top-color:#C8FFC8; border-left-color:#C8FFC8; border-right-color:#C8FFC8; border-bottom-color:#000000; border-width:2px; border-style:solid; padding-top:10px; padding-bottom:1px; margin-bottom:10px;\">\n";
         if (!isset($_SESSION [us_katego])){$color = "green";}else{$color = "lightgreen";}
 
         echo "<a href=\"".$conf_4f ["MainURL"]."?us_ktgotyp=user&us_ktgo=alle\">";
@@ -444,6 +527,8 @@ class Listen extends kategorien {
         }
         echo "</div>";   //echo "<p>";
       }
+
+
     }
   }
 
@@ -459,7 +544,7 @@ class Listen extends kategorien {
     $tblusername = $conf_4f_tbl ["usrtblprefix"].strtolower ($_SESSION["vStab_funktion"]).
                      "_".strtolower ($_SESSION["vStab_kuerzel"]);
 
-    $fkttblname  = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($_SESSION["vStab_funktion"]);
+    $tblfktname  = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($_SESSION["vStab_funktion"]);
 
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
                          $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
@@ -486,8 +571,10 @@ class Listen extends kategorien {
           $query_select_ma_arg .= ",".$conf_4f_tbl ["masterkatego"].".`kategorie`";
           $query_from_ma_arg .= ",".$conf_4f_tbl ["masterkatego"].",".$conf_4f_tbl ["masterkategolk"];
       }
-
-
+      if ( isset($_SESSION[fk_katego])) {
+          $query_select_fk_arg .= ",".$tblfktname."_katego.`kategorie`";
+          $query_from_fk_arg .= ",".$tblfktname."_katego, ".$tblfktname."_kategolink ";
+      }
       if ( isset($_SESSION[us_katego])) {
           $query_select_us_arg .= ",".$tblusername."_katego.`kategorie`";
           $query_from_us_arg .= ",".$tblusername."_katego, ".$tblusername."_kategolink ";
@@ -507,12 +594,12 @@ class Listen extends kategorien {
         $query_where_arg3 = " AND ((";
         if ($_SESSION [filter_erledigt] == 1){
           $query_where_arg3 .= "(`".$conf_4f_tbl ["nachrichten"]."`.`00_lfd` ".$donewhat." IN
-                    ( select `".$fkttblname."_erl`.`nachnum` from `".$fkttblname."_erl` where 1))";}
+                    ( select `".$tblfktname."_erl`.`nachnum` from `".$tblfktname."_erl` where 1))";}
         if ( ($_SESSION [filter_erledigt] == 1) AND
              ($_SESSION [filter_unerledigt] == 1) ) { $query_where_arg3 .= ") OR ("; }
         if ($_SESSION [filter_unerledigt] == 1){
           $query_where_arg3 .= "(`".$conf_4f_tbl ["nachrichten"]."`.`00_lfd` ".$donewhat." NOT IN
-                    ( select `".$fkttblname."_erl`.`nachnum` from `".$fkttblname."_erl` where 1))";}
+                    ( select `".$tblfktname."_erl`.`nachnum` from `".$tblfktname."_erl` where 1))";}
         $query_where_arg3 .= " ))";
       } else {$query_where_arg3 = " ";}
       $query_where_arg4 = "";
@@ -522,13 +609,19 @@ class Listen extends kategorien {
                             " AND (".$conf_4f_tbl ["masterkatego"].".`kategorie` = \"".$_SESSION["ma_katego"]."\")";
       }
       $query_where_arg5 = "";
+      if (isset($_SESSION[fk_katego])){
+        $query_where_arg5 = " AND (`".$conf_4f_tbl ["nachrichten"]."`.`00_lfd` = `".$tblfktname."_kategolink`.`msg`)".
+                            " AND (`".$tblfktname."_katego`.`lfd` = `".$tblfktname."_kategolink`.`katego`)".
+                            " AND  (`".$tblfktname."_katego`.`kategorie` = \"".$_SESSION["fk_katego"]."\")";
+      }
+      $query_where_arg6 = "";
       if (isset($_SESSION[us_katego])){
-        $query_where_arg5 = " AND (`".$conf_4f_tbl ["nachrichten"]."`.`00_lfd` = `".$tblusername."_kategolink`.`msg`)".
+        $query_where_arg6 = " AND (`".$conf_4f_tbl ["nachrichten"]."`.`00_lfd` = `".$tblusername."_kategolink`.`msg`)".
                             " AND (`".$tblusername."_katego`.`lfd` = `".$tblusername."_kategolink`.`katego`)".
                             " AND  (`".$tblusername."_katego`.`kategorie` = \"".$_SESSION["us_katego"]."\")";
       }
     } else {
-     $query_where_arg2 = "";  $query_where_arg3 ="";   $query_where_arg4 = "";
+     $query_where_arg2 = "";  $query_where_arg3 ="";   $query_where_arg4 = "";  $query_where_arg5 = "";   $query_where_arg6 = "";
     }
     $query_orderby_arg = "`04_nummer` DESC, `09_vorrangstufe` DESC ";
     if (isset ($_SESSION["flt_search"])) {
@@ -539,21 +632,21 @@ class Listen extends kategorien {
           "(".$conf_4f_tbl ["nachrichten"].".`12_inhalt` LIKE \"%".htmlentities ($_SESSION["flt_search"])."%\") OR ".
           "(".$conf_4f_tbl ["nachrichten"].".`13_abseinheit` LIKE \"%".$_SESSION["flt_search"]."%\") )";
 
-      $querycount = "SELECT COUNT(*) FROM ".$query_from_arg.$query_from_ma_arg.$query_from_us_arg." WHERE ".
+      $querycount = "SELECT COUNT(*) FROM ".$query_from_arg.$query_from_ma_arg.$query_from_fk_arg.$query_from_us_arg." WHERE ".
                $query_where_arg1." AND ".$query_search.";" ;
 
-      $query = "SELECT ".$query_select_arg.$query_select_ma_arg.$query_select_us_arg." FROM ".$query_from_arg.$query_from_ma_arg.$query_from_us_arg." WHERE ".
+      $query = "SELECT ".$query_select_arg.$query_select_ma_arg.$query_select_fk_arg.$query_select_us_arg." FROM ".$query_from_arg.$query_from_ma_arg.$query_from_fk_arg.$query_from_us_arg." WHERE ".
                $query_where_arg1." AND ".$query_search." ORDER BY ".$query_orderby_arg ;
     } else {
       $query_search = "";
-      $querycount = "SELECT COUNT(*) FROM ".$query_from_arg.$query_from_ma_arg.$query_from_us_arg." WHERE ".
-               $query_where_arg1." ".$query_where_arg2." ".$query_where_arg3." ".$query_where_arg4.$query_where_arg5.";" ;
+      $querycount = "SELECT COUNT(*) FROM ".$query_from_arg.$query_from_ma_arg.$query_from_fk_arg.$query_from_us_arg." WHERE ".
+               $query_where_arg1." ".$query_where_arg2." ".$query_where_arg3." ".$query_where_arg4.$query_where_arg6.";" ;
 
-      $query = "SELECT ".$query_select_arg.$query_select_ma_arg.$query_select_us_arg." FROM ".$query_from_arg.$query_from_ma_arg.$query_from_us_arg." WHERE ".
-               $query_where_arg1." ".$query_where_arg2." ".$query_where_arg3." ".$query_where_arg4.$query_where_arg5." ORDER BY ".$query_orderby_arg ;
+      $query = "SELECT ".$query_select_arg.$query_select_ma_arg.$query_select_fk_arg.$query_select_us_arg." FROM ".$query_from_arg.$query_from_ma_arg.$query_from_fk_arg.$query_from_us_arg." WHERE ".
+               $query_where_arg1." ".$query_where_arg2." ".$query_where_arg3." ".$query_where_arg4.$query_where_arg5.$query_where_arg6." ORDER BY ".$query_orderby_arg ;
     }
 
-    if ( debug == true ){  echo "<br><br>QUERYCOUNT [get_list] =".$querycount."<br>".$fkttblname;echo "<br><br>";}
+    if ( debug == true ){  echo "<br><br>QUERYCOUNT [get_list] =".$querycount."<br>".$tblfktname;echo "<br><br>";}
 
     if ( $_SESSION["filter_darstellung"] == "1" ){
       $tmp = $dbaccess->query_table_wert ($querycount);

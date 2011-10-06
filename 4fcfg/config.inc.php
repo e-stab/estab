@@ -16,6 +16,9 @@
 
 \******************************************************************************/
 
+    if (file_exists ( "d_cfg.inc.php" )) REQUIRE "d_cfg.inc.php" ;
+    if (file_exists ( "./4fcfg/d_cfg.inc.php" )) REQUIRE "./4fcfg/d_cfg.inc.php" ;
+    if (file_exists ( "../4fcfg/d_cfg.inc.php" )) REQUIRE "../4fcfg/d_cfg.inc.php" ;
     /*
       Sollen Klänge übermittelt und abgespielt werden können ?
         true  : Klänge werden als objekt übertragen und können abgespielt werden.
@@ -32,12 +35,8 @@
     */
     define ("posttakzeit","true");
 
-     /* Zwischen dem Documentroot des Webservers (htdocs) und dem Kats-
-        Verzeichnis eventuell vorhandenes Verzeichnis.*/
-    $conf_pre_dir =  ""; // mit führendem /
-
       // URL des Servers
-    $conf_urlroot  = "http://".$_SERVER ["SERVER_NAME"].":".$_SERVER ["SERVER_PORT"];
+    $conf_urlroot  = "http://".$_SERVER ["SERVER_NAME"].":".$_SERVER ["SERVER_PORT"]."/";
 
       // Wurzelverzeichnis fr den Webserver
       // unter Linux /srv/www/htdocs
@@ -50,32 +49,32 @@
       // http://192.168.100.1/Einsatzlt
       // http://www.leitstelle.de/ELStab
       // u.s.w. */
-    $pre_url = $conf_urlroot.$conf_pre_dir;
+    $pre_url = $conf_urlroot.$conf_web["pre_path"] ;
 
       // Design fuer Buttons
     $conf_design           = "HS";
 
-      // Pfad zur Einsatzstabssoftware
-    $conf_web ["pre_path"] = $conf_pre_dir."/kats";
 
-    $conf_menue ["symbole"] = $conf_urlroot.$conf_web ["pre_path"]."/4fsym/";
+    $conf_menue ["symbole"] = $conf_urlroot.$conf_web["pre_path"]."4fsym/";
 
 /*******************   nicht aendern ; do not change !!! ***********************/
 
     $conf_design_path      = $conf_urlroot. // $conf_web ["srvroot"]. // $conf_urlroot.
-                               $conf_web ["pre_path"].
-                               "/4fach/design/".$conf_design ;
+                             $conf_web ["pre_path"].
+                               "4fach/design/".$conf_design ;
+
+//echo "<big>".$conf_design_path."</big>";
 
     $conf_design_URI       = $pre_url.
                                $conf_web ["pre_path"].
-                               "/4fach/design/".$conf_design;
+                               "4fach/design/".$conf_design;
 
 /********** Die nachfolgenden Zeilen duerfen nicht geaendert werden !!!  *********/
 /*********               Do not change the folowing lines               **********/
     $conf_4f ["Titelkurz"]        =  "eStab";
     $conf_4f ["SubTitel"]["env"]  =  " - elektronischer Nachrichtenvordruck";
     $conf_4f ["SubTitel"]["etb"]  =  "Einsatztagebuch";
-    $conf_4f ["Version"]          =  "v0.9.20 25.09.2009 ";
+    $conf_4f ["Version"]          =  "v0.9.20 23.07.2011 nach FKT-Katego";
       // Hier kann die eigene Dienststelle eingetragen werden Zeilenumbruch mit <br>
     $conf_4f ["Stelle"]           =  "Einsatzleitung Kreis Heinsberg" ;
       // Programm information und Versionsnummer
@@ -97,23 +96,26 @@
     $conf_4f ["NameVersion"][10]  = "Nachrichtenvordrucke als PDF-Datei  <br>\n";
     $conf_4f ["NameVersion"][11]  = "lade-/speicherbare Funktionsmatrix Teil 1 <br>\n";
 
-    $conf_4f ["NameVersion"][12]  = "(C) 2005-2010 HaJo Landmesser<br>eMail: info@eStab.de <br>\n";
+    $conf_4f ["NameVersion"][12]  = "(C) 2005-2011 HaJo Landmesser<br>eMail: info@eStab.de <br>\n";
     $conf_4f ["NameVersion"][13]  = "Infos, Forum unter  http://www.eStab.de <br>\n";
 
 
 /*******************************************************************************/
       // Datenverzeichnis
-    $conf_4f ["data"]     = "/4fdata";
+    $conf_4f ["data"]     = "4fdata";
 
     $conf_4f ["anhang"]   = "/anhang";
     $conf_4f ["vordruck"] = "/vordruck";
 
 /*******************************************************************************/
 
-    $conf_4f ["MainURL"]    = $conf_urlroot.$conf_web ["pre_path"]."/4fach/mainindex.php";
+    $conf_4f ["MainURL"]    = $conf_urlroot.$conf_web ["pre_path"]."4fach/mainindex.php";
 
-  include "dbcfg.inc.php"; // wegen des Datenbanknamens  $conf_4f_db ["datenbank"]
-  include "e_cfg.inc.php";
+//  include "dbcfg.inc.php"; // wegen des Datenbanknamens  $conf_4f_db ["datenbank"]
+
+    if (file_exists ( "e_cfg.inc.php" )) REQUIRE "e_cfg.inc.php" ;
+    if (file_exists ( "./4fcfg/e_cfg.inc.php" )) REQUIRE "./4fcfg/e_cfg.inc.php" ;
+    if (file_exists ( "../4fcfg/e_cfg.inc.php" )) REQUIRE "../4fcfg/e_cfg.inc.php" ;
 
     $conf_4f ["ablage_dir"] = $conf_web ["srvroot"].
                               $conf_web ["pre_path"].
@@ -188,8 +190,8 @@
 /*****************************************************************/
 
 $color_data_table = "#E0E0E0";
-$color_button =         "#E0E0E0";
-$color_button_ok =      "#A0FFA0"; // auch für "Absenden"
-$color_button_nok =     "#FFA0A0";
+$color_button     = "#E0E0E0";
+$color_button_ok  = "#A0FFA0"; // auch für "Absenden"
+$color_button_nok = "#FFA0A0";
 
 ?>

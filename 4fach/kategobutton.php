@@ -28,11 +28,11 @@
     $black       = imagecolorallocate($img,  0,  0,  0);
 
     switch ($color){
-      case "blue"        : $bg = $blue;        $textcol= $white; $is_highlighted = false; break;
+      case "blue"        : $bg = $blue;        $textcol= $black; $is_highlighted = false; break;
       case "red"         : $bg = $red;         $textcol= $black; $is_highlighted = false; break;
       case "yellow"      : $bg = $yellow;      $textcol= $black; $is_highlighted = false; break;
       case "green"       : $bg = $green;       $textcol= $black; $is_highlighted = false; break;
-      case "lightblue"   : $bg = $lightblue;   $textcol= $white; $is_highlighted = true; break;
+      case "lightblue"   : $bg = $lightblue;   $textcol= $black; $is_highlighted = true; break;
       case "lightred"    : $bg = $lightred;    $textcol= $black; $is_highlighted = true; break;
       case "lightyellow" : $bg = $lightyellow; $textcol= $black; $is_highlighted = true; break;
       case "lightgreen"  : $bg = $lightgreen;  $textcol= $black; $is_highlighted = true; break;

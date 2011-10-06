@@ -1,5 +1,5 @@
 <?php
-include ($_SERVER['DOCUMENT_ROOT']."/kats/4fach/upload/upload_class.php"); //classes is the map where the class file is stored (one above the root)
+include ($_SERVER['DOCUMENT_ROOT']."/".$conf_web ["pre_path"]."4fach/upload/upload_class.php"); //classes is the map where the class file is stored (one above the root)
 error_reporting(E_ALL);
 $max_size = 1024*1024*5; // the max. size for uploading
 

@@ -12,26 +12,23 @@
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
 
-define ("debug",false);
+//define ("debug",false);
+
+include  ("../4fcfg/config.inc.php");
+include  ("../4fcfg/dbcfg.inc.php");     // Datenbankparameter
+include  ("../4fcfg/e_cfg.inc.php");     // Datenbankparameter
+require_once  ("../4fach/db_operation.php");  // Datenbank operationen
+require_once  ("../4fach/tools.php") ;
+//require_once  ("../4fbak/backup_img.php") ;
+require_once  ("../4fbak/backup_pdf.php") ;
+
 define ("outputtyp","png"); // png, jpg
-define('FPDF_FONTPATH',$_SERVER ["DOCUMENT_ROOT"].'/kats/4fbak/fpdf/font/');
+define('FPDF_FONTPATH',$_SERVER ["DOCUMENT_ROOT"]."/".$conf_web ["pre_path"].'4fbak/fpdf/font/');
 
-@ini_set('memory_limit', '32M');
 
-include  ($_SERVER ["DOCUMENT_ROOT"]."/kats/4fcfg/dbcfg.inc.php");     // Datenbankparameter
-include  ($_SERVER ["DOCUMENT_ROOT"]."/kats/4fcfg/e_cfg.inc.php");     // Datenbankparameter
-require_once  ($_SERVER ["DOCUMENT_ROOT"]."/kats/4fach/db_operation.php");  // Datenbank operationen
-require_once  ($_SERVER ["DOCUMENT_ROOT"]."/kats/4fach/tools.php") ;
-require_once  ($_SERVER ["DOCUMENT_ROOT"]."/kats/4fbak/backup_img.php") ;
-require_once  ($_SERVER ["DOCUMENT_ROOT"]."/kats/4fbak/backup_pdf.php") ;
+@ini_set('memory_limit', '64M');
 
-//  pre_html ("N","Erstellen der Backupvordrucke");
-//  echo "<body>";
-
-//  echo "Erstelle Grafiken für:<br>";
-
-//    do {
-//      echo "...";
+  // schalte Ausführungslimmit aus = unbegrenzte Laufzeit
 set_time_limit ( 0 );
 
   if (isset($_GET["anz"])){
@@ -64,10 +61,8 @@ set_time_limit ( 0 );
   if ( $dbdata != "" ) {
     foreach ($dbdata as $formdata){
 
-//echo "FORMDATA"; print_r ($formdata); echo "<br>";
-
-      $vordruck = new vordruckasimg ($formdata);
-      $vordruck->main();
+//      $vordruck = new vordruckasimg ($formdata);
+//      $vordruck->main();
 
       $vordruckpdf = new vordruckaspdf ($formdata);
       $vordruckpdf->SetFont ('helvetica');
@@ -81,9 +76,6 @@ set_time_limit ( 0 );
       if (debug) { echo "query===".$query."<br>"; }
 
       $res = $dbaccess->query_table_iu ($query);
-//          if (isset($_GET["anz"])){
-//            echo "Nachweisung: ".$formdata ["04_nummer"]." ".$formdata ["04_richtung"]."<br>";
-//          }
     }
   }
   if (isset($_GET["anz"])){
@@ -91,6 +83,5 @@ set_time_limit ( 0 );
     echo "</BODY></HTML>";
   }
 
-//  exit; // Abbruch zum Debuggen
 
 ?>

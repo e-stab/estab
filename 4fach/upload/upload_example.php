@@ -7,7 +7,7 @@ $max_size = 1024*1024*5; // the max. size for uploading
 
 $my_upload = new file_upload;
 
-$my_upload->upload_dir = $_SERVER['DOCUMENT_ROOT']."/intern/kats/4fach/anhang/"; // "files" is the folder for the uploaded files (you have to create this folder)
+$my_upload->upload_dir = $_SERVER['DOCUMENT_ROOT'].$conf_web ["pre_path"]."4fach/anhang/"; // "files" is the folder for the uploaded files (you have to create this folder)
 $my_upload->extensions = array(".jpg",".tif",".avi",".png", ".zip", ".pdf"); // specify the allowed extensions here
 // $my_upload->extensions = "de"; // use this to switch the messages into an other language (translate first!!!)
 $my_upload->max_length_filename = 50; // change this value to fit your field length in your database (standard 100)

@@ -19,7 +19,7 @@ include ("../4fcfg/e_cfg.inc.php");
 /*****************************************************************************\
    Klasse: nachrichten4fach
 
-   konstruktor :
+   konstruktor : nachrichten4fach (Daten übergabe,  für wen (task), Fehler im Formular)
    destruktor  :
    methoden    :
 
@@ -30,6 +30,10 @@ include ("../4fcfg/e_cfg.inc.php");
 \*****************************************************************************/
 class nachrichten4fach {
 
+	/*************************************************************************
+	   Konstruktor der Klasse: nachrichten4fach
+
+	**************************************************************************/
     function nachrichten4fach ($formulardaten, $task, $errorselect){
       $this->task = $task ;
       $this->formdata = $formulardaten ;
@@ -39,38 +43,36 @@ class nachrichten4fach {
         $this->errorselect = $errorselect;
       } else {
 
-
-          // errorselect zuruecksetzen
-         $this->errorselect ["01_medium"]   = true ;
-         $this->errorselect ["01_datum"]   = true ;
-
-         $this->errorselect ["01_zeichen"]   = true ;
-         $this->errorselect ["02_zeit"]   = true ;
-         $this->errorselect ["02_zeichen"]   = true ;
-         $this->errorselect ["03_datum"]   = true ;
-         $this->errorselect ["03_zeit"]   = true ;
-         $this->errorselect ["03_zeichen"]   = true ;
+	  // errorselect zuruecksetzen
+         $this->errorselect ["01_medium"]   	= true ;
+         $this->errorselect ["01_datum"]    	= true ;
+         $this->errorselect ["01_zeichen"]   	= true ;
+         $this->errorselect ["02_zeit"]      	= true ;
+         $this->errorselect ["02_zeichen"]   	= true ;
+         $this->errorselect ["03_datum"]   	= true ;
+         $this->errorselect ["03_zeit"]   		= true ;
+         $this->errorselect ["03_zeichen"]   	= true ;
          $this->errorselect ["05_gegenstelle"]   = true ;
-         $this->errorselect ["06_befweg"]   = true ;
-         $this->errorselect ["06_befwegausw"]   = true ;
-         $this->errorselect ["07_durchspruch"]   = true ;
-         $this->errorselect ["08_befhinweis"]   = true ;
-         $this->errorselect ["08_befhinwausw"]   = true ;
-         $this->errorselect ["10_anschrift"]   = true ;
-         $this->errorselect ["12_inhalt"]   = true ;
-         $this->errorselect ["12_abfzeit"]   = true ;
-         $this->errorselect ["13_abseinheit"]   = true ;
-         $this->errorselect ["14_zeichen"]   = true ;
-         $this->errorselect ["14_funktion"]   = true ;
-         $this->errorselect ["15_quitdatum"]   = true ;
-         $this->errorselect ["15_quitzeichen"]   = true ;
-         $this->errorselect ["17_vermerke"]   = true ;
+         $this->errorselect ["06_befweg"]     	= true ;
+         $this->errorselect ["06_befwegausw"] 	= true ;
+         $this->errorselect ["07_durchspruch"]  	= true ;
+         $this->errorselect ["08_befhinweis"]   	= true ;
+         $this->errorselect ["08_befhinwausw"]	= true ;
+         $this->errorselect ["10_anschrift"] 	= true ;
+         $this->errorselect ["12_inhalt"]   	= true ;
+         $this->errorselect ["12_abfzeit"]   	= true ;
+         $this->errorselect ["13_abseinheit"]   	= true ;
+         $this->errorselect ["14_zeichen"] 		= true ;
+         $this->errorselect ["14_funktion"]   	= true ;
+         $this->errorselect ["15_quitdatum"]   	= true ;
+         $this->errorselect ["15_quitzeichen"] 	= true ;
+         $this->errorselect ["17_vermerke"] 	= true ;
       }
-      if ($this->formdata ["01_datum"] == "0000-00-00 00:00:00") { $this->formdata["01_datum"] = ""; }
-      if ($this->formdata ["02_zeit"] == "0000-00-00 00:00:00") { $this->formdata ["02_zeit"] = ""; }
-      if ($this->formdata ["03_datum"] == "0000-00-00 00:00:00") { $this->formdata ["03_datum"] = ""; }
-      if ($this->formdata ["12_abfzeit"] == "0000-00-00 00:00:00") { $this->formdata ["12_abfzeit"] = ""; }
-      if ($this->formdata ["15_quitdatum"] == "0000-00-00 00:00:00") { $this->formdata ["15_quitdatum"] = ""; }
+      if ($this->formdata ["01_datum"]		== "0000-00-00 00:00:00") { $this->formdata ["01_datum"] = ""; }
+      if ($this->formdata ["02_zeit"]		== "0000-00-00 00:00:00") { $this->formdata ["02_zeit"] = ""; }
+      if ($this->formdata ["03_datum"]		== "0000-00-00 00:00:00") { $this->formdata ["03_datum"] = ""; }
+      if ($this->formdata ["12_abfzeit"]		== "0000-00-00 00:00:00") { $this->formdata ["12_abfzeit"] = ""; }
+      if ($this->formdata ["15_quitdatum"]	== "0000-00-00 00:00:00") { $this->formdata ["15_quitdatum"] = ""; }
 
       if ( ($this->formdata ["11_gesprnotiz"] == "t") OR
            ($this->formdata ["11_gesprnotiz"] == "1") OR
@@ -167,8 +169,9 @@ class nachrichten4fach {
   var $feld ;
 
 /*****************************************************************************\
-   Funktion    :
-   Beschreibung:
+   Funktion    : get_access_by_task
+   Beschreibung: 
+     
 
    (C) Hajo Landmesser IuK Kreis Heinsberg
    mailto://hajo.landmesser@iuk-heinsberg.de
@@ -394,7 +397,7 @@ class nachrichten4fach {
     echo "<TR>\n";
     echo "<TD>\n";
     if ($umfang == 2){
-          echo "<TABLE BORDER=\"0\" CELLSPACING=\"1\" CELLPEDDING=\"0\">\n";
+      echo "<TABLE BORDER=\"0\" CELLSPACING=\"1\" CELLPEDDING=\"0\">\n";
       echo "<input type=\"hidden\" name=\"kate_todo\" value=\"speichern\">\n";
       echo "<input type=\"hidden\" name=\"msglfd\" value=\"".$this->formdata["00_lfd"]."\">\n";
       echo "<TR>\n";
@@ -405,11 +408,11 @@ class nachrichten4fach {
             <img src=\"".$conf_design_path."/print.gif\" alt=\"Drucken\" width=\"32\"height=\"32\" border=\"0\" title=\"Drucken\"></a>\n";
       echo "</TD>\n";
 
-      if ( $this->task == "Stab_lesen"){
-        echo "<TD>";
+      if ( $this->task == "Stab_lesen"){   // Stab lesen
           // MASTER KATEGORIE
-        $katego1 = new  kategorien ("master");
-        $katearr1 = $katego1->db_get_kategobymsg ($this->formdata["00_lfd"]);
+        echo "<TD>";
+        $katego_master = new  kategorien ("master");
+        $katearr_master = $katego_master->db_get_kategobymsg ($this->formdata["00_lfd"]);
         echo"<a ";
           // Ist die Funktion berechtigt globale Kategorien zu aendern?
         $berechtigt = ($_SESSION ["vStab_funktion"] == $redcopy2) OR
@@ -427,25 +430,48 @@ class nachrichten4fach {
         echo "</TD>";
 
           // Schreibe die augenblickliche Masterkategorie hin
-        if ( $katearr1["kategorie"] != ""){
+        if ( $katearr_master["kategorie"] != ""){
           echo "<TD>";
           $color = "red";
-          echo"<a><img src=\"./createbutton.php?icontext=".$katearr1["kategorie"]."&color=".$color."\" alt=\"".$katearr1["beschreibung"]."\"></a>";
+          echo"<a><img src=\"./createbutton.php?icontext=".$katearr_master["kategorie"]."&color=".$color."\" alt=\"".$katearr_master["beschreibung"]."\"></a>";
           echo "</TD>";
         }
 
         echo "<TD>";
 
         if ($berechtigt) {
-          $katego1->pulldown_kategorien ($katearr1["lfd"], true, $ordnum);
+          $katego_master->pulldown_kategorien ($katearr_master["lfd"], true, $ordnum);
         }
         echo "</TD>\n";
+
+          // FUNKTIONS KATEGORIE
         echo "<TD>\n";
+        $katego_fkt = new  kategorien ("fkt");
+        $katearr_fkt = $katego_fkt->db_get_kategobymsg ($this->formdata["00_lfd"]);
+        echo"<a href=\"katgoedt.php?dbtyp=fkt&fkt=edit&msgno=".$this->formdata["00_lfd"]."\">
+            <img src=\"".$conf_design_path."/folder_user.gif\"
+                 alt=\"Funktionsordner verwalten\"
+                 width=\"32\"
+                 height=\"32\"
+                 border=\"0\"
+                 title=\"funktionsordner verwalten\"></a>\n";
+        echo "</TD>\n";
+        echo "<TD>\n";
+        echo "</TD>";
+        echo "<TD>";
+        if ($katearr_fkt["kategorie"] != "" ){
+          $color = "blue";
+          echo"<a><img src=\"./createbutton.php?icontext=".$katearr_fkt["kategorie"]."&color=".$color."\" alt=\"".$katearr_fkt["beschreibung"]."\"></a>";
+        }
+        echo "</TD>";
+        echo "<TD>";
+        $katego_fkt->pulldown_kategorien ($katearr_fkt["lfd"], true, $ordnum);
+        echo "</TD>\n";
+
          // BENUTZER KATEGORIE
-        $katego2 = new  kategorien ("user");
-
-        $katearr2 = $katego2->db_get_kategobymsg ($this->formdata["00_lfd"]);
-
+        echo "<TD>\n";
+        $katego_user = new  kategorien ("user");
+        $katearr_user = $katego_user->db_get_kategobymsg ($this->formdata["00_lfd"]);
         echo"<a href=\"katgoedt.php?dbtyp=user&fkt=edit&msgno=".$this->formdata["00_lfd"]."\">
             <img src=\"".$conf_design_path."/folder_local.gif\"
                  alt=\"pers&ouml;nliche Ordner verwalten\"
@@ -453,20 +479,20 @@ class nachrichten4fach {
                  height=\"32\"
                  border=\"0\"
                  title=\"pers&ouml;nliche Ordner verwalten\"></a>\n";
-
         echo "</TD>\n";
         echo "<TD>\n";
         echo "</TD>";
         echo "<TD>";
-        if ($katearr2["kategorie"] != "" ){
+        if ($katearr_user["kategorie"] != "" ){
           $color = "green";
-          echo"<a><img src=\"./createbutton.php?icontext=".$katearr2["kategorie"]."&color=".$color."\" alt=\"".$katearr2["beschreibung"]."\"></a>";
+          echo"<a><img src=\"./createbutton.php?icontext=".$katearr_user["kategorie"]."&color=".$color."\" alt=\"".$katearr_user["beschreibung"]."\"></a>";
         }
         echo "</TD>";
         echo "<TD>";
-        $katego2->pulldown_kategorien ($katearr2["lfd"], true, $ordnum);
+        $katego_user->pulldown_kategorien ($katearr_user["lfd"], true, $ordnum);
         echo "</TD>";
-        echo "<TD><input type=\"image\" name=\"4fachkatego_absenden\" src=\"button.php?type=menue&m_text=<=zuordnen&m_fs=10&m_form=rund\" alt=\"zuordnen\"></TD>\n";
+        echo "<TD><input type=\"image\" name=\"4fachkatego_absenden\" src=\"button.php?type=menue&m_text=<=zuordnen&m_fs=10&m_form=rund\" alt=\"zuordnen\">";
+        echo "</TD>\n";
       }
       echo "</TR>\n";
       echo "</TBODY>\n";

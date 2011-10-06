@@ -46,18 +46,27 @@ class kategorien {
 
     $this->stab_fkt  = $_SESSION ["vStab_funktion"] ;
     $this->dbtyp = $table;
-
-    if ($table == "master") {
-      $this->db_master_katego = $conf_4f_tbl ["masterkatego"] ;
-      $this->db_tablname      = $conf_4f_tbl ["masterkatego"] ;
-      $this->db_tablnamelk    = $conf_4f_tbl ["masterkategolk"];
-    } else {
-      $this->db_tbl = $conf_4f_tbl ["usrtblprefix"].
-                    strtolower ($_SESSION["vStab_funktion"])."_".
-                    strtolower ($_SESSION["vStab_kuerzel"]) ;
-      $this->db_tablname   = $this->db_tbl."_katego";
-      $this->db_tablnamelk = $this->db_tbl."_kategolink";
+    switch ( $table ) {
+      case "master":
+        $this->db_master_katego = $conf_4f_tbl ["masterkatego"] ;
+        $this->db_tablname      = $conf_4f_tbl ["masterkatego"] ;
+        $this->db_tablnamelk    = $conf_4f_tbl ["masterkategolk"];
+      break;
+      case "fkt":
+        $this->db_tbl = $conf_4f_tbl ["usrtblprefix"]."_fkt_".
+                              strtolower ($_SESSION["vStab_funktion"]);
+        $this->db_tablname   = $this->db_tbl."_katego";
+        $this->db_tablnamelk = $this->db_tbl."_kategolink";
+      break;
+      case "user":
+        $this->db_tbl = $conf_4f_tbl ["usrtblprefix"].
+                      strtolower ($_SESSION["vStab_funktion"])."_".
+                      strtolower ($_SESSION["vStab_kuerzel"]) ;
+        $this->db_tablname   = $this->db_tbl."_katego";
+        $this->db_tablnamelk = $this->db_tbl."_kategolink";
+      break;
     }
+
     $this->db_server   = $conf_4f_db ["server"];
     $this->db_benutzer = $conf_4f_db ["user"];
     $this->db_passwort = $conf_4f_db ["password"];

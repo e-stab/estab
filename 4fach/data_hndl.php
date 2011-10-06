@@ -41,11 +41,13 @@ if (validate){
 \*******************************************************************************/
 function check_save_user () {
   $error_userlogin = false;
+  if (debug) echo "data_hndl.php 44<br>";
   // Als allererstes Pruefen wir mal die Formulardaten auf Vollstaedigkeit
   if ($_GET ["kennwort1"] != "" ){
     if ( ( $_GET [kuerzel] != "" ) AND ( $_GET [benutzer] != ""  ) ) {
       include ("../4fcfg/dbcfg.inc.php");
       include ("../4fcfg/e_cfg.inc.php");
+      if (debug) echo "PHP_SELF=".$_SERVER["PHP_SELF"]."<br>";
        /* Die Daten in der Datenbank vorhanden?
           Also suchen wird erst mal nach dem Kuerzel in der Datenbank  */
       $dbaccess = new db_access ($conf_4f_db  ["server"],
@@ -54,10 +56,16 @@ function check_save_user () {
                                  $conf_4f_db  ["user"],
                                  $conf_4f_db  ["password"] );
 
+      if (debug) {echo "db-daten 59 "; var_dump ($conf_4f_db); echo "<br>";}
       // Daten sind in $_GET vorhanden
       $GETkuerzel = strtolower ( $_GET ["kuerzel"]);
+
       $query = "SELECT * FROM ".$conf_4f_tbl ["benutzer"]." WHERE `kuerzel` LIKE \"".$GETkuerzel."\";";
+      if (debug) {echo "data_hndl.php 64 query=".$query."<br>";}
+
       $result = $dbaccess->query_table ($query);
+      if (debug) {echo "result67 ="; var_dump ($result); echo"<br>";}
+
       if ( ( count ($result) > 0 ) AND ( $result != "" ) ){
         $db_result = $result [1];
         $user_eq = ( $_GET["benutzer"] == $db_result ["benutzer"] );
@@ -101,7 +109,7 @@ function check_save_user () {
                          `fwdip`    = \"".$_SERVER[HTTP_X_FORWARDED_FOR]."\",
                          `aktiv`    = \"1\" WHERE kuerzel = \"".$GETkuerzel."\";";
             $result = $dbaccess->query_table_iu ($query);
-             // Tabelle fr die Benutzerfunktion anlegen
+             // Tabelle fuer die Benutzerfunktion anlegen
             if ($_GET ["funktion"] != "A/W"){
               $usertablename = $conf_4f_tbl ["usrtblprefix"].strtolower ($_GET ["funktion"])."_".strtolower ( $_GET ["kuerzel"]);
               $fkttblname  = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($_GET ["funktion"]);
@@ -135,7 +143,9 @@ function check_save_user () {
                      Es sind keine Daten in der Datenbank ==> Neuer Benutzer
                      Setze die Daten im Session Cookie und in der Datenbank.
             **********************************************************************/
+          if (debug) {echo "data_hndl146"."<br>";}
           $rolle = rollenfinder ( $_GET["funktion"] );
+          if (debug) {echo "data_hndl148"."<br>";}
           $_SESSION ["vStab_benutzer"] = $_GET["benutzer"];
           $_SESSION ["vStab_kuerzel"]  = $GETkuerzel;
           $_SESSION ["vStab_funktion"] = $_GET["funktion"];
@@ -151,7 +161,10 @@ function check_save_user () {
                           `fwdip`    = \"".$_SERVER[HTTP_X_FORWARDED_FOR]."\",
                           `password` = \"".$_GET["kennwort1"]."\",
                           `aktiv`    = \"1\"";
+          if (debug) {echo "data_hndl.php 163 query=".$query."<br>";}
           $result = $dbaccess->query_table_iu ($query);
+          if (debug) {echo "data_hndl165"; var_dump ($result); echo "<br>"; }
+
           protokolleintrag ("Anmelden", $_SESSION[vStab_benutzer].";".$_SESSION[vStab_kuerzel].";".$_SESSION[vStab_funktion].";".$_SESSION[vStab_rolle].";".session_id().";".$_SERVER[REMOTE_ADDR]);
           if ($_SESSION ["vStab_funktion"] != "A/W"){
             $usertablename = $conf_4f_tbl ["usrtblprefix"].strtolower ($_GET ["funktion"])."_".strtolower ( $_GET ["kuerzel"]);
@@ -234,8 +247,8 @@ function check_and_save ($data){
         echo "DATAHNDL286=";
         var_dump ($data); echo "<br>";
         }
-                 $vali = new vali_data_form ( $data ) ;
-                 $result = $vali->validatethis (); //checkdata ();
+        $vali = new vali_data_form ( $data ) ;
+        $result = $vali->validatethis (); //checkdata ();
         if (debug){
         echo "DATAHNDL292=";
         echo "<b>RESULT</b>";
@@ -404,7 +417,7 @@ function check_and_save ($data){
         }
         $vali = new vali_data_form ( $data ) ;
         $result = $vali->validatethis (); //checkdata ();
-        if (debug){ 
+        if (debug){
             echo "<b>DATA</b>"; var_dump ($data); echo "<br>";
           echo "DATAHNDL 453="; echo "<b>RESULT</b>"; var_dump ($result); echo "<br><br>";
           echo "<b>vali-data</b>"; var_dump ($vali->i_data); echo "<br><br>";
@@ -849,7 +862,7 @@ function check_and_save ($data){
     include ("../4fcfg/config.inc.php");
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
-    include ("../4fach/protkoll.php");
+    include_once ("../4fach/protkoll.php");
      // Gibt es einen Eintrag zu der Nachricht mit der Nummer $lfd
     $dbaccess = new db_access ($conf_4f_db ["server"],
                                $conf_4f_db ["datenbank"],

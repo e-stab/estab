@@ -17,6 +17,7 @@ include ("./4fcfg/config.inc.php");
     $conf_menue["sym_top_left"] = $conf_menue ["symbole"]."el80.gif";
     $conf_menue["sym_top_right"] = $conf_menue ["symbole"]."iuk_80.jpg";
 
+
 // Anordnung:
 // 1            2
 //3             4
@@ -33,7 +34,7 @@ include ("./4fcfg/config.inc.php");
 
         $menue[5]["text"] = "Liste aller Meldungen";
     $menue[5]["pic"]  = $conf_menue ["symbole"]."all_msg.png";
-    $menue[5]["link"] = "./4fach/ue_ltg.php";
+    $menue[5]["link"] = "./4fueltg/ue_ltg.php";
 
     $menue[7]["text"] = "";
     $menue[7]["pic"]  = $conf_menue ["symbole"]."null.gif";
@@ -48,15 +49,15 @@ include ("./4fcfg/config.inc.php");
     $menue[2]["pic"]  = $conf_menue ["symbole"]."etb_aktiv.png";
     $menue[2]["link"] = "./stabetb/etb.php";
 
-    $menue[4]["text"] = "";
-    $menue[4]["pic"]  = $conf_menue ["symbole"]."null.gif";
-    $menue[4]["link"] = "";
+    $menue[4]["text"] = "Technisches Betriebsbuch";
+    $menue[4]["pic"]  = $conf_menue ["symbole"]."tbb_aktiv.png";
+    $menue[4]["link"] = "./fmtbb/tbb.php";
 
     $menue[6]["text"] = "Infosammunlung BOS";
     $menue[6]["pic"]  = $conf_menue ["symbole"]."merke32.gif";
     $menue[6]["link"] = "./stabinfo/index.php";
-	
-	$zusatz_menue[2]["text"] = "Kurzanleitung zur eStab Installation & Nutzung";
+
+        $zusatz_menue[2]["text"] = "Kurzanleitung zur eStab Installation & Nutzung";
     $zusatz_menue[2]["pic"]  = $conf_menue ["symbole"]."icon_handbuch.gif";
     $zusatz_menue[2]["link"] = "./doku/Handbuch_eStab.pdf";
 

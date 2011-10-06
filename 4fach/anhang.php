@@ -51,9 +51,9 @@ class fileupload extends file_upload {
 
   \***************************************************************************/
   function get_next_filename_from_db () {
-    include ("../4fcfg/dbcfg.inc.php");
-    include ("../4fcfg/e_cfg.inc.php");
-    include_once ("./db_operation.php");
+    require ("../4fcfg/dbcfg.inc.php");
+    require ("../4fcfg/e_cfg.inc.php");
+    require_once ("./db_operation.php");
 
     $db = new db_access ($conf_4f_db  ["server"],
                          $conf_4f_db  ["datenbank"],
@@ -102,10 +102,10 @@ class fileupload extends file_upload {
 
   \***************************************************************************/
   function reset_reservation (){
-    include ("../4fcfg/config.inc.php");
-    include ("../4fcfg/dbcfg.inc.php");
-    include ("../4fcfg/e_cfg.inc.php");
-    include_once ("./db_operation.php");
+    require ("../4fcfg/config.inc.php");
+    require ("../4fcfg/dbcfg.inc.php");
+    require ("../4fcfg/e_cfg.inc.php");
+    require_once ("./db_operation.php");
     $db = new db_access ($conf_4f_db  ["server"],
                          $conf_4f_db  ["datenbank"],
                          $conf_4f_tbl ["anhang"],
@@ -121,9 +121,9 @@ class fileupload extends file_upload {
 
   \***************************************************************************/
   function res_filename_db ($filename){
-    include ("../4fcfg/dbcfg.inc.php");
-    include ("../4fcfg/e_cfg.inc.php");
-    include_once ("./db_operation.php");
+    require ("../4fcfg/dbcfg.inc.php");
+    require ("../4fcfg/e_cfg.inc.php");
+    require_once ("./db_operation.php");
     $db = new db_access ($conf_4f_db  ["server"],
                          $conf_4f_db  ["datenbank"],
                          $conf_4f_tbl ["anhang"],
@@ -238,9 +238,9 @@ class fileupload extends file_upload {
 
   \***************************************************************************/
   function change_status_in_db ($change, $filename, $status){
-    include ("../4fcfg/dbcfg.inc.php");
-    include ("../4fcfg/e_cfg.inc.php");
-    include_once ("./db_operation.php");
+    require ("../4fcfg/dbcfg.inc.php");
+    require ("../4fcfg/e_cfg.inc.php");
+    require_once ("./db_operation.php");
     $db = new db_access ($conf_4f_db  ["server"],
                          $conf_4f_db  ["datenbank"],
                          $conf_4f_tbl ["anhang"],
@@ -270,10 +270,10 @@ class fileupload extends file_upload {
 /*****************************************************************************\
 \*****************************************************************************/
   function save_in_db ($data) {
-    include ("../4fcfg/dbcfg.inc.php");
-    include ("../4fcfg/e_cfg.inc.php");
-    include_once ("./db_operation.php");
-    include ("./protokoll.php");
+    require ("../4fcfg/dbcfg.inc.php");
+    require ("../4fcfg/e_cfg.inc.php");
+    require_once ("./db_operation.php");
+    require ("./protokoll.php");
 
     list($filename, $extention) = explode (".",$data["filename"]);
 
@@ -353,9 +353,9 @@ class fileupload extends file_upload {
 
 \*****************************************************************************/
   function scan4nextfilename (){
-    include ("../4fcfg/config.inc.php");
-    include ("../4fcfg/e_cfg.inc.php");
-    include ("../4fcfg/dbcfg.inc.php");
+    require ("../4fcfg/config.inc.php");
+    require ("../4fcfg/e_cfg.inc.php");
+    require ("../4fcfg/dbcfg.inc.php");
 
     $nextfile = $this->get_next_filename_from_db ();
 
@@ -380,7 +380,7 @@ class fileupload extends file_upload {
 
 \*****************************************************************************/
   function konv_datetime_taktime ($datetime){
-    include ("../4fcfg/config.inc.php");
+    require ("../4fcfg/config.inc.php");
     // Datenbankzeit konvertiert in taktische Zeit
     // yyyy-MM-tt hh:mm:ss ==> tthhmmMMMyyyy
     list ($datum, $zeit) = explode (" ",$datetime);
@@ -408,7 +408,7 @@ class fileupload extends file_upload {
 
 
   function convtaktodatetime ($taktime){
-    include ("../4fcfg/config.inc.php");
+    require ("../4fcfg/config.inc.php");
     /* Datum ~= TTMM, Zeit == ~= HHMM */
     $tag    = substr ($taktime, 0, 2);
     $stunde = substr ($taktime, 2, 2);
@@ -431,7 +431,7 @@ class fileupload extends file_upload {
 
 
   function fileselectform ($predata) {
-    include ("../4fcfg/config.inc.php");
+    require ("../4fcfg/config.inc.php");
     echo "<form name=\"uploadform\" enctype=\"multipart/form-data\" method=\"post\" action=\"".$_SERVER['PHP_SELF']."\">\n";
     echo "<fieldset>\n";
     echo "<legend><big>Anhang hochladen</big></legend>\n";
@@ -507,11 +507,11 @@ session_start();
 
 define ("debug", false);
 
-    include ("../4fcfg/config.inc.php");
-    include_once ("./db_operation.php");  // Datenbank operationen
+    require ("../4fcfg/config.inc.php");
+    require_once ("./db_operation.php");  // Datenbank operationen
 
-    include_once ("./4fachform.php");            // Formular Behandlung 4fach Vordruck
-    include_once ("./tools.php");
+    require_once ("./4fachform.php");            // Formular Behandlung 4fach Vordruck
+    require_once ("./tools.php");
 
 if ( debug == true ){
   echo "<br><br>\n";
@@ -657,9 +657,9 @@ if ( debug == true ){
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
 
-include_once ("../4fcfg/dbcfg.inc.php");
-include_once ("../4fcfg/e_cfg.inc.php");
-include_once ("./db_operation.php");  // Datenbank operationen
+require ("../4fcfg/dbcfg.inc.php");
+require ("../4fcfg/e_cfg.inc.php");
+require_once ("./db_operation.php");  // Datenbank operationen
 
 
 
@@ -669,7 +669,9 @@ include_once ("./db_operation.php");  // Datenbank operationen
     benoetigte Datei:
   \**********************************************************************/
   function readFiles_from_db(){
-    include ("../4fcfg/config.inc.php");
+    require ("../4fcfg/config.inc.php");
+    require ("../4fcfg/dbcfg.inc.php");
+    require ("../4fcfg/e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
     $query = "SELECT * FROM `".$conf_4f_tbl ["anhang"]."` where `status` = 1 ORDER BY filename DESC";
     $result = $dbaccess->query_table ($query);
@@ -683,7 +685,9 @@ include_once ("./db_operation.php");  // Datenbank operationen
   \**********************************************************************/
   function readrecord_from_db($anhangname){
     list ($filename, $fileext) = explode (".",$anhangname);
-    include ("../4fcfg/config.inc.php");
+    require ("../4fcfg/config.inc.php");
+    require ("../4fcfg/dbcfg.inc.php");
+    require ("../4fcfg/e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
     $query = "SELECT * FROM `".$conf_4f_tbl ["anhang"]."` where `filename` = \"".$filename."\" ORDER BY filename DESC";
     $result = $dbaccess->query_table ($query);
@@ -756,7 +760,7 @@ include_once ("./db_operation.php");  // Datenbank operationen
           // Preview, if posible
         echo "<td>\n";
         echo "<a href=\"".$conf_4f ["ablage_uri"]."/".$file["filename"].".".$file["fileext"]."\" target=\"_blank\">\n";
-        echo "<img  border=\"0\" alt=\"Anhangdatei\" src=\"".$conf_pre_dir."/kats/4fach/showpic.php?file=".
+        echo "<img  border=\"0\" alt=\"Anhangdatei\" src=\"".$conf_web ["pre_path"]."4fach/showpic.php?file=".
             $conf_4f ["ablage_dir"]."/".$file["filename"].".".$file["fileext"]."&width=250\"></a></td>\n";
         echo "</td>\n";
           // filename
@@ -842,7 +846,7 @@ include_once ("./db_operation.php");  // Datenbank operationen
   /***************************************************************************\
   \***************************************************************************/
   function restore_formdata () {
-    include ("../4fcfg/fkt_rolle.inc.php");
+    require ("../4fcfg/fkt_rolle.inc.php");
 
     if (isset ($_SESSION["01_medium"])){       $data["01_medium"]       = $_SESSION["01_medium"];       unset ($_SESSION["01_medium"]);  }
     if (isset ($_SESSION["01_datum"])){        $data["01_datum"]        = $_SESSION["01_datum"];        unset ($_SESSION["01_datum"]);  }
@@ -888,7 +892,7 @@ include_once ("./db_operation.php");  // Datenbank operationen
 
 
   function fileselectwindow (){
-    include ("../4fcfg/config.inc.php");
+    require ("../4fcfg/config.inc.php");
         // zwei möglichkeiten 1. absenden oder 2. abbrechen
     if (!isset($_POST["abbrechen_x"])) {
       $max_size = 1024*1024*5; // the max. size for uploading

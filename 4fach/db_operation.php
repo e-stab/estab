@@ -116,6 +116,30 @@ class db_access {
        die('117 db_oper Ungueltige Abfrage: ' . mysql_error());
     }
 
+     // Kategorien der Funktion
+    $query = "CREATE TABLE IF NOT EXISTS ".$fkttblname."_katego (
+        `lfd` bigint(20) unsigned NOT NULL auto_increment COMMENT 'Laufende Nummer',
+        `kategorie` varchar(10) NOT NULL COMMENT 'Benutzer definierte Kategorien',
+        `beschreibung` varchar (254) NULL COMMENT 'Beschreibung zur Kategorie',
+        PRIMARY KEY  (`lfd`)
+      ) ENGINE=MyISAM DEFAULT CHARSET=latin1 AUTO_INCREMENT=1 ;";
+
+    $result = mysql_query($query);
+    if (!$result) {
+       die('131 db_oper Ungueltige Abfrage: ' . mysql_error());
+    }
+     // Zuordnung Kategorien <--> Meldung
+    $query = "CREATE TABLE IF NOT EXISTS ".$fkttblname."_kategolink (
+             `msg` bigint(20) NOT NULL,
+          `katego` bigint(20) NOT NULL
+           ) ENGINE=MyISAM DEFAULT CHARSET=latin1 ;";
+
+    $result = mysql_query($query);
+    if (!$result) {
+       die('Ungueltige Abfrage: ' . mysql_error());
+    }
+
+
 
      // Kategorien
     $query = "CREATE TABLE IF NOT EXISTS ".$tablename."_katego (
@@ -129,9 +153,6 @@ class db_access {
     if (!$result) {
        die('131 db_oper Ungueltige Abfrage: ' . mysql_error());
     }
-
-
-
      // Zuordnung Kategorien <--> Meldung
     $query = "CREATE TABLE IF NOT EXISTS ".$tablename."_kategolink (
              `msg` bigint(20) NOT NULL,
@@ -172,13 +193,13 @@ class db_access {
     $this->result = "";
     $this->sqlquery = $query ;
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
-       or die ("[query_table] Konnte keine Verbindung zur Datenbank herstellen");
+       or die ("[query_table196] Konnte keine Verbindung zur Datenbank herstellen" . mysql_error());
 
     $db_check = mysql_select_db ($this->db_name)
-       or die ("[query_table] Auswahl der Datenbank fehlgeschlagen");
+       or die ("[query_table199] Auswahl der Datenbank fehlgeschlagen" . mysql_error());
 
     $query_result = mysql_query ($this->sqlquery, $db) or
-       die("[query_table] <br>$query<br>103-".mysql_error()." ".mysql_errno());
+       die("[query_table202] <br>$query<br>103-".mysql_error()." ".mysql_errno());
 
     $this->resultcount = mysql_num_rows($query_result);
 
@@ -233,13 +254,13 @@ class db_access {
     $this->result = "";
     $this->sqlquery = $query ;
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
-       or die ("[query_table] Konnte keine Verbindung zur Datenbank herstellen");
+       or die ("[query_table257] Konnte keine Verbindung zur Datenbank herstellen".mysql_error()." ".mysql_errno());
 
     $db_check = mysql_select_db ($this->db_name)
-       or die ("[query_table] Auswahl der Datenbank fehlgeschlagen");
+       or die ("[query_table250] Auswahl der Datenbank fehlgeschlagen".mysql_error()." ".mysql_errno());
 
     $query_result = mysql_query ($this->sqlquery, $db) or
-       die("[query_table] 103-".mysql_error()." ".mysql_errno());
+       die("[query_table263] 103-".mysql_error()." ".mysql_errno().mysql_error()." ".mysql_errno());
 
     $this->resultcount = mysql_num_rows($query_result);
 

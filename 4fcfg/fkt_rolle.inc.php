@@ -11,9 +11,9 @@
 \******************************************************************************/
 //              lfd-Nr      PosForm  Fkt
 //                       Spalte,Zeile          Roll
-    include      ("../4fcfg/config.inc.php");
-    include_once ("../4fcfg/dbcfg.inc.php");
-    include_once ("../4fcfg/e_cfg.inc.php");
+    include ("../4fcfg/config.inc.php");
+    include ("../4fcfg/dbcfg.inc.php");
+    include ("../4fcfg/e_cfg.inc.php");
 //    include_once ("../4fach/db_operation.php");
 
 // echo "<h1>fkt_rolle.inc.php</h1>";
@@ -28,13 +28,13 @@ echo "DBDATA--".$conf_4f_db  ["server"]." - ".$conf_4f_db  ["datenbank"]." - ".
                                $conf_4f_tbl ["benutzer"]." - ".
                                $conf_4f_db  ["user"]." - ".
                                $conf_4f_db  ["password"]."<br>" ;
-*/
 
+*/
     $db = mysql_connect($conf_4f_db  ["server"],$conf_4f_db ["user"], $conf_4f_db  ["password"])
-       or die ("[query_table] Konnte keine Verbindung zur Datenbank herstellen");
+       or die ("[query_table]34 Konnte keine Verbindung zur Datenbank herstellen".mysql_error()." ".mysql_errno());
 
     $db_check = mysql_select_db ($conf_4f_db  ["datenbank"])
-       or die ("[query_table] Auswahl der Datenbank fehlgeschlagen");
+       or die ("[query_table]37 Auswahl der Datenbank fehlgeschlagen".mysql_error()." ".mysql_errno());
 
     $query = "SELECT
                  mtx_x as `m`,
@@ -47,7 +47,7 @@ echo "DBDATA--".$conf_4f_db  ["server"]." - ".$conf_4f_db  ["datenbank"]." - ".
                  mtx_auto as `auto` FROM ".$conf_4f_tbl   ["empfmtx"]." WHERE 1 ;" ;
 
     $query_result = mysql_query ($query, $db) or
-       die("[query_table] <br>$query<br>103-".mysql_error()." ".mysql_errno());
+       die("[query_table]50 <br>$query<br>103-".mysql_error()." ".mysql_errno());
 
     $resultcount = mysql_num_rows($query_result);
 

@@ -221,52 +221,6 @@ class fileupload extends file_upload {
     echo "</form>";
   }
 
-/*
-  function fileform(){
-    include ("../../config.inc.php");
-    echo "<form method=\"post\" action=\"".$_SERVER ["PHPSELF"]."\">";
-
-    echo "<table style=\"width: 100%; height: 285px;\" border=\"1\" cellpadding=\"2\" cellspacing=\"2\">\n";
-    echo "<tbody>\n";
-    echo "<tr>\n";
-    echo "<td style=\"width: 346px; text-align: center; height: 260px;\">\n";   //  $conf_urlroot.$conf_web ["pre_path"]."/4fach/anhang
-    echo "<img style=\"width: 312px; height: 233px;\" alt=\"Anhangdatei\" src=\"http://beachl/kats/4fach/upload/showpic.php?file=C:\DSCF0052.JPG&width=200&height=150\"></td>\n";
-    echo "<td style=\"width: 739px; height: 260px;\">\n";
-    echo "<table style=\"text-align: left; width: 718px; height: 88px;\" border=\"1\" cellpadding=\"2\" cellspacing=\"2\">\n";
-    echo "<tbody>\n";
-    echo "<tr>\n";
-    echo "  <td style=\"width: 113px;\">Quelle:</td>\n";
-    echo "  <td style=\"width: 585px;\">\n";
-    echo "$this->ff_filename";
-    echo "  </td>\n";
-    echo "</tr>\n";
-    echo "<tr>\n";
-    echo "  <td style=\"width: 113px;\">Beschreibung</td>\n";
-    echo "  <td style=\"width: 585px; font-weight: bold;\"><big><big>\n";
-    echo "$this->ff_comment";
-    echo "  </big></big></td>\n";
-    echo "</tr>\n";
-    echo "<tr>\n";
-    echo "  <td style=\"width: 113px;\">Zeitstempel</td>\n";
-    echo "  <td style=\"width: 585px;\"><big style=\"font-weight: bold;\">\n";
-    echo "$this->ff_timestamp";
-    echo "  </big></td>\n";
-    echo "</tr>\n";
-    echo "<tr>\n";
-    echo "  <td style=\"width: 113px;\">K&uuml;rzel</td>\n";
-    echo "  <td style=\"width: 585px;\"><span style=\"font-weight: bold;\">\n";
-    echo "$this->ff_kuerzel";
-    echo "  </td>\n";
-    echo "</tr>\n";
-    echo "</tbody>\n";
-    echo "</table>\n";
-    echo "</td>\n";
-    echo "</tr>\n";
-    echo "</tbody>\n";
-    echo "</table>\n";
-    echo "</form>\n";
-  }
-*/
 
   function post_html () {
     echo "</body>";
