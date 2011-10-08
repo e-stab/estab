@@ -369,7 +369,7 @@ ANTWORT % WEITERLEITUNG
          ( !$_SESSION ["gesprnoti"] ) and
          ( $_GET ["task"] != "SI-Admin" ) and
          ( $_GET ["task"] != "Stab_sichten" ) ){
-        // Bei Gesprächsnotiz 2. Vorlage für Sichtung
+        // Bei Gesprächsnotiz 2. Vorlage beim Verfasser für Sichtung
 
         if ( debug == true ){ echo "### Gesprächsnotiz == 2. Sichtung";  echo "<br>\n";}
 

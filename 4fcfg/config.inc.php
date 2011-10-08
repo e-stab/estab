@@ -117,7 +117,7 @@
     if (file_exists ( "./4fcfg/e_cfg.inc.php" )) REQUIRE "./4fcfg/e_cfg.inc.php" ;
     if (file_exists ( "../4fcfg/e_cfg.inc.php" )) REQUIRE "../4fcfg/e_cfg.inc.php" ;
 
-    $conf_4f ["ablage_dir"] = $conf_web ["srvroot"].
+    $conf_4f ["ablage_dir"] = $conf_web ["srvroot"]."/".
                               $conf_web ["pre_path"].
                               $conf_4f ["data"]."/".
                               $conf_4f_db ["datenbank"].
@@ -131,13 +131,13 @@
 
 /*******************************************************************************/
 
-    $conf_4f ["vordruck_dir"] = $conf_web ["srvroot"].
+    $conf_4f ["vordruck_dir"] = $conf_web ["srvroot"]."/".
                               $conf_web ["pre_path"].
                               $conf_4f ["data"]."/".
                               $conf_4f_db ["datenbank"].
                               $conf_4f ["vordruck"];
 
-    $conf_4f ["einsatzende_dir"] = $conf_web ["srvroot"].
+    $conf_4f ["einsatzende_dir"] = $conf_web ["srvroot"]."/".
                               $conf_web ["pre_path"].
                               $conf_4f ["data"]."/".
                               $conf_4f_db ["datenbank"] ;

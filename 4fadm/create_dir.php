@@ -14,21 +14,21 @@
   include "../4fcfg/config.inc.php";
 
   // Hauptverzeichnis Datenbankname = Verzeichnisname
-  $mainpath = $conf_web ["srvroot"].$conf_web ["pre_path"].$conf_4f ["data"]."/".$conf_4f_db ["datenbank"] ;
+  $mainpath = $conf_web ["srvroot"]."/".$conf_web ["pre_path"].$conf_4f ["data"]."/".$conf_4f_db ["datenbank"] ;
     // Ist das 4fdata Verzeichnis vorhanden
   if ( ( $conf_web ["srvroot"]  != "" ) and
        ( $conf_web ["pre_path"] != "")  ){
     // Ist das Verzeichnis schon vorhanden?
-    $ismaindir  = is_dir  ( $conf_web ["srvroot"].$conf_web ["pre_path"].$conf_4f ["data"] );
-    $ismainfile = is_file ( $conf_web ["srvroot"].$conf_web ["pre_path"].$conf_4f ["data"] );
+    $ismaindir  = is_dir  ( $conf_web ["srvroot"]."/".$conf_web ["pre_path"].$conf_4f ["data"] );
+    $ismainfile = is_file ( $conf_web ["srvroot"]."/".$conf_web ["pre_path"].$conf_4f ["data"] );
   }
     // Wenn das 4fdata Verzeichnis nicht vorhanden ist lege es an
   if ( !$ismaindir and !$ismainfile ){
-    $success = mkdir ( $conf_web ["srvroot"].$conf_web ["pre_path"].$conf_4f ["data"] ) ;
+    $success = mkdir ( $conf_web ["srvroot"]."/".$conf_web ["pre_path"].$conf_4f ["data"] ) ;
   }
   if ( $success ) {
-    chmod ( $conf_web ["srvroot"].$conf_web ["pre_path"].$conf_4f ["data"], 0777);
-    echo "-4fdata-Verzeichnis wurde angelegt(\"".$conf_web ["srvroot"].$conf_web ["pre_path"].$conf_4f ["data"]."\")";
+    chmod ( $conf_web ["srvroot"]."/".$conf_web ["pre_path"].$conf_4f ["data"], 0777);
+    echo "-4fdata-Verzeichnis wurde angelegt(\"".$conf_web ["srvroot"]."/".$conf_web ["pre_path"].$conf_4f ["data"]."\")";
     echo "<br>";
   }
 
@@ -38,8 +38,8 @@
     // Ist das Verzeichnis schon vorhanden?
     $isdir  = is_dir  ( $mainpath );
     $isfile = is_file ( $mainpath );
-    $ismaindir  = is_dir  ( $conf_web ["srvroot"].$conf_web ["pre_path"].$conf_4f ["data"] );
-    $ismainfile = is_file ( $conf_web ["srvroot"].$conf_web ["pre_path"].$conf_4f ["data"] );
+    $ismaindir  = is_dir  ( $conf_web ["srvroot"]."/".$conf_web ["pre_path"].$conf_4f ["data"] );
+    $ismainfile = is_file ( $conf_web ["srvroot"]."/".$conf_web ["pre_path"].$conf_4f ["data"] );
 /*
     if ( $isdir ){ echo "isdir<br>"; } else { echo "!isdir<br>"; }
     if ( $isfile){ echo "isfile<br>"; } else { echo "!isfile<br>"; }

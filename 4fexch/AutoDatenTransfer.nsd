@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root text="&#34;AutoDatenTransfer&#34;,&#34;ADT&#34;" comment="" color="ffffff" type="program" style="nice">
+	<children>
+		<case text="&#34;Transferrichtung&#34;,&#34;eingang&#34;,&#34;ausgang&#34;,&#34;default&#34;" comment="" color="ffffff">
+			<qCase>
+				<instruction text="&#34;/*************************************************************&#34;,&#34;Aufruf als URL &#34;,&#34;http://&#60;eStab-server&#62;?dir=input&amp;data=&#34;&#34;Datensatz&#34;&#34;&#34;,&#34;Skript wird remote aufgerufen &#34;,&#34;zur Datenübernahme in die &#34;,&#34;Datenbank&#34;,&#34;**************************************************************/&#34;" comment="&#34;&#34;" color="ffffff" rotated="0"></instruction>
+			</qCase>
+			<qCase>
+				<instruction text="&#34;/*************************&#34;,&#34;Fremdaufruf einer URL zur&#34;,&#34;Übergabe von Daten an eine&#34;,&#34;entfernte Führungsstelle.&#34;,&#34;**************************/&#34;" comment="&#34;&#34;" color="ffffff" rotated="0"></instruction>
+			</qCase>
+			<qCase>
+				<instruction text="&#34;/**************************************&#34;,&#34;Mach nichts&#34;,&#34;***************************************/&#34;" comment="" color="ffffff" rotated="0"></instruction>
+			</qCase>
+		</case>
+	</children>
+</root>

@@ -17,7 +17,7 @@ define ("debug", false);
           $y = substr ($xy, 1, 1);
 //          echo "<b>##POS=".$pos." x=".$x." y=".$y." val=".$val."</b><br>";
         }
-//      $suchmuster = "\!\"ï¿½\$\%\&/()=?";
+//      $suchmuster = "\!\" \$\%\&/()=?";
 //      preg_match($suchmuster, $val, $treffer, PREG_OFFSET_CAPTURE, 3);
     }
 
@@ -53,7 +53,7 @@ define ("debug", false);
     $fix = "\r\n\r\n";
 
     $anmelde = "\r\n\r\n";
-    $user_count = 0; // Fï¿½r die Anmeldeliste
+    $user_count = 0; // F r die Anmeldeliste
     $matrix = "$"."empf_matrix = array ( \r\n";
     for ($zeile = 1; $zeile <= 5; $zeile ++) {
       $matrix .= "$zeile => array ( \r\n";
@@ -150,7 +150,7 @@ define ("debug", false);
         $rotkopiex = substr ($val, 0, 1);
         $rotkopiey = substr ($val, 1, 1);
       } else {
-          // key zerlegen in links der Schlï¿½ssel - rechts die Position
+          // key zerlegen in links der Schl ssel - rechts die Position
         list ($left,$right) = explode ('_',$key);
           /* left kann sein
               1. pos
@@ -317,7 +317,7 @@ define ("debug", false);
     echo "</td>\n";
 
     echo "<td style=\"font-size:18px; font-weight:800; text-align: center; width: 10px; background-color: ".$bgcolor.";\">\n";
-      // Radiobutton fÃ¼r die Rotkopie
+      // Radiobutton für die Rotkopie
     if ( $isredcopy2 ) {$sel = "checked=\"checked\"";} else {$sel = "";}
     echo "<input name=\"lagerot\" type=\"radio\"".$sel." value=\"".$zeile.$spalte."\" id=\"fktmtx_".$zeile.$spalte."_rk\" >\n";
     echo "</td>";
@@ -409,7 +409,7 @@ if ( debug == true ){
   echo "SESSION="; print_r ($_SESSION); echo "#<br>\n";
 }
 
-    // Gibt es eine default Datei?
+   // Gibt es eine default Datei?
   define ("defaultfile","default.fkt");
   if (file_exists (filename) ){
 
@@ -432,7 +432,7 @@ if ( debug == true ){
   if (isset($_GET ["speichern_x"] ) ){
     $check = check_fkt ($_GET);
     if ($check) {
-      $filename =  $conf_web ["srvroot"].$conf_web ["pre_path"]."/4fcfg/deault.fkt.php";
+      $filename =  $conf_web ["srvroot"]."/".$conf_web ["pre_path"]."/4fcfg/deault.fkt.php";
       write_fkt_file ($_GET, $filename);
       write_fkt_db   ($_GET);
     }
@@ -441,7 +441,7 @@ if ( debug == true ){
 
   if (isset($_GET ["laden_x"] ) ){
        //     echo "<b>datei laden !!!<br></b>";
-     $filename =  $conf_web ["srvroot"].$conf_web ["pre_path"]."/4fcfg/deault.fkt.php";
+     $filename =  $conf_web ["srvroot"]."/".$conf_web ["pre_path"]."/4fcfg/deault.fkt.php";
      include ($filename);
   }
 

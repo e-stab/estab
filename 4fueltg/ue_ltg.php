@@ -825,7 +825,7 @@ var_dump ($this->formdata); echo "<br>";
   function list_anhang (){
     include ("../4fcfg/config.inc.php");
     include ("../4fcfg/dbcfg.inc.php");
-        include ("../4fcfg/e_cfg.inc.php");
+    include ("../4fcfg/e_cfg.inc.php");
       // in 12_anhang stehen die Anhangdateien mit ";" getrennt.
     echo "<br>";
     $anhaenge = split(";", $this->formdata ["12_anhang"]);

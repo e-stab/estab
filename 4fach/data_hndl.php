@@ -250,15 +250,15 @@ function check_and_save ($data){
         $vali = new vali_data_form ( $data ) ;
         $result = $vali->validatethis (); //checkdata ();
         if (debug){
-        echo "DATAHNDL292=";
-        echo "<b>RESULT</b>";
-        var_dump ($result); echo "<br>";
-        echo "<b>vali-data</b>";
-        var_dump ($vali->i_data); echo "<br>";
-        echo "<b>DATA</b>";
-        var_dump ($data); echo "<br>";
-        echo "<b>vali-VALIDATE</b>";
-        var_dump ($vali->validate); echo "<br>";
+          echo "DATAHNDL292=";
+          echo "<b>RESULT</b>";
+          var_dump ($result); echo "<br>";
+          echo "<b>vali-data</b>";
+          var_dump ($vali->i_data); echo "<br>";
+          echo "<b>DATA</b>";
+          var_dump ($data); echo "<br>";
+          echo "<b>vali-VALIDATE</b>";
+          var_dump ($vali->validate); echo "<br>";
         }
 
         $data = $vali->i_data ;
@@ -541,7 +541,7 @@ function check_and_save ($data){
        $nachweis_E     = get_last_nachw_num ("E") + 1; // E weil Gspraechsnotiz als Eingang
        $data ["16_empf"] .= $redcopy2."_rt,".$data ["14_funktion"]."_gn"; // Der Verfasser bekommt den gruenen
        $query = "INSERT into `".$conf_4f_tbl ["nachrichten"]."` SET
-            `01_medium`       = \"".$data ["01_medium"]      ."\",       
+            `01_medium`       = \"".$data ["01_medium"]      ."\",
             `01_datum`        = \"".konv_taktime_datetime ($data ["01_datum"])."\",
             `01_zeichen`      = \"".$data ["01_zeichen"]     ."\",
             `04_nummer`       = \"".$nachweis_E              ."\",
@@ -562,8 +562,8 @@ function check_and_save ($data){
             `16_empf`         = \"".$data ["16_empf"]        ."\",
             `17_vermerke`     =  \"".$data ["17_vermerke"]."\",
 
-            `x00_status`      = \"4\",
-            `x01_abschluss`   = \"f\",
+            `x00_status`      = \"8\",
+            `x01_abschluss`   = \"t\",
             `x02_sperre`      = \"f\",
             `x03_sperruser`   = \"\" ";
 /*
