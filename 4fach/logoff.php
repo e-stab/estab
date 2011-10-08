@@ -16,7 +16,7 @@ if ( debug == true ){
 if (debug){
   error_reporting(E_ALL ^ E_NOTICE);
 } else {
-  error_reporting(FATAL | ERROR | WARNING);
+  error_reporting(E_ERROR | E_WARNING);
 }
 
 

@@ -12,7 +12,7 @@
    mailto://hajo.landmesser@iuk-heinsberg.de
 \******************************************************************************/
 
-  error_reporting(FATAL | ERROR | WARNING);
+  error_reporting(E_ERROR | E_WARNING);
 
 session_start ();
 
