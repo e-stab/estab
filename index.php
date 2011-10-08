@@ -41,9 +41,9 @@ include ("menue.inc.php");
 
       $is_gerade = ($m % 2) == 0;
       if (!$is_gerade){echo "<tr>\n";}
-        if ($menue[$m][link] != ""){
+        if ($menue[$m]['link'] != ""){
           echo "<td style=\"text-align: center; width: 100px; background-color: ".$conf_menue["foreground_color"].";\" BORDER=\"0\" CELLPADDING=\"1\" CELLSPACING=\"0\">\n";
-          echo "<a  href=\"".$menue[$m][link]."\" target=\"_blank\"><img src=\"".$menue[$m][pic]."\" alt=\"".$menue[$m][text]."\"></a>";
+          echo "<a  href=\"".$menue[$m]['link']."\" target=\"_blank\"><img src=\"".$menue[$m]['pic']."\" alt=\"".$menue[$m]['text']."\"></a>";
           echo "</td>\n";
         } else {
           echo "<td style=\"text-align: center; width: 100px; background-color: ".$conf_menue["foreground_color"].";\" BORDER=\"0\" CELLPADDING=\"1\" CELLSPACING=\"0\">\n";
@@ -51,9 +51,9 @@ include ("menue.inc.php");
           echo "</td>\n";
         }
 
-        if ($menue[$m][link] != ""){
+        if ($menue[$m]['link'] != ""){
           echo "<td style=\"text-align: center; width: 250px; background-color: ".$conf_menue["foreground_color"].";\" BORDER=\"0\" CELLPADDING=\"1\" CELLSPACING=\"0\">\n";
-          echo "<a  href=\"".$menue[$m][link]."\" target=\"_blank\"><big><big>".$menue[$m][text]."</big></a>\n";
+          echo "<a  href=\"".$menue[$m]['link']."\" target=\"_blank\"><big><big>".$menue[$m]['text']."</big></a>\n";
           echo "</td>\n";
         } else {
           echo "<td style=\"text-align: center; width: 250px; background-color: ".$conf_menue["foreground_color"].";\" BORDER=\"0\" CELLPADDING=\"1\" CELLSPACING=\"0\">\n";
@@ -68,7 +68,7 @@ include ("menue.inc.php");
       }
       if ($is_gerade){echo "</tr>\n";}
     }
-    if (!((count ($menue) % 2) == 0)) { // ist nicht gerade ==> nur bis zu einer linken Spalte
+    if (!((count ($menue) % 2) == 0)) { // ist nicht gerade ==> nur bis zu einer 'link'en Spalte
       // es muss eine leere rechte Spalte erstellt werden.
       echo "<td style=\"text-align: center; width: 100px; background-color: ".$conf_menue["foreground_color"].";\" BORDER=\"0\" CELLPADDING=\"1\" CELLSPACING=\"0\">\n";
       echo "<img src=\"".$conf_menue ["symbole"]."/null.gif \" alt=\"leer\">";
@@ -91,9 +91,9 @@ include ("menue.inc.php");
 
         $is_gerade = ($m % 2) == 0;
         if (!$is_gerade){echo "<tr>\n";}
-          if ($zusatz_menue[$m][link] != ""){
+          if ($zusatz_menue[$m]['link'] != ""){
             echo "<td style=\"text-align: center; width: 100px; background-color: ".$conf_menue["foreground_color"].";\" BORDER=\"0\" CELLPADDING=\"1\" CELLSPACING=\"0\">\n";
-            echo "<a  href=\"".$zusatz_menue[$m][link]."\" target=\"_blank\"><img src=\"".$zusatz_menue[$m][pic]."\" alt=\"".$zusatz_menue[$m][text]."\"></a>";
+            echo "<a  href=\"".$zusatz_menue[$m]['link']."\" target=\"_blank\"><img src=\"".$zusatz_menue[$m]['pic']."\" alt=\"".$zusatz_menue[$m]['text']."\"></a>";
             echo "</td>\n";
           } else {
             echo "<td style=\"text-align: center; width: 100px; background-color: ".$conf_menue["foreground_color"].";\" BORDER=\"0\" CELLPADDING=\"1\" CELLSPACING=\"0\">\n";
@@ -101,9 +101,9 @@ include ("menue.inc.php");
             echo "</td>\n";
           }
 
-          if ($zusatz_menue[$m][link] != ""){
+          if ($zusatz_menue[$m]['link'] != ""){
             echo "<td style=\"text-align: center; width: 250px; background-color: ".$conf_menue["foreground_color"].";\" BORDER=\"0\" CELLPADDING=\"1\" CELLSPACING=\"0\">\n";
-            echo "<a  href=\"".$zusatz_menue[$m][link]."\" target=\"_blank\"><big><big>".$zusatz_menue[$m][text]."</big></a>\n";
+            echo "<a  href=\"".$zusatz_menue[$m]['link']."\" target=\"_blank\"><big><big>".$zusatz_menue[$m]['text']."</big></a>\n";
             echo "</td>\n";
           } else {
             echo "<td style=\"text-align: center; width: 250px; background-color: ".$conf_menue["foreground_color"].";\" BORDER=\"0\" CELLPADDING=\"1\" CELLSPACING=\"0\">\n";
@@ -118,7 +118,7 @@ include ("menue.inc.php");
         }
         if ($is_gerade){echo "</tr>\n";}
       }
-      if (!((count ($zusatz_menue) % 2) == 0)) { // ist nicht gerade ==> nur bis zu einer linken Spalte
+      if (!((count ($zusatz_menue) % 2) == 0)) { // ist nicht gerade ==> nur bis zu einer 'link'en Spalte
         // es muss eine leere rechte Spalte erstellt werden.
         echo "<td style=\"text-align: center; width: 100px; background-color: ".$conf_menue["foreground_color"].";\" BORDER=\"0\" CELLPADDING=\"1\" CELLSPACING=\"0\">\n";
         echo "<img src=\"".$conf_menue ["symbole"]."/null.gif \" alt=\"leer\">";
