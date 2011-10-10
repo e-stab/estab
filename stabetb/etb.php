@@ -212,7 +212,8 @@ if (debug == true){ echo "D A T E N  W E R D E N  G E S P E I C H E R N<br>";}
 
     $db_check = mysql_select_db ($this->db_name)
        or die ("[query_table] Auswahl der Datenbank fehlgeschlagen");
-    $result = mysql_list_tables($conf_4f_db ["datenbank"]);
+//    $result = mysql_list_tables($conf_4f_db ["datenbank"]); nach "mysql_list_tables is depreciated" => mysql_query"SHOW TABLES FROM " . $conf_4f_db["datenbank"])
+    $result = mysql_query("SHOW TABLES FROM " . $conf_4f_db["datenbank"]);
     $db_errno  = mysql_errno ();
     $db_errtxt = mysql_error ();
     if ($result) {
