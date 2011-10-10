@@ -167,7 +167,7 @@ ANTWORT % WEITERLEITUNG
        ) and  ( !isset( $_GET["ah_auswahl_x"] ) ) )  {
 
       if ( debug == true ){ echo "### mainindex 547 ( _GET[stab_anhang_x] ) or isset ( _GET[fm_anhang_x] ) ) and ( !isset( _GET[ah_auswahl_x] ) ";  echo "<br>\n";}
-    $_SESSION [anhang_menue] = 100;
+    $_SESSION ["anhang_menue"] = 100;
     include ("anhang.php");
     $menue1 = "anhang";
     exit;
@@ -241,10 +241,10 @@ ANTWORT % WEITERLEITUNG
 
   if (isset ($_GET["filter_anzahl_x"])) {
     $_SESSION["filter_anzahl"] = $_GET["filter_anzahl"]; }
-    if (isset($_GET[flt_start_x])) { $_SESSION[flt_navi] = "start";}
-    if (isset($_GET[flt_back_x]))  { $_SESSION[flt_navi] = "back";}
-    if (isset($_GET[flt_for_x]))   { $_SESSION[flt_navi] = "for";}
-    if (isset($_GET[flt_end_x]))   { $_SESSION[flt_navi] = "end";}
+    if (isset($_GET[flt_start_x])) { $_SESSION["flt_navi"] = "start";}
+    if (isset($_GET[flt_back_x]))  { $_SESSION["flt_navi"] = "back";}
+    if (isset($_GET[flt_for_x]))   { $_SESSION["flt_navi"] = "for";}
+    if (isset($_GET[flt_end_x]))   { $_SESSION["flt_navi"] = "end";}
 
 
   /************************************************************************\
@@ -309,7 +309,7 @@ ANTWORT % WEITERLEITUNG
         if (debug) echo "mainindex 324 <br> ";
         resetframeset ($conf_urlroot.$conf_web["pre_path"]);
       }
-    // Wenn Benutzer OK ==> SESSION [menue]=ROLLE ; $_SESSION [ROLLE]= Stab, Fernmelder...
+    // Wenn Benutzer OK ==> SESSION ["menue"]="ROLLE" ; $_SESSION ["ROLLE"]= "Stab", Fernmelder...
   } else {
     if (debug) echo "mainindex 330 <br> ";
     if (  ($_GET["2teskennwort"] == "Yes") and
@@ -813,7 +813,7 @@ ul#topmenu li.active {
       ($_SESSION ["vStab_kuerzel"] == $result[1][x03_sperruser])) ) { // Du bist der Bearbeiter
 
       // Setze den Eintrag auf " G E S P E R R T "
-      $query = "UPDATE ".$conf_4f_tbl ["nachrichten"]." SET x02_sperre = \"t\", x03_sperruser = \"".$_SESSION [vStab_kuerzel]."\" where 00_lfd = ".$_GET["00_lfd"];
+      $query = "UPDATE ".$conf_4f_tbl ["nachrichten"]." SET x02_sperre = \"t\", x03_sperruser = \"".$_SESSION ["vStab_kuerzel"]."\" where 00_lfd = ".$_GET["00_lfd"];
       $result = $dbaccess->query_table_iu ($query);
       // Jetzt holen wir uns den kompletten, gesperrten Eintrag
       $formdata = get_msg_by_lfd ($_GET["00_lfd"]);
@@ -914,7 +914,7 @@ ul#topmenu li.active {
                    `ip`    = \"\"
                WHERE `kuerzel` = \"".$_SESSION["vStab_kuerzel"]."\";";
      $result = $dbaccess->query_table_iu ($query);
-     protokolleintrag ("Abmelden", $_SESSION[vStab_benutzer].";".$_SESSION[vStab_kuerzel].";".$_SESSION[vStab_funktion].";".$_SESSION[vStab_rolle].";".session_id().";".$_SERVER[REMOTE_ADDR]);
+     protokolleintrag ("Abmelden", $_SESSION["vStab_benutzer"].";".$_SESSION["vStab_kuerzel"].";".$_SESSION["vStab_funktion"].";".$_SESSION["vStab_rolle"].";".session_id().";".$_SERVER["REMOTE_ADDR"]);
 
      // Session beenden - SESSION zurcksetzen -
      $_SESSION = array();
@@ -923,7 +923,7 @@ ul#topmenu li.active {
      }
      session_destroy ();
 
-     $_SESSION [menue] = "WELCOME";
+     $_SESSION ["menue"] = "WELCOME";
      resetframeset ($conf_urlroot.$conf_web ["pre_path"]);
 
   } // isset ($_GET["m2_abmelden_x"]

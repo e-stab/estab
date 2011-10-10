@@ -29,11 +29,11 @@
     /* getrennt : Eingang und Ausgang zählen für sich
       gemeinsam : Eingang und Ausgang zählen zusammen
     */
-    define ("Nachweisung", "gemeinsam");
+    if (defined("Nachweisung") == false ) define ("Nachweisung", "gemeinsam");
 
     /*
     */
-    define ("posttakzeit","true");
+    if (defined("posttakzeit") == false ) define ("posttakzeit","true");
 
       // URL des Servers
     $conf_urlroot  = "http://".$_SERVER ["SERVER_NAME"].":".$_SERVER ["SERVER_PORT"]."/";

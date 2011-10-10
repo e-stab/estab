@@ -14,6 +14,7 @@
 include ("../4fcfg/dbcfg.inc.php");
 include ("../4fcfg/e_cfg.inc.php");
 include ("../4fcfg/para.inc.php");
+//include ("../4fcfg/config.inc.php");
 
   function pre_html ($art, $titel, $cssstr){
     include ("../4fcfg/para.inc.php");

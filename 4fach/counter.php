@@ -25,7 +25,7 @@ echo "<body bgcolor=\"#ECECFF\">";
 *****************************************************************************/
 
 // Status A/W:
-if ( $_SESSION [ROLLE] == "Fernmelder") {
+if ( $_SESSION ["ROLLE"] == "Fernmelder") {
   echo "<table width=\"50\" align=\"center\" border=\"1\" cellspacing=\"2\" cellpeding=\"3\">";
   echo "<tr>";
   echo "<td>";
@@ -47,7 +47,7 @@ if ( $_SESSION [ROLLE] == "Fernmelder") {
 }
 
 // Status Sichter:
-if ( ( $_SESSION [ROLLE] == "Stab") and
+if ( ( $_SESSION ["ROLLE"] == "Stab") and
      ($_SESSION ["vStab_funktion"] == "Si" ) ) {
   echo "<table width=\"50\" align=\"center\" border=\"1\" cellspacing=\"2\" cellpeding=\"3\">";
   echo "<tr>";
@@ -70,8 +70,8 @@ if ( ( $_SESSION [ROLLE] == "Stab") and
 }
 
 //  Status Stab:
-if ( ( $_SESSION [ROLLE] == "FB") or
-     (  ( $_SESSION [ROLLE] == "Stab") and
+if ( ( $_SESSION ["ROLLE"] == "FB") or
+     (  ( $_SESSION ["ROLLE"] == "Stab") and
         ($_SESSION ["vStab_funktion"] != "Si" )
      )
    )  {

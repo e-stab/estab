@@ -4,7 +4,7 @@
 \******************************************************************************/ 
 /** Verzeichnis zwischen Root und eStab**/
 
-$conf_web ["pre_path"] = "kats/"; 
+$conf_web ["pre_path"] = "estab/"; 
 
 
 

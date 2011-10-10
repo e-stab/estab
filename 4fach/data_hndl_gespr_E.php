@@ -80,7 +80,7 @@ function check_save_user () {
                         ( $_SESSION ["vStab_funktion"] == $db_result [1]["benutzer"] )  );
 
       $sid_gleich = ( ( session_id() == $db_result ["sid"] ));
-      $ip_gleich   = ( ( $_SERVER [REMOTE_ADDR] == $db_result ["ip"] ));
+      $ip_gleich   = ( ( $_SERVER ["REMOTE_ADDR"] == $db_result ["ip"] ));
 /*
 echo "db_gleich="; var_dump ($db_gleich); echo "<br>";
 echo "GET-benutzer=";  var_dump ( $_GET["benutzer"] ); echo "<br>";
@@ -103,19 +103,19 @@ echo "ip_gleich="; var_dump ($ip_gleich); echo "<br>";
         if ($db_result ["aktiv"] == 1 ){
           $query = "UPDATE ".$conf_4f_tbl ["benutzer"]."
                     SET   `SID` = \"".session_id()."\",
-                           `ip` = \"".$_SERVER [REMOTE_ADDR]."\",
+                           `ip` = \"".$_SERVER ["REMOTE_ADDR"]."\",
                         `aktiv` = \"1\" WHERE `kuerzel` = \"".$GETkuerzel."\";";
 
           $result = $dbaccess->query_table_iu ($query);
-          $_SESSION [menue] = "ROLLE";  // Starte Menue im Rollenmodus
+          $_SESSION ["menue"] = "ROLLE";  // Starte Menue im Rollenmodus
           $rolle = rollenfinder ( $_GET["funktion"] );
           $_SESSION ["vStab_benutzer"] = $_GET["benutzer"];
           $_SESSION ["vStab_kuerzel"]  = $GETkuerzel;
           $_SESSION ["vStab_funktion"] = $_GET["funktion"];
           $_SESSION ["vStab_rolle"]    = $rolle;
-          $_SESSION [menue] = "ROLLE";  // Starte Menu im Rollenmodus
-          $_SESSION [ROLLE] = $rolle;
-          protokolleintrag ("Sessiondaten neu setzen", $_SESSION[vStab_benutzer].";".$_SESSION[vStab_kuerzel].";".$_SESSION[vStab_funktion].";".$_SESSION[vStab_rolle].";".session_id().";".$_SERVER[REMOTE_ADDR]);
+          $_SESSION ["menue"] = "ROLLE";  // Starte Menu im Rollenmodus
+          $_SESSION ["ROLLE"] = $rolle;
+          protokolleintrag ("Sessiondaten neu setzen", $_SESSION["vStab_benutzer"].";".$_SESSION["vStab_kuerzel"].";".$_SESSION["vStab_funktion"].";".$_SESSION["vStab_rolle"].";".session_id().";".$_SERVER["REMOTE_ADDR"]);
         }
         /***
           Wiederanmeldung nach Abmeldung
@@ -126,7 +126,7 @@ echo "ip_gleich="; var_dump ($ip_gleich); echo "<br>";
                    SET `funktion` = \"".$_GET ["funktion"]."\",
                        `rolle`    = \"".$rolle."\",
                             `SID` = \"".session_id()."\",
-                             `ip` = \"".$_SERVER [REMOTE_ADDR]."\",
+                             `ip` = \"".$_SERVER ["REMOTE_ADDR"]."\",
                           `aktiv` = \"1\" WHERE kuerzel = \"".$GETkuerzel."\";";
           $result = $dbaccess->query_table_iu ($query);
            // Tabelle fr die Benutzerfunktion anlegen
@@ -135,14 +135,14 @@ echo "ip_gleich="; var_dump ($ip_gleich); echo "<br>";
             $dbaccess->create_user_table ($usertablename);
           }
           $rolle = rollenfinder ( $_GET["funktion"] );
-          $_SESSION [ROLLE] = $rolle;
+          $_SESSION ["ROLLE"] = $rolle;
           $_SESSION ["vStab_benutzer"] = $_GET["benutzer"];
           $_SESSION ["vStab_kuerzel"]  = $GETkuerzel;
           $_SESSION ["vStab_funktion"] = $_GET["funktion"];
           $_SESSION ["vStab_rolle"]    = $rolle;
           $_SESSION ["menue"] = "ROLLE";  // Starte Menu im Rollenmodus
           $_SESSION ["ROLLE"] = $rolle;
-          protokolleintrag ("Funktion Ummelden", $_SESSION[vStab_benutzer].";".$_SESSION[vStab_kuerzel].";".$_SESSION[vStab_funktion].";".$_SESSION[vStab_rolle].";".session_id().";".$_SERVER[REMOTE_ADDR]);
+          protokolleintrag ("Funktion Ummelden", $_SESSION["vStab_benutzer"].";".$_SESSION["vStab_kuerzel"].";".$_SESSION["vStab_funktion"].";".$_SESSION["vStab_rolle"].";".session_id().";".$_SERVER["REMOTE_ADDR"]);
         }
       } // $db_gleich
       if ($kuerzel_eq and !$user_eq) {
@@ -168,23 +168,23 @@ echo "ip_gleich="; var_dump ($ip_gleich); echo "<br>";
                       `funktion` = \"".$_GET["funktion"]."\",
                       `rolle`    = \"".$rolle."\",
                       `sid`      = \"".session_id()  ."\",
-                      `ip`       = \"".$_SERVER[REMOTE_ADDR]."\",
+                      `ip`       = \"".$_SERVER["REMOTE_ADDR"]."\",
                       `aktiv`    = \"1\"";
 
       $result = $dbaccess->query_table_iu ($query);
 
-      protokolleintrag ("Anmelden", $_SESSION[vStab_benutzer].";".$_SESSION[vStab_kuerzel].";".$_SESSION[vStab_funktion].";".$_SESSION[vStab_rolle].";".session_id().";".$_SERVER[REMOTE_ADDR]);
+      protokolleintrag ("Anmelden", $_SESSION["vStab_benutzer"].";".$_SESSION["vStab_kuerzel"].";".$_SESSION["vStab_funktion"].";".$_SESSION["vStab_rolle"].";".session_id().";".$_SERVER["REMOTE_ADDR"]);
 
       if ($_SESSION ["vStab_funktion"] != "A/W"){
         $usertablename = $conf_4f_tbl ["usrtblprefix"].$_GET ["funktion"]."_".strtoupper ( $_GET ["kuerzel"]);
 //        $usertablename = $conf_4f_tbl ["usrtblprefix"].$_SESSION ["vStab_kuerzel"]."_".$_SESSION ["vStab_funktion"] ;
         $dbaccess->create_user_table ($usertablename);
       }
-      $_SESSION [menue] = "ROLLE";  // Starte Menu im Rollenmodus
-      $_SESSION [ROLLE] = $rolle;
+      $_SESSION ["menue"] = "ROLLE";  // Starte Menu im Rollenmodus
+      $_SESSION ["ROLLE"] = $rolle;
     }
   }  else {  // if $GET [kuerzel und benutzer] == ""
-    $_SESSION [menue] = "LOGIN";
+    $_SESSION ["menue"] = "LOGIN";
     $infotext = "Keine Daten eingegeben !!!";
     errorwindow( "Benutzeranmeldung", $infotext );
     $error_userlogin = true;
@@ -299,7 +299,7 @@ function check_and_save ($data){
 // echo "query[FM-Eingang]===".$query."<br>";
 
         $result = $dbaccess->query_table_iu ($query);
-        protokolleintrag ("FM-Eingang",$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
+        protokolleintrag ("FM-Eingang",$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
     break;
 
     case "FM-Eingang_Sichter":
@@ -383,7 +383,7 @@ function check_and_save ($data){
 
 // echo "query[FM-Eingang_Sichter]===".$query."<br>";
        $result = $dbaccess->query_table_iu ($query);
-       protokolleintrag ("FM-Eingang-Sichter",$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
+       protokolleintrag ("FM-Eingang-Sichter",$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
     break;
 
     case "Stab_schreiben":
@@ -488,7 +488,7 @@ function check_and_save ($data){
              WHERE `00_lfd` = \"".$data ["00_lfd"]."\"";
 //echo "query[FM AUSGANG]===".$query."<br>";
        $result = $dbaccess->query_table_iu ($query);
-       protokolleintrag ("FM-Ausgang",$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
+       protokolleintrag ("FM-Ausgang",$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
     break;
 
     case "FM-Ausgang_Sichter":
@@ -543,7 +543,7 @@ function check_and_save ($data){
              WHERE `00_lfd` = \"".$data ["00_lfd"]."\";";
 //echo "query[FM AUSGANG Sichter]===".$query."<br>";
        $result = $dbaccess->query_table_iu ($query);
-        protokolleintrag ("FM-Ausgang-Sichter",$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
+        protokolleintrag ("FM-Ausgang-Sichter",$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
     break;
 
    case "Stab_sichten":
@@ -586,7 +586,7 @@ function check_and_save ($data){
              WHERE `00_lfd` = \"".$data ["00_lfd"]."\";";
 // echo "query[Stab sichten]===".$query."<br>";
        $result = $dbaccess->query_table_iu ($query);
-        protokolleintrag ("Stab_sichten",$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
+        protokolleintrag ("Stab_sichten",$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
     break;
 
     case "Nachweis":
@@ -640,9 +640,9 @@ function check_and_save ($data){
 //echo "query[FM-Admin]===".$query."<br>";
        $result = $dbaccess->query_table_iu ($query);
        if ($data["task"] == "FM-Admin") {
-         protokolleintrag ("++ FM-Admin",$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
+         protokolleintrag ("++ FM-Admin",$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
        } else {
-         protokolleintrag ("++ SI-Admin",$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
+         protokolleintrag ("++ SI-Admin",$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
        }
     break;
   }
@@ -704,7 +704,7 @@ function check_and_save ($data){
 // echo "query[STAB_lesen]===".$query."<br>";
 
        $result = $dbaccess->query_table_iu ($query);
-        protokolleintrag ("Stab_".$_SESSION["vStab_funktion"]." gelesen_".$lfd,$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
+        protokolleintrag ("Stab_".$_SESSION["vStab_funktion"]." gelesen_".$lfd,$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
 
     }
   }
