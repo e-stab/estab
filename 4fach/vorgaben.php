@@ -4,7 +4,7 @@ define ("debug",false);
 
 session_start ();
 
-if ( debug == false ){
+if ( debug == true ){
   echo "<br><br>\n";
 //  echo "GET="; var_dump ($_GET);    echo "#<br><br>\n";
 //  echo "POST="; var_dump ($_POST);   echo "#<br><br>\n";
