@@ -567,7 +567,7 @@ if (debug == true){    echo ">strtoupper( _SESSION[ \"vStab_rolle\"]) ->"; var_d
 if (debug == true){    echo ">strtoupper( _SESSION[\"ROLLE\"]) ->"; var_dump (strtoupper( $_SESSION["ROLLE"])); echo "<br>";}
 
     if ((strtoupper( $_SESSION["vStab_rolle"])  == strtoupper("FERNMELDER")) or
-        (strtoupper( $_SESSION["ROLLE"])        == strtoupper("FERNMELDER")) ){
+        (strtoupper( $_SESSION["ROLLEROLLE"])        == strtoupper("FERNMELDER")) ){
       $berechtigt = true;
     } else {
       $berechtigt = false ;

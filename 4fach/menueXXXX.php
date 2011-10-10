@@ -80,12 +80,12 @@ function menue (){
     break;
 
     case "ROLLE" : // Taetigkeit nach Rolle ==>
-          if (isset ($_SESSION [ROLLE])){
-             switch ($_SESSION [ROLLE]){
+          if (isset ($_SESSION ["ROLLE"])){
+             switch ($_SESSION ["ROLLE"]){
 
                case "Stab" :  /* Hier gibt es den normalen Stab und die Sichterfunktion also muss hier noch
                                  die Funktion ausgewertet werden.*/
-                 if (($_SESSION [vStab_funktion]) == "Si") {// Sichter
+                 if (($_SESSION ["vStab_funktion"]) == "Si") {// Sichter
                    echo "<td>\n";
                    echo "<input type=\"image\" name=\"stab_sichten\" src=\"".$conf_design_path."/assort.gif\" alt=\"sichten\">\n";
                    echo "</td>\n";
