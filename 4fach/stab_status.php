@@ -182,7 +182,7 @@ class stab_status {
           case "start":
                   $_SESSION["filter_start"] = 0;
           break;
-           // Eine Seite zur�ck
+           // Eine Seite zurÃ¼ck
           case "back":
                   $_SESSION["filter_start"] -= $_SESSION[filter_anzahl];
                   if ($_SESSION["filter_start"] < 0){
@@ -241,7 +241,7 @@ class stab_status {
       if ($logedon_user != ""){
         echo "logedon_user ==="; var_dump ($logedon_user); echo "<br>";
 
-        echo "ERGEBNIS f�r ".$conf_fkt["fkt"]."=".$status->get_all ($conf_fkt["fkt"], $logedon_user["kuerzel"]).
+        echo "ERGEBNIS fÃ¼r ".$conf_fkt["fkt"]."=".$status->get_all ($conf_fkt["fkt"], $logedon_user["kuerzel"]).
              "====".$status->get_all_gelesen ($conf_fkt["fkt"], $logedon_user[1]["kuerzel"])."<br><br>";
       }
     }

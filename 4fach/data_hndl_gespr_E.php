@@ -23,7 +23,7 @@ include ("vali_data.php");
 /*******************************************************************************
   Benutzeranmeldung Cookies setzen und eintrag in die Datenbank
   1. Sind Cookiedaten vorhanden
-     JA   --> Prfe Cookiedaten mit Datenbankeintr�en
+     JA   --> Prfe Cookiedaten mit DatenbankeintrÃ¯Â¿Â½en
           --> Datenabgleich
      NEIN --> Neueintrag Datenbank und COOKIES
 ********************************************************************************/
@@ -146,8 +146,8 @@ echo "ip_gleich="; var_dump ($ip_gleich); echo "<br>";
         }
       } // $db_gleich
       if ($kuerzel_eq and !$user_eq) {
-        // K�rzel in Datenbank vorhanden -- Benutzername passt NICHT dazu !!!
-        $infotext = "K�rzel schon vorhanden !!!<br>Benutzername stimmt nicht mit den gespeicherten Daten �berein.";
+        // KÃ¼rzel in Datenbank vorhanden -- Benutzername passt NICHT dazu !!!
+        $infotext = "KÃ¼rzel schon vorhanden !!!<br>Benutzername stimmt nicht mit den gespeicherten Daten Ã¼berein.";
         errorwindow( "Benutzeranmeldung", $infotext );
         $error_userlogin = true;
       }
@@ -390,7 +390,7 @@ function check_and_save ($data){
 /*          07_durchspruch;          08_befhinweis;          08_befhinwausw;          09_vorrangstufe;          10_anschrift;          11_gesprnotiz;          12_inhalt;
           12_abfzeit;          13_abseinheit;          14_zeichen;          14_funktion;
           Workflow ==>
-            Erg�zung Nachweisdaten (A und Nachweisnummer) 04_richtung 04_nummer
+            ErgÃ¯Â¿Â½zung Nachweisdaten (A und Nachweisnummer) 04_richtung 04_nummer
             Daten in Datenbank mit einem INSERT
             INSERT INTO tabelle SET spalten_name=ausdruck, spalten_name=ausdruck, ...
 */

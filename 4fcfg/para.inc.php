@@ -5,7 +5,8 @@
     $cfg ["vbg"] ["gn"]      =  "rgb( 130, 230, 130)" ;
     $cfg ["vbg"] ["bl"]      =  "rgb( 150, 150, 255)" ;
     $cfg ["vbg"] ["ge"]      =  "rgb( 255, 255, 128)" ;
-    $cfg ["vbg"] ["dflt"] =  "rgb( 255, 255, 255)" ;
+    $cfg ["vbg"] ["dflt"]    =  "rgb( 255, 255, 255)" ;
+	$cfg ["vbg"] ["default"] =  "rgb( 255, 255, 255)" ;
 
     $cfg ["lbg"] ["rt"]      =  "rgb( 255, 150, 150)" ;
     $cfg ["lbg"] ["gn"]      =  "rgb( 130, 230, 130)" ;

@@ -1,13 +1,13 @@
 <?php
 
-define ("colorschema",aknz);
+define ("colorschema",'aknz');
 /*// iuk, thw, aknz
 */
 
 switch (colorschema){
   case "alt":   //  alte Einstellung
     $this->bg_color_fm_a   = "rgb(255, 224, 200)"; // rosa Fernmelder aktiv
-    $this->bg_color_fmp_a  = "rgb(100, 255, 100)"; // hell grün Fernmelderpflichtfeld  aktiv
+    $this->bg_color_fmp_a  = "rgb(100, 255, 100)"; // hell grÃ¼n Fernmelderpflichtfeld  aktiv
     $this->bg_color_nw_a   = "rgb(255, 204, 51)";  // orange
     $this->bg_color_tx_a   = "rgb(224, 255, 255)"; // hell blau
     $this->bg_color_si_a   = "rgb(255, 224, 255)"; // hell violett
@@ -19,7 +19,7 @@ switch (colorschema){
   case "iuk":
    // Gruenes Blatt oben
     $this->bg_color_fm_a   = "rgb(  0, 255,   0)"; // rosa Fernmelder aktiv
-    $this->bg_color_fmp_a  = "rgb(200, 255, 200)"; // hell grün Fernmelderpflichtfeld  aktiv
+    $this->bg_color_fmp_a  = "rgb(200, 255, 200)"; // hell grÃ¼n Fernmelderpflichtfeld  aktiv
     $this->bg_color_nw_a   = "rgb(255, 204, 51)";  // orange
     $this->bg_color_tx_a   = "rgb(  0, 255,   0)"; // hell blau
     $this->bg_color_si_a   = "rgb(  0, 255,   0)"; // hell violett
@@ -41,7 +41,7 @@ switch (colorschema){
     $this->bg_color_aktv_must = "rgb(240, 20, 20)";     // unklar (war: rot)
   break;
   case "aknz":
-     // weißes Blatt oben
+     // weiÃŸes Blatt oben
     $this->bg_color_fm_a   = "rgb(200, 200, 200)"; // grau
     $this->bg_color_fmp_a  = "rgb(255, 255, 255)"; // weiss
     $this->bg_color_nw_a   = "rgb(255, 204,  51)"; // orange
@@ -53,10 +53,4 @@ switch (colorschema){
     $this->bg_color_aktv_must = "rgb(240, 20, 20)"; // rot
   break;
 }
-/*
-
-AKNZ   WS  GN  RT  GE
-AKNZ   WS  RT  GE  GN
-
-*/
 ?>

@@ -2,16 +2,16 @@
 
 include ("../4fcfg/config.inc.php");            // Konfigurationseinstellungen und Vorgaben
 include ("../4fach/db_operation.php");          // Datenbank operationen
-include ("../4fach/data_hndl.php");             // propritäre  Datenbankoperationen
+include ("../4fach/tools.php");                 // diverse Funktionen
+include ("../4fach/data_hndl.php");             // propritÃ¤re  Datenbankoperationen
 include ("../4fcfg/para.inc.php");              //
 
-
-define ("inhalt_limit",true);
+define ("inhalt_limit",true); // VerkÃ¼rzte Darstellung der Meldung ergÃ¤nzt mit  "..."
 
 /*****************************************************************************\
    Datei: ue_ltg.php
 
-   benötigte Dateien:  keine
+   benÃ¶tigte Dateien:  keine
 
    Beschreibung:
 
@@ -23,7 +23,7 @@ define ("inhalt_limit",true);
 
 class Listen {
 /******************************************************************************\
-   $welche ~= Art der Liste die Ausggeben werden soll. Möglich sind:
+   $welche ~= Art der Liste die Ausggeben werden soll. MÃ¶glich sind:
      FMA    - Fernmeldeausgangsliste
      STUSER - Stabbenutzer
      STSI   - Stab Sichter
@@ -72,8 +72,9 @@ class Listen {
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
 
-    $tblusername   = $conf_4f_tbl ["usrtblprefix"].strtolower ($_SESSION["vStab_funktion"]).
-                     "_".strtolower ($_SESSION["vStab_kuerzel"]);
+	if ((isset($_SESSION["vStab_funktion"])) and (isset($_SESSION["vStab_kuerzel"])))
+       $tblusername   = $conf_4f_tbl ["usrtblprefix"].strtolower ($_SESSION["vStab_funktion"]).
+                        "_".strtolower ($_SESSION["vStab_kuerzel"]);
 
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
                          $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
@@ -96,16 +97,20 @@ class Listen {
 
 //    if ($_SESSION [flt_gelesen]  != 1){$readwhat = " NOT ";} else {$readwhat = " ";}
 
-    if ($_SESSION [flt_erledigt] != 1){$donewhat = " NOT ";} else {$donewhat = " ";}
+    if ((isset($_SESSION["vStab_kuerzel"])) and 
+	    (isset($_SESSION["flt_erledigt"])) and 
+		($_SESSION ['flt_erledigt'] != 1))
+	 {$donewhat = " NOT ";} else {$donewhat = " ";}
 
-
+/*
     if ($_SESSION["ueb_flt_darstellung"] == "1" ){
-      $query_where_arg3 = ""; //" AND (`".$conf_4f_tbl ["nachrichten"]."`.`04_nummer` ".$donewhat." IN                          ( select `".$tblusername."_erl`.`nachnum` from `".$tblusername."_erl` where 1))";
+      $query_where_arg3 = ""; //" AND (`".$conf_4f_tbl ["nachrichten"]."`.`04_nummer` ".$donewhat." IN  ( select `".$tblusername."_erl`.`nachnum` from `".$tblusername."_erl` where 1))";
     } else {
       $query_where_arg2 = "";
     }
-
+*/
     $query_orderby_arg = "`04_nummer` DESC, `09_vorrangstufe` DESC ";
+	//$query_orderby_arg = "`04_nummer` ASC, `09_vorrangstufe` ASC ";
 
     if (isset ($_SESSION["ueb_flt_search"])) {
       $query_search = "(".
@@ -126,11 +131,11 @@ class Listen {
 
     } else {
       $query_search = "";
-      $querycount = "SELECT COUNT(*) FROM ".$query_from_arg." WHERE ".
-               $query_where_arg1." ".$query_where_arg2." ".$query_where_arg3.";" ;
+	  $querycount = "SELECT COUNT(*) FROM ".$query_from_arg." WHERE ".
+               $query_where_arg1; //." ".$query_where_arg2." ".$query_where_arg3.";" ;
 
       $query = "SELECT ".$query_select_arg." FROM ".$query_from_arg." WHERE ".
-               $query_where_arg1." ".$query_where_arg2." ".$query_where_arg3." ORDER BY ".$query_orderby_arg ;
+            $query_where_arg1." ORDER BY ".$query_orderby_arg ;  //." ".$query_where_arg2." ".$query_where_arg3." ORDER BY ".$query_orderby_arg ;
     }
 
     if ( debug == true ){  echo "<br><br>QUERYCOUNT [get_list] =".$querycount."<br>";echo "<br><br>";}
@@ -140,49 +145,89 @@ class Listen {
       $anzahl = $tmp[0];
       $_SESSION["ueb_flt_rescount"] = $anzahl ;
 
+        // Anzahl, Meldungen pro Seite ==> Meldungen der letzten Seite
       if ( debug == true ){ echo "<br>ANZAHL ===".$anzahl."<br>";}
 
-      if (isset($_SESSION[ueb_flt_navi])) {
+        // Listennavigation 
 
-        switch ($_SESSION[ueb_flt_navi]) {
+      $anz_meld_seite = $_SESSION["ueb_flt_anzahl"];
+      $pageoffirst = ceil ($_SESSION['ueb_flt_start'] / $anz_meld_seite) +1 ;
+      $pagecount   = ceil ($anzahl / $anz_meld_seite) ;
+      $is_last_page = ($pageoffirst == $pagecount);
+/*
+echo "Meldung pro Seite        =".$anz_meld_seite."<br>";
+echo "Seite der ersten Meldung =".$pageoffirst."<br>";
+echo "Startmeldung             =".$_SESSION['ueb_flt_start']."<br>" ;
+echo "Gesamtanzahl der Seiten  =".$pagecount."<br>";
+echo "Ist es die letzte Seite  ="; if ($is_last_page){echo "Ja";} else {echo "Nein";} echo "<br>";
+*/
+      if (isset($_SESSION['ueb_flt_navi'])) {
+        switch ($_SESSION['ueb_flt_navi']) {
            // ANFANG
           case "start":
                   $_SESSION["ueb_flt_start"] = 0;
           break;
-           // Eine Seite zurück
+           // Eine Seite zurÃ¼ck
           case "back":
-                  $_SESSION["ueb_flt_start"] -= $_SESSION[ueb_flt_anzahl];
+                  $_SESSION["ueb_flt_start"] -= $_SESSION['ueb_flt_anzahl'];
                   if ($_SESSION["ueb_flt_start"] < 0){
-                    $_SESSION["ueb_flt_start"]=0;}
+                      $_SESSION["ueb_flt_start"]=0;}
           break;
            // Eine Seite vor
           case "for":
-                  if ($anzahl < $_SESSION[ueb_flt_anzahl]){ $_SESSION[ueb_flt_start] = 0;
-                  } else {
-                    $_SESSION["ueb_flt_start"] += $_SESSION[ueb_flt_anzahl];
-                    if ($_SESSION["ueb_flt_start"] >= $anzahl){
-                      $_SESSION["ueb_flt_start"] = $anzahl-1;}
+//                  if (!$is_last_page){ // Es ist nicht die letzte Seite
+                    if ($anzahl < $_SESSION['ueb_flt_anzahl']){ // Es ist nur eine Seite
+                      $_SESSION['ueb_flt_start'] = 0; 
+                    } else {
+                       // Schon auf der letzten Seite?
+                      if ($is_last_page){
+                      } else {
+ 
+                        $_SESSION["ueb_flt_start"] += $_SESSION['ueb_flt_anzahl']; // eine Seite weiter
+                        if ($_SESSION["ueb_flt_start"] >= $anzahl){
+                          $_SESSION["ueb_flt_start"] = $anzahl-1;}
+  //                    }
+                    }
                   }
+//exit;
           break;
           // Letzte Seite
           case "end":
-                  if ($anzahl < $_SESSION[ueb_flt_anzahl]){ $_SESSION[ueb_flt_start] = 0;
+                  if ($anzahl < $_SESSION['ueb_flt_anzahl']){ // Nur eine Seite
+                    $_SESSION['ueb_flt_start'] = 0;
                   } else {
-                    $seiten = floor ($anzahl / $_SESSION[ueb_flt_anzahl])-1 ;
-                    $_SESSION["ueb_flt_start"] = $seiten * $_SESSION["ueb_flt_anzahl"];
+                    $seiten = floor ($anzahl / $_SESSION['ueb_flt_anzahl']) ;
+                       // Berechne den Rest auf der letzten Seite
+                    $anz_rest_meld_seite = floor ($anzahl/$_SESSION['ueb_flt_anzahl']) * $_SESSION['ueb_flt_anzahl'];
+					if ($anz_rest_meld_seite == 0){
+                    $_SESSION["ueb_flt_start"] = $seiten-1 * $_SESSION["ueb_flt_anzahl"];
+					}
                   }
           break;
         }
-        unset ($_SESSION [ueb_flt_navi]);
+        unset ($_SESSION ['ueb_flt_navi']);
       }
-      $query .= " LIMIT ".$_SESSION["ueb_flt_start"].",".$_SESSION["ueb_flt_anzahl"];
+      $query .= " LIMIT ".$_SESSION["ueb_flt_start"].",".$anz_meld_seite;
     }
+/*	
+      $anz_rest_meld_seite = $_SESSION["ueb_flt_anzahl"];
+      $pageoffirst = ceil ($_SESSION['ueb_flt_start'] / $anz_meld_seite) + 1 ;
+      $pagecount   = ceil ($anzahl / $anz_meld_seite) ;
+      $is_last_page = ($pageoffirst == $pagecount);
+echo "***************************************************************************<br>";
+echo "Rest Meldung pro Seite   =".$anz_rest_meld_seite."<br>";
+echo "Seite der ersten Meldung =".$pageoffirst."<br>";
+echo "Startmeldung             =".$_SESSION['ueb_flt_start']."<br>" ;
+echo "Gesamtanzahl der Seiten  =".$pagecount."<br>";
+echo "Ist es die letzte Seite  ="; if ($is_last_page){echo "Ja";} else {echo "Nein";} echo "<br>";
+*/
 
 
-    $query = $query_select.$query;
+	
+//    $query = $query_select.$query;
 
-    if ( debug == true ){  echo "QUERY [get_list] =".$query."<br>";echo "<br><br>";}
-
+    if ( debug == true ){  echo "QUERY [get_list]227=".$query."<br>";echo "<br><br>";}
+  
     $result = $dbaccess->query_table ($query);
 
 //    if ( debug == true ){ echo "RESULT [get_list] ="; var_dump ($result); echo "<br><br>"; }
@@ -230,7 +275,7 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
 
     if ( debug ) { echo "\n\n\n<!-- ANFANG file:liste.php fkt:darstellungsart -->"; }
 
-    echo "\n<form action=\"".$_SERVER ["PHP_SELF"]."\" method=\"get\" target=\"_self\">\n";
+    echo "\n<form action=\"".$_SERVER ["PHP_SELF"]."\" method=\"GET\" target=\"_self\">\n";
     echo "<table><tbody>";
     echo "<tr>";
 
@@ -241,7 +286,7 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
     echo "<td>";
     echo "Meldung/Seite:<br>\n";
 
-      // Voreinstellung für die Meldungen pro Seite
+      // Voreinstellung fÃ¼r die Meldungen pro Seite
     if ( !(isset ($_SESSION["ueb_flt_anzahl"])) OR
         ( $_SESSION["ueb_flt_anzahl"] == "" )
      ){$_SESSION["ueb_flt_anzahl"] = 5; }
@@ -291,7 +336,7 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
     echo "</td>";
 */
     echo "<td>";
-    if ($_SESSION ["ueb_flt_find_mask"] == 0)  {
+    if ((isset($_SESSION ["ueb_flt_find_mask"])) and($_SESSION ["ueb_flt_find_mask"] == 0))  {
       echo "<div>";
       echo "<input type=\"image\" name=\"ueb_flt_find_mask_ein\" src=\"../4fach/button.php?type=push&textpos=buttom&status=AUS&text=finden\" alt=\"finden\">\n";
       echo "</div>";
@@ -313,7 +358,7 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
     echo "<tr>";
 
 
-    if ($_SESSION["ueb_flt_find_mask"] == 1){
+    if ((isset($_SESSION ["ueb_flt_find_mask"])) and ($_SESSION["ueb_flt_find_mask"] == 1)){
       echo "\n<form action=\"".$_SERVER ["PHP_SELF"]."\" method=\"get\" target=\"_self\">\n";
       echo "<td>";
       if (isset ($_SESSION ["ueb_flt_search"]) ) { $defvalue = $_SESSION ["ueb_flt_search"] ;}
@@ -345,6 +390,8 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
 
 \******************************************************************************/
   function createlist (){
+//  include ("../4fcfg/config.inc.php");
+//  include ("../4fach/tools.php");                 // diverse Funktionen
     echo "\n\n\n<!-- ANFANG file:ue_ltg.php fkt:createlist -->";
     include ("../4fcfg/config.inc.php");
     include ("../4fcfg/para.inc.php");
@@ -356,12 +403,13 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
     echo "<html>\n";
     echo "<head>\n";
     echo "<link REL=\"SHORTCUT ICON\" HREF=\"favicon.ico\" />";
-    echo "<meta http-equiv=\"refresh\" content=\"10\">\n";
+//    echo "<meta http-equiv=\"refresh\" content=\"10\">\n";
     echo "</head>\n";
 
     echo "<body bgcolor=\"#DCDCFF\">";
 
     $result = $this->get_list ();
+	if (debug)  {echo "this->get_list() = "; var_dump($result);echo "<br><br>";}
     $this->darstellungs_art ( "Stab_lesen" );
 
     $this->listen_navi ();
@@ -387,6 +435,7 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
       echo "</tr>";
 
       foreach ($result as $row){
+	     
          // VORRANGSTUFE
          if ( ( $row["09_vorrangstufe"] != "") and ( $row["09_vorrangstufe"] != "eee" ) ){
            echo "<tr style=\"background-color: rgb(255,255,0); color:fm=meldung&FFFFFF; font-weight:bold;\">\n";
@@ -466,7 +515,7 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
          // Abfassungs Z E I T
          if (($row["12_abfzeit"] != "")) {
            $abfzeit = convdatetimeto ($row["12_abfzeit"]);
-           echo "<a href=\"ue_ltg.php?ueb_fm=ueb&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$abfzeit[stak]."</a>\n";
+           echo "<a href=\"ue_ltg.php?ueb_fm=ueb&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$abfzeit['stak']."</a>\n";
          } else {
            echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
          }
@@ -474,26 +523,32 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
 
          // Funktionen und Farben
          $empfcolor = extraiereempfaenger ( $row ["16_empf"] ) ;
+		 if (debug)  {echo "empfcolor = "; var_dump($empfcolor);echo "<br><br>";}
          for ( $i=1; $i<= count ($conf_empf); $i++ ) {
            if ( ( $conf_empf [$i]["fkt"] != "Si" ) and ( $conf_empf [$i]["fkt"] != "A/W" ) ) {
-             switch ($empfcolor [$conf_empf [$i][fkt]]) {
-               case "rt":
-                                 echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["rt"]."; \">";
-                                 echo "X";
-               break;
-               case "gn":
-                 echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["gn"]."; \">";
-                                 echo "X";
-                                break;
-               case "bl":
-                 echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["bl"]."; \">";
-                         echo "X";
-                           break;
-               default:
+             if (isset($empfcolor [$conf_empf [$i]['fkt']])) {
+               switch ($empfcolor [$conf_empf [$i]['fkt']]) {
+                 case "rt":
+                   echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["rt"]."; \">";
+                   echo "X";
+                 break;
+                 case "gn":
+                   echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["gn"]."; \">";
+                   echo "X";
+                 break;
+                 case "bl":
+                   echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["bl"]."; \">";
+                   echo "X";
+                 break;
+                 default:
+                   echo "<td style=\"text-align: center; background-color: rgb(250, 250, 250); \">";
+                   echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
+               }
+               echo "</td>";
+			 } else {
                  echo "<td style=\"text-align: center; background-color: rgb(250, 250, 250); \">";
-                 echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
-             }
-             echo "</td>";
+                 echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";			 
+			 }
            }
          }
 
@@ -518,7 +573,7 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
 
     $this->listen_navi ();
 
-    echo "<!-- ENDE file:ue_ltg.php fkt:createlist -->";
+    echo "<!-- ENDE file:ue_ltg.php fkt:createlist -->\n";
 
   }
 
@@ -650,7 +705,7 @@ var_dump ($this->formdata); echo "<br>";
 \*****************************************************************************/
   function get_access_by_task (){
     // Alle Felder auf inaktiv setzen
-    for ( $i = 0; $i <= 17; $i++ ){
+    for ( $i = 1; $i <= 17; $i++ ){
       $this->bg [$i] = $this->feldbg [$i]["i"] ;
       $this->feld [$i] = false;
     }
@@ -785,16 +840,18 @@ var_dump ($this->formdata); echo "<br>";
       // Wandel die Textzeile mit den Empfaengern in ein ARRAY um
     $empf_array_color = explode (",",$empf_text);
 
-    for ( $i=0; $i <= count ( $empf_array_color ); $i++ ) {
+    for ( $i=0; $i < count ( $empf_array_color )-1; $i++ ) {
         //  die Farbe der Kopie
-      list ( $fkt, $cpycol ) = explode ("_", $empf_array_color [$i]);
-      if ( $fkt != "" ){
-        $empf_array [$i]['fkt'] = $fkt ;
-        $empf_array [$i]['cpy'] = $cpycol ;
-        if ($fkt == $_SESSION ['vStab_funktion']) {
-          $this->fktmsgbgcolor = $cpycol ;
+      if (isset($empf_array_color [$i])){
+	    list ( $fkt, $cpycol ) = explode ("_", $empf_array_color [$i]);
+	    if ( $fkt != "" ){
+          $empf_array [$i]['fkt'] = $fkt ;
+          $empf_array [$i]['cpy'] = $cpycol ;
+          if ((isset ($_SESSION ['vStab_funktion'])) and ($fkt == $_SESSION ['vStab_funktion'])) { 
+            $this->fktmsgbgcolor = $cpycol ;
+          }
         }
-      }
+	  }	
     }
     $sonstcount = 2;
     for ($i=1; $i <= 5 ; $i++){
@@ -828,7 +885,7 @@ var_dump ($this->formdata); echo "<br>";
     include ("../4fcfg/e_cfg.inc.php");
       // in 12_anhang stehen die Anhangdateien mit ";" getrennt.
     echo "<br>";
-    $anhaenge = split(";", $this->formdata ["12_anhang"]);
+    $anhaenge = preg_split("/;/", $this->formdata ["12_anhang"]);
     foreach ($anhaenge as $anhang){
       if ($anhang != "") {
         echo "<a style=\"font-size:18px; font-weight:900;\" href=\"";
@@ -872,7 +929,7 @@ var_dump ($this->formdata); echo "<br>";
     pre_html ("N","Formular ".$this->task." ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"], ""); // Normaler Seitenaufbau ohne Auffrischung
 
     echo "<body style=\"text-align: left; background-color: rgb(255,255,255); \">\n"; //".$this->formbgcolor.";\">\n";
-    echo "<body style=\"text-align: left; background-color: ".$formbgcolor.";\">\n";
+    echo "<body style=\"text-align: left; background-color: ".$this->formbgcolor.";\">\n";
 
     echo "<form style=\"\" method=\"get\" action=\"".$_SERVER ["PHP_SELF"]."\" name=\"4fach\">";
 
@@ -934,8 +991,8 @@ var_dump ($this->formdata); echo "<br>";
 
     if  ($this->formdata["01_datum"] != "" ) {
       $arr = convdatetimeto ($this->formdata["01_datum"]);
-      $this->formdata["01_datum"] = $arr [datum];
-      $this->formdata["01_zeit"] = $arr [zeit];
+      $this->formdata["01_datum"] = $arr ['datum'];
+      $this->formdata["01_zeit"] = $arr ['zeit'];
     } else {
         $this->formdata["01_datum"] ="";
         $this->formdata["01_zeit"] = "";
@@ -984,14 +1041,14 @@ var_dump ($this->formdata); echo "<br>";
 
     /****************************************************************************\
     | Zeile, Spalte 2 , 2+3  2   2   Ausgang Annahmevermerk +
-    |                         4  3   Ausgang Beförderungsvermerk
+    |                         4  3   Ausgang BefÃ¶rderungsvermerk
     02_zeit
     02_zeichen
     \****************************************************************************/
 
     if ($this->formdata["02_zeit"] != "" ) {
       $arr = convdatetimeto ($this->formdata["02_zeit"]);
-      $this->formdata["02_zeit"] = $arr [zeit];
+      $this->formdata["02_zeit"] = $arr ['zeit'];
     }   else {
       $this->formdata["02_zeit"] = "";
     }
@@ -1024,8 +1081,8 @@ var_dump ($this->formdata); echo "<br>";
 
       if  ($this->formdata["03_datum"] != "" ) {
         $arr = convdatetimeto ($this->formdata["03_datum"]);
-        $this->formdata["03_datum"] = $arr [datum];
-        $this->formdata["03_zeit"] = $arr [zeit];
+        $this->formdata["03_datum"] = $arr ['datum'];
+        $this->formdata["03_zeit"] = $arr ['zeit'];
       }   else {
         $this->formdata["03_datum"] ="";
         $this->formdata["03_zeit"] = "";
@@ -1152,11 +1209,11 @@ var_dump ($this->formdata); echo "<br>";
 
     echo "<tbody>\n";
     echo "<tr>\n";
-    // Zeile, Spalte 4 , 1   32   6   Beförderungsweg
+    // Zeile, Spalte 4 , 1   32   6   BefÃ¶rderungsweg
     echo "<td style=\"width: 131px; background-color: ".$this->bg[6].";\">Bef&ouml;rderungsweg:</td>\n";
 
     /****************************************************************************\
-    // Zeile, Spalte 4 , 2   32   6   Beförderungsweg
+    // Zeile, Spalte 4 , 2   32   6   BefÃ¶rderungsweg
     06_befweg
     \****************************************************************************/
 
@@ -1172,7 +1229,7 @@ var_dump ($this->formdata); echo "<br>";
     echo "</td>";
 
     /****************************************************************************\
-    // Zeile, Spalte 4 , 3   32   6   Beförderungsweg
+    // Zeile, Spalte 4 , 3   32   6   BefÃ¶rderungsweg
     06_befwegausw
     \****************************************************************************/
     if (!$this->feld[6]) {
@@ -1233,13 +1290,13 @@ var_dump ($this->formdata); echo "<br>";
     echo "<input name=\"07_durchspruch\" value=\"S\" type=\"radio\" ".$param.$sel.">Spruch</td>\n";
 
     /****************************************************************************\
-    // Zeile, Spalte 5,2   128    8   Beförderungshinweis
+    // Zeile, Spalte 5,2   128    8   BefÃ¶rderungshinweis
     \****************************************************************************/
 
     echo "<td style=\"text-align: left; width: 140px; background-color: ".$this->bg[8].";\">Bef&ouml;rderungshinweis:<br>Tel.</td>\n";
 
     /****************************************************************************\
-    // Zeile, Spalte 5,3   128    8   Beförderungshinweis
+    // Zeile, Spalte 5,3   128    8   BefÃ¶rderungshinweis
     08_befhinweis
     \****************************************************************************/
     echo "<td style=\"width: 294px; background-color: ".$this->bg[8].";\">\n";
@@ -1252,7 +1309,7 @@ var_dump ($this->formdata); echo "<br>";
     }
     echo "</td>\n";
     /****************************************************************************\
-    // Zeile, Spalte 5,4   128    8   Beförderungshinweis
+    // Zeile, Spalte 5,4   128    8   BefÃ¶rderungshinweis
     08_befhinwausw
     \****************************************************************************/
 
@@ -1339,7 +1396,7 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
     echo "</td>\n";
 
     /****************************************************************************\
-    // Zeile, Spalte 6,3   Gesprächsnotiz    1024 11  Gesprächsnotiz
+    // Zeile, Spalte 6,3   GesprÃ¤chsnotiz    1024 11  GesprÃ¤chsnotiz
     11_gesprnotiz
     \****************************************************************************/
     if (((($this->formdata["11_gesprnotiz"]) != "" )) or (!$this->feld[11])) {
@@ -1528,7 +1585,7 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
     if  ($this->formdata["15_quitdatum"] != "" ) {
         $arr = convdatetimeto ($this->formdata["15_quitdatum"]);
 
-        $this->formdata["15_quitdatum"] = $arr [zeit];
+        $this->formdata["15_quitdatum"] = $arr ['zeit'];
     }   else {
         $this->formdata["15_quitdatum"] = "";
     }
@@ -1731,9 +1788,15 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
 define ("debug", false);
 
   session_start ();
+  
+$returnValue = null ; // first set returnValue to a defined stat
+if (count($_GET)>0)  { $returnValue = $_GET; }   // GET Daten, wenn vorhanden speichern
+if (count($_POST)>0) { $returnValue = $_POST; }  // POST Daten, wenn vorhanden speichern
+  
 
   if ( debug == true ){
     echo "<br><br>\n";
+    echo "returnValue="; var_dump ($returnValue);    echo "#<br><br>\n";	
     echo "GET="; var_dump ($_GET);    echo "#<br><br>\n";
     echo "POST="; var_dump ($_POST);   echo "#<br><br>\n";
     echo "COOKIE="; var_dump ($_COOKIE); echo "#<br><br>\n";
@@ -1741,26 +1804,8 @@ define ("debug", false);
     echo "SESSION="; print_r ($_SESSION); echo "#<br>\n";
   }
 
-
-
-
   /**********************************************************************\
-    Überprüfe ob die Listendarstellung geaendert werden soll
-
-  ["filter_darstellung"]=> string(2) "on"
-  ["filter_anzahl"]=> string(2) "10"
-  ["filter_gelesen"]=> string(2) "on"
-  ["filter_erledigt"]=> string(2) "on"
-  ["filter_submit"]=> string(10) "einstellen" }
-
-  ["flt_start_x"]=>  string(2) "23" ["flt_start_y"]=>  string(1) "6"
-  ["flt_back_x"]=>  string(2) "18" ["flt_back_y"]=>  string(2) "12"
-  ["flt_for_x"]=>  string(2) "16" ["flt_for_y"]=>  string(2) "12"
-  ["flt_end_x"]=>  string(1) "9" ["flt_end_y"]=>  string(1) "7"
-
-  ["flt_search"]=>  string(4) "test"
-  ["filter_suche"]=>  string(6) "suchen" } #
-
+    ÃberprÃ¼fe ob die Listendarstellung geaendert werden soll
   \**********************************************************************/
   if (!isset ( $_SESSION["ueb_flt_darstellung"])){
     $_SESSION["ueb_flt_darstellung"] = 1;
@@ -1772,71 +1817,81 @@ define ("debug", false);
   }
 /*
   // filtern EIN / AUS
-  if ( (isset ($_GET["ueb_flt_darstellung_aus_x"])) or
-       (isset ($_GET["ueb_flt_darstellung_ein_x"])) ){
+  if ( (isset ($returnValue["ueb_flt_darstellung_aus_x"])) or
+       (isset ($returnValue["ueb_flt_darstellung_ein_x"])) ){
 
-    if ( ($_SESSION["ueb_flt_darstellung"] == 1) and (isset ($_GET["ueb_flt_darstellung_aus_x"])) ) {
+    if ( ($_SESSION["ueb_flt_darstellung"] == 1) and (isset ($returnValue["ueb_flt_darstellung_aus_x"])) ) {
       $_SESSION["ueb_flt_darstellung"] = 0;
-    } elseif ( ($_SESSION["ueb_flt_darstellung"] == 0) and (isset ($_GET["ueb_flt_darstellung_ein_x"])) ){
+    } elseif ( ($_SESSION["ueb_flt_darstellung"] == 0) and (isset ($returnValue["ueb_flt_darstellung_ein_x"])) ){
       $_SESSION["ueb_flt_darstellung"] = 1;
     }
   }
 
   // erledigte SICHTAR UNSICHTBAR
-  if ( (isset ($_GET["ueb_flt_erledigt_aus_x"])) or
-       (isset ($_GET["ueb_flt_erledigt_ein_x"])) ){
+  if ( (isset ($returnValue["ueb_flt_erledigt_aus_x"])) or
+       (isset ($returnValue["ueb_flt_erledigt_ein_x"])) ){
 
-    if ( ($_SESSION["ueb_flt_erledigt"] == 1) and (isset($_GET["ueb_flt_erledigt_aus_x"])) ) {
+    if ( ($_SESSION["ueb_flt_erledigt"] == 1) and (isset($returnValue["ueb_flt_erledigt_aus_x"])) ) {
       $_SESSION["ueb_flt_erledigt"] = 0;
-    } elseif ( ($_SESSION["ueb_flt_erledigt"] == 0) and (isset ($_GET["ueb_flt_erledigt_ein_x"])) ){
+    } elseif ( ($_SESSION["ueb_flt_erledigt"] == 0) and (isset ($returnValue["ueb_flt_erledigt_ein_x"])) ){
       $_SESSION["ueb_flt_erledigt"] = 1;
     }
   }
   // unerledigte SICHTBAR UNSICHTBAR
-  if ( (isset ($_GET["ueb_flt_unerledigt_aus_x"])) or
-       (isset ($_GET["ueb_flt_unerledigt_ein_x"])) ){
+  if ( (isset ($returnValue["ueb_flt_unerledigt_aus_x"])) or
+       (isset ($returnValue["ueb_flt_unerledigt_ein_x"])) ){
 
-    if ( ($_SESSION["ueb_flt_unerledigt"] == 1) and (isset($_GET["ueb_flt_unerledigt_aus_x"])) ) {
+    if ( ($_SESSION["ueb_flt_unerledigt"] == 1) and (isset($returnValue["ueb_flt_unerledigt_aus_x"])) ) {
       $_SESSION["ueb_flt_unerledigt"] = 0;
-    } elseif ( ($_SESSION["ueb_flt_unerledigt"] == 0) and (isset ($_GET["ueb_flt_unerledigt_ein_x"])) ){
+    } elseif ( ($_SESSION["ueb_flt_unerledigt"] == 0) and (isset ($returnValue["ueb_flt_unerledigt_ein_x"])) ){
       $_SESSION["ueb_flt_unerledigt"] = 1;
     }
   }
 */
-  // finde Menü
-  if ( (isset ($_GET["ueb_flt_find_mask_aus_x"])) or
-       (isset ($_GET["ueb_flt_find_mask_ein_x"])) ){
-
-    if ( ($_SESSION["ueb_flt_find_mask"] == 1) and (isset($_GET["ueb_flt_find_mask_aus_x"])) ) {
-      unset ($_SESSION["ueb_flt_search"]);
-      $_SESSION["ueb_flt_find_mask"] = 0;
-    } elseif ( ($_SESSION["ueb_flt_find_mask"] == 0) and (isset ($_GET["ueb_flt_find_mask_ein_x"])) ){
-      $_SESSION["ueb_flt_find_mask"] = 1;
-    }
+  // finde MenÃ¼
+  if (!isset ($_SESSION["ueb_flt_find_mask"])) {
+    $_SESSION["ueb_flt_find_mask"] = 0;
   }
 
-  if (isset($_GET["ueb_flt_suche_reset"])){ unset ($_SESSION["ueb_flt_search"]); }
+  if ( (isset ($returnValue["ueb_flt_find_mask_aus_x"])) or
+       (isset ($returnValue["ueb_flt_find_mask_ein_x"])) ){
 
-  if (isset($_GET["ueb_flt_suche"])){
-    if ($_SESSION["ueb_flt_search"] != $_GET ["ueb_flt_search"]){
+	   if ( ($_SESSION["ueb_flt_find_mask"] == 1) and (isset($returnValue["ueb_flt_find_mask_aus_x"])) ) {
+        unset ($_SESSION["ueb_flt_search"]);
+		unset ($returnValue["ueb_flt_search"]);
+        $_SESSION["ueb_flt_find_mask"] = 0;
+	
+      } elseif ( ($_SESSION["ueb_flt_find_mask"] == 0) and (isset ($returnValue["ueb_flt_find_mask_ein_x"])) ){
+        $_SESSION["ueb_flt_find_mask"] = 1;
+		$_SESSION["ueb_flt_start"] = 0 ;
+        $_SESSION["ueb_flt_position"] = 0;
+      }
+    
+  }
+
+  if (isset($returnValue["ueb_flt_suche_reset"])){ unset ($_SESSION["ueb_flt_search"]); }
+
+  if (isset($returnValue["ueb_flt_search"])){
+    if (isset($_SESSION["ueb_flt_search"]) AND ( $_SESSION["ueb_flt_search"] != $returnValue ["ueb_flt_search"])){
       $_SESSION["ueb_flt_start"] = 0 ;
       $_SESSION["ueb_flt_position"] = 0;
     }
-    $_SESSION["ueb_flt_search"] = $_GET ["ueb_flt_search"];
+    $_SESSION["ueb_flt_search"] = $returnValue ["ueb_flt_search"];
   }
 
-  if (isset ($_GET["ueb_flt_anzahl_x"])) {
-    $_SESSION["ueb_flt_anzahl"] = $_GET["ueb_flt_anzahl"]; }
+  // Listennavigation
+  if (isset ($returnValue["ueb_flt_anzahl_x"])) {
+    $_SESSION["ueb_flt_anzahl"] = $returnValue["ueb_flt_anzahl"]; }
 
-  if (isset($_GET[ueb_flt_start_x])) { $_SESSION[ueb_flt_navi] = "start";}
-  if (isset($_GET[ueb_flt_back_x]))  { $_SESSION[ueb_flt_navi] = "back";}
-  if (isset($_GET[ueb_flt_for_x]))   { $_SESSION[ueb_flt_navi] = "for";}
-  if (isset($_GET[ueb_flt_end_x]))   { $_SESSION[ueb_flt_navi] = "end";}
+  if (isset($returnValue['ueb_flt_start_x'])) { $_SESSION['ueb_flt_navi'] = "start";}
+  if (isset($returnValue['ueb_flt_back_x']))  { $_SESSION['ueb_flt_navi'] = "back";}
+  if (isset($returnValue['ueb_flt_for_x']))   { $_SESSION['ueb_flt_navi'] = "for";}
+  if (isset($returnValue['ueb_flt_end_x']))   { $_SESSION['ueb_flt_navi'] = "end";}
 
 
 
   /**********************************************************************\
-    Überprüfe ob die Listendarstellung geaendert werden soll
+    ÃberprÃ¼fe ob die Listendarstellung geaendert werden soll
   \**********************************************************************/
 
 
@@ -1845,9 +1900,9 @@ define ("debug", false);
 
   Darstellung der Meldung ber die laufende Nummer
 \**********************************************************************/
-   if (( $_GET["ueb_fm"] == "ueb")){
+   if ((isset($returnValue["ueb_fm"])) and ( $returnValue["ueb_fm"] == "ueb")){
       $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
-      $query = "SELECT * FROM `".$conf_4f_tbl ["nachrichten"]."` where 00_lfd = ".$_GET["00_lfd"];
+      $query = "SELECT * FROM `".$conf_4f_tbl ["nachrichten"]."` where 00_lfd = ".$returnValue["00_lfd"];
       $result = $dbaccess->query_table ($query);
       $formdata = $result [1];
       $form = new nachrichten4fach ($formdata, "Stab_lesen", "");
@@ -1855,11 +1910,11 @@ define ("debug", false);
 
 
 
-  if ( !isset( $_GET["ueb_fm"])) {
+  if ( !isset( $returnValue["ueb_fm"])) {
 
-    if ( isset ($_GET["ueb_flt_submit"])) { // es soll was geändert werden
-      if ($_GET["ueb_flt_darstellung"] == "on") {$_SESSION["ueb_flt_darstellung"] = 1;
-        if (isset ($_GET["ueb_flt_anzahl"])) {$_SESSION["ueb_flt_anzahl"] = $_GET["ueb_flt_anzahl"]; }
+    if ( isset ($returnValue["ueb_flt_submit"])) { // es soll was geÃ¤ndert werden
+      if ($returnValue["ueb_flt_darstellung"] == "on") {$_SESSION["ueb_flt_darstellung"] = 1;
+        if (isset ($returnValue["ueb_flt_anzahl"])) {$_SESSION["ueb_flt_anzahl"] = $returnValue["ueb_flt_anzahl"]; }
         else {
           $_SESSION["ueb_flt_anzahl"] = 5;
         }

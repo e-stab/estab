@@ -2,23 +2,23 @@
 /*****************************************************************************\
    Datei: set_number_after_crash.php
 
-   benötigte Dateien: config.inc.php, dbcfg.inc.php, protokoll.php
+   benÃ¶tigte Dateien: config.inc.php, dbcfg.inc.php, protokoll.php
 
 
    Beschreibung:
 
-          Fällt estab aus wird mit papier weitergearbeitet. Ist estab dann wider
-          einsatzbereit muss es möglich sein den Nachrichtenzähler auf die nächste
+          FÃ¤llt estab aus wird mit papier weitergearbeitet. Ist estab dann wider
+          einsatzbereit muss es mÃ¶glich sein den NachrichtenzÃ¤hler auf die nÃ¤chste
           bis dahin aufgelaufene Nachrichtennummer zu inkrementieren.
           Dekrementieren ist nicht gestattet. Diese Aktion muss geloggt werden.
-          Das Ändern des Zählerstandes soll als weitere Option im Adminbereich
+          Das Ã„ndern des ZÃ¤hlerstandes soll als weitere Option im Adminbereich
           aufgelistet werden.
 
           First Page: Formular anzeigen und Counter inkrementiernen
 
           Second Page: Neue Counter Position setzten
 
-   (C) David Toboll FGr F/K Münster
+   (C) David Toboll FGr F/K MÃ¼nster
    mailto://d.toboll@thw-muenster.de
 \******************************************************************************/
 
@@ -27,13 +27,14 @@ include("../4fcfg/config.inc.php");
 include("../4fach/protokoll.php");
 
 //Parameter
-$page = $_GET['page'];
+if (isset($_GET['page'])) $page = $_GET['page'];
 if($page=='') $page = 1;
 $protokoll = false;
 
-//Datenbank Verbindung herstellen und überprüfen
+//Datenbank Verbindung herstellen und Ã¼berprÃ¼fen
  $db = mysql_connect($conf_4f_db ["server"],$conf_4f_db ["user"], $conf_4f_db ["password"]);
  $db_con_is_ok = mysql_ping  ($db);
+ mysql_query('SET NAMES utf8');
  mysql_select_db($conf_4f_db ["datenbank"])  ;
 
 
@@ -68,7 +69,7 @@ $result = mysql_query ("SELECT 04_richtung, 04_nummer FROM  $tabelle ORDER BY 00
 if($page == 1) {
 
 
-//Nachweisung Überprüfen
+//Nachweisung ÃœberprÃ¼fen
 if(Nachweisung == "gemeinsam")
          {
          ?>
@@ -144,7 +145,7 @@ if($page == 2){
 if(Nachweisung == "gemeinsam")
          {
          $ea_num = $_GET['ea_nummer_get'];
-         $inhalt1 = "eStab Systemmeldung.<br><br>Nachrichtenzähler wurde nach Systemausfall auf E/A".$ea_num." erhöht.";
+         $inhalt1 = "eStab Systemmeldung.<br><br>NachrichtenzÃ¤hler wurde nach Systemausfall auf E/A".$ea_num." erhÃ¶ht.";
          if($ea_num > $nummer[0]++)
                  {
                  $eintrag = "INSERT INTO $tabelle (04_richtung, 04_nummer, 12_inhalt)VALUES ('E', '$ea_num', $inhalt1)";
@@ -155,7 +156,7 @@ if(Nachweisung == "gemeinsam")
          else
                  {
                  echo "<b>Fehler:</b> Ihr eingegebner Wert (".$ea_num.") ist niedriger als der Mindeswert <u>".$nummer[0]++."</u>";
-                 echo"<br><br> <a href=set_number_after_crash.php>Zurück</a> ";
+                 echo"<br><br> <a href=set_number_after_crash.php>ZurÃ¼ck</a> ";
                  }
          }
 elseif(Nachweisung == "getrennt")
@@ -164,7 +165,7 @@ elseif(Nachweisung == "getrennt")
          $a_num = $_GET['a_nummer_get'];
          $enum = $nummer[$e_nummer]+1;
          $anum = $nummer[$a_nummer]+1;
-         $inhalt = "eStab Systemmeldung.<br><br>Nachrichtenzähler wurde nach Systemausfall auf E".$e_num."/A".$a_num." erhöht.";
+         $inhalt = "eStab Systemmeldung.<br><br>NachrichtenzÃ¤hler wurde nach Systemausfall auf E".$e_num."/A".$a_num." erhÃ¶ht.";
          if($e_num > $enum  && $a_num > $anum )
                  {
                  $eintrag = "INSERT INTO $tabelle (04_richtung, 04_nummer, 12_inhalt, 15_quitdatum, 15_quitzeichen) VALUES ('E', '$e_num', '$inhalt', now(), 'xxx')";
@@ -182,7 +183,7 @@ elseif(Nachweisung == "getrennt")
                  if($e_num <= $enum)   { echo "<b>Fehler:</b> Ihr eingegebner Eingangs-Wert (".$e_num.") ist niedriger als der Mindeswert <u>".$enum."</u><br>"; }
                  if($a_num <= $anum) { echo "<b>Fehler:</b> Ihr eingegebner Ausgangs-Wert (".$a_num.") ist niedriger als der Mindeswert <u>".$anum."</u>"; }
 
-                 echo"<br><br> <a href=set_number_after_crash.php>Zurück</a> ";
+                 echo"<br><br> <a href=set_number_after_crash.php>ZurÃ¼ck</a> ";
                  }
          }
 
@@ -200,6 +201,6 @@ if($protokoll)
 
 }
 
-echo "<br><br><br><hr><a href=admin.php>Zurück zur Administrations Übersicht</a>";
+echo "<br><br><br><hr><a href=admin.php>ZurÃ¼ck zur Administrations Ãœbersicht</a>";
 
 ?>

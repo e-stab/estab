@@ -12,7 +12,7 @@
                 "vis"   => false,
                 "link"  => "./make_conf.php?task=quick_values",
                 "menue" => "Schnellstart Einstellungen",
-                "descr" => "Vorgaben für den Schnellstart"),
+                "descr" => "Vorgaben f&uuml;r den Schnellstart"),
 
     array ("acl" => "",
                 "vis" => false,
@@ -47,8 +47,8 @@
     array ("acl" => "",
                 "vis" => true,
                 "link"  => "./set_number_after_crash.php",
-                "menue" => "Nachrichtennummerzähler setzen",
-                "descr" => "Nachrichtenzähler nach Systemausfall erhöhen."),
+                "menue" => "Nachrichtennummerz&auml;hler setzen",
+                "descr" => "Nachrichtenz&auml;hler nach Systemausfall erh&ouml;hen."),
 
     array ("acl" => "",
                 "vis" => true,
@@ -72,7 +72,7 @@
                 "vis" => true,
                 "link"  => "../4fbak/backup.php?anz=50",
                 "menue" => "Grafiken erzeugen",
-                "descr" => "Es wird versucht 50 Nachrichten in Grafiken zu konvertieren. Gegebenenfalls muß der Prozess mehrmals gestartet werden."),
+                "descr" => "Es wird versucht 50 Nachrichten in Grafiken zu konvertieren. Gegebenenfalls mu&szlig; der Prozess mehrmals gestartet werden."),
 
     array ("acl" => "",
                 "vis" => true,
@@ -84,7 +84,7 @@
                 "vis" => true,
                 "link"  => "./make_conf.php?task=datenbank",
                 "menue" => "Datenbankparameter eingeben",
-                "descr" => "Anlegen der Datenbankparameter.<br>Serveradresse, Datenbankbenutzer, Tabellenpräfix usw."),
+                "descr" => "Anlegen der Datenbankparameter.<br>Serveradresse, Datenbankbenutzer, Tabellenpr&auml;fix usw."),
 
     array ("acl" => "",
                 "vis" => true,

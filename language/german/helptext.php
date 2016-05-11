@@ -26,7 +26,7 @@
     switch ($errorkind){
       case '01_medium':
         $titel = 'Aufnahmevermerk';
-        $info  = '<b><big>Übermittlungsmedium:</big></b><br>Ein Wert <b>muss</b> angegeben werden.<br><table><tr><td><b>Fe</b></td><td> - Fernsprecher<br></td></tr><tr><td><b>Fu</b></td><td> - Funk<br></td></tr><tr><td><b>Me</b></td><td> - Melder<br></td></tr><tr><td><b>Fax</b></td><td> - Telefaksimile<br></td></tr><tr><td><b>@</b></td><td> - Datenübertragung aller Art (HTTP, FTP, SMTP...)</td></tr></table>';
+        $info  = '<b><big>Ãœbermittlungsmedium:</big></b><br>Ein Wert <b>muss</b> angegeben werden.<br><table><tr><td><b>Fe</b></td><td> - Fernsprecher<br></td></tr><tr><td><b>Fu</b></td><td> - Funk<br></td></tr><tr><td><b>Me</b></td><td> - Melder<br></td></tr><tr><td><b>Fax</b></td><td> - Telefaksimile<br></td></tr><tr><td><b>@</b></td><td> - DatenÃ¼bertragung aller Art (HTTP, FTP, SMTP...)</td></tr></table>';
       break;
       case '01_datum':
       case '02_zeit':
@@ -51,7 +51,7 @@
            $titel = 'Quittung';
          break;
         }
-       $info  = '<b><big>Datums/Zeitformat:</big></b><br><b>keine Eingabe</b> - es wird automatisch die Serverzeit (links) eingetragen.<br><b>hhmm</b> - Stunde und Minute<br><b>TThhmm</b> - Tag, Stunde und Minute kurze taktische Zeit.<br><b>TThhmmMMMJJJJ</b> - Tag, Stunde, Minute, Monat und jahr<br>vollständige taktische Zeit.';
+       $info  = '<b><big>Datums/Zeitformat:</big></b><br><b>keine Eingabe</b> - es wird automatisch die Serverzeit (links) eingetragen.<br><b>hhmm</b> - Stunde und Minute<br><b>TThhmm</b> - Tag, Stunde und Minute kurze taktische Zeit.<br><b>TThhmmMMMJJJJ</b> - Tag, Stunde, Minute, Monat und jahr<br>vollstÃ¤ndige taktische Zeit.';
       break;
 
       case '01_zeichen':
@@ -78,7 +78,7 @@
 
       case '10_anschrift':
         $titel = 'Anschrift';
-        $info  = 'Ziel für diese Meldung.';
+        $info  = 'Ziel fÃ¼r diese Meldung.';
       break;
 
       case '12_inhalt':

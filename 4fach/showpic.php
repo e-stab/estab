@@ -47,12 +47,12 @@ define ("debug",false);
 
 
   function loadpic ($filename){
-    // Datei �ffnen
+    // Datei Ã¶ffnen
     $imgtype = getimagetypebyfilename( $filename );
     if (debug) {echo "showpic.php 37 Imagetype===".$imgtype."<br>";}
     switch ($imgtype){
        case "IMAGETYPE_GIF":   $im = imagecreatefromgif  ( $filename );      break;
-       case "IMAGETYPE_JPEG":  $im = ImageCreateFromjpeg ( $filename ); /* Versuch, Datei zu �ffnen */   break;
+       case "IMAGETYPE_JPEG":  $im = ImageCreateFromjpeg ( $filename ); /* Versuch, Datei zu Ã¶ffnen */   break;
        case "IMAGETYPE_PNG":   $im = ImageCreateFrompng  ( $filename );      break;
        case "IMAGETYPE_SWF": break;
        case "IMAGETYPE_PSD": break;
@@ -69,13 +69,13 @@ define ("debug",false);
        case "IMAGETYPE_XBM":  $im = imagecreatefromxbm ( $filename );      break;
     }
     if (debug) {echo "showpic.php 56 im ===".$im."<br>";}
-    if (!$im) {                            /* Pr�fen, ob fehlgeschlagen */
+    if (!$im) {                            /* PrÃ¼fen, ob fehlgeschlagen */
         $im = ImageCreate (150, 30);       /* Erzeugen eines leeren Bildes */
         $bgc = ImageColorAllocate ($im, 255, 255, 255);
         $tc  = ImageColorAllocate ($im, 0, 0, 0);
         ImageFilledRectangle ($im, 0, 0, 150, 30, $bgc);
         /* Ausgabe einer Fehlermeldung */
-        ImageString($im, 1, 5, 5, "Fehler beim �ffnen von: $imgname", $tc);
+        ImageString($im, 1, 5, 5, "Fehler beim Ãffnen von: $imgname", $tc);
     }
     return $im;
   } // loadpic ($filename){
@@ -87,7 +87,7 @@ define ("debug",false);
      // lade die Quelldatei
     if (debug) echo "showpic.php 71 <br>";
     $src = loadpic ($_GET ["file"]);
-     // Breite und H�he der Quelle
+     // Breite und HÃ¶he der Quelle
      // Ist die Quelle im Hochformat?
 
 

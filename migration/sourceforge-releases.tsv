@@ -1,0 +1,4 @@
+version	released_utc	archive_bytes	md5	sha256	source_url	snapshot_policy
+0.9.26b	2016-05-11T14:57:17Z	4970578	ac705dcc82209de67579ff64ce0b1780	fcedda942ff783141a75c806dfc89a2045ad74929d015185959518339de5c81d	https://sourceforge.net/projects/estab/files/eStab_0.9.x/ver0.9.26b.zip/download	kats tree without macOS .DS_Store and AppleDouble metadata
+0.9.26c	2018-07-02T05:51:26Z	4970895	ea7eed615a9d508c83c6865237d2d5e8	8376c58cfd5e57c3a9c24f56a2148088afbb98eb425fc2eb166f815cdbf06041	https://sourceforge.net/projects/estab/files/eStab_0.9.x/ver0.9.26c.zip/download	kats tree without macOS .DS_Store and AppleDouble metadata
+

@@ -1,13 +1,24 @@
 <?php
+include ("config.inc.php");
 
+    echo "<FORM action=\"../4fadm/admin.php\" method=\"get\" target=\"_self\">\n";
+    echo "<fieldset>";
+    echo "<legend>Aktion:</legend>\n";
+    echo "<table border=\"1\" cellpadding=\"5\" cellspacing=\"0\" bgcolor=$color_data_table>\n";
+    echo "<tr>\n";
+    echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/ok.gif\"></td>\n";
+    echo "</td></tr>\n";
+    echo "</table>\n";
+    echo "</fieldset>";
+    echo "<br>";
+  
     echo "<big><big><big> Parameter der config.inc.php</big></big></big>";
     echo date("l dS of F Y h:i:s A");
 
-include ("config.inc.php");
 
     echo "<table>";
     echo "<tbody>";
-
+  
     if ($conf_4f["sounds"]) {
       echo "<tr><td>"; echo " conf_4f[sounds]"; echo "</td><td>"; echo "TRUE" ; echo "</td></tr>";
     } else {
@@ -43,4 +54,16 @@ include ("config.inc.php");
     echo "<tr><td>"; echo " conf_4f_liste [\"inhalt\"]    ="; echo "</td><td>"; echo $conf_4f_liste ["inhalt"]; echo "</td></tr>";
     echo "</tbody>";
     echo "</table>";
+	echo "<br>";
+	
+ echo "<FORM action=\"../4fadm/admin.php\" method=\"get\" target=\"_self\">\n";
+    echo "<fieldset>";
+    echo "<legend>Aktion:</legend>\n";
+    echo "<table border=\"1\" cellpadding=\"5\" cellspacing=\"0\" bgcolor=$color_data_table>\n";
+    echo "<tr>\n";
+    echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/ok.gif\"></td>\n";
+    echo "</td></tr>\n";
+    echo "</table>\n";
+    echo "</fieldset>";
+    echo "<br>";
 ?>

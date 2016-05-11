@@ -88,3 +88,21 @@ Der SVN-Stand ist nicht der letzte veröffentlichte Programmstand. SourceForge
 veröffentlichte später die Archive `ver0.9.26b.zip` und `ver0.9.26c.zip`. Diese
 werden als klar gekennzeichnete Snapshot-Commits mit Archivprüfsummen auf den
 SVN-Verlauf gesetzt. Es wird keine nicht belegte Zwischenhistorie erfunden.
+
+Die Download-Zeitstempel sowie MD5- und SHA-256-Prüfsummen stehen in
+`sourceforge-releases.tsv`. `unzip -t` prüfte beide Archive vollständig. Für die
+Git-Snapshots wird jeweils der enthaltene `kats`-Baum übernommen; rein
+betriebssystembezogene `.DS_Store`- und AppleDouble-Dateien (`._*` und der
+äußere `__MACOSX`-Baum) werden ausgelassen. Fachdateien, IDE-Metadaten und
+historische Drittkomponenten bleiben im getaggten Snapshot unverändert.
+Der in 0.9.26b zerlegt (NFD) geschriebene Dateiname
+`ubltg/Übungsmodul eStab.pap` wird wie von Git auf macOS vorgesehen in die
+portable NFC-Form normalisiert; der Dateiinhalt bleibt identisch. 0.9.26c
+lieferte denselben Namen bereits in NFC.
+
+Ein Snapshot lässt sich gegen ein entpacktes Archiv prüfen, zum Beispiel:
+
+```console
+python3 migration/verify_release_snapshot.py /tmp/ver0.9.26c/kats . \
+  --ref ver0.9.26c
+```

@@ -22,7 +22,7 @@ class admmenue {
     echo "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0 Transitional//EN\">";
     echo "<html>";
     echo "<head>";
-    echo "  <meta http-equiv=\"CONTENT-TYPE\" content=\"text/html; charset=iso\">";
+    echo "  <meta http-equiv=\"CONTENT-TYPE\" content=\"text/html; charset=utf8\">";
     echo "  <title>Administrative Massnahme</title>";
     echo "  <meta name=\"GENERATOR\" content=\"OpenOffice.org 2.0  (Linux)\">";
     echo "  <meta name=\"AUTHOR\" content=\"Hajo Landmesser\">";
@@ -43,7 +43,7 @@ class admmenue {
   }
 
   function head (){
-     // Überschrift
+     // Ãœberschrift
    echo "<p style=\"border: 4px double rgb(216, 253, 2);
                 padding: 40px; background-color: rgb(128, 128, 64);
                 color: rgb(216, 253, 2);

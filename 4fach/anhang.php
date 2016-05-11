@@ -13,6 +13,8 @@
 /*****************************************************************************\
     Auswahl einer Anhangdatei
     Datei auf den Server hochladen
+
+20160510 - store_formdata von $_GET auf $_POST umgestellt. 
 ******************************************************************************/
 
 include ("./upload_class.php");
@@ -24,10 +26,10 @@ class fileupload extends file_upload {
   var $fs_comment;      // Beschreibung
   var $fs_shortname;    // Kuerzel
   var $fs_timestamp;    // Zeitstempel
-  var $fs_nextfilename; // N�chster Dateiname
+  var $fs_nextfilename; // NÃ¤chster Dateiname
 
   var $ff_savename ;    // Name der gespeicherten Datei g.g. Darstellung im Menue
-  var $ff_filename ;    // Urspr�nglicher Dateiname
+  var $ff_filename ;    // UrsprÃ¼nglicher Dateiname
   var $ff_comment  ;    // Beschreibung Faxkopf
   var $ff_timestamp;    // Zeitstempel
   var $ff_kuerzel  ;    // Kuerzel des Fm
@@ -43,10 +45,10 @@ class fileupload extends file_upload {
            8 : reserviert
 
     Beschreibung:
-      Wenn diese Routine aufgerufen wird m�chte man hier einen freien
+      Wenn diese Routine aufgerufen wird mÃ¶chte man hier einen freien
       Dateinamen. Das bedeutet :
-      1. Alle Reservierungen in der Datenbank f�r diese Session_ID k�nnen
-         gel�scht werden. d.h. erstmal alle Datenbankreservierungen l�schen.
+      1. Alle Reservierungen in der Datenbank fÃ¼r diese Session_ID kÃ¶nnen
+         gelÃ¶scht werden. d.h. erstmal alle Datenbankreservierungen lÃ¶schen.
       2.
 
   \***************************************************************************/
@@ -60,7 +62,7 @@ class fileupload extends file_upload {
                          $conf_4f_tbl ["anhang"],
                          $conf_4f_db  ["user"],
                          $conf_4f_db  ["password"]);
-      //setze alte Reservierungen auf status = 4  f�r eigene Session ID
+      //setze alte Reservierungen auf status = 4  fÃ¼r eigene Session ID
     $this->loesche_reservierungen ($db, $conf_4f_tbl ["anhang"]);
       // Dateinamen aus abgebrochene Reservierrungen
     $frei_res = $this->res_abgebr ($db, $conf_4f_tbl ["anhang"]);
@@ -68,7 +70,7 @@ class fileupload extends file_upload {
     if ($frei_res) {
       $this->fs_nextfilename = $frei_res;
     }else{
-      $this->next_filename ($db, $conf_4f_tbl ["anhang"], $conf_4f[hoheit]);
+      $this->next_filename ($db, $conf_4f_tbl ['anhang'], $conf_4f['hoheit']);
     }
   }
 
@@ -135,7 +137,7 @@ class fileupload extends file_upload {
               WHERE ".$conf_4f_tbl ["anhang"].".filename =\"".$filename."\";";
     $result = $db->query_table ($query);
     if ($result != ""){
-      $status_abfrage = $result [1][status];}
+      $status_abfrage = $result [1]['status'];}
     else {
       $status_abfrage = NULL;
     }
@@ -167,7 +169,7 @@ class fileupload extends file_upload {
       // Abgebrochene Uploads
     $query = "SELECT  min(filename) as filename FROM ".$tbl." WHERE `status` = 4 GROUP BY filename";
     $result = $db->query_table ($query);
-    if ($result != "") {return ($result[1][filename]);}
+    if ($result != "") {return ($result[1]['filename']);}
     else {
       return ("");
     }
@@ -180,19 +182,19 @@ class fileupload extends file_upload {
 
   \***************************************************************************/
   function next_filename ($db, $tbl, $hoheit){
-      // Dateiname mit der h�chsten Zahl
+      // Dateiname mit der hÃ¶chsten Zahl
     $query = "SELECT MAX(filename) as filename,status FROM ".$tbl." WHERE 1 GROUP BY `status` ";
 //echo "QUERY==="; var_dump($query); echo "<br>";
     $result = $db->query_table ($query);
 //echo "RESULT==="; var_dump($result); echo "<br>";
 
     if ($result != "") {
-      if ( ($result[2] != NULL) && ($result [2][filename] > $result [1][filename])){
-        $filename = $result [2][filename];
-        $status   = $result [2][status];
+      if ( (isset($result[2])) and ( ($result[2] != NULL) && ($result [2]['filename'] > $result [1]['filename']))){
+        $filename = $result [2]['filename'];
+        $status   = $result [2]['status'];
       } else {
-        $filename = $result [1][filename];
-        $status   = $result [1][status];
+        $filename = $result [1]['filename'];
+        $status   = $result [1]['status'];
     }
     } else {
       $filename = "";
@@ -204,6 +206,7 @@ class fileupload extends file_upload {
       $hoheitlen = strlen ( $hoheit );
       $filelen = strlen ($filename);
       $filehoheit = substr ( $filename, 0, $hoheitlen );
+	  $highest = 0;
       if (strtoupper ( $hoheit ) == strtoupper ( $filehoheit ) ) {
         $nummer = substr ( $filename, $hoheitlen, ($filelen - $hoheitlen) );
         if ($nummer > $highest){ $highest = $nummer; }
@@ -219,7 +222,7 @@ class fileupload extends file_upload {
     for ( $i=1; $i<= ($this->filenamezero-$expo); $i++ ){
       $fillzero .= "0";
     }
-      // Filename == hoheit + Nullen + N�chste Zahl
+      // Filename == hoheit + Nullen + NÃ¤chste Zahl
     $this->fs_nextfilename = $hoheit.$fillzero.$nextnum ;
 //echo "FS_NEXTFILENAME==="; var_dump($this->fs_nextfilename); echo "<br>";
   }
@@ -234,7 +237,7 @@ class fileupload extends file_upload {
                                 2 -
                                 1 - gesetzt
     Beschreibung:
-      liest und �ndert die Datenbankeintr�ge f�r die Dateinamen.
+      liest und Ã¤ndert die DatenbankeintrÃ¤ge fÃ¼r die Dateinamen.
 
   \***************************************************************************/
   function change_status_in_db ($change, $filename, $status){
@@ -292,7 +295,7 @@ class fileupload extends file_upload {
     if ($result == ""){
       $status = "";
     }else {
-      $status =  $result [1][status];
+      $status =  $result [1]['status'];
     }
       // status == 8 ==> aktualisieren
     if ($status == "8") {
@@ -310,12 +313,12 @@ class fileupload extends file_upload {
     $result = $db->query_table_iu ($query);
 
     protokolleintrag ("Anhangdaten speichern",
-                              $_SESSION[vStab_benutzer].";".
-                              $_SESSION[vStab_kuerzel].";".
-                              $_SESSION[vStab_funktion].";".
-                              $_SESSION[vStab_rolle].";".
+                              $_SESSION['vStab_benutzer'].";".
+                              $_SESSION['vStab_kuerzel'].";".
+                              $_SESSION['vStab_funktion'].";".
+                              $_SESSION['vStab_rolle'].";".
                               session_id().";".
-                              $_SERVER[REMOTE_ADDR].";".
+                              $_SERVER['REMOTE_ADDR'].";".
                               $data["filename"].";".
                               $data["org_filename"].";".
                               $data["time"]
@@ -347,8 +350,8 @@ class fileupload extends file_upload {
   Funktion:  scan4nextfilename ()
   Parameter:
   Beschreibung:
-    1. Pr�fe kausalit�t Dateien und Datenbank
-    2. Ziehe n�chsten Wert aus der Datenbank
+    1. PrÃ¼fe kausalitÃ¤t Dateien und Datenbank
+    2. Ziehe nÃ¤chsten Wert aus der Datenbank
     3. Setze Status in der Datenbank auf Vergeben.
 
 \*****************************************************************************/
@@ -370,7 +373,7 @@ class fileupload extends file_upload {
     for ( $i=1; $i<= ($this->filenamezero-$expo); $i++ ){
       $fillzero .= "0";
     }
-      // Filename == hoheit + Nullen + N�chste Zahl
+      // Filename == hoheit + Nullen + NÃ¤chste Zahl
     $this->fs_nextfilename = $hoheit.$fillzero.$nextnum ;
   } // scan4nextfilename
 
@@ -422,8 +425,8 @@ class fileupload extends file_upload {
   function pre_html($titel){
     echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
     echo "<html>\n";
-    echo "<head>\n";
-    echo "<meta content=\"text/html; charset=ISO-8859-1\" http-equiv=\"content-type\">\n";
+    echo "<head>";
+    echo "<meta content=\"text/html; charset=UTF-8\" http-equiv=\"content-type\">\n";
     echo "<title>$titel</title>";
     echo "</head>";
     echo "<body>";
@@ -455,6 +458,7 @@ class fileupload extends file_upload {
     echo "<tr>\n" ;
     echo "  <td style=\"width: 167px;\">Beschreibung</td>\n";
     echo "  <td style=\"width: 769px;\">";
+	if (!isset($predata["comment"])) { $predata["comment"] = ""; }
     echo "   <input style=\"font-size:18px; font-weight:900;\" maxlength=\"255\" size=\"80\" name=\"fs_comment\" value=\"".$predata["comment"]."\"></td>\n";
     echo "</tr>\n";
     echo "<tr>\n";
@@ -526,22 +530,22 @@ if ( debug == true ){
 
 /*****************************************************************************\
 
-100 - Anhangmen� + Anhange zur Auswahl
-  Im Hauptmen� [Anh�nge] geklickt
+100 - AnhangmenÃ¼ + Anhange zur Auswahl
+  Im HauptmenÃ¼ [AnhÃ¤nge] geklickt
   GET =  ["fm_anhang_x"]
      ==> Liste anzeigen mit Auswahl oder Uploadbutton
   101 - absenden
   102 - abbrechen
   103 - upload
 
-101 - Aufruf Nachrichtenvordruck mit �bernahme altdaten
+101 - Aufruf Nachrichtenvordruck mit Ã¼bernahme altdaten
 
-103 - Datei hochladen Men�
-  Im Anhangmen� [Upload] geklickt
+103 - Datei hochladen MenÃ¼
+  Im AnhangmenÃ¼ [Upload] geklickt
   GET =  ["anhang"]=>  string(10) "ah_auswahl"
          ["ah_auswahl_x"]=>  string(2) "19"
          ["ah_auswahl_y"]=>  string(1) "6" } #
-     ==> Vordruck mit Anhang �ffnen
+     ==> Vordruck mit Anhang Ã¶ffnen
   111 - absenden
   112 - abbrechen
 
@@ -564,7 +568,7 @@ if ( debug == true ){
     $keys = array_keys ($_GET);
     $ahkey = array ();
     foreach ($keys as $key){
-      list($lfd, $num) = split("_", $key);
+      list($lfd, $num) = explode("_", $key);
       if ($lfd == "lfd") { $ahkey [] = "lfd_".$num;}
     }
 
@@ -603,13 +607,15 @@ if ( debug == true ){
        )
       ){
 
-    if ( debug == true ){ echo "### 417 anhang.php Vordruck aufrufen mit Daten f�llen ";  echo "<br>\n";}
+    if ( debug == true ){ echo "### 417 anhang.php Vordruck aufrufen mit Daten fÃ¼llen ";  echo "<br>\n";}
 
     $keys = array_keys ($_GET);
     $ahkey = array ();
     foreach ($keys as $key){
-      list($lfd, $num) = split("_", $key);
-      if ($lfd == "lfd") { $ahkey [] = "lfd_".$num;}
+	  if (preg_match('/_/', $key) > 0 )	{ 
+	    list($lfd, $num) = preg_split('/_/', $key, 2); 
+	    if ($lfd == "lfd") { $ahkey [] = "lfd_".$num;}
+	  }
     }
     $anhang = "";
     $inhalt = "\n\r";
@@ -665,7 +671,7 @@ require_once ("./db_operation.php");  // Datenbank operationen
 
   /**********************************************************************\
     Funktion: readFiles_from_db ()
-    lese die Datens�tze aus der Datenbank
+    lese die DatensÃ¤tze aus der Datenbank
     benoetigte Datei:
   \**********************************************************************/
   function readFiles_from_db(){
@@ -680,7 +686,7 @@ require_once ("./db_operation.php");  // Datenbank operationen
 
   /**********************************************************************\
     Funktion: readFiles_from_db ()
-    lese die Datens�tze aus der Datenbank
+    lese die DatensÃ¤tze aus der Datenbank
     benoetigte Datei:
   \**********************************************************************/
   function readrecord_from_db($anhangname){
@@ -735,7 +741,7 @@ require_once ("./db_operation.php");  // Datenbank operationen
         echo "</fieldset>\n";
 
         echo "<fieldset>";
-    echo "<legend>Liste der verf�gbaren Dateien</legend>\n";
+    echo "<legend>Liste der verfÃ¼gbaren Dateien</legend>\n";
     echo "<table border=\"1\" cellspacing=\"2\" cellpeding=\"3\" bgcolor=\"#E0E0E0\">\n";
 
     $files = readDirectory ();
@@ -755,22 +761,22 @@ require_once ("./db_operation.php");  // Datenbank operationen
         echo "<tr>\n";
           // checkbox
         echo "<td style=\"text-align:center;\">\n";
-        echo "<input type=\"checkbox\" name=\"lfd_".$i."\" value=\"".$file[filename].".".$file["fileext"]."\">\n";
+        echo "<input type=\"checkbox\" name=\"lfd_".$i."\" value=\"".$file['filename'].".".$file["fileext"]."\">\n";
         echo "</td>\n";
           // Preview, if posible
         echo "<td>\n";
         echo "<a href=\"".$conf_4f ["ablage_uri"]."/".$file["filename"].".".$file["fileext"]."\" target=\"_blank\">\n";
-        echo "<img  border=\"0\" alt=\"Anhangdatei\" src=\"".$conf_web ["pre_path"]."4fach/showpic.php?file=".
+        echo "<img  border=\"0\" alt=\"Anhangdatei\" src=\"/".$conf_web ["pre_path"]."4fach/showpic.php?file=".
             $conf_4f ["ablage_dir"]."/".$file["filename"].".".$file["fileext"]."&width=250\"></a></td>\n";
         echo "</td>\n";
           // filename
-        echo "<td style=\"text-align:center;\"> <a href=\"".$conf_4f ["ablage_uri"]."/".$file[filename].".".$file["fileext"]."\" target=\"_blank\">$file[filename]</a></td>\n";
+        echo "<td style=\"text-align:center;\"> <a href=\"".$conf_4f ["ablage_uri"]."/".$file['filename'].".".$file["fileext"]."\" target=\"_blank\">".$file['filename']."</a></td>\n";
           // commend belong to the attechmant
-        echo "<td> <a href=\"".$conf_4f ["ablage_uri"]."/".$file[filename].".".$file["fileext"]."\" target=\"_blank\">$file[comment]</a></td>\n";
+        echo "<td> <a href=\"".$conf_4f ["ablage_uri"]."/".$file['filename'].".".$file["fileext"]."\" target=\"_blank\">".$file['comment']."</a></td>\n";
           // org Dateiname
-        echo "<td> <a href=\"".$conf_4f ["ablage_uri"]."/".$file[filename].".".$file["fileext"]."\" target=\"_blank\">localh$file[org_filename]</a></td>\n";
+        echo "<td> <a href=\"".$conf_4f ["ablage_uri"]."/".$file['filename'].".".$file["fileext"]."\" target=\"_blank\">".$file['org_filename']."</a></td>\n";
           // time when the attetchment was edit
-        echo "<td> <a href=\"".$conf_4f ["ablage_uri"]."/".$file[filename].".".$file["fileext"]."\" target=\"_blank\">$file[date]</a></td>\n";
+        echo "<td> <a href=\"".$conf_4f ["ablage_uri"]."/".$file['filename'].".".$file["fileext"]."\" target=\"_blank\">".$file['date']."</a></td>\n";
         echo "</tr>\n";
         $i++;
       }
@@ -781,7 +787,7 @@ require_once ("./db_operation.php");  // Datenbank operationen
   }
 
 /***********************************************************************\
-   Steuerung �ber ein Sessioncookie
+   Steuerung Ã¼ber ein Sessioncookie
   anhang_menue();
      $_SESSION ["UPLOAD"] ==
         "fileselect" :
@@ -813,65 +819,71 @@ require_once ("./db_operation.php");  // Datenbank operationen
 
   \***************************************************************************/
   function store_formdata () {
-    $_SESSION["01_medium"]       = $_GET["01_medium"];
-    $_SESSION["01_datum"]        = $_GET["01_datum"];
-    $_SESSION["01_zeichen"]      = $_GET["01_zeichen"];
-    $_SESSION["05_gegenstelle"]  = $_GET["05_gegenstelle"];
-    $_SESSION["06_befweg"]       = $_GET["06_befweg"];
-    $_SESSION["06_befwegausw"]   = $_GET["06_befwegausw"];
-    $_SESSION["07_durchspruch"]  = $_GET["07_durchspruch"];
-    $_SESSION["08_befhinweis"]   = $_GET["08_befhinweis"];
-    $_SESSION["08_befhinwausw"]  = $_GET["08_befhinwausw"];
-    $_SESSION["09_vorrangstufe"] = $_GET["09_vorrangstufe"];
-    $_SESSION["10_anschrift"]    = $_GET["10_anschrift"];
-    $_SESSION["11_gesprnotiz"]   = $_GET["11_gesprnotiz"];
-    $_SESSION["12_anhang"]       = $_GET["12_anhang"];
-    $_SESSION["12_inhalt"]       = $_GET["12_inhalt"];
-    $_SESSION["12_abfzeit"]      = $_GET["12_abfzeit"];
-    $_SESSION["13_abseinheit"]   = $_GET["13_abseinheit"];
-    $_SESSION["14_zeichen"]      = $_GET["14_zeichen"];
-    $_SESSION["14_funktion"]     = $_GET["14_funktion"];
-    $_SESSION["15_quitdatum"]    = $_GET["15_quitdatum"];
-    $_SESSION["15_quitzeichen"]  = $_GET["15_quitzeichen"];
-    $_SESSION["16_gncopy"]       = $_GET["16_gncopy"];
+  	 if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big>store_formdata</big></big><br>";  }
+    $_SESSION["01_medium"]       = $_POST["01_medium"];
+    $_SESSION["01_datum"]        = $_POST["01_datum"];
+    $_SESSION["01_zeichen"]      = $_POST["01_zeichen"];
+    $_SESSION["05_gegenstelle"]  = $_POST["05_gegenstelle"];
+    $_SESSION["06_befweg"]       = $_POST["06_befweg"];
+    $_SESSION["06_befwegausw"]   = $_POST["06_befwegausw"];
+    $_SESSION["07_durchspruch"]  = $_POST["07_durchspruch"];
+    $_SESSION["08_befhinweis"]   = $_POST["08_befhinweis"];
+    $_SESSION["08_befhinwausw"]  = $_POST["08_befhinwausw"];
+    $_SESSION["09_vorrangstufe"] = $_POST["09_vorrangstufe"];
+    $_SESSION["10_anschrift"]    = $_POST["10_anschrift"];
+    $_SESSION["11_gesprnotiz"]   = $_POST["11_gesprnotiz"];
+    $_SESSION["12_anhang"]       = $_POST["12_anhang"];
+    $_SESSION["12_inhalt"]       = $_POST["12_inhalt"];
+    $_SESSION["12_abfzeit"]      = $_POST["12_abfzeit"];
+    $_SESSION["13_abseinheit"]   = $_POST["13_abseinheit"];
+    $_SESSION["14_zeichen"]      = $_POST["14_zeichen"];
+    $_SESSION["14_funktion"]     = $_POST["14_funktion"];
+    $_SESSION["15_quitdatum"]    = $_POST["15_quitdatum"];
+    $_SESSION["15_quitzeichen"]  = $_POST["15_quitzeichen"];
+    $_SESSION["16_gncopy"]       = $_POST["16_gncopy"];
     for ($m=1; $m<=5; $m++){
       for ($n=1; $n<=4; $n++){
-        if (isset ($_GET["16_".$m.$n])) $_SESSION["16_".$m.$n] = $_GET["16_".$m.$n] ;
+        if (isset ($_POST["16_".$m.$n])) $_SESSION["16_".$m.$n] = $_POST["16_".$m.$n] ;
 //        echo "key==="."16_".$m.$n."  SESSION=====".$_SESSION["16_".$m.$n]."<br>";
       }
     }
-    $_SESSION["17_vermerke"] = $_GET["17_vermerke"];
+    $_SESSION["17_vermerke"] = $_POST["17_vermerke"];
   }
 
   /***************************************************************************\
   \***************************************************************************/
   function restore_formdata () {
     require ("../4fcfg/fkt_rolle.inc.php");
-
-    if (isset ($_SESSION["01_medium"])){       $data["01_medium"]       = $_SESSION["01_medium"];       unset ($_SESSION["01_medium"]);  }
-    if (isset ($_SESSION["01_datum"])){        $data["01_datum"]        = $_SESSION["01_datum"];        unset ($_SESSION["01_datum"]);  }
-    if (isset ($_SESSION["01_zeichen"])){      $data["01_zeichen"]      = $_SESSION["01_zeichen"];      unset ($_SESSION["01_zeichen"]);  }
-    if (isset ($_SESSION["05_gegenstelle"])){  $data["05_gegenstelle"]  = $_SESSION["05_gegenstelle"];  unset ($_SESSION["05_gegenstelle"]);  }
-    if (isset ($_SESSION["06_befweg"])){       $data["06_befweg"]       = $_SESSION["06_befweg"];       unset ($_SESSION["06_befweg"]);  }
-    if (isset ($_SESSION["06_befwegausw"])){   $data["06_befwegausw"]   = $_SESSION["06_befwegausw"];   unset ($_SESSION["06_befwegausw"]);  }
-    if (isset ($_SESSION["07_durchspruch"])){  $data["07_durchspruch"]  = $_SESSION["07_durchspruch"];  unset ($_SESSION["07_durchspruch"]);  }
-    if (isset ($_SESSION["08_befhinweis"])){   $data["08_befhinweis"]   = $_SESSION["08_befhinweis"];   unset ($_SESSION["08_befhinweis"]);  }
-    if (isset ($_SESSION["08_befhinwausw"])){  $data["08_befhinwausw"]  = $_SESSION["08_befhinwausw"];  unset ($_SESSION["08_befhinwausw"]);  }
-    if (isset ($_SESSION["09_vorrangstufe"])){ $data["09_vorrangstufe"] = $_SESSION["09_vorrangstufe"]; unset ($_SESSION["09_vorrangstufe"]);  }
-    if (isset ($_SESSION["10_anschrift"])){    $data["10_anschrift"]    = $_SESSION["10_anschrift"];    unset ($_SESSION["10_anschrift"]);  }
-    if (isset ($_SESSION["11_gesprnotiz"])){   $data["11_gesprnotiz"]   = $_SESSION["11_gesprnotiz"];   unset ($_SESSION["11_gesprnotiz"]);  }
-    if (isset ($_SESSION["12_anhang"])){       $data["12_anhang"]       = $_SESSION["12_anhang"];       unset ($_SESSION["12_anhang"]);  }
-    if (isset ($_SESSION["12_inhalt"])){       $data["12_inhalt"]       = $_SESSION["12_inhalt"];       unset ($_SESSION["12_inhalt"]);  }
-    if (isset ($_SESSION["12_abfzeit"])){      $data["12_abfzeit"]      = $_SESSION["12_abfzeit"];      unset ($_SESSION["12_abfzeit"]);  }
-    if (isset ($_SESSION["13_abseinheit"])){   $data["13_abseinheit"]   = $_SESSION["13_abseinheit"];   unset ($_SESSION["13_abseinheit"]);  }
-    if (isset ($_SESSION["14_zeichen"])){      $data["14_zeichen"]      = $_SESSION["14_zeichen"];      unset ($_SESSION["14_zeichen"]);  }
-    if (isset ($_SESSION["14_funktion"])){     $data["14_funktion"]     = $_SESSION["14_funktion"];     unset ($_SESSION["14_funktion"]);  }
-    if (isset ($_SESSION["15_quitdatum"])){    $data["15_quitdatum"]    = $_SESSION["15_quitdatum"];    unset ($_SESSION["15_quitdatum"]); }
-    if (isset ($_SESSION["15_quitzeichen"])){  $data["15_quitzeichen"]  = $_SESSION["15_quitzeichen"];  unset ($_SESSION["15_quitzeichen"]); }
+    if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big> restore_formdata</big></big><br>";  }
+    if (isset ($_SESSION["01_medium"])){       $data["01_medium"]       = $_SESSION["01_medium"];       unset ($_SESSION["01_medium"]);  }      else { $data["01_medium"]      = "";}
+    if (isset ($_SESSION["01_datum"])){        $data["01_datum"]        = $_SESSION["01_datum"];        unset ($_SESSION["01_datum"]);  }       else { $data["01_datum"]       = "";}
+    if (isset ($_SESSION["01_zeichen"])){      $data["01_zeichen"]      = $_SESSION["01_zeichen"];      unset ($_SESSION["01_zeichen"]);  }     else { $data["01_zeichen"]     = "";}
+	if (isset ($_SESSION["02_zeichen"])){      $data["02_zeichen"]      = $_SESSION["02_zeichen"];      unset ($_SESSION["02_zeichen"]);  }     else { $data["02_zeichen"]     = "";}
+	if (isset ($_SESSION["03_zeichen"])){      $data["03_zeichen"]      = $_SESSION["03_zeichen"];      unset ($_SESSION["03_zeichen"]);  }     else { $data["03_zeichen"]     = "";}
+	if (isset ($_SESSION["04_richtung"])){     $data["04_richtung"]     = $_SESSION["04_richtung"];     unset ($_SESSION["04_richtung"]);  }    else { $data["04_richtung"]    = "";}
+	if (isset ($_SESSION["04_nummer"])){       $data["04_nummer"]       = $_SESSION["04_nummer"];       unset ($_SESSION["04_nummer"]);  }      else { $data["04_nummer"]      = "";}
+    if (isset ($_SESSION["05_gegenstelle"])){  $data["05_gegenstelle"]  = $_SESSION["05_gegenstelle"];  unset ($_SESSION["05_gegenstelle"]);  } else { $data["05_gegenstelle"] = "";}
+    if (isset ($_SESSION["06_befweg"])){       $data["06_befweg"]       = $_SESSION["06_befweg"];       unset ($_SESSION["06_befweg"]);  }      else { $data["06_befweg"]      = "";}
+    if (isset ($_SESSION["06_befwegausw"])){   $data["06_befwegausw"]   = $_SESSION["06_befwegausw"];   unset ($_SESSION["06_befwegausw"]);  }  else { $data["06_befwegausw"]  = "";}
+    if (isset ($_SESSION["07_durchspruch"])){  $data["07_durchspruch"]  = $_SESSION["07_durchspruch"];  unset ($_SESSION["07_durchspruch"]);  } else { $data["07_durchspruch"] = "";}
+    if (isset ($_SESSION["08_befhinweis"])){   $data["08_befhinweis"]   = $_SESSION["08_befhinweis"];   unset ($_SESSION["08_befhinweis"]);  }  else { $data["08_befhinweis"]  = "";}
+    if (isset ($_SESSION["08_befhinwausw"])){  $data["08_befhinwausw"]  = $_SESSION["08_befhinwausw"];  unset ($_SESSION["08_befhinwausw"]);  } else { $data["08_befhinwausw"] = "";}
+    if (isset ($_SESSION["09_vorrangstufe"])){ $data["09_vorrangstufe"] = $_SESSION["09_vorrangstufe"]; unset ($_SESSION["09_vorrangstufe"]);  }else { $data["09_vorrangstufe"]= "";}
+    if (isset ($_SESSION["10_anschrift"])){    $data["10_anschrift"]    = $_SESSION["10_anschrift"];    unset ($_SESSION["10_anschrift"]);  }   else { $data["10_anschrift"]   = "";}
+    if (isset ($_SESSION["11_gesprnotiz"])){   $data["11_gesprnotiz"]   = $_SESSION["11_gesprnotiz"];   unset ($_SESSION["11_gesprnotiz"]);  }  else { $data["11_gesprnotiz"]  = "";}
+    if (isset ($_SESSION["12_anhang"])){       $data["12_anhang"]       = $_SESSION["12_anhang"];       unset ($_SESSION["12_anhang"]);  }      else { $data["12_anhang"]      = "";}
+    if (isset ($_SESSION["12_inhalt"])){       $data["12_inhalt"]       = $_SESSION["12_inhalt"];       unset ($_SESSION["12_inhalt"]);  }      else { $data["12_inhalt"]      = "";}
+    if (isset ($_SESSION["12_abfzeit"])){      $data["12_abfzeit"]      = $_SESSION["12_abfzeit"];      unset ($_SESSION["12_abfzeit"]);  }     else { $data["12_abfzeit"]     = "";}
+    if (isset ($_SESSION["13_abseinheit"])){   $data["13_abseinheit"]   = $_SESSION["13_abseinheit"];   unset ($_SESSION["13_abseinheit"]);  }  else { $data["13_abseinheit"]  = "";}
+    if (isset ($_SESSION["14_zeichen"])){      $data["14_zeichen"]      = $_SESSION["14_zeichen"];      unset ($_SESSION["14_zeichen"]);  }     else { $data["14_zeichen"]     = "";}
+    if (isset ($_SESSION["14_funktion"])){     $data["14_funktion"]     = $_SESSION["14_funktion"];     unset ($_SESSION["14_funktion"]);  }    else { $data["14_funktion"]    = "";}
+    if (isset ($_SESSION["15_quitdatum"])){    $data["15_quitdatum"]    = $_SESSION["15_quitdatum"];    unset ($_SESSION["15_quitdatum"]); }    else { $data["15_quitdatum"]   = "";}
+    if (isset ($_SESSION["15_quitzeichen"])){  $data["15_quitzeichen"]  = $_SESSION["15_quitzeichen"];  unset ($_SESSION["15_quitzeichen"]); }  else { $data["15_quitzeichen"] = "";}
 
     if (isset ($_SESSION["16_gncopy"])){
       list ($gncopyord, $gncopypos, $gncopyfkt) = explode ("_", $_SESSION["16_gncopy"]);
     }
+	$data ["16_empf"] = "";
     for ($m=1; $m<=5; $m++){
       for ($n=1; $n<=4; $n++){
         if ( isset ( $_SESSION ["16_".$m.$n] ) ) {
@@ -893,7 +905,7 @@ require_once ("./db_operation.php");  // Datenbank operationen
 
   function fileselectwindow (){
     require ("../4fcfg/config.inc.php");
-        // zwei m�glichkeiten 1. absenden oder 2. abbrechen
+        // zwei mÃ¶glichkeiten 1. absenden oder 2. abbrechen
     if (!isset($_POST["abbrechen_x"])) {
       $max_size = 1024*1024*5; // the max. size for uploading
       $my_upload = new fileupload;
@@ -919,13 +931,13 @@ require_once ("./db_operation.php");  // Datenbank operationen
 
         if ($my_upload->upload($new_name)) { // new name is an additional filename information, use this to rename the uploaded file
           $full_path = $my_upload->upload_dir.$my_upload->file_copy;    if ( debug == true ){ echo "006 full_path   =".$full_path."<br>";}
-          $info = $my_upload->get_uploaded_file_info($full_path);               if ( debug == true ){ echo "007 info        =".$info."<br>";}
+          $info = $my_upload->get_uploaded_file_info($full_path);       if ( debug == true ){ echo "007 info        =".$info."<br>";}
           $data["filename"]     = basename ($full_path); //$_POST ["fs_nextfilename"] ;
           $data["org_filename"] = $_FILES["upload"]["name"];
           $data["comment"]      = $_POST ["fs_comment"];
           $data["kuerzel"]      = $_POST ["fs_shortname"];
           $data["time"]         = $my_upload->convtaktodatetime ($_POST ["fs_timestamp"]);
-          $data["md5hash"]      = md5_file($full_path);                                 if (debug){echo "data==="; var_dump($data); echo "<br>";}
+          $data["md5hash"]      = md5_file($full_path);                 if (debug){echo "data==="; var_dump($data); echo "<br>";}
           $my_upload->save_in_db ($data);
         }
       }
@@ -940,14 +952,14 @@ require_once ("./db_operation.php");  // Datenbank operationen
   switch ($_SESSION["anhang_menue"]){
 
     case 100: // Auswahlmenue
-        if (debug) echo "anhang.php 891 -- Auswahlmenue<br>";
+        if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big> 100 --> Auswahlmenue</big></big><br>";  }        
         store_formdata();
         anhang_menue ();
         $_SESSION["anhang_menue"] = 110;
     break;
 
     case 110: // UPLOAD Menue
-        if (debug) echo "anhang.php 898 -- anhang_menue == 110 --> UPLOADMENUE<br>";
+        if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big> 110 --> UPLOADMENUE</big></big><br>";  }        
 
         if ( isset ($_GET ["ah_upload_x"])){
           fileselect ();
@@ -968,7 +980,7 @@ require_once ("./db_operation.php");  // Datenbank operationen
     break;
 
     case 999: // ??
-        if (debug) echo "anhang.php 918 -- anhang_menue == 110 --> UPLOADMENUE<br>";
+        if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big> 999 --> UPLOAD</big></big><br>";  }
         if ( isset ($_GET ["ah_upload_x"])){
           fileselect ();
         }
@@ -983,7 +995,7 @@ require_once ("./db_operation.php");  // Datenbank operationen
     break;
 
     default;
-      echo "<big><big><big>Kein Men�punkt !!!</big></big></big><br>" ;
+      echo "<big><big><big>Kein MenÃ¼punkt !!!</big></big></big><br>" ;
   }
 
 

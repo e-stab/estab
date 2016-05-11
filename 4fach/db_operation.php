@@ -1,8 +1,9 @@
 <?php
+//if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>DB-Operationen</big><br>";  }
 /*****************************************************************************\
    Datei: db_operation.php
 
-   ben�tigte Dateien:
+   benÃ¶tigte Dateien:
 
    Beschreibung:
 
@@ -35,7 +36,7 @@ class db_access {
   function db_connection_check (){
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[table_exist] Konnte keine Verbindung zur Datenbank herstellen");
-
+    mysql_query('SET NAMES utf8');
     $result = mysql_ping  ($db);
 
     return ($result);
@@ -46,14 +47,14 @@ class db_access {
   function table_exist ($tablename) {
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[table_exist] Konnte keine Verbindung zur Datenbank herstellen");
-
+    mysql_query('SET NAMES utf8');
     $db_check = mysql_select_db ($this->db_name)
        or die ("[read_table] Auswahl der Datenbank fehlgeschlagen");
 
     $result = mysql_list_tables($this->db_name);
 
     if (!$result) {
-      echo "DB Fehler, Tabellen k�nnen nicht angezeigt werden\n";
+      echo "DB Fehler, Tabellen kÃ¶nnen nicht angezeigt werden\n";
       echo 'MySQL Fehler: ' . mysql_error();
       exit;
     }
@@ -72,14 +73,14 @@ class db_access {
   function create_user_table ($tablename, $fkttblname) {
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("create_user_table [connect] Konnte keine Verbindung zur Datenbank herstellen");
-
+    mysql_query('SET NAMES utf8');
     $db_check = mysql_select_db ($this->db_name)
        or die ("[read_table] Auswahl der Datenbank fehlgeschlagen");
      // gelesen
     $query = "CREATE TABLE IF NOT EXISTS ".$tablename."_read (
         `lfd` bigint(20) unsigned NOT NULL auto_increment COMMENT 'Laufende Nummer',
-        `zeit` timestamp NOT NULL default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP COMMENT 'Zeitpunkt der letzte �nderung',
-        `nachnum` bigint(20) NOT NULL COMMENT 'Fremdschl�ssel der Erledigten Nachricht',
+        `zeit` timestamp NOT NULL default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP COMMENT 'Zeitpunkt der letzte Ãnderung',
+        `nachnum` bigint(20) NOT NULL COMMENT 'FremdschlÃ¼ssel der Erledigten Nachricht',
         `gelesen` datetime NOT NULL default '0000-00-00 00:00:00' COMMENT 'Zeitpunkt wann die Nachricht gelesen wurde',
         PRIMARY KEY  (`lfd`)
       ) ENGINE=MyISAM DEFAULT CHARSET=latin1 AUTO_INCREMENT=1 ;";
@@ -98,8 +99,8 @@ class db_access {
 
     $query = "CREATE TABLE IF NOT EXISTS ".$fkttblname."_erl (
         `lfd` bigint(20) unsigned NOT NULL auto_increment COMMENT 'Laufende Nummer',
-        `zeit` timestamp NOT NULL default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP COMMENT 'Zeitpunkt der letzte �nderung',
-        `nachnum` bigint(20) NOT NULL COMMENT 'Fremdschl�ssel der Erledigten Nachricht',
+        `zeit` timestamp NOT NULL default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP COMMENT 'Zeitpunkt der letzte Ãnderung',
+        `nachnum` bigint(20) NOT NULL COMMENT 'FremdschlÃ¼ssel der Erledigten Nachricht',
         `erledigt` datetime NOT NULL default '0000-00-00 00:00:00' COMMENT 'Zeitpunkt wann die Nachricht gelesen wurde',
         PRIMARY KEY  (`lfd`)
       ) ENGINE=MyISAM DEFAULT CHARSET=latin1 AUTO_INCREMENT=1 ;";
@@ -169,7 +170,7 @@ class db_access {
   function read_table (){
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[read_table] Konnte keine Verbindung zur Datenbank herstellen");
-
+    mysql_query('SET NAMES utf8');
     $db_check = mysql_select_db ($this->db_name)
        or die ("[read_table] Auswahl der Datenbank fehlgeschlagen");
 
@@ -194,7 +195,7 @@ class db_access {
     $this->sqlquery = $query ;
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[query_table196] Konnte keine Verbindung zur Datenbank herstellen" . mysql_error());
-
+    mysql_query('SET NAMES utf8');
     $db_check = mysql_select_db ($this->db_name)
        or die ("[query_table199] Auswahl der Datenbank fehlgeschlagen" . mysql_error());
 
@@ -217,7 +218,7 @@ class db_access {
     $this->sqlquery = $query ;
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[query_table_wert] Konnte keine Verbindung zur Datenbank herstellen");
-
+    mysql_query('SET NAMES utf8');
     $db_check = mysql_select_db ($this->db_name)
        or die ("[query_table_wert] Auswahl der Datenbank fehlgeschlagen");
 
@@ -238,12 +239,12 @@ class db_access {
     $this->sqlquery = $query ;
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[query_table_iu] Konnte keine Verbindung zur Datenbank herstellen");
-
+    mysql_query('SET NAMES utf8');
     $db_check = mysql_select_db ($this->db_name)
        or die ("[query_table_iu] Auswahl der Datenbank fehlgeschlagen");
 
     $query_result = mysql_query ($this->sqlquery, $db) or
-       die("[query_table_iu] ".mysql_error()." ".mysql_errno());
+       die("[query_table_iu] ".mysql_error()." ".mysql_errno()."<br> Query=".$query);
     mysql_close ($db);
     return ($query_result);
   } // function query_table_iu
@@ -255,7 +256,7 @@ class db_access {
     $this->sqlquery = $query ;
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[query_table257] Konnte keine Verbindung zur Datenbank herstellen".mysql_error()." ".mysql_errno());
-
+    mysql_query('SET NAMES utf8');
     $db_check = mysql_select_db ($this->db_name)
        or die ("[query_table250] Auswahl der Datenbank fehlgeschlagen".mysql_error()." ".mysql_errno());
 

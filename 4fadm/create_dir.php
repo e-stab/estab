@@ -12,9 +12,10 @@
 \*****************************************************************************/
 
   include "../4fcfg/config.inc.php";
-
+  if (debug) {echo "<b>create_dir.".__LINE__." Scriptstart</b><br>";}
   // Hauptverzeichnis Datenbankname = Verzeichnisname
   $mainpath = $conf_web ["srvroot"]."/".$conf_web ["pre_path"].$conf_4f ["data"]."/".$conf_4f_db ["datenbank"] ;
+  if (debug){ echo "erkannter mainpath (create_dir.".__LINE__."):".$mainpath."<br>" ;}
     // Ist das 4fdata Verzeichnis vorhanden
   if ( ( $conf_web ["srvroot"]  != "" ) and
        ( $conf_web ["pre_path"] != "")  ){
@@ -26,7 +27,7 @@
   if ( !$ismaindir and !$ismainfile ){
     $success = mkdir ( $conf_web ["srvroot"]."/".$conf_web ["pre_path"].$conf_4f ["data"] ) ;
   }
-  if ( $success ) {
+  if (isset($success) and $success) {
     chmod ( $conf_web ["srvroot"]."/".$conf_web ["pre_path"].$conf_4f ["data"], 0777);
     echo "-4fdata-Verzeichnis wurde angelegt(\"".$conf_web ["srvroot"]."/".$conf_web ["pre_path"].$conf_4f ["data"]."\")";
     echo "<br>";
@@ -54,14 +55,14 @@
     } else {
       echo "<br><b>FEHLER:</b> Verzeichnis oder Datei mit dem Namen \"".$conf_4f_db ["datenbank"]."\" schon vorhanden!<br>";
       echo "Mainpath=".$mainpath."<br>";
-      echo "Bitte prüfen und gegebenenfalls löschen! <br>";
+      echo "Bitte pr&uuml;fen und gegebenenfalls l&ouml;schen! <br>";
     }
     // Da das mit dem Verzeichnis geklapp hat, nun die Unterverzeichnisse
 
     // Anhang
 
     $anhangpath = $conf_4f ["ablage_dir"] ;
-
+    if (debug){ echo "AnhangPfad (create_dir.".__LINE__."):".$anhangpath."<br>" ;}
     $isdir  = is_dir  ( $anhangpath );
     $isfile = is_file ( $anhangpath );
 /*
@@ -77,12 +78,12 @@
       }
     } else {
       echo "<br><b>FEHLER:</b> Verzeichnis oder Datei mit dem Namen <br>\"".$anhangpath."\"<br> schon vorhanden!<br>";
-      echo "Bitte prüfen und gegebenenfalls löschen! <br>";
+      echo "Bitte pr&uuml;fen und gegebenenfalls l&ouml;schen! <br>";
     }
 
     // Vordruck
     $vordruckpath = $conf_4f ["vordruck_dir"] ;
-
+    if (debug){ echo "Vordruckpfad (create_dir.".__LINE__."):".$vordruckpath."<br>" ;}
 
     $isdir  = is_dir  ( $vordruckpath );
     $isfile = is_file ( $vordruckpath );
@@ -99,7 +100,7 @@
       }
     } else {
       echo "<br><b>FEHLER:</b> Verzeichnis oder Datei mit dem Namen <br>\"".$vordruckpath."\"<br> schon vorhanden!<br>";
-      echo "Bitte prüfen und gegebenenfalls löschen! <br>";
+      echo "Bitte pr&uuml;fen und gegebenenfalls l&ouml;schen! <br>";
     }
 
 

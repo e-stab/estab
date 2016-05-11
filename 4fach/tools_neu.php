@@ -19,7 +19,8 @@ include ("../4fcfg/para.inc.php");
     include ("../4fcfg/para.inc.php");
     echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
     echo "<html>\n";
-    echo "<head>\n";
+    echo "<head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8" />\n";
 
     echo "<script language=\"JavaScript\">\n";
     echo "<!--\n";
@@ -201,7 +202,7 @@ include ("../4fcfg/para.inc.php");
          "dec" => '12' );
 
     $laenge = strlen ($data);
-//echo "tools181 --- l�nge = ".$laenge." und time = ".$data."<br>";
+//echo "tools181 --- lÃ¤nge = ".$laenge." und time = ".$data."<br>";
     switch ( $laenge ){
       case 13:// TThhmmMMMJJJJ
           $tag    = substr ($data, 0, 2);
@@ -459,14 +460,14 @@ bersichtlich dargestellt werden.
       while ( $i <= count ($conf_empf) ){
         echo "<!-- 000 -".$i." max=".count ($conf_empf)."-list.php -->\n";
         if ($i == 1) {
-            // Anfang der Darstellung als erstmal eine Tabelle öffnen
+            // Anfang der Darstellung als erstmal eine Tabelle ÃÂ¶ffnen
           echo "<!-- 001 - table auf - list.php -->\n";
           echo "<table align=\"center\" style=\"text-align:center; width:".$zellenbreite."; height:".$zellenhoehe."; font-size:9pt; background-color: rgb(150, 150, 150); font-size:9pt; border=\"1\" cellpadding=\"1\" cellspacing=\"1\">\n";
           echo "<tbody>\n";
           $tableisset = true;
         }
          /*
-          Ist der aktuelle $i und der nächste $i+1 maximal zweistellig UND $i noch NICHT der Letzte oder Vorletzte ???
+          Ist der aktuelle $i und der nÃÂ¤chste $i+1 maximal zweistellig UND $i noch NICHT der Letzte oder Vorletzte ???
          */
         if ( ( strlen( $conf_empf [$i]["fkt"] ) <= 2 ) and
              ( strlen( $conf_empf [$i+1]["fkt"] ) <= 2 )and

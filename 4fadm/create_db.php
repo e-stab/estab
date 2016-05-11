@@ -1,5 +1,6 @@
 <?php
 
+define("debug", false);
 // umdefinieren der Konstanten - nur in PHP 4
 define("FATAL", E_USER_ERROR);
 define("ERROR", E_USER_WARNING);
@@ -7,6 +8,8 @@ define("WARNING", E_USER_NOTICE);
 
 // die Stufe für dieses Skript einstellen
 error_reporting(E_ALL);
+
+	if (debug){ echo "<b>Start in </b>".__file__.":".__LINE__."):<br>" ;}
 
 // Fehlerbehandlungsfunktion
 
@@ -81,7 +84,8 @@ function outerrormsg ($errno, $errtxt) {
 
 \-----------------------------------------------------------------------------*/
 
-$old_error_handler = set_error_handler("myErrorHandler");
+// $old_error_handler = set_error_handler("myErrorHandler");
+	if (debug){ echo "<b>Errorhandling in </b>".__file__.":".__LINE__."):<br>" ;}
 
   include "../4fcfg/dbcfg.inc.php";
   include "../4fcfg/e_cfg.inc.php";
@@ -115,9 +119,12 @@ $old_error_handler = set_error_handler("myErrorHandler");
   if (!$link) {
      die('keine Verbindung m&ouml;glich: ' . mysql_error());
   }
+  mysql_query('SET NAMES utf8');
   echo "Verbindung erfolgreich<br>\n";
 
-  $query = "CREATE DATABASE IF NOT EXISTS ".$conf_4f_db ["datenbank"] ;
+  $query = "CREATE DATABASE IF NOT EXISTS ".$conf_4f_db ["datenbank"].
+	   " DEFAULT CHARACTER SET utf8
+             DEFAULT COLLATE utf8_general_ci ;" ;
 
   $result = mysql_query($query, $link);
   if (!$result) {
@@ -181,7 +188,7 @@ $old_error_handler = set_error_handler("myErrorHandler");
     `99_lstacc` timestamp NOT NULL default '0000-00-00 00:00:00' on update CURRENT_TIMESTAMP,
     KEY `00_lfd` (`00_lfd`),
     FULLTEXT KEY `12_inhalt` (`12_inhalt`)
-  ) ENGINE=MyISAM  AUTO_INCREMENT=1 ;";
+  ) ENGINE=MyISAM DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;";
 
   $result = mysql_query($query, $link);
   if (!$result) {
@@ -193,10 +200,10 @@ $old_error_handler = set_error_handler("myErrorHandler");
 
     // Ist die Tabelle FKTMTX vorhanden
 
-  $result = mysql_list_tables($conf_4f_db ["datenbank"]);
+  $result = mysql_query('Show Tables');
 
   if (!$result) {
-    echo "DB Fehler, Tabellen können nicht angezeigt werden\n";
+    echo "DB Fehler, Tabellen kÃ¶nnen nicht angezeigt werden\n";
     echo 'MySQL Fehler: ' . mysql_error();
     exit;
   }
@@ -221,14 +228,14 @@ $old_error_handler = set_error_handler("myErrorHandler");
                 `mtx_lfd` bigint(11) unsigned NOT NULL auto_increment,
                 `mtx_x` int(11) NOT NULL,
                 `mtx_y` int(11) NOT NULL,
-                `mtx_typ` set('cb','t') character set latin1 collate latin1_general_ci NOT NULL,
+                `mtx_typ` set('cb','t') character set utf8 collate utf8_general_ci NOT NULL,
                 `mtx_fkt` varchar(6) NOT NULL,
-                `mtx_rolle` set('Stab','FB') character set latin1 collate latin1_general_ci NOT NULL,
+                `mtx_rolle` set('Stab','FB') character set utf8 collate utf8_general_ci NOT NULL,
                 `mtx_mode` set('ro','rw') NOT NULL,
                 `mtx_rc2`  binary(1) NOT NULL default 'f',
                 `mtx_auto` binary(1) NOT NULL default 'f',
                 PRIMARY KEY  (`mtx_lfd`)
-              ) ENGINE=MyISAM  DEFAULT CHARSET=latin1 AUTO_INCREMENT=1 ;";
+              ) ENGINE=MyISAM DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;";
 
 
     $result = mysql_query($query, $link);
@@ -274,13 +281,13 @@ $old_error_handler = set_error_handler("myErrorHandler");
     `aktiv` smallint(1) NOT NULL,
     `password` varchar(32) NOT NULL default '',
     PRIMARY KEY  (`kuerzel`)
-  ) ENGINE=MyISAM DEFAULT CHARSET=latin1;";
+  ) ENGINE=MyISAM DEFAULT CHARSET=utf8;";
 
 
 
   $result = mysql_query($query, $link);
   if (!$result) {
-     die('Ungültige Abfrage: ' . mysql_error());
+     die('UngÃ¼ltige Abfrage: ' . mysql_error());
   } else {
     echo 'Benutzertabelle wurde angelegt.';
     echo "<br>\n";
@@ -292,7 +299,7 @@ $old_error_handler = set_error_handler("myErrorHandler");
         `kategorie` varchar(10) NOT NULL COMMENT 'Benutzer definierte Kategorien',
         `beschreibung` varchar (254) NULL COMMENT 'Beschreibung zur Kategorie',
         PRIMARY KEY  (`lfd`)
-      ) ENGINE=MyISAM DEFAULT CHARSET=latin1 AUTO_INCREMENT=1 ;";
+      ) ENGINE=MyISAM DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;";
 
   $result = mysql_query($query, $link);
   if (!$result) {
@@ -307,7 +314,7 @@ $old_error_handler = set_error_handler("myErrorHandler");
              `msg` bigint(20) NOT NULL,
           `katego` bigint(20) NOT NULL,
            PRIMARY KEY  (`msg`)
-           ) ENGINE=MyISAM DEFAULT CHARSET=latin1 ;";
+           ) ENGINE=MyISAM DEFAULT CHARSET=utf8 ;";
 
   $result = mysql_query($query, $link);
   if (!$result) {
@@ -326,7 +333,7 @@ $old_error_handler = set_error_handler("myErrorHandler");
     `p_was` varchar(30) NOT NULL default '',
     `p_ereignis` text NOT NULL,
     PRIMARY KEY  (`p_lfd`)
-  ) ENGINE=MyISAM AUTO_INCREMENT=1 ;";
+  ) ENGINE=MyISAM DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;";
 
   $result = mysql_query($query, $link);
   if (!$result) {
@@ -349,7 +356,7 @@ $old_error_handler = set_error_handler("myErrorHandler");
       `status` tinyint(4) NOT NULL DEFAULT '1',
       `id` varchar(32) NOT NULL,
     PRIMARY KEY (`lfd-nr`)
-    ) ENGINE=MyISAM AUTO_INCREMENT=1; ";
+    ) ENGINE=MyISAM DEFAULT CHARSET=utf8 AUTO_INCREMENT=1; ";
 
 
   $result = mysql_query($query, $link);
@@ -369,8 +376,8 @@ $old_error_handler = set_error_handler("myErrorHandler");
   `etb_kuerzel` varchar(6) NOT NULL default '',
   `etb_funktion` varchar(10) NOT NULL default '',
    PRIMARY KEY  (`etb_lfd-nr`)
-  ) ENGINE = MYISAM AUTO_INCREMENT=1;";
-
+  ) ENGINE = MYISAM  DEFAULT CHARSET=utf8 AUTO_INCREMENT=1;";
+	if (debug){ echo "<b>Start in </b>".__file__.":".__LINE__."):<b>".$query."</b><br>" ;}
   $result = mysql_query($query, $link);
   if (!$result) {
      die('Ung&uuml;ltige Abfrage: ' . mysql_error());
@@ -378,7 +385,7 @@ $old_error_handler = set_error_handler("myErrorHandler");
     echo "Einsatztagebuch wurde angelegt.";
     echo "<br>\n";
   }
-
+	if (debug){ echo "<b>Start in </b>".__file__.":".__LINE__."):<br>" ;}
   $query = "CREATE TABLE IF NOT EXISTS `".$conf_tbl ["tbb"]."` (
   `tbb_lfd-nr` INT NOT NULL auto_increment,
   `tbb_time` DATETIME NOT NULL ,
@@ -388,8 +395,8 @@ $old_error_handler = set_error_handler("myErrorHandler");
   `tbb_kuerzel` varchar(6) NOT NULL default '',
   `tbb_funktion` varchar(10) NOT NULL default '',
    PRIMARY KEY  (`tbb_lfd-nr`)
-  ) ENGINE = MYISAM AUTO_INCREMENT=1;";
-
+  ) ENGINE = MYISAM DEFAULT CHARSET=utf8 AUTO_INCREMENT=1;";
+if (debug){ echo "<b>Start in </b>".__file__.":".__LINE__."):<b>".$query."</b><br>" ;}
   $result = mysql_query($query, $link);
   if (!$result) {
      die('Ung&uuml;ltige Abfrage: ' . mysql_error());
@@ -398,7 +405,7 @@ $old_error_handler = set_error_handler("myErrorHandler");
     echo "<br>\n";
   }
 
-
+	if (debug){ echo "<b>Start in </b>".__file__.":".__LINE__."):<br>" ;}
   $query = "CREATE TABLE IF NOT EXISTS `".$conf_tbl ["ubb"]."` (
   `ubb_lfd-nr` INT NOT NULL auto_increment,
   `ubb_time`   DATETIME NOT NULL ,
@@ -411,13 +418,13 @@ $old_error_handler = set_error_handler("myErrorHandler");
   `ubb_kuerzel` varchar(6) NOT NULL default '',
   `ubb_funktion` varchar(10) NOT NULL default '',
    PRIMARY KEY  (`ubb_lfd-nr`)
-  ) ENGINE = MYISAM AUTO_INCREMENT=1;";
-
+  ) ENGINE = MYISAM DEFAULT CHARSET=utf8 AUTO_INCREMENT=1;";
+if (debug){ echo "<b>Start in </b>".__file__.":".__LINE__."):<b>".$query."</b><br>" ;}
   $result = mysql_query($query, $link);
   if (!$result) {
      die('Ung&uuml;ltige Abfrage: ' . mysql_error().'query='.$query  );
   } else {
-    echo "Einsatztagebuch wurde angelegt.";
+    echo "Übungstagebuch wurde angelegt.";
     echo "<br>\n";
   }
 
@@ -439,7 +446,7 @@ $query = "CREATE TABLE IF NOT EXISTS `".$conf_tbl ["komplan"]."` (
   `e-mail` varchar(255) NULL,
   `ftphttp` varchar(255) NULL,
   PRIMARY KEY (`lfd`)
-) ENGINE=MyISAM AUTO_INCREMENT=1 ;";
+) ENGINE=MyISAM DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;";
 
   $result = mysql_query($query, $link);
   if (!$result) {
@@ -487,7 +494,7 @@ $query = "CREATE TABLE IF NOT EXISTS `".$conf_tbl ["bhp50"]."` (
   `sudi_bemerk` text ,
   PRIMARY KEY (`lfd-nr`),
   KEY `anhang` (`anhang`)
-) ENGINE=MyISAM AUTO_INCREMENT=1 ; ";
+) ENGINE=MyISAM DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ; ";
 
   $result = mysql_query($query, $link);
   if (!$result) {

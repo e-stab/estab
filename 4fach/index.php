@@ -16,9 +16,9 @@
 <HTML>
 <HEAD>
 <link REL="SHORTCUT ICON" HREF="../favicon.ico" />
-<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=ISO-8859-1">
-<META NAME="Author" CONTENT="Hajo Landmesser">
-<META NAME="Generator" CONTENT="self">
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">
+<meta name="author" content="Hajo Landmesser" >
+<meta name="generator" content="Bluefish 2.2.5" >
 <TITLE>Nachrichtenvordruck</TITLE>
 <FRAMESET COLS="100,*" frameborder="0" framespacing="0" border="0">
    <FRAMESET ROWS="150,*" frameborder="0" framespacing="0" border="0">

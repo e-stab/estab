@@ -89,7 +89,7 @@ function outerrormsg ($errno, $errtxt) {
      die('keine Verbindung m&ouml;glich: ' . mysql_error());
   }
   echo "Verbindung erfolgreich<br>\n";
-
+  mysql_query('SET NAMES utf8');
   $query = "CREATE DATABASE IF NOT EXISTS ".$conf_4f_db ["datenbank"] ;
   $result = mysql_query($query, $link);
   if (!$result) {
@@ -176,7 +176,7 @@ function outerrormsg ($errno, $errtxt) {
 
   $result = mysql_query($query, $link);
   if (!$result) {
-     die('Ungültige Abfrage: ' . mysql_error());
+     die('UngÃ¼ltige Abfrage: ' . mysql_error());
   } else {
     echo 'Benutzertabelle wurde angelegt.';
     echo "<br>";

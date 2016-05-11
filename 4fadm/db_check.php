@@ -7,8 +7,8 @@ include ("../4fcfg/config.inc.php");
 echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
 echo "<html>\n";
 echo "<head>\n";
-echo "<meta content=\"text/html; charset=ISO-8859-1\" http-equiv=\"content-type\">\n";
-echo "<title>Datenbankverbindung prüfen</title>";
+echo "<meta content=\"text/html; charset=UTF-8\" http-equiv=\"content-type\">\n";
+echo "<title>Datenbankverbindung prÃ¼fen</title>";
 echo "</head>";
 echo "<body>";
 
@@ -31,7 +31,7 @@ define("FATAL", E_USER_ERROR);
 define("ERROR", E_USER_WARNING);
 define("WARNING", E_USER_NOTICE);
 
-// die Stufe für dieses Skript einstellen
+// die Stufe fÃ¼r dieses Skript einstellen
 error_reporting(E_ALL); //FATAL | ERROR | WARNING);
 
 // Fehlerbehandlungsfunktion
@@ -89,7 +89,7 @@ function outerrormsg ($errno, $errtxt) {
          echo "Benutzer oder Passwort zur Anmeldung am SQL-Server falsch.";
       break;
        case 1046 :
-         echo "Es ist keine Datenbank ausgewählt.";
+         echo "Es ist keine Datenbank ausgewÃ¤hlt.";
       break;
       case 1049 :
          echo "<p>Datenbank nicht vorhanden <a href=\"./create_db.php\">Datenbank anlegen</a></p>";
@@ -127,7 +127,7 @@ $old_error_handler = set_error_handler("myErrorHandler");
     $db_hndl = mysql_connect ( $conf_4f_db ["server"] ,
                                $conf_4f_db ["user"] ,
                                $conf_4f_db ["password"] );
-
+    mysql_query('SET NAMES utf8');
     $db_errno  = mysql_errno ();
     $db_errtxt = mysql_error ();
     if ($db_errno != 0) {

@@ -9,27 +9,27 @@
                 <tr><td><b>TThhmm</b></td><td>Tag, Stunde und Minute kurze taktische Zeit.<br>
                                    TT - Tag des Monats 2 stellig.</td></tr>
                 <tr><td><b>TThhmmMMMJJJJ</b></td><td>Tag, Stunde, Minute, Monat und jahr<br>
-                                                     vollständige taktische Zeit.<br>
-                           MMM - Monat als Kürzen sind zulässig:(jan,feb,mar,apr,mai,may,jun,jul,aug,sep,okt,oct,nov,dez,dec)</td></tr>
-                </tbody></table><br>Die Analyse und Fehlererkennung des Formates setzt auf die Länge der Zeichenfolge.<br>
-                Aus diesem Grund muss bei der Eingabe vom Tag, Stunde und Minute auf die führende Null "0"
+                                                     vollstÃ¤ndige taktische Zeit.<br>
+                           MMM - Monat als KÃ¼rzen sind zulÃ¤ssig:(jan,feb,mar,apr,mai,may,jun,jul,aug,sep,okt,oct,nov,dez,dec)</td></tr>
+                </tbody></table><br>Die Analyse und Fehlererkennung des Formates setzt auf die LÃ¤nge der Zeichenfolge.<br>
+                Aus diesem Grund muss bei der Eingabe vom Tag, Stunde und Minute auf die fÃ¼hrende Null "0"
                 geachtet werden. Wichtig ist auch das Jahr 4 stellig einzugeben.';
 
     $KuerzelInfo = '';
 
-    $ZeichenInfo = 'Hier muss ein K&uuml;rzel eingegeben werden das im System dokumentiert ist.<br><br>unter Umständen muss das Kürzel im ETB dokumentiert werden.';
+    $ZeichenInfo = 'Hier muss ein K&uuml;rzel eingegeben werden das im System dokumentiert ist.<br><br>unter UmstÃ¤nden muss das KÃ¼rzel im ETB dokumentiert werden.';
 
     $Infotext = array (
       '01_medium'      =>  array ('Aufnahmevermerk',
-                                  '<b><big>Übermittlungsmedium:</big></b><br>
+                                  '<b><big>Ãœbermittlungsmedium:</big></b><br>
                                   Ein Wert <b>muss</b> angegeben werden.<br>
                                   <table border=\"0\" cellspacing=\"5\" cellpadding=\"5\">
                                   <tr><td><b>Fe</b></td><td> Fernsprecher</td></tr>
                                   <tr><td><b>Fu</b></td><td> Funk</td></tr>
                                   <tr><td><b>Me</b></td><td> Melder</td></tr>
                                   <tr><td><b>Fax</b></td><td>Telefaksimile</td></tr>
-                                  <tr><td><b>@</b></td><td>elektronische Datenübertragung (HTTP, FTP, SMTP...)<br>
-                                  Das Zeichen "@" ist hier nicht offiziell. In anderen Vordrucken wird des K&uuml;rze "DFÜ" benutzt.</td></tr></table>'),
+                                  <tr><td><b>@</b></td><td>elektronische DatenÃ¼bertragung (HTTP, FTP, SMTP...)<br>
+                                  Das Zeichen "@" ist hier nicht offiziell. In anderen Vordrucken wird des K&uuml;rze "DFÃœ" benutzt.</td></tr></table>'),
 
       '01_datum'       =>  array ('Aufnahmevermerk',          $TimeInfo),
       '01_zeichen'     =>  array ('Aufnahmevermerk',          $ZeichenInfo),
@@ -41,25 +41,25 @@
       '03_zeichen'     =>  array ('Bef&ouml;rderungsvermerk', $ZeichenInfo),
 
       '10_anschrift'   =>  array ('Anschrift',                '<b><big>Anschrift</big></b><br>
-                                                               Bei einem Nachrichteneingang ist hier die Führungsstelle gemeint.
+                                                               Bei einem Nachrichteneingang ist hier die FÃ¼hrungsstelle gemeint.
                                                                Insbesondere kann hier auch eine Sachbearbeiter eingetragen werden.<br><br>
-                                                               Bei einem Nachrichtenausgang muss hier möglichst präzise das Ziel der Meldung angegeben werden.
-                                                               Im Feld "Beförderungshinweis" können spezifische Informationen über die Erreichbarkeit eingetragen werden.'),
+                                                               Bei einem Nachrichtenausgang muss hier mÃ¶glichst prÃ¤zise das Ziel der Meldung angegeben werden.
+                                                               Im Feld "BefÃ¶rderungshinweis" kÃ¶nnen spezifische Informationen Ã¼ber die Erreichbarkeit eingetragen werden.'),
 
       '12_inhalt'      =>  array ('Inhalt',                   '<big><big><b>Meldungstext!</b></big></big><br>
-                                                              Text der zu übermittelnden Nachricht ...
-                                                              <li> kurz und knapp, aber trotzdem unmißverständlich</li>
+                                                              Text der zu Ã¼bermittelnden Nachricht ...
+                                                              <li> kurz und knapp, aber trotzdem unmiÃŸverstÃ¤ndlich</li>
                                                               <li> keine Taktischen Zeichen oder Schadensymbole</li>
                                                               <li> Leserlich schreiben!</li>
-                                                              <li> Orts- und Straßenangaben in Großbuchstaben</li>
+                                                              <li> Orts- und StraÃŸenangaben in GroÃŸbuchstaben</li>
                                                               <br><br>
                                                                Einsatzbefehle an Befehlsschema anpassen<br>
                                                                <b>Einheit - Auftrag - Mittel - Ziel - Weg</b> <br><br>
-                                                               Sonstige Nachrichten an „W“-Fragen orientieren:<br>
-                                                               <b>Wer – Wo – Was – Wann - Wie</<b>'),
+                                                               Sonstige Nachrichten an Â„WÂ“-Fragen orientieren:<br>
+                                                               <b>Wer Â– Wo Â– Was Â– Wann - Wie</<b>'),
       '12_abfzeit'     =>  array ('Abfassungszeit',           $TimeInfo),
       '13_abseinheit'  =>  array ('Absender',                 '<big><big><b>Absender</b></big></big><br>
-                                                              <li>Der Verfasser trägt den Absender ein</li>
+                                                              <li>Der Verfasser trÃ¤gt den Absender ein</li>
                                                               <li>Absender ist immer die Einheit oder Einrichtung, nicht die Person/Funktion</li>'),
       '15_quitdatum'   =>  array ('Quittung',                 $TimeInfo),
       '15_quitzeichen' =>  array ('Quittung',                 $ZeichenInfo)

@@ -2,7 +2,7 @@
 /*****************************************************************************\
    Datei: status.php
 
-   benötigte Dateien:    tools.php, db_operation.php
+   benÃ¶tigte Dateien:    tools.php, db_operation.php
 
    Beschreibung:
 
@@ -13,6 +13,8 @@
 \******************************************************************************/
 
 session_start ();
+
+define ("debug", false);              // true = gibt debuginformationen aus
 
 include ("tools.php");
 include ("db_operation.php");
@@ -25,7 +27,7 @@ echo "<body bgcolor=\"#ECECFF\">";
 *****************************************************************************/
 
 // Status A/W:
-if ( $_SESSION ["ROLLE"] == "Fernmelder") {
+if ( (isset($_SESSION ['ROLLE'])) AND ($_SESSION ['ROLLE'] == "Fernmelder") ) {
   echo "<table width=\"50\" align=\"center\" border=\"1\" cellspacing=\"2\" cellpeding=\"3\">";
   echo "<tr>";
   echo "<td>";
@@ -34,7 +36,7 @@ if ( $_SESSION ["ROLLE"] == "Fernmelder") {
     echo "<p style=\" text-align:center; font-size:x-large; font-weight:bold;\">".$outqueue."</p>\n";
   } else {
     echo "<p style=\" color:#FF0000; text-decoration:blink; text-align:center; font-size:x-large; font-weight:bold;\">".$outqueue."</p>\n";
-        if (( $_SESSION["old_que_aw"] < $outqueue) and ( $conf_4f["sounds"] ) ) {
+        if ((isset($_SESSION['old_que_aw']))and( $_SESSION['old_que_aw'] < $outqueue) and ( $conf_4f['sounds'] ) ) {
         echo "<object height=\"0%\" width=\"0%\" classid=\"clsid:22D6F312-B0F6-11D0-94AB-0080C74C7E95\">
                 <param name=\"FileName\" value=\"".$conf_design_path."/notify_aw.wav\" />
                 </object>";
@@ -43,12 +45,13 @@ if ( $_SESSION ["ROLLE"] == "Fernmelder") {
   echo "</td>";
   echo "</tr>";
   echo "</table>";
-  $_SESSION[old_que_aw] = $outqueue;
+  $_SESSION['old_que_aw'] = $outqueue;
 }
 
 // Status Sichter:
-if ( ( $_SESSION ["ROLLE"] == "Stab") and
-     ($_SESSION ["vStab_funktion"] == "Si" ) ) {
+if ( (isset($_SESSION ['ROLLE'])) AND (
+     ( $_SESSION ['ROLLE'] == "Stab") and
+     ( $_SESSION ['vStab_funktion'] == "Si" ) ) ) {
   echo "<table width=\"50\" align=\"center\" border=\"1\" cellspacing=\"2\" cellpeding=\"3\">";
   echo "<tr>";
   echo "<td>";
@@ -66,13 +69,12 @@ if ( ( $_SESSION ["ROLLE"] == "Stab") and
   echo "</td>";
   echo "</tr>";
   echo "</table>";
-  $_SESSION[old_que_si] = $outqueue;
+  $_SESSION['old_que_si'] = $outqueue;
 }
 
 //  Status Stab:
-if ( ( $_SESSION ["ROLLE"] == "FB") or
-     (  ( $_SESSION ["ROLLE"] == "Stab") and
-        ($_SESSION ["vStab_funktion"] != "Si" )
+if ( (isset($_SESSION ['ROLLE'])) AND (
+        ( $_SESSION ["ROLLE"] == "FB") or (($_SESSION ["ROLLE"] == "Stab") and ($_SESSION ["vStab_funktion"] != "Si" ))
      )
    )  {
   echo "<table width=\"50\" align=\"center\" border=\"1\" cellspacing=\"2\" cellpeding=\"3\">";
@@ -87,7 +89,8 @@ if ( ( $_SESSION ["ROLLE"] == "FB") or
     } else {
       echo "<p style=\" color:#FF0000; text-decoration:blink; text-align:center; font-size:x-large; font-weight:bold;\">XX</p>\n";
     }
-        if ( ( $_SESSION[old_que_stab] < $outqueue) and ( $conf_4f["sounds"] ) ) {
+
+        if ( (isset($_SESSION['old_que_stab'])) and ( $_SESSION['old_que_stab'] < $outqueue) and ( $conf_4f["sounds"] ) ) {
         echo "<object height=\"0%\"     width=\"0%\" classid=\"clsid:22D6F312-B0F6-11D0-94AB-0080C74C7E95\">
                 <param name=\"FileName\" value=\"".$conf_design_path."/notify_stab.wav\" />
                 </object>";
@@ -96,7 +99,7 @@ if ( ( $_SESSION ["ROLLE"] == "FB") or
   echo "</td>";
   echo "</tr>";
   echo "</table>";
-  $_SESSION[old_que_stab] = $outqueue;
+  $_SESSION['old_que_stab'] = $outqueue;
 }
 
 showsrvtime ("vertikal");

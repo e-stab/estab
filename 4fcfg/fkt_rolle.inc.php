@@ -49,17 +49,19 @@ echo "DBDATA--".$conf_4f_db  ["server"]." - ".$conf_4f_db  ["datenbank"]." - ".
     $query_result = mysql_query ($query, $db) or
        die("[query_table]50 <br>$query<br>103-".mysql_error()." ".mysql_errno());
 
-    $resultcount = mysql_num_rows($query_result);
+//	echo "QUERY(fkt_rolle.inc.php)=".$query."<br><br>";
 
+    $resultcount = mysql_num_rows($query_result);
+//	echo "<big>$resultcount</big><br>";
+//    var_dump (mysql_fetch_array($query_result));echo "<br>";
+	$result = NULL;
     for ($i=1;$i<=$resultcount;$i++){
-      $result[$i] = mysql_fetch_assoc($query_result);
+      $result[$i] = mysql_fetch_array($query_result);
     }
 
     mysql_free_result($query_result);
 
-//    echo "QUERY(fkt_rolle.inc.php)=".$query."<br><br>";
-
-      // Voreinstellung für die leere Tabelle
+      // Voreinstellung fÃ¼r die leere Tabelle
     for ($i=1; $i<=5; $i++){
       for ($j=1; $j<=4; $j++){
          $empf_matrix [$i][$j] = array(
@@ -113,7 +115,7 @@ echo "DBDATA--".$conf_4f_db  ["server"]." - ".$conf_4f_db  ["datenbank"]." - ".
 
       mysql_free_result($query_result);
 
-       // Voreinstellung für die leere Tabelle
+       // Voreinstellung fÃ¼r die leere Tabelle
      $stab = NULL;
      $fb   = Null;
      $i    = 0 ;

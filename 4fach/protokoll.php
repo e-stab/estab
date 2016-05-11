@@ -2,14 +2,14 @@
 /*****************************************************************************\
    Datei: protokoll.php
 
-   ben�tigte Dateien:
+   benÃ¶tigte Dateien:
 
    Beschreibung:
 
    (C) Hajo Landmesser IuK Kreis Heinsberg
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
-
+if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big>Protokoll</big></big><br>";  }
 /*****************************************************************************\
   function protokolleintrag ();
        p_zeit,         - Zeitstempel
@@ -33,7 +33,7 @@ Aufruf:
       $result = "";
       $db = mysql_connect($conf_4f_db["server"],$conf_4f_db["user"], $conf_4f_db["password"])
             or die ("900 - Konnte keine Verbindung zur Protokolldatenbank herstellen");
-
+      mysql_query('SET NAMES utf8');
       $db_check = mysql_select_db ($conf_4f_db ["datenbank"] )
            or die ("901 - Auswahl der Protokolldatenbank fehlgeschlagen");
 

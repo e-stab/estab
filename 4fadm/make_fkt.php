@@ -1,24 +1,25 @@
 <?php
+session_start();
+
 define ("debug", false);
 /****************************************************************************\
 
 \****************************************************************************/
   function check_fkt ($values){
-
-//    echo "VALUES="; var_dump ($values); echo "<br><br><br>";
-
+    if (debug) {echo "VALUES="; var_dump ($values); echo "<br><br><br>";}
+	$xy = NULL;
     foreach ($values as $key => $val){
-      if (debug) echo "KEY = ".$key." - VAL =".$val."<br>";
+      if (debug) echo "XY=".$xy."  - KEY = ".$key." - VAL =".$val."<br>";
 
-      list ($pos,$xy) = explode ('_',$key);
-      if ( ($pos == "pos") and ($val != "") )
-        if (strlen ($xy) == 2){
-          $x = substr ($xy, 0, 1);
-          $y = substr ($xy, 1, 1);
-//          echo "<b>##POS=".$pos." x=".$x." y=".$y." val=".$val."</b><br>";
-        }
-//      $suchmuster = "\!\" \$\%\&/()=?";
-//      preg_match($suchmuster, $val, $treffer, PREG_OFFSET_CAPTURE, 3);
+      if ($xy != ""){
+	    list ($pos,$xy) = explode ('_',$key);
+        if ( ($pos == "pos") and ($val != "") )
+          if (strlen ($xy) == 2){
+            $x = substr ($xy, 0, 1);
+            $y = substr ($xy, 1, 1);
+            if (debug) echo "<b>##POS=".$pos." x=".$x." y=".$y." val=".$val."</b><br>";
+          }
+      }    
     }
 
     return (true);
@@ -32,9 +33,6 @@ define ("debug", false);
 
     include ("../4fcfg/config.inc.php");
     include ("../4fcfg/fkt_rolle.inc.php");
-
-// echo "VALUE=="; print_r ($values); echo "<br><br><br>";
-
 
     $prefile = "<"."?"."php \r\n".
       "/"."******************************************************************************\ \r\n".
@@ -168,18 +166,20 @@ define ("debug", false);
 //      echo "+++<br>";
 
     } // foreach
-
-//     echo "<br>"; echo "pos   dbsave=";print_r ($pos); echo "<br>";
-//     echo "<br>"; echo "rolle dbsave=";print_r ($rolle); echo "<br>";
-//     echo "<br>"; echo "stasi dbsave=";print_r ($stasi); echo "<br>";
-
+/*
+     echo "<br>"; echo "<b>pos   dbsave=</b>"; var_dump ($pos);   echo "<br>";
+     echo "<br>"; echo "<b>rolle dbsave=</b>"; var_dump ($rolle); echo "<br>";
+     echo "<br>"; echo "<b>stasi dbsave=</b>"; var_dump ($stasi); echo "<br>";
+*/
     $fktquery = "INSERT INTO `".$conf_4f_tbl   ["empfmtx"]."` (`mtx_x`, `mtx_y`, `mtx_typ`, `mtx_fkt`, `mtx_rolle`, `mtx_mode`, `mtx_rc2`, `mtx_auto`) VALUES ";
     for ($zeile = 1; $zeile <= 5; $zeile ++) {
       for ($spalte = 1; $spalte <= 4; $spalte ++){
-        if (($rolle[$zeile][$spalte] == "Stab") OR
-            ($rolle[$zeile][$spalte] == "FB")){ $typ="\"cb\""; } else { $typ="\"t\""; }
+        if ((isset ($rolle[$zeile][$spalte])) AND 
+            (($rolle[$zeile][$spalte] == "Stab") OR
+            ($rolle[$zeile][$spalte] == "FB")) ){ $typ="\"cb\""; } else { $typ="\"t\""; }
         if (($rotkopiex == $zeile) and ($rotkopiey == $spalte)){ $redcpy = "1"; } else { $redcpy = "0"; }
-        if ( $stasi [$zeile][$spalte] == 1 ) { $autosichter = "1" ; } else { $autosichter = "0"; }
+        if ( (isset ($stasi [$zeile][$spalte])) and ($stasi [$zeile][$spalte] == 1)) { 
+           $autosichter = "1" ; } else { $autosichter = "0"; }
 
         if ($pos[$zeile][$spalte] != ""){
           $fktquery .= "(".$zeile.",
@@ -229,7 +229,7 @@ define ("debug", false);
     echo "<html>\n";
     echo "<head>\n";
       // Hier ist Java drin
-    echo "<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=utf-8\">";
+    echo "<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=utf8\">";
     echo "<title>".$titel."</title>\n";
 
     echo "<script type='text/javascript'>\n";
@@ -285,10 +285,11 @@ define ("debug", false);
        // rot
        $bgcolor = "rgb(255, 0, 0)";
     } else {
-      if ($entry[auto] == 1) { // Hintergrundfarbe des Feldes umstellen bei der standard Sichtung
+      if (!isset ($entry['auto'])) { $entry['auto'] = ""; }
+      if ($entry['auto'] == 1) { // Hintergrundfarbe des Feldes umstellen bei der standard Sichtung
          // blau
         $bgcolor = "rgb(  100,   100, 255)";
-      } elseif ($entry[auto] == 0) {
+      } elseif ($entry['auto'] == 0) {
          //
         $bgcolor = "rgb(204, 204, 152)";
       }
@@ -299,7 +300,7 @@ define ("debug", false);
       echo "<td style=\"font-size:18px; font-weight:900; text-align: center; width: 10px; background-color: ".$bgcolor.";\">\n";
       echo "<a><img src=\"".$conf_design_path."/null.gif\" alt=\"leer\"></a>\n";
     } else {
-      if ($entry[auto] == 1) { // Hintergrundfarbe des Feldes umstellen bei der standard Sichtung
+      if ($entry['auto'] == 1) { // Hintergrundfarbe des Feldes umstellen bei der standard Sichtung
          // blau
         echo "<td style=\"font-size:18px; font-weight:800; text-align: center; width: 10px; background-color: ".$bgcolor.";\">\n";
       } else {
@@ -307,17 +308,17 @@ define ("debug", false);
         echo "<td style=\"font-size:18px; font-weight:800; text-align: center; width: 10px; background-color: ".$bgcolor.";\">\n";
       }
        // Autosichtung
-      if ($entry[auto] == 1) {
-        echo "<!-- ".$isstasi." -->";
+      if ($entry['auto'] == 1) {
+//        echo "<!-- ".$isstasi." -->";
         echo "<input type=\"checkbox\" name=\"stasi_".$zeile.$spalte."\" value=\"salami_".$zeile.$spalte."\" id=\"fktmtx_".$zeile.$spalte."_as\" checked=\"checked\" >";
-      } elseif ($entry[auto] == 0) {
+      } elseif ($entry['auto'] == 0) {
         echo "<input type=\"checkbox\" name=\"stasi_".$zeile.$spalte."\" value=\"salami_".$zeile.$spalte."\" id=\"fktmtx_".$zeile.$spalte."_as\" >";
       }
     }
     echo "</td>\n";
 
     echo "<td style=\"font-size:18px; font-weight:800; text-align: center; width: 10px; background-color: ".$bgcolor.";\">\n";
-      // Radiobutton für die Rotkopie
+      // Radiobutton fÃ¼r die Rotkopie
     if ( $isredcopy2 ) {$sel = "checked=\"checked\"";} else {$sel = "";}
     echo "<input name=\"lagerot\" type=\"radio\"".$sel." value=\"".$zeile.$spalte."\" id=\"fktmtx_".$zeile.$spalte."_rk\" >\n";
     echo "</td>";
@@ -406,16 +407,11 @@ if ( debug == true ){
   echo "GET="; var_dump ($_GET);    echo "#<br><br>\n";
   echo "POST="; var_dump ($_POST);   echo "#<br><br>\n";
   echo "COOKIE="; var_dump ($_COOKIE); echo "#<br><br>\n";
-  echo "SESSION="; print_r ($_SESSION); echo "#<br>\n";
+  if (isset($_SESSION)) echo "SESSION="; var_dump ($_SESSION); echo "#<br>\n";
 }
 
    // Gibt es eine default Datei?
-  define ("defaultfile","default.fkt");
-  if (file_exists (filename) ){
-
-  }
-
-
+  define ('defaultfile','default.fkt');
   if (isset($_GET ["absenden_x"] ) ){
     $check = check_fkt ($_GET);
     if ($check) {

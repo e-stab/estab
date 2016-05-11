@@ -15,7 +15,7 @@ class vali_data_form {
   }
 
   /*****************************************************************************\
-    Voreinstellung f�r das Ergebnisarray
+    Voreinstellung fÃ¼r das Ergebnisarray
   \*****************************************************************************/
   function reset_validate () {
      $this->validate ["01_medium"]   = false ;
@@ -99,7 +99,7 @@ class vali_data_form {
   }
 
   function test_vtzeit  ( $data){
-    // pr�fe auf vollst�ndige taktische Zeit
+    // prÃ¼fe auf vollstÃ¤ndige taktische Zeit
     // TThhmmMMMJJJJ
     $tag    = substr ($data, 0, 2);
     $stunde = substr ($data, 2, 2);

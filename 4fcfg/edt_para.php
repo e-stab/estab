@@ -123,7 +123,7 @@ class parametrierung {
         2 => array ('text' => "<b>Passwort</b> :",
                     'feld' => "name=\"db_userpw\" type=\"password\" size=\"30\" maxlength=\"30\""
                     ),
-        3 => array ('text' => "<b>Passwortbest‰tigung</b> :",
+        3 => array ('text' => "<b>Passwortbest√§tigung</b> :",
                     'feld' => "name=\"db_userpwrep\" type=\"password\" size=\"30\" maxlength=\"30\""
                     ),
         4 => array ('text' => "<b>Datenbankname</b> :",

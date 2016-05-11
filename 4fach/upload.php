@@ -1,5 +1,5 @@
 <?php
-define ("debug",true);
+//define ("debug",false);
 
 include ("upload/upload_class.php");
 
@@ -11,10 +11,10 @@ class fileupload extends file_upload {
   var $fs_comment;   // Beschreibung
   var $fs_shortname; // Kuerzel
   var $fs_timestamp; // Zeitstempel
-  var $fs_nextfilename; // N�chster Dateiname
+  var $fs_nextfilename; // NÃ¤chster Dateiname
 
   var $ff_savename ; // Name der gespeicherten Datei g.g. Darstellung im Menue
-  var $ff_filename ; // Urspr�nglicher Dateiname
+  var $ff_filename ; // UrsprÃ¼nglicher Dateiname
   var $ff_comment  ; // Beschreibung Faxkopf
   var $ff_timestamp; // Zeitstempel
   var $ff_kuerzel  ; // Kuerzel des Fm
@@ -163,8 +163,9 @@ class fileupload extends file_upload {
   function pre_html($titel){
     echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
     echo "<html>\n";
-    echo "<head>\n";
-    echo "<meta content=\"text/html; charset=ISO-8859-1\" http-equiv=\"content-type\">\n";
+    echo "<head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8" />\n";
+    echo "<meta content=\"text/html; charset=UTF-8\" http-equiv=\"content-type\">\n";
     echo "<title>$titel</title>";
     echo "</head>";
     echo "<body>";
@@ -235,13 +236,13 @@ class fileupload extends file_upload {
 
 session_start();
 
-define ("debug",true);
+//define ("debug",false);
 
     include ("../config.inc.php");
 
 //echo "<big><big><big>UPLOAD</big></big></big><br>";
 /************************************************************************
-   Steuerung �ber ein Sessioncookie
+   Steuerung Ã¼ber ein Sessioncookie
 
      $_SESSION ["UPLOAD"] ==
         "fileselect" :
@@ -274,14 +275,14 @@ echo "status=".$status."<br>";
     break;
       /*---------------------------------------------------------------*/
     case "fileselectwindow":
-          // zwei m�glichkeiten 1. absenden oder 2. abbrechen
+          // zwei mÃ¶glichkeiten 1. absenden oder 2. abbrechen
       if (!isset($_POST["abbrechen_x"])) {
         $max_size = 1024*1024*5; // the max. size for uploading
         $my_upload = new fileupload;
         $my_upload->upload_dir = $conf_4f ["ablage_dir"]."/" ; // "files" is the folder for the uploaded files (you have to create this folder)
           if ( debug == true ){ echo "Upload-Dir:".$my_upload->upload_dir."<br>";}
 
-        $my_upload->extensions = array(".jpg",".tif",".gif",".avi",".png",".bmp",".zip", ".pdf",".doc",".xls",".odt",".xia"); // Erlaubte Dateierweiterungen
+        $my_upload->extensions = array(".jpg",".tif",".gif",".avi",".png",".bmp",".zip", ".pdf",".doc",".xls",".odt",".xia",".txt"); // Erlaubte Dateierweiterungen
         $my_upload->max_length_filename = 100; // change this value to fit your field length in your database (standard 100)
         $my_upload->rename_file = true;
         if (isset($_POST["absenden_x"])) {

@@ -8,9 +8,14 @@ define ("debug",false);
 define("FATAL", E_USER_ERROR);
 define("ERROR", E_USER_WARNING);
 define("WARNING", E_USER_NOTICE);
-
-// die Stufe f�r dieses Skript einstellen
-error_reporting(E_ALL);
+	if (debug){ echo "<b>Start in </b>".__file__.":".__LINE__."):<br>" ;}
+// die Stufe fÃ¼r dieses Skript einstellen
+if (debug) { 
+   error_reporting(E_ALL);
+   ini_set('display_errors', '1');
+} else {
+	error_reporting(E_ALL);
+}
 
 // Fehlerbehandlungsfunktion
 function myErrorHandler($errno, $errstr, $errfile, $errline)
@@ -67,7 +72,7 @@ function outerrormsg ($errno, $errtxt) {
          echo "Benutzer oder Passwort zur Anmeldung am SQL-Server falsch.";
       break;
        case 1046 :
-         echo "Es ist keine Datenbank ausgew�hlt.";
+         echo "Es ist keine Datenbank ausgewÃ¤hlt.";
       break;
       case 1049 :
          echo "<p>Datenbank nicht vorhanden <a href=\"../4fadm/create_db.php\">Datenbank anlegen</a></p>";
@@ -164,11 +169,9 @@ class make_dbconf {
     $fileline [15] = "$"."conf_tbl     [\"tbb\"]           = \"".$values ['tbl_pre']."tbb\"; \r\n";
     $fileline [16] = "$"."conf_tbl     [\"ubb\"]           = \"".$values ['tbl_pre']."ubb\"; \r\n";
 
-
-
     $postfile = "\r\r\n\r\n\n?>";
 
-    $filename =  $conf_web ["srvroot"].$conf_web ["pre_path"]."4fcfg/dbcfg.inc.php";
+    $filename =  $conf_web ["srvroot"]."/".$conf_web ["pre_path"]."4fcfg/dbcfg.inc.php";
 
     $fhndl = fopen ( $filename, "w+");
 
@@ -179,6 +182,7 @@ class make_dbconf {
     }
 
     fwrite ($fhndl, $postfile);
+
     fclose ($fhndl);
   }
 
@@ -198,13 +202,13 @@ class make_dbconf {
         2 => array ('text' => "<b>Passwort</b> :",
                     'feld' => "name=\"db_userpw\" type=\"text\" size=\"30\" maxlength=\"30\""
                     ),
-        3 => array ('text' => "<b>Tabellenpr&auml;fix</b><br>Zeichenfolge die den<br>Tabellennamen vorangestellt wird :",
+        3 => array ('text' => "<b>TabellenprÃ¤fix</b><br>Zeichenfolge die den<br>Tabellennamen vorangestellt wird :",
                     'feld' => "name=\"tbl_pre\" type=\"text\" size=\"30\" maxlength=\"30\" value=\"".$this->preconf ['tbl_pre']."\""
                     )
       );
 
     $vordruckmenue = array (
-        0 => array ('text' => "<b>Anschrift</b><br>Text der bei Eing&auml;ngen<br>im Anschriftfeld eingetragen <br>werden soll<br><i>EL KR HS</i> :",
+        0 => array ('text' => "<b>Anschrift</b><br>Text der bei EingÃ¤ngen<br>im Anschriftfeld eingetragen <br>werden soll<br><i>EL KR HS</i> :",
                     'feld' => "name=\"anschrift\" type=\"text\" size=\"10\" maxlength=\"30\" value=\"".$this->preconf ['anschrift']."\""
                     ),
         1 => array ('text' => "<b>Hoheitskennzeichen</b><br>:",
@@ -278,15 +282,10 @@ class make_econf {
     "/"."******************************************************************************\ \r\n".
     "              Definitionen fuer den Einsatz                                        \r\n".
     "\******************************************************************************"."/ \r\n";
-
     $fileline [1]  = "$"."conf_4f_db [\"datenbank\"]     = \"".$values ['db_dbname']."\"; \r\n";
-
     $fileline [2] = "$"."conf_4f     [\"anschrift\"]    = \"".$values ['anschrift']."\"; \r\n";
-
     $fileline [3] = "$"."conf_4f     [\"hoheit\"]       = \"".$values ['hoheit']."\"; \r\n";
-
     $postfile = "\r\r\n\r\n\n?>";
-
     $a=explode("/",$_SERVER["PHP_SELF"]);
 // echo "a="; var_dump($a); echo "<br>";
     $i = 1;
@@ -299,7 +298,7 @@ class make_econf {
 // echo "<big> PRE_DIR=".$conf_pre_dir." </big><br>";
 
     if ($b != ""){
-      $conf_pre_dir =  $b; // mit f�hrendem /
+      $conf_pre_dir =  $b; // mit fÃ¼hrendem /
     } else {
       $conf_pre_dir =  "";
     }
@@ -345,7 +344,7 @@ class make_econf {
 // echo "<big> PRE_DIR=".$conf_pre_dir." </big><br>";
 
     if ($b != ""){
-      $conf_pre_dir =  $b; // mit f�hrendem /
+      $conf_pre_dir =  $b; // mit fÃ¼hrendem /
     } else {
       $conf_pre_dir =  "";
     }
@@ -391,9 +390,9 @@ class make_econf {
 
 
     $db = mysql_connect($conf_4f_db ["server"],$conf_4f_db ["user"], $conf_4f_db ["password"]);
-
+    
     $db_con_is_ok = mysql_ping  ($db);
-
+    mysql_query('SET NAMES utf8');
     echo "<table border=\"2\" cellpadding=\"5\" cellspacing=\"0\" bgcolor=\"#E0E0E0\">\n";
 
     echo "<tr>\n";
@@ -414,7 +413,7 @@ class make_econf {
     echo "<p><b>Keine Sonderzeichen oder Umlaute</b><br>Beispiel: <b>\"e_15jun2006\"</b></p>";
     if (!$db_con_is_ok) {
       echo "<p><img src=\"".$conf_menue ["symbole"]."/redlight.gif\" alt=\"schwerer Fehler\">".
-           " Es besteht keine Verbindung zur Datenbank.<br>Bitte unter \"Datenbankparameter eingeben\" die Parameter pr�fen</p>";
+           " Es besteht keine Verbindung zur Datenbank.<br>Bitte unter \"Datenbankparameter eingeben\" die Parameter prÃ¼fen</p>";
     } else {
       echo "<p><img src=\"".$conf_menue ["symbole"]."/greenlight.gif\" alt=\"keine Fehler\">".
            "Verbindung zur Datenbank ist in Ordnung.<br>Die Datenbank kann angelegt werden.</p>";
@@ -432,11 +431,11 @@ class make_econf {
     $vordruckmenue = array (
         0 => array ('text' => "<b>Anschrift :</b>",
                     'feld' => "name=\"anschrift\" type=\"text\" size=\"10\" maxlength=\"30\" value=\"".$this->preconf ['anschrift']."\"",
-                    'com'  => "Text der automatisch bei Eing&auml;ngen im Anschriftfeld eingetragen <br>werden soll<br><i>EL KR HS</i> "
+                    'com'  => "Text der automatisch bei EingÃ¤ngen im Anschriftfeld eingetragen <br>werden soll<br><i>EL KR HS</i> "
                     ),
         1 => array ('text' => "<b>Hoheitskennzeichen</b><br>:",
                     'feld' => "name=\"hoheit\" type=\"text\" size=\"6\" maxlength=\"6\" value=\"".$this->preconf ['hoheit']."\"",
-                    'com'  => "Wird als Pr&auml;fix f�r die Anh&auml;nge ben&ouml;tigt."
+                    'com'  => "Wird als PrÃ¤fix fÃ¼r die AnhÃ¤nge benÃ¶tigt."
                     )
       );
 
@@ -485,7 +484,7 @@ class make_econf {
       $db_hndl = mysql_connect ( $conf_4f_db ["server"] ,
                                  $conf_4f_db ["user"] ,
                                  $conf_4f_db ["password"] );
-
+      mysql_query('SET NAMES utf8');
       $db_errno  = mysql_errno ();
       $db_errtxt = mysql_error ();
       if ($db_errno != 0) {
@@ -575,9 +574,9 @@ class make_econf {
 
     echo "</tbody></table>";
 
-    echo "<br><big><big>Die Tabellen wurden als Komma getrennte Werte gespeichert und k�nnen so in<br>".
+    echo "<br><big><big>Die Tabellen wurden als Komma getrennte Werte gespeichert und kÃ¶nnen so in<br>".
          " OpenOffice.Calc oder Excel importiert und ausgewertet werden.<br></big></big>";
-    // zum Schluss �bertragen wir das gesamte Verzeichnis als ZIP-Datei an den anforderer
+    // zum Schluss Ã¼bertragen wir das gesamte Verzeichnis als ZIP-Datei an den anforderer
 
   }
 
@@ -590,9 +589,10 @@ class make_econf {
   include ("../4fcfg/e_cfg.inc.php");
   include ("../4fcfg/config.inc.php");
 
+  if (debug){ echo "<b>Startscript</b>".__file__.":".__LINE__."):<br>" ;}
 
 // auf die benutzerdefinierte Fehlerbehandlung umstellen
-  $old_error_handler = set_error_handler("myErrorHandler");
+//  $old_error_handler = set_error_handler("myErrorHandler");
 
 
   // Aufruf von admin.php
@@ -601,16 +601,17 @@ class make_econf {
   // vom formular datenbankparameter
   // vom formular Einsatzdaten
 
-
   if  ( $_GET ["task"] == "datenbank" ) {
     $a = new make_dbconf ($conf_4f_db, $conf_4f_tbl, $conf_tbl, $conf_4f);
 
     if (isset($_GET["absenden_x"])) {
       $a->write_dbfkt_file ($_GET);
-      header("Location: ".$conf_urlroot.$conf_web ["pre_path"]."4fadm/admin.php");
+      if (debug){ echo "<b>Location: ".$conf_urlroot.$conf_web ['pre_path']."4fadm/admin.php</b>".__file__.":".__LINE__."):<br>" ;}
+      header("Location: ".$conf_urlroot.$conf_web ['pre_path']."4fadm/admin.php");
     }
     if ( isset($_GET["abbrechen_x"]) ){
-      header("Location: ".$conf_urlroot.$conf_web ["pre_path"]."/4fadm/admin.php");
+    	if (debug){ echo "<b>Location: ".$conf_urlroot.$conf_web ['pre_path']."4fadm/admin.php</b>".__file__.":".__LINE__."):<br>" ;}
+      header("Location: ".$conf_urlroot.$conf_web ['pre_path']."4fadm/admin.php");
     }
 
     $a->menue ();
@@ -621,10 +622,11 @@ class make_econf {
     if (isset($_GET["absenden_x"])) {
       $einsatz_neu->write_dfkt_file ($_GET);
       $einsatz_neu->write_efkt_file ($_GET);
-      header("Location: ".$conf_urlroot.$conf_web ["pre_path"]."/4fadm/create_db.php");
+      if (debug){ echo "<b>Location: ".$conf_urlroot.$conf_web ["pre_path"]."4fadm/create_db.php</b>".__file__.":".__LINE__."):<br>" ;}
+      header("Location: ".$conf_urlroot.$conf_web ["pre_path"]."4fadm/create_db.php");
     }
     if ( isset($_GET["abbrechen_x"]) ){
-      header("Location: ".$conf_urlroot.$conf_web ["pre_path"]."/4fadm/admin.php");
+      header("Location: ".$conf_urlroot.$conf_web ["pre_path"]."4fadm/admin.php");
     }
     $einsatz_neu->menue ();
   }
@@ -651,9 +653,7 @@ class make_econf {
 
   if  ( $_GET ["task"] == "einsatz_ende" ) {
     $einsatz_ende = new make_econf ($conf_4f_db, $conf_4f_tbl, $conf_tbl, $conf_4f);
-
     $einsatz_ende->schliesse_einsatz ();
-
   }
 
   echo "</BODY></HTML>";

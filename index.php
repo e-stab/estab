@@ -2,6 +2,22 @@
 
 define ("showmenue", true);
 
+/*eStab
+         ---------------------
+   -------                 --------------
+             SSSSSSS    tt             aa
+            SS          tt             aa
+    eeeeee\ SS         ttttt  aaaaaa   aa
+   ee |  ee\ SSSSSSS    tt         aa  aaaaaa
+   eeeeeeEe |      SS   tt    aaaaaaa  aa    aa
+   ee_|____/       SS   tt   aa    aa  aa    aa
+    eeeeee | SSSSSSS    tttt  aaaaaaa  aaaaaaa
+   \______/
+ 
+ 
+
+*/
+
 
 //include ("./4fcfg/config.inc.php");
 include ("menue.inc.php");
@@ -39,21 +55,22 @@ include ("menue.inc.php");
 
     for ($m=1;$m <= count ($menue);$m++){
 
-      $is_gerade = ($m % 2) == 0;
-      if (!$is_gerade){echo "<tr>\n";}
-        if ($menue[$m]['link'] != ""){
-          echo "<td style=\"text-align: center; width: 100px; background-color: ".$conf_menue["foreground_color"].";\" BORDER=\"0\" CELLPADDING=\"1\" CELLSPACING=\"0\">\n";
-          echo "<a  href=\"".$menue[$m]['link']."\" target=\"_blank\"><img src=\"".$menue[$m]['pic']."\" alt=\"".$menue[$m]['text']."\"></a>";
-          echo "</td>\n";
-        } else {
-          echo "<td style=\"text-align: center; width: 100px; background-color: ".$conf_menue["foreground_color"].";\" BORDER=\"0\" CELLPADDING=\"1\" CELLSPACING=\"0\">\n";
-          echo "<a><img src=\"".$conf_menue ["symbole"]."/null.gif \" alt=\"leer\"></a>";
-          echo "</td>\n";
-        }
+      $is_gerade = ($m % 2) == 0; // linke Spalte des Menüs
+      if (!$is_gerade){echo "<tr>\n";} // neue Zeile also erstmal ein <TR>
 
-        if ($menue[$m]['link'] != ""){
+		if (($menue[$m]['visible']) AND ($menue[$m]['link'] != "")) { // 1. Spalte links (Pictogramme)
+			echo "<td style=\"text-align: center; width: 100px; background-color: ".$conf_menue["foreground_color"].";\" BORDER=\"0\" CELLPADDING=\"1\" CELLSPACING=\"0\">\n";
+         echo "<a  href=\"".$menue[$m]['link']."\" target=\"_blank\"><img src=\"".$menue[$m]['pic']."\" title=\"".$menue[$m]['info']."\" alt=\"".$menue[$m]['text']."\"></a>";
+         echo "</td>\n";
+		} else {
+         echo "<td style=\"text-align: center; width: 100px; background-color: ".$conf_menue["foreground_color"].";\" BORDER=\"0\" CELLPADDING=\"1\" CELLSPACING=\"0\">\n";
+         echo "<a><img src=\"".$conf_menue ["symbole"]."/null.gif \" alt=\"leer\"></a>";
+         echo "</td>\n";
+      }
+
+      if (($menue[$m]['visible']) AND ($menue[$m]['link'] != "")){ // 2. Spalte links Text
           echo "<td style=\"text-align: center; width: 250px; background-color: ".$conf_menue["foreground_color"].";\" BORDER=\"0\" CELLPADDING=\"1\" CELLSPACING=\"0\">\n";
-          echo "<a  href=\"".$menue[$m]['link']."\" target=\"_blank\"><big><big>".$menue[$m]['text']."</big></a>\n";
+          echo "<a  href=\"".$menue[$m]['link']."\" title=\"".$menue[$m]['info']."\" target=\"_blank\"><big><big>".$menue[$m]['text']."</big></a>\n";
           echo "</td>\n";
         } else {
           echo "<td style=\"text-align: center; width: 250px; background-color: ".$conf_menue["foreground_color"].";\" BORDER=\"0\" CELLPADDING=\"1\" CELLSPACING=\"0\">\n";
@@ -93,7 +110,7 @@ include ("menue.inc.php");
         if (!$is_gerade){echo "<tr>\n";}
           if ($zusatz_menue[$m]['link'] != ""){
             echo "<td style=\"text-align: center; width: 100px; background-color: ".$conf_menue["foreground_color"].";\" BORDER=\"0\" CELLPADDING=\"1\" CELLSPACING=\"0\">\n";
-            echo "<a  href=\"".$zusatz_menue[$m]['link']."\" target=\"_blank\"><img src=\"".$zusatz_menue[$m]['pic']."\" alt=\"".$zusatz_menue[$m]['text']."\"></a>";
+            echo "<a  href=\"".$zusatz_menue[$m]['link']."\" target=\"_blank\"><img src=\"".$zusatz_menue[$m]['pic']."\" title=\"".$menue[$m]['info']."\" alt=\"".$zusatz_menue[$m]['text']."\"></a>";
             echo "</td>\n";
           } else {
             echo "<td style=\"text-align: center; width: 100px; background-color: ".$conf_menue["foreground_color"].";\" BORDER=\"0\" CELLPADDING=\"1\" CELLSPACING=\"0\">\n";
@@ -103,7 +120,7 @@ include ("menue.inc.php");
 
           if ($zusatz_menue[$m]['link'] != ""){
             echo "<td style=\"text-align: center; width: 250px; background-color: ".$conf_menue["foreground_color"].";\" BORDER=\"0\" CELLPADDING=\"1\" CELLSPACING=\"0\">\n";
-            echo "<a  href=\"".$zusatz_menue[$m]['link']."\" target=\"_blank\"><big><big>".$zusatz_menue[$m]['text']."</big></a>\n";
+            echo "<a  href=\"".$zusatz_menue[$m]['link']."\" title=\"".$zusatz_menue[$m]['info']."\" target=\"_blank\"><big><big>".$zusatz_menue[$m]['text']."</big></a>\n";
             echo "</td>\n";
           } else {
             echo "<td style=\"text-align: center; width: 250px; background-color: ".$conf_menue["foreground_color"].";\" BORDER=\"0\" CELLPADDING=\"1\" CELLSPACING=\"0\">\n";
@@ -113,7 +130,7 @@ include ("menue.inc.php");
 
         if (!$is_gerade){
           echo "<td style=\"text-align: center; width: 100px; background-color: ".$conf_menue["foreground_color"].";\" BORDER=\"0\" CELLPADDING=\"1\" CELLSPACING=\"0\">\n";
-          echo "<a><img src=\"".$conf_menue ["symbole"]."/null.gif \" alt=\"leer\"></a>";
+          echo "<a><img src=\"".$conf_menue ["symbole"]."/null.gif \" title=\"".$menue[$m]['info']."\" alt=\"leer\"></a>";
           echo "</td>\n";
         }
         if ($is_gerade){echo "</tr>\n";}
@@ -130,10 +147,10 @@ include ("menue.inc.php");
 
         echo "</td>\n";
       }
-    }
-  echo "</tbody>\n";
-  echo "</table>\n";
-    echo "</body>\n";
-    echo "</head>\n";
+   }
+	echo "</tbody>\n";
+	echo "</table>\n";
+	echo "</body>\n";
+	echo "</head>\n";
 
 ?>

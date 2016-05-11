@@ -1,8 +1,8 @@
 <?php
 /**********************************************************************************\
-  Das Skript wird per include beim Abmelden ausgef�hrt.
+  Das Skript wird per include beim Abmelden ausgefÃ¼hrt.
 \**********************************************************************************/
-define ("debug", true);
+define ("debug", false);
 
 
 if ( debug == true ){

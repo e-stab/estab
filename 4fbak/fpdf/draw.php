@@ -119,7 +119,7 @@ class PDF_Draw extends FPDF {
 		}
 	}
 
-	// Draws a Bézier curve (the Bézier curve is tangent to the line between the control points at either end of the curve)
+	// Draws a BÃ©zier curve (the BÃ©zier curve is tangent to the line between the control points at either end of the curve)
 	// Parameters:
 	// - x0, y0: Start point
 	// - x1, y1: Control point 1
@@ -163,7 +163,7 @@ class PDF_Draw extends FPDF {
 	// - style: Style of ellipse (draw and/or fill: D, F, DF, FD, C (D + close))
 	// - line_style: Line style for ellipse. Array like for SetLineStyle
 	// - fill_color: Fill color. Array with components (red, green, blue)
-	// - nSeg: Ellipse is made up of nSeg Bézier curves
+	// - nSeg: Ellipse is made up of nSeg BÃ©zier curves
 	function Ellipse($x0, $y0, $rx, $ry = 0, $angle = 0, $astart = 0, $afinish = 360, $style = '', $line_style = null, $fill_color = null, $nSeg = 8) {
 		if ($rx) {
 			if (!(false === strpos($style, 'F')) && $fill_color) {
@@ -249,7 +249,7 @@ class PDF_Draw extends FPDF {
 	// - style: Style of circle (draw and/or fill) (D, F, DF, FD, C (D + close))
 	// - line_style: Line style for circle. Array like for SetLineStyle
 	// - fill_color: Fill color. Array with components (red, green, blue)
-	// - nSeg: Ellipse is made up of nSeg Bézier curves
+	// - nSeg: Ellipse is made up of nSeg BÃ©zier curves
 	function Circle($x0, $y0, $r, $astart = 0, $afinish = 360, $style = '', $line_style = null, $fill_color = null, $nSeg = 8) {
 		$this->Ellipse($x0, $y0, $r, 0, 0, $astart, $afinish, $style, $line_style, $fill_color, $nSeg);
 	}
@@ -471,7 +471,7 @@ class PDF_Draw extends FPDF {
 		$this->_out(sprintf('%.2f %.2f l', $x * $this->k, ($this->h - $y) * $this->k));
 	}
 
-	// Draws a Bézier curve from last draw point
+	// Draws a BÃ©zier curve from last draw point
 	// Parameters:
 	// - x1, y1: Control point 1
 	// - x2, y2: Control point 2

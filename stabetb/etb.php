@@ -101,7 +101,7 @@ class etb_liste {
     $this->sqlquery = $query ;
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[query_table_iu] Konnte keine Verbindung zur Datenbank herstellen");
-
+    mysql_query('SET NAMES utf8');
     $db_check = mysql_select_db ($this->db_name)
        or die ("[query_table_iu] Auswahl der Datenbank fehlgeschlagen");
 
@@ -120,7 +120,7 @@ class etb_liste {
 
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[query_table] Konnte keine Verbindung zur Datenbank herstellen");
-
+    mysql_query('SET NAMES utf8');
     $db_check = mysql_select_db ($this->db_name)
        or die ("[query_table] Auswahl der Datenbank fehlgeschlagen");
 
@@ -178,7 +178,7 @@ if (debug == true){ echo "D A T E N  W E R D E N  G E S P E I C H E R N<br>";}
                                $conf_4f_db  ["password"] );
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[query_table] Konnte keine Verbindung zur Datenbank herstellen");
-
+    mysql_query('SET NAMES utf8');
     $db_check = mysql_select_db ($this->db_name)
        or die ("[query_table] Auswahl der Datenbank fehlgeschlagen");
 
@@ -209,7 +209,7 @@ if (debug == true){ echo "D A T E N  W E R D E N  G E S P E I C H E R N<br>";}
                         $conf_4f_db  ["password"] );
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[query_table] Konnte keine Verbindung zur Datenbank herstellen");
-
+    mysql_query('SET NAMES utf8');
     $db_check = mysql_select_db ($this->db_name)
        or die ("[query_table] Auswahl der Datenbank fehlgeschlagen");
 //    $result = mysql_list_tables($conf_4f_db ["datenbank"]); nach "mysql_list_tables is depreciated" => mysql_query"SHOW TABLES FROM " . $conf_4f_db["datenbank"])
@@ -385,6 +385,9 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
 /*****************************************************************************\
 
 \*****************************************************************************/
+var $lfd ;
+var $task;
+
   function etb_eintragsmenue ($data) {
     include ("../4fcfg/config.inc.php");
 
@@ -551,31 +554,59 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
 
 } // class etb_liste
 
+/***************************************************************************************************************************/
+
 
     session_start();
 
-if (debug == true){    echo ">strtoupper( _SESSION[ \"vStab_rolle\"]) ->"; var_dump (strtoupper( $_SESSION["vStab_rolle"])); echo "<br>";}
-if (debug == true){    echo ">strtoupper( _SESSION[\"ROLLE\"]) ->"; var_dump (strtoupper( $_SESSION["ROLLE"])); echo "<br>";}
+    if (debug == true){ echo ">strtoupper( _SESSION[ \"vStab_rolle\"]) ->"; var_dump (strtoupper( $_SESSION["vStab_rolle"])); echo "<br>";}
+    if (debug == true){ echo ">strtoupper( _SESSION[\"ROLLE\"]) ->"; var_dump (strtoupper( $_SESSION["ROLLE"])); echo "<br>";}
 
-    if ((strtoupper( $_SESSION["vStab_rolle"])  == strtoupper("STAB")) or
-        (strtoupper( $_SESSION["ROLLE"])        == strtoupper("STAB")) ){
-      $berechtigt = true;
-    } else {
-      $berechtigt = false ;
-    }
+    // In der Datenbank in der "nv_empfmtx" Tabelle muss es eine Funktion geben die in der Spalte mtx_rc2 (rc2 ==> redcopy to)
+	// Wir brauchen die Datenbankbenutzerdaten
+	include ("../4fcfg/dbcfg.inc.php");
+    include ("../4fcfg/e_cfg.inc.php");
+	
+    $query = "SELECT mtx_fkt FROM `".$conf_4f_tbl  ["empfmtx"]."` WHERE `mtx_rc2` = '1'";
+    
+    $db = mysql_connect($conf_4f_db  ["server"],$conf_4f_db  ["user"], $conf_4f_db  ["password"])
+       or die ("[etb.php Berechtigung] Konnte keine Verbindung zur Datenbank herstellen");
+    mysql_query('SET NAMES utf8');
+    $db_check = mysql_select_db ($conf_4f_db  ["datenbank"])
+       or die ("[etb.php Datenbankprüfung] Auswahl der Datenbank fehlgeschlagen");
 
-if (debug == true){    echo ">berechtigt ->"; var_dump ($berechtigt); echo "<br>";}
+    $query_result = mysql_query ($query, $db) or
+       die("[etb.php Queryfehler] ".mysql_error()." ".mysql_errno()."Query=".$query);
+
+    mysql_close ($db);
+
+	$justified = mysql_result ($query_result, 0);
+    	
+    // Prüfe ob eine Berechtigung für Einträge vorhanden ist "S2"
+	$readauth = (
+	  ((isset ($_SESSION["vStab_rolle"])) and ((strtoupper( $_SESSION["vStab_rolle"])  == strtoupper("STAB")))) or
+      ((isset ($_SESSION["ROLLE"]))       and ((strtoupper( $_SESSION["ROLLE"])        == strtoupper("STAB")))) );
+	
+    if (isset($_SESSION["vStab_funktion"])) {
+	  $berechtigt = ((strcmp( strtoupper( $_SESSION["vStab_funktion"]), (strtoupper($justified)))) == 0);
+	} else {
+	  $berechtigt = false;
+	}
+	
+    if (debug == true){    echo ">berechtigt     ->"; var_dump ($berechtigt); echo "<br>";}
+	if (debug == true){    echo ">leseberechtigt ->"; var_dump ($readauth);   echo "<br>";}
+
+if ($readauth or $berechtigt) {	
 
     $etbobj = new etb_liste ;
 
     $etbobj->etb_authorized = $berechtigt;
 
-    $etbobj->etb_funktion = $_SESSION ["vStab_funktion"] ;
-    $etbobj->etb_kuerzel  = $_SESSION ["vStab_kuerzel"] ;
-    $etbobj->etb_benutzer = $_SESSION ["vStab_benutzer"] ;
+    if (isset ($_SESSION ["vStab_funktion"])) $etbobj->etb_funktion = $_SESSION ["vStab_funktion"] ;
+    if (isset ($_SESSION ["vStab_kuerzel"]))  $etbobj->etb_kuerzel  = $_SESSION ["vStab_kuerzel"] ;
+    if (isset ($_SESSION ["vStab_benutzer"])) $etbobj->etb_benutzer = $_SESSION ["vStab_benutzer"] ;
 
-
-if (debug == true){    echo ">etb_authorized ->"; var_dump ($etbobj->etb_authorized); echo "<br>";}
+  if (debug == true){    echo ">etb_authorized ->"; var_dump ($etbobj->etb_authorized); echo "<br>";}
 
   if ( !(isset ($_GET["absenden_x"] ))) {
 
@@ -590,7 +621,7 @@ if (debug == true){    echo ">etb_authorized ->"; var_dump ($etbobj->etb_authori
     if ( (isset ($_GET["absenden_x"] )) and
          ($_GET["Einsatzdaten"] == "erfassen") ){
 
-      if (debug == true){ echo "Daten k�nnen gespeichert werden !!!!<br>";}
+      if (debug == true){ echo "Daten können gespeichert werden !!!!<br>";}
       $etbobj->speichen_etbtitel ($_GET);
       header("Location: ".$_SERVER["PHP_SELF"]);
 
@@ -617,7 +648,7 @@ if (debug == true){    echo ">etb_authorized ->"; var_dump ($etbobj->etb_authori
     }
 
 
-    if ( $_GET["etb_menue"] == "eintrag" ){
+    if ( (isset ($_GET["etb_menue"])) AND ($_GET["etb_menue"] == "eintrag") ){
         if (debug == true){ echo "M A R K E  0 0 2<br>";}
       $etbobj->etb_eintragsmenue ("");
     }
@@ -659,4 +690,7 @@ if (debug == true){    echo ">etb_authorized ->"; var_dump ($etbobj->etb_authori
 
   if ( !(isset ($_GET["absenden_x"] ))) {  $etbobj->etb_post_html(); }
 
+} else {
+  echo "<big><big><big><b>Keine Berechtigung</b></big></big></big>";
+}
 ?>

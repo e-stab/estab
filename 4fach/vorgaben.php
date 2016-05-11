@@ -13,8 +13,6 @@ if ( debug == true ){
   echo "SESSION="; print_r ($_SESSION); echo "#<br>\n";
 }
 
-  if ( ( $_SESSION ["menue"] == "Usermode" ) and
-       ( !isset ( $_SESSION ["menue"]))) { reset_cookie (); }
 
   include ("../4fcfg/config.inc.php");
   include ("../4fcfg/dbcfg.inc.php");
@@ -22,7 +20,7 @@ if ( debug == true ){
   include ("../4fcfg/fkt_rolle.inc.php");
     // hellblauer Hintergrund
   echo "<body align=\"center\" bgcolor=\"#ECECFF\">";
-  echo "<form action=\"".$conf_4f ["MainURL"]."\" method=\"get\" target=\"mainframe\">\n";
+  echo "<form action=\"".$conf_4f ["MainURL"]."\" method=\"POST\" target=\"mainframe\">\n";
 //  echo "<!-- Formularelemente und andere Elemente innerhalb des Formulars -->\n";
 //  echo date ("His")."<br>";
   echo "<table align=\"center\" style=\"text-align:center;\" border=\"0\" cellspacing=\"0\" cellpeding=\"0\">\n";
@@ -39,8 +37,8 @@ if ( debug == true ){
              echo "</tr>\n";
   }
 
-
-  switch ($_SESSION ["menue"]) {
+if (isset($_SESSION ['menue'])) {
+  switch ($_SESSION ['menue']) {
     case "ROLLE" : // Taetigkeit nach Rolle ==>
       if ($_SESSION ["menue"] == "ROLLE") { // Taetigkeit nach Rolle ==>
         if (isset ($_SESSION ["ROLLE"])){
@@ -81,7 +79,7 @@ if ( debug == true ){
                   echo "<input type=\"image\" name=\"fm_admin\" src=\"button.php?type=menue&m_text=2.Sichtung&m_fs=10&m_form=rund&width=99&bg=mlightblue\" alt=\"admin\">\n";
                   echo "</td></tr>\n";
                   echo "<tr><td>\n";
-                  echo "<input type=\"image\" name=\"fm_anhang\" src=\"button.php?type=menue&m_text=Anhänge&m_fs=10&m_form=rund&width=99&bg=mlightblue\" alt=\"Anhang\">\n";
+                  echo "<input type=\"image\" name=\"fm_anhang\" src=\"button.php?type=menue&m_text=AnhÃ¤nge&m_fs=10&m_form=rund&width=99&bg=mlightblue\" alt=\"Anhang\">\n";
                   echo "</td></tr>\n";
 
              break;
@@ -111,6 +109,7 @@ if ( debug == true ){
       }
     break;
   }
+} // if switsch _session (menue)
   echo "</tbody>";
   echo "</table>";
   echo "</form>";

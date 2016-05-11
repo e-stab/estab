@@ -5,7 +5,7 @@
    benoetigte Dateien:
 
    Beschreibung:
-       Erzeugt Datenbankeinträde basierend auf Vorgabedaten aus dieser Datei.
+       Erzeugt DatenbankeintrÃ¤de basierend auf Vorgabedaten aus dieser Datei.
 
    Funktionen:
 
@@ -18,7 +18,7 @@
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
 
-define ("validate",true);     // Soll das Formular überprüft werden
+define ("validate",true);     // Soll das Formular Ã¼berprÃ¼ft werden
 
 include ("tools.php");
 

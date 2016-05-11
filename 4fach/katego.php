@@ -6,8 +6,8 @@
   Funktionen:
     - Auflisten der Kategorien
     - neu eintragen von Kategorien
-    - editieren/�ndern der Kategorien
-    - l�schen von Kategorien
+    - editieren/Ã¤ndern der Kategorien
+    - lÃ¶schen von Kategorien
     - speichern der Kategorien
     - Zuweisung einer Kategorie zu einer Meldung
 
@@ -73,13 +73,13 @@ class kategorien {
     $this->db_name     = $conf_4f_db ["datenbank"];
     $this->grundkatego = array (
           1 => array ("kategorie"    => "Alle",
-                      "beschreibung" => "ohne Ber�cksichtigung der Kategorien"),
+                      "beschreibung" => "ohne BerÃ¼cksichtigung der Kategorien"),
           2 => array ("kategorie"    => "ohne",
                       "beschreibung" => "Ohne Kategorie"));
 
     $this->db_hndl = mysql_connect($this->db_server,$this->db_benutzer, $this->db_passwort)
        or die ("[connection] katego.php 73 Konnte keine Verbindung zur Datenbank herstellen");
-
+    mysql_query('SET NAMES utf8');
     $db_check = mysql_select_db ($this->db_name, $this->db_hndl)
        or die ("[read_table] Auswahl der Datenbank fehlgeschlagen");
     $result = mysql_ping  ($this->db_hndl);
@@ -217,7 +217,7 @@ class kategorien {
   }
 
 /*******************************************************************************
-   Funktion: db_neu()
+   Funktion: db_delete()
 ********************************************************************************/
   function db_delete ( $lfd ){
     $this->sqlquery = "DELETE FROM `".$this->db_tablname."`
@@ -249,24 +249,25 @@ class kategorien {
       echo "</TR>\n";
       echo "</THEAD>\n";
       echo "<TBODY>\n";
-      for ($i=1; $this->result[$i]!= NULL; $i++){
+ //     for ($i=1; $this->result[$i]!= NULL; $i++){
+	  foreach ($this->result as $res){
         echo "<TR>\n";
         echo "<TD>\n";
-        echo "<big>".$this->result[$i][kategorie]."</big>\n";
+        echo "<big>".$res['kategorie']."</big>\n";
         echo "</TD>\n";
         echo "<TD>\n";
-        echo "<big>".$this->result[$i][beschreibung]."</big>\n";
+        echo "<big>".$res['beschreibung']."</big>\n";
         echo "</TD>\n";
         echo "<TD>\n";
           echo "<TABLE>";
           echo "<TBODY>";
           echo "<TR>";
           echo "<TD align=\"center\">";
-          echo "<a href=\"".$_SERVER['PHP_SELF']."?kate_todo=editrecord&lfd=".$this->result[$i][lfd]."&dbtyp=".$this->dbtyp."\">";
+          echo "<a href=\"".$_SERVER['PHP_SELF']."?kate_todo=editrecord&lfd=".$res['lfd']."&dbtyp=".$this->dbtyp."\">";
           echo "<img class=\"icon\" width=\"16\" height=\"16\" src=\"".$conf_design_path."/edit.gif\" alt=\"editieren\" title=\"Edit\" border=\"0\" /></a>";
           echo "</TD>";
           echo "<TD align=\"center\">";
-          echo "<a href=\"".$_SERVER['PHP_SELF']."?kate_todo=deleterecord&lfd=".$this->result[$i][lfd]."&dbtyp=".$this->dbtyp."\">";
+          echo "<a href=\"".$_SERVER['PHP_SELF']."?kate_todo=deleterecord&lfd=".$res['lfd']."&dbtyp=".$this->dbtyp."\">";
           echo "<img class=\"icon\" width=\"16\" height=\"16\" src=\"".$conf_design_path."/delete.gif\" alt=\"l&ouml;schen\" title=\"L&ouml;schen\" border=\"0\" /></a>";
           echo "</TD>";
           echo "</TR>";
@@ -306,7 +307,8 @@ class kategorien {
 
     $this->lese_kategorien (); // hole die Liste der Kategorien
     if ($this->result != NULL) {
-      echo "\n<select ".$param." name=\"kategorien_".$this->dbtyp."_".$ordnum."\">\n";
+      //echo "\n<select ".$param." name=\"kategorien_".$this->dbtyp."_".$ordnum."\">\n";
+	  echo "\n<select name=\"kategorien_".$this->dbtyp."_".$ordnum."\">\n";
       if ($mit_leer) {
         if ($katego_no == "") {
           $sel = " selected ";
@@ -322,8 +324,9 @@ class kategorien {
         echo "<option value=\"".$katego["kategorie"]."\" ".$sel.">".$katego["kategorie"]."</option>\n";
       }
       echo "</select>\n";
-    }
+    
     echo "<input type=\"hidden\" name=\"kategorien_".$this->dbtyp."\" value=\"".$kategoselected."\">\n";
+    }
   }
 
 /*******************************************************************************\
@@ -392,7 +395,7 @@ class kategorien {
                              ){
     if (isset ($todo)){
       switch ( $todo ){
-        case "liste": // Liste der Kategorien und Eingabem�glichkeit einer neuen
+        case "liste": // Liste der Kategorien und EingabemÃ¶glichkeit einer neuen
             $this->liste_kategorien ();
             $this->eingabezeile ("neu","","","");
 

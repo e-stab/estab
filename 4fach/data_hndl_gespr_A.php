@@ -147,8 +147,8 @@ echo "ip_gleich="; var_dump ($ip_gleich); echo "<br>";
         }
       } // $db_gleich
       if ($kuerzel_eq and !$user_eq) {
-        // K�rzel in Datenbank vorhanden -- Benutzername passt NICHT dazu !!!
-        $infotext = "K�rzel schon vorhanden !!!<br>Benutzername stimmt nicht mit den gespeicherten Daten �berein.";
+        // KÃ¼rzel in Datenbank vorhanden -- Benutzername passt NICHT dazu !!!
+        $infotext = "KÃ¼rzel schon vorhanden !!!<br>Benutzername stimmt nicht mit den gespeicherten Daten Ã¼berein.";
         errorwindow( "Benutzeranmeldung", $infotext );
         $error_userlogin = true;
       }

@@ -11,10 +11,10 @@ class fileupload extends file_upload {
   var $fs_comment;   // Beschreibung
   var $fs_shortname; // Kuerzel
   var $fs_timestamp; // Zeitstempel
-  var $fs_nextfilename; // Nächster Dateiname
+  var $fs_nextfilename; // NÃ¤chster Dateiname
 
   var $ff_savename ; // Name der gespeicherten Datei g.g. Darstellung im Menue
-  var $ff_filename ; // Ursprünglicher Dateiname
+  var $ff_filename ; // UrsprÃ¼nglicher Dateiname
   var $ff_comment  ; // Beschreibung Faxkopf
   var $ff_timestamp; // Zeitstempel
   var $ff_kuerzel  ; // Kuerzel des Fm
@@ -164,7 +164,7 @@ class fileupload extends file_upload {
     echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
     echo "<html>\n";
     echo "<head>\n";
-    echo "<meta content=\"text/html; charset=ISO-8859-1\" http-equiv=\"content-type\">\n";
+    echo "<meta content=\"text/html; charset=UTF-8\" http-equiv=\"content-type\">\n";
     echo "<title>$titel</title>";
     echo "</head>";
     echo "<body>";
@@ -238,7 +238,7 @@ session_start();
 
 /************************************************************************
 
-   Steuerung über ein Sessioncookie
+   Steuerung Ã¼ber ein Sessioncookie
 
      $_SESSION ["UPLOAD"] ==
         "fileselect" :
@@ -270,7 +270,7 @@ $status = $_SESSION ["UPLOAD"];
     break;
       /*---------------------------------------------------------------*/
     case "fileselectwindow":
-          // zwei möglichkeiten 1. absenden oder 2. abbrechen
+          // zwei mÃ¶glichkeiten 1. absenden oder 2. abbrechen
         $max_size = 1024*1024*5; // the max. size for uploading
 /****300****/
         $my_upload = new fileupload;

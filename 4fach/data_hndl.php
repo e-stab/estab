@@ -1,4 +1,5 @@
 <?php
+if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>Data hndl</big><br>\n";}
 /*****************************************************************************\
    Datei: data_hndl.php
 
@@ -17,8 +18,7 @@
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
 
-define ("validate",true);     // Soll das Formular überprüft werden
-
+define ("validate",true);     // Soll das Formular Ã¼berprÃ¼ft werden
 include ("tools.php");
 
 if (validate){
@@ -26,14 +26,12 @@ if (validate){
 }
 
 /*******************************************************************************
-  Benutzeranmeldung Cookies setzen und eintrag in die Datenbank
+  Benutzeranmeldung Cookies setzen und eintragen in die Datenbank
   1. Sind Cookiedaten vorhanden
      JA   --> Pruefe Cookiedaten mit Datenbankeintraege
           --> Datenabgleich
      NEIN --> Neueintrag Datenbank und COOKIES
 ********************************************************************************/
-
-
 
 /*******************************************************************************\
     Funktion:  check_save_user ()
@@ -127,14 +125,14 @@ function check_save_user () {
           }
         } ELSE { // $db_gleich
           if (!$passwd_eq){
-            $infotext = "Passwort falsch !!<br>Das Passwort stimmen nicht überein.";
+            $infotext = "Passwort falsch !!<br>Das Passwort stimmen nicht ÃƒÂ¼berein.";
             errorwindow( "Benutzeranmeldung", $infotext );
             $error_userlogin = true;
           }
         }
         if ($kuerzel_eq and !$user_eq) {
-          // Kürzel in Datenbank vorhanden -- Benutzername passt NICHT dazu !!!
-          $infotext = "Kürzel schon vorhanden !!!<br>Benutzername stimmt nicht mit den gespeicherten Daten überein.";
+          // KÃ¼rzel in Datenbank vorhanden -- Benutzername passt NICHT dazu !!!
+          $infotext = "KÃ¼rzel schon vorhanden !!!<br>Benutzername stimmt nicht mit den gespeicherten Daten Ã¼berein.";
           errorwindow( "Benutzeranmeldung", $infotext );
           $error_userlogin = true;
         }
@@ -193,7 +191,7 @@ function check_save_user () {
 
 \*****************************************************************************/
 function check_and_save ($data){
-
+  if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>check_and_save</big><br>\n";}
   include ("../4fcfg/config.inc.php");
   include ("../4fcfg/dbcfg.inc.php");
   include ("../4fcfg/e_cfg.inc.php");
@@ -206,26 +204,39 @@ function check_and_save ($data){
   }
 
   if (debug){
-    echo "256 check_and_save --->   "; var_dump ($data);
-    echo "<br><br><br>\n";
-    while (list($key, $val) = each($data)) {
-       echo "$key => $val  ---> $data[$key]<br>\n";
-    }
+    if (debug) echo __FILE__.":".__LINE__." ###<br> "; var_dump ($data); echo "<br><br><br>\n";
+/* 
+		while (list($key, $val) = each($data)) {
+			echo "$key => $val  ---> $data[$key]<br>\n";
+      }  
+*/
+    
   }
 
-// Umwandlung Sonderzeichen in HTML Zeichencode
-  if ($data ["12_inhalt"] != ""){
-    $data ["12_inhalt"] = htmlentities (  $data ["12_inhalt"] ); }
-  if ($data ["17_vermerk"] != ""){
-    $data ["17_vermerke"] = htmlentities (  $data ["17_vermerke"] ); }
-  $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
+
+/*
+  Umwandlung Sonderzeichen in HTML Zeichencode
+  Die Umwandlung der Texte wurde deaktiviert, da die Texte als UTF-8 kodiert wurden.
+*/
+
+	if ($data ["12_inhalt"] != ""){
+  		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### 369 check and save";  echo "<br>\n";}
+    	$tempstr = htmlentities (  $data ["12_inhalt"],ENT_COMPAT,'UTF-8'); 
+		$data ["12_inhalt"] = $tempstr;
+		if (debug) echo __FILE__.":".__LINE__."-->".$data ["12_inhalt"]."br";
+	}
+	if ($data ["17_vermerk"] != ""){
+		$data ["17_vermerke"] = htmlentities (  $data ["17_vermerke"],ENT_COMPAT,'UTF-8' ); 
+	}
+
+	$dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
                              $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],
                              $conf_4f_db ["password"] );
 
-  switch ($data["task"]){
-
-    case "FM-Eingang":
-    case "FM-Eingang_Anhang":
+	switch ($data["task"]){
+		case "FM-Eingang":
+    	case "FM-Eingang_Anhang":
+    	if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>FM-Eingang, FM-Eingang_Anhang</big><br>\n";}
        /*****************************************************************************************************
            Betroffene Felder:
             01_medium            01_datum   TTMM            01_zeit    SSMM            01_zeichen            05_gegenstelle            07_durchspruch;            08_befhinweis;
@@ -236,20 +247,16 @@ function check_and_save ($data){
             Daten in Datenbank mit einem INSERT
             INSERT INTO tabelle SET spalten_name=ausdruck, spalten_name=ausdruck, ...
       ******************************************************************************************************/
-       $data ["16_empf"] .= $redcopy2."_rt,";
-
-       if ($data ["01_datum"] == "" ) { $data ["01_datum"] = date ("Hi") ; }
-       if ($data ["12_abfzeit"] == "" ) { $data ["12_abfzeit"] = date ("Hi") ; }
-
-      if (validate){
-         /*----------------------------------------------------*/
-        if (debug){
-        echo "DATAHNDL286=";
-        var_dump ($data); echo "<br>";
-        }
-        $vali = new vali_data_form ( $data ) ;
-        $result = $vali->validatethis (); //checkdata ();
-        if (debug){
+			$data ["16_empf"] .= $redcopy2."_rt,";
+			if ($data ["01_datum"] == "" ) { $data ["01_datum"] = date ("Hi") ; }
+			if ($data ["12_abfzeit"] == "" ) { $data ["12_abfzeit"] = date ("Hi") ; }
+			if (validate){
+         		/*----------------------------------------------------*/
+				if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>"; var_dump ($data); echo "<br>\n";}         	
+        	
+				$vali = new vali_data_form ( $data ) ;
+      	  	$result = $vali->validatethis (); //checkdata ();
+/*        	if (debug){
           echo "DATAHNDL292=";
           echo "<b>RESULT</b>";
           var_dump ($result); echo "<br>";
@@ -260,19 +267,19 @@ function check_and_save ($data){
           echo "<b>vali-VALIDATE</b>";
           var_dump ($vali->validate); echo "<br>";
         }
+*/
 
-        $data = $vali->i_data ;
+				$data = $vali->i_data ;
 
-        if (!$result) {
-          $form = new nachrichten4fach ($data, $data["task"], $vali->validate);
-          exit ;
-        }
-        /*----------------------------------------------------*/
+        		if (!$result) {
+          		$form = new nachrichten4fach ($data, $data["task"], $vali->validate);
+          		exit ;
+        		}
+        			/*----------------------------------------------------*/
       }
 
-
-       $nachweis_E = get_last_nachw_num ("E") + 1;
-       $query = "INSERT into `".$conf_4f_tbl ["nachrichten"]."` SET
+		$nachweis_E = get_last_nachw_num ("E") + 1;
+      $query = "INSERT into `".$conf_4f_tbl ["nachrichten"]."` SET
             `01_medium`       = \"".$data ["01_medium"]      ."\",
             `01_datum`        = \"".konv_taktime_datetime ($data ["01_datum"])."\",
             `01_zeichen`      = \"".$data ["01_zeichen"]     ."\",
@@ -294,17 +301,14 @@ function check_and_save ($data){
             `16_empf`         = \"".$data ["16_empf"]."\",
             `x00_status`      = \"4\",
             `x01_abschluss`   = \"f\"";
-
-        if (debug){  echo "query[FM-Eingang]===".$query."<br>";}
-
-        $result = $dbaccess->query_table_iu ($query);
-
-        protokolleintrag ("FM-Eingang",$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
+		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>"; echo "query[FM-Eingang]===".$query."<br>"; }
+		$result = $dbaccess->query_table_iu ($query);
+      protokolleintrag ("FM-Eingang",$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
     break;
 
-    case "FM-Eingang_Sichter":
-    case "FM-Eingang_Anhang_Sichter" :
-
+		case "FM-Eingang_Sichter":
+		case "FM-Eingang_Anhang_Sichter" :
+			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>FM-Eingang_Sichter, FM-Eingang_Anhang_Sichter</big><br>\n";}
        /*****************************************************************************************************
            Betroffene Felder:
             01_medium            01_datum   TTMM            01_zeit    SSMM            01_zeichen            05_gegenstelle            07_durchspruch;            08_befhinweis;
@@ -315,32 +319,30 @@ function check_and_save ($data){
             Daten in Datenbank mit einem INSERT
             INSERT INTO tabelle SET spalten_name=ausdruck, spalten_name=ausdruck, ...
       ******************************************************************************************************/
-       $data ["16_empf"] = $redcopy2."_rt,";
+			$data ["16_empf"] = $redcopy2."_rt,";
 
-       for (  $i = 1 ; $i <= 5 ; $i++ ){
-         for ( $j = 1 ; $j <= 5 ; $j++ ){
-           if ( isset ( $data ["16_".$i.$j] ) ) {
-             list ($ord, $pos, $fkt) = explode ("_", $data ["16_".$i.$j]);
-             $data ["16_empf"] .= $empf_matrix [$i][$j]["fkt"]."_".$fkt.",";
-           }
-           if ( $data ["16_gncopy"] == "16_".$i.$j."_gn" ) {
-             $data ["16_empf"] .= $empf_matrix [$i][$j]["fkt"]."_gn,";
-           }
-         }
-       }
+       	for (  $i = 1 ; $i <= 5 ; $i++ ){
+         	for ( $j = 1 ; $j <= 5 ; $j++ ){
+           		if ( isset ( $data ["16_".$i.$j] ) ) {
+             		list ($ord, $pos, $fkt) = explode ("_", $data ["16_".$i.$j]);
+             		$data ["16_empf"] .= $empf_matrix [$i][$j]["fkt"]."_".$fkt.",";
+           		}
+           		if ( $data ["16_gncopy"] == "16_".$i.$j."_gn" ) {
+             		$data ["16_empf"] .= $empf_matrix [$i][$j]["fkt"]."_gn,";
+           		}
+         	}
+       	}
 
-       if ($data ["01_datum"] == "" ) { $data ["01_datum"] = date ("Hi") ; }
-       if ($data ["12_abfzeit"] == "" ) { $data ["12_abfzeit"] = date ("Hi") ; }
-       if ($data ["15_quitdatum"] == "" ) { $data ["15_quitdatum"] = date ("Hi") ; }
+       	if ($data ["01_datum"] == "" ) { $data ["01_datum"] = date ("Hi") ; }
+       	if ($data ["12_abfzeit"] == "" ) { $data ["12_abfzeit"] = date ("Hi") ; }
+       	if ($data ["15_quitdatum"] == "" ) { $data ["15_quitdatum"] = date ("Hi") ; }
 
-        if (validate){
-           /*----------------------------------------------------*/
-          if (debug){
-            echo "DATAHNDL368=";
-            var_dump ($data); echo "<br>";
-          }
-          $vali = new vali_data_form ( $data ) ;
-          $result = $vali->validatethis (); //checkdata ();
+        	if (validate){
+         	  /*----------------------------------------------------*/
+				if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>"; var_dump ($data); echo "<br>\n";}
+          	$vali = new vali_data_form ( $data ) ;
+          	$result = $vali->validatethis (); //checkdata ();
+/*
           if (debug){
             echo "DATAHNDL374=";
             echo "<b>RESULT</b>";
@@ -352,20 +354,18 @@ function check_and_save ($data){
             echo "<b>vali-VALIDATE</b>";
             var_dump ($vali->validate); echo "<br>";
           }
-          $data = $vali->i_data ;
-          if (debug){
-            echo "<b>DATA</b>";
-            var_dump ($data); echo "<br>";
-          }
-          if (!$result) {
-           $form = new nachrichten4fach ($data, $data["task"], $vali->validate);
-           exit ;
-          }
-          /*----------------------------------------------------*/
-        }
+*/
+				$data = $vali->i_data ;
+				if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>"; var_dump ($data); echo "<br>\n";}          
+				if (!$result) {
+           		$form = new nachrichten4fach ($data, $data["task"], $vali->validate);
+           		exit ;
+          	}
+          		/*----------------------------------------------------*/
+        	}
 
-       $nachweis_E = get_last_nachw_num ("E") + 1;
-       $query = "INSERT into `".$conf_4f_tbl ["nachrichten"]."` SET
+			$nachweis_E = get_last_nachw_num ("E") + 1;
+       	$query = "INSERT into `".$conf_4f_tbl ["nachrichten"]."` SET
             `01_medium`       = \"".$data ["01_medium"]      ."\",
             `01_datum`        = \"".konv_taktime_datetime ($data ["01_datum"])."\",
             `01_zeichen`      = \"".$data ["01_zeichen"]     ."\",
@@ -390,16 +390,13 @@ function check_and_save ($data){
             `17_vermerke`     =  \"".$data ["17_vermerke"]."\",
             `x00_status`      = \"8\",
             `x01_abschluss`   = \"t\"";
+			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>"; echo "query[FM-Eingang_Sichter]===".$query."<br>"; }
+			$result = $dbaccess->query_table_iu ($query);
+       	protokolleintrag ("FM-Eingang-Sichter",$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
+    	break;
 
-       if (debug){
-         echo "query[FM-Eingang_Sichter]===".$query."<br>";
-       }
-       $result = $dbaccess->query_table_iu ($query);
-       protokolleintrag ("FM-Eingang-Sichter",$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
-    break;
-
-    case "Stab_schreiben":
-
+    	case "Stab_schreiben":
+			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>Stab_schreiben</big><br>\n";}
 /*          07_durchspruch;          08_befhinweis;          08_befhinwausw;          09_vorrangstufe;          10_anschrift;          11_gesprnotiz;          12_inhalt;
           12_abfzeit;          13_abseinheit;          14_zeichen;          14_funktion;
           Workflow ==>
@@ -464,7 +461,7 @@ function check_and_save ($data){
             `x00_status`      = \"2\",
             `x01_abschluss`   = \"f\"; ";
 
-       if (debug) { echo "datahndl.php 464 ==>query[Stab schreiben]===".$query."<br>";}
+       if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big> ==>query[Stab schreiben]===".$query."</big><br>\n";} 
 
        $result = $dbaccess->query_table_iu ($query);
        protokolleintrag ("Stab-schreiben",$query);
@@ -484,6 +481,7 @@ function check_and_save ($data){
       SSSSS   T   A   A BBBB  _____ GGGG  EEEEE SSSSS P     R   R N   N  OOO    T   IIIII
     \****************************************************************************/
     case "Stab_gesprnoti":
+		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>Stab_gesprnoti</big><br>\n";}    
       if ($data ["01_datum"] == "" )     { $data ["01_datum"]     = date ("Hi") ; }
       if ($data ["12_abfzeit"] == "" )   { $data ["12_abfzeit"]   = date ("Hi") ; }
       if ($data ["15_quitdatum"] == "" ) { $data ["15_quitdatum"] = date ("Hi") ; }
@@ -580,22 +578,19 @@ function check_and_save ($data){
        $lfd = $result [0];
        set_msg_read ($lfd) ;
 
-    break;
+		break;
 
-    case "FM-Ausgang":
-
-      if ($data ["03_datum"] == "" ) { $data ["03_datum"] = date ("Hi") ; }
-
-
-      if (validate){
-         /*----------------------------------------------------*/
-        if (debug){
-          echo "DATAHNDL658=";
-          var_dump ($data); echo "<br><br>";
-        }
-        $vali = new vali_data_form ( $data ) ;
-        $result = $vali->validatethis (); //checkdata ();
-        if (debug){
+		case "FM-Ausgang":
+			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>FM-Ausgang</big><br>\n";}		
+			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### - FM-Ausgang <br>\n";}
+      	if ($data ["03_datum"] == "" ) { $data ["03_datum"] = date ("Hi") ; }
+	      if (validate){
+   	   	   /*----------------------------------------------------*/
+			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>"; var_dump ($data); echo "<br><br>";}
+        	$vali = new vali_data_form ( $data ) ;
+        	$result = $vali->validatethis (); //checkdata ();
+/*
+			if (debug){
           echo "<b>DATA</b>";
           var_dump ($data); echo "<br>";
 
@@ -609,18 +604,17 @@ function check_and_save ($data){
           echo "<b>vali-VALIDATE</b>";
           var_dump ($vali->validate); echo "<br>";
         }
-
-        $data = $vali->i_data ;
-
+*/
+			$data = $vali->i_data ;
          if (!$result) {
-           $form = new nachrichten4fach ($data, $data["task"], $vali->validate);
-           exit ;
+				$form = new nachrichten4fach ($data, $data["task"], $vali->validate);
+           	exit ;
          }
       }
-
-
-
-       $query = "UPDATE `".$conf_4f_tbl ["nachrichten"]."` SET
+		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### VOR conf_4f[\"si_in_out\"]".$conf_4f["si_in_out"]."<br>"; }      
+		if($conf_4f["si_in_out"]) {  //  Ein- und AusÃ¤nge sichten
+			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### Ein- und AusgÃ¤nge sichten<br>"; }
+			$query = "UPDATE `".$conf_4f_tbl ["nachrichten"]."` SET
             `03_datum`        = \"".konv_taktime_datetime ($data ["03_datum"]) ."\",
             `03_zeichen`      = \"".$data ["03_zeichen"]  ."\",
             `05_gegenstelle`  = \"".$data ["05_gegenstelle"] ."\",
@@ -631,25 +625,37 @@ function check_and_save ($data){
             `x02_sperre`      = \"f\",
             `x03_sperruser`   = \"\"
              WHERE `00_lfd` = \"".$data ["00_lfd"]."\"";
+       } else {
+       	if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### nur EingÃ¤nge sichten<br>"; }
+       	$query = "UPDATE `".$conf_4f_tbl ["nachrichten"]."` SET
+            `03_datum`        = \"".konv_taktime_datetime ($data ["03_datum"]) ."\",
+            `03_zeichen`      = \"".$data ["03_zeichen"]  ."\",
+            `05_gegenstelle`  = \"".$data ["05_gegenstelle"] ."\",
+            `06_befweg`       = \"".$data ["06_befweg"]."\",
+            `06_befwegausw`   = \"".$data ["06_befwegausw"]   ."\",
+				`x00_status`      = \"8\",
+            `x01_abschluss`   = \"t\",
+            `x02_sperre`      = \"f\",
+            `x03_sperruser`   = \"\"
+             WHERE `00_lfd` = \"".$data ["00_lfd"]."\"";
+       }
        $result = $dbaccess->query_table_iu ($query);
        protokolleintrag ("FM-Ausgang",$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
-    break;
+   break;
 
-    case "FM-Ausgang_Sichter":
+		case "FM-Ausgang_Sichter":
+			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>FM-Ausgang_Sichter</big><br>\n";}
+		if ($data ["15_quitdatum"] == "" ) { $data ["15_quitdatum"] = date ("Hi") ; }
+		$data ["16_empf"] = $redcopy2."_rt,";
 
-      if ($data ["15_quitdatum"] == "" ) { $data ["15_quitdatum"] = date ("Hi") ; }
-
-
-       $data ["16_empf"] = $redcopy2."_rt,";
-
-       for (  $i = 1 ; $i <= 5 ; $i++ ){
-         for ( $j = 1 ; $j <= 5 ; $j++ ){
-           if ( isset ( $data ["16_".$i.$j] ) ) {
-             list ($ord, $pos, $fkt) = explode ("_", $data ["16_".$i.$j]);
-             $data ["16_empf"] .= $empf_matrix [$i][$j]["fkt"]."_".$fkt.",";
-           } // if
-           if ( $data ["16_gncopy"] == "16_".$i.$j."_gn" ) {
-             $data ["16_empf"] .= $empf_matrix [$i][$j]["fkt"]."_gn,";
+      for (  $i = 1 ; $i <= 5 ; $i++ ){
+      	for ( $j = 1 ; $j <= 5 ; $j++ ){
+         	if ( isset ( $data ["16_".$i.$j] ) ) {
+            	list ($ord, $pos, $fkt) = explode ("_", $data ["16_".$i.$j]);
+             	$data ["16_empf"] .= $empf_matrix [$i][$j]["fkt"]."_".$fkt.",";
+           	} // if
+           	if ( $data ["16_gncopy"] == "16_".$i.$j."_gn" ) {
+            	$data ["16_empf"] .= $empf_matrix [$i][$j]["fkt"]."_gn,";
            }
          } // for 2.
        } // for 1.
@@ -657,12 +663,13 @@ function check_and_save ($data){
       if ($data ["03_datum"] == "" ) { $data ["03_datum"] = date ("Hi") ; }
 
       if (validate){
-        if (debug){
-          echo "DATAHNDL FM-Ausgang_Sichter =";
-          var_dump ($data); echo "<br><br>";
-        }
-        $vali = new vali_data_form ( $data ) ;
-        $result = $vali->validatethis (); //checkdata ();
+			if (debug){
+         	echo "DATAHNDL FM-Ausgang_Sichter =";
+          	var_dump ($data); echo "<br><br>";
+        	}
+        	$vali = new vali_data_form ( $data ) ;
+        	$result = $vali->validatethis (); //checkdata ();
+/*        
         if (debug){
           echo "<b>DATA</b>";
           var_dump ($data); echo "<br>";
@@ -677,12 +684,12 @@ function check_and_save ($data){
           echo "<b>vali-VALIDATE</b>";
           var_dump ($vali->validate); echo "<br>";
         }
-
-        $data = $vali->i_data ;
+*/
+        	$data = $vali->i_data ;
 
          if (!$result) {
-           $form = new nachrichten4fach ($data, $data["task"], $vali->validate);
-           exit ;
+         	$form = new nachrichten4fach ($data, $data["task"], $vali->validate);
+           	exit ;
          }
       }
       $query = "UPDATE `".$conf_4f_tbl ["nachrichten"]."` SET
@@ -702,10 +709,11 @@ function check_and_save ($data){
              WHERE `00_lfd` = \"".$data ["00_lfd"]."\";";
        $result = $dbaccess->query_table_iu ($query);
         protokolleintrag ("FM-Ausgang-Sichter",$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
-    break;
+		break;
 
 
-   case "Stab_sichten":
+		case "Stab_sichten":
+			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>Stab_sichten</big><br>\n";}   
 /*
           15_quitdatum;
           15_quitzeichen;
@@ -746,17 +754,19 @@ function check_and_save ($data){
         protokolleintrag ("Stab_sichten",$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
     break;
 
-    case "Nachweis":
+		case "Nachweis":
+			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>Nachweis</big><br>\n";}
 /*
           04_richtung;
           04_nummer;
 */
-    break;
+   break;
 
-    case "FM-Admin":
-    case "SI-Admin":
+	case "FM-Admin":
+	case "SI-Admin":
+		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>FM-Admin, SI-Admin</big><br>\n";}
        // Holen wir erst einmal die nicht sichtbaren Datumsangaben
-       $query    = "SELECT `01_datum`, `02_zeit`, `03_datum`, `12_abfzeit`, `15_quitdatum`
+      $query    = "SELECT `01_datum`, `02_zeit`, `03_datum`, `12_abfzeit`, `15_quitdatum`
                     FROM ".$conf_4f_tbl ["nachrichten"]." WHERE `00_lfd` = \"".$data ['00_lfd']."\"; ";
        $result   = $dbaccess->query_table ($query);
        $db_datum = $result [1];
@@ -803,8 +813,8 @@ function check_and_save ($data){
  [vStab_rolle] => Stab
  *****************************************************************************/
 
-  function legere_nuntium ($lfd) {
-
+	function legere_nuntium ($lfd) {
+		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>legere nuntium ".$lfd."</big><br>\n";}
     include ("../4fcfg/config.inc.php");
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
@@ -826,8 +836,8 @@ function check_and_save ($data){
   set_msg_read ($lfd)
 
 \*****************************************************************************/
-  function set_msg_read ($lfd) {
-
+	function set_msg_read ($lfd) {
+		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>set_msg_read</big><br>\n";}
     include ("../4fcfg/config.inc.php");
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
@@ -857,12 +867,12 @@ function check_and_save ($data){
 
   DELETE FROM `usr_ls_ls_read` WHERE `usr_ls_ls_read`.`lfd` = 3 LIMIT 1
 \*****************************************************************************/
-  function unset_msg_read ($lfd) {
-
+	function unset_msg_read ($lfd) {
+		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>unset_msg_read</big><br>\n";}
     include ("../4fcfg/config.inc.php");
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
-    include_once ("../4fach/protkoll.php");
+    include_once ("../4fach/protokoll.php");
      // Gibt es einen Eintrag zu der Nachricht mit der Nummer $lfd
     $dbaccess = new db_access ($conf_4f_db ["server"],
                                $conf_4f_db ["datenbank"],
@@ -887,12 +897,12 @@ function check_and_save ($data){
    set_msg_done ($lfd)
 
  *****************************************************************************/
-  function set_msg_done ($lfd) {
-
+	function set_msg_done ($lfd) {
+		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>set_msg_done</big><br>\n";}
     include ("../4fcfg/config.inc.php");
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
-    include ("../4fach/protkoll.php");
+    include_once ("../4fach/protokoll.php");
 
      // Gibt es einen Eintrag zu der Nachricht mit der Nummer $lfd
     $dbaccess = new db_access ($conf_4f_db ["server"],
@@ -919,12 +929,12 @@ function check_and_save ($data){
    unset_msg_done ($lfd)
 
  *****************************************************************************/
-function unset_msg_done ($lfd) {
-
+	function unset_msg_done ($lfd) {
+		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>unset_msg_done</big><br>\n";}
     include ("../4fcfg/config.inc.php");
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
-    include ("../4fach/protkoll.php");
+    include_once ("../4fach/protokoll.php");
      // Gibt es einen Eintrag zu der Nachricht mit der Nummer $lfd
     $dbaccess = new db_access ($conf_4f_db ["server"],
                                $conf_4f_db ["datenbank"],
@@ -954,8 +964,8 @@ function unset_msg_done ($lfd) {
 
  ==> Liste der gelesenen Nachrichten
 \*****************************************************************************/
-  function list_of_readed_msg (){
-
+	function list_of_readed_msg (){
+		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>list_of_readed_msg</big><br>\n";}
     include ("../4fcfg/config.inc.php");
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
@@ -973,6 +983,7 @@ function unset_msg_done ($lfd) {
     $query = "select ".$conf_4f_tbl ["nachrichten"].".00_lfd from ".
               $conf_4f_tbl ["nachrichten"].", ".$tblusername."_read where ".
               $conf_4f_tbl ["nachrichten"].".00_lfd = ".$tblusername."_read.nachnum ;";
+if ( debug ) { echo "debug(data_hndl.php.976)=".$query."<br>"; }			  
     $result = $dbaccess->query_usrtable ($query);
     return ($result);
   }
@@ -986,28 +997,29 @@ function unset_msg_done ($lfd) {
 
  ==> Liste der erledigten Nachrichten
 \*****************************************************************************/
-function list_of_done_msg (){
+	function list_of_done_msg (){
+		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>list_of_done_msg</big><br>\n";}
+		
+		include ("../4fcfg/config.inc.php");
+  		include ("../4fcfg/dbcfg.inc.php");
+  		include ("../4fcfg/e_cfg.inc.php");
 
-  include ("../4fcfg/config.inc.php");
-  include ("../4fcfg/dbcfg.inc.php");
-  include ("../4fcfg/e_cfg.inc.php");
-
-  $dbaccess = new db_access ($conf_4f_db ["server"],
+  		$dbaccess = new db_access ($conf_4f_db ["server"],
                              $conf_4f_db ["datenbank"],
                              $conf_4f_tbl ["benutzer"],
                              $conf_4f_db ["user"],
                              $conf_4f_db ["password"] );
-  $fkttblname  = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($_SESSION["vStab_funktion"]);
-  $query = "select ".$conf_4f_tbl ["nachrichten"].".00_lfd from ".
+  		$fkttblname  = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($_SESSION["vStab_funktion"]);
+  		$query = "select ".$conf_4f_tbl ["nachrichten"].".00_lfd from ".
            $conf_4f_tbl ["nachrichten"].", ".$fkttblname."_erl where ".
            $conf_4f_tbl ["nachrichten"].".00_lfd = ".$fkttblname."_erl.nachnum ;";
-  $result = $dbaccess->query_usrtable ($query);
-  return ($result);
-}
+  		$result = $dbaccess->query_usrtable ($query);
+  		return ($result);
+	}
 
 
-  function get_flt_gelesen (){
-
+	function get_flt_gelesen (){
+		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>get_flt_gelesen</big><br>\n";}
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"],
@@ -1029,7 +1041,8 @@ function list_of_done_msg (){
     $flt_gelesene = $result [0];
   }
 
-  function get_flt_erledigt (){
+	function get_flt_erledigt (){
+		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>get_flt_erledigt</big><br>\n";}  	
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"],
@@ -1055,8 +1068,8 @@ function list_of_done_msg (){
 /*****************************************************************************\
  get_msg_by_lfd ( $lfd )
 \*****************************************************************************/
-  function get_msg_by_lfd ( $lfd ){
-
+	function get_msg_by_lfd ( $lfd ){
+		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>get_msg_by_lfd = ".$lfd."</big><br>\n";}
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
 

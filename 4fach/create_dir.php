@@ -29,7 +29,7 @@
       }
     } else {
       echo "<br><b>FEHLER:</b> Verzeichnis oder Datei mit dem Namen \"".$conf_4f_db ["datenbank"]."\" schon vorhanden!<br>";
-      echo "Bitte pr�fen und gegebenenfalls l�schen! <br>";
+      echo "Bitte prÃ¼fen und gegebenenfalls lÃ¶schen! <br>";
 
     }
     // Da das mit dem Verzeichnis geklapp hat, nun die Unterverzeichnisse
@@ -49,7 +49,7 @@
       }
     } else {
       echo "<br><b>FEHLER:</b> Verzeichnis oder Datei mit dem Namen <br>\"".$anhangpath."\"<br> schon vorhanden!<br>";
-      echo "Bitte pr�fen und gegebenenfalls l�schen! <br>";
+      echo "Bitte prÃ¼fen und gegebenenfalls lÃ¶schen! <br>";
     }
 
     // Vordruck
@@ -65,7 +65,7 @@
       }
     } else {
       echo "<br><b>FEHLER:</b> Verzeichnis oder Datei mit dem Namen <br>\"".$vordruckpath."\"<br> schon vorhanden!<br>";
-      echo "Bitte pr�fen und gegebenenfalls l�schen! <br>";
+      echo "Bitte prÃ¼fen und gegebenenfalls lÃ¶schen! <br>";
     }
   }
 

@@ -3,7 +3,7 @@
 |  Mehrfach Schaltergenerator
 |  Es sollen Schalter folgender Art hergestellt werden:
 |    1. Kippschalter Aus/Ein
-|    2. Druckschalter Rund ohne F�llung Aus / mit F�llung (ggf farbig) Ein
+|    2. Druckschalter Rund ohne FÃ¼llung Aus / mit FÃ¼llung (ggf farbig) Ein
 |    3. Radioschalter mehrere Schalter nur einer ist aktiv
 |
 |
@@ -49,23 +49,23 @@ class createbutton {
    Funktion: createbutton ()
    Konstruktor der Klasse createbutton
 
-   Argumente werden mit der $_GET Variable �bergeben.
+   Argumente werden mit der $_GET Variable Ã¼bergeben.
 
-   Beim Radiobutton wird zwischen der Grafikerzeugung und der �bermittlung der
+   Beim Radiobutton wird zwischen der Grafikerzeugung und der Ã¼bermittlung der
    map-Daten unterschieden.
 
      1. "tumbler" Kippschalter
-       a. status  0 oder 1 f�r Kippschalter nach oben oder unten
+       a. status  0 oder 1 fÃ¼r Kippschalter nach oben oder unten
        b. ontext  Beschriftungstext oben
        c. offtext Beschriftungstext unten
 
      http://1service.no-ip.org/kats/4fach/buttonxxx.php?type=push&status=EIN&text=erledigt
      2. "push"    Druckschalter
-       a. status  0 oder 1 f�r Druckschalter eingedr�ckt oder nicht
+       a. status  0 oder 1 fÃ¼r Druckschalter eingedrÃ¼ckt oder nicht
        b. form    rund oder quadratisch
        c. oncol   on color farbe wenn eingeschaltet
        d. text    Schalterbeschriftung
-       e. textpos Textposition rechts, links, dr�ber oder drunter
+       e. textpos Textposition rechts, links, drÃ¼ber oder drunter
 
      3. "radio"   Radioschalter
        "switches" Schalter
@@ -86,11 +86,12 @@ class createbutton {
         $this->tumbler = $_GET ;
       break;
       case "push":
-        $this->status = $_GET [status];
-        $this->form   = $_GET [form];
-        $this->oncol  = $_GET [oncol];
-        $this->text   = $_GET [text];
-        $this->textpos= $_GET [textpos];
+        if (isset($_GET ['status'] )){ $this->status = $_GET ['status'];  }
+        if (isset($_GET ['form']   )){ $this->form   = $_GET ['form'];    }
+        if (isset($_GET ['oncol']  )){ $this->oncol  = $_GET ['oncol'];   }
+        if (isset($_GET ['text']   )){ $this->text   = $_GET ['text'];    }
+        if (isset($_GET ['textpos'])){ $this->textpos= $_GET ['textpos']; }
+
         $this->create_push_button ();
       break;
       case "radio":
@@ -98,28 +99,31 @@ class createbutton {
         $this->radioswt = split (";", $_GET["switches"]);
       break;
       case "icon":
-        $this->status = $_GET [status];  // EIN oder AUS
-        if (isset($_GET [bg]       )){$this->bg        = $_GET [bg]       ;}else{ $this->bg        = lighterblue;}    // Hintergrundfarbe
-        if (isset($_GET [textcol]  )){$this->textcol   = $_GET [textcol]  ;}else{ $this->textcol   = black;}// Text farbe
-        if (isset($_GET [bordercol])){$this->bordercol = $_GET [bordercol];}else{ $this->bordercol = black;}// Linienfarbe
-        $this->color  = $_GET [color];
-        if (isset ($_GET [font_size])) {$this->font_size = $_GET [font_size] ;}
-        $this->text   = $_GET [text];
-        $this->textpos= $_GET [textpos]; // in or under
+        $this->status = $_GET ['status'];  // EIN oder AUS
+           // Hintergrundfarbe
+        if (isset($_GET ['bg']       )){$this->bg  = $_GET ['bg'] ;} else { $this->bg   = $this->lightblue;}    
+           // Text farbe
+        if (isset($_GET ['textcol']  )){$this->textcol   = $_GET ['textcol']  ;}else{ $this->textcol   = $this->black;}
+           // Linienfarbe
+        if (isset($_GET ['bordercol'])){$this->bordercol = $_GET ['bordercol'];}else{ $this->bordercol = $this->black;}
+        if (isset ($_GET ['color']))     {$this->color     = $_GET ['color']; }
+        if (isset ($_GET ['font_size'])) {$this->font_size = $_GET ['font_size'] ;  }
+        if (isset ($_GET ['text']))      {$this->text      = $_GET ['text'];        }
+        if (isset ($_GET ['textpos']))   {$this->textpos   = $_GET ['textpos'];     } // in or under
 
         $this->create_icon_button ();
       break;
         // Menuetaster
       case "menue":
 
-        if (isset($_GET [bg]))    {$this->m_bg   = $_GET [bg]       ;}else{ $this->m_bg      = lighterblue;}    // Hintergrundfarbe
-        if (isset($_GET [m_tc]))  {$this->m_tc   = $_GET [textcol]  ;}else{ $this->textcol   = black;}// Text farbe
-        if (isset($_GET [m_bc]))  {$this->m_bc   = $_GET [bordercol];}else{ $this->bordercol = black;}// Linienfarbe
-        if (isset($_GET [m_form])){$this->m_form = $_GET [m_form];   }else{ $this->m_form    = "spitz";}
-        if (isset($_GET [font_size])) {$this->font_size = $_GET [font_size] ;}
-        if (isset($_GET [m_text])){$this->m_text = $_GET [m_text];   }else{ $this->m_text    = "!Textfehler!";}
-        if (isset($_GET [m_fs])){$this->m_fs = $_GET [m_fs];         }   // Fontsize
-        if (isset($_GET [width])){$this->m_width = $_GET [width];    }   // Wunschbreite
+        if (isset($_GET ['bg']))    {$this->m_bg   = $_GET ['bg']       ;}else{ $this->m_bg      = $this->lightblue;}//Hintergrundfarbe
+        if (isset($_GET ['m_tc']))  {$this->m_tc   = $_GET ['textcol']  ;}else{ $this->textcol   = $this->black;}// Text farbe
+        if (isset($_GET ['m_bc']))  {$this->m_bc   = $_GET ['bordercol'];}else{ $this->bordercol = $this->black;}// Linienfarbe
+        if (isset($_GET ['m_form'])){$this->m_form = $_GET ['m_form'];   }else{ $this->m_form    = "spitz";}
+        if (isset($_GET ['font_size'])) {$this->font_size = $_GET ['font_size'] ;}
+        if (isset($_GET ['m_text'])){$this->m_text = $_GET ['m_text'];   }else{ $this->m_text    = "!Textfehler!";}
+        if (isset($_GET ['m_fs']))  {$this->m_fs = $_GET ['m_fs'];         }   // Fontsize
+        if (isset($_GET ['width'])) {$this->m_width = $_GET ['width'];    }   // Wunschbreite
         $this->create_menue_button ();
       break;
     }
@@ -133,7 +137,7 @@ class createbutton {
     $this->green       = imagecolorallocate($this->img, 80,255, 80);
     $this->lightyellow = imagecolorallocate($this->img,225,225,200);
     $this->lightblue   = imagecolorallocate($this->img,200,200,255);
-    $this->lighterblue = imagecolorallocate($this->img,220,220,255);
+    $this->lightblue = imagecolorallocate($this->img,220,220,255);
     $this->mlightblue  = imagecolorallocate($this->img,220,220,255);
     $this->lightred    = imagecolorallocate($this->img,255,200,200);
     $this->lightgreen  = imagecolorallocate($this->img,200,255,200);
@@ -148,8 +152,8 @@ class createbutton {
       case "red":         return ($this->red);         break;
       case "green":       return ($this->green);       break;
       case "lightyellow": return ($this->lightyellow); break;
+      case "lighterblue":   return ($this->lightblue);   break;
       case "lightblue":   return ($this->lightblue);   break;
-      case "lighterblue": return ($this->lighterblue); break;
       case "mlightblue":  return ($this->mlightblue);  break;
       case "lightred":    return ($this->lightred);    break;
       case "lightgreen":  return ($this->lightgreen);  break;
@@ -186,8 +190,10 @@ class createbutton {
     $xpos= ($this->width - $fontwidth) / 2 ;//$i*imagefontwidth($font_size);
     $ypos= ($this->height - imagefontheight($this->font_size) ) / 2 ;
     imagestring($this->img, $this->font_size, $xpos, $ypos, $this->text, $this->get_color ($this->textcol) );
-    header("Content-Type: image/png");
-    imagepng($this->img);
+
+    header("Content-Type: image/gif");
+    imagegif($this->img);
+
     imagedestroy($this->img);
   }
 
@@ -207,7 +213,7 @@ class createbutton {
 \********************************************************************************/
   function create_push_button (){
     $switchwidth  = 20 ; // Schalterbreite
-    $switchheight = 30 ; // Schalterh�he
+    $switchheight = 30 ; // SchalterhÃ¶he
     $xsymcent     = $switchwidth / 2 ;
     $ysymcent     = $switchheight *(1-1/3) ;
     $elliheight   = $switchheight / 2;
@@ -218,14 +224,14 @@ class createbutton {
     $fontheight  = imagefontheight($this->font_size)*1.5;
 
     switch ( $this->textpos ){
-        // dr�ber
-        // schalterh�he + Texth�he
+        // drÃ¼ber
+        // schalterhÃ¶he + TexthÃ¶he
         // Breiteste Schalter oder Text
       case "top":
       break;
 
         // drunter
-        // schalterh�he + Texth�he
+        // schalterhÃ¶he + TexthÃ¶he
         // Breiteste Schalter oder Text
       case "buttom":
         $this->height = $switchheight + $fontheight ;
@@ -240,7 +246,7 @@ class createbutton {
 
         // links daneben
         // schalterbreite + textbreite
-        // Gr��te von schalterh�te oder Texth�he
+        // GrÃ¶Ãte von schalterhÃ¶te oder TexthÃ¶he
       case "left":
         // x/y Position der oberen linken Ecke des Schalters
         $xpos_img = 0 ;
@@ -252,7 +258,7 @@ class createbutton {
 
         // rechts daneben
         // schalterbreite + textbreite
-        // Gr��te von schalterh�te oder Texth�he
+        // GrÃ¶Ãte von schalterhÃ¶te oder TexthÃ¶he
       case "right":
         $this->height = $this->fontheight ;
         if ($this->height < $switchheight){ $this->height = $switchheight ; }
@@ -281,7 +287,7 @@ class createbutton {
     $this->set_color ($this->oncol);
 
     if ($this->status == "EIN"){
-      // Eingeschaltet ==> gr�ner Knopf nach unten
+      // Eingeschaltet ==> grÃ¼ner Knopf nach unten
       $noerror = imagefilledarc ($this->img, $xpos_img + $xsymcent, $ypos_img + $ysymcent-5,  $switchwidth-9,  $elliheight-9,  0, 360, $this->green, IMG_ARC_PIE);
       $noerror = imagefilledarc ($this->img, $xpos_img + $xsymcent, $ypos_img + $ysymcent-5,  $switchwidth-8,  $elliheight-8,  0, 360, $this->blue, IMG_ARC_NOFILL);
       $noerror = imagefilledarc ($this->img, $xpos_img + $xsymcent, $ypos_img + $ysymcent-5,  $switchwidth-7,  $elliheight-7,  0, 360, $this->blue, IMG_ARC_NOFILL);
@@ -302,12 +308,14 @@ class createbutton {
     $noerror = imagefilledarc ($this->img, $xpos_img + $xsymcent,  $ysymcent,  $switchwidth-1,  $elliheight-1,  320, 220, $this->blue, IMG_ARC_NOFILL);
     $noerror = imagefilledarc ($this->img, $xpos_img + $xsymcent,  $ysymcent,  $switchwidth  ,  $elliheight  ,  320, 220, $this->blue, IMG_ARC_NOFILL);
 
-    imagefill  ( $this->img, 1, 1, $this->lighterblue );
+    imagefill  ( $this->img, 1, 1, $this->lightblue );
     imagestring($this->img,$this->font_size,$xpos_txt,$ypos_txt,$this->text,$this->black) ; //textcol);
 
-    header("Content-Type: image/png");
-    imagepng($this->img);
+
+    header("Content-Type: image/gif");
+    imagegif($this->img);
     imagedestroy($this->img);
+
   }
 
 
@@ -331,24 +339,25 @@ class createbutton {
   var $m_bc ;   // Randfarbe
   var $m_pc ;   // Farbe der Umgebung
   var $m_font ; // Zeichensatz
-  var $m_fs ;   // Schriftgr�sse
+  var $m_fs ;   // SchriftgrÃ¶sse
+  var $m_width; // Breite
 
   function create_menue_button (){
-    $this->m_font = "../4fbak/fonts/georgiaz.ttf";
+    $this->m_font = "../4fbak/fonts/georgiaz.ttf"; // aufwahl der Schriftart
 
-    $b = @imageTTFBbox($this->m_fs, 0, $this->m_font, $this->m_text);
-/*  p[6],p[7] O---------------------O p[4],p[5]
+    $b = imageTTFBbox($this->m_fs, 0, $this->m_font, $this->m_text);  //errechnet die GrÃ¶Ãe des Bereichs fÃ¼r eine True-Type-Textausgabe
+/*  b[6],b[7] O---------------------O b[4],b[5]
               |                     |
-    p[0],p[1] O---------------------O p[2],p[3]  */
+    b[0],b[1] O---------------------O b[2],b[3]  */
 
-    $txt_dx = abs ($b[4]) + abs ($b[6]) ;
-    $ober   = abs ($this->m_fs - abs ($b[7])) ;
-    $mittel = $this->m_fs ;
-    $unter  = abs ($b[1]) ;
+    $txt_dx = abs ($b[4]) + abs ($b[6]) ;       // Breite des Textes
+    $ober   = abs ($this->m_fs - abs ($b[7])) ; // SchriftgrÃ¶sse - Y-Wert oben
+    $mittel = $this->m_fs;                      // SchriftgrÃ¶sse
+    $unter  = abs ($b[1])-2;                    // Y-Wert unten - 2 Pixel
 
     $txt_dy = $ober + $mittel + $unter ;
 
-    $this->height = $txt_dy + 5 ;
+    $this->height = $txt_dy + 6 ;
     $this->width  = $txt_dx + $ober + $mittel ;
     if ( $this->m_width > $this->width ){ $this->width = $this->m_width ;}
     $this->img   = imagecreate($this->width, $this->height);
@@ -380,7 +389,7 @@ class createbutton {
         imageline  ( $this->img, $x1, $y3, $x4, $y2, $this->black ) ;
         imageline  ( $this->img, $x4, $y2, $x1, $y1, $this->black ) ;
 
-        imagefill  ( $this->img, 1, 1, $this->lighterblue );
+        imagefill  ( $this->img, 1, 1, $this->lightblue );
       break;
 
       case "rund":
@@ -405,58 +414,48 @@ class createbutton {
         imagearc  ( $this->img, $x1, $y3, $this->height, $this->height, 90 , 270, $this->black  );
         imagearc  ( $this->img, $x2, $y3, $this->height, $this->height, 270, 450, $this->black  );
 
-        imagefill  ( $this->img,            0,   0, $this->get_color ($this->m_bg) );
-        imagefill  ( $this->img,            0, $y2, $this->get_color ($this->m_bg) );
-        imagefill  ( $this->img, $this->width,   0, $this->get_color ($this->m_bg) );
+        imagefill  ( $this->img,            1,   1, $this->get_color ($this->m_bg) );
+        imagefill  ( $this->img,            1, $y2, $this->get_color ($this->m_bg) );
+        imagefill  ( $this->img, $this->width,   1, $this->get_color ($this->m_bg) );
         imagefill  ( $this->img, $this->width, $y2, $this->get_color ($this->m_bg) );
       break;
 
     }
 
-    $bo = imagettftext ( $this->img, $this->m_fs, 0, $x1-3, ($oben+$mittel+$unten+4), $this->black, $this->m_font,  $this->m_text );
+    $bo = imagettftext ( $this->img, $this->m_fs, 0, $x1-3, ($ober+$mittel+$unter+1), $this->black, $this->m_font,  $this->m_text );
 
-    header("Content-Type: image/png");
-    imagepng($this->img);
+    header("Content-Type: image/gif");
+    imagegif($this->img);
     imagedestroy($this->img);
-
   }
-
-
 } // class button
 /*******************************************************************************
 *******************************************************************************/
 
 
 define ("debug", false);
+
+if ( debug == true ){
+  echo "<br><br>\n";
+  echo "GET="; var_dump ($_GET);    echo "#<br><br>\n";
+  echo "POST="; var_dump ($_POST);   echo "#<br><br>\n";
+  echo "COOKIE="; var_dump ($_COOKIE); echo "#<br><br>\n";
+  echo "SESSION="; print_r ($_SESSION); echo "#<br>\n";
+}
+
+
   if (isset ($_GET["type"])){
     switch ($_GET["type"]){
       case "tumbler":
-        if (isset ( $_GET ["ontext"] )) {
-          $ontext = $_GET ["ontext"];
-        } else { $ontext = "!FEHLER!"; }
-
-        if (isset ( $_GET ["offtext"] )) {
-          $offtext = $_GET ["offtext"];
-        } else { $offtext = "!FEHLER!"; }
-
-        if (isset ( $_GET ["color"] )) {
-          $color = $_GET ["color"];
-        } else {
-          $color = "blue";
-        }
+        if (isset ( $_GET ["ontext"] )) { $ontext = $_GET ["ontext"];   } else { $ontext = "!FEHLER!"; }
+        if (isset ( $_GET ["offtext"] )) {$offtext = $_GET ["offtext"]; } else { $offtext = "!FEHLER!"; }
+        if (isset ( $_GET ["color"] )) {  $color = $_GET ["color"];     } else { $color = "blue"; }
         $button = new createbutton ("push",$text, $color, $form);
         break ;
 
       case "push":
-        if (isset ( $_GET ["text"] )) {
-          $text = $_GET ["text"];
-        } else { $text = "!FEHLER!"; }
-
-        if (isset ( $_GET ["color"] )) {
-          $color = $_GET ["color"];
-        } else {
-          $color = "blue";
-        }
+        if (isset ( $_GET ["text"] )) { $text = $_GET ["text"];   } else { $text = "!FEHLER!"; }
+        if (isset ( $_GET ["color"] )) {$color = $_GET ["color"]; } else { $color = "blue"; }
         $button = new createbutton ("push", $text, $color, debug);
         break ;
 
@@ -467,6 +466,13 @@ define ("debug", false);
       break ;
 
       case "icon":
+        $text = "";
+	$color = "";
+	$form = "";
+        if (isset ($_GET ['color'])) { $color  = $_GET ['color'];  }
+        if (isset ($_GET ['form']))  { $form   = $_GET ['form'] ;  }
+        if (isset ($_GET ['text']))  { $text   = $_GET ['text'];   }
+
         $button = new createbutton ("icon",$text, $color, $form);
         break ;
 
@@ -482,7 +488,6 @@ define ("debug", false);
         }
         $button = new createbutton ("menue", $text, $color, debug);
         break ;
-
 
       default:
     }

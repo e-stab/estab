@@ -7,7 +7,7 @@
    Beschreibung:
      Zentrale Konfigurationsdatei
 
-   (C) 2006-2008 Hajo Landmesser IuK Kreis Heinsberg
+   (C) 2006-2012 Hajo Landmesser IuK Kreis Heinsberg
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
 
@@ -17,17 +17,26 @@
 \******************************************************************************/
 
     if (file_exists ( "d_cfg.inc.php" )) REQUIRE "d_cfg.inc.php" ;
+    if (file_exists ( "m_cfg.inc.php" )) REQUIRE "m_cfg.inc.php" ;
     if (file_exists ( "./4fcfg/d_cfg.inc.php" )) REQUIRE "./4fcfg/d_cfg.inc.php" ;
     if (file_exists ( "../4fcfg/d_cfg.inc.php" )) REQUIRE "../4fcfg/d_cfg.inc.php" ;
     /*
-      Sollen Klänge übermittelt und abgespielt werden können ?
-        true  : Klänge werden als objekt übertragen und können abgespielt werden.
-        false : es werden keine Klänge übermittelt;
+      Sollen KÃ¤nge Ã¼bermittelt und abgespielt werden kÃ¶nnen ?
+        true  : KlÃ¤nge werden als objekt Ã¼bertragen und kÃ¶nnen abgespielt werden.
+        false : es werden keine KlÃ¤nge Ã¼bermittelt;
     */
     $conf_4f["sounds"] = true ;
 
-    /* getrennt : Eingang und Ausgang zählen für sich
-      gemeinsam : Eingang und Ausgang zählen zusammen
+
+	/* $conf_4f["si_in_out"] 
+			true == Ein- und AusgÃ¤nge laufen Ã¼ber den Sichter
+		  false == nur EingÃ¤nge gehen Ã¼ber den Sichter
+	*/
+	 $conf_4f["si_in_out"] = false ;
+
+
+    /* getrennt : Eingang und Ausgang zÃ¤hlen fÃ¼r sich
+      gemeinsam : Eingang und Ausgang zÃ¤hlen zusammen
     */
     if (defined("Nachweisung") == false ) define ("Nachweisung", "gemeinsam");
 
@@ -74,9 +83,9 @@
     $conf_4f ["Titelkurz"]        =  "eStab";
     $conf_4f ["SubTitel"]["env"]  =  " - elektronischer Nachrichtenvordruck";
     $conf_4f ["SubTitel"]["etb"]  =  "Einsatztagebuch";
-    $conf_4f ["Version"]          =  "v0.9.20 23.07.2011 nach FKT-Katego";
+    $conf_4f ["Version"]          =  "v0.9.26  .10.2015";
       // Hier kann die eigene Dienststelle eingetragen werden Zeilenumbruch mit <br>
-    $conf_4f ["Stelle"]           =  "Einsatzleitung Kreis Heinsberg" ;
+    $conf_4f ["Stelle"]           =  "FÃ¼hrungshilfsmittel" ;
       // Programm information und Versionsnummer
     $conf_4f ["NameVersion"][0]   = "<big><big><b>".$conf_4f ["Titelkurz"]." ".
                                     $conf_4f ["SubTitel"]["env"]."</b><br>".
@@ -84,21 +93,21 @@
                                     $conf_4f ["Stelle"]."</big></big></big></b><br><br>\n";
 
 
-    $conf_4f ["NameVersion"][1]   = "<b>Ein Programm der IuK Kreis Heinsberg</b><br>\n";
+    $conf_4f ["NameVersion"][1]   = "<b></b><br>\n";
     $conf_4f ["NameVersion"][2]   = "Nachrichtenvordruck Stab-Modul      <br>\n";
     $conf_4f ["NameVersion"][3]   = "Nachrichtenvordruck Fernmelde-Modul <br>\n";
     $conf_4f ["NameVersion"][4]   = "Nachrichtenvordruck Sichter-Modul   <br>\n";
     $conf_4f ["NameVersion"][5]   = "Administrationsmodul                <br>\n";
     $conf_4f ["NameVersion"][6]   = "Editor Empf&auml;ngermatix          <br>\n";
     $conf_4f ["NameVersion"][7]   = "Nachweisung Eingang / Ausgang       <br>\n";
-    $conf_4f ["NameVersion"][8]   = "ETB Einsatztagebuch                 <br>\n";
-    $conf_4f ["NameVersion"][9]   = "Kategorisierung                     <br>\n";
-    $conf_4f ["NameVersion"][10]  = "Nachrichtenvordrucke als PDF-Datei  <br>\n";
-    $conf_4f ["NameVersion"][11]  = "lade-/speicherbare Funktionsmatrix Teil 1 <br>\n";
-
-    $conf_4f ["NameVersion"][12]  = "(C) 2005-2011 HaJo Landmesser<br>eMail: info@eStab.de <br>\n";
-    $conf_4f ["NameVersion"][13]  = "Infos, Forum unter  http://www.eStab.de <br>\n";
-
+    $conf_4f ["NameVersion"][8]   = "ETB - Einsatztagebuch               <br>\n";
+    $conf_4f ["NameVersion"][9]   = "TBB - Technisches Betriebsbuch      <br>\n";
+    $conf_4f ["NameVersion"][10]  = "Kategorisierung                     <br>\n";
+    $conf_4f ["NameVersion"][11]  = "Nachrichtenvordrucke als PDF-Datei  <br>\n";
+    $conf_4f ["NameVersion"][12]  = "lade-/speicherbare Funktionsmatrix Teil 1 <br>\n";
+    $conf_4f ["NameVersion"][13]  = "(C) 2005-2015 HaJo Landmesser (<a href=mailto:info@eStab.de>info@eStab.de</a>)<br>\n";
+    $conf_4f ["NameVersion"][14]  = "Infos unter  <a href=http://www.eStab.de target=\"_blank\">http://www.eStab.de</a><br>\n";
+    $conf_4f ["NameVersion"][16]  = "<a href=http://sourceforge.net/projects/estab/forums target=\"_blank\">Forum</a>, <a href=http://eStab.sourceforge.net target=\"_blank\">Entwicklung</a> & <a href=http://sourceforge.net/projects/estab/files/ target=\"_blank\">Sourcen</a> unter: <a href=http://eStab.sourceforge.net target=\"_blank\">http://eStab.sourceforge.net</a><br>\n";
 
 /*******************************************************************************/
       // Datenverzeichnis
@@ -191,7 +200,6 @@
 
 $color_data_table = "#E0E0E0";
 $color_button     = "#E0E0E0";
-$color_button_ok  = "#A0FFA0"; // auch für "Absenden"
+$color_button_ok  = "#A0FFA0"; // auch fÃƒÂ¼r "Absenden"
 $color_button_nok = "#FFA0A0";
-
 ?>

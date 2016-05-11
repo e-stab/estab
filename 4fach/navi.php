@@ -2,7 +2,7 @@
 /*****************************************************************************\
    Datei: navi.php
 
-   ben�tigte Dateien:    tools.php, db_operation.php,  config.inc.php
+   benÃ¶tigte Dateien:    tools.php, db_operation.php,  config.inc.php
 
    Beschreibung:
 
@@ -153,7 +153,7 @@
                   echo "<input type=\"image\" name=\"fm_admin\" src=\"button.php?type=menue&m_text=2.Sichtung&m_fs=10&m_form=rund\" alt=\"admin\">\n";
                   echo "</td></tr>\n";
                   echo "<tr><td>\n";
-                  echo "<input type=\"image\" name=\"fm_anhang\" src=\"button.php?type=menue&m_text=Anh�nge&m_fs=10&m_form=rund\" alt=\"Anhang\">\n";
+                  echo "<input type=\"image\" name=\"fm_anhang\" src=\"button.php?type=menue&m_text=AnhÃ¤nge&m_fs=10&m_form=rund\" alt=\"Anhang\">\n";
                   echo "</td></tr>\n";
 
              break;

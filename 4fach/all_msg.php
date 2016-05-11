@@ -239,7 +239,7 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
     echo "<td>";
     echo "Meldung/Seite:<br>\n";
 
-      // Voreinstellung für die Meldungen pro Seite
+      // Voreinstellung fÃ¼r die Meldungen pro Seite
     if ( !(isset ($_SESSION["am_flt_anzahl"])) OR
         ( $_SESSION["am_flt_anzahl"] == "" )
      ){$_SESSION["am_flt_anzahl"] = 5; }
@@ -981,7 +981,7 @@ var_dump ($this->formdata); echo "<br>";
 
     /****************************************************************************\
     | Zeile, Spalte 2 , 2+3  2   2   Ausgang Annahmevermerk +
-    |                         4  3   Ausgang Beförderungsvermerk
+    |                         4  3   Ausgang BefÃ¶rderungsvermerk
     02_zeit
     02_zeichen
     \****************************************************************************/
@@ -1149,11 +1149,11 @@ var_dump ($this->formdata); echo "<br>";
 
     echo "<tbody>\n";
     echo "<tr>\n";
-    // Zeile, Spalte 4 , 1   32   6   Beförderungsweg
+    // Zeile, Spalte 4 , 1   32   6   BefÃ¶rderungsweg
     echo "<td style=\"width: 131px; background-color: ".$this->bg[6].";\">Bef&ouml;rderungsweg:</td>\n";
 
     /****************************************************************************\
-    // Zeile, Spalte 4 , 2   32   6   Beförderungsweg
+    // Zeile, Spalte 4 , 2   32   6   BefÃ¶rderungsweg
     06_befweg
     \****************************************************************************/
 
@@ -1169,7 +1169,7 @@ var_dump ($this->formdata); echo "<br>";
     echo "</td>";
 
     /****************************************************************************\
-    // Zeile, Spalte 4 , 3   32   6   Beförderungsweg
+    // Zeile, Spalte 4 , 3   32   6   BefÃ¶rderungsweg
     06_befwegausw
     \****************************************************************************/
     if (!$this->feld[6]) {
@@ -1230,13 +1230,13 @@ var_dump ($this->formdata); echo "<br>";
     echo "<input name=\"07_durchspruch\" value=\"S\" type=\"radio\" ".$param.$sel.">Spruch</td>\n";
 
     /****************************************************************************\
-    // Zeile, Spalte 5,2   128    8   Beförderungshinweis
+    // Zeile, Spalte 5,2   128    8   BefÃ¶rderungshinweis
     \****************************************************************************/
 
     echo "<td style=\"text-align: left; width: 140px; background-color: ".$this->bg[8].";\">Bef&ouml;rderungshinweis:<br>Tel.</td>\n";
 
     /****************************************************************************\
-    // Zeile, Spalte 5,3   128    8   Beförderungshinweis
+    // Zeile, Spalte 5,3   128    8   BefÃ¶rderungshinweis
     08_befhinweis
     \****************************************************************************/
     echo "<td style=\"width: 294px; background-color: ".$this->bg[8].";\">\n";
@@ -1249,7 +1249,7 @@ var_dump ($this->formdata); echo "<br>";
     }
     echo "</td>\n";
     /****************************************************************************\
-    // Zeile, Spalte 5,4   128    8   Beförderungshinweis
+    // Zeile, Spalte 5,4   128    8   BefÃ¶rderungshinweis
     08_befhinwausw
     \****************************************************************************/
 
@@ -1336,7 +1336,7 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
     echo "</td>\n";
 
     /****************************************************************************\
-    // Zeile, Spalte 6,3   Gesprächsnotiz    1024 11  Gesprächsnotiz
+    // Zeile, Spalte 6,3   GesprÃ¤chsnotiz    1024 11  GesprÃ¤chsnotiz
     11_gesprnotiz
     \****************************************************************************/
     if (((($this->formdata["11_gesprnotiz"]) != "" )) or (!$this->feld[11])) {
@@ -1725,7 +1725,7 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
 /*############################################################################
 ##############################################################################*/
 
-define ("debug", true);
+define ("debug", false);
 
   session_start ();
 
@@ -1742,7 +1742,7 @@ define ("debug", true);
 
 
   /**********************************************************************\
-    Überprüfe ob die Listendarstellung geaendert werden soll
+    ÃberprÃ¼fe ob die Listendarstellung geaendert werden soll
 
   ["filter_darstellung"]=> string(2) "on"
   ["filter_anzahl"]=> string(2) "10"
@@ -1800,7 +1800,7 @@ define ("debug", true);
     }
   }
 */
-  // finde Menü
+  // finde MenÃ¼
   if ( (isset ($_GET["am_flt_find_mask_aus_x"])) or
        (isset ($_GET["am_flt_find_mask_ein_x"])) ){
 
@@ -1833,7 +1833,7 @@ define ("debug", true);
 
 
   /**********************************************************************\
-    Überprüfe ob die Listendarstellung geaendert werden soll
+    ÃberprÃ¼fe ob die Listendarstellung geaendert werden soll
   \**********************************************************************/
 
 
@@ -1854,7 +1854,7 @@ define ("debug", true);
 
   if ( !isset( $_GET["ueb_fm"])) {
 
-    if ( isset ($_GET["am_flt_submit"])) { // es soll was geändert werden
+    if ( isset ($_GET["am_flt_submit"])) { // es soll was geÃ¤ndert werden
       if ($_GET["am_flt_darstellung"] == "on") {$_SESSION["am_flt_darstellung"] = 1;
         if (isset ($_GET["am_flt_anzahl"])) {$_SESSION["am_flt_anzahl"] = $_GET["am_flt_anzahl"]; }
         else {

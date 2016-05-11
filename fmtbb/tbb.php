@@ -2,7 +2,7 @@
 
 define ("debug", false);
 /******************************************************************************\
-Einsatz Tage Buch
+technisches Betriebsbuch
 
   Szenario "Kein Eintrag vorhanden, kein Einsatz definiert."
 
@@ -101,7 +101,7 @@ class tbb_liste {
     $this->sqlquery = $query ;
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[query_table_iu] Konnte keine Verbindung zur Datenbank herstellen");
-
+    mysql_query('SET NAMES utf8');
     $db_check = mysql_select_db ($this->db_name)
        or die ("[query_table_iu] Auswahl der Datenbank fehlgeschlagen");
 
@@ -120,7 +120,7 @@ class tbb_liste {
 
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[query_table] Konnte keine Verbindung zur Datenbank herstellen");
-
+    mysql_query('SET NAMES utf8');
     $db_check = mysql_select_db ($this->db_name)
        or die ("[query_table] Auswahl der Datenbank fehlgeschlagen");
 
@@ -178,7 +178,7 @@ if (debug == true){ echo "D A T E N  W E R D E N  G E S P E I C H E R N<br>";}
                                $conf_4f_db  ["password"] );
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[query_table] Konnte keine Verbindung zur Datenbank herstellen");
-
+    mysql_query('SET NAMES utf8');
     $db_check = mysql_select_db ($this->db_name)
        or die ("[query_table] Auswahl der Datenbank fehlgeschlagen");
 
@@ -209,7 +209,7 @@ if (debug == true){ echo "D A T E N  W E R D E N  G E S P E I C H E R N<br>";}
                         $conf_4f_db  ["password"] );
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[query_table] Konnte keine Verbindung zur Datenbank herstellen");
-
+    mysql_query('SET NAMES utf8');
     $db_check = mysql_select_db ($this->db_name)
        or die ("[query_table] Auswahl der Datenbank fehlgeschlagen");
  //    $result = mysql_list_tables($conf_4f_db ["datenbank"]); nach "mysql_list_tables is depreciated" => mysql_query"SHOW TABLES FROM " . $conf_4f_db["datenbank"])
@@ -327,7 +327,8 @@ if (debug == true){ echo "tbb_tableexist==>"; var_dump($this->tbb_titel_tbl); ec
     echo "<table border=\"1\" cellspacing=\"2\" cellpeding=\"3\">\n";
     echo "<tr>\n";
     echo "<td>";
-    echo "<input type=\"image\" name=\"tbb_eintrag\" value=\"tbb_eintrag\" src=\"".$conf_design_path."/logbook_entry.gif\">\n";
+//    echo "<input type=\"image\" name=\"tbb_eintrag\" value=\"tbb_eintrag\" src=\"".$conf_design_path."/logbook_entry.gif\">\n";
+	echo "<input type=\"image\" name=\"tbb_eintrag\" src=\"../4fach/button.php?type=menue&m_text=TBB-Eintrag&m_fs=10&m_form=rund&width=99&bg=mlightblue\" alt=\"TBb-Eintrag\">\n";
     echo "</td>";
     echo "</tr>";
     echo "</table>";
@@ -386,6 +387,9 @@ if (debug == true){ echo "tbb_tableexist==>"; var_dump($this->tbb_titel_tbl); ec
 /*****************************************************************************\
 
 \*****************************************************************************/
+var $lfd ;
+var $task ;
+
   function tbb_eintragsmenue ($data) {
     include ("../4fcfg/config.inc.php");
 
@@ -560,34 +564,49 @@ if (debug == true){ echo "tbb_tableexist==>"; var_dump($this->tbb_titel_tbl); ec
   }
 
 } // class tbb_liste
+/**************************************************************************************************************************/
 
+session_start();
 
-    session_start();
+if (debug == true){ echo ">strtoupper( _SESSION[ \"vStab_rolle\"]) ->"; var_dump (strtoupper( $_SESSION["vStab_rolle"])); echo "<br>";}
+if (debug == true){ echo ">strtoupper( _SESSION[\"ROLLE\"]) ->"; var_dump (strtoupper( $_SESSION["ROLLE"])); echo "<br>";}
 
-if (debug == true){    echo ">strtoupper( _SESSION[ \"vStab_rolle\"]) ->"; var_dump (strtoupper( $_SESSION["vStab_rolle"])); echo "<br>";}
-if (debug == true){    echo ">strtoupper( _SESSION[\"ROLLE\"]) ->"; var_dump (strtoupper( $_SESSION["ROLLE"])); echo "<br>";}
+    if ( 
+        ( 
+          (isset($_SESSION["vStab_rolle"]) ) AND (strtoupper( $_SESSION["vStab_rolle"]) == strtoupper("FERNMELDER"))
+        ) or
 
-    if ((strtoupper( $_SESSION["vStab_rolle"])  == strtoupper("FERNMELDER")) or
-        (strtoupper( $_SESSION["ROLLEROLLE"])        == strtoupper("FERNMELDER")) ){
+        ( 
+	      (isset($_SESSION["ROLLE"])) AND (strtoupper( $_SESSION["ROLLE"]) == strtoupper("FERNMELDER"))
+        ) or
+        ( 
+		  (isset($_SESSION["vStab_funktion"])) AND (strtoupper( $_SESSION["vStab_funktion"]) == strtoupper("S6"))
+        )
+       )
+	{
       $berechtigt = true;
     } else {
       $berechtigt = false ;
     }
+	
+	$readonly = (isset($_SESSION["vStab_funktion"])) && (strtoupper( $_SESSION["vStab_funktion"]) == strtoupper("S6"));
 
-if (debug == true){    echo ">berechtigt ->"; var_dump ($berechtigt); echo "<br>";}
+if ($readonly or $berechtigt) {		
+	
+    if (debug == true){    echo ">berechtigt ->"; var_dump ($berechtigt); echo "<br>";}
 
     $tbbobj = new tbb_liste ;
 
     $tbbobj->tbb_authorized = $berechtigt;
 
-    $tbbobj->tbb_funktion = $_SESSION ["vStab_funktion"] ;
-    $tbbobj->tbb_kuerzel  = $_SESSION ["vStab_kuerzel"] ;
-    $tbbobj->tbb_benutzer = $_SESSION ["vStab_benutzer"] ;
+    if (isset($_SESSION ["vStab_funktion"])) { $tbbobj->tbb_funktion = $_SESSION ["vStab_funktion"] ;} 
+    if (isset($_SESSION ["vStab_kuerzel"]))  { $tbbobj->tbb_kuerzel  = $_SESSION ["vStab_kuerzel"] ; }
+    if (isset($_SESSION ["vStab_benutzer"])) { $tbbobj->tbb_benutzer = $_SESSION ["vStab_benutzer"] ;}
 
 
-if (debug == true){    echo ">tbb_authorized ->"; var_dump ($tbbobj->tbb_authorized); echo "<br>";}
+   if (debug == true){    echo ">tbb_authorized ->"; var_dump ($tbbobj->tbb_authorized); echo "<br>";}
 
-  if ( !(isset ($_GET["absenden_x"] ))) {
+   if ( !(isset ($_GET["absenden_x"] ))) { 
 
     $tbbobj->tbb_pre_html();
 
@@ -600,7 +619,7 @@ if (debug == true){    echo ">tbb_authorized ->"; var_dump ($tbbobj->tbb_authori
     if ( (isset ($_GET["absenden_x"] )) and
          ($_GET["Einsatzdaten"] == "erfassen") ){
 
-      if (debug == true){ echo "Daten können gespeichert werden !!!!<br>";}
+      if (debug == true){ echo "Daten kÃ¶nnen gespeichert werden !!!!<br>";}
       $tbbobj->speichen_tbbtitel ($_GET);
       header("Location: ".$_SERVER["PHP_SELF"]);
 
@@ -627,8 +646,8 @@ if (debug == true){    echo ">tbb_authorized ->"; var_dump ($tbbobj->tbb_authori
     }
 
 
-    if ( $_GET["tbb_menue"] == "eintrag" ){
-        if (debug == true){ echo "M A R K E  0 0 2<br>";}
+    if ((isset ($_GET["tbb_menue"])) and ($_GET["tbb_menue"] == "eintrag")) {
+      if (debug == true){ echo "M A R K E  0 0 2<br>";}
       $tbbobj->tbb_eintragsmenue ("");
     }
 
@@ -669,4 +688,7 @@ if (debug == true){    echo ">tbb_authorized ->"; var_dump ($tbbobj->tbb_authori
 
   if ( !(isset ($_GET["absenden_x"] ))) {  $tbbobj->tbb_post_html(); }
 
+} else {
+  echo "<big><big><big><b>Keine Berechtigung</b></big></big></big>";
+}
 ?>

@@ -2,8 +2,8 @@
 /******************************************************************************\ 
               Definitionen fuer den Einsatz                                        
 \******************************************************************************/ 
-$conf_4f_db ["datenbank"]     = "estab_test"; 
-$conf_4f     ["anschrift"]    = "EL HS"; 
+$conf_4f_db ["datenbank"]     = "e311201mar2016"; 
+$conf_4f     ["anschrift"]    = "TEL HS"; 
 $conf_4f     ["hoheit"]       = "HS"; 
 
 

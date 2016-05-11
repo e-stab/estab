@@ -2,7 +2,7 @@
 /*****************************************************************************\
    Datei: status.php
 
-   ben�tigte Dateien:    tools.php, db_operation.php
+   benÃ¶tigte Dateien:    tools.php, db_operation.php
 
    Beschreibung:
 
@@ -21,7 +21,7 @@ include ("../4fcfg/dbcfg.inc.php");    // Datenbankparameter
 
   $db = mysql_connect($conf_4f_db   ["server"],$conf_4f_db   ["user"], $conf_4f_db   ["password"] );
   $result = mysql_ping  ($db);
-  
+  mysql_query('SET NAMES utf8');
   if ($result == false){
     echo "<big>DB?</big>";
     exit;

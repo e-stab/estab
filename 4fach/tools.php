@@ -1,4 +1,7 @@
 <?php
+
+//define ("debug", false);              // true = gibt debuginformationen aus
+
 /*****************************************************************************\
    Datei: tools.php
 
@@ -10,17 +13,16 @@
    (C) Hajo Landmesser IuK Kreis Heinsberg
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
-
 include ("../4fcfg/dbcfg.inc.php");
 include ("../4fcfg/e_cfg.inc.php");
 include ("../4fcfg/para.inc.php");
-//include ("../4fcfg/config.inc.php");
 
   function pre_html ($art, $titel, $cssstr){
     include ("../4fcfg/para.inc.php");
+    include ("../4fcfg/config.inc.php");
     echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
     echo "<html>\n";
-    echo "<head>\n";
+    echo "<head><meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\" />\n";
 
     echo "<script language=\"JavaScript\">\n";
     echo "<!--\n";
@@ -84,6 +86,8 @@ include ("../4fcfg/para.inc.php");
    echo "</head>\n";
   }
 
+
+
   /****************************************************************************\
   | Umwandlung von $datum -->
   | Formateingang: TTMM
@@ -97,6 +101,7 @@ include ("../4fcfg/para.inc.php");
     $date = $jahr."-".$monat."-".$tag ;
     return $date ;
   }
+
 
   /****************************************************************************\
   | Umwandlung von $zeit
@@ -126,6 +131,7 @@ include ("../4fcfg/para.inc.php");
     $datetime = $jahr."-".$monat."-".$tag." ".$stunde.":".$minute.":00";
     return $datetime;
   }
+
 
   /****************************************************************************\
   | Umwandlung von Datum und Zeit ==> Datetimeformat
@@ -259,8 +265,8 @@ include ("../4fcfg/para.inc.php");
   } //conv_time_datetime
 
 
-
   function getoutqueuecount (){
+  	 if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>getoutqueuecount</big><br>";  }
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
@@ -271,16 +277,24 @@ include ("../4fcfg/para.inc.php");
     return $result[0];
   }
 
-  function getviewerqueuecount (){
+
+	function getviewerqueuecount (){
+		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>getviewerqueuecount</big><br>";  }
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
-    $query = "SELECT count(*) FROM `".$conf_4f_tbl ["nachrichten"]."`
-              WHERE ( (  `15_quitdatum`    = 0 ) AND
-                      (  `15_quitzeichen`  = 0 ) )  AND
-                    ( (  `04_richtung`     =\"E\") OR
-                      (  `03_datum`       != 0 ) AND
-                      (  `03_zeichen`     != \"\" ) );";
+
+		$WHERE_inout = "WHERE ( ( `15_quitdatum` = 0 ) AND ( `15_quitzeichen` = 0 ) ) AND ( ( `04_richtung` =\"E\") OR ( `03_datum` != 0 ) AND ( `03_zeichen` != \"\" ) )"; 
+		$WHERE_in    = "WHERE ( ( `15_quitdatum` = 0 ) AND ( `15_quitzeichen` = 0 ) ) AND ( `04_richtung` =\"E\")"; 
+
+		if($conf_4f["si_in_out"]) {  //  Ein- und Ausänge sichten
+			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### Ein- und Ausgänge sichten<br>"; }
+				$query = "SELECT count(*) FROM `".$conf_4f_tbl ["nachrichten"]."` ".$WHERE_inout.";";
+      } else {
+       	if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### nur Eingänge sichten<br>"; }
+				$query = "SELECT count(*) FROM `".$conf_4f_tbl ["nachrichten"]."` ".$WHERE_in.";";				
+		}
+	if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>getviewerqueuecount:query=".$query."</big><br>";  }                      
    $result = $dbaccess->query_table_wert ($query);
     return $result[0];
   }
@@ -288,7 +302,8 @@ include ("../4fcfg/para.inc.php");
 
 
   function getreadedcount (){
-    include ("../4fcfg/config.inc.php");
+		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>getreadedcount</big><br>";  }
+		include ("../4fcfg/config.inc.php");
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
 
@@ -308,6 +323,7 @@ include ("../4fcfg/para.inc.php");
   }
 
   function getdonecount (){
+		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>getdonecount</big><br>";  }  	
     include ("../4fcfg/config.inc.php");
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
@@ -340,6 +356,7 @@ include ("../4fcfg/para.inc.php");
   bist du der letzte deiner Art?
 \**************************************************************************************/
   function einhorn ($fkt){
+		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>einhor</big><br>";  }  	
     include ("../4fcfg/config.inc.php");
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
@@ -383,7 +400,7 @@ include ("../4fcfg/para.inc.php");
 
   /************************************************************************\
      Function: sichter_online()
-     pr�ft ob ein Sichter angemeldet ist
+     prÃ¼ft ob ein Sichter angemeldet ist
   \************************************************************************/
   function sichter_online (){
     include ("../4fcfg/dbcfg.inc.php");
@@ -396,7 +413,7 @@ include ("../4fcfg/para.inc.php");
 
   /************************************************************************\
      Function: get_autosichter_targets($ausnahme)
-     ermittelt die Ziele f�r die Autosichtung
+     ermittelt die Ziele fÃ¼r die Autosichtung
   \************************************************************************/
   function get_autosichter_targets($ausnahme) {
     include ("../4fcfg/dbcfg.inc.php");
@@ -404,6 +421,7 @@ include ("../4fcfg/para.inc.php");
     include ("../4fcfg/fkt_rolle.inc.php");
     $db = mysql_connect($conf_4f_db  ["server"],$conf_4f_db ["user"], $conf_4f_db  ["password"])
        or die ("[query_table] Konnte keine Verbindung zur Datenbank herstellen");
+    mysql_query('SET NAMES utf8');   
     $db_check = mysql_select_db ($conf_4f_db  ["datenbank"])
        or die ("[query_table] Auswahl der Datenbank fehlgeschlagen");
     $query = "SELECT
@@ -619,6 +637,7 @@ bersichtlich dargestellt werden.
   function benutzerstatus ($what){ // kann sein "anzeige" oder mit "verlinkt"
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
+    
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
     $query = "SELECT * FROM `".$conf_4f_tbl ["benutzer"]."` where 1 order by aktiv DESC, kuerzel";
     $result = $dbaccess->query_table ($query);
@@ -630,9 +649,15 @@ bersichtlich dargestellt werden.
     $abgemldt = " rgb(200, 200, 200); color:&a0a0a0; "; // was ( 240, 240, 240);
 
     $fernm_aw = 0;
-    $leitstelle    = 0;
+    $leitstelle  = 0;
     /*Benutzerliste*/
     if ((count ($benutzer) > 0) and ($benutzer != "")){
+      include ("../4fcfg/config.inc.php");
+      if ($what == 'verlinkt'){
+         echo "\n\n<form action=\"".$conf_4f ["MainURL"]."\" method=\"POST\" target=\"mainframe\">\n";
+         echo "<!-- Benutzerliste mit aktiven Links zur Anmeldung -->\n";
+      
+      }
 
       echo "<fieldset>";
       echo "<legend><b><big>Benutzerliste</big></b></legend>\n";
@@ -670,6 +695,9 @@ bersichtlich dargestellt werden.
       }
       echo "</tbody></table>\n";
       echo "</fieldset>\n";
+      if ($what == 'verlinkt'){
+         echo "</form>\n";
+      }
     } else {
       echo "<br>";
       echo "<big><b>Es ist keine Funktion angemeldet.</b></big>";
@@ -754,9 +782,12 @@ bersichtlich dargestellt werden.
 \******************************************************************************/
   function extraiereempfaenger ($empf){
     $receiver = explode (",",$empf);
-    for ($i=0; $i < count( $receiver ); $i++ ) {
-      $hilfeaus = explode ( "_", $receiver [$i] ) ;
-      $fktcopycolor[$hilfeaus[0]] = $hilfeaus [1] ;
+	$fktcopycolor = NULL;
+    for ($i=0; $i < count( $receiver ); $i++ ) {	  
+	  if (preg_match ( "/_/", $receiver [$i] ) != 0) {
+        $hilfeaus = explode ( "_", $receiver [$i] ) ;
+        $fktcopycolor[$hilfeaus[0]] = $hilfeaus [1] ;
+	  } 
     }
     return $fktcopycolor;
   }
@@ -775,7 +806,12 @@ bersichtlich dargestellt werden.
       list ($datum, $zeit) = explode (" ",$datetime);
       list ($yyyy, $MM, $tt) = explode ("-", $datum);
       list ($hh, $mm, $ss) = explode (":", $zeit);
-      return ($tt.$hh.$mm.$tak_monate[$MM].$yyyy);
+	  if ($MM != "00"){ 
+	    return ($tt.$hh.$mm.$tak_monate[$MM].$yyyy); 
+	  } else { 
+	    return ("");
+	  }
+      
     } else {
       return ("");
     }

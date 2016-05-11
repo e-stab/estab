@@ -25,7 +25,7 @@ class vordruckasimg {
 
 // Trennungslinie FM / Stab bzw Stab / Sichter
   var $fm_stab_line = 275 ; // 300 px von oben
-  var $stab_sichter_line = 1100 ; // 400 px für den Sichter
+  var $stab_sichter_line = 1100 ; // 400 px fÃ¼r den Sichter
 
 // Bildbereich Formulardaten
   var $fleft ;
@@ -42,7 +42,7 @@ class vordruckasimg {
   var $color_sw ;
   var $color_rd ;
 
-// Schrift und Schriftgrössen
+// Schrift und SchriftgrÃ¶ssen
   var $font ;
   var $fontsize00 = 9 ;
   var $fontsize01 = 12 ;
@@ -88,21 +88,21 @@ class vordruckasimg {
 
     if ($data ["01_datum"] != "0000-00-00 00:00:00") {
       $arr = convdatetimeto ($data ["01_datum"]);
-      $this->db_dataset ["01_datum"]        = konv_datetime_taktime (convtodatetime ($arr[datum], $arr[zeit]));
+      $this->db_dataset ["01_datum"]        = konv_datetime_taktime (convtodatetime ($arr['datum'], $arr['zeit']));
     } else { $this->db_dataset ["01_datum"] = ""; }
 
     $this->db_dataset ["01_zeichen"]      = $data  ["01_zeichen"];
 
     if ($data ["02_zeit"] != "0000-00-00 00:00:00") {
       $arr = convdatetimeto ($data ["02_zeit"]);
-      $this->db_dataset ["02_zeit"]         = konv_datetime_taktime (convtodatetime ($arr[datum], $arr[zeit]));
+      $this->db_dataset ["02_zeit"]         = konv_datetime_taktime (convtodatetime ($arr['datum'], $arr['zeit']));
     } else { $this->db_dataset ["02_zeit"] = ""; }
 
     $this->db_dataset ["02_zeichen"]      = $data ["02_zeichen"];
 
     if ($data ["03_datum"] != "0000-00-00 00:00:00") {
       $arr = convdatetimeto ($data ["03_datum"]);
-      $this->db_dataset ["03_datum"]        = konv_datetime_taktime (convtodatetime ($arr[datum], $arr[zeit]));
+      $this->db_dataset ["03_datum"]        = konv_datetime_taktime (convtodatetime ($arr['datum'], $arr['zeit']));
     } else { $this->db_dataset ["03_datum"] = ""; }
 
     $this->db_dataset ["03_zeichen"]      = $data ["03_zeichen"] ;
@@ -121,13 +121,13 @@ class vordruckasimg {
     $this->db_dataset ["12_inhalt"]       = $data ["12_inhalt"] ;
 
       $arr = convdatetimeto ($data ["12_abfzeit"]);
-    $this->db_dataset ["12_abfzeit"]      = konv_datetime_taktime (convtodatetime ($arr[datum], $arr[zeit]));
+    $this->db_dataset ["12_abfzeit"]      = konv_datetime_taktime (convtodatetime ($arr['datum'], $arr['zeit']));
     $this->db_dataset ["13_abseinheit"]   = $data ["13_abseinheit"] ;
     $this->db_dataset ["14_zeichen"]      = $data ["14_zeichen"] ;
     $this->db_dataset ["14_funktion"]     = $data ["14_funktion"] ;
 
       $arr = convdatetimeto ($data ["15_quitdatum"]);
-    $this->db_dataset ["15_quitdatum"]    = konv_datetime_taktime (convtodatetime ($arr[datum], $arr[zeit]));
+    $this->db_dataset ["15_quitdatum"]    = konv_datetime_taktime (convtodatetime ($arr['datum'], $arr['zeit']));
     $this->db_dataset ["15_quitzeichen"]  = $data ["15_quitzeichen"] ;
     $this->db_dataset ["16_empf"]         = $data ["16_empf"] ;
     $this->db_dataset ["17_vermerke"]     = $data ["17_vermerke"] ;
@@ -136,7 +136,7 @@ class vordruckasimg {
     $this->db_dataset ["x04_druck"]       = $data ["x04_druck"] == "t" ;
 
       $arr = convdatetimeto ($data ["x05_druck_d"]);
-    $this->db_dataset ["x05_druck_d"]     = konv_datetime_taktime (convtodatetime ($arr[datum], $arr[zeit]));
+    $this->db_dataset ["x05_druck_d"]     = konv_datetime_taktime (convtodatetime ($arr['datum'], $arr['zeit']));
     $this->db_dataset ["99_lstacc"]       = $data ["99_lstacc"];
   }
 
@@ -193,7 +193,7 @@ class vordruckasimg {
   }
 
   function draw_mediumselect ($x, $y, $selectvalue){
-    $aa1 = array ("Fu","Fe","Me","Fax","DFÜ");
+    $aa1 = array ("Fu","Fe","Me","Fax","DFÃœ");
     for ($o=0; $o<= 4; $o++){
       if ( $aa1[$o] == $selectvalue ){ $select = true; }else{ $select=false; }
       $this->draw_radiobutton ( $x+$o*55, $y, $select, $this->fontsize00, $aa1[$o] );
@@ -341,14 +341,14 @@ class vordruckasimg {
     // Feld 1
     $this->draw_text ( 200,   35,  0, $this->color_sw, $this->fontsize01, "b", "u", "z", "EINGANG" );
     $this->draw_text ( 200,   60,  0, $this->color_sw, $this->fontsize01, "n", "u", "z", "Aufnahmevermerk" );
-    $this->draw_text ( 200,  170,  0, $this->color_sw, $this->fontsize01, "n", "u", "z", "Datum   Zeit   Kürzel" );
+    $this->draw_text ( 200,  170,  0, $this->color_sw, $this->fontsize01, "n", "u", "z", "Datum   Zeit   KÃ¼rzel" );
 
     $this->draw_text ( 625,   35,  0, $this->color_sw, $this->fontsize01, "b", "u", "z", "AUSGANG" );
     $this->draw_text ( 500,   60,  0, $this->color_sw, $this->fontsize01, "n", "u", "z", "Annahmevermerk" );
-    $this->draw_text ( 500,  170,  0, $this->color_sw, $this->fontsize01, "n", "u", "z", "Zeit   Kürzel" );
+    $this->draw_text ( 500,  170,  0, $this->color_sw, $this->fontsize01, "n", "u", "z", "Zeit   KÃ¼rzel" );
 
-    $this->draw_text ( 760,   60,  0, $this->color_sw, $this->fontsize01, "n", "u", "z", "Beförderungsvermerk" );
-    $this->draw_text ( 760,  170,  0, $this->color_sw, $this->fontsize01, "n", "u", "z", "Datum   Zeit   Kürzel" );
+    $this->draw_text ( 760,   60,  0, $this->color_sw, $this->fontsize01, "n", "u", "z", "BefÃ¶rderungsvermerk" );
+    $this->draw_text ( 760,  170,  0, $this->color_sw, $this->fontsize01, "n", "u", "z", "Datum   Zeit   KÃ¼rzel" );
 
 
     $this->draw_text (1050,   35,  0, $this->color_sw, $this->fontsize01, "n", "u", "z", "Nachweis-Nr." );
@@ -356,13 +356,13 @@ class vordruckasimg {
     $this->draw_text ( 75,  195,  0, $this->color_sw, $this->fontsize01, "n", "u", "l", "Rufname der Gegenstelle/" );
     $this->draw_text ( 75,  200,  0, $this->color_sw, $this->fontsize01, "n", "o", "l", "Spruchkopf" );
 
-    $this->draw_text ( 75,  240,  0, $this->color_sw, $this->fontsize01, "n", "m", "l", "Beförderungsweg" );
+    $this->draw_text ( 75,  240,  0, $this->color_sw, $this->fontsize01, "n", "m", "l", "BefÃ¶rderungsweg" );
 
-    $this->draw_text ( 212, 312,  0, $this->color_sw, $this->fontsize01, "n", "m", "l", "Beförderungshinweis" );
+    $this->draw_text ( 212, 312,  0, $this->color_sw, $this->fontsize01, "n", "m", "l", "BefÃ¶rderungshinweis" );
 
     $this->draw_text (  75,  360,  0, $this->color_sw, $this->fontsize01, "n", "m", "l", "Vorrang" );
     $this->draw_text ( 260,  360,  0, $this->color_sw, $this->fontsize01, "n", "m", "l", "Anschrift" );
-    $this->draw_text ( 860,  360,  0, $this->color_sw, $this->fontsize01, "n", "m", "l", "Gesprächsnotiz" );
+    $this->draw_text ( 860,  360,  0, $this->color_sw, $this->fontsize01, "n", "m", "l", "GesprÃ¤chsnotiz" );
 
     $this->draw_text (  75,  460,  0, $this->color_sw, $this->fontsize01, "n", "m", "l", "Inhalt" );
 
@@ -459,9 +459,9 @@ class vordruckasimg {
   function mediumselect () {
       // Aufnamevermerk
     $this->draw_mediumselect ( 75,  80, $this->db_dataset ["01_medium"]);
-      // Beförderungsweg
+      // BefÃ¶rderungsweg
     $this->draw_mediumselect (900, 250, $this->db_dataset ["06_befwegausw"]);
-     // Beförderungshinweis
+     // BefÃ¶rderungshinweis
     $this->draw_mediumselect (900, 310, $this->db_dataset ["08_befhinwausw"]);
 
     if ( $this->db_dataset ["07_durchspruch"] == "D"){ $select_D = true;}else{$select_D = false;}
@@ -515,10 +515,10 @@ class vordruckasimg {
       // Rufname der Gegenstelle
     $this->draw_text ( 400,  200,  0, $this->color_sw, $this->fontsize03, "b", "m", "l",
                $this->db_dataset ["05_gegenstelle"] );
-      // Beförderungsweg
+      // BefÃ¶rderungsweg
     $this->draw_text ( 275,  250,  0, $this->color_sw, $this->fontsize03, "b", "m", "l",
                $this->db_dataset ["06_befweg"] );
-      // Beförderungshinweis
+      // BefÃ¶rderungshinweis
     $this->draw_text ( 400,  312,  0, $this->color_sw, $this->fontsize03, "b", "m", "l",
                $this->db_dataset ["08_befhinweis"] );
       // Vorrandstufe
@@ -528,7 +528,7 @@ class vordruckasimg {
     $this->draw_textfield ( 276, 400, 500, 500, 40, $this->db_dataset ["10_anschrift"]);
 /*    $this->draw_text ( 275,  400,  0, $this->color_sw, $this->fontsize04, "b", "o", "l",
                $this->db_dataset ["10_anschrift"] );
-      // Gesprächjsnotiz
+      // GesprÃ¤chjsnotiz
     $this->draw_text ( 275,  375,  0, $this->color_sw, $this->fontsize04, "b", "o", "l",
                $this->db_dataset ["10_anschrift"] );
 */
@@ -542,7 +542,7 @@ class vordruckasimg {
      // Absende Einheit Stelle Einrichtung
     $this->draw_text ( 250,  1050,  0, $this->color_sw, $this->fontsize04, "b", "m", "l",
                $this->db_dataset ["13_abseinheit"] );
-      // Kürzel
+      // KÃ¼rzel
     $this->draw_text ( 725,  1050,  0, $this->color_sw, $this->fontsize04, "b", "m", "z",
                $this->db_dataset ["14_zeichen"] );
       // Funktion
