@@ -7,7 +7,7 @@
    Beschreibung:
      Zentrale Konfigurationsdatei
 
-   (C) 2006-2012 Hajo Landmesser IuK Kreis Heinsberg
+   (C) 2006-2018 Hajo Landmesser IuK Kreis Heinsberg
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
 
@@ -83,7 +83,7 @@
     $conf_4f ["Titelkurz"]        =  "eStab";
     $conf_4f ["SubTitel"]["env"]  =  " - elektronischer Nachrichtenvordruck";
     $conf_4f ["SubTitel"]["etb"]  =  "Einsatztagebuch";
-    $conf_4f ["Version"]          =  "v0.9.26  .10.2015";
+    $conf_4f ["Version"]          =  "v0.9.26c  6.2018";
       // Hier kann die eigene Dienststelle eingetragen werden Zeilenumbruch mit <br>
     $conf_4f ["Stelle"]           =  "Führungshilfsmittel" ;
       // Programm information und Versionsnummer
