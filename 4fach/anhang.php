@@ -13,6 +13,8 @@
 /*****************************************************************************\
     Auswahl einer Anhangdatei
     Datei auf den Server hochladen
+
+20160510 - store_formdata von $_GET auf $_POST umgestellt. 
 ******************************************************************************/
 
 include ("./upload_class.php");
@@ -817,41 +819,42 @@ require_once ("./db_operation.php");  // Datenbank operationen
 
   \***************************************************************************/
   function store_formdata () {
-    $_SESSION["01_medium"]       = $_GET["01_medium"];
-    $_SESSION["01_datum"]        = $_GET["01_datum"];
-    $_SESSION["01_zeichen"]      = $_GET["01_zeichen"];
-    $_SESSION["05_gegenstelle"]  = $_GET["05_gegenstelle"];
-    $_SESSION["06_befweg"]       = $_GET["06_befweg"];
-    $_SESSION["06_befwegausw"]   = $_GET["06_befwegausw"];
-    $_SESSION["07_durchspruch"]  = $_GET["07_durchspruch"];
-    $_SESSION["08_befhinweis"]   = $_GET["08_befhinweis"];
-    $_SESSION["08_befhinwausw"]  = $_GET["08_befhinwausw"];
-    $_SESSION["09_vorrangstufe"] = $_GET["09_vorrangstufe"];
-    $_SESSION["10_anschrift"]    = $_GET["10_anschrift"];
-    $_SESSION["11_gesprnotiz"]   = $_GET["11_gesprnotiz"];
-    $_SESSION["12_anhang"]       = $_GET["12_anhang"];
-    $_SESSION["12_inhalt"]       = $_GET["12_inhalt"];
-    $_SESSION["12_abfzeit"]      = $_GET["12_abfzeit"];
-    $_SESSION["13_abseinheit"]   = $_GET["13_abseinheit"];
-    $_SESSION["14_zeichen"]      = $_GET["14_zeichen"];
-    $_SESSION["14_funktion"]     = $_GET["14_funktion"];
-    $_SESSION["15_quitdatum"]    = $_GET["15_quitdatum"];
-    $_SESSION["15_quitzeichen"]  = $_GET["15_quitzeichen"];
-    $_SESSION["16_gncopy"]       = $_GET["16_gncopy"];
+  	 if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big>store_formdata</big></big><br>";  }
+    $_SESSION["01_medium"]       = $_POST["01_medium"];
+    $_SESSION["01_datum"]        = $_POST["01_datum"];
+    $_SESSION["01_zeichen"]      = $_POST["01_zeichen"];
+    $_SESSION["05_gegenstelle"]  = $_POST["05_gegenstelle"];
+    $_SESSION["06_befweg"]       = $_POST["06_befweg"];
+    $_SESSION["06_befwegausw"]   = $_POST["06_befwegausw"];
+    $_SESSION["07_durchspruch"]  = $_POST["07_durchspruch"];
+    $_SESSION["08_befhinweis"]   = $_POST["08_befhinweis"];
+    $_SESSION["08_befhinwausw"]  = $_POST["08_befhinwausw"];
+    $_SESSION["09_vorrangstufe"] = $_POST["09_vorrangstufe"];
+    $_SESSION["10_anschrift"]    = $_POST["10_anschrift"];
+    $_SESSION["11_gesprnotiz"]   = $_POST["11_gesprnotiz"];
+    $_SESSION["12_anhang"]       = $_POST["12_anhang"];
+    $_SESSION["12_inhalt"]       = $_POST["12_inhalt"];
+    $_SESSION["12_abfzeit"]      = $_POST["12_abfzeit"];
+    $_SESSION["13_abseinheit"]   = $_POST["13_abseinheit"];
+    $_SESSION["14_zeichen"]      = $_POST["14_zeichen"];
+    $_SESSION["14_funktion"]     = $_POST["14_funktion"];
+    $_SESSION["15_quitdatum"]    = $_POST["15_quitdatum"];
+    $_SESSION["15_quitzeichen"]  = $_POST["15_quitzeichen"];
+    $_SESSION["16_gncopy"]       = $_POST["16_gncopy"];
     for ($m=1; $m<=5; $m++){
       for ($n=1; $n<=4; $n++){
-        if (isset ($_GET["16_".$m.$n])) $_SESSION["16_".$m.$n] = $_GET["16_".$m.$n] ;
+        if (isset ($_POST["16_".$m.$n])) $_SESSION["16_".$m.$n] = $_POST["16_".$m.$n] ;
 //        echo "key==="."16_".$m.$n."  SESSION=====".$_SESSION["16_".$m.$n]."<br>";
       }
     }
-    $_SESSION["17_vermerke"] = $_GET["17_vermerke"];
+    $_SESSION["17_vermerke"] = $_POST["17_vermerke"];
   }
 
   /***************************************************************************\
   \***************************************************************************/
   function restore_formdata () {
     require ("../4fcfg/fkt_rolle.inc.php");
-
+    if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big> restore_formdata</big></big><br>";  }
     if (isset ($_SESSION["01_medium"])){       $data["01_medium"]       = $_SESSION["01_medium"];       unset ($_SESSION["01_medium"]);  }      else { $data["01_medium"]      = "";}
     if (isset ($_SESSION["01_datum"])){        $data["01_datum"]        = $_SESSION["01_datum"];        unset ($_SESSION["01_datum"]);  }       else { $data["01_datum"]       = "";}
     if (isset ($_SESSION["01_zeichen"])){      $data["01_zeichen"]      = $_SESSION["01_zeichen"];      unset ($_SESSION["01_zeichen"]);  }     else { $data["01_zeichen"]     = "";}
@@ -949,14 +952,14 @@ require_once ("./db_operation.php");  // Datenbank operationen
   switch ($_SESSION["anhang_menue"]){
 
     case 100: // Auswahlmenue
-        if (debug) echo "anhang.php 891 -- Auswahlmenue<br>";
+        if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big> 100 --> Auswahlmenue</big></big><br>";  }        
         store_formdata();
         anhang_menue ();
         $_SESSION["anhang_menue"] = 110;
     break;
 
     case 110: // UPLOAD Menue
-        if (debug) echo "anhang.php 898 -- anhang_menue == 110 --> UPLOADMENUE<br>";
+        if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big> 110 --> UPLOADMENUE</big></big><br>";  }        
 
         if ( isset ($_GET ["ah_upload_x"])){
           fileselect ();
@@ -977,7 +980,7 @@ require_once ("./db_operation.php");  // Datenbank operationen
     break;
 
     case 999: // ??
-        if (debug) echo "anhang.php 918 -- anhang_menue == 110 --> UPLOADMENUE<br>";
+        if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big> 999 --> UPLOAD</big></big><br>";  }
         if ( isset ($_GET ["ah_upload_x"])){
           fileselect ();
         }
