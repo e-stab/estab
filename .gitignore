@@ -1,0 +1,21 @@
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Generated application state
+/4fdata/
+/var/
+/coverage/
+
+# Tool caches
+__pycache__/
+*.py[cod]
+/.phpunit.cache/
+/vendor/
+
+# Operating-system and editor metadata
+.DS_Store
+._*
+*.swp
+*~

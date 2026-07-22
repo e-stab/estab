@@ -1,0 +1,11 @@
+OK	trunk	svn-r85	files=1683	missing=0	extra=0	changed=0
+OK	branch/0.9.20_bugfix	legacy/0.9.20_bugfix	files=645	missing=0	extra=0	changed=0
+OK	branch/0.9.20_buttons_rework	legacy/0.9.20_buttons_rework	files=579	missing=0	extra=0	changed=0
+OK	branch/0.9.20_kto_usr_fkt	legacy/0.9.20_kto_usr_fkt	files=578	missing=0	extra=0	changed=0
+OK	branch/0.9.20_ticket20	legacy/0.9.20_ticket20	files=577	missing=0	extra=0	changed=0
+OK	tags/ver0.9.09	ver0.9.09^{}	files=289	missing=0	extra=0	changed=0
+OK	tags/ver0.9.10	ver0.9.10^{}	files=292	missing=0	extra=0	changed=0
+OK	tags/ver0.9.11	ver0.9.11^{}	files=324	missing=0	extra=0	changed=0
+OK	tags/ver0.9.12	ver0.9.12^{}	files=585	missing=0	extra=0	changed=0
+OK	tags/ver0.9.20	ver0.9.20^{}	files=575	missing=0	extra=0	changed=0
+OK	tags/ver0.9.20b	ver0.9.20b^{}	files=633	missing=0	extra=0	changed=0
