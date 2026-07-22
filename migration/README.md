@@ -55,6 +55,8 @@ Trunk-Baum entspricht r84.
   Verzeichnisse und die Revision-zu-Commit-Tabelle.
 - `svn-trunk-r84.sha256` enthält einen sortierten SHA-256-Hash für jede der
   1.683 Dateien des letzten SVN-Trunks.
+- `svn-documentation-r85.sha256` enthält dasselbe für alle 95 Dateien der
+  separat versionierten Originaldokumentation.
 - `svn-ref-verification.txt` ist das protokollierte Ergebnis des vollständigen
   Ref-Vergleichs beim Import.
 

@@ -1,0 +1,18 @@
+# Binary historical documents and media must remain byte-identical.
+*.bmp binary
+*.gif binary
+*.ico binary
+*.jpg binary
+*.jpeg binary
+*.JPG binary
+*.odt binary
+*.ods binary
+*.ott binary
+*.pap binary
+*.pdf binary
+*.png binary
+*.ttf binary
+*.wav binary
+*.xcf binary
+*.zip binary
+

@@ -75,8 +75,7 @@ def write_revision_map(repository: Path, output: Path) -> None:
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def write_trunk_manifest(svn_wc: Path, output: Path) -> None:
-    root = svn_wc / "eStab_0.9" / "trunk"
+def write_file_manifest(root: Path, output: Path) -> None:
     rows: list[str] = []
     for directory, names, filenames in os.walk(root):
         names[:] = sorted(name for name in names if name != ".svn")
@@ -95,10 +94,12 @@ def main() -> int:
     write_empty_directories(svn_wc, output_dir / "svn-empty-directories.txt")
     write_properties(svn_wc, output_dir / "svn-properties.tsv")
     write_revision_map(repository, output_dir / "svn-revision-map.tsv")
-    write_trunk_manifest(svn_wc, output_dir / "svn-trunk-r84.sha256")
+    write_file_manifest(svn_wc / "eStab_0.9" / "trunk", output_dir / "svn-trunk-r84.sha256")
+    write_file_manifest(
+        svn_wc / "eStab_0.9" / "docu", output_dir / "svn-documentation-r85.sha256"
+    )
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
