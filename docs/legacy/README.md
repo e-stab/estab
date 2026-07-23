@@ -13,6 +13,12 @@ und ist **keine Betriebsanleitung für den heutigen Container**.
 - [`Handbuch_eStab.pdf`](../../doku/Handbuch_eStab.pdf) ist das 31-seitige
   Anwendungshandbuch Version 1.1 vom 23. Juli 2011, das auch den offiziellen
   0.9.26c-Release begleitete.
+- [`Tests.odt`](../../doku/Tests.odt) und
+  [`Tests.ott`](../../doku/Tests.ott) sind die historische Testbeschreibung
+  beziehungsweise Dokumentvorlage aus dem Programmstand.
+- [`suhosin.odt`](../../doku/suhosin.odt) hält die damaligen Hinweise zur
+  nicht mehr eingesetzten Suhosin-Erweiterung fest und dient nur der
+  Provenienz, nicht der heutigen Härtung.
 - [`Handbuch0001.odt`](svn-r85/Quellen_Handbuch/Handbuch0001.odt) und
   [`Dokumentation.odt`](svn-r85/Quellen_Handbuch/Dokumentation.odt) sind die
   ursprünglichen, umfangreichen Handbuchquellen.

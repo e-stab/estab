@@ -21,3 +21,25 @@ erhalten. Der nachfolgende Arbeitsstand übernimmt ausschließlich
 Diese Entscheidung wird später durch einen Integrationstest abgesichert: Ein
 ausgefüllter Nachrichtenvordruck muss einen Anhang-Upload durchlaufen, ohne
 auch nur ein Formularfeld oder eine Empfängerzuordnung zu verlieren.
+
+## 0.9.26b/c: fehlende BOS-Infosammlung
+
+Beide späteren Release-Archive enthalten den im Hauptmenü weiterhin aktiven
+Link `./stabinfo/index.php`, lassen aber den vollständigen Verzeichnisbaum
+`stabinfo/` aus. Ein unverändertes Release liefert für den sichtbaren
+Menüpunkt deshalb HTTP 404. Der letzte SVN-Trunk enthält alle 14 zugehörigen
+HTML-, PHP- und Bilddateien; dieser belegte Bestand wird im heutigen
+Arbeitsstand wieder aufgenommen.
+
+In `stabinfo/l_index.php` werden zwei bereits historisch tote Ziele
+korrigiert: Der DRK-Menüpunkt verweist auf die tatsächlich mitgelieferte Datei
+`DRK Rufnamenschema.html`, und der Link auf das nie enthaltene Verzeichnis
+`HB_abt_2009` entfällt. Der HTTP-Smoke-Test öffnet Startseite, Frameset und
+Inhaltsseite der Infosammlung, damit der veröffentlichte Menüpunkt nicht erneut
+unbemerkt verloren geht.
+
+Der SVN-Bestand lud außerdem zwölf „kleiner oder gleich“-Symbole und zwei
+bedeutungslose Zierbilder per unverschlüsseltem HTTP von fremden Servern.
+Heute stehen die Vergleichszeichen semantisch als lokales `&le;` im Dokument;
+die Zierbilder und ein entbehrlicher externer Begriff-Link sind entfernt.
+Es wurden keine fremden Bilddateien heruntergeladen oder übernommen.
