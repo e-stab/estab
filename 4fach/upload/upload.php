@@ -1,4 +1,12 @@
 <?php
+// Dieser historische Direktendpunkt umging die transaktionale Reservierung in
+// ../anhang.php. Der produktive Upload bleibt dort vollständig verfügbar.
+http_response_code (410);
+header ("Content-Type: text/html; charset=UTF-8");
+echo "<!doctype html><html><body><p>Dieser alte Uploadpfad ist deaktiviert. ".
+     "Bitte die Anhang-Funktion der Anwendung verwenden.</p></body></html>";
+exit;
+
 define ("debug",false);
 
 include ("upload_class.php");
@@ -96,7 +104,7 @@ class fileupload extends file_upload {
     include ("../../dbcfg.inc.php");
     $filenames = $this->readDirectory ( $conf_4f ["ablage_dir"] );
 
-    $hoheit = $conf_4f[hoheit];
+    $hoheit = $conf_4f['hoheit'];
     $hoheitlen = strlen ( $hoheit );
     $highest = 0;
     foreach ($filenames as $file){
@@ -304,7 +312,7 @@ $status = $_SESSION ["UPLOAD"];
             echo "<big><big><b>".$errortxt."</b></big></big>";
           }
 
-          $my_upload->replace = true ; //(isset($_POST['replace'])) ? $_POST['replace'] : "n"; // because only a checked checkboxes is true
+          $my_upload->replace = false; // Existing attachment names must never be overwritten.
 
           $my_upload->do_filename_check = false; // (isset($_POST['check'])) ? $_POST['check'] : "n"; // use this boolean to check for a valid filename
 

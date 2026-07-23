@@ -2,6 +2,9 @@
 
 session_start();
 
+require_once __DIR__ . '/../app/csrf.php';
+require_once __DIR__ . '/../app/export.php';
+
 define ("debug",false);
 
 // umdefinieren der Konstanten - nur in PHP 4
@@ -128,6 +131,10 @@ error_reporting() Level Konstanten und Bit-Werte     value      constant
 class make_dbconf {
 
   var $preconf ;
+
+  function __construct ($conf_4f_db, $conf_4f_tbl, $conf_tbl, $conf_4f){
+    $this->make_dbconf ($conf_4f_db, $conf_4f_tbl, $conf_tbl, $conf_4f);
+  }
 
   function make_dbconf ($conf_4f_db, $conf_4f_tbl, $conf_tbl, $conf_4f){
     $this->preconf ['serveradr'] = $conf_4f_db  ["server"] ;
@@ -264,6 +271,10 @@ class make_dbconf {
 class make_econf {
 
   var $preconf ;
+
+  function __construct ($conf_4f_db, $conf_4f_tbl, $conf_tbl, $conf_4f){
+    $this->make_econf ($conf_4f_db, $conf_4f_tbl, $conf_tbl, $conf_4f);
+  }
 
   function make_econf ($conf_4f_db, $conf_4f_tbl, $conf_tbl, $conf_4f){
     $this->preconf ['db_dbname'] = $conf_4f_db  ["datenbank"] ;
@@ -538,45 +549,28 @@ class make_econf {
     echo "<big>Die Datenbanktabellen werden in das Verzeichnis:<br><b>\"".
           $conf_4f ["einsatzende_dir"]."\"</b> kopiert.<br><br></big>";
 
-    // dann schreiben wir alle Tabellen als csv-Datei in das Einsatzverzeichnis
-
-    echo "<table border=\"1\" cellspacing=\"2\" cellpadding=\"5\">";
-    echo "<tbody>";
-    foreach ($tables as $table){
-      echo "<tr>";
-      echo "<td>";
-      $filename = $conf_4f ["einsatzende_dir"]."/".$table.".csv" ;
-      echo "<b>".$table."</b>";
-      echo "</td>";
-
-      echo "<td>";
-
-      $query = "SELECT * INTO OUTFILE '".$filename."' FIELDS TERMINATED BY ';'
-                OPTIONALLY ENCLOSED BY '\"' FROM ".$table." WHERE 1;";
-
-      $sqlquery = $query ;
-
-      $result = mysql_query ($sqlquery, $db_hndl) ;
-
-      $db_errno  = mysql_errno ();
-      $db_errtxt = mysql_error ();
-      if ($db_errno != 0) {
-        echo "<p><img src=\"".$conf_menue ["symbole"]."/redlight.gif\" alt=\"schwerer Fehler\"></p>";
-      } else {
-        echo "<p><img src=\"".$conf_menue ["symbole"]."/greenlight.gif\" alt=\"keine Fehler\"></p>";
-      }
-      echo "</td><td>";
-      echo "<b>";
-        outerrormsg ($db_errno, $db_errtxt);
-      echo "</b>";
-      echo "</td></tr>";
+    // Export durch den PHP-Prozess: kein MariaDB-FILE-Privileg und kein
+    // serverseitiges SELECT ... INTO OUTFILE erforderlich.
+    if (!mysql_select_db ($conf_4f_db ["datenbank"], $db_hndl)) {
+      throw new RuntimeException ("Datenbank konnte für den Export nicht ausgewählt werden");
     }
+    $exportBase = estab_env ("ESTAB_EXPORT_DIR", "/var/lib/estab/export");
+    $export = estab_export_database ($db_hndl, (string) $exportBase);
 
+    echo "<table border=\"1\" cellspacing=\"2\" cellpadding=\"5\"><tbody>";
+    echo "<tr><th>Tabelle</th><th>Datensätze</th><th>SHA-256</th></tr>";
+    foreach ($export ["manifest"]["tables"] as $tableExport) {
+      echo "<tr><td>".htmlspecialchars ($tableExport ["table"], ENT_QUOTES | ENT_SUBSTITUTE, "UTF-8")."</td>";
+      echo "<td>".(int) $tableExport ["rows"]."</td>";
+      echo "<td><code>".htmlspecialchars ($tableExport ["sha256"], ENT_QUOTES | ENT_SUBSTITUTE, "UTF-8")."</code></td></tr>";
+    }
     echo "</tbody></table>";
 
-    echo "<br><big><big>Die Tabellen wurden als Komma getrennte Werte gespeichert und kÃ¶nnen so in<br>".
-         " OpenOffice.Calc oder Excel importiert und ausgewertet werden.<br></big></big>";
-    // zum Schluss Ã¼bertragen wir das gesamte Verzeichnis als ZIP-Datei an den anforderer
+    echo "<p><big>Der Einsatzexport wurde vollständig und portabel erzeugt.</big></p>";
+    echo "<p>Verzeichnis: <code>".htmlspecialchars ($export ["directory"], ENT_QUOTES | ENT_SUBSTITUTE, "UTF-8")."</code></p>";
+    if (is_string ($export ["archive"])) {
+      echo "<p>ZIP-Archiv: <code>".htmlspecialchars ($export ["archive"], ENT_QUOTES | ENT_SUBSTITUTE, "UTF-8")."</code></p>";
+    }
 
   }
 

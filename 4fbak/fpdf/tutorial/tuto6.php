@@ -8,6 +8,11 @@ var $I;
 var $U;
 var $HREF;
 
+function __construct($orientation='P',$unit='mm',$format='A4')
+{
+	$this->PDF($orientation,$unit,$format);
+}
+
 function PDF($orientation='P',$unit='mm',$format='A4')
 {
 	//Call parent constructor
@@ -37,7 +42,7 @@ function WriteHTML($html)
 		else
 		{
 			//Tag
-			if($e{0}=='/')
+			if($e[0]=='/')
 				$this->CloseTag(strtoupper(substr($e,1)));
 			else
 			{

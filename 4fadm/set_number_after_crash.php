@@ -1,206 +1,175 @@
 <?php
-/*****************************************************************************\
-   Datei: set_number_after_crash.php
 
-   benötigte Dateien: config.inc.php, dbcfg.inc.php, protokoll.php
+declare(strict_types=1);
 
+session_start();
 
-   Beschreibung:
+require_once __DIR__ . '/../4fcfg/config.inc.php';
+require_once __DIR__ . '/../4fcfg/dbcfg.inc.php';
+require_once __DIR__ . '/../app/admin_operations.php';
+require_once __DIR__ . '/../app/csrf.php';
 
-          Fällt estab aus wird mit papier weitergearbeitet. Ist estab dann wider
-          einsatzbereit muss es möglich sein den Nachrichtenzähler auf die nächste
-          bis dahin aufgelaufene Nachrichtennummer zu inkrementieren.
-          Dekrementieren ist nicht gestattet. Diese Aktion muss geloggt werden.
-          Das Ändern des Zählerstandes soll als weitere Option im Adminbereich
-          aufgelistet werden.
+estab_admin_require_http_auth($_SERVER);
 
-          First Page: Formular anzeigen und Counter inkrementiernen
+$mode = estab_admin_validate_counter_mode((string) Nachweisung);
+$error = null;
+$submitted = [];
 
-          Second Page: Neue Counter Position setzten
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+    try {
+        estab_csrf_require_post($_SERVER, $_POST);
+    } catch (Throwable) {
+        http_response_code(403);
+        $error = 'Die Formularsitzung ist ungültig oder abgelaufen.';
+    }
 
-   (C) David Toboll FGr F/K Münster
-   mailto://d.toboll@thw-muenster.de
-\******************************************************************************/
+    if ($error === null) {
+        if (($_POST['admin_action'] ?? null) !== 'raise_counter') {
+            http_response_code(422);
+            $error = 'Unbekannte administrative Aktion.';
+        }
+    }
 
-include("../4fcfg/dbcfg.inc.php");
-include("../4fcfg/config.inc.php");
-include("../4fach/protokoll.php");
-
-//Parameter
-if (isset($_GET['page'])) $page = $_GET['page'];
-if($page=='') $page = 1;
-$protokoll = false;
-
-//Datenbank Verbindung herstellen und überprüfen
- $db = mysql_connect($conf_4f_db ["server"],$conf_4f_db ["user"], $conf_4f_db ["password"]);
- $db_con_is_ok = mysql_ping  ($db);
- mysql_query('SET NAMES utf8');
- mysql_select_db($conf_4f_db ["datenbank"])  ;
-
-
-//Datenbank abfrage und in Array ablegen
- $tabelle = $conf_4f_tbl['nachrichten'];
-//DB Einlesen
-$result = mysql_query ("SELECT 04_richtung, 04_nummer FROM  $tabelle ORDER BY 00_lfd DESC");
-            while($inhalt = mysql_fetch_array($result, MYSQL_ASSOC)){
-            $nummer[] = $inhalt['04_nummer'];
-            $richtung[] = $inhalt['04_richtung'];
+    if ($error === null) {
+        $validation = estab_admin_validate_counter_input($_POST, $mode);
+        $submitted = $validation['data'];
+        if (!$validation['valid']) {
+            http_response_code(422);
+            $error = 'Nur positive ganze Nachrichtennummern bis '
+                . ESTAB_ADMIN_COUNTER_MAX . ' sind zulässig.';
+        } else {
+            try {
+                $connection = estab_auth_connect($conf_4f_db);
+                try {
+                    estab_admin_raise_message_counter(
+                        $connection,
+                        $conf_4f_tbl['nachrichten'],
+                        $conf_4f_tbl['protokoll'],
+                        $mode,
+                        $validation['data']
+                    );
+                } finally {
+                    estab_auth_close($connection);
+                }
+                header('Location: set_number_after_crash.php?updated=1', true, 303);
+                exit;
+            } catch (EstabAdminConflictException $exception) {
+                http_response_code(409);
+                $error = $exception->getMessage();
+            } catch (Throwable $exception) {
+                error_log('eStab message counter update failed: ' . $exception->getMessage());
+                http_response_code(500);
+                $error = 'Der Nachrichtenzähler konnte nicht atomar erhöht werden.';
             }
-
-//Finde letzte Eingangsnummer
-                 for($i=0; $i<=count($richtung); $i++){
-                 if($richtung[$i] == "E")
-                         {
-                         $e_nummer = $i;
-                         break;
-                         }
-                 }
-//Finde letzte Ausgangsnummer
-                 for($i=0; $i<=count($richtung); $i++){
-                 if($richtung[$i] == "A")
-                         {
-                         $a_nummer = $i;
-                         break;
-                         }
-                 }
-
-
-//########################################## First Page ##########################################
-if($page == 1) {
-
-
-//Nachweisung Überprüfen
-if(Nachweisung == "gemeinsam")
-         {
-         ?>
-<script type="text/javascript">
-         function checkForm() {
-         var strFehler='';
-         if (document.forms[0].ea_nummer.value <= <?PHP echo $nummer[0]++; ?>)
-         strFehler += "Feld Ein-/Ausgangsnummer fehlerhaft:Mindestwert <? echo $nummer[0]; ?> \n";
-
-         if (strFehler.length>0) {
-         alert("Festgestellte Probleme: \n\n"+strFehler);
-         return(false);
-         }
-         }
-</script>
-<?php
-         echo"<form action='' onsubmit='return checkForm()' method=get>";
-         echo"<fieldset>";
-         echo"<legend>Nachrichtennummer nach Systemausfall setzen</legend>";
-         echo"Hinweis: Tragen Sie hier die letzte verwendete Nummer ein!";
-         echo"<table border=2 cellpadding=5 cellspacing=0 bgcolor=#E0E0E0>";
-         echo"<tr><td align=right><b>Ein-/Ausgangsnummer</b><br>Mindestwert: ".$nummer[0]."</td><td>";
-         echo"<input name=ea_nummer_get type=text size=8>";
-         echo"</td></tr></table>";
-         echo"<input name=page type=hidden value=2 size=8>";
-         echo"<input type='submit' value='Absenden'/>";
-         echo"</fieldset></form>";
-         }
-elseif(Nachweisung == "getrennt")
-         {
-
-?>
-<script type="text/javascript">
-         function checkForm() {
-         var strFehler='';
-         if (document.forms[0].e_nummer.value < <? echo $nummer[$e_nummer]++; ?>)
-         strFehler += "Feld Eingangsnummer fehlerhaft:Mindestwert <? echo $nummer[$e_nummer]; ?> \n";
-
-          if (document.forms[0].a_nummer.value < <? echo $nummer[$a_nummer]++; ?>)
-         strFehler += "Feld Ausgangsnummer fehlerhaft:Mindestwert <? echo $nummer[$a_nummer]; ?> \n";
-
-         if (strFehler.length>0) {
-         alert("Festgestellte Probleme: \n\n"+strFehler);
-         return(false);
-         }
-         }
-</script>
-<?php
-         //Formular schreiben
-         echo"<form action='' onsubmit='return checkForm()' method=get>";
-         echo"<fieldset>";
-         echo"<legend>Nachrichtennummer nach Systemausfall setzen</legend>";
-         echo"Hinweis: Tragen Sie hier die letzten verwendeten Nummeren ein!";
-         echo"<table border=2 cellpadding=5 cellspacing=0 bgcolor=#E0E0E0>";
-         echo"<tr><td align=right><b>Eingangsnummer</b><br>Mindestwert: ".$nummer[$e_nummer]."</td><td>";
-         echo"<input name=e_nummer_get type=text size=8>";
-         echo"</td></tr>";
-         echo"<tr><td align=right><b>Ausgangsnummer</b><br>Mindestwert: ".$nummer[$a_nummer]."</td><td>";
-         echo"<input name=a_nummer_get type=text size=8>";
-         echo"</td></tr></table>";
-         echo"<input name=page type=hidden value=2 size=8>";
-         echo"<input type='submit' value='Absenden'/>";
-         echo"</fieldset></form>";
-         }
-}
-//########################################## Second Page ##########################################
-if($page == 2){
-//Neue Nummern im System setzen
-
-//Datenbank Eintragungen
-
-
-if(Nachweisung == "gemeinsam")
-         {
-         $ea_num = $_GET['ea_nummer_get'];
-         $inhalt1 = "eStab Systemmeldung.<br><br>Nachrichtenzähler wurde nach Systemausfall auf E/A".$ea_num." erhöht.";
-         if($ea_num > $nummer[0]++)
-                 {
-                 $eintrag = "INSERT INTO $tabelle (04_richtung, 04_nummer, 12_inhalt)VALUES ('E', '$ea_num', $inhalt1)";
-                 $eintragen = mysql_query($eintrag);
-                 if($eintragen) echo "Nachweisnummer (Eingang/Ausgang) wurde gesetzt auf:".$ea_num;
-                 $protokoll = true;
-                 }
-         else
-                 {
-                 echo "<b>Fehler:</b> Ihr eingegebner Wert (".$ea_num.") ist niedriger als der Mindeswert <u>".$nummer[0]++."</u>";
-                 echo"<br><br> <a href=set_number_after_crash.php>Zurück</a> ";
-                 }
-         }
-elseif(Nachweisung == "getrennt")
-         {
-         $e_num = $_GET['e_nummer_get'];
-         $a_num = $_GET['a_nummer_get'];
-         $enum = $nummer[$e_nummer]+1;
-         $anum = $nummer[$a_nummer]+1;
-         $inhalt = "eStab Systemmeldung.<br><br>Nachrichtenzähler wurde nach Systemausfall auf E".$e_num."/A".$a_num." erhöht.";
-         if($e_num > $enum  && $a_num > $anum )
-                 {
-                 $eintrag = "INSERT INTO $tabelle (04_richtung, 04_nummer, 12_inhalt, 15_quitdatum, 15_quitzeichen) VALUES ('E', '$e_num', '$inhalt', now(), 'xxx')";
-                 $eintragen = mysql_query($eintrag);
-                 if($eintragen) echo "Nachweisnummer (Eingang) wurde gesetzt auf: ".$e_num."<br>";
-
-                 $protokoll = true;
-
-                 $eintrag = "INSERT INTO $tabelle (03_zeichen, 04_richtung, 04_nummer, 12_inhalt) VALUES ('xxx', 'A', '$a_num', '$inhalt')";
-                 $eintragen = mysql_query($eintrag);
-                 if($eintragen) echo "Nachweisnummer (Ausgang) wurde gesetzt auf: ".$a_num;
-                 }
-         else
-                 {
-                 if($e_num <= $enum)   { echo "<b>Fehler:</b> Ihr eingegebner Eingangs-Wert (".$e_num.") ist niedriger als der Mindeswert <u>".$enum."</u><br>"; }
-                 if($a_num <= $anum) { echo "<b>Fehler:</b> Ihr eingegebner Ausgangs-Wert (".$a_num.") ist niedriger als der Mindeswert <u>".$anum."</u>"; }
-
-                 echo"<br><br> <a href=set_number_after_crash.php>Zurück</a> ";
-                 }
-         }
-
-
-//Protokoll eintrag
-if($protokoll)
-         {
-         if(Nachweisung == "gemeinsam") $wert_neu = "E/A".$ea_num;
-         elseif(Nachweisung == "getrennt") $wert_neu = "E".$e_num." / A".$a_num;
-         $was = "Nachrichtennummer Sync";
-         $daten = "Nachrichtenz&auml;hler nach Systemausfall auf ".$wert_neu." gesetzt.";
-         protokolleintrag($was, $daten);
-         }
-
-
+        }
+    }
 }
 
-echo "<br><br><br><hr><a href=admin.php>Zurück zur Administrations Übersicht</a>";
+try {
+    $connection = estab_auth_connect($conf_4f_db);
+    try {
+        $current = estab_admin_fetch_counter_maxima(
+            $connection,
+            $conf_4f_tbl['nachrichten'],
+            $mode
+        );
+    } finally {
+        estab_auth_close($connection);
+    }
+} catch (Throwable $exception) {
+    error_log('eStab message counter lookup failed: ' . $exception->getMessage());
+    http_response_code(500);
+    $error = 'Der aktuelle Nachrichtenzähler konnte nicht gelesen werden.';
+    $current = $mode === 'gemeinsam'
+        ? ['ea_nummer' => 0]
+        : ['e_nummer' => 0, 'a_nummer' => 0];
+}
 
-?>
+$updated = ($_GET['updated'] ?? '') === '1';
+
+?><!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>eStab Nachrichtenzähler</title>
+  <style>
+    body { font: 16px/1.45 system-ui, sans-serif; max-width: 50rem; margin: 2rem auto; padding: 0 1rem; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #999; padding: .55rem; text-align: left; }
+    .error { color: #8b0000; font-weight: bold; }
+    .success { color: #075f23; font-weight: bold; }
+  </style>
+</head>
+<body data-counter-mode="<?= estab_admin_html($mode) ?>">
+  <h1>Nachrichtennummer nach Systemausfall erhöhen</h1>
+  <p>Hier wird die letzte auf der Rückfallebene verwendete Nummer eingetragen.
+    Der Vorgang kann einen Zähler niemals absenken und erzeugt
+    Systemnachricht sowie Audit-Eintrag in derselben Transaktion.</p>
+
+  <?php if ($updated): ?>
+    <p class="success">Der Nachrichtenzähler wurde erhöht.</p>
+  <?php endif; ?>
+  <?php if ($error !== null): ?>
+    <p class="error"><?= estab_admin_html($error) ?></p>
+  <?php endif; ?>
+
+  <form method="post" action="set_number_after_crash.php">
+    <?= estab_csrf_field() ?>
+    <input type="hidden" name="admin_action" value="raise_counter">
+    <table>
+      <tbody>
+      <?php if ($mode === 'gemeinsam'): ?>
+        <tr>
+          <th scope="row"><label for="ea_nummer">Ein-/Ausgangsnummer</label></th>
+          <td>
+            <input
+              id="ea_nummer"
+              name="ea_nummer"
+              type="number"
+              min="<?= $current['ea_nummer'] + 1 ?>"
+              max="<?= ESTAB_ADMIN_COUNTER_MAX ?>"
+              required
+              value="<?= estab_admin_html($submitted['ea_nummer'] ?? '') ?>">
+            <small>Aktueller Höchstwert: <strong id="current-common"><?= $current['ea_nummer'] ?></strong></small>
+          </td>
+        </tr>
+      <?php else: ?>
+        <tr>
+          <th scope="row"><label for="e_nummer">Eingangsnummer</label></th>
+          <td>
+            <input
+              id="e_nummer"
+              name="e_nummer"
+              type="number"
+              min="<?= $current['e_nummer'] + 1 ?>"
+              max="<?= ESTAB_ADMIN_COUNTER_MAX ?>"
+              required
+              value="<?= estab_admin_html($submitted['e_nummer'] ?? '') ?>">
+            <small>Aktueller Höchstwert: <strong id="current-incoming"><?= $current['e_nummer'] ?></strong></small>
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><label for="a_nummer">Ausgangsnummer</label></th>
+          <td>
+            <input
+              id="a_nummer"
+              name="a_nummer"
+              type="number"
+              min="<?= $current['a_nummer'] + 1 ?>"
+              max="<?= ESTAB_ADMIN_COUNTER_MAX ?>"
+              required
+              value="<?= estab_admin_html($submitted['a_nummer'] ?? '') ?>">
+            <small>Aktueller Höchstwert: <strong id="current-outgoing"><?= $current['a_nummer'] ?></strong></small>
+          </td>
+        </tr>
+      <?php endif; ?>
+      </tbody>
+    </table>
+    <p>
+      <button type="submit">Zähler atomar erhöhen</button>
+      <a href="admin.php">Abbrechen</a>
+    </p>
+  </form>
+</body>
+</html>

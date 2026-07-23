@@ -5,6 +5,10 @@ class admmenue {
   var $in_table ;
   var $last_col ;
 
+  function __construct (){
+    $this->admmenue ();
+  }
+
   function admmenue (){
     include ("admmenue.inc.php");
 

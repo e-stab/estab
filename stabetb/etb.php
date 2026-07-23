@@ -1,6 +1,7 @@
 <?php
 
-define ("debug", false);
+if (!defined ("debug")) { define ("debug", false); }
+if (ob_get_level () === 0) { ob_start (); }
 /******************************************************************************\
 Einsatz Tage Buch
 
@@ -42,6 +43,10 @@ class etb_liste {
 
 \*****************************************************************************/
   // Klassenkonstruktor
+  function __construct (){
+    $this->etb_liste ();
+  }
+
   function etb_liste (){
     $this->etb_tableexist ();
       if (debug == true){    echo "etb_liste 1 ->"; var_dump ($this->etb_titel_tbl); echo "<br>";}
@@ -67,6 +72,9 @@ class etb_liste {
 
   var $db_sqlquery;
   var $db_result;
+  var $sqlquery;
+  var $result = "";
+  var $resultcount = 0;
 
 
 /*****************************************************************************\
@@ -97,30 +105,13 @@ class etb_liste {
 /*****************************************************************************\
 
 \*****************************************************************************/
-  function query_table_iu ($query){
-    $this->sqlquery = $query ;
-    $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
-       or die ("[query_table_iu] Konnte keine Verbindung zur Datenbank herstellen");
-    mysql_query('SET NAMES utf8');
-    $db_check = mysql_select_db ($this->db_name)
-       or die ("[query_table_iu] Auswahl der Datenbank fehlgeschlagen");
-
-    $query_result = mysql_query ($this->sqlquery, $db) or
-       die("[query_table_iu] ".mysql_error()." ".mysql_errno());
-
-    mysql_close ($db);
-  } // function query_table_iu
-
-/*****************************************************************************\
-
-\*****************************************************************************/
   function query_table ($query){
-    $this->result = "";
+    $this->result = array ();
     $this->sqlquery = $query ;
 
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[query_table] Konnte keine Verbindung zur Datenbank herstellen");
-    mysql_query('SET NAMES utf8');
+    mysql_query('SET NAMES utf8mb4');
     $db_check = mysql_select_db ($this->db_name)
        or die ("[query_table] Auswahl der Datenbank fehlgeschlagen");
 
@@ -134,7 +125,7 @@ class etb_liste {
     }
     mysql_free_result($query_result);
     mysql_close ($db);
-    return ($this->result);
+    return ($this->resultcount > 0 ? $this->result : "");
   } // function read_table
 
 
@@ -142,26 +133,15 @@ class etb_liste {
 
 \*****************************************************************************/
   function speichen_etbtitel ($daten){
-
-    if ( $etb_titel_gesetzt ) {
-      $this->create_etbtitel_tbl();
-    }
-if (debug == true){ echo "D A T E N  W E R D E N  G E S P E I C H E R N<br>";}
-
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
-    $this->set_db_para ($conf_4f_db  ["server"],
-                        $conf_4f_db  ["datenbank"],
-                        $conf_tbl    ["etb"],
-                        $conf_4f_db  ["user"],
-                        $conf_4f_db  ["password"] );
-
-    $query = "INSERT into `".$conf_4f_tbl ["prefix"]."etbtitel` SET
-                      `einsatz` = \"".$daten["einsatz"]."\",
-                      `ort`     = \"".$daten["ort"]."\" ";
-
-    $result = $this->query_table_iu ($query);
-
+    $validation = estab_logbook_validate_title (is_array ($daten) ? $daten : array ());
+    if (!$validation ["valid"]) {
+      throw new InvalidArgumentException ("Ungültige Einsatzdaten");
+    }
+    $table = $conf_4f_tbl ["prefix"]."etbtitel";
+    estab_logbook_create_title_table ($conf_4f_db, $table);
+    estab_logbook_insert_title ($conf_4f_db, $table, $validation ["data"]);
   }
 
 
@@ -171,28 +151,10 @@ if (debug == true){ echo "D A T E N  W E R D E N  G E S P E I C H E R N<br>";}
   function create_etbtitel_tbl(){
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
-    $this->set_db_para ($conf_4f_db  ["server"],
-                               $conf_4f_db  ["datenbank"],
-                               $conf_tbl    ["etb"],
-                               $conf_4f_db  ["user"],
-                               $conf_4f_db  ["password"] );
-    $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
-       or die ("[query_table] Konnte keine Verbindung zur Datenbank herstellen");
-    mysql_query('SET NAMES utf8');
-    $db_check = mysql_select_db ($this->db_name)
-       or die ("[query_table] Auswahl der Datenbank fehlgeschlagen");
-
-    $query = "CREATE TABLE IF NOT EXISTS `".$conf_4f_tbl ["prefix"]."etbtitel` (
-            `lfd-nr` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-            `einsatz` varchar(255) NOT NULL,
-            `ort` varchar(255) NOT NULL,
-            PRIMARY KEY (`lfd-nr`)
-          ) ENGINE=MyISAM AUTO_INCREMENT=1 ;";
-
-    $result = mysql_query($query, $db);
-    if (!$result) {
-       die('Ungueltige Abfrage: ' . mysql_error());
-    }
+    estab_logbook_create_title_table (
+      $conf_4f_db,
+      $conf_4f_tbl ["prefix"]."etbtitel"
+    );
   }
 
 
@@ -202,27 +164,10 @@ if (debug == true){ echo "D A T E N  W E R D E N  G E S P E I C H E R N<br>";}
   function etb_tableexist () {
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
-    $this->set_db_para ($conf_4f_db  ["server"],
-                        $conf_4f_db  ["datenbank"],
-                        $conf_tbl    ["etb"],
-                        $conf_4f_db  ["user"],
-                        $conf_4f_db  ["password"] );
-    $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
-       or die ("[query_table] Konnte keine Verbindung zur Datenbank herstellen");
-    mysql_query('SET NAMES utf8');
-    $db_check = mysql_select_db ($this->db_name)
-       or die ("[query_table] Auswahl der Datenbank fehlgeschlagen");
-//    $result = mysql_list_tables($conf_4f_db ["datenbank"]); nach "mysql_list_tables is depreciated" => mysql_query"SHOW TABLES FROM " . $conf_4f_db["datenbank"])
-    $result = mysql_query("SHOW TABLES FROM " . $conf_4f_db["datenbank"]);
-    $db_errno  = mysql_errno ();
-    $db_errtxt = mysql_error ();
-    if ($result) {
-      $eq = false;
-      while ( ($row = mysql_fetch_row($result)) and ($eq == false)) {
-         $eq = ( $conf_4f_tbl ["prefix"]."etbtitel" == $row[0] );
-      }
-    }
-    mysql_free_result($result);
+    $eq = estab_logbook_table_exists (
+      $conf_4f_db,
+      $conf_4f_tbl ["prefix"]."etbtitel"
+    );
     $this->etb_titel_tbl = $eq ;
 if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); echo "<br>"; }
     return $eq;
@@ -242,7 +187,8 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
                         $conf_4f_db  ["user"],
                         $conf_4f_db  ["password"] );
 
-    $query = "SELECT * FROM ".$conf_4f_tbl ["prefix"]."etbtitel WHERE 1 ";
+    $query = "SELECT * FROM ".estab_auth_table ($conf_4f_tbl ["prefix"]."etbtitel")
+      ." ORDER BY `lfd-nr` ASC LIMIT 1";
     $result = $this->query_table ($query);
 
       if (debug == true){echo "read_out_etbtitel--result="; var_dump($result); echo "<br>";}
@@ -266,7 +212,7 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
     echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
     echo "<html>\n";
     echo "<head>\n";
-    echo "  <meta content=\"text/html; charset=ISO-8859-1\" http-equiv=\"content-type\">\n";
+    echo "  <meta content=\"text/html; charset=UTF-8\" http-equiv=\"content-type\">\n";
     if (!$this->etb_authorized) {
       echo "<meta http-equiv=\"refresh\" content=\"10\">\n";
     }
@@ -321,7 +267,8 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
 \*****************************************************************************/
   function etb_menue (){
     include ("../4fcfg/config.inc.php");
-    echo "<form action=\"".$_SERVER["PHP_SELF"]."\" method=\"GET\" >\n";
+    $action = estab_auth_html (estab_public_root ()."stabetb/etb.php");
+    echo "<form action=\"".$action."\" method=\"GET\" >\n";
     echo "<!-- Formularelemente und andere Elemente innerhalb des Formulars -->\n";
     echo "<!-- etb_menue -->\n";
     echo "<table border=\"1\" cellspacing=\"2\" cellpeding=\"3\">\n";
@@ -346,7 +293,8 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
                                $conf_tbl    ["etb"],
                                $conf_4f_db  ["user"],
                                $conf_4f_db  ["password"] );
-    $query = "SELECT * FROM ".$conf_tbl ["etb"]." WHERE 1 order by `etb_lfd-nr` DESC ;";
+    $query = "SELECT * FROM ".estab_auth_table ($conf_tbl ["etb"])
+      ." ORDER BY `etb_lfd-nr` DESC";
     $result = $this->query_table ($query);
   if (debug == true){echo "etb_getdate-->"; var_dump($result);echo "<br>";}
     return $result;
@@ -356,30 +304,23 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
 
 \*****************************************************************************/
   function speichen_etb_eintrag ($daten){
-
-    if ( $etb_titel_gesetzt ) {
-      $this->create_etbtitel_tbl();
-    }
-    if (debug == true){     echo "D A T E N  W E R D E N  G E S P E I C H E R N<br>";}
-
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
-    $this->set_db_para ($conf_4f_db  ["server"],
-                        $conf_4f_db  ["datenbank"],
-                        $conf_tbl    ["etb"],
-                        $conf_4f_db  ["user"],
-                        $conf_4f_db  ["password"] );
-
-    $query = "INSERT into `".$conf_tbl ["etb"]."` SET
-                      `etb_time`   = \"".$this->convtodatetime ( date ("dm"),   date ("Hi") )."\",
-                      `etb_aktion` = \"".$daten["event"]."\",
-                      `etb_bemerk` = \"".$daten["comment"]."\",
-                      `etb_funktion` = \"".$this->etb_funktion."\",
-                      `etb_kuerzel`  = \"".$this->etb_kuerzel."\",
-                      `etb_benutzer` = \"".$this->etb_benutzer."\" ";
-
-    $result = $this->query_table_iu ($query);
-
+    $validation = estab_logbook_validate_entry (is_array ($daten) ? $daten : array ());
+    if (!$validation ["valid"]) {
+      throw new InvalidArgumentException ("Ungültiger ETB-Eintrag");
+    }
+    estab_logbook_insert_entry (
+      $conf_4f_db,
+      $conf_tbl ["etb"],
+      "etb",
+      $validation ["data"],
+      array (
+        "funktion" => (string) $this->etb_funktion,
+        "kuerzel" => (string) $this->etb_kuerzel,
+        "benutzer" => (string) $this->etb_benutzer,
+      )
+    );
   }
 
 /*****************************************************************************\
@@ -390,6 +331,7 @@ var $task;
 
   function etb_eintragsmenue ($data) {
     include ("../4fcfg/config.inc.php");
+    $action = estab_auth_html (estab_public_root ()."stabetb/etb.php");
 
     echo "<big><big>Eintrag ins \n";
     echo "<span style=\"color: rgb(255, 0, 0); font-weight: bold;\">E</span>\n";
@@ -400,16 +342,18 @@ var $task;
     echo "uch<br>\n";
     echo "<br>\n";
     echo "</big></big>\n";
-    echo "<form method=\"GET\" action=\"".$_SERVER["PHP_SELF"]."\" name=\"etbeintrag\">\n";
+    echo "<form method=\"POST\" action=\"".$action."\" name=\"etbeintrag\">\n";
+    echo estab_csrf_field ()."\n";
+    echo "<input type=\"hidden\" name=\"logbook_action\" value=\"save_entry\">\n";
     echo "<table style=\"text-align: left;\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\">\n";
     echo "<tbody>\n";
     echo "<tr>\n";
     echo "<td><b>Darstellung der Ereignisse</b><br>\n";
-    echo "<textarea style=\"font-size:18px; font-weight:900;\" tabindex=\"1\" cols=\"80\" rows=\"4\" name=\"event\"></textarea></td>\n";
+    echo "<textarea style=\"font-size:18px; font-weight:900;\" tabindex=\"1\" cols=\"80\" rows=\"4\" maxlength=\"10000\" required name=\"event\"></textarea></td>\n";
     echo "</tr>\n";
     echo "<tr>";
     echo "<td><b>Bemerkung</b><br>";
-    echo "<textarea style=\"font-size:18px; font-weight:900;\" tabindex=\"2\" cols=\"80\" rows=\"4\" name=\"comment\"></textarea></td>\n";
+    echo "<textarea style=\"font-size:18px; font-weight:900;\" tabindex=\"2\" cols=\"80\" rows=\"4\" maxlength=\"10000\" name=\"comment\"></textarea></td>\n";
     echo "</tr>\n";
     echo "</tbody>\n";
     echo "</table>\n";
@@ -418,13 +362,10 @@ var $task;
     echo "<tbody>\n";
     echo "<tr>\n";
     echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"absenden\" alt=\"absenden\" tabindex=\"3\" src=\"".$conf_design_path."/ok.gif\"></td>\n";
-    echo "<td bgcolor=$color_button_nok><input type=\"image\" name=\"abbrechen\" alt=\"abbrechen\" tabindex=\"4\" src=\"".$conf_design_path."/cancel.gif\"></td>\n";
+    echo "<td bgcolor=$color_button_nok><a href=\"".$action."\"><img alt=\"abbrechen\" src=\"".$conf_design_path."/cancel.gif\"></a></td>\n";
     echo "</tr>\n";
     echo "</tbody>\n";
     echo "</table>\n";
-
-    echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
-    echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
 
     echo "</form>\n";
   }
@@ -437,11 +378,11 @@ var $task;
     echo "<tbody>\n";
     echo "<tr>\n";
       echo "<td>Einsatz</td>";
-      echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\">".$this->etb_art."</td>" ;
+      echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\">".estab_auth_html ($this->etb_art)."</td>" ;
     echo "</tr>";
     echo "<tr>\n";
       echo "<td>Ort</td>";
-      echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\">".$this->etb_ort."</td>" ;
+      echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\">".estab_auth_html ($this->etb_ort)."</td>" ;
     echo "</tr>";
 /*   echo "<tr>\n";
       echo "<td>Zeit</td>";
@@ -470,21 +411,24 @@ var $task;
 \*****************************************************************************/
   function inputeinsatzstammdaten (){
   include ("../4fcfg/config.inc.php");
+    $action = estab_auth_html (estab_public_root ()."stabetb/etb.php");
     echo "<big><big><big><b>Einsatzdaten erfassen</b></big></big></big>\n";
     echo "<!-- einsatzdatenmenue -->";
-    echo "<form method=\"GET\" action=\"".$_SERVER ["PHP_SELF"]."\" name=\"Einsatzdaten\">\n";
+    echo "<form method=\"POST\" action=\"".$action."\" name=\"Einsatzdaten\">\n";
+    echo estab_csrf_field ()."\n";
+    echo "<input type=\"hidden\" name=\"logbook_action\" value=\"save_title\">\n";
     echo "<table style=\"text-align: left; width: 603px; height: 64px;\" border=\"1\" cellpadding=\"2\" cellspacing=\"2\">";
     echo "<tbody>";
     echo "<tr>";
     echo "<td style=\"width: 100px;\">Einsatz</td>";
     echo "<td style=\"width: 506px;\">";
-    echo "<input style=\"font-size:18px; font-weight:900;\" value=\"\" maxlength=\"255\" size=\"60\" name=\"einsatz\">";
+    echo "<input style=\"font-size:18px; font-weight:900;\" value=\"\" maxlength=\"255\" size=\"60\" required name=\"einsatz\">";
     echo "</td>";
     echo "</tr>";
     echo "<tr>";
     echo "<td style=\"width: 100px;\">Ort</td>";
     echo "<td style=\"width: 506px;\">";
-    echo "<input style=\"font-size:18px; font-weight:900;\" value=\"\" maxlength=\"255\" size=\"60\" name=\"ort\"></td>";
+    echo "<input style=\"font-size:18px; font-weight:900;\" value=\"\" maxlength=\"255\" size=\"60\" required name=\"ort\"></td>";
     echo "</tr>";
     echo "</tbody>";
     echo "</table>";
@@ -493,12 +437,11 @@ var $task;
       echo "<tbody>\n";
       echo "<tr>\n";
       echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"absenden\" alt=\"absenden\" tabindex=\"3\" src=\"".$conf_design_path."/ok.gif\"></td>\n";
-      echo "<td bgcolor=$color_button_nok><input type=\"image\" name=\"abbrechen\" alt=\"abbrechen\" tabindex=\"4\" src=\"".$conf_design_path."/cancel.gif\"></td>\n";
+      echo "<td bgcolor=$color_button_nok><a href=\"".$action."\"><img alt=\"abbrechen\" src=\"".$conf_design_path."/cancel.gif\"></a></td>\n";
       echo "</tr>\n";
       echo "</tbody>\n";
       echo "</table>\n";
     }
-    echo "<input type=\"hidden\" name=\"Einsatzdaten\" value=\"erfassen\">\n";
     echo "</form>";
   }
 
@@ -506,7 +449,6 @@ var $task;
 
 \*****************************************************************************/
   function printlist ($daten){
-    include ("../4fach/tools.php");
     // Schreibe die Liste
     if ( $daten != "" ) {
 
@@ -520,14 +462,14 @@ var $task;
 
         echo "<tr>";
         echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\">\n";
-        echo $line ["etb_lfd-nr"];
+        echo (int) $line ["etb_lfd-nr"];
         echo "</td>\n";
         echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\">";
         echo $this->konv_datetime_taktime ($line ["etb_time"]);
         echo "</td>\n";
         if ( $line ["etb_aktion"] != "" ) {
           echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\" >";
-          echo $line ["etb_aktion"];
+          echo estab_auth_html ($line ["etb_aktion"]);
         } else {
           echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\" >";
           echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
@@ -535,7 +477,7 @@ var $task;
         echo "</td>\n";
         if ( $line ["etb_bemerk"] != "" ) {
           echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\" >";
-          echo $line ["etb_bemerk"];
+          echo estab_auth_html ($line ["etb_bemerk"]);
         } else {
           echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\" >";
           echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
@@ -547,8 +489,7 @@ var $task;
       echo "</tbody>\n";
       echo "</table>\n";
     } else {
-      $this->inputeinsatzstammdaten ();
-
+      echo "<p>Noch keine ETB-Einträge vorhanden.</p>\n";
     }
   }
 
@@ -557,140 +498,123 @@ var $task;
 /***************************************************************************************************************************/
 
 
-    session_start();
-
-    if (debug == true){ echo ">strtoupper( _SESSION[ \"vStab_rolle\"]) ->"; var_dump (strtoupper( $_SESSION["vStab_rolle"])); echo "<br>";}
-    if (debug == true){ echo ">strtoupper( _SESSION[\"ROLLE\"]) ->"; var_dump (strtoupper( $_SESSION["ROLLE"])); echo "<br>";}
-
-    // In der Datenbank in der "nv_empfmtx" Tabelle muss es eine Funktion geben die in der Spalte mtx_rc2 (rc2 ==> redcopy to)
-	// Wir brauchen die Datenbankbenutzerdaten
-	include ("../4fcfg/dbcfg.inc.php");
-    include ("../4fcfg/e_cfg.inc.php");
-	
-    $query = "SELECT mtx_fkt FROM `".$conf_4f_tbl  ["empfmtx"]."` WHERE `mtx_rc2` = '1'";
-    
-    $db = mysql_connect($conf_4f_db  ["server"],$conf_4f_db  ["user"], $conf_4f_db  ["password"])
-       or die ("[etb.php Berechtigung] Konnte keine Verbindung zur Datenbank herstellen");
-    mysql_query('SET NAMES utf8');
-    $db_check = mysql_select_db ($conf_4f_db  ["datenbank"])
-       or die ("[etb.php Datenbankprüfung] Auswahl der Datenbank fehlgeschlagen");
-
-    $query_result = mysql_query ($query, $db) or
-       die("[etb.php Queryfehler] ".mysql_error()." ".mysql_errno()."Query=".$query);
-
-    mysql_close ($db);
-
-	$justified = mysql_result ($query_result, 0);
-    	
-    // Prüfe ob eine Berechtigung für Einträge vorhanden ist "S2"
-	$readauth = (
-	  ((isset ($_SESSION["vStab_rolle"])) and ((strtoupper( $_SESSION["vStab_rolle"])  == strtoupper("STAB")))) or
-      ((isset ($_SESSION["ROLLE"]))       and ((strtoupper( $_SESSION["ROLLE"])        == strtoupper("STAB")))) );
-	
-    if (isset($_SESSION["vStab_funktion"])) {
-	  $berechtigt = ((strcmp( strtoupper( $_SESSION["vStab_funktion"]), (strtoupper($justified)))) == 0);
-	} else {
-	  $berechtigt = false;
-	}
-	
-    if (debug == true){    echo ">berechtigt     ->"; var_dump ($berechtigt); echo "<br>";}
-	if (debug == true){    echo ">leseberechtigt ->"; var_dump ($readauth);   echo "<br>";}
-
-if ($readauth or $berechtigt) {	
-
-    $etbobj = new etb_liste ;
-
-    $etbobj->etb_authorized = $berechtigt;
-
-    if (isset ($_SESSION ["vStab_funktion"])) $etbobj->etb_funktion = $_SESSION ["vStab_funktion"] ;
-    if (isset ($_SESSION ["vStab_kuerzel"]))  $etbobj->etb_kuerzel  = $_SESSION ["vStab_kuerzel"] ;
-    if (isset ($_SESSION ["vStab_benutzer"])) $etbobj->etb_benutzer = $_SESSION ["vStab_benutzer"] ;
-
-  if (debug == true){    echo ">etb_authorized ->"; var_dump ($etbobj->etb_authorized); echo "<br>";}
-
-  if ( !(isset ($_GET["absenden_x"] ))) {
-
-    $etbobj->etb_pre_html();
-
-    $etbobj->etb_ueberschrift ();
-      // Einsatzdaten vorhanden !!!
-  }
-
-  if ( !$etbobj->etb_titel_gesetzt ){
-
-    if ( (isset ($_GET["absenden_x"] )) and
-         ($_GET["Einsatzdaten"] == "erfassen") ){
-
-      if (debug == true){ echo "Daten können gespeichert werden !!!!<br>";}
-      $etbobj->speichen_etbtitel ($_GET);
-      header("Location: ".$_SERVER["PHP_SELF"]);
-
-    } else {
-        if (debug==true){      echo "Titel ist nicht gesetzt !!!!<br>";}
-      $etbobj->create_etbtitel_tbl();
-      $etbobj->inputeinsatzstammdaten ();
-    }
-
-  } else {
-//    echo "<big>Wir sind im zweiten Teil !!!</big><br>";
-
-
-    if (( $etbobj->etb_titel_gesetzt ) and
-        ( !(isset ($_GET["absenden_x"] ) ) ) ) {
-      $etbobj->etb_einsatzdaten ();
-    }
-
-    if ( (isset ($_GET["absenden_x"] )) and
-         ($_GET["Einsatzdaten"] == "erfassen") ){
-        if (debug == true){ echo "M A R K E  0 0 1<br>";}
-      $etbobj->speichen_etbtitel ($_GET);
-      header("Location: ".$_SERVER["PHP_SELF"]);
-    }
-
-
-    if ( (isset ($_GET["etb_menue"])) AND ($_GET["etb_menue"] == "eintrag") ){
-        if (debug == true){ echo "M A R K E  0 0 2<br>";}
-      $etbobj->etb_eintragsmenue ("");
-    }
-
-    if ( isset ($_GET["absenden_x"]) ){
-        if (debug == true){ echo "M A R K E  0 0 3<br>";}
-      $etbobj->speichen_etb_eintrag ($_GET);
-      header("Location: ".$_SERVER["PHP_SELF"]);
-    }
-        
-    if (isset ( $_GET ["etb_eintrag_x"] ) ) {
-        if (debug == true){ echo "M A R K E  0 0 4<br>";}
-      $etbobj->etb_eintragsmenue ("");
-    } else {
-        if (debug == true){ echo "M A R K E  0 0 5<br>";}
-      if ($etbobj->etb_authorized){
-        $etbobj->etb_menue ();
-      }
-    }
-    $daten = $etbobj->etb_getdate ();
-    if (  $daten != "" ){
-        if (debug == true){ echo "M A R K E  0 0 6<br>";}
-      // Hole Daten aus der Datenbank
-      $etbobj->printlist ($daten);
-    } else {
-
-    }
-  }
-
-    if (debug == true){
-      echo "<br><br>\n";
-      echo "GET     ="; var_dump ($_GET);    echo "#<br><br>\n";
-      echo "POST    ="; var_dump ($_POST);   echo "#<br><br>\n";
-      echo "COOKIE  ="; var_dump ($_COOKIE); echo "#<br><br>\n";
-      // echo "SERVER  ="; var_dump ($_SERVER); echo "#<br><br>\n";
-      echo "SESSION ="; var_dump ($_SESSION); echo "#<br><br>\n";
-      echo "FILES   ="; var_dump ($_FILES); echo "#<br><br>\n";
-    }
-
-  if ( !(isset ($_GET["absenden_x"] ))) {  $etbobj->etb_post_html(); }
-
-} else {
-  echo "<big><big><big><b>Keine Berechtigung</b></big></big></big>";
+if (session_status () !== PHP_SESSION_ACTIVE) {
+  session_start ();
 }
+require_once __DIR__ . "/../app/logbook.php";
+estab_auth_require_session ($_SESSION);
+
+include ("../4fcfg/dbcfg.inc.php");
+include ("../4fcfg/e_cfg.inc.php");
+
+$identity = estab_auth_session_identity ($_SESSION);
+if (!is_array ($identity)) {
+  estab_logbook_abort (403, "Anmeldung erforderlich.");
+}
+
+try {
+  // Older databases used "1"; current matrices store the red-copy flag as "t".
+  $redcopyFunction = estab_logbook_redcopy_function (
+    $conf_4f_db,
+    $conf_4f_tbl ["empfmtx"]
+  );
+} catch (Throwable $exception) {
+  error_log ("ETB authorization lookup failed: ".$exception->getMessage ());
+  estab_logbook_abort (503, "Das Einsatztagebuch ist vorübergehend nicht verfügbar.");
+}
+
+$berechtigt = is_string ($redcopyFunction)
+  && strcasecmp ($identity ["funktion"], $redcopyFunction) === 0;
+
+$requestMethod = isset ($_SERVER ["REQUEST_METHOD"]) && is_string ($_SERVER ["REQUEST_METHOD"])
+  ? strtoupper ($_SERVER ["REQUEST_METHOD"])
+  : "GET";
+if (!in_array ($requestMethod, array ("GET", "POST"), true)) {
+  header ("Allow: GET, POST");
+  estab_logbook_abort (405, "Nicht unterstützte Anfragemethode.");
+}
+
+try {
+  $etbobj = new etb_liste;
+} catch (Throwable $exception) {
+  error_log ("ETB initialization failed: ".$exception->getMessage ());
+  estab_logbook_abort (503, "Das Einsatztagebuch ist vorübergehend nicht verfügbar.");
+}
+$etbobj->etb_authorized = $berechtigt;
+$etbobj->etb_funktion = $identity ["funktion"];
+$etbobj->etb_kuerzel = $identity ["kuerzel"];
+$etbobj->etb_benutzer = $identity ["benutzer"];
+
+if ($requestMethod === "POST") {
+  if (!$berechtigt) {
+    estab_logbook_abort (403, "Nur die Red-Copy-Funktion darf ETB-Einträge schreiben.");
+  }
+  estab_logbook_require_csrf ($_SERVER, $_POST);
+  $action = isset ($_POST ["logbook_action"]) && is_string ($_POST ["logbook_action"])
+    ? $_POST ["logbook_action"]
+    : "";
+
+  try {
+    if ($action === "save_title") {
+      $validation = estab_logbook_validate_title ($_POST);
+      if (!$validation ["valid"]) {
+        estab_logbook_abort (422, "Einsatz und Ort sind erforderlich und auf 255 Zeichen begrenzt.");
+      }
+      $etbobj->speichen_etbtitel ($validation ["data"]);
+    } elseif ($action === "save_entry") {
+      if (!$etbobj->etb_titel_gesetzt) {
+        estab_logbook_abort (409, "Vor dem ersten ETB-Eintrag müssen Einsatzdaten erfasst werden.");
+      }
+      $validation = estab_logbook_validate_entry ($_POST);
+      if (!$validation ["valid"]) {
+        estab_logbook_abort (422, "Der ETB-Eintrag ist leer oder überschreitet 10000 Zeichen.");
+      }
+      $etbobj->speichen_etb_eintrag ($validation ["data"]);
+    } else {
+      estab_logbook_abort (400, "Unbekannte ETB-Aktion.");
+    }
+  } catch (Throwable $exception) {
+    error_log ("ETB write failed: ".$exception->getMessage ());
+    estab_logbook_abort (500, "Der ETB-Eintrag konnte nicht gespeichert werden.");
+  }
+
+  estab_logbook_redirect (estab_public_root ()."stabetb/etb.php");
+}
+
+if (!$etbobj->etb_titel_gesetzt) {
+  try {
+    $etbobj->create_etbtitel_tbl ();
+  } catch (Throwable $exception) {
+    error_log ("ETB title table creation failed: ".$exception->getMessage ());
+    estab_logbook_abort (500, "Das Einsatztagebuch konnte nicht vorbereitet werden.");
+  }
+}
+
+$etbobj->etb_pre_html ();
+$etbobj->etb_ueberschrift ();
+
+if (!$etbobj->etb_titel_gesetzt) {
+  if ($berechtigt) {
+    $etbobj->inputeinsatzstammdaten ();
+  } else {
+    echo "<p><b>Einsatzdaten erfassen:</b> Die Einsatzdaten wurden noch nicht "
+      ."durch die Red-Copy-Funktion erfasst.</p>\n";
+  }
+} else {
+  $etbobj->etb_einsatzdaten ();
+  $entryFormRequested = isset ($_GET ["etb_eintrag_x"])
+    || (
+      isset ($_GET ["etb_menue"])
+      && is_string ($_GET ["etb_menue"])
+      && $_GET ["etb_menue"] === "eintrag"
+    );
+  if ($berechtigt && $entryFormRequested) {
+    $etbobj->etb_eintragsmenue ("");
+  } elseif ($berechtigt) {
+    $etbobj->etb_menue ();
+  }
+  $etbobj->printlist ($etbobj->etb_getdate ());
+}
+
+$etbobj->etb_post_html ();
 ?>

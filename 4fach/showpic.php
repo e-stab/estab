@@ -1,155 +1,140 @@
 <?php
-/******************************************************************************\
-  php.ini  c:\xampp\apache\bin
 
-;;;;;;;;;;;;;;;;;;;
-; Resource Limits ;
-;;;;;;;;;;;;;;;;;;;
+/**
+ * Safe attachment preview endpoint.
+ *
+ * The historic implementation accepted an arbitrary server path. The current
+ * endpoint accepts only a validated stored basename, resolves it below the
+ * active operation's attachment directory and caps all decoded dimensions.
+ */
 
-max_execution_time = 120     ; Maximum execution time of each script, in seconds
-max_input_time = 120    ; Maximum amount of time each script may spend parsing request data
+require_once __DIR__ . '/../app/file_access.php';
+require __DIR__ . '/../4fcfg/config.inc.php';
+if (session_status() === PHP_SESSION_NONE) {
+  session_start();
+}
 
-memory_limit = 128M      ; Maximum amount of memory a script may consume (16MB)
+function estab_preview_error (int $status, string $message): never {
+  http_response_code ($status);
+  header ("Content-Type: text/plain; charset=UTF-8");
+  header ("Cache-Control: no-store");
+  echo $message;
+  exit;
+}
 
-\******************************************************************************/
+function estab_preview_dimension (string $name): ?int {
+  if (!isset ($_GET[$name]) || $_GET[$name] === "") {
+    return null;
+  }
+  $value = filter_var ($_GET[$name], FILTER_VALIDATE_INT,
+                       array ("options" => array ("min_range" => 1, "max_range" => 1600)));
+  if ($value === false) {
+    estab_preview_error (400, "Ungültige Vorschaugröße.");
+  }
+  return $value;
+}
 
+function estab_preview_placeholder (int $width, int $height): GdImage {
+  $image = imagecreatetruecolor ($width, $height);
+  $background = imagecolorallocate ($image, 245, 245, 245);
+  $foreground = imagecolorallocate ($image, 40, 40, 40);
+  imagefilledrectangle ($image, 0, 0, $width, $height, $background);
+  imagestring ($image, 3, 10, max (5, (int) (($height - 15) / 2)), "Keine Bildvorschau", $foreground);
+  return $image;
+}
 
-/*******************************************************************************\
-  Parameter:
-    filename: Pfad und Dateiname der dargestellt werden soll.
-\*******************************************************************************/
+if (session_status() !== PHP_SESSION_ACTIVE
+    || !estab_auth_session_is_authenticated ($_SESSION)) {
+  estab_preview_error (403, "Anmeldung erforderlich.");
+}
 
-define ("debug",false);
+$requested = isset ($_GET["file"]) ? (string) $_GET["file"] : "";
+try {
+  $resolved = estab_file_resolve (
+    (string) $conf_4f["ablage_dir"],
+    "attachment",
+    $requested
+  );
+} catch (InvalidArgumentException) {
+  estab_preview_error (400, "Ungültiger Anhangname.");
+} catch (RuntimeException) {
+  estab_preview_error (404, "Anhang nicht gefunden.");
+}
 
-  function getimagetypebyfilename ($filename){
-    $filetype = exif_imagetype ( $filename );
-    $def_filetype = array (
-       1 => "IMAGETYPE_GIF",
-       2 => "IMAGETYPE_JPEG",
-       3 => "IMAGETYPE_PNG",
-       4 => "IMAGETYPE_SWF",
-       5 => "IMAGETYPE_PSD",
-       6 => "IMAGETYPE_BMP",
-       7 => "IMAGETYPE_TIFF_II", // (intel-Bytefolge)
-       8 => "IMAGETYPE_TIFF_MM", // (motorola-Bytefolge)
-       9 => "IMAGETYPE_JPC",
-      10 => "IMAGETYPE_JP2",
-      11 => "IMAGETYPE_JPX",
-      12 => "IMAGETYPE_JB2",
-      13 => "IMAGETYPE_SWC",
-      14 => "IMAGETYPE_IFF",
-      15 => "IMAGETYPE_WBMP",
-      16 => "IMAGETYPE_XBM") ;
-    $strfiletype = $def_filetype [$filetype];
-    return ($strfiletype);
+$width = estab_preview_dimension ("width");
+$height = estab_preview_dimension ("height");
+$zoom = null;
+if (isset ($_GET["zoom"]) && $_GET["zoom"] !== "") {
+  $zoom = filter_var ($_GET["zoom"], FILTER_VALIDATE_FLOAT);
+  if ($zoom === false || $zoom < 0.05 || $zoom > 4.0) {
+    estab_preview_error (400, "Ungültiger Zoomfaktor.");
+  }
+}
+if ($width === null && $height === null && $zoom === null) {
+  estab_preview_error (400, "Vorschaugröße fehlt.");
+}
+
+$imageInfo = @getimagesize ($resolved);
+$source = false;
+if ($imageInfo !== false && $imageInfo[0] > 0 && $imageInfo[1] > 0
+    && ($imageInfo[0] * $imageInfo[1]) <= 40000000) {
+  switch ($imageInfo[2]) {
+    case IMAGETYPE_GIF:
+      $source = @imagecreatefromgif ($resolved);
+    break;
+    case IMAGETYPE_JPEG:
+      $source = @imagecreatefromjpeg ($resolved);
+    break;
+    case IMAGETYPE_PNG:
+      $source = @imagecreatefrompng ($resolved);
+    break;
+    case IMAGETYPE_BMP:
+      $source = function_exists ("imagecreatefrombmp") ? @imagecreatefrombmp ($resolved) : false;
+    break;
+  }
+}
+
+if (!$source) {
+  $targetWidth = $width ?? 250;
+  $targetHeight = $height ?? 60;
+  $targetWidth = min ($targetWidth, 800);
+  $targetHeight = min ($targetHeight, 200);
+  $target = estab_preview_placeholder ($targetWidth, $targetHeight);
+} else {
+  $sourceWidth = imagesx ($source);
+  $sourceHeight = imagesy ($source);
+  if ($zoom !== null) {
+    $targetWidth = max (1, min (1600, (int) round ($sourceWidth * $zoom)));
+    $targetHeight = max (1, min (1600, (int) round ($sourceHeight * $zoom)));
+  } elseif ($width !== null && $height !== null) {
+    $scale = min ($width / $sourceWidth, $height / $sourceHeight);
+    $targetWidth = max (1, (int) round ($sourceWidth * $scale));
+    $targetHeight = max (1, (int) round ($sourceHeight * $scale));
+  } elseif ($width !== null) {
+    $targetWidth = $width;
+    $targetHeight = max (1, (int) round ($sourceHeight * ($width / $sourceWidth)));
+  } else {
+    $targetHeight = $height;
+    $targetWidth = max (1, (int) round ($sourceWidth * ($height / $sourceHeight)));
+  }
+  if ($targetWidth > 1600 || $targetHeight > 1600) {
+    $source = null;
+    estab_preview_error (400, "Vorschaugröße überschreitet das Limit.");
   }
 
+  $target = imagecreatetruecolor ($targetWidth, $targetHeight);
+  imagealphablending ($target, false);
+  imagesavealpha ($target, true);
+  $transparent = imagecolorallocatealpha ($target, 255, 255, 255, 127);
+  imagefilledrectangle ($target, 0, 0, $targetWidth, $targetHeight, $transparent);
+  imagecopyresampled ($target, $source, 0, 0, 0, 0,
+                      $targetWidth, $targetHeight, $sourceWidth, $sourceHeight);
+  $source = null;
+}
 
-
-  function loadpic ($filename){
-    // Datei Ã¶ffnen
-    $imgtype = getimagetypebyfilename( $filename );
-    if (debug) {echo "showpic.php 37 Imagetype===".$imgtype."<br>";}
-    switch ($imgtype){
-       case "IMAGETYPE_GIF":   $im = imagecreatefromgif  ( $filename );      break;
-       case "IMAGETYPE_JPEG":  $im = ImageCreateFromjpeg ( $filename ); /* Versuch, Datei zu Ã¶ffnen */   break;
-       case "IMAGETYPE_PNG":   $im = ImageCreateFrompng  ( $filename );      break;
-       case "IMAGETYPE_SWF": break;
-       case "IMAGETYPE_PSD": break;
-       case "IMAGETYPE_BMP":    $im = imagecreatefromwbmp ( $filename );  break;
-       case "IMAGETYPE_TIFF_II": // (intel-Bytefolge)      break;
-       case "IMAGETYPE_TIFF_MM": // (motorola-Bytefolge)   break;
-       case "IMAGETYPE_JPC": break;
-       case "IMAGETYPE_JP2": break;
-       case "IMAGETYPE_JPX": break;
-       case "IMAGETYPE_JB2": break;
-       case "IMAGETYPE_SWC": break;
-       case "IMAGETYPE_IFF": break;
-       case "IMAGETYPE_WBMP": break;
-       case "IMAGETYPE_XBM":  $im = imagecreatefromxbm ( $filename );      break;
-    }
-    if (debug) {echo "showpic.php 56 im ===".$im."<br>";}
-    if (!$im) {                            /* PrÃ¼fen, ob fehlgeschlagen */
-        $im = ImageCreate (150, 30);       /* Erzeugen eines leeren Bildes */
-        $bgc = ImageColorAllocate ($im, 255, 255, 255);
-        $tc  = ImageColorAllocate ($im, 0, 0, 0);
-        ImageFilledRectangle ($im, 0, 0, 150, 30, $bgc);
-        /* Ausgabe einer Fehlermeldung */
-        ImageString($im, 1, 5, 5, "Fehler beim Ãffnen von: $imgname", $tc);
-    }
-    return $im;
-  } // loadpic ($filename){
-
-  if (debug) echo "showpic.php 66 <br>";
-
-  if ( (isset ( $_GET ["file"] )) and
-     ( (isset ( $_GET ["zoom"] ))  or  ( (isset( $_GET ["width"])) or (isset( $_GET ["height"] )) ) ) ) {
-     // lade die Quelldatei
-    if (debug) echo "showpic.php 71 <br>";
-    $src = loadpic ($_GET ["file"]);
-     // Breite und HÃ¶he der Quelle
-     // Ist die Quelle im Hochformat?
-
-
-    $sx = imagesx ( $src );
-    $sy = imagesy ( $src );
-    $ist_hoch = ($sy/$sx)>1;
-    if (debug) echo "showpic.php 80 <br>";
-    if ($ist_hoch){ $breitzuhoch = ($sx / $sy); } else { $breitzuhoch = ( $sy / $sx); }
-     // Zieldatei anlegen
-    if (isset ( $_GET ["zoom"] )) {
-      $dest = imagecreatetruecolor ( $sx * $_GET["zoom"], $sy * $_GET["zoom"] );
-      imagecopyresized ( $dest, $src, 0, 0, 0 , 0 , $sx * $_GET["zoom"], $sy * $_GET["zoom"], $sx , $sy );
-      // Beide Werte sind gesetzt
-    }
-    if (debug) echo "showpic.php 88 <br>";
-    if ( (isset( $_GET ["width"])) and (isset( $_GET ["height"] )) ) {
-      if ($ist_hoch) {
-        if (debug) echo "showpic.php 91 <br>";
-        $dest = imagecreatetruecolor ( $_GET["height"], $_GET["width"] );
-        imagecopyresized ( $dest, $src, 0, 0, 0 , 0 , $_GET["height"], $_GET["width"], $sx , $sy );
-      } else {
-        if (debug) echo "showpic.php 95 <br>";
-        $dest = imagecreatetruecolor ( $_GET["width"], $_GET["height"] );
-        imagecopyresized ( $dest, $src, 0, 0, 0 , 0 , $_GET["width"], $_GET["height"], $sx , $sy );
-      }
-     // Nur die Breite ist gesetzt
-    }
-    if (debug) echo "showpic.php 101 <br>";
-
-    if ( (isset( $_GET ["width"])) and (!isset( $_GET ["height"] )) ) {
-
-/*
-echo "width und !height<br>$breitzuhoch isthoch=";
-if ( $isthoch ) { echo "wahr"; } else {echo "falsch";}
-echo "<br>";
-echo "_GET[width]                    =".$_GET["width"]."<br>";
-echo "_GET[width] * breitzuhoch =".$_GET["width"] * $breitzuhoch."<br>";
-*/
-
-      if ($ist_hoch) {
-        $dest = imagecreatetruecolor ( $_GET["width"] * $breitzuhoch,  $_GET["width"] );
-        imagecopyresized ( $dest, $src, 0, 0, 0 , 0 , $_GET["width"] * $breitzuhoch, $_GET["width"], $sx , $sy );
-      } else {
-        $dest = imagecreatetruecolor ( $_GET["width"], $_GET["width"] * $breitzuhoch );
-        imagecopyresized ( $dest, $src, 0, 0, 0 , 0 , $_GET["width"], $_GET["width"] * $breitzuhoch, $sx , $sy );
-      }
-    }
-
-
-    if ( (!isset( $_GET ["width"])) and (isset( $_GET ["height"] )) ) {
-      if ($ist_hoch) {
-        $dest = imagecreatetruecolor ( $_GET["height"], $_GET["height"] / $breitzuhoch );
-        imagecopyresized ( $dest, $src, 0, 0, 0 , 0 , $_GET["height"], $_GET["height"] / $breitzuhoch, $sx , $sy );
-      } else {
-        $dest = imagecreatetruecolor ( $_GET["height"] / $breitzuhoch, $_GET["height"] );
-        imagecopyresized ( $dest, $src, 0, 0, 0 , 0 , $_GET["height"] / $breitzuhoch , $_GET["height"], $sx , $sy );
-      }
-    }
-
-    header ("Content-type: image/png");
-    imagepng($dest);
-    imagedestroy($dest);
-  }
-
-?>
+header ("Content-Type: image/png");
+header ("Content-Disposition: inline; filename=preview.png");
+header ("Cache-Control: private, no-store");
+header ("X-Content-Type-Options: nosniff");
+imagepng ($target);
+$target = null;

@@ -62,6 +62,10 @@ class vordruckasimg {
   /*******************************************************************************
             Klassen Konstruktor
   ********************************************************************************/
+  function __construct ($data) {
+    $this->vordruckasimg ($data);
+  }
+
   function vordruckasimg ($data) {
     require_once ("../4fach/tools.php") ;
     include ("../4fcfg/config.inc.php") ;
@@ -86,24 +90,18 @@ class vordruckasimg {
     $this->db_dataset ["00_lfd"]          = $data ["00_lfd"] ;
     $this->db_dataset ["01_medium"]       = $data ["01_medium"];
 
-    if ($data ["01_datum"] != "0000-00-00 00:00:00") {
-      $arr = convdatetimeto ($data ["01_datum"]);
-      $this->db_dataset ["01_datum"]        = konv_datetime_taktime (convtodatetime ($arr['datum'], $arr['zeit']));
-    } else { $this->db_dataset ["01_datum"] = ""; }
+    $this->db_dataset ["01_datum"] = estab_datetime_is_unset ($data ["01_datum"])
+      ? "" : konv_datetime_taktime ($data ["01_datum"]);
 
     $this->db_dataset ["01_zeichen"]      = $data  ["01_zeichen"];
 
-    if ($data ["02_zeit"] != "0000-00-00 00:00:00") {
-      $arr = convdatetimeto ($data ["02_zeit"]);
-      $this->db_dataset ["02_zeit"]         = konv_datetime_taktime (convtodatetime ($arr['datum'], $arr['zeit']));
-    } else { $this->db_dataset ["02_zeit"] = ""; }
+    $this->db_dataset ["02_zeit"] = estab_datetime_is_unset ($data ["02_zeit"])
+      ? "" : konv_datetime_taktime ($data ["02_zeit"]);
 
     $this->db_dataset ["02_zeichen"]      = $data ["02_zeichen"];
 
-    if ($data ["03_datum"] != "0000-00-00 00:00:00") {
-      $arr = convdatetimeto ($data ["03_datum"]);
-      $this->db_dataset ["03_datum"]        = konv_datetime_taktime (convtodatetime ($arr['datum'], $arr['zeit']));
-    } else { $this->db_dataset ["03_datum"] = ""; }
+    $this->db_dataset ["03_datum"] = estab_datetime_is_unset ($data ["03_datum"])
+      ? "" : konv_datetime_taktime ($data ["03_datum"]);
 
     $this->db_dataset ["03_zeichen"]      = $data ["03_zeichen"] ;
     $this->db_dataset ["04_richtung"]     = $data ["04_richtung"] ;
@@ -120,14 +118,14 @@ class vordruckasimg {
     $this->db_dataset ["12_anhang"]       = $data ["12_anhang"] ;
     $this->db_dataset ["12_inhalt"]       = $data ["12_inhalt"] ;
 
-      $arr = convdatetimeto ($data ["12_abfzeit"]);
-    $this->db_dataset ["12_abfzeit"]      = konv_datetime_taktime (convtodatetime ($arr['datum'], $arr['zeit']));
+    $this->db_dataset ["12_abfzeit"] = estab_datetime_is_unset ($data ["12_abfzeit"])
+      ? "" : konv_datetime_taktime ($data ["12_abfzeit"]);
     $this->db_dataset ["13_abseinheit"]   = $data ["13_abseinheit"] ;
     $this->db_dataset ["14_zeichen"]      = $data ["14_zeichen"] ;
     $this->db_dataset ["14_funktion"]     = $data ["14_funktion"] ;
 
-      $arr = convdatetimeto ($data ["15_quitdatum"]);
-    $this->db_dataset ["15_quitdatum"]    = konv_datetime_taktime (convtodatetime ($arr['datum'], $arr['zeit']));
+    $this->db_dataset ["15_quitdatum"] = estab_datetime_is_unset ($data ["15_quitdatum"])
+      ? "" : konv_datetime_taktime ($data ["15_quitdatum"]);
     $this->db_dataset ["15_quitzeichen"]  = $data ["15_quitzeichen"] ;
     $this->db_dataset ["16_empf"]         = $data ["16_empf"] ;
     $this->db_dataset ["17_vermerke"]     = $data ["17_vermerke"] ;
@@ -135,8 +133,8 @@ class vordruckasimg {
     $this->db_dataset ["x01_abschluss"]   = $data ["x01_abschluss"];
     $this->db_dataset ["x04_druck"]       = $data ["x04_druck"] == "t" ;
 
-      $arr = convdatetimeto ($data ["x05_druck_d"]);
-    $this->db_dataset ["x05_druck_d"]     = konv_datetime_taktime (convtodatetime ($arr['datum'], $arr['zeit']));
+    $this->db_dataset ["x05_druck_d"] = estab_datetime_is_unset ($data ["x05_druck_d"])
+      ? "" : konv_datetime_taktime ($data ["x05_druck_d"]);
     $this->db_dataset ["99_lstacc"]       = $data ["99_lstacc"];
   }
 
@@ -236,7 +234,7 @@ class vordruckasimg {
       case "r": // rechts
         $x -= ($p[2]-$p[0]) ;// do nothing
       break;
-      default; // nothing
+      default: // nothing
     }
 
     switch ($posv){
@@ -252,7 +250,7 @@ class vordruckasimg {
       case "u": // bottom
         // do nothing
       break;
-      default; // nothing
+      default: // nothing
     }
 
     if (debug){ print_r ($p); echo "<br>";
@@ -491,9 +489,9 @@ class vordruckasimg {
 
     for ($y=1; $y<=5; $y++){
       for ($x=1; $x<=4; $x++){
-        if ( $empf_matrix[$y][$x][fkt] != "" ) {
+        if ( $empf_matrix[$y][$x]['fkt'] != "" ) {
           if ( $this->empfarray [$y][$x]["checked"] ){ $select = true;}else{$select = false;}
-          $this->draw_radiobutton  ( $x0 + ($x-1)*$dx, $y0 + ($y-1)*$dy, $select, $this->fkt_size,  $empf_matrix[$y][$x][fkt] );
+          $this->draw_radiobutton  ( $x0 + ($x-1)*$dx, $y0 + ($y-1)*$dy, $select, $this->fkt_size,  $empf_matrix[$y][$x]['fkt'] );
         }
       }
     }
@@ -601,7 +599,9 @@ class vordruckasimg {
       if (outputtyp == "png") { imagepng($this->image, $filename.".png"); }
       if (outputtyp == "jpg") { imagejpeg($this->image, $filename.".jpg"); }
 //    }
-    imagedestroy($this->image);
+    // GdImage objects are released automatically; imagedestroy() is
+    // deprecated and a no-op since PHP 8.5.
+    $this->image = null;
   }
 
 } // class

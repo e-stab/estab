@@ -72,6 +72,11 @@ var $PDFVersion;         //PDF version number
 *                               Public methods                                 *
 *                                                                              *
 *******************************************************************************/
+function __construct($orientation='P', $unit='mm', $format='A4')
+{
+        $this->FPDF($orientation, $unit, $format);
+}
+
 function FPDF($orientation='P', $unit='mm', $format='A4')
 {
         //Some checks
@@ -1343,7 +1348,8 @@ function _parsegif($file)
                 $this->Error('Unable to create a temporary file');
         if(!imagepng($im,$tmp))
                 $this->Error('Error while saving to temporary file');
-        imagedestroy($im);
+        // GdImage objects are released automatically on current PHP.
+        $im = null;
         $info=$this->_parsepng($tmp);
         unlink($tmp);
         return $info;
@@ -1561,8 +1567,7 @@ function _putfonts()
 function _putimages()
 {
         $filter=($this->compress) ? '/Filter /FlateDecode ' : '';
-        reset($this->images);
-        while(list($file,$info)=each($this->images))
+        foreach($this->images as $file=>$info)
         {
                 $this->_newobj();
                 $this->images[$file]['n']=$this->n;

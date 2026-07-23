@@ -1,5 +1,8 @@
 <?php
 define("debug", false);
+session_start ();
+require_once __DIR__ . "/../app/auth.php";
+estab_auth_require_session ($_SESSION);
 include ("../4fcfg/config.inc.php");  // Konfigurationseinstellungen und Vorgaben
 include ("db_operation.php");        // Datenbank operationen
 include ("liste.php");          // erzeuge Ausgabelisten

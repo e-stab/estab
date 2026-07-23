@@ -16,6 +16,8 @@
 include ("../4fcfg/dbcfg.inc.php");
 include ("../4fcfg/e_cfg.inc.php");
 include ("../4fcfg/para.inc.php");
+require_once __DIR__ . "/../app/auth.php";
+require_once __DIR__ . "/../app/file_access.php";
 
   function pre_html ($art, $titel, $cssstr){
     include ("../4fcfg/para.inc.php");
@@ -28,12 +30,12 @@ include ("../4fcfg/para.inc.php");
     echo "<!--\n";
     echo "function FramesVeraendern(url1, frameziel1, url2, frameziel2, url3, frameziel3)";
     echo "{";
-    echo "    Frame1 = eval(\"parent.\"+frameziel1);";
-    echo "    Frame2 = eval(\"parent.\"+frameziel2);";
-    echo "    Frame3 = eval(\"parent.\"+frameziel3);";
-    echo "    Frame1.location.href = url1; ";
-    echo "    Frame2.location.href = url2; ";
-    echo "    Frame3.location.href = url3; ";
+    echo "    var frame1 = parent[frameziel1];";
+    echo "    var frame2 = parent[frameziel2];";
+    echo "    var frame3 = parent[frameziel3];";
+    echo "    frame1.location.href = url1; ";
+    echo "    frame2.location.href = url2; ";
+    echo "    frame3.location.href = url3; ";
     echo "}";
     echo "//-->\n";
     echo "</script>\n";
@@ -142,13 +144,12 @@ include ("../4fcfg/para.inc.php");
   |       arr.stak  = TThhmm
   \****************************************************************************/
   function convdatetimeto ($datetime){
-    list ($datum, $zeit) = explode (" ",$datetime);
-    list ($jahr, $monat, $tag) = explode ("-", $datum);
-    list ($stunde, $minute, $sekunde) = explode (":", $zeit);
-    $arr ["datum"] = $tag.$monat;
-    $arr ["zeit"]  = $stunde.$minute;
-    $arr ["stak"]  = $tag.$stunde.$minute;
-    return $arr;
+    $parts = estab_datetime_parts ($datetime);
+    return array (
+      "datum" => $parts ["datum"],
+      "zeit"  => $parts ["zeit"],
+      "stak"  => $parts ["stak"],
+    );
   }
 
   /****************************************************************************\
@@ -159,10 +160,11 @@ include ("../4fcfg/para.inc.php");
   |       arr.zeit  =  hh:mm:ss
   \****************************************************************************/
   function convdbdatetimeto ($datetime){
-    list ($datum, $zeit) = explode (" ",$datetime);
-    $arr [datum] = $datum;
-    $arr [zeit]  = $zeit;
-    return $arr;
+    $parts = estab_datetime_parts ($datetime);
+    return array (
+      'datum' => $parts ['date'],
+      'zeit'  => $parts ['time'],
+    );
   }
 
   /****************************************************************************\
@@ -271,7 +273,7 @@ include ("../4fcfg/para.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
     $query = "SELECT count(*) FROM `".$conf_4f_tbl ["nachrichten"]."` WHERE ((`04_richtung` = \"A\") AND
-                                                  (`03_datum` = 0) AND
+                                                  (`03_datum` IS NULL) AND
                                                   (`03_zeichen` = \"\"));";
    $result = $dbaccess->query_table_wert ($query);
     return $result[0];
@@ -284,8 +286,8 @@ include ("../4fcfg/para.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
 
-		$WHERE_inout = "WHERE ( ( `15_quitdatum` = 0 ) AND ( `15_quitzeichen` = 0 ) ) AND ( ( `04_richtung` =\"E\") OR ( `03_datum` != 0 ) AND ( `03_zeichen` != \"\" ) )"; 
-		$WHERE_in    = "WHERE ( ( `15_quitdatum` = 0 ) AND ( `15_quitzeichen` = 0 ) ) AND ( `04_richtung` =\"E\")"; 
+		$WHERE_inout = "WHERE ( ( `15_quitdatum` IS NULL ) AND ( `15_quitzeichen` = \"\" ) ) AND ( ( `04_richtung` =\"E\") OR ( (`03_datum` IS NOT NULL) AND ( `03_zeichen` != \"\" ) ) )";
+		$WHERE_in    = "WHERE ( ( `15_quitdatum` IS NULL ) AND ( `15_quitzeichen` = \"\" ) ) AND ( `04_richtung` =\"E\")";
 
 		if($conf_4f["si_in_out"]) {  //  Ein- und Ausänge sichten
 			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### Ein- und Ausgänge sichten<br>"; }
@@ -433,8 +435,8 @@ include ("../4fcfg/para.inc.php");
     $result = NULL;
     for ($i=1;$i<=$resultcount;$i++){
       $fkt = mysql_fetch_assoc($query_result);
-      if ($fkt[fkt] != $ausnahme){
-        $result .= $fkt[fkt]."_bl,";
+      if ($fkt['fkt'] != $ausnahme){
+        $result .= $fkt['fkt']."_bl,";
       }
     }
     mysql_free_result($query_result);
@@ -450,10 +452,18 @@ bersichtlich dargestellt werden.
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
     include ("../4fcfg/fkt_rolle.inc.php");
-    $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
-    $query = "SELECT * FROM `".$conf_4f_tbl ["benutzer"]."` where 1";
-    $result = $dbaccess->query_table ($query);
-    $benutzer = $result ;
+    $benutzer = array ();
+    $statusConnection = null;
+    try {
+      $statusConnection = estab_auth_connect ($conf_4f_db);
+      $benutzer = estab_auth_fetch_users ($statusConnection, $conf_4f_tbl ["benutzer"]);
+    } catch (Throwable $exception) {
+      error_log ("eStab system status lookup failed: ".$exception->getMessage ());
+    } finally {
+      if ($statusConnection instanceof mysqli) {
+        estab_auth_close ($statusConnection);
+      }
+    }
     $aktiv    = " rgb(100, 250,  20); color:&000000; "; // was (100, 250,  20)
     $inaktiv  = " rgb(200, 200, 200); color:&FFFF00; "; // was (250,  60,  30)
     $self     = " rgb(250,  60,  30); color:&ffffff; "; // was ( 50, 180, 220);
@@ -464,14 +474,16 @@ bersichtlich dargestellt werden.
       $userstatus [ ($conf_empf[$i]["rolle"]) ]  [ ($conf_empf[$i]["fkt"]) ]  = $inaktiv;
     }
 
-    if ((count ($benutzer) > 0) and ($benutzer != "")){
+    if ($benutzer !== array ()){
       foreach ($benutzer as $user){
-        if ($user[aktiv] == 1 ) {          $userstatus [$user[rolle]]  [$user[funktion]]  = $aktiv;}
+        if ($user['aktiv'] == 1 ) {          $userstatus [$user['rolle']]  [$user['funktion']]  = $aktiv;}
 
         if ( ($user ["funktion"] == "A/W") AND ($user["aktiv"] == 1) ){ $fernm_aw ++;}
       }
     }
-    $userstatus [$_SESSION["vStab_rolle"]][$_SESSION["vStab_funktion"]] = $self;
+    if (isset ($_SESSION ["vStab_rolle"], $_SESSION ["vStab_funktion"])) {
+      $userstatus [$_SESSION["vStab_rolle"]][$_SESSION["vStab_funktion"]] = $self;
+    }
     if ($direction == "horizontal"){
       echo "<fieldset>";
       echo "<legend><b><big>Funktionsbersicht</big></b></legend>\n";
@@ -637,25 +649,31 @@ bersichtlich dargestellt werden.
   function benutzerstatus ($what){ // kann sein "anzeige" oder mit "verlinkt"
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
-    
-    $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
-    $query = "SELECT * FROM `".$conf_4f_tbl ["benutzer"]."` where 1 order by aktiv DESC, kuerzel";
-    $result = $dbaccess->query_table ($query);
-    $benutzer = $result ;
+
+    $benutzer = array ();
+    $statusConnection = null;
+    try {
+      $statusConnection = estab_auth_connect ($conf_4f_db);
+      $benutzer = estab_auth_fetch_users ($statusConnection, $conf_4f_tbl ["benutzer"]);
+    } catch (Throwable $exception) {
+      error_log ("eStab user status lookup failed: ".$exception->getMessage ());
+    } finally {
+      if ($statusConnection instanceof mysqli) {
+        estab_auth_close ($statusConnection);
+      }
+    }
 
     $aktiv    = " rgb(100, 250,  20); color:&000000; "; // was (100, 250,  20)
     $inaktiv  = " rgb(200, 200, 200); color:&FFFF00; "; // was (250,  60,  30)
     $self     = " rgb(250,  60,  30); color:&ffffff; "; // was ( 50, 180, 220);
     $abgemldt = " rgb(200, 200, 200); color:&a0a0a0; "; // was ( 240, 240, 240);
 
-    $fernm_aw = 0;
-    $leitstelle  = 0;
     /*Benutzerliste*/
-    if ((count ($benutzer) > 0) and ($benutzer != "")){
+    if ($benutzer !== array ()){
       include ("../4fcfg/config.inc.php");
       if ($what == 'verlinkt'){
-         echo "\n\n<form action=\"".$conf_4f ["MainURL"]."\" method=\"POST\" target=\"mainframe\">\n";
-         echo "<!-- Benutzerliste mit aktiven Links zur Anmeldung -->\n";
+         echo "\n\n<form action=\"".estab_auth_html ($conf_4f ["MainURL"])."\" method=\"POST\" target=\"mainframe\">\n";
+         echo "<!-- Benutzerliste mit POST-Auswahl zur Anmeldung -->\n";
       
       }
 
@@ -668,28 +686,18 @@ bersichtlich dargestellt werden.
       echo "</tr>";
       foreach ($benutzer as $user){
         echo "<tr>";
-        if ($_SESSION [menue] == "LOGIN"){
-          $hreflink = "href=\"mainindex.php?benutzer=$user[benutzer]&kuerzel=$user[kuerzel]&funktion=$user[funktion]&anmelden=Anmelden\"";
-        } else {
-          $hreflink = "";
-        }
-        if (session_id () == $user ["sid"]){
-          echo "<td style=\"background-color: ".$self." font-weight:bold;\"><a $hreflink>$user[benutzer]</a></td>
-                <td style=\"background-color: ".$self." font-weight:bold;\"><a $hreflink>$user[kuerzel]</a></td>
-                <td style=\"background-color: ".$self." font-weight:bold;\"><a $hreflink>$user[rolle]</a></td>
-                <td style=\"background-color: ".$self." font-weight:bold;\"><a $hreflink>$user[funktion]</a></td>";
-        } else {
-          if ( $user [aktiv] == 1 ){
-            echo "<td style=\"background-color: ".$aktiv." font-weight:bold;\"><a $hreflink>$user[benutzer]</a></td>
-                  <td style=\"background-color: ".$aktiv." font-weight:bold;\"><a $hreflink>$user[kuerzel]</a></td>
-                  <td style=\"background-color: ".$aktiv." font-weight:bold;\"><a $hreflink>$user[rolle]</a></td>
-                  <td style=\"background-color: ".$aktiv." font-weight:bold;\"><a $hreflink>$user[funktion]</a></td>";
-          } else {
-            echo "<td style=\"background-color: ".$abgemldt." font-weight:bold;\"><a $hreflink>$user[benutzer]</a></td>
-                  <td style=\"background-color: ".$abgemldt." font-weight:bold;\"><a $hreflink>$user[kuerzel]</a></td>
-                  <td style=\"background-color: ".$abgemldt." font-weight:bold;\"><a $hreflink>$user[rolle]</a></td>
-                  <td style=\"background-color: ".$abgemldt." font-weight:bold;\"><a $hreflink>$user[funktion]</a></td>";
+        $background = ((string) ($user ["sid"] ?? "") !== "" && session_id () === (string) $user ["sid"])
+          ? $self
+          : (((int) ($user ["aktiv"] ?? 0) === 1) ? $aktiv : $abgemldt);
+        $loginSelectable = $what == 'verlinkt' && ($_SESSION ["menue"] ?? "") == "LOGIN";
+        $identityToken = $loginSelectable ? estab_auth_identity_token ($user) : "";
+        foreach (array ("benutzer", "kuerzel", "rolle", "funktion") as $column) {
+          $safeValue = estab_auth_html ($user [$column] ?? "");
+          if ($loginSelectable) {
+            $safeToken = estab_auth_html ($identityToken);
+            $safeValue = "<button type=\"submit\" name=\"login_identity\" value=\"".$safeToken."\">".$safeValue."</button>";
           }
+          echo "<td style=\"background-color: ".$background." font-weight:bold;\">".$safeValue."</td>";
         }
         echo "</tr>";
       }
@@ -802,19 +810,7 @@ bersichtlich dargestellt werden.
     include ("../4fcfg/config.inc.php");
     // Datenbankzeit konvertiert in taktische Zeit
     // yyyy-MM-tt hh:mm:ss ==> tthhmmMMMyyyy
-    if (strlen ($datetime) == 19 ){
-      list ($datum, $zeit) = explode (" ",$datetime);
-      list ($yyyy, $MM, $tt) = explode ("-", $datum);
-      list ($hh, $mm, $ss) = explode (":", $zeit);
-	  if ($MM != "00"){ 
-	    return ($tt.$hh.$mm.$tak_monate[$MM].$yyyy); 
-	  } else { 
-	    return ("");
-	  }
-      
-    } else {
-      return ("");
-    }
+    return estab_datetime_to_tactical ($datetime, $tak_monate);
   }
 
 

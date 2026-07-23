@@ -2,7 +2,7 @@
 /**********************************************************************************\
   Das Skript wird per include beim Abmelden ausgefÃ¼hrt.
 \**********************************************************************************/
-define ("debug", false);
+if (!defined ("debug")) { define ("debug", false); }
 
 
 if ( debug == true ){
@@ -36,23 +36,24 @@ if (debug){
                      `10_anschrift`,
                      `12_abfzeit`,
                      `12_inhalt` FROM `".$conf_4f_tbl ["nachrichten"]."`
-              WHERE ( (  `15_quitdatum`    = 0 ) AND
-                      (  `15_quitzeichen`  = 0 ) )  AND
+              WHERE ( (  `15_quitdatum`    IS NULL ) AND
+                      (  `15_quitzeichen`  = '' ) )  AND
 
                     ( (  `04_richtung`     =\"E\") OR
-                      (  `03_datum`       != 0 ) AND
+                      (  `03_datum`       IS NOT NULL ) AND
                       (  `03_zeichen`     != \"\" ) )
               order by `09_vorrangstufe` DESC, `12_abfzeit`; ";
 
     if (debug) {echo "<br>QUERY ===".$query;  echo "<br>";}
 
     $result = $dbaccess->query_table ($query);
+    $result = is_array ($result) ? $result : array ();
 
-    if (($result != NULL) && (debug)) {
+    if (($result !== array ()) && (debug)) {
       echo "<br>RESULT ===";  print_r ($result); echo "<br>";
     }
 
-    if (($result != NULL) && (debug)){
+    if (($result !== array ()) && (debug)){
       echo "<table style=\"text-align: center; background-color: rgb(255, 255, 255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
       echo "<tr style=\"background-color: rgb(240,240,200); color:#000000; font-weight:bold;\">\n";
       echo "<td>ZEIT</td>\n";
@@ -65,7 +66,7 @@ if (debug){
           echo "<tr style=\"background-color: rgb(220,0,0); color:#FFFFFF; font-weight:bold;\">\n";
        }
        $abfzeit = convdatetimeto ($row["12_abfzeit"]);
-       echo "<td>"; if (($row["12_abfzeit"] != "")) { echo "<a href=\"mainindex.php?sichter=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$abfzeit[stak]."</a>\n"; } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+       echo "<td>"; if (($row["12_abfzeit"] != "")) { echo "<a href=\"mainindex.php?sichter=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$abfzeit['stak']."</a>\n"; } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
        echo "<td>"; if (($row["09_vorrangstufe"] != "")) { echo "<a href=\"mainindex.php?sichter=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["09_vorrangstufe"]."</a>\n" ; } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
        echo "<td>"; if (($row["10_anschrift"] != "")) { echo "<a href=\"mainindex.php?sichter=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["10_anschrift"]."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
        echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { echo "<a href=\"mainindex.php?sichter=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["12_inhalt"]."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";

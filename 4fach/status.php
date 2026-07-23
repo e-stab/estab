@@ -1,56 +1,60 @@
 <?php
-/*****************************************************************************\
-   Datei: status.php
 
-   benÃ¶tigte Dateien:    tools.php, db_operation.php
+declare(strict_types=1);
 
-   Beschreibung:
+session_start();
 
-          Hier wird die Statusspalte links dargestellt.
+require_once __DIR__ . '/../app/auth.php';
 
-   (C) Hajo Landmesser IuK Kreis Heinsberg
-   mailto://hajo.landmesser@iuk-heinsberg.de
-\******************************************************************************/
-
-  error_reporting(E_ERROR | E_WARNING);
-
-session_start ();
-
-/*!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*/
-include ("../4fcfg/dbcfg.inc.php");    // Datenbankparameter
-
-  $db = mysql_connect($conf_4f_db   ["server"],$conf_4f_db   ["user"], $conf_4f_db   ["password"] );
-  $result = mysql_ping  ($db);
-  mysql_query('SET NAMES utf8');
-  if ($result == false){
-    echo "<big>DB?</big>";
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+if (!is_string($method) || !in_array($method, ['GET', 'HEAD'], true)) {
+    http_response_code(405);
+    header('Allow: GET, HEAD');
+    header('Content-Type: text/plain; charset=UTF-8');
+    header('Cache-Control: no-store');
+    echo 'Method not allowed.';
     exit;
-  }
-  if (isset($db)){
-    mysql_close($db);
-  }
+}
 
-/*!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*/
+header('Content-Type: text/html; charset=UTF-8');
+header('Cache-Control: no-store');
 
-include ("tools.php");
-include ("db_operation.php");
-include ("../4fcfg/config.inc.php");
-
-
-pre_html ("status", "Status","");
-
-echo "<body bgcolor=\"#ECECFF\">";
-
-systemstatus ("vertikal");
-
-echo "<table align=\"center\" style=\"text-align:center; width: 50px; background-color: rgb(150, 150, 150); height: 10px;\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\">\n";
-echo "<tbody>\n";
-echo "<tr><td>";
-echo "<img src=\"".$conf_design_path."/timer.gif\">";
-echo "</td></tr>";
-echo "</table>";
-?>
-
+if (estab_auth_session_identity($_SESSION) === null) {
+    if ($method === 'HEAD') {
+        exit;
+    }
+    ?>
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="refresh" content="10">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>eStab Status</title>
+</head>
+<body style="background-color:#ececff">
+  <p>Status erst nach Anmeldung verfügbar.</p>
 </body>
-
 </html>
+    <?php
+    exit;
+}
+
+require_once __DIR__ . '/../4fcfg/config.inc.php';
+require_once __DIR__ . '/tools.php';
+require_once __DIR__ . '/db_operation.php';
+
+if ($method === 'HEAD') {
+    exit;
+}
+
+pre_html('status', 'Status', '');
+echo '<body bgcolor="#ECECFF">';
+systemstatus('vertikal');
+echo '<table align="center" style="text-align:center; width:50px; '
+    . 'background-color:rgb(150, 150, 150); height:10px;" '
+    . 'border="0" cellpadding="0" cellspacing="0"><tbody><tr><td>';
+echo '<img src="'
+    . htmlspecialchars((string) $conf_design_path, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+    . '/timer.gif" alt="">';
+echo '</td></tr></tbody></table></body></html>';

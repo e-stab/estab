@@ -19,10 +19,79 @@ define ("create_vordrucke", true);   // Erstellt PDF oder/und PNG Dokumente fÃ�
 if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big>Steuerungsdatei</big></big><br>";  }
 
 session_start ();
- 
-$returnValue = null ; // first set returnValue to a defined stat
+
+require_once __DIR__ . "/../app/workflow.php";
+require_once __DIR__ . "/../app/csrf.php";
+
+$returnValue = array (); // no request data is a valid, warning-free state
 if (count($_GET)>0)  { $returnValue = $_GET; }   // GET Daten, wenn vorhanden speichern
 if (count($_POST)>0) { $returnValue = $_POST; }  // POST Daten, wenn vorhanden speichern
+
+// Frequently compared routing values have neutral defaults. Button fields
+// intentionally remain absent because the legacy code uses isset() for them.
+$returnValue += array (
+  "task" => "",
+  "fm" => "",
+  "stab" => "",
+  "sichter" => "",
+);
+
+// PHP 8 reports reads of missing session keys. These neutral values preserve
+// the old loose-comparison behaviour without flooding production logs.
+$_SESSION += array (
+  "ROLLE" => "",
+  "UPLOAD" => "",
+  "fm_zweite_sichtung" => 0,
+  "gesprnoti" => false,
+  "si_zweite_sichtung" => 0,
+  "vStab_benutzer" => "",
+  "vStab_funktion" => "",
+  "vStab_kuerzel" => "",
+  "vStab_rolle" => "",
+);
+
+// The controller historically mixed public login handling with every
+// message route. Admit only an exact login request before authentication and
+// enforce the established function/role boundary before any database action.
+$workflowIdentity = estab_auth_session_identity ($_SESSION);
+if ($workflowIdentity === null) {
+  if (!estab_workflow_public_login_request ($_SERVER, $_GET, $_POST)) {
+    estab_workflow_forbid ();
+  }
+} elseif (!estab_workflow_route_allowed (
+  $workflowIdentity,
+  (string) ($_SERVER ["REQUEST_METHOD"] ?? "GET"),
+  $returnValue
+)) {
+  estab_workflow_forbid ();
+}
+
+if (
+  $workflowIdentity !== null
+  && (
+    ($returnValue ["task"] ?? "") !== ""
+    || isset ($returnValue ["action"])
+    || isset ($returnValue ["reset_record"])
+    || isset ($returnValue ["m2_abmelden_x"])
+    || ($returnValue ["stab"] ?? "") === "meldung"
+    || ($returnValue ["sichter"] ?? "") === "meldung"
+    || in_array (($returnValue ["fm"] ?? ""), array (
+      "meldung", "FM-Adminmeldung", "SI-Adminmeldung",
+    ), true)
+  )
+) {
+  try {
+    estab_csrf_require_post ($_SERVER, $_POST);
+  } catch (Throwable $exception) {
+    estab_workflow_forbid ();
+  }
+}
+
+foreach (array ("reset_record", "00_lfd", "msglfd") as $recordKey) {
+  if (isset ($returnValue [$recordKey]) && $returnValue [$recordKey] !== "") {
+    $returnValue [$recordKey] = estab_workflow_record_id ($returnValue [$recordKey]);
+  }
+}
 
 /*
 $pre_01medium = "Fu";
@@ -40,11 +109,7 @@ if ( debug){
   echo "SESSION="; print_r ($_SESSION); echo "#<br>\n";
 }
 // exit;
-if (debug){
-  error_reporting(E_ALL ^ E_NOTICE);
-} else {
-  error_reporting(E_ERROR | E_WARNING);
-}
+error_reporting(E_ALL);
 
 include ("../4fcfg/config.inc.php");    // Konfigurationseinstellungen und Vorgaben
 include ("../4fcfg/dbcfg.inc.php");     // Datenbankparameter
@@ -54,6 +119,48 @@ include ("db_operation.php");           // Datenbank operationen
 include ("4fachform.php");              // Formular Behandlung 4fach Vordruck
 include ("liste.php");                  // erzeuge Ausgabelisten
 include ("data_hndl.php");              // Schnittstelle zur Datenbank
+
+// Role checks alone are insufficient for record identifiers supplied by a
+// browser. Bind every data-bearing route to the addressed message before any
+// read, state transition, lock change or form save can run.
+$messageOperation = $workflowIdentity === null
+  ? null
+  : estab_workflow_message_operation ($returnValue);
+if ($messageOperation !== null) {
+  $messageRecordId = $messageOperation === "telecommunications-reset"
+    ? ($returnValue ["reset_record"] ?? null)
+    : ($returnValue ["00_lfd"] ?? null);
+  if (!is_int ($messageRecordId) || $messageRecordId < 1) {
+    estab_workflow_forbid ();
+  }
+  $objectConnection = null;
+  try {
+    $objectConnection = estab_message_connect ($conf_4f_db);
+    $objectMessage = estab_message_fetch_by_id (
+      $objectConnection,
+      $conf_4f_tbl ["nachrichten"],
+      $messageRecordId
+    );
+    if (
+      !is_array ($objectMessage)
+      || !estab_message_object_allowed (
+        $workflowIdentity,
+        $messageOperation,
+        $objectMessage,
+        (bool) ($conf_4f ["si_in_out"] ?? true)
+      )
+    ) {
+      estab_workflow_forbid ();
+    }
+  } catch (Throwable $exception) {
+    error_log ("eStab message object gate failed");
+    estab_workflow_forbid ();
+  } finally {
+    if ($objectConnection instanceof mysqli) {
+      estab_auth_close ($objectConnection);
+    }
+  }
+}
 
   $db = mysql_connect($conf_4f_db   ["server"],$conf_4f_db   ["user"], $conf_4f_db   ["password"] );
   mysql_query('SET NAMES utf8');
@@ -77,12 +184,18 @@ include ("data_hndl.php");              // Schnittstelle zur Datenbank
 /**********************************************************************\
 \**********************************************************************/
   function resetframeset ($rootpath) {
-    pre_html ("reset","Framereset ".$conf_4f ["NameVersion"],""); // Normaler Seitenaufbau mit Auffrischung
+    global $conf_4f;
+    pre_html ("reset", "Framereset ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"], ""); // Normaler Seitenaufbau mit Auffrischung
     echo "<body onLoad=\"FramesVeraendern('".$rootpath."/4fach/counter.php','counter','".$rootpath."/4fach/vorgaben.php','vorgaben','".$rootpath."/4fach/mainindex.php','mainframe')\">";
   }
 
 
   if (isset ($returnValue ["reset_record"])){
+    try {
+      estab_csrf_require_post ($_SERVER, $_POST);
+    } catch (Throwable $exception) {
+      estab_workflow_forbid ();
+    }
     reset_record_lock ($returnValue ["reset_record"]);
     if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big>eset Recordlock</big></big><br>";  }
   }
@@ -91,11 +204,6 @@ include ("data_hndl.php");              // Schnittstelle zur Datenbank
 /**********************************************************************\
   Es gab noch keinen Kontakt ==> Begruessung
 \**********************************************************************/
-if (isset ( $returnValue ["m2_parameter_x"] )) {
-  include ("./edt_para.php");
-  $para = new parametrierung ();
-}
-
 /*******************************************************************
 ANTWORT % WEITERLEITUNG
 *******************************************************************/
@@ -116,45 +224,51 @@ ANTWORT % WEITERLEITUNG
   \****************************************************************************/
     // Kategorie Master
   if (isset($returnValue ["ma_ktgotyp"])){
-    if ( $returnValue ["ma_ktgo"] == "alle") {
+    $masterCategory = estab_workflow_category_filter ($returnValue ["ma_ktgo"] ?? null);
+    if ($returnValue ["ma_ktgotyp"] !== "global" || $masterCategory === null) {
+      estab_workflow_forbid ();
+    }
+    if ($masterCategory === "alle") {
       unset ($_SESSION ["ma_kategotyp"]);
       unset ($_SESSION ["ma_katego"]);
     } else {
       $_SESSION ["ma_kategotyp"] = $returnValue ["ma_ktgotyp"];
-      $_SESSION ["ma_katego"]    = $returnValue ["ma_ktgo"];
+      $_SESSION ["ma_katego"]    = $masterCategory;
       $_SESSION["filter_start"] = 0 ;
       $_SESSION["filter_position"] = 0;
     }
   }
     // Kategorie FUNKTION
   if (isset($returnValue ["fk_ktgotyp"])){
-    if ( $returnValue ["fk_ktgo"] == "alle") {
+    $functionCategory = estab_workflow_category_filter ($returnValue ["fk_ktgo"] ?? null);
+    if ($returnValue ["fk_ktgotyp"] !== "fkt" || $functionCategory === null) {
+      estab_workflow_forbid ();
+    }
+    if ($functionCategory === "alle") {
       unset ($_SESSION ["fk_kategotyp"]);
       unset ($_SESSION ["fk_katego"]);
     } else {
       $_SESSION ["fk_kategotyp"] = $returnValue ["fk_ktgotyp"];
-      $_SESSION ["fk_katego"]    = $returnValue ["fk_ktgo"];
+      $_SESSION ["fk_katego"]    = $functionCategory;
       $_SESSION["filter_start"] = 0 ;
       $_SESSION["filter_position"] = 0;
     }
   }
     // Kategorie USER
   if (isset($returnValue ["us_ktgotyp"])){
-    if ( $returnValue ["us_ktgo"] == "alle") {
+    $userCategory = estab_workflow_category_filter ($returnValue ["us_ktgo"] ?? null);
+    if ($returnValue ["us_ktgotyp"] !== "user" || $userCategory === null) {
+      estab_workflow_forbid ();
+    }
+    if ($userCategory === "alle") {
       unset ($_SESSION ["us_kategotyp"]);
       unset ($_SESSION ["us_katego"]);
     } else {
       $_SESSION ["us_kategotyp"] = $returnValue ["us_ktgotyp"];
-      $_SESSION ["us_katego"]    = $returnValue ["us_ktgo"];
+      $_SESSION ["us_katego"]    = $userCategory;
       $_SESSION["filter_start"] = 0 ;
       $_SESSION["filter_position"] = 0;
     }
-  }
-
-
-  if (isset ( $returnValue ["4fachkatego_absenden_x"])) {
-    include ("../4fach/katgoedt.php");
-    if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big>katgoedt.php</big></big><br>";  }
   }
 
 
@@ -193,7 +307,11 @@ ANTWORT % WEITERLEITUNG
     $_SESSION["filter_anzahl"]      = 15;
     $_SESSION["filter_start"]       = 0 ;
     $_SESSION["filter_position"]    = 0;
+    $_SESSION["filter_gelesen"]     = 0;
+    $_SESSION["flt_find_mask"]      = 0;
   }
+  if (!isset ($_SESSION["filter_gelesen"])) { $_SESSION["filter_gelesen"] = 0; }
+  if (!isset ($_SESSION["flt_find_mask"])) { $_SESSION["flt_find_mask"] = 0; }
   // filtern EIN / AUS
   if ( (isset ($returnValue["filter_darstellung_aus_x"])) or
        (isset ($returnValue["filter_darstellung_ein_x"])) ){
@@ -241,7 +359,14 @@ ANTWORT % WEITERLEITUNG
   if (isset($returnValue["filter_suche_reset"])){ unset ($_SESSION["flt_search"]); }
 
   if (isset($returnValue["flt_search"]) AND ($_SESSION["flt_find_mask"] == 1)){
-    if ($_SESSION["flt_search"] != $returnValue ["flt_search"]){
+    if (
+      !is_string ($returnValue ["flt_search"])
+      || strlen ($returnValue ["flt_search"]) > 120
+      || str_contains ($returnValue ["flt_search"], "\0")
+    ) {
+      estab_workflow_forbid ();
+    }
+    if (($_SESSION["flt_search"] ?? null) !== $returnValue ["flt_search"]){
       $_SESSION["filter_start"] = 0 ;
       $_SESSION["filter_position"] = 0;
 	  $_SESSION["flt_search"] = $returnValue ["flt_search"];
@@ -250,7 +375,17 @@ ANTWORT % WEITERLEITUNG
 	}
   }
 
-  if (isset($returnValue['filter_anzahl_x'])) { $_SESSION['filter_anzahl'] = $returnValue['filter_anzahl']; }
+  if (isset($returnValue['filter_anzahl_x'])) {
+    $requestedPageSize = filter_var (
+      $returnValue ['filter_anzahl'] ?? null,
+      FILTER_VALIDATE_INT,
+      array ("options" => array ("min_range" => 5, "max_range" => 25))
+    );
+    if (!is_int ($requestedPageSize) || ($requestedPageSize % 5) !== 0) {
+      estab_workflow_forbid ();
+    }
+    $_SESSION['filter_anzahl'] = $requestedPageSize;
+  }
   if (isset($returnValue['flt_start_x'])) { $_SESSION['flt_navi'] = "start";}
   if (isset($returnValue['flt_back_x']))  { $_SESSION['flt_navi'] = "back";}
   if (isset($returnValue['flt_for_x']))   { $_SESSION['flt_navi'] = "for";}
@@ -287,7 +422,13 @@ ANTWORT % WEITERLEITUNG
   /**********************************************************************\
     Der Anmelde Button wurde gedrueckt
   \**********************************************************************/
-  if ( $returnValue["login"] == "Anmelden" )  {
+  if (
+    ($returnValue["login"] ?? null) === "Anmelden"
+    || (
+      isset ($returnValue ["login_x"], $returnValue ["login_y"])
+      && estab_workflow_public_login_request ($_SERVER, $_GET, $_POST)
+    )
+  ) {
     $_SESSION ["menue"] = "LOGIN"; }
 
 
@@ -296,52 +437,46 @@ ANTWORT % WEITERLEITUNG
   /**********************************************************************\
     Es kommen Anmeldedaten die geprueft und gespeichert werden muessen
   \**********************************************************************/
-  $doppelkennwort = true;
-  if (
-     ((isset ($returnValue["benutzer"])) AND
-      (isset ($returnValue["kuerzel"] )) AND
-      (isset ($returnValue["funktion"])) AND
-      ($_SESSION["menue"] == "LOGIN")) )
-    // Es wurden beide Kennworte gesetzt
-    if (
-         ( ($returnValue["2teskennwort"] == "Yes") and
-           (isset ($returnValue["kennwort1"])) and
-           (isset ($returnValue["kennwort2"])) and
-           ($returnValue["kennwort1"] != "") and
-           ($returnValue["kennwort2"] != "") and
-           ($returnValue["kennwort1"] == $returnValue["kennwort2"]) ) OR
+  // Identität und Kennwort werden ausschließlich aus einem POST-Request gelesen.
+  // GET bleibt für die zahlreichen historischen Nicht-Login-Aktionen erhalten.
+  $loginData = (($_SERVER ["REQUEST_METHOD"] ?? "GET") === "POST") ? $_POST : array ();
+  $identitySelected = false;
+  if (isset ($loginData ["login_identity"]) && is_string ($loginData ["login_identity"])) {
+    $selectedIdentity = estab_auth_decode_identity_token ($loginData ["login_identity"], is_array ($conf_empf) ? $conf_empf : array ());
+    if (is_array ($selectedIdentity)) {
+      $loginData = array_replace ($loginData, $selectedIdentity);
+      $identitySelected = true;
+      $_SESSION ["menue"] = "LOGIN";
+    }
+  }
 
-         ( ($returnValue["2teskennwort"] != "Yes") AND
-           (isset ($returnValue["kennwort1"])) )
-       )  {
-      if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br>";  }
-      $error = check_save_user ();
+  $menuename = "";
+  $menuekuerzel = "";
+  $menuefunktion = "";
+  if (isset ($loginData ["benutzer"]) && is_string ($loginData ["benutzer"])) { $menuename = $loginData ["benutzer"]; }
+  if (isset ($loginData ["kuerzel"]) && is_string ($loginData ["kuerzel"])) { $menuekuerzel = $loginData ["kuerzel"]; }
+  if (isset ($loginData ["funktion"]) && is_string ($loginData ["funktion"])) { $menuefunktion = $loginData ["funktion"]; }
+
+  $doppelkennwort = !$identitySelected && (($loginData ["2teskennwort"] ?? "Yes") === "Yes");
+  $hasLoginIdentity = isset ($loginData ["benutzer"], $loginData ["kuerzel"], $loginData ["funktion"]);
+  $hasPassword = isset ($loginData ["kennwort1"]) && is_string ($loginData ["kennwort1"]) && $loginData ["kennwort1"] !== "";
+  $requiresConfirmation = (($loginData ["2teskennwort"] ?? "No") === "Yes");
+  $confirmationMatches = !$requiresConfirmation
+    || (isset ($loginData ["kennwort1"], $loginData ["kennwort2"])
+        && is_string ($loginData ["kennwort1"])
+        && is_string ($loginData ["kennwort2"])
+        && hash_equals ($loginData ["kennwort1"], $loginData ["kennwort2"]));
+
+  if ($hasLoginIdentity && $hasPassword && ($_SESSION ["menue"] ?? "") === "LOGIN") {
+    if (!$confirmationMatches) {
+      errorwindow ("Benutzeranmeldung", "Die beiden Kennwörter stimmen nicht überein.");
+      $doppelkennwort = true;
+    } else {
+      $error = check_save_user ($loginData);
       if (!$error) {
-        $_SESSION["menue"] = "ROLLE";  //   führt zu Fehlern bei der Menüdarstellung
-        if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br>";  }
+        $_SESSION ["menue"] = "ROLLE";
         resetframeset ($conf_urlroot.$conf_web["pre_path"]);
       }
-    // Wenn Benutzer OK ==> SESSION ["menue"]="ROLLE" ; $_SESSION ["ROLLE"]= "Stab", Fernmelder...
-  } else {
-    if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br>";  }
-    if (  ($returnValue["2teskennwort"] == "Yes") and
-          (isset ($returnValue["kennwort1"])) and
-          (isset ($returnValue["kennwort2"])) and
-          ($returnValue["kennwort1"] != "") and
-          ($returnValue["kennwort2"] != "") and
-          ($returnValue["kennwort1"] != $returnValue["kennwort2"]) ) {
-          // Kennwort1 ungleich Kennwort2
-      if (isset ($returnValue["benutzer"])) { $menuename     = $returnValue["benutzer"]; }
-      if (isset ($returnValue["kuerzel"] )) { $menuekuerzel  = $returnValue["kuerzel"]; }
-      if (isset ($returnValue["funktion"])) { $menuefunktion = $returnValue["funktion"]; }
-      $doppelkennwort = true;
-      if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br>";  }
-    } else {
-        if (isset ($returnValue["benutzer"])) { $menuename     = $returnValue["benutzer"]; }
-        if (isset ($returnValue["kuerzel"] )) { $menuekuerzel  = $returnValue["kuerzel"]; }
-        if (isset ($returnValue["funktion"])) { $menuefunktion = $returnValue["funktion"]; }
-        $doppelkennwort = false;
-        if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br>";  }
     }
   }
 
@@ -354,12 +489,16 @@ ANTWORT % WEITERLEITUNG
 ***********************************************************************/
 
   // Abbruch der Gesprächsnotiz beim Sichten
-  if ( ( $returnValue["abbrechen_x"] ) and ( $_SESSION ["gesprnoti"] ) ){
+  if ( !empty ($returnValue["abbrechen_x"]) and !empty ($_SESSION ["gesprnoti"]) ){
     unset ( $_SESSION ['gesprnoti'] );
   }
 
 
-  if ( ( ( $returnValue["task"] == "Stab_schreiben" ) or
+  $workflowTaskSubmitted = isset ($returnValue ["absenden_x"])
+    || isset ($returnValue ["antwort_x"])
+    || isset ($returnValue ["weiterleiten_x"]);
+
+  if ( $workflowTaskSubmitted and ( ( $returnValue["task"] == "Stab_schreiben" ) or
          ( $returnValue["task"] == "Stab_gesprnoti" ) or
          ( $returnValue["task"] == "FM-Ausgang" ) or
          ( $returnValue["task"] == "FM-Ausgang_Sichter" ) or
@@ -368,18 +507,13 @@ ANTWORT % WEITERLEITUNG
          ( $returnValue["task"] == "FM-Eingang_Sichter" ) or
          ( $returnValue["task"] == "FM-Eingang_Anhang" ) or
          ( $returnValue["task"] == "FM-Eingang_Anhang_Sichter" ) or
-         ( $returnValue["task"] == "Stab_sichten" ) or
-         ( $returnValue["task"] == "SI-Admin" ) )  and (
-         ( !isset ($returnValue["abbrechen_x"])) or 
-            isset ($returnValue["antworten_x"]) or 
-            isset ($returnValue["weiterleiten_x"])
-         )
-         ) {
+	         ( $returnValue["task"] == "Stab_sichten" ) or
+	         ( $returnValue["task"] == "SI-Admin" ) ) ) {
     $returndata = $returnValue;
 
     if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br> Daten kommen vom Formular und können gespeichert werden";  echo "<br>\n";}
 
-    if ( ( $returnValue ["11_gesprnotiz"] == "on" ) and
+    if ( ( ($returnValue ["11_gesprnotiz"] ?? "") == "on" ) and
          ( !$_SESSION ["gesprnoti"] ) and
          ( $returnValue ["task"] != "SI-Admin" ) and
          ( $returnValue ["task"] != "Stab_sichten" ) ){
@@ -422,20 +556,20 @@ ANTWORT % WEITERLEITUNG
 FM-Ausgang (Sichter) abgebrochen
       \************************************************************************/
 
-       if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br> ".(($returnValue[task] == FM-Ausgang_Sichter) and ($returnValue [abbrechen_x])) ;  echo "<br>\n";}
+       if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br> ".(($returnValue['task'] == FM-Ausgang_Sichter) and ($returnValue ['abbrechen_x'])) ;  echo "<br>\n";}
 
-       $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
-       $query = "SELECT `x02_sperre`,`x03_sperruser` FROM `".$conf_4f_tbl ["nachrichten"]."`
-                 where `00_lfd` = ".$returnValue["00_lfd"];
-       $result = $dbaccess->query_table ($query);
-
-       if ( ($result [1]['x02_sperre'] == "f") OR // Ist der Satz schon in Bearbeitung (sperre == FALSE)?
-           (($result [1]['x02_sperre'] == "t" ) AND // Satz gesperrt
-            ($_SESSION ["vStab_kuerzel"] == $result[1][x03_sperruser])) ) { // Du bist der Bearbeiter
-
-         $query = "UPDATE ".$conf_4f_tbl ["nachrichten"]."
-                   SET x02_sperre = \"f\", x03_sperruser = \"\" where 00_lfd = ".$returnValue["00_lfd"];
-         $result = $dbaccess->query_table_iu ($query);
+       $lockConnection = estab_message_connect ($conf_4f_db);
+       try {
+         if (!estab_message_release_lock (
+           $lockConnection,
+           $conf_4f_tbl ["nachrichten"],
+           $returnValue ["00_lfd"],
+           $workflowIdentity ["kuerzel"]
+         )) {
+           throw new RuntimeException ("Message lock release lost its target");
+         }
+       } finally {
+         estab_auth_close ($lockConnection);
        }
   }
 
@@ -558,7 +692,7 @@ if  ((isset ($_SESSION ["vStab_benutzer"])) AND
    $mode = 2;
 }
 
-$formdata = ""; // setze die Formulardaten zurck
+$formdata = array (); // setze die Formulardaten zurueck
 
 /**********************************************************************\
   --- S T A B  s c h r e i b e n ---
@@ -676,7 +810,7 @@ ul#topmenu li.active {
 }";
 
 
-      pre_html ("stabliste","Stab lesen ".$conf_4f ["NameVersion"],$css.$csskatego); // Normaler Seitenaufbau mit Auffrischung
+      pre_html ("stabliste", "Stab lesen ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"], $csskatego); // Normaler Seitenaufbau mit Auffrischung
       echo "<body bgcolor=\"#DCDCFF\">";
       $list = new listen ("Stab_lesen", "");
       $list->createlist ();
@@ -751,7 +885,11 @@ ul#topmenu li.active {
             "a:hover { color:#EE0000; text-decoration:none; background-color:#FFFF99; font-weight:normal; }\n".
             "a:active { color:#0000EE; background-color:#FFFF99; }\n".
             "a:focus { color:#0000EE; background-color:#FFFF99;  }";
-        pre_html ("siliste","Sichterliste ".$conf_4f ["NameVersion"],$css); // Normaler Seitenaufbau mit Auffrischung
+        pre_html (
+          "siliste",
+          "Sichterliste ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"],
+          $css
+        ); // Normaler Seitenaufbau mit Auffrischung
         echo "<body bgcolor=\"#DCDCFF\">";
         $list = new listen ("Stab_sichten", "STSI");
         $list->createlist ();
@@ -833,19 +971,26 @@ if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>  ### FM Aus
   	
     if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>   ### FM - Ausgang  ";  echo "<br>\n";}
 
-    $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
-    $query = "SELECT `x02_sperre`,`x03_sperruser` FROM `".$conf_4f_tbl ["nachrichten"]."` where 00_lfd = ".$returnValue["00_lfd"];
-    $result = $dbaccess->query_table ($query);
+    $lockConnection = estab_message_connect ($conf_4f_db);
+    try {
+      $lockAcquired = estab_message_acquire_outgoing_lock (
+        $lockConnection,
+        $conf_4f_tbl ["nachrichten"],
+        $returnValue ["00_lfd"],
+        $workflowIdentity ["kuerzel"]
+      );
+      $lockedMessage = estab_message_fetch_by_id (
+        $lockConnection,
+        $conf_4f_tbl ["nachrichten"],
+        $returnValue ["00_lfd"]
+      );
+    } finally {
+      estab_auth_close ($lockConnection);
+    }
 
-    if ( ($result [1]['x02_sperre'] == "f") OR // Ist der Satz schon in Bearbeitung (sperre == FALSE)?
-     (($result [1]['x02_sperre'] == "t" ) AND // Satz gesperrt
-      ($_SESSION ["vStab_kuerzel"] == $result[1][x03_sperruser])) ) { // Du bist der Bearbeiter
-
-      // Setze den Eintrag auf " G E S P E R R T "
-      $query = "UPDATE ".$conf_4f_tbl ["nachrichten"]." SET x02_sperre = \"t\", x03_sperruser = \"".$_SESSION ["vStab_kuerzel"]."\" where 00_lfd = ".$returnValue["00_lfd"];
-      $result = $dbaccess->query_table_iu ($query);
-      // Jetzt holen wir uns den kompletten, gesperrten Eintrag
-      $formdata = get_msg_by_lfd ($returnValue["00_lfd"]);
+    if ($lockAcquired && is_array ($lockedMessage)) {
+      // Jetzt holen wir uns den kompletten, gesperrten Eintrag.
+      $formdata = $lockedMessage;
       // Voreinstellungen fuer den Befoerderungsvermerk
       $formdata ["03_zeichen"]  = $_SESSION ["vStab_kuerzel"];
 
@@ -864,14 +1009,23 @@ if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>  ### FM Aus
     		}   			  
       }
     } else {
-      if (( $_SESSION ["vStab_kuerzel"] != $result[1][x03_sperruser] )){
+      $lockOwner = is_array ($lockedMessage)
+        ? (string) ($lockedMessage ["x03_sperruser"] ?? "")
+        : "";
+      if ($_SESSION ["vStab_kuerzel"] !== $lockOwner) {
         // Kruezel sind gleich
-        echo "<big><big><big>Datensatz ist im Zugriff von <b>".$result[1][x03_sperruser]."!</b><br></big></big></big>";
+        echo "<big><big><big>Datensatz ist im Zugriff von <b>".
+             estab_message_html ($lockOwner)."!</b><br></big></big></big>";
         echo "<br><br><br><br><br><br>";
         echo "!!!Achtung!!!<br>";
         echo "Datensatzfreischaltung nur auf Anordnung des Betriebsstellenleiters.<br>";
-        echo"<a href=\"./mainindex.php?reset_record=".$returnValue["00_lfd"]."\">
-             <img src=\"./createbutton.php?icontext=Datensatz freigeben&color=red\" alt=\"Datensatz freigeben\"></a>";
+        echo "<form method=\"post\" action=\"./mainindex.php\" target=\"_self\">";
+        echo estab_csrf_field ();
+        echo "<input type=\"hidden\" name=\"reset_record\" value=\"".
+             estab_auth_html ($returnValue ["00_lfd"])."\">";
+        echo "<button type=\"submit\" style=\"border:0;background:transparent;padding:0\">".
+             "<img src=\"./createbutton.php?icontext=Datensatz%20freigeben&amp;color=red\" ".
+             "alt=\"Datensatz freigeben\"></button></form>";
       }
     }
   }  //  if ( $returnValue["fm"] == "meldung" 
@@ -893,7 +1047,11 @@ if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>  ### FM Aus
            "a:hover { color:#EE0000; text-decoration:none; background-color:#FFFF99; font-weight:bold; }\n".
            "a:active { color:#0000EE; background-color:#FFFF99; font-weight:bold; }\n".
            "a:focus { color:#0000EE; background-color:#FFFF99; font-weight:bold; }";
-    	pre_html ("si2liste","Stab lesen ".$conf_4f ["NameVersion"],$css); // Normaler Seitenaufbau mit Auffrischung
+        pre_html (
+          "si2liste",
+          "Stab lesen ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"],
+          $css
+        ); // Normaler Seitenaufbau mit Auffrischung
     	echo "<body bgcolor=\"#DCDCFF\"\n><!-- 2. Sichtung -->\n";
     	$list = new listen ("FMADMIN", "");
     	$list->createlist ();
@@ -910,7 +1068,11 @@ if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>  ### FM Aus
            "a:hover { color:#EE0000; text-decoration:none; background-color:#FFFF99; font-weight:bold; }\n".
            "a:active { color:#0000EE; background-color:#FFFF99; font-weight:bold; }\n".
            "a:focus { color:#0000EE; background-color:#FFFF99; font-weight:bold; }";
-    	pre_html ("si2liste","Stab lesen ".$conf_4f ["NameVersion"],$css); // Normaler Seitenaufbau mit Auffrischung
+        pre_html (
+          "si2liste",
+          "Stab lesen ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"],
+          $css
+        ); // Normaler Seitenaufbau mit Auffrischung
     	echo "<body bgcolor=\"#DCDCFF\">";
     	$list = new listen ("SIADMIN", "");
     	$list->createlist ();
@@ -946,26 +1108,38 @@ Nachricht als Sichtung anzeigen
   if (isset ($returnValue["m2_abmelden_x"])) {
     if ( debug == true ){ echo "### 907 m2_abmelden_x ";  echo "<br>\n";}
 
+     $logoutData = array (
+       "benutzer" => (string) ($_SESSION ["vStab_benutzer"] ?? ""),
+       "kuerzel" => (string) ($_SESSION ["vStab_kuerzel"] ?? ""),
+       "funktion" => (string) ($_SESSION ["vStab_funktion"] ?? ""),
+       "rolle" => (string) ($_SESSION ["vStab_rolle"] ?? ""),
+       "sid" => session_id (),
+       "ip" => estab_auth_remote_ip ($_SERVER),
+     );
+
+     // Die lokale Authentisierung endet unabhängig von nachfolgenden DB-Fehlern.
+     estab_auth_destroy_session ();
      include_once ("./logoff.php");
 
-     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
-     $query = "UPDATE ".$conf_4f_tbl ["benutzer"]." SET
-                   `aktiv` = \"0\",
-                   `sid`   = \"\",
-                   `ip`    = \"\"
-               WHERE `kuerzel` = \"".$_SESSION["vStab_kuerzel"]."\";";
-     $result = $dbaccess->query_table_iu ($query);
-     protokolleintrag ("Abmelden", $_SESSION["vStab_benutzer"].";".$_SESSION["vStab_kuerzel"].";".$_SESSION["vStab_funktion"].";".$_SESSION["vStab_rolle"].";".session_id().";".$_SERVER["REMOTE_ADDR"]);
-
-     // Session beenden - SESSION zurcksetzen -
-     $_SESSION = array();
-     if (isset($_COOKIE[session_name()])) {
-       setcookie(session_name(), '', time()-42000, '/');
+     $logoutConnection = null;
+     try {
+       if ($logoutData ["kuerzel"] !== "") {
+         $logoutConnection = estab_auth_connect ($conf_4f_db);
+         estab_auth_mark_logged_out ($logoutConnection, $conf_4f_tbl ["benutzer"], $logoutData ["kuerzel"]);
+         estab_auth_close ($logoutConnection);
+         $logoutConnection = null;
+       }
+       protokolleintrag ("Abmelden", $logoutData ["benutzer"].";".$logoutData ["kuerzel"].";".$logoutData ["funktion"].";".$logoutData ["rolle"].";".$logoutData ["sid"].";".$logoutData ["ip"]);
+     } catch (Throwable $exception) {
+       error_log ("eStab logout database update failed: ".$exception->getMessage ());
+     } finally {
+       if ($logoutConnection instanceof mysqli) {
+         estab_auth_close ($logoutConnection);
+       }
      }
-     session_destroy ();
 
-     $_SESSION ["menue"] = "WELCOME";
      resetframeset ($conf_urlroot.$conf_web ["pre_path"]);
+     exit;
 
   } // isset ($returnValue["m2_abmelden_x"]
 
@@ -982,7 +1156,7 @@ Nachricht als Sichtung anzeigen
     echo "</head>\n";
 
     echo "<body bgcolor=\"#DCDCFF\">";
-    echo "<form action=\"".$conf_4f ["MainURL"]."\" method=\"GET\" target=\"mainframe\">\n";
+    echo "<form action=\"".estab_auth_html ($conf_4f ["MainURL"])."\" method=\"POST\" target=\"mainframe\">\n";
     echo "<!-- Formularelemente und andere Elemente innerhalb des Formulars -->\n";
     echo "<table border=\"1\" cellspacing=\"1\" cellpeding=\"1\">\n";
     echo "<tbody>";
@@ -996,33 +1170,37 @@ Nachricht als Sichtung anzeigen
       case "WELCOME" : // nicht angemeldet ==> nur login Button
                echo "<td>\n";
                foreach ( $conf_4f ['NameVersion'] as $titel ) {
+                 // NameVersion is trusted application markup assembled only
+                 // from the versioned configuration, not request data.
                  echo $titel;
                }
                echo "</td>\n";
                echo "</tr>\n<tr>\n";
       break;
       case "LOGIN" : // Anmeldeformular
-              echo "<td>\nName, Vorname:</td>\n<td>\n<input style=\"font-size:20px; font-weight:900;\" type=\"text\" size=\"32\" value=\"".$menuename."\" maxlength=\"32\" name=\"benutzer\"></td>\n";
+              echo "<td>\nName, Vorname:</td>\n<td>\n<input style=\"font-size:20px; font-weight:900;\" type=\"text\" size=\"32\" value=\"".estab_auth_html ($menuename)."\" maxlength=\"50\" name=\"benutzer\" autocomplete=\"name\"></td>\n";
               echo "</tr>\n<tr>\n";
-              echo "<td>\nKürzel:</td>\n<td>\n<input style=\"font-size:20px; font-weight:900;\" type=\"text\" size=\"3\" maxlength=\"3\" value=\"".$menuekuerzel."\" name=\"kuerzel\"></td>\n";
+              echo "<td>\nKürzel:</td>\n<td>\n<input style=\"font-size:20px; font-weight:900;\" type=\"text\" size=\"6\" maxlength=\"6\" value=\"".estab_auth_html ($menuekuerzel)."\" name=\"kuerzel\" autocomplete=\"username\"></td>\n";
               echo "</tr>\n<tr>\n";
               echo "<td>\nFunktion:</td>\n<td>\n<select style=\"font-size:20px; font-weight:900;\" name=\"funktion\">\n";
               for ($i=1; $i <= count ($conf_empf); $i++ ){
                 if ($menuefunktion == $conf_empf[$i]["fkt"]){ $sel = "selected"; }else{ $sel = ""; }
-                echo "<option ".$sel.">".$conf_empf[$i]["fkt"]."</option>\n";
+                $funktion = estab_auth_html ($conf_empf[$i]["fkt"]);
+                echo "<option value=\"".$funktion."\" ".$sel.">".$funktion."</option>\n";
               }
               echo "</select>\n";
               echo "</td>\n";
               echo "</tr>\n<tr>\n";
 
               echo "<td>Kennwort:</td>";
-              echo "<td><input name=\"kennwort1\" type=\"password\" size=\"32\" maxlength=\"32\"></td>\n";
+              $passwordAutocomplete = $doppelkennwort ? "new-password" : "current-password";
+              echo "<td><input name=\"kennwort1\" type=\"password\" size=\"32\" maxlength=\"255\" autocomplete=\"".$passwordAutocomplete."\"></td>\n";
               if ( $doppelkennwort ) {
                 echo "<input type=\"hidden\" name=\"2teskennwort\" value=\"Yes\">\n";
                 echo "</tr>\n";
                 echo "<tr>\n";
                 echo "<td>Kennwort:</td>" ;
-                echo "<td><input name=\"kennwort2\" type=\"password\" size=\"32\" maxlength=\"32\"></td>\n";
+                echo "<td><input name=\"kennwort2\" type=\"password\" size=\"32\" maxlength=\"255\" autocomplete=\"new-password\"></td>\n";
               }
               echo "<tr>";
                           echo "<td align=\"center\" bgcolor=$color_button_ok><input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/ok.gif\"></td>";

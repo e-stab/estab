@@ -26,7 +26,7 @@ include ("menue.inc.php");
     echo "<html>\n";
     echo "<head>\n";
     echo "<link REL=\"SHORTCUT ICON\" HREF=\"favicon.ico\" />";
-    echo "<meta content=\"text/html; charset=ISO-8859-1\" http-equiv=\"content-type\">\n";
+    echo "<meta content=\"text/html; charset=UTF-8\" http-equiv=\"content-type\">\n";
     echo "<title>".$conf_menue ["titel"]."</title>\n";
     echo "</head>\n";
     echo "<body  style=\"background-color: ".$conf_menue["background_color"].";\">\n";

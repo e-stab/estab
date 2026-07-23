@@ -1,6 +1,7 @@
 <?php
 
-define ("debug", false);
+if (!defined ("debug")) { define ("debug", false); }
+if (ob_get_level () === 0) { ob_start (); }
 /******************************************************************************\
 technisches Betriebsbuch
 
@@ -42,6 +43,10 @@ class tbb_liste {
 
 \*****************************************************************************/
   // Klassenkonstruktor
+  function __construct (){
+    $this->tbb_liste ();
+  }
+
   function tbb_liste (){
     $this->tbb_tableexist ();
       if (debug == true){    echo "tbb_liste 1 ->"; var_dump ($this->tbb_titel_tbl); echo "<br>";}
@@ -67,6 +72,9 @@ class tbb_liste {
 
   var $db_sqlquery;
   var $db_result;
+  var $sqlquery;
+  var $result = "";
+  var $resultcount = 0;
 
 
 /*****************************************************************************\
@@ -97,30 +105,13 @@ class tbb_liste {
 /*****************************************************************************\
 
 \*****************************************************************************/
-  function query_table_iu ($query){
-    $this->sqlquery = $query ;
-    $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
-       or die ("[query_table_iu] Konnte keine Verbindung zur Datenbank herstellen");
-    mysql_query('SET NAMES utf8');
-    $db_check = mysql_select_db ($this->db_name)
-       or die ("[query_table_iu] Auswahl der Datenbank fehlgeschlagen");
-
-    $query_result = mysql_query ($this->sqlquery, $db) or
-       die("[query_table_iu] ".mysql_error()." ".mysql_errno());
-
-    mysql_close ($db);
-  } // function query_table_iu
-
-/*****************************************************************************\
-
-\*****************************************************************************/
   function query_table ($query){
-    $this->result = "";
+    $this->result = array ();
     $this->sqlquery = $query ;
 
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[query_table] Konnte keine Verbindung zur Datenbank herstellen");
-    mysql_query('SET NAMES utf8');
+    mysql_query('SET NAMES utf8mb4');
     $db_check = mysql_select_db ($this->db_name)
        or die ("[query_table] Auswahl der Datenbank fehlgeschlagen");
 
@@ -134,7 +125,7 @@ class tbb_liste {
     }
     mysql_free_result($query_result);
     mysql_close ($db);
-    return ($this->result);
+    return ($this->resultcount > 0 ? $this->result : "");
   } // function read_table
 
 
@@ -142,26 +133,15 @@ class tbb_liste {
 
 \*****************************************************************************/
   function speichen_tbbtitel ($daten){
-
-    if ( $tbb_titel_gesetzt ) {
-      $this->create_tbbtitel_tbl();
-    }
-if (debug == true){ echo "D A T E N  W E R D E N  G E S P E I C H E R N<br>";}
-
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
-    $this->set_db_para ($conf_4f_db  ["server"],
-                        $conf_4f_db  ["datenbank"],
-                        $conf_tbl    ["tbb"],
-                        $conf_4f_db  ["user"],
-                        $conf_4f_db  ["password"] );
-
-    $query = "INSERT into `".$conf_4f_tbl ["prefix"]."tbbtitel` SET
-                      `einsatz` = \"".$daten["einsatz"]."\",
-                      `ort`     = \"".$daten["ort"]."\" ";
-
-    $result = $this->query_table_iu ($query);
-
+    $validation = estab_logbook_validate_title (is_array ($daten) ? $daten : array ());
+    if (!$validation ["valid"]) {
+      throw new InvalidArgumentException ("Ungültige Einsatzdaten");
+    }
+    $table = $conf_4f_tbl ["prefix"]."tbbtitel";
+    estab_logbook_create_title_table ($conf_4f_db, $table);
+    estab_logbook_insert_title ($conf_4f_db, $table, $validation ["data"]);
   }
 
 
@@ -171,28 +151,10 @@ if (debug == true){ echo "D A T E N  W E R D E N  G E S P E I C H E R N<br>";}
   function create_tbbtitel_tbl(){
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
-    $this->set_db_para ($conf_4f_db  ["server"],
-                               $conf_4f_db  ["datenbank"],
-                               $conf_tbl    ["tbb"],
-                               $conf_4f_db  ["user"],
-                               $conf_4f_db  ["password"] );
-    $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
-       or die ("[query_table] Konnte keine Verbindung zur Datenbank herstellen");
-    mysql_query('SET NAMES utf8');
-    $db_check = mysql_select_db ($this->db_name)
-       or die ("[query_table] Auswahl der Datenbank fehlgeschlagen");
-
-    $query = "CREATE TABLE IF NOT EXISTS `".$conf_4f_tbl ["prefix"]."tbbtitel` (
-            `lfd-nr` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-            `einsatz` varchar(255) NOT NULL,
-            `ort` varchar(255) NOT NULL,
-            PRIMARY KEY (`lfd-nr`)
-          ) ENGINE=MyISAM AUTO_INCREMENT=1 ;";
-
-    $result = mysql_query($query, $db);
-    if (!$result) {
-       die('Ungueltige Abfrage: ' . mysql_error());
-    }
+    estab_logbook_create_title_table (
+      $conf_4f_db,
+      $conf_4f_tbl ["prefix"]."tbbtitel"
+    );
   }
 
 
@@ -202,27 +164,10 @@ if (debug == true){ echo "D A T E N  W E R D E N  G E S P E I C H E R N<br>";}
   function tbb_tableexist () {
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
-    $this->set_db_para ($conf_4f_db  ["server"],
-                        $conf_4f_db  ["datenbank"],
-                        $conf_tbl    ["tbb"],
-                        $conf_4f_db  ["user"],
-                        $conf_4f_db  ["password"] );
-    $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
-       or die ("[query_table] Konnte keine Verbindung zur Datenbank herstellen");
-    mysql_query('SET NAMES utf8');
-    $db_check = mysql_select_db ($this->db_name)
-       or die ("[query_table] Auswahl der Datenbank fehlgeschlagen");
- //    $result = mysql_list_tables($conf_4f_db ["datenbank"]); nach "mysql_list_tables is depreciated" => mysql_query"SHOW TABLES FROM " . $conf_4f_db["datenbank"])
-    $result = mysql_query("SHOW TABLES FROM " . $conf_4f_db["datenbank"]);
-    $db_errno  = mysql_errno ();
-    $db_errtxt = mysql_error ();
-    if ($result) {
-      $eq = false;
-      while ( ($row = mysql_fetch_row($result)) and ($eq == false)) {
-         $eq = ( $conf_4f_tbl ["prefix"]."tbbtitel" == $row[0] );
-      }
-    }
-    mysql_free_result($result);
+    $eq = estab_logbook_table_exists (
+      $conf_4f_db,
+      $conf_4f_tbl ["prefix"]."tbbtitel"
+    );
     $this->tbb_titel_tbl = $eq ;
 if (debug == true){ echo "tbb_tableexist==>"; var_dump($this->tbb_titel_tbl); echo "<br>"; }
     return $eq;
@@ -242,7 +187,8 @@ if (debug == true){ echo "tbb_tableexist==>"; var_dump($this->tbb_titel_tbl); ec
                         $conf_4f_db  ["user"],
                         $conf_4f_db  ["password"] );
 
-    $query = "SELECT * FROM ".$conf_4f_tbl ["prefix"]."tbbtitel WHERE 1 ";
+    $query = "SELECT * FROM ".estab_auth_table ($conf_4f_tbl ["prefix"]."tbbtitel")
+      ." ORDER BY `lfd-nr` ASC LIMIT 1";
     $result = $this->query_table ($query);
 
       if (debug == true){echo "read_out_tbbtitel--result="; var_dump($result); echo "<br>";}
@@ -266,7 +212,7 @@ if (debug == true){ echo "tbb_tableexist==>"; var_dump($this->tbb_titel_tbl); ec
     echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
     echo "<html>\n";
     echo "<head>\n";
-    echo "  <meta content=\"text/html; charset=ISO-8859-1\" http-equiv=\"content-type\">\n";
+    echo "  <meta content=\"text/html; charset=UTF-8\" http-equiv=\"content-type\">\n";
     if (!$this->tbb_authorized) {
       echo "<meta http-equiv=\"refresh\" content=\"10\">\n";
     }
@@ -321,7 +267,8 @@ if (debug == true){ echo "tbb_tableexist==>"; var_dump($this->tbb_titel_tbl); ec
 \*****************************************************************************/
   function tbb_menue (){
     include ("../4fcfg/config.inc.php");
-    echo "<form action=\"".$_SERVER["PHP_SELF"]."\" method=\"GET\" >\n";
+    $action = estab_auth_html (estab_public_root ()."fmtbb/tbb.php");
+    echo "<form action=\"".$action."\" method=\"GET\" >\n";
     echo "<!-- Formularelemente und andere Elemente innerhalb des Formulars -->\n";
     echo "<!-- tbb_menue -->\n";
     echo "<table border=\"1\" cellspacing=\"2\" cellpeding=\"3\">\n";
@@ -347,7 +294,8 @@ if (debug == true){ echo "tbb_tableexist==>"; var_dump($this->tbb_titel_tbl); ec
                                $conf_tbl    ["tbb"],
                                $conf_4f_db  ["user"],
                                $conf_4f_db  ["password"] );
-    $query = "SELECT * FROM ".$conf_tbl ["tbb"]." WHERE 1 order by `tbb_lfd-nr` DESC ;";
+    $query = "SELECT * FROM ".estab_auth_table ($conf_tbl ["tbb"])
+      ." ORDER BY `tbb_lfd-nr` DESC";
   if (debug == true){echo "tbb_getdate-->query=".$query; echo "<br>";}
     $result = $this->query_table ($query);
   if (debug == true){echo "tbb_getdate-->"; var_dump($result);echo "<br>";}
@@ -358,30 +306,23 @@ if (debug == true){ echo "tbb_tableexist==>"; var_dump($this->tbb_titel_tbl); ec
 
 \*****************************************************************************/
   function speichen_tbb_eintrag ($daten){
-
-    if ( $tbb_titel_gesetzt ) {
-      $this->create_tbbtitel_tbl();
-    }
-    if (debug == true){     echo "D A T E N  W E R D E N  G E S P E I C H E R N<br>";}
-
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
-    $this->set_db_para ($conf_4f_db  ["server"],
-                        $conf_4f_db  ["datenbank"],
-                        $conf_tbl    ["tbb"],
-                        $conf_4f_db  ["user"],
-                        $conf_4f_db  ["password"] );
-
-    $query = "INSERT into `".$conf_tbl ["tbb"]."` SET
-                      `tbb_time`   = \"".$this->convtodatetime ( date ("dm"),   date ("Hi") )."\",
-                      `tbb_aktion` = \"".$daten["event"]."\",
-                      `tbb_bemerk` = \"".$daten["comment"]."\",
-                      `tbb_funktion` = \"".$this->tbb_funktion."\",
-                      `tbb_kuerzel`  = \"".$this->tbb_kuerzel."\",
-                      `tbb_benutzer` = \"".$this->tbb_benutzer."\" ";
-
-    $result = $this->query_table_iu ($query);
-
+    $validation = estab_logbook_validate_entry (is_array ($daten) ? $daten : array ());
+    if (!$validation ["valid"]) {
+      throw new InvalidArgumentException ("Ungültiger TBB-Eintrag");
+    }
+    estab_logbook_insert_entry (
+      $conf_4f_db,
+      $conf_tbl ["tbb"],
+      "tbb",
+      $validation ["data"],
+      array (
+        "funktion" => (string) $this->tbb_funktion,
+        "kuerzel" => (string) $this->tbb_kuerzel,
+        "benutzer" => (string) $this->tbb_benutzer,
+      )
+    );
   }
 
 /*****************************************************************************\
@@ -392,6 +333,7 @@ var $task ;
 
   function tbb_eintragsmenue ($data) {
     include ("../4fcfg/config.inc.php");
+    $action = estab_auth_html (estab_public_root ()."fmtbb/tbb.php");
 
     echo "<big><big>Eintrag ins \n";
     echo "<span style=\"color: rgb(255, 0, 0); font-weight: bold;\">T</span>\n";
@@ -402,16 +344,18 @@ var $task ;
     echo "uch<br>\n";
     echo "<br>\n";
     echo "</big></big>\n";
-    echo "<form method=\"GET\" action=\"".$_SERVER["PHP_SELF"]."\" name=\"tbbeintrag\">\n";
+    echo "<form method=\"POST\" action=\"".$action."\" name=\"tbbeintrag\">\n";
+    echo estab_csrf_field ()."\n";
+    echo "<input type=\"hidden\" name=\"logbook_action\" value=\"save_entry\">\n";
     echo "<table style=\"text-align: left;\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\">\n";
     echo "<tbody>\n";
     echo "<tr>\n";
     echo "<td><b>Darstellung der Ereignisse</b><br>\n";
-    echo "<textarea style=\"font-size:18px; font-weight:900;\" tabindex=\"1\" cols=\"80\" rows=\"4\" name=\"event\"></textarea></td>\n";
+    echo "<textarea style=\"font-size:18px; font-weight:900;\" tabindex=\"1\" cols=\"80\" rows=\"4\" maxlength=\"10000\" required name=\"event\"></textarea></td>\n";
     echo "</tr>\n";
     echo "<tr>";
     echo "<td><b>Bemerkung</b><br>";
-    echo "<textarea style=\"font-size:18px; font-weight:900;\" tabindex=\"2\" cols=\"80\" rows=\"4\" name=\"comment\"></textarea></td>\n";
+    echo "<textarea style=\"font-size:18px; font-weight:900;\" tabindex=\"2\" cols=\"80\" rows=\"4\" maxlength=\"10000\" name=\"comment\"></textarea></td>\n";
     echo "</tr>\n";
     echo "</tbody>\n";
     echo "</table>\n";
@@ -420,13 +364,10 @@ var $task ;
     echo "<tbody>\n";
     echo "<tr>\n";
     echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"absenden\" alt=\"absenden\" tabindex=\"3\" src=\"".$conf_design_path."/ok.gif\"></td>\n";
-    echo "<td bgcolor=$color_button_nok><input type=\"image\" name=\"abbrechen\" alt=\"abbrechen\" tabindex=\"4\" src=\"".$conf_design_path."/cancel.gif\"></td>\n";
+    echo "<td bgcolor=$color_button_nok><a href=\"".$action."\"><img alt=\"abbrechen\" src=\"".$conf_design_path."/cancel.gif\"></a></td>\n";
     echo "</tr>\n";
     echo "</tbody>\n";
     echo "</table>\n";
-
-    echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
-    echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
 
     echo "</form>\n";
   }
@@ -439,11 +380,11 @@ var $task ;
     echo "<tbody>\n";
     echo "<tr>\n";
       echo "<td>Einsatz</td>";
-      echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\">".$this->tbb_art."</td>" ;
+      echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\">".estab_auth_html ($this->tbb_art)."</td>" ;
     echo "</tr>";
     echo "<tr>\n";
       echo "<td>Ort</td>";
-      echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\">".$this->tbb_ort."</td>" ;
+      echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\">".estab_auth_html ($this->tbb_ort)."</td>" ;
     echo "</tr>";
 /*   echo "<tr>\n";
       echo "<td>Zeit</td>";
@@ -472,21 +413,24 @@ var $task ;
 \*****************************************************************************/
   function inputeinsatzstammdaten (){
   include ("../4fcfg/config.inc.php");
+    $action = estab_auth_html (estab_public_root ()."fmtbb/tbb.php");
     echo "<big><big><big><b>Einsatzdaten erfassen</b></big></big></big>\n";
     echo "<!-- einsatzdatenmenue -->";
-    echo "<form method=\"GET\" action=\"".$_SERVER ["PHP_SELF"]."\" name=\"Einsatzdaten\">\n";
+    echo "<form method=\"POST\" action=\"".$action."\" name=\"Einsatzdaten\">\n";
+    echo estab_csrf_field ()."\n";
+    echo "<input type=\"hidden\" name=\"logbook_action\" value=\"save_title\">\n";
     echo "<table style=\"text-align: left; width: 603px; height: 64px;\" border=\"1\" cellpadding=\"2\" cellspacing=\"2\">";
     echo "<tbody>";
     echo "<tr>";
     echo "<td style=\"width: 100px;\">Einsatz</td>";
     echo "<td style=\"width: 506px;\">";
-    echo "<input style=\"font-size:18px; font-weight:900;\" value=\"\" maxlength=\"255\" size=\"60\" name=\"einsatz\">";
+    echo "<input style=\"font-size:18px; font-weight:900;\" value=\"\" maxlength=\"255\" size=\"60\" required name=\"einsatz\">";
     echo "</td>";
     echo "</tr>";
     echo "<tr>";
     echo "<td style=\"width: 100px;\">Ort</td>";
     echo "<td style=\"width: 506px;\">";
-    echo "<input style=\"font-size:18px; font-weight:900;\" value=\"\" maxlength=\"255\" size=\"60\" name=\"ort\"></td>";
+    echo "<input style=\"font-size:18px; font-weight:900;\" value=\"\" maxlength=\"255\" size=\"60\" required name=\"ort\"></td>";
     echo "</tr>";
     echo "</tbody>";
     echo "</table>";
@@ -495,12 +439,11 @@ var $task ;
       echo "<tbody>\n";
       echo "<tr>\n";
       echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"absenden\" alt=\"absenden\" tabindex=\"3\" src=\"".$conf_design_path."/ok.gif\"></td>\n";
-      echo "<td bgcolor=$color_button_nok><input type=\"image\" name=\"abbrechen\" alt=\"abbrechen\" tabindex=\"4\" src=\"".$conf_design_path."/cancel.gif\"></td>\n";
+      echo "<td bgcolor=$color_button_nok><a href=\"".$action."\"><img alt=\"abbrechen\" src=\"".$conf_design_path."/cancel.gif\"></a></td>\n";
       echo "</tr>\n";
       echo "</tbody>\n";
       echo "</table>\n";
     }
-    echo "<input type=\"hidden\" name=\"Einsatzdaten\" value=\"erfassen\">\n";
     echo "</form>";
   }
 
@@ -508,7 +451,6 @@ var $task ;
 
 \*****************************************************************************/
   function printlist ($daten){
-    include ("../4fach/tools.php");
     // Schreibe die Liste
     if ( $daten != "" ) {
 
@@ -522,14 +464,14 @@ var $task ;
 
         echo "<tr>";
         echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\">\n";
-        echo $line ["tbb_lfd-nr"];
+        echo (int) $line ["tbb_lfd-nr"];
         echo "</td>\n";
         echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\">";
         echo $this->konv_datetime_taktime ($line ["tbb_time"]);
         echo "</td>\n";
         if ( $line ["tbb_aktion"] != "" ) {
           echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\" >";
-          echo $line ["tbb_aktion"];
+          echo estab_auth_html ($line ["tbb_aktion"]);
         } else {
           echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\" >";
           echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
@@ -537,7 +479,7 @@ var $task ;
         echo "</td>\n";
         if ( $line ["tbb_bemerk"] != "" ) {
           echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\" >";
-          echo $line ["tbb_bemerk"];
+          echo estab_auth_html ($line ["tbb_bemerk"]);
         } else {
           echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\" >";
           echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
@@ -545,7 +487,7 @@ var $task ;
 
         if ( $line ["tbb_kuerzel"] != "" ) {
           echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\" >";
-          echo $line ["tbb_kuerzel"];
+          echo estab_auth_html ($line ["tbb_kuerzel"]);
         } else {
           echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\" >";
           echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
@@ -558,137 +500,115 @@ var $task ;
       echo "</tbody>\n";
       echo "</table>\n";
     } else {
-      $this->inputeinsatzstammdaten ();
-
+      echo "<p>Noch keine TBB-Einträge vorhanden.</p>\n";
     }
   }
 
 } // class tbb_liste
 /**************************************************************************************************************************/
 
-session_start();
-
-if (debug == true){ echo ">strtoupper( _SESSION[ \"vStab_rolle\"]) ->"; var_dump (strtoupper( $_SESSION["vStab_rolle"])); echo "<br>";}
-if (debug == true){ echo ">strtoupper( _SESSION[\"ROLLE\"]) ->"; var_dump (strtoupper( $_SESSION["ROLLE"])); echo "<br>";}
-
-    if ( 
-        ( 
-          (isset($_SESSION["vStab_rolle"]) ) AND (strtoupper( $_SESSION["vStab_rolle"]) == strtoupper("FERNMELDER"))
-        ) or
-
-        ( 
-	      (isset($_SESSION["ROLLE"])) AND (strtoupper( $_SESSION["ROLLE"]) == strtoupper("FERNMELDER"))
-        ) or
-        ( 
-		  (isset($_SESSION["vStab_funktion"])) AND (strtoupper( $_SESSION["vStab_funktion"]) == strtoupper("S6"))
-        )
-       )
-	{
-      $berechtigt = true;
-    } else {
-      $berechtigt = false ;
-    }
-	
-	$readonly = (isset($_SESSION["vStab_funktion"])) && (strtoupper( $_SESSION["vStab_funktion"]) == strtoupper("S6"));
-
-if ($readonly or $berechtigt) {		
-	
-    if (debug == true){    echo ">berechtigt ->"; var_dump ($berechtigt); echo "<br>";}
-
-    $tbbobj = new tbb_liste ;
-
-    $tbbobj->tbb_authorized = $berechtigt;
-
-    if (isset($_SESSION ["vStab_funktion"])) { $tbbobj->tbb_funktion = $_SESSION ["vStab_funktion"] ;} 
-    if (isset($_SESSION ["vStab_kuerzel"]))  { $tbbobj->tbb_kuerzel  = $_SESSION ["vStab_kuerzel"] ; }
-    if (isset($_SESSION ["vStab_benutzer"])) { $tbbobj->tbb_benutzer = $_SESSION ["vStab_benutzer"] ;}
-
-
-   if (debug == true){    echo ">tbb_authorized ->"; var_dump ($tbbobj->tbb_authorized); echo "<br>";}
-
-   if ( !(isset ($_GET["absenden_x"] ))) { 
-
-    $tbbobj->tbb_pre_html();
-
-    $tbbobj->tbb_ueberschrift ();
-      // Einsatzdaten vorhanden !!!
-  }
-
-  if ( !$tbbobj->tbb_titel_gesetzt ){
-
-    if ( (isset ($_GET["absenden_x"] )) and
-         ($_GET["Einsatzdaten"] == "erfassen") ){
-
-      if (debug == true){ echo "Daten können gespeichert werden !!!!<br>";}
-      $tbbobj->speichen_tbbtitel ($_GET);
-      header("Location: ".$_SERVER["PHP_SELF"]);
-
-    } else {
-        if (debug==true){      echo "Titel ist nicht gesetzt !!!!<br>";}
-      $tbbobj->create_tbbtitel_tbl();
-      $tbbobj->inputeinsatzstammdaten ();
-    }
-
-  } else {
-//    echo "<big>Wir sind im zweiten Teil !!!</big><br>";
-
-
-    if (( $tbbobj->tbb_titel_gesetzt ) and
-        ( !(isset ($_GET["absenden_x"] ) ) ) ) {
-      $tbbobj->tbb_einsatzdaten ();
-    }
-
-    if ( (isset ($_GET["absenden_x"] )) and
-         ($_GET["Einsatzdaten"] == "erfassen") ){
-        if (debug == true){ echo "M A R K E  0 0 1<br>";}
-      $tbbobj->speichen_tbbtitel ($_GET);
-      header("Location: ".$_SERVER["PHP_SELF"]);
-    }
-
-
-    if ((isset ($_GET["tbb_menue"])) and ($_GET["tbb_menue"] == "eintrag")) {
-      if (debug == true){ echo "M A R K E  0 0 2<br>";}
-      $tbbobj->tbb_eintragsmenue ("");
-    }
-
-    if ( isset ($_GET["absenden_x"]) ){
-        if (debug == true){ echo "M A R K E  0 0 3<br>";}
-      $tbbobj->speichen_tbb_eintrag ($_GET);
-      header("Location: ".$_SERVER["PHP_SELF"]);
-    }
-
-    if (isset ( $_GET ["tbb_eintrag_x"] ) ) {
-        if (debug == true){ echo "M A R K E  0 0 4<br>";}
-      $tbbobj->tbb_eintragsmenue ("");
-    } else {
-        if (debug == true){ echo "M A R K E  0 0 5<br>";}
-      if ($tbbobj->tbb_authorized){
-        $tbbobj->tbb_menue ();
-      }
-    }
-    $daten = $tbbobj->tbb_getdate ();
-    if (  $daten != "" ){
-        if (debug == true){ echo "M A R K E  0 0 6<br>";}
-      // Hole Daten aus der Datenbank
-      $tbbobj->printlist ($daten);
-    } else {
-
-    }
-  }
-
-    if (debug == true){
-      echo "<br><br>\n";
-      echo "GET     ="; var_dump ($_GET);    echo "#<br><br>\n";
-      echo "POST    ="; var_dump ($_POST);   echo "#<br><br>\n";
-      echo "COOKIE  ="; var_dump ($_COOKIE); echo "#<br><br>\n";
-      // echo "SERVER  ="; var_dump ($_SERVER); echo "#<br><br>\n";
-      echo "SESSION ="; var_dump ($_SESSION); echo "#<br><br>\n";
-      echo "FILES   ="; var_dump ($_FILES); echo "#<br><br>\n";
-    }
-
-  if ( !(isset ($_GET["absenden_x"] ))) {  $tbbobj->tbb_post_html(); }
-
-} else {
-  echo "<big><big><big><b>Keine Berechtigung</b></big></big></big>";
+if (session_status () !== PHP_SESSION_ACTIVE) {
+  session_start ();
 }
+require_once __DIR__ . "/../app/logbook.php";
+estab_auth_require_session ($_SESSION);
+
+$identity = estab_auth_session_identity ($_SESSION);
+if (!is_array ($identity)) {
+  estab_logbook_abort (403, "Anmeldung erforderlich.");
+}
+
+$berechtigt = strcasecmp ($identity ["funktion"], "A/W") === 0
+  && strcasecmp ($identity ["rolle"], "Fernmelder") === 0;
+
+$requestMethod = isset ($_SERVER ["REQUEST_METHOD"]) && is_string ($_SERVER ["REQUEST_METHOD"])
+  ? strtoupper ($_SERVER ["REQUEST_METHOD"])
+  : "GET";
+if (!in_array ($requestMethod, array ("GET", "POST"), true)) {
+  header ("Allow: GET, POST");
+  estab_logbook_abort (405, "Nicht unterstützte Anfragemethode.");
+}
+
+try {
+  $tbbobj = new tbb_liste;
+} catch (Throwable $exception) {
+  error_log ("TBB initialization failed: ".$exception->getMessage ());
+  estab_logbook_abort (503, "Das technische Betriebsbuch ist vorübergehend nicht verfügbar.");
+}
+$tbbobj->tbb_authorized = $berechtigt;
+$tbbobj->tbb_funktion = $identity ["funktion"];
+$tbbobj->tbb_kuerzel = $identity ["kuerzel"];
+$tbbobj->tbb_benutzer = $identity ["benutzer"];
+
+if ($requestMethod === "POST") {
+  if (!$berechtigt) {
+    estab_logbook_abort (403, "Nur die Fernmeldefunktion A/W darf TBB-Einträge schreiben.");
+  }
+  estab_logbook_require_csrf ($_SERVER, $_POST);
+  $action = isset ($_POST ["logbook_action"]) && is_string ($_POST ["logbook_action"])
+    ? $_POST ["logbook_action"]
+    : "";
+
+  try {
+    if ($action === "save_title") {
+      $validation = estab_logbook_validate_title ($_POST);
+      if (!$validation ["valid"]) {
+        estab_logbook_abort (422, "Einsatz und Ort sind erforderlich und auf 255 Zeichen begrenzt.");
+      }
+      $tbbobj->speichen_tbbtitel ($validation ["data"]);
+    } elseif ($action === "save_entry") {
+      if (!$tbbobj->tbb_titel_gesetzt) {
+        estab_logbook_abort (409, "Vor dem ersten TBB-Eintrag müssen Einsatzdaten erfasst werden.");
+      }
+      $validation = estab_logbook_validate_entry ($_POST);
+      if (!$validation ["valid"]) {
+        estab_logbook_abort (422, "Der TBB-Eintrag ist leer oder überschreitet 10000 Zeichen.");
+      }
+      $tbbobj->speichen_tbb_eintrag ($validation ["data"]);
+    } else {
+      estab_logbook_abort (400, "Unbekannte TBB-Aktion.");
+    }
+  } catch (Throwable $exception) {
+    error_log ("TBB write failed: ".$exception->getMessage ());
+    estab_logbook_abort (500, "Der TBB-Eintrag konnte nicht gespeichert werden.");
+  }
+
+  estab_logbook_redirect (estab_public_root ()."fmtbb/tbb.php");
+}
+
+if (!$tbbobj->tbb_titel_gesetzt) {
+  try {
+    $tbbobj->create_tbbtitel_tbl ();
+  } catch (Throwable $exception) {
+    error_log ("TBB title table creation failed: ".$exception->getMessage ());
+    estab_logbook_abort (500, "Das technische Betriebsbuch konnte nicht vorbereitet werden.");
+  }
+}
+
+$tbbobj->tbb_pre_html ();
+$tbbobj->tbb_ueberschrift ();
+
+if (!$tbbobj->tbb_titel_gesetzt) {
+  if ($berechtigt) {
+    $tbbobj->inputeinsatzstammdaten ();
+  } else {
+    echo "<p>Die Einsatzdaten wurden noch nicht durch A/W erfasst.</p>\n";
+  }
+} else {
+  $tbbobj->tbb_einsatzdaten ();
+  $entryFormRequested = isset ($_GET ["tbb_eintrag_x"])
+    || (
+      isset ($_GET ["tbb_menue"])
+      && is_string ($_GET ["tbb_menue"])
+      && $_GET ["tbb_menue"] === "eintrag"
+    );
+  if ($berechtigt && $entryFormRequested) {
+    $tbbobj->tbb_eintragsmenue ("");
+  } elseif ($berechtigt) {
+    $tbbobj->tbb_menue ();
+  }
+  $tbbobj->printlist ($tbbobj->tbb_getdate ());
+}
+
+$tbbobj->tbb_post_html ();
 ?>

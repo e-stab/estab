@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . "/../app/datetime.php";
+
 
 
   /****************************************************************************\
@@ -56,13 +58,12 @@
   |       arr.stak  = TThhmm
   \****************************************************************************/
   function convdatetimeto ($datetime){
-    list ($datum, $zeit) = explode (" ",$datetime);
-    list ($jahr, $monat, $tag) = explode ("-", $datum);
-    list ($stunde, $minute, $sekunde) = explode (":", $zeit);
-    $arr ["datum"] = $tag.$monat;
-    $arr ["zeit"]  = $stunde.$minute;
-    $arr ["stak"]  = $tag.$stunde.$minute;
-    return $arr;
+    $parts = estab_datetime_parts ($datetime);
+    return array (
+      "datum" => $parts ["datum"],
+      "zeit"  => $parts ["zeit"],
+      "stak"  => $parts ["stak"],
+    );
   }
 
   /****************************************************************************\
@@ -73,10 +74,11 @@
   |       arr.zeit  =  hh:mm:ss
   \****************************************************************************/
   function convdbdatetimeto ($datetime){
-    list ($datum, $zeit) = explode (" ",$datetime);
-    $arr [datum] = $datum;
-    $arr [zeit]  = $zeit;
-    return $arr;
+    $parts = estab_datetime_parts ($datetime);
+    return array (
+      'datum' => $parts ['date'],
+      'zeit'  => $parts ['time'],
+    );
   }
 
   /****************************************************************************\
@@ -184,7 +186,7 @@
     include ("../4fcfg/e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
     $query = "SELECT count(*) FROM `".$conf_4f_tbl ["nachrichten"]."` WHERE ((`04_richtung` = \"A\") AND
-                                                  (`03_datum` = 0) AND
+                                                  (`03_datum` IS NULL) AND
                                                   (`03_zeichen` = \"\"));";
    $result = $dbaccess->query_table_wert ($query);
     return $result[0];
@@ -195,10 +197,10 @@
     include ("../4fcfg/e_cfg.inc.php");
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
     $query = "SELECT count(*) FROM `".$conf_4f_tbl ["nachrichten"]."`
-              WHERE ( (  `15_quitdatum`    = 0 ) AND
-                      (  `15_quitzeichen`  = 0 ) )  AND
+              WHERE ( (  `15_quitdatum`    IS NULL ) AND
+                      (  `15_quitzeichen`  = '' ) )  AND
                     ( (  `04_richtung`     =\"E\") OR
-                      (  `03_datum`       != 0 ) AND
+                      (  `03_datum`       IS NOT NULL ) AND
                       (  `03_zeichen`     != \"\" ) );";
    $result = $dbaccess->query_table_wert ($query);
     return $result[0];
@@ -335,8 +337,8 @@
     $result = NULL;
     for ($i=1;$i<=$resultcount;$i++){
       $fkt = mysql_fetch_assoc($query_result);
-      if ($fkt[fkt] != $ausnahme){
-        $result .= $fkt[fkt]."_bl,";
+      if ($fkt['fkt'] != $ausnahme){
+        $result .= $fkt['fkt']."_bl,";
       }
     }
     mysql_free_result($query_result);
@@ -368,7 +370,7 @@ bersichtlich dargestellt werden.
 
     if ((count ($benutzer) > 0) and ($benutzer != "")){
       foreach ($benutzer as $user){
-        if ($user[aktiv] == 1 ) {          $userstatus [$user[rolle]]  [$user[funktion]]  = $aktiv;}
+        if ($user['aktiv'] == 1 ) {          $userstatus [$user['rolle']]  [$user['funktion']]  = $aktiv;}
 
         if ( ($user ["funktion"] == "A/W") AND ($user["aktiv"] == 1) ){ $fernm_aw ++;}
       }
@@ -570,27 +572,27 @@ bersichtlich dargestellt werden.
       echo "</tr>";
       foreach ($benutzer as $user){
         echo "<tr>";
-        if ($_SESSION [menue] == "LOGIN"){
-          $hreflink = "href=\"mainindex.php?benutzer=$user[benutzer]&kuerzel=$user[kuerzel]&funktion=$user[funktion]&anmelden=Anmelden\"";
+        if ($_SESSION ['menue'] == "LOGIN"){
+          $hreflink = "href=\"mainindex.php?benutzer={$user['benutzer']}&kuerzel={$user['kuerzel']}&funktion={$user['funktion']}&anmelden=Anmelden\"";
         } else {
           $hreflink = "";
         }
         if (session_id () == $user ["sid"]){
-          echo "<td style=\"background-color: ".$self." font-weight:bold;\"><a $hreflink>$user[benutzer]</a></td>
-                <td style=\"background-color: ".$self." font-weight:bold;\"><a $hreflink>$user[kuerzel]</a></td>
-                <td style=\"background-color: ".$self." font-weight:bold;\"><a $hreflink>$user[rolle]</a></td>
-                <td style=\"background-color: ".$self." font-weight:bold;\"><a $hreflink>$user[funktion]</a></td>";
+          echo "<td style=\"background-color: ".$self." font-weight:bold;\"><a $hreflink>{$user['benutzer']}</a></td>
+                <td style=\"background-color: ".$self." font-weight:bold;\"><a $hreflink>{$user['kuerzel']}</a></td>
+                <td style=\"background-color: ".$self." font-weight:bold;\"><a $hreflink>{$user['rolle']}</a></td>
+                <td style=\"background-color: ".$self." font-weight:bold;\"><a $hreflink>{$user['funktion']}</a></td>";
         } else {
-          if ( $user [aktiv] == 1 ){
-            echo "<td style=\"background-color: ".$aktiv." font-weight:bold;\"><a $hreflink>$user[benutzer]</a></td>
-                  <td style=\"background-color: ".$aktiv." font-weight:bold;\"><a $hreflink>$user[kuerzel]</a></td>
-                  <td style=\"background-color: ".$aktiv." font-weight:bold;\"><a $hreflink>$user[rolle]</a></td>
-                  <td style=\"background-color: ".$aktiv." font-weight:bold;\"><a $hreflink>$user[funktion]</a></td>";
+          if ( $user ['aktiv'] == 1 ){
+            echo "<td style=\"background-color: ".$aktiv." font-weight:bold;\"><a $hreflink>{$user['benutzer']}</a></td>
+                  <td style=\"background-color: ".$aktiv." font-weight:bold;\"><a $hreflink>{$user['kuerzel']}</a></td>
+                  <td style=\"background-color: ".$aktiv." font-weight:bold;\"><a $hreflink>{$user['rolle']}</a></td>
+                  <td style=\"background-color: ".$aktiv." font-weight:bold;\"><a $hreflink>{$user['funktion']}</a></td>";
           } else {
-            echo "<td style=\"background-color: ".$abgemldt." font-weight:bold;\"><a $hreflink>$user[benutzer]</a></td>
-                  <td style=\"background-color: ".$abgemldt." font-weight:bold;\"><a $hreflink>$user[kuerzel]</a></td>
-                  <td style=\"background-color: ".$abgemldt." font-weight:bold;\"><a $hreflink>$user[rolle]</a></td>
-                  <td style=\"background-color: ".$abgemldt." font-weight:bold;\"><a $hreflink>$user[funktion]</a></td>";
+            echo "<td style=\"background-color: ".$abgemldt." font-weight:bold;\"><a $hreflink>{$user['benutzer']}</a></td>
+                  <td style=\"background-color: ".$abgemldt." font-weight:bold;\"><a $hreflink>{$user['kuerzel']}</a></td>
+                  <td style=\"background-color: ".$abgemldt." font-weight:bold;\"><a $hreflink>{$user['rolle']}</a></td>
+                  <td style=\"background-color: ".$abgemldt." font-weight:bold;\"><a $hreflink>{$user['funktion']}</a></td>";
           }
         }
         echo "</tr>";
@@ -704,19 +706,7 @@ bersichtlich dargestellt werden.
     include ("../4fcfg/config.inc.php");
     // Datenbankzeit konvertiert in taktische Zeit
     // yyyy-MM-tt hh:mm:ss ==> tthhmmMMMyyyy
-    if (strlen ($datetime) == 19 ){
-      list ($datum, $zeit) = explode (" ",$datetime);
-      list ($yyyy, $MM, $tt) = explode ("-", $datum);
-      list ($hh, $mm, $ss) = explode (":", $zeit);
-	  if ($MM != "00"){ 
-	    return ($tt.$hh.$mm.$tak_monate[$MM].$yyyy); 
-	  } else { 
-	    return ("");
-	  }
-      
-    } else {
-      return ("");
-    }
+    return estab_datetime_to_tactical ($datetime, $tak_monate);
   }
 
 

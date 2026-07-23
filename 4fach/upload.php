@@ -1,4 +1,13 @@
 <?php
+// Dieser historische Direktendpunkt umging die transaktionale Reservierung in
+// anhang.php. Er bleibt als nachvollziehbares Legacy-Artefakt erhalten, führt
+// aber bewusst keinen Datei- oder Datenbankzugriff mehr aus.
+http_response_code (410);
+header ("Content-Type: text/html; charset=UTF-8");
+echo "<!doctype html><html><body><p>Dieser alte Uploadpfad ist deaktiviert. ".
+     "Bitte die Anhang-Funktion der Anwendung verwenden.</p></body></html>";
+exit;
+
 //define ("debug",false);
 
 include ("upload/upload_class.php");
@@ -57,12 +66,12 @@ class fileupload extends file_upload {
 
 
       protokolleintrag ("Anhangdaten speichern",
-                            $_SESSION[vStab_benutzer].";".
-                            $_SESSION[vStab_kuerzel].";".
-                            $_SESSION[vStab_funktion].";".
-                            $_SESSION[vStab_rolle].";".
+                            $_SESSION['vStab_benutzer'].";".
+                            $_SESSION['vStab_kuerzel'].";".
+                            $_SESSION['vStab_funktion'].";".
+                            $_SESSION['vStab_rolle'].";".
                             session_id().";".
-                            $_SERVER[REMOTE_ADDR].";".
+                            $_SERVER['REMOTE_ADDR'].";".
                             $data["filename"].";".
                             $data["org_filename"].";".
                             $data["time"]
@@ -95,7 +104,7 @@ class fileupload extends file_upload {
     include ("../dbcfg.inc.php");
     $filenames = $this->readDirectory ( $conf_4f ["ablage_dir"] );
 
-    $hoheit = $conf_4f[hoheit];
+    $hoheit = $conf_4f['hoheit'];
     $hoheitlen = strlen ( $hoheit );
     $highest = 0;
     foreach ($filenames as $file){
@@ -163,8 +172,7 @@ class fileupload extends file_upload {
   function pre_html($titel){
     echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
     echo "<html>\n";
-    echo "<head>
-<meta http-equiv="content-type" content="text/html; charset=UTF-8" />\n";
+    echo "<head>\n";
     echo "<meta content=\"text/html; charset=UTF-8\" http-equiv=\"content-type\">\n";
     echo "<title>$titel</title>";
     echo "</head>";
@@ -304,7 +312,7 @@ echo "status=".$status."<br>";
             echo "<big><big><b>".$errortxt."</b></big></big>";
           }
 
-          $my_upload->replace = true ; //(isset($_POST['replace'])) ? $_POST['replace'] : "n"; // because only a checked checkboxes is true
+          $my_upload->replace = false; // Existing attachment names must never be overwritten.
 
           $my_upload->do_filename_check = false; // (isset($_POST['check'])) ? $_POST['check'] : "n"; // use this boolean to check for a valid filename
 

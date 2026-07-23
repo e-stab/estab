@@ -18,7 +18,13 @@ define('FPDF_FONTPATH',$_SERVER ["DOCUMENT_ROOT"]."/".$conf_web["pre_path"]."4fb
 @ini_set('memory_limit', '32M');
 
 require ($_SERVER ["DOCUMENT_ROOT"]."/".$conf_web["pre_path"]."4fbak/fpdf.php");
+require_once __DIR__ . "/../app/message_repository.php";
 // require_once ("./fpdf/ellipse/ellipse.php");
+
+/** Encode UTF-8 application text for FPDF's built-in Windows-1252 fonts. */
+function estab_fpdf_text ($text) {
+  return mb_convert_encoding ((string) $text, "Windows-1252", "UTF-8");
+}
 
 
  /*****
@@ -171,14 +177,21 @@ class vordruckaspdf extends PDF_Ellipse {
   var $image ;
 
   var $db_dataset ;
+  var $recipientMatrix ;
 
   /*******************************************************************************
             Klassen Konstruktor
   ********************************************************************************/
-  function vordruckaspdf ($data) {
+  function __construct ($data, $recipientMatrix = null) {
+    $this->vordruckaspdf ($data, $recipientMatrix);
+  }
+
+  function vordruckaspdf ($data, $recipientMatrix = null) {
     require_once ("../4fach/tools.php") ;
     include ("../4fcfg/config.inc.php") ;
 
+    $this->FPDF ('P', 'mm', 'A4');
+    $this->init_pkts ();
     $this->SetAutoPageBreak(true, $this->bottom - $this->point[38][1]) ;
 
     $this->fleft   = $this->left   + $this->border['left'] ;
@@ -200,28 +213,23 @@ class vordruckaspdf extends PDF_Ellipse {
     $this->color_sw = array ( "r" =>   0, "g" =>   0, "b" =>   0 );
     $this->color_rd = array ( "r" => 255, "g" =>   0, "b" =>   0 );
     $this->color_bl = array ( "r" =>   0, "g" =>   0, "b" => 255 );
+    $this->recipientMatrix = is_array ($recipientMatrix) ? $recipientMatrix : null;
 
     $this->db_dataset ["00_lfd"]          = $data ["00_lfd"] ;
     $this->db_dataset ["01_medium"]       = $data ["01_medium"];
 
-    if ($data ["01_datum"] != "0000-00-00 00:00:00") {
-      $arr = convdatetimeto ($data ["01_datum"]);
-      $this->db_dataset ["01_datum"]        = konv_datetime_taktime (convtodatetime ($arr['datum'], $arr['zeit']));
-    } else { $this->db_dataset ["01_datum"] = ""; }
+    $this->db_dataset ["01_datum"] = estab_datetime_is_unset ($data ["01_datum"])
+      ? "" : konv_datetime_taktime ($data ["01_datum"]);
 
     $this->db_dataset ["01_zeichen"]      = $data  ["01_zeichen"];
 
-    if ($data ["02_zeit"] != "0000-00-00 00:00:00") {
-      $arr = convdatetimeto ($data ["02_zeit"]);
-      $this->db_dataset ["02_zeit"]         = konv_datetime_taktime (convtodatetime ($arr['datum'], $arr['zeit']));
-    } else { $this->db_dataset ["02_zeit"] = ""; }
+    $this->db_dataset ["02_zeit"] = estab_datetime_is_unset ($data ["02_zeit"])
+      ? "" : konv_datetime_taktime ($data ["02_zeit"]);
 
     $this->db_dataset ["02_zeichen"]      = $data ["02_zeichen"];
 
-    if ($data ["03_datum"] != "0000-00-00 00:00:00") {
-      $arr = convdatetimeto ($data ["03_datum"]);
-      $this->db_dataset ["03_datum"]        = konv_datetime_taktime (convtodatetime ($arr['datum'], $arr['zeit']));
-    } else { $this->db_dataset ["03_datum"] = ""; }
+    $this->db_dataset ["03_datum"] = estab_datetime_is_unset ($data ["03_datum"])
+      ? "" : konv_datetime_taktime ($data ["03_datum"]);
 
     $this->db_dataset ["03_zeichen"]      = $data ["03_zeichen"] ;
     $this->db_dataset ["04_richtung"]     = $data ["04_richtung"] ;
@@ -238,14 +246,14 @@ class vordruckaspdf extends PDF_Ellipse {
     $this->db_dataset ["12_anhang"]       = $data ["12_anhang"] ;
     $this->db_dataset ["12_inhalt"]       = $data ["12_inhalt"] ;
 
-      $arr = convdatetimeto ($data ["12_abfzeit"]);
-    $this->db_dataset ["12_abfzeit"]      = konv_datetime_taktime (convtodatetime ($arr['datum'], $arr['zeit']));
+    $this->db_dataset ["12_abfzeit"] = estab_datetime_is_unset ($data ["12_abfzeit"])
+      ? "" : konv_datetime_taktime ($data ["12_abfzeit"]);
     $this->db_dataset ["13_abseinheit"]   = $data ["13_abseinheit"] ;
     $this->db_dataset ["14_zeichen"]      = $data ["14_zeichen"] ;
     $this->db_dataset ["14_funktion"]     = $data ["14_funktion"] ;
 
-      $arr = convdatetimeto ($data ["15_quitdatum"]);
-    $this->db_dataset ["15_quitdatum"]    = konv_datetime_taktime (convtodatetime ($arr['datum'], $arr['zeit']));
+    $this->db_dataset ["15_quitdatum"] = estab_datetime_is_unset ($data ["15_quitdatum"])
+      ? "" : konv_datetime_taktime ($data ["15_quitdatum"]);
     $this->db_dataset ["15_quitzeichen"]  = $data ["15_quitzeichen"] ;
     $this->db_dataset ["16_empf"]         = $data ["16_empf"] ;
     $this->db_dataset ["17_vermerke"]     = $data ["17_vermerke"] ;
@@ -253,13 +261,10 @@ class vordruckaspdf extends PDF_Ellipse {
     $this->db_dataset ["x01_abschluss"]   = $data ["x01_abschluss"];
     $this->db_dataset ["x04_druck"]       = $data ["x04_druck"] == "t" ;
 
-      $arr = convdatetimeto ($data ["x05_druck_d"]);
-    $this->db_dataset ["x05_druck_d"]     = konv_datetime_taktime (convtodatetime ($arr['datum'], $arr['zeit']));
+    $this->db_dataset ["x05_druck_d"] = estab_datetime_is_unset ($data ["x05_druck_d"])
+      ? "" : konv_datetime_taktime ($data ["x05_druck_d"]);
     $this->db_dataset ["99_lstacc"]       = $data ["99_lstacc"];
 
-    $this->init_pkts ();
-
-    $this->FPDF ('P', 'mm', 'A4');
   }
 
   var $point ;
@@ -341,7 +346,7 @@ class vordruckaspdf extends PDF_Ellipse {
 
 
   function imagegrid($image, $w, $h, $s, $color) {
-      $this->SetDrawColor ($color[r],$color[g],$color[b]);
+      $this->SetDrawColor ($color['r'],$color['g'],$color['b']);
       $this->line( 0, 0, $w-1, 0);
       $this->line( $w-1, 0, $w-1, $h-1 );
       $this->line( $w-1, $h-1, 0, $h-1 );
@@ -368,14 +373,18 @@ class vordruckaspdf extends PDF_Ellipse {
 \*****************************************************************************/
     // Listet unter Inhalt eventuelle Anhangsdateien als href auf
   function list_anhang ($x, $y){
-//    include ("../4fcfg/config.inc.php");
+    include ("../4fcfg/config.inc.php");
 //    include ("../4fcfg/dbcfg.inc.php");
 //    include ("../4fcfg/e_cfg.inc.php");
       // in 12_anhang stehen die Anhangdateien mit ";" getrennt.
     $anhaenge = preg_split("/;/", $this->db_dataset ["12_anhang"]);
     foreach ($anhaenge as $anhang){
       if ($anhang != "") {
-        $link = "../anhang/".$anhang ;
+        try {
+          $link = estab_file_download_url ($conf_4f ["download_uri"], "attachment", $anhang);
+        } catch (InvalidArgumentException) {
+          continue;
+        }
         $this->draw_text_with_link ($x,
                                     $y, 0,
                                     $this->color_bl, $this->fontsize00, "b", "o", "l", $anhang."   ", $link) ;
@@ -501,7 +510,7 @@ class vordruckaspdf extends PDF_Ellipse {
       case "b": // rechts
         $az = "B";
       break;
-      default; // nothing
+      default: // nothing
     }
     // Schriftart definieren
     $this->SetFont('helvetica', $az, $size );
@@ -514,7 +523,7 @@ class vordruckaspdf extends PDF_Ellipse {
       case "u": // rechts
         $y -= $size ;
       break;
-      default; // nothing
+      default: // nothing
     }
     switch ($posh){
       case "l": //links
@@ -529,7 +538,15 @@ class vordruckaspdf extends PDF_Ellipse {
       default: $align = "L"; // nothing
     }
     $this->SetXY ($x, $y);
-    $this->Cell( 1, 1, utf8_decode($text), 0, 0, $align, 0);
+    $this->Cell(
+      1,
+      1,
+      estab_fpdf_text(estab_message_plain_text($text)),
+      0,
+      0,
+      $align,
+      0
+    );
   }
 
 
@@ -550,7 +567,7 @@ class vordruckaspdf extends PDF_Ellipse {
       case "b": // rechts
         $az = "B";
       break;
-      default; // nothing
+      default: // nothing
     }
     // Schriftart definieren
     $this->SetFont('helvetica', $az, $size );
@@ -563,7 +580,7 @@ class vordruckaspdf extends PDF_Ellipse {
       case "u": // rechts
         $y -= $size ;
       break;
-      default; // nothing
+      default: // nothing
     }
     switch ($posh){
       case "l": //links
@@ -578,9 +595,10 @@ class vordruckaspdf extends PDF_Ellipse {
       default: $align = "L"; // nothing
     }
     $this->SetXY ($x, $y);
-    $w = $this->GetStringWidth( $text );
+    $pdftext = estab_fpdf_text(estab_message_plain_text($text));
+    $w = $this->GetStringWidth( $pdftext );
 
-    $this->Cell( $w, $size, utf8_decode($text), "LTRB",  0, $align, 0, $link);
+    $this->Cell( $w, $size, $pdftext, "LTRB",  0, $align, 0, $link);
   }
 
 /*******************************************************************************/
@@ -701,7 +719,7 @@ class vordruckaspdf extends PDF_Ellipse {
     $this->SetXY ($x1, $y1);
     $this->SetTextColor ($color['r'],$color['g'],$color['b']);
     $this->SetFont ("helvetica","B",$this->fontsize01);
-    $text = $ntext;
+    $text = estab_fpdf_text(estab_message_plain_text($ntext));
 
     $delta_x = $x2 - $x1 ;
     $delta_y = $y2 - $y1 ;
@@ -720,7 +738,11 @@ class vordruckaspdf extends PDF_Ellipse {
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
   function ziele (){
-  include ("../4fcfg/fkt_rolle.inc.php");
+    if (!is_array ($this->recipientMatrix)) {
+      include ("../4fcfg/fkt_rolle.inc.php");
+      $this->recipientMatrix = $empf_matrix;
+    }
+    $empf_matrix = $this->recipientMatrix;
     for ($i=1; $i <= 5 ; $i++){
       for ($j=1; $j <= 4 ; $j++){
         $this->empfarray [$i][$j]["checked"] = false;
@@ -781,15 +803,11 @@ class vordruckaspdf extends PDF_Ellipse {
 
     $this->ziele();
 
-    $empf_farbe = explode (",",$this->db_dataset ["16_empf"]);
-
-    include ("../4fcfg/fkt_rolle.inc.php");
+    $empf_matrix = $this->recipientMatrix;
     $x0 =  $this->point [52][0] + 5 ;
     $y0 =  $this->point [52][1] + 5 ;
     $dx =  24 ;
     $dy =  10 ;
-    $this->ziele();
-
     for ($y=1; $y<=5; $y++){
       for ($x=1; $x<=4; $x++){
         if ( $empf_matrix[$y][$x]['fkt'] != "" ) {
@@ -885,7 +903,7 @@ class vordruckaspdf extends PDF_Ellipse {
                             $this->point[56][0],
                             $this->point[56][1],
                             $this->color_bl,
-                            html_entity_decode($this->db_dataset["17_vermerke"]));
+                            $this->db_dataset["17_vermerke"]);
 
   }
 
@@ -898,7 +916,7 @@ class vordruckaspdf extends PDF_Ellipse {
                             $this->point[40][0]-10,
                             $this->point[40][1]-5,
                             $this->color_bl,
-                            utf8_decode(html_entity_decode($this->db_dataset["12_inhalt"]))
+                            $this->db_dataset["12_inhalt"]
 //                            html_entity_decode($this->db_dataset["12_inhalt"]
                             );
     $x = $this->GetX ();
@@ -936,7 +954,7 @@ class vordruckaspdf extends PDF_Ellipse {
     $this->SetTextColor (255, 0, 0);
     $this->SetFont ("arial","B",9);
     $this->SetXY ( $this->point [54][0], $this->point [54][1] + 8 );
-    $this->Cell(0,10,utf8_decode('VS - Nur für den Dienstgebrauch'),0,0,'C');
+    $this->Cell(0,10,estab_fpdf_text('VS - Nur für den Dienstgebrauch'),0,0,'C');
 
     //Logo
     $this->Image($_SERVER ["DOCUMENT_ROOT"]."/".$conf_web["pre_path"]."4fbak/logo.png",
@@ -951,7 +969,7 @@ class vordruckaspdf extends PDF_Ellipse {
 //    $this->SetAutoPageBreak(false, 0) ;
     $this->SetFont('Arial','',40);
     $this->SetTextColor(240, 240, 240);
-    $this->RotatedText(20,195,utf8_decode('VS - Nur für den Dienstgebrauch'), 30);
+    $this->RotatedText(20,195,estab_fpdf_text('VS - Nur für den Dienstgebrauch'), 30);
 
     $this->gesamtrahmenbypoints();
     $this->linesbypoints ();

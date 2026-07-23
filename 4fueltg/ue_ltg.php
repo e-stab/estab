@@ -1,5 +1,10 @@
 <?php
 
+define ("debug", false);
+session_start ();
+require_once __DIR__ . "/../app/auth.php";
+estab_auth_require_session ($_SESSION);
+
 include ("../4fcfg/config.inc.php");            // Konfigurationseinstellungen und Vorgaben
 include ("../4fach/db_operation.php");          // Datenbank operationen
 include ("../4fach/tools.php");                 // diverse Funktionen
@@ -7,6 +12,24 @@ include ("../4fach/data_hndl.php");             // propritÃ¤re  Datenbankopera
 include ("../4fcfg/para.inc.php");              //
 
 define ("inhalt_limit",true); // VerkÃ¼rzte Darstellung der Meldung ergÃ¤nzt mit  "..."
+
+function estab_overview_detail_link ($recordId, $label) {
+  $recordId = estab_message_positive_id ($recordId);
+  $url = "ue_ltg.php?".http_build_query (array (
+    "ueb_fm" => "ueb",
+    "00_lfd" => $recordId,
+  ), "", "&", PHP_QUERY_RFC3986);
+  echo "<a href=\"".estab_message_html ($url)."\" target=\"_self\">".
+       estab_message_html ($label)."</a>\n";
+}
+
+function estab_overview_forbid () {
+  http_response_code (403);
+  header ("Content-Type: text/plain; charset=UTF-8");
+  header ("Cache-Control: no-store");
+  echo "Aktion nicht erlaubt.";
+  exit;
+}
 
 /*****************************************************************************\
    Datei: ue_ltg.php
@@ -38,16 +61,25 @@ class Listen {
 
   // Listengestaltung
 
+  function __construct ($welche, $user){
+    $this->listen ($welche, $user);
+  }
+
 /******************************************************************************\
 
 \******************************************************************************/
 
 
   function explodereceiver ( $empf){
+    $fktcopycolor = array ();
     $receiver = explode (",",$empf);
     for ($i=0; $i < count( $receiver ); $i++ ) {
-      $hilfeaus = explode ( "_", $receiver [$i] ) ;
-      $fktcopycolor[$hilfeaus[0]] = $hilfeaus [1] ;
+      $token = trim ((string) $receiver [$i]);
+      if ($token === "") { continue; }
+      $hilfeaus = explode ("_", $token, 2);
+      $function = trim ((string) ($hilfeaus[0] ?? ""));
+      if ($function === "") { continue; }
+      $fktcopycolor[$function] = (string) ($hilfeaus[1] ?? "");
     }
     return $fktcopycolor;
   }
@@ -111,14 +143,17 @@ class Listen {
 */
     $query_orderby_arg = "`04_nummer` DESC, `09_vorrangstufe` DESC ";
 	//$query_orderby_arg = "`04_nummer` ASC, `09_vorrangstufe` ASC ";
+    $queryParameters = array ();
 
     if (isset ($_SESSION["ueb_flt_search"])) {
+      $searchPattern = "%".(string) $_SESSION["ueb_flt_search"]."%";
       $query_search = "(".
-          "(".$conf_4f_tbl ["nachrichten"].".`04_nummer` LIKE \"%".$_SESSION["ueb_flt_search"]."%\") OR ".
-          "(".$conf_4f_tbl ["nachrichten"].".`10_anschrift` LIKE \"%".$_SESSION["ueb_flt_search"]."%\") OR ".
-          "(".$conf_4f_tbl ["nachrichten"].".`12_abfzeit` LIKE \"%".$_SESSION["ueb_flt_search"]."%\") OR ".
-          "(".$conf_4f_tbl ["nachrichten"].".`12_inhalt` LIKE \"%".htmlentities ($_SESSION["ueb_flt_search"])."%\") OR ".
-          "(".$conf_4f_tbl ["nachrichten"].".`13_abseinheit` LIKE \"%".$_SESSION["ueb_flt_search"]."%\") )";
+          "(".$conf_4f_tbl ["nachrichten"].".`04_nummer` LIKE ?) OR ".
+          "(".$conf_4f_tbl ["nachrichten"].".`10_anschrift` LIKE ?) OR ".
+          "(".$conf_4f_tbl ["nachrichten"].".`12_abfzeit` LIKE ?) OR ".
+          "(".$conf_4f_tbl ["nachrichten"].".`12_inhalt` LIKE ?) OR ".
+          "(".$conf_4f_tbl ["nachrichten"].".`13_abseinheit` LIKE ?) )";
+      $queryParameters = array_fill (0, 5, $searchPattern);
 
 
       $querycount = "SELECT COUNT(*) FROM ".$query_from_arg." WHERE ".
@@ -141,8 +176,12 @@ class Listen {
     if ( debug == true ){  echo "<br><br>QUERYCOUNT [get_list] =".$querycount."<br>";echo "<br><br>";}
 
     if ( $_SESSION["ueb_flt_darstellung"] == "1" ){
-      $tmp = $dbaccess->query_table_wert ($querycount);
-      $anzahl = $tmp[0];
+      $messageConnection = estab_message_connect ($conf_4f_db);
+      try {
+        $anzahl = estab_message_query_int ($messageConnection, $querycount, $queryParameters);
+      } finally {
+        estab_auth_close ($messageConnection);
+      }
       $_SESSION["ueb_flt_rescount"] = $anzahl ;
 
         // Anzahl, Meldungen pro Seite ==> Meldungen der letzten Seite
@@ -150,7 +189,20 @@ class Listen {
 
         // Listennavigation 
 
-      $anz_meld_seite = $_SESSION["ueb_flt_anzahl"];
+      $anz_meld_seite = filter_var (
+        $_SESSION["ueb_flt_anzahl"] ?? 15,
+        FILTER_VALIDATE_INT,
+        array ("options" => array ("min_range" => 1, "max_range" => 100))
+      );
+      if (!is_int ($anz_meld_seite)) { $anz_meld_seite = 15; }
+      $pageStart = filter_var (
+        $_SESSION["ueb_flt_start"] ?? 0,
+        FILTER_VALIDATE_INT,
+        array ("options" => array ("min_range" => 0, "max_range" => PHP_INT_MAX))
+      );
+      if (!is_int ($pageStart)) { $pageStart = 0; }
+      $_SESSION["ueb_flt_anzahl"] = $anz_meld_seite;
+      $_SESSION["ueb_flt_start"] = $pageStart;
       $pageoffirst = ceil ($_SESSION['ueb_flt_start'] / $anz_meld_seite) +1 ;
       $pagecount   = ceil ($anzahl / $anz_meld_seite) ;
       $is_last_page = ($pageoffirst == $pagecount);
@@ -193,19 +245,18 @@ echo "Ist es die letzte Seite  ="; if ($is_last_page){echo "Ja";} else {echo "Ne
           break;
           // Letzte Seite
           case "end":
-                  if ($anzahl < $_SESSION['ueb_flt_anzahl']){ // Nur eine Seite
-                    $_SESSION['ueb_flt_start'] = 0;
-                  } else {
-                    $seiten = floor ($anzahl / $_SESSION['ueb_flt_anzahl']) ;
-                       // Berechne den Rest auf der letzten Seite
-                    $anz_rest_meld_seite = floor ($anzahl/$_SESSION['ueb_flt_anzahl']) * $_SESSION['ueb_flt_anzahl'];
-					if ($anz_rest_meld_seite == 0){
-                    $_SESSION["ueb_flt_start"] = $seiten-1 * $_SESSION["ueb_flt_anzahl"];
-					}
-                  }
+                  $_SESSION["ueb_flt_start"] = $anzahl > 0
+                    ? intdiv ($anzahl - 1, $anz_meld_seite) * $anz_meld_seite
+                    : 0;
           break;
         }
         unset ($_SESSION ['ueb_flt_navi']);
+      }
+      if ($anzahl === 0) {
+        $_SESSION["ueb_flt_start"] = 0;
+      } elseif ($_SESSION["ueb_flt_start"] >= $anzahl) {
+        $_SESSION["ueb_flt_start"] =
+          intdiv ($anzahl - 1, $anz_meld_seite) * $anz_meld_seite;
       }
       $query .= " LIMIT ".$_SESSION["ueb_flt_start"].",".$anz_meld_seite;
     }
@@ -228,11 +279,16 @@ echo "Ist es die letzte Seite  ="; if ($is_last_page){echo "Ja";} else {echo "Ne
 
     if ( debug == true ){  echo "QUERY [get_list]227=".$query."<br>";echo "<br><br>";}
   
-    $result = $dbaccess->query_table ($query);
+    $messageConnection = estab_message_connect ($conf_4f_db);
+    try {
+      $result = estab_message_query_rows ($messageConnection, $query, $queryParameters);
+    } finally {
+      estab_auth_close ($messageConnection);
+    }
 
 //    if ( debug == true ){ echo "RESULT [get_list] ="; var_dump ($result); echo "<br><br>"; }
 
-    return ($result);
+    return ($result === array () ? "" : $result);
 
   }
 
@@ -275,7 +331,7 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
 
     if ( debug ) { echo "\n\n\n<!-- ANFANG file:liste.php fkt:darstellungsart -->"; }
 
-    echo "\n<form action=\"".$_SERVER ["PHP_SELF"]."\" method=\"GET\" target=\"_self\">\n";
+    echo "\n<form action=\"".estab_message_html ($_SERVER ["PHP_SELF"] ?? "ue_ltg.php")."\" method=\"GET\" target=\"_self\">\n";
     echo "<table><tbody>";
     echo "<tr>";
 
@@ -359,12 +415,13 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
 
 
     if ((isset($_SESSION ["ueb_flt_find_mask"])) and ($_SESSION["ueb_flt_find_mask"] == 1)){
-      echo "\n<form action=\"".$_SERVER ["PHP_SELF"]."\" method=\"get\" target=\"_self\">\n";
+      echo "\n<form action=\"".estab_message_html ($_SERVER ["PHP_SELF"] ?? "ue_ltg.php")."\" method=\"get\" target=\"_self\">\n";
       echo "<td>";
       if (isset ($_SESSION ["ueb_flt_search"]) ) { $defvalue = $_SESSION ["ueb_flt_search"] ;}
       else {$defvalue = "";}
       echo "<div>";
-      echo "<p>Suchbegriff: <input name=\"ueb_flt_search\" value=\"".$defvalue."\" type=\"text\" size=\"30\" maxlength=\"30\"></p>";
+      echo "<p>Suchbegriff: <input name=\"ueb_flt_search\" value=\"".
+           estab_message_html ($defvalue)."\" type=\"text\" size=\"30\" maxlength=\"30\"></p>";
       echo "<div>";
       echo "</td>";
       echo "<td>";
@@ -427,7 +484,7 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
       for ( $i=1; $i<= count ($conf_empf); $i++ ) {
         if ( ( $conf_empf [$i]["fkt"] != "Si" ) and ( $conf_empf [$i]["fkt"] != "A/W" ) ) {
           echo "<td>";
-          echo $conf_empf [$i]["fkt"];
+          echo estab_message_html ($conf_empf [$i]["fkt"]);
           echo "</td>\n";
         }
       }
@@ -442,7 +499,7 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
          }
          echo "<td>";
          if ( ( $row["09_vorrangstufe"] != "") and ( $row["09_vorrangstufe"] != "eee" ) ) {
-           echo "<a href=\"ue_ltg.php?ueb_fm=ueb&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["09_vorrangstufe"]."</a>\n" ;
+           estab_overview_detail_link ($row["00_lfd"], $row["09_vorrangstufe"]);
          } else {
            echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
          }
@@ -451,7 +508,7 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
          // RICHTUNG Eingang / Ausgang
          echo "<td>";
          if (($row["04_richtung"] != "")) {
-           echo "<a href=\"ue_ltg.php?ueb_fm=ueb&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["04_richtung"]."</a>\n";
+           estab_overview_detail_link ($row["00_lfd"], $row["04_richtung"]);
          } else {
            echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
          }
@@ -460,7 +517,7 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
          // N a c h w e i s n u m m e r
          echo "<td>";
          if (($row["04_richtung"] != "")) {
-           echo "<a href=\"ue_ltg.php?ueb_fm=ueb&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["04_nummer"]."</a>\n";
+           estab_overview_detail_link ($row["00_lfd"], $row["04_nummer"]);
          } else {
            echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
          }
@@ -471,7 +528,7 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
          if ($row["04_richtung"] == "A" ) {
            echo "<td>";
            if (($row["10_anschrift"] != "")) {
-             echo "<a href=\"ue_ltg.php?ueb_fm=ueb&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["10_anschrift"]."</a>\n";
+	             estab_overview_detail_link ($row["00_lfd"], $row["10_anschrift"]);
            } else {
              echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
            }
@@ -481,7 +538,7 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
 
            // Absender / Einheit / Stelle / ...
            if (($row["13_abseinheit"] != "")) {
-             echo "<a href=\"ue_ltg.php?ueb_fm=ueb&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["13_abseinheit"]."</a>\n";
+             estab_overview_detail_link ($row["00_lfd"], $row["13_abseinheit"]);
            } else {
                echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
            }
@@ -493,7 +550,7 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
 
            // Absender / Einheit / Stelle / ...
            if (($row["13_abseinheit"] != "")) {
-             echo "<a href=\"ue_ltg.php?ueb_fm=ueb&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["13_abseinheit"]."</a>\n";
+	             estab_overview_detail_link ($row["00_lfd"], $row["13_abseinheit"]);
            } else {
                echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
            }
@@ -503,7 +560,7 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
 
            // Anschrift
            if (($row["10_anschrift"] != "")) {
-             echo "<a href=\"ue_ltg.php?ueb_fm=ueb&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["10_anschrift"]."</a>\n";
+             estab_overview_detail_link ($row["00_lfd"], $row["10_anschrift"]);
            } else {
                echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
            }
@@ -515,7 +572,7 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
          // Abfassungs Z E I T
          if (($row["12_abfzeit"] != "")) {
            $abfzeit = convdatetimeto ($row["12_abfzeit"]);
-           echo "<a href=\"ue_ltg.php?ueb_fm=ueb&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$abfzeit['stak']."</a>\n";
+           estab_overview_detail_link ($row["00_lfd"], $abfzeit["stak"]);
          } else {
            echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
          }
@@ -555,13 +612,10 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
          // I N H A L T !
          echo "<td align=\"left\">";
          if (($row["12_inhalt"] != "")) {
-           echo "<a href=\"ue_ltg.php?ueb_fm=ueb&00_lfd=".
-                    $row["00_lfd"]."\" target=\"_self\">";
-                    if ( inhalt_limit ){
-                      echo substr($row["12_inhalt"], 0, $conf_4f_liste ["inhalt"])." ..."."</a>\n";
-                    } else {
-                      echo $row["12_inhalt"];
-                    }
+           $overviewText = inhalt_limit
+             ? estab_message_excerpt ($row["12_inhalt"], (int) $conf_4f_liste ["inhalt"])." ..."
+             : estab_message_plain_text ($row["12_inhalt"]);
+           estab_overview_detail_link ($row["00_lfd"], $overviewText);
          } else {
            echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
          }
@@ -593,15 +647,23 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
 \*****************************************************************************/
 class nachrichten4fach {
 
+    function __construct ($formulardaten, $task, $errorselect){
+      $this->nachrichten4fach ($formulardaten, $task, $errorselect);
+    }
+
+    function safe_message_value ($field) {
+      return estab_message_html ($this->formdata[$field] ?? "");
+    }
+
     function nachrichten4fach ($formulardaten, $task, $errorselect){
       $this->task = $task ;
       $this->formdata = $formulardaten ;
       $this->lfd = $this->formdata ["00_lfd"];
-      if ($this->formdata ["01_datum"] == "0000-00-00 00:00:00") { $this->formdata["01_datum"] = ""; }
-      if ($this->formdata ["02_zeit"] == "0000-00-00 00:00:00") { $this->formdata ["02_zeit"] = ""; }
-      if ($this->formdata ["03_datum"] == "0000-00-00 00:00:00") { $this->formdata ["03_datum"] = ""; }
-      if ($this->formdata ["12_abfzeit"] == "0000-00-00 00:00:00") { $this->formdata ["12_abfzeit"] = ""; }
-      if ($this->formdata ["15_quitdatum"] == "0000-00-00 00:00:00") { $this->formdata ["15_quitdatum"] = ""; }
+      foreach (array ("01_datum", "02_zeit", "03_datum", "12_abfzeit", "15_quitdatum") as $dateField) {
+        if (estab_datetime_is_unset ($this->formdata [$dateField] ?? null)) {
+          $this->formdata [$dateField] = "";
+        }
+      }
       if ($this->formdata ["11_gesprnotiz"] == "t") {
         $this->formdata   ["11_gesprnotiz"] = true;
       } else {
@@ -888,11 +950,14 @@ var_dump ($this->formdata); echo "<br>";
     $anhaenge = preg_split("/;/", $this->formdata ["12_anhang"]);
     foreach ($anhaenge as $anhang){
       if ($anhang != "") {
-        echo "<a style=\"font-size:18px; font-weight:900;\" href=\"";
-        echo $conf_4f ["ablage_uri"]."/".$anhang;
-        echo "\" target=\"_blank\">";
-        echo $anhang;
-        echo "</a><br>";
+        try {
+          $downloadUrl = estab_file_download_url ($conf_4f ["download_uri"], "attachment", $anhang);
+        } catch (InvalidArgumentException) {
+          continue;
+        }
+        echo "<a style=\"font-size:18px; font-weight:900;\" href=\"".
+             estab_auth_html ($downloadUrl)."\" target=\"_blank\" rel=\"noopener\">".
+             estab_auth_html ($anhang)."</a><br>";
       }
     }
   } // list_anhang ()
@@ -931,7 +996,7 @@ var_dump ($this->formdata); echo "<br>";
     echo "<body style=\"text-align: left; background-color: rgb(255,255,255); \">\n"; //".$this->formbgcolor.";\">\n";
     echo "<body style=\"text-align: left; background-color: ".$this->formbgcolor.";\">\n";
 
-    echo "<form style=\"\" method=\"get\" action=\"".$_SERVER ["PHP_SELF"]."\" name=\"4fach\">";
+    echo "<form style=\"\" method=\"get\" action=\"".estab_message_html ($_SERVER ["PHP_SELF"] ?? "ue_ltg.php")."\" name=\"4fach\">";
 
     echo "<a href=\"javascript:window.print()\">Diese Seite drucken</a>";
 
@@ -983,7 +1048,7 @@ var_dump ($this->formdata); echo "<br>";
      if (!$this->feld [1]){
       $param = " disabled ";
     // Radio Button die deaktiviert sind liefern keinen Wert zurueck !!!
-      echo "<input type=\"hidden\" name=\"01_medium\" value=\"".$this->formdata["01_medium"]."\">\n";
+      echo "<input type=\"hidden\" name=\"01_medium\" value=\"".$this->safe_message_value ("01_medium")."\">\n";
     }
     else {
       $param = "";
@@ -1019,20 +1084,20 @@ var_dump ($this->formdata); echo "<br>";
         if ( posttakzeit ) {
           echo "<div style=\"text-align: center;\"><b>";
           $takzeit = konv_datetime_taktime (convtodatetime ($this->formdata["01_datum"], $this->formdata["01_zeit"]) );
-          echo $takzeit."&nbsp; &nbsp;".$this->formdata["01_zeichen"];
+          echo estab_message_html ($takzeit)."&nbsp; &nbsp;".$this->safe_message_value ("01_zeichen");
           echo "</b></div>";
         } else {
         echo "<div style=\"text-align: center;\"><b>";
-        echo $this->formdata["01_datum"]."&nbsp; &nbsp;".$this->formdata["01_zeit"]."&nbsp; &nbsp;".$this->formdata["01_zeichen"];
+        echo $this->safe_message_value ("01_datum")."&nbsp; &nbsp;".$this->safe_message_value ("01_zeit")."&nbsp; &nbsp;".$this->safe_message_value ("01_zeichen");
         echo "</b></div>";
         }
       } else {
         echo "<br>";
       }
     } else {
-      echo "<input maxlength=\"4\" size=\"4\" name=\"01_datum\" value=\"".$this->formdata["01_datum"]."\">\n";
-      echo "<input maxlength=\"4\" size=\"4\" name=\"01_zeit\" value=\"".$this->formdata["01_zeit"]."\">\n";
-      echo "<input maxlength=\"3\" size=\"3\" name=\"01_zeichen\" value=\"".$this->formdata["01_zeichen"]."\">\n";
+      echo "<input maxlength=\"4\" size=\"4\" name=\"01_datum\" value=\"".$this->safe_message_value ("01_datum")."\">\n";
+      echo "<input maxlength=\"4\" size=\"4\" name=\"01_zeit\" value=\"".$this->safe_message_value ("01_zeit")."\">\n";
+      echo "<input maxlength=\"3\" size=\"3\" name=\"01_zeichen\" value=\"".$this->safe_message_value ("01_zeichen")."\">\n";
     }
 //    echo "<br>\n";
     echo "<div style=\"text-align: center;\">";
@@ -1066,14 +1131,14 @@ var_dump ($this->formdata); echo "<br>";
       if ( ( $this->formdata["02_zeit"] != "" ) or
            ( $this->formdata["02_zeichen"] != "" ) ) {
         echo "<div style=\"text-align: center;\"><b>";
-        echo $this->formdata["02_zeit"]."&nbsp; &nbsp;".$this->formdata["02_zeichen"];
+        echo $this->safe_message_value ("02_zeit")."&nbsp; &nbsp;".$this->safe_message_value ("02_zeichen");
         echo "</b></div>";
       } else {
         echo "<br>";
       }
     } else {
-    echo "<input maxlength=\"4\" size=\"4\" name=\"02_zeit\" value=\"".$this->formdata["02_zeit"]."\">&nbsp;\n
-          <input maxlength=\"3\" size=\"3\" name=\"02_zeichen\" value=\"".$this->formdata["02_zeichen"]."\"><br>\n";
+    echo "<input maxlength=\"4\" size=\"4\" name=\"02_zeit\" value=\"".$this->safe_message_value ("02_zeit")."\">&nbsp;\n
+          <input maxlength=\"3\" size=\"3\" name=\"02_zeichen\" value=\"".$this->safe_message_value ("02_zeichen")."\"><br>\n";
     }
     echo "<div style=\"text-align: center;\">";
     echo "&nbsp;Uhrzeit &nbsp; &nbsp;Zeichen</td>\n";
@@ -1099,20 +1164,20 @@ var_dump ($this->formdata); echo "<br>";
         if ( posttakzeit ) {
           echo "<div style=\"text-align: center;\"><b>";
           $takzeit = konv_datetime_taktime (convtodatetime ($this->formdata["03_datum"], $this->formdata["03_zeit"]) );
-          echo $takzeit."&nbsp; &nbsp;".$this->formdata["03_zeichen"];
+          echo estab_message_html ($takzeit)."&nbsp; &nbsp;".$this->safe_message_value ("03_zeichen");
           echo "</b></div>";
         } else {
           echo "<div style=\"text-align: center;\"><b>";
-          echo $this->formdata["03_datum"]."&nbsp; &nbsp;".$this->formdata["03_zeit"]."&nbsp; &nbsp;".$this->formdata["03_zeichen"];
+          echo $this->safe_message_value ("03_datum")."&nbsp; &nbsp;".$this->safe_message_value ("03_zeit")."&nbsp; &nbsp;".$this->safe_message_value ("03_zeichen");
           echo "</b></div>";
         }
       }else {
         echo "<br>";
       }
     } else {
-      echo "<input maxlength=\"4\" size=\"4\" name=\"03_datum\" value=\"".$this->formdata["03_datum"]."\">\n";
-      echo "<input maxlength=\"4\" size=\"4\" name=\"03_zeit\" value=\"".$this->formdata["03_zeit"]."\">\n";
-      echo "<input maxlength=\"3\" size=\"3\" name=\"03_zeichen\" value=\"".$this->formdata["03_zeichen"]."\"><br>\n";
+      echo "<input maxlength=\"4\" size=\"4\" name=\"03_datum\" value=\"".$this->safe_message_value ("03_datum")."\">\n";
+      echo "<input maxlength=\"4\" size=\"4\" name=\"03_zeit\" value=\"".$this->safe_message_value ("03_zeit")."\">\n";
+      echo "<input maxlength=\"3\" size=\"3\" name=\"03_zeichen\" value=\"".$this->safe_message_value ("03_zeichen")."\"><br>\n";
     }
 
     echo "<div style=\"text-align: center;\">";
@@ -1135,14 +1200,14 @@ var_dump ($this->formdata); echo "<br>";
 
     if (!$this->feld[4]) {
         echo "<div style=\"text-align: center;\"><b><big><big><big>";
-        echo $this->formdata["04_richtung"]."&nbsp; &nbsp;".$this->formdata["04_nummer"];
+        echo $this->safe_message_value ("04_richtung")."&nbsp; &nbsp;".$this->safe_message_value ("04_nummer");
         echo "</big></big></big></b></div>";
     } else {
-      echo "<input maxlength=\"6\" size=\"6\" name=\"04_nummer\" value=\"".$this->formdata["04_nummer"]."\"><br>\n";
+      echo "<input maxlength=\"6\" size=\"6\" name=\"04_nummer\" value=\"".$this->safe_message_value ("04_nummer")."\"><br>\n";
       if (!$this->feld[4]) {
         $param = " disabled ";
         // Radio Button die deaktiviert sind liefern keinen Wert zurck !!!
-        echo "<input type=\"hidden\" name=\"04_richtung\" value=\"".$this->formdata["04_richtung"]."\">\n";
+        echo "<input type=\"hidden\" name=\"04_richtung\" value=\"".$this->safe_message_value ("04_richtung")."\">\n";
       }
       else {
         $param = "";
@@ -1185,10 +1250,10 @@ var_dump ($this->formdata); echo "<br>";
     echo "<td style=\"text-align: center; background-color: ".$this->bg[5]."; width: 580px;\">\n";
     if  (!$this->feld[5]) {
       echo "<div style=\"text-align: left;\"><b>";
-      echo $this->formdata["05_gegenstelle"];
+      echo $this->safe_message_value ("05_gegenstelle");
       echo "</b></div>";
     } else {
-       echo "<input maxlength=\"80\" size=\"80\" name=\"05_gegenstelle\" value=\"".$this->formdata["05_gegenstelle"]."\">\n";
+       echo "<input maxlength=\"80\" size=\"80\" name=\"05_gegenstelle\" value=\"".$this->safe_message_value ("05_gegenstelle")."\">\n";
     }
     echo "</td>";
 
@@ -1220,10 +1285,10 @@ var_dump ($this->formdata); echo "<br>";
     echo "<td style=\"text-align: center; width: 446px; background-color: ".$this->bg[6].";\">\n";
     if (!$this->feld[6]) {
       echo "<div style=\"text-align: left;\"><b>";
-      echo $this->formdata["06_befweg"];
+      echo $this->safe_message_value ("06_befweg");
       echo "</b></div>";
     } else {
-      echo "<input maxlength=\"50\" size=\"50\" name=\"06_befweg\" value=\"".$this->formdata["06_befweg"]."\">\n";
+      echo "<input maxlength=\"50\" size=\"50\" name=\"06_befweg\" value=\"".$this->safe_message_value ("06_befweg")."\">\n";
     }
 
     echo "</td>";
@@ -1235,7 +1300,7 @@ var_dump ($this->formdata); echo "<br>";
     if (!$this->feld[6]) {
       $param = " disabled ";
       // Radio Button die deaktiviert sind liefern keinen Wert zurck !!!
-      echo "<input type=\"hidden\" name=\"06_befwegausw\" value=\"".$this->formdata["06_befwegausw"]."\">\n";
+      echo "<input type=\"hidden\" name=\"06_befwegausw\" value=\"".$this->safe_message_value ("06_befwegausw")."\">\n";
     }
     else {
       $param = "";
@@ -1278,7 +1343,7 @@ var_dump ($this->formdata); echo "<br>";
     if (!$this->feld[7]) {
       $param = " disabled ";
       // Radio Button die deaktiviert sind liefern keinen Wert zurck !!!
-      echo "<input type=\"hidden\" name=\"07_durchspruch\" value=\"".$this->formdata["07_durchspruch"]."\">\n";
+      echo "<input type=\"hidden\" name=\"07_durchspruch\" value=\"".$this->safe_message_value ("07_durchspruch")."\">\n";
     }
     else {
       $param = "";}
@@ -1302,10 +1367,10 @@ var_dump ($this->formdata); echo "<br>";
     echo "<td style=\"width: 294px; background-color: ".$this->bg[8].";\">\n";
     if  (!$this->feld[8]) {
       echo "<div style=\"text-align: left;\"><b>";
-      echo $this->formdata["08_befhinweis"];
+      echo $this->safe_message_value ("08_befhinweis");
       echo "</b></div>";
     } else {
-      echo "<input maxlength=\"40\" size=\"40\" name=\"08_befhinweis\" value=\"".$this->formdata["08_befhinweis"]."\">";
+      echo "<input maxlength=\"40\" size=\"40\" name=\"08_befhinweis\" value=\"".$this->safe_message_value ("08_befhinweis")."\">";
     }
     echo "</td>\n";
     /****************************************************************************\
@@ -1317,7 +1382,7 @@ var_dump ($this->formdata); echo "<br>";
     if  (!$this->feld[8]) {
       $param = " disabled ";
       // Radio Button die deaktiviert sind liefern keinen Wert zurck !!!
-      echo "<input type=\"hidden\" name=\"08_befhinwausw\" value=\"".$this->formdata["08_befhinwausw"]."\">\n";
+      echo "<input type=\"hidden\" name=\"08_befhinwausw\" value=\"".$this->safe_message_value ("08_befhinwausw")."\">\n";
     }
     else {
       $param = "";
@@ -1358,7 +1423,7 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
 
     if (((($this->formdata["09_vorrangstufe"]) != "" )) or (!$this->feld[9])) {
       echo "<div style=\"text-align: center; font-size:24px; font-weight:900;\"><big><big><b>";
-      echo $this->formdata["09_vorrangstufe"];
+      echo $this->safe_message_value ("09_vorrangstufe");
       echo "</big></big></b></div>";
     } else {
       echo "<select ".$param." name=\"09_vorrangstufe\">\n";
@@ -1383,12 +1448,12 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
 
     if (!$this->feld[10]) {
       echo "<div style=\"text-align: center; font-size:24px; font-weight:900;\">";
-      echo $this->formdata["10_anschrift"] ;
+      echo $this->safe_message_value ("10_anschrift") ;
       echo "</div>\n";
 
     } else {
       echo "<div style=\"text-align: center;\">";
-      echo "<textarea style=\"font-size:18px; font-weight:900;\" cols=\"40\" rows=\"2\" name=\"10_anschrift\">".$this->formdata["10_anschrift"] ;
+      echo "<textarea style=\"font-size:18px; font-weight:900;\" cols=\"40\" rows=\"2\" name=\"10_anschrift\">".$this->safe_message_value ("10_anschrift") ;
       echo "</textarea></div>\n";
     }
 
@@ -1435,17 +1500,17 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
     echo "<td valign=\"TOP\" style=\"background-color: ".$this->bg[12].";\">Inhalt/Text:<br>\n";
     if  ($this->feld[12]) {
       echo "<div style=\"text-align: center;\">";
-      echo "<textarea style=\"font-size:18px; font-weight:900;\" cols=\"65\" rows=\"10\" name=\"12_inhalt\"".$param.">".$this->formdata["12_inhalt"];
+      echo "<textarea style=\"font-size:18px; font-weight:900;\" cols=\"65\" rows=\"10\" name=\"12_inhalt\"".$param.">".$this->safe_message_value ("12_inhalt");
       echo "</textarea></div>\n";
     } else {
       echo "<div style=\"text-align: left; font-size:18px; font-weight:900;\">";
-      echo "<input type=\"hidden\" name=\"12_inhalt\" value=\"".$this->formdata["12_inhalt"]."\">\n";
-      echo nl2br ( $this->formdata["12_inhalt"]) ;
+      echo "<input type=\"hidden\" name=\"12_inhalt\" value=\"".$this->safe_message_value ("12_inhalt")."\">\n";
+      echo nl2br ($this->safe_message_value ("12_inhalt"));
       echo "</div>";
     }
       // Sind Anhge definiert? Wenn ja, anzeigen.
     if ($this->formdata["12_anhang"] != ""){
-      echo "<input type=\"hidden\" name=\"12_anhang\" value=\"".$this->formdata["12_anhang"]."\">\n";
+      echo "<input type=\"hidden\" name=\"12_anhang\" value=\"".$this->safe_message_value ("12_anhang")."\">\n";
       $this->list_anhang ();
     }
     echo "</td>\n";
@@ -1482,11 +1547,11 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
 
     if (!$this->feld [12]){
       echo "<div style=\"text-align: left; font-size:24px; font-weight:900;\">";
-      echo $this->formdata["12_abfzeit"] ;
-      echo "<input type=\"hidden\" name=\"12_abfzeit\" value=\"".$this->formdata["12_abfzeit"]."\">\n";
+      echo $this->safe_message_value ("12_abfzeit") ;
+      echo "<input type=\"hidden\" name=\"12_abfzeit\" value=\"".$this->safe_message_value ("12_abfzeit")."\">\n";
       echo "</div>\n";
     } else {
-      echo "<input maxlength=\"4\" size=\"4\" name=\"12_abfzeit\" value=\"".$this->formdata["12_abfzeit"]."\">";
+      echo "<input maxlength=\"4\" size=\"4\" name=\"12_abfzeit\" value=\"".$this->safe_message_value ("12_abfzeit")."\">";
     }
 
     echo "</td>\n";
@@ -1512,13 +1577,13 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
     echo "<td style=\"text-align: left; width: 200px; background-color: ".$this->bg[13].";\">\n";
 
     if (!$this->feld [13]){
-      echo "<b><big>".$this->formdata["13_abseinheit"]."</big></b>" ;
-      echo "<input type=\"hidden\" name=\"13_abseinheit\" value=\"".$this->formdata["13_abseinheit"]."\">\n";
+      echo "<b><big>".$this->safe_message_value ("13_abseinheit")."</big></b>" ;
+      echo "<input type=\"hidden\" name=\"13_abseinheit\" value=\"".$this->safe_message_value ("13_abseinheit")."\">\n";
     }
     else {
       echo "<div style=\"text-align: left;\" >";
       echo "<input style=\"font-size:16px; font-weight:900;\" maxlength=\"15\" size=\"15\"
-              name=\"13_abseinheit\" value=\"".$this->formdata["13_abseinheit"]."\">";
+              name=\"13_abseinheit\" value=\"".$this->safe_message_value ("13_abseinheit")."\">";
       echo "</div>\n";
     }
     echo "<br>\n";
@@ -1532,11 +1597,11 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
     echo "<td style=\"width: 100px; background-color: ".$this->bg[14].";\">\n";
     if (!$this->feld [14]){
 //      echo "<div style=\"text-align: left; font-size:24px; font-weight:900;\">";
-      echo "<b><big>".$this->formdata["14_zeichen"]."</big></b><br>" ;
-      echo "<input type=\"hidden\" name=\"14_zeichen\" value=\"".$this->formdata["14_zeichen"]."\">\n";
+      echo "<b><big>".$this->safe_message_value ("14_zeichen")."</big></b><br>" ;
+      echo "<input type=\"hidden\" name=\"14_zeichen\" value=\"".$this->safe_message_value ("14_zeichen")."\">\n";
 //      echo "</div>\n";
     } else {
-      echo "<input maxlength=\"25\" size=\"10\" name=\"14_zeichen\" value=\"".$this->formdata["14_zeichen"]."\"><br>\n";
+      echo "<input maxlength=\"25\" size=\"10\" name=\"14_zeichen\" value=\"".$this->safe_message_value ("14_zeichen")."\"><br>\n";
     }
     echo "Zeichen</td>\n";
 
@@ -1547,11 +1612,11 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
     echo "<td style=\"width: 100px; background-color: ".$this->bg[14].";\">\n";
     if (!$this->feld [14]){
 //      echo "<div style=\"text-align: left; font-size:24px; font-weight:900;\">";
-      echo "<b><big>".$this->formdata["14_funktion"]."</big></b><br>" ;
-      echo "<input type=\"hidden\" name=\"14_funktion\" value=\"".$this->formdata["14_funktion"]."\">\n";
+      echo "<b><big>".$this->safe_message_value ("14_funktion")."</big></b><br>" ;
+      echo "<input type=\"hidden\" name=\"14_funktion\" value=\"".$this->safe_message_value ("14_funktion")."\">\n";
 //      echo "</div>\n";
     } else {
-      echo "<input maxlength=\"25\" size=\"10\" name=\"14_funktion\" value=\"".$this->formdata["14_funktion"]."\"".$param."><br>\n";
+      echo "<input maxlength=\"25\" size=\"10\" name=\"14_funktion\" value=\"".$this->safe_message_value ("14_funktion")."\"".$param."><br>\n";
     }
     echo "Funktion</td>\n";
     echo "</tr>\n";
@@ -1592,12 +1657,12 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
 
     if (!$this->feld [15]){
       echo "<div style=\"text-align: left;\">";
-      echo $this->formdata["15_quitdatum"]."&nbsp;&nbsp;".$this->formdata["15_quitzeichen"];
+      echo $this->safe_message_value ("15_quitdatum")."&nbsp;&nbsp;".$this->safe_message_value ("15_quitzeichen");
       echo "</div>\n";
 
     } else {
-    echo "<input maxlength=\"4\" size=\"4\" name=\"15_quitdatum\" value=\"".$this->formdata["15_quitdatum"]."\">&nbsp;\n";
-    echo "<input maxlength=\"3\" size=\"3\" name=\"15_quitzeichen\" value=\"".$this->formdata["15_quitzeichen"]."\"><br>\n";
+    echo "<input maxlength=\"4\" size=\"4\" name=\"15_quitdatum\" value=\"".$this->safe_message_value ("15_quitdatum")."\">&nbsp;\n";
+    echo "<input maxlength=\"3\" size=\"3\" name=\"15_quitzeichen\" value=\"".$this->safe_message_value ("15_quitzeichen")."\"><br>\n";
     }
 
     echo "&nbsp;Uhrzeit &nbsp; &nbsp;Zeichen</td>\n";
@@ -1661,12 +1726,12 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
                 echo "<a style=\"background-color:#0303FD;\">
                       <input name=\"16_".$m.$n."\" value=\"16_".$m.$n."_bl\" type=\"checkbox\" ".$param.$selcbbl.">\n</a>";
 
-                echo $this->empfarray [$m][$n]["fkt"] ;
+	                echo estab_message_html ($this->empfarray [$m][$n]["fkt"] ?? "");
               break;
 
               case "t":
                 if ($this->empfarray [$m][$n]["fkt"] != ""){
-                  echo $this->empfarray [$m][$n]["fkt"] ;
+	                  echo estab_message_html ($this->empfarray [$m][$n]["fkt"] ?? "");
                 } else {
                   echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
                 }
@@ -1676,7 +1741,9 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
                 if ($this->empfarray [$m][$n]["checked"]) {$selcb = "checked=\"checked\"";} else {$selcb = "";}
                 echo "<a style=\"background-color:#00B000;\">
                       <input name=\"16_".$m.$n."\" value=\"16_".$m.$n."\" type=\"checkbox\" ".$param.$sel."></a>\n";
-                echo "<input maxlength=\"8\" size=\"8\" value=\"".$this->empfarray [$m][$n]["fkt"]."\" name=\"16_empf_sonst_".$m.$n."\" ".$param."></td>\n";
+	                echo "<input maxlength=\"8\" size=\"8\" value=\"".
+	                  estab_message_html ($this->empfarray [$m][$n]["fkt"] ?? "").
+	                  "\" name=\"16_empf_sonst_".$m.$n."\" ".$param."></td>\n";
               break;
             }
 
@@ -1701,12 +1768,12 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
           case "cb":
             if ($this->empfarray [$m][$n]["checked"]) {$sel = "checked=\"checked\"";} else {$sel = "";}
             echo "<input name=\"16_".$m.$n."\" value=\"16_".$m.$n."\" type=\"checkbox\" ".$param.$sel.">\n";
-            echo $this->empfarray [$m][$n]["fkt"] ;
+	            echo estab_message_html ($this->empfarray [$m][$n]["fkt"] ?? "");
           break;
 
           case "t":
             if ($this->empfarray [$m][$n]["fkt"] != ""){
-              echo $this->empfarray [$m][$n]["fkt"] ;
+	              echo estab_message_html ($this->empfarray [$m][$n]["fkt"] ?? "");
             } else {
               echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
             }
@@ -1716,7 +1783,9 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
             if ($this->empfarray [$m][$n]["checked"]) {$sel = "checked=\"checked\"";} else {$sel = "";}
             echo "<a style=\"background-color:#00B000;\">
                   <input name=\"16_".$m.$n."\" value=\"16_".$m.$n."\" type=\"checkbox\" ".$param.$sel."></a>\n";
-            echo "<input maxlength=\"8\" size=\"8\" value=\"".$this->empfarray [$m][$n]["fkt"]."\" name=\"16_empf_sonst_".$m.$n."\" ".$param."></td>\n";
+	            echo "<input maxlength=\"8\" size=\"8\" value=\"".
+	              estab_message_html ($this->empfarray [$m][$n]["fkt"] ?? "").
+	              "\" name=\"16_empf_sonst_".$m.$n."\" ".$param."></td>\n";
           break;
         }
 
@@ -1739,9 +1808,9 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
     echo "<td  valign=\"TOP\" style=\"text-align: left; width: 350px; background-color: ".$this->bg[17].";\">Vermerke:<br>\n";
 
     if (((($this->formdata["17_vermerke"]) != "" )) or (!$this->feld[17])) {
-      echo $this->formdata["17_vermerke"];
+      echo $this->safe_message_value ("17_vermerke");
     } else {
-      echo "<textarea cols=\"40\" rows=\"10\" name=\"17_vermerke\" ".$param.">".$this->formdata["17_vermerke"]."</textarea>";
+      echo "<textarea cols=\"40\" rows=\"10\" name=\"17_vermerke\" ".$param.">".$this->safe_message_value ("17_vermerke")."</textarea>";
     }
 
     echo "</td>\n";
@@ -1759,14 +1828,14 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
 
     if ($this->task == "Stab_lesen"){
       echo "<tr><td>\n";
-      echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
-      echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
+      echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".estab_message_html ($this->lfd)."\">\n";
+      echo "<input type=\"hidden\" name=\"task\" value=\"".estab_message_html ($this->task)."\">\n";
       echo "<input type=\"image\" name=\"ablesen\" src=\"".$conf_design_path."/isread.gif\">\n";
       echo "</td></tr>\n";
     } else {
       echo "<tr><td>\n";
-      echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
-      echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
+      echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".estab_message_html ($this->lfd)."\">\n";
+      echo "<input type=\"hidden\" name=\"task\" value=\"".estab_message_html ($this->task)."\">\n";
       echo "<input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/send.gif\">\n";
       echo "</td><td>\n";
       echo "<input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/cancel.gif\">\n";
@@ -1785,11 +1854,7 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
 /*############################################################################
 ##############################################################################*/
 
-define ("debug", false);
-
-  session_start ();
-  
-$returnValue = null ; // first set returnValue to a defined stat
+$returnValue = array (); // first set returnValue to a defined state
 if (count($_GET)>0)  { $returnValue = $_GET; }   // GET Daten, wenn vorhanden speichern
 if (count($_POST)>0) { $returnValue = $_POST; }  // POST Daten, wenn vorhanden speichern
   
@@ -1872,6 +1937,13 @@ if (count($_POST)>0) { $returnValue = $_POST; }  // POST Daten, wenn vorhanden s
   if (isset($returnValue["ueb_flt_suche_reset"])){ unset ($_SESSION["ueb_flt_search"]); }
 
   if (isset($returnValue["ueb_flt_search"])){
+    if (
+      !is_string ($returnValue ["ueb_flt_search"])
+      || strlen ($returnValue ["ueb_flt_search"]) > 120
+      || str_contains ($returnValue ["ueb_flt_search"], "\0")
+    ) {
+      estab_overview_forbid ();
+    }
     if (isset($_SESSION["ueb_flt_search"]) AND ( $_SESSION["ueb_flt_search"] != $returnValue ["ueb_flt_search"])){
       $_SESSION["ueb_flt_start"] = 0 ;
       $_SESSION["ueb_flt_position"] = 0;
@@ -1881,7 +1953,16 @@ if (count($_POST)>0) { $returnValue = $_POST; }  // POST Daten, wenn vorhanden s
 
   // Listennavigation
   if (isset ($returnValue["ueb_flt_anzahl_x"])) {
-    $_SESSION["ueb_flt_anzahl"] = $returnValue["ueb_flt_anzahl"]; }
+    $requestedPageSize = filter_var (
+      $returnValue["ueb_flt_anzahl"] ?? null,
+      FILTER_VALIDATE_INT,
+      array ("options" => array ("min_range" => 5, "max_range" => 25))
+    );
+    if (!is_int ($requestedPageSize) || ($requestedPageSize % 5) !== 0) {
+      estab_overview_forbid ();
+    }
+    $_SESSION["ueb_flt_anzahl"] = $requestedPageSize;
+  }
 
   if (isset($returnValue['ueb_flt_start_x'])) { $_SESSION['ueb_flt_navi'] = "start";}
   if (isset($returnValue['ueb_flt_back_x']))  { $_SESSION['ueb_flt_navi'] = "back";}
@@ -1901,10 +1982,24 @@ if (count($_POST)>0) { $returnValue = $_POST; }  // POST Daten, wenn vorhanden s
   Darstellung der Meldung ber die laufende Nummer
 \**********************************************************************/
    if ((isset($returnValue["ueb_fm"])) and ( $returnValue["ueb_fm"] == "ueb")){
-      $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
-      $query = "SELECT * FROM `".$conf_4f_tbl ["nachrichten"]."` where 00_lfd = ".$returnValue["00_lfd"];
-      $result = $dbaccess->query_table ($query);
-      $formdata = $result [1];
+      try {
+        $overviewRecordId = estab_message_positive_id ($returnValue ["00_lfd"] ?? null);
+      } catch (Throwable $exception) {
+        estab_overview_forbid ();
+      }
+      $messageConnection = estab_message_connect ($conf_4f_db);
+      try {
+        $formdata = estab_message_fetch_by_id (
+          $messageConnection,
+          $conf_4f_tbl ["nachrichten"],
+          $overviewRecordId
+        );
+      } finally {
+        estab_auth_close ($messageConnection);
+      }
+      if (!is_array ($formdata)) {
+        estab_overview_forbid ();
+      }
       $form = new nachrichten4fach ($formdata, "Stab_lesen", "");
    }
 

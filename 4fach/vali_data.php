@@ -8,6 +8,10 @@ class vali_data_form {
   /*****************************************************************************\
      Konstruktor
   \*****************************************************************************/
+  function __construct ($data){
+    $this->vali_data_form ($data);
+  }
+
   function vali_data_form ($data){
     $this->i_data = $data ;
     $this->reset_validate() ;
@@ -135,9 +139,9 @@ class vali_data_form {
        case ("text"): // 1..n Zeichen es muss Inhalt vorhanden sein
            if ( strlen ($data) > 0 ) { $valid["l_data"] = true; }
          break ;
-       case ("kuerzel"): // 3 stellig
+       case ("kuerzel"): // 1 bis 6 Zeichen, wie das Benutzerkuerzel
            if ( ( strlen ($data) > 0 ) and
-                ( strlen ($data) <= 3 ) ) { $valid["l_data"] = true; }
+                ( strlen ($data) <= 6 ) ) { $valid["l_data"] = true; }
          break ;
        case ("binaer"): // logischer Wert - Ist gesetzt oder nicht
            if  ( $data == true  ) { $valid["l_data"] = true; }

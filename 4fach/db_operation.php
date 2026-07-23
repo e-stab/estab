@@ -23,6 +23,13 @@ class db_access {
 
   var $db_sqlquery;
   var $db_result;
+  var $sqlquery;
+  var $result = "";
+  var $resultcount = 0;
+
+  function __construct ($newdb_server, $newdb_name, $newdb_table, $newdb_user, $newdb_pw){
+    $this->db_access ($newdb_server, $newdb_name, $newdb_table, $newdb_user, $newdb_pw);
+  }
 
   function db_access ($newdb_server, $newdb_name, $newdb_table, $newdb_user, $newdb_pw){
     $this->db_server = $newdb_server ;
@@ -70,104 +77,200 @@ class db_access {
   Funktion create_user_table ($tablename)
 \******************************************************************************/
 
+  function quote_dynamic_table_identifier ($basename, $suffix) {
+    if (!is_string($basename) || $basename === "") {
+      throw new InvalidArgumentException ("Dynamischer Tabellenname darf nicht leer sein");
+    }
+
+    $identifier = $basename.$suffix;
+    if ((strlen ($identifier) > 64) ||
+        (!preg_match ("/\\A[A-Za-z_][A-Za-z0-9_]*\\z/D", $identifier))) {
+      throw new InvalidArgumentException ("Ungueltiger dynamischer Tabellenname");
+    }
+
+    return "`".$identifier."`";
+  }
+
+  function execute_dynamic_schema_query ($query, $db) {
+    $result = mysql_query ($query, $db);
+    if (!$result) {
+      throw new RuntimeException (
+        "[create_user_table] Ungueltige Abfrage: ".mysql_error ($db)
+      );
+    }
+  }
+
   function create_user_table ($tablename, $fkttblname) {
+    $user_read       = $this->quote_dynamic_table_identifier ($tablename, "_read");
+    $function_done   = $this->quote_dynamic_table_identifier ($fkttblname, "_erl");
+    $function_katego = $this->quote_dynamic_table_identifier ($fkttblname, "_katego");
+    $function_link   = $this->quote_dynamic_table_identifier ($fkttblname, "_kategolink");
+    $user_katego     = $this->quote_dynamic_table_identifier ($tablename, "_katego");
+    $user_link       = $this->quote_dynamic_table_identifier ($tablename, "_kategolink");
+
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("create_user_table [connect] Konnte keine Verbindung zur Datenbank herstellen");
-    mysql_query('SET NAMES utf8');
-    $db_check = mysql_select_db ($this->db_name)
+    $this->execute_dynamic_schema_query (
+      'SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci',
+      $db
+    );
+    $db_check = mysql_select_db ($this->db_name, $db)
        or die ("[read_table] Auswahl der Datenbank fehlgeschlagen");
-     // gelesen
-    $query = "CREATE TABLE IF NOT EXISTS ".$tablename."_read (
-        `lfd` bigint(20) unsigned NOT NULL auto_increment COMMENT 'Laufende Nummer',
-        `zeit` timestamp NOT NULL default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP COMMENT 'Zeitpunkt der letzte Ãnderung',
-        `nachnum` bigint(20) NOT NULL COMMENT 'FremdschlÃ¼ssel der Erledigten Nachricht',
-        `gelesen` datetime NOT NULL default '0000-00-00 00:00:00' COMMENT 'Zeitpunkt wann die Nachricht gelesen wurde',
-        PRIMARY KEY  (`lfd`)
-      ) ENGINE=MyISAM DEFAULT CHARSET=latin1 AUTO_INCREMENT=1 ;";
-    $result = mysql_query($query);
-    if (!$result) {
-       die('89 db_oper Ungueltige Abfrage: ' . mysql_error());
+
+    $mode_result = mysql_query ("SELECT @@SESSION.sql_mode", $db);
+    if (!$mode_result) {
+      throw new RuntimeException (
+        "[create_user_table] SQL-Mode konnte nicht gelesen werden: ".mysql_error ($db)
+      );
     }
+    $mode_row = mysql_fetch_row ($mode_result);
+    mysql_free_result ($mode_result);
+    $original_sql_mode = $mode_row [0];
 
-     $query = "ALTER TABLE `".$tablename."_read` ADD INDEX ( `nachnum` ) ";
-     $result = mysql_query($query);
-    if (!$result) {
-       die('95 db_oper Ungueltige Abfrage: ' . mysql_error());
-    }
+    $create_queries = array (
+      "CREATE TABLE IF NOT EXISTS ".$user_read." (
+        `lfd` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Laufende Nummer',
+        `zeit` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Zeitpunkt der letzten Aenderung',
+        `nachnum` BIGINT NOT NULL COMMENT 'Nachrichtennummer',
+        `gelesen` DATETIME NULL DEFAULT NULL COMMENT 'Zeitpunkt, zu dem die Nachricht gelesen wurde',
+        PRIMARY KEY (`lfd`),
+        KEY `idx_nachnum` (`nachnum`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 
-     // erledigte bezogen auf die Funktion
+      "CREATE TABLE IF NOT EXISTS ".$function_done." (
+        `lfd` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Laufende Nummer',
+        `zeit` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Zeitpunkt der letzten Aenderung',
+        `nachnum` BIGINT NOT NULL COMMENT 'Nachrichtennummer',
+        `erledigt` DATETIME NULL DEFAULT NULL COMMENT 'Zeitpunkt, zu dem die Nachricht erledigt wurde',
+        PRIMARY KEY (`lfd`),
+        KEY `idx_nachnum` (`nachnum`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 
-    $query = "CREATE TABLE IF NOT EXISTS ".$fkttblname."_erl (
-        `lfd` bigint(20) unsigned NOT NULL auto_increment COMMENT 'Laufende Nummer',
-        `zeit` timestamp NOT NULL default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP COMMENT 'Zeitpunkt der letzte Ãnderung',
-        `nachnum` bigint(20) NOT NULL COMMENT 'FremdschlÃ¼ssel der Erledigten Nachricht',
-        `erledigt` datetime NOT NULL default '0000-00-00 00:00:00' COMMENT 'Zeitpunkt wann die Nachricht gelesen wurde',
-        PRIMARY KEY  (`lfd`)
-      ) ENGINE=MyISAM DEFAULT CHARSET=latin1 AUTO_INCREMENT=1 ;";
+      "CREATE TABLE IF NOT EXISTS ".$function_katego." (
+        `lfd` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Laufende Nummer',
+        `kategorie` VARCHAR(10) NOT NULL COMMENT 'Benutzerdefinierte Kategorie',
+        `beschreibung` VARCHAR(254) NULL COMMENT 'Beschreibung zur Kategorie',
+        PRIMARY KEY (`lfd`),
+        KEY `idx_kategorie` (`kategorie`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 
-    $result = mysql_query($query);
-    if (!$result) {
-       die('110 db_Oper Ungueltige Abfrage: ' . mysql_error());
-    }
+      "CREATE TABLE IF NOT EXISTS ".$function_link." (
+        `lfd` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        `msg` BIGINT NOT NULL,
+        `katego` BIGINT NOT NULL,
+        PRIMARY KEY (`lfd`),
+        KEY `idx_msg_katego` (`msg`, `katego`),
+        KEY `idx_katego_msg` (`katego`, `msg`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 
+      "CREATE TABLE IF NOT EXISTS ".$user_katego." (
+        `lfd` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Laufende Nummer',
+        `kategorie` VARCHAR(10) NOT NULL COMMENT 'Benutzerdefinierte Kategorie',
+        `beschreibung` VARCHAR(254) NULL COMMENT 'Beschreibung zur Kategorie',
+        PRIMARY KEY (`lfd`),
+        KEY `idx_kategorie` (`kategorie`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 
-     $query = "ALTER TABLE `".$fkttblname."_erl` ADD INDEX ( `nachnum` ) ";
-     $result = mysql_query($query);
-    if (!$result) {
-       die('117 db_oper Ungueltige Abfrage: ' . mysql_error());
-    }
+      "CREATE TABLE IF NOT EXISTS ".$user_link." (
+        `lfd` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        `msg` BIGINT NOT NULL,
+        `katego` BIGINT NOT NULL,
+        PRIMARY KEY (`lfd`),
+        KEY `idx_msg_katego` (`msg`, `katego`),
+        KEY `idx_katego_msg` (`katego`, `msg`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
 
-     // Kategorien der Funktion
-    $query = "CREATE TABLE IF NOT EXISTS ".$fkttblname."_katego (
-        `lfd` bigint(20) unsigned NOT NULL auto_increment COMMENT 'Laufende Nummer',
-        `kategorie` varchar(10) NOT NULL COMMENT 'Benutzer definierte Kategorien',
-        `beschreibung` varchar (254) NULL COMMENT 'Beschreibung zur Kategorie',
-        PRIMARY KEY  (`lfd`)
-      ) ENGINE=MyISAM DEFAULT CHARSET=latin1 AUTO_INCREMENT=1 ;";
+    $migration_queries = array (
+      "ALTER TABLE ".$user_read."
+         MODIFY `lfd` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+         MODIFY `zeit` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+         MODIFY `nachnum` BIGINT NOT NULL,
+         MODIFY `gelesen` DATETIME NULL DEFAULT NULL,
+         ENGINE=InnoDB,
+         CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
+      "UPDATE ".$user_read."
+          SET `gelesen` = NULL
+        WHERE `gelesen` = '0000-00-00 00:00:00'",
+      "CREATE INDEX IF NOT EXISTS `idx_nachnum` ON ".$user_read." (`nachnum`)",
 
-    $result = mysql_query($query);
-    if (!$result) {
-       die('131 db_oper Ungueltige Abfrage: ' . mysql_error());
-    }
-     // Zuordnung Kategorien <--> Meldung
-    $query = "CREATE TABLE IF NOT EXISTS ".$fkttblname."_kategolink (
-             `msg` bigint(20) NOT NULL,
-          `katego` bigint(20) NOT NULL
-           ) ENGINE=MyISAM DEFAULT CHARSET=latin1 ;";
+      "ALTER TABLE ".$function_done."
+         MODIFY `lfd` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+         MODIFY `zeit` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+         MODIFY `nachnum` BIGINT NOT NULL,
+         MODIFY `erledigt` DATETIME NULL DEFAULT NULL,
+         ENGINE=InnoDB,
+         CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
+      "UPDATE ".$function_done."
+          SET `erledigt` = NULL
+        WHERE `erledigt` = '0000-00-00 00:00:00'",
+      "CREATE INDEX IF NOT EXISTS `idx_nachnum` ON ".$function_done." (`nachnum`)",
 
-    $result = mysql_query($query);
-    if (!$result) {
-       die('Ungueltige Abfrage: ' . mysql_error());
-    }
+      "ALTER TABLE ".$function_katego."
+         MODIFY `lfd` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+         MODIFY `kategorie` VARCHAR(10) NOT NULL,
+         MODIFY `beschreibung` VARCHAR(254) NULL,
+         ENGINE=InnoDB,
+         CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
+      "CREATE INDEX IF NOT EXISTS `idx_kategorie` ON ".$function_katego." (`kategorie`)",
 
+      "ALTER TABLE ".$function_link."
+         ADD COLUMN IF NOT EXISTS `lfd`
+           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY FIRST",
+      "ALTER TABLE ".$function_link."
+         MODIFY `msg` BIGINT NOT NULL,
+         MODIFY `katego` BIGINT NOT NULL,
+         ENGINE=InnoDB,
+         CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
+      "CREATE INDEX IF NOT EXISTS `idx_msg_katego`
+         ON ".$function_link." (`msg`, `katego`)",
+      "CREATE INDEX IF NOT EXISTS `idx_katego_msg`
+         ON ".$function_link." (`katego`, `msg`)",
 
+      "ALTER TABLE ".$user_katego."
+         MODIFY `lfd` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+         MODIFY `kategorie` VARCHAR(10) NOT NULL,
+         MODIFY `beschreibung` VARCHAR(254) NULL,
+         ENGINE=InnoDB,
+         CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
+      "CREATE INDEX IF NOT EXISTS `idx_kategorie` ON ".$user_katego." (`kategorie`)",
 
-     // Kategorien
-    $query = "CREATE TABLE IF NOT EXISTS ".$tablename."_katego (
-        `lfd` bigint(20) unsigned NOT NULL auto_increment COMMENT 'Laufende Nummer',
-        `kategorie` varchar(10) NOT NULL COMMENT 'Benutzer definierte Kategorien',
-        `beschreibung` varchar (254) NULL COMMENT 'Beschreibung zur Kategorie',
-        PRIMARY KEY  (`lfd`)
-      ) ENGINE=MyISAM DEFAULT CHARSET=latin1 AUTO_INCREMENT=1 ;";
+      "ALTER TABLE ".$user_link."
+         ADD COLUMN IF NOT EXISTS `lfd`
+           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY FIRST",
+      "ALTER TABLE ".$user_link."
+         MODIFY `msg` BIGINT NOT NULL,
+         MODIFY `katego` BIGINT NOT NULL,
+         ENGINE=InnoDB,
+         CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
+      "CREATE INDEX IF NOT EXISTS `idx_msg_katego`
+         ON ".$user_link." (`msg`, `katego`)",
+      "CREATE INDEX IF NOT EXISTS `idx_katego_msg`
+         ON ".$user_link." (`katego`, `msg`)"
+    );
 
-    $result = mysql_query($query);
-    if (!$result) {
-       die('131 db_oper Ungueltige Abfrage: ' . mysql_error());
-    }
-     // Zuordnung Kategorien <--> Meldung
-    $query = "CREATE TABLE IF NOT EXISTS ".$tablename."_kategolink (
-             `msg` bigint(20) NOT NULL,
-          `katego` bigint(20) NOT NULL
-           ) ENGINE=MyISAM DEFAULT CHARSET=latin1 ;";
-
-    $result = mysql_query($query);
-    if (!$result) {
-       die('Ungueltige Abfrage: ' . mysql_error());
+    try {
+      // Only this connection is relaxed while invalid legacy zero dates are
+      // made nullable. The original strict mode is restored in every case.
+      $this->execute_dynamic_schema_query ("SET SESSION sql_mode = ''", $db);
+      foreach ($create_queries as $query) {
+        $this->execute_dynamic_schema_query ($query, $db);
+      }
+      foreach ($migration_queries as $query) {
+        $this->execute_dynamic_schema_query ($query, $db);
+      }
+    } finally {
+      $escaped_sql_mode = mysql_real_escape_string ($original_sql_mode, $db);
+      $this->execute_dynamic_schema_query (
+        "SET SESSION sql_mode = '".$escaped_sql_mode."'",
+        $db
+      );
     }
   }
 
 
   function read_table (){
+    $this->result = array ();
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[read_table] Konnte keine Verbindung zur Datenbank herstellen");
     mysql_query('SET NAMES utf8');
@@ -187,11 +290,11 @@ class db_access {
 
     mysql_free_result($query_result);
     mysql_close ($db);
-    return ($this->result);
+    return ($this->resultcount > 0 ? $this->result : "");
   } // function read_table
 
   function query_table ($query){
-    $this->result = "";
+    $this->result = array ();
     $this->sqlquery = $query ;
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[query_table196] Konnte keine Verbindung zur Datenbank herstellen" . mysql_error());
@@ -210,11 +313,11 @@ class db_access {
 
     mysql_free_result($query_result);
     mysql_close ($db);
-    return ($this->result);
+    return ($this->resultcount > 0 ? $this->result : "");
   } // function read_table
 
   function query_table_wert ($query){
-    $this->result = "";
+    $this->result = array ();
     $this->sqlquery = $query ;
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[query_table_wert] Konnte keine Verbindung zur Datenbank herstellen");
@@ -252,7 +355,7 @@ class db_access {
 
 
   function query_usrtable ($query){
-    $this->result = "";
+    $this->result = array ();
     $this->sqlquery = $query ;
     $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
        or die ("[query_table257] Konnte keine Verbindung zur Datenbank herstellen".mysql_error()." ".mysql_errno());
@@ -276,7 +379,7 @@ class db_access {
 
     mysql_free_result($query_result);
     mysql_close ($db);
-    return ($this->result);
+    return ($this->resultcount > 0 ? $this->result : "");
   } // function read_table
 
 } // class

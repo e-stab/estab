@@ -138,7 +138,7 @@ function check_and_save ($data){
 
         $result = $dbaccess->query_table_iu ($query);
 
-        protokolleintrag ("FM-Eingang",$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
+        protokolleintrag ("FM-Eingang",$query.";".session_id().";".$_SERVER['REMOTE_ADDR']);
     break;
 
     case "FM-Eingang_Sichter":
@@ -234,7 +234,7 @@ function check_and_save ($data){
          echo "query[FM-Eingang_Sichter]===".$query."<br>";
        }
        $result = $dbaccess->query_table_iu ($query);
-       protokolleintrag ("FM-Eingang-Sichter",$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
+       protokolleintrag ("FM-Eingang-Sichter",$query.";".session_id().";".$_SERVER['REMOTE_ADDR']);
     break;
 
     case "Stab_schreiben":
@@ -471,7 +471,7 @@ function check_and_save ($data){
             `x03_sperruser`   = \"\"
              WHERE `00_lfd` = \"".$data ["00_lfd"]."\"";
        $result = $dbaccess->query_table_iu ($query);
-       protokolleintrag ("FM-Ausgang",$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
+       protokolleintrag ("FM-Ausgang",$query.";".session_id().";".$_SERVER['REMOTE_ADDR']);
     break;
 
     case "FM-Ausgang_Sichter":
@@ -540,7 +540,7 @@ function check_and_save ($data){
             `x03_sperruser`   = \"\"
              WHERE `00_lfd` = \"".$data ["00_lfd"]."\";";
        $result = $dbaccess->query_table_iu ($query);
-        protokolleintrag ("FM-Ausgang-Sichter",$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
+        protokolleintrag ("FM-Ausgang-Sichter",$query.";".session_id().";".$_SERVER['REMOTE_ADDR']);
     break;
 
 
@@ -582,7 +582,7 @@ function check_and_save ($data){
             `x03_sperruser`   = \"\"
              WHERE `00_lfd` = \"".$data ["00_lfd"]."\";";
        $result = $dbaccess->query_table_iu ($query);
-        protokolleintrag ("Stab_sichten",$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
+        protokolleintrag ("Stab_sichten",$query.";".session_id().";".$_SERVER['REMOTE_ADDR']);
     break;
 
     case "Nachweis":
@@ -627,9 +627,9 @@ function check_and_save ($data){
              WHERE `00_lfd` = \"".$data ["00_lfd"]."\"";
        $result = $dbaccess->query_table_iu ($query);
        if ($data["task"] == "FM-Admin") {
-         protokolleintrag ("++ FM-Admin",$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
+         protokolleintrag ("++ FM-Admin",$query.";".session_id().";".$_SERVER['REMOTE_ADDR']);
        } else {
-         protokolleintrag ("++ SI-Admin",$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
+         protokolleintrag ("++ SI-Admin",$query.";".session_id().";".$_SERVER['REMOTE_ADDR']);
        }
     break;
   }
@@ -685,7 +685,7 @@ function check_and_save ($data){
             `nachnum`      = \"".$lfd."\",
             `gelesen`      = \"".convtodatetime (date ("dmY"), date ("Hi"))."\"";
        $result = $dbaccess->query_table_iu ($query);
-        protokolleintrag ("Stab_".$_SESSION["vStab_funktion"]." gelesen_".$lfd,$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
+        protokolleintrag ("Stab_".$_SESSION["vStab_funktion"]." gelesen_".$lfd,$query.";".session_id().";".$_SERVER['REMOTE_ADDR']);
 
     }
   }
@@ -715,7 +715,7 @@ function check_and_save ($data){
        $query = "DELETE FROM ".$tblusername."_read
                         WHERE ".$tblusername."_read.nachnum = $lfd;";
        $result = $dbaccess->query_table_iu ($query);
-        protokolleintrag ("Stab_".$_SESSION["vStab_funktion"]." ungelesen_".$lfd,$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
+        protokolleintrag ("Stab_".$_SESSION["vStab_funktion"]." ungelesen_".$lfd,$query.";".session_id().";".$_SERVER['REMOTE_ADDR']);
     }
   }
 
@@ -747,7 +747,7 @@ function check_and_save ($data){
             `nachnum`      = \"".$lfd."\",
             `erledigt`     = \"".convtodatetime (date ("dmY"), date ("Hi"))."\"";
        $result = $dbaccess->query_table_iu ($query);
-       protokolleintrag ("Stab_".$_SESSION["vStab_funktion"]." erledigt_".$lfd,$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
+       protokolleintrag ("Stab_".$_SESSION["vStab_funktion"]." erledigt_".$lfd,$query.";".session_id().";".$_SERVER['REMOTE_ADDR']);
     }
   }
 
@@ -777,7 +777,7 @@ function unset_msg_done ($lfd) {
        $query = "DELETE FROM ".$fkttblname."_erl
                         WHERE ".$fkttblname."_erl.nachnum = $lfd;";
        $result = $dbaccess->query_table_iu ($query);
-       protokolleintrag ("Stab_".$_SESSION["vStab_funktion"]." unerledigt_".$lfd,$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
+       protokolleintrag ("Stab_".$_SESSION["vStab_funktion"]." unerledigt_".$lfd,$query.";".session_id().";".$_SERVER['REMOTE_ADDR']);
     }
   }
 
@@ -904,23 +904,23 @@ function list_of_done_msg (){
     $result = $dbaccess->query_table ($query);
     $data = $result [1];
 
-    if ($data ["01_datum"] == "0000-00-00 00:00:00")     { $data["01_datum"] = ""; }
-    if ($data ["02_zeit"] == "0000-00-00 00:00:00")      { $data ["02_zeit"] = ""; }
-    if ($data ["03_datum"] == "0000-00-00 00:00:00")     { $data ["03_datum"] = ""; }
-    if ($data ["12_abfzeit"] == "0000-00-00 00:00:00")   { $data ["12_abfzeit"] = ""; }
-    if ($data ["15_quitdatum"] == "0000-00-00 00:00:00") { $data ["15_quitdatum"] = ""; }
+    foreach (array ("01_datum", "02_zeit", "03_datum", "12_abfzeit", "15_quitdatum") as $dateField) {
+      if (estab_datetime_is_unset ($data [$dateField] ?? null)) {
+        $data [$dateField] = "";
+      }
+    }
 
      //  Umwandlung Datenbankdatum --> taktischer Zeit falls erforderlich
-    if (strlen ($data["01_datum"]) != ""){
+    if (!estab_datetime_is_unset ($data["01_datum"])){
       $data["01_datum"]   = konv_datetime_taktime ($data["01_datum"]);
     }
-    if (strlen ($data["02_zeit"]) != ""){
+    if (!estab_datetime_is_unset ($data["02_zeit"])){
       $data["02_zeit"]   = konv_datetime_taktime ($data["02_zeit"]);
     }
-    if (strlen ($data["12_abfzeit"]) != ""){
+    if (!estab_datetime_is_unset ($data["12_abfzeit"])){
       $data["12_abfzeit"] = konv_datetime_taktime ($data["12_abfzeit"]);
     }
-    if (strlen ($data["15_quitdatum"]) != ""){
+    if (!estab_datetime_is_unset ($data["15_quitdatum"])){
       $data["15_quitdatum"] = konv_datetime_taktime ($data["15_quitdatum"]);
     }
 
@@ -944,7 +944,7 @@ function list_of_done_msg (){
              WHERE `00_lfd` = \"".$lfd."\";";
 
     $result = $dbaccess->query_table_iu ($query);
-    protokolleintrag ("Fernmelder Free_record",$query.";".session_id().";".$_SERVER[REMOTE_ADDR]);
+    protokolleintrag ("Fernmelder Free_record",$query.";".session_id().";".$_SERVER['REMOTE_ADDR']);
   }
 
 ?>

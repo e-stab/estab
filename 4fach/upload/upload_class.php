@@ -27,6 +27,7 @@ class file_upload {
         var $replace;
         var $do_filename_check;
         var $max_length_filename = 100;
+        var $max_file_size = 5242880;
         var $extensions;
         var $ext_string;
         var $language;
@@ -37,10 +38,18 @@ class file_upload {
         var $create_directory = true;
 
 
+        function __construct() {
+                $this->file_upload();
+        }
+
         function file_upload() {
                 $this->language = "de"; // choice of en, nl, es
                 $this->rename_file = false;
                 $this->ext_string = "";
+                $configured_limit = getenv("ESTAB_UPLOAD_MAX_BYTES");
+                if ($configured_limit !== false && ctype_digit($configured_limit)) {
+                        $this->max_file_size = min((int) $configured_limit, 52428800);
+                }
         }
 
         function show_error_string() {
@@ -56,6 +65,10 @@ class file_upload {
                 if ($this->rename_file) {
                         if ($this->the_file == "") return;
                         $name = ($new_name == "") ? strtotime("now") : $new_name;
+                        if (!is_string($name) || !preg_match('/^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/D', $name)) {
+                                $this->message[] = $this->error_text(12);
+                                return false;
+                        }
                         $name = $name.$this->get_extension($this->the_file);
                 } else {
                         $name = $this->the_file;
@@ -66,6 +79,15 @@ class file_upload {
 
         function upload($to_name = "") {
                 $new_name = $this->set_file_name($to_name);
+                if ($new_name === false || $this->http_error !== UPLOAD_ERR_OK) {
+                        $this->message[] = $this->error_text((int) $this->http_error);
+                        return false;
+                }
+                $size = @filesize($this->the_temp_file);
+                if ($size === false || $size > $this->max_file_size) {
+                        $this->message[] = $this->error_text(17);
+                        return false;
+                }
                 if ($this->check_file_name($new_name)) {
                         if ($this->validateExtension()) {
                                 if (is_uploaded_file($this->the_temp_file)) {
@@ -91,6 +113,11 @@ class file_upload {
 
         function check_file_name($the_name) {
                 if ($the_name != "") {
+                    if (basename($the_name) !== $the_name ||
+                        !preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]*\.[A-Za-z0-9]{1,10}$/D', $the_name)) {
+                        $this->message[] = $this->error_text(12);
+                        return false;
+                    }
                         if (strlen($the_name) > $this->max_length_filename) {
                                 $this->message[] = $this->error_text(13);
                                 return false;
@@ -112,35 +139,56 @@ class file_upload {
                 }
         }
         function get_extension($from_file) {
-                $ext = strtolower(strrchr($from_file,"."));
-                return $ext;
+                $extension = pathinfo(basename($from_file), PATHINFO_EXTENSION);
+                return $extension === "" ? "" : ".".strtolower($extension);
         }
         function validateExtension() {
                 $extension = $this->get_extension($this->the_file);
                 $ext_array = $this->extensions;
-                if (in_array($extension, $ext_array)) {
-                        // check mime type hier too against allowed/restricted mime types (boolean check mimetype)
-                        return true;
-                } else {
+                if (!in_array($extension, $ext_array, true)) {
                         return false;
                 }
+
+                $allowed_mime = array(
+                        ".jpg" => array("image/jpeg"),
+                        ".tif" => array("image/tiff"),
+                        ".gif" => array("image/gif"),
+                        ".avi" => array("video/x-msvideo", "video/avi", "application/octet-stream"),
+                        ".png" => array("image/png"),
+                        ".bmp" => array("image/bmp", "image/x-ms-bmp"),
+                        ".zip" => array("application/zip", "application/x-zip-compressed"),
+                        ".pdf" => array("application/pdf"),
+                        ".doc" => array("application/msword", "application/x-ole-storage", "application/CDFV2"),
+                        ".xls" => array("application/vnd.ms-excel", "application/x-ole-storage", "application/CDFV2"),
+                        ".odt" => array("application/vnd.oasis.opendocument.text", "application/zip"),
+                        ".txt" => array("text/plain"),
+                        ".xia" => array("application/zip", "application/octet-stream")
+                );
+                $finfo = new finfo(FILEINFO_MIME_TYPE);
+                $mime = $finfo->file($this->the_temp_file);
+                if ($mime === false || !isset($allowed_mime[$extension]) ||
+                    !in_array($mime, $allowed_mime[$extension], true)) {
+                        $this->message[] = $this->error_text(18);
+                        return false;
+                }
+                return true;
         }
         // this method is only used for detailed error reporting
         function show_extensions() {
                 $this->ext_string = implode(" ", $this->extensions);
         }
         function move_upload($tmp_file, $new_file) {
-                umask(0);
+                if (basename($new_file) !== $new_file) return false;
                 if ($this->existing_file($new_file)) {
-                        $newfile = $this->upload_dir.$new_file;
+                        $newfile = rtrim($this->upload_dir, "/\\").DIRECTORY_SEPARATOR.$new_file;
                         if ($this->check_dir($this->upload_dir)) {
                                 if (move_uploaded_file($tmp_file, $newfile)) {
                                         if ($this->replace == "y") {
                                                 //system("chmod 0777 $newfile"); // maybe you need to use the system command in some cases...
-                                                chmod($newfile , 0777);
+                                                chmod($newfile , 0640);
                                         } else {
                                                 // system("chmod 0755 $newfile");
-                                                chmod($newfile , 0755);
+                                                chmod($newfile , 0640);
                                         }
                                         return true;
                                 } else {
@@ -158,9 +206,7 @@ class file_upload {
         function check_dir($directory) {
                 if (!is_dir($directory)) {
                         if ($this->create_directory) {
-                                umask(0);
-                                mkdir($directory, 0777);
-                                return true;
+                                return mkdir($directory, 0770, true);
                         } else {
                                 return false;
                         }
@@ -194,18 +240,7 @@ class file_upload {
 
         // this method was first located inside the foto_upload extension
         function del_temp_file($file) {
-                $delete = @unlink($file);
-                clearstatcache();
-                if (@file_exists($file)) {
-                        $filesys = eregi_replace("/","\\",$file);
-                        $delete = @system("del $filesys");
-                        clearstatcache();
-                        if (@file_exists($file)) {
-                                $delete = @chmod ($file, 0775);
-                                $delete = @unlink($file);
-                                $delete = @system("del $filesys");
-                        }
-                }
+                return is_file($file) ? @unlink($file) : true;
         }
         // some error (HTTP)reporting, change the messages or remove options if you like.
         function error_text($err_num) {
@@ -237,6 +272,8 @@ class file_upload {
                         $error[14] = "Das Upload-Verzeichnis existiert nicht!";
                         $error[15] = "Upload <b>".$this->the_file."...Fehler!</b> Eine Datei mit gleichem Dateinamen existiert bereits.";
                         $error[16] = "Die hochgeladene Datei ist umbenannt in <b>".$this->file_copy."</b>.";
+                        $error[17] = "Die Datei überschreitet das erlaubte Upload-Limit.";
+                        $error[18] = "Dateiendung und erkannter Dateityp passen nicht zusammen.";
                         break;
                         //
                         // place here the translations (if you need) from the directory "add_translations"

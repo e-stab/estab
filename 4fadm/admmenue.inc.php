@@ -4,15 +4,15 @@
   $menue_item = array  (
     array ("acl"   => "",
                 "vis"   => false,
-                "link"  => "./make_conf.php?task=quick_action",
+                "link"  => "",
                 "menue" => "Schnellstart",
-                "descr" => "<b>Anlegen eines neuen Einsatzes. </b>Es wird eine Datenbank und ein Verzeichnis angelegt.&nbsp;<b></b>"),
+                "descr" => "Im Container durch Compose, Umgebungsvariablen und das Datenbankschema ersetzt."),
 
     array ("acl"   => "",
                 "vis"   => false,
-                "link"  => "./make_conf.php?task=quick_values",
+                "link"  => "",
                 "menue" => "Schnellstart Einstellungen",
-                "descr" => "Vorgaben f&uuml;r den Schnellstart"),
+                "descr" => "Im Container durch Compose und Umgebungsvariablen ersetzt."),
 
     array ("acl" => "",
                 "vis" => false,
@@ -21,10 +21,10 @@
                 "descr" => "breake"),
 
     array ("acl"   => "",
-                "vis"   => true,
-                "link"  => "./make_conf.php?task=einsatz_neu",
+                "vis"   => false,
+                "link"  => "",
                 "menue" => "EINSATZ erstellen",
-                "descr" => "<b>Anlegen eines neuen Einsatzes. </b>Es wird eine Datenbank und ein Verzeichnis angelegt.&nbsp;<b></b>"),
+                "descr" => "Datenbank und persistente Verzeichnisse werden beim Containerstart bereitgestellt."),
 
     array ("acl"   => "",
                 "vis" => true,
@@ -34,7 +34,7 @@
 
     array ("acl"   => "",
                 "vis" => false,
-                "link"  => "./std_si_fkt.php",
+                "link"  => "",
                 "menue" => "Ersatzsichter",
                 "descr" => "Sichtung durch: Fernmelder (A/W) oder automatische Sichtung."),
 
@@ -52,9 +52,9 @@
 
     array ("acl" => "",
                 "vis" => true,
-                "link"  => "./make_conf.php?task=einsatz_ende",
-                "menue" => "EINSATZ beenden",
-                "descr" => "<b>Abschliessen eines Einsatzes.</b> Alle Tabellen der Datenbank werden als CSV-Datei in das Einsatzverzeichnis gespeichert."),
+                "link"  => "./export.php",
+                "menue" => "Einsatzexport",
+                "descr" => "Alle Basistabellen werden ohne Datenbank-FILE-Recht als CSV, Manifest und ZIP im persistenten Exportverzeichnis gesichert."),
 
     array ("acl" => "",
                 "vis" => true,
@@ -69,34 +69,10 @@
                 "descr" => "Zur&uuml;cksetzen des&nbsp;Grafikflags in der Datenbank."),
 
     array ("acl" => "",
-                "vis" => true,
-                "link"  => "../4fbak/backup.php?anz=50",
+                "vis" => false,
+                "link"  => "",
                 "menue" => "Grafiken erzeugen",
-                "descr" => "Es wird versucht 50 Nachrichten in Grafiken zu konvertieren. Gegebenenfalls mu&szlig; der Prozess mehrmals gestartet werden."),
-
-    array ("acl" => "",
-                "vis" => true,
-                "link"  => "breake",
-                "menue" => "breake",
-                "descr" => "breake"),
-
-    array ("acl" => "",
-                "vis" => true,
-                "link"  => "./make_conf.php?task=datenbank",
-                "menue" => "Datenbankparameter eingeben",
-                "descr" => "Anlegen der Datenbankparameter.<br>Serveradresse, Datenbankbenutzer, Tabellenpr&auml;fix usw."),
-
-    array ("acl" => "",
-                "vis" => true,
-                "link"  => "./db_check.php",
-                "menue" => "Datenbankverbindung pr&uuml;fen",
-                "descr" => "Hiermit kann gepr&uuml;ft werden ob mit den gegebenen Einstellungen eine Verbindung zur Datenbank aufgebaut werden kann."),
-
-    array ("acl" => "",
-                "vis" => true,
-                "link"  => "./create_db.php",
-                "menue" => "Anlegen der Datenbank und der Tabellen",
-                "descr" => "Die Datenbank und die erforderlichen Tabellen werden angelegt, soweit diese nicht schon vorhanden sind."),
+                "descr" => "Der unsichere Alt-Batch-Endpunkt ist im Container deaktiviert."),
 
     array ("acl" => "",
                 "vis" => true,
@@ -106,27 +82,51 @@
 
     array ("acl" => "",
                 "vis" => false,
-                "link"  => "./FMD_statis.php",
+                "link"  => "",
+                "menue" => "Datenbankparameter eingeben",
+                "descr" => "Datenbankparameter werden ausschlie&szlig;lich &uuml;ber Compose, ENV und Secrets gesetzt."),
+
+    array ("acl" => "",
+                "vis" => true,
+                "link"  => "./system_status.php",
+                "menue" => "Systemstatus",
+                "descr" => "Nicht-sensible Laufzeit-, Datenbank- und Speicherpr&uuml;fung sowie Hinweise zur Containerkonfiguration."),
+
+    array ("acl" => "",
+                "vis" => false,
+                "link"  => "",
+                "menue" => "Anlegen der Datenbank und der Tabellen",
+                "descr" => "Das Schema wird ausschlie&szlig;lich durch den MariaDB-Container initialisiert."),
+
+    array ("acl" => "",
+                "vis" => true,
+                "link"  => "breake",
+                "menue" => "breake",
+                "descr" => "breake"),
+
+    array ("acl" => "",
+                "vis" => false,
+                "link"  => "",
                 "menue" => "Betriebszustand/Statistiken",
                 "descr" => "Anzeige des Betriebszustandes der Fernmeldezentrale"),
 
     array ("acl" => "",
                 "vis" => false,
-                "link"  => "./edt_para.php",
+                "link"  => "",
                 "menue" => "Anzeigeparameter",
                 "descr" => "Einstellung der Farben und der Aktualisierungsintervalle"),
 
     array ("acl" => "",
-                "vis" => true,
-                "link"  => "../4fcfg/echo_config.inc.php",
+                "vis" => false,
+                "link"  => "",
                 "menue" => "Konfigurationsdatei",
-                "descr" => "Listet den Inhalt der config.inc.php Datei auf."),
+                "descr" => "Konfiguration und Secrets werden im Container nicht &uuml;ber das Web offengelegt."),
 
     array ("acl" => "",
-                "vis" => true,
-                "link"  => "./phpinfo.php",
+                "vis" => false,
+                "link"  => "",
                 "menue" => "PHP Info",
-                "descr" => "Informationsseite zur PHP Installation")
+                "descr" => "Die vollst&auml;ndige PHP-Diagnose ist im Container deaktiviert; der Systemstatus zeigt nur notwendige Merkmale.")
 
 
     );

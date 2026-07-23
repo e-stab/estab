@@ -41,7 +41,7 @@ function check_save_user () {
   // Als allererstes Pruefen wir mal die Formulardaten auf Vollstaedigkeit
 //echo "check_save_user GET="; var_dump ($_GET);    echo "#<br><br>\n";
 
-  if ( ( $_GET [kuerzel] != "" ) AND ( $_GET [benutzer] != "" ) ) {
+  if ( ( $_GET ['kuerzel'] != "" ) AND ( $_GET ['benutzer'] != "" ) ) {
 
     // Daten sind in $_GET vorhanden
     $GETkuerzel = strtoupper ( $_GET ["kuerzel"]);
@@ -133,7 +133,8 @@ echo "ip_gleich="; var_dump ($ip_gleich); echo "<br>";
            // Tabelle fr die Benutzerfunktion anlegen
           if ($_GET ["funktion"] != "A/W"){
             $usertablename = $conf_4f_tbl ["usrtblprefix"].$_GET ["funktion"]."_".strtoupper ( $_GET ["kuerzel"]);
-            $dbaccess->create_user_table ($usertablename);
+            $fkttblname = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($_GET ["funktion"]);
+            $dbaccess->create_user_table ($usertablename, $fkttblname);
           }
           $rolle = rollenfinder ( $_GET["funktion"] );
           $_SESSION ["ROLLE"] = $rolle;
@@ -174,12 +175,13 @@ echo "ip_gleich="; var_dump ($ip_gleich); echo "<br>";
 
       $result = $dbaccess->query_table_iu ($query);
 
-      protokolleintrag ("Anmelden", $_SESSION["vStab_benutzer"].";".$_SESSION["vStab_kuerzel"].";".$_SESSION["vStab_funktion"].";".$_SESSION["vStab_rolle"].";".session_id().";".$_SERVER["REMOTE_ADDR]");
+      protokolleintrag ("Anmelden", $_SESSION["vStab_benutzer"].";".$_SESSION["vStab_kuerzel"].";".$_SESSION["vStab_funktion"].";".$_SESSION["vStab_rolle"].";".session_id().";".$_SERVER["REMOTE_ADDR"]);
 
       if ($_SESSION ["vStab_funktion"] != "A/W"){
         $usertablename = $conf_4f_tbl ["usrtblprefix"].$_GET ["funktion"]."_".strtoupper ( $_GET ["kuerzel"]);
 //        $usertablename = $conf_4f_tbl ["usrtblprefix"].$_SESSION ["vStab_kuerzel"]."_".$_SESSION ["vStab_funktion"] ;
-        $dbaccess->create_user_table ($usertablename);
+        $fkttblname = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($_GET ["funktion"]);
+        $dbaccess->create_user_table ($usertablename, $fkttblname);
       }
       $_SESSION ["menue"] = "ROLLE";  // Starte Menu im Rollenmodus
       $_SESSION ["ROLLE"] = $rolle;

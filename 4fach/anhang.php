@@ -18,6 +18,9 @@
 ******************************************************************************/
 
 include ("./upload_class.php");
+require_once __DIR__ . "/../app/attachment.php";
+require_once __DIR__ . "/../app/csrf.php";
+require_once __DIR__ . "/../app/file_access.php";
 
 class fileupload extends file_upload {
   // fs - fileselectform Dateiauswahl
@@ -55,22 +58,18 @@ class fileupload extends file_upload {
   function get_next_filename_from_db () {
     require ("../4fcfg/dbcfg.inc.php");
     require ("../4fcfg/e_cfg.inc.php");
-    require_once ("./db_operation.php");
-
-    $db = new db_access ($conf_4f_db  ["server"],
-                         $conf_4f_db  ["datenbank"],
-                         $conf_4f_tbl ["anhang"],
-                         $conf_4f_db  ["user"],
-                         $conf_4f_db  ["password"]);
-      //setze alte Reservierungen auf status = 4  fÃ¼r eigene Session ID
-    $this->loesche_reservierungen ($db, $conf_4f_tbl ["anhang"]);
-      // Dateinamen aus abgebrochene Reservierrungen
-    $frei_res = $this->res_abgebr ($db, $conf_4f_tbl ["anhang"]);
-//echo "FREIRES===";var_dump($frei_res); echo "<br>";
-    if ($frei_res) {
-      $this->fs_nextfilename = $frei_res;
-    }else{
-      $this->next_filename ($db, $conf_4f_tbl ['anhang'], $conf_4f['hoheit']);
+    $connection = estab_attachment_connection ($conf_4f_db);
+    try {
+      $this->fs_nextfilename = estab_attachment_reserve (
+        $connection,
+        $conf_4f_tbl ["anhang"],
+        $conf_4f ["hoheit"],
+        session_id (),
+        $this->filenamezero
+      );
+      return $this->fs_nextfilename;
+    } finally {
+      estab_attachment_close ($connection);
     }
   }
 
@@ -81,20 +80,15 @@ class fileupload extends file_upload {
 
   \***************************************************************************/
   function loesche_reservierungen ($db, $tbl){
-    $query = "SELECT * FROM ".$tbl."
-              WHERE ((`id` = \"".session_id()."\")AND
-                     (`status` = \"8\"));";
-    $result = $db->query_table ($query);
-    $query = "UPDATE ".$tbl."
-              SET   `status` = \"4\",
-                    `id` = \"\"
-              WHERE ((`id` = \"".session_id()."\")AND
-                     (`status` = \"8\"));";
-    $result = $db->query_table_iu ($query);
-    $query = "SELECT * FROM ".$tbl."
-              WHERE ((`id` = \"".session_id()."\")AND
-                     (`status` = \"8\"));";
-    $result = $db->query_table ($query);
+    unset ($db);
+    require ("../4fcfg/dbcfg.inc.php");
+    require ("../4fcfg/e_cfg.inc.php");
+    $connection = estab_attachment_connection ($conf_4f_db);
+    try {
+      estab_attachment_release_unclaimed ($connection, $tbl, session_id ());
+    } finally {
+      estab_attachment_close ($connection);
+    }
   }
 
   /***************************************************************************\
@@ -104,16 +98,14 @@ class fileupload extends file_upload {
 
   \***************************************************************************/
   function reset_reservation (){
-    require ("../4fcfg/config.inc.php");
     require ("../4fcfg/dbcfg.inc.php");
     require ("../4fcfg/e_cfg.inc.php");
-    require_once ("./db_operation.php");
-    $db = new db_access ($conf_4f_db  ["server"],
-                         $conf_4f_db  ["datenbank"],
-                         $conf_4f_tbl ["anhang"],
-                         $conf_4f_db  ["user"],
-                         $conf_4f_db  ["password"]);
-    $this->loesche_reservierungen ($db, $conf_4f_tbl ["anhang"]);
+    $connection = estab_attachment_connection ($conf_4f_db);
+    try {
+      estab_attachment_release ($connection, $conf_4f_tbl ["anhang"], session_id ());
+    } finally {
+      estab_attachment_close ($connection);
+    }
   }
 
   /***************************************************************************\
@@ -123,40 +115,7 @@ class fileupload extends file_upload {
 
   \***************************************************************************/
   function res_filename_db ($filename){
-    require ("../4fcfg/dbcfg.inc.php");
-    require ("../4fcfg/e_cfg.inc.php");
-    require_once ("./db_operation.php");
-    $db = new db_access ($conf_4f_db  ["server"],
-                         $conf_4f_db  ["datenbank"],
-                         $conf_4f_tbl ["anhang"],
-                         $conf_4f_db  ["user"],
-                         $conf_4f_db  ["password"]);
-      // Welchen Status hat filename?
-    $query = "SELECT `status`
-              FROM ".$conf_4f_tbl ["anhang"]."
-              WHERE ".$conf_4f_tbl ["anhang"].".filename =\"".$filename."\";";
-    $result = $db->query_table ($query);
-    if ($result != ""){
-      $status_abfrage = $result [1]['status'];}
-    else {
-      $status_abfrage = NULL;
-    }
-      // Nicht in der Datenbank => anlegen
-    if ($status_abfrage == "") {
-      $query = "INSERT INTO ".$conf_4f_tbl ["anhang"]."
-                SET `filename` = \"".$filename."\",
-                    `status`   = \"8\",
-                    `id`       = \"".session_id()."\";";
-      $result = $db->query_table_iu ($query);
-    } elseif ($status_abfrage == "4") {
-
-      $query = "UPDATE ".$conf_4f_tbl ["anhang"]."
-                SET   `status` = \"8\",
-                      `id`     = \"".session_id()."\"
-                WHERE ((`filename` = \"".$filename."\") AND
-                       (`status` = \"4\"));";
-    $result = $db->query_table_iu ($query);
-    }
+    return ($filename === $this->fs_nextfilename);
   }
 
   /***************************************************************************\
@@ -166,13 +125,8 @@ class fileupload extends file_upload {
 
   \***************************************************************************/
   function res_abgebr ($db, $tbl){
-      // Abgebrochene Uploads
-    $query = "SELECT  min(filename) as filename FROM ".$tbl." WHERE `status` = 4 GROUP BY filename";
-    $result = $db->query_table ($query);
-    if ($result != "") {return ($result[1]['filename']);}
-    else {
-      return ("");
-    }
+    unset ($db, $tbl);
+    return ("");
   }
 
   /***************************************************************************\
@@ -182,49 +136,8 @@ class fileupload extends file_upload {
 
   \***************************************************************************/
   function next_filename ($db, $tbl, $hoheit){
-      // Dateiname mit der hÃ¶chsten Zahl
-    $query = "SELECT MAX(filename) as filename,status FROM ".$tbl." WHERE 1 GROUP BY `status` ";
-//echo "QUERY==="; var_dump($query); echo "<br>";
-    $result = $db->query_table ($query);
-//echo "RESULT==="; var_dump($result); echo "<br>";
-
-    if ($result != "") {
-      if ( (isset($result[2])) and ( ($result[2] != NULL) && ($result [2]['filename'] > $result [1]['filename']))){
-        $filename = $result [2]['filename'];
-        $status   = $result [2]['status'];
-      } else {
-        $filename = $result [1]['filename'];
-        $status   = $result [1]['status'];
-    }
-    } else {
-      $filename = "";
-      $status   = "";
-    }
-
-
-    if ($filename != ""){
-      $hoheitlen = strlen ( $hoheit );
-      $filelen = strlen ($filename);
-      $filehoheit = substr ( $filename, 0, $hoheitlen );
-	  $highest = 0;
-      if (strtoupper ( $hoheit ) == strtoupper ( $filehoheit ) ) {
-        $nummer = substr ( $filename, $hoheitlen, ($filelen - $hoheitlen) );
-        if ($nummer > $highest){ $highest = $nummer; }
-      }
-      $nextnum = $highest + 1 ;
-      $expo = intval (log10 ($nextnum) )+1;
-    } else {
-      $expo = 1;
-      $nextnum  = "1";
-    }
-    $fillzero = "";
-      // fuelle mit Nullen auf
-    for ( $i=1; $i<= ($this->filenamezero-$expo); $i++ ){
-      $fillzero .= "0";
-    }
-      // Filename == hoheit + Nullen + NÃ¤chste Zahl
-    $this->fs_nextfilename = $hoheit.$fillzero.$nextnum ;
-//echo "FS_NEXTFILENAME==="; var_dump($this->fs_nextfilename); echo "<br>";
+    unset ($db, $tbl, $hoheit);
+    return $this->get_next_filename_from_db ();
   }
 
 
@@ -241,33 +154,45 @@ class fileupload extends file_upload {
 
   \***************************************************************************/
   function change_status_in_db ($change, $filename, $status){
+    unset ($status);
     require ("../4fcfg/dbcfg.inc.php");
     require ("../4fcfg/e_cfg.inc.php");
-    require_once ("./db_operation.php");
-    $db = new db_access ($conf_4f_db  ["server"],
-                         $conf_4f_db  ["datenbank"],
-                         $conf_4f_tbl ["anhang"],
-                         $conf_4f_db  ["user"],
-                         $conf_4f_db  ["password"]);
-      // Welchen Status hat filename?
-    $query = "SELECT `status`
-              FROM ".$conf_4f_tbl ["anhang"]."
-              WHERE ".$conf_4f_tbl ["anhang"].".filename =\"".$filename."\";";
-    if (debug) echo "anhang.php 75 -- Query ===".$query."<br>";
-    $result = $db->query_table ($query);
-    if ($result == "") {// filename ist noch nicht in der DB
-      // Es kann Status 8 gesetzt werden
-      if ($change == 8) {
-        $query = "INSERT INTO ".$conf_4f_tbl ["anhang"]."
-                  SET `filename` = ".$filename.",
-                      `status`   = '8' ; ";
+    $connection = estab_attachment_connection ($conf_4f_db);
+    try {
+      if ((string) $change === "4") {
+        estab_attachment_release ($connection, $conf_4f_tbl ["anhang"], session_id (), $filename);
+        return true;
       }
+      if ((string) $change === "8") {
+        return $this->res_filename_db ($filename);
+      }
+      return false;
+    } finally {
+      estab_attachment_close ($connection);
     }
-    $query = "SELECT * FROM ".$conf_4f_tbl ["anhang"]." WHERE 1 ";
-
-    if (debug) echo "anhang.php 41 -- Query ===".$query."<br>";
-    $result = $db->query_table ($query);
   } // change_status_in_db
+
+  function claim_reservation ($filename){
+    require ("../4fcfg/dbcfg.inc.php");
+    require ("../4fcfg/e_cfg.inc.php");
+    $connection = estab_attachment_connection ($conf_4f_db);
+    try {
+      return estab_attachment_claim ($connection, $conf_4f_tbl ["anhang"], $filename, session_id ());
+    } finally {
+      estab_attachment_close ($connection);
+    }
+  }
+
+  function release_reservation ($filename){
+    require ("../4fcfg/dbcfg.inc.php");
+    require ("../4fcfg/e_cfg.inc.php");
+    $connection = estab_attachment_connection ($conf_4f_db);
+    try {
+      estab_attachment_release ($connection, $conf_4f_tbl ["anhang"], session_id (), $filename);
+    } finally {
+      estab_attachment_close ($connection);
+    }
+  }
 
 
 /*****************************************************************************\
@@ -275,54 +200,41 @@ class fileupload extends file_upload {
   function save_in_db ($data) {
     require ("../4fcfg/dbcfg.inc.php");
     require ("../4fcfg/e_cfg.inc.php");
-    require_once ("./db_operation.php");
-    require ("./protokoll.php");
+    $reservation = (string) ($data ["reservation"] ?? "");
+    $metadata = estab_attachment_validate_metadata (
+      $data,
+      $reservation,
+      (string) ($_SESSION ["vStab_kuerzel"] ?? "")
+    );
+    $connection = estab_attachment_connection ($conf_4f_db);
+    try {
+      $saved = estab_attachment_finalize (
+        $connection,
+        $conf_4f_tbl ["anhang"],
+        session_id (),
+        $metadata
+      );
+      if (!$saved) {
+        return false;
+      }
 
-    list($filename, $extention) = explode (".",$data["filename"]);
-
-    $db = new db_access ($conf_4f_db  ["server"],
-                         $conf_4f_db  ["datenbank"],
-                         $conf_4f_tbl ["anhang"],
-                         $conf_4f_db  ["user"],
-                         $conf_4f_db  ["password"]);
-
-    $query = "SELECT `status`
-              FROM ".$conf_4f_tbl ["anhang"]."
-              WHERE (".$conf_4f_tbl ["anhang"].".filename =\"".$filename."\")";
-
-    if (debug) echo "anhang.php 231 -- Query ===".$query."<br>";
-    $result = $db->query_table ($query);
-    if ($result == ""){
-      $status = "";
-    }else {
-      $status =  $result [1]['status'];
-    }
-      // status == 8 ==> aktualisieren
-    if ($status == "8") {
-    $query = "UPDATE ".$conf_4f_tbl ["anhang"]." SET
-                        `fileext`       = \"".$extention."\",
-                        `org_filename`  = \"".$data["org_filename"]."\",
-                        `comment`       = \"".$data["comment"]."\",
-                        `md5hash`       = \"".$data["md5hash"]."\",
-                        `kuerzel`       = \"".$data["kuerzel"]."\",
-                        `date`          = \"".$data["time"]."\",
-                        `status`        = \"1\",
-                        `id`            = \"".session_id()."\"
-                        WHERE `filename` = \"".$filename."\"";
-    if (debug) echo "anhang.php 245 -- Query ===".$query."<br>";
-    $result = $db->query_table_iu ($query);
-
-    protokolleintrag ("Anhangdaten speichern",
-                              $_SESSION['vStab_benutzer'].";".
-                              $_SESSION['vStab_kuerzel'].";".
-                              $_SESSION['vStab_funktion'].";".
-                              $_SESSION['vStab_rolle'].";".
-                              session_id().";".
-                              $_SERVER['REMOTE_ADDR'].";".
-                              $data["filename"].";".
-                              $data["org_filename"].";".
-                              $data["time"]
-                              );
+      $details = (string) ($_SESSION ["vStab_benutzer"] ?? "").";".
+                 (string) ($_SESSION ["vStab_kuerzel"] ?? "").";".
+                 (string) ($_SESSION ["vStab_funktion"] ?? "").";".
+                 (string) ($_SESSION ["vStab_rolle"] ?? "").";".
+                 session_id ().";".
+                 estab_auth_remote_ip ($_SERVER).";".
+                 $metadata ["filename"].".".$metadata ["fileext"].";".
+                 $metadata ["org_filename"].";".
+                 $metadata ["date"];
+      try {
+        estab_attachment_log ($connection, $conf_4f_tbl ["protokoll"], "Anhangdaten speichern", $details);
+      } catch (Throwable $exception) {
+        error_log ("eStab attachment audit failed: ".$exception->getMessage ());
+      }
+      return true;
+    } finally {
+      estab_attachment_close ($connection);
     }
   }
 
@@ -356,25 +268,7 @@ class fileupload extends file_upload {
 
 \*****************************************************************************/
   function scan4nextfilename (){
-    require ("../4fcfg/config.inc.php");
-    require ("../4fcfg/e_cfg.inc.php");
-    require ("../4fcfg/dbcfg.inc.php");
-
-    $nextfile = $this->get_next_filename_from_db ();
-
-    $hoheit = $conf_4f[hoheit];
-    $hoheitlen = strlen ( $hoheit );
-    $highest = 0;
-
-    $nextnum = $highest + 1 ;
-    $expo = intval (log10 ($nextnum) )+1;
-    $fillzero = "";
-      // fuelle mit Nullen auf
-    for ( $i=1; $i<= ($this->filenamezero-$expo); $i++ ){
-      $fillzero .= "0";
-    }
-      // Filename == hoheit + Nullen + NÃ¤chste Zahl
-    $this->fs_nextfilename = $hoheit.$fillzero.$nextnum ;
+    return $this->get_next_filename_from_db ();
   } // scan4nextfilename
 
 
@@ -427,7 +321,7 @@ class fileupload extends file_upload {
     echo "<html>\n";
     echo "<head>";
     echo "<meta content=\"text/html; charset=UTF-8\" http-equiv=\"content-type\">\n";
-    echo "<title>$titel</title>";
+    echo "<title>".estab_attachment_html ($titel)."</title>";
     echo "</head>";
     echo "<body>";
   }
@@ -435,7 +329,13 @@ class fileupload extends file_upload {
 
   function fileselectform ($predata) {
     require ("../4fcfg/config.inc.php");
-    echo "<form name=\"uploadform\" enctype=\"multipart/form-data\" method=\"post\" action=\"".$_SERVER['PHP_SELF']."\">\n";
+    $formAction = estab_attachment_html ($_SERVER['PHP_SELF'] ?? "anhang.php");
+    $newFilename = estab_attachment_html ($predata["newfilename"] ?? "");
+    $comment = estab_attachment_html ($predata["comment"] ?? "");
+    $shortname = estab_attachment_html ($predata["kuerzel"] ?? "");
+    $timestamp = estab_attachment_html ($predata["time"] ?? "");
+    echo "<form name=\"uploadform\" enctype=\"multipart/form-data\" method=\"post\" action=\"".$formAction."\">\n";
+    echo estab_csrf_field ()."\n";
     echo "<fieldset>\n";
     echo "<legend><big>Anhang hochladen</big></legend>\n";
     echo "<table style=\"text-align: left; width: 745px; height: 170px;\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" bgcolor=\"#E0E0E0\">\n";
@@ -446,8 +346,8 @@ class fileupload extends file_upload {
     echo "<tbody>\n";
     echo "<tr>\n";
     echo "  <td style=\"width: 167px;\">Dateiname:</td>\n";
-    echo "  <td style=\"width: 769px;\"><big><big style=\"font-weight: bold;\">".$predata["newfilename"]."</big></big></td>\n";
-    echo "  <input type=\"hidden\" name=\"fs_nextfilename\" value=\"".$predata["newfilename"]."\">\n";
+    echo "  <td style=\"width: 769px;\"><big><big style=\"font-weight: bold;\">".$newFilename."</big></big></td>\n";
+    echo "  <input type=\"hidden\" name=\"fs_nextfilename\" value=\"".$newFilename."\">\n";
     echo "</tr>\n";
     echo "<tr>\n";
     echo "  <td style=\"width: 167px;\">Datei:</td>\n";
@@ -458,16 +358,15 @@ class fileupload extends file_upload {
     echo "<tr>\n" ;
     echo "  <td style=\"width: 167px;\">Beschreibung</td>\n";
     echo "  <td style=\"width: 769px;\">";
-	if (!isset($predata["comment"])) { $predata["comment"] = ""; }
-    echo "   <input style=\"font-size:18px; font-weight:900;\" maxlength=\"255\" size=\"80\" name=\"fs_comment\" value=\"".$predata["comment"]."\"></td>\n";
+    echo "   <input style=\"font-size:18px; font-weight:900;\" maxlength=\"255\" size=\"80\" name=\"fs_comment\" value=\"".$comment."\"></td>\n";
     echo "</tr>\n";
     echo "<tr>\n";
     echo "  <td>K&uuml;rzel</td>\n";
-    echo "  <td style=\"width: 769px;\"><big><input maxlength=\"3\" size=\"3\" name=\"fs_shortname\" value=\"".$predata["kuerzel"]."\"></big></td>\n";
+    echo "  <td style=\"width: 769px;\"><big><input maxlength=\"6\" size=\"6\" name=\"fs_shortname\" value=\"".$shortname."\" readonly></big></td>\n";
     echo "</tr>\n";
     echo "<tr>\n";
     echo "  <td style=\"width: 167px;\">Zeitstempel</td>\n";
-    echo "  <td style=\"width: 769px;\"><input maxlength=\"13\" size=\"13\" name=\"fs_timestamp\" value=\"".$predata["time"]."\"></td>\n";
+    echo "  <td style=\"width: 769px;\"><input maxlength=\"13\" size=\"13\" name=\"fs_timestamp\" value=\"".$timestamp."\"></td>\n";
     echo "</tr>\n";
     echo "</tbody>\n";
     echo "</table>\n";
@@ -507,9 +406,18 @@ class fileupload extends file_upload {
 
 
 
-session_start();
+if (session_status () === PHP_SESSION_NONE) {
+  session_start ();
+}
+if (!estab_auth_session_is_authenticated ($_SESSION)) {
+  http_response_code (403);
+  header ("Content-Type: text/plain; charset=UTF-8");
+  header ("Cache-Control: no-store");
+  echo "Anmeldung erforderlich.";
+  exit;
+}
 
-define ("debug", false);
+if (!defined ("debug")) { define ("debug", false); }
 
     require ("../4fcfg/config.inc.php");
     require_once ("./db_operation.php");  // Datenbank operationen
@@ -575,10 +483,22 @@ if ( debug == true ){
     $anhang = "";
     $inhalt = "\n\r";
     foreach ($ahkey as $anh){
-      $db_data = readrecord_from_db($_GET [$anh]);
-      $anhang .= $_GET [$anh].";";
+      $db_data = readrecord_from_db((string) ($_GET [$anh] ?? ""));
+      if (!isset ($db_data [1])) { continue; }
+      try {
+        $selectedBase = estab_attachment_validate_reservation_name ((string) $db_data [1]["filename"]);
+      } catch (InvalidArgumentException) {
+        continue;
+      }
+      $selectedExtension = strtolower ((string) $db_data [1]["fileext"]);
+      if (!estab_attachment_extension_is_allowed ($selectedExtension)
+          || !estab_attachment_validate_sql_datetime ((string) $db_data [1]["date"])) {
+        continue;
+      }
+      $selectedName = $selectedBase.".".$selectedExtension;
+      $anhang .= $selectedName.";";
       $anhang_date = konv_datetime_taktime ($db_data[1]["date"]);
-      $inhalt .= $_GET [$anh]." - ".$db_data[1]["comment"]." - ".$anhang_date."\n";
+      $inhalt .= estab_attachment_html ($selectedName)." - ".estab_attachment_html ($db_data[1]["comment"])." - ".estab_attachment_html ($anhang_date)."\n";
     }
     $formdata = restore_formdata ();
 
@@ -620,10 +540,22 @@ if ( debug == true ){
     $anhang = "";
     $inhalt = "\n\r";
     foreach ($ahkey as $anh){
-      $db_data = readrecord_from_db($_GET [$anh]);
-      $anhang .= $_GET [$anh].";";
+      $db_data = readrecord_from_db((string) ($_GET [$anh] ?? ""));
+      if (!isset ($db_data [1])) { continue; }
+      try {
+        $selectedBase = estab_attachment_validate_reservation_name ((string) $db_data [1]["filename"]);
+      } catch (InvalidArgumentException) {
+        continue;
+      }
+      $selectedExtension = strtolower ((string) $db_data [1]["fileext"]);
+      if (!estab_attachment_extension_is_allowed ($selectedExtension)
+          || !estab_attachment_validate_sql_datetime ((string) $db_data [1]["date"])) {
+        continue;
+      }
+      $selectedName = $selectedBase.".".$selectedExtension;
+      $anhang .= $selectedName.";";
       $anhang_date = konv_datetime_taktime ($db_data[1]["date"]);
-      $inhalt .= $_GET [$anh]." - ".$db_data[1]["comment"]." - ".$anhang_date."\n";
+      $inhalt .= estab_attachment_html ($selectedName)." - ".estab_attachment_html ($db_data[1]["comment"])." - ".estab_attachment_html ($anhang_date)."\n";
     }
     $formdata = restore_formdata ();
     if ( debug == true ){
@@ -675,13 +607,14 @@ require_once ("./db_operation.php");  // Datenbank operationen
     benoetigte Datei:
   \**********************************************************************/
   function readFiles_from_db(){
-    require ("../4fcfg/config.inc.php");
     require ("../4fcfg/dbcfg.inc.php");
     require ("../4fcfg/e_cfg.inc.php");
-    $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
-    $query = "SELECT * FROM `".$conf_4f_tbl ["anhang"]."` where `status` = 1 ORDER BY filename DESC";
-    $result = $dbaccess->query_table ($query);
-    return ($result);
+    $connection = estab_attachment_connection ($conf_4f_db);
+    try {
+      return estab_attachment_list ($connection, $conf_4f_tbl ["anhang"]);
+    } finally {
+      estab_attachment_close ($connection);
+    }
   }
 
   /**********************************************************************\
@@ -690,14 +623,21 @@ require_once ("./db_operation.php");  // Datenbank operationen
     benoetigte Datei:
   \**********************************************************************/
   function readrecord_from_db($anhangname){
-    list ($filename, $fileext) = explode (".",$anhangname);
-    require ("../4fcfg/config.inc.php");
+    $filename = pathinfo (basename ((string) $anhangname), PATHINFO_FILENAME);
+    try {
+      $filename = estab_attachment_validate_reservation_name ($filename);
+    } catch (InvalidArgumentException) {
+      return array ();
+    }
     require ("../4fcfg/dbcfg.inc.php");
     require ("../4fcfg/e_cfg.inc.php");
-    $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
-    $query = "SELECT * FROM `".$conf_4f_tbl ["anhang"]."` where `filename` = \"".$filename."\" ORDER BY filename DESC";
-    $result = $dbaccess->query_table ($query);
-    return ($result);
+    $connection = estab_attachment_connection ($conf_4f_db);
+    try {
+      $result = estab_attachment_find ($connection, $conf_4f_tbl ["anhang"], $filename);
+      return is_array ($result) ? array (1 => $result) : array ();
+    } finally {
+      estab_attachment_close ($connection);
+    }
   }
 
   /**********************************************************************\
@@ -744,10 +684,8 @@ require_once ("./db_operation.php");  // Datenbank operationen
     echo "<legend>Liste der verfÃ¼gbaren Dateien</legend>\n";
     echo "<table border=\"1\" cellspacing=\"2\" cellpeding=\"3\" bgcolor=\"#E0E0E0\">\n";
 
-    $files = readDirectory ();
-
     $db_file_data = readFiles_from_db();
-    if ($db_file_data != NULL){
+    if ($db_file_data !== array ()){
       $i = 0;
       echo "<TR>";
       echo "<TH>Auswahl</TH>";
@@ -758,25 +696,52 @@ require_once ("./db_operation.php");  // Datenbank operationen
       echo "<TH>Datum/Zeit</TH>";
       echo "</TR>";
       foreach ($db_file_data as $file){
+        try {
+          $storedFilename = estab_attachment_validate_reservation_name ((string) ($file ["filename"] ?? ""));
+        } catch (InvalidArgumentException) {
+          continue;
+        }
+        $storedExtension = strtolower ((string) ($file ["fileext"] ?? ""));
+        if (preg_match ("/\\A[a-z0-9]{1,16}\\z/D", $storedExtension) !== 1
+            || !estab_attachment_extension_is_allowed ($storedExtension)) {
+          continue;
+        }
+        $attachmentValue = $storedFilename.".".$storedExtension;
+        try {
+          $publicUrl = estab_file_download_url (
+            (string) $conf_4f ["download_uri"],
+            "attachment",
+            $attachmentValue
+          );
+        } catch (InvalidArgumentException) {
+          continue;
+        }
+        $safePublicUrl = estab_attachment_html ($publicUrl);
         echo "<tr>\n";
           // checkbox
         echo "<td style=\"text-align:center;\">\n";
-        echo "<input type=\"checkbox\" name=\"lfd_".$i."\" value=\"".$file['filename'].".".$file["fileext"]."\">\n";
+        echo "<input type=\"checkbox\" name=\"lfd_".$i."\" value=\"".estab_attachment_html ($attachmentValue)."\">\n";
         echo "</td>\n";
           // Preview, if posible
         echo "<td>\n";
-        echo "<a href=\"".$conf_4f ["ablage_uri"]."/".$file["filename"].".".$file["fileext"]."\" target=\"_blank\">\n";
-        echo "<img  border=\"0\" alt=\"Anhangdatei\" src=\"/".$conf_web ["pre_path"]."4fach/showpic.php?file=".
-            $conf_4f ["ablage_dir"]."/".$file["filename"].".".$file["fileext"]."&width=250\"></a></td>\n";
+        echo "<a href=\"".$safePublicUrl."\" target=\"_blank\" rel=\"noopener\">\n";
+        $previewUrl = $conf_urlroot.$conf_web ["pre_path"]."4fach/showpic.php?".
+                      http_build_query (
+                        array ("file" => $attachmentValue, "width" => 250),
+                        "",
+                        "&",
+                        PHP_QUERY_RFC3986
+                      );
+        echo "<img border=\"0\" alt=\"Anhangdatei\" src=\"".estab_attachment_html ($previewUrl)."\"></a></td>\n";
         echo "</td>\n";
           // filename
-        echo "<td style=\"text-align:center;\"> <a href=\"".$conf_4f ["ablage_uri"]."/".$file['filename'].".".$file["fileext"]."\" target=\"_blank\">".$file['filename']."</a></td>\n";
+        echo "<td style=\"text-align:center;\"> <a href=\"".$safePublicUrl."\" target=\"_blank\" rel=\"noopener\">".estab_attachment_html ($storedFilename)."</a></td>\n";
           // commend belong to the attechmant
-        echo "<td> <a href=\"".$conf_4f ["ablage_uri"]."/".$file['filename'].".".$file["fileext"]."\" target=\"_blank\">".$file['comment']."</a></td>\n";
+        echo "<td> <a href=\"".$safePublicUrl."\" target=\"_blank\" rel=\"noopener\">".estab_attachment_html ($file ["comment"] ?? "")."</a></td>\n";
           // org Dateiname
-        echo "<td> <a href=\"".$conf_4f ["ablage_uri"]."/".$file['filename'].".".$file["fileext"]."\" target=\"_blank\">".$file['org_filename']."</a></td>\n";
+        echo "<td> <a href=\"".$safePublicUrl."\" target=\"_blank\" rel=\"noopener\">".estab_attachment_html ($file ["org_filename"] ?? "")."</a></td>\n";
           // time when the attetchment was edit
-        echo "<td> <a href=\"".$conf_4f ["ablage_uri"]."/".$file['filename'].".".$file["fileext"]."\" target=\"_blank\">".$file['date']."</a></td>\n";
+        echo "<td> <a href=\"".$safePublicUrl."\" target=\"_blank\" rel=\"noopener\">".estab_attachment_html ($file ["date"] ?? "")."</a></td>\n";
         echo "</tr>\n";
         $i++;
       }
@@ -801,7 +766,6 @@ require_once ("./db_operation.php");  // Datenbank operationen
     $data["newfilename"]  =  $instanz->fs_nextfilename;
     $data["kuerzel"]      =  $_SESSION["vStab_kuerzel"];
     $data["time"]         =  date("dHiMY");
-    $instanz->res_filename_db ($data["newfilename"]);
     $instanz->fileselectform ($data);
     $instanz->post_html ();
     $_SESSION ["anhang_submenue"] =  110;
@@ -831,23 +795,23 @@ require_once ("./db_operation.php");  // Datenbank operationen
     $_SESSION["08_befhinwausw"]  = $_POST["08_befhinwausw"];
     $_SESSION["09_vorrangstufe"] = $_POST["09_vorrangstufe"];
     $_SESSION["10_anschrift"]    = $_POST["10_anschrift"];
-    $_SESSION["11_gesprnotiz"]   = $_POST["11_gesprnotiz"];
+    $_SESSION["11_gesprnotiz"]   = $_POST["11_gesprnotiz"] ?? "";
     $_SESSION["12_anhang"]       = $_POST["12_anhang"];
     $_SESSION["12_inhalt"]       = $_POST["12_inhalt"];
     $_SESSION["12_abfzeit"]      = $_POST["12_abfzeit"];
     $_SESSION["13_abseinheit"]   = $_POST["13_abseinheit"];
     $_SESSION["14_zeichen"]      = $_POST["14_zeichen"];
     $_SESSION["14_funktion"]     = $_POST["14_funktion"];
-    $_SESSION["15_quitdatum"]    = $_POST["15_quitdatum"];
-    $_SESSION["15_quitzeichen"]  = $_POST["15_quitzeichen"];
-    $_SESSION["16_gncopy"]       = $_POST["16_gncopy"];
+    $_SESSION["15_quitdatum"]    = $_POST["15_quitdatum"] ?? "";
+    $_SESSION["15_quitzeichen"]  = $_POST["15_quitzeichen"] ?? "";
+    $_SESSION["16_gncopy"]       = $_POST["16_gncopy"] ?? "";
     for ($m=1; $m<=5; $m++){
       for ($n=1; $n<=4; $n++){
         if (isset ($_POST["16_".$m.$n])) $_SESSION["16_".$m.$n] = $_POST["16_".$m.$n] ;
 //        echo "key==="."16_".$m.$n."  SESSION=====".$_SESSION["16_".$m.$n]."<br>";
       }
     }
-    $_SESSION["17_vermerke"] = $_POST["17_vermerke"];
+    $_SESSION["17_vermerke"] = $_POST["17_vermerke"] ?? "";
   }
 
   /***************************************************************************\
@@ -880,8 +844,9 @@ require_once ("./db_operation.php");  // Datenbank operationen
     if (isset ($_SESSION["15_quitdatum"])){    $data["15_quitdatum"]    = $_SESSION["15_quitdatum"];    unset ($_SESSION["15_quitdatum"]); }    else { $data["15_quitdatum"]   = "";}
     if (isset ($_SESSION["15_quitzeichen"])){  $data["15_quitzeichen"]  = $_SESSION["15_quitzeichen"];  unset ($_SESSION["15_quitzeichen"]); }  else { $data["15_quitzeichen"] = "";}
 
-    if (isset ($_SESSION["16_gncopy"])){
-      list ($gncopyord, $gncopypos, $gncopyfkt) = explode ("_", $_SESSION["16_gncopy"]);
+    if (isset ($_SESSION["16_gncopy"]) &&
+        preg_match ("/\\A([^_]+)_([^_]+)_([^_]+)\\z/D", (string) $_SESSION["16_gncopy"], $gncopyParts)){
+      list (, $gncopyord, $gncopypos, $gncopyfkt) = $gncopyParts;
     }
 	$data ["16_empf"] = "";
     for ($m=1; $m<=5; $m++){
@@ -892,7 +857,7 @@ require_once ("./db_operation.php");  // Datenbank operationen
 //           echo "SESSION====".$_SESSION ["16_".$m.$n]." data=== ".$data ["16_empf"]."<br>";
            unset ($_SESSION ["16_".$m.$n]);
         }
-        if ((isset ($_SESSION["16_gncopy"])) && ($m.$n == $gncopypos)) {
+        if (isset ($gncopypos) && ($m.$n == $gncopypos)) {
           $data ["16_empf"] .= $empf_matrix [$m][$n]["fkt"]."_".$gncopyfkt.",";
           unset ($_SESSION["16_gncopy"]);
         }
@@ -905,44 +870,103 @@ require_once ("./db_operation.php");  // Datenbank operationen
 
   function fileselectwindow (){
     require ("../4fcfg/config.inc.php");
-        // zwei mÃ¶glichkeiten 1. absenden oder 2. abbrechen
-    if (!isset($_POST["abbrechen_x"])) {
-      $max_size = 1024*1024*5; // the max. size for uploading
+    try {
+      estab_csrf_require_post ($_SERVER, $_POST);
+    } catch (RuntimeException $exception) {
+      http_response_code (400);
+      error_log ("eStab attachment CSRF validation failed: ".$exception->getMessage ());
+      echo "<big><big><b>Die Upload-Anforderung ist ungültig oder abgelaufen.</b></big></big>";
+      anhang_menue ();
+      exit;
+    }
+    if (!isset($_POST["abbrechen_x"]) && isset($_POST["absenden_x"])) {
       $my_upload = new fileupload;
-      $my_upload->upload_dir = $conf_4f ["ablage_dir"]."/" ; // "files" is the folder for the uploaded files (you have to create this folder)
-        if ( debug == true ){ echo "Upload-Dir:".$my_upload->upload_dir."<br>";}
-
-      $my_upload->extensions = array(".jpg",".tif",".gif",".avi",".png",".bmp",".zip",".pdf",".doc",".xls",".odt",".txt", ".xia"); // Erlaubte Dateierweiterungen
-      $my_upload->max_length_filename = 100; // change this value to fit your field length in your database (standard 100)
+      $my_upload->upload_dir = rtrim ($conf_4f ["ablage_dir"], "/\\")."/";
+      $my_upload->extensions = array_map (
+        static fn ($extension) => ".".$extension,
+        estab_attachment_allowed_extensions ()
+      );
+      $my_upload->max_length_filename = 100;
       $my_upload->rename_file = true;
-      if (isset($_POST["absenden_x"])) {                                if ( debug == true ){ echo "001 is set POST absender_x<br>";}
-        $my_upload->the_temp_file = $_FILES['upload']['tmp_name'];      if ( debug == true ){ echo "002 tmpname =".$my_upload->the_temp_file."<br>";}
-        $my_upload->the_file = $_FILES['upload']['name'];               if ( debug == true ){ echo "003 name    =".$my_upload->the_file."<br>";}
-        $my_upload->http_error = $_FILES['upload']['error'];            if ( debug == true ){ echo "004 error   =".$my_upload->http_error."<br>";}
-                                                                        if ( debug == true ){ echo "004a _FILES ="; var_dump ($_FILES); echo"<br><br>";}
-                if ($my_upload->http_error != 0){
-          $errortxt = $my_upload->error_text($my_upload->http_error);
-          echo "<big><big><b>".$errortxt."</b></big></big>";
+      $my_upload->replace = false;
+      $my_upload->do_filename_check = false;
+
+      $claimed = false;
+      $finalized = false;
+      $full_path = null;
+      $new_name = "";
+      try {
+        $new_name = estab_attachment_validate_reservation_name (
+          is_string ($_POST ["fs_nextfilename"] ?? null) ? $_POST ["fs_nextfilename"] : "",
+          $conf_4f ["hoheit"]
+        );
+        if (!$my_upload->claim_reservation ($new_name)) {
+          throw new RuntimeException ("Die Dateinamenreservierung ist nicht mehr aktiv.");
         }
-        $my_upload->replace = true ; //(isset($_POST['replace'])) ? $_POST['replace'] : "n"; // because only a checked checkboxes is true
-        $my_upload->do_filename_check = false; // (isset($_POST['check'])) ? $_POST['check'] : "n"; // use this boolean to check for a valid filename
+        $claimed = true;
 
-        $new_name = (isset($_POST['fs_nextfilename'])) ? $_POST['fs_nextfilename'] : "";        if ( debug == true ){ echo "005 newname   =".$new_name."<br>";}
+        $upload = $_FILES ["upload"] ?? null;
+        if (!is_array ($upload)
+            || !isset ($upload ["tmp_name"], $upload ["name"], $upload ["error"])
+            || !is_string ($upload ["tmp_name"])
+            || !is_string ($upload ["name"])
+            || !is_int ($upload ["error"])) {
+          throw new InvalidArgumentException ("Ungültige Upload-Metadaten.");
+        }
+        $my_upload->the_temp_file = $upload ["tmp_name"];
+        $my_upload->the_file = $upload ["name"];
+        $my_upload->http_error = $upload ["error"];
+        if ($my_upload->http_error !== UPLOAD_ERR_OK) {
+          throw new RuntimeException ($my_upload->error_text ($my_upload->http_error));
+        }
+        if (!$my_upload->upload ($new_name)) {
+          throw new RuntimeException ("Die Datei konnte nicht sicher hochgeladen werden.");
+        }
 
-        if ($my_upload->upload($new_name)) { // new name is an additional filename information, use this to rename the uploaded file
-          $full_path = $my_upload->upload_dir.$my_upload->file_copy;    if ( debug == true ){ echo "006 full_path   =".$full_path."<br>";}
-          $info = $my_upload->get_uploaded_file_info($full_path);       if ( debug == true ){ echo "007 info        =".$info."<br>";}
-          $data["filename"]     = basename ($full_path); //$_POST ["fs_nextfilename"] ;
-          $data["org_filename"] = $_FILES["upload"]["name"];
-          $data["comment"]      = $_POST ["fs_comment"];
-          $data["kuerzel"]      = $_POST ["fs_shortname"];
-          $data["time"]         = $my_upload->convtaktodatetime ($_POST ["fs_timestamp"]);
-          $data["md5hash"]      = md5_file($full_path);                 if (debug){echo "data==="; var_dump($data); echo "<br>";}
-          $my_upload->save_in_db ($data);
+        $full_path = $my_upload->upload_dir.$my_upload->file_copy;
+        $timestamp = estab_attachment_parse_tactical_time (
+          is_string ($_POST ["fs_timestamp"] ?? null) ? $_POST ["fs_timestamp"] : ""
+        );
+        if ($timestamp === null) {
+          throw new InvalidArgumentException ("Der Zeitstempel ist ungültig.");
+        }
+        $digest = md5_file ($full_path);
+        if (!is_string ($digest)) {
+          throw new RuntimeException ("Die Dateiprüfsumme konnte nicht erstellt werden.");
+        }
+        $data = array (
+          "reservation" => $new_name,
+          "filename" => basename ($full_path),
+          "org_filename" => $upload ["name"],
+          "comment" => is_string ($_POST ["fs_comment"] ?? null) ? $_POST ["fs_comment"] : "",
+          "time" => $timestamp,
+          "md5hash" => $digest,
+        );
+        if (!$my_upload->save_in_db ($data)) {
+          throw new RuntimeException ("Die Reservierung gehört nicht zu dieser Sitzung.");
+        }
+        $finalized = true;
+      } catch (Throwable $exception) {
+        error_log ("eStab attachment upload failed: ".$exception->getMessage ());
+        echo "<big><big><b>Der Anhang konnte nicht sicher gespeichert werden.</b></big></big>";
+      } finally {
+        if (!$finalized && is_string ($full_path) && is_file ($full_path)) {
+          $uploadRoot = rtrim ($my_upload->upload_dir, "/\\").DIRECTORY_SEPARATOR;
+          if (str_starts_with ($full_path, $uploadRoot) && basename ($full_path) === $my_upload->file_copy) {
+            @unlink ($full_path);
+          }
+        }
+        if ($claimed && !$finalized) {
+          try {
+            $my_upload->release_reservation ($new_name);
+          } catch (Throwable $exception) {
+            error_log ("eStab attachment reservation release failed: ".$exception->getMessage ());
+          }
         }
       }
+    } else {
+      file_unselect ();
     }
-    file_unselect ();
     unset ($_SESSION ["UPLOAD"]);
     anhang_menue ();
     exit;
@@ -994,7 +1018,7 @@ require_once ("./db_operation.php");  // Datenbank operationen
         }
     break;
 
-    default;
+    default:
       echo "<big><big><big>Kein MenÃ¼punkt !!!</big></big></big><br>" ;
   }
 

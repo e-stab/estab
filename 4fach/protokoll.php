@@ -9,7 +9,7 @@
    (C) Hajo Landmesser IuK Kreis Heinsberg
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
-if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big>Protokoll</big></big><br>";  }
+if (defined ("debug") && debug) { echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big>Protokoll</big></big><br>";  }
 /*****************************************************************************\
   function protokolleintrag ();
        p_zeit,         - Zeitstempel

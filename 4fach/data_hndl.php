@@ -1,5 +1,5 @@
 <?php
-if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>Data hndl</big><br>\n";}
+if (defined ("debug") && debug) { echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>Data hndl</big><br>\n";}
 /*****************************************************************************\
    Datei: data_hndl.php
 
@@ -19,10 +19,12 @@ if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>Data hn
 \*****************************************************************************/
 
 define ("validate",true);     // Soll das Formular überprüft werden
-include ("tools.php");
+require_once __DIR__ . "/tools.php";
+require_once __DIR__ . "/../app/auth.php";
+require_once __DIR__ . "/../app/message_repository.php";
 
 if (validate){
-  include ("vali_data.php");
+  require_once __DIR__ . "/vali_data.php";
 }
 
 /*******************************************************************************
@@ -37,153 +39,134 @@ if (validate){
     Funktion:  check_save_user ()
 
 \*******************************************************************************/
-function check_save_user () {
-  $error_userlogin = false;
-  if (debug) echo "data_hndl.php 44<br>";
-  // Als allererstes Pruefen wir mal die Formulardaten auf Vollstaedigkeit
-  if ($_GET ["kennwort1"] != "" ){
-    if ( ( $_GET [kuerzel] != "" ) AND ( $_GET [benutzer] != ""  ) ) {
-      include ("../4fcfg/dbcfg.inc.php");
-      include ("../4fcfg/e_cfg.inc.php");
-      if (debug) echo "PHP_SELF=".$_SERVER["PHP_SELF"]."<br>";
-       /* Die Daten in der Datenbank vorhanden?
-          Also suchen wird erst mal nach dem Kuerzel in der Datenbank  */
-      $dbaccess = new db_access ($conf_4f_db  ["server"],
-                                 $conf_4f_db  ["datenbank"],
-                                 $conf_4f_tbl ["benutzer"],
-                                 $conf_4f_db  ["user"],
-                                 $conf_4f_db  ["password"] );
+function check_save_user (array $loginData) {
+  global $conf_empf;
 
-      if (debug) {echo "db-daten 59 "; var_dump ($conf_4f_db); echo "<br>";}
-      // Daten sind in $_GET vorhanden
-      $GETkuerzel = strtolower ( $_GET ["kuerzel"]);
+  include ("../4fcfg/dbcfg.inc.php");
+  include ("../4fcfg/e_cfg.inc.php");
 
-      $query = "SELECT * FROM ".$conf_4f_tbl ["benutzer"]." WHERE `kuerzel` LIKE \"".$GETkuerzel."\";";
-      if (debug) {echo "data_hndl.php 64 query=".$query."<br>";}
-
-      $result = $dbaccess->query_table ($query);
-      if (debug) {echo "result67 ="; var_dump ($result); echo"<br>";}
-
-      if ( ( count ($result) > 0 ) AND ( $result != "" ) ){
-        $db_result = $result [1];
-        $user_eq = ( $_GET["benutzer"] == $db_result ["benutzer"] );
-        $kuerzel_eq = ( $GETkuerzel == $db_result ["kuerzel"] );
-        $passwd_eq = ( $_GET["kennwort1"] == $db_result ["password"] );
-
-        $db_gleich  = ( $user_eq  AND $kuerzel_eq AND $passwd_eq);
-        $sd_gleich  = ( ( $_SESSION ["vStab_benutzer"] == $db_result [1]["benutzer"] ) AND
-                        ( $_SESSION ["vStab_kuerzel"]  == $db_result [1]["kuerzel"] ) AND
-                        ( $_SESSION ["vStab_funktion"] == $db_result [1]["benutzer"] )  );
-
-        $sid_gleich = ( ( session_id() == $db_result ["sid"] ));
-        $ip_gleich   = ( ( $_SERVER [REMOTE_ADDR] == $db_result ["ip"] ));
-
-        if (  $db_gleich  ) {
-          /*** Wiederanmeldung ***/
-          if ($db_result ["aktiv"] == 1 ){
-            $query = "UPDATE ".$conf_4f_tbl ["benutzer"]."
-                      SET   `SID` = \"".session_id()."\",
-                             `ip` = \"".$_SERVER ["REMOTE_ADDR"]."\",
-                          `fwdip` = \"".$_SERVER["HTTP_X_FORWARDED_FOR"]."\",
-                          `aktiv` = \"1\" WHERE `kuerzel` = \"".$GETkuerzel."\";";
-            $result = $dbaccess->query_table_iu ($query);
-            $_SESSION ["menue"] = "ROLLE";  // Starte Menue im Rollenmodus
-            $rolle = rollenfinder ( $_GET["funktion"] );
-            $_SESSION ["vStab_benutzer"] = $_GET["benutzer"];
-            $_SESSION ["vStab_kuerzel"]  = $GETkuerzel;
-            $_SESSION ["vStab_funktion"] = $_GET["funktion"];
-            $_SESSION ["vStab_rolle"]    = $rolle;
-            $_SESSION ["menue"] = "ROLLE";  // Starte Menu im Rollenmodus
-            $_SESSION ["ROLLE"] = $rolle;
-            protokolleintrag ("Sessiondaten neu setzen", $_SESSION["vStab_benutzer"].";".$_SESSION["vStab_kuerzel"].";".$_SESSION["vStab_funktion"].";".$_SESSION["vStab_rolle"].";".session_id().";".$_SERVER["REMOTE_ADDR"]);
-          }
-          if ($db_result ["aktiv"] == 0 ){
-            $rolle = rollenfinder ( $_GET["funktion"] );
-            $query = "UPDATE ".$conf_4f_tbl ["benutzer"]."
-                     SET `funktion` = \"".$_GET ["funktion"]."\",
-                         `rolle`    = \"".$rolle."\",
-                         `SID`      = \"".session_id()."\",
-                         `ip`       = \"".$_SERVER ["REMOTE_ADDR"]."\",
-                         `fwdip`    = \"".$_SERVER["HTTP_X_FORWARDED_FOR"]."\",
-                         `aktiv`    = \"1\" WHERE kuerzel = \"".$GETkuerzel."\";";
-            $result = $dbaccess->query_table_iu ($query);
-             // Tabelle fuer die Benutzerfunktion anlegen
-            if ($_GET ["funktion"] != "A/W"){
-              $usertablename = $conf_4f_tbl ["usrtblprefix"].strtolower ($_GET ["funktion"])."_".strtolower ( $_GET ["kuerzel"]);
-              $fkttblname  = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($_GET ["funktion"]);
-              $dbaccess->create_user_table ($usertablename, $fkttblname);
-            }
-            $rolle = rollenfinder ( $_GET["funktion"] );
-            $_SESSION ["ROLLE"] = $rolle;
-            $_SESSION ["vStab_benutzer"] = $_GET["benutzer"];
-            $_SESSION ["vStab_kuerzel"]  = $GETkuerzel;
-            $_SESSION ["vStab_funktion"] = $_GET["funktion"];
-            $_SESSION ["vStab_rolle"]    = $rolle;
-            $_SESSION ["menue"] = "ROLLE";  // Starte Menu im Rollenmodus
-            $_SESSION ["ROLLE"] = $rolle;
-            protokolleintrag ("Funktion Ummelden", $_SESSION["vStab_benutzer"].";".$_SESSION["vStab_kuerzel"].";".$_SESSION["vStab_funktion"].";".$_SESSION["vStab_rolle"].";".session_id().";".$_SERVER["REMOTE_ADDR"]);
-          }
-        } ELSE { // $db_gleich
-          if (!$passwd_eq){
-            $infotext = "Passwort falsch !!<br>Das Passwort stimmen nicht Ã¼berein.";
-            errorwindow( "Benutzeranmeldung", $infotext );
-            $error_userlogin = true;
-          }
-        }
-        if ($kuerzel_eq and !$user_eq) {
-          // Kürzel in Datenbank vorhanden -- Benutzername passt NICHT dazu !!!
-          $infotext = "Kürzel schon vorhanden !!!<br>Benutzername stimmt nicht mit den gespeicherten Daten überein.";
-          errorwindow( "Benutzeranmeldung", $infotext );
-          $error_userlogin = true;
-        }
-      }  else { // nicht in der Datenbank
-           /**********************************************************************
-                     Es sind keine Daten in der Datenbank ==> Neuer Benutzer
-                     Setze die Daten im Session Cookie und in der Datenbank.
-            **********************************************************************/
-          if (debug) {echo "data_hndl146"."<br>";}
-          $rolle = rollenfinder ( $_GET["funktion"] );
-          if (debug) {echo "data_hndl148"."<br>";}
-          $_SESSION ["vStab_benutzer"] = $_GET["benutzer"];
-          $_SESSION ["vStab_kuerzel"]  = $GETkuerzel;
-          $_SESSION ["vStab_funktion"] = $_GET["funktion"];
-          $_SESSION ["vStab_rolle"]    = $rolle;
-
-          $query = "INSERT into ".$conf_4f_tbl ["benutzer"]." SET
-                          `benutzer` = \"".$_GET["benutzer"]."\",
-                          `kuerzel`  = \"".$GETkuerzel."\",
-                          `funktion` = \"".$_GET["funktion"]."\",
-                          `rolle`    = \"".$rolle."\",
-                          `sid`      = \"".session_id()  ."\",
-                          `ip`       = \"".$_SERVER["REMOTE_ADDR"]."\",
-                          `fwdip`    = \"".$_SERVER["HTTP_X_FORWARDED_FOR"]."\",
-                          `password` = \"".$_GET["kennwort1"]."\",
-                          `aktiv`    = \"1\"";
-          if (debug) {echo "data_hndl.php 163 query=".$query."<br>";}
-          $result = $dbaccess->query_table_iu ($query);
-          if (debug) {echo "data_hndl165"; var_dump ($result); echo "<br>"; }
-
-          protokolleintrag ("Anmelden", $_SESSION["vStab_benutzer"].";".$_SESSION["vStab_kuerzel"].";".$_SESSION["vStab_funktion"].";".$_SESSION["vStab_rolle"].";".session_id().";".$_SERVER["REMOTE_ADDR"]);
-          if ($_SESSION ["vStab_funktion"] != "A/W"){
-            $usertablename = $conf_4f_tbl ["usrtblprefix"].strtolower ($_GET ["funktion"])."_".strtolower ( $_GET ["kuerzel"]);
-            $fkttblname  = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($_SESSION["vStab_funktion"]);
-            $dbaccess->create_user_table ($usertablename, $fkttblname);
-          }
-          $_SESSION ["menue"] = "ROLLE";  // Starte Menu im Rollenmodus
-          $_SESSION ["ROLLE"] = $rolle;
-      } // ( ( count ($result) > 0 ) AND ( $result != "" ) ){
-    }  else {  // if $GET [kuerzel und benutzer] == ""
-      $_SESSION ["menue"] = "LOGIN";
-      $infotext = "Keine Daten eingegeben !!!";
-      errorwindow( "Benutzeranmeldung", $infotext );
-      $error_userlogin = true;
-    }
-  } else { // kennwort == ""
-     $error_userlogin = true;
+  $validation = estab_auth_validate_login ($loginData, is_array ($conf_empf) ? $conf_empf : array ());
+  if (!$validation ["valid"]) {
+    $_SESSION ["menue"] = "LOGIN";
+    errorwindow ("Benutzeranmeldung", "Die Anmeldedaten sind unvollständig oder ungültig.");
+    return true;
   }
 
-  return ($error_userlogin);
+  $login = $validation ["data"];
+  $connection = null;
+  try {
+    $connection = estab_auth_connect ($conf_4f_db);
+    $dbUser = estab_auth_fetch_user ($connection, $conf_4f_tbl ["benutzer"], $login ["kuerzel"]);
+    $ip = estab_auth_remote_ip ($_SERVER);
+    $forwardedIp = estab_auth_forwarded_ip (
+      $_SERVER,
+      estab_env_bool ("ESTAB_TRUST_PROXY_HEADERS", false)
+    );
 
+    $dbaccess = new db_access ($conf_4f_db ["server"],
+                              $conf_4f_db ["datenbank"],
+                              $conf_4f_tbl ["benutzer"],
+                              $conf_4f_db ["user"],
+                              $conf_4f_db ["password"] );
+
+    if (is_array ($dbUser)) {
+      $nameMatches = hash_equals ((string) $dbUser ["benutzer"], $login ["benutzer"]);
+      $passwordCheck = estab_auth_verify_password ($login ["password"], (string) $dbUser ["password"]);
+      if (!$nameMatches || !$passwordCheck ["valid"]) {
+        errorwindow ("Benutzeranmeldung", "Name, Kürzel oder Kennwort stimmen nicht überein.");
+        return true;
+      }
+
+      if (session_status () !== PHP_SESSION_ACTIVE || !session_regenerate_id (true)) {
+        throw new RuntimeException ("Die Sitzung konnte nicht erneuert werden");
+      }
+
+      $wasInactive = ((int) $dbUser ["aktiv"] === 0);
+      $storedPassword = is_string ($passwordCheck ["replacement"])
+        ? $passwordCheck ["replacement"]
+        : (string) $dbUser ["password"];
+      estab_auth_update_user ($connection, $conf_4f_tbl ["benutzer"], array (
+        "funktion" => $login ["funktion"],
+        "rolle" => $login ["rolle"],
+        "sid" => session_id (),
+        "ip" => $ip,
+        "fwdip" => $forwardedIp,
+        "password" => $storedPassword,
+        "kuerzel" => $login ["kuerzel"],
+      ), $wasInactive);
+
+      $_SESSION ["vStab_benutzer"] = $login ["benutzer"];
+      $_SESSION ["vStab_kuerzel"] = $login ["kuerzel"];
+      $_SESSION ["vStab_funktion"] = $login ["funktion"];
+      $_SESSION ["vStab_rolle"] = $login ["rolle"];
+      $_SESSION ["menue"] = "ROLLE";
+      $_SESSION ["ROLLE"] = $login ["rolle"];
+
+      estab_auth_close ($connection);
+      $connection = null;
+
+      // Existing imported rows can still carry MyISAM/latin1 dynamic tables,
+      // even when their stale legacy `aktiv` flag is 1. The operation is
+      // idempotent, so reconcile all six tables after every successful login.
+      if ($login ["funktion"] != "A/W") {
+        $usertablename = $conf_4f_tbl ["usrtblprefix"].strtolower ($login ["funktion"])."_".$login ["kuerzel"];
+        $fkttblname = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($login ["funktion"]);
+        $dbaccess->create_user_table ($usertablename, $fkttblname);
+      }
+
+      $event = $wasInactive ? "Funktion Ummelden" : "Sessiondaten neu setzen";
+      protokolleintrag ($event, $login ["benutzer"].";".$login ["kuerzel"].";".$login ["funktion"].";".$login ["rolle"].";".session_id ().";".$ip);
+      return false;
+    }
+
+    if (!estab_auth_self_registration_allowed ()) {
+      errorwindow ("Benutzeranmeldung", "Die Selbstregistrierung ist deaktiviert.");
+      return true;
+    }
+
+    if (session_status () !== PHP_SESSION_ACTIVE || !session_regenerate_id (true)) {
+      throw new RuntimeException ("Die Sitzung konnte nicht erneuert werden");
+    }
+
+    $passwordHash = password_hash ($login ["password"], PASSWORD_DEFAULT);
+    estab_auth_insert_user ($connection, $conf_4f_tbl ["benutzer"], array (
+      "benutzer" => $login ["benutzer"],
+      "kuerzel" => $login ["kuerzel"],
+      "funktion" => $login ["funktion"],
+      "rolle" => $login ["rolle"],
+      "sid" => session_id (),
+      "ip" => $ip,
+      "fwdip" => $forwardedIp,
+      "password" => $passwordHash,
+    ));
+
+    $_SESSION ["vStab_benutzer"] = $login ["benutzer"];
+    $_SESSION ["vStab_kuerzel"] = $login ["kuerzel"];
+    $_SESSION ["vStab_funktion"] = $login ["funktion"];
+    $_SESSION ["vStab_rolle"] = $login ["rolle"];
+    $_SESSION ["menue"] = "ROLLE";
+    $_SESSION ["ROLLE"] = $login ["rolle"];
+
+    estab_auth_close ($connection);
+    $connection = null;
+
+    if ($login ["funktion"] != "A/W") {
+      $usertablename = $conf_4f_tbl ["usrtblprefix"].strtolower ($login ["funktion"])."_".$login ["kuerzel"];
+      $fkttblname = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($login ["funktion"]);
+      $dbaccess->create_user_table ($usertablename, $fkttblname);
+    }
+    protokolleintrag ("Anmelden", $login ["benutzer"].";".$login ["kuerzel"].";".$login ["funktion"].";".$login ["rolle"].";".session_id ().";".$ip);
+    return false;
+  } catch (Throwable $exception) {
+    error_log ("eStab authentication failed: ".$exception->getMessage ());
+    $_SESSION ["menue"] = "LOGIN";
+    errorwindow ("Benutzeranmeldung", "Die Anmeldung konnte technisch nicht abgeschlossen werden.");
+    return true;
+  } finally {
+    if ($connection instanceof mysqli) {
+      estab_auth_close ($connection);
+    }
+  }
 } // function save_user
 
 
@@ -197,42 +180,33 @@ function check_and_save ($data){
   include ("../4fcfg/e_cfg.inc.php");
   include ("../4fcfg/fkt_rolle.inc.php");
 
-  if ($data ["11_gesprnotiz"] == "on") {
+  $data = array_replace (array_fill_keys (array (
+    "00_lfd", "01_medium", "01_datum", "01_zeichen",
+    "02_zeit", "02_zeichen", "03_datum", "03_zeichen",
+    "05_gegenstelle", "06_befweg", "06_befwegausw",
+    "07_durchspruch", "08_befhinweis", "08_befhinwausw",
+    "09_vorrangstufe", "10_anschrift", "11_gesprnotiz",
+    "12_anhang", "12_inhalt", "12_abfzeit", "13_abseinheit",
+    "14_zeichen", "14_funktion", "15_quitdatum",
+    "15_quitzeichen", "16_empf", "16_gncopy", "17_vermerke",
+    "task"
+  ), ""), is_array ($data) ? $data : array ());
+
+  if (($data ["11_gesprnotiz"] ?? "") == "on") {
     $data ["11_gesprnotiz"] = "t" ;
   }  else {
     $data ["11_gesprnotiz"] = "f" ;
   }
 
-  if (debug){
-    if (debug) echo __FILE__.":".__LINE__." ###<br> "; var_dump ($data); echo "<br><br><br>\n";
-/* 
-		while (list($key, $val) = each($data)) {
-			echo "$key => $val  ---> $data[$key]<br>\n";
-      }  
-*/
-    
+  // Store raw UTF-8. Encoding belongs exclusively to the output context.
+  foreach (array ("12_inhalt", "17_vermerke") as $rawTextField) {
+    if (!isset ($data [$rawTextField]) || !is_string ($data [$rawTextField])) {
+      $data [$rawTextField] = "";
+    }
   }
 
-
-/*
-  Umwandlung Sonderzeichen in HTML Zeichencode
-  Die Umwandlung der Texte wurde deaktiviert, da die Texte als UTF-8 kodiert wurden.
-*/
-
-	if ($data ["12_inhalt"] != ""){
-  		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### 369 check and save";  echo "<br>\n";}
-    	$tempstr = htmlentities (  $data ["12_inhalt"],ENT_COMPAT,'UTF-8'); 
-		$data ["12_inhalt"] = $tempstr;
-		if (debug) echo __FILE__.":".__LINE__."-->".$data ["12_inhalt"]."br";
-	}
-	if ($data ["17_vermerk"] != ""){
-		$data ["17_vermerke"] = htmlentities (  $data ["17_vermerke"],ENT_COMPAT,'UTF-8' ); 
-	}
-
-	$dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
-                             $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],
-                             $conf_4f_db ["password"] );
-
+  $messageConnection = estab_message_connect ($conf_4f_db);
+  try {
 	switch ($data["task"]){
 		case "FM-Eingang":
     	case "FM-Eingang_Anhang":
@@ -278,32 +252,35 @@ function check_and_save ($data){
         			/*----------------------------------------------------*/
       }
 
-		$nachweis_E = get_last_nachw_num ("E") + 1;
-      $query = "INSERT into `".$conf_4f_tbl ["nachrichten"]."` SET
-            `01_medium`       = \"".$data ["01_medium"]      ."\",
-            `01_datum`        = \"".konv_taktime_datetime ($data ["01_datum"])."\",
-            `01_zeichen`      = \"".$data ["01_zeichen"]     ."\",
-            `04_richtung`     = \"E\",
-            `04_nummer`       = \"".$nachweis_E              ."\",
-            `05_gegenstelle`  = \"".$data ["05_gegenstelle"] ."\",
-            `07_durchspruch`  = \"".$data ["07_durchspruch"] ."\",
-            `08_befhinweis`   = \"".$data ["08_befhinweis"]  ."\",
-            `08_befhinwausw`  = \"".$data ["08_befhinwausw"] ."\",
-            `09_vorrangstufe` = \"".$data ["09_vorrangstufe"]."\",
-            `10_anschrift`    = \"".$data ["10_anschrift"]   ."\",
-            `11_gesprnotiz`   = \"".$data ["11_gesprnotiz"]  ."\",
-            `12_anhang`       = \"".$data ["12_anhang"]      ."\",
-            `12_inhalt`       = \"".$data ["12_inhalt"]      ."\",
-            `12_abfzeit`      = \"".konv_taktime_datetime ($data ["12_abfzeit"])     ."\",
-            `13_abseinheit`   = \"".$data ["13_abseinheit"]  ."\",
-            `14_zeichen`      = \"".$data ["14_zeichen"]     ."\",
-            `14_funktion`     = \"".$data ["14_funktion"]."\",
-            `16_empf`         = \"".$data ["16_empf"]."\",
-            `x00_status`      = \"4\",
-            `x01_abschluss`   = \"f\"";
-		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>"; echo "query[FM-Eingang]===".$query."<br>"; }
-		$result = $dbaccess->query_table_iu ($query);
-      protokolleintrag ("FM-Eingang",$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
+      $storedMessage = estab_message_insert_numbered (
+        $messageConnection,
+        $conf_4f_db ["datenbank"],
+        $conf_4f_tbl ["nachrichten"],
+        "E",
+        Nachweisung === "getrennt",
+        array (
+          "01_medium" => $data ["01_medium"],
+          "01_datum" => konv_taktime_datetime ($data ["01_datum"]),
+          "01_zeichen" => $data ["01_zeichen"],
+          "05_gegenstelle" => $data ["05_gegenstelle"],
+          "07_durchspruch" => $data ["07_durchspruch"],
+          "08_befhinweis" => $data ["08_befhinweis"],
+          "08_befhinwausw" => $data ["08_befhinwausw"],
+          "09_vorrangstufe" => $data ["09_vorrangstufe"],
+          "10_anschrift" => $data ["10_anschrift"],
+          "11_gesprnotiz" => $data ["11_gesprnotiz"],
+          "12_anhang" => $data ["12_anhang"],
+          "12_inhalt" => $data ["12_inhalt"],
+          "12_abfzeit" => konv_taktime_datetime ($data ["12_abfzeit"]),
+          "13_abseinheit" => $data ["13_abseinheit"],
+          "14_zeichen" => $data ["14_zeichen"],
+          "14_funktion" => $data ["14_funktion"],
+          "16_empf" => $data ["16_empf"],
+          "x00_status" => 4,
+          "x01_abschluss" => "f",
+        )
+      );
+      protokolleintrag ("FM-Eingang", "message_id=".$storedMessage ["id"]);
     break;
 
 		case "FM-Eingang_Sichter":
@@ -364,35 +341,38 @@ function check_and_save ($data){
           		/*----------------------------------------------------*/
         	}
 
-			$nachweis_E = get_last_nachw_num ("E") + 1;
-       	$query = "INSERT into `".$conf_4f_tbl ["nachrichten"]."` SET
-            `01_medium`       = \"".$data ["01_medium"]      ."\",
-            `01_datum`        = \"".konv_taktime_datetime ($data ["01_datum"])."\",
-            `01_zeichen`      = \"".$data ["01_zeichen"]     ."\",
-            `04_richtung`     = \"E\",
-            `04_nummer`       = \"".$nachweis_E              ."\",
-            `05_gegenstelle`  = \"".$data ["05_gegenstelle"] ."\",
-            `07_durchspruch`  = \"".$data ["07_durchspruch"] ."\",
-            `08_befhinweis`   = \"".$data ["08_befhinweis"]  ."\",
-            `08_befhinwausw`  = \"".$data ["08_befhinwausw"] ."\",
-            `09_vorrangstufe` = \"".$data ["09_vorrangstufe"]."\",
-            `10_anschrift`    = \"".$data ["10_anschrift"]   ."\",
-            `11_gesprnotiz`   = \"".$data ["11_gesprnotiz"]  ."\",
-            `12_anhang`       = \"".$data ["12_anhang"]      ."\",
-            `12_inhalt`       = \"".$data ["12_inhalt"]      ."\",
-            `12_abfzeit`      = \"".konv_taktime_datetime ($data ["12_abfzeit"])     ."\",
-            `13_abseinheit`   = \"".$data ["13_abseinheit"]  ."\",
-            `14_zeichen`      = \"".$data ["14_zeichen"]     ."\",
-            `14_funktion`     = \"".$data ["14_funktion"]    ."\",
-            `15_quitdatum`    = \"".konv_taktime_datetime ($data ["15_quitdatum"])   ."\",
-            `15_quitzeichen`  =  \"".$data ["15_quitzeichen"]."\",
-            `16_empf`         =  \"".$data ["16_empf"]."\",
-            `17_vermerke`     =  \"".$data ["17_vermerke"]."\",
-            `x00_status`      = \"8\",
-            `x01_abschluss`   = \"t\"";
-			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>"; echo "query[FM-Eingang_Sichter]===".$query."<br>"; }
-			$result = $dbaccess->query_table_iu ($query);
-       	protokolleintrag ("FM-Eingang-Sichter",$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
+      $storedMessage = estab_message_insert_numbered (
+        $messageConnection,
+        $conf_4f_db ["datenbank"],
+        $conf_4f_tbl ["nachrichten"],
+        "E",
+        Nachweisung === "getrennt",
+        array (
+          "01_medium" => $data ["01_medium"],
+          "01_datum" => konv_taktime_datetime ($data ["01_datum"]),
+          "01_zeichen" => $data ["01_zeichen"],
+          "05_gegenstelle" => $data ["05_gegenstelle"],
+          "07_durchspruch" => $data ["07_durchspruch"],
+          "08_befhinweis" => $data ["08_befhinweis"],
+          "08_befhinwausw" => $data ["08_befhinwausw"],
+          "09_vorrangstufe" => $data ["09_vorrangstufe"],
+          "10_anschrift" => $data ["10_anschrift"],
+          "11_gesprnotiz" => $data ["11_gesprnotiz"],
+          "12_anhang" => $data ["12_anhang"],
+          "12_inhalt" => $data ["12_inhalt"],
+          "12_abfzeit" => konv_taktime_datetime ($data ["12_abfzeit"]),
+          "13_abseinheit" => $data ["13_abseinheit"],
+          "14_zeichen" => $data ["14_zeichen"],
+          "14_funktion" => $data ["14_funktion"],
+          "15_quitdatum" => konv_taktime_datetime ($data ["15_quitdatum"]),
+          "15_quitzeichen" => $data ["15_quitzeichen"],
+          "16_empf" => $data ["16_empf"],
+          "17_vermerke" => $data ["17_vermerke"],
+          "x00_status" => 8,
+          "x01_abschluss" => "t",
+        )
+      );
+      protokolleintrag ("FM-Eingang-Sichter", "message_id=".$storedMessage ["id"]);
     	break;
 
     	case "Stab_schreiben":
@@ -436,42 +416,34 @@ function check_and_save ($data){
 
 
        $data ["16_empf"] = $redcopy2."_rt,".$data ["14_funktion"]."_gn"; // Der Verfasser bekommt den gruenen
-       $gesprnotiz_or_not = "`x00_status`      = \"10\",
-                `04_richtung`     = \"A\",
-                `x01_abschluss`   = \"f\"";
-       $nachweis_A       = get_last_nachw_num ("A") + 1;
-       $query = "INSERT into `".$conf_4f_tbl ["nachrichten"]."` SET
-            `02_zeit`         = \"".$data ["02_zeit"]    ."\",
-            `02_zeichen`      = \"\",
-            `04_nummer`       = \"".$nachweis_A              ."\",
-            `04_richtung`     = \"A\",
-            `07_durchspruch`  = \"".$data ["07_durchspruch"] ."\",
-            `08_befhinweis`   = \"".$data ["08_befhinweis"]  ."\",
-            `08_befhinwausw`  = \"".$data ["08_befhinwausw"] ."\",
-            `09_vorrangstufe` = \"".$data ["09_vorrangstufe"]."\",
-            `10_anschrift`    = \"".$data ["10_anschrift"]   ."\",
-            `11_gesprnotiz`   = \"".$data ["11_gesprnotiz"]  ."\",
-            `12_anhang`       = \"".$data ["12_anhang"]      ."\",
-            `12_inhalt`       = \"".$data ["12_inhalt"]      ."\",
-            `12_abfzeit`      = \"".konv_taktime_datetime ($data ["12_abfzeit"])    ."\",
-            `13_abseinheit`   = \"".$data ["13_abseinheit"]  ."\",
-            `14_zeichen`      = \"".$data ["14_zeichen"]     ."\",
-            `14_funktion`     = \"".$data ["14_funktion"]    ."\",
-            `16_empf`         = \"".$data ["16_empf"]."\",
-            `x00_status`      = \"2\",
-            `x01_abschluss`   = \"f\"; ";
-
-       if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big> ==>query[Stab schreiben]===".$query."</big><br>\n";} 
-
-       $result = $dbaccess->query_table_iu ($query);
-       protokolleintrag ("Stab-schreiben",$query);
-       $query = "SELECT ".$conf_4f_tbl ["nachrichten"].".`00_lfd` FROM `".$conf_4f_tbl ["nachrichten"]."`
-                 WHERE `04_nummer` = \"".$nachweis_A."\" AND `04_richtung` = \"A\" ;";
-//echo "query[Stab schreiben2]===".$query."<br>";
-
-       $result = $dbaccess->query_table_wert ($query);
-       $lfd = $result [0] ;
-       set_msg_read ($lfd) ;
+       $storedMessage = estab_message_insert_numbered (
+         $messageConnection,
+         $conf_4f_db ["datenbank"],
+         $conf_4f_tbl ["nachrichten"],
+         "A",
+         Nachweisung === "getrennt",
+         array (
+           "02_zeit" => $data ["02_zeit"],
+           "02_zeichen" => "",
+           "07_durchspruch" => $data ["07_durchspruch"],
+           "08_befhinweis" => $data ["08_befhinweis"],
+           "08_befhinwausw" => $data ["08_befhinwausw"],
+           "09_vorrangstufe" => $data ["09_vorrangstufe"],
+           "10_anschrift" => $data ["10_anschrift"],
+           "11_gesprnotiz" => $data ["11_gesprnotiz"],
+           "12_anhang" => $data ["12_anhang"],
+           "12_inhalt" => $data ["12_inhalt"],
+           "12_abfzeit" => konv_taktime_datetime ($data ["12_abfzeit"]),
+           "13_abseinheit" => $data ["13_abseinheit"],
+           "14_zeichen" => $data ["14_zeichen"],
+           "14_funktion" => $data ["14_funktion"],
+           "16_empf" => $data ["16_empf"],
+           "x00_status" => 2,
+           "x01_abschluss" => "f",
+         )
+       );
+       protokolleintrag ("Stab-schreiben", "message_id=".$storedMessage ["id"]);
+       set_msg_read ($storedMessage ["id"]) ;
     break;
     /****************************************************************************\
       SSSSS TTTTT AAAAA BBBB        GGGGG EEEEE SSSSS PPPP  RRRR  N   N  OOO  TTTTT IIIII
@@ -536,47 +508,39 @@ function check_and_save ($data){
          }
        }
        $data ["11_gesprnotiz"] = "t" ;
-       $nachweis_E     = get_last_nachw_num ("E") + 1; // E weil Gspraechsnotiz als Eingang
        $data ["16_empf"] .= $redcopy2."_rt,".$data ["14_funktion"]."_gn"; // Der Verfasser bekommt den gruenen
-       $query = "INSERT into `".$conf_4f_tbl ["nachrichten"]."` SET
-            `01_medium`       = \"".$data ["01_medium"]      ."\",
-            `01_datum`        = \"".konv_taktime_datetime ($data ["01_datum"])."\",
-            `01_zeichen`      = \"".$data ["01_zeichen"]     ."\",
-            `04_nummer`       = \"".$nachweis_E              ."\",
-            `04_richtung`     = \"E\",
-            `07_durchspruch`  = \"".$data ["07_durchspruch"] ."\",
-            `08_befhinweis`   = \"".$data ["08_befhinweis"]  ."\",
-            `08_befhinwausw`  = \"".$data ["08_befhinwausw"] ."\",
-            `09_vorrangstufe` = \"".$data ["09_vorrangstufe"]."\",
-            `10_anschrift`    = \"".$data ["10_anschrift"]   ."\",
-            `11_gesprnotiz`   = \"".$data ["11_gesprnotiz"]  ."\",
-            `12_anhang`       = \"".$data ["12_anhang"]      ."\",
-            `12_inhalt`       = \"".$data ["12_inhalt"]      ."\",
-            `12_abfzeit`      = \"".konv_taktime_datetime ($data ["12_abfzeit"])     ."\",
-
-            `13_abseinheit`   = \"".$data ["13_abseinheit"]  ."\",
-            `14_zeichen`      = \"".$data ["14_zeichen"]     ."\",
-            `14_funktion`     = \"".$data ["14_funktion"]    ."\",
-            `16_empf`         = \"".$data ["16_empf"]        ."\",
-            `17_vermerke`     =  \"".$data ["17_vermerke"]."\",
-
-            `x00_status`      = \"8\",
-            `x01_abschluss`   = \"t\",
-            `x02_sperre`      = \"f\",
-            `x03_sperruser`   = \"\" ";
-/*
-            `15_quitdatum`    = \"".konv_taktime_datetime ($data ["15_quitdatum"])   ."\",
-            `15_quitzeichen`  =  \"".$data ["15_quitzeichen"]."\",
-
-*/
-
-       $result = $dbaccess->query_table_iu ($query);
-       protokolleintrag ("Stab-gesprnoti",$query);
-       $query = "SELECT ".$conf_4f_tbl ["nachrichten"].".`00_lfd` FROM `".$conf_4f_tbl ["nachrichten"]."`
-                 WHERE `04_nummer` = \"".$nachweis_E."\" AND `04_richtung` = \"E\" ;";
-       $result = $dbaccess->query_table_wert ($query);
-       $lfd = $result [0];
-       set_msg_read ($lfd) ;
+       $storedMessage = estab_message_insert_numbered (
+         $messageConnection,
+         $conf_4f_db ["datenbank"],
+         $conf_4f_tbl ["nachrichten"],
+         "E",
+         Nachweisung === "getrennt",
+         array (
+           "01_medium" => $data ["01_medium"],
+           "01_datum" => konv_taktime_datetime ($data ["01_datum"]),
+           "01_zeichen" => $data ["01_zeichen"],
+           "07_durchspruch" => $data ["07_durchspruch"],
+           "08_befhinweis" => $data ["08_befhinweis"],
+           "08_befhinwausw" => $data ["08_befhinwausw"],
+           "09_vorrangstufe" => $data ["09_vorrangstufe"],
+           "10_anschrift" => $data ["10_anschrift"],
+           "11_gesprnotiz" => $data ["11_gesprnotiz"],
+           "12_anhang" => $data ["12_anhang"],
+           "12_inhalt" => $data ["12_inhalt"],
+           "12_abfzeit" => konv_taktime_datetime ($data ["12_abfzeit"]),
+           "13_abseinheit" => $data ["13_abseinheit"],
+           "14_zeichen" => $data ["14_zeichen"],
+           "14_funktion" => $data ["14_funktion"],
+           "16_empf" => $data ["16_empf"],
+           "17_vermerke" => $data ["17_vermerke"],
+           "x00_status" => 8,
+           "x01_abschluss" => "t",
+           "x02_sperre" => "f",
+           "x03_sperruser" => "",
+         )
+       );
+       protokolleintrag ("Stab-gesprnoti", "message_id=".$storedMessage ["id"]);
+       set_msg_read ($storedMessage ["id"]) ;
 
 		break;
 
@@ -612,35 +576,36 @@ function check_and_save ($data){
          }
       }
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### VOR conf_4f[\"si_in_out\"]".$conf_4f["si_in_out"]."<br>"; }      
-		if($conf_4f["si_in_out"]) {  //  Ein- und Ausänge sichten
-			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### Ein- und Ausgänge sichten<br>"; }
-			$query = "UPDATE `".$conf_4f_tbl ["nachrichten"]."` SET
-            `03_datum`        = \"".konv_taktime_datetime ($data ["03_datum"]) ."\",
-            `03_zeichen`      = \"".$data ["03_zeichen"]  ."\",
-            `05_gegenstelle`  = \"".$data ["05_gegenstelle"] ."\",
-            `06_befweg`       = \"".$data ["06_befweg"]."\",
-            `06_befwegausw`   = \"".$data ["06_befwegausw"]   ."\",
-            `x00_status`      = \"4\",
-            `x01_abschluss`   = \"f\",
-            `x02_sperre`      = \"f\",
-            `x03_sperruser`   = \"\"
-             WHERE `00_lfd` = \"".$data ["00_lfd"]."\"";
+			if($conf_4f["si_in_out"]) {  //  Ein- und Ausänge sichten
+				if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### Ein- und Ausgänge sichten<br>"; }
+        $transportStatus = 4;
+        $transportClosed = "f";
        } else {
-       	if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### nur Eingänge sichten<br>"; }
-       	$query = "UPDATE `".$conf_4f_tbl ["nachrichten"]."` SET
-            `03_datum`        = \"".konv_taktime_datetime ($data ["03_datum"]) ."\",
-            `03_zeichen`      = \"".$data ["03_zeichen"]  ."\",
-            `05_gegenstelle`  = \"".$data ["05_gegenstelle"] ."\",
-            `06_befweg`       = \"".$data ["06_befweg"]."\",
-            `06_befwegausw`   = \"".$data ["06_befwegausw"]   ."\",
-				`x00_status`      = \"8\",
-            `x01_abschluss`   = \"t\",
-            `x02_sperre`      = \"f\",
-            `x03_sperruser`   = \"\"
-             WHERE `00_lfd` = \"".$data ["00_lfd"]."\"";
+         if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### nur Eingänge sichten<br>"; }
+        $transportStatus = 8;
+        $transportClosed = "t";
        }
-       $result = $dbaccess->query_table_iu ($query);
-       protokolleintrag ("FM-Ausgang",$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
+       $transportSaved = estab_message_update_locked_outgoing (
+         $messageConnection,
+         $conf_4f_tbl ["nachrichten"],
+         $data ["00_lfd"],
+         (string) $_SESSION ["vStab_kuerzel"],
+         array (
+           "03_datum" => konv_taktime_datetime ($data ["03_datum"]),
+           "03_zeichen" => $data ["03_zeichen"],
+           "05_gegenstelle" => $data ["05_gegenstelle"],
+           "06_befweg" => $data ["06_befweg"],
+           "06_befwegausw" => $data ["06_befwegausw"],
+           "x00_status" => $transportStatus,
+           "x01_abschluss" => $transportClosed,
+           "x02_sperre" => "f",
+           "x03_sperruser" => "",
+         )
+       );
+       if (!$transportSaved) {
+         throw new RuntimeException ("Message lock or status changed");
+       }
+       protokolleintrag ("FM-Ausgang", "message_id=".estab_message_positive_id ($data ["00_lfd"]));
    break;
 
 		case "FM-Ausgang_Sichter":
@@ -692,23 +657,31 @@ function check_and_save ($data){
            	exit ;
          }
       }
-      $query = "UPDATE `".$conf_4f_tbl ["nachrichten"]."` SET
-            `03_datum`        = \"".konv_taktime_datetime ($data ["03_datum"])."\",
-            `03_zeichen`      = \"".$data ["03_zeichen"]  ."\",
-            `05_gegenstelle`  = \"".$data ["05_gegenstelle"] ."\",
-            `06_befweg` = \"".$data ["06_befweg"]."\",
-            `06_befwegausw`    = \"".$data ["06_befwegausw"]   ."\",
-            `15_quitdatum`   = \"".konv_taktime_datetime ($data ["15_quitdatum"])."\",
-            `15_quitzeichen` =  \"".$data ["15_quitzeichen"]."\",
-            `16_empf`          =  \"".$data ["16_empf"]."\",
-            `17_vermerke`   =  \"".$data ["17_vermerke"]."\",
-            `x00_status`      = \"8\",
-            `x01_abschluss`   = \"t\",
-            `x02_sperre`      = \"f\",
-            `x03_sperruser`   = \"\"
-             WHERE `00_lfd` = \"".$data ["00_lfd"]."\";";
-       $result = $dbaccess->query_table_iu ($query);
-        protokolleintrag ("FM-Ausgang-Sichter",$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
+      $transportAndReviewSaved = estab_message_update_locked_outgoing (
+        $messageConnection,
+        $conf_4f_tbl ["nachrichten"],
+        $data ["00_lfd"],
+        (string) $_SESSION ["vStab_kuerzel"],
+        array (
+          "03_datum" => konv_taktime_datetime ($data ["03_datum"]),
+          "03_zeichen" => $data ["03_zeichen"],
+          "05_gegenstelle" => $data ["05_gegenstelle"],
+          "06_befweg" => $data ["06_befweg"],
+          "06_befwegausw" => $data ["06_befwegausw"],
+          "15_quitdatum" => konv_taktime_datetime ($data ["15_quitdatum"]),
+          "15_quitzeichen" => $data ["15_quitzeichen"],
+          "16_empf" => $data ["16_empf"],
+          "17_vermerke" => $data ["17_vermerke"],
+          "x00_status" => 8,
+          "x01_abschluss" => "t",
+          "x02_sperre" => "f",
+          "x03_sperruser" => "",
+        )
+      );
+      if (!$transportAndReviewSaved) {
+        throw new RuntimeException ("Message lock or status changed");
+      }
+      protokolleintrag ("FM-Ausgang-Sichter", "message_id=".estab_message_positive_id ($data ["00_lfd"]));
 		break;
 
 
@@ -740,18 +713,26 @@ function check_and_save ($data){
        }  else {
          $data ["15_quitdatum"] = $data ["15_quitdatum"] ;
        }
-       $query = "UPDATE `".$conf_4f_tbl ["nachrichten"]."` SET
-            `15_quitdatum`   = \"".convtodatetime (date ("dm"), $data ["15_quitdatum"]) ."\",
-            `15_quitzeichen` =  \"".$data ["15_quitzeichen"]."\",
-            `16_empf`           =  \"".$data ["16_empf"]."\",
-            `17_vermerke`   =  \"".$data ["17_vermerke"]."\",
-            `x00_status`      = \"8\",
-            `x01_abschluss`   = \"t\",
-            `x02_sperre`      = \"f\",
-            `x03_sperruser`   = \"\"
-             WHERE `00_lfd` = \"".$data ["00_lfd"]."\";";
-       $result = $dbaccess->query_table_iu ($query);
-        protokolleintrag ("Stab_sichten",$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
+       $reviewSaved = estab_message_update_pending_review (
+         $messageConnection,
+         $conf_4f_tbl ["nachrichten"],
+         $data ["00_lfd"],
+         (bool) ($conf_4f ["si_in_out"] ?? true),
+         array (
+           "15_quitdatum" => convtodatetime (date ("dm"), $data ["15_quitdatum"]),
+           "15_quitzeichen" => $data ["15_quitzeichen"],
+           "16_empf" => $data ["16_empf"],
+           "17_vermerke" => $data ["17_vermerke"],
+           "x00_status" => 8,
+           "x01_abschluss" => "t",
+           "x02_sperre" => "f",
+           "x03_sperruser" => "",
+         )
+       );
+       if (!$reviewSaved) {
+         throw new RuntimeException ("Message review status changed");
+       }
+       protokolleintrag ("Stab_sichten", "message_id=".estab_message_positive_id ($data ["00_lfd"]));
     break;
 
 		case "Nachweis":
@@ -765,16 +746,16 @@ function check_and_save ($data){
 	case "FM-Admin":
 	case "SI-Admin":
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>FM-Admin, SI-Admin</big><br>\n";}
-       // Holen wir erst einmal die nicht sichtbaren Datumsangaben
-      $query    = "SELECT `01_datum`, `02_zeit`, `03_datum`, `12_abfzeit`, `15_quitdatum`
-                    FROM ".$conf_4f_tbl ["nachrichten"]." WHERE `00_lfd` = \"".$data ['00_lfd']."\"; ";
-       $result   = $dbaccess->query_table ($query);
-       $db_datum = $result [1];
-       $convdate ['01_datum']     = convdbdatetimeto ($db_datum ['01_datum']);
-       $convdate ['02_zeit']      = convdbdatetimeto ($db_datum ['02_zeit']);
-       $convdate ['03_datum']     = convdbdatetimeto ($db_datum ['03_datum']);
-       $convdate ['12_abfzeit']   = convdbdatetimeto ($db_datum ['12_abfzeit']);
-       $convdate ['15_quitdatum'] = convdbdatetimeto ($db_datum ['15_quitdatum']);
+       // Preserve the hidden database timestamp exactly; only visible fields
+       // submitted by this administration form are changed.
+       $storedAdminMessage = estab_message_fetch_by_id (
+         $messageConnection,
+         $conf_4f_tbl ["nachrichten"],
+         $data ["00_lfd"]
+       );
+       if (!is_array ($storedAdminMessage)) {
+         throw new RuntimeException ("Message not found");
+       }
        $data ["16_empf"] = $redcopy2."_rt,";
        for (  $i = 1 ; $i <= 5 ; $i++ ){
          for ( $j = 1 ; $j <= 5 ; $j++ ){
@@ -790,19 +771,28 @@ function check_and_save ($data){
 
 
 
-       $query = "UPDATE  `".$conf_4f_tbl ["nachrichten"]."` SET
-            `15_quitdatum`    = \"".$convdate ['15_quitdatum']['datum']." ".$convdate ['15_quitdatum']['zeit'] ."\",
-            `15_quitzeichen`  =  \"".$data ["15_quitzeichen"]."\",
-            `16_empf`         =  \"".$data ["16_empf"]."\",
-            `17_vermerke`     =  \"".$data ["17_vermerke"]."\"
-             WHERE `00_lfd` = \"".$data ["00_lfd"]."\"";
-       $result = $dbaccess->query_table_iu ($query);
-       if ($data["task"] == "FM-Admin") {
-         protokolleintrag ("++ FM-Admin",$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
-       } else {
-         protokolleintrag ("++ SI-Admin",$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
+       if (!estab_message_update (
+         $messageConnection,
+         $conf_4f_tbl ["nachrichten"],
+         $data ["00_lfd"],
+         array (
+           "15_quitdatum" => $storedAdminMessage ["15_quitdatum"],
+           "15_quitzeichen" => $data ["15_quitzeichen"],
+           "16_empf" => $data ["16_empf"],
+           "17_vermerke" => $data ["17_vermerke"],
+         )
+       )) {
+         throw new RuntimeException ("Admin message update lost its target");
        }
-    break;
+       if ($data["task"] == "FM-Admin") {
+         protokolleintrag ("++ FM-Admin", "message_id=".estab_message_positive_id ($data ["00_lfd"]));
+       } else {
+         protokolleintrag ("++ SI-Admin", "message_id=".estab_message_positive_id ($data ["00_lfd"]));
+       }
+	    break;
+	  }
+  } finally {
+    estab_auth_close ($messageConnection);
   }
 }
 
@@ -815,19 +805,20 @@ function check_and_save ($data){
 
 	function legere_nuntium ($lfd) {
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>legere nuntium ".$lfd."</big><br>\n";}
-    include ("../4fcfg/config.inc.php");
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
-     // Gibt es einen Eintrag zu der Nachricht mit der Nummer $lfd
-    $dbaccess = new db_access ($conf_4f_db ["server"],
-                               $conf_4f_db ["datenbank"],
-                               $conf_4f_tbl ["benutzer"],
-                               $conf_4f_db ["user"],
-                               $conf_4f_db ["password"] );
-    $tblusername   = $conf_4f_tbl ["usrtblprefix"].strtolower ($_SESSION["vStab_funktion"])."_".strtolower ($_SESSION["vStab_kuerzel"]);
-    $query = "SELECT count(*) FROM $tblusername"."_read WHERE `nachnum` = $lfd;";
-    $result = $dbaccess->query_table_wert ($query);
-    return ($result [0]);
+    $stateTable = estab_message_state_table (
+      $conf_4f_tbl ["usrtblprefix"],
+      (string) $_SESSION ["vStab_funktion"],
+      (string) $_SESSION ["vStab_kuerzel"],
+      "read"
+    );
+    $connection = estab_message_connect ($conf_4f_db);
+    try {
+      return estab_message_state_exists ($connection, $stateTable, $lfd) ? 1 : 0;
+    } finally {
+      estab_auth_close ($connection);
+    }
   }
 
 
@@ -838,27 +829,32 @@ function check_and_save ($data){
 \*****************************************************************************/
 	function set_msg_read ($lfd) {
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>set_msg_read</big><br>\n";}
-    include ("../4fcfg/config.inc.php");
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
-     // Gibt es einen Eintrag zu der Nachricht mit der Nummer $lfd
-    $dbaccess = new db_access ($conf_4f_db ["server"],
-                               $conf_4f_db ["datenbank"],
-                               $conf_4f_tbl ["benutzer"],
-                               $conf_4f_db ["user"],
-                               $conf_4f_db ["password"] );
-
-    $tblusername   = $conf_4f_tbl ["usrtblprefix"].strtolower ($_SESSION["vStab_funktion"])."_".strtolower ($_SESSION["vStab_kuerzel"]);
-    $query = "SELECT count(*) FROM $tblusername"."_read WHERE `nachnum` = $lfd;";
-    $result = $dbaccess->query_table_wert ($query);
-    if ($result [0] == 0){
-       $query = "INSERT into ".$tblusername."_read SET
-            `nachnum`      = \"".$lfd."\",
-            `gelesen`      = \"".convtodatetime (date ("dmY"), date ("Hi"))."\"";
-       $result = $dbaccess->query_table_iu ($query);
-        protokolleintrag ("Stab_".$_SESSION["vStab_funktion"]." gelesen_".$lfd,$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
-
+    $recordId = estab_message_positive_id ($lfd);
+    $stateTable = estab_message_state_table (
+      $conf_4f_tbl ["usrtblprefix"],
+      (string) $_SESSION ["vStab_funktion"],
+      (string) $_SESSION ["vStab_kuerzel"],
+      "read"
+    );
+    $connection = estab_message_connect ($conf_4f_db);
+    try {
+      if (!estab_message_state_set_for_recipient (
+        $connection,
+        $conf_4f_tbl ["nachrichten"],
+        $stateTable,
+        $recordId,
+        (string) $_SESSION ["vStab_funktion"],
+        "read",
+        convtodatetime (date ("dmY"), date ("Hi"))
+      )) {
+        throw new RuntimeException ("Message read state is no longer authorised");
+      }
+    } finally {
+      estab_auth_close ($connection);
     }
+    protokolleintrag ("Nachricht gelesen", "message_id=".$recordId);
   }
 
 /*****************************************************************************
@@ -869,25 +865,31 @@ function check_and_save ($data){
 \*****************************************************************************/
 	function unset_msg_read ($lfd) {
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>unset_msg_read</big><br>\n";}
-    include ("../4fcfg/config.inc.php");
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
     include_once ("../4fach/protokoll.php");
-     // Gibt es einen Eintrag zu der Nachricht mit der Nummer $lfd
-    $dbaccess = new db_access ($conf_4f_db ["server"],
-                               $conf_4f_db ["datenbank"],
-                               $conf_4f_tbl ["benutzer"],
-                               $conf_4f_db ["user"],
-                               $conf_4f_db ["password"] );
-    $tblusername   = $conf_4f_tbl ["usrtblprefix"].strtolower ($_SESSION["vStab_funktion"])."_".strtolower ($_SESSION["vStab_kuerzel"]);
-    $query = "SELECT count(*) FROM $tblusername"."_read WHERE `nachnum` = $lfd;";
-    $result = $dbaccess->query_table_wert ($query);
-    if ($result [0] != 0){
-       $query = "DELETE FROM ".$tblusername."_read
-                        WHERE ".$tblusername."_read.nachnum = $lfd;";
-       $result = $dbaccess->query_table_iu ($query);
-        protokolleintrag ("Stab_".$_SESSION["vStab_funktion"]." ungelesen_".$lfd,$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
+    $recordId = estab_message_positive_id ($lfd);
+    $stateTable = estab_message_state_table (
+      $conf_4f_tbl ["usrtblprefix"],
+      (string) $_SESSION ["vStab_funktion"],
+      (string) $_SESSION ["vStab_kuerzel"],
+      "read"
+    );
+    $connection = estab_message_connect ($conf_4f_db);
+    try {
+      if (!estab_message_state_unset_for_recipient (
+        $connection,
+        $conf_4f_tbl ["nachrichten"],
+        $stateTable,
+        $recordId,
+        (string) $_SESSION ["vStab_funktion"]
+      )) {
+        throw new RuntimeException ("Message read state is no longer authorised");
+      }
+    } finally {
+      estab_auth_close ($connection);
     }
+    protokolleintrag ("Nachricht ungelesen", "message_id=".$recordId);
   }
 
 
@@ -899,27 +901,33 @@ function check_and_save ($data){
  *****************************************************************************/
 	function set_msg_done ($lfd) {
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>set_msg_done</big><br>\n";}
-    include ("../4fcfg/config.inc.php");
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
     include_once ("../4fach/protokoll.php");
-
-     // Gibt es einen Eintrag zu der Nachricht mit der Nummer $lfd
-    $dbaccess = new db_access ($conf_4f_db ["server"],
-                               $conf_4f_db ["datenbank"],
-                               $conf_4f_tbl ["benutzer"],
-                               $conf_4f_db ["user"],
-                               $conf_4f_db ["password"] );
-    $fkttblname  = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($_SESSION["vStab_funktion"]);
-    $query = "SELECT count(*) FROM $fkttblname"."_erl WHERE `nachnum` = $lfd;";
-    $result = $dbaccess->query_table_wert ($query);
-    if ($result [0] == 0){
-       $query = "INSERT into ".$fkttblname."_erl SET
-            `nachnum`      = \"".$lfd."\",
-            `erledigt`     = \"".convtodatetime (date ("dmY"), date ("Hi"))."\"";
-       $result = $dbaccess->query_table_iu ($query);
-       protokolleintrag ("Stab_".$_SESSION["vStab_funktion"]." erledigt_".$lfd,$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
+    $recordId = estab_message_positive_id ($lfd);
+    $stateTable = estab_message_state_table (
+      $conf_4f_tbl ["usrtblprefix"],
+      (string) $_SESSION ["vStab_funktion"],
+      (string) $_SESSION ["vStab_kuerzel"],
+      "done"
+    );
+    $connection = estab_message_connect ($conf_4f_db);
+    try {
+      if (!estab_message_state_set_for_recipient (
+        $connection,
+        $conf_4f_tbl ["nachrichten"],
+        $stateTable,
+        $recordId,
+        (string) $_SESSION ["vStab_funktion"],
+        "done",
+        convtodatetime (date ("dmY"), date ("Hi"))
+      )) {
+        throw new RuntimeException ("Message done state is no longer authorised");
+      }
+    } finally {
+      estab_auth_close ($connection);
     }
+    protokolleintrag ("Nachricht erledigt", "message_id=".$recordId);
   }
 
 
@@ -931,25 +939,31 @@ function check_and_save ($data){
  *****************************************************************************/
 	function unset_msg_done ($lfd) {
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>unset_msg_done</big><br>\n";}
-    include ("../4fcfg/config.inc.php");
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
     include_once ("../4fach/protokoll.php");
-     // Gibt es einen Eintrag zu der Nachricht mit der Nummer $lfd
-    $dbaccess = new db_access ($conf_4f_db ["server"],
-                               $conf_4f_db ["datenbank"],
-                               $conf_4f_tbl ["benutzer"],
-                               $conf_4f_db ["user"],
-                               $conf_4f_db ["password"] );
-    $fkttblname  = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($_SESSION["vStab_funktion"]);
-    $query = "SELECT count(*) FROM $fkttblname"."_erl WHERE `nachnum` = $lfd;";
-    $result = $dbaccess->query_table_wert ($query);
-    if ($result [0] != 0){
-       $query = "DELETE FROM ".$fkttblname."_erl
-                        WHERE ".$fkttblname."_erl.nachnum = $lfd;";
-       $result = $dbaccess->query_table_iu ($query);
-       protokolleintrag ("Stab_".$_SESSION["vStab_funktion"]." unerledigt_".$lfd,$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
+    $recordId = estab_message_positive_id ($lfd);
+    $stateTable = estab_message_state_table (
+      $conf_4f_tbl ["usrtblprefix"],
+      (string) $_SESSION ["vStab_funktion"],
+      (string) $_SESSION ["vStab_kuerzel"],
+      "done"
+    );
+    $connection = estab_message_connect ($conf_4f_db);
+    try {
+      if (!estab_message_state_unset_for_recipient (
+        $connection,
+        $conf_4f_tbl ["nachrichten"],
+        $stateTable,
+        $recordId,
+        (string) $_SESSION ["vStab_funktion"]
+      )) {
+        throw new RuntimeException ("Message done state is no longer authorised");
+      }
+    } finally {
+      estab_auth_close ($connection);
     }
+    protokolleintrag ("Nachricht unerledigt", "message_id=".$recordId);
   }
 
 
@@ -966,26 +980,25 @@ function check_and_save ($data){
 \*****************************************************************************/
 	function list_of_readed_msg (){
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>list_of_readed_msg</big><br>\n";}
-    include ("../4fcfg/config.inc.php");
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
-
-    $dbaccess = new db_access ($conf_4f_db ["server"],
-                               $conf_4f_db ["datenbank"],
-                               $conf_4f_tbl ["benutzer"],
-                               $conf_4f_db ["user"],
-                               $conf_4f_db ["password"] );
-
-    $tblusername   = $conf_4f_tbl ["usrtblprefix"].
-                     strtolower ($_SESSION["vStab_funktion"])."_".
-                     strtolower ($_SESSION["vStab_kuerzel"]);
-
-    $query = "select ".$conf_4f_tbl ["nachrichten"].".00_lfd from ".
-              $conf_4f_tbl ["nachrichten"].", ".$tblusername."_read where ".
-              $conf_4f_tbl ["nachrichten"].".00_lfd = ".$tblusername."_read.nachnum ;";
-if ( debug ) { echo "debug(data_hndl.php.976)=".$query."<br>"; }			  
-    $result = $dbaccess->query_usrtable ($query);
-    return ($result);
+    $stateTable = estab_message_state_table (
+      $conf_4f_tbl ["usrtblprefix"],
+      (string) $_SESSION ["vStab_funktion"],
+      (string) $_SESSION ["vStab_kuerzel"],
+      "read"
+    );
+    $connection = estab_message_connect ($conf_4f_db);
+    try {
+      $ids = estab_message_state_ids (
+        $connection,
+        $conf_4f_tbl ["nachrichten"],
+        $stateTable
+      );
+      return $ids === array () ? "" : $ids;
+    } finally {
+      estab_auth_close ($connection);
+    }
   }
 
 /*****************************************************************************\
@@ -1004,17 +1017,23 @@ if ( debug ) { echo "debug(data_hndl.php.976)=".$query."<br>"; }
   		include ("../4fcfg/dbcfg.inc.php");
   		include ("../4fcfg/e_cfg.inc.php");
 
-  		$dbaccess = new db_access ($conf_4f_db ["server"],
-                             $conf_4f_db ["datenbank"],
-                             $conf_4f_tbl ["benutzer"],
-                             $conf_4f_db ["user"],
-                             $conf_4f_db ["password"] );
-  		$fkttblname  = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($_SESSION["vStab_funktion"]);
-  		$query = "select ".$conf_4f_tbl ["nachrichten"].".00_lfd from ".
-           $conf_4f_tbl ["nachrichten"].", ".$fkttblname."_erl where ".
-           $conf_4f_tbl ["nachrichten"].".00_lfd = ".$fkttblname."_erl.nachnum ;";
-  		$result = $dbaccess->query_usrtable ($query);
-  		return ($result);
+      $stateTable = estab_message_state_table (
+        $conf_4f_tbl ["usrtblprefix"],
+        (string) $_SESSION ["vStab_funktion"],
+        (string) $_SESSION ["vStab_kuerzel"],
+        "done"
+      );
+      $connection = estab_message_connect ($conf_4f_db);
+      try {
+        $ids = estab_message_state_ids (
+          $connection,
+          $conf_4f_tbl ["nachrichten"],
+          $stateTable
+        );
+        return $ids === array () ? "" : $ids;
+      } finally {
+        estab_auth_close ($connection);
+      }
 	}
 
 
@@ -1073,28 +1092,37 @@ if ( debug ) { echo "debug(data_hndl.php.976)=".$query."<br>"; }
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
 
-    $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
-    $query = "SELECT * FROM `".$conf_4f_tbl ["nachrichten"]."` where 00_lfd = ".$lfd; //$_GET["00_lfd"];
-    $result = $dbaccess->query_table ($query);
-    $data = $result [1];
+    $connection = estab_message_connect ($conf_4f_db);
+    try {
+      $data = estab_message_fetch_by_id (
+        $connection,
+        $conf_4f_tbl ["nachrichten"],
+        $lfd
+      );
+    } finally {
+      estab_auth_close ($connection);
+    }
+    if (!is_array ($data)) {
+      throw new RuntimeException ("Message not found");
+    }
 
-    if ($data ["01_datum"] == "0000-00-00 00:00:00")     { $data["01_datum"] = ""; }
-    if ($data ["02_zeit"] == "0000-00-00 00:00:00")      { $data ["02_zeit"] = ""; }
-    if ($data ["03_datum"] == "0000-00-00 00:00:00")     { $data ["03_datum"] = ""; }
-    if ($data ["12_abfzeit"] == "0000-00-00 00:00:00")   { $data ["12_abfzeit"] = ""; }
-    if ($data ["15_quitdatum"] == "0000-00-00 00:00:00") { $data ["15_quitdatum"] = ""; }
+    foreach (array ("01_datum", "02_zeit", "03_datum", "12_abfzeit", "15_quitdatum") as $dateField) {
+      if (estab_datetime_is_unset ($data [$dateField] ?? null)) {
+        $data [$dateField] = "";
+      }
+    }
 
      //  Umwandlung Datenbankdatum --> taktischer Zeit falls erforderlich
-    if (strlen ($data["01_datum"]) != ""){
+    if (!estab_datetime_is_unset ($data["01_datum"])){
       $data["01_datum"]   = konv_datetime_taktime ($data["01_datum"]);
     }
-    if (strlen ($data["02_zeit"]) != ""){
+    if (!estab_datetime_is_unset ($data["02_zeit"])){
       $data["02_zeit"]   = konv_datetime_taktime ($data["02_zeit"]);
     }
-    if (strlen ($data["12_abfzeit"]) != ""){
+    if (!estab_datetime_is_unset ($data["12_abfzeit"])){
       $data["12_abfzeit"] = konv_datetime_taktime ($data["12_abfzeit"]);
     }
-    if (strlen ($data["15_quitdatum"]) != ""){
+    if (!estab_datetime_is_unset ($data["15_quitdatum"])){
       $data["15_quitdatum"] = konv_datetime_taktime ($data["15_quitdatum"]);
     }
 
@@ -1110,15 +1138,20 @@ if ( debug ) { echo "debug(data_hndl.php.976)=".$query."<br>"; }
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
 
-    $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
-
-    $query = "UPDATE `".$conf_4f_tbl ["nachrichten"]."` SET
-            `x02_sperre`      = \"f\",
-            `x03_sperruser`   = \"\"
-             WHERE `00_lfd` = \"".$lfd."\";";
-
-    $result = $dbaccess->query_table_iu ($query);
-    protokolleintrag ("Fernmelder Free_record",$query.";".session_id().";".$_SERVER["REMOTE_ADDR"]);
+    $recordId = estab_message_positive_id ($lfd);
+    $connection = estab_message_connect ($conf_4f_db);
+    try {
+      if (!estab_message_release_lock (
+        $connection,
+        $conf_4f_tbl ["nachrichten"],
+        $recordId
+      )) {
+        throw new RuntimeException ("Message lock reset lost its target");
+      }
+    } finally {
+      estab_auth_close ($connection);
+    }
+    protokolleintrag ("Fernmelder Free_record", "message_id=".$recordId);
   }
 
 ?>

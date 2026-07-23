@@ -6,6 +6,10 @@ class parametrierung {
 
   var $preconf ;
 
+  function __construct (){
+    $this->parametrierung ();
+  }
+
 /****************************************************************************\
 
 \****************************************************************************/
@@ -223,13 +227,6 @@ class parametrierung {
     //echo "SERVER="; var_dump ($_SERVER); echo "#<br><br>\n";
     echo "SESSION="; print_r ($_SESSION); echo "#<br>\n";
   }
-
-
-
-
-}
-
-
 echo "<b><big><big>Klasse noch nicht implementiert.</big></big></b>";
 
 ?>

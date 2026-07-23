@@ -16,3 +16,5 @@
 *.xcf binary
 *.zip binary
 
+# Most imported PHP sources intentionally retain their historical CRLF endings.
+*.php whitespace=trailing-space,space-before-tab,cr-at-eol

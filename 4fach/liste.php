@@ -1,7 +1,104 @@
 <?php
-if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big>Liste</big></big><br>";  }
+if (defined ("debug") && debug) { echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big>Liste</big></big><br>";  }
+require_once __DIR__ . "/../app/auth.php";
+require_once __DIR__ . "/../app/csrf.php";
+require_once __DIR__ . "/../app/message_repository.php";
 include ("katego.php");
 include ("../4fcfg/e_cfg.inc.php");
+
+function estab_list_state_action ($action, $recordId, $todo, $image, $alt) {
+  $safeAction = estab_auth_html ($action);
+  $safeRecordId = estab_auth_html ($recordId);
+  $safeTodo = estab_auth_html ($todo);
+  $safeImage = estab_auth_html ($image);
+  $safeAlt = estab_auth_html ($alt);
+  echo "<form method=\"post\" action=\"mainindex.php\" target=\"_self\" style=\"display:inline\">";
+  echo estab_csrf_field ();
+  echo "<input type=\"hidden\" name=\"action\" value=\"".$safeAction."\">";
+  echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$safeRecordId."\">";
+  echo "<input type=\"hidden\" name=\"todo\" value=\"".$safeTodo."\">";
+  echo "<button type=\"submit\" style=\"border:0;background:transparent;padding:0\">";
+  echo "<img src=\"".$safeImage."\" alt=\"".$safeAlt."\" border=\"0\"></button></form>";
+}
+
+/** Render a detail navigation as a CSRF-protected POST control. */
+function estab_list_detail_action ($route, $value, $recordId, $label, $large = false) {
+  if (!in_array ($route, array ("stab", "sichter", "fm"), true)) {
+    throw new InvalidArgumentException ("Unbekannte Detailroute");
+  }
+  $safeRoute = estab_auth_html ($route);
+  $safeValue = estab_auth_html ($value);
+  $safeRecordId = estab_auth_html (estab_message_positive_id ($recordId));
+  $safeLabel = estab_message_html ($label);
+  echo "<form method=\"post\" action=\"mainindex.php\" target=\"_self\" style=\"display:inline\">";
+  echo estab_csrf_field ();
+  echo "<input type=\"hidden\" name=\"".$safeRoute."\" value=\"".$safeValue."\">";
+  echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$safeRecordId."\">";
+  echo "<button type=\"submit\" style=\"border:0;background:transparent;padding:0;".
+       "color:inherit;text-decoration:underline;cursor:pointer;font:inherit\">";
+  if ($large) { echo "<big>"; }
+  echo $safeLabel;
+  if ($large) { echo "</big>"; }
+  echo "</button></form>";
+}
+
+/** Build and escape a category navigation URL without mixing data into HTML. */
+function estab_list_category_url ($baseUrl, array $parameters) {
+  $separator = strpos ((string) $baseUrl, "?") === false ? "?" : "&";
+  return estab_message_html (
+    (string) $baseUrl.$separator.http_build_query ($parameters, "", "&", PHP_QUERY_RFC3986)
+  );
+}
+
+/** Build and escape the fixed local category-button URL. */
+function estab_list_category_icon ($label, $color) {
+  return estab_message_html (
+    "./kategobutton.php?".http_build_query (array (
+      "icontext" => (string) $label,
+      "color" => (string) $color,
+    ), "", "&", PHP_QUERY_RFC3986)
+  );
+}
+
+/** Clamp and advance the legacy list pager without putting request data in SQL. */
+function estab_list_page_window ($resultCount) {
+  $pageSize = filter_var ($_SESSION["filter_anzahl"] ?? 15, FILTER_VALIDATE_INT, array (
+    "options" => array ("min_range" => 1, "max_range" => 200),
+  ));
+  if (!is_int ($pageSize)) { $pageSize = 15; }
+  $start = filter_var ($_SESSION["filter_start"] ?? 0, FILTER_VALIDATE_INT, array (
+    "options" => array ("min_range" => 0, "max_range" => PHP_INT_MAX),
+  ));
+  if (!is_int ($start)) { $start = 0; }
+
+  switch ((string) ($_SESSION["flt_navi"] ?? "")) {
+    case "start":
+      $start = 0;
+    break;
+    case "back":
+      $start = max (0, $start - $pageSize);
+    break;
+    case "for":
+      if ($start + $pageSize < $resultCount) { $start += $pageSize; }
+    break;
+    case "end":
+      $start = $resultCount > 0
+        ? intdiv ($resultCount - 1, $pageSize) * $pageSize
+        : 0;
+    break;
+  }
+  unset ($_SESSION["flt_navi"]);
+
+  if ($resultCount === 0) {
+    $start = 0;
+  } elseif ($start >= $resultCount) {
+    $start = intdiv ($resultCount - 1, $pageSize) * $pageSize;
+  }
+  $_SESSION["filter_anzahl"] = $pageSize;
+  $_SESSION["filter_start"] = $start;
+  $_SESSION["filter_rescount"] = $resultCount;
+  return array ($start, $pageSize);
+}
 /*****************************************************************************\
    Datei: liste.php
 
@@ -12,7 +109,7 @@ include ("../4fcfg/e_cfg.inc.php");
    (C) Hajo Landmesser IuK Kreis Heinsberg
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
-if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br>";  }
+if (defined ("debug") && debug) { echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br>";  }
 
 class Listen extends kategorien {
 /******************************************************************************\
@@ -36,14 +133,21 @@ class Listen extends kategorien {
 
   // Listengestaltung
 
+  function __construct ($welche, $user){
+    $this->listen ($welche, $user);
+  }
+
 /******************************************************************************\
 
 \******************************************************************************/
   function explodereceiver ( $empf) {
+    $fktcopycolor = array ();
     $receiver = explode (",",$empf);
     for ($i=0; $i < count( $receiver ); $i++ ) {
       $hilfeaus = explode ( "_", $receiver [$i] ) ;
-      $fktcopycolor[$hilfeaus[0]] = $hilfeaus [1] ;
+      if (($hilfeaus[0] ?? "") !== "") {
+        $fktcopycolor[$hilfeaus[0]] = $hilfeaus [1] ?? "";
+      }
     }
     return $fktcopycolor;
   }
@@ -94,7 +198,7 @@ class Listen extends kategorien {
           echo "<table><tbody>";
           echo "<tr>";
           echo "<td>";
-          echo "<big><b>".($_SESSION[filter_start]+1)."|".($_SESSION[filter_start]+$_SESSION[filter_anzahl])."|<big>".($_SESSION["filter_rescount"])."</big></b></big>";
+          echo "<big><b>".($_SESSION['filter_start']+1)."|".($_SESSION['filter_start']+$_SESSION['filter_anzahl'])."|<big>".($_SESSION["filter_rescount"])."</big></b></big>";
           echo "</td>";
           echo "<td>";
           echo "Meldung/Seite:<br>\n";
@@ -111,9 +215,13 @@ class Listen extends kategorien {
           echo "<div  style=\"border-top-color:#DCDCFF; border-left-color:#DCDCFF; border-right-color:#DCDCFF; border-bottom-color:#000000; border-width:1px; border-style:solid; padding:0px\">";
             for ($pps=5; $pps <=25; $pps+=5){
               if ( $_SESSION["filter_anzahl"] == $pps )  {
-                echo "<a href=\"".$conf_4f ["MainURL"]."?filter_anzahl_x=1&filter_anzahl=".$pps."\"><img src=\"button.php?type=icon&status=AUS&text=".$pps."&bg=blue\" border=\"0\" alt=\"Anzahl".$pps."EIN\"></a>";
+                echo "<a href=\"".estab_list_category_url ($conf_4f ["MainURL"], array (
+                  "filter_anzahl_x" => 1, "filter_anzahl" => $pps,
+                ))."\"><img src=\"button.php?type=icon&amp;status=AUS&amp;text=".$pps."&amp;bg=blue\" border=\"0\" alt=\"Anzahl".$pps."EIN\"></a>";
               } else {
-                echo "<a href=\"".$conf_4f ["MainURL"]."?filter_anzahl_x=1&filter_anzahl=".$pps."\"><img src=\"button.php?type=icon&status=EIN&text=".$pps."&bg=lighterblue\" border=\"0\" alt=\"Anzahl".$pps."AUS\"></a>";
+                echo "<a href=\"".estab_list_category_url ($conf_4f ["MainURL"], array (
+                  "filter_anzahl_x" => 1, "filter_anzahl" => $pps,
+                ))."\"><img src=\"button.php?type=icon&amp;status=EIN&amp;text=".$pps."&amp;bg=lighterblue\" border=\"0\" alt=\"Anzahl".$pps."AUS\"></a>";
               }
             }
           echo "</div>";
@@ -122,7 +230,7 @@ class Listen extends kategorien {
           echo "</tbody></table>";
           echo "</td>";
           echo "<td>";
-          if ($_SESSION [filter_unerledigt] == 0)  {
+          if ($_SESSION ['filter_unerledigt'] == 0)  {
             echo "<div>";
             echo "<input type=\"image\" name=\"filter_unerledigt_ein\" src=\"button.php?type=push&textpos=buttom&status=AUS&text=un-\" alt=\"unerledigte\">\n";
             echo "</div>";
@@ -133,7 +241,7 @@ class Listen extends kategorien {
           }
           echo "</td>";
           echo "<td>";
-          if ($_SESSION [filter_erledigt] == 0)  {
+          if ($_SESSION ['filter_erledigt'] == 0)  {
             echo "<div>";
             echo "<input type=\"image\" name=\"filter_erledigt_ein\" src=\"button.php?type=push&textpos=buttom&status=AUS&text=erledigt\" alt=\"erledigte\">\n";
             echo "</div>";
@@ -144,7 +252,7 @@ class Listen extends kategorien {
           }
           echo "</td>";
           echo "<td>";
-          if ($_SESSION [flt_find_mask] == 0)  {
+          if ($_SESSION ['flt_find_mask'] == 0)  {
             echo "<div>";
             echo "<input type=\"image\" name=\"flt_find_mask_ein\" src=\"button.php?type=push&textpos=buttom&status=AUS&text=finden\" alt=\"finden\">\n";
             echo "</div>";
@@ -165,7 +273,7 @@ class Listen extends kategorien {
           if (isset ($_SESSION ["flt_search"]) ) { $defvalue = $_SESSION ["flt_search"] ;}
           else {$defvalue = "";}
           echo "<div>";
-          echo "<p>Suchbegriff: <input name=\"flt_search\" value=\"".$defvalue."\" type=\"text\" size=\"30\" maxlength=\"30\"></p>";
+          echo "<p>Suchbegriff: <input name=\"flt_search\" value=\"".estab_message_html ($defvalue)."\" type=\"text\" size=\"30\" maxlength=\"30\"></p>";
           echo "<div>";
           echo "</td>";
           echo "<td>";
@@ -197,7 +305,7 @@ class Listen extends kategorien {
           echo "<table><tbody>";
           echo "<tr>";
           echo "<td>";
-          echo "<big><b>".($_SESSION[filter_start]+1)."|".($_SESSION[filter_start]+$_SESSION[filter_anzahl])."|<big>".($_SESSION["filter_rescount"])."</big></b></big>";
+          echo "<big><b>".($_SESSION['filter_start']+1)."|".($_SESSION['filter_start']+$_SESSION['filter_anzahl'])."|<big>".($_SESSION["filter_rescount"])."</big></b></big>";
           echo "</td>";
           echo "<td>";
           echo "Meldung/Seite:<br>\n";
@@ -214,9 +322,13 @@ class Listen extends kategorien {
           echo "<div  style=\"border-top-color:#DCDCFF; border-left-color:#DCDCFF; border-right-color:#DCDCFF; border-bottom-color:#000000; border-width:1px; border-style:solid; padding:0px\">";
             for ($pps=5; $pps <=25; $pps+=5){
               if ( $_SESSION["filter_anzahl"] == $pps )  {
-                echo "<a href=\"".$conf_4f ["MainURL"]."?filter_anzahl_x=1&filter_anzahl=".$pps."\"><img src=\"button.php?type=icon&status=AUS&text=".$pps."&bg=blue\" border=\"0\" alt=\"Anzahl".$pps."EIN\"></a>";
+                echo "<a href=\"".estab_list_category_url ($conf_4f ["MainURL"], array (
+                  "filter_anzahl_x" => 1, "filter_anzahl" => $pps,
+                ))."\"><img src=\"button.php?type=icon&amp;status=AUS&amp;text=".$pps."&amp;bg=blue\" border=\"0\" alt=\"Anzahl".$pps."EIN\"></a>";
               } else {
-                echo "<a href=\"".$conf_4f ["MainURL"]."?filter_anzahl_x=1&filter_anzahl=".$pps."\"><img src=\"button.php?type=icon&status=EIN&text=".$pps."&bg=lighterblue\" border=\"0\" alt=\"Anzahl".$pps."AUS\"></a>";
+                echo "<a href=\"".estab_list_category_url ($conf_4f ["MainURL"], array (
+                  "filter_anzahl_x" => 1, "filter_anzahl" => $pps,
+                ))."\"><img src=\"button.php?type=icon&amp;status=EIN&amp;text=".$pps."&amp;bg=lighterblue\" border=\"0\" alt=\"Anzahl".$pps."AUS\"></a>";
               }
             }
           echo "</div>";
@@ -227,7 +339,7 @@ class Listen extends kategorien {
 
 		  
           echo "<td>";
-          if ($_SESSION [flt_find_mask] == 0)  {
+          if ($_SESSION ['flt_find_mask'] == 0)  {
             echo "<div>";
             echo "<input type=\"image\" name=\"flt_find_mask_ein\" src=\"button.php?type=push&textpos=buttom&status=AUS&text=finden\" alt=\"finden\">\n";
             echo "</div>";
@@ -248,7 +360,7 @@ class Listen extends kategorien {
           if (isset ($_SESSION ["flt_search"]) ) { $defvalue = $_SESSION ["flt_search"] ;}
           else {$defvalue = "";}
           echo "<div>";
-          echo "<p>Suchbegriff: <input name=\"flt_search\" value=\"".$defvalue."\" type=\"text\" size=\"30\" maxlength=\"30\"></p>";
+          echo "<p>Suchbegriff: <input name=\"flt_search\" value=\"".estab_message_html ($defvalue)."\" type=\"text\" size=\"30\" maxlength=\"30\"></p>";
           echo "<div>";
           echo "</td>";
           echo "<td>";
@@ -325,33 +437,22 @@ class Listen extends kategorien {
     include ("../4fcfg/fkt_rolle.inc.php");
     $this->redcopy2  = $redcopy2 ;
 
-    if (!isset ($_SESSION ["vStab_funktion"])) session_start ();
-
-    $this->stab_fkt  = $_SESSION ["vStab_funktion"] ;
-    $this->dbtyp = $table;
-
-    switch  ($table) {
-       case "master":
-            $this->db_master_katego = $conf_4f_tbl ["masterkatego"] ;
-            $this->db_tablname      = $conf_4f_tbl ["masterkatego"] ;
-            $this->db_tablnamelk    = $conf_4f_tbl ["masterkategolk"];
-       break;
-       case "fkt":
-        $this->db_tbl = $conf_4f_tbl ["usrtblprefix"]."_fkt_".
-                              strtolower ($_SESSION["vStab_funktion"]);
-        $this->db_tablname   = $this->db_tbl."_katego";
-        $this->db_tablnamelk = $this->db_tbl."_kategolink";
-       break;
-       case "user":
-            $this->db_tbl = $conf_4f_tbl ["usrtblprefix"].
-                          strtolower ($_SESSION["vStab_funktion"])."_".
-                          strtolower ($_SESSION["vStab_kuerzel"]) ;
-            $this->db_tablname   = $this->db_tbl."_katego";
-            $this->db_tablnamelk = $this->db_tbl."_kategolink";
-       break;
-
+    $identity = estab_auth_session_identity ($_SESSION);
+    if ($identity === null) {
+      throw new EstabCategoryAuthorizationException ("Anmeldung erforderlich.");
     }
-
+    $this->categoryIdentity = $identity;
+    $this->categoryScope = estab_category_scope ((string) $table, $identity, $conf_4f_tbl);
+    $this->stab_fkt = $identity ["funktion"];
+    $this->dbtyp = $this->categoryScope ["type"];
+    $this->db_tablname = $this->categoryScope ["category_table"];
+    $this->db_tablnamelk = $this->categoryScope ["link_table"];
+    $this->db_tbl = str_ends_with ($this->db_tablname, "_katego")
+      ? substr ($this->db_tablname, 0, -7)
+      : $this->db_tablname;
+    if ($this->dbtyp === "master") {
+      $this->db_master_katego = $this->db_tablname;
+    }
 
     $this->db_server   = $conf_4f_db ["server"];
     $this->db_benutzer = $conf_4f_db ["user"];
@@ -363,11 +464,22 @@ class Listen extends kategorien {
           2 => array ("kategorie"    => "ohne",
                       "beschreibung" => "Ohne Kategorie"));
 
-    $this->db_hndl = mysql_connect($this->db_server,$this->db_benutzer, $this->db_passwort)
-       or die ("[connection] katego.php 73 Konnte keine Verbindung zur Datenbank herstellen");
-    mysql_query('SET NAMES utf8');
-    $db_check = mysql_select_db ($this->db_name, $this->db_hndl)
-       or die ("[read_table] Auswahl der Datenbank fehlgeschlagen");
+    if (!$this->categoryConnection instanceof mysqli) {
+      $this->categoryConnection = estab_auth_connect ($conf_4f_db);
+    }
+    // Preserve the historical public handle for callers outside this class.
+    $this->db_hndl = $this->categoryConnection;
+  }
+
+  /** Preserve the one-based result arrays consumed by the legacy renderer. */
+  function category_rows_one_based (){
+    $rows = estab_category_fetch_all ($this->connection (), $this->categoryScope);
+    $result = array ();
+    foreach ($rows as $index => $row) {
+      $result [$index + 1] = $row;
+    }
+    $this->resultcount = count ($result);
+    return $result;
   }
 
   /***********************************************************************************
@@ -378,48 +490,20 @@ class Listen extends kategorien {
       include ("../4fcfg/config.inc.php");
 
       $this->set_katego_para ("master");   // MASTER
-      $this->sqlquery = "SELECT * FROM `".$this->db_tablname."` WHERE 1  ORDER BY `kategorie`;";
-      $query_result = mysql_query ($this->sqlquery, $this->db_hndl) or
-         die("[query_table_MASTER] <br>$this->sqlquery<br>103-".mysql_error()." ".mysql_errno());
-      $this->resultcount = mysql_num_rows($query_result);
-      $this->masterresult = NULL;
-      for ($i=1; $i<=$this->resultcount; $i++){
-        $this->masterresult[$i] = mysql_fetch_assoc($query_result);
-      }
-      mysql_free_result($query_result);
-
+      $this->masterresult = $this->category_rows_one_based ();
 
       $this->set_katego_para ("fkt");     // FUNKTION
-      $this->sqlquery = "SELECT * FROM `".$this->db_tablname."` WHERE 1  ORDER BY `kategorie`;";
-
-      $query_result = mysql_query ($this->sqlquery, $this->db_hndl) or
-         die("[query_table_FUNKTION405] <br>$this->sqlquery<br>-".mysql_error()." ".mysql_errno());
-      $this->resultcount = mysql_num_rows($query_result);
-      $this->fktresult = NULL ;
-      for ($i=1; $i<=$this->resultcount; $i++){
-        $this->fktresult[$i] = mysql_fetch_assoc($query_result);
-      }
-      mysql_free_result($query_result);
-
+      $this->fktresult = $this->category_rows_one_based ();
 
       $this->set_katego_para ("user");     // USER
-      $this->sqlquery = "SELECT * FROM `".$this->db_tablname."` WHERE 1  ORDER BY `kategorie`;";
-      $query_result = mysql_query ($this->sqlquery, $this->db_hndl) or
-         die("[query_table_USER] <br>$this->sqlquery<br>103-".mysql_error()." ".mysql_errno());
-      $this->resultcount = mysql_num_rows($query_result);
-      $this->userresult = NULL ;
-      for ($i=1; $i<=$this->resultcount; $i++){
-        $this->userresult[$i] = mysql_fetch_assoc($query_result);
-      }
-      mysql_free_result($query_result);
-
+      $this->userresult = $this->category_rows_one_based ();
 
       $mastercount = COUNT($this->masterresult) ;
       $fktcount    = COUNT($this->fktresult) ;
       $usercount   = COUNT($this->userresult) ;
 
-      if (isset ($_SESSION [global_katego])) {
-        $kategoselected = $_SESSION [global_katego];
+      if (isset ($_SESSION ['global_katego'])) {
+        $kategoselected = $_SESSION ['global_katego'];
       }
 
         // MASTER KATEGORIE
@@ -434,9 +518,12 @@ class Listen extends kategorien {
                            border-style:solid;
                            padding-top:10px;
                            padding-bottom:0px;\">\n";
-        if (!isset($_SESSION [ma_katego])){$color = "red";}else{$color = "lightred";}
-            echo"<a href=\"".$conf_4f ["MainURL"]."?ma_ktgotyp=global&ma_ktgo=alle\">
-              <img src=\"./kategobutton.php?icontext=ALLE&color=".$color."\"
+        if (!isset($_SESSION ['ma_katego'])){$color = "red";}else{$color = "lightred";}
+            echo"<a href=\"".estab_list_category_url ($conf_4f ["MainURL"], array (
+              "ma_ktgotyp" => "global",
+              "ma_ktgo" => "alle",
+            ))."\">
+              <img src=\"".estab_list_category_icon ("ALLE", $color)."\"
                    alt=\"Alle\"
                    border=\"0\"
                    title=\"Alle\"></a>\n";
@@ -445,13 +532,16 @@ class Listen extends kategorien {
           if ( $this->masterresult[$i]["kategorie"] == "" ) {
             echo "<a><img src=\"null.gif\" alt=\"leer\"></a>\n";
           } else {
-            if ( ($_SESSION [ma_katego] == $this->masterresult[$i]["kategorie"]) AND
-                 ($_SESSION [ma_kategotyp] == "global") ){$color = "red";}else{$color = "lightred";}
-            echo"<a href=\"".$conf_4f ["MainURL"]."?ma_ktgotyp=global&ma_ktgo=".$this->masterresult[$i]["kategorie"]."\">
-              <img src=\"./kategobutton.php?icontext=".$this->masterresult[$i]["kategorie"]."&color=".$color."\"
-                   alt=\"".$this->masterresult[$i]["beschreibung"]."\"
+            if ( (($_SESSION ['ma_katego'] ?? "") == $this->masterresult[$i]["lfd"]) AND
+                 (($_SESSION ['ma_kategotyp'] ?? "") == "global") ){$color = "red";}else{$color = "lightred";}
+            echo"<a href=\"".estab_list_category_url ($conf_4f ["MainURL"], array (
+              "ma_ktgotyp" => "global",
+              "ma_ktgo" => $this->masterresult[$i]["lfd"],
+            ))."\">
+              <img src=\"".estab_list_category_icon ($this->masterresult[$i]["kategorie"], $color)."\"
+                   alt=\"".estab_message_html ($this->masterresult[$i]["beschreibung"] ?? "")."\"
                    border=\"0\"
-                   title=\"".$this->masterresult[$i]["beschreibung"]."\"></a>\n";
+                   title=\"".estab_message_html ($this->masterresult[$i]["beschreibung"] ?? "")."\"></a>\n";
           }
         }
         echo "</div>";
@@ -470,10 +560,13 @@ class Listen extends kategorien {
                            padding-top:10px;
                            padding-bottom:1px;
                            margin-bottom:0px;\">\n";
-        if (!isset($_SESSION [fk_katego])){$color = "blue";}else{$color = "lightblue";}
+        if (!isset($_SESSION ['fk_katego'])){$color = "blue";}else{$color = "lightblue";}
 
-        echo "<a href=\"".$conf_4f ["MainURL"]."?fk_ktgotyp=fkt&fk_ktgo=alle\">";
-        echo "<img src=\"./kategobutton.php?icontext=ALLE&color=".$color."\"
+        echo "<a href=\"".estab_list_category_url ($conf_4f ["MainURL"], array (
+          "fk_ktgotyp" => "fkt",
+          "fk_ktgo" => "alle",
+        ))."\">";
+        echo "<img src=\"".estab_list_category_icon ("ALLE", $color)."\"
                    alt=\"Alle\"
                    border=\"0\"
                    title=\"Alle\">"; //</a>";
@@ -481,13 +574,16 @@ class Listen extends kategorien {
           if ( $this->fktresult[$i]["kategorie"] == "" ) {
             echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
           } else {
-            if ( ($_SESSION [fk_katego] == $this->fktresult[$i]["kategorie"]) AND
-                 ($_SESSION [fk_kategotyp] == "fkt" ) ){$color = "blue";}else{$color = "lightblue";}
-              echo"<a href=\"".$conf_4f ["MainURL"]."?fk_ktgotyp=fkt&fk_ktgo=".$this->fktresult[$i]["kategorie"]."\">
-              <img src=\"./kategobutton.php?icontext=".$this->fktresult[$i]["kategorie"]."&color=".$color."\"
-                   alt=\"".$this->fktresult[$i]["beschreibung"]."\"
+            if ( (($_SESSION ['fk_katego'] ?? "") == $this->fktresult[$i]["lfd"]) AND
+                 (($_SESSION ['fk_kategotyp'] ?? "") == "fkt" ) ){$color = "blue";}else{$color = "lightblue";}
+              echo"<a href=\"".estab_list_category_url ($conf_4f ["MainURL"], array (
+                "fk_ktgotyp" => "fkt",
+                "fk_ktgo" => $this->fktresult[$i]["lfd"],
+              ))."\">
+              <img src=\"".estab_list_category_icon ($this->fktresult[$i]["kategorie"], $color)."\"
+                   alt=\"".estab_message_html ($this->fktresult[$i]["beschreibung"] ?? "")."\"
                    border=\"0\"
-                   title=\"".$this->fktresult[$i]["beschreibung"]."\"></a>";
+                   title=\"".estab_message_html ($this->fktresult[$i]["beschreibung"] ?? "")."\"></a>";
           }
         }
         echo "</div>";   //echo "<p>";
@@ -496,10 +592,13 @@ class Listen extends kategorien {
         // USER KATEGORIE
       if ($usercount != 0){
         echo "<div style=\"height:20px; background-color:#C8FFC8; border-top-color:#C8FFC8; border-left-color:#C8FFC8; border-right-color:#C8FFC8; border-bottom-color:#000000; border-width:2px; border-style:solid; padding-top:10px; padding-bottom:1px; margin-bottom:10px;\">\n";
-        if (!isset($_SESSION [us_katego])){$color = "green";}else{$color = "lightgreen";}
+        if (!isset($_SESSION ['us_katego'])){$color = "green";}else{$color = "lightgreen";}
 
-        echo "<a href=\"".$conf_4f ["MainURL"]."?us_ktgotyp=user&us_ktgo=alle\">";
-        echo "<img src=\"./kategobutton.php?icontext=ALLE&color=".$color."\"
+        echo "<a href=\"".estab_list_category_url ($conf_4f ["MainURL"], array (
+          "us_ktgotyp" => "user",
+          "us_ktgo" => "alle",
+        ))."\">";
+        echo "<img src=\"".estab_list_category_icon ("ALLE", $color)."\"
                    alt=\"Alle\"
                    border=\"0\"
                    title=\"Alle\">"; //</a>";
@@ -507,13 +606,16 @@ class Listen extends kategorien {
           if ( $this->userresult[$i]["kategorie"] == "" ) {
             echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
           } else {
-            if ( ($_SESSION [us_katego] == $this->userresult[$i]["kategorie"]) AND
-                 ($_SESSION [us_kategotyp] == "user" ) ){$color = "green";}else{$color = "lightgreen";}
-            echo"<a href=\"".$conf_4f ["MainURL"]."?us_ktgotyp=user&us_ktgo=".$this->userresult[$i]["kategorie"]."\">
-              <img src=\"./kategobutton.php?icontext=".$this->userresult[$i]["kategorie"]."&color=".$color."\"
-                   alt=\"".$this->userresult[$i]["beschreibung"]."\"
+            if ( (($_SESSION ['us_katego'] ?? "") == $this->userresult[$i]["lfd"]) AND
+                 (($_SESSION ['us_kategotyp'] ?? "") == "user" ) ){$color = "green";}else{$color = "lightgreen";}
+            echo"<a href=\"".estab_list_category_url ($conf_4f ["MainURL"], array (
+              "us_ktgotyp" => "user",
+              "us_ktgo" => $this->userresult[$i]["lfd"],
+            ))."\">
+              <img src=\"".estab_list_category_icon ($this->userresult[$i]["kategorie"], $color)."\"
+                   alt=\"".estab_message_html ($this->userresult[$i]["beschreibung"] ?? "")."\"
                    border=\"0\"
-                   title=\"".$this->userresult[$i]["beschreibung"]."\"></a>";
+                   title=\"".estab_message_html ($this->userresult[$i]["beschreibung"] ?? "")."\"></a>";
           }
         }
         echo "</div>";   //echo "<p>";
@@ -526,262 +628,121 @@ class Listen extends kategorien {
 
 
   function get_list ($listenart){
-    if (debug) {echo "<b>file:liste.php:540 fkt:get_list </b><br>";}
     include ("../4fcfg/config.inc.php");
     include ("../4fcfg/para.inc.php");
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
-    
-	switch ($listenart) {
-    case "Stab_lesen":
-	case "global":
-	
-	
-	$tblusername = $conf_4f_tbl ["usrtblprefix"].strtolower ($_SESSION["vStab_funktion"]).
-                     "_".strtolower ($_SESSION["vStab_kuerzel"]);
 
-    $tblfktname  = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($_SESSION["vStab_funktion"]);
+    $messageTable = estab_message_table ((string) $conf_4f_tbl ["nachrichten"]);
+    $parameters = array ();
+    $where = array ();
+    $joins = array ();
+    $select = "m.`00_lfd`, m.`09_vorrangstufe`, m.`04_richtung`, ".
+      "m.`04_nummer`, m.`10_anschrift`, m.`12_abfzeit`, m.`12_inhalt`, ".
+      "m.`13_abseinheit`, m.`14_funktion`, m.`16_empf`, ".
+      "m.`X00_status`, m.`x01_abschluss`";
 
-    $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
-                         $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
+    switch ($listenart) {
+      case "Stab_lesen":
+      case "global":
+        $identity = estab_auth_session_identity ($_SESSION);
+        if ($identity === null) { throw new RuntimeException ("Ungueltige Sitzung"); }
 
-    $query_select_arg = $conf_4f_tbl ["nachrichten"].".`00_lfd`, ".
-                        $conf_4f_tbl ["nachrichten"].".`09_vorrangstufe`, ".
-                        $conf_4f_tbl ["nachrichten"].".`04_richtung`, ".
-                        $conf_4f_tbl ["nachrichten"].".`04_nummer`, ".
-                        $conf_4f_tbl ["nachrichten"].".`10_anschrift`, ".
-                        $conf_4f_tbl ["nachrichten"].".`12_abfzeit`, ".
-                        $conf_4f_tbl ["nachrichten"].".`12_inhalt`, ".
-                        $conf_4f_tbl ["nachrichten"].".`13_abseinheit`, ".
-                        $conf_4f_tbl ["nachrichten"].".`14_funktion`, ".
-                        $conf_4f_tbl ["nachrichten"].".`16_empf`, ".
-                        $conf_4f_tbl ["nachrichten"].".`X00_status`, ".
-                        $conf_4f_tbl ["nachrichten"].".`x01_abschluss` ";
+        $prefix = (string) $conf_4f_tbl ["usrtblprefix"];
+        $readTable = estab_message_table (estab_message_state_table (
+          $prefix, $identity ["funktion"], $identity ["kuerzel"], "read"
+        ));
+        $doneTable = estab_message_table (estab_message_state_table (
+          $prefix, $identity ["funktion"], $identity ["kuerzel"], "done"
+        ));
+        $functionBase = $prefix."_fkt_".strtolower ($identity ["funktion"]);
+        $userBase = $prefix.strtolower ($identity ["funktion"])."_".$identity ["kuerzel"];
 
-    $query_from_arg   = $conf_4f_tbl ["nachrichten"] ;
-      // Kategorien Master und User die im Query erscheinen mÃ¼ssen
+        $where[] = "m.`16_empf` REGEXP ?";
+        $parameters[] = "(^|,)[[:space:]]*(alle|".
+          preg_quote ($identity ["funktion"]).
+          ")(_[^,[:space:]]+)?[[:space:]]*(,|$)";
 
-    if (  ($_SESSION["filter_darstellung"] == "1" ) AND !(isset($_SESSION[flt_search])) ) {
+        $displayFilters = (int) ($_SESSION["filter_darstellung"] ?? 1) === 1;
+        $searchActive = isset ($_SESSION["flt_search"]);
+        if ($displayFilters && !$searchActive) {
+          if ((int) ($_SESSION["filter_gelesen"] ?? 0) === 1) {
+            $where[] = "m.`00_lfd` IN (SELECT `nachnum` FROM ".$readTable.")";
+          }
 
-      if ( isset ($_SESSION["ma_katego"]) ) {
-          $query_select_ma_arg .= ",".$conf_4f_tbl ["masterkatego"].".`kategorie`";
-          $query_from_ma_arg .= ",".$conf_4f_tbl ["masterkatego"].",".$conf_4f_tbl ["masterkategolk"];
-      }
-      if ( isset($_SESSION[fk_katego])) {
-          $query_select_fk_arg .= ",".$tblfktname."_katego.`kategorie`";
-          $query_from_fk_arg .= ",".$tblfktname."_katego, ".$tblfktname."_kategolink ";
-      }
-      if ( isset($_SESSION[us_katego])) {
-          $query_select_us_arg .= ",".$tblusername."_katego.`kategorie`";
-          $query_from_us_arg .= ",".$tblusername."_katego, ".$tblusername."_kategolink ";
-      }
-    }
-      // FÃ¼r wenn sind die Meldungen bestimmt
-    $query_where_arg1 = "(( `".$conf_4f_tbl ["nachrichten"]."`.`16_empf` like \"%".$_SESSION["vStab_funktion"]."%\" ) OR
-                          ( `".$conf_4f_tbl ["nachrichten"]."`.`16_empf` like \"%alle%\" ))";
-    
-	if ($_SESSION["filter_darstellung"] == "1" ){
-      if ($_SESSION [filter_gelesen]  == 1){
-        $query_where_arg2 = " AND (`".$conf_4f_tbl ["nachrichten"]."`.`00_lfd` ".$readwhat." IN
-                              ( select `".$tblusername."_read`.`nachnum` from `".$tblusername."_read` where 1))";
-      } else {
-        $query_where_arg2 = "";
-      }
-      if ( ($_SESSION [filter_erledigt] == 1) OR ($_SESSION [filter_unerledigt] == 1) ) {
-        $query_where_arg3 = " AND ((";
-        if ($_SESSION [filter_erledigt] == 1){
-          $query_where_arg3 .= "(`".$conf_4f_tbl ["nachrichten"]."`.`00_lfd` ".$donewhat." IN
-                    ( select `".$tblfktname."_erl`.`nachnum` from `".$tblfktname."_erl` where 1))";}
-        if ( ($_SESSION [filter_erledigt] == 1) AND
-             ($_SESSION [filter_unerledigt] == 1) ) { $query_where_arg3 .= ") OR ("; }
-        if ($_SESSION [filter_unerledigt] == 1){
-          $query_where_arg3 .= "(`".$conf_4f_tbl ["nachrichten"]."`.`00_lfd` ".$donewhat." NOT IN
-                    ( select `".$tblfktname."_erl`.`nachnum` from `".$tblfktname."_erl` where 1))";}
-        $query_where_arg3 .= " ))";
-      } else {$query_where_arg3 = " ";}
-      $query_where_arg4 = "";
-      if (isset($_SESSION[ma_katego])){
-        $query_where_arg4 = " AND (".$conf_4f_tbl ["nachrichten"].".`00_lfd` = `".$conf_4f_tbl ["masterkategolk"]."`.`msg`)".
-                            " AND (".$conf_4f_tbl ["masterkatego"].".`lfd` = `".$conf_4f_tbl ["masterkategolk"]."`.`katego`)".
-                            " AND (".$conf_4f_tbl ["masterkatego"].".`kategorie` = \"".$_SESSION["ma_katego"]."\")";
-      }
-      $query_where_arg5 = "";
-      if (isset($_SESSION[fk_katego])){
-        $query_where_arg5 = " AND (`".$conf_4f_tbl ["nachrichten"]."`.`00_lfd` = `".$tblfktname."_kategolink`.`msg`)".
-                            " AND (`".$tblfktname."_katego`.`lfd` = `".$tblfktname."_kategolink`.`katego`)".
-                            " AND  (`".$tblfktname."_katego`.`kategorie` = \"".$_SESSION["fk_katego"]."\")";
-      }
-      $query_where_arg6 = "";
-      if (isset($_SESSION[us_katego])){
-        $query_where_arg6 = " AND (`".$conf_4f_tbl ["nachrichten"]."`.`00_lfd` = `".$tblusername."_kategolink`.`msg`)".
-                            " AND (`".$tblusername."_katego`.`lfd` = `".$tblusername."_kategolink`.`katego`)".
-                            " AND  (`".$tblusername."_katego`.`kategorie` = \"".$_SESSION["us_katego"]."\")";
-      }
-    } else {
-     $query_where_arg2 = "";  $query_where_arg3 ="";   $query_where_arg4 = "";  $query_where_arg5 = "";   $query_where_arg6 = "";
-    }
-    $query_orderby_arg = "`04_nummer` DESC, `09_vorrangstufe` DESC ";
-    if (isset ($_SESSION["flt_search"])) {
-      $query_search = "(".
-          "(".$conf_4f_tbl ["nachrichten"].".`04_nummer` LIKE \"%".$_SESSION["flt_search"]."%\") OR ".
-          "(".$conf_4f_tbl ["nachrichten"].".`10_anschrift` LIKE \"%".$_SESSION["flt_search"]."%\") OR ".
-          "(".$conf_4f_tbl ["nachrichten"].".`12_abfzeit` LIKE \"%".$_SESSION["flt_search"]."%\") OR ".
-          "(".$conf_4f_tbl ["nachrichten"].".`12_inhalt` LIKE \"%".htmlentities ($_SESSION["flt_search"])."%\") OR ".
-          "(".$conf_4f_tbl ["nachrichten"].".`13_abseinheit` LIKE \"%".$_SESSION["flt_search"]."%\") )";
+          $showDone = (int) ($_SESSION["filter_erledigt"] ?? 0) === 1;
+          $showOpen = (int) ($_SESSION["filter_unerledigt"] ?? 0) === 1;
+          if ($showDone xor $showOpen) {
+            $where[] = "m.`00_lfd` ".($showDone ? "" : "NOT ").
+              "IN (SELECT `nachnum` FROM ".$doneTable.")";
+          } elseif (!$showDone && !$showOpen) {
+            $where[] = "1 = 0";
+          }
 
-      $querycount = "SELECT COUNT(*) FROM ".$query_from_arg.$query_from_ma_arg.$query_from_fk_arg.$query_from_us_arg." WHERE ".
-               $query_where_arg1." AND ".$query_search.";" ;
-
-      $query = "SELECT ".$query_select_arg.$query_select_ma_arg.$query_select_fk_arg.$query_select_us_arg." FROM ".$query_from_arg.$query_from_ma_arg.$query_from_fk_arg.$query_from_us_arg." WHERE ".
-               $query_where_arg1." AND ".$query_search." ORDER BY ".$query_orderby_arg ;
-    } else {
-      $query_search = "";
-      $querycount = "SELECT COUNT(*) FROM ".$query_from_arg.$query_from_ma_arg.$query_from_fk_arg.$query_from_us_arg." WHERE ".
-               $query_where_arg1." ".$query_where_arg2." ".$query_where_arg3." ".$query_where_arg4.$query_where_arg6.";" ;
-
-      $query = "SELECT ".$query_select_arg.$query_select_ma_arg.$query_select_fk_arg.$query_select_us_arg." FROM ".$query_from_arg.$query_from_ma_arg.$query_from_fk_arg.$query_from_us_arg." WHERE ".
-               $query_where_arg1." ".$query_where_arg2." ".$query_where_arg3." ".$query_where_arg4.$query_where_arg5.$query_where_arg6." ORDER BY ".$query_orderby_arg ;
-    }
-
-    if ( debug){  echo "<br><br><b>file:liste.php:651 fkt:get_list  QUERYCOUNT =".$querycount."<br>".$tblfktname."</b><br><br>";}
-	if ( debug){  echo "<br><br><b>file:liste.php:652 fkt:get_list  QUERY  =".$query."</b><br><br>";}
-
-    if ( $_SESSION["filter_darstellung"] == "1" ){
-      $tmp = $dbaccess->query_table_wert ($querycount);
-      $anzahl = $tmp[0];
-
-      $_SESSION["filter_rescount"] = $anzahl ;
-      if ( debug){  echo "<b>file:liste.php:659 fkt:get_list  Anzahl =".$anzahl."</b><br>";}
-	  
-      if (isset($_SESSION[flt_navi])) {
-        switch ($_SESSION[flt_navi]) {
-           // ANFANG
-          case "start":
-            if ( debug){  echo "<b>file:liste.php:665 fkt:get_list - switch (_SESSION[flt_navi]):start </b><br>";}
-		    $_SESSION["filter_start"] = 0;
-          break;
-           // Eine Seite zurÃ¼ck
-          case "back":
-		    if ( debug){  echo "<b>file:liste.php:670 fkt:get_list - switch (_SESSION[flt_navi]):back </b><br>";}
-            $_SESSION["filter_start"] -= $_SESSION[filter_anzahl];
-            if ($_SESSION["filter_start"] < 0){
-               $_SESSION["filter_start"]=0;}
-          break;
-           // Eine Seite vor
-          case "for":
-		  if ( debug){  echo "<b>file:liste.php:677 fkt:get_list - switch (_SESSION[flt_navi]):for </b><br>";}
-             if ($anzahl < $_SESSION[filter_anzahl]){ $_SESSION[filter_start] = 0;
-             } else {
-              $_SESSION["filter_start"] += $_SESSION[filter_anzahl];
-             if ($_SESSION["filter_start"] >= $anzahl){
-               $_SESSION["filter_start"] = $anzahl-1;}
-             }
-          break;
-          // Letzte Seite
-          case "end":
-		    if ( debug){  echo "<b>file:liste.php:687 fkt:get_list - switch (_SESSION[flt_navi]):end </b><br>";}
-            if ($anzahl < $_SESSION[filter_anzahl]){ $_SESSION[filter_start] = 0;
-            } else {
-              $seiten = floor ($anzahl / $_SESSION[filter_anzahl]);
-              $_SESSION["filter_start"] = $seiten * $_SESSION["filter_anzahl"];
-            }
-          break;
+          $categorySpecs = array (
+            array ("ma_katego", $conf_4f_tbl ["masterkatego"], $conf_4f_tbl ["masterkategolk"], "ma"),
+            array ("fk_katego", $functionBase."_katego", $functionBase."_kategolink", "fk"),
+            array ("us_katego", $userBase."_katego", $userBase."_kategolink", "us"),
+          );
+          foreach ($categorySpecs as $spec) {
+            if (!isset ($_SESSION[$spec[0]])) { continue; }
+            $categoryId = estab_message_positive_id ($_SESSION[$spec[0]]);
+            $categoryTable = estab_message_table ((string) $spec[1]);
+            $linkTable = estab_message_table ((string) $spec[2]);
+            $alias = $spec[3];
+            $joins[] = "INNER JOIN ".$linkTable." AS ".$alias."l".
+              " ON ".$alias."l.`msg` = m.`00_lfd`";
+            $joins[] = "INNER JOIN ".$categoryTable." AS ".$alias."c".
+              " ON ".$alias."c.`lfd` = ".$alias."l.`katego`";
+            $where[] = $alias."c.`lfd` = ?";
+            $parameters[] = $categoryId;
+          }
         }
-        unset ($_SESSION [flt_navi]);
-      }
-      $query .= " LIMIT ".$_SESSION["filter_start"].",".$_SESSION["filter_anzahl"];
-    }
-      // ZunÃ¤chst holen wir alls Meldungen mit den entsprechenden Kriterien
-    $query = $query_select.$query;
-	break;
-	/************************************************************************************************************/
-	case "FMADMIN":
-	case "SIADMIN":
-      if ( debug){  echo "<b>file:liste.php:699 fkt:get_list  case FMADMIN, SIADMIN</b><br>";}
-	  include ("../4fcfg/fkt_rolle.inc.php");
-      $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
-                             $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
 
-      if (isset ($_SESSION["flt_search"])) {
-        $query_search = "(".
-          "(".$conf_4f_tbl ["nachrichten"].".`04_nummer` LIKE \"%".$_SESSION["flt_search"]."%\") OR ".
-          "(".$conf_4f_tbl ["nachrichten"].".`10_anschrift` LIKE \"%".$_SESSION["flt_search"]."%\") OR ".
-          "(".$conf_4f_tbl ["nachrichten"].".`12_abfzeit` LIKE \"%".$_SESSION["flt_search"]."%\") OR ".
-          "(".$conf_4f_tbl ["nachrichten"].".`12_inhalt` LIKE \"%".htmlentities ($_SESSION["flt_search"])."%\") OR ".
-          "(".$conf_4f_tbl ["nachrichten"].".`13_abseinheit` LIKE \"%".$_SESSION["flt_search"]."%\") )";
-      } else {
-        $query_search = " 1 ";
-      }
-
-	  $query = "SELECT `00_lfd`,
-                         `04_richtung`,
-                         `04_nummer`,
-                         `09_vorrangstufe`,
-                         `10_anschrift`,
-                         `12_abfzeit`,
-                         `13_abseinheit`,
-                         `12_inhalt`,
-                         `16_empf`
-                   FROM `".$conf_4f_tbl ["nachrichten"]."`
-				   WHERE".$query_search." order by 04_nummer DESC, 09_vorrangstufe DESC ";          //
-					
-	  if ( debug){  echo "<b>file:liste.php:711 fkt:get_list  case SIADMIN, FMADMIN query =".$query."</b><br>";}
- 
-      if ( debug){  echo "<b>file:liste.php:737 fkt:get_list  case SIADMIN, FMADMIN query =".$query."</b><br>";}	  
-      if ( $_SESSION["filter_darstellung"] == "1" ){
-        $tmp = $dbaccess->query_table_wert ($query);
-		if ( debug){  echo "<b>file:liste.php:719 fkt:get_list  case SIADMIN, FMADMIN $tmp =";print_r($query); echo "</b><br>";}
-        $anzahl = $tmp[0];
-
-        $_SESSION["filter_rescount"] = $anzahl ;
-        if ( debug){  echo "<b>file:liste.php:724 fkt:get_list  Anzahl =".$anzahl."</b><br>";}
-	  
-        if (isset($_SESSION[flt_navi])) {
-          switch ($_SESSION[flt_navi]) {
-           // ANFANG
-          case "start":
-            if ( debug){  echo "<b>file:liste.php:730 fkt:get_list - switch (_SESSION[flt_navi]):start </b><br>";}
-		    $_SESSION["filter_start"] = 0;
-          break;
-           // Eine Seite zurÃ¼ck
-          case "back":
-		    if ( debug){  echo "<b>file:liste.php:735 fkt:get_list - switch (_SESSION[flt_navi]):back </b><br>";}
-            $_SESSION["filter_start"] -= $_SESSION[filter_anzahl];
-            if ($_SESSION["filter_start"] < 0){
-               $_SESSION["filter_start"]=0;}
-          break;
-           // Eine Seite vor
-          case "for":
-		  if ( debug){  echo "<b>file:liste.php:742 fkt:get_list - switch (_SESSION[flt_navi]):for </b><br>";}
-             if ($anzahl < $_SESSION[filter_anzahl]){ $_SESSION[filter_start] = 0;
-             } else {
-              $_SESSION["filter_start"] += $_SESSION[filter_anzahl];
-             if ($_SESSION["filter_start"] >= $anzahl){
-               $_SESSION["filter_start"] = $anzahl-1;}
-             }
-          break;
-          // Letzte Seite
-          case "end":
-		    if ( debug){  echo "<b>file:liste.php:752 fkt:get_list - switch (_SESSION[flt_navi]):end </b><br>";}
-            if ($anzahl < $_SESSION[filter_anzahl]){ $_SESSION[filter_start] = 0;
-            } else {
-              $seiten = floor ($anzahl / $_SESSION[filter_anzahl]);
-              $_SESSION["filter_start"] = $seiten * $_SESSION["filter_anzahl"];
-            }
-          break;
+        if ($searchActive) {
+          $searchPattern = "%".(string) $_SESSION["flt_search"]."%";
+          $where[] = "(m.`04_nummer` LIKE ? OR m.`10_anschrift` LIKE ? OR ".
+            "m.`12_abfzeit` LIKE ? OR m.`12_inhalt` LIKE ? OR ".
+            "m.`13_abseinheit` LIKE ?)";
+          for ($i = 0; $i < 5; $i++) { $parameters[] = $searchPattern; }
         }
-        unset ($_SESSION [flt_navi]);
-      }
-      $query .= " LIMIT ".$_SESSION["filter_start"].",".$_SESSION["filter_anzahl"];
-    }
-    $query .= ";";
+      break;
 
-	break;
-	}
-	if ( debug){  echo "<b>file:liste.php:770 fkt:get_list QUERY [get_list] =".$query."</b><br>";}
-    $result = $dbaccess->query_table ($query);
-	if ( debug){  echo "<b>file:liste.php:772 fkt:get_list_ENDE Result = "; print_r($result); echo "</b><br>";}
-    return ($result);
+      case "FMADMIN":
+      case "SIADMIN":
+        $displayFilters = (int) ($_SESSION["filter_darstellung"] ?? 1) === 1;
+        if (isset ($_SESSION["flt_search"])) {
+          $searchPattern = "%".(string) $_SESSION["flt_search"]."%";
+          $where[] = "(m.`04_nummer` LIKE ? OR m.`10_anschrift` LIKE ? OR ".
+            "m.`12_abfzeit` LIKE ? OR m.`12_inhalt` LIKE ? OR ".
+            "m.`13_abseinheit` LIKE ?)";
+          for ($i = 0; $i < 5; $i++) { $parameters[] = $searchPattern; }
+        }
+      break;
+
+      default:
+        throw new InvalidArgumentException ("Unbekannte Listenart");
+    }
+
+    $from = " FROM ".$messageTable." AS m ".
+      implode (" ", $joins);
+    $whereSql = $where === array () ? "1 = 1" : implode (" AND ", $where);
+    $countSql = "SELECT COUNT(DISTINCT m.`00_lfd`)".$from." WHERE ".$whereSql;
+    $query = "SELECT DISTINCT ".$select.$from." WHERE ".$whereSql.
+      " ORDER BY m.`04_nummer` DESC, m.`09_vorrangstufe` DESC";
+
+    $messageConnection = estab_message_connect ($conf_4f_db);
+    try {
+      if ($displayFilters) {
+        $count = estab_message_query_int ($messageConnection, $countSql, $parameters);
+        list ($start, $pageSize) = estab_list_page_window ($count);
+        $query .= " LIMIT ".$start.",".$pageSize;
+      }
+      $result = estab_message_query_rows ($messageConnection, $query, $parameters);
+    } finally {
+      estab_auth_close ($messageConnection);
+    }
+    return $result === array () ? "" : $result;
   }
 
 /******************************************************************************\
@@ -800,7 +761,7 @@ class Listen extends kategorien {
         $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
                              $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
         $query = "SELECT `00_lfd`,`07_durchspruch`, `08_befhinweis`, `08_befhinwausw`,`09_vorrangstufe`, `10_anschrift`, `12_abfzeit`, `12_inhalt` FROM `".$conf_4f_tbl ["nachrichten"]."`
-                  WHERE ((`04_richtung` = \"A\") AND (`03_datum` = 0) AND (`03_zeichen` = \"\")) order by `09_vorrangstufe` DESC, `12_abfzeit` ; ";
+                  WHERE ((`04_richtung` = \"A\") AND (`03_datum` IS NULL) AND (`03_zeichen` = \"\")) order by `09_vorrangstufe` DESC, `12_abfzeit` ; ";
         $result = $dbaccess->query_table ($query);
         if ($result != "" ){
           echo "<table style=\"text-align: center; background-color: rgb(255, 255, 255); \" border=\"1\" cellpadding=\"10\" cellspacing=\"1\">\n<tbody>\n";
@@ -815,10 +776,10 @@ class Listen extends kategorien {
               echo "<tr style=\"background-color: rgb(255,255,100); color:#FFFFFF; font-weight:bold;\">\n";
             }
             $abfzeit = convdatetimeto ($row["12_abfzeit"]);
-            echo "<td>"; if (($row["12_abfzeit"] != "")) { echo "<a href=\"mainindex.php?fm=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$abfzeit["stak"]."</a>\n"; } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
-            echo "<td>"; if (($row["09_vorrangstufe"] != "")) { echo "<a href=\"mainindex.php?fm=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["09_vorrangstufe"]."</a>\n" ; } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
-            echo "<td>"; if (($row["10_anschrift"] != "")) { echo "<a href=\"mainindex.php?fm=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["10_anschrift"]."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
-            echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { echo "<a href=\"mainindex.php?fm=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["12_inhalt"]."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";           echo "</tr>";
+            echo "<td>"; if (($row["12_abfzeit"] != "")) { estab_list_detail_action ("fm", "meldung", $row["00_lfd"], $abfzeit["stak"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+            echo "<td>"; if (($row["09_vorrangstufe"] != "")) { estab_list_detail_action ("fm", "meldung", $row["00_lfd"], $row["09_vorrangstufe"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+            echo "<td>"; if (($row["10_anschrift"] != "")) { estab_list_detail_action ("fm", "meldung", $row["00_lfd"], $row["10_anschrift"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+            echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { estab_list_detail_action ("fm", "meldung", $row["00_lfd"], $row["12_inhalt"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";           echo "</tr>";
           }
           echo "</tbody></table>";
         } else {// if $result != ""
@@ -862,7 +823,7 @@ class Listen extends kategorien {
           // zeilenweise Anzeige der Datenbankanfrage
           foreach ($result as $row){
              $hilf = $this->explodereceiver ( $row ["16_empf"] );
-             $receivercolor = $hilf [ $_SESSION [vStab_funktion] ]; // Empfaenger dieser Zeile
+             $receivercolor = $hilf [ $_SESSION ['vStab_funktion'] ] ?? ""; // Empfaenger dieser Zeile
              switch ($receivercolor){
                case "rt":  $receiverbackground = $cfg ["lbg"] ["rt"];   break;
                case "gn":  $receiverbackground = $cfg ["lbg"] ["gn"];   break;
@@ -884,25 +845,21 @@ class Listen extends kategorien {
              if ( $vorrang ){
                if ( $schongelesen ){
                  echo "<td align=\"center\">";
-                 echo "<a href=\"mainindex.php?action=gelesen&00_lfd=".$row["00_lfd"]."&todo=unset\" target=\"_self\">\n";
-                 echo "<img src=\"".$conf_design_path."/000.gif\" alt=\"lesen\" border=\"0\"></a>";
+                 estab_list_state_action ("gelesen", $row ["00_lfd"], "unset", $conf_design_path."/000.gif", "lesen");
                  echo "</td>\n";
                } else {
                  echo "<td align=\"center\">";
-                 echo "<a href=\"mainindex.php?action=gelesen&00_lfd=".$row["00_lfd"]."&todo=set\" target=\"_self\">\n";
-                 echo "<img src=\"".$conf_design_path."/mail_prio_unread.gif\" alt=\"lesen\" border=\"0\"></a>";
+                 estab_list_state_action ("gelesen", $row ["00_lfd"], "set", $conf_design_path."/mail_prio_unread.gif", "lesen");
                  echo "</td>\n";
                }
              } else {
                if ( $schongelesen ){  // ==> wurde schon gelesen
                  echo "<td align=\"center\">";
-                 echo "<a href=\"mainindex.php?action=gelesen&00_lfd=".$row["00_lfd"]."&todo=unset\" target=\"_self\">\n";
-                 echo "<img src=\"".$conf_design_path."/000.gif\" alt=\"lesen\" border=\"0\"></a>";
+                 estab_list_state_action ("gelesen", $row ["00_lfd"], "unset", $conf_design_path."/000.gif", "lesen");
                  echo "</td>\n";
                } else {
                  echo "<td align=\"center\">";
-                 echo "<a href=\"mainindex.php?action=gelesen&00_lfd=".$row["00_lfd"]."&todo=set\" target=\"_self\">\n";
-                 echo "<img src=\"".$conf_design_path."/mail_unread.gif\" alt=\"Neu/new\" border=\"0\"></a>";
+                 estab_list_state_action ("gelesen", $row ["00_lfd"], "set", $conf_design_path."/mail_unread.gif", "Neu/new");
                  echo "</td>\n";
                }
              }
@@ -918,13 +875,11 @@ class Listen extends kategorien {
 
              if ( $schonerledigt ){  // ==> wurde schon erledigt
                  echo "<td style=\"text-align: center; vertical-align: middle;\">";
-                 echo "<a href=\"mainindex.php?action=erledigt&00_lfd=".$row["00_lfd"]."&todo=unset\" target=\"_self\">\n";
-                 echo "<img src=\"".$conf_design_path."/task_done.gif\" alt=\"erledigt\" border=\"0\"></a>";
+                 estab_list_state_action ("erledigt", $row ["00_lfd"], "unset", $conf_design_path."/task_done.gif", "erledigt");
                  echo "</td>\n";
              } else {
                  echo "<td style=\"text-align: center; vertical-align: middle;\">";
-                 echo "<a href=\"mainindex.php?action=erledigt&00_lfd=".$row["00_lfd"]."&todo=set\" target=\"_self\">\n";
-                 echo "<p><img src=\"".$conf_design_path."/task_due.gif\" alt=\"NICHT erledigt\" border=\"0\"></p>";
+                 estab_list_state_action ("erledigt", $row ["00_lfd"], "set", $conf_design_path."/task_due.gif", "NICHT erledigt");
                  echo "</td>\n";
              }
 
@@ -953,20 +908,20 @@ class Listen extends kategorien {
              echo "<td>";
               // Vorrangstufe
              if ( ( $row["09_vorrangstufe"] != "") and ( $row["09_vorrangstufe"] != "eee" ) ) {
-               echo "<a href=\"mainindex.php?stab=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["09_vorrangstufe"]."</a>\n" ;
+               estab_list_detail_action ("stab", "meldung", $row["00_lfd"], $row["09_vorrangstufe"]);
              } else {
                echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";}
              echo "</td>\n";
               // Eingang / Ausgang
-             echo "<td>"; if (($row["04_richtung"] != "")) { echo "<a href=\"mainindex.php?stab=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["04_richtung"]."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+             echo "<td>"; if (($row["04_richtung"] != "")) { estab_list_detail_action ("stab", "meldung", $row["00_lfd"], $row["04_richtung"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
               // Nachweisnummer
-             echo "<td>"; if (($row["04_nummer"] != "")) { echo "<a href=\"mainindex.php?stab=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["04_nummer"]."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+             echo "<td>"; if (($row["04_nummer"] != "")) { estab_list_detail_action ("stab", "meldung", $row["00_lfd"], $row["04_nummer"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
               // Muss der Absender oder die Absendende Einheit unter von / an
              if ($row["04_richtung"] == "A" ) { // von = 14_funktion an=10_anschrift
                 // Ausgang VON
                echo "<td>";
                if (($row["14_funktion"] != "")) {
-                 echo "<a href=\"mainindex.php?stab=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["14_funktion"]."</a>\n";
+                 estab_list_detail_action ("stab", "meldung", $row["00_lfd"], $row["14_funktion"]);
                } else {
                  echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";}
                echo "</td>\n";
@@ -974,7 +929,7 @@ class Listen extends kategorien {
                 // Ausgang AN
                echo "<td>";
                if (($row["10_anschrift"] != "")) {
-                 echo "<a href=\"mainindex.php?stab=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["10_anschrift"]."</a>\n";
+                 estab_list_detail_action ("stab", "meldung", $row["00_lfd"], $row["10_anschrift"]);
                } else {
                  echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";}
                echo "</td>\n";
@@ -984,7 +939,7 @@ class Listen extends kategorien {
              if ($row["04_richtung"] == "E" ) {  // von = 13_abseinheit/14_funktion an=10_anschrift
                echo "<td>";
                if ( ($row["13_abseinheit"] != "") ) {
-                 echo "<a href=\"mainindex.php?stab=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\"><big>".$row["13_abseinheit"]."</big></a>\n";
+                 estab_list_detail_action ("stab", "meldung", $row["00_lfd"], $row["13_abseinheit"], true);
                } else {
                  echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
                }
@@ -993,7 +948,7 @@ class Listen extends kategorien {
 
                echo "<td>";
                if (($row["10_anschrift"] != "")) {
-                 echo "<a href=\"mainindex.php?stab=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\"><big>".$row["10_anschrift"]."</big></a>\n";
+                 estab_list_detail_action ("stab", "meldung", $row["00_lfd"], $row["10_anschrift"], true);
                } else {
                  echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
                }
@@ -1003,7 +958,7 @@ class Listen extends kategorien {
              if (($row["12_abfzeit"] != "")) {
                $arr    = convdatetimeto ($row["12_abfzeit"]);
                $abzeit = $arr ["stak"];
-               echo "<a href=\"mainindex.php?stab=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\"><big>".$abzeit."</big></a>\n";
+               estab_list_detail_action ("stab", "meldung", $row["00_lfd"], $abzeit, true);
              } else {
                echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
              }
@@ -1011,7 +966,7 @@ class Listen extends kategorien {
 
              echo "<td align=\"left\">";
              if (($row["12_inhalt"] != "")) {
-               echo "<a href=\"mainindex.php?stab=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\"><big>".$row["12_inhalt"]."</big></a>\n";
+               estab_list_detail_action ("stab", "meldung", $row["00_lfd"], $row["12_inhalt"], true);
              } else {
                echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
              }
@@ -1028,8 +983,8 @@ class Listen extends kategorien {
 			$dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
                              $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
 
-			$WHERE_inout = "WHERE ( ( `15_quitdatum` = 0 ) AND ( `15_quitzeichen` = 0 ) ) AND ( ( `04_richtung` =\"E\") OR ( `03_datum` != 0 ) AND ( `03_zeichen` != \"\" ) )"; 
-			$WHERE_in    = "WHERE ( ( `15_quitdatum` = 0 ) AND ( `15_quitzeichen` = 0 ) ) AND ( `04_richtung` =\"E\")"; 
+			$WHERE_inout = "WHERE ( ( `15_quitdatum` IS NULL ) AND ( `15_quitzeichen` = \"\" ) ) AND ( ( `04_richtung` =\"E\") OR ( (`03_datum` IS NOT NULL) AND ( `03_zeichen` != \"\" ) ) )";
+			$WHERE_in    = "WHERE ( ( `15_quitdatum` IS NULL ) AND ( `15_quitzeichen` = \"\" ) ) AND ( `04_richtung` =\"E\")";
 
 //order by `09_vorrangstufe` DESC, `12_abfzeit`; 
 
@@ -1070,10 +1025,10 @@ class Listen extends kategorien {
               echo "<tr style=\"background-color: rgb(220,0,0); color:#FFFFFF; font-weight:bold;\">\n";
            }
            $abfzeit = convdatetimeto ($row["12_abfzeit"]);
-           echo "<td>"; if (($row["12_abfzeit"] != "")) { echo "<a href=\"mainindex.php?sichter=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$abfzeit[stak]."</a>\n"; } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
-           echo "<td>"; if (($row["09_vorrangstufe"] != "")) { echo "<a href=\"mainindex.php?sichter=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["09_vorrangstufe"]."</a>\n" ; } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
-           echo "<td>"; if (($row["10_anschrift"] != "")) { echo "<a href=\"mainindex.php?sichter=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["10_anschrift"]."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
-           echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { echo "<a href=\"mainindex.php?sichter=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["12_inhalt"]."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+           echo "<td>"; if (($row["12_abfzeit"] != "")) { estab_list_detail_action ("sichter", "meldung", $row["00_lfd"], $abfzeit["stak"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+           echo "<td>"; if (($row["09_vorrangstufe"] != "")) { estab_list_detail_action ("sichter", "meldung", $row["00_lfd"], $row["09_vorrangstufe"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+           echo "<td>"; if (($row["10_anschrift"] != "")) { estab_list_detail_action ("sichter", "meldung", $row["00_lfd"], $row["10_anschrift"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+           echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { estab_list_detail_action ("sichter", "meldung", $row["00_lfd"], $row["12_inhalt"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
            echo "</tr>";
           } // foreach result row
           echo "</tbody></table>";
@@ -1100,6 +1055,9 @@ include ("../4fcfg/fkt_rolle.inc.php");
           Hole die Liste der gelesenen und der erledigten Nachrichten
         */
         $result = $this->get_list ($this->listenart);
+        $adminMessageRoute = $this->listenart == "FMADMIN"
+          ? "FM-Adminmeldung"
+          : "SI-Adminmeldung";
         $this->darstellungs_art ( $this->listenart );
         $this->listen_navi () ;  //Navigationsbutton
 		
@@ -1130,7 +1088,7 @@ include ("../4fcfg/fkt_rolle.inc.php");
              }
              echo "<td>";
              if ( ( $row["09_vorrangstufe"] != "") and ( $row["09_vorrangstufe"] != "eee" ) ) {
-               echo "<a href=\"mainindex.php?fm=SI-Adminmeldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["09_vorrangstufe"]."</a>\n" ;
+               estab_list_detail_action ("fm", $adminMessageRoute, $row["00_lfd"], $row["09_vorrangstufe"]);
              } else {
                echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
              }
@@ -1139,7 +1097,7 @@ include ("../4fcfg/fkt_rolle.inc.php");
              // RICHTUNG Eingang / Ausgang
              echo "<td>";
              if (($row["04_richtung"] != "")) {
-               echo "<a href=\"mainindex.php?fm=SI-Adminmeldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["04_richtung"]."</a>\n";
+               estab_list_detail_action ("fm", $adminMessageRoute, $row["00_lfd"], $row["04_richtung"]);
              } else {
                echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
              }
@@ -1148,7 +1106,7 @@ include ("../4fcfg/fkt_rolle.inc.php");
              // N a c h w e i s n u m m e r
              echo "<td>";
              if (($row["04_richtung"] != "")) {
-               echo "<a href=\"mainindex.php?fm=SI-Adminmeldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["04_nummer"]."</a>\n";
+               estab_list_detail_action ("fm", $adminMessageRoute, $row["00_lfd"], $row["04_nummer"]);
              } else {
                echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
              }
@@ -1157,7 +1115,7 @@ include ("../4fcfg/fkt_rolle.inc.php");
              if ($row["04_richtung"] == "A" ) {
                echo "<td>";
                if (($row["10_anschrift"] != "")) {
-                 echo "<a href=\"mainindex.php?fm=SI-Adminmeldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["10_anschrift"]."</a>\n";
+                 estab_list_detail_action ("fm", $adminMessageRoute, $row["00_lfd"], $row["10_anschrift"]);
                } else {
                  echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
                }
@@ -1167,7 +1125,7 @@ include ("../4fcfg/fkt_rolle.inc.php");
 
              // Absender / Einheit / Stelle / ...
              if (($row["13_abseinheit"] != "")) {
-               echo "<a href=\"mainindex.php?fm=SI-Adminmeldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["13_abseinheit"]."</a>\n";
+               estab_list_detail_action ("fm", $adminMessageRoute, $row["00_lfd"], $row["13_abseinheit"]);
                } else {
                  echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
                }
@@ -1177,7 +1135,7 @@ include ("../4fcfg/fkt_rolle.inc.php");
              // Abfassungs Z E I T
              if (($row["12_abfzeit"] != "")) {
                $abfzeit = convdatetimeto ($row["12_abfzeit"]);
-               echo "<a href=\"mainindex.php?fm=SI-Adminmeldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$abfzeit[stak]."</a>\n";
+               estab_list_detail_action ("fm", $adminMessageRoute, $row["00_lfd"], $abfzeit["stak"]);
              } else {
                echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
              }
@@ -1187,7 +1145,7 @@ include ("../4fcfg/fkt_rolle.inc.php");
              $empfcolor = extraiereempfaenger ( $row ["16_empf"] ) ;
              for ( $i=1; $i<= count ($conf_empf); $i++ ) {
                if ( ( $conf_empf [$i]["fkt"] != "Si" ) and ( $conf_empf [$i]["fkt"] != "A/W" ) ) {
-                 switch ($empfcolor [$conf_empf [$i][fkt]]) {
+                 switch ($empfcolor [$conf_empf [$i]['fkt']]) {
                   case "rt":
                    echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["rt"]."; \">";
                    echo "X";
@@ -1211,9 +1169,12 @@ include ("../4fcfg/fkt_rolle.inc.php");
              // I N H A L T !
              echo "<td align=\"left\">";
              if (($row["12_inhalt"] != "")) {
-               echo "<a href=\"mainindex.php?fm=SI-Adminmeldung&00_lfd=".
-                        $row["00_lfd"]."\" target=\"_self\">".
-                        substr($row["12_inhalt"], 0, $conf_4f_liste ["inhalt"])." ..."."</a>\n";
+               estab_list_detail_action (
+                 "fm",
+                 $adminMessageRoute,
+                 $row["00_lfd"],
+                 estab_message_excerpt ($row["12_inhalt"], (int) $conf_4f_liste ["inhalt"])." ..."
+               );
              } else {
                echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
              }
@@ -1393,34 +1354,34 @@ include ("../4fcfg/fkt_rolle.inc.php");
                echo "<td>";
                if ( ( $row["09_vorrangstufe"] != "") and
                     ( $row["09_vorrangstufe"] != "eee" ) ) {
-                 echo "<a>".$row["09_vorrangstufe"]."</a>\n" ;
+                 echo "<a>".estab_message_html ($row["09_vorrangstufe"])."</a>\n" ;
                } else {
                  echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
                }
                echo "</td>\n";
-               echo "<td>"; if (($row["04_richtung"] != "")) { echo "<a>".$row["04_richtung"]."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
-               echo "<td>"; if (($row["04_nummer"] != "")) { echo "<a>".$row["04_nummer"]."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+               echo "<td>"; if (($row["04_richtung"] != "")) { echo "<a>".estab_message_html ($row["04_richtung"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+               echo "<td>"; if (($row["04_nummer"] != "")) { echo "<a>".estab_message_html ($row["04_nummer"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
                if ($row["04_richtung"] == "A" ) {
                  echo "<td>";
                  if (($row["10_anschrift"] != "")) {
-                   echo "<a>".$row["10_anschrift"]."</a>\n"; } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+                   echo "<a>".estab_message_html ($row["10_anschrift"])."</a>\n"; } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
                } else {
                  echo "<td>";
                  if (($row["13_abseinheit"] != "")) {
-                   echo "<a>".$row["13_abseinheit"]."</a>\n";
+                   echo "<a>".estab_message_html ($row["13_abseinheit"])."</a>\n";
                  } else {
                    echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
                }
                echo "<td>";
                if (($row["12_abfzeit"] != "")) {
                  $arr    = convdatetimeto ($row["12_abfzeit"]);
-                 $abzeit = $arr [stak];
+                 $abzeit = $arr ['stak'];
                  echo "<a>".$abzeit."</a>\n";
                } else {
                  echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
                }
                echo "</td>\n";
-               echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { echo "<a>".$row["12_inhalt"]."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+               echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { echo "<a>".estab_message_html ($row["12_inhalt"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
                echo "</tr>";
             }  // foreach $result
           } // if 2. result == ""
@@ -1454,33 +1415,33 @@ include ("../4fcfg/fkt_rolle.inc.php");
             foreach ($result as $row){
                echo "<td>";
                if ( ( $row["09_vorrangstufe"] != "") and ( $row["09_vorrangstufe"] != "eee" ) ) {
-                 echo "<a>".$row["09_vorrangstufe"]."</a>\n" ;
+                 echo "<a>".estab_message_html ($row["09_vorrangstufe"])."</a>\n" ;
                } else {
                  echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";}
                echo "</td>\n";
-               echo "<td>"; if (($row["04_richtung"] != "")) { echo "<a>".$row["04_richtung"]."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
-               echo "<td>"; if (($row["04_nummer"] != "")) { echo "<a>".$row["04_nummer"]."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+               echo "<td>"; if (($row["04_richtung"] != "")) { echo "<a>".estab_message_html ($row["04_richtung"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+               echo "<td>"; if (($row["04_nummer"] != "")) { echo "<a>".estab_message_html ($row["04_nummer"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
                if ($row["04_richtung"] == "A" ) {
                  echo "<td>";
                  if (($row["10_anschrift"] != "")) {
-                   echo "<a>".$row["10_anschrift"]."</a>\n"; } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+                   echo "<a>".estab_message_html ($row["10_anschrift"])."</a>\n"; } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
                } else {
                  echo "<td>";
                  if (($row["13_abseinheit"] != "")) {
-                   echo "<a>".$row["13_abseinheit"]."</a>\n";
+                   echo "<a>".estab_message_html ($row["13_abseinheit"])."</a>\n";
                  } else {
                    echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
                }
                echo "<td>";
                if (($row["12_abfzeit"] != "")) {
                  $arr    = convdatetimeto ($row["12_abfzeit"]);
-                 $abzeit = $arr [stak];
+                 $abzeit = $arr ['stak'];
                  echo "<a>".$abzeit."</a>\n";
                } else {
                  echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
                }
                echo "</td>\n";
-               echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { echo "<a>".$row["12_inhalt"]."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+               echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { echo "<a>".estab_message_html ($row["12_inhalt"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
                echo "</tr>";
             }  // foreach $result
           }
@@ -1518,27 +1479,27 @@ include ("../4fcfg/fkt_rolle.inc.php");
             foreach ($result as $row){
                echo "<td>";
                if ( ( $row["09_vorrangstufe"] != "") and ( $row["09_vorrangstufe"] != "eee" ) ) {
-                 echo "<a>".$row["09_vorrangstufe"]."</a>\n" ;
+                 echo "<a>".estab_message_html ($row["09_vorrangstufe"])."</a>\n" ;
                } else {
                  echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";}
                echo "</td>\n";
-               echo "<td>"; if (($row["04_richtung"] != "")) { echo "<a>".$row["04_richtung"]."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
-               echo "<td>"; if (($row["04_nummer"] != "")) { echo "<a>".$row["04_nummer"]."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+               echo "<td>"; if (($row["04_richtung"] != "")) { echo "<a>".estab_message_html ($row["04_richtung"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+               echo "<td>"; if (($row["04_nummer"] != "")) { echo "<a>".estab_message_html ($row["04_nummer"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
                if ($row["04_richtung"] == "A" ) {
                  echo "<td>";
                  if (($row["10_anschrift"] != "")) {
-                   echo "<a>".$row["10_anschrift"]."</a>\n"; } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+                   echo "<a>".estab_message_html ($row["10_anschrift"])."</a>\n"; } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
                } else {
                  echo "<td>";
                  if (($row["13_abseinheit"] != "")) {
-                   echo "<a>".$row["13_abseinheit"]."</a>\n";
+                   echo "<a>".estab_message_html ($row["13_abseinheit"])."</a>\n";
                  } else {
                    echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
                }
 
 
                echo "<td>";
-               if (($row["01_datum"] != "") and ( $row["01_datum"] != "0000-00-00 00:00:00" )) {
+               if (!estab_datetime_is_unset ($row["01_datum"])) {
                  $arr    = convdatetimeto ($row["01_datum"]);
                  $abzeit = $arr ['stak'];
                  echo "<a>".$abzeit."</a>\n";
@@ -1566,7 +1527,7 @@ include ("../4fcfg/fkt_rolle.inc.php");
                echo "</td>\n";
 */
                echo "<td>";
-               if (($row["02_zeit"] != "") and ( $row["02_zeit"] != "0000-00-00 00:00:00" )) {
+               if (!estab_datetime_is_unset ($row["02_zeit"])) {
                  $arr    = convdatetimeto ($row["02_zeit"]);
                  $abzeit = $arr ['stak'];
                  echo "<a>".$abzeit."</a>\n";
@@ -1576,7 +1537,7 @@ include ("../4fcfg/fkt_rolle.inc.php");
                echo "</td>";
 
                echo "<td>";
-               if (($row["03_datum"] != "") and ( $row["03_datum"] != "0000-00-00 00:00:00" )) {
+               if (!estab_datetime_is_unset ($row["03_datum"])) {
                  $arr    = convdatetimeto ($row["03_datum"]);
                  $abzeit = $arr ['stak'];
                  echo "<a>".$abzeit."</a>\n";
@@ -1593,7 +1554,7 @@ include ("../4fcfg/fkt_rolle.inc.php");
                }
                echo "</td>\n";
 */
-               echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { echo "<a>".$row["12_inhalt"]."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+               echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { echo "<a>".estab_message_html ($row["12_inhalt"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
                echo "</tr>";
             }  // foreach $result
           }

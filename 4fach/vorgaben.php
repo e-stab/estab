@@ -3,6 +3,8 @@
 define ("debug",false);
 
 session_start ();
+require_once __DIR__ . "/../app/auth.php";
+require_once __DIR__ . "/../app/csrf.php";
 
 if ( debug == true ){
   echo "<br><br>\n";
@@ -21,6 +23,9 @@ if ( debug == true ){
     // hellblauer Hintergrund
   echo "<body align=\"center\" bgcolor=\"#ECECFF\">";
   echo "<form action=\"".$conf_4f ["MainURL"]."\" method=\"POST\" target=\"mainframe\">\n";
+  if (estab_auth_session_is_authenticated ($_SESSION)) {
+    echo estab_csrf_field ();
+  }
 //  echo "<!-- Formularelemente und andere Elemente innerhalb des Formulars -->\n";
 //  echo date ("His")."<br>";
   echo "<table align=\"center\" style=\"text-align:center;\" border=\"0\" cellspacing=\"0\" cellpeding=\"0\">\n";

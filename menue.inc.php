@@ -48,9 +48,9 @@ include ("./4fcfg/config.inc.php");
 	$menue[1]["visible"] = true ;  
 
 	$menue[3]["text"] = "Generierte Vordrucke<BR>(S2)";
-	$menue[3]["info"] = "Zeigt das Verzeichnis mit den abgeschlossenen\nNachrichtenvordrucken als angelegten PDF-Dateien.";
+	$menue[3]["info"] = "Gesch&uuml;tzte Liste der im laufenden Einsatz erzeugten PDF- und Bildvordrucke. Eine Anmeldung am Nachrichtenvordruck ist erforderlich.";
    $menue[3]["pic"]  = "./4fach/design/mr/folder_global.gif";
-   $menue[3]["link"] = "./4fdata/" . $conf_4f_db["datenbank"] . "/vordruck/";
+   $menue[3]["link"] = "./4fach/vordrucke.php";
    $menue[3]["visible"] = true ;
 
 	$menue[5]["text"] = "Liste aller Meldungen";
@@ -59,10 +59,10 @@ include ("./4fcfg/config.inc.php");
    $menue[5]["link"] = "./4fueltg/ue_ltg.php";
    $menue[5]["visible"] = true ;
 
-   $menue[7]["text"] = "Infosammunlung BOS";
+   $menue[7]["text"] = "Infosammlung BOS";
 	$menue[7]["info"] = "Informationen rund um die Stabsarbeit.";
    $menue[7]["pic"]  = $conf_menue ["symbole"]."merke32.gif";
-   $menue[7]["link"] = "./stabinfo/Content/index.php";
+   $menue[7]["link"] = "./stabinfo/index.php";
    $menue[7]["visible"] = true ;
 
    $zusatz_menue[1]["text"] = "administrative Massnahme";

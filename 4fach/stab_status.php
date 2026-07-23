@@ -119,11 +119,11 @@ class stab_status {
 
 //    if ($_SESSION [filter_gelesen]  != 1){$readwhat = " NOT ";} else {$readwhat = " ";}
 
-    if ($_SESSION [filter_erledigt] != 1){$donewhat = " NOT ";} else {$donewhat = " ";}
+    if ($_SESSION ['filter_erledigt'] != 1){$donewhat = " NOT ";} else {$donewhat = " ";}
 
 
     if ($_SESSION["filter_darstellung"] == "1" ){
-      if ($_SESSION [filter_gelesen]  == 1){
+      if ($_SESSION ['filter_gelesen']  == 1){
         $query_where_arg2 = " AND (`".$conf_4f_tbl ["nachrichten"]."`.`04_nummer` ".$readwhat." IN
                               ( select `".$tblusername."_read`.`nachnum` from `".$tblusername."_read` where 1))";
       } else {
@@ -175,38 +175,38 @@ class stab_status {
 
       if ( debug == true ){ echo "<br>ANZAHL ===".$anzahl."<br>";}
 
-      if (isset($_SESSION[flt_navi])) {
+      if (isset($_SESSION['flt_navi'])) {
 
-        switch ($_SESSION[flt_navi]) {
+        switch ($_SESSION['flt_navi']) {
            // ANFANG
           case "start":
                   $_SESSION["filter_start"] = 0;
           break;
            // Eine Seite zurÃ¼ck
           case "back":
-                  $_SESSION["filter_start"] -= $_SESSION[filter_anzahl];
+                  $_SESSION["filter_start"] -= $_SESSION['filter_anzahl'];
                   if ($_SESSION["filter_start"] < 0){
                     $_SESSION["filter_start"]=0;}
           break;
            // Eine Seite vor
           case "for":
-                  if ($anzahl < $_SESSION[filter_anzahl]){ $_SESSION[filter_start] = 0;
+                  if ($anzahl < $_SESSION['filter_anzahl']){ $_SESSION['filter_start'] = 0;
                   } else {
-                    $_SESSION["filter_start"] += $_SESSION[filter_anzahl];
+                    $_SESSION["filter_start"] += $_SESSION['filter_anzahl'];
                     if ($_SESSION["filter_start"] >= $anzahl){
                       $_SESSION["filter_start"] = $anzahl-1;}
                   }
           break;
           // Letzte Seite
           case "end":
-                  if ($anzahl < $_SESSION[filter_anzahl]){ $_SESSION[filter_start] = 0;
+                  if ($anzahl < $_SESSION['filter_anzahl']){ $_SESSION['filter_start'] = 0;
                   } else {
-                    $seiten = floor ($anzahl / $_SESSION[filter_anzahl])-1 ;
+                    $seiten = floor ($anzahl / $_SESSION['filter_anzahl'])-1 ;
                     $_SESSION["filter_start"] = $seiten * $_SESSION["filter_anzahl"];
                   }
           break;
         }
-        unset ($_SESSION [flt_navi]);
+        unset ($_SESSION ['flt_navi']);
       }
       $query .= " LIMIT ".$_SESSION["filter_start"].",".$_SESSION["filter_anzahl"];
     }

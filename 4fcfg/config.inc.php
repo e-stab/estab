@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../app/bootstrap.php';
 /*****************************************************************************\
    Datei: config.inc.php
 
@@ -16,10 +17,10 @@
 
 \******************************************************************************/
 
-    if (file_exists ( "d_cfg.inc.php" )) REQUIRE "d_cfg.inc.php" ;
-    if (file_exists ( "m_cfg.inc.php" )) REQUIRE "m_cfg.inc.php" ;
-    if (file_exists ( "./4fcfg/d_cfg.inc.php" )) REQUIRE "./4fcfg/d_cfg.inc.php" ;
-    if (file_exists ( "../4fcfg/d_cfg.inc.php" )) REQUIRE "../4fcfg/d_cfg.inc.php" ;
+    require __DIR__ . "/d_cfg.inc.php";
+    if (file_exists(__DIR__ . "/m_cfg.inc.php")) {
+        require __DIR__ . "/m_cfg.inc.php";
+    }
     /*
       Sollen Känge übermittelt und abgespielt werden können ?
         true  : Klänge werden als objekt übertragen und können abgespielt werden.
@@ -44,8 +45,9 @@
     */
     if (defined("posttakzeit") == false ) define ("posttakzeit","true");
 
-      // URL des Servers
-    $conf_urlroot  = "http://".$_SERVER ["SERVER_NAME"].":".$_SERVER ["SERVER_PORT"]."/";
+      // Relative URLs work behind reverse proxies and on arbitrary host ports.
+      // Set ESTAB_PUBLIC_URL only when an absolute canonical URL is required.
+    $conf_urlroot = estab_public_root();
 
       // Wurzelverzeichnis fr den Webserver
       // unter Linux /srv/www/htdocs
@@ -74,9 +76,7 @@
 
 //echo "<big>".$conf_design_path."</big>";
 
-    $conf_design_URI       = $pre_url.
-                               $conf_web ["pre_path"].
-                               "4fach/design/".$conf_design;
+    $conf_design_URI       = $pre_url."4fach/design/".$conf_design;
 
 /********** Die nachfolgenden Zeilen duerfen nicht geaendert werden !!!  *********/
 /*********               Do not change the folowing lines               **********/
@@ -119,12 +119,12 @@
 /*******************************************************************************/
 
     $conf_4f ["MainURL"]    = $conf_urlroot.$conf_web ["pre_path"]."4fach/mainindex.php";
+    $conf_4f ["download_uri"] = $conf_urlroot.$conf_web ["pre_path"]."4fach/download.php";
+    $conf_4f ["vordruck_list_uri"] = $conf_urlroot.$conf_web ["pre_path"]."4fach/vordrucke.php";
 
 //  include "dbcfg.inc.php"; // wegen des Datenbanknamens  $conf_4f_db ["datenbank"]
 
-    if (file_exists ( "e_cfg.inc.php" )) REQUIRE "e_cfg.inc.php" ;
-    if (file_exists ( "./4fcfg/e_cfg.inc.php" )) REQUIRE "./4fcfg/e_cfg.inc.php" ;
-    if (file_exists ( "../4fcfg/e_cfg.inc.php" )) REQUIRE "../4fcfg/e_cfg.inc.php" ;
+    require __DIR__ . "/e_cfg.inc.php";
 
     $conf_4f ["ablage_dir"] = $conf_web ["srvroot"]."/".
                               $conf_web ["pre_path"].

@@ -38,6 +38,10 @@ class Listen {
 
   // Listengestaltung
 
+  function __construct ($welche, $user){
+    $this->listen ($welche, $user);
+  }
+
 /******************************************************************************\
 
 \******************************************************************************/
@@ -96,7 +100,7 @@ class Listen {
 
 //    if ($_SESSION [flt_gelesen]  != 1){$readwhat = " NOT ";} else {$readwhat = " ";}
 
-    if ($_SESSION [flt_erledigt] != 1){$donewhat = " NOT ";} else {$donewhat = " ";}
+    if ($_SESSION ['flt_erledigt'] != 1){$donewhat = " NOT ";} else {$donewhat = " ";}
 
 
     if ($_SESSION["am_flt_darstellung"] == "1" ){
@@ -142,38 +146,38 @@ class Listen {
 
       if ( debug == true ){ echo "<br>ANZAHL ===".$anzahl."<br>";}
 
-      if (isset($_SESSION[am_flt_navi])) {
+      if (isset($_SESSION['am_flt_navi'])) {
 
-        switch ($_SESSION[am_flt_navi]) {
+        switch ($_SESSION['am_flt_navi']) {
            // ANFANG
           case "start":
                   $_SESSION["am_flt_start"] = 0;
           break;
            // Eine Seite zurück
           case "back":
-                  $_SESSION["am_flt_start"] -= $_SESSION[am_flt_anzahl];
+                  $_SESSION["am_flt_start"] -= $_SESSION['am_flt_anzahl'];
                   if ($_SESSION["am_flt_start"] < 0){
                     $_SESSION["am_flt_start"]=0;}
           break;
            // Eine Seite vor
           case "for":
-                  if ($anzahl < $_SESSION[am_flt_anzahl]){ $_SESSION[am_flt_start] = 0;
+                  if ($anzahl < $_SESSION['am_flt_anzahl']){ $_SESSION['am_flt_start'] = 0;
                   } else {
-                    $_SESSION["am_flt_start"] += $_SESSION[am_flt_anzahl];
+                    $_SESSION["am_flt_start"] += $_SESSION['am_flt_anzahl'];
                     if ($_SESSION["am_flt_start"] >= $anzahl){
                       $_SESSION["am_flt_start"] = $anzahl-1;}
                   }
           break;
           // Letzte Seite
           case "end":
-                  if ($anzahl < $_SESSION[am_flt_anzahl]){ $_SESSION[am_flt_start] = 0;
+                  if ($anzahl < $_SESSION['am_flt_anzahl']){ $_SESSION['am_flt_start'] = 0;
                   } else {
-                    $seiten = floor ($anzahl / $_SESSION[am_flt_anzahl])-1 ;
+                    $seiten = floor ($anzahl / $_SESSION['am_flt_anzahl'])-1 ;
                     $_SESSION["am_flt_start"] = $seiten * $_SESSION["am_flt_anzahl"];
                   }
           break;
         }
-        unset ($_SESSION [am_flt_navi]);
+        unset ($_SESSION ['am_flt_navi']);
       }
       $query .= " LIMIT ".$_SESSION["am_flt_start"].",".$_SESSION["am_flt_anzahl"];
     }
@@ -463,7 +467,7 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
          // Abfassungs Z E I T
          if (($row["12_abfzeit"] != "")) {
            $abfzeit = convdatetimeto ($row["12_abfzeit"]);
-           echo "<a href=\"ue_ltg.php?ueb_fm=ueb&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$abfzeit[stak]."</a>\n";
+           echo "<a href=\"ue_ltg.php?ueb_fm=ueb&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$abfzeit['stak']."</a>\n";
          } else {
            echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
          }
@@ -473,7 +477,7 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
          $empfcolor = extraiereempfaenger ( $row ["16_empf"] ) ;
          for ( $i=1; $i<= count ($conf_empf); $i++ ) {
            if ( ( $conf_empf [$i]["fkt"] != "Si" ) and ( $conf_empf [$i]["fkt"] != "A/W" ) ) {
-             switch ($empfcolor [$conf_empf [$i][fkt]]) {
+             switch ($empfcolor [$conf_empf [$i]['fkt']]) {
                case "rt":
                                  echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["rt"]."; \">";
                                  echo "X";
@@ -535,15 +539,19 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
 \*****************************************************************************/
 class nachrichten4fach {
 
+    function __construct ($formulardaten, $task, $errorselect){
+      $this->nachrichten4fach ($formulardaten, $task, $errorselect);
+    }
+
     function nachrichten4fach ($formulardaten, $task, $errorselect){
       $this->task = $task ;
       $this->formdata = $formulardaten ;
       $this->lfd = $this->formdata ["00_lfd"];
-      if ($this->formdata ["01_datum"] == "0000-00-00 00:00:00") { $this->formdata["01_datum"] = ""; }
-      if ($this->formdata ["02_zeit"] == "0000-00-00 00:00:00") { $this->formdata ["02_zeit"] = ""; }
-      if ($this->formdata ["03_datum"] == "0000-00-00 00:00:00") { $this->formdata ["03_datum"] = ""; }
-      if ($this->formdata ["12_abfzeit"] == "0000-00-00 00:00:00") { $this->formdata ["12_abfzeit"] = ""; }
-      if ($this->formdata ["15_quitdatum"] == "0000-00-00 00:00:00") { $this->formdata ["15_quitdatum"] = ""; }
+      foreach (array ("01_datum", "02_zeit", "03_datum", "12_abfzeit", "15_quitdatum") as $dateField) {
+        if (estab_datetime_is_unset ($this->formdata [$dateField] ?? null)) {
+          $this->formdata [$dateField] = "";
+        }
+      }
       if ($this->formdata ["11_gesprnotiz"] == "t") {
         $this->formdata   ["11_gesprnotiz"] = true;
       } else {
@@ -828,11 +836,14 @@ var_dump ($this->formdata); echo "<br>";
     $anhaenge = split(";", $this->formdata ["12_anhang"]);
     foreach ($anhaenge as $anhang){
       if ($anhang != "") {
-        echo "<a style=\"font-size:18px; font-weight:900;\" href=\"";
-        echo $conf_4f ["ablage_uri"]."/".$anhang;
-        echo "\" target=\"_blank\">";
-        echo $anhang;
-        echo "</a><br>";
+        try {
+          $downloadUrl = estab_file_download_url ($conf_4f ["download_uri"], "attachment", $anhang);
+        } catch (InvalidArgumentException) {
+          continue;
+        }
+        echo "<a style=\"font-size:18px; font-weight:900;\" href=\"".
+             estab_auth_html ($downloadUrl)."\" target=\"_blank\" rel=\"noopener\">".
+             estab_auth_html ($anhang)."</a><br>";
       }
     }
   } // list_anhang ()
@@ -931,8 +942,8 @@ var_dump ($this->formdata); echo "<br>";
 
     if  ($this->formdata["01_datum"] != "" ) {
       $arr = convdatetimeto ($this->formdata["01_datum"]);
-      $this->formdata["01_datum"] = $arr [datum];
-      $this->formdata["01_zeit"] = $arr [zeit];
+      $this->formdata["01_datum"] = $arr ['datum'];
+      $this->formdata["01_zeit"] = $arr ['zeit'];
     } else {
         $this->formdata["01_datum"] ="";
         $this->formdata["01_zeit"] = "";
@@ -972,7 +983,7 @@ var_dump ($this->formdata); echo "<br>";
     } else {
       echo "<input maxlength=\"4\" size=\"4\" name=\"01_datum\" value=\"".$this->formdata["01_datum"]."\">\n";
       echo "<input maxlength=\"4\" size=\"4\" name=\"01_zeit\" value=\"".$this->formdata["01_zeit"]."\">\n";
-      echo "<input maxlength=\"3\" size=\"3\" name=\"01_zeichen\" value=\"".$this->formdata["01_zeichen"]."\">\n";
+      echo "<input maxlength=\"6\" size=\"6\" name=\"01_zeichen\" value=\"".$this->formdata["01_zeichen"]."\">\n";
     }
 //    echo "<br>\n";
     echo "<div style=\"text-align: center;\">";
@@ -988,7 +999,7 @@ var_dump ($this->formdata); echo "<br>";
 
     if ($this->formdata["02_zeit"] != "" ) {
       $arr = convdatetimeto ($this->formdata["02_zeit"]);
-      $this->formdata["02_zeit"] = $arr [zeit];
+      $this->formdata["02_zeit"] = $arr ['zeit'];
     }   else {
       $this->formdata["02_zeit"] = "";
     }
@@ -1013,7 +1024,7 @@ var_dump ($this->formdata); echo "<br>";
       }
     } else {
     echo "<input maxlength=\"4\" size=\"4\" name=\"02_zeit\" value=\"".$this->formdata["02_zeit"]."\">&nbsp;\n
-          <input maxlength=\"3\" size=\"3\" name=\"02_zeichen\" value=\"".$this->formdata["02_zeichen"]."\"><br>\n";
+          <input maxlength=\"6\" size=\"6\" name=\"02_zeichen\" value=\"".$this->formdata["02_zeichen"]."\"><br>\n";
     }
     echo "<div style=\"text-align: center;\">";
     echo "&nbsp;Uhrzeit &nbsp; &nbsp;Zeichen</td>\n";
@@ -1021,8 +1032,8 @@ var_dump ($this->formdata); echo "<br>";
 
       if  ($this->formdata["03_datum"] != "" ) {
         $arr = convdatetimeto ($this->formdata["03_datum"]);
-        $this->formdata["03_datum"] = $arr [datum];
-        $this->formdata["03_zeit"] = $arr [zeit];
+        $this->formdata["03_datum"] = $arr ['datum'];
+        $this->formdata["03_zeit"] = $arr ['zeit'];
       }   else {
         $this->formdata["03_datum"] ="";
         $this->formdata["03_zeit"] = "";
@@ -1052,7 +1063,7 @@ var_dump ($this->formdata); echo "<br>";
     } else {
       echo "<input maxlength=\"4\" size=\"4\" name=\"03_datum\" value=\"".$this->formdata["03_datum"]."\">\n";
       echo "<input maxlength=\"4\" size=\"4\" name=\"03_zeit\" value=\"".$this->formdata["03_zeit"]."\">\n";
-      echo "<input maxlength=\"3\" size=\"3\" name=\"03_zeichen\" value=\"".$this->formdata["03_zeichen"]."\"><br>\n";
+      echo "<input maxlength=\"6\" size=\"6\" name=\"03_zeichen\" value=\"".$this->formdata["03_zeichen"]."\"><br>\n";
     }
 
     echo "<div style=\"text-align: center;\">";
@@ -1476,7 +1487,7 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
       echo "<input type=\"hidden\" name=\"14_zeichen\" value=\"".$this->formdata["14_zeichen"]."\">\n";
 //      echo "</div>\n";
     } else {
-      echo "<input maxlength=\"25\" size=\"10\" name=\"14_zeichen\" value=\"".$this->formdata["14_zeichen"]."\"><br>\n";
+      echo "<input maxlength=\"6\" size=\"6\" name=\"14_zeichen\" value=\"".$this->formdata["14_zeichen"]."\"><br>\n";
     }
     echo "Zeichen</td>\n";
 
@@ -1525,7 +1536,7 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
     if  ($this->formdata["15_quitdatum"] != "" ) {
         $arr = convdatetimeto ($this->formdata["15_quitdatum"]);
 
-        $this->formdata["15_quitdatum"] = $arr [zeit];
+        $this->formdata["15_quitdatum"] = $arr ['zeit'];
     }   else {
         $this->formdata["15_quitdatum"] = "";
     }
@@ -1537,7 +1548,7 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
 
     } else {
     echo "<input maxlength=\"4\" size=\"4\" name=\"15_quitdatum\" value=\"".$this->formdata["15_quitdatum"]."\">&nbsp;\n";
-    echo "<input maxlength=\"3\" size=\"3\" name=\"15_quitzeichen\" value=\"".$this->formdata["15_quitzeichen"]."\"><br>\n";
+    echo "<input maxlength=\"6\" size=\"6\" name=\"15_quitzeichen\" value=\"".$this->formdata["15_quitzeichen"]."\"><br>\n";
     }
 
     echo "&nbsp;Uhrzeit &nbsp; &nbsp;Zeichen</td>\n";
@@ -1825,10 +1836,10 @@ define ("debug", false);
   if (isset ($_GET["am_flt_anzahl_x"])) {
     $_SESSION["am_flt_anzahl"] = $_GET["am_flt_anzahl"]; }
 
-  if (isset($_GET[am_flt_start_x])) { $_SESSION[am_flt_navi] = "start";}
-  if (isset($_GET[am_flt_back_x]))  { $_SESSION[am_flt_navi] = "back";}
-  if (isset($_GET[am_flt_for_x]))   { $_SESSION[am_flt_navi] = "for";}
-  if (isset($_GET[am_flt_end_x]))   { $_SESSION[am_flt_navi] = "end";}
+  if (isset($_GET['am_flt_start_x'])) { $_SESSION['am_flt_navi'] = "start";}
+  if (isset($_GET['am_flt_back_x']))  { $_SESSION['am_flt_navi'] = "back";}
+  if (isset($_GET['am_flt_for_x']))   { $_SESSION['am_flt_navi'] = "for";}
+  if (isset($_GET['am_flt_end_x']))   { $_SESSION['am_flt_navi'] = "end";}
 
 
 
