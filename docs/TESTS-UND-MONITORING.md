@@ -12,7 +12,7 @@ steht in der [Funktionsmatrix](FUNKTIONSNACHWEIS.md).
 | Image-Build | benötigte PHP-Erweiterungen und Apache-Konfiguration |
 | Datenbank | echtes MariaDB-Schema, Indizes, Matrix, Engines, Collations und Zero-Date-Freiheit |
 | HTTP | Header, direkte Endpunktfläche, 403-/400-/405-Grenzen, PNG-Antworten, Registrierung, sichtbare Sitzungsidentität, CSRF-Abmeldung, erneute Anmeldung, Nachrichten-/Kategorien- und ETB-/TBB-Rollengrenzen sowie optional Admin-Export |
-| Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, acht stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau eine Frameset-Leiste, Logout sowie Layout bei exakt 390 × 844 CSS-Pixeln |
+| Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, acht stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, BOS-Disclosure, Logout sowie öffentliche und authentifizierte mobile Bedienung bei exakt 390 × 844 CSS-Pixeln |
 | Fachabnahme | kompletter Nachrichten-, Anhang-, PDF-, ETB-/TBB- und Restore-Ablauf |
 | Betrieb | kontinuierliche Readiness, Logs, Restarts, Kapazität und Backup-Alter |
 
@@ -48,10 +48,19 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   verständlicher Trennung von Anwendung, Administration und öffentlichen
   Inhalten,
 - HTML-escaping und Base-Path-Auflösung der gemeinsamen Sitzungsleiste,
-  öffentliche und authentifizierte Navigation, aktive Markierung, kompakte
-  Bereichsauswahl, Dirty-Form-Guard, eindeutige Abmeldeformulare,
-  POST-/CSRF-Vertrag, lokale Session-Zerstörung bei DB-Fehlern, unveränderte
-  Nicht-HTML-Antworten sowie SID-gebundene Statusänderung,
+  öffentliche und authentifizierte Navigation, aktive Markierung, dauerhaft
+  sichtbarer Sidebar-Modus, separater kompakter BOS-Disclosure-Modus,
+  Zwei-`iframe`-Vertrag, mobile Vollviewport-Zeilen, Statusfragment,
+  rollenabhängige Textaktionen und sichere
+  `estab:show-content`-Kommunikation, Dirty-Form-Guard, eindeutige
+  Abmeldeformulare, POST-/CSRF-Vertrag, lokale Session-Zerstörung bei
+  DB-Fehlern, unveränderte Nicht-HTML-Antworten sowie SID-gebundene
+  Statusänderung,
+- rollenabhängige Zuordnung der drei Hinweistondateien, validierte
+  gleich-originige WAV-URLs, die einmalige Initialisierung und Fortschreibung
+  der `old_que_*`-Basiswerte, Auslösung ausschließlich bei einer späteren
+  Erhöhung, ausdrückliche Browserfreigabe, langlebiges Audioelement und
+  sichtbare Status-/Fehlerrückmeldung,
 - Nachrichten-IDs, Rollen-/Objektregeln, Empfänger-Tokens, erlaubte
   Workflow-Aktionen, POST-/CSRF-Verträge, Prepared Statements, sichere
   UTF-8-/Legacy-Entity-Ausgabe und die inerten Payloads Quotes, Ampersand,
@@ -311,10 +320,10 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
 - formulargebundene Beibehaltung eines erlaubten geschützten Zielbereichs
   durch Auswahl, Validierungsfehler und erfolgreiche Anmeldung,
 - exakt eine escaped Sitzungsleiste mit Name, Kürzel, Funktion, Rolle und
-  Abmeldebutton auf Root-Einstieg, Hauptansicht, Frameset-Navigation,
+  Abmeldebutton auf Root-Einstieg, Hauptansicht, vollhoher Anwendungs-Sidebar,
   direkten Status-/Zählerseiten, Nachrichtenübersicht, Nachweisung,
-  Übungsleitung, Anhängen, Vordrucken, Kategorien sowie ETB/TBB; eingebettete
-  Hilfsframes vermeiden Duplikate und anonyme Fachseiten bleiben ohne
+  Übungsleitung, Anhängen, Vordrucken, Kategorien sowie ETB/TBB; der rechte
+  `mainframe` vermeidet Duplikate und anonyme Fachseiten bleiben ohne
   vorgetäuschte eStab-Identität,
 - HTTP 405 für Logout per GET, HTTP 403 bei fehlendem oder falschem CSRF,
   Cookie-/Sitzungsende und 303-Rückleitung bei Erfolg sowie die
@@ -352,7 +361,8 @@ Für eine abweichende öffentliche URL gilt derselbe
 Er weist nach:
 
 - vollständige Erreichbarkeit des sichtbaren Root-Menüs, seiner lokalen
-  Piktogramme, des Nachrichtenvordruck-Framesets sowie aller verlinkten
+  Piktogramme, des aus `vorgaben` und `mainframe` bestehenden
+  Nachrichtenvordruck-Arbeitsbereichs sowie aller verlinkten
   `stabinfo`-Frames, Inhaltsseiten und lokalen Bilder,
 - HTTP 403 für dateisysteminterne Vierfach-Controller, den vollständigen
   `/4fbak/`-Baum, Spracharrays, alte Admin-Generatoren,
@@ -364,7 +374,7 @@ Er weist nach:
 - HTTP 400 für entfernte Buttonarten, Arrays, unbekannte Farben sowie
   übergroße Schrift-, Breiten- und Textwerte,
 - ausschließlich bekannte Hilfetextschlüssel und einen anonym neutralen
-  Statusframe ohne Rollenbelegung.
+  Statusendpunkt ohne Rollenbelegung.
 
 Der Test und der statische Vertrag stellen zusätzlich sicher, dass unter
 `stabinfo/` keine `http://`-Fremdressource verblieben ist und alle zwölf
@@ -395,21 +405,56 @@ und gibt es weder in Logs noch Diagnosen aus. Das Kürzel muss bei manuellen
 Wiederholungsläufen neu und höchstens sechs Zeichen lang sein.
 
 Der Ablauf klickt die getrennten Wege der Übersicht, öffnet die Neuanlage im
-Legacy-Frameset, füllt das Formular aus und prüft in acht Abschnitten:
+Zwei-`iframe`-Nachrichtenarbeitsbereich, füllt das Formular aus und prüft
+insbesondere:
 
 - Anonyme Nutzer sehen alle acht Bereiche in stabiler Reihenfolge, genau eine
   aktive Markierung und sichere Anmeldeziele; direkte Zugriffe auf geschützte
   Endpunkte bleiben mit HTTP 403 geschützt.
-- Der Frame-Refresh verwendet die richtige Origin und keinen schema-relativen
-  Doppel-Slash. Im vollständigen Frameset ist genau eine sichtbare
-  Sitzungsleiste mit Name, Kürzel, Funktion, Rolle und Logout vorhanden.
-- Die native kompakte Auswahl „Bereich wechseln“ lässt sich real öffnen; der
-  Link „Übersicht“ verlässt das Frameset im Top-Level-Kontext.
+- Der Arbeitsbereich enthält in stabiler Reihenfolge ausschließlich die
+  vollhohe `vorgaben`-Sidebar und den `mainframe`. Der gemeinsame Refresh
+  verwendet die richtige Origin und keinen schema-relativen Doppel-Slash. In
+  der Sidebar ist genau eine sichtbare Sitzungsidentität mit Name, Kürzel,
+  Funktion, Rolle und Logout vorhanden; der rechte Inhaltsframe dupliziert sie
+  nicht.
+- Statuskarte, Identität, Navigation und Aktionen folgen ohne Überlappung
+  aufeinander. Arbeitszähler, Serverzeit, Onlinebelegung und die aktuelle
+  Funktion sind vorhanden; die rollenabhängigen Fachaktionen sind echte,
+  mindestens 44 Pixel große Textbuttons. Ein positiver Arbeitszähler besitzt
+  eine dauerhaft sichtbare Warnstufe.
+- Alle zehn Bereichs- und Dienstlinks sind ohne Disclosure dauerhaft sichtbar,
+  mindestens 44 Pixel groß und besitzen weder eine eigene horizontale noch
+  vertikale Scrollfläche. Bei `1440 × 1000`, `1280 × 720` und `700 × 760`
+  CSS-Pixeln ist das Sidebar-Dokument die einzige vertikale Scrollfläche und
+  bleibt horizontal innerhalb seiner Breite.
+- Ein echter Statusfragment-Refresh ersetzt genau eine Statuskarte und bewahrt
+  sowohl die Scrollposition des Sidebar-Dokuments als auch den Tastaturfokus
+  auf einem externen Aktionsbutton und auf dem ersetzten Hinweiston-Schalter.
+  Ein simulierter HTTP-503-Abruf markiert die weiter bedienbare Karte als nicht
+  aktuell; der folgende erfolgreiche Abruf meldet die Erholung. Statisch sind
+  zusätzlich der begrenzte `AbortController`-Timeout sowie serverseitige
+  `partial`-/`unavailable`-Zustände abgesichert.
+  Der Link „Übersicht“ verlässt den Zwei-`iframe`-Arbeitsbereich weiterhin im
+  Top-Level-Kontext.
+- Die eingebundene Audioquelle ist gleich-originig, besitzt einen
+  RIFF-/WAVE-Container und meldet PCM als Format. Der Hinweiston-Schalter
+  startet deaktiviert, zeigt stets eine sichtbare Rückmeldung und fordert erst
+  nach einem echten Klick die Wiedergabe an. Der Lauf simuliert eine
+  `NotAllowedError`-Blockade, prüft den ehrlichen Zustand nach Reload,
+  synchronisiert Ein/Aus über ein `StorageEvent` und injiziert einen echten
+  Statusrefresh mit Auslösemarker. Zwei verzögert aufgelöste Wiedergaben werden
+  währenddessen per erneutem Klick beziehungsweise `StorageEvent` abgebrochen
+  und dürfen den ausgeschalteten Zustand nicht zurückdrehen. Dabei bleibt
+  dasselbe langlebige Audioelement erhalten. Der Test ersetzt
+  `HTMLMediaElement.play()` kontrolliert durch Fehler, auflösbare Promises
+  beziehungsweise einen Zähler und belegt damit den Wiedergabeaufruf, nicht
+  physische Hörbarkeit.
 - Ein geändertes Nachrichtenfeld löst beim globalen Bereichswechsel den
   nativen Bestätigungsdialog aus: Ablehnen bewahrt Seite und Wert,
   anschließendes Bestätigen öffnet die Übersicht.
 - Reale Klicks auf die BOS-Karte und eine statische BOS-Unterseite behalten
-  die kompakte Navigation; der Rückweg zur Übersicht funktioniert.
+  den separaten kompakten Disclosure-Modus; das reale Öffnen seiner
+  Bereichsauswahl und der Rückweg zur Übersicht funktionieren.
 - Reale Klicks auf die ETB-Karte öffnen ohne neuen Tab den richtigen Pfad und
   markieren `incident-log` als aktiven Bereich.
 - Ein echter Mausklick auf `Abmelden` im ETB beendet die Sitzung und stellt
@@ -421,7 +466,11 @@ Legacy-Frameset, füllt das Formular aus und prüft in acht Abschnitten:
 - Mit einem über das DevTools-Protokoll exakt auf 390 × 844 CSS-Pixel
   gesetzten Viewport bleiben zusätzlich Leiste, Kopf, Login-Karte und
   Einspalten-Karten innerhalb der Breite; Navigationslinks sind erreichbar und
-  zentrale Login-Schaltflächen mindestens 44 Pixel hoch.
+  zentrale Login-Schaltflächen mindestens 44 Pixel hoch. Im authentifizierten
+  Nachrichtenarbeitsbereich stehen Sidebar und Inhalt als zwei volle
+  Viewport-Zeilen untereinander. Eine echte Rollenaktion scrollt vollständig
+  zum geladenen Inhalt; der sichtbare, mindestens 44 × 44 Pixel große Button
+  „Menü“ führt vollständig zur Sidebar zurück.
 
 Soweit Chrome bereits steuerbar ist, legt der Test bei Fehlern `failure.png`
 und ein kennwortfreies `state.json` an. Bei Browser-Startfehlern oder einem
@@ -533,11 +582,16 @@ im Kommando stehen.
 ## Fachliche Abnahme
 
 Der automatisierte Browser-Akzeptanztest belegt die technische Bedienmechanik
-von Menü, Frameset, Sitzung und Logout. Er ersetzt nicht die nachfolgende
-fachliche Abnahme mit der organisationsspezifischen Empfängermatrix. Als
-fachliche Referenz dient das
+von Menü, Zwei-`iframe`-Arbeitsbereich, Sidebar, Sitzung und Logout. Er ersetzt
+nicht die nachfolgende fachliche Abnahme mit der organisationsspezifischen
+Empfängermatrix. Als fachliche Referenz dient das
 [historische Anwendungshandbuch](../doku/Handbuch_eStab.pdf); seine alten
 Installations- und Sicherheitskapitel gelten nicht.
+
+Insbesondere beweist die Automation keine physische Hörbarkeit. Sie prüft
+PCM-WAV-Daten, Opt-in-Zustand, sichtbaren Rückfall und den angeforderten
+Wiedergabeaufruf; Lautsprecher, Lautstärke, Betriebssystem-, Browser- und
+Geräteeinstellungen müssen manuell abgenommen werden.
 
 Mindestens zu prüfen:
 
@@ -548,6 +602,12 @@ Mindestens zu prüfen:
   Prioritätsstufe, Empfängern und Inhalt erfassen,
 - Weiterleitung, Sichtung, Quittierung, Statuswechsel und Listenfilter über
   zwei unterschiedliche Funktionssitzungen nachvollziehen,
+- für Fernmelder, Si und mindestens eine Stab-/FB-Sitzung den
+  Hinweiston-Schalter im vorgesehenen Browser ausdrücklich aktivieren, den
+  Testton tatsächlich anhören, nach der stillen ersten
+  Warteschlangenmessung jeweils eine reale Erhöhung erzeugen und den passenden
+  Hinweis genau einmal physisch hören; mit ausgeschaltetem oder browserseitig
+  blockiertem Ton zusätzlich die sichtbare Rückmeldung kontrollieren,
 - globale, funktionsbezogene und persönliche Kategorie anlegen, zuweisen,
   suchen und entfernen,
 - zulässigen Anhang hochladen, Vorschau/Download prüfen und eine unzulässige

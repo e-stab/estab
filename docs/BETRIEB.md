@@ -168,8 +168,9 @@ Die Anwendung hat zwei getrennte Anmeldebereiche:
 
 1. Funktionsbenutzer wählen auf `/` unmittelbar „Mit bestehendem Konto
    anmelden“ oder – sofern freigeschaltet – „Neues Konto anlegen“. Das
-   Frameset öffnet direkt das passende Formular. Neue Kennwörter werden
-   mit `password_hash()` gespeichert; ein beim Altimport vorhandenes
+   Nachrichtenvordruck-Modul öffnet das passende Formular direkt in seinem
+   rechten `iframe` namens `mainframe`. Neue Kennwörter werden mit
+   `password_hash()` gespeichert; ein beim Altimport vorhandenes
    Klartextkennwort wird beim ersten erfolgreichen Login transparent ersetzt.
 2. `/4fadm` verwendet den in `.env` konfigurierten Admin-Benutzer und das
    separate Admin-Secret als HTTP Basic Auth. Der im historischen Pfad
@@ -192,9 +193,21 @@ Die gemeinsame Navigation führt in derselben Reihenfolge durch Übersicht,
 Nachrichtenvordruck, Meldungsübersicht, Vordrucke, Einsatztagebuch,
 Technisches Betriebsbuch, Nachweisung und BOS-Info. Der aktuelle Bereich ist
 hervorgehoben; alle internen Ziele ersetzen die aktuelle Ansicht und erzeugen
-keine zusätzlichen Tabs. In der linken Frameset-Navigation steht dieselbe
-Auswahl platzsparend unter „Bereich wechseln“ bereit. Der BOS-Bereich hält sie
-beim Wechsel seiner statischen Informationsseiten dauerhaft sichtbar.
+keine zusätzlichen Tabs. Der Nachrichtenvordruck verwendet genau zwei moderne
+`iframe`-Elemente: die vollhohe linke `vorgaben`-Sidebar und den rechten
+`mainframe`. In der Sidebar folgen auf die Statuskarte die Sitzungsidentität
+mit Logout, alle dauerhaft sichtbaren Bereichslinks und die zur angemeldeten
+Rolle passenden Textbuttons für Fachaktionen. Die frühere aufklappbare Auswahl
+„Bereich wechseln“ und ihre kleine eigene Scrollfläche entfallen. Bei geringer
+Höhe scrollt ausschließlich das gesamte Sidebar-Dokument, sodass Status,
+Navigation und Aktionen in einer durchgehenden Reihenfolge erreichbar bleiben.
+Der BOS-Bereich verwendet unabhängig davon weiterhin seinen kompakten
+Disclosure-Modus im eigenen Navigationsframe. Bis einschließlich 672
+CSS-Pixel Breite werden Sidebar und Fachinhalt als zwei jeweils viewporthohe
+Zeilen angeordnet. Das Ausführen einer rollenabhängigen Fachaktion wechselt
+automatisch zur Inhaltszeile und setzt den Tastaturfokus auf den Inhaltsframe.
+Der dort sichtbare, mindestens 44 Pixel große Button „Menü“ führt samt Fokus
+zurück zur Sidebar.
 
 Vor der Anmeldung zeigt die Leiste „Nicht angemeldet“ und den Anmeldebutton.
 Geschützte Bereiche und Karten bleiben zur Orientierung sichtbar, tragen die
@@ -206,16 +219,63 @@ Browser-Tab erhalten; parallele Anmeldefenster überschreiben ihr Ziel nicht.
 separater technischer Zugang markiert.
 
 Nach erfolgreicher Anmeldung erscheint auf der Übersicht, im
-Anwendungs-Frameset, auf den Administrationsseiten und auf allen ausgewählten
-eigenständigen HTML-Modulen die Sitzungsleiste. Sie nennt Name, Kürzel,
-Funktion und Rolle, damit vor jeder fachlichen Aktion sichtbar ist, in welchem
-Kontext gearbeitet wird. Der Button „Abmelden“ sendet einen CSRF-geschützten
-POST, beendet die gesamte eStab-Browsersitzung und führt mit HTTP 303 zum
-Anmeldeeinstieg zurück. Mehrere Tabs teilen sich dieselbe Browsersitzung und
-sind danach gemeinsam abgemeldet. Werden Status- oder Zählerframe direkt in
-einem Tab geöffnet, zeigen sie die kompakte Leiste selbst; im vollständigen
-Frameset erscheint sie zur besseren Bedienbarkeit nur einmal in der
-Navigation. Hilfe- und Problem-Popups zeigen die Leiste im jeweiligen Fenster.
+Nachrichtenarbeitsbereich, auf den Administrationsseiten und auf allen
+ausgewählten eigenständigen HTML-Modulen die Sitzungsleiste. Sie nennt Name,
+Kürzel, Funktion und Rolle, damit vor jeder fachlichen Aktion sichtbar ist, in
+welchem Kontext gearbeitet wird. Der Button „Abmelden“ sendet einen
+CSRF-geschützten POST, beendet die gesamte eStab-Browsersitzung und führt mit
+HTTP 303 zum Anmeldeeinstieg zurück. Mehrere Tabs teilen sich dieselbe
+Browsersitzung und sind danach gemeinsam abgemeldet. Direkt geöffnete
+Status-/Zählerseiten zeigen die kompakte Leiste selbst; im
+Nachrichtenarbeitsbereich befindet sich die einzige sichtbare Identität in der
+Sidebar. Hilfe- und Problem-Popups zeigen die Leiste im jeweiligen Fenster.
+
+Die Statuskarte am Anfang der Sidebar vereint den rollenabhängigen
+Arbeitszähler, Datum und Serverzeit sowie die Onlinebelegung aller
+konfigurierten Funktionen. Die Anwendung lädt regelmäßig ausschließlich das
+authentifizierte Statusfragment
+`/4fach/vorgaben.php?fragment=status` nach und ersetzt nur diese Karte. Das
+Sidebar-Dokument, die Bereichslinks und die Aktionsbuttons werden dabei nicht
+neu geladen; Tastaturfokus und Scrollposition bleiben auch dann erhalten, wenn
+der Hinweiston-Schalter fokussiert ist. Ein Zähler größer null bleibt bis zur
+Abarbeitung dauerhaft kontrastreich markiert. Schlägt die Datenbankabfrage
+fehl, zeigt der Zähler „–“; Identität, Navigation und Aktionen bleiben
+verfügbar, der letzte erfolgreiche `old_que_*`-Basiswert bleibt unverändert und
+die Karte meldet „Statusdaten unvollständig“ beziehungsweise „Statusdaten nicht
+verfügbar“. Ein HTTP-, Parse- oder Netzwerkfehler kennzeichnet die bestehende
+Karte sichtbar als „Status nicht aktuell“ mit Uhrzeit des letzten erfolgreichen
+Abrufs. Jeder Abruf wird spätestens nach 4,5 bis 15 Sekunden abgebrochen, damit
+ein hängender Request spätere Aktualisierungen nicht dauerhaft blockiert. Der
+nächste vollständige Abruf entfernt die Warnung und meldet die Erholung.
+
+Ist `conf_4f["sounds"]` aktiviert, bietet die Statuskarte für Fernmelder, Si
+und Stab/FB den Schalter „Hinweistöne aktivieren“ an. Die Zustimmung ist pro
+Browser ausdrücklich erforderlich und wird lokal im Browser gespeichert; ein
+frischer Browser startet mit ausgeschaltetem Ton. Ausschalten wird sofort mit
+anderen offenen Tabs derselben Origin synchronisiert. Nach einem Reload wird
+eine gespeicherte Einschaltabsicht so lange als „erneut freigeben“ angezeigt,
+bis in diesem Tab wirklich eine Wiedergabe gelungen ist. Die Anwendung
+verwendet die mitgelieferten gleich-originigen PCM-WAV-Dateien
+`4fach/audio/notify_aw.wav`, `notify_si.wav` und `notify_stab.wav`. Das
+langlebige Audioelement liegt außerhalb des regelmäßig ersetzten
+Statusfragments und bleibt deshalb über Aktualisierungen hinweg erhalten.
+Browserblockaden, ein nicht unterstütztes Format sowie der Ein-/Aus-Zustand
+werden direkt unter dem Schalter sichtbar gemeldet. Eine Zunahme lässt die
+Statuskarte zusätzlich aufleuchten; solange Meldungen offen sind, bleibt
+bereits der Zähler selbst hervorgehoben. Ausschalten oder eine Änderung aus
+einem anderen Tab verwirft auch einen noch laufenden Wiedergabeversuch; dessen
+spätes Ergebnis kann den Ton nicht unbemerkt wieder aktivieren.
+
+Die Warteschlangenerkennung führt pro Sitzung genau einen Basiswert
+`old_que_aw`, `old_que_si` beziehungsweise `old_que_stab`. Die erste
+erfolgreiche Messung initialisiert ihn ohne Hinweis; jede weitere erfolgreiche
+Messung aktualisiert ihn, aber nur eine Erhöhung fordert genau einmal die
+rollenabhängige Wiedergabe an. Ein unveränderter oder kleinerer Wert löst
+nichts aus. Ist die Warteschlange vorübergehend nicht messbar, bleibt der
+letzte erfolgreiche Basiswert erhalten. Diese Auslöse- und Browsermechanik ist
+automatisiert geprüft. Für die Betriebsabnahme muss der Ton nach ausdrücklicher
+Aktivierung auf jedem vorgesehenen Browser und Endgerät zusätzlich tatsächlich
+angehört werden; die Automation kann physische Hörbarkeit nicht beweisen.
 
 Wurde in einem dafür markierten Formular ein Wert geändert oder eine Datei
 ausgewählt, fragt die Oberfläche vor einem globalen Bereichswechsel oder

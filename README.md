@@ -62,8 +62,8 @@ das Kennwort erscheint weder in Argumentliste noch Log.
 | --- | --- | --- |
 | `/` | Einstieg, direkter Anmeldebutton und Modulübersicht | öffentlich bis zur Modulanmeldung |
 | `/4fach/index.php` | öffentlicher Einstieg in die vollständige Anwendung mit Kontoauswahl und Benutzeranmeldung | Fachfunktionen erst mit eStab-Sitzung |
-| `/4fach/logout.php` | zentrale Abmeldung aus Sitzungsleiste und Frameset | eStab-Sitzung, ausschließlich POST mit Session-CSRF |
-| `/4fach/status.php` | Statusframe | anonym nur neutraler Hinweis, Rollenbelegung erst mit eStab-Sitzung |
+| `/4fach/logout.php` | zentrale Abmeldung aus Sitzungsleiste und Nachrichtenarbeitsbereich | eStab-Sitzung, ausschließlich POST mit Session-CSRF |
+| `/4fach/status.php` | eigenständige Statusansicht für Kompatibilitätsaufrufe | anonym nur neutraler Hinweis, Rollenbelegung erst mit eStab-Sitzung |
 | `/4fach/katgoedt.php` | globale, Funktions- und persönliche Kategorien | eStab-Sitzung, Rollen-/Objektprüfung und CSRF für Änderungen |
 | `/4fadm/admin.php` | Administration | separates HTTP Basic Auth |
 | `/4fadm/system_status.php` | ausführlicher Laufzeitstatus | HTTP Basic Auth |
@@ -101,25 +101,64 @@ akzeptiert. Die Administration ist als eigener technischer Zugang markiert.
 Eine gemeinsame Navigation führt in stabiler Reihenfolge durch Übersicht,
 Nachrichtenvordruck, Meldungsübersicht, Vordrucke, ETB, TBB, Nachweisung und
 BOS-Info. Sie markiert den aktiven Bereich und öffnet interne Ziele immer im
-selben Browserkontext. Im Legacy-Frameset steht dieselbe Auswahl kompakt unter
-„Bereich wechseln“ bereit. Öffentliche Seiten zeigen zusätzlich den Zustand
-„Nicht angemeldet“ und einen Anmeldebutton; geschützte Ziele leiten
-verständlich zum Login.
+selben Browserkontext. Der Nachrichtenarbeitsbereich besteht aus genau zwei
+modernen `iframe`-Elementen: links der vollhohen `vorgaben`-Sidebar und rechts
+dem `mainframe` für die Fachansicht. In der Sidebar stehen sämtliche
+Bereichslinks dauerhaft sichtbar; es gibt weder die frühere aufklappbare
+Auswahl „Bereich wechseln“ noch eine darin verschachtelte Scrollfläche. Nur
+das vollständige Sidebar-Dokument scrollt bei Bedarf. Der BOS-Bereich behält
+für seinen eigenen schmalen Navigationsframe den separaten kompakten
+Disclosure-Modus. Öffentliche Seiten zeigen zusätzlich den Zustand „Nicht
+angemeldet“ und einen Anmeldebutton; geschützte Ziele leiten verständlich zum
+Login. Bis einschließlich 672 CSS-Pixel Breite stehen Sidebar und Fachinhalt
+als zwei jeweils viewporthohe Zeilen untereinander. Eine rollenabhängige
+Fachaktion scrollt automatisch zum Inhalt und setzt den Tastaturfokus auf
+dessen Frame; der dort eingeblendete, mindestens 44 Pixel große Button „Menü“
+führt samt Fokus wieder zur Sidebar.
 
-Nach erfolgreicher Anmeldung zeigen der Einstieg, das Haupt-Frameset, die
-Administrationsseiten und alle geschützten eigenständigen HTML-Module die
-gemeinsame Leiste mit Name, Kürzel, Funktion und abgeleiteter Rolle. Der
-Button „Abmelden“ beendet die lokale Sitzung auch bei einer nachgelagerten
-Datenbankstörung, löscht die Anwendungscookies und führt anschließend zum
-Anmeldeeinstieg zurück. Direkt geöffnete Status-/Zählerseiten erhalten dieselbe
-kompakte Anzeige; innerhalb des Framesets bleibt sie bewusst einmalig in der
-Navigation sichtbar. Formulare mit ungespeicherten Fach- oder
+Nach erfolgreicher Anmeldung zeigen der Einstieg, der
+Nachrichtenarbeitsbereich, die Administrationsseiten und alle geschützten
+eigenständigen HTML-Module die gemeinsame Leiste mit Name, Kürzel, Funktion und
+abgeleiteter Rolle. Der Button „Abmelden“ beendet die lokale Sitzung auch bei
+einer nachgelagerten Datenbankstörung, löscht die Anwendungscookies und führt
+anschließend zum Anmeldeeinstieg zurück. Oberhalb von Identität, Logout,
+Bereichslinks und rollenabhängigen Textbuttons bündelt die Sidebar den
+passenden Arbeitszähler, Serverzeit und Onlinebelegung in einer Statuskarte.
+Nur dieses Statusfragment wird regelmäßig aktualisiert; Fokus und
+Scrollposition des Sidebar-Dokuments bleiben dabei auch am Hinweiston-Schalter
+erhalten. Offene Meldungen bleiben unabhängig vom einmaligen Tonsignal
+dauerhaft farblich hervorgehoben. Ist die Statusdatenbank vorübergehend nicht
+erreichbar, bleiben Navigation und Aktionen bedienbar, der nicht messbare
+Zähler erscheint als „–“ und die Karte kennzeichnet ihre Daten als
+unvollständig beziehungsweise nicht verfügbar. Fehlgeschlagene oder hängende
+Browserabrufe wechseln sichtbar auf „Status nicht aktuell“ und werden zeitlich
+begrenzt; der nächste erfolgreiche Abruf meldet die Erholung. Direkt geöffnete
+Status-/Zählerseiten erhalten weiterhin eine kompakte Anzeige. Formulare mit
+ungespeicherten Fach- oder
 Administrationseingaben warnen vor einem globalen Bereichswechsel oder
 Logout. Hilfe- und Problemfenster prüfen dabei auch ungespeicherte Eingaben im
 zugehörigen Hauptfenster und führen globale Navigation beziehungsweise Logout
 dort aus. Auf Administrationsseiten wird der separate HTTP-Basic-Benutzer
 sichtbar und klar von einem gegebenenfalls zusätzlich angemeldeten
 eStab-Funktionskonto getrennt.
+
+Für Fernmelder-, Si- und Stab-/FB-Warteschlangen bleiben die
+rollenabhängigen Hinweise als mitgelieferte, gleich-originige PCM-WAV-Dateien
+erhalten. Die erste erfolgreiche Messung setzt nur einmalig den jeweiligen
+Sitzungsbasiswert `old_que_aw`, `old_que_si` oder `old_que_stab`; erst eine
+spätere Erhöhung löst genau einen Hinweis aus. Hinweistöne sind pro Browser
+zunächst ausgeschaltet und müssen über „Hinweistöne aktivieren“ ausdrücklich
+freigegeben werden. Die Ein-/Aus-Entscheidung gilt browserweit; jeder neu
+geladene Tab weist eine noch ausstehende Wiedergabefreigabe ehrlich aus, bis
+eine Testwiedergabe dort erfolgreich war. Das langlebige Audioelement liegt
+außerhalb des ausgetauschten Statusfragments. Ein sichtbarer Status samt
+hervorgehobener Statuskarte bleibt als Rückmeldung erhalten, falls Audio
+ausgeschaltet, blockiert oder nicht unterstützt ist. Der echte Browsertest
+belegt Blockade, Reload, tabübergreifende Einstellung, automatische Auslösung
+und das sichere Abbrechen noch laufender Wiedergabeversuche. Er belegt
+außerdem den authentifizierten mobilen Ablauf bei 390 × 844 CSS-Pixeln; ob der
+Ton auf dem Zielgerät physisch hörbar ist, bleibt Bestandteil der manuellen
+Abnahme.
 
 Interne PHP-Controller, Spracharrays, `*.inc.php` und der vollständige
 `/4fbak/`-Baum sind keine direkten Webendpunkte und werden von Apache mit

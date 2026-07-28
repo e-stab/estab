@@ -6,8 +6,10 @@ Sicherheitsgrenze der Benutzeranmeldung. `navigation.php` definiert Bereiche,
 Reihenfolge, Zugriffsklassen, aktive Routen und sichere Anmeldeziele zentral.
 `session_ui.php` injiziert die gemeinsame, escaped Navigation und
 Sitzungsanzeige ausschließlich in ausgewählte HTML-Controller; `logout.php`
-kapselt das Beenden und Auditieren der Sitzung. `image_button.php` validiert
-und rendert die weiterhin öffentlich benötigten Legacy-Bildbuttons.
+kapselt das Beenden und Auditieren der Sitzung. `sidebar.php` rendert die
+zusammengefasste Status-, Belegungs- und Hinweistonkarte des
+Nachrichtenarbeitsbereichs. `image_button.php` validiert und rendert die
+weiterhin öffentlich benötigten Legacy-Bildbuttons.
 
 ## Sicherheits- und Kompatibilitätsentscheidungen
 
@@ -79,7 +81,8 @@ und rendert die weiterhin öffentlich benötigten Legacy-Bildbuttons.
   dieselbe Schicht „Nicht angemeldet“, den Anmeldebutton und die gemeinsame
   Navigation, ohne eine Identität vorzutäuschen. Das Abmelden ist ein
   eigenständiges POST-Formular mit dem CSRF-Token der erneuerten Sitzung und
-  `target="_top"` für das Frameset. Der zentrale Endpunkt akzeptiert weder GET
+  `target="_top"` für den übergeordneten Arbeitsbereich beziehungsweise
+  Browserkontext. Der zentrale Endpunkt akzeptiert weder GET
   noch fehlende oder falsche Tokens und antwortet nach Erfolg mit HTTP 303.
   Binärantworten und Health-Endpunkte werden nicht durch automatische globale
   Ausgabe verändert. Die ausgewählten Administrationscontroller erhalten die
@@ -88,10 +91,21 @@ und rendert die weiterhin öffentlich benötigten Legacy-Bildbuttons.
   escaped als Administrationskontext angezeigt und niemals als eStab-Rolle
   übernommen. Der Ausgabehandler lässt explizite Plain-Text-/JSON-Fehler und
   Redirects unverändert; ein normaler Nutztext kann den eindeutigen
-  HTML-Marker der Leiste nicht unterdrücken. Im
-  zusammengesetzten Frameset bleibt nur die kompakte, persistente
-  Navigationsleiste mit „Bereich wechseln“ sichtbar; der Hauptframe entfernt
-  seine Standalone-Leiste vor der ersten Darstellung.
+  HTML-Marker der Leiste nicht unterdrücken. Der Nachrichtenarbeitsbereich
+  besteht aus der durchgehenden `vorgaben`-Sidebar und dem rechten `mainframe`.
+  Die Sidebar bündelt Arbeitszähler, Serverzeit,
+  Onlinebelegung, Identität, Logout, zehn dauerhaft sichtbare Bereichslinks
+  ohne Disclosure sowie rollenabhängige Fachaktionen. Der Hauptframe entfernt
+  seine Standalone-Leiste vor der ersten Darstellung. Das regelmäßig
+  ausgetauschte Statusfragment lässt Navigation, wiederhergestellten Fokus,
+  Scrollposition und das langlebige PCM-WAV-Audioelement bestehen. Positive
+  Zähler bleiben hervorgehoben; fehlgeschlagene vorbereitete Statusabfragen
+  melden `partial`/`unavailable` und lassen die Navigation intakt. Ein
+  begrenzter Poll markiert HTTP-/Netzfehler als `stale`; unveränderte
+  Live-Regionen bleiben als DOM-Knoten erhalten. Hörbare Hinweise benötigen je
+  Tab eine erfolgreiche Browserfreigabe; die browserweite Ein-/Aus-Absicht
+  wird über `localStorage` synchronisiert und verspätete `play()`-Ergebnisse
+  werden generationsgebunden verworfen.
 - Bearbeitungsformulare markieren sich ausdrücklich mit
   `data-estab-dirty-guard`. Nur bei geändertem Zustand bestätigt der Browser
   einen globalen Bereichswechsel oder Logout; lokale Speichern-, Abbrechen-

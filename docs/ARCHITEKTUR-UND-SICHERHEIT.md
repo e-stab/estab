@@ -147,16 +147,89 @@ angezeigt und nie in eine Fachrolle übersetzt.
 
 Die Leiste wird nicht aus dem globalen Bootstrap ausgegeben: Binärdownloads,
 PNG-Renderer, Readiness und Fehlerantworten bleiben dadurch unverändert. Im
-Frameset wird sie kompakt mit einer nativen, standardmäßig geschlossenen
-Bereichsauswahl gerendert; eigenständige Fachmodule und der Root-Einstieg
-erhalten die vollständige Variante. Direkt aufgerufene Status-/Zählerframes
-zeigen sie ebenfalls kompakt; ihre vom Frameset explizit als eingebettet
-markierten Aufrufe verzichten auf Duplikate. Der rechte Hauptframe entfernt
-seine für Standalone-Aufrufe vorgesehene Leiste im zusammengesetzten Frameset
-unmittelbar per statischem Inline-Guard, sodass genau eine sichtbare Identität
-und ein Logout verbleiben. Der BOS-Bereich behält die kompakte Navigation im
-persistenten Navigationsframe; aktive Hilfe-/Problem-Popups verwenden dieselbe
-Ausgabegrenze.
+Nachrichtenarbeitsbereich bilden genau zwei moderne `iframe`-Elemente in einem
+CSS-Grid: die vollhohe linke `vorgaben`-Sidebar und der rechte `mainframe`.
+Die früheren separaten Counter- und Statusframes werden nicht mehr eingebettet.
+Der rechte Inhaltsframe entfernt seine für Standalone-Aufrufe vorgesehene
+Leiste weiterhin unmittelbar per statischem Inline-Guard, sodass genau eine
+sichtbare Identität und ein Logout in der Sidebar verbleiben. Eigenständige
+Fachmodule und der Root-Einstieg erhalten die vollständige Variante; direkt
+aufgerufene Status-/Zählerseiten zeigen die kompakte Variante selbst.
+
+Die Sidebar besitzt bewusst einen eigenen Navigationsmodus. Sie rendert zuerst
+eine Statuskarte mit rollenabhängigem Arbeitszähler, Serverzeit und
+Onlinebelegung, danach Identität und CSRF-geschützten Logout, sämtliche zehn
+Bereichs- und Dienstlinks und schließlich echte rollenabhängige Textbuttons für
+die Fachaktionen. Diese Links stehen ohne `<details>` oder
+„Bereich wechseln“-Disclosure dauerhaft bereit. Die Bereichsnavigation und
+Aktionsgruppen erzeugen keine eigenen Scrollcontainer; bei geringer
+Viewport-Höhe ist das vollständige Sidebar-Dokument die einzige vertikale
+Scrollfläche. Der BOS-Bereich behält davon getrennt seinen kompakten,
+aufklappbaren Disclosure-Modus im persistenten Navigationsframe. Aktive
+Hilfe-/Problem-Popups verwenden weiterhin dieselbe Ausgabegrenze.
+
+Bis einschließlich `42rem` beziehungsweise 672 CSS-Pixel wechselt das
+Workspace-Grid auf zwei untereinanderliegende Zeilen mit jeweils `100dvh`:
+zuerst die Sidebar, danach der Fachinhalt. Nach einer rollenabhängigen
+Fachaktion sendet die gleich-originige Sidebar ausschließlich das feste
+Signal `estab:show-content` an den Elternkontext. Dieser prüft Origin, Quelle
+und Signalwert, scrollt den Inhaltsframe in den Viewport, setzt den Fokus auf
+ihn und blendet dort den mindestens 44 Pixel großen Button „Menü“ ein. Der
+Button scrollt die Sidebar wieder vollständig in den Viewport und setzt den
+Fokus auf ihren Frame.
+
+`app/sidebar.php` erzeugt die semantische Statuskarte und den begrenzten
+Aktualisierungscode. Der angemeldete GET
+`/4fach/vorgaben.php?fragment=status` liefert ausschließlich das neue
+Statusfragment; ein anonymer Aufruf wird abgewiesen. Die Sidebar ersetzt nur
+diesen Knoten und lädt weder Identität, Navigation noch Aktionsformular neu.
+Dadurch bleiben Dokument-Scrollposition und Tastaturfokus bei der regelmäßigen
+Aktualisierung erhalten; wird der mitersetzte Hinweiston-Schalter fokussiert,
+stellt die Aktualisierungslogik seinen Fokus gezielt am neuen Knoten wieder
+her. Die Statusabfragen verwenden vorbereitete `mysqli`-Operationen statt der
+beendenden Legacy-Helfer. Verbindungs-, Belegungs- oder Queue-Fehler werden
+isoliert behandelt, sodass die dauerhafte Navigation weiter gerendert wird.
+Der Renderer unterscheidet deshalb serverseitig `current`, `partial` und
+`unavailable`. HTTP-, Parser- und Netzwerkfehler des Pollers setzen zusätzlich
+den clientseitigen Zustand `stale` mit dem Zeitpunkt des letzten erfolgreichen
+Abrufs. Ein `AbortController` beendet jeden Abruf vor dem nächsten Poll
+beziehungsweise spätestens nach 15 Sekunden. Unveränderte Queue-, Freshness-
+und Sound-Live-Regionen werden in das neue Fragment übernommen, statt
+periodisch neu angesagt zu werden; nur echte Zustandswechsel ändern ihren Text.
+
+Die rollenabhängigen Warteschlangenprofile ordnen Fernmelder
+`old_que_aw`/`notify_aw.wav`, Si `old_que_si`/`notify_si.wav` und Stab
+beziehungsweise FB `old_que_stab`/`notify_stab.wav` zu. Es werden nur
+validierte, gleich-originige PCM-WAV-Assets unter `/4fach/audio/` verwendet.
+Die erste erfolgreiche Messung initialisiert den betreffenden
+`old_que_*`-Sitzungswert, ohne einen Hinweis zu erzeugen. Jede spätere
+erfolgreiche Messung ersetzt den Basiswert; nur eine Erhöhung markiert das
+Antwortfragment genau einmal. Gleichstand und Rückgang bleiben still, bei
+nicht verfügbarer Messung bleibt der letzte erfolgreiche Basiswert erhalten.
+Die Basis wird auch bei serverseitig deaktivierten Tönen fortgeschrieben,
+damit ein späteres Einschalten keine alten Zuwächse nachmeldet. Ein positiver
+Zähler trägt unabhängig vom einmaligen Zuwachsmarker einen dauerhaften
+`has-work`-Zustand als nichtakustische Handlungsanzeige.
+
+Der Browser beginnt ohne lokale Freigabe mit ausgeschalteten Hinweistönen.
+Erst der explizite Schalter in der Statuskarte startet eine Testwiedergabe und
+speichert die Ein-/Aus-Entscheidung originbezogen in `localStorage`. Offene
+Tabs übernehmen Änderungen über das `storage`-Ereignis. Eine gespeicherte
+Einschaltabsicht wird nach einem Reload zunächst als blockiert dargestellt;
+erst eine in diesem Dokument tatsächlich erfolgreiche Wiedergabe setzt den
+lokalen Zustand auf bereit. Das einzige
+`audio`-Element liegt außerhalb des austauschbaren Statusfragments und bleibt
+deshalb über alle Statusaktualisierungen hinweg erhalten. Das neue Fragment
+liefert nur den Auslösemarker; die langlebige Browserlogik spielt ihn
+ausschließlich bei aktivierter Freigabe ab. Ein sichtbarer, per
+`aria-live` ausgegebener Zustands- beziehungsweise Fehlertext und die
+hervorgehobene Statuskarte sind der nichtakustische Rückfall, wenn Ton
+ausgeschaltet, vom Browser blockiert oder nicht unterstützt wird. Ein
+monotoner Generationszähler verwirft asynchrone `play()`-Ergebnisse, sobald der
+Nutzer oder ein anderer Tab den Zustand inzwischen geändert hat. Automatische
+Tests können Dateiformat, Zustandswechsel, parallele beziehungsweise spät
+auflösende Wiedergabeversuche und angeforderte Wiedergabe, nicht aber die
+physische Hörbarkeit auf Lautsprecher oder Endgerät belegen.
 
 Schreibformulare, bei denen ein globaler Wechsel Daten verlieren kann,
 aktivieren explizit `data-estab-dirty-guard`. Die gemeinsame Leiste vergleicht
@@ -212,10 +285,10 @@ Die Apache-Konfiguration:
   eingeschränkte Browser-Berechtigungen und eine Content Security Policy.
 
 Die Content Security Policy erlaubt derzeit wegen der historischen Oberfläche
-noch Inline-Styles und Inline-Skripte. Die aktive Frame-Navigation löst Ziele
-ohne `eval()` über `parent[...]` auf; `script-src` benötigt deshalb kein
-`unsafe-eval` mehr. Die Richtlinie reduziert Angriffsfläche, ist aber kein
-vollständiger XSS-Schutz.
+noch Inline-Styles und Inline-Skripte. Der Refresh des
+Zwei-`iframe`-Arbeitsbereichs löst die benannten Ziele ohne `eval()` über
+`parent[...]` auf; `script-src` benötigt deshalb kein `unsafe-eval` mehr. Die
+Richtlinie reduziert Angriffsfläche, ist aber kein vollständiger XSS-Schutz.
 
 Historische `stabinfo`-Seiten benötigen keine Fremdressourcen mehr. Zwölf
 extern geladene „kleiner oder gleich“-Grafiken sind durch semantischen lokalen
@@ -233,13 +306,20 @@ syntaktische PNG-Dateien mit `nosniff`.
 `info.php` escaped die beiden begrenzten Textparameter als HTML.
 `language/german/helptext.php` liefert nur vorhandene Schlüssel aus dem
 intern eingebundenen Hilfetextarray; das Array selbst ist per HTTP gesperrt.
-Der Frame `/4fach/status.php` bleibt für den Anmeldebildschirm erreichbar,
-zeigt anonym aber nur einen neutralen Hinweis. Erst eine vollständig
-validierte Anwendungssitzung lädt Datenbank- und Rollenstatus.
+Die eigenständige Ansicht `/4fach/status.php` bleibt für
+Kompatibilitätsaufrufe erreichbar, zeigt anonym aber nur einen neutralen
+Hinweis. Erst eine vollständig validierte Anwendungssitzung lädt Datenbank-
+und Rollenstatus. Der in die Sidebar eingebundene aktuelle Status verwendet
+stattdessen das ebenfalls sitzungsgeschützte Fragment von `vorgaben.php`.
 
 Alte direkte Upload-Endpunkte sind mit HTTP 410 deaktiviert. Der aktive
 Anhangpfad validiert Dateiname, MIME-Typ, Größe und Metadaten, reserviert Namen
 transaktional und verwendet für schreibende Formulare ein Session-CSRF-Token.
+Auch erst beim Abruf oder Lesen eines vorbereiteten Resultsets gemeldete
+MariaDB-Deadlocks und Lock-Timeouts werden als Datenbankfehler normalisiert,
+zurückgerollt und innerhalb der begrenzten Reservierungsversuche erneut
+ausgeführt; sie können daher weder als PHP-Fatal enden noch eine falsche
+Folgenummer erzeugen.
 Die Dateiauslieferung akzeptiert nur freigegebene Bereiche, Basenames und
 Dateitypen, löst Pfade unterhalb des erwarteten Wurzelverzeichnisses auf und
 verwirft ausbrechende Symlinks. Direkter Zugriff auf hochgeladene Bytes bleibt

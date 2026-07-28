@@ -13,23 +13,51 @@ Geprüft werden:
 - die sichtbaren, anonym verständlich zum Login führenden Modulkarten sowie
   HTTP 403 bei direkten Zugriffen auf geschützte Fachendpunkte;
 - das Anlegen und unmittelbare Anmelden eines neuen Funktionskontos im
-  Legacy-Frameset;
+  Zwei-`iframe`-Nachrichtenarbeitsbereich;
 - genau eine sichtbare, dauerhaft verfügbare Session-Bar im gesamten
-  Anwendungs-Frameset sowie Name, Kürzel, Funktion, abgeleitete Rolle,
-  gemeinsame Navigation und Abmeldebutton;
+  Nachrichtenarbeitsbereich sowie Name, Kürzel, Funktion, abgeleitete Rolle,
+  gemeinsame Navigation und Abmeldebutton in der vollhohen
+  `vorgaben`-Sidebar; der rechte `mainframe` enthält keine Duplikate;
+- ausschließlich die beiden modernen `iframe`-Elemente `vorgaben` und
+  `mainframe`, eine Statuskarte mit rollenabhängigem Zähler, Serverzeit und
+  Onlinebelegung sowie echte rollenabhängige Textbuttons;
 - die acht Kernbereiche der gemeinsamen Navigation in stabiler Reihenfolge
   sowie genau ein zum geöffneten Bereich passendes `aria-current="page"` und
   Top-Level-Ziele für alle Kernlinks;
-- das reale Öffnen der kompakten Bereichsauswahl und die Rückkehr aus dem
-  Anwendungs-Frameset über den sichtbaren Link `Übersicht`;
+- alle zehn Bereichs- und Dienstlinks dauerhaft sichtbar und mit mindestens
+  44 × 44 CSS-Pixeln Bedienfläche, ohne „Bereich wechseln“-Disclosure und ohne
+  eigene Scrollfläche; der sichtbare Link `Übersicht` verlässt den
+  Nachrichtenarbeitsbereich im Top-Level-Kontext;
+- die vollhohe Sidebar bei `1440x1000`, `1280x720` und `700x760`
+  CSS-Pixeln: Status, Identität, Navigation und Aktionen überlappen nicht,
+  passen horizontal und verwenden bei Bedarf ausschließlich die einzige
+  dokumentweite Sidebar-Scrollfläche;
+- den authentifizierten Nachrichtenarbeitsbereich bei `390x844` CSS-Pixeln:
+  Sidebar und Inhalt bilden zwei volle Viewport-Zeilen, eine echte Rollenaktion
+  scrollt samt Fokus vollständig zum geladenen Inhaltsframe und der sichtbare,
+  mindestens 44 × 44 Pixel große Button „Menü“ führt samt Fokus vollständig
+  zur Sidebar zurück;
+- einen echten Statusfragment-Refresh, der genau die Statuskarte ersetzt und
+  Fokus eines Aktionsbuttons und des ersetzten Hinweiston-Schalters sowie die
+  Scrollposition der Sidebar erhält; ein simulierter HTTP-503-Abruf setzt
+  sichtbar „Status nicht aktuell“, lässt die Navigation bedienbar und der
+  folgende erfolgreiche Abruf meldet die Erholung;
+- die gleich-originige Audioquelle als RIFF/WAVE mit PCM-Format, den zunächst
+  deaktivierten Schalter zur ausdrücklichen Browserfreigabe, seine sichtbare
+  Zustands-/Fehlerrückmeldung und das langlebige Audioelement außerhalb des
+  ersetzten Statusfragments; eine simulierte Browserblockade bleibt nach
+  Reload als noch nicht freigegeben erkennbar, ein `StorageEvent` synchronisiert
+  Ein/Aus und ein Statusrefresh mit Auslösemarker fordert automatisch genau
+  eine Wiedergabe an; verzögert auflösende Wiedergabeversuche können per
+  erneutem Klick oder `StorageEvent` sicher abgebrochen werden;
 - ein geändertes Nachrichtenfeld, der native Verlustwarnungsdialog, der nach
   Ablehnen unveränderte Formularwert und der erst nach Bestätigen ausgeführte
   Bereichswechsel;
 - interne Karten der angemeldeten Übersicht ohne neues Browser-Tab;
 - das Öffnen der Infosammlung BOS durch einen echten Klick auf ihre Root-Karte,
-  die persistente kompakte Navigation beim Wechsel einer statischen
-  BOS-Inhaltsseite, das reale Öffnen ihrer Bereichsauswahl und die Rückkehr
-  über `Übersicht`;
+  den separat beibehaltenen kompakten Disclosure-Modus beim Wechsel einer
+  statischen BOS-Inhaltsseite, das reale Öffnen seiner Bereichsauswahl und die
+  Rückkehr über `Übersicht`;
 - das Öffnen des geschützten Einsatztagebuchs durch einen echten Klick auf
   seine Root-Karte, den richtigen Pfad und den aktiven Navigationsbereich
   `incident-log`;
@@ -146,10 +174,23 @@ Bestandsloginformular geprüft; die erfolgreiche Browseranmeldung verwendet
 weiterhin die Neuanlage eines wegwerfbaren Testkontos. Die HTTP-Integration
 weist die erfolgreiche Anmeldung eines vorhandenen Kontos separat nach.
 
-Der Browserlauf prüft die vollständigen Klickpfade im Desktop-Viewport, das
-Kartenraster zusätzlich an vier Zwischenbreiten und die zentrale öffentliche
-Übersicht bei exakt `390x844` CSS-Pixeln. Das belegt Navigation,
-Anmeldeeinstieg, überlappungsfreie Karten samt Hover und Bediengrößen auf
-schmalen Displays. Die fachinterne Bedienung sämtlicher historischer Formulare
-im mehrspaltigen Legacy-Frameset wird damit nicht als vollständig mobil
-optimiert oder fachlich abgenommen behauptet.
+Der Browserlauf prüft die vollständigen Klickpfade im Desktop-Viewport, die
+Sidebar zusätzlich bei `1440x1000`, `1280x720`, `700x760` und authentifiziert
+bei `390x844` CSS-Pixeln, das Kartenraster an vier Zwischenbreiten und die
+zentrale öffentliche Übersicht ebenfalls bei exakt `390x844` CSS-Pixeln. Das
+belegt Navigation, Anmeldeeinstieg, den Zwei-`iframe`-Arbeitsbereich ohne
+verschachtelte Scrollflächen, die mobilen Vollviewport-Zeilen samt
+Rollenaktionswechsel und „Menü“-Rückweg, überlappungsfreie Karten samt Hover
+und Bediengrößen auf schmalen Displays.
+
+Für den Audiotest ersetzt der Lauf `HTMLMediaElement.play()` kontrolliert
+zunächst durch eine abgewiesene Promise und danach durch einen Aufrufzähler.
+Damit weist er PCM-WAV-Datei, expliziten Opt-in, Browserblockade, Reload- und
+tabübergreifenden Zustandswechsel, sichtbaren Rückfall sowie manuell und
+automatisch angeforderte Wiedergabe und das racesichere Verwerfen verspäteter
+Ergebnisse nach, aber nicht, dass Lautsprecher, Lautstärke, Browser und
+Betriebssystem den Ton physisch hörbar ausgeben. Diese Hörprobe bleibt
+verpflichtender Bestandteil der manuellen Fachabnahme. Die fachinterne
+Bedienung sämtlicher historischer Formulare im rechten Inhalts-`iframe` wird
+ebenfalls nicht als vollständig mobil optimiert oder fachlich abgenommen
+behauptet.
