@@ -170,6 +170,16 @@ assert_body_absent() {
     fi
 }
 
+assert_body_regex() {
+    pattern=$1
+    description=${2:-$pattern}
+    if ! grep -Eq -- "$pattern" "$body"; then
+        printf 'HTTP smoke: response does not match %s\n' "$description" >&2
+        sed -n '1,80p' "$body" >&2
+        exit 1
+    fi
+}
+
 assert_export_zip() {
     expected_marker=${1:-}
     "$compose_engine" compose run --rm --no-deps -T \
@@ -870,7 +880,137 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "csrf_token=$sidebar_csrf_token" \
     --data-urlencode 'fm_eingang_x=1' \
     "$base_url/4fach/mainindex.php"
-assert_body 'name="task" value="FM-Eingang'
+assert_body 'name="task" value="FM-Eingang_Sichter"'
+assert_body 'name="16_11" value="16_11_bl"'
+assert_body 'name="16_gncopy" type="radio"'
+assert_body 'value="16_12_gn"'
+
+# Reproduce the 0.9.26c attachment regression through the real authenticated
+# A/W form. Missing inactive controls such as 06_befweg and an initially empty
+# 12_anhang are deliberately not invented here: this request mirrors what a
+# browser submits. The blue and green recipient selections, every active
+# message value and the sighter note must survive upload and selection in the
+# returned form itself.
+aw_workflow_csrf_token=$(csrf_from_body)
+aw_content_marker="AW_ATTACHMENT_FORM_STATE_$$"
+aw_note_marker="AW_ATTACHMENT_NOTE_STATE_$$"
+aw_counterpart_marker='AW-GEGENSTELLE-STATE'
+aw_transport_marker='AW-BEFOERDERUNG-STATE'
+aw_address_marker='AW-ANSCHRIFT-STATE'
+aw_sender_marker='AW-ABSENDER-STATE'
+aw_author_marker='awz001'
+aw_received_at='281915Jul2026'
+aw_written_at='1917'
+aw_reviewed_at='281918Jul2026'
+aw_upload_file=$work_dir/aw-attachment-state.txt
+printf '%s\n' "$aw_content_marker" >"$aw_upload_file"
+
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$aw_workflow_csrf_token" \
+    --data-urlencode 'anhang_plus_x=1' \
+    --data-urlencode 'task=FM-Eingang_Sichter' \
+    --data-urlencode '01_medium=Fu' \
+    --data-urlencode "01_datum=$aw_received_at" \
+    --data-urlencode "01_zeichen=$legacy_registration_code" \
+    --data-urlencode "05_gegenstelle=$aw_counterpart_marker" \
+    --data-urlencode '06_befwegausw=' \
+    --data-urlencode '07_durchspruch=S' \
+    --data-urlencode "08_befhinweis=$aw_transport_marker" \
+    --data-urlencode '08_befhinwausw=Fax' \
+    --data-urlencode '09_vorrangstufe=sss' \
+    --data-urlencode "10_anschrift=$aw_address_marker" \
+    --data-urlencode '11_gesprnotiz=' \
+    --data-urlencode "12_inhalt=$aw_content_marker" \
+    --data-urlencode "12_abfzeit=$aw_written_at" \
+    --data-urlencode "13_abseinheit=$aw_sender_marker" \
+    --data-urlencode "14_zeichen=$aw_author_marker" \
+    --data-urlencode '14_funktion=A/W' \
+    --data-urlencode "15_quitdatum=$aw_reviewed_at" \
+    --data-urlencode "15_quitzeichen=$legacy_registration_code" \
+    --data-urlencode '16_11=16_11_bl' \
+    --data-urlencode '16_gncopy=16_12_gn' \
+    --data-urlencode "17_vermerke=$aw_note_marker" \
+    "$base_url/4fach/mainindex.php"
+assert_body 'Liste der verfügbaren Dateien'
+assert_body_absent 'Warning:'
+
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/anhang.php?ah_upload_x=1"
+assert_body 'Anhang hochladen'
+assert_session_bar "$legacy_registration_name" "$legacy_registration_code" \
+    'A/W' 'Fernmelder'
+aw_attachment_csrf_token=$(csrf_from_body)
+aw_reserved_name=$(sed -n \
+    's/.*name="fs_nextfilename" value="\([A-Za-z0-9_-][A-Za-z0-9_-]*\)".*/\1/p' \
+    "$body" | head -n 1)
+aw_upload_timestamp=$(sed -n \
+    's/.*name="fs_timestamp" value="\([A-Za-z0-9][A-Za-z0-9]*\)".*/\1/p' \
+    "$body" | head -n 1)
+if ! printf '%s' "$aw_reserved_name" | grep -Eq '^[A-Za-z]{2}[0-9]{4,}$'; then
+    printf 'HTTP smoke: A/W attachment reservation missing\n' >&2
+    exit 1
+fi
+if ! printf '%s' "$aw_upload_timestamp" |
+    grep -Eq '^[0-9]{6}[A-Za-z]{3}[0-9]{4}$'; then
+    printf 'HTTP smoke: A/W attachment timestamp missing\n' >&2
+    exit 1
+fi
+
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --form "csrf_token=$aw_attachment_csrf_token" \
+    --form "fs_nextfilename=$aw_reserved_name" \
+    --form 'fs_comment=A/W form-state integration attachment' \
+    --form "fs_shortname=$legacy_registration_code" \
+    --form "fs_timestamp=$aw_upload_timestamp" \
+    --form 'absenden_x=1' \
+    --form "upload=@$aw_upload_file;type=text/plain;filename=aw-state.txt" \
+    "$base_url/4fach/anhang.php"
+aw_stored_attachment=$aw_reserved_name.txt
+assert_body "$aw_reserved_name"
+
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/download.php?area=attachment&file=$aw_stored_attachment"
+if ! cmp -s "$aw_upload_file" "$body"; then
+    printf 'HTTP smoke: A/W attachment content differs after upload\n' >&2
+    exit 1
+fi
+
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/anhang.php?ah_auswahl_x=1&lfd_901=$aw_stored_attachment"
+assert_body 'name="task" value="FM-Eingang_Anhang_Sichter"'
+assert_body_regex 'name="01_medium" value="Fu" type="radio"[^>]*checked="checked"' \
+    'preserved A/W medium'
+assert_body "name=\"01_datum\" value=\"$aw_received_at\""
+assert_body "name=\"01_zeichen\" value=\"$legacy_registration_code\""
+assert_body "name=\"05_gegenstelle\" value=\"$aw_counterpart_marker\""
+assert_body_regex 'name="07_durchspruch" value="S" type="radio"[^>]*checked="checked"' \
+    'preserved A/W message type'
+assert_body "name=\"08_befhinweis\" value=\"$aw_transport_marker\""
+assert_body_regex 'name="08_befhinwausw" value="Fax" type="radio"[^>]*checked="checked"' \
+    'preserved A/W transport selection'
+assert_body 'name="09_vorrangstufe" value="sss"'
+assert_body_regex "name=\"10_anschrift\">$aw_address_marker</textarea>" \
+    'preserved A/W address'
+assert_body 'name="12_inhalt"'
+assert_body "$aw_content_marker"
+assert_body "name=\"12_anhang\" value=\"$aw_stored_attachment;\""
+assert_body "name=\"12_abfzeit\" value=\"$aw_written_at\""
+assert_body "name=\"13_abseinheit\" value=\"$aw_sender_marker\""
+assert_body "name=\"14_zeichen\" value=\"$aw_author_marker\""
+assert_body 'name="14_funktion" value="A/W"'
+assert_body "name=\"15_quitdatum\" value=\"$aw_reviewed_at\""
+assert_body "name=\"15_quitzeichen\" value=\"$legacy_registration_code\""
+assert_body_regex 'name="16_11" value="16_11_bl" type="checkbox"[^>]*checked="checked"' \
+    'preserved blue recipient'
+assert_body_regex 'name="16_gncopy" type="radio"[^>]*checked="checked"[^>]*value="16_12_gn"' \
+    'preserved green-copy recipient'
+assert_body_regex "name=\"17_vermerke\"[^>]*>$aw_note_marker</textarea>" \
+    'preserved submitted sighter note control'
+assert_body_absent 'Warning:'
+assert_session_bar "$legacy_registration_name" "$legacy_registration_code" \
+    'A/W' 'Fernmelder'
 
 # An active account may not select a different function and thereby acquire a
 # different role while its stored assignment remains unchanged.

@@ -179,9 +179,15 @@ $assert(!estab_attachment_database_error_is_retryable(1048), 'invalid data error
 
 $attachmentSource = file_get_contents(__DIR__ . '/../../app/attachment.php');
 $controllerSource = file_get_contents(__DIR__ . '/../../4fach/anhang.php');
+$messageFormSource = file_get_contents(__DIR__ . '/../../4fach/4fachform.php');
 $schemaSource = file_get_contents(__DIR__ . '/../../docker/db/init/10-schema.sql');
 $verifySource = file_get_contents(__DIR__ . '/../../docker/db/verify.sql');
-$assert(is_string($attachmentSource) && is_string($controllerSource), 'attachment sources readable');
+$assert(
+    is_string($attachmentSource)
+        && is_string($controllerSource)
+        && is_string($messageFormSource),
+    'attachment and message-form sources readable'
+);
 $assert(is_string($schemaSource) && is_string($verifySource), 'container schema checks readable');
 $assert(
     preg_match('/(?:mysql_query|query_table(?:_iu)?|->query\s*\()/i', $attachmentSource . $controllerSource) !== 1,
@@ -227,6 +233,27 @@ $assert(
         && str_contains($controllerSource, 'estab_csrf_require_post ($_SERVER, $_POST)')
         && str_contains($controllerSource, 'session_status () === PHP_SESSION_NONE'),
     'active upload form and handler enforce CSRF with a safe session guard'
+);
+$assert(
+    str_contains($controllerSource, 'function estab_attachment_post_scalar')
+        && str_contains($controllerSource, 'array_key_exists ($key, $post)')
+        && str_contains($controllerSource, 'is_string ($post [$key])')
+        && substr_count($controllerSource, 'estab_attachment_post_scalar ($_POST,') >= 22,
+    'attachment form state does not safely accept missing or non-scalar browser controls'
+);
+$assert(
+    str_contains($controllerSource, '[1-5][1-4])_gn')
+        && str_contains($controllerSource, '(?:_(bl))?')
+        && str_contains($controllerSource, '$recipientPattern')
+        && !str_contains($controllerSource, 'preg_match ("/\\\\A([^_]+)_([^_]+)_([^_]+)\\\\z/D"'),
+    'attachment recipient restore is not constrained to real matrix positions and copy colours'
+);
+$assert(
+    str_contains($controllerSource, '($formdata ["10_anschrift"] ?? "") === ""')
+        && str_contains($messageFormSource, 'value=\\"16_".$m.$n."_bl\\"')
+        && str_contains($messageFormSource, 'if (!$this->feld[17])')
+        && str_contains($messageFormSource, 'name=\\"17_vermerke\\"'),
+    'returned A/W attachment form can lose address, blue/green selection or sighter notes'
 );
 $assert(
     preg_match('/estab_attachment_html\s*\(\s*\$file\s*\[\s*"comment"/', $controllerSource) === 1,

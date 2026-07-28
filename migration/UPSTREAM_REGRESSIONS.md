@@ -18,9 +18,12 @@ erhalten. Der nachfolgende Arbeitsstand übernimmt ausschließlich
 `4fach/anhang.php` aus dem ebenfalls verifizierten Tag `ver0.9.26b`; der
 0.9.26c-Versionsmarker in `4fcfg/config.inc.php` bleibt bestehen.
 
-Diese Entscheidung wird später durch einen Integrationstest abgesichert: Ein
-ausgefüllter Nachrichtenvordruck muss einen Anhang-Upload durchlaufen, ohne
-auch nur ein Formularfeld oder eine Empfängerzuordnung zu verlieren.
+Diese Entscheidung ist durch einen echten HTTP-Integrationstest abgesichert:
+Ein authentifizierter A/W-Benutzer füllt den Nachrichtenvordruck mit markanten
+Werten, Vermerk sowie blauer und grüner Empfängerzuordnung, lädt einen Anhang
+hoch und wählt ihn aus. Der Test prüft anschließend die zurückgelieferten
+Formularfelder und ausgewählten Matrix-Controls selbst; er speist die Werte
+nicht erst beim späteren Speichern erneut ein.
 
 ## 0.9.26b/c: fehlende BOS-Infosammlung
 

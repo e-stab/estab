@@ -569,8 +569,12 @@ if ( debug == true ){
     if (isset ($_GET["ah_auswahl_x"])) {
       $formdata ["12_anhang"]   = $anhang;
       $formdata ["12_inhalt"]  .= $inhalt;
-      $formdata ["01_zeichen"]  = $_SESSION ["vStab_kuerzel"];
-      $formdata ["10_anschrift"]  = $conf_4f ["anschrift"];
+      if (($formdata ["01_zeichen"] ?? "") === "") {
+        $formdata ["01_zeichen"] = $_SESSION ["vStab_kuerzel"];
+      }
+      if (($formdata ["10_anschrift"] ?? "") === "") {
+        $formdata ["10_anschrift"] = $conf_4f ["anschrift"];
+      }
     }
     if (sichter_online()) {
       $form = new nachrichten4fach ($formdata, "FM-Eingang_Anhang", "");
@@ -784,36 +788,49 @@ require_once ("./db_operation.php");  // Datenbank operationen
   /***************************************************************************\
 
   \***************************************************************************/
+  function estab_attachment_post_scalar ($post, $key) {
+    if (!is_array ($post) || !array_key_exists ($key, $post)) {
+      return "";
+    }
+    return is_string ($post [$key]) ? $post [$key] : "";
+  }
+
   function store_formdata () {
-  	 if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big>store_formdata</big></big><br>";  }
-    $_SESSION["01_medium"]       = $_POST["01_medium"];
-    $_SESSION["01_datum"]        = $_POST["01_datum"];
-    $_SESSION["01_zeichen"]      = $_POST["01_zeichen"];
-    $_SESSION["05_gegenstelle"]  = $_POST["05_gegenstelle"];
-    $_SESSION["06_befweg"]       = $_POST["06_befweg"];
-    $_SESSION["06_befwegausw"]   = $_POST["06_befwegausw"];
-    $_SESSION["07_durchspruch"]  = $_POST["07_durchspruch"];
-    $_SESSION["08_befhinweis"]   = $_POST["08_befhinweis"];
-    $_SESSION["08_befhinwausw"]  = $_POST["08_befhinwausw"];
-    $_SESSION["09_vorrangstufe"] = $_POST["09_vorrangstufe"];
-    $_SESSION["10_anschrift"]    = $_POST["10_anschrift"];
-    $_SESSION["11_gesprnotiz"]   = $_POST["11_gesprnotiz"] ?? "";
-    $_SESSION["12_anhang"]       = $_POST["12_anhang"];
-    $_SESSION["12_inhalt"]       = $_POST["12_inhalt"];
-    $_SESSION["12_abfzeit"]      = $_POST["12_abfzeit"];
-    $_SESSION["13_abseinheit"]   = $_POST["13_abseinheit"];
-    $_SESSION["14_zeichen"]      = $_POST["14_zeichen"];
-    $_SESSION["14_funktion"]     = $_POST["14_funktion"];
-    $_SESSION["15_quitdatum"]    = $_POST["15_quitdatum"] ?? "";
-    $_SESSION["15_quitzeichen"]  = $_POST["15_quitzeichen"] ?? "";
-    $_SESSION["16_gncopy"]       = $_POST["16_gncopy"] ?? "";
+    if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big>store_formdata</big></big><br>";  }
+    $_SESSION["01_medium"]       = estab_attachment_post_scalar ($_POST, "01_medium");
+    $_SESSION["01_datum"]        = estab_attachment_post_scalar ($_POST, "01_datum");
+    $_SESSION["01_zeichen"]      = estab_attachment_post_scalar ($_POST, "01_zeichen");
+    $_SESSION["05_gegenstelle"]  = estab_attachment_post_scalar ($_POST, "05_gegenstelle");
+    $_SESSION["06_befweg"]       = estab_attachment_post_scalar ($_POST, "06_befweg");
+    $_SESSION["06_befwegausw"]   = estab_attachment_post_scalar ($_POST, "06_befwegausw");
+    $_SESSION["07_durchspruch"]  = estab_attachment_post_scalar ($_POST, "07_durchspruch");
+    $_SESSION["08_befhinweis"]   = estab_attachment_post_scalar ($_POST, "08_befhinweis");
+    $_SESSION["08_befhinwausw"]  = estab_attachment_post_scalar ($_POST, "08_befhinwausw");
+    $_SESSION["09_vorrangstufe"] = estab_attachment_post_scalar ($_POST, "09_vorrangstufe");
+    $_SESSION["10_anschrift"]    = estab_attachment_post_scalar ($_POST, "10_anschrift");
+    $_SESSION["11_gesprnotiz"]   = estab_attachment_post_scalar ($_POST, "11_gesprnotiz");
+    $_SESSION["12_anhang"]       = estab_attachment_post_scalar ($_POST, "12_anhang");
+    $_SESSION["12_inhalt"]       = estab_attachment_post_scalar ($_POST, "12_inhalt");
+    $_SESSION["12_abfzeit"]      = estab_attachment_post_scalar ($_POST, "12_abfzeit");
+    $_SESSION["13_abseinheit"]   = estab_attachment_post_scalar ($_POST, "13_abseinheit");
+    $_SESSION["14_zeichen"]      = estab_attachment_post_scalar ($_POST, "14_zeichen");
+    $_SESSION["14_funktion"]     = estab_attachment_post_scalar ($_POST, "14_funktion");
+    $_SESSION["15_quitdatum"]    = estab_attachment_post_scalar ($_POST, "15_quitdatum");
+    $_SESSION["15_quitzeichen"]  = estab_attachment_post_scalar ($_POST, "15_quitzeichen");
+    $_SESSION["16_gncopy"]       = estab_attachment_post_scalar ($_POST, "16_gncopy");
     for ($m=1; $m<=5; $m++){
       for ($n=1; $n<=4; $n++){
-        if (isset ($_POST["16_".$m.$n])) $_SESSION["16_".$m.$n] = $_POST["16_".$m.$n] ;
+        $recipientKey = "16_".$m.$n;
+        $recipientValue = estab_attachment_post_scalar ($_POST, $recipientKey);
+        if ($recipientValue !== "") {
+          $_SESSION[$recipientKey] = $recipientValue;
+        } else {
+          unset ($_SESSION[$recipientKey]);
+        }
 //        echo "key==="."16_".$m.$n."  SESSION=====".$_SESSION["16_".$m.$n]."<br>";
       }
     }
-    $_SESSION["17_vermerke"] = $_POST["17_vermerke"] ?? "";
+    $_SESSION["17_vermerke"] = estab_attachment_post_scalar ($_POST, "17_vermerke");
   }
 
   /***************************************************************************\
@@ -846,22 +863,37 @@ require_once ("./db_operation.php");  // Datenbank operationen
     if (isset ($_SESSION["15_quitdatum"])){    $data["15_quitdatum"]    = $_SESSION["15_quitdatum"];    unset ($_SESSION["15_quitdatum"]); }    else { $data["15_quitdatum"]   = "";}
     if (isset ($_SESSION["15_quitzeichen"])){  $data["15_quitzeichen"]  = $_SESSION["15_quitzeichen"];  unset ($_SESSION["15_quitzeichen"]); }  else { $data["15_quitzeichen"] = "";}
 
+    $gncopypos = "";
     if (isset ($_SESSION["16_gncopy"]) &&
-        preg_match ("/\\A([^_]+)_([^_]+)_([^_]+)\\z/D", (string) $_SESSION["16_gncopy"], $gncopyParts)){
-      list (, $gncopyord, $gncopypos, $gncopyfkt) = $gncopyParts;
+        is_string ($_SESSION["16_gncopy"]) &&
+        preg_match ("/\\A16_([1-5][1-4])_gn\\z/D", $_SESSION["16_gncopy"], $gncopyParts)){
+      $gncopypos = $gncopyParts [1];
     }
-	$data ["16_empf"] = "";
+    unset ($_SESSION["16_gncopy"]);
+		$data ["16_empf"] = "";
     for ($m=1; $m<=5; $m++){
       for ($n=1; $n<=4; $n++){
-        if ( isset ( $_SESSION ["16_".$m.$n] ) ) {
-           list ($ord, $pos, $fkt) = explode ("_", $_SESSION ["16_".$m.$n]);
-           $data ["16_empf"] .= $empf_matrix [$m][$n]["fkt"]."_".$fkt.",";
+        $recipientKey = "16_".$m.$n;
+        if ( isset ( $_SESSION [$recipientKey] ) ) {
+          $recipientValue = is_string ($_SESSION [$recipientKey])
+            ? $_SESSION [$recipientKey]
+            : "";
+          $recipientPattern = "/\\A16_".$m.$n."(?:_(bl))?\\z/D";
+          if (preg_match ($recipientPattern, $recipientValue, $recipientParts)) {
+            $recipientFunction = (string) ($empf_matrix [$m][$n]["fkt"] ?? "");
+            $copyColor = $recipientParts [1] ?? "";
+            if ($recipientFunction !== "") {
+              $data ["16_empf"] .= $recipientFunction."_".$copyColor.",";
+            }
+          }
 //           echo "SESSION====".$_SESSION ["16_".$m.$n]." data=== ".$data ["16_empf"]."<br>";
-           unset ($_SESSION ["16_".$m.$n]);
+          unset ($_SESSION [$recipientKey]);
         }
-        if (isset ($gncopypos) && ($m.$n == $gncopypos)) {
-          $data ["16_empf"] .= $empf_matrix [$m][$n]["fkt"]."_".$gncopyfkt.",";
-          unset ($_SESSION["16_gncopy"]);
+        if ((string) ($m.$n) === $gncopypos) {
+          $recipientFunction = (string) ($empf_matrix [$m][$n]["fkt"] ?? "");
+          if ($recipientFunction !== "") {
+            $data ["16_empf"] .= $recipientFunction."_gn,";
+          }
         }
       }
     }

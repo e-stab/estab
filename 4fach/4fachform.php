@@ -1404,7 +1404,7 @@ class nachrichten4fach {
     \****************************************************************************/
     echo "<td  valign=\"TOP\" style=\"text-align: left; width: 350px; background-color: ".$this->bg[17].";\">Vermerke:<br>\n";
 
-    if (((($this->formdata["17_vermerke"]) != "" )) or (!$this->feld[17])) {
+    if (!$this->feld[17]) {
       echo nl2br ($this->safe_message_value ("17_vermerke"));
     } else {
       echo "<textarea cols=\"40\" rows=\"10\" name=\"17_vermerke\" ".$param.">".$this->safe_message_value ("17_vermerke")."</textarea>";
