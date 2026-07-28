@@ -8,6 +8,15 @@ if [ "${ESTAB_ADMIN_HTTP_TEST_ALLOW_MUTATION:-false}" != "true" ]; then
     exit 1
 fi
 
+project_name=${COMPOSE_PROJECT_NAME:-estab}
+case "$project_name" in
+    estab_ci | estab_ci_*) ;;
+    *)
+        echo 'Admin HTTP: refusing mutation outside an estab_ci project' >&2
+        exit 1
+        ;;
+esac
+
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$repo_root"
 
@@ -44,11 +53,13 @@ second_cookie=$work_dir/second-admin-cookies.txt
 admin_curl_config=$work_dir/admin-curl.conf
 original_matrix=$work_dir/original-matrix.txt
 restored_matrix=$work_dir/restored-matrix.txt
+original_standard_matrix=$work_dir/original-standard-matrix.txt
+observed_standard_matrix=$work_dir/observed-standard-matrix.txt
+active_before_load=$work_dir/active-before-load.txt
 users_before=$work_dir/users-before.txt
 users_after=$work_dir/users-after.txt
 backup_created=false
 
-project_name=${COMPOSE_PROJECT_NAME:-estab}
 test_number=$(printf '%s' "$project_name" | cksum | awk '{print $1}')
 case "$test_number" in
     '' | *[!0-9]*)
@@ -57,8 +68,10 @@ case "$test_number" in
         ;;
 esac
 backup_table="estab_admin_matrix_${test_number}"
+standard_backup_table="estab_admin_standard_${test_number}"
 print_backup_table="estab_admin_print_${test_number}"
 marker="ESTAB_ADMIN_RESET_${test_number}_$$"
+rollback_trigger="estab_admin_standard_fail_${test_number}_$$"
 
 escaped_admin_credentials=$(printf '%s:%s' "$admin_user" "$admin_password" |
     sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
@@ -101,6 +114,7 @@ db_sql()
 }
 
 matrix_auto_increment=1
+standard_matrix_auto_increment=1
 message_auto_increment=1
 protocol_auto_increment=1
 message_floor=0
@@ -113,9 +127,12 @@ cleanup()
     set +e
     if [ "$backup_created" = true ]; then
         db_sql >/dev/null 2>&1 <<SQL
+DROP TRIGGER IF EXISTS \`${rollback_trigger}\`;
 START TRANSACTION;
 DELETE FROM \`nv_empfmtx\`;
 INSERT INTO \`nv_empfmtx\` SELECT * FROM \`${backup_table}\`;
+DELETE FROM \`nv_empfmtx_standard\`;
+INSERT INTO \`nv_empfmtx_standard\` SELECT * FROM \`${standard_backup_table}\`;
 DELETE FROM \`nv_nachrichten\`
  WHERE \`00_lfd\` > ${message_floor}
    AND (
@@ -131,8 +148,10 @@ DELETE FROM \`nv_protokoll\`
    AND \`p_was\` IN ('Empfängermatrix', 'Nachrichtennummer Sync', 'Grafikstatus Reset');
 COMMIT;
 DROP TABLE IF EXISTS \`${backup_table}\`;
+DROP TABLE IF EXISTS \`${standard_backup_table}\`;
 DROP TABLE IF EXISTS \`${print_backup_table}\`;
 ALTER TABLE \`nv_empfmtx\` AUTO_INCREMENT = ${matrix_auto_increment};
+ALTER TABLE \`nv_empfmtx_standard\` AUTO_INCREMENT = ${standard_matrix_auto_increment};
 ALTER TABLE \`nv_nachrichten\` AUTO_INCREMENT = ${message_auto_increment};
 ALTER TABLE \`nv_protokoll\` AUTO_INCREMENT = ${protocol_auto_increment};
 SQL
@@ -172,6 +191,16 @@ assert_body()
     fi
 }
 
+assert_body_absent()
+{
+    unexpected=$1
+    if grep -Fq -- "$unexpected" "$body"; then
+        printf 'Admin HTTP: response unexpectedly contains %s\n' "$unexpected" >&2
+        sed -n '1,100p' "$body" >&2
+        exit 1
+    fi
+}
+
 csrf_from_body()
 {
     token=$(sed -n \
@@ -198,6 +227,43 @@ SELECT CONCAT(
 SQL
 }
 
+normalized_standard_matrix()
+{
+    db_sql <<'SQL'
+SELECT CONCAT(
+         `mtx_x`, '|', `mtx_y`, '|', `mtx_fkt`, '|', `mtx_rolle`, '|',
+         IF(`mtx_rc2` IN ('t','1'), '1', '0'), '|',
+         IF(`mtx_auto` IN ('t','1'), '1', '0')
+       )
+  FROM `nv_empfmtx_standard`
+ ORDER BY `mtx_x`, `mtx_y`;
+SQL
+}
+
+exact_matrix_snapshot()
+{
+    db_sql <<'SQL'
+SELECT CONCAT_WS('|',
+         `mtx_lfd`, `mtx_x`, `mtx_y`, HEX(`mtx_typ`), HEX(`mtx_fkt`),
+         HEX(`mtx_rolle`), HEX(`mtx_mode`), HEX(`mtx_rc2`), HEX(`mtx_auto`)
+       )
+  FROM `nv_empfmtx`
+ ORDER BY `mtx_x`, `mtx_y`;
+SQL
+}
+
+exact_standard_matrix_snapshot()
+{
+    db_sql <<'SQL'
+SELECT CONCAT_WS('|',
+         `mtx_lfd`, `mtx_x`, `mtx_y`, HEX(`mtx_typ`), HEX(`mtx_fkt`),
+         HEX(`mtx_rolle`), HEX(`mtx_mode`), HEX(`mtx_rc2`), HEX(`mtx_auto`)
+       )
+  FROM `nv_empfmtx_standard`
+ ORDER BY `mtx_x`, `mtx_y`;
+SQL
+}
+
 users_snapshot()
 {
     db_sql <<'SQL'
@@ -215,19 +281,30 @@ write_matrix_payload()
     destination=$1
     csrf_token=$2
     changed_position=${3:-}
+    action=${4:-save_matrix}
+    source_matrix=${5:-$original_matrix}
+    changed_function=${6:-E2EADM}
 
-    redcopy_position=$(awk -F '|' '$5 == "1" { print $1 $2 }' "$original_matrix")
+    case "$action" in
+        save_matrix | save_matrix_and_standard) ;;
+        *)
+            echo 'Admin HTTP: invalid matrix test action' >&2
+            exit 1
+            ;;
+    esac
+
+    redcopy_position=$(awk -F '|' '$5 == "1" { print $1 $2 }' "$source_matrix")
     if ! printf '%s' "$redcopy_position" | grep -Eq '^[1-5][1-4]$'; then
         echo 'Admin HTTP: original matrix has no unique red-copy target' >&2
         exit 1
     fi
 
-    printf 'csrf_token=%s&admin_action=save_matrix&lagerot=%s' \
-        "$csrf_token" "$redcopy_position" >"$destination"
+    printf 'csrf_token=%s&admin_action=%s&lagerot=%s' \
+        "$csrf_token" "$action" "$redcopy_position" >"$destination"
     while IFS='|' read -r row column function_name role redcopy auto; do
         position="${row}${column}"
         if [ -n "$changed_position" ] && [ "$position" = "$changed_position" ]; then
-            function_name=E2EADM
+            function_name=$changed_function
             role=FB
             auto=1
         fi
@@ -236,7 +313,7 @@ write_matrix_payload()
         if [ "$auto" = 1 ]; then
             printf '&stasi_%s=1' "$position" >>"$destination"
         fi
-    done <"$original_matrix"
+    done <"$source_matrix"
 }
 
 # Apache authentication and deny rules must fire before PHP renders data.
@@ -255,6 +332,12 @@ matrix_auto_increment=$(db_sql <<'SQL'
 SELECT COALESCE(`AUTO_INCREMENT`, 1)
   FROM information_schema.tables
  WHERE table_schema = DATABASE() AND table_name = 'nv_empfmtx';
+SQL
+)
+standard_matrix_auto_increment=$(db_sql <<'SQL'
+SELECT COALESCE(`AUTO_INCREMENT`, 1)
+  FROM information_schema.tables
+ WHERE table_schema = DATABASE() AND table_name = 'nv_empfmtx_standard';
 SQL
 )
 message_auto_increment=$(db_sql <<'SQL'
@@ -277,7 +360,7 @@ audit_floor=$(db_sql <<'SQL'
 SELECT COALESCE(MAX(`p_lfd`), 0) FROM `nv_protokoll`;
 SQL
 )
-for number in "$matrix_auto_increment" "$message_auto_increment" \
+for number in "$matrix_auto_increment" "$standard_matrix_auto_increment" "$message_auto_increment" \
     "$protocol_auto_increment" "$message_floor" "$audit_floor"; do
     case "$number" in
         '' | *[!0-9]*)
@@ -291,6 +374,9 @@ db_sql <<SQL
 DROP TABLE IF EXISTS \`${backup_table}\`;
 CREATE TABLE \`${backup_table}\` LIKE \`nv_empfmtx\`;
 INSERT INTO \`${backup_table}\` SELECT * FROM \`nv_empfmtx\`;
+DROP TABLE IF EXISTS \`${standard_backup_table}\`;
+CREATE TABLE \`${standard_backup_table}\` LIKE \`nv_empfmtx_standard\`;
+INSERT INTO \`${standard_backup_table}\` SELECT * FROM \`nv_empfmtx_standard\`;
 DROP TABLE IF EXISTS \`${print_backup_table}\`;
 CREATE TABLE \`${print_backup_table}\` (
   \`00_lfd\` BIGINT NOT NULL PRIMARY KEY,
@@ -305,9 +391,14 @@ SQL
 backup_created=true
 
 normalized_matrix >"$original_matrix"
+normalized_standard_matrix >"$original_standard_matrix"
 users_snapshot >"$users_before"
 if [ "$(wc -l <"$original_matrix" | tr -d ' ')" != 20 ]; then
     echo 'Admin HTTP: original matrix is not five by four' >&2
+    exit 1
+fi
+if [ "$(wc -l <"$original_standard_matrix" | tr -d ' ')" != 20 ]; then
+    echo 'Admin HTTP: original standard matrix is not five by four' >&2
     exit 1
 fi
 blank_position=$(awk -F '|' '$3 == "" { print $1 $2; exit }' "$original_matrix")
@@ -316,14 +407,24 @@ if ! printf '%s' "$blank_position" | grep -Eq '^[1-5][1-4]$'; then
     exit 1
 fi
 
-# Historical GET write controls are inert for matrix, counter and reset.
-assert_status 200 --config "$admin_curl_config" \
-    "$base_url/4fadm/make_fkt.php?absenden_x=1&pos_11=GETWRITE"
-normalized_matrix >"$restored_matrix"
-cmp -s "$original_matrix" "$restored_matrix" || {
-    echo 'Admin HTTP: matrix changed through GET' >&2
-    exit 1
-}
+# Historical submit, load and save image-button GET controls are inert for
+# both the active and the persistent standard matrix.
+for legacy_matrix_control in absenden_x laden_x speichern_x; do
+    assert_status 200 --config "$admin_curl_config" \
+        "$base_url/4fadm/make_fkt.php?${legacy_matrix_control}=1&pos_11=GETWRITE"
+    normalized_matrix >"$restored_matrix"
+    cmp -s "$original_matrix" "$restored_matrix" || {
+        printf 'Admin HTTP: active matrix changed through historical GET %s\n' \
+            "$legacy_matrix_control" >&2
+        exit 1
+    }
+    normalized_standard_matrix >"$observed_standard_matrix"
+    cmp -s "$original_standard_matrix" "$observed_standard_matrix" || {
+        printf 'Admin HTTP: standard matrix changed through historical GET %s\n' \
+            "$legacy_matrix_control" >&2
+        exit 1
+    }
+done
 
 counter_before=$(db_sql <<'SQL'
 SELECT COALESCE(MAX(`04_nummer`), 0) FROM `nv_nachrichten`;
@@ -355,6 +456,12 @@ fi
 # A Basic-authenticated request still needs its own PHP session and CSRF token.
 assert_status 403 --config "$admin_curl_config" \
     --request POST --data-urlencode 'admin_action=save_matrix' \
+    "$base_url/4fadm/make_fkt.php"
+assert_status 403 --config "$admin_curl_config" \
+    --request POST --data-urlencode 'admin_action=load_standard' \
+    "$base_url/4fadm/make_fkt.php"
+assert_status 403 --config "$admin_curl_config" \
+    --request POST --data-urlencode 'admin_action=save_matrix_and_standard' \
     "$base_url/4fadm/make_fkt.php"
 assert_status 403 --config "$admin_curl_config" \
     --request POST --data-urlencode 'ea_nummer=999999999' \
@@ -392,7 +499,153 @@ if [ "$changed_cell" != 'E2EADM|FB|1' ]; then
     exit 1
 fi
 
-restore_payload=$work_dir/matrix-restore.txt
+# Saving only the active matrix must not modify the persistent preset.
+normalized_matrix >"$active_before_load"
+normalized_standard_matrix >"$observed_standard_matrix"
+cmp -s "$original_standard_matrix" "$observed_standard_matrix" || {
+    echo 'Admin HTTP: active-only save changed the standard matrix' >&2
+    exit 1
+}
+
+# Loading the standard is a POST+CSRF read: it changes neither table nor the
+# audit ledger and presents an explicitly unsaved editor state.
+matrix_audit_before_load=$(db_sql <<SQL
+SELECT COUNT(*) FROM \`nv_protokoll\`
+ WHERE \`p_lfd\` > ${audit_floor}
+   AND \`p_was\` = 'Empfängermatrix';
+SQL
+)
+assert_status 200 --config "$admin_curl_config" \
+    --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+    --request POST \
+    --data-urlencode "csrf_token=$matrix_csrf" \
+    --data-urlencode 'admin_action=load_standard' \
+    "$base_url/4fadm/make_fkt.php"
+assert_body 'Die Standardmatrix wurde in den Editor geladen, aber noch nicht gespeichert.'
+assert_body 'data-estab-dirty-initial'
+assert_body_absent 'value="E2EADM"'
+normalized_matrix >"$restored_matrix"
+cmp -s "$active_before_load" "$restored_matrix" || {
+    echo 'Admin HTTP: loading the standard matrix changed the active matrix' >&2
+    exit 1
+}
+normalized_standard_matrix >"$observed_standard_matrix"
+cmp -s "$original_standard_matrix" "$observed_standard_matrix" || {
+    echo 'Admin HTTP: loading the standard matrix changed the preset itself' >&2
+    exit 1
+}
+matrix_audit_after_load=$(db_sql <<SQL
+SELECT COUNT(*) FROM \`nv_protokoll\`
+ WHERE \`p_lfd\` > ${audit_floor}
+   AND \`p_was\` = 'Empfängermatrix';
+SQL
+)
+if [ "$matrix_audit_before_load" != "$matrix_audit_after_load" ]; then
+    echo 'Admin HTTP: loading the standard matrix wrote an audit mutation' >&2
+    exit 1
+fi
+
+# The combined action persists an exact copy to both tables in one transaction,
+# including the automatic-sighting and red-copy flags.
+save_both_payload=$work_dir/matrix-save-both.txt
+write_matrix_payload \
+    "$save_both_payload" "$matrix_csrf" "$blank_position" \
+    save_matrix_and_standard
+
+# Force the second table's first insert to fail. The active replacement has
+# already run at that point, so exact before/after row snapshots prove that the
+# shared transaction rolls back both tables rather than leaving a half-save.
+failed_both_payload=$work_dir/matrix-save-both-failed.txt
+write_matrix_payload \
+    "$failed_both_payload" "$matrix_csrf" "$blank_position" \
+    save_matrix_and_standard "$original_matrix" E2ERBK
+active_before_failed_save=$work_dir/active-before-failed-save.txt
+standard_before_failed_save=$work_dir/standard-before-failed-save.txt
+active_after_failed_save=$work_dir/active-after-failed-save.txt
+standard_after_failed_save=$work_dir/standard-after-failed-save.txt
+exact_matrix_snapshot >"$active_before_failed_save"
+exact_standard_matrix_snapshot >"$standard_before_failed_save"
+db_sql <<SQL
+DROP TRIGGER IF EXISTS \`${rollback_trigger}\`;
+CREATE TRIGGER \`${rollback_trigger}\`
+BEFORE INSERT ON \`nv_empfmtx_standard\`
+FOR EACH ROW
+SIGNAL SQLSTATE '45000'
+  SET MESSAGE_TEXT = 'eStab intentional standard matrix rollback proof';
+SQL
+assert_status 500 --config "$admin_curl_config" \
+    --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+    --request POST --header 'Content-Type: application/x-www-form-urlencoded' \
+    --data-binary "@$failed_both_payload" \
+    "$base_url/4fadm/make_fkt.php"
+assert_body 'Aktive Empfängermatrix und Standardmatrix konnten nicht atomar gespeichert werden.'
+assert_body 'value="E2ERBK"'
+db_sql <<SQL
+DROP TRIGGER IF EXISTS \`${rollback_trigger}\`;
+SQL
+exact_matrix_snapshot >"$active_after_failed_save"
+exact_standard_matrix_snapshot >"$standard_after_failed_save"
+cmp -s "$active_before_failed_save" "$active_after_failed_save" || {
+    echo 'Admin HTTP: failed combined save did not roll back the active matrix exactly' >&2
+    exit 1
+}
+cmp -s "$standard_before_failed_save" "$standard_after_failed_save" || {
+    echo 'Admin HTTP: failed combined save did not preserve the standard matrix exactly' >&2
+    exit 1
+}
+matrix_audit_after_failed_save=$(db_sql <<SQL
+SELECT COUNT(*) FROM \`nv_protokoll\`
+ WHERE \`p_lfd\` > ${audit_floor}
+   AND \`p_was\` = 'Empfängermatrix';
+SQL
+)
+if [ "$matrix_audit_after_failed_save" != "$matrix_audit_after_load" ]; then
+    echo 'Admin HTTP: failed combined save retained an audit row' >&2
+    exit 1
+fi
+
+assert_status 303 --config "$admin_curl_config" \
+    --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+    --request POST --header 'Content-Type: application/x-www-form-urlencoded' \
+    --data-binary "@$save_both_payload" \
+    "$base_url/4fadm/make_fkt.php"
+normalized_matrix >"$restored_matrix"
+cmp -s "$active_before_load" "$restored_matrix" || {
+    echo 'Admin HTTP: combined save changed the submitted active matrix' >&2
+    exit 1
+}
+normalized_standard_matrix >"$observed_standard_matrix"
+cmp -s "$active_before_load" "$observed_standard_matrix" || {
+    echo 'Admin HTTP: combined save did not persist an exact standard copy' >&2
+    exit 1
+}
+changed_standard_cell=$(db_sql <<SQL
+SELECT CONCAT(\`mtx_fkt\`, '|', \`mtx_rolle\`, '|',
+              IF(\`mtx_rc2\` IN ('t','1'), '1', '0'), '|',
+              IF(\`mtx_auto\` IN ('t','1'), '1', '0'))
+  FROM \`nv_empfmtx_standard\`
+ WHERE CONCAT(\`mtx_x\`, \`mtx_y\`) = '${blank_position}';
+SQL
+)
+if [ "$changed_standard_cell" != 'E2EADM|FB|0|1' ]; then
+    echo 'Admin HTTP: combined save lost a standard matrix flag' >&2
+    exit 1
+fi
+
+# Loading the newly stored preset must now render that exact changed cell while
+# remaining free of database mutations.
+assert_status 200 --config "$admin_curl_config" \
+    --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+    --request POST \
+    --data-urlencode "csrf_token=$matrix_csrf" \
+    --data-urlencode 'admin_action=load_standard' \
+    "$base_url/4fadm/make_fkt.php"
+assert_body 'value="E2EADM"'
+assert_body 'data-estab-dirty-initial'
+
+# Restore the active matrix first. The active-only action must leave the
+# changed standard untouched.
+restore_payload=$work_dir/matrix-restore-active.txt
 write_matrix_payload "$restore_payload" "$matrix_csrf"
 assert_status 303 --config "$admin_curl_config" \
     --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
@@ -401,7 +654,40 @@ assert_status 303 --config "$admin_curl_config" \
     "$base_url/4fadm/make_fkt.php"
 normalized_matrix >"$restored_matrix"
 cmp -s "$original_matrix" "$restored_matrix" || {
-    echo 'Admin HTTP: matrix roundtrip did not restore all 20 cells' >&2
+    echo 'Admin HTTP: active matrix roundtrip did not restore all 20 cells' >&2
+    exit 1
+}
+normalized_standard_matrix >"$observed_standard_matrix"
+cmp -s "$active_before_load" "$observed_standard_matrix" || {
+    echo 'Admin HTTP: active-only restore changed the saved standard matrix' >&2
+    exit 1
+}
+
+# Restore potentially different original active and standard states through
+# the public actions, so the test is safe beyond the fresh default fixture.
+restore_standard_payload=$work_dir/matrix-restore-standard.txt
+write_matrix_payload \
+    "$restore_standard_payload" "$matrix_csrf" "" \
+    save_matrix_and_standard "$original_standard_matrix"
+assert_status 303 --config "$admin_curl_config" \
+    --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+    --request POST --header 'Content-Type: application/x-www-form-urlencoded' \
+    --data-binary "@$restore_standard_payload" \
+    "$base_url/4fadm/make_fkt.php"
+normalized_standard_matrix >"$observed_standard_matrix"
+cmp -s "$original_standard_matrix" "$observed_standard_matrix" || {
+    echo 'Admin HTTP: standard matrix roundtrip did not restore all 20 cells' >&2
+    exit 1
+}
+write_matrix_payload "$restore_payload" "$matrix_csrf"
+assert_status 303 --config "$admin_curl_config" \
+    --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+    --request POST --header 'Content-Type: application/x-www-form-urlencoded' \
+    --data-binary "@$restore_payload" \
+    "$base_url/4fadm/make_fkt.php"
+normalized_matrix >"$restored_matrix"
+cmp -s "$original_matrix" "$restored_matrix" || {
+    echo 'Admin HTTP: final active matrix restore is incomplete' >&2
     exit 1
 }
 
@@ -499,8 +785,18 @@ SELECT COUNT(*) FROM \`nv_protokoll\`
    AND \`p_was\` IN ('Empfängermatrix', 'Nachrichtennummer Sync', 'Grafikstatus Reset');
 SQL
 )
-if [ "$audit_count" -lt 4 ]; then
+if [ "$audit_count" -lt 7 ]; then
     echo 'Admin HTTP: prepared audit records are incomplete' >&2
+    exit 1
+fi
+matrix_audit_count=$(db_sql <<SQL
+SELECT COUNT(*) FROM \`nv_protokoll\`
+ WHERE \`p_lfd\` > ${audit_floor}
+   AND \`p_was\` = 'Empfängermatrix';
+SQL
+)
+if [ "$matrix_audit_count" != 5 ]; then
+    echo 'Admin HTTP: matrix load/save audit boundary is not exact' >&2
     exit 1
 fi
 

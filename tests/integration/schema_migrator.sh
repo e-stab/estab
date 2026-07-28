@@ -10,11 +10,15 @@ export ESTAB_SCHEMA_VERIFY_FILE=
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 fixture="$script_dir/../fixtures/legacy-runtime-schema.sql"
+standard_matrix_fixture="$script_dir/../fixtures/recipient-matrix-standard.txt"
 test_database="estab_migration_test_$$"
 retry_database="estab_baseline_retry_test_$$"
 guard_database="estab_baseline_guard_test_$$"
+collision_database="estab_standard_collision_test_$$"
 
-for database_name in "$test_database" "$retry_database" "$guard_database"; do
+for database_name in \
+    "$test_database" "$retry_database" "$guard_database" "$collision_database"
+do
     case "$database_name" in
         *[!A-Za-z0-9_]*)
             echo "schema migrator test: unsafe fixture database name" >&2
@@ -23,6 +27,7 @@ for database_name in "$test_database" "$retry_database" "$guard_database"; do
     esac
 done
 if [ ! -r "$fixture" ] \
+    || [ ! -r "$standard_matrix_fixture" ] \
     || [ ! -r "$ESTAB_SCHEMA_BASELINE_FILE" ] \
     || [ ! -x "$ESTAB_MIGRATOR_BIN" ]; then
     echo "schema migrator test: fixture, baseline, or migrator is unavailable" >&2
@@ -92,7 +97,8 @@ cleanup()
     admin_query "
 DROP DATABASE IF EXISTS \`$test_database\`;
 DROP DATABASE IF EXISTS \`$retry_database\`;
-DROP DATABASE IF EXISTS \`$guard_database\`" >/dev/null 2>&1 || true
+DROP DATABASE IF EXISTS \`$guard_database\`;
+DROP DATABASE IF EXISTS \`$collision_database\`" >/dev/null 2>&1 || true
     rm -f -- "$client_defaults" "$failure_log"
     exit "$status"
 }
@@ -147,13 +153,79 @@ SELECT COUNT(*)
    AND state = 'applied'
    AND applied_at IS NOT NULL")" \
     "interrupted baseline was not retried and recorded"
-assert_equal "14" "$(database_query "$retry_database" "
+assert_equal "15" "$(database_query "$retry_database" "
 SELECT COUNT(*)
   FROM information_schema.tables
  WHERE table_schema = DATABASE()
    AND table_type = 'BASE TABLE'
    AND LEFT(table_name, 3) = 'nv_'")" \
-    "retried baseline did not produce all runtime tables"
+    "retried baseline and migrations did not produce all runtime tables"
+
+# MariaDB commits CREATE TABLE independently of the seed transaction. Prove
+# both possible interruption points are resumable only for the migration-owned
+# table: after CREATE with zero rows and after the canonical seed commit.
+database_query "$retry_database" "
+DELETE FROM estab_schema_migrations
+ WHERE version = '40-recipient-matrix-standard.sql';
+DELETE FROM nv_empfmtx_standard"
+ESTAB_DB_NAME="$retry_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "20|1" "$(database_query "$retry_database" "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM nv_empfmtx_standard), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '40-recipient-matrix-standard.sql'
+             AND state = 'applied')
+       )")" \
+    "empty migration-owned standard matrix was not safely resumed"
+
+database_query "$retry_database" "
+DELETE FROM estab_schema_migrations
+ WHERE version = '40-recipient-matrix-standard.sql'"
+ESTAB_DB_NAME="$retry_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "$(cat "$standard_matrix_fixture")" "$(database_query "$retry_database" "
+SELECT CONCAT(
+         mtx_x, '|', mtx_y, '|', mtx_typ, '|', mtx_fkt, '|', mtx_rolle, '|',
+         mtx_mode, '|',
+         IF(mtx_rc2 IN ('t','1'), '1', '0'), '|',
+         IF(mtx_auto IN ('t','1'), '1', '0')
+       )
+  FROM nv_empfmtx_standard
+ ORDER BY mtx_x, mtx_y")" \
+    "fully seeded migration-owned standard matrix was not resumed exactly"
+
+# The ownership marker is not permission to overwrite later or foreign data.
+# Any non-canonical content must stay untouched and require operator review.
+database_query "$retry_database" "
+DELETE FROM estab_schema_migrations
+ WHERE version = '40-recipient-matrix-standard.sql';
+UPDATE nv_empfmtx_standard
+   SET mtx_fkt = 'BROKEN'
+ WHERE mtx_x = 1 AND mtx_y = 1"
+if ESTAB_DB_NAME="$retry_database" \
+    "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: modified migration-owned standard matrix was overwritten" >&2
+    exit 1
+fi
+if ! grep -q \
+    'Standard matrix migration blocked: owned table content is not resumable' \
+    "$failure_log"; then
+    echo "schema migrator test: modified owned-table failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "BROKEN|0" "$(database_query "$retry_database" "
+SELECT CONCAT(
+         (SELECT mtx_fkt FROM nv_empfmtx_standard
+           WHERE mtx_x = 1 AND mtx_y = 1), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '40-recipient-matrix-standard.sql')
+       )")" \
+    "blocked owned standard matrix was changed or recorded"
+database_query "$retry_database" "
+UPDATE nv_empfmtx_standard
+   SET mtx_fkt = 'LS'
+ WHERE mtx_x = 1 AND mtx_y = 1"
+ESTAB_DB_NAME="$retry_database" "$ESTAB_MIGRATOR_BIN"
 
 admin_query "
 DROP DATABASE IF EXISTS \`$guard_database\`;
@@ -178,6 +250,39 @@ SELECT COUNT(*)
  WHERE table_schema = DATABASE()
    AND table_name IN ('nv_nachrichten', 'estab_schema_baselines')")" \
     "partial namespace guard modified the blocked database"
+
+admin_query "
+DROP DATABASE IF EXISTS \`$collision_database\`;
+CREATE DATABASE \`$collision_database\`
+  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+mariadb \
+    --defaults-extra-file="$client_defaults" \
+    --database="$collision_database" \
+    < "$ESTAB_SCHEMA_BASELINE_FILE"
+database_query "$collision_database" "
+CREATE TABLE nv_empfmtx_standard (
+  marker VARCHAR(64) NOT NULL PRIMARY KEY
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+INSERT INTO nv_empfmtx_standard (marker) VALUES ('preserve-this-table')"
+if ESTAB_DB_NAME="$collision_database" \
+    "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: pre-existing standard matrix table was accepted" >&2
+    exit 1
+fi
+if ! grep -q \
+    'Standard matrix migration blocked: pre-existing nv_empfmtx_standard table' \
+    "$failure_log"; then
+    echo "schema migrator test: standard matrix collision failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "preserve-this-table" "$(database_query "$collision_database" "
+SELECT marker FROM nv_empfmtx_standard")" \
+    "standard matrix collision table was modified"
+assert_equal "0" "$(database_query "$collision_database" "
+SELECT COUNT(*) FROM estab_schema_migrations
+ WHERE version = '40-recipient-matrix-standard.sql'")" \
+    "failed standard matrix collision left a migration record"
 
 admin_query "
 DROP DATABASE IF EXISTS \`$test_database\`;
@@ -210,11 +315,37 @@ fixture_query "DELETE FROM nv_anhang WHERE \`lfd-nr\` = 2"
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
 
-assert_equal "2" "$(fixture_query "
+assert_equal "3" "$(fixture_query "
 SELECT COUNT(*) FROM estab_schema_migrations
  WHERE state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
     "versioned migration records are incomplete"
+assert_equal "1" "$(fixture_query "
+SELECT COUNT(*) FROM estab_schema_migrations
+ WHERE version = '40-recipient-matrix-standard.sql'
+   AND state = 'applied'
+   AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
+    "standard matrix migration was not recorded"
+assert_equal "20|20|20|1|0" "$(fixture_query "
+SELECT CONCAT(
+         COUNT(*), '|',
+         COUNT(DISTINCT mtx_x, mtx_y), '|',
+         SUM(mtx_x BETWEEN 1 AND 5 AND mtx_y BETWEEN 1 AND 4), '|',
+         SUM(mtx_rc2 IN ('t','1')), '|',
+         SUM(mtx_auto IN ('t','1'))
+       )
+  FROM nv_empfmtx_standard")" \
+    "single standard recipient matrix was not seeded exactly"
+assert_equal "$(cat "$standard_matrix_fixture")" "$(fixture_query "
+SELECT CONCAT(
+         mtx_x, '|', mtx_y, '|', mtx_typ, '|', mtx_fkt, '|', mtx_rolle, '|',
+         mtx_mode, '|',
+         IF(mtx_rc2 IN ('t','1'), '1', '0'), '|',
+         IF(mtx_auto IN ('t','1'), '1', '0')
+       )
+  FROM nv_empfmtx_standard
+ ORDER BY mtx_x, mtx_y")" \
+    "standard recipient matrix differs from the historical 20-cell fixture"
 assert_equal "8" "$(fixture_query "
 SELECT COUNT(*)
   FROM information_schema.columns

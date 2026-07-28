@@ -1165,7 +1165,7 @@ class BrowserAcceptance:
         self._assert_narrow_overview()
         self._assert_root_card_layout("anonyme Übersicht bei 390 px")
 
-        print("[9/9] Exportübersicht, Erstellung und zweistufiges Löschen")
+        print("[9/9] Exportverwaltung und Matrix-Bestätigungen")
         if self.config.admin_user and self.config.admin_password:
             self._assert_export_management()
         else:
@@ -1407,8 +1407,64 @@ class BrowserAcceptance:
             self._assert_export_layout(
                 "Exportübersicht nach Löschung bei 390×844 px"
             )
+            self._assert_matrix_confirmations()
         finally:
             self.cdp.call("Network.setExtraHTTPHeaders", {"headers": {}})
+
+    def _assert_matrix_confirmations(self) -> None:
+        self.cdp.navigate(self.config.base_url + "/4fadm/make_fkt.php")
+        self.cdp.wait_for(
+            """
+            document.readyState === "complete" &&
+            Boolean(document.querySelector('input[name="pos_13"]')) &&
+            Boolean(document.querySelector(
+                'button[value="load_standard"][data-estab-confirm]'
+            )) &&
+            Boolean(document.querySelector(
+                'button[value="save_matrix_and_standard"][data-estab-confirm]'
+            ))
+            """,
+            "Matrixeditor mit bestätigungspflichtigen Aktionen wurde nicht geladen",
+        )
+        self.cdp.set_value(
+            None,
+            'input[name="pos_13"]',
+            "BRTEST",
+            "ungespeicherter Matrix-Testwert",
+        )
+
+        for selector, expected_prefix, description in (
+            (
+                'button[value="load_standard"]',
+                "Die aktuellen Editorwerte werden verworfen",
+                "Standardmatrix laden",
+            ),
+            (
+                'button[value="save_matrix_and_standard"]',
+                "Die aktive Matrix wird gespeichert",
+                "bisherigen Standard ersetzen",
+            ),
+        ):
+            dialog = self.cdp.click(
+                None,
+                selector,
+                description,
+                dialog_accept=False,
+            )
+            self._truth(
+                isinstance(dialog, dict)
+                and dialog.get("type") == "confirm"
+                and str(dialog.get("message", "")).startswith(expected_prefix),
+                f"{description} öffnete keinen verständlichen Bestätigungsdialog.",
+            )
+            self.cdp.wait_for(
+                """
+                location.pathname.endsWith("/4fadm/make_fkt.php") &&
+                document.querySelector('input[name="pos_13"]')?.value ===
+                    "BRTEST"
+                """,
+                f"Abgelehnte Aktion „{description}“ verwarf Editorwerte.",
+            )
 
     def _assert_export_layout(self, description: str) -> None:
         state = self.cdp.evaluate(

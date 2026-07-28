@@ -127,6 +127,10 @@ $assert(
     substr_count($markup, '<script data-estab-dirty-guard>') === 1
         && str_contains($markup, 'form[data-estab-dirty-guard]')
         && str_contains($markup, 'data-estab-dirty-initial')
+        && str_contains($markup, 'event.submitter')
+        && str_contains($markup, 'replace-editor-with-standard')
+        && str_contains($markup, 'replace-standard')
+        && str_contains($markup, 'nur in einem Datenbankbackup')
         && str_contains($markup, 'window.confirm(')
         && str_contains($markup, 'Ungespeicherte Eingaben')
         && str_contains($markup, '.estab-button-login')

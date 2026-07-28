@@ -14,6 +14,8 @@ estab_session_ui_start($_SESSION);
 
 $error = null;
 $submitted = null;
+$loadedStandard = false;
+$standardMatrixTable = $conf_4f_tbl['empfmtx'] . '_standard';
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     try {
         estab_csrf_require_post($_SERVER, $_POST);
@@ -22,14 +24,43 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $error = 'Die Formularsitzung ist ungültig oder abgelaufen.';
     }
 
+    $actionValue = $_POST['admin_action'] ?? null;
+    $action = is_string($actionValue) ? $actionValue : '';
     if ($error === null) {
-        if (($_POST['admin_action'] ?? null) !== 'save_matrix') {
+        if (!in_array(
+            $action,
+            ['load_standard', 'save_matrix', 'save_matrix_and_standard'],
+            true
+        )) {
             http_response_code(422);
             $error = 'Unbekannte administrative Aktion.';
         }
     }
 
-    if ($error === null) {
+    if ($error === null && $action === 'load_standard') {
+        try {
+            $connection = estab_auth_connect($conf_4f_db);
+            try {
+                $submitted = [
+                    'valid' => true,
+                    'errors' => [],
+                    'data' => estab_admin_fetch_matrix($connection, $standardMatrixTable),
+                ];
+            } finally {
+                estab_auth_close($connection);
+            }
+            $loadedStandard = true;
+        } catch (Throwable $exception) {
+            error_log('eStab standard recipient matrix lookup failed: ' . $exception->getMessage());
+            http_response_code(500);
+            $error = 'Die Standardmatrix konnte nicht vollständig gelesen werden.';
+        }
+    }
+
+    if (
+        $error === null
+        && in_array($action, ['save_matrix', 'save_matrix_and_standard'], true)
+    ) {
         $submitted = estab_admin_validate_matrix($_POST);
         if (!$submitted['valid']) {
             http_response_code(422);
@@ -39,21 +70,36 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             try {
                 $connection = estab_auth_connect($conf_4f_db);
                 try {
-                    estab_admin_replace_matrix(
-                        $connection,
-                        $conf_4f_tbl['empfmtx'],
-                        $conf_4f_tbl['protokoll'],
-                        $submitted['data']
-                    );
+                    if ($action === 'save_matrix_and_standard') {
+                        estab_admin_replace_matrix_and_standard(
+                            $connection,
+                            $conf_4f_tbl['empfmtx'],
+                            $standardMatrixTable,
+                            $conf_4f_tbl['protokoll'],
+                            $submitted['data']
+                        );
+                    } else {
+                        estab_admin_replace_matrix(
+                            $connection,
+                            $conf_4f_tbl['empfmtx'],
+                            $conf_4f_tbl['protokoll'],
+                            $submitted['data']
+                        );
+                    }
                 } finally {
                     estab_auth_close($connection);
                 }
-                header('Location: make_fkt.php?updated=1', true, 303);
+                $updatedValue = $action === 'save_matrix_and_standard'
+                    ? 'active-and-standard'
+                    : 'active';
+                header('Location: make_fkt.php?updated=' . $updatedValue, true, 303);
                 exit;
             } catch (Throwable $exception) {
                 error_log('eStab recipient matrix update failed: ' . $exception->getMessage());
                 http_response_code(500);
-                $error = 'Die Empfängermatrix konnte nicht atomar gespeichert werden.';
+                $error = $action === 'save_matrix_and_standard'
+                    ? 'Aktive Empfängermatrix und Standardmatrix konnten nicht atomar gespeichert werden.'
+                    : 'Die aktive Empfängermatrix konnte nicht atomar gespeichert werden.';
             }
         }
     }
@@ -77,7 +123,8 @@ try {
     $matrix = ['cells' => [], 'redcopy' => ''];
 }
 
-$updated = ($_GET['updated'] ?? '') === '1';
+$updatedValue = $_GET['updated'] ?? '';
+$updated = is_string($updatedValue) ? $updatedValue : '';
 
 ?><!doctype html>
 <html lang="de">
@@ -93,21 +140,33 @@ $updated = ($_GET['updated'] ?? '') === '1';
     input[type="text"] { width: 7em; }
     .error { color: #8b0000; font-weight: bold; }
     .success { color: #075f23; font-weight: bold; }
+    .warning { color: #6f4300; font-weight: bold; }
     .actions { margin-top: 1rem; }
     fieldset { border: 0; padding: 0; margin: 0; min-width: 12rem; }
   </style>
 </head>
 <body>
   <h1>Empfängermatrix bearbeiten</h1>
-  <p>Die Laufzeit liest diese Matrix direkt aus MariaDB. Das Speichern ersetzt
-    alle 20 Positionen in einer Transaktion; angemeldete Benutzer und deren
-    aktuelle Funktionszuordnung werden dabei nicht verändert.</p>
+  <p>Die Laufzeit liest die aktive Matrix direkt aus MariaDB. Sie können nur
+    diese aktive Matrix speichern oder denselben Stand atomar zugleich als
+    einzelne Standardmatrix sichern. Angemeldete Benutzer und deren aktuelle
+    Funktionszuordnung werden dabei nicht verändert.</p>
   <p>Funktionsnamen bestehen aus höchstens sechs Buchstaben, Ziffern oder
     Unterstrichen. <code>Si</code> und <code>A/W</code> sind reserviert.
     Genau eine belegte Position muss Rotkopie-Empfänger sein.</p>
+  <p class="warning">Achtung: „Standard laden“ verwirft die aktuellen
+    Editorwerte. „Standard ersetzen“ überschreibt die einzige gespeicherte
+    Vorlage; der vorherige Stand bleibt dann nur in einem Datenbankbackup
+    erhalten. Beide Aktionen verlangen deshalb eine ausdrückliche
+    Bestätigung.</p>
 
-  <?php if ($updated): ?>
-    <p class="success">Die Empfängermatrix wurde vollständig gespeichert.</p>
+  <?php if ($updated === 'active'): ?>
+    <p class="success">Die aktive Empfängermatrix wurde vollständig gespeichert.</p>
+  <?php elseif ($updated === 'active-and-standard'): ?>
+    <p class="success">Aktive Empfängermatrix und Standardmatrix wurden gemeinsam gespeichert.</p>
+  <?php endif; ?>
+  <?php if ($loadedStandard): ?>
+    <p class="success">Die Standardmatrix wurde in den Editor geladen, aber noch nicht gespeichert.</p>
   <?php endif; ?>
   <?php if ($error !== null): ?>
     <p class="error"><?= estab_admin_html($error) ?></p>
@@ -115,11 +174,10 @@ $updated = ($_GET['updated'] ?? '') === '1';
 
   <?php if (count($matrix['cells']) === 20): ?>
   <form method="post" action="make_fkt.php" data-estab-dirty-guard
-    <?= $error !== null && is_array($submitted)
+    <?= ($error !== null && is_array($submitted)) || $loadedStandard
         ? 'data-estab-dirty-initial'
         : '' ?>>
     <?= estab_csrf_field() ?>
-    <input type="hidden" name="admin_action" value="save_matrix">
     <table>
       <thead>
         <tr>
@@ -192,7 +250,17 @@ $updated = ($_GET['updated'] ?? '') === '1';
       </tbody>
     </table>
     <p class="actions">
-      <button type="submit">Matrix atomar speichern</button>
+      <button type="submit" name="admin_action" value="save_matrix">
+        Nur aktive Matrix speichern
+      </button>
+      <button type="submit" name="admin_action" value="load_standard"
+        formnovalidate data-estab-confirm="replace-editor-with-standard">
+        Ungespeicherte Eingaben verwerfen und Standard laden
+      </button>
+      <button type="submit" name="admin_action" value="save_matrix_and_standard"
+        data-estab-confirm="replace-standard">
+        Aktive Matrix speichern und bisherigen Standard ersetzen
+      </button>
       <a href="admin.php">Abbrechen</a>
     </p>
   </form>

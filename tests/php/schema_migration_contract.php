@@ -22,6 +22,9 @@ $compose = $read($root . '/compose.yaml');
 $migratorImage = $read($root . '/docker/db/Dockerfile.migrate');
 $runner = $read($root . '/docker/db/migrate.sh');
 $runtimeMigration = $read($root . '/docker/db/migrations/30-runtime-schema.sql');
+$standardMatrixMigration = $read(
+    $root . '/docker/db/migrations/40-recipient-matrix-standard.sql'
+);
 $baseline = $read($root . '/docker/db/init/10-schema.sql');
 $verify = $read($root . '/docker/db/verify.sql');
 $health = $read($root . '/health.php');
@@ -119,6 +122,62 @@ $assert(
     && str_contains($runtimeMigration, 'ENGINE=InnoDB, CONVERT TO CHARACTER SET utf8mb4'),
     'Runtime migration does not discover and normalise historic eStab tables'
 );
+$assert(
+    !str_contains($baseline, 'nv_empfmtx_standard')
+        && str_contains(
+            $standardMatrixMigration,
+            'CREATE TABLE `nv_empfmtx_standard`'
+        )
+        && !str_contains(
+            $standardMatrixMigration,
+            'CREATE TABLE IF NOT EXISTS `nv_empfmtx_standard`'
+        )
+        && str_contains($standardMatrixMigration, '`mtx_rc2` BINARY(1)')
+        && str_contains($standardMatrixMigration, '`mtx_auto` BINARY(1)')
+        && str_contains(
+            $standardMatrixMigration,
+            'UNIQUE KEY `uq_empfmtx_standard_position` (`mtx_x`, `mtx_y`)'
+        ),
+    'Single standard matrix is not supplied through an additive versioned schema'
+);
+$assert(
+    str_contains($standardMatrixMigration, 'estab_migrate_40_preflight')
+        && str_contains(
+            $standardMatrixMigration,
+            'Standard matrix migration blocked: pre-existing nv_empfmtx_standard table'
+        )
+        && str_contains(
+            $standardMatrixMigration,
+            'estab:migration:40-recipient-matrix-standard:v1'
+        )
+        && str_contains(
+            $standardMatrixMigration,
+            'Standard matrix migration blocked: owned table content is not resumable'
+        )
+        && !str_contains($standardMatrixMigration, 'DELETE FROM `nv_empfmtx_standard`')
+        && str_contains($standardMatrixMigration, 'START TRANSACTION')
+        && str_contains($standardMatrixMigration, 'INSERT INTO `nv_empfmtx_standard`')
+        && str_contains($standardMatrixMigration, "(3,1,'cb','S2', 'Stab','ro','t','f')")
+        && str_contains($standardMatrixMigration, 'COMMIT'),
+    'Standard matrix migration does not fail closed and seed the historical preset'
+);
+$assert(
+    str_contains($schemaIntegration, 'recipient-matrix-standard.txt')
+        && str_contains($schemaIntegration, 'preserve-this-table')
+        && str_contains(
+            $schemaIntegration,
+            'empty migration-owned standard matrix was not safely resumed'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'modified migration-owned standard matrix was overwritten'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'standard recipient matrix differs from the historical 20-cell fixture'
+        ),
+    'Schema integration omits collision and exact standard-matrix evidence'
+);
 foreach ([
     'idx_benutzer_funktion_aktiv',
     'idx_anhang_filename_status',
@@ -167,15 +226,24 @@ foreach ([
 $assert(
     str_contains($verify, 'runtime_code_widths_ok')
     && str_contains($verify, 'runtime_attachment_indexes_ok')
+    && str_contains($verify, 'standard_matrix_row_count_ok')
+    && str_contains($verify, 'matrix_flag_targets_ok')
+    && str_contains($verify, 'standard_matrix_flag_targets_ok')
+    && str_contains($verify, "`mtx_auto` IN ('t', '1')")
     && str_contains($verify, 'schema_migrations_ok'),
-    'Database verification omits runtime widths, indexes, or migration ledger'
+    'Database verification omits runtime widths, indexes, standard matrix, or migration ledger'
 );
 $assert(
-    str_contains($health, "'20-nullable-dates.sql','30-runtime-schema.sql'")
+    str_contains(
+        $health,
+        "'20-nullable-dates.sql','30-runtime-schema.sql',"
+    )
+    && str_contains($health, "'40-recipient-matrix-standard.sql'")
+    && str_contains($health, 'FROM nv_empfmtx_standard')
     && str_contains($health, "'15_quitzeichen','x03_sperruser'")
     && str_contains($health, "column_name = 'fileext'")
     && str_contains($health, "column_name = 'id'"),
-    'Readiness does not gate on migrations, runtime codes, or attachment widths'
+    'Readiness does not gate on migrations, matrices, runtime codes, or attachment widths'
 );
 
 echo "schema migration contract: OK ({$assertions} assertions)\n";

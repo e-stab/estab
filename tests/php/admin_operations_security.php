@@ -61,6 +61,20 @@ $invalid = $validMatrixInput;
 $invalid['lagerot'] = '13';
 $assert(estab_admin_validate_matrix($invalid)['valid'] === false, 'empty red-copy target accepted');
 
+$invalid = $validMatrixInput;
+$invalid['rolle_11'] = '';
+$assert(
+    estab_admin_validate_matrix($invalid)['valid'] === false,
+    'roleless red-copy target accepted'
+);
+
+$invalid = $validMatrixInput;
+$invalid['rolle_12'] = '';
+$assert(
+    estab_admin_validate_matrix($invalid)['valid'] === false,
+    'roleless automatic-sighting target accepted'
+);
+
 $assert(estab_admin_parse_counter_value('1') === 1, 'minimum counter rejected');
 $assert(
     estab_admin_parse_counter_value((string) ESTAB_ADMIN_COUNTER_MAX) === ESTAB_ADMIN_COUNTER_MAX,
@@ -99,8 +113,17 @@ $matrixPage = file_get_contents($root . '/4fadm/make_fkt.php');
 $counterPage = file_get_contents($root . '/4fadm/set_number_after_crash.php');
 $resetPage = file_get_contents($root . '/4fach/resetpic.php');
 $databaseConfig = file_get_contents($root . '/4fcfg/dbcfg.inc.php');
+$messageTools = file_get_contents($root . '/4fach/tools.php');
+$messageDummy = file_get_contents($root . '/4fach/dummy.php');
 $apache = file_get_contents($root . '/docker/apache/estab.conf');
-foreach ([$helper, $matrixPage, $counterPage, $resetPage, $databaseConfig, $apache] as $source) {
+$adminHttp = file_get_contents($root . '/tests/integration/admin_workflows_http.sh');
+foreach (
+    [
+        $helper, $matrixPage, $counterPage, $resetPage, $databaseConfig,
+        $messageTools, $messageDummy, $apache, $adminHttp,
+    ]
+    as $source
+) {
     if (!is_string($source)) {
         throw new RuntimeException('Could not read administrative source files');
     }
@@ -119,7 +142,7 @@ $assert(
     'administrative database values are not consistently parameterized'
 );
 $assert(
-    substr_count($helper, '$connection->begin_transaction()') >= 3
+    substr_count($helper, '$connection->begin_transaction()') >= 4
         && substr_count($helper, '$connection->rollback()') >= 3
         && str_contains($helper, "'DELETE FROM ' . estab_auth_table(\$matrixTable)")
         && !str_contains($helper, 'TRUNCATE'),
@@ -145,10 +168,65 @@ $assert(
     'matrix update unexpectedly changes account assignments'
 );
 $assert(
+    str_contains($helper, 'function estab_admin_replace_matrix_and_standard(')
+        && substr_count(
+            $helper,
+            'estab_admin_write_matrix($connection, $matrixTable, $matrix)'
+        ) === 2
+        && str_contains(
+            $helper,
+            'estab_admin_write_matrix($connection, $standardMatrixTable, $matrix)'
+        )
+        && str_contains($helper, '`mtx_rc2`, `mtx_auto`')
+        && str_contains($helper, '$connection->commit()'),
+    'active and standard matrices are not replaced together with both flags'
+);
+$assert(
+    str_contains(
+        $matrixPage,
+        "\$standardMatrixTable = \$conf_4f_tbl['empfmtx'] . '_standard'"
+    )
+        && str_contains($matrixPage, "\$action === 'load_standard'")
+        && str_contains(
+            $matrixPage,
+            'estab_admin_fetch_matrix($connection, $standardMatrixTable)'
+        )
+        && str_contains($matrixPage, 'estab_admin_replace_matrix_and_standard(')
+        && str_contains($matrixPage, 'value="save_matrix"')
+        && str_contains($matrixPage, 'value="save_matrix_and_standard"')
+        && str_contains($matrixPage, 'value="load_standard"')
+        && str_contains(
+            $matrixPage,
+            'data-estab-confirm="replace-editor-with-standard"'
+        )
+        && str_contains($matrixPage, 'data-estab-confirm="replace-standard"')
+        && str_contains($matrixPage, 'bisherigen Standard ersetzen'),
+    'matrix editor does not expose the three explicit database-backed preset actions'
+);
+$assert(
     !str_contains($matrixPage, 'fopen(')
+        && !str_contains($matrixPage, 'file_put_contents(')
         && !str_contains($matrixPage, 'deault.fkt')
         && !str_contains($matrixPage, 'default.fkt'),
     'matrix editor still writes a generated PHP configuration file'
+);
+$assert(
+    str_contains($messageTools, "WHERE `mtx_auto` IN ('t','1')")
+        && str_contains($messageDummy, "WHERE `mtx_auto` IN ('t','1')"),
+    'runtime and editor disagree on accepted automatic-sighting flags'
+);
+$assert(
+    str_contains($adminHttp, 'refusing mutation outside an estab_ci project')
+        && str_contains($adminHttp, 'absenden_x laden_x speichern_x')
+        && str_contains($adminHttp, 'BEFORE INSERT ON \`nv_empfmtx_standard\`')
+        && str_contains($adminHttp, 'assert_status 500')
+        && str_contains($adminHttp, 'exact_matrix_snapshot')
+        && str_contains($adminHttp, 'exact_standard_matrix_snapshot')
+        && str_contains(
+            $adminHttp,
+            'failed combined save did not roll back the active matrix exactly'
+        ),
+    'admin HTTP proof omits legacy GET inertness or the two-table rollback gate'
 );
 
 foreach ([$matrixPage, $counterPage, $resetPage] as $page) {

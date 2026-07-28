@@ -42,9 +42,11 @@ function estab_admin_html(mixed $value): string
 /**
  * Validate all 20 recipient cells and return a canonical matrix.
  *
- * Empty cells cannot carry a role or automatic-sighting flag. Function names
- * are unique case-insensitively because they become login/recipient
- * identifiers throughout the legacy runtime.
+ * Empty cells cannot carry a role. Automatic sighting and the red-copy target
+ * require a selectable function with a Stab/FB role; a label-only text cell
+ * must never look operational. Function names are unique case-insensitively
+ * because they become login/recipient identifiers throughout the legacy
+ * runtime.
  */
 function estab_admin_validate_matrix(array $input): array
 {
@@ -85,7 +87,10 @@ function estab_admin_validate_matrix(array $input): array
                 $errors[] = 'stasi_' . $position;
             }
 
-            if ($function === '' && ($role !== '' || $auto)) {
+            if (
+                ($function === '' && $role !== '')
+                || ($auto && ($function === '' || $role === ''))
+            ) {
                 $errors[] = 'cell_' . $position;
             }
 
@@ -113,6 +118,7 @@ function estab_admin_validate_matrix(array $input): array
     if (
         !array_key_exists($redcopy, $cells)
         || $cells[$redcopy]['function'] === ''
+        || $cells[$redcopy]['role'] === ''
     ) {
         $errors[] = 'lagerot';
     } else {
@@ -216,15 +222,14 @@ function estab_admin_insert_audit(
 }
 
 /**
- * Atomically replace the matrix with exactly 20 prepared inserts.
+ * Replace one matrix inside the caller's transaction with prepared writes.
  *
- * DELETE is transactional for the InnoDB table. No account table is queried
+ * DELETE is transactional for the InnoDB tables. No account table is queried
  * or updated: active user assignments remain explicit operator decisions.
  */
-function estab_admin_replace_matrix(
+function estab_admin_write_matrix(
     mysqli $connection,
     string $matrixTable,
-    string $protocolTable,
     array $matrix
 ): void {
     $cells = $matrix['cells'] ?? null;
@@ -232,68 +237,107 @@ function estab_admin_replace_matrix(
         throw new InvalidArgumentException('A complete validated recipient matrix is required');
     }
 
+    $delete = $connection->prepare('DELETE FROM ' . estab_auth_table($matrixTable));
+    if (!$delete) {
+        throw new RuntimeException('Could not prepare recipient matrix replacement');
+    }
+    try {
+        if (!$delete->execute()) {
+            throw new RuntimeException('Could not clear recipient matrix');
+        }
+    } finally {
+        $delete->close();
+    }
+
+    $insert = $connection->prepare(
+        'INSERT INTO ' . estab_auth_table($matrixTable)
+        . ' (`mtx_x`, `mtx_y`, `mtx_typ`, `mtx_fkt`, `mtx_rolle`,'
+        . ' `mtx_mode`, `mtx_rc2`, `mtx_auto`)'
+        . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    );
+    if (!$insert) {
+        throw new RuntimeException('Could not prepare recipient matrix insert');
+    }
+    try {
+        foreach ($cells as $cell) {
+            if (!is_array($cell)) {
+                throw new InvalidArgumentException('Invalid recipient matrix cell');
+            }
+            $row = (int) ($cell['row'] ?? 0);
+            $column = (int) ($cell['column'] ?? 0);
+            $function = (string) ($cell['function'] ?? '');
+            $role = (string) ($cell['role'] ?? '');
+            $type = $function !== '' && $role !== '' ? 'cb' : 't';
+            $mode = 'ro';
+            $redcopy = !empty($cell['redcopy']) ? 't' : 'f';
+            $auto = !empty($cell['auto']) ? '1' : '0';
+            $insert->bind_param(
+                'iissssss',
+                $row,
+                $column,
+                $type,
+                $function,
+                $role,
+                $mode,
+                $redcopy,
+                $auto
+            );
+            if (!$insert->execute()) {
+                throw new RuntimeException('Could not insert recipient matrix cell');
+            }
+        }
+    } finally {
+        $insert->close();
+    }
+}
+
+/** Atomically replace only the matrix currently used by the runtime. */
+function estab_admin_replace_matrix(
+    mysqli $connection,
+    string $matrixTable,
+    string $protocolTable,
+    array $matrix
+): void {
     if (!$connection->begin_transaction()) {
         throw new RuntimeException('Could not start recipient matrix transaction');
     }
     try {
-        $delete = $connection->prepare('DELETE FROM ' . estab_auth_table($matrixTable));
-        if (!$delete) {
-            throw new RuntimeException('Could not prepare recipient matrix replacement');
-        }
-        try {
-            if (!$delete->execute()) {
-                throw new RuntimeException('Could not clear recipient matrix');
-            }
-        } finally {
-            $delete->close();
-        }
-
-        $insert = $connection->prepare(
-            'INSERT INTO ' . estab_auth_table($matrixTable)
-            . ' (`mtx_x`, `mtx_y`, `mtx_typ`, `mtx_fkt`, `mtx_rolle`,'
-            . ' `mtx_mode`, `mtx_rc2`, `mtx_auto`)'
-            . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-        );
-        if (!$insert) {
-            throw new RuntimeException('Could not prepare recipient matrix insert');
-        }
-        try {
-            foreach ($cells as $cell) {
-                if (!is_array($cell)) {
-                    throw new InvalidArgumentException('Invalid recipient matrix cell');
-                }
-                $row = (int) ($cell['row'] ?? 0);
-                $column = (int) ($cell['column'] ?? 0);
-                $function = (string) ($cell['function'] ?? '');
-                $role = (string) ($cell['role'] ?? '');
-                $type = $function !== '' && $role !== '' ? 'cb' : 't';
-                $mode = 'ro';
-                $redcopy = !empty($cell['redcopy']) ? 't' : 'f';
-                $auto = !empty($cell['auto']) ? '1' : '0';
-                $insert->bind_param(
-                    'iissssss',
-                    $row,
-                    $column,
-                    $type,
-                    $function,
-                    $role,
-                    $mode,
-                    $redcopy,
-                    $auto
-                );
-                if (!$insert->execute()) {
-                    throw new RuntimeException('Could not insert recipient matrix cell');
-                }
-            }
-        } finally {
-            $insert->close();
-        }
-
+        estab_admin_write_matrix($connection, $matrixTable, $matrix);
         estab_admin_insert_audit(
             $connection,
             $protocolTable,
             'Empfängermatrix',
             'Empfängermatrix atomar mit 20 Positionen aktualisiert.'
+        );
+        if (!$connection->commit()) {
+            throw new RuntimeException('Could not commit recipient matrix replacement');
+        }
+    } catch (Throwable $exception) {
+        $connection->rollback();
+        throw $exception;
+    }
+}
+
+/** Atomically make the submitted matrix both active and the single preset. */
+function estab_admin_replace_matrix_and_standard(
+    mysqli $connection,
+    string $matrixTable,
+    string $standardMatrixTable,
+    string $protocolTable,
+    array $matrix
+): void {
+    if (!$connection->begin_transaction()) {
+        throw new RuntimeException('Could not start recipient matrix transaction');
+    }
+    try {
+        // Keep a stable lock order across both administrative save actions.
+        estab_admin_write_matrix($connection, $matrixTable, $matrix);
+        estab_admin_write_matrix($connection, $standardMatrixTable, $matrix);
+        estab_admin_insert_audit(
+            $connection,
+            $protocolTable,
+            'Empfängermatrix',
+            'Aktive Empfängermatrix und Standardmatrix atomar mit je 20 Positionen aktualisiert.'
         );
         if (!$connection->commit()) {
             throw new RuntimeException('Could not commit recipient matrix replacement');

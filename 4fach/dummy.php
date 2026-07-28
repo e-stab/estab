@@ -330,7 +330,7 @@ require_once __DIR__ . "/../app/datetime.php";
        or die ("[query_table] Auswahl der Datenbank fehlgeschlagen");
     $query = "SELECT
                  mtx_fkt as `fkt` FROM ".$conf_4f_tbl ["empfmtx"]
-              ." WHERE `mtx_auto` = 1 ;" ;
+              ." WHERE `mtx_auto` IN ('t','1') ;" ;
     $query_result = mysql_query ($query, $db) or
        die("[query_table] <br>$query<br>103-".mysql_error()." ".mysql_errno());
     $resultcount = mysql_num_rows($query_result);

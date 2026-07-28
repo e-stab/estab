@@ -6,11 +6,11 @@ SELECT
       FROM information_schema.tables
      WHERE table_schema = DATABASE()
        AND table_name IN (
-         'nv_nachrichten', 'nv_empfmtx', 'nv_benutzer',
+         'nv_nachrichten', 'nv_empfmtx', 'nv_empfmtx_standard', 'nv_benutzer',
          'nv_masterkatego', 'nv_masterkategolink', 'nv_protokoll',
          'nv_anhang', 'nv_etb', 'nv_tbb', 'nv_ubb', 'nv_komplan',
          'nv_bhp50', 'nv_etbtitel', 'nv_tbbtitel'
-       )) = 14) AS `base_tables_ok`,
+       )) = 15) AS `base_tables_ok`,
   ((SELECT COUNT(*)
       FROM information_schema.tables
      WHERE table_schema = DATABASE()
@@ -46,10 +46,46 @@ SELECT
       WHERE `mtx_x` BETWEEN 1 AND 5 AND `mtx_y` BETWEEN 1 AND 4) = 20)
        AS `matrix_dimensions_ok`,
   ((SELECT COUNT(*) FROM `nv_empfmtx`
-      WHERE `mtx_fkt` IN ('LS','S1','S2','S3','S4','S5','S6','POL','THW','SAN')) = 10)
-       AS `default_functions_ok`,
-  ((SELECT COUNT(*) FROM `nv_empfmtx` WHERE `mtx_rc2` = 't' AND `mtx_fkt` = 'S2') = 1)
-       AS `red_copy_target_ok`,
+      WHERE `mtx_rc2` IN ('t', '1')) = 1
+   AND
+   (SELECT COUNT(*) FROM `nv_empfmtx`
+      WHERE `mtx_rc2` IN ('t', '1')
+        AND `mtx_typ` = 'cb'
+        AND `mtx_fkt` <> ''
+        AND `mtx_rolle` IN ('Stab', 'FB')) = 1
+   AND
+   (SELECT COUNT(*) FROM `nv_empfmtx`
+      WHERE `mtx_auto` IN ('t', '1')
+        AND NOT (
+          `mtx_typ` = 'cb'
+          AND `mtx_fkt` <> ''
+          AND `mtx_rolle` IN ('Stab', 'FB')
+        )) = 0)
+       AS `matrix_flag_targets_ok`,
+  ((SELECT COUNT(*) FROM `nv_empfmtx_standard`) = 20)
+       AS `standard_matrix_row_count_ok`,
+  ((SELECT COUNT(DISTINCT `mtx_x`, `mtx_y`) FROM `nv_empfmtx_standard`) = 20)
+       AS `standard_matrix_positions_unique_ok`,
+  ((SELECT COUNT(*) FROM `nv_empfmtx_standard`
+      WHERE `mtx_x` BETWEEN 1 AND 5 AND `mtx_y` BETWEEN 1 AND 4) = 20)
+       AS `standard_matrix_dimensions_ok`,
+  ((SELECT COUNT(*) FROM `nv_empfmtx_standard`
+      WHERE `mtx_rc2` IN ('t', '1')) = 1
+   AND
+   (SELECT COUNT(*) FROM `nv_empfmtx_standard`
+      WHERE `mtx_rc2` IN ('t', '1')
+        AND `mtx_typ` = 'cb'
+        AND `mtx_fkt` <> ''
+        AND `mtx_rolle` IN ('Stab', 'FB')) = 1
+   AND
+   (SELECT COUNT(*) FROM `nv_empfmtx_standard`
+      WHERE `mtx_auto` IN ('t', '1')
+        AND NOT (
+          `mtx_typ` = 'cb'
+          AND `mtx_fkt` <> ''
+          AND `mtx_rolle` IN ('Stab', 'FB')
+        )) = 0)
+       AS `standard_matrix_flag_targets_ok`,
   ((SELECT COUNT(*)
       FROM information_schema.statistics
      WHERE table_schema = DATABASE()
@@ -158,16 +194,17 @@ SELECT
        AND seq_in_index = 1
        AND column_name = 'md5hash') = 1)
        AS `runtime_attachment_indexes_ok`,
-  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 2
+  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 3
    AND
    (SELECT COUNT(*)
       FROM `estab_schema_migrations`
      WHERE `version` IN (
        '20-nullable-dates.sql',
-       '30-runtime-schema.sql'
+       '30-runtime-schema.sql',
+       '40-recipient-matrix-standard.sql'
      )
        AND `state` = 'applied'
-       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 2)
+       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 3)
        AS `schema_migrations_ok`;
 
 SELECT `table_name`, `engine`, `table_collation`
