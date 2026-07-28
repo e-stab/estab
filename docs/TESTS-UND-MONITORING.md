@@ -12,7 +12,7 @@ steht in der [Funktionsmatrix](FUNKTIONSNACHWEIS.md).
 | Image-Build | benötigte PHP-Erweiterungen und Apache-Konfiguration |
 | Datenbank | echtes MariaDB-Schema, Indizes, Matrix, Engines, Collations und Zero-Date-Freiheit |
 | HTTP | Header, direkte Endpunktfläche, 403-/400-/405-Grenzen, PNG-Antworten, Registrierung, sichtbare Sitzungsidentität, CSRF-Abmeldung, erneute Anmeldung, Nachrichten-/Kategorien- und ETB-/TBB-Rollengrenzen sowie optional Admin-Export |
-| Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, acht stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, genau eine Frameset-Leiste, Logout sowie Layout bei exakt 390 × 844 CSS-Pixeln |
+| Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, acht stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau eine Frameset-Leiste, Logout sowie Layout bei exakt 390 × 844 CSS-Pixeln |
 | Fachabnahme | kompletter Nachrichten-, Anhang-, PDF-, ETB-/TBB- und Restore-Ablauf |
 | Betrieb | kontinuierliche Readiness, Logs, Restarts, Kapazität und Backup-Alter |
 
@@ -414,10 +414,14 @@ Legacy-Frameset, füllt das Formular aus und prüft in acht Abschnitten:
   markieren `incident-log` als aktiven Bereich.
 - Ein echter Mausklick auf `Abmelden` im ETB beendet die Sitzung und stellt
   den öffentlichen Navigationszustand wieder her.
+- Bei 1440, 1120, 800, 700, 672 und 390 CSS-Pixel Breite bleiben alle
+  Kartenlinks vollständig innerhalb ihrer Karten, keine Klickfläche oder
+  sichtbare Hovermarkierung überdeckt eine Nachbarkarte und echter Hover
+  verändert keine Geometrie.
 - Mit einem über das DevTools-Protokoll exakt auf 390 × 844 CSS-Pixel
-  gesetzten Viewport bleiben Leiste, Kopf, Login-Karte und Einspalten-Karten
-  innerhalb der Breite; Navigationslinks sind erreichbar und zentrale
-  Login-Schaltflächen mindestens 44 Pixel hoch.
+  gesetzten Viewport bleiben zusätzlich Leiste, Kopf, Login-Karte und
+  Einspalten-Karten innerhalb der Breite; Navigationslinks sind erreichbar und
+  zentrale Login-Schaltflächen mindestens 44 Pixel hoch.
 
 Soweit Chrome bereits steuerbar ist, legt der Test bei Fehlern `failure.png`
 und ein kennwortfreies `state.json` an. Bei Browser-Startfehlern oder einem

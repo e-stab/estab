@@ -447,17 +447,18 @@
     border: 1px solid #8da2bd;
     border-radius: 10px;
     box-shadow: 0 3px 10px rgba(23, 32, 51, 0.1);
+    display: grid;
     min-width: 0;
 }
 
 .estab-menu-link {
     align-items: center;
     border-radius: inherit;
+    box-sizing: border-box;
     color: #183454;
     display: grid;
     gap: 1rem;
     grid-template-columns: 5rem minmax(0, 1fr);
-    height: 100%;
     padding: 1rem;
     text-decoration: none;
 }

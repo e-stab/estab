@@ -35,6 +35,10 @@ Geprüft werden:
   `incident-log`;
 - ein echter Mausklick auf `Abmelden` im Einsatztagebuch, die ungültig
   gewordene Sitzung und die Rückkehr zur anonymen Übersicht;
+- das Kartenraster bei `1440`, `1120`, `800`, `700`, `672` und `390`
+  CSS-Pixeln: Jede Klickfläche bleibt vollständig in ihrer Karte, Karten und
+  Klickflächen überdecken keine Nachbarn und ein echter Hover verändert weder
+  Geometrie noch Zwischenräume;
 - ein über das DevTools-Protokoll exakt auf `390x844` CSS-Pixel gesetzter
   Viewport, in dem öffentliche Leiste, Kopf, Login-Karte und einspaltige
   Modulkarten innerhalb der Breite bleiben, die Bereichsnavigation erreichbar
@@ -142,9 +146,10 @@ Bestandsloginformular geprüft; die erfolgreiche Browseranmeldung verwendet
 weiterhin die Neuanlage eines wegwerfbaren Testkontos. Die HTTP-Integration
 weist die erfolgreiche Anmeldung eines vorhandenen Kontos separat nach.
 
-Der Browserlauf prüft die vollständigen Klickpfade im Desktop-Viewport und die
-zentrale öffentliche Übersicht zusätzlich bei exakt `390x844` CSS-Pixeln. Das
-belegt Navigation, Anmeldeeinstieg, Kartenraster und Bediengrößen auf schmalen
-Displays. Die fachinterne Bedienung sämtlicher historischer Formulare im
-mehrspaltigen Legacy-Frameset wird damit nicht als vollständig mobil optimiert
-oder fachlich abgenommen behauptet.
+Der Browserlauf prüft die vollständigen Klickpfade im Desktop-Viewport, das
+Kartenraster zusätzlich an vier Zwischenbreiten und die zentrale öffentliche
+Übersicht bei exakt `390x844` CSS-Pixeln. Das belegt Navigation,
+Anmeldeeinstieg, überlappungsfreie Karten samt Hover und Bediengrößen auf
+schmalen Displays. Die fachinterne Bedienung sämtlicher historischer Formulare
+im mehrspaltigen Legacy-Frameset wird damit nicht als vollständig mobil
+optimiert oder fachlich abgenommen behauptet.

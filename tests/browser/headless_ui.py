@@ -782,6 +782,7 @@ class BrowserAcceptance:
         print("[1/8] Anonyme Übersicht, zwei Konto-Flows und gesperrte Module")
         self._assert_anonymous_overview()
         self._assert_protected_cards()
+        self._assert_root_card_layout("anonyme Übersicht bei 1440 px")
 
         print("[2/8] Bestehenden Konto-Flow über das Frameset öffnen")
         self.cdp.click(None, "#estab-login", "Button für ein bestehendes Konto")
@@ -1092,7 +1093,23 @@ class BrowserAcceptance:
         self._assert_anonymous_overview()
         self._assert_protected_cards()
 
-        print("[8/8] Schmaler 390x844-Viewport und horizontal bedienbare Bereichsnavigation")
+        print("[8/8] Kartenraster in Desktop-, Zwischen- und Schmalansicht")
+        for width in (1120, 800, 700, 672):
+            self.cdp.call(
+                "Emulation.setDeviceMetricsOverride",
+                {
+                    "width": width,
+                    "height": 844,
+                    "deviceScaleFactor": 1,
+                    "mobile": False,
+                    "screenWidth": width,
+                    "screenHeight": 844,
+                },
+            )
+            self.cdp.navigate(self.config.base_url + "/")
+            self._assert_root_card_layout(
+                f"anonyme Übersicht bei {width} px"
+            )
         self.cdp.call(
             "Emulation.setDeviceMetricsOverride",
             {
@@ -1106,6 +1123,7 @@ class BrowserAcceptance:
         )
         self.cdp.navigate(self.config.base_url + "/")
         self._assert_narrow_overview()
+        self._assert_root_card_layout("anonyme Übersicht bei 390 px")
 
     def _assert_anonymous_overview(self) -> None:
         self._equal(
@@ -1237,6 +1255,7 @@ class BrowserAcceptance:
             "Anwendungsbutton auf der angemeldeten Übersicht",
         )
         self._assert_internal_cards_same_tab()
+        self._assert_root_card_layout("angemeldete Übersicht")
 
     def _assert_dirty_navigation_guard(self) -> None:
         field_selector = (
@@ -1611,6 +1630,240 @@ class BrowserAcceptance:
             [],
             "Interne Modulkarten öffnen nicht durchgehend im selben Tab",
         )
+
+    def _assert_root_card_layout(self, location: str) -> None:
+        layout_expression = """
+            (() => {
+                const bounds = element => {
+                    if (!element) return null;
+                    const rect = element.getBoundingClientRect();
+                    return {
+                        left: rect.left,
+                        right: rect.right,
+                        top: rect.top,
+                        bottom: rect.bottom,
+                        width: rect.width,
+                        height: rect.height
+                    };
+                };
+                const intersects = (first, second) => (
+                    first.left < second.right - 0.5
+                    && first.right > second.left + 0.5
+                    && first.top < second.bottom - 0.5
+                    && first.bottom > second.top + 0.5
+                );
+                const nodes = Array.from(
+                    document.querySelectorAll(".estab-menu-card")
+                ).map((card, index) => {
+                    const link = card.querySelector("a.estab-menu-link");
+                    return {
+                        index,
+                        key: link
+                            ? link.getAttribute("data-estab-nav-key")
+                            : null,
+                        card,
+                        link,
+                        cardBounds: bounds(card),
+                        linkBounds: bounds(link)
+                    };
+                });
+                const records = nodes.map(node => ({
+                    index: node.index,
+                    key: node.key,
+                    card: node.cardBounds,
+                    link: node.linkBounds
+                }));
+                const containmentViolations = nodes.filter(node => {
+                    const card = node.cardBounds;
+                    const link = node.linkBounds;
+                    return !card || !link
+                        || link.left < card.left - 0.5
+                        || link.right > card.right + 0.5
+                        || link.top < card.top - 0.5
+                        || link.bottom > card.bottom + 0.5;
+                }).map(node => node.key || `index-${node.index}`);
+                const cardOverlaps = [];
+                const linkOverlaps = [];
+                for (let first = 0; first < nodes.length; first += 1) {
+                    for (
+                        let second = first + 1;
+                        second < nodes.length;
+                        second += 1
+                    ) {
+                        if (intersects(
+                            nodes[first].cardBounds,
+                            nodes[second].cardBounds
+                        )) {
+                            cardOverlaps.push([
+                                nodes[first].key,
+                                nodes[second].key
+                            ]);
+                        }
+                        if (
+                            intersects(
+                                nodes[first].linkBounds,
+                                nodes[second].cardBounds
+                            )
+                            || intersects(
+                                nodes[second].linkBounds,
+                                nodes[first].cardBounds
+                            )
+                        ) {
+                            linkOverlaps.push([
+                                nodes[first].key,
+                                nodes[second].key
+                            ]);
+                        }
+                    }
+                }
+                const hovered = nodes.filter(
+                    node => node.link && node.link.matches(":hover")
+                ).map(node => node.key);
+                const hoveredNode = nodes.find(
+                    node => node.link && node.link.matches(":hover")
+                ) || null;
+                let hoverVisualOverlaps = [];
+                let hoverStyle = null;
+                if (hoveredNode) {
+                    const style = getComputedStyle(hoveredNode.link);
+                    const outlineWidth = Number.parseFloat(style.outlineWidth) || 0;
+                    const outlineOffset = Number.parseFloat(style.outlineOffset) || 0;
+                    const expansion = Math.max(
+                        0,
+                        outlineWidth + outlineOffset
+                    );
+                    const visualBounds = {
+                        left: hoveredNode.linkBounds.left - expansion,
+                        right: hoveredNode.linkBounds.right + expansion,
+                        top: hoveredNode.linkBounds.top - expansion,
+                        bottom: hoveredNode.linkBounds.bottom + expansion
+                    };
+                    hoverVisualOverlaps = nodes.filter(
+                        node => node !== hoveredNode
+                            && intersects(visualBounds, node.cardBounds)
+                    ).map(node => node.key);
+                    hoverStyle = {
+                        outlineWidth,
+                        outlineOffset,
+                        backgroundColor: style.backgroundColor
+                    };
+                }
+                return {
+                    records,
+                    containmentViolations,
+                    cardOverlaps,
+                    linkOverlaps,
+                    hovered,
+                    hoverVisualOverlaps,
+                    hoverStyle
+                };
+            })()
+        """
+        initial = self.cdp.evaluate(layout_expression)
+        self._truth(
+            isinstance(initial, dict)
+            and isinstance(initial.get("records"), list)
+            and len(initial["records"]) == len(self.root_card_keys),
+            f"Das vollständige Kartenraster fehlt auf der {location}.",
+        )
+        self._equal(
+            initial.get("containmentViolations"),
+            [],
+            f"Kartenlinks ragen auf der {location} aus ihren Karten heraus",
+        )
+        self._equal(
+            initial.get("cardOverlaps"),
+            [],
+            f"Karten überschneiden sich auf der {location}",
+        )
+        self._equal(
+            initial.get("linkOverlaps"),
+            [],
+            f"Klickflächen überschneiden Nachbarkarten auf der {location}",
+        )
+
+        hover_position = self.cdp.evaluate(
+            """
+            (() => {
+                const link = document.querySelector(
+                    ".estab-menu-card a.estab-menu-link"
+                );
+                if (!link) return null;
+                link.scrollIntoView({block: "center", inline: "center"});
+                const rect = link.getBoundingClientRect();
+                return {
+                    key: link.getAttribute("data-estab-nav-key"),
+                    x: rect.left + rect.width / 2,
+                    y: rect.top + rect.height / 2
+                };
+            })()
+            """
+        )
+        self._truth(
+            isinstance(hover_position, dict),
+            f"Keine Karte konnte auf der {location} per Hover geprüft werden.",
+        )
+        before_hover = self.cdp.evaluate(layout_expression)
+        self.cdp.call(
+            "Input.dispatchMouseEvent",
+            {
+                "type": "mouseMoved",
+                "x": hover_position["x"],
+                "y": hover_position["y"],
+            },
+        )
+        after_hover = self.cdp.evaluate(layout_expression)
+        hover_key = hover_position.get("key")
+        self._truth(
+            hover_key in after_hover.get("hovered", []),
+            f"Der echte Hoverzustand wurde auf der {location} nicht aktiviert.",
+        )
+        self._equal(
+            after_hover.get("containmentViolations"),
+            [],
+            f"Hover lässt einen Kartenlink auf der {location} herausragen",
+        )
+        self._equal(
+            after_hover.get("linkOverlaps"),
+            [],
+            f"Hover lässt eine Klickfläche auf der {location} eine Nachbarkarte überdecken",
+        )
+        self._equal(
+            after_hover.get("hoverVisualOverlaps"),
+            [],
+            f"Die sichtbare Hovermarkierung überdeckt auf der {location} eine Nachbarkarte",
+        )
+        self._truth(
+            isinstance(after_hover.get("hoverStyle"), dict)
+            and after_hover["hoverStyle"].get("outlineWidth", 0) > 0,
+            f"Eine sichtbare Hovermarkierung fehlt auf der {location}.",
+        )
+
+        def geometry_for(
+            state: dict[str, Any],
+            key: str,
+        ) -> dict[str, Any] | None:
+            for record in state.get("records", []):
+                if isinstance(record, dict) and record.get("key") == key:
+                    return record
+            return None
+
+        before_geometry = geometry_for(before_hover, str(hover_key))
+        after_geometry = geometry_for(after_hover, str(hover_key))
+        self._truth(
+            isinstance(before_geometry, dict)
+            and isinstance(after_geometry, dict),
+            f"Hovergeometrie fehlt auf der {location}.",
+        )
+        for element in ("card", "link"):
+            for dimension in ("left", "right", "top", "bottom", "width", "height"):
+                before_value = before_geometry[element][dimension]
+                after_value = after_geometry[element][dimension]
+                self._truth(
+                    abs(before_value - after_value) <= 0.5,
+                    f"Hover verändert auf der {location} die "
+                    f"{element}-{dimension}-Geometrie.",
+                )
 
     def _click_root_card(self, path: str, description: str) -> None:
         selector = f'a.estab-menu-link[href$="{path}"]'
