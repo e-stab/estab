@@ -934,19 +934,36 @@ class BrowserAcceptance:
             0,
             "zusätzliche Session-Bar im Frameset-Dokument",
         )
-        self._equal(
-            self.cdp.evaluate(
-                _visible_count_expression("counter", "aside[data-estab-session-bar]")
-            ),
-            0,
-            "Session-Bar im eingebetteten Counter",
-        )
-        self._equal(
-            self.cdp.evaluate(
-                _visible_count_expression("status", "aside[data-estab-session-bar]")
-            ),
-            0,
-            "Session-Bar im eingebetteten Statusframe",
+        for width, height in (
+            (1440, 1000),
+            (1280, 720),
+            (700, 760),
+            (390, 844),
+        ):
+            self.cdp.call(
+                "Emulation.setDeviceMetricsOverride",
+                {
+                    "width": width,
+                    "height": height,
+                    "deviceScaleFactor": 1,
+                    "mobile": False,
+                    "screenWidth": width,
+                    "screenHeight": height,
+                },
+            )
+            self._assert_application_sidebar_layout(
+                f"Nachrichten-Sidebar bei {width}×{height} px"
+            )
+        self.cdp.call(
+            "Emulation.setDeviceMetricsOverride",
+            {
+                "width": 1440,
+                "height": 1000,
+                "deviceScaleFactor": 1,
+                "mobile": False,
+                "screenWidth": 1440,
+                "screenHeight": 1000,
+            },
         )
 
         self._assert_dirty_navigation_guard()
@@ -1081,7 +1098,7 @@ class BrowserAcceptance:
             ),
             "anonyme Anmeldung nach dem Logout fehlt",
         )
-        for frame_name in ("mainframe", "vorgaben", "counter", "status"):
+        for frame_name in ("mainframe", "vorgaben"):
             self._equal(
                 self.cdp.evaluate(
                     _visible_count_expression(frame_name, "aside[data-estab-session-bar]")
@@ -1257,6 +1274,1218 @@ class BrowserAcceptance:
         self._assert_internal_cards_same_tab()
         self._assert_root_card_layout("angemeldete Übersicht")
 
+    def _assert_application_sidebar_layout(self, location: str) -> None:
+        workspace = self.cdp.evaluate(
+            """
+            (() => {
+                if (innerWidth <= 672) {
+                    scrollTo(0, 0);
+                }
+                const shell = document.querySelector(
+                    "[data-estab-message-workspace]"
+                );
+                const sidebar = document.querySelector(
+                    'iframe[name="vorgaben"]'
+                );
+                const content = document.querySelector(
+                    'iframe[name="mainframe"]'
+                );
+                if (!shell || !sidebar || !content) return null;
+                const sidebarRect = sidebar.getBoundingClientRect();
+                const contentRect = content.getBoundingClientRect();
+                return {
+                    frameNames: Array.from(
+                        document.querySelectorAll("iframe[name]")
+                    ).map(frame => frame.getAttribute("name")),
+                    sidebar: {
+                        left: sidebarRect.left,
+                        right: sidebarRect.right,
+                        top: sidebarRect.top,
+                        bottom: sidebarRect.bottom,
+                        width: sidebarRect.width
+                    },
+                    content: {
+                        left: contentRect.left,
+                        right: contentRect.right,
+                        top: contentRect.top,
+                        bottom: contentRect.bottom,
+                        width: contentRect.width
+                    },
+                    innerWidth,
+                    innerHeight,
+                    scrollHeight: document.scrollingElement.scrollHeight
+                };
+            })()
+            """
+        )
+        self._truth(isinstance(workspace, dict), f"Arbeitsbereich fehlt: {location}.")
+        self._equal(
+            workspace.get("frameNames"),
+            ["vorgaben", "mainframe"],
+            f"Frame-Struktur in {location}",
+        )
+        sidebar_frame = workspace.get("sidebar")
+        content_frame = workspace.get("content")
+        inner_width = float(workspace.get("innerWidth", 0))
+        inner_height = float(workspace.get("innerHeight", 0))
+        if inner_width <= 672:
+            self._truth(
+                isinstance(sidebar_frame, dict)
+                and isinstance(content_frame, dict)
+                and abs(float(sidebar_frame.get("left", -1))) <= 0.5
+                and abs(float(content_frame.get("left", -1))) <= 0.5
+                and abs(float(sidebar_frame.get("top", -1))) <= 0.5
+                and abs(float(sidebar_frame.get("bottom", -1)) - inner_height)
+                <= 0.5
+                and abs(float(content_frame.get("top", -1)) - inner_height)
+                <= 0.5
+                and abs(
+                    float(content_frame.get("bottom", -1))
+                    - (2 * inner_height)
+                )
+                <= 0.5
+                and abs(float(sidebar_frame.get("width", 0)) - inner_width)
+                <= 0.5
+                and abs(float(content_frame.get("width", 0)) - inner_width)
+                <= 0.5
+                and abs(
+                    float(workspace.get("scrollHeight", 0))
+                    - (2 * inner_height)
+                )
+                <= 1,
+                f"Sidebar und Inhalt bilden in {location} keine zwei vollen "
+                "Viewport-Zeilen.",
+            )
+        else:
+            self._truth(
+                isinstance(sidebar_frame, dict)
+                and isinstance(content_frame, dict)
+                and abs(float(sidebar_frame.get("top", -1))) <= 0.5
+                and abs(
+                    float(sidebar_frame.get("bottom", -1)) - inner_height
+                )
+                <= 0.5
+                and abs(float(content_frame.get("top", -1))) <= 0.5
+                and abs(float(content_frame.get("bottom", -1)) - inner_height)
+                <= 0.5
+                and float(sidebar_frame.get("width", 0)) >= 260
+                and float(sidebar_frame.get("right", 0))
+                <= float(content_frame.get("left", -1)) + 0.5
+                and float(content_frame.get("width", 0)) >= 300,
+                f"Sidebar nutzt in {location} nicht die volle linke Höhe.",
+            )
+
+        state = self.cdp.evaluate(
+            _frame_expression(
+                "vorgaben",
+                """
+                const root = doc.scrollingElement;
+                const status = doc.querySelector("[data-estab-sidebar-status]");
+                const bar = doc.querySelector("aside[data-estab-session-bar]");
+                const topline = bar && bar.querySelector(
+                    ".estab-session-topline"
+                );
+                const navigation = bar && bar.querySelector(
+                    "[data-estab-navigation]"
+                );
+                const workflow = doc.querySelector(
+                    "[data-estab-workflow-menu]"
+                );
+                const links = navigation
+                    ? Array.from(
+                        navigation.querySelectorAll("a[data-estab-nav-key]")
+                    )
+                    : [];
+                const actions = workflow
+                    ? Array.from(
+                        workflow.querySelectorAll(
+                            "button[data-estab-workflow-key]"
+                        )
+                    )
+                    : [];
+                const rect = element => {
+                    if (!element) return null;
+                    const value = element.getBoundingClientRect();
+                    return {
+                        left: value.left,
+                        right: value.right,
+                        top: value.top,
+                        bottom: value.bottom,
+                        width: value.width,
+                        height: value.height
+                    };
+                };
+                const nestedScrollers = Array.from(
+                    doc.querySelectorAll("body *")
+                ).filter(element => {
+                    const style = target.getComputedStyle(element);
+                    return /(auto|scroll)/.test(style.overflowY) &&
+                        element.scrollHeight > element.clientHeight + 1;
+                });
+                const currentPresence = status && status.querySelector(
+                    '[data-estab-presence-state="current"]'
+                );
+                const queue = status && status.querySelector(
+                    "[data-estab-queue-count]"
+                );
+                const queueContainer = status && status.querySelector(
+                    "[data-estab-queue-state]"
+                );
+                const time = status && status.querySelector("time[datetime]");
+                const soundToggle = doc.querySelector(
+                    "[data-estab-sound-toggle]"
+                );
+                const soundFeedback = doc.querySelector(
+                    "[data-estab-sound-feedback]"
+                );
+                const sidebarAudio = doc.querySelector(
+                    "audio[data-estab-sidebar-audio]"
+                );
+                return {
+                    status: rect(status),
+                    bar: rect(bar),
+                    topline: rect(topline),
+                    navigation: rect(navigation),
+                    workflow: rect(workflow),
+                    navigationMode: navigation && navigation.getAttribute(
+                        "data-estab-navigation-mode"
+                    ),
+                    hasDisclosure: Boolean(
+                        navigation && navigation.querySelector("details,summary")
+                    ),
+                    linkCount: links.length,
+                    linksFit: links.every(link => {
+                        const value = rect(link);
+                        const style = target.getComputedStyle(link);
+                        return value && value.width >= 44 &&
+                            value.height >= 44 &&
+                            style.display !== "none" &&
+                            style.visibility !== "hidden";
+                    }),
+                    navigationScrollFree: Boolean(
+                        navigation &&
+                        navigation.scrollWidth <= navigation.clientWidth + 1 &&
+                        navigation.scrollHeight <= navigation.clientHeight + 1
+                    ),
+                    nestedScrollers: nestedScrollers.map(element =>
+                        element.className || element.tagName
+                    ),
+                    documentWidthFits:
+                        root.scrollWidth <= root.clientWidth + 1,
+                    documentCanReachEnd:
+                        root.scrollHeight >= root.clientHeight,
+                    actionKeys: actions.map(button =>
+                        button.getAttribute("data-estab-workflow-key")
+                    ),
+                    actionsFit: actions.every(button => {
+                        const value = rect(button);
+                        return value && value.width >= 44 && value.height >= 44;
+                    }),
+                    currentFunction: currentPresence &&
+                        currentPresence.getAttribute(
+                            "data-estab-presence-function"
+                        ),
+                    queueText: queue && queue.textContent.trim(),
+                    queueState: queueContainer && queueContainer.getAttribute(
+                        "data-estab-queue-state"
+                    ),
+                    queueWarningVisible: Boolean(
+                        queueContainer
+                        && queueContainer.getAttribute(
+                            "data-estab-queue-state"
+                        ) === "has-work"
+                        && target.getComputedStyle(
+                            queueContainer
+                        ).backgroundColor !== "rgba(0, 0, 0, 0)"
+                        && target.getComputedStyle(
+                            queueContainer
+                        ).borderTopColor !== "rgba(0, 0, 0, 0)"
+                    ),
+                    timeValue: time && time.getAttribute("datetime"),
+                    onlineCount: status && Number(
+                        status.querySelector("[data-estab-online-count]")
+                            ?.getAttribute("data-estab-online-count")
+                    ),
+                    soundToggle: rect(soundToggle),
+                    soundToggleVisible: Boolean(
+                        soundToggle
+                        && target.getComputedStyle(soundToggle).display !== "none"
+                        && target.getComputedStyle(soundToggle).visibility !== "hidden"
+                    ),
+                    soundTogglePressed: soundToggle &&
+                        soundToggle.getAttribute("aria-pressed"),
+                    soundFeedback: rect(soundFeedback),
+                    soundFeedbackVisible: Boolean(
+                        soundFeedback
+                        && target.getComputedStyle(soundFeedback).display !== "none"
+                        && target.getComputedStyle(soundFeedback).visibility !== "hidden"
+                    ),
+                    soundFeedbackText: soundFeedback &&
+                        soundFeedback.textContent.trim(),
+                    soundFeedbackLive: soundFeedback &&
+                        soundFeedback.getAttribute("aria-live"),
+                    audioCount: doc.querySelectorAll(
+                        "audio[data-estab-sidebar-audio]"
+                    ).length,
+                    audioSource: sidebarAudio &&
+                        sidebarAudio.getAttribute("src"),
+                    refreshAvailable:
+                        typeof target.estabRefreshSidebarStatus === "function"
+                };
+                """,
+            )
+        )
+        self._truth(isinstance(state, dict), f"Sidebar-Inhalt fehlt: {location}.")
+        for key in ("status", "bar", "topline", "navigation", "workflow"):
+            self._truth(
+                isinstance(state.get(key), dict),
+                f"{key} fehlt in {location}.",
+            )
+        status_rect = state["status"]
+        bar_rect = state["bar"]
+        topline_rect = state["topline"]
+        navigation_rect = state["navigation"]
+        workflow_rect = state["workflow"]
+        self._truth(
+            status_rect["bottom"] <= bar_rect["top"] + 0.5
+            and topline_rect["bottom"] <= navigation_rect["top"] + 0.5
+            and bar_rect["bottom"] <= workflow_rect["top"] + 0.5,
+            f"Status, Benutzer, Bereiche und Aktionen überlappen in {location}.",
+        )
+        self._equal(
+            state.get("navigationMode"),
+            "sidebar",
+            f"Navigationsmodus in {location}",
+        )
+        self._truth(
+            not state.get("hasDisclosure"),
+            f"Bereichsnavigation ist in {location} noch eingeklappt.",
+        )
+        self._equal(state.get("linkCount"), 10, f"Bereichslinks in {location}")
+        self._truth(
+            state.get("linksFit") and state.get("navigationScrollFree"),
+            f"Bereichslinks besitzen in {location} eigene Scroll- oder zu kleine Flächen.",
+        )
+        self._equal(
+            state.get("nestedScrollers"),
+            [],
+            f"Verschachtelte vertikale Scrollflächen in {location}",
+        )
+        self._truth(
+            state.get("documentWidthFits") and state.get("documentCanReachEnd"),
+            f"Gesamte Sidebar passt horizontal oder scrollt nicht vollständig in {location}.",
+        )
+        self._equal(
+            state.get("actionKeys"),
+            [
+                "stab_schreiben",
+                "stab_lesen",
+                "m2_benutzer",
+            ],
+            f"Arbeitsaktionen in {location}",
+        )
+        self._truth(state.get("actionsFit"), f"Zu kleine Aktion in {location}.")
+        self._equal(
+            state.get("currentFunction"),
+            self.config.login_function,
+            f"Eigene Online-Funktion in {location}",
+        )
+        queue_text = state.get("queueText")
+        self._truth(
+            isinstance(queue_text, str) and queue_text.isdigit(),
+            f"Arbeitszähler ist in {location} nicht numerisch.",
+        )
+        queue_count = int(queue_text)
+        self._equal(
+            state.get("queueState"),
+            "has-work" if queue_count > 0 else "empty",
+            f"Persistenter Warteschlangenstatus in {location}",
+        )
+        if queue_count > 0:
+            self._truth(
+                state.get("queueWarningVisible") is True,
+                f"Offene Meldungen sind in {location} nicht hervorgehoben.",
+            )
+        time_value = state.get("timeValue")
+        self._truth(
+            isinstance(time_value, str) and "T" in time_value,
+            f"Serverzeit fehlt in {location}.",
+        )
+        self._truth(
+            isinstance(state.get("onlineCount"), (int, float))
+            and state["onlineCount"] >= 1,
+            f"Online-Übersicht ist in {location} unvollständig.",
+        )
+        self._truth(
+            state.get("refreshAvailable"),
+            f"Schonende Statusaktualisierung fehlt in {location}.",
+        )
+        sound_toggle = state.get("soundToggle")
+        sound_feedback = state.get("soundFeedback")
+        self._truth(
+            isinstance(sound_toggle, dict)
+            and float(sound_toggle.get("width", 0)) >= 44
+            and float(sound_toggle.get("height", 0)) >= 44
+            and state.get("soundToggleVisible") is True,
+            f"Sound-Schalter ist in {location} nicht sichtbar oder kleiner als 44 px.",
+        )
+        self._equal(
+            state.get("soundTogglePressed"),
+            "false",
+            f"Initialer Sound-Zustand in {location}",
+        )
+        self._truth(
+            isinstance(sound_feedback, dict)
+            and float(sound_feedback.get("width", 0)) > 0
+            and float(sound_feedback.get("height", 0)) > 0
+            and state.get("soundFeedbackVisible") is True
+            and isinstance(state.get("soundFeedbackText"), str)
+            and bool(state["soundFeedbackText"])
+            and state.get("soundFeedbackLive") == "polite",
+            f"Sichtbarer Sound-Status fehlt in {location}.",
+        )
+        self._equal(
+            state.get("audioCount"),
+            1,
+            f"Anzahl langlebiger Audio-Elemente in {location}",
+        )
+        audio_source = state.get("audioSource")
+        self._truth(
+            isinstance(audio_source, str) and audio_source.lower().endswith(".wav"),
+            f"PCM-WAV-Quelle fehlt in {location}.",
+        )
+
+        audio_contract = self.cdp.evaluate(
+            _frame_expression(
+                "vorgaben",
+                """
+                return (async () => {
+                    const audio = doc.querySelector(
+                        "audio[data-estab-sidebar-audio]"
+                    );
+                    if (!audio) return null;
+                    const rawSource = audio.getAttribute("src");
+                    if (!rawSource) return null;
+                    const source = new target.URL(rawSource, target.location.href);
+                    if (source.origin !== target.location.origin ||
+                        !source.pathname.toLowerCase().endsWith(".wav")) {
+                        return null;
+                    }
+                    const response = await target.fetch(source.href, {
+                        credentials: "same-origin",
+                        cache: "no-store"
+                    });
+                    if (!response.ok) return null;
+                    const bytes = await response.arrayBuffer();
+                    const view = new target.DataView(bytes);
+                    const ascii = (offset, length) => {
+                        let value = "";
+                        for (let index = 0; index < length; index += 1) {
+                            value += String.fromCharCode(
+                                view.getUint8(offset + index)
+                            );
+                        }
+                        return value;
+                    };
+                    if (view.byteLength < 20 ||
+                        ascii(0, 4) !== "RIFF" ||
+                        ascii(8, 4) !== "WAVE") {
+                        return null;
+                    }
+                    let offset = 12;
+                    while (offset + 8 <= view.byteLength) {
+                        const chunk = ascii(offset, 4);
+                        const size = view.getUint32(offset + 4, true);
+                        const dataOffset = offset + 8;
+                        if (chunk === "fmt " && size >= 16 &&
+                            dataOffset + size <= view.byteLength) {
+                            return {
+                                sameOrigin: true,
+                                path: source.pathname,
+                                format: view.getUint16(dataOffset, true)
+                            };
+                        }
+                        offset = dataOffset + size + (size % 2);
+                    }
+                    return null;
+                })();
+                """,
+            )
+        )
+        self._truth(
+            isinstance(audio_contract, dict)
+            and audio_contract.get("sameOrigin") is True
+            and str(audio_contract.get("path", "")).lower().endswith(".wav")
+            and audio_contract.get("format") == 1,
+            f"Audioquelle ist in {location} kein gleich-originiges PCM-WAV.",
+        )
+
+        refresh = self.cdp.evaluate(
+            _frame_expression(
+                "vorgaben",
+                """
+                return (async () => {
+                    const root = doc.scrollingElement;
+                    const action = doc.querySelector(
+                        'button[data-estab-workflow-key="m2_benutzer"]'
+                    );
+                    const audio = doc.querySelector(
+                        "audio[data-estab-sidebar-audio]"
+                    );
+                    if (!root || !action ||
+                        !audio ||
+                        typeof target.estabRefreshSidebarStatus !== "function") {
+                        return null;
+                    }
+                    root.scrollTop = Math.max(
+                        0,
+                        root.scrollHeight - root.clientHeight
+                    );
+                    action.focus({preventScroll: true});
+                    const before = root.scrollTop;
+                    const refreshed = await target.estabRefreshSidebarStatus();
+                    await new Promise(resolve =>
+                        target.requestAnimationFrame(resolve)
+                    );
+                    return {
+                        refreshed,
+                        before,
+                        after: root.scrollTop,
+                        focusPreserved: doc.activeElement === action,
+                        statusCount: doc.querySelectorAll(
+                            "[data-estab-sidebar-status]"
+                        ).length,
+                        soundToggleCount: doc.querySelectorAll(
+                            "[data-estab-sound-toggle]"
+                        ).length,
+                        soundFeedbackCount: doc.querySelectorAll(
+                            "[data-estab-sound-feedback]"
+                        ).length,
+                        audioPreserved: audio === doc.querySelector(
+                            "audio[data-estab-sidebar-audio]"
+                        )
+                    };
+                })();
+                """,
+            )
+        )
+        self._truth(
+            isinstance(refresh, dict)
+            and refresh.get("refreshed") is True
+            and refresh.get("focusPreserved") is True
+            and refresh.get("statusCount") == 1
+            and refresh.get("soundToggleCount") == 1
+            and refresh.get("soundFeedbackCount") == 1
+            and refresh.get("audioPreserved") is True
+            and abs(
+                float(refresh.get("before", -10))
+                - float(refresh.get("after", 10))
+            ) <= 1,
+            f"Statusaktualisierung verändert Fokus oder Scrollposition in {location}.",
+        )
+
+        sound_focus_refresh = self.cdp.evaluate(
+            _frame_expression(
+                "vorgaben",
+                """
+                return (async () => {
+                    const root = doc.scrollingElement;
+                    const button = doc.querySelector(
+                        "[data-estab-sound-toggle]"
+                    );
+                    if (!root || !button ||
+                        typeof target.estabRefreshSidebarStatus !== "function") {
+                        return null;
+                    }
+                    button.focus({preventScroll: true});
+                    const before = root.scrollTop;
+                    const refreshed = await target.estabRefreshSidebarStatus();
+                    await new Promise(resolve =>
+                        target.requestAnimationFrame(resolve)
+                    );
+                    const restored = doc.querySelector(
+                        "[data-estab-sound-toggle]"
+                    );
+                    return {
+                        refreshed,
+                        identityPreserved: restored === button,
+                        focusPreserved:
+                            Boolean(restored && doc.activeElement === restored),
+                        before,
+                        after: root.scrollTop
+                    };
+                })();
+                """,
+            )
+        )
+        self._truth(
+            isinstance(sound_focus_refresh, dict)
+            and sound_focus_refresh.get("refreshed") is True
+            and sound_focus_refresh.get("identityPreserved") is True
+            and sound_focus_refresh.get("focusPreserved") is True
+            and abs(
+                float(sound_focus_refresh.get("before", -10))
+                - float(sound_focus_refresh.get("after", 10))
+            )
+            <= 1,
+            f"Statusaktualisierung verliert in {location} den Fokus des "
+            "Hinweiston-Schalters.",
+        )
+
+        if inner_width == 390 and inner_height == 844:
+            self._assert_sidebar_stale_recovery(location)
+            self._assert_sidebar_sound_toggle(location)
+            self._assert_mobile_message_navigation(location)
+
+    def _assert_sidebar_stale_recovery(self, location: str) -> None:
+        result = self.cdp.evaluate(
+            _frame_expression(
+                "vorgaben",
+                """
+                return (async () => {
+                    const action = doc.querySelector(
+                        'button[data-estab-workflow-key="m2_benutzer"]'
+                    );
+                    const originalFetch = target.fetch;
+                    if (!action ||
+                        typeof target.estabRefreshSidebarStatus !== "function") {
+                        return null;
+                    }
+                    action.focus({preventScroll: true});
+                    try {
+                        target.fetch = function () {
+                            return target.Promise.resolve(
+                                new target.Response("unavailable", {status: 503})
+                            );
+                        };
+                        const failed =
+                            await target.estabRefreshSidebarStatus();
+                        const staleStatus = doc.querySelector(
+                            "[data-estab-sidebar-status]"
+                        );
+                        const staleFreshness = doc.querySelector(
+                            "[data-estab-sidebar-freshness]"
+                        );
+                        const stale = {
+                            failed,
+                            state: staleFreshness &&
+                                staleFreshness.getAttribute(
+                                    "data-estab-status-freshness"
+                                ),
+                            text: staleFreshness &&
+                                staleFreshness.textContent.trim(),
+                            classed: Boolean(
+                                staleStatus &&
+                                staleStatus.classList.contains(
+                                    "estab-sidebar-status-stale"
+                                )
+                            ),
+                            focusPreserved: doc.activeElement === action,
+                            navigationCount: doc.querySelectorAll(
+                                'a[data-estab-nav-key]'
+                            ).length
+                        };
+                        target.fetch = originalFetch;
+                        const recovered =
+                            await target.estabRefreshSidebarStatus();
+                        const currentStatus = doc.querySelector(
+                            "[data-estab-sidebar-status]"
+                        );
+                        const currentFreshness = doc.querySelector(
+                            "[data-estab-sidebar-freshness]"
+                        );
+                        return {
+                            stale,
+                            recovered,
+                            currentState: currentFreshness &&
+                                currentFreshness.getAttribute(
+                                    "data-estab-status-freshness"
+                                ),
+                            currentText: currentFreshness &&
+                                currentFreshness.textContent.trim(),
+                            staleClassCleared: Boolean(
+                                currentStatus &&
+                                !currentStatus.classList.contains(
+                                    "estab-sidebar-status-stale"
+                                )
+                            )
+                        };
+                    } finally {
+                        target.fetch = originalFetch;
+                    }
+                })();
+                """,
+            )
+        )
+        stale = result.get("stale", {}) if isinstance(result, dict) else {}
+        self._truth(
+            isinstance(result, dict)
+            and stale.get("failed") is False
+            and stale.get("state") == "stale"
+            and "Status nicht aktuell" in str(stale.get("text", ""))
+            and "letzter Abruf" in str(stale.get("text", ""))
+            and stale.get("classed") is True
+            and stale.get("focusPreserved") is True
+            and stale.get("navigationCount") == 10
+            and result.get("recovered") is True
+            and result.get("currentState") == "current"
+            and result.get("currentText") == "Status wieder aktuell"
+            and result.get("staleClassCleared") is True,
+            f"Fehlgeschlagener Statusabruf ist in {location} nicht sichtbar "
+            "oder erholt sich nicht.",
+        )
+
+    def _assert_sidebar_sound_toggle(self, location: str) -> None:
+        initial = self.cdp.evaluate(
+            _frame_expression(
+                "vorgaben",
+                """
+                const button = doc.querySelector("[data-estab-sound-toggle]");
+                const feedback = doc.querySelector(
+                    "[data-estab-sound-feedback]"
+                );
+                const audio = doc.querySelector(
+                    "audio[data-estab-sidebar-audio]"
+                );
+                if (!button || !feedback || !audio) return null;
+                audio.__estabBrowserAudioIdentity = "persistent";
+                audio.__estabBrowserPlayCalls = 0;
+                audio.play = function () {
+                    this.__estabBrowserPlayCalls += 1;
+                    const error = new target.Error("gesture required");
+                    error.name = "NotAllowedError";
+                    return target.Promise.reject(error);
+                };
+                return {
+                    pressed: button.getAttribute("aria-pressed"),
+                    feedback: feedback.textContent.trim()
+                };
+                """,
+            )
+        )
+        self._truth(
+            isinstance(initial, dict)
+            and initial.get("pressed") == "false"
+            and bool(initial.get("feedback")),
+            f"Sound-Schalter besitzt in {location} keinen deaktivierten Ausgangszustand.",
+        )
+
+        self.cdp.click(
+            "vorgaben",
+            "[data-estab-sound-toggle]",
+            f"blockierter Sound-Schalter in {location}",
+        )
+        blocked = self.cdp.wait_for(
+            _frame_expression(
+                "vorgaben",
+                """
+                const button = doc.querySelector("[data-estab-sound-toggle]");
+                const feedback = doc.querySelector(
+                    "[data-estab-sound-feedback]"
+                );
+                const audio = doc.querySelector(
+                    "audio[data-estab-sidebar-audio]"
+                );
+                if (!button || !feedback || !audio ||
+                    button.getAttribute("aria-pressed") !== "true" ||
+                    button.getAttribute("data-estab-sound-state") !== "blocked" ||
+                    !feedback.textContent.includes("blockiert") ||
+                    target.localStorage.getItem(
+                        "estab.sidebar.sounds"
+                    ) !== "on" ||
+                    audio.__estabBrowserAudioIdentity !== "persistent" ||
+                    audio.__estabBrowserPlayCalls < 1) {
+                    return false;
+                }
+                return {
+                    feedback: feedback.textContent.trim(),
+                    playCalls: audio.__estabBrowserPlayCalls
+                };
+                """,
+            ),
+            f"blockierte Audiowiedergabe wird in {location} nicht sichtbar",
+        )
+
+        self.cdp.evaluate(
+            """
+            (() => {
+                const sidebar = document.querySelector(
+                    'iframe[name="vorgaben"]'
+                );
+                if (!sidebar || !sidebar.contentWindow) return false;
+                sidebar.contentWindow.location.reload();
+                return true;
+            })()
+            """
+        )
+        reloaded = self.cdp.wait_for(
+            _frame_expression(
+                "vorgaben",
+                """
+                const button = doc.querySelector("[data-estab-sound-toggle]");
+                const feedback = doc.querySelector(
+                    "[data-estab-sound-feedback]"
+                );
+                if (!button || !feedback ||
+                    doc.readyState !== "complete" ||
+                    typeof target.estabSidebarSoundState !== "function") {
+                    return false;
+                }
+                const state = target.estabSidebarSoundState();
+                if (button.getAttribute("aria-pressed") !== "true" ||
+                    button.getAttribute("data-estab-sound-state") !== "blocked" ||
+                    state.state !== "blocked" ||
+                    state.enabled !== true ||
+                    !feedback.textContent.includes("erneut freigeben")) {
+                    return false;
+                }
+                return state;
+                """,
+            ),
+            f"Reload meldet blockierte Töne in {location} fälschlich als aktiv",
+        )
+        self._equal(
+            reloaded.get("state"),
+            "blocked",
+            f"Sound-Zustand nach Reload in {location}",
+        )
+        self.cdp.click(
+            "vorgaben",
+            "[data-estab-sound-toggle]",
+            f"blockierten Sound-Schalter in {location} ausschalten",
+        )
+        self.cdp.wait_for(
+            _frame_expression(
+                "vorgaben",
+                """
+                const button = doc.querySelector("[data-estab-sound-toggle]");
+                const state = target.estabSidebarSoundState();
+                return Boolean(
+                    button &&
+                    button.getAttribute("aria-pressed") === "false" &&
+                    state.enabled === false &&
+                    state.state === "inactive" &&
+                    target.localStorage.getItem(
+                        "estab.sidebar.sounds"
+                    ) === "off"
+                );
+                """,
+            ),
+            f"blockierter Sound-Schalter lässt sich in {location} nicht ausschalten",
+        )
+
+        prepared = self.cdp.evaluate(
+            _frame_expression(
+                "vorgaben",
+                """
+                const audio = doc.querySelector(
+                    "audio[data-estab-sidebar-audio]"
+                );
+                if (!audio) return false;
+                audio.__estabBrowserAudioIdentity = "persistent";
+                audio.__estabBrowserPlayCalls = 0;
+                audio.play = function () {
+                    this.__estabBrowserPlayCalls += 1;
+                    return target.Promise.resolve();
+                };
+                return true;
+                """,
+            )
+        )
+        self._truth(prepared, f"Audiofreigabe in {location} nicht vorbereitet.")
+        self.cdp.click(
+            "vorgaben",
+            "[data-estab-sound-toggle]",
+            f"Sound-Schalter zum Freigeben in {location}",
+        )
+        enabled = self.cdp.wait_for(
+            _frame_expression(
+                "vorgaben",
+                """
+                const button = doc.querySelector("[data-estab-sound-toggle]");
+                const feedback = doc.querySelector(
+                    "[data-estab-sound-feedback]"
+                );
+                const audio = doc.querySelector(
+                    "audio[data-estab-sidebar-audio]"
+                );
+                if (!button || !feedback || !audio ||
+                    button.getAttribute("aria-pressed") !== "true" ||
+                    button.getAttribute("data-estab-sound-state") !== "ready" ||
+                    !feedback.textContent.includes("aktiviert") ||
+                    audio.__estabBrowserAudioIdentity !== "persistent" ||
+                    audio.__estabBrowserPlayCalls < 1) {
+                    return false;
+                }
+                return {
+                    feedback: feedback.textContent.trim(),
+                    playCalls: audio.__estabBrowserPlayCalls
+                };
+                """,
+            ),
+            f"Sound-Schalter wurde in {location} nicht freigegeben",
+        )
+
+        automatic = self.cdp.evaluate(
+            _frame_expression(
+                "vorgaben",
+                """
+                return (async () => {
+                    const audio = doc.querySelector(
+                        "audio[data-estab-sidebar-audio]"
+                    );
+                    if (!audio ||
+                        typeof target.estabRefreshSidebarStatus !== "function") {
+                        return null;
+                    }
+                    const before = audio.__estabBrowserPlayCalls;
+                    const originalFetch = target.fetch.bind(target);
+                    let injected = false;
+                    target.fetch = async function (...parameters) {
+                        const response = await originalFetch(...parameters);
+                        const body = await response.text();
+                        target.fetch = originalFetch;
+                        injected = true;
+                        return new target.Response(
+                            body.replace(
+                                'data-estab-notify="0"',
+                                'data-estab-notify="1"'
+                            ),
+                            {
+                                status: response.status,
+                                statusText: response.statusText,
+                                headers: response.headers
+                            }
+                        );
+                    };
+                    const refreshed =
+                        await target.estabRefreshSidebarStatus();
+                    await new Promise(resolve =>
+                        target.requestAnimationFrame(resolve)
+                    );
+                    const feedback = doc.querySelector(
+                        "[data-estab-sound-feedback]"
+                    );
+                    return {
+                        refreshed,
+                        injected,
+                        before,
+                        after: audio.__estabBrowserPlayCalls,
+                        feedback: feedback && feedback.textContent.trim()
+                    };
+                })();
+                """,
+            )
+        )
+        self._truth(
+            isinstance(automatic, dict)
+            and automatic.get("refreshed") is True
+            and automatic.get("injected") is True
+            and int(automatic.get("after", 0))
+            == int(automatic.get("before", -1)) + 1
+            and "abgespielt" in str(automatic.get("feedback", "")),
+            f"Automatischer Warteschlangenton läuft in {location} nicht.",
+        )
+
+        sound_races = self.cdp.evaluate(
+            _frame_expression(
+                "vorgaben",
+                """
+                return (async () => {
+                    const key = "estab.sidebar.sounds";
+                    const audio = doc.querySelector(
+                        "audio[data-estab-sidebar-audio]"
+                    );
+                    const button = doc.querySelector(
+                        "[data-estab-sound-toggle]"
+                    );
+                    if (!audio || !button) return null;
+                    const settle = async () => {
+                        await target.Promise.resolve();
+                        await new target.Promise(resolve =>
+                            target.setTimeout(resolve, 0)
+                        );
+                    };
+                    const storage = (oldValue, newValue) => {
+                        target.localStorage.setItem(key, newValue);
+                        target.dispatchEvent(
+                            new target.StorageEvent("storage", {
+                                key,
+                                oldValue,
+                                newValue
+                            })
+                        );
+                    };
+                    audio.__estabBrowserPauseCalls = 0;
+                    audio.pause = function () {
+                        this.__estabBrowserPauseCalls += 1;
+                    };
+
+                    button.click();
+                    let resolveClick;
+                    audio.play = function () {
+                        this.__estabBrowserPlayCalls += 1;
+                        return new target.Promise(resolve => {
+                            resolveClick = resolve;
+                        });
+                    };
+                    button.click();
+                    const clickChecking = target.estabSidebarSoundState();
+                    button.click();
+                    const clickCancelled = target.estabSidebarSoundState();
+                    resolveClick();
+                    await settle();
+                    const clickSettled = target.estabSidebarSoundState();
+
+                    let resolveStorage;
+                    audio.play = function () {
+                        this.__estabBrowserPlayCalls += 1;
+                        return new target.Promise(resolve => {
+                            resolveStorage = resolve;
+                        });
+                    };
+                    button.click();
+                    const storageChecking = target.estabSidebarSoundState();
+                    storage("on", "off");
+                    const storageCancelled = target.estabSidebarSoundState();
+                    resolveStorage();
+                    await settle();
+                    const storageSettled = target.estabSidebarSoundState();
+
+                    storage("off", "on");
+                    const on = target.estabSidebarSoundState();
+                    const onPressed = button.getAttribute("aria-pressed");
+                    const onButtonState =
+                        button.getAttribute("data-estab-sound-state");
+                    button.click();
+                    const optedOut = target.estabSidebarSoundState();
+                    audio.play = function () {
+                        this.__estabBrowserPlayCalls += 1;
+                        return target.Promise.resolve();
+                    };
+                    return {
+                        clickChecking,
+                        clickCancelled,
+                        clickSettled,
+                        storageChecking,
+                        storageCancelled,
+                        storageSettled,
+                        pauseCalls: audio.__estabBrowserPauseCalls,
+                        on,
+                        onPressed,
+                        onButtonState,
+                        optedOut
+                    };
+                })();
+                """,
+            )
+        )
+        self._truth(
+            isinstance(sound_races, dict)
+            and sound_races.get("clickChecking", {}).get("state") == "checking"
+            and sound_races.get("clickCancelled", {}).get("enabled") is False
+            and sound_races.get("clickSettled", {}).get("enabled") is False
+            and sound_races.get("clickSettled", {}).get("state") == "inactive"
+            and sound_races.get("storageChecking", {}).get("state")
+            == "checking"
+            and sound_races.get("storageCancelled", {}).get("enabled") is False
+            and sound_races.get("storageSettled", {}).get("enabled") is False
+            and sound_races.get("storageSettled", {}).get("state") == "inactive"
+            and int(sound_races.get("pauseCalls", 0)) >= 2
+            and sound_races.get("on", {}).get("enabled") is True
+            and sound_races.get("on", {}).get("state") == "blocked"
+            and sound_races.get("onPressed") == "true"
+            and sound_races.get("onButtonState") == "blocked"
+            and sound_races.get("optedOut", {}).get("enabled") is False,
+            f"Abbruch oder browserweite Sound-Synchronisation läuft in "
+            f"{location} nicht racesicher.",
+        )
+
+        self.cdp.click(
+            "vorgaben",
+            "[data-estab-sound-toggle]",
+            f"erneut freizugebender Sound-Schalter in {location}",
+        )
+        ready_again = self.cdp.wait_for(
+            _frame_expression(
+                "vorgaben",
+                """
+                const button = doc.querySelector("[data-estab-sound-toggle]");
+                const audio = doc.querySelector(
+                    "audio[data-estab-sidebar-audio]"
+                );
+                if (!button || !audio ||
+                    button.getAttribute("data-estab-sound-state") !== "ready") {
+                    return false;
+                }
+                return {playCalls: audio.__estabBrowserPlayCalls};
+                """,
+            ),
+            f"Sound-Schalter wurde in {location} nicht erneut freigegeben",
+        )
+        self.cdp.click(
+            "vorgaben",
+            "[data-estab-sound-toggle]",
+            f"Sound-Schalter zum Deaktivieren in {location}",
+        )
+        disabled = self.cdp.wait_for(
+            _frame_expression(
+                "vorgaben",
+                f"""
+                const button = doc.querySelector("[data-estab-sound-toggle]");
+                const feedback = doc.querySelector(
+                    "[data-estab-sound-feedback]"
+                );
+                const audio = doc.querySelector(
+                    "audio[data-estab-sidebar-audio]"
+                );
+                if (!button || !feedback || !audio ||
+                    button.getAttribute("aria-pressed") !== "false" ||
+                    !feedback.textContent.trim() ||
+                    feedback.textContent.trim() === {
+                        json.dumps(str(enabled.get("feedback", "")))
+                    } ||
+                    audio.__estabBrowserAudioIdentity !== "persistent") {{
+                    return false;
+                }}
+                return {{
+                    playCalls: audio.__estabBrowserPlayCalls
+                }};
+                """,
+            ),
+            f"Sound-Schalter wurde in {location} nicht deaktiviert",
+        )
+        self._equal(
+            disabled.get("playCalls"),
+            ready_again.get("playCalls"),
+            f"Deaktivieren des Sound-Schalters startet in {location} Audio",
+        )
+
+    def _assert_mobile_message_navigation(self, location: str) -> None:
+        armed = self.cdp.evaluate(
+            """
+            (() => {
+                const sidebar = document.querySelector(
+                    'iframe[name="vorgaben"]'
+                );
+                const content = document.querySelector(
+                    'iframe[name="mainframe"]'
+                );
+                if (!sidebar || !content || !content.contentWindow) {
+                    return false;
+                }
+                window.__estabMobileLoadFocusProbe = false;
+                content.addEventListener("load", () => {
+                    window.__estabMobileLoadFocusProbe = true;
+                    sidebar.focus({preventScroll: true});
+                }, {once: true});
+                content.contentWindow.__estabMobileActionProbe = true;
+                return true;
+            })()
+            """
+        )
+        self._truth(
+            armed,
+            f"Mobiler Rollenaktions-Test konnte in {location} nicht vorbereitet werden.",
+        )
+        self.cdp.click(
+            "vorgaben",
+            'button[data-estab-workflow-key="stab_lesen"]',
+            f"Rollenaktion Lesen in {location}",
+        )
+        content_state = self.cdp.wait_for(
+            """
+            (() => {
+                const content = document.querySelector(
+                    'iframe[name="mainframe"]'
+                );
+                const returnButton = document.querySelector(
+                    "[data-estab-mobile-menu-return]"
+                );
+                if (!content || !content.contentWindow || !returnButton) {
+                    return false;
+                }
+                const contentRect = content.getBoundingClientRect();
+                const buttonRect = returnButton.getBoundingClientRect();
+                const buttonStyle = getComputedStyle(returnButton);
+                const visibleHeight = Math.max(
+                    0,
+                    Math.min(innerHeight, contentRect.bottom)
+                        - Math.max(0, contentRect.top)
+                );
+                const buttonVisible =
+                    buttonStyle.display !== "none" &&
+                    buttonStyle.visibility !== "hidden" &&
+                    buttonRect.width >= 44 &&
+                    buttonRect.height >= 44 &&
+                    buttonRect.right > 0 &&
+                    buttonRect.left < innerWidth &&
+                    buttonRect.bottom > 0 &&
+                    buttonRect.top < innerHeight;
+                let actionLoaded = false;
+                try {
+                    actionLoaded =
+                        content.contentDocument.readyState === "complete" &&
+                        content.contentWindow.__estabMobileActionProbe !== true;
+                } catch (_error) {
+                    return false;
+                }
+                if (!actionLoaded ||
+                    visibleHeight < innerHeight - 1 ||
+                    !buttonVisible ||
+                    window.__estabMobileLoadFocusProbe !== true ||
+                    document.activeElement !== content) {
+                    return false;
+                }
+                return {
+                    visibleHeight,
+                    buttonWidth: buttonRect.width,
+                    buttonHeight: buttonRect.height,
+                    scrollY,
+                    contentFocused: document.activeElement === content,
+                    loadFocusRestored:
+                        window.__estabMobileLoadFocusProbe === true
+                };
+            })()
+            """,
+            f"Rollenaktion zeigt in {location} den mainframe nicht sichtbar an",
+        )
+        self._truth(
+            content_state.get("scrollY", 0) >= 843
+            and content_state.get("visibleHeight", 0) >= 843
+            and content_state.get("buttonWidth", 0) >= 44
+            and content_state.get("buttonHeight", 0) >= 44
+            and content_state.get("contentFocused") is True
+            and content_state.get("loadFocusRestored") is True,
+            f"Mobiler Inhaltswechsel oder Rückkehrbutton ist in {location} unvollständig.",
+        )
+
+        self.cdp.click(
+            None,
+            "[data-estab-mobile-menu-return]",
+            f"Mobiler Rückkehrbutton in {location}",
+        )
+        self.cdp.wait_for(
+            """
+            (() => {
+                const sidebar = document.querySelector(
+                    'iframe[name="vorgaben"]'
+                );
+                if (!sidebar) return false;
+                const rect = sidebar.getBoundingClientRect();
+                const visibleHeight = Math.max(
+                    0,
+                    Math.min(innerHeight, rect.bottom)
+                        - Math.max(0, rect.top)
+                );
+                return scrollY <= 1 &&
+                    visibleHeight >= innerHeight - 1 &&
+                    document.activeElement === sidebar;
+            })()
+            """,
+            f"Rückkehrbutton bringt in {location} nicht zur Sidebar zurück",
+        )
+
     def _assert_dirty_navigation_guard(self) -> None:
         field_selector = (
             'form[name="4fach"][data-estab-dirty-guard] '
@@ -1265,7 +2494,7 @@ class BrowserAcceptance:
         dirty_value = "Browser-Dirty-Guard-Test"
         self.cdp.click(
             "vorgaben",
-            'input[type="image"][name="stab_schreiben"]',
+            'button[name="stab_schreiben_x"][data-estab-workflow-key="stab_schreiben"]',
             "fachliches Formular zum Schreiben einer Nachricht",
         )
         self.cdp.wait_for(
@@ -1323,10 +2552,6 @@ class BrowserAcceptance:
                 "Der Dirty-Guard hat keinen erwarteten nativen Bestätigungsdialog geöffnet.",
             )
 
-        self._open_compact_navigation(
-            "vorgaben",
-            "Anwendungs-Navigationsframe mit geändertem Formular",
-        )
         click_overview_and_handle_dialog(False, "Ablehnen")
         self.cdp.wait_for(
             _frame_expression(
@@ -1346,10 +2571,6 @@ class BrowserAcceptance:
             "abgelehnter Bereichswechsel hat Seite oder Formularwert nicht bewahrt",
         )
 
-        self._open_compact_navigation(
-            "vorgaben",
-            "Anwendungs-Navigationsframe nach abgelehntem Bereichswechsel",
-        )
         click_overview_and_handle_dialog(True, "Bestätigen")
 
     def _assert_narrow_overview(self) -> None:
@@ -2191,6 +3412,8 @@ class BrowserAcceptance:
                     navigationVisible:
                         navigationRect.width > 0 && navigationRect.height > 0,
                     allNavigationLinksVisible: links.every(visible),
+                    navigationMode:
+                        navigation.getAttribute("data-estab-navigation-mode"),
                     compact: bar.classList.contains("estab-session-bar-compact"),
                     hasDisclosure: Boolean(disclosure),
                     disclosureSummaryVisible: Boolean(summary && visible(summary)),
@@ -2237,7 +3460,14 @@ class BrowserAcceptance:
             details.get("navigationVisible"),
             f"Gemeinsame Navigation ist in {location} nicht sichtbar.",
         )
-        if details.get("compact"):
+        if details.get("navigationMode") == "sidebar":
+            self._truth(
+                details.get("compact")
+                and not details.get("hasDisclosure")
+                and details.get("allNavigationLinksVisible"),
+                f"Dauerhaft sichtbare Sidebar-Navigation fehlt in {location}.",
+            )
+        elif details.get("compact"):
             self._truth(
                 details.get("hasDisclosure") and details.get("disclosureSummaryVisible"),
                 f"Kompakte Bereichsauswahl fehlt in {location}.",

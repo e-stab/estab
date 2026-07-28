@@ -58,6 +58,19 @@ $assert(
     'operational navigation labels changed'
 );
 $assert(
+    array_column($areas, 'short_label') === [
+        'Übersicht',
+        'Nachrichten',
+        'Meldungen',
+        'Vordrucke',
+        'ETB',
+        'TBB',
+        'Nachweisung',
+        'BOS-Info',
+    ],
+    'sidebar navigation labels changed'
+);
+$assert(
     array_column($areas, 'path') === [
         'index.php',
         '4fach/index.php',
@@ -75,6 +88,10 @@ $assert(
         && array_column($services, 'path') === [
             '4fadm/admin.php',
             'doku/Handbuch_eStab.pdf',
+        ]
+        && array_column($services, 'short_label') === [
+            'Administration',
+            'Handbuch',
         ]
         && $services[0]['hint'] === 'Technischer Zugang',
     'secondary service navigation contract changed'
@@ -291,6 +308,89 @@ $assert(
         && substr_count($compact, 'aria-current="page"') === 1,
     'compact details navigation contract is incomplete'
 );
+$sidebar = estab_navigation_markup(
+    true,
+    ['REQUEST_URI' => '/4fach/index.php'],
+    true,
+    true
+);
+$expectedSidebarLabels = array_merge(
+    array_column($areas, 'short_label'),
+    array_column($services, 'short_label')
+);
+$lastPosition = -1;
+foreach ($expectedSidebarLabels as $label) {
+    $position = strpos($sidebar, '>' . $label . '</span>');
+    $assert(
+        is_int($position) && $position > $lastPosition,
+        'rendered sidebar navigation order changed at ' . $label
+    );
+    $lastPosition = is_int($position) ? $position : $lastPosition;
+}
+$assert(
+    str_contains($sidebar, 'estab-navigation-sidebar')
+        && str_contains($sidebar, 'data-estab-navigation-mode="sidebar"')
+        && str_contains($sidebar, '<h2>Bereiche</h2>')
+        && str_contains($sidebar, '<p>Arbeitsbereich wechseln</p>')
+        && substr_count($sidebar, 'data-estab-navigation-item') === 10
+        && substr_count($sidebar, 'target="_top"') === 10
+        && substr_count($sidebar, 'aria-current="page"') === 1
+        && !str_contains($sidebar, '<details')
+        && !str_contains($sidebar, '<summary'),
+    'always-visible sidebar navigation contract is incomplete'
+);
+$assert(
+    str_contains($sidebar, '>Nachrichten</span>')
+        && str_contains($sidebar, '>Meldungen</span>')
+        && str_contains($sidebar, '>ETB</span>')
+        && str_contains($sidebar, '>TBB</span>')
+        && str_contains(
+            $sidebar,
+            'aria-label="Nachrichtenvordruck" title="Nachrichtenvordruck"'
+        )
+        && str_contains(
+            $sidebar,
+            'aria-label="Meldungsübersicht" title="Meldungsübersicht"'
+        )
+        && str_contains(
+            $sidebar,
+            'aria-label="Einsatztagebuch (ETB)"'
+                . ' title="Einsatztagebuch (ETB)"'
+        )
+        && str_contains(
+            $sidebar,
+            'aria-label="Technisches Betriebsbuch (TBB)"'
+                . ' title="Technisches Betriebsbuch (TBB)"'
+        )
+        && !str_contains($sidebar, '>Nachrichtenvordruck</span>')
+        && !str_contains($sidebar, '>Meldungsübersicht</span>')
+        && !str_contains($sidebar, '>Einsatztagebuch (ETB)</span>')
+        && !str_contains($sidebar, '>Technisches Betriebsbuch (TBB)</span>'),
+    'sidebar labels are not concise visually and complete accessibly'
+);
+$anonymousSidebar = estab_navigation_markup(
+    false,
+    ['REQUEST_URI' => '/4fach/vorgaben.php'],
+    true,
+    true
+);
+$assert(
+    str_contains(
+        $anonymousSidebar,
+        'data-estab-navigation-mode="sidebar"'
+    )
+        && substr_count(
+            $anonymousSidebar,
+            'data-estab-navigation-locked'
+        ) === 6
+        && str_contains(
+            $anonymousSidebar,
+            'href="/4fach/index.php?next=messages"'
+        )
+        && !str_contains($anonymousSidebar, '<details')
+        && !str_contains($anonymousSidebar, '<summary'),
+    'anonymous sidebar navigation is hidden, expandable, or exposes real protected targets'
+);
 $assert(
     str_contains(
         estab_navigation_markup(true, [], false),
@@ -301,6 +401,15 @@ $assert(
             '<details'
         ),
     'full navigation unexpectedly uses compact disclosure markup'
+);
+$assertThrows(
+    static fn (): string => estab_navigation_markup(
+        true,
+        [],
+        false,
+        true
+    ),
+    'sidebar navigation accepted non-compact session chrome'
 );
 
 $escaped = estab_navigation_item_markup([
@@ -327,6 +436,46 @@ $assert(
         )
         && substr_count($escaped, 'aria-current="page"') === 1,
     'navigation item values were not escaped at the HTML boundary'
+);
+$escapedShortLabel = estab_navigation_item_markup([
+    'key' => 'safe-short',
+    'label' => 'Long label',
+    'short_label' => '<strong>Short & "safe"</strong>',
+    'path' => 'safe-short.php',
+    'access' => 'public',
+], true, null, true);
+$assert(
+    !str_contains($escapedShortLabel, '<strong>')
+        && str_contains(
+            $escapedShortLabel,
+            '&lt;strong&gt;Short &amp; &quot;safe&quot;&lt;/strong&gt;'
+        )
+        && str_contains(
+            $escapedShortLabel,
+            'aria-label="Long label" title="Long label"'
+        )
+        && !str_contains($escapedShortLabel, '>Long label</span>'),
+    'sidebar short label or its full accessible name is unsafe'
+);
+$assertThrows(
+    static fn (): string => estab_navigation_item_markup([
+        'key' => 'missing-short',
+        'label' => 'Long label',
+        'short_label' => '',
+        'path' => 'missing-short.php',
+        'access' => 'public',
+    ], true, null, true),
+    'empty sidebar short label accepted'
+);
+$assertThrows(
+    static fn (): string => estab_navigation_item_markup([
+        'key' => 'array-short',
+        'label' => 'Long label',
+        'short_label' => ['not', 'text'],
+        'path' => 'array-short.php',
+        'access' => 'public',
+    ], true, null, true),
+    'non-string sidebar short label accepted'
 );
 
 foreach ([

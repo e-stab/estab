@@ -216,10 +216,20 @@ $assert(
 foreach ([$tools, $toolsNew] as $frameHelper) {
     $assert(
         !str_contains($frameHelper, 'eval(')
-            && str_contains($frameHelper, 'var frame1 = parent[frameziel1];')
-            && str_contains($frameHelper, 'var frame2 = parent[frameziel2];')
-            && str_contains($frameHelper, 'var frame3 = parent[frameziel3];'),
-        'active frame navigation still requires JavaScript eval'
+            && str_contains(
+                $frameHelper,
+                'for(var i=0;i+1<arguments.length;i+=2)'
+            )
+            && str_contains(
+                $frameHelper,
+                'var frame=parent[arguments[i+1]];'
+            )
+            && str_contains(
+                $frameHelper,
+                'if(frame){frame.location.href=arguments[i];}'
+            )
+            && !str_contains($frameHelper, 'var frame3'),
+        'frame navigation does not safely iterate existing target pairs'
     );
 }
 $assert(

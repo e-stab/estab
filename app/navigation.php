@@ -14,6 +14,7 @@ require_once __DIR__ . '/auth.php';
  * @return list<array{
  *     key: string,
  *     label: string,
+ *     short_label?: string,
  *     path: string,
  *     access: 'public'|'protected',
  *     root?: bool,
@@ -26,6 +27,7 @@ function estab_navigation_areas(): array
         [
             'key' => 'overview',
             'label' => 'Übersicht',
+            'short_label' => 'Übersicht',
             'path' => 'index.php',
             'access' => 'public',
             'root' => true,
@@ -33,42 +35,49 @@ function estab_navigation_areas(): array
         [
             'key' => 'messages',
             'label' => 'Nachrichtenvordruck',
+            'short_label' => 'Nachrichten',
             'path' => '4fach/index.php',
             'access' => 'protected',
         ],
         [
             'key' => 'message-overview',
             'label' => 'Meldungsübersicht',
+            'short_label' => 'Meldungen',
             'path' => '4fueltg/ue_ltg.php',
             'access' => 'protected',
         ],
         [
             'key' => 'forms',
             'label' => 'Vordrucke',
+            'short_label' => 'Vordrucke',
             'path' => '4fach/vordrucke.php',
             'access' => 'protected',
         ],
         [
             'key' => 'incident-log',
             'label' => 'Einsatztagebuch (ETB)',
+            'short_label' => 'ETB',
             'path' => 'stabetb/etb.php',
             'access' => 'protected',
         ],
         [
             'key' => 'technical-log',
             'label' => 'Technisches Betriebsbuch (TBB)',
+            'short_label' => 'TBB',
             'path' => 'fmtbb/tbb.php',
             'access' => 'protected',
         ],
         [
             'key' => 'tracking',
             'label' => 'Nachweisung',
+            'short_label' => 'Nachweisung',
             'path' => '4fach/nachwea.php?nwalle',
             'access' => 'protected',
         ],
         [
             'key' => 'bos-info',
             'label' => 'BOS-Info',
+            'short_label' => 'BOS-Info',
             'path' => 'stabinfo/index.php',
             'access' => 'public',
         ],
@@ -84,6 +93,7 @@ function estab_navigation_areas(): array
  * @return list<array{
  *     key: string,
  *     label: string,
+ *     short_label?: string,
  *     path: string,
  *     access: 'public',
  *     hint: string
@@ -95,6 +105,7 @@ function estab_navigation_services(): array
         [
             'key' => 'administration',
             'label' => 'Administration',
+            'short_label' => 'Administration',
             'path' => '4fadm/admin.php',
             'access' => 'public',
             'hint' => 'Technischer Zugang',
@@ -102,6 +113,7 @@ function estab_navigation_services(): array
         [
             'key' => 'handbook',
             'label' => 'Handbuch',
+            'short_label' => 'Handbuch',
             'path' => 'doku/Handbuch_eStab.pdf',
             'access' => 'public',
             'hint' => 'Dokumentation',
@@ -197,6 +209,7 @@ function estab_navigation_login_destination_field(
  * @return array{
  *     key: string,
  *     label: string,
+ *     short_label: string,
  *     path: string,
  *     access: 'public'|'protected',
  *     root: bool,
@@ -207,6 +220,7 @@ function estab_navigation_validated_item(array $item): array
 {
     $key = $item['key'] ?? null;
     $label = $item['label'] ?? null;
+    $shortLabel = $item['short_label'] ?? $label;
     $path = $item['path'] ?? null;
     $access = $item['access'] ?? null;
     $root = $item['root'] ?? false;
@@ -220,6 +234,9 @@ function estab_navigation_validated_item(array $item): array
     }
     if (!is_string($label) || trim($label) === '') {
         throw new InvalidArgumentException('Invalid navigation label');
+    }
+    if (!is_string($shortLabel) || trim($shortLabel) === '') {
+        throw new InvalidArgumentException('Invalid short navigation label');
     }
     if (
         !is_string($path)
@@ -251,6 +268,7 @@ function estab_navigation_validated_item(array $item): array
     return [
         'key' => $key,
         'label' => $label,
+        'short_label' => $shortLabel,
         'path' => $path,
         'access' => $access,
         'root' => $root,
@@ -397,7 +415,8 @@ function estab_navigation_active_key(array $server): ?string
 function estab_navigation_item_markup(
     array $item,
     bool $authenticated,
-    ?string $activeKey
+    ?string $activeKey,
+    bool $shortLabel = false
 ): string {
     $item = estab_navigation_validated_item($item);
     $locked = $item['access'] === 'protected' && !$authenticated;
@@ -420,6 +439,11 @@ function estab_navigation_item_markup(
             . 'Anmeldung erforderlich'
             . '</span>'
         : '';
+    $label = $shortLabel ? $item['short_label'] : $item['label'];
+    $accessibleLabel = $shortLabel && $label !== $item['label']
+        ? ' aria-label="' . estab_auth_html($item['label']) . '"'
+            . ' title="' . estab_auth_html($item['label']) . '"'
+        : '';
 
     return '<li class="estab-navigation-item"'
         . ' data-estab-navigation-item'
@@ -430,9 +454,10 @@ function estab_navigation_item_markup(
         . '<a class="estab-navigation-link" href="'
         . estab_auth_html($url) . '" target="_top"'
         . ' data-estab-nav-key="' . estab_auth_html($item['key']) . '"'
+        . $accessibleLabel
         . $current . '>'
         . '<span class="estab-navigation-label">'
-        . estab_auth_html($item['label']) . '</span>'
+        . estab_auth_html($label) . '</span>'
         . $hint . $loginHint
         . '</a></li>';
 }
@@ -442,7 +467,8 @@ function estab_navigation_group_markup(
     array $items,
     bool $authenticated,
     ?string $activeKey,
-    string $group
+    string $group,
+    bool $shortLabels = false
 ): string {
     if (preg_match('/\A[a-z][a-z0-9-]*\z/D', $group) !== 1) {
         throw new InvalidArgumentException('Invalid navigation group');
@@ -462,7 +488,8 @@ function estab_navigation_group_markup(
         $markup .= estab_navigation_item_markup(
             $validated,
             $authenticated,
-            $activeKey
+            $activeKey,
+            $shortLabels
         );
     }
 
@@ -481,14 +508,21 @@ function estab_navigation_group_markup(
 function estab_navigation_markup(
     bool $authenticated,
     array $server = [],
-    bool $compact = false
+    bool $compact = false,
+    bool $sidebar = false
 ): string {
+    if ($sidebar && !$compact) {
+        throw new InvalidArgumentException(
+            'Sidebar navigation requires compact session chrome'
+        );
+    }
     $activeKey = estab_navigation_active_key($server);
     $areas = estab_navigation_group_markup(
         estab_navigation_areas(),
         $authenticated,
         $activeKey,
-        'areas'
+        'areas',
+        $sidebar
     );
     $services = '<div class="estab-navigation-services">'
         . '<span class="estab-navigation-services-label">Service</span>'
@@ -496,14 +530,20 @@ function estab_navigation_markup(
             estab_navigation_services(),
             $authenticated,
             $activeKey,
-            'services'
+            'services',
+            $sidebar
         )
         . '</div>';
     $content = '<div class="estab-navigation-content">'
         . $areas . $services . '</div>';
-    $mode = $compact ? 'compact' : 'full';
+    $mode = $sidebar ? 'sidebar' : ($compact ? 'compact' : 'full');
 
-    if ($compact) {
+    if ($sidebar) {
+        $content = '<div class="estab-navigation-sidebar-heading">'
+            . '<h2>Bereiche</h2>'
+            . '<p>Arbeitsbereich wechseln</p>'
+            . '</div>' . $content;
+    } elseif ($compact) {
         $content = '<details class="estab-navigation-disclosure">'
             . '<summary>Bereich wechseln</summary>'
             . $content

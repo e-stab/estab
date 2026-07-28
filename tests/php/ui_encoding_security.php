@@ -24,6 +24,7 @@ $uiFiles = [
     'app/navigation.php',
     'app/root_menu.php',
     'app/session_ui.php',
+    'app/sidebar.php',
     '4fach/index.php',
     '4fach/mainindex.php',
     '4fach/vorgaben.php',

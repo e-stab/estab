@@ -62,7 +62,8 @@ function estab_session_ui_markup(
     string $csrfToken,
     bool $compact = false,
     array $server = [],
-    bool $popup = false
+    bool $popup = false,
+    bool $sidebar = false
 ): string {
     $identity = estab_auth_session_identity($session);
     if ($identity === null) {
@@ -72,15 +73,24 @@ function estab_session_ui_markup(
         throw new InvalidArgumentException('Invalid session UI CSRF token');
     }
 
+    if ($sidebar && !$compact) {
+        throw new InvalidArgumentException(
+            'Sidebar session UI requires compact presentation'
+        );
+    }
     $barClass = $compact
         ? 'estab-session-bar estab-session-bar-compact'
         : 'estab-session-bar';
+    if ($sidebar) {
+        $barClass .= ' estab-session-bar-sidebar';
+    }
     $homeUrl = estab_application_root();
     $logoutUrl = estab_application_url('4fach/logout.php');
     $navigation = estab_navigation_markup(
         true,
         $server === [] ? $_SERVER : $server,
-        $compact
+        $compact,
+        $sidebar
     );
     $name = estab_auth_html($identity['benutzer']);
     $code = estab_auth_html($identity['kuerzel']);
@@ -144,11 +154,20 @@ function estab_session_ui_public_markup(
     bool $compact = false,
     array $server = [],
     ?string $loginDestination = null,
-    bool $popup = false
+    bool $popup = false,
+    bool $sidebar = false
 ): string {
+    if ($sidebar && !$compact) {
+        throw new InvalidArgumentException(
+            'Public sidebar UI requires compact presentation'
+        );
+    }
     $barClass = $compact
         ? 'estab-session-bar estab-session-bar-public estab-session-bar-compact'
         : 'estab-session-bar estab-session-bar-public';
+    if ($sidebar) {
+        $barClass .= ' estab-session-bar-sidebar';
+    }
     $homeUrl = estab_application_root();
     if ($loginDestination !== null) {
         $loginDestination = estab_navigation_login_destination_key(
@@ -164,7 +183,8 @@ function estab_session_ui_public_markup(
     $navigation = estab_navigation_markup(
         false,
         $effectiveServer,
-        $compact
+        $compact,
+        $sidebar
     );
     $status = $adminUser === null
         ? '<span class="estab-session-anonymous">Nicht angemeldet</span>'
@@ -289,14 +309,12 @@ function estab_session_ui_dirty_guard_script(bool $popup = false): string
 }
 
 /**
- * Return the safe JavaScript call used to refresh all three application
- * frames after login, logout-compatible legacy actions, and message saves.
+ * Return the safe JavaScript call used to refresh the application sidebar and
+ * content frame after login, logout-compatible legacy actions, and saves.
  */
 function estab_session_ui_frame_refresh_script(): string
 {
     $arguments = [
-        estab_application_url('4fach/counter.php?embedded=1'),
-        'counter',
         estab_application_url('4fach/vorgaben.php'),
         'vorgaben',
         estab_application_url('4fach/mainindex.php'),
@@ -323,7 +341,8 @@ function estab_session_ui_current_markup(
     array $session,
     bool $compact = false,
     ?string $loginDestination = null,
-    bool $popup = false
+    bool $popup = false,
+    bool $sidebar = false
 ): string
 {
     if (session_status() !== PHP_SESSION_ACTIVE) {
@@ -341,7 +360,8 @@ function estab_session_ui_current_markup(
             $compact,
             $_SERVER,
             $loginDestination,
-            $popup
+            $popup,
+            $sidebar
         );
     }
 
@@ -350,7 +370,8 @@ function estab_session_ui_current_markup(
         estab_csrf_token(),
         $compact,
         $_SERVER,
-        $popup
+        $popup,
+        $sidebar
     );
 }
 

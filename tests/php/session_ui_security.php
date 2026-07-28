@@ -12,6 +12,18 @@ $assert = static function (bool $condition, string $message) use (&$assertions):
         throw new RuntimeException($message);
     }
 };
+$assertThrows = static function (
+    callable $operation,
+    string $message
+) use ($assert): void {
+    try {
+        $operation();
+    } catch (InvalidArgumentException) {
+        $assert(true, $message);
+        return;
+    }
+    $assert(false, $message);
+};
 
 $token = str_repeat('a', 64);
 $identity = [
@@ -69,6 +81,41 @@ $assert(
         && str_contains($compact, '<summary>Bereich wechseln</summary>')
         && !str_contains($compact, 'data-estab-mainframe-guard'),
     'compact frame presentation missing'
+);
+$sidebarMarkup = estab_session_ui_markup(
+    $identity,
+    $token,
+    true,
+    [],
+    false,
+    true
+);
+$assert(
+    str_contains($sidebarMarkup, 'estab-session-bar-compact')
+        && str_contains($sidebarMarkup, 'estab-session-bar-sidebar')
+        && str_contains(
+            $sidebarMarkup,
+            'data-estab-navigation-mode="sidebar"'
+        )
+        && str_contains($sidebarMarkup, '<h2>Bereiche</h2>')
+        && str_contains($sidebarMarkup, '>Nachrichten</span>')
+        && str_contains($sidebarMarkup, 'data-estab-user-code="ada001"')
+        && str_contains($sidebarMarkup, 'data-estab-logout-form')
+        && !str_contains($sidebarMarkup, '<details')
+        && !str_contains($sidebarMarkup, '<summary')
+        && !str_contains($sidebarMarkup, 'data-estab-mainframe-guard'),
+    'always-visible authenticated sidebar presentation is incomplete'
+);
+$assertThrows(
+    static fn (): string => estab_session_ui_markup(
+        $identity,
+        $token,
+        false,
+        [],
+        false,
+        true
+    ),
+    'authenticated sidebar accepted non-compact presentation'
 );
 $assert(
     str_contains($markup, 'data-estab-mainframe-guard')
@@ -136,8 +183,46 @@ $assert(
         && str_contains(
             $destinationPublicMarkup,
             '<summary>Bereich wechseln</summary>'
-        ),
+    ),
     'public frame login control lost its protected destination'
+);
+$publicSidebarMarkup = estab_session_ui_public_markup(
+    true,
+    ['SCRIPT_NAME' => '/4fach/vorgaben.php'],
+    'incident-log',
+    false,
+    true
+);
+$assert(
+    str_contains($publicSidebarMarkup, 'estab-session-bar-sidebar')
+        && str_contains($publicSidebarMarkup, 'data-estab-public-bar')
+        && str_contains(
+            $publicSidebarMarkup,
+            'data-estab-navigation-mode="sidebar"'
+        )
+        && str_contains(
+            $publicSidebarMarkup,
+            'href="/4fach/index.php?next=incident-log"'
+        )
+        && substr_count(
+            $publicSidebarMarkup,
+            'data-estab-navigation-locked'
+        ) === 6
+        && !str_contains($publicSidebarMarkup, '<details')
+        && !str_contains($publicSidebarMarkup, '<summary')
+        && !str_contains($publicSidebarMarkup, 'data-estab-session-bar')
+        && !str_contains($publicSidebarMarkup, 'data-estab-logout-form'),
+    'public sidebar disclosed a session, lost its destination, or became expandable'
+);
+$assertThrows(
+    static fn (): string => estab_session_ui_public_markup(
+        false,
+        [],
+        null,
+        false,
+        true
+    ),
+    'public sidebar accepted non-compact presentation'
 );
 $assert(
     estab_session_ui_login_destination(
@@ -229,18 +314,12 @@ $assert(
     'session home link did not preserve public URL and deployment base path'
 );
 $assert(
-    str_contains(
-        $scopedFrameRefresh,
-        '"https://example.invalid/gateway/dispatch/site/4fach/counter.php?embedded=1"'
-    )
-        && str_contains(
-            $scopedFrameRefresh,
-            '"https://example.invalid/gateway/dispatch/site/4fach/vorgaben.php"'
-        )
-        && str_contains(
-            $scopedFrameRefresh,
-            '"https://example.invalid/gateway/dispatch/site/4fach/mainindex.php"'
-        ),
+    $scopedFrameRefresh
+        === 'FramesVeraendern('
+            . '"https://example.invalid/gateway/dispatch/site/4fach/vorgaben.php",'
+            . '"vorgaben",'
+            . '"https://example.invalid/gateway/dispatch/site/4fach/mainindex.php",'
+            . '"mainframe");',
     'frame refresh did not preserve public URL and deployment base path'
 );
 if ($originalPublicUrl === false) {
@@ -257,9 +336,14 @@ putenv('ESTAB_PUBLIC_URL=/');
 putenv('ESTAB_BASE_PATH=');
 $rootFrameRefresh = estab_session_ui_frame_refresh_script();
 $assert(
-    str_contains($rootFrameRefresh, '"/4fach/counter.php?embedded=1"')
+    $rootFrameRefresh
+        === 'FramesVeraendern('
+            . '"/4fach/vorgaben.php","vorgaben",'
+            . '"/4fach/mainindex.php","mainframe");'
+        && !str_contains($rootFrameRefresh, 'counter')
+        && !str_contains($rootFrameRefresh, 'status')
         && !str_contains($rootFrameRefresh, '"//4fach/'),
-    'root frame refresh produced a scheme-relative URL'
+    'root frame refresh contains a stale frame or unsafe URL'
 );
 if ($originalPublicUrl === false) {
     putenv('ESTAB_PUBLIC_URL');
@@ -469,8 +553,35 @@ $assert(
 $navigationSource = file_get_contents($root . '/4fach/vorgaben.php');
 $assert(
     is_string($navigationSource)
-        && str_contains($navigationSource, 'estab_session_ui_current_markup'),
-    'persistent navigation does not render compact session UI'
+        && str_contains($navigationSource, 'estab_session_ui_current_markup')
+        && str_contains($navigationSource, 'data-estab-sidebar-root')
+        && str_contains($navigationSource, 'data-estab-workflow-menu')
+        && str_contains($navigationSource, 'estab_sidebar_status_markup')
+        && str_contains(
+            $navigationSource,
+            'estab_sidebar_queue_notification'
+        )
+        && str_contains($navigationSource, 'estab_sidebar_queue_count')
+        && str_contains($navigationSource, 'estab_sidebar_audio_markup')
+        && str_contains(
+            $navigationSource,
+            'data-estab-sidebar-workspace-link'
+        )
+        && str_contains(
+            $navigationSource,
+            'estab_sidebar_status_refresh_script'
+        )
+        && !str_contains($navigationSource, 'getoutqueuecount(')
+        && !str_contains($navigationSource, 'getviewerqueuecount(')
+        && !str_contains($navigationSource, 'getdonecount(')
+        && !str_contains($navigationSource, 'db_operation.php')
+        && !str_contains($navigationSource, 'tools.php')
+        && !str_contains($navigationSource, 'fkt_rolle.inc.php')
+        && str_contains(
+            $navigationSource,
+            'estab_sidebar_fetch_configured_positions'
+        ),
+    'persistent navigation does not render a resilient unified live sidebar'
 );
 $mainSource = file_get_contents($root . '/4fach/mainindex.php');
 $mainBufferPosition = is_string($mainSource)
@@ -488,9 +599,33 @@ $assert(
 $framesetSource = file_get_contents($root . '/4fach/index.php');
 $assert(
     is_string($framesetSource)
-        && str_contains($framesetSource, './counter.php?embedded=1')
-        && str_contains($framesetSource, './status.php?embedded=1'),
-    'frameset helper pages would duplicate the persistent navigation bar'
+        && substr_count($framesetSource, '<iframe') === 2
+        && substr_count($framesetSource, 'name="vorgaben"') === 1
+        && substr_count($framesetSource, 'name="mainframe"') === 1
+        && str_contains($framesetSource, 'data-estab-message-workspace')
+        && str_contains($framesetSource, 'data-estab-mobile-menu-return')
+        && str_contains(
+            $framesetSource,
+            "event.data === 'estab:show-content'"
+        )
+        && str_contains(
+            $framesetSource,
+            'event.source === sidebar.contentWindow'
+        )
+        && str_contains($framesetSource, 'content.scrollIntoView')
+        && str_contains(
+            $framesetSource,
+            'content.focus({preventScroll: true})'
+        )
+        && str_contains($framesetSource, "content.addEventListener('load'")
+        && str_contains(
+            $framesetSource,
+            'window.requestAnimationFrame(showContent)'
+        )
+        && !str_contains($framesetSource, 'counter.php')
+        && !str_contains($framesetSource, 'status.php')
+        && !str_contains(strtolower($framesetSource), '<frameset'),
+    'message workspace does not contain exactly its sidebar and content frames'
 );
 $toolsSource = file_get_contents($root . '/4fach/tools.php');
 $assert(

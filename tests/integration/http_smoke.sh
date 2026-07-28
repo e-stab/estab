@@ -658,6 +658,34 @@ if [ "$legacy_assignment" != "$(printf 'A/W\tFernmelder\t1')" ]; then
         "$legacy_assignment" >&2
     exit 1
 fi
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/vorgaben.php"
+assert_session_bar "$legacy_registration_name" "$legacy_registration_code" \
+    'A/W' 'Fernmelder'
+assert_body 'data-estab-sidebar-status'
+assert_body 'data-estab-navigation-mode="sidebar"'
+assert_body 'data-estab-presence-state="current"'
+assert_body 'data-estab-presence-function="A/W"'
+assert_body 'data-estab-sound-toggle'
+assert_body 'data-estab-sidebar-audio'
+assert_body "src=\"$expected_app_root/4fach/audio/notify_aw.wav\""
+for workflow_key in fm_eingang fm_ausgang fm_admin fm_anhang m2_benutzer; do
+    assert_body "data-estab-workflow-key=\"$workflow_key\""
+done
+assert_body_absent 'data-estab-workflow-key="stab_schreiben"'
+sidebar_csrf_token=$(csrf_from_body)
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/vorgaben.php?fragment=status"
+assert_body 'data-estab-sidebar-status'
+assert_body 'data-estab-presence-function="A/W"'
+assert_body 'data-estab-sound-toggle'
+assert_body_absent 'data-estab-sidebar-audio'
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$sidebar_csrf_token" \
+    --data-urlencode 'fm_eingang_x=1' \
+    "$base_url/4fach/mainindex.php"
+assert_body 'name="task" value="FM-Eingang'
 
 # An active account may not select a different function and thereby acquire a
 # different role while its stored assignment remains unchanged.
@@ -1004,8 +1032,41 @@ assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/vorgaben.php"
 assert_body 'estab-session-bar-compact'
+assert_body 'data-estab-navigation-mode="sidebar"'
+assert_body 'data-estab-sidebar-status'
+assert_body 'data-estab-sidebar-refresh'
+assert_body 'data-estab-sound-toggle'
+assert_body 'data-estab-sidebar-audio'
+case "$test_role:$test_function" in
+    Fernmelder:*)
+        expected_sidebar_sound=notify_aw.wav
+        ;;
+    Stab:Si)
+        expected_sidebar_sound=notify_si.wav
+        ;;
+    Stab:*|FB:*)
+        expected_sidebar_sound=notify_stab.wav
+        ;;
+    *)
+        printf 'HTTP smoke: no sidebar sound mapping for %s/%s\n' \
+            "$test_role" "$test_function" >&2
+        exit 1
+        ;;
+esac
+assert_body \
+    "src=\"$expected_app_root/4fach/audio/$expected_sidebar_sound\""
+assert_body 'data-estab-workflow-key="stab_schreiben"'
+assert_body 'data-estab-workflow-key="stab_lesen"'
+assert_body 'data-estab-workflow-key="m2_benutzer"'
+assert_body_absent 'data-estab-workflow-key="fm_eingang"'
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 older_logout_csrf=$(csrf_from_body)
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/vorgaben.php?fragment=status"
+assert_body 'data-estab-sidebar-status'
+assert_body "data-estab-presence-function=\"$test_function\""
+assert_body 'data-estab-sound-toggle'
+assert_body_absent 'data-estab-sidebar-audio'
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/status.php"
 assert_body 'estab-session-bar-compact'

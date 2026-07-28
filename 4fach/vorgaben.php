@@ -1,156 +1,308 @@
 <?php
 
-define ("debug",false);
+declare(strict_types=1);
 
-session_start ();
-require_once __DIR__ . "/../app/auth.php";
-require_once __DIR__ . "/../app/csrf.php";
-require_once __DIR__ . "/../app/session_ui.php";
+define('debug', false);
 
+require_once __DIR__ . '/../app/auth.php';
+require_once __DIR__ . '/../app/csrf.php';
+require_once __DIR__ . '/../app/session_ui.php';
+require_once __DIR__ . '/../app/sidebar.php';
+
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+if (!is_string($method) || !in_array($method, ['GET', 'HEAD'], true)) {
+    http_response_code(405);
+    header('Allow: GET, HEAD');
+    header('Content-Type: text/plain; charset=UTF-8');
+    header('Cache-Control: no-store');
+    echo 'Method not allowed.';
+    exit;
+}
+
+$statusFragment = false;
 $loginDestination = null;
 foreach (array_keys($_GET) as $requestKey) {
-  if (!is_string($requestKey) || $requestKey !== "next") {
-    http_response_code(400);
-    header("Content-Type: text/plain; charset=UTF-8");
-    echo "Ungültige Navigationsauswahl.";
+    if (
+        !is_string($requestKey)
+        || !in_array($requestKey, ['fragment', 'next'], true)
+    ) {
+        http_response_code(400);
+        header('Content-Type: text/plain; charset=UTF-8');
+        echo 'Ungültige Navigationsauswahl.';
+        exit;
+    }
+}
+if (array_key_exists('fragment', $_GET)) {
+    if (
+        count($_GET) !== 1
+        || !is_string($_GET['fragment'])
+        || $_GET['fragment'] !== 'status'
+    ) {
+        http_response_code(400);
+        header('Content-Type: text/plain; charset=UTF-8');
+        echo 'Ungültige Statusauswahl.';
+        exit;
+    }
+    $statusFragment = true;
+} elseif (array_key_exists('next', $_GET)) {
+    $loginDestination = estab_navigation_login_destination_key(
+        $_GET['next']
+    );
+    if ($loginDestination === null) {
+        http_response_code(400);
+        header('Content-Type: text/plain; charset=UTF-8');
+        echo 'Ungültiges Anmeldeziel.';
+        exit;
+    }
+}
+
+session_start();
+
+$identity = estab_auth_session_identity($_SESSION);
+if ($statusFragment && $identity === null) {
+    http_response_code(403);
+    header('Content-Type: text/plain; charset=UTF-8');
+    header('Cache-Control: no-store');
+    if ($method !== 'HEAD') {
+        echo 'Anmeldung erforderlich.';
+    }
     exit;
-  }
 }
-if (array_key_exists("next", $_GET)) {
-  $loginDestination = estab_navigation_login_destination_key($_GET["next"]);
-  if ($loginDestination === null) {
-    http_response_code(400);
-    header("Content-Type: text/plain; charset=UTF-8");
-    echo "Ungültiges Anmeldeziel.";
+
+header('Content-Type: text/html; charset=UTF-8');
+header('Cache-Control: private, no-store, max-age=0');
+if ($method === 'HEAD') {
     exit;
-  }
 }
 
-if ( debug == true ){
-  echo "<br><br>\n";
-//  echo "GET="; var_dump ($_GET);    echo "#<br><br>\n";
-//  echo "POST="; var_dump ($_POST);   echo "#<br><br>\n";
-//  echo "COOKIE="; var_dump ($_COOKIE); echo "#<br><br>\n";
-  //echo "SERVER="; var_dump ($_SERVER); echo "#<br><br>\n";
-  echo "SESSION="; print_r ($_SESSION); echo "#<br>\n";
-}
+include __DIR__ . '/../4fcfg/config.inc.php';
+include __DIR__ . '/../4fcfg/dbcfg.inc.php';
+include __DIR__ . '/../4fcfg/e_cfg.inc.php';
 
+/**
+ * Load live role occupancy and the current role-specific work queue.
+ */
+function estab_vorgaben_status_markup(
+    array &$session,
+    array $databaseConfig,
+    string $userTable,
+    string $messageTable,
+    string $userTablePrefix,
+    string $matrixTable,
+    ?array $queueProfile,
+    bool $includeOutgoingForReview,
+    bool $soundsEnabled,
+    ?string $soundUrl
+): string {
+    $identity = estab_auth_session_identity($session);
+    if ($identity === null) {
+        return '';
+    }
 
-  include ("../4fcfg/config.inc.php");
-  include ("../4fcfg/dbcfg.inc.php");
-  include ("../4fcfg/e_cfg.inc.php");
-  include ("../4fcfg/fkt_rolle.inc.php");
-  header ("Content-Type: text/html; charset=UTF-8");
-  header ("Cache-Control: private, no-store, max-age=0");
-  echo "<!doctype html>\n";
-  echo "<html lang=\"de\"><head>\n";
-  echo "<meta charset=\"UTF-8\">\n";
-  echo "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n";
-  echo "<title>eStab Navigation</title>\n";
-  echo estab_session_ui_stylesheet ()."\n";
-  echo "</head>\n";
-    // hellblauer Hintergrund
-  echo "<body class=\"estab-navigation-frame\" align=\"center\" bgcolor=\"#ECECFF\">";
-  echo estab_session_ui_current_markup (
-    $_SESSION,
-    true,
-    $loginDestination
-  );
-  echo "<form action=\"".$conf_4f ["MainURL"]."\" method=\"POST\" target=\"mainframe\">\n";
-  echo estab_csrf_field ();
-  echo estab_navigation_login_destination_field ($loginDestination);
-//  echo "<!-- Formularelemente und andere Elemente innerhalb des Formulars -->\n";
-//  echo date ("His")."<br>";
-  echo "<table align=\"center\" style=\"text-align:center;\" border=\"0\" cellspacing=\"0\" cellpeding=\"0\">\n";
-  echo "<tbody>";
-  if ( (count ($_SESSION) == 0) OR
-       (!isset($_SESSION ["menue"])) OR
-       ($_SESSION ["menue"] == "WELCOME") OR
-       ($_SESSION ["menue"] == "LOGIN")){
-             echo "<tr>\n";
-             echo "<td>\n";
-             echo "<input type=\"hidden\" name=\"login\" value=\"Anmelden\">\n";
-             echo "<input type=\"image\" name=\"login\" src=\"button.php?type=menue&m_text=anmelden&m_fs=10&m_form=rund&width=99&bg=mlightblue\">\n";
-             echo "</td>\n";
-             echo "</tr>\n";
-  }
+    $users = [];
+    $positions = [];
+    $queueCount = null;
+    $freshnessState = 'current';
+    $queueLabel = is_string($queueProfile['label'] ?? null)
+        ? $queueProfile['label']
+        : 'Offene Meldungen';
+    $connection = null;
+    try {
+        $connection = estab_auth_connect($databaseConfig);
+    } catch (Throwable $exception) {
+        $freshnessState = 'unavailable';
+        error_log(
+            'eStab sidebar database connection failed: '
+            . $exception->getMessage()
+        );
+    }
 
-if (isset($_SESSION ['menue'])) {
-  switch ($_SESSION ['menue']) {
-    case "ROLLE" : // Taetigkeit nach Rolle ==>
-      if ($_SESSION ["menue"] == "ROLLE") { // Taetigkeit nach Rolle ==>
-        if (isset ($_SESSION ["ROLLE"])){
-           switch ($_SESSION ["ROLLE"]){
-
-             case "Stab" :  /* Hier gibt es den normalen Stab und die Sichterfunktion also muss hier noch
-                               die Funktion ausgewertet werden.*/
-               if (($_SESSION ["vStab_funktion"]) == "Si") {// Sichter
-                 echo "<tr><td>\n";
-                 echo "<input type=\"image\" name=\"stab_sichten\" src=\"button.php?type=menue&m_text=sichten&m_fs=10&m_form=rund&width=99&bg=mlightblue\" alt=\"sichten\">\n";
-                 echo "</td></tr>\n";
-                 echo "<tr><td>\n";
-                 echo "<input type=\"image\" name=\"si_admin\" src=\"button.php?type=menue&m_text=2.Sichtung&m_fs=10&m_form=rund&width=99&bg=mlightblue\" alt=\"2.Sichtung\">\n";
-                 echo "</td></tr>\n";
-               } else {
-                 echo "<tr><td>\n";
-                 echo "<input type=\"image\" name=\"stab_schreiben\" src=\"button.php?type=menue&m_text=schreiben&m_fs=10&m_form=rund&width=99&bg=mlightblue&bg=mlightblue\" alt=\"schreiben\">\n";
-                 echo "</td></tr>\n";
-/*
-                 echo "<tr><td>\n";
-                 echo "<input type=\"image\" name=\"stab_anhang\" src=\"".$conf_design_path."/attachment.gif\" alt=\"Anhang\">\n";
-                 echo "</td></tr>\n";
-*/
-                 echo "<tr><td>\n";
-                 echo "<input type=\"image\" name=\"stab_lesen\" src=\"button.php?type=menue&m_text=lesen&m_fs=10&m_form=rund&width=99&bg=mlightblue\" alt=\"lesen\">\n";
-                 echo "</td></tr>\n";
-               }
-             break;
-
-             case "Fernmelder" :
-                  echo "<tr><td>\n";
-                  echo "<input type=\"image\" name=\"fm_eingang\" src=\"button.php?type=menue&m_text=Eingang&m_fs=10&m_form=rund&width=99&bg=mlightblue\" alt=\"Eingang\">\n";
-                  echo "</td></tr>\n";
-                  echo "<tr><td>";
-                  echo "<input type=\"image\" name=\"fm_ausgang\" src=\"button.php?type=menue&m_text=Ausgang&m_fs=10&m_form=rund&width=99&bg=mlightblue\" alt=\"Ausgang\">\n";
-                  echo "</td></td>\n";
-                  echo "<tr><td>\n";
-                  echo "<input type=\"image\" name=\"fm_admin\" src=\"button.php?type=menue&m_text=2.Sichtung&m_fs=10&m_form=rund&width=99&bg=mlightblue\" alt=\"admin\">\n";
-                  echo "</td></tr>\n";
-                  echo "<tr><td>\n";
-                  echo "<input type=\"image\" name=\"fm_anhang\" src=\"button.php?type=menue&m_text=Anhänge&m_fs=10&m_form=rund&width=99&bg=mlightblue\" alt=\"Anhang\">\n";
-                  echo "</td></tr>\n";
-
-             break;
-
-             case "Administrator" : break;
-
-             case "FB" :
-                  echo "<tr>\n";
-                  echo "<td>\n";
-                  echo "<input type=\"image\" name=\"stab_schreiben\" src=\"button.php?type=menue&m_text=schreiben&m_fs=10&m_form=rund&width=99&bg=mlightblue\">\n";
-                  echo "</td></tr>\n";
-                  echo "<tr><td>\n";
-                  echo "<input type=\"image\" name=\"stab_lesen\" src=\"button.php?type=menue&m_text=lesen&m_fs=10&m_form=rund&width=99&bg=mlightblue\">\n";
-                  echo "</td></tr>\n";
-             break;
-           }
-
-
-          echo "<tr>\n";
-          echo "<td>\n";
-          echo "<input type=\"image\" name=\"m2_benutzer\" value=\"benutzer\" src=\"button.php?type=menue&m_text=Benutzer&m_fs=10&m_form=rund&width=99&bg=mlightblue\" alt=\"Benutzer\">\n";
-          echo "</td></tr>\n";
+    if ($connection instanceof mysqli) {
+        try {
+            $positions = estab_sidebar_fetch_configured_positions(
+                $connection,
+                $matrixTable
+            );
+        } catch (Throwable $exception) {
+            $freshnessState = 'partial';
+            error_log(
+                'eStab sidebar matrix lookup failed: '
+                . $exception->getMessage()
+            );
         }
-      }
-    break;
-  }
-} // if switsch _session (menue)
-  echo "</tbody>";
-  echo "</table>";
-  echo "</form>";
-  echo "</body>";
-  echo "</html>";
-  echo "\n<!-- ENDE file:vorgabe.php -->\n";
 
+        try {
+            $users = estab_auth_fetch_users($connection, $userTable);
+        } catch (Throwable $exception) {
+            $freshnessState = 'partial';
+            error_log(
+                'eStab sidebar occupancy lookup failed: '
+                . $exception->getMessage()
+            );
+        }
 
+        try {
+            $queueSessionKey = $queueProfile['session_key'] ?? null;
+            if (is_string($queueSessionKey)) {
+                $queueCount = estab_sidebar_queue_count(
+                    $connection,
+                    $queueSessionKey,
+                    $messageTable,
+                    $userTablePrefix,
+                    $identity['funktion'],
+                    $includeOutgoingForReview
+                );
+            }
+        } catch (Throwable $exception) {
+            $queueCount = null;
+            $freshnessState = 'partial';
+            error_log(
+                'eStab sidebar queue lookup failed: '
+                . $exception->getMessage()
+            );
+        } finally {
+            estab_auth_close($connection);
+        }
+    }
+
+    $notificationSoundUrl = estab_sidebar_queue_notification(
+        $session,
+        is_string($queueProfile['session_key'] ?? null)
+            ? $queueProfile['session_key']
+            : null,
+        $queueCount,
+        $soundsEnabled,
+        $soundUrl
+    );
+
+    return estab_sidebar_status_markup(
+        $session,
+        $positions,
+        $users,
+        $queueLabel,
+        $queueCount,
+        null,
+        $soundUrl,
+        $notificationSoundUrl,
+        $freshnessState
+    );
+}
+
+$queueProfile = $identity === null
+    ? null
+    : estab_sidebar_queue_profile($identity);
+$soundsEnabled = (bool) ($conf_4f['sounds'] ?? false);
+$soundUrl = $soundsEnabled && is_string($queueProfile['sound_file'] ?? null)
+    ? estab_application_url('4fach/audio/' . $queueProfile['sound_file'])
+    : null;
+$statusMarkup = $identity === null
+    ? ''
+    : estab_vorgaben_status_markup(
+        $_SESSION,
+        $conf_4f_db,
+        (string) $conf_4f_tbl['benutzer'],
+        (string) $conf_4f_tbl['nachrichten'],
+        (string) $conf_4f_tbl['usrtblprefix'],
+        (string) $conf_4f_tbl['empfmtx'],
+        $queueProfile,
+        (bool) ($conf_4f['si_in_out'] ?? false),
+        $soundsEnabled,
+        $soundUrl
+    );
+
+if ($statusFragment) {
+    echo $statusMarkup;
+    exit;
+}
+
+$menuState = $_SESSION['menue'] ?? '';
+$actions = estab_sidebar_workflow_actions($identity, $menuState);
+
+$refreshInterval = isset($cfg['itv']['status'])
+    ? (int) $cfg['itv']['status']
+    : 10;
+$refreshScript = $identity === null
+    ? ''
+    : estab_sidebar_status_refresh_script(
+        estab_application_url('4fach/vorgaben.php?fragment=status'),
+        $refreshInterval
+    );
 ?>
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>eStab Navigation</title>
+  <?= estab_session_ui_stylesheet() ?>
+</head>
+<body class="estab-navigation-frame estab-message-sidebar-page">
+  <div class="estab-message-sidebar" data-estab-sidebar-root>
+    <?= $statusMarkup ?>
+    <?= estab_session_ui_current_markup(
+        $_SESSION,
+        true,
+        $loginDestination,
+        false,
+        true
+    ) ?>
+    <?php if ($identity !== null): ?>
+      <main class="estab-sidebar-workflow" data-estab-workflow-menu>
+        <div class="estab-sidebar-section-heading">
+          <h2>Aktionen</h2>
+          <p>
+            <?= estab_auth_html($identity['funktion']) ?>
+            · <?= estab_auth_html($identity['rolle']) ?>
+          </p>
+        </div>
+        <?php if ($actions !== []): ?>
+          <form
+            class="estab-sidebar-action-form"
+            action="<?= estab_auth_html((string) $conf_4f['MainURL']) ?>"
+            method="post"
+            target="mainframe"
+          >
+            <?= estab_csrf_field() ?>
+            <?= estab_navigation_login_destination_field($loginDestination) ?>
+            <div class="estab-sidebar-actions">
+              <?php foreach ($actions as $action): ?>
+                <button
+                  class="estab-sidebar-action"
+                  type="submit"
+                  name="<?= estab_auth_html($action['name']) ?>"
+                  value="1"
+                  data-estab-workflow-key="<?= estab_auth_html($action['key']) ?>"
+                >
+                  <span class="estab-sidebar-action-title">
+                    <?= estab_auth_html($action['label']) ?>
+                  </span>
+                  <span class="estab-sidebar-action-description">
+                    <?= estab_auth_html($action['description']) ?>
+                  </span>
+                </button>
+              <?php endforeach; ?>
+            </div>
+          </form>
+        <?php else: ?>
+          <p class="estab-sidebar-empty">
+            Für diese Rolle sind hier keine Nachrichtenaktionen hinterlegt.
+          </p>
+        <?php endif; ?>
+      </main>
+    <?php endif; ?>
+  </div>
+  <?= estab_sidebar_audio_markup($soundUrl) ?>
+  <?= $refreshScript ?>
+  <script data-estab-sidebar-workspace-link>
+    document.addEventListener('submit', function (event) {
+      if (
+        event.target instanceof HTMLFormElement
+        && event.target.matches('.estab-sidebar-action-form')
+        && window.parent !== window
+      ) {
+        window.parent.postMessage('estab:show-content', window.location.origin);
+      }
+    });
+  </script>
+</body>
+</html>

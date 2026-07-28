@@ -46,6 +46,15 @@ assert_body_fixed() {
     fi
 }
 
+assert_body_absent_fixed() {
+    forbidden=$1
+    if grep -Fq -- "$forbidden" "$body"; then
+        printf 'HTTP surface: response unexpectedly contains %s\n' "$forbidden" >&2
+        sed -n '1,40p' "$body" >&2
+        exit 1
+    fi
+}
+
 assert_no_insecure_resource() {
     if grep -Fiq 'http://' "$body"; then
         printf 'HTTP surface: stabinfo response still embeds an insecure remote resource\n' >&2
@@ -130,25 +139,45 @@ for asset in \
     /4fsym/nw.png \
     /4fsym/icon_handbuch.gif \
     /4fsym/null.gif \
+    /4fach/audio/notify_aw.wav \
+    /4fach/audio/notify_si.wav \
+    /4fach/audio/notify_stab.wav \
     /doku/Handbuch_eStab.pdf
 do
     assert_nonempty_200 "$base_url$asset"
 done
 
 assert_status 200 "$base_url/4fach/index.php"
-for frame in './counter.php?embedded=1' './vorgaben.php' './status.php?embedded=1' './mainindex.php'; do
-    assert_body_fixed "$frame"
-done
+iframe_count=$(grep -o '<iframe' "$body" | wc -l | tr -d ' ')
+if [ "$iframe_count" != 2 ]; then
+    printf 'HTTP surface: expected exactly two message workspace frames, got %s\n' \
+        "$iframe_count" >&2
+    sed -n '1,80p' "$body" >&2
+    exit 1
+fi
+assert_body_fixed 'data-estab-message-workspace'
+assert_body_fixed 'name="vorgaben"'
+assert_body_fixed 'src="./vorgaben.php"'
+assert_body_fixed 'name="mainframe"'
+assert_body_fixed 'src="./mainindex.php"'
+assert_body_fixed 'data-estab-mobile-menu-return'
+assert_body_fixed 'data-estab-mobile-workspace-navigation'
+assert_body_fixed "event.data === 'estab:show-content'"
+assert_body_fixed 'event.source === sidebar.contentWindow'
+assert_body_fixed "content.scrollIntoView({block: 'start'})"
+assert_body_absent_fixed './counter.php?embedded=1'
+assert_body_absent_fixed './status.php?embedded=1'
+assert_body_absent_fixed '<frameset'
 assert_status 200 "$base_url/4fach/index.php?login_flow=existing"
-assert_body_fixed 'SRC="./mainindex.php?login_flow=existing"'
+assert_body_fixed 'src="./mainindex.php?login_flow=existing"'
 assert_status 200 "$base_url/4fach/index.php?login_flow=new"
-assert_body_fixed 'SRC="./mainindex.php?login_flow=new"'
+assert_body_fixed 'src="./mainindex.php?login_flow=new"'
 assert_status 200 "$base_url/4fach/index.php?next=incident-log"
-assert_body_fixed 'SRC="./mainindex.php?next=incident-log"'
-assert_body_fixed 'SRC="./vorgaben.php?next=incident-log"'
+assert_body_fixed 'src="./mainindex.php?next=incident-log"'
+assert_body_fixed 'src="./vorgaben.php?next=incident-log"'
 assert_status 200 "$base_url/4fach/index.php?login_flow=existing&next=tracking"
-assert_body_fixed 'SRC="./mainindex.php?login_flow=existing&amp;next=tracking"'
-assert_body_fixed 'SRC="./vorgaben.php?next=tracking"'
+assert_body_fixed 'src="./mainindex.php?login_flow=existing&amp;next=tracking"'
+assert_body_fixed 'src="./vorgaben.php?next=tracking"'
 assert_status 400 "$base_url/4fach/index.php?login_flow=unknown"
 assert_status 400 "$base_url/4fach/index.php?next=administration"
 assert_status 400 "$base_url/4fach/index.php?next=https%3A%2F%2Fattacker.invalid"
@@ -158,18 +187,50 @@ if grep -Fq 'data-estab-session-bar' "$body"; then
     exit 1
 fi
 assert_status 200 "$base_url/4fach/vorgaben.php"
-assert_body_fixed 'm_text=anmelden'
+assert_body_fixed 'data-estab-sidebar-root'
 assert_body_fixed 'data-estab-public-bar'
-assert_body_fixed '<summary>Bereich wechseln</summary>'
+assert_body_fixed 'estab-session-bar-sidebar'
+assert_body_fixed 'data-estab-navigation-mode="sidebar"'
+assert_body_fixed '<h2>Bereiche</h2>'
+assert_body_fixed '<p>Arbeitsbereich wechseln</p>'
+assert_body_fixed '>Anmelden</a>'
+navigation_item_count=$(
+    grep -o 'data-estab-navigation-item' "$body" | wc -l | tr -d ' '
+)
+if [ "$navigation_item_count" != 10 ]; then
+    printf 'HTTP surface: anonymous sidebar contains %s navigation items, expected 10\n' \
+        "$navigation_item_count" >&2
+    exit 1
+fi
+for forbidden in \
+    '<details' \
+    '<summary' \
+    'data-estab-sidebar-status' \
+    'data-estab-queue-count' \
+    'data-estab-presence-state' \
+    'data-estab-sidebar-refresh' \
+    'data-estab-sound-toggle' \
+    'data-estab-sidebar-audio' \
+    'data-estab-workflow-menu'
+do
+    assert_body_absent_fixed "$forbidden"
+done
 if grep -Fq 'data-estab-session-bar' "$body"; then
     printf 'HTTP surface: anonymous navigation contains authenticated session UI\n' >&2
     exit 1
 fi
 assert_status 200 "$base_url/4fach/vorgaben.php?next=incident-log"
-assert_body_fixed 'name="next" value="incident-log"'
 assert_body_fixed "href=\"$expected_app_root/4fach/index.php?next=incident-log\""
+assert_body_fixed 'data-estab-navigation-mode="sidebar"'
+assert_body_absent_fixed '<summary'
 assert_status 400 "$base_url/4fach/vorgaben.php?next=administration"
 assert_status 400 "$base_url/4fach/vorgaben.php?unexpected=1"
+assert_status 403 "$base_url/4fach/vorgaben.php?fragment=status"
+assert_body_fixed 'Anmeldung erforderlich.'
+assert_body_absent_fixed 'data-estab-sidebar-status'
+assert_status 400 "$base_url/4fach/vorgaben.php?fragment=unknown"
+assert_status 400 \
+    "$base_url/4fach/vorgaben.php?fragment=status&next=incident-log"
 assert_status 200 "$base_url/4fach/mainindex.php"
 assert_body_fixed 'eStab-Funktionskonto'
 assert_body_fixed 'Wie möchten Sie fortfahren?'
@@ -226,6 +287,7 @@ assert_no_insecure_resource
 assert_nonempty_200 "$base_url/stabinfo/f_info.php"
 assert_no_insecure_resource
 assert_status 200 "$base_url/stabinfo/l_index.php"
+assert_body_fixed '<summary>Bereich wechseln</summary>'
 if grep -Fq 'data-estab-session-bar' "$body"; then
     printf 'HTTP surface: anonymous BOS navigation contains authenticated session UI\n' >&2
     exit 1

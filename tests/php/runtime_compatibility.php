@@ -115,4 +115,19 @@ $assert(
     'search state still reads an absent session key'
 );
 
+$messageForm = file_get_contents(__DIR__ . '/../../4fach/4fachform.php');
+$assert(is_string($messageForm), 'message form source is readable');
+$assert(
+    str_contains($messageForm, 'isset($this->formdata["16_empf"])')
+        && str_contains(
+            $messageForm,
+            'is_string($this->formdata["16_empf"])'
+        )
+        && !str_contains(
+            $messageForm,
+            '$empf_text  = $this->formdata ["16_empf"]'
+        ),
+    'empty recipient data is not normalised before explode()'
+);
+
 echo "runtime compatibility: OK ({$assertions} assertions)\n";

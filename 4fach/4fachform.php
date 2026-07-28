@@ -346,7 +346,10 @@ class nachrichten4fach {
       }
     }
 
-    $empf_text  = $this->formdata ["16_empf"] ; // Zeile mit den Empfaengern aus der DB
+    $empf_text = isset($this->formdata["16_empf"])
+        && is_string($this->formdata["16_empf"])
+        ? $this->formdata["16_empf"]
+        : ""; // Zeile mit den Empfaengern aus der DB
       // Wandel die Textzeile mit den Empfaengern in ein ARRAY um
     $empf_array_color = explode (",",$empf_text);
 

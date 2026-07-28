@@ -59,32 +59,116 @@ $navigationFrameUrl = './vorgaben.php'
 
    Beschreibung:
 
-          In dieser Datei wird der Frameset eingerichtet.
-          links einStreifen mit der status.php
-          rest die Datei mainindex.php
+          In dieser Datei wird der Arbeitsbereich eingerichtet:
+          links eine durchgehende Navigation, rechts mainindex.php.
 
    (C) Hajo Landmesser IuK Kreis Heinsberg
    mailto://hajo.landmesser@iuk-heinsberg.de
 *****************************************************************************/
 ?>
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
-<HTML>
-<HEAD>
-<link REL="SHORTCUT ICON" HREF="../favicon.ico" />
-<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">
-<meta name="author" content="Hajo Landmesser" >
-<meta name="generator" content="Bluefish 2.2.5" >
-<TITLE>Nachrichtenvordruck</TITLE>
-<FRAMESET COLS="200,*" frameborder="0" framespacing="0" border="0">
-   <FRAMESET ROWS="150,*" frameborder="0" framespacing="0" border="0">
-      <FRAME NAME="counter" TITLE="counter" SRC="./counter.php?embedded=1" SCROLLING=NO MARGINWIDTH="0" MARGINHEIGHT="0" FRAMEBORDER="0" NORESIZE>
-         <FRAMESET ROWS="360,*" frameborder="0" framespacing="0" border="0">
-           <FRAME NAME="vorgaben" TITLE="vorgaben" SRC="<?= estab_auth_html($navigationFrameUrl) ?>" SCROLLING=AUTO MARGINWIDTH="0" MARGINHEIGHT="0" FRAMEBORDER="0" NORESIZE>
-           <FRAME NAME="status" TITLE="status" SRC="./status.php?embedded=1" SCROLLING=NO MARGINWIDTH="0" MARGINHEIGHT="0" FRAMEBORDER="0" NORESIZE>
-         </FRAMESET>
-   </FRAMESET>
-   <FRAME NAME="mainframe" TITLE="mainframe" SRC="<?= estab_auth_html($mainFrameUrl) ?>" SCROLLING=AUTO MARGINWIDTH="3" MARGINHEIGHT="3" FRAMEBORDER="0">
-</FRAMESET>
-</HEAD>
-</HTML>
+<!doctype html>
+<html lang="de" class="estab-message-workspace-document">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="author" content="Hajo Landmesser">
+  <link rel="shortcut icon" href="../favicon.ico">
+  <link rel="stylesheet" href="../estab-ui.css">
+  <title>Nachrichtenvordruck</title>
+</head>
+<body class="estab-message-workspace">
+  <main class="estab-message-workspace-grid" data-estab-message-workspace>
+    <iframe
+      class="estab-message-sidebar-frame"
+      name="vorgaben"
+      title="eStab Navigation und Einsatzstatus"
+      src="<?= estab_auth_html($navigationFrameUrl) ?>"
+    ></iframe>
+    <iframe
+      class="estab-message-content-frame"
+      name="mainframe"
+      title="eStab Arbeitsbereich"
+      src="<?= estab_auth_html($mainFrameUrl) ?>"
+    ></iframe>
+  </main>
+  <button
+    class="estab-mobile-sidebar-return"
+    type="button"
+    data-estab-mobile-menu-return
+    hidden
+  >
+    <span aria-hidden="true">←</span>
+    Menü
+  </button>
+  <script data-estab-mobile-workspace-navigation>
+    (function () {
+      var sidebar = document.querySelector('.estab-message-sidebar-frame');
+      var content = document.querySelector('.estab-message-content-frame');
+      var returnButton = document.querySelector(
+        '[data-estab-mobile-menu-return]'
+      );
+      var narrow = window.matchMedia('(max-width: 42rem)');
+      var contentRequested = false;
+
+      function showContent() {
+        if (!narrow.matches || !content || !returnButton) {
+          return;
+        }
+        contentRequested = true;
+        returnButton.hidden = false;
+        content.scrollIntoView({block: 'start'});
+        content.focus({preventScroll: true});
+      }
+
+      window.addEventListener('message', function (event) {
+        if (
+          event.origin === window.location.origin
+          && sidebar
+          && event.source === sidebar.contentWindow
+          && event.data === 'estab:show-content'
+        ) {
+          showContent();
+        }
+      });
+
+      if (content) {
+        content.addEventListener('load', function () {
+          if (contentRequested) {
+            window.requestAnimationFrame(showContent);
+          }
+        });
+      }
+
+      if (returnButton) {
+        returnButton.addEventListener('click', function () {
+          contentRequested = false;
+          returnButton.hidden = true;
+          if (sidebar) {
+            sidebar.scrollIntoView({block: 'start'});
+            sidebar.focus({preventScroll: true});
+          }
+        });
+      }
+
+      window.addEventListener('scroll', function () {
+        if (
+          narrow.matches
+          && returnButton
+          && window.scrollY < window.innerHeight / 2
+        ) {
+          contentRequested = false;
+          returnButton.hidden = true;
+        }
+      }, {passive: true});
+
+      narrow.addEventListener('change', function () {
+        if (!narrow.matches && returnButton) {
+          contentRequested = false;
+          returnButton.hidden = true;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
 
