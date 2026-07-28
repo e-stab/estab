@@ -509,19 +509,54 @@ function estab_auth_fetch_users(mysqli $connection, string $table): array
     }
 }
 
-/** Mark an account logged out using its primary key. */
-function estab_auth_mark_logged_out(mysqli $connection, string $table, string $code): void
+/**
+ * Mark only the matching account session logged out.
+ *
+ * Binding the stored session ID prevents an older browser session from
+ * deactivating a newer login of the same account.
+ */
+function estab_auth_mark_logged_out(
+    mysqli $connection,
+    string $table,
+    string $code,
+    string $sessionId
+): bool
 {
     $sql = 'UPDATE ' . estab_auth_table($table)
-        . " SET `aktiv` = 0, `sid` = '', `ip` = '', `fwdip` = '' WHERE `kuerzel` = ?";
+        . " SET `aktiv` = 0, `sid` = '', `ip` = '', `fwdip` = ''"
+        . ' WHERE `kuerzel` = ? AND `sid` = ?';
     $statement = $connection->prepare($sql);
     if (!$statement) {
         throw new RuntimeException('Could not prepare logout update');
     }
     try {
-        $statement->bind_param('s', $code);
+        $statement->bind_param('ss', $code, $sessionId);
         if (!$statement->execute()) {
             throw new RuntimeException('Could not update logout state');
+        }
+        return $statement->affected_rows === 1;
+    } finally {
+        $statement->close();
+    }
+}
+
+/** Append an authentication lifecycle event through a prepared statement. */
+function estab_auth_log_event(
+    mysqli $connection,
+    string $table,
+    string $event,
+    string $detail
+): void {
+    $sql = 'INSERT INTO ' . estab_auth_table($table)
+        . ' (`p_zeit`, `p_was`, `p_ereignis`) VALUES (NOW(), ?, ?)';
+    $statement = $connection->prepare($sql);
+    if (!$statement) {
+        throw new RuntimeException('Could not prepare authentication audit event');
+    }
+    try {
+        $statement->bind_param('ss', $event, $detail);
+        if (!$statement->execute()) {
+            throw new RuntimeException('Could not write authentication audit event');
         }
     } finally {
         $statement->close();

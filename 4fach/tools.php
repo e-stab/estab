@@ -539,8 +539,9 @@ bersichtlich dargestellt werden.
       $i = 1;
       $doppel = false;  // zweisymbole nebeneinander ja/nein
       $prefdoppelt = false; // vorgaenger doppelt
+      $entryCount = count ($conf_empf);
 
-      while ( $i <= count ($conf_empf) ){
+      while ( $i <= $entryCount ){
 
         if ($i == 1) {
            echo "<!-- 001 list.php -->\n";
@@ -551,10 +552,9 @@ bersichtlich dargestellt werden.
            $tableisset = true;
         }
 
-        if ( ( strlen( $conf_empf [$i]["fkt"] ) <= 2 ) and
-             ( strlen( $conf_empf [$i+1]["fkt"] ) <= 2 )and
-             ( $i <= count ($conf_empf) -1 ) ) { // die naechsten zwei sind max zweistellig
-          if (!$statusalt){ $absneu = true; }  // dann
+        if ( ( $i <= $entryCount - 1 ) and
+             ( strlen( $conf_empf [$i]["fkt"] ) <= 2 ) and
+             ( strlen( $conf_empf [$i+1]["fkt"] ) <= 2 ) ) { // die naechsten zwei sind max zweistellig
             $doppel = true;
           } else {
             $doppel = false;
@@ -570,7 +570,6 @@ bersichtlich dargestellt werden.
            echo "<table align=\"center\" style=\"text-align:center; width:".$zellenbreite."; height:".$zellenhoehe."; font-size:9pt; background-color: rgb(150, 150, 150);  font-size:9pt; height:".$zellenhoehe.";\" border=\"0\" cellpadding=\"1\" cellspacing=\"1\">\n";
            echo "<tbody>\n";
            $tableisset = true;
-           $absneu = false;
            $prefdoppelt = $doppel;
         }
 
@@ -605,7 +604,7 @@ bersichtlich dargestellt werden.
 
         }
 
-        if ($conf_empf[$i]["fkt"] == "A/W") {
+        if ( ($i <= $entryCount) and ($conf_empf[$i]["fkt"] == "A/W") ) {
           // Zeige wenigstens einen inaktiven Fermelder an
 
           echo "<!-- 006 liste.php -->\n";
@@ -629,7 +628,7 @@ bersichtlich dargestellt werden.
           echo "</tbody>"; echo "</table>\n";
           $tableisset = false;
         $i++;
-        $doppelt     = false;
+        $doppel      = false;
         $prefdoppelt = false;
           echo "<table align=\"center\" style=\"text-align:center; width:".$zellenbreite."; height:".$zellenhoehe."; font-size:9pt; background-color: rgb(150, 150, 150);  font-size:9pt; height:".$zellenhoehe.";\" border=\"0\" cellpadding=\"1\" cellspacing=\"1\">\n";
           echo "<tbody>\n";

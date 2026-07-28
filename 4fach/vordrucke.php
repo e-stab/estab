@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../app/file_access.php';
+require_once __DIR__ . '/../app/session_ui.php';
 require __DIR__ . '/../4fcfg/config.inc.php';
 
 if (session_status() === PHP_SESSION_NONE) {
@@ -16,6 +17,7 @@ if (
     echo 'Anmeldung erforderlich.';
     exit;
 }
+estab_session_ui_start($_SESSION);
 
 $files = estab_file_list((string) $conf_4f['vordruck_dir'], 'vordruck');
 ?>
@@ -35,7 +37,6 @@ $files = estab_file_list((string) $conf_4f['vordruck_dir'], 'vordruck');
 </head>
 <body>
   <h1>Generierte Vordrucke</h1>
-  <p>Angemeldet als <?= estab_auth_html($_SESSION['vStab_benutzer']) ?>.</p>
 <?php if ($files === []): ?>
   <p>Es sind noch keine Vordrucke vorhanden.</p>
 <?php else: ?>

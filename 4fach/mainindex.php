@@ -22,6 +22,9 @@ session_start ();
 
 require_once __DIR__ . "/../app/workflow.php";
 require_once __DIR__ . "/../app/csrf.php";
+require_once __DIR__ . "/../app/session_ui.php";
+require_once __DIR__ . "/../app/logout.php";
+estab_session_ui_start ($_SESSION);
 
 $returnValue = array (); // no request data is a valid, warning-free state
 if (count($_GET)>0)  { $returnValue = $_GET; }   // GET Daten, wenn vorhanden speichern
@@ -194,7 +197,7 @@ if ($messageOperation !== null) {
   function resetframeset ($rootpath) {
     global $conf_4f;
     pre_html ("reset", "Framereset ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"], ""); // Normaler Seitenaufbau mit Auffrischung
-    echo "<body onLoad=\"FramesVeraendern('".$rootpath."/4fach/counter.php','counter','".$rootpath."/4fach/vorgaben.php','vorgaben','".$rootpath."/4fach/mainindex.php','mainframe')\">";
+    echo "<body onLoad=\"FramesVeraendern('".$rootpath."/4fach/counter.php?embedded=1','counter','".$rootpath."/4fach/vorgaben.php','vorgaben','".$rootpath."/4fach/mainindex.php','mainframe')\">";
   }
 
 
@@ -1124,35 +1127,15 @@ Nachricht als Sichtung anzeigen
   if (isset ($returnValue["m2_abmelden_x"])) {
     if ( debug == true ){ echo "### 907 m2_abmelden_x ";  echo "<br>\n";}
 
-     $logoutData = array (
-       "benutzer" => (string) ($_SESSION ["vStab_benutzer"] ?? ""),
-       "kuerzel" => (string) ($_SESSION ["vStab_kuerzel"] ?? ""),
-       "funktion" => (string) ($_SESSION ["vStab_funktion"] ?? ""),
-       "rolle" => (string) ($_SESSION ["vStab_rolle"] ?? ""),
-       "sid" => session_id (),
-       "ip" => estab_auth_remote_ip ($_SERVER),
+     // Compatibility for the historical image button. New UI controls use
+     // logout.php and a 303 redirect that also works from standalone tabs.
+     estab_logout_current_session (
+       $conf_4f_db,
+       $conf_4f_tbl ["benutzer"],
+       $conf_4f_tbl ["protokoll"],
+       $_SERVER
      );
-
-     // Die lokale Authentisierung endet unabhängig von nachfolgenden DB-Fehlern.
-     estab_auth_destroy_session ();
      include_once ("./logoff.php");
-
-     $logoutConnection = null;
-     try {
-       if ($logoutData ["kuerzel"] !== "") {
-         $logoutConnection = estab_auth_connect ($conf_4f_db);
-         estab_auth_mark_logged_out ($logoutConnection, $conf_4f_tbl ["benutzer"], $logoutData ["kuerzel"]);
-         estab_auth_close ($logoutConnection);
-         $logoutConnection = null;
-       }
-       protokolleintrag ("Abmelden", $logoutData ["benutzer"].";".$logoutData ["kuerzel"].";".$logoutData ["funktion"].";".$logoutData ["rolle"].";".$logoutData ["sid"].";".$logoutData ["ip"]);
-     } catch (Throwable $exception) {
-       error_log ("eStab logout database update failed: ".$exception->getMessage ());
-     } finally {
-       if ($logoutConnection instanceof mysqli) {
-         estab_auth_close ($logoutConnection);
-       }
-     }
 
      resetframeset ($conf_urlroot.$conf_web ["pre_path"]);
      exit;

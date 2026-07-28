@@ -5,6 +5,7 @@ define ("debug",false);
 session_start ();
 require_once __DIR__ . "/../app/auth.php";
 require_once __DIR__ . "/../app/csrf.php";
+require_once __DIR__ . "/../app/session_ui.php";
 
 if ( debug == true ){
   echo "<br><br>\n";
@@ -20,8 +21,18 @@ if ( debug == true ){
   include ("../4fcfg/dbcfg.inc.php");
   include ("../4fcfg/e_cfg.inc.php");
   include ("../4fcfg/fkt_rolle.inc.php");
+  header ("Content-Type: text/html; charset=UTF-8");
+  header ("Cache-Control: private, no-store, max-age=0");
+  echo "<!doctype html>\n";
+  echo "<html lang=\"de\"><head>\n";
+  echo "<meta charset=\"UTF-8\">\n";
+  echo "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n";
+  echo "<title>eStab Navigation</title>\n";
+  echo estab_session_ui_stylesheet ()."\n";
+  echo "</head>\n";
     // hellblauer Hintergrund
-  echo "<body align=\"center\" bgcolor=\"#ECECFF\">";
+  echo "<body class=\"estab-navigation-frame\" align=\"center\" bgcolor=\"#ECECFF\">";
+  echo estab_session_ui_current_markup ($_SESSION, true);
   echo "<form action=\"".$conf_4f ["MainURL"]."\" method=\"POST\" target=\"mainframe\">\n";
   echo estab_csrf_field ();
 //  echo "<!-- Formularelemente und andere Elemente innerhalb des Formulars -->\n";
@@ -105,9 +116,6 @@ if (isset($_SESSION ['menue'])) {
           echo "<td>\n";
           echo "<input type=\"image\" name=\"m2_benutzer\" value=\"benutzer\" src=\"button.php?type=menue&m_text=Benutzer&m_fs=10&m_form=rund&width=99&bg=mlightblue\" alt=\"Benutzer\">\n";
           echo "</td></tr>\n";
-          echo "<tr><td>\n";
-          echo "<input type=\"image\" name=\"m2_abmelden\" value=\"Abmelden\" src=\"button.php?type=menue&m_text=abmelden&m_fs=10&m_form=rund&width=99&bg=mlightblue\" alt=\"abmelden\">\n";
-          echo "</td></tr>\n";
         }
       }
     break;
@@ -117,6 +125,7 @@ if (isset($_SESSION ['menue'])) {
   echo "</table>";
   echo "</form>";
   echo "</body>";
+  echo "</html>";
   echo "\n<!-- ENDE file:vorgabe.php -->\n";
 
 

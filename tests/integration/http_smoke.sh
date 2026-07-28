@@ -86,8 +86,9 @@ printf '%s' "$collision_password" >"$collision_password_file"
 chmod 0600 "$login_password_file" "$collision_password_file"
 
 request_status() {
+    : >"$headers"
     curl --silent --show-error --max-time 20 --connect-timeout 5 \
-        --output "$body" --write-out '%{http_code}' "$@"
+        --dump-header "$headers" --output "$body" --write-out '%{http_code}' "$@"
 }
 
 assert_status() {
@@ -119,6 +120,37 @@ assert_body_absent() {
     fi
 }
 
+assert_session_bar() {
+    expected_name=$1
+    expected_code=$2
+    expected_function=$3
+    expected_role=$4
+    bar_count=$(grep -o 'data-estab-session-bar' "$body" | wc -l | tr -d ' ')
+    logout_count=$(grep -o 'data-estab-logout-form' "$body" | wc -l | tr -d ' ')
+    if [ "$bar_count" != 1 ] || [ "$logout_count" != 1 ]; then
+        printf 'HTTP smoke: expected exactly one session bar/logout form, got %s/%s\n' \
+            "$bar_count" "$logout_count" >&2
+        sed -n '1,80p' "$body" >&2
+        exit 1
+    fi
+    for marker in \
+        'Angemeldet als' \
+        "data-estab-user-name=\"$expected_name\"" \
+        "data-estab-user-code=\"$expected_code\"" \
+        "data-estab-user-function=\"$expected_function\"" \
+        "data-estab-user-role=\"$expected_role\"" \
+        'data-estab-logout-form' \
+        'method="post"' \
+        'target="_top"' \
+        '4fach/logout.php' \
+        'name="logout_action" value="logout"' \
+        '>Abmelden</button>'
+    do
+        assert_body "$marker"
+    done
+    csrf_from_body >/dev/null
+}
+
 csrf_from_body() {
     token=$(sed -n \
         's/.*name="csrf_token" value="\([a-f0-9][a-f0-9]*\)".*/\1/p' \
@@ -129,6 +161,11 @@ csrf_from_body() {
         exit 1
     fi
     printf '%s' "$token"
+}
+
+session_cookie_from_jar() {
+    jar=$1
+    awk -F '\t' '$6 == "PHPSESSID" { value = $7 } END { print value }' "$jar"
 }
 
 db_sql() {
@@ -197,6 +234,28 @@ account_assignment() {
         "$account_code" | db_sql
 }
 
+logout_audit_count() {
+    account_code=$1
+    case "$account_code" in
+        '' | *[!a-z0-9_]*) printf 'HTTP smoke: unsafe audit account code\n' >&2; exit 1 ;;
+    esac
+    printf "SELECT COUNT(*) FROM nv_protokoll WHERE p_was = 'Abmelden' AND SUBSTRING_INDEX(SUBSTRING_INDEX(p_ereignis, ';', 2), ';', -1) = '%s';\n" \
+        "$account_code" | db_sql
+}
+
+logout_audit_reference_count() {
+    account_code=$1
+    session_id=$2
+    case "$account_code" in
+        '' | *[!a-z0-9_]*) printf 'HTTP smoke: unsafe audit account code\n' >&2; exit 1 ;;
+    esac
+    case "$session_id" in
+        '' | *[!A-Za-z0-9]*) printf 'HTTP smoke: unsafe audit session ID\n' >&2; exit 1 ;;
+    esac
+    printf "SELECT COUNT(*) FROM nv_protokoll WHERE p_was = 'Abmelden' AND SUBSTRING_INDEX(SUBSTRING_INDEX(p_ereignis, ';', 2), ';', -1) = '%s' AND SUBSTRING_INDEX(SUBSTRING_INDEX(p_ereignis, ';', 5), ';', -1) = CONCAT('sha256:', SHA2('%s', 256));\n" \
+        "$account_code" "$session_id" | db_sql
+}
+
 curl --silent --show-error --fail --max-time 20 --connect-timeout 5 \
     --dump-header "$headers" --output "$body" "$base_url/health.php"
 assert_body '"status":"ready"'
@@ -212,6 +271,8 @@ assert_body 'Nachrichtenvordruck'
 assert_body 'Infosammlung BOS'
 assert_body 'id="estab-login"'
 assert_body 'href="./4fach/index.php"'
+assert_body_absent 'data-estab-session-bar'
+assert_body_absent 'data-estab-logout-form'
 assert_status 200 "$base_url/stabinfo/index.php"
 assert_status 200 "$base_url/doku/Handbuch_eStab.pdf"
 
@@ -222,10 +283,19 @@ assert_status 403 "$base_url/4fach/anhang.php"
 assert_status 403 "$base_url/4fach/download.php?area=attachment&file=EL0001.txt"
 assert_status 403 "$base_url/4fach/showpic.php?file=EL0001.txt"
 assert_status 403 "$base_url/4fach/vordrucke.php"
+assert_status 200 "$base_url/4fach/counter.php"
+assert_body_absent 'data-estab-session-bar'
+assert_status 200 "$base_url/4fach/status.php"
+assert_body_absent 'data-estab-session-bar'
 assert_status 403 "$base_url/4fach/nachwea.php?nwalle=1"
 assert_status 403 "$base_url/4fueltg/ue_ltg.php"
 assert_status 403 "$base_url/stabetb/etb.php"
 assert_status 403 "$base_url/fmtbb/tbb.php"
+assert_status 405 "$base_url/4fach/logout.php"
+assert_status 403 --request POST \
+    --data-urlencode 'csrf_token=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+    --data-urlencode 'logout_action=logout' \
+    "$base_url/4fach/logout.php"
 assert_status 410 "$base_url/4fach/upload.php"
 assert_status 410 "$base_url/4fach/upload/upload.php"
 assert_status 401 "$base_url/4fadm/admin.php"
@@ -283,6 +353,8 @@ if [ "$restore_verify_only" = true ]; then
         --data-urlencode 'absenden_x=1' \
         "$base_url/4fach/mainindex.php"
     assert_body 'Meldung/Seite:'
+    restore_role=$(account_assignment "$test_code" | awk -F '	' '{print $2}')
+    assert_session_bar "$test_name" "$test_code" "$test_function" "$restore_role"
 
     assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         "$base_url/4fach/mainindex.php"
@@ -386,6 +458,12 @@ if grep -Eq 'Fatal error|Uncaught (Error|TypeError)|Warning:' "$body"; then
     exit 1
 fi
 assert_account_count 1 "$test_code"
+test_role=$(account_assignment "$test_code" | awk -F '	' '{print $2}')
+if [ -z "$test_role" ]; then
+    printf 'HTTP smoke: could not determine the authenticated account role\n' >&2
+    exit 1
+fi
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 
 # The new-account flow must neither log in an existing code nor replace its
 # password. Use a deliberately different password and compare the stored hash
@@ -594,6 +672,11 @@ assert_body "option value=\"$test_function\" selected"
 assert_body 'autocomplete="current-password"'
 assert_body_absent 'name="kennwort2"'
 preauth_csrf_token=$(csrf_from_body)
+preauth_session_id=$(session_cookie_from_jar "$cookie_jar")
+if [ -z "$preauth_session_id" ]; then
+    printf 'HTTP smoke: pre-authentication session cookie missing\n' >&2
+    exit 1
+fi
 
 # The collision password must still fail. The original password then proves a
 # fresh login against the unchanged stored hash.
@@ -622,6 +705,17 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode 'absenden_x=1' \
     "$base_url/4fach/mainindex.php"
 assert_body 'Meldung/Seite:'
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+authenticated_session_id=$(session_cookie_from_jar "$cookie_jar")
+authenticated_csrf_token=$(csrf_from_body)
+if [ -z "$authenticated_session_id" ] || [ "$authenticated_session_id" = "$preauth_session_id" ]; then
+    printf 'HTTP smoke: successful login did not rotate the session cookie\n' >&2
+    exit 1
+fi
+if [ "$authenticated_csrf_token" = "$preauth_csrf_token" ]; then
+    printf 'HTTP smoke: successful login did not rotate the CSRF token\n' >&2
+    exit 1
+fi
 
 # An authenticated session must log off before another login or account
 # creation request can reach the controller.
@@ -686,6 +780,7 @@ assert_body 'Liste der'
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/anhang.php?ah_upload_x=1"
 assert_body 'Anhang hochladen'
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 csrf_token=$(sed -n 's/.*name="csrf_token" value="\([a-f0-9][a-f0-9]*\)".*/\1/p' "$body" | head -n 1)
 reserved_name=$(sed -n 's/.*name="fs_nextfilename" value="\([A-Za-z0-9_-][A-Za-z0-9_-]*\)".*/\1/p' "$body" | head -n 1)
 upload_timestamp=$(sed -n 's/.*name="fs_timestamp" value="\([A-Za-z0-9][A-Za-z0-9]*\)".*/\1/p' "$body" | head -n 1)
@@ -732,6 +827,7 @@ done
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/anhang.php?ah_auswahl_x=1&lfd_999=$stored_attachment"
 assert_body "value=\"$stored_attachment;\""
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
@@ -760,6 +856,13 @@ fi
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/mainindex.php"
 assert_body "$workflow_marker"
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/"
+assert_body 'id="estab-open"'
+assert_body_absent 'id="estab-login"'
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 
 # Raw UTF-8 message storage must preserve punctuation and SQL-shaped text,
 # while every HTML list/search reflection remains inert.
@@ -809,16 +912,154 @@ assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/nachwea.php?nwalle=1"
 assert_body 'Nachweisung Eingang / Ausgang'
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fueltg/ue_ltg.php"
 assert_body "$workflow_marker"
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/stabetb/etb.php"
 assert_body 'Einsatzdaten erfassen'
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/fmtbb/tbb.php"
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/vordrucke.php"
 assert_body 'Generierte Vordrucke'
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/vorgaben.php"
+assert_body 'estab-session-bar-compact'
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+older_logout_csrf=$(csrf_from_body)
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/status.php"
+assert_body 'estab-session-bar-compact'
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/counter.php"
+assert_body 'estab-session-bar-compact'
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+assert_status 200 --cookie "$cookie_jar" \
+    "$base_url/4fach/status.php?embedded=1"
+assert_body_absent 'data-estab-session-bar'
+assert_status 200 --cookie "$cookie_jar" \
+    "$base_url/4fach/counter.php?embedded=1"
+assert_body_absent 'data-estab-session-bar'
+
+logout_audit_before=$(logout_audit_count "$test_code")
+case "$logout_audit_before" in
+    '' | *[!0-9]*) printf 'HTTP smoke: invalid initial logout audit count\n' >&2; exit 1 ;;
+esac
+
+# A dedicated POST endpoint makes the same logout form reliable in the
+# frameset and in standalone tabs. Invalid requests leave both session and
+# database state untouched.
+assert_status 405 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/logout.php"
+assert_status 200 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
+assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode 'logout_action=logout' \
+    "$base_url/4fach/logout.php"
+assert_status 200 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
+case "$older_logout_csrf" in
+    0*) wrong_logout_csrf="1${older_logout_csrf#?}" ;;
+    *) wrong_logout_csrf="0${older_logout_csrf#?}" ;;
+esac
+assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$wrong_logout_csrf" \
+    --data-urlencode 'logout_action=logout' \
+    "$base_url/4fach/logout.php"
+assert_status 200 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
+if [ "$(account_assignment "$test_code")" != "$(printf '%s\t%s\t1' "$test_function" "$test_role")" ]; then
+    printf 'HTTP smoke: rejected logout changed the active account state\n' >&2
+    exit 1
+fi
+if [ "$(logout_audit_count "$test_code")" != "$logout_audit_before" ]; then
+    printf 'HTTP smoke: rejected logout wrote an audit event\n' >&2
+    exit 1
+fi
+
+# A newer login replaces the account's stored SID. Logging out the older
+# browser must end only that local session and must not deactivate the newer
+# one.
+newer_cookie_jar=$work_dir/newer-cookies.txt
+assert_status 200 --cookie "$newer_cookie_jar" --cookie-jar "$newer_cookie_jar" \
+    --request POST --data-urlencode 'login_flow=existing' \
+    "$base_url/4fach/mainindex.php"
+newer_preauth_csrf=$(csrf_from_body)
+assert_status 200 --cookie "$newer_cookie_jar" --cookie-jar "$newer_cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$newer_preauth_csrf" \
+    --data-urlencode 'login_flow=existing' \
+    --data-urlencode "benutzer=$test_name" \
+    --data-urlencode "kuerzel=$test_code" \
+    --data-urlencode "funktion=$test_function" \
+    --data-urlencode "kennwort1@$login_password_file" \
+    --data-urlencode '2teskennwort=No' \
+    --data-urlencode 'absenden_x=1' \
+    "$base_url/4fach/mainindex.php"
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+newer_logout_csrf=$(csrf_from_body)
+newer_authenticated_session_id=$(session_cookie_from_jar "$newer_cookie_jar")
+if [ -z "$newer_authenticated_session_id" ]; then
+    printf 'HTTP smoke: newer authenticated session cookie missing\n' >&2
+    exit 1
+fi
+
+assert_status 303 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$older_logout_csrf" \
+    --data-urlencode 'logout_action=logout' \
+    "$base_url/4fach/logout.php"
+if ! grep -Eiq '^Location: .*4fach/index[.]php[[:space:]]*$' "$headers"; then
+    printf 'HTTP smoke: logout did not redirect to the application login\n' >&2
+    sed -n '1,30p' "$headers" >&2
+    exit 1
+fi
+assert_status 403 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
+assert_status 200 --cookie "$newer_cookie_jar" "$base_url/4fach/vordrucke.php"
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+if [ "$(account_assignment "$test_code")" != "$(printf '%s\t%s\t1' "$test_function" "$test_role")" ]; then
+    printf 'HTTP smoke: stale-session logout deactivated the newer login\n' >&2
+    exit 1
+fi
+if [ "$(logout_audit_count "$test_code")" -ne "$((logout_audit_before + 1))" ]; then
+    printf 'HTTP smoke: stale-session logout audit event missing\n' >&2
+    exit 1
+fi
+if [ "$(logout_audit_reference_count "$test_code" "$authenticated_session_id")" -ne 1 ]; then
+    printf 'HTTP smoke: stale-session logout audit lacks its hashed session reference\n' >&2
+    exit 1
+fi
+
+assert_status 303 --cookie "$newer_cookie_jar" --cookie-jar "$newer_cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$newer_logout_csrf" \
+    --data-urlencode 'logout_action=logout' \
+    "$base_url/4fach/logout.php"
+assert_status 403 --cookie "$newer_cookie_jar" "$base_url/4fach/vordrucke.php"
+if [ "$(account_assignment "$test_code")" != "$(printf '%s\t%s\t0' "$test_function" "$test_role")" ]; then
+    printf 'HTTP smoke: current-session logout did not deactivate the account\n' >&2
+    exit 1
+fi
+if [ "$(logout_audit_count "$test_code")" -ne "$((logout_audit_before + 2))" ]; then
+    printf 'HTTP smoke: current-session logout audit event missing\n' >&2
+    exit 1
+fi
+if [ "$(logout_audit_reference_count "$test_code" "$newer_authenticated_session_id")" -ne 1 ]; then
+    printf 'HTTP smoke: current-session logout audit lacks its hashed session reference\n' >&2
+    exit 1
+fi
+assert_status 200 --cookie "$newer_cookie_jar" "$base_url/"
+assert_body 'id="estab-login"'
+assert_body_absent 'data-estab-session-bar'
 
 admin_password=${ESTAB_TEST_ADMIN_PASSWORD:-}
 if [ -z "$admin_password" ] && [ -n "${ESTAB_TEST_ADMIN_PASSWORD_FILE:-}" ]; then

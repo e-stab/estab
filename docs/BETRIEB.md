@@ -188,6 +188,25 @@ die Rolle wechseln. Für einen vorgesehenen Funktionswechsel muss das Konto
 zuerst ordnungsgemäß abgemeldet und anschließend mit der neuen zugeteilten
 Funktion angemeldet werden.
 
+Nach erfolgreicher Anmeldung erscheint auf dem Root-Einstieg, im
+Anwendungs-Frameset und auf allen geschützten eigenständigen HTML-Modulen eine
+Sitzungsleiste. Sie nennt Name, Kürzel, Funktion und Rolle, damit vor jeder
+fachlichen Aktion sichtbar ist, in welchem Kontext gearbeitet wird. In der
+linken Frameset-Navigation ist dieselbe Leiste platzsparend angeordnet. Der
+Button „Abmelden“ sendet einen CSRF-geschützten POST, beendet die gesamte
+eStab-Browsersitzung und führt mit HTTP 303 zum Anmeldeeinstieg zurück.
+Mehrere Tabs teilen sich dieselbe Browsersitzung und sind danach gemeinsam
+abgemeldet. Werden Status- oder Zählerframe direkt in einem Tab geöffnet,
+zeigen sie die kompakte Leiste selbst; im vollständigen Frameset erscheint sie
+zur besseren Bedienbarkeit nur einmal in der Navigation.
+
+Diese Schaltfläche beendet ausschließlich die eStab-Funktionssitzung. Die
+Administration nutzt HTTP Basic Auth; dessen Zugangsdaten verwaltet der
+Browser separat und sie besitzen deshalb keine verlässliche
+Anwendungs-Abmeldeschaltfläche. Für einen vollständigen Admin-Benutzerwechsel
+ist je nach Browser ein privates Fenster oder das Schließen aller betreffenden
+Browserfenster erforderlich.
+
 Browserformulare für Bestandsanmeldung und Kontoanlage tragen ein
 sitzungsgebundenes CSRF-Token. Direkte historische Clients, die dieses Token
 nicht beziehen können, funktionieren nur nach der bewussten Ausnahme

@@ -15,6 +15,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 
 require_once __DIR__ . '/../app/workflow.php';
 require_once __DIR__ . '/../app/csrf.php';
+require_once __DIR__ . '/../app/session_ui.php';
 require_once __DIR__ . '/../app/category.php';
 require_once __DIR__ . '/../app/message_repository.php';
 require_once __DIR__ . '/../4fcfg/config.inc.php';
@@ -28,6 +29,7 @@ $identity = estab_auth_session_identity($_SESSION);
 if ($identity === null) {
     estab_workflow_forbid();
 }
+estab_session_ui_start($_SESSION);
 
 /** @var array<string,string> $conf_4f_db */
 /** @var array<string,string> $conf_4f_tbl */

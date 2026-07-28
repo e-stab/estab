@@ -13,6 +13,10 @@
 \******************************************************************************/
 
 session_start ();
+require_once __DIR__ . "/../app/session_ui.php";
+if (!estab_session_ui_is_embedded_frame ($_GET)) {
+  estab_session_ui_start ($_SESSION, true);
+}
 
 define ("debug", false);              // true = gibt debuginformationen aus
 

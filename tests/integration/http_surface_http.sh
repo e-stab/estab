@@ -82,6 +82,10 @@ done
 assert_body_fixed 'id="estab-login"'
 assert_body_fixed 'href="./4fach/index.php"'
 assert_body_fixed '>Anmelden oder Konto anlegen</a>'
+if grep -Fq 'data-estab-session-bar' "$body"; then
+    printf 'HTTP surface: anonymous root page contains authenticated session UI\n' >&2
+    exit 1
+fi
 if grep -Fq 'name="kennwort1"' "$body"; then
     printf 'HTTP surface: root page unexpectedly contains a credential form\n' >&2
     exit 1
@@ -108,18 +112,36 @@ do
 done
 
 assert_status 200 "$base_url/4fach/index.php"
-for frame in './counter.php' './vorgaben.php' './status.php' './mainindex.php'; do
+for frame in './counter.php?embedded=1' './vorgaben.php' './status.php?embedded=1' './mainindex.php'; do
     assert_body_fixed "$frame"
 done
 assert_nonempty_200 "$base_url/4fach/counter.php"
+if grep -Fq 'data-estab-session-bar' "$body"; then
+    printf 'HTTP surface: anonymous counter contains authenticated session UI\n' >&2
+    exit 1
+fi
 assert_status 200 "$base_url/4fach/vorgaben.php"
 assert_body_fixed 'm_text=anmelden'
+if grep -Fq 'data-estab-session-bar' "$body"; then
+    printf 'HTTP surface: anonymous navigation contains authenticated session UI\n' >&2
+    exit 1
+fi
 assert_status 200 "$base_url/4fach/mainindex.php"
 assert_body_fixed 'eStab-Funktionskonto'
 assert_body_fixed 'Wie möchten Sie fortfahren?'
 assert_body_fixed 'name="login_flow" value="existing"'
 assert_body_fixed 'name="login_flow" value="new"'
 assert_body_fixed 'name="csrf_token"'
+if grep -Fq 'data-estab-session-bar' "$body"; then
+    printf 'HTTP surface: anonymous login page contains authenticated session UI\n' >&2
+    exit 1
+fi
+
+assert_status 405 "$base_url/4fach/logout.php"
+assert_status 403 --request POST \
+    --data-urlencode 'csrf_token=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+    --data-urlencode 'logout_action=logout' \
+    "$base_url/4fach/logout.php"
 
 assert_status 200 --request POST --data-urlencode 'login_flow=existing' \
     "$base_url/4fach/mainindex.php"

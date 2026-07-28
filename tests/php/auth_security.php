@@ -162,5 +162,10 @@ $assert(
         && !str_contains($loginController, 'errorwindow ("Benutzeranmeldung"'),
     'login controller does not keep flows, active assignments, and inline errors separate'
 );
+$assert(
+    substr_count($loginController, 'session_regenerate_id (true)') === 2
+        && substr_count($loginController, 'unset ($_SESSION ["estab_csrf_token"])') === 2,
+    'both successful login paths must rotate the session ID and pre-authentication CSRF token'
+);
 
 echo "authentication security: OK ({$assertions} assertions)\n";

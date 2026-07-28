@@ -1,8 +1,103 @@
 .estab-login-cta,
-.estab-auth-shell {
+.estab-auth-shell,
+.estab-session-bar {
     box-sizing: border-box;
     color: #172033;
     font-family: Arial, Helvetica, sans-serif;
+}
+
+.estab-session-bar {
+    align-items: center;
+    background: #172f4d;
+    border-bottom: 3px solid #e5b247;
+    box-shadow: 0 3px 10px rgba(23, 32, 51, 0.24);
+    color: #ffffff;
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    margin: 0;
+    padding: 0.75rem 1rem;
+    position: sticky;
+    top: 0;
+    width: 100%;
+    z-index: 1000;
+}
+
+.estab-session-identity {
+    align-items: baseline;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.7rem;
+    line-height: 1.35;
+}
+
+.estab-session-prefix {
+    color: #dbe8f5;
+}
+
+.estab-session-detail {
+    border-left: 1px solid #8da2bd;
+    padding-left: 0.7rem;
+}
+
+.estab-session-logout {
+    flex: 0 0 auto;
+    margin: 0;
+}
+
+.estab-session-bar .estab-button-logout {
+    background: #ffffff;
+    border-color: #ffffff;
+    color: #7a1b18;
+    min-width: 7.5rem;
+}
+
+.estab-session-bar .estab-button-logout:hover,
+.estab-session-bar .estab-button-logout:focus {
+    background: #fff1f0;
+    border-color: #ffffff;
+}
+
+.estab-session-bar-compact {
+    align-items: stretch;
+    border-bottom-width: 2px;
+    display: block;
+    font-size: 0.82rem;
+    padding: 0.65rem;
+    position: static;
+    text-align: left;
+}
+
+.estab-session-bar-compact .estab-session-identity {
+    align-items: stretch;
+    display: grid;
+    gap: 0.2rem;
+}
+
+.estab-session-bar-compact .estab-session-prefix,
+.estab-session-bar-compact [data-estab-user-name] {
+    display: block;
+}
+
+.estab-session-bar-compact .estab-session-detail {
+    border-left: 0;
+    padding-left: 0;
+}
+
+.estab-session-bar-compact .estab-session-logout {
+    margin-top: 0.6rem;
+}
+
+.estab-session-bar-compact .estab-button-logout {
+    font-size: 0.88rem;
+    min-width: 0;
+    padding: 0.5rem;
+    width: 100%;
+}
+
+.estab-navigation-frame {
+    margin: 0;
+    min-width: 0;
 }
 
 .estab-root-header,
@@ -201,6 +296,21 @@
 }
 
 @media (max-width: 42rem) {
+    .estab-session-bar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .estab-session-detail {
+        border-left: 0;
+        padding-left: 0;
+    }
+
+    .estab-session-logout,
+    .estab-button-logout {
+        width: 100%;
+    }
+
     .estab-login-cta {
         margin: 1rem;
         padding: 1.25rem;
@@ -250,5 +360,11 @@
 
     .estab-root-menu td:nth-child(3) {
         display: none;
+    }
+}
+
+@media print {
+    .estab-session-bar {
+        display: none !important;
     }
 }

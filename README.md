@@ -62,6 +62,7 @@ das Kennwort erscheint weder in Argumentliste noch Log.
 | --- | --- | --- |
 | `/` | Einstieg, direkter Anmeldebutton und Modulübersicht | öffentlich bis zur Modulanmeldung |
 | `/4fach/index.php` | öffentlicher Einstieg in die vollständige Anwendung mit Kontoauswahl und Benutzeranmeldung | Fachfunktionen erst mit eStab-Sitzung |
+| `/4fach/logout.php` | zentrale Abmeldung aus Sitzungsleiste und Frameset | eStab-Sitzung, ausschließlich POST mit Session-CSRF |
 | `/4fach/status.php` | Statusframe | anonym nur neutraler Hinweis, Rollenbelegung erst mit eStab-Sitzung |
 | `/4fach/katgoedt.php` | globale, Funktions- und persönliche Kategorien | eStab-Sitzung, Rollen-/Objektprüfung und CSRF für Änderungen |
 | `/4fadm/admin.php` | Administration | separates HTTP Basic Auth |
@@ -85,6 +86,15 @@ bei aktivierter Selbstregistrierung und meldet niemals still ein vorhandenes
 Konto an. Die Rolle wird in beiden Fällen ausschließlich aus der ausgewählten
 Funktion und der Empfängermatrix abgeleitet. Beide Browserabläufe sind bereits
 vor der Anmeldung an ein Session-CSRF-Token gebunden.
+
+Nach erfolgreicher Anmeldung zeigen der Einstieg, das Haupt-Frameset und alle
+geschützten eigenständigen HTML-Module eine gemeinsame Sitzungsleiste mit Name,
+Kürzel, Funktion und abgeleiteter Rolle. Der dortige Button „Abmelden“ beendet
+die lokale Sitzung auch bei einer nachgelagerten Datenbankstörung, löscht die
+Anwendungscookies und führt anschließend zum Anmeldeeinstieg zurück. Direkt
+geöffnete Status-/Zählerseiten erhalten dieselbe kompakte Anzeige; innerhalb
+des Framesets bleibt sie bewusst einmalig in der Navigation sichtbar. Die
+separate HTTP-Basic-Identität der Administration wird davon nicht berührt.
 
 Interne PHP-Controller, Spracharrays, `*.inc.php` und der vollständige
 `/4fbak/`-Baum sind keine direkten Webendpunkte und werden von Apache mit

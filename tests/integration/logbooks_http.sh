@@ -64,6 +64,30 @@ assert_no_runtime_error()
     fi
 }
 
+assert_session_identity()
+{
+    expected_name=$1
+    expected_code=$2
+    expected_function=$3
+    expected_role=$4
+    bar_count=$(grep -o 'data-estab-session-bar' "$body" | wc -l | tr -d ' ')
+    if [ "$bar_count" != 1 ]; then
+        printf 'Logbook HTTP: expected one session bar, got %s\n' "$bar_count" >&2
+        exit 1
+    fi
+    for marker in \
+        "data-estab-user-name=\"$expected_name\"" \
+        "data-estab-user-code=\"$expected_code\"" \
+        "data-estab-user-function=\"$expected_function\"" \
+        "data-estab-user-role=\"$expected_role\"" \
+        'data-estab-logout-form' \
+        'target="_top"' \
+        '>Abmelden</button>'
+    do
+        assert_body "$marker"
+    done
+}
+
 csrf_from_body()
 {
     token=$(sed -n \
@@ -214,10 +238,12 @@ login_user "$s2_cookies" "$s2_name" "$s2_code" S2 "$s2_password"
 login_user "$aw_cookies" "$aw_name" "$aw_code" A/W "$aw_password"
 
 assert_status 200 --cookie "$aw_cookies" "$base_url/stabetb/etb.php"
+assert_session_identity "$aw_name" "$aw_code" A/W Fernmelder
 assert_body_absent 'value="save_title"'
 assert_body_absent 'value="save_entry"'
 assert_no_runtime_error
 assert_status 200 --cookie "$s2_cookies" "$base_url/fmtbb/tbb.php"
+assert_session_identity "$s2_name" "$s2_code" S2 Stab
 assert_body_absent 'value="save_title"'
 assert_body_absent 'value="save_entry"'
 assert_no_runtime_error
@@ -228,11 +254,13 @@ assert_status 403 \
     --data-urlencode 'logbook_action=save_entry' \
     --data-urlencode 'event=cross-role-etb-must-not-be-written' \
     "$base_url/stabetb/etb.php"
+assert_body_absent 'data-estab-session-bar'
 assert_status 403 \
     --cookie "$s2_cookies" --request POST \
     --data-urlencode 'logbook_action=save_entry' \
     --data-urlencode 'event=cross-role-tbb-must-not-be-written' \
     "$base_url/fmtbb/tbb.php"
+assert_body_absent 'data-estab-session-bar'
 
 # A write without a session-bound token remains forbidden even for the writer.
 assert_status 403 \
@@ -290,11 +318,13 @@ ensure_entry \
 
 # Cross-role readers see the persisted content but never a write form.
 assert_status 200 --cookie "$aw_cookies" "$base_url/stabetb/etb.php"
+assert_session_identity "$aw_name" "$aw_code" A/W Fernmelder
 assert_body 'LOGBOOK_ETB_ENTRY_E2E'
 assert_body_absent 'value="save_title"'
 assert_body_absent 'value="save_entry"'
 assert_no_runtime_error
 assert_status 200 --cookie "$s2_cookies" "$base_url/fmtbb/tbb.php"
+assert_session_identity "$s2_name" "$s2_code" S2 Stab
 assert_body 'LOGBOOK_TBB_ENTRY_E2E'
 assert_body_absent 'value="save_title"'
 assert_body_absent 'value="save_entry"'

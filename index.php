@@ -2,6 +2,13 @@
 
 define ("showmenue", true);
 
+require_once __DIR__ . "/app/session_ui.php";
+if (session_status () !== PHP_SESSION_ACTIVE) {
+    session_start ();
+}
+estab_session_ui_start ($_SESSION);
+$rootIdentity = estab_auth_session_identity ($_SESSION);
+
 /*eStab
          ---------------------
    -------                 --------------
@@ -51,9 +58,15 @@ include ("menue.inc.php");
     echo "</div>";
     echo "<main>\n";
     echo "<section class=\"estab-login-cta\" aria-labelledby=\"estab-login-title\">\n";
-    echo "<h1 id=\"estab-login-title\">eStab-Anmeldung</h1>\n";
-    echo "<p>Melden Sie sich mit einem bestehenden Funktionskonto an oder legen Sie ein neues Konto an, sofern die Registrierung freigeschaltet ist.</p>\n";
-    echo "<p><a id=\"estab-login\" class=\"estab-button estab-button-primary\" href=\"./4fach/index.php\">Anmelden oder Konto anlegen</a></p>\n";
+    if ($rootIdentity === null) {
+      echo "<h1 id=\"estab-login-title\">eStab-Anmeldung</h1>\n";
+      echo "<p>Melden Sie sich mit einem bestehenden Funktionskonto an oder legen Sie ein neues Konto an, sofern die Registrierung freigeschaltet ist.</p>\n";
+      echo "<p><a id=\"estab-login\" class=\"estab-button estab-button-primary\" href=\"./4fach/index.php\">Anmelden oder Konto anlegen</a></p>\n";
+    } else {
+      echo "<h1 id=\"estab-login-title\">eStab öffnen</h1>\n";
+      echo "<p>Ihre Anmeldung ist aktiv. Öffnen Sie den Nachrichtenvordruck oder wählen Sie unten einen weiteren geschützten Bereich.</p>\n";
+      echo "<p><a id=\"estab-open\" class=\"estab-button estab-button-primary\" href=\"./4fach/index.php\">Zum Nachrichtenvordruck</a></p>\n";
+    }
     echo "<p><small>Die separate Administration finden Sie weiterhin unter „administrative Massnahme“.</small></p>\n";
     echo "</section>\n";
     echo "<div style=\"text-align: center;\">";

@@ -97,6 +97,7 @@ function check_save_user (array $loginData, string &$loginError) {
       if (session_status () !== PHP_SESSION_ACTIVE || !session_regenerate_id (true)) {
         throw new RuntimeException ("Die Sitzung konnte nicht erneuert werden");
       }
+      unset ($_SESSION ["estab_csrf_token"]);
 
       $storedPassword = is_string ($passwordCheck ["replacement"])
         ? $passwordCheck ["replacement"]
@@ -147,6 +148,7 @@ function check_save_user (array $loginData, string &$loginError) {
     if (session_status () !== PHP_SESSION_ACTIVE || !session_regenerate_id (true)) {
       throw new RuntimeException ("Die Sitzung konnte nicht erneuert werden");
     }
+    unset ($_SESSION ["estab_csrf_token"]);
 
     $passwordHash = password_hash ($login ["password"], PASSWORD_DEFAULT);
     estab_auth_insert_user ($connection, $conf_4f_tbl ["benutzer"], array (

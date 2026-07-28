@@ -3,7 +3,9 @@
 define ("debug", false);
 session_start ();
 require_once __DIR__ . "/../app/auth.php";
+require_once __DIR__ . "/../app/session_ui.php";
 estab_auth_require_session ($_SESSION);
+estab_session_ui_start ($_SESSION);
 
 include ("../4fcfg/config.inc.php");            // Konfigurationseinstellungen und Vorgaben
 include ("../4fach/db_operation.php");          // Datenbank operationen

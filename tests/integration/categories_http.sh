@@ -228,6 +228,29 @@ assert_body_absent()
     fi
 }
 
+assert_session_identity()
+{
+    expected_name=$1
+    expected_code=$2
+    expected_function=$3
+    expected_role=$4
+    bar_count=$(grep -o 'data-estab-session-bar' "$body" | wc -l | tr -d ' ')
+    if [ "$bar_count" != 1 ]; then
+        printf 'Category HTTP: expected one session bar, got %s\n' "$bar_count" >&2
+        exit 1
+    fi
+    for marker in \
+        "data-estab-user-name=\"$expected_name\"" \
+        "data-estab-user-code=\"$expected_code\"" \
+        "data-estab-user-function=\"$expected_function\"" \
+        "data-estab-user-role=\"$expected_role\"" \
+        'data-estab-logout-form' \
+        '>Abmelden</button>'
+    do
+        assert_body "$marker"
+    done
+}
+
 csrf_from_body()
 {
     token=$(sed -n \
@@ -460,12 +483,18 @@ category_state_captured=true
 assert_status 422 \
     --cookie "$s1_cookies" \
     "$base_url/4fach/katgoedt.php?dbtyp=fkt&msgno=0"
+assert_body_absent 'data-estab-session-bar'
 load_manager "$s1_cookies" fkt "$message_id"
+assert_session_identity "$s1_name" "$s1_code" "$s1_function" Stab
 load_manager "$s1_cookies" user "$message_id"
+assert_session_identity "$s1_name" "$s1_code" "$s1_function" Stab
 assert_status 403 --cookie "$s1_cookies" \
     "$base_url/4fach/katgoedt.php?dbtyp=master&msgno=$message_id"
+assert_body_absent 'data-estab-session-bar'
 load_manager "$s2_cookies" master "$message_id"
+assert_session_identity "$s2_name" "$s2_code" S2 Stab
 load_manager "$si_cookies" master "$message_id"
+assert_session_identity "$si_name" "$si_code" Si Stab
 
 # Historic GET mutation parameters are display-only and cannot create a row.
 assert_status 200 --cookie "$s1_cookies" \

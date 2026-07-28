@@ -2,8 +2,11 @@
 
 `bootstrap.php` stellt die kontrollierte PHP-8.5-Laufzeit sowie die noch
 benötigten Legacy-Kompatibilitätsfunktionen bereit. `auth.php` bildet die
-Sicherheitsgrenze der Benutzeranmeldung. `image_button.php` validiert und
-rendert die weiterhin öffentlich benötigten Legacy-Bildbuttons.
+Sicherheitsgrenze der Benutzeranmeldung. `session_ui.php` injiziert die
+gemeinsame, escaped Sitzungsanzeige ausschließlich in ausgewählte
+HTML-Controller; `logout.php` kapselt das Beenden und Auditieren der Sitzung.
+`image_button.php` validiert und rendert die weiterhin öffentlich benötigten
+Legacy-Bildbuttons.
 
 ## Sicherheits- und Kompatibilitätsentscheidungen
 
@@ -34,9 +37,15 @@ rendert die weiterhin öffentlich benötigten Legacy-Bildbuttons.
   Anmeldung akzeptiert und in demselben Update transparent durch einen Hash
   ersetzt. Moderne Hashes werden bei Bedarf ebenfalls neu gehasht.
 - Die Session-ID wird nach erfolgreicher Prüfung und vor dem Speichern der SID
-  mit `session_regenerate_id(true)` erneuert. Beim Logout werden Sessiondaten,
-  Session-Cookie und historische `vStab_*`-Cookies entfernt; die lokale Session
-  endet auch dann, wenn die anschließende DB-Aktualisierung fehlschlägt.
+  mit `session_regenerate_id(true)` erneuert; ein Voranmelde-CSRF-Token wird
+  dabei verworfen und für die authentifizierte Sitzung neu erzeugt. Beim
+  Logout werden Sessiondaten, Session-Cookie und historische `vStab_*`-Cookies
+  entfernt; die lokale Session endet auch dann, wenn die anschließende
+  DB-Aktualisierung fehlschlägt. Das Datenbank-Update ist an Kürzel und
+  gespeicherte Session-ID gebunden, damit eine alte Browser-Sitzung nicht den
+  Status einer neueren Anmeldung desselben Kontos deaktiviert. Das Audit
+  speichert dafür nur einen SHA-256-Verweis und niemals die wiederverwendbare
+  rohe Session-ID.
 - `REMOTE_ADDR` wird nur als gültiges IPv4-/IPv6-Literal gespeichert.
   `X-Forwarded-For` wird standardmäßig ignoriert. Nur mit dem strikt geparsten
   `ESTAB_TRUST_PROXY_HEADERS=true` wird eine vollständig validierte IP-Kette
@@ -51,6 +60,16 @@ rendert die weiterhin öffentlich benötigten Legacy-Bildbuttons.
   getrennte Formulare, sodass ein Moduswechsel keine Zugangsdaten mitsendet.
   Jede Anmeldung und Neuanlage aus der Browseroberfläche erfordert bereits vor
   der Authentisierung ein sitzungsgebundenes CSRF-Token.
+- Nach der Anmeldung rendert `session_ui.php` Name, Kürzel, Funktion und
+  serverseitig abgeleitete Rolle HTML-escaped. Das Abmelden ist ein
+  eigenständiges POST-Formular mit dem CSRF-Token der erneuerten Sitzung und
+  `target="_top"` für das Frameset. Der zentrale Endpunkt akzeptiert weder GET
+  noch fehlende oder falsche Tokens und antwortet nach Erfolg mit HTTP 303.
+  Binärantworten, Health-Endpunkte und die separat geschützte Administration
+  werden nicht durch automatische globale Ausgabe verändert. Ebenso lässt der
+  Ausgabehandler explizite Plain-Text-/JSON-Fehler und Redirects unverändert;
+  ein normaler Nutztext kann den eindeutigen HTML-Marker der Leiste nicht
+  unterdrücken.
 - Ein aktives Konto behält seine gespeicherte Funktion. Erst nach dem Abmelden
   darf die historische „Funktion Ummelden“-Logik einem inaktiven Konto eine
   andere Funktion zuweisen; ein Request kann daher nicht die Sitzungsrolle
@@ -65,5 +84,6 @@ Die DB-freien Sicherheitsprüfungen laufen mit:
 
 ```sh
 php tests/php/auth_security.php
+php tests/php/session_ui_security.php
 php tests/php/http_surface_security.php
 ```

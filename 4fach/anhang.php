@@ -21,6 +21,7 @@ include ("./upload_class.php");
 require_once __DIR__ . "/../app/attachment.php";
 require_once __DIR__ . "/../app/csrf.php";
 require_once __DIR__ . "/../app/file_access.php";
+require_once __DIR__ . "/../app/session_ui.php";
 
 class fileupload extends file_upload {
   // fs - fileselectform Dateiauswahl
@@ -416,6 +417,7 @@ if (!estab_auth_session_is_authenticated ($_SESSION)) {
   echo "Anmeldung erforderlich.";
   exit;
 }
+estab_session_ui_start ($_SESSION);
 
 if (!defined ("debug")) { define ("debug", false); }
 

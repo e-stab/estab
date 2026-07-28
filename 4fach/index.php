@@ -20,12 +20,12 @@
 <meta name="author" content="Hajo Landmesser" >
 <meta name="generator" content="Bluefish 2.2.5" >
 <TITLE>Nachrichtenvordruck</TITLE>
-<FRAMESET COLS="100,*" frameborder="0" framespacing="0" border="0">
+<FRAMESET COLS="200,*" frameborder="0" framespacing="0" border="0">
    <FRAMESET ROWS="150,*" frameborder="0" framespacing="0" border="0">
-      <FRAME NAME="counter" TITLE="counter" SRC="./counter.php" SCROLLING=NO MARGINWIDTH="0" MARGINHEIGHT="0" FRAMEBORDER="0" NORESIZE>
-         <FRAMESET ROWS="150,*" frameborder="0" framespacing="0" border="0">
-           <FRAME NAME="vorgaben" TITLE="vorgaben" SRC="./vorgaben.php" SCROLLING=NO MARGINWIDTH="0" MARGINHEIGHT="0" FRAMEBORDER="0" NORESIZE>
-           <FRAME NAME="status" TITLE="status" SRC="./status.php" SCROLLING=NO MARGINWIDTH="0" MARGINHEIGHT="0" FRAMEBORDER="0" NORESIZE>
+      <FRAME NAME="counter" TITLE="counter" SRC="./counter.php?embedded=1" SCROLLING=NO MARGINWIDTH="0" MARGINHEIGHT="0" FRAMEBORDER="0" NORESIZE>
+         <FRAMESET ROWS="360,*" frameborder="0" framespacing="0" border="0">
+           <FRAME NAME="vorgaben" TITLE="vorgaben" SRC="./vorgaben.php" SCROLLING=AUTO MARGINWIDTH="0" MARGINHEIGHT="0" FRAMEBORDER="0" NORESIZE>
+           <FRAME NAME="status" TITLE="status" SRC="./status.php?embedded=1" SCROLLING=NO MARGINWIDTH="0" MARGINHEIGHT="0" FRAMEBORDER="0" NORESIZE>
          </FRAMESET>
    </FRAMESET>
    <FRAME NAME="mainframe" TITLE="mainframe" SRC="./mainindex.php" SCROLLING=AUTO MARGINWIDTH="3" MARGINHEIGHT="3" FRAMEBORDER="0">

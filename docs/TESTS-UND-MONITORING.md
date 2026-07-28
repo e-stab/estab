@@ -11,7 +11,7 @@ steht in der [Funktionsmatrix](FUNKTIONSNACHWEIS.md).
 | Quellprüfung | PHP-8.5-Lint, Kompatibilitäts-, Sicherheits-, Upload-, Export- und PDF-Regressionen |
 | Image-Build | benötigte PHP-Erweiterungen und Apache-Konfiguration |
 | Datenbank | echtes MariaDB-Schema, Indizes, Matrix, Engines, Collations und Zero-Date-Freiheit |
-| HTTP | Header, direkte Endpunktfläche, 403-/400-Grenzen, PNG-Antworten, Registrierung, erneute Anmeldung, Nachrichten-/Kategorien- und ETB-/TBB-Rollengrenzen sowie optional Admin-Export |
+| HTTP | Header, direkte Endpunktfläche, 403-/400-/405-Grenzen, PNG-Antworten, Registrierung, sichtbare Sitzungsidentität, CSRF-Abmeldung, erneute Anmeldung, Nachrichten-/Kategorien- und ETB-/TBB-Rollengrenzen sowie optional Admin-Export |
 | Fachabnahme | kompletter Nachrichten-, Anhang-, PDF-, ETB-/TBB- und Restore-Ablauf |
 | Betrieb | kontinuierliche Readiness, Logs, Restarts, Kapazität und Backup-Alter |
 
@@ -40,6 +40,10 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
 - `NULL`-/Zero-Date-Behandlung,
 - Anmelde-, Konto-Flow-, aktive Funktionsbindungs-, Session-, Proxy- und
   Passwortregeln,
+- HTML-escaping und Base-Path-Auflösung der gemeinsamen Sitzungsleiste,
+  eindeutige Abmeldeformulare, POST-/CSRF-Vertrag, lokale
+  Session-Zerstörung bei DB-Fehlern, unveränderte Nicht-HTML-Antworten sowie
+  SID-gebundene Statusänderung,
 - Nachrichten-IDs, Rollen-/Objektregeln, Empfänger-Tokens, erlaubte
   Workflow-Aktionen, POST-/CSRF-Verträge, Prepared Statements, sichere
   UTF-8-/Legacy-Entity-Ausgabe und die inerten Payloads Quotes, Ampersand,
@@ -93,7 +97,8 @@ Docker wird `ESTAB_CONTAINER_CLI=docker` gesetzt oder die Variable weggelassen.
 Die HTTP-Stufe beweist dabei den Startseiten-Anmeldebutton, die getrennten
 Bestandskonto-/Neukonto-Formulare, die sichtbare Kontenauswahl,
 Kennwortbestätigung, unveränderte Kontenzahlen und Passwort-Hashes bei
-Fehlversuchen, aktive Funktionsbindung sowie deaktivierte Selbstregistrierung.
+Fehlversuchen, aktive Funktionsbindung, die gemeinsame Sitzungsanzeige,
+CSRF-geschützte Abmeldung sowie deaktivierte Selbstregistrierung.
 
 ## Wegwerfbarer Integrations-Stack
 
@@ -272,6 +277,16 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
 - HTTP 401 für den anonymen Administrationszugriff,
 - Image-Button-Login, Registrierung, authentifizierte Oberfläche und erneute
   Anmeldung über Kontenliste und gespeicherten Passwort-Hash,
+- exakt eine escaped Sitzungsleiste mit Name, Kürzel, Funktion, Rolle und
+  Abmeldebutton auf Root-Einstieg, Hauptansicht, Frameset-Navigation,
+  direkten Status-/Zählerseiten, Nachrichtenübersicht, Nachweisung,
+  Übungsleitung, Anhängen, Vordrucken, Kategorien sowie ETB/TBB; eingebettete
+  Hilfsframes vermeiden Duplikate und anonyme Seiten bleiben ohne
+  Identitätsausgabe,
+- HTTP 405 für Logout per GET, HTTP 403 bei fehlendem oder falschem CSRF,
+  Cookie-/Sitzungsende und 303-Rückleitung bei Erfolg sowie die
+  SID-Grenze, durch die eine alte Sitzung eine neuere Anmeldung desselben
+  Kontos nicht deaktiviert,
 - sitzungsgebundene Voranmelde-CSRF-Tokens, HTTP 403 ohne Token im Browserflow
   und HTTP 403 für erkannte Cross-Site-Requests im explizit aktivierten
   Legacy-Kompatibilitätsmodus,

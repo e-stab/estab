@@ -38,7 +38,7 @@ auch Apache nur an `127.0.0.1:8080` gebunden.
 | `4fadm/` | Basic-Auth-geschützte Administration, Systemstatus und Einsatzexport |
 | `4fbak/` | nur dateisystemintern verwendete PDF-/Bild-Erzeugung und historische FPDF-Komponente |
 | `stabetb/`, `fmtbb/`, `ubltg/`, `sammlung/` | Einsatztagebuch, technisches Betriebsbuch und Zusatzmodule |
-| `app/` | Bootstrap, PHP-/MySQL-Kompatibilität, Authentisierung, CSRF, Datum, Nachrichten-/Kategoriezugriff, begrenzte PNG-Renderer, Anhang, Export und transaktionale Admin-Operationen |
+| `app/` | Bootstrap, PHP-/MySQL-Kompatibilität, Authentisierung, gemeinsame Sitzungsanzeige und Abmeldung, CSRF, Datum, Nachrichten-/Kategoriezugriff, begrenzte PNG-Renderer, Anhang, Export und transaktionale Admin-Operationen |
 | `4fcfg/` | historische Konfigurationsschnittstelle, heute aus validierten Umgebungswerten gespeist |
 | `docker/` | Apache-/PHP-Härtung, Entrypoint, Datenbankschema und Migrationen |
 | `tests/` | statische, sicherheitsbezogene, Datenbank- und HTTP-Nachweise |
@@ -108,6 +108,29 @@ oder Kontoerstellung abmelden. Bei aktiven Konten muss die übermittelte
 Funktion außerdem der gespeicherten Zuordnung entsprechen; nur die bestehende
 Ummeldelogik für inaktive Konten darf Funktion und daraus abgeleitete Rolle
 ändern.
+
+Die ausgewählten geschützten HTML-Controller verwenden
+`app/session_ui.php` als gemeinsame Ausgabegrenze. Die Leiste zeigt
+HTML-escaped Name, Kürzel, Funktion und die serverseitig abgeleitete Rolle und
+stellt genau ein CSRF-geschütztes POST-Formular zum Abmelden bereit. Sie wird
+nicht aus dem globalen Bootstrap ausgegeben: Binärdownloads, PNG-Renderer,
+Readiness und Fehlerantworten bleiben dadurch unverändert. Im Frameset wird die
+Leiste kompakt in der Navigation gerendert; eigenständige Fachmodule und der
+bereits authentifizierte Root-Einstieg erhalten dieselbe Identität. Direkt
+aufgerufene Status-/Zählerframes zeigen sie ebenfalls kompakt; ihre vom
+Frameset explizit als eingebettet markierten Aufrufe verzichten auf Duplikate.
+Explizite Nicht-HTML-Antworten und Redirects passieren den Ausgabehandler
+unverändert.
+
+`4fach/logout.php` akzeptiert nur einen angemeldeten POST mit gültigem
+Session-CSRF und leitet nach Erfolg mit HTTP 303 zum Anmeldeeinstieg weiter.
+Die lokale Sitzung und alle Anwendungs-Cookies werden vor der
+Datenbanknachführung beendet. Das Setzen des Benutzerstatus auf inaktiv ist an
+Kürzel und die in der Datenbank gespeicherte SID gebunden. So kann ein später
+abgeschickter Logout einer alten Sitzung eine neuere Anmeldung desselben
+Kontos nicht deaktivieren. Audit- oder Datenbankfehler lassen die lokale
+Sitzung nicht wieder aufleben. Für die historische Audit-Korrelation wird
+lediglich ein SHA-256-Verweis statt der rohen Session-ID gespeichert.
 
 ## Webserver-Härtung
 
