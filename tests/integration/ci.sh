@@ -295,13 +295,15 @@ export ESTAB_REGISTRY_PROJECT="${COMPOSE_PROJECT_NAME}_registry"
 export ESTAB_REGISTRY_HTTP_PORT="$registry_http_port"
 export ESTAB_REGISTRY_APP_IMAGE="${COMPOSE_PROJECT_NAME}-app:latest"
 export ESTAB_REGISTRY_MIGRATE_IMAGE="${COMPOSE_PROJECT_NAME}-migrate:latest"
-echo "CI integration: validating pull-only registry deployment"
-run_timed 8m sh tests/integration/registry_compose.sh
+export ESTAB_REGISTRY_TEMP_PARENT="$temporary_parent"
+echo "CI integration: validating pull-only registry deployment and bind restore"
+run_timed 16m sh tests/integration/registry_compose.sh
 unset \
     ESTAB_REGISTRY_PROJECT \
     ESTAB_REGISTRY_HTTP_PORT \
     ESTAB_REGISTRY_APP_IMAGE \
-    ESTAB_REGISTRY_MIGRATE_IMAGE
+    ESTAB_REGISTRY_MIGRATE_IMAGE \
+    ESTAB_REGISTRY_TEMP_PARENT
 
 echo "CI integration: starting a fresh database"
 run_timed 5m "$container_cli" compose up --detach db

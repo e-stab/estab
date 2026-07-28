@@ -25,6 +25,7 @@ $registryReadme = $read($root . '/deploy/registry/README.md');
 $workflow = $read($root . '/.github/workflows/publish-images.yml');
 $ciWorkflow = $read($root . '/.github/workflows/ci.yml');
 $integration = $read($root . '/tests/integration/registry_compose.sh');
+$restoreRoundtrip = $read($root . '/tests/integration/restore_roundtrip.sh');
 $ci = $read($root . '/tests/integration/ci.sh');
 $appDockerfile = $read($root . '/Dockerfile');
 $migrateDockerfile = $read($root . '/docker/db/Dockerfile.migrate');
@@ -245,9 +246,61 @@ $assert(
     )
     && str_contains($integration, 'remaining_containers')
     && str_contains($integration, 'remaining_volumes')
-    && str_contains($integration, 'isolated resources remain after cleanup')
+    && str_contains($integration, 'resources remain for')
     && str_contains($ci, 'tests/integration/registry_compose.sh'),
     'Complete CI does not prove execution and cleanup of the pull-only deployment'
+);
+$assert(
+    str_contains($integration, '.estab-registry-bind.XXXXXX')
+    && str_contains($integration, '.estab-ci-bind-storage')
+    && str_contains($integration, 'ESTAB_DB_DATA_SOURCE=$bind_db')
+    && str_contains($integration, 'ESTAB_APP_DATA_SOURCE=$bind_data')
+    && str_contains($integration, 'ESTAB_EXPORT_DATA_SOURCE=$bind_export')
+    && str_contains($integration, 'assert_bind_mount')
+    && str_contains($integration, '.Type .Source .Destination'),
+    'Registry integration does not create, guard, and inspect real host bind mounts'
+);
+$assert(
+    str_contains($integration, 'ESTAB_RESTORE_STORAGE_MODE=bind')
+    && str_contains($integration, 'tests/integration/restore_roundtrip.sh')
+    && str_contains($integration, 'sha256sum --check --strict SHA256SUMS')
+    && str_contains($integration, 'ESTAB_REGISTRY_BIND_')
+    && str_contains($integration, '.estab-bind-data-marker')
+    && str_contains($integration, '.estab-bind-export-marker')
+    && str_contains($integration, 'database_marker_count')
+    && str_contains($integration, 'restored marker content differs'),
+    'Registry integration does not prove an exact database/file bind backup and restore'
+);
+$assert(
+    str_contains($restoreRoundtrip, 'storage_mode=${ESTAB_RESTORE_STORAGE_MODE:-named}')
+    && str_contains($restoreRoundtrip, '${COMPOSE_PROJECT_NAME}_estab_db')
+    && str_contains($restoreRoundtrip, '${COMPOSE_PROJECT_NAME}_estab_data')
+    && str_contains($restoreRoundtrip, '${COMPOSE_PROJECT_NAME}_estab_export')
+    && str_contains($restoreRoundtrip, 'ESTAB_COMPOSE_FILE')
+    && str_contains($restoreRoundtrip, 'validate_bind_storage')
+    && str_contains($restoreRoundtrip, 'bind storage guard does not match the CI project')
+    && str_contains($restoreRoundtrip, 'bind sources do not match the guarded storage root')
+    && str_contains(
+        $restoreRoundtrip,
+        'find /var/lib/mysql -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +'
+    )
+    && str_contains(
+        $restoreRoundtrip,
+        'find /var/www/html/4fdata -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +'
+    )
+    && str_contains(
+        $restoreRoundtrip,
+        'find /var/lib/estab/export -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +'
+    ),
+    'Restore roundtrip does not fail closed before clearing guarded bind storage'
+);
+$assert(
+    str_contains($integration, 'remaining_networks')
+    && str_contains($integration, 'temporary bind root remains')
+    && str_contains($integration, 'test_completed=1')
+    && str_contains($ci, 'ESTAB_REGISTRY_TEMP_PARENT')
+    && str_contains($ci, 'validating pull-only registry deployment and bind restore'),
+    'Registry bind roundtrip lacks complete resource cleanup or CI wiring'
 );
 
 echo "registry deployment contract: OK ({$assertions} assertions)\n";

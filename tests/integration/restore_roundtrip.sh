@@ -8,6 +8,9 @@ cd "$repo_root"
 : "${COMPOSE_PROJECT_NAME:?COMPOSE_PROJECT_NAME is required}"
 : "${ESTAB_BACKUP_DIR:?ESTAB_BACKUP_DIR is required}"
 container_cli=${ESTAB_CONTAINER_CLI:-docker}
+compose_file=${ESTAB_COMPOSE_FILE:-}
+storage_mode=${ESTAB_RESTORE_STORAGE_MODE:-named}
+bind_storage_root=${ESTAB_BIND_STORAGE_ROOT:-}
 case "$container_cli" in
     docker | podman) ;;
     *)
@@ -23,6 +26,13 @@ command -v sha256sum >/dev/null 2>&1 || {
     echo "Restore roundtrip: sha256sum is required" >&2
     exit 1
 }
+case "$storage_mode" in
+    named | bind) ;;
+    *)
+        echo "Restore roundtrip: ESTAB_RESTORE_STORAGE_MODE must be named or bind" >&2
+        exit 1
+        ;;
+esac
 
 case "$COMPOSE_PROJECT_NAME" in
     estab_ci | estab_ci_*) ;;
@@ -38,6 +48,66 @@ fi
 chmod 0700 "$ESTAB_BACKUP_DIR"
 umask 077
 
+compose_command=("$container_cli" compose)
+if [[ -n $compose_file ]]; then
+    if [[ ! -f $compose_file || ! -r $compose_file ]]; then
+        echo "Restore roundtrip: Compose file is not readable" >&2
+        exit 1
+    fi
+    compose_file=$(CDPATH= cd -- "$(dirname -- "$compose_file")" && pwd -P)/$(basename -- "$compose_file")
+    compose_command+=(-f "$compose_file" -p "$COMPOSE_PROJECT_NAME")
+fi
+
+validate_bind_storage() {
+    local canonical_root expected_db expected_data expected_export guard_file
+
+    if [[ -z $bind_storage_root || ! -d $bind_storage_root || -L $bind_storage_root ]]; then
+        echo "Restore roundtrip: bind storage root must be a real directory" >&2
+        return 1
+    fi
+    canonical_root=$(CDPATH= cd -- "$bind_storage_root" && pwd -P)
+    case "$(basename -- "$canonical_root")" in
+        .estab-registry-bind.*) ;;
+        *)
+            echo "Restore roundtrip: bind storage root lacks the guarded CI prefix" >&2
+            return 1
+            ;;
+    esac
+    if [[ $canonical_root == / || $canonical_root == "$repo_root" ]]; then
+        echo "Restore roundtrip: refusing a broad bind storage root" >&2
+        return 1
+    fi
+
+    guard_file=$canonical_root/.estab-ci-bind-storage
+    if [[ ! -f $guard_file || -L $guard_file ]] ||
+        [[ $(sed -n '1p' "$guard_file") != "$COMPOSE_PROJECT_NAME" ]]; then
+        echo "Restore roundtrip: bind storage guard does not match the CI project" >&2
+        return 1
+    fi
+
+    expected_db=$canonical_root/data/db
+    expected_data=$canonical_root/data/4fdata
+    expected_export=$canonical_root/data/export
+    if [[ ${ESTAB_DB_DATA_SOURCE:-} != "$expected_db" ]] ||
+        [[ ${ESTAB_APP_DATA_SOURCE:-} != "$expected_data" ]] ||
+        [[ ${ESTAB_EXPORT_DATA_SOURCE:-} != "$expected_export" ]]; then
+        echo "Restore roundtrip: bind sources do not match the guarded storage root" >&2
+        return 1
+    fi
+    for storage_directory in "$expected_db" "$expected_data" "$expected_export"; do
+        if [[ ! -d $storage_directory || -L $storage_directory ]]; then
+            echo "Restore roundtrip: bind source is not a real directory" >&2
+            return 1
+        fi
+    done
+
+    bind_storage_root=$canonical_root
+}
+
+if [[ $storage_mode == bind ]]; then
+    validate_bind_storage
+fi
+
 db_dump=$ESTAB_BACKUP_DIR/database.sql
 data_archive=$ESTAB_BACKUP_DIR/4fdata.tar
 export_archive=$ESTAB_BACKUP_DIR/export.tar
@@ -49,7 +119,7 @@ for backup_file in "$db_dump" "$data_archive" "$export_archive"; do
 done
 
 compose() {
-    "$container_cli" compose "$@"
+    "${compose_command[@]}" "$@"
 }
 
 run_timed() {
@@ -118,10 +188,10 @@ validate_archive() {
 }
 
 echo "Restore roundtrip: quiescing the application"
-run_timed 2m "$container_cli" compose stop --timeout 20 app
+run_timed 2m "${compose_command[@]}" stop --timeout 20 app
 
 echo "Restore roundtrip: creating a private logical database dump"
-run_timed 5m "$container_cli" compose exec -T db sh -ceu '
+run_timed 5m "${compose_command[@]}" exec -T db sh -ceu '
     umask 077
     client_defaults=$(mktemp "${TMPDIR:-/tmp}/estab-backup-client.XXXXXX")
     cleanup_client_defaults()
@@ -157,9 +227,9 @@ run_timed 5m "$container_cli" compose exec -T db sh -ceu '
 ' >"$db_dump"
 
 echo "Restore roundtrip: archiving 4fdata and export volumes"
-run_timed 5m "$container_cli" compose run --rm --no-deps -T \
+run_timed 5m "${compose_command[@]}" run --rm --no-deps -T \
     --entrypoint tar app -C /var/www/html -cpf - 4fdata >"$data_archive"
-run_timed 5m "$container_cli" compose run --rm --no-deps -T \
+run_timed 5m "${compose_command[@]}" run --rm --no-deps -T \
     --entrypoint tar app -C /var/lib/estab -cpf - export >"$export_archive"
 
 if [[ ! -s $db_dump ]]; then
@@ -174,26 +244,51 @@ validate_archive "$export_archive" export
     sha256sum --check --strict SHA256SUMS >/dev/null
 )
 
-volumes=(
-    "${COMPOSE_PROJECT_NAME}_estab_db"
-    "${COMPOSE_PROJECT_NAME}_estab_data"
-    "${COMPOSE_PROJECT_NAME}_estab_export"
-)
-for volume in "${volumes[@]}"; do
-    "$container_cli" volume inspect "$volume" >/dev/null
-done
+volumes=()
+if [[ $storage_mode == named ]]; then
+    volumes=(
+        "${COMPOSE_PROJECT_NAME}_estab_db"
+        "${COMPOSE_PROJECT_NAME}_estab_data"
+        "${COMPOSE_PROJECT_NAME}_estab_export"
+    )
+    for volume in "${volumes[@]}"; do
+        "$container_cli" volume inspect "$volume" >/dev/null
+    done
 
-echo "Restore roundtrip: deleting only guarded CI containers and volumes"
-run_timed 3m "$container_cli" compose down --volumes --remove-orphans --timeout 20
-for volume in "${volumes[@]}"; do
-    if "$container_cli" volume inspect "$volume" >/dev/null 2>&1; then
-        echo "Restore roundtrip: CI volume was not deleted: $volume" >&2
-        exit 1
-    fi
-done
+    echo "Restore roundtrip: deleting only guarded CI containers and named volumes"
+    run_timed 3m "${compose_command[@]}" down --volumes --remove-orphans --timeout 20
+    for volume in "${volumes[@]}"; do
+        if "$container_cli" volume inspect "$volume" >/dev/null 2>&1; then
+            echo "Restore roundtrip: CI volume was not deleted: $volume" >&2
+            exit 1
+        fi
+    done
+else
+    echo "Restore roundtrip: deleting only guarded CI containers and bind-mounted data"
+    validate_bind_storage
+    run_timed 3m "${compose_command[@]}" down --volumes --remove-orphans --timeout 20
 
-echo "Restore roundtrip: creating a fresh database volume"
-run_timed 5m "$container_cli" compose up --detach db
+    # These one-shot containers see exactly the three sources validated above.
+    # Clearing inside their mount points also works when MariaDB changed the
+    # host directory owner to its container UID.
+    run_timed 3m "${compose_command[@]}" run --rm --no-deps -T \
+        --entrypoint sh db -ceu '
+            find /var/lib/mysql -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+            test -z "$(find /var/lib/mysql -mindepth 1 -print -quit)"
+        '
+    run_timed 3m "${compose_command[@]}" run --rm --no-deps -T \
+        --entrypoint sh app -ceu '
+            find /var/www/html/4fdata -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+            find /var/lib/estab/export -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+            test -z "$(find /var/www/html/4fdata -mindepth 1 -print -quit)"
+            test -z "$(find /var/lib/estab/export -mindepth 1 -print -quit)"
+        '
+    run_timed 2m "${compose_command[@]}" down --volumes --remove-orphans --timeout 20
+    validate_bind_storage
+fi
+
+echo "Restore roundtrip: creating fresh database storage"
+run_timed 5m "${compose_command[@]}" up --detach db
 wait_for_healthy db 180
 
 echo "Restore roundtrip: restoring the logical database dump"
@@ -201,7 +296,7 @@ echo "Restore roundtrip: restoring the logical database dump"
     cd "$ESTAB_BACKUP_DIR"
     sha256sum --check --strict SHA256SUMS >/dev/null
 )
-run_timed 5m "$container_cli" compose exec -T db sh -ceu '
+run_timed 5m "${compose_command[@]}" exec -T db sh -ceu '
     umask 077
     client_defaults=$(mktemp "${TMPDIR:-/tmp}/estab-restore-client.XXXXXX")
     cleanup_client_defaults()
@@ -228,17 +323,21 @@ run_timed 5m "$container_cli" compose exec -T db sh -ceu '
 ' <"$db_dump"
 
 echo "Restore roundtrip: restoring application data volumes"
-run_timed 5m "$container_cli" compose run --rm --no-deps -T \
+run_timed 5m "${compose_command[@]}" run --rm --no-deps -T \
     --entrypoint tar app -C /var/www/html -xpf - <"$data_archive"
-run_timed 5m "$container_cli" compose run --rm --no-deps -T \
+run_timed 5m "${compose_command[@]}" run --rm --no-deps -T \
     --entrypoint tar app -C /var/lib/estab -xpf - <"$export_archive"
-for volume in "${volumes[@]}"; do
-    "$container_cli" volume inspect "$volume" >/dev/null
-done
+if [[ $storage_mode == named ]]; then
+    for volume in "${volumes[@]}"; do
+        "$container_cli" volume inspect "$volume" >/dev/null
+    done
+else
+    validate_bind_storage
+fi
 
 echo "Restore roundtrip: starting migrator and restored application"
 export ESTAB_ALLOW_SELF_REGISTRATION=false
-run_timed 5m "$container_cli" compose up --detach
+run_timed 5m "${compose_command[@]}" up --detach
 wait_for_healthy db 60
 wait_for_healthy app 240
 
