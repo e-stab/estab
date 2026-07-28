@@ -25,6 +25,15 @@ und ist **keine Betriebsanleitung für den heutigen Container**.
 - [`Systemstatus.nsd`](svn-r85/Programmierung/Systemstatus.nsd) dokumentiert
   einen historischen Ablaufentwurf im Structorizer-Format.
 
+### Historische Notiz im Laufzeitbaum
+
+[`4fcfg/todo.txt`](../../4fcfg/todo.txt) ist eine unverändert übernommene
+Entwicklerunterhaltung aus dem SVN-Bestand über eine damals erwogene
+Farbkonfiguration. Sie ist kein aktueller Projekt-Backlog und beschreibt keine
+für den heutigen Container zugesagte Funktion. Zeichensatzartefakte bleiben als
+Teil des belegten Originalstands erhalten; der gesamte Konfigurationsbaum
+`4fcfg/` ist im Container per HTTP gesperrt.
+
 Die Screenshots sind nach Fachbereich gegliedert:
 
 | Verzeichnis | Inhalt |

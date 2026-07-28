@@ -503,8 +503,17 @@ gesperrt.
   App-/Migrator-Referenzen. Der Publish-Workflow ist manuell, global
   serialisiert, an einen gleichnamigen Git-Tag, zwei Repositoryvariablen und
   ein Required-Reviewer-Environment gebunden. Er baut beide Kandidaten vor dem
-  ersten Push, überschreibt keine vorhandenen OCI-Tags und erzeugt
-  amd64/arm64-Manifeste mit SBOM, Provenance und verifizierter Attestation.
+  ersten Push, überschreibt keine vorhandenen OCI-Tags und führt das komplette
+  Laufzeit-/Restore-Gate nativ auf amd64 und arm64 aus. Für beide
+  Plattformmanifeste werden SPDX-SBOM und Build-Provenance angefordert und
+  nach dem Push inhaltlich eingelesen; zusätzlich wird die separat
+  veröffentlichte GitHub-Attestation verifiziert. App, Migrator und
+  MariaDB-Basis durchlaufen auf beiden Architekturen einen auf vollständigen
+  Commit gepinnten Trivy-Lauf, der behebbare hohe oder kritische Befunde
+  blockiert. Ausnahmen sind auf den konkreten Binärpfad begrenzt, begründet und
+  mit Ablaufdatum versehen. Das erfolgreiche Imagepaar wird zusammen mit
+  Compose, digestgebundener Konfigurationsvorlage, Runbooks und Backup-Verifier
+  als prüfsummengebundenes unveränderliches GitHub-Releasepaket veröffentlicht.
   `latest` wird weder publiziert noch als Deploymentstandard akzeptiert. Eine
   öffentliche Veröffentlichung bleibt bis zur separaten Rechteprüfung des
   historischen Gesamtbestands gesperrt.

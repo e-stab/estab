@@ -79,10 +79,27 @@ podman compose run --rm migrate
 Vor dem ersten Lauf einer neuen Version auf einem gefüllten Volume ist ein
 konsistentes Datenbank-/`4fdata`-Backup Pflicht.
 
-Zur Kontrolle kann anschließend ausgeführt werden:
+Für eine davon getrennte, ausschließlich lesende Kontrolle gegen den laufenden
+Datenbankcontainer kann die Repository-Datei direkt eingespielt werden. Das
+temporäre Clientprofil verhindert, dass das Root-Kennwort in der Argumentliste
+erscheint:
 
 ```sh
-mariadb --database="$MARIADB_DATABASE" < /docker/db/verify.sql
+podman compose exec -T db sh -eu -c '
+  umask 077
+  option_file=$(mktemp /tmp/estab-verify.XXXXXX)
+  cleanup() { rm -f -- "$option_file"; }
+  trap cleanup EXIT HUP INT TERM
+  password=$(tr -d "\r\n" < /run/secrets/estab_db_root_password)
+  escaped_password=$(printf "%s" "$password" |
+    sed -e "s/\\\\/\\\\\\\\/g" -e "s/\"/\\\\\"/g")
+  unset password
+  printf "[client]\nuser=root\npassword=\"%s\"\n" \
+    "$escaped_password" > "$option_file"
+  unset escaped_password
+  mariadb --defaults-extra-file="$option_file" \
+    --batch --skip-column-names --raw "$MARIADB_DATABASE"
+' < docker/db/verify.sql
 ```
 
 Alle Spalten der ersten Ergebniszeile müssen `1` sein, die zweite Abfrage darf

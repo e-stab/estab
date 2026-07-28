@@ -77,7 +77,9 @@ Geprüft werden:
   zunächst geschlossene und bewusst zweistufig geöffnete Löschbestätigung,
   den bestätigten Löschvorgang und das anschließende Verschwinden genau dieses
   Exports; Karten bleiben innerhalb des Viewports und alle Aktionen mindestens
-  44 × 44 Pixel groß.
+  44 × 44 Pixel groß; anschließend im Matrixeditor die beiden verständlichen
+  Bestätigungsdialoge für „Standard laden“ und „Standard ersetzen“ sowie den
+  unveränderten Editorwert und Seitenzustand nach ihrer Ablehnung.
 
 Die stabile Reihenfolge der Navigationsbereiche lautet:
 
@@ -118,9 +120,11 @@ ESTAB_TEST_LOGIN_FUNCTION=S1 \
 python3 tests/browser/headless_ui.py
 ```
 
-Nur die Exportverwaltung lässt sich auf einem isolierten Test-Deployment
-gezielt prüfen. Der Lauf erzeugt einen eigenen Export und löscht genau diesen
-anschließend wieder:
+Die Exportverwaltung und die beiden destruktiven Matrix-Bestätigungen lassen
+sich auf einem isolierten Test-Deployment gezielt prüfen. Der Lauf erzeugt
+einen eigenen Export und löscht genau diesen anschließend wieder. Im
+Matrixeditor lehnt er beide Bestätigungsdialoge ab und verändert daher weder
+aktive noch gespeicherte Standardmatrix:
 
 ```sh
 ESTAB_TEST_BASE_URL=http://127.0.0.1:8080 \

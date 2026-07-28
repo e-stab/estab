@@ -4065,7 +4065,10 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--export-only",
         action="store_true",
-        help="nur die administrative Exportoberfläche testen",
+        help=(
+            "nur administrative Exportoberfläche und "
+            "Matrix-Bestätigungen testen"
+        ),
     )
     return parser.parse_args()
 

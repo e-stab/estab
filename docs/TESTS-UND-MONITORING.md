@@ -11,7 +11,7 @@ steht in der [Funktionsmatrix](FUNKTIONSNACHWEIS.md).
 | Quellprüfung | PHP-8.5-Lint, Kompatibilitäts-, Sicherheits-, Upload-, Export- und PDF-Regressionen |
 | Image-Build | benötigte PHP-Erweiterungen und Apache-Konfiguration |
 | Datenbank | echtes MariaDB-Schema, Indizes, aktive und persistente Standardmatrix, Engines, Collations und Zero-Date-Freiheit |
-| HTTP | Header, direkte Endpunktfläche, 403-/400-/405-Grenzen, PNG-Antworten, Registrierung, sichtbare Sitzungsidentität, CSRF-Abmeldung, erneute Anmeldung, vollständige A/W-/Si-/S1-/S2-/S3-Nachrichtenläufe in beiden Ausgangssichtungsmodi, Kategorien- und ETB-/TBB-Rollengrenzen, reale Vordruckerzeugung/-auslieferung sowie optional Admin-Export |
+| HTTP | Header, direkte Endpunktfläche, 403-/400-/405-Grenzen, PNG-Antworten, Registrierung, sichtbare Sitzungsidentität, CSRF-Abmeldung, erneute Anmeldung, vollständige A/W-/Si-/S1-/S2-/S3-/POL-FB-Nachrichtenläufe in beiden Ausgangssichtungsmodi, Autosichtung, Zweitprüfung, Antworten/Weiterleiten, Kategorien- und ETB-/TBB-Rollengrenzen, reale Vordruckerzeugung/-auslieferung sowie optional Admin-Export |
 | Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, acht stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, Matrixstandard-Bestätigungen, BOS-Disclosure, Logout sowie öffentliche und authentifizierte mobile Bedienung bei exakt 390 × 844 CSS-Pixeln |
 | Fachabnahme | kompletter Nachrichten-, Anhang-, PDF-, ETB-/TBB- und Restore-Ablauf |
 | Betrieb | kontinuierliche Readiness, Logs, Restarts, Kapazität und Backup-Alter |
@@ -90,8 +90,10 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
 - selbsttragende Fresh-Schema-Initialisierung, pull-only Registry-Compose,
   persistente Storage-/Secret-Grenzen, guardierte echte Host-Bind-Mounts samt
   Backup-/Restore-Vertrag und vollständiger Cleanup-Postcondition, manuell
-  durch Rechtefreigaben gesperrter GHCR-Workflow, amd64/arm64, SBOM,
-  Provenance und Attestation,
+  durch Rechtefreigaben gesperrter GHCR-Workflow, native amd64-/arm64-Läufe,
+  inhaltlich gelesene SPDX-SBOM/Build-Provenance, separat verifizierte
+  GitHub-Attestation, fail-closed High-/Critical-CVE-Gate und
+  prüfsummengebundenes Digest-Installationspaket,
 - Erzeugung eines lesbaren PDF-Dokuments.
 
 Ein Prozess-Exitcode ungleich null sperrt die Freigabe.
@@ -686,18 +688,35 @@ Dadurch sind beide Konfigurationen getrennt belegt:
 - Ausgang im optionalen Modus `true`: S1 legt Status 2 an; A/W transportiert
   auf Status 4; Si sichtet anschließend auf Status 8.
 
-Der Lauf registriert isolierte A/W-, Si-, S1-, S2- und S3-Konten über die
-öffentliche Kontooberfläche. Er prüft die gerenderten Listen und Aktionen,
-fehlende CSRF-Tokens mit HTTP 403, A/W-Sperrbesitz, Status und Abschluss direkt
-in MariaDB, den erzeugten Ein-/Ausgangsvordruck sowie die exakten
-Empfängerfarben `S2_rt`, `S1_gn` und `S3_bl`. Danach öffnet A/W die gerenderte
-FM-Admin-Zweitprüfung: Speichern und Abbrechen müssen vorhanden sein, nur
-Quittierungszeichen, Empfängerfarben und Vermerk dürfen bearbeitbar sein; der
+Der Lauf registriert isolierte A/W-, Si-, S1-, S2-, S3- und POL/FB-Konten über
+die öffentliche Kontooberfläche. Er prüft die gerenderten Listen und Aktionen,
+fehlende CSRF-Tokens mit HTTP 403, die erlaubten Stabsaktionen sowie verbotene
+Fernmelde-/Si-Aktionen des echten FB-Profils, A/W-Sperrbesitz, Status und
+Abschluss direkt in MariaDB, den erzeugten Ein-/Ausgangsvordruck sowie die
+exakten Empfängerfarben `S2_rt`, `S1_gn` und `S3_bl`.
+
+Für die reale Autosichtung markiert der Test POL/FB ausschließlich in seiner
+wegwerfbaren Matrix als Ziel und schaltet das einzige isolierte Si-Konto
+offline. Das vom echten Eingangsformular automatisch ausgewählte Kontrollfeld
+wird unverändert abgesendet; Status 8, Quittierung, POL-Empfänger, Vordruck und
+sichtbare FB-Liste müssen daraus tatsächlich entstehen. Matrix und Si-Zustand
+werden noch im Lauf zurückgesetzt und im Cleanup erneut abgesichert.
+
+Danach öffnen A/W und Si jeweils ihren eigenen gerenderten
+FM-/SI-Admin-Zweitprüfpfad. Speichern und Abbrechen müssen vorhanden sein; nur
+Quittierungszeichen, Empfängerfarben und Vermerk dürfen bearbeitbar sein. Der
 ursprüngliche Quittierungszeitpunkt erscheint ausdrücklich schreibgeschützt.
-Eine echte CSRF-geschützte Änderung samt manipuliertem Zeitwert darf den
+Echte CSRF-geschützte Änderungen mit manipuliertem Zeitwert dürfen den
 SHA-256-Fingerabdruck der Felder 1–14, den gespeicherten Zeitpunkt sowie
 Transport-, Sperr- und Abschlussbelege nicht verändern. Auch der bereits
 erzeugte PDF-Vordruck muss erhalten bleiben.
+
+Abschließend liest POL/FB die zugestellte Eingangsnachricht und betätigt die
+tatsächlich gerenderten Aktionen „Antworten“ und „Weiterleiten“. Beide
+abgeleiteten Formulare werden gespeichert und müssen zwei getrennte
+Status-2-Ausgänge mit korrektem Zitat, Ziel, Absender, Funktionskennung und
+Empfängern erzeugen. Der persönliche Lesestatus wird gesetzt, während der
+Fingerabdruck der Quellnachricht unverändert bleibt.
 
 Vor der Bereinigung weist der Test nach, dass ein Vordruck mit derselben
 Nachweisnummer nicht schon vor dem eigenen Abschluss existierte. Der Trap
@@ -817,6 +836,29 @@ Zeitpunkt, Prüfer und Ergebnis protokolliert. Screenshots allein reichen nicht:
 Die maschinenlesbaren Testausgaben und Backup-Prüfsummen gehören zum
 Freigabenachweis.
 
+## Multi-Arch- und Schwachstellen-Gate
+
+Die Compose-Integration wird in GitHub Actions nativ auf
+`ubuntu-24.04`/amd64 und `ubuntu-24.04-arm`/arm64 ausgeführt. Beide Läufe
+umfassen Migration, HTTP-Rollenpfade, Parallelität, pull-only Deployment,
+Bind-Mount- und Volume-Restore sowie vollständigen Cleanup. Der echte
+Headless-Browser ist im amd64-Lauf verpflichtend; auf arm64 bleiben sämtliche
+server- und containerseitigen Gates verpflichtend. Die zusätzliche manuelle
+Browserabnahme auf dem tatsächlichen NAS ist davon unberührt.
+
+Nach dem Containerlauf scannt der auf einen vollständigen Action-Commit und
+Trivy 0.70.0 festgelegte Gate jeweils App, Migrator und das exakt gepinnte
+MariaDB-Image. Jeder behebbare Befund der Stufe `HIGH` oder `CRITICAL` beendet
+den Lauf. Unbehebbare Befunde werden angezeigt, blockieren aber erst, sobald
+der Lieferant eine korrigierte Version bereitstellt. `.trivyignore.yaml`
+enthält ausschließlich konkret begründete, pfadgebundene Ausnahmen mit
+Ablaufdatum. Aktuell betrifft dies Standardbibliotheksbefunde im von der
+offiziellen MariaDB-Entrypoint benötigten lokalen UID/GID-Helfer `gosu`; der
+Migrator entfernt den dort unbenötigten Helfer vollständig. Nach Ablauf muss
+die Ausnahme erneuert begründet oder durch ein aktualisiertes Basisimage
+entfernt werden. Freie, globale oder unbefristete CVE-Ausnahmen sind kein
+zulässiger Freigabenachweis.
+
 ## Readiness und Containerzustand
 
 `/health.php` liefert HTTP 200 nur, wenn alle folgenden Prüfungen erfolgreich
@@ -890,8 +932,8 @@ einsatzbezogene Informationen enthalten.
 | Zeitpunkt | Mindestprüfung |
 | --- | --- |
 | jeder Commit | statische Suite |
-| jeder Image-Build | erfolgreicher Build und Apache `configtest` |
-| CI/Freigabekandidat | vollständiges CI-Gate mit `ESTAB_BROWSER_TEST=required` |
+| jeder Image-Build | erfolgreicher Build, Apache `configtest` und High-/Critical-CVE-Gate |
+| CI/Freigabekandidat | vollständiges natives amd64-/arm64-Gate; echter Browser auf amd64 verpflichtend |
 | Erstinstallation | Readiness, `verify.sql`, HTTP-Smoke, Browser-Akzeptanz und Fachabnahme |
 | Upgrade/Migration | Restore-Kopie, SQL-Migrationen, alle Testebenen |
 | laufender Betrieb | Readiness, Logs, Restarts, Speicher, Backup-Alter |

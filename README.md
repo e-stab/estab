@@ -67,11 +67,16 @@ dass keine SQL-Datei aus einem Git-Checkout auf das Zielgerät gemountet wird.
 Im Repository ist noch kein freigegebener Image-Stand mit Manifest-Digests
 dokumentiert. Der Publish-Workflow ist manuell, akzeptiert ausschließlich
 einen gleichnamigen vorhandenen Git-/OCI-Tag, baut beide Images vor dem ersten
-Push vollständig und führt zuvor die Fresh-/Browser-/Restore-CI aus. Er bleibt
-zusätzlich durch Rechtebestätigung, zwei Repositoryvariablen und ein zwingend
-mit Required Reviewer geschütztes GitHub-Environment gesperrt. Das Deployment
-verlangt einen expliziten Release-Tag oder besser beide Multi-Arch-Digests;
-einen `latest`-Pfad gibt es absichtlich nicht.
+Push vollständig und führt zuvor die Fresh-/Restore-CI nativ auf `amd64` und
+`arm64` sowie den echten Browsertest auf `amd64` aus. App, Migrator und
+MariaDB-Basis werden auf beiden Architekturen gegen behebbare hohe und
+kritische Schwachstellen geprüft; eng begrenzte Ausnahmen besitzen Pfad,
+Begründung und Ablaufdatum. Er bleibt zusätzlich durch Rechtebestätigung, zwei
+Repositoryvariablen und ein zwingend mit Required Reviewer geschütztes
+GitHub-Environment gesperrt. Nach erfolgreicher Veröffentlichung entsteht ein
+prüfsummengebundenes GitHub-Releasepaket mit beiden Manifest-Digests,
+`compose.yaml`, bereits gebundener `.env.example`, Runbooks und
+Backup-Verifier. Einen `latest`-Pfad gibt es absichtlich nicht.
 
 ## Zugänge
 

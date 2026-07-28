@@ -153,7 +153,7 @@ ihn anschließend wieder her.
 podman compose run --rm migrate
 ```
 
-Ein bereits aktueller Bestand meldet beide Migrationen als vorhanden und
+Ein bereits aktueller Bestand meldet alle drei Migrationen als vorhanden und
 führt trotzdem den vollständigen Read-only-Schematest aus. Die Ausgabe muss
 `Post-migration schema verification passed` und anschließend
 `All schema migrations are applied` enthalten. Erst danach sollte der Stack
@@ -323,9 +323,12 @@ ungespeicherte Eingaben. Die Matrix behält validierte Eingaben selbst dann
 sichtbar, wenn die Datenbanktransaktion fehlschlägt. Die von eStab geöffneten
 Hilfe- und Problemfenster prüfen die Formulare ihres zugehörigen
 Hauptfensters; bestätigte globale Navigation und Logout werden dort
-ausgeführt. „Abbrechen“, „Speichern“ und andere lokale Fachaktionen bleiben
-unverändert. Die Warnung verhindert keinen Verlust durch Browserabsturz oder
-das Schließen eines Tabs; wichtige Eingaben weiterhin zeitnah speichern.
+ausgeführt. Lokale Speichern-, Abbrechen- und Fachaktionen lösen diesen
+generischen Dialog nicht aus. Davon getrennt besitzen „Standard laden“ und
+„Standard ersetzen“ im Matrixeditor wegen des gezielten Verwerfens
+beziehungsweise Überschreibens eigene Bestätigungsdialoge. Die Warnungen
+verhindern keinen Verlust durch Browserabsturz oder das Schließen eines Tabs;
+wichtige Eingaben weiterhin zeitnah speichern.
 
 Diese Schaltfläche beendet ausschließlich die eStab-Funktionssitzung. Die
 Administration nutzt HTTP Basic Auth; dessen Zugangsdaten verwaltet der
