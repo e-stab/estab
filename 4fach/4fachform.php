@@ -303,17 +303,11 @@ class nachrichten4fach {
       break;
 
       case "FM-Admin" :
-        for ($i=1;$i<=17;$i++){
-          $this->bg [$i] = $this->feldbg [$i]["a"] ;
-          $this->feld [$i] = true;
-        }
-      break;
-
       case "SI-Admin" :
         for ($i=15;$i<=17;$i++){
           $this->bg [$i] = $this->feldbg [$i]["a"] ;
           $this->feld [$i] = true;
-      }
+        }
       break;
 
       default :
@@ -637,6 +631,7 @@ class nachrichten4fach {
           }
 
         break;
+        case "FM-Admin":
         case "Stab_sichten":
         case "SI-Admin":
           echo "<td>\n";

@@ -102,6 +102,26 @@ $assert(estab_message_object_allowed($viewer, 'viewer-review', $incoming), 'pend
 $assert(estab_message_object_allowed($radio, 'telecommunications-edit', $outgoing), 'pending outgoing denied');
 $assert(estab_message_object_allowed($radio, 'telecommunications-save', $outgoing), 'lock owner denied');
 $assert(!estab_message_object_allowed($otherRadio, 'telecommunications-save', $outgoing), 'foreign lock accepted');
+$assert(
+    estab_workflow_route_allowed(
+        $radio,
+        'POST',
+        ['task' => 'FM-Admin', '00_lfd' => '1', 'absenden_x' => '1']
+    )
+        && !estab_workflow_route_allowed(
+            $staff,
+            'POST',
+            ['task' => 'FM-Admin', '00_lfd' => '1', 'absenden_x' => '1']
+        ),
+    'FM admin submit is not restricted to the A/W role'
+);
+$assert(
+    estab_workflow_message_operation(['task' => 'FM-Admin', '00_lfd' => '1'])
+        === 'telecommunications-admin'
+        && estab_message_object_allowed($radio, 'telecommunications-admin', $incoming)
+        && !estab_message_object_allowed($staff, 'telecommunications-admin', $incoming),
+    'FM admin submit bypasses its message-object permission'
+);
 $transported = $outgoing;
 $transported['03_datum'] = '2026-07-23 12:00:00';
 $transported['03_zeichen'] = 'aw0001';
@@ -126,6 +146,49 @@ foreach ([
 ] as $source) {
     $assert(is_string($source), 'security source unreadable');
 }
+
+$fmAdminAccess = [];
+$fmAdminButtons = [];
+$fmAdminUpdate = [];
+$assert(
+    preg_match(
+        '/case\s+"FM-Admin"\s*:\s*case\s+"SI-Admin"\s*:(?<body>.*?)break;/s',
+        $formSource,
+        $fmAdminAccess
+    ) === 1
+        && str_contains($fmAdminAccess['body'], 'for ($i=15;$i<=17;$i++)')
+        && !str_contains($fmAdminAccess['body'], 'for ($i=1;$i<=17;$i++)'),
+    'FM admin form exposes fields outside the persisted review section'
+);
+$assert(
+    preg_match(
+        '/case\s+"FM-Admin"\s*:\s*case\s+"Stab_sichten"\s*:\s*case\s+"SI-Admin"\s*:(?<body>.*?)break;/s',
+        $formSource,
+        $fmAdminButtons
+    ) === 1
+        && str_contains($fmAdminButtons['body'], 'name=\\"task\\"')
+        && str_contains($fmAdminButtons['body'], 'name=\\"absenden\\"')
+        && str_contains($fmAdminButtons['body'], 'name=\\"abbrechen\\"'),
+    'FM admin form has no controller-compatible submit controls'
+);
+$assert(
+    preg_match(
+        '/case "FM-Admin":\s*case "SI-Admin":(?<body>.*?)\s+break;/s',
+        $dataSource,
+        $fmAdminUpdate
+    ) === 1
+        && str_contains($fmAdminUpdate['body'], '"15_quitzeichen"')
+        && str_contains($fmAdminUpdate['body'], '"16_empf"')
+        && str_contains($fmAdminUpdate['body'], '"17_vermerke"')
+        && !str_contains($fmAdminUpdate['body'], '"12_inhalt"'),
+    'FM admin handler and editable review fields are no longer aligned'
+);
+$assert(
+    str_contains($mainSource, '($returnValue ["task"] ?? "") !== ""')
+        && str_contains($mainSource, 'estab_csrf_require_post ($_SERVER, $_POST);')
+        && str_contains($mainSource, '( $returnValue["task"] == "FM-Admin" )'),
+    'FM admin submit is not covered by the authenticated CSRF save gate'
+);
 
 $assert(
     str_contains($repositorySource, '->prepare($sql)')
