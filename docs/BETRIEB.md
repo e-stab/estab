@@ -14,9 +14,30 @@ vorhandener Daten ist kein Erststart und wird separat unter
 - bei Zugriff außerhalb des Hosts: eigener Reverse Proxy mit gültigem
   TLS-Zertifikat
 
-Das Image ist reproduzierbar auf `php:8.5.8-apache-trixie`, die Datenbank auf
-`mariadb:11.8.8` festgelegt. Versionsänderungen sind damit bewusste Upgrades
-und keine unbeobachteten automatischen Aktualisierungen.
+PHP- und MariaDB-Basis sind nicht nur auf
+`php:8.5.8-apache-trixie` beziehungsweise `mariadb:11.8.8`, sondern auch auf
+deren geprüfte Multi-Arch-Index-Digests festgelegt. Änderungen daran sind
+bewusste Upgrades. Da der App-Build Pakete aus den Debian-Repositories
+installiert, wird dennoch keine byteidentische Reproduzierbarkeit behauptet;
+entscheidend sind Commit, resultierende Image-Digests und Attestationsnachweis.
+
+## Source-Build oder pull-only Images
+
+Das Root-`compose.yaml` baut `app` und `migrate` aus dem ausgecheckten
+Quellstand und ist der Referenzweg für Entwicklung und Freigabetests. Für
+Geräte ohne lokalen Build – insbesondere Synology Container Manager – liegt
+unter [`deploy/registry/`](../deploy/registry/README.md) ein eigenständiges
+Compose-Paket. Es verwendet dieselben Secrets, Netze, Healthchecks und
+Startbedingungen, referenziert aber ausschließlich fertige App- und
+Migrator-Images.
+
+Die technischen GHCR- und Multi-Arch-Dateien sind vorbereitet; im Repository
+ist noch kein freigegebener Image-Stand samt Manifest-Digests dokumentiert.
+Eine öffentliche Binärverteilung bleibt bis zur dokumentierten Rechteklärung
+des historischen Gesamtbestands gesperrt. Der manuelle Workflow verlangt zwei
+Repository-Freigabevariablen, eine ausdrückliche Bestätigung, einen bestehenden
+gleichnamigen Git-Tag und das Environment `container-publish`. Dieses
+Environment muss vor Aktivierung einen Required Reviewer besitzen.
 
 ## Erstinstallation
 
@@ -77,8 +98,9 @@ podman compose build --pull migrate app
 
 Der App-Build bricht ab, wenn eine der benötigten PHP-Erweiterungen `gd`,
 `mbstring`, `mysqli`, `Zend OPcache` oder `zip` fehlt. Das separate
-Migrationsimage enthält den MariaDB-Client, den checksum-prüfenden Runner, die
-versionierten SQL-Dateien und die vollständige Schema-Verifikation.
+Migrationsimage enthält den MariaDB-Client, das kanonische Basisschema, den
+checksum-prüfenden Runner, die versionierten SQL-Dateien und die vollständige
+Schema-Verifikation.
 
 ### 3. Stack starten
 
@@ -88,11 +110,19 @@ podman compose ps
 curl --fail --silent --show-error http://127.0.0.1:8080/health.php
 ```
 
-Beim ersten Start legt der offizielle MariaDB-Entrypoint das Basisschema aus
-`docker/db/init/10-schema.sql` an. Das geschieht nur bei einem leeren
-Datenbank-Volume. Danach läuft der einmalige Service `migrate`. Er wendet jede
-noch nicht protokollierte Datei unter `docker/db/migrations/` in
-Dateinamenreihenfolge an, speichert Version, SHA-256, Status und Zeitpunkt in
+Beim ersten Start legt der offizielle MariaDB-Entrypoint nur Datenbank und
+DB-Benutzer an. Danach läuft der einmalige Service `migrate`. Ist der
+`nv_*`-Namensraum vollständig leer, bindet er das im Image eingebettete
+`docker/db/init/10-schema.sql` vor dem ersten DDL per SHA-256 an den Zustand
+`applying` in `estab_schema_baselines`. Nach allen 14 Tabellen wird derselbe
+Datensatz auf `applied` gesetzt. Ein harter Abbruch lässt dadurch einen
+prüfbaren Zustand zurück; der nächste Lauf akzeptiert ausschließlich dieselbe
+Prüfsumme und ergänzt das idempotente Basisschema. Unprotokollierte einzelne
+`nv_*`-Tabellen ohne die Kerntabelle bleiben als unklare Teilinstallation
+gesperrt. Ein vorhandenes Legacy-Schema mit Kerntabelle wird nicht mit der
+Fresh-Baseline überschrieben. Anschließend verarbeitet der Runner jede noch
+nicht protokollierte Datei unter `docker/db/migrations/` in
+Dateinamenreihenfolge, speichert Version, SHA-256, Status und Zeitpunkt in
 `estab_schema_migrations` und führt `docker/db/verify.sql` aus.
 
 Der App-Service hängt mit `service_completed_successfully` von diesem Lauf ab.

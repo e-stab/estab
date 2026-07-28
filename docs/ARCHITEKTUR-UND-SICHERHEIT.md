@@ -470,6 +470,12 @@ gesperrt.
 - Nur Datenbank und One-shot-Migrator erhalten das MariaDB-Root-Secret. Der
   Migrator übergibt es dem Client durch eine private temporäre Optionsdatei,
   nicht als Prozessargument.
+- Das Migrationsimage enthält das kanonische Basisschema. Bei leerem
+  `nv_*`-Namensraum bindet es dessen SHA-256 vor dem ersten DDL an
+  `estab_schema_baselines`; derselbe Checksum darf einen unterbrochenen,
+  idempotenten Fresh-Lauf fortsetzen. Ein unprotokollierter Teilbestand ohne
+  Kerntabelle blockiert eine vermeintliche Neuinitialisierung; das Deployment
+  benötigt keinen Host-Schema-Mount.
 - Jede SQL-Migration ist versioniert und per SHA-256 in
   `estab_schema_migrations` gebunden. Abweichung, SQL-Fehler oder negativer
   Post-Migrations-Schematest verhindern den App-Start.
@@ -479,8 +485,20 @@ gesperrt.
   Script-Ausführung betrieben.
 - Der Readiness-Endpunkt prüft nicht nur Prozesse, sondern auch Datenbank,
   Schemakern und beschreibbaren Speicher.
-- Images sind auf konkrete PHP-/MariaDB-Versionen festgelegt und werden nur
-  nach einem geprüften Upgrade geändert.
+- PHP- und MariaDB-Basen sind auf konkrete Versionen und Multi-Arch-Digests
+  festgelegt und werden nur nach einem geprüften Upgrade geändert. Wegen der
+  beim App-Build bezogenen Debian-Pakete gilt das Ergebnis dennoch nicht als
+  garantiert byteidentisch reproduzierbar; die resultierenden Digests sind
+  Teil des Freigabenachweises.
+- Die pull-only Distribution verlangt zwei explizite, gemeinsam freigegebene
+  App-/Migrator-Referenzen. Der Publish-Workflow ist manuell, global
+  serialisiert, an einen gleichnamigen Git-Tag, zwei Repositoryvariablen und
+  ein Required-Reviewer-Environment gebunden. Er baut beide Kandidaten vor dem
+  ersten Push, überschreibt keine vorhandenen OCI-Tags und erzeugt
+  amd64/arm64-Manifeste mit SBOM, Provenance und verifizierter Attestation.
+  `latest` wird weder publiziert noch als Deploymentstandard akzeptiert. Eine
+  öffentliche Veröffentlichung bleibt bis zur separaten Rechteprüfung des
+  historischen Gesamtbestands gesperrt.
 
 Benannte Volumes sind keine Sicherung. Schutz vor Hostverlust, Fehlbedienung
 oder beschädigten Daten bietet nur das getrennte Verfahren unter

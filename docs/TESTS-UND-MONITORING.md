@@ -24,13 +24,14 @@ Mit lokalem PHP 8.5:
 tests/static/run.sh
 ```
 
-Oder reproduzierbar mit dem festgelegten CLI-Image:
+Oder mit der festgelegten PHP-Version und ihrem Multi-Arch-Digest im
+CLI-Image:
 
 ```console
 podman run --rm \
   --volume "$PWD:/workspace:ro" \
   --workdir /workspace \
-  php:8.5.8-cli-trixie \
+  php:8.5.8-cli-trixie@sha256:58b996c35ce0511cdbaa1fc0476a194fd0221097d721ff7df5af0b6f1a3d0202 \
   tests/static/run.sh
 ```
 
@@ -80,6 +81,9 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
 - portabler Tabellenexport,
 - Compose-Startgate, private MariaDB-Optionsdatei, Migration-Ledger,
   Prüfsummenbindung und Runtime-Schemavertrag,
+- selbsttragende Fresh-Schema-Initialisierung, pull-only Registry-Compose,
+  persistente Storage-/Secret-Grenzen, manuell durch Rechtefreigaben gesperrter
+  GHCR-Workflow, amd64/arm64, SBOM, Provenance und Attestation,
 - Erzeugung eines lesbaren PDF-Dokuments.
 
 Ein Prozess-Exitcode ungleich null sperrt die Freigabe.
@@ -106,7 +110,16 @@ sie auch nach einem Fehler. Docker verwendet standardmäßig `RUNNER_TEMP` oder
 `/tmp`. Ein anderer bereits vorhandener, schreibbarer Pfad kann für beide
 Engines explizit mit `ESTAB_CI_TEMP_PARENT` gesetzt werden.
 
-Der Lauf baut die festgelegten Images frisch, migriert ein leeres Schema,
+Der Lauf baut die festgelegten Images frisch und startet sie zusätzlich in
+einem zweiten, pull-only Registry-Compose-Projekt ohne Build oder
+Host-Schema-Mount. Dort müssen der selbsttragende Migrator mit Exitcode 0 und
+die App gesund enden; vor dem grünen Ergebnis müssen Compose-Down sowie die
+Postcondition für leere Projekt-Container und -Volumes erfolgreich sein. Der
+Schema-Migratortest simuliert außerdem einen unterbrochenen Fresh-Lauf nach
+dem ersten DDL mit vorab gespeichertem Baseline-Checksum, setzt genau diesen
+Lauf fort und weist separat nach, dass ein unprotokollierter
+`nv_*`-Teilbestand blockiert und unverändert bleibt.
+Anschließend migriert der Hauptlauf ein leeres Schema,
 führt PHP-, Datenbank-, Rollen-, HTTP- und Administrationsnachweise aus, prüft
 die Containerlogs und stellt Datenbank, Anhang-/Vordruckdaten sowie Exporte aus
 einem prüfsummengebundenen Backup in neue Volumes wieder her. Ein exakt

@@ -56,6 +56,23 @@ Der Runner gibt `Post-migration schema verification passed` aus. Er verwendet
 das Root-Secret ausschließlich über eine private temporäre MariaDB-Optionsdatei;
 das Kennwort erscheint weder in Argumentliste noch Log.
 
+### Ohne lokalen Image-Build
+
+Für Docker, Podman und Synology Container Manager ist ein eigenständiges
+[pull-only-Deploymentpaket](deploy/registry/README.md) vorbereitet. Es
+referenziert ein gemeinsam versioniertes App-/Migrator-Imagepaar für
+`linux/amd64` und `linux/arm64`; der Migrator trägt das Basisschema selbst, so
+dass keine SQL-Datei aus einem Git-Checkout auf das Zielgerät gemountet wird.
+
+Im Repository ist noch kein freigegebener Image-Stand mit Manifest-Digests
+dokumentiert. Der Publish-Workflow ist manuell, akzeptiert ausschließlich
+einen gleichnamigen vorhandenen Git-/OCI-Tag, baut beide Images vor dem ersten
+Push vollständig und führt zuvor die Fresh-/Browser-/Restore-CI aus. Er bleibt
+zusätzlich durch Rechtebestätigung, zwei Repositoryvariablen und ein zwingend
+mit Required Reviewer geschütztes GitHub-Environment gesperrt. Das Deployment
+verlangt einen expliziten Release-Tag oder besser beide Multi-Arch-Digests;
+einen `latest`-Pfad gibt es absichtlich nicht.
+
 ## Zugänge
 
 | Pfad | Zweck | Schutz |
@@ -193,6 +210,7 @@ wegwerfbaren Test-Stack verwendet werden.
 ## Dokumentation
 
 - [Betrieb und Konfiguration](docs/BETRIEB.md)
+- [Pull-only Registry- und Synology-Deployment](deploy/registry/README.md)
 - [Migration und Upgrade](docs/MIGRATION-UND-UPGRADE.md)
 - [Backup und Wiederherstellung](docs/BACKUP-UND-WIEDERHERSTELLUNG.md)
 - [Tests, Funktionsnachweis und Monitoring](docs/TESTS-UND-MONITORING.md)
@@ -214,8 +232,15 @@ Die offizielle [SourceForge-Projektseite](https://sourceforge.net/projects/estab
 führt eStab als GNU General Public License Version 3.0. In den importierten
 SVN- und Release-Bäumen war keine eigenständige Lizenztextdatei enthalten;
 dieses Repository erfindet deshalb keine darüber hinausgehende
-Lizenzformulierung. Vor einer Weiterverteilung sollte die konkrete
-Lizenzkennzeichnung mit den ursprünglichen Rechteinhabern geklärt werden.
+Lizenzformulierung. Der Laufzeitbestand enthält außerdem historische
+Schriften, Grafiken, Bibliotheken und Dokumente mit noch nicht vollständig
+inventarisierten Drittanbieterhinweisen. Vor einer öffentlichen
+Quell-/Binärweiterverteilung müssen Hauptlizenz, Drittanbieterzuordnung und
+Weiterverteilungsrechte mit den ursprünglichen Rechteinhabern geklärt,
+unklare nicht benötigte Assets ausgeschlossen beziehungsweise benötigte Assets
+ersetzt und die erforderlichen Lizenztexte/Notices ergänzt werden. Der
+vorbereitete GHCR-Workflow ist bis zu dieser Prüfung bewusst mehrstufig
+gesperrt; das ist eine technische Risikogrenze und keine Rechtsberatung.
 
 ## Herkunft
 
