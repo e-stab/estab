@@ -19,6 +19,7 @@ $read = static function (string $path): string {
 };
 
 $sourceCompose = $read($root . '/compose.yaml');
+$sourceEnvironment = $read($root . '/.env.example');
 $registryCompose = $read($root . '/deploy/registry/compose.yaml');
 $registryEnvironment = $read($root . '/deploy/registry/.env.example');
 $registryReadme = $read($root . '/deploy/registry/README.md');
@@ -106,6 +107,7 @@ foreach ([
     'ESTAB_ADMIN_USER',
     'ESTAB_PUBLIC_URL',
     'ESTAB_BASE_PATH',
+    'ESTAB_REVIEW_OUTGOING_MESSAGES',
     'ESTAB_ALLOW_SELF_REGISTRATION',
     'ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF',
     'ESTAB_TRUST_PROXY_HEADERS',
@@ -113,11 +115,27 @@ foreach ([
 ] as $environmentName) {
     $assert(
         str_contains($sourceCompose, $environmentName)
+        && str_contains($sourceEnvironment, $environmentName)
         && str_contains($registryCompose, $environmentName)
         && str_contains($registryEnvironment, $environmentName),
         'Registry deployment drifted on ' . $environmentName
     );
 }
+$outgoingReviewComposeSetting =
+    'ESTAB_REVIEW_OUTGOING_MESSAGES: ${ESTAB_REVIEW_OUTGOING_MESSAGES:-false}';
+$assert(
+    str_contains($sourceCompose, $outgoingReviewComposeSetting)
+    && str_contains($registryCompose, $outgoingReviewComposeSetting)
+    && preg_match(
+        '/^ESTAB_REVIEW_OUTGOING_MESSAGES=false$/m',
+        $sourceEnvironment
+    ) === 1
+    && preg_match(
+        '/^ESTAB_REVIEW_OUTGOING_MESSAGES=false$/m',
+        $registryEnvironment
+    ) === 1,
+    'Outgoing-message review does not keep the published false default'
+);
 $assert(
     str_contains($registryCompose, 'database:')
     && str_contains($registryCompose, 'internal: true')

@@ -33,6 +33,7 @@ fi
 $php_bin "$repo_root/tools/modernize_php_tokens.php"
 $php_bin "$repo_root/tools/check_legacy_constructors.php"
 $php_bin "$repo_root/tests/php/runtime_compatibility.php"
+$php_bin "$repo_root/tests/php/config_security.php"
 $php_bin "$repo_root/tests/php/date_compatibility.php"
 $php_bin "$repo_root/tests/php/auth_security.php"
 $php_bin "$repo_root/tests/php/navigation_security.php"
