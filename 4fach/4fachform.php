@@ -1255,19 +1255,27 @@ class nachrichten4fach {
     echo "<td style=\"width: 109px; background-color: ".$this->bg[15].";\">Quittung:";
     echo "</td>\n";
     echo "<td style=\"width: 289px; background-color: ".$this->bg[15].";\">\n";
+    $immutableAdminTimestamp = in_array ($this->task, array ("FM-Admin", "SI-Admin"), true);
     if (!$this->feld [15]){
       echo "<div style=\"text-align: left;\">";
       echo $this->safe_message_value ("15_quitdatum")."&nbsp;&nbsp;".$this->safe_message_value ("15_quitzeichen");
       echo "</div>\n";
     } else {
-    if ( $this->errorselect ["15_quitdatum"] == false ){
-      $this->showerrorinfo ("15_quitdatum");    }
-    echo "<input id=\"f_15_quitdatum\" maxlength=\"13\" size=\"13\" name=\"15_quitdatum\" value=\"".$this->safe_message_value ("15_quitdatum")."\">&nbsp;\n";
-    if ( $this->errorselect ["15_quitzeichen"] == false ){
-      $this->showerrorinfo ("15_quitzeichen");    }
-    echo "<input id=\"f_15_quitzeichen\" maxlength=\"6\" size=\"6\" name=\"15_quitzeichen\" value=\"".$this->safe_message_value ("15_quitzeichen")."\"><br>\n";
+      if ($immutableAdminTimestamp) {
+        echo "<span id=\"f_15_quitdatum\" data-estab-readonly=\"true\" aria-label=\"Quittierungszeitpunkt schreibgeschützt\">".$this->safe_message_value ("15_quitdatum")."</span>\n";
+        echo "<input id=\"f_15_quitdatum_value\" type=\"hidden\" name=\"15_quitdatum\" value=\"".$this->safe_message_value ("15_quitdatum")."\">&nbsp;\n";
+      } else {
+        if ( $this->errorselect ["15_quitdatum"] == false ){
+          $this->showerrorinfo ("15_quitdatum");    }
+        echo "<input id=\"f_15_quitdatum\" maxlength=\"13\" size=\"13\" name=\"15_quitdatum\" value=\"".$this->safe_message_value ("15_quitdatum")."\">&nbsp;\n";
+      }
+      if ( $this->errorselect ["15_quitzeichen"] == false ){
+        $this->showerrorinfo ("15_quitzeichen");    }
+      echo "<input id=\"f_15_quitzeichen\" maxlength=\"6\" size=\"6\" name=\"15_quitzeichen\" value=\"".$this->safe_message_value ("15_quitzeichen")."\"><br>\n";
     }
-    echo "&nbsp;Uhrzeit &nbsp; &nbsp;Zeichen</td>\n";
+    echo $immutableAdminTimestamp
+      ? "&nbsp;Uhrzeit (fest) &nbsp; &nbsp;Zeichen</td>\n"
+      : "&nbsp;Uhrzeit &nbsp; &nbsp;Zeichen</td>\n";
     echo "</tr>\n";
     echo "</tbody>\n";
     echo "</table>\n";

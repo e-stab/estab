@@ -169,6 +169,20 @@ $assert(
     'FM admin form exposes fields outside the persisted review section'
 );
 $assert(
+    str_contains($formSource, '$immutableAdminTimestamp = in_array')
+        && str_contains($formSource, 'data-estab-readonly=\\"true\\"')
+        && str_contains(
+            $formSource,
+            'id=\\"f_15_quitdatum_value\\" type=\\"hidden\\"'
+        )
+        && str_contains($formSource, 'Uhrzeit (fest)')
+        && str_contains(
+            $dataSource,
+            '"15_quitdatum" => $storedAdminMessage ["15_quitdatum"]'
+        ),
+    'FM/SI administration exposes or persists an editable review timestamp'
+);
+$assert(
     preg_match(
         '/case\s+"FM-Admin"\s*:\s*case\s+"Stab_sichten"\s*:\s*case\s+"SI-Admin"\s*:(?<body>.*?)break;/s',
         $formSource,

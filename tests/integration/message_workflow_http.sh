@@ -917,7 +917,15 @@ assert_body 'name="task" value="FM-Admin"' 'FM-Admin form task'
 assert_body "name=\"00_lfd\" value=\"$incoming_id\"" 'FM-Admin form message'
 assert_body 'name="absenden"' 'FM-Admin save control'
 assert_body 'name="abbrechen"' 'FM-Admin cancel control'
-assert_body 'id="f_15_quitdatum" maxlength="13"' 'FM-Admin acknowledgment time'
+assert_body \
+    'id="f_15_quitdatum" data-estab-readonly="true"' \
+    'FM-Admin read-only acknowledgment time'
+assert_body \
+    'id="f_15_quitdatum_value" type="hidden" name="15_quitdatum"' \
+    'FM-Admin acknowledgment time compatibility value'
+assert_body_absent \
+    'id="f_15_quitdatum" maxlength=' \
+    'FM-Admin editable acknowledgment time'
 assert_body 'id="f_15_quitzeichen" maxlength="6"' 'FM-Admin acknowledgment code'
 assert_body 'name="16_gncopy" type="radio"' 'FM-Admin green-copy controls'
 assert_body 'name="16_21" value="16_21_bl" type="checkbox"' \
@@ -1014,7 +1022,7 @@ assert_message_state "$incoming_marker" \
     'FM-Admin preserved completed incoming state'
 assert_db_equals \
     "${incoming_quit_timestamp_before}|${aw_code}|S2_rt,S1_bl,S3_gn,|${fm_admin_note}" \
-    'FM-Admin changed only second-review evidence' \
+    'FM-Admin changed only editable second-review evidence and rejected timestamp tampering' \
     "SELECT CONCAT(DATE_FORMAT(\`15_quitdatum\`, '%Y-%m-%d %H:%i:%s'), '|', \`15_quitzeichen\`, '|', COALESCE(\`16_empf\`, ''), '|', COALESCE(\`17_vermerke\`, '')) FROM \`nv_nachrichten\` WHERE \`00_lfd\` = ${incoming_id};"
 if ! generated_form_check present E "$incoming_number"; then
     echo 'Message workflow HTTP: FM-Admin lost the completed incoming form' >&2

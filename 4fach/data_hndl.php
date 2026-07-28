@@ -768,8 +768,8 @@ function check_and_save ($data){
 	case "FM-Admin":
 	case "SI-Admin":
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>FM-Admin, SI-Admin</big><br>\n";}
-       // Preserve the hidden database timestamp exactly; only visible fields
-       // submitted by this administration form are changed.
+       // Preserve the original review timestamp exactly. The administration
+       // form renders it read-only and only permits code, recipients and note.
        $storedAdminMessage = estab_message_fetch_by_id (
          $messageConnection,
          $conf_4f_tbl ["nachrichten"],
