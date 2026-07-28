@@ -7,6 +7,25 @@ require_once __DIR__ . "/../app/auth.php";
 require_once __DIR__ . "/../app/csrf.php";
 require_once __DIR__ . "/../app/session_ui.php";
 
+$loginDestination = null;
+foreach (array_keys($_GET) as $requestKey) {
+  if (!is_string($requestKey) || $requestKey !== "next") {
+    http_response_code(400);
+    header("Content-Type: text/plain; charset=UTF-8");
+    echo "Ungültige Navigationsauswahl.";
+    exit;
+  }
+}
+if (array_key_exists("next", $_GET)) {
+  $loginDestination = estab_navigation_login_destination_key($_GET["next"]);
+  if ($loginDestination === null) {
+    http_response_code(400);
+    header("Content-Type: text/plain; charset=UTF-8");
+    echo "Ungültiges Anmeldeziel.";
+    exit;
+  }
+}
+
 if ( debug == true ){
   echo "<br><br>\n";
 //  echo "GET="; var_dump ($_GET);    echo "#<br><br>\n";
@@ -32,9 +51,14 @@ if ( debug == true ){
   echo "</head>\n";
     // hellblauer Hintergrund
   echo "<body class=\"estab-navigation-frame\" align=\"center\" bgcolor=\"#ECECFF\">";
-  echo estab_session_ui_current_markup ($_SESSION, true);
+  echo estab_session_ui_current_markup (
+    $_SESSION,
+    true,
+    $loginDestination
+  );
   echo "<form action=\"".$conf_4f ["MainURL"]."\" method=\"POST\" target=\"mainframe\">\n";
   echo estab_csrf_field ();
+  echo estab_navigation_login_destination_field ($loginDestination);
 //  echo "<!-- Formularelemente und andere Elemente innerhalb des Formulars -->\n";
 //  echo date ("His")."<br>";
   echo "<table align=\"center\" style=\"text-align:center;\" border=\"0\" cellspacing=\"0\" cellpeding=\"0\">\n";

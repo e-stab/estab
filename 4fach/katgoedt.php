@@ -101,7 +101,7 @@ function estab_category_render_manager(
     if (isset($statusMessages[$status])) {
         echo '<p class="notice" role="status">' . estab_auth_html($statusMessages[$status]) . '</p>';
     }
-    echo '<p><a href="mainindex.php">Zur Übersicht</a></p>';
+    echo '<p><a href="mainindex.php">Zum Nachrichtenvordruck</a></p>';
 
     echo '<table><thead><tr><th>Kategorie</th><th>Beschreibung</th><th>Aktionen</th>'
         . '</tr></thead><tbody>';
@@ -130,7 +130,8 @@ function estab_category_render_manager(
 
     $isUpdate = $editing !== null;
     echo '<h2>' . ($isUpdate ? 'Kategorie bearbeiten' : 'Neue Kategorie') . '</h2>';
-    echo '<form method="post" action="' . estab_auth_html($formAction) . '">';
+    echo '<form method="post" action="' . estab_auth_html($formAction)
+        . '" data-estab-dirty-guard>';
     echo estab_csrf_field();
     echo '<input type="hidden" name="category_action" value="'
         . ($isUpdate ? 'update' : 'create') . '">';

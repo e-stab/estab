@@ -19,6 +19,7 @@ include ("../4fcfg/para.inc.php");
 require_once __DIR__ . "/../app/auth.php";
 require_once __DIR__ . "/../app/csrf.php";
 require_once __DIR__ . "/../app/file_access.php";
+require_once __DIR__ . "/../app/navigation.php";
 
   function pre_html ($art, $titel, $cssstr){
     include ("../4fcfg/para.inc.php");
@@ -45,7 +46,7 @@ require_once __DIR__ . "/../app/file_access.php";
    switch ($art){
      case "N":
         echo"<script type=\"text/javascript\">";
-        echo "function FensterOeffnen (Adresse) {MeinFenster = window.open(Adresse, \"Zweitfenster\", \"width=500,height=400,left=100,top=100,menubar=no,location=no,resizable=no,status=no,toolbar=no\");  MeinFenster.focus();}";
+        echo "function FensterOeffnen (Adresse) {MeinFenster = window.open(Adresse, \"Zweitfenster\", \"width=700,height=650,left=100,top=100,menubar=no,location=no,resizable=yes,scrollbars=yes,status=no,toolbar=no\"); if (MeinFenster) { MeinFenster.focus(); }}";
         echo "</script>";
 
      break;
@@ -646,7 +647,7 @@ bersichtlich dargestellt werden.
 /********************************************************************************************************
    Benutzerstatus
 ********************************************************************************************************/
-  function benutzerstatus ($what){ // kann sein "anzeige" oder mit "verlinkt"
+  function benutzerstatus ($what, $loginDestination = null){ // kann sein "anzeige" oder mit "verlinkt"
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
 
@@ -671,6 +672,7 @@ bersichtlich dargestellt werden.
       if ($what == 'verlinkt'){
          echo "\n\n<form action=\"".estab_auth_html ($conf_4f ["MainURL"])."\" method=\"POST\" target=\"mainframe\">\n";
          echo estab_csrf_field ()."\n";
+         echo estab_navigation_login_destination_field ($loginDestination)."\n";
          echo "<!-- Benutzerliste mit POST-Auswahl zur Anmeldung -->\n";
       }
 

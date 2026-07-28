@@ -46,6 +46,7 @@ class nachrichten4fach {
 
     function nachrichten4fach ($formulardaten, $task, $errorselect){
       $this->task = $task ;
+      $this->hasUnsavedValidationData = $errorselect !== "";
       $formDefaults = array_fill_keys (array (
         "00_lfd", "01_datum", "01_medium", "01_zeichen", "02_zeichen",
         "02_zeit", "03_datum", "03_zeichen", "04_nummer", "04_richtung",
@@ -115,6 +116,7 @@ class nachrichten4fach {
     var $formdata ;   // array, Formulardaten
     var $lfd ;        // integer, laufende Nummer der Nachricht
     var $errorselect; // array, Felder die falsch eingegeben wurden.
+    var $hasUnsavedValidationData = false;
 
   // aktive und Inaktive Darstellungsfarben
 
@@ -709,7 +711,10 @@ class nachrichten4fach {
 
     include_once ("./katego.php");
 
-    echo "<FORM style=\"\" method=\"POST\" action=\"".$conf_4f ["MainURL"]."\" name=\"4fach\">\n";
+    $dirtyInitial = $this->hasUnsavedValidationData
+      ? " data-estab-dirty-initial"
+      : "";
+    echo "<FORM style=\"\" method=\"POST\" action=\"".$conf_4f ["MainURL"]."\" name=\"4fach\" data-estab-dirty-guard".$dirtyInitial.">\n";
     echo estab_csrf_field ();
     $this->show_menue_buttons (2, "oben");
     echo "<!-- **********4fachform.php-697-anfang-HAUPTTABELLE*********** -->\n";

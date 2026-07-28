@@ -7,25 +7,47 @@
 }
 
 .estab-session-bar {
-    align-items: center;
     background: #172f4d;
     border-bottom: 3px solid #e5b247;
     box-shadow: 0 3px 10px rgba(23, 32, 51, 0.24);
     color: #ffffff;
-    display: flex;
-    gap: 1rem;
-    justify-content: space-between;
+    display: block;
     margin: 0;
-    padding: 0.75rem 1rem;
+    padding: 0;
     position: sticky;
     top: 0;
     width: 100%;
     z-index: 1000;
 }
 
+.estab-session-topline {
+    align-items: center;
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    min-height: 3.25rem;
+    padding: 0.55rem 1rem;
+}
+
+.estab-session-brand {
+    color: #ffffff;
+    flex: 0 0 auto;
+    font-size: 1.25rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    text-decoration: none;
+}
+
+.estab-session-brand:hover,
+.estab-session-brand:focus {
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+}
+
 .estab-session-identity {
     align-items: baseline;
     display: flex;
+    flex: 1 1 auto;
     flex-wrap: wrap;
     gap: 0.35rem 0.7rem;
     line-height: 1.35;
@@ -40,6 +62,16 @@
     padding-left: 0.7rem;
 }
 
+.estab-session-admin-context {
+    border-left: 1px solid #8da2bd;
+    color: #dbe8f5;
+    padding-left: 0.7rem;
+}
+
+.estab-session-admin-note {
+    color: #b9cbe0;
+}
+
 .estab-session-logout {
     flex: 0 0 auto;
     margin: 0;
@@ -52,14 +84,14 @@
     gap: 0.6rem;
 }
 
-.estab-session-bar .estab-button-home {
+.estab-session-bar .estab-button-login {
     background: transparent;
     border-color: #dbe8f5;
     color: #ffffff;
 }
 
-.estab-session-bar .estab-button-home:hover,
-.estab-session-bar .estab-button-home:focus {
+.estab-session-bar .estab-button-login:hover,
+.estab-session-bar .estab-button-login:focus {
     background: #294b70;
     border-color: #ffffff;
 }
@@ -77,14 +109,126 @@
     border-color: #ffffff;
 }
 
-.estab-session-bar-compact {
+.estab-session-anonymous {
+    color: #dbe8f5;
+    flex: 1 1 auto;
+}
+
+.estab-navigation {
+    background: #102641;
+    border-top: 1px solid #45627f;
+    color: #ffffff;
+}
+
+.estab-navigation-content {
     align-items: stretch;
+    display: flex;
+    gap: 0.4rem;
+    justify-content: flex-start;
+    margin: 0 auto;
+    max-width: 100rem;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    padding: 0 0.65rem;
+    scrollbar-width: thin;
+}
+
+.estab-navigation-list {
+    align-items: stretch;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.15rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.estab-navigation-item {
+    display: flex;
+    min-width: 0;
+}
+
+.estab-navigation-link {
+    align-items: center;
+    border-bottom: 3px solid transparent;
+    color: #ffffff;
+    display: flex;
+    font-size: 0.84rem;
+    font-weight: 700;
+    min-height: 2.8rem;
+    padding: 0.35rem 0.55rem;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.estab-navigation-link:hover,
+.estab-navigation-link:focus {
+    background: #294b70;
+    outline: 2px solid #ffffff;
+    outline-offset: -2px;
+}
+
+.estab-navigation-link[aria-current="page"] {
+    background: #294b70;
+    border-bottom-color: #e5b247;
+}
+
+.estab-navigation-item[data-estab-navigation-locked] .estab-navigation-link {
+    color: #d2dce8;
+}
+
+.estab-navigation-item[data-estab-navigation-locked] .estab-navigation-label::after {
+    content: "  🔒";
+    font-size: 0.7rem;
+}
+
+.estab-navigation-login-hint {
+    border: 0;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+}
+
+.estab-navigation-services {
+    align-items: center;
+    border-left: 1px solid #45627f;
+    display: flex;
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding-left: 0.4rem;
+}
+
+.estab-navigation-services-label,
+.estab-navigation-hint {
+    border: 0;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+}
+
+.estab-session-bar-compact {
     border-bottom-width: 2px;
     display: block;
     font-size: 0.82rem;
-    padding: 0.65rem;
+    padding: 0;
     position: static;
     text-align: left;
+}
+
+.estab-session-bar-compact .estab-session-topline {
+    align-items: stretch;
+    display: grid;
+    gap: 0.45rem;
+    min-height: 0;
+    padding: 0.65rem;
 }
 
 .estab-session-bar-compact .estab-session-identity {
@@ -112,15 +256,65 @@
     display: grid;
     gap: 0.45rem;
     grid-template-columns: 1fr;
-    margin-top: 0.6rem;
+    margin-top: 0.15rem;
 }
 
-.estab-session-bar-compact .estab-button-home,
+.estab-session-bar-compact .estab-button-login,
 .estab-session-bar-compact .estab-button-logout {
     font-size: 0.88rem;
     min-width: 0;
     padding: 0.5rem;
     width: 100%;
+}
+
+.estab-session-bar-compact .estab-navigation {
+    border-top-color: #6b8199;
+}
+
+.estab-navigation-disclosure > summary {
+    cursor: pointer;
+    font-size: 0.92rem;
+    font-weight: 700;
+    min-height: 2.75rem;
+    padding: 0.75rem;
+}
+
+.estab-navigation-disclosure > summary:hover,
+.estab-navigation-disclosure > summary:focus {
+    background: #294b70;
+    outline: 2px solid #ffffff;
+    outline-offset: -2px;
+}
+
+.estab-navigation-compact .estab-navigation-content,
+.estab-navigation-compact .estab-navigation-list,
+.estab-navigation-compact .estab-navigation-services {
+    align-items: stretch;
+    display: grid;
+    gap: 0;
+    padding: 0;
+}
+
+.estab-navigation-compact .estab-navigation-services {
+    border-left: 0;
+    border-top: 1px solid #45627f;
+}
+
+.estab-navigation-compact .estab-navigation-item {
+    display: block;
+}
+
+.estab-navigation-compact .estab-navigation-link {
+    border-bottom: 0;
+    border-left: 4px solid transparent;
+    justify-content: flex-start;
+    min-height: 2.75rem;
+    padding: 0.55rem 0.7rem;
+}
+
+.estab-navigation-compact .estab-navigation-link[aria-current="page"] {
+    border-bottom: 0;
+    border-left-color: #e5b247;
 }
 
 .estab-navigation-frame {
@@ -131,7 +325,14 @@
 .estab-root-header,
 .estab-root-menu {
     box-sizing: border-box;
+    font-family: Arial, Helvetica, sans-serif;
     max-width: 100%;
+}
+
+.estab-root-page {
+    margin: 0;
+    min-width: 0;
+    overflow-x: hidden;
 }
 
 .estab-root-header {
@@ -160,6 +361,8 @@
 }
 
 .estab-root-main {
+    box-sizing: border-box;
+    font-family: Arial, Helvetica, sans-serif;
     margin: 0 auto;
     max-width: 70rem;
     padding: 0 1rem 2rem;
@@ -461,9 +664,20 @@
 }
 
 @media (max-width: 42rem) {
-    .estab-session-bar {
+    .estab-session-topline {
         align-items: stretch;
-        flex-direction: column;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .estab-session-brand {
+        align-self: center;
+    }
+
+    .estab-session-identity,
+    .estab-session-anonymous {
+        grid-column: 1 / -1;
+        grid-row: 2;
     }
 
     .estab-session-detail {
@@ -471,20 +685,58 @@
         padding-left: 0;
     }
 
-    .estab-session-logout,
-    .estab-button-logout {
-        width: 100%;
+    .estab-session-admin-context {
+        border-left: 0;
+        padding-left: 0;
     }
 
     .estab-session-actions {
-        align-items: stretch;
+        grid-column: 2;
+        grid-row: 1;
+    }
+
+    .estab-navigation-content {
+        justify-content: flex-start;
+        overflow-x: auto;
+        overscroll-behavior-inline: contain;
+        padding: 0;
+        scrollbar-width: thin;
+    }
+
+    .estab-navigation-list {
+        flex: 0 0 auto;
+        flex-wrap: nowrap;
+    }
+
+    .estab-navigation-link {
+        min-height: 2.9rem;
+        white-space: nowrap;
+    }
+
+    .estab-navigation-services {
+        flex: 0 0 auto;
+    }
+
+    .estab-login-cta {
+        margin: 1rem auto;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+        padding: 1.1rem;
+        width: 100%;
+    }
+
+    .estab-root-main {
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+    }
+
+    .estab-root-auth-actions {
         display: grid;
         grid-template-columns: 1fr;
     }
 
-    .estab-login-cta {
-        margin: 1rem;
-        padding: 1.25rem;
+    .estab-root-auth-actions .estab-button {
+        width: 100%;
     }
 
     .estab-auth-fields,
@@ -511,11 +763,10 @@
 
 @media (max-width: 64rem) {
     .estab-root-header {
-        width: calc(100% - 1rem);
-    }
-
-    .estab-root-header {
-        grid-template-columns: minmax(3.5rem, 6rem) minmax(0, 1fr) minmax(3.5rem, 6rem);
+        gap: 0.5rem;
+        grid-template-columns: minmax(2.75rem, 5rem) minmax(0, 1fr) minmax(2.75rem, 5rem);
+        padding: 0.6rem;
+        width: calc(100% - 1.5rem);
     }
 }
 

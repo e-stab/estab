@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/csrf.php';
+require_once __DIR__ . '/navigation.php';
 
 /** Return the configured browser root used by shared session controls. */
 function estab_session_ui_root(): string
@@ -20,6 +21,37 @@ function estab_session_ui_stylesheet(): string
 }
 
 /**
+ * Return the separately authenticated Basic-Auth user on admin routes.
+ *
+ * REMOTE_USER is trusted only as display context after the web server has
+ * admitted the request. It never becomes an eStab role or session identity.
+ */
+function estab_session_ui_admin_user(array $server): ?string
+{
+    if (estab_navigation_active_key($server) !== 'administration') {
+        return null;
+    }
+    $user = $server['REMOTE_USER'] ?? null;
+    if (!is_string($user) || trim($user) === '') {
+        return null;
+    }
+    return trim($user);
+}
+
+/** Resolve an optional safe destination carried by the current login tab. */
+function estab_session_ui_login_destination(
+    array $get,
+    array $post
+): ?string {
+    foreach ([$post, $get] as $input) {
+        if (array_key_exists('next', $input)) {
+            return estab_navigation_login_destination_key($input['next']);
+        }
+    }
+    return null;
+}
+
+/**
  * Render one validated application session and its protected logout control.
  *
  * The session shape is validated by the same function that guards protected
@@ -28,7 +60,9 @@ function estab_session_ui_stylesheet(): string
 function estab_session_ui_markup(
     array $session,
     string $csrfToken,
-    bool $compact = false
+    bool $compact = false,
+    array $server = [],
+    bool $popup = false
 ): string {
     $identity = estab_auth_session_identity($session);
     if ($identity === null) {
@@ -43,13 +77,32 @@ function estab_session_ui_markup(
         : 'estab-session-bar';
     $homeUrl = estab_application_root();
     $logoutUrl = estab_application_url('4fach/logout.php');
+    $navigation = estab_navigation_markup(
+        true,
+        $server === [] ? $_SERVER : $server,
+        $compact
+    );
     $name = estab_auth_html($identity['benutzer']);
     $code = estab_auth_html($identity['kuerzel']);
     $function = estab_auth_html($identity['funktion']);
     $role = estab_auth_html($identity['rolle']);
+    $adminUser = estab_session_ui_admin_user(
+        $server === [] ? $_SERVER : $server
+    );
+    $adminContext = $adminUser === null
+        ? ''
+        : '<span class="estab-session-admin-context">'
+            . 'Administrationszugang <strong data-estab-admin-user="'
+            . estab_auth_html($adminUser) . '">'
+            . estab_auth_html($adminUser) . '</strong></span>';
 
     return '<aside class="' . $barClass . '" data-estab-session-bar'
+        . ($popup ? ' data-estab-popup-ui' : '')
         . ' aria-label="Aktuelle Anmeldung">'
+        . '<div class="estab-session-topline">'
+        . '<a class="estab-session-brand" href="'
+        . estab_auth_html($homeUrl) . '" target="_top"'
+        . ' aria-label="eStab-Übersicht">eStab</a>'
         . '<div class="estab-session-identity">'
         . '<span class="estab-session-prefix">Angemeldet als</span>'
         . '<strong data-estab-user-name="' . $name . '">' . $name . '</strong>'
@@ -61,10 +114,9 @@ function estab_session_ui_markup(
         . ' · Funktion ' . $function
         . ' · Rolle ' . $role
         . '</span>'
+        . $adminContext
         . '</div>'
         . '<div class="estab-session-actions">'
-        . '<a class="estab-button estab-button-home" href="'
-        . estab_auth_html($homeUrl) . '" target="_top">Startseite</a>'
         . '<form class="estab-session-logout" data-estab-logout-form'
         . ' method="post" action="' . estab_auth_html($logoutUrl)
         . '" target="_top">'
@@ -75,8 +127,70 @@ function estab_session_ui_markup(
         . ' type="submit">Abmelden</button>'
         . '</form>'
         . '</div>'
+        . '</div>'
+        . $navigation
         . '</aside>'
-        . ($compact ? '' : estab_session_ui_mainframe_guard());
+        . ($compact ? '' : estab_session_ui_mainframe_guard())
+        . estab_session_ui_dirty_guard_script($popup);
+}
+
+/**
+ * Render the same area navigation without claiming that a user is signed in.
+ *
+ * Public pages such as BOS-Info therefore retain a reliable route back to the
+ * overview. Protected items lead to the explicit login entry.
+ */
+function estab_session_ui_public_markup(
+    bool $compact = false,
+    array $server = [],
+    ?string $loginDestination = null,
+    bool $popup = false
+): string {
+    $barClass = $compact
+        ? 'estab-session-bar estab-session-bar-public estab-session-bar-compact'
+        : 'estab-session-bar estab-session-bar-public';
+    $homeUrl = estab_application_root();
+    if ($loginDestination !== null) {
+        $loginDestination = estab_navigation_login_destination_key(
+            $loginDestination
+        );
+        if ($loginDestination === null) {
+            throw new InvalidArgumentException('Invalid public login destination');
+        }
+    }
+    $loginUrl = estab_navigation_login_url($loginDestination);
+    $effectiveServer = $server === [] ? $_SERVER : $server;
+    $adminUser = estab_session_ui_admin_user($effectiveServer);
+    $navigation = estab_navigation_markup(
+        false,
+        $effectiveServer,
+        $compact
+    );
+    $status = $adminUser === null
+        ? '<span class="estab-session-anonymous">Nicht angemeldet</span>'
+        : '<span class="estab-session-anonymous">'
+            . 'Administrationszugang <strong data-estab-admin-user="'
+            . estab_auth_html($adminUser) . '">'
+            . estab_auth_html($adminUser) . '</strong>'
+            . '<span class="estab-session-admin-note">'
+            . ' · Kein eStab-Funktionskonto angemeldet</span></span>';
+
+    return '<aside class="' . $barClass . '" data-estab-public-bar'
+        . ($popup ? ' data-estab-popup-ui' : '')
+        . ' aria-label="eStab-Navigation">'
+        . '<div class="estab-session-topline">'
+        . '<a class="estab-session-brand" href="'
+        . estab_auth_html($homeUrl) . '" target="_top"'
+        . ' aria-label="eStab-Übersicht">eStab</a>'
+        . $status
+        . '<div class="estab-session-actions">'
+        . '<a class="estab-button estab-button-login" href="'
+        . estab_auth_html($loginUrl) . '" target="_top">Anmelden</a>'
+        . '</div></div>'
+        . $navigation
+        . '</aside>'
+        . ($compact ? '' : estab_session_ui_mainframe_guard())
+        . estab_session_ui_dirty_guard_script($popup);
 }
 
 /**
@@ -93,6 +207,84 @@ function estab_session_ui_mainframe_guard(): string
         . 'bar.remove();'
         . '}'
         . '})(document.currentScript);'
+        . '</script>';
+}
+
+/**
+ * Confirm global navigation when an explicitly marked edit form is dirty.
+ *
+ * The compact frame recursively inspects the same-origin mainframe and a
+ * popup's opener. Comparing current controls with their HTML defaults avoids
+ * polling; an explicit server marker covers redisplayed unsaved values.
+ * Historical local submit/cancel actions remain untouched.
+ */
+function estab_session_ui_dirty_guard_script(bool $popup = false): string
+{
+    return '<script data-estab-dirty-guard>'
+        . '(function(){'
+        . 'var popupContext=' . ($popup ? 'true' : 'false') . ';'
+        . 'function applicationWindow(){'
+        . 'if(!popupContext){return null;}'
+        . 'var candidate=window.opener;'
+        . 'if(!candidate||candidate.closed){return null;}'
+        . 'try{candidate=candidate.top;'
+        . 'if(candidate.location.origin!==window.location.origin){return null;}'
+        . 'void candidate.document;return candidate;}catch(ignore){return null;}}'
+        . 'function docs(win,list){'
+        . 'try{list.push(win.document);'
+        . 'for(var i=0;i<win.frames.length;i++){docs(win.frames[i],list);}}'
+        . 'catch(ignore){}return list;}'
+        . 'function changed(form){'
+        . 'if(form.hasAttribute("data-estab-dirty-initial")){return true;}'
+        . 'var controls=form.elements;'
+        . 'for(var i=0;i<controls.length;i++){'
+        . 'var field=controls[i];'
+        . 'if(!field||field.disabled){continue;}'
+        . 'var tag=String(field.tagName||"").toLowerCase();'
+        . 'var type=String(field.type||"").toLowerCase();'
+        . 'if(type==="hidden"||type==="submit"||type==="button"'
+        . '||type==="image"||type==="reset"){continue;}'
+        . 'if(type==="checkbox"||type==="radio"){'
+        . 'if(field.checked!==field.defaultChecked){return true;}'
+        . '}else if(tag==="select"){'
+        . 'for(var j=0;j<field.options.length;j++){'
+        . 'if(field.options[j].selected!==field.options[j].defaultSelected){'
+        . 'return true;}}'
+        . '}else if(type==="file"){if(field.files&&field.files.length){return true;}}'
+        . 'else if(field.value!==field.defaultValue){return true;}'
+        . '}return false;}'
+        . 'function dirty(){'
+        . 'var all=docs(window.top,[]);'
+        . 'var app=applicationWindow();'
+        . 'if(app&&app!==window.top){docs(app,all);}'
+        . 'for(var i=0;i<all.length;i++){'
+        . 'var forms=all[i].querySelectorAll("form[data-estab-dirty-guard]");'
+        . 'for(var j=0;j<forms.length;j++){if(changed(forms[j])){return true;}}'
+        . '}return false;}'
+        . 'function approve(){'
+        . 'return !dirty()||window.confirm('
+        . '"Ungespeicherte Eingaben gehen beim Bereichswechsel verloren. "'
+        . '+"Möchten Sie die Seite wirklich verlassen?");}'
+        . 'document.addEventListener("click",function(event){'
+        . 'var origin=event.target;'
+        . 'var link=origin&&typeof origin.closest==="function"'
+        . '?origin.closest("[data-estab-navigation] a,.estab-session-brand,"'
+        . '+".estab-button-login"):null;'
+        . 'if(!link){return;}'
+        . 'if(!approve()){event.preventDefault();return;}'
+        . 'var app=applicationWindow();'
+        . 'if(app){event.preventDefault();app.location.assign(link.href);'
+        . 'window.close();}},true);'
+        . 'document.addEventListener("submit",function(event){'
+        . 'var form=event.target;'
+        . 'if(!form.matches(".estab-session-logout")){return;}'
+        . 'if(!approve()){event.preventDefault();return;}'
+        . 'var app=applicationWindow();'
+        . 'if(app){var targetName="estab-application-"'
+        . '+Date.now()+"-"+Math.random().toString(36).slice(2);'
+        . 'app.name=targetName;form.target=targetName;'
+        . 'window.setTimeout(function(){window.close();},100);}},true);'
+        . '})();'
         . '</script>';
 }
 
@@ -127,23 +319,46 @@ function estab_session_ui_frame_refresh_script(): string
 }
 
 /** Return the session bar for a valid current login, or an empty string. */
-function estab_session_ui_current_markup(array $session, bool $compact = false): string
+function estab_session_ui_current_markup(
+    array $session,
+    bool $compact = false,
+    ?string $loginDestination = null,
+    bool $popup = false
+): string
 {
-    if (
-        session_status() !== PHP_SESSION_ACTIVE
-        || estab_auth_session_identity($session) === null
-    ) {
+    if (session_status() !== PHP_SESSION_ACTIVE) {
         return '';
     }
 
-    return estab_session_ui_markup($session, estab_csrf_token(), $compact);
+    if (estab_auth_session_identity($session) === null) {
+        if ($loginDestination === null) {
+            $loginDestination = estab_session_ui_login_destination(
+                $_GET,
+                $_POST
+            );
+        }
+        return estab_session_ui_public_markup(
+            $compact,
+            $_SERVER,
+            $loginDestination,
+            $popup
+        );
+    }
+
+    return estab_session_ui_markup(
+        $session,
+        estab_csrf_token(),
+        $compact,
+        $_SERVER,
+        $popup
+    );
 }
 
 /** Detect the actual shared element without colliding with escaped user text. */
 function estab_session_ui_document_has_bar(string $html): bool
 {
     return preg_match(
-        '/<aside\b[^>]*\bdata-estab-session-bar\b[^>]*>/i',
+        '/<aside\b[^>]*\bdata-estab-(?:session|public)-bar\b[^>]*>/i',
         $html
     ) === 1;
 }
@@ -243,7 +458,11 @@ function estab_session_ui_inject_document(string $html, string $markup): string
  * Registration is deliberately not global: downloads, image endpoints,
  * health checks and plain-text errors remain byte-for-byte untouched.
  */
-function estab_session_ui_start(array $session, bool $compact = false): void
+function estab_session_ui_start(
+    array $session,
+    bool $compact = false,
+    bool $popup = false
+): void
 {
     static $started = false;
     if ($started || PHP_SAPI === 'cli') {
@@ -257,7 +476,7 @@ function estab_session_ui_start(array $session, bool $compact = false): void
         header('Cache-Control: private, no-store, max-age=0');
     }
 
-    ob_start(static function (string $html) use ($compact): string {
+    ob_start(static function (string $html) use ($compact, $popup): string {
         $status = http_response_code();
         $status = is_int($status) ? $status : 200;
         if (!estab_session_ui_response_is_html(headers_list(), $status)) {
@@ -266,7 +485,12 @@ function estab_session_ui_start(array $session, bool $compact = false): void
 
         return estab_session_ui_inject_document(
             $html,
-            estab_session_ui_current_markup($_SESSION, $compact)
+            estab_session_ui_current_markup(
+                $_SESSION,
+                $compact,
+                null,
+                $popup
+            )
         );
     });
 }

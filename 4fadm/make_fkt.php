@@ -7,8 +7,10 @@ session_start();
 require_once __DIR__ . '/../4fcfg/dbcfg.inc.php';
 require_once __DIR__ . '/../app/admin_operations.php';
 require_once __DIR__ . '/../app/csrf.php';
+require_once __DIR__ . '/../app/session_ui.php';
 
 estab_admin_require_http_auth($_SERVER);
+estab_session_ui_start($_SESSION);
 
 $error = null;
 $submitted = null;
@@ -58,7 +60,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 }
 
 try {
-    if (is_array($submitted) && !$submitted['valid']) {
+    if (is_array($submitted)) {
         $matrix = $submitted['data'];
     } else {
         $connection = estab_auth_connect($conf_4f_db);
@@ -112,7 +114,10 @@ $updated = ($_GET['updated'] ?? '') === '1';
   <?php endif; ?>
 
   <?php if (count($matrix['cells']) === 20): ?>
-  <form method="post" action="make_fkt.php">
+  <form method="post" action="make_fkt.php" data-estab-dirty-guard
+    <?= $error !== null && is_array($submitted)
+        ? 'data-estab-dirty-initial'
+        : '' ?>>
     <?= estab_csrf_field() ?>
     <input type="hidden" name="admin_action" value="save_matrix">
     <table>

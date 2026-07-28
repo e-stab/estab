@@ -335,7 +335,7 @@ class fileupload extends file_upload {
     $comment = estab_attachment_html ($predata["comment"] ?? "");
     $shortname = estab_attachment_html ($predata["kuerzel"] ?? "");
     $timestamp = estab_attachment_html ($predata["time"] ?? "");
-    echo "<form name=\"uploadform\" enctype=\"multipart/form-data\" method=\"post\" action=\"".$formAction."\">\n";
+    echo "<form name=\"uploadform\" enctype=\"multipart/form-data\" method=\"post\" action=\"".$formAction."\" data-estab-dirty-guard>\n";
     echo estab_csrf_field ()."\n";
     echo "<fieldset>\n";
     echo "<legend><big>Anhang hochladen</big></legend>\n";
@@ -675,9 +675,9 @@ require_once ("./db_operation.php");  // Datenbank operationen
     echo "<table border=\"1\" cellspacing=\"2\" cellpeding=\"3\" bgcolor=\"#E0E0E0\">\n";
     echo "<tr>";
     echo "<input type=\"hidden\" name=\"anhang\" value=\"ah_auswahl\">\n";
-    echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"ah_auswahl\" src=\"".$conf_design_path."/ok.gif\"></td>\n";
-    echo "<td bgcolor=$color_button_nok><input type=\"image\" name=\"ah_abbrechen\" src=\"".$conf_design_path."/cancel.gif\"></td>\n";
-    echo "<td bgcolor=$color_button><input type=\"image\" name=\"ah_upload\" src=\"".$conf_design_path."/upload.gif\"></td>\n";
+    echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"ah_auswahl\" src=\"".$conf_design_path."/ok.gif\" alt=\"Ausgewählte Anhänge übernehmen\"></td>\n";
+    echo "<td bgcolor=$color_button_nok><input type=\"image\" name=\"ah_abbrechen\" src=\"".$conf_design_path."/cancel.gif\" alt=\"Zurück zum Nachrichtenvordruck\"></td>\n";
+    echo "<td bgcolor=$color_button><input type=\"image\" name=\"ah_upload\" src=\"".$conf_design_path."/upload.gif\" alt=\"Neuen Anhang hochladen\"></td>\n";
     echo "</tr>\n";
     echo "</table>";
         echo "</fieldset>\n";

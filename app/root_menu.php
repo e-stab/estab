@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/navigation.php';
 
 /** Convert the trusted legacy menu text into escaped, readable plain text. */
 function estab_root_menu_text(mixed $value): string
@@ -48,11 +49,26 @@ function estab_root_menu_item_markup(array $item, bool $authenticated): string
         throw new InvalidArgumentException('Unknown root-menu access class');
     }
 
+    $navigationKey = $item['navigation_key'] ?? null;
+    $navigationItem = $navigationKey === null
+        ? null
+        : estab_navigation_item_for_key($navigationKey);
+    if (
+        $navigationKey !== null
+        && (
+            $navigationItem === null
+            || './' . $navigationItem['path'] !== $configuredLink
+        )
+    ) {
+        throw new InvalidArgumentException('Invalid root-menu navigation key');
+    }
+
     $locked = $access === 'application' && !$authenticated;
     $href = $locked
-        ? estab_application_url('4fach/index.php')
+        ? estab_navigation_login_url(
+            $navigationItem === null ? null : $navigationItem['key']
+        )
         : $configuredLink;
-    $target = $locked ? '' : ' target="_blank" rel="noopener noreferrer"';
     $cardClass = 'estab-menu-card estab-menu-card-' . $access
         . ($locked ? ' estab-menu-card-locked' : '');
     $badge = match (true) {
@@ -75,7 +91,11 @@ function estab_root_menu_item_markup(array $item, bool $authenticated): string
 
     return '<li class="' . $cardClass . '">'
         . '<a class="estab-menu-link" href="' . estab_auth_html($href) . '"'
-        . $target . ' title="' . estab_auth_html($linkTitle) . '">'
+        . ($navigationItem === null
+            ? ''
+            : ' data-estab-nav-key="'
+                . estab_auth_html($navigationItem['key']) . '"')
+        . ' title="' . estab_auth_html($linkTitle) . '">'
         . '<span class="estab-menu-icon" aria-hidden="true">'
         . '<img src="' . estab_auth_html($picture) . '" alt=""></span>'
         . '<span class="estab-menu-copy">'

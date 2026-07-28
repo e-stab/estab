@@ -14,6 +14,8 @@ require_once __DIR__ . '/../4fcfg/e_cfg.inc.php';
 require_once __DIR__ . '/../app/auth.php';
 require_once __DIR__ . '/../app/csrf.php';
 require_once __DIR__ . '/../app/export.php';
+require_once __DIR__ . '/../app/session_ui.php';
+estab_session_ui_start($_SESSION);
 
 $export = null;
 $error = null;
@@ -81,7 +83,7 @@ function export_html(mixed $value): string
     </table>
   <?php endif; ?>
 
-  <form method="post">
+  <form method="post" data-estab-dirty-guard>
     <?= estab_csrf_field() ?>
     <button type="submit">Neuen vollständigen Export erzeugen</button>
   </form>

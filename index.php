@@ -40,7 +40,7 @@ $applicationUrl = estab_auth_html(estab_application_url('4fach/index.php'));
   <link rel="stylesheet" href="./estab-ui.css">
   <title><?= $pageTitle ?></title>
 </head>
-<body style="background-color:<?= $background ?>">
+<body class="estab-root-page" style="background-color:<?= $background ?>">
   <header class="estab-root-header" style="--estab-menu-background:<?= $foreground ?>">
     <img src="<?= $leftSymbol ?>" alt="Taktisches Zeichen Einsatzleitung">
     <p><?= $organisation ?></p>
@@ -64,15 +64,15 @@ $applicationUrl = estab_auth_html(estab_application_url('4fach/index.php'));
       <p class="estab-auth-note">Neue Konten können auf dieser Installation nicht selbst angelegt werden. Wenden Sie sich an die zuständige Stelle.</p>
 <?php endif; ?>
 <?php else: ?>
-      <h1 id="estab-login-title">eStab öffnen</h1>
-      <p>Ihre Anmeldung ist aktiv. Öffnen Sie den Nachrichtenvordruck oder wählen Sie einen der jetzt freigeschalteten Bereiche.</p>
-      <p><a id="estab-open" class="estab-button estab-button-primary" href="<?= $applicationUrl ?>">Zum Nachrichtenvordruck</a></p>
+      <h1 id="estab-login-title">Bereich auswählen</h1>
+      <p>Ihre Anmeldung ist aktiv. Wählen Sie unten den benötigten Bereich oder öffnen Sie direkt den Nachrichtenvordruck.</p>
+      <p><a id="estab-open" class="estab-button estab-button-primary" href="<?= $applicationUrl ?>">Nachrichtenvordruck öffnen</a></p>
 <?php endif; ?>
       <p><small>Die Administration verwendet einen separaten technischen Zugang und ist kein eStab-Funktionskonto.</small></p>
     </section>
 
     <nav class="estab-menu-section" aria-labelledby="estab-modules-title">
-      <h2 id="estab-modules-title">eStab-Bereiche</h2>
+      <h2 id="estab-modules-title">Bereiche</h2>
       <?= estab_root_menu_markup($menue, $authenticated) ?>
     </nav>
 

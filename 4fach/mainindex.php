@@ -202,6 +202,36 @@ if ($messageOperation !== null) {
          "\">";
   }
 
+  /**
+   * Replace the complete login frameset with the selected standalone area.
+   *
+   * The login POST runs inside the historical mainframe. A top-level browser
+   * replacement therefore keeps the selected area out of that narrow frame;
+   * the ordinary link remains available when JavaScript is disabled.
+   */
+  function estab_navigation_open_after_login (string $destinationKey): never {
+    $destinationUrl = estab_navigation_url_for_key ($destinationKey);
+    $encodedUrl = json_encode (
+      $destinationUrl,
+      JSON_HEX_TAG
+        | JSON_HEX_AMP
+        | JSON_HEX_APOS
+        | JSON_HEX_QUOT
+        | JSON_UNESCAPED_SLASHES
+        | JSON_THROW_ON_ERROR
+    );
+    header ("Content-Type: text/html; charset=UTF-8");
+    echo "<!doctype html><html lang=\"de\"><head><meta charset=\"UTF-8\">";
+    echo "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">";
+    echo "<title>eStab-Bereich öffnen</title></head><body>";
+    echo "<p>Der gewählte eStab-Bereich wird geöffnet.</p>";
+    echo "<p><a href=\"".estab_auth_html ($destinationUrl).
+         "\" target=\"_top\">Jetzt öffnen</a></p>";
+    echo "<script>window.top.location.replace(".$encodedUrl.");</script>";
+    echo "</body></html>";
+    exit;
+  }
+
 
   if (isset ($returnValue ["reset_record"])){
     try {
@@ -451,14 +481,30 @@ ANTWORT % WEITERLEITUNG
     Es kommen Anmeldedaten die geprueft und gespeichert werden muessen
   \**********************************************************************/
   // Identität und Kennwort werden ausschließlich aus einem POST-Request
-  // gelesen. GET darf nur den rein darstellenden Konto-Flow vorwählen.
-  $loginData = (($_SERVER ["REQUEST_METHOD"] ?? "GET") === "POST") ? $_POST : array ();
+  // gelesen. GET darf Konto-Flow und geschützten Zielschlüssel vorwählen.
+  $requestMethod = (string) ($_SERVER ["REQUEST_METHOD"] ?? "GET");
+  $loginData = $requestMethod === "POST" ? $_POST : array ();
   $loginFlowRequest = $loginData;
-  if (
-    (($_SERVER ["REQUEST_METHOD"] ?? "GET") === "GET")
-    && array_keys ($_GET) === array ("login_flow")
-  ) {
-    $loginFlowRequest = $_GET;
+  $loginDestination = null;
+  if ($requestMethod === "GET") {
+    $loginFlowRequest = array_key_exists ("login_flow", $_GET)
+      ? array ("login_flow" => $_GET ["login_flow"])
+      : array ();
+    if (array_key_exists ("next", $_GET)) {
+      $loginDestination = estab_navigation_login_destination_key (
+        $_GET ["next"]
+      );
+      if ($loginDestination === null) {
+        estab_workflow_forbid ();
+      }
+    }
+  } elseif (array_key_exists ("next", $loginData)) {
+    $loginDestination = estab_navigation_login_destination_key (
+      $loginData ["next"]
+    );
+    if ($loginDestination === null) {
+      estab_workflow_forbid ();
+    }
   }
   $loginFlow = estab_auth_login_flow ($loginFlowRequest);
   $loginError = "";
@@ -503,6 +549,9 @@ ANTWORT % WEITERLEITUNG
       $error = check_save_user ($loginData, $loginError);
       if (!$error) {
         $_SESSION ["menue"] = "ROLLE";
+        if ($loginDestination !== null && $loginDestination !== "messages") {
+          estab_navigation_open_after_login ($loginDestination);
+        }
         resetframeset ();
       }
     }
@@ -1158,6 +1207,9 @@ Nachricht als Sichtung anzeigen
   if ($_SESSION ["menue"] == "LOGIN" or $_SESSION ["menue"] == "WELCOME" ) {
     $registrationAllowed = estab_auth_self_registration_allowed ();
     $loginAction = estab_auth_html ($conf_4f ["MainURL"]);
+    $loginDestinationField = estab_navigation_login_destination_field (
+      $loginDestination
+    );
     echo "<!doctype html>\n";
     echo "<html lang=\"de\">\n";
     echo "<head>\n";
@@ -1186,11 +1238,13 @@ Nachricht als Sichtung anzeigen
       echo "<div class=\"estab-auth-actions\">\n";
       echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"mainframe\">\n";
       echo estab_csrf_field ()."\n";
+      echo $loginDestinationField."\n";
       echo "<button class=\"estab-button estab-button-primary\" type=\"submit\" name=\"login_flow\" value=\"existing\">Mit bestehendem Konto anmelden</button>\n";
       echo "</form>\n";
       if ($registrationAllowed) {
         echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"mainframe\">\n";
         echo estab_csrf_field ()."\n";
+        echo $loginDestinationField."\n";
         echo "<button class=\"estab-button\" type=\"submit\" name=\"login_flow\" value=\"new\">Neues Konto anlegen</button>\n";
         echo "</form>\n";
       } else {
@@ -1208,6 +1262,7 @@ Nachricht als Sichtung anzeigen
       }
       echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"mainframe\">\n";
       echo estab_csrf_field ()."\n";
+      echo $loginDestinationField."\n";
       echo "<button class=\"estab-button\" type=\"submit\" name=\"login\" value=\"Anmelden\">Zurück zur Auswahl</button>\n";
       echo "</form>\n";
     } else {
@@ -1233,6 +1288,7 @@ Nachricht als Sichtung anzeigen
       echo "<fieldset class=\"estab-auth-form\">\n";
       echo "<legend>Zugangsdaten</legend>\n";
       echo estab_csrf_field ()."\n";
+      echo $loginDestinationField."\n";
       echo "<input type=\"hidden\" name=\"login_flow\" value=\"".$loginFlow."\">\n";
       echo "<input type=\"hidden\" name=\"2teskennwort\" value=\"".$legacyConfirmation."\">\n";
       echo "<table class=\"estab-auth-fields\"><tbody>\n";
@@ -1267,6 +1323,7 @@ Nachricht als Sichtung anzeigen
       echo "</form>\n";
       echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"mainframe\">\n";
       echo estab_csrf_field ()."\n";
+      echo $loginDestinationField."\n";
       echo "<button class=\"estab-button\" type=\"submit\" name=\"login\" value=\"Anmelden\">Andere Kontoaktion wählen</button>\n";
       echo "</form>\n";
     }
@@ -1283,7 +1340,7 @@ if ( ( isset ($returnValue["m2_benutzer_x"])) OR
        AND $loginFlow !== "new" ) )
   {
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br>";  }
-  	 	benutzerstatus ("verlinkt");
+      benutzerstatus ("verlinkt", $loginDestination);
 	  
    }
 

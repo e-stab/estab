@@ -1,5 +1,9 @@
 <?php
 
+session_start();
+require_once __DIR__ . '/../app/session_ui.php';
+estab_session_ui_start($_SESSION);
+
 class admmenue {
 
   var $in_table ;

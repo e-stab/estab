@@ -8,8 +8,10 @@ require_once __DIR__ . '/../4fcfg/config.inc.php';
 require_once __DIR__ . '/../4fcfg/dbcfg.inc.php';
 require_once __DIR__ . '/../app/admin_operations.php';
 require_once __DIR__ . '/../app/csrf.php';
+require_once __DIR__ . '/../app/session_ui.php';
 
 estab_admin_require_http_auth($_SERVER);
+estab_session_ui_start($_SESSION);
 
 $mode = estab_admin_validate_counter_mode((string) Nachweisung);
 $error = null;
@@ -114,7 +116,10 @@ $updated = ($_GET['updated'] ?? '') === '1';
     <p class="error"><?= estab_admin_html($error) ?></p>
   <?php endif; ?>
 
-  <form method="post" action="set_number_after_crash.php">
+  <form method="post" action="set_number_after_crash.php" data-estab-dirty-guard
+    <?= $error !== null && $submitted !== []
+        ? 'data-estab-dirty-initial'
+        : '' ?>>
     <?= estab_csrf_field() ?>
     <input type="hidden" name="admin_action" value="raise_counter">
     <table>

@@ -7,8 +7,10 @@ session_start();
 require_once __DIR__ . '/../4fcfg/dbcfg.inc.php';
 require_once __DIR__ . '/../app/admin_operations.php';
 require_once __DIR__ . '/../app/csrf.php';
+require_once __DIR__ . '/../app/session_ui.php';
 
 estab_admin_require_http_auth($_SERVER);
+estab_session_ui_start($_SESSION);
 
 $error = null;
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
@@ -83,7 +85,7 @@ $affected = is_string($affectedValue) && preg_match('/\A[0-9]{1,10}\z/D', $affec
     Vorgang kann mehrere Sekunden dauern und liefert historisch keine eigene
     Fortschrittsanzeige.</p>
 
-  <form method="post" action="resetpic.php">
+  <form method="post" action="resetpic.php" data-estab-dirty-guard>
     <?= estab_csrf_field() ?>
     <input type="hidden" name="admin_action" value="reset_print_flags">
     <button type="submit">Grafikmarkierungen jetzt zurücksetzen</button>

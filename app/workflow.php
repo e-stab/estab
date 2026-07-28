@@ -9,6 +9,7 @@
  */
 
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/navigation.php';
 
 /** Return true only for the exact anonymous requests used by the login UI. */
 function estab_workflow_public_login_request(array $server, array $get, array $post): bool
@@ -21,8 +22,27 @@ function estab_workflow_public_login_request(array $server, array $get, array $p
         if ($get === []) {
             return true;
         }
-        return array_keys($get) === ['login_flow']
-            && estab_auth_login_flow($get) !== null;
+        foreach (array_keys($get) as $key) {
+            if (
+                !is_string($key)
+                || !in_array($key, ['login_flow', 'next'], true)
+            ) {
+                return false;
+            }
+        }
+        if (
+            array_key_exists('login_flow', $get)
+            && estab_auth_login_flow($get) === null
+        ) {
+            return false;
+        }
+        if (
+            array_key_exists('next', $get)
+            && estab_navigation_login_destination_key($get['next']) === null
+        ) {
+            return false;
+        }
+        return true;
     }
     if ($method !== 'POST' || $get !== [] || $post === []) {
         return false;
@@ -34,7 +54,7 @@ function estab_workflow_public_login_request(array $server, array $get, array $p
         'benutzer', 'kuerzel', 'funktion',
         'kennwort1', 'kennwort2', '2teskennwort',
         'absenden_x', 'absenden_y',
-        'csrf_token',
+        'csrf_token', 'next',
     ];
     foreach (array_keys($post) as $key) {
         if (!is_string($key) || !in_array($key, $allowedKeys, true)) {
@@ -52,6 +72,14 @@ function estab_workflow_public_login_request(array $server, array $get, array $p
     }
     $request = $post;
     unset($request['csrf_token']);
+    if (array_key_exists('next', $request)) {
+        if (
+            estab_navigation_login_destination_key($request['next']) === null
+        ) {
+            return false;
+        }
+        unset($request['next']);
+    }
 
     $coordinatePairValid = static function (array $values): bool {
         if (
@@ -372,7 +400,7 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
     foreach ([
         'login', 'login_x', 'login_y', 'login_identity', 'login_flow',
         'benutzer', 'kuerzel', 'funktion', 'kennwort1', 'kennwort2',
-        '2teskennwort',
+        '2teskennwort', 'next',
     ] as $loginKey) {
         if (array_key_exists($loginKey, $request)) {
             // Account selection and authentication always start from a fresh

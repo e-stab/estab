@@ -1832,15 +1832,15 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
       echo "<tr><td>\n";
       echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".estab_message_html ($this->lfd)."\">\n";
       echo "<input type=\"hidden\" name=\"task\" value=\"".estab_message_html ($this->task)."\">\n";
-      echo "<input type=\"image\" name=\"ablesen\" src=\"".$conf_design_path."/isread.gif\">\n";
+      echo "<input type=\"image\" name=\"ablesen\" src=\"".$conf_design_path."/isread.gif\" alt=\"Zur Meldungsübersicht\">\n";
       echo "</td></tr>\n";
     } else {
       echo "<tr><td>\n";
       echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".estab_message_html ($this->lfd)."\">\n";
       echo "<input type=\"hidden\" name=\"task\" value=\"".estab_message_html ($this->task)."\">\n";
-      echo "<input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/send.gif\">\n";
+      echo "<input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/send.gif\" alt=\"Meldung übernehmen\">\n";
       echo "</td><td>\n";
-      echo "<input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/cancel.gif\">\n";
+      echo "<input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/cancel.gif\" alt=\"Abbrechen und zur Meldungsübersicht\">\n";
       echo "</td></tr>\n";
     }
     echo "</tbody>\n</table>\n";
