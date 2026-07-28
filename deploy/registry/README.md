@@ -78,6 +78,13 @@ Hostverzeichnisse. Diese Daten sind produktiv. `compose down --volumes`,
 „Clean“ beziehungsweise das Löschen eines Container-Manager-Projekts darf nur
 nach einem geprüften Vollbackup erfolgen.
 
+`ESTAB_REVIEW_OUTGOING_MESSAGES=false` erhält auch im Pull-only-/Synology-Paket
+den kompatiblen Direktabschluss transportierter Ausgänge. Mit `true` bleiben
+sie nach A/W-Transport offen, erscheinen beim Sichter und werden erst dort
+abgeschlossen. Der Wert wird strikt geparst; nach jeder Änderung ist nur der
+App-Container neu zu erzeugen und anschließend der vollständige Rollenpfad zu
+prüfen.
+
 Der Hostverzeichnis-Pfad ist Bestandteil des automatisierten Release-Gates:
 Ein zusätzliches Pull-only-Projekt startet mit drei echten temporären
 Bind-Mounts. Der Test prüft die effektiven Mount-Typen und -Quellen, erzeugt

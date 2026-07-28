@@ -9,7 +9,9 @@ Sitzungsanzeige ausschließlich in ausgewählte HTML-Controller; `logout.php`
 kapselt das Beenden und Auditieren der Sitzung. `sidebar.php` rendert die
 zusammengefasste Status-, Belegungs- und Hinweistonkarte des
 Nachrichtenarbeitsbereichs. `image_button.php` validiert und rendert die
-weiterhin öffentlich benötigten Legacy-Bildbuttons.
+weiterhin öffentlich benötigten Legacy-Bildbuttons. `admin_operations.php`
+bildet die vorbereitete, transaktionale Persistenzgrenze für aktive
+Empfängermatrix, Standardmatrix, Nachrichtenzähler und Grafikreset.
 
 ## Sicherheits- und Kompatibilitätsentscheidungen
 
@@ -64,6 +66,14 @@ weiterhin öffentlich benötigten Legacy-Bildbuttons.
   Umgebungswerte akzeptieren ausschließlich `1/0`, `true/false`, `yes/no` oder
   `on/off`; Tippfehler führen absichtlich zu einem Fehler statt zu implizitem
   Aktivieren.
+- `ESTAB_REVIEW_OUTGOING_MESSAGES=false` ist der Containerstandard: Ein vom
+  Stab erstellter Ausgang wechselt nach dem Transport durch A/W direkt von
+  Status 2 auf Status 8. Mit dem strikt geparsten Wert `true` läuft derselbe
+  Ausgang von Status 2 zunächst auf Status 4 und muss anschließend durch Si
+  auf Status 8 gesichtet werden. Ist die Umgebungsvariable nicht gesetzt,
+  bleibt ein boolescher Legacy-Wert `si_in_out` aus der optionalen
+  `4fcfg/m_cfg.inc.php` wirksam; ein nicht boolescher Wert bricht absichtlich
+  ab.
 - Der sichtbare Einstieg verwendet native Textbuttons, zugeordnete Labels,
   eindeutige Kennwortfelder und Inline-Fehler. Die beiden Konto-Flows bleiben
   getrennte Formulare, sodass ein Moduswechsel keine Zugangsdaten mitsendet.
@@ -115,10 +125,33 @@ weiterhin öffentlich benötigten Legacy-Bildbuttons.
   nur die symbolische Laufkennung und entfernt ausschließlich das zugehörige
   flache Verzeichnis-/ZIP-Paar. Symlinks, Unterverzeichnisse und ausbrechende
   Pfade werden nicht verfolgt.
+- Die Matrixadministration verwendet keine generierte oder eingebundene
+  PHP-Konfiguration mehr. Aktive Matrix und die einzige gespeicherte
+  Standardmatrix liegen in getrennten InnoDB-Tabellen und müssen jeweils
+  vollständig aus 20 eindeutigen Zellen bestehen. Genau eine belegte
+  Stab-/FB-Funktion ist Rotkopie; Rotkopie und Autosichtung sind auf leeren
+  oder reinen Textzellen verboten. „Nur aktive Matrix speichern“ ändert nur
+  die Laufzeitmatrix, „Standard laden“ ersetzt ausschließlich die noch
+  ungespeicherten Editorwerte, und gemeinsames Speichern ersetzt beide
+  Tabellen und schreibt den zugehörigen Auditdatensatz in derselben
+  Transaktion. Ein Fehler in einer der beiden Tabellen rollt die gesamte
+  Änderung zurück; Benutzerkonten oder deren aktuelle Funktionszuordnung
+  werden dabei nicht umgeschrieben.
+- Der belegte A/W-Zweitprüfpfad `FM-Admin` ist auf ein autorisiertes
+  Nachrichtenobjekt und die Fernmelderrolle gebunden. Das Formular bietet
+  controllerkompatible Speichern-/Abbrechen-Aktionen und lässt ausschließlich
+  Quittierungszeichen, Empfängerfarben und Vermerk bearbeiten. Der
+  ursprüngliche Quittierungszeitpunkt ist sichtbar schreibgeschützt und wird
+  auch bei manipuliertem POST unverändert aus der Datenbank übernommen;
+  Nachrichteninhalt und Transportbelege (Felder 1–14) bleiben ebenfalls
+  unveränderlich.
 - Bearbeitungsformulare markieren sich ausdrücklich mit
   `data-estab-dirty-guard`. Nur bei geändertem Zustand bestätigt der Browser
   einen globalen Bereichswechsel oder Logout; lokale Speichern-, Abbrechen-
-  und Fachaktionen bleiben unverändert. Nachrichtenformular,
+  und Fachaktionen lösen diesen generischen Dialog nicht aus. Die beiden
+  destruktiven Matrixaktionen „Standard laden“ und „Standard ersetzen“
+  besitzen stattdessen eigene, feste Bestätigungstexte und brechen bei
+  Ablehnung ohne Seiten- oder Wertverlust ab. Nachrichtenformular,
   Empfängermatrix und Zählerreparatur markieren serverseitig nach einem Fehler
   erneut angezeigte, noch ungespeicherte Werte zusätzlich mit
   `data-estab-dirty-initial`; die Matrix behält validierte Eingaben auch nach

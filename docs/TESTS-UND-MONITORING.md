@@ -10,9 +10,9 @@ steht in der [Funktionsmatrix](FUNKTIONSNACHWEIS.md).
 | --- | --- |
 | Quellprüfung | PHP-8.5-Lint, Kompatibilitäts-, Sicherheits-, Upload-, Export- und PDF-Regressionen |
 | Image-Build | benötigte PHP-Erweiterungen und Apache-Konfiguration |
-| Datenbank | echtes MariaDB-Schema, Indizes, Matrix, Engines, Collations und Zero-Date-Freiheit |
-| HTTP | Header, direkte Endpunktfläche, 403-/400-/405-Grenzen, PNG-Antworten, Registrierung, sichtbare Sitzungsidentität, CSRF-Abmeldung, erneute Anmeldung, Nachrichten-/Kategorien- und ETB-/TBB-Rollengrenzen, reale Vordruckerzeugung/-auslieferung sowie optional Admin-Export |
-| Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, acht stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, BOS-Disclosure, Logout sowie öffentliche und authentifizierte mobile Bedienung bei exakt 390 × 844 CSS-Pixeln |
+| Datenbank | echtes MariaDB-Schema, Indizes, aktive und persistente Standardmatrix, Engines, Collations und Zero-Date-Freiheit |
+| HTTP | Header, direkte Endpunktfläche, 403-/400-/405-Grenzen, PNG-Antworten, Registrierung, sichtbare Sitzungsidentität, CSRF-Abmeldung, erneute Anmeldung, vollständige A/W-/Si-/S1-/S2-/S3-Nachrichtenläufe in beiden Ausgangssichtungsmodi, Kategorien- und ETB-/TBB-Rollengrenzen, reale Vordruckerzeugung/-auslieferung sowie optional Admin-Export |
+| Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, acht stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, Matrixstandard-Bestätigungen, BOS-Disclosure, Logout sowie öffentliche und authentifizierte mobile Bedienung bei exakt 390 × 844 CSS-Pixeln |
 | Fachabnahme | kompletter Nachrichten-, Anhang-, PDF-, ETB-/TBB- und Restore-Ablauf |
 | Betrieb | kontinuierliche Readiness, Logs, Restarts, Kapazität und Backup-Alter |
 
@@ -42,6 +42,8 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
 - `NULL`-/Zero-Date-Behandlung,
 - Anmelde-, Konto-Flow-, aktive Funktionsbindungs-, Session-, Proxy- und
   Passwortregeln,
+- strikt boolescher Legacy-Fallback und Umgebungsoverride für die optionale
+  Ausgangssichtung sowie fehlersicheres Verhalten bei ungültigen Werten,
 - kanonische Reihenfolge, sichere URL-Auflösung, aktive Route und ausschließlich
   erlaubte symbolische Anmeldeziele der gemeinsamen Navigation,
 - zustandsabhängige Root-Menükarten mit genau einem Tastaturziel, sicherem
@@ -70,8 +72,12 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   Endpunktverträge, vollständige Apache-Sperrlisten und eine CSP ohne
   `unsafe-eval`,
 - CSRF-Token,
-- Empfängermatrix-, Nachrichtenzähler- und Grafikreset-Validierung samt
-  Prepared-Statement-, Transaktions-, Auth-/CSRF- und PRG-Vertrag,
+- Empfängermatrix- und Standardmatrix-Validierung mit jeweils 20 eindeutigen
+  Positionen, genau einer gültigen Rotkopie und nur gültigen
+  Autosichtungszielen sowie getrennten Laden-/Speichern-Aktionen,
+  Zwei-Tabellen-Transaktion, lokalem Bestätigungsvertrag und ohne generierte
+  PHP-Konfiguration; außerdem Nachrichtenzähler- und Grafikreset-Validierung
+  samt Prepared-Statement-, Transaktions-, Auth-/CSRF- und PRG-Vertrag,
 - Kategorien-Typen, positive IDs, sessionabgeleitete Tabellenräume,
   Master-Rechte, doppelte Auswahllisten, HTML-Ausgabe sowie den
   Prepared-Statement-, Transaktions-, Objektberechtigungs- und PRG-Vertrag,
@@ -129,7 +135,12 @@ sein.
 Der Schema-Migratortest simuliert außerdem einen unterbrochenen Fresh-Lauf nach
 dem ersten DDL mit vorab gespeichertem Baseline-Checksum, setzt genau diesen
 Lauf fort und weist separat nach, dass ein unprotokollierter
-`nv_*`-Teilbestand blockiert und unverändert bleibt.
+`nv_*`-Teilbestand blockiert und unverändert bleibt. Für Migration 40 entfernt
+er anschließend kontrolliert den Ledgerabschluss und beweist beide
+MariaDB-Abbruchpunkte: Die markierte eigene Standardmatrixtabelle wird leer
+neu befüllt oder mit bereits vollständigem kanonischem Seed ohne Abweichung
+abgeschlossen. Eine veränderte markierte Tabelle und eine fremde Tabelle
+gleichen Namens bleiben jeweils unverändert blockiert.
 Anschließend migriert der Hauptlauf ein leeres Schema,
 führt PHP-, Datenbank-, Rollen-, HTTP- und Administrationsnachweise aus, prüft
 die Containerlogs und stellt Datenbank, Anhang-/Vordruckdaten sowie Exporte aus
@@ -141,6 +152,10 @@ Dieser findet außerdem die vor dem Backup angelegten ETB-/TBB-Titel und
 -Einträge nur lesend wieder. Am Ende werden nur die guardierten CI-Container,
 CI-Volumes, temporären Bind-Mounts und Secrets entfernt. Mit
 Docker wird `ESTAB_CONTAINER_CLI=docker` gesetzt oder die Variable weggelassen.
+Der vollständige Nachrichtenrollenlauf arbeitet zunächst mit
+`ESTAB_REVIEW_OUTGOING_MESSAGES=false`, erstellt dann nur den App-Container
+mit `true` neu, prüft beide Statuspfade und stellt anschließend den
+Standardwert `false` wieder her.
 Die HTTP-Stufe beweist dabei den Übersichts-Anmeldebutton, die getrennten
 Bestandskonto-/Neukonto-Formulare, die sichtbare Kontenauswahl,
 Kennwortbestätigung, unveränderte Kontenzahlen und Passwort-Hashes bei
@@ -199,7 +214,11 @@ Legacy-Testdatenbank. Zuerst muss ein doppelter Anhangname die
 Runtime-Migration blockieren. Danach prüft der Test Bereinigung/Retry,
 idempotenten Zweitlauf, Zero-Date-Konvertierung, Benutzer-/IP-/Kürzelbreiten,
 Indizes, Datenwerterhalt und einen absichtlich manipulierten
-Migration-Checksum:
+Migration-Checksum. Zusätzlich muss eine bereits vorhandene, nicht im Ledger
+erfasste Tabelle `nv_empfmtx_standard` die neue Migration blockieren, ohne
+ihren Marker zu verändern; in einem kollisionsfreien Lauf werden alle 20
+normalisierten Standardzellen exakt gegen
+`tests/fixtures/recipient-matrix-standard.txt` verglichen:
 
 ```console
 ESTAB_HTTP_PORT=18080 \
@@ -537,6 +556,10 @@ insbesondere:
 - Ein geändertes Nachrichtenfeld löst beim globalen Bereichswechsel den
   nativen Bestätigungsdialog aus: Ablehnen bewahrt Seite und Wert,
   anschließendes Bestätigen öffnet die Übersicht.
+- Im Matrixeditor lösen „Ungespeicherte Eingaben verwerfen und Standard laden“
+  und „Aktive Matrix speichern und bisherigen Standard ersetzen“ jeweils
+  einen eigenen nativen Bestätigungsdialog aus. Der Browser lehnt beide
+  Dialoge ab und weist nach, dass Testwert und Matrixseite erhalten bleiben.
 - Reale Klicks auf die BOS-Karte und eine statische BOS-Unterseite behalten
   den separaten kompakten Disclosure-Modus; das reale Öffnen seiner
   Bereichsauswahl und der Rückweg zur Übersicht funktionieren.
@@ -628,14 +651,69 @@ Ein Trap entfernt sämtliche Testkategorien, Links, die fremde Nachricht und
 das isolierte Si-Konto samt persönlicher Tabellen. Die CI führt diesen Test
 nach HTTP-Smoke und ETB/TBB, aber vor Admin-Workflow und Backup-/Restore aus.
 
-### Admin-Workflow-HTTP-Integration
+### Nachrichtenrollen-HTTP-Integration
 
-Der Test verändert Empfängermatrix, Nachrichtenzähler, Grafikflags und Audit.
-Er verweigert deshalb ohne die ausdrückliche Sicherheitsvariable den Start und
-darf ausschließlich gegen das eigene Wegwerfprojekt laufen:
+`tests/integration/message_workflow_http.sh` erzeugt echte Konten, Nachrichten,
+dynamische Statustabellen und Vordrucke. Der Test startet deshalb nur mit
+`ESTAB_MESSAGE_WORKFLOW_HTTP_TEST_ALLOW_MUTATION=true` und einem Compose-Projekt
+namens `estab_ci` oder `estab_ci_*`. Das Projekt muss wegwerfbar,
+selbstregistrierungsfähig und mit der historischen Standardmatrix initialisiert
+sein.
+
+Ein einzelner Lauf gegen den Standardmodus kann beispielsweise so gestartet
+werden:
 
 ```console
-COMPOSE_PROJECT_NAME=estab-acceptance \
+COMPOSE_PROJECT_NAME=estab_ci_message \
+ESTAB_TEST_COMPOSE_ENGINE=podman \
+ESTAB_TEST_BASE_URL=http://127.0.0.1:18080 \
+ESTAB_TEST_WORKFLOW_MARKER=MANUELLER_E2E_MARKER \
+ESTAB_TEST_ROLE_PASSWORD_FILE=/absoluter/pfad/role_password.txt \
+ESTAB_TEST_WORKFLOW_VARIANT=default \
+ESTAB_TEST_EXPECT_OUTGOING_REVIEW=disabled \
+ESTAB_MESSAGE_WORKFLOW_HTTP_TEST_ALLOW_MUTATION=true \
+tests/integration/message_workflow_http.sh
+```
+
+Für den zweiten Modus erstellt die CI ausschließlich den App-Dienst mit
+`ESTAB_REVIEW_OUTGOING_MESSAGES=true` neu und startet denselben Test mit einer
+neuen Variantenkennung sowie `ESTAB_TEST_EXPECT_OUTGOING_REVIEW=enabled`.
+Dadurch sind beide Konfigurationen getrennt belegt:
+
+- Eingang: A/W legt Status 4 an; Si sichtet auf Status 8.
+- Ausgang im Standardmodus `false`: S1 legt Status 2 an; A/W transportiert
+  direkt auf Status 8.
+- Ausgang im optionalen Modus `true`: S1 legt Status 2 an; A/W transportiert
+  auf Status 4; Si sichtet anschließend auf Status 8.
+
+Der Lauf registriert isolierte A/W-, Si-, S1-, S2- und S3-Konten über die
+öffentliche Kontooberfläche. Er prüft die gerenderten Listen und Aktionen,
+fehlende CSRF-Tokens mit HTTP 403, A/W-Sperrbesitz, Status und Abschluss direkt
+in MariaDB, den erzeugten Ein-/Ausgangsvordruck sowie die exakten
+Empfängerfarben `S2_rt`, `S1_gn` und `S3_bl`. Danach öffnet A/W die gerenderte
+FM-Admin-Zweitprüfung: Speichern und Abbrechen müssen vorhanden sein, nur
+Quittierungszeichen, Empfängerfarben und Vermerk dürfen bearbeitbar sein; der
+ursprüngliche Quittierungszeitpunkt erscheint ausdrücklich schreibgeschützt.
+Eine echte CSRF-geschützte Änderung samt manipuliertem Zeitwert darf den
+SHA-256-Fingerabdruck der Felder 1–14, den gespeicherten Zeitpunkt sowie
+Transport-, Sperr- und Abschlussbelege nicht verändern. Auch der bereits
+erzeugte PDF-Vordruck muss erhalten bleiben.
+
+Vor der Bereinigung weist der Test nach, dass ein Vordruck mit derselben
+Nachweisnummer nicht schon vor dem eigenen Abschluss existierte. Der Trap
+entfernt daher nur nachweislich selbst erzeugte Vordrucke sowie die eigenen
+Konten, dynamischen Tabellen, Nachrichten und Auditdaten. Er ist dennoch
+ausdrücklich kein Test für Produktionsdaten.
+
+### Admin-Workflow-HTTP-Integration
+
+Der Test verändert aktive Empfängermatrix, persistente Standardmatrix,
+Nachrichtenzähler, Grafikflags und Audit. Er verweigert deshalb ohne die
+ausdrückliche Sicherheitsvariable den Start und darf ausschließlich gegen das
+eigene Wegwerfprojekt laufen:
+
+```console
+COMPOSE_PROJECT_NAME=estab_ci_acceptance \
 ESTAB_TEST_COMPOSE_ENGINE=podman \
 ESTAB_TEST_BASE_URL=http://127.0.0.1:18080 \
 ESTAB_TEST_ADMIN_USER=estab-admin \
@@ -650,27 +728,37 @@ Der Test verwendet das bereits im Datenbankcontainer gemountete Root-Secret
 - HTTP 401 ohne Admin-Basic-Auth und HTTP 403 für `all_msg.php`, die
   gefährlichen Uploadhelfer sowie die direkt aufrufbaren Print-/FPDF-Bäume,
 - inerte historische GET-Schreibparameter und HTTP 403 ohne Session-CSRF,
-- vollständigen 5x4-Matrix-Roundtrip mit exakt einer Rotkopie und unveränderten
+- vollständigen 5x4-Roundtrip für aktive und persistente Standardmatrix mit
+  exakt einer belegten Rotkopie, gültigen Autosichtungsflags und unveränderten
   Benutzerkonten,
+- getrennte Semantik der drei Matrixaktionen: aktives Speichern lässt den
+  Standard unverändert; Standard laden verändert weder Datenbank noch Audit;
+  gemeinsames Speichern kopiert alle 20 Zellen samt Rotkopie und Autosichtung,
+- atomaren Rollback beider Matrixtabellen und des Audits: ein temporärer
+  `BEFORE INSERT`-Trigger erzwingt einen Fehler in der Standardtabelle,
+  anschließend stimmen die exakten Vorher-/Nachher-Snapshots aller Spalten
+  beider Tabellen und die Auditanzahl überein,
 - zwei parallele, getrennte Admin-Sitzungen: genau eine darf denselben
   Nachrichtenzähler erhöhen; die andere erhält HTTP 409,
 - Systemnachricht, Audit und POST-only-Grafikreset.
 
-Ein Trap stellt die ursprüngliche Matrix, alle vorherigen Grafikflags und die
-Auto-Inkremente wieder her und entfernt synthetische Nachrichten/Audits. Das
-ist eine zusätzliche Schutzschicht, keine Freigabe für den Lauf gegen
-Produktionsdaten. In der CI läuft dieser Test nach HTTP-Smoke, ETB/TBB und
-Kategorien-Test, aber vor dem eigenständigen Backup-/Restore-Roundtrip.
+Ein Trap entfernt den temporären Fehlertrigger, stellt beide ursprünglichen
+Matrizen, alle vorherigen Grafikflags und die Auto-Inkremente wieder her und
+entfernt synthetische Nachrichten/Audits. Das ist eine zusätzliche
+Schutzschicht, keine Freigabe für den Lauf gegen Produktionsdaten. In der CI
+läuft dieser Test nach HTTP-Smoke, ETB/TBB, Kategorien- und
+Nachrichtenrollentest, aber vor dem eigenständigen
+Backup-/Restore-Roundtrip.
 
 Nach abgeschlossener Abnahme wird ausschließlich das explizite Testprojekt
 mitsamt seinen Testvolumes entfernt:
 
 ```console
 ESTAB_HTTP_PORT=18080 \
-podman compose -p estab-acceptance down --volumes
+podman compose -p estab_ci_acceptance down --volumes
 ```
 
-Vor diesem destruktiven Befehl muss der Projektname `estab-acceptance` sichtbar
+Vor diesem destruktiven Befehl muss der Projektname `estab_ci_acceptance` sichtbar
 im Kommando stehen.
 
 ## Fachliche Abnahme
@@ -737,13 +825,22 @@ sind:
 - PHP ist mindestens Version 8.5,
 - `gd`, `mbstring`, `mysqli`, `Zend OPcache` und `zip` sind geladen,
 - Datenbankverbindung und `SELECT 1` funktionieren,
-- 14 Basistabellen sowie die exakt definierten Benutzer- und Anhangindizes
-  vorhanden sind,
-- beide versionierten Migrationen mit gültigem SHA-256 als angewendet
+- 15 Runtime-Tabellen vorhanden sind: die 14 Basistabellen sowie die durch die
+  additive Migration angelegte Standardmatrix,
+- aktive und Standardmatrix jeweils genau 20 eindeutige 5x4-Positionen,
+  genau ein belegtes Stab-/FB-Rotkopieziel und keine Autosichtung auf leeren
+  oder reinen Textzellen enthalten,
+- die exakt definierten Benutzer- und Anhangindizes vorhanden sind,
+- alle drei versionierten Migrationen mit gültigem SHA-256 als angewendet
   protokolliert sind,
 - Benutzer-, IP-, Anhang- und alle sechs Nachrichten-Kürzelfelder die
   erforderlichen Breiten besitzen,
 - Anhang-, Vordruck- und Exportverzeichnis beschreibbar sind.
+
+`docker/db/verify.sql` löst den aggregierten Schemacheck in 20 benannte
+`*_ok`-Ergebnisfelder auf. Für einen gültigen Stand müssen alle den Wert `1`
+haben; die anschließende Abfrage nach abweichender Engine oder Collation darf
+keine Zeile liefern.
 
 Der Speichercheck legt kurzzeitig eine kleine Probe-Datei an und entfernt sie
 wieder. Bei Fehlern liefert der Endpunkt HTTP 503 und nur boolesche

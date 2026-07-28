@@ -407,10 +407,15 @@ alle Werte gebunden und jeder Vorgang verwendet InnoDB-Transaktionen:
 - Die Empfängermatrix wird serverseitig als genau fünf mal vier Positionen
   validiert. Funktionen sind leer oder höchstens sechs alphanumerische
   Zeichen/Unterstriche lang, `Si` und `A/W` bleiben reserviert, Rollen sind
-  leer, `Stab` oder `FB`, und genau eine belegte Funktion erhält die Rotkopie.
-  Ein transaktionales `DELETE` plus 20 Prepared Inserts ersetzt die Matrix.
-  Es wird keine PHP-Konfigurationsdatei mehr erzeugt und die Benutzertabelle
-  wird nicht verändert.
+  leer, `Stab` oder `FB`, und genau eine auswählbare Funktion erhält die
+  Rotkopie. Rotkopie und Autosichtung sind auf `mtx_typ=cb`, eine nichtleere
+  Funktion und eine `Stab`-/`FB`-Rolle gebunden. Ein transaktionales `DELETE`
+  plus 20 Prepared Inserts ersetzt die aktive Matrix. Eine zweite
+  DB-gespeicherte 20-Zellen-Tabelle hält genau eine Standardmatrix; Laden ist
+  nur ein CSRF-geschützter Editor-Read, während das Ersetzen von aktivem und
+  Standardstand in derselben Transaktion erfolgt. Es wird keine ausführbare
+  PHP-Konfigurationsdatei mehr erzeugt und die Benutzertabelle wird nicht
+  verändert.
 - Die Reparatur des Nachrichtenzählers akzeptiert nur positive Ganzzahlen bis
   `999999999`. Ein MariaDB-Advisory-Lock und `FOR UPDATE` serialisieren
   parallele Admin-Anforderungen und reguläre Nachrichtenschreiber; Werte
@@ -479,6 +484,10 @@ gesperrt.
 - Jede SQL-Migration ist versioniert und per SHA-256 in
   `estab_schema_migrations` gebunden. Abweichung, SQL-Fehler oder negativer
   Post-Migrations-Schematest verhindern den App-Start.
+- Die durch Migration 40 angelegte Standardmatrix trägt eine eindeutige
+  Eigentumsmarkierung. Nach einem Abbruch darf nur eine leere oder exakt
+  kanonisch gesetzte eigene Tabelle weiterlaufen; manipulierte Inhalte und
+  fremde Namenskollisionen bleiben unverändert gesperrt.
 - Der App-Entrypoint prüft erforderliche Secrets und Identifier, bevor Apache
   startet.
 - Datenverzeichnisse werden mit restriktiver `umask` und ohne

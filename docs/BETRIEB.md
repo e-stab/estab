@@ -72,6 +72,7 @@ Wichtige Werte in `.env`:
 | `ESTAB_BASE_PATH` | leer | historischer Installationspfad im Document Root; im gelieferten Root-Image leer lassen |
 | `ESTAB_ORGANISATION` | `Einsatzleitung` | angezeigte Dienststelle/Organisation |
 | `ESTAB_AUTHORITY_CODE` | `EL` | Hoheits-/Organisationskürzel |
+| `ESTAB_REVIEW_OUTGOING_MESSAGES` | `false` | `false`: nur Eingänge sichten; `true`: auch transportierte Ausgänge erst nach Si-Sichtung abschließen |
 | `ESTAB_ALLOW_SELF_REGISTRATION` | `true` | erlaubt neuen Funktionsbenutzern die erste Registrierung |
 | `ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF` | `false` | erlaubt ausdrücklich benötigten direkten Legacy-Clients tokenlose Anmeldung; nicht für Browserbetrieb aktivieren |
 | `ESTAB_TRUST_PROXY_HEADERS` | `false` | wertet validierte `X-Forwarded-*`-Ketten aus |
@@ -124,6 +125,13 @@ Fresh-Baseline überschrieben. Anschließend verarbeitet der Runner jede noch
 nicht protokollierte Datei unter `docker/db/migrations/` in
 Dateinamenreihenfolge, speichert Version, SHA-256, Status und Zeitpunkt in
 `estab_schema_migrations` und führt `docker/db/verify.sql` aus.
+
+Migration 40 erkennt ihre eigene Standardmatrixtabelle an einer eindeutigen
+Tabellenmarkierung. Nach einem Abbruch zwischen `CREATE TABLE`, Seed und
+Ledgerabschluss wird nur eine leere oder exakt kanonisch gesetzte eigene
+Tabelle automatisch fortgesetzt. Eine fremde gleichnamige Tabelle oder
+abweichende Inhalte bleiben unverändert gesperrt und müssen anhand von Backup,
+Tabellenkommentar und Migrationsledger geprüft werden.
 
 Der App-Service hängt mit `service_completed_successfully` von diesem Lauf ab.
 Bei SQL-Fehler, doppeltem Anhangnamen, geänderter Prüfsumme oder fehlgeschlagener
@@ -356,13 +364,19 @@ Die drei aktiven Maßnahmen sind über die Administrationsübersicht erreichbar
 und schreiben nur nach POST plus Session-CSRF:
 
 - **Empfängermatrix:** Vorher Datenbanksicherung erstellen und die örtliche
-  Rollen-/Rotkopieplanung festhalten. Das Speichern ersetzt alle 20
-  Matrixpositionen atomar in MariaDB; im read-only Image wird keine
-  Konfigurationsdatei geschrieben. Bereits bestehende Benutzerkonten und
-  laufende Sitzungen werden bewusst nicht automatisch umbenannt oder einer
-  anderen Funktion zugeteilt. Nach dem Speichern müssen abgemeldete
-  Neuanmeldung, Sichtung, Rotkopie und Autosichtung mit den betroffenen
-  Funktionen fachlich geprüft werden.
+  Rollen-/Rotkopieplanung festhalten. „Nur aktive Matrix speichern“ ersetzt
+  genau die 20 Laufzeitpositionen. „Standard laden“ übernimmt die einzige
+  gespeicherte Vorlage nur in den Editor; erst ein anschließendes Speichern
+  ändert die Laufzeit. „Aktive Matrix speichern und bisherigen Standard
+  ersetzen“ schreibt beide Tabellen gemeinsam in einer Transaktion. Laden
+  verwirft aktuelle Editorwerte, Ersetzen überschreibt die vorherige Vorlage;
+  beide Aktionen verlangen deshalb einen nativen Bestätigungsdialog. Im
+  read-only Image wird keine PHP-Konfigurationsdatei geschrieben. Rotkopie
+  und Autosichtung sind nur auf einer auswählbaren `Stab`-/`FB`-Funktion
+  zulässig. Bereits bestehende Benutzerkonten und laufende Sitzungen werden
+  bewusst nicht automatisch umbenannt oder einer anderen Funktion zugeteilt.
+  Nach dem Speichern müssen abgemeldete Neuanmeldung, Sichtung, Rotkopie und
+  Autosichtung mit den betroffenen Funktionen fachlich geprüft werden.
 - **Nachrichtenzähler:** Ausschließlich nach dokumentiertem Systemausfall die
   letzte tatsächlich auf Papier verwendete Nummer eintragen. Der Zielwert muss
   strikt größer als der angezeigte Höchstwert sein. Gemeinsame und getrennte

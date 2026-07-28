@@ -85,7 +85,7 @@ einen `latest`-Pfad gibt es absichtlich nicht.
 | `/4fadm/admin.php` | Administration | separates HTTP Basic Auth |
 | `/4fadm/system_status.php` | ausführlicher Laufzeitstatus | HTTP Basic Auth |
 | `/4fadm/export.php` | Einsatzexporte auflisten, erstellen, als ZIP herunterladen und einzeln löschen | HTTP Basic Auth; POST-Erstellung/-Löschung mit Session-CSRF; Download nur über validierte Exportkennung |
-| `/4fadm/make_fkt.php` | Empfängermatrix atomar bearbeiten | HTTP Basic Auth und CSRF |
+| `/4fadm/make_fkt.php` | aktive Empfängermatrix und einzelne Standardmatrix atomar bearbeiten | HTTP Basic Auth, Session-CSRF und Bestätigung vor dem Verwerfen/Ersetzen |
 | `/4fadm/set_number_after_crash.php` | Nachrichtenzähler nach Rückfallbetrieb erhöhen | HTTP Basic Auth und CSRF |
 | `/4fach/resetpic.php` | Grafik-/PDF-Erzeugungsmarkierungen zurücksetzen | HTTP Basic Auth und CSRF |
 | `/health.php` | knappe Readiness-Antwort für den Monitor | absichtlich ohne Anmeldung |
@@ -95,6 +95,13 @@ Der Benutzername für den Administrationsbereich steht in
 `ESTAB_ADMIN_USER`, das Kennwort in der durch
 `ESTAB_ADMIN_PASSWORD_SECRET_FILE` referenzierten Datei. Diese
 Administrationsanmeldung ist unabhängig von den eStab-Funktionsbenutzern.
+
+Mit `ESTAB_REVIEW_OUTGOING_MESSAGES=false` bleibt das veröffentlichte
+Standardverhalten erhalten: Nur Eingänge gehen nach dem Fernmelder zum
+Sichter; transportierte Ausgänge werden direkt abgeschlossen. Der strikt
+geparste Wert `true` aktiviert auch für Ausgänge den vollständigen Pfad
+Stab → A/W → Sichter. Nach einer Änderung muss der App-Container neu erzeugt
+und der Rollen-Workflow fachlich abgenommen werden.
 
 Der Anmeldeeinstieg trennt zwei Vorgänge ausdrücklich: „Mit bestehendem Konto
 anmelden“ verlangt das bereits gespeicherte Kennwort und legt niemals ein Konto

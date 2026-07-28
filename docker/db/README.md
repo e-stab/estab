@@ -117,6 +117,20 @@ Vor dem eindeutigen Anhangindex zählt die Migration doppelte `filename`-
 Gruppen. Jede Gruppe löst ein explizites SQL-Signal aus; es wird nichts
 automatisch gelöscht oder umbenannt.
 
+`migrations/40-recipient-matrix-standard.sql` legt zusätzlich genau eine
+persistente Standard-Empfängermatrix mit 20 eindeutigen Positionen an. Sie
+bewahrt Funktion, Rolle, Rotkopie und Autosichtung ohne generierten PHP-Code.
+Die Migration markiert ausschließlich ihre eigene Tabelle per
+Tabellenkommentar. Dadurch kann sie nach dem nicht transaktionalen
+`CREATE TABLE` sowohl eine noch leere eigene Tabelle als auch den bereits
+vollständig gesetzten kanonischen Seed sicher wiederaufnehmen. Abweichende
+Inhalte werden niemals überschrieben. Eine fremde Tabelle gleichen Namens
+ohne exakte Eigentumsmarkierung blockiert vor jeder Änderung. Der
+Integrationstest beweist beide Wiederaufnahmepunkte, die unveränderte
+Blockade manipulierter Inhalte und einer fremden Namenskollision sowie den
+zellgenauen Vergleich aller 20 normalisierten Zellen mit der historischen
+Sollbelegung.
+
 Die Datumsmigration ist wiederholbar. Sie deaktiviert die Zero-Date-Modi nur
 für ihre eigene Sitzung und stellt den vorherigen SQL-Modus danach wieder
 her. Alle gültigen Zeitstempel bleiben bytegleich; auch `99_lstacc` wird

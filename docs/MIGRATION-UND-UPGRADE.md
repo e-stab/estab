@@ -64,6 +64,7 @@ Derzeit sind folgende explizite Migrationen vorhanden:
 | --- | --- |
 | `docker/db/migrations/20-nullable-dates.sql` | konvertiert historische `0000-00-00 00:00:00`-Werte zu `NULL` und macht die betroffenen Spalten nullable |
 | `docker/db/migrations/30-runtime-schema.sql` | erweitert Benutzer-, IP-, Nachrichtenkürzel- und Anhangfelder, stellt Laufzeitindizes und ETB-/TBB-Titeltabellen her, erzwingt eindeutige Anhangnamen und normalisiert vorhandene `nv_*`-Tabellen auf InnoDB/`utf8mb4` |
+| `docker/db/migrations/40-recipient-matrix-standard.sql` | ersetzt die frühere ausführbare `deault.fkt.php` durch genau eine persistente 20-Zellen-Standardmatrix einschließlich Rotkopie und Autosichtung |
 
 Das freigegebene Upgradeverfahren lautet:
 
@@ -89,6 +90,17 @@ fachlicher Korrektur erneut gestartet werden kann. Ein harter Prozessabbruch
 kann bewusst einen `applying`-Datensatz hinterlassen; dieser Zustand ist
 fail-closed und muss vor einer manuellen Änderung anhand von Backup,
 Containerlog und bereits ausgeführten DDL-Schritten geprüft werden.
+
+Migration 40 ist absichtlich fail-closed, berücksichtigt aber die
+Nicht-Transaktionalität von `CREATE TABLE`: Ihre selbst angelegte Tabelle
+trägt eine eindeutige Eigentumsmarkierung im Tabellenkommentar. Fehlt nach
+einem Abbruch nur der Ledgerabschluss, darf ausschließlich eine leere
+markierte Tabelle oder die exakt kanonisch gesetzte 20-Zellen-Matrix
+weiterlaufen. Bereits abweichende Inhalte werden nicht zurückgesetzt. Eine
+gleichnamige Tabelle ohne diese Markierung löst vor jeder Änderung eine
+eindeutige Namenskollisionsmeldung aus. Vor einer manuellen Bereinigung müssen
+Tabelleninhalt, Kommentar, Migrationstabelle und Backup gemeinsam geprüft
+werden.
 
 `30-runtime-schema.sql` prüft Anhangnamen vor jeder Strukturänderung. Gibt es
 mehrere Zeilen mit demselben `nv_anhang.filename`, signalisiert MariaDB einen
