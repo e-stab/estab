@@ -172,10 +172,24 @@ Im Beispiel wird der konkrete Sicherungssatz einmal festgelegt:
 
 ```console
 restore_dir=backup/20260723-120000
-test -r "$restore_dir/database.sql"
-test -r "$restore_dir/4fdata.tar.gz"
-test -r "$restore_dir/export.tar.gz"
+backup_verifier=deploy/registry/verify-backup.sh
+test -r "$backup_verifier"
+sh "$backup_verifier" "$restore_dir"
 ```
+
+Im installierten Pull-only-Paket liegt dasselbe Programm direkt als
+`verify-backup.sh`; dort wird deshalb
+`backup_verifier=./verify-backup.sh` gesetzt. Der Verifier ist ein zwingender,
+rein lesender Preflight. Er verbindet sich nicht mit MariaDB und startet keinen
+Container: Er prüft die
+`SHA256SUMS`, die vollständigen gzip-Streams, ausschließlich relative
+tar-Mitglieder sowie das Fehlen von Links und Sonderdateien. Beim SQL-Dump
+verlangt er eine nichtleere, vollständig abgeschlossene MariaDB-Dumpstruktur
+mit übereinstimmender Datenbank- und `USE`-Anweisung. Das Manifest darf genau
+die drei erwarteten Nutzdateien nennen. Ein Fehler beendet den Restore vor der
+ersten überschreibenden Operation. Manipulierte Hashes, unsichere
+Manifestpfade, Links in Archiven und abweichende Datenbanknamen sind Bestandteil
+der statischen Testsuite.
 
 ### 1. Zielversion bereitstellen
 
@@ -213,6 +227,11 @@ Anwendungsdatenbank, nicht jedoch die systemweite MariaDB-Benutzerdatenbank.
 ### 2. Datenbank wiederherstellen
 
 ```console
+if ! sh "$backup_verifier" "$restore_dir"; then
+  echo "Restore-Preflight fehlgeschlagen; Datenbank-Import wird nicht gestartet." >&2
+  exit 1
+fi
+
 podman compose exec -T db sh -ceu \
   'umask 077
   client_file=$(mktemp)
@@ -234,9 +253,17 @@ Optionsdatei.
 
 Die erste Operation leert ausschließlich die beiden im Compose-Service
 eingehängten Zielpfade. Sie ist destruktiv und darf nicht gegen ein anderes
-Compose-Projekt ausgeführt werden.
+Compose-Projekt ausgeführt werden. Der vollständige Preflight wird unmittelbar
+vor dieser zweiten destruktiven Grenze erneut ausgeführt; seit der
+Datenbankwiederherstellung beschädigte oder ausgetauschte Archive können so
+nicht in die Dateivolumes gelangen.
 
 ```console
+if ! sh "$backup_verifier" "$restore_dir"; then
+  echo "Restore-Preflight fehlgeschlagen; Dateivolumes bleiben unverändert." >&2
+  exit 1
+fi
+
 podman compose run --rm --no-deps -T --entrypoint sh app -ceu '
   find /var/www/html/4fdata -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
   find /var/lib/estab/export -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +

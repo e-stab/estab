@@ -1,0 +1,68 @@
+# The upstream MariaDB 11.8.8 image embeds gosu 1.19, built with Go 1.24.6.
+# Trivy reports vulnerabilities in Go standard-library packages by version,
+# even though gosu is a local uid/gid switcher and does not invoke the affected
+# TLS, HTTP, mail, DNS, URL, or os.Root parsing code paths. The migration image
+# removes this unused binary; the database image still needs it in its official
+# entrypoint. Every exception is path-bound and expires, forcing a new review
+# or an upstream image/gosu update.
+vulnerabilities:
+  - id: CVE-2025-68121
+    paths: [usr/local/bin/gosu]
+    expired_at: 2026-10-31
+    statement: Affected crypto/tls code is unreachable in the local gosu uid/gid switcher.
+  - id: CVE-2025-61726
+    paths: [usr/local/bin/gosu]
+    expired_at: 2026-10-31
+    statement: Affected net/url query parsing is unreachable in gosu.
+  - id: CVE-2025-61729
+    paths: [usr/local/bin/gosu]
+    expired_at: 2026-10-31
+    statement: Affected crypto/x509 code is unreachable in gosu.
+  - id: CVE-2026-25679
+    paths: [usr/local/bin/gosu]
+    expired_at: 2026-10-31
+    statement: Affected net/url host parsing is unreachable in gosu.
+  - id: CVE-2026-27145
+    paths: [usr/local/bin/gosu]
+    expired_at: 2026-10-31
+    statement: Affected crypto/x509 code is unreachable in gosu.
+  - id: CVE-2026-32280
+    paths: [usr/local/bin/gosu]
+    expired_at: 2026-10-31
+    statement: Affected crypto/x509 and crypto/tls code is unreachable in gosu.
+  - id: CVE-2026-32281
+    paths: [usr/local/bin/gosu]
+    expired_at: 2026-10-31
+    statement: Affected crypto/x509 code is unreachable in gosu.
+  - id: CVE-2026-32283
+    paths: [usr/local/bin/gosu]
+    expired_at: 2026-10-31
+    statement: Affected crypto/tls code is unreachable in gosu.
+  - id: CVE-2026-33811
+    paths: [usr/local/bin/gosu]
+    expired_at: 2026-10-31
+    statement: Affected DNS processing is unreachable in gosu.
+  - id: CVE-2026-33814
+    paths: [usr/local/bin/gosu]
+    expired_at: 2026-10-31
+    statement: Affected HTTP/2 code is unreachable in gosu.
+  - id: CVE-2026-39820
+    paths: [usr/local/bin/gosu]
+    expired_at: 2026-10-31
+    statement: Affected net/mail code is unreachable in gosu.
+  - id: CVE-2026-39822
+    paths: [usr/local/bin/gosu]
+    expired_at: 2026-10-31
+    statement: Affected os.Root API is not used by gosu.
+  - id: CVE-2026-39836
+    paths: [usr/local/bin/gosu]
+    expired_at: 2026-10-31
+    statement: Affected Go networking code is unreachable in gosu.
+  - id: CVE-2026-42499
+    paths: [usr/local/bin/gosu]
+    expired_at: 2026-10-31
+    statement: Affected net/mail code is unreachable in gosu.
+  - id: CVE-2026-42504
+    paths: [usr/local/bin/gosu]
+    expired_at: 2026-10-31
+    statement: Affected MIME parsing is unreachable in gosu.

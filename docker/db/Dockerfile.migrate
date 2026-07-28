@@ -9,7 +9,8 @@ COPY docker/db/init/10-schema.sql /opt/estab/schema/10-schema.sql
 COPY docker/db/migrations/ /opt/estab/migrations/
 COPY docker/db/verify.sql /opt/estab/verify.sql
 
-RUN chmod 0755 /usr/local/bin/estab-migrate \
+RUN rm -f /usr/local/bin/gosu \
+    && chmod 0755 /usr/local/bin/estab-migrate \
     && find /opt/estab -type f -name '*.sql' -exec chmod 0444 '{}' +
 
 ENTRYPOINT ["/usr/local/bin/estab-migrate"]

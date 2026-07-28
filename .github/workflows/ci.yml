@@ -32,12 +32,22 @@ jobs:
           tests/static/run.sh
 
   compose-integration:
-    name: Fresh Docker Compose integration
+    name: Fresh Docker Compose integration (${{ matrix.arch }})
     needs: php-static
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            browser: required
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            browser: skip
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
     env:
-      COMPOSE_PROJECT_NAME: estab_ci_${{ github.run_id }}_${{ github.run_attempt }}
+      COMPOSE_PROJECT_NAME: estab_ci_${{ github.run_id }}_${{ github.run_attempt }}_${{ matrix.arch }}
       ESTAB_HTTP_PORT: "18080"
     steps:
       - name: Check out repository
@@ -51,17 +61,53 @@ jobs:
           docker compose version
 
       - name: Run fresh-stack integration
-        timeout-minutes: 40
+        timeout-minutes: 50
         env:
           ESTAB_CI_LOG_DIR: ${{ runner.temp }}/estab-ci-logs
-          ESTAB_BROWSER_TEST: required
+          ESTAB_BROWSER_TEST: ${{ matrix.browser }}
         run: bash tests/integration/ci.sh
+
+      - name: Scan application image for fixable high or critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.COMPOSE_PROJECT_NAME }}-app:latest
+          version: v0.70.0
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Scan migration image for fixable high or critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.COMPOSE_PROJECT_NAME }}-migrate:latest
+          version: v0.70.0
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          skip-setup-trivy: true
+          exit-code: "1"
+
+      - name: Scan database image for fixable high or critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: docker.io/library/mariadb@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4
+          version: v0.70.0
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: .trivyignore.yaml
+          skip-setup-trivy: true
+          exit-code: "1"
 
       - name: Upload failure diagnostics
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: compose-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          name: compose-diagnostics-${{ matrix.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/estab-ci-logs
           if-no-files-found: ignore
           retention-days: 7

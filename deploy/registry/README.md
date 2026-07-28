@@ -39,7 +39,24 @@ Multi-Arch-Digests festgelegt; ihre Aktualisierung ist ein eigener geprüfter
 
 ## Installation mit Docker oder Podman
 
-Im Verzeichnis dieses Pakets:
+Das vom Workflow veröffentlichte Archiv wird vor dem Entpacken und danach
+nochmals dateiweise geprüft. `RELEASE` zeigt anschließend den exakt gebundenen
+Tag, Commit und beide Image-Digests:
+
+```console
+bundle=estab-RELEASE
+sha256sum --check "$bundle.tar.gz.sha256"
+tar -xzf "$bundle.tar.gz"
+cd "$bundle"
+sha256sum --check SHA256SUMS
+```
+
+`RELEASE` wird dabei durch den veröffentlichten Releasenamen ersetzt. Auf
+macOS wird jeweils `shasum -a 256 --check` statt `sha256sum --check`
+verwendet. Bei einer abweichenden Prüfsumme darf das Paket nicht gestartet
+werden.
+
+Anschließend im geprüften Paketverzeichnis:
 
 ```console
 cp .env.example .env
@@ -50,14 +67,24 @@ openssl rand -base64 36 > secrets/admin_password.txt
 chmod 0600 secrets/*.txt
 ```
 
-Die beiden Image-Werte in `.env.example` sind absichtlich leer:
-`compose config` muss scheitern, bis eine ausdrückliche Auswahl getroffen
-wurde. In `.env` werden `ESTAB_APP_IMAGE` und `ESTAB_MIGRATE_IMAGE` auf
-denselben vollständig veröffentlichten Release-Stand gesetzt. Bevorzugt
-werden die beiden von GHCR gemeldeten Manifest-Digests, zum Beispiel
-`ghcr.io/e-stab/estab@sha256:…`. Ein Tag allein reicht nur, wenn er laut
-Releaseprotokoll unveränderlich ist und beide zugehörigen Digests dokumentiert
-sind. Danach:
+Die beiden Image-Werte in der Repository-Vorlage `.env.example` sind
+absichtlich leer: `compose config` muss scheitern, bis eine ausdrückliche
+Auswahl getroffen wurde. In `.env` werden `ESTAB_APP_IMAGE` und
+`ESTAB_MIGRATE_IMAGE` auf denselben vollständig veröffentlichten Release-Stand
+gesetzt. Bevorzugt werden die beiden von GHCR gemeldeten Manifest-Digests, zum
+Beispiel `ghcr.io/e-stab/estab@sha256:…`. Ein Tag allein reicht nur, wenn er
+laut Releaseprotokoll unveränderlich ist und beide zugehörigen Digests
+dokumentiert sind.
+
+Bei einem durch den Publish-Workflow erzeugten GitHub-Releasepaket sind beide
+Werte in der enthaltenen `.env.example` bereits auf die nach Manifest-,
+Attestations-, SBOM-/Provenance- und CVE-Prüfung ermittelten Digests gebunden.
+Die daneben veröffentlichte SHA-256-Datei wird vor dem Entpacken geprüft.
+`RELEASE` im Paket hält Tag, Commit und beide vollständigen Imagereferenzen
+zusätzlich menschenlesbar fest. Eigenhändiges Heraussuchen oder Übertragen der
+Digests entfällt damit.
+
+Danach:
 
 ```console
 docker compose config
@@ -102,7 +129,10 @@ echten Betriebsbestands bleibt dennoch Pflicht.
 Vorausgesetzt werden ein Synology-Modell mit Container Manager und eine
 CPU-Architektur, für die das Release-Manifest ein Image enthält. Die
 Publish-Pipeline baut `linux/amd64` und `linux/arm64`; ältere 32-Bit-NAS sind
-nicht abgedeckt.
+nicht abgedeckt. Das vollständige Container-/Migrations-/Restore-Gate läuft im
+normalen CI- und im Publish-Workflow nativ auf beiden Zielarchitekturen. Der
+echte Browserlauf ist in GitHub Actions auf `amd64` verpflichtend; die
+Bedienabnahme auf dem tatsächlichen NAS-Endgerät bleibt zusätzlich nötig.
 
 1. Einen geschützten Projektordner wie
    `/volume1/docker/estab` anlegen und `compose.yaml`, eine aus

@@ -24,11 +24,21 @@ concurrency:
 
 jobs:
   verify:
-    name: Verify release candidate
-    runs-on: ubuntu-24.04
-    timeout-minutes: 50
+    name: Verify release candidate (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            browser: required
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            browser: skip
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 65
     env:
-      COMPOSE_PROJECT_NAME: estab_ci_publish_${{ github.run_id }}_${{ github.run_attempt }}
+      COMPOSE_PROJECT_NAME: estab_ci_publish_${{ github.run_id }}_${{ github.run_attempt }}_${{ matrix.arch }}
       ESTAB_HTTP_PORT: "18080"
       RELEASE_IMAGE_TAG: ${{ inputs.image_tag }}
       REDISTRIBUTION_CLEARED: ${{ inputs.redistribution_cleared }}
@@ -77,17 +87,53 @@ jobs:
           fi
 
       - name: Run complete fresh-stack release gate
-        timeout-minutes: 42
+        timeout-minutes: 52
         env:
           ESTAB_CI_LOG_DIR: ${{ runner.temp }}/estab-ci-logs
-          ESTAB_BROWSER_TEST: required
+          ESTAB_BROWSER_TEST: ${{ matrix.browser }}
         run: bash tests/integration/ci.sh
+
+      - name: Scan application image for fixable high or critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.COMPOSE_PROJECT_NAME }}-app:latest
+          version: v0.70.0
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Scan migration image for fixable high or critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.COMPOSE_PROJECT_NAME }}-migrate:latest
+          version: v0.70.0
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          skip-setup-trivy: true
+          exit-code: "1"
+
+      - name: Scan database image for fixable high or critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: docker.io/library/mariadb@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4
+          version: v0.70.0
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: .trivyignore.yaml
+          skip-setup-trivy: true
+          exit-code: "1"
 
       - name: Upload failure diagnostics
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: publish-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          name: publish-diagnostics-${{ matrix.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/estab-ci-logs
           if-no-files-found: ignore
           retention-days: 7
@@ -99,7 +145,7 @@ jobs:
     timeout-minutes: 75
     environment: container-publish
     permissions:
-      contents: read
+      contents: write
       packages: write
       attestations: write
       id-token: write
@@ -123,6 +169,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
         with:
+          version: v0.35.0
           driver-opts: |
             image=moby/buildkit:buildx-stable-1@sha256:2f5adac4ecd194d9f8c10b7b5d7bceb5186853db1b26e5abd3a657af0b7e26ec
 
@@ -239,6 +286,9 @@ jobs:
             local image=$1
             local digest=$2
             local manifest
+            local platform
+            local sbom
+            local provenance
             manifest=$(docker buildx imagetools inspect "$image@$digest" --raw)
             jq -e '
               ([.manifests[] | select(
@@ -249,8 +299,134 @@ jobs:
                 .platform.os == "linux" and .platform.architecture == "arm64"
               )] | length) == 1
             ' <<<"$manifest" >/dev/null
+            for platform in linux/amd64 linux/arm64; do
+              sbom=$(docker buildx imagetools inspect "$image@$digest" \
+                --format "{{ json (index .SBOM \"$platform\").SPDX }}")
+              jq -e '
+                .SPDXID == "SPDXRef-DOCUMENT"
+                and (.spdxVersion | startswith("SPDX-"))
+                and (.packages | type == "array" and length > 0)
+              ' <<<"$sbom" >/dev/null
+              provenance=$(docker buildx imagetools inspect "$image@$digest" \
+                --format "{{ json (index .Provenance \"$platform\").SLSA }}")
+              jq -e --arg platform "$platform" '
+                (.buildType | type == "string" and length > 0)
+                and (.builder.id | type == "string")
+                and .invocation.environment.platform == $platform
+              ' <<<"$provenance" >/dev/null
+            done
             gh attestation verify "oci://$image@$digest" \
               --repo "$GITHUB_REPOSITORY" >/dev/null
           }
           verify_index "$APP_IMAGE" "$APP_DIGEST"
           verify_index "$MIGRATE_IMAGE" "$MIGRATE_DIGEST"
+
+      - name: Build immutable installation bundle
+        id: bundle
+        shell: bash
+        env:
+          APP_DIGEST: ${{ steps.push_app.outputs.digest }}
+          MIGRATE_DIGEST: ${{ steps.push_migrate.outputs.digest }}
+        run: |
+          set -euo pipefail
+          bundle_name="estab-${RELEASE_IMAGE_TAG}"
+          bundle_root="$RUNNER_TEMP/$bundle_name"
+          install -d -m 0755 "$bundle_root"
+          cp deploy/registry/compose.yaml "$bundle_root/compose.yaml"
+          sed \
+            's#../../docs/BACKUP-UND-WIEDERHERSTELLUNG.md#BACKUP-UND-WIEDERHERSTELLUNG.md#g' \
+            deploy/registry/README.md >"$bundle_root/README.md"
+          cp deploy/registry/verify-backup.sh "$bundle_root/verify-backup.sh"
+          sed \
+            -e 's#^backup_verifier=deploy/registry/verify-backup.sh$#backup_verifier=./verify-backup.sh#' \
+            -e "s#(TESTS-UND-MONITORING.md)#(https://github.com/e-stab/estab/blob/$GITHUB_SHA/docs/TESTS-UND-MONITORING.md)#" \
+            docs/BACKUP-UND-WIEDERHERSTELLUNG.md \
+            >"$bundle_root/BACKUP-UND-WIEDERHERSTELLUNG.md"
+          awk \
+            -v app="$APP_IMAGE@$APP_DIGEST" \
+            -v migrate="$MIGRATE_IMAGE@$MIGRATE_DIGEST" '
+              /^ESTAB_APP_IMAGE=/ {
+                print "ESTAB_APP_IMAGE=" app
+                next
+              }
+              /^ESTAB_MIGRATE_IMAGE=/ {
+                print "ESTAB_MIGRATE_IMAGE=" migrate
+                next
+              }
+              { print }
+            ' deploy/registry/.env.example >"$bundle_root/.env.example"
+          {
+            printf 'Git-Tag: %s\n' "$RELEASE_IMAGE_TAG"
+            printf 'Git-Commit: %s\n' "$GITHUB_SHA"
+            printf 'App-Image: %s@%s\n' "$APP_IMAGE" "$APP_DIGEST"
+            printf 'Migrator-Image: %s@%s\n' "$MIGRATE_IMAGE" "$MIGRATE_DIGEST"
+          } >"$bundle_root/RELEASE"
+          (
+            cd "$bundle_root"
+            sha256sum -- * .env.example >SHA256SUMS
+          )
+          tar -C "$RUNNER_TEMP" -czf "$RUNNER_TEMP/$bundle_name.tar.gz" \
+            "$bundle_name"
+          (
+            cd "$RUNNER_TEMP"
+            sha256sum "$bundle_name.tar.gz" \
+              >"$bundle_name.tar.gz.sha256"
+          )
+          {
+            echo "bundle_name=$bundle_name"
+            echo "bundle_path=$RUNNER_TEMP/$bundle_name.tar.gz"
+            echo "checksum_path=$RUNNER_TEMP/$bundle_name.tar.gz.sha256"
+          } >>"$GITHUB_OUTPUT"
+          {
+            echo "### Verifiziertes eStab-Imagepaar"
+            echo
+            echo "- App: \`$APP_IMAGE@$APP_DIGEST\`"
+            echo "- Migrator: \`$MIGRATE_IMAGE@$MIGRATE_DIGEST\`"
+            echo "- Installationspaket: \`$bundle_name.tar.gz\`"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Publish immutable installation bundle
+        shell: bash
+        env:
+          BUNDLE_NAME: ${{ steps.bundle.outputs.bundle_name }}
+          BUNDLE_PATH: ${{ steps.bundle.outputs.bundle_path }}
+          CHECKSUM_PATH: ${{ steps.bundle.outputs.checksum_path }}
+          APP_DIGEST: ${{ steps.push_app.outputs.digest }}
+          MIGRATE_DIGEST: ${{ steps.push_migrate.outputs.digest }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_IMAGE_TAG" >/dev/null 2>&1; then
+            existing_assets=$(gh release view "$RELEASE_IMAGE_TAG" \
+              --json assets --jq '.assets[].name')
+            for asset_name in \
+              "$BUNDLE_NAME.tar.gz" \
+              "$BUNDLE_NAME.tar.gz.sha256"
+            do
+              if printf '%s\n' "$existing_assets" |
+                  grep -Fqx "$asset_name"; then
+                echo "Refusing to overwrite existing release asset: $asset_name" >&2
+                exit 1
+              fi
+            done
+          else
+            notes="$RUNNER_TEMP/release-notes.md"
+            {
+              echo "Verifiziertes eStab-Containerpaar für linux/amd64 und linux/arm64."
+              echo
+              echo "- App: \`$APP_IMAGE@$APP_DIGEST\`"
+              echo "- Migrator: \`$MIGRATE_IMAGE@$MIGRATE_DIGEST\`"
+              echo
+              echo "Das Installationspaket enthält Compose, eine bereits auf beide"
+              echo "Manifest-Digests gebundene Konfigurationsvorlage, Runbook und"
+              echo "den prüfsummengebundenen Backup-Verifier."
+              echo
+              echo "Vor dem Entpacken:"
+              echo "\`sha256sum --check $BUNDLE_NAME.tar.gz.sha256\`"
+            } >"$notes"
+            gh release create "$RELEASE_IMAGE_TAG" \
+              --verify-tag \
+              --title "eStab $RELEASE_IMAGE_TAG" \
+              --notes-file "$notes"
+          fi
+          gh release upload "$RELEASE_IMAGE_TAG" \
+            "$BUNDLE_PATH" "$CHECKSUM_PATH"

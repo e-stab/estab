@@ -54,6 +54,7 @@ $php_bin "$repo_root/tests/php/http_surface_security.php"
 $php_bin "$repo_root/tests/php/export_security.php"
 $php_bin "$repo_root/tests/php/schema_migration_contract.php"
 $php_bin "$repo_root/tests/php/registry_deployment_contract.php"
+sh "$repo_root/tests/static/backup_verifier.sh"
 pdf_result=$($php_bin "$repo_root/tests/php/pdf_smoke.php" 2>&1)
 printf '%s\n' "$pdf_result"
 printf '%s\n' "$pdf_result" | grep -q '^PDF smoke test: OK ('

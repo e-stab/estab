@@ -27,6 +27,9 @@ $workflow = $read($root . '/.github/workflows/publish-images.yml');
 $ciWorkflow = $read($root . '/.github/workflows/ci.yml');
 $integration = $read($root . '/tests/integration/registry_compose.sh');
 $restoreRoundtrip = $read($root . '/tests/integration/restore_roundtrip.sh');
+$backupRunbook = $read($root . '/docs/BACKUP-UND-WIEDERHERSTELLUNG.md');
+$backupVerifier = $read($root . '/deploy/registry/verify-backup.sh');
+$trivyIgnore = $read($root . '/.trivyignore.yaml');
 $ci = $read($root . '/tests/integration/ci.sh');
 $appDockerfile = $read($root . '/Dockerfile');
 $migrateDockerfile = $read($root . '/docker/db/Dockerfile.migrate');
@@ -197,6 +200,7 @@ $assert(
         'moby/buildkit:buildx-stable-1@sha256:2f5adac4ecd194d9f8c10b7b5d7bceb5186853db1b26e5abd3a657af0b7e26ec'
     )
     && str_contains($workflow, 'platforms: arm64')
+    && str_contains($workflow, 'version: v0.35.0')
     && !str_contains($workflow, 'docker/metadata-action@'),
     'Publish workflow lacks pinned actions, binfmt, BuildKit, or attestations'
 );
@@ -227,6 +231,18 @@ $assert(
     'Standard CI still uses mutable action or PHP CLI references'
 );
 $assert(
+    str_contains($ciWorkflow, 'runner: ubuntu-24.04')
+    && str_contains($ciWorkflow, 'runner: ubuntu-24.04-arm')
+    && str_contains($ciWorkflow, 'browser: required')
+    && str_contains($ciWorkflow, 'browser: skip')
+    && str_contains($ciWorkflow, 'Fresh Docker Compose integration (${{ matrix.arch }})')
+    && str_contains($workflow, 'runner: ubuntu-24.04')
+    && str_contains($workflow, 'runner: ubuntu-24.04-arm')
+    && str_contains($workflow, 'Verify release candidate (${{ matrix.arch }})')
+    && str_contains($workflow, 'ESTAB_BROWSER_TEST: ${{ matrix.browser }}'),
+    'CI or release verification does not execute the container suite natively on amd64 and arm64'
+);
+$assert(
     str_contains($workflow, 'platforms: linux/amd64,linux/arm64')
     && str_contains($workflow, 'provenance: mode=max')
     && str_contains($workflow, 'sbom: true')
@@ -234,8 +250,29 @@ $assert(
     && substr_count($workflow, 'push: true') === 2
     && str_contains($workflow, 'bash tests/integration/ci.sh')
     && str_contains($workflow, 'gh attestation verify')
+    && str_contains($workflow, 'index .SBOM')
+    && str_contains($workflow, 'index .Provenance')
+    && str_contains($workflow, 'SPDXRef-DOCUMENT')
+    && str_contains($workflow, '.packages | type == "array" and length > 0')
+    && str_contains($workflow, '.invocation.environment.platform == $platform')
     && str_contains($workflow, 'create-storage-record: false'),
     'Publish workflow omits prebuild, platforms, evidence, or complete release gate'
+);
+$trivyAction = 'aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25';
+$assert(
+    substr_count($ciWorkflow, $trivyAction) === 3
+    && substr_count($workflow, $trivyAction) === 3
+    && substr_count($ciWorkflow, 'severity: HIGH,CRITICAL') === 3
+    && substr_count($workflow, 'severity: HIGH,CRITICAL') === 3
+    && substr_count($ciWorkflow, 'trivyignores: .trivyignore.yaml') === 1
+    && substr_count($workflow, 'trivyignores: .trivyignore.yaml') === 1
+    && str_contains($ciWorkflow, 'version: v0.70.0')
+    && str_contains($workflow, 'version: v0.70.0')
+    && str_contains($appDockerfile, 'apt-get purge -y --auto-remove')
+    && str_contains($migrateDockerfile, 'rm -f /usr/local/bin/gosu')
+    && substr_count($trivyIgnore, 'paths: [usr/local/bin/gosu]') === 15
+    && substr_count($trivyIgnore, 'expired_at: 2026-10-31') === 15,
+    'Native CI or release verification lacks the pinned expiring high/critical image vulnerability gate'
 );
 $assert(
     str_contains($workflow, 'APP_IMAGE: ghcr.io/e-stab/estab')
@@ -243,6 +280,35 @@ $assert(
     && str_contains($workflow, 'org.opencontainers.image.version=')
     && !str_contains($workflow, 'org.opencontainers.image.licenses'),
     'Publish workflow omits an image or asserts an unverified license'
+);
+$assert(
+    str_contains($workflow, 'contents: write')
+    && str_contains($workflow, 'Build immutable installation bundle')
+    && str_contains($workflow, 'deploy/registry/verify-backup.sh')
+    && str_contains(
+        $workflow,
+        's#../../docs/BACKUP-UND-WIEDERHERSTELLUNG.md#BACKUP-UND-WIEDERHERSTELLUNG.md#g'
+    )
+    && str_contains(
+        $workflow,
+        's#^backup_verifier=deploy/registry/verify-backup.sh$#backup_verifier=./verify-backup.sh#'
+    )
+    && str_contains(
+        $workflow,
+        'https://github.com/e-stab/estab/blob/$GITHUB_SHA/docs/TESTS-UND-MONITORING.md'
+    )
+    && str_contains($workflow, 'ESTAB_APP_IMAGE=" app')
+    && str_contains($workflow, 'ESTAB_MIGRATE_IMAGE=" migrate')
+    && str_contains($workflow, 'App-Image: %s@%s')
+    && str_contains($workflow, 'Migrator-Image: %s@%s')
+    && str_contains($workflow, 'sha256sum -- * .env.example')
+    && str_contains($workflow, 'sha256sum "$bundle_name.tar.gz"')
+    && !str_contains($workflow, 'sha256sum "$RUNNER_TEMP/$bundle_name.tar.gz"')
+    && str_contains($workflow, 'gh release create "$RELEASE_IMAGE_TAG"')
+    && str_contains($workflow, 'gh release upload "$RELEASE_IMAGE_TAG"')
+    && str_contains($workflow, '"$BUNDLE_NAME.tar.gz.sha256"')
+    && str_contains($workflow, 'Refusing to overwrite existing release asset: $asset_name'),
+    'Publish workflow does not produce a checksum-bound immutable digest installation bundle'
 );
 foreach ([$appDockerfile, $migrateDockerfile] as $dockerfile) {
     $assert(
@@ -319,6 +385,23 @@ $assert(
     && str_contains($ci, 'ESTAB_REGISTRY_TEMP_PARENT')
     && str_contains($ci, 'validating pull-only registry deployment and bind restore'),
     'Registry bind roundtrip lacks complete resource cleanup or CI wiring'
+);
+$assert(
+    str_contains($backupVerifier, 'sha256sum -c SHA256SUMS')
+    && str_contains($backupVerifier, 'shasum -a 256 -c SHA256SUMS')
+    && str_contains($backupVerifier, 'gzip -t "$archive"')
+    && substr_count($backupVerifier, 'tar -tzf "$archive"') >= 1
+    && str_contains($backupVerifier, 'tar -tvzf "$archive"')
+    && str_contains($backupVerifier, "'-- MariaDB dump'")
+    && str_contains($backupVerifier, "'-- Dump completed on '")
+    && str_contains($backupVerifier, 'expected_manifest_names=')
+    && str_contains($backupVerifier, '$created_database" != "$selected_database')
+    && str_contains($backupRunbook, 'backup_verifier=deploy/registry/verify-backup.sh')
+    && substr_count(
+        $backupRunbook,
+        'if ! sh "$backup_verifier" "$restore_dir"; then'
+    ) === 2,
+    'Manual restore runbook lacks a mandatory read-only preflight at both destructive boundaries'
 );
 
 echo "registry deployment contract: OK ({$assertions} assertions)\n";

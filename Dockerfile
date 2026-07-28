@@ -16,15 +16,27 @@ RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
         apache2-utils \
+        libfreetype6 \
         libfreetype6-dev \
+        libjpeg62-turbo \
         libjpeg62-turbo-dev \
+        libpng16-16t64 \
         libpng-dev \
+        libzip5 \
         libzip-dev; \
     docker-php-ext-configure gd --with-freetype --with-jpeg; \
     docker-php-ext-install -j1 gd mysqli zip; \
     php -r 'foreach (["gd", "mbstring", "mysqli", "Zend OPcache", "zip"] as $extension) { if (!extension_loaded($extension)) { fwrite(STDERR, "Missing PHP extension: $extension\n"); exit(1); } }'; \
     a2enmod auth_basic authn_file headers; \
     a2dissite 000-default; \
+    apt-get purge -y --auto-remove \
+        libc6-dev \
+        libfreetype-dev \
+        libfreetype6-dev \
+        libjpeg62-turbo-dev \
+        libpng-dev \
+        libzip-dev \
+        $PHPIZE_DEPS; \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /var/www/html
