@@ -1145,7 +1145,8 @@ include ("../4fcfg/fkt_rolle.inc.php");
              $empfcolor = extraiereempfaenger ( $row ["16_empf"] ) ;
              for ( $i=1; $i<= count ($conf_empf); $i++ ) {
                if ( ( $conf_empf [$i]["fkt"] != "Si" ) and ( $conf_empf [$i]["fkt"] != "A/W" ) ) {
-                 switch ($empfcolor [$conf_empf [$i]['fkt']]) {
+                 $recipientFunction = $conf_empf [$i]['fkt'];
+                 switch ($empfcolor [$recipientFunction] ?? '') {
                   case "rt":
                    echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["rt"]."; \">";
                    echo "X";
@@ -1280,7 +1281,7 @@ include ("../4fcfg/fkt_rolle.inc.php");
              // Abfassungs Z E I T
              if (($row["12_abfzeit"] != "")) {
                $abfzeit = convdatetimeto ($row["12_abfzeit"]);
-               echo "<a href=\"mainindex.php?fm=SI-Adminmeldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$abfzeit[stak]."</a>\n";
+               echo "<a href=\"mainindex.php?fm=SI-Adminmeldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$abfzeit['stak']."</a>\n";
              } else {
                echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
              }
@@ -1290,7 +1291,8 @@ include ("../4fcfg/fkt_rolle.inc.php");
              $empfcolor = extraiereempfaenger ( $row ["16_empf"] ) ;
              for ( $i=1; $i<= count ($conf_empf); $i++ ) {
                if ( ( $conf_empf [$i]["fkt"] != "Si" ) and ( $conf_empf [$i]["fkt"] != "A/W" ) ) {
-                 switch ($empfcolor [$conf_empf [$i][fkt]]) {
+                 $recipientFunction = $conf_empf [$i]['fkt'];
+                 switch ($empfcolor [$recipientFunction] ?? '') {
                   case "rt":
                    echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["rt"]."; \">";
                    echo "X";

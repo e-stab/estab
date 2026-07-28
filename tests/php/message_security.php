@@ -137,15 +137,23 @@ $dataSource = file_get_contents($root . '/4fach/data_hndl.php');
 $mainSource = file_get_contents($root . '/4fach/mainindex.php');
 $formSource = file_get_contents($root . '/4fach/4fachform.php');
 $listSource = file_get_contents($root . '/4fach/liste.php');
+$allMessagesSource = file_get_contents($root . '/4fach/all_msg.php');
 $overviewSource = file_get_contents($root . '/4fueltg/ue_ltg.php');
 $pdfSource = file_get_contents($root . '/4fbak/backup_pdf.php');
 $concurrencySource = file_get_contents($root . '/tests/integration/message_concurrency.php');
 foreach ([
     $repositorySource, $dataSource, $mainSource, $formSource,
-    $listSource, $overviewSource, $pdfSource, $concurrencySource,
+    $listSource, $allMessagesSource, $overviewSource, $pdfSource, $concurrencySource,
 ] as $source) {
     $assert(is_string($source), 'security source unreadable');
 }
+
+$assert(
+    substr_count($listSource, "switch (\$empfcolor [\$recipientFunction] ?? '')") === 2
+        && substr_count($allMessagesSource, "switch (\$empfcolor [\$recipientFunction] ?? '')") === 1
+        && !str_contains($listSource, '$abfzeit[stak]'),
+    'message lists do not handle missing recipient colors or timestamp keys safely'
+);
 
 $fmAdminAccess = [];
 $fmAdminButtons = [];
