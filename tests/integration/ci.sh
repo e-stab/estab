@@ -381,9 +381,34 @@ if [[ $(sed -n '1p' "$http_state_file") != "$workflow_marker" ]]; then
     echo "CI integration: HTTP smoke did not persist the expected workflow marker state" >&2
     exit 1
 fi
+restore_state_lines=$(wc -l <"$http_state_file" | tr -d '[:space:]')
+if [[ "$restore_state_lines" != 6 ]]; then
+    echo "CI integration: HTTP smoke state file must contain exactly six lines" >&2
+    exit 1
+fi
 restore_attachment=$(sed -n '2p' "$http_state_file")
 if [[ ! $restore_attachment =~ ^[A-Za-z]{2}[0-9]{4,}\.[A-Za-z0-9]{1,16}$ ]]; then
     echo "CI integration: HTTP smoke returned an unsafe attachment name" >&2
+    exit 1
+fi
+restore_vordruck=$(sed -n '3p' "$http_state_file")
+restore_vordruck_sha256=$(sed -n '4p' "$http_state_file")
+restore_export_id=$(sed -n '5p' "$http_state_file")
+restore_export_sha256=$(sed -n '6p' "$http_state_file")
+if [[ ! $restore_vordruck =~ ^[A-Za-z0-9_]+\ [0-9]+\ [EA]\.pdf$ ]]; then
+    echo "CI integration: HTTP smoke returned an unsafe generated-form name" >&2
+    exit 1
+fi
+if [[ ! $restore_vordruck_sha256 =~ ^[a-f0-9]{64}$ ]]; then
+    echo "CI integration: HTTP smoke returned an invalid generated-form checksum" >&2
+    exit 1
+fi
+if [[ ! $restore_export_id =~ ^estab-[0-9]{8}-[0-9]{6}-[a-f0-9]{8}$ ]]; then
+    echo "CI integration: HTTP smoke returned an unsafe survivor export ID" >&2
+    exit 1
+fi
+if [[ ! $restore_export_sha256 =~ ^[a-f0-9]{64}$ ]]; then
+    echo "CI integration: HTTP smoke returned an invalid survivor export checksum" >&2
     exit 1
 fi
 
@@ -419,21 +444,43 @@ wait_for_healthy db 30
 wait_for_healthy app 60
 verify_schema
 
-echo "CI integration: checking restored export-volume marker"
+echo "CI integration: checking exact restored export run"
 run_timed 4m "$container_cli" compose run --rm --no-deps -T \
     --volume "$http_state_file:/run/estab/http-state:ro" \
     --entrypoint sh \
     app -ceu '
         marker=$(sed -n "1p" /run/estab/http-state)
+        export_id=$(sed -n "5p" /run/estab/http-state)
+        expected_sha256=$(sed -n "6p" /run/estab/http-state)
+        case "$export_id" in
+            estab-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]-[a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9][a-f0-9]) ;;
+            *) echo "CI integration: unsafe restored export ID" >&2; exit 1 ;;
+        esac
+        printf "%s" "$expected_sha256" | grep -Eq "^[a-f0-9]{64}$" || {
+            echo "CI integration: unsafe restored export checksum" >&2
+            exit 1
+        }
         test -n "$marker"
-        grep -R -F -q -- "$marker" /var/lib/estab/export
+        test -f "/var/lib/estab/export/$export_id.zip"
+        test -d "/var/lib/estab/export/$export_id"
+        test -f "/var/lib/estab/export/$export_id/manifest.json"
+        test -f "/var/lib/estab/export/$export_id/nv_nachrichten.csv"
+        actual_sha256=$(sha256sum "/var/lib/estab/export/$export_id.zip" | awk "{ print \$1 }")
+        test "$actual_sha256" = "$expected_sha256"
+        grep -F -q -- ";$marker;" "/var/lib/estab/export/$export_id/nv_nachrichten.csv"
     '
 
 echo "CI integration: re-authenticating against restored state"
 export ESTAB_TEST_RESTORE_VERIFY_ONLY=true
 export ESTAB_TEST_RESTORE_ATTACHMENT="$restore_attachment"
+export ESTAB_TEST_RESTORE_VORDRUCK="$restore_vordruck"
+export ESTAB_TEST_RESTORE_VORDRUCK_SHA256="$restore_vordruck_sha256"
 run_timed 5m sh tests/integration/http_smoke.sh
-unset ESTAB_TEST_RESTORE_VERIFY_ONLY ESTAB_TEST_RESTORE_ATTACHMENT
+unset \
+    ESTAB_TEST_RESTORE_VERIFY_ONLY \
+    ESTAB_TEST_RESTORE_ATTACHMENT \
+    ESTAB_TEST_RESTORE_VORDRUCK \
+    ESTAB_TEST_RESTORE_VORDRUCK_SHA256
 
 wait_for_healthy db 30
 wait_for_healthy app 60

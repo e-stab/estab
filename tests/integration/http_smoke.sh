@@ -37,6 +37,8 @@ fi
 workflow_marker=${ESTAB_TEST_WORKFLOW_MARKER:-}
 restore_verify_only=${ESTAB_TEST_RESTORE_VERIFY_ONLY:-false}
 restore_attachment=${ESTAB_TEST_RESTORE_ATTACHMENT:-}
+restore_vordruck=${ESTAB_TEST_RESTORE_VORDRUCK:-}
+restore_vordruck_sha256=${ESTAB_TEST_RESTORE_VORDRUCK_SHA256:-}
 state_file=${ESTAB_TEST_STATE_FILE:-}
 compose_engine=${ESTAB_TEST_COMPOSE_ENGINE:-}
 
@@ -58,6 +60,10 @@ case "$compose_engine" in
         ;;
 esac
 "$compose_engine" compose version >/dev/null
+command -v openssl >/dev/null 2>&1 || {
+    printf 'HTTP smoke: openssl is required for content verification\n' >&2
+    exit 1
+}
 
 case "$restore_verify_only" in
     true | false) ;;
@@ -81,6 +87,16 @@ if [ "$restore_verify_only" = true ]; then
         printf 'HTTP smoke: restore verification requires a safe attachment name\n' >&2
         exit 1
     fi
+    if ! printf '%s' "$restore_vordruck" |
+        grep -Eq '^[A-Za-z0-9_]+ [0-9]+ [EA][.]pdf$'; then
+        printf 'HTTP smoke: restore verification requires a safe generated-form name\n' >&2
+        exit 1
+    fi
+    if ! printf '%s' "$restore_vordruck_sha256" |
+        grep -Eq '^[a-f0-9]{64}$'; then
+        printf 'HTTP smoke: restore verification requires a generated-form checksum\n' >&2
+        exit 1
+    fi
 fi
 
 work_dir=$(mktemp -d /tmp/estab-http-smoke.XXXXXX)
@@ -102,6 +118,27 @@ request_status() {
     : >"$headers"
     curl --silent --show-error --max-time 20 --connect-timeout 5 \
         --dump-header "$headers" --output "$body" --write-out '%{http_code}' "$@"
+}
+
+file_sha256() {
+    digest=$(openssl dgst -sha256 -r "$1" | awk '{print $1}')
+    if ! printf '%s' "$digest" | grep -Eq '^[a-f0-9]{64}$'; then
+        printf 'HTTP smoke: could not calculate SHA-256 for %s\n' "$1" >&2
+        exit 1
+    fi
+    printf '%s' "$digest"
+}
+
+assert_pdf_body() {
+    pdf_magic=$(od -An -tx1 -N5 "$body" | tr -d ' \n')
+    if [ "$pdf_magic" != '255044462d' ]; then
+        printf 'HTTP smoke: generated form does not start with PDF magic\n' >&2
+        exit 1
+    fi
+    if ! tail -c 128 "$body" | grep -q '%%EOF'; then
+        printf 'HTTP smoke: generated form has no PDF trailer\n' >&2
+        exit 1
+    fi
 }
 
 assert_status() {
@@ -134,8 +171,10 @@ assert_body_absent() {
 }
 
 assert_export_zip() {
+    expected_marker=${1:-}
     "$compose_engine" compose run --rm --no-deps -T \
         app php -d auto_prepend_file= -r '
+        $expectedMarker = $argv[1] ?? "";
         $bytes = stream_get_contents(STDIN);
         $temporary = tempnam(sys_get_temp_dir(), "estab-export-http-");
         if (
@@ -194,9 +233,44 @@ assert_export_zip() {
                 exit(1);
             }
         }
+        if ($expectedMarker !== "") {
+            $csv = $archive->getFromName("nv_nachrichten.csv");
+            $stream = fopen("php://temp", "w+b");
+            if (
+                !is_string($csv)
+                || $stream === false
+                || fwrite($stream, $csv) !== strlen($csv)
+                || !rewind($stream)
+            ) {
+                $archive->close();
+                @unlink($temporary);
+                fwrite(STDERR, "HTTP smoke: message export could not be read\n");
+                exit(1);
+            }
+            $headers = fgetcsv($stream, null, ";", "\"", "");
+            $contentIndex = is_array($headers)
+                ? array_search("12_inhalt", $headers, true)
+                : false;
+            $found = false;
+            if (is_int($contentIndex)) {
+                while (($row = fgetcsv($stream, null, ";", "\"", "")) !== false) {
+                    if (($row[$contentIndex] ?? null) === $expectedMarker) {
+                        $found = true;
+                        break;
+                    }
+                }
+            }
+            fclose($stream);
+            if (!$found) {
+                $archive->close();
+                @unlink($temporary);
+                fwrite(STDERR, "HTTP smoke: exact workflow marker is missing from message export\n");
+                exit(1);
+            }
+        }
         $archive->close();
         @unlink($temporary);
-        ' <"$body"
+        ' "$expected_marker" <"$body"
 }
 
 assert_session_bar() {
@@ -284,6 +358,16 @@ db_sql() {
             --raw \
             --database="$MARIADB_DATABASE"
     '
+}
+
+vordruck_name_for_marker() {
+    marker=$1
+    if ! printf '%s' "$marker" | grep -Eq '^[A-Za-z0-9_:-]{1,180}$'; then
+        printf 'HTTP smoke: unsafe generated-form marker\n' >&2
+        exit 1
+    fi
+    printf "SELECT CONCAT(DATABASE(), ' ', \`04_nummer\`, ' ', \`04_richtung\`, '.pdf') FROM nv_nachrichten WHERE \`12_inhalt\` = '%s' AND \`x01_abschluss\` = 't' AND \`x04_druck\` = 't' ORDER BY \`00_lfd\` DESC LIMIT 1;\n" \
+        "$marker" | db_sql
 }
 
 assert_account_count() {
@@ -470,6 +554,41 @@ if [ "$restore_verify_only" = true ]; then
     printf '%s\n' "$workflow_marker" >"$expected_attachment"
     if ! cmp -s "$expected_attachment" "$body"; then
         printf 'HTTP smoke: restored attachment content differs\n' >&2
+        exit 1
+    fi
+
+    assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        "$base_url/4fach/vordrucke.php"
+    assert_body "$restore_vordruck"
+    assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        --get \
+        --data-urlencode 'area=vordruck' \
+        --data-urlencode "file=$restore_vordruck" \
+        "$base_url/4fach/download.php"
+    assert_pdf_body
+    if [ "$(file_sha256 "$body")" != "$restore_vordruck_sha256" ]; then
+        printf 'HTTP smoke: restored generated-form checksum differs\n' >&2
+        exit 1
+    fi
+
+    # Read the logbooks without invoking their mutation-oriented integration
+    # helper. Missing restore data must fail here instead of being recreated.
+    assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        "$base_url/stabetb/etb.php"
+    assert_body 'LOGBOOK_ETB_E2E'
+    assert_body 'LOGBOOK_ETB_ENTRY_E2E'
+    assert_session_bar "$test_name" "$test_code" "$test_function" "$restore_role"
+    if grep -Eq 'Fatal error|Uncaught (Error|TypeError)|Warning:|Deprecated:' "$body"; then
+        printf 'HTTP smoke: PHP runtime error leaked while reading restored ETB state\n' >&2
+        exit 1
+    fi
+    assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        "$base_url/fmtbb/tbb.php"
+    assert_body 'LOGBOOK_TBB_E2E'
+    assert_body 'LOGBOOK_TBB_ENTRY_E2E'
+    assert_session_bar "$test_name" "$test_code" "$test_function" "$restore_role"
+    if grep -Eq 'Fatal error|Uncaught (Error|TypeError)|Warning:|Deprecated:' "$body"; then
+        printf 'HTTP smoke: PHP runtime error leaked while reading restored TBB state\n' >&2
         exit 1
     fi
 
@@ -1012,6 +1131,68 @@ assert_body_absent 'Anmeldung erforderlich'
 assert_body 'href="./stabetb/etb.php"'
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 
+# A completed staff conversation note must exercise the real application
+# generator, publish a downloadable PDF in the persistent vordruck volume and
+# carry that exact byte sequence through the later backup/restore roundtrip.
+vordruck_marker="${workflow_marker}_VORDRUCK"
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$workflow_csrf_token" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=Stab_gesprnoti' \
+    --data-urlencode '01_medium=Fu' \
+    --data-urlencode '01_datum=' \
+    --data-urlencode "01_zeichen=$test_code" \
+    --data-urlencode '02_zeit=' \
+    --data-urlencode '07_durchspruch=D' \
+    --data-urlencode '08_befhinweis=' \
+    --data-urlencode '08_befhinwausw=' \
+    --data-urlencode '09_vorrangstufe=' \
+    --data-urlencode '10_anschrift=HTTP-Vordruckempfänger' \
+    --data-urlencode '11_gesprnotiz=f' \
+    --data-urlencode '12_anhang=' \
+    --data-urlencode "12_inhalt=$vordruck_marker" \
+    --data-urlencode "12_abfzeit=$tactical_time" \
+    --data-urlencode '13_abseinheit=HTTP-Vordrucktest' \
+    --data-urlencode "14_zeichen=$test_code" \
+    --data-urlencode "14_funktion=$test_function" \
+    --data-urlencode '15_quitdatum=' \
+    --data-urlencode "15_quitzeichen=$test_code" \
+    --data-urlencode '16_gncopy=' \
+    --data-urlencode '16_empf=' \
+    --data-urlencode '17_vermerke=Backup-Restore-Nachweis' \
+    "$base_url/4fach/mainindex.php"
+if grep -Eq 'Fatal error|Uncaught (Error|TypeError)|Warning:' "$body"; then
+    printf 'HTTP smoke: PHP runtime error leaked while generating a form\n' >&2
+    exit 1
+fi
+stored_vordruck=$(vordruck_name_for_marker "$vordruck_marker")
+if ! printf '%s' "$stored_vordruck" |
+    grep -Eq '^[A-Za-z0-9_]+ [0-9]+ [EA][.]pdf$'; then
+    printf 'HTTP smoke: completed workflow produced no safe generated-form name\n' >&2
+    exit 1
+fi
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/vordrucke.php"
+assert_body "$stored_vordruck"
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --get \
+    --data-urlencode 'area=vordruck' \
+    --data-urlencode "file=$stored_vordruck" \
+    "$base_url/4fach/download.php"
+assert_pdf_body
+for header_pattern in \
+    '^Content-Type: application/pdf' \
+    '^Content-Disposition: inline;'
+do
+    if ! grep -Eiq "$header_pattern" "$headers"; then
+        printf 'HTTP smoke: generated-form header missing: %s\n' \
+            "$header_pattern" >&2
+        exit 1
+    fi
+done
+stored_vordruck_sha256=$(file_sha256 "$body")
+
 # Raw UTF-8 message storage must preserve punctuation and SQL-shaped text,
 # while every HTML list/search reflection remains inert.
 security_payload="MSGSEC 'quoted' \"double\" & <script>alert(\"x\")</script> ' OR 1=1 --"
@@ -1397,7 +1578,7 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
         printf 'HTTP smoke: export download does not start with ZIP magic\n' >&2
         exit 1
     fi
-    assert_export_zip
+    assert_export_zip "$workflow_marker"
 
     assert_status 400 --config "$admin_curl_config" \
         "$base_url/4fadm/export.php?action=download&export_id=..%2Fescape"
@@ -1467,6 +1648,7 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
 
     assert_status 200 --config "$admin_curl_config" \
         "$base_url/4fadm/export.php?action=download&export_id=$second_export_id"
+    assert_export_zip "$workflow_marker"
     survivor_zip=$work_dir/survivor-export.zip
     cp "$body" "$survivor_zip"
 
@@ -1500,6 +1682,7 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
         printf 'HTTP smoke: deleting one export changed the survivor ZIP\n' >&2
         exit 1
     fi
+    survivor_export_sha256=$(file_sha256 "$survivor_zip")
 fi
 
 if [ -n "$state_file" ]; then
@@ -1508,10 +1691,23 @@ if [ -n "$state_file" ]; then
         printf 'HTTP smoke: state-file parent directory does not exist\n' >&2
         exit 1
     fi
+    if ! printf '%s' "${second_export_id:-}" |
+        grep -Eq '^estab-[0-9]{8}-[0-9]{6}-[a-f0-9]{8}$' ||
+        ! printf '%s' "${survivor_export_sha256:-}" |
+            grep -Eq '^[a-f0-9]{64}$'; then
+        printf 'HTTP smoke: state persistence requires a verified survivor export\n' >&2
+        exit 1
+    fi
     state_tmp="${state_file}.tmp.$$"
     (
         umask 077
-        printf '%s\n%s\n' "$workflow_marker" "$stored_attachment" >"$state_tmp"
+        printf '%s\n%s\n%s\n%s\n%s\n%s\n' \
+            "$workflow_marker" \
+            "$stored_attachment" \
+            "$stored_vordruck" \
+            "$stored_vordruck_sha256" \
+            "$second_export_id" \
+            "$survivor_export_sha256" >"$state_tmp"
     )
     mv -f -- "$state_tmp" "$state_file"
 fi

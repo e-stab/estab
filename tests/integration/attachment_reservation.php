@@ -83,9 +83,150 @@ function attachment_db_count(mysqli $connection, string $table): int
     return (int) ($row[0] ?? -1);
 }
 
+function attachment_db_status_counter(mysqli $connection, string $name): int
+{
+    if ($name !== 'Innodb_deadlocks') {
+        throw new InvalidArgumentException('Unsupported MariaDB status counter');
+    }
+    $result = $connection->query("SHOW GLOBAL STATUS LIKE 'Innodb_deadlocks'");
+    attachment_db_assert($result instanceof mysqli_result, 'Could not read MariaDB deadlock counter');
+    try {
+        $row = $result->fetch_assoc();
+        attachment_db_assert(is_array($row), 'MariaDB deadlock counter is missing');
+        $value = (string) ($row['Value'] ?? '');
+        attachment_db_assert(
+            preg_match('/\A[0-9]+\z/D', $value) === 1,
+            'MariaDB deadlock counter is invalid'
+        );
+        return (int) $value;
+    } finally {
+        $result->free();
+    }
+}
+
+/**
+ * Make mysqli receive one row before MariaDB reports a lock timeout.
+ *
+ * mysqlnd therefore completes execute(), while get_result() fails as it tries
+ * to buffer the remaining row. This proves that the production result helper
+ * preserves the deferred 1205 code instead of dereferencing false.
+ */
+function attachment_db_prove_deferred_result_timeout(
+    mysqli $connectionA,
+    mysqli $connectionB,
+    string $table
+): void {
+    $quotedTable = estab_attachment_table($table);
+    $firstName = 'DP0001';
+    $secondName = 'DP0002';
+    $insert = null;
+    $blockedStatement = null;
+    $originalTimeout = 50;
+
+    $timeoutResult = $connectionB->query('SELECT @@SESSION.innodb_lock_wait_timeout');
+    attachment_db_assert($timeoutResult instanceof mysqli_result, 'Could not read lock wait timeout');
+    try {
+        $timeoutRow = $timeoutResult->fetch_row();
+        attachment_db_assert(is_array($timeoutRow), 'Lock wait timeout is missing');
+        $originalTimeout = (int) ($timeoutRow[0] ?? 50);
+    } finally {
+        $timeoutResult->free();
+    }
+
+    try {
+        $insert = $connectionA->prepare(
+            'INSERT INTO ' . $quotedTable . " (`filename`, `status`, `id`) VALUES (?, 4, '')"
+        );
+        attachment_db_assert($insert instanceof mysqli_stmt, 'Could not prepare deferred-result fixture');
+        $probeName = $firstName;
+        $insert->bind_param('s', $probeName);
+        attachment_db_assert($insert->execute(), 'Could not insert first deferred-result row');
+        $firstId = (int) $connectionA->insert_id;
+        $probeName = $secondName;
+        attachment_db_assert($insert->execute(), 'Could not insert second deferred-result row');
+        $secondId = (int) $connectionA->insert_id;
+        attachment_db_assert(
+            $firstId > 0 && $secondId > $firstId,
+            'Deferred-result fixture has invalid sequence identifiers'
+        );
+        $insert->close();
+        $insert = null;
+
+        attachment_db_assert($connectionA->begin_transaction(), 'Could not start blocking transaction');
+        $lockResult = $connectionA->query(
+            'SELECT `filename` FROM ' . $quotedTable
+            . ' WHERE `lfd-nr` = ' . $secondId . ' FOR UPDATE'
+        );
+        attachment_db_assert($lockResult instanceof mysqli_result, 'Could not lock deferred-result row');
+        $lockResult->free();
+
+        attachment_db_assert(
+            $connectionB->query('SET SESSION innodb_lock_wait_timeout = 1'),
+            'Could not shorten lock wait timeout'
+        );
+        attachment_db_assert($connectionB->begin_transaction(), 'Could not start deferred-result transaction');
+
+        $blockedStatement = $connectionB->prepare(
+            'SELECT `filename` FROM ' . $quotedTable
+            . ' WHERE `lfd-nr` >= ? ORDER BY `lfd-nr` FOR UPDATE'
+        );
+        attachment_db_assert(
+            $blockedStatement instanceof mysqli_stmt,
+            'Could not prepare deferred-result lookup'
+        );
+        $blockedStatement->bind_param('i', $firstId);
+        $started = microtime(true);
+        attachment_db_assert(
+            $blockedStatement->execute(),
+            'Lock timeout was not deferred until result buffering'
+        );
+
+        $failure = null;
+        try {
+            $unexpectedResult = estab_attachment_statement_result(
+                $blockedStatement,
+                $connectionB,
+                'Deferred lock timeout probe'
+            );
+            $unexpectedResult->free();
+        } catch (EstabAttachmentDatabaseException $exception) {
+            $failure = $exception;
+        }
+        $elapsed = microtime(true) - $started;
+        attachment_db_assert(
+            $failure instanceof EstabAttachmentDatabaseException
+                && $failure->getCode() === 1205,
+            'Deferred get_result() failure did not preserve MariaDB error 1205'
+        );
+        attachment_db_assert($elapsed < 10.0, 'Deferred lock timeout exceeded its test bound');
+    } finally {
+        if ($blockedStatement instanceof mysqli_stmt) {
+            $blockedStatement->close();
+        }
+        if ($insert instanceof mysqli_stmt) {
+            $insert->close();
+        }
+        $connectionB->rollback();
+        $connectionA->rollback();
+        $connectionB->query(
+            'SET SESSION innodb_lock_wait_timeout = ' . max(1, $originalTimeout)
+        );
+
+        $delete = $connectionA->prepare(
+            'DELETE FROM ' . $quotedTable . ' WHERE `filename` IN (?, ?)'
+        );
+        if ($delete instanceof mysqli_stmt) {
+            $delete->bind_param('ss', $firstName, $secondName);
+            $delete->execute();
+            $delete->close();
+        }
+    }
+}
+
 function attachment_db_worker(array $arguments): never
 {
     [$table, $prefix, $sessionId, $barrier] = $arguments;
+    set_time_limit(45);
     $connection = estab_attachment_connection(attachment_db_config());
     $readyFile = $barrier . '.' . $sessionId . '.ready';
     file_put_contents($readyFile, 'ready', LOCK_EX);
@@ -99,7 +240,22 @@ function attachment_db_worker(array $arguments): never
     }
 
     try {
-        echo estab_attachment_reserve($connection, $table, $prefix, $sessionId), "\n";
+        $retries = [];
+        $filename = estab_attachment_reserve(
+            $connection,
+            $table,
+            $prefix,
+            $sessionId,
+            4,
+            8,
+            static function (int $attempt, int $code) use (&$retries): void {
+                $retries[] = ['attempt' => $attempt, 'code' => $code];
+            }
+        );
+        echo json_encode(
+            ['filename' => $filename, 'retries' => $retries],
+            JSON_THROW_ON_ERROR
+        ), "\n";
     } finally {
         estab_attachment_close($connection);
     }
@@ -133,7 +289,10 @@ function attachment_db_start_worker(
     return [$process, $pipes, $sessionId];
 }
 
-function attachment_db_finish_worker(array $worker): string
+/**
+ * @return array{filename: string, retries: list<array{attempt: int, code: int}>}
+ */
+function attachment_db_finish_worker(array $worker): array
 {
     [$process, $pipes, $sessionId] = $worker;
     $stdout = stream_get_contents($pipes[1]);
@@ -148,8 +307,38 @@ function attachment_db_finish_worker(array $worker): string
         $exitCode === 0,
         'Reservation worker ' . $sessionId . ' failed: ' . trim((string) $stderr)
     );
-    $filename = trim((string) $stdout);
-    return estab_attachment_validate_reservation_name($filename, 'IT');
+    try {
+        $result = json_decode(trim((string) $stdout), true, 8, JSON_THROW_ON_ERROR);
+    } catch (JsonException $exception) {
+        throw new RuntimeException(
+            'Reservation worker ' . $sessionId . ' returned invalid JSON',
+            0,
+            $exception
+        );
+    }
+    attachment_db_assert(is_array($result), 'Reservation worker result is not an object');
+    $filename = estab_attachment_validate_reservation_name(
+        (string) ($result['filename'] ?? ''),
+        'IT'
+    );
+    $retries = $result['retries'] ?? null;
+    attachment_db_assert(is_array($retries) && array_is_list($retries), 'Worker retry trace is invalid');
+    $validatedRetries = [];
+    foreach ($retries as $retry) {
+        attachment_db_assert(is_array($retry), 'Worker retry trace entry is invalid');
+        $attempt = $retry['attempt'] ?? null;
+        $code = $retry['code'] ?? null;
+        attachment_db_assert(
+            is_int($attempt) && $attempt >= 1 && $attempt < 8,
+            'Worker retry attempt is invalid'
+        );
+        attachment_db_assert(
+            is_int($code) && estab_attachment_database_error_is_retryable($code),
+            'Worker retry code is invalid'
+        );
+        $validatedRetries[] = ['attempt' => $attempt, 'code' => $code];
+    }
+    return ['filename' => $filename, 'retries' => $validatedRetries];
 }
 
 if (($argv[1] ?? '') === '--reserve-worker') {
@@ -216,21 +405,64 @@ try {
         . ' ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci';
     attachment_db_assert($connectionA->query($fixtureSql), 'Could not create attachment fixture');
 
-    $workers = [
-        attachment_db_start_worker($table, $prefix, $sessionA, $barrier),
-        attachment_db_start_worker($table, $prefix, $sessionB, $barrier),
-    ];
-    $readyDeadline = microtime(true) + 10.0;
-    while (!is_file($readyFiles[0]) || !is_file($readyFiles[1])) {
-        if (microtime(true) >= $readyDeadline) {
-            throw new RuntimeException('Concurrent reservation workers did not become ready');
-        }
-        usleep(10_000);
-    }
-    file_put_contents($barrier, 'go', LOCK_EX);
+    attachment_db_prove_deferred_result_timeout($connectionA, $connectionB, $table);
+    attachment_db_assert(
+        attachment_db_count($connectionA, $table) === 0,
+        'Deferred-result fixture cleanup left rows behind'
+    );
 
-    $filenameA = attachment_db_finish_worker($workers[0]);
-    $filenameB = attachment_db_finish_worker($workers[1]);
+    $deadlockProved = false;
+    $filenameA = '';
+    $filenameB = '';
+    for ($raceAttempt = 1; $raceAttempt <= 12; $raceAttempt++) {
+        @unlink($barrier);
+        foreach ($readyFiles as $readyFile) {
+            @unlink($readyFile);
+        }
+
+        $deadlocksBefore = attachment_db_status_counter($connectionA, 'Innodb_deadlocks');
+        $workers = [];
+        $workers[] = attachment_db_start_worker($table, $prefix, $sessionA, $barrier);
+        $workers[] = attachment_db_start_worker($table, $prefix, $sessionB, $barrier);
+        $readyDeadline = microtime(true) + 10.0;
+        while (!is_file($readyFiles[0]) || !is_file($readyFiles[1])) {
+            if (microtime(true) >= $readyDeadline) {
+                throw new RuntimeException('Concurrent reservation workers did not become ready');
+            }
+            usleep(10_000);
+        }
+        attachment_db_assert(
+            file_put_contents($barrier, 'go', LOCK_EX) !== false,
+            'Could not release reservation worker barrier'
+        );
+
+        $workerA = attachment_db_finish_worker($workers[0]);
+        $workerB = attachment_db_finish_worker($workers[1]);
+        $workers = [];
+        $filenameA = $workerA['filename'];
+        $filenameB = $workerB['filename'];
+        $workerRetryCodes = array_merge(
+            array_column($workerA['retries'], 'code'),
+            array_column($workerB['retries'], 'code')
+        );
+        $deadlocksAfter = attachment_db_status_counter($connectionA, 'Innodb_deadlocks');
+        if (
+            $deadlocksAfter > $deadlocksBefore
+            && in_array(1213, $workerRetryCodes, true)
+        ) {
+            $deadlockProved = true;
+            break;
+        }
+
+        attachment_db_assert(
+            $connectionA->query('TRUNCATE TABLE ' . estab_attachment_table($table)),
+            'Could not reset deadlock race fixture'
+        );
+    }
+    attachment_db_assert(
+        $deadlockProved,
+        'Concurrent reservation race did not prove a retried MariaDB deadlock in 12 attempts'
+    );
     attachment_db_assert($filenameA !== $filenameB, 'Concurrent reservations collided');
     attachment_db_assert(
         [$filenameA, $filenameB] === ['IT0001', 'IT0002']

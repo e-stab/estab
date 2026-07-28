@@ -268,6 +268,11 @@ function estab_attachment_release_unclaimed(
  *
  * The unique filename index is the final concurrency guard. Duplicate keys,
  * deadlocks and lock timeouts are retried from a fresh transaction.
+ *
+ * @param null|callable(int, int): void $retryObserver Receives attempt and
+ *     database error code immediately before a retry. Production callers
+ *     normally leave this unset; integration tests use it as evidence that
+ *     the real rollback/retry branch ran.
  */
 function estab_attachment_reserve(
     mysqli $connection,
@@ -275,7 +280,8 @@ function estab_attachment_reserve(
     string $prefix,
     string $sessionId,
     int $width = 4,
-    int $maxAttempts = 8
+    int $maxAttempts = 8,
+    ?callable $retryObserver = null
 ): string {
     $quotedTable = estab_attachment_table($table);
     $prefix = estab_attachment_validate_prefix($prefix);
@@ -396,6 +402,9 @@ function estab_attachment_reserve(
                 && estab_attachment_database_error_is_retryable($exception->getCode())
                 && $attempt < $maxAttempts
             ) {
+                if ($retryObserver !== null) {
+                    $retryObserver($attempt, (int) $exception->getCode());
+                }
                 continue;
             }
             throw $exception;
