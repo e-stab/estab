@@ -70,7 +70,14 @@ Geprüft werden:
 - ein über das DevTools-Protokoll exakt auf `390x844` CSS-Pixel gesetzter
   Viewport, in dem öffentliche Leiste, Kopf, Login-Karte und einspaltige
   Modulkarten innerhalb der Breite bleiben, die Bereichsnavigation erreichbar
-  ist und zentrale Login-Schaltflächen mindestens 44 Pixel hoch sind.
+  ist und zentrale Login-Schaltflächen mindestens 44 Pixel hoch sind;
+- mit separaten ephemeren Admin-Testdaten die Basic-Auth-geschützte
+  Exportübersicht bei `1280x800` und `390x844` CSS-Pixeln, die echte
+  Exporterstellung, das offene Manifest, genau einen Downloadlink sowie die
+  zunächst geschlossene und bewusst zweistufig geöffnete Löschbestätigung,
+  den bestätigten Löschvorgang und das anschließende Verschwinden genau dieses
+  Exports; Karten bleiben innerhalb des Viewports und alle Aktionen mindestens
+  44 × 44 Pixel groß.
 
 Die stabile Reihenfolge der Navigationsbereiche lautet:
 
@@ -111,6 +118,17 @@ ESTAB_TEST_LOGIN_FUNCTION=S1 \
 python3 tests/browser/headless_ui.py
 ```
 
+Nur die Exportverwaltung lässt sich auf einem isolierten Test-Deployment
+gezielt prüfen. Der Lauf erzeugt einen eigenen Export und löscht genau diesen
+anschließend wieder:
+
+```sh
+ESTAB_TEST_BASE_URL=http://127.0.0.1:8080 \
+ESTAB_TEST_ADMIN_USER=estab-admin \
+ESTAB_TEST_ADMIN_PASSWORD_FILE=secrets/admin_password.txt \
+python3 tests/browser/headless_ui.py --export-only
+```
+
 Wenn weder `ESTAB_TEST_LOGIN_PASSWORD` noch
 `ESTAB_TEST_LOGIN_PASSWORD_FILE` gesetzt ist, erzeugt der Test intern mit
 `secrets.token_urlsafe(32)` ein starkes ephemeres Kennwort. Es wird niemals
@@ -126,9 +144,10 @@ python3 tests/browser/headless_ui.py
 ```
 
 `ESTAB_TEST_LOGIN_PASSWORD` hat Vorrang, falls beide Varianten gesetzt sind.
-Produktive Kennwörter und insbesondere das separate Administrationskennwort
-dürfen dafür nicht verwendet werden. Der Test gibt das Kennwort weder im
-Erfolgsfall noch in Fehlermeldungen oder Diagnosedateien aus.
+Produktive Kennwörter dürfen dafür nicht verwendet werden. Der optionale
+Export-Browsertest liest entsprechend nur den ephemeren Admin-Benutzer und
+das Admin-Kennwort des isolierten Test-Stacks. Der Test gibt keines der
+Kennwörter im Erfolgsfall, in Fehlermeldungen oder Diagnosedateien aus.
 
 Weitere Einstellungen:
 
@@ -140,6 +159,9 @@ Weitere Einstellungen:
 | `ESTAB_TEST_LOGIN_FUNCTION` | `S1` | Im Formular vorhandene Funktion |
 | `ESTAB_TEST_LOGIN_PASSWORD` | zufällig erzeugt | Optionales, ausschließlich für diesen Browser-Test bestimmtes Kennwort |
 | `ESTAB_TEST_LOGIN_PASSWORD_FILE` | nicht gesetzt | Optionale Datei mit dem Testkennwort |
+| `ESTAB_TEST_ADMIN_USER` | nicht gesetzt | Optionaler Admin-Benutzer des isolierten Test-Stacks; aktiviert zusammen mit einem Kennwort den Export-Browsertest |
+| `ESTAB_TEST_ADMIN_PASSWORD` | nicht gesetzt | Optionales ephemeres Admin-Testkennwort |
+| `ESTAB_TEST_ADMIN_PASSWORD_FILE` | nicht gesetzt | Bevorzugte Secret-Datei mit dem ephemeren Admin-Testkennwort |
 | `ESTAB_BROWSER_BINARY` | automatische Suche | Chrome-/Chromium-Programm |
 | `ESTAB_BROWSER_TIMEOUT` | `25` | Timeout je Browseraktion in Sekunden |
 | `ESTAB_BROWSER_STARTUP_TIMEOUT` | `15` | Browser-Starttimeout in Sekunden |

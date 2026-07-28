@@ -67,7 +67,7 @@ das Kennwort erscheint weder in Argumentliste noch Log.
 | `/4fach/katgoedt.php` | globale, Funktions- und persönliche Kategorien | eStab-Sitzung, Rollen-/Objektprüfung und CSRF für Änderungen |
 | `/4fadm/admin.php` | Administration | separates HTTP Basic Auth |
 | `/4fadm/system_status.php` | ausführlicher Laufzeitstatus | HTTP Basic Auth |
-| `/4fadm/export.php` | manueller CSV-/ZIP-Einsatzexport | HTTP Basic Auth und CSRF |
+| `/4fadm/export.php` | Einsatzexporte auflisten, erstellen, als ZIP herunterladen und einzeln löschen | HTTP Basic Auth; POST-Erstellung/-Löschung mit Session-CSRF; Download nur über validierte Exportkennung |
 | `/4fadm/make_fkt.php` | Empfängermatrix atomar bearbeiten | HTTP Basic Auth und CSRF |
 | `/4fadm/set_number_after_crash.php` | Nachrichtenzähler nach Rückfallbetrieb erhöhen | HTTP Basic Auth und CSRF |
 | `/4fach/resetpic.php` | Grafik-/PDF-Erzeugungsmarkierungen zurücksetzen | HTTP Basic Auth und CSRF |
@@ -184,7 +184,7 @@ Compose verwaltet drei benannte Volumes:
 | --- | --- | --- |
 | `estab_db` | `/var/lib/mysql` | MariaDB-Datenbestand |
 | `estab_data` | `/var/www/html/4fdata` | Anhänge und erzeugte Vordrucke |
-| `estab_export` | `/var/lib/estab/export` | manuell erzeugte Tabellenexporte |
+| `estab_export` | `/var/lib/estab/export` | im Administrationsbereich manuell verwaltete Tabellenexporte |
 
 `podman compose down` behält diese Volumes. `podman compose down --volumes`
 löscht sie und darf nur nach einem geprüften Backup oder für einen ausdrücklich

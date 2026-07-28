@@ -325,9 +325,17 @@ Dateitypen, löst Pfade unterhalb des erwarteten Wurzelverzeichnisses auf und
 verwirft ausbrechende Symlinks. Direkter Zugriff auf hochgeladene Bytes bleibt
 auf Apache-Ebene eine zweite Schutzlinie.
 
-Der neue Administrations-Export verwendet ebenfalls POST plus CSRF und erzeugt
-CSV-Dateien anwendungsseitig. Der MariaDB-Benutzer benötigt dafür kein
-globales `FILE`-Privileg.
+Der Administrations-Export erzeugt CSV-Dateien anwendungsseitig; der
+MariaDB-Benutzer benötigt dafür kein globales `FILE`-Privileg. Die Oberfläche
+listet die atomar veröffentlichten ZIP-Läufe neueste zuerst und zeigt das
+begrenzt validierte Manifest, Datensatzanzahlen und Prüfsummen. Download ist
+eine Basic-Auth-geschützte, ausschließlich lesende GET-Aktion mit streng
+validierter symbolischer Laufkennung; die Datei wird vor der HTML-Pufferung als
+reguläres, nicht verlinktes Root-Kind geöffnet. Erstellung und irreversible
+Einzellöschung verwenden dagegen POST, Session-CSRF, eine feste
+Aktions-Allowlist und anschließend HTTP 303. Löschen entfernt nur das exakt
+zugehörige flache Laufverzeichnis und ZIP; Symlinks, Unterverzeichnisse,
+Traversal und fremde Dateien werden abgewiesen.
 
 ## Nachrichtenablage und Workflow-Grenzen
 

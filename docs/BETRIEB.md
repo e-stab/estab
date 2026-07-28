@@ -424,8 +424,11 @@ podman compose exec -T db du -sh /var/lib/mysql
 
 Anhänge und Vordrucke liegen pro Datenbank unter
 `/var/www/html/4fdata/$ESTAB_DB_NAME/`. Exporte wachsen unabhängig davon im
-Export-Volume und werden nicht automatisch gelöscht. Für beide Bereiche sind
-Aufbewahrungsfrist und Kapazitätsalarm festzulegen.
+Export-Volume und werden nicht automatisch gelöscht. Vollständige einzelne
+Läufe können unter `/4fadm/export.php` nach einer ausdrücklichen zweiten
+Bestätigung gelöscht werden. Das ersetzt keine Aufbewahrungsregel: Für beide
+Bereiche sind weiterhin Frist, Verantwortlichkeit und Kapazitätsalarm
+festzulegen.
 
 Eine Sicherung und ein regelmäßig geprobter Restore sind in
 [Backup und Wiederherstellung](BACKUP-UND-WIEDERHERSTELLUNG.md) beschrieben.

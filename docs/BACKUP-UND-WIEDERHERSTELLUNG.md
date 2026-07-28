@@ -211,8 +211,9 @@ Nachrichtenfluss, Anhänge, PDF/Vordruck und Einsatzexport.
 
 ## Administrativer Einsatzexport
 
-Unter `/4fadm/export.php` kann ein Administrator einen Export aller
-Basistabellen erzeugen. Pro Tabelle entstehen:
+Unter `/4fadm/export.php` kann ein Administrator Exporte aller Basistabellen
+erzeugen, vorhandene Läufe mit Manifest und Prüfsummen ansehen und das jeweilige
+ZIP herunterladen. Pro Tabelle entstehen:
 
 - eine UTF-8-CSV-Datei mit Semikolon als Trennzeichen und Kopfzeile,
 - `\N` als eindeutige Darstellung von SQL `NULL`,
@@ -228,6 +229,14 @@ podman compose exec -T app \
   > estab-export.tar.gz
 ```
 
+Jeder vollständig veröffentlichte Lauf erscheint in der Übersicht mit
+Zeitpunkt, Datenbank, Tabellen-/Datensatzanzahl und Archivgröße. „Export
+löschen …“ öffnet zunächst eine Warnung; erst die zweite, CSRF-geschützte
+Bestätigung entfernt genau dieses ZIP und sein CSV-Verzeichnis. Der Vorgang
+ist nicht rückgängig zu machen. Ein anderer Export bleibt davon unberührt.
+Symlinks oder unerwartete Unterverzeichnisse werden aus Sicherheitsgründen
+nicht über die Weboberfläche gelöscht.
+
 Dieser Export ist für Prüfung und Datenaustausch gedacht, aber **kein
 Vollbackup**:
 
@@ -237,7 +246,8 @@ Vollbackup**:
 - die Tabellen werden nacheinander und nicht in einer gemeinsamen
   Snapshot-Transaktion gelesen,
 - es gibt keinen automatischen CSV-Importer,
-- alte Exporte werden nicht automatisch rotiert.
+- alte Exporte werden nicht automatisch rotiert; die neue Einzellöschung
+  bleibt eine bewusste manuelle Aufbewahrungsentscheidung.
 
 Für Disaster Recovery ist immer das konsistente Vollbackup aus Datenbankdump
 und beiden Dateibereichen maßgeblich.

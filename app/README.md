@@ -106,6 +106,15 @@ weiterhin öffentlich benötigten Legacy-Bildbuttons.
   Tab eine erfolgreiche Browserfreigabe; die browserweite Ein-/Aus-Absicht
   wird über `localStorage` synchronisiert und verspätete `play()`-Ergebnisse
   werden generationsgebunden verworfen.
+- `export.php` veröffentlicht jeden Datenbankexport atomar als streng benannten
+  Lauf und ZIP außerhalb des DocumentRoot. Die Administrationsseite listet nur
+  reguläre, nicht verlinkte Archive unmittelbar im konfigurierten Exportroot.
+  Binäre Downloads werden vor der gemeinsamen HTML-Ausgabepufferung geöffnet
+  und unverändert gestreamt. Erstellen und Löschen verwenden eine explizite
+  Aktions-Allowlist, POST, Session-CSRF und HTTP 303; die Löschung akzeptiert
+  nur die symbolische Laufkennung und entfernt ausschließlich das zugehörige
+  flache Verzeichnis-/ZIP-Paar. Symlinks, Unterverzeichnisse und ausbrechende
+  Pfade werden nicht verfolgt.
 - Bearbeitungsformulare markieren sich ausdrücklich mit
   `data-estab-dirty-guard`. Nur bei geändertem Zustand bestätigt der Browser
   einen globalen Bereichswechsel oder Logout; lokale Speichern-, Abbrechen-

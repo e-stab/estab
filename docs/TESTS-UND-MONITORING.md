@@ -341,8 +341,11 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
   SQL-ähnlichem Text bei nachweislich inertem HTML sowie HTTP 403 für den
   historischen GET-Detailaufruf,
 - Basic-Auth-Adminseite mit escaped technischem Benutzernamen, ausdrücklicher
-  Trennung vom eStab-Funktionskonto, CSRF-Token und vollständigem
-  Einsatzexport.
+  Trennung vom eStab-Funktionskonto sowie Exportverwaltung: zwei vollständige
+  Exporte erzeugen, PRG-Rückleitungen und CSRF-Grenzen prüfen, Manifest und
+  jede CSV-Prüfsumme im heruntergeladenen ZIP verifizieren, Traversal und
+  unbekannte IDs abweisen, genau einen Lauf löschen und den zweiten
+  byteidentisch für den Backup-/Restore-Nachweis behalten.
 
 ### Direkte HTTP-Oberfläche
 
@@ -620,8 +623,11 @@ Mindestens zu prüfen:
   und Cross-Rollen-Schreibversuche mit HTTP 403 abweisen; Kommunikationsplan
   und alle lokal benötigten Zusatzmodule öffnen und je einen repräsentativen
   Datensatz anlegen/lesen,
-- administrativen Einsatzexport erzeugen, ZIP öffnen und
-  `manifest.json`-Hashes gegen die CSV-Dateien prüfen,
+- administrative Exportübersicht am Desktop und bei 390 Pixel Breite öffnen,
+  Export erzeugen, ZIP herunterladen, `manifest.json`-Hashes gegen die
+  CSV-Dateien prüfen und die zweistufige Löschbestätigung ohne horizontales
+  Überlaufen bedienen; anschließend einen Lauf löschen und einen zweiten
+  unverändert behalten,
 - Vollbackup in ein leeres Testprojekt zurückspielen und denselben
   Nachrichten-/Anhangdatensatz wiederfinden.
 
