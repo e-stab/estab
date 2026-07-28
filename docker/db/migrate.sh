@@ -5,6 +5,7 @@ set -eu
 : "${ESTAB_DB_PORT:=3306}"
 : "${ESTAB_DB_NAME:=estab}"
 : "${ESTAB_DB_ROOT_PASSWORD_FILE:=/run/secrets/estab_db_root_password}"
+: "${ESTAB_SCHEMA_BASELINE_FILE:=/opt/estab/schema/10-schema.sql}"
 : "${ESTAB_MIGRATIONS_DIR:=/opt/estab/migrations}"
 ESTAB_SCHEMA_VERIFY_FILE=${ESTAB_SCHEMA_VERIFY_FILE-/opt/estab/verify.sql}
 
@@ -97,6 +98,136 @@ database_verify()
         --raw \
         --database="$ESTAB_DB_NAME"
 }
+
+if [ ! -r "$ESTAB_SCHEMA_BASELINE_FILE" ]; then
+    echo "Fresh schema baseline is not readable: $ESTAB_SCHEMA_BASELINE_FILE" >&2
+    exit 1
+fi
+baseline_checksum=$(sha256sum "$ESTAB_SCHEMA_BASELINE_FILE" | awk '{print $1}')
+case "$baseline_checksum" in
+    *[!0-9a-f]*|'')
+        echo "Could not calculate fresh schema baseline checksum" >&2
+        exit 1
+        ;;
+esac
+
+create_baseline_ledger()
+{
+    database_query "
+CREATE TABLE IF NOT EXISTS estab_schema_baselines (
+  version VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  checksum CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  state ENUM('applying','applied') NOT NULL,
+  started_at DATETIME(6) NOT NULL,
+  applied_at DATETIME(6) NULL,
+  PRIMARY KEY (version)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+}
+
+core_table_present=$(database_query "
+SELECT COUNT(*)
+  FROM information_schema.tables
+ WHERE table_schema = DATABASE()
+   AND table_type = 'BASE TABLE'
+   AND table_name = 'nv_nachrichten'")
+namespace_table_count=$(database_query "
+SELECT COUNT(*)
+  FROM information_schema.tables
+ WHERE table_schema = DATABASE()
+   AND table_type = 'BASE TABLE'
+   AND LEFT(table_name, 3) = 'nv_'")
+baseline_ledger_present=$(database_query "
+SELECT COUNT(*)
+  FROM information_schema.tables
+ WHERE table_schema = DATABASE()
+   AND table_type = 'BASE TABLE'
+   AND table_name = 'estab_schema_baselines'")
+baseline_record=
+if [ "$baseline_ledger_present" = "1" ]; then
+    baseline_record=$(database_query "
+SELECT CONCAT(checksum, '|', state)
+  FROM estab_schema_baselines
+ WHERE version = '10-schema.sql'")
+elif [ "$baseline_ledger_present" != "0" ]; then
+    echo "Could not determine fresh schema baseline ledger state" >&2
+    exit 1
+fi
+baseline_action=skip
+
+if [ -n "$baseline_record" ]; then
+    stored_baseline_checksum=${baseline_record%%|*}
+    stored_baseline_state=${baseline_record#*|}
+    if [ "$stored_baseline_checksum" != "$baseline_checksum" ]; then
+        echo "Checksum mismatch for fresh schema baseline: 10-schema.sql" >&2
+        exit 1
+    fi
+    case "$stored_baseline_state" in
+        applying)
+            echo "Retrying interrupted fresh schema baseline: $baseline_checksum"
+            baseline_action=apply
+            ;;
+        applied)
+            echo "Fresh schema baseline already applied: $baseline_checksum"
+            ;;
+        *)
+            echo "Invalid fresh schema baseline state: $stored_baseline_state" >&2
+            exit 1
+            ;;
+    esac
+elif [ "$namespace_table_count" = "0" ]; then
+    create_baseline_ledger
+    database_query "
+INSERT INTO estab_schema_baselines
+  (version, checksum, state, started_at, applied_at)
+VALUES
+  ('10-schema.sql', '$baseline_checksum', 'applying', NOW(6), NULL)"
+    echo "Applying fresh schema baseline: $baseline_checksum"
+    baseline_action=apply
+elif [ "$core_table_present" = "0" ]; then
+    echo "Fresh schema initialization blocked: partial nv_* tables already exist" >&2
+    exit 1
+else
+    echo "Existing eStab schema detected; fresh baseline was not reapplied."
+fi
+
+if [ "$baseline_action" = "apply" ]; then
+    if ! database_apply < "$ESTAB_SCHEMA_BASELINE_FILE"; then
+        echo "Fresh schema baseline failed; its applying record was retained for a safe retry" >&2
+        exit 1
+    fi
+fi
+
+if [ -n "$baseline_record" ] || [ "$baseline_action" = "apply" ]; then
+    baseline_table_count=$(database_query "
+SELECT COUNT(*)
+  FROM information_schema.tables
+ WHERE table_schema = DATABASE()
+   AND table_type = 'BASE TABLE'
+   AND table_name IN (
+     'nv_nachrichten', 'nv_empfmtx', 'nv_benutzer',
+     'nv_masterkatego', 'nv_masterkategolink', 'nv_protokoll',
+     'nv_anhang', 'nv_etb', 'nv_tbb', 'nv_ubb', 'nv_komplan',
+     'nv_bhp50', 'nv_etbtitel', 'nv_tbbtitel'
+   )")
+    if [ "$baseline_table_count" != "14" ]; then
+        echo "Fresh schema baseline is incomplete; expected 14 runtime tables" >&2
+        exit 1
+    fi
+fi
+
+if [ "$baseline_action" = "apply" ]; then
+    updated_rows=$(database_query "
+UPDATE estab_schema_baselines
+   SET state = 'applied', applied_at = NOW(6)
+ WHERE version = '10-schema.sql'
+   AND checksum = '$baseline_checksum'
+   AND state = 'applying';
+SELECT ROW_COUNT();")
+    if [ "$updated_rows" != "1" ]; then
+        echo "Could not finalize fresh schema baseline record" >&2
+        exit 1
+    fi
+fi
 
 database_query "
 CREATE TABLE IF NOT EXISTS estab_schema_migrations (

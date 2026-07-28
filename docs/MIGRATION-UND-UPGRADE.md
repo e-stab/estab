@@ -12,7 +12,10 @@ Bei eStab sind drei unterschiedliche Vorgänge auseinanderzuhalten:
 
 ## Frische Installation
 
-Bei leerem Volume `estab_db` führt der MariaDB-Entrypoint einmalig
+Bei leerem Volume `estab_db` legt der offizielle MariaDB-Entrypoint zunächst
+nur die konfigurierte Datenbank und den Anwendungsbenutzer an. Anschließend
+erkennt der One-shot-Migrator den vollständig leeren `nv_*`-Namensraum und
+führt seine eingebettete kanonische Fassung von
 `docker/db/init/10-schema.sql` aus. Das Skript:
 
 - legt die 14 Basistabellen als InnoDB/`utf8mb4` an,
@@ -25,9 +28,15 @@ Bei leerem Volume `estab_db` führt der MariaDB-Entrypoint einmalig
 Der Dateibaum wird nicht aus dem Image vorbelegt. Der App-Entrypoint erzeugt
 die benötigten Verzeichnisse im persistenten `estab_data`-Volume.
 
-Der Init-Mechanismus wird bei einem bereits gefüllten MariaDB-Volume nicht
-erneut ausgeführt. Deshalb folgt bei jeder Erstinstallation und jedem
-freigegebenen Upgrade der versionierte Service `migrate`; erst dessen
+Das Basisschema wird erstmals angelegt, wenn der `nv_*`-Namensraum leer ist.
+Vor dem ersten DDL speichert der Runner Dateiname, SHA-256 und Zustand
+`applying` in `estab_schema_baselines`. Nach einem harten Abbruch darf nur
+dieselbe Baseline erneut laufen; ihre `IF NOT EXISTS`-/`INSERT IGNORE`-Schritte
+ergänzen die fehlenden Tabellen, bevor der Datensatz auf `applied` wechselt.
+Ein unprotokollierter teilinitialisierter Namensraum ohne
+`nv_nachrichten` wird weiterhin mit eindeutiger Fehlermeldung blockiert. Ein
+vorhandenes Legacy-Schema mit Kerntabelle überspringt die Fresh-Baseline und
+durchläuft ausschließlich die versionierten Upgrade-Migrationen. Erst
 erfolgreicher Exit und Post-Migrations-Schematest geben die App frei. Bei
 einem bloßen Neustart mit unverändertem Image verwendet Compose den bereits
 erfolgreich beendeten One-shot-Container; für eine erneute Prüfung wird er

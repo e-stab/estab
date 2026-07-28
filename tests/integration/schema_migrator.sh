@@ -5,20 +5,27 @@ set -eu
 : "${ESTAB_DB_PORT:=3306}"
 : "${ESTAB_DB_ROOT_PASSWORD_FILE:=/run/secrets/estab_db_root_password}"
 : "${ESTAB_MIGRATOR_BIN:=/usr/local/bin/estab-migrate}"
+: "${ESTAB_SCHEMA_BASELINE_FILE:=/opt/estab/schema/10-schema.sql}"
 export ESTAB_SCHEMA_VERIFY_FILE=
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 fixture="$script_dir/../fixtures/legacy-runtime-schema.sql"
 test_database="estab_migration_test_$$"
+retry_database="estab_baseline_retry_test_$$"
+guard_database="estab_baseline_guard_test_$$"
 
-case "$test_database" in
-    *[!A-Za-z0-9_]*)
-        echo "schema migrator test: unsafe fixture database name" >&2
-        exit 1
-        ;;
-esac
-if [ ! -r "$fixture" ] || [ ! -x "$ESTAB_MIGRATOR_BIN" ]; then
-    echo "schema migrator test: fixture or migrator is unavailable" >&2
+for database_name in "$test_database" "$retry_database" "$guard_database"; do
+    case "$database_name" in
+        *[!A-Za-z0-9_]*)
+            echo "schema migrator test: unsafe fixture database name" >&2
+            exit 1
+            ;;
+    esac
+done
+if [ ! -r "$fixture" ] \
+    || [ ! -r "$ESTAB_SCHEMA_BASELINE_FILE" ] \
+    || [ ! -x "$ESTAB_MIGRATOR_BIN" ]; then
+    echo "schema migrator test: fixture, baseline, or migrator is unavailable" >&2
     exit 1
 fi
 if [ ! -r "$ESTAB_DB_ROOT_PASSWORD_FILE" ]; then
@@ -62,20 +69,30 @@ admin_query()
 
 fixture_query()
 {
+    database_query "$test_database" "$1"
+}
+
+database_query()
+{
+    database_name=$1
+    sql=$2
     mariadb \
         --defaults-extra-file="$client_defaults" \
         --batch \
         --skip-column-names \
         --raw \
-        --database="$test_database" \
-        --execute="$1"
+        --database="$database_name" \
+        --execute="$sql"
 }
 
 cleanup()
 {
     status=$?
     trap - EXIT HUP INT TERM
-    admin_query "DROP DATABASE IF EXISTS \`$test_database\`" >/dev/null 2>&1 || true
+    admin_query "
+DROP DATABASE IF EXISTS \`$test_database\`;
+DROP DATABASE IF EXISTS \`$retry_database\`;
+DROP DATABASE IF EXISTS \`$guard_database\`" >/dev/null 2>&1 || true
     rm -f -- "$client_defaults" "$failure_log"
     exit "$status"
 }
@@ -92,6 +109,75 @@ assert_equal()
         exit 1
     fi
 }
+
+admin_query "
+DROP DATABASE IF EXISTS \`$retry_database\`;
+CREATE DATABASE \`$retry_database\`
+  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+baseline_checksum=$(sha256sum "$ESTAB_SCHEMA_BASELINE_FILE" | awk '{print $1}')
+database_query "$retry_database" "
+CREATE TABLE estab_schema_baselines (
+  version VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  checksum CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  state ENUM('applying','applied') NOT NULL,
+  started_at DATETIME(6) NOT NULL,
+  applied_at DATETIME(6) NULL,
+  PRIMARY KEY (version)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+INSERT INTO estab_schema_baselines
+  (version, checksum, state, started_at, applied_at)
+VALUES
+  ('10-schema.sql', '$baseline_checksum', 'applying', NOW(6), NULL)"
+awk '
+    /^CREATE TABLE IF NOT EXISTS `nv_nachrichten`/ { copying = 1 }
+    copying { print }
+    copying && /ENGINE=InnoDB.*;$/ { exit }
+' "$ESTAB_SCHEMA_BASELINE_FILE" |
+    mariadb \
+        --defaults-extra-file="$client_defaults" \
+        --database="$retry_database"
+
+ESTAB_DB_NAME="$retry_database" "$ESTAB_MIGRATOR_BIN"
+ESTAB_DB_NAME="$retry_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "1" "$(database_query "$retry_database" "
+SELECT COUNT(*)
+  FROM estab_schema_baselines
+ WHERE version = '10-schema.sql'
+   AND checksum = '$baseline_checksum'
+   AND state = 'applied'
+   AND applied_at IS NOT NULL")" \
+    "interrupted baseline was not retried and recorded"
+assert_equal "14" "$(database_query "$retry_database" "
+SELECT COUNT(*)
+  FROM information_schema.tables
+ WHERE table_schema = DATABASE()
+   AND table_type = 'BASE TABLE'
+   AND LEFT(table_name, 3) = 'nv_'")" \
+    "retried baseline did not produce all runtime tables"
+
+admin_query "
+DROP DATABASE IF EXISTS \`$guard_database\`;
+CREATE DATABASE \`$guard_database\`
+  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+database_query "$guard_database" "
+CREATE TABLE nv_partial_probe (
+  id INT NOT NULL PRIMARY KEY
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+if ESTAB_DB_NAME="$guard_database" "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: untracked partial namespace was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'partial nv_\* tables already exist' "$failure_log"; then
+    echo "schema migrator test: partial namespace failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "0" "$(database_query "$guard_database" "
+SELECT COUNT(*)
+  FROM information_schema.tables
+ WHERE table_schema = DATABASE()
+   AND table_name IN ('nv_nachrichten', 'estab_schema_baselines')")" \
+    "partial namespace guard modified the blocked database"
 
 admin_query "
 DROP DATABASE IF EXISTS \`$test_database\`;

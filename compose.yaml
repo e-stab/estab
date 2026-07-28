@@ -2,7 +2,7 @@ name: estab
 
 services:
   db:
-    image: mariadb:11.8.8
+    image: mariadb:11.8.8@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4
     init: true
     restart: unless-stopped
     command:
@@ -18,7 +18,6 @@ services:
       - estab_db_root_password
     volumes:
       - estab_db:/var/lib/mysql
-      - ./docker/db/init/10-schema.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
     networks:
       - database
     healthcheck:

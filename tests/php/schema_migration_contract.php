@@ -25,6 +25,7 @@ $runtimeMigration = $read($root . '/docker/db/migrations/30-runtime-schema.sql')
 $baseline = $read($root . '/docker/db/init/10-schema.sql');
 $verify = $read($root . '/docker/db/verify.sql');
 $health = $read($root . '/health.php');
+$schemaIntegration = $read($root . '/tests/integration/schema_migrator.sh');
 
 $assert(
     preg_match('/^\s{2}migrate:\R/m', $compose) === 1,
@@ -40,9 +41,33 @@ $assert(
 );
 $assert(
     str_contains($migratorImage, 'COPY docker/db/migrate.sh')
+    && str_contains($migratorImage, 'COPY docker/db/init/10-schema.sql')
     && str_contains($migratorImage, 'COPY docker/db/migrations/')
     && str_contains($migratorImage, 'COPY docker/db/verify.sql'),
-    'Migration image does not contain runner, versioned SQL, and verification'
+    'Migration image does not contain baseline, runner, versioned SQL, and verification'
+);
+$assert(
+    !str_contains($compose, '/docker-entrypoint-initdb.d/10-schema.sql')
+    && str_contains($runner, 'ESTAB_SCHEMA_BASELINE_FILE')
+    && str_contains($runner, 'Fresh schema initialization blocked: partial nv_* tables already exist')
+    && str_contains($runner, 'sha256sum "$ESTAB_SCHEMA_BASELINE_FILE"')
+    && str_contains($runner, 'CREATE TABLE IF NOT EXISTS estab_schema_baselines')
+    && str_contains($runner, 'Retrying interrupted fresh schema baseline')
+    && str_contains($runner, 'Checksum mismatch for fresh schema baseline')
+    && str_contains($runner, 'expected 14 runtime tables')
+    && str_contains($runner, 'database_apply < "$ESTAB_SCHEMA_BASELINE_FILE"'),
+    'Fresh installation lacks a checksum-ledgered, retryable embedded baseline'
+);
+$assert(
+    str_contains($schemaIntegration, 'estab_baseline_retry_test_')
+    && str_contains(
+        $schemaIntegration,
+        "('10-schema.sql', '\$baseline_checksum', 'applying'"
+    )
+    && str_contains($schemaIntegration, 'interrupted baseline was not retried and recorded')
+    && str_contains($schemaIntegration, 'untracked partial namespace was accepted')
+    && str_contains($schemaIntegration, 'partial namespace guard modified the blocked database'),
+    'Integration tests do not prove baseline retry and the untracked-partial guard'
 );
 $assert(
     str_contains($runner, '--defaults-extra-file="$client_defaults"'),

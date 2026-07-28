@@ -1,10 +1,23 @@
 # Datenbank-Basis
 
 `init/10-schema.sql` bildet das in eStab 0.9.26c verwendete Basisschema für
-MariaDB 11.8 ab. Die Datei ist für
-`/docker-entrypoint-initdb.d/10-schema.sql` im offiziellen MariaDB-Container
-gedacht. Der Container muss die Zieldatenbank vorher über `MARIADB_DATABASE`
-ausgewählt haben.
+MariaDB 11.8 ab. Das Migrationsimage kopiert genau diese kanonische Datei nach
+`/opt/estab/schema/10-schema.sql`. Bei einem leeren `nv_*`-Namensraum bindet
+der Runner ihre SHA-256-Prüfsumme vor dem ersten DDL an einen
+`applying`-Datensatz in `estab_schema_baselines`. Ein harter Abbruch ist damit
+von einem fremden Teilbestand unterscheidbar: nur dieselbe Baseline darf die
+idempotente Initialisierung fortsetzen und nach allen 14 Tabellen auf
+`applied` wechseln. Ein unprotokollierter teilweise vorhandener
+`nv_*`-Namensraum ohne `nv_nachrichten` blockiert weiterhin fail-closed. Ein
+Legacy-Schema mit Kerntabelle wird nicht durch die Fresh-Baseline ergänzt. Der
+offizielle MariaDB-Container muss die Zieldatenbank vorher über
+`MARIADB_DATABASE` angelegt haben.
+
+Die Datei kann für isolierte Schemaarbeit weiterhin direkt gegen eine bereits
+ausgewählte leere Datenbank ausgeführt werden. Compose bindet sie aber nicht
+mehr nach `/docker-entrypoint-initdb.d`; damit enthält das veröffentlichbare
+Migrationsimage sämtliche für eine pull-only Neuinstallation benötigten
+Schemaartefakte.
 
 Compose erzwingt im Server
 `STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO`
@@ -27,28 +40,35 @@ Der App-Service besitzt die Abhängigkeit
 `condition: service_completed_successfully`; ein fehlerhafter oder
 unvollständiger Migrationslauf lässt Apache deshalb aus.
 
-Das eigene Image aus `Dockerfile.migrate` enthält den MariaDB-Client,
-`migrate.sh`, alle Dateien unter `migrations/` und `verify.sql`. Der Runner:
+Das eigene Image aus `Dockerfile.migrate` enthält den MariaDB-Client, das
+Basisschema, `migrate.sh`, alle Dateien unter `migrations/` und `verify.sql`.
+Der Runner:
 
 1. liest das Root-Kennwort aus dem Compose-Secret in eine temporäre Datei mit
    Modus `0600`,
 2. verbindet den Client über `--defaults-extra-file`, sodass kein Kennwort in
    Argumentliste oder Log erscheint,
-3. verarbeitet unveränderliche SQL-Dateien in sortierter
+3. prüft den `nv_*`-Namensraum, speichert bei einer leeren Installation
+   Baseline-Dateiname, SHA-256 und Zustand vor dem ersten DDL und setzt einen
+   unterbrochenen Lauf ausschließlich mit derselben Prüfsumme fort,
+4. verarbeitet unveränderliche SQL-Dateien in sortierter
    Dateinamenreihenfolge,
-4. speichert Dateiname, SHA-256, Zustand, Lauf-ID sowie Zeitpunkte in
+5. speichert Dateiname, SHA-256, Zustand, Lauf-ID sowie Zeitpunkte in
    `estab_schema_migrations`,
-5. überspringt nur exakt dieselbe bereits angewendete Prüfsumme,
-6. blockiert bei Prüfsummenabweichung oder einem fremden/unterbrochenen
+6. überspringt nur exakt dieselbe bereits angewendete Prüfsumme,
+7. blockiert bei Prüfsummenabweichung oder einem fremden/unterbrochenen
    `applying`-Zustand,
-7. führt abschließend `verify.sql` aus und akzeptiert ausschließlich eine
+8. führt abschließend `verify.sql` aus und akzeptiert ausschließlich eine
    Ergebniszeile voller `1` ohne nachfolgende Abweichungszeile.
 
-Ein regulär fehlgeschlagenes, idempotentes SQL-Skript entfernt nur seinen
+Ein regulär fehlgeschlagenes, idempotentes Upgrade-Skript entfernt nur seinen
 eigenen `applying`-Datensatz und kann nach fachlicher Korrektur erneut laufen.
-Ein harter Abbruch bleibt absichtlich fail-closed und erfordert
-Operatorprüfung. Bereits veröffentlichte Migrationsdateien dürfen nie editiert
-werden; jede Änderung erhält die nächste Versionsdatei.
+Ein harter Abbruch einer versionierten Upgrade-Migration bleibt absichtlich
+fail-closed und erfordert Operatorprüfung. Der getrennte Fresh-Baseline-Zweig
+ist dagegen aufgrund seines vorab gespeicherten Checksums und seiner
+idempotenten SQL-Anweisungen automatisch wiederaufnehmbar. Bereits
+veröffentlichte SQL-Dateien dürfen nie editiert werden; jede Änderung erhält
+die nächste Versionsdatei.
 
 Ausführen beziehungsweise erneut prüfen:
 
@@ -68,10 +88,14 @@ mariadb --database="$MARIADB_DATABASE" < /docker/db/verify.sql
 Alle Spalten der ersten Ergebniszeile müssen `1` sein, die zweite Abfrage darf
 keine Zeile liefern. `verify.sql` liest ausschließlich Metadaten und Daten.
 
-Die Fassung wurde mit dem offiziellen Image `mariadb:11.8` (MariaDB 11.8.8)
-validiert: Erstinitialisierung und ein unmittelbar folgender zweiter Lauf von
-`10-schema.sql` waren fehlerfrei. Sämtliche Struktur- und Matrixprüfwerte waren
-jeweils `1`.
+Die Fassung wird mit dem festgelegten Multi-Arch-Digest von
+`mariadb:11.8.8` validiert: Der selbsttragende Migrator initialisiert ein
+leeres Datenbank-Volume. Der Integrationstest simuliert zusätzlich einen
+harten Abbruch nach der ersten Basistabelle mit bereits gespeichertem
+Baseline-Checksum, weist den erfolgreichen Wiederanlauf nach und prüft, dass
+ein unprotokollierter fremder `nv_*`-Teilbestand blockiert bleibt. Ein
+unmittelbar folgender Lauf verarbeitet nur die checksum-gebundenen
+Migrationen. Sämtliche Struktur- und Matrixprüfwerte müssen jeweils `1` sein.
 Repräsentative Teil-Inserts für `nv_nachrichten` sowie die dreispaltige
 Anhang-Reservierung liefen unter `STRICT_TRANS_TABLES` erfolgreich und wurden
 innerhalb einer Testtransaktion zurückgerollt.
@@ -201,7 +225,8 @@ repräsentative temporäre Tabellen an.
 Die historischen, im Webserver gesperrten Provisionierungsdateien
 `4fadm/create_db.php` und `4fach/create_db.php` sind nicht autoritativ. Ihre
 Datumsdefinitionen sind dennoch Strict-Mode-tauglich; im Container bleibt
-ausschließlich `init/10-schema.sql` der freigegebene Initialisierungsweg.
+ausschließlich die durch `migrate.sh` kontrollierte eingebettete Fassung von
+`init/10-schema.sql` der freigegebene Initialisierungsweg.
 
 Historische Anwendungspfade verwenden weiterhin `mysql_*`; im Container
 werden sie durch die getestete `mysqli`-Kompatibilitätsschicht abgebildet. Der
