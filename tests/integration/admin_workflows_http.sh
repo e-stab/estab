@@ -91,7 +91,7 @@ db_sql()
         unset escaped_password
         chmod 0600 "$client_defaults"
 
-        exec mariadb \
+        mariadb \
             --defaults-extra-file="$client_defaults" \
             --batch \
             --skip-column-names \

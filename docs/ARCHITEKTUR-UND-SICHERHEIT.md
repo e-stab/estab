@@ -90,6 +90,25 @@ mit `ESTAB_ALLOW_SELF_REGISTRATION=false` abgeschaltet werden. Sie ist eine
 bewusste Betriebsentscheidung und kein Ersatz für Netzsegmentierung oder
 organisatorische Benutzerfreigabe.
 
+Der anonyme Einstieg bindet die fachliche Absicht an einen streng validierten
+POST-Modus: `existing` darf ausschließlich einen vorhandenen Datensatz
+authentisieren, `new` ausschließlich einen noch nicht vergebenen Datensatz
+anlegen. Widersprüchliche Modus-/Kennwortbestätigungswerte werden vor dem
+Legacy-Controller abgewiesen. Jeder Browser-POST mit Zugangsdaten benötigt
+bereits vor der Authentisierung das CSRF-Token der anonymen Sitzung. Tokenlose
+historische Ein-/Zwei-Kennwort-Clients sind standardmäßig deaktiviert; die
+explizite Ausnahme `ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF=true` akzeptiert nur
+den alten Request ohne `login_flow` und weist erkannte Cross-Site-Metadaten
+weiterhin ab. Auswahlfehler erscheinen im Hauptframe statt in
+einem Popup, damit auch eingebettete Browser und assistive Technik die
+Rückmeldung zuverlässig darstellen. Die öffentliche Benutzerliste dient nur
+zur Vorbelegung; pro Zeile wird genau eine Auswahlaktion übertragen.
+Bereits authentifizierte Sitzungen müssen sich vor einer anderen Anmeldung
+oder Kontoerstellung abmelden. Bei aktiven Konten muss die übermittelte
+Funktion außerdem der gespeicherten Zuordnung entsprechen; nur die bestehende
+Ummeldelogik für inaktive Konten darf Funktion und daraus abgeleitete Rolle
+ändern.
+
 ## Webserver-Härtung
 
 Die Apache-Konfiguration:

@@ -17,6 +17,16 @@ $assert(
     estab_workflow_public_login_request(['REQUEST_METHOD' => 'POST'], [], ['login' => 'Anmelden']),
     'login transition rejected'
 );
+foreach (['existing', 'new'] as $loginFlow) {
+    $assert(
+        estab_workflow_public_login_request(
+            ['REQUEST_METHOD' => 'POST'],
+            [],
+            ['login_flow' => $loginFlow]
+        ),
+        'valid account-flow selection rejected'
+    );
+}
 $assert(
     estab_workflow_public_login_request(
         ['REQUEST_METHOD' => 'POST'],
@@ -41,6 +51,7 @@ foreach ([
     );
 }
 $credentials = [
+    'login_flow' => 'new',
     'benutzer' => 'Ada Müller',
     'kuerzel' => 'ada001',
     'funktion' => 'S1',
@@ -53,9 +64,140 @@ $assert(
     estab_workflow_public_login_request(['REQUEST_METHOD' => 'POST'], [], $credentials),
     'credential POST rejected'
 );
+$loginCsrf = str_repeat('a', 64);
+$assert(
+    estab_workflow_public_login_request(
+        ['REQUEST_METHOD' => 'POST'],
+        [],
+        $credentials + ['csrf_token' => $loginCsrf]
+    ),
+    'credential POST with a syntactically valid CSRF token rejected'
+);
+$assert(
+    !estab_workflow_public_login_request(
+        ['REQUEST_METHOD' => 'POST'],
+        [],
+        $credentials + ['csrf_token' => 'short']
+    ),
+    'credential POST with malformed CSRF token accepted'
+);
+$existingCredentials = [
+    'login_flow' => 'existing',
+    'benutzer' => 'Ada Müller',
+    'kuerzel' => 'ada001',
+    'funktion' => 'S1',
+    'kennwort1' => 'test-secret',
+    '2teskennwort' => 'No',
+];
+$assert(
+    estab_workflow_public_login_request(
+        ['REQUEST_METHOD' => 'POST'],
+        [],
+        $existingCredentials
+    ),
+    'existing-account credential POST rejected'
+);
+$assert(
+    estab_workflow_public_login_request(
+        ['REQUEST_METHOD' => 'POST'],
+        [],
+        array_diff_key($existingCredentials, ['login_flow' => true, '2teskennwort' => true])
+    ),
+    'historical one-password existing-account POST rejected'
+);
+$assert(
+    estab_workflow_public_login_request(
+        ['REQUEST_METHOD' => 'POST'],
+        [],
+        array_diff_key($credentials, ['login_flow' => true])
+    ),
+    'historical two-password credential POST rejected'
+);
+$assert(
+    estab_workflow_public_login_request(
+        ['REQUEST_METHOD' => 'POST'],
+        [],
+        array_diff_key($existingCredentials, ['2teskennwort' => true])
+    ),
+    'explicit existing flow was coupled to the compatibility marker'
+);
+$assert(
+    estab_workflow_public_login_request(
+        ['REQUEST_METHOD' => 'POST'],
+        [],
+        array_diff_key($credentials, ['2teskennwort' => true])
+    ),
+    'explicit new flow was coupled to the compatibility marker'
+);
+$legacyCredentials = array_diff_key(
+    $existingCredentials,
+    ['login_flow' => true, '2teskennwort' => true]
+);
+$assert(
+    estab_workflow_login_credentials_present($credentials)
+        && !estab_workflow_login_credentials_present(['login_flow' => 'existing']),
+    'credential-bearing request detection is incorrect'
+);
+$legacyModeBefore = getenv('ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF');
+putenv('ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF=false');
+$assert(
+    !estab_workflow_legacy_login_without_csrf_allowed(
+        ['HTTP_HOST' => 'estab.example', 'HTTP_SEC_FETCH_SITE' => 'same-origin'],
+        $legacyCredentials
+    ),
+    'tokenless legacy login is enabled by default'
+);
+putenv('ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF=true');
+$assert(
+    estab_workflow_legacy_login_without_csrf_allowed(
+        ['HTTP_HOST' => 'estab.example', 'HTTP_SEC_FETCH_SITE' => 'same-origin'],
+        $legacyCredentials
+    ),
+    'same-origin tokenless legacy login rejected after explicit opt-in'
+);
+$assert(
+    !estab_workflow_legacy_login_without_csrf_allowed(
+        ['HTTP_HOST' => 'estab.example', 'HTTP_SEC_FETCH_SITE' => 'cross-site'],
+        $legacyCredentials
+    ),
+    'cross-site tokenless legacy login accepted'
+);
+$assert(
+    !estab_workflow_legacy_login_without_csrf_allowed(
+        ['HTTP_HOST' => 'estab.example', 'HTTP_ORIGIN' => 'https://evil.example'],
+        $legacyCredentials
+    ),
+    'foreign-origin tokenless legacy login accepted'
+);
+$assert(
+    !estab_workflow_legacy_login_without_csrf_allowed(
+        ['HTTP_HOST' => 'estab.example', 'HTTP_SEC_FETCH_SITE' => 'same-origin'],
+        $existingCredentials
+    ),
+    'explicit browser login was misclassified as a tokenless legacy request'
+);
+if ($legacyModeBefore === false) {
+    putenv('ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF');
+} else {
+    putenv('ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF=' . $legacyModeBefore);
+}
 foreach ([
     ['REQUEST_METHOD' => 'GET', 'get' => ['reset_record' => '1'], 'post' => []],
+    ['REQUEST_METHOD' => 'GET', 'get' => ['login_flow' => 'new'], 'post' => []],
     ['REQUEST_METHOD' => 'POST', 'get' => [], 'post' => ['login' => 'Anmelden', 'reset_record' => '1']],
+    ['REQUEST_METHOD' => 'POST', 'get' => [], 'post' => ['login_flow' => 'unknown']],
+    ['REQUEST_METHOD' => 'POST', 'get' => [], 'post' => ['login_flow' => ['existing']]],
+    ['REQUEST_METHOD' => 'POST', 'get' => [], 'post' => ['login_flow' => 'new', 'task' => 'Stab_schreiben']],
+    [
+        'REQUEST_METHOD' => 'POST',
+        'get' => [],
+        'post' => $existingCredentials + ['kennwort2' => 'unexpected'],
+    ],
+    [
+        'REQUEST_METHOD' => 'POST',
+        'get' => [],
+        'post' => array_replace($credentials, ['2teskennwort' => 'No']),
+    ],
     ['REQUEST_METHOD' => 'POST', 'get' => [], 'post' => $credentials + ['task' => 'Stab_schreiben']],
     ['REQUEST_METHOD' => 'POST', 'get' => ['00_lfd' => '1'], 'post' => $credentials],
 ] as $anonymousRequest) {
@@ -80,6 +222,22 @@ $staff = ['benutzer' => 'Staff', 'kuerzel' => 'staff1', 'funktion' => 'S1', 'rol
 $advisor = ['benutzer' => 'Advisor', 'kuerzel' => 'fb0001', 'funktion' => 'POL', 'rolle' => 'FB'];
 $viewer = ['benutzer' => 'Viewer', 'kuerzel' => 'si0001', 'funktion' => 'Si', 'rolle' => 'Stab'];
 $telecommunications = ['benutzer' => 'Radio', 'kuerzel' => 'aw0001', 'funktion' => 'A/W', 'rolle' => 'Fernmelder'];
+
+$assert(
+    !estab_workflow_route_allowed($staff, 'POST', $existingCredentials),
+    'authenticated session accepted a second login request'
+);
+$assert(
+    !estab_workflow_route_allowed($staff, 'POST', [
+        'login_flow' => 'new',
+        'benutzer' => 'Other',
+        'kuerzel' => 'other1',
+        'funktion' => 'A/W',
+        'kennwort1' => 'new-secret',
+        'kennwort2' => 'new-secret',
+    ]),
+    'authenticated session accepted account creation or role switching'
+);
 
 $assert(estab_workflow_route_allowed($staff, 'POST', ['task' => 'Stab_schreiben']), 'staff write denied');
 $assert(estab_workflow_route_allowed($advisor, 'POST', ['stab' => 'meldung', '00_lfd' => '1']), 'advisor read denied');
@@ -132,7 +290,9 @@ $assert(is_string($mainController), 'main controller unreadable');
 $assert(
     str_contains($mainController, 'estab_workflow_public_login_request')
         && str_contains($mainController, 'estab_workflow_route_allowed')
-        && str_contains($mainController, 'estab_workflow_record_id'),
+        && str_contains($mainController, 'estab_workflow_record_id')
+        && str_contains($mainController, 'estab_csrf_is_valid')
+        && str_contains($mainController, 'estab_workflow_legacy_login_without_csrf_allowed'),
     'main controller does not enforce the central workflow gate'
 );
 

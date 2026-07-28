@@ -23,9 +23,7 @@ if ( debug == true ){
     // hellblauer Hintergrund
   echo "<body align=\"center\" bgcolor=\"#ECECFF\">";
   echo "<form action=\"".$conf_4f ["MainURL"]."\" method=\"POST\" target=\"mainframe\">\n";
-  if (estab_auth_session_is_authenticated ($_SESSION)) {
-    echo estab_csrf_field ();
-  }
+  echo estab_csrf_field ();
 //  echo "<!-- Formularelemente und andere Elemente innerhalb des Formulars -->\n";
 //  echo date ("His")."<br>";
   echo "<table align=\"center\" style=\"text-align:center;\" border=\"0\" cellspacing=\"0\" cellpeding=\"0\">\n";

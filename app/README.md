@@ -8,6 +8,18 @@ rendert die weiterhin öffentlich benötigten Legacy-Bildbuttons.
 ## Sicherheits- und Kompatibilitätsentscheidungen
 
 - Name, Kürzel, Funktion und Kennwort werden beim Login nur aus `POST` gelesen.
+  Der Konto-Flow wird ebenfalls ausschließlich per `POST` als `existing` oder
+  `new` übermittelt. Ein unbekanntes Bestandskonto wird nicht mehr implizit
+  registriert; der Neuanlage-Flow meldet kein vorhandenes Konto an.
+  Historische Ein-Kennwort-POSTs bleiben reine Bestandsanmeldungen. Der alte
+  Zwei-Kennwort-Request mit `2teskennwort=Yes` behält für direkte Legacy-Clients
+  sein bisheriges „anmelden oder anlegen“-Verhalten; auch dabei gilt
+  `ESTAB_ALLOW_SELF_REGISTRATION`. Tokenlose Legacy-Anmeldungen sind
+  standardmäßig gesperrt und müssen bei tatsächlichem Bedarf ausdrücklich mit
+  `ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF=true` freigeschaltet werden; als
+  browserseitig `cross-site` erkennbare Requests bleiben trotzdem gesperrt.
+  Die neue Oberfläche verwendet diesen mehrdeutigen Pfad nicht, sondern sendet
+  immer einen ausdrücklichen Flow mit sitzungsgebundenem CSRF-Token.
   Die anklickbare Benutzerliste sendet ebenfalls per `POST`; ihr kodierter Wert
   dient ausschließlich zum Vorbefüllen und wird nicht als Authentisierungsnachweis
   betrachtet.
@@ -34,6 +46,15 @@ rendert die weiterhin öffentlich benötigten Legacy-Bildbuttons.
   Umgebungswerte akzeptieren ausschließlich `1/0`, `true/false`, `yes/no` oder
   `on/off`; Tippfehler führen absichtlich zu einem Fehler statt zu implizitem
   Aktivieren.
+- Der sichtbare Einstieg verwendet native Textbuttons, zugeordnete Labels,
+  eindeutige Kennwortfelder und Inline-Fehler. Die beiden Konto-Flows bleiben
+  getrennte Formulare, sodass ein Moduswechsel keine Zugangsdaten mitsendet.
+  Jede Anmeldung und Neuanlage aus der Browseroberfläche erfordert bereits vor
+  der Authentisierung ein sitzungsgebundenes CSRF-Token.
+- Ein aktives Konto behält seine gespeicherte Funktion. Erst nach dem Abmelden
+  darf die historische „Funktion Ummelden“-Logik einem inaktiven Konto eine
+  andere Funktion zuweisen; ein Request kann daher nicht die Sitzungsrolle
+  eines aktiven Kontos wechseln.
 - Die Bitmap-Renderer akzeptieren ausschließlich skalare UTF-8-Werte,
   geschlossene Typ-/Form-/Farbvokabulare und enge Größen- sowie Textgrenzen.
   Die drei Webskripte sind nur dünne Wrapper; Parameterfehler liefern HTTP 400,

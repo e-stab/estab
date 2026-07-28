@@ -79,9 +79,17 @@ for label in \
 do
     assert_body_fixed "$label"
 done
+assert_body_fixed 'id="estab-login"'
+assert_body_fixed 'href="./4fach/index.php"'
+assert_body_fixed '>Anmelden oder Konto anlegen</a>'
+if grep -Fq 'name="kennwort1"' "$body"; then
+    printf 'HTTP surface: root page unexpectedly contains a credential form\n' >&2
+    exit 1
+fi
 
 for asset in \
     /favicon.ico \
+    /estab-ui.css \
     /4fsym/el80.gif \
     /4fsym/iuk_80.jpg \
     /4fsym/4fach_aktiv.png \
@@ -107,7 +115,35 @@ assert_nonempty_200 "$base_url/4fach/counter.php"
 assert_status 200 "$base_url/4fach/vorgaben.php"
 assert_body_fixed 'm_text=anmelden'
 assert_status 200 "$base_url/4fach/mainindex.php"
-assert_body_fixed 'Nachrichtenvordruck Stab-Modul'
+assert_body_fixed 'eStab-Funktionskonto'
+assert_body_fixed 'Wie möchten Sie fortfahren?'
+assert_body_fixed 'name="login_flow" value="existing"'
+assert_body_fixed 'name="login_flow" value="new"'
+assert_body_fixed 'name="csrf_token"'
+
+assert_status 200 --request POST --data-urlencode 'login_flow=existing' \
+    "$base_url/4fach/mainindex.php"
+assert_body_fixed 'Mit bestehendem Konto anmelden'
+assert_body_fixed 'name="login_flow" value="existing"'
+assert_body_fixed 'autocomplete="current-password"'
+assert_body_fixed '<option value="" disabled selected>Bitte Funktion wählen</option>'
+assert_body_fixed 'name="csrf_token"'
+if grep -Fq 'name="kennwort2"' "$body"; then
+    printf 'HTTP surface: existing-account form contains password confirmation\n' >&2
+    exit 1
+fi
+
+assert_status 200 --request POST --data-urlencode 'login_flow=new' \
+    "$base_url/4fach/mainindex.php"
+assert_body_fixed 'Neues Funktionskonto anlegen'
+assert_body_fixed 'name="login_flow" value="new"'
+assert_body_fixed 'name="kennwort2"'
+assert_body_fixed 'Kennwort wiederholen'
+assert_body_fixed 'Konto erstellen und anmelden'
+assert_body_fixed 'name="csrf_token"'
+
+assert_status 403 --request POST --data-urlencode 'login_flow=unknown' \
+    "$base_url/4fach/mainindex.php"
 
 assert_status 200 "$base_url/stabinfo/index.php"
 assert_body_fixed './l_index.php'

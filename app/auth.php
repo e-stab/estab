@@ -135,6 +135,57 @@ function estab_auth_self_registration_allowed(): bool
     return estab_env_bool('ESTAB_ALLOW_SELF_REGISTRATION', true);
 }
 
+/**
+ * Resolve the account flow selected by the anonymous login UI.
+ *
+ * The explicit flow is authoritative for the new UI. The historical
+ * 2teskennwort marker remains a compatibility fallback for existing clients.
+ */
+function estab_auth_login_flow(array $input): ?string
+{
+    if (array_key_exists('login_flow', $input)) {
+        if (!is_string($input['login_flow'])) {
+            return null;
+        }
+        return in_array($input['login_flow'], ['existing', 'new'], true)
+            ? $input['login_flow']
+            : null;
+    }
+
+    $legacyConfirmation = $input['2teskennwort'] ?? null;
+    if ($legacyConfirmation === 'Yes') {
+        return 'new';
+    }
+    if ($legacyConfirmation === 'No') {
+        return 'existing';
+    }
+    if (array_key_exists('2teskennwort', $input)) {
+        return null;
+    }
+
+    // Compatibility for the historical one-password form produced after
+    // selecting an account from the public list. Unknown accounts remain in
+    // the existing-account branch and can therefore never be registered.
+    foreach (['benutzer', 'kuerzel', 'funktion', 'kennwort1'] as $credentialKey) {
+        if (!isset($input[$credentialKey]) || !is_string($input[$credentialKey])) {
+            return null;
+        }
+    }
+    return 'existing';
+}
+
+/**
+ * Active accounts retain their current function until they are logged off.
+ *
+ * The historical "Funktion Ummelden" operation remains available for inactive
+ * accounts, but request data cannot switch the role of an active session.
+ */
+function estab_auth_assignment_allowed(array $storedUser, string $submittedFunction): bool
+{
+    return (int) ($storedUser['aktiv'] ?? 0) === 0
+        || hash_equals((string) ($storedUser['funktion'] ?? ''), $submittedFunction);
+}
+
 /** Accept only a syntactically valid direct peer address. */
 function estab_auth_remote_ip(array $server): string
 {

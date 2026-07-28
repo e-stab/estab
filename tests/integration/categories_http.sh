@@ -116,7 +116,7 @@ db_sql()
         unset escaped_password
         chmod 0600 "$client_defaults"
 
-        exec mariadb \
+        mariadb \
             --defaults-extra-file="$client_defaults" \
             --batch \
             --skip-column-names \
@@ -281,11 +281,14 @@ login_existing()
     : >"$cookie_jar"
     assert_status 200 \
         --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-        --request POST --data-urlencode 'login=Anmelden' \
+        --request POST --data-urlencode 'login_flow=existing' \
         "$base_url/4fach/mainindex.php"
+    login_csrf=$(csrf_from_body)
     assert_status 200 \
         --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         --request POST \
+        --data-urlencode "csrf_token=$login_csrf" \
+        --data-urlencode 'login_flow=existing' \
         --data-urlencode "benutzer=$name" \
         --data-urlencode "kuerzel=$code" \
         --data-urlencode "funktion=$function_name" \
@@ -306,11 +309,14 @@ register_user()
     : >"$cookie_jar"
     assert_status 200 \
         --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-        --request POST --data-urlencode 'login=Anmelden' \
+        --request POST --data-urlencode 'login_flow=new' \
         "$base_url/4fach/mainindex.php"
+    login_csrf=$(csrf_from_body)
     assert_status 200 \
         --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         --request POST \
+        --data-urlencode "csrf_token=$login_csrf" \
+        --data-urlencode 'login_flow=new' \
         --data-urlencode "benutzer=$name" \
         --data-urlencode "kuerzel=$code" \
         --data-urlencode "funktion=$function_name" \

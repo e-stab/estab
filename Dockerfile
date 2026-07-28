@@ -25,7 +25,7 @@ RUN set -eux; \
 
 WORKDIR /var/www/html
 
-COPY index.php health.php config.inc.php dbcfg.inc.php e_cfg.inc.php favicon.ico menue.inc.php ./
+COPY index.php health.php config.inc.php dbcfg.inc.php e_cfg.inc.php favicon.ico menue.inc.php estab-ui.css ./
 COPY 4fach/ ./4fach/
 COPY 4fadm/ ./4fadm/
 COPY 4fbak/ ./4fbak/

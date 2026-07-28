@@ -38,7 +38,8 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
 
 - PHP-8.5-Laufzeit- und Legacy-Konstruktor-Kompatibilität,
 - `NULL`-/Zero-Date-Behandlung,
-- Anmelde-, Session-, Proxy- und Passwortregeln,
+- Anmelde-, Konto-Flow-, aktive Funktionsbindungs-, Session-, Proxy- und
+  Passwortregeln,
 - Nachrichten-IDs, Rollen-/Objektregeln, Empfänger-Tokens, erlaubte
   Workflow-Aktionen, POST-/CSRF-Verträge, Prepared Statements, sichere
   UTF-8-/Legacy-Entity-Ausgabe und die inerten Payloads Quotes, Ampersand,
@@ -89,6 +90,10 @@ die Containerlogs und stellt Datenbank, Anhänge und Export aus einem
 prüfsummengebundenen Backup in neue Volumes wieder her. Am Ende werden nur die
 guardierten CI-Container, CI-Volumes und temporären Secrets entfernt. Mit
 Docker wird `ESTAB_CONTAINER_CLI=docker` gesetzt oder die Variable weggelassen.
+Die HTTP-Stufe beweist dabei den Startseiten-Anmeldebutton, die getrennten
+Bestandskonto-/Neukonto-Formulare, die sichtbare Kontenauswahl,
+Kennwortbestätigung, unveränderte Kontenzahlen und Passwort-Hashes bei
+Fehlversuchen, aktive Funktionsbindung sowie deaktivierte Selbstregistrierung.
 
 ## Wegwerfbarer Integrations-Stack
 
@@ -243,11 +248,19 @@ eine zweite Sitzung zur Prüfung des gespeicherten Passwort-Hashes und kann
 zusätzlich einen echten Admin-Export erzeugen:
 
 ```console
+COMPOSE_PROJECT_NAME=estab-acceptance \
 ESTAB_TEST_BASE_URL=http://127.0.0.1:18080 \
+ESTAB_TEST_COMPOSE_ENGINE=podman \
 ESTAB_TEST_ADMIN_USER=estab-admin \
 ESTAB_TEST_ADMIN_PASSWORD="$(tr -d '\r\n' < secrets/admin_password.txt)" \
 tests/integration/http_smoke.sh
 ```
+
+`COMPOSE_PROJECT_NAME` muss auf den gestarteten, ausschließlich für die
+Abnahme vorgesehenen Teststack zeigen. `ESTAB_TEST_COMPOSE_ENGINE` ist
+verpflichtend; ohne die direkte MariaDB-Verbindung bricht der Test ab, damit
+Kontenzahl, Passwort-Hash und Rollenbindung niemals nur vermeintlich geprüft
+werden.
 
 Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
 `ESTAB_TEST_ADMIN_USER` denselben Wert erhalten. Der Test prüft unter anderem:
@@ -258,7 +271,15 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
 - HTTP 410 für unsichere historische Direkt-Upload-Endpunkte,
 - HTTP 401 für den anonymen Administrationszugriff,
 - Image-Button-Login, Registrierung, authentifizierte Oberfläche und erneute
-  Anmeldung über den gespeicherten Passwort-Hash,
+  Anmeldung über Kontenliste und gespeicherten Passwort-Hash,
+- sitzungsgebundene Voranmelde-CSRF-Tokens, HTTP 403 ohne Token im Browserflow
+  und HTTP 403 für erkannte Cross-Site-Requests im explizit aktivierten
+  Legacy-Kompatibilitätsmodus,
+- direkte MariaDB-Nachweise, dass Fehlversuche kein Konto erzeugen und eine
+  Neuanlage-Kollision den vorhandenen Passwort-Hash nicht verändert,
+- unveränderte DB-Zuordnung beim blockierten Funktions-/Rollenwechsel für
+  aktive Konten, erlaubte Neuzuordnung erst nach erfolgreichem Logout und
+  blockierte Zweitanmeldung aus einer bereits authentifizierten Sitzung,
 - Speichern und Suchen einer Nachricht mit Quotes, Ampersand, `<script>` und
   SQL-ähnlichem Text bei nachweislich inertem HTML sowie HTTP 403 für den
   historischen GET-Detailaufruf,

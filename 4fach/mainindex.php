@@ -58,6 +58,14 @@ if ($workflowIdentity === null) {
   if (!estab_workflow_public_login_request ($_SERVER, $_GET, $_POST)) {
     estab_workflow_forbid ();
   }
+  if (
+    (string) ($_SERVER ["REQUEST_METHOD"] ?? "") === "POST"
+    && estab_workflow_login_credentials_present ($_POST)
+    && !estab_csrf_is_valid ($_POST ["csrf_token"] ?? null)
+    && !estab_workflow_legacy_login_without_csrf_allowed ($_SERVER, $_POST)
+  ) {
+    estab_workflow_forbid ();
+  }
 } elseif (!estab_workflow_route_allowed (
   $workflowIdentity,
   (string) ($_SERVER ["REQUEST_METHOD"] ?? "GET"),
@@ -440,12 +448,18 @@ ANTWORT % WEITERLEITUNG
   // Identität und Kennwort werden ausschließlich aus einem POST-Request gelesen.
   // GET bleibt für die zahlreichen historischen Nicht-Login-Aktionen erhalten.
   $loginData = (($_SERVER ["REQUEST_METHOD"] ?? "GET") === "POST") ? $_POST : array ();
+  $loginFlow = estab_auth_login_flow ($loginData);
+  $loginError = "";
+  if ($loginFlow !== null) {
+    $_SESSION ["menue"] = "LOGIN";
+  }
   $identitySelected = false;
   if (isset ($loginData ["login_identity"]) && is_string ($loginData ["login_identity"])) {
     $selectedIdentity = estab_auth_decode_identity_token ($loginData ["login_identity"], is_array ($conf_empf) ? $conf_empf : array ());
     if (is_array ($selectedIdentity)) {
       $loginData = array_replace ($loginData, $selectedIdentity);
       $identitySelected = true;
+      $loginFlow = "existing";
       $_SESSION ["menue"] = "LOGIN";
     }
   }
@@ -457,10 +471,10 @@ ANTWORT % WEITERLEITUNG
   if (isset ($loginData ["kuerzel"]) && is_string ($loginData ["kuerzel"])) { $menuekuerzel = $loginData ["kuerzel"]; }
   if (isset ($loginData ["funktion"]) && is_string ($loginData ["funktion"])) { $menuefunktion = $loginData ["funktion"]; }
 
-  $doppelkennwort = !$identitySelected && (($loginData ["2teskennwort"] ?? "Yes") === "Yes");
+  $doppelkennwort = $loginFlow === "new";
   $hasLoginIdentity = isset ($loginData ["benutzer"], $loginData ["kuerzel"], $loginData ["funktion"]);
   $hasPassword = isset ($loginData ["kennwort1"]) && is_string ($loginData ["kennwort1"]) && $loginData ["kennwort1"] !== "";
-  $requiresConfirmation = (($loginData ["2teskennwort"] ?? "No") === "Yes");
+  $requiresConfirmation = $loginFlow === "new";
   $confirmationMatches = !$requiresConfirmation
     || (isset ($loginData ["kennwort1"], $loginData ["kennwort2"])
         && is_string ($loginData ["kennwort1"])
@@ -468,11 +482,13 @@ ANTWORT % WEITERLEITUNG
         && hash_equals ($loginData ["kennwort1"], $loginData ["kennwort2"]));
 
   if ($hasLoginIdentity && $hasPassword && ($_SESSION ["menue"] ?? "") === "LOGIN") {
-    if (!$confirmationMatches) {
-      errorwindow ("Benutzeranmeldung", "Die beiden Kennwörter stimmen nicht überein.");
+    if ($loginFlow === null) {
+      $loginError = "Wählen Sie zuerst, ob Sie ein bestehendes Konto verwenden oder ein neues Konto anlegen möchten.";
+    } elseif (!$confirmationMatches) {
+      $loginError = "Die beiden Kennwörter stimmen nicht überein.";
       $doppelkennwort = true;
     } else {
-      $error = check_save_user ($loginData);
+      $error = check_save_user ($loginData, $loginError);
       if (!$error) {
         $_SESSION ["menue"] = "ROLLE";
         resetframeset ($conf_urlroot.$conf_web["pre_path"]);
@@ -1148,75 +1164,121 @@ Nachricht als Sichtung anzeigen
 
   \**********************************************************************/
   if ($_SESSION ["menue"] == "LOGIN" or $_SESSION ["menue"] == "WELCOME" ) {
-
-    echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
-    echo "<html>\n";
-    echo "<head>";
+    $registrationAllowed = estab_auth_self_registration_allowed ();
+    $loginAction = estab_auth_html ($conf_4f ["MainURL"]);
+    echo "<!doctype html>\n";
+    echo "<html lang=\"de\">\n";
+    echo "<head>\n";
     echo "<meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\" />\n";
+    echo "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n";
+    echo "<link rel=\"stylesheet\" href=\"../estab-ui.css\">\n";
+    echo "<title>eStab – Anmeldung</title>\n";
     echo "</head>\n";
+    echo "<body bgcolor=\"#DCDCFF\">\n";
+    echo "<main class=\"estab-auth-shell\">\n";
+    echo "<section class=\"estab-auth-card\" aria-labelledby=\"estab-auth-title\">\n";
+    echo "<h1 id=\"estab-auth-title\">eStab-Funktionskonto</h1>\n";
+    echo "<p class=\"estab-auth-help\"><strong>".
+         estab_auth_html ($conf_4f ["Titelkurz"].$conf_4f ["SubTitel"]["env"]).
+         "</strong><br>Version ".estab_auth_html ($conf_4f ["Version"]).
+         " · ".estab_auth_html ($conf_4f ["Stelle"])."</p>\n";
 
-    echo "<body bgcolor=\"#DCDCFF\">";
-    echo "<form action=\"".estab_auth_html ($conf_4f ["MainURL"])."\" method=\"POST\" target=\"mainframe\">\n";
-    echo "<!-- Formularelemente und andere Elemente innerhalb des Formulars -->\n";
-    echo "<table border=\"1\" cellspacing=\"1\" cellpeding=\"1\">\n";
-    echo "<tbody>";
-    echo "<tr>\n";
-    echo "<td>\n";
-
-    echo "<table border=\"1\" cellspacing=\"1\" cellpeding=\"1\">\n";
-    echo "<tbody>";
-    echo "<tr>\n";
-    switch ($_SESSION ["menue"]) {
-      case "WELCOME" : // nicht angemeldet ==> nur login Button
-               echo "<td>\n";
-               foreach ( $conf_4f ['NameVersion'] as $titel ) {
-                 // NameVersion is trusted application markup assembled only
-                 // from the versioned configuration, not request data.
-                 echo $titel;
-               }
-               echo "</td>\n";
-               echo "</tr>\n<tr>\n";
-      break;
-      case "LOGIN" : // Anmeldeformular
-              echo "<td>\nName, Vorname:</td>\n<td>\n<input style=\"font-size:20px; font-weight:900;\" type=\"text\" size=\"32\" value=\"".estab_auth_html ($menuename)."\" maxlength=\"50\" name=\"benutzer\" autocomplete=\"name\"></td>\n";
-              echo "</tr>\n<tr>\n";
-              echo "<td>\nKürzel:</td>\n<td>\n<input style=\"font-size:20px; font-weight:900;\" type=\"text\" size=\"6\" maxlength=\"6\" value=\"".estab_auth_html ($menuekuerzel)."\" name=\"kuerzel\" autocomplete=\"username\"></td>\n";
-              echo "</tr>\n<tr>\n";
-              echo "<td>\nFunktion:</td>\n<td>\n<select style=\"font-size:20px; font-weight:900;\" name=\"funktion\">\n";
-              for ($i=1; $i <= count ($conf_empf); $i++ ){
-                if ($menuefunktion == $conf_empf[$i]["fkt"]){ $sel = "selected"; }else{ $sel = ""; }
-                $funktion = estab_auth_html ($conf_empf[$i]["fkt"]);
-                echo "<option value=\"".$funktion."\" ".$sel.">".$funktion."</option>\n";
-              }
-              echo "</select>\n";
-              echo "</td>\n";
-              echo "</tr>\n<tr>\n";
-
-              echo "<td>Kennwort:</td>";
-              $passwordAutocomplete = $doppelkennwort ? "new-password" : "current-password";
-              echo "<td><input name=\"kennwort1\" type=\"password\" size=\"32\" maxlength=\"255\" autocomplete=\"".$passwordAutocomplete."\"></td>\n";
-              if ( $doppelkennwort ) {
-                echo "<input type=\"hidden\" name=\"2teskennwort\" value=\"Yes\">\n";
-                echo "</tr>\n";
-                echo "<tr>\n";
-                echo "<td>Kennwort:</td>" ;
-                echo "<td><input name=\"kennwort2\" type=\"password\" size=\"32\" maxlength=\"255\" autocomplete=\"new-password\"></td>\n";
-              }
-              echo "<tr>";
-                          echo "<td align=\"center\" bgcolor=$color_button_ok><input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/ok.gif\"></td>";
-                          echo "<td>\n<a><img src=\"null.gif\" alt=\"leer\"></a>\n</td>\n";
-                          echo "</tr>\n";
-
-      break;
+    if ($loginError !== "") {
+      echo "<div class=\"estab-auth-error\" role=\"alert\" tabindex=\"-1\" autofocus>".
+           estab_auth_html ($loginError)."</div>\n";
     }
-    echo "</tr>\n";
-    echo "</tbody>";
-    echo "</table>";
-    echo "</td>\n";
-    echo "</tr>\n";
-    echo "</tbody>";
-    echo "</table>";
-    echo "</form>";
+
+    if ($loginFlow === null) {
+      echo "<h2>Wie möchten Sie fortfahren?</h2>\n";
+      echo "<p class=\"estab-auth-help\">Wählen Sie, ob Sie sich mit einem bestehenden Funktionskonto anmelden oder ein neues Funktionskonto erstellen.</p>\n";
+      echo "<div class=\"estab-auth-actions\">\n";
+      echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"mainframe\">\n";
+      echo estab_csrf_field ()."\n";
+      echo "<button class=\"estab-button estab-button-primary\" type=\"submit\" name=\"login_flow\" value=\"existing\">Mit bestehendem Konto anmelden</button>\n";
+      echo "</form>\n";
+      if ($registrationAllowed) {
+        echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"mainframe\">\n";
+        echo estab_csrf_field ()."\n";
+        echo "<button class=\"estab-button\" type=\"submit\" name=\"login_flow\" value=\"new\">Neues Konto anlegen</button>\n";
+        echo "</form>\n";
+      } else {
+        echo "<button class=\"estab-button\" type=\"button\" disabled>Neues Konto anlegen</button>\n";
+      }
+      echo "</div>\n";
+      if (!$registrationAllowed) {
+        echo "<p class=\"estab-auth-note\">Neue Konten können hier nicht erstellt werden. Wenden Sie sich an die zuständige Stelle.</p>\n";
+      }
+      echo "<p class=\"estab-auth-note\">Ein Funktionskonto gewährt keinen Zugang zur separaten Administration.</p>\n";
+    } elseif ($loginFlow === "new" && !$registrationAllowed) {
+      echo "<h2>Neues Konto anlegen</h2>\n";
+      if ($loginError === "") {
+        echo "<p class=\"estab-auth-error\" role=\"alert\" tabindex=\"-1\" autofocus>Neue Konten können hier nicht erstellt werden. Wenden Sie sich an die zuständige Stelle.</p>\n";
+      }
+      echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"mainframe\">\n";
+      echo estab_csrf_field ()."\n";
+      echo "<button class=\"estab-button\" type=\"submit\" name=\"login\" value=\"Anmelden\">Zurück zur Auswahl</button>\n";
+      echo "</form>\n";
+    } else {
+      $isRegistration = $loginFlow === "new";
+      $formTitle = $isRegistration
+        ? "Neues Funktionskonto anlegen"
+        : "Mit bestehendem Konto anmelden";
+      $formHelp = $isRegistration
+        ? "Erstellen Sie ein Konto nur nach organisatorischer Freigabe. Wählen Sie die Ihnen zugeteilte Funktion; eStab leitet daraus die Rolle gemäß Empfängermatrix ab."
+        : "Wählen Sie Ihr Konto aus der Liste oder geben Sie Name, Kürzel und Ihre zugeteilte Funktion ein. Verwenden Sie Ihr bestehendes Kennwort.";
+      $submitLabel = $isRegistration
+        ? "Konto erstellen und anmelden"
+        : "Anmelden";
+      $legacyConfirmation = $isRegistration ? "Yes" : "No";
+      $passwordAutocomplete = $isRegistration ? "new-password" : "current-password";
+      $hasLoginError = $loginError !== "";
+      $nameAutofocus = !$hasLoginError && !$identitySelected ? " autofocus" : "";
+      $passwordAutofocus = !$hasLoginError && $identitySelected ? " autofocus" : "";
+
+      echo "<h2>".$formTitle."</h2>\n";
+      echo "<p class=\"estab-auth-help\">".$formHelp."</p>\n";
+      echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"mainframe\">\n";
+      echo "<fieldset class=\"estab-auth-form\">\n";
+      echo "<legend>Zugangsdaten</legend>\n";
+      echo estab_csrf_field ()."\n";
+      echo "<input type=\"hidden\" name=\"login_flow\" value=\"".$loginFlow."\">\n";
+      echo "<input type=\"hidden\" name=\"2teskennwort\" value=\"".$legacyConfirmation."\">\n";
+      echo "<table class=\"estab-auth-fields\"><tbody>\n";
+      echo "<tr><th><label for=\"estab-login-name\">Name, Vorname</label></th>\n";
+      echo "<td><input id=\"estab-login-name\" name=\"benutzer\" type=\"text\" value=\"".
+           estab_auth_html ($menuename)."\" maxlength=\"50\" autocomplete=\"name\" required".$nameAutofocus."></td></tr>\n";
+      echo "<tr><th><label for=\"estab-login-code\">Kürzel</label></th>\n";
+      echo "<td><input id=\"estab-login-code\" name=\"kuerzel\" type=\"text\" value=\"".
+           estab_auth_html ($menuekuerzel)."\" minlength=\"1\" maxlength=\"6\" pattern=\"[A-Za-z0-9_]{1,6}\" autocomplete=\"username\" required></td></tr>\n";
+      echo "<tr><th><label for=\"estab-login-function\">Funktion</label></th>\n";
+      echo "<td><select id=\"estab-login-function\" name=\"funktion\" required>\n";
+      $placeholderSelected = $menuefunktion === "" ? " selected" : "";
+      echo "<option value=\"\" disabled".$placeholderSelected.">Bitte Funktion wählen</option>\n";
+      for ($i=1; $i <= count ($conf_empf); $i++) {
+        $selected = $menuefunktion == $conf_empf[$i]["fkt"] ? " selected" : "";
+        $funktion = estab_auth_html ($conf_empf[$i]["fkt"]);
+        echo "<option value=\"".$funktion."\"".$selected.">".$funktion."</option>\n";
+      }
+      echo "</select></td></tr>\n";
+      echo "<tr><th><label for=\"estab-login-password\">Kennwort</label></th>\n";
+      echo "<td><input id=\"estab-login-password\" name=\"kennwort1\" type=\"password\" maxlength=\"255\" autocomplete=\"".
+           $passwordAutocomplete."\" required".$passwordAutofocus."></td></tr>\n";
+      if ($isRegistration) {
+        echo "<tr><th><label for=\"estab-login-password-confirm\">Kennwort wiederholen</label></th>\n";
+        echo "<td><input id=\"estab-login-password-confirm\" name=\"kennwort2\" type=\"password\" maxlength=\"255\" autocomplete=\"new-password\" required></td></tr>\n";
+      }
+      echo "</tbody></table>\n";
+      echo "<div class=\"estab-auth-actions\">\n";
+      echo "<button class=\"estab-button estab-button-primary\" type=\"submit\">".$submitLabel."</button>\n";
+      echo "</div>\n";
+      echo "</fieldset>\n";
+      echo "</form>\n";
+      echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"mainframe\">\n";
+      echo estab_csrf_field ()."\n";
+      echo "<button class=\"estab-button\" type=\"submit\" name=\"login\" value=\"Anmelden\">Andere Kontoaktion wählen</button>\n";
+      echo "</form>\n";
+    }
+    echo "</section>\n";
 
   }
 
@@ -1225,13 +1287,17 @@ Nachricht als Sichtung anzeigen
 
 \**********************************************************************/
 if ( ( isset ($returnValue["m2_benutzer_x"])) OR
-     ( $_SESSION ["menue"] == "WELCOME" ) OR
-     ( $_SESSION ["menue"] == "LOGIN" ) )
+     ( ( $_SESSION ["menue"] == "WELCOME" OR $_SESSION ["menue"] == "LOGIN" )
+       AND $loginFlow !== "new" ) )
   {
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br>";  }
   	 	benutzerstatus ("verlinkt");
 	  
    }
+
+if ($_SESSION ["menue"] == "LOGIN" or $_SESSION ["menue"] == "WELCOME") {
+  echo "</main>\n";
+}
 
 
 if ( debug == true ){

@@ -94,12 +94,73 @@ $decoded = estab_auth_decode_identity_token($token, $confEmpf);
 $assert($decoded === ['benutzer' => 'Müller, Ada', 'kuerzel' => 'ada', 'funktion' => 'S1'], 'POST prefill token round trip');
 $assert(estab_auth_decode_identity_token('not+base64', $confEmpf) === null, 'malformed prefill token rejected');
 
+$assert(
+    estab_auth_login_flow(['login_flow' => 'existing']) === 'existing',
+    'explicit existing-account flow rejected'
+);
+$assert(
+    estab_auth_login_flow(['login_flow' => 'new']) === 'new',
+    'explicit new-account flow rejected'
+);
+$assert(
+    estab_auth_login_flow(['2teskennwort' => 'Yes']) === 'new'
+        && estab_auth_login_flow(['2teskennwort' => 'No']) === 'existing',
+    'legacy account-flow compatibility lost'
+);
+$assert(
+    estab_auth_login_flow([
+        'benutzer' => 'Ada Müller',
+        'kuerzel' => 'ada001',
+        'funktion' => 'S1',
+        'kennwort1' => 'test-secret',
+    ]) === 'existing',
+    'historical one-password existing-account flow rejected'
+);
+foreach ([
+    [],
+    ['login_flow' => 'unknown'],
+    ['login_flow' => ['existing']],
+] as $invalidFlow) {
+    $assert(estab_auth_login_flow($invalidFlow) === null, 'invalid account flow accepted');
+}
+
+$assert(
+    estab_auth_assignment_allowed(['aktiv' => 1, 'funktion' => 'S1'], 'S1'),
+    'active account rejected for its stored function'
+);
+$assert(
+    !estab_auth_assignment_allowed(['aktiv' => 1, 'funktion' => 'S1'], 'A/W'),
+    'active account accepted a request-selected role switch'
+);
+$assert(
+    estab_auth_assignment_allowed(['aktiv' => 0, 'funktion' => 'S1'], 'A/W'),
+    'inactive account can no longer be reassigned'
+);
+
+$registrationSetting = getenv('ESTAB_ALLOW_SELF_REGISTRATION');
+putenv('ESTAB_ALLOW_SELF_REGISTRATION=true');
+$assert(estab_auth_self_registration_allowed() === true, 'enabled self-registration rejected');
+putenv('ESTAB_ALLOW_SELF_REGISTRATION=false');
+$assert(estab_auth_self_registration_allowed() === false, 'disabled self-registration ignored');
+if ($registrationSetting === false) {
+    putenv('ESTAB_ALLOW_SELF_REGISTRATION');
+} else {
+    putenv('ESTAB_ALLOW_SELF_REGISTRATION=' . $registrationSetting);
+}
+
 $loginController = file_get_contents(dirname(__DIR__, 2) . '/4fach/data_hndl.php');
 $assert(is_string($loginController), 'login controller source readable');
 $assert(
     substr_count($loginController, 'if ($login ["funktion"] != "A/W")') >= 2
         && !str_contains($loginController, '$wasInactive && $login ["funktion"] != "A/W"'),
     'active imported users do not reconcile their legacy dynamic tables on login'
+);
+$assert(
+    str_contains($loginController, '$loginFlow === "new"')
+        && str_contains($loginController, '$loginFlow === "existing"')
+        && str_contains($loginController, 'estab_auth_assignment_allowed')
+        && !str_contains($loginController, 'errorwindow ("Benutzeranmeldung"'),
+    'login controller does not keep flows, active assignments, and inline errors separate'
 );
 
 echo "authentication security: OK ({$assertions} assertions)\n";

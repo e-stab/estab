@@ -22,16 +22,18 @@ define ("showmenue", true);
 //include ("./4fcfg/config.inc.php");
 include ("menue.inc.php");
 
-    echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
-    echo "<html>\n";
+    echo "<!doctype html>\n";
+    echo "<html lang=\"de\">\n";
     echo "<head>\n";
     echo "<link REL=\"SHORTCUT ICON\" HREF=\"favicon.ico\" />";
+    echo "<link rel=\"stylesheet\" href=\"./estab-ui.css\">";
     echo "<meta content=\"text/html; charset=UTF-8\" http-equiv=\"content-type\">\n";
+    echo "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n";
     echo "<title>".$conf_menue ["titel"]."</title>\n";
     echo "</head>\n";
     echo "<body  style=\"background-color: ".$conf_menue["background_color"].";\">\n";
     echo "<div style=\"text-align: center;\">";
-    echo "<table style=\"background-color: rgb(150, 150, 150); text-align: center; margin-left: auto; margin-right: auto;\" border=\"3\" cellpadding=\"3\" cellspacing=\"3\">\n";
+    echo "<table class=\"estab-root-header\" style=\"background-color: rgb(150, 150, 150); text-align: center; margin-left: auto; margin-right: auto;\" border=\"3\" cellpadding=\"3\" cellspacing=\"3\">\n";
     echo "<tbody>\n";
     echo "<tr>\n";
     echo "<td style=\"text-align: center; width: 200px; background-color: ".$conf_menue["foreground_color"].";\" BORDER=\"0\" CELLPADDING=\"1\" CELLSPACING=\"0\">\n";
@@ -47,10 +49,17 @@ include ("menue.inc.php");
     echo "</tbody>\n";
     echo "</table>\n";
     echo "</div>";
+    echo "<main>\n";
+    echo "<section class=\"estab-login-cta\" aria-labelledby=\"estab-login-title\">\n";
+    echo "<h1 id=\"estab-login-title\">eStab-Anmeldung</h1>\n";
+    echo "<p>Melden Sie sich mit einem bestehenden Funktionskonto an oder legen Sie ein neues Konto an, sofern die Registrierung freigeschaltet ist.</p>\n";
+    echo "<p><a id=\"estab-login\" class=\"estab-button estab-button-primary\" href=\"./4fach/index.php\">Anmelden oder Konto anlegen</a></p>\n";
+    echo "<p><small>Die separate Administration finden Sie weiterhin unter „administrative Massnahme“.</small></p>\n";
+    echo "</section>\n";
     echo "<div style=\"text-align: center;\">";
     echo "<br><br><br>";
 
-    echo "<table style=\"background-color: rgb(150, 150, 150); text-align: left; margin-left: auto; margin-right: auto;\" border=\"1\" cellpadding=\"3\" cellspacing=\"3\">\n";
+    echo "<table class=\"estab-root-menu\" style=\"background-color: rgb(150, 150, 150); text-align: left; margin-left: auto; margin-right: auto;\" border=\"1\" cellpadding=\"3\" cellspacing=\"3\">\n";
     echo "<tbody>\n";
 
     for ($m=1;$m <= count ($menue);$m++){
@@ -150,7 +159,9 @@ include ("menue.inc.php");
    }
 	echo "</tbody>\n";
 	echo "</table>\n";
+    echo "</div>\n";
+    echo "</main>\n";
 	echo "</body>\n";
-	echo "</head>\n";
+	echo "</html>\n";
 
 ?>

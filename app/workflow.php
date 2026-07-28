@@ -23,16 +23,28 @@ function estab_workflow_public_login_request(array $server, array $get, array $p
 
     $allowedKeys = [
         'login', 'login_x', 'login_y',
-        'login_identity',
+        'login_identity', 'login_flow',
         'benutzer', 'kuerzel', 'funktion',
         'kennwort1', 'kennwort2', '2teskennwort',
         'absenden_x', 'absenden_y',
+        'csrf_token',
     ];
     foreach (array_keys($post) as $key) {
         if (!is_string($key) || !in_array($key, $allowedKeys, true)) {
             return false;
         }
     }
+    if (
+        isset($post['csrf_token'])
+        && (
+            !is_string($post['csrf_token'])
+            || preg_match('/\A[a-f0-9]{64}\z/D', $post['csrf_token']) !== 1
+        )
+    ) {
+        return false;
+    }
+    $request = $post;
+    unset($request['csrf_token']);
 
     $coordinatePairValid = static function (array $values): bool {
         if (
@@ -52,42 +64,150 @@ function estab_workflow_public_login_request(array $server, array $get, array $p
         return true;
     };
 
-    if (array_key_exists('login', $post)) {
-        $extraKeys = array_diff(array_keys($post), ['login', 'login_x', 'login_y']);
-        $hasCoordinates = isset($post['login_x']) || isset($post['login_y']);
-        return is_string($post['login'])
-            && $post['login'] === 'Anmelden'
+    if (array_key_exists('login', $request)) {
+        $extraKeys = array_diff(array_keys($request), ['login', 'login_x', 'login_y']);
+        $hasCoordinates = isset($request['login_x']) || isset($request['login_y']);
+        return is_string($request['login'])
+            && $request['login'] === 'Anmelden'
             && $extraKeys === []
-            && (!$hasCoordinates || $coordinatePairValid($post));
+            && (!$hasCoordinates || $coordinatePairValid($request));
     }
 
     if (
-        array_keys($post) === ['login_x', 'login_y']
-        || array_keys($post) === ['login_y', 'login_x']
+        array_keys($request) === ['login_x', 'login_y']
+        || array_keys($request) === ['login_y', 'login_x']
     ) {
-        return $coordinatePairValid($post);
+        return $coordinatePairValid($request);
     }
 
-    if (array_key_exists('login_identity', $post)) {
-        return is_string($post['login_identity'])
-            && $post['login_identity'] !== ''
-            && array_keys($post) === ['login_identity'];
+    if (array_keys($request) === ['login_flow']) {
+        return estab_auth_login_flow($request) !== null;
     }
 
+    if (array_key_exists('login_identity', $request)) {
+        return is_string($request['login_identity'])
+            && $request['login_identity'] !== ''
+            && array_keys($request) === ['login_identity'];
+    }
+
+    foreach (['benutzer', 'kuerzel', 'funktion', 'kennwort1'] as $requiredKey) {
+        if (!isset($request[$requiredKey]) || !is_string($request[$requiredKey])) {
+            return false;
+        }
+    }
+    $loginFlow = estab_auth_login_flow($request);
+    if ($loginFlow === null) {
+        return false;
+    }
+    if (isset($request['2teskennwort'])) {
+        if (!is_string($request['2teskennwort']) || !in_array($request['2teskennwort'], ['Yes', 'No'], true)) {
+            return false;
+        }
+        if ($request['2teskennwort'] === 'Yes' && !isset($request['kennwort2'])) {
+            return false;
+        }
+    }
+    if ($loginFlow === 'new') {
+        if (
+            !isset($request['kennwort2'])
+            || !is_string($request['kennwort2'])
+            || (
+                isset($request['2teskennwort'])
+                && $request['2teskennwort'] !== 'Yes'
+            )
+        ) {
+            return false;
+        }
+    } elseif (
+        isset($request['kennwort2'])
+        || (
+            isset($request['2teskennwort'])
+            && $request['2teskennwort'] !== 'No'
+        )
+    ) {
+        return false;
+    }
+    return !isset($request['login'], $request['login_identity']);
+}
+
+/** Return whether this POST can authenticate or register an account. */
+function estab_workflow_login_credentials_present(array $post): bool
+{
     foreach (['benutzer', 'kuerzel', 'funktion', 'kennwort1'] as $requiredKey) {
         if (!isset($post[$requiredKey]) || !is_string($post[$requiredKey])) {
             return false;
         }
     }
-    if (isset($post['2teskennwort'])) {
-        if (!is_string($post['2teskennwort']) || !in_array($post['2teskennwort'], ['Yes', 'No'], true)) {
+    return true;
+}
+
+/** Compare browser request metadata with the current request authority. */
+function estab_workflow_login_metadata_same_site(array $server): bool
+{
+    $fetchSite = $server['HTTP_SEC_FETCH_SITE'] ?? '';
+    if (
+        $fetchSite !== ''
+        && (
+            !is_string($fetchSite)
+            || !in_array(strtolower($fetchSite), ['same-origin', 'same-site', 'none'], true)
+        )
+    ) {
+        return false;
+    }
+
+    $requestAuthority = $server['HTTP_HOST'] ?? '';
+    if (!is_string($requestAuthority)) {
+        return false;
+    }
+    $requestUrl = parse_url('http://' . trim($requestAuthority));
+    $requestHost = is_array($requestUrl) && isset($requestUrl['host'])
+        ? strtolower((string) $requestUrl['host'])
+        : '';
+    $requestPort = is_array($requestUrl) && isset($requestUrl['port'])
+        ? (int) $requestUrl['port']
+        : null;
+
+    foreach (['HTTP_ORIGIN', 'HTTP_REFERER'] as $metadataKey) {
+        if (!array_key_exists($metadataKey, $server)) {
+            continue;
+        }
+        $metadata = $server[$metadataKey];
+        if (!is_string($metadata) || trim($metadata) === '' || $requestHost === '') {
             return false;
         }
-        if ($post['2teskennwort'] === 'Yes' && !isset($post['kennwort2'])) {
+        $metadataUrl = parse_url($metadata);
+        if (!is_array($metadataUrl) || !isset($metadataUrl['host'])) {
+            return false;
+        }
+        $metadataHost = strtolower((string) $metadataUrl['host']);
+        $metadataPort = isset($metadataUrl['port']) ? (int) $metadataUrl['port'] : null;
+        if (
+            !hash_equals($requestHost, $metadataHost)
+            || (
+                $requestPort !== null
+                && $metadataPort !== null
+                && $requestPort !== $metadataPort
+            )
+        ) {
             return false;
         }
     }
-    return !isset($post['login'], $post['login_identity']);
+    return true;
+}
+
+/**
+ * Keep tokenless legacy clients behind an explicit, default-off boundary.
+ *
+ * Browser requests that identify themselves as cross-site are rejected even
+ * after an operator has enabled this compatibility mode.
+ */
+function estab_workflow_legacy_login_without_csrf_allowed(array $server, array $post): bool
+{
+    return estab_env_bool('ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF', false)
+        && estab_workflow_login_credentials_present($post)
+        && !array_key_exists('login_flow', $post)
+        && !array_key_exists('csrf_token', $post)
+        && estab_workflow_login_metadata_same_site($server);
 }
 
 /** Send the same non-disclosing denial used by data-bearing endpoints. */
@@ -242,6 +362,18 @@ function estab_workflow_message_operation(array $request): ?string
 function estab_workflow_route_allowed(array $identity, string $method, array $request): bool
 {
     $method = strtoupper($method);
+    foreach ([
+        'login', 'login_x', 'login_y', 'login_identity', 'login_flow',
+        'benutzer', 'kuerzel', 'funktion', 'kennwort1', 'kennwort2',
+        '2teskennwort',
+    ] as $loginKey) {
+        if (array_key_exists($loginKey, $request)) {
+            // Account selection and authentication always start from a fresh
+            // anonymous session. An authenticated request must log off first.
+            return false;
+        }
+    }
+
     $isTelecommunications = estab_workflow_is_telecommunications($identity);
     $isViewer = estab_workflow_is_viewer($identity);
     $isStaffWriter = estab_workflow_is_staff_writer($identity);

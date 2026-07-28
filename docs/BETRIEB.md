@@ -52,6 +52,7 @@ Wichtige Werte in `.env`:
 | `ESTAB_ORGANISATION` | `Einsatzleitung` | angezeigte Dienststelle/Organisation |
 | `ESTAB_AUTHORITY_CODE` | `EL` | Hoheits-/Organisationskürzel |
 | `ESTAB_ALLOW_SELF_REGISTRATION` | `true` | erlaubt neuen Funktionsbenutzern die erste Registrierung |
+| `ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF` | `false` | erlaubt ausdrücklich benötigten direkten Legacy-Clients tokenlose Anmeldung; nicht für Browserbetrieb aktivieren |
 | `ESTAB_TRUST_PROXY_HEADERS` | `false` | wertet validierte `X-Forwarded-*`-Ketten aus |
 | `ESTAB_UPLOAD_MAX_BYTES` | `5242880` | anwendungsseitige maximale Uploadgröße |
 | `TZ` | `Europe/Berlin` | Zeitzone von Anwendung und Datenbank |
@@ -165,15 +166,36 @@ persistenten Daten und ist ein destruktiver Neuaufbau.
 
 Die Anwendung hat zwei getrennte Anmeldebereiche:
 
-1. Funktionsbenutzer melden sich unter `/4fach/mainindex.php` mit Name,
-   Kürzel, Funktion und Kennwort an. Neue Kennwörter werden mit
-   `password_hash()` gespeichert; ein beim Altimport vorhandenes
+1. Funktionsbenutzer öffnen über den Anmeldebutton auf `/` den vollständigen
+   Frameset unter `/4fach/index.php`. Dort wählen sie ausdrücklich zwischen
+   einem bestehenden und einem neuen Funktionskonto. Neue Kennwörter werden
+   mit `password_hash()` gespeichert; ein beim Altimport vorhandenes
    Klartextkennwort wird beim ersten erfolgreichen Login transparent ersetzt.
 2. `/4fadm` verwendet den in `.env` konfigurierten Admin-Benutzer und das
    separate Admin-Secret als HTTP Basic Auth. Der im historischen Pfad
    verbliebene Grafikreset `/4fach/resetpic.php` liegt hinter demselben Schutz.
 
 Die Selbstregistrierung ist aus Kompatibilitätsgründen standardmäßig aktiv.
+„Mit bestehendem Konto anmelden“ erzeugt auch bei einem unbekannten Kürzel
+niemals einen neuen Datensatz. „Neues Konto anlegen“ verlangt das Kennwort
+zweimal und weist bereits vergebene Kürzel ab. Name, eindeutiges Kürzel mit
+höchstens sechs Buchstaben, Ziffern oder `_` sowie die organisatorisch
+zugeteilte Funktion sind Pflichtangaben; die Rolle ist nicht frei wählbar.
+Die öffentliche Kontenliste übernimmt bei Auswahl nur Name, Kürzel und
+Funktion, niemals das Kennwort.
+Ein bereits aktives Konto kann nicht durch eine abweichende Funktionsauswahl
+die Rolle wechseln. Für einen vorgesehenen Funktionswechsel muss das Konto
+zuerst ordnungsgemäß abgemeldet und anschließend mit der neuen zugeteilten
+Funktion angemeldet werden.
+
+Browserformulare für Bestandsanmeldung und Kontoanlage tragen ein
+sitzungsgebundenes CSRF-Token. Direkte historische Clients, die dieses Token
+nicht beziehen können, funktionieren nur nach der bewussten Ausnahme
+`ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF=true`. Diese Ausnahme bleibt für
+erkannte Cross-Site-Browserrequests gesperrt, ist aber schwächer als der
+normale Tokenfluss und darf nur in einem kontrollierten Netz sowie für die
+Dauer der Migration solcher Clients aktiviert werden.
+
 Wo Benutzer vorab kontrolliert eingerichtet werden können, sollte anschließend
 `ESTAB_ALLOW_SELF_REGISTRATION=false` gesetzt und der App-Container neu
 erzeugt werden. Ein versehentliches Abschalten vor Anlage des ersten

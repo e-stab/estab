@@ -39,16 +39,23 @@ if (validate){
     Funktion:  check_save_user ()
 
 \*******************************************************************************/
-function check_save_user (array $loginData) {
+function check_save_user (array $loginData, string &$loginError) {
   global $conf_empf;
 
   include ("../4fcfg/dbcfg.inc.php");
   include ("../4fcfg/e_cfg.inc.php");
 
   $validation = estab_auth_validate_login ($loginData, is_array ($conf_empf) ? $conf_empf : array ());
-  if (!$validation ["valid"]) {
+  $loginFlow = estab_auth_login_flow ($loginData);
+  $explicitLoginFlow = array_key_exists ("login_flow", $loginData);
+  if (!$validation ["valid"] || $loginFlow === null) {
     $_SESSION ["menue"] = "LOGIN";
-    errorwindow ("Benutzeranmeldung", "Die Anmeldedaten sind unvollständig oder ungültig.");
+    $loginError = "Bitte prüfen Sie Name, Kürzel, Funktion und Kennwort.";
+    return true;
+  }
+  if ($loginFlow === "new" && $explicitLoginFlow && !estab_auth_self_registration_allowed ()) {
+    $_SESSION ["menue"] = "LOGIN";
+    $loginError = "Neue Konten können hier nicht erstellt werden. Wenden Sie sich an die zuständige Stelle.";
     return true;
   }
 
@@ -70,10 +77,20 @@ function check_save_user (array $loginData) {
                               $conf_4f_db ["password"] );
 
     if (is_array ($dbUser)) {
+      if ($loginFlow === "new" && $explicitLoginFlow) {
+        $loginError = "Dieses Kürzel ist bereits vergeben. Melden Sie sich mit dem bestehenden Konto an oder wählen Sie ein anderes Kürzel.";
+        return true;
+      }
       $nameMatches = hash_equals ((string) $dbUser ["benutzer"], $login ["benutzer"]);
       $passwordCheck = estab_auth_verify_password ($login ["password"], (string) $dbUser ["password"]);
       if (!$nameMatches || !$passwordCheck ["valid"]) {
-        errorwindow ("Benutzeranmeldung", "Name, Kürzel oder Kennwort stimmen nicht überein.");
+        $loginError = "Name, Kürzel oder Kennwort stimmen nicht mit dem bestehenden Konto überein.";
+        return true;
+      }
+
+      $wasInactive = ((int) $dbUser ["aktiv"] === 0);
+      if (!estab_auth_assignment_allowed ($dbUser, $login ["funktion"])) {
+        $loginError = "Dieses aktive Konto ist einer anderen Funktion zugeordnet. Melden Sie das Konto zuerst ab oder wählen Sie die zugeordnete Funktion.";
         return true;
       }
 
@@ -81,7 +98,6 @@ function check_save_user (array $loginData) {
         throw new RuntimeException ("Die Sitzung konnte nicht erneuert werden");
       }
 
-      $wasInactive = ((int) $dbUser ["aktiv"] === 0);
       $storedPassword = is_string ($passwordCheck ["replacement"])
         ? $passwordCheck ["replacement"]
         : (string) $dbUser ["password"];
@@ -119,8 +135,12 @@ function check_save_user (array $loginData) {
       return false;
     }
 
+    if ($loginFlow === "existing") {
+      $loginError = "Name, Kürzel oder Kennwort stimmen nicht mit einem bestehenden Konto überein.";
+      return true;
+    }
     if (!estab_auth_self_registration_allowed ()) {
-      errorwindow ("Benutzeranmeldung", "Die Selbstregistrierung ist deaktiviert.");
+      $loginError = "Neue Konten können hier nicht erstellt werden. Wenden Sie sich an die zuständige Stelle.";
       return true;
     }
 
@@ -160,7 +180,7 @@ function check_save_user (array $loginData) {
   } catch (Throwable $exception) {
     error_log ("eStab authentication failed: ".$exception->getMessage ());
     $_SESSION ["menue"] = "LOGIN";
-    errorwindow ("Benutzeranmeldung", "Die Anmeldung konnte technisch nicht abgeschlossen werden.");
+    $loginError = "Die Anmeldung konnte technisch nicht abgeschlossen werden. Versuchen Sie es erneut oder wenden Sie sich an die zuständige Stelle.";
     return true;
   } finally {
     if ($connection instanceof mysqli) {

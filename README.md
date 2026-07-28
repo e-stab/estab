@@ -60,8 +60,8 @@ das Kennwort erscheint weder in Argumentliste noch Log.
 
 | Pfad | Zweck | Schutz |
 | --- | --- | --- |
-| `/` | Einstieg und Modulübersicht | öffentlich bis zur Modulanmeldung |
-| `/4fach/mainindex.php` | Anwendung und Benutzeranmeldung | eStab-Sitzung |
+| `/` | Einstieg, direkter Anmeldebutton und Modulübersicht | öffentlich bis zur Modulanmeldung |
+| `/4fach/index.php` | öffentlicher Einstieg in die vollständige Anwendung mit Kontoauswahl und Benutzeranmeldung | Fachfunktionen erst mit eStab-Sitzung |
 | `/4fach/status.php` | Statusframe | anonym nur neutraler Hinweis, Rollenbelegung erst mit eStab-Sitzung |
 | `/4fach/katgoedt.php` | globale, Funktions- und persönliche Kategorien | eStab-Sitzung, Rollen-/Objektprüfung und CSRF für Änderungen |
 | `/4fadm/admin.php` | Administration | separates HTTP Basic Auth |
@@ -77,6 +77,14 @@ Der Benutzername für den Administrationsbereich steht in
 `ESTAB_ADMIN_USER`, das Kennwort in der durch
 `ESTAB_ADMIN_PASSWORD_SECRET_FILE` referenzierten Datei. Diese
 Administrationsanmeldung ist unabhängig von den eStab-Funktionsbenutzern.
+
+Der Anmeldeeinstieg trennt zwei Vorgänge ausdrücklich: „Mit bestehendem Konto
+anmelden“ verlangt das bereits gespeicherte Kennwort und legt niemals ein Konto
+an. „Neues Konto anlegen“ verlangt eine Kennwortbestätigung, funktioniert nur
+bei aktivierter Selbstregistrierung und meldet niemals still ein vorhandenes
+Konto an. Die Rolle wird in beiden Fällen ausschließlich aus der ausgewählten
+Funktion und der Empfängermatrix abgeleitet. Beide Browserabläufe sind bereits
+vor der Anmeldung an ein Session-CSRF-Token gebunden.
 
 Interne PHP-Controller, Spracharrays, `*.inc.php` und der vollständige
 `/4fbak/`-Baum sind keine direkten Webendpunkte und werden von Apache mit

@@ -88,13 +88,45 @@ login_user()
     : > "$cookie_jar"
     assert_status 200 \
         --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-        --request POST --data-urlencode 'login=Anmelden' \
+        --request POST --data-urlencode 'login_flow=existing' \
         "$base_url/4fach/mainindex.php"
     assert_body 'name="kennwort1"'
+    login_csrf=$(csrf_from_body)
 
     assert_status 200 \
         --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         --request POST \
+        --data-urlencode "csrf_token=$login_csrf" \
+        --data-urlencode 'login_flow=existing' \
+        --data-urlencode "benutzer=$name" \
+        --data-urlencode "kuerzel=$code" \
+        --data-urlencode "funktion=$function_name" \
+        --data-urlencode "kennwort1=$password" \
+        --data-urlencode '2teskennwort=No' \
+        --data-urlencode 'absenden_x=1' \
+        "$base_url/4fach/mainindex.php"
+    assert_no_runtime_error
+    # Do not couple authentication to a particular dashboard label. The
+    # frameset response varies with the current role and existing messages;
+    # access to a protected endpoint is the authoritative proof instead.
+    if [ "$(request_status --cookie "$cookie_jar" "$base_url/stabetb/etb.php")" = "200" ]; then
+        assert_no_runtime_error
+        return
+    fi
+
+    : > "$cookie_jar"
+    assert_status 200 \
+        --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        --request POST --data-urlencode 'login_flow=new' \
+        "$base_url/4fach/mainindex.php"
+    assert_body 'name="kennwort2"'
+    login_csrf=$(csrf_from_body)
+
+    assert_status 200 \
+        --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        --request POST \
+        --data-urlencode "csrf_token=$login_csrf" \
+        --data-urlencode 'login_flow=new' \
         --data-urlencode "benutzer=$name" \
         --data-urlencode "kuerzel=$code" \
         --data-urlencode "funktion=$function_name" \
@@ -103,6 +135,8 @@ login_user()
         --data-urlencode '2teskennwort=Yes' \
         --data-urlencode 'absenden_x=1' \
         "$base_url/4fach/mainindex.php"
+    assert_no_runtime_error
+    assert_status 200 --cookie "$cookie_jar" "$base_url/stabetb/etb.php"
     assert_no_runtime_error
 }
 

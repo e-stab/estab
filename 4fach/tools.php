@@ -17,6 +17,7 @@ include ("../4fcfg/dbcfg.inc.php");
 include ("../4fcfg/e_cfg.inc.php");
 include ("../4fcfg/para.inc.php");
 require_once __DIR__ . "/../app/auth.php";
+require_once __DIR__ . "/../app/csrf.php";
 require_once __DIR__ . "/../app/file_access.php";
 
   function pre_html ($art, $titel, $cssstr){
@@ -663,52 +664,71 @@ bersichtlich dargestellt werden.
       }
     }
 
-    $aktiv    = " rgb(100, 250,  20); color:&000000; "; // was (100, 250,  20)
-    $inaktiv  = " rgb(200, 200, 200); color:&FFFF00; "; // was (250,  60,  30)
-    $self     = " rgb(250,  60,  30); color:&ffffff; "; // was ( 50, 180, 220);
-    $abgemldt = " rgb(200, 200, 200); color:&a0a0a0; "; // was ( 240, 240, 240);
-
     /*Benutzerliste*/
     if ($benutzer !== array ()){
       include ("../4fcfg/config.inc.php");
+      $loginSelectable = $what == "verlinkt"
+        && in_array (($_SESSION ["menue"] ?? ""), array ("WELCOME", "LOGIN"), true);
       if ($what == 'verlinkt'){
          echo "\n\n<form action=\"".estab_auth_html ($conf_4f ["MainURL"])."\" method=\"POST\" target=\"mainframe\">\n";
+         echo estab_csrf_field ()."\n";
          echo "<!-- Benutzerliste mit POST-Auswahl zur Anmeldung -->\n";
-      
       }
 
-      echo "<fieldset>";
-      echo "<legend><b><big>Benutzerliste</big></b></legend>\n";
-      echo "<table style=\"text-align: left; background-color: rgb(150, 150, 150); height: 32px;\" border=\"3\" cellpadding=\"5\" cellspacing=\"5\">\n";
+      echo "<section class=\"estab-auth-shell\">\n";
+      echo "<fieldset class=\"estab-auth-card\">";
+      echo "<legend><b><big>".
+           ($loginSelectable ? "Bestehendes Konto auswählen" : "Benutzerliste").
+           "</big></b></legend>\n";
+      if ($loginSelectable) {
+        echo "<p>Die Auswahl übernimmt Name, Kürzel und Funktion. Zum Anmelden benötigen Sie weiterhin das zugehörige Kennwort.</p>\n";
+      }
+      echo "<table class=\"estab-account-list\">\n";
       echo "<tbody>\n";
       echo "<tr>";
-      echo "<td><b>Benutzer</b></td><td><b>K&uuml;rzel</b></td><td><b>Rolle</b></td><td><b>Funktion</b></td>";
-      echo "</tr>";
+      echo "<th scope=\"col\">Benutzer</th><th scope=\"col\">Kürzel</th><th scope=\"col\">Rolle</th><th scope=\"col\">Funktion</th><th scope=\"col\">Status</th>";
+      if ($loginSelectable) {
+        echo "<th scope=\"col\">Aktion</th>";
+      }
+      echo "</tr>\n";
       foreach ($benutzer as $user){
-        echo "<tr>";
-        $background = ((string) ($user ["sid"] ?? "") !== "" && session_id () === (string) $user ["sid"])
-          ? $self
-          : (((int) ($user ["aktiv"] ?? 0) === 1) ? $aktiv : $abgemldt);
-        $loginSelectable = $what == 'verlinkt' && ($_SESSION ["menue"] ?? "") == "LOGIN";
+        $isCurrentSession = (string) ($user ["sid"] ?? "") !== ""
+          && session_id () === (string) $user ["sid"];
+        $isActive = (int) ($user ["aktiv"] ?? 0) === 1;
+        $rowClass = $isActive ? "estab-account-active" : "estab-account-inactive";
+        $statusText = $isCurrentSession
+          ? "Aktuelle Sitzung"
+          : ($isActive ? "Angemeldet" : "Abgemeldet");
+        echo "<tr class=\"".$rowClass."\">";
         $identityToken = $loginSelectable ? estab_auth_identity_token ($user) : "";
         foreach (array ("benutzer", "kuerzel", "rolle", "funktion") as $column) {
           $safeValue = estab_auth_html ($user [$column] ?? "");
-          if ($loginSelectable) {
-            $safeToken = estab_auth_html ($identityToken);
-            $safeValue = "<button type=\"submit\" name=\"login_identity\" value=\"".$safeToken."\">".$safeValue."</button>";
-          }
-          echo "<td style=\"background-color: ".$background." font-weight:bold;\">".$safeValue."</td>";
+          echo "<td>".$safeValue."</td>";
         }
-        echo "</tr>";
+        echo "<td>".estab_auth_html ($statusText)."</td>";
+        if ($loginSelectable) {
+          $safeToken = estab_auth_html ($identityToken);
+          $safeName = estab_auth_html ($user ["benutzer"] ?? "");
+          $safeCode = estab_auth_html ($user ["kuerzel"] ?? "");
+          echo "<td><button class=\"estab-button\" type=\"submit\" name=\"login_identity\" value=\"".$safeToken."\" aria-label=\"Konto ".$safeName." mit Kürzel ".$safeCode." auswählen\">Konto auswählen</button></td>";
+        }
+        echo "</tr>\n";
       }
       echo "</tbody></table>\n";
       echo "</fieldset>\n";
+      echo "</section>\n";
       if ($what == 'verlinkt'){
          echo "</form>\n";
       }
     } else {
-      echo "<br>";
-      echo "<big><b>Es ist keine Funktion angemeldet.</b></big>";
+      echo "<section class=\"estab-auth-shell\"><div class=\"estab-auth-card\">\n";
+      echo "<h2>Noch keine Konten vorhanden</h2>\n";
+      if (estab_auth_self_registration_allowed ()) {
+        echo "<p>Legen Sie das erste Funktionskonto über „Neues Konto anlegen“ an.</p>\n";
+      } else {
+        echo "<p>Die Kontoerstellung ist deaktiviert. Wenden Sie sich an die zuständige Stelle.</p>\n";
+      }
+      echo "</div></section>\n";
     }
   }
 
