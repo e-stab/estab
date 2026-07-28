@@ -1609,6 +1609,19 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
 
     admin_cookie=$work_dir/admin-cookies.txt
     assert_status 401 \
+        "$base_url/4fadm/system_status.php"
+    assert_status 200 --config "$admin_curl_config" \
+        "$base_url/4fadm/system_status.php"
+    assert_body 'Gesamtzustand: betriebsbereit'
+    assert_body 'Verbindung und Lesetest'
+    assert_body 'Anhangsspeicher'
+    assert_body 'Vordruckspeicher'
+    assert_body 'Einsatzexport'
+    assert_body 'data-estab-public-bar'
+    assert_body "data-estab-admin-user=\"$ESTAB_TEST_ADMIN_USER\""
+    assert_body_absent 'Prüfung erforderlich'
+
+    assert_status 401 \
         "$base_url/4fadm/export.php"
     assert_status 401 \
         "$base_url/4fadm/export.php?action=download&export_id=estab-20260722-120000-aaaaaaaa"

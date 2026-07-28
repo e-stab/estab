@@ -79,22 +79,33 @@ si_code="i${identity_seed}"
 s1_code="a${identity_seed}"
 s2_code="l${identity_seed}"
 s3_code="n${identity_seed}"
+pol_code="p${identity_seed}"
 aw_name="Workflow A-W ${identity_seed}"
 si_name="Workflow Si ${identity_seed}"
 s1_name="Workflow S1 ${identity_seed}"
 s2_name="Workflow S2 ${identity_seed}"
 s3_name="Workflow S3 ${identity_seed}"
+pol_name="Workflow POL ${identity_seed}"
 incoming_marker="E2EIN_${identity_seed}_${workflow_variant}"
 outgoing_marker="E2EOUT_${identity_seed}_${workflow_variant}"
+autosight_marker="E2EAUTO_${identity_seed}_${workflow_variant}"
+reply_marker="E2EREPLY_${identity_seed}_${workflow_variant}"
+forward_marker="E2EFORWARD_${identity_seed}_${workflow_variant}"
 fm_admin_note="FMADMIN_${identity_seed}_${workflow_variant}"
+si_admin_note="SIADMIN_${identity_seed}_${workflow_variant}"
 
-for code in "$aw_code" "$si_code" "$s1_code" "$s2_code" "$s3_code"; do
+for code in \
+    "$aw_code" "$si_code" "$s1_code" "$s2_code" "$s3_code" "$pol_code"
+do
     if ! printf '%s' "$code" | grep -Eq '^[a-z0-9_]{1,6}$'; then
         echo 'Message workflow HTTP: derived an unsafe user code' >&2
         exit 1
     fi
 done
-for marker in "$incoming_marker" "$outgoing_marker"; do
+for marker in \
+    "$incoming_marker" "$outgoing_marker" "$autosight_marker" \
+    "$reply_marker" "$forward_marker"
+do
     if ! printf '%s' "$marker" | grep -Eq '^[A-Za-z0-9_-]{1,64}$'; then
         echo 'Message workflow HTTP: derived an unsafe message marker' >&2
         exit 1
@@ -109,13 +120,18 @@ si_cookies=$work_dir/si-cookies.txt
 s1_cookies=$work_dir/s1-cookies.txt
 s2_cookies=$work_dir/s2-cookies.txt
 s3_cookies=$work_dir/s3-cookies.txt
+pol_cookies=$work_dir/pol-cookies.txt
 
 incoming_id=0
 incoming_number=0
 outgoing_id=0
 outgoing_number=0
+autosight_id=0
+autosight_number=0
 incoming_form_cleanup_owned=false
 outgoing_form_cleanup_owned=false
+autosight_form_cleanup_owned=false
+matrix_auto_mutated=false
 mutation_started=false
 message_auto_increment=1
 protocol_auto_increment=1
@@ -125,6 +141,7 @@ s1_function_tables_before=0
 s2_function_tables_before=0
 s3_function_tables_before=0
 si_function_tables_before=0
+pol_function_tables_before=0
 
 db_sql()
 {
@@ -249,7 +266,8 @@ cleanup()
     cleanup_status=0
 
     for cookie_jar in \
-        "$aw_cookies" "$si_cookies" "$s1_cookies" "$s2_cookies" "$s3_cookies"
+        "$aw_cookies" "$si_cookies" "$s1_cookies" "$s2_cookies" \
+        "$s3_cookies" "$pol_cookies"
     do
         purge_session_file "$cookie_jar" >/dev/null 2>&1 || cleanup_status=1
     done
@@ -264,18 +282,28 @@ cleanup()
         generated_form_check remove A "$outgoing_number" >/dev/null 2>&1 ||
             cleanup_status=1
     fi
+    if [ "$autosight_form_cleanup_owned" = true ] &&
+        [ "$autosight_number" -gt 0 ]; then
+        generated_form_check remove E "$autosight_number" >/dev/null 2>&1 ||
+            cleanup_status=1
+    fi
 
     if [ "$mutation_started" = true ]; then
         db_sql >/dev/null 2>&1 <<SQL || cleanup_status=1
 START TRANSACTION;
 DELETE FROM \`nv_nachrichten\`
- WHERE \`12_inhalt\` IN ('${incoming_marker}', '${outgoing_marker}');
+ WHERE \`12_inhalt\` IN (
+         '${incoming_marker}', '${outgoing_marker}', '${autosight_marker}'
+       )
+    OR \`12_inhalt\` LIKE '%${reply_marker}%'
+    OR \`12_inhalt\` LIKE '%${forward_marker}%';
 DELETE FROM \`nv_benutzer\`
  WHERE (\`kuerzel\` = '${aw_code}' AND \`benutzer\` = '${aw_name}' AND \`funktion\` = 'A/W')
     OR (\`kuerzel\` = '${si_code}' AND \`benutzer\` = '${si_name}' AND \`funktion\` = 'Si')
     OR (\`kuerzel\` = '${s1_code}' AND \`benutzer\` = '${s1_name}' AND \`funktion\` = 'S1')
     OR (\`kuerzel\` = '${s2_code}' AND \`benutzer\` = '${s2_name}' AND \`funktion\` = 'S2')
-    OR (\`kuerzel\` = '${s3_code}' AND \`benutzer\` = '${s3_name}' AND \`funktion\` = 'S3');
+    OR (\`kuerzel\` = '${s3_code}' AND \`benutzer\` = '${s3_name}' AND \`funktion\` = 'S3')
+    OR (\`kuerzel\` = '${pol_code}' AND \`benutzer\` = '${pol_name}' AND \`funktion\` = 'POL');
 DELETE FROM \`nv_protokoll\` WHERE \`p_lfd\` > ${protocol_auto_increment} - 1;
 COMMIT;
 DROP TABLE IF EXISTS
@@ -290,10 +318,21 @@ DROP TABLE IF EXISTS
   \`usr_s3_${s3_code}_kategolink\`,
   \`usr_si_${si_code}_read\`,
   \`usr_si_${si_code}_katego\`,
-  \`usr_si_${si_code}_kategolink\`;
+  \`usr_si_${si_code}_kategolink\`,
+  \`usr_pol_${pol_code}_read\`,
+  \`usr_pol_${pol_code}_katego\`,
+  \`usr_pol_${pol_code}_kategolink\`;
 ALTER TABLE \`nv_nachrichten\` AUTO_INCREMENT = ${message_auto_increment};
 ALTER TABLE \`nv_protokoll\` AUTO_INCREMENT = ${protocol_auto_increment};
 SQL
+
+        if [ "$matrix_auto_mutated" = true ]; then
+            db_sql >/dev/null 2>&1 <<'SQL' || cleanup_status=1
+UPDATE `nv_empfmtx`
+   SET `mtx_auto` = 'f'
+ WHERE `mtx_fkt` = 'POL' AND `mtx_rolle` = 'FB';
+SQL
+        fi
 
         drop_new_function_tables s1 "$s1_function_tables_before" >/dev/null 2>&1 ||
             cleanup_status=1
@@ -303,6 +342,8 @@ SQL
             cleanup_status=1
         drop_new_function_tables si "$si_function_tables_before" >/dev/null 2>&1 ||
             cleanup_status=1
+        drop_new_function_tables pol "$pol_function_tables_before" >/dev/null 2>&1 ||
+            cleanup_status=1
 
         cleanup_snapshot=$(db_sql 2>/dev/null <<SQL
 SELECT CONCAT(
@@ -311,7 +352,10 @@ SELECT CONCAT(
   (SELECT COUNT(*) FROM \`nv_protokoll\`),
   '|',
   (SELECT COUNT(*) FROM \`nv_benutzer\`
-    WHERE \`kuerzel\` IN ('${aw_code}', '${si_code}', '${s1_code}', '${s2_code}', '${s3_code}')),
+    WHERE \`kuerzel\` IN (
+      '${aw_code}', '${si_code}', '${s1_code}', '${s2_code}', '${s3_code}',
+      '${pol_code}'
+    )),
   '|',
   (SELECT COUNT(*) FROM information_schema.tables
     WHERE table_schema = DATABASE()
@@ -319,7 +363,8 @@ SELECT CONCAT(
         'usr_s1_${s1_code}_read', 'usr_s1_${s1_code}_katego', 'usr_s1_${s1_code}_kategolink',
         'usr_s2_${s2_code}_read', 'usr_s2_${s2_code}_katego', 'usr_s2_${s2_code}_kategolink',
         'usr_s3_${s3_code}_read', 'usr_s3_${s3_code}_katego', 'usr_s3_${s3_code}_kategolink',
-        'usr_si_${si_code}_read', 'usr_si_${si_code}_katego', 'usr_si_${si_code}_kategolink'
+        'usr_si_${si_code}_read', 'usr_si_${si_code}_katego', 'usr_si_${si_code}_kategolink',
+        'usr_pol_${pol_code}_read', 'usr_pol_${pol_code}_katego', 'usr_pol_${pol_code}_kategolink'
       )),
   '|',
   (SELECT COUNT(*) FROM information_schema.tables
@@ -336,13 +381,24 @@ SELECT CONCAT(
   '|',
   (SELECT COUNT(*) FROM information_schema.tables
     WHERE table_schema = DATABASE()
-      AND table_name IN ('usr__fkt_si_erl', 'usr__fkt_si_katego', 'usr__fkt_si_kategolink'))
+      AND table_name IN ('usr__fkt_si_erl', 'usr__fkt_si_katego', 'usr__fkt_si_kategolink')),
+  '|',
+  (SELECT COUNT(*) FROM information_schema.tables
+    WHERE table_schema = DATABASE()
+      AND table_name IN ('usr__fkt_pol_erl', 'usr__fkt_pol_katego', 'usr__fkt_pol_kategolink')),
+  '|',
+  (SELECT COUNT(*) FROM \`nv_empfmtx\`
+    WHERE \`mtx_fkt\` = 'POL'
+      AND \`mtx_rolle\` = 'FB'
+      AND \`mtx_auto\` IN ('t','1'))
 );
 SQL
         )
-        expected_cleanup="${message_count_before}|${protocol_count_before}|0|0|${s1_function_tables_before}|${s2_function_tables_before}|${s3_function_tables_before}|${si_function_tables_before}"
+        expected_cleanup="${message_count_before}|${protocol_count_before}|0|0|${s1_function_tables_before}|${s2_function_tables_before}|${s3_function_tables_before}|${si_function_tables_before}|${pol_function_tables_before}|0"
         if [ "$cleanup_snapshot" != "$expected_cleanup" ]; then
             echo 'Message workflow HTTP: cleanup invariants failed' >&2
+            printf 'expected: %s\nactual:   %s\n' \
+                "$expected_cleanup" "$cleanup_snapshot" >&2
             cleanup_status=1
         fi
     fi
@@ -667,10 +723,17 @@ finish_viewer_message()
 fixture_collision=$(db_sql <<SQL
 SELECT CONCAT(
   (SELECT COUNT(*) FROM \`nv_benutzer\`
-    WHERE \`kuerzel\` IN ('${aw_code}', '${si_code}', '${s1_code}', '${s2_code}', '${s3_code}')),
+    WHERE \`kuerzel\` IN (
+      '${aw_code}', '${si_code}', '${s1_code}', '${s2_code}', '${s3_code}',
+      '${pol_code}'
+    )),
   '|',
   (SELECT COUNT(*) FROM \`nv_nachrichten\`
-    WHERE \`12_inhalt\` IN ('${incoming_marker}', '${outgoing_marker}')),
+    WHERE \`12_inhalt\` IN (
+      '${incoming_marker}', '${outgoing_marker}', '${autosight_marker}'
+    )
+       OR \`12_inhalt\` LIKE '%${reply_marker}%'
+       OR \`12_inhalt\` LIKE '%${forward_marker}%'),
   '|',
   (SELECT COUNT(*) FROM information_schema.tables
     WHERE table_schema = DATABASE()
@@ -678,7 +741,8 @@ SELECT CONCAT(
         'usr_s1_${s1_code}_read', 'usr_s1_${s1_code}_katego', 'usr_s1_${s1_code}_kategolink',
         'usr_s2_${s2_code}_read', 'usr_s2_${s2_code}_katego', 'usr_s2_${s2_code}_kategolink',
         'usr_s3_${s3_code}_read', 'usr_s3_${s3_code}_katego', 'usr_s3_${s3_code}_kategolink',
-        'usr_si_${si_code}_read', 'usr_si_${si_code}_katego', 'usr_si_${si_code}_kategolink'
+        'usr_si_${si_code}_read', 'usr_si_${si_code}_katego', 'usr_si_${si_code}_kategolink',
+        'usr_pol_${pol_code}_read', 'usr_pol_${pol_code}_katego', 'usr_pol_${pol_code}_kategolink'
       ))
 );
 SQL
@@ -706,6 +770,8 @@ if [ "$matrix_contract" != '2:1:cb:S1:f|3:1:cb:S2:t|4:1:cb:S3:f' ]; then
 fi
 assert_db_equals 1 'unique red-copy function' \
     "SELECT COUNT(*) FROM \`nv_empfmtx\` WHERE \`mtx_rc2\` IN ('t','1');"
+assert_db_equals 'FB|0' 'initial POL role and autosighting state' \
+    "SELECT CONCAT(\`mtx_rolle\`, '|', IF(\`mtx_auto\` IN ('t','1'), '1', '0')) FROM \`nv_empfmtx\` WHERE \`mtx_fkt\` = 'POL';"
 assert_db_equals 0 'pre-existing unprinted closed messages' \
     "SELECT COUNT(*) FROM \`nv_nachrichten\` WHERE \`x01_abschluss\` IN ('t','1') AND \`x04_druck\` IN ('f','0');"
 
@@ -745,9 +811,11 @@ s1_function_tables_before=$(function_table_count s1)
 s2_function_tables_before=$(function_table_count s2)
 s3_function_tables_before=$(function_table_count s3)
 si_function_tables_before=$(function_table_count si)
+pol_function_tables_before=$(function_table_count pol)
 for table_count in \
     "$s1_function_tables_before" "$s2_function_tables_before" \
-    "$s3_function_tables_before" "$si_function_tables_before"
+    "$s3_function_tables_before" "$si_function_tables_before" \
+    "$pol_function_tables_before"
 do
     case "$table_count" in
         0 | 3) ;;
@@ -760,15 +828,151 @@ done
 
 mutation_started=true
 
-# Create five isolated functional accounts through the public account UI.
+# Create six isolated functional accounts through the public account UI.
 # Keeping Si signed in makes both A/W forms use their genuine online-Si branch.
 register_user "$aw_cookies" "$aw_name" "$aw_code" A/W Fernmelder
 register_user "$s1_cookies" "$s1_name" "$s1_code" S1 Stab
 register_user "$s2_cookies" "$s2_name" "$s2_code" S2 Stab
 register_user "$s3_cookies" "$s3_name" "$s3_code" S3 Stab
+register_user "$pol_cookies" "$pol_name" "$pol_code" POL FB
 register_user "$si_cookies" "$si_name" "$si_code" Si Stab
 assert_db_equals 1 'online Si fixture' \
     "SELECT COUNT(*) FROM \`nv_benutzer\` WHERE \`kuerzel\`='${si_code}' AND \`funktion\`='Si' AND \`aktiv\`=1;"
+assert_db_equals 1 'isolated online Si fixture' \
+    "SELECT COUNT(*) FROM \`nv_benutzer\` WHERE \`funktion\`='Si' AND \`aktiv\`=1;"
+
+# Prove the real FB profile before using POL as an automatic recipient. A
+# Fachberater gets the staff writer/reader controls, but neither the Si nor the
+# telecommunications actions.
+load_sidebar "$pol_cookies" 'POL/FB role navigation'
+assert_body 'name="stab_schreiben_x"' 'POL/FB write action'
+assert_body 'name="stab_lesen_x"' 'POL/FB read action'
+assert_body_absent 'name="fm_eingang_x"' 'POL/FB telecommunications action'
+assert_body_absent 'name="si_admin_x"' 'POL/FB viewer action'
+pol_csrf=$(csrf_from_body)
+assert_status 403 'reject POL/FB telecommunications action' \
+    --cookie "$pol_cookies" --cookie-jar "$pol_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$pol_csrf" \
+    --data-urlencode 'fm_eingang_x=1' \
+    "$base_url/4fach/mainindex.php"
+load_sidebar "$pol_cookies" 'POL/FB role navigation after rejected action'
+pol_csrf=$(csrf_from_body)
+assert_status 403 'reject POL/FB viewer administration action' \
+    --cookie "$pol_cookies" --cookie-jar "$pol_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$pol_csrf" \
+    --data-urlencode 'si_admin_x=1' \
+    "$base_url/4fach/mainindex.php"
+
+# Exercise automatic sighting, not only persistence of the matrix flag. POL is
+# temporarily marked as an autosighting target and Si is made offline in the
+# disposable fixture. The rendered FM-Eingang_Sichter form must derive the
+# checked POL control; the test submits that exact rendered default.
+matrix_auto_mutated=true
+db_sql >/dev/null <<SQL
+START TRANSACTION;
+UPDATE \`nv_empfmtx\`
+   SET \`mtx_auto\` = 't'
+ WHERE \`mtx_fkt\` = 'POL' AND \`mtx_rolle\` = 'FB';
+UPDATE \`nv_benutzer\`
+   SET \`aktiv\` = 0
+ WHERE \`kuerzel\` = '${si_code}' AND \`funktion\` = 'Si';
+COMMIT;
+SQL
+assert_db_equals '1|0' 'autosighting fixture and offline Si' \
+    "SELECT CONCAT((SELECT COUNT(*) FROM \`nv_empfmtx\` WHERE \`mtx_fkt\`='POL' AND \`mtx_auto\` IN ('t','1')), '|', (SELECT COUNT(*) FROM \`nv_benutzer\` WHERE \`funktion\`='Si' AND \`aktiv\`=1));"
+
+load_dashboard "$aw_cookies" 'A/W dashboard before automatic sighting'
+autosight_csrf=$(csrf_from_body)
+assert_status 200 'open automatic-sighting incoming form' \
+    --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$autosight_csrf" \
+    --data-urlencode 'fm_eingang_x=1' \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'automatic-sighting incoming form'
+assert_body \
+    'name="task" value="FM-Eingang_Sichter"' \
+    'automatic-sighting form task'
+auto_checkbox=$(sed -n \
+    's/.*name="\(16_32\)" value="\(16_32_bl\)" type="checkbox"[^>]*checked="checked".*/\1=\2/p' \
+    "$body" | head -n 1)
+if [ "$auto_checkbox" != '16_32=16_32_bl' ]; then
+    echo 'Message workflow HTTP: POL autosighting default was not derived from the rendered form' >&2
+    exit 1
+fi
+
+autosight_csrf=$(csrf_from_body)
+tactical_time=$(date '+%H%M')
+assert_status 200 'save automatic-sighting incoming message' \
+    --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$autosight_csrf" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=FM-Eingang_Sichter' \
+    --data-urlencode '01_medium=Fu' \
+    --data-urlencode "01_datum=$tactical_time" \
+    --data-urlencode "01_zeichen=$aw_code" \
+    --data-urlencode '05_gegenstelle=E2E-Auto-Gegenstelle' \
+    --data-urlencode '07_durchspruch=D' \
+    --data-urlencode '08_befhinweis=' \
+    --data-urlencode '08_befhinwausw=' \
+    --data-urlencode '09_vorrangstufe=eee' \
+    --data-urlencode '10_anschrift=E2E-Einsatzleitung' \
+    --data-urlencode '11_gesprnotiz=f' \
+    --data-urlencode '12_anhang=' \
+    --data-urlencode "12_inhalt=$autosight_marker" \
+    --data-urlencode "12_abfzeit=$tactical_time" \
+    --data-urlencode '13_abseinheit=E2E-Auto-Absender' \
+    --data-urlencode '14_zeichen=' \
+    --data-urlencode '14_funktion=' \
+    --data-urlencode "15_quitdatum=$tactical_time" \
+    --data-urlencode "15_quitzeichen=$aw_code" \
+    --data-urlencode "$auto_checkbox" \
+    --data-urlencode '16_gncopy=' \
+    --data-urlencode '17_vermerke=Automatisch ohne Si gesichtet' \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'saved automatic-sighting incoming message'
+
+autosight_id=$(db_sql <<SQL
+SELECT \`00_lfd\` FROM \`nv_nachrichten\`
+ WHERE \`12_inhalt\` = '${autosight_marker}';
+SQL
+)
+autosight_number=$(db_sql <<SQL
+SELECT \`04_nummer\` FROM \`nv_nachrichten\`
+ WHERE \`12_inhalt\` = '${autosight_marker}';
+SQL
+)
+assert_numeric 'automatic-sighting message ID' "$autosight_id"
+assert_numeric 'automatic-sighting evidence number' "$autosight_number"
+autosight_form_cleanup_owned=true
+assert_message_state "$autosight_marker" \
+    "E|8|t|set|${aw_code}|S2_rt,POL_bl,|f||t" \
+    'automatic-sighting completed message'
+if ! generated_form_check present E "$autosight_number"; then
+    echo 'Message workflow HTTP: automatic sighting generated no form' >&2
+    exit 1
+fi
+load_dashboard "$pol_cookies" 'POL/FB automatic-sighting recipient list'
+assert_body "$autosight_marker" 'POL/FB automatic-sighting recipient list'
+assert_route_control \
+    stab meldung "$autosight_id" 'POL/FB automatic-sighting detail control'
+
+db_sql >/dev/null <<SQL
+START TRANSACTION;
+UPDATE \`nv_empfmtx\`
+   SET \`mtx_auto\` = 'f'
+ WHERE \`mtx_fkt\` = 'POL' AND \`mtx_rolle\` = 'FB';
+UPDATE \`nv_benutzer\`
+   SET \`aktiv\` = 1
+ WHERE \`kuerzel\` = '${si_code}' AND \`funktion\` = 'Si';
+COMMIT;
+SQL
+assert_db_equals '0|1' 'restored matrix and online Si' \
+    "SELECT CONCAT((SELECT COUNT(*) FROM \`nv_empfmtx\` WHERE \`mtx_fkt\`='POL' AND \`mtx_auto\` IN ('t','1')), '|', (SELECT COUNT(*) FROM \`nv_benutzer\` WHERE \`kuerzel\`='${si_code}' AND \`funktion\`='Si' AND \`aktiv\`=1));"
+matrix_auto_mutated=false
 
 # Incoming message: A/W captures a real form (status 4), Si reviews it
 # (status 8), assigns the exact red/green/blue copies and closes it.
@@ -1029,6 +1233,320 @@ if ! generated_form_check present E "$incoming_number"; then
     exit 1
 fi
 
+# Si independently opens the corresponding second-review list and persists the
+# same deliberately narrow field set. This is a separate routed workflow, not
+# an inference from the analogous A/W form.
+si_admin_immutable_before=$(
+    message_admin_immutable_fingerprint "$incoming_marker"
+)
+if ! printf '%s' "$si_admin_immutable_before" |
+    grep -Eq '^[a-f0-9]{64}$'; then
+    echo 'Message workflow HTTP: invalid SI-Admin evidence snapshot' >&2
+    exit 1
+fi
+load_sidebar "$si_cookies" 'Si navigation before second review'
+assert_body 'name="si_admin_x"' 'rendered Si second-review action'
+si_admin_csrf=$(csrf_from_body)
+assert_status 200 'open Si second-review list' \
+    --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$si_admin_csrf" \
+    --data-urlencode 'si_admin_x=1' \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'Si second-review list'
+assert_body "$incoming_marker" 'Si second-review list'
+assert_route_control \
+    fm SI-Adminmeldung "$incoming_id" 'SI-Admin detail control'
+
+si_admin_csrf=$(csrf_from_body)
+assert_status 200 'open completed incoming SI-Admin form' \
+    --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$si_admin_csrf" \
+    --data-urlencode 'fm=SI-Adminmeldung' \
+    --data-urlencode "00_lfd=$incoming_id" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'completed incoming SI-Admin form'
+assert_body 'name="task" value="SI-Admin"' 'SI-Admin form task'
+assert_body "name=\"00_lfd\" value=\"$incoming_id\"" 'SI-Admin form message'
+assert_body 'name="absenden"' 'SI-Admin save control'
+assert_body 'name="abbrechen"' 'SI-Admin cancel control'
+assert_body \
+    'id="f_15_quitdatum" data-estab-readonly="true"' \
+    'SI-Admin read-only acknowledgment time'
+assert_body \
+    'id="f_15_quitdatum_value" type="hidden" name="15_quitdatum"' \
+    'SI-Admin acknowledgment time compatibility value'
+assert_body_absent \
+    'id="f_15_quitdatum" maxlength=' \
+    'SI-Admin editable acknowledgment time'
+assert_body 'id="f_15_quitzeichen" maxlength="6"' \
+    'SI-Admin acknowledgment code'
+assert_body 'name="16_gncopy" type="radio"' \
+    'SI-Admin green-copy controls'
+assert_body 'name="16_32" value="16_32_bl" type="checkbox"' \
+    'SI-Admin POL blue-copy control'
+assert_body '<textarea cols="40" rows="10" name="17_vermerke"' \
+    'SI-Admin note control'
+assert_body '<input id="f_12_inhalt" type="hidden"' \
+    'SI-Admin immutable message content'
+assert_body '<input id="f_10_anschrift" type="hidden"' \
+    'SI-Admin immutable address'
+for forbidden_si_admin_control in \
+    'id="f_01_datum" maxlength=' \
+    'id="f_01_zeichen" maxlength=' \
+    'id="f_02_zeit" maxlength=' \
+    'id="f_02_zeichen" maxlength=' \
+    'id="f_03_datum" maxlength=' \
+    'id="f_03_zeichen" maxlength=' \
+    'id="f_04_nummer" maxlength=' \
+    'id="f_04_richtung" name=' \
+    'id="f_05_gegenstelle" maxlength=' \
+    'id="f_06_befweg" maxlength=' \
+    '<textarea id="f_10_anschrift"' \
+    '<textarea id="f_12_inhalt"' \
+    'id="f_12_abfzeit" maxlength=' \
+    'id="f_13_abseinheit" style=' \
+    'id="f_14_zeichen" maxlength=' \
+    'id="f_14_funktion" maxlength='
+do
+    assert_body_absent "$forbidden_si_admin_control" \
+        'SI-Admin fields 1-14 read-only contract'
+done
+
+case "$incoming_quit_clock_before" in
+    0001) si_admin_submitted_quit_time=2359 ;;
+    *) si_admin_submitted_quit_time=0001 ;;
+esac
+si_admin_csrf=$(csrf_from_body)
+assert_status 200 'save completed incoming SI-Admin review' \
+    --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$si_admin_csrf" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=SI-Admin' \
+    --data-urlencode "00_lfd=$incoming_id" \
+    --data-urlencode "15_quitdatum=$si_admin_submitted_quit_time" \
+    --data-urlencode "15_quitzeichen=$si_code" \
+    --data-urlencode '16_32=16_32_bl' \
+    --data-urlencode '16_gncopy=16_21_gn' \
+    --data-urlencode "17_vermerke=$si_admin_note" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'saved completed incoming SI-Admin review'
+
+si_admin_immutable_after=$(
+    message_admin_immutable_fingerprint "$incoming_marker"
+)
+if [ "$si_admin_immutable_after" != "$si_admin_immutable_before" ]; then
+    echo 'Message workflow HTTP: SI-Admin changed immutable message evidence' >&2
+    exit 1
+fi
+assert_message_state "$incoming_marker" \
+    "E|8|t|set|${si_code}|S2_rt,S1_gn,POL_bl,|f||t" \
+    'SI-Admin preserved completed incoming state'
+assert_db_equals \
+    "${incoming_quit_timestamp_before}|${si_code}|S2_rt,S1_gn,POL_bl,|${si_admin_note}" \
+    'SI-Admin changed only editable second-review evidence and rejected timestamp tampering' \
+    "SELECT CONCAT(DATE_FORMAT(\`15_quitdatum\`, '%Y-%m-%d %H:%i:%s'), '|', \`15_quitzeichen\`, '|', COALESCE(\`16_empf\`, ''), '|', COALESCE(\`17_vermerke\`, '')) FROM \`nv_nachrichten\` WHERE \`00_lfd\` = ${incoming_id};"
+if ! generated_form_check present E "$incoming_number"; then
+    echo 'Message workflow HTTP: SI-Admin lost the completed incoming form' >&2
+    exit 1
+fi
+
+# Leave the persistent SI-Admin list through the rendered viewer action. Later
+# assertions about the ordinary Si queue must not accidentally inspect the
+# administration archive merely because this test exercised second review.
+load_sidebar "$si_cookies" 'Si navigation after second review'
+assert_body 'name="stab_sichten_x"' 'rendered Si viewer action after second review'
+si_admin_csrf=$(csrf_from_body)
+assert_status 200 'return from Si second review to normal viewer queue' \
+    --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$si_admin_csrf" \
+    --data-urlencode 'stab_sichten_x=1' \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'Si normal viewer queue after second review'
+assert_body_absent "$incoming_marker" 'Si normal viewer queue after second review'
+
+# The real POL/FB recipient now reads the completed message and exercises both
+# derivation controls. Each generated Stab_schreiben form is then submitted to
+# create a distinct outgoing database record, while the source fingerprint
+# remains byte-for-byte unchanged.
+derived_source_before=$(
+    message_admin_immutable_fingerprint "$incoming_marker"
+)
+load_dashboard "$pol_cookies" 'POL/FB list before answer'
+assert_body "$incoming_marker" 'POL/FB list before answer'
+assert_route_control stab meldung "$incoming_id" 'POL/FB incoming detail control'
+pol_csrf=$(csrf_from_body)
+assert_status 200 'open incoming message as POL/FB for answer' \
+    --cookie "$pol_cookies" --cookie-jar "$pol_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$pol_csrf" \
+    --data-urlencode 'stab=meldung' \
+    --data-urlencode "00_lfd=$incoming_id" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'POL/FB incoming read form for answer'
+assert_body 'name="task" value="Stab_lesen"' 'POL/FB incoming read task'
+assert_body 'name="antwort"' 'POL/FB answer control'
+assert_body 'name="weiterleiten"' 'POL/FB forward control'
+
+pol_csrf=$(csrf_from_body)
+assert_status 200 'derive POL/FB answer form' \
+    --cookie "$pol_cookies" --cookie-jar "$pol_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$pol_csrf" \
+    --data-urlencode 'antwort_x=1' \
+    --data-urlencode 'task=Stab_lesen' \
+    --data-urlencode "00_lfd=$incoming_id" \
+    --data-urlencode '04_richtung=E' \
+    --data-urlencode "04_nummer=$incoming_number" \
+    --data-urlencode '10_anschrift=E2E-Einsatzleitung' \
+    --data-urlencode "12_inhalt=$incoming_marker" \
+    --data-urlencode '13_abseinheit=E2E-Absender' \
+    --data-urlencode '14_funktion=' \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'derived POL/FB answer form'
+assert_body 'name="task" value="Stab_schreiben"' 'derived answer task'
+assert_body \
+    'name="10_anschrift">E2E-Absender  </textarea>' \
+    'derived answer destination'
+assert_body \
+    'name="13_abseinheit" value="E2E-Einsatzleitung"' \
+    'derived answer sender'
+assert_body \
+    "name=\"14_zeichen\" value=\"$pol_code\"" \
+    'derived answer author code'
+assert_body \
+    'name="14_funktion" value="POL"' \
+    'derived answer author function'
+assert_body "Zitat: von E $incoming_number" 'derived answer quote reference'
+assert_body "$incoming_marker" 'derived answer quoted content'
+
+reply_content=$(printf 'Zitat: von E %s\n"%s"\n%s' \
+    "$incoming_number" "$incoming_marker" "$reply_marker")
+pol_csrf=$(csrf_from_body)
+assert_status 200 'save POL/FB answer' \
+    --cookie "$pol_cookies" --cookie-jar "$pol_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$pol_csrf" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=Stab_schreiben' \
+    --data-urlencode '02_zeit=' \
+    --data-urlencode '07_durchspruch=D' \
+    --data-urlencode '08_befhinweis=' \
+    --data-urlencode '08_befhinwausw=' \
+    --data-urlencode '09_vorrangstufe=eee' \
+    --data-urlencode '10_anschrift=E2E-Absender' \
+    --data-urlencode '11_gesprnotiz=f' \
+    --data-urlencode '12_anhang=' \
+    --data-urlencode "12_inhalt=$reply_content" \
+    --data-urlencode '12_abfzeit=' \
+    --data-urlencode '13_abseinheit=E2E-Einsatzleitung' \
+    --data-urlencode "14_zeichen=$pol_code" \
+    --data-urlencode '14_funktion=POL' \
+    --data-urlencode '16_gncopy=' \
+    --data-urlencode '17_vermerke=' \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'saved POL/FB answer'
+reply_id=$(db_sql <<SQL
+SELECT \`00_lfd\` FROM \`nv_nachrichten\`
+ WHERE \`12_inhalt\` LIKE '%${reply_marker}%';
+SQL
+)
+assert_numeric 'POL/FB answer message ID' "$reply_id"
+assert_db_equals \
+    "A|2|E2E-Absender|E2E-Einsatzleitung|${pol_code}|POL|S2_rt,POL_gn|1|1|1" \
+    'persisted POL/FB answer' \
+    "SELECT CONCAT(\`04_richtung\`, '|', \`x00_status\`, '|', \`10_anschrift\`, '|', \`13_abseinheit\`, '|', \`14_zeichen\`, '|', \`14_funktion\`, '|', \`16_empf\`, '|', LOCATE('Zitat: von E ${incoming_number}', \`12_inhalt\`) > 0, '|', LOCATE('${incoming_marker}', \`12_inhalt\`) > 0, '|', LOCATE('${reply_marker}', \`12_inhalt\`) > 0) FROM \`nv_nachrichten\` WHERE \`00_lfd\` = ${reply_id};"
+
+load_dashboard "$pol_cookies" 'POL/FB list before forwarding'
+assert_body "$incoming_marker" 'POL/FB list before forwarding'
+assert_route_control stab meldung "$incoming_id" 'POL/FB forward source control'
+pol_csrf=$(csrf_from_body)
+assert_status 200 'open incoming message as POL/FB for forwarding' \
+    --cookie "$pol_cookies" --cookie-jar "$pol_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$pol_csrf" \
+    --data-urlencode 'stab=meldung' \
+    --data-urlencode "00_lfd=$incoming_id" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'POL/FB incoming read form for forwarding'
+pol_csrf=$(csrf_from_body)
+assert_status 200 'derive POL/FB forwarding form' \
+    --cookie "$pol_cookies" --cookie-jar "$pol_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$pol_csrf" \
+    --data-urlencode 'weiterleiten_x=1' \
+    --data-urlencode 'task=Stab_lesen' \
+    --data-urlencode "00_lfd=$incoming_id" \
+    --data-urlencode '04_richtung=E' \
+    --data-urlencode "04_nummer=$incoming_number" \
+    --data-urlencode '10_anschrift=E2E-Einsatzleitung' \
+    --data-urlencode "12_inhalt=$incoming_marker" \
+    --data-urlencode '13_abseinheit=E2E-Absender' \
+    --data-urlencode '14_funktion=' \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'derived POL/FB forwarding form'
+assert_body 'name="task" value="Stab_schreiben"' 'derived forwarding task'
+assert_body \
+    'name="10_anschrift"></textarea>' \
+    'derived forwarding empty destination'
+assert_body \
+    "name=\"14_zeichen\" value=\"$pol_code\"" \
+    'derived forwarding author code'
+assert_body \
+    'name="14_funktion" value="POL"' \
+    'derived forwarding author function'
+assert_body "Zitat: von E $incoming_number" 'derived forwarding quote reference'
+assert_body "$incoming_marker" 'derived forwarding quoted content'
+
+forward_content=$(printf 'Zitat: von E %s\n"%s"\n%s' \
+    "$incoming_number" "$incoming_marker" "$forward_marker")
+pol_csrf=$(csrf_from_body)
+assert_status 200 'save POL/FB forwarding' \
+    --cookie "$pol_cookies" --cookie-jar "$pol_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$pol_csrf" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=Stab_schreiben' \
+    --data-urlencode '02_zeit=' \
+    --data-urlencode '07_durchspruch=D' \
+    --data-urlencode '08_befhinweis=' \
+    --data-urlencode '08_befhinwausw=' \
+    --data-urlencode '09_vorrangstufe=eee' \
+    --data-urlencode '10_anschrift=E2E-Weiterleitungsziel' \
+    --data-urlencode '11_gesprnotiz=f' \
+    --data-urlencode '12_anhang=' \
+    --data-urlencode "12_inhalt=$forward_content" \
+    --data-urlencode '12_abfzeit=' \
+    --data-urlencode '13_abseinheit=E2E-Einsatzleitung' \
+    --data-urlencode "14_zeichen=$pol_code" \
+    --data-urlencode '14_funktion=POL' \
+    --data-urlencode '16_gncopy=' \
+    --data-urlencode '17_vermerke=' \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'saved POL/FB forwarding'
+forward_id=$(db_sql <<SQL
+SELECT \`00_lfd\` FROM \`nv_nachrichten\`
+ WHERE \`12_inhalt\` LIKE '%${forward_marker}%';
+SQL
+)
+assert_numeric 'POL/FB forwarding message ID' "$forward_id"
+assert_db_equals \
+    "A|2|E2E-Weiterleitungsziel|E2E-Einsatzleitung|${pol_code}|POL|S2_rt,POL_gn|1|1|1" \
+    'persisted POL/FB forwarding' \
+    "SELECT CONCAT(\`04_richtung\`, '|', \`x00_status\`, '|', \`10_anschrift\`, '|', \`13_abseinheit\`, '|', \`14_zeichen\`, '|', \`14_funktion\`, '|', \`16_empf\`, '|', LOCATE('Zitat: von E ${incoming_number}', \`12_inhalt\`) > 0, '|', LOCATE('${incoming_marker}', \`12_inhalt\`) > 0, '|', LOCATE('${forward_marker}', \`12_inhalt\`) > 0) FROM \`nv_nachrichten\` WHERE \`00_lfd\` = ${forward_id};"
+assert_db_equals 1 'POL/FB source read state' \
+    "SELECT COUNT(*) FROM \`usr_pol_${pol_code}_read\` WHERE \`nachnum\` = ${incoming_id};"
+derived_source_after=$(
+    message_admin_immutable_fingerprint "$incoming_marker"
+)
+if [ "$derived_source_after" != "$derived_source_before" ]; then
+    echo 'Message workflow HTTP: answer or forwarding changed source message evidence' >&2
+    exit 1
+fi
+
 # Leave the persistent administration-list mode through the actual rendered
 # A/W navigation control so the following transport queue is the normal one.
 load_sidebar "$aw_cookies" 'A/W navigation after second review'
@@ -1041,7 +1559,11 @@ assert_status 200 'return from A/W second review to outgoing queue' \
     --data-urlencode 'fm_ausgang_x=1' \
     "$base_url/4fach/mainindex.php"
 assert_no_runtime_error 'A/W outgoing queue after second review'
-assert_body_absent "$incoming_marker" 'normal A/W outgoing queue after second review'
+assert_body_absent \
+    "name=\"00_lfd\" value=\"$incoming_id\"" \
+    'original incoming record in normal A/W outgoing queue'
+assert_body "$reply_marker" 'POL/FB answer in normal A/W outgoing queue'
+assert_body "$forward_marker" 'POL/FB forwarding in normal A/W outgoing queue'
 
 # Outgoing message: S1 writes status 2, A/W sees it in the transport queue and
 # acquires the record lock through the rendered detail control.
@@ -1237,5 +1759,5 @@ else
     assert_body_absent "$outgoing_marker" 'S3 non-recipient outgoing list'
 fi
 
-printf 'Message workflow HTTP integration (%s): OK; incoming 4 -> 8, outgoing %s\n' \
-    "$workflow_variant" "$outgoing_path"
+printf '%s\n' \
+    "Message workflow HTTP integration (${workflow_variant}): OK; incoming 4 -> 8, outgoing ${outgoing_path}; POL/FB, autosighting, SI-Admin, answer and forwarding verified"
