@@ -78,6 +78,18 @@ Hostverzeichnisse. Diese Daten sind produktiv. `compose down --volumes`,
 „Clean“ beziehungsweise das Löschen eines Container-Manager-Projekts darf nur
 nach einem geprüften Vollbackup erfolgen.
 
+Der Hostverzeichnis-Pfad ist Bestandteil des automatisierten Release-Gates:
+Ein zusätzliches Pull-only-Projekt startet mit drei echten temporären
+Bind-Mounts. Der Test prüft die effektiven Mount-Typen und -Quellen, erzeugt
+einen Datenbank- und zwei Dateimarker, erstellt ein prüfsummengebundenes
+Vollbackup, leert ausschließlich seinen per Projektkennung und Guard-Datei
+abgesicherten temporären Speicher und stellt ihn wieder her. Migrator,
+`/health.php`, Markerinhalt und Marker-SHA-256 müssen danach unverändert sein.
+Erst nach vollständiger Entfernung von Containern, Volumes, Netzwerken und
+temporärem Hostpfad wird der Lauf grün. Das belegt die technische
+Backup-/Restore-Mechanik des NAS-Layouts; die regelmäßige Restore-Probe des
+echten Betriebsbestands bleibt dennoch Pflicht.
+
 ## Synology Container Manager
 
 Vorausgesetzt werden ein Synology-Modell mit Container Manager und eine
@@ -109,6 +121,24 @@ Synology beschreibt denselben Projektassistenten als Kombination aus
 Projektname, Arbeitsverzeichnis und hochgeladener oder editierter
 `docker-compose.yml`. Der optionale Web-Station-Portalweg ersetzt nicht die
 TLS-, Proxy- und Firewall-Prüfung.
+
+## Backup und Wiederherstellung auf dem NAS
+
+Das Vollbackup wird im Projektordner mit den Befehlen aus
+[`docs/BACKUP-UND-WIEDERHERSTELLUNG.md`](../../docs/BACKUP-UND-WIEDERHERSTELLUNG.md)
+erstellt. Diese Befehle lesen Datenbank, `4fdata` und Exporte über ihre
+Containerpfade und funktionieren dadurch unverändert mit den drei
+`./data/...`-Bind-Mounts. Das laufende MariaDB-Verzeichnis `data/db` darf nicht
+als Ersatz für den logischen Dump kopiert werden.
+
+Für den Restore werden die in der Sicherung protokollierten beiden
+Image-Digests in `.env` eingetragen und mit `docker compose pull` geladen.
+Dieser Pull-only-Weg verwendet kein `docker compose build`. Vor jeder
+destruktiven Operation müssen Projektordner und die drei effektiven
+`ESTAB_*_DATA_SOURCE`-Werte sichtbar auf `./data/db`, `./data/4fdata` und
+`./data/export` zeigen. Anschließend werden Dump und Dateiarchive wie im
+Runbook über die Containergrenzen eingespielt, der Migrator separat mit
+Exitcode 0 abgeschlossen und erst danach die App freigegeben.
 
 ## Kontrolliertes Upgrade
 

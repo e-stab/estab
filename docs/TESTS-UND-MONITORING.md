@@ -82,8 +82,10 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
 - Compose-Startgate, private MariaDB-Optionsdatei, Migration-Ledger,
   Prüfsummenbindung und Runtime-Schemavertrag,
 - selbsttragende Fresh-Schema-Initialisierung, pull-only Registry-Compose,
-  persistente Storage-/Secret-Grenzen, manuell durch Rechtefreigaben gesperrter
-  GHCR-Workflow, amd64/arm64, SBOM, Provenance und Attestation,
+  persistente Storage-/Secret-Grenzen, guardierte echte Host-Bind-Mounts samt
+  Backup-/Restore-Vertrag und vollständiger Cleanup-Postcondition, manuell
+  durch Rechtefreigaben gesperrter GHCR-Workflow, amd64/arm64, SBOM,
+  Provenance und Attestation,
 - Erzeugung eines lesbaren PDF-Dokuments.
 
 Ein Prozess-Exitcode ungleich null sperrt die Freigabe.
@@ -113,9 +115,18 @@ Engines explizit mit `ESTAB_CI_TEMP_PARENT` gesetzt werden.
 Der Lauf baut die festgelegten Images frisch und startet sie zusätzlich in
 einem zweiten, pull-only Registry-Compose-Projekt ohne Build oder
 Host-Schema-Mount. Dort müssen der selbsttragende Migrator mit Exitcode 0 und
-die App gesund enden; vor dem grünen Ergebnis müssen Compose-Down sowie die
-Postcondition für leere Projekt-Container und -Volumes erfolgreich sein. Der
-Schema-Migratortest simuliert außerdem einen unterbrochenen Fresh-Lauf nach
+die App gesund enden. Derselbe Test startet danach ein weiteres Pull-only-
+Projekt mit drei echten temporären Host-Bind-Mounts für MariaDB, `4fdata` und
+Exporte. Container-Inspect bindet Typ, Quellpfad und Containerziel an den
+erwarteten Zufallspfad. Ein Datenbankmarker und zwei Dateimarker werden mit
+SHA-256 gesichert, ausschließlich nach erfolgreicher Prüfung von Projektname,
+temporärem Pfad und Guard-Datei vollständig geleert und aus dem Backup
+wiederhergestellt. Migrator, Readiness und alle drei Marker müssen danach
+exakt übereinstimmen. Vor dem grünen Ergebnis müssen beide Registry-Projekte,
+ihre Container, Volumes und Netzwerke sowie der temporäre Bind-Baum entfernt
+sein.
+
+Der Schema-Migratortest simuliert außerdem einen unterbrochenen Fresh-Lauf nach
 dem ersten DDL mit vorab gespeichertem Baseline-Checksum, setzt genau diesen
 Lauf fort und weist separat nach, dass ein unprotokollierter
 `nv_*`-Teilbestand blockiert und unverändert bleibt.
@@ -128,7 +139,7 @@ Vordruck samt SHA-256 sowie Kennung und SHA-256 des zuvor vollständig
 validierten Export-ZIP an den zweiten, ausschließlich prüfenden HTTP-Lauf.
 Dieser findet außerdem die vor dem Backup angelegten ETB-/TBB-Titel und
 -Einträge nur lesend wieder. Am Ende werden nur die guardierten CI-Container,
-CI-Volumes und temporären Secrets entfernt. Mit
+CI-Volumes, temporären Bind-Mounts und Secrets entfernt. Mit
 Docker wird `ESTAB_CONTAINER_CLI=docker` gesetzt oder die Variable weggelassen.
 Die HTTP-Stufe beweist dabei den Übersichts-Anmeldebutton, die getrennten
 Bestandskonto-/Neukonto-Formulare, die sichtbare Kontenauswahl,
@@ -398,6 +409,10 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
 - Speichern und Suchen einer Nachricht mit Quotes, Ampersand, `<script>` und
   SQL-ähnlichem Text bei nachweislich inertem HTML sowie HTTP 403 für den
   historischen GET-Detailaufruf,
+- Durchlaufen des echten A/W-Anhang-Uploads mit zuvor ausgefülltem
+  Nachrichtenvordruck; die direkte Rückgabe nach der Anhangsauswahl muss
+  Anschrift, sämtliche markanten Eingaben, Vermerk sowie blaue und grüne
+  Empfängerzuordnung als weiterhin absendbare Formularwerte enthalten,
 - Abschluss einer echten Gesprächsnotiz über den historischen Controller,
   anschließende Erzeugung durch den produktiven Vordruckgenerator, Auffinden in
   der geschützten Liste und Download mit PDF-Header/-Trailer, MIME-Headern und
@@ -599,6 +614,15 @@ escaped und ohne ausführbares Script ausgegeben. Der Listenfilter wird mit der
 positiven Kategorie-ID erfolgreich ausgeführt und beim Löschen dieser Kategorie
 aus der Sitzung entfernt; der SQL-artige Name als Filterparameter wird mit
 HTTP 403 abgewiesen.
+
+Vor den Kategorieänderungen betätigt derselbe Test außerdem die tatsächlich
+gerenderten Nachrichtenaktionen für „gelesen“ und „erledigt“. Fehlendes CSRF
+und eine fremde Nachrichten-ID liefern HTTP 403 und verändern keine
+Statustabelle. Wiederholtes Setzen beziehungsweise Entfernen bleibt
+idempotent; die sichtbaren Gegenaktionen wechseln passend mit. Eine erledigte
+Nachricht verschwindet aus der Standardliste, erscheint mit eingeschaltetem
+Erledigt-Filter wieder und wird am Ende auf ihren ursprünglichen Zustand
+zurückgesetzt.
 
 Ein Trap entfernt sämtliche Testkategorien, Links, die fremde Nachricht und
 das isolierte Si-Konto samt persönlicher Tabellen. Die CI führt diesen Test

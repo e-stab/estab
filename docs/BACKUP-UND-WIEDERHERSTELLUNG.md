@@ -19,6 +19,13 @@ Die folgenden Befehle halten die Anwendung an, lassen MariaDB aber für den
 transaktionalen Dump laufen. Dadurch können während der Sicherung weder
 Tabellen noch Anhänge verändert werden.
 
+Die Befehle arbeiten ausschließlich über die im Compose-Projekt eingehängten
+Containerpfade. Sie gelten deshalb sowohl für benannte Volumes als auch für die
+unter `deploy/registry/` empfohlenen Synology-Verzeichnisse
+`./data/db`, `./data/4fdata` und `./data/export`. Auf einem Pull-only-Ziel werden
+sie im Verzeichnis des installierten Registry-Pakets ausgeführt; ein Git-Checkout
+oder lokaler Image-Build ist dafür nicht erforderlich.
+
 ```console
 backup_dir="backup/$(date +%Y%m%d-%H%M%S)"
 install -d -m 0700 "$backup_dir"
@@ -82,11 +89,28 @@ Auf macOS kann statt `sha256sum` verwendet werden:
   shasum -a 256 database.sql 4fdata.tar.gz export.tar.gz > SHA256SUMS)
 ```
 
-Zusätzlich sollten mindestens festgehalten werden:
+Zusätzlich werden die tatsächlich laufenden Images festgehalten:
+
+```console
+podman compose images > "$backup_dir/container-images.txt"
+```
+
+Beim Source-Build gehört außerdem der Commit dazu:
 
 ```console
 git rev-parse HEAD > "$backup_dir/git-commit.txt"
-podman compose images > "$backup_dir/container-images.txt"
+```
+
+Beim Pull-only-Paket gibt es dagegen möglicherweise keinen Git-Checkout. Dort
+werden die beiden unveränderlichen Referenzen direkt aus der Deployment-`.env`
+übernommen, ohne die übrige Konfiguration oder Secret-Dateien in den
+Sicherungssatz zu kopieren:
+
+```console
+sed -n \
+  -e '/^ESTAB_APP_IMAGE=/p' \
+  -e '/^ESTAB_MIGRATE_IMAGE=/p' \
+  .env > "$backup_dir/image-references.txt"
 ```
 
 `.env` und die drei Secret-Dateien werden nicht unverschlüsselt in dasselbe
@@ -116,16 +140,27 @@ Der eigentliche Wiederherstellungsnachweis ist ein regelmäßig durchgeführter
 Restore in einen separaten Compose-Projektnamen mit anschließendem Schema-,
 HTTP- und Fachtest.
 
-Das vollständige CI-Gate automatisiert davon einen destruktiv guardierten
-Roundtrip: Es sichert Datenbank, `estab_data` und `estab_export`, löscht nur die
-eindeutig als `estab_ci` beziehungsweise `estab_ci_*` erkannten Testcontainer
-und -Volumes, legt alle drei Volumes leer neu an und spielt die Sicherung
-zurück. Danach müssen das Schema, das bestehende Konto, die Nachricht, der
-exakte Anhanginhalt, der SHA-256 des real erzeugten PDF-Vordrucks, vorhandene
-ETB-/TBB-Titel und -Einträge sowie Kennung und SHA-256 des zuvor per
-Manifest/CSV geprüften Export-ZIP unverändert nachweisbar sein. Die
-ETB-/TBB-Prüfung ist dabei absichtlich read-only, damit fehlende Daten den Lauf
-beenden und nicht unbemerkt neu angelegt werden.
+Das vollständige CI-Gate automatisiert zwei destruktiv guardierte Roundtrips:
+
+1. Der fachliche Hauptlauf sichert Datenbank, `estab_data` und `estab_export`,
+   löscht nur die eindeutig als `estab_ci` beziehungsweise `estab_ci_*`
+   erkannten Testcontainer und benannten Test-Volumes, legt alle drei Volumes
+   leer neu an und spielt die Sicherung zurück. Danach müssen Schema,
+   bestehendes Konto, Nachricht, exakter Anhanginhalt, SHA-256 des real
+   erzeugten PDF-Vordrucks, vorhandene ETB-/TBB-Titel und -Einträge sowie
+   Kennung und SHA-256 des zuvor per Manifest/CSV geprüften Export-ZIP
+   unverändert nachweisbar sein. Die ETB-/TBB-Prüfung ist dabei absichtlich
+   read-only, damit fehlende Daten den Lauf beenden und nicht unbemerkt neu
+   angelegt werden.
+2. Der Pull-only-Lauf startet dasselbe App-/Migrator-Imagepaar mit drei echten
+   temporären Host-Bind-Mounts. Container-Inspect muss deren Typ, Quelle und
+   Ziel exakt bestätigen. Anschließend werden ein Datenbankmarker und je ein
+   Dateimarker in `4fdata` und `export` gesichert. Nur ein per Zufallsnamen,
+   Projektkennung und Guard-Datei gebundener temporärer Wurzelpfad darf geleert
+   werden. Nach Restore müssen Migrator, Readiness, Datenbankmarker, beide
+   Dateiinhalte und deren SHA-256 unverändert sein. Ein grünes Ergebnis wird
+   erst nach Entfernung beider Compose-Projekte, ihrer Container, Volumes und
+   Netzwerke sowie des temporären Hostbaums ausgegeben.
 
 ## Vollständige Wiederherstellung
 
@@ -144,14 +179,32 @@ test -r "$restore_dir/export.tar.gz"
 
 ### 1. Zielversion bereitstellen
 
-Checkout und Image müssen zur gesicherten Version passen. `.env` und Secrets
-werden aus dem geschützten Konfigurationsbackup hergestellt, anschließend:
+Image beziehungsweise Checkout müssen zur gesicherten Version passen. `.env`
+und Secrets werden aus dem geschützten Konfigurationsbackup hergestellt.
+
+Beim Source-Build im Repository:
 
 ```console
 podman compose build migrate app
 podman compose up -d db
 podman compose stop app
 ```
+
+Beim Pull-only-Paket auf Docker, Podman oder Synology werden ausdrücklich die
+im Sicherungsprotokoll festgehaltenen App-/Migrator-Digests in `.env`
+eingetragen. Im Projektverzeichnis gilt dann:
+
+```console
+docker compose config
+docker compose pull
+docker compose up -d db
+docker compose stop app
+```
+
+Hier wird niemals `compose build` verwendet. Mit Podman wird `docker compose`
+durch `podman compose` ersetzt. Die drei in `.env` referenzierten
+`ESTAB_*_DATA_SOURCE`-Pfade müssen vor dem Restore noch einmal gegen das
+beabsichtigte Zielprojekt geprüft werden.
 
 Bei einem leeren Zielvolume initialisiert MariaDB zunächst seine Benutzer. Der
 Dump enthält dank `--add-drop-database` anschließend die vollständige
@@ -201,6 +254,13 @@ podman compose run --rm --no-deps -T --entrypoint sh app -ceu \
 Der reguläre Entrypoint korrigiert beim nächsten Start fehlende
 Laufzeitverzeichnisse. Fremde Besitzrechte aus dem Archiv können bei Bedarf
 vorab im Test-Stack mit `tar -tvzf` geprüft werden.
+
+Bei Bind-Mounts werden niemals die Hostpfade aus einer unkontrollierten
+Shellvariable direkt rekursiv gelöscht. Das Leeren erfolgt wie oben innerhalb
+der fest konfigurierten Container-Mounts, nachdem Projektordner, `.env` und die
+drei effektiven Quellen sichtbar geprüft wurden. Der automatisierte Test
+akzeptiert darüber hinaus ausschließlich seinen eigenen zufällig benannten
+temporären Pfad samt passender Guard-Datei.
 
 ### 4. Freigabeprüfung
 
