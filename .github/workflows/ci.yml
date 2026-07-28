@@ -54,6 +54,7 @@ jobs:
         timeout-minutes: 40
         env:
           ESTAB_CI_LOG_DIR: ${{ runner.temp }}/estab-ci-logs
+          ESTAB_BROWSER_TEST: required
         run: bash tests/integration/ci.sh
 
       - name: Upload failure diagnostics

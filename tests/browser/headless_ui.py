@@ -1,0 +1,1332 @@
+#!/usr/bin/env python3
+"""Dependency-free ESTAB browser acceptance test using Chrome DevTools Protocol."""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import dataclasses
+import hashlib
+import json
+import os
+import pathlib
+import re
+import secrets
+import shutil
+import socket
+import ssl
+import struct
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.parse
+import urllib.request
+from typing import Any
+
+
+class TestFailure(RuntimeError):
+    """Expected test or environment failure with a user-facing message."""
+
+
+@dataclasses.dataclass(frozen=True)
+class TestConfig:
+    base_url: str
+    login_name: str
+    login_code: str
+    login_function: str
+    login_password: str = dataclasses.field(repr=False)
+    timeout: float = 25.0
+    startup_timeout: float = 15.0
+
+    @classmethod
+    def from_environment(cls) -> "TestConfig":
+        base_url = os.environ.get("ESTAB_TEST_BASE_URL", "http://127.0.0.1:8080").rstrip("/")
+        parsed = urllib.parse.urlsplit(base_url)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.netloc
+            or parsed.username
+            or parsed.password
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise TestFailure("ESTAB_TEST_BASE_URL muss eine HTTP(S)-Basis-URL ohne Zugangsdaten sein.")
+
+        login_name = os.environ.get("ESTAB_TEST_LOGIN_NAME", "Browser Acceptance")
+        login_code = os.environ.get("ESTAB_TEST_LOGIN_CODE", "brw001").lower()
+        login_function = os.environ.get("ESTAB_TEST_LOGIN_FUNCTION", "S1")
+        password = os.environ.get("ESTAB_TEST_LOGIN_PASSWORD")
+        password_file = os.environ.get("ESTAB_TEST_LOGIN_PASSWORD_FILE")
+        if password is None and password_file:
+            try:
+                password = pathlib.Path(password_file).read_text(encoding="utf-8").rstrip("\r\n")
+            except OSError as exc:
+                raise TestFailure("Die Datei aus ESTAB_TEST_LOGIN_PASSWORD_FILE ist nicht lesbar.") from exc
+        if password is None:
+            password = secrets.token_urlsafe(32)
+        if not password:
+            raise TestFailure("Das konfigurierte Browser-Testkennwort darf nicht leer sein.")
+        if not login_name.strip():
+            raise TestFailure("ESTAB_TEST_LOGIN_NAME darf nicht leer sein.")
+        if not re.fullmatch(r"[a-z0-9_]{1,6}", login_code):
+            raise TestFailure(
+                "ESTAB_TEST_LOGIN_CODE muss aus 1 bis 6 Kleinbuchstaben, Ziffern oder _ bestehen."
+            )
+        if not re.fullmatch(r"[A-Za-z0-9_/-]{1,20}", login_function):
+            raise TestFailure("ESTAB_TEST_LOGIN_FUNCTION enthält nicht unterstützte Zeichen.")
+
+        timeout = _positive_float("ESTAB_BROWSER_TIMEOUT", 25.0)
+        startup_timeout = _positive_float("ESTAB_BROWSER_STARTUP_TIMEOUT", 15.0)
+        return cls(
+            base_url=base_url,
+            login_name=login_name.strip(),
+            login_code=login_code,
+            login_function=login_function,
+            login_password=password,
+            timeout=timeout,
+            startup_timeout=startup_timeout,
+        )
+
+
+def _positive_float(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise TestFailure(f"{name} muss eine positive Zahl sein.") from exc
+    if value <= 0:
+        raise TestFailure(f"{name} muss eine positive Zahl sein.")
+    return value
+
+
+def _enabled(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def find_chrome() -> pathlib.Path:
+    configured = os.environ.get("ESTAB_BROWSER_BINARY")
+    if configured:
+        candidate = pathlib.Path(configured).expanduser()
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate.resolve()
+        raise TestFailure("ESTAB_BROWSER_BINARY verweist nicht auf eine ausführbare Datei.")
+
+    command_names = (
+        "google-chrome",
+        "google-chrome-stable",
+        "chromium",
+        "chromium-browser",
+        "chrome",
+    )
+    for command_name in command_names:
+        resolved = shutil.which(command_name)
+        if resolved:
+            return pathlib.Path(resolved).resolve()
+
+    home = pathlib.Path.home()
+    candidates = (
+        pathlib.Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+        pathlib.Path(
+            "/Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+        ),
+        pathlib.Path("/Applications/Chromium.app/Contents/MacOS/Chromium"),
+        home / "Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        home
+        / "Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+        home / "Applications/Chromium.app/Contents/MacOS/Chromium",
+        pathlib.Path("/usr/bin/google-chrome"),
+        pathlib.Path("/usr/bin/google-chrome-stable"),
+        pathlib.Path("/usr/bin/chromium"),
+        pathlib.Path("/usr/bin/chromium-browser"),
+        pathlib.Path("/snap/bin/chromium"),
+    )
+    for candidate in candidates:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate.resolve()
+
+    raise TestFailure(
+        "Kein Chrome/Chromium gefunden. ESTAB_BROWSER_BINARY kann den Pfad explizit setzen."
+    )
+
+
+def browser_version(binary: pathlib.Path) -> str:
+    try:
+        result = subprocess.run(
+            [str(binary), "--version"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise TestFailure("Browser-Version konnte nicht ermittelt werden.") from exc
+    version = re.sub(r"\s+", " ", result.stdout).strip()
+    if result.returncode != 0 or not version:
+        raise TestFailure("Browser-Version konnte nicht ermittelt werden.")
+    return version[:200]
+
+
+class ChromeProcess:
+    def __init__(self, binary: pathlib.Path, startup_timeout: float) -> None:
+        self.binary = binary
+        self.startup_timeout = startup_timeout
+        self._profile: tempfile.TemporaryDirectory[str] | None = None
+        self._log: Any = None
+        self.process: subprocess.Popen[bytes] | None = None
+        self.websocket_url: str | None = None
+
+    def start(self) -> None:
+        self._profile = tempfile.TemporaryDirectory(prefix="estab-chrome-profile-")
+        profile_path = pathlib.Path(self._profile.name)
+        self._log = tempfile.TemporaryFile(mode="w+b")
+        command = [
+            str(self.binary),
+            "--headless=new",
+            "--disable-gpu",
+            "--disable-dev-shm-usage",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--remote-debugging-port=0",
+            f"--user-data-dir={profile_path}",
+            "--window-size=1440,1000",
+        ]
+        if _enabled("ESTAB_BROWSER_NO_SANDBOX"):
+            command.append("--no-sandbox")
+        command.append("about:blank")
+        try:
+            self.process = subprocess.Popen(
+                command,
+                stdin=subprocess.DEVNULL,
+                stdout=self._log,
+                stderr=self._log,
+            )
+        except OSError as exc:
+            self.close()
+            raise TestFailure("Chrome konnte nicht gestartet werden.") from exc
+
+        active_port_file = profile_path / "DevToolsActivePort"
+        deadline = time.monotonic() + self.startup_timeout
+        port: int | None = None
+        while time.monotonic() < deadline:
+            if self.process.poll() is not None:
+                self.close()
+                raise TestFailure("Chrome wurde beim Start unerwartet beendet.")
+            try:
+                lines = active_port_file.read_text(encoding="ascii").splitlines()
+                if lines:
+                    port = int(lines[0])
+                    break
+            except (OSError, ValueError):
+                pass
+            time.sleep(0.05)
+        if port is None:
+            self.close()
+            raise TestFailure("Timeout beim Start der Chrome-Debugging-Schnittstelle.")
+
+        endpoint = f"http://127.0.0.1:{port}/json/list"
+        last_error: Exception | None = None
+        while time.monotonic() < deadline:
+            try:
+                with urllib.request.urlopen(endpoint, timeout=1.0) as response:
+                    targets = json.load(response)
+                pages = [
+                    target
+                    for target in targets
+                    if target.get("type") == "page" and target.get("webSocketDebuggerUrl")
+                ]
+                if pages:
+                    self.websocket_url = str(pages[0]["webSocketDebuggerUrl"])
+                    return
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                last_error = exc
+            time.sleep(0.05)
+        self.close()
+        raise TestFailure("Chrome hat kein steuerbares Browser-Tab bereitgestellt.") from last_error
+
+    def close(self) -> None:
+        process = self.process
+        self.process = None
+        if process is not None and process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=3)
+        if self._log is not None:
+            self._log.close()
+            self._log = None
+        if self._profile is not None:
+            self._profile.cleanup()
+            self._profile = None
+
+    def __enter__(self) -> "ChromeProcess":
+        self.start()
+        return self
+
+    def __exit__(self, _exc_type: Any, _exc: Any, _traceback: Any) -> None:
+        self.close()
+
+
+class WebSocket:
+    """Small RFC 6455 client sufficient for Chrome's local CDP endpoint."""
+
+    def __init__(self, url: str, timeout: float) -> None:
+        parsed = urllib.parse.urlsplit(url)
+        if parsed.scheme not in {"ws", "wss"} or not parsed.hostname:
+            raise TestFailure("Chrome lieferte eine ungültige WebSocket-Adresse.")
+        port = parsed.port or (443 if parsed.scheme == "wss" else 80)
+        try:
+            raw_socket = socket.create_connection((parsed.hostname, port), timeout=timeout)
+            if parsed.scheme == "wss":
+                context = ssl.create_default_context()
+                raw_socket = context.wrap_socket(raw_socket, server_hostname=parsed.hostname)
+        except OSError as exc:
+            raise TestFailure("Verbindung zur Chrome-Debugging-Schnittstelle fehlgeschlagen.") from exc
+        self.socket = raw_socket
+        self.buffer = bytearray()
+        self.fragments = bytearray()
+        self.fragment_opcode: int | None = None
+
+        key = base64.b64encode(secrets.token_bytes(16)).decode("ascii")
+        path = urllib.parse.urlunsplit(("", "", parsed.path or "/", parsed.query, ""))
+        host = parsed.hostname
+        if port not in {80, 443}:
+            host = f"{host}:{port}"
+        request = (
+            f"GET {path} HTTP/1.1\r\n"
+            f"Host: {host}\r\n"
+            "Upgrade: websocket\r\n"
+            "Connection: Upgrade\r\n"
+            f"Sec-WebSocket-Key: {key}\r\n"
+            "Sec-WebSocket-Version: 13\r\n"
+            "\r\n"
+        ).encode("ascii")
+        try:
+            self.socket.sendall(request)
+            header = self._read_until(b"\r\n\r\n", 65536)
+        except OSError as exc:
+            self.close()
+            raise TestFailure("WebSocket-Handshake mit Chrome fehlgeschlagen.") from exc
+        header_text = header.decode("iso-8859-1")
+        if not header_text.startswith("HTTP/1.1 101"):
+            self.close()
+            raise TestFailure("Chrome hat den WebSocket-Handshake abgelehnt.")
+        expected = base64.b64encode(
+            hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")).digest()
+        ).decode("ascii")
+        headers = {}
+        for line in header_text.split("\r\n")[1:]:
+            if ":" in line:
+                name, value = line.split(":", 1)
+                headers[name.strip().lower()] = value.strip()
+        if headers.get("sec-websocket-accept") != expected:
+            self.close()
+            raise TestFailure("Chrome lieferte eine ungültige WebSocket-Bestätigung.")
+
+    def _read_until(self, marker: bytes, limit: int) -> bytes:
+        while marker not in self.buffer:
+            chunk = self.socket.recv(4096)
+            if not chunk:
+                raise ConnectionError("WebSocket closed")
+            self.buffer.extend(chunk)
+            if len(self.buffer) > limit:
+                raise ConnectionError("WebSocket header too large")
+        end = self.buffer.index(marker) + len(marker)
+        result = bytes(self.buffer[:end])
+        del self.buffer[:end]
+        return result
+
+    def _read_exact(self, size: int) -> bytes:
+        while len(self.buffer) < size:
+            chunk = self.socket.recv(max(4096, size - len(self.buffer)))
+            if not chunk:
+                raise ConnectionError("WebSocket closed")
+            self.buffer.extend(chunk)
+        result = bytes(self.buffer[:size])
+        del self.buffer[:size]
+        return result
+
+    def _send_frame(self, opcode: int, payload: bytes) -> None:
+        header = bytearray([0x80 | opcode])
+        length = len(payload)
+        if length < 126:
+            header.append(0x80 | length)
+        elif length < 65536:
+            header.append(0x80 | 126)
+            header.extend(struct.pack("!H", length))
+        else:
+            header.append(0x80 | 127)
+            header.extend(struct.pack("!Q", length))
+        mask = secrets.token_bytes(4)
+        header.extend(mask)
+        masked = bytes(value ^ mask[index % 4] for index, value in enumerate(payload))
+        self.socket.sendall(header + masked)
+
+    def send_json(self, value: Any) -> None:
+        self._send_frame(0x1, json.dumps(value, separators=(",", ":")).encode("utf-8"))
+
+    def receive_json(self, deadline: float) -> Any:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError
+            self.socket.settimeout(remaining)
+            first, second = self._read_exact(2)
+            finished = bool(first & 0x80)
+            opcode = first & 0x0F
+            masked = bool(second & 0x80)
+            length = second & 0x7F
+            if length == 126:
+                length = struct.unpack("!H", self._read_exact(2))[0]
+            elif length == 127:
+                length = struct.unpack("!Q", self._read_exact(8))[0]
+            mask = self._read_exact(4) if masked else b""
+            payload = self._read_exact(length)
+            if masked:
+                payload = bytes(value ^ mask[index % 4] for index, value in enumerate(payload))
+
+            if opcode == 0x8:
+                raise ConnectionError("WebSocket closed")
+            if opcode == 0x9:
+                self._send_frame(0xA, payload)
+                continue
+            if opcode == 0xA:
+                continue
+            if opcode in {0x1, 0x2}:
+                self.fragment_opcode = opcode
+                self.fragments = bytearray(payload)
+            elif opcode == 0x0 and self.fragment_opcode is not None:
+                self.fragments.extend(payload)
+            else:
+                continue
+            if not finished:
+                continue
+            completed_opcode = self.fragment_opcode
+            completed = bytes(self.fragments)
+            self.fragment_opcode = None
+            self.fragments.clear()
+            if completed_opcode != 0x1:
+                continue
+            return json.loads(completed.decode("utf-8"))
+
+    def close(self) -> None:
+        sock = getattr(self, "socket", None)
+        if sock is None:
+            return
+        self.socket = None  # type: ignore[assignment]
+        try:
+            self._send_frame(0x8, b"")
+        except (OSError, AttributeError):
+            pass
+        try:
+            sock.close()
+        except OSError:
+            pass
+
+    def __enter__(self) -> "WebSocket":
+        return self
+
+    def __exit__(self, _exc_type: Any, _exc: Any, _traceback: Any) -> None:
+        self.close()
+
+
+class CDP:
+    def __init__(self, websocket: WebSocket, timeout: float) -> None:
+        self.websocket = websocket
+        self.timeout = timeout
+        self.next_id = 1
+
+    def call(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        call_id = self.next_id
+        self.next_id += 1
+        message: dict[str, Any] = {"id": call_id, "method": method}
+        if params is not None:
+            message["params"] = params
+        try:
+            self.websocket.send_json(message)
+            deadline = time.monotonic() + self.timeout
+            while True:
+                response = self.websocket.receive_json(deadline)
+                if response.get("id") != call_id:
+                    continue
+                if "error" in response:
+                    raise TestFailure(f"Chrome-CDP-Aufruf {method} ist fehlgeschlagen.")
+                return response.get("result", {})
+        except (OSError, ConnectionError, TimeoutError, ValueError) as exc:
+            raise TestFailure(f"Timeout oder Verbindungsfehler bei Chrome-CDP-Aufruf {method}.") from exc
+
+    def evaluate(self, expression: str) -> Any:
+        result = self.call(
+            "Runtime.evaluate",
+            {
+                "expression": expression,
+                "returnByValue": True,
+                "awaitPromise": True,
+                "userGesture": True,
+            },
+        )
+        if result.get("exceptionDetails"):
+            raise TestFailure("JavaScript-Auswertung im Browser ist fehlgeschlagen.")
+        return result.get("result", {}).get("value")
+
+    def wait_for(self, expression: str, description: str, timeout: float | None = None) -> Any:
+        deadline = time.monotonic() + (timeout if timeout is not None else self.timeout)
+        while time.monotonic() < deadline:
+            try:
+                value = self.evaluate(expression)
+                if value:
+                    return value
+            except TestFailure:
+                pass
+            time.sleep(0.1)
+        raise TestFailure(f"Timeout: {description}.")
+
+    def navigate(self, url: str) -> None:
+        result = self.call("Page.navigate", {"url": url})
+        if result.get("errorText"):
+            raise TestFailure("Chrome konnte die Test-URL nicht laden.")
+        expected_url = json.dumps(url)
+        self.wait_for(
+            f"""
+            (() => {{
+                const expected = new URL({expected_url});
+                return document.readyState === "complete" &&
+                    location.origin === expected.origin &&
+                    location.pathname === expected.pathname &&
+                    location.search === expected.search;
+            }})()
+            """,
+            "Zielseite wurde nicht vollständig geladen",
+        )
+
+    def click(self, frame_name: str | None, selector: str, description: str) -> None:
+        position_expression = _frame_expression(
+            frame_name,
+            f"""
+            const element = doc.querySelector({json.dumps(selector)});
+            if (!element || element.disabled) return null;
+            const style = target.getComputedStyle(element);
+            const rect = element.getBoundingClientRect();
+            if (style.display === "none" || style.visibility === "hidden" ||
+                rect.width <= 0 || rect.height <= 0) return null;
+            element.scrollIntoView({{block: "center", inline: "center"}});
+            const updated = element.getBoundingClientRect();
+            let x = updated.left + updated.width / 2;
+            let y = updated.top + updated.height / 2;
+            let current = target;
+            while (current !== current.top) {{
+                const frame = current.frameElement;
+                if (!frame) return null;
+                const frameRect = frame.getBoundingClientRect();
+                x += frameRect.left;
+                y += frameRect.top;
+                current = current.parent;
+            }}
+            return {{x, y}};
+            """,
+        )
+        position = self.wait_for(position_expression, f"{description} ist nicht anklickbar")
+        x = float(position["x"])
+        y = float(position["y"])
+        self.call("Input.dispatchMouseEvent", {"type": "mouseMoved", "x": x, "y": y})
+        self.call(
+            "Input.dispatchMouseEvent",
+            {
+                "type": "mousePressed",
+                "x": x,
+                "y": y,
+                "button": "left",
+                "clickCount": 1,
+            },
+        )
+        self.call(
+            "Input.dispatchMouseEvent",
+            {
+                "type": "mouseReleased",
+                "x": x,
+                "y": y,
+                "button": "left",
+                "clickCount": 1,
+            },
+        )
+
+    def set_value(
+        self,
+        frame_name: str,
+        selector: str,
+        value: str,
+        description: str,
+        *,
+        select: bool = False,
+    ) -> None:
+        prototype = "HTMLSelectElement" if select else "HTMLInputElement"
+        expression = _frame_expression(
+            frame_name,
+            f"""
+            const element = doc.querySelector({json.dumps(selector)});
+            if (!element) return false;
+            const desired = {json.dumps(value)};
+            if ({str(select).lower()} &&
+                !Array.from(element.options).some(option => option.value === desired)) {{
+                return false;
+            }}
+            const descriptor = Object.getOwnPropertyDescriptor(
+                target.{prototype}.prototype, "value"
+            );
+            descriptor.set.call(element, desired);
+            element.dispatchEvent(new target.Event("input", {{bubbles: true}}));
+            element.dispatchEvent(new target.Event("change", {{bubbles: true}}));
+            return element.value === desired;
+            """,
+        )
+        if not self.evaluate(expression):
+            raise TestFailure(f"{description} konnte nicht gesetzt werden.")
+
+
+def _frame_expression(frame_name: str | None, body: str) -> str:
+    frame_literal = "null" if frame_name is None else json.dumps(frame_name)
+    return f"""
+    (() => {{
+        const requested = {frame_literal};
+        const findFrame = (root, name) => {{
+            for (let index = 0; index < root.frames.length; index += 1) {{
+                const child = root.frames[index];
+                try {{
+                    if (child.name === name) return child;
+                    const nested = findFrame(child, name);
+                    if (nested) return nested;
+                }} catch (_error) {{
+                    // The ESTAB frames are same-origin; ignore unrelated inaccessible frames.
+                }}
+            }}
+            return null;
+        }};
+        const target = requested === null ? window : findFrame(window, requested);
+        if (!target) return null;
+        let doc;
+        try {{
+            doc = target.document;
+        }} catch (_error) {{
+            return null;
+        }}
+        {body}
+    }})()
+    """
+
+
+def _visible_count_expression(frame_name: str | None, selector: str) -> str:
+    return _frame_expression(
+        frame_name,
+        f"""
+        const visible = element => {{
+            const style = target.getComputedStyle(element);
+            const rect = element.getBoundingClientRect();
+            return style.display !== "none" && style.visibility !== "hidden" &&
+                rect.width > 0 && rect.height > 0;
+        }};
+        return Array.from(doc.querySelectorAll({json.dumps(selector)})).filter(visible).length;
+        """,
+    )
+
+
+def _text_expression(frame_name: str | None, selector: str) -> str:
+    return _frame_expression(
+        frame_name,
+        f"""
+        const element = doc.querySelector({json.dumps(selector)});
+        return element ? element.innerText.replace(/\\s+/g, " ").trim() : null;
+        """,
+    )
+
+
+class BrowserAcceptance:
+    protected_paths = (
+        "4fach/vordrucke.php",
+        "4fueltg/ue_ltg.php",
+        "stabetb/etb.php",
+        "fmtbb/tbb.php",
+        "4fach/nachwea.php?nwalle",
+    )
+
+    def __init__(self, cdp: CDP, config: TestConfig) -> None:
+        self.cdp = cdp
+        self.config = config
+
+    def run(self) -> None:
+        self.cdp.call("Page.enable")
+        self.cdp.call("Runtime.enable")
+        self.cdp.call("Network.enable")
+        self.cdp.navigate(self.config.base_url + "/")
+
+        print("[1/6] Anonyme Startseite, zwei Konto-Flows und gesperrte Module")
+        self._assert_anonymous_home()
+        self._assert_protected_cards()
+
+        print("[2/6] Bestehenden Konto-Flow über das Frameset öffnen")
+        self.cdp.click(None, "#estab-login", "Button für ein bestehendes Konto")
+        self._wait_for_frame("mainframe")
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                return Array.from(doc.querySelectorAll("h1, h2")).some(
+                    heading => heading.innerText.includes(
+                        "Mit bestehendem Konto anmelden"
+                    )
+                ) && Boolean(doc.querySelector(
+                    'input[autocomplete="current-password"]'
+                ));
+                """,
+            ),
+            "Formular für ein bestehendes Konto fehlt",
+        )
+
+        self.cdp.navigate(self.config.base_url + "/")
+        print("[3/6] Neuen Konto-Flow über das Frameset öffnen")
+        self.cdp.click(None, "#estab-register", "Button für ein neues Konto")
+        self._wait_for_frame("mainframe")
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                return Array.from(doc.querySelectorAll("h1, h2")).some(
+                    heading => heading.innerText.includes("Neues Funktionskonto anlegen")
+                );
+                """,
+            ),
+            "Formular für ein neues Funktionskonto fehlt",
+        )
+
+        print("[4/6] Neues Konto über das Frameset anlegen")
+        self.cdp.set_value(
+            "mainframe", 'input[name="benutzer"]', self.config.login_name, "Benutzername"
+        )
+        self.cdp.set_value(
+            "mainframe", 'input[name="kuerzel"]', self.config.login_code, "Kürzel"
+        )
+        self.cdp.set_value(
+            "mainframe",
+            'select[name="funktion"]',
+            self.config.login_function,
+            "Funktion",
+            select=True,
+        )
+        self.cdp.set_value(
+            "mainframe",
+            'input[name="kennwort1"]',
+            self.config.login_password,
+            "Kennwort",
+        )
+        self.cdp.set_value(
+            "mainframe",
+            'input[name="kennwort2"]',
+            self.config.login_password,
+            "Kennwortbestätigung",
+        )
+        self.cdp.click(
+            "mainframe",
+            'button.estab-button-primary[type="submit"]',
+            "Konto erstellen und anmelden",
+        )
+        self._wait_for_authenticated_frames()
+
+        print("[5/6] Session-Informationen in Anwendung, BOS-Bereich und Startseite")
+        self._equal(
+            self.cdp.evaluate(
+                _visible_count_expression("mainframe", "aside[data-estab-session-bar]")
+            ),
+            0,
+            "zusätzliche Session-Bar im Inhaltsframe",
+        )
+        self._assert_session_bar("vorgaben", "Anwendungs-Navigationsframe")
+        self._equal(
+            self.cdp.evaluate(
+                _visible_count_expression(
+                    "vorgaben",
+                    "aside[data-estab-session-bar].estab-session-bar-compact",
+                )
+            ),
+            1,
+            "kompakte Session-Bar im Anwendungs-Navigationsframe",
+        )
+        self._equal(
+            self.cdp.evaluate(
+                _visible_count_expression(None, "aside[data-estab-session-bar]")
+            ),
+            0,
+            "zusätzliche Session-Bar im Frameset-Dokument",
+        )
+        self._equal(
+            self.cdp.evaluate(
+                _visible_count_expression("counter", "aside[data-estab-session-bar]")
+            ),
+            0,
+            "Session-Bar im eingebetteten Counter",
+        )
+        self._equal(
+            self.cdp.evaluate(
+                _visible_count_expression("status", "aside[data-estab-session-bar]")
+            ),
+            0,
+            "Session-Bar im eingebetteten Statusframe",
+        )
+
+        self.cdp.click(
+            "vorgaben",
+            "a.estab-button-home",
+            "Startseitenlink im Anwendungs-Navigationsframe",
+        )
+        self.cdp.wait_for(
+            """
+            document.readyState === "complete" &&
+            Boolean(document.querySelector("#estab-open")) &&
+            Boolean(document.querySelector("aside[data-estab-session-bar]"))
+            """,
+            "angemeldete Startseite wurde nicht über den Startseitenlink geöffnet",
+        )
+        self._assert_session_bar(None, "Startseite")
+        self._equal(
+            self.cdp.evaluate(_visible_count_expression(None, "#estab-open")),
+            1,
+            "Anwendungsbutton auf der angemeldeten Startseite",
+        )
+
+        self.cdp.navigate(self.config.base_url + "/stabinfo/index.php")
+        self.cdp.wait_for(
+            _frame_expression(
+                "status",
+                """
+                return target.location.pathname.endsWith("/stabinfo/l_index.php") &&
+                    doc.readyState === "complete";
+                """,
+            ),
+            "BOS-Navigationsframe wurde nicht vollständig geladen",
+        )
+        self._assert_session_bar("status", "BOS-Navigationsframe")
+        self._equal(
+            self.cdp.evaluate(
+                _visible_count_expression(
+                    "status",
+                    "aside[data-estab-session-bar].estab-session-bar-compact",
+                )
+            ),
+            1,
+            "kompakte Session-Bar im BOS-Navigationsframe",
+        )
+        self._equal(
+            self.cdp.evaluate(
+                _visible_count_expression(None, "aside[data-estab-session-bar]")
+            ),
+            0,
+            "zusätzliche Session-Bar im BOS-Frameset-Dokument",
+        )
+        self._equal(
+            self.cdp.evaluate(
+                _visible_count_expression("mainframe", "aside[data-estab-session-bar]")
+            ),
+            0,
+            "Session-Bar im statischen BOS-Inhaltsframe",
+        )
+        self.cdp.click(
+            "status",
+            'a[target="mainframe"]',
+            "erster BOS-Inhaltslink",
+        )
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                return target.location.pathname.endsWith("/stabinfo/Buchstabier.html") &&
+                    doc.readyState === "complete";
+                """,
+            ),
+            "BOS-Inhaltslink wurde nicht im Inhaltsframe geöffnet",
+        )
+        self._assert_session_bar("status", "BOS-Navigationsframe nach Inhaltswechsel")
+        self._equal(
+            self.cdp.evaluate(
+                _visible_count_expression(
+                    "status",
+                    "aside[data-estab-session-bar].estab-session-bar-compact",
+                )
+            ),
+            1,
+            "kompakte BOS-Session-Bar nach Inhaltswechsel",
+        )
+        self._equal(
+            self.cdp.evaluate(
+                _visible_count_expression(None, "aside[data-estab-session-bar]")
+            ),
+            0,
+            "zusätzliche Session-Bar im BOS-Frameset nach Inhaltswechsel",
+        )
+        self._equal(
+            self.cdp.evaluate(
+                _visible_count_expression("mainframe", "aside[data-estab-session-bar]")
+            ),
+            0,
+            "Session-Bar im BOS-Inhalt nach Inhaltswechsel",
+        )
+        self.cdp.click(
+            "status",
+            "a.estab-button-home",
+            "Startseitenlink im BOS-Navigationsframe",
+        )
+        self.cdp.wait_for(
+            """
+            document.readyState === "complete" &&
+            Boolean(document.querySelector("#estab-open")) &&
+            Boolean(document.querySelector("aside[data-estab-session-bar]"))
+            """,
+            "angemeldete Startseite wurde nicht aus dem BOS-Bereich geöffnet",
+        )
+        self._assert_session_bar(None, "Startseite nach BOS-Bereich")
+
+        print("[6/6] Logout per echtem Klick und Rückkehr in den anonymen Zustand")
+        self.cdp.click(
+            None,
+            "[data-estab-logout-form] button",
+            "Abmeldebutton auf der Startseite",
+        )
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                const existing = doc.querySelector('button[name="login_flow"][value="existing"]');
+                return Boolean(existing && !doc.querySelector("aside[data-estab-session-bar]"));
+                """,
+            ),
+            "anonyme Anmeldung nach dem Logout fehlt",
+        )
+        for frame_name in ("mainframe", "vorgaben", "counter", "status"):
+            self._equal(
+                self.cdp.evaluate(
+                    _visible_count_expression(frame_name, "aside[data-estab-session-bar]")
+                ),
+                0,
+                f"Session-Bar nach Logout im Frame {frame_name}",
+            )
+        self.cdp.navigate(self.config.base_url + "/")
+        self._assert_anonymous_home()
+        self._assert_protected_cards()
+
+    def _assert_anonymous_home(self) -> None:
+        self._equal(
+            self.cdp.evaluate(_visible_count_expression(None, "#estab-login")),
+            1,
+            "Anmeldebutton auf der anonymen Startseite",
+        )
+        self._equal(
+            self.cdp.evaluate(_text_expression(None, "#estab-login")),
+            "Mit bestehendem Konto anmelden",
+            "Beschriftung des Anmeldebuttons",
+        )
+        self._equal(
+            self.cdp.evaluate(_visible_count_expression(None, "#estab-register")),
+            1,
+            "Button für ein neues Konto auf der anonymen Startseite",
+        )
+        self._equal(
+            self.cdp.evaluate(_text_expression(None, "#estab-register")),
+            "Neues Konto anlegen",
+            "Beschriftung des Buttons für ein neues Konto",
+        )
+        flow_urls = self.cdp.evaluate(
+            """
+            (() => {
+                const existing = document.querySelector("#estab-login");
+                const fresh = document.querySelector("#estab-register");
+                if (!existing || !fresh) return null;
+                const existingUrl = new URL(existing.href, location.href);
+                const freshUrl = new URL(fresh.href, location.href);
+                return {
+                    existing: existingUrl.pathname + existingUrl.search,
+                    fresh: freshUrl.pathname + freshUrl.search
+                };
+            })()
+            """
+        )
+        self._truth(flow_urls, "Die beiden Konto-Flows sind nicht verlinkt.")
+        self._truth(
+            str(flow_urls["existing"]).endswith("/4fach/index.php?login_flow=existing"),
+            "Der Button für ein bestehendes Konto öffnet nicht den bestehenden Konto-Flow.",
+        )
+        self._truth(
+            str(flow_urls["fresh"]).endswith("/4fach/index.php?login_flow=new"),
+            "Der Button für ein neues Konto öffnet nicht den Registrierungs-Flow.",
+        )
+        copy_is_clear = self.cdp.evaluate(
+            """
+            (() => {
+                const text = document.body.innerText.replace(/\\s+/g, " ");
+                return text.includes("Bestehendes Konto") &&
+                    text.includes("Neues Konto anlegen") &&
+                    text.includes("noch kein Konto existiert");
+            })()
+            """
+        )
+        self._truth(copy_is_clear, "Startseite erklärt bestehendes und neues Konto nicht klar.")
+        self._equal(
+            self.cdp.evaluate(
+                _visible_count_expression(None, "aside[data-estab-session-bar]")
+            ),
+            0,
+            "Session-Bar auf der anonymen Startseite",
+        )
+
+    def _assert_protected_cards(self) -> None:
+        card_state = self.cdp.evaluate(
+            """
+            (() => {
+                const all = Array.from(
+                    document.querySelectorAll(".estab-menu-card-application")
+                );
+                const locked = all.filter(card =>
+                    card.classList.contains("estab-menu-card-locked")
+                );
+                return {total: all.length, locked: locked.map(card => {
+                const link = card.querySelector("a.estab-menu-link");
+                const badge = card.querySelector(".estab-menu-badge");
+                if (!link || !badge) return null;
+                const url = new URL(link.href, location.href);
+                return {
+                    href: url.pathname + url.search,
+                    target: link.getAttribute("target"),
+                    badge: badge.innerText.replace(/\\s+/g, " ").trim()
+                };
+                })};
+            })()
+            """
+        )
+        if (
+            not isinstance(card_state, dict)
+            or not isinstance(card_state.get("locked"), list)
+            or card_state.get("total") != len(card_state["locked"])
+            or card_state.get("total", 0) < len(self.protected_paths)
+        ):
+            raise TestFailure("Die geschützten Modulkarten sind anonym nicht vollständig gesperrt.")
+        for card in card_state["locked"]:
+            if (
+                not card
+                or not str(card.get("href", "")).endswith("/4fach/index.php")
+                or card.get("target") is not None
+                or card.get("badge") != "Anmeldung erforderlich"
+            ):
+                raise TestFailure(
+                    "Mindestens eine anonyme Modulkarte besitzt keinen eindeutigen Anmeldeschutz."
+                )
+
+        paths_json = json.dumps(self.protected_paths)
+        results = self.cdp.evaluate(
+            f"""
+            (async () => {{
+                const paths = {paths_json};
+                return Promise.all(paths.map(async path => {{
+                    let status = 0;
+                    try {{
+                        const response = await fetch(new URL(path, location.href), {{
+                            credentials: "same-origin",
+                            redirect: "manual",
+                            cache: "no-store"
+                        }});
+                        status = response.status;
+                    }} catch (_error) {{
+                        status = -1;
+                    }}
+                    return {{path, status}};
+                }}));
+            }})()
+            """
+        )
+        if not isinstance(results, list):
+            raise TestFailure("Status der geschützten Modulkarten konnte nicht geprüft werden.")
+        failures = [
+            result.get("path", "unbekannt")
+            for result in results
+            if result.get("status") != 403
+        ]
+        if failures:
+            raise TestFailure(
+                "Direkte anonyme Modulzugriffe sind nicht vollständig mit HTTP 403 gesperrt: "
+                + ", ".join(failures)
+            )
+
+    def _wait_for_frame(self, frame_name: str) -> None:
+        self.cdp.wait_for(
+            _frame_expression(
+                frame_name,
+                'return doc.readyState === "complete" || doc.readyState === "interactive";',
+            ),
+            f"Frame {frame_name} wurde nicht geladen",
+        )
+
+    def _wait_for_authenticated_frames(self) -> None:
+        expected_name = json.dumps(self.config.login_name)
+        expected_code = json.dumps(self.config.login_code)
+        expected_function = json.dumps(self.config.login_function)
+        deadline = time.monotonic() + self.config.timeout
+        while time.monotonic() < deadline:
+            try:
+                content_is_authenticated = self.cdp.evaluate(
+                    _frame_expression(
+                        "mainframe",
+                        """
+                        return target.location.pathname.endsWith(
+                                "/4fach/mainindex.php"
+                            ) &&
+                            doc.readyState === "complete" &&
+                            Boolean(doc.querySelector("form")) &&
+                            Boolean(doc.querySelector(
+                                "script[data-estab-mainframe-guard]"
+                            )) &&
+                            !doc.querySelector(".estab-auth-card") &&
+                            !doc.querySelector('input[name="kennwort1"]');
+                        """,
+                    )
+                )
+                navigation_identity = self.cdp.evaluate(
+                    _frame_expression(
+                        "vorgaben",
+                        f"""
+                        const bars = Array.from(
+                            doc.querySelectorAll("aside[data-estab-session-bar]")
+                        ).filter(element => {{
+                            const rect = element.getBoundingClientRect();
+                            const style = target.getComputedStyle(element);
+                            return rect.width > 0 && rect.height > 0 &&
+                                style.display !== "none" && style.visibility !== "hidden";
+                        }});
+                        if (bars.length !== 1) return false;
+                        const identity = bars[0].querySelector("[data-estab-user-code]");
+                        const name = bars[0].querySelector("[data-estab-user-name]");
+                        return Boolean(identity &&
+                            name &&
+                            name.getAttribute("data-estab-user-name") === {expected_name} &&
+                            identity.getAttribute("data-estab-user-code") === {expected_code} &&
+                            identity.getAttribute("data-estab-user-function") === {expected_function});
+                        """,
+                    )
+                )
+                main_bar_count = self.cdp.evaluate(
+                    _visible_count_expression(
+                        "mainframe", "aside[data-estab-session-bar]"
+                    )
+                )
+                if content_is_authenticated and navigation_identity and main_bar_count == 0:
+                    time.sleep(0.3)
+                    return
+                error_text = self.cdp.evaluate(
+                    _text_expression("mainframe", ".estab-auth-error, .error")
+                )
+            except TestFailure:
+                time.sleep(0.1)
+                continue
+            if error_text:
+                raise TestFailure(
+                    "Kontoanlage wurde von der Anwendung abgelehnt. "
+                    "Bitte ein noch nicht verwendetes ESTAB_TEST_LOGIN_CODE nutzen."
+                )
+            time.sleep(0.1)
+        raise TestFailure("Timeout: Konto wurde nicht angelegt und angemeldet.")
+
+    def _assert_session_bar(self, frame_name: str | None, location: str) -> None:
+        selector = "aside[data-estab-session-bar]"
+        self._equal(
+            self.cdp.evaluate(_visible_count_expression(frame_name, selector)),
+            1,
+            f"Anzahl sichtbarer Session-Bars in {location}",
+        )
+        details = self.cdp.evaluate(
+            _frame_expression(
+                frame_name,
+                f"""
+                const bar = doc.querySelector({json.dumps(selector)});
+                const identity = bar && bar.querySelector("[data-estab-user-code]");
+                const name = bar && bar.querySelector("[data-estab-user-name]");
+                const home = bar && bar.querySelector("a.estab-button-home");
+                const logout = bar && bar.querySelector("[data-estab-logout-form] button");
+                if (!bar || !identity || !name || !home || !logout) return null;
+                const homeRect = home.getBoundingClientRect();
+                const logoutRect = logout.getBoundingClientRect();
+                return {{
+                    name: name.getAttribute("data-estab-user-name"),
+                    code: identity.getAttribute("data-estab-user-code"),
+                    functionName: identity.getAttribute("data-estab-user-function"),
+                    role: identity.getAttribute("data-estab-user-role"),
+                    text: bar.innerText.replace(/\\s+/g, " ").trim(),
+                    homeVisible: homeRect.width > 0 && homeRect.height > 0 &&
+                        home.innerText.replace(/\\s+/g, " ").trim() === "Startseite" &&
+                        home.getAttribute("target") === "_top",
+                    logoutVisible: logoutRect.width > 0 && logoutRect.height > 0 &&
+                        !logout.disabled
+                }};
+                """,
+            )
+        )
+        if not details:
+            raise TestFailure(f"Session-Informationen fehlen in {location}.")
+        self._equal(details["name"], self.config.login_name, f"Benutzername in {location}")
+        self._equal(details["code"], self.config.login_code, f"Kürzel in {location}")
+        self._equal(
+            details["functionName"],
+            self.config.login_function,
+            f"Funktion in {location}",
+        )
+        role = details.get("role")
+        self._truth(isinstance(role, str) and bool(role.strip()), f"Rolle fehlt in {location}.")
+        visible_text = details.get("text", "")
+        for expected in (
+            "Angemeldet als",
+            self.config.login_name,
+            self.config.login_code,
+            self.config.login_function,
+            role,
+            "Startseite",
+            "Abmelden",
+        ):
+            self._truth(expected in visible_text, f"Session-Bar in {location} ist unvollständig.")
+        self._truth(details.get("logoutVisible"), f"Abmeldebutton fehlt in {location}.")
+        self._truth(details.get("homeVisible"), f"Startseitenlink fehlt in {location}.")
+
+    @staticmethod
+    def _equal(actual: Any, expected: Any, description: str) -> None:
+        if actual != expected:
+            raise TestFailure(
+                f"{description}: erwartet {expected!r}, erhalten {actual!r}."
+            )
+
+    @staticmethod
+    def _truth(condition: Any, message: str) -> None:
+        if not condition:
+            raise TestFailure(message)
+
+
+def capture_diagnostics(cdp: CDP | None) -> pathlib.Path | None:
+    if cdp is None:
+        return None
+    configured = os.environ.get("ESTAB_BROWSER_ARTIFACT_DIR")
+    try:
+        if configured:
+            root = pathlib.Path(configured).expanduser()
+            root.mkdir(parents=True, exist_ok=True)
+            artifact_dir = root / f"failure-{time.strftime('%Y%m%d-%H%M%S')}-{os.getpid()}"
+            artifact_dir.mkdir()
+        else:
+            artifact_dir = pathlib.Path(tempfile.mkdtemp(prefix="estab-browser-failure-"))
+
+        try:
+            screenshot = cdp.call("Page.captureScreenshot", {"format": "png"})
+            encoded = screenshot.get("data")
+            if encoded:
+                (artifact_dir / "failure.png").write_bytes(base64.b64decode(encoded))
+        except (TestFailure, OSError, ValueError):
+            pass
+
+        try:
+            state = cdp.evaluate(
+                """
+                (() => {
+                    const frames = [];
+                    const collect = root => {
+                        for (let index = 0; index < root.frames.length; index += 1) {
+                            const child = root.frames[index];
+                            try {
+                                frames.push({
+                                    name: child.name || "",
+                                    url: child.location.href,
+                                    sessionBars: child.document.querySelectorAll(
+                                        "aside[data-estab-session-bar]"
+                                    ).length
+                                });
+                                collect(child);
+                            } catch (_error) {
+                                frames.push({name: "", url: "inaccessible", sessionBars: null});
+                            }
+                        }
+                    };
+                    collect(window);
+                    return {
+                        url: location.href,
+                        title: document.title,
+                        topSessionBars: document.querySelectorAll(
+                            "aside[data-estab-session-bar]"
+                        ).length,
+                        frames
+                    };
+                })()
+                """
+            )
+            (artifact_dir / "state.json").write_text(
+                json.dumps(state, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+        except (TestFailure, OSError, TypeError, ValueError):
+            pass
+        return artifact_dir
+    except OSError:
+        return None
+
+
+def parse_arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Testet ESTAB-Anmeldung, Kontoanlage, Session-Anzeige und Logout "
+            "in einem echten Headless-Chrome."
+        )
+    )
+    parser.add_argument(
+        "--check-browser",
+        action="store_true",
+        help="nur Chrome/Chromium suchen und ohne Anwendungstest beenden",
+    )
+    return parser.parse_args()
+
+
+def main() -> int:
+    arguments = parse_arguments()
+    chrome: ChromeProcess | None = None
+    websocket: WebSocket | None = None
+    cdp: CDP | None = None
+    try:
+        binary = find_chrome()
+        version = browser_version(binary)
+        if arguments.check_browser:
+            print(f"Browser verfügbar: {binary} ({version})")
+            return 0
+        print(f"Browser: {version}")
+        config = TestConfig.from_environment()
+        chrome = ChromeProcess(binary, config.startup_timeout)
+        chrome.start()
+        if chrome.websocket_url is None:
+            raise TestFailure("Chrome hat keine Debugging-Adresse bereitgestellt.")
+        websocket = WebSocket(chrome.websocket_url, config.timeout)
+        cdp = CDP(websocket, config.timeout)
+        BrowserAcceptance(cdp, config).run()
+        print("Headless browser UI: OK")
+        return 0
+    except KeyboardInterrupt:
+        print("Headless browser UI: abgebrochen.", file=sys.stderr)
+        return 130
+    except TestFailure as exc:
+        artifact_dir = capture_diagnostics(cdp)
+        print(f"Headless browser UI: FAIL: {exc}", file=sys.stderr)
+        if artifact_dir is not None:
+            print(f"Diagnose: {artifact_dir}", file=sys.stderr)
+        return 1
+    finally:
+        if websocket is not None:
+            websocket.close()
+        if chrome is not None:
+            chrome.close()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

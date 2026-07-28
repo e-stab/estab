@@ -14,7 +14,7 @@ mit einer vollständigen fachlichen Freigabe verwechselt wird.
 | Upgrade eines Legacy-Schemas | `tests/integration/schema_migrator.sh` | Duplikate blockieren; Retry und Zweitlauf sind idempotent; Engine, Zeichensatz und Inhalte dynamischer Tabellen bleiben korrekt; Checksum-Manipulation blockiert |
 | Datumsmigration | `tests/integration/date_compatibility.php` | Zero Dates werden `NULL`; gültige Werte und SQL-Mode bleiben erhalten |
 | dynamische Benutzer-/Funktionstabellen | `tests/integration/dynamic_tables.php` | sechs Tabellen, Daten, Duplikate, Engine, Collation und Indizes bleiben korrekt |
-| Anmeldung, Sitzungsanzeige und Rollenbindung | `tests/php/auth_security.php`, `tests/php/session_ui_security.php`, `tests/php/workflow_security.php`, `tests/integration/http_surface_http.sh`, `tests/integration/http_smoke.sh`, `tests/integration/categories_http.sh`, `tests/integration/logbooks_http.sh` | Startseitenbutton, Kontenlisten-Auswahl und getrennte, voranmelde-CSRF-gebundene Konto-Flows funktionieren; Bestandslogin erzeugt kein Konto, Neuanlage übernimmt weder vorhandenes Kürzel noch Passwort-Hash; Name, Kürzel, Funktion, Rolle und genau ein Abmeldeformular erscheinen escaped auf Root, Frameset-Navigation und geschützten HTML-Modulen, niemals anonym; GET sowie fehlendes/falsches Logout-CSRF werden abgewiesen; der erfolgreiche Logout löscht die Sitzung und eine alte SID deaktiviert keine neuere Anmeldung desselben Kontos; aktive Konten können Funktion/Rolle nicht per Request wechseln, inaktive Konten erst nach Logout; der explizit freigeschaltete historische Zwei-Kennwort-Pfad bleibt für Same-Site-Clients kompatibel und weist Cross-Site ab |
+| Anmeldung, Menü, Sitzungsanzeige und Rollenbindung | `tests/php/auth_security.php`, `tests/php/session_ui_security.php`, `tests/php/root_menu_security.php`, `tests/php/workflow_security.php`, `tests/browser/headless_ui.py`, `tests/integration/http_surface_http.sh`, `tests/integration/http_smoke.sh`, `tests/integration/categories_http.sh`, `tests/integration/logbooks_http.sh` | Getrennte, voranmelde-CSRF-gebundene Konto-Flows funktionieren; anonyme Modulkarten bleiben sichtbar, führen aber statt auf eine rohe 403-Seite zur Anmeldung; der echte Browser klickt Neuanlage, Startseitenlink und Logout und weist genau eine sichtbare Frameset-Sitzungsleiste nach; Bestandslogin erzeugt kein Konto, Neuanlage übernimmt weder vorhandenes Kürzel noch Passwort-Hash; Name, Kürzel, Funktion, Rolle und genau ein Abmeldeformular erscheinen escaped auf Root, Frameset-Navigation und geschützten HTML-Modulen, niemals anonym; GET sowie fehlendes/falsches Logout-CSRF werden abgewiesen; der erfolgreiche Logout löscht die Sitzung und eine alte SID deaktiviert keine neuere Anmeldung desselben Kontos; aktive Konten können Funktion/Rolle nicht per Request wechseln, inaktive Konten erst nach Logout; der explizit freigeschaltete historische Zwei-Kennwort-Pfad bleibt für Same-Site-Clients kompatibel und weist Cross-Site ab |
 | Stab-Nachricht | `tests/php/message_security.php`, `tests/integration/http_smoke.sh` | Formular öffnet, rohe UTF-8-Nachricht wird gespeichert und wieder gelesen; Quotes, `&`, `<script>` und SQL-ähnlicher Text bleiben Daten; GET-Detail, fremde Objekte und ungültige IDs werden abgewiesen |
 | Nachrichtenstatus und Parallelität | `tests/integration/message_concurrency.php` | parallele Nummern kollidieren nicht; fremde Sperrinhaber verlieren; beim Save-/Reset-Rennen gewinnt genau eine Änderung; parallele Read-State-Writes bleiben logisch eindeutig |
 | Anhang | `tests/php/attachment_security.php`, `tests/php/file_access_security.php`, `tests/integration/attachment_reservation.php`, HTTP-Smoke | parallele Reservierungen kollidieren nicht; Besitz, Upload und authentifizierter Download sind korrekt |
@@ -31,7 +31,11 @@ mit einer vollständigen fachlichen Freigabe verwechselt wird.
 Die CI-Orchestrierung liegt in `tests/integration/ci.sh`. Sie verwendet
 ephemere Secrets, eigene Volumes, harte Zeitgrenzen, Fehlerartefakte und
 entfernt den Teststack am Ende. PHP-Warnungen, Notices, Deprecations, Fatals
-und ungefangene Fehler im App-Log sperren die Freigabe.
+und ungefangene Fehler im App-Log sperren die Freigabe. GitHub Actions setzt
+den Browsermodus auf `required`; lokal läuft er standardmäßig automatisch,
+wenn Python 3 und Chrome/Chromium verfügbar sind. Ein lokales `SKIP` ist kein
+vollständiger Freigabenachweis. Browserfehler sichern Screenshot und
+kennwortfreien Frame-/Session-Zustand im CI-Diagnoseartefakt.
 
 ## Verpflichtende fachliche Bedienabnahme
 
@@ -70,6 +74,7 @@ MariaDB-Image-Digest/Version:
 Testzeitpunkt und Zeitzone:
 Testumgebung/Compose-Projekt:
 Automatisierte Suite: PASS/FAIL, Log-/Artefaktpfad:
+Browser-Akzeptanz: PASS/FAIL, Browser-Version, Artefaktpfad:
 Restore-Roundtrip: PASS/FAIL, Backup-SHA-256:
 Abgenommene Rollen/Funktionen:
 Fachliche Bedienabnahme: PASS/FAIL, Prüfer:

@@ -23,13 +23,43 @@ command -v openssl >/dev/null 2>&1 || {
     exit 1
 }
 
+browser_test_mode=${ESTAB_BROWSER_TEST:-auto}
+case "$browser_test_mode" in
+    auto | required | skip) ;;
+    *)
+        echo "CI integration: ESTAB_BROWSER_TEST must be auto, required, or skip" >&2
+        exit 1
+        ;;
+esac
+browser_test_enabled=false
+if [[ $browser_test_mode != skip ]]; then
+    browser_check_output=
+    if command -v python3 >/dev/null 2>&1 &&
+        browser_check_output=$(python3 -B tests/browser/headless_ui.py --check-browser 2>&1); then
+        browser_test_enabled=true
+        echo "CI integration: browser acceptance enabled (${browser_check_output})"
+    elif [[ $browser_test_mode == required ]]; then
+        echo "CI integration: required browser acceptance is unavailable" >&2
+        if [[ -n $browser_check_output ]]; then
+            printf '%s\n' "$browser_check_output" >&2
+        else
+            echo "CI integration: python3 is required for browser acceptance" >&2
+        fi
+        exit 1
+    else
+        echo "CI integration: browser acceptance skipped; set ESTAB_BROWSER_TEST=required for a release gate"
+    fi
+else
+    echo "CI integration: browser acceptance explicitly skipped"
+fi
+
 export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-estab_ci}
 export ESTAB_DB_NAME=${ESTAB_DB_NAME:-estab}
 export ESTAB_DB_USER=${ESTAB_DB_USER:-estab}
 export ESTAB_ADMIN_USER=${ESTAB_ADMIN_USER:-estab-admin}
 export ESTAB_HTTP_BIND=${ESTAB_HTTP_BIND:-127.0.0.1}
 export ESTAB_HTTP_PORT=${ESTAB_HTTP_PORT:-18080}
-export ESTAB_PUBLIC_URL=${ESTAB_PUBLIC_URL:-http://127.0.0.1:${ESTAB_HTTP_PORT}/}
+export ESTAB_PUBLIC_URL=${ESTAB_PUBLIC_URL:-/}
 export ESTAB_ALLOW_SELF_REGISTRATION=true
 export ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF=true
 export ESTAB_TEST_COMPOSE_ENGINE=${ESTAB_TEST_COMPOSE_ENGINE:-$container_cli}
@@ -302,6 +332,45 @@ export ESTAB_TEST_WORKFLOW_MARKER="$workflow_marker"
 
 echo "CI integration: checking the direct HTTP surface"
 run_timed 3m sh tests/integration/http_surface_http.sh
+
+if [[ $browser_test_enabled == true ]]; then
+    echo "CI integration: running real-browser menu and session acceptance"
+    reserved_login_codes=(
+        "$(printf '%s' "${ESTAB_TEST_LOGIN_CODE:-e2e001}" | tr '[:upper:]' '[:lower:]')"
+        "$(printf '%s' "${ESTAB_TEST_ETB_CODE:-e2s200}" | tr '[:upper:]' '[:lower:]')"
+        "$(printf '%s' "${ESTAB_TEST_TBB_CODE:-e2aw00}" | tr '[:upper:]' '[:lower:]')"
+        "$(printf '%s' "${ESTAB_TEST_CATEGORY_SI_CODE:-e2si00}" | tr '[:upper:]' '[:lower:]')"
+    )
+    browser_login_code=
+    for browser_prefix in b c d f g h j k; do
+        browser_candidate="${browser_prefix}${roundtrip_token:0:5}"
+        browser_collision=false
+        for reserved_login_code in "${reserved_login_codes[@]}"; do
+            if [[ $browser_candidate == "$reserved_login_code" ]]; then
+                browser_collision=true
+                break
+            fi
+        done
+        if [[ $browser_collision == false ]]; then
+            browser_login_code=$browser_candidate
+            break
+        fi
+    done
+    if [[ -z $browser_login_code ]]; then
+        echo "CI integration: could not allocate an isolated browser test code" >&2
+        exit 1
+    fi
+    (
+        unset ESTAB_TEST_LOGIN_PASSWORD ESTAB_TEST_LOGIN_PASSWORD_FILE
+        export ESTAB_TEST_LOGIN_NAME="Browser Acceptance"
+        export ESTAB_TEST_LOGIN_CODE="$browser_login_code"
+        export ESTAB_TEST_LOGIN_FUNCTION="S1"
+        if [[ -n ${ESTAB_CI_LOG_DIR:-} ]]; then
+            export ESTAB_BROWSER_ARTIFACT_DIR="$ESTAB_CI_LOG_DIR/browser"
+        fi
+        run_timed 4m python3 -B tests/browser/headless_ui.py
+    )
+fi
 
 echo "CI integration: running authenticated HTTP smoke"
 export ESTAB_TEST_STATE_FILE="$http_state_file"

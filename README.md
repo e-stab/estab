@@ -87,6 +87,14 @@ Konto an. Die Rolle wird in beiden Fällen ausschließlich aus der ausgewählten
 Funktion und der Empfängermatrix abgeleitet. Beide Browserabläufe sind bereits
 vor der Anmeldung an ein Session-CSRF-Token gebunden.
 
+Auf der Startseite führen zwei getrennte Schaltflächen unmittelbar zum
+passenden Bestands- beziehungsweise Neuanlageformular. Ist
+Selbstregistrierung deaktiviert, verschwindet die Neuanlage-Schaltfläche und
+ein Hinweis nennt den organisatorischen Kontaktweg. Ohne eStab-Sitzung sind
+geschützte Modulkarten sichtbar als „Anmeldung erforderlich“ gekennzeichnet
+und führen zum Anmeldeeinstieg statt auf eine HTTP-403-Seite. Die
+Administration ist als eigener technischer Zugang markiert.
+
 Nach erfolgreicher Anmeldung zeigen der Einstieg, das Haupt-Frameset und alle
 geschützten eigenständigen HTML-Module eine gemeinsame Sitzungsleiste mit Name,
 Kürzel, Funktion und abgeleiteter Rolle. Der dortige Button „Abmelden“ beendet
@@ -94,7 +102,11 @@ die lokale Sitzung auch bei einer nachgelagerten Datenbankstörung, löscht die
 Anwendungscookies und führt anschließend zum Anmeldeeinstieg zurück. Direkt
 geöffnete Status-/Zählerseiten erhalten dieselbe kompakte Anzeige; innerhalb
 des Framesets bleibt sie bewusst einmalig in der Navigation sichtbar. Die
-separate HTTP-Basic-Identität der Administration wird davon nicht berührt.
+Schaltfläche „Startseite“ führt aus Fachmodulen und Frames zuverlässig zur
+Modulübersicht zurück. Der BOS-Informationsbereich hält die Anzeige in seinem
+Navigationsframe sichtbar; aktive Hilfe- und Problem-Popups zeigen sie
+ebenfalls. Die separate HTTP-Basic-Identität der Administration wird davon
+nicht berührt.
 
 Interne PHP-Controller, Spracharrays, `*.inc.php` und der vollständige
 `/4fbak/`-Baum sind keine direkten Webendpunkte und werden von Apache mit
@@ -132,6 +144,7 @@ wegwerfbaren Test-Stack verwendet werden.
 - [Migration und Upgrade](docs/MIGRATION-UND-UPGRADE.md)
 - [Backup und Wiederherstellung](docs/BACKUP-UND-WIEDERHERSTELLUNG.md)
 - [Tests, Funktionsnachweis und Monitoring](docs/TESTS-UND-MONITORING.md)
+- [Echter Browser-Akzeptanztest](tests/browser/README.md)
 - [Funktionsmatrix und Freigabeprotokoll](docs/FUNKTIONSNACHWEIS.md)
 - [Architektur und Sicherheitsentscheidungen](docs/ARCHITEKTUR-UND-SICHERHEIT.md)
 - [Nachweis der SVN- und Release-Migration](migration/README.md)

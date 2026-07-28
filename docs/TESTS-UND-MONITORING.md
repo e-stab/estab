@@ -12,6 +12,7 @@ steht in der [Funktionsmatrix](FUNKTIONSNACHWEIS.md).
 | Image-Build | benötigte PHP-Erweiterungen und Apache-Konfiguration |
 | Datenbank | echtes MariaDB-Schema, Indizes, Matrix, Engines, Collations und Zero-Date-Freiheit |
 | HTTP | Header, direkte Endpunktfläche, 403-/400-/405-Grenzen, PNG-Antworten, Registrierung, sichtbare Sitzungsidentität, CSRF-Abmeldung, erneute Anmeldung, Nachrichten-/Kategorien- und ETB-/TBB-Rollengrenzen sowie optional Admin-Export |
+| Echter Browser | sichtbare Startseite, getrennte Konto-Flows, Frameset-Navigation, genau eine Sitzungsleiste, Startseitenlink und Logout per echtem Mausklick |
 | Fachabnahme | kompletter Nachrichten-, Anhang-, PDF-, ETB-/TBB- und Restore-Ablauf |
 | Betrieb | kontinuierliche Readiness, Logs, Restarts, Kapazität und Backup-Alter |
 
@@ -40,6 +41,9 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
 - `NULL`-/Zero-Date-Behandlung,
 - Anmelde-, Konto-Flow-, aktive Funktionsbindungs-, Session-, Proxy- und
   Passwortregeln,
+- zustandsabhängige Root-Menükarten mit genau einem Tastaturziel, sicherem
+  Escaping und verständlicher Trennung von Anwendung, Administration und
+  öffentlichen Inhalten,
 - HTML-escaping und Base-Path-Auflösung der gemeinsamen Sitzungsleiste,
   eindeutige Abmeldeformulare, POST-/CSRF-Vertrag, lokale
   Session-Zerstörung bei DB-Fehlern, unveränderte Nicht-HTML-Antworten sowie
@@ -78,6 +82,7 @@ einem privaten temporären Verzeichnis:
 COMPOSE_PROJECT_NAME=estab_ci_local_01 \
 ESTAB_CONTAINER_CLI=podman \
 ESTAB_HTTP_PORT=18080 \
+ESTAB_BROWSER_TEST=required \
 tests/integration/ci.sh
 ```
 
@@ -98,7 +103,22 @@ Die HTTP-Stufe beweist dabei den Startseiten-Anmeldebutton, die getrennten
 Bestandskonto-/Neukonto-Formulare, die sichtbare Kontenauswahl,
 Kennwortbestätigung, unveränderte Kontenzahlen und Passwort-Hashes bei
 Fehlversuchen, aktive Funktionsbindung, die gemeinsame Sitzungsanzeige,
-CSRF-geschützte Abmeldung sowie deaktivierte Selbstregistrierung.
+CSRF-geschützte Abmeldung sowie deaktivierte Selbstregistrierung. Zusätzlich
+steuert der Browser-Akzeptanztest einen echten Chrome-/Chromium-Prozess.
+Das Gate verwendet standardmäßig die auch für Laptop, LAN und Reverse Proxy
+empfohlene root-relative Einstellung `ESTAB_PUBLIC_URL=/`; absolute
+Basis-URLs und zusätzliche Pfade bleiben durch parametrisierte HTTP- und
+statische URL-Tests abgedeckt.
+
+`ESTAB_BROWSER_TEST` kennt drei Betriebsarten:
+
+- `auto` ist der lokale Standard und führt den Test aus, wenn Python 3 und
+  Chrome/Chromium gefunden werden; andernfalls meldet der Lauf ausdrücklich
+  `SKIP`.
+- `required` macht den Browser zum Freigabe-Gate und bricht bei fehlender
+  Laufzeit ab. GitHub Actions verwendet immer diesen Modus.
+- `skip` deaktiviert den Test bewusst und ist kein vollständiger
+  Freigabenachweis.
 
 ## Wegwerfbarer Integrations-Stack
 
@@ -267,6 +287,12 @@ verpflichtend; ohne die direkte MariaDB-Verbindung bricht der Test ab, damit
 Kontenzahl, Passwort-Hash und Rollenbindung niemals nur vermeintlich geprüft
 werden.
 
+Der Einzelaufruf erwartet standardmäßig root-relative Browserlinks. Verwendet
+das Test-Deployment eine absolute öffentliche URL oder einen Base-Path, wird
+der vollständige erwartete Anwendungsroot zusätzlich angegeben, zum Beispiel
+`ESTAB_TEST_EXPECTED_APP_ROOT=https://test.example/estab`. Alternativ können
+`ESTAB_PUBLIC_URL` und `ESTAB_BASE_PATH` in dieselbe Shell exportiert werden.
+
 Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
 `ESTAB_TEST_ADMIN_USER` denselben Wert erhalten. Der Test prüft unter anderem:
 
@@ -310,6 +336,10 @@ ESTAB_TEST_BASE_URL=http://127.0.0.1:18080 \
 tests/integration/http_surface_http.sh
 ```
 
+Auch dieser Einzelaufruf nimmt standardmäßig root-relative Browserlinks an.
+Für eine abweichende öffentliche URL gilt derselbe
+`ESTAB_TEST_EXPECTED_APP_ROOT`-Override wie beim HTTP-Smoke-Test.
+
 Er weist nach:
 
 - vollständige Erreichbarkeit des sichtbaren Root-Menüs, seiner lokalen
@@ -334,6 +364,49 @@ ersetzten Vergleichszeichen weiterhin semantisch ausgegeben werden.
 `tests/php/http_surface_security.php` prüft dieselben Validator- und
 Apache-Verträge ohne Webserver. Das vollständige CI-Gate führt zuerst diesen
 read-only HTTP-Test und danach die zustandsverändernden Fachabläufe aus.
+
+### Echter Browser-Akzeptanztest
+
+`tests/browser/headless_ui.py` verwendet ausschließlich die
+Python-Standardbibliothek und steuert Chrome oder Chromium direkt über das
+Chrome DevTools Protocol. Der Test gehört ausschließlich auf einen frischen
+Wegwerf-Stack mit aktivierter Selbstregistrierung, weil er ein anschließend
+wieder abgemeldetes Testkonto anlegt:
+
+```console
+ESTAB_TEST_BASE_URL=http://127.0.0.1:18080 \
+ESTAB_TEST_LOGIN_NAME='Browser Test' \
+ESTAB_TEST_LOGIN_CODE=brw001 \
+ESTAB_TEST_LOGIN_FUNCTION=S1 \
+python3 -B tests/browser/headless_ui.py
+```
+
+Ohne Kennwortvariable erzeugt der Test intern ein starkes ephemeres Kennwort
+und gibt es weder in Logs noch Diagnosen aus. Das Kürzel muss bei manuellen
+Wiederholungsläufen neu und höchstens sechs Zeichen lang sein.
+
+Der Ablauf klickt die getrennten Startseitenwege, öffnet die Neuanlage im
+Legacy-Frameset, füllt das Formular aus und prüft danach:
+
+- anonyme Modulkarten führen verständlich zur Anmeldung, direkte Zugriffe
+  bleiben mit HTTP 403 geschützt;
+- der Frame-Refresh verwendet die richtige Origin und keinen
+  schema-relativen Doppel-Slash;
+- im vollständigen Frameset ist genau eine sichtbare Sitzungsleiste vorhanden;
+- Name, Kürzel, Funktion, Rolle, Startseitenlink und Abmeldebutton sind
+  tatsächlich sichtbar und bedienbar;
+- im BOS-Frameset bleibt die kompakte Leiste beim Wechsel einer statischen
+  Informationsseite erhalten;
+- ein echter Mausklick auf `Abmelden` beendet die Sitzung und stellt den
+  anonymen Zustand wieder her.
+
+Soweit Chrome bereits steuerbar ist, legt der Test bei Fehlern `failure.png`
+und ein kennwortfreies `state.json` an. Bei Browser-Startfehlern oder einem
+harten CI-Timeout bleiben die normalen CI-/Compose-Logs. Im CI-Lauf landen
+vorhandene Browserdiagnosen unter dem bestehenden Diagnoseverzeichnis und
+werden vom Fehler-Artefakt hochgeladen. Alle Variablen und die Browsererkennung
+sind in
+[`tests/browser/README.md`](../tests/browser/README.md) dokumentiert.
 
 ### ETB-/TBB-HTTP-Integration
 
@@ -436,7 +509,9 @@ im Kommando stehen.
 
 ## Fachliche Abnahme
 
-Die technischen Tests werden um einen browserbasierten Ablauf ergänzt. Als
+Der automatisierte Browser-Akzeptanztest belegt die technische Bedienmechanik
+von Menü, Frameset, Sitzung und Logout. Er ersetzt nicht die nachfolgende
+fachliche Abnahme mit der organisationsspezifischen Empfängermatrix. Als
 fachliche Referenz dient das
 [historische Anwendungshandbuch](../doku/Handbuch_eStab.pdf); seine alten
 Installations- und Sicherheitskapitel gelten nicht.
@@ -537,7 +612,8 @@ einsatzbezogene Informationen enthalten.
 | --- | --- |
 | jeder Commit | statische Suite |
 | jeder Image-Build | erfolgreicher Build und Apache `configtest` |
-| Erstinstallation | Readiness, `verify.sql`, HTTP-Smoke und Fachabnahme |
+| CI/Freigabekandidat | vollständiges CI-Gate mit `ESTAB_BROWSER_TEST=required` |
+| Erstinstallation | Readiness, `verify.sql`, HTTP-Smoke, Browser-Akzeptanz und Fachabnahme |
 | Upgrade/Migration | Restore-Kopie, SQL-Migrationen, alle Testebenen |
 | laufender Betrieb | Readiness, Logs, Restarts, Speicher, Backup-Alter |
 | regelmäßig | vollständige Restore-Probe und repräsentative Fachabnahme |
