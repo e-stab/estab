@@ -55,8 +55,8 @@
                                                               <br><br>
                                                                Einsatzbefehle an Befehlsschema anpassen<br>
                                                                <b>Einheit - Auftrag - Mittel - Ziel - Weg</b> <br><br>
-                                                               Sonstige Nachrichten an W-Fragen orientieren:<br>
-                                                               <b>Wer  Wo  Was  Wann - Wie</<b>'),
+                                                               Sonstige Nachrichten an „W“-Fragen orientieren:<br>
+                                                               <b>Wer – Wo – Was – Wann – Wie</b>'),
       '12_abfzeit'     =>  array ('Abfassungszeit',           $TimeInfo),
       '13_abseinheit'  =>  array ('Absender',                 '<big><big><b>Absender</b></big></big><br>
                                                               <li>Der Verfasser trägt den Absender ein</li>

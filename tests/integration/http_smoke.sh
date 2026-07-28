@@ -826,7 +826,8 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode '16_gncopy=' \
     --data-urlencode '17_vermerke=' \
     "$base_url/4fach/mainindex.php"
-assert_body 'Liste der'
+assert_body 'Liste der verfügbaren Dateien'
+assert_body_absent 'Liste der verfÃ¼gbaren Dateien'
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/anhang.php?ah_upload_x=1"

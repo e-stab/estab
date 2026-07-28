@@ -362,6 +362,13 @@ assert_status 405 --request POST "$base_url/4fach/button.php"
 
 assert_status 200 "$base_url/language/german/helptext.php?Errorart=01_medium"
 assert_body_fixed 'Aufnahmevermerk'
+assert_status 200 "$base_url/language/german/helptext.php?Errorart=12_inhalt"
+assert_body_fixed 'Sonstige Nachrichten an „W“-Fragen orientieren:'
+assert_body_fixed '<b>Wer – Wo – Was – Wann – Wie</b>'
+if grep -Fq '</<b>' "$body"; then
+    printf 'HTTP surface: message help contains malformed closing markup\n' >&2
+    exit 1
+fi
 assert_status 400 "$base_url/language/german/helptext.php"
 assert_status 400 "$base_url/language/german/helptext.php?Errorart=unbekannt"
 assert_status 400 --get --data-urlencode 'Errorart[]=01_medium' \

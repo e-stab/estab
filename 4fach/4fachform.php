@@ -533,11 +533,11 @@ class nachrichten4fach {
         ), "", "&", PHP_QUERY_RFC3986);
         echo"<a href=\"".estab_message_html ($userManagerUrl)."\">
             <img src=\"".estab_message_html ($conf_design_path."/folder_local.gif")."\"
-                 alt=\"persÃ¶nliche Ordner verwalten\"
+                 alt=\"persönliche Ordner verwalten\"
                  width=\"32\"
                  height=\"32\"
                  border=\"0\"
-                 title=\"persÃ¶nliche Ordner verwalten\"></a>\n";
+                 title=\"persönliche Ordner verwalten\"></a>\n";
         echo "</TD>\n";
         echo "<TD>\n";
         echo "</TD>";

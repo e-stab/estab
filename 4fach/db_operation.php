@@ -61,7 +61,7 @@ class db_access {
     $result = mysql_list_tables($this->db_name);
 
     if (!$result) {
-      echo "DB Fehler, Tabellen kÃ¶nnen nicht angezeigt werden\n";
+      echo "DB-Fehler: Tabellen können nicht angezeigt werden.\n";
       echo 'MySQL Fehler: ' . mysql_error();
       exit;
     }

@@ -225,6 +225,18 @@ $assert(
     preg_match('/estab_attachment_html\s*\(\s*\$storedFilename/', $controllerSource) === 1,
     'database filename is escaped at HTML boundary'
 );
+$assert(
+    str_contains($controllerSource, 'Liste der verfügbaren Dateien'),
+    'attachment list heading is stored as valid UTF-8'
+);
+$assert(
+    !str_contains($controllerSource, 'Liste der verfÃ¼gbaren Dateien'),
+    'attachment list heading contains no UTF-8 mojibake'
+);
+$assert(
+    str_contains($controllerSource, 'Kein Menüpunkt'),
+    'attachment fallback message is stored as valid UTF-8'
+);
 
 foreach (['../../4fach/upload.php', '../../4fach/upload/upload.php'] as $legacyPath) {
     $legacySource = file_get_contents(__DIR__ . '/' . $legacyPath);

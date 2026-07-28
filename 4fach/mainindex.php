@@ -179,7 +179,7 @@ if ($messageOperation !== null) {
 
   if ($result == false){
     echo "<h1>Es besteht keine Verbindung zur Datenbank.</h1>";
-    echo "<big><b>MÃ¶gliche Ursachen:<br></b>";
+    echo "<big><b>Mögliche Ursachen:<br></b>";
     echo " 1. Datenbankserver ist nicht erreichbar weil aus.<br>";
     echo " 2. Netzwerkfehler, wenn DB-Server auf anderem Server.<br>";
     echo " 3. Benutzer oder Passwort stimmen nicht.<br><br>";
@@ -900,7 +900,7 @@ ul#topmenu li.active {
 \**********************************************************************/
   if (( $returnValue["stab"] == "meldung")){
 
-    if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> Stab Meldung lesen - Darstellung der Meldung Ã¼ber die laufende Nummer ";  echo "<br>\n";}
+    if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> Stab Meldung lesen - Darstellung der Meldung über die laufende Nummer ";  echo "<br>\n";}
 
     set_msg_read ($returnValue["00_lfd"]);
     $formdata = get_msg_by_lfd ($returnValue["00_lfd"]);

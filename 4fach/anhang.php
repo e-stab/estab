@@ -30,10 +30,10 @@ class fileupload extends file_upload {
   var $fs_comment;      // Beschreibung
   var $fs_shortname;    // Kuerzel
   var $fs_timestamp;    // Zeitstempel
-  var $fs_nextfilename; // NÃ¤chster Dateiname
+  var $fs_nextfilename; // Nächster Dateiname
 
   var $ff_savename ;    // Name der gespeicherten Datei g.g. Darstellung im Menue
-  var $ff_filename ;    // UrsprÃ¼nglicher Dateiname
+  var $ff_filename ;    // Ursprünglicher Dateiname
   var $ff_comment  ;    // Beschreibung Faxkopf
   var $ff_timestamp;    // Zeitstempel
   var $ff_kuerzel  ;    // Kuerzel des Fm
@@ -49,10 +49,10 @@ class fileupload extends file_upload {
            8 : reserviert
 
     Beschreibung:
-      Wenn diese Routine aufgerufen wird mÃ¶chte man hier einen freien
+      Wenn diese Routine aufgerufen wird möchte man hier einen freien
       Dateinamen. Das bedeutet :
-      1. Alle Reservierungen in der Datenbank fÃ¼r diese Session_ID kÃ¶nnen
-         gelÃ¶scht werden. d.h. erstmal alle Datenbankreservierungen lÃ¶schen.
+      1. Alle Reservierungen in der Datenbank für diese Session_ID können
+         gelöscht werden. d.h. erstmal alle Datenbankreservierungen löschen.
       2.
 
   \***************************************************************************/
@@ -151,7 +151,7 @@ class fileupload extends file_upload {
                                 2 -
                                 1 - gesetzt
     Beschreibung:
-      liest und Ã¤ndert die DatenbankeintrÃ¤ge fÃ¼r die Dateinamen.
+      liest und ändert die Datenbankeinträge für die Dateinamen.
 
   \***************************************************************************/
   function change_status_in_db ($change, $filename, $status){
@@ -263,8 +263,8 @@ class fileupload extends file_upload {
   Funktion:  scan4nextfilename ()
   Parameter:
   Beschreibung:
-    1. PrÃ¼fe kausalitÃ¤t Dateien und Datenbank
-    2. Ziehe nÃ¤chsten Wert aus der Datenbank
+    1. Prüfe Kausalität Dateien und Datenbank
+    2. Ziehe nächsten Wert aus der Datenbank
     3. Setze Status in der Datenbank auf Vergeben.
 
 \*****************************************************************************/
@@ -440,22 +440,22 @@ if ( debug == true ){
 
 /*****************************************************************************\
 
-100 - AnhangmenÃ¼ + Anhange zur Auswahl
-  Im HauptmenÃ¼ [AnhÃ¤nge] geklickt
+100 - Anhangmenü + Anhänge zur Auswahl
+  Im Hauptmenü [Anhänge] geklickt
   GET =  ["fm_anhang_x"]
      ==> Liste anzeigen mit Auswahl oder Uploadbutton
   101 - absenden
   102 - abbrechen
   103 - upload
 
-101 - Aufruf Nachrichtenvordruck mit Ã¼bernahme altdaten
+101 - Aufruf Nachrichtenvordruck mit Übernahme Altdaten
 
-103 - Datei hochladen MenÃ¼
-  Im AnhangmenÃ¼ [Upload] geklickt
+103 - Datei-hochladen-Menü
+  Im Anhangmenü [Upload] geklickt
   GET =  ["anhang"]=>  string(10) "ah_auswahl"
          ["ah_auswahl_x"]=>  string(2) "19"
          ["ah_auswahl_y"]=>  string(1) "6" } #
-     ==> Vordruck mit Anhang Ã¶ffnen
+     ==> Vordruck mit Anhang öffnen
   111 - absenden
   112 - abbrechen
 
@@ -529,7 +529,7 @@ if ( debug == true ){
        )
       ){
 
-    if ( debug == true ){ echo "### 417 anhang.php Vordruck aufrufen mit Daten fÃ¼llen ";  echo "<br>\n";}
+    if ( debug == true ){ echo "### 417 anhang.php Vordruck aufrufen mit Daten füllen ";  echo "<br>\n";}
 
     $keys = array_keys ($_GET);
     $ahkey = array ();
@@ -605,7 +605,7 @@ require_once ("./db_operation.php");  // Datenbank operationen
 
   /**********************************************************************\
     Funktion: readFiles_from_db ()
-    lese die DatensÃ¤tze aus der Datenbank
+    lese die Datensätze aus der Datenbank
     benoetigte Datei:
   \**********************************************************************/
   function readFiles_from_db(){
@@ -621,7 +621,7 @@ require_once ("./db_operation.php");  // Datenbank operationen
 
   /**********************************************************************\
     Funktion: readFiles_from_db ()
-    lese die DatensÃ¤tze aus der Datenbank
+    lese die Datensätze aus der Datenbank
     benoetigte Datei:
   \**********************************************************************/
   function readrecord_from_db($anhangname){
@@ -683,7 +683,7 @@ require_once ("./db_operation.php");  // Datenbank operationen
         echo "</fieldset>\n";
 
         echo "<fieldset>";
-    echo "<legend>Liste der verfÃ¼gbaren Dateien</legend>\n";
+    echo "<legend>Liste der verfügbaren Dateien</legend>\n";
     echo "<table border=\"1\" cellspacing=\"2\" cellpeding=\"3\" bgcolor=\"#E0E0E0\">\n";
 
     $db_file_data = readFiles_from_db();
@@ -754,7 +754,7 @@ require_once ("./db_operation.php");  // Datenbank operationen
   }
 
 /***********************************************************************\
-   Steuerung Ã¼ber ein Sessioncookie
+   Steuerung über ein Sessioncookie
   anhang_menue();
      $_SESSION ["UPLOAD"] ==
         "fileselect" :
@@ -1021,7 +1021,7 @@ require_once ("./db_operation.php");  // Datenbank operationen
     break;
 
     default:
-      echo "<big><big><big>Kein MenÃ¼punkt !!!</big></big></big><br>" ;
+      echo "<big><big><big>Kein Menüpunkt!</big></big></big><br>" ;
   }
 
 

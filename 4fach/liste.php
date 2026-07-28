@@ -460,7 +460,7 @@ class Listen extends kategorien {
     $this->db_name     = $conf_4f_db ["datenbank"];
     $this->grundkatego = array (
           1 => array ("kategorie"    => "Alle",
-                      "beschreibung" => "ohne BerÃ¼cksichtigung der Kategorien"),
+                      "beschreibung" => "ohne Berücksichtigung der Kategorien"),
           2 => array ("kategorie"    => "ohne",
                       "beschreibung" => "Ohne Kategorie"));
 
