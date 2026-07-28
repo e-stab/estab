@@ -101,6 +101,34 @@ function estab_public_root(): string
     return $value . '/';
 }
 
+/** Return the configured public root including the optional deployment path. */
+function estab_application_root(): string
+{
+    return estab_public_root() . estab_base_path();
+}
+
+/**
+ * Build one application URL without ever producing a scheme-relative // path.
+ *
+ * Callers supply repository-owned relative paths. Rejecting absolute,
+ * traversal, and control-character input keeps this helper unsuitable for
+ * open redirects even if a future call accidentally forwards request data.
+ */
+function estab_application_url(string $relativePath): string
+{
+    if (
+        $relativePath === ''
+        || str_starts_with($relativePath, '/')
+        || str_contains($relativePath, '\\')
+        || str_contains($relativePath, '..')
+        || preg_match('/[\x00-\x1F\x7F]/D', $relativePath) === 1
+    ) {
+        throw new InvalidArgumentException('Application URL path must be relative');
+    }
+
+    return estab_application_root() . $relativePath;
+}
+
 /** Accept HTTPS forwarding only from an explicitly trusted, valid chain. */
 function estab_proxy_reports_https(array $server, bool $trustProxyHeaders): bool
 {

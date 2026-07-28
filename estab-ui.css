@@ -45,6 +45,25 @@
     margin: 0;
 }
 
+.estab-session-actions {
+    align-items: center;
+    display: flex;
+    flex: 0 0 auto;
+    gap: 0.6rem;
+}
+
+.estab-session-bar .estab-button-home {
+    background: transparent;
+    border-color: #dbe8f5;
+    color: #ffffff;
+}
+
+.estab-session-bar .estab-button-home:hover,
+.estab-session-bar .estab-button-home:focus {
+    background: #294b70;
+    border-color: #ffffff;
+}
+
 .estab-session-bar .estab-button-logout {
     background: #ffffff;
     border-color: #ffffff;
@@ -85,9 +104,18 @@
 }
 
 .estab-session-bar-compact .estab-session-logout {
+    margin: 0;
+}
+
+.estab-session-bar-compact .estab-session-actions {
+    align-items: stretch;
+    display: grid;
+    gap: 0.45rem;
+    grid-template-columns: 1fr;
     margin-top: 0.6rem;
 }
 
+.estab-session-bar-compact .estab-button-home,
 .estab-session-bar-compact .estab-button-logout {
     font-size: 0.88rem;
     min-width: 0;
@@ -106,10 +134,35 @@
     max-width: 100%;
 }
 
+.estab-root-header {
+    align-items: center;
+    background: var(--estab-menu-background, #f0f0f0);
+    border: 3px solid #969696;
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: minmax(4rem, 8rem) minmax(0, 1fr) minmax(4rem, 8rem);
+    margin: 1rem auto 0;
+    max-width: 64rem;
+    padding: 0.75rem 1rem;
+    text-align: center;
+}
+
+.estab-root-header p {
+    font-size: clamp(1.65rem, 4vw, 3rem);
+    font-weight: 700;
+    margin: 0;
+}
+
 .estab-root-header img,
 .estab-root-menu img {
     height: auto;
     max-width: 100%;
+}
+
+.estab-root-main {
+    margin: 0 auto;
+    max-width: 70rem;
+    padding: 0 1rem 2rem;
 }
 
 .estab-login-cta {
@@ -160,6 +213,118 @@
 
 .estab-auth-actions form {
     margin: 0;
+}
+
+.estab-root-auth-actions {
+    justify-content: center;
+}
+
+.estab-menu-section {
+    margin: 2rem auto;
+}
+
+.estab-menu-section h2 {
+    color: #172033;
+    font-family: Arial, Helvetica, sans-serif;
+    margin: 0 0 0.8rem;
+    text-align: center;
+}
+
+.estab-root-menu {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.estab-menu-card {
+    background: #ffffff;
+    border: 1px solid #8da2bd;
+    border-radius: 10px;
+    box-shadow: 0 3px 10px rgba(23, 32, 51, 0.1);
+    min-width: 0;
+}
+
+.estab-menu-link {
+    align-items: center;
+    border-radius: inherit;
+    color: #183454;
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: 5rem minmax(0, 1fr);
+    height: 100%;
+    padding: 1rem;
+    text-decoration: none;
+}
+
+.estab-menu-link:hover,
+.estab-menu-link:focus {
+    background: #eef3f8;
+    outline: 3px solid #111827;
+    outline-offset: 2px;
+}
+
+.estab-menu-icon {
+    align-items: center;
+    display: flex;
+    justify-content: center;
+}
+
+.estab-menu-icon img {
+    max-height: 4.5rem;
+}
+
+.estab-menu-copy {
+    display: grid;
+    gap: 0.4rem;
+    min-width: 0;
+}
+
+.estab-menu-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+}
+
+.estab-menu-description {
+    color: #3b4a5d;
+    font-size: 0.9rem;
+    line-height: 1.35;
+}
+
+.estab-menu-badge {
+    background: #e6edf5;
+    border-radius: 999px;
+    color: #183454;
+    display: inline-block;
+    font-size: 0.78rem;
+    font-weight: 700;
+    justify-self: start;
+    padding: 0.3rem 0.55rem;
+}
+
+.estab-menu-card-locked {
+    background: #f4f5f6;
+    border-style: dashed;
+}
+
+.estab-menu-card-locked .estab-menu-link {
+    color: #4d5968;
+}
+
+.estab-menu-card-locked .estab-menu-badge {
+    background: #fff3cd;
+    color: #664d03;
+}
+
+.estab-menu-card-administration {
+    border-color: #8b5d28;
+}
+
+.estab-menu-card-administration .estab-menu-badge {
+    background: #f6e5d0;
+    color: #623b0e;
 }
 
 .estab-button {
@@ -311,6 +476,12 @@
         width: 100%;
     }
 
+    .estab-session-actions {
+        align-items: stretch;
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+
     .estab-login-cta {
         margin: 1rem;
         padding: 1.25rem;
@@ -328,38 +499,23 @@
     .estab-auth-fields th {
         padding-bottom: 0;
     }
+
+    .estab-root-menu {
+        grid-template-columns: 1fr;
+    }
+
+    .estab-menu-link {
+        grid-template-columns: 4rem minmax(0, 1fr);
+    }
 }
 
 @media (max-width: 64rem) {
-    .estab-root-header,
-    .estab-root-menu {
+    .estab-root-header {
         width: calc(100% - 1rem);
     }
 
-    .estab-root-header tbody,
-    .estab-root-menu tbody {
-        display: block;
-    }
-
-    .estab-root-header tr {
-        display: grid;
+    .estab-root-header {
         grid-template-columns: minmax(3.5rem, 6rem) minmax(0, 1fr) minmax(3.5rem, 6rem);
-    }
-
-    .estab-root-menu tr {
-        display: grid;
-        grid-template-columns: minmax(3.5rem, 5rem) minmax(0, 1fr);
-    }
-
-    .estab-root-header td,
-    .estab-root-menu td {
-        box-sizing: border-box;
-        overflow-wrap: anywhere;
-        width: auto !important;
-    }
-
-    .estab-root-menu td:nth-child(3) {
-        display: none;
     }
 }
 

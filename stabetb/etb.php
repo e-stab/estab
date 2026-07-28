@@ -267,7 +267,7 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
 \*****************************************************************************/
   function etb_menue (){
     include ("../4fcfg/config.inc.php");
-    $action = estab_auth_html (estab_public_root ()."stabetb/etb.php");
+    $action = estab_auth_html (estab_application_url ("stabetb/etb.php"));
     echo "<form action=\"".$action."\" method=\"GET\" >\n";
     echo "<!-- Formularelemente und andere Elemente innerhalb des Formulars -->\n";
     echo "<!-- etb_menue -->\n";
@@ -331,7 +331,7 @@ var $task;
 
   function etb_eintragsmenue ($data) {
     include ("../4fcfg/config.inc.php");
-    $action = estab_auth_html (estab_public_root ()."stabetb/etb.php");
+    $action = estab_auth_html (estab_application_url ("stabetb/etb.php"));
 
     echo "<big><big>Eintrag ins \n";
     echo "<span style=\"color: rgb(255, 0, 0); font-weight: bold;\">E</span>\n";
@@ -411,7 +411,7 @@ var $task;
 \*****************************************************************************/
   function inputeinsatzstammdaten (){
   include ("../4fcfg/config.inc.php");
-    $action = estab_auth_html (estab_public_root ()."stabetb/etb.php");
+    $action = estab_auth_html (estab_application_url ("stabetb/etb.php"));
     echo "<big><big><big><b>Einsatzdaten erfassen</b></big></big></big>\n";
     echo "<!-- einsatzdatenmenue -->";
     echo "<form method=\"POST\" action=\"".$action."\" name=\"Einsatzdaten\">\n";
@@ -580,7 +580,7 @@ if ($requestMethod === "POST") {
     estab_logbook_abort (500, "Der ETB-Eintrag konnte nicht gespeichert werden.");
   }
 
-  estab_logbook_redirect (estab_public_root ()."stabetb/etb.php");
+  estab_logbook_redirect (estab_application_url ("stabetb/etb.php"));
 }
 
 if (!$etbobj->etb_titel_gesetzt) {

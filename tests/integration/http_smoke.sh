@@ -5,6 +5,19 @@ repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$repo_root"
 
 base_url=${ESTAB_TEST_BASE_URL:-http://127.0.0.1:8080}
+expected_app_root=${ESTAB_TEST_EXPECTED_APP_ROOT:-}
+if [ -z "$expected_app_root" ]; then
+    expected_app_root=${ESTAB_PUBLIC_URL:-/}
+    expected_app_root=${expected_app_root%/}
+    expected_base_path=${ESTAB_BASE_PATH:-}
+    expected_base_path=${expected_base_path#/}
+    expected_base_path=${expected_base_path%/}
+    if [ -n "$expected_base_path" ]; then
+        expected_app_root="$expected_app_root/$expected_base_path"
+    fi
+else
+    expected_app_root=${expected_app_root%/}
+fi
 test_name=${ESTAB_TEST_LOGIN_NAME:-Container Integration}
 test_code=${ESTAB_TEST_LOGIN_CODE:-e2e001}
 test_code=$(printf '%s' "$test_code" | tr '[:upper:]' '[:lower:]')
@@ -135,6 +148,9 @@ assert_session_bar() {
     fi
     for marker in \
         'Angemeldet als' \
+        "Kürzel $expected_code" \
+        "Funktion $expected_function" \
+        "Rolle $expected_role" \
         "data-estab-user-name=\"$expected_name\"" \
         "data-estab-user-code=\"$expected_code\"" \
         "data-estab-user-function=\"$expected_function\"" \
@@ -142,6 +158,7 @@ assert_session_bar() {
         'data-estab-logout-form' \
         'method="post"' \
         'target="_top"' \
+        '>Startseite</a>' \
         '4fach/logout.php' \
         'name="logout_action" value="logout"' \
         '>Abmelden</button>'
@@ -270,7 +287,18 @@ assert_status 200 "$base_url/"
 assert_body 'Nachrichtenvordruck'
 assert_body 'Infosammlung BOS'
 assert_body 'id="estab-login"'
-assert_body 'href="./4fach/index.php"'
+assert_body "href=\"$expected_app_root/4fach/index.php?login_flow=existing\""
+assert_body '>Mit bestehendem Konto anmelden</a>'
+assert_body 'Anmeldung erforderlich'
+assert_body 'Separater Administrationszugang'
+if [ "$restore_verify_only" = true ]; then
+    assert_body_absent 'id="estab-register"'
+    assert_body 'Neue Konten können auf dieser Installation nicht selbst angelegt werden'
+else
+    assert_body 'id="estab-register"'
+    assert_body "href=\"$expected_app_root/4fach/index.php?login_flow=new\""
+fi
+assert_body_absent 'href="./stabetb/etb.php"'
 assert_body_absent 'data-estab-session-bar'
 assert_body_absent 'data-estab-logout-form'
 assert_status 200 "$base_url/stabinfo/index.php"
@@ -300,8 +328,14 @@ assert_status 410 "$base_url/4fach/upload.php"
 assert_status 410 "$base_url/4fach/upload/upload.php"
 assert_status 401 "$base_url/4fadm/admin.php"
 
-# Login state must come from POST. First enter the account chooser; creating a
-# new account and using an existing one are intentionally separate flows.
+# Credentials must come from POST. The root menu may safely preselect the
+# display-only account flow with GET so both user journeys are direct.
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/mainindex.php?login_flow=existing"
+assert_body 'Mit bestehendem Konto anmelden'
+assert_body 'autocomplete="current-password"'
+
+# The legacy image button still enters the chooser for compatible clients.
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode 'login_x=12' \
@@ -453,6 +487,10 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode 'absenden_x=1' \
     "$base_url/4fach/mainindex.php"
 assert_body 'Meldung/Seite:'
+assert_body "$expected_app_root/4fach/counter.php?embedded=1"
+assert_body "$expected_app_root/4fach/vorgaben.php"
+assert_body "$expected_app_root/4fach/mainindex.php"
+assert_body_absent '//4fach/'
 if grep -Eq 'Fatal error|Uncaught (Error|TypeError)|Warning:' "$body"; then
     printf 'HTTP smoke: PHP runtime error leaked into authenticated response\n' >&2
     exit 1
@@ -862,6 +900,8 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/"
 assert_body 'id="estab-open"'
 assert_body_absent 'id="estab-login"'
+assert_body_absent 'Anmeldung erforderlich'
+assert_body 'href="./stabetb/etb.php"'
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 
 # Raw UTF-8 message storage must preserve punctuation and SQL-shaped text,
@@ -929,6 +969,22 @@ assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/vordrucke.php"
 assert_body 'Generierte Vordrucke'
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/stabinfo/l_index.php"
+assert_body 'Info-Bereiche'
+assert_body 'estab-session-bar-compact'
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/info.php?sub=Test&info=Hinweis"
+assert_body 'Problembericht'
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/language/german/helptext.php?Errorart=01_medium"
+assert_body 'Aufnahmevermerk'
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \

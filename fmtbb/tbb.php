@@ -267,7 +267,7 @@ if (debug == true){ echo "tbb_tableexist==>"; var_dump($this->tbb_titel_tbl); ec
 \*****************************************************************************/
   function tbb_menue (){
     include ("../4fcfg/config.inc.php");
-    $action = estab_auth_html (estab_public_root ()."fmtbb/tbb.php");
+    $action = estab_auth_html (estab_application_url ("fmtbb/tbb.php"));
     echo "<form action=\"".$action."\" method=\"GET\" >\n";
     echo "<!-- Formularelemente und andere Elemente innerhalb des Formulars -->\n";
     echo "<!-- tbb_menue -->\n";
@@ -333,7 +333,7 @@ var $task ;
 
   function tbb_eintragsmenue ($data) {
     include ("../4fcfg/config.inc.php");
-    $action = estab_auth_html (estab_public_root ()."fmtbb/tbb.php");
+    $action = estab_auth_html (estab_application_url ("fmtbb/tbb.php"));
 
     echo "<big><big>Eintrag ins \n";
     echo "<span style=\"color: rgb(255, 0, 0); font-weight: bold;\">T</span>\n";
@@ -413,7 +413,7 @@ var $task ;
 \*****************************************************************************/
   function inputeinsatzstammdaten (){
   include ("../4fcfg/config.inc.php");
-    $action = estab_auth_html (estab_public_root ()."fmtbb/tbb.php");
+    $action = estab_auth_html (estab_application_url ("fmtbb/tbb.php"));
     echo "<big><big><big><b>Einsatzdaten erfassen</b></big></big></big>\n";
     echo "<!-- einsatzdatenmenue -->";
     echo "<form method=\"POST\" action=\"".$action."\" name=\"Einsatzdaten\">\n";
@@ -575,7 +575,7 @@ if ($requestMethod === "POST") {
     estab_logbook_abort (500, "Der TBB-Eintrag konnte nicht gespeichert werden.");
   }
 
-  estab_logbook_redirect (estab_public_root ()."fmtbb/tbb.php");
+  estab_logbook_redirect (estab_application_url ("fmtbb/tbb.php"));
 }
 
 if (!$tbbobj->tbb_titel_gesetzt) {

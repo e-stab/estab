@@ -38,6 +38,27 @@ $assert($invalidIdentifierRejected, 'invalid identifier rejected');
 
 putenv('ESTAB_BASE_PATH=estab/sub');
 $assert(estab_base_path() === 'estab/sub/', 'base path normalisation');
+putenv('ESTAB_PUBLIC_URL=/');
+$assert(
+    estab_application_root() === '/estab/sub/'
+        && estab_application_url('4fach/mainindex.php') === '/estab/sub/4fach/mainindex.php',
+    'application URL does not preserve the deployment base path'
+);
+putenv('ESTAB_BASE_PATH=');
+$assert(
+    estab_application_url('4fach/mainindex.php') === '/4fach/mainindex.php'
+        && !str_starts_with(estab_application_url('4fach/mainindex.php'), '//'),
+    'root deployment produced a scheme-relative application URL'
+);
+foreach (['', '/absolute', '../escape', 'safe\\escape', "line\nbreak"] as $invalidRelativeUrl) {
+    $invalidRelativeRejected = false;
+    try {
+        estab_application_url($invalidRelativeUrl);
+    } catch (InvalidArgumentException) {
+        $invalidRelativeRejected = true;
+    }
+    $assert($invalidRelativeRejected, 'unsafe relative application URL accepted');
+}
 putenv('ESTAB_BASE_PATH=../escape');
 $invalidPathRejected = false;
 try {
@@ -49,6 +70,12 @@ $assert($invalidPathRejected, 'base path traversal rejected');
 
 putenv('ESTAB_PUBLIC_URL=https://estab.example.test/base');
 $assert(estab_public_root() === 'https://estab.example.test/base/', 'absolute public URL');
+putenv('ESTAB_BASE_PATH=dispatch/site');
+$assert(
+    estab_application_url('fmtbb/tbb.php')
+        === 'https://estab.example.test/base/dispatch/site/fmtbb/tbb.php',
+    'absolute application URL lost its deployment base path'
+);
 putenv('ESTAB_PUBLIC_URL=javascript:alert(1)');
 $invalidUrlRejected = false;
 try {

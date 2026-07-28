@@ -51,10 +51,7 @@ estab_logout_current_session(
 );
 
 header(
-    'Location: '
-        . estab_public_root()
-        . estab_base_path()
-        . '4fach/index.php',
+    'Location: ' . estab_application_url('4fach/index.php'),
     true,
     303
 );

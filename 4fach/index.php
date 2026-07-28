@@ -1,4 +1,29 @@
-<?php session_start ();
+<?php
+require_once __DIR__ . '/../app/auth.php';
+
+$loginFlow = null;
+if ($_GET !== []) {
+   if (
+      array_keys($_GET) !== ['login_flow']
+      || !is_string($_GET['login_flow'])
+   ) {
+      http_response_code(400);
+      header('Content-Type: text/plain; charset=UTF-8');
+      echo 'Ungültige Anmeldeauswahl.';
+      exit;
+   }
+   $loginFlow = estab_auth_login_flow($_GET);
+   if ($loginFlow === null) {
+      http_response_code(400);
+      header('Content-Type: text/plain; charset=UTF-8');
+      echo 'Ungültige Anmeldeauswahl.';
+      exit;
+   }
+}
+
+session_start();
+$mainFrameUrl = './mainindex.php'
+   . ($loginFlow === null ? '' : '?login_flow=' . rawurlencode($loginFlow));
 /*****************************************************************************\
    Datei: index.php
 
@@ -28,7 +53,7 @@
            <FRAME NAME="status" TITLE="status" SRC="./status.php?embedded=1" SCROLLING=NO MARGINWIDTH="0" MARGINHEIGHT="0" FRAMEBORDER="0" NORESIZE>
          </FRAMESET>
    </FRAMESET>
-   <FRAME NAME="mainframe" TITLE="mainframe" SRC="./mainindex.php" SCROLLING=AUTO MARGINWIDTH="3" MARGINHEIGHT="3" FRAMEBORDER="0">
+   <FRAME NAME="mainframe" TITLE="mainframe" SRC="<?= estab_auth_html($mainFrameUrl) ?>" SCROLLING=AUTO MARGINWIDTH="3" MARGINHEIGHT="3" FRAMEBORDER="0">
 </FRAMESET>
 </HEAD>
 </HTML>

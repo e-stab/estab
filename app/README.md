@@ -11,8 +11,9 @@ Legacy-Bildbuttons.
 ## Sicherheits- und Kompatibilitätsentscheidungen
 
 - Name, Kürzel, Funktion und Kennwort werden beim Login nur aus `POST` gelesen.
-  Der Konto-Flow wird ebenfalls ausschließlich per `POST` als `existing` oder
-  `new` übermittelt. Ein unbekanntes Bestandskonto wird nicht mehr implizit
+  Die Startseite darf ausschließlich den darstellenden Konto-Flow per streng
+  begrenztem `GET` als `existing` oder `new` vorwählen; Zugangsdaten und jede
+  Zustandsänderung bleiben `POST` plus Session-CSRF. Ein unbekanntes Bestandskonto wird nicht mehr implizit
   registriert; der Neuanlage-Flow meldet kein vorhandenes Konto an.
   Historische Ein-Kennwort-POSTs bleiben reine Bestandsanmeldungen. Der alte
   Zwei-Kennwort-Request mit `2teskennwort=Yes` behält für direkte Legacy-Clients
@@ -69,7 +70,15 @@ Legacy-Bildbuttons.
   werden nicht durch automatische globale Ausgabe verändert. Ebenso lässt der
   Ausgabehandler explizite Plain-Text-/JSON-Fehler und Redirects unverändert;
   ein normaler Nutztext kann den eindeutigen HTML-Marker der Leiste nicht
-  unterdrücken.
+  unterdrücken. Ein zentraler URL-Builder verbindet öffentliche Basis-URL,
+  optionalen Deployment-Pfad und interne Ziele ohne schema-relative
+  Doppel-Slashes. Im zusammengesetzten Frameset bleibt nur die kompakte,
+  persistente Navigationsleiste sichtbar; der Hauptframe entfernt seine
+  Standalone-Leiste vor der ersten Darstellung.
+- `root_menu.php` wandelt die historischen Menüdefinitionen in valides,
+  escaped Karten-Markup mit genau einem Tastaturziel pro Modul um. Geschützte
+  Ziele führen anonym zur Anmeldung, während Administration und öffentliche
+  Dokumentation sichtbar getrennte Zugriffsklassen behalten.
 - Ein aktives Konto behält seine gespeicherte Funktion. Erst nach dem Abmelden
   darf die historische „Funktion Ummelden“-Logik einem inaktiven Konto eine
   andere Funktion zuweisen; ein Request kann daher nicht die Sitzungsrolle

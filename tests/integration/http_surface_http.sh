@@ -3,6 +3,19 @@
 set -eu
 
 base_url=${ESTAB_TEST_BASE_URL:-http://127.0.0.1:8080}
+expected_app_root=${ESTAB_TEST_EXPECTED_APP_ROOT:-}
+if [ -z "$expected_app_root" ]; then
+    expected_app_root=${ESTAB_PUBLIC_URL:-/}
+    expected_app_root=${expected_app_root%/}
+    expected_base_path=${ESTAB_BASE_PATH:-}
+    expected_base_path=${expected_base_path#/}
+    expected_base_path=${expected_base_path%/}
+    if [ -n "$expected_base_path" ]; then
+        expected_app_root="$expected_app_root/$expected_base_path"
+    fi
+else
+    expected_app_root=${expected_app_root%/}
+fi
 work_dir=$(mktemp -d /tmp/estab-http-surface.XXXXXX)
 trap 'rm -rf -- "$work_dir"' EXIT HUP INT TERM
 body=$work_dir/body
@@ -71,7 +84,7 @@ for label in \
     'Generierte Vordrucke' \
     'Liste aller Meldungen' \
     'Infosammlung BOS' \
-    'administrative Massnahme' \
+    'Administration' \
     'Einsatztagebuch' \
     'Technisches Betriebsbuch' \
     'Nachweisung' \
@@ -80,8 +93,17 @@ do
     assert_body_fixed "$label"
 done
 assert_body_fixed 'id="estab-login"'
-assert_body_fixed 'href="./4fach/index.php"'
-assert_body_fixed '>Anmelden oder Konto anlegen</a>'
+assert_body_fixed "href=\"$expected_app_root/4fach/index.php?login_flow=existing\""
+assert_body_fixed '>Mit bestehendem Konto anmelden</a>'
+assert_body_fixed 'id="estab-register"'
+assert_body_fixed "href=\"$expected_app_root/4fach/index.php?login_flow=new\""
+assert_body_fixed '>Neues Konto anlegen</a>'
+assert_body_fixed 'Anmeldung erforderlich'
+assert_body_fixed 'Separater Administrationszugang'
+if grep -Fq 'href="./stabetb/etb.php"' "$body"; then
+    printf 'HTTP surface: anonymous root menu exposes a protected module target\n' >&2
+    exit 1
+fi
 if grep -Fq 'data-estab-session-bar' "$body"; then
     printf 'HTTP surface: anonymous root page contains authenticated session UI\n' >&2
     exit 1
@@ -115,6 +137,11 @@ assert_status 200 "$base_url/4fach/index.php"
 for frame in './counter.php?embedded=1' './vorgaben.php' './status.php?embedded=1' './mainindex.php'; do
     assert_body_fixed "$frame"
 done
+assert_status 200 "$base_url/4fach/index.php?login_flow=existing"
+assert_body_fixed 'SRC="./mainindex.php?login_flow=existing"'
+assert_status 200 "$base_url/4fach/index.php?login_flow=new"
+assert_body_fixed 'SRC="./mainindex.php?login_flow=new"'
+assert_status 400 "$base_url/4fach/index.php?login_flow=unknown"
 assert_nonempty_200 "$base_url/4fach/counter.php"
 if grep -Fq 'data-estab-session-bar' "$body"; then
     printf 'HTTP surface: anonymous counter contains authenticated session UI\n' >&2
@@ -136,6 +163,14 @@ if grep -Fq 'data-estab-session-bar' "$body"; then
     printf 'HTTP surface: anonymous login page contains authenticated session UI\n' >&2
     exit 1
 fi
+
+assert_status 200 "$base_url/4fach/mainindex.php?login_flow=existing"
+assert_body_fixed 'Mit bestehendem Konto anmelden'
+assert_body_fixed 'autocomplete="current-password"'
+assert_status 200 "$base_url/4fach/mainindex.php?login_flow=new"
+assert_body_fixed 'Neues Funktionskonto anlegen'
+assert_body_fixed 'name="kennwort2"'
+assert_status 403 "$base_url/4fach/mainindex.php?login_flow=unknown"
 
 assert_status 405 "$base_url/4fach/logout.php"
 assert_status 403 --request POST \
@@ -174,6 +209,10 @@ assert_no_insecure_resource
 assert_nonempty_200 "$base_url/stabinfo/f_info.php"
 assert_no_insecure_resource
 assert_status 200 "$base_url/stabinfo/l_index.php"
+if grep -Fq 'data-estab-session-bar' "$body"; then
+    printf 'HTTP surface: anonymous BOS navigation contains authenticated session UI\n' >&2
+    exit 1
+fi
 assert_no_insecure_resource
 for linked_info in \
     Buchstabier.html \

@@ -194,10 +194,12 @@ if ($messageOperation !== null) {
 
 /**********************************************************************\
 \**********************************************************************/
-  function resetframeset ($rootpath) {
+  function resetframeset () {
     global $conf_4f;
     pre_html ("reset", "Framereset ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"], ""); // Normaler Seitenaufbau mit Auffrischung
-    echo "<body onLoad=\"FramesVeraendern('".$rootpath."/4fach/counter.php?embedded=1','counter','".$rootpath."/4fach/vorgaben.php','vorgaben','".$rootpath."/4fach/mainindex.php','mainframe')\">";
+    echo "<body onload=\"".
+         estab_auth_html (estab_session_ui_frame_refresh_script ()).
+         "\">";
   }
 
 
@@ -448,10 +450,17 @@ ANTWORT % WEITERLEITUNG
   /**********************************************************************\
     Es kommen Anmeldedaten die geprueft und gespeichert werden muessen
   \**********************************************************************/
-  // Identität und Kennwort werden ausschließlich aus einem POST-Request gelesen.
-  // GET bleibt für die zahlreichen historischen Nicht-Login-Aktionen erhalten.
+  // Identität und Kennwort werden ausschließlich aus einem POST-Request
+  // gelesen. GET darf nur den rein darstellenden Konto-Flow vorwählen.
   $loginData = (($_SERVER ["REQUEST_METHOD"] ?? "GET") === "POST") ? $_POST : array ();
-  $loginFlow = estab_auth_login_flow ($loginData);
+  $loginFlowRequest = $loginData;
+  if (
+    (($_SERVER ["REQUEST_METHOD"] ?? "GET") === "GET")
+    && array_keys ($_GET) === array ("login_flow")
+  ) {
+    $loginFlowRequest = $_GET;
+  }
+  $loginFlow = estab_auth_login_flow ($loginFlowRequest);
   $loginError = "";
   if ($loginFlow !== null) {
     $_SESSION ["menue"] = "LOGIN";
@@ -494,7 +503,7 @@ ANTWORT % WEITERLEITUNG
       $error = check_save_user ($loginData, $loginError);
       if (!$error) {
         $_SESSION ["menue"] = "ROLLE";
-        resetframeset ($conf_urlroot.$conf_web["pre_path"]);
+        resetframeset ();
       }
     }
   }
@@ -563,7 +572,7 @@ ANTWORT % WEITERLEITUNG
       }
 
       if ( !$weiterantwort ){
-        resetframeset ($conf_urlroot.$conf_web ["pre_path"]);
+        resetframeset ();
       }
     }
   } elseif ( ( ($returnValue["task"] == "FM-Ausgang_Sichter") OR
@@ -1137,7 +1146,7 @@ Nachricht als Sichtung anzeigen
      );
      include_once ("./logoff.php");
 
-     resetframeset ($conf_urlroot.$conf_web ["pre_path"]);
+     resetframeset ();
      exit;
 
   } // isset ($returnValue["m2_abmelden_x"]

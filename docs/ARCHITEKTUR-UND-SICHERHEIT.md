@@ -91,7 +91,9 @@ bewusste Betriebsentscheidung und kein Ersatz für Netzsegmentierung oder
 organisatorische Benutzerfreigabe.
 
 Der anonyme Einstieg bindet die fachliche Absicht an einen streng validierten
-POST-Modus: `existing` darf ausschließlich einen vorhandenen Datensatz
+Modus: Ein exakter, zustandsfreier `GET` darf von der Startseite lediglich
+`existing` oder `new` zur Anzeige vorwählen. Das anschließende `POST`
+`existing` darf ausschließlich einen vorhandenen Datensatz
 authentisieren, `new` ausschließlich einen noch nicht vergebenen Datensatz
 anlegen. Widersprüchliche Modus-/Kennwortbestätigungswerte werden vor dem
 Legacy-Controller abgewiesen. Jeder Browser-POST mit Zugangsdaten benötigt
@@ -109,6 +111,13 @@ Funktion außerdem der gespeicherten Zuordnung entsprechen; nur die bestehende
 Ummeldelogik für inaktive Konten darf Funktion und daraus abgeleitete Rolle
 ändern.
 
+Das Root-Menü klassifiziert jedes Ziel als öffentlich, Anwendung oder
+Administration. Geschützte Anwendungsmodule sind anonym nicht direkt
+verlinkt, sondern als „Anmeldung erforderlich“ gekennzeichnet und mit dem
+Anmeldeeinstieg verbunden. Dadurch bleibt die Funktionsübersicht sichtbar,
+ohne Benutzer auf technisch korrekte, aber unverständliche 403-Antworten zu
+schicken. Icon und Text bilden gemeinsam genau einen Link.
+
 Die ausgewählten geschützten HTML-Controller verwenden
 `app/session_ui.php` als gemeinsame Ausgabegrenze. Die Leiste zeigt
 HTML-escaped Name, Kürzel, Funktion und die serverseitig abgeleitete Rolle und
@@ -119,6 +128,11 @@ Leiste kompakt in der Navigation gerendert; eigenständige Fachmodule und der
 bereits authentifizierte Root-Einstieg erhalten dieselbe Identität. Direkt
 aufgerufene Status-/Zählerframes zeigen sie ebenfalls kompakt; ihre vom
 Frameset explizit als eingebettet markierten Aufrufe verzichten auf Duplikate.
+Der rechte Hauptframe entfernt seine für Standalone-Aufrufe vorgesehene Leiste
+im zusammengesetzten Frameset unmittelbar per statischem Inline-Guard, sodass
+genau eine sichtbare Identität und ein Logout verbleiben. Der BOS-Bereich
+behält eine kompakte Leiste im persistenten Navigationsframe; aktive
+Hilfe-/Problem-Popups verwenden dieselbe Ausgabegrenze.
 Explizite Nicht-HTML-Antworten und Redirects passieren den Ausgabehandler
 unverändert.
 

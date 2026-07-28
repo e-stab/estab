@@ -2,6 +2,10 @@
 
 declare(strict_types=1);
 
+session_start();
+require_once __DIR__ . '/../../app/session_ui.php';
+estab_session_ui_start($_SESSION);
+
 /** Stop malformed or unknown help lookups without exposing internal keys. */
 function estab_helptext_error(int $status, string $message): void
 {

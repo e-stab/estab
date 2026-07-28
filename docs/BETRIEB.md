@@ -47,7 +47,7 @@ Wichtige Werte in `.env`:
 | `ESTAB_ADMIN_USER` | `estab-admin` | Benutzer für HTTP Basic Auth unter `/4fadm` |
 | `ESTAB_HTTP_BIND` | `127.0.0.1` | veröffentlichte Hostadresse |
 | `ESTAB_HTTP_PORT` | `8080` | veröffentlichter Hostport |
-| `ESTAB_PUBLIC_URL` | `http://127.0.0.1:8080/` | kanonische öffentliche Basis-URL, immer mit passendem Schema und Pfad |
+| `ESTAB_PUBLIC_URL` | `/` | portable Browser-Basis; nur bei garantiert einer externen Adresse auf eine absolute HTTP(S)-URL setzen |
 | `ESTAB_BASE_PATH` | leer | historischer Installationspfad im Document Root; im gelieferten Root-Image leer lassen |
 | `ESTAB_ORGANISATION` | `Einsatzleitung` | angezeigte Dienststelle/Organisation |
 | `ESTAB_AUTHORITY_CODE` | `EL` | Hoheits-/Organisationskürzel |
@@ -166,9 +166,9 @@ persistenten Daten und ist ein destruktiver Neuaufbau.
 
 Die Anwendung hat zwei getrennte Anmeldebereiche:
 
-1. Funktionsbenutzer öffnen über den Anmeldebutton auf `/` den vollständigen
-   Frameset unter `/4fach/index.php`. Dort wählen sie ausdrücklich zwischen
-   einem bestehenden und einem neuen Funktionskonto. Neue Kennwörter werden
+1. Funktionsbenutzer wählen auf `/` unmittelbar „Mit bestehendem Konto
+   anmelden“ oder – sofern freigeschaltet – „Neues Konto anlegen“. Das
+   Frameset öffnet direkt das passende Formular. Neue Kennwörter werden
    mit `password_hash()` gespeichert; ein beim Altimport vorhandenes
    Klartextkennwort wird beim ersten erfolgreichen Login transparent ersetzt.
 2. `/4fadm` verwendet den in `.env` konfigurierten Admin-Benutzer und das
@@ -198,7 +198,16 @@ eStab-Browsersitzung und führt mit HTTP 303 zum Anmeldeeinstieg zurück.
 Mehrere Tabs teilen sich dieselbe Browsersitzung und sind danach gemeinsam
 abgemeldet. Werden Status- oder Zählerframe direkt in einem Tab geöffnet,
 zeigen sie die kompakte Leiste selbst; im vollständigen Frameset erscheint sie
-zur besseren Bedienbarkeit nur einmal in der Navigation.
+zur besseren Bedienbarkeit nur einmal in der Navigation. Über „Startseite“
+gelangen Benutzer aus jedem Fachmodul zur nun freigeschalteten
+Modulübersicht. Der BOS-Bereich zeigt die Leiste dauerhaft links neben seinen
+statischen Informationsseiten; Hilfe- und Problem-Popups zeigen sie im
+jeweiligen Fenster.
+
+Vor der Anmeldung bleiben geschützte Module auf der Startseite zur Orientierung
+sichtbar, tragen aber die Kennzeichnung „Anmeldung erforderlich“ und führen
+zum Anmeldeeinstieg statt auf eine 403-Fehlerseite. Die Administration ist
+explizit als separater Zugang markiert.
 
 Diese Schaltfläche beendet ausschließlich die eStab-Funktionssitzung. Die
 Administration nutzt HTTP Basic Auth; dessen Zugangsdaten verwaltet der

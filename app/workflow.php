@@ -15,7 +15,14 @@ function estab_workflow_public_login_request(array $server, array $get, array $p
 {
     $method = strtoupper((string) ($server['REQUEST_METHOD'] ?? 'GET'));
     if ($method === 'GET') {
-        return $get === [] && $post === [];
+        if ($post !== []) {
+            return false;
+        }
+        if ($get === []) {
+            return true;
+        }
+        return array_keys($get) === ['login_flow']
+            && estab_auth_login_flow($get) !== null;
     }
     if ($method !== 'POST' || $get !== [] || $post === []) {
         return false;

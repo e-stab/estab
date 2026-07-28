@@ -51,6 +51,7 @@ $assert(
     str_contains($markup, 'method="post"')
         && str_contains($markup, 'target="_top"')
         && str_contains($markup, '4fach/logout.php')
+        && str_contains($markup, '>Startseite</a>')
         && str_contains($markup, 'name="logout_action" value="logout"')
         && str_contains($markup, '>Abmelden</button>'),
     'logout form contract incomplete'
@@ -62,8 +63,15 @@ $assert(
 
 $compact = estab_session_ui_markup($identity, $token, true);
 $assert(
-    str_contains($compact, 'estab-session-bar-compact'),
+    str_contains($compact, 'estab-session-bar-compact')
+        && !str_contains($compact, 'data-estab-mainframe-guard'),
     'compact frame presentation missing'
+);
+$assert(
+    str_contains($markup, 'data-estab-mainframe-guard')
+        && str_contains($markup, 'window.name==="mainframe"')
+        && str_contains($markup, 'bar.remove()'),
+    'full session bar is not suppressed in the composed main frame'
 );
 
 $originalPublicUrl = getenv('ESTAB_PUBLIC_URL');
@@ -72,6 +80,7 @@ putenv('ESTAB_PUBLIC_URL=https://example.invalid/gateway');
 putenv('ESTAB_BASE_PATH=dispatch/site');
 $scopedMarkup = estab_session_ui_markup($identity, $token);
 $scopedStylesheet = estab_session_ui_stylesheet();
+$scopedFrameRefresh = estab_session_ui_frame_refresh_script();
 $assert(
     str_contains(
         $scopedMarkup,
@@ -85,6 +94,46 @@ $assert(
         'href="https://example.invalid/gateway/dispatch/site/estab-ui.css"'
     ),
     'session stylesheet did not preserve public URL and deployment base path'
+);
+$assert(
+    str_contains(
+        $scopedMarkup,
+        'href="https://example.invalid/gateway/dispatch/site/"'
+    ),
+    'session home link did not preserve public URL and deployment base path'
+);
+$assert(
+    str_contains(
+        $scopedFrameRefresh,
+        '"https://example.invalid/gateway/dispatch/site/4fach/counter.php?embedded=1"'
+    )
+        && str_contains(
+            $scopedFrameRefresh,
+            '"https://example.invalid/gateway/dispatch/site/4fach/vorgaben.php"'
+        )
+        && str_contains(
+            $scopedFrameRefresh,
+            '"https://example.invalid/gateway/dispatch/site/4fach/mainindex.php"'
+        ),
+    'frame refresh did not preserve public URL and deployment base path'
+);
+if ($originalPublicUrl === false) {
+    putenv('ESTAB_PUBLIC_URL');
+} else {
+    putenv('ESTAB_PUBLIC_URL=' . $originalPublicUrl);
+}
+if ($originalBasePath === false) {
+    putenv('ESTAB_BASE_PATH');
+} else {
+    putenv('ESTAB_BASE_PATH=' . $originalBasePath);
+}
+putenv('ESTAB_PUBLIC_URL=/');
+putenv('ESTAB_BASE_PATH=');
+$rootFrameRefresh = estab_session_ui_frame_refresh_script();
+$assert(
+    str_contains($rootFrameRefresh, '"/4fach/counter.php?embedded=1"')
+        && !str_contains($rootFrameRefresh, '"//4fach/'),
+    'root frame refresh produced a scheme-relative URL'
 );
 if ($originalPublicUrl === false) {
     putenv('ESTAB_PUBLIC_URL');
@@ -119,6 +168,30 @@ $assert(
     estab_session_ui_document_has_bar($markerTextInjected)
         && str_contains($markerTextInjected, 'data-estab-logout-form'),
     'plain marker text suppressed the real session bar'
+);
+$stylesheetTextDocument = str_replace(
+    'Inhalt',
+    'Nutztext estab-ui.css ist kein Stylesheet-Link',
+    $document
+);
+$stylesheetTextInjected = estab_session_ui_inject_document(
+    $stylesheetTextDocument,
+    $markup
+);
+$assert(
+    estab_session_ui_document_has_stylesheet($stylesheetTextInjected)
+        && substr_count($stylesheetTextInjected, 'estab-ui.css') === 2,
+    'plain stylesheet filename suppressed the real shared stylesheet'
+);
+$prelinkedDocument = str_replace(
+    '</head>',
+    estab_session_ui_stylesheet() . '</head>',
+    $document
+);
+$prelinkedInjected = estab_session_ui_inject_document($prelinkedDocument, $markup);
+$assert(
+    substr_count($prelinkedInjected, 'estab-ui.css') === 1,
+    'existing shared stylesheet link was duplicated'
 );
 $fragment = estab_session_ui_inject_document('<table><tr><td>Inhalt</td></tr></table>', $markup);
 $assert(
@@ -192,6 +265,9 @@ $bufferedSurfaces = [
     '4fueltg/ue_ltg.php',
     'stabetb/etb.php',
     'fmtbb/tbb.php',
+    'stabinfo/l_index.php',
+    '4fach/info.php',
+    'language/german/helptext.php',
 ];
 foreach ($bufferedSurfaces as $surface) {
     $source = file_get_contents($root . '/' . $surface);
@@ -241,8 +317,12 @@ $assert(
         && str_contains($endpointSource, "if (\$method !== 'POST')")
         && str_contains($endpointSource, 'estab_csrf_require_post')
         && str_contains($endpointSource, "'logout_action'")
+        && str_contains(
+            $endpointSource,
+            "estab_application_url('4fach/index.php')"
+        )
         && str_contains($endpointSource, '303'),
-    'standalone logout endpoint lacks its POST, CSRF, action, or redirect contract'
+    'standalone logout endpoint lacks its POST, CSRF, action, safe URL, or redirect contract'
 );
 $authSource = file_get_contents($root . '/app/auth.php');
 $assert(

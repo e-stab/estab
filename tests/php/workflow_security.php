@@ -13,6 +13,16 @@ $assert = static function (bool $condition, string $message) use (&$assertions):
 };
 
 $assert(estab_workflow_public_login_request(['REQUEST_METHOD' => 'GET'], [], []), 'empty login page rejected');
+foreach (['existing', 'new'] as $loginFlow) {
+    $assert(
+        estab_workflow_public_login_request(
+            ['REQUEST_METHOD' => 'GET'],
+            ['login_flow' => $loginFlow],
+            []
+        ),
+        'safe GET account-flow selection rejected'
+    );
+}
 $assert(
     estab_workflow_public_login_request(['REQUEST_METHOD' => 'POST'], [], ['login' => 'Anmelden']),
     'login transition rejected'
@@ -183,7 +193,18 @@ if ($legacyModeBefore === false) {
 }
 foreach ([
     ['REQUEST_METHOD' => 'GET', 'get' => ['reset_record' => '1'], 'post' => []],
-    ['REQUEST_METHOD' => 'GET', 'get' => ['login_flow' => 'new'], 'post' => []],
+    ['REQUEST_METHOD' => 'GET', 'get' => ['login_flow' => 'unknown'], 'post' => []],
+    ['REQUEST_METHOD' => 'GET', 'get' => ['login_flow' => ['new']], 'post' => []],
+    [
+        'REQUEST_METHOD' => 'GET',
+        'get' => ['login_flow' => 'new', 'task' => 'Stab_schreiben'],
+        'post' => [],
+    ],
+    [
+        'REQUEST_METHOD' => 'GET',
+        'get' => ['login_flow' => 'new'],
+        'post' => ['login_flow' => 'new'],
+    ],
     ['REQUEST_METHOD' => 'POST', 'get' => [], 'post' => ['login' => 'Anmelden', 'reset_record' => '1']],
     ['REQUEST_METHOD' => 'POST', 'get' => [], 'post' => ['login_flow' => 'unknown']],
     ['REQUEST_METHOD' => 'POST', 'get' => [], 'post' => ['login_flow' => ['existing']]],

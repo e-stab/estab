@@ -8,7 +8,7 @@ require_once __DIR__ . '/csrf.php';
 /** Return the configured browser root used by shared session controls. */
 function estab_session_ui_root(): string
 {
-    return estab_public_root() . estab_base_path();
+    return estab_application_root();
 }
 
 /** Return the shared stylesheet element for standalone application pages. */
@@ -41,7 +41,8 @@ function estab_session_ui_markup(
     $barClass = $compact
         ? 'estab-session-bar estab-session-bar-compact'
         : 'estab-session-bar';
-    $logoutUrl = estab_session_ui_root() . '4fach/logout.php';
+    $homeUrl = estab_application_root();
+    $logoutUrl = estab_application_url('4fach/logout.php');
     $name = estab_auth_html($identity['benutzer']);
     $code = estab_auth_html($identity['kuerzel']);
     $function = estab_auth_html($identity['funktion']);
@@ -61,6 +62,9 @@ function estab_session_ui_markup(
         . ' · Rolle ' . $role
         . '</span>'
         . '</div>'
+        . '<div class="estab-session-actions">'
+        . '<a class="estab-button estab-button-home" href="'
+        . estab_auth_html($homeUrl) . '" target="_top">Startseite</a>'
         . '<form class="estab-session-logout" data-estab-logout-form'
         . ' method="post" action="' . estab_auth_html($logoutUrl)
         . '" target="_top">'
@@ -70,7 +74,56 @@ function estab_session_ui_markup(
         . '<button class="estab-button estab-button-logout"'
         . ' type="submit">Abmelden</button>'
         . '</form>'
-        . '</aside>';
+        . '</div>'
+        . '</aside>'
+        . ($compact ? '' : estab_session_ui_mainframe_guard());
+}
+
+/**
+ * Hide the main controller's standalone bar when it is rendered inside the
+ * named application frame. The compact navigation-frame bar remains visible.
+ */
+function estab_session_ui_mainframe_guard(): string
+{
+    return '<script data-estab-mainframe-guard>'
+        . '(function(script){'
+        . 'var bar=script.previousElementSibling;'
+        . 'if(window.parent!==window&&window.name==="mainframe"'
+        . '&&bar&&bar.tagName==="ASIDE"){'
+        . 'bar.remove();'
+        . '}'
+        . '})(document.currentScript);'
+        . '</script>';
+}
+
+/**
+ * Return the safe JavaScript call used to refresh all three application
+ * frames after login, logout-compatible legacy actions, and message saves.
+ */
+function estab_session_ui_frame_refresh_script(): string
+{
+    $arguments = [
+        estab_application_url('4fach/counter.php?embedded=1'),
+        'counter',
+        estab_application_url('4fach/vorgaben.php'),
+        'vorgaben',
+        estab_application_url('4fach/mainindex.php'),
+        'mainframe',
+    ];
+    $encoded = array_map(
+        static fn (string $value): string => json_encode(
+            $value,
+            JSON_HEX_TAG
+                | JSON_HEX_AMP
+                | JSON_HEX_APOS
+                | JSON_HEX_QUOT
+                | JSON_UNESCAPED_SLASHES
+                | JSON_THROW_ON_ERROR
+        ),
+        $arguments
+    );
+
+    return 'FramesVeraendern(' . implode(',', $encoded) . ');';
 }
 
 /** Return the session bar for a valid current login, or an empty string. */
@@ -91,6 +144,19 @@ function estab_session_ui_document_has_bar(string $html): bool
 {
     return preg_match(
         '/<aside\b[^>]*\bdata-estab-session-bar\b[^>]*>/i',
+        $html
+    ) === 1;
+}
+
+/** Detect an actual shared stylesheet link, not coincidental visible text. */
+function estab_session_ui_document_has_stylesheet(string $html): bool
+{
+    return preg_match(
+        '~<link\b'
+            . '(?=[^>]*\brel=["\']stylesheet["\'])'
+            . '(?=[^>]*\bhref=["\'][^"\']*estab-ui\.css'
+            . '(?:[?#][^"\']*)?["\'])'
+            . '[^>]*>~i',
         $html
     ) === 1;
 }
@@ -154,7 +220,7 @@ function estab_session_ui_inject_document(string $html, string $markup): string
         $bodyEnd = $lastBody[1] + strlen($lastBody[0]);
         $html = substr($html, 0, $bodyEnd) . $markup . substr($html, $bodyEnd);
 
-        if (!str_contains($html, 'estab-ui.css')) {
+        if (!estab_session_ui_document_has_stylesheet($html)) {
             $headEnd = strripos($html, '</head>');
             if ($headEnd !== false) {
                 $html = substr($html, 0, $headEnd)
