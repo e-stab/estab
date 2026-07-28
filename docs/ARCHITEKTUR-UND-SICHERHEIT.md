@@ -38,7 +38,7 @@ auch Apache nur an `127.0.0.1:8080` gebunden.
 | `4fadm/` | Basic-Auth-geschützte Administration, Systemstatus und Einsatzexport |
 | `4fbak/` | nur dateisystemintern verwendete PDF-/Bild-Erzeugung und historische FPDF-Komponente |
 | `stabetb/`, `fmtbb/`, `ubltg/`, `sammlung/` | Einsatztagebuch, technisches Betriebsbuch und Zusatzmodule |
-| `app/` | Bootstrap, PHP-/MySQL-Kompatibilität, Authentisierung, gemeinsame Sitzungsanzeige und Abmeldung, CSRF, Datum, Nachrichten-/Kategoriezugriff, begrenzte PNG-Renderer, Anhang, Export und transaktionale Admin-Operationen |
+| `app/` | Bootstrap, PHP-/MySQL-Kompatibilität, Authentisierung, gemeinsame Bereichsnavigation, Sitzungsanzeige und Abmeldung, CSRF, Datum, Nachrichten-/Kategoriezugriff, begrenzte PNG-Renderer, Anhang, Export und transaktionale Admin-Operationen |
 | `4fcfg/` | historische Konfigurationsschnittstelle, heute aus validierten Umgebungswerten gespeist |
 | `docker/` | Apache-/PHP-Härtung, Entrypoint, Datenbankschema und Migrationen |
 | `tests/` | statische, sicherheitsbezogene, Datenbank- und HTTP-Nachweise |
@@ -90,9 +90,10 @@ mit `ESTAB_ALLOW_SELF_REGISTRATION=false` abgeschaltet werden. Sie ist eine
 bewusste Betriebsentscheidung und kein Ersatz für Netzsegmentierung oder
 organisatorische Benutzerfreigabe.
 
-Der anonyme Einstieg bindet die fachliche Absicht an einen streng validierten
-Modus: Ein exakter, zustandsfreier `GET` darf von der Startseite lediglich
-`existing` oder `new` zur Anzeige vorwählen. Das anschließende `POST`
+Der anonyme Einstieg bindet die fachliche Absicht an streng validierte
+Auswahlwerte: Ein exakter, zustandsfreier `GET` darf von der Übersicht
+`existing` oder `new` zur Anzeige sowie einen bekannten geschützten
+Zielschlüssel vorwählen. Das anschließende `POST`
 `existing` darf ausschließlich einen vorhandenen Datensatz
 authentisieren, `new` ausschließlich einen noch nicht vergebenen Datensatz
 anlegen. Widersprüchliche Modus-/Kennwortbestätigungswerte werden vor dem
@@ -111,28 +112,68 @@ Funktion außerdem der gespeicherten Zuordnung entsprechen; nur die bestehende
 Ummeldelogik für inaktive Konten darf Funktion und daraus abgeleitete Rolle
 ändern.
 
-Das Root-Menü klassifiziert jedes Ziel als öffentlich, Anwendung oder
-Administration. Geschützte Anwendungsmodule sind anonym nicht direkt
-verlinkt, sondern als „Anmeldung erforderlich“ gekennzeichnet und mit dem
-Anmeldeeinstieg verbunden. Dadurch bleibt die Funktionsübersicht sichtbar,
-ohne Benutzer auf technisch korrekte, aber unverständliche 403-Antworten zu
-schicken. Icon und Text bilden gemeinsam genau einen Link.
+`app/navigation.php` ist das kanonische Manifest für die acht operativen
+Bereiche. Es definiert Schlüssel, Beschriftung, Reihenfolge, Zielpfad und
+Zugriffsklasse einmalig und löst den aktiven Bereich aus dem
+konfigurationsbereinigten Requestpfad auf. Alle Ziele passieren
+`estab_application_url()`, interne Links verwenden `target="_top"` und kein
+operativer Link öffnet einen neuen Tab. Administration und Handbuch bleiben
+als Dienste getrennt von den operativen Bereichen.
 
-Die ausgewählten geschützten HTML-Controller verwenden
-`app/session_ui.php` als gemeinsame Ausgabegrenze. Die Leiste zeigt
-HTML-escaped Name, Kürzel, Funktion und die serverseitig abgeleitete Rolle und
-stellt genau ein CSRF-geschütztes POST-Formular zum Abmelden bereit. Sie wird
-nicht aus dem globalen Bootstrap ausgegeben: Binärdownloads, PNG-Renderer,
-Readiness und Fehlerantworten bleiben dadurch unverändert. Im Frameset wird die
-Leiste kompakt in der Navigation gerendert; eigenständige Fachmodule und der
-bereits authentifizierte Root-Einstieg erhalten dieselbe Identität. Direkt
-aufgerufene Status-/Zählerframes zeigen sie ebenfalls kompakt; ihre vom
-Frameset explizit als eingebettet markierten Aufrufe verzichten auf Duplikate.
-Der rechte Hauptframe entfernt seine für Standalone-Aufrufe vorgesehene Leiste
-im zusammengesetzten Frameset unmittelbar per statischem Inline-Guard, sodass
-genau eine sichtbare Identität und ein Logout verbleiben. Der BOS-Bereich
-behält eine kompakte Leiste im persistenten Navigationsframe; aktive
-Hilfe-/Problem-Popups verwenden dieselbe Ausgabegrenze.
+Das Root-Menü klassifiziert jedes Ziel als öffentlich, Anwendung oder
+Administration und bindet passende Karten an dasselbe Navigationsmanifest.
+Geschützte Anwendungsmodule sind anonym als „Anmeldung erforderlich“
+gekennzeichnet und mit dem Anmeldeeinstieg verbunden. Dabei wird ausschließlich
+ein fester symbolischer `next`-Schlüssel für einen bekannten geschützten
+Bereich übertragen und als escaped Hidden-Feld in jedem Schritt genau dieses
+Login-Tabs bis zum erfolgreichen Login bewahrt. Ein globaler Sessionwert wird
+dazu bewusst nicht verwendet, damit parallele Tabs ihre Ziele nicht
+überschreiben. Freie URLs, unbekannte Schlüssel sowie öffentliche oder
+administrative Rücksprungziele werden abgewiesen; der Komfortpfad ist daher
+kein Open Redirect. Icon und Text bilden gemeinsam genau einen Link und
+interne Karten bleiben im selben Browserkontext.
+
+Die ausgewählten HTML-Controller verwenden
+`app/session_ui.php` als gemeinsame Ausgabegrenze. Ohne Fachsitzung zeigt die
+Leiste „Nicht angemeldet“, einen Anmeldebutton und dieselbe Bereichsnavigation;
+geschützte Links verwenden den sicheren Zielschlüssel. Mit gültiger Sitzung
+zeigt sie HTML-escaped Name, Kürzel, Funktion und die serverseitig abgeleitete
+Rolle und stellt genau ein CSRF-geschütztes POST-Formular zum Abmelden bereit.
+Die ausgewählten Administrationscontroller verwenden die Leiste ebenfalls;
+ihre vorgelagerte HTTP-Basic-Authentisierung bleibt unabhängig von der
+eStab-Fachsitzung. Der vom Webserver gesetzte `REMOTE_USER` wird auf
+Administrationsrouten ausschließlich escaped als technischer Kontext
+angezeigt und nie in eine Fachrolle übersetzt.
+
+Die Leiste wird nicht aus dem globalen Bootstrap ausgegeben: Binärdownloads,
+PNG-Renderer, Readiness und Fehlerantworten bleiben dadurch unverändert. Im
+Frameset wird sie kompakt mit einer nativen, standardmäßig geschlossenen
+Bereichsauswahl gerendert; eigenständige Fachmodule und der Root-Einstieg
+erhalten die vollständige Variante. Direkt aufgerufene Status-/Zählerframes
+zeigen sie ebenfalls kompakt; ihre vom Frameset explizit als eingebettet
+markierten Aufrufe verzichten auf Duplikate. Der rechte Hauptframe entfernt
+seine für Standalone-Aufrufe vorgesehene Leiste im zusammengesetzten Frameset
+unmittelbar per statischem Inline-Guard, sodass genau eine sichtbare Identität
+und ein Logout verbleiben. Der BOS-Bereich behält die kompakte Navigation im
+persistenten Navigationsframe; aktive Hilfe-/Problem-Popups verwenden dieselbe
+Ausgabegrenze.
+
+Schreibformulare, bei denen ein globaler Wechsel Daten verlieren kann,
+aktivieren explizit `data-estab-dirty-guard`. Die gemeinsame Leiste vergleicht
+dann Eingaben, Auswahl- und Dateifelder mit ihrem initialen Zustand und
+bestätigt nur Navigation, Markenlink oder Logout. Lokale Submit-, Abbrechen-
+und Fachaktionen werden nicht abgefangen. Nach einer serverseitigen
+Validierungsantwort markieren Nachrichtenformular, Empfängermatrix und
+Zählerreparatur erneut angezeigte, noch nicht gespeicherte Werte mit
+`data-estab-dirty-initial`. Die Matrix rendert auch nach einem transaktionalen
+Persistenzfehler die validierten POST-Werte erneut, statt sie durch den alten
+Datenbankstand zu ersetzen.
+Nur ausdrücklich als Anwendungspopup gestartete, gleich-originige Hilfe- und
+Problemfenster beziehen zusätzlich das Hauptfenster samt Frames ein. Globale
+Links navigieren dort das Hauptfenster; ein bestätigter Logout wird per POST
+in dessen Browsing-Kontext ausgeführt, damit keine optisch angemeldete,
+tatsächlich bereits ungültige Hauptansicht zurückbleibt. Ein gewöhnlich in
+einem neuen Fenster geöffnetes Fachmodul verändert seinen Opener nicht.
 Explizite Nicht-HTML-Antworten und Redirects passieren den Ausgabehandler
 unverändert.
 

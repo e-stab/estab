@@ -188,33 +188,56 @@ die Rolle wechseln. Für einen vorgesehenen Funktionswechsel muss das Konto
 zuerst ordnungsgemäß abgemeldet und anschließend mit der neuen zugeteilten
 Funktion angemeldet werden.
 
-Nach erfolgreicher Anmeldung erscheint auf dem Root-Einstieg, im
-Anwendungs-Frameset und auf allen geschützten eigenständigen HTML-Modulen eine
-Sitzungsleiste. Sie nennt Name, Kürzel, Funktion und Rolle, damit vor jeder
-fachlichen Aktion sichtbar ist, in welchem Kontext gearbeitet wird. In der
-linken Frameset-Navigation ist dieselbe Leiste platzsparend angeordnet. Der
-Button „Abmelden“ sendet einen CSRF-geschützten POST, beendet die gesamte
-eStab-Browsersitzung und führt mit HTTP 303 zum Anmeldeeinstieg zurück.
-Mehrere Tabs teilen sich dieselbe Browsersitzung und sind danach gemeinsam
-abgemeldet. Werden Status- oder Zählerframe direkt in einem Tab geöffnet,
-zeigen sie die kompakte Leiste selbst; im vollständigen Frameset erscheint sie
-zur besseren Bedienbarkeit nur einmal in der Navigation. Über „Startseite“
-gelangen Benutzer aus jedem Fachmodul zur nun freigeschalteten
-Modulübersicht. Der BOS-Bereich zeigt die Leiste dauerhaft links neben seinen
-statischen Informationsseiten; Hilfe- und Problem-Popups zeigen sie im
-jeweiligen Fenster.
+Die gemeinsame Navigation führt in derselben Reihenfolge durch Übersicht,
+Nachrichtenvordruck, Meldungsübersicht, Vordrucke, Einsatztagebuch,
+Technisches Betriebsbuch, Nachweisung und BOS-Info. Der aktuelle Bereich ist
+hervorgehoben; alle internen Ziele ersetzen die aktuelle Ansicht und erzeugen
+keine zusätzlichen Tabs. In der linken Frameset-Navigation steht dieselbe
+Auswahl platzsparend unter „Bereich wechseln“ bereit. Der BOS-Bereich hält sie
+beim Wechsel seiner statischen Informationsseiten dauerhaft sichtbar.
 
-Vor der Anmeldung bleiben geschützte Module auf der Startseite zur Orientierung
-sichtbar, tragen aber die Kennzeichnung „Anmeldung erforderlich“ und führen
-zum Anmeldeeinstieg statt auf eine 403-Fehlerseite. Die Administration ist
-explizit als separater Zugang markiert.
+Vor der Anmeldung zeigt die Leiste „Nicht angemeldet“ und den Anmeldebutton.
+Geschützte Bereiche und Karten bleiben zur Orientierung sichtbar, tragen die
+Kennzeichnung „Anmeldung erforderlich“ und führen zum Anmeldeeinstieg statt
+auf eine 403-Fehlerseite. Nach einer erfolgreichen Anmeldung wird der zuvor
+gewählte geschützte Bereich direkt geöffnet. Die Auswahl bleibt pro
+Browser-Tab erhalten; parallele Anmeldefenster überschreiben ihr Ziel nicht.
+Übersicht und BOS-Info bleiben öffentlich; die Administration ist als
+separater technischer Zugang markiert.
+
+Nach erfolgreicher Anmeldung erscheint auf der Übersicht, im
+Anwendungs-Frameset, auf den Administrationsseiten und auf allen ausgewählten
+eigenständigen HTML-Modulen die Sitzungsleiste. Sie nennt Name, Kürzel,
+Funktion und Rolle, damit vor jeder fachlichen Aktion sichtbar ist, in welchem
+Kontext gearbeitet wird. Der Button „Abmelden“ sendet einen CSRF-geschützten
+POST, beendet die gesamte eStab-Browsersitzung und führt mit HTTP 303 zum
+Anmeldeeinstieg zurück. Mehrere Tabs teilen sich dieselbe Browsersitzung und
+sind danach gemeinsam abgemeldet. Werden Status- oder Zählerframe direkt in
+einem Tab geöffnet, zeigen sie die kompakte Leiste selbst; im vollständigen
+Frameset erscheint sie zur besseren Bedienbarkeit nur einmal in der
+Navigation. Hilfe- und Problem-Popups zeigen die Leiste im jeweiligen Fenster.
+
+Wurde in einem dafür markierten Formular ein Wert geändert oder eine Datei
+ausgewählt, fragt die Oberfläche vor einem globalen Bereichswechsel oder
+Logout nach. Bei Nachrichtenformular, Empfängermatrix und Zählerreparatur gilt
+das auch für serverseitig wegen eines Fehlers erneut angezeigte, noch
+ungespeicherte Eingaben. Die Matrix behält validierte Eingaben selbst dann
+sichtbar, wenn die Datenbanktransaktion fehlschlägt. Die von eStab geöffneten
+Hilfe- und Problemfenster prüfen die Formulare ihres zugehörigen
+Hauptfensters; bestätigte globale Navigation und Logout werden dort
+ausgeführt. „Abbrechen“, „Speichern“ und andere lokale Fachaktionen bleiben
+unverändert. Die Warnung verhindert keinen Verlust durch Browserabsturz oder
+das Schließen eines Tabs; wichtige Eingaben weiterhin zeitnah speichern.
 
 Diese Schaltfläche beendet ausschließlich die eStab-Funktionssitzung. Die
 Administration nutzt HTTP Basic Auth; dessen Zugangsdaten verwaltet der
 Browser separat und sie besitzen deshalb keine verlässliche
 Anwendungs-Abmeldeschaltfläche. Für einen vollständigen Admin-Benutzerwechsel
 ist je nach Browser ein privates Fenster oder das Schließen aller betreffenden
-Browserfenster erforderlich.
+Browserfenster erforderlich. Die Leiste nennt auf Administrationsseiten den
+technischen Basic-Auth-Benutzer und unterscheidet ihn ausdrücklich vom
+eStab-Funktionskonto. Der eStab-Button „Abmelden“ beendet nur die
+Funktionssitzung.
 
 Browserformulare für Bestandsanmeldung und Kontoanlage tragen ein
 sitzungsgebundenes CSRF-Token. Direkte historische Clients, die dieses Token

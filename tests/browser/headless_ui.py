@@ -443,6 +443,14 @@ class CDP:
         self.websocket = websocket
         self.timeout = timeout
         self.next_id = 1
+        self.events: list[dict[str, Any]] = []
+
+    def _queue_event(self, message: dict[str, Any]) -> None:
+        if not isinstance(message.get("method"), str):
+            return
+        self.events.append(message)
+        if len(self.events) > 256:
+            del self.events[:-256]
 
     def call(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         call_id = self.next_id
@@ -456,12 +464,79 @@ class CDP:
             while True:
                 response = self.websocket.receive_json(deadline)
                 if response.get("id") != call_id:
+                    if "method" in response:
+                        self._queue_event(response)
                     continue
                 if "error" in response:
                     raise TestFailure(f"Chrome-CDP-Aufruf {method} ist fehlgeschlagen.")
                 return response.get("result", {})
         except (OSError, ConnectionError, TimeoutError, ValueError) as exc:
             raise TestFailure(f"Timeout oder Verbindungsfehler bei Chrome-CDP-Aufruf {method}.") from exc
+
+    def discard_events(self, method: str) -> None:
+        self.events = [
+            event for event in self.events if event.get("method") != method
+        ]
+
+    def call_with_javascript_dialog(
+        self,
+        method: str,
+        params: dict[str, Any],
+        *,
+        accept: bool,
+        description: str,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        event_method = "Page.javascriptDialogOpening"
+        self.discard_events(event_method)
+        command_id = self.next_id
+        self.next_id += 1
+        command_result: dict[str, Any] | None = None
+        dialog: dict[str, Any] | None = None
+        handler_id: int | None = None
+        handler_finished = False
+        deadline = time.monotonic() + self.timeout
+        try:
+            self.websocket.send_json(
+                {"id": command_id, "method": method, "params": params}
+            )
+            while True:
+                message = self.websocket.receive_json(deadline)
+                if message.get("method") == event_method and dialog is None:
+                    raw_dialog = message.get("params")
+                    dialog = raw_dialog if isinstance(raw_dialog, dict) else {}
+                    handler_id = self.next_id
+                    self.next_id += 1
+                    self.websocket.send_json(
+                        {
+                            "id": handler_id,
+                            "method": "Page.handleJavaScriptDialog",
+                            "params": {"accept": accept},
+                        }
+                    )
+                elif message.get("id") == command_id:
+                    if "error" in message:
+                        raise TestFailure(
+                            f"Chrome-CDP-Aufruf {method} ist fehlgeschlagen."
+                        )
+                    raw_result = message.get("result")
+                    command_result = raw_result if isinstance(raw_result, dict) else {}
+                elif handler_id is not None and message.get("id") == handler_id:
+                    if "error" in message:
+                        raise TestFailure(
+                            "Chrome konnte den nativen Bestätigungsdialog nicht beantworten."
+                        )
+                    handler_finished = True
+                elif "method" in message:
+                    self._queue_event(message)
+
+                if (
+                    command_result is not None
+                    and dialog is not None
+                    and handler_finished
+                ):
+                    return command_result, dialog
+        except (OSError, ConnectionError, TimeoutError, ValueError) as exc:
+            raise TestFailure(f"Timeout: {description}.") from exc
 
     def evaluate(self, expression: str) -> Any:
         result = self.call(
@@ -507,7 +582,14 @@ class CDP:
             "Zielseite wurde nicht vollständig geladen",
         )
 
-    def click(self, frame_name: str | None, selector: str, description: str) -> None:
+    def click(
+        self,
+        frame_name: str | None,
+        selector: str,
+        description: str,
+        *,
+        dialog_accept: bool | None = None,
+    ) -> dict[str, Any] | None:
         position_expression = _frame_expression(
             frame_name,
             f"""
@@ -547,16 +629,23 @@ class CDP:
                 "clickCount": 1,
             },
         )
-        self.call(
+        release = {
+            "type": "mouseReleased",
+            "x": x,
+            "y": y,
+            "button": "left",
+            "clickCount": 1,
+        }
+        if dialog_accept is None:
+            self.call("Input.dispatchMouseEvent", release)
+            return None
+        _, dialog = self.call_with_javascript_dialog(
             "Input.dispatchMouseEvent",
-            {
-                "type": "mouseReleased",
-                "x": x,
-                "y": y,
-                "button": "left",
-                "clickCount": 1,
-            },
+            release,
+            accept=dialog_accept,
+            description=f"nativer Bestätigungsdialog für {description} fehlt",
         )
+        return dialog
 
     def set_value(
         self,
@@ -648,6 +737,30 @@ def _text_expression(frame_name: str | None, selector: str) -> str:
 
 
 class BrowserAcceptance:
+    navigation_keys = (
+        "overview",
+        "messages",
+        "message-overview",
+        "forms",
+        "incident-log",
+        "technical-log",
+        "tracking",
+        "bos-info",
+    )
+    protected_card_keys = (
+        "messages",
+        "message-overview",
+        "forms",
+        "incident-log",
+        "technical-log",
+        "tracking",
+    )
+    root_card_keys = (
+        *protected_card_keys,
+        "bos-info",
+        "administration",
+        "handbook",
+    )
     protected_paths = (
         "4fach/vordrucke.php",
         "4fueltg/ue_ltg.php",
@@ -666,11 +779,11 @@ class BrowserAcceptance:
         self.cdp.call("Network.enable")
         self.cdp.navigate(self.config.base_url + "/")
 
-        print("[1/6] Anonyme Startseite, zwei Konto-Flows und gesperrte Module")
-        self._assert_anonymous_home()
+        print("[1/8] Anonyme Übersicht, zwei Konto-Flows und gesperrte Module")
+        self._assert_anonymous_overview()
         self._assert_protected_cards()
 
-        print("[2/6] Bestehenden Konto-Flow über das Frameset öffnen")
+        print("[2/8] Bestehenden Konto-Flow über das Frameset öffnen")
         self.cdp.click(None, "#estab-login", "Button für ein bestehendes Konto")
         self._wait_for_frame("mainframe")
         self.cdp.wait_for(
@@ -690,22 +803,59 @@ class BrowserAcceptance:
         )
 
         self.cdp.navigate(self.config.base_url + "/")
-        print("[3/6] Neuen Konto-Flow über das Frameset öffnen")
-        self.cdp.click(None, "#estab-register", "Button für ein neues Konto")
+        print("[3/8] Gesperrte ETB-Karte und neuen Konto-Flow über das Frameset öffnen")
+        self.cdp.click(
+            None,
+            'a.estab-menu-link[data-estab-nav-key="incident-log"]',
+            "gesperrte Root-Karte für das Einsatztagebuch",
+        )
+        self.cdp.wait_for(
+            """
+            document.readyState === "complete" &&
+            location.pathname.endsWith("/4fach/index.php") &&
+            new URLSearchParams(location.search).get("next") === "incident-log"
+            """,
+            "ETB-Karte hat das angeforderte Anmeldeziel nicht geöffnet",
+        )
         self._wait_for_frame("mainframe")
         self.cdp.wait_for(
             _frame_expression(
                 "mainframe",
                 """
-                return Array.from(doc.querySelectorAll("h1, h2")).some(
-                    heading => heading.innerText.includes("Neues Funktionskonto anlegen")
+                const query = new target.URLSearchParams(target.location.search);
+                const registration = doc.querySelector(
+                    'button[name="login_flow"][value="new"]'
                 );
+                return target.location.pathname.endsWith("/4fach/mainindex.php") &&
+                    query.get("next") === "incident-log" &&
+                    Boolean(registration);
                 """,
             ),
-            "Formular für ein neues Funktionskonto fehlt",
+            "Anmeldeauswahl hat das angeforderte ETB-Ziel nicht übernommen",
+        )
+        self.cdp.click(
+            "mainframe",
+            'button[name="login_flow"][value="new"]',
+            "Neues Konto für das angeforderte ETB anlegen",
+        )
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                const destination = doc.querySelector(
+                    'input[name="next"][value="incident-log"]'
+                );
+                return Array.from(doc.querySelectorAll("h1, h2")).some(
+                    heading => heading.innerText.includes("Neues Funktionskonto anlegen")
+                ) && Boolean(destination) && new target.URLSearchParams(
+                    target.top.location.search
+                ).get("next") === "incident-log";
+                """,
+            ),
+            "Formular für ein neues Funktionskonto mit erhaltenem ETB-Ziel fehlt",
         )
 
-        print("[4/6] Neues Konto über das Frameset anlegen")
+        print("[4/8] Neues Konto anlegen und das angeforderte Einsatztagebuch öffnen")
         self.cdp.set_value(
             "mainframe", 'input[name="benutzer"]', self.config.login_name, "Benutzername"
         )
@@ -736,9 +886,24 @@ class BrowserAcceptance:
             'button.estab-button-primary[type="submit"]',
             "Konto erstellen und anmelden",
         )
+        self._wait_for_top_level_path(
+            "/stabetb/etb.php",
+            "Einsatztagebuch wurde nach der Kontoanlage nicht als angefordertes Ziel geöffnet",
+        )
+        self._assert_session_bar(
+            None,
+            "Einsatztagebuch nach Kontoanlage",
+            "incident-log",
+        )
+
+        self.cdp.click(
+            None,
+            '[data-estab-navigation] a[data-estab-nav-key="messages"]',
+            "Nachrichtenvordruck aus dem angeforderten Einsatztagebuch",
+        )
         self._wait_for_authenticated_frames()
 
-        print("[5/6] Session-Informationen in Anwendung, BOS-Bereich und Startseite")
+        print("[5/8] Ungespeicherte fachliche Eingaben schützen den Bereichswechsel")
         self._equal(
             self.cdp.evaluate(
                 _visible_count_expression("mainframe", "aside[data-estab-session-bar]")
@@ -746,7 +911,11 @@ class BrowserAcceptance:
             0,
             "zusätzliche Session-Bar im Inhaltsframe",
         )
-        self._assert_session_bar("vorgaben", "Anwendungs-Navigationsframe")
+        self._assert_session_bar(
+            "vorgaben",
+            "Anwendungs-Navigationsframe",
+            "messages",
+        )
         self._equal(
             self.cdp.evaluate(
                 _visible_count_expression(
@@ -779,27 +948,20 @@ class BrowserAcceptance:
             "Session-Bar im eingebetteten Statusframe",
         )
 
-        self.cdp.click(
-            "vorgaben",
-            "a.estab-button-home",
-            "Startseitenlink im Anwendungs-Navigationsframe",
-        )
-        self.cdp.wait_for(
-            """
-            document.readyState === "complete" &&
-            Boolean(document.querySelector("#estab-open")) &&
-            Boolean(document.querySelector("aside[data-estab-session-bar]"))
-            """,
-            "angemeldete Startseite wurde nicht über den Startseitenlink geöffnet",
-        )
-        self._assert_session_bar(None, "Startseite")
-        self._equal(
-            self.cdp.evaluate(_visible_count_expression(None, "#estab-open")),
-            1,
-            "Anwendungsbutton auf der angemeldeten Startseite",
+        self._assert_dirty_navigation_guard()
+        self._wait_for_authenticated_overview(
+            "angemeldete Übersicht wurde nach bestätigtem Bereichswechsel nicht geöffnet"
         )
 
-        self.cdp.navigate(self.config.base_url + "/stabinfo/index.php")
+        print("[6/8] Navigation über Übersicht, BOS und Einsatztagebuch")
+        self._click_root_card(
+            "stabinfo/index.php",
+            "Root-Karte für die Infosammlung BOS",
+        )
+        self._wait_for_top_level_path(
+            "/stabinfo/index.php",
+            "Infosammlung BOS wurde nicht über ihre Root-Karte geöffnet",
+        )
         self.cdp.wait_for(
             _frame_expression(
                 "status",
@@ -810,7 +972,7 @@ class BrowserAcceptance:
             ),
             "BOS-Navigationsframe wurde nicht vollständig geladen",
         )
-        self._assert_session_bar("status", "BOS-Navigationsframe")
+        self._assert_session_bar("status", "BOS-Navigationsframe", "bos-info")
         self._equal(
             self.cdp.evaluate(
                 _visible_count_expression(
@@ -837,8 +999,8 @@ class BrowserAcceptance:
         )
         self.cdp.click(
             "status",
-            'a[target="mainframe"]',
-            "erster BOS-Inhaltslink",
+            'a[href$="Buchstabier.html"][target="mainframe"]',
+            "BOS-Inhaltslink zum Buchstabieralphabet",
         )
         self.cdp.wait_for(
             _frame_expression(
@@ -850,7 +1012,11 @@ class BrowserAcceptance:
             ),
             "BOS-Inhaltslink wurde nicht im Inhaltsframe geöffnet",
         )
-        self._assert_session_bar("status", "BOS-Navigationsframe nach Inhaltswechsel")
+        self._assert_session_bar(
+            "status",
+            "BOS-Navigationsframe nach Inhaltswechsel",
+            "bos-info",
+        )
         self._equal(
             self.cdp.evaluate(
                 _visible_count_expression(
@@ -875,26 +1041,34 @@ class BrowserAcceptance:
             0,
             "Session-Bar im BOS-Inhalt nach Inhaltswechsel",
         )
+        self._open_compact_navigation(
+            "status",
+            "BOS-Navigationsframe",
+        )
         self.cdp.click(
             "status",
-            "a.estab-button-home",
-            "Startseitenlink im BOS-Navigationsframe",
+            '[data-estab-navigation] a[data-estab-nav-key="overview"]',
+            "Übersichtslink im BOS-Navigationsframe",
         )
-        self.cdp.wait_for(
-            """
-            document.readyState === "complete" &&
-            Boolean(document.querySelector("#estab-open")) &&
-            Boolean(document.querySelector("aside[data-estab-session-bar]"))
-            """,
-            "angemeldete Startseite wurde nicht aus dem BOS-Bereich geöffnet",
+        self._wait_for_authenticated_overview(
+            "angemeldete Übersicht wurde nicht aus dem BOS-Bereich geöffnet"
         )
-        self._assert_session_bar(None, "Startseite nach BOS-Bereich")
 
-        print("[6/6] Logout per echtem Klick und Rückkehr in den anonymen Zustand")
+        self._click_root_card(
+            "stabetb/etb.php",
+            "Root-Karte für das Einsatztagebuch",
+        )
+        self._wait_for_top_level_path(
+            "/stabetb/etb.php",
+            "Einsatztagebuch wurde nicht über seine Root-Karte geöffnet",
+        )
+        self._assert_session_bar(None, "Einsatztagebuch", "incident-log")
+
+        print("[7/8] Logout aus dem Einsatztagebuch und Rückkehr in den anonymen Zustand")
         self.cdp.click(
             None,
             "[data-estab-logout-form] button",
-            "Abmeldebutton auf der Startseite",
+            "Abmeldebutton im Einsatztagebuch",
         )
         self.cdp.wait_for(
             _frame_expression(
@@ -915,14 +1089,29 @@ class BrowserAcceptance:
                 f"Session-Bar nach Logout im Frame {frame_name}",
             )
         self.cdp.navigate(self.config.base_url + "/")
-        self._assert_anonymous_home()
+        self._assert_anonymous_overview()
         self._assert_protected_cards()
 
-    def _assert_anonymous_home(self) -> None:
+        print("[8/8] Schmaler 390x844-Viewport und horizontal bedienbare Bereichsnavigation")
+        self.cdp.call(
+            "Emulation.setDeviceMetricsOverride",
+            {
+                "width": 390,
+                "height": 844,
+                "deviceScaleFactor": 1,
+                "mobile": False,
+                "screenWidth": 390,
+                "screenHeight": 844,
+            },
+        )
+        self.cdp.navigate(self.config.base_url + "/")
+        self._assert_narrow_overview()
+
+    def _assert_anonymous_overview(self) -> None:
         self._equal(
             self.cdp.evaluate(_visible_count_expression(None, "#estab-login")),
             1,
-            "Anmeldebutton auf der anonymen Startseite",
+            "Anmeldebutton auf der anonymen Übersicht",
         )
         self._equal(
             self.cdp.evaluate(_text_expression(None, "#estab-login")),
@@ -932,7 +1121,7 @@ class BrowserAcceptance:
         self._equal(
             self.cdp.evaluate(_visible_count_expression(None, "#estab-register")),
             1,
-            "Button für ein neues Konto auf der anonymen Startseite",
+            "Button für ein neues Konto auf der anonymen Übersicht",
         )
         self._equal(
             self.cdp.evaluate(_text_expression(None, "#estab-register")),
@@ -973,50 +1162,592 @@ class BrowserAcceptance:
             })()
             """
         )
-        self._truth(copy_is_clear, "Startseite erklärt bestehendes und neues Konto nicht klar.")
+        self._truth(copy_is_clear, "Übersicht erklärt bestehendes und neues Konto nicht klar.")
         self._equal(
             self.cdp.evaluate(
                 _visible_count_expression(None, "aside[data-estab-session-bar]")
             ),
             0,
-            "Session-Bar auf der anonymen Startseite",
+            "Session-Bar auf der anonymen Übersicht",
+        )
+        public_navigation = self.cdp.evaluate(
+            """
+            (() => {
+                const bar = document.querySelector("aside[data-estab-public-bar]");
+                const navigation = bar &&
+                    bar.querySelector("[data-estab-navigation]");
+                const core = navigation
+                    ? Array.from(navigation.querySelectorAll(
+                        '[data-estab-navigation-group="areas"] a[data-estab-nav-key]'
+                    ))
+                    : [];
+                const current = navigation
+                    ? Array.from(navigation.querySelectorAll('[aria-current="page"]'))
+                    : [];
+                return bar && navigation ? {
+                    keys: core.map(link => link.getAttribute("data-estab-nav-key")),
+                    active: current.map(link => link.getAttribute("data-estab-nav-key")),
+                    locked: core.filter(link =>
+                        link.closest("[data-estab-navigation-locked]")
+                    ).length
+                } : null;
+            })()
+            """
+        )
+        self._truth(
+            isinstance(public_navigation, dict),
+            "Öffentliche Bereichsnavigation fehlt auf der anonymen Übersicht.",
+        )
+        self._equal(
+            public_navigation.get("keys"),
+            list(self.navigation_keys),
+            "Reihenfolge der anonymen Bereichsnavigation",
+        )
+        self._equal(
+            public_navigation.get("active"),
+            ["overview"],
+            "Aktiver Bereich der anonymen Navigation",
+        )
+        self._equal(
+            public_navigation.get("locked"),
+            6,
+            "Anzahl anmeldepflichtiger Bereiche in der anonymen Navigation",
+        )
+
+    def _wait_for_authenticated_overview(self, description: str) -> None:
+        expected_url = json.dumps(self.config.base_url + "/")
+        self.cdp.wait_for(
+            f"""
+            (() => {{
+                const expected = new URL({expected_url});
+                return document.readyState === "complete" &&
+                    location.origin === expected.origin &&
+                    location.pathname === expected.pathname &&
+                    location.search === expected.search &&
+                    Boolean(document.querySelector("#estab-open")) &&
+                    Boolean(document.querySelector("aside[data-estab-session-bar]"));
+            }})()
+            """,
+            description,
+        )
+        self._assert_session_bar(None, "Modulübersicht", "overview")
+        self._equal(
+            self.cdp.evaluate(_visible_count_expression(None, "#estab-open")),
+            1,
+            "Anwendungsbutton auf der angemeldeten Übersicht",
+        )
+        self._assert_internal_cards_same_tab()
+
+    def _assert_dirty_navigation_guard(self) -> None:
+        field_selector = (
+            'form[name="4fach"][data-estab-dirty-guard] '
+            'input#f_08_befhinweis'
+        )
+        dirty_value = "Browser-Dirty-Guard-Test"
+        self.cdp.click(
+            "vorgaben",
+            'input[type="image"][name="stab_schreiben"]',
+            "fachliches Formular zum Schreiben einer Nachricht",
+        )
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                f"""
+                const form = doc.querySelector(
+                    'form[name="4fach"][data-estab-dirty-guard]'
+                );
+                const field = doc.querySelector({json.dumps(field_selector)});
+                return target.location.pathname.endsWith("/4fach/mainindex.php") &&
+                    doc.readyState === "complete" &&
+                    Boolean(form && field && !field.disabled &&
+                        field.getAttribute("type") !== "hidden");
+                """,
+            ),
+            "fachliches Nachrichtenformular wurde nicht im Inhaltsframe geöffnet",
+        )
+        self.cdp.set_value(
+            "mainframe",
+            field_selector,
+            dirty_value,
+            "ungespeicherter Beförderungshinweis",
+        )
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                f"""
+                const field = doc.querySelector({json.dumps(field_selector)});
+                return Boolean(field &&
+                    field.value === {json.dumps(dirty_value)} &&
+                    field.defaultValue !== field.value);
+                """,
+            ),
+            "fachliches Formularfeld wurde nicht als geändert erkannt",
+        )
+
+        def click_overview_and_handle_dialog(accept: bool, action: str) -> None:
+            dialog = self.cdp.click(
+                "vorgaben",
+                '[data-estab-navigation] a[data-estab-nav-key="overview"]',
+                f"Übersichtslink zum {action} des Bereichswechsels",
+                dialog_accept=accept,
+            )
+            dialog_is_confirm = (
+                isinstance(dialog, dict) and dialog.get("type") == "confirm"
+            )
+            dialog_has_expected_copy = isinstance(dialog, dict) and str(
+                dialog.get("message", "")
+            ).startswith(
+                "Ungespeicherte Eingaben gehen beim Bereichswechsel verloren."
+            )
+            self._truth(
+                dialog_is_confirm and dialog_has_expected_copy,
+                "Der Dirty-Guard hat keinen erwarteten nativen Bestätigungsdialog geöffnet.",
+            )
+
+        self._open_compact_navigation(
+            "vorgaben",
+            "Anwendungs-Navigationsframe mit geändertem Formular",
+        )
+        click_overview_and_handle_dialog(False, "Ablehnen")
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                f"""
+                const form = doc.querySelector(
+                    'form[name="4fach"][data-estab-dirty-guard]'
+                );
+                const field = doc.querySelector({json.dumps(field_selector)});
+                return target.top.location.pathname.endsWith("/4fach/index.php") &&
+                    target.location.pathname.endsWith("/4fach/mainindex.php") &&
+                    Boolean(form && field &&
+                        field.value === {json.dumps(dirty_value)} &&
+                        field.defaultValue !== field.value);
+                """,
+            ),
+            "abgelehnter Bereichswechsel hat Seite oder Formularwert nicht bewahrt",
+        )
+
+        self._open_compact_navigation(
+            "vorgaben",
+            "Anwendungs-Navigationsframe nach abgelehntem Bereichswechsel",
+        )
+        click_overview_and_handle_dialog(True, "Bestätigen")
+
+    def _assert_narrow_overview(self) -> None:
+        state = self.cdp.evaluate(
+            """
+            (() => {
+                const bounds = element => {
+                    if (!element) return null;
+                    const rect = element.getBoundingClientRect();
+                    return {
+                        left: rect.left,
+                        right: rect.right,
+                        top: rect.top,
+                        bottom: rect.bottom,
+                        width: rect.width,
+                        height: rect.height
+                    };
+                };
+                const actions = Array.from(
+                    document.querySelectorAll(
+                        ".estab-root-auth-actions .estab-button"
+                    )
+                ).map(bounds);
+                const navigation = document.querySelector(
+                    ".estab-navigation-content"
+                );
+                const navigationLinks = navigation
+                    ? Array.from(navigation.querySelectorAll(
+                        "a[data-estab-nav-key]"
+                    ))
+                    : [];
+                if (navigation) navigation.scrollLeft = 0;
+                const navigationRect = bounds(navigation);
+                const lastNavigationLink =
+                    navigationLinks[navigationLinks.length - 1] || null;
+                const cards = Array.from(
+                    document.querySelectorAll(".estab-menu-card")
+                ).map(bounds);
+                const unexpectedOverflow = Array.from(
+                    document.body.querySelectorAll("*")
+                ).filter(element => {
+                    if (navigation && navigation.contains(element)) return false;
+                    const style = window.getComputedStyle(element);
+                    if (
+                        style.display === "none"
+                        || style.visibility === "hidden"
+                    ) {
+                        return false;
+                    }
+                    const rect = element.getBoundingClientRect();
+                    return (
+                        rect.width > 0
+                        && rect.height > 0
+                        && (
+                            rect.left < -0.5
+                            || rect.right > window.innerWidth + 0.5
+                        )
+                    );
+                }).slice(0, 20).map(element => ({
+                    tag: element.tagName.toLowerCase(),
+                    id: element.id,
+                    classes: element.className
+                }));
+                return {
+                    innerWidth: window.innerWidth,
+                    unexpectedOverflow,
+                    regions: {
+                        publicBar: bounds(document.querySelector(
+                            "aside[data-estab-public-bar]"
+                        )),
+                        masthead: bounds(document.querySelector(
+                            ".estab-root-header"
+                        )),
+                        rootMain: bounds(document.querySelector(
+                            ".estab-root-main"
+                        )),
+                        loginCard: bounds(document.querySelector(
+                            ".estab-login-cta"
+                        ))
+                    },
+                    menuSections: Array.from(
+                        document.querySelectorAll(".estab-menu-section")
+                    ).map(bounds),
+                    navigation: navigation && navigationRect ? {
+                        left: navigationRect.left,
+                        right: navigationRect.right,
+                        top: navigationRect.top,
+                        bottom: navigationRect.bottom,
+                        clientWidth: navigation.clientWidth,
+                        scrollWidth: navigation.scrollWidth,
+                        scrollLeft: navigation.scrollLeft,
+                        lastKey: lastNavigationLink
+                            ? lastNavigationLink.getAttribute("data-estab-nav-key")
+                            : null
+                    } : null,
+                    actions,
+                    cards
+                };
+            })()
+            """
+        )
+        self._truth(
+            isinstance(state, dict),
+            "Layout im schmalen Viewport konnte nicht geprüft werden.",
+        )
+        self._equal(state.get("innerWidth"), 390, "Breite des schmalen Viewports")
+        unexpected_overflow = state.get("unexpectedOverflow")
+        self._truth(
+            isinstance(unexpected_overflow, list) and not unexpected_overflow,
+            "Mindestens ein sichtbares Element liegt außerhalb des schmalen "
+            f"Viewports: {unexpected_overflow!r}",
+        )
+
+        def assert_horizontally_contained(bounds: Any, description: str) -> None:
+            self._truth(
+                isinstance(bounds, dict)
+                and bounds.get("left", -1) >= -0.5
+                and bounds.get("right", 10000) <= state["innerWidth"] + 0.5
+                and bounds.get("width", 0) > 0,
+                f"{description} liegt horizontal außerhalb des schmalen Viewports.",
+            )
+
+        regions = state.get("regions")
+        self._truth(
+            isinstance(regions, dict),
+            "Relevante Seitenbereiche fehlen im schmalen Viewport.",
+        )
+        for key in ("publicBar", "masthead", "rootMain", "loginCard"):
+            assert_horizontally_contained(
+                regions.get(key),
+                f"Seitenbereich {key}",
+            )
+        menu_sections = state.get("menuSections")
+        self._truth(
+            isinstance(menu_sections, list) and len(menu_sections) == 2,
+            "Bereichsgruppen fehlen im schmalen Viewport.",
+        )
+        for index, section in enumerate(menu_sections, start=1):
+            assert_horizontally_contained(
+                section,
+                f"Bereichsgruppe {index}",
+            )
+
+        navigation = state.get("navigation")
+        self._truth(
+            isinstance(navigation, dict)
+            and navigation.get("left", -1) >= -0.5
+            and navigation.get("right", 10000) <= state["innerWidth"] + 0.5
+            and navigation.get("bottom", 0) > navigation.get("top", 0)
+            and navigation.get("scrollLeft") == 0
+            and navigation.get("scrollWidth", 0) > navigation.get("clientWidth", 0)
+            and navigation.get("lastKey") == "handbook",
+            "Bereichsnavigation besitzt im schmalen Viewport keinen sauber "
+            "begrenzten horizontalen Scrollbereich.",
+        )
+
+        actions = state.get("actions")
+        self._truth(
+            isinstance(actions, list) and len(actions) == 2,
+            "Anmeldeaktionen fehlen im schmalen Viewport.",
+        )
+        for index, action in enumerate(actions, start=1):
+            assert_horizontally_contained(
+                action,
+                f"Anmeldeaktion {index}",
+            )
+            self._truth(
+                action.get("height", 0) >= 44,
+                f"Anmeldeaktion {index} ist im schmalen Viewport zu klein.",
+            )
+
+        cards = state.get("cards")
+        self._truth(
+            isinstance(cards, list)
+            and len(cards) == len(self.root_card_keys),
+            "Nicht alle Bereichskarten wurden im schmalen Viewport gefunden.",
+        )
+        for index, card in enumerate(cards, start=1):
+            assert_horizontally_contained(
+                card,
+                f"Bereichskarte {index}",
+            )
+            self._truth(
+                abs(card["left"] - cards[0]["left"]) < 1,
+                "Bereichskarten sind im schmalen Viewport nicht durchgehend "
+                "einspaltig ausgerichtet.",
+            )
+
+        scroll_distance = (
+            navigation["scrollWidth"] - navigation["clientWidth"] + 64
+        )
+        scroll_x = (navigation["left"] + navigation["right"]) / 2
+        scroll_y = (navigation["top"] + navigation["bottom"]) / 2
+        self.cdp.call(
+            "Input.dispatchMouseEvent",
+            {"type": "mouseMoved", "x": scroll_x, "y": scroll_y},
+        )
+        self.cdp.call(
+            "Input.dispatchMouseEvent",
+            {
+                "type": "mouseWheel",
+                "x": scroll_x,
+                "y": scroll_y,
+                "deltaX": scroll_distance,
+                "deltaY": 0,
+            },
+        )
+        scroll_state = self.cdp.wait_for(
+            """
+            (() => {
+                const navigation = document.querySelector(
+                    ".estab-navigation-content"
+                );
+                const links = navigation
+                    ? Array.from(navigation.querySelectorAll(
+                        "a[data-estab-nav-key]"
+                    ))
+                    : [];
+                const last = links[links.length - 1] || null;
+                if (!navigation || !last) return null;
+                const navigationRect = navigation.getBoundingClientRect();
+                const lastRect = last.getBoundingClientRect();
+                if (
+                    navigation.scrollLeft <= 0 ||
+                    lastRect.left < navigationRect.left - 0.5 ||
+                    lastRect.right > navigationRect.right + 0.5
+                ) {
+                    return null;
+                }
+                return {
+                    scrollLeft: navigation.scrollLeft,
+                    lastKey: last.getAttribute("data-estab-nav-key")
+                };
+            })()
+            """,
+            "letzter Bereichslink wurde durch horizontales Scrollen "
+            "im schmalen Viewport nicht erreichbar",
+        )
+        self._equal(
+            scroll_state.get("lastKey"),
+            "handbook",
+            "Letzter horizontal erreichbarer Navigationsbereich",
+        )
+
+    def _assert_internal_cards_same_tab(self) -> None:
+        state = self.cdp.evaluate(
+            """
+            (() => {
+                const cards = Array.from(
+                    document.querySelectorAll("a.estab-menu-link")
+                );
+                const internal = cards.filter(link => {
+                    try {
+                        return new URL(link.href, location.href).origin === location.origin;
+                    } catch (_error) {
+                        return false;
+                    }
+                });
+                return {
+                    count: internal.length,
+                    targetViolations: internal
+                        .filter(link => link.getAttribute("target") !== null)
+                        .map(link => ({
+                            href: link.getAttribute("href"),
+                            target: link.getAttribute("target")
+                        }))
+                };
+            })()
+            """
+        )
+        self._truth(
+            isinstance(state, dict) and state.get("count", 0) > 0,
+            "Interne Modulkarten konnten auf der angemeldeten Übersicht nicht geprüft werden.",
+        )
+        violations = state.get("targetViolations")
+        self._equal(
+            violations,
+            [],
+            "Interne Modulkarten öffnen nicht durchgehend im selben Tab",
+        )
+
+    def _click_root_card(self, path: str, description: str) -> None:
+        selector = f'a.estab-menu-link[href$="{path}"]'
+        self._equal(
+            self.cdp.evaluate(_visible_count_expression(None, selector)),
+            1,
+            f"Anzahl sichtbarer Karten für {description}",
+        )
+        self.cdp.click(None, selector, description)
+
+    def _wait_for_top_level_path(self, path: str, description: str) -> None:
+        expected_path = json.dumps(path)
+        self.cdp.wait_for(
+            f"""
+            document.readyState === "complete" &&
+            location.pathname.endsWith({expected_path})
+            """,
+            description,
+        )
+
+    def _open_compact_navigation(self, frame_name: str, location: str) -> None:
+        disclosure_open = self.cdp.evaluate(
+            _frame_expression(
+                frame_name,
+                """
+                const navigation = doc.querySelector("[data-estab-navigation]");
+                const disclosure = navigation && navigation.querySelector("details");
+                return disclosure ? disclosure.open : null;
+                """,
+            )
+        )
+        self._truth(
+            disclosure_open is not None,
+            f"Kompakte Bereichsauswahl fehlt in {location}.",
+        )
+        if not disclosure_open:
+            self.cdp.click(
+                frame_name,
+                "[data-estab-navigation] summary",
+                f"Bereichsauswahl in {location}",
+            )
+        self.cdp.wait_for(
+            _frame_expression(
+                frame_name,
+                """
+                const navigation = doc.querySelector("[data-estab-navigation]");
+                const disclosure = navigation && navigation.querySelector("details");
+                if (!navigation || !disclosure || !disclosure.open) return false;
+                return Array.from(
+                    navigation.querySelectorAll("a[data-estab-nav-key]")
+                ).every(link => {
+                    const rect = link.getBoundingClientRect();
+                    const style = target.getComputedStyle(link);
+                    return rect.width > 0 && rect.height > 0 &&
+                        style.display !== "none" && style.visibility !== "hidden";
+                });
+                """,
+            ),
+            f"Bereichsauswahl in {location} wurde nicht geöffnet",
         )
 
     def _assert_protected_cards(self) -> None:
+        expected_destinations = list(self.protected_card_keys)
+        expected_root_cards = list(self.root_card_keys)
         card_state = self.cdp.evaluate(
             """
             (() => {
+                const rootCards = Array.from(
+                    document.querySelectorAll(".estab-menu-card")
+                );
                 const all = Array.from(
                     document.querySelectorAll(".estab-menu-card-application")
                 );
                 const locked = all.filter(card =>
                     card.classList.contains("estab-menu-card-locked")
                 );
-                return {total: all.length, locked: locked.map(card => {
-                const link = card.querySelector("a.estab-menu-link");
-                const badge = card.querySelector(".estab-menu-badge");
-                if (!link || !badge) return null;
-                const url = new URL(link.href, location.href);
                 return {
-                    href: url.pathname + url.search,
-                    target: link.getAttribute("target"),
-                    badge: badge.innerText.replace(/\\s+/g, " ").trim()
+                    rootKeys: rootCards.map(card => {
+                        const link = card.querySelector(
+                            "a.estab-menu-link[data-estab-nav-key]"
+                        );
+                        return link
+                            ? link.getAttribute("data-estab-nav-key")
+                            : null;
+                    }),
+                    total: all.length,
+                    locked: locked.map(card => {
+                        const link = card.querySelector("a.estab-menu-link");
+                        const badge = card.querySelector(".estab-menu-badge");
+                        if (!link || !badge) return null;
+                        const url = new URL(link.href, location.href);
+                        return {
+                            href: url.pathname + url.search,
+                            key: link.getAttribute("data-estab-nav-key"),
+                            target: link.getAttribute("target"),
+                            badge: badge.innerText.replace(/\\s+/g, " ").trim()
+                        };
+                    })
                 };
-                })};
             })()
             """
         )
+        self._truth(
+            isinstance(card_state, dict)
+            and isinstance(card_state.get("rootKeys"), list),
+            "Die vollständige Root-Kartenreihenfolge konnte nicht geprüft werden.",
+        )
+        self._equal(
+            card_state.get("rootKeys"),
+            expected_root_cards,
+            "Reihenfolge und Eindeutigkeit aller Root-Karten",
+        )
         if (
-            not isinstance(card_state, dict)
-            or not isinstance(card_state.get("locked"), list)
+            not isinstance(card_state.get("locked"), list)
             or card_state.get("total") != len(card_state["locked"])
-            or card_state.get("total", 0) < len(self.protected_paths)
+            or card_state.get("total") != len(expected_destinations)
         ):
-            raise TestFailure("Die geschützten Modulkarten sind anonym nicht vollständig gesperrt.")
+            raise TestFailure(
+                "Die geschützten Modulkarten sind anonym nicht vollständig gesperrt."
+            )
+        actual_destinations = [
+            str(card.get("key", "")) if isinstance(card, dict) else ""
+            for card in card_state["locked"]
+        ]
+        self._equal(
+            actual_destinations,
+            expected_destinations,
+            "Reihenfolge und Eindeutigkeit der Post-Login-Ziele "
+            "geschützter Modulkarten",
+        )
         for card in card_state["locked"]:
+            destination = str(card.get("key", ""))
             if (
                 not card
-                or not str(card.get("href", "")).endswith("/4fach/index.php")
+                or not str(card.get("href", "")).endswith(
+                    "/4fach/index.php?next=" + destination
+                )
                 or card.get("target") is not None
                 or card.get("badge") != "Anmeldung erforderlich"
             ):
@@ -1083,7 +1814,6 @@ class BrowserAcceptance:
                                 "/4fach/mainindex.php"
                             ) &&
                             doc.readyState === "complete" &&
-                            Boolean(doc.querySelector("form")) &&
                             Boolean(doc.querySelector(
                                 "script[data-estab-mainframe-guard]"
                             )) &&
@@ -1137,8 +1867,18 @@ class BrowserAcceptance:
             time.sleep(0.1)
         raise TestFailure("Timeout: Konto wurde nicht angelegt und angemeldet.")
 
-    def _assert_session_bar(self, frame_name: str | None, location: str) -> None:
+    def _assert_session_bar(
+        self,
+        frame_name: str | None,
+        location: str,
+        expected_active_key: str,
+    ) -> None:
+        self._truth(
+            expected_active_key in self.navigation_keys,
+            f"Unbekannter erwarteter Navigationsbereich {expected_active_key!r}.",
+        )
         selector = "aside[data-estab-session-bar]"
+        expected_navigation_keys = list(self.navigation_keys)
         self._equal(
             self.cdp.evaluate(_visible_count_expression(frame_name, selector)),
             1,
@@ -1151,20 +1891,59 @@ class BrowserAcceptance:
                 const bar = doc.querySelector({json.dumps(selector)});
                 const identity = bar && bar.querySelector("[data-estab-user-code]");
                 const name = bar && bar.querySelector("[data-estab-user-name]");
-                const home = bar && bar.querySelector("a.estab-button-home");
+                const navigation = bar && bar.querySelector("[data-estab-navigation]");
+                const expectedCoreKeys = new Set(
+                    {json.dumps(expected_navigation_keys)}
+                );
+                const links = navigation
+                    ? Array.from(
+                        navigation.querySelectorAll("a[data-estab-nav-key]")
+                    ).filter(link => expectedCoreKeys.has(
+                        link.getAttribute("data-estab-nav-key")
+                    ))
+                    : [];
+                const current = navigation
+                    ? Array.from(navigation.querySelectorAll('[aria-current="page"]'))
+                    : [];
+                const overview = navigation &&
+                    navigation.querySelector('a[data-estab-nav-key="overview"]');
+                const disclosure = navigation && navigation.querySelector("details");
+                const summary = disclosure && disclosure.querySelector("summary");
                 const logout = bar && bar.querySelector("[data-estab-logout-form] button");
-                if (!bar || !identity || !name || !home || !logout) return null;
-                const homeRect = home.getBoundingClientRect();
+                if (!bar || !identity || !name || !navigation || !overview || !logout) {{
+                    return null;
+                }}
+                const navigationRect = navigation.getBoundingClientRect();
                 const logoutRect = logout.getBoundingClientRect();
+                const visible = element => {{
+                    const rect = element.getBoundingClientRect();
+                    const style = target.getComputedStyle(element);
+                    return rect.width > 0 && rect.height > 0 &&
+                        style.display !== "none" && style.visibility !== "hidden";
+                }};
                 return {{
                     name: name.getAttribute("data-estab-user-name"),
                     code: identity.getAttribute("data-estab-user-code"),
                     functionName: identity.getAttribute("data-estab-user-function"),
                     role: identity.getAttribute("data-estab-user-role"),
                     text: bar.innerText.replace(/\\s+/g, " ").trim(),
-                    homeVisible: homeRect.width > 0 && homeRect.height > 0 &&
-                        home.innerText.replace(/\\s+/g, " ").trim() === "Startseite" &&
-                        home.getAttribute("target") === "_top",
+                    navigationCount:
+                        bar.querySelectorAll("[data-estab-navigation]").length,
+                    navigationKeys:
+                        links.map(link => link.getAttribute("data-estab-nav-key")),
+                    allCoreTargetsTop:
+                        links.every(link => link.getAttribute("target") === "_top"),
+                    activeKeys:
+                        current.map(link => link.getAttribute("data-estab-nav-key")),
+                    navigationVisible:
+                        navigationRect.width > 0 && navigationRect.height > 0,
+                    allNavigationLinksVisible: links.every(visible),
+                    compact: bar.classList.contains("estab-session-bar-compact"),
+                    hasDisclosure: Boolean(disclosure),
+                    disclosureSummaryVisible: Boolean(summary && visible(summary)),
+                    overviewContract:
+                        overview.textContent.replace(/\\s+/g, " ").trim() === "Übersicht" &&
+                        overview.getAttribute("target") === "_top",
                     logoutVisible: logoutRect.width > 0 && logoutRect.height > 0 &&
                         !logout.disabled
                 }};
@@ -1182,6 +1961,39 @@ class BrowserAcceptance:
         )
         role = details.get("role")
         self._truth(isinstance(role, str) and bool(role.strip()), f"Rolle fehlt in {location}.")
+        self._equal(
+            details.get("navigationCount"),
+            1,
+            f"Anzahl gemeinsamer Navigationen in {location}",
+        )
+        self._equal(
+            details.get("navigationKeys"),
+            expected_navigation_keys,
+            f"Reihenfolge der Kernbereiche in {location}",
+        )
+        self._truth(
+            details.get("allCoreTargetsTop"),
+            f"Kernbereich wechselt in {location} nicht durchgehend das Top-Level-Ziel.",
+        )
+        self._equal(
+            details.get("activeKeys"),
+            [expected_active_key],
+            f"Aktiver Navigationsbereich in {location}",
+        )
+        self._truth(
+            details.get("navigationVisible"),
+            f"Gemeinsame Navigation ist in {location} nicht sichtbar.",
+        )
+        if details.get("compact"):
+            self._truth(
+                details.get("hasDisclosure") and details.get("disclosureSummaryVisible"),
+                f"Kompakte Bereichsauswahl fehlt in {location}.",
+            )
+        else:
+            self._truth(
+                details.get("allNavigationLinksVisible"),
+                f"Mindestens ein Kernbereich ist in {location} nicht sichtbar.",
+            )
         visible_text = details.get("text", "")
         for expected in (
             "Angemeldet als",
@@ -1189,12 +2001,11 @@ class BrowserAcceptance:
             self.config.login_code,
             self.config.login_function,
             role,
-            "Startseite",
             "Abmelden",
         ):
             self._truth(expected in visible_text, f"Session-Bar in {location} ist unvollständig.")
         self._truth(details.get("logoutVisible"), f"Abmeldebutton fehlt in {location}.")
-        self._truth(details.get("homeVisible"), f"Startseitenlink fehlt in {location}.")
+        self._truth(details.get("overviewContract"), f"Übersichtslink fehlt in {location}.")
 
     @staticmethod
     def _equal(actual: Any, expected: Any, description: str) -> None:
@@ -1239,12 +2050,29 @@ def capture_diagnostics(cdp: CDP | None) -> pathlib.Path | None:
                         for (let index = 0; index < root.frames.length; index += 1) {
                             const child = root.frames[index];
                             try {
+                                const navigation = child.document.querySelector(
+                                    "[data-estab-navigation]"
+                                );
                                 frames.push({
                                     name: child.name || "",
                                     url: child.location.href,
                                     sessionBars: child.document.querySelectorAll(
                                         "aside[data-estab-session-bar]"
-                                    ).length
+                                    ).length,
+                                    navigationKeys: navigation
+                                        ? Array.from(navigation.querySelectorAll(
+                                            "a[data-estab-nav-key]"
+                                        )).map(link => link.getAttribute(
+                                            "data-estab-nav-key"
+                                        ))
+                                        : [],
+                                    activeNavigationKeys: navigation
+                                        ? Array.from(navigation.querySelectorAll(
+                                            '[aria-current="page"]'
+                                        )).map(link => link.getAttribute(
+                                            "data-estab-nav-key"
+                                        ))
+                                        : []
                                 });
                                 collect(child);
                             } catch (_error) {
@@ -1253,12 +2081,25 @@ def capture_diagnostics(cdp: CDP | None) -> pathlib.Path | None:
                         }
                     };
                     collect(window);
+                    const topNavigation = document.querySelector(
+                        "[data-estab-navigation]"
+                    );
                     return {
                         url: location.href,
                         title: document.title,
                         topSessionBars: document.querySelectorAll(
                             "aside[data-estab-session-bar]"
                         ).length,
+                        topNavigationKeys: topNavigation
+                            ? Array.from(topNavigation.querySelectorAll(
+                                "a[data-estab-nav-key]"
+                            )).map(link => link.getAttribute("data-estab-nav-key"))
+                            : [],
+                        topActiveNavigationKeys: topNavigation
+                            ? Array.from(topNavigation.querySelectorAll(
+                                '[aria-current="page"]'
+                            )).map(link => link.getAttribute("data-estab-nav-key"))
+                            : [],
                         frames
                     };
                 })()

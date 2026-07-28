@@ -158,7 +158,9 @@ assert_session_bar() {
         'data-estab-logout-form' \
         'method="post"' \
         'target="_top"' \
-        '>Startseite</a>' \
+        'data-estab-navigation' \
+        'data-estab-nav-key="overview"' \
+        '>Übersicht</span>' \
         '4fach/logout.php' \
         'name="logout_action" value="logout"' \
         '>Abmelden</button>'
@@ -285,7 +287,7 @@ done
 
 assert_status 200 "$base_url/"
 assert_body 'Nachrichtenvordruck'
-assert_body 'Infosammlung BOS'
+assert_body 'BOS-Info'
 assert_body 'id="estab-login"'
 assert_body "href=\"$expected_app_root/4fach/index.php?login_flow=existing\""
 assert_body '>Mit bestehendem Konto anmelden</a>'
@@ -448,11 +450,20 @@ assert_account_count 0 "$unknown_existing_code"
 
 : > "$cookie_jar"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-    --request POST --data-urlencode 'login_flow=new' \
+    "$base_url/4fach/mainindex.php?next=incident-log"
+assert_body 'Wie möchten Sie fortfahren?'
+assert_body 'name="next" value="incident-log"'
+preauth_csrf_token=$(csrf_from_body)
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$preauth_csrf_token" \
+    --data-urlencode 'login_flow=new' \
+    --data-urlencode 'next=incident-log' \
     "$base_url/4fach/mainindex.php"
 assert_body 'Neues Funktionskonto anlegen'
 assert_body 'name="kennwort2"'
 assert_body 'Kennwort wiederholen'
+assert_body 'name="next" value="incident-log"'
 preauth_csrf_token=$(csrf_from_body)
 
 # A failed confirmation remains in the registration form and creates no
@@ -468,8 +479,10 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "kennwort1@$login_password_file" \
     --data-urlencode 'kennwort2=does-not-match' \
     --data-urlencode '2teskennwort=Yes' \
+    --data-urlencode 'next=incident-log' \
     "$base_url/4fach/mainindex.php"
 assert_body 'Die beiden Kennwörter stimmen nicht überein'
+assert_body 'name="next" value="incident-log"'
 assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/vordrucke.php"
 assert_account_count 0 "$test_code"
@@ -485,11 +498,11 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "kennwort2@$login_password_file" \
     --data-urlencode '2teskennwort=Yes' \
     --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'next=incident-log' \
     "$base_url/4fach/mainindex.php"
-assert_body 'Meldung/Seite:'
-assert_body "$expected_app_root/4fach/counter.php?embedded=1"
-assert_body "$expected_app_root/4fach/vorgaben.php"
-assert_body "$expected_app_root/4fach/mainindex.php"
+assert_body 'Der gewählte eStab-Bereich wird geöffnet'
+assert_body "href=\"$expected_app_root/stabetb/etb.php\" target=\"_top\""
+assert_body "window.top.location.replace(\"$expected_app_root/stabetb/etb.php\")"
 assert_body_absent '//4fach/'
 if grep -Eq 'Fatal error|Uncaught (Error|TypeError)|Warning:' "$body"; then
     printf 'HTTP smoke: PHP runtime error leaked into authenticated response\n' >&2
@@ -1137,6 +1150,13 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
     assert_status 200 --config "$admin_curl_config" \
         "$base_url/4fadm/admin.php"
     assert_body 'Einsatzexport'
+    assert_body 'data-estab-public-bar'
+    assert_body 'data-estab-navigation'
+    assert_body 'Administrationszugang'
+    assert_body "data-estab-admin-user=\"$ESTAB_TEST_ADMIN_USER\""
+    assert_body 'Kein eStab-Funktionskonto angemeldet'
+    assert_body 'data-estab-nav-key="administration" aria-current="page"'
+    assert_body_absent 'data-estab-session-bar'
 
     admin_cookie=$work_dir/admin-cookies.txt
     assert_status 200 --config "$admin_curl_config" \

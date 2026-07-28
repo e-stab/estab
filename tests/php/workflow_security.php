@@ -24,6 +24,37 @@ foreach (['existing', 'new'] as $loginFlow) {
     );
 }
 $assert(
+    estab_workflow_public_login_request(
+        ['REQUEST_METHOD' => 'GET'],
+        ['next' => 'incident-log'],
+        []
+    )
+        && estab_workflow_public_login_request(
+            ['REQUEST_METHOD' => 'GET'],
+            ['login_flow' => 'existing', 'next' => 'tracking'],
+            []
+        ),
+    'validated post-login destination was rejected'
+);
+$assert(
+    !estab_workflow_public_login_request(
+        ['REQUEST_METHOD' => 'GET'],
+        ['next' => 'administration'],
+        []
+    )
+        && !estab_workflow_public_login_request(
+            ['REQUEST_METHOD' => 'GET'],
+            ['next' => 'https://attacker.invalid'],
+            []
+        )
+        && !estab_workflow_public_login_request(
+            ['REQUEST_METHOD' => 'GET'],
+            ['next' => ['incident-log']],
+            []
+        ),
+    'untrusted post-login destination was accepted'
+);
+$assert(
     estab_workflow_public_login_request(['REQUEST_METHOD' => 'POST'], [], ['login' => 'Anmelden']),
     'login transition rejected'
 );
@@ -37,6 +68,14 @@ foreach (['existing', 'new'] as $loginFlow) {
         'valid account-flow selection rejected'
     );
 }
+$assert(
+    estab_workflow_public_login_request(
+        ['REQUEST_METHOD' => 'POST'],
+        [],
+        ['login_flow' => 'new', 'next' => 'incident-log']
+    ),
+    'form-bound protected login destination was rejected'
+);
 $assert(
     estab_workflow_public_login_request(
         ['REQUEST_METHOD' => 'POST'],
@@ -73,6 +112,14 @@ $credentials = [
 $assert(
     estab_workflow_public_login_request(['REQUEST_METHOD' => 'POST'], [], $credentials),
     'credential POST rejected'
+);
+$assert(
+    estab_workflow_public_login_request(
+        ['REQUEST_METHOD' => 'POST'],
+        [],
+        $credentials + ['next' => 'incident-log']
+    ),
+    'credential POST lost its form-bound protected destination'
 );
 $loginCsrf = str_repeat('a', 64);
 $assert(
@@ -209,6 +256,8 @@ foreach ([
     ['REQUEST_METHOD' => 'POST', 'get' => [], 'post' => ['login_flow' => 'unknown']],
     ['REQUEST_METHOD' => 'POST', 'get' => [], 'post' => ['login_flow' => ['existing']]],
     ['REQUEST_METHOD' => 'POST', 'get' => [], 'post' => ['login_flow' => 'new', 'task' => 'Stab_schreiben']],
+    ['REQUEST_METHOD' => 'POST', 'get' => [], 'post' => ['login_flow' => 'new', 'next' => 'administration']],
+    ['REQUEST_METHOD' => 'POST', 'get' => [], 'post' => ['login_flow' => 'new', 'next' => ['incident-log']]],
     [
         'REQUEST_METHOD' => 'POST',
         'get' => [],
@@ -247,6 +296,14 @@ $telecommunications = ['benutzer' => 'Radio', 'kuerzel' => 'aw0001', 'funktion' 
 $assert(
     !estab_workflow_route_allowed($staff, 'POST', $existingCredentials),
     'authenticated session accepted a second login request'
+);
+$assert(
+    !estab_workflow_route_allowed(
+        $staff,
+        'POST',
+        ['next' => 'incident-log']
+    ),
+    'authenticated session accepted a login destination selector'
 );
 $assert(
     !estab_workflow_route_allowed($staff, 'POST', [
@@ -313,7 +370,12 @@ $assert(
         && str_contains($mainController, 'estab_workflow_route_allowed')
         && str_contains($mainController, 'estab_workflow_record_id')
         && str_contains($mainController, 'estab_csrf_is_valid')
-        && str_contains($mainController, 'estab_workflow_legacy_login_without_csrf_allowed'),
+        && str_contains($mainController, 'estab_workflow_legacy_login_without_csrf_allowed')
+        && str_contains(
+            $mainController,
+            'estab_navigation_login_destination_field'
+        )
+        && !str_contains($mainController, 'estab_login_destination'),
     'main controller does not enforce the central workflow gate'
 );
 

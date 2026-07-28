@@ -12,7 +12,7 @@ steht in der [Funktionsmatrix](FUNKTIONSNACHWEIS.md).
 | Image-Build | benötigte PHP-Erweiterungen und Apache-Konfiguration |
 | Datenbank | echtes MariaDB-Schema, Indizes, Matrix, Engines, Collations und Zero-Date-Freiheit |
 | HTTP | Header, direkte Endpunktfläche, 403-/400-/405-Grenzen, PNG-Antworten, Registrierung, sichtbare Sitzungsidentität, CSRF-Abmeldung, erneute Anmeldung, Nachrichten-/Kategorien- und ETB-/TBB-Rollengrenzen sowie optional Admin-Export |
-| Echter Browser | sichtbare Startseite, getrennte Konto-Flows, Frameset-Navigation, genau eine Sitzungsleiste, Startseitenlink und Logout per echtem Mausklick |
+| Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, acht stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, genau eine Frameset-Leiste, Logout sowie Layout bei exakt 390 × 844 CSS-Pixeln |
 | Fachabnahme | kompletter Nachrichten-, Anhang-, PDF-, ETB-/TBB- und Restore-Ablauf |
 | Betrieb | kontinuierliche Readiness, Logs, Restarts, Kapazität und Backup-Alter |
 
@@ -41,13 +41,17 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
 - `NULL`-/Zero-Date-Behandlung,
 - Anmelde-, Konto-Flow-, aktive Funktionsbindungs-, Session-, Proxy- und
   Passwortregeln,
+- kanonische Reihenfolge, sichere URL-Auflösung, aktive Route und ausschließlich
+  erlaubte symbolische Anmeldeziele der gemeinsamen Navigation,
 - zustandsabhängige Root-Menükarten mit genau einem Tastaturziel, sicherem
-  Escaping und verständlicher Trennung von Anwendung, Administration und
-  öffentlichen Inhalten,
+  Escaping, gleichem Browserkontext, sicherer Zielbeibehaltung und
+  verständlicher Trennung von Anwendung, Administration und öffentlichen
+  Inhalten,
 - HTML-escaping und Base-Path-Auflösung der gemeinsamen Sitzungsleiste,
-  eindeutige Abmeldeformulare, POST-/CSRF-Vertrag, lokale
-  Session-Zerstörung bei DB-Fehlern, unveränderte Nicht-HTML-Antworten sowie
-  SID-gebundene Statusänderung,
+  öffentliche und authentifizierte Navigation, aktive Markierung, kompakte
+  Bereichsauswahl, Dirty-Form-Guard, eindeutige Abmeldeformulare,
+  POST-/CSRF-Vertrag, lokale Session-Zerstörung bei DB-Fehlern, unveränderte
+  Nicht-HTML-Antworten sowie SID-gebundene Statusänderung,
 - Nachrichten-IDs, Rollen-/Objektregeln, Empfänger-Tokens, erlaubte
   Workflow-Aktionen, POST-/CSRF-Verträge, Prepared Statements, sichere
   UTF-8-/Legacy-Entity-Ausgabe und die inerten Payloads Quotes, Ampersand,
@@ -99,10 +103,11 @@ die Containerlogs und stellt Datenbank, Anhänge und Export aus einem
 prüfsummengebundenen Backup in neue Volumes wieder her. Am Ende werden nur die
 guardierten CI-Container, CI-Volumes und temporären Secrets entfernt. Mit
 Docker wird `ESTAB_CONTAINER_CLI=docker` gesetzt oder die Variable weggelassen.
-Die HTTP-Stufe beweist dabei den Startseiten-Anmeldebutton, die getrennten
+Die HTTP-Stufe beweist dabei den Übersichts-Anmeldebutton, die getrennten
 Bestandskonto-/Neukonto-Formulare, die sichtbare Kontenauswahl,
 Kennwortbestätigung, unveränderte Kontenzahlen und Passwort-Hashes bei
-Fehlversuchen, aktive Funktionsbindung, die gemeinsame Sitzungsanzeige,
+Fehlversuchen, aktive Funktionsbindung, die sichere Wiederaufnahme eines zuvor
+gewählten geschützten Bereichs, die gemeinsame Sitzungsanzeige,
 CSRF-geschützte Abmeldung sowie deaktivierte Selbstregistrierung. Zusätzlich
 steuert der Browser-Akzeptanztest einen echten Chrome-/Chromium-Prozess.
 Das Gate verwendet standardmäßig die auch für Laptop, LAN und Reverse Proxy
@@ -297,18 +302,20 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
 `ESTAB_TEST_ADMIN_USER` denselben Wert erhalten. Der Test prüft unter anderem:
 
 - Readiness und Security Header,
-- Startseite, BOS-Infos und historisches PDF-Handbuch,
+- Übersicht, BOS-Infos und historisches PDF-Handbuch,
 - HTTP 403 für interne beziehungsweise abgeschaltete Provisionierungspfade,
 - HTTP 410 für unsichere historische Direkt-Upload-Endpunkte,
 - HTTP 401 für den anonymen Administrationszugriff,
 - Image-Button-Login, Registrierung, authentifizierte Oberfläche und erneute
   Anmeldung über Kontenliste und gespeicherten Passwort-Hash,
+- formulargebundene Beibehaltung eines erlaubten geschützten Zielbereichs
+  durch Auswahl, Validierungsfehler und erfolgreiche Anmeldung,
 - exakt eine escaped Sitzungsleiste mit Name, Kürzel, Funktion, Rolle und
   Abmeldebutton auf Root-Einstieg, Hauptansicht, Frameset-Navigation,
   direkten Status-/Zählerseiten, Nachrichtenübersicht, Nachweisung,
   Übungsleitung, Anhängen, Vordrucken, Kategorien sowie ETB/TBB; eingebettete
-  Hilfsframes vermeiden Duplikate und anonyme Seiten bleiben ohne
-  Identitätsausgabe,
+  Hilfsframes vermeiden Duplikate und anonyme Fachseiten bleiben ohne
+  vorgetäuschte eStab-Identität,
 - HTTP 405 für Logout per GET, HTTP 403 bei fehlendem oder falschem CSRF,
   Cookie-/Sitzungsende und 303-Rückleitung bei Erfolg sowie die
   SID-Grenze, durch die eine alte Sitzung eine neuere Anmeldung desselben
@@ -324,7 +331,9 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
 - Speichern und Suchen einer Nachricht mit Quotes, Ampersand, `<script>` und
   SQL-ähnlichem Text bei nachweislich inertem HTML sowie HTTP 403 für den
   historischen GET-Detailaufruf,
-- Adminseite, CSRF-Token und vollständigen Einsatzexport.
+- Basic-Auth-Adminseite mit escaped technischem Benutzernamen, ausdrücklicher
+  Trennung vom eStab-Funktionskonto, CSRF-Token und vollständigem
+  Einsatzexport.
 
 ### Direkte HTTP-Oberfläche
 
@@ -385,20 +394,30 @@ Ohne Kennwortvariable erzeugt der Test intern ein starkes ephemeres Kennwort
 und gibt es weder in Logs noch Diagnosen aus. Das Kürzel muss bei manuellen
 Wiederholungsläufen neu und höchstens sechs Zeichen lang sein.
 
-Der Ablauf klickt die getrennten Startseitenwege, öffnet die Neuanlage im
-Legacy-Frameset, füllt das Formular aus und prüft danach:
+Der Ablauf klickt die getrennten Wege der Übersicht, öffnet die Neuanlage im
+Legacy-Frameset, füllt das Formular aus und prüft in acht Abschnitten:
 
-- anonyme Modulkarten führen verständlich zur Anmeldung, direkte Zugriffe
-  bleiben mit HTTP 403 geschützt;
-- der Frame-Refresh verwendet die richtige Origin und keinen
-  schema-relativen Doppel-Slash;
-- im vollständigen Frameset ist genau eine sichtbare Sitzungsleiste vorhanden;
-- Name, Kürzel, Funktion, Rolle, Startseitenlink und Abmeldebutton sind
-  tatsächlich sichtbar und bedienbar;
-- im BOS-Frameset bleibt die kompakte Leiste beim Wechsel einer statischen
-  Informationsseite erhalten;
-- ein echter Mausklick auf `Abmelden` beendet die Sitzung und stellt den
-  anonymen Zustand wieder her.
+- Anonyme Nutzer sehen alle acht Bereiche in stabiler Reihenfolge, genau eine
+  aktive Markierung und sichere Anmeldeziele; direkte Zugriffe auf geschützte
+  Endpunkte bleiben mit HTTP 403 geschützt.
+- Der Frame-Refresh verwendet die richtige Origin und keinen schema-relativen
+  Doppel-Slash. Im vollständigen Frameset ist genau eine sichtbare
+  Sitzungsleiste mit Name, Kürzel, Funktion, Rolle und Logout vorhanden.
+- Die native kompakte Auswahl „Bereich wechseln“ lässt sich real öffnen; der
+  Link „Übersicht“ verlässt das Frameset im Top-Level-Kontext.
+- Ein geändertes Nachrichtenfeld löst beim globalen Bereichswechsel den
+  nativen Bestätigungsdialog aus: Ablehnen bewahrt Seite und Wert,
+  anschließendes Bestätigen öffnet die Übersicht.
+- Reale Klicks auf die BOS-Karte und eine statische BOS-Unterseite behalten
+  die kompakte Navigation; der Rückweg zur Übersicht funktioniert.
+- Reale Klicks auf die ETB-Karte öffnen ohne neuen Tab den richtigen Pfad und
+  markieren `incident-log` als aktiven Bereich.
+- Ein echter Mausklick auf `Abmelden` im ETB beendet die Sitzung und stellt
+  den öffentlichen Navigationszustand wieder her.
+- Mit einem über das DevTools-Protokoll exakt auf 390 × 844 CSS-Pixel
+  gesetzten Viewport bleiben Leiste, Kopf, Login-Karte und Einspalten-Karten
+  innerhalb der Breite; Navigationslinks sind erreichbar und zentrale
+  Login-Schaltflächen mindestens 44 Pixel hoch.
 
 Soweit Chrome bereits steuerbar ist, legt der Test bei Fehlern `failure.png`
 und ein kennwortfreies `state.json` an. Bei Browser-Startfehlern oder einem

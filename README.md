@@ -87,26 +87,39 @@ Konto an. Die Rolle wird in beiden Fällen ausschließlich aus der ausgewählten
 Funktion und der Empfängermatrix abgeleitet. Beide Browserabläufe sind bereits
 vor der Anmeldung an ein Session-CSRF-Token gebunden.
 
-Auf der Startseite führen zwei getrennte Schaltflächen unmittelbar zum
+Auf der Übersicht führen zwei getrennte Schaltflächen unmittelbar zum
 passenden Bestands- beziehungsweise Neuanlageformular. Ist
 Selbstregistrierung deaktiviert, verschwindet die Neuanlage-Schaltfläche und
 ein Hinweis nennt den organisatorischen Kontaktweg. Ohne eStab-Sitzung sind
 geschützte Modulkarten sichtbar als „Anmeldung erforderlich“ gekennzeichnet
-und führen zum Anmeldeeinstieg statt auf eine HTTP-403-Seite. Die
-Administration ist als eigener technischer Zugang markiert.
+und führen zum Anmeldeeinstieg statt auf eine HTTP-403-Seite. Der dort
+ausgewählte Bereich wird als fester, serverseitig erlaubter Schlüssel
+in jedem Formular des jeweiligen Browser-Tabs beibehalten und nach
+erfolgreicher Anmeldung direkt geöffnet. Freie Rücksprung-URLs werden nicht
+akzeptiert. Die Administration ist als eigener technischer Zugang markiert.
 
-Nach erfolgreicher Anmeldung zeigen der Einstieg, das Haupt-Frameset und alle
-geschützten eigenständigen HTML-Module eine gemeinsame Sitzungsleiste mit Name,
-Kürzel, Funktion und abgeleiteter Rolle. Der dortige Button „Abmelden“ beendet
-die lokale Sitzung auch bei einer nachgelagerten Datenbankstörung, löscht die
-Anwendungscookies und führt anschließend zum Anmeldeeinstieg zurück. Direkt
-geöffnete Status-/Zählerseiten erhalten dieselbe kompakte Anzeige; innerhalb
-des Framesets bleibt sie bewusst einmalig in der Navigation sichtbar. Die
-Schaltfläche „Startseite“ führt aus Fachmodulen und Frames zuverlässig zur
-Modulübersicht zurück. Der BOS-Informationsbereich hält die Anzeige in seinem
-Navigationsframe sichtbar; aktive Hilfe- und Problem-Popups zeigen sie
-ebenfalls. Die separate HTTP-Basic-Identität der Administration wird davon
-nicht berührt.
+Eine gemeinsame Navigation führt in stabiler Reihenfolge durch Übersicht,
+Nachrichtenvordruck, Meldungsübersicht, Vordrucke, ETB, TBB, Nachweisung und
+BOS-Info. Sie markiert den aktiven Bereich und öffnet interne Ziele immer im
+selben Browserkontext. Im Legacy-Frameset steht dieselbe Auswahl kompakt unter
+„Bereich wechseln“ bereit. Öffentliche Seiten zeigen zusätzlich den Zustand
+„Nicht angemeldet“ und einen Anmeldebutton; geschützte Ziele leiten
+verständlich zum Login.
+
+Nach erfolgreicher Anmeldung zeigen der Einstieg, das Haupt-Frameset, die
+Administrationsseiten und alle geschützten eigenständigen HTML-Module die
+gemeinsame Leiste mit Name, Kürzel, Funktion und abgeleiteter Rolle. Der
+Button „Abmelden“ beendet die lokale Sitzung auch bei einer nachgelagerten
+Datenbankstörung, löscht die Anwendungscookies und führt anschließend zum
+Anmeldeeinstieg zurück. Direkt geöffnete Status-/Zählerseiten erhalten dieselbe
+kompakte Anzeige; innerhalb des Framesets bleibt sie bewusst einmalig in der
+Navigation sichtbar. Formulare mit ungespeicherten Fach- oder
+Administrationseingaben warnen vor einem globalen Bereichswechsel oder
+Logout. Hilfe- und Problemfenster prüfen dabei auch ungespeicherte Eingaben im
+zugehörigen Hauptfenster und führen globale Navigation beziehungsweise Logout
+dort aus. Auf Administrationsseiten wird der separate HTTP-Basic-Benutzer
+sichtbar und klar von einem gegebenenfalls zusätzlich angemeldeten
+eStab-Funktionskonto getrennt.
 
 Interne PHP-Controller, Spracharrays, `*.inc.php` und der vollständige
 `/4fbak/`-Baum sind keine direkten Webendpunkte und werden von Apache mit

@@ -81,14 +81,14 @@ assert_png() {
 assert_status 200 "$base_url/"
 for label in \
     'Nachrichtenvordruck' \
-    'Generierte Vordrucke' \
-    'Liste aller Meldungen' \
-    'Infosammlung BOS' \
+    'Vordrucke' \
+    'Meldungsübersicht' \
+    'BOS-Info' \
     'Administration' \
     'Einsatztagebuch' \
     'Technisches Betriebsbuch' \
     'Nachweisung' \
-    'Kurzanleitung zur eStab Installation'
+    'Handbuch'
 do
     assert_body_fixed "$label"
 done
@@ -100,6 +100,8 @@ assert_body_fixed "href=\"$expected_app_root/4fach/index.php?login_flow=new\""
 assert_body_fixed '>Neues Konto anlegen</a>'
 assert_body_fixed 'Anmeldung erforderlich'
 assert_body_fixed 'Separater Administrationszugang'
+assert_body_fixed 'data-estab-navigation'
+assert_body_fixed 'data-estab-nav-key="overview"'
 if grep -Fq 'href="./stabetb/etb.php"' "$body"; then
     printf 'HTTP surface: anonymous root menu exposes a protected module target\n' >&2
     exit 1
@@ -141,7 +143,15 @@ assert_status 200 "$base_url/4fach/index.php?login_flow=existing"
 assert_body_fixed 'SRC="./mainindex.php?login_flow=existing"'
 assert_status 200 "$base_url/4fach/index.php?login_flow=new"
 assert_body_fixed 'SRC="./mainindex.php?login_flow=new"'
+assert_status 200 "$base_url/4fach/index.php?next=incident-log"
+assert_body_fixed 'SRC="./mainindex.php?next=incident-log"'
+assert_body_fixed 'SRC="./vorgaben.php?next=incident-log"'
+assert_status 200 "$base_url/4fach/index.php?login_flow=existing&next=tracking"
+assert_body_fixed 'SRC="./mainindex.php?login_flow=existing&amp;next=tracking"'
+assert_body_fixed 'SRC="./vorgaben.php?next=tracking"'
 assert_status 400 "$base_url/4fach/index.php?login_flow=unknown"
+assert_status 400 "$base_url/4fach/index.php?next=administration"
+assert_status 400 "$base_url/4fach/index.php?next=https%3A%2F%2Fattacker.invalid"
 assert_nonempty_200 "$base_url/4fach/counter.php"
 if grep -Fq 'data-estab-session-bar' "$body"; then
     printf 'HTTP surface: anonymous counter contains authenticated session UI\n' >&2
@@ -149,10 +159,17 @@ if grep -Fq 'data-estab-session-bar' "$body"; then
 fi
 assert_status 200 "$base_url/4fach/vorgaben.php"
 assert_body_fixed 'm_text=anmelden'
+assert_body_fixed 'data-estab-public-bar'
+assert_body_fixed '<summary>Bereich wechseln</summary>'
 if grep -Fq 'data-estab-session-bar' "$body"; then
     printf 'HTTP surface: anonymous navigation contains authenticated session UI\n' >&2
     exit 1
 fi
+assert_status 200 "$base_url/4fach/vorgaben.php?next=incident-log"
+assert_body_fixed 'name="next" value="incident-log"'
+assert_body_fixed "href=\"$expected_app_root/4fach/index.php?next=incident-log\""
+assert_status 400 "$base_url/4fach/vorgaben.php?next=administration"
+assert_status 400 "$base_url/4fach/vorgaben.php?unexpected=1"
 assert_status 200 "$base_url/4fach/mainindex.php"
 assert_body_fixed 'eStab-Funktionskonto'
 assert_body_fixed 'Wie möchten Sie fortfahren?'

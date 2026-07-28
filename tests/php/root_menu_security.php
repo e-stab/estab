@@ -42,10 +42,32 @@ $unlocked = estab_root_menu_item_markup($protected, true);
 $assert(
     substr_count($unlocked, '<a ') === 1
         && str_contains($unlocked, 'href="./protected.php"')
-        && str_contains($unlocked, 'target="_blank"')
-        && str_contains($unlocked, 'rel="noopener noreferrer"')
+        && !str_contains($unlocked, 'target=')
         && !str_contains($unlocked, 'Anmeldung erforderlich'),
-    'authenticated protected menu card did not expose its real target safely'
+    'authenticated protected menu card did not expose its real same-tab target safely'
+);
+
+$keyedProtected = [
+    'text' => 'Einsatztagebuch (ETB)',
+    'info' => 'Geschützter Bereich',
+    'pic' => './icon.png',
+    'link' => './stabetb/etb.php',
+    'navigation_key' => 'incident-log',
+    'visible' => true,
+    'access' => 'application',
+];
+$keyedLocked = estab_root_menu_item_markup($keyedProtected, false);
+$assert(
+    str_contains(
+        $keyedLocked,
+        'href="/4fach/index.php?next=incident-log"'
+    )
+        && str_contains(
+            $keyedLocked,
+            'data-estab-nav-key="incident-log"'
+        )
+        && !str_contains($keyedLocked, 'href="./stabetb/etb.php"'),
+    'protected root card did not retain its validated post-login destination'
 );
 
 $administration = estab_root_menu_item_markup([
@@ -121,5 +143,19 @@ try {
     $invalidAccessRejected = true;
 }
 $assert($invalidAccessRejected, 'unknown menu access class accepted');
+
+$invalidNavigationKeyRejected = false;
+try {
+    estab_root_menu_item_markup(
+        array_replace($keyedProtected, ['navigation_key' => 'administration']),
+        false
+    );
+} catch (InvalidArgumentException) {
+    $invalidNavigationKeyRejected = true;
+}
+$assert(
+    $invalidNavigationKeyRejected,
+    'root menu accepted a navigation key that does not match its target'
+);
 
 echo "root menu security: OK ({$assertions} assertions)\n";

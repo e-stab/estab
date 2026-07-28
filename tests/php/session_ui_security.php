@@ -51,10 +51,12 @@ $assert(
     str_contains($markup, 'method="post"')
         && str_contains($markup, 'target="_top"')
         && str_contains($markup, '4fach/logout.php')
-        && str_contains($markup, '>Startseite</a>')
+        && str_contains($markup, 'data-estab-navigation')
+        && str_contains($markup, 'data-estab-nav-key="overview"')
+        && str_contains($markup, '>Übersicht</span>')
         && str_contains($markup, 'name="logout_action" value="logout"')
         && str_contains($markup, '>Abmelden</button>'),
-    'logout form contract incomplete'
+    'navigation or logout form contract incomplete'
 );
 $assert(
     str_contains($markup, 'name="csrf_token" value="' . $token . '"'),
@@ -64,6 +66,7 @@ $assert(
 $compact = estab_session_ui_markup($identity, $token, true);
 $assert(
     str_contains($compact, 'estab-session-bar-compact')
+        && str_contains($compact, '<summary>Bereich wechseln</summary>')
         && !str_contains($compact, 'data-estab-mainframe-guard'),
     'compact frame presentation missing'
 );
@@ -72,6 +75,129 @@ $assert(
         && str_contains($markup, 'window.name==="mainframe"')
         && str_contains($markup, 'bar.remove()'),
     'full session bar is not suppressed in the composed main frame'
+);
+$assert(
+    substr_count($markup, '<script data-estab-dirty-guard>') === 1
+        && str_contains($markup, 'form[data-estab-dirty-guard]')
+        && str_contains($markup, 'data-estab-dirty-initial')
+        && str_contains($markup, 'window.confirm(')
+        && str_contains($markup, 'Ungespeicherte Eingaben')
+        && str_contains($markup, '.estab-button-login')
+        && str_contains($markup, 'window.opener')
+        && str_contains($markup, 'app.location.assign(link.href)')
+        && str_contains($markup, 'app.name=targetName')
+        && str_contains($markup, 'var popupContext=false'),
+    'shared navigation does not guard explicitly marked unsaved forms'
+);
+$popupMarkup = estab_session_ui_markup(
+    $identity,
+    $token,
+    false,
+    [],
+    true
+);
+$assert(
+    str_contains($popupMarkup, 'data-estab-popup-ui')
+        && str_contains($popupMarkup, 'var popupContext=true')
+        && !str_contains($markup, 'data-estab-popup-ui'),
+    'opener coordination is not restricted to explicit application popups'
+);
+$publicMarkup = estab_session_ui_public_markup(
+    false,
+    ['SCRIPT_NAME' => '/stabinfo/index.php']
+);
+$assert(
+    str_contains($publicMarkup, 'data-estab-public-bar')
+        && str_contains($publicMarkup, 'Nicht angemeldet')
+        && str_contains($publicMarkup, '>Anmelden</a>')
+        && str_contains($publicMarkup, 'data-estab-navigation')
+        && str_contains(
+            $publicMarkup,
+            'data-estab-nav-key="bos-info" aria-current="page"'
+        )
+        && !str_contains($publicMarkup, 'data-estab-session-bar')
+        && !str_contains($publicMarkup, 'data-estab-logout-form'),
+    'public navigation falsely claims a session or omits its login route'
+);
+$assert(
+    estab_session_ui_document_has_bar($publicMarkup),
+    'public navigation bar was not detected as shared chrome'
+);
+$destinationPublicMarkup = estab_session_ui_public_markup(
+    true,
+    ['SCRIPT_NAME' => '/4fach/vorgaben.php'],
+    'incident-log'
+);
+$assert(
+    str_contains(
+        $destinationPublicMarkup,
+        'href="/4fach/index.php?next=incident-log"'
+    )
+        && str_contains(
+            $destinationPublicMarkup,
+            '<summary>Bereich wechseln</summary>'
+        ),
+    'public frame login control lost its protected destination'
+);
+$assert(
+    estab_session_ui_login_destination(
+        ['next' => 'tracking'],
+        []
+    ) === 'tracking'
+        && estab_session_ui_login_destination(
+            ['next' => 'tracking'],
+            ['next' => 'incident-log']
+        ) === 'incident-log'
+        && estab_session_ui_login_destination(
+            ['next' => 'administration'],
+            []
+        ) === null,
+    'request-bound session UI destination resolution is unsafe'
+);
+$adminServer = [
+    'SCRIPT_NAME' => '/4fadm/admin.php',
+    'REMOTE_USER' => 'admin<&',
+];
+$adminPublicMarkup = estab_session_ui_public_markup(false, $adminServer);
+$assert(
+    estab_session_ui_admin_user($adminServer) === 'admin<&'
+        && str_contains(
+            $adminPublicMarkup,
+            'data-estab-admin-user="admin&lt;&amp;"'
+        )
+        && str_contains($adminPublicMarkup, 'Administrationszugang')
+        && str_contains(
+            $adminPublicMarkup,
+            'Kein eStab-Funktionskonto angemeldet'
+        )
+        && str_contains(
+            $adminPublicMarkup,
+            'data-estab-nav-key="administration" aria-current="page"'
+        )
+        && !str_contains($adminPublicMarkup, 'admin<&'),
+    'Basic-Auth administration context is missing or unescaped'
+);
+$adminSessionMarkup = estab_session_ui_markup(
+    $identity,
+    $token,
+    false,
+    $adminServer
+);
+$assert(
+    str_contains($adminSessionMarkup, 'data-estab-session-bar')
+        && str_contains(
+            $adminSessionMarkup,
+            'data-estab-admin-user="admin&lt;&amp;"'
+        )
+        && str_contains($adminSessionMarkup, 'Müller &amp; &quot;Ada&quot;'),
+    'combined eStab and Basic-Auth identities are not distinguishable'
+);
+$assert(
+    estab_session_ui_admin_user([
+        'SCRIPT_NAME' => '/index.php',
+        'REMOTE_USER' => 'admin',
+    ]) === null,
+    'REMOTE_USER leaked into a non-administrative route'
 );
 
 $originalPublicUrl = getenv('ESTAB_PUBLIC_URL');
@@ -268,6 +394,12 @@ $bufferedSurfaces = [
     'stabinfo/l_index.php',
     '4fach/info.php',
     'language/german/helptext.php',
+    '4fadm/admin.php',
+    '4fadm/make_fkt.php',
+    '4fadm/set_number_after_crash.php',
+    '4fadm/export.php',
+    '4fadm/system_status.php',
+    '4fach/resetpic.php',
 ];
 foreach ($bufferedSurfaces as $surface) {
     $source = file_get_contents($root . '/' . $surface);
@@ -276,6 +408,64 @@ foreach ($bufferedSurfaces as $surface) {
         $surface . ' does not install the shared authenticated session UI'
     );
 }
+$guardedEditSurfaces = [
+    '4fach/4fachform.php',
+    '4fach/anhang.php',
+    '4fach/katgoedt.php',
+    'stabetb/etb.php',
+    'fmtbb/tbb.php',
+    '4fadm/make_fkt.php',
+    '4fadm/set_number_after_crash.php',
+    '4fadm/export.php',
+    '4fach/resetpic.php',
+];
+foreach ($guardedEditSurfaces as $surface) {
+    $source = file_get_contents($root . '/' . $surface);
+    $assert(
+        is_string($source) && str_contains(
+            $source,
+            'data-estab-dirty-guard'
+        ),
+        $surface . ' does not opt its edit form into navigation loss protection'
+    );
+}
+$matrixSource = file_get_contents($root . '/4fadm/make_fkt.php');
+$counterSource = file_get_contents(
+    $root . '/4fadm/set_number_after_crash.php'
+);
+$messageFormSource = file_get_contents($root . '/4fach/4fachform.php');
+$assert(
+    is_string($matrixSource)
+        && is_string($counterSource)
+        && is_string($messageFormSource)
+        && str_contains($matrixSource, 'data-estab-dirty-initial')
+        && str_contains($counterSource, 'data-estab-dirty-initial')
+        && str_contains($messageFormSource, 'data-estab-dirty-initial'),
+    'server-rerendered unsaved values are not marked dirty'
+);
+$assert(
+    str_contains($matrixSource, 'if (is_array($submitted))')
+        && str_contains(
+            $matrixSource,
+            '$error !== null && is_array($submitted)'
+        ),
+    'matrix persistence errors do not preserve and guard submitted values'
+);
+$helpSource = file_get_contents($root . '/language/german/helptext.php');
+$infoSource = file_get_contents($root . '/4fach/info.php');
+$assert(
+    is_string($helpSource)
+        && is_string($infoSource)
+        && str_contains(
+            $helpSource,
+            'estab_session_ui_start($_SESSION, false, true)'
+        )
+        && str_contains(
+            $infoSource,
+            'estab_session_ui_start($_SESSION, false, true)'
+        ),
+    'help and problem windows do not opt into explicit opener coordination'
+);
 $navigationSource = file_get_contents($root . '/4fach/vorgaben.php');
 $assert(
     is_string($navigationSource)
