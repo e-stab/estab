@@ -39,7 +39,6 @@ jobs:
     env:
       COMPOSE_PROJECT_NAME: estab_ci_${{ github.run_id }}_${{ github.run_attempt }}
       ESTAB_HTTP_PORT: "18080"
-      ESTAB_CI_LOG_DIR: ${{ runner.temp }}/estab-ci-logs
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -53,6 +52,8 @@ jobs:
 
       - name: Run fresh-stack integration
         timeout-minutes: 40
+        env:
+          ESTAB_CI_LOG_DIR: ${{ runner.temp }}/estab-ci-logs
         run: bash tests/integration/ci.sh
 
       - name: Upload failure diagnostics
