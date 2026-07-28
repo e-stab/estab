@@ -62,6 +62,7 @@ export ESTAB_HTTP_PORT=${ESTAB_HTTP_PORT:-18080}
 export ESTAB_PUBLIC_URL=${ESTAB_PUBLIC_URL:-/}
 export ESTAB_ALLOW_SELF_REGISTRATION=true
 export ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF=true
+export ESTAB_REVIEW_OUTGOING_MESSAGES=false
 export ESTAB_TEST_COMPOSE_ENGINE=${ESTAB_TEST_COMPOSE_ENGINE:-$container_cli}
 export TZ=${TZ:-Europe/Berlin}
 
@@ -441,6 +442,33 @@ echo "CI integration: running category HTTP integration"
 export ESTAB_CATEGORY_HTTP_TEST_ALLOW_MUTATION=true
 run_timed 5m sh tests/integration/categories_http.sh
 unset ESTAB_CATEGORY_HTTP_TEST_ALLOW_MUTATION
+
+echo "CI integration: proving the default incoming and direct outgoing message workflows"
+export ESTAB_MESSAGE_WORKFLOW_HTTP_TEST_ALLOW_MUTATION=true
+export ESTAB_TEST_WORKFLOW_VARIANT=default
+export ESTAB_TEST_EXPECT_OUTGOING_REVIEW=disabled
+run_timed 6m sh tests/integration/message_workflow_http.sh
+assert_clean_app_logs
+
+echo "CI integration: recreating the app with outgoing Si review enabled"
+export ESTAB_REVIEW_OUTGOING_MESSAGES=true
+run_timed 5m "$container_cli" compose up --detach --no-deps --force-recreate app
+wait_for_healthy app 240
+
+echo "CI integration: proving the complete outgoing 2 -> 4 -> 8 message workflow"
+export ESTAB_TEST_WORKFLOW_VARIANT=review
+export ESTAB_TEST_EXPECT_OUTGOING_REVIEW=enabled
+run_timed 6m sh tests/integration/message_workflow_http.sh
+assert_clean_app_logs
+
+echo "CI integration: restoring the default direct outgoing workflow"
+export ESTAB_REVIEW_OUTGOING_MESSAGES=false
+run_timed 5m "$container_cli" compose up --detach --no-deps --force-recreate app
+wait_for_healthy app 240
+unset \
+    ESTAB_MESSAGE_WORKFLOW_HTTP_TEST_ALLOW_MUTATION \
+    ESTAB_TEST_WORKFLOW_VARIANT \
+    ESTAB_TEST_EXPECT_OUTGOING_REVIEW
 
 echo "CI integration: running administrative workflow HTTP integration"
 export ESTAB_ADMIN_HTTP_TEST_ALLOW_MUTATION=true
