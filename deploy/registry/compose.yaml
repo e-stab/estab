@@ -1,0 +1,112 @@
+services:
+  db:
+    image: mariadb:11.8.8@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4
+    init: true
+    restart: unless-stopped
+    command:
+      - --sql-mode=STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+    environment:
+      MARIADB_DATABASE: ${ESTAB_DB_NAME:-estab}
+      MARIADB_USER: ${ESTAB_DB_USER:-estab}
+      MARIADB_PASSWORD_FILE: /run/secrets/estab_db_password
+      MARIADB_ROOT_PASSWORD_FILE: /run/secrets/estab_db_root_password
+      TZ: ${TZ:-Europe/Berlin}
+    secrets:
+      - estab_db_password
+      - estab_db_root_password
+    volumes:
+      - ${ESTAB_DB_DATA_SOURCE:-estab_db}:/var/lib/mysql
+    networks:
+      - database
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      start_period: 45s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+
+  migrate:
+    image: ${ESTAB_MIGRATE_IMAGE:?Set ESTAB_MIGRATE_IMAGE to an immutable release tag or digest}
+    init: true
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ESTAB_DB_HOST: db
+      ESTAB_DB_PORT: "3306"
+      ESTAB_DB_NAME: ${ESTAB_DB_NAME:-estab}
+      ESTAB_DB_ROOT_PASSWORD_FILE: /run/secrets/estab_db_root_password
+    secrets:
+      - estab_db_root_password
+    networks:
+      - database
+    security_opt:
+      - no-new-privileges:true
+
+  app:
+    image: ${ESTAB_APP_IMAGE:?Set ESTAB_APP_IMAGE to an immutable release tag or digest}
+    init: true
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      ESTAB_DB_HOST: db
+      ESTAB_DB_PORT: "3306"
+      ESTAB_DB_USER: ${ESTAB_DB_USER:-estab}
+      ESTAB_DB_PASSWORD_FILE: /run/secrets/estab_db_password
+      ESTAB_DB_NAME: ${ESTAB_DB_NAME:-estab}
+      ESTAB_BASE_PATH: ${ESTAB_BASE_PATH:-}
+      ESTAB_PUBLIC_URL: ${ESTAB_PUBLIC_URL:-/}
+      ESTAB_ORGANISATION: ${ESTAB_ORGANISATION:-Einsatzleitung}
+      ESTAB_AUTHORITY_CODE: ${ESTAB_AUTHORITY_CODE:-EL}
+      ESTAB_ALLOW_SELF_REGISTRATION: ${ESTAB_ALLOW_SELF_REGISTRATION:-true}
+      ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF: ${ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF:-false}
+      ESTAB_TRUST_PROXY_HEADERS: ${ESTAB_TRUST_PROXY_HEADERS:-false}
+      ESTAB_UPLOAD_MAX_BYTES: ${ESTAB_UPLOAD_MAX_BYTES:-5242880}
+      ESTAB_EXPORT_DIR: /var/lib/estab/export
+      ESTAB_ADMIN_USER: ${ESTAB_ADMIN_USER:-estab-admin}
+      ESTAB_ADMIN_PASSWORD_FILE: /run/secrets/estab_admin_password
+      TZ: ${TZ:-Europe/Berlin}
+    secrets:
+      - estab_db_password
+      - estab_admin_password
+    volumes:
+      - ${ESTAB_APP_DATA_SOURCE:-estab_data}:/var/www/html/4fdata
+      - ${ESTAB_EXPORT_DATA_SOURCE:-estab_export}:/var/lib/estab/export
+    ports:
+      - "${ESTAB_HTTP_BIND:-127.0.0.1}:${ESTAB_HTTP_PORT:-8080}:8080"
+    networks:
+      - frontend
+      - database
+    healthcheck:
+      test: ["CMD", "estab-healthcheck"]
+      interval: 30s
+      timeout: 5s
+      start_period: 45s
+      retries: 5
+    security_opt:
+      - no-new-privileges:true
+
+secrets:
+  estab_db_password:
+    file: ${ESTAB_DB_PASSWORD_SECRET_FILE:-./secrets/db_password.txt}
+  estab_db_root_password:
+    file: ${ESTAB_DB_ROOT_PASSWORD_SECRET_FILE:-./secrets/db_root_password.txt}
+  estab_admin_password:
+    file: ${ESTAB_ADMIN_PASSWORD_SECRET_FILE:-./secrets/admin_password.txt}
+
+volumes:
+  estab_db:
+  estab_data:
+  estab_export:
+
+networks:
+  frontend:
+  database:
+    internal: true

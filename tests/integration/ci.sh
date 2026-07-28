@@ -283,6 +283,26 @@ echo "CI integration: pulling and building pinned runtime images"
 run_timed 5m "$container_cli" compose pull db
 run_timed 15m "$container_cli" compose build --pull migrate app
 
+registry_http_port=${ESTAB_REGISTRY_HTTP_PORT:-}
+if [[ -z $registry_http_port ]]; then
+    if ((ESTAB_HTTP_PORT < 65535)); then
+        registry_http_port=$((ESTAB_HTTP_PORT + 1))
+    else
+        registry_http_port=$((ESTAB_HTTP_PORT - 1))
+    fi
+fi
+export ESTAB_REGISTRY_PROJECT="${COMPOSE_PROJECT_NAME}_registry"
+export ESTAB_REGISTRY_HTTP_PORT="$registry_http_port"
+export ESTAB_REGISTRY_APP_IMAGE="${COMPOSE_PROJECT_NAME}-app:latest"
+export ESTAB_REGISTRY_MIGRATE_IMAGE="${COMPOSE_PROJECT_NAME}-migrate:latest"
+echo "CI integration: validating pull-only registry deployment"
+run_timed 8m sh tests/integration/registry_compose.sh
+unset \
+    ESTAB_REGISTRY_PROJECT \
+    ESTAB_REGISTRY_HTTP_PORT \
+    ESTAB_REGISTRY_APP_IMAGE \
+    ESTAB_REGISTRY_MIGRATE_IMAGE
+
 echo "CI integration: starting a fresh database"
 run_timed 5m "$container_cli" compose up --detach db
 wait_for_healthy db 180

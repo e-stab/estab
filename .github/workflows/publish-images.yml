@@ -1,0 +1,256 @@
+name: Publish OCI images
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Existing Git tag and immutable OCI tag for both images
+        required: true
+        type: string
+      redistribution_cleared:
+        description: Rights and license review for all shipped assets is complete
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+# Publishing is serialized across every ref. Two dispatches must never race for
+# the same immutable registry tags.
+concurrency:
+  group: publish-images
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify release candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      COMPOSE_PROJECT_NAME: estab_ci_publish_${{ github.run_id }}_${{ github.run_attempt }}
+      ESTAB_HTTP_PORT: "18080"
+      RELEASE_IMAGE_TAG: ${{ inputs.image_tag }}
+      REDISTRIBUTION_CLEARED: ${{ inputs.redistribution_cleared }}
+      CONTAINER_PUBLISH_ENABLED: ${{ vars.ESTAB_CONTAINER_PUBLISH_ENABLED }}
+      PUBLISH_REVIEWER_CONFIGURED: ${{ vars.ESTAB_CONTAINER_PUBLISH_REVIEWER_CONFIGURED }}
+      RELEASE_REPOSITORY: ${{ github.repository }}
+      RELEASE_REF_TYPE: ${{ github.ref_type }}
+      RELEASE_REF_NAME: ${{ github.ref_name }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Validate manual release gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$RELEASE_REPOSITORY" != "e-stab/estab" ]]; then
+            echo "Publishing is restricted to e-stab/estab." >&2
+            exit 1
+          fi
+          if [[ "$CONTAINER_PUBLISH_ENABLED" != "true" ]]; then
+            echo "Repository variable ESTAB_CONTAINER_PUBLISH_ENABLED is not true." >&2
+            exit 1
+          fi
+          if [[ "$PUBLISH_REVIEWER_CONFIGURED" != "true" ]]; then
+            echo "Required-reviewer configuration has not been confirmed." >&2
+            exit 1
+          fi
+          if [[ "$REDISTRIBUTION_CLEARED" != "true" ]]; then
+            echo "Rights and license review has not been confirmed." >&2
+            exit 1
+          fi
+          if [[ "$RELEASE_REF_TYPE" != "tag" || "$RELEASE_REF_NAME" != "$RELEASE_IMAGE_TAG" ]]; then
+            echo "Dispatch the workflow from the existing Git tag named by image_tag." >&2
+            exit 1
+          fi
+          if [[ "$RELEASE_IMAGE_TAG" == "latest" ]]; then
+            echo "The mutable latest tag is deliberately unsupported." >&2
+            exit 1
+          fi
+          if [[ ! "$RELEASE_IMAGE_TAG" =~ ^[a-z0-9][a-z0-9._-]{0,127}$ ]]; then
+            echo "Image tag must be a lowercase OCI-compatible release tag." >&2
+            exit 1
+          fi
+
+      - name: Run complete fresh-stack release gate
+        timeout-minutes: 42
+        env:
+          ESTAB_CI_LOG_DIR: ${{ runner.temp }}/estab-ci-logs
+          ESTAB_BROWSER_TEST: required
+        run: bash tests/integration/ci.sh
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: publish-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/estab-ci-logs
+          if-no-files-found: ignore
+          retention-days: 7
+
+  publish:
+    name: Publish verified image pair
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    environment: container-publish
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    env:
+      APP_IMAGE: ghcr.io/e-stab/estab
+      MIGRATE_IMAGE: ghcr.io/e-stab/estab-migrate
+      RELEASE_IMAGE_TAG: ${{ inputs.image_tag }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4
+        with:
+          image: tonistiigi/binfmt:latest@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+        with:
+          driver-opts: |
+            image=moby/buildkit:buildx-stable-1@sha256:2f5adac4ecd194d9f8c10b7b5d7bceb5186853db1b26e5abd3a657af0b7e26ec
+
+      # Both images must compile for both target architectures before the first
+      # registry mutation. The later push steps reuse these verified caches.
+      - name: Prebuild application image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: false
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=estab
+          cache-to: type=gha,mode=max,scope=estab
+
+      - name: Prebuild migration image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          file: docker/db/Dockerfile.migrate
+          platforms: linux/amd64,linux/arm64
+          push: false
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=estab-migrate
+          cache-to: type=gha,mode=max,scope=estab-migrate
+
+      - name: Log in to GHCR
+        uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Refuse existing immutable tags
+        shell: bash
+        run: |
+          set -euo pipefail
+          for image in "$APP_IMAGE" "$MIGRATE_IMAGE"; do
+            if output=$(docker buildx imagetools inspect \
+                "$image:$RELEASE_IMAGE_TAG" 2>&1); then
+              echo "Refusing to overwrite existing image tag: $image:$RELEASE_IMAGE_TAG" >&2
+              exit 1
+            fi
+            if ! grep -Eqi 'manifest unknown|not found|no such manifest' <<<"$output"; then
+              echo "Could not prove that $image:$RELEASE_IMAGE_TAG is absent:" >&2
+              printf '%s\n' "$output" >&2
+              exit 1
+            fi
+          done
+
+      - name: Publish application image
+        id: push_app
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.APP_IMAGE }}:${{ env.RELEASE_IMAGE_TAG }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ env.RELEASE_IMAGE_TAG }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=estab
+          cache-to: type=gha,mode=max,scope=estab
+
+      - name: Publish migration image
+        id: push_migrate
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          file: docker/db/Dockerfile.migrate
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.MIGRATE_IMAGE }}:${{ env.RELEASE_IMAGE_TAG }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ env.RELEASE_IMAGE_TAG }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=estab-migrate
+          cache-to: type=gha,mode=max,scope=estab-migrate
+
+      - name: Attest application image
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4
+        with:
+          subject-name: ${{ env.APP_IMAGE }}
+          subject-digest: ${{ steps.push_app.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
+
+      - name: Attest migration image
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4
+        with:
+          subject-name: ${{ env.MIGRATE_IMAGE }}
+          subject-digest: ${{ steps.push_migrate.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
+
+      - name: Verify manifests and attestations
+        shell: bash
+        env:
+          APP_DIGEST: ${{ steps.push_app.outputs.digest }}
+          MIGRATE_DIGEST: ${{ steps.push_migrate.outputs.digest }}
+        run: |
+          set -euo pipefail
+          verify_index() {
+            local image=$1
+            local digest=$2
+            local manifest
+            manifest=$(docker buildx imagetools inspect "$image@$digest" --raw)
+            jq -e '
+              ([.manifests[] | select(
+                .platform.os == "linux" and .platform.architecture == "amd64"
+              )] | length) == 1
+              and
+              ([.manifests[] | select(
+                .platform.os == "linux" and .platform.architecture == "arm64"
+              )] | length) == 1
+            ' <<<"$manifest" >/dev/null
+            gh attestation verify "oci://$image@$digest" \
+              --repo "$GITHUB_REPOSITORY" >/dev/null
+          }
+          verify_index "$APP_IMAGE" "$APP_DIGEST"
+          verify_index "$MIGRATE_IMAGE" "$MIGRATE_DIGEST"

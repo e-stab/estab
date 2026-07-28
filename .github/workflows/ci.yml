@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 12
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
@@ -28,7 +28,7 @@ jobs:
           docker run --rm --pull=always
           --volume "$GITHUB_WORKSPACE:/workspace:ro"
           --workdir /workspace
-          php:8.5.8-cli-trixie
+          php:8.5.8-cli-trixie@sha256:58b996c35ce0511cdbaa1fc0476a194fd0221097d721ff7df5af0b6f1a3d0202
           tests/static/run.sh
 
   compose-integration:
@@ -41,7 +41,7 @@ jobs:
       ESTAB_HTTP_PORT: "18080"
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
@@ -59,7 +59,7 @@ jobs:
 
       - name: Upload failure diagnostics
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: compose-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/estab-ci-logs
