@@ -187,6 +187,17 @@ $assert(
     preg_match('/(?:mysql_query|query_table(?:_iu)?|->query\s*\()/i', $attachmentSource . $controllerSource) !== 1,
     'active attachment path contains no direct SQL execution'
 );
+$assert(
+    substr_count($attachmentSource, 'estab_attachment_statement_result(') >= 3
+        && substr_count($attachmentSource, 'estab_attachment_statement_row(') >= 4
+        && substr_count($attachmentSource, '->get_result()') === 1
+        && substr_count($attachmentSource, '->fetch_assoc()') === 1,
+    'all attachment SELECT results are validated before they are consumed'
+);
+$assert(
+    str_contains($attachmentSource, '$statement->errno ?: $connection->errno'),
+    'deferred result errors preserve their retryable MariaDB error code'
+);
 $assert(str_contains($attachmentSource, 'begin_transaction()'), 'reservation starts a transaction');
 $assert(substr_count($attachmentSource, 'FOR UPDATE') >= 2, 'reservation candidates are locked');
 $assert(

@@ -195,6 +195,41 @@ function estab_attachment_statement_error(mysqli_stmt $statement, string $messag
     throw new EstabAttachmentDatabaseException($message, $statement->errno);
 }
 
+function estab_attachment_statement_result(
+    mysqli_stmt $statement,
+    mysqli $connection,
+    string $message
+): mysqli_result {
+    $result = $statement->get_result();
+    if (!$result instanceof mysqli_result) {
+        throw new EstabAttachmentDatabaseException(
+            $message,
+            $statement->errno ?: $connection->errno
+        );
+    }
+    return $result;
+}
+
+function estab_attachment_statement_row(
+    mysqli_stmt $statement,
+    mysqli $connection,
+    string $message
+): ?array {
+    $result = estab_attachment_statement_result($statement, $connection, $message);
+    try {
+        $row = $result->fetch_assoc();
+        if ($row === false) {
+            throw new EstabAttachmentDatabaseException(
+                $message,
+                $statement->errno ?: $connection->errno
+            );
+        }
+        return $row;
+    } finally {
+        $result->free();
+    }
+}
+
 function estab_attachment_connection(array $databaseConfig): mysqli
 {
     return estab_auth_connect($databaseConfig);
@@ -273,9 +308,11 @@ function estab_attachment_reserve(
                 if (!$reuse->execute()) {
                     estab_attachment_statement_error($reuse, 'Could not find reusable reservation');
                 }
-                $result = $reuse->get_result();
-                $row = $result->fetch_assoc();
-                $result->free();
+                $row = estab_attachment_statement_row(
+                    $reuse,
+                    $connection,
+                    'Could not read reusable reservation result'
+                );
             } finally {
                 $reuse->close();
             }
@@ -318,9 +355,11 @@ function estab_attachment_reserve(
                 if (!$highestStatement->execute()) {
                     estab_attachment_statement_error($highestStatement, 'Could not read filename sequence');
                 }
-                $result = $highestStatement->get_result();
-                $highestRow = $result->fetch_assoc();
-                $result->free();
+                $highestRow = estab_attachment_statement_row(
+                    $highestStatement,
+                    $connection,
+                    'Could not read filename sequence result'
+                );
             } finally {
                 $highestStatement->close();
             }
@@ -490,10 +529,16 @@ function estab_attachment_list(mysqli $connection, string $table): array
         if (!$statement->execute()) {
             estab_attachment_statement_error($statement, 'Could not list attachments');
         }
-        $result = $statement->get_result();
-        $rows = $result->fetch_all(MYSQLI_ASSOC);
-        $result->free();
-        return $rows;
+        $result = estab_attachment_statement_result(
+            $statement,
+            $connection,
+            'Could not read attachment listing result'
+        );
+        try {
+            return $result->fetch_all(MYSQLI_ASSOC);
+        } finally {
+            $result->free();
+        }
     } finally {
         $statement->close();
     }
@@ -514,9 +559,11 @@ function estab_attachment_find(mysqli $connection, string $table, string $filena
         if (!$statement->execute()) {
             estab_attachment_statement_error($statement, 'Could not find attachment');
         }
-        $result = $statement->get_result();
-        $row = $result->fetch_assoc();
-        $result->free();
+        $row = estab_attachment_statement_row(
+            $statement,
+            $connection,
+            'Could not read attachment lookup result'
+        );
         return is_array($row) ? $row : null;
     } finally {
         $statement->close();
