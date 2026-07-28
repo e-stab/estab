@@ -426,8 +426,12 @@ $assert(
             ['Content-Type: application/json; charset=UTF-8'],
             200
         )
+        && !estab_session_ui_response_is_html(
+            ['Content-Type: application/zip'],
+            200
+        )
         && !estab_session_ui_response_is_html([], 303),
-    'session UI would alter a plain-text, JSON, or redirect response'
+    'session UI would alter a plain-text, JSON, ZIP, or redirect response'
 );
 $assert(
     estab_session_ui_is_embedded_frame(['embedded' => '1'])

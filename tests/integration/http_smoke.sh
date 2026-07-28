@@ -133,6 +133,72 @@ assert_body_absent() {
     fi
 }
 
+assert_export_zip() {
+    "$compose_engine" compose run --rm --no-deps -T \
+        app php -d auto_prepend_file= -r '
+        $bytes = stream_get_contents(STDIN);
+        $temporary = tempnam(sys_get_temp_dir(), "estab-export-http-");
+        if (
+            !is_string($bytes)
+            || $bytes === ""
+            || $temporary === false
+            || file_put_contents($temporary, $bytes) !== strlen($bytes)
+        ) {
+            fwrite(STDERR, "HTTP smoke: could not stage downloaded ZIP\n");
+            exit(1);
+        }
+        $archive = new ZipArchive();
+        if ($archive->open($temporary) !== true) {
+            @unlink($temporary);
+            fwrite(STDERR, "HTTP smoke: downloaded export is not a ZIP\n");
+            exit(1);
+        }
+        $manifestJson = $archive->getFromName("manifest.json");
+        try {
+            $manifest = is_string($manifestJson)
+                ? json_decode($manifestJson, true, 32, JSON_THROW_ON_ERROR)
+                : null;
+        } catch (Throwable) {
+            $manifest = null;
+        }
+        if (
+            !is_array($manifest)
+            || ($manifest["format"] ?? null) !== 1
+            || !is_array($manifest["tables"] ?? null)
+            || $manifest["tables"] === []
+        ) {
+            $archive->close();
+            @unlink($temporary);
+            fwrite(STDERR, "HTTP smoke: export manifest is missing or invalid\n");
+            exit(1);
+        }
+        foreach ($manifest["tables"] as $table) {
+            $file = $table["file"] ?? null;
+            $sha256 = $table["sha256"] ?? null;
+            if (
+                !is_string($file)
+                || basename($file) !== $file
+                || !is_string($sha256)
+                || preg_match("/\A[a-f0-9]{64}\z/D", $sha256) !== 1
+            ) {
+                $archive->close();
+                @unlink($temporary);
+                fwrite(STDERR, "HTTP smoke: unsafe export manifest entry\n");
+                exit(1);
+            }
+            $csv = $archive->getFromName($file);
+            if (!is_string($csv) || !hash_equals($sha256, hash("sha256", $csv))) {
+                $archive->close();
+                @unlink($temporary);
+                fwrite(STDERR, "HTTP smoke: export CSV checksum differs\n");
+                exit(1);
+            }
+        }
+        $archive->close();
+        @unlink($temporary);
+        ' <"$body"
+}
+
 assert_session_bar() {
     expected_name=$1
     expected_code=$2
@@ -1221,19 +1287,219 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
     assert_body_absent 'data-estab-session-bar'
 
     admin_cookie=$work_dir/admin-cookies.txt
+    assert_status 401 \
+        "$base_url/4fadm/export.php"
+    assert_status 401 \
+        "$base_url/4fadm/export.php?action=download&export_id=estab-20260722-120000-aaaaaaaa"
+
     assert_status 200 --config "$admin_curl_config" \
         --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
         "$base_url/4fadm/export.php"
+    assert_body 'data-estab-export-list'
+    assert_body 'Vorhandene Exporte'
+    assert_body 'Vollständigen Export erstellen'
+    assert_body_absent '/var/lib/estab/export'
     csrf_token=$(sed -n 's/.*name="csrf_token" value="\([a-f0-9][a-f0-9]*\)".*/\1/p' "$body" | head -n 1)
     if ! printf '%s' "$csrf_token" | grep -Eq '^[a-f0-9]{64}$'; then
         printf 'HTTP smoke: export CSRF token missing\n' >&2
         exit 1
     fi
+    export_count_before_rejected_create=$(grep -c \
+        'data-estab-export-id=' "$body" || true)
+
+    assert_status 403 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        --request POST \
+        --data-urlencode 'admin_action=create_export' \
+        --data-urlencode 'csrf_token=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+        "$base_url/4fadm/export.php"
+    assert_body 'Formularsitzung ist ungültig oder abgelaufen'
+
+    assert_status 422 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        --request POST \
+        --data-urlencode "csrf_token=$csrf_token" \
+        --data-urlencode 'admin_action=unknown_export_action' \
+        "$base_url/4fadm/export.php"
+    assert_body 'Unbekannte administrative Aktion'
+
     assert_status 200 --config "$admin_curl_config" \
         --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
-        --request POST --data-urlencode "csrf_token=$csrf_token" \
         "$base_url/4fadm/export.php"
-    assert_body 'Export vollständig.'
+    export_count_after_rejected_create=$(grep -c \
+        'data-estab-export-id=' "$body" || true)
+    if [ "$export_count_after_rejected_create" \
+        -ne "$export_count_before_rejected_create" ]; then
+        printf 'HTTP smoke: rejected create request changed export count\n' >&2
+        exit 1
+    fi
+    assert_body_absent 'Der neue Export wurde vollständig erstellt'
+    assert_body_absent 'Der ausgewählte Export wurde vollständig gelöscht'
+
+    assert_status 303 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        --request POST \
+        --data-urlencode "csrf_token=$csrf_token" \
+        --data-urlencode 'admin_action=create_export' \
+        "$base_url/4fadm/export.php"
+    first_export_id=$(sed -n \
+        's/^Location: export[.]php?created=\(estab-[0-9][0-9]*-[0-9][0-9]*-[a-f0-9][a-f0-9]*\).*/\1/p' \
+        "$headers" | tr -d '\r' | head -n 1)
+    if ! printf '%s' "$first_export_id" |
+        grep -Eq '^estab-[0-9]{8}-[0-9]{6}-[a-f0-9]{8}$'; then
+        printf 'HTTP smoke: first export redirect contains no safe run ID\n' >&2
+        sed -n '1,30p' "$headers" >&2
+        exit 1
+    fi
+
+    assert_status 200 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        "$base_url/4fadm/export.php?created=$first_export_id"
+    assert_body 'Der neue Export wurde vollständig erstellt'
+    assert_body "data-estab-export-id=\"$first_export_id\""
+    assert_body "action=download&amp;export_id=$first_export_id"
+    assert_body 'data-estab-export-delete'
+    assert_body 'Inhalt und Prüfsummen anzeigen'
+    assert_body_absent '/var/lib/estab/export'
+
+    assert_status 200 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        "$base_url/4fadm/export.php?created=$first_export_id"
+    assert_body_absent 'Der neue Export wurde vollständig erstellt'
+    assert_body_absent 'estab-export-card-new'
+
+    assert_status 200 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        "$base_url/4fadm/export.php?action=download&export_id=$first_export_id"
+    for header_pattern in \
+        '^Content-Type: application/zip' \
+        "^Content-Disposition: attachment; filename=\"$first_export_id[.]zip\"" \
+        '^Cache-Control: private, no-store, max-age=0' \
+        '^X-Content-Type-Options: nosniff'
+    do
+        if ! grep -Eiq "$header_pattern" "$headers"; then
+            printf 'HTTP smoke: export download header missing: %s\n' \
+                "$header_pattern" >&2
+            sed -n '1,40p' "$headers" >&2
+            exit 1
+        fi
+    done
+    export_content_length=$(sed -n \
+        's/^Content-Length: \([0-9][0-9]*\).*/\1/p' "$headers" |
+        tr -d '\r' | head -n 1)
+    export_download_size=$(wc -c <"$body" | tr -d ' ')
+    if [ "$export_content_length" != "$export_download_size" ]; then
+        printf 'HTTP smoke: export Content-Length differs from body size\n' >&2
+        exit 1
+    fi
+    export_magic=$(od -An -tx1 -N4 "$body" | tr -d ' \n')
+    if [ "$export_magic" != '504b0304' ]; then
+        printf 'HTTP smoke: export download does not start with ZIP magic\n' >&2
+        exit 1
+    fi
+    assert_export_zip
+
+    assert_status 400 --config "$admin_curl_config" \
+        "$base_url/4fadm/export.php?action=download&export_id=..%2Fescape"
+    assert_status 400 --config "$admin_curl_config" \
+        "$base_url/4fadm/export.php?action=download&export_id%5B%5D=$first_export_id"
+    assert_status 404 --config "$admin_curl_config" \
+        "$base_url/4fadm/export.php?action=download&export_id=estab-19990101-000000-00000000"
+    assert_status 405 --config "$admin_curl_config" \
+        --request POST \
+        "$base_url/4fadm/export.php?action=download&export_id=$first_export_id"
+
+    assert_status 200 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        "$base_url/4fadm/export.php?admin_action=delete_export&export_id=$first_export_id"
+    assert_body "data-estab-export-id=\"$first_export_id\""
+
+    assert_status 403 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        --request POST \
+        --data-urlencode 'csrf_token=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+        --data-urlencode 'admin_action=delete_export' \
+        --data-urlencode "export_id=$first_export_id" \
+        "$base_url/4fadm/export.php"
+    assert_body 'Formularsitzung ist ungültig oder abgelaufen'
+    assert_status 200 --config "$admin_curl_config" \
+        "$base_url/4fadm/export.php?action=download&export_id=$first_export_id"
+
+    assert_status 422 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        --request POST \
+        --data-urlencode "csrf_token=$csrf_token" \
+        --data-urlencode 'admin_action=delete_export' \
+        --data-urlencode 'export_id=../escape' \
+        "$base_url/4fadm/export.php"
+    assert_status 404 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        --request POST \
+        --data-urlencode "csrf_token=$csrf_token" \
+        --data-urlencode 'admin_action=delete_export' \
+        --data-urlencode 'export_id=estab-19990101-000000-00000000' \
+        "$base_url/4fadm/export.php"
+
+    assert_status 303 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        --request POST \
+        --data-urlencode "csrf_token=$csrf_token" \
+        --data-urlencode 'admin_action=create_export' \
+        "$base_url/4fadm/export.php"
+    second_export_id=$(sed -n \
+        's/^Location: export[.]php?created=\(estab-[0-9][0-9]*-[0-9][0-9]*-[a-f0-9][a-f0-9]*\).*/\1/p' \
+        "$headers" | tr -d '\r' | head -n 1)
+    if ! printf '%s' "$second_export_id" |
+        grep -Eq '^estab-[0-9]{8}-[0-9]{6}-[a-f0-9]{8}$'; then
+        printf 'HTTP smoke: second export redirect contains no safe run ID\n' >&2
+        exit 1
+    fi
+    if [ "$second_export_id" = "$first_export_id" ]; then
+        printf 'HTTP smoke: two export runs received the same identifier\n' >&2
+        exit 1
+    fi
+
+    assert_status 200 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        "$base_url/4fadm/export.php?deleted=$second_export_id"
+    assert_body_absent 'Der ausgewählte Export wurde vollständig gelöscht'
+    assert_body "data-estab-export-id=\"$second_export_id\""
+
+    assert_status 200 --config "$admin_curl_config" \
+        "$base_url/4fadm/export.php?action=download&export_id=$second_export_id"
+    survivor_zip=$work_dir/survivor-export.zip
+    cp "$body" "$survivor_zip"
+
+    assert_status 303 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        --request POST \
+        --data-urlencode "csrf_token=$csrf_token" \
+        --data-urlencode 'admin_action=delete_export' \
+        --data-urlencode "export_id=$first_export_id" \
+        "$base_url/4fadm/export.php"
+    if ! grep -Eiq "^Location: export[.]php[?]deleted=$first_export_id" "$headers"; then
+        printf 'HTTP smoke: delete redirect does not identify the selected export\n' >&2
+        exit 1
+    fi
+
+    assert_status 200 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        "$base_url/4fadm/export.php?deleted=$first_export_id"
+    assert_body 'Der ausgewählte Export wurde vollständig gelöscht'
+    assert_body_absent "data-estab-export-id=\"$first_export_id\""
+    assert_body "data-estab-export-id=\"$second_export_id\""
+    assert_status 200 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        "$base_url/4fadm/export.php?deleted=$first_export_id"
+    assert_body_absent 'Der ausgewählte Export wurde vollständig gelöscht'
+    assert_status 404 --config "$admin_curl_config" \
+        "$base_url/4fadm/export.php?action=download&export_id=$first_export_id"
+    assert_status 200 --config "$admin_curl_config" \
+        "$base_url/4fadm/export.php?action=download&export_id=$second_export_id"
+    if ! cmp -s "$survivor_zip" "$body"; then
+        printf 'HTTP smoke: deleting one export changed the survivor ZIP\n' >&2
+        exit 1
+    fi
 fi
 
 if [ -n "$state_file" ]; then

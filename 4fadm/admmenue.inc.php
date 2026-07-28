@@ -54,7 +54,7 @@
                 "vis" => true,
                 "link"  => "./export.php",
                 "menue" => "Einsatzexport",
-                "descr" => "Alle Basistabellen werden ohne Datenbank-FILE-Recht als CSV, Manifest und ZIP im persistenten Exportverzeichnis gesichert."),
+                "descr" => "Exporte aller Basistabellen erstellen, als ZIP herunterladen, mit Manifest und Pr&uuml;fsummen ansehen oder gezielt l&ouml;schen."),
 
     array ("acl" => "",
                 "vis" => true,

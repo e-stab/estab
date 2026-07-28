@@ -36,6 +36,8 @@ class TestConfig:
     login_code: str
     login_function: str
     login_password: str = dataclasses.field(repr=False)
+    admin_user: str | None = None
+    admin_password: str | None = dataclasses.field(default=None, repr=False)
     timeout: float = 25.0
     startup_timeout: float = 15.0
 
@@ -76,6 +78,25 @@ class TestConfig:
         if not re.fullmatch(r"[A-Za-z0-9_/-]{1,20}", login_function):
             raise TestFailure("ESTAB_TEST_LOGIN_FUNCTION enthält nicht unterstützte Zeichen.")
 
+        admin_user = os.environ.get("ESTAB_TEST_ADMIN_USER")
+        admin_password = os.environ.get("ESTAB_TEST_ADMIN_PASSWORD")
+        admin_password_file = os.environ.get("ESTAB_TEST_ADMIN_PASSWORD_FILE")
+        if admin_password is None and admin_password_file:
+            try:
+                admin_password = pathlib.Path(admin_password_file).read_text(
+                    encoding="utf-8"
+                ).rstrip("\r\n")
+            except OSError as exc:
+                raise TestFailure(
+                    "Die Datei aus ESTAB_TEST_ADMIN_PASSWORD_FILE ist nicht lesbar."
+                ) from exc
+        if bool(admin_user) != bool(admin_password):
+            raise TestFailure(
+                "Für den Browser-Admin-Test müssen Benutzer und Kennwort gemeinsam gesetzt sein."
+            )
+        if admin_user and not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", admin_user):
+            raise TestFailure("ESTAB_TEST_ADMIN_USER enthält nicht unterstützte Zeichen.")
+
         timeout = _positive_float("ESTAB_BROWSER_TIMEOUT", 25.0)
         startup_timeout = _positive_float("ESTAB_BROWSER_STARTUP_TIMEOUT", 15.0)
         return cls(
@@ -84,6 +105,8 @@ class TestConfig:
             login_code=login_code,
             login_function=login_function,
             login_password=password,
+            admin_user=admin_user,
+            admin_password=admin_password,
             timeout=timeout,
             startup_timeout=startup_timeout,
         )
@@ -779,12 +802,12 @@ class BrowserAcceptance:
         self.cdp.call("Network.enable")
         self.cdp.navigate(self.config.base_url + "/")
 
-        print("[1/8] Anonyme Übersicht, zwei Konto-Flows und gesperrte Module")
+        print("[1/9] Anonyme Übersicht, zwei Konto-Flows und gesperrte Module")
         self._assert_anonymous_overview()
         self._assert_protected_cards()
         self._assert_root_card_layout("anonyme Übersicht bei 1440 px")
 
-        print("[2/8] Bestehenden Konto-Flow über das Frameset öffnen")
+        print("[2/9] Bestehenden Konto-Flow über das Frameset öffnen")
         self.cdp.click(None, "#estab-login", "Button für ein bestehendes Konto")
         self._wait_for_frame("mainframe")
         self.cdp.wait_for(
@@ -804,7 +827,7 @@ class BrowserAcceptance:
         )
 
         self.cdp.navigate(self.config.base_url + "/")
-        print("[3/8] Gesperrte ETB-Karte und neuen Konto-Flow über das Frameset öffnen")
+        print("[3/9] Gesperrte ETB-Karte und neuen Konto-Flow über das Frameset öffnen")
         self.cdp.click(
             None,
             'a.estab-menu-link[data-estab-nav-key="incident-log"]',
@@ -856,7 +879,7 @@ class BrowserAcceptance:
             "Formular für ein neues Funktionskonto mit erhaltenem ETB-Ziel fehlt",
         )
 
-        print("[4/8] Neues Konto anlegen und das angeforderte Einsatztagebuch öffnen")
+        print("[4/9] Neues Konto anlegen und das angeforderte Einsatztagebuch öffnen")
         self.cdp.set_value(
             "mainframe", 'input[name="benutzer"]', self.config.login_name, "Benutzername"
         )
@@ -904,7 +927,7 @@ class BrowserAcceptance:
         )
         self._wait_for_authenticated_frames()
 
-        print("[5/8] Ungespeicherte fachliche Eingaben schützen den Bereichswechsel")
+        print("[5/9] Ungespeicherte fachliche Eingaben schützen den Bereichswechsel")
         self._equal(
             self.cdp.evaluate(
                 _visible_count_expression("mainframe", "aside[data-estab-session-bar]")
@@ -971,7 +994,7 @@ class BrowserAcceptance:
             "angemeldete Übersicht wurde nach bestätigtem Bereichswechsel nicht geöffnet"
         )
 
-        print("[6/8] Navigation über Übersicht, BOS und Einsatztagebuch")
+        print("[6/9] Navigation über Übersicht, BOS und Einsatztagebuch")
         self._click_root_card(
             "stabinfo/index.php",
             "Root-Karte für die Infosammlung BOS",
@@ -1082,7 +1105,7 @@ class BrowserAcceptance:
         )
         self._assert_session_bar(None, "Einsatztagebuch", "incident-log")
 
-        print("[7/8] Logout aus dem Einsatztagebuch und Rückkehr in den anonymen Zustand")
+        print("[7/9] Logout aus dem Einsatztagebuch und Rückkehr in den anonymen Zustand")
         self.cdp.click(
             None,
             "[data-estab-logout-form] button",
@@ -1110,7 +1133,7 @@ class BrowserAcceptance:
         self._assert_anonymous_overview()
         self._assert_protected_cards()
 
-        print("[8/8] Kartenraster in Desktop-, Zwischen- und Schmalansicht")
+        print("[8/9] Kartenraster in Desktop-, Zwischen- und Schmalansicht")
         for width in (1120, 800, 700, 672):
             self.cdp.call(
                 "Emulation.setDeviceMetricsOverride",
@@ -1141,6 +1164,378 @@ class BrowserAcceptance:
         self.cdp.navigate(self.config.base_url + "/")
         self._assert_narrow_overview()
         self._assert_root_card_layout("anonyme Übersicht bei 390 px")
+
+        print("[9/9] Exportübersicht, Erstellung und zweistufiges Löschen")
+        if self.config.admin_user and self.config.admin_password:
+            self._assert_export_management()
+        else:
+            print("      übersprungen: keine Admin-Testzugangsdaten gesetzt")
+
+    def _assert_export_management(self) -> None:
+        assert self.config.admin_user is not None
+        assert self.config.admin_password is not None
+        credentials = (
+            f"{self.config.admin_user}:{self.config.admin_password}".encode("utf-8")
+        )
+        authorization = "Basic " + base64.b64encode(credentials).decode("ascii")
+        self.cdp.call(
+            "Network.setExtraHTTPHeaders",
+            {"headers": {"Authorization": authorization}},
+        )
+        try:
+            self.cdp.call(
+                "Emulation.setDeviceMetricsOverride",
+                {
+                    "width": 1280,
+                    "height": 800,
+                    "deviceScaleFactor": 1,
+                    "mobile": False,
+                    "screenWidth": 1280,
+                    "screenHeight": 800,
+                },
+            )
+            self.cdp.navigate(self.config.base_url + "/4fadm/export.php")
+            self.cdp.wait_for(
+                """
+                document.readyState === "complete" &&
+                Boolean(document.querySelector("[data-estab-export-list]")) &&
+                Boolean(document.querySelector("[data-estab-export-create]")) &&
+                Boolean(document.querySelector(
+                    '[data-estab-public-bar] [data-estab-admin-user]'
+                ))
+                """,
+                "administrative Exportübersicht wurde nicht vollständig geladen",
+            )
+            self._assert_export_layout("Exportübersicht bei 1280×800 px")
+            self._truth(
+                "/var/lib/estab/export" not in str(
+                    self.cdp.evaluate("document.body.innerText")
+                ),
+                "Exportübersicht zeigt einen internen Containerpfad.",
+            )
+
+            self.cdp.click(
+                None,
+                "[data-estab-export-create] button[type=submit]",
+                "vollständigen Einsatzexport erstellen",
+            )
+            self.cdp.wait_for(
+                """
+                document.readyState === "complete" &&
+                new URLSearchParams(location.search).has("created") &&
+                Boolean(document.querySelector(
+                    ".estab-export-card-new[data-estab-export-id]"
+                )) &&
+                Boolean(document.querySelector(
+                    ".estab-export-card-new .estab-export-manifest[open]"
+                ))
+                """,
+                "neu erstellter Export erscheint nicht in der Übersicht",
+            )
+            run_id = self.cdp.evaluate(
+                """
+                document.querySelector(
+                    ".estab-export-card-new[data-estab-export-id]"
+                )?.getAttribute("data-estab-export-id")
+                """
+            )
+            self._truth(
+                isinstance(run_id, str)
+                and re.fullmatch(
+                    r"estab-[0-9]{8}-[0-9]{6}-[a-f0-9]{8}",
+                    run_id,
+                )
+                is not None,
+                "Neu erstellter Export hat keine kanonische Kennung.",
+            )
+            self._assert_export_layout(
+                "Exportübersicht mit neuem Lauf bei 1280×800 px"
+            )
+            export_actions = self.cdp.evaluate(
+                    """
+                    (() => {
+                        const card = document.querySelector(
+                            ".estab-export-card-new"
+                        );
+                        if (!card) return null;
+                        return {
+                            downloads: card.querySelectorAll(
+                                'a[href*="action=download"]'
+                            ).length,
+                            deleteDetails: card.querySelectorAll(
+                                ".estab-export-delete-confirm"
+                            ).length,
+                            deleteForms: card.querySelectorAll(
+                                "form[data-estab-export-delete]"
+                            ).length,
+                            hashes: card.querySelectorAll(
+                                ".estab-export-manifest-list code"
+                            ).length,
+                            accessibleNames: [
+                                card.querySelector(
+                                    'a[href*="action=download"]'
+                                )?.getAttribute("aria-label") || "",
+                                card.querySelector(
+                                    ".estab-export-delete-confirm summary"
+                                )?.textContent || "",
+                                card.querySelector(
+                                    "[data-estab-export-delete] button"
+                                )?.getAttribute("aria-label") || "",
+                                card.querySelector(
+                                    ".estab-export-manifest summary"
+                                )?.textContent || ""
+                            ]
+                        };
+                    })()
+                    """
+            )
+            unique_run_code = run_id[-8:] if isinstance(run_id, str) else ""
+            self._truth(
+                isinstance(export_actions, dict)
+                and export_actions.get("downloads") == 1
+                and export_actions.get("deleteDetails") == 1
+                and export_actions.get("deleteForms") == 1
+                and int(export_actions.get("hashes", 0)) >= 1
+                and unique_run_code != ""
+                and all(
+                    unique_run_code in accessible_name
+                    for accessible_name in export_actions.get(
+                        "accessibleNames",
+                        [],
+                    )
+                )
+                and len(export_actions.get("accessibleNames", [])) == 4,
+                "Aktionen oder Manifest des neu erstellten Exports fehlen.",
+            )
+
+            self.cdp.call(
+                "Emulation.setDeviceMetricsOverride",
+                {
+                    "width": 390,
+                    "height": 844,
+                    "deviceScaleFactor": 1,
+                    "mobile": False,
+                    "screenWidth": 390,
+                    "screenHeight": 844,
+                },
+            )
+            self._assert_export_layout("Exportübersicht bei 390×844 px")
+            self._equal(
+                self.cdp.evaluate(
+                    """
+                    document.querySelector(
+                        ".estab-export-card-new .estab-export-delete-confirm"
+                    )?.open
+                    """
+                ),
+                False,
+                "Löschbestätigung ist vor der bewussten Auswahl geöffnet",
+            )
+            self.cdp.click(
+                None,
+                ".estab-export-card-new .estab-export-delete-confirm > summary",
+                "zweistufige Export-Löschbestätigung öffnen",
+            )
+            delete_state = self.cdp.evaluate(
+                """
+                (() => {
+                    const details = document.querySelector(
+                        ".estab-export-card-new .estab-export-delete-confirm"
+                    );
+                    const button = details?.querySelector(
+                        "button.estab-button-danger"
+                    );
+                    if (!details || !button) return null;
+                    const rect = button.getBoundingClientRect();
+                    return {
+                        open: details.open,
+                        buttonWidth: rect.width,
+                        buttonHeight: rect.height,
+                        warning: details.innerText.includes(
+                            "kann nicht rückgängig gemacht werden"
+                        )
+                    };
+                })()
+                """
+            )
+            self._truth(
+                isinstance(delete_state, dict)
+                and delete_state.get("open") is True
+                and float(delete_state.get("buttonWidth", 0)) >= 44
+                and float(delete_state.get("buttonHeight", 0)) >= 44
+                and delete_state.get("warning") is True,
+                "Zweistufige Löschbestätigung ist mobil nicht vollständig bedienbar.",
+            )
+            self._truth(
+                "Abbrechen" in str(
+                    self.cdp.evaluate(
+                        """
+                        document.querySelector(
+                            ".estab-export-card-new " +
+                            ".estab-export-delete-confirm > summary"
+                        )?.innerText
+                        """
+                    )
+                ),
+                "Geöffnete Löschbestätigung bietet keinen verständlichen Rückweg.",
+            )
+            self._assert_export_layout(
+                "Geöffnete Löschbestätigung bei 390×844 px"
+            )
+            self.cdp.click(
+                None,
+                ".estab-export-card-new [data-estab-export-delete] " +
+                "button.estab-button-danger",
+                "bestätigten Einsatzexport endgültig löschen",
+            )
+            expected_deleted_id = json.dumps(run_id)
+            self.cdp.wait_for(
+                f"""
+                document.readyState === "complete" &&
+                new URLSearchParams(location.search).get("deleted") ===
+                    {expected_deleted_id} &&
+                Boolean(document.querySelector(
+                    '.estab-export-alert-success[role="status"]'
+                )) &&
+                !document.querySelector(
+                    '[data-estab-export-id={json.dumps(run_id)}]'
+                ) &&
+                Boolean(document.querySelector("[data-estab-export-list]"))
+                """,
+                "bestätigter Export wurde nicht aus der Übersicht entfernt",
+            )
+            self._assert_export_layout(
+                "Exportübersicht nach Löschung bei 390×844 px"
+            )
+        finally:
+            self.cdp.call("Network.setExtraHTTPHeaders", {"headers": {}})
+
+    def _assert_export_layout(self, description: str) -> None:
+        state = self.cdp.evaluate(
+            """
+            (() => {
+                const visible = element => {
+                    if (!element) return false;
+                    const style = getComputedStyle(element);
+                    const rect = element.getBoundingClientRect();
+                    return style.display !== "none" &&
+                        style.visibility !== "hidden" &&
+                        rect.width > 0 && rect.height > 0;
+                };
+                const targets = Array.from(document.querySelectorAll(
+                    "[data-estab-export-create] button," +
+                    ".estab-export-card a.estab-button," +
+                    ".estab-export-card summary.estab-button"
+                )).filter(visible);
+                const cards = Array.from(document.querySelectorAll(
+                    ".estab-export-card"
+                ));
+                const navigation = document.querySelector(
+                    ".estab-navigation"
+                );
+                const navigationContent = document.querySelector(
+                    ".estab-navigation-content"
+                );
+                const metrics = element => {
+                    if (!element) return null;
+                    const rect = element.getBoundingClientRect();
+                    const style = getComputedStyle(element);
+                    return {
+                        left: rect.left,
+                        right: rect.right,
+                        width: rect.width,
+                        clientWidth: element.clientWidth,
+                        scrollWidth: element.scrollWidth,
+                        overflowX: style.overflowX,
+                        position: style.position
+                    };
+                };
+                const overflowElements = Array.from(
+                    document.body.querySelectorAll("*")
+                ).filter(element => {
+                    const style = getComputedStyle(element);
+                    const rect = element.getBoundingClientRect();
+                    return style.display !== "none" &&
+                        style.visibility !== "hidden" &&
+                        rect.width > 0 &&
+                        rect.height > 0 &&
+                        (
+                            rect.left < -0.5 ||
+                            rect.right > innerWidth + 0.5
+                        );
+                }).slice(0, 20).map(element => {
+                    const rect = element.getBoundingClientRect();
+                    return {
+                        tag: element.tagName.toLowerCase(),
+                        id: element.id,
+                        classes: String(element.className),
+                        left: rect.left,
+                        right: rect.right,
+                        width: rect.width
+                    };
+                });
+                return {
+                    innerWidth: innerWidth,
+                    bodyScrollWidth: document.documentElement.scrollWidth,
+                    bodyClientWidth: document.documentElement.clientWidth,
+                    body: metrics(document.body),
+                    sessionBar: metrics(document.querySelector(
+                        ".estab-session-bar"
+                    )),
+                    sessionTopline: metrics(document.querySelector(
+                        ".estab-session-topline"
+                    )),
+                    sessionIdentity: metrics(document.querySelector(
+                        ".estab-session-identity"
+                    )),
+                    sessionActions: metrics(document.querySelector(
+                        ".estab-session-actions"
+                    )),
+                    navigation: metrics(navigation),
+                    navigationContent: metrics(navigationContent),
+                    overflowElements,
+                    cards: cards.length,
+                    cardsFit: cards.every(card => {
+                        const rect = card.getBoundingClientRect();
+                        return rect.left >= -0.5 &&
+                            rect.right <= innerWidth + 0.5;
+                    }),
+                    targetCount: targets.length,
+                    targetsFit: targets.every(target => {
+                        const rect = target.getBoundingClientRect();
+                        return rect.width >= 44 && rect.height >= 44 &&
+                            rect.left >= -0.5 &&
+                            rect.right <= innerWidth + 0.5;
+                    }),
+                    listVisible: visible(document.querySelector(
+                        "[data-estab-export-list]"
+                    )),
+                    createVisible: visible(document.querySelector(
+                        "[data-estab-export-create]"
+                    ))
+                };
+            })()
+            """
+        )
+        self._truth(isinstance(state, dict), f"{description}: Layoutstatus fehlt.")
+        self._truth(
+            state.get("listVisible") is True
+            and state.get("createVisible") is True,
+            f"{description}: Erstellen oder Exportliste ist nicht sichtbar.",
+        )
+        self._truth(
+            int(state.get("bodyScrollWidth", 0)) <= int(state.get("innerWidth", 0)) + 1,
+            f"{description}: Seite erzeugt horizontales Dokument-Scrolling: "
+            f"{state!r}",
+        )
+        self._truth(
+            state.get("cardsFit") is True and state.get("targetsFit") is True,
+            f"{description}: Karten oder Bedienelemente ragen aus dem Viewport.",
+        )
+        self._truth(
+            int(state.get("targetCount", 0)) >= 1,
+            f"{description}: Keine mindestens 44 px großen Aktionen gefunden.",
+        )
 
     def _assert_anonymous_overview(self) -> None:
         self._equal(
@@ -3611,6 +4006,11 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="nur Chrome/Chromium suchen und ohne Anwendungstest beenden",
     )
+    parser.add_argument(
+        "--export-only",
+        action="store_true",
+        help="nur die administrative Exportoberfläche testen",
+    )
     return parser.parse_args()
 
 
@@ -3633,7 +4033,19 @@ def main() -> int:
             raise TestFailure("Chrome hat keine Debugging-Adresse bereitgestellt.")
         websocket = WebSocket(chrome.websocket_url, config.timeout)
         cdp = CDP(websocket, config.timeout)
-        BrowserAcceptance(cdp, config).run()
+        acceptance = BrowserAcceptance(cdp, config)
+        if arguments.export_only:
+            if not config.admin_user or not config.admin_password:
+                raise TestFailure(
+                    "--export-only benötigt ESTAB_TEST_ADMIN_USER und "
+                    "ESTAB_TEST_ADMIN_PASSWORD(_FILE)."
+                )
+            cdp.call("Page.enable")
+            cdp.call("Runtime.enable")
+            cdp.call("Network.enable")
+            acceptance._assert_export_management()
+        else:
+            acceptance.run()
         print("Headless browser UI: OK")
         return 0
     except KeyboardInterrupt:
