@@ -68,6 +68,8 @@ function_category_table="usr__fkt_${s1_function_lower}_katego"
 function_link_table="usr__fkt_${s1_function_lower}_kategolink"
 user_category_table="usr_${s1_function_lower}_${s1_code}_katego"
 user_link_table="usr_${s1_function_lower}_${s1_code}_kategolink"
+user_read_table="usr_${s1_function_lower}_${s1_code}_read"
+function_done_table="usr__fkt_${s1_function_lower}_erl"
 
 compose_engine=${ESTAB_TEST_COMPOSE_ENGINE:-docker}
 case "$compose_engine" in
@@ -82,6 +84,7 @@ s1_cookies=$work_dir/s1-cookies.txt
 s2_cookies=$work_dir/s2-cookies.txt
 si_cookies=$work_dir/si-cookies.txt
 foreign_marker="ESTAB_CATEGORY_FOREIGN_$$"
+message_id=0
 foreign_message_id=0
 message_auto_increment=1
 master_auto_increment=1
@@ -89,6 +92,9 @@ function_auto_increment=1
 user_auto_increment=1
 message_state_captured=false
 category_state_captured=false
+workflow_state_captured=false
+workflow_read_timestamp=
+workflow_done_timestamp=
 si_users_before=0
 
 db_sql()
@@ -156,6 +162,10 @@ DELETE FROM \`nv_masterkatego\`
  WHERE HEX(\`kategorie\`) IN ('4D5354522651', '53494D4153544552');
 DELETE FROM \`nv_nachrichten\`
  WHERE \`12_inhalt\` = '${foreign_marker}';
+DELETE FROM \`${user_read_table}\`
+ WHERE \`nachnum\` = ${foreign_message_id};
+DELETE FROM \`${function_done_table}\`
+ WHERE \`nachnum\` = ${foreign_message_id};
 DELETE FROM \`nv_benutzer\` WHERE \`kuerzel\` = '${si_code}';
 COMMIT;
 DROP TABLE IF EXISTS
@@ -174,6 +184,24 @@ ALTER TABLE \`nv_masterkatego\` AUTO_INCREMENT = ${master_auto_increment};
 ALTER TABLE \`${function_category_table}\` AUTO_INCREMENT = ${function_auto_increment};
 ALTER TABLE \`${user_category_table}\` AUTO_INCREMENT = ${user_auto_increment};
 SQL
+    fi
+    if [ "$workflow_state_captured" = true ]; then
+        db_sql >/dev/null 2>&1 <<SQL
+DELETE FROM \`${user_read_table}\` WHERE \`nachnum\` = ${message_id};
+DELETE FROM \`${function_done_table}\` WHERE \`nachnum\` = ${message_id};
+SQL
+        if [ -n "$workflow_read_timestamp" ]; then
+            db_sql >/dev/null 2>&1 <<SQL
+INSERT INTO \`${user_read_table}\` (\`nachnum\`, \`gelesen\`)
+VALUES (${message_id}, '${workflow_read_timestamp}');
+SQL
+        fi
+        if [ -n "$workflow_done_timestamp" ]; then
+            db_sql >/dev/null 2>&1 <<SQL
+INSERT INTO \`${function_done_table}\` (\`nachnum\`, \`erledigt\`)
+VALUES (${message_id}, '${workflow_done_timestamp}');
+SQL
+        fi
     fi
     if [ "$si_users_before" = 0 ]; then
         db_sql >/dev/null 2>&1 <<'SQL'
@@ -377,6 +405,59 @@ load_message_detail()
         "$base_url/4fach/mainindex.php"
 }
 
+load_message_list()
+{
+    cookie_jar=$1
+    assert_status 200 \
+        --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        "$base_url/4fach/mainindex.php"
+}
+
+post_message_state()
+{
+    cookie_jar=$1
+    action=$2
+    todo=$3
+    record_id=$4
+    expected_status=$5
+    state_csrf=$(csrf_from_body)
+    assert_status "$expected_status" \
+        --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        --request POST \
+        --data-urlencode "csrf_token=$state_csrf" \
+        --data-urlencode "action=$action" \
+        --data-urlencode "00_lfd=$record_id" \
+        --data-urlencode "todo=$todo" \
+        "$base_url/4fach/mainindex.php"
+}
+
+assert_workflow_state_control()
+{
+    action=$1
+    todo=$2
+    assert_body "$workflow_marker"
+    state_control="name=\"action\" value=\"$action\"><input type=\"hidden\" name=\"00_lfd\" value=\"$message_id\"><input type=\"hidden\" name=\"todo\" value=\"$todo\""
+    if ! grep -Fq -- "$state_control" "$body"; then
+        printf 'Category HTTP: workflow message lacks %s/%s control\n' \
+            "$action" "$todo" >&2
+        sed -n '1,160p' "$body" >&2
+        exit 1
+    fi
+}
+
+assert_workflow_state_controls_absent()
+{
+    for action in gelesen erledigt; do
+        state_control="name=\"action\" value=\"$action\"><input type=\"hidden\" name=\"00_lfd\" value=\"$message_id\">"
+        if grep -Fq -- "$state_control" "$body"; then
+            printf 'Category HTTP: hidden workflow message still has %s control\n' \
+                "$action" >&2
+            sed -n '1,160p' "$body" >&2
+            exit 1
+        fi
+    done
+}
+
 create_category()
 {
     cookie_jar=$1
@@ -479,6 +560,114 @@ assert_numeric 'master category auto increment' "$master_auto_increment"
 assert_numeric 'function category auto increment' "$function_auto_increment"
 assert_numeric 'user category auto increment' "$user_auto_increment"
 category_state_captured=true
+
+# Exercise the real read/done controls before category mutations change the
+# list filter. This covers rendered form fields, CSRF, the object gate,
+# session-derived state tables, idempotence and the visible done filter.
+# Stab_schreiben marks its new outgoing message as read for the author.
+assert_db_equals 1 \
+    "SELECT COUNT(*) FROM \`${user_read_table}\` WHERE \`nachnum\`=${message_id} AND \`gelesen\` IS NOT NULL;"
+assert_db_equals 0 \
+    "SELECT COUNT(*) FROM \`${function_done_table}\` WHERE \`nachnum\`=${message_id};"
+workflow_read_timestamp=$(db_sql <<SQL
+SELECT COALESCE(MAX(DATE_FORMAT(\`gelesen\`, '%Y-%m-%d %H:%i:%s')), '')
+  FROM \`${user_read_table}\`
+ WHERE \`nachnum\` = ${message_id};
+SQL
+)
+workflow_done_timestamp=$(db_sql <<SQL
+SELECT COALESCE(MAX(DATE_FORMAT(\`erledigt\`, '%Y-%m-%d %H:%i:%s')), '')
+  FROM \`${function_done_table}\`
+ WHERE \`nachnum\` = ${message_id};
+SQL
+)
+for workflow_timestamp in "$workflow_read_timestamp" "$workflow_done_timestamp"; do
+    if [ -n "$workflow_timestamp" ] &&
+        ! printf '%s' "$workflow_timestamp" |
+            grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$'; then
+        echo 'Category HTTP: invalid captured workflow timestamp' >&2
+        exit 1
+    fi
+done
+workflow_state_captured=true
+load_message_list "$s1_cookies"
+assert_body "$workflow_marker"
+assert_workflow_state_control gelesen unset
+assert_workflow_state_control erledigt set
+
+assert_status 403 \
+    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --request POST \
+    --data-urlencode 'action=gelesen' \
+    --data-urlencode "00_lfd=$message_id" \
+    --data-urlencode 'todo=unset' \
+    "$base_url/4fach/mainindex.php"
+assert_db_equals 1 \
+    "SELECT COUNT(*) FROM \`${user_read_table}\` WHERE \`nachnum\`=${message_id};"
+
+load_message_list "$s1_cookies"
+post_message_state "$s1_cookies" gelesen unset "$message_id" 200
+assert_db_equals 0 \
+    "SELECT COUNT(*) FROM \`${user_read_table}\` WHERE \`nachnum\`=${message_id};"
+assert_workflow_state_control gelesen set
+post_message_state "$s1_cookies" gelesen unset "$message_id" 200
+assert_db_equals 0 \
+    "SELECT COUNT(*) FROM \`${user_read_table}\` WHERE \`nachnum\`=${message_id};"
+
+post_message_state "$s1_cookies" gelesen set "$message_id" 200
+assert_db_equals 1 \
+    "SELECT COUNT(*) FROM \`${user_read_table}\` WHERE \`nachnum\`=${message_id} AND \`gelesen\` IS NOT NULL;"
+assert_workflow_state_control gelesen unset
+post_message_state "$s1_cookies" gelesen set "$message_id" 200
+assert_db_equals 1 \
+    "SELECT COUNT(*) FROM \`${user_read_table}\` WHERE \`nachnum\`=${message_id};"
+
+load_message_list "$s1_cookies"
+post_message_state "$s1_cookies" gelesen set "$foreign_message_id" 403
+assert_db_equals 0 \
+    "SELECT COUNT(*) FROM \`${user_read_table}\` WHERE \`nachnum\`=${foreign_message_id};"
+assert_db_equals 0 \
+    "SELECT COUNT(*) FROM \`${function_done_table}\` WHERE \`nachnum\`=${foreign_message_id};"
+
+load_message_list "$s1_cookies"
+post_message_state "$s1_cookies" erledigt set "$message_id" 200
+assert_db_equals 1 \
+    "SELECT COUNT(*) FROM \`${function_done_table}\` WHERE \`nachnum\`=${message_id} AND \`erledigt\` IS NOT NULL;"
+assert_workflow_state_controls_absent
+post_message_state "$s1_cookies" erledigt set "$message_id" 200
+assert_db_equals 1 \
+    "SELECT COUNT(*) FROM \`${function_done_table}\` WHERE \`nachnum\`=${message_id};"
+assert_workflow_state_controls_absent
+
+state_csrf=$(csrf_from_body)
+assert_status 200 \
+    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$state_csrf" \
+    --data-urlencode 'filter_erledigt_ein_x=1' \
+    "$base_url/4fach/mainindex.php"
+assert_workflow_state_control erledigt unset
+post_message_state "$s1_cookies" erledigt unset "$message_id" 200
+assert_db_equals 0 \
+    "SELECT COUNT(*) FROM \`${function_done_table}\` WHERE \`nachnum\`=${message_id};"
+assert_body "$workflow_marker"
+assert_workflow_state_control erledigt set
+post_message_state "$s1_cookies" erledigt unset "$message_id" 200
+assert_db_equals 0 \
+    "SELECT COUNT(*) FROM \`${function_done_table}\` WHERE \`nachnum\`=${message_id};"
+
+assert_db_equals 1 \
+    "SELECT COUNT(*) FROM \`${user_read_table}\` WHERE \`nachnum\`=${message_id};"
+assert_workflow_state_control gelesen unset
+
+state_csrf=$(csrf_from_body)
+assert_status 200 \
+    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$state_csrf" \
+    --data-urlencode 'filter_erledigt_aus_x=1' \
+    "$base_url/4fach/mainindex.php"
+assert_body "$workflow_marker"
 
 assert_status 422 \
     --cookie "$s1_cookies" \
