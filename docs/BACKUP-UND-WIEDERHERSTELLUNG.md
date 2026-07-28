@@ -116,6 +116,17 @@ Der eigentliche Wiederherstellungsnachweis ist ein regelmäßig durchgeführter
 Restore in einen separaten Compose-Projektnamen mit anschließendem Schema-,
 HTTP- und Fachtest.
 
+Das vollständige CI-Gate automatisiert davon einen destruktiv guardierten
+Roundtrip: Es sichert Datenbank, `estab_data` und `estab_export`, löscht nur die
+eindeutig als `estab_ci` beziehungsweise `estab_ci_*` erkannten Testcontainer
+und -Volumes, legt alle drei Volumes leer neu an und spielt die Sicherung
+zurück. Danach müssen das Schema, das bestehende Konto, die Nachricht, der
+exakte Anhanginhalt, der SHA-256 des real erzeugten PDF-Vordrucks, vorhandene
+ETB-/TBB-Titel und -Einträge sowie Kennung und SHA-256 des zuvor per
+Manifest/CSV geprüften Export-ZIP unverändert nachweisbar sein. Die
+ETB-/TBB-Prüfung ist dabei absichtlich read-only, damit fehlende Daten den Lauf
+beenden und nicht unbemerkt neu angelegt werden.
+
 ## Vollständige Wiederherstellung
 
 Die folgenden Schritte überschreiben die gewählte Zieldatenbank sowie beide
@@ -207,7 +218,10 @@ bevor `app` gestartet wird.
 
 Danach folgen HTTP-Smoke-Test und fachliche Abnahme aus
 [Tests und Monitoring](TESTS-UND-MONITORING.md), insbesondere Anmeldung,
-Nachrichtenfluss, Anhänge, PDF/Vordruck und Einsatzexport.
+Nachrichtenfluss, Anhänge, PDF/Vordruck, ETB/TBB und Einsatzexport. Der
+automatisierte Restore-Zweig vergleicht dabei nicht nur Dateinamen: Er verlangt
+den ursprünglichen Anhanginhalt, den gespeicherten PDF-SHA-256 und den
+gespeicherten SHA-256 des genau bezeichneten Export-ZIP.
 
 ## Administrativer Einsatzexport
 
@@ -265,4 +279,7 @@ Eine betriebliche Regelung sollte mindestens definieren:
 - dokumentierte Dauer bis zur fachlichen Freigabe.
 
 Ein Backup gilt erst dann als belastbar, wenn eine Restore-Probe mit
-`verify.sql`, HTTP-Smoke-Test und ausgewählten Fachabläufen erfolgreich war.
+`verify.sql`, HTTP-Smoke-Test, bytegenau geprüften Dateiartefakten,
+ausschließlich gelesenen bestehenden ETB-/TBB-Daten und ausgewählten
+Fachabläufen erfolgreich war. Das grüne lokale CI-Gate ersetzt nicht die
+regelmäßige betriebliche Wiederherstellung auf einem getrennten Host.

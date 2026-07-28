@@ -11,7 +11,7 @@ steht in der [Funktionsmatrix](FUNKTIONSNACHWEIS.md).
 | Quellprüfung | PHP-8.5-Lint, Kompatibilitäts-, Sicherheits-, Upload-, Export- und PDF-Regressionen |
 | Image-Build | benötigte PHP-Erweiterungen und Apache-Konfiguration |
 | Datenbank | echtes MariaDB-Schema, Indizes, Matrix, Engines, Collations und Zero-Date-Freiheit |
-| HTTP | Header, direkte Endpunktfläche, 403-/400-/405-Grenzen, PNG-Antworten, Registrierung, sichtbare Sitzungsidentität, CSRF-Abmeldung, erneute Anmeldung, Nachrichten-/Kategorien- und ETB-/TBB-Rollengrenzen sowie optional Admin-Export |
+| HTTP | Header, direkte Endpunktfläche, 403-/400-/405-Grenzen, PNG-Antworten, Registrierung, sichtbare Sitzungsidentität, CSRF-Abmeldung, erneute Anmeldung, Nachrichten-/Kategorien- und ETB-/TBB-Rollengrenzen, reale Vordruckerzeugung/-auslieferung sowie optional Admin-Export |
 | Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, acht stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, BOS-Disclosure, Logout sowie öffentliche und authentifizierte mobile Bedienung bei exakt 390 × 844 CSS-Pixeln |
 | Fachabnahme | kompletter Nachrichten-, Anhang-, PDF-, ETB-/TBB- und Restore-Ablauf |
 | Betrieb | kontinuierliche Readiness, Logs, Restarts, Kapazität und Backup-Alter |
@@ -108,9 +108,14 @@ Engines explizit mit `ESTAB_CI_TEMP_PARENT` gesetzt werden.
 
 Der Lauf baut die festgelegten Images frisch, migriert ein leeres Schema,
 führt PHP-, Datenbank-, Rollen-, HTTP- und Administrationsnachweise aus, prüft
-die Containerlogs und stellt Datenbank, Anhänge und Export aus einem
-prüfsummengebundenen Backup in neue Volumes wieder her. Am Ende werden nur die
-guardierten CI-Container, CI-Volumes und temporären Secrets entfernt. Mit
+die Containerlogs und stellt Datenbank, Anhang-/Vordruckdaten sowie Exporte aus
+einem prüfsummengebundenen Backup in neue Volumes wieder her. Ein exakt
+sechszeiliger Zustandsvertrag bindet dabei Nachricht, Anhang, generierten
+Vordruck samt SHA-256 sowie Kennung und SHA-256 des zuvor vollständig
+validierten Export-ZIP an den zweiten, ausschließlich prüfenden HTTP-Lauf.
+Dieser findet außerdem die vor dem Backup angelegten ETB-/TBB-Titel und
+-Einträge nur lesend wieder. Am Ende werden nur die guardierten CI-Container,
+CI-Volumes und temporären Secrets entfernt. Mit
 Docker wird `ESTAB_CONTAINER_CLI=docker` gesetzt oder die Variable weggelassen.
 Die HTTP-Stufe beweist dabei den Übersichts-Anmeldebutton, die getrennten
 Bestandskonto-/Neukonto-Formulare, die sichtbare Kontenauswahl,
@@ -231,6 +236,46 @@ verwendet fest abgegrenzte Tabellennamen und entfernt sie am Anfang, bei
 Prozessende und nach erfolgreichem Lauf; er gehört trotzdem ausschließlich in
 den Wegwerf-Stack.
 
+### Datenbank-Integration der Anhangreservierung
+
+`tests/integration/attachment_reservation.php` verwendet eine zufällig
+benannte InnoDB-Wegwerftabelle und unabhängige MariaDB-Verbindungen. Der
+Einzelaufruf entspricht dem Muster der übrigen PHP-Datenbanktests:
+
+```console
+ESTAB_TEST_DB_PASSWORD="$(tr -d '\r\n' < secrets/db_password.txt)" \
+ESTAB_HTTP_PORT=18080 \
+podman compose -p estab-acceptance run --rm --no-deps -T \
+  --volume "$PWD:/workspace:ro" \
+  --workdir /workspace \
+  --env ESTAB_TEST_DB_PASSWORD \
+  --env ESTAB_TEST_DB_HOST=db \
+  --env ESTAB_TEST_DB_NAME=estab \
+  --env ESTAB_TEST_DB_USER=estab \
+  --entrypoint php \
+  app -d auto_prepend_file= tests/integration/attachment_reservation.php
+```
+
+Der Test liefert drei voneinander getrennte Belege:
+
+- Eine Verbindung sperrt die zweite von zwei Ergebniszeilen. Auf der anderen
+  Verbindung beendet `execute()` erfolgreich, erst das echte
+  `mysqli_stmt::get_result()` meldet Timeout 1205. Der Produktionshelfer muss
+  genau diesen Code erhalten und darf `false` nicht als Resultat verwenden.
+- Zwei echte Worker rufen gleichzeitig
+  `estab_attachment_reserve()` auf. Der Lauf gilt nur dann als Deadlockbeleg,
+  wenn der globale InnoDB-Zähler steigt **und** mindestens der betroffene
+  Produktionsworker über den optionalen Beobachter einen ausgeführten Retry
+  mit Code 1213 meldet. Beide Worker müssen anschließend erfolgreich
+  unterschiedliche fortlaufende Namen besitzen.
+- Besitzgrenzen, Claim, Finalisierung, Freigabe, Wiederverwendung,
+  Idempotenz und der eindeutige Dateinamenindex werden danach auf derselben
+  Produktionsschnittstelle geprüft.
+
+Transaktionen, Session-Timeout, Worker, Barrieren, Zeilen und Fixture-Tabelle
+werden auch im Fehlerfall bereinigt. Der Gesamtorchestrator begrenzt den
+Einzeltest zusätzlich zeitlich.
+
 ### Datenbank-Integration der Nachrichten-Parallelität
 
 `tests/integration/message_concurrency.php` erzeugt zufällig benannte
@@ -340,12 +385,21 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
 - Speichern und Suchen einer Nachricht mit Quotes, Ampersand, `<script>` und
   SQL-ähnlichem Text bei nachweislich inertem HTML sowie HTTP 403 für den
   historischen GET-Detailaufruf,
+- Abschluss einer echten Gesprächsnotiz über den historischen Controller,
+  anschließende Erzeugung durch den produktiven Vordruckgenerator, Auffinden in
+  der geschützten Liste und Download mit PDF-Header/-Trailer, MIME-Headern und
+  gespeichertem SHA-256 für den Restore-Vergleich,
 - Basic-Auth-Adminseite mit escaped technischem Benutzernamen, ausdrücklicher
   Trennung vom eStab-Funktionskonto sowie Exportverwaltung: zwei vollständige
   Exporte erzeugen, PRG-Rückleitungen und CSRF-Grenzen prüfen, Manifest und
-  jede CSV-Prüfsumme im heruntergeladenen ZIP verifizieren, Traversal und
-  unbekannte IDs abweisen, genau einen Lauf löschen und den zweiten
-  byteidentisch für den Backup-/Restore-Nachweis behalten.
+  jede CSV-Prüfsumme in beiden heruntergeladenen ZIPs verifizieren, den
+  Workflowmarker per CSV-Parser exakt in `nv_nachrichten.csv` nachweisen,
+  Traversal und unbekannte IDs abweisen, genau einen Lauf löschen und den
+  zweiten byteidentisch für den Backup-/Restore-Nachweis behalten,
+- Restore-Prüfmodus ohne Neuanlage: vorhandenes Konto und Nachricht erneut
+  öffnen, exakten Anhanginhalt und PDF-SHA vergleichen, ETB-/TBB-Titel und
+  -Einträge nur lesen sowie Kennung, Manifest, Nachrichten-CSV und ZIP-SHA des
+  überlebenden Exportlaufs im wiederhergestellten Volume prüfen.
 
 ### Direkte HTTP-Oberfläche
 
@@ -629,7 +683,9 @@ Mindestens zu prüfen:
   Überlaufen bedienen; anschließend einen Lauf löschen und einen zweiten
   unverändert behalten,
 - Vollbackup in ein leeres Testprojekt zurückspielen und denselben
-  Nachrichten-/Anhangdatensatz wiederfinden.
+  Nachrichten-/Anhangdatensatz, den erzeugten Vordruck, beide Bücher und den
+  ausgewählten Exportlauf wiederfinden; für die betriebliche Freigabe muss
+  diese Probe zusätzlich auf einem getrennten Host erfolgen.
 
 Für jeden Abnahmelauf werden Commit, Image-Digest, Datenbankversion, Browser,
 Zeitpunkt, Prüfer und Ergebnis protokolliert. Screenshots allein reichen nicht:
