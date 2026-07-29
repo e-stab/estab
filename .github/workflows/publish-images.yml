@@ -23,23 +23,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  verify:
-    name: Verify release candidate (${{ matrix.arch }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-24.04
-            browser: required
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-            browser: skip
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 65
+  preflight:
+    name: Validate manual release gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     env:
-      COMPOSE_PROJECT_NAME: estab_ci_publish_${{ github.run_id }}_${{ github.run_attempt }}_${{ matrix.arch }}
-      ESTAB_HTTP_PORT: "18080"
       RELEASE_IMAGE_TAG: ${{ inputs.image_tag }}
       REDISTRIBUTION_CLEARED: ${{ inputs.redistribution_cleared }}
       CONTAINER_PUBLISH_ENABLED: ${{ vars.ESTAB_CONTAINER_PUBLISH_ENABLED }}
@@ -53,7 +41,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Validate manual release gates
+      - name: Validate repository, tag, rights, and reviewer gates
         shell: bash
         run: |
           set -euo pipefail
@@ -85,74 +73,31 @@ jobs:
             echo "Image tag must be a lowercase OCI-compatible release tag." >&2
             exit 1
           fi
+          if [[ "$(git rev-parse "refs/tags/$RELEASE_IMAGE_TAG^{commit}")" != "$GITHUB_SHA" ]]; then
+            echo "The selected Git tag does not resolve to the checked-out commit." >&2
+            exit 1
+          fi
 
-      - name: Run complete fresh-stack release gate
-        timeout-minutes: 52
-        env:
-          ESTAB_CI_LOG_DIR: ${{ runner.temp }}/estab-ci-logs
-          ESTAB_BROWSER_TEST: ${{ matrix.browser }}
-        run: bash tests/integration/ci.sh
-
-      - name: Scan application image for fixable high or critical vulnerabilities
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: ${{ env.COMPOSE_PROJECT_NAME }}-app:latest
-          version: v0.70.0
-          scanners: vuln
-          vuln-type: os,library
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: "1"
-
-      - name: Scan migration image for fixable high or critical vulnerabilities
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: ${{ env.COMPOSE_PROJECT_NAME }}-migrate:latest
-          version: v0.70.0
-          scanners: vuln
-          vuln-type: os,library
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          skip-setup-trivy: true
-          exit-code: "1"
-
-      - name: Scan database image for fixable high or critical vulnerabilities
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: docker.io/library/mariadb@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4
-          version: v0.70.0
-          scanners: vuln
-          vuln-type: os,library
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          trivyignores: .trivyignore.yaml
-          skip-setup-trivy: true
-          exit-code: "1"
-
-      - name: Upload failure diagnostics
-        if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: publish-diagnostics-${{ matrix.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/estab-ci-logs
-          if-no-files-found: ignore
-          retention-days: 7
-
-  publish:
-    name: Publish verified image pair
-    needs: verify
+  stage:
+    name: Build immutable candidate image pair
+    needs: preflight
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     environment: container-publish
     permissions:
-      contents: write
+      contents: read
       packages: write
       attestations: write
       id-token: write
+    outputs:
+      app_digest: ${{ steps.push_app.outputs.digest }}
+      migrate_digest: ${{ steps.push_migrate.outputs.digest }}
+      candidate_tag: ${{ steps.candidate_metadata.outputs.tag }}
     env:
       APP_IMAGE: ghcr.io/e-stab/estab
       MIGRATE_IMAGE: ghcr.io/e-stab/estab-migrate
       RELEASE_IMAGE_TAG: ${{ inputs.image_tag }}
+      CANDIDATE_IMAGE_TAG: candidate-${{ github.run_id }}-${{ github.run_attempt }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Check out repository
@@ -173,32 +118,6 @@ jobs:
           driver-opts: |
             image=moby/buildkit:buildx-stable-1@sha256:2f5adac4ecd194d9f8c10b7b5d7bceb5186853db1b26e5abd3a657af0b7e26ec
 
-      # Both images must compile for both target architectures before the first
-      # registry mutation. The later push steps reuse these verified caches.
-      - name: Prebuild application image
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
-        with:
-          context: .
-          file: Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: false
-          provenance: mode=max
-          sbom: true
-          cache-from: type=gha,scope=estab
-          cache-to: type=gha,mode=max,scope=estab
-
-      - name: Prebuild migration image
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
-        with:
-          context: .
-          file: docker/db/Dockerfile.migrate
-          platforms: linux/amd64,linux/arm64
-          push: false
-          provenance: mode=max
-          sbom: true
-          cache-from: type=gha,scope=estab-migrate
-          cache-to: type=gha,mode=max,scope=estab-migrate
-
       - name: Log in to GHCR
         uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4
         with:
@@ -206,24 +125,44 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Record immutable candidate identity
+        id: candidate_metadata
+        shell: bash
+        run: printf 'tag=%s\n' "$CANDIDATE_IMAGE_TAG" >>"$GITHUB_OUTPUT"
+
       - name: Refuse existing immutable tags
         shell: bash
         run: |
           set -euo pipefail
           for image in "$APP_IMAGE" "$MIGRATE_IMAGE"; do
-            if output=$(docker buildx imagetools inspect \
-                "$image:$RELEASE_IMAGE_TAG" 2>&1); then
-              echo "Refusing to overwrite existing image tag: $image:$RELEASE_IMAGE_TAG" >&2
-              exit 1
-            fi
-            if ! grep -Eqi 'manifest unknown|not found|no such manifest' <<<"$output"; then
-              echo "Could not prove that $image:$RELEASE_IMAGE_TAG is absent:" >&2
-              printf '%s\n' "$output" >&2
-              exit 1
-            fi
+            for tag in "$RELEASE_IMAGE_TAG" "$CANDIDATE_IMAGE_TAG"; do
+              if output=$(docker buildx imagetools inspect \
+                  "$image:$tag" 2>&1); then
+                echo "Refusing to overwrite existing image tag: $image:$tag" >&2
+                exit 1
+              fi
+              if ! grep -Eqi 'manifest unknown|not found|no such manifest' <<<"$output"; then
+                echo "Could not prove that $image:$tag is absent:" >&2
+                printf '%s\n' "$output" >&2
+                exit 1
+              fi
+            done
           done
+          if release_output=$(gh release view "$RELEASE_IMAGE_TAG" 2>&1); then
+            echo "Refusing to reuse existing GitHub release: $RELEASE_IMAGE_TAG" >&2
+            exit 1
+          fi
+          if ! grep -Eqi 'release not found|not found.*HTTP 404|HTTP 404.*not found' \
+              <<<"$release_output"; then
+            echo "Could not prove that GitHub release $RELEASE_IMAGE_TAG is absent:" >&2
+            printf '%s\n' "$release_output" >&2
+            exit 1
+          fi
 
-      - name: Publish application image
+      # Each Dockerfile is built and pushed exactly once. This candidate tag is
+      # deliberately not a release tag and may remain as immutable build
+      # evidence when a later verification gate fails.
+      - name: Push application candidate
         id: push_app
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
@@ -231,7 +170,7 @@ jobs:
           file: Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ env.APP_IMAGE }}:${{ env.RELEASE_IMAGE_TAG }}
+          tags: ${{ env.APP_IMAGE }}:${{ env.CANDIDATE_IMAGE_TAG }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -241,7 +180,7 @@ jobs:
           cache-from: type=gha,scope=estab
           cache-to: type=gha,mode=max,scope=estab
 
-      - name: Publish migration image
+      - name: Push migration candidate
         id: push_migrate
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
@@ -249,7 +188,7 @@ jobs:
           file: docker/db/Dockerfile.migrate
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ env.MIGRATE_IMAGE }}:${{ env.RELEASE_IMAGE_TAG }}
+          tags: ${{ env.MIGRATE_IMAGE }}:${{ env.CANDIDATE_IMAGE_TAG }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -275,7 +214,7 @@ jobs:
           push-to-registry: true
           create-storage-record: false
 
-      - name: Verify manifests and attestations
+      - name: Verify candidate indexes and build evidence
         shell: bash
         env:
           APP_DIGEST: ${{ steps.push_app.outputs.digest }}
@@ -285,10 +224,22 @@ jobs:
           verify_index() {
             local image=$1
             local digest=$2
+            local candidate_digest
             local manifest
             local platform
             local sbom
             local provenance
+            if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+              echo "Build did not return a valid index digest for $image." >&2
+              exit 1
+            fi
+            candidate_digest=$(docker buildx imagetools inspect \
+              "$image:$CANDIDATE_IMAGE_TAG" |
+              awk '$1 == "Digest:" { print $2; exit }')
+            if [[ "$candidate_digest" != "$digest" ]]; then
+              echo "Candidate tag for $image does not resolve to its build digest." >&2
+              exit 1
+            fi
             manifest=$(docker buildx imagetools inspect "$image@$digest" --raw)
             jq -e '
               ([.manifests[] | select(
@@ -316,17 +267,291 @@ jobs:
               ' <<<"$provenance" >/dev/null
             done
             gh attestation verify "oci://$image@$digest" \
-              --repo "$GITHUB_REPOSITORY" >/dev/null
+              --repo "$GITHUB_REPOSITORY" \
+              --bundle-from-oci \
+              --source-digest "$GITHUB_SHA" >/dev/null
           }
           verify_index "$APP_IMAGE" "$APP_DIGEST"
           verify_index "$MIGRATE_IMAGE" "$MIGRATE_DIGEST"
 
+  verify_candidate:
+    name: Verify release candidate (${{ matrix.arch }})
+    needs: stage
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            browser: required
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            browser: skip
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 75
+    permissions:
+      contents: read
+      packages: read
+      attestations: read
+    env:
+      APP_IMAGE: ghcr.io/e-stab/estab
+      MIGRATE_IMAGE: ghcr.io/e-stab/estab-migrate
+      APP_DIGEST: ${{ needs.stage.outputs.app_digest }}
+      MIGRATE_DIGEST: ${{ needs.stage.outputs.migrate_digest }}
+      COMPOSE_PROJECT_NAME: estab_ci_publish_${{ github.run_id }}_${{ github.run_attempt }}_${{ matrix.arch }}
+      ESTAB_HTTP_PORT: "18080"
+      ESTAB_BROWSER_TEST: ${{ matrix.browser }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+        with:
+          version: v0.35.0
+          driver-opts: |
+            image=moby/buildkit:buildx-stable-1@sha256:2f5adac4ecd194d9f8c10b7b5d7bceb5186853db1b26e5abd3a657af0b7e26ec
+
+      - name: Log in to GHCR
+        uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull and verify exact native candidate images
+        shell: bash
+        env:
+          ESTAB_PREBUILT_APP_IMAGE: ${{ env.APP_IMAGE }}@${{ env.APP_DIGEST }}
+          ESTAB_PREBUILT_MIGRATE_IMAGE: ${{ env.MIGRATE_IMAGE }}@${{ env.MIGRATE_DIGEST }}
+          ESTAB_RELEASE_EVIDENCE_DIR: ${{ runner.temp }}/estab-release-evidence
+        run: |
+          bash tests/integration/verify_release_candidate.sh \
+            "${{ matrix.arch }}" \
+            "$ESTAB_PREBUILT_APP_IMAGE" \
+            "$ESTAB_PREBUILT_MIGRATE_IMAGE" \
+            "$ESTAB_RELEASE_EVIDENCE_DIR"
+
+      - name: Run complete fresh-stack gate against exact candidate digests
+        timeout-minutes: 55
+        env:
+          ESTAB_PREBUILT_APP_IMAGE: ${{ env.APP_IMAGE }}@${{ env.APP_DIGEST }}
+          ESTAB_PREBUILT_MIGRATE_IMAGE: ${{ env.MIGRATE_IMAGE }}@${{ env.MIGRATE_DIGEST }}
+          ESTAB_CI_LOG_DIR: ${{ runner.temp }}/estab-ci-logs
+        run: bash tests/integration/ci.sh
+
+      - name: Scan exact application candidate for fixable high or critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.APP_IMAGE }}@${{ env.APP_DIGEST }}
+          version: v0.70.0
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: table
+          output: ${{ runner.temp }}/estab-release-evidence/trivy-app.txt
+          exit-code: "1"
+
+      - name: Scan exact migration candidate for fixable high or critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.MIGRATE_IMAGE }}@${{ env.MIGRATE_DIGEST }}
+          version: v0.70.0
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: table
+          output: ${{ runner.temp }}/estab-release-evidence/trivy-migrate.txt
+          skip-setup-trivy: true
+          exit-code: "1"
+
+      - name: Scan exact database image for fixable high or critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: docker.io/library/mariadb@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4
+          version: v0.70.0
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: .trivyignore.yaml
+          format: table
+          output: ${{ runner.temp }}/estab-release-evidence/trivy-db.txt
+          skip-setup-trivy: true
+          exit-code: "1"
+
+      - name: Finalize successful architecture evidence
+        shell: bash
+        env:
+          ESTAB_RELEASE_EVIDENCE_DIR: ${{ runner.temp }}/estab-release-evidence
+        run: |
+          set -euo pipefail
+          test -f "$RUNNER_TEMP/estab-ci-logs/prebuilt-images.env"
+          test -f "$ESTAB_RELEASE_EVIDENCE_DIR/app-index.json"
+          test -f "$ESTAB_RELEASE_EVIDENCE_DIR/migrate-index.json"
+          test -f "$ESTAB_RELEASE_EVIDENCE_DIR/app-native-manifest.json"
+          test -f "$ESTAB_RELEASE_EVIDENCE_DIR/migrate-native-manifest.json"
+          test -f "$ESTAB_RELEASE_EVIDENCE_DIR/app-sbom.json"
+          test -f "$ESTAB_RELEASE_EVIDENCE_DIR/migrate-sbom.json"
+          test -f "$ESTAB_RELEASE_EVIDENCE_DIR/app-provenance.json"
+          test -f "$ESTAB_RELEASE_EVIDENCE_DIR/migrate-provenance.json"
+          test -f "$ESTAB_RELEASE_EVIDENCE_DIR/app-attestation.json"
+          test -f "$ESTAB_RELEASE_EVIDENCE_DIR/migrate-attestation.json"
+          test -f "$ESTAB_RELEASE_EVIDENCE_DIR/trivy-app.txt"
+          test -f "$ESTAB_RELEASE_EVIDENCE_DIR/trivy-migrate.txt"
+          test -f "$ESTAB_RELEASE_EVIDENCE_DIR/trivy-db.txt"
+          cp -a "$RUNNER_TEMP/estab-ci-logs" \
+            "$ESTAB_RELEASE_EVIDENCE_DIR/ci"
+          {
+            printf 'result=passed\n'
+            printf 'architecture=%s\n' '${{ matrix.arch }}'
+            printf 'browser_gate=%s\n' '${{ matrix.browser }}'
+            printf 'candidate_tag=%s\n' '${{ needs.stage.outputs.candidate_tag }}'
+            printf 'integration_gate=passed\n'
+            printf 'vulnerability_gate=passed\n'
+            printf 'attestation_gate=passed\n'
+            printf 'verified_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } >"$ESTAB_RELEASE_EVIDENCE_DIR/result.env"
+          checksums_tmp=$(mktemp "$RUNNER_TEMP/estab-release-sha.XXXXXX")
+          trap 'rm -f -- "$checksums_tmp"' EXIT
+          (
+            cd "$ESTAB_RELEASE_EVIDENCE_DIR"
+            find . -type f ! -name SHA256SUMS -print0 |
+              LC_ALL=C sort -z |
+              xargs -0 sha256sum
+          ) >"$checksums_tmp"
+          mv -- "$checksums_tmp" \
+            "$ESTAB_RELEASE_EVIDENCE_DIR/SHA256SUMS"
+          trap - EXIT
+          (
+            cd "$ESTAB_RELEASE_EVIDENCE_DIR"
+            sha256sum --check SHA256SUMS
+          )
+
+      - name: Upload successful architecture evidence
+        if: success()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: publish-evidence-${{ matrix.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/estab-release-evidence
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: publish-diagnostics-${{ matrix.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/estab-ci-logs
+            ${{ runner.temp }}/estab-release-evidence
+          if-no-files-found: ignore
+          retention-days: 7
+
+  release:
+    name: Promote verified digests and publish installation bundle
+    needs:
+      - stage
+      - verify_candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: container-publish
+    permissions:
+      contents: write
+      packages: write
+      attestations: read
+    env:
+      APP_IMAGE: ghcr.io/e-stab/estab
+      MIGRATE_IMAGE: ghcr.io/e-stab/estab-migrate
+      APP_DIGEST: ${{ needs.stage.outputs.app_digest }}
+      MIGRATE_DIGEST: ${{ needs.stage.outputs.migrate_digest }}
+      RELEASE_IMAGE_TAG: ${{ inputs.image_tag }}
+      CANDIDATE_IMAGE_TAG: ${{ needs.stage.outputs.candidate_tag }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+        with:
+          version: v0.35.0
+          driver-opts: |
+            image=moby/buildkit:buildx-stable-1@sha256:2f5adac4ecd194d9f8c10b7b5d7bceb5186853db1b26e5abd3a657af0b7e26ec
+
+      - name: Log in to GHCR
+        uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Recheck immutable publication targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          resolve_digest() {
+            docker buildx imagetools inspect "$1" |
+              awk '$1 == "Digest:" { print $2; exit }'
+          }
+          assert_absent() {
+            local reference=$1
+            local output
+            if output=$(docker buildx imagetools inspect "$reference" 2>&1); then
+              echo "Refusing to overwrite existing image tag: $reference" >&2
+              exit 1
+            fi
+            if ! grep -Eqi 'manifest unknown|not found|no such manifest' <<<"$output"; then
+              echo "Could not prove that $reference is absent:" >&2
+              printf '%s\n' "$output" >&2
+              exit 1
+            fi
+          }
+          for digest in "$APP_DIGEST" "$MIGRATE_DIGEST"; do
+            if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+              echo "Stage output is not a valid image digest." >&2
+              exit 1
+            fi
+          done
+          if [[ "$(resolve_digest "$APP_IMAGE:$CANDIDATE_IMAGE_TAG")" != "$APP_DIGEST" ]]; then
+            echo "Application candidate tag changed after verification." >&2
+            exit 1
+          fi
+          if [[ "$(resolve_digest "$MIGRATE_IMAGE:$CANDIDATE_IMAGE_TAG")" != "$MIGRATE_DIGEST" ]]; then
+            echo "Migration candidate tag changed after verification." >&2
+            exit 1
+          fi
+          assert_absent "$APP_IMAGE:$RELEASE_IMAGE_TAG"
+          assert_absent "$MIGRATE_IMAGE:$RELEASE_IMAGE_TAG"
+          if release_output=$(gh release view "$RELEASE_IMAGE_TAG" 2>&1); then
+            echo "Refusing to reuse existing GitHub release: $RELEASE_IMAGE_TAG" >&2
+            exit 1
+          fi
+          if ! grep -Eqi 'release not found|not found.*HTTP 404|HTTP 404.*not found' \
+              <<<"$release_output"; then
+            echo "Could not prove that GitHub release $RELEASE_IMAGE_TAG is absent:" >&2
+            printf '%s\n' "$release_output" >&2
+            exit 1
+          fi
+          gh attestation verify "oci://$APP_IMAGE@$APP_DIGEST" \
+            --repo "$GITHUB_REPOSITORY" \
+            --bundle-from-oci \
+            --source-digest "$GITHUB_SHA" >/dev/null
+          gh attestation verify "oci://$MIGRATE_IMAGE@$MIGRATE_DIGEST" \
+            --repo "$GITHUB_REPOSITORY" \
+            --bundle-from-oci \
+            --source-digest "$GITHUB_SHA" >/dev/null
+
       - name: Build immutable installation bundle
         id: bundle
         shell: bash
-        env:
-          APP_DIGEST: ${{ steps.push_app.outputs.digest }}
-          MIGRATE_DIGEST: ${{ steps.push_migrate.outputs.digest }}
         run: |
           set -euo pipefail
           bundle_name="estab-${RELEASE_IMAGE_TAG}"
@@ -336,6 +561,7 @@ jobs:
           sed \
             's#../../docs/BACKUP-UND-WIEDERHERSTELLUNG.md#BACKUP-UND-WIEDERHERSTELLUNG.md#g' \
             deploy/registry/README.md >"$bundle_root/README.md"
+          cp deploy/registry/backup.sh "$bundle_root/backup.sh"
           cp deploy/registry/verify-backup.sh "$bundle_root/verify-backup.sh"
           sed \
             -e 's#^backup_verifier=deploy/registry/verify-backup.sh$#backup_verifier=./verify-backup.sh#' \
@@ -377,56 +603,204 @@ jobs:
             echo "bundle_path=$RUNNER_TEMP/$bundle_name.tar.gz"
             echo "checksum_path=$RUNNER_TEMP/$bundle_name.tar.gz.sha256"
           } >>"$GITHUB_OUTPUT"
-          {
-            echo "### Verifiziertes eStab-Imagepaar"
-            echo
-            echo "- App: \`$APP_IMAGE@$APP_DIGEST\`"
-            echo "- Migrator: \`$MIGRATE_IMAGE@$MIGRATE_DIGEST\`"
-            echo "- Installationspaket: \`$bundle_name.tar.gz\`"
-          } >>"$GITHUB_STEP_SUMMARY"
 
-      - name: Publish immutable installation bundle
+      - name: Verify draft assets and promote exact digests
         shell: bash
         env:
           BUNDLE_NAME: ${{ steps.bundle.outputs.bundle_name }}
           BUNDLE_PATH: ${{ steps.bundle.outputs.bundle_path }}
           CHECKSUM_PATH: ${{ steps.bundle.outputs.checksum_path }}
-          APP_DIGEST: ${{ steps.push_app.outputs.digest }}
-          MIGRATE_DIGEST: ${{ steps.push_migrate.outputs.digest }}
+          RELEASE_EVIDENCE_DIR: ${{ runner.temp }}/estab-release-evidence
         run: |
-          set -euo pipefail
-          if gh release view "$RELEASE_IMAGE_TAG" >/dev/null 2>&1; then
-            existing_assets=$(gh release view "$RELEASE_IMAGE_TAG" \
-              --json assets --jq '.assets[].name')
-            for asset_name in \
-              "$BUNDLE_NAME.tar.gz" \
-              "$BUNDLE_NAME.tar.gz.sha256"
-            do
-              if printf '%s\n' "$existing_assets" |
-                  grep -Fqx "$asset_name"; then
-                echo "Refusing to overwrite existing release asset: $asset_name" >&2
-                exit 1
-              fi
-            done
-          else
-            notes="$RUNNER_TEMP/release-notes.md"
-            {
-              echo "Verifiziertes eStab-Containerpaar für linux/amd64 und linux/arm64."
-              echo
-              echo "- App: \`$APP_IMAGE@$APP_DIGEST\`"
-              echo "- Migrator: \`$MIGRATE_IMAGE@$MIGRATE_DIGEST\`"
-              echo
-              echo "Das Installationspaket enthält Compose, eine bereits auf beide"
-              echo "Manifest-Digests gebundene Konfigurationsvorlage, Runbook und"
-              echo "den prüfsummengebundenen Backup-Verifier."
-              echo
-              echo "Vor dem Entpacken:"
-              echo "\`sha256sum --check $BUNDLE_NAME.tar.gz.sha256\`"
-            } >"$notes"
-            gh release create "$RELEASE_IMAGE_TAG" \
-              --verify-tag \
-              --title "eStab $RELEASE_IMAGE_TAG" \
-              --notes-file "$notes"
-          fi
+          set -Eeuo pipefail
+          draft_created=false
+          promotion_started=false
+          cleanup_owned_draft() {
+            local status=$?
+            if ((status != 0)) &&
+                [[ "$draft_created" == true ]] &&
+                [[ "$promotion_started" == false ]]; then
+              gh release delete "$RELEASE_IMAGE_TAG" --yes >/dev/null 2>&1 || true
+            fi
+            exit "$status"
+          }
+          trap cleanup_owned_draft EXIT
+
+          notes="$RUNNER_TEMP/release-notes.md"
+          {
+            echo "Verifiziertes eStab-Containerpaar für linux/amd64 und linux/arm64."
+            echo
+            echo "- App: \`$APP_IMAGE@$APP_DIGEST\`"
+            echo "- Migrator: \`$MIGRATE_IMAGE@$MIGRATE_DIGEST\`"
+            echo
+            echo "Das Installationspaket enthält Compose, eine bereits auf beide"
+            echo "Manifest-Digests gebundene Konfigurationsvorlage, Runbook und"
+            echo "den prüfsummengebundenen Backup-Verifier."
+            echo
+            echo "Vor dem Entpacken:"
+            echo "\`sha256sum --check $BUNDLE_NAME.tar.gz.sha256\`"
+          } >"$notes"
+          gh release create "$RELEASE_IMAGE_TAG" \
+            --verify-tag \
+            --draft \
+            --latest=false \
+            --title "eStab $RELEASE_IMAGE_TAG" \
+            --notes-file "$notes"
+          draft_created=true
+
+          existing_assets=$(gh release view "$RELEASE_IMAGE_TAG" \
+            --json assets --jq '.assets[].name')
+          for asset_name in \
+            "$BUNDLE_NAME.tar.gz" \
+            "$BUNDLE_NAME.tar.gz.sha256"
+          do
+            if printf '%s\n' "$existing_assets" |
+                grep -Fqx "$asset_name"; then
+              echo "Refusing to overwrite existing release asset: $asset_name" >&2
+              exit 1
+            fi
+          done
           gh release upload "$RELEASE_IMAGE_TAG" \
             "$BUNDLE_PATH" "$CHECKSUM_PATH"
+
+          verification_dir=$(mktemp -d "$RUNNER_TEMP/estab-release-verify.XXXXXX")
+          gh release download "$RELEASE_IMAGE_TAG" \
+            --dir "$verification_dir" \
+            --pattern "$BUNDLE_NAME.tar.gz" \
+            --pattern "$BUNDLE_NAME.tar.gz.sha256"
+          cmp "$CHECKSUM_PATH" \
+            "$verification_dir/$BUNDLE_NAME.tar.gz.sha256"
+          (
+            cd "$verification_dir"
+            sha256sum --check "$BUNDLE_NAME.tar.gz.sha256"
+            tar -xzf "$BUNDLE_NAME.tar.gz"
+            cd "$BUNDLE_NAME"
+            sha256sum --check SHA256SUMS
+          )
+          release_state=$(gh release view "$RELEASE_IMAGE_TAG" \
+            --json isDraft,assets)
+          jq -e --arg archive "$BUNDLE_NAME.tar.gz" \
+            --arg checksum "$BUNDLE_NAME.tar.gz.sha256" '
+              .isDraft == true
+              and ([.assets[].name] | sort) == ([$archive, $checksum] | sort)
+            ' <<<"$release_state" >/dev/null
+
+          # Promotion only retags the already-tested indexes. There is no
+          # Dockerfile rebuild between native verification and release.
+          assert_absent() {
+            local reference=$1
+            local output
+            if output=$(docker buildx imagetools inspect "$reference" 2>&1); then
+              echo "Refusing to overwrite existing image tag: $reference" >&2
+              exit 1
+            fi
+            if ! grep -Eqi 'manifest unknown|not found|no such manifest' <<<"$output"; then
+              echo "Could not prove that $reference is absent:" >&2
+              printf '%s\n' "$output" >&2
+              exit 1
+            fi
+          }
+          assert_absent "$APP_IMAGE:$RELEASE_IMAGE_TAG"
+          assert_absent "$MIGRATE_IMAGE:$RELEASE_IMAGE_TAG"
+          promotion_started=true
+          docker buildx imagetools create \
+            --tag "$APP_IMAGE:$RELEASE_IMAGE_TAG" \
+            "$APP_IMAGE@$APP_DIGEST"
+          docker buildx imagetools create \
+            --tag "$MIGRATE_IMAGE:$RELEASE_IMAGE_TAG" \
+            "$MIGRATE_IMAGE@$MIGRATE_DIGEST"
+
+          resolve_digest() {
+            docker buildx imagetools inspect "$1" |
+              awk '$1 == "Digest:" { print $2; exit }'
+          }
+          final_app_digest=$(resolve_digest "$APP_IMAGE:$RELEASE_IMAGE_TAG")
+          final_migrate_digest=$(resolve_digest "$MIGRATE_IMAGE:$RELEASE_IMAGE_TAG")
+          if [[ "$final_app_digest" != "$APP_DIGEST" ||
+              "$final_migrate_digest" != "$MIGRATE_DIGEST" ]]; then
+            echo "A promoted release tag does not match its verified digest." >&2
+            exit 1
+          fi
+
+          install -d -m 0755 "$RELEASE_EVIDENCE_DIR"
+          {
+            printf 'git_tag=%s\n' "$RELEASE_IMAGE_TAG"
+            printf 'git_commit=%s\n' "$GITHUB_SHA"
+            printf 'app_reference=%s@%s\n' "$APP_IMAGE" "$final_app_digest"
+            printf 'migrate_reference=%s@%s\n' "$MIGRATE_IMAGE" "$final_migrate_digest"
+            printf 'bundle_sha256=%s\n' \
+              "$(sha256sum "$BUNDLE_PATH" | awk '{ print $1 }')"
+          } >"$RELEASE_EVIDENCE_DIR/publication.env"
+          cp "$verification_dir/$BUNDLE_NAME.tar.gz.sha256" \
+            "$RELEASE_EVIDENCE_DIR/"
+          (
+            cd "$RELEASE_EVIDENCE_DIR"
+            sha256sum -- * >SHA256SUMS
+            sha256sum --check SHA256SUMS
+          )
+
+      - name: Upload publication evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: publication-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/estab-release-evidence
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Make the fully verified draft visible
+        shell: bash
+        env:
+          BUNDLE_NAME: ${{ steps.bundle.outputs.bundle_name }}
+          CHECKSUM_PATH: ${{ steps.bundle.outputs.checksum_path }}
+        run: |
+          set -euo pipefail
+          final_asset_check=$(mktemp -d "$RUNNER_TEMP/estab-release-final-check.XXXXXX")
+          gh release download "$RELEASE_IMAGE_TAG" \
+            --dir "$final_asset_check" \
+            --pattern "$BUNDLE_NAME.tar.gz" \
+            --pattern "$BUNDLE_NAME.tar.gz.sha256"
+          cmp "$CHECKSUM_PATH" \
+            "$final_asset_check/$BUNDLE_NAME.tar.gz.sha256"
+          (
+            cd "$final_asset_check"
+            sha256sum --check "$BUNDLE_NAME.tar.gz.sha256"
+          )
+          resolve_digest() {
+            docker buildx imagetools inspect "$1" |
+              awk '$1 == "Digest:" { print $2; exit }'
+          }
+          if [[ "$(resolve_digest "$APP_IMAGE:$RELEASE_IMAGE_TAG")" != "$APP_DIGEST" ||
+              "$(resolve_digest "$MIGRATE_IMAGE:$RELEASE_IMAGE_TAG")" != "$MIGRATE_DIGEST" ]]; then
+            echo "A release tag changed before publication." >&2
+            exit 1
+          fi
+          gh attestation verify "oci://$APP_IMAGE@$APP_DIGEST" \
+            --repo "$GITHUB_REPOSITORY" \
+            --bundle-from-oci \
+            --source-digest "$GITHUB_SHA" >/dev/null
+          gh attestation verify "oci://$MIGRATE_IMAGE@$MIGRATE_DIGEST" \
+            --repo "$GITHUB_REPOSITORY" \
+            --bundle-from-oci \
+            --source-digest "$GITHUB_SHA" >/dev/null
+          release_state=$(gh release view "$RELEASE_IMAGE_TAG" \
+            --json isDraft,assets)
+          jq -e --arg archive "$BUNDLE_NAME.tar.gz" \
+            --arg checksum "$BUNDLE_NAME.tar.gz.sha256" '
+              .isDraft == true
+              and ([.assets[].name] | sort) == ([$archive, $checksum] | sort)
+            ' <<<"$release_state" >/dev/null
+          gh release edit "$RELEASE_IMAGE_TAG" --draft=false
+          published_state=$(gh release view "$RELEASE_IMAGE_TAG" \
+            --json isDraft,assets)
+          jq -e --arg archive "$BUNDLE_NAME.tar.gz" \
+            --arg checksum "$BUNDLE_NAME.tar.gz.sha256" '
+              .isDraft == false
+              and ([.assets[].name] | sort) == ([$archive, $checksum] | sort)
+            ' <<<"$published_state" >/dev/null
+          {
+            echo "### Verifiziertes eStab-Imagepaar"
+            echo
+            echo "- App: \`$APP_IMAGE@$APP_DIGEST\`"
+            echo "- Migrator: \`$MIGRATE_IMAGE@$MIGRATE_DIGEST\`"
+            echo "- Installationspaket: \`$BUNDLE_NAME.tar.gz\`"
+          } >>"$GITHUB_STEP_SUMMARY"
