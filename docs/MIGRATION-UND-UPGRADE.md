@@ -261,6 +261,17 @@ Der administrative CSV-/ZIP-Export enthält keine Anhänge, Vordrucke oder
 Tabellendefinitionen und besitzt keinen automatischen Importer. Er ist daher
 weder eine Dateiübernahme noch ein vollständiges Migrationsformat.
 
+Ein Image-Upgrade und das Öffnen im aktuellen Layout schreiben persistierte
+Vordrucke nicht um. Die geschützte Seite
+`/4fach/vordrucke.php` öffnet abgeschlossene Nachrichten des aktiven Einsatzes
+dennoch mit der Vorlage des neuen Images: Nach erneuter Einsatz- und
+Datensatzprüfung entsteht ein aktueller PDF-Abzug im Speicher, während das
+übernommene Archiv-PDF für Backup und Restore bytegleich bleibt. Ein
+PDF-Vordruckreset ist für einen reinen Layoutwechsel deshalb nicht nötig. Nur
+der ausdrücklich bestätigte administrative Vordruckreset kann die
+Druckmarkierungen des aktiven Einsatzes zurücksetzen und dadurch bei einer
+erneuten Erzeugung dessen Archivdateien ersetzen.
+
 ## Upgrade-Abnahme und Rollback
 
 Für jede Abnahme werden festgehalten:

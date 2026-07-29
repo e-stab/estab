@@ -219,9 +219,17 @@ durch Teildaten.
 Vordruckliste und Download scannen nicht vertrauensvoll das gemeinsame
 Verzeichnis. Sie leiten den erwarteten Namen aus einem abgeschlossenen,
 gedruckten Datenbankdatensatz des aktiven Einsatzes ab und prüfen ID,
-Nachweisnummer und Richtung erneut. Die Dateien historischer Einsätze bleiben
-im persistenten Volume kollisionsfrei erhalten, sind aber nicht über die
-aktive Vordruckliste eines anderen Einsatzes abrufbar. Das
+Nachweisnummer und Richtung erneut. Der in der Liste sichtbare aktuelle
+PDF-Abzug liest danach den vollständigen Datensatz und die validierte
+Empfängermatrix innerhalb derselben Transaktion und rendert nur im Speicher.
+Damit erscheinen auch vor einem Vorlagenwechsel archivierte Vordrucke im
+aktuellen Layout des Gesamtexports. Die persistierte Archivdatei wird durch
+diesen GET weder ersetzt noch neu datiert; ihr parameterloser interner
+Download bleibt für den bytegleichen Backup-/Restore-Nachweis erhalten.
+
+Die Dateien historischer Einsätze bleiben im persistenten Volume
+kollisionsfrei erhalten, sind aber nicht über die aktive Vordruckliste eines
+anderen Einsatzes abrufbar. Das
 [PDF-Einsatzdossier](PDF-EINSATZDOSSIER.md) erzeugt für ausgewählte
 historische Einsätze eine eigene zusammenhängende Darstellung. Seine
 Nachrichtenseiten verwenden denselben A4-Formularrenderer wie die

@@ -129,6 +129,11 @@ müssen danach in der globalen Statusleiste erscheinen. Funktionskonten lassen
 sich unter `/4fadm/users.php` sperren, entsperren und mit einem neuen Kennwort
 versehen. Ein vollständiges ETB-/TTB-/Nachrichten-/Anhang-Dossier für einen
 aktiven oder historischen Einsatz erzeugt `/4fadm/incident_export.php`.
+Unter `/4fach/vordrucke.php` öffnen angemeldete Benutzer abgeschlossene
+Nachrichten des aktiven Einsatzes im jeweils aktuellen, mit dem Dossier
+gemeinsamen PDF-Layout. Die beim Nachrichtenabschluss atomar gespeicherte
+Archivdatei wird dabei weder ersetzt noch verändert und bleibt Bestandteil
+von Backup und Restore.
 
 ### Ohne lokalen Image-Build
 
@@ -171,6 +176,7 @@ nicht.
 | `/4fach/logout.php` | zentrale Abmeldung aus Sitzungsleiste und Nachrichtenarbeitsbereich | eStab-Sitzung, ausschließlich POST mit Session-CSRF |
 | `/4fach/status.php` | eigenständige Statusansicht für Kompatibilitätsaufrufe | anonym nur neutraler Hinweis, Rollenbelegung erst mit eStab-Sitzung |
 | `/4fach/katgoedt.php` | globale, Funktions- und persönliche Kategorien | eStab-Sitzung, Rollen-/Objektprüfung und CSRF für Änderungen |
+| `/4fach/vordrucke.php` | abgeschlossene Vordrucke des aktiven Einsatzes im aktuellen, mit dem Einsatzdossier gemeinsamen PDF-Layout öffnen | eStab-Sitzung; Einsatz-, Abschluss- und Druckstatus werden serverseitig erneut geprüft, das persistierte Archiv bleibt unverändert |
 | `/4fadm/admin.php` | Administration | separates HTTP Basic Auth |
 | `/4fadm/incidents.php` | Einsätze anlegen, aktivieren und deaktivieren | HTTP Basic Auth, Session-CSRF und revisionsgesicherter globaler Status |
 | `/4fadm/users.php` | Benutzer anlegen, Funktionen fest zuweisen, sperren/entsperren und Kennwörter zurücksetzen | HTTP Basic Auth, Session-CSRF; Rollen werden serverseitig abgeleitet und aktive Sitzungen atomar widerrufen |

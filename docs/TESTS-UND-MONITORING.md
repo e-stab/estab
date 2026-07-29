@@ -428,6 +428,17 @@ absichtlich globale Feld `Seite 4/5` ausgespart. Anschließend extrahiert
 Quelldatei. Die CI bewahrt PDFs, PNGs, Text- und Werkzeuginformationen 14 Tage
 als Nachweisartefakt auf.
 
+Die Fixture ruft für den Einzelvordruck denselben öffentlichen
+`render_message_form_document()`-Dienst auf wie der aktuelle Download unter
+`/4fach/vordrucke.php`; der produktive Archivgenerator delegiert ebenfalls an
+diese Methode. `tests/php/generated_form_security.php` bindet zusätzlich die
+vollständige Matrixvalidierung, den abgeschlossenen und gedruckten
+Aktiveinsatz-Datensatz, den strikt skalaren `layout=current`-Schalter und den
+weiterhin getrennten Archivstream. Im echten HTTP-Smoke werden beide Pfade
+abgerufen: Der aktuelle Abzug muss den Marker
+`X-eStab-PDF-Layout: current` tragen, der parameterlose Archivpfad behält
+seinen SHA-256 über den destruktiven Backup-/Restore-Roundtrip.
+
 Diese drei Tests sind bewusst in `tests/integration/ci.sh` orchestriert.
 Insbesondere der PDF-Test ist kein sicherer Einzelbefehl gegen einen
 Produktivbestand: Er verlangt den fest benannten aktiven CI-Einsatz und gehört
@@ -617,8 +628,15 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
   Empfängerzuordnung als weiterhin absendbare Formularwerte enthalten,
 - Abschluss einer echten Gesprächsnotiz über den historischen Controller,
   anschließende Erzeugung durch den produktiven Vordruckgenerator, Auffinden in
-  der geschützten Liste und Download mit PDF-Header/-Trailer, MIME-Headern und
-  gespeichertem SHA-256 für den Restore-Vergleich,
+  der geschützten Liste, aktuellen In-Memory-Download mit gemeinsamem
+  Dossierrenderer und eigenem Layout-Header sowie getrennten Archivdownload
+  mit PDF-Header/-Trailer und MIME-Headern; danach ersetzt der Test
+  ausschließlich in seinem Wegwerfstack das Archiv durch ein gültiges,
+  absichtlich veraltetes Marker-PDF. Der aktuelle Abzug darf diesen Marker
+  nicht enthalten, der parameterlose Archivdownload muss ihn enthalten und
+  dessen SHA-256 muss nach Backup und Restore unverändert sein. Leere,
+  unbekannte, nichtskalare oder für Anhänge gesetzte Layoutparameter werden
+  abgewiesen,
 - Basic-Auth-Adminseite mit escaped technischem Benutzernamen, ausdrücklicher
   Trennung vom eStab-Funktionskonto sowie Exportverwaltung: zwei vollständige
   Exporte erzeugen, PRG-Rückleitungen und CSRF-Grenzen prüfen, Manifest und

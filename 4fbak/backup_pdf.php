@@ -144,6 +144,12 @@ function Ellipse($x, $y, $rx, $ry, $style='D')
 
 
 class vordruckaspdf extends PDF_Ellipse {
+  function Error ($message) {
+    throw new RuntimeException (
+      "Message form PDF rendering failed: " . (string) $message
+    );
+  }
+
 // Vollbild
   var $left   =    0 ;
   var $right  = 210 ;
@@ -1095,18 +1101,31 @@ class vordruckaspdf extends PDF_Ellipse {
   }
 
 /*******************************************************************************/
+  function render_message_form_document(){
+    if ($this->PageNo() !== 0) {
+      throw new LogicException ("Message form document was already rendered");
+    }
+    $this->SetFont('helvetica','',12);
+    $this->AliasNbPages();
+    $this->AddPage();
+    $this->writedata_inhalt ();
+
+    $document = $this->Output ("", "S");
+    if (
+      !is_string ($document)
+      || !str_starts_with ($document, "%PDF-")
+      || !str_ends_with ($document, "%%EOF\n")
+    ) {
+      throw new RuntimeException ("Message form renderer returned an incomplete PDF");
+    }
+    return $document;
+  }
+
+/*******************************************************************************/
   function main(){
     include (__DIR__ . "/../4fcfg/config.inc.php");    // Konfigurationseinstellungen und Vorgaben
     include (__DIR__ . "/../4fcfg/dbcfg.inc.php");     // Datenbankparameter
     include (__DIR__ . "/../4fcfg/e_cfg.inc.php");     // Datenbankname
-
-    // Schriftart definieren
-    $this->SetFont('helvetica','',12);
-    $this->AliasNbPages();
-    // Erste Seite hinzufügen
-    $this->AddPage();
-
-    $this->writedata_inhalt ();
 
     $filename = estab_generated_form_filename (
       $conf_4f_db ["datenbank"],
@@ -1114,7 +1133,7 @@ class vordruckaspdf extends PDF_Ellipse {
       $this->db_dataset ["04_nummer"],
       $this->db_dataset ["04_richtung"]
     );
-    $document = $this->Output ("", "S");
+    $document = $this->render_message_form_document ();
     estab_generated_form_publish (
       $conf_4f ["vordruck_dir"],
       $filename,

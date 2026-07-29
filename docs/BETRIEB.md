@@ -289,6 +289,15 @@ begrenzt `ESTAB_PDF_ATTACHMENT_MAX_BYTES`. `0` deaktiviert nicht den
 PDF-Export, sondern nur das Einbetten von Originaldateien; ein Dossier mit
 gewählten Anhängen bricht dann sichtbar ab, statt Dateien auszulassen.
 
+Angemeldete Funktionsbenutzer öffnen unter `/4fach/vordrucke.php` die
+abgeschlossenen Vordrucke des aktiven Einsatzes. Der sichtbare Download wird
+aus Nachrichtendatensatz und aktueller Empfängermatrix im Speicher erzeugt und
+verwendet dieselbe Vorlage wie das PDF-Dossier. Das ist insbesondere nach
+einem Vorlagen-Upgrade wichtig: Bereits persistierte Archiv-PDFs werden nicht
+automatisch überschrieben, der Benutzer erhält trotzdem sofort das aktuelle
+Layout. Die Spalten **Archivgröße** und **Archivdatei geändert** beziehen sich
+ausdrücklich auf die unveränderte Datei im `estab_data`-Volume.
+
 Die Selbstregistrierung ist standardmäßig deaktiviert. Neue Konten legt die
 zuständige Stelle unter Administration → Benutzerverwaltung an.
 „Mit bestehendem Konto anmelden“ erzeugt auch bei einem unbekannten Kürzel

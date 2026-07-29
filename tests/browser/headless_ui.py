@@ -1600,6 +1600,7 @@ class BrowserAcceptance:
                 f"Vordruckübersicht bei {width}×{height} px",
                 "[data-estab-generated-forms]",
                 mobile=width <= 390,
+                require_responsive_table=True,
             )
 
         self.cdp.call(

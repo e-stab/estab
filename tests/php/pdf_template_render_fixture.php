@@ -27,11 +27,7 @@ $matrix = estab_pdf_test_recipient_matrix();
 $single = new vordruckaspdf($message, $matrix);
 $single->SetCompression(false);
 $single->SetTitle('eStab message-form render fixture');
-$single->AliasNbPages();
-$single->SetFont('helvetica', '', 12);
-$single->AddPage();
-$single->writedata_inhalt();
-$singleBytes = $single->Output('', 'S');
+$singleBytes = $single->render_message_form_document();
 
 $incident = [
     'einsatz_id' => 1,
@@ -67,11 +63,7 @@ $longMessage = array_replace($message, [
 ]);
 $longSingle = new vordruckaspdf($longMessage, $matrix);
 $longSingle->SetCompression(false);
-$longSingle->AliasNbPages();
-$longSingle->SetFont('helvetica', '', 12);
-$longSingle->AddPage();
-$longSingle->writedata_inhalt();
-$longSingleBytes = $longSingle->Output('', 'S');
+$longSingleBytes = $longSingle->render_message_form_document();
 
 $longDossier = new EstabIncidentPdf(
     $incident,

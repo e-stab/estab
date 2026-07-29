@@ -30,19 +30,36 @@ if (
 
 $area = isset($_GET['area']) && is_string($_GET['area']) ? $_GET['area'] : '';
 $filename = isset($_GET['file']) && is_string($_GET['file']) ? $_GET['file'] : '';
+$layoutProvided = array_key_exists('layout', $_GET);
+$layout = $layoutProvided && is_string($_GET['layout'])
+    ? $_GET['layout']
+    : '';
 
 try {
+    if ($layoutProvided && !is_string($_GET['layout'])) {
+        throw new InvalidArgumentException('Invalid generated-form layout type');
+    }
     $area = estab_file_area($area);
     $filename = estab_file_validate_name($area, $filename);
+    if (
+        $layoutProvided
+        && ($area !== 'vordruck' || $layout !== 'current')
+    ) {
+        throw new InvalidArgumentException('Invalid generated-form layout');
+    }
 } catch (InvalidArgumentException) {
     estab_download_error(400, 'Ungültige Dateianforderung.');
 }
 
+$currentLayout = $area === 'vordruck' && $layout === 'current';
 $inline = $area === 'vordruck'
     && preg_match('/\.(?:pdf|png|jpe?g)\z/Di', $filename) === 1;
 $connection = null;
 $transactionActive = false;
 $stream = null;
+$document = null;
+$renderMessage = null;
+$renderRecipientMatrix = null;
 $size = 0;
 $contentType = 'application/octet-stream';
 $failure = null;
@@ -75,13 +92,29 @@ try {
         $root = (string) $conf_4f['ablage_dir'];
     } else {
         try {
-            estab_generated_form_require_active(
-                $connection,
-                $conf_4f_tbl['nachrichten'],
-                (string) $conf_4f_db['datenbank'],
-                $filename,
-                true
-            );
+            if ($currentLayout) {
+                $activeForm = estab_generated_form_fetch_active(
+                    $connection,
+                    $conf_4f_tbl['nachrichten'],
+                    (string) $conf_4f_db['datenbank'],
+                    $filename,
+                    true
+                );
+                $recipientMatrix = estab_generated_form_recipient_matrix(
+                    $connection,
+                    $conf_4f_tbl['empfmtx']
+                );
+                $renderMessage = $activeForm['message'];
+                $renderRecipientMatrix = $recipientMatrix;
+            } else {
+                estab_generated_form_require_active(
+                    $connection,
+                    $conf_4f_tbl['nachrichten'],
+                    (string) $conf_4f_db['datenbank'],
+                    $filename,
+                    true
+                );
+            }
         } catch (InvalidArgumentException $exception) {
             throw new EstabIncidentNotFoundException(
                 'Generated form name is not canonical',
@@ -91,20 +124,38 @@ try {
         $root = (string) $conf_4f['vordruck_dir'];
     }
 
-    try {
-        $stream = estab_file_open($root, $area, $filename);
-    } catch (RuntimeException $exception) {
-        throw new EstabIncidentNotFoundException(
-            'Authorized file is unavailable',
-            previous: $exception
-        );
+    if ($currentLayout) {
+        try {
+            $archiveProof = estab_file_open($root, $area, $filename);
+            fclose($archiveProof);
+        } catch (RuntimeException $exception) {
+            throw new EstabIncidentNotFoundException(
+                'Authorized generated-form archive is unavailable',
+                previous: $exception
+            );
+        }
+    } else {
+        try {
+            $stream = estab_file_open($root, $area, $filename);
+        } catch (RuntimeException $exception) {
+            throw new EstabIncidentNotFoundException(
+                'Authorized file is unavailable',
+                previous: $exception
+            );
+        }
+        $stat = fstat($stream);
+        if (
+            !is_array($stat)
+            || !isset($stat['size'])
+            || (int) $stat['size'] < 0
+        ) {
+            throw new EstabIncidentNotFoundException(
+                'Authorized file metadata is unavailable'
+            );
+        }
+        $size = (int) $stat['size'];
+        $contentType = estab_file_stream_content_type($stream);
     }
-    $stat = fstat($stream);
-    if (!is_array($stat) || !isset($stat['size']) || (int) $stat['size'] < 0) {
-        throw new EstabIncidentNotFoundException('Authorized file metadata is unavailable');
-    }
-    $size = (int) $stat['size'];
-    $contentType = estab_file_stream_content_type($stream);
     if (!$connection->commit()) {
         throw new RuntimeException('Could not commit file authorization transaction');
     }
@@ -128,10 +179,33 @@ try {
         $stream = null;
     }
 }
+if (
+    $failure === null
+    && $currentLayout
+    && is_array($renderMessage)
+    && is_array($renderRecipientMatrix)
+) {
+    try {
+        require_once __DIR__ . '/../4fbak/backup_pdf.php';
+        $pdf = new vordruckaspdf(
+            $renderMessage,
+            $renderRecipientMatrix
+        );
+        $document = $pdf->render_message_form_document();
+        $size = strlen($document);
+        $contentType = 'application/pdf';
+    } catch (Throwable $exception) {
+        error_log(
+            'eStab current-layout PDF render failed: '
+                . $exception->getMessage()
+        );
+        $failure = [503, 'Der aktuelle PDF-Abzug konnte nicht erstellt werden.'];
+    }
+}
 if (is_array($failure)) {
     estab_download_error((int) $failure[0], (string) $failure[1]);
 }
-if (!is_resource($stream)) {
+if (!is_resource($stream) && !is_string($document)) {
     estab_download_error(503, 'Die Datei konnte nicht geöffnet werden.');
 }
 
@@ -142,7 +216,14 @@ header('Cache-Control: private, no-store, max-age=0');
 header('Pragma: no-cache');
 header('X-Content-Type-Options: nosniff');
 header('Content-Security-Policy: sandbox; default-src \'none\'');
+if ($currentLayout) {
+    header('X-eStab-PDF-Layout: current');
+}
 
-fpassthru($stream);
-fclose($stream);
+if (is_string($document)) {
+    echo $document;
+} else {
+    fpassthru($stream);
+    fclose($stream);
+}
 exit;

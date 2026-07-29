@@ -65,7 +65,11 @@ try {
     <aside class="estab-tool-notice" aria-label="Gültigkeitsbereich">
       <strong>Einsatzbezogene Ansicht:</strong>
       <p>Ein Einsatzwechsel aktualisiert diese Liste. Vordrucke anderer oder
-        beendeter Einsätze werden hier bewusst nicht vermischt.</p>
+        beendeter Einsätze werden hier bewusst nicht vermischt. Beim Öffnen
+        entsteht aus dem aktuell gespeicherten Nachrichtendatensatz und der
+        aktuellen Empfängermatrix ein rein lesender PDF-Abzug mit derselben
+        Vorlage wie im PDF-Einsatzdossier. Die beim Abschluss erzeugte
+        Archivdatei bleibt im Einsatzspeicher erhalten.</p>
     </aside>
 
     <?php if ($listError !== null): ?>
@@ -92,9 +96,9 @@ try {
           <thead>
             <tr>
               <th scope="col">Meldung</th>
-              <th scope="col">Datei und Download</th>
-              <th scope="col">Größe</th>
-              <th scope="col">Erstellt/geändert</th>
+              <th scope="col">Aktuelles PDF</th>
+              <th scope="col">Archivgröße</th>
+              <th scope="col">Archivdatei geändert</th>
             </tr>
           </thead>
           <tbody>
@@ -104,7 +108,7 @@ try {
                   (string) $conf_4f['download_uri'],
                   'vordruck',
                   $file['name']
-              );
+              ) . '&layout=current';
           ?>
             <tr>
               <td data-label="Meldung">
@@ -112,21 +116,29 @@ try {
                   <?= estab_auth_html($file['direction'] . ' ' . $file['number']) ?>
                 </strong>
               </td>
-              <td data-label="Datei und Download">
+              <td data-label="Aktuelles PDF">
                 <a
                   class="estab-button"
                   href="<?= estab_auth_html($url) ?>"
                   target="_blank"
                   rel="noopener">
-                  <?= estab_auth_html($file['name']) ?> herunterladen
+                  PDF im aktuellen Layout öffnen
+                  <span class="estab-visually-hidden">
+                    (öffnet in neuem Tab)
+                  </span>
                 </a>
+                <br>
+                <small>
+                  Dateiname:
+                  <code><?= estab_auth_html($file['name']) ?></code>
+                </small>
               </td>
-              <td class="estab-tool-table-number" data-label="Größe">
+              <td class="estab-tool-table-number" data-label="Archivgröße">
                 <?= estab_auth_html(
                     number_format($file['size'] / 1024, 1, ',', '.')
                 ) ?> KiB
               </td>
-              <td data-label="Erstellt/geändert">
+              <td data-label="Archivdatei geändert">
                 <?= estab_auth_html(
                     date('d.m.Y H:i:s', $file['modified'])
                 ) ?>
@@ -140,7 +152,8 @@ try {
 
     <footer class="estab-tool-footer">
       <a href="../">Zur eStab-Übersicht</a>
-      <span>Downloads werden serverseitig gegen den aktiven Einsatz geprüft.</span>
+      <span>PDF-Abzüge werden serverseitig gegen den aktiven Einsatz geprüft
+        und verändern weder Nachricht noch Archivdatei.</span>
     </footer>
   </main>
 </body>

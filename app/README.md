@@ -15,7 +15,9 @@ Empfängermatrix, Standardmatrix, Nachrichtenzähler und Grafikreset.
 `incident.php` und `incident_ui.php` bilden den globalen Einsatzstatus,
 Eingabegate und Statusbanner. `attachment.php` hält Reservierung, Dateiablage,
 Metadaten und Audit in demselben Einsatzkontext. `generated_form.php`
-autorisiert die einzelnen einsatzbezogen benannten Nachrichtenvordrucke.
+autorisiert die einzelnen einsatzbezogen benannten Nachrichtenvordrucke,
+liefert deren vollständigen Nachrichtendatensatz und validiert die gemeinsame
+5×4-Empfängermatrix für den aktuellen PDF-Abzug.
 `incident_export.php` und `incident_pdf.php` erzeugen das PDF-Dossier eines
 ausdrücklich ausgewählten Einsatzes; `user_admin.php` kapselt dauerhafte
 Kontosperre und Kennwortreset.
@@ -159,7 +161,14 @@ Kontosperre und Kennwortreset.
   `<datenbank> Einsatz-<einsatz_id> <nummer> <E|A>.pdf` über eine temporäre
   Datei und atomisches `rename` veröffentlicht. Liste und Download leiten den
   Namen aus dem abgeschlossenen, gedruckten Nachrichtendatensatz des aktiven
-  Einsatzes ab, statt dem gemeinsamen Verzeichnisinhalt zu vertrauen.
+  Einsatzes ab, statt dem gemeinsamen Verzeichnisinhalt zu vertrauen. Der
+  sichtbare Link `layout=current` rendert nach derselben gesperrten
+  Autorisierung den vollständigen Datensatz und die validierte Matrix mit
+  `vordruckaspdf::render_message_form_document()` neu im Speicher. So entspricht
+  auch ein vor einem Layout-Upgrade archivierter Vordruck dem aktuellen
+  Dossierlayout, ohne dass der lesende Request die persistierte Archivdatei
+  verändert. Der parameterlose interne Downloadpfad streamt diese
+  Archivdatei weiterhin bytegleich für Backup-/Restore-Nachweise.
 - `assignment.php` bildet die gemeinsame, datenbankbasierte
   Zuordnungsrichtlinie. Matrixspeichern, Login, Kontoanlage und Neuzuweisung
   teilen einen globalen MariaDB-Lock; Kontooperationen nehmen danach erst den

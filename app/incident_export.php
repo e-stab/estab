@@ -209,60 +209,15 @@ function estab_incident_export_rows(
  */
 function estab_incident_export_recipient_matrix(mysqli $connection): array
 {
-    $statement = $connection->prepare(
-        'SELECT `mtx_x`, `mtx_y`, `mtx_fkt`'
-            . ' FROM ' . estab_auth_table('nv_empfmtx')
-            . ' ORDER BY `mtx_x`, `mtx_y`'
-    );
-    if (!$statement) {
-        throw new EstabIncidentExportDataException(
-            'Die Empfängermatrix konnte nicht gelesen werden.'
-        );
-    }
     try {
-        if (!$statement->execute()) {
-            throw new EstabIncidentExportDataException(
-                'Die Empfängermatrix konnte nicht gelesen werden.'
-            );
-        }
-        $result = $statement->get_result();
-        if (!$result instanceof mysqli_result) {
-            throw new EstabIncidentExportDataException(
-                'Die Empfängermatrix konnte nicht gelesen werden.'
-            );
-        }
-        $matrix = [];
-        while (($row = $result->fetch_assoc()) !== null) {
-            $matrixRow = (int) ($row['mtx_x'] ?? 0);
-            $matrixColumn = (int) ($row['mtx_y'] ?? 0);
-            $function = trim((string) ($row['mtx_fkt'] ?? ''));
-            if (
-                $matrixRow < 1
-                || $matrixRow > 5
-                || $matrixColumn < 1
-                || $matrixColumn > 4
-                || (
-                    $function !== ''
-                    && preg_match('/\A[A-Za-z0-9_]{1,6}\z/D', $function) !== 1
-                )
-                || isset($matrix[$matrixRow][$matrixColumn])
-            ) {
-                throw new EstabIncidentExportDataException(
-                    'Die Empfängermatrix ist für den PDF-Export ungültig.'
-                );
-            }
-            $matrix[$matrixRow][$matrixColumn] = ['fkt' => $function];
-        }
-        $result->free();
-    } finally {
-        $statement->close();
-    }
-    if (array_sum(array_map('count', $matrix)) !== 20) {
+        return estab_generated_form_recipient_matrix($connection);
+    } catch (RuntimeException | InvalidArgumentException $exception) {
         throw new EstabIncidentExportDataException(
-            'Die Empfängermatrix ist für den PDF-Export unvollständig.'
+            'Die Empfängermatrix ist für den PDF-Export ungültig.',
+            0,
+            $exception
         );
     }
-    return $matrix;
 }
 
 /**

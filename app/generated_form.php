@@ -269,8 +269,70 @@ function estab_generated_form_list_active(
     return $files;
 }
 
-/** Prove that a requested generated form belongs to the active incident. */
-function estab_generated_form_require_active(
+/**
+ * Read and validate the complete recipient matrix used by every message PDF.
+ *
+ * @return array<int,array<int,array{fkt:string}>>
+ */
+function estab_generated_form_recipient_matrix(
+    mysqli $connection,
+    string $matrixTable = 'nv_empfmtx'
+): array {
+    $statement = $connection->prepare(
+        'SELECT `mtx_x`, `mtx_y`, `mtx_fkt` FROM '
+            . estab_auth_table($matrixTable)
+            . ' ORDER BY `mtx_x`, `mtx_y`'
+    );
+    if (!$statement) {
+        throw new RuntimeException('Could not prepare generated-form matrix read');
+    }
+    try {
+        if (!$statement->execute()) {
+            throw new RuntimeException('Could not read generated-form matrix');
+        }
+        $result = $statement->get_result();
+        if (!$result instanceof mysqli_result) {
+            throw new RuntimeException('Could not fetch generated-form matrix');
+        }
+        $matrix = [];
+        while (($row = $result->fetch_assoc()) !== null) {
+            $matrixRow = (int) ($row['mtx_x'] ?? 0);
+            $matrixColumn = (int) ($row['mtx_y'] ?? 0);
+            $function = trim((string) ($row['mtx_fkt'] ?? ''));
+            if (
+                $matrixRow < 1
+                || $matrixRow > 5
+                || $matrixColumn < 1
+                || $matrixColumn > 4
+                || (
+                    $function !== ''
+                    && preg_match('/\A[A-Za-z0-9_]{1,6}\z/D', $function) !== 1
+                )
+                || isset($matrix[$matrixRow][$matrixColumn])
+            ) {
+                throw new RuntimeException('Generated-form matrix is invalid');
+            }
+            $matrix[$matrixRow][$matrixColumn] = ['fkt' => $function];
+        }
+        $result->free();
+    } finally {
+        $statement->close();
+    }
+    if (array_sum(array_map('count', $matrix)) !== 20) {
+        throw new RuntimeException('Generated-form matrix is incomplete');
+    }
+    return $matrix;
+}
+
+/**
+ * Return the authorized row behind one active-incident generated form.
+ *
+ * @return array{
+ *   incident_id:int,message_id:int,number:int,direction:string,
+ *   message:array<string,mixed>
+ * }
+ */
+function estab_generated_form_fetch_active(
     mysqli $connection,
     string $messageTable,
     string $database,
@@ -287,10 +349,11 @@ function estab_generated_form_require_active(
     }
 
     $statement = $connection->prepare(
-        'SELECT `00_lfd` FROM ' . estab_auth_table($messageTable)
+        'SELECT * FROM ' . estab_auth_table($messageTable)
         . " WHERE `einsatz_id` = ? AND `04_nummer` = ?"
         . " AND `04_richtung` = ? AND `x04_druck` = 't'"
         . " AND `x01_abschluss` = 't' LIMIT 1"
+        . ($forUpdate ? ' FOR UPDATE' : '')
     );
     if (!$statement) {
         throw new RuntimeException('Could not prepare generated-form authorization');
@@ -324,5 +387,25 @@ function estab_generated_form_require_active(
         ),
         'number' => $parsed['number'],
         'direction' => $parsed['direction'],
+        'message' => $row,
     ];
+}
+
+/** Prove that a requested generated form belongs to the active incident. */
+function estab_generated_form_require_active(
+    mysqli $connection,
+    string $messageTable,
+    string $database,
+    string $filename,
+    bool $forUpdate = false
+): array {
+    $active = estab_generated_form_fetch_active(
+        $connection,
+        $messageTable,
+        $database,
+        $filename,
+        $forUpdate
+    );
+    unset($active['message']);
+    return $active;
 }

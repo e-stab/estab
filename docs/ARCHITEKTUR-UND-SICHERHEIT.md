@@ -292,6 +292,10 @@ Die Apache-Konfiguration:
 - verweigert jeden direkten HTTP-Zugriff auf den persistenten `4fdata`-Baum;
   Anhänge und Vordrucke werden ausschließlich nach einer gültigen
   Anwendungssitzung durch den geprüften Download-Endpunkt ausgeliefert,
+- trennt beim Vordruckdownload den unveränderten Archivstream vom ausdrücklich
+  gewählten aktuellen Layout-Abzug; beide verlangen denselben abgeschlossenen,
+  gedruckten Datensatz des aktiven Einsatzes, der aktuelle Abzug validiert
+  zusätzlich die vollständige Empfängermatrix und schreibt keine Datei,
 - setzt `nosniff`, `SAMEORIGIN`, eine Same-Origin-Referrer-Policy,
   eingeschränkte Browser-Berechtigungen und eine Content Security Policy.
 

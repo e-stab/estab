@@ -133,8 +133,8 @@ Das vollständige CI-Gate automatisiert zwei destruktiv guardierte Roundtrips:
    löscht nur die eindeutig als `estab_ci` beziehungsweise `estab_ci_*`
    erkannten Testcontainer und benannten Test-Volumes, legt alle drei Volumes
    leer neu an und spielt die Sicherung zurück. Danach müssen Schema,
-   bestehendes Konto, Nachricht, exakter Anhanginhalt, SHA-256 des real
-   erzeugten PDF-Vordrucks, den globalen Einsatzkopf, vorhandene
+   bestehendes Konto, Nachricht, exakter Anhanginhalt, SHA-256 des
+   persistierten PDF-Vordrucks, den globalen Einsatzkopf, vorhandene
    ETB-/TBB-Einträge sowie
    Kennung und SHA-256 des zuvor per Manifest/CSV geprüften Export-ZIP
    unverändert nachweisbar sein. Die ETB-/TBB-Prüfung ist dabei absichtlich
@@ -339,6 +339,13 @@ Nachrichtenfluss, Anhänge, PDF/Vordruck, ETB/TBB und Einsatzexport. Der
 automatisierte Restore-Zweig vergleicht dabei nicht nur Dateinamen: Er verlangt
 den ursprünglichen Anhanginhalt, den gespeicherten PDF-SHA-256 und den
 gespeicherten SHA-256 des genau bezeichneten Export-ZIP.
+
+Der Vordruck-SHA-256 bezieht sich ausdrücklich auf die beim Abschluss
+persistierte Archivdatei. Die Benutzeroberfläche rendert unter
+`/4fach/vordrucke.php` zusätzlich einen aktuellen, nicht persistierten
+Layout-Abzug aus denselben Nachrichtendaten; dessen Bytes dürfen sich nach
+einem Vorlagen-Upgrade ändern, ohne den Restore-Nachweis des Archivs zu
+verletzen.
 
 ## Administrativer Einsatzexport
 

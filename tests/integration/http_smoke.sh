@@ -395,6 +395,36 @@ vordruck_name_for_marker() {
         "$marker" | db_sql
 }
 
+stage_stale_vordruck_archive() {
+    archive_name=$1
+    if ! printf '%s' "$archive_name" |
+        grep -Eq '^[A-Za-z0-9_]+ Einsatz-[1-9][0-9]* [1-9][0-9]* [EA][.]pdf$'; then
+        printf 'HTTP smoke: unsafe stale generated-form fixture name\n' >&2
+        exit 1
+    fi
+    "$compose_engine" compose exec -T --user www-data app \
+        php -d auto_prepend_file= -r '
+        $filename = $argv[1] ?? "";
+        require "/var/www/html/4fbak/backup_pdf.php";
+        $pdf = new FPDF("P", "mm", "A4");
+        $pdf->SetCompression(false);
+        $pdf->SetTitle("eStab stale generated-form regression fixture");
+        $pdf->AddPage();
+        $pdf->SetFont("Arial", "B", 16);
+        $pdf->Text(20, 30, "ARCHIVE-ONLY-VS-NfD");
+        $document = $pdf->Output("", "S");
+        $database = getenv("ESTAB_DB_NAME");
+        if (!is_string($database) || $database === "") {
+            $database = "estab";
+        }
+        estab_generated_form_publish(
+            "/var/www/html/4fdata/" . $database . "/vordruck",
+            $filename,
+            $document
+        );
+    ' "$archive_name"
+}
+
 assert_account_count() {
     expected=$1
     account_code=$2
@@ -618,14 +648,29 @@ if [ "$restore_verify_only" = true ]; then
     assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         "$base_url/4fach/vordrucke.php"
     assert_body "$restore_vordruck"
+    assert_body 'layout=current'
+    assert_body 'PDF im aktuellen Layout öffnen'
     assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         --get \
         --data-urlencode 'area=vordruck' \
         --data-urlencode "file=$restore_vordruck" \
         "$base_url/4fach/download.php"
     assert_pdf_body
+    assert_body 'ARCHIVE-ONLY-VS-NfD'
     if [ "$(file_sha256 "$body")" != "$restore_vordruck_sha256" ]; then
         printf 'HTTP smoke: restored generated-form checksum differs\n' >&2
+        exit 1
+    fi
+    assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        --get \
+        --data-urlencode 'area=vordruck' \
+        --data-urlencode "file=$restore_vordruck" \
+        --data-urlencode 'layout=current' \
+        "$base_url/4fach/download.php"
+    assert_pdf_body
+    assert_body_absent 'ARCHIVE-ONLY-VS-NfD'
+    if ! grep -Eiq '^X-eStab-PDF-Layout: current' "$headers"; then
+        printf 'HTTP smoke: restored current-layout PDF marker missing\n' >&2
         exit 1
     fi
 
@@ -1394,9 +1439,11 @@ assert_body_absent 'Anmeldung erforderlich'
 assert_body 'href="./stabetb/etb.php"'
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 
-# A completed staff conversation note must exercise the real application
-# generator, publish a downloadable PDF in the persistent vordruck volume and
-# carry that exact byte sequence through the later backup/restore roundtrip.
+# A completed staff conversation note must first exercise the real application
+# generator and publish a downloadable PDF. The test then replaces only this
+# disposable archive with a valid, deliberately stale marker PDF: the current
+# layout must ignore that marker while the archive's exact byte sequence is
+# carried through the later backup/restore roundtrip.
 vordruck_marker="${workflow_marker}_VORDRUCK"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
@@ -1438,6 +1485,8 @@ fi
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/vordrucke.php"
 assert_body "$stored_vordruck"
+assert_body 'layout=current'
+assert_body 'PDF im aktuellen Layout öffnen'
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --get \
     --data-urlencode 'area=vordruck' \
@@ -1454,7 +1503,67 @@ do
         exit 1
     fi
 done
+generated_vordruck_sha256=$(file_sha256 "$body")
+stage_stale_vordruck_archive "$stored_vordruck"
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --get \
+    --data-urlencode 'area=vordruck' \
+    --data-urlencode "file=$stored_vordruck" \
+    "$base_url/4fach/download.php"
+assert_pdf_body
+assert_body 'ARCHIVE-ONLY-VS-NfD'
 stored_vordruck_sha256=$(file_sha256 "$body")
+if [ "$stored_vordruck_sha256" = "$generated_vordruck_sha256" ]; then
+    printf 'HTTP smoke: stale generated-form fixture did not replace archive\n' >&2
+    exit 1
+fi
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --get \
+    --data-urlencode 'area=vordruck' \
+    --data-urlencode "file=$stored_vordruck" \
+    --data-urlencode 'layout=current' \
+    "$base_url/4fach/download.php"
+assert_pdf_body
+assert_body_absent 'ARCHIVE-ONLY-VS-NfD'
+for header_pattern in \
+    '^Content-Type: application/pdf' \
+    '^Content-Disposition: inline;' \
+    '^X-eStab-PDF-Layout: current'
+do
+    if ! grep -Eiq "$header_pattern" "$headers"; then
+        printf 'HTTP smoke: current-layout form header missing: %s\n' \
+            "$header_pattern" >&2
+        exit 1
+    fi
+done
+assert_status 400 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --get \
+    --data-urlencode 'area=vordruck' \
+    --data-urlencode "file=$stored_vordruck" \
+    --data-urlencode 'layout=archive' \
+    "$base_url/4fach/download.php"
+assert_body 'Ungültige Dateianforderung'
+assert_status 400 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --get \
+    --data-urlencode 'area=vordruck' \
+    --data-urlencode "file=$stored_vordruck" \
+    --data-urlencode 'layout=' \
+    "$base_url/4fach/download.php"
+assert_body 'Ungültige Dateianforderung'
+assert_status 400 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --get \
+    --data-urlencode 'area=attachment' \
+    --data-urlencode "file=$stored_attachment" \
+    --data-urlencode 'layout=current' \
+    "$base_url/4fach/download.php"
+assert_body 'Ungültige Dateianforderung'
+assert_status 400 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --get \
+    --data-urlencode 'area=vordruck' \
+    --data-urlencode "file=$stored_vordruck" \
+    --data-urlencode 'layout[]=current' \
+    "$base_url/4fach/download.php"
+assert_body 'Ungültige Dateianforderung'
 assert_status 404 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --get \
     --data-urlencode 'area=vordruck' \

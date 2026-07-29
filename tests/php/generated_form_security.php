@@ -108,6 +108,9 @@ $pdf = (string) file_get_contents($root . '/4fbak/backup_pdf.php');
 $list = (string) file_get_contents($root . '/4fach/vordrucke.php');
 $download = (string) file_get_contents($root . '/4fach/download.php');
 $helper = (string) file_get_contents($root . '/app/generated_form.php');
+$incidentExport = (string) file_get_contents(
+    $root . '/app/incident_export.php'
+);
 
 $assert(
     str_contains($backup, 'estab_incident_require_active ($connection, true)')
@@ -119,13 +122,30 @@ $assert(
 $assert(
     str_contains($pdf, 'estab_generated_form_filename')
         && str_contains($pdf, 'estab_generated_form_publish')
-        && str_contains($pdf, '$this->db_dataset ["einsatz_id"]'),
+        && str_contains($pdf, '$this->db_dataset ["einsatz_id"]')
+        && str_contains($pdf, 'function render_message_form_document()')
+        && str_contains($pdf, 'function Error ($message)')
+        && str_contains(
+            $pdf,
+            'throw new RuntimeException ('
+        )
+        && str_contains(
+            $pdf,
+            '$document = $this->render_message_form_document ();'
+        ),
     'PDF writer can still collide across incidents or publish partial bytes'
 );
 $assert(
     str_contains($list, 'estab_generated_form_list_active')
         && !str_contains($list, 'estab_file_list(')
+        && str_contains($list, ") . '&layout=current';")
+        && str_contains($list, 'PDF im aktuellen Layout öffnen')
         && str_contains($download, 'estab_generated_form_require_active')
+        && str_contains($download, 'estab_generated_form_fetch_active')
+        && str_contains($download, 'estab_generated_form_recipient_matrix')
+        && str_contains($download, 'render_message_form_document')
+        && str_contains($download, '$currentLayout')
+        && str_contains($download, 'X-eStab-PDF-Layout: current')
         && str_contains($download, "            true\n        );")
         && str_contains(
             $helper,
@@ -136,8 +156,36 @@ $assert(
 $assert(
     str_contains($helper, 'AND `einsatz_id` = ?')
         && str_contains($helper, "AND `x04_druck` = 't'")
-        && str_contains($helper, "AND `x01_abschluss` = 't'"),
+        && str_contains($helper, "AND `x01_abschluss` = 't'")
+        && str_contains($helper, "\$forUpdate ? ' FOR UPDATE' : ''")
+        && str_contains($helper, "'message' => \$row"),
     'generated-form authorization lacks row, print, or completion scope'
+);
+$assert(
+    str_contains($helper, 'function estab_generated_form_recipient_matrix(')
+        && str_contains($helper, "array_sum(array_map('count', \$matrix)) !== 20")
+        && str_contains($helper, "preg_match('/\\A[A-Za-z0-9_]{1,6}\\z/D'")
+        && str_contains($download, "\$conf_4f_tbl['empfmtx']")
+        && str_contains(
+            $incidentExport,
+            'return estab_generated_form_recipient_matrix($connection);'
+        ),
+    'current-layout download and dossier do not share a complete safe matrix'
+);
+$assert(
+    str_contains($download, "\$layout !== 'current'")
+        && str_contains($download, '$layoutProvided && !is_string')
+        && str_contains($download, '$layoutProvided')
+        && str_contains($download, '$archiveProof = estab_file_open')
+        && str_contains($download, 'estab_file_open($root, $area, $filename)'),
+    'layout selection is ambiguous or removed the immutable archive path'
+);
+$assert(
+    strpos($download, '$connection->commit()') !== false
+        && strpos($download, 'new vordruckaspdf(') !== false
+        && strpos($download, '$connection->commit()')
+            < strpos($download, 'new vordruckaspdf('),
+    'current-layout PDF rendering still holds the active-incident DB locks'
 );
 
 echo "generated form security: OK ({$assertions} assertions)\n";

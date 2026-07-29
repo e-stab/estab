@@ -22,6 +22,17 @@ Empfängerkennzeichnung und mehrseitiger Inhaltsfluss in Einzel- und
 Gesamtexport überein. Die gemeinsame Vorlage druckt weder eine
 VS-NfD-Kennzeichnung noch das frühere Wappen.
 
+Die Seite **Generierte Vordrucke** unterscheidet dabei bewusst Quelle und
+Darstellung: Beim Nachrichtenabschluss bleibt ein vollständiges PDF atomar im
+persistenten Einsatzspeicher archiviert. Der sichtbare Button **PDF im
+aktuellen Layout öffnen** prüft erneut aktiven Einsatz, Abschluss- und
+Druckstatus und rendert anschließend aus dem aktuell gespeicherten
+Nachrichtendatensatz und der aktuellen Matrix einen nur lesenden PDF-Abzug im
+Speicher. Alte Archivdateien müssen nach einem Vorlagen-Upgrade deshalb weder
+überschrieben noch manuell zurückgesetzt werden. Das Archiv bleibt bytegleich
+für Backup und Restore erhalten; der geöffnete Abzug verwendet immer denselben
+Renderer wie die Nachrichtenseiten eines neu erzeugten Dossiers.
+
 Die Legacy-Datenbank speichert die Empfängermatrix nicht historisch pro
 Einsatz. Das Dossier liest deshalb die zum Exportzeitpunkt gültige Matrix im
 selben Datenbank-Snapshot. Eine im Nachrichtendatensatz gespeicherte Funktion,
@@ -76,6 +87,7 @@ Die automatisierten Tests prüfen unter anderem:
 - echte Extraktion des unveränderten Beispielanhangs,
 - durchsuchbaren Text für ETB, TTB und Nachrichten,
 - dieselben Formularmarker in Einzel- und Gesamtexport,
+- aktuelle In-Memory-Ausgabe trotz unverändert erhaltener Archivdatei,
 - Abwesenheit von VS-NfD-Aufdruck, Wappen und Seitenbildern,
 - verlustfreie Anzeige nicht mehr in der Matrix vorhandener Empfänger,
 - pixelidentisches A4-Rendering beider Nachrichtenausgabepfade einschließlich
