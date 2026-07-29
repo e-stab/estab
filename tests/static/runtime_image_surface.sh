@@ -48,6 +48,8 @@ assert_dockerfile_contains 'COPY 4fbak/fpdf/font/*.php ./4fbak/fpdf/font/'
 assert_dockerfile_contains 'COPY doku/Handbuch_eStab.pdf ./doku/'
 assert_dockerfile_contains 'COPY docker/app/verify-runtime-surface.sh /usr/local/bin/estab-verify-runtime-surface'
 assert_dockerfile_contains 'estab-verify-runtime-surface /var/www/html'
+assert_dockerfile_contains '"fileinfo", "gd", "mbstring"'
+assert_dockerfile_contains 'gd_info()["JPEG Support"]'
 
 sh "$verifier" --list-required | while IFS= read -r relative_path; do
     mkdir -p "$fixture/$(dirname -- "$relative_path")"

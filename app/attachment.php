@@ -67,7 +67,7 @@ function estab_attachment_next_name(string $prefix, int $highest, int $width = 4
 function estab_attachment_allowed_extensions(): array
 {
     return [
-        'jpg', 'tif', 'gif', 'avi', 'png', 'bmp', 'zip',
+        'jpg', 'jpeg', 'tif', 'tiff', 'gif', 'avi', 'png', 'bmp', 'zip',
         'pdf', 'doc', 'xls', 'odt', 'txt', 'xia',
     ];
 }

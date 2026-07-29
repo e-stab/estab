@@ -249,7 +249,10 @@ passen; bei Überschreitung bricht der Export sichtbar ab und lässt keine Datei
 stillschweigend weg. Nach einer Änderung ist der App-Container neu zu
 erzeugen. Einzelne Uploads bleiben zusätzlich durch
 `ESTAB_UPLOAD_MAX_BYTES`, PHP `upload_max_filesize` und `post_max_size`
-begrenzt.
+begrenzt. Der Auslieferungsstandard für `ESTAB_UPLOAD_MAX_BYTES` beträgt
+`20971520` Byte (20 MiB). Der Anhangdialog unterstützt sowohl `.jpg` als auch
+`.jpeg` und zeigt das wirksame Limit an; nur Endung und serverseitig erkannter
+MIME-Typ gemeinsam autorisieren die Datei.
 
 Eine frische Datenbank besitzt absichtlich keinen aktiven Einsatz. Nach dem
 ersten gesunden Start muss der technische Administrator unter

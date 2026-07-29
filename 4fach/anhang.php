@@ -342,9 +342,20 @@ class fileupload extends file_upload {
     $comment = estab_attachment_html ($predata["comment"] ?? "");
     $shortname = estab_attachment_html ($predata["kuerzel"] ?? "");
     $timestamp = estab_attachment_html ($predata["time"] ?? "");
+    $allowedExtensions = estab_attachment_allowed_extensions ();
+    $accept = estab_attachment_html (
+      implode (",", array_map (
+        static fn ($extension) => ".".$extension,
+        $allowedExtensions
+      ))
+    );
+    $formatNames = estab_attachment_html (
+      strtoupper (implode (", ", $allowedExtensions))
+    );
+    $uploadLimit = estab_attachment_html ($this->upload_limit_label ());
     echo "<form name=\"uploadform\" enctype=\"multipart/form-data\" method=\"post\" ".
          "action=\"".$formAction."\" data-estab-dirty-guard ".
-         "data-estab-requires-incident>\n";
+         "data-estab-requires-incident data-estab-attachment-upload>\n";
     echo estab_csrf_field ()."\n";
     echo "<fieldset>\n";
     echo "<legend><big>Anhang hochladen</big></legend>\n";
@@ -360,9 +371,13 @@ class fileupload extends file_upload {
     echo "  <input type=\"hidden\" name=\"fs_nextfilename\" value=\"".$newFilename."\">\n";
     echo "</tr>\n";
     echo "<tr>\n";
-    echo "  <td style=\"width: 167px;\">Datei:</td>\n";
+    echo "  <td style=\"width: 167px;\"><label for=\"attachment-upload-file\">Datei:</label></td>\n";
     echo "  <td style=\"width: 769px;\">";
-    echo "  <input style=\"font-size:18px; font-weight:900; font-weight: bold;\" name=\"upload\" type=\"file\" size=\"60\">";
+    echo "  <input id=\"attachment-upload-file\" style=\"font-size:18px; font-weight:900; font-weight: bold;\" ".
+         "name=\"upload\" type=\"file\" size=\"60\" accept=\"".$accept."\" ".
+         "aria-describedby=\"attachment-upload-help\" required>";
+    echo "  <br><small id=\"attachment-upload-help\">Erlaubte Formate: ".$formatNames.
+         ". Maximale Dateigröße: ".$uploadLimit.".</small>";
     echo "  </td>\n";
     echo "</tr>\n";
     echo "<tr>\n" ;
@@ -391,8 +406,11 @@ class fileupload extends file_upload {
     echo "<legend>Aktion:</legend>\n";
     echo "<table border=\"1\" cellpadding=\"2\" cellspacing=\"0\" bgcolor=\"#E0E0E0\">\n";
     echo "<tr>\n";
-    echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"absenden\" src=\"".$conf_design_path."/ok.gif\"></td>\n";
-    echo "<td bgcolor=$color_button_nok><input type=\"image\" name=\"abbrechen\" src=\"".$conf_design_path."/cancel.gif\"></td>\n";
+    echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"absenden\" ".
+         "src=\"".$conf_design_path."/ok.gif\" alt=\"Anhang speichern\"></td>\n";
+    echo "<td bgcolor=$color_button_nok><input type=\"image\" name=\"abbrechen\" ".
+         "src=\"".$conf_design_path."/cancel.gif\" alt=\"Upload abbrechen\" ".
+         "formnovalidate></td>\n";
     echo "</td></tr>\n";
     echo "</table>\n";
         echo "</fieldset>\n";
@@ -1028,14 +1046,19 @@ require_once ("./db_operation.php");  // Datenbank operationen
       $finalized = false;
       $full_path = null;
       $new_name = "";
+      $uploadFailureMessage = "";
       try {
         $new_name = estab_attachment_validate_reservation_name (
           is_string ($_POST ["fs_nextfilename"] ?? null) ? $_POST ["fs_nextfilename"] : "",
           $conf_4f ["hoheit"]
         );
         $upload = $_FILES ["upload"] ?? null;
-        if (!is_array ($upload)
-            || !isset ($upload ["tmp_name"], $upload ["name"], $upload ["error"])
+        if (!is_array ($upload)) {
+          $my_upload->failure_code = UPLOAD_ERR_NO_FILE;
+          $uploadFailureMessage = $my_upload->user_error_message ();
+          throw new RuntimeException ($uploadFailureMessage);
+        }
+        if (!isset ($upload ["tmp_name"], $upload ["name"], $upload ["error"])
             || !is_string ($upload ["tmp_name"])
             || !is_string ($upload ["name"])
             || !is_int ($upload ["error"])) {
@@ -1045,7 +1068,9 @@ require_once ("./db_operation.php");  // Datenbank operationen
         $my_upload->the_file = $upload ["name"];
         $my_upload->http_error = $upload ["error"];
         if ($my_upload->http_error !== UPLOAD_ERR_OK) {
-          throw new RuntimeException ($my_upload->error_text ($my_upload->http_error));
+          $my_upload->failure_code = $my_upload->http_error;
+          $uploadFailureMessage = $my_upload->user_error_message ();
+          throw new RuntimeException ($uploadFailureMessage);
         }
         $connection = estab_attachment_connection ($conf_4f_db);
         try {
@@ -1061,12 +1086,12 @@ require_once ("./db_operation.php");  // Datenbank operationen
               $my_upload,
               $new_name,
               $upload,
+              &$uploadFailureMessage,
               &$full_path
             ): array {
               if (!$my_upload->upload ($new_name)) {
-                throw new RuntimeException (
-                  "Die Datei konnte nicht sicher hochgeladen werden."
-                );
+                $uploadFailureMessage = $my_upload->user_error_message ();
+                throw new RuntimeException ($uploadFailureMessage);
               }
               $full_path = $my_upload->upload_dir.$my_upload->file_copy;
               $timestamp = estab_attachment_parse_tactical_time (
@@ -1118,12 +1143,37 @@ require_once ("./db_operation.php");  // Datenbank operationen
         $finalized = true;
       } catch (Throwable $exception) {
         error_log ("eStab attachment upload failed: ".$exception->getMessage ());
-        echo "<big><big><b>Der Anhang konnte nicht sicher gespeichert werden.</b></big></big>";
+        $visibleUploadFailure = $uploadFailureMessage !== ""
+          ? $uploadFailureMessage
+          : "Der Anhang konnte nicht sicher gespeichert werden.";
+        echo "<p role=\"alert\"><b>".
+             estab_attachment_html ($visibleUploadFailure).
+             "</b></p>";
       } finally {
         if (!$finalized && is_string ($full_path) && is_file ($full_path)) {
           $uploadRoot = rtrim ($my_upload->upload_dir, "/\\").DIRECTORY_SEPARATOR;
           if (str_starts_with ($full_path, $uploadRoot) && basename ($full_path) === $my_upload->file_copy) {
             @unlink ($full_path);
+          }
+        }
+        if (!$finalized && $new_name !== "") {
+          try {
+            $releaseConnection = estab_attachment_connection ($conf_4f_db);
+            try {
+              estab_attachment_release (
+                $releaseConnection,
+                $conf_4f_tbl ["anhang"],
+                session_id (),
+                $new_name
+              );
+            } finally {
+              estab_attachment_close ($releaseConnection);
+            }
+          } catch (Throwable $cleanupException) {
+            error_log (
+              "eStab attachment reservation cleanup failed: ".
+              $cleanupException->getMessage ()
+            );
           }
         }
       }

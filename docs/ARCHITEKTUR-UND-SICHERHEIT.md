@@ -330,6 +330,14 @@ stattdessen das ebenfalls sitzungsgeschützte Fragment von `vorgaben.php`.
 Alte direkte Upload-Endpunkte sind mit HTTP 410 deaktiviert. Der aktive
 Anhangpfad validiert Dateiname, MIME-Typ, Größe und Metadaten, reserviert Namen
 transaktional und verwendet für schreibende Formulare ein Session-CSRF-Token.
+Die Upload- und Auslieferungsgrenzen behandeln `jpg`/`jpeg` sowie `tif`/`tiff`
+konsistent; Groß-/Kleinschreibung wird normalisiert, der Dateiinhalt aber mit
+Fileinfo erneut geprüft. Die Image-Erstellung verlangt außerdem ausdrücklich
+Fileinfo sowie JPEG-Unterstützung in GD. Ablehnungen wegen Endung, erkanntem
+Typ oder Größe erscheinen als feste, HTML-escaped Benutzerhinweise. Auch wenn
+PHP eine Datei bereits vor dem atomaren Store wegen seiner Größenbegrenzung
+abweist, gibt der Controller die sitzungs- und einsatzgebundene Reservierung
+gezielt frei.
 Auch erst beim Abruf oder Lesen eines vorbereiteten Resultsets gemeldete
 MariaDB-Deadlocks und Lock-Timeouts werden als Datenbankfehler normalisiert,
 zurückgerollt und innerhalb der begrenzten Reservierungsversuche erneut

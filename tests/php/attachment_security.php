@@ -101,7 +101,19 @@ $assert($metadata['comment'] === 'Lage <Nord>', 'comment trimmed without corrupt
 $assert($metadata['kuerzel'] === 'ada', 'session code overrides submitted metadata');
 $assert($metadata['md5hash'] === 'abcdef0123456789abcdef0123456789', 'digest normalised');
 $assert(estab_attachment_extension_is_allowed('PDF'), 'supported extension accepted case-insensitively');
+$assert(estab_attachment_extension_is_allowed('JPEG'), 'JPEG alias accepted case-insensitively');
+$assert(estab_attachment_extension_is_allowed('TIFF'), 'TIFF alias matches the delivery allowlist');
 $assert(!estab_attachment_extension_is_allowed('php'), 'executable extension rejected');
+
+$jpegMetadata = estab_attachment_validate_metadata([
+    'filename' => '/srv/attachments/EL0001.JPEG',
+    'org_filename' => 'C:\\fakepath\\Lagebild.JPEG',
+    'comment' => 'Lagebild',
+    'time' => '2026-07-22 15:30:00',
+    'md5hash' => 'abcdef0123456789abcdef0123456789',
+], 'EL0001', 'ada');
+$assert($jpegMetadata['fileext'] === 'jpeg', 'JPEG alias is stored in canonical lowercase');
+$assert($jpegMetadata['org_filename'] === 'Lagebild.JPEG', 'JPEG original name is preserved');
 
 $invalidMetadata = [
     'filename' => 'EL0001.pdf',
@@ -250,6 +262,15 @@ $assert(
     'failed upload can leave a claimed reservation across an incident switch'
 );
 $assert(
+    str_contains($controllerSource, 'if (!$finalized && $new_name !== "")')
+        && str_contains($controllerSource, 'estab_attachment_release (')
+        && str_contains(
+            $controllerSource,
+            'eStab attachment reservation cleanup failed: '
+        ),
+    'controller releases uploads rejected before the atomic store'
+);
+$assert(
     str_contains($schemaSource, 'UNIQUE KEY `uq_anhang_filename` (`filename`)'),
     'schema provides unique filename race guard'
 );
@@ -376,6 +397,17 @@ $assert(
 $assert(
     str_contains($controllerSource, 'Liste der verfügbaren Dateien'),
     'attachment list heading is stored as valid UTF-8'
+);
+$assert(
+    str_contains($controllerSource, 'id=\\"attachment-upload-file\\"')
+        && str_contains($controllerSource, 'accept=\\"".$accept."\\"')
+        && str_contains($controllerSource, 'attachment-upload-help')
+        && str_contains($controllerSource, 'Erlaubte Formate:')
+        && str_contains($controllerSource, 'Maximale Dateigröße:')
+        && str_contains($controllerSource, 'formnovalidate')
+        && str_contains($controllerSource, 'user_error_message ()')
+        && str_contains($controllerSource, 'estab_attachment_html ($visibleUploadFailure)'),
+    'upload form does not advertise JPEG support, limit, or safe rejection reason'
 );
 $assert(
     !str_contains($controllerSource, 'Liste der verfÃ¼gbaren Dateien'),

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../../4fach/upload_class.php';
+require_once __DIR__ . '/../../app/attachment.php';
 
 $assertions = 0;
 
@@ -49,9 +50,46 @@ try {
     @unlink($fakePdf);
 }
 
+$realJpeg = __DIR__ . '/../../4fach/design/HS/null.jpg';
+$jpegUpload = new file_upload();
+$jpegUpload->extensions = array_map(
+    static fn (string $extension): string => '.' . $extension,
+    estab_attachment_allowed_extensions()
+);
+$jpegUpload->the_temp_file = $realJpeg;
+foreach (['lage.jpg', 'lage.jpeg', 'LAGE.JPG', 'LAGE.JPEG'] as $jpegName) {
+    $jpegUpload->the_file = $jpegName;
+    upload_assert(
+        $jpegUpload->validateExtension() === true,
+        $jpegName . ' with real image/jpeg content accepted'
+    );
+}
+$jpegUpload->the_temp_file = __FILE__;
+$jpegUpload->the_file = 'fake.JPEG';
+upload_assert(
+    $jpegUpload->validateExtension() === false
+        && $jpegUpload->failure_code === 18
+        && $jpegUpload->user_error_message()
+            === 'Dateiendung und erkannter Dateityp passen nicht zusammen.',
+    'plain text renamed to JPEG is rejected with a safe specific reason'
+);
+$jpegUpload->the_temp_file = $realJpeg;
+$jpegUpload->the_file = 'lage.heic';
+upload_assert(
+    $jpegUpload->validateExtension() === false
+        && $jpegUpload->failure_code === 11
+        && $jpegUpload->user_error_message()
+            === 'Diese Dateiendung wird nicht unterstützt.',
+    'unsupported image extension is rejected with a safe specific reason'
+);
+
 putenv('ESTAB_UPLOAD_MAX_BYTES=1234');
 $configured = new file_upload();
 upload_assert($configured->max_file_size === 1234, 'deployment upload limit applied');
+upload_assert($configured->upload_limit_label() === '1,2 KiB', 'small deployment limit is formatted safely');
+putenv('ESTAB_UPLOAD_MAX_BYTES=20971520');
+$configured = new file_upload();
+upload_assert($configured->upload_limit_label() === '20 MiB', 'whole MiB limit is formatted without decimals');
 putenv('ESTAB_UPLOAD_MAX_BYTES');
 
 upload_assert($upload->del_temp_file('/definitely/not/a/file') === true, 'missing temp file is harmless');

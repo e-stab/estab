@@ -297,7 +297,7 @@ function estab_validate_runtime_configuration(): void
     estab_env_integer('ESTAB_DB_PORT', 3306, 1, 65535);
     estab_env_integer(
         'ESTAB_UPLOAD_MAX_BYTES',
-        5242880,
+        20971520,
         1,
         52428800
     );

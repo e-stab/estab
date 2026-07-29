@@ -623,8 +623,17 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
   SQL-ähnlichem Text bei nachweislich inertem HTML sowie HTTP 403 für den
   historischen GET-Detailaufruf,
 - Durchlaufen des echten A/W-Anhang-Uploads mit zuvor ausgefülltem
-  Nachrichtenvordruck; die direkte Rückgabe nach der Anhangsauswahl muss
-  Anschrift, sämtliche markanten Eingaben, Vermerk sowie blaue und grüne
+  Nachrichtenvordruck und einem echten JPEG über der früheren 5-MiB-Grenze,
+  dessen Browsername auf `.JPEG` endet; Datenbank und Download müssen die
+  normalisierte Endung `.jpeg`, Benutzerkürzel, MD5, MIME-Typ und unveränderten
+  Dateiinhalt nachweisen. Die Vorschau muss die Bildbytes tatsächlich
+  dekodieren und auf 80 × 80 Pixel skalieren. Ein über 20 MiB großes JPEG und
+  eine nur in `.JPEG` umbenannte Textdatei müssen mit ihrem konkreten Grund
+  abgewiesen werden, ohne Datei, finale Metadaten oder aktive Reservierung zu
+  hinterlassen. Der Chrome-Test muss den vorbereiteten Dialog auch ohne
+  ausgewählte Datei abbrechen und die Reservierung freigeben können. Die
+  direkte Rückgabe nach der Anhangsauswahl muss Anschrift,
+  sämtliche markanten Eingaben, Vermerk sowie blaue und grüne
   Empfängerzuordnung als weiterhin absendbare Formularwerte enthalten,
 - Abschluss einer echten Gesprächsnotiz über den historischen Controller,
   anschließende Erzeugung durch den produktiven Vordruckgenerator, Auffinden in

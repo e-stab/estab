@@ -449,6 +449,8 @@ active_attachment_reservation_count() {
 assert_uploaded_attachment() {
     reservation=$1
     expected_code=$2
+    expected_extension=${3:-txt}
+    expected_md5=${4:-}
     if ! printf '%s' "$reservation" | grep -Eq '^[A-Za-z]{2}[0-9]{4,}$'; then
         printf 'HTTP smoke: unsafe attachment reservation assertion\n' >&2
         exit 1
@@ -459,9 +461,21 @@ assert_uploaded_attachment() {
             exit 1
             ;;
     esac
+    case "$expected_extension" in
+        '' | *[!a-z0-9]*)
+            printf 'HTTP smoke: unsafe attachment extension assertion\n' >&2
+            exit 1
+            ;;
+    esac
+    if [ -n "$expected_md5" ] &&
+        ! printf '%s' "$expected_md5" | grep -Eq '^[a-f0-9]{32}$'; then
+        printf 'HTTP smoke: unsafe attachment digest assertion\n' >&2
+        exit 1
+    fi
     matching_rows=$(
-        printf "SELECT COUNT(*) FROM nv_anhang AS a JOIN nv_einsatz_status AS s ON s.singleton_id = 1 AND s.active_einsatz_id = a.einsatz_id WHERE BINARY a.filename = BINARY '%s' AND a.status = 1 AND BINARY a.fileext = BINARY 'txt' AND BINARY a.kuerzel = BINARY '%s';\n" \
-            "$reservation" "$expected_code" |
+        printf "SELECT COUNT(*) FROM nv_anhang AS a JOIN nv_einsatz_status AS s ON s.singleton_id = 1 AND s.active_einsatz_id = a.einsatz_id WHERE BINARY a.filename = BINARY '%s' AND a.status = 1 AND BINARY a.fileext = BINARY '%s' AND BINARY a.kuerzel = BINARY '%s' AND ('%s' = '' OR BINARY a.md5hash = BINARY '%s');\n" \
+            "$reservation" "$expected_extension" "$expected_code" \
+            "$expected_md5" "$expected_md5" |
             db_sql
     )
     if [ "$matching_rows" != 1 ]; then
@@ -1008,8 +1022,15 @@ aw_author_marker='awz001'
 aw_received_at='281915Jul2026'
 aw_written_at='1917'
 aw_reviewed_at='281918Jul2026'
-aw_upload_file=$work_dir/aw-attachment-state.txt
-printf '%s\n' "$aw_content_marker" >"$aw_upload_file"
+aw_upload_file=$work_dir/aw-large-valid.jpeg
+cp "$repo_root/4fach/design/HS/null.jpg" "$aw_upload_file"
+dd if=/dev/zero bs=1048576 count=6 >>"$aw_upload_file" 2>/dev/null
+aw_upload_size=$(wc -c <"$aw_upload_file" | tr -d '[:space:]')
+if [ "$aw_upload_size" -le 5242880 ] || [ "$aw_upload_size" -ge 20971520 ]; then
+    printf 'HTTP smoke: generated JPEG does not prove the raised upload limit\n' >&2
+    exit 1
+fi
+aw_upload_md5=$(openssl dgst -md5 -r "$aw_upload_file" | awk '{print $1}')
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
@@ -1066,6 +1087,9 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode 'ah_upload_x=1' \
     "$base_url/4fach/anhang.php"
 assert_body 'Anhang hochladen'
+assert_body 'accept=".jpg,.jpeg,.tif,.tiff'
+assert_body 'Erlaubte Formate: JPG, JPEG'
+assert_body 'Maximale Dateigröße: 20 MiB'
 assert_session_bar "$legacy_registration_name" "$legacy_registration_code" \
     'A/W' 'Fernmelder'
 aw_attachment_csrf_token=$(csrf_from_body)
@@ -1093,20 +1117,165 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --form "fs_shortname=$legacy_registration_code" \
     --form "fs_timestamp=$aw_upload_timestamp" \
     --form 'absenden_x=1' \
-    --form "upload=@$aw_upload_file;type=text/plain;filename=aw-state.txt" \
+    --form "upload=@$aw_upload_file;type=image/jpeg;filename=Lagebild.JPEG" \
     "$base_url/4fach/anhang.php"
-aw_stored_attachment=$aw_reserved_name.txt
+aw_stored_attachment=$aw_reserved_name.jpeg
 assert_body_absent 'Der Anhang konnte nicht sicher gespeichert werden.'
 assert_body "$aw_reserved_name"
-assert_uploaded_attachment "$aw_reserved_name" "$legacy_registration_code"
+assert_body 'Lagebild.JPEG'
+assert_uploaded_attachment \
+    "$aw_reserved_name" "$legacy_registration_code" jpeg "$aw_upload_md5"
 aw_attachment_menu_csrf_token=$(csrf_from_body)
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --dump-header "$headers" \
     "$base_url/4fach/download.php?area=attachment&file=$aw_stored_attachment"
 if ! cmp -s "$aw_upload_file" "$body"; then
-    printf 'HTTP smoke: A/W attachment content differs after upload\n' >&2
+    printf 'HTTP smoke: A/W JPEG attachment content differs after upload\n' >&2
     exit 1
 fi
+if ! grep -Eiq '^Content-Type: image/jpeg' "$headers"; then
+    printf 'HTTP smoke: A/W JPEG download MIME differs\n' >&2
+    exit 1
+fi
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --dump-header "$headers" \
+    "$base_url/4fach/showpic.php?file=$aw_stored_attachment&width=160&height=80"
+if ! grep -Eiq '^Content-Type: image/png' "$headers"; then
+    printf 'HTTP smoke: A/W JPEG preview is not PNG\n' >&2
+    exit 1
+fi
+aw_preview_dimensions=$(od -An -tx1 -j16 -N8 "$body" | tr -d ' \n')
+if [ "$aw_preview_dimensions" != '0000005000000050' ]; then
+    printf 'HTTP smoke: A/W JPEG preview was not decoded to 80x80 pixels\n' >&2
+    exit 1
+fi
+
+# PHP rejects files above upload_max_filesize before application MIME
+# validation. The user receives the configured limit and the reservation still
+# has to be released.
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$aw_attachment_menu_csrf_token" \
+    --data-urlencode 'ah_upload_x=1' \
+    "$base_url/4fach/anhang.php"
+oversized_jpeg_csrf_token=$(csrf_from_body)
+oversized_jpeg_reserved_name=$(sed -n \
+    's/.*name="fs_nextfilename" value="\([A-Za-z0-9_-][A-Za-z0-9_-]*\)".*/\1/p' \
+    "$body" | head -n 1)
+oversized_jpeg_timestamp=$(sed -n \
+    's/.*name="fs_timestamp" value="\([A-Za-z0-9][A-Za-z0-9]*\)".*/\1/p' \
+    "$body" | head -n 1)
+if ! printf '%s' "$oversized_jpeg_csrf_token" | grep -Eq '^[a-f0-9]{64}$'; then
+    printf 'HTTP smoke: oversized JPEG CSRF token missing\n' >&2
+    exit 1
+fi
+if ! printf '%s' "$oversized_jpeg_reserved_name" | grep -Eq '^[A-Za-z]{2}[0-9]{4,}$'; then
+    printf 'HTTP smoke: oversized JPEG reservation missing\n' >&2
+    exit 1
+fi
+if ! printf '%s' "$oversized_jpeg_timestamp" |
+    grep -Eq '^[0-9]{6}[A-Za-z]{3}[0-9]{4}$'; then
+    printf 'HTTP smoke: oversized JPEG timestamp missing\n' >&2
+    exit 1
+fi
+oversized_jpeg_file=$work_dir/oversized.jpeg
+cp "$repo_root/4fach/design/HS/null.jpg" "$oversized_jpeg_file"
+dd if=/dev/zero bs=1048576 count=21 >>"$oversized_jpeg_file" 2>/dev/null
+oversized_jpeg_size=$(wc -c <"$oversized_jpeg_file" | tr -d '[:space:]')
+if [ "$oversized_jpeg_size" -le 20971520 ] ||
+    [ "$oversized_jpeg_size" -ge 25165824 ]; then
+    printf 'HTTP smoke: generated oversized JPEG is outside the PHP test window\n' >&2
+    exit 1
+fi
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --form "csrf_token=$oversized_jpeg_csrf_token" \
+    --form "fs_nextfilename=$oversized_jpeg_reserved_name" \
+    --form 'fs_comment=Zu großes JPEG' \
+    --form "fs_shortname=$legacy_registration_code" \
+    --form "fs_timestamp=$oversized_jpeg_timestamp" \
+    --form 'absenden_x=1' \
+    --form "upload=@$oversized_jpeg_file;type=image/jpeg;filename=zu-gross.JPEG" \
+    "$base_url/4fach/anhang.php"
+assert_body 'Die Datei ist größer als die erlaubten 20 MiB.'
+assert_body_absent 'Der Anhang konnte nicht sicher gespeichert werden.'
+aw_attachment_menu_csrf_token=$(csrf_from_body)
+if [ "$(active_attachment_reservation_count)" != 0 ]; then
+    printf 'HTTP smoke: oversized JPEG left an active reservation\n' >&2
+    exit 1
+fi
+oversized_jpeg_rows=$(
+    printf "SELECT COUNT(*) FROM nv_anhang WHERE BINARY filename = BINARY '%s' AND status = 1;\n" \
+        "$oversized_jpeg_reserved_name" |
+        db_sql
+)
+if [ "$oversized_jpeg_rows" != 0 ]; then
+    printf 'HTTP smoke: oversized JPEG produced finalized metadata\n' >&2
+    exit 1
+fi
+assert_status 404 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/download.php?area=attachment&file=$oversized_jpeg_reserved_name.jpeg"
+assert_body 'Datei nicht gefunden'
+
+# A browser-supplied MIME claim is not trusted. Plain text named ".JPEG" must
+# fail visibly and release its reservation without publishing bytes or metadata.
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$aw_attachment_menu_csrf_token" \
+    --data-urlencode 'ah_upload_x=1' \
+    "$base_url/4fach/anhang.php"
+fake_jpeg_csrf_token=$(csrf_from_body)
+fake_jpeg_reserved_name=$(sed -n \
+    's/.*name="fs_nextfilename" value="\([A-Za-z0-9_-][A-Za-z0-9_-]*\)".*/\1/p' \
+    "$body" | head -n 1)
+fake_jpeg_timestamp=$(sed -n \
+    's/.*name="fs_timestamp" value="\([A-Za-z0-9][A-Za-z0-9]*\)".*/\1/p' \
+    "$body" | head -n 1)
+if ! printf '%s' "$fake_jpeg_csrf_token" | grep -Eq '^[a-f0-9]{64}$'; then
+    printf 'HTTP smoke: fake JPEG CSRF token missing\n' >&2
+    exit 1
+fi
+if ! printf '%s' "$fake_jpeg_reserved_name" | grep -Eq '^[A-Za-z]{2}[0-9]{4,}$'; then
+    printf 'HTTP smoke: fake JPEG reservation missing\n' >&2
+    exit 1
+fi
+if ! printf '%s' "$fake_jpeg_timestamp" |
+    grep -Eq '^[0-9]{6}[A-Za-z]{3}[0-9]{4}$'; then
+    printf 'HTTP smoke: fake JPEG timestamp missing\n' >&2
+    exit 1
+fi
+fake_jpeg_file=$work_dir/not-a-jpeg.txt
+printf 'plain text must never pass as JPEG\n' >"$fake_jpeg_file"
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --form "csrf_token=$fake_jpeg_csrf_token" \
+    --form "fs_nextfilename=$fake_jpeg_reserved_name" \
+    --form 'fs_comment=Manipulierter JPEG-Test' \
+    --form "fs_shortname=$legacy_registration_code" \
+    --form "fs_timestamp=$fake_jpeg_timestamp" \
+    --form 'absenden_x=1' \
+    --form "upload=@$fake_jpeg_file;type=image/jpeg;filename=fake.JPEG" \
+    "$base_url/4fach/anhang.php"
+assert_body 'Dateiendung und erkannter Dateityp passen nicht zusammen.'
+assert_body_absent 'Der Anhang konnte nicht sicher gespeichert werden.'
+aw_attachment_menu_csrf_token=$(csrf_from_body)
+if [ "$(active_attachment_reservation_count)" != 0 ]; then
+    printf 'HTTP smoke: rejected fake JPEG left an active reservation\n' >&2
+    exit 1
+fi
+fake_jpeg_rows=$(
+    printf "SELECT COUNT(*) FROM nv_anhang WHERE BINARY filename = BINARY '%s' AND status = 1;\n" \
+        "$fake_jpeg_reserved_name" |
+        db_sql
+)
+if [ "$fake_jpeg_rows" != 0 ]; then
+    printf 'HTTP smoke: rejected fake JPEG produced finalized metadata\n' >&2
+    exit 1
+fi
+assert_status 404 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/download.php?area=attachment&file=$fake_jpeg_reserved_name.jpeg"
+assert_body 'Datei nicht gefunden'
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \

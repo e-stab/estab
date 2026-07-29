@@ -134,6 +134,9 @@ Nachrichten des aktiven Einsatzes im jeweils aktuellen, mit dem Dossier
 gemeinsamen PDF-Layout. Die beim Nachrichtenabschluss atomar gespeicherte
 Archivdatei wird dabei weder ersetzt noch verändert und bleibt Bestandteil
 von Backup und Restore.
+Der Anhangdialog unterstützt echte JPEG-Bilder mit `.jpg` und `.jpeg`,
+prüft den MIME-Typ serverseitig und nennt das standardmäßige Uploadlimit von
+20 MiB direkt am Dateifeld.
 
 ### Ohne lokalen Image-Build
 

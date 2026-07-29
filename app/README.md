@@ -156,7 +156,14 @@ Kontosperre und Kennwortreset.
   und schreibt das Audit unter demselben Einsatz-Lock. Fehler rollen zum
   Savepoint vor dem Claim zurück und geben die Reservierung frei; der
   Controller entfernt eine bereits verschobene Datei aus dem validierten
-  Ablageroot.
+  Ablageroot und gibt auch Uploads frei, die PHP bereits wegen fehlender oder
+  zu großer Dateien vor dem Claim ablehnt. Die gemeinsame Endungs-Allowlist
+  umfasst die gebräuchlichen
+  Bildaliase `jpg`/`jpeg` und `tif`/`tiff`; der Legacy-Uploadvalidator bindet
+  beide Schreibweisen weiterhin an den tatsächlich erkannten MIME-Typ. Das
+  Formular nennt Formate und effektives Größenlimit, ohne interne Fehler oder
+  ungefilterte Dateinamen auszugeben; „Abbrechen“ bleibt trotz verpflichtender
+  Dateiauswahl jederzeit ohne Browservalidierung möglich.
 - Einzelne Nachrichtenvordrucke werden als
   `<datenbank> Einsatz-<einsatz_id> <nummer> <E|A>.pdf` über eine temporäre
   Datei und atomisches `rename` veröffentlicht. Liste und Download leiten den

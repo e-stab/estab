@@ -1216,6 +1216,7 @@ class BrowserAcceptance:
         )
         self._assert_session_bar(None, "Einsatztagebuch", "incident-log")
         self._assert_generated_forms_tool()
+        self._assert_attachment_upload_form()
         if self.config.admin_user and self.config.admin_password:
             self._assert_authenticated_administration_session_chrome()
         else:
@@ -1622,6 +1623,94 @@ class BrowserAcceptance:
         self._assert_session_bar(
             None,
             "Einsatztagebuch nach Vordruckprüfung",
+            "incident-log",
+        )
+
+    def _assert_attachment_upload_form(self) -> None:
+        self.cdp.navigate(self.config.base_url + "/4fach/anhang.php")
+        self.cdp.wait_for(
+            """
+            document.readyState === "complete" &&
+            Boolean(document.querySelector('input[name="ah_upload"]')) &&
+            Boolean(document.querySelector("aside[data-estab-session-bar]"))
+            """,
+            "eigenständige Anhangübersicht wurde nicht vollständig geladen",
+        )
+        self.cdp.click(
+            None,
+            'input[name="ah_upload"]',
+            "Uploadaktion in der Anhangübersicht",
+        )
+        self.cdp.wait_for(
+            """
+            document.readyState === "complete" &&
+            Boolean(document.querySelector("[data-estab-attachment-upload]")) &&
+            Boolean(document.querySelector("#attachment-upload-file"))
+            """,
+            "Formular für einen neuen Anhang wurde nicht geladen",
+        )
+        upload_state = self.cdp.evaluate(
+            """
+            (() => {
+                const input = document.querySelector(
+                    "#attachment-upload-file"
+                );
+                const help = document.querySelector(
+                    "#attachment-upload-help"
+                );
+                const label = document.querySelector(
+                    'label[for="attachment-upload-file"]'
+                );
+                const cancel = document.querySelector(
+                    'input[name="abbrechen"]'
+                );
+                return {
+                    accept: input?.accept || "",
+                    required: input?.required === true,
+                    help: help?.innerText || "",
+                    label: label?.innerText || "",
+                    describedBy: input?.getAttribute(
+                        "aria-describedby"
+                    ) || "",
+                    cancelSkipsValidation: cancel?.formNoValidate === true
+                };
+            })()
+            """
+        )
+        self._truth(
+            isinstance(upload_state, dict)
+            and ".jpg" in str(upload_state.get("accept", "")).lower()
+            and ".jpeg" in str(upload_state.get("accept", "")).lower()
+            and upload_state.get("required") is True
+            and "JPG, JPEG" in str(upload_state.get("help", ""))
+            and "20 MiB" in str(upload_state.get("help", ""))
+            and upload_state.get("label") == "Datei:"
+            and upload_state.get("describedBy") == "attachment-upload-help"
+            and upload_state.get("cancelSkipsValidation") is True,
+            "JPEG-Unterstützung, Uploadgrenze oder Beschriftung fehlen im "
+            f"Dateidialog: {upload_state!r}",
+        )
+        self.cdp.click(
+            None,
+            'input[name="abbrechen"]',
+            "vorbereitete Anhangreservierung abbrechen",
+        )
+        self.cdp.wait_for(
+            """
+            document.readyState === "complete" &&
+            Boolean(document.querySelector('input[name="ah_upload"]')) &&
+            !document.querySelector("[data-estab-attachment-upload]")
+            """,
+            "Anhangreservierung wurde nach Abbruch nicht verlassen",
+        )
+        self.cdp.navigate(self.config.base_url + "/stabetb/etb.php")
+        self._wait_for_top_level_path(
+            "/stabetb/etb.php",
+            "Einsatztagebuch wurde nach der Anhangprüfung nicht wieder geladen",
+        )
+        self._assert_session_bar(
+            None,
+            "Einsatztagebuch nach Anhangprüfung",
             "incident-log",
         )
 

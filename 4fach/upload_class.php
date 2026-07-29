@@ -27,11 +27,12 @@ class file_upload {
         var $replace;
         var $do_filename_check;
         var $max_length_filename = 100;
-        var $max_file_size = 5242880;
+        var $max_file_size = 20971520;
         var $extensions;
         var $ext_string;
         var $language;
         var $http_error;
+        var $failure_code;
         var $rename_file; // if this var is true the file copy get a new name
         var $file_copy; // the new name
         var $message = array();
@@ -46,6 +47,7 @@ class file_upload {
                 $this->language = "de"; // choice of en, nl, es
                 $this->rename_file = false;
                 $this->ext_string = "";
+                $this->failure_code = null;
                 $configured_limit = getenv("ESTAB_UPLOAD_MAX_BYTES");
                 if ($configured_limit !== false && ctype_digit($configured_limit)) {
                         $this->max_file_size = min((int) $configured_limit, 52428800);
@@ -60,14 +62,61 @@ class file_upload {
                 return $msg_string;
         }
 
+        function fail($error_code) {
+                $this->failure_code = (int) $error_code;
+                $this->message[] = $this->error_text($this->failure_code);
+                return false;
+        }
+
+        function upload_limit_label() {
+                if ($this->max_file_size < 1024) {
+                        return number_format($this->max_file_size, 0, ",", ".")." Byte";
+                }
+                if ($this->max_file_size < 1048576) {
+                        $kibibytes = $this->max_file_size / 1024;
+                        if ($this->max_file_size % 1024 === 0) {
+                                return number_format($kibibytes, 0, ",", ".")." KiB";
+                        }
+                        return number_format($kibibytes, 1, ",", ".")." KiB";
+                }
+                $mebibytes = $this->max_file_size / 1048576;
+                if ($this->max_file_size % 1048576 === 0) {
+                        return number_format($mebibytes, 0, ",", ".")." MiB";
+                }
+                return number_format($mebibytes, 1, ",", ".")." MiB";
+        }
+
+        function user_error_message() {
+                switch ((int) $this->failure_code) {
+                        case UPLOAD_ERR_INI_SIZE:
+                        case UPLOAD_ERR_FORM_SIZE:
+                        case 17:
+                                return "Die Datei ist größer als die erlaubten ".
+                                       $this->upload_limit_label().".";
+                        case UPLOAD_ERR_PARTIAL:
+                                return "Die Datei wurde nur teilweise übertragen. Bitte erneut versuchen.";
+                        case UPLOAD_ERR_NO_FILE:
+                        case 10:
+                                return "Bitte wählen Sie eine Datei aus.";
+                        case 11:
+                                return "Diese Dateiendung wird nicht unterstützt.";
+                        case 12:
+                        case 13:
+                                return "Der Dateiname ist ungültig oder zu lang.";
+                        case 18:
+                                return "Dateiendung und erkannter Dateityp passen nicht zusammen.";
+                        default:
+                                return "Die Datei konnte nicht sicher hochgeladen werden.";
+                }
+        }
+
 
         function set_file_name($new_name = "") { // this "conversion" is used for unique/new filenames
                 if ($this->rename_file) {
                         if ($this->the_file == "") return;
                         $name = ($new_name == "") ? strtotime("now") : $new_name;
                         if (!is_string($name) || !preg_match('/^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/D', $name)) {
-                                $this->message[] = $this->error_text(12);
-                                return false;
+                                return $this->fail(12);
                         }
                         $name = $name.$this->get_extension($this->the_file);
                 } else {
@@ -79,32 +128,32 @@ class file_upload {
 
         function upload($to_name = "") {
                 $new_name = $this->set_file_name($to_name);
-                if ($new_name === false || $this->http_error !== UPLOAD_ERR_OK) {
-                        $this->message[] = $this->error_text((int) $this->http_error);
+                if ($new_name === false) {
                         return false;
+                }
+                if ($this->http_error !== UPLOAD_ERR_OK) {
+                        return $this->fail((int) $this->http_error);
                 }
                 $size = @filesize($this->the_temp_file);
                 if ($size === false || $size > $this->max_file_size) {
-                        $this->message[] = $this->error_text(17);
-                        return false;
+                        return $this->fail(17);
                 }
                 if ($this->check_file_name($new_name)) {
                         if ($this->validateExtension()) {
                                 if (is_uploaded_file($this->the_temp_file)) {
                                         $this->file_copy = $new_name;
                                         if ($this->move_upload($this->the_temp_file, $this->file_copy)) {
+                                                $this->failure_code = null;
                                                 $this->message[] = $this->error_text($this->http_error);
                                                 if ($this->rename_file) $this->message[] = $this->error_text(16);
                                                 return true;
                                         }
                                 } else {
-                                        $this->message[] = $this->error_text($this->http_error);
-                                        return false;
+                                        return $this->fail(UPLOAD_ERR_PARTIAL);
                                 }
                         } else {
                                 $this->show_extensions();
-                                $this->message[] = $this->error_text(11);
-                                return false;
+                                return $this->fail($this->failure_code ?? 11);
                         }
                 } else {
                         return false;
@@ -115,27 +164,23 @@ class file_upload {
                 if ($the_name != "") {
                     if (basename($the_name) !== $the_name ||
                         !preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]*\.[A-Za-z0-9]{1,10}$/D', $the_name)) {
-                        $this->message[] = $this->error_text(12);
-                        return false;
+                        return $this->fail(12);
                     }
                         if (strlen($the_name) > $this->max_length_filename) {
-                                $this->message[] = $this->error_text(13);
-                                return false;
+                                return $this->fail(13);
                         } else {
                                 if ($this->do_filename_check == "y") {
                                         if (preg_match("/^[a-z0-9_]*\.(.){1,5}$/i", $the_name)) {
                                                 return true;
                                         } else {
-                                                $this->message[] = $this->error_text(12);
-                                                return false;
+                                                return $this->fail(12);
                                         }
                                 } else {
                                         return true;
                                 }
                         }
                 } else {
-                        $this->message[] = $this->error_text(10);
-                        return false;
+                        return $this->fail(10);
                 }
         }
         function get_extension($from_file) {
@@ -146,12 +191,15 @@ class file_upload {
                 $extension = $this->get_extension($this->the_file);
                 $ext_array = $this->extensions;
                 if (!in_array($extension, $ext_array, true)) {
+                        $this->failure_code = 11;
                         return false;
                 }
 
                 $allowed_mime = array(
                         ".jpg" => array("image/jpeg"),
+                        ".jpeg" => array("image/jpeg"),
                         ".tif" => array("image/tiff"),
+                        ".tiff" => array("image/tiff"),
                         ".gif" => array("image/gif"),
                         ".avi" => array("video/x-msvideo", "video/avi", "application/octet-stream"),
                         ".png" => array("image/png"),
@@ -168,9 +216,10 @@ class file_upload {
                 $mime = $finfo->file($this->the_temp_file);
                 if ($mime === false || !isset($allowed_mime[$extension]) ||
                     !in_array($mime, $allowed_mime[$extension], true)) {
-                        $this->message[] = $this->error_text(18);
+                        $this->failure_code = 18;
                         return false;
                 }
+                $this->failure_code = null;
                 return true;
         }
         // this method is only used for detailed error reporting
@@ -178,7 +227,7 @@ class file_upload {
                 $this->ext_string = implode(" ", $this->extensions);
         }
         function move_upload($tmp_file, $new_file) {
-                if (basename($new_file) !== $new_file) return false;
+                if (basename($new_file) !== $new_file) return $this->fail(12);
                 if ($this->existing_file($new_file)) {
                         $newfile = rtrim($this->upload_dir, "/\\").DIRECTORY_SEPARATOR.$new_file;
                         if ($this->check_dir($this->upload_dir)) {
@@ -192,15 +241,13 @@ class file_upload {
                                         }
                                         return true;
                                 } else {
-                                        return false;
+                                        return $this->fail(UPLOAD_ERR_PARTIAL);
                                 }
                         } else {
-                                $this->message[] = $this->error_text(14);
-                                return false;
+                                return $this->fail(14);
                         }
                 } else {
-                        $this->message[] = $this->error_text(15);
-                        return false;
+                        return $this->fail(15);
                 }
         }
         function check_dir($directory) {

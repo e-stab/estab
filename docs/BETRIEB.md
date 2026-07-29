@@ -87,13 +87,22 @@ Wichtige Werte in `.env`:
 | `ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF` | `false` | erlaubt ausdrücklich benötigten direkten Legacy-Clients tokenlose Anmeldung; nicht für Browserbetrieb aktivieren |
 | `ESTAB_TRUST_PROXY_HEADERS` | `false` | erlaubt dem zusätzlich freigegebenen direkten Proxy validierte `X-Forwarded-*`-Ketten |
 | `ESTAB_TRUSTED_PROXIES` | leer | verpflichtende, kommaseparierte IP-/CIDR-Allowlist, sobald Proxy-Header aktiviert werden |
-| `ESTAB_UPLOAD_MAX_BYTES` | `5242880` | anwendungsseitige maximale Uploadgröße |
+| `ESTAB_UPLOAD_MAX_BYTES` | `20971520` | anwendungsseitige maximale Uploadgröße |
 | `ESTAB_PDF_ATTACHMENT_MAX_BYTES` | `52428800` | maximale Gesamtsumme eingebetteter Originalanhänge je PDF-Einsatzdossier; `0` deaktiviert Einbettungen |
 | `TZ` | `Europe/Berlin` | Zeitzone von Anwendung und Datenbank |
 
 Die effektive Uploadgrenze ist der kleinste Wert aus
 `ESTAB_UPLOAD_MAX_BYTES`, PHPs `upload_max_filesize` von 20 MiB und
 `post_max_size` von 24 MiB.
+
+Der Anhangdialog akzeptiert unter anderem `.jpg` und `.jpeg` sowie `.tif` und
+`.tiff` unabhängig von Groß-/Kleinschreibung. Dateiendung und serverseitig
+erkannter MIME-Typ müssen zusammenpassen; eine nur in `.jpeg` umbenannte
+Fremddatei bleibt deshalb gesperrt. Formular und Fehlermeldung zeigen die
+effektive Anwendungsgrenze verständlich an. Bestehende Installationen, deren
+`.env` noch ausdrücklich `ESTAB_UPLOAD_MAX_BYTES=5242880` enthält, behalten
+das alte 5-MiB-Limit, bis der Wert bewusst auf `20971520` angehoben und der
+App-Container neu erzeugt wird.
 
 Der App-Entrypoint validiert vor dem Apache-Start DB-Name und -Port,
 Uploadgrenzen, URL/Basispfad, alle booleschen Schalter sowie die
