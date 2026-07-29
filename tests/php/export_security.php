@@ -19,6 +19,80 @@ export_assert(estab_export_quote_identifier('nv_nachrichten') === '`nv_nachricht
 export_assert(estab_export_quote_identifier('odd`name') === '`odd``name`', 'backtick escaped');
 export_assert(estab_export_filename('nv_nachrichten') === 'nv_nachrichten.csv', 'portable table filename retained');
 export_assert(estab_export_filename('../escape') === 'table-' . bin2hex('../escape') . '.csv', 'unsafe filename encoded');
+export_assert(estab_export_csv_cell(null) === '\\N', 'NULL marker retained');
+foreach ([
+    0 => '0',
+    42 => '42',
+    '12.50' => '12.50',
+    " \t1.25e2 " => " \t1.25e2 ",
+    'Ärztliche Leitung' => 'Ärztliche Leitung',
+    'Text;mit;Semikolon' => 'Text;mit;Semikolon',
+    "'=bereits-neutral" => "'=bereits-neutral",
+] as $input => $expected) {
+    export_assert(
+        estab_export_csv_cell($input) === $expected,
+        'normal UTF-8, delimiter, apostrophe or numeric CSV value retained'
+    );
+}
+foreach ([
+    '=1+1',
+    '+123',
+    '-123',
+    ' +SUM(A1:A2)',
+    "\t-2+3",
+    '@cmd',
+    "\u{00A0}=HYPERLINK(\"https://invalid\")",
+    "\u{2003}+123",
+    "\u{202F}-123",
+] as $formulaLike) {
+    export_assert(
+        estab_export_csv_cell($formulaLike) === "'" . $formulaLike,
+        'formula-like CSV value neutralised'
+    );
+}
+$neutralisedHeaders = estab_export_csv_headers([
+    (object) ['name' => '=formula'],
+    (object) ['name' => 'normal'],
+    (object) ['name' => '-12'],
+]);
+export_assert(
+    $neutralisedHeaders === ["'=formula", 'normal', "'-12"],
+    'database-provided CSV headers use the same formula guard'
+);
+$csvStream = fopen('php://temp', 'w+b');
+export_assert($csvStream !== false, 'CSV semantics test stream opened');
+if ($csvStream !== false) {
+    fputcsv(
+        $csvStream,
+        estab_export_csv_headers([
+            (object) ['name' => '=header'],
+            (object) ['name' => 'normal'],
+        ]),
+        ';',
+        '"',
+        '',
+        "\r\n"
+    );
+    fputcsv(
+        $csvStream,
+        array_map(
+            'estab_export_csv_cell',
+            ['=1+1', 'Text;mit;Semikolon', null, '-42']
+        ),
+        ';',
+        '"',
+        '',
+        "\r\n"
+    );
+    rewind($csvStream);
+    export_assert(
+        stream_get_contents($csvStream)
+            === "'=header;normal\r\n"
+                . "'=1+1;\"Text;mit;Semikolon\";\\N;'-42\r\n",
+        'formula guard preserves semicolon, CRLF, quoting and NULL semantics'
+    );
+    fclose($csvStream);
+}
 
 foreach (['', str_repeat('a', 65), "bad\0name"] as $invalid) {
     $rejected = false;
@@ -95,17 +169,296 @@ function export_test_create_run(
     );
 }
 
+function export_test_stage_result(
+    array $scope,
+    string $csv = "id;value\r\n1;fixture\r\n",
+    string $archive = "PK\x03\x04staged"
+): array {
+    file_put_contents(
+        $scope['staging_directory'] . DIRECTORY_SEPARATOR . 'nv_test.csv',
+        $csv
+    );
+    file_put_contents(
+        $scope['staging_directory'] . DIRECTORY_SEPARATOR . 'manifest.json',
+        '{"format":1}'
+    );
+    file_put_contents(
+        $scope['staging_directory'] . DIRECTORY_SEPARATOR
+            . $scope['staged_archive_name'],
+        $archive
+    );
+    return [
+        'files' => ['nv_test.csv', 'manifest.json'],
+        'manifest' => ['test' => true],
+    ];
+}
+
 try {
-    $run = estab_export_create_run_directory(
+    $scope = estab_export_create_staging_scope(
         $base,
-        new DateTimeImmutable('2026-07-22 12:00:00')
+        new DateTimeImmutable('2026-07-22 11:50:00'),
+        static fn (int $attempt): string => '11111111'
     );
-    export_assert(is_dir($run), 'private run directory created');
     export_assert(
-        str_starts_with(basename($run), 'estab-20260722-120000-'),
-        'timestamped run name'
+        is_dir($scope['staging_directory']),
+        'private staging directory created'
     );
-    rmdir($run);
+    export_assert(
+        basename($scope['staging_directory'])
+            === '.estab-staging-estab-20260722-115000-11111111',
+        'staging directory name is hidden and strictly derived'
+    );
+    $scopeMode = fileperms($scope['staging_directory']);
+    export_assert(
+        is_int($scopeMode) && ($scopeMode & 0777) === 0700,
+        'staging directory is private'
+    );
+    export_assert(
+        is_file($scope['reservation_path'])
+            && !file_exists($scope['final_directory'])
+            && !file_exists($scope['final_archive']),
+        'staging allocation does not expose a canonical run'
+    );
+    file_put_contents($outside, 'outside-sentinel');
+    $tamperedScope = $scope;
+    $tamperedScope['staging_directory'] = $outside;
+    $tamperedScopeRejected = false;
+    try {
+        estab_export_cleanup_staging_scope($tamperedScope);
+    } catch (EstabExportUnsafePathException) {
+        $tamperedScopeRejected = true;
+    }
+    export_assert(
+        $tamperedScopeRejected,
+        'cleanup rejects a caller-modified staging path'
+    );
+    export_assert(
+        file_get_contents($outside) === 'outside-sentinel'
+            && is_dir($scope['staging_directory']),
+        'tampered cleanup touches neither outside target nor owned stage'
+    );
+    estab_export_cleanup_staging_scope($scope);
+    export_assert(
+        !file_exists($scope['staging_directory'])
+            && !file_exists($scope['reservation_path']),
+        'empty staging scope cleaned completely'
+    );
+
+    $published = estab_export_run_staged(
+        $base,
+        static fn (array $scope): array =>
+            export_test_stage_result($scope),
+        new DateTimeImmutable('2026-07-22 11:51:00'),
+        null,
+        static fn (int $attempt): string => '22222222'
+    );
+    $publishedId = 'estab-20260722-115100-22222222';
+    export_assert(
+        $published['directory']
+            === $base . DIRECTORY_SEPARATOR . $publishedId
+            && $published['archive']
+                === $base . DIRECTORY_SEPARATOR . $publishedId . '.zip'
+            && ($published['manifest']['test'] ?? false) === true,
+        'completed stage returns only canonical published paths'
+    );
+    export_assert(
+        is_dir($published['directory'])
+            && is_file($published['archive'])
+            && !file_exists(
+                $base . DIRECTORY_SEPARATOR
+                . '.estab-staging-' . $publishedId
+            )
+            && !file_exists(
+                $base . DIRECTORY_SEPARATOR
+                . '.estab-reservation-' . $publishedId
+            ),
+        'directory and ZIP publish without private leftovers'
+    );
+    export_assert(
+        !file_exists(
+            $published['directory'] . DIRECTORY_SEPARATOR
+            . '.estab-archive-' . $publishedId . '.zip'
+        ),
+        'private archive hard link removed after commit'
+    );
+    estab_export_delete_run($base, $publishedId);
+
+    $failedId = 'estab-20260722-115200-33333333';
+    $builderFailed = false;
+    try {
+        estab_export_run_staged(
+            $base,
+            static function (array $scope) use ($outside): array {
+                file_put_contents(
+                    $scope['staging_directory']
+                        . DIRECTORY_SEPARATOR . 'partial.csv.part-deadbeef',
+                    'partial'
+                );
+                symlink(
+                    $outside,
+                    $scope['staging_directory']
+                        . DIRECTORY_SEPARATOR . 'outside-link'
+                );
+                throw new RuntimeException('injected builder failure');
+            },
+            new DateTimeImmutable('2026-07-22 11:52:00'),
+            null,
+            static fn (int $attempt): string => '33333333'
+        );
+    } catch (RuntimeException $exception) {
+        $builderFailed = $exception->getMessage()
+            === 'injected builder failure';
+    }
+    export_assert($builderFailed, 'injected builder failure propagated');
+    export_assert(
+        !file_exists($base . DIRECTORY_SEPARATOR . $failedId)
+            && !file_exists($base . DIRECTORY_SEPARATOR . $failedId . '.zip')
+            && !file_exists(
+                $base . DIRECTORY_SEPARATOR
+                . '.estab-staging-' . $failedId
+            )
+            && !file_exists(
+                $base . DIRECTORY_SEPARATOR
+                . '.estab-reservation-' . $failedId
+            ),
+        'Throwable removes partial files, link and private staging scope'
+    );
+    export_assert(
+        file_get_contents($outside) === 'outside-sentinel',
+        'failed staging cleanup never follows its symlink'
+    );
+
+    $symlinkId = 'estab-20260722-115300-44444444';
+    $symlinkStageRejected = false;
+    try {
+        estab_export_run_staged(
+            $base,
+            static function (array $scope) use ($outside): array {
+                symlink(
+                    $outside,
+                    $scope['staging_directory']
+                        . DIRECTORY_SEPARATOR . 'nv_test.csv'
+                );
+                file_put_contents(
+                    $scope['staging_directory']
+                        . DIRECTORY_SEPARATOR . 'manifest.json',
+                    '{"format":1}'
+                );
+                file_put_contents(
+                    $scope['staging_directory'] . DIRECTORY_SEPARATOR
+                        . $scope['staged_archive_name'],
+                    "PK\x03\x04symlink"
+                );
+                return [
+                    'files' => ['nv_test.csv', 'manifest.json'],
+                    'manifest' => [],
+                ];
+            },
+            new DateTimeImmutable('2026-07-22 11:53:00'),
+            null,
+            static fn (int $attempt): string => '44444444'
+        );
+    } catch (EstabExportUnsafePathException) {
+        $symlinkStageRejected = true;
+    }
+    export_assert(
+        $symlinkStageRejected,
+        'symlink cannot be published as a generated CSV'
+    );
+    export_assert(
+        !file_exists($base . DIRECTORY_SEPARATOR . $symlinkId)
+            && !file_exists(
+                $base . DIRECTORY_SEPARATOR
+                . '.estab-staging-' . $symlinkId
+            )
+            && file_get_contents($outside) === 'outside-sentinel',
+        'rejected symlink stage is removed without touching its target'
+    );
+
+    $postRenameId = 'estab-20260722-115400-55555555';
+    $postRenameFailed = false;
+    try {
+        estab_export_run_staged(
+            $base,
+            static fn (array $scope): array =>
+                export_test_stage_result($scope),
+            new DateTimeImmutable('2026-07-22 11:54:00'),
+            static function (string $phase, array $scope): void {
+                if ($phase === 'after_directory_publish') {
+                    throw new RuntimeException(
+                        'injected post-rename failure'
+                    );
+                }
+            },
+            static fn (int $attempt): string => '55555555'
+        );
+    } catch (RuntimeException $exception) {
+        $postRenameFailed = $exception->getMessage()
+            === 'injected post-rename failure';
+    }
+    export_assert(
+        $postRenameFailed,
+        'failure between directory move and ZIP commit propagated'
+    );
+    export_assert(
+        !file_exists($base . DIRECTORY_SEPARATOR . $postRenameId)
+            && !file_exists(
+                $base . DIRECTORY_SEPARATOR . $postRenameId . '.zip'
+            )
+            && !file_exists(
+                $base . DIRECTORY_SEPARATOR
+                . '.estab-reservation-' . $postRenameId
+            ),
+        'post-rename failure rolls the unpublished run back completely'
+    );
+
+    $raceId = 'estab-20260722-115500-66666666';
+    $raceArchive = $base . DIRECTORY_SEPARATOR . $raceId . '.zip';
+    $raceRejected = false;
+    try {
+        estab_export_run_staged(
+            $base,
+            static fn (array $scope): array =>
+                export_test_stage_result($scope),
+            new DateTimeImmutable('2026-07-22 11:55:00'),
+            static function (string $phase, array $scope): void {
+                if ($phase === 'after_directory_publish') {
+                    file_put_contents(
+                        $scope['final_archive'],
+                        'concurrent-sentinel'
+                    );
+                }
+            },
+            static fn (int $attempt): string => '66666666'
+        );
+    } catch (RuntimeException) {
+        $raceRejected = true;
+    }
+    export_assert(
+        $raceRejected,
+        'concurrent final archive collision fails closed'
+    );
+    export_assert(
+        !file_exists($base . DIRECTORY_SEPARATOR . $raceId)
+            && file_get_contents($raceArchive) === 'concurrent-sentinel',
+        'rollback removes only its run directory and preserves foreign archive'
+    );
+    unlink($raceArchive);
+
+    $unsafeTokenRejected = false;
+    try {
+        estab_export_create_staging_scope(
+            $base,
+            new DateTimeImmutable('2026-07-22 11:56:00'),
+            static fn (int $attempt): string => '../bad00'
+        );
+    } catch (InvalidArgumentException) {
+        $unsafeTokenRejected = true;
+    }
+    export_assert(
+        $unsafeTokenRejected,
+        'traversal-capable staging token rejected before filesystem use'
+    );
 
     $validId = 'estab-20260722-120000-aaaaaaaa';
     export_assert(
@@ -141,7 +494,49 @@ try {
     export_test_create_run($base, $unsafeId, 'nv_unsafe', 1, "PK\x03\x04unsafe");
     export_test_create_run($base, $nestedId, 'nv_nested', 1, "PK\x03\x04nested");
 
-    file_put_contents($outside, 'outside-sentinel');
+    $collisionManifest = file_get_contents(
+        $base . DIRECTORY_SEPARATOR . $olderId
+            . DIRECTORY_SEPARATOR . 'manifest.json'
+    );
+    $collisionArchive = file_get_contents(
+        $base . DIRECTORY_SEPARATOR . $olderId . '.zip'
+    );
+    $collisionRejected = false;
+    try {
+        estab_export_run_staged(
+            $base,
+            static function (array $scope): array {
+                throw new RuntimeException(
+                    'builder must not run for an existing export'
+                );
+            },
+            new DateTimeImmutable('2026-07-22 12:00:00'),
+            null,
+            static fn (int $attempt): string => 'aaaaaaaa'
+        );
+    } catch (RuntimeException $exception) {
+        $collisionRejected = $exception->getMessage()
+            === 'Could not allocate an export staging scope';
+    }
+    export_assert(
+        $collisionRejected,
+        'existing run identifier cannot be reallocated'
+    );
+    export_assert(
+        file_get_contents(
+            $base . DIRECTORY_SEPARATOR . $olderId
+                . DIRECTORY_SEPARATOR . 'manifest.json'
+        ) === $collisionManifest
+            && file_get_contents(
+                $base . DIRECTORY_SEPARATOR . $olderId . '.zip'
+            ) === $collisionArchive
+            && !file_exists(
+                $base . DIRECTORY_SEPARATOR
+                . '.estab-reservation-' . $olderId
+            ),
+        'allocation collision leaves existing export byte-for-byte untouched'
+    );
+
     $innerLink = $base . DIRECTORY_SEPARATOR . $unsafeId
         . DIRECTORY_SEPARATOR . 'outside-link';
     export_assert(
@@ -263,6 +658,18 @@ try {
             ]),
             JSON_THROW_ON_ERROR
         ),
+        'invalid formula prefix' => json_encode(
+            array_replace($validManifest, [
+                'spreadsheet_formula_prefix' => '=',
+            ]),
+            JSON_THROW_ON_ERROR
+        ),
+        'invalid formula triggers' => json_encode(
+            array_replace($validManifest, [
+                'spreadsheet_formula_triggers' => '=@',
+            ]),
+            JSON_THROW_ON_ERROR
+        ),
     ];
     foreach ($invalidManifests as $description => $invalidManifestJson) {
         file_put_contents($newerManifestPath, $invalidManifestJson);
@@ -359,6 +766,68 @@ try {
     export_test_remove($outside);
 }
 
+if (class_exists(ZipArchive::class)) {
+    $zipBase = sys_get_temp_dir() . DIRECTORY_SEPARATOR
+        . 'estab-export-zip-test-' . bin2hex(random_bytes(6));
+    try {
+        $zipResult = estab_export_run_staged(
+            $zipBase,
+            static function (array $scope): array {
+                $csvPath = $scope['staging_directory']
+                    . DIRECTORY_SEPARATOR . 'nv_zip.csv';
+                $manifestPath = $scope['staging_directory']
+                    . DIRECTORY_SEPARATOR . 'manifest.json';
+                file_put_contents($csvPath, "id;value\r\n1;zip\r\n");
+                file_put_contents($manifestPath, '{"format":1}');
+                $archivePath = $scope['staging_directory']
+                    . DIRECTORY_SEPARATOR . $scope['staged_archive_name'];
+                $archive = new ZipArchive();
+                if (
+                    $archive->open(
+                        $archivePath,
+                        ZipArchive::CREATE | ZipArchive::EXCL
+                    ) !== true
+                    || !$archive->addFile($csvPath, 'nv_zip.csv')
+                    || !$archive->addFile($manifestPath, 'manifest.json')
+                    || !$archive->close()
+                ) {
+                    throw new RuntimeException(
+                        'Could not create ZIP transaction fixture'
+                    );
+                }
+                return [
+                    'files' => ['nv_zip.csv', 'manifest.json'],
+                    'manifest' => ['zip' => true],
+                ];
+            },
+            new DateTimeImmutable('2026-07-22 11:57:00'),
+            null,
+            static fn (int $attempt): string => '77777777'
+        );
+        export_assert(
+            is_dir($zipResult['directory'])
+                && is_file($zipResult['archive']),
+            'real ZIP and run directory published together'
+        );
+        $publishedZip = new ZipArchive();
+        export_assert(
+            $publishedZip->open($zipResult['archive']) === true
+                && $publishedZip->locateName('nv_zip.csv') !== false
+                && $publishedZip->locateName('manifest.json') !== false,
+            'atomically published ZIP contains CSV and manifest'
+        );
+        $publishedZip->close();
+        $zipId = basename($zipResult['directory']);
+        estab_export_delete_run($zipBase, $zipId);
+        export_assert(
+            estab_export_list_runs($zipBase) === [],
+            'real ZIP transaction remains compatible with managed deletion'
+        );
+    } finally {
+        export_test_remove($zipBase);
+    }
+}
+
 $controllerSource = file_get_contents(__DIR__ . '/../../4fadm/export.php');
 export_assert(is_string($controllerSource), 'export controller source readable');
 export_assert(
@@ -406,6 +875,13 @@ export_assert(
 export_assert(
     str_contains($controllerSource, ". ' admin=' . \$adminLogIdentity"),
     'successful create and delete events include the validated admin identity'
+);
+$exportSource = file_get_contents(__DIR__ . '/../../app/export.php');
+export_assert(
+    is_string($exportSource)
+        && str_contains($exportSource, "'spreadsheet_formula_prefix' => \"'\"")
+        && str_contains($exportSource, "'spreadsheet_formula_triggers' => '=+-@'"),
+    'new manifests document spreadsheet formula neutralisation'
 );
 
 printf("export security: OK (%d assertions)\n", $assertions);

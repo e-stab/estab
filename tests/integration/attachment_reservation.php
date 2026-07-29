@@ -4,6 +4,7 @@ if (!function_exists('estab_env')) {
     require_once __DIR__ . '/../../app/bootstrap.php';
 }
 require_once __DIR__ . '/../../app/attachment.php';
+require_once __DIR__ . '/../../app/file_access.php';
 
 function attachment_db_assert(bool $condition, string $message): void
 {
@@ -389,6 +390,7 @@ try {
 
     $fixtureSql = 'CREATE TABLE ' . estab_attachment_table($table) . ' ('
         . ' `lfd-nr` BIGINT NOT NULL AUTO_INCREMENT,'
+        . ' `einsatz_id` BIGINT UNSIGNED NULL DEFAULT NULL,'
         . " `filename` VARCHAR(255) NOT NULL DEFAULT '',"
         . " `fileext` VARCHAR(16) NOT NULL DEFAULT '',"
         . " `org_filename` VARCHAR(255) NOT NULL DEFAULT '',"
@@ -411,57 +413,43 @@ try {
         'Deferred-result fixture cleanup left rows behind'
     );
 
-    $deadlockProved = false;
-    $filenameA = '';
-    $filenameB = '';
-    for ($raceAttempt = 1; $raceAttempt <= 12; $raceAttempt++) {
-        @unlink($barrier);
-        foreach ($readyFiles as $readyFile) {
-            @unlink($readyFile);
-        }
+    @unlink($barrier);
+    foreach ($readyFiles as $readyFile) {
+        @unlink($readyFile);
+    }
 
-        $deadlocksBefore = attachment_db_status_counter($connectionA, 'Innodb_deadlocks');
-        $workers = [];
-        $workers[] = attachment_db_start_worker($table, $prefix, $sessionA, $barrier);
-        $workers[] = attachment_db_start_worker($table, $prefix, $sessionB, $barrier);
-        $readyDeadline = microtime(true) + 10.0;
-        while (!is_file($readyFiles[0]) || !is_file($readyFiles[1])) {
-            if (microtime(true) >= $readyDeadline) {
-                throw new RuntimeException('Concurrent reservation workers did not become ready');
-            }
-            usleep(10_000);
+    // Both writers first lock the singleton active-incident row. That
+    // authoritative lock order must serialize filename allocation without
+    // relying on a deadlock/retry to produce distinct reservations.
+    $deadlocksBefore = attachment_db_status_counter($connectionA, 'Innodb_deadlocks');
+    $workers = [];
+    $workers[] = attachment_db_start_worker($table, $prefix, $sessionA, $barrier);
+    $workers[] = attachment_db_start_worker($table, $prefix, $sessionB, $barrier);
+    $readyDeadline = microtime(true) + 10.0;
+    while (!is_file($readyFiles[0]) || !is_file($readyFiles[1])) {
+        if (microtime(true) >= $readyDeadline) {
+            throw new RuntimeException('Concurrent reservation workers did not become ready');
         }
-        attachment_db_assert(
-            file_put_contents($barrier, 'go', LOCK_EX) !== false,
-            'Could not release reservation worker barrier'
-        );
-
-        $workerA = attachment_db_finish_worker($workers[0]);
-        $workerB = attachment_db_finish_worker($workers[1]);
-        $workers = [];
-        $filenameA = $workerA['filename'];
-        $filenameB = $workerB['filename'];
-        $workerRetryCodes = array_merge(
-            array_column($workerA['retries'], 'code'),
-            array_column($workerB['retries'], 'code')
-        );
-        $deadlocksAfter = attachment_db_status_counter($connectionA, 'Innodb_deadlocks');
-        if (
-            $deadlocksAfter > $deadlocksBefore
-            && in_array(1213, $workerRetryCodes, true)
-        ) {
-            $deadlockProved = true;
-            break;
-        }
-
-        attachment_db_assert(
-            $connectionA->query('TRUNCATE TABLE ' . estab_attachment_table($table)),
-            'Could not reset deadlock race fixture'
-        );
+        usleep(10_000);
     }
     attachment_db_assert(
-        $deadlockProved,
-        'Concurrent reservation race did not prove a retried MariaDB deadlock in 12 attempts'
+        file_put_contents($barrier, 'go', LOCK_EX) !== false,
+        'Could not release reservation worker barrier'
+    );
+
+    $workerA = attachment_db_finish_worker($workers[0]);
+    $workerB = attachment_db_finish_worker($workers[1]);
+    $workers = [];
+    $filenameA = $workerA['filename'];
+    $filenameB = $workerB['filename'];
+    $workerRetryCodes = array_merge(
+        array_column($workerA['retries'], 'code'),
+        array_column($workerB['retries'], 'code')
+    );
+    $deadlocksAfter = attachment_db_status_counter($connectionA, 'Innodb_deadlocks');
+    attachment_db_assert(
+        $deadlocksAfter === $deadlocksBefore && $workerRetryCodes === [],
+        'Active-incident locking did not serialize concurrent reservations'
     );
     attachment_db_assert($filenameA !== $filenameB, 'Concurrent reservations collided');
     attachment_db_assert(
@@ -528,6 +516,134 @@ try {
         estab_attachment_find($connectionB, $table, $filenameA) !== null,
         'Finalised attachment cannot be found'
     );
+    attachment_db_assert(
+        estab_attachment_find(
+            $connectionB,
+            $table,
+            strtolower($filenameA)
+        ) === null,
+        'Case-insensitive database collation authorized a different pathname'
+    );
+
+    // A direct download/preview authorization must keep the singleton status
+    // locked until the already-authorized pathname has become a stable open
+    // file handle. A competing incident switch therefore cannot slip into the
+    // gap between the database decision and fopen().
+    $authorizationRoot = sys_get_temp_dir()
+        . '/estab-file-authorization-' . $token;
+    attachment_db_assert(
+        mkdir($authorizationRoot, 0700),
+        'Could not create file-authorization fixture directory'
+    );
+    $authorizationName = $filenameA . '.pdf';
+    $authorizationBytes = "%PDF-1.7\nincident-lock-" . $token . "\n%%EOF\n";
+    attachment_db_assert(
+        file_put_contents(
+            $authorizationRoot . '/' . $authorizationName,
+            $authorizationBytes,
+            LOCK_EX
+        ) === strlen($authorizationBytes),
+        'Could not write file-authorization fixture'
+    );
+    $authorizedStream = null;
+    $timeoutResult = $connectionB->query(
+        'SELECT @@SESSION.innodb_lock_wait_timeout'
+    );
+    attachment_db_assert(
+        $timeoutResult instanceof mysqli_result,
+        'Could not read authorization lock timeout'
+    );
+    try {
+        $timeoutRow = $timeoutResult->fetch_row();
+        $originalAuthorizationTimeout = max(1, (int) ($timeoutRow[0] ?? 50));
+    } finally {
+        $timeoutResult->free();
+    }
+    try {
+        attachment_db_assert(
+            $connectionA->begin_transaction(),
+            'Could not start file-authorization transaction'
+        );
+        attachment_db_assert(
+            is_array(
+                estab_attachment_find(
+                    $connectionA,
+                    $table,
+                    $filenameA,
+                    true
+                )
+            ),
+            'Locked file authorization did not find its active attachment'
+        );
+        $authorizedStream = estab_file_open(
+            $authorizationRoot,
+            'attachment',
+            $authorizationName
+        );
+        attachment_db_assert(
+            is_resource($authorizedStream),
+            'Locked file authorization returned no open handle'
+        );
+
+        attachment_db_assert(
+            $connectionB->query(
+                'SET SESSION innodb_lock_wait_timeout = 1'
+            ),
+            'Could not shorten authorization lock timeout'
+        );
+        attachment_db_assert(
+            $connectionB->begin_transaction(),
+            'Could not start competing incident transaction'
+        );
+        $switchFailure = null;
+        $switchFailureCode = 0;
+        try {
+            estab_incident_require_active($connectionB, true);
+        } catch (Throwable $exception) {
+            $switchFailure = $exception;
+            $switchFailureCode = $connectionB->errno ?: $exception->getCode();
+        }
+        $connectionB->rollback();
+        attachment_db_assert(
+            $switchFailure instanceof Throwable
+                && $switchFailureCode === 1205,
+            'Incident status was not locked through the authorized file open'
+        );
+
+        attachment_db_assert(
+            $connectionA->commit(),
+            'Could not commit file-authorization transaction'
+        );
+        attachment_db_assert(
+            stream_get_contents($authorizedStream) === $authorizationBytes,
+            'Authorized handle changed after releasing the incident lock'
+        );
+        fclose($authorizedStream);
+        $authorizedStream = null;
+
+        attachment_db_assert(
+            $connectionB->begin_transaction(),
+            'Could not retry incident status lock'
+        );
+        $statusAfterOpen = estab_incident_require_active($connectionB, true);
+        attachment_db_assert(
+            (int) ($statusAfterOpen['active_einsatz_id'] ?? 0) > 0,
+            'Incident status lock did not become available after file open'
+        );
+        $connectionB->rollback();
+    } finally {
+        if (is_resource($authorizedStream)) {
+            fclose($authorizedStream);
+        }
+        $connectionA->rollback();
+        $connectionB->rollback();
+        $connectionB->query(
+            'SET SESSION innodb_lock_wait_timeout = '
+            . $originalAuthorizationTimeout
+        );
+        @unlink($authorizationRoot . '/' . $authorizationName);
+        @rmdir($authorizationRoot);
+    }
 
     $duplicate = $connectionB->prepare(
         'INSERT INTO ' . estab_attachment_table($table)
@@ -568,6 +684,78 @@ try {
     attachment_db_assert(
         (int) (attachment_db_row($connectionB, $table, $filenameB)['status'] ?? -1) === 4,
         'Claim cleanup did not release the fixture'
+    );
+
+    // The browser path keeps the active-incident row locked while the upload
+    // callback, final metadata update and audit insert complete.
+    $uploadSession = 'it_upload_' . $token;
+    $uploadName = estab_attachment_reserve(
+        $connectionA,
+        $table,
+        $prefix,
+        $uploadSession
+    );
+    $storedUpload = estab_attachment_store_upload(
+        $connectionA,
+        $table,
+        'nv_protokoll',
+        $uploadName,
+        $uploadSession,
+        'it001',
+        'Anhangdaten speichern',
+        static fn (): array => [
+            'filename' => $uploadName . '.pdf',
+            'org_filename' => 'atomic-browser-upload.pdf',
+            'comment' => 'Incident-locked browser upload fixture',
+            'time' => '2026-07-23 12:45:00',
+            'md5hash' => md5('browser-upload-' . $token),
+        ],
+        static fn (array $stored): string =>
+            'integration;' . $stored['filename'] . '.' . $stored['fileext']
+    );
+    attachment_db_assert(
+        is_array($storedUpload)
+            && ($storedUpload['filename'] ?? null) === $uploadName,
+        'Atomic browser upload did not return validated metadata'
+    );
+    attachment_db_assert(
+        (int) (attachment_db_row($connectionB, $table, $uploadName)['status'] ?? -1) === 1,
+        'Atomic browser upload did not finalise its reservation'
+    );
+
+    $failedSession = 'it_failed_' . $token;
+    $failedName = estab_attachment_reserve(
+        $connectionA,
+        $table,
+        $prefix,
+        $failedSession
+    );
+    try {
+        estab_attachment_store_upload(
+            $connectionA,
+            $table,
+            'nv_protokoll',
+            $failedName,
+            $failedSession,
+            'it001',
+            'Anhangdaten speichern',
+            static function (): never {
+                throw new RuntimeException('deliberate upload callback failure');
+            },
+            static fn (array $stored): string => (string) $stored['filename']
+        );
+        attachment_db_assert(false, 'Failing browser upload unexpectedly succeeded');
+    } catch (RuntimeException $exception) {
+        attachment_db_assert(
+            $exception->getMessage() === 'deliberate upload callback failure',
+            'Failing browser upload did not preserve the callback error'
+        );
+    }
+    $failedRow = attachment_db_row($connectionB, $table, $failedName);
+    attachment_db_assert(
+        (int) ($failedRow['status'] ?? -1) === 4
+            && ($failedRow['id'] ?? null) === '',
+        'Failing browser upload left a claimed reservation behind'
     );
 } finally {
     foreach ($workers as $worker) {

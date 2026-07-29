@@ -106,6 +106,25 @@ $assert(
         && !str_contains($sidebarMarkup, 'data-estab-mainframe-guard'),
     'always-visible authenticated sidebar presentation is incomplete'
 );
+$sidebarIdentityMarkup = estab_session_ui_markup(
+    $identity,
+    $token,
+    true,
+    [],
+    false,
+    true,
+    false
+);
+$assert(
+    str_contains($sidebarIdentityMarkup, 'estab-session-bar-sidebar')
+        && str_contains($sidebarIdentityMarkup, 'data-estab-user-code="ada001"')
+        && str_contains($sidebarIdentityMarkup, 'data-estab-logout-form')
+        && !str_contains(
+            $sidebarIdentityMarkup,
+            'data-estab-navigation-mode='
+        ),
+    'split sidebar identity unexpectedly contains the area navigation'
+);
 $assertThrows(
     static fn (): string => estab_session_ui_markup(
         $identity,
@@ -487,6 +506,9 @@ $bufferedSurfaces = [
     '4fach/info.php',
     'language/german/helptext.php',
     '4fadm/admin.php',
+    '4fadm/incidents.php',
+    '4fadm/incident_export.php',
+    '4fadm/users.php',
     '4fadm/make_fkt.php',
     '4fadm/set_number_after_crash.php',
     '4fadm/export.php',
@@ -509,6 +531,8 @@ $guardedEditSurfaces = [
     '4fadm/make_fkt.php',
     '4fadm/set_number_after_crash.php',
     '4fadm/export.php',
+    '4fadm/incidents.php',
+    '4fadm/users.php',
     '4fach/resetpic.php',
 ];
 foreach ($guardedEditSurfaces as $surface) {
@@ -559,9 +583,22 @@ $assert(
     'help and problem windows do not opt into explicit opener coordination'
 );
 $navigationSource = file_get_contents($root . '/4fach/vorgaben.php');
+$navigationStatusPosition = is_string($navigationSource)
+    ? strpos($navigationSource, '<?= $statusMarkup ?>')
+    : false;
+$navigationWorkflowPosition = is_string($navigationSource)
+    ? strpos($navigationSource, 'data-estab-workflow-menu')
+    : false;
+$navigationAreasPosition = is_string($navigationSource)
+    ? strrpos($navigationSource, 'estab_navigation_markup(')
+    : false;
 $assert(
     is_string($navigationSource)
         && str_contains($navigationSource, 'estab_session_ui_current_markup')
+        && str_contains(
+            $navigationSource,
+            'estab_navigation_markup('
+        )
         && str_contains($navigationSource, 'data-estab-sidebar-root')
         && str_contains($navigationSource, 'data-estab-workflow-menu')
         && str_contains($navigationSource, 'estab_sidebar_status_markup')
@@ -588,7 +625,12 @@ $assert(
         && str_contains(
             $navigationSource,
             'estab_sidebar_fetch_configured_positions'
-        ),
+        )
+        && is_int($navigationStatusPosition)
+        && is_int($navigationWorkflowPosition)
+        && is_int($navigationAreasPosition)
+        && $navigationStatusPosition < $navigationWorkflowPosition
+        && $navigationWorkflowPosition < $navigationAreasPosition,
     'persistent navigation does not render a resilient unified live sidebar'
 );
 $mainSource = file_get_contents($root . '/4fach/mainindex.php');
@@ -634,6 +676,101 @@ $assert(
         && !str_contains($framesetSource, 'status.php')
         && !str_contains(strtolower($framesetSource), '<frameset'),
     'message workspace does not contain exactly its sidebar and content frames'
+);
+$bosWorkspaceSource = file_get_contents($root . '/stabinfo/index.php');
+$bosNavigationSource = file_get_contents($root . '/stabinfo/l_index.php');
+$bosWelcomeSource = file_get_contents($root . '/stabinfo/f_info.php');
+$bosStylesheetSource = file_get_contents($root . '/estab-ui.css');
+$assert(
+    is_string($bosWorkspaceSource)
+        && substr_count($bosWorkspaceSource, '<iframe') === 2
+        && substr_count($bosWorkspaceSource, 'name="status"') === 1
+        && substr_count($bosWorkspaceSource, 'name="mainframe"') === 1
+        && str_contains($bosWorkspaceSource, 'data-estab-bos-workspace')
+        && str_contains($bosWorkspaceSource, 'src="./l_index.php"')
+        && str_contains($bosWorkspaceSource, 'src="./f_info.php"')
+        && str_contains(
+            $bosWorkspaceSource,
+            'data-estab-mobile-menu-return'
+        )
+        && str_contains(
+            $bosWorkspaceSource,
+            "event.data === 'estab:show-content'"
+        )
+        && str_contains(
+            $bosWorkspaceSource,
+            'event.source === sidebar.contentWindow'
+        )
+        && str_contains(
+            $bosWorkspaceSource,
+            'data-estab-bos-responsive-style'
+        )
+        && str_contains(
+            $bosWorkspaceSource,
+            "body.classList.add('estab-bos-embedded-content')"
+        )
+        && !str_contains(strtolower($bosWorkspaceSource), '<frameset'),
+    'BOS workspace is not the responsive two-frame application workspace'
+);
+$assert(
+    is_string($bosNavigationSource)
+        && str_contains($bosNavigationSource, 'estab_session_ui_current_markup')
+        && str_contains($bosNavigationSource, 'data-estab-bos-sidebar')
+        && str_contains(
+            $bosNavigationSource,
+            'data-estab-bos-document-navigation'
+        )
+        && str_contains($bosNavigationSource, 'target="mainframe"')
+        && str_contains(
+            $bosNavigationSource,
+            'data-estab-bos-document-link'
+        )
+        && str_contains(
+            $bosNavigationSource,
+            "window.parent.postMessage("
+        )
+        && str_contains(
+            $bosNavigationSource,
+            "'estab:show-content'"
+        )
+        && !str_contains($bosNavigationSource, '<details')
+        && !str_contains($bosNavigationSource, '<summary')
+        && !str_contains($bosNavigationSource, '<table')
+        && !str_contains($bosNavigationSource, 'style='),
+    'BOS sidebar is not an always-visible shared navigation and document menu'
+);
+foreach ([
+    'Buchstabier.html',
+    'Kartendatum.html',
+    'IuK-InfoPack.html',
+    'Orgas.html',
+    'FF-Rufnamenschema.html',
+    'DRK%20Rufnamenschema.html',
+    'THWFuRNR.html',
+] as $bosDocument) {
+    $assert(
+        str_contains((string) $bosNavigationSource, $bosDocument),
+        'BOS sidebar lost its historical document link: ' . $bosDocument
+    );
+}
+$assert(
+    is_string($bosWelcomeSource)
+        && str_contains($bosWelcomeSource, 'data-estab-bos-welcome')
+        && str_contains($bosWelcomeSource, '../estab-ui.css')
+        && is_string($bosStylesheetSource)
+        && str_contains(
+            $bosStylesheetSource,
+            '.estab-bos-document-navigation'
+        )
+        && str_contains(
+            $bosStylesheetSource,
+            '.estab-bos-embedded-content'
+        )
+        && str_contains(
+            $bosStylesheetSource,
+            '.estab-bos-welcome'
+        ),
+    'BOS welcome and responsive content styles are incomplete'
 );
 $toolsSource = file_get_contents($root . '/4fach/tools.php');
 $assert(

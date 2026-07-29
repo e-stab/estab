@@ -39,6 +39,16 @@ Repository-Freigabevariablen, eine ausdrückliche Bestätigung, einen bestehende
 gleichnamigen Git-Tag und das Environment `container-publish`. Dieses
 Environment muss vor Aktivierung einen Required Reviewer besitzen.
 
+Der Workflow veröffentlicht zunächst nur laufbezogene Candidate-Tags. Die
+exakten Multi-Arch-Digests werden anschließend nativ auf `amd64` und `arm64`
+ausgeführt und geprüft; erst danach dürfen dieselben Digests ohne Rebuild die
+Finaltags erhalten. Für Installationen gilt ausschließlich ein sichtbares
+GitHub-Release mit beiden prüfsummengebundenen Paketdateien als freigegeben.
+Candidate-Tags, ein verstecktes Draft-Release oder nur ein einzelner Finaltag
+sind ausdrücklich kein installierbarer Stand. Die kontrollierte Behandlung
+solcher Zwischenstände beschreibt das
+[Registry-Runbook](../deploy/registry/README.md#unvollständigen-publish-lauf-behandeln).
+
 ## Erstinstallation
 
 ### 1. Konfiguration und Secrets anlegen
@@ -73,15 +83,25 @@ Wichtige Werte in `.env`:
 | `ESTAB_ORGANISATION` | `Einsatzleitung` | angezeigte Dienststelle/Organisation |
 | `ESTAB_AUTHORITY_CODE` | `EL` | Hoheits-/Organisationskürzel |
 | `ESTAB_REVIEW_OUTGOING_MESSAGES` | `false` | `false`: nur Eingänge sichten; `true`: auch transportierte Ausgänge erst nach Si-Sichtung abschließen |
-| `ESTAB_ALLOW_SELF_REGISTRATION` | `true` | erlaubt neuen Funktionsbenutzern die erste Registrierung |
+| `ESTAB_ALLOW_SELF_REGISTRATION` | `false` | optionale öffentliche Kompatibilitätsregistrierung; reguläre Konten werden administrativ angelegt |
 | `ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF` | `false` | erlaubt ausdrücklich benötigten direkten Legacy-Clients tokenlose Anmeldung; nicht für Browserbetrieb aktivieren |
-| `ESTAB_TRUST_PROXY_HEADERS` | `false` | wertet validierte `X-Forwarded-*`-Ketten aus |
+| `ESTAB_TRUST_PROXY_HEADERS` | `false` | erlaubt dem zusätzlich freigegebenen direkten Proxy validierte `X-Forwarded-*`-Ketten |
+| `ESTAB_TRUSTED_PROXIES` | leer | verpflichtende, kommaseparierte IP-/CIDR-Allowlist, sobald Proxy-Header aktiviert werden |
 | `ESTAB_UPLOAD_MAX_BYTES` | `5242880` | anwendungsseitige maximale Uploadgröße |
+| `ESTAB_PDF_ATTACHMENT_MAX_BYTES` | `52428800` | maximale Gesamtsumme eingebetteter Originalanhänge je PDF-Einsatzdossier; `0` deaktiviert Einbettungen |
 | `TZ` | `Europe/Berlin` | Zeitzone von Anwendung und Datenbank |
 
 Die effektive Uploadgrenze ist der kleinste Wert aus
 `ESTAB_UPLOAD_MAX_BYTES`, PHPs `upload_max_filesize` von 20 MiB und
 `post_max_size` von 24 MiB.
+
+Der App-Entrypoint validiert vor dem Apache-Start DB-Name und -Port,
+Uploadgrenzen, URL/Basispfad, alle booleschen Schalter sowie die
+Proxy-Allowlist. Ports außerhalb `1` bis `65535`, Uploadgrenzen außerhalb
+`1` Byte bis 50 MiB, PDF-Anhangsgrenzen außerhalb `0` bis 100 MiB und
+syntaktisch ungültige Werte beenden den Container mit einem klaren
+Konfigurationsfehler. `/health.php` und der administrative Systemstatus
+verwenden dieselbe Prüfung.
 
 Die Datenbank-Initialisierung wertet Datenbankname, Benutzer und
 Datenbank-Secrets nur aus, wenn `/var/lib/mysql` leer ist. Nach dem ersten
@@ -133,6 +153,15 @@ Tabelle automatisch fortgesetzt. Eine fremde gleichnamige Tabelle oder
 abweichende Inhalte bleiben unverändert gesperrt und müssen anhand von Backup,
 Tabellenkommentar und Migrationsledger geprüft werden.
 
+Migration 50 verlangt vor ihrer ersten Einsatz-Tabelle alle zehn
+einsatzrelevanten operativen Basistabellen. Fehlt in einem erkannten
+Legacy-Schema beispielsweise ETB, TTB oder Protokoll, bricht sie mit
+`Incident migration blocked: required operational table is missing` ab und
+legt weder Einsatz-Tabellen noch einen erfolgreichen Ledgerdatensatz an. Ein
+solcher beschädigter Bestand wird nicht durch leere Ersatztabellen
+umgedeutet; er muss aus einem geprüften Backup beziehungsweise gegen die
+historische Schemaquelle vollständig rekonstruiert werden.
+
 Der App-Service hängt mit `service_completed_successfully` von diesem Lauf ab.
 Bei SQL-Fehler, doppeltem Anhangnamen, geänderter Prüfsumme oder fehlgeschlagener
 Schema-Verifikation bleibt die Anwendung aus. Erst danach legt der
@@ -153,11 +182,28 @@ ihn anschließend wieder her.
 podman compose run --rm migrate
 ```
 
-Ein bereits aktueller Bestand meldet alle drei Migrationen als vorhanden und
+Ein bereits aktueller Bestand meldet alle fünf Migrationen als vorhanden und
 führt trotzdem den vollständigen Read-only-Schematest aus. Die Ausgabe muss
 `Post-migration schema verification passed` und anschließend
 `All schema migrations are applied` enthalten. Erst danach sollte der Stack
 fachlich freigegeben werden.
+
+### 5. Ersten Einsatz aktivieren
+
+Eine Neuinstallation startet absichtlich ohne aktiven Einsatz. Anmeldung,
+Lesen und Administration funktionieren, operative Formulare bleiben jedoch
+gesperrt und zeigen den roten Hinweis „Kein Einsatz aktiv“. Vor der ersten
+Nachricht, dem ersten Anhang oder einem ETB-/TTB-Eintrag:
+
+1. `/4fadm/admin.php` mit dem separaten Basic-Auth-Zugang öffnen,
+2. **Einsätze** wählen,
+3. Kennung, Name und Beginn anlegen und „direkt aktivieren“ wählen,
+4. in der globalen Statusleiste auf allen Modulen Kennung und Name prüfen.
+
+Ein Einsatzwechsel gilt systemweit für alle angemeldeten Browser. Er darf nur
+koordiniert erfolgen, wenn keine ungespeicherten Fachvorgänge offen sind.
+Historische Daten bleiben ihrem vorherigen Einsatz zugeordnet und werden
+nicht in den neuen Statusraum umgehängt.
 
 ## Normaler Lebenszyklus
 
@@ -212,20 +258,46 @@ Die Anwendung hat zwei getrennte Anmeldebereiche:
    Klartextkennwort wird beim ersten erfolgreichen Login transparent ersetzt.
 2. `/4fadm` verwendet den in `.env` konfigurierten Admin-Benutzer und das
    separate Admin-Secret als HTTP Basic Auth. Der im historischen Pfad
-   verbliebene Grafikreset `/4fach/resetpic.php` liegt hinter demselben Schutz.
+   verbliebene Vordruckreset `/4fach/resetpic.php` liegt hinter demselben Schutz.
 
-Die Selbstregistrierung ist aus Kompatibilitätsgründen standardmäßig aktiv.
+Unter `/4fadm/users.php` legt dieser technische Administrator die
+eStab-Funktionskonten mit Name, eindeutigem Kürzel, Startkennwort und fester
+Funktion an. Die Rolle wird aus der aktiven Empfängermatrix abgeleitet und ist
+nicht frei wählbar. Eine administrative Neuzuweisung ersetzt die bisherige
+Funktion und beendet eine aktive Fachsitzung. „Konto sperren“ beendet ebenfalls
+eine aktive Fachsitzung und verhindert neue Anmeldungen; „Konto entsperren“
+erzeugt keine Sitzung. Ein Kennwortreset verlangt das neue Kennwort zweimal,
+lässt eine bestehende Sperre unverändert und widerruft jede alte Sitzung. Der
+Klartext wird weder angezeigt noch protokolliert. Der technische
+Basic-Auth-Zugang selbst wird
+weiterhin ausschließlich über `ESTAB_ADMIN_USER` und die
+`admin_password.txt`-Secret-Datei geändert. Details und Auditvertrag stehen in
+[Benutzerverwaltung](BENUTZERVERWALTUNG.md).
+
+Unter `/4fadm/incident_export.php` kann derselbe Administrator einen aktiven
+oder historischen Einsatz als PDF-Dossier ausgeben. ETB, TTB,
+Nachrichtenvordrucke und Originalanhänge sind einzeln wählbar; Anhänge
+erfordern die Nachrichten. Die Gesamtsumme eingebetteter Originaldateien
+begrenzt `ESTAB_PDF_ATTACHMENT_MAX_BYTES`. `0` deaktiviert nicht den
+PDF-Export, sondern nur das Einbetten von Originaldateien; ein Dossier mit
+gewählten Anhängen bricht dann sichtbar ab, statt Dateien auszulassen.
+
+Die Selbstregistrierung ist standardmäßig deaktiviert. Neue Konten legt die
+zuständige Stelle unter Administration → Benutzerverwaltung an.
 „Mit bestehendem Konto anmelden“ erzeugt auch bei einem unbekannten Kürzel
 niemals einen neuen Datensatz. „Neues Konto anlegen“ verlangt das Kennwort
-zweimal und weist bereits vergebene Kürzel ab. Name, eindeutiges Kürzel mit
+zweimal und weist bereits vergebene Kürzel ab, erscheint aber nur nach der
+bewussten Kompatibilitätsfreigabe
+`ESTAB_ALLOW_SELF_REGISTRATION=true`. Name, eindeutiges Kürzel mit
 höchstens sechs Buchstaben, Ziffern oder `_` sowie die organisatorisch
 zugeteilte Funktion sind Pflichtangaben; die Rolle ist nicht frei wählbar.
 Die öffentliche Kontenliste übernimmt bei Auswahl nur Name, Kürzel und
 Funktion, niemals das Kennwort.
-Ein bereits aktives Konto kann nicht durch eine abweichende Funktionsauswahl
-die Rolle wechseln. Für einen vorgesehenen Funktionswechsel muss das Konto
-zuerst ordnungsgemäß abgemeldet und anschließend mit der neuen zugeteilten
-Funktion angemeldet werden.
+Ein Konto kann unabhängig von seinem Onlinezustand nicht durch eine
+abweichende Funktionsauswahl die Rolle wechseln. Einen vorgesehenen
+Funktionswechsel führt der technische Administrator in der
+Benutzerverwaltung aus; dadurch endet eine vorhandene Sitzung und die nächste
+Anmeldung muss die neue Funktion verwenden.
 
 Die gemeinsame Navigation führt in derselben Reihenfolge durch Übersicht,
 Nachrichtenvordruck, Meldungsübersicht, Vordrucke, Einsatztagebuch,
@@ -234,18 +306,30 @@ hervorgehoben; alle internen Ziele ersetzen die aktuelle Ansicht und erzeugen
 keine zusätzlichen Tabs. Der Nachrichtenvordruck verwendet genau zwei moderne
 `iframe`-Elemente: die vollhohe linke `vorgaben`-Sidebar und den rechten
 `mainframe`. In der Sidebar folgen auf die Statuskarte die Sitzungsidentität
-mit Logout, alle dauerhaft sichtbaren Bereichslinks und die zur angemeldeten
-Rolle passenden Textbuttons für Fachaktionen. Die frühere aufklappbare Auswahl
+mit Logout, die zur angemeldeten Rolle passenden Textbuttons für Fachaktionen
+und danach alle dauerhaft sichtbaren Bereichslinks. Die frühere aufklappbare Auswahl
 „Bereich wechseln“ und ihre kleine eigene Scrollfläche entfallen. Bei geringer
 Höhe scrollt ausschließlich das gesamte Sidebar-Dokument, sodass Status,
 Navigation und Aktionen in einer durchgehenden Reihenfolge erreichbar bleiben.
-Der BOS-Bereich verwendet unabhängig davon weiterhin seinen kompakten
-Disclosure-Modus im eigenen Navigationsframe. Bis einschließlich 672
+Der BOS-Bereich verwendet dieselbe sichtbare Navigationslogik in einem
+responsiven Zwei-Spalten-Arbeitsbereich; es gibt dort ebenfalls kein
+aufklappbares Kleinmenü mit eigener Scrollfläche. Bis einschließlich 672
 CSS-Pixel Breite werden Sidebar und Fachinhalt als zwei jeweils viewporthohe
 Zeilen angeordnet. Das Ausführen einer rollenabhängigen Fachaktion wechselt
 automatisch zur Inhaltszeile und setzt den Tastaturfokus auf den Inhaltsframe.
 Der dort sichtbare, mindestens 44 Pixel große Button „Menü“ führt samt Fokus
 zurück zur Sidebar.
+
+Eigenständige Fach- und Administrationsseiten verwenden dasselbe
+Werkzeuggestell mit Seitenkopf, Status-/Hinweisflächen, beschrifteten
+Formularfeldern, responsiven Tabellen und eindeutiger Rücknavigation. Das gilt
+unter anderem für Meldungsübersicht, Nachweisung, ETB, TTB,
+Kategorienverwaltung, Empfängermatrix, Exporte und Systemstatus. Breite
+historische Fachformulare liegen in einem sichtbar begrenzten, horizontal
+scrollbaren Inhaltsbereich; das Gesamtdokument bleibt auf schmalen Geräten
+innerhalb des Viewports. Direkt nicht benötigte Altgeneratoren wie
+`4fbak/backup.php` und die Web-Installer sind keine Benutzeroberflächen und
+werden durch die Webserver-Regeln mit HTTP 403 abgewiesen.
 
 Vor der Anmeldung zeigt die Leiste „Nicht angemeldet“ und den Anmeldebutton.
 Geschützte Bereiche und Karten bleiben zur Orientierung sichtbar, tragen die
@@ -348,10 +432,11 @@ erkannte Cross-Site-Browserrequests gesperrt, ist aber schwächer als der
 normale Tokenfluss und darf nur in einem kontrollierten Netz sowie für die
 Dauer der Migration solcher Clients aktiviert werden.
 
-Wo Benutzer vorab kontrolliert eingerichtet werden können, sollte anschließend
-`ESTAB_ALLOW_SELF_REGISTRATION=false` gesetzt und der App-Container neu
-erzeugt werden. Ein versehentliches Abschalten vor Anlage des ersten
-Funktionsbenutzers verhindert dessen Registrierung.
+`ESTAB_ALLOW_SELF_REGISTRATION=false` ist der sichere Auslieferungsstandard.
+Soll die historische öffentliche Kontoanlage ausnahmsweise vorübergehend
+verwendet werden, muss sie ausdrücklich mit `true` aktiviert und nach der
+kontrollierten Anlage wieder deaktiviert werden. Die Benutzerverwaltung bleibt
+von dieser Option unabhängig erreichbar.
 
 Das Admin-Kennwort kann ohne Datenbankänderung rotiert werden:
 
@@ -361,7 +446,7 @@ Das Admin-Kennwort kann ohne Datenbankänderung rotiert werden:
 3. `podman compose up -d --force-recreate app` ausführen,
 4. den alten und den neuen Zugang über TLS prüfen.
 
-### Empfängermatrix, Zählerreparatur und Grafikreset
+### Empfängermatrix, Zählerreparatur und PDF-Vordruckreset
 
 Die drei aktiven Maßnahmen sind über die Administrationsübersicht erreichbar
 und schreiben nur nach POST plus Session-CSRF:
@@ -376,20 +461,29 @@ und schreiben nur nach POST plus Session-CSRF:
   beide Aktionen verlangen deshalb einen nativen Bestätigungsdialog. Im
   read-only Image wird keine PHP-Konfigurationsdatei geschrieben. Rotkopie
   und Autosichtung sind nur auf einer auswählbaren `Stab`-/`FB`-Funktion
-  zulässig. Bereits bestehende Benutzerkonten und laufende Sitzungen werden
-  bewusst nicht automatisch umbenannt oder einer anderen Funktion zugeteilt.
-  Nach dem Speichern müssen abgemeldete Neuanmeldung, Sichtung, Rotkopie und
-  Autosichtung mit den betroffenen Funktionen fachlich geprüft werden.
-- **Nachrichtenzähler:** Ausschließlich nach dokumentiertem Systemausfall die
+  zulässig. Das Speichern gleicht bestehende Konten atomar mit der neuen
+  Richtlinie ab: Rollenänderungen werden serverseitig übernommen und
+  betroffene Sitzungen beendet. Für entfernte Funktionen bleiben Funktion und
+  letzte Rolle als „Zuordnung nicht mehr gültig“ erhalten; das Konto wird
+  abgemeldet und muss in der Benutzerverwaltung einer gültigen Funktion
+  zugewiesen werden. Es findet keine automatische Ersatzzuordnung und keine
+  Umbenennung oder Löschung dynamischer Legacy-Tabellen statt. Login,
+  Kontoanlage, Neuzuweisung und Matrixspeichern teilen dafür einen globalen
+  Lock; ein Konflikt antwortet mit HTTP 409. Nach dem Speichern müssen
+  Neuanmeldung, Sichtung, Rotkopie und Autosichtung mit den betroffenen
+  Funktionen fachlich geprüft werden.
+- **Nachrichtenzähler:** Ausschließlich nach dokumentiertem Systemausfall und
+  mit dem betroffenen Einsatz als aktivem Einsatz die
   letzte tatsächlich auf Papier verwendete Nummer eintragen. Der Zielwert muss
   strikt größer als der angezeigte Höchstwert sein. Gemeinsame und getrennte
   Nachweisung werden getrennt behandelt; ein Absenken oder Teilupdate ist
   ausgeschlossen. Die Maßnahme erzeugt Systemnachricht(en) und einen
-  `nv_protokoll`-Eintrag.
-- **Grafikreset:** Die GET-Seite zeigt nur die Auswirkung. Erst die bestätigte
-  POST-Anforderung setzt `x04_druck` zurück. Danach erzeugt der historische
-  Abschlusslauf Nachrichtengrafiken/PDFs erneut; Fortschritt wird weiterhin
-  nicht separat angezeigt.
+  einsatzgebundenen `nv_protokoll`-Eintrag.
+- **PDF-Vordruckreset:** Die GET-Seite zeigt nur die Auswirkung für den
+  aktiven Einsatz. Erst die bestätigte POST-Anforderung setzt dessen
+  `x04_druck` zurück; historische Einsätze bleiben unverändert. Danach erzeugt
+  der Abschlusslauf die einsatzbezogen benannten PDF-Vordrucke erneut;
+  Fortschritt wird weiterhin nicht separat angezeigt.
 
 Jede Maßnahme schreibt einen Audit-Eintrag. Datenbank- oder
 Validierungsfehler dürfen deshalb nicht durch wiederholtes Browser-Refresh
@@ -424,7 +518,13 @@ ESTAB_HTTP_BIND=127.0.0.1
 ESTAB_PUBLIC_URL=https://estab.example.org/
 ESTAB_BASE_PATH=
 ESTAB_TRUST_PROXY_HEADERS=true
+ESTAB_TRUSTED_PROXIES=192.0.2.10/32
 ```
+
+`192.0.2.10/32` ist hier nur eine Dokumentationsadresse und muss durch die
+tatsächliche direkte Peer-Adresse des Reverse Proxys aus Sicht des
+App-Containers ersetzt werden. Bei einem stabilen Container-Bridge-Netz kann
+statt einer Einzeladresse dessen enges CIDR verwendet werden.
 
 Minimales Nginx-Prinzip:
 
@@ -433,7 +533,7 @@ location / {
     proxy_pass http://127.0.0.1:8080;
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-For $remote_addr;
 }
 ```
 
@@ -454,12 +554,22 @@ Container direkt unter `/var/www/html` liegt. Die Variable ist nur für ein
 bewusst angepasstes Image gedacht, das Code und Daten tatsächlich in einem
 Unterverzeichnis des Document Roots installiert.
 
-`ESTAB_TRUST_PROXY_HEADERS=true` ist nur sicher, wenn der App-Port
-ausschließlich vom kontrollierten Proxy erreichbar ist. Die Anwendung
-akzeptiert dann eine vollständig syntaktisch gültige
-`X-Forwarded-For`-Kette und verwendet deren erste Adresse für Auditzwecke;
-eine eigene Proxy-Allowlist führt sie nicht. `X-Forwarded-Proto: https`
-aktiviert außerdem das `Secure`-Attribut des Session-Cookies.
+`ESTAB_TRUST_PROXY_HEADERS=true` ohne nichtleere
+`ESTAB_TRUSTED_PROXIES`-Allowlist ist ein fail-closed Konfigurationsfehler.
+Akzeptiert werden ausschließlich IP-Literale und präzise IPv4-/IPv6-CIDRs;
+Hostnamen, ungültige Präfixe, leere Listenelemente sowie `0.0.0.0/0` und
+`::/0` sind verboten. Nur wenn `REMOTE_ADDR` zu einer Regel passt, wertet die
+Anwendung die vollständig syntaktisch gültige `X-Forwarded-For`-Kette aus und
+verwendet deren erste Adresse für Auditzwecke. Für alle anderen direkten Peers
+werden Forwarded-Header ignoriert. `X-Forwarded-Proto: https` aktiviert nur
+innerhalb derselben Vertrauensgrenze das `Secure`-Attribut des
+Session-Cookies.
+
+Der Proxy muss eingehende Forwarded-Header überschreiben, wie im Beispiel mit
+`$remote_addr`, und darf sie nicht ungeprüft um vom Client gelieferte Werte
+ergänzen. Die Allowlist ist Defense-in-Depth; der App-Port bleibt zusätzlich
+per Bind-Adresse und Firewall ausschließlich für den kontrollierten Proxy
+erreichbar.
 
 ## Speicher und Kapazität
 

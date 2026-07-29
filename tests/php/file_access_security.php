@@ -109,6 +109,39 @@ $linkCreated = @symlink($outsideRoot . '/secret.pdf', $allowedRoot . '/escape.pd
 try {
     $resolved = estab_file_resolve($allowedRoot, 'vordruck', 'estab 1 A.pdf');
     $assert($resolved === realpath($allowedRoot . '/estab 1 A.pdf'), 'allowed file resolved incorrectly');
+    $opened = estab_file_open($allowedRoot, 'vordruck', 'estab 1 A.pdf');
+    $assert(
+        is_resource($opened) && stream_get_contents($opened) === '%PDF-test',
+        'safe file opener changed the authorized bytes'
+    );
+    fclose($opened);
+
+    $opened = estab_file_open($allowedRoot, 'vordruck', 'estab 1 A.pdf');
+    fseek($opened, 2);
+    $position = ftell($opened);
+    $mime = estab_file_stream_content_type($opened);
+    $assert(
+        $mime === 'application/pdf' && ftell($opened) === $position,
+        'stream MIME detection changed the authorized handle position'
+    );
+    fclose($opened);
+
+    $opened = estab_file_open($allowedRoot, 'vordruck', 'estab 1 A.pdf');
+    rename(
+        $allowedRoot . '/estab 1 A.pdf',
+        $allowedRoot . '/estab original A.pdf'
+    );
+    file_put_contents($allowedRoot . '/estab 1 A.pdf', '%PDF-replacement');
+    $assert(
+        stream_get_contents($opened) === '%PDF-test',
+        'opened handle followed a later pathname replacement'
+    );
+    fclose($opened);
+    unlink($allowedRoot . '/estab 1 A.pdf');
+    rename(
+        $allowedRoot . '/estab original A.pdf',
+        $allowedRoot . '/estab 1 A.pdf'
+    );
     $assertRejected(
         static fn () => estab_file_resolve($allowedRoot, 'vordruck', '../outside/secret.pdf'),
         'path traversal escaped the storage root'
@@ -160,15 +193,24 @@ foreach ([$download, $preview, $forms] as $endpoint) {
     );
 }
 $assert(
-    str_contains($download, 'estab_file_resolve')
+    str_contains($download, 'estab_file_open')
+        && str_contains($download, 'begin_transaction()')
+        && str_contains($download, 'estab_file_stream_content_type($stream)')
+        && strpos($download, 'estab_file_open(') < strpos($download, '$connection->commit()')
         && str_contains($download, 'X-Content-Type-Options: nosniff')
         && str_contains($download, 'Content-Disposition: '),
-    'download endpoint lacks safe resolver or response headers'
+    'download endpoint lacks atomic authorization/open or safe response headers'
 );
 $assert(
-    str_contains($preview, 'estab_file_resolve')
+    str_contains($preview, 'estab_file_open')
+        && str_contains($preview, 'begin_transaction ()')
+        && str_contains($preview, 'estab_attachment_find (')
+        && str_contains($preview, '$storedName,')
+        && str_contains($preview, 'true')
+        && strpos($preview, 'estab_file_open (') < strpos($preview, '$connection->commit ()')
+        && str_contains($preview, 'getimagesizefromstring ($imageBytes)')
         && !str_contains($preview, 'realpath ($requested)'),
-    'preview endpoint still accepts an arbitrary server path'
+    'preview endpoint lacks atomic authorization/open or safe in-memory decoding'
 );
 $assert(
     str_contains($attachmentController, 'estab_file_download_url')

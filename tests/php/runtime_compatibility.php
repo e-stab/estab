@@ -93,6 +93,192 @@ $assert(
     'invalid forwarded protocol chain rejected'
 );
 
+$proxyNetworks = estab_parse_trusted_proxy_networks(
+    '127.0.0.1, 10.20.0.0/16, 2001:db8::/32,127.0.0.1/32'
+);
+$assert(
+    $proxyNetworks === [
+        '127.0.0.1/32',
+        '10.20.0.0/16',
+        '2001:db8::/32',
+    ],
+    'trusted proxy networks were not validated and normalised'
+);
+$assert(
+    estab_ip_matches_proxy_network('10.20.44.9', '10.20.0.0/16')
+        && !estab_ip_matches_proxy_network('10.21.44.9', '10.20.0.0/16')
+        && estab_ip_matches_proxy_network('2001:db8:1::5', '2001:db8::/32')
+        && !estab_ip_matches_proxy_network('2001:db9::5', '2001:db8::/32')
+        && !estab_ip_matches_proxy_network('127.0.0.1', '2001:db8::/32'),
+    'IPv4 or IPv6 proxy CIDR matching is incorrect'
+);
+$assert(
+    estab_proxy_peer_is_trusted(
+        ['REMOTE_ADDR' => '10.20.5.7'],
+        $proxyNetworks
+    )
+        && !estab_proxy_peer_is_trusted(
+            ['REMOTE_ADDR' => '198.51.100.8'],
+            $proxyNetworks
+        ),
+    'direct proxy peer was not checked against the allowlist'
+);
+foreach ([
+    'proxy.example.test',
+    '127.0.0.1,',
+    '127.0.0.1/33',
+    '2001:db8::/129',
+    '0.0.0.0/0',
+    '::/0',
+] as $invalidProxyNetwork) {
+    $invalidProxyRejected = false;
+    try {
+        estab_parse_trusted_proxy_networks($invalidProxyNetwork);
+    } catch (InvalidArgumentException) {
+        $invalidProxyRejected = true;
+    }
+    $assert(
+        $invalidProxyRejected,
+        'unsafe trusted proxy rule accepted: ' . $invalidProxyNetwork
+    );
+}
+
+$originalProxyTrust = getenv('ESTAB_TRUST_PROXY_HEADERS');
+$originalTrustedProxies = getenv('ESTAB_TRUSTED_PROXIES');
+try {
+    putenv('ESTAB_TRUST_PROXY_HEADERS=false');
+    putenv('ESTAB_TRUSTED_PROXIES=10.20.0.0/16');
+    $assert(
+        !estab_request_trusts_proxy_headers([
+            'REMOTE_ADDR' => '10.20.5.7',
+        ]),
+        'proxy allowlist enabled forwarded headers without the explicit switch'
+    );
+
+    putenv('ESTAB_TRUST_PROXY_HEADERS=true');
+    $assert(
+        estab_request_trusts_proxy_headers([
+            'REMOTE_ADDR' => '10.20.5.7',
+        ])
+            && !estab_request_trusts_proxy_headers([
+                'REMOTE_ADDR' => '198.51.100.8',
+            ]),
+        'request-scoped proxy trust did not bind the switch to the direct peer'
+    );
+
+    putenv('ESTAB_TRUSTED_PROXIES');
+    $missingProxyAllowlistRejected = false;
+    try {
+        estab_request_trusts_proxy_headers([
+            'REMOTE_ADDR' => '10.20.5.7',
+        ]);
+    } catch (RuntimeException) {
+        $missingProxyAllowlistRejected = true;
+    }
+    $assert(
+        $missingProxyAllowlistRejected,
+        'enabled proxy trust silently accepted a missing peer allowlist'
+    );
+} finally {
+    if ($originalProxyTrust === false) {
+        putenv('ESTAB_TRUST_PROXY_HEADERS');
+    } else {
+        putenv('ESTAB_TRUST_PROXY_HEADERS=' . $originalProxyTrust);
+    }
+    if ($originalTrustedProxies === false) {
+        putenv('ESTAB_TRUSTED_PROXIES');
+    } else {
+        putenv('ESTAB_TRUSTED_PROXIES=' . $originalTrustedProxies);
+    }
+}
+
+$runtimeConfigurationNames = [
+    'ESTAB_DB_NAME',
+    'ESTAB_DB_PORT',
+    'ESTAB_UPLOAD_MAX_BYTES',
+    'ESTAB_PDF_ATTACHMENT_MAX_BYTES',
+    'ESTAB_PUBLIC_URL',
+    'ESTAB_BASE_PATH',
+    'ESTAB_REVIEW_OUTGOING_MESSAGES',
+    'ESTAB_ALLOW_SELF_REGISTRATION',
+    'ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF',
+    'ESTAB_TRUST_PROXY_HEADERS',
+    'ESTAB_TRUSTED_PROXIES',
+];
+$runtimeConfigurationBefore = [];
+foreach ($runtimeConfigurationNames as $name) {
+    $runtimeConfigurationBefore[$name] = getenv($name);
+}
+$validRuntimeConfiguration = [
+    'ESTAB_DB_NAME' => 'estab_test',
+    'ESTAB_DB_PORT' => '3306',
+    'ESTAB_UPLOAD_MAX_BYTES' => '5242880',
+    'ESTAB_PDF_ATTACHMENT_MAX_BYTES' => '52428800',
+    'ESTAB_PUBLIC_URL' => '/',
+    'ESTAB_BASE_PATH' => '',
+    'ESTAB_REVIEW_OUTGOING_MESSAGES' => 'false',
+    'ESTAB_ALLOW_SELF_REGISTRATION' => 'true',
+    'ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF' => 'false',
+    'ESTAB_TRUST_PROXY_HEADERS' => 'false',
+    'ESTAB_TRUSTED_PROXIES' => '',
+];
+try {
+    foreach ($validRuntimeConfiguration as $name => $value) {
+        putenv($name . '=' . $value);
+    }
+    estab_validate_runtime_configuration();
+    $assert(true, 'valid runtime configuration accepted');
+
+    foreach ([
+        ['ESTAB_DB_NAME', 'estab-test'],
+        ['ESTAB_DB_PORT', '0'],
+        ['ESTAB_DB_PORT', '65536'],
+        ['ESTAB_DB_PORT', '3306x'],
+        ['ESTAB_UPLOAD_MAX_BYTES', '0'],
+        ['ESTAB_UPLOAD_MAX_BYTES', '52428801'],
+        ['ESTAB_PDF_ATTACHMENT_MAX_BYTES', '-1'],
+        ['ESTAB_PDF_ATTACHMENT_MAX_BYTES', '104857601'],
+        ['ESTAB_ALLOW_SELF_REGISTRATION', 'sometimes'],
+        ['ESTAB_TRUSTED_PROXIES', '0.0.0.0/0'],
+    ] as [$name, $value]) {
+        foreach ($validRuntimeConfiguration as $validName => $validValue) {
+            putenv($validName . '=' . $validValue);
+        }
+        putenv($name . '=' . $value);
+        $rejected = false;
+        try {
+            estab_validate_runtime_configuration();
+        } catch (Throwable) {
+            $rejected = true;
+        }
+        $assert($rejected, "invalid runtime configuration accepted: {$name}");
+    }
+
+    foreach ($validRuntimeConfiguration as $name => $value) {
+        putenv($name . '=' . $value);
+    }
+    putenv('ESTAB_TRUST_PROXY_HEADERS=true');
+    putenv('ESTAB_TRUSTED_PROXIES=');
+    $incompleteProxyConfigurationRejected = false;
+    try {
+        estab_validate_runtime_configuration();
+    } catch (Throwable) {
+        $incompleteProxyConfigurationRejected = true;
+    }
+    $assert(
+        $incompleteProxyConfigurationRejected,
+        'proxy trust without an allowlist passed startup validation'
+    );
+} finally {
+    foreach ($runtimeConfigurationBefore as $name => $value) {
+        if ($value === false) {
+            putenv($name);
+        } else {
+            putenv($name . '=' . $value);
+        }
+    }
+}
+
 $legacyMysqlSource = file_get_contents(__DIR__ . '/../../app/legacy_mysql.php');
 $assert(is_string($legacyMysqlSource), 'legacy MySQL compatibility source is readable');
 $assert(
@@ -128,6 +314,16 @@ $assert(
             '$empf_text  = $this->formdata ["16_empf"]'
         ),
     'empty recipient data is not normalised before explode()'
+);
+
+$legacyTools = file_get_contents(__DIR__ . '/../../4fach/tools.php');
+$pdfReset = file_get_contents(__DIR__ . '/../../4fbak/backup.php');
+$assert(
+    is_string($legacyTools)
+        && is_string($pdfReset)
+        && !preg_match('/charset\\s*=\\s*(?:iso|latin)/i', $legacyTools)
+        && !preg_match('/charset\\s*=\\s*(?:iso|latin)/i', $pdfReset),
+    'active legacy HTML generators still contradict the UTF-8 response charset'
 );
 
 echo "runtime compatibility: OK ({$assertions} assertions)\n";

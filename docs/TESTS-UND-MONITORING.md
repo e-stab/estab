@@ -8,9 +8,9 @@ steht in der [Funktionsmatrix](FUNKTIONSNACHWEIS.md).
 
 | Ebene | Nachweis |
 | --- | --- |
-| Quellprüfung | PHP-8.5-Lint, Kompatibilitäts-, Sicherheits-, Upload-, Export- und PDF-Regressionen |
+| Quellprüfung | PHP-8.5-Lint, Kompatibilitäts-, Sicherheits-, Einsatz-, Benutzerverwaltungs-, Upload-, Export- und PDF-Regressionen |
 | Image-Build | benötigte PHP-Erweiterungen und Apache-Konfiguration |
-| Datenbank | echtes MariaDB-Schema, Indizes, aktive und persistente Standardmatrix, Engines, Collations und Zero-Date-Freiheit |
+| Datenbank | echtes MariaDB-Schema, Einsatz-Singleton/Trigger, Kontosperre, Indizes, aktive und persistente Standardmatrix, Engines, Collations und Zero-Date-Freiheit |
 | HTTP | Header, direkte Endpunktfläche, 403-/400-/405-Grenzen, PNG-Antworten, Registrierung, sichtbare Sitzungsidentität, CSRF-Abmeldung, erneute Anmeldung, vollständige A/W-/Si-/S1-/S2-/S3-/POL-FB-Nachrichtenläufe in beiden Ausgangssichtungsmodi, Autosichtung, Zweitprüfung, Antworten/Weiterleiten, Kategorien- und ETB-/TBB-Rollengrenzen, reale Vordruckerzeugung/-auslieferung sowie optional Admin-Export |
 | Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, acht stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, Matrixstandard-Bestätigungen, BOS-Disclosure, Logout sowie öffentliche und authentifizierte mobile Bedienung bei exakt 390 × 844 CSS-Pixeln |
 | Fachabnahme | kompletter Nachrichten-, Anhang-, PDF-, ETB-/TBB- und Restore-Ablauf |
@@ -40,8 +40,10 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
 
 - PHP-8.5-Laufzeit- und Legacy-Konstruktor-Kompatibilität,
 - `NULL`-/Zero-Date-Behandlung,
-- Anmelde-, Konto-Flow-, aktive Funktionsbindungs-, Session-, Proxy- und
-  Passwortregeln,
+- Anmelde-, administrative Kontoanlage-, unveränderliche Funktionsbindungs-,
+  Session- und
+  Passwortregeln sowie die fail-closed Proxy-Peer-Vertrauensgrenze mit
+  IPv4-/IPv6-CIDR-Allowlist,
 - strikt boolescher Legacy-Fallback und Umgebungsoverride für die optionale
   Ausgangssichtung sowie fehlersicheres Verhalten bei ungültigen Werten,
 - kanonische Reihenfolge, sichere URL-Auflösung, aktive Route und ausschließlich
@@ -59,6 +61,11 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   Abmeldeformulare, POST-/CSRF-Vertrag, lokale Session-Zerstörung bei
   DB-Fehlern, unveränderte Nicht-HTML-Antworten sowie SID-gebundene
   Statusänderung,
+- gemeinsames responsives Werkzeuggestell für die erreichbaren
+  Administrations-, Kategorien-, ETB-/TTB-, Nachweis- und
+  Meldungsübersichtsseiten einschließlich beschrifteter Felder,
+  Tastaturfokus, responsiver Tabellenkarten und begrenzter Scrollflächen für
+  unvermeidbar breite historische Fachformulare,
 - rollenabhängige Zuordnung der drei Hinweistondateien, validierte
   gleich-originige WAV-URLs, die einmalige Initialisierung und Fortschreibung
   der `old_que_*`-Basiswerte, Auslösung ausschließlich bei einer späteren
@@ -75,12 +82,20 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
 - Empfängermatrix- und Standardmatrix-Validierung mit jeweils 20 eindeutigen
   Positionen, genau einer gültigen Rotkopie und nur gültigen
   Autosichtungszielen sowie getrennten Laden-/Speichern-Aktionen,
+  globalem Zuordnungslock, atomarer Matrix-/Kontenabstimmung,
+  Rollen-Synchronisierung, Sitzungswiderruf, reparierbarem Waisenstatus,
   Zwei-Tabellen-Transaktion, lokalem Bestätigungsvertrag und ohne generierte
-  PHP-Konfiguration; außerdem Nachrichtenzähler- und Grafikreset-Validierung
-  samt Prepared-Statement-, Transaktions-, Auth-/CSRF- und PRG-Vertrag,
+  PHP-Konfiguration; außerdem Nachrichtenzähler- und
+  PDF-Vordruckreset-Validierung samt Prepared-Statement-, Transaktions-,
+  Auth-/CSRF- und PRG-Vertrag,
 - Kategorien-Typen, positive IDs, sessionabgeleitete Tabellenräume,
   Master-Rechte, doppelte Auswahllisten, HTML-Ausgabe sowie den
   Prepared-Statement-, Transaktions-, Objektberechtigungs- und PRG-Vertrag,
+- globalen Einsatz-Singleton, revisionsgesicherte Aktivierung,
+  No-active-Eingabesperre, Einsatzzuordnung sämtlicher operativer Tabellen und
+  einheitliche Statusbanner,
+- Kontosperre und Kennwortreset mit gemeinsamem Login-Lock,
+  Sitzungswiderruf, auditgebundenem Rollback und ohne Klartextweitergabe,
 - Upload- und Anhangpfadvalidierung,
 - authentifizierte Dateiauslieferung samt Traversal-, Symlink- und
   Header-Injection-Schutz,
@@ -91,10 +106,12 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   persistente Storage-/Secret-Grenzen, guardierte echte Host-Bind-Mounts samt
   Backup-/Restore-Vertrag und vollständiger Cleanup-Postcondition, manuell
   durch Rechtefreigaben gesperrter GHCR-Workflow, native amd64-/arm64-Läufe,
-  inhaltlich gelesene SPDX-SBOM/Build-Provenance, separat verifizierte
-  GitHub-Attestation, fail-closed High-/Critical-CVE-Gate und
+  inhaltlich gelesene SPDX-SBOM/Build-Provenance, gegen Quellcommit und
+  Digest verifizierte OCI-Attestation aus GHCR, fail-closed
+  High-/Critical-CVE-Gate und
   prüfsummengebundenes Digest-Installationspaket,
-- Erzeugung eines lesbaren PDF-Dokuments.
+- Erzeugung lesbarer Nachrichtenvordrucke und eines durchsuchbaren
+  PDF-Einsatzdossiers mit sicher eingebetteten Originaldateien.
 
 Ein Prozess-Exitcode ungleich null sperrt die Freigabe.
 
@@ -120,10 +137,11 @@ sie auch nach einem Fehler. Docker verwendet standardmäßig `RUNNER_TEMP` oder
 `/tmp`. Ein anderer bereits vorhandener, schreibbarer Pfad kann für beide
 Engines explizit mit `ESTAB_CI_TEMP_PARENT` gesetzt werden.
 
-Der Lauf baut die festgelegten Images frisch und startet sie zusätzlich in
-einem zweiten, pull-only Registry-Compose-Projekt ohne Build oder
-Host-Schema-Mount. Dort müssen der selbsttragende Migrator mit Exitcode 0 und
-die App gesund enden. Derselbe Test startet danach ein weiteres Pull-only-
+Der normale lokale und Standard-CI-Lauf baut die festgelegten Images frisch
+und startet sie zusätzlich in einem zweiten, pull-only
+Registry-Compose-Projekt ohne Build oder Host-Schema-Mount. Dort müssen der
+selbsttragende Migrator mit Exitcode 0 und die App gesund enden. Derselbe Test
+startet danach ein weiteres Pull-only-
 Projekt mit drei echten temporären Host-Bind-Mounts für MariaDB, `4fdata` und
 Exporte. Container-Inspect bindet Typ, Quellpfad und Containerziel an den
 erwarteten Zufallspfad. Ein Datenbankmarker und zwei Dateimarker werden mit
@@ -150,21 +168,40 @@ einem prüfsummengebundenen Backup in neue Volumes wieder her. Ein exakt
 sechszeiliger Zustandsvertrag bindet dabei Nachricht, Anhang, generierten
 Vordruck samt SHA-256 sowie Kennung und SHA-256 des zuvor vollständig
 validierten Export-ZIP an den zweiten, ausschließlich prüfenden HTTP-Lauf.
-Dieser findet außerdem die vor dem Backup angelegten ETB-/TBB-Titel und
--Einträge nur lesend wieder. Am Ende werden nur die guardierten CI-Container,
+Dieser findet außerdem den globalen Einsatzkopf und die vor dem Backup
+angelegten ETB-/TBB-Einträge nur lesend wieder. Am Ende werden nur die
+guardierten CI-Container,
 CI-Volumes, temporären Bind-Mounts und Secrets entfernt. Mit
 Docker wird `ESTAB_CONTAINER_CLI=docker` gesetzt oder die Variable weggelassen.
+Vor den allgemeinen Schreibtests aktiviert die CI über die Domänen-API den
+fest benannten Einsatz `CI-INTEGRATION`. Danach belegt sie die
+Benutzerverwaltung gegen MariaDB und erzeugt einen separaten historischen
+PDF-Testeinsatz. Dessen ETB, TTB, Nachricht und Originalanhang müssen aus
+einem konsistenten Read-only-Snapshot exportiert werden, während gleichartige
+Daten des aktiven CI-Einsatzes ausgeschlossen bleiben. Der Test extrahiert
+den realen `/EmbeddedFile`-Stream und vergleicht Bytes und SHA-256 mit dem
+Original, bevor er Testdaten und aktiven Einsatz wiederherstellt.
 Der vollständige Nachrichtenrollenlauf arbeitet zunächst mit
 `ESTAB_REVIEW_OUTGOING_MESSAGES=false`, erstellt dann nur den App-Container
 mit `true` neu, prüft beide Statuspfade und stellt anschließend den
 Standardwert `false` wieder her.
-Die HTTP-Stufe beweist dabei den Übersichts-Anmeldebutton, die getrennten
-Bestandskonto-/Neukonto-Formulare, die sichtbare Kontenauswahl,
-Kennwortbestätigung, unveränderte Kontenzahlen und Passwort-Hashes bei
-Fehlversuchen, aktive Funktionsbindung, die sichere Wiederaufnahme eines zuvor
-gewählten geschützten Bereichs, die gemeinsame Sitzungsanzeige,
-CSRF-geschützte Abmeldung sowie deaktivierte Selbstregistrierung. Zusätzlich
-steuert der Browser-Akzeptanztest einen echten Chrome-/Chromium-Prozess.
+Die HTTP-Stufe beweist dabei den Übersichts-Anmeldebutton, den
+Bestandskonto-Flow, die sichtbare Kontenauswahl, die standardmäßig fehlende
+öffentliche Kontoanlage, unveränderte Kontenzahlen und Passwort-Hashes bei
+blockierten Neuanlageversuchen, unveränderliche Funktionsbindung auch nach
+Logout, die sichere Wiederaufnahme eines zuvor gewählten geschützten Bereichs,
+die gemeinsame Sitzungsanzeige und CSRF-geschützte Abmeldung. Die Fachtests
+provisionieren ihre Konten über dieselbe transaktionale
+Benutzerverwaltungs-API. Zusätzlich steuert der Browser-Akzeptanztest einen
+echten Chrome-/Chromium-Prozess.
+Der Hauptstack läuft dabei durchgehend mit
+`ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF=false` und weist auch für angeblich
+gleich-originige tokenlose Zugangsdaten HTTP 403 nach. Erst danach wird nur
+der App-Container kurz mit dem expliziten Wert `true` neu erstellt:
+`tests/integration/legacy_login_http.sh` belegt genau einen historischen
+Ein-Kennwort-Login, die weiterhin geschlossene Cross-Site-Grenze und den
+CSRF-geschützten Logout. Anschließend stellt die CI den sicheren Standard
+`false` wieder her, bevor Fachtests weiterlaufen.
 Das Gate verwendet standardmäßig die auch für Laptop, LAN und Reverse Proxy
 empfohlene root-relative Einstellung `ESTAB_PUBLIC_URL=/`; absolute
 Basis-URLs und zusätzliche Pfade bleiben durch parametrisierte HTTP- und
@@ -176,9 +213,85 @@ statische URL-Tests abgedeckt.
   Chrome/Chromium gefunden werden; andernfalls meldet der Lauf ausdrücklich
   `SKIP`.
 - `required` macht den Browser zum Freigabe-Gate und bricht bei fehlender
-  Laufzeit ab. GitHub Actions verwendet immer diesen Modus.
+  Laufzeit ab. GitHub Actions verwendet diesen Modus im nativen amd64-Lauf.
 - `skip` deaktiviert den Test bewusst und ist kein vollständiger
-  Freigabenachweis.
+  Freigabenachweis. Nur der zusätzliche native arm64-Lauf verwendet ihn; alle
+  server- und containerseitigen Gates bleiben dort verpflichtend.
+
+Die Standard-CI läuft auf Push, Pull Request, manuelle Anforderung und jeden
+Montag um 03:23 UTC. Damit werden auch neue Schwachstellenmeldungen und
+zeitabhängiger Infrastrukturdrift sichtbar, wenn am Quellstand nichts geändert
+wurde. Beide Architekturläufe laden das jeweilige Diagnose- und
+Evidenzverzeichnis unabhängig vom Ergebnis für 14 Tage als
+`compose-evidence-*` hoch. Ein grüner Lauf bleibt dadurch genauso
+nachvollziehbar wie ein fehlgeschlagener; Secrets dürfen in diesem Verzeichnis
+nie abgelegt werden.
+
+## Publish-Gate für exakt gebaute Candidate-Images
+
+Der manuelle Publish-Workflow baut App und Migrator nicht erneut zwischen Test
+und Veröffentlichung. Nach den Rechte-, Tag- und Environment-Gates baut und
+pusht er jeden Dockerfile genau einmal als Multi-Arch-Index unter einem
+laufbezogenen `candidate-*`-Tag. Die zurückgegebenen beiden Index-Digests und
+der tatsächliche Candidate-Tag werden als Stage-Outputs an die nachfolgenden
+Jobs gebunden.
+
+Je ein nativer Runner auf `amd64` und `arm64` führt anschließend
+`tests/integration/verify_release_candidate.sh` aus. Der Nachweis bindet:
+
+1. die Rohbytes des Indexes an den angeforderten SHA-256-Digest,
+2. den plattformspezifischen Descriptor an das native Manifest,
+3. dessen Config-Digest an die tatsächlich lokal gezogene Image-ID,
+4. SPDX-SBOM und SLSA-Provenance an `linux/amd64` beziehungsweise
+   `linux/arm64`, und
+5. die aus GHCR geladene OCI-Attestation an Repository und Git-Commit.
+
+Danach erhält derselbe vollständige Orchestrator die beiden Referenzen intern
+als `ESTAB_PREBUILT_APP_IMAGE` und `ESTAB_PREBUILT_MIGRATE_IMAGE`. Er akzeptiert
+sie nur gemeinsam und nur in der Form `Image@sha256:…`, baut App und Migrator
+in diesem Modus nicht neu und prüft über Container-Inspect sowohl vor den
+Fachtests als auch nach dem Restore, dass genau die erwarteten Image-IDs
+liefen. Der Browser ist auf `amd64` verpflichtend und nur im zusätzlichen
+`arm64`-Lauf bewusst deaktiviert. Trivy scannt App, Migrator und die
+MariaDB-Basis auf beiden nativen Architekturen über ihre exakten
+Index-Digests.
+
+Jeder erfolgreiche Architekturlauf lädt für 90 Tage ein
+`publish-evidence-*`-Artefakt hoch. Es enthält Index und natives Manifest,
+Image-IDs, SBOM, Provenance, strukturierte Attestationsprüfung,
+Trivy-Ausgaben, CI-/Browser-Evidence und eine `SHA256SUMS`. Bei einem Fehler
+wird stattdessen die bis dahin vorhandene separate
+`publish-diagnostics-*`-Sammlung für sieben Tage gesichert. Scheitert eine
+Architektur oder schon der Candidate-Build, entstehen weder Finaltags noch
+ein GitHub-Release.
+
+Der Release-Job lädt zusätzlich vor der Sichtbarkeit ein 90 Tage aufbewahrtes
+`publication-evidence-*`-Artefakt mit Git-Tag, Commit, beiden endgültigen
+Digestreferenzen, Paket-SHA-256 und eigener `SHA256SUMS` hoch. Schlägt bereits
+dieser Evidence-Upload fehl, bleibt das Draft-Release unsichtbar.
+
+Erst der von beiden Architekturen abhängige Release-Job:
+
+1. erzeugt ein verstecktes Draft-Release,
+2. lädt Archiv und äußere SHA-256-Datei hoch und wieder herunter,
+3. prüft die äußere sowie alle inneren Paketprüfsummen,
+4. promotet exakt die getesteten App-/Migrator-Digests ohne Rebuild per
+   `imagetools create`,
+5. vergleicht beide Finaltags erneut mit den Stage-Digests und
+6. veröffentlicht das Draft-Release erst nach erneuter Asset-, Digest- und
+   Attestationsprüfung.
+
+Die beiden GHCR-Repositories und GitHub Releases besitzen keine gemeinsame
+atomare Transaktion. Candidate-Tags bleiben deshalb als nicht-finale Evidence
+erhalten. Vor Promotion versucht der Workflow ein selbst erzeugtes
+fehlerhaftes Draft-Release zu entfernen; ab Promotionsbeginn bleibt ein
+verstecktes Draft-Release absichtlich als Recovery-Anker bestehen, weil ein
+oder beide Finaltags schon gesetzt sein können. Ein erfolgreicher
+Veröffentlichungsaufruf kann außerdem trotz fehlgeschlagener Abschlussabfrage
+bereits sichtbar sein. Diese
+Zwischenstände dürfen nie installiert oder blind erneut überschrieben werden;
+der kontrollierte Ablauf steht unter
+[Unvollständigen Publish-Lauf behandeln](../deploy/registry/README.md#unvollständigen-publish-lauf-behandeln).
 
 ## Wegwerfbarer Integrations-Stack
 
@@ -188,7 +301,6 @@ Volumes:
 
 ```console
 ESTAB_HTTP_PORT=18080 \
-ESTAB_ALLOW_SELF_REGISTRATION=true \
 podman compose -p estab-acceptance up -d --build
 
 ESTAB_HTTP_PORT=18080 \
@@ -252,6 +364,50 @@ podman compose -p estab-acceptance run --rm --no-deps -T \
   --entrypoint php \
   app tests/integration/date_compatibility.php
 ```
+
+### Einsatzdomäne, Benutzerverwaltung und PDF-Dossier
+
+`tests/integration/incident_domain.php` läuft gegen eine eigens angelegte und
+vollständig migrierte Datenbank. Er startet nur mit
+`ESTAB_INCIDENT_INTEGRATION=1` und einem Namen
+`estab_incident_*test`. Dadurch können No-active-Trigger,
+Parallelaktivierung, Update-/Delete-Sperren und ein harter
+MariaDB-Lock-Timeout belegt werden, ohne den Hauptbestand umzuschalten.
+
+Im Haupt-CI-Bestand prüft `tests/integration/user_admin.php` zunächst
+Kontoanlage, serverseitig abgeleitete feste Funktionszuordnung,
+Legacy-Reparatur, Neuzuweisung, Kontosperre, Entsperren, Kennwortreset,
+Sitzungswiderruf, Login-Lock und Audit gegen die echte MariaDB und den
+produktiven Legacy-Login. Der Test führt sowohl einen echten Bestandslogin als
+auch die ausdrücklich aktivierte Self-Registration aus und beweist für beide
+Auditzeilen die exakte `sha256:`-Referenz der rotierten Sitzung sowie die
+Abwesenheit von Klartext-SID und Kennwort. Das funktioniert bewusst auch ohne
+aktiven Einsatz.
+`tests/integration/assignment_policy.php` verwendet mehrere Verbindungen für
+den globalen Matrix-/Login-/Benutzerverwaltungs-Lock, gleicht geänderte Rollen
+und entfernte Funktionen ab, erlaubt einem inaktiven Waisenkonto den
+auditierten Kennwortreset, weist seine Anmeldung mit dem neuen Kennwort
+weiterhin ab, erzwingt Rollback nach einem Auditfehler und prüft die
+fail-closed Readiness eines ungültig aktiven Kontos. Danach aktiviert
+`tests/integration/incident_ci_bootstrap.php` idempotent genau den Einsatz
+`CI-INTEGRATION`.
+
+Direkt danach legt `tests/integration/incident_export.php` einen separaten
+Einsatz an, füllt in beiden Einsätzen je einen ETB-, TTB-, Nachrichten- und
+Anhangdatensatz und macht den Export-Einsatz wieder historisch. Der
+konsistente Read-only-Snapshot muss exakt dessen vier Datensätze liefern. Aus
+der erzeugten PDF wird der tatsächliche `/EmbeddedFile`-Stream anhand seiner
+deklarierten Länge extrahiert und bytegleich samt SHA-256 mit dem Original
+verglichen; Marker und Datei des anderen Einsatzes dürfen nicht vorkommen.
+Der Test stellt den benannten CI-Einsatz wieder aktiv, entfernt seine
+operativen Fixtures und verweigert ohne
+`ESTAB_INCIDENT_EXPORT_INTEGRATION=1` den Start.
+
+Diese drei Tests sind bewusst in `tests/integration/ci.sh` orchestriert.
+Insbesondere der PDF-Test ist kein sicherer Einzelbefehl gegen einen
+Produktivbestand: Er verlangt den fest benannten aktiven CI-Einsatz und gehört
+ausschließlich in ein wegwerfbares Projekt `estab_ci` beziehungsweise
+`estab_ci_*`.
 
 ### Datenbank-Integration dynamischer Tabellen
 
@@ -446,9 +602,10 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
   Traversal und unbekannte IDs abweisen, genau einen Lauf löschen und den
   zweiten byteidentisch für den Backup-/Restore-Nachweis behalten,
 - Restore-Prüfmodus ohne Neuanlage: vorhandenes Konto und Nachricht erneut
-  öffnen, exakten Anhanginhalt und PDF-SHA vergleichen, ETB-/TBB-Titel und
-  -Einträge nur lesen sowie Kennung, Manifest, Nachrichten-CSV und ZIP-SHA des
-  überlebenden Exportlaufs im wiederhergestellten Volume prüfen.
+  öffnen, exakten Anhanginhalt und PDF-SHA vergleichen, globalen Einsatzkopf
+  sowie ETB-/TBB-Einträge nur lesen und Kennung, Manifest, Nachrichten-CSV
+  und ZIP-SHA des überlebenden Exportlaufs im wiederhergestellten Volume
+  prüfen.
 
 ### Direkte HTTP-Oberfläche
 
@@ -494,9 +651,11 @@ read-only HTTP-Test und danach die zustandsverändernden Fachabläufe aus.
 
 `tests/browser/headless_ui.py` verwendet ausschließlich die
 Python-Standardbibliothek und steuert Chrome oder Chromium direkt über das
-Chrome DevTools Protocol. Der Test gehört ausschließlich auf einen frischen
-Wegwerf-Stack mit aktivierter Selbstregistrierung, weil er ein anschließend
-wieder abgemeldetes Testkonto anlegt:
+Chrome DevTools Protocol. Das Testkonto muss vorher mit der in
+`docs/BENUTZERVERWALTUNG.md` beschriebenen Administration angelegt und der
+Funktion `S1` zugewiesen sein. Im CI übernimmt das der eng auf
+`estab_ci`-Projekte begrenzte Provisionierer; öffentliche Selbstregistrierung
+bleibt ausgeschaltet:
 
 ```console
 ESTAB_TEST_BASE_URL=http://127.0.0.1:18080 \
@@ -602,12 +761,14 @@ tests/integration/logbooks_http.sh
 ```
 
 Er weist nach, dass anonyme Zugriffe HTTP 403 erhalten, während jeder gültig
-angemeldete Benutzer ETB und TBB lesen kann. Die jeweils fachfremde Sitzung
-erhält HTTP 200 samt gespeichertem Inhalt, aber weder Titel- noch
-Eintragsformular. Cross-Rollen-POSTs liefern HTTP 403. Nur S2/Red-Copy darf
-ETB-Daten und nur A/W mit der Rolle Fernmelder TBB-Daten über POST und
-Session-CSRF-Token schreiben. Zusätzlich prüft der Test serverseitige
-Längengrenzen, inerte historische GET-Schreibparameter und HTML-Escaping.
+angemeldete Benutzer ETB und TBB lesen kann. Beide Bücher zeigen den globalen
+Einsatzkopf und besitzen kein lokales Titelformular mehr. Die jeweils
+fachfremde Sitzung erhält HTTP 200 samt gespeichertem Inhalt, aber kein
+Eintragsformular. Cross-Rollen-POSTs liefern HTTP 403. Nur die aktuell als
+Rotkopie markierte Funktion (Fresh-Standard: S2) darf ETB-Daten und nur A/W
+mit der Rolle Fernmelder TBB-Daten über POST und Session-CSRF-Token schreiben.
+Zusätzlich prüft der Test serverseitige Längengrenzen, inerte historische
+GET-Schreibparameter und HTML-Escaping.
 
 ### Kategorien-HTTP-Integration
 
@@ -748,8 +909,9 @@ Der Test verwendet das bereits im Datenbankcontainer gemountete Root-Secret
   gefährlichen Uploadhelfer sowie die direkt aufrufbaren Print-/FPDF-Bäume,
 - inerte historische GET-Schreibparameter und HTTP 403 ohne Session-CSRF,
 - vollständigen 5x4-Roundtrip für aktive und persistente Standardmatrix mit
-  exakt einer belegten Rotkopie, gültigen Autosichtungsflags und unveränderten
-  Benutzerkonten,
+  exakt einer belegten Rotkopie und gültigen Autosichtungsflags; die dabei
+  nicht betroffenen Benutzerkonten bleiben bytegenau unverändert, während der
+  separate Zuordnungsrichtlinientest betroffene Konten abdeckt,
 - getrennte Semantik der drei Matrixaktionen: aktives Speichern lässt den
   Standard unverändert; Standard laden verändert weder Datenbank noch Audit;
   gemeinsames Speichern kopiert alle 20 Zellen samt Rotkopie und Autosichtung,
@@ -759,7 +921,7 @@ Der Test verwendet das bereits im Datenbankcontainer gemountete Root-Secret
   beider Tabellen und die Auditanzahl überein,
 - zwei parallele, getrennte Admin-Sitzungen: genau eine darf denselben
   Nachrichtenzähler erhöhen; die andere erhält HTTP 409,
-- Systemnachricht, Audit und POST-only-Grafikreset.
+- Systemnachricht, Audit und POST-only-PDF-Vordruckreset.
 
 Ein Trap entfernt den temporären Fehlertrigger, stellt beide ursprünglichen
 Matrizen, alle vorherigen Grafikflags und die Auto-Inkremente wieder her und
@@ -796,8 +958,15 @@ Geräteeinstellungen müssen manuell abgenommen werden.
 
 Mindestens zu prüfen:
 
-- neuen Benutzer für jede tatsächlich verwendete Funktion registrieren,
-  abmelden und mit demselben Kennwort erneut anmelden,
+- zwei Testeinsätze nacheinander aktivieren, die globale Statusanzeige auf
+  allen Modulen kontrollieren und nach Deaktivierung die rote
+  No-active-Warnung sowie gesperrte operative Formulare prüfen,
+- neuen Benutzer für jede tatsächlich verwendete Funktion in der
+  Benutzerverwaltung anlegen, abmelden und mit demselben Kennwort erneut
+  anmelden; eine abweichende Funktion vor und nach dem Logout abweisen,
+- ein Funktionskonto in der Administration sperren, die alte Sitzung und
+  Neuanmeldung abweisen, anschließend entsperren und ein Kennwort
+  zurücksetzen; altes Kennwort ablehnen und neues akzeptieren,
 - Berechtigungs-/Rollenzuordnung aus der Empfängermatrix kontrollieren,
 - eingehende und ausgehende Nachricht mit Richtung, Gegenstelle,
   Prioritätsstufe, Empfängern und Inhalt erfassen,
@@ -813,13 +982,18 @@ Mindestens zu prüfen:
   suchen und entfernen,
 - zulässigen Anhang hochladen, Vorschau/Download prüfen und eine unzulässige
   Datei ablehnen lassen,
-- Nachrichtenvordruck als PDF und als Bild erzeugen und aus der geschützten
+- Nachrichtenvordruck als PDF erzeugen und aus der geschützten
   Vordruckliste abrufen,
-- Einsatztagebuch und technisches Betriebsbuch mit S2/Red-Copy sowie A/W in
-  der Rolle Fernmelder beschreiben; anschließend beide Bücher mit der jeweils
-  anderen angemeldeten Funktion vollständig, aber ohne Schreibformular lesen
-  und Cross-Rollen-Schreibversuche mit HTTP 403 abweisen; Kommunikationsplan
-  und alle lokal benötigten Zusatzmodule öffnen und je einen repräsentativen
+- für einen inzwischen historischen Einsatz ein PDF-Dossier mit ETB, TTB,
+  Nachrichtenvordrucken und Originalanhängen erzeugen, die Anlagenansicht im
+  vorgesehenen PDF-Programm öffnen und stichprobenartig eine eingebettete
+  Datei samt dokumentierter SHA-256 gegen das Original prüfen,
+- Einsatztagebuch und technisches Betriebsbuch mit der aktuell als Rotkopie
+  markierten Funktion (Fresh-Standard: S2) sowie A/W in der Rolle Fernmelder
+  beschreiben; anschließend beide Bücher mit der jeweils anderen angemeldeten
+  Funktion vollständig, aber ohne Schreibformular lesen und
+  Cross-Rollen-Schreibversuche mit HTTP 403 abweisen; Kommunikationsplan und
+  alle lokal benötigten Zusatzmodule öffnen und je einen repräsentativen
   Datensatz anlegen/lesen,
 - administrative Exportübersicht am Desktop und bei 390 Pixel Breite öffnen,
   Export erzeugen, ZIP herunterladen, `manifest.json`-Hashes gegen die
@@ -866,27 +1040,34 @@ sind:
 
 - PHP ist mindestens Version 8.5,
 - `gd`, `mbstring`, `mysqli`, `Zend OPcache` und `zip` sind geladen,
+- DB-Name und -Port, Uploadgrenze, öffentliche URL, Basispfad, boolesche
+  Schalter sowie eine gegebenenfalls aktivierte Proxy-Allowlist sind
+  syntaktisch und in ihren erlaubten Wertebereichen gültig,
 - Datenbankverbindung und `SELECT 1` funktionieren,
-- 15 Runtime-Tabellen vorhanden sind: die 14 Basistabellen sowie die durch die
-  additive Migration angelegte Standardmatrix,
+- 18 Runtime-Tabellen vorhanden sind: die 14 Basistabellen, die persistente
+  Standardmatrix und die drei Tabellen der globalen Einsatzdomäne,
 - aktive und Standardmatrix jeweils genau 20 eindeutige 5x4-Positionen,
   genau ein belegtes Stab-/FB-Rotkopieziel und keine Autosichtung auf leeren
   oder reinen Textzellen enthalten,
 - die exakt definierten Benutzer- und Anhangindizes vorhanden sind,
-- alle drei versionierten Migrationen mit gültigem SHA-256 als angewendet
+- alle fünf versionierten Migrationen mit gültigem SHA-256 als angewendet
   protokolliert sind,
+- der Singleton des globalen Einsatzstatus, alle Einsatz-Fremdschlüssel und
+  -Trigger sowie die dauerhafte Kontosperr-Spalte kanonisch vorhanden sind,
 - Benutzer-, IP-, Anhang- und alle sechs Nachrichten-Kürzelfelder die
   erforderlichen Breiten besitzen,
 - Anhang-, Vordruck- und Exportverzeichnis beschreibbar sind.
 
-`docker/db/verify.sql` löst den aggregierten Schemacheck in 20 benannte
+`docker/db/verify.sql` löst den aggregierten Schemacheck in 25 benannte
 `*_ok`-Ergebnisfelder auf. Für einen gültigen Stand müssen alle den Wert `1`
 haben; die anschließende Abfrage nach abweichender Engine oder Collation darf
 keine Zeile liefern.
 
 Der Speichercheck legt kurzzeitig eine kleine Probe-Datei an und entfernt sie
-wieder. Bei Fehlern liefert der Endpunkt HTTP 503 und nur boolesche
-Teilergebnisse, keine Zugangsdaten.
+wieder. Bei Konfigurations- oder Laufzeitfehlern liefert der Endpunkt HTTP 503
+und nur boolesche Teilergebnisse, keine Zugangsdaten. Dieselbe
+Konfigurationsprüfung läuft bereits im Container-Entrypoint; ein eindeutig
+ungültiger Wert startet Apache daher gar nicht erst.
 
 ```console
 curl --fail --silent --show-error \
@@ -902,6 +1083,11 @@ alarmieren.
 `/health.php` ist bewusst knapp und ersetzt nicht `docker/db/verify.sql`.
 Der ausführlichere `/4fadm/system_status.php` zeigt hinter Admin-Authentisierung
 PHP-Module, Tabellenanzahl, beschreibbare Speicher und Konfigurationsstatus.
+Beide Endpunkte rufen dieselbe zentrale Readiness-Prüfung auf. Der HTTP-Test
+benennt die Standardmatrixtabelle kontrolliert um und beweist dabei gleichzeitig
+HTTP 503 sowie „Prüfung erforderlich“; erst nach exakter Wiederherstellung
+melden beide Ansichten wieder Bereitschaft. Eine leere oder nur lesbare
+Datenbank kann dadurch in der Adminansicht nicht mehr fälschlich grün werden.
 
 ## Logs und Kapazität
 
@@ -933,6 +1119,7 @@ einsatzbezogene Informationen enthalten.
 | --- | --- |
 | jeder Commit | statische Suite |
 | jeder Image-Build | erfolgreicher Build, Apache `configtest` und High-/Critical-CVE-Gate |
+| wöchentlich | vollständiges natives CI-Gate und erneuter CVE-/Infrastrukturdrift-Check |
 | CI/Freigabekandidat | vollständiges natives amd64-/arm64-Gate; echter Browser auf amd64 verpflichtend |
 | Erstinstallation | Readiness, `verify.sql`, HTTP-Smoke, Browser-Akzeptanz und Fachabnahme |
 | Upgrade/Migration | Restore-Kopie, SQL-Migrationen, alle Testebenen |

@@ -3,6 +3,7 @@ set -eu
 
 base_url=${ESTAB_TEST_BASE_URL:-http://127.0.0.1:8080}
 base_url=${base_url%/}
+repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 s2_name=${ESTAB_TEST_ETB_NAME:-Logbook Integration S2}
 s2_code=${ESTAB_TEST_ETB_CODE:-e2s200}
 s2_password=${ESTAB_TEST_ETB_PASSWORD:-Logbook-Test-S2-20260723}
@@ -130,66 +131,22 @@ login_user()
         --data-urlencode 'absenden_x=1' \
         "$base_url/4fach/mainindex.php"
     assert_no_runtime_error
-    # Do not couple authentication to a particular dashboard label. The
-    # frameset response varies with the current role and existing messages;
-    # access to a protected endpoint is the authoritative proof instead.
-    if [ "$(request_status --cookie "$cookie_jar" "$base_url/stabetb/etb.php")" = "200" ]; then
-        assert_no_runtime_error
-        return
-    fi
-
-    : > "$cookie_jar"
-    assert_status 200 \
-        --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-        --request POST --data-urlencode 'login_flow=new' \
-        "$base_url/4fach/mainindex.php"
-    assert_body 'name="kennwort2"'
-    login_csrf=$(csrf_from_body)
-
-    assert_status 200 \
-        --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-        --request POST \
-        --data-urlencode "csrf_token=$login_csrf" \
-        --data-urlencode 'login_flow=new' \
-        --data-urlencode "benutzer=$name" \
-        --data-urlencode "kuerzel=$code" \
-        --data-urlencode "funktion=$function_name" \
-        --data-urlencode "kennwort1=$password" \
-        --data-urlencode "kennwort2=$password" \
-        --data-urlencode '2teskennwort=Yes' \
-        --data-urlencode 'absenden_x=1' \
-        "$base_url/4fach/mainindex.php"
-    assert_no_runtime_error
     assert_status 200 --cookie "$cookie_jar" "$base_url/stabetb/etb.php"
     assert_no_runtime_error
 }
 
-ensure_title()
+assert_global_incident_header()
 {
     cookie_jar=$1
     endpoint=$2
-    operation=$3
-    location=$4
 
     assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         "$base_url/$endpoint"
-    assert_no_runtime_error
-    if grep -Fq 'value="save_title"' "$body"; then
-        csrf_token=$(csrf_from_body)
-        assert_status 303 \
-            --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-            --request POST \
-            --data-urlencode "csrf_token=$csrf_token" \
-            --data-urlencode 'logbook_action=save_title' \
-            --data-urlencode "einsatz=$operation" \
-            --data-urlencode "ort=$location" \
-            "$base_url/$endpoint"
-    fi
-
-    assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-        "$base_url/$endpoint"
-    assert_body "$operation"
-    assert_body "$location"
+    assert_body 'data-estab-incident-state="active"'
+    assert_body 'data-estab-incident-code="CI-INTEGRATION"'
+    assert_body 'CI-INTEGRATION'
+    assert_body 'Automatisierter CI-Integrationstest'
+    assert_body_absent 'value="save_title"'
     assert_no_runtime_error
 }
 
@@ -234,6 +191,10 @@ ensure_entry()
 assert_status 403 "$base_url/stabetb/etb.php"
 assert_status 403 "$base_url/fmtbb/tbb.php"
 
+sh "$repo_root/tests/integration/provision_user.sh" \
+    "$s2_name" "$s2_code" S2 "$s2_password"
+sh "$repo_root/tests/integration/provision_user.sh" \
+    "$aw_name" "$aw_code" A/W "$aw_password"
 login_user "$s2_cookies" "$s2_name" "$s2_code" S2 "$s2_password"
 login_user "$aw_cookies" "$aw_name" "$aw_code" A/W "$aw_password"
 
@@ -283,12 +244,8 @@ assert_status 200 --cookie "$aw_cookies" \
     "$base_url/fmtbb/tbb.php?absenden_x=1&Einsatzdaten=erfassen&einsatz=GET_WRITE_MUST_FAIL&ort=GET"
 assert_body_absent 'GET_WRITE_MUST_FAIL'
 
-ensure_title \
-    "$s2_cookies" stabetb/etb.php \
-    'LOGBOOK_ETB_E2E' 'HTTP-Integration-ETB'
-ensure_title \
-    "$aw_cookies" fmtbb/tbb.php \
-    'LOGBOOK_TBB_E2E' 'HTTP-Integration-TBB'
+assert_global_incident_header "$s2_cookies" stabetb/etb.php
+assert_global_incident_header "$aw_cookies" fmtbb/tbb.php
 
 # Prove the shared server-side length limit through a real ETB write request.
 assert_status 200 --cookie "$s2_cookies" --cookie-jar "$s2_cookies" \

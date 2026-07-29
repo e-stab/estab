@@ -3,6 +3,12 @@
 require_once __DIR__ . '/../../app/bootstrap.php';
 require_once __DIR__ . '/../../4fach/db_operation.php';
 
+define('ESTAB_DYNAMIC_SCHEMA_LOCK_TIMEOUT_SECONDS', 0);
+define('ESTAB_LOGIN_LOCK_TIMEOUT_SECONDS', 0);
+define('ESTAB_USER_ADMIN_ACCOUNT_LOCK_TIMEOUT', 0);
+
+require_once __DIR__ . '/../../app/user_admin.php';
+
 function test_assert(bool $condition, string $message): void
 {
     if (!$condition) {
@@ -183,12 +189,16 @@ try {
 test_assert($oversizedRejected, 'Oversized dynamic identifier was accepted');
 
 $methodLink = EstabLegacyMysql::link();
-test_assert($methodLink instanceof mysqli, 'create_user_table lost its connection');
-$restoredMode = test_scalar('SELECT @@SESSION.sql_mode', $methodLink) ?? '';
+test_assert(
+    $methodLink === false,
+    'create_user_table left its private database connection open'
+);
+$modeVerification = test_connect($server, $database, $username, $password);
+$restoredMode = test_scalar('SELECT @@SESSION.sql_mode', $modeVerification) ?? '';
 foreach (explode(',', $strictMode) as $requiredMode) {
     test_assert(str_contains($restoredMode, $requiredMode), 'SQL mode not restored: ' . $requiredMode);
 }
-mysql_close($methodLink);
+mysql_close($modeVerification);
 
 $link = test_connect($server, $database, $username, $password);
 $escapedDatabase = mysql_real_escape_string($database, $link);
@@ -329,6 +339,453 @@ test_assert(
     test_scalar("SELECT COUNT(*) FROM `{$userBase}_kategolink` WHERE `msg` = 503", $link) === '2',
     'Multiple category assignments no longer work'
 );
+
+// An administratively provisioned account must remain inactive until all six
+// dynamic tables are ready. Exercise both account-level and shared-schema
+// contention before proving that the exact same existing-account login can be
+// retried.
+$registrationCode = 'atm001';
+$registrationName = 'Atomic Registration';
+$registrationUserBase = 'usr_s2_' . $registrationCode;
+$registrationTables = [
+    $registrationUserBase . '_read',
+    $functionBase . '_erl',
+    $functionBase . '_katego',
+    $functionBase . '_kategolink',
+    $registrationUserBase . '_katego',
+    $registrationUserBase . '_kategolink',
+];
+$registrationUserTables = [
+    $registrationUserBase . '_read',
+    $registrationUserBase . '_katego',
+    $registrationUserBase . '_kategolink',
+];
+$quotedRegistrationTables = implode(',', array_map(
+    static fn (string $table): string => "'" . $table . "'",
+    $registrationTables
+));
+$quotedRegistrationUserTables = implode(',', array_map(
+    static fn (string $table): string => "'" . $table . "'",
+    $registrationUserTables
+));
+
+test_query(
+    "DELETE FROM `nv_benutzer` WHERE `kuerzel` = '{$registrationCode}'",
+    $link
+);
+test_query(
+    "DELETE FROM `nv_protokoll`"
+    . " WHERE `p_ereignis` LIKE '%\"target\":\"{$registrationCode}\"%'",
+    $link
+);
+test_query(
+    "DELETE FROM `nv_protokoll`"
+    . " WHERE `p_was` = 'Benutzerverwaltung'"
+    . " AND `p_ereignis` LIKE '%\"target\":\"{$registrationCode}\"%'",
+    $link
+);
+foreach ($registrationUserTables as $registrationTable) {
+    test_query("DROP TABLE IF EXISTS `{$registrationTable}`", $link);
+}
+
+$provisionConfig = [
+    'server' => $server,
+    'user' => $username,
+    'password' => $password,
+    'datenbank' => $database,
+];
+$provisionConnection = estab_auth_connect($provisionConfig);
+try {
+    $provisioned = estab_user_admin_create_account(
+        $provisionConnection,
+        $database,
+        'nv_benutzer',
+        'nv_protokoll',
+        $registrationName,
+        $registrationCode,
+        'S2',
+        'atomic-registration-password',
+        'atomic-registration-password',
+        'nv_empfmtx',
+        'dynamic-table-integration',
+        '127.0.0.1'
+    );
+} finally {
+    estab_auth_close($provisionConnection);
+}
+test_assert(
+    ($provisioned['active_session_revoked'] ?? null) === false
+        && test_scalar(
+            "SELECT COUNT(*) FROM `nv_benutzer`"
+            . " WHERE `kuerzel` = '{$registrationCode}'"
+            . " AND `funktion` = 'S2' AND `rolle` = 'Stab'"
+            . " AND `aktiv` = 0 AND `sid` = ''",
+            $link
+        ) === '1',
+    'Administrative provisioning did not create one inactive assigned account'
+);
+
+$originalDirectory = getcwd();
+test_assert(is_string($originalDirectory), 'Could not read current directory');
+test_assert(chdir(__DIR__ . '/../../4fach'), 'Could not enter application directory');
+if (!defined('debug')) {
+    define('debug', false);
+}
+require_once __DIR__ . '/../../4fach/data_hndl.php';
+$conf_empf = [
+    1 => ['fkt' => 'S2', 'rolle' => 'Stab'],
+];
+$_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+unset($_SERVER['HTTP_X_FORWARDED_FOR']);
+test_assert(session_start(), 'Could not start registration test session');
+$_SESSION = ['menue' => 'LOGIN'];
+
+$registrationRequest = [
+    'login_flow' => 'existing',
+    'benutzer' => $registrationName,
+    'kuerzel' => $registrationCode,
+    'funktion' => 'S2',
+    'kennwort1' => 'atomic-registration-password',
+];
+$accountLockName = estab_login_account_lock_name(
+    $database,
+    'nv_benutzer',
+    $registrationCode
+);
+$escapedAccountLockName = mysql_real_escape_string($accountLockName, $link);
+test_assert(
+    test_scalar("SELECT GET_LOCK('{$escapedAccountLockName}', 0)", $link) === '1',
+    'Could not hold competing account lock'
+);
+$loginError = '';
+test_assert(
+    check_save_user($registrationRequest, $loginError) === true,
+    'Existing-account login succeeded while the account lock was held'
+);
+test_assert(
+    str_contains($loginError, 'technisch nicht abgeschlossen'),
+    'Account-lock failure did not use the technical login error'
+);
+test_assert(
+    test_scalar(
+        "SELECT COUNT(*) FROM `nv_benutzer`"
+        . " WHERE `kuerzel` = '{$registrationCode}'"
+        . " AND `aktiv` = 0 AND `sid` = ''",
+        $link
+    ) === '1',
+    'Account-lock failure activated or removed the provisioned account'
+);
+test_assert(
+    estab_auth_session_identity($_SESSION) === null,
+    'Account-lock failure authenticated a session'
+);
+test_assert(
+    test_scalar(
+        "SELECT COUNT(*) FROM information_schema.tables
+          WHERE table_schema = '{$escapedDatabase}'
+            AND table_name IN ({$quotedRegistrationUserTables})",
+        $link
+    ) === '0',
+    'Account-lock failure created user tables'
+);
+test_assert(
+    test_scalar("SELECT RELEASE_LOCK('{$escapedAccountLockName}')", $link) === '1',
+    'Could not release competing account lock'
+);
+
+$registrationAccess = new db_access($server, $database, '', $username, $password);
+$schemaLockName = $registrationAccess->dynamic_schema_lock_name($functionBase);
+$escapedSchemaLockName = mysql_real_escape_string($schemaLockName, $link);
+test_assert(
+    test_scalar("SELECT GET_LOCK('{$escapedSchemaLockName}', 0)", $link) === '1',
+    'Could not hold competing schema lock'
+);
+$_SESSION = ['menue' => 'LOGIN'];
+$loginError = '';
+test_assert(
+    check_save_user($registrationRequest, $loginError) === true,
+    'Existing-account login succeeded while the shared schema lock was held'
+);
+test_assert(
+    test_scalar(
+        "SELECT COUNT(*) FROM `nv_benutzer`"
+        . " WHERE `kuerzel` = '{$registrationCode}'"
+        . " AND `aktiv` = 0 AND `sid` = ''",
+        $link
+    ) === '1',
+    'Schema-lock failure activated or removed the provisioned account'
+);
+test_assert(
+    estab_auth_session_identity($_SESSION) === null,
+    'Schema-lock failure authenticated a session'
+);
+test_assert(
+    test_scalar(
+        "SELECT COUNT(*) FROM information_schema.tables
+          WHERE table_schema = '{$escapedDatabase}'
+            AND table_name IN ({$quotedRegistrationUserTables})",
+        $link
+    ) === '0',
+    'Schema-lock failure left partial user tables'
+);
+test_assert(
+    test_scalar("SELECT RELEASE_LOCK('{$escapedSchemaLockName}')", $link) === '1',
+    'Could not release competing schema lock'
+);
+
+$_SESSION = ['menue' => 'LOGIN'];
+$validationDatabase = [
+    'server' => $server,
+    'user' => $username,
+    'password' => $password,
+    'datenbank' => $database,
+];
+test_assert(
+    estab_auth_current_session_identity(
+        $_SESSION,
+        $validationDatabase,
+        'nv_benutzer',
+        session_id(),
+        true
+    ) === null,
+    'Anonymous pre-login state unexpectedly authenticated'
+);
+$loginError = '';
+test_assert(
+    check_save_user($registrationRequest, $loginError) === false,
+    'Existing-account login retry did not succeed: ' . $loginError
+);
+test_assert(
+    test_scalar(
+        "SELECT COUNT(*) FROM `nv_benutzer`
+          WHERE `kuerzel` = '{$registrationCode}' AND `aktiv` = 1",
+        $link
+    ) === '1',
+    'Successful login did not activate exactly one provisioned account'
+);
+test_assert(
+    estab_auth_session_identity($_SESSION) === [
+        'benutzer' => $registrationName,
+        'kuerzel' => $registrationCode,
+        'funktion' => 'S2',
+        'rolle' => 'Stab',
+    ],
+    'Successful existing-account login did not establish the committed identity'
+);
+test_assert(
+    estab_auth_current_session_identity(
+        $_SESSION,
+        $validationDatabase,
+        'nv_benutzer',
+        session_id(),
+        true
+    ) !== null,
+    'Anonymous request state was cached across a successful login'
+);
+$firstAuthenticatedSession = $_SESSION;
+$firstAuthenticatedSessionId = session_id();
+test_assert(
+    estab_auth_session_id_is_valid($firstAuthenticatedSessionId),
+    'Successful existing-account login produced an invalid session ID'
+);
+test_assert(
+    test_scalar(
+        "SELECT COUNT(*) FROM information_schema.tables
+          WHERE table_schema = '{$escapedDatabase}'
+            AND table_name IN ({$quotedRegistrationTables})",
+        $link
+    ) === '6',
+    'Successful existing-account login did not leave all six dynamic tables ready'
+);
+$loginAuditResult = test_query(
+    "SELECT `p_ereignis` FROM `nv_protokoll`
+      WHERE `p_was` = 'Anmelden'
+        AND `p_ereignis` LIKE '%\"target\":\"{$registrationCode}\"%'
+      ORDER BY `p_lfd` DESC LIMIT 1",
+    $link
+);
+test_assert($loginAuditResult instanceof mysqli_result, 'Expected login audit');
+$loginAuditRow = mysql_fetch_assoc($loginAuditResult);
+mysql_free_result($loginAuditResult);
+$loginAuditJson = is_array($loginAuditRow)
+    ? (string) ($loginAuditRow['p_ereignis'] ?? '')
+    : '';
+$loginAudit = json_decode(
+    $loginAuditJson,
+    true,
+    8,
+    JSON_THROW_ON_ERROR
+);
+test_assert(
+    ($loginAudit['action'] ?? null) === 'existing_login'
+        && ($loginAudit['target'] ?? null) === $registrationCode
+        && ($loginAudit['session_reference'] ?? null)
+            === 'sha256:' . hash('sha256', $firstAuthenticatedSessionId)
+        && !str_contains($loginAuditJson, $firstAuthenticatedSessionId),
+    'Existing-account audit is missing, uncommitted, or leaks its raw SID'
+);
+
+// Model another browser signing in to the same active account. The newer SID
+// must supersede the first browser without allowing that stale browser to
+// deactivate or continue using the account.
+session_write_close();
+session_id('estabtest' . bin2hex(random_bytes(8)));
+test_assert(session_start(), 'Could not start second browser session');
+$_SESSION = ['menue' => 'LOGIN'];
+$secondBrowserPreLoginSessionId = session_id();
+$existingLoginRequest = [
+    'login_flow' => 'existing',
+    'benutzer' => $registrationName,
+    'kuerzel' => $registrationCode,
+    'funktion' => 'S2',
+    'kennwort1' => 'atomic-registration-password',
+];
+$loginError = '';
+test_assert(
+    check_save_user($existingLoginRequest, $loginError) === false,
+    'Second browser login did not succeed: ' . $loginError
+);
+$secondAuthenticatedSession = $_SESSION;
+$secondAuthenticatedSessionId = session_id();
+test_assert(
+    $secondAuthenticatedSessionId !== $firstAuthenticatedSessionId
+        && $secondAuthenticatedSessionId !== $secondBrowserPreLoginSessionId,
+    'Second browser login did not rotate to a distinct session ID'
+);
+test_assert(
+    test_scalar(
+        "SELECT `sid` FROM `nv_benutzer`
+          WHERE `kuerzel` = '{$registrationCode}' AND `aktiv` = 1",
+        $link
+    ) === $secondAuthenticatedSessionId,
+    'Authoritative account row did not retain only the newer SID'
+);
+$refreshAuditResult = test_query(
+    "SELECT `p_ereignis` FROM `nv_protokoll`
+      WHERE `p_was` = 'Sessiondaten neu setzen'
+        AND `p_ereignis` LIKE '%\"target\":\"{$registrationCode}\"%'
+      ORDER BY `p_lfd` DESC LIMIT 1",
+    $link
+);
+test_assert(
+    $refreshAuditResult instanceof mysqli_result,
+    'Expected session-refresh audit'
+);
+$refreshAuditRow = mysql_fetch_assoc($refreshAuditResult);
+mysql_free_result($refreshAuditResult);
+$refreshAuditJson = is_array($refreshAuditRow)
+    ? (string) ($refreshAuditRow['p_ereignis'] ?? '')
+    : '';
+$refreshAudit = json_decode(
+    $refreshAuditJson,
+    true,
+    8,
+    JSON_THROW_ON_ERROR
+);
+test_assert(
+    ($refreshAudit['action'] ?? null) === 'session_refresh'
+        && ($refreshAudit['target'] ?? null) === $registrationCode
+        && ($refreshAudit['session_reference'] ?? null)
+            === 'sha256:' . hash('sha256', $secondAuthenticatedSessionId)
+        && !str_contains($refreshAuditJson, $secondAuthenticatedSessionId),
+    'Session-refresh audit is missing or leaks its raw SID'
+);
+
+$staleBrowserSession = $firstAuthenticatedSession;
+test_assert(
+    estab_auth_current_session_identity(
+        $staleBrowserSession,
+        $validationDatabase,
+        'nv_benutzer',
+        $firstAuthenticatedSessionId
+    ) === null,
+    'First browser remained authorized after the second login'
+);
+test_assert(
+    $staleBrowserSession === ['menue' => 'LOGIN'],
+    'Revoked browser retained local workflow state'
+);
+
+$currentBrowserSession = $secondAuthenticatedSession;
+test_assert(
+    estab_auth_current_session_identity(
+        $currentBrowserSession,
+        $validationDatabase,
+        'nv_benutzer',
+        $secondAuthenticatedSessionId
+    ) === [
+        'benutzer' => $registrationName,
+        'kuerzel' => $registrationCode,
+        'funktion' => 'S2',
+        'rolle' => 'Stab',
+    ],
+    'Current browser was rejected by authoritative SID validation'
+);
+test_assert(
+    estab_auth_mark_logged_out(
+        $link,
+        'nv_benutzer',
+        $registrationCode,
+        $firstAuthenticatedSessionId
+    ) === false
+        && test_scalar(
+            "SELECT COUNT(*) FROM `nv_benutzer`
+              WHERE `kuerzel` = '{$registrationCode}'
+                AND `sid` = '"
+                . mysql_real_escape_string(
+                    $secondAuthenticatedSessionId,
+                    $link
+                )
+                . "' AND `aktiv` = 1",
+            $link
+        ) === '1',
+    'Stale-browser logout deactivated the newer account session'
+);
+
+$databaseFailureSession = $secondAuthenticatedSession;
+test_assert(
+    estab_auth_current_session_identity(
+        $databaseFailureSession,
+        array_replace(
+            $validationDatabase,
+            ['datenbank' => 'estab_missing_session_validation_database']
+        ),
+        'nv_benutzer',
+        $secondAuthenticatedSessionId
+    ) === null
+        && $databaseFailureSession === ['menue' => 'LOGIN'],
+    'Session validation did not fail closed when its database was unavailable'
+);
+
+test_query(
+    "DELETE FROM `nv_benutzer` WHERE `kuerzel` = '{$registrationCode}'",
+    $link
+);
+test_query(
+    "DELETE FROM `nv_protokoll`"
+    . " WHERE `p_ereignis` LIKE '%\"target\":\"{$registrationCode}\"%'",
+    $link
+);
+test_query(
+    "DELETE FROM `nv_protokoll`"
+    . " WHERE `p_was` = 'Benutzerverwaltung'"
+    . " AND `p_ereignis` LIKE '%\"target\":\"{$registrationCode}\"%'",
+    $link
+);
+foreach ($registrationUserTables as $registrationTable) {
+    test_query("DROP TABLE IF EXISTS `{$registrationTable}`", $link);
+}
+$_SESSION = [];
+session_destroy();
+$currentSessionCookie = session_name();
+unset($_COOKIE[$currentSessionCookie]);
+session_id($firstAuthenticatedSessionId);
+if (session_start()) {
+    $_SESSION = [];
+    session_destroy();
+}
+test_assert(chdir($originalDirectory), 'Could not restore integration directory');
+
 mysql_close($link);
 
 drop_fixture_tables($server, $database, $username, $password, $tables);

@@ -51,7 +51,7 @@ $assert(
         'Meldungsübersicht',
         'Vordrucke',
         'Einsatztagebuch (ETB)',
-        'Technisches Betriebsbuch (TBB)',
+        'Technisches Betriebsbuch (TTB)',
         'Nachweisung',
         'BOS-Info',
     ],
@@ -64,7 +64,7 @@ $assert(
         'Meldungen',
         'Vordrucke',
         'ETB',
-        'TBB',
+        'TTB',
         'Nachweisung',
         'BOS-Info',
     ],
@@ -343,7 +343,7 @@ $assert(
     str_contains($sidebar, '>Nachrichten</span>')
         && str_contains($sidebar, '>Meldungen</span>')
         && str_contains($sidebar, '>ETB</span>')
-        && str_contains($sidebar, '>TBB</span>')
+        && str_contains($sidebar, '>TTB</span>')
         && str_contains(
             $sidebar,
             'aria-label="Nachrichtenvordruck" title="Nachrichtenvordruck"'
@@ -359,13 +359,13 @@ $assert(
         )
         && str_contains(
             $sidebar,
-            'aria-label="Technisches Betriebsbuch (TBB)"'
-                . ' title="Technisches Betriebsbuch (TBB)"'
+            'aria-label="Technisches Betriebsbuch (TTB)"'
+                . ' title="Technisches Betriebsbuch (TTB)"'
         )
         && !str_contains($sidebar, '>Nachrichtenvordruck</span>')
         && !str_contains($sidebar, '>Meldungsübersicht</span>')
         && !str_contains($sidebar, '>Einsatztagebuch (ETB)</span>')
-        && !str_contains($sidebar, '>Technisches Betriebsbuch (TBB)</span>'),
+        && !str_contains($sidebar, '>Technisches Betriebsbuch (TTB)</span>'),
     'sidebar labels are not concise visually and complete accessibly'
 );
 $anonymousSidebar = estab_navigation_markup(

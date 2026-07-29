@@ -13,7 +13,7 @@ require_once $repositoryRoot . '/4fcfg/config.inc.php';
 require_once $repositoryRoot . '/4fbak/backup_pdf.php';
 
 $fields = [
-    '00_lfd', '01_datum', '01_medium', '01_zeichen', '02_zeichen',
+    '00_lfd', 'einsatz_id', '01_datum', '01_medium', '01_zeichen', '02_zeichen',
     '02_zeit', '03_datum', '03_zeichen', '04_nummer', '04_richtung',
     '05_gegenstelle', '06_befweg', '06_befwegausw', '07_durchspruch',
     '08_befhinwausw', '08_befhinweis', '09_vorrangstufe',
@@ -26,6 +26,7 @@ $fields = [
 $fixture = array_fill_keys($fields, '');
 $fixture = array_replace($fixture, [
     '00_lfd' => 1,
+    'einsatz_id' => 1,
     '01_medium' => 'Funk',
     '04_nummer' => 7,
     '04_richtung' => 'A',

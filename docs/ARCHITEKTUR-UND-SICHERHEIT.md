@@ -36,7 +36,7 @@ auch Apache nur an `127.0.0.1:8080` gebunden.
 | --- | --- |
 | `4fach/` | Nachrichtenvordruck, Anmeldung, Sichtung, Kategorien, Anhänge und Fachoberfläche |
 | `4fadm/` | Basic-Auth-geschützte Administration, Systemstatus und Einsatzexport |
-| `4fbak/` | nur dateisystemintern verwendete PDF-/Bild-Erzeugung und historische FPDF-Komponente |
+| `4fbak/` | aktive dateisysteminterne PDF-Erzeugung, historische FPDF-Komponente und der bereits im letzten Upstream-Release deaktivierte Bildgenerator |
 | `stabetb/`, `fmtbb/`, `ubltg/`, `sammlung/` | Einsatztagebuch, technisches Betriebsbuch und Zusatzmodule |
 | `app/` | Bootstrap, PHP-/MySQL-Kompatibilität, Authentisierung, gemeinsame Bereichsnavigation, Sitzungsanzeige und Abmeldung, CSRF, Datum, Nachrichten-/Kategoriezugriff, begrenzte PNG-Renderer, Anhang, Export und transaktionale Admin-Operationen |
 | `4fcfg/` | historische Konfigurationsschnittstelle, heute aus validierten Umgebungswerten gespeist |
@@ -75,7 +75,7 @@ Es existieren zwei unabhängige Identitäten:
   Cookies sind `HttpOnly`, `SameSite=Lax` und bei erkanntem HTTPS zusätzlich
   `Secure`.
 - Der gesamte Pfad `/4fadm` sowie der historisch unter `/4fach/resetpic.php`
-  liegende Grafikreset werden vom Apache mit einer zur Startzeit erzeugten
+  liegende PDF-Vordruckreset werden vom Apache mit einer zur Startzeit erzeugten
   bcrypt-`htpasswd` geschützt. Das Admin-Kennwort stammt aus einem separaten
   Compose-Secret. Schreibende Admin-Formulare verlangen zusätzlich einen an
   die PHP-Sitzung gebundenen CSRF-Token.
@@ -85,9 +85,10 @@ Historische Klartextwerte werden nur bei einer erfolgreichen Anmeldung
 akzeptiert und dabei transparent durch einen Hash ersetzt. Die Datenbankspalte
 ist dafür auf 255 Zeichen erweitert.
 
-Selbstregistrierung bleibt aus Fachkompatibilität standardmäßig aktiv und kann
-mit `ESTAB_ALLOW_SELF_REGISTRATION=false` abgeschaltet werden. Sie ist eine
-bewusste Betriebsentscheidung und kein Ersatz für Netzsegmentierung oder
+Selbstregistrierung ist standardmäßig ausgeschaltet. Konten werden über den
+unabhängig per HTTP Basic Auth geschützten Administrationsbereich mit einer
+festen Funktion angelegt. `ESTAB_ALLOW_SELF_REGISTRATION=true` ist nur eine
+bewusste Kompatibilitätsausnahme und kein Ersatz für Netzsegmentierung oder
 organisatorische Benutzerfreigabe.
 
 Der anonyme Einstieg bindet die fachliche Absicht an streng validierte
@@ -107,10 +108,11 @@ einem Popup, damit auch eingebettete Browser und assistive Technik die
 Rückmeldung zuverlässig darstellen. Die öffentliche Benutzerliste dient nur
 zur Vorbelegung; pro Zeile wird genau eine Auswahlaktion übertragen.
 Bereits authentifizierte Sitzungen müssen sich vor einer anderen Anmeldung
-oder Kontoerstellung abmelden. Bei aktiven Konten muss die übermittelte
-Funktion außerdem der gespeicherten Zuordnung entsprechen; nur die bestehende
-Ummeldelogik für inaktive Konten darf Funktion und daraus abgeleitete Rolle
-ändern.
+oder Kontoerstellung abmelden. Bei jedem Bestandskonto muss die übermittelte
+Funktion unabhängig vom Onlinezustand exakt der gespeicherten administrativen
+Zuordnung entsprechen. Nur `/4fadm/users.php` darf Funktion und daraus
+abgeleitete Rolle unter gemeinsamem Konto-Lock ändern; die Änderung setzt
+Onlinezustand und Sitzungsmetadaten atomar zurück und wird auditiert.
 
 `app/navigation.php` ist das kanonische Manifest für die acht operativen
 Bereiche. Es definiert Schlüssel, Beschriftung, Reihenfolge, Zielpfad und
@@ -250,6 +252,14 @@ einem neuen Fenster geöffnetes Fachmodul verändert seinen Opener nicht.
 Explizite Nicht-HTML-Antworten und Redirects passieren den Ausgabehandler
 unverändert.
 
+Bestandslogin, erneute Anmeldung eines bereits aktiven Kontos und die
+standardmäßig deaktivierte Self-Registration schreiben ein strukturiertes
+JSON-Audit. Es enthält nur die explizit ausgewählten Identitätsfelder, die
+validierte direkte IP und `sha256:<64 Hexzeichen>` als korrelierbare
+Sitzungsreferenz. Die rohe Session-ID und das Kennwort werden nicht in den
+Audit-Builder übernommen. Kontoaktivierung und Audit committen in derselben
+Transaktion.
+
 `4fach/logout.php` akzeptiert nur einen angemeldeten POST mit gültigem
 Session-CSRF und leitet nach Erfolg mit HTTP 303 zum Anmeldeeinstieg weiter.
 Die lokale Sitzung und alle Anwendungs-Cookies werden vor der
@@ -257,8 +267,9 @@ Datenbanknachführung beendet. Das Setzen des Benutzerstatus auf inaktiv ist an
 Kürzel und die in der Datenbank gespeicherte SID gebunden. So kann ein später
 abgeschickter Logout einer alten Sitzung eine neuere Anmeldung desselben
 Kontos nicht deaktivieren. Audit- oder Datenbankfehler lassen die lokale
-Sitzung nicht wieder aufleben. Für die historische Audit-Korrelation wird
-lediglich ein SHA-256-Verweis statt der rohen Session-ID gespeichert.
+Sitzung nicht wieder aufleben. Auch hier wird für die historische
+Audit-Korrelation lediglich ein SHA-256-Verweis statt der rohen Session-ID
+gespeichert.
 
 ## Webserver-Härtung
 
@@ -414,15 +425,23 @@ alle Werte gebunden und jeder Vorgang verwendet InnoDB-Transaktionen:
   DB-gespeicherte 20-Zellen-Tabelle hält genau eine Standardmatrix; Laden ist
   nur ein CSRF-geschützter Editor-Read, während das Ersetzen von aktivem und
   Standardstand in derselben Transaktion erfolgt. Es wird keine ausführbare
-  PHP-Konfigurationsdatei mehr erzeugt und die Benutzertabelle wird nicht
-  verändert.
+  PHP-Konfigurationsdatei mehr erzeugt.
+  `app/assignment.php` serialisiert aktives Matrixspeichern, Login,
+  Kontoanlage und Neuzuweisung mit einem globalen MariaDB-Advisory-Lock.
+  Unter diesem Lock synchronisiert dieselbe Matrixtransaktion geänderte
+  serverabgeleitete Rollen und widerruft betroffene Sitzungen. Entfernte
+  Funktionen behalten ihre letzte Kontozuordnung als sichtbaren
+  Waisenstatus, verlieren jedoch sämtliche Sitzungsmetadaten und können sich
+  erst nach administrativer Neuzuweisung wieder anmelden. Matrix, Konten und
+  Audit rollen bei jedem Fehler gemeinsam zurück; dynamische Legacy-Tabellen
+  werden nicht umbenannt oder gelöscht.
 - Die Reparatur des Nachrichtenzählers akzeptiert nur positive Ganzzahlen bis
   `999999999`. Ein MariaDB-Advisory-Lock und `FOR UPDATE` serialisieren
   parallele Admin-Anforderungen und reguläre Nachrichtenschreiber; Werte
   müssen sowohl im gemeinsamen als auch im getrennten Modus strikt über dem
   aktuellen Maximum liegen.
   Systemnachricht(en) und Audit-Eintrag werden gemeinsam committed.
-- Der Grafikreset setzt ausschließlich nach einem CSRF-geprüften POST die
+- Der PDF-Vordruckreset setzt ausschließlich nach einem CSRF-geprüften POST die
   validierte Spalte `x04_druck` zurück und auditiert die Zahl betroffener
   Nachrichten.
 
@@ -526,12 +545,15 @@ oder beschädigten Daten bietet nur das getrennte Verfahren unter
 
 Ohne `ESTAB_TRUST_PROXY_HEADERS=true` ignoriert die Anwendung
 `X-Forwarded-For` für Audit-IP-Adressen und verwendet nur den direkten Peer.
-Bei aktivierter Option muss jedes Element der weitergereichten IP- und
-Protokollketten syntaktisch gültig sein. Eine Herkunfts-Allowlist wird jedoch
-nicht implementiert.
+Bei aktivierter Option ist zusätzlich eine nichtleere IP-/CIDR-Allowlist in
+`ESTAB_TRUSTED_PROXIES` zwingend. Erst wenn `REMOTE_ADDR` zu einer Regel passt,
+werden vollständig syntaktisch gültige IP- und Protokollketten ausgewertet.
+Eine fehlende oder ungültige Allowlist bricht fail-closed ab; für nicht
+freigegebene direkte Peers bleiben die Header wirkungslos. Catch-all-Netze und
+DNS-Namen sind nicht zulässig.
 
-Daraus folgt: Bei aktiviertem Vertrauen darf der App-Port nur vom eigenen
-Proxy erreichbar sein. Der Proxy überschreibt eingehende
+Zusätzlich darf der App-Port bei aktiviertem Vertrauen nur vom eigenen Proxy
+erreichbar sein. Der Proxy überschreibt eingehende
 `X-Forwarded-For`-/`X-Forwarded-Proto`-Header, terminiert TLS und setzt
 Zugriffslimits. Details stehen unter
 [Betrieb und Konfiguration](BETRIEB.md#reverse-proxy-und-tls).
@@ -546,8 +568,10 @@ entwickelte Anwendung. Für die Freigabe sind insbesondere zu berücksichtigen:
 - CSRF-Schutz ist für modernisierte schreibende Pfade vorhanden, aber nicht
   pauschal für jede historische Formularaktion bewiesen,
 - die CSP benötigt für die historische Oberfläche weiterhin `unsafe-inline`,
-- es gibt in eStab selbst kein Rate Limiting, keine Mehrfaktor-Authentisierung
-  und keine zentrale Benutzerverwaltung,
+- es gibt in eStab selbst kein Rate Limiting und keine
+  Mehrfaktor-Authentisierung; die zentrale Verwaltung kann Funktionskonten
+  sperren, entsperren und Kennwörter zurücksetzen, bietet aber keine
+  abgestuften Administratorrollen oder externe Identity-Provider,
 - HTTP Basic Auth schützt Administration nur zusammen mit TLS ausreichend,
 - Einsatz-, Kommunikations- und gegebenenfalls Gesundheitsdaten erfordern
   strenge Zugriffs-, Protokollierungs-, Aufbewahrungs- und Löschregeln,
@@ -574,8 +598,9 @@ Das aktuelle Basisschema verwendet:
 - längere Session-, Passwort-, IPv6- und Dateiendungsfelder,
 - idempotente InnoDB-/`utf8mb4`-Migration der dynamischen Benutzer- und
   Funktionstabellen bei ihrer Aktivierung,
-- keine neuen Foreign Keys, weil historische Löschpfade keine definierte
-  Cascade-Semantik besitzen.
+- Foreign Keys für die unmittelbar einsatzgebundenen operativen Tabellen;
+  abgeleitete dynamische Status-/Kategorietabellen bleiben wegen ihrer
+  historischen Löschpfade ohne zusätzliche Cascade-Beziehungen.
 
 Die detaillierte Gegenüberstellung zum Legacy-Schema steht in
 [`docker/db/README.md`](../docker/db/README.md). Provenienz und unveränderte

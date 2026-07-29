@@ -119,6 +119,7 @@ message_auto_increment=1
 protocol_auto_increment=1
 message_floor=0
 audit_floor=0
+active_incident_id=0
 
 cleanup()
 {
@@ -135,6 +136,7 @@ DELETE FROM \`nv_empfmtx_standard\`;
 INSERT INTO \`nv_empfmtx_standard\` SELECT * FROM \`${standard_backup_table}\`;
 DELETE FROM \`nv_nachrichten\`
  WHERE \`00_lfd\` > ${message_floor}
+   AND \`einsatz_id\` = ${active_incident_id}
    AND (
      \`12_inhalt\` = '${marker}'
      OR \`12_inhalt\` LIKE 'eStab Systemmeldung.%Nachrichtenzähler wurde nach Systemausfall%'
@@ -142,7 +144,8 @@ DELETE FROM \`nv_nachrichten\`
 UPDATE \`nv_nachrichten\` AS current_message
   JOIN \`${print_backup_table}\` AS original_print
     ON original_print.\`00_lfd\` = current_message.\`00_lfd\`
-   SET current_message.\`x04_druck\` = original_print.\`x04_druck\`;
+   SET current_message.\`x04_druck\` = original_print.\`x04_druck\`
+ WHERE current_message.\`einsatz_id\` = ${active_incident_id};
 DELETE FROM \`nv_protokoll\`
  WHERE \`p_lfd\` > ${audit_floor}
    AND \`p_was\` IN ('Empfängermatrix', 'Nachrichtennummer Sync', 'Grafikstatus Reset');
@@ -319,6 +322,7 @@ write_matrix_payload()
 # Apache authentication and deny rules must fire before PHP renders data.
 assert_status 401 "$base_url/4fadm/make_fkt.php"
 assert_status 401 "$base_url/4fadm/set_number_after_crash.php"
+assert_status 401 "$base_url/4fadm/users.php"
 assert_status 401 "$base_url/4fach/resetpic.php"
 assert_status 403 "$base_url/4fach/all_msg.php"
 assert_status 403 "$base_url/4fach/upload/foto_upload.php"
@@ -360,6 +364,12 @@ audit_floor=$(db_sql <<'SQL'
 SELECT COALESCE(MAX(`p_lfd`), 0) FROM `nv_protokoll`;
 SQL
 )
+active_incident_id=$(db_sql <<'SQL'
+SELECT `active_einsatz_id`
+  FROM `nv_einsatz_status`
+ WHERE `singleton_id` = 1;
+SQL
+)
 for number in "$matrix_auto_increment" "$standard_matrix_auto_increment" "$message_auto_increment" \
     "$protocol_auto_increment" "$message_floor" "$audit_floor"; do
     case "$number" in
@@ -369,6 +379,12 @@ for number in "$matrix_auto_increment" "$standard_matrix_auto_increment" "$messa
             ;;
     esac
 done
+case "$active_incident_id" in
+    '' | 0 | *[!0-9]*)
+        echo 'Admin HTTP: no active incident is available for the fixture' >&2
+        exit 1
+        ;;
+esac
 
 db_sql <<SQL
 DROP TABLE IF EXISTS \`${backup_table}\`;
@@ -383,10 +399,11 @@ CREATE TABLE \`${print_backup_table}\` (
   \`x04_druck\` BINARY(1) NOT NULL
 ) ENGINE=InnoDB;
 INSERT INTO \`${print_backup_table}\` (\`00_lfd\`, \`x04_druck\`)
-SELECT \`00_lfd\`, \`x04_druck\` FROM \`nv_nachrichten\`;
+SELECT \`00_lfd\`, \`x04_druck\` FROM \`nv_nachrichten\`
+ WHERE \`einsatz_id\` = ${active_incident_id};
 INSERT INTO \`nv_nachrichten\`
-  (\`04_richtung\`, \`04_nummer\`, \`12_inhalt\`, \`x04_druck\`)
-VALUES ('E', 0, '${marker}', 't');
+  (\`einsatz_id\`, \`04_richtung\`, \`04_nummer\`, \`12_inhalt\`, \`x04_druck\`)
+VALUES (${active_incident_id}, 'E', 0, '${marker}', 't');
 SQL
 backup_created=true
 
@@ -427,13 +444,21 @@ for legacy_matrix_control in absenden_x laden_x speichern_x; do
 done
 
 counter_before=$(db_sql <<'SQL'
-SELECT COALESCE(MAX(`04_nummer`), 0) FROM `nv_nachrichten`;
+SELECT COALESCE(MAX(m.`04_nummer`), 0)
+  FROM `nv_nachrichten` AS m
+  JOIN `nv_einsatz_status` AS s
+    ON s.`singleton_id` = 1
+   AND s.`active_einsatz_id` = m.`einsatz_id`;
 SQL
 )
 assert_status 200 --config "$admin_curl_config" \
     "$base_url/4fadm/set_number_after_crash.php?page=2&ea_nummer=999999999"
 counter_after_get=$(db_sql <<'SQL'
-SELECT COALESCE(MAX(`04_nummer`), 0) FROM `nv_nachrichten`;
+SELECT COALESCE(MAX(m.`04_nummer`), 0)
+  FROM `nv_nachrichten` AS m
+  JOIN `nv_einsatz_status` AS s
+    ON s.`singleton_id` = 1
+   AND s.`active_einsatz_id` = m.`einsatz_id`;
 SQL
 )
 if [ "$counter_before" != "$counter_after_get" ]; then
@@ -467,8 +492,47 @@ assert_status 403 --config "$admin_curl_config" \
     --request POST --data-urlencode 'ea_nummer=999999999' \
     "$base_url/4fadm/set_number_after_crash.php"
 assert_status 403 --config "$admin_curl_config" \
+    --request POST \
+    --data-urlencode 'admin_action=block' \
+    --data-urlencode 'target_code=e2e001' \
+    "$base_url/4fadm/users.php"
+assert_status 403 --config "$admin_curl_config" \
     --request POST --data-urlencode 'admin_action=reset_print_flags' \
     "$base_url/4fach/resetpic.php"
+
+# The account-management controller must be reachable through the same
+# independently authenticated administration surface and issue a per-session
+# CSRF token before any block or password-reset action can be submitted.
+assert_status 200 --config "$admin_curl_config" \
+    --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+    "$base_url/4fadm/users.php"
+assert_body 'data-estab-user-admin'
+assert_body 'Benutzerverwaltung'
+users_csrf=$(csrf_from_body)
+missing_user_code=zz404z
+if [ "$(db_sql <<SQL
+SELECT COUNT(*) FROM \`nv_benutzer\`
+ WHERE \`kuerzel\` = '${missing_user_code}';
+SQL
+)" != 0 ]; then
+    missing_user_code=zz405z
+fi
+if [ "$(db_sql <<SQL
+SELECT COUNT(*) FROM \`nv_benutzer\`
+ WHERE \`kuerzel\` = '${missing_user_code}';
+SQL
+)" != 0 ]; then
+    echo 'Admin HTTP: could not reserve a missing user fixture' >&2
+    exit 1
+fi
+assert_status 404 --config "$admin_curl_config" \
+    --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+    --request POST \
+    --data-urlencode "csrf_token=$users_csrf" \
+    --data-urlencode 'admin_action=block' \
+    --data-urlencode "target_code=$missing_user_code" \
+    "$base_url/4fadm/users.php"
+assert_body 'Das ausgewählte Konto wurde nicht gefunden.'
 
 # Change one unused recipient cell, verify it, then restore the complete
 # original matrix through the same HTTP transaction.
@@ -742,7 +806,8 @@ if [ "$counter_statuses" != '303 409 ' ]; then
 fi
 counter_rows=$(db_sql <<SQL
 SELECT COUNT(*) FROM \`nv_nachrichten\`
- WHERE \`04_richtung\` = 'E'
+ WHERE \`einsatz_id\` = ${active_incident_id}
+   AND \`04_richtung\` = 'E'
    AND \`04_nummer\` = ${counter_target}
    AND \`12_inhalt\` LIKE 'eStab Systemmeldung.%Nachrichtenzähler wurde nach Systemausfall%';
 SQL
@@ -797,6 +862,17 @@ SQL
 )
 if [ "$matrix_audit_count" != 5 ]; then
     echo 'Admin HTTP: matrix load/save audit boundary is not exact' >&2
+    exit 1
+fi
+scoped_admin_audit_count=$(db_sql <<SQL
+SELECT COUNT(*) FROM \`nv_protokoll\`
+ WHERE \`p_lfd\` > ${audit_floor}
+   AND \`p_was\` IN ('Nachrichtennummer Sync', 'Grafikstatus Reset')
+   AND \`einsatz_id\` = ${active_incident_id};
+SQL
+)
+if [ "$scoped_admin_audit_count" != 2 ]; then
+    echo 'Admin HTTP: operational admin audit is not bound to the active incident' >&2
     exit 1
 fi
 

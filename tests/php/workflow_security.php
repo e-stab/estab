@@ -379,4 +379,41 @@ $assert(
     'main controller does not enforce the central workflow gate'
 );
 
+$ciIntegration = file_get_contents(dirname(__DIR__) . '/integration/ci.sh');
+$defaultHttpSmoke = file_get_contents(dirname(__DIR__) . '/integration/http_smoke.sh');
+$legacyHttpSmoke = file_get_contents(dirname(__DIR__) . '/integration/legacy_login_http.sh');
+$assert(
+    is_string($ciIntegration)
+        && str_contains(
+            $ciIntegration,
+            'export ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF=false'
+        )
+        && str_contains(
+            $ciIntegration,
+            'export ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF=true'
+        )
+        && str_contains($ciIntegration, 'tests/integration/legacy_login_http.sh'),
+    'CI does not keep the full stack default-off and isolate the legacy opt-in'
+);
+$assert(
+    is_string($defaultHttpSmoke)
+        && substr_count(
+            $defaultHttpSmoke,
+            "--header 'Sec-Fetch-Site: same-origin'"
+        ) >= 3
+        && str_contains(
+            $defaultHttpSmoke,
+            'The production-default stack rejects every tokenless credential request'
+        ),
+    'default HTTP acceptance no longer proves tokenless login rejection'
+);
+$assert(
+    is_string($legacyHttpSmoke)
+        && str_contains($legacyHttpSmoke, "Sec-Fetch-Site: cross-site")
+        && str_contains($legacyHttpSmoke, "Sec-Fetch-Site: same-origin")
+        && str_contains($legacyHttpSmoke, 'data-estab-session-bar')
+        && str_contains($legacyHttpSmoke, 'logout_action=logout'),
+    'isolated legacy HTTP acceptance omits origin isolation or session cleanup'
+);
+
 printf("Workflow security tests: OK (%d assertions)\n", $assertions);

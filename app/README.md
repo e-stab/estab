@@ -12,6 +12,13 @@ Nachrichtenarbeitsbereichs. `image_button.php` validiert und rendert die
 weiterhin öffentlich benötigten Legacy-Bildbuttons. `admin_operations.php`
 bildet die vorbereitete, transaktionale Persistenzgrenze für aktive
 Empfängermatrix, Standardmatrix, Nachrichtenzähler und Grafikreset.
+`incident.php` und `incident_ui.php` bilden den globalen Einsatzstatus,
+Eingabegate und Statusbanner. `attachment.php` hält Reservierung, Dateiablage,
+Metadaten und Audit in demselben Einsatzkontext. `generated_form.php`
+autorisiert die einzelnen einsatzbezogen benannten Nachrichtenvordrucke.
+`incident_export.php` und `incident_pdf.php` erzeugen das PDF-Dossier eines
+ausdrücklich ausgewählten Einsatzes; `user_admin.php` kapselt dauerhafte
+Kontosperre und Kennwortreset.
 
 ## Sicherheits- und Kompatibilitätsentscheidungen
 
@@ -54,15 +61,26 @@ Empfängermatrix, Standardmatrix, Nachrichtenzähler und Grafikreset.
   entfernt; die lokale Session endet auch dann, wenn die anschließende
   DB-Aktualisierung fehlschlägt. Das Datenbank-Update ist an Kürzel und
   gespeicherte Session-ID gebunden, damit eine alte Browser-Sitzung nicht den
-  Status einer neueren Anmeldung desselben Kontos deaktiviert. Das Audit
-  speichert dafür nur einen SHA-256-Verweis und niemals die wiederverwendbare
-  rohe Session-ID.
+  Status einer neueren Anmeldung desselben Kontos deaktiviert. Die
+  strukturierten JSON-Audits für Bestandslogin, Sitzungsaktualisierung,
+  Self-Registration und Logout speichern ausschließlich einen
+  `sha256:`-Verweis und niemals die wiederverwendbare rohe Session-ID oder ein
+  Kennwort.
 - `REMOTE_ADDR` wird nur als gültiges IPv4-/IPv6-Literal gespeichert.
   `X-Forwarded-For` wird standardmäßig ignoriert. Nur mit dem strikt geparsten
-  `ESTAB_TRUST_PROXY_HEADERS=true` wird eine vollständig validierte IP-Kette
-  akzeptiert und deren erster Eintrag als Auditwert gespeichert.
-- Selbstregistrierung bleibt für bestehende Installationen standardmäßig an.
-  `ESTAB_ALLOW_SELF_REGISTRATION=false` schaltet sie ab. Boolesche
+  `ESTAB_TRUST_PROXY_HEADERS=true` **und** einem direkten Peer innerhalb der
+  IP-/CIDR-Allowlist `ESTAB_TRUSTED_PROXIES` wird eine vollständig validierte
+  IP-Kette akzeptiert und deren erster Eintrag als Auditwert gespeichert.
+  Eine aktivierte Option ohne Allowlist ist ein Konfigurationsfehler;
+  Hostnamen, ungültige Präfixe und Catch-all-Netze werden abgewiesen.
+- `estab_validate_runtime_configuration()` prüft die requestunabhängigen
+  Deploymentwerte zentral. Der Container ruft sie vor Apache auf; Readiness
+  verwendet exakt dieselbe Grenze und meldet ungültige Ports, Identifikatoren,
+  Größen, URLs, Bool-Werte oder Proxy-Netze als nicht betriebsbereit.
+- Selbstregistrierung ist standardmäßig ausgeschaltet. Nur die bewusst gesetzte
+  Kompatibilitätsoption `ESTAB_ALLOW_SELF_REGISTRATION=true` erlaubt die
+  öffentliche Kontoanlage; regulär legt die Basic-Auth-geschützte
+  Benutzerverwaltung Konten und deren feste Funktion an. Boolesche
   Umgebungswerte akzeptieren ausschließlich `1/0`, `true/false`, `yes/no` oder
   `on/off`; Tippfehler führen absichtlich zu einem Fehler statt zu implizitem
   Aktivieren.
@@ -125,6 +143,35 @@ Empfängermatrix, Standardmatrix, Nachrichtenzähler und Grafikreset.
   nur die symbolische Laufkennung und entfernt ausschließlich das zugehörige
   flache Verzeichnis-/ZIP-Paar. Symlinks, Unterverzeichnisse und ausbrechende
   Pfade werden nicht verfolgt.
+- Der Singleton in `incident.php` erlaubt systemweit höchstens einen aktiven
+  Einsatz. Operative Writer halten ihn mit `SELECT ... FOR UPDATE` bis zum
+  Commit; ohne aktiven Einsatz scheitern sie. Der PDF-Dossierreader ist die
+  bewusste Ausnahme auf der Leseseite: Er verwendet einen konsistenten
+  Read-only-Snapshot der explizit gewählten aktiven oder historischen
+  Einsatz-ID.
+- `attachment.php::estab_attachment_store_upload()` beansprucht die
+  reservierte Kennung, verschiebt und prüft die Datei, finalisiert Metadaten
+  und schreibt das Audit unter demselben Einsatz-Lock. Fehler rollen zum
+  Savepoint vor dem Claim zurück und geben die Reservierung frei; der
+  Controller entfernt eine bereits verschobene Datei aus dem validierten
+  Ablageroot.
+- Einzelne Nachrichtenvordrucke werden als
+  `<datenbank> Einsatz-<einsatz_id> <nummer> <E|A>.pdf` über eine temporäre
+  Datei und atomisches `rename` veröffentlicht. Liste und Download leiten den
+  Namen aus dem abgeschlossenen, gedruckten Nachrichtendatensatz des aktiven
+  Einsatzes ab, statt dem gemeinsamen Verzeichnisinhalt zu vertrauen.
+- `assignment.php` bildet die gemeinsame, datenbankbasierte
+  Zuordnungsrichtlinie. Matrixspeichern, Login, Kontoanlage und Neuzuweisung
+  teilen einen globalen MariaDB-Lock; Kontooperationen nehmen danach erst den
+  kontospezifischen Lock. Dadurch wird die Rolle immer aus einem frischen,
+  vollständigen Matrixstand abgeleitet.
+- `user_admin.php` verwendet diese Richtlinie und denselben kontospezifischen
+  MariaDB-Lock wie der Login. Kontoanlage, feste Funktionszuordnung, Sperren,
+  Entsperren und Kennwortreset schreiben das kennwortfreie Audit in derselben
+  Transaktion. Neuzuweisung, Sperre und Reset widerrufen bestehende
+  Sitzungsdaten. Rollen stammen aus der serverseitigen Funktionsmatrix;
+  `nv_benutzer.aktiv` bleibt reiner Onlinezustand und `estab_gesperrt` die
+  dauerhafte administrative Sperre.
 - Die Matrixadministration verwendet keine generierte oder eingebundene
   PHP-Konfiguration mehr. Aktive Matrix und die einzige gespeicherte
   Standardmatrix liegen in getrennten InnoDB-Tabellen und müssen jeweils
@@ -133,10 +180,14 @@ Empfängermatrix, Standardmatrix, Nachrichtenzähler und Grafikreset.
   oder reinen Textzellen verboten. „Nur aktive Matrix speichern“ ändert nur
   die Laufzeitmatrix, „Standard laden“ ersetzt ausschließlich die noch
   ungespeicherten Editorwerte, und gemeinsames Speichern ersetzt beide
-  Tabellen und schreibt den zugehörigen Auditdatensatz in derselben
-  Transaktion. Ein Fehler in einer der beiden Tabellen rollt die gesamte
-  Änderung zurück; Benutzerkonten oder deren aktuelle Funktionszuordnung
-  werden dabei nicht umgeschrieben.
+  Tabellen. Dieselbe Transaktion synchronisiert anschließend die
+  serverabgeleitete Rolle aller weiterhin vorhandenen Funktionen und
+  widerruft betroffene Sitzungen. Entfernte Funktionen werden nicht
+  stillschweigend auf andere Funktionen umgebogen: Das Konto behält seine
+  letzte Zuordnung als sichtbar zu reparierenden Waisenstatus, wird abgemeldet
+  und kann sich bis zur administrativen Neuzuweisung nicht anmelden.
+  Matrix-, Konto- und kennwortfreie Auditänderungen committen gemeinsam; jeder
+  Fehler rollt den vollständigen Vorgang zurück.
 - Der belegte A/W-Zweitprüfpfad `FM-Admin` ist auf ein autorisiertes
   Nachrichtenobjekt und die Fernmelderrolle gebunden. Das Formular bietet
   controllerkompatible Speichern-/Abbrechen-Aktionen und lässt ausschließlich
@@ -164,10 +215,10 @@ Empfängermatrix, Standardmatrix, Nachrichtenzähler und Grafikreset.
   zur Anmeldung. Interne Karten öffnen im selben Browserkontext, während
   Administration und öffentliche Dokumentation sichtbar getrennte
   Zugriffsklassen behalten.
-- Ein aktives Konto behält seine gespeicherte Funktion. Erst nach dem Abmelden
-  darf die historische „Funktion Ummelden“-Logik einem inaktiven Konto eine
-  andere Funktion zuweisen; ein Request kann daher nicht die Sitzungsrolle
-  eines aktiven Kontos wechseln.
+- Ein Konto behält seine administrativ gespeicherte Funktion unabhängig vom
+  Onlinezustand. Weder ein aktives noch ein abgemeldetes Konto kann per
+  Anmelderequest Funktion oder Rolle wechseln. Nur die getrennt geschützte
+  Benutzerverwaltung darf neu zuweisen und widerruft dabei jede Sitzung.
 - Die Bitmap-Renderer akzeptieren ausschließlich skalare UTF-8-Werte,
   geschlossene Typ-/Form-/Farbvokabulare und enge Größen- sowie Textgrenzen.
   Die drei Webskripte sind nur dünne Wrapper; Parameterfehler liefern HTTP 400,

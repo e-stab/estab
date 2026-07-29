@@ -154,6 +154,15 @@ $assert(
         && !str_contains($listSource, '$abfzeit[stak]'),
     'message lists do not handle missing recipient colors or timestamp keys safely'
 );
+$assert(
+    substr_count($listSource, 'data-estab-list-filter') === 2
+        && substr_count($listSource, '<form') === 4
+        && substr_count($listSource, '</form>') === 4
+        && substr_count($listSource, 'echo "<tr".$priorityStyle') === 3
+        && substr_count($listSource, 'echo "<tr>\n";') >= 3
+        && substr_count($listSource, 'echo "</th>\n";') >= 3,
+    'message lists contain nested filters or structurally incomplete table rows'
+);
 
 $fmAdminAccess = [];
 $fmAdminButtons = [];
@@ -258,7 +267,10 @@ $assert(
 );
 $assert(
     str_contains($concurrencySource, "message_db_start_worker('numbered'")
-        && str_contains($concurrencySource, "message_db_start_worker('state'")
+        && preg_match(
+            "/message_db_start_worker\\(\\s*'state'/",
+            $concurrencySource
+        ) === 1
         && str_contains($concurrencySource, "message_db_start_worker('save'")
         && str_contains($concurrencySource, "message_db_start_worker('reset'")
         && str_contains($concurrencySource, 'estab_admin_acquire_counter_lock'),

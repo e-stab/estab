@@ -11,13 +11,15 @@ http_port=${ESTAB_REGISTRY_HTTP_PORT:-18081}
 app_image=${ESTAB_REGISTRY_APP_IMAGE:-}
 migrate_image=${ESTAB_REGISTRY_MIGRATE_IMAGE:-}
 compose_file=$repo_root/deploy/registry/compose.yaml
-restore_script=$repo_root/tests/integration/restore_roundtrip.sh
+backup_operator=$repo_root/deploy/registry/backup.sh
+backup_verifier=$repo_root/deploy/registry/verify-backup.sh
 temporary_parent=${ESTAB_REGISTRY_TEMP_PARENT:-$repo_root}
 bind_root=
 bind_db=
 bind_data=
 bind_export=
-backup_dir=
+backup_parent=
+production_backup=
 
 case "$container_cli" in
     docker | podman) ;;
@@ -61,8 +63,8 @@ do
         exit 1
     fi
 done
-if [ ! -x "$restore_script" ]; then
-    echo "Registry compose integration: restore roundtrip is not executable" >&2
+if [ ! -r "$backup_operator" ] || [ ! -r "$backup_verifier" ]; then
+    echo "Registry compose integration: production backup tools are unreadable" >&2
     exit 1
 fi
 if [ ! -d "$temporary_parent" ] || [ ! -w "$temporary_parent" ]; then
@@ -90,9 +92,10 @@ esac
 bind_db=$bind_root/data/db
 bind_data=$bind_root/data/4fdata
 bind_export=$bind_root/data/export
-backup_dir=$bind_root/backups/roundtrip
-mkdir -p "$bind_db" "$bind_data" "$bind_export" "$backup_dir"
-chmod 0700 "$bind_root/data" "$bind_root/backups" "$backup_dir"
+backup_parent=$bind_root/backups
+production_backup=$backup_parent/production-v2
+mkdir -p "$bind_db" "$bind_data" "$bind_export" "$backup_parent"
+chmod 0700 "$bind_root/data" "$backup_parent"
 printf '%s\n' "$bind_project" >"$bind_root/.estab-ci-bind-storage"
 chmod 0600 "$bind_root/.estab-ci-bind-storage"
 
@@ -125,6 +128,35 @@ compose_project()
 compose()
 {
     compose_project "$active_project" "$@"
+}
+
+verify_default_project_stability()
+{
+    first_release=$bind_root/project-name-release-one
+    second_release=$bind_root/project-name-release-two
+    mkdir -p "$first_release" "$second_release"
+    cp "$compose_file" "$first_release/compose.yaml"
+    cp "$compose_file" "$second_release/compose.yaml"
+
+    for release_directory in "$first_release" "$second_release"; do
+        (
+            unset COMPOSE_PROJECT_NAME
+            cd "$release_directory"
+            "$container_cli" compose -f compose.yaml config
+        ) >"$release_directory/effective-compose.yaml"
+        if ! grep -Eq '^name: estab$' \
+            "$release_directory/effective-compose.yaml"; then
+            echo "Registry compose integration: release directory changed the default project name" >&2
+            return 1
+        fi
+        for volume_name in estab_estab_db estab_estab_data estab_estab_export; do
+            if ! grep -Fq "name: $volume_name" \
+                "$release_directory/effective-compose.yaml"; then
+                echo "Registry compose integration: stable volume name is missing: $volume_name" >&2
+                return 1
+            fi
+        done
+    done
 }
 
 validate_bind_root()
@@ -323,6 +355,31 @@ wait_for_app()
     done
 }
 
+wait_for_db()
+{
+    deadline=$(( $(date +%s) + 240 ))
+    while :; do
+        db_id=$(compose ps -q db 2>/dev/null || true)
+        if [ -n "$db_id" ]; then
+            db_status=$("$container_cli" inspect --format \
+                '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' \
+                "$db_id" 2>/dev/null || true)
+            case "$db_status" in
+                healthy) return 0 ;;
+                unhealthy | exited | dead)
+                    echo "Registry compose integration: db entered $db_status" >&2
+                    return 1
+                    ;;
+            esac
+        fi
+        if [ "$(date +%s)" -ge "$deadline" ]; then
+            echo "Registry compose integration: db did not become healthy" >&2
+            return 1
+        fi
+        sleep 3
+    done
+}
+
 verify_stack()
 {
     wait_for_app
@@ -423,6 +480,35 @@ database_client()
     '
 }
 
+database_restore_client()
+{
+    compose exec -T db sh -ceu '
+        umask 077
+        client_defaults=$(mktemp "${TMPDIR:-/tmp}/estab-registry-restore-client.XXXXXX")
+        cleanup_client_defaults()
+        {
+            rm -f -- "$client_defaults"
+        }
+        trap cleanup_client_defaults EXIT HUP INT TERM
+
+        root_password=$(tr -d "\r\n" </run/secrets/estab_db_root_password)
+        escaped_password=$(printf "%s" "$root_password" |
+            sed -e "s/\\\\/\\\\\\\\/g" -e "s/\"/\\\\\"/g")
+        unset root_password
+        {
+            printf "[client]\n"
+            printf "user=root\n"
+            printf "password=\"%s\"\n" "$escaped_password"
+            printf "protocol=socket\n"
+            printf "default-character-set=utf8mb4\n"
+        } >"$client_defaults"
+        unset escaped_password
+        chmod 0600 "$client_defaults"
+
+        mariadb --defaults-extra-file="$client_defaults"
+    '
+}
+
 database_marker_count()
 {
     printf "SELECT COUNT(*) FROM nv_protokoll WHERE p_was = 'registry-bind' AND p_ereignis = '%s';\n" \
@@ -440,6 +526,7 @@ container_file_sha256()
 
 use_named_storage
 active_project=$project
+verify_default_project_stability
 compose config >/dev/null
 compose down --volumes --remove-orphans --timeout 20 >/dev/null 2>&1
 
@@ -499,19 +586,54 @@ if [ -z "$data_marker_sha256" ] || [ -z "$export_marker_sha256" ]; then
     exit 1
 fi
 
-echo "Registry compose integration: backing up, clearing, and restoring guarded bind data"
-COMPOSE_PROJECT_NAME=$bind_project \
-ESTAB_CONTAINER_CLI=$container_cli \
-ESTAB_COMPOSE_FILE=$compose_file \
-ESTAB_RESTORE_STORAGE_MODE=bind \
-ESTAB_BIND_STORAGE_ROOT=$bind_root \
-ESTAB_BACKUP_DIR=$backup_dir \
-    bash "$restore_script"
-
+echo "Registry compose integration: creating a production format-2 backup"
 (
-    cd "$backup_dir"
-    sha256sum --check --strict SHA256SUMS >/dev/null
+    cd "$repo_root/deploy/registry"
+    COMPOSE_PROJECT_NAME=$bind_project \
+    ESTAB_CONTAINER_CLI=$container_cli \
+    ESTAB_BACKUP_HEALTH_TIMEOUT_SECONDS=240 \
+        sh "$backup_operator" "$production_backup"
 )
+[ -d "$production_backup" ] && [ ! -L "$production_backup" ]
+grep -Fqx 'estab-full-backup-v2' "$production_backup/backup-format.txt"
+sh "$backup_verifier" "$production_backup" "${ESTAB_DB_NAME:-estab}"
+
+echo "Registry compose integration: clearing only guarded bind storage"
+validate_bind_root
+compose down --volumes --remove-orphans --timeout 20
+sh "$backup_verifier" "$production_backup" "${ESTAB_DB_NAME:-estab}"
+compose run --rm --no-deps -T --entrypoint sh db -ceu '
+    find /var/lib/mysql -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+    test -z "$(find /var/lib/mysql -mindepth 1 -print -quit)"
+'
+compose run --rm --no-deps -T --entrypoint sh app -ceu '
+    find /var/www/html/4fdata -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+    find /var/lib/estab/export -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+    test -z "$(find /var/www/html/4fdata -mindepth 1 -print -quit)"
+    test -z "$(find /var/lib/estab/export -mindepth 1 -print -quit)"
+'
+compose down --volumes --remove-orphans --timeout 20
+validate_bind_root
+
+echo "Registry compose integration: restoring exactly the production format-2 backup"
+compose up --detach db
+wait_for_db
+sh "$backup_verifier" "$production_backup" "${ESTAB_DB_NAME:-estab}"
+database_restore_client <"$production_backup/database.sql"
+
+sh "$backup_verifier" "$production_backup" "${ESTAB_DB_NAME:-estab}"
+compose run --rm --no-deps -T --entrypoint sh app -ceu \
+    'tar -xzf - -C /var/www/html/4fdata' \
+    <"$production_backup/4fdata.tar.gz"
+compose run --rm --no-deps -T --entrypoint sh app -ceu \
+    'tar -xzf - -C /var/lib/estab/export' \
+    <"$production_backup/export.tar.gz"
+
+compose up --force-recreate migrate
+compose up --detach app
+wait_for_db
+wait_for_app
+sh "$backup_verifier" "$production_backup" "${ESTAB_DB_NAME:-estab}"
 verify_bind_mounts
 compose run --rm --no-deps -T migrate
 wait_for_app

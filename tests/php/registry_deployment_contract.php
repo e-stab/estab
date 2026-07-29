@@ -28,14 +28,19 @@ $ciWorkflow = $read($root . '/.github/workflows/ci.yml');
 $integration = $read($root . '/tests/integration/registry_compose.sh');
 $restoreRoundtrip = $read($root . '/tests/integration/restore_roundtrip.sh');
 $backupRunbook = $read($root . '/docs/BACKUP-UND-WIEDERHERSTELLUNG.md');
+$backupOperator = $read($root . '/deploy/registry/backup.sh');
 $backupVerifier = $read($root . '/deploy/registry/verify-backup.sh');
+$staticRunner = $read($root . '/tests/static/run.sh');
 $trivyIgnore = $read($root . '/.trivyignore.yaml');
 $ci = $read($root . '/tests/integration/ci.sh');
+$candidateVerifier = $read($root . '/tests/integration/verify_release_candidate.sh');
 $appDockerfile = $read($root . '/Dockerfile');
 $migrateDockerfile = $read($root . '/docker/db/Dockerfile.migrate');
 
 $assert(
-    !str_contains($registryCompose, 'build:')
+    str_starts_with($registryCompose, "name: \${COMPOSE_PROJECT_NAME:-estab}\n")
+    && preg_match('/^COMPOSE_PROJECT_NAME=estab$/m', $registryEnvironment) === 1
+    && !str_contains($registryCompose, 'build:')
     && !str_contains($registryCompose, '/docker-entrypoint-initdb.d/')
     && str_contains($registryCompose, '${ESTAB_APP_IMAGE:?')
     && str_contains($registryCompose, '${ESTAB_MIGRATE_IMAGE:?')
@@ -114,7 +119,9 @@ foreach ([
     'ESTAB_ALLOW_SELF_REGISTRATION',
     'ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF',
     'ESTAB_TRUST_PROXY_HEADERS',
+    'ESTAB_TRUSTED_PROXIES',
     'ESTAB_UPLOAD_MAX_BYTES',
+    'ESTAB_PDF_ATTACHMENT_MAX_BYTES',
 ] as $environmentName) {
     $assert(
         str_contains($sourceCompose, $environmentName)
@@ -139,6 +146,21 @@ $assert(
     ) === 1,
     'Outgoing-message review does not keep the published false default'
 );
+$selfRegistrationComposeSetting =
+    'ESTAB_ALLOW_SELF_REGISTRATION: ${ESTAB_ALLOW_SELF_REGISTRATION:-false}';
+$assert(
+    str_contains($sourceCompose, $selfRegistrationComposeSetting)
+    && str_contains($registryCompose, $selfRegistrationComposeSetting)
+    && preg_match(
+        '/^ESTAB_ALLOW_SELF_REGISTRATION=false$/m',
+        $sourceEnvironment
+    ) === 1
+    && preg_match(
+        '/^ESTAB_ALLOW_SELF_REGISTRATION=false$/m',
+        $registryEnvironment
+    ) === 1,
+    'Self-registration does not keep the published secure false default'
+);
 $assert(
     str_contains($registryCompose, 'database:')
     && str_contains($registryCompose, 'internal: true')
@@ -159,6 +181,8 @@ $assert(
     && str_contains($registryReadme, '@sha256:')
     && str_contains($registryReadme, 'Vollbackup')
     && str_contains($registryReadme, 'Unvollständigen Publish-Lauf behandeln')
+    && str_contains($registryReadme, 'Candidate-Tag')
+    && str_contains($registryReadme, 'verstecktes Draft')
     && str_contains($registryReadme, 'Required Reviewer'),
     'Registry runbook omits architecture, Synology, digest, backup, or release recovery'
 );
@@ -227,8 +251,11 @@ $assert(
         $ciWorkflow,
         'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a'
     )
+    && str_contains($ciWorkflow, 'cron: "23 3 * * 1"')
+    && str_contains($ciWorkflow, 'if: always()')
+    && str_contains($ciWorkflow, 'name: compose-evidence-${{ matrix.arch }}-')
     && !preg_match('/uses:\s*[^@\s]+@v\d+/m', $ciWorkflow),
-    'Standard CI still uses mutable action or PHP CLI references'
+    'Standard CI lacks pinned references, scheduled drift checks, or retained evidence'
 );
 $assert(
     str_contains($ciWorkflow, 'runner: ubuntu-24.04')
@@ -246,17 +273,52 @@ $assert(
     str_contains($workflow, 'platforms: linux/amd64,linux/arm64')
     && str_contains($workflow, 'provenance: mode=max')
     && str_contains($workflow, 'sbom: true')
-    && substr_count($workflow, 'push: false') === 2
+    && substr_count(
+        $workflow,
+        'docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a'
+    ) === 2
+    && !str_contains($workflow, 'push: false')
     && substr_count($workflow, 'push: true') === 2
+    && str_contains($workflow, 'name: Build immutable candidate image pair')
+    && str_contains($workflow, 'CANDIDATE_IMAGE_TAG: candidate-')
+    && str_contains($workflow, 'candidate_tag: ${{ steps.candidate_metadata.outputs.tag }}')
+    && str_contains($workflow, 'APP_DIGEST: ${{ needs.stage.outputs.app_digest }}')
+    && str_contains($workflow, 'MIGRATE_DIGEST: ${{ needs.stage.outputs.migrate_digest }}')
+    && str_contains($workflow, 'ESTAB_PREBUILT_APP_IMAGE:')
+    && str_contains($workflow, 'ESTAB_PREBUILT_MIGRATE_IMAGE:')
     && str_contains($workflow, 'bash tests/integration/ci.sh')
     && str_contains($workflow, 'gh attestation verify')
+    && str_contains($workflow, '--bundle-from-oci')
+    && str_contains($workflow, '--source-digest "$GITHUB_SHA"')
     && str_contains($workflow, 'index .SBOM')
     && str_contains($workflow, 'index .Provenance')
     && str_contains($workflow, 'SPDXRef-DOCUMENT')
     && str_contains($workflow, '.packages | type == "array" and length > 0')
     && str_contains($workflow, '.invocation.environment.platform == $platform')
-    && str_contains($workflow, 'create-storage-record: false'),
-    'Publish workflow omits prebuild, platforms, evidence, or complete release gate'
+    && str_contains($workflow, 'create-storage-record: false')
+    && str_contains($workflow, 'Upload successful architecture evidence')
+    && str_contains($workflow, 'name: publish-evidence-${{ matrix.arch }}-')
+    && str_contains($workflow, 'Upload failure diagnostics')
+    && str_contains($workflow, 'retention-days: 90')
+    && str_contains($workflow, 'retention-days: 7'),
+    'Publish workflow omits its single-build candidate, exact-digest native gates, or retained evidence'
+);
+$assert(
+    is_executable($root . '/tests/integration/verify_release_candidate.sh')
+    && str_contains($candidateVerifier, 'amd64 | arm64')
+    && str_contains($candidateVerifier, 'actual_digest="sha256:')
+    && str_contains($candidateVerifier, 'native_manifest_digest="sha256:')
+    && str_contains($candidateVerifier, 'local image is not the indexed native config')
+    && str_contains($candidateVerifier, '.SBOM')
+    && str_contains($candidateVerifier, '.Provenance')
+    && str_contains($candidateVerifier, '--bundle-from-oci')
+    && str_contains($candidateVerifier, '--source-digest "$GITHUB_SHA"')
+    && str_contains($ci, 'prebuilt_app_image=${ESTAB_PREBUILT_APP_IMAGE:-}')
+    && str_contains($ci, 'prebuilt_migrate_image=${ESTAB_PREBUILT_MIGRATE_IMAGE:-}')
+    && str_contains($ci, 'prebuilt images must use exact sha256 digest references')
+    && str_contains($ci, 'verify_prebuilt_runtime_images initial')
+    && str_contains($ci, 'verify_prebuilt_runtime_images final'),
+    'Exact candidate verifier does not bind index, platform manifest, config, attestation, and runtime IDs'
 );
 $trivyAction = 'aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25';
 $assert(
@@ -281,9 +343,18 @@ $assert(
     && !str_contains($workflow, 'org.opencontainers.image.licenses'),
     'Publish workflow omits an image or asserts an unverified license'
 );
+$releaseDraftPosition = strpos($workflow, 'gh release create "$RELEASE_IMAGE_TAG"');
+$releaseUploadPosition = strpos($workflow, 'gh release upload "$RELEASE_IMAGE_TAG"');
+$releaseDownloadPosition = strpos($workflow, 'gh release download "$RELEASE_IMAGE_TAG"');
+$releasePromotionPosition = strpos($workflow, 'docker buildx imagetools create');
+$publicationEvidencePosition = strpos($workflow, 'name: publication-evidence-${{ github.run_id }}-');
+$releasePublishPosition = strpos($workflow, 'gh release edit "$RELEASE_IMAGE_TAG" --draft=false');
 $assert(
     str_contains($workflow, 'contents: write')
+    && str_contains($workflow, 'name: Promote verified digests and publish installation bundle')
+    && str_contains($workflow, '- verify_candidate')
     && str_contains($workflow, 'Build immutable installation bundle')
+    && str_contains($workflow, 'deploy/registry/backup.sh')
     && str_contains($workflow, 'deploy/registry/verify-backup.sh')
     && str_contains(
         $workflow,
@@ -305,10 +376,30 @@ $assert(
     && str_contains($workflow, 'sha256sum "$bundle_name.tar.gz"')
     && !str_contains($workflow, 'sha256sum "$RUNNER_TEMP/$bundle_name.tar.gz"')
     && str_contains($workflow, 'gh release create "$RELEASE_IMAGE_TAG"')
+    && str_contains($workflow, '--draft')
+    && str_contains($workflow, '--latest=false')
     && str_contains($workflow, 'gh release upload "$RELEASE_IMAGE_TAG"')
+    && substr_count($workflow, 'gh release download "$RELEASE_IMAGE_TAG"') === 2
+    && substr_count($workflow, 'docker buildx imagetools create') === 2
+    && str_contains($workflow, 'gh release edit "$RELEASE_IMAGE_TAG" --draft=false')
+    && str_contains($workflow, 'cleanup_owned_draft')
+    && str_contains($workflow, 'promotion_started=true')
+    && str_contains($workflow, 'A promoted release tag does not match its verified digest.')
+    && str_contains($workflow, 'name: publication-evidence-${{ github.run_id }}-')
     && str_contains($workflow, '"$BUNDLE_NAME.tar.gz.sha256"')
-    && str_contains($workflow, 'Refusing to overwrite existing release asset: $asset_name'),
-    'Publish workflow does not produce a checksum-bound immutable digest installation bundle'
+    && str_contains($workflow, 'Refusing to overwrite existing release asset: $asset_name')
+    && $releaseDraftPosition !== false
+    && $releaseUploadPosition !== false
+    && $releaseDownloadPosition !== false
+    && $releasePromotionPosition !== false
+    && $publicationEvidencePosition !== false
+    && $releasePublishPosition !== false
+    && $releaseDraftPosition < $releaseUploadPosition
+    && $releaseUploadPosition < $releaseDownloadPosition
+    && $releaseDownloadPosition < $releasePromotionPosition
+    && $releasePromotionPosition < $publicationEvidencePosition
+    && $publicationEvidencePosition < $releasePublishPosition,
+    'Publish workflow does not verify hidden draft assets before digest-only promotion and final visibility'
 );
 foreach ([$appDockerfile, $migrateDockerfile] as $dockerfile) {
     $assert(
@@ -336,6 +427,10 @@ $assert(
 );
 $assert(
     str_contains($integration, '.estab-registry-bind.XXXXXX')
+    && str_contains($integration, 'verify_default_project_stability')
+    && str_contains($integration, 'project-name-release-one')
+    && str_contains($integration, 'project-name-release-two')
+    && str_contains($integration, 'estab_estab_db')
     && str_contains($integration, '.estab-ci-bind-storage')
     && str_contains($integration, 'ESTAB_DB_DATA_SOURCE=$bind_db')
     && str_contains($integration, 'ESTAB_APP_DATA_SOURCE=$bind_data')
@@ -345,9 +440,16 @@ $assert(
     'Registry integration does not create, guard, and inspect real host bind mounts'
 );
 $assert(
-    str_contains($integration, 'ESTAB_RESTORE_STORAGE_MODE=bind')
-    && str_contains($integration, 'tests/integration/restore_roundtrip.sh')
-    && str_contains($integration, 'sha256sum --check --strict SHA256SUMS')
+    str_contains($integration, 'production_backup=$backup_parent/production-v2')
+    && str_contains($integration, 'sh "$backup_operator" "$production_backup"')
+    && str_contains($integration, "'estab-full-backup-v2'")
+    && substr_count(
+        $integration,
+        'sh "$backup_verifier" "$production_backup" "${ESTAB_DB_NAME:-estab}"'
+    ) >= 3
+    && str_contains($integration, 'database_restore_client <"$production_backup/database.sql"')
+    && str_contains($integration, '<"$production_backup/4fdata.tar.gz"')
+    && str_contains($integration, '<"$production_backup/export.tar.gz"')
     && str_contains($integration, 'ESTAB_REGISTRY_BIND_')
     && str_contains($integration, '.estab-bind-data-marker')
     && str_contains($integration, '.estab-bind-export-marker')
@@ -387,6 +489,38 @@ $assert(
     'Registry bind roundtrip lacks complete resource cleanup or CI wiring'
 );
 $assert(
+    is_executable($root . '/deploy/registry/backup.sh')
+    && str_contains($backupOperator, 'ABSOLUTE_BACKUP_DIRECTORY')
+    && str_contains($backupOperator, 'backup target already exists')
+    && str_contains($backupOperator, 'mktemp -d "${staging_prefix}XXXXXX"')
+    && str_contains($backupOperator, 'compose stop app')
+    && str_contains($backupOperator, 'compose start app')
+    && str_contains($backupOperator, 'mariadb-dump')
+    && str_contains($backupOperator, '/var/www/html/4fdata')
+    && str_contains($backupOperator, '/var/lib/estab/export')
+    && str_contains($backupOperator, 'backup-format.txt')
+    && str_contains($backupOperator, 'storage-sources.txt')
+    && str_contains($backupOperator, 'image-references.txt')
+    && str_contains($backupOperator, 'image_digest_hex=${image_digest#sha256:}')
+    && str_contains($backupOperator, '*[!0123456789abcdef]*')
+    && str_contains($backupOperator, '[ "${#image_digest_hex}" -eq 64 ]')
+    && str_contains($backupOperator, 'image_digest="sha256:$image_digest_hex"')
+    && str_contains($backupOperator, 'sh "$backup_verifier" "$staging_dir" "$database_name"')
+    && str_contains($backupOperator, 'publication_lock="${canonical_parent%/}/.estab-backup.lock"')
+    && str_contains($backupOperator, 'if ! mkdir "$publication_lock"; then')
+    && str_contains($backupOperator, 'wait_for_healthy app "$app_container"')
+    && str_contains($backupOperator, 'wait_for_healthy db "$db_container"')
+    && str_contains($backupOperator, 'restart_application')
+    && str_contains($backupOperator, '"$move_cli" "$staged_before_publication" "$backup_target"')
+    && !str_contains($backupOperator, '-nT')
+    && str_contains($backupOperator, 'atomic backup publication could not be proven')
+    && str_contains($backupOperator, "trap 'cleanup 129' HUP")
+    && str_contains($backupOperator, "trap 'cleanup 130' INT")
+    && str_contains($backupOperator, "trap 'cleanup 143' TERM")
+    && str_contains($staticRunner, 'tests/static/backup_operator.sh'),
+    'Operator backup does not fail closed, capture every data source, bind metadata, and publish atomically'
+);
+$assert(
     str_contains($backupVerifier, 'sha256sum -c SHA256SUMS')
     && str_contains($backupVerifier, 'shasum -a 256 -c SHA256SUMS')
     && str_contains($backupVerifier, 'gzip -t "$archive"')
@@ -396,10 +530,20 @@ $assert(
     && str_contains($backupVerifier, "'-- Dump completed on '")
     && str_contains($backupVerifier, 'expected_manifest_names=')
     && str_contains($backupVerifier, '$created_database" != "$selected_database')
+    && str_contains($backupVerifier, '$created_database" != "$expected_database')
+    && str_contains($backupVerifier, 'BACKUP_DIRECTORY EXPECTED_DATABASE')
+    && str_contains($backupVerifier, 'estab-full-backup-v2')
+    && str_contains($backupVerifier, 'backup-created-utc.txt')
+    && str_contains($backupVerifier, 'storage-sources.txt')
+    && str_contains($backupVerifier, 'image-references.txt')
+    && str_contains($backupVerifier, 'format v2 contains an unbound or missing directory entry')
+    && str_contains($backupRunbook, 'deploy/registry/backup.sh')
     && str_contains($backupRunbook, 'backup_verifier=deploy/registry/verify-backup.sh')
+    && str_contains($backupRunbook, "'true healthy') break")
+    && str_contains($backupRunbook, 'Ein bloßer `running`-Status ist keine Importfreigabe')
     && substr_count(
         $backupRunbook,
-        'if ! sh "$backup_verifier" "$restore_dir"; then'
+        'if ! sh "$backup_verifier" "$restore_dir" "$expected_database"; then'
     ) === 2,
     'Manual restore runbook lacks a mandatory read-only preflight at both destructive boundaries'
 );

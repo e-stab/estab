@@ -8,12 +8,12 @@ erforderlich.
 
 Geprüft werden:
 
-- die anonyme Übersicht mit klar getrennten Wegen für ein bestehendes und ein
-  neues Konto;
+- die anonyme Übersicht mit eindeutigem Bestandslogin, deaktivierter
+  öffentlicher Kontoanlage und Verweis auf die Benutzerverwaltung;
 - die sichtbaren, anonym verständlich zum Login führenden Modulkarten sowie
   HTTP 403 bei direkten Zugriffen auf geschützte Fachendpunkte;
-- das Anlegen und unmittelbare Anmelden eines neuen Funktionskontos im
-  Zwei-`iframe`-Nachrichtenarbeitsbereich;
+- das Anmelden eines zuvor über die Benutzerverwaltungs-API provisionierten
+  Funktionskontos im Zwei-`iframe`-Nachrichtenarbeitsbereich;
 - genau eine sichtbare, dauerhaft verfügbare Session-Bar im gesamten
   Nachrichtenarbeitsbereich sowie Name, Kürzel, Funktion, abgeleitete Rolle,
   gemeinsame Navigation und Abmeldebutton in der vollhohen
@@ -72,7 +72,12 @@ Geprüft werden:
   Modulkarten innerhalb der Breite bleiben, die Bereichsnavigation erreichbar
   ist und zentrale Login-Schaltflächen mindestens 44 Pixel hoch sind;
 - mit separaten ephemeren Admin-Testdaten die Basic-Auth-geschützte
-  Exportübersicht bei `1280x800` und `390x844` CSS-Pixeln, die echte
+  Adminübersicht mit genau fünf klar getrennten Maßnahmen bei `1280x800` und
+  `390x844` CSS-Pixeln: Navigation, Adminidentität und Karten bleiben sichtbar,
+  die Karten überlappen sich nicht, erzeugen kein horizontales
+  Dokument-Scrolling, sind vollständig klickbar und bilden mobil eine
+  einheitliche Spalte;
+- die Exportübersicht bei `1280x800` und `390x844` CSS-Pixeln, die echte
   Exporterstellung, das offene Manifest, genau einen Downloadlink sowie die
   zunächst geschlossene und bewusst zweistufig geöffnete Löschbestätigung,
   den bestätigten Löschvorgang und das anschließende Verschwinden genau dieses

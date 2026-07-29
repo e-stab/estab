@@ -104,9 +104,10 @@ done
 assert_body_fixed 'id="estab-login"'
 assert_body_fixed "href=\"$expected_app_root/4fach/index.php?login_flow=existing\""
 assert_body_fixed '>Mit bestehendem Konto anmelden</a>'
-assert_body_fixed 'id="estab-register"'
-assert_body_fixed "href=\"$expected_app_root/4fach/index.php?login_flow=new\""
-assert_body_fixed '>Neues Konto anlegen</a>'
+assert_body_absent_fixed 'id="estab-register"'
+assert_body_absent_fixed "href=\"$expected_app_root/4fach/index.php?login_flow=new\""
+assert_body_fixed 'Neue Konten können auf dieser Installation nicht selbst angelegt werden'
+assert_body_fixed 'Administration → Benutzerverwaltung'
 assert_body_fixed 'Anmeldung erforderlich'
 assert_body_fixed 'Separater Administrationszugang'
 assert_body_fixed 'data-estab-navigation'
@@ -235,7 +236,9 @@ assert_status 200 "$base_url/4fach/mainindex.php"
 assert_body_fixed 'eStab-Funktionskonto'
 assert_body_fixed 'Wie möchten Sie fortfahren?'
 assert_body_fixed 'name="login_flow" value="existing"'
-assert_body_fixed 'name="login_flow" value="new"'
+assert_body_absent_fixed 'name="login_flow" value="new"'
+assert_body_fixed '<button class="estab-button" type="button" disabled>Neues Konto anlegen</button>'
+assert_body_fixed 'Administration → Benutzerverwaltung'
 assert_body_fixed 'name="csrf_token"'
 if grep -Fq 'data-estab-session-bar' "$body"; then
     printf 'HTTP surface: anonymous login page contains authenticated session UI\n' >&2
@@ -246,8 +249,10 @@ assert_status 200 "$base_url/4fach/mainindex.php?login_flow=existing"
 assert_body_fixed 'Mit bestehendem Konto anmelden'
 assert_body_fixed 'autocomplete="current-password"'
 assert_status 200 "$base_url/4fach/mainindex.php?login_flow=new"
-assert_body_fixed 'Neues Funktionskonto anlegen'
-assert_body_fixed 'name="kennwort2"'
+assert_body_fixed '<h2>Neues Konto anlegen</h2>'
+assert_body_fixed 'Neue Konten können hier nicht erstellt werden'
+assert_body_fixed 'Administration → Benutzerverwaltung'
+assert_body_absent_fixed 'name="kennwort2"'
 assert_status 403 "$base_url/4fach/mainindex.php?login_flow=unknown"
 
 assert_status 405 "$base_url/4fach/logout.php"
@@ -270,11 +275,11 @@ fi
 
 assert_status 200 --request POST --data-urlencode 'login_flow=new' \
     "$base_url/4fach/mainindex.php"
-assert_body_fixed 'Neues Funktionskonto anlegen'
-assert_body_fixed 'name="login_flow" value="new"'
-assert_body_fixed 'name="kennwort2"'
-assert_body_fixed 'Kennwort wiederholen'
-assert_body_fixed 'Konto erstellen und anmelden'
+assert_body_fixed '<h2>Neues Konto anlegen</h2>'
+assert_body_fixed 'Neue Konten können hier nicht erstellt werden'
+assert_body_fixed 'Administration → Benutzerverwaltung'
+assert_body_absent_fixed 'name="login_flow" value="new"'
+assert_body_absent_fixed 'name="kennwort2"'
 assert_body_fixed 'name="csrf_token"'
 
 assert_status 403 --request POST --data-urlencode 'login_flow=unknown' \
@@ -283,11 +288,23 @@ assert_status 403 --request POST --data-urlencode 'login_flow=unknown' \
 assert_status 200 "$base_url/stabinfo/index.php"
 assert_body_fixed './l_index.php'
 assert_body_fixed './f_info.php'
+assert_body_fixed 'data-estab-bos-workspace'
+assert_body_fixed 'name="status"'
+assert_body_fixed 'name="mainframe"'
+assert_body_fixed 'data-estab-mobile-menu-return'
+assert_body_fixed 'data-estab-bos-responsive-style'
+assert_body_absent_fixed '<frameset'
 assert_no_insecure_resource
 assert_nonempty_200 "$base_url/stabinfo/f_info.php"
+assert_body_fixed 'data-estab-bos-welcome'
 assert_no_insecure_resource
 assert_status 200 "$base_url/stabinfo/l_index.php"
-assert_body_fixed '<summary>Bereich wechseln</summary>'
+assert_body_fixed 'data-estab-public-bar'
+assert_body_fixed 'data-estab-navigation-mode="sidebar"'
+assert_body_fixed 'data-estab-bos-document-navigation'
+assert_body_fixed 'data-estab-bos-document-link'
+assert_body_absent_fixed '<details'
+assert_body_absent_fixed '<summary'
 if grep -Fq 'data-estab-session-bar' "$body"; then
     printf 'HTTP surface: anonymous BOS navigation contains authenticated session UI\n' >&2
     exit 1

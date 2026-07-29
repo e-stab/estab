@@ -349,35 +349,6 @@ login_existing()
         "$base_url/4fach/mainindex.php"
 }
 
-register_user()
-{
-    cookie_jar=$1
-    name=$2
-    code=$3
-    function_name=$4
-    password=$5
-
-    : >"$cookie_jar"
-    assert_status 200 \
-        --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-        --request POST --data-urlencode 'login_flow=new' \
-        "$base_url/4fach/mainindex.php"
-    login_csrf=$(csrf_from_body)
-    assert_status 200 \
-        --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-        --request POST \
-        --data-urlencode "csrf_token=$login_csrf" \
-        --data-urlencode 'login_flow=new' \
-        --data-urlencode "benutzer=$name" \
-        --data-urlencode "kuerzel=$code" \
-        --data-urlencode "funktion=$function_name" \
-        --data-urlencode "kennwort1=$password" \
-        --data-urlencode "kennwort2=$password" \
-        --data-urlencode '2teskennwort=Yes' \
-        --data-urlencode 'absenden_x=1' \
-        "$base_url/4fach/mainindex.php"
-}
-
 load_manager()
 {
     cookie_jar=$1
@@ -534,9 +505,15 @@ SQL
 case "$si_users_before" in
     '' | *[!0-9]*) echo 'Category HTTP: invalid Si user count' >&2; exit 1 ;;
 esac
+sh tests/integration/provision_user.sh \
+    "$s1_name" "$s1_code" "$s1_function" "$s1_password"
+sh tests/integration/provision_user.sh \
+    "$s2_name" "$s2_code" S2 "$s2_password"
+sh tests/integration/provision_user.sh \
+    "$si_name" "$si_code" Si "$si_password"
 login_existing "$s1_cookies" "$s1_name" "$s1_code" "$s1_function" "$s1_password"
 login_existing "$s2_cookies" "$s2_name" "$s2_code" S2 "$s2_password"
-register_user "$si_cookies" "$si_name" "$si_code" Si "$si_password"
+login_existing "$si_cookies" "$si_name" "$si_code" Si "$si_password"
 
 master_auto_increment=$(db_sql <<'SQL'
 SELECT COALESCE(`AUTO_INCREMENT`, 1)

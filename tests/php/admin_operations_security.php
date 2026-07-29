@@ -109,6 +109,7 @@ $assert(
 
 $root = dirname(__DIR__, 2);
 $helper = file_get_contents($root . '/app/admin_operations.php');
+$assignmentPolicy = file_get_contents($root . '/app/assignment.php');
 $matrixPage = file_get_contents($root . '/4fadm/make_fkt.php');
 $counterPage = file_get_contents($root . '/4fadm/set_number_after_crash.php');
 $resetPage = file_get_contents($root . '/4fach/resetpic.php');
@@ -119,7 +120,7 @@ $apache = file_get_contents($root . '/docker/apache/estab.conf');
 $adminHttp = file_get_contents($root . '/tests/integration/admin_workflows_http.sh');
 foreach (
     [
-        $helper, $matrixPage, $counterPage, $resetPage, $databaseConfig,
+        $helper, $assignmentPolicy, $matrixPage, $counterPage, $resetPage, $databaseConfig,
         $messageTools, $messageDummy, $apache, $adminHttp,
     ]
     as $source
@@ -162,10 +163,44 @@ $assert(
     'administrative audit records are incomplete'
 );
 $assert(
-    !str_contains($helper, 'nv_benutzer')
-        && !str_contains($matrixPage, "conf_4f_tbl['benutzer']")
-        && !str_contains($matrixPage, 'nv_benutzer'),
-    'matrix update unexpectedly changes account assignments'
+    substr_count($helper, 'estab_incident_require_active($connection, true)')
+        >= 2
+        && substr_count($helper, 'WHERE `einsatz_id` = ?') >= 2
+        && str_contains(
+            $helper,
+            '(`einsatz_id`, `04_richtung`, `04_nummer`, `12_inhalt`)'
+        )
+        && str_contains(
+            $helper,
+            'SET `x04_druck` = ?, `x05_druck_d` = NULL'
+        ),
+    'counter repair or print reset is not bound to the locked active incident'
+);
+$assert(
+    str_contains(
+        $helper,
+        '(`einsatz_id`, `p_was`, `p_ereignis`) VALUES (?, ?, ?)'
+    )
+        && str_contains($counterPage, 'data-estab-requires-incident')
+        && str_contains($resetPage, 'data-estab-requires-incident')
+        && str_contains($counterPage, 'EstabNoActiveIncidentException')
+        && str_contains($resetPage, 'EstabNoActiveIncidentException'),
+    'incident-scoped administrative actions lack audit or fail-closed UI gates'
+);
+$assert(
+    str_contains($helper, 'estab_assignment_acquire_policy_lock(')
+        && substr_count(
+            $helper,
+            'estab_assignment_reconcile_accounts('
+        ) === 2
+        && str_contains($matrixPage, "\$conf_4f_tbl['benutzer']")
+        && is_string($assignmentPolicy)
+        && str_contains($assignmentPolicy, '`rolle` = ?')
+        && str_contains($assignmentPolicy, '`aktiv` = 0')
+        && str_contains($assignmentPolicy, "`sid` = ''")
+        && !str_contains($assignmentPolicy, 'SET `funktion` =')
+        && !str_contains($assignmentPolicy, 'DROP TABLE'),
+    'matrix update does not reconcile roles and revoke orphaned assignments safely'
 );
 $assert(
     str_contains($helper, 'function estab_admin_replace_matrix_and_standard(')
@@ -178,6 +213,10 @@ $assert(
             'estab_admin_write_matrix($connection, $standardMatrixTable, $matrix)'
         )
         && str_contains($helper, '`mtx_rc2`, `mtx_auto`')
+        && str_contains(
+            $helper,
+            "estab_assignment_matrix_audit(\n                'replace_active_and_standard'"
+        )
         && str_contains($helper, '$connection->commit()'),
     'active and standard matrices are not replaced together with both flags'
 );

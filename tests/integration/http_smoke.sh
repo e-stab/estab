@@ -88,7 +88,7 @@ if [ "$restore_verify_only" = true ]; then
         exit 1
     fi
     if ! printf '%s' "$restore_vordruck" |
-        grep -Eq '^[A-Za-z0-9_]+ [0-9]+ [EA][.]pdf$'; then
+        grep -Eq '^[A-Za-z0-9_]+ Einsatz-[1-9][0-9]* [1-9][0-9]* [EA][.]pdf$'; then
         printf 'HTTP smoke: restore verification requires a safe generated-form name\n' >&2
         exit 1
     fi
@@ -100,7 +100,22 @@ if [ "$restore_verify_only" = true ]; then
 fi
 
 work_dir=$(mktemp -d /tmp/estab-http-smoke.XXXXXX)
-trap 'rm -rf -- "$work_dir"' EXIT HUP INT TERM
+readiness_schema_renamed=0
+cleanup_http_smoke() {
+    status=$?
+    trap - EXIT HUP INT TERM
+    if [ "$readiness_schema_renamed" -eq 1 ]; then
+        printf '%s\n' \
+            'RENAME TABLE estab_readiness_probe_matrix TO nv_empfmtx_standard;' |
+            db_sql >/dev/null 2>&1 || {
+                printf 'HTTP smoke: emergency readiness-schema restore failed\n' >&2
+                status=1
+            }
+    fi
+    rm -rf -- "$work_dir"
+    exit "$status"
+}
+trap cleanup_http_smoke EXIT HUP INT TERM
 cookie_jar=$work_dir/cookies.txt
 body=$work_dir/body.html
 headers=$work_dir/headers.txt
@@ -376,7 +391,7 @@ vordruck_name_for_marker() {
         printf 'HTTP smoke: unsafe generated-form marker\n' >&2
         exit 1
     fi
-    printf "SELECT CONCAT(DATABASE(), ' ', \`04_nummer\`, ' ', \`04_richtung\`, '.pdf') FROM nv_nachrichten WHERE \`12_inhalt\` = '%s' AND \`x01_abschluss\` = 't' AND \`x04_druck\` = 't' ORDER BY \`00_lfd\` DESC LIMIT 1;\n" \
+    printf "SELECT CONCAT(DATABASE(), ' Einsatz-', \`einsatz_id\`, ' ', \`04_nummer\`, ' ', \`04_richtung\`, '.pdf') FROM nv_nachrichten WHERE \`12_inhalt\` = '%s' AND \`x01_abschluss\` = 't' AND \`x04_druck\` = 't' ORDER BY \`00_lfd\` DESC LIMIT 1;\n" \
         "$marker" | db_sql
 }
 
@@ -391,6 +406,40 @@ assert_account_count() {
     if [ "$actual" != "$expected" ]; then
         printf 'HTTP smoke: expected %s account rows for %s, got %s\n' \
             "$expected" "$account_code" "$actual" >&2
+        exit 1
+    fi
+}
+
+active_attachment_reservation_count() {
+    printf '%s\n' \
+        "SELECT COUNT(*) FROM nv_anhang WHERE status = 8 AND einsatz_id = (SELECT active_einsatz_id FROM nv_einsatz_status WHERE singleton_id = 1);" |
+        db_sql
+}
+
+assert_uploaded_attachment() {
+    reservation=$1
+    expected_code=$2
+    if ! printf '%s' "$reservation" | grep -Eq '^[A-Za-z]{2}[0-9]{4,}$'; then
+        printf 'HTTP smoke: unsafe attachment reservation assertion\n' >&2
+        exit 1
+    fi
+    case "$expected_code" in
+        '' | *[!a-z0-9_]*)
+            printf 'HTTP smoke: unsafe attachment account assertion\n' >&2
+            exit 1
+            ;;
+    esac
+    matching_rows=$(
+        printf "SELECT COUNT(*) FROM nv_anhang AS a JOIN nv_einsatz_status AS s ON s.singleton_id = 1 AND s.active_einsatz_id = a.einsatz_id WHERE BINARY a.filename = BINARY '%s' AND a.status = 1 AND BINARY a.fileext = BINARY 'txt' AND BINARY a.kuerzel = BINARY '%s';\n" \
+            "$reservation" "$expected_code" |
+            db_sql
+    )
+    if [ "$matching_rows" != 1 ]; then
+        printf 'HTTP smoke: uploaded attachment was not finalized for its active incident and account\n' >&2
+        exit 1
+    fi
+    if [ "$(active_attachment_reservation_count)" != 0 ]; then
+        printf 'HTTP smoke: successful attachment upload left an active reservation\n' >&2
         exit 1
     fi
 }
@@ -453,13 +502,9 @@ assert_body "href=\"$expected_app_root/4fach/index.php?login_flow=existing\""
 assert_body '>Mit bestehendem Konto anmelden</a>'
 assert_body 'Anmeldung erforderlich'
 assert_body 'Separater Administrationszugang'
-if [ "$restore_verify_only" = true ]; then
-    assert_body_absent 'id="estab-register"'
-    assert_body 'Neue Konten können auf dieser Installation nicht selbst angelegt werden'
-else
-    assert_body 'id="estab-register"'
-    assert_body "href=\"$expected_app_root/4fach/index.php?login_flow=new\""
-fi
+assert_body_absent 'id="estab-register"'
+assert_body 'Neue Konten können auf dieser Installation nicht selbst angelegt werden'
+assert_body 'Administration → Benutzerverwaltung'
 assert_body_absent 'href="./stabetb/etb.php"'
 assert_body_absent 'data-estab-session-bar'
 assert_body_absent 'data-estab-logout-form'
@@ -507,28 +552,31 @@ assert_body 'Wie möchten Sie fortfahren?'
 assert_body_absent 'name="kennwort1"'
 preauth_csrf_token=$(csrf_from_body)
 
+# Public account creation is disabled in the production-default stack. Even a
+# complete, CSRF-valid compatibility request must remain anonymous and leave
+# the database untouched.
+assert_body_absent 'name="login_flow" value="new"'
+assert_body 'Neue Konten können hier nicht erstellt werden'
+assert_body 'Administration → Benutzerverwaltung'
+disabled_registration_code=rno001
+assert_account_count 0 "$disabled_registration_code"
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$preauth_csrf_token" \
+    --data-urlencode 'login_flow=new' \
+    --data-urlencode 'benutzer=Öffentliche Registrierung blockiert' \
+    --data-urlencode "kuerzel=$disabled_registration_code" \
+    --data-urlencode "funktion=$test_function" \
+    --data-urlencode "kennwort1@$login_password_file" \
+    --data-urlencode "kennwort2@$login_password_file" \
+    --data-urlencode '2teskennwort=Yes' \
+    "$base_url/4fach/mainindex.php"
+assert_body 'Neue Konten können hier nicht erstellt werden'
+assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/vordrucke.php"
+assert_account_count 0 "$disabled_registration_code"
+
 if [ "$restore_verify_only" = true ]; then
-    assert_body_absent 'name="login_flow" value="new"'
-    assert_body 'Neue Konten können hier nicht erstellt werden'
-
-    restore_unknown_code=rno001
-    assert_account_count 0 "$restore_unknown_code"
-    assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-        --request POST \
-        --data-urlencode "csrf_token=$preauth_csrf_token" \
-        --data-urlencode 'login_flow=new' \
-        --data-urlencode 'benutzer=Restore Registrierung blockiert' \
-        --data-urlencode "kuerzel=$restore_unknown_code" \
-        --data-urlencode "funktion=$test_function" \
-        --data-urlencode "kennwort1@$login_password_file" \
-        --data-urlencode "kennwort2@$login_password_file" \
-        --data-urlencode '2teskennwort=Yes' \
-        "$base_url/4fach/mainindex.php"
-    assert_body 'Neue Konten können hier nicht erstellt werden'
-    assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-        "$base_url/4fach/vordrucke.php"
-    assert_account_count 0 "$restore_unknown_code"
-
     assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         --request POST --data-urlencode 'login_flow=existing' \
         "$base_url/4fach/mainindex.php"
@@ -585,7 +633,9 @@ if [ "$restore_verify_only" = true ]; then
     # helper. Missing restore data must fail here instead of being recreated.
     assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         "$base_url/stabetb/etb.php"
-    assert_body 'LOGBOOK_ETB_E2E'
+    assert_body 'data-estab-incident-code="CI-INTEGRATION"'
+    assert_body 'Automatisierter CI-Integrationstest'
+    assert_body_absent 'value="save_title"'
     assert_body 'LOGBOOK_ETB_ENTRY_E2E'
     assert_session_bar "$test_name" "$test_code" "$test_function" "$restore_role"
     if grep -Eq 'Fatal error|Uncaught (Error|TypeError)|Warning:|Deprecated:' "$body"; then
@@ -594,7 +644,9 @@ if [ "$restore_verify_only" = true ]; then
     fi
     assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         "$base_url/fmtbb/tbb.php"
-    assert_body 'LOGBOOK_TBB_E2E'
+    assert_body 'data-estab-incident-code="CI-INTEGRATION"'
+    assert_body 'Automatisierter CI-Integrationstest'
+    assert_body_absent 'value="save_title"'
     assert_body 'LOGBOOK_TBB_ENTRY_E2E'
     assert_session_bar "$test_name" "$test_code" "$test_function" "$restore_role"
     if grep -Eq 'Fatal error|Uncaught (Error|TypeError)|Warning:|Deprecated:' "$body"; then
@@ -643,6 +695,10 @@ assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/vordrucke.php"
 assert_account_count 0 "$unknown_existing_code"
 
+# Provision the primary fixture through the administrative domain boundary,
+# then prove the normal existing-account flow retains its requested target.
+sh tests/integration/provision_user.sh \
+    "$test_name" "$test_code" "$test_function" "$test_password"
 : > "$cookie_jar"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/mainindex.php?next=incident-log"
@@ -652,46 +708,23 @@ preauth_csrf_token=$(csrf_from_body)
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$preauth_csrf_token" \
-    --data-urlencode 'login_flow=new' \
+    --data-urlencode 'login_flow=existing' \
     --data-urlencode 'next=incident-log' \
     "$base_url/4fach/mainindex.php"
-assert_body 'Neues Funktionskonto anlegen'
-assert_body 'name="kennwort2"'
-assert_body 'Kennwort wiederholen'
+assert_body 'Mit bestehendem Konto anmelden'
+assert_body 'autocomplete="current-password"'
+assert_body_absent 'name="kennwort2"'
 assert_body 'name="next" value="incident-log"'
 preauth_csrf_token=$(csrf_from_body)
-
-# A failed confirmation remains in the registration form and creates no
-# authenticated session or account.
-assert_account_count 0 "$test_code"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$preauth_csrf_token" \
-    --data-urlencode 'login_flow=new' \
+    --data-urlencode 'login_flow=existing' \
     --data-urlencode "benutzer=$test_name" \
     --data-urlencode "kuerzel=$test_code" \
     --data-urlencode "funktion=$test_function" \
     --data-urlencode "kennwort1@$login_password_file" \
-    --data-urlencode 'kennwort2=does-not-match' \
-    --data-urlencode '2teskennwort=Yes' \
-    --data-urlencode 'next=incident-log' \
-    "$base_url/4fach/mainindex.php"
-assert_body 'Die beiden Kennwörter stimmen nicht überein'
-assert_body 'name="next" value="incident-log"'
-assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-    "$base_url/4fach/vordrucke.php"
-assert_account_count 0 "$test_code"
-
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-    --request POST \
-    --data-urlencode "csrf_token=$preauth_csrf_token" \
-    --data-urlencode 'login_flow=new' \
-    --data-urlencode "benutzer=$test_name" \
-    --data-urlencode "kuerzel=$test_code" \
-    --data-urlencode "funktion=$test_function" \
-    --data-urlencode "kennwort1@$login_password_file" \
-    --data-urlencode "kennwort2@$login_password_file" \
-    --data-urlencode '2teskennwort=Yes' \
+    --data-urlencode '2teskennwort=No' \
     --data-urlencode 'absenden_x=1' \
     --data-urlencode 'next=incident-log' \
     "$base_url/4fach/mainindex.php"
@@ -711,12 +744,11 @@ if [ -z "$test_role" ]; then
 fi
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 
-# The new-account flow must neither log in an existing code nor replace its
-# password. Use a deliberately different password and compare the stored hash
-# byte-for-byte when the test runs with its CI Compose binding.
+# Disabled public registration must neither log in an existing code nor
+# replace its password hash.
 stored_password_before=$(account_password_hex "$test_code")
 if [ -z "$stored_password_before" ]; then
-    printf 'HTTP smoke: stored password hash is missing before collision test\n' >&2
+    printf 'HTTP smoke: stored password hash is missing before registration gate test\n' >&2
     exit 1
 fi
 : > "$cookie_jar"
@@ -735,19 +767,19 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "kennwort2@$collision_password_file" \
     --data-urlencode '2teskennwort=Yes' \
     "$base_url/4fach/mainindex.php"
-assert_body 'Dieses Kürzel ist bereits vergeben'
+assert_body 'Neue Konten können hier nicht erstellt werden'
 assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/vordrucke.php"
 assert_account_count 1 "$test_code"
 stored_password_after=$(account_password_hex "$test_code")
 if [ "$stored_password_after" != "$stored_password_before" ]; then
-    printf 'HTTP smoke: new-account collision changed the stored password hash\n' >&2
+    printf 'HTTP smoke: disabled registration changed the stored password hash\n' >&2
     exit 1
 fi
 
-# Historical clients remain able to authenticate an existing account with the
-# old one-password request or the old two-password confirmation marker. Neither
-# compatibility request changes the explicit semantics used by the new UI.
+# The production-default stack rejects every tokenless credential request,
+# including requests that claim to be same-origin. The explicit compatibility
+# opt-in is exercised separately after this complete default-mode run.
 : > "$cookie_jar"
 assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --header 'Sec-Fetch-Site: cross-site' \
@@ -760,7 +792,7 @@ assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
 assert_status 403 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
 
 : > "$cookie_jar"
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --header 'Sec-Fetch-Site: same-origin' \
     --request POST \
     --data-urlencode "benutzer=$test_name" \
@@ -768,10 +800,10 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "funktion=$test_function" \
     --data-urlencode "kennwort1@$login_password_file" \
     "$base_url/4fach/mainindex.php"
-assert_status 200 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
+assert_status 403 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
 
 : > "$cookie_jar"
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --header 'Sec-Fetch-Site: same-origin' \
     --request POST \
     --data-urlencode "benutzer=$test_name" \
@@ -781,31 +813,36 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "kennwort2@$login_password_file" \
     --data-urlencode '2teskennwort=Yes' \
     "$base_url/4fach/mainindex.php"
-assert_status 200 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
+assert_status 403 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
 
-# The historical two-password request also retains its original registration
-# semantics for direct legacy clients. Prove that this compatibility route
-# still obeys the same account lifecycle: create as S1, log out, then reassign
-# the now-inactive account to A/W on its next authenticated login.
+# A separately provisioned account keeps its administrative assignment across
+# logout; the login request can never repurpose the inactive row.
 legacy_registration_code=e2l001
-legacy_registration_name='Legacy HTTP Registrierung'
+legacy_registration_name='Administrativ provisioniertes HTTP-Konto'
 assert_account_count 0 "$legacy_registration_code"
+sh tests/integration/provision_user.sh \
+    "$legacy_registration_name" "$legacy_registration_code" A/W \
+    "$collision_password"
 : > "$cookie_jar"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-    --header 'Sec-Fetch-Site: same-origin' \
+    --request POST --data-urlencode 'login_flow=existing' \
+    "$base_url/4fach/mainindex.php"
+preauth_csrf_token=$(csrf_from_body)
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
+    --data-urlencode "csrf_token=$preauth_csrf_token" \
+    --data-urlencode 'login_flow=existing' \
     --data-urlencode "benutzer=$legacy_registration_name" \
     --data-urlencode "kuerzel=$legacy_registration_code" \
-    --data-urlencode 'funktion=S1' \
+    --data-urlencode 'funktion=A/W' \
     --data-urlencode "kennwort1@$collision_password_file" \
-    --data-urlencode "kennwort2@$collision_password_file" \
-    --data-urlencode '2teskennwort=Yes' \
+    --data-urlencode '2teskennwort=No' \
     "$base_url/4fach/mainindex.php"
 assert_status 200 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
 assert_account_count 1 "$legacy_registration_code"
 legacy_assignment=$(account_assignment "$legacy_registration_code")
-if [ "$legacy_assignment" != "$(printf 'S1\tStab\t1')" ]; then
-    printf 'HTTP smoke: legacy registration has unexpected assignment: %s\n' \
+if [ "$legacy_assignment" != "$(printf 'A/W\tFernmelder\t1')" ]; then
+    printf 'HTTP smoke: provisioned account has unexpected assignment: %s\n' \
         "$legacy_assignment" >&2
     exit 1
 fi
@@ -825,8 +862,32 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode 'm2_abmelden_x=1' \
     "$base_url/4fach/mainindex.php"
 legacy_assignment=$(account_assignment "$legacy_registration_code")
-if [ "$legacy_assignment" != "$(printf 'S1\tStab\t0')" ]; then
+if [ "$legacy_assignment" != "$(printf 'A/W\tFernmelder\t0')" ]; then
     printf 'HTTP smoke: logout did not deactivate legacy account: %s\n' \
+        "$legacy_assignment" >&2
+    exit 1
+fi
+
+: > "$cookie_jar"
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST --data-urlencode 'login_flow=existing' \
+    "$base_url/4fach/mainindex.php"
+preauth_csrf_token=$(csrf_from_body)
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$preauth_csrf_token" \
+    --data-urlencode 'login_flow=existing' \
+    --data-urlencode "benutzer=$legacy_registration_name" \
+    --data-urlencode "kuerzel=$legacy_registration_code" \
+    --data-urlencode 'funktion=S1' \
+    --data-urlencode "kennwort1@$collision_password_file" \
+    --data-urlencode '2teskennwort=No' \
+    "$base_url/4fach/mainindex.php"
+assert_body 'administrativ zugewiesene Funktion'
+assert_status 403 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
+legacy_assignment=$(account_assignment "$legacy_registration_code")
+if [ "$legacy_assignment" != "$(printf 'A/W\tFernmelder\t0')" ]; then
+    printf 'HTTP smoke: inactive account changed its assignment on login: %s\n' \
         "$legacy_assignment" >&2
     exit 1
 fi
@@ -849,7 +910,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
 assert_status 200 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
 legacy_assignment=$(account_assignment "$legacy_registration_code")
 if [ "$legacy_assignment" != "$(printf 'A/W\tFernmelder\t1')" ]; then
-    printf 'HTTP smoke: inactive account was not reassigned on login: %s\n' \
+    printf 'HTTP smoke: account did not reactivate its assigned function: %s\n' \
         "$legacy_assignment" >&2
     exit 1
 fi
@@ -934,9 +995,31 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/mainindex.php"
 assert_body 'Liste der verfügbaren Dateien'
 assert_body_absent 'Warning:'
+aw_attachment_menu_csrf_token=$(csrf_from_body)
+aw_reservations_before_csrf=$(active_attachment_reservation_count)
+
+assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode \
+        'csrf_token=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+    --data-urlencode 'ah_upload_x=1' \
+    "$base_url/4fach/anhang.php"
+assert_body 'ungültig oder abgelaufen'
+aw_reservations_after_csrf=$(active_attachment_reservation_count)
+if [ "$aw_reservations_after_csrf" != "$aw_reservations_before_csrf" ]; then
+    printf 'HTTP smoke: rejected attachment CSRF created a reservation\n' >&2
+    exit 1
+fi
+
+assert_status 405 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/anhang.php?ah_upload_x=1"
+assert_body 'nur per Formular'
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-    "$base_url/4fach/anhang.php?ah_upload_x=1"
+    --request POST \
+    --data-urlencode "csrf_token=$aw_attachment_menu_csrf_token" \
+    --data-urlencode 'ah_upload_x=1' \
+    "$base_url/4fach/anhang.php"
 assert_body 'Anhang hochladen'
 assert_session_bar "$legacy_registration_name" "$legacy_registration_code" \
     'A/W' 'Fernmelder'
@@ -961,14 +1044,17 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --form "csrf_token=$aw_attachment_csrf_token" \
     --form "fs_nextfilename=$aw_reserved_name" \
-    --form 'fs_comment=A/W form-state integration attachment' \
+    --form 'fs_comment=A/W & <Beschreibung>' \
     --form "fs_shortname=$legacy_registration_code" \
     --form "fs_timestamp=$aw_upload_timestamp" \
     --form 'absenden_x=1' \
     --form "upload=@$aw_upload_file;type=text/plain;filename=aw-state.txt" \
     "$base_url/4fach/anhang.php"
 aw_stored_attachment=$aw_reserved_name.txt
+assert_body_absent 'Der Anhang konnte nicht sicher gespeichert werden.'
 assert_body "$aw_reserved_name"
+assert_uploaded_attachment "$aw_reserved_name" "$legacy_registration_code"
+aw_attachment_menu_csrf_token=$(csrf_from_body)
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/download.php?area=attachment&file=$aw_stored_attachment"
@@ -978,7 +1064,11 @@ if ! cmp -s "$aw_upload_file" "$body"; then
 fi
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-    "$base_url/4fach/anhang.php?ah_auswahl_x=1&lfd_901=$aw_stored_attachment"
+    --request POST \
+    --data-urlencode "csrf_token=$aw_attachment_menu_csrf_token" \
+    --data-urlencode 'ah_auswahl_x=1' \
+    --data-urlencode "lfd_901=$aw_stored_attachment" \
+    "$base_url/4fach/anhang.php"
 assert_body 'name="task" value="FM-Eingang_Anhang_Sichter"'
 assert_body_regex 'name="01_medium" value="Fu" type="radio"[^>]*checked="checked"' \
     'preserved A/W medium'
@@ -1002,6 +1092,8 @@ assert_body "name=\"14_zeichen\" value=\"$aw_author_marker\""
 assert_body 'name="14_funktion" value="A/W"'
 assert_body "name=\"15_quitdatum\" value=\"$aw_reviewed_at\""
 assert_body "name=\"15_quitzeichen\" value=\"$legacy_registration_code\""
+assert_body 'A/W &amp; &lt;Beschreibung&gt;'
+assert_body_absent 'A/W &amp;amp; &amp;lt;Beschreibung&amp;gt;'
 assert_body_regex 'name="16_11" value="16_11_bl" type="checkbox"[^>]*checked="checked"' \
     'preserved blue recipient'
 assert_body_regex 'name="16_gncopy" type="radio"[^>]*checked="checked"[^>]*value="16_12_gn"' \
@@ -1034,7 +1126,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "kennwort1@$login_password_file" \
     --data-urlencode '2teskennwort=No' \
     "$base_url/4fach/mainindex.php"
-assert_body 'aktive Konto ist einer anderen Funktion zugeordnet'
+assert_body 'administrativ zugewiesene Funktion'
 assert_status 403 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
 assignment_after=$(account_assignment "$test_code")
 if [ "$assignment_after" != "$assignment_before" ]; then
@@ -1181,9 +1273,13 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/mainindex.php"
 assert_body 'Liste der verfügbaren Dateien'
 assert_body_absent 'Liste der verfÃ¼gbaren Dateien'
+attachment_menu_csrf_token=$(csrf_from_body)
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-    "$base_url/4fach/anhang.php?ah_upload_x=1"
+    --request POST \
+    --data-urlencode "csrf_token=$attachment_menu_csrf_token" \
+    --data-urlencode 'ah_upload_x=1' \
+    "$base_url/4fach/anhang.php"
 assert_body 'Anhang hochladen'
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 csrf_token=$(sed -n 's/.*name="csrf_token" value="\([a-f0-9][a-f0-9]*\)".*/\1/p' "$body" | head -n 1)
@@ -1213,7 +1309,10 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --form "upload=@$upload_file;type=text/plain;filename=workflow.txt" \
     "$base_url/4fach/anhang.php"
 stored_attachment=$reserved_name.txt
+assert_body_absent 'Der Anhang konnte nicht sicher gespeichert werden.'
 assert_body "$reserved_name"
+assert_uploaded_attachment "$reserved_name" "$test_code"
+attachment_menu_csrf_token=$(csrf_from_body)
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --dump-header "$headers" \
@@ -1230,7 +1329,31 @@ for header in Content-Disposition Content-Security-Policy X-Content-Type-Options
 done
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-    "$base_url/4fach/anhang.php?ah_auswahl_x=1&lfd_999=$stored_attachment"
+    --dump-header "$headers" \
+    "$base_url/4fach/showpic.php?file=$stored_attachment&width=160&height=80"
+if ! grep -qi '^Content-Type: image/png' "$headers"; then
+    printf 'HTTP smoke: attachment preview is not a PNG response\n' >&2
+    exit 1
+fi
+preview_magic=$(od -An -tx1 -N8 "$body" | tr -d ' \n')
+if [ "$preview_magic" != '89504e470d0a1a0a' ]; then
+    printf 'HTTP smoke: attachment preview has an invalid PNG signature\n' >&2
+    exit 1
+fi
+assert_status 400 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --get \
+    --data-urlencode "file[]=$stored_attachment" \
+    --data-urlencode 'width=160' \
+    "$base_url/4fach/showpic.php"
+assert_body 'Ungültiger Anhangname'
+assert_body_absent 'Warning:'
+
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$attachment_menu_csrf_token" \
+    --data-urlencode 'ah_auswahl_x=1' \
+    --data-urlencode "lfd_999=$stored_attachment" \
+    "$base_url/4fach/anhang.php"
 assert_body "value=\"$stored_attachment;\""
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 
@@ -1308,7 +1431,7 @@ if grep -Eq 'Fatal error|Uncaught (Error|TypeError)|Warning:' "$body"; then
 fi
 stored_vordruck=$(vordruck_name_for_marker "$vordruck_marker")
 if ! printf '%s' "$stored_vordruck" |
-    grep -Eq '^[A-Za-z0-9_]+ [0-9]+ [EA][.]pdf$'; then
+    grep -Eq '^[A-Za-z0-9_]+ Einsatz-[1-9][0-9]* [1-9][0-9]* [EA][.]pdf$'; then
     printf 'HTTP smoke: completed workflow produced no safe generated-form name\n' >&2
     exit 1
 fi
@@ -1332,6 +1455,12 @@ do
     fi
 done
 stored_vordruck_sha256=$(file_sha256 "$body")
+assert_status 404 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --get \
+    --data-urlencode 'area=vordruck' \
+    --data-urlencode 'file=nicht-kanonisch.pdf' \
+    "$base_url/4fach/download.php"
+assert_body 'Datei nicht gefunden'
 
 # Raw UTF-8 message storage must preserve punctuation and SQL-shaped text,
 # while every HTML list/search reflection remains inert.
@@ -1388,11 +1517,16 @@ assert_body "$workflow_marker"
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/stabetb/etb.php"
-assert_body 'Einsatzdaten erfassen'
+assert_body 'Ihre Funktion hat lesenden Zugriff.'
+assert_body_absent 'value="save_entry"'
+assert_body_absent 'Neuen ETB-Eintrag anlegen'
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/fmtbb/tbb.php"
+assert_body 'Ihre Funktion hat lesenden Zugriff.'
+assert_body_absent 'value="save_entry"'
+assert_body_absent 'Neuen TTB-Eintrag anlegen'
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
@@ -1524,7 +1658,6 @@ assert_status 200 --cookie "$newer_cookie_jar" --cookie-jar "$newer_cookie_jar" 
     --data-urlencode 'absenden_x=1' \
     "$base_url/4fach/mainindex.php"
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
-newer_logout_csrf=$(csrf_from_body)
 newer_authenticated_session_id=$(session_cookie_from_jar "$newer_cookie_jar")
 if [ -z "$newer_authenticated_session_id" ]; then
     printf 'HTTP smoke: newer authenticated session cookie missing\n' >&2
@@ -1557,12 +1690,55 @@ if [ "$(logout_audit_reference_count "$test_code" "$authenticated_session_id")" 
     exit 1
 fi
 
-assert_status 303 --cookie "$newer_cookie_jar" --cookie-jar "$newer_cookie_jar" \
+# A third browser now supersedes the still-active second browser. Unlike the
+# deliberately permitted stale logout above, its next protected data request
+# must validate the authoritative SID, fail with 403 and clear its local
+# workflow state. The third browser remains usable and can log out normally.
+current_cookie_jar=$work_dir/current-cookies.txt
+assert_status 200 --cookie "$current_cookie_jar" --cookie-jar "$current_cookie_jar" \
+    --request POST --data-urlencode 'login_flow=existing' \
+    "$base_url/4fach/mainindex.php"
+current_preauth_csrf=$(csrf_from_body)
+assert_status 200 --cookie "$current_cookie_jar" --cookie-jar "$current_cookie_jar" \
     --request POST \
-    --data-urlencode "csrf_token=$newer_logout_csrf" \
+    --data-urlencode "csrf_token=$current_preauth_csrf" \
+    --data-urlencode 'login_flow=existing' \
+    --data-urlencode "benutzer=$test_name" \
+    --data-urlencode "kuerzel=$test_code" \
+    --data-urlencode "funktion=$test_function" \
+    --data-urlencode "kennwort1@$login_password_file" \
+    --data-urlencode '2teskennwort=No' \
+    --data-urlencode 'absenden_x=1' \
+    "$base_url/4fach/mainindex.php"
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+current_logout_csrf=$(csrf_from_body)
+current_authenticated_session_id=$(session_cookie_from_jar "$current_cookie_jar")
+if [ -z "$current_authenticated_session_id" ] ||
+    [ "$current_authenticated_session_id" = "$newer_authenticated_session_id" ]; then
+    printf 'HTTP smoke: superseding login did not establish a distinct session\n' >&2
+    exit 1
+fi
+
+assert_status 403 --cookie "$newer_cookie_jar" --cookie-jar "$newer_cookie_jar" \
+    "$base_url/4fach/vordrucke.php"
+assert_status 200 --cookie "$current_cookie_jar" --cookie-jar "$current_cookie_jar" \
+    "$base_url/4fach/vordrucke.php"
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+if [ "$(account_assignment "$test_code")" != "$(printf '%s\t%s\t1' "$test_function" "$test_role")" ]; then
+    printf 'HTTP smoke: stale protected request deactivated the current login\n' >&2
+    exit 1
+fi
+if [ "$(logout_audit_count "$test_code")" -ne "$((logout_audit_before + 1))" ]; then
+    printf 'HTTP smoke: stale protected request wrote a logout audit event\n' >&2
+    exit 1
+fi
+
+assert_status 303 --cookie "$current_cookie_jar" --cookie-jar "$current_cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$current_logout_csrf" \
     --data-urlencode 'logout_action=logout' \
     "$base_url/4fach/logout.php"
-assert_status 403 --cookie "$newer_cookie_jar" "$base_url/4fach/vordrucke.php"
+assert_status 403 --cookie "$current_cookie_jar" "$base_url/4fach/vordrucke.php"
 if [ "$(account_assignment "$test_code")" != "$(printf '%s\t%s\t0' "$test_function" "$test_role")" ]; then
     printf 'HTTP smoke: current-session logout did not deactivate the account\n' >&2
     exit 1
@@ -1571,11 +1747,11 @@ if [ "$(logout_audit_count "$test_code")" -ne "$((logout_audit_before + 2))" ]; 
     printf 'HTTP smoke: current-session logout audit event missing\n' >&2
     exit 1
 fi
-if [ "$(logout_audit_reference_count "$test_code" "$newer_authenticated_session_id")" -ne 1 ]; then
+if [ "$(logout_audit_reference_count "$test_code" "$current_authenticated_session_id")" -ne 1 ]; then
     printf 'HTTP smoke: current-session logout audit lacks its hashed session reference\n' >&2
     exit 1
 fi
-assert_status 200 --cookie "$newer_cookie_jar" "$base_url/"
+assert_status 200 --cookie "$current_cookie_jar" "$base_url/"
 assert_body 'id="estab-login"'
 assert_body_absent 'data-estab-session-bar'
 
@@ -1598,6 +1774,16 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
 
     assert_status 200 --config "$admin_curl_config" \
         "$base_url/4fadm/admin.php"
+    assert_body 'data-estab-admin-dashboard'
+    assert_body 'data-estab-admin-card="incidents"'
+    assert_body 'data-estab-admin-card="users"'
+    assert_body 'data-estab-admin-card="matrix"'
+    assert_body 'data-estab-admin-card="counter"'
+    assert_body 'data-estab-admin-card="print-reset"'
+    assert_body 'data-estab-admin-card="incident-pdf"'
+    assert_body 'data-estab-admin-card="export"'
+    assert_body 'data-estab-admin-card="system-status"'
+    assert_body '<h1>Administration</h1>'
     assert_body 'Einsatzexport'
     assert_body 'data-estab-public-bar'
     assert_body 'data-estab-navigation'
@@ -1606,20 +1792,120 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
     assert_body 'Kein eStab-Funktionskonto angemeldet'
     assert_body 'data-estab-nav-key="administration" aria-current="page"'
     assert_body_absent 'data-estab-session-bar'
+    assert_body_absent 'Administrative Maßnahmen</th>'
 
     admin_cookie=$work_dir/admin-cookies.txt
+    assert_status 401 \
+        "$base_url/4fadm/incidents.php"
+    assert_status 401 \
+        "$base_url/4fadm/users.php"
+    assert_status 401 \
+        "$base_url/4fadm/incident_export.php"
+    assert_status 200 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        "$base_url/4fadm/incidents.php"
+    assert_body 'data-estab-incident-admin'
+    assert_body 'Einsätze verwalten'
+    assert_status 200 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        "$base_url/4fadm/users.php"
+    assert_body 'data-estab-user-admin'
+    assert_body 'Benutzerverwaltung'
+    assert_status 200 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        "$base_url/4fadm/incident_export.php"
+    assert_body 'data-estab-incident-export'
+    assert_body 'PDF-Einsatzdossier'
+    incident_pdf_csrf=$(csrf_from_body)
+    incident_pdf_id=$(printf '%s\n' \
+        'SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1;' |
+        db_sql | tr -d '\r\n')
+    if ! printf '%s' "$incident_pdf_id" | grep -Eq '^[1-9][0-9]*$'; then
+        printf 'HTTP smoke: PDF dossier has no active incident fixture\n' >&2
+        exit 1
+    fi
+    incident_pdf_audit_before=$(printf '%s\n' \
+        "SELECT COUNT(*) FROM nv_einsatz_ereignisse WHERE einsatz_id = ${incident_pdf_id} AND aktion = 'pdf_export';" |
+        db_sql | tr -d '\r\n')
+    assert_status 200 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        --request POST \
+        --data-urlencode "csrf_token=$incident_pdf_csrf" \
+        --data-urlencode "einsatz_id=$incident_pdf_id" \
+        --data-urlencode 'include_etb=1' \
+        --data-urlencode 'include_ttb=1' \
+        --data-urlencode 'include_messages=1' \
+        --data-urlencode 'include_attachments=1' \
+        "$base_url/4fadm/incident_export.php"
+    assert_pdf_body
+    for header_pattern in \
+        '^Content-Type: application/pdf' \
+        '^Content-Disposition: attachment;' \
+        '^Cache-Control: private, no-store, max-age=0' \
+        '^X-Content-Type-Options: nosniff'
+    do
+        if ! grep -Eiq "$header_pattern" "$headers"; then
+            printf 'HTTP smoke: PDF dossier header missing: %s\n' \
+                "$header_pattern" >&2
+            sed -n '1,40p' "$headers" >&2
+            exit 1
+        fi
+    done
+    incident_pdf_audit_after=$(printf '%s\n' \
+        "SELECT COUNT(*) FROM nv_einsatz_ereignisse WHERE einsatz_id = ${incident_pdf_id} AND aktion = 'pdf_export';" |
+        db_sql | tr -d '\r\n')
+    if [ "$incident_pdf_audit_after" -ne "$((incident_pdf_audit_before + 1))" ]; then
+        echo 'HTTP smoke: successful PDF dossier was not audited exactly once' >&2
+        exit 1
+    fi
+
     assert_status 401 \
         "$base_url/4fadm/system_status.php"
     assert_status 200 --config "$admin_curl_config" \
         "$base_url/4fadm/system_status.php"
-    assert_body 'Gesamtzustand: betriebsbereit'
+    assert_body 'data-estab-readiness="ready"'
+    assert_body 'Gesamtzustand'
+    assert_body 'Betriebsbereit'
     assert_body 'Verbindung und Lesetest'
+    assert_body 'Schema, Matrix und Migrationen'
     assert_body 'Anhangsspeicher'
     assert_body 'Vordruckspeicher'
     assert_body 'Einsatzexport'
     assert_body 'data-estab-public-bar'
     assert_body "data-estab-admin-user=\"$ESTAB_TEST_ADMIN_USER\""
     assert_body_absent 'Prüfung erforderlich'
+
+    readiness_probe_state=$(printf '%s\n' \
+        "SELECT CONCAT((SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'nv_empfmtx_standard'), ':', (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'estab_readiness_probe_matrix'));" |
+        db_sql | tr -d '\r\n')
+    if [ "$readiness_probe_state" != '1:0' ]; then
+        printf 'HTTP smoke: readiness failure probe has an unsafe schema precondition\n' >&2
+        exit 1
+    fi
+    printf '%s\n' \
+        'RENAME TABLE nv_empfmtx_standard TO estab_readiness_probe_matrix;' |
+        db_sql >/dev/null
+    readiness_schema_renamed=1
+
+    assert_status 503 "$base_url/health.php"
+    assert_body '"schema":false'
+    assert_status 200 --config "$admin_curl_config" \
+        "$base_url/4fadm/system_status.php"
+    assert_body 'data-estab-readiness="failed"'
+    assert_body 'Gesamtzustand'
+    assert_body 'Prüfung erforderlich'
+    assert_body 'Schema, Matrix und Migrationen'
+    assert_body 'estab-tool-badge-danger'
+    assert_body 'nicht bereit'
+    assert_body_absent 'data-estab-readiness="ready"'
+    assert_body_absent 'Betriebsbereit'
+
+    printf '%s\n' \
+        'RENAME TABLE estab_readiness_probe_matrix TO nv_empfmtx_standard;' |
+        db_sql >/dev/null
+    readiness_schema_renamed=0
+    assert_status 200 "$base_url/health.php"
+    assert_body '"schema":true'
 
     assert_status 401 \
         "$base_url/4fadm/export.php"

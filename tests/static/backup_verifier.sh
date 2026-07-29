@@ -21,12 +21,111 @@ USE `estab`;
 EOF
 (cd "$valid" && sha256sum database.sql 4fdata.tar.gz export.tar.gz >SHA256SUMS)
 
-sh "$verifier" "$valid" >/dev/null
+sh "$verifier" "$valid" estab >/dev/null
+
+valid_v2=$work_dir/valid-v2
+cp -R "$valid" "$valid_v2"
+rm -rf -- "$valid_v2/data" "$valid_v2/export"
+printf 'estab-full-backup-v2\n' >"$valid_v2/backup-format.txt"
+printf '2026-07-29T01:00:00Z\n' >"$valid_v2/backup-created-utc.txt"
+printf 'estab\n' >"$valid_v2/project-name.txt"
+printf 'estab\n' >"$valid_v2/database-name.txt"
+cat >"$valid_v2/storage-sources.txt" <<'EOF'
+database	/var/lib/mysql	volume	estab_estab_db	/var/lib/containers/storage/volumes/estab_estab_db/_data
+application	/var/www/html/4fdata	bind	-	/volume1/docker/estab/data/4fdata
+export	/var/lib/estab/export	bind	-	/volume1/docker/estab/data/export
+EOF
+cat >"$valid_v2/image-references.txt" <<'EOF'
+app	ghcr.io/e-stab/estab@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	sha256:1111111111111111111111111111111111111111111111111111111111111111
+migrate	ghcr.io/e-stab/estab-migrate@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb	sha256:2222222222222222222222222222222222222222222222222222222222222222
+database	mariadb@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc	sha256:3333333333333333333333333333333333333333333333333333333333333333
+EOF
+(
+    cd "$valid_v2"
+    sha256sum \
+        4fdata.tar.gz \
+        backup-created-utc.txt \
+        backup-format.txt \
+        database-name.txt \
+        database.sql \
+        export.tar.gz \
+        image-references.txt \
+        project-name.txt \
+        storage-sources.txt \
+        >SHA256SUMS
+)
+sh "$verifier" "$valid_v2" estab >/dev/null
+
+invalid_v2_metadata=$work_dir/invalid-v2-metadata
+cp -R "$valid_v2" "$invalid_v2_metadata"
+printf 'database\t/var/lib/mysql\tbind\t-\trelative/path\n' \
+    >"$invalid_v2_metadata/storage-sources.txt"
+(
+    cd "$invalid_v2_metadata"
+    sha256sum \
+        4fdata.tar.gz \
+        backup-created-utc.txt \
+        backup-format.txt \
+        database-name.txt \
+        database.sql \
+        export.tar.gz \
+        image-references.txt \
+        project-name.txt \
+        storage-sources.txt \
+        >SHA256SUMS
+)
+if sh "$verifier" "$invalid_v2_metadata" estab >/dev/null 2>&1; then
+    printf 'Backup verifier test: invalid but correctly hashed v2 metadata accepted\n' >&2
+    exit 1
+fi
+
+unbound_v2_metadata=$work_dir/unbound-v2-metadata
+cp -R "$valid_v2" "$unbound_v2_metadata"
+grep -v 'project-name.txt$' "$valid_v2/SHA256SUMS" \
+    >"$unbound_v2_metadata/SHA256SUMS"
+if sh "$verifier" "$unbound_v2_metadata" estab >/dev/null 2>&1; then
+    printf 'Backup verifier test: unbound v2 metadata accepted\n' >&2
+    exit 1
+fi
+
+for extra_kind in file directory symlink; do
+    extra_v2=$work_dir/extra-v2-$extra_kind
+    cp -R "$valid_v2" "$extra_v2"
+    case "$extra_kind" in
+        file)
+            printf 'unbound\n' >"$extra_v2/unbound.txt"
+            ;;
+        directory)
+            mkdir "$extra_v2/unbound-directory"
+            ;;
+        symlink)
+            ln -s database.sql "$extra_v2/unbound-link"
+            ;;
+    esac
+    if sh "$verifier" "$extra_v2" estab >/dev/null 2>&1; then
+        printf 'Backup verifier test: unbound v2 %s accepted\n' \
+            "$extra_kind" >&2
+        exit 1
+    fi
+done
+
+if sh "$verifier" "$valid" other >/dev/null 2>&1; then
+    printf 'Backup verifier test: dump for another target database accepted\n' >&2
+    exit 1
+fi
+if sh "$verifier" "$valid" 'estab;other' >/dev/null 2>&1; then
+    printf 'Backup verifier test: unsafe expected database accepted\n' >&2
+    exit 1
+fi
+if sh "$verifier" "$valid" >/dev/null 2>&1; then
+    printf 'Backup verifier test: missing expected database accepted\n' >&2
+    exit 1
+fi
 
 tampered=$work_dir/tampered
 cp -R "$valid" "$tampered"
 printf 'tampered\n' >>"$tampered/database.sql"
-if sh "$verifier" "$tampered" >/dev/null 2>&1; then
+if sh "$verifier" "$tampered" estab >/dev/null 2>&1; then
     printf 'Backup verifier test: tampered payload accepted\n' >&2
     exit 1
 fi
@@ -34,7 +133,7 @@ fi
 unsafe_manifest=$work_dir/unsafe-manifest
 cp -R "$valid" "$unsafe_manifest"
 printf '%064d  ../outside\n' 0 >>"$unsafe_manifest/SHA256SUMS"
-if sh "$verifier" "$unsafe_manifest" >/dev/null 2>&1; then
+if sh "$verifier" "$unsafe_manifest" estab >/dev/null 2>&1; then
     printf 'Backup verifier test: unsafe manifest accepted\n' >&2
     exit 1
 fi
@@ -45,7 +144,7 @@ mkdir -p "$work_dir/link-source"
 ln -s target "$work_dir/link-source/link"
 tar -C "$work_dir/link-source" -czf "$link_archive/4fdata.tar.gz" .
 (cd "$link_archive" && sha256sum database.sql 4fdata.tar.gz export.tar.gz >SHA256SUMS)
-if sh "$verifier" "$link_archive" >/dev/null 2>&1; then
+if sh "$verifier" "$link_archive" estab >/dev/null 2>&1; then
     printf 'Backup verifier test: symlink archive accepted\n' >&2
     exit 1
 fi
@@ -55,7 +154,7 @@ cp -R "$valid" "$malformed_archive"
 printf 'valid gzip, but not a tar archive\n' >"$work_dir/not-a-tar"
 gzip -c "$work_dir/not-a-tar" >"$malformed_archive/4fdata.tar.gz"
 (cd "$malformed_archive" && sha256sum database.sql 4fdata.tar.gz export.tar.gz >SHA256SUMS)
-if sh "$verifier" "$malformed_archive" >/dev/null 2>&1; then
+if sh "$verifier" "$malformed_archive" estab >/dev/null 2>&1; then
     printf 'Backup verifier test: malformed tar archive accepted\n' >&2
     exit 1
 fi
@@ -65,7 +164,7 @@ cp -R "$valid" "$wrong_database"
 sed 's/USE `estab`;/USE `other`;/' "$valid/database.sql" \
     >"$wrong_database/database.sql"
 (cd "$wrong_database" && sha256sum database.sql 4fdata.tar.gz export.tar.gz >SHA256SUMS)
-if sh "$verifier" "$wrong_database" >/dev/null 2>&1; then
+if sh "$verifier" "$wrong_database" estab >/dev/null 2>&1; then
     printf 'Backup verifier test: mismatched database names accepted\n' >&2
     exit 1
 fi

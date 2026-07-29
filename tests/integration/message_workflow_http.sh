@@ -182,17 +182,28 @@ generated_form_check()
     mode=$1
     direction=$2
     number=$3
+    incident_id=$(db_sql <<'SQL'
+SELECT `active_einsatz_id`
+  FROM `nv_einsatz_status`
+ WHERE `singleton_id` = 1;
+SQL
+)
+    case "$incident_id" in
+        '' | 0 | *[!0-9]*) return 2 ;;
+    esac
     "$compose_engine" compose exec -T app sh -ceu '
         mode=$1
         direction=$2
         number=$3
+        incident_id=$4
         case "$mode" in present | absent | remove) ;; *) exit 2 ;; esac
         case "$direction" in E | A) ;; *) exit 2 ;; esac
         case "$number" in "" | *[!0-9]* | 0) exit 2 ;; esac
+        case "$incident_id" in "" | *[!0-9]* | 0) exit 2 ;; esac
         case "$ESTAB_DB_NAME" in
             "" | *[!A-Za-z0-9_]*) exit 2 ;;
         esac
-        file="/var/www/html/4fdata/$ESTAB_DB_NAME/vordruck/$ESTAB_DB_NAME $number $direction.pdf"
+        file="/var/www/html/4fdata/$ESTAB_DB_NAME/vordruck/$ESTAB_DB_NAME Einsatz-$incident_id $number $direction.pdf"
         case "$mode" in
             present) test -f "$file" ;;
             absent) test ! -e "$file" ;;
@@ -201,7 +212,7 @@ generated_form_check()
                 test ! -e "$file"
                 ;;
         esac
-    ' message-workflow-cleanup "$mode" "$direction" "$number"
+    ' message-workflow-cleanup "$mode" "$direction" "$number" "$incident_id"
 }
 
 purge_session_file()
@@ -635,7 +646,7 @@ load_sidebar()
     assert_no_runtime_error "$label"
 }
 
-register_user()
+provision_and_login_user()
 {
     cookie_jar=$1
     name=$2
@@ -643,28 +654,31 @@ register_user()
     function_name=$4
     role=$5
 
+    sh tests/integration/provision_user.sh \
+        "$name" "$code" "$function_name" "$role_password"
+
     : >"$cookie_jar"
-    assert_status 200 "open registration for $function_name" \
+    assert_status 200 "open existing-account login for $function_name" \
         --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-        --request POST --data-urlencode 'login_flow=new' \
+        --request POST --data-urlencode 'login_flow=existing' \
         "$base_url/4fach/mainindex.php"
-    assert_body 'name="kennwort2"' "registration form for $function_name"
+    assert_body 'autocomplete="current-password"' \
+        "existing-account form for $function_name"
     login_csrf=$(csrf_from_body)
 
-    assert_status 200 "register $function_name" \
+    assert_status 200 "login $function_name" \
         --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         --request POST \
         --data-urlencode "csrf_token=$login_csrf" \
-        --data-urlencode 'login_flow=new' \
+        --data-urlencode 'login_flow=existing' \
         --data-urlencode "benutzer=$name" \
         --data-urlencode "kuerzel=$code" \
         --data-urlencode "funktion=$function_name" \
         --data-urlencode "kennwort1=$role_password" \
-        --data-urlencode "kennwort2=$role_password" \
-        --data-urlencode '2teskennwort=Yes' \
+        --data-urlencode '2teskennwort=No' \
         --data-urlencode 'absenden_x=1' \
         "$base_url/4fach/mainindex.php"
-    assert_no_runtime_error "registration response for $function_name"
+    assert_no_runtime_error "login response for $function_name"
     load_dashboard "$cookie_jar" "dashboard for $function_name"
     assert_session_identity "$name" "$code" "$function_name" "$role"
 }
@@ -828,14 +842,15 @@ done
 
 mutation_started=true
 
-# Create six isolated functional accounts through the public account UI.
+# Create six isolated functional accounts through the administrative domain
+# boundary, then exercise only the production bestandskonto login flow.
 # Keeping Si signed in makes both A/W forms use their genuine online-Si branch.
-register_user "$aw_cookies" "$aw_name" "$aw_code" A/W Fernmelder
-register_user "$s1_cookies" "$s1_name" "$s1_code" S1 Stab
-register_user "$s2_cookies" "$s2_name" "$s2_code" S2 Stab
-register_user "$s3_cookies" "$s3_name" "$s3_code" S3 Stab
-register_user "$pol_cookies" "$pol_name" "$pol_code" POL FB
-register_user "$si_cookies" "$si_name" "$si_code" Si Stab
+provision_and_login_user "$aw_cookies" "$aw_name" "$aw_code" A/W Fernmelder
+provision_and_login_user "$s1_cookies" "$s1_name" "$s1_code" S1 Stab
+provision_and_login_user "$s2_cookies" "$s2_name" "$s2_code" S2 Stab
+provision_and_login_user "$s3_cookies" "$s3_name" "$s3_code" S3 Stab
+provision_and_login_user "$pol_cookies" "$pol_name" "$pol_code" POL FB
+provision_and_login_user "$si_cookies" "$si_name" "$si_code" Si Stab
 assert_db_equals 1 'online Si fixture' \
     "SELECT COUNT(*) FROM \`nv_benutzer\` WHERE \`kuerzel\`='${si_code}' AND \`funktion\`='Si' AND \`aktiv\`=1;"
 assert_db_equals 1 'isolated online Si fixture' \

@@ -215,8 +215,47 @@ $assert(
     'finalisation requires exact claimed filename and owner'
 );
 $assert(
+    str_contains($attachmentSource, 'function estab_attachment_store_upload(')
+        && str_contains(
+            $attachmentSource,
+            'SAVEPOINT estab_attachment_before_claim'
+        )
+        && str_contains(
+            $attachmentSource,
+            'ROLLBACK TO SAVEPOINT estab_attachment_before_claim'
+        )
+        && str_contains(
+            $attachmentSource,
+            'Could not commit atomic upload'
+        )
+        && str_contains(
+            $controllerSource,
+            'estab_attachment_store_upload ('
+        ),
+    'browser upload does not hold the active incident across file and DB finalisation'
+);
+$assert(
+    str_contains(
+        $attachmentSource,
+        "SET `status` = 4, `id` = ''"
+    )
+        && str_contains(
+            $attachmentSource,
+            'Could not release failed upload'
+        )
+        && !str_contains(
+            $controllerSource,
+            '$my_upload->claim_reservation ($new_name)'
+        ),
+    'failed upload can leave a claimed reservation across an incident switch'
+);
+$assert(
     str_contains($schemaSource, 'UNIQUE KEY `uq_anhang_filename` (`filename`)'),
     'schema provides unique filename race guard'
+);
+$assert(
+    str_contains($attachmentSource, "hash_equals(\$filename, \$row['filename'])"),
+    'case-insensitive database collation can authorize another attachment path'
 );
 $assert(
     str_contains($schemaSource, '`kuerzel` VARCHAR(6) NULL DEFAULT NULL')
@@ -231,29 +270,100 @@ $assert(
 $assert(
     str_contains($controllerSource, 'estab_csrf_field ()')
         && str_contains($controllerSource, 'estab_csrf_require_post ($_SERVER, $_POST)')
+        && str_contains(
+            $controllerSource,
+            'method=\\"post\\"'
+        )
+        && str_contains($controllerSource, '$attachmentGetActionRequested')
+        && str_contains($controllerSource, 'http_response_code (405)')
+        && !str_contains($controllerSource, 'isset ($_GET ["ah_upload_x"])')
+        && !str_contains($controllerSource, 'isset ($_GET["ah_auswahl_x"])')
+        && !str_contains(
+            $controllerSource,
+            'readrecord_from_db((string) ($_POST'
+        )
         && str_contains($controllerSource, 'session_status () === PHP_SESSION_NONE'),
-    'active upload form and handler enforce CSRF with a safe session guard'
+    'attachment menu actions are not scalar-safe POSTs with enforced CSRF'
+);
+$assert(
+    str_contains($controllerSource, '$_SESSION ["anhang_menue"] ?? null')
+        && str_contains($controllerSource, '$attachmentMenuState !== 100')
+        && str_contains($controllerSource, '$attachmentMenuState !== 110')
+        && str_contains($controllerSource, 'switch ($attachmentMenuState)')
+        && !str_contains($controllerSource, 'switch ($_SESSION["anhang_menue"])'),
+    'direct attachment entry normalises missing or malformed menu state'
+);
+$assert(
+    str_contains($controllerSource, '$_SESSION ["anhang_message_context"] = true')
+        && substr_count($controllerSource, '$attachmentMessageContext &&') === 2
+        && str_contains(
+            $controllerSource,
+            'Zum Übernehmen von Anhängen öffnen Sie bitte zuerst einen Nachrichtenvordruck.'
+        ),
+    'attachment selection is bound to a message-form context'
+);
+$assert(
+    str_contains($controllerSource, 'Die Anhangübersicht wurde direkt geöffnet.')
+        && str_contains($controllerSource, 'anhang_menue ($attachmentContextNotice)')
+        && str_contains(
+            $controllerSource,
+            'Hier können Sie vorhandene Anhänge ansehen oder neue Dateien hochladen.'
+        ),
+    'direct attachment entry renders a user-oriented standalone overview'
+);
+$assert(
+    !str_contains($controllerSource, 'case 999:')
+        && !str_contains($controllerSource, 'if ($_POST["absenden_x"])'),
+    'obsolete attachment state and unguarded POST read are absent'
+);
+$assert(
+    str_contains($controllerSource, 'preg_match ("/\\\\Alfd_[0-9]+\\\\z/D", $key)')
+        && !str_contains($controllerSource, 'list($lfd, $num) = explode("_", $key)'),
+    'attachment selection accepts only numeric lfd form keys'
+);
+$assert(
+    str_contains($controllerSource, 'eStab attachment list failed:')
+        && str_contains($controllerSource, 'eStab attachment reservation failed:')
+        && substr_count($controllerSource, 'http_response_code (503)') >= 2
+        && str_contains(
+            $controllerSource,
+            'Die Anhangliste kann derzeit nicht geladen werden.'
+        )
+        && str_contains(
+            $controllerSource,
+            'Der Upload kann derzeit nicht vorbereitet werden.'
+        ),
+    'direct list and upload preparation handle database failures'
+);
+$assert(
+    preg_match(
+        '/function fileselectwindow \(\)\s*\{\s*'
+            . 'require \("\.\.\/4fcfg\/dbcfg\.inc\.php"\);\s*'
+            . 'require \("\.\.\/4fcfg\/config\.inc\.php"\);/',
+        $controllerSource
+    ) === 1,
+    'upload finalisation loads the complete database configuration in function scope'
 );
 $assert(
     str_contains($controllerSource, 'function estab_attachment_post_scalar')
         && str_contains($controllerSource, 'array_key_exists ($key, $post)')
         && str_contains($controllerSource, 'is_string ($post [$key])')
         && substr_count($controllerSource, 'estab_attachment_post_scalar ($_POST,') >= 22,
-    'attachment form state does not safely accept missing or non-scalar browser controls'
+    'attachment form state safely accepts missing or non-scalar browser controls'
 );
 $assert(
     str_contains($controllerSource, '[1-5][1-4])_gn')
         && str_contains($controllerSource, '(?:_(bl))?')
         && str_contains($controllerSource, '$recipientPattern')
         && !str_contains($controllerSource, 'preg_match ("/\\\\A([^_]+)_([^_]+)_([^_]+)\\\\z/D"'),
-    'attachment recipient restore is not constrained to real matrix positions and copy colours'
+    'attachment recipient restore is constrained to real matrix positions and copy colours'
 );
 $assert(
     str_contains($controllerSource, '($formdata ["10_anschrift"] ?? "") === ""')
         && str_contains($messageFormSource, 'value=\\"16_".$m.$n."_bl\\"')
         && str_contains($messageFormSource, 'if (!$this->feld[17])')
         && str_contains($messageFormSource, 'name=\\"17_vermerke\\"'),
-    'returned A/W attachment form can lose address, blue/green selection or sighter notes'
+    'returned A/W attachment form preserves address, copy selection and sighter notes'
 );
 $assert(
     preg_match('/estab_attachment_html\s*\(\s*\$file\s*\[\s*"comment"/', $controllerSource) === 1,
@@ -272,8 +382,12 @@ $assert(
     'attachment list heading contains no UTF-8 mojibake'
 );
 $assert(
-    str_contains($controllerSource, 'Kein Menüpunkt'),
-    'attachment fallback message is stored as valid UTF-8'
+    !str_contains($controllerSource, 'Kein Menüpunkt')
+        && str_contains(
+            $controllerSource,
+            'Die Anhangübersicht konnte nicht initialisiert werden.'
+        ),
+    'attachment controller replaces the legacy dead-end fallback'
 );
 
 foreach (['../../4fach/upload.php', '../../4fach/upload/upload.php'] as $legacyPath) {

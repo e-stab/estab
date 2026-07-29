@@ -169,39 +169,45 @@ $awQueueQuery = estab_sidebar_queue_query(
     'nv_nachrichten',
     'usr_',
     'A/W',
-    false
+    false,
+    42
 );
 $siIncomingQuery = estab_sidebar_queue_query(
     'old_que_si',
     'nv_nachrichten',
     'usr_',
     'Si',
-    false
+    false,
+    42
 );
 $siCombinedQuery = estab_sidebar_queue_query(
     'old_que_si',
     'nv_nachrichten',
     'usr_',
     'Si',
-    true
+    true,
+    42
 );
 $staffQueueQuery = estab_sidebar_queue_query(
     'old_que_stab',
     'nv_nachrichten',
     'usr_',
     'S1',
-    false
+    false,
+    42
 );
 $assert(
-    $awQueueQuery['parameters'] === []
+    $awQueueQuery['parameters'] === [42]
         && str_contains($awQueueQuery['sql'], '`nv_nachrichten`')
+        && str_contains($awQueueQuery['sql'], '`einsatz_id` = ?')
         && str_contains($awQueueQuery['sql'], "`04_richtung` = 'A'")
         && str_contains($awQueueQuery['sql'], '`03_datum` IS NULL')
         && str_contains($awQueueQuery['sql'], "`03_zeichen` = ''"),
     'outgoing queue query changed its legacy selection'
 );
 $assert(
-    $siIncomingQuery['parameters'] === []
+    $siIncomingQuery['parameters'] === [42]
+        && str_contains($siIncomingQuery['sql'], '`einsatz_id` = ?')
         && str_contains($siIncomingQuery['sql'], "`04_richtung` = 'E'")
         && !str_contains($siIncomingQuery['sql'], '`03_datum` IS NOT NULL')
         && str_contains($siCombinedQuery['sql'], '`03_datum` IS NOT NULL')
@@ -209,8 +215,9 @@ $assert(
     'review queue query ignores the configured incoming/outgoing scope'
 );
 $assert(
-    $staffQueueQuery['parameters'] === ['%S1%', '%S1%']
+    $staffQueueQuery['parameters'] === [42, '%S1%', 42, '%S1%']
         && substr_count($staffQueueQuery['sql'], '`nv_nachrichten`') === 2
+        && substr_count($staffQueueQuery['sql'], '`einsatz_id` = ?') === 2
         && str_contains($staffQueueQuery['sql'], '`usr__fkt_s1_erl`')
         && str_contains(
             $staffQueueQuery['sql'],
@@ -232,11 +239,23 @@ foreach (
             $invalidQueueQuery[1],
             $invalidQueueQuery[2],
             $invalidQueueQuery[3],
-            false
+            false,
+            42
         ),
         'unsafe queue profile or table identifier accepted'
     );
 }
+$assertThrows(
+    static fn (): array => estab_sidebar_queue_query(
+        'old_que_aw',
+        'nv_nachrichten',
+        'usr_',
+        'A/W',
+        false,
+        0
+    ),
+    'invalid incident identifier accepted for the queue scope'
+);
 
 $audioUrls = [
     'old_que_aw' => '/4fach/audio/notify_aw.wav',

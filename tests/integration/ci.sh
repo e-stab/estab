@@ -23,6 +23,21 @@ command -v openssl >/dev/null 2>&1 || {
     exit 1
 }
 
+prebuilt_app_image=${ESTAB_PREBUILT_APP_IMAGE:-}
+prebuilt_migrate_image=${ESTAB_PREBUILT_MIGRATE_IMAGE:-}
+if [[ -n $prebuilt_app_image || -n $prebuilt_migrate_image ]]; then
+    if [[ -z $prebuilt_app_image || -z $prebuilt_migrate_image ]]; then
+        echo "CI integration: both prebuilt image references are required" >&2
+        exit 1
+    fi
+    for prebuilt_image in "$prebuilt_app_image" "$prebuilt_migrate_image"; do
+        if [[ ! $prebuilt_image =~ ^[^[:space:]@]+@sha256:[a-f0-9]{64}$ ]]; then
+            echo "CI integration: prebuilt images must use exact sha256 digest references" >&2
+            exit 1
+        fi
+    done
+fi
+
 browser_test_mode=${ESTAB_BROWSER_TEST:-auto}
 case "$browser_test_mode" in
     auto | required | skip) ;;
@@ -60,8 +75,8 @@ export ESTAB_ADMIN_USER=${ESTAB_ADMIN_USER:-estab-admin}
 export ESTAB_HTTP_BIND=${ESTAB_HTTP_BIND:-127.0.0.1}
 export ESTAB_HTTP_PORT=${ESTAB_HTTP_PORT:-18080}
 export ESTAB_PUBLIC_URL=${ESTAB_PUBLIC_URL:-/}
-export ESTAB_ALLOW_SELF_REGISTRATION=true
-export ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF=true
+export ESTAB_ALLOW_SELF_REGISTRATION=false
+export ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF=false
 export ESTAB_REVIEW_OUTGOING_MESSAGES=false
 export ESTAB_TEST_COMPOSE_ENGINE=${ESTAB_TEST_COMPOSE_ENGINE:-$container_cli}
 export TZ=${TZ:-Europe/Berlin}
@@ -196,6 +211,37 @@ wait_for_healthy() {
     return 1
 }
 
+verify_prebuilt_runtime_images() {
+    local phase=${1:-runtime}
+    local service expected_image_id container_id actual_image_id
+    if [[ ! $phase =~ ^[a-z][a-z0-9_-]*$ ]]; then
+        echo "CI integration: invalid exact-image verification phase" >&2
+        return 1
+    fi
+    for service in migrate app; do
+        case "$service" in
+            migrate) expected_image_id=$expected_migrate_id ;;
+            app) expected_image_id=$expected_app_id ;;
+        esac
+        container_id=$(compose ps --all -q "$service")
+        if [[ -z $container_id ]]; then
+            echo "CI integration: ${service} container is missing from the exact-image stack" >&2
+            return 1
+        fi
+        actual_image_id=$("$container_cli" inspect \
+            --format '{{.Image}}' "$container_id")
+        if [[ $actual_image_id != "$expected_image_id" ]]; then
+            echo "CI integration: ${service} did not execute the exact prebuilt image" >&2
+            return 1
+        fi
+        if [[ -n ${ESTAB_CI_LOG_DIR:-} ]]; then
+            printf '%s_%s_image_id=%s\n' "$phase" "$service" "$actual_image_id" \
+                >>"$ESTAB_CI_LOG_DIR/prebuilt-images.env"
+        fi
+    done
+    echo "CI integration: exact prebuilt image IDs are running"
+}
+
 verify_schema() {
     local output check_count
     if ! output=$(compose exec -T db sh -ceu \
@@ -263,6 +309,84 @@ run_php_integration() {
         app php -d auto_prepend_file= "$test_file"
 }
 
+incident_test_database() {
+    local action=$1
+    case "$action" in
+        create | drop) ;;
+        *)
+            echo "CI integration: invalid incident test database action" >&2
+            return 1
+            ;;
+    esac
+
+    compose exec -T db sh -ceu '
+        umask 077
+        client_defaults=$(mktemp "${TMPDIR:-/tmp}/estab-incident-client.XXXXXX")
+        cleanup_client_defaults()
+        {
+            rm -f -- "$client_defaults"
+        }
+        trap cleanup_client_defaults EXIT HUP INT TERM
+
+        root_password=$(tr -d "\r\n" </run/secrets/estab_db_root_password)
+        escaped_password=$(printf "%s" "$root_password" |
+            sed -e "s/\\\\/\\\\\\\\/g" -e "s/\"/\\\\\"/g")
+        unset root_password
+        {
+            printf "[client]\n"
+            printf "user=root\n"
+            printf "password=\"%s\"\n" "$escaped_password"
+            printf "protocol=socket\n"
+            printf "default-character-set=utf8mb4\n"
+        } >"$client_defaults"
+        unset escaped_password
+        chmod 0600 "$client_defaults"
+
+        case "$1" in
+            create)
+                statement="
+                    DROP DATABASE IF EXISTS \`estab_incident_ci_test\`;
+                    CREATE DATABASE \`estab_incident_ci_test\`
+                      CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+                ;;
+            drop)
+                statement="
+                    DROP DATABASE IF EXISTS \`estab_incident_ci_test\`"
+                ;;
+        esac
+        mariadb \
+            --defaults-extra-file="$client_defaults" \
+            --execute="$statement"
+    ' incident-test-database "$action"
+}
+
+run_incident_domain_integration() {
+    local status=0
+    local database_name=estab_incident_ci_test
+
+    echo "CI integration: creating an isolated incident-domain database"
+    incident_test_database create
+    if ! run_timed 4m "$container_cli" compose run --rm --no-deps -T \
+        --env "ESTAB_DB_NAME=$database_name" \
+        migrate; then
+        status=1
+    elif ! run_timed 4m "$container_cli" compose run --rm --no-deps -T \
+        --env ESTAB_INCIDENT_INTEGRATION=1 \
+        --env "ESTAB_DB_NAME=$database_name" \
+        --env ESTAB_DB_ROOT_PASSWORD_FILE=/run/secrets/incident_root_password \
+        --volume "$repo_root:/workspace:ro" \
+        --volume \
+            "$secret_dir/db_root_password.txt:/run/secrets/incident_root_password:ro" \
+        --workdir /workspace \
+        app php -d auto_prepend_file= tests/integration/incident_domain.php; then
+        status=1
+    fi
+    if ! incident_test_database drop; then
+        status=1
+    fi
+    return "$status"
+}
+
 assert_clean_app_logs() {
     local app_logs
     local php_log_error_pattern='PHP (Warning|Deprecated|Notice|Fatal error|Parse error):|Uncaught'
@@ -280,9 +404,42 @@ compose config >/dev/null
 # A previous interrupted local run must never turn this into an upgrade test.
 compose down --volumes --remove-orphans --timeout 20 >/dev/null 2>&1 || true
 
-echo "CI integration: pulling and building pinned runtime images"
+echo "CI integration: preparing pinned runtime images"
 run_timed 5m "$container_cli" compose pull db
-run_timed 15m "$container_cli" compose build --pull migrate app
+if [[ -n $prebuilt_app_image ]]; then
+    echo "CI integration: pulling exact prebuilt application and migration digests"
+    run_timed 10m "$container_cli" pull "$prebuilt_app_image"
+    run_timed 10m "$container_cli" pull "$prebuilt_migrate_image"
+    "$container_cli" tag \
+        "$prebuilt_app_image" "${COMPOSE_PROJECT_NAME}-app:latest"
+    "$container_cli" tag \
+        "$prebuilt_migrate_image" "${COMPOSE_PROJECT_NAME}-migrate:latest"
+    expected_app_id=$("$container_cli" image inspect \
+        --format '{{.Id}}' "$prebuilt_app_image")
+    expected_migrate_id=$("$container_cli" image inspect \
+        --format '{{.Id}}' "$prebuilt_migrate_image")
+    tagged_app_id=$("$container_cli" image inspect \
+        --format '{{.Id}}' "${COMPOSE_PROJECT_NAME}-app:latest")
+    tagged_migrate_id=$("$container_cli" image inspect \
+        --format '{{.Id}}' "${COMPOSE_PROJECT_NAME}-migrate:latest")
+    if [[ $expected_app_id != "$tagged_app_id" ||
+        $expected_migrate_id != "$tagged_migrate_id" ]]; then
+        echo "CI integration: exact prebuilt images were not tagged byte-identically" >&2
+        exit 1
+    fi
+    if [[ -n ${ESTAB_CI_LOG_DIR:-} ]]; then
+        mkdir -p "$ESTAB_CI_LOG_DIR"
+        {
+            printf 'app_reference=%s\n' "$prebuilt_app_image"
+            printf 'app_image_id=%s\n' "$expected_app_id"
+            printf 'migrate_reference=%s\n' "$prebuilt_migrate_image"
+            printf 'migrate_image_id=%s\n' "$expected_migrate_id"
+        } >"$ESTAB_CI_LOG_DIR/prebuilt-images.env"
+    fi
+else
+    echo "CI integration: building application and migration images from source"
+    run_timed 15m "$container_cli" compose build --pull migrate app
+fi
 
 registry_http_port=${ESTAB_REGISTRY_HTTP_PORT:-}
 if [[ -z $registry_http_port ]]; then
@@ -319,9 +476,31 @@ run_timed 8m "$container_cli" compose run --rm --no-deps -T \
 echo "CI integration: starting the migrated application stack"
 run_timed 5m "$container_cli" compose up --detach
 wait_for_healthy app 240
+if [[ -n $prebuilt_app_image ]]; then
+    verify_prebuilt_runtime_images initial
+fi
 
 verify_schema
+run_incident_domain_integration
 run_php_integration "nullable-date migration" tests/integration/date_compatibility.php
+run_php_integration "user administration" tests/integration/user_admin.php
+run_php_integration \
+    "assignment-policy concurrency and revocation" \
+    tests/integration/assignment_policy.php
+
+echo "CI integration: activating the named incident through the domain API"
+run_timed 4m "$container_cli" compose run --rm --no-deps -T \
+    --env ESTAB_INCIDENT_CI_BOOTSTRAP=1 \
+    --volume "$repo_root:/workspace:ro" \
+    --workdir /workspace \
+    app php -d auto_prepend_file= tests/integration/incident_ci_bootstrap.php
+
+echo "CI integration: proving the incident-scoped PDF dossier"
+run_timed 4m "$container_cli" compose run --rm --no-deps -T \
+    --env ESTAB_INCIDENT_EXPORT_INTEGRATION=1 \
+    --volume "$repo_root:/workspace:ro" \
+    --workdir /workspace \
+    app php -d auto_prepend_file= tests/integration/incident_export.php
 
 echo "CI integration: running dynamic-table migration"
 run_timed 5m "$container_cli" compose run --rm --no-deps -T \
@@ -384,10 +563,16 @@ if [[ $browser_test_enabled == true ]]; then
         exit 1
     fi
     (
-        unset ESTAB_TEST_LOGIN_PASSWORD ESTAB_TEST_LOGIN_PASSWORD_FILE
         export ESTAB_TEST_LOGIN_NAME="Browser Acceptance"
         export ESTAB_TEST_LOGIN_CODE="$browser_login_code"
         export ESTAB_TEST_LOGIN_FUNCTION="S1"
+        browser_login_password=$(tr -d '\r\n' <"$ESTAB_TEST_LOGIN_PASSWORD_FILE")
+        sh tests/integration/provision_user.sh \
+            "$ESTAB_TEST_LOGIN_NAME" \
+            "$ESTAB_TEST_LOGIN_CODE" \
+            "$ESTAB_TEST_LOGIN_FUNCTION" \
+            "$browser_login_password"
+        unset browser_login_password
         if [[ -n ${ESTAB_CI_LOG_DIR:-} ]]; then
             export ESTAB_BROWSER_ARTIFACT_DIR="$ESTAB_CI_LOG_DIR/browser"
         fi
@@ -418,7 +603,7 @@ restore_vordruck=$(sed -n '3p' "$http_state_file")
 restore_vordruck_sha256=$(sed -n '4p' "$http_state_file")
 restore_export_id=$(sed -n '5p' "$http_state_file")
 restore_export_sha256=$(sed -n '6p' "$http_state_file")
-if [[ ! $restore_vordruck =~ ^[A-Za-z0-9_]+\ [0-9]+\ [EA]\.pdf$ ]]; then
+if [[ ! $restore_vordruck =~ ^[A-Za-z0-9_]+\ Einsatz-[1-9][0-9]*\ [1-9][0-9]*\ [EA]\.pdf$ ]]; then
     echo "CI integration: HTTP smoke returned an unsafe generated-form name" >&2
     exit 1
 fi
@@ -434,6 +619,18 @@ if [[ ! $restore_export_sha256 =~ ^[a-f0-9]{64}$ ]]; then
     echo "CI integration: HTTP smoke returned an invalid survivor export checksum" >&2
     exit 1
 fi
+
+echo "CI integration: proving the isolated tokenless legacy-login opt-in"
+export ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF=true
+run_timed 5m "$container_cli" compose up --detach --no-deps --force-recreate app
+wait_for_healthy app 240
+run_timed 3m sh tests/integration/legacy_login_http.sh
+
+echo "CI integration: restoring the default CSRF-protected login"
+export ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF=false
+run_timed 5m "$container_cli" compose up --detach --no-deps --force-recreate app
+wait_for_healthy app 240
+assert_clean_app_logs
 
 echo "CI integration: running ETB/TBB HTTP integration"
 run_timed 5m sh tests/integration/logbooks_http.sh
@@ -536,5 +733,8 @@ wait_for_healthy db 30
 wait_for_healthy app 60
 verify_schema
 assert_clean_app_logs
+if [[ -n $prebuilt_app_image ]]; then
+    verify_prebuilt_runtime_images final
+fi
 
 echo "CI integration: OK"

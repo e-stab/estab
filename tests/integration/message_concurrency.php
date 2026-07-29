@@ -71,6 +71,7 @@ function message_db_worker(array $arguments): never
     $workerKey = (string) ($arguments[2] ?? '');
     $messageTable = (string) ($arguments[3] ?? '');
     $secondary = (string) ($arguments[4] ?? '');
+    $scopeTable = (string) ($arguments[5] ?? '');
     $config = message_db_config();
     $connection = estab_message_connect($config);
     file_put_contents($barrier . '.' . $workerKey . '.ready', 'ready', LOCK_EX);
@@ -101,7 +102,8 @@ function message_db_worker(array $arguments): never
                     $messageTable,
                     $secondary,
                     'read',
-                    '2026-07-23 12:00:00'
+                    '2026-07-23 12:00:00',
+                    $scopeTable
                 );
                 echo "1\n";
                 break;
@@ -147,7 +149,8 @@ function message_db_start_worker(
     string $barrier,
     string $workerKey,
     string $messageTable,
-    string $secondary
+    string $secondary,
+    string $scopeTable = ''
 ): array {
     $command = [
         PHP_BINARY,
@@ -160,6 +163,7 @@ function message_db_start_worker(
         $workerKey,
         $messageTable,
         $secondary,
+        $scopeTable,
     ];
     $descriptors = [
         0 => ['file', '/dev/null', 'r'],
@@ -214,7 +218,7 @@ function message_db_open_barrier(string $barrier): void
 
 if (($argv[1] ?? '') === '--worker') {
     try {
-        message_db_worker(array_slice($argv, 2, 5));
+        message_db_worker(array_slice($argv, 2, 6));
     } catch (Throwable $exception) {
         fwrite(STDERR, $exception::class . ': ' . $exception->getMessage() . "\n");
         exit(1);
@@ -250,6 +254,7 @@ try {
     $connection = estab_message_connect($config);
     $messageSql = 'CREATE TABLE ' . estab_message_table($messageTable) . ' ('
         . ' `00_lfd` BIGINT NOT NULL AUTO_INCREMENT,'
+        . ' `einsatz_id` BIGINT UNSIGNED NULL DEFAULT NULL,'
         . " `03_datum` DATETIME NULL DEFAULT NULL,"
         . " `03_zeichen` VARCHAR(6) NOT NULL DEFAULT '',"
         . " `04_richtung` CHAR(1) NOT NULL DEFAULT '',"
@@ -315,8 +320,22 @@ try {
     $stateBarrier = sys_get_temp_dir() . '/estab-message-state-' . $token;
     $barriers[] = $stateBarrier;
     $stateWorkers = [
-        message_db_start_worker('state', $stateBarrier, 'a', $stateTable, (string) $stateMessageId),
-        message_db_start_worker('state', $stateBarrier, 'b', $stateTable, (string) $stateMessageId),
+        message_db_start_worker(
+            'state',
+            $stateBarrier,
+            'a',
+            $stateTable,
+            (string) $stateMessageId,
+            $messageTable
+        ),
+        message_db_start_worker(
+            'state',
+            $stateBarrier,
+            'b',
+            $stateTable,
+            (string) $stateMessageId,
+            $messageTable
+        ),
     ];
     message_db_wait_until_ready($stateBarrier, $stateWorkers);
     message_db_open_barrier($stateBarrier);

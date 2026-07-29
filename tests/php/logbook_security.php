@@ -92,8 +92,12 @@ $assert(
 );
 
 foreach (['ETB' => $etb, 'TBB' => $tbb] as $name => $source) {
+    $normalizedMarkupSource = str_replace('\\"', '"', $source);
     $assert(
-        str_contains($source, 'method=\"POST\"')
+        preg_match(
+            '/<form\b[^>]*\bmethod="post"/i',
+            $normalizedMarkupSource
+        ) === 1
             && str_contains($source, 'estab_csrf_field ()')
             && str_contains($source, 'estab_logbook_require_csrf ($_SERVER, $_POST)'),
         "{$name} writes are not POST-only and CSRF-protected"

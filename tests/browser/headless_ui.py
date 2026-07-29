@@ -796,13 +796,100 @@ class BrowserAcceptance:
         self.cdp = cdp
         self.config = config
 
+    def run_bos(self) -> None:
+        self.cdp.call("Page.enable")
+        self.cdp.call("Runtime.enable")
+        self.cdp.call("Network.enable")
+        self.cdp.navigate(self.config.base_url + "/stabinfo/index.php")
+        self._wait_for_top_level_path(
+            "/stabinfo/index.php",
+            "öffentliche BOS-Infosammlung wurde nicht geladen",
+        )
+        self.cdp.wait_for(
+            _frame_expression(
+                "status",
+                """
+                return target.location.pathname.endsWith(
+                    "/stabinfo/l_index.php"
+                ) && doc.readyState === "complete";
+                """,
+            ),
+            "öffentliche BOS-Sidebar wurde nicht vollständig geladen",
+        )
+        self._equal(
+            self.cdp.evaluate(
+                _visible_count_expression(
+                    "status",
+                    "aside[data-estab-public-bar]"
+                )
+            ),
+            1,
+            "öffentliche Shared-Bar in der BOS-Sidebar",
+        )
+        self._equal(
+            self.cdp.evaluate(
+                _visible_count_expression(
+                    "status",
+                    "aside[data-estab-session-bar]"
+                )
+            ),
+            0,
+            "authentifizierte Bar in der öffentlichen BOS-Sidebar",
+        )
+        self._equal(
+            self.cdp.evaluate(
+                _visible_count_expression(
+                    "mainframe",
+                    "aside[data-estab-session-bar],aside[data-estab-public-bar]"
+                )
+            ),
+            0,
+            "zusätzliche Shared-Bar im BOS-Dokument",
+        )
+        self._assert_bos_workspace_layout(
+            "öffentliche BOS-Infosammlung bei 1440×1000 px"
+        )
+        self.cdp.call(
+            "Emulation.setDeviceMetricsOverride",
+            {
+                "width": 390,
+                "height": 844,
+                "deviceScaleFactor": 1,
+                "mobile": False,
+                "screenWidth": 390,
+                "screenHeight": 844,
+            },
+        )
+        self._assert_bos_workspace_layout(
+            "öffentliche BOS-Infosammlung bei 390×844 px"
+        )
+        self.cdp.click(
+            "status",
+            'a[href$="Buchstabier.html"][target="mainframe"]',
+            "öffentlicher BOS-Inhaltslink",
+        )
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                return target.location.pathname.endsWith(
+                    "/stabinfo/Buchstabier.html"
+                ) && doc.readyState === "complete";
+                """,
+            ),
+            "öffentliches BOS-Dokument wurde nicht geladen",
+        )
+        self._assert_mobile_bos_navigation(
+            "öffentliche BOS-Infosammlung bei 390×844 px"
+        )
+
     def run(self) -> None:
         self.cdp.call("Page.enable")
         self.cdp.call("Runtime.enable")
         self.cdp.call("Network.enable")
         self.cdp.navigate(self.config.base_url + "/")
 
-        print("[1/9] Anonyme Übersicht, zwei Konto-Flows und gesperrte Module")
+        print("[1/9] Anonyme Übersicht, Bestandslogin und gesperrte Module")
         self._assert_anonymous_overview()
         self._assert_protected_cards()
         self._assert_root_card_layout("anonyme Übersicht bei 1440 px")
@@ -827,7 +914,7 @@ class BrowserAcceptance:
         )
 
         self.cdp.navigate(self.config.base_url + "/")
-        print("[3/9] Gesperrte ETB-Karte und neuen Konto-Flow über das Frameset öffnen")
+        print("[3/9] Gesperrte ETB-Karte mit erhaltenem Anmeldeziel öffnen")
         self.cdp.click(
             None,
             'a.estab-menu-link[data-estab-nav-key="incident-log"]',
@@ -847,20 +934,21 @@ class BrowserAcceptance:
                 "mainframe",
                 """
                 const query = new target.URLSearchParams(target.location.search);
-                const registration = doc.querySelector(
-                    'button[name="login_flow"][value="new"]'
+                const existing = doc.querySelector(
+                    'button[name="login_flow"][value="existing"]'
                 );
                 return target.location.pathname.endsWith("/4fach/mainindex.php") &&
                     query.get("next") === "incident-log" &&
-                    Boolean(registration);
+                    Boolean(existing) &&
+                    !doc.querySelector('button[name="login_flow"][value="new"]');
                 """,
             ),
             "Anmeldeauswahl hat das angeforderte ETB-Ziel nicht übernommen",
         )
         self.cdp.click(
             "mainframe",
-            'button[name="login_flow"][value="new"]',
-            "Neues Konto für das angeforderte ETB anlegen",
+            'button[name="login_flow"][value="existing"]',
+            "Bestandskonto für das angeforderte ETB anmelden",
         )
         self.cdp.wait_for(
             _frame_expression(
@@ -870,16 +958,18 @@ class BrowserAcceptance:
                     'input[name="next"][value="incident-log"]'
                 );
                 return Array.from(doc.querySelectorAll("h1, h2")).some(
-                    heading => heading.innerText.includes("Neues Funktionskonto anlegen")
+                    heading => heading.innerText.includes(
+                        "Mit bestehendem Konto anmelden"
+                    )
                 ) && Boolean(destination) && new target.URLSearchParams(
                     target.top.location.search
                 ).get("next") === "incident-log";
                 """,
             ),
-            "Formular für ein neues Funktionskonto mit erhaltenem ETB-Ziel fehlt",
+            "Bestandskonto-Formular mit erhaltenem ETB-Ziel fehlt",
         )
 
-        print("[4/9] Neues Konto anlegen und das angeforderte Einsatztagebuch öffnen")
+        print("[4/9] Provisioniertes Konto anmelden und Einsatztagebuch öffnen")
         self.cdp.set_value(
             "mainframe", 'input[name="benutzer"]', self.config.login_name, "Benutzername"
         )
@@ -899,24 +989,18 @@ class BrowserAcceptance:
             self.config.login_password,
             "Kennwort",
         )
-        self.cdp.set_value(
-            "mainframe",
-            'input[name="kennwort2"]',
-            self.config.login_password,
-            "Kennwortbestätigung",
-        )
         self.cdp.click(
             "mainframe",
             'button.estab-button-primary[type="submit"]',
-            "Konto erstellen und anmelden",
+            "Bestandskonto anmelden",
         )
         self._wait_for_top_level_path(
             "/stabetb/etb.php",
-            "Einsatztagebuch wurde nach der Kontoanlage nicht als angefordertes Ziel geöffnet",
+            "Einsatztagebuch wurde nach der Anmeldung nicht als angefordertes Ziel geöffnet",
         )
         self._assert_session_bar(
             None,
-            "Einsatztagebuch nach Kontoanlage",
+            "Einsatztagebuch nach Bestandslogin",
             "incident-log",
         )
 
@@ -1038,6 +1122,23 @@ class BrowserAcceptance:
             0,
             "Session-Bar im statischen BOS-Inhaltsframe",
         )
+        self._assert_bos_workspace_layout(
+            "BOS-Infosammlung bei 1440×1000 px"
+        )
+        self.cdp.call(
+            "Emulation.setDeviceMetricsOverride",
+            {
+                "width": 390,
+                "height": 844,
+                "deviceScaleFactor": 1,
+                "mobile": False,
+                "screenWidth": 390,
+                "screenHeight": 844,
+            },
+        )
+        self._assert_bos_workspace_layout(
+            "BOS-Infosammlung bei 390×844 px"
+        )
         self.cdp.click(
             "status",
             'a[href$="Buchstabier.html"][target="mainframe"]',
@@ -1052,6 +1153,9 @@ class BrowserAcceptance:
                 """,
             ),
             "BOS-Inhaltslink wurde nicht im Inhaltsframe geöffnet",
+        )
+        self._assert_mobile_bos_navigation(
+            "BOS-Infosammlung bei 390×844 px"
         )
         self._assert_session_bar(
             "status",
@@ -1082,9 +1186,16 @@ class BrowserAcceptance:
             0,
             "Session-Bar im BOS-Inhalt nach Inhaltswechsel",
         )
-        self._open_compact_navigation(
-            "status",
-            "BOS-Navigationsframe",
+        self.cdp.call(
+            "Emulation.setDeviceMetricsOverride",
+            {
+                "width": 1440,
+                "height": 1000,
+                "deviceScaleFactor": 1,
+                "mobile": False,
+                "screenWidth": 1440,
+                "screenHeight": 1000,
+            },
         )
         self.cdp.click(
             "status",
@@ -1104,6 +1215,14 @@ class BrowserAcceptance:
             "Einsatztagebuch wurde nicht über seine Root-Karte geöffnet",
         )
         self._assert_session_bar(None, "Einsatztagebuch", "incident-log")
+        self._assert_generated_forms_tool()
+        if self.config.admin_user and self.config.admin_password:
+            self._assert_authenticated_administration_session_chrome()
+        else:
+            print(
+                "      übersprungen: authentifizierte Admin-Sitzungsleisten "
+                "ohne Admin-Testzugangsdaten"
+            )
 
         print("[7/9] Logout aus dem Einsatztagebuch und Rückkehr in den anonymen Zustand")
         self.cdp.click(
@@ -1165,7 +1284,7 @@ class BrowserAcceptance:
         self._assert_narrow_overview()
         self._assert_root_card_layout("anonyme Übersicht bei 390 px")
 
-        print("[9/9] Exportverwaltung und Matrix-Bestätigungen")
+        print("[9/9] Adminübersicht, Exportverwaltung und Matrix-Bestätigungen")
         if self.config.admin_user and self.config.admin_password:
             self._assert_export_management()
         else:
@@ -1183,6 +1302,50 @@ class BrowserAcceptance:
             {"headers": {"Authorization": authorization}},
         )
         try:
+            self.cdp.call(
+                "Emulation.setDeviceMetricsOverride",
+                {
+                    "width": 1280,
+                    "height": 800,
+                    "deviceScaleFactor": 1,
+                    "mobile": False,
+                    "screenWidth": 1280,
+                    "screenHeight": 800,
+                },
+            )
+            self.cdp.navigate(self.config.base_url + "/4fadm/admin.php")
+            self.cdp.wait_for(
+                """
+                document.readyState === "complete" &&
+                Boolean(document.querySelector("[data-estab-admin-dashboard]")) &&
+                document.querySelectorAll("[data-estab-admin-card]").length === 8 &&
+                Boolean(document.querySelector(
+                    '[data-estab-public-bar] [data-estab-admin-user]'
+                ))
+                """,
+                "administrative Übersicht wurde nicht vollständig geladen",
+            )
+            self._assert_admin_dashboard_layout(
+                "Adminübersicht bei 1280×800 px"
+            )
+
+            self.cdp.call(
+                "Emulation.setDeviceMetricsOverride",
+                {
+                    "width": 390,
+                    "height": 844,
+                    "deviceScaleFactor": 1,
+                    "mobile": False,
+                    "screenWidth": 390,
+                    "screenHeight": 844,
+                },
+            )
+            self._assert_admin_dashboard_layout(
+                "Adminübersicht bei 390×844 px",
+                require_single_column=True,
+            )
+            self._assert_administration_tools()
+
             self.cdp.call(
                 "Emulation.setDeviceMetricsOverride",
                 {
@@ -1411,6 +1574,510 @@ class BrowserAcceptance:
         finally:
             self.cdp.call("Network.setExtraHTTPHeaders", {"headers": {}})
 
+    def _assert_generated_forms_tool(self) -> None:
+        for width, height in ((1280, 800), (390, 844)):
+            self.cdp.call(
+                "Emulation.setDeviceMetricsOverride",
+                {
+                    "width": width,
+                    "height": height,
+                    "deviceScaleFactor": 1,
+                    "mobile": False,
+                    "screenWidth": width,
+                    "screenHeight": height,
+                },
+            )
+            self.cdp.navigate(self.config.base_url + "/4fach/vordrucke.php")
+            self.cdp.wait_for(
+                """
+                document.readyState === "complete" &&
+                Boolean(document.querySelector("[data-estab-generated-forms]")) &&
+                Boolean(document.querySelector("aside[data-estab-session-bar]"))
+                """,
+                "einsatzbezogene Vordruckübersicht wurde nicht vollständig geladen",
+            )
+            self._assert_tool_page_layout(
+                f"Vordruckübersicht bei {width}×{height} px",
+                "[data-estab-generated-forms]",
+                mobile=width <= 390,
+            )
+
+        self.cdp.call(
+            "Emulation.setDeviceMetricsOverride",
+            {
+                "width": 1440,
+                "height": 1000,
+                "deviceScaleFactor": 1,
+                "mobile": False,
+                "screenWidth": 1440,
+                "screenHeight": 1000,
+            },
+        )
+        self.cdp.navigate(self.config.base_url + "/stabetb/etb.php")
+        self._wait_for_top_level_path(
+            "/stabetb/etb.php",
+            "Einsatztagebuch wurde nach der Vordruckprüfung nicht wieder geladen",
+        )
+        self._assert_session_bar(
+            None,
+            "Einsatztagebuch nach Vordruckprüfung",
+            "incident-log",
+        )
+
+    def _assert_authenticated_administration_session_chrome(self) -> None:
+        assert self.config.admin_user is not None
+        assert self.config.admin_password is not None
+        credentials = (
+            f"{self.config.admin_user}:{self.config.admin_password}".encode(
+                "utf-8"
+            )
+        )
+        authorization = "Basic " + base64.b64encode(credentials).decode("ascii")
+        surfaces = (
+            (
+                "/4fadm/admin.php",
+                "[data-estab-admin-dashboard]",
+                "Adminübersicht",
+            ),
+            (
+                "/4fadm/incidents.php",
+                "[data-estab-incident-admin]",
+                "Einsatzverwaltung",
+            ),
+            (
+                "/4fadm/users.php",
+                "[data-estab-user-admin]",
+                "Benutzerverwaltung",
+            ),
+            (
+                "/4fadm/make_fkt.php",
+                "[data-estab-matrix-tool]",
+                "Empfängermatrix",
+            ),
+            (
+                "/4fadm/set_number_after_crash.php",
+                "[data-estab-counter-tool]",
+                "Nachrichtenzähler",
+            ),
+            (
+                "/4fach/resetpic.php",
+                "[data-estab-print-reset-tool]",
+                "Vordruck-Wiedererzeugung",
+            ),
+            (
+                "/4fadm/incident_export.php",
+                "[data-estab-incident-export]",
+                "PDF-Einsatzdossier",
+            ),
+            (
+                "/4fadm/export.php",
+                "[data-estab-export-tool]",
+                "Einsatzexporte",
+            ),
+            (
+                "/4fadm/system_status.php",
+                "[data-estab-system-status]",
+                "Systemstatus",
+            ),
+        )
+        self.cdp.call(
+            "Network.setExtraHTTPHeaders",
+            {"headers": {"Authorization": authorization}},
+        )
+        try:
+            self.cdp.call(
+                "Emulation.setDeviceMetricsOverride",
+                {
+                    "width": 1280,
+                    "height": 800,
+                    "deviceScaleFactor": 1,
+                    "mobile": False,
+                    "screenWidth": 1280,
+                    "screenHeight": 800,
+                },
+            )
+            for path, marker, label in surfaces:
+                self.cdp.navigate(self.config.base_url + path)
+                self.cdp.wait_for(
+                    f"""
+                    document.readyState === "complete" &&
+                    Boolean(document.querySelector({json.dumps(marker)})) &&
+                    Boolean(document.querySelector(
+                        "aside[data-estab-session-bar] " +
+                        "[data-estab-admin-user]"
+                    ))
+                    """,
+                    f"{label} mit kombinierter Anmeldung wurde nicht geladen",
+                )
+                self._assert_session_bar(
+                    None,
+                    f"{label} mit eStab- und Administrationsanmeldung",
+                    "administration",
+                )
+                self._equal(
+                    self.cdp.evaluate(
+                        """
+                        document.querySelector(
+                            "aside[data-estab-session-bar] " +
+                            "[data-estab-admin-user]"
+                        )?.getAttribute("data-estab-admin-user")
+                        """
+                    ),
+                    self.config.admin_user,
+                    f"technische Administrationsidentität in {label}",
+                )
+        finally:
+            self.cdp.call("Network.setExtraHTTPHeaders", {"headers": {}})
+
+        self.cdp.navigate(self.config.base_url + "/stabetb/etb.php")
+        self._wait_for_top_level_path(
+            "/stabetb/etb.php",
+            "Einsatztagebuch wurde nach der Admin-Sitzungsprüfung nicht geladen",
+        )
+        self._assert_session_bar(
+            None,
+            "Einsatztagebuch nach der Admin-Sitzungsprüfung",
+            "incident-log",
+        )
+
+    def _assert_administration_tools(self) -> None:
+        tools = (
+            (
+                "/4fadm/incidents.php",
+                "[data-estab-incident-admin]",
+                "Einsatzverwaltung",
+                False,
+                True,
+            ),
+            (
+                "/4fadm/users.php",
+                "[data-estab-user-admin]",
+                "Benutzerverwaltung",
+                True,
+                False,
+            ),
+            (
+                "/4fadm/set_number_after_crash.php",
+                "[data-estab-counter-tool]",
+                "Nachrichtenzähler",
+                False,
+                True,
+            ),
+            (
+                "/4fach/resetpic.php",
+                "[data-estab-print-reset-tool]",
+                "Vordruck-Wiedererzeugung",
+                False,
+                True,
+            ),
+            (
+                "/4fadm/make_fkt.php",
+                "[data-estab-matrix-tool]",
+                "Empfängermatrix",
+                True,
+                True,
+            ),
+            (
+                "/4fadm/incident_export.php",
+                "[data-estab-incident-export]",
+                "PDF-Einsatzdossier",
+                False,
+                True,
+            ),
+            (
+                "/4fadm/system_status.php",
+                "[data-estab-system-status]",
+                "Systemstatus",
+                True,
+                False,
+            ),
+        )
+        for path, marker, label, responsive_table, require_target in tools:
+            for width, height in ((1280, 800), (390, 844)):
+                self.cdp.call(
+                    "Emulation.setDeviceMetricsOverride",
+                    {
+                        "width": width,
+                        "height": height,
+                        "deviceScaleFactor": 1,
+                        "mobile": False,
+                        "screenWidth": width,
+                        "screenHeight": height,
+                    },
+                )
+                self.cdp.navigate(self.config.base_url + path)
+                escaped_marker = json.dumps(marker)
+                self.cdp.wait_for(
+                    f"""
+                    document.readyState === "complete" &&
+                    Boolean(document.querySelector({escaped_marker})) &&
+                    (
+                        document.querySelectorAll(
+                            "aside[data-estab-session-bar]"
+                        ).length +
+                        document.querySelectorAll(
+                            "aside[data-estab-public-bar]"
+                        ).length
+                    ) === 1
+                    """,
+                    f"{label} wurde nicht vollständig geladen",
+                )
+                self._assert_tool_page_layout(
+                    f"{label} bei {width}×{height} px",
+                    marker,
+                    mobile=width <= 390,
+                    require_responsive_table=responsive_table,
+                    require_target=require_target,
+                )
+
+    def _assert_tool_page_layout(
+        self,
+        description: str,
+        marker: str,
+        *,
+        mobile: bool,
+        require_responsive_table: bool = False,
+        require_target: bool = False,
+    ) -> None:
+        state = self.cdp.evaluate(
+            f"""
+            (() => {{
+                const visible = element => {{
+                    if (!element) return false;
+                    const style = getComputedStyle(element);
+                    const rect = element.getBoundingClientRect();
+                    return style.display !== "none" &&
+                        style.visibility !== "hidden" &&
+                        rect.width > 0 && rect.height > 0;
+                }};
+                const marker = document.querySelector({json.dumps(marker)});
+                const main = document.querySelector(".estab-tool-main");
+                const mainRect = main?.getBoundingClientRect() || null;
+                const targets = Array.from(document.querySelectorAll(
+                    ".estab-tool-main .estab-button," +
+                    ".estab-tool-main summary"
+                )).filter(visible);
+                const table = document.querySelector(".estab-tool-table");
+                const wrapper = document.querySelector(
+                    ".estab-tool-table-responsive"
+                );
+                const firstCell = table?.querySelector("tbody td") || null;
+                return {{
+                    markerVisible: visible(marker),
+                    heroVisible: visible(document.querySelector(
+                        ".estab-tool-hero"
+                    )),
+                    footerVisible: visible(document.querySelector(
+                        ".estab-tool-footer"
+                    )),
+                    navigationVisible: visible(document.querySelector(
+                        "[data-estab-navigation]"
+                    )),
+                    barCount:
+                        document.querySelectorAll(
+                            "aside[data-estab-session-bar]"
+                        ).length +
+                        document.querySelectorAll(
+                            "aside[data-estab-public-bar]"
+                        ).length,
+                    mainFits: Boolean(mainRect) &&
+                        mainRect.left >= -0.5 &&
+                        mainRect.right <= innerWidth + 0.5,
+                    targetsFit: targets.every(target => {{
+                        const rect = target.getBoundingClientRect();
+                        return rect.width >= 44 &&
+                            rect.height >= 44 &&
+                            rect.left >= -0.5 &&
+                            rect.right <= innerWidth + 0.5;
+                    }}),
+                    targetCount: targets.length,
+                    documentScrollWidth:
+                        document.documentElement.scrollWidth,
+                    innerWidth,
+                    tablePresent: Boolean(table),
+                    emptyVisible: visible(document.querySelector(
+                        ".estab-tool-empty"
+                    )),
+                    responsiveTable: Boolean(
+                        table && wrapper && firstCell &&
+                        getComputedStyle(table).display === "block" &&
+                        getComputedStyle(firstCell).display === "block" &&
+                        getComputedStyle(wrapper).overflowX === "visible"
+                    )
+                }};
+            }})()
+            """
+        )
+        self._truth(
+            isinstance(state, dict)
+            and state.get("markerVisible") is True
+            and state.get("heroVisible") is True
+            and state.get("footerVisible") is True
+            and state.get("navigationVisible") is True
+            and state.get("barCount") == 1,
+            f"{description}: Werkzeugseite, Navigation oder einzelne Shared-Bar fehlt.",
+        )
+        self._truth(
+            state.get("mainFits") is True
+            and state.get("targetsFit") is True,
+            f"{description}: Inhalt oder Bedienelemente ragen aus dem Viewport.",
+        )
+        if require_target:
+            self._truth(
+                int(state.get("targetCount", 0)) >= 1,
+                f"{description}: kein bedienbares Werkzeugziel sichtbar.",
+            )
+        self._truth(
+            int(state.get("documentScrollWidth", 0))
+            <= int(state.get("innerWidth", 0)) + 1,
+            f"{description}: Seite erzeugt horizontales Dokument-Scrolling: "
+            f"{state!r}",
+        )
+        if mobile and require_responsive_table:
+            self._truth(
+                (
+                    state.get("tablePresent") is True
+                    and state.get("responsiveTable") is True
+                )
+                or (
+                    state.get("tablePresent") is False
+                    and state.get("emptyVisible") is True
+                ),
+                f"{description}: Datentabelle wird mobil nicht zu beschrifteten "
+                "Karten und der Leerzustand fehlt.",
+            )
+
+    def _assert_admin_dashboard_layout(
+        self,
+        description: str,
+        require_single_column: bool = False,
+    ) -> None:
+        state = self.cdp.evaluate(
+            """
+            (() => {
+                const visible = element => {
+                    if (!element) return false;
+                    const style = getComputedStyle(element);
+                    const rect = element.getBoundingClientRect();
+                    return style.display !== "none" &&
+                        style.visibility !== "hidden" &&
+                        rect.width > 0 && rect.height > 0;
+                };
+                const cards = Array.from(document.querySelectorAll(
+                    "[data-estab-admin-card]"
+                )).filter(visible);
+                const cardRects = cards.map(card => {
+                    const rect = card.getBoundingClientRect();
+                    return {
+                        key: card.getAttribute("data-estab-admin-card"),
+                        left: rect.left,
+                        right: rect.right,
+                        top: rect.top,
+                        bottom: rect.bottom,
+                        width: rect.width,
+                        height: rect.height
+                    };
+                });
+                const overlaps = [];
+                for (let first = 0; first < cardRects.length; first += 1) {
+                    for (
+                        let second = first + 1;
+                        second < cardRects.length;
+                        second += 1
+                    ) {
+                        const a = cardRects[first];
+                        const b = cardRects[second];
+                        if (
+                            Math.min(a.right, b.right) -
+                                Math.max(a.left, b.left) > 0.5 &&
+                            Math.min(a.bottom, b.bottom) -
+                                Math.max(a.top, b.top) > 0.5
+                        ) {
+                            overlaps.push([a.key, b.key]);
+                        }
+                    }
+                }
+                const firstRect = cardRects[0] || null;
+                return {
+                    dashboardVisible: visible(document.querySelector(
+                        "[data-estab-admin-dashboard]"
+                    )),
+                    sectionCount: document.querySelectorAll(
+                        ".estab-admin-dashboard-section"
+                    ).length,
+                    keys: cardRects.map(card => card.key),
+                    cardsFit: cardRects.every(card =>
+                        card.width >= 44 &&
+                        card.height >= 44 &&
+                        card.left >= -0.5 &&
+                        card.right <= innerWidth + 0.5
+                    ),
+                    singleColumn: Boolean(firstRect) && cardRects.every(card =>
+                        Math.abs(card.left - firstRect.left) <= 1 &&
+                        Math.abs(card.right - firstRect.right) <= 1
+                    ),
+                    overlaps,
+                    innerWidth,
+                    documentScrollWidth:
+                        document.documentElement.scrollWidth,
+                    adminUserVisible: visible(document.querySelector(
+                        "[data-estab-public-bar] [data-estab-admin-user]"
+                    )),
+                    navigationVisible: visible(document.querySelector(
+                        "[data-estab-navigation]"
+                    ))
+                };
+            })()
+            """
+        )
+        self._truth(isinstance(state, dict), f"{description}: Layoutstatus fehlt.")
+        self._truth(
+            state.get("dashboardVisible") is True
+            and state.get("adminUserVisible") is True
+            and state.get("navigationVisible") is True,
+            f"{description}: Übersicht, Adminidentität oder Navigation fehlt.",
+        )
+        self._equal(
+            state.get("keys"),
+            [
+                "incidents",
+                "users",
+                "matrix",
+                "counter",
+                "print-reset",
+                "incident-pdf",
+                "export",
+                "system-status",
+            ],
+            f"{description}: administrative Karten",
+        )
+        self._equal(
+            state.get("sectionCount"),
+            3,
+            f"{description}: administrative Gruppen",
+        )
+        self._truth(
+            state.get("cardsFit") is True,
+            f"{description}: Eine Karte ragt aus dem Viewport oder ist kleiner "
+            "als 44 × 44 Pixel.",
+        )
+        self._equal(
+            state.get("overlaps"),
+            [],
+            f"{description}: überlappende Karten",
+        )
+        self._truth(
+            int(state.get("documentScrollWidth", 0))
+            <= int(state.get("innerWidth", 0)) + 1,
+            f"{description}: Seite erzeugt horizontales Dokument-Scrolling: "
+            f"{state!r}",
+        )
+        if require_single_column:
+            self._truth(
+                state.get("singleColumn") is True,
+                f"{description}: Karten bilden mobil keine einheitliche Spalte.",
+            )
+
     def _assert_matrix_confirmations(self) -> None:
         self.cdp.navigate(self.config.base_url + "/4fadm/make_fkt.php")
         self.cdp.wait_for(
@@ -1606,49 +2273,42 @@ class BrowserAcceptance:
         )
         self._equal(
             self.cdp.evaluate(_visible_count_expression(None, "#estab-register")),
-            1,
-            "Button für ein neues Konto auf der anonymen Übersicht",
-        )
-        self._equal(
-            self.cdp.evaluate(_text_expression(None, "#estab-register")),
-            "Neues Konto anlegen",
-            "Beschriftung des Buttons für ein neues Konto",
+            0,
+            "unerwarteter Selbstregistrierungsbutton auf der anonymen Übersicht",
         )
         flow_urls = self.cdp.evaluate(
             """
             (() => {
                 const existing = document.querySelector("#estab-login");
                 const fresh = document.querySelector("#estab-register");
-                if (!existing || !fresh) return null;
+                if (!existing || fresh) return null;
                 const existingUrl = new URL(existing.href, location.href);
-                const freshUrl = new URL(fresh.href, location.href);
                 return {
-                    existing: existingUrl.pathname + existingUrl.search,
-                    fresh: freshUrl.pathname + freshUrl.search
+                    existing: existingUrl.pathname + existingUrl.search
                 };
             })()
             """
         )
-        self._truth(flow_urls, "Die beiden Konto-Flows sind nicht verlinkt.")
+        self._truth(flow_urls, "Der Bestandskonto-Flow ist nicht eindeutig verlinkt.")
         self._truth(
             str(flow_urls["existing"]).endswith("/4fach/index.php?login_flow=existing"),
             "Der Button für ein bestehendes Konto öffnet nicht den bestehenden Konto-Flow.",
-        )
-        self._truth(
-            str(flow_urls["fresh"]).endswith("/4fach/index.php?login_flow=new"),
-            "Der Button für ein neues Konto öffnet nicht den Registrierungs-Flow.",
         )
         copy_is_clear = self.cdp.evaluate(
             """
             (() => {
                 const text = document.body.innerText.replace(/\\s+/g, " ");
                 return text.includes("Bestehendes Konto") &&
-                    text.includes("Neues Konto anlegen") &&
-                    text.includes("noch kein Konto existiert");
+                    text.includes("nicht selbst angelegt") &&
+                    text.includes("Administration") &&
+                    text.includes("Benutzerverwaltung");
             })()
             """
         )
-        self._truth(copy_is_clear, "Übersicht erklärt bestehendes und neues Konto nicht klar.")
+        self._truth(
+            copy_is_clear,
+            "Übersicht erklärt Bestandslogin und administrative Kontoanlage nicht klar.",
+        )
         self._equal(
             self.cdp.evaluate(
                 _visible_count_expression(None, "aside[data-estab-session-bar]")
@@ -1836,8 +2496,11 @@ class BrowserAcceptance:
                 const topline = bar && bar.querySelector(
                     ".estab-session-topline"
                 );
-                const navigation = bar && bar.querySelector(
-                    "[data-estab-navigation]"
+                const navigation = bar && (
+                    bar.querySelector("[data-estab-navigation]") ||
+                    doc.querySelector(
+                        "[data-estab-sidebar-root] > [data-estab-navigation]"
+                    )
                 );
                 const workflow = doc.querySelector(
                     "[data-estab-workflow-menu]"
@@ -1999,9 +2662,11 @@ class BrowserAcceptance:
         workflow_rect = state["workflow"]
         self._truth(
             status_rect["bottom"] <= bar_rect["top"] + 0.5
-            and topline_rect["bottom"] <= navigation_rect["top"] + 0.5
-            and bar_rect["bottom"] <= workflow_rect["top"] + 0.5,
-            f"Status, Benutzer, Bereiche und Aktionen überlappen in {location}.",
+            and bar_rect["bottom"] <= workflow_rect["top"] + 0.5
+            and workflow_rect["bottom"] <= navigation_rect["top"] + 0.5
+            and topline_rect["bottom"] <= bar_rect["bottom"] + 0.5,
+            f"Status, Benutzer, Aktionen und Bereiche sind in {location} "
+            "nicht überschneidungsfrei angeordnet.",
         )
         self._equal(
             state.get("navigationMode"),
@@ -2812,6 +3477,293 @@ class BrowserAcceptance:
             f"Deaktivieren des Sound-Schalters startet in {location} Audio",
         )
 
+    def _assert_bos_workspace_layout(self, location: str) -> None:
+        workspace = self.cdp.evaluate(
+            """
+            (() => {
+                if (innerWidth <= 672) {
+                    scrollTo(0, 0);
+                }
+                const shell = document.querySelector(
+                    "[data-estab-bos-workspace]"
+                );
+                const sidebar = document.querySelector(
+                    'iframe[name="status"]'
+                );
+                const content = document.querySelector(
+                    'iframe[name="mainframe"]'
+                );
+                if (!shell || !sidebar || !content) return null;
+                const sidebarRect = sidebar.getBoundingClientRect();
+                const contentRect = content.getBoundingClientRect();
+                return {
+                    frameNames: Array.from(
+                        document.querySelectorAll("iframe[name]")
+                    ).map(frame => frame.getAttribute("name")),
+                    sidebar: {
+                        left: sidebarRect.left,
+                        right: sidebarRect.right,
+                        top: sidebarRect.top,
+                        bottom: sidebarRect.bottom,
+                        width: sidebarRect.width
+                    },
+                    content: {
+                        left: contentRect.left,
+                        right: contentRect.right,
+                        top: contentRect.top,
+                        bottom: contentRect.bottom,
+                        width: contentRect.width
+                    },
+                    innerWidth,
+                    innerHeight,
+                    scrollHeight: document.scrollingElement.scrollHeight,
+                    scrollWidth: document.scrollingElement.scrollWidth
+                };
+            })()
+            """
+        )
+        self._truth(
+            isinstance(workspace, dict),
+            f"Responsive BOS-Arbeitsbereich fehlt: {location}.",
+        )
+        self._equal(
+            workspace.get("frameNames"),
+            ["status", "mainframe"],
+            f"BOS-Frame-Struktur in {location}",
+        )
+        sidebar_frame = workspace.get("sidebar")
+        content_frame = workspace.get("content")
+        inner_width = float(workspace.get("innerWidth", 0))
+        inner_height = float(workspace.get("innerHeight", 0))
+        self._truth(
+            float(workspace.get("scrollWidth", 0)) <= inner_width + 1,
+            f"BOS-Arbeitsbereich erzeugt in {location} horizontales Scrolling.",
+        )
+        if inner_width <= 672:
+            self._truth(
+                isinstance(sidebar_frame, dict)
+                and isinstance(content_frame, dict)
+                and abs(float(sidebar_frame.get("left", -1))) <= 0.5
+                and abs(float(content_frame.get("left", -1))) <= 0.5
+                and abs(float(sidebar_frame.get("top", -1))) <= 0.5
+                and abs(float(sidebar_frame.get("bottom", -1)) - inner_height)
+                <= 0.5
+                and abs(float(content_frame.get("top", -1)) - inner_height)
+                <= 0.5
+                and abs(
+                    float(content_frame.get("bottom", -1))
+                    - (2 * inner_height)
+                )
+                <= 0.5
+                and abs(float(sidebar_frame.get("width", 0)) - inner_width)
+                <= 0.5
+                and abs(float(content_frame.get("width", 0)) - inner_width)
+                <= 0.5
+                and abs(
+                    float(workspace.get("scrollHeight", 0))
+                    - (2 * inner_height)
+                )
+                <= 1,
+                f"BOS-Navigation und Inhalt bilden in {location} keine "
+                "zwei vollen mobilen Ansichten.",
+            )
+        else:
+            self._truth(
+                isinstance(sidebar_frame, dict)
+                and isinstance(content_frame, dict)
+                and abs(float(sidebar_frame.get("top", -1))) <= 0.5
+                and abs(
+                    float(sidebar_frame.get("bottom", -1)) - inner_height
+                )
+                <= 0.5
+                and abs(float(content_frame.get("top", -1))) <= 0.5
+                and abs(float(content_frame.get("bottom", -1)) - inner_height)
+                <= 0.5
+                and float(sidebar_frame.get("width", 0)) >= 260
+                and float(sidebar_frame.get("right", 0))
+                <= float(content_frame.get("left", -1)) + 0.5
+                and float(content_frame.get("width", 0)) >= 300,
+                f"BOS-Sidebar nutzt in {location} nicht die volle linke Höhe.",
+            )
+
+        sidebar_state = self.cdp.evaluate(
+            _frame_expression(
+                "status",
+                """
+                const root = doc.scrollingElement;
+                const bar = doc.querySelector(
+                    "aside[data-estab-session-bar],aside[data-estab-public-bar]"
+                );
+                const navigation = bar && bar.querySelector(
+                    "[data-estab-navigation]"
+                );
+                const documents = doc.querySelector(
+                    "[data-estab-bos-document-navigation]"
+                );
+                const links = documents
+                    ? Array.from(
+                        documents.querySelectorAll(
+                            "a[data-estab-bos-document-link]"
+                        )
+                    )
+                    : [];
+                const barRect = bar && bar.getBoundingClientRect();
+                const documentRect =
+                    documents && documents.getBoundingClientRect();
+                return {
+                    navigationMode: navigation && navigation.getAttribute(
+                        "data-estab-navigation-mode"
+                    ),
+                    detailsCount: doc.querySelectorAll("details").length,
+                    documentCount: links.length,
+                    documentOrder:
+                        Boolean(barRect && documentRect) &&
+                        documentRect.top >= barRect.bottom - 0.5,
+                    linksFit: links.every(link => {
+                        const rect = link.getBoundingClientRect();
+                        return rect.width >= 44 && rect.height >= 44 &&
+                            rect.left >= -0.5 &&
+                            rect.right <= root.clientWidth + 0.5;
+                    }),
+                    scrollWidth: root.scrollWidth,
+                    clientWidth: root.clientWidth
+                };
+                """,
+            )
+        )
+        self._truth(
+            isinstance(sidebar_state, dict)
+            and sidebar_state.get("navigationMode") == "sidebar"
+            and sidebar_state.get("detailsCount") == 0
+            and sidebar_state.get("documentCount") == 7
+            and sidebar_state.get("documentOrder") is True
+            and sidebar_state.get("linksFit") is True
+            and int(sidebar_state.get("scrollWidth", 0))
+            <= int(sidebar_state.get("clientWidth", 0)) + 1,
+            f"BOS-Sidebar ist in {location} nicht vollständig sichtbar: "
+            f"{sidebar_state!r}",
+        )
+
+        content_state = self.cdp.evaluate(
+            _frame_expression(
+                "mainframe",
+                """
+                const root = doc.scrollingElement;
+                return {
+                    enhanced: doc.documentElement.classList.contains(
+                        "estab-bos-embedded-document"
+                    ) && doc.body.classList.contains(
+                        "estab-bos-embedded-content"
+                    ),
+                    scrollWidth: root.scrollWidth,
+                    clientWidth: root.clientWidth
+                };
+                """,
+            )
+        )
+        self._truth(
+            isinstance(content_state, dict)
+            and content_state.get("enhanced") is True
+            and int(content_state.get("scrollWidth", 0))
+            <= int(content_state.get("clientWidth", 0)) + 1,
+            f"BOS-Inhalt ist in {location} nicht responsiv: {content_state!r}",
+        )
+
+    def _assert_mobile_bos_navigation(self, location: str) -> None:
+        time.sleep(0.25)
+        content_state = self.cdp.evaluate(
+            """
+            (() => {
+                const content = document.querySelector(
+                    'iframe[name="mainframe"]'
+                );
+                const returnButton = document.querySelector(
+                    "[data-estab-mobile-menu-return]"
+                );
+                if (!content || !content.contentDocument || !returnButton) {
+                    return false;
+                }
+                const contentRect = content.getBoundingClientRect();
+                const buttonRect = returnButton.getBoundingClientRect();
+                const buttonStyle = getComputedStyle(returnButton);
+                const root = content.contentDocument.scrollingElement ||
+                    content.contentDocument.documentElement;
+                if (!root) {
+                    return false;
+                }
+                const visibleHeight = Math.max(
+                    0,
+                    Math.min(innerHeight, contentRect.bottom)
+                        - Math.max(0, contentRect.top)
+                );
+                const buttonVisible =
+                    buttonStyle.display !== "none" &&
+                    buttonStyle.visibility !== "hidden" &&
+                    buttonRect.width >= 44 &&
+                    buttonRect.height >= 44 &&
+                    buttonRect.right > 0 &&
+                    buttonRect.left < innerWidth &&
+                    buttonRect.bottom > 0 &&
+                    buttonRect.top < innerHeight;
+                return {
+                    visibleHeight,
+                    buttonWidth: buttonRect.width,
+                    buttonHeight: buttonRect.height,
+                    buttonVisible,
+                    enhanced:
+                        content.contentDocument.documentElement.classList.contains(
+                            "estab-bos-embedded-document"
+                        ),
+                    horizontalOverflow:
+                        root.scrollWidth > root.clientWidth + 1,
+                    scrollY
+                };
+            })()
+            """,
+        )
+        self._truth(
+            isinstance(content_state, dict)
+            and content_state.get("scrollY", 0) >= 843
+            and content_state.get("visibleHeight", 0) >= 843
+            and content_state.get("buttonWidth", 0) >= 44
+            and content_state.get("buttonHeight", 0) >= 44
+            and content_state.get("buttonVisible") is True
+            and content_state.get("enhanced") is True
+            and content_state.get("horizontalOverflow") is False,
+            f"Mobiler BOS-Dokumentwechsel ist in {location} unvollständig: "
+            f"{content_state!r}",
+        )
+
+        self.cdp.click(
+            None,
+            "[data-estab-mobile-menu-return]",
+            f"Mobiler BOS-Rückkehrbutton in {location}",
+        )
+        self.cdp.wait_for(
+            """
+            (() => {
+                const sidebar = document.querySelector(
+                    'iframe[name="status"]'
+                );
+                const returnButton = document.querySelector(
+                    "[data-estab-mobile-menu-return]"
+                );
+                if (!sidebar || !returnButton) return false;
+                const rect = sidebar.getBoundingClientRect();
+                const visibleHeight = Math.max(
+                    0,
+                    Math.min(innerHeight, rect.bottom)
+                        - Math.max(0, rect.top)
+                );
+                return scrollY <= 1 &&
+                    visibleHeight >= innerHeight - 1 &&
+                    document.activeElement === sidebar &&
+                    returnButton.hidden;
+            })()
+            """,
+            f"BOS-Rückkehrbutton bringt in {location} nicht zum Info-Menü",
+        )
+
     def _assert_mobile_message_navigation(self, location: str) -> None:
         armed = self.cdp.evaluate(
             """
@@ -3044,7 +3996,13 @@ class BrowserAcceptance:
                     document.querySelectorAll(
                         ".estab-root-auth-actions .estab-button"
                     )
-                ).map(bounds);
+                ).map(element => Object.assign(bounds(element), {
+                    id: element.id,
+                    text: element.innerText.trim()
+                }));
+                const authNote = document.querySelector(
+                    ".estab-login-cta .estab-auth-note"
+                );
                 const navigation = document.querySelector(
                     ".estab-navigation-content"
                 );
@@ -3100,8 +4058,10 @@ class BrowserAcceptance:
                         )),
                         loginCard: bounds(document.querySelector(
                             ".estab-login-cta"
-                        ))
+                        )),
+                        authNote: bounds(authNote)
                     },
+                    authNoteText: authNote ? authNote.innerText.trim() : "",
                     menuSections: Array.from(
                         document.querySelectorAll(".estab-menu-section")
                     ).map(bounds),
@@ -3149,7 +4109,7 @@ class BrowserAcceptance:
             isinstance(regions, dict),
             "Relevante Seitenbereiche fehlen im schmalen Viewport.",
         )
-        for key in ("publicBar", "masthead", "rootMain", "loginCard"):
+        for key in ("publicBar", "masthead", "rootMain", "loginCard", "authNote"):
             assert_horizontally_contained(
                 regions.get(key),
                 f"Seitenbereich {key}",
@@ -3180,8 +4140,11 @@ class BrowserAcceptance:
 
         actions = state.get("actions")
         self._truth(
-            isinstance(actions, list) and len(actions) == 2,
-            "Anmeldeaktionen fehlen im schmalen Viewport.",
+            isinstance(actions, list)
+            and len(actions) == 1
+            and actions[0].get("id") == "estab-login"
+            and actions[0].get("text") == "Mit bestehendem Konto anmelden",
+            "Eindeutige Bestandskonto-Anmeldung fehlt im schmalen Viewport.",
         )
         for index, action in enumerate(actions, start=1):
             assert_horizontally_contained(
@@ -3192,6 +4155,15 @@ class BrowserAcceptance:
                 action.get("height", 0) >= 44,
                 f"Anmeldeaktion {index} ist im schmalen Viewport zu klein.",
             )
+        auth_note_text = state.get("authNoteText")
+        self._truth(
+            isinstance(auth_note_text, str)
+            and "nicht selbst angelegt" in auth_note_text
+            and "Administration" in auth_note_text
+            and "Benutzerverwaltung" in auth_note_text,
+            "Hinweis zur administrativen Anlage neuer Konten fehlt im "
+            "schmalen Viewport.",
+        )
 
         cards = state.get("cards")
         self._truth(
@@ -3799,7 +4771,7 @@ class BrowserAcceptance:
         expected_active_key: str,
     ) -> None:
         self._truth(
-            expected_active_key in self.navigation_keys,
+            expected_active_key in (*self.navigation_keys, "administration"),
             f"Unbekannter erwarteter Navigationsbereich {expected_active_key!r}.",
         )
         selector = "aside[data-estab-session-bar]"
@@ -3816,7 +4788,24 @@ class BrowserAcceptance:
                 const bar = doc.querySelector({json.dumps(selector)});
                 const identity = bar && bar.querySelector("[data-estab-user-code]");
                 const name = bar && bar.querySelector("[data-estab-user-name]");
-                const navigation = bar && bar.querySelector("[data-estab-navigation]");
+                const sidebarRoot = bar && bar.closest(
+                    "[data-estab-sidebar-root]"
+                );
+                const navigation = bar && (
+                    bar.querySelector("[data-estab-navigation]") ||
+                    (
+                        sidebarRoot &&
+                        sidebarRoot.querySelector(
+                            ":scope > [data-estab-navigation]"
+                        )
+                    )
+                );
+                const sidebarStatus = sidebarRoot && sidebarRoot.querySelector(
+                    ":scope > [data-estab-sidebar-status]"
+                );
+                const sidebarWorkflow = sidebarRoot && sidebarRoot.querySelector(
+                    ":scope > [data-estab-workflow-menu]"
+                );
                 const expectedCoreKeys = new Set(
                     {json.dumps(expected_navigation_keys)}
                 );
@@ -3853,7 +4842,7 @@ class BrowserAcceptance:
                     role: identity.getAttribute("data-estab-user-role"),
                     text: bar.innerText.replace(/\\s+/g, " ").trim(),
                     navigationCount:
-                        bar.querySelectorAll("[data-estab-navigation]").length,
+                        doc.querySelectorAll("[data-estab-navigation]").length,
                     navigationKeys:
                         links.map(link => link.getAttribute("data-estab-nav-key")),
                     allCoreTargetsTop:
@@ -3866,6 +4855,25 @@ class BrowserAcceptance:
                     navigationMode:
                         navigation.getAttribute("data-estab-navigation-mode"),
                     compact: bar.classList.contains("estab-session-bar-compact"),
+                    sidebarOrder: !sidebarRoot || (
+                        Boolean(
+                            sidebarStatus &&
+                            sidebarWorkflow &&
+                            navigation
+                        ) &&
+                        (
+                            sidebarStatus.compareDocumentPosition(bar) &
+                            Node.DOCUMENT_POSITION_FOLLOWING
+                        ) !== 0 &&
+                        (
+                            bar.compareDocumentPosition(sidebarWorkflow) &
+                            Node.DOCUMENT_POSITION_FOLLOWING
+                        ) !== 0 &&
+                        (
+                            sidebarWorkflow.compareDocumentPosition(navigation) &
+                            Node.DOCUMENT_POSITION_FOLLOWING
+                        ) !== 0
+                    ),
                     hasDisclosure: Boolean(disclosure),
                     disclosureSummaryVisible: Boolean(summary && visible(summary)),
                     overviewContract:
@@ -3915,8 +4923,10 @@ class BrowserAcceptance:
             self._truth(
                 details.get("compact")
                 and not details.get("hasDisclosure")
-                and details.get("allNavigationLinksVisible"),
-                f"Dauerhaft sichtbare Sidebar-Navigation fehlt in {location}.",
+                and details.get("allNavigationLinksVisible")
+                and details.get("sidebarOrder"),
+                f"Status, Identität, Aktionen und sichtbare Navigation sind "
+                f"in {location} nicht korrekt angeordnet.",
             )
         elif details.get("compact"):
             self._truth(
@@ -4070,6 +5080,11 @@ def parse_arguments() -> argparse.Namespace:
             "Matrix-Bestätigungen testen"
         ),
     )
+    parser.add_argument(
+        "--bos-only",
+        action="store_true",
+        help="nur den öffentlichen responsiven BOS-Arbeitsbereich testen",
+    )
     return parser.parse_args()
 
 
@@ -4093,7 +5108,13 @@ def main() -> int:
         websocket = WebSocket(chrome.websocket_url, config.timeout)
         cdp = CDP(websocket, config.timeout)
         acceptance = BrowserAcceptance(cdp, config)
-        if arguments.export_only:
+        if arguments.export_only and arguments.bos_only:
+            raise TestFailure(
+                "--export-only und --bos-only können nicht kombiniert werden."
+            )
+        if arguments.bos_only:
+            acceptance.run_bos()
+        elif arguments.export_only:
             if not config.admin_user or not config.admin_password:
                 raise TestFailure(
                     "--export-only benötigt ESTAB_TEST_ADMIN_USER und "

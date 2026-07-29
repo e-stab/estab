@@ -185,10 +185,15 @@ foreach ([$helper, $endpoint, $facade, $form, $list, $mainController, $apache] a
 $assert(
     substr_count($helper, '->prepare(') >= 12
         && substr_count($helper, '->bind_param(') >= 10
-        && substr_count($helper, '->begin_transaction()') >= 4
-        && substr_count($helper, 'if (!$connection->begin_transaction())') >= 4
-        && substr_count($helper, 'if (!$connection->commit())') >= 4
-        && substr_count($helper, '->rollback()') >= 4
+        && substr_count($helper, '->begin_transaction()') >= 3
+        && substr_count($helper, 'if (!$connection->begin_transaction())') >= 3
+        && substr_count($helper, 'if (!$connection->commit())') >= 3
+        && substr_count($helper, '->rollback()') >= 3
+        && str_contains($helper, 'estab_incident_with_active_write(')
+        && str_contains(
+            $helper,
+            'WHERE `00_lfd` = ? AND `einsatz_id` = ? FOR UPDATE'
+        )
         && str_contains($helper, 'estab_auth_table('),
     'category storage is not consistently prepared, transactional and identifier-safe'
 );
