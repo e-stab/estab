@@ -56,7 +56,7 @@ echo "DBDATA--".$conf_4f_db  ["server"]." - ".$conf_4f_db  ["datenbank"]." - ".
 //    var_dump (mysql_fetch_array($query_result));echo "<br>";
 	$result = NULL;
     for ($i=1;$i<=$resultcount;$i++){
-      $result[$i] = mysql_fetch_array($query_result);
+      $result[$i] = mysql_fetch_assoc($query_result);
     }
 
     mysql_free_result($query_result);
@@ -87,33 +87,6 @@ echo "DBDATA--".$conf_4f_db  ["server"]." - ".$conf_4f_db  ["datenbank"]." - ".
         if ( ($fktdata["redcopy"] == "t") or
              ($fktdata["redcopy"] == "1")){ $redcopy2 = $fktdata ["fkt"] ;}
       }
-
-      $db = mysql_connect($conf_4f_db  ["server"],$conf_4f_db ["user"], $conf_4f_db  ["password"])
-         or die ("[query_table] Konnte keine Verbindung zur Datenbank herstellen");
-
-      $db_check = mysql_select_db ($conf_4f_db  ["datenbank"])
-         or die ("[query_table] Auswahl der Datenbank fehlgeschlagen");
-
-      $query = "SELECT
-                 mtx_x as `m`,
-                 mtx_y as `n`,
-                 mtx_typ as `typ`,
-                 mtx_fkt as `fkt`,
-                 mtx_rolle as `rolle`,
-                 mtx_mode as `mode`,
-                 mtx_rc2 as `redcopy`,
-                 mtx_auto as `auto` FROM ".$conf_4f_tbl   ["empfmtx"]." WHERE 1 ;" ;
-
-      $query_result = mysql_query ($query, $db) or
-         die("[query_table] <br>$query<br>103-".mysql_error()." ".mysql_errno());
-
-      $resultcount = mysql_num_rows($query_result);
-
-      for ($i=1;$i<=$resultcount;$i++){
-        $result[$i] = mysql_fetch_assoc($query_result);
-      }
-
-      mysql_free_result($query_result);
 
        // Voreinstellung für die leere Tabelle
      $stab = NULL;

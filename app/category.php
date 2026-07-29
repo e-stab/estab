@@ -511,17 +511,18 @@ function estab_category_lock_existing(
 function estab_category_lock_message(
     mysqli $connection,
     string $messageTable,
-    int $messageId
+    int $messageId,
+    int $incidentId
 ): array {
     $statement = $connection->prepare(
         'SELECT * FROM ' . estab_auth_table($messageTable)
-        . ' WHERE `00_lfd` = ? FOR UPDATE'
+        . ' WHERE `00_lfd` = ? AND `einsatz_id` = ? FOR UPDATE'
     );
     if (!$statement) {
         throw new RuntimeException('Meldungssperre konnte nicht vorbereitet werden.');
     }
     try {
-        $statement->bind_param('i', $messageId);
+        $statement->bind_param('ii', $messageId, $incidentId);
         if (!$statement->execute()) {
             throw new RuntimeException('Meldung konnte nicht gesperrt werden.');
         }
@@ -564,64 +565,82 @@ function estab_category_assign(
         }
     }
 
-    if (!$connection->begin_transaction()) {
-        throw new RuntimeException('Kategorietransaktion konnte nicht gestartet werden.');
-    }
-    try {
-        $message = estab_category_lock_message($connection, $messageTable, $messageId);
-        if (!estab_message_object_allowed($identity, 'staff-read', $message)) {
-            throw new EstabCategoryAuthorizationException(
-                'Keine Berechtigung für diese Meldung.'
+    estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
+            $connection,
+            $messageId,
+            $messageTable,
+            $identity,
+            $scopes,
+            $assignments
+        ): void {
+            $incidentId = (int) $incident['active_einsatz_id'];
+            $message = estab_category_lock_message(
+                $connection,
+                $messageTable,
+                $messageId,
+                $incidentId
             );
-        }
-        foreach ($assignments as $type => $categoryId) {
-            $scope = $scopes[$type];
-            if ($categoryId !== null) {
-                estab_category_lock_existing(
-                    $connection,
-                    estab_auth_table((string) $scope['category_table']),
-                    $categoryId
+            if (!estab_message_object_allowed($identity, 'staff-read', $message)) {
+                throw new EstabCategoryAuthorizationException(
+                    'Keine Berechtigung für diese Meldung.'
                 );
             }
-
-            $linkTable = estab_auth_table((string) $scope['link_table']);
-            $delete = $connection->prepare('DELETE FROM ' . $linkTable . ' WHERE `msg` = ?');
-            if (!$delete) {
-                throw new RuntimeException('Alte Kategoriezuordnung konnte nicht vorbereitet werden.');
-            }
-            try {
-                $delete->bind_param('i', $messageId);
-                if (!$delete->execute()) {
-                    throw new RuntimeException('Alte Kategoriezuordnung konnte nicht entfernt werden.');
+            foreach ($assignments as $type => $categoryId) {
+                $scope = $scopes[$type];
+                if ($categoryId !== null) {
+                    estab_category_lock_existing(
+                        $connection,
+                        estab_auth_table((string) $scope['category_table']),
+                        $categoryId
+                    );
                 }
-            } finally {
-                $delete->close();
-            }
 
-            if ($categoryId !== null) {
-                $insert = $connection->prepare(
-                    'INSERT INTO ' . $linkTable . ' (`msg`, `katego`) VALUES (?, ?)'
+                $linkTable = estab_auth_table((string) $scope['link_table']);
+                $delete = $connection->prepare(
+                    'DELETE FROM ' . $linkTable . ' WHERE `msg` = ?'
                 );
-                if (!$insert) {
-                    throw new RuntimeException('Kategoriezuordnung konnte nicht vorbereitet werden.');
+                if (!$delete) {
+                    throw new RuntimeException(
+                        'Alte Kategoriezuordnung konnte nicht vorbereitet werden.'
+                    );
                 }
                 try {
-                    $insert->bind_param('ii', $messageId, $categoryId);
-                    if (!$insert->execute()) {
-                        throw new RuntimeException('Kategoriezuordnung konnte nicht gespeichert werden.');
+                    $delete->bind_param('i', $messageId);
+                    if (!$delete->execute()) {
+                        throw new RuntimeException(
+                            'Alte Kategoriezuordnung konnte nicht entfernt werden.'
+                        );
                     }
                 } finally {
-                    $insert->close();
+                    $delete->close();
+                }
+
+                if ($categoryId !== null) {
+                    $insert = $connection->prepare(
+                        'INSERT INTO ' . $linkTable
+                        . ' (`msg`, `katego`) VALUES (?, ?)'
+                    );
+                    if (!$insert) {
+                        throw new RuntimeException(
+                            'Kategoriezuordnung konnte nicht vorbereitet werden.'
+                        );
+                    }
+                    try {
+                        $insert->bind_param('ii', $messageId, $categoryId);
+                        if (!$insert->execute()) {
+                            throw new RuntimeException(
+                                'Kategoriezuordnung konnte nicht gespeichert werden.'
+                            );
+                        }
+                    } finally {
+                        $insert->close();
+                    }
                 }
             }
         }
-        if (!$connection->commit()) {
-            throw new RuntimeException('Kategorietransaktion konnte nicht abgeschlossen werden.');
-        }
-    } catch (Throwable $exception) {
-        $connection->rollback();
-        throw $exception;
-    }
+    );
 }
 
 /**

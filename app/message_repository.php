@@ -10,6 +10,7 @@
 
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/datetime.php';
+require_once __DIR__ . '/incident.php';
 
 /** @return array<string, true> */
 function estab_message_columns(): array
@@ -156,24 +157,122 @@ function estab_message_fields(array $fields): array
     return $validated;
 }
 
-/** Insert fields and return the positive auto-increment identifier. */
-function estab_message_insert(
+/**
+ * Insert fields after the singleton incident row has already been locked.
+ *
+ * `einsatz_id` is deliberately not part of the public field allowlist. It is
+ * always supplied from the authoritative status row, never from request data.
+ */
+function estab_message_insert_for_incident(
     mysqli $connection,
     string $table,
-    array $fields
+    array $fields,
+    int $incidentId
 ): int {
     $fields = estab_message_fields($fields);
-    $columns = array_keys($fields);
+    $incidentId = estab_incident_positive_id($incidentId);
+    $columns = array_merge(['einsatz_id'], array_keys($fields));
+    $values = array_merge([$incidentId], array_values($fields));
     $sql = 'INSERT INTO ' . estab_message_table($table)
         . ' (`' . implode('`, `', $columns) . '`) VALUES ('
         . implode(', ', array_fill(0, count($columns), '?')) . ')';
-    $statement = estab_message_execute($connection, $sql, array_values($fields));
+    $statement = estab_message_execute($connection, $sql, $values);
     try {
         $recordId = (int) $connection->insert_id;
         if ($recordId < 1) {
             throw new RuntimeException('Message insert returned no record identifier');
         }
         return $recordId;
+    } finally {
+        $statement->close();
+    }
+}
+
+/** Insert one message atomically into the globally active incident. */
+function estab_message_insert(
+    mysqli $connection,
+    string $table,
+    array $fields
+): int {
+    return estab_incident_with_active_write(
+        $connection,
+        static fn (array $incident): int => estab_message_insert_for_incident(
+            $connection,
+            $table,
+            $fields,
+            (int) $incident['active_einsatz_id']
+        )
+    );
+}
+
+/**
+ * Verify that every attachment referenced by a new message is finalised in
+ * the same incident. This closes the incident-switch window between selecting
+ * an attachment and submitting the message form.
+ */
+function estab_message_require_attachment_scope(
+    mysqli $connection,
+    string $attachmentTable,
+    int $incidentId,
+    mixed $attachmentList
+): void {
+    if ($attachmentList === null || $attachmentList === '') {
+        return;
+    }
+    if (!is_string($attachmentList) || strlen($attachmentList) > 65535) {
+        throw new InvalidArgumentException('Invalid message attachment list');
+    }
+    $filenames = array_values(array_unique(array_filter(
+        array_map('trim', explode(';', $attachmentList)),
+        static fn (string $filename): bool => $filename !== ''
+    )));
+    if (count($filenames) > 100) {
+        throw new InvalidArgumentException('Too many message attachments');
+    }
+    $incidentId = estab_incident_positive_id($incidentId);
+    $statement = $connection->prepare(
+        'SELECT COUNT(*) FROM ' . estab_message_table($attachmentTable)
+        . ' WHERE `einsatz_id` = ? AND `filename` = ?'
+        . ' AND `fileext` = ? AND `status` = 1'
+    );
+    if (!$statement) {
+        throw new RuntimeException('Could not prepare message attachment scope');
+    }
+    try {
+        foreach ($filenames as $filename) {
+            if (
+                preg_match(
+                    '/\A([A-Za-z0-9_-]{2,255})\.([a-z0-9]{1,16})\z/D',
+                    $filename,
+                    $parts
+                ) !== 1
+            ) {
+                throw new InvalidArgumentException(
+                    'Invalid message attachment reference'
+                );
+            }
+            $base = $parts[1];
+            $extension = strtolower($parts[2]);
+            $statement->bind_param(
+                'iss',
+                $incidentId,
+                $base,
+                $extension
+            );
+            if (!$statement->execute()) {
+                throw new RuntimeException(
+                    'Could not verify message attachment scope'
+                );
+            }
+            $result = $statement->get_result();
+            $row = $result->fetch_row();
+            $result->free();
+            if ((int) ($row[0] ?? 0) !== 1) {
+                throw new EstabIncidentConflictException(
+                    'Ein ausgewählter Anhang gehört nicht zum aktiven Einsatz.'
+                );
+            }
+        }
     } finally {
         $statement->close();
     }
@@ -217,7 +316,8 @@ function estab_message_insert_numbered(
     string $table,
     string $direction,
     bool $separateNumbering,
-    array $fields
+    array $fields,
+    ?string $attachmentTable = null
 ): array {
     if (!in_array($direction, ['E', 'A'], true)) {
         throw new InvalidArgumentException('Invalid message direction');
@@ -238,52 +338,73 @@ function estab_message_insert_numbered(
         throw new RuntimeException('Could not serialize message number allocation');
     }
 
-    $transactionOpen = false;
     try {
-        if (!$connection->begin_transaction()) {
-            throw new RuntimeException('Could not start message transaction');
-        }
-        $transactionOpen = true;
-
-        if ($separateNumbering) {
-            $numberStatement = estab_message_execute(
+        return estab_incident_with_active_write(
+            $connection,
+            static function (array $incident) use (
                 $connection,
-                'SELECT COALESCE(MAX(`04_nummer`), 0) FROM '
-                    . estab_message_table($table)
-                    . ' WHERE `04_richtung` = ? FOR UPDATE',
-                [$direction]
-            );
-        } else {
-            $numberStatement = estab_message_execute(
-                $connection,
-                'SELECT COALESCE(MAX(`04_nummer`), 0) FROM '
-                    . estab_message_table($table)
-                    . ' FOR UPDATE'
-            );
-        }
-        try {
-            $numberRow = $numberStatement->get_result()->fetch_row();
-        } finally {
-            $numberStatement->close();
-        }
-        $number = ((int) ($numberRow[0] ?? 0)) + 1;
-        if ($number < 1) {
-            throw new RuntimeException('Message number allocation overflowed');
-        }
+                $table,
+                $direction,
+                $separateNumbering,
+                $fields,
+                $attachmentTable
+            ): array {
+                $incidentId = (int) $incident['active_einsatz_id'];
+                if ($separateNumbering) {
+                    $numberStatement = estab_message_execute(
+                        $connection,
+                        'SELECT COALESCE(MAX(`04_nummer`), 0) FROM '
+                            . estab_message_table($table)
+                            . ' WHERE `einsatz_id` = ?'
+                            . ' AND `04_richtung` = ? FOR UPDATE',
+                        [$incidentId, $direction]
+                    );
+                } else {
+                    $numberStatement = estab_message_execute(
+                        $connection,
+                        'SELECT COALESCE(MAX(`04_nummer`), 0) FROM '
+                            . estab_message_table($table)
+                            . ' WHERE `einsatz_id` = ? FOR UPDATE',
+                        [$incidentId]
+                    );
+                }
+                try {
+                    $numberRow = $numberStatement->get_result()->fetch_row();
+                } finally {
+                    $numberStatement->close();
+                }
+                $number = ((int) ($numberRow[0] ?? 0)) + 1;
+                if ($number < 1) {
+                    throw new RuntimeException('Message number allocation overflowed');
+                }
 
-        $fields['04_richtung'] = $direction;
-        $fields['04_nummer'] = $number;
-        $recordId = estab_message_insert($connection, $table, $fields);
-        if (!$connection->commit()) {
-            throw new RuntimeException('Could not commit message transaction');
-        }
-        $transactionOpen = false;
-        return ['id' => $recordId, 'number' => $number];
-    } catch (Throwable $exception) {
-        if ($transactionOpen) {
-            $connection->rollback();
-        }
-        throw $exception;
+                $fields['04_richtung'] = $direction;
+                $fields['04_nummer'] = $number;
+                if (
+                    array_key_exists('12_anhang', $fields)
+                    && (string) $fields['12_anhang'] !== ''
+                ) {
+                    if ($attachmentTable === null) {
+                        throw new LogicException(
+                            'Message attachment table is required'
+                        );
+                    }
+                    estab_message_require_attachment_scope(
+                        $connection,
+                        $attachmentTable,
+                        $incidentId,
+                        $fields['12_anhang']
+                    );
+                }
+                $recordId = estab_message_insert_for_incident(
+                    $connection,
+                    $table,
+                    $fields,
+                    $incidentId
+                );
+                return ['id' => $recordId, 'number' => $number];
+            }
+        );
     } finally {
         $release = estab_message_execute(
             $connection,
@@ -303,48 +424,62 @@ function estab_message_update(
 ): bool {
     $recordId = estab_message_positive_id($recordId);
     $fields = estab_message_fields($fields);
-    $assignments = [];
-    foreach (array_keys($fields) as $column) {
-        $assignments[] = '`' . $column . '` = ?';
-    }
-    $parameters = array_values($fields);
-    $parameters[] = $recordId;
-    $statement = estab_message_execute(
+    return estab_incident_with_active_write(
         $connection,
-        'UPDATE ' . estab_message_table($table)
-            . ' SET ' . implode(', ', $assignments)
-            . ' WHERE `00_lfd` = ?',
-        $parameters
-    );
-    try {
-        if ($statement->affected_rows === 1) {
-            return true;
-        }
-    } finally {
-        $statement->close();
-    }
+        static function (array $incident) use (
+            $connection,
+            $table,
+            $recordId,
+            $fields
+        ): bool {
+            $incidentId = (int) $incident['active_einsatz_id'];
+            $assignments = [];
+            foreach (array_keys($fields) as $column) {
+                $assignments[] = '`' . $column . '` = ?';
+            }
+            $parameters = array_values($fields);
+            $parameters[] = $recordId;
+            $parameters[] = $incidentId;
+            $statement = estab_message_execute(
+                $connection,
+                'UPDATE ' . estab_message_table($table)
+                    . ' SET ' . implode(', ', $assignments)
+                    . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?',
+                $parameters
+            );
+            try {
+                if ($statement->affected_rows === 1) {
+                    return true;
+                }
+            } finally {
+                $statement->close();
+            }
 
-    // An UPDATE that writes the values already stored reports zero affected
-    // rows. Verify every requested field explicitly before treating that as
-    // idempotent success; a concurrently deleted record therefore fails.
-    $verificationParameters = [$recordId];
-    $verificationConditions = ['`00_lfd` = ?'];
-    foreach ($fields as $column => $value) {
-        $verificationConditions[] = '`' . $column . '` <=> ?';
-        $verificationParameters[] = $value;
-    }
-    $verification = estab_message_execute(
-        $connection,
-        'SELECT COUNT(*) FROM ' . estab_message_table($table)
-            . ' WHERE ' . implode(' AND ', $verificationConditions),
-        $verificationParameters
+            // An UPDATE that writes the values already stored reports zero
+            // affected rows. Verify the incident and every submitted field.
+            $verificationParameters = [$recordId, $incidentId];
+            $verificationConditions = [
+                '`00_lfd` = ?',
+                '`einsatz_id` = ?',
+            ];
+            foreach ($fields as $column => $value) {
+                $verificationConditions[] = '`' . $column . '` <=> ?';
+                $verificationParameters[] = $value;
+            }
+            $verification = estab_message_execute(
+                $connection,
+                'SELECT COUNT(*) FROM ' . estab_message_table($table)
+                    . ' WHERE ' . implode(' AND ', $verificationConditions),
+                $verificationParameters
+            );
+            try {
+                $row = $verification->get_result()->fetch_row();
+                return ((int) ($row[0] ?? 0)) === 1;
+            } finally {
+                $verification->close();
+            }
+        }
     );
-    try {
-        $row = $verification->get_result()->fetch_row();
-        return ((int) ($row[0] ?? 0)) === 1;
-    } finally {
-        $verification->close();
-    }
 }
 
 /**
@@ -364,28 +499,41 @@ function estab_message_update_locked_outgoing(
         throw new InvalidArgumentException('Invalid message lock owner');
     }
     $fields = estab_message_fields($fields);
-    $assignments = [];
-    foreach (array_keys($fields) as $column) {
-        $assignments[] = '`' . $column . '` = ?';
-    }
-    $parameters = array_values($fields);
-    $parameters[] = $recordId;
-    $parameters[] = '';
-    $parameters[] = $operatorCode;
-    $statement = estab_message_execute(
+    return estab_incident_with_active_write(
         $connection,
-        'UPDATE ' . estab_message_table($table)
-            . ' SET ' . implode(', ', $assignments)
-            . " WHERE `00_lfd` = ? AND `04_richtung` = 'A'"
-            . ' AND `03_datum` IS NULL AND `03_zeichen` = ?'
-            . " AND `x02_sperre` = 't' AND `x03_sperruser` = ?",
-        $parameters
+        static function (array $incident) use (
+            $connection,
+            $table,
+            $recordId,
+            $operatorCode,
+            $fields
+        ): bool {
+            $assignments = [];
+            foreach (array_keys($fields) as $column) {
+                $assignments[] = '`' . $column . '` = ?';
+            }
+            $parameters = array_values($fields);
+            $parameters[] = $recordId;
+            $parameters[] = (int) $incident['active_einsatz_id'];
+            $parameters[] = '';
+            $parameters[] = $operatorCode;
+            $statement = estab_message_execute(
+                $connection,
+                'UPDATE ' . estab_message_table($table)
+                    . ' SET ' . implode(', ', $assignments)
+                    . " WHERE `00_lfd` = ? AND `einsatz_id` = ?"
+                    . " AND `04_richtung` = 'A'"
+                    . ' AND `03_datum` IS NULL AND `03_zeichen` = ?'
+                    . " AND `x02_sperre` = 't' AND `x03_sperruser` = ?",
+                $parameters
+            );
+            try {
+                return $statement->affected_rows === 1;
+            } finally {
+                $statement->close();
+            }
+        }
     );
-    try {
-        return $statement->affected_rows === 1;
-    } finally {
-        $statement->close();
-    }
 }
 
 /** Atomically finish a message that is still in the viewer queue. */
@@ -398,34 +546,46 @@ function estab_message_update_pending_review(
 ): bool {
     $recordId = estab_message_positive_id($recordId);
     $fields = estab_message_fields($fields);
-    $assignments = [];
-    foreach (array_keys($fields) as $column) {
-        $assignments[] = '`' . $column . '` = ?';
-    }
-    $parameters = array_values($fields);
-    $parameters[] = $recordId;
-    $parameters[] = '';
-    $parameters[] = '';
-    $sql = 'UPDATE ' . estab_message_table($table)
-        . ' SET ' . implode(', ', $assignments)
-        . ' WHERE `00_lfd` = ?'
-        . ' AND `15_quitdatum` IS NULL AND `15_quitzeichen` = ?'
-        . " AND (`04_richtung` = 'E'";
-    if ($reviewOutgoing) {
-        $sql .= " OR (`04_richtung` = 'A'"
-            . ' AND `03_datum` IS NOT NULL AND `03_zeichen` <> ?)';
-    } else {
-        // Keep the parameter count stable while failing the outgoing branch.
-        $sql .= ' OR (? <> ?)';
-        $parameters[] = '';
-    }
-    $sql .= ')';
-    $statement = estab_message_execute($connection, $sql, $parameters);
-    try {
-        return $statement->affected_rows === 1;
-    } finally {
-        $statement->close();
-    }
+    return estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
+            $connection,
+            $table,
+            $recordId,
+            $reviewOutgoing,
+            $fields
+        ): bool {
+            $assignments = [];
+            foreach (array_keys($fields) as $column) {
+                $assignments[] = '`' . $column . '` = ?';
+            }
+            $parameters = array_values($fields);
+            $parameters[] = $recordId;
+            $parameters[] = (int) $incident['active_einsatz_id'];
+            $parameters[] = '';
+            $parameters[] = '';
+            $sql = 'UPDATE ' . estab_message_table($table)
+                . ' SET ' . implode(', ', $assignments)
+                . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
+                . ' AND `15_quitdatum` IS NULL AND `15_quitzeichen` = ?'
+                . " AND (`04_richtung` = 'E'";
+            if ($reviewOutgoing) {
+                $sql .= " OR (`04_richtung` = 'A'"
+                    . ' AND `03_datum` IS NOT NULL AND `03_zeichen` <> ?)';
+            } else {
+                // Keep the parameter count stable while failing the outgoing branch.
+                $sql .= ' OR (? <> ?)';
+                $parameters[] = '';
+            }
+            $sql .= ')';
+            $statement = estab_message_execute($connection, $sql, $parameters);
+            try {
+                return $statement->affected_rows === 1;
+            } finally {
+                $statement->close();
+            }
+        }
+    );
 }
 
 /** Fetch one complete message by positive primary key. */
@@ -435,11 +595,15 @@ function estab_message_fetch_by_id(
     mixed $recordId
 ): ?array {
     $recordId = estab_message_positive_id($recordId);
+    $incident = estab_incident_active($connection);
+    if ($incident === null) {
+        return null;
+    }
     $statement = estab_message_execute(
         $connection,
         'SELECT * FROM ' . estab_message_table($table)
-            . ' WHERE `00_lfd` = ? LIMIT 1',
-        [$recordId]
+            . ' WHERE `00_lfd` = ? AND `einsatz_id` = ? LIMIT 1',
+        [$recordId, (int) $incident['active_einsatz_id']]
     );
     try {
         $row = $statement->get_result()->fetch_assoc();
@@ -499,39 +663,53 @@ function estab_message_acquire_outgoing_lock(
     if (preg_match('/\A[a-z0-9_]{1,6}\z/D', $operatorCode) !== 1) {
         throw new InvalidArgumentException('Invalid message lock owner');
     }
-    $statement = estab_message_execute(
+    return estab_incident_with_active_write(
         $connection,
-        'UPDATE ' . estab_message_table($table)
-            . " SET `x02_sperre` = 't', `x03_sperruser` = ?"
-            . " WHERE `00_lfd` = ? AND `04_richtung` = 'A'"
-            . ' AND `03_datum` IS NULL AND `03_zeichen` = ?'
-            . " AND (`x02_sperre` = 'f' OR (`x02_sperre` = 't' AND `x03_sperruser` = ?))",
-        [$operatorCode, $recordId, '', $operatorCode]
-    );
-    try {
-        if ($statement->affected_rows === 1) {
-            return true;
-        }
-    } finally {
-        $statement->close();
-    }
+        static function (array $incident) use (
+            $connection,
+            $table,
+            $recordId,
+            $operatorCode
+        ): bool {
+            $incidentId = (int) $incident['active_einsatz_id'];
+            $statement = estab_message_execute(
+                $connection,
+                'UPDATE ' . estab_message_table($table)
+                    . " SET `x02_sperre` = 't', `x03_sperruser` = ?"
+                    . " WHERE `00_lfd` = ? AND `einsatz_id` = ?"
+                    . " AND `04_richtung` = 'A'"
+                    . ' AND `03_datum` IS NULL AND `03_zeichen` = ?'
+                    . " AND (`x02_sperre` = 'f'"
+                    . " OR (`x02_sperre` = 't' AND `x03_sperruser` = ?))",
+                [$operatorCode, $recordId, $incidentId, '', $operatorCode]
+            );
+            try {
+                if ($statement->affected_rows === 1) {
+                    return true;
+                }
+            } finally {
+                $statement->close();
+            }
 
-    // MariaDB reports zero affected rows when the same owner re-opens an
-    // already acquired lock. Verify that idempotent success explicitly.
-    $verification = estab_message_execute(
-        $connection,
-        'SELECT COUNT(*) FROM ' . estab_message_table($table)
-            . " WHERE `00_lfd` = ? AND `04_richtung` = 'A'"
-            . ' AND `03_datum` IS NULL AND `03_zeichen` = ?'
-            . " AND `x02_sperre` = 't' AND `x03_sperruser` = ?",
-        [$recordId, '', $operatorCode]
+            // MariaDB reports zero affected rows when the same owner re-opens
+            // an already acquired lock. Verify that idempotent success.
+            $verification = estab_message_execute(
+                $connection,
+                'SELECT COUNT(*) FROM ' . estab_message_table($table)
+                    . " WHERE `00_lfd` = ? AND `einsatz_id` = ?"
+                    . " AND `04_richtung` = 'A'"
+                    . ' AND `03_datum` IS NULL AND `03_zeichen` = ?'
+                    . " AND `x02_sperre` = 't' AND `x03_sperruser` = ?",
+                [$recordId, $incidentId, '', $operatorCode]
+            );
+            try {
+                $row = $verification->get_result()->fetch_row();
+                return ((int) ($row[0] ?? 0)) === 1;
+            } finally {
+                $verification->close();
+            }
+        }
     );
-    try {
-        $row = $verification->get_result()->fetch_row();
-        return ((int) ($row[0] ?? 0)) === 1;
-    } finally {
-        $verification->close();
-    }
 }
 
 /** Release a lock owned by the operator; force is reserved for reset workflow. */
@@ -542,44 +720,59 @@ function estab_message_release_lock(
     ?string $operatorCode = null
 ): bool {
     $recordId = estab_message_positive_id($recordId);
-    $sql = 'UPDATE ' . estab_message_table($table)
-        . " SET `x02_sperre` = 'f', `x03_sperruser` = ''"
-        . " WHERE `00_lfd` = ? AND `04_richtung` = 'A'"
-        . ' AND `03_datum` IS NULL AND `03_zeichen` = ?';
-    $parameters = [$recordId, ''];
-    if ($operatorCode !== null) {
-        if (preg_match('/\A[a-z0-9_]{1,6}\z/D', $operatorCode) !== 1) {
-            throw new InvalidArgumentException('Invalid message lock owner');
-        }
-        $sql .= " AND (`x02_sperre` = 'f' OR `x03_sperruser` = ?)";
-        $parameters[] = $operatorCode;
+    if (
+        $operatorCode !== null
+        && preg_match('/\A[a-z0-9_]{1,6}\z/D', $operatorCode) !== 1
+    ) {
+        throw new InvalidArgumentException('Invalid message lock owner');
     }
-    $statement = estab_message_execute($connection, $sql, $parameters);
-    try {
-        if ($statement->affected_rows === 1) {
-            return true;
-        }
-    } finally {
-        $statement->close();
-    }
-
-    // Zero affected rows is successful only when the addressed pending row is
-    // already in the requested unlocked state. A foreign lock, a transported
-    // row or a deleted row must remain a failure.
-    $verification = estab_message_execute(
+    return estab_incident_with_active_write(
         $connection,
-        'SELECT COUNT(*) FROM ' . estab_message_table($table)
-            . " WHERE `00_lfd` = ? AND `04_richtung` = 'A'"
-            . ' AND `03_datum` IS NULL AND `03_zeichen` = ?'
-            . " AND `x02_sperre` = 'f' AND `x03_sperruser` = ?",
-        [$recordId, '', '']
+        static function (array $incident) use (
+            $connection,
+            $table,
+            $recordId,
+            $operatorCode
+        ): bool {
+            $incidentId = (int) $incident['active_einsatz_id'];
+            $sql = 'UPDATE ' . estab_message_table($table)
+                . " SET `x02_sperre` = 'f', `x03_sperruser` = ''"
+                . " WHERE `00_lfd` = ? AND `einsatz_id` = ?"
+                . " AND `04_richtung` = 'A'"
+                . ' AND `03_datum` IS NULL AND `03_zeichen` = ?';
+            $parameters = [$recordId, $incidentId, ''];
+            if ($operatorCode !== null) {
+                $sql .= " AND (`x02_sperre` = 'f' OR `x03_sperruser` = ?)";
+                $parameters[] = $operatorCode;
+            }
+            $statement = estab_message_execute($connection, $sql, $parameters);
+            try {
+                if ($statement->affected_rows === 1) {
+                    return true;
+                }
+            } finally {
+                $statement->close();
+            }
+
+            // Zero affected rows is successful only when the addressed active
+            // incident row is already unlocked.
+            $verification = estab_message_execute(
+                $connection,
+                'SELECT COUNT(*) FROM ' . estab_message_table($table)
+                    . " WHERE `00_lfd` = ? AND `einsatz_id` = ?"
+                    . " AND `04_richtung` = 'A'"
+                    . ' AND `03_datum` IS NULL AND `03_zeichen` = ?'
+                    . " AND `x02_sperre` = 'f' AND `x03_sperruser` = ?",
+                [$recordId, $incidentId, '', '']
+            );
+            try {
+                $row = $verification->get_result()->fetch_row();
+                return ((int) ($row[0] ?? 0)) === 1;
+            } finally {
+                $verification->close();
+            }
+        }
     );
-    try {
-        $row = $verification->get_result()->fetch_row();
-        return ((int) ($row[0] ?? 0)) === 1;
-    } finally {
-        $verification->close();
-    }
 }
 
 /** Construct one of the two runtime state tables from validated identity data. */
@@ -607,15 +800,22 @@ function estab_message_state_table(
 
 function estab_message_state_exists(
     mysqli $connection,
-    string $table,
-    mixed $recordId
+    string $stateTable,
+    mixed $recordId,
+    string $messageTable
 ): bool {
     $recordId = estab_message_positive_id($recordId);
+    $incident = estab_incident_active($connection);
+    if ($incident === null) {
+        return false;
+    }
     $statement = estab_message_execute(
         $connection,
-        'SELECT COUNT(*) FROM ' . estab_message_table($table)
-            . ' WHERE `nachnum` = ?',
-        [$recordId]
+        'SELECT COUNT(*) FROM ' . estab_message_table($stateTable) . ' AS s'
+            . ' INNER JOIN ' . estab_message_table($messageTable) . ' AS m'
+            . ' ON m.`00_lfd` = s.`nachnum`'
+            . ' WHERE s.`nachnum` = ? AND m.`einsatz_id` = ?',
+        [$recordId, (int) $incident['active_einsatz_id']]
     );
     try {
         $row = $statement->get_result()->fetch_row();
@@ -683,10 +883,11 @@ function estab_message_release_state_lock(
 /** Idempotently record read/done state with a bound message identifier. */
 function estab_message_state_set(
     mysqli $connection,
-    string $table,
+    string $stateTable,
     mixed $recordId,
     string $state,
-    string $timestamp
+    string $timestamp,
+    string $messageTable
 ): void {
     $recordId = estab_message_positive_id($recordId);
     $dateColumn = match ($state) {
@@ -694,40 +895,82 @@ function estab_message_state_set(
         'done' => 'erledigt',
         default => throw new InvalidArgumentException('Invalid message state'),
     };
-    $lockName = estab_message_acquire_state_lock($connection, $table, $recordId);
-    try {
-        $statement = estab_message_execute(
+    estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
             $connection,
-            'INSERT INTO ' . estab_message_table($table)
-                . ' (`nachnum`, `' . $dateColumn . '`)'
-                . ' SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM '
-                . estab_message_table($table) . ' WHERE `nachnum` = ?)',
-            [$recordId, $timestamp, $recordId]
-        );
-        $statement->close();
-    } finally {
-        estab_message_release_state_lock($connection, $lockName);
-    }
+            $stateTable,
+            $messageTable,
+            $recordId,
+            $dateColumn,
+            $timestamp
+        ): void {
+            $lockName = estab_message_acquire_state_lock(
+                $connection,
+                $stateTable,
+                $recordId
+            );
+            try {
+                $statement = estab_message_execute(
+                    $connection,
+                    'INSERT INTO ' . estab_message_table($stateTable)
+                        . ' (`nachnum`, `' . $dateColumn . '`)'
+                        . ' SELECT m.`00_lfd`, ? FROM '
+                        . estab_message_table($messageTable) . ' AS m'
+                        . ' WHERE m.`00_lfd` = ? AND m.`einsatz_id` = ?'
+                        . ' AND NOT EXISTS (SELECT 1 FROM '
+                        . estab_message_table($stateTable)
+                        . ' WHERE `nachnum` = ?)',
+                    [
+                        $timestamp,
+                        $recordId,
+                        (int) $incident['active_einsatz_id'],
+                        $recordId,
+                    ]
+                );
+                $statement->close();
+            } finally {
+                estab_message_release_state_lock($connection, $lockName);
+            }
+        }
+    );
 }
 
 function estab_message_state_unset(
     mysqli $connection,
-    string $table,
-    mixed $recordId
+    string $stateTable,
+    mixed $recordId,
+    string $messageTable
 ): void {
     $recordId = estab_message_positive_id($recordId);
-    $lockName = estab_message_acquire_state_lock($connection, $table, $recordId);
-    try {
-        $statement = estab_message_execute(
+    estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
             $connection,
-            'DELETE FROM ' . estab_message_table($table)
-                . ' WHERE `nachnum` = ?',
-            [$recordId]
-        );
-        $statement->close();
-    } finally {
-        estab_message_release_state_lock($connection, $lockName);
-    }
+            $stateTable,
+            $messageTable,
+            $recordId
+        ): void {
+            $lockName = estab_message_acquire_state_lock(
+                $connection,
+                $stateTable,
+                $recordId
+            );
+            try {
+                $statement = estab_message_execute(
+                    $connection,
+                    'DELETE s FROM ' . estab_message_table($stateTable) . ' AS s'
+                        . ' INNER JOIN ' . estab_message_table($messageTable)
+                        . ' AS m ON m.`00_lfd` = s.`nachnum`'
+                        . ' WHERE s.`nachnum` = ? AND m.`einsatz_id` = ?',
+                    [$recordId, (int) $incident['active_einsatz_id']]
+                );
+                $statement->close();
+            } finally {
+                estab_message_release_state_lock($connection, $lockName);
+            }
+        }
+    );
 }
 
 /**
@@ -750,49 +993,74 @@ function estab_message_state_set_for_recipient(
         default => throw new InvalidArgumentException('Invalid message state'),
     };
     $recipientPattern = estab_message_recipient_pattern($function);
-    $lockName = estab_message_acquire_state_lock(
+    return estab_incident_with_active_write(
         $connection,
-        $stateTable,
-        $recordId
-    );
-    try {
-        $statement = estab_message_execute(
+        static function (array $incident) use (
             $connection,
-            'INSERT INTO ' . estab_message_table($stateTable)
-                . ' (`nachnum`, `' . $dateColumn . '`)'
-                . ' SELECT ?, ? FROM ' . estab_message_table($messageTable) . ' AS m'
-                . ' WHERE m.`00_lfd` = ? AND m.`16_empf` REGEXP ?'
-                . ' AND NOT EXISTS (SELECT 1 FROM '
-                . estab_message_table($stateTable) . ' WHERE `nachnum` = ?)',
-            [$recordId, $timestamp, $recordId, $recipientPattern, $recordId]
-        );
-        try {
-            if ($statement->affected_rows === 1) {
-                return true;
-            }
-        } finally {
-            $statement->close();
-        }
+            $messageTable,
+            $stateTable,
+            $recordId,
+            $dateColumn,
+            $timestamp,
+            $recipientPattern
+        ): bool {
+            $incidentId = (int) $incident['active_einsatz_id'];
+            $lockName = estab_message_acquire_state_lock(
+                $connection,
+                $stateTable,
+                $recordId
+            );
+            try {
+                $statement = estab_message_execute(
+                    $connection,
+                    'INSERT INTO ' . estab_message_table($stateTable)
+                        . ' (`nachnum`, `' . $dateColumn . '`)'
+                        . ' SELECT m.`00_lfd`, ? FROM '
+                        . estab_message_table($messageTable) . ' AS m'
+                        . ' WHERE m.`00_lfd` = ? AND m.`einsatz_id` = ?'
+                        . ' AND m.`16_empf` REGEXP ?'
+                        . ' AND NOT EXISTS (SELECT 1 FROM '
+                        . estab_message_table($stateTable)
+                        . ' WHERE `nachnum` = ?)',
+                    [
+                        $timestamp,
+                        $recordId,
+                        $incidentId,
+                        $recipientPattern,
+                        $recordId,
+                    ]
+                );
+                try {
+                    if ($statement->affected_rows === 1) {
+                        return true;
+                    }
+                } finally {
+                    $statement->close();
+                }
 
-        // Distinguish an authorised idempotent repeat from a missing or newly
-        // foreign object without leaving the state lock.
-        $verification = estab_message_execute(
-            $connection,
-            'SELECT COUNT(*) FROM ' . estab_message_table($messageTable) . ' AS m'
-                . ' INNER JOIN ' . estab_message_table($stateTable) . ' AS s'
-                . ' ON s.`nachnum` = m.`00_lfd`'
-                . ' WHERE m.`00_lfd` = ? AND m.`16_empf` REGEXP ?',
-            [$recordId, $recipientPattern]
-        );
-        try {
-            $row = $verification->get_result()->fetch_row();
-            return ((int) ($row[0] ?? 0)) > 0;
-        } finally {
-            $verification->close();
+                // Distinguish an authorised idempotent repeat from a missing,
+                // inactive or newly foreign object without leaving the lock.
+                $verification = estab_message_execute(
+                    $connection,
+                    'SELECT COUNT(*) FROM '
+                        . estab_message_table($messageTable) . ' AS m'
+                        . ' INNER JOIN ' . estab_message_table($stateTable)
+                        . ' AS s ON s.`nachnum` = m.`00_lfd`'
+                        . ' WHERE m.`00_lfd` = ? AND m.`einsatz_id` = ?'
+                        . ' AND m.`16_empf` REGEXP ?',
+                    [$recordId, $incidentId, $recipientPattern]
+                );
+                try {
+                    $row = $verification->get_result()->fetch_row();
+                    return ((int) ($row[0] ?? 0)) > 0;
+                } finally {
+                    $verification->close();
+                }
+            } finally {
+                estab_message_release_state_lock($connection, $lockName);
+            }
         }
-    } finally {
-        estab_message_release_state_lock($connection, $lockName);
-    }
+    );
 }
 
 /**
@@ -808,45 +1076,60 @@ function estab_message_state_unset_for_recipient(
 ): bool {
     $recordId = estab_message_positive_id($recordId);
     $recipientPattern = estab_message_recipient_pattern($function);
-    $lockName = estab_message_acquire_state_lock(
+    return estab_incident_with_active_write(
         $connection,
-        $stateTable,
-        $recordId
-    );
-    try {
-        $statement = estab_message_execute(
+        static function (array $incident) use (
             $connection,
-            'DELETE s FROM ' . estab_message_table($stateTable) . ' AS s'
-                . ' INNER JOIN ' . estab_message_table($messageTable) . ' AS m'
-                . ' ON m.`00_lfd` = s.`nachnum`'
-                . ' WHERE s.`nachnum` = ? AND m.`16_empf` REGEXP ?',
-            [$recordId, $recipientPattern]
-        );
-        try {
-            if ($statement->affected_rows > 0) {
-                return true;
-            }
-        } finally {
-            $statement->close();
-        }
+            $messageTable,
+            $stateTable,
+            $recordId,
+            $recipientPattern
+        ): bool {
+            $incidentId = (int) $incident['active_einsatz_id'];
+            $lockName = estab_message_acquire_state_lock(
+                $connection,
+                $stateTable,
+                $recordId
+            );
+            try {
+                $statement = estab_message_execute(
+                    $connection,
+                    'DELETE s FROM ' . estab_message_table($stateTable) . ' AS s'
+                        . ' INNER JOIN ' . estab_message_table($messageTable)
+                        . ' AS m ON m.`00_lfd` = s.`nachnum`'
+                        . ' WHERE s.`nachnum` = ? AND m.`einsatz_id` = ?'
+                        . ' AND m.`16_empf` REGEXP ?',
+                    [$recordId, $incidentId, $recipientPattern]
+                );
+                try {
+                    if ($statement->affected_rows > 0) {
+                        return true;
+                    }
+                } finally {
+                    $statement->close();
+                }
 
-        // No state row is an idempotent success only for an object that is
-        // still visible to this function.
-        $verification = estab_message_execute(
-            $connection,
-            'SELECT COUNT(*) FROM ' . estab_message_table($messageTable)
-                . ' WHERE `00_lfd` = ? AND `16_empf` REGEXP ?',
-            [$recordId, $recipientPattern]
-        );
-        try {
-            $row = $verification->get_result()->fetch_row();
-            return ((int) ($row[0] ?? 0)) === 1;
-        } finally {
-            $verification->close();
+                // No state row is an idempotent success only for an active
+                // incident object that remains visible to this function.
+                $verification = estab_message_execute(
+                    $connection,
+                    'SELECT COUNT(*) FROM '
+                        . estab_message_table($messageTable)
+                        . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
+                        . ' AND `16_empf` REGEXP ?',
+                    [$recordId, $incidentId, $recipientPattern]
+                );
+                try {
+                    $row = $verification->get_result()->fetch_row();
+                    return ((int) ($row[0] ?? 0)) === 1;
+                } finally {
+                    $verification->close();
+                }
+            } finally {
+                estab_message_release_state_lock($connection, $lockName);
+            }
         }
-    } finally {
-        estab_message_release_state_lock($connection, $lockName);
-    }
+    );
 }
 
 /** @return list<int> */
@@ -855,11 +1138,17 @@ function estab_message_state_ids(
     string $messageTable,
     string $stateTable
 ): array {
+    $incident = estab_incident_active($connection);
+    if ($incident === null) {
+        return [];
+    }
     $statement = estab_message_execute(
         $connection,
         'SELECT DISTINCT m.`00_lfd` FROM ' . estab_message_table($messageTable)
             . ' AS m INNER JOIN ' . estab_message_table($stateTable)
             . ' AS s ON m.`00_lfd` = s.`nachnum`'
+            . ' WHERE m.`einsatz_id` = ?',
+        [(int) $incident['active_einsatz_id']]
     );
     try {
         $result = $statement->get_result();

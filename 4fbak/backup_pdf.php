@@ -19,6 +19,7 @@ define('FPDF_FONTPATH',$_SERVER ["DOCUMENT_ROOT"]."/".$conf_web["pre_path"]."4fb
 
 require ($_SERVER ["DOCUMENT_ROOT"]."/".$conf_web["pre_path"]."4fbak/fpdf.php");
 require_once __DIR__ . "/../app/message_repository.php";
+require_once __DIR__ . "/../app/generated_form.php";
 // require_once ("./fpdf/ellipse/ellipse.php");
 
 /** Encode UTF-8 application text for FPDF's built-in Windows-1252 fonts. */
@@ -216,6 +217,7 @@ class vordruckaspdf extends PDF_Ellipse {
     $this->recipientMatrix = is_array ($recipientMatrix) ? $recipientMatrix : null;
 
     $this->db_dataset ["00_lfd"]          = $data ["00_lfd"] ;
+    $this->db_dataset ["einsatz_id"]      = $data ["einsatz_id"] ;
     $this->db_dataset ["01_medium"]       = $data ["01_medium"];
 
     $this->db_dataset ["01_datum"] = estab_datetime_is_unset ($data ["01_datum"])
@@ -1010,10 +1012,19 @@ class vordruckaspdf extends PDF_Ellipse {
 
     $this->writedata_inhalt ();
 
-    $filename = $conf_4f ["vordruck_dir"]."/".$conf_4f_db ["datenbank"]." ".
-                  $this->db_dataset ["04_nummer"]." ".$this->db_dataset ["04_richtung"].".pdf" ;
-
-    $this->Output ($filename, "F");
+    $filename = estab_generated_form_filename (
+      $conf_4f_db ["datenbank"],
+      $this->db_dataset ["einsatz_id"],
+      $this->db_dataset ["04_nummer"],
+      $this->db_dataset ["04_richtung"]
+    );
+    $document = $this->Output ("", "S");
+    estab_generated_form_publish (
+      $conf_4f ["vordruck_dir"],
+      $filename,
+      $document
+    );
+    return $filename;
   }
 
 

@@ -20,7 +20,9 @@ if ($method !== 'POST') {
     exit;
 }
 
-if (estab_auth_session_identity($_SESSION) === null) {
+// A stale login must still be able to destroy its local browser session. The
+// persistence layer updates only a row carrying this exact SID.
+if (estab_auth_session_identity_shape($_SESSION) === null) {
     http_response_code(403);
     header('Content-Type: text/plain; charset=UTF-8');
     echo 'Anmeldung erforderlich.';

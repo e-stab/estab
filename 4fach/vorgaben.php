@@ -8,6 +8,7 @@ require_once __DIR__ . '/../app/auth.php';
 require_once __DIR__ . '/../app/csrf.php';
 require_once __DIR__ . '/../app/session_ui.php';
 require_once __DIR__ . '/../app/sidebar.php';
+require_once __DIR__ . '/../app/incident_ui.php';
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 if (!is_string($method) || !in_array($method, ['GET', 'HEAD'], true)) {
@@ -106,6 +107,11 @@ function estab_vorgaben_status_markup(
     $queueLabel = is_string($queueProfile['label'] ?? null)
         ? $queueProfile['label']
         : 'Offene Meldungen';
+    $incidentState = [
+        'availability' => 'unavailable',
+        'active' => false,
+        'incident' => null,
+    ];
     $connection = null;
     try {
         $connection = estab_auth_connect($databaseConfig);
@@ -160,6 +166,17 @@ function estab_vorgaben_status_markup(
                 'eStab sidebar queue lookup failed: '
                 . $exception->getMessage()
             );
+        }
+
+        try {
+            $incidentState = estab_incident_ui_state_from_status(
+                estab_incident_status($connection)
+            );
+        } catch (Throwable $exception) {
+            error_log(
+                'eStab sidebar incident lookup failed: '
+                . $exception->getMessage()
+            );
         } finally {
             estab_auth_close($connection);
         }
@@ -174,7 +191,6 @@ function estab_vorgaben_status_markup(
         $soundsEnabled,
         $soundUrl
     );
-
     return estab_sidebar_status_markup(
         $session,
         $positions,
@@ -184,7 +200,8 @@ function estab_vorgaben_status_markup(
         null,
         $soundUrl,
         $notificationSoundUrl,
-        $freshnessState
+        $freshnessState,
+        estab_incident_ui_markup($incidentState, true, true)
     );
 }
 
@@ -244,7 +261,9 @@ $refreshScript = $identity === null
         true,
         $loginDestination,
         false,
-        true
+        true,
+        false,
+        false
     ) ?>
     <?php if ($identity !== null): ?>
       <main class="estab-sidebar-workflow" data-estab-workflow-menu>
@@ -258,6 +277,7 @@ $refreshScript = $identity === null
         <?php if ($actions !== []): ?>
           <form
             class="estab-sidebar-action-form"
+            data-estab-requires-incident
             action="<?= estab_auth_html((string) $conf_4f['MainURL']) ?>"
             method="post"
             target="mainframe"
@@ -290,6 +310,12 @@ $refreshScript = $identity === null
         <?php endif; ?>
       </main>
     <?php endif; ?>
+    <?= estab_navigation_markup(
+        $identity !== null,
+        $_SERVER,
+        true,
+        true
+    ) ?>
   </div>
   <?= estab_sidebar_audio_markup($soundUrl) ?>
   <?= $refreshScript ?>

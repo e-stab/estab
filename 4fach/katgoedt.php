@@ -29,7 +29,7 @@ $identity = estab_auth_session_identity($_SESSION);
 if ($identity === null) {
     estab_workflow_forbid();
 }
-estab_session_ui_start($_SESSION);
+estab_session_ui_start($_SESSION, false, true);
 
 /** @var array<string,string> $conf_4f_db */
 /** @var array<string,string> $conf_4f_tbl */
@@ -81,41 +81,66 @@ function estab_category_render_manager(
         'fkt' => 'Funktionskategorien',
         'user' => 'Persönliche Kategorien',
     };
+    $scopeDescription = match ($type) {
+        'master' => 'Diese Kategorien stehen allen berechtigten Funktionen zur Verfügung.',
+        'fkt' => 'Diese Kategorien gelten für die aktuell angemeldete Funktion.',
+        'user' => 'Diese Kategorien gehören ausschließlich zum angemeldeten Konto.',
+    };
     $formAction = 'katgoedt.php';
     header('Content-Type: text/html; charset=UTF-8');
     echo "<!doctype html>\n";
     echo "<html lang=\"de\"><head><meta charset=\"UTF-8\">";
     echo '<meta name="viewport" content="width=device-width,initial-scale=1">';
     echo '<title>' . estab_auth_html($heading) . '</title>';
-    echo '<style>'
-        . 'body{font-family:system-ui,sans-serif;max-width:70rem;margin:2rem auto;padding:0 1rem}'
-        . 'table{border-collapse:collapse;width:100%;margin:1rem 0}'
-        . 'th,td{border:1px solid #aaa;padding:.55rem;text-align:left;vertical-align:top}'
-        . '.actions{display:flex;gap:.5rem;align-items:center}.actions form{margin:0}'
-        . '.notice{padding:.7rem;background:#e7f5e7;border:1px solid #5a8}'
-        . 'label{display:block;margin:.7rem 0}input[type=text]{width:min(100%,48rem);padding:.35rem}'
-        . 'button,a.button{padding:.4rem .7rem}'
-        . '</style></head><body>';
+    echo estab_session_ui_stylesheet();
+    echo '</head><body class="estab-tool-page">';
+    echo '<main class="estab-tool-main" data-estab-category-manager>';
+    echo '<header class="estab-tool-hero">';
+    echo '<p class="estab-tool-eyebrow">Nachrichten · Kategorien</p>';
     echo '<h1>' . estab_auth_html($heading) . '</h1>';
-    echo '<p>Meldung ' . estab_auth_html($messageId) . '</p>';
+    echo '<p>' . estab_auth_html($scopeDescription)
+        . ' Änderungen werden sofort für die Nachricht '
+        . estab_auth_html($messageId) . ' angeboten.</p>';
+    echo '</header>';
     if (isset($statusMessages[$status])) {
-        echo '<p class="notice" role="status">' . estab_auth_html($statusMessages[$status]) . '</p>';
+        echo '<p class="estab-tool-feedback estab-tool-feedback-success" role="status">'
+            . estab_auth_html($statusMessages[$status]) . '</p>';
     }
-    echo '<p><a href="mainindex.php">Zum Nachrichtenvordruck</a></p>';
+    echo '<aside class="estab-tool-notice" aria-label="Bearbeitete Nachricht">';
+    echo '<strong>Aktuelle Nachricht: ' . estab_auth_html($messageId) . '</strong>';
+    echo '<p>Nach dem Anlegen oder Bearbeiten können Sie die Kategorie im '
+        . 'Nachrichtenvordruck zuweisen.</p></aside>';
 
-    echo '<table><thead><tr><th>Kategorie</th><th>Beschreibung</th><th>Aktionen</th>'
+    echo '<section class="estab-tool-panel" aria-labelledby="category-list-title">';
+    echo '<header class="estab-tool-panel-heading">';
+    echo '<h2 id="category-list-title">Vorhandene Kategorien</h2>';
+    echo '<p>Bearbeiten Sie Bezeichnung und Beschreibung oder entfernen Sie '
+        . 'nicht mehr benötigte Kategorien.</p></header>';
+    echo '<div class="estab-tool-table-wrap estab-tool-table-responsive">';
+    echo '<table class="estab-tool-table">';
+    echo '<caption class="estab-visually-hidden">'
+        . estab_auth_html($heading) . '</caption>';
+    echo '<thead><tr><th scope="col">Kategorie</th>'
+        . '<th scope="col">Beschreibung</th><th scope="col">Aktionen</th>'
         . '</tr></thead><tbody>';
     if ($rows === []) {
-        echo '<tr><td colspan="3">Noch keine Kategorien vorhanden.</td></tr>';
+        echo '<tr><td colspan="3" class="estab-tool-empty">'
+            . 'Noch keine Kategorien vorhanden.</td></tr>';
     }
     foreach ($rows as $row) {
         $categoryId = (int) $row['lfd'];
         $editUrl = estab_category_manager_url($type, $messageId)
             . '&edit_id=' . rawurlencode((string) $categoryId);
-        echo '<tr><td>' . estab_auth_html($row['kategorie']) . '</td>';
-        echo '<td>' . estab_auth_html($row['beschreibung']) . '</td>';
-        echo '<td><div class="actions">';
-        echo '<a class="button" href="' . estab_auth_html($editUrl) . '">Bearbeiten</a>';
+        echo '<tr><td data-label="Kategorie"><strong>'
+            . estab_auth_html($row['kategorie']) . '</strong></td>';
+        echo '<td data-label="Beschreibung">'
+            . estab_auth_html($row['beschreibung']) . '</td>';
+        echo '<td data-label="Aktionen"><div class="estab-tool-actions">';
+        echo '<a class="estab-button" href="' . estab_auth_html($editUrl)
+            . '">Bearbeiten</a>';
+        echo '<details class="estab-tool-details">';
+        echo '<summary>Kategorie löschen …</summary>';
+        echo '<p>Diese Kategorie und ihre Zuordnungen werden entfernt.</p>';
         echo '<form method="post" action="' . estab_auth_html($formAction) . '">';
         echo estab_csrf_field();
         echo '<input type="hidden" name="category_action" value="delete">';
@@ -123,15 +148,26 @@ function estab_category_render_manager(
         echo '<input type="hidden" name="msgno" value="' . estab_auth_html($messageId) . '">';
         echo '<input type="hidden" name="category_id" value="'
             . estab_auth_html($categoryId) . '">';
-        echo '<button type="submit">Löschen</button></form>';
+        echo '<button class="estab-button estab-button-danger-outline" '
+            . 'type="submit" aria-label="Kategorie '
+            . estab_auth_html($row['kategorie']) . ' löschen">Löschen</button>';
+        echo '</form></details>';
         echo '</div></td></tr>';
     }
-    echo '</tbody></table>';
+    echo '</tbody></table></div></section>';
 
     $isUpdate = $editing !== null;
-    echo '<h2>' . ($isUpdate ? 'Kategorie bearbeiten' : 'Neue Kategorie') . '</h2>';
-    echo '<form method="post" action="' . estab_auth_html($formAction)
-        . '" data-estab-dirty-guard>';
+    echo '<section class="estab-tool-panel" aria-labelledby="category-form-title">';
+    echo '<header class="estab-tool-panel-heading">';
+    echo '<h2 id="category-form-title">'
+        . ($isUpdate ? 'Kategorie bearbeiten' : 'Neue Kategorie anlegen')
+        . '</h2>';
+    echo '<p>' . ($isUpdate
+        ? 'Speichern Sie die angepassten Werte oder brechen Sie die Bearbeitung ab.'
+        : 'Legen Sie eine kurze Bezeichnung und eine verständliche Beschreibung fest.')
+        . '</p></header>';
+    echo '<form class="estab-tool-form" method="post" action="'
+        . estab_auth_html($formAction) . '" data-estab-dirty-guard>';
     echo estab_csrf_field();
     echo '<input type="hidden" name="category_action" value="'
         . ($isUpdate ? 'update' : 'create') . '">';
@@ -141,20 +177,33 @@ function estab_category_render_manager(
         echo '<input type="hidden" name="category_id" value="'
             . estab_auth_html($editing['lfd']) . '">';
     }
-    echo '<label>Kategorie '
-        . '<input type="text" name="kategorie" maxlength="10" required value="'
-        . estab_auth_html($editing['kategorie'] ?? '') . '"></label>';
-    echo '<label>Beschreibung '
-        . '<input type="text" name="beschreibung" maxlength="254" value="'
-        . estab_auth_html($editing['beschreibung'] ?? '') . '"></label>';
-    echo '<button type="submit">' . ($isUpdate ? 'Änderung speichern' : 'Kategorie anlegen')
+    echo '<div class="estab-tool-form-grid">';
+    echo '<div class="estab-tool-field">';
+    echo '<label for="category-name">Kategorie</label>';
+    echo '<input id="category-name" type="text" name="kategorie" maxlength="10" '
+        . 'required autocomplete="off" value="'
+        . estab_auth_html($editing['kategorie'] ?? '') . '">';
+    echo '<small>Höchstens 10 Zeichen.</small></div>';
+    echo '<div class="estab-tool-field">';
+    echo '<label for="category-description">Beschreibung</label>';
+    echo '<input id="category-description" type="text" name="beschreibung" '
+        . 'maxlength="254" autocomplete="off" value="'
+        . estab_auth_html($editing['beschreibung'] ?? '') . '">';
+    echo '<small>Optional, höchstens 254 Zeichen.</small></div></div>';
+    echo '<div class="estab-tool-actions">';
+    echo '<button class="estab-button estab-button-primary" type="submit">'
+        . ($isUpdate ? 'Änderung speichern' : 'Kategorie anlegen')
         . '</button>';
     if ($isUpdate) {
-        echo ' <a href="' . estab_auth_html(
+        echo '<a class="estab-button" href="' . estab_auth_html(
             estab_category_manager_url($type, $messageId)
         ) . '">Abbrechen</a>';
     }
-    echo '</form></body></html>';
+    echo '</div></form></section>';
+    echo '<footer class="estab-tool-footer">';
+    echo '<a href="mainindex.php">Zum Nachrichtenvordruck</a>';
+    echo '<span>Kategorien sind nach ihrem Gültigkeitsbereich getrennt.</span>';
+    echo '</footer></main></body></html>';
 }
 
 try {

@@ -61,7 +61,7 @@ $applicationUrl = estab_auth_html(estab_application_url('4fach/index.php'));
 <?php if ($registrationAllowed): ?>
       <p class="estab-auth-note">„Neues Konto anlegen“ verwenden Sie nur, wenn für Ihr Kürzel noch kein Konto existiert und die zuständige Stelle die Registrierung freigegeben hat.</p>
 <?php else: ?>
-      <p class="estab-auth-note">Neue Konten können auf dieser Installation nicht selbst angelegt werden. Wenden Sie sich an die zuständige Stelle.</p>
+      <p class="estab-auth-note">Neue Konten können auf dieser Installation nicht selbst angelegt werden. Die zuständige Stelle legt sie unter Administration → Benutzerverwaltung an.</p>
 <?php endif; ?>
 <?php else: ?>
       <h1 id="estab-login-title">Bereich auswählen</h1>

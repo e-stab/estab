@@ -229,7 +229,14 @@ class fileupload extends file_upload {
                  $metadata ["org_filename"].";".
                  $metadata ["date"];
       try {
-        estab_attachment_log ($connection, $conf_4f_tbl ["protokoll"], "Anhangdaten speichern", $details);
+        estab_attachment_log (
+          $connection,
+          $conf_4f_tbl ["protokoll"],
+          "Anhangdaten speichern",
+          $details,
+          $conf_4f_tbl ["anhang"],
+          $metadata ["filename"]
+        );
       } catch (Throwable $exception) {
         error_log ("eStab attachment audit failed: ".$exception->getMessage ());
       }
@@ -335,7 +342,9 @@ class fileupload extends file_upload {
     $comment = estab_attachment_html ($predata["comment"] ?? "");
     $shortname = estab_attachment_html ($predata["kuerzel"] ?? "");
     $timestamp = estab_attachment_html ($predata["time"] ?? "");
-    echo "<form name=\"uploadform\" enctype=\"multipart/form-data\" method=\"post\" action=\"".$formAction."\" data-estab-dirty-guard>\n";
+    echo "<form name=\"uploadform\" enctype=\"multipart/form-data\" method=\"post\" ".
+         "action=\"".$formAction."\" data-estab-dirty-guard ".
+         "data-estab-requires-incident>\n";
     echo estab_csrf_field ()."\n";
     echo "<fieldset>\n";
     echo "<legend><big>Anhang hochladen</big></legend>\n";
@@ -421,6 +430,50 @@ estab_session_ui_start ($_SESSION);
 
 if (!defined ("debug")) { define ("debug", false); }
 
+$attachmentMessageContext =
+  ($_SESSION ["anhang_message_context"] ?? null) === true;
+$attachmentContextNotice = "";
+$attachmentMenuActionKeys = array (
+  "ah_auswahl_x",
+  "ah_abbrechen_x",
+  "ah_upload_x",
+);
+$attachmentGetActionRequested = false;
+$attachmentPostActionRequested = false;
+foreach ($attachmentMenuActionKeys as $attachmentMenuActionKey) {
+  $attachmentGetActionRequested =
+    $attachmentGetActionRequested || isset ($_GET [$attachmentMenuActionKey]);
+  $attachmentPostActionRequested =
+    $attachmentPostActionRequested || isset ($_POST [$attachmentMenuActionKey]);
+}
+if ($attachmentGetActionRequested) {
+  http_response_code (405);
+  header ("Allow: POST");
+  header ("Content-Type: text/plain; charset=UTF-8");
+  header ("Cache-Control: no-store");
+  echo "Diese Anhang-Aktion ist nur per Formular möglich.";
+  exit;
+}
+if ($attachmentPostActionRequested) {
+  try {
+    estab_csrf_require_post ($_SERVER, $_POST);
+  } catch (RuntimeException $exception) {
+    http_response_code (403);
+    header ("Content-Type: text/plain; charset=UTF-8");
+    header ("Cache-Control: no-store");
+    error_log ("eStab attachment menu CSRF validation failed: ".$exception->getMessage ());
+    echo "Die Anhang-Aktion ist ungültig oder abgelaufen.";
+    exit;
+  }
+}
+$attachmentSelectionRequested =
+  isset ($_POST ["ah_auswahl_x"]) || isset ($_POST ["ah_abbrechen_x"]);
+if ($attachmentSelectionRequested && !$attachmentMessageContext) {
+  $attachmentContextNotice =
+    "Zum Übernehmen von Anhängen öffnen Sie bitte zuerst einen Nachrichtenvordruck. ".
+    "Die Anhangübersicht bleibt unabhängig davon verfügbar.";
+}
+
     require ("../4fcfg/config.inc.php");
     require_once ("./db_operation.php");  // Datenbank operationen
 
@@ -442,7 +495,7 @@ if ( debug == true ){
 
 100 - Anhangmenü + Anhänge zur Auswahl
   Im Hauptmenü [Anhänge] geklickt
-  GET =  ["fm_anhang_x"]
+  POST = ["fm_anhang_x"]
      ==> Liste anzeigen mit Auswahl oder Uploadbutton
   101 - absenden
   102 - abbrechen
@@ -452,7 +505,7 @@ if ( debug == true ){
 
 103 - Datei-hochladen-Menü
   Im Anhangmenü [Upload] geklickt
-  GET =  ["anhang"]=>  string(10) "ah_auswahl"
+  POST = ["anhang"]=>  string(10) "ah_auswahl"
          ["ah_auswahl_x"]=>  string(2) "19"
          ["ah_auswahl_y"]=>  string(1) "6" } #
      ==> Vordruck mit Anhang öffnen
@@ -467,25 +520,29 @@ if ( debug == true ){
 
   Anhang ausgewaehlt und kann in Vordruck uebernommen werde
 \**********************************************************************/
-  if ( ($_SESSION ["vStab_rolle"]== "Stab") and
-       ( (isset ($_GET["ah_auswahl_x"])) OR
-         (isset ($_GET["ah_abbrechen_x"]))
+  if ( $attachmentMessageContext &&
+       ($_SESSION ["vStab_rolle"]== "Stab") and
+       ( (isset ($_POST["ah_auswahl_x"])) OR
+         (isset ($_POST["ah_abbrechen_x"]))
        )
       ){
 
     if ( debug == true ){ echo "### 559 Anhang ausgewaehlt und kann in Vordruck uebernommen werden ";  echo "<br>\n";}
 
-    $keys = array_keys ($_GET);
+    $keys = array_keys ($_POST);
     $ahkey = array ();
     foreach ($keys as $key){
-      list($lfd, $num) = explode("_", $key);
-      if ($lfd == "lfd") { $ahkey [] = "lfd_".$num;}
+      if (is_string ($key) && preg_match ("/\\Alfd_[0-9]+\\z/D", $key)) {
+        $ahkey [] = $key;
+      }
     }
 
     $anhang = "";
     $inhalt = "\n\r";
     foreach ($ahkey as $anh){
-      $db_data = readrecord_from_db((string) ($_GET [$anh] ?? ""));
+      $selectedValue = $_POST [$anh] ?? null;
+      if (!is_string ($selectedValue)) { continue; }
+      $db_data = readrecord_from_db($selectedValue);
       if (!isset ($db_data [1])) { continue; }
       try {
         $selectedBase = estab_attachment_validate_reservation_name ((string) $db_data [1]["filename"]);
@@ -500,11 +557,12 @@ if ( debug == true ){
       $selectedName = $selectedBase.".".$selectedExtension;
       $anhang .= $selectedName.";";
       $anhang_date = konv_datetime_taktime ($db_data[1]["date"]);
-      $inhalt .= estab_attachment_html ($selectedName)." - ".estab_attachment_html ($db_data[1]["comment"])." - ".estab_attachment_html ($anhang_date)."\n";
+      $inhalt .= $selectedName." - ".(string) $db_data[1]["comment"].
+                 " - ".$anhang_date."\n";
     }
     $formdata = restore_formdata ();
 
-    if (isset ($_GET["ah_auswahl_x"])) {
+    if (isset ($_POST["ah_auswahl_x"])) {
       $formdata ["12_anhang"]   = $anhang;
       $formdata ["12_inhalt"]  .= $inhalt;
 
@@ -512,6 +570,7 @@ if ( debug == true ){
       $formdata ["14_zeichen"]     = $_SESSION["vStab_kuerzel"];
       $formdata ["14_funktion"]    = $_SESSION["vStab_funktion"];
     }
+    unset ($_SESSION ["anhang_message_context"], $_SESSION ["anhang_menue"]);
     $form = new nachrichten4fach ($formdata, "Stab_schreiben", "");
     exit;
 
@@ -523,26 +582,28 @@ if ( debug == true ){
 
 \**********************************************************************/
     // Anhang ausgewaelt und kann in Vordruck uebernommen werden
-  if ( ( ($_SESSION ["vStab_rolle"]== "Fernmelder")  )and
-       ( (isset ($_GET["ah_auswahl_x"])) OR
-         (isset ($_GET["ah_abbrechen_x"]))
+  if ( $attachmentMessageContext &&
+       ( ($_SESSION ["vStab_rolle"]== "Fernmelder")  )and
+       ( (isset ($_POST["ah_auswahl_x"])) OR
+         (isset ($_POST["ah_abbrechen_x"]))
        )
       ){
 
     if ( debug == true ){ echo "### 417 anhang.php Vordruck aufrufen mit Daten füllen ";  echo "<br>\n";}
 
-    $keys = array_keys ($_GET);
+    $keys = array_keys ($_POST);
     $ahkey = array ();
     foreach ($keys as $key){
-	  if (preg_match('/_/', $key) > 0 )	{ 
-	    list($lfd, $num) = preg_split('/_/', $key, 2); 
-	    if ($lfd == "lfd") { $ahkey [] = "lfd_".$num;}
-	  }
+      if (is_string ($key) && preg_match ("/\\Alfd_[0-9]+\\z/D", $key)) {
+        $ahkey [] = $key;
+      }
     }
     $anhang = "";
     $inhalt = "\n\r";
     foreach ($ahkey as $anh){
-      $db_data = readrecord_from_db((string) ($_GET [$anh] ?? ""));
+      $selectedValue = $_POST [$anh] ?? null;
+      if (!is_string ($selectedValue)) { continue; }
+      $db_data = readrecord_from_db($selectedValue);
       if (!isset ($db_data [1])) { continue; }
       try {
         $selectedBase = estab_attachment_validate_reservation_name ((string) $db_data [1]["filename"]);
@@ -557,7 +618,8 @@ if ( debug == true ){
       $selectedName = $selectedBase.".".$selectedExtension;
       $anhang .= $selectedName.";";
       $anhang_date = konv_datetime_taktime ($db_data[1]["date"]);
-      $inhalt .= estab_attachment_html ($selectedName)." - ".estab_attachment_html ($db_data[1]["comment"])." - ".estab_attachment_html ($anhang_date)."\n";
+      $inhalt .= $selectedName." - ".(string) $db_data[1]["comment"].
+                 " - ".$anhang_date."\n";
     }
     $formdata = restore_formdata ();
     if ( debug == true ){
@@ -566,7 +628,7 @@ if ( debug == true ){
       print_r ($formdata); echo "<br>";
     }
 
-    if (isset ($_GET["ah_auswahl_x"])) {
+    if (isset ($_POST["ah_auswahl_x"])) {
       $formdata ["12_anhang"]   = $anhang;
       $formdata ["12_inhalt"]  .= $inhalt;
       if (($formdata ["01_zeichen"] ?? "") === "") {
@@ -576,6 +638,7 @@ if ( debug == true ){
         $formdata ["10_anschrift"] = $conf_4f ["anschrift"];
       }
     }
+    unset ($_SESSION ["anhang_message_context"], $_SESSION ["anhang_menue"]);
     if (sichter_online()) {
       $form = new nachrichten4fach ($formdata, "FM-Eingang_Anhang", "");
     } else {
@@ -669,9 +732,20 @@ require_once ("./db_operation.php");  // Datenbank operationen
 /**********************************************************************\
    function: anhang_menue
 \**********************************************************************/
-  function anhang_menue (){
+  function anhang_menue ($notice = ""){
     include ("../4fcfg/config.inc.php");
-    echo "<form name=\"uploadform\" enctype=\"multipart/form-data\" method=\"get\" action=\"anhang.php\">\n"; // action=\"".$_SERVER['PHP_SELF']."\">";
+    $hasMessageContext =
+      ($_SESSION ["anhang_message_context"] ?? null) === true;
+    if (is_string ($notice) && $notice !== "") {
+      echo "<p role=\"status\"><b>".estab_attachment_html ($notice)."</b></p>\n";
+    }
+    if (!$hasMessageContext) {
+      echo "<p>Hier können Sie vorhandene Anhänge ansehen oder neue Dateien hochladen. ".
+           "Anhänge werden erst aus einem geöffneten Nachrichtenvordruck übernommen.</p>\n";
+    }
+    echo "<form name=\"uploadform\" enctype=\"multipart/form-data\" method=\"post\" ".
+         "action=\"anhang.php\" data-estab-requires-incident>\n";
+    echo estab_csrf_field ()."\n";
     echo "<!-- anhang.php Formularelemente und andere Elemente innerhalb des Formulars -->\n";
 
         echo "<fieldset>";
@@ -679,8 +753,10 @@ require_once ("./db_operation.php");  // Datenbank operationen
     echo "<table border=\"1\" cellspacing=\"2\" cellpeding=\"3\" bgcolor=\"#E0E0E0\">\n";
     echo "<tr>";
     echo "<input type=\"hidden\" name=\"anhang\" value=\"ah_auswahl\">\n";
-    echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"ah_auswahl\" src=\"".$conf_design_path."/ok.gif\" alt=\"Ausgewählte Anhänge übernehmen\"></td>\n";
-    echo "<td bgcolor=$color_button_nok><input type=\"image\" name=\"ah_abbrechen\" src=\"".$conf_design_path."/cancel.gif\" alt=\"Zurück zum Nachrichtenvordruck\"></td>\n";
+    if ($hasMessageContext) {
+      echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"ah_auswahl\" src=\"".$conf_design_path."/ok.gif\" alt=\"Ausgewählte Anhänge übernehmen\"></td>\n";
+      echo "<td bgcolor=$color_button_nok><input type=\"image\" name=\"ah_abbrechen\" src=\"".$conf_design_path."/cancel.gif\" alt=\"Zurück zum Nachrichtenvordruck\"></td>\n";
+    }
     echo "<td bgcolor=$color_button><input type=\"image\" name=\"ah_upload\" src=\"".$conf_design_path."/upload.gif\" alt=\"Neuen Anhang hochladen\"></td>\n";
     echo "</tr>\n";
     echo "</table>";
@@ -690,11 +766,23 @@ require_once ("./db_operation.php");  // Datenbank operationen
     echo "<legend>Liste der verfügbaren Dateien</legend>\n";
     echo "<table border=\"1\" cellspacing=\"2\" cellpeding=\"3\" bgcolor=\"#E0E0E0\">\n";
 
-    $db_file_data = readFiles_from_db();
+    try {
+      $db_file_data = readFiles_from_db();
+    } catch (Throwable $exception) {
+      http_response_code (503);
+      error_log ("eStab attachment list failed: ".$exception->getMessage ());
+      $columnCount = $hasMessageContext ? 6 : 5;
+      echo "<tr><td colspan=\"".$columnCount."\" role=\"alert\">".
+           "Die Anhangliste kann derzeit nicht geladen werden. ".
+           "Bitte versuchen Sie es später erneut.</td></tr>\n";
+      $db_file_data = array ();
+    }
     if ($db_file_data !== array ()){
       $i = 0;
       echo "<TR>";
-      echo "<TH>Auswahl</TH>";
+      if ($hasMessageContext) {
+        echo "<TH>Auswahl</TH>";
+      }
       echo "<TH>Vorschau</TH>";
       echo "<TH>Dateiname</TH>";
       echo "<TH>Bemerkung</TH>";
@@ -725,9 +813,11 @@ require_once ("./db_operation.php");  // Datenbank operationen
         $safePublicUrl = estab_attachment_html ($publicUrl);
         echo "<tr>\n";
           // checkbox
-        echo "<td style=\"text-align:center;\">\n";
-        echo "<input type=\"checkbox\" name=\"lfd_".$i."\" value=\"".estab_attachment_html ($attachmentValue)."\">\n";
-        echo "</td>\n";
+        if ($hasMessageContext) {
+          echo "<td style=\"text-align:center;\">\n";
+          echo "<input type=\"checkbox\" name=\"lfd_".$i."\" value=\"".estab_attachment_html ($attachmentValue)."\">\n";
+          echo "</td>\n";
+        }
           // Preview, if posible
         echo "<td>\n";
         echo "<a href=\"".$safePublicUrl."\" target=\"_blank\" rel=\"noopener\">\n";
@@ -739,7 +829,6 @@ require_once ("./db_operation.php");  // Datenbank operationen
                         PHP_QUERY_RFC3986
                       );
         echo "<img border=\"0\" alt=\"Anhangdatei\" src=\"".estab_attachment_html ($previewUrl)."\"></a></td>\n";
-        echo "</td>\n";
           // filename
         echo "<td style=\"text-align:center;\"> <a href=\"".$safePublicUrl."\" target=\"_blank\" rel=\"noopener\">".estab_attachment_html ($storedFilename)."</a></td>\n";
           // commend belong to the attechmant
@@ -768,7 +857,17 @@ require_once ("./db_operation.php");  // Datenbank operationen
   function fileselect () {
     $instanz = new fileupload ();
     $instanz->pre_html("Upload");
-    $instanz->get_next_filename_from_db();
+    try {
+      $instanz->get_next_filename_from_db();
+    } catch (Throwable $exception) {
+      http_response_code (503);
+      error_log ("eStab attachment reservation failed: ".$exception->getMessage ());
+      echo "<p role=\"alert\"><b>Der Upload kann derzeit nicht vorbereitet werden. ".
+           "Bitte versuchen Sie es später erneut.</b></p>";
+      $instanz->post_html ();
+      $_SESSION ["anhang_submenue"] = 110;
+      return;
+    }
     $data["newfilename"]  =  $instanz->fs_nextfilename;
     $data["kuerzel"]      =  $_SESSION["vStab_kuerzel"];
     $data["time"]         =  date("dHiMY");
@@ -903,6 +1002,7 @@ require_once ("./db_operation.php");  // Datenbank operationen
 
 
   function fileselectwindow (){
+    require ("../4fcfg/dbcfg.inc.php");
     require ("../4fcfg/config.inc.php");
     try {
       estab_csrf_require_post ($_SERVER, $_POST);
@@ -925,7 +1025,6 @@ require_once ("./db_operation.php");  // Datenbank operationen
       $my_upload->replace = false;
       $my_upload->do_filename_check = false;
 
-      $claimed = false;
       $finalized = false;
       $full_path = null;
       $new_name = "";
@@ -934,11 +1033,6 @@ require_once ("./db_operation.php");  // Datenbank operationen
           is_string ($_POST ["fs_nextfilename"] ?? null) ? $_POST ["fs_nextfilename"] : "",
           $conf_4f ["hoheit"]
         );
-        if (!$my_upload->claim_reservation ($new_name)) {
-          throw new RuntimeException ("Die Dateinamenreservierung ist nicht mehr aktiv.");
-        }
-        $claimed = true;
-
         $upload = $_FILES ["upload"] ?? null;
         if (!is_array ($upload)
             || !isset ($upload ["tmp_name"], $upload ["name"], $upload ["error"])
@@ -953,31 +1047,73 @@ require_once ("./db_operation.php");  // Datenbank operationen
         if ($my_upload->http_error !== UPLOAD_ERR_OK) {
           throw new RuntimeException ($my_upload->error_text ($my_upload->http_error));
         }
-        if (!$my_upload->upload ($new_name)) {
-          throw new RuntimeException ("Die Datei konnte nicht sicher hochgeladen werden.");
+        $connection = estab_attachment_connection ($conf_4f_db);
+        try {
+          $stored = estab_attachment_store_upload (
+            $connection,
+            $conf_4f_tbl ["anhang"],
+            $conf_4f_tbl ["protokoll"],
+            $new_name,
+            session_id (),
+            (string) ($_SESSION ["vStab_kuerzel"] ?? ""),
+            "Anhangdaten speichern",
+            function () use (
+              $my_upload,
+              $new_name,
+              $upload,
+              &$full_path
+            ): array {
+              if (!$my_upload->upload ($new_name)) {
+                throw new RuntimeException (
+                  "Die Datei konnte nicht sicher hochgeladen werden."
+                );
+              }
+              $full_path = $my_upload->upload_dir.$my_upload->file_copy;
+              $timestamp = estab_attachment_parse_tactical_time (
+                is_string ($_POST ["fs_timestamp"] ?? null)
+                  ? $_POST ["fs_timestamp"]
+                  : ""
+              );
+              if ($timestamp === null) {
+                throw new InvalidArgumentException (
+                  "Der Zeitstempel ist ungültig."
+                );
+              }
+              $digest = md5_file ($full_path);
+              if (!is_string ($digest)) {
+                throw new RuntimeException (
+                  "Die Dateiprüfsumme konnte nicht erstellt werden."
+                );
+              }
+              return array (
+                "filename" => basename ($full_path),
+                "org_filename" => $upload ["name"],
+                "comment" => is_string ($_POST ["fs_comment"] ?? null)
+                  ? $_POST ["fs_comment"]
+                  : "",
+                "time" => $timestamp,
+                "md5hash" => $digest,
+              );
+            },
+            static function (array $metadata): string {
+              return (string) ($_SESSION ["vStab_benutzer"] ?? "").";".
+                     (string) ($_SESSION ["vStab_kuerzel"] ?? "").";".
+                     (string) ($_SESSION ["vStab_funktion"] ?? "").";".
+                     (string) ($_SESSION ["vStab_rolle"] ?? "").";".
+                     session_id ().";".
+                     estab_auth_remote_ip ($_SERVER).";".
+                     $metadata ["filename"].".".$metadata ["fileext"].";".
+                     $metadata ["org_filename"].";".
+                     $metadata ["date"];
+            }
+          );
+        } finally {
+          estab_attachment_close ($connection);
         }
-
-        $full_path = $my_upload->upload_dir.$my_upload->file_copy;
-        $timestamp = estab_attachment_parse_tactical_time (
-          is_string ($_POST ["fs_timestamp"] ?? null) ? $_POST ["fs_timestamp"] : ""
-        );
-        if ($timestamp === null) {
-          throw new InvalidArgumentException ("Der Zeitstempel ist ungültig.");
-        }
-        $digest = md5_file ($full_path);
-        if (!is_string ($digest)) {
-          throw new RuntimeException ("Die Dateiprüfsumme konnte nicht erstellt werden.");
-        }
-        $data = array (
-          "reservation" => $new_name,
-          "filename" => basename ($full_path),
-          "org_filename" => $upload ["name"],
-          "comment" => is_string ($_POST ["fs_comment"] ?? null) ? $_POST ["fs_comment"] : "",
-          "time" => $timestamp,
-          "md5hash" => $digest,
-        );
-        if (!$my_upload->save_in_db ($data)) {
-          throw new RuntimeException ("Die Reservierung gehört nicht zu dieser Sitzung.");
+        if (!is_array ($stored)) {
+          throw new RuntimeException (
+            "Die Reservierung gehört nicht zu dieser Sitzung."
+          );
         }
         $finalized = true;
       } catch (Throwable $exception) {
@@ -990,13 +1126,6 @@ require_once ("./db_operation.php");  // Datenbank operationen
             @unlink ($full_path);
           }
         }
-        if ($claimed && !$finalized) {
-          try {
-            $my_upload->release_reservation ($new_name);
-          } catch (Throwable $exception) {
-            error_log ("eStab attachment reservation release failed: ".$exception->getMessage ());
-          }
-        }
       }
     } else {
       file_unselect ();
@@ -1007,11 +1136,26 @@ require_once ("./db_operation.php");  // Datenbank operationen
   }
 
 
-  switch ($_SESSION["anhang_menue"]){
+  $attachmentMenuState = $_SESSION ["anhang_menue"] ?? null;
+  if ($attachmentMenuState === "100" || $attachmentMenuState === "110") {
+    $attachmentMenuState = (int) $attachmentMenuState;
+  }
+  if ($attachmentMenuState !== 100 && $attachmentMenuState !== 110) {
+    $attachmentMenuState = 110;
+    $_SESSION ["anhang_menue"] = 110;
+    unset ($_SESSION ["anhang_message_context"]);
+    if ($attachmentContextNotice === "") {
+      $attachmentContextNotice =
+        "Die Anhangübersicht wurde direkt geöffnet.";
+    }
+  }
+
+  switch ($attachmentMenuState){
 
     case 100: // Auswahlmenue
-        if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big> 100 --> Auswahlmenue</big></big><br>";  }        
+        if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big> 100 --> Auswahlmenue</big></big><br>";  }
         store_formdata();
+        $_SESSION ["anhang_message_context"] = true;
         anhang_menue ();
         $_SESSION["anhang_menue"] = 110;
     break;
@@ -1019,15 +1163,18 @@ require_once ("./db_operation.php");  // Datenbank operationen
     case 110: // UPLOAD Menue
         if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big> 110 --> UPLOADMENUE</big></big><br>";  }        
 
-        if ( isset ($_GET ["ah_upload_x"])){
+        if ( isset ($_POST ["ah_upload_x"])){
           fileselect ();
+          break;
         }
 
-        if ( isset ($_GET ["ah_abbrechen_x"])){
+        if ( isset ($_POST ["ah_abbrechen_x"])){
           unset ($_SESSION["anhang_menue"]);
           unset ($_SESSION["anhang"]);
+          unset ($_SESSION ["anhang_message_context"]);
           $_SESSION["anhang_result"] = "abbrechen" ;
           header("Location: ".$conf_4f ["MainURL"]);
+          exit;
         }
 
         if ( (isset ($_POST["absenden_x"] )) OR
@@ -1035,25 +1182,12 @@ require_once ("./db_operation.php");  // Datenbank operationen
 
           fileselectwindow ();
         }
-    break;
-
-    case 999: // ??
-        if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big> 999 --> UPLOAD</big></big><br>";  }
-        if ( isset ($_GET ["ah_upload_x"])){
-          fileselect ();
-        }
-        if ( isset ($_GET ["ah_abbrechen_x"])){
-           unset ($_SESSION["anhang_menue"]);
-           unset ($_SESSION["anhang"]);
-           header("Location: ".$conf_4f ["MainURL"]);
-        }
-        if ($_POST["absenden_x"]){
-          fileselectwindow ();
-        }
+        anhang_menue ($attachmentContextNotice);
     break;
 
     default:
-      echo "<big><big><big>Kein Menüpunkt!</big></big></big><br>" ;
+      http_response_code (500);
+      echo "<p role=\"alert\"><b>Die Anhangübersicht konnte nicht initialisiert werden.</b></p>";
   }
 
 

@@ -74,6 +74,53 @@ function estab_file_resolve(string $root, string $area, string $filename): strin
 }
 
 /**
+ * Open a resolved file and verify that the handle still references the same
+ * regular file below the configured root.
+ *
+ * The second resolution closes the pathname race between realpath() and
+ * fopen(). Once this function returns, later rename/unlink operations cannot
+ * redirect the already-open handle to different bytes.
+ *
+ * @return resource
+ */
+function estab_file_open(string $root, string $area, string $filename): mixed
+{
+    $path = estab_file_resolve($root, $area, $filename);
+    $stream = @fopen($path, 'rb');
+    if ($stream === false) {
+        throw new RuntimeException('File could not be opened');
+    }
+
+    try {
+        $opened = fstat($stream);
+        $currentPath = realpath($path);
+        $current = $currentPath === false ? false : @stat($currentPath);
+        $resolvedRoot = realpath($root);
+        $prefix = is_string($resolvedRoot)
+            ? rtrim($resolvedRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR
+            : '';
+        if (
+            !is_array($opened)
+            || !isset($opened['mode'], $opened['dev'], $opened['ino'])
+            || (((int) $opened['mode']) & 0170000) !== 0100000
+            || !is_string($currentPath)
+            || $prefix === ''
+            || !str_starts_with($currentPath, $prefix)
+            || !is_array($current)
+            || !isset($current['dev'], $current['ino'])
+            || (int) $opened['dev'] !== (int) $current['dev']
+            || (int) $opened['ino'] !== (int) $current['ino']
+        ) {
+            throw new RuntimeException('Opened file changed during resolution');
+        }
+        return $stream;
+    } catch (Throwable $exception) {
+        fclose($stream);
+        throw $exception;
+    }
+}
+
+/**
  * Return safe generated forms only; invalid names, links and subdirectories
  * are deliberately omitted.
  *
@@ -130,6 +177,31 @@ function estab_file_download_url(string $endpoint, string $area, string $filenam
 function estab_file_content_type(string $path): string
 {
     $detected = (new finfo(FILEINFO_MIME_TYPE))->file($path);
+    return is_string($detected) && preg_match('/\A[a-z0-9.+-]+\/[a-z0-9.+-]+\z/Di', $detected) === 1
+        ? $detected
+        : 'application/octet-stream';
+}
+
+/** Detect a MIME type from an already-authorized, already-open file handle. */
+function estab_file_stream_content_type(mixed $stream): string
+{
+    if (!is_resource($stream) || get_resource_type($stream) !== 'stream') {
+        throw new InvalidArgumentException('A readable file stream is required');
+    }
+    $position = ftell($stream);
+    if ($position === false || !rewind($stream)) {
+        return 'application/octet-stream';
+    }
+    $sample = fread($stream, 262144);
+    if ($position === 0) {
+        rewind($stream);
+    } else {
+        fseek($stream, $position);
+    }
+    if (!is_string($sample)) {
+        return 'application/octet-stream';
+    }
+    $detected = (new finfo(FILEINFO_MIME_TYPE))->buffer($sample);
     return is_string($detected) && preg_match('/\A[a-z0-9.+-]+\/[a-z0-9.+-]+\z/Di', $detected) === 1
         ? $detected
         : 'application/octet-stream';

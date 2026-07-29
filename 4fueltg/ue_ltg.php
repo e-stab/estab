@@ -15,14 +15,53 @@ include ("../4fcfg/para.inc.php");              //
 
 define ("inhalt_limit",true); // VerkÃ¼rzte Darstellung der Meldung ergÃ¤nzt mit  "..."
 
+function estab_overview_url (array $query = array ()) {
+  $url = estab_application_url ("4fueltg/ue_ltg.php");
+  if ($query !== array ()) {
+    $url .= "?".http_build_query ($query, "", "&", PHP_QUERY_RFC3986);
+  }
+  return $url;
+}
+
 function estab_overview_detail_link ($recordId, $label) {
   $recordId = estab_message_positive_id ($recordId);
-  $url = "ue_ltg.php?".http_build_query (array (
+  $url = estab_overview_url (array (
     "ueb_fm" => "ueb",
     "00_lfd" => $recordId,
-  ), "", "&", PHP_QUERY_RFC3986);
+  ));
   echo "<a href=\"".estab_message_html ($url)."\" target=\"_self\">".
        estab_message_html ($label)."</a>\n";
+}
+
+function estab_overview_row_start ($priority) {
+  return $priority
+    ? "<tr style=\"background-color: rgb(255,255,0); color: #000000; font-weight:bold;\">\n"
+    : "<tr>\n";
+}
+
+function estab_overview_recipient_cell ($copyColor, array $backgroundColors) {
+  if (
+    in_array ($copyColor, array ("rt", "gn", "bl"), true)
+    && isset ($backgroundColors [$copyColor])
+  ) {
+    return "<td style=\"text-align: center; background-color: ".
+           estab_message_html ($backgroundColors [$copyColor])."; \">X</td>";
+  }
+
+  return "<td style=\"text-align: center; background-color: rgb(250, 250, 250); \">".
+         "<p><img src=\"null.gif\" alt=\"leer\"></p></td>";
+}
+
+function estab_overview_empty_row ($columnCount) {
+  $columnCount = filter_var (
+    $columnCount,
+    FILTER_VALIDATE_INT,
+    array ("options" => array ("min_range" => 1, "max_range" => 100))
+  );
+  if (!is_int ($columnCount)) {
+    throw new InvalidArgumentException ("Ungültige Spaltenanzahl");
+  }
+  return "<tr><td colspan=\"".$columnCount."\">Keine Meldungen vorhanden.</td></tr>\n";
 }
 
 function estab_overview_forbid () {
@@ -127,7 +166,10 @@ class Listen {
 
     $query_from_arg   = $conf_4f_tbl ["nachrichten"]; //.", ".$tblusername."_read , ".$tblusername."_erl ";
 
-    $query_where_arg1 = "1"; // "(( `16_empf` like \"%".$_SESSION["vStab_funktion"]."%\" ) OR ( `16_empf` like \"%alle%\" ))";
+    $query_where_arg1 =
+      $conf_4f_tbl ["nachrichten"].".`einsatz_id` = ".
+      "(SELECT `active_einsatz_id` FROM `nv_einsatz_status` ".
+      "WHERE `singleton_id` = 1)";
 
 //    if ($_SESSION [flt_gelesen]  != 1){$readwhat = " NOT ";} else {$readwhat = " ";}
 
@@ -317,10 +359,13 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
 
   function  listen_navi (){
     include ("../4fcfg/config.inc.php");
+    echo "<form action=\"".estab_message_html (estab_overview_url ()).
+         "\" method=\"get\" target=\"_self\">\n";
     echo "<input type=\"image\" name=\"ueb_flt_start\" src=\"".$conf_design_path."/go_start.gif\" alt=\"Anfang\">\n";
     echo "<input type=\"image\" name=\"ueb_flt_back\"  src=\"".$conf_design_path."/go_back.gif\" alt=\"zurueck\">\n";
     echo "<input type=\"image\" name=\"ueb_flt_for\"   src=\"".$conf_design_path."/go_forward.gif\" alt=\"vor\">\n";
     echo "<input type=\"image\" name=\"ueb_flt_end\"   src=\"".$conf_design_path."/go_end.gif\" alt=\"Ende\">\n";
+    echo "</form>\n";
   }
 
 
@@ -333,7 +378,8 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
 
     if ( debug ) { echo "\n\n\n<!-- ANFANG file:liste.php fkt:darstellungsart -->"; }
 
-    echo "\n<form action=\"".estab_message_html ($_SERVER ["PHP_SELF"] ?? "ue_ltg.php")."\" method=\"GET\" target=\"_self\">\n";
+    echo "\n<form action=\"".estab_message_html (estab_overview_url ()).
+         "\" method=\"get\" target=\"_self\">\n";
     echo "<table><tbody>";
     echo "<tr>";
 
@@ -355,10 +401,14 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
     echo "<td>";
     echo "<div  style=\"border-top-color:#DCDCFF; border-left-color:#DCDCFF; border-right-color:#DCDCFF; border-bottom-color:#000000; border-width:1px; border-style:solid; padding:0px\">";
       for ($pps=5; $pps <=25; $pps+=5){
+        $pageSizeUrl = estab_overview_url (array (
+          "ueb_flt_anzahl_x" => 1,
+          "ueb_flt_anzahl" => $pps,
+        ));
         if ( $_SESSION["ueb_flt_anzahl"] == $pps )  {
-          echo "<a href=\"".$_SERVER ["PHP_SELF"]."?ueb_flt_anzahl_x=1&ueb_flt_anzahl=".$pps."\"><img src=\"../4fach/button.php?type=icon&status=AUS&text=".$pps."&bg=blue\" border=\"0\" alt=\"Anzahl".$pps."EIN\"></a>";
+          echo "<a href=\"".estab_message_html ($pageSizeUrl)."\"><img src=\"../4fach/button.php?type=icon&status=AUS&text=".$pps."&bg=blue\" border=\"0\" alt=\"Anzahl".$pps."EIN\"></a>";
         } else {
-          echo "<a href=\"".$_SERVER ["PHP_SELF"]."?ueb_flt_anzahl_x=1&ueb_flt_anzahl=".$pps."\"><img src=\"../4fach/button.php?type=icon&status=EIN&text=".$pps."&bg=lighterblue\" border=\"0\" alt=\"Anzahl".$pps."AUS\"></a>";
+          echo "<a href=\"".estab_message_html ($pageSizeUrl)."\"><img src=\"../4fach/button.php?type=icon&status=EIN&text=".$pps."&bg=lighterblue\" border=\"0\" alt=\"Anzahl".$pps."AUS\"></a>";
         }
       }
     echo "</div>";
@@ -407,40 +457,33 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
 
 
     echo "<!-- ue_ltg.php 426 -->";
-    //        echo "</form>";
 
     echo "<td>";
 
-
-    echo "<table><tbody>";
-    echo "<tr>";
-
-
     if ((isset($_SESSION ["ueb_flt_find_mask"])) and ($_SESSION["ueb_flt_find_mask"] == 1)){
-      echo "\n<form action=\"".estab_message_html ($_SERVER ["PHP_SELF"] ?? "ue_ltg.php")."\" method=\"get\" target=\"_self\">\n";
+      echo "<table><tbody>";
+      echo "<tr>";
       echo "<td>";
       if (isset ($_SESSION ["ueb_flt_search"]) ) { $defvalue = $_SESSION ["ueb_flt_search"] ;}
       else {$defvalue = "";}
       echo "<div>";
       echo "<p>Suchbegriff: <input name=\"ueb_flt_search\" value=\"".
            estab_message_html ($defvalue)."\" type=\"text\" size=\"30\" maxlength=\"30\"></p>";
-      echo "<div>";
+      echo "</div>";
       echo "</td>";
       echo "<td>";
       echo "<input name=\"ueb_flt_suche\" value=\"suchen\" type=\"submit\">\n";
       echo "</td>";
-    //          echo "</form>";
-      echo "</div>";
+      echo "</tr>";
+      echo "</tbody></table>";
     }
-
-    echo "</tr>";
-    echo "</tbody></table>";
 
 
     echo "</td>";
 
     echo "</tr>";
     echo "</tbody></table>";
+    echo "</form>\n";
   }
 
 
@@ -458,14 +501,30 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
     include ("../4fcfg/e_cfg.inc.php");
     include ("../4fcfg/fkt_rolle.inc.php");
 
-    echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
-    echo "<html>\n";
+    echo "<!doctype html>\n";
+    echo "<html lang=\"de\">\n";
     echo "<head>\n";
-    echo "<link REL=\"SHORTCUT ICON\" HREF=\"favicon.ico\" />";
-//    echo "<meta http-equiv=\"refresh\" content=\"10\">\n";
+    echo "<meta charset=\"UTF-8\">\n";
+    echo "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n";
+    echo "<title>eStab Meldungsübersicht</title>\n";
+    echo estab_session_ui_stylesheet ()."\n";
     echo "</head>\n";
-
-    echo "<body bgcolor=\"#DCDCFF\">";
+    echo "<body class=\"estab-tool-page\">\n";
+    echo "<main class=\"estab-tool-main estab-tool-main-wide\" ";
+    echo "data-estab-message-overview>\n";
+    echo "<header class=\"estab-tool-hero\">\n";
+    echo "<p class=\"estab-tool-eyebrow\">Übungsleitung · Nachrichten</p>\n";
+    echo "<h1>Meldungsübersicht</h1>\n";
+    echo "<p>Sichtungsstatus und Verteilung aller Nachrichten des aktiven ";
+    echo "Einsatzes. Wählen Sie eine Zeile, um den vollständigen Vordruck ";
+    echo "anzusehen.</p>\n</header>\n";
+    echo "<section class=\"estab-tool-panel\" ";
+    echo "aria-labelledby=\"message-overview-list-title\">\n";
+    echo "<header class=\"estab-tool-panel-heading\">\n";
+    echo "<h2 id=\"message-overview-list-title\">Nachrichten</h2>\n";
+    echo "<p>Filter und Seitennavigation wirken nur auf diese Übersicht.</p>\n";
+    echo "</header>\n";
+    echo "<div class=\"estab-tool-legacy-content\">\n";
 
     $result = $this->get_list ();
 	if (debug)  {echo "this->get_list() = "; var_dump($result);echo "<br><br>";}
@@ -473,34 +532,41 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
 
     $this->listen_navi ();
 
-    if  ($result != ""){
-      echo "<table style=\"text-align: center; background-color: rgb(250,250, 250); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
-      echo "<tr style=\"background-color: rgb(240,240,200); color:fm=meldung&0000FF; font-weight:bold;\">\n";
-      echo "<td>Vorst</td>\n";
-      echo "<td>E/A</td>\n";
-      echo "<td>Nw-Nr.</td>\n";
-      echo "<td>Von</td>";
-      echo "<td>An</td>";
-      echo "<td>Abfasszeit</td>\n";
-      // Funktionen und Farben
-      for ( $i=1; $i<= count ($conf_empf); $i++ ) {
-        if ( ( $conf_empf [$i]["fkt"] != "Si" ) and ( $conf_empf [$i]["fkt"] != "A/W" ) ) {
-          echo "<td>";
-          echo estab_message_html ($conf_empf [$i]["fkt"]);
-          echo "</td>\n";
-        }
+    $overviewColumnCount = 7;
+    echo "<table style=\"text-align: center; background-color: rgb(250,250, 250); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n";
+    echo "<thead>\n";
+    echo "<tr style=\"background-color: rgb(240,240,200); color: #0000ff; font-weight:bold;\">\n";
+    echo "<th scope=\"col\">Vorst</th>\n";
+    echo "<th scope=\"col\">E/A</th>\n";
+    echo "<th scope=\"col\">Nw-Nr.</th>\n";
+    echo "<th scope=\"col\">Von</th>";
+    echo "<th scope=\"col\">An</th>";
+    echo "<th scope=\"col\">Abfasszeit</th>\n";
+    // Funktionen und Farben
+    for ( $i=1; $i<= count ($conf_empf); $i++ ) {
+      if ( ( $conf_empf [$i]["fkt"] != "Si" ) and ( $conf_empf [$i]["fkt"] != "A/W" ) ) {
+        echo "<th scope=\"col\">";
+        echo estab_message_html ($conf_empf [$i]["fkt"]);
+        echo "</th>\n";
+        $overviewColumnCount++;
       }
-      echo "<td>Inhalt</td>\n";
-      echo "</tr>";
+    }
+    echo "<th scope=\"col\">Inhalt</th>\n";
+    echo "</tr>\n";
+    echo "</thead>\n";
+    echo "<tbody>\n";
 
+    if  ($result != ""){
       foreach ($result as $row){
-	     
+         $priority = (
+           ($row["09_vorrangstufe"] ?? "") != ""
+           and ($row["09_vorrangstufe"] ?? "") != "eee"
+         );
+         echo estab_overview_row_start ($priority);
+
          // VORRANGSTUFE
-         if ( ( $row["09_vorrangstufe"] != "") and ( $row["09_vorrangstufe"] != "eee" ) ){
-           echo "<tr style=\"background-color: rgb(255,255,0); color:fm=meldung&FFFFFF; font-weight:bold;\">\n";
-         }
          echo "<td>";
-         if ( ( $row["09_vorrangstufe"] != "") and ( $row["09_vorrangstufe"] != "eee" ) ) {
+         if ($priority) {
            estab_overview_detail_link ($row["00_lfd"], $row["09_vorrangstufe"]);
          } else {
            echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
@@ -585,29 +651,11 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
 		 if (debug)  {echo "empfcolor = "; var_dump($empfcolor);echo "<br><br>";}
          for ( $i=1; $i<= count ($conf_empf); $i++ ) {
            if ( ( $conf_empf [$i]["fkt"] != "Si" ) and ( $conf_empf [$i]["fkt"] != "A/W" ) ) {
-             if (isset($empfcolor [$conf_empf [$i]['fkt']])) {
-               switch ($empfcolor [$conf_empf [$i]['fkt']]) {
-                 case "rt":
-                   echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["rt"]."; \">";
-                   echo "X";
-                 break;
-                 case "gn":
-                   echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["gn"]."; \">";
-                   echo "X";
-                 break;
-                 case "bl":
-                   echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["bl"]."; \">";
-                   echo "X";
-                 break;
-                 default:
-                   echo "<td style=\"text-align: center; background-color: rgb(250, 250, 250); \">";
-                   echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
-               }
-               echo "</td>";
-			 } else {
-                 echo "<td style=\"text-align: center; background-color: rgb(250, 250, 250); \">";
-                 echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";			 
-			 }
+             $recipientFunction = $conf_empf [$i]["fkt"];
+             echo estab_overview_recipient_cell (
+               $empfcolor [$recipientFunction] ?? "",
+               $cfg ["vbg"]
+             );
            }
          }
 
@@ -624,12 +672,23 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
          echo "</td>\n";
          echo "</tr>";
       }
+    } else {
+      echo estab_overview_empty_row ($overviewColumnCount);
     }
-    echo "</tbody></table>";
+    echo "</tbody>\n";
+    echo "</table>\n";
 
     $this->listen_navi ();
 
     echo "<!-- ENDE file:ue_ltg.php fkt:createlist -->\n";
+    echo "</div>\n</section>\n";
+    echo "<footer class=\"estab-tool-footer\">\n";
+    echo "<a href=\"".estab_auth_html (estab_application_root ())."\">";
+    echo "Zur eStab-Übersicht</a>\n";
+    echo "<span>Es werden ausschließlich Daten des aktiven Einsatzes angezeigt.</span>\n";
+    echo "</footer>\n</main>\n";
+    echo "</body>\n";
+    echo "</html>\n";
 
   }
 
@@ -995,13 +1054,6 @@ var_dump ($this->formdata); echo "<br>";
 
     pre_html ("N","Formular ".$this->task." ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"], ""); // Normaler Seitenaufbau ohne Auffrischung
 
-    echo "<body style=\"text-align: left; background-color: rgb(255,255,255); \">\n"; //".$this->formbgcolor.";\">\n";
-    echo "<body style=\"text-align: left; background-color: ".$this->formbgcolor.";\">\n";
-
-    echo "<form style=\"\" method=\"get\" action=\"".estab_message_html ($_SERVER ["PHP_SELF"] ?? "ue_ltg.php")."\" name=\"4fach\">";
-
-    echo "<a href=\"javascript:window.print()\">Diese Seite drucken</a>";
-
     switch ($this->task){
       case "FM-Eingang"         : $ueberschrift = "* * *   A N N A H M E  * * *"; break;
       case "FM-Eingang_Sichter" : $ueberschrift = "* * *   A N N A H M E / Sichtung  * * *"; break;
@@ -1012,8 +1064,29 @@ var_dump ($this->formdata); echo "<br>";
       case "Stab_lesen"         : $ueberschrift = "* * *   N A C H R I C H T lesen   * * *"; break;
       case "Sichter"            : $ueberschrift = "* * *   S I C H T U N G   * * *"; break;
       case "Nachweis"           : $ueberschrift = "* * *   N A C H W E I S U N G   * * *"; break;
+      default                   : $ueberschrift = "Nachrichtenvordruck"; break;
     }
-    echo "<big><big><big><b>".$ueberschrift."</b></big></big></big><br>\n";
+    echo "<body class=\"estab-tool-page\">\n";
+    echo "<main class=\"estab-tool-main estab-tool-main-wide\" ";
+    echo "data-estab-message-detail>\n";
+    echo "<header class=\"estab-tool-hero\">\n";
+    echo "<p class=\"estab-tool-eyebrow\">Übungsleitung · Nachrichtendetail</p>\n";
+    echo "<h1>".estab_message_html ($ueberschrift)."</h1>\n";
+    echo "<p>Vollständiger Nachrichtenvordruck des aktiven Einsatzes. ";
+    echo "Farbkennzeichnungen innerhalb des Vordrucks bleiben fachlich erhalten.</p>\n";
+    echo "</header>\n";
+    echo "<section class=\"estab-tool-panel\" ";
+    echo "aria-labelledby=\"message-detail-title\">\n";
+    echo "<header class=\"estab-tool-panel-heading\">\n";
+    echo "<h2 id=\"message-detail-title\">Nachrichtenvordruck</h2>\n";
+    echo "<div class=\"estab-tool-actions\">\n";
+    echo "<button class=\"estab-button\" type=\"button\" ";
+    echo "onclick=\"window.print()\">Diese Seite drucken</button>\n";
+    echo "</div>\n</header>\n";
+    echo "<div class=\"estab-tool-legacy-content\">\n";
+    echo "<form method=\"get\" action=\"".
+         estab_message_html (estab_overview_url ()).
+         "\" name=\"4fach\" data-estab-requires-incident>";
     echo "\n\n<!-- ********** TABLE   001 Gesamte Tabelle *********** -->\n";
 
     echo "<!-- H A U P T T A B E L L E  -->";
@@ -1846,7 +1919,12 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
     echo "</tbody>\n</table>\n";
     echo "<br>\n";
     echo "</form>\n";
-    //echo "TASK=".$this->task."<br>";
+    echo "</div>\n</section>\n";
+    echo "<footer class=\"estab-tool-footer\">\n";
+    echo "<a href=\"".estab_message_html (estab_overview_url ()).
+         "\">Zurück zur Meldungsübersicht</a>\n";
+    echo "<span>Der Vordruck gehört zum aktuell aktiven Einsatz.</span>\n";
+    echo "</footer>\n</main>\n";
     echo "</body>\n";
     echo "</html>\n";
   } // function plot_form

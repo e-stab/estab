@@ -87,7 +87,9 @@ if (!function_exists('mysql_connect')) {
         mysqli_report(MYSQLI_REPORT_OFF);
 
         $host = $server !== '' ? $server : (getenv('ESTAB_DB_HOST') ?: 'db');
-        $port = (int) (getenv('ESTAB_DB_PORT') ?: 3306);
+        $port = function_exists('estab_env_integer')
+            ? estab_env_integer('ESTAB_DB_PORT', 3306, 1, 65535)
+            : (int) (getenv('ESTAB_DB_PORT') ?: 3306);
         if (preg_match('/^\[([^]]+)](?::(\d+))?$/', $host, $matches)) {
             $host = $matches[1];
             $port = isset($matches[2]) ? (int) $matches[2] : $port;

@@ -60,15 +60,46 @@ if ($method === 'HEAD') {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Problembericht</title>
+  <?= estab_session_ui_stylesheet() ?>
 </head>
-<body>
-  <h1>Problembericht</h1>
+<body class="estab-tool-page">
+  <main
+    class="estab-tool-main estab-tool-main-narrow"
+    data-estab-problem-report>
+    <header class="estab-tool-hero">
+      <p class="estab-tool-eyebrow">Nachrichten · Hinweis</p>
+      <h1>Problembericht</h1>
+      <p>Die Anwendung konnte einen Teil der gewählten Aktion nicht
+        vollständig ausführen.</p>
+    </header>
+    <section class="estab-tool-panel" aria-labelledby="problem-report-title">
+      <header class="estab-tool-panel-heading">
+        <h2 id="problem-report-title">Details</h2>
+      </header>
 <?php if ($subject !== ''): ?>
-  <p><strong><?= $escape($subject) ?></strong></p>
+      <p class="estab-tool-feedback estab-tool-feedback-error" role="alert">
+        <?= $escape($subject) ?>
+      </p>
 <?php endif; ?>
 <?php if ($information !== ''): ?>
-  <p><?= $escape($information) ?></p>
+      <p><?= $escape($information) ?></p>
 <?php endif; ?>
-  <p><button type="button" onclick="window.close()">Problemfenster schließen</button></p>
+      <?php if ($subject === '' && $information === ''): ?>
+        <p class="estab-tool-empty">Es wurden keine weiteren Details übermittelt.</p>
+      <?php endif; ?>
+      <div class="estab-tool-actions">
+        <button
+          class="estab-button estab-button-primary"
+          type="button"
+          onclick="window.close()">
+          Problemfenster schließen
+        </button>
+      </div>
+    </section>
+    <footer class="estab-tool-footer">
+      <span>Bei wiederholten Fehlern den Zeitpunkt und die ausgeführte Aktion
+        an die Administration weitergeben.</span>
+    </footer>
+  </main>
 </body>
 </html>

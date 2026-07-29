@@ -5,93 +5,115 @@ declare(strict_types=1);
 session_start();
 require_once __DIR__ . '/../app/session_ui.php';
 estab_session_ui_start($_SESSION, true);
+
 header('Content-Type: text/html; charset=UTF-8');
 header('Cache-Control: private, no-store, max-age=0');
 
+$sessionMarkup = estab_session_ui_current_markup(
+    $_SESSION,
+    true,
+    null,
+    false,
+    true
+);
+
+$documents = [
+    [
+        'href' => 'Buchstabier.html',
+        'title' => 'Buchstabieralphabet',
+        'description' => 'Deutsches und internationales Alphabet',
+    ],
+    [
+        'href' => 'Kartendatum.html',
+        'title' => 'Neues Kartendatum',
+        'description' => 'Hinweise zu ED50, WGS84 und UTMREF',
+    ],
+    [
+        'href' => 'IuK-InfoPack.html',
+        'title' => 'Stabzusammensetzung',
+        'description' => 'Aufbau und Aufgaben des Einsatzleitstabs',
+    ],
+    [
+        'href' => 'Orgas.html',
+        'title' => 'Behörden und Organisationen',
+        'description' => 'Abkürzungen und Sprechfunk-Rufnamen',
+    ],
+    [
+        'href' => 'FF-Rufnamenschema.html',
+        'title' => 'F-Rufnamenregel',
+        'description' => 'Rufnamenschema der Feuerwehr',
+    ],
+    [
+        'href' => 'DRK%20Rufnamenschema.html',
+        'title' => 'DRK-Rufnamenregel',
+        'description' => 'Rufnamenschema des Deutschen Roten Kreuzes',
+    ],
+    [
+        'href' => 'THWFuRNR.html',
+        'title' => 'THW-Rufnamenregel',
+        'description' => 'Rufnamenschema des Technischen Hilfswerks',
+    ],
+];
+
 ?>
 <!doctype html>
-<html>
+<html lang="de">
 <head>
-
-
-
-  <meta content="text/html; charset=UTF-8" http-equiv="content-type">
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-
-
-  <title>Index.html</title>
+  <title>BOS-Informationen</title>
+  <?= estab_session_ui_stylesheet() ?>
 </head>
-
-
-<body style="background-color: rgb(51, 204, 0); color: rgb(0, 0, 0);" alink="#ee0000" link="#0000ee" vlink="#551a8b">
-
-<big style="font-weight: bold;"><big>Info-Bereiche</big></big>
-<table style="text-align: left; width: 167px; background-color: rgb(153, 255, 153);" border="0" cellpadding="0" cellspacing="10">
-
-  <tbody>
-
-    <tr>
-
-      <td style="width: 157px;" align="undefined" valign="undefined">
-        <a href="Buchstabier.html" target="mainframe"><big><span style="font-weight: bold;">Buchstabieralphabet</span></big></a></td>
-
-    </tr>
-
-    <tr>
-
-      <td style="width: 157px;" align="undefined" valign="undefined">
-        <a href="Kartendatum.html" target="mainframe"><big><span style="font-weight: bold;">neues Kartendatum</span></big></a></td>
-
-    </tr>
-
-    <tr>
-
-      <td style="width: 157px;" align="undefined" valign="undefined">
-      <big style="font-weight: bold;">
-      <a href="IuK-InfoPack.html" target="mainframe">Stabzusammensetzung</a></big></td>
-
-    </tr>
-
-
-    <tr>
-
-      <td style="width: 157px; background-color: rgb(153, 255, 153);" align="undefined" valign="undefined">
-      <big style="font-weight: bold;">
-      <a href="Orgas.html" target="mainframe">Behörden und<br>
-Organisationen</a></big></td>
-
-    </tr>
-
-
-    <tr>
-
-      <td style="width: 157px;" align="undefined" valign="undefined">
-      <big style="font-weight: bold;">
-      <a href="FF-Rufnamenschema.html" target="mainframe">F-Rufnamenregel</a></big></td>
-
-    </tr>
-
-    <tr>
-
-      <td style="width: 157px;" align="undefined" valign="undefined">
-      <big style="font-weight: bold;">
-      <a href="DRK%20Rufnamenschema.html" target="mainframe">DRK-Rufnamenregel</a></big></td>
-
-    </tr>
-
-
-    <tr>
-
-      <td style="width: 157px;" align="undefined" valign="undefined">
-      <big style="font-weight: bold;">
-      <a href="THWFuRNR.html" target="mainframe">THW-Rufnamenregel</a></big></td>
-
-    </tr>
-
-  </tbody>
-</table>
-
-<br>
-
+<body class="estab-navigation-frame estab-message-sidebar-page">
+  <div class="estab-message-sidebar estab-bos-sidebar" data-estab-bos-sidebar>
+    <?= $sessionMarkup ?>
+    <main
+      class="estab-bos-document-navigation"
+      data-estab-bos-document-navigation
+    >
+      <header class="estab-sidebar-section-heading">
+        <h1>Info-Bereiche</h1>
+        <p>Dokument auswählen</p>
+      </header>
+      <nav aria-label="BOS-Dokumente">
+        <ul class="estab-bos-document-list">
+          <?php foreach ($documents as $document): ?>
+            <li>
+              <a
+                class="estab-bos-document-link"
+                href="<?= estab_auth_html($document['href']) ?>"
+                target="mainframe"
+                data-estab-bos-document-link
+              >
+                <strong><?= estab_auth_html($document['title']) ?></strong>
+                <span><?= estab_auth_html($document['description']) ?></span>
+              </a>
+            </li>
+          <?php endforeach; ?>
+        </ul>
+      </nav>
+    </main>
+  </div>
+  <script data-estab-bos-workspace-link>
+    (function () {
+      var links = Array.from(
+        document.querySelectorAll('[data-estab-bos-document-link]')
+      );
+      links.forEach(function (link) {
+        link.addEventListener('click', function () {
+          links.forEach(function (candidate) {
+            candidate.removeAttribute('aria-current');
+          });
+          link.setAttribute('aria-current', 'page');
+          if (window.parent !== window) {
+            window.parent.postMessage(
+              'estab:show-content',
+              window.location.origin
+            );
+          }
+        });
+      });
+    })();
+  </script>
 </body>
 </html>

@@ -4,9 +4,69 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/csrf.php';
+require_once __DIR__ . '/incident.php';
 
 const ESTAB_LOGBOOK_TITLE_MAX_LENGTH = 255;
 const ESTAB_LOGBOOK_TEXT_MAX_LENGTH = 10000;
+
+/** Return the global active incident for ETB/TBB display, or null. */
+function estab_logbook_active_incident(array $databaseConfig): ?array
+{
+    $connection = estab_auth_connect($databaseConfig);
+    try {
+        return estab_incident_active($connection);
+    } finally {
+        estab_auth_close($connection);
+    }
+}
+
+/**
+ * Read only logbook rows belonging to the global active incident.
+ *
+ * @return list<array<string, mixed>>
+ */
+function estab_logbook_entries(
+    array $databaseConfig,
+    string $table,
+    string $kind
+): array {
+    if (!in_array($kind, ['etb', 'tbb'], true)) {
+        throw new InvalidArgumentException('Invalid logbook kind');
+    }
+    $connection = estab_auth_connect($databaseConfig);
+    try {
+        $incident = estab_incident_active($connection);
+        if ($incident === null) {
+            return [];
+        }
+        $orderColumn = $kind . '_lfd-nr';
+        $statement = $connection->prepare(
+            'SELECT * FROM ' . estab_auth_table($table)
+            . ' WHERE `einsatz_id` = ?'
+            . ' ORDER BY `' . $orderColumn . '` DESC'
+        );
+        if (!$statement) {
+            throw new RuntimeException('Could not prepare logbook listing');
+        }
+        try {
+            $incidentId = (int) $incident['active_einsatz_id'];
+            $statement->bind_param('i', $incidentId);
+            if (!$statement->execute()) {
+                throw new RuntimeException('Could not execute logbook listing');
+            }
+            $result = $statement->get_result();
+            try {
+                return $result->fetch_all(MYSQLI_ASSOC);
+            } finally {
+                $result->free();
+            }
+        } finally {
+            $statement->close();
+        }
+    } finally {
+        estab_auth_close($connection);
+    }
+}
 
 /**
  * Validate and normalize the initial operation title.
@@ -183,29 +243,54 @@ function estab_logbook_insert_entry(
 
     $connection = estab_auth_connect($databaseConfig);
     try {
-        $prefix = $kind . '_';
-        $sql = 'INSERT INTO ' . estab_auth_table($table)
-            . ' (`' . $prefix . 'time`, `' . $prefix . 'aktion`,'
-            . ' `' . $prefix . 'bemerk`, `' . $prefix . 'funktion`,'
-            . ' `' . $prefix . 'kuerzel`, `' . $prefix . 'benutzer`)'
-            . ' VALUES (NOW(), ?, ?, ?, ?, ?)';
-        $statement = $connection->prepare($sql);
-        if (!$statement) {
-            throw new RuntimeException('Could not prepare logbook entry insert');
-        }
-        try {
-            $event = (string) ($entry['event'] ?? '');
-            $comment = (string) ($entry['comment'] ?? '');
-            $function = (string) ($identity['funktion'] ?? '');
-            $code = (string) ($identity['kuerzel'] ?? '');
-            $user = (string) ($identity['benutzer'] ?? '');
-            $statement->bind_param('sssss', $event, $comment, $function, $code, $user);
-            if (!$statement->execute()) {
-                throw new RuntimeException('Could not execute logbook entry insert');
+        estab_incident_with_active_write(
+            $connection,
+            static function (array $incident) use (
+                $connection,
+                $table,
+                $kind,
+                $entry,
+                $identity
+            ): void {
+                $prefix = $kind . '_';
+                $sql = 'INSERT INTO ' . estab_auth_table($table)
+                    . ' (`einsatz_id`, `' . $prefix . 'time`,'
+                    . ' `' . $prefix . 'aktion`, `' . $prefix . 'bemerk`,'
+                    . ' `' . $prefix . 'funktion`, `' . $prefix . 'kuerzel`,'
+                    . ' `' . $prefix . 'benutzer`)'
+                    . ' VALUES (?, NOW(), ?, ?, ?, ?, ?)';
+                $statement = $connection->prepare($sql);
+                if (!$statement) {
+                    throw new RuntimeException(
+                        'Could not prepare logbook entry insert'
+                    );
+                }
+                try {
+                    $incidentId = (int) $incident['active_einsatz_id'];
+                    $event = (string) ($entry['event'] ?? '');
+                    $comment = (string) ($entry['comment'] ?? '');
+                    $function = (string) ($identity['funktion'] ?? '');
+                    $code = (string) ($identity['kuerzel'] ?? '');
+                    $user = (string) ($identity['benutzer'] ?? '');
+                    $statement->bind_param(
+                        'isssss',
+                        $incidentId,
+                        $event,
+                        $comment,
+                        $function,
+                        $code,
+                        $user
+                    );
+                    if (!$statement->execute()) {
+                        throw new RuntimeException(
+                            'Could not execute logbook entry insert'
+                        );
+                    }
+                } finally {
+                    $statement->close();
+                }
             }
-        } finally {
-            $statement->close();
-        }
+        );
     } finally {
         estab_auth_close($connection);
     }

@@ -73,17 +73,29 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                     if ($action === 'save_matrix_and_standard') {
                         estab_admin_replace_matrix_and_standard(
                             $connection,
+                            (string) $conf_4f_db['datenbank'],
                             $conf_4f_tbl['empfmtx'],
                             $standardMatrixTable,
+                            $conf_4f_tbl['benutzer'],
                             $conf_4f_tbl['protokoll'],
-                            $submitted['data']
+                            $submitted['data'],
+                            is_string($_SERVER['REMOTE_USER'] ?? null)
+                                ? $_SERVER['REMOTE_USER']
+                                : 'unknown',
+                            estab_auth_remote_ip($_SERVER)
                         );
                     } else {
                         estab_admin_replace_matrix(
                             $connection,
+                            (string) $conf_4f_db['datenbank'],
                             $conf_4f_tbl['empfmtx'],
+                            $conf_4f_tbl['benutzer'],
                             $conf_4f_tbl['protokoll'],
-                            $submitted['data']
+                            $submitted['data'],
+                            is_string($_SERVER['REMOTE_USER'] ?? null)
+                                ? $_SERVER['REMOTE_USER']
+                                : 'unknown',
+                            estab_auth_remote_ip($_SERVER)
                         );
                     }
                 } finally {
@@ -94,6 +106,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                     : 'active';
                 header('Location: make_fkt.php?updated=' . $updatedValue, true, 303);
                 exit;
+            } catch (EstabAssignmentBusyException $exception) {
+                http_response_code(409);
+                $error = 'Die Funktionszuordnungen werden gerade von einer '
+                    . 'anderen administrativen Aktion geändert. Bitte '
+                    . 'versuchen Sie es erneut.';
             } catch (Throwable $exception) {
                 error_log('eStab recipient matrix update failed: ' . $exception->getMessage());
                 http_response_code(500);
@@ -132,138 +149,200 @@ $updated = is_string($updatedValue) ? $updatedValue : '';
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>eStab Empfängermatrix</title>
-  <style>
-    body { font: 16px/1.45 system-ui, sans-serif; max-width: 92rem; margin: 2rem auto; padding: 0 1rem; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #999; padding: .45rem; vertical-align: top; }
-    th { background: #eee; }
-    input[type="text"] { width: 7em; }
-    .error { color: #8b0000; font-weight: bold; }
-    .success { color: #075f23; font-weight: bold; }
-    .warning { color: #6f4300; font-weight: bold; }
-    .actions { margin-top: 1rem; }
-    fieldset { border: 0; padding: 0; margin: 0; min-width: 12rem; }
-  </style>
+  <?= estab_session_ui_stylesheet() ?>
 </head>
-<body>
-  <h1>Empfängermatrix bearbeiten</h1>
-  <p>Die Laufzeit liest die aktive Matrix direkt aus MariaDB. Sie können nur
-    diese aktive Matrix speichern oder denselben Stand atomar zugleich als
-    einzelne Standardmatrix sichern. Angemeldete Benutzer und deren aktuelle
-    Funktionszuordnung werden dabei nicht verändert.</p>
-  <p>Funktionsnamen bestehen aus höchstens sechs Buchstaben, Ziffern oder
-    Unterstrichen. <code>Si</code> und <code>A/W</code> sind reserviert.
-    Genau eine belegte Position muss Rotkopie-Empfänger sein.</p>
-  <p class="warning">Achtung: „Standard laden“ verwirft die aktuellen
-    Editorwerte. „Standard ersetzen“ überschreibt die einzige gespeicherte
-    Vorlage; der vorherige Stand bleibt dann nur in einem Datenbankbackup
-    erhalten. Beide Aktionen verlangen deshalb eine ausdrückliche
-    Bestätigung.</p>
+<body class="estab-tool-page">
+  <main
+    class="estab-tool-main estab-tool-main-wide"
+    data-estab-matrix-tool>
+    <header class="estab-tool-hero">
+      <p class="estab-tool-eyebrow">Administration · Konfiguration</p>
+      <h1>Empfängermatrix bearbeiten</h1>
+      <p>Die aktive Matrix steuert Funktionen, Rollen, Autosichtung und
+        Rotkopie. Geänderte Rollen werden auf zugewiesene Konten übertragen;
+        entfernte Funktionen bleiben zur administrativen Neuzuweisung sichtbar.
+        Betroffene Sitzungen werden beim Speichern beendet.</p>
+    </header>
 
-  <?php if ($updated === 'active'): ?>
-    <p class="success">Die aktive Empfängermatrix wurde vollständig gespeichert.</p>
-  <?php elseif ($updated === 'active-and-standard'): ?>
-    <p class="success">Aktive Empfängermatrix und Standardmatrix wurden gemeinsam gespeichert.</p>
-  <?php endif; ?>
-  <?php if ($loadedStandard): ?>
-    <p class="success">Die Standardmatrix wurde in den Editor geladen, aber noch nicht gespeichert.</p>
-  <?php endif; ?>
-  <?php if ($error !== null): ?>
-    <p class="error"><?= estab_admin_html($error) ?></p>
-  <?php endif; ?>
+    <aside
+      class="estab-tool-notice estab-tool-notice-warning"
+      id="matrix-impact"
+      aria-label="Auswirkung der Matrixänderung">
+      <strong>Vor dem Speichern prüfen:</strong>
+      <p>Funktionsnamen bestehen aus höchstens sechs Buchstaben, Ziffern oder
+        Unterstrichen. <code>Si</code> und <code>A/W</code> sind reserviert.
+        Genau eine belegte Position muss Rotkopie-Empfänger sein.</p>
+      <p>„Standard laden“ verwirft die aktuellen Editorwerte.
+        „Standard ersetzen“ überschreibt die einzige gespeicherte Vorlage;
+        der vorherige Stand bleibt dann nur in einem Datenbankbackup erhalten.
+        Beide Aktionen verlangen deshalb eine ausdrückliche Bestätigung.</p>
+      <p>Wenn Sie eine aktive Funktion entfernen oder ihre Rolle ändern,
+        werden alle Sitzungen der betroffenen Konten widerrufen. Konten mit
+        entfernter Funktion können sich erst nach einer Neuzuweisung in der
+        Benutzerverwaltung wieder anmelden.</p>
+    </aside>
 
-  <?php if (count($matrix['cells']) === 20): ?>
-  <form method="post" action="make_fkt.php" data-estab-dirty-guard
-    <?= ($error !== null && is_array($submitted)) || $loadedStandard
-        ? 'data-estab-dirty-initial'
-        : '' ?>>
-    <?= estab_csrf_field() ?>
-    <table>
-      <thead>
-        <tr>
-          <th>Position</th>
-          <th>Funktion</th>
-          <th>Rolle</th>
-          <th>Autosichtung</th>
-          <th>Rotkopie</th>
-        </tr>
-      </thead>
-      <tbody>
-      <?php for ($row = 1; $row <= ESTAB_ADMIN_MATRIX_ROWS; $row++): ?>
-        <?php for ($column = 1; $column <= ESTAB_ADMIN_MATRIX_COLUMNS; $column++): ?>
-          <?php
-            $position = (string) $row . (string) $column;
-            $cell = $matrix['cells'][$position];
-          ?>
-          <tr>
-            <th scope="row"><?= $row ?>.<?= $column ?></th>
-            <td>
-              <label>
-                <span class="visually-hidden">Funktion <?= $row ?>.<?= $column ?></span>
-                <input
-                  type="text"
-                  name="pos_<?= $position ?>"
-                  maxlength="6"
-                  pattern="[A-Za-z0-9_]{0,6}"
-                  value="<?= estab_admin_html($cell['function']) ?>">
-              </label>
-            </td>
-            <td>
-              <fieldset>
-                <legend>Rolle <?= $row ?>.<?= $column ?></legend>
-                <?php foreach (['' => 'leer', 'Stab' => 'Stab', 'FB' => 'Fachberater'] as $value => $label): ?>
-                  <label>
-                    <input
-                      type="radio"
-                      name="rolle_<?= $position ?>"
-                      value="<?= estab_admin_html($value) ?>"
-                      <?= $cell['role'] === $value ? 'checked' : '' ?>>
-                    <?= estab_admin_html($label) ?>
-                  </label>
-                <?php endforeach; ?>
-              </fieldset>
-            </td>
-            <td>
-              <label>
-                <input
-                  type="checkbox"
-                  name="stasi_<?= $position ?>"
-                  value="1"
-                  <?= !empty($cell['auto']) ? 'checked' : '' ?>>
-                automatisch
-              </label>
-            </td>
-            <td>
-              <label>
-                <input
-                  type="radio"
-                  name="lagerot"
-                  value="<?= $position ?>"
-                  <?= !empty($cell['redcopy']) ? 'checked' : '' ?>
-                  required>
-                Rotkopie
-              </label>
-            </td>
-          </tr>
-        <?php endfor; ?>
-      <?php endfor; ?>
-      </tbody>
-    </table>
-    <p class="actions">
-      <button type="submit" name="admin_action" value="save_matrix">
-        Nur aktive Matrix speichern
-      </button>
-      <button type="submit" name="admin_action" value="load_standard"
-        formnovalidate data-estab-confirm="replace-editor-with-standard">
-        Ungespeicherte Eingaben verwerfen und Standard laden
-      </button>
-      <button type="submit" name="admin_action" value="save_matrix_and_standard"
-        data-estab-confirm="replace-standard">
-        Aktive Matrix speichern und bisherigen Standard ersetzen
-      </button>
-      <a href="admin.php">Abbrechen</a>
-    </p>
-  </form>
-  <?php endif; ?>
+    <?php if ($updated === 'active'): ?>
+      <p class="estab-tool-feedback estab-tool-feedback-success" role="status">
+        Die aktive Empfängermatrix wurde vollständig gespeichert.
+      </p>
+    <?php elseif ($updated === 'active-and-standard'): ?>
+      <p class="estab-tool-feedback estab-tool-feedback-success" role="status">
+        Aktive Empfängermatrix und Standardmatrix wurden gemeinsam gespeichert.
+      </p>
+    <?php endif; ?>
+    <?php if ($loadedStandard): ?>
+      <p class="estab-tool-feedback estab-tool-feedback-success" role="status">
+        Die Standardmatrix wurde in den Editor geladen, aber noch nicht gespeichert.
+      </p>
+    <?php endif; ?>
+    <?php if ($error !== null): ?>
+      <p class="estab-tool-feedback estab-tool-feedback-error" role="alert">
+        <?= estab_admin_html($error) ?>
+      </p>
+    <?php endif; ?>
+
+    <?php if (count($matrix['cells']) === 20): ?>
+      <section class="estab-tool-panel" aria-labelledby="matrix-editor-title">
+        <header class="estab-tool-panel-heading">
+          <h2 id="matrix-editor-title">Aktive Belegung</h2>
+          <p>Jede Position kann leer bleiben oder genau einer Funktion und
+            Rolle zugeordnet werden.</p>
+        </header>
+        <form
+          class="estab-tool-form"
+          method="post"
+          action="make_fkt.php"
+          data-estab-dirty-guard
+          aria-describedby="matrix-impact"
+          <?= ($error !== null && is_array($submitted)) || $loadedStandard
+              ? 'data-estab-dirty-initial'
+              : '' ?>>
+          <?= estab_csrf_field() ?>
+          <div
+            class="estab-tool-table-wrap estab-tool-table-responsive"
+            data-estab-matrix-table>
+            <table class="estab-tool-table estab-tool-matrix-table">
+              <caption class="estab-visually-hidden">
+                Empfängermatrix mit zwanzig konfigurierbaren Positionen
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Position</th>
+                  <th scope="col">Funktion</th>
+                  <th scope="col">Rolle</th>
+                  <th scope="col">Autosichtung</th>
+                  <th scope="col">Rotkopie</th>
+                </tr>
+              </thead>
+              <tbody>
+              <?php for ($row = 1; $row <= ESTAB_ADMIN_MATRIX_ROWS; $row++): ?>
+                <?php for ($column = 1; $column <= ESTAB_ADMIN_MATRIX_COLUMNS; $column++): ?>
+                  <?php
+                    $position = (string) $row . (string) $column;
+                    $cell = $matrix['cells'][$position];
+                    $positionLabel = $row . '.' . $column;
+                  ?>
+                  <tr>
+                    <td data-label="Position">
+                      <strong><?= $positionLabel ?></strong>
+                    </td>
+                    <td data-label="Funktion">
+                      <div class="estab-tool-field">
+                        <label
+                          class="estab-visually-hidden"
+                          for="matrix-function-<?= $position ?>">
+                          Funktion Position <?= $positionLabel ?>
+                        </label>
+                        <input
+                          id="matrix-function-<?= $position ?>"
+                          type="text"
+                          name="pos_<?= $position ?>"
+                          maxlength="6"
+                          pattern="[A-Za-z0-9_]{0,6}"
+                          autocomplete="off"
+                          value="<?= estab_admin_html($cell['function']) ?>">
+                      </div>
+                    </td>
+                    <td data-label="Rolle">
+                      <fieldset class="estab-tool-matrix-options">
+                        <legend class="estab-visually-hidden">
+                          Rolle Position <?= $positionLabel ?>
+                        </legend>
+                        <?php foreach (['' => 'leer', 'Stab' => 'Stab', 'FB' => 'Fachberater'] as $value => $label): ?>
+                          <label class="estab-tool-check">
+                            <input
+                              type="radio"
+                              name="rolle_<?= $position ?>"
+                              value="<?= estab_admin_html($value) ?>"
+                              <?= $cell['role'] === $value ? 'checked' : '' ?>>
+                            <?= estab_admin_html($label) ?>
+                          </label>
+                        <?php endforeach; ?>
+                      </fieldset>
+                    </td>
+                    <td data-label="Autosichtung">
+                      <label class="estab-tool-check">
+                        <input
+                          type="checkbox"
+                          name="stasi_<?= $position ?>"
+                          value="1"
+                          <?= !empty($cell['auto']) ? 'checked' : '' ?>>
+                        automatisch
+                      </label>
+                    </td>
+                    <td data-label="Rotkopie">
+                      <label class="estab-tool-check">
+                        <input
+                          type="radio"
+                          name="lagerot"
+                          value="<?= $position ?>"
+                          <?= !empty($cell['redcopy']) ? 'checked' : '' ?>
+                          required>
+                        Rotkopie
+                      </label>
+                    </td>
+                  </tr>
+                <?php endfor; ?>
+              <?php endfor; ?>
+              </tbody>
+            </table>
+          </div>
+          <div class="estab-tool-actions">
+            <button
+              class="estab-button estab-button-primary"
+              type="submit"
+              name="admin_action"
+              value="save_matrix">
+              Nur aktive Matrix speichern
+            </button>
+            <button
+              class="estab-button"
+              type="submit"
+              name="admin_action"
+              value="load_standard"
+              formnovalidate
+              data-estab-confirm="replace-editor-with-standard">
+              Ungespeicherte Eingaben verwerfen und Standard laden
+            </button>
+            <button
+              class="estab-button estab-button-danger-outline"
+              type="submit"
+              name="admin_action"
+              value="save_matrix_and_standard"
+              data-estab-confirm="replace-standard">
+              Aktive Matrix speichern und bisherigen Standard ersetzen
+            </button>
+            <a class="estab-button" href="admin.php">Abbrechen</a>
+          </div>
+        </form>
+      </section>
+    <?php endif; ?>
+
+    <footer class="estab-tool-footer">
+      <a href="admin.php">Zurück zur Administration</a>
+      <span>Änderungen werden vollständig und atomar gespeichert.</span>
+    </footer>
+  </main>
 </body>
 </html>

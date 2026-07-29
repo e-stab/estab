@@ -47,14 +47,32 @@ function estab_auth_function_roles(array $confEmpf): array
  */
 function estab_auth_validate_login(array $input, array $confEmpf): array
 {
-    $name = isset($input['benutzer']) && is_string($input['benutzer'])
-        ? trim($input['benutzer'])
+    return estab_auth_validate_login_with_roles(
+        $input,
+        estab_auth_function_roles($confEmpf)
+    );
+}
+
+/**
+ * Validate login input against a function map read under the assignment-policy
+ * lock. Keeping this decision pure makes both the legacy configuration adapter
+ * and the database-authoritative login path use exactly the same boundary.
+ *
+ * @param array<string,string> $roles
+ */
+function estab_auth_validate_login_with_roles(array $input, array $roles): array
+{
+    $rawName = $input['benutzer'] ?? null;
+    $rawCode = $input['kuerzel'] ?? null;
+    $rawFunction = $input['funktion'] ?? null;
+    $name = is_string($rawName)
+        ? trim($rawName)
         : '';
-    $code = isset($input['kuerzel']) && is_string($input['kuerzel'])
-        ? strtolower(trim($input['kuerzel']))
+    $code = is_string($rawCode)
+        ? strtolower(trim($rawCode))
         : '';
-    $function = isset($input['funktion']) && is_string($input['funktion'])
-        ? trim($input['funktion'])
+    $function = is_string($rawFunction)
+        ? trim($rawFunction)
         : '';
     $password = isset($input['kennwort1']) && is_string($input['kennwort1'])
         ? $input['kennwort1']
@@ -63,18 +81,30 @@ function estab_auth_validate_login(array $input, array $confEmpf): array
     $errors = [];
     $nameLength = estab_auth_text_length($name);
     if (
-        $nameLength < 1
+        !is_string($rawName)
+        || preg_match('//u', $rawName) !== 1
+        || preg_match('/[\p{C}<>]/u', $rawName) === 1
+        || $nameLength < 1
         || $nameLength > 50
-        || preg_match('/[\p{C}<>]/u', $name) === 1
     ) {
         $errors[] = 'benutzer';
     }
-    if (preg_match('/\A[a-z0-9_]{1,6}\z/D', $code) !== 1) {
+    if (
+        !is_string($rawCode)
+        || preg_match('/[\x00-\x1F\x7F]/D', $rawCode) === 1
+        || preg_match('/\A[a-z0-9_]{1,6}\z/D', $code) !== 1
+    ) {
         $errors[] = 'kuerzel';
     }
 
-    $roles = estab_auth_function_roles($confEmpf);
-    if (!array_key_exists($function, $roles)) {
+    if (
+        !is_string($rawFunction)
+        || preg_match('//u', $rawFunction) !== 1
+        || preg_match('/[\p{C}]/u', $rawFunction) === 1
+        || !array_key_exists($function, $roles)
+        || !is_string($roles[$function])
+        || !in_array($roles[$function], ['Stab', 'FB', 'Fernmelder'], true)
+    ) {
         $errors[] = 'funktion';
     } elseif ($function !== 'A/W' && preg_match('/\A[A-Za-z0-9_]+\z/D', $function) !== 1) {
         // Non-A/W functions become part of dynamic SQL identifiers later.
@@ -129,10 +159,15 @@ function estab_auth_verify_password(string $provided, string $stored): array
     ];
 }
 
-/** Self-registration remains compatible by default and can be disabled. */
+/**
+ * Public account creation is an explicit compatibility exception.
+ *
+ * Fresh installations use the Basic-Auth protected user administration so an
+ * anonymous request can never choose its own privileged function.
+ */
 function estab_auth_self_registration_allowed(): bool
 {
-    return estab_env_bool('ESTAB_ALLOW_SELF_REGISTRATION', true);
+    return estab_env_bool('ESTAB_ALLOW_SELF_REGISTRATION', false);
 }
 
 /**
@@ -175,15 +210,24 @@ function estab_auth_login_flow(array $input): ?string
 }
 
 /**
- * Active accounts retain their current function until they are logged off.
+ * A stored function is an administrative assignment, not online state.
  *
- * The historical "Funktion Ummelden" operation remains available for inactive
- * accounts, but request data cannot switch the role of an active session.
+ * Logout changes only `aktiv`; it must never let request data select another
+ * function and thereby another role. Reassignment belongs to the independently
+ * authenticated administration boundary.
  */
 function estab_auth_assignment_allowed(array $storedUser, string $submittedFunction): bool
 {
-    return (int) ($storedUser['aktiv'] ?? 0) === 0
-        || hash_equals((string) ($storedUser['funktion'] ?? ''), $submittedFunction);
+    return hash_equals(
+        (string) ($storedUser['funktion'] ?? ''),
+        $submittedFunction
+    );
+}
+
+/** A blocked account can neither create nor retain an application session. */
+function estab_auth_account_is_blocked(array $storedUser): bool
+{
+    return (int) ($storedUser['estab_gesperrt'] ?? 0) === 1;
 }
 
 /** Accept only a syntactically valid direct peer address. */
@@ -281,12 +325,13 @@ function estab_auth_html(mixed $value): string
 }
 
 /**
- * Return the authenticated application identity stored by the login flow.
+ * Return the syntactically valid application identity stored by the login flow.
  *
- * mainindex.php initialises these keys with empty strings for legacy code, so
- * checking only isset() is not an authentication decision.
+ * This pure shape check is also used for logout snapshots and tests. Protected
+ * web requests must go through estab_auth_session_identity(), which additionally
+ * binds the PHP session to the authoritative account row.
  */
-function estab_auth_session_identity(array $session): ?array
+function estab_auth_session_identity_shape(array $session): ?array
 {
     $name = isset($session['vStab_benutzer']) && is_string($session['vStab_benutzer'])
         ? trim($session['vStab_benutzer'])
@@ -320,6 +365,39 @@ function estab_auth_session_identity(array $session): ?array
         'funktion' => $function,
         'rolle' => $role,
     ];
+}
+
+/**
+ * Return the authenticated application identity.
+ *
+ * Calls concerning the active web session are checked against the current SID
+ * in nv_benutzer. Other arrays remain a pure shape check so validation helpers
+ * can safely inspect snapshots and constructed identities.
+ */
+function estab_auth_session_identity(array $session): ?array
+{
+    $identity = estab_auth_session_identity_shape($session);
+    if ($identity === null) {
+        return null;
+    }
+
+    if (
+        PHP_SAPI !== 'cli'
+        && session_status() === PHP_SESSION_ACTIVE
+        && isset($_SESSION)
+        && is_array($_SESSION)
+        && $session === $_SESSION
+    ) {
+        return estab_auth_current_session_identity(
+            $_SESSION,
+            null,
+            null,
+            null,
+            true
+        );
+    }
+
+    return $identity;
 }
 
 function estab_auth_session_is_authenticated(array $session): bool
@@ -379,7 +457,8 @@ function estab_auth_close(mysqli $connection): void
 /** Fetch exactly one account by its primary key. */
 function estab_auth_fetch_user(mysqli $connection, string $table, string $code): ?array
 {
-    $sql = 'SELECT `benutzer`, `kuerzel`, `funktion`, `rolle`, `sid`, `ip`, `fwdip`, `aktiv`, `password`'
+    $sql = 'SELECT `benutzer`, `kuerzel`, `funktion`, `rolle`, `sid`, `ip`, `fwdip`,'
+        . ' `aktiv`, `estab_gesperrt`, `password`'
         . ' FROM ' . estab_auth_table($table) . ' WHERE `kuerzel` = ? LIMIT 1';
     $statement = $connection->prepare($sql);
     if (!$statement) {
@@ -399,58 +478,300 @@ function estab_auth_fetch_user(mysqli $connection, string $table, string $code):
     }
 }
 
-/** Update session/audit state and, for inactive users, their selected role. */
+/** Fetch the minimal authoritative account state needed for one request. */
+function estab_auth_fetch_session_user(
+    mysqli $connection,
+    string $table,
+    string $code
+): ?array {
+    $sql = 'SELECT `benutzer`, `kuerzel`, `funktion`, `rolle`, `sid`, `aktiv`,'
+        . ' `estab_gesperrt`'
+        . ' FROM ' . estab_auth_table($table) . ' WHERE `kuerzel` = ? LIMIT 1';
+    $statement = $connection->prepare($sql);
+    if (!$statement) {
+        throw new RuntimeException('Could not prepare session account lookup');
+    }
+    try {
+        $statement->bind_param('s', $code);
+        if (!$statement->execute()) {
+            throw new RuntimeException('Could not execute session account lookup');
+        }
+        $result = $statement->get_result();
+        $row = $result->fetch_assoc();
+        $result->free();
+        return is_array($row) ? $row : null;
+    } finally {
+        $statement->close();
+    }
+}
+
+/** Session IDs are opaque credentials, but still need strict storage bounds. */
+function estab_auth_session_id_is_valid(string $sessionId): bool
+{
+    return $sessionId !== ''
+        && strlen($sessionId) <= 50
+        && preg_match('/\A[A-Za-z0-9,-]+\z/D', $sessionId) === 1;
+}
+
+/**
+ * Encode a credential-free login lifecycle record.
+ *
+ * Session IDs are bearer credentials while their account session is active.
+ * The audit therefore stores only the same one-way SHA-256 reference used by
+ * logout auditing. The explicit field selection also prevents the password in
+ * the validated login array from reaching the ledger.
+ */
+function estab_auth_login_audit_details(
+    string $action,
+    array $login,
+    string $sessionId,
+    string $remoteAddress
+): string {
+    if (
+        !in_array(
+            $action,
+            ['existing_login', 'session_refresh', 'self_registration'],
+            true
+        )
+        || !estab_auth_session_id_is_valid($sessionId)
+    ) {
+        throw new InvalidArgumentException('Invalid login audit boundary');
+    }
+    $identity = estab_auth_session_identity_shape([
+        'vStab_benutzer' => $login['benutzer'] ?? null,
+        'vStab_kuerzel' => $login['kuerzel'] ?? null,
+        'vStab_funktion' => $login['funktion'] ?? null,
+        'vStab_rolle' => $login['rolle'] ?? null,
+    ]);
+    if ($identity === null) {
+        throw new InvalidArgumentException('Invalid login audit identity');
+    }
+
+    $payload = json_encode(
+        [
+            'version' => 1,
+            'action' => $action,
+            'name' => $identity['benutzer'],
+            'target' => $identity['kuerzel'],
+            'function' => $identity['funktion'],
+            'role' => $identity['rolle'],
+            'session_reference' => 'sha256:' . hash('sha256', $sessionId),
+            'remote_address' => filter_var(
+                $remoteAddress,
+                FILTER_VALIDATE_IP
+            ) === false ? '' : $remoteAddress,
+        ],
+        JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+    );
+    if (!is_string($payload)) {
+        throw new RuntimeException('Could not encode login audit');
+    }
+    return $payload;
+}
+
+/** Compare the complete application identity with one authoritative DB row. */
+function estab_auth_account_matches_session(
+    array $storedUser,
+    array $identity,
+    string $sessionId
+): bool {
+    $storedSessionId = $storedUser['sid'] ?? null;
+    if (
+        !is_string($storedSessionId)
+        || !estab_auth_session_id_is_valid($storedSessionId)
+        || !estab_auth_session_id_is_valid($sessionId)
+        || (int) ($storedUser['aktiv'] ?? 0) !== 1
+        || estab_auth_account_is_blocked($storedUser)
+    ) {
+        return false;
+    }
+
+    return hash_equals($storedSessionId, $sessionId)
+        && hash_equals(
+            strtolower(trim((string) ($storedUser['kuerzel'] ?? ''))),
+            (string) ($identity['kuerzel'] ?? '')
+        )
+        && hash_equals(
+            (string) ($storedUser['benutzer'] ?? ''),
+            (string) ($identity['benutzer'] ?? '')
+        )
+        && hash_equals(
+            (string) ($storedUser['funktion'] ?? ''),
+            (string) ($identity['funktion'] ?? '')
+        )
+        && hash_equals(
+            (string) ($storedUser['rolle'] ?? ''),
+            (string) ($identity['rolle'] ?? '')
+        );
+}
+
+/** Resolve the same session store used by 4fcfg/dbcfg.inc.php. */
+function estab_auth_runtime_session_store(): array
+{
+    return [
+        'database' => [
+            'server' => (string) estab_env('ESTAB_DB_HOST', 'db'),
+            'user' => (string) estab_env('ESTAB_DB_USER', 'estab'),
+            'password' => (string) estab_env('ESTAB_DB_PASSWORD', ''),
+            'datenbank' => estab_env_identifier('ESTAB_DB_NAME', 'estab'),
+        ],
+        'table' => 'nv_benutzer',
+    ];
+}
+
+/** Remove all local workflow state after revocation or a validation failure. */
+function estab_auth_invalidate_local_session(array &$session): void
+{
+    $session = ['menue' => 'LOGIN'];
+}
+
+/**
+ * Bind one PHP session to the current active account row.
+ *
+ * A failed connection, missing row, changed identity, inactive account or
+ * superseded SID all invalidate the complete local workflow state. Successful
+ * checks may be cached only for the duration of the current web request.
+ */
+function estab_auth_current_session_identity(
+    array &$session,
+    ?array $databaseConfig = null,
+    ?string $userTable = null,
+    ?string $sessionId = null,
+    bool $useRequestCache = false
+): ?array {
+    static $requestCache = [];
+
+    $identity = estab_auth_session_identity_shape($session);
+    if ($identity === null) {
+        return null;
+    }
+
+    if ($sessionId === null) {
+        if (
+            session_status() !== PHP_SESSION_ACTIVE
+            || !isset($_SESSION)
+            || !is_array($_SESSION)
+            || $session !== $_SESSION
+        ) {
+            estab_auth_invalidate_local_session($session);
+            return null;
+        }
+        $sessionId = session_id();
+    }
+    if (!estab_auth_session_id_is_valid($sessionId)) {
+        estab_auth_invalidate_local_session($session);
+        return null;
+    }
+
+    try {
+        if ($databaseConfig === null || $userTable === null) {
+            $store = estab_auth_runtime_session_store();
+            $databaseConfig ??= $store['database'];
+            $userTable ??= $store['table'];
+        }
+        if (!is_array($databaseConfig) || !is_string($userTable)) {
+            throw new RuntimeException('Authentication session store is invalid');
+        }
+        estab_auth_table($userTable);
+
+        $cacheKey = hash('sha256', json_encode([
+            'server' => (string) ($databaseConfig['server'] ?? ''),
+            'user' => (string) ($databaseConfig['user'] ?? ''),
+            'password' => hash(
+                'sha256',
+                (string) ($databaseConfig['password'] ?? '')
+            ),
+            'database' => (string) ($databaseConfig['datenbank'] ?? ''),
+            'table' => $userTable,
+            'sid' => $sessionId,
+            'identity' => $identity,
+        ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+
+        if ($useRequestCache && array_key_exists($cacheKey, $requestCache)) {
+            if ($requestCache[$cacheKey] === true) {
+                $session['ROLLE'] = $identity['rolle'];
+                return $identity;
+            }
+            estab_auth_invalidate_local_session($session);
+            return null;
+        }
+
+        $connection = null;
+        try {
+            $connection = estab_auth_connect($databaseConfig);
+            $storedUser = estab_auth_fetch_session_user(
+                $connection,
+                $userTable,
+                $identity['kuerzel']
+            );
+        } finally {
+            if ($connection instanceof mysqli) {
+                estab_auth_close($connection);
+            }
+        }
+
+        $valid = is_array($storedUser)
+            && estab_auth_account_matches_session(
+                $storedUser,
+                $identity,
+                $sessionId
+            );
+        if ($useRequestCache) {
+            $requestCache[$cacheKey] = $valid;
+        }
+        if (!$valid) {
+            estab_auth_invalidate_local_session($session);
+            return null;
+        }
+
+        // Legacy routes still consult this duplicate role field.
+        $session['ROLLE'] = $identity['rolle'];
+        return $identity;
+    } catch (Throwable $exception) {
+        error_log(
+            'eStab session validation failed: ' . $exception->getMessage()
+        );
+        estab_auth_invalidate_local_session($session);
+        return null;
+    }
+}
+
+/**
+ * Activate an existing account without changing its assigned function.
+ *
+ * The role may be refreshed from the server-controlled function map. Binding
+ * the stored function in the WHERE clause makes the assignment invariant hold
+ * even if a caller reaches this function without the normal advisory lock.
+ */
 function estab_auth_update_user(
     mysqli $connection,
     string $table,
-    array $user,
-    bool $changeAssignment
+    array $user
 ): void {
-    if ($changeAssignment) {
-        $sql = 'UPDATE ' . estab_auth_table($table)
-            . ' SET `funktion` = ?, `rolle` = ?, `sid` = ?, `ip` = ?, `fwdip` = ?, `aktiv` = 1, `password` = ?'
-            . ' WHERE `kuerzel` = ?';
-        $statement = $connection->prepare($sql);
-        if (!$statement) {
-            throw new RuntimeException('Could not prepare account update');
-        }
-        try {
-            $statement->bind_param(
-                'sssssss',
-                $user['funktion'],
-                $user['rolle'],
-                $user['sid'],
-                $user['ip'],
-                $user['fwdip'],
-                $user['password'],
-                $user['kuerzel']
-            );
-            if (!$statement->execute()) {
-                throw new RuntimeException('Could not update account');
-            }
-        } finally {
-            $statement->close();
-        }
-        return;
-    }
-
     $sql = 'UPDATE ' . estab_auth_table($table)
-        . ' SET `sid` = ?, `ip` = ?, `fwdip` = ?, `aktiv` = 1, `password` = ? WHERE `kuerzel` = ?';
+        . ' SET `rolle` = ?, `sid` = ?, `ip` = ?, `fwdip` = ?,'
+        . ' `aktiv` = 1, `password` = ?'
+        . ' WHERE `kuerzel` = ? AND `funktion` = ?'
+        . ' AND `estab_gesperrt` = 0';
     $statement = $connection->prepare($sql);
     if (!$statement) {
         throw new RuntimeException('Could not prepare account update');
     }
     try {
         $statement->bind_param(
-            'sssss',
+            'sssssss',
+            $user['rolle'],
             $user['sid'],
             $user['ip'],
             $user['fwdip'],
             $user['password'],
-            $user['kuerzel']
+            $user['kuerzel'],
+            $user['funktion']
         );
-        if (!$statement->execute()) {
-            throw new RuntimeException('Could not update account');
+        if (!$statement->execute() || $statement->affected_rows !== 1) {
+            throw new RuntimeException(
+                'Could not activate account with its assigned function'
+            );
         }
     } finally {
         $statement->close();

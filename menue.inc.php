@@ -50,7 +50,7 @@ include ("./4fcfg/config.inc.php");
 	$menue[1]["visible"] = true ;  
 
 	$menue[3]["text"] = "Vordrucke";
-	$menue[3]["info"] = "Gesch&uuml;tzte Liste der im laufenden Einsatz erzeugten PDF- und Bildvordrucke. Eine Anmeldung am Nachrichtenvordruck ist erforderlich.";
+	$menue[3]["info"] = "Gesch&uuml;tzte Liste der im laufenden Einsatz erzeugten PDF-Vordrucke. Eine Anmeldung am Nachrichtenvordruck ist erforderlich.";
    $menue[3]["pic"]  = "./4fach/design/mr/folder_global.gif";
    $menue[3]["link"] = "./4fach/vordrucke.php";
    $menue[3]["navigation_key"] = "forms";
@@ -89,7 +89,7 @@ include ("./4fcfg/config.inc.php");
    $menue[4]["access"] = "application";
    $menue[4]["visible"] = true ;
 
-   $menue[5]["text"] = "Technisches Betriebsbuch<BR>(TBB)";
+   $menue[5]["text"] = "Technisches Betriebsbuch<BR>(TTB)";
 	$menue[5]["info"] = "Eintragungen sind für Fernmelder A/W möglich. Andere Funktionen können lesen.";
    $menue[5]["pic"]  = $conf_menue ["symbole"]."tbb_aktiv.png";
    $menue[5]["link"] = "./fmtbb/tbb.php";

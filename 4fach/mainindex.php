@@ -131,6 +131,76 @@ include ("4fachform.php");              // Formular Behandlung 4fach Vordruck
 include ("liste.php");                  // erzeuge Ausgabelisten
 include ("data_hndl.php");              // Schnittstelle zur Datenbank
 
+/**
+ * Reject authenticated operational POSTs before opening or changing domain
+ * objects when the global incident input lock is closed.
+ */
+function estab_workflow_require_active_incident_for_post (
+  ?array $identity,
+  array $server,
+  array $request,
+  array $databaseConfig
+): void {
+  if (
+    $identity === null
+    || strtoupper ((string) ($server ["REQUEST_METHOD"] ?? "GET")) !== "POST"
+    || isset ($request ["m2_abmelden_x"])
+  ) {
+    return;
+  }
+
+  $submittedTask = (string) ($request ["task"] ?? "") !== ""
+    && (
+      isset ($request ["absenden_x"])
+      || isset ($request ["antwort_x"])
+      || isset ($request ["weiterleiten_x"])
+      || isset ($request ["abbrechen_x"])
+    );
+  $operational = $submittedTask
+    || isset ($request ["action"])
+    || isset ($request ["reset_record"])
+    || isset ($request ["stab_anhang_x"])
+    || isset ($request ["fm_anhang_x"])
+    || (string) ($request ["fm"] ?? "") === "meldung";
+  if (!$operational) {
+    return;
+  }
+
+  $connection = null;
+  try {
+    $connection = estab_message_connect ($databaseConfig);
+    $incident = estab_incident_active ($connection);
+  } catch (Throwable $exception) {
+    error_log ("eStab incident input gate unavailable: ".$exception->getMessage ());
+    http_response_code (503);
+    header ("Content-Type: text/plain; charset=UTF-8");
+    header ("Cache-Control: no-store");
+    echo "Der Einsatzstatus kann derzeit nicht geprüft werden.";
+    exit;
+  } finally {
+    if ($connection instanceof mysqli) {
+      estab_auth_close ($connection);
+    }
+  }
+  if ($incident !== null) {
+    return;
+  }
+
+  http_response_code (409);
+  header ("Content-Type: text/plain; charset=UTF-8");
+  header ("Cache-Control: no-store");
+  echo "Kein Einsatz ist aktiv. Eingaben sind gesperrt. Aktivieren Sie zuerst ".
+       "einen Einsatz in der Administration.";
+  exit;
+}
+
+estab_workflow_require_active_incident_for_post (
+  $workflowIdentity,
+  $_SERVER,
+  $returnValue,
+  $conf_4f_db
+);
+
 // Role checks alone are insufficient for record identifiers supplied by a
 // browser. Bind every data-bearing route to the addressed message before any
 // read, state transition, lock change or form save can run.
@@ -1252,13 +1322,13 @@ Nachricht als Sichtung anzeigen
       }
       echo "</div>\n";
       if (!$registrationAllowed) {
-        echo "<p class=\"estab-auth-note\">Neue Konten können hier nicht erstellt werden. Wenden Sie sich an die zuständige Stelle.</p>\n";
+        echo "<p class=\"estab-auth-note\">Neue Konten können hier nicht erstellt werden. Die zuständige Stelle legt sie unter Administration → Benutzerverwaltung an.</p>\n";
       }
       echo "<p class=\"estab-auth-note\">Ein Funktionskonto gewährt keinen Zugang zur separaten Administration.</p>\n";
     } elseif ($loginFlow === "new" && !$registrationAllowed) {
       echo "<h2>Neues Konto anlegen</h2>\n";
       if ($loginError === "") {
-        echo "<p class=\"estab-auth-error\" role=\"alert\" tabindex=\"-1\" autofocus>Neue Konten können hier nicht erstellt werden. Wenden Sie sich an die zuständige Stelle.</p>\n";
+        echo "<p class=\"estab-auth-error\" role=\"alert\" tabindex=\"-1\" autofocus>Neue Konten können hier nicht erstellt werden. Die zuständige Stelle legt sie unter Administration → Benutzerverwaltung an.</p>\n";
       }
       echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"mainframe\">\n";
       echo estab_csrf_field ()."\n";

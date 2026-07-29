@@ -11,6 +11,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/message_repository.php';
+require_once __DIR__ . '/assignment.php';
 
 const ESTAB_ADMIN_MATRIX_ROWS = 5;
 const ESTAB_ADMIN_MATRIX_COLUMNS = 4;
@@ -202,17 +203,27 @@ function estab_admin_insert_audit(
     mysqli $connection,
     string $protocolTable,
     string $event,
-    string $details
+    string $details,
+    ?int $incidentId = null
 ): void {
-    $statement = $connection->prepare(
-        'INSERT INTO ' . estab_auth_table($protocolTable)
-        . ' (`p_was`, `p_ereignis`) VALUES (?, ?)'
-    );
+    if ($incidentId === null) {
+        $sql = 'INSERT INTO ' . estab_auth_table($protocolTable)
+            . ' (`p_was`, `p_ereignis`) VALUES (?, ?)';
+    } else {
+        $incidentId = estab_incident_positive_id($incidentId);
+        $sql = 'INSERT INTO ' . estab_auth_table($protocolTable)
+            . ' (`einsatz_id`, `p_was`, `p_ereignis`) VALUES (?, ?, ?)';
+    }
+    $statement = $connection->prepare($sql);
     if (!$statement) {
         throw new RuntimeException('Could not prepare administrative audit');
     }
     try {
-        $statement->bind_param('ss', $event, $details);
+        if ($incidentId === null) {
+            $statement->bind_param('ss', $event, $details);
+        } else {
+            $statement->bind_param('iss', $incidentId, $event, $details);
+        }
         if (!$statement->execute()) {
             throw new RuntimeException('Could not write administrative audit');
         }
@@ -224,8 +235,8 @@ function estab_admin_insert_audit(
 /**
  * Replace one matrix inside the caller's transaction with prepared writes.
  *
- * DELETE is transactional for the InnoDB tables. No account table is queried
- * or updated: active user assignments remain explicit operator decisions.
+ * DELETE is transactional for the InnoDB tables. Account-policy reconciliation
+ * is deliberately performed by the outer active-matrix transaction.
  */
 function estab_admin_write_matrix(
     mysqli $connection,
@@ -294,57 +305,136 @@ function estab_admin_write_matrix(
 /** Atomically replace only the matrix currently used by the runtime. */
 function estab_admin_replace_matrix(
     mysqli $connection,
+    string $database,
     string $matrixTable,
+    string $userTable,
     string $protocolTable,
-    array $matrix
+    array $matrix,
+    string $actor = 'unknown',
+    string $remoteAddress = ''
 ): void {
-    if (!$connection->begin_transaction()) {
-        throw new RuntimeException('Could not start recipient matrix transaction');
-    }
+    $policyLockName = estab_assignment_acquire_policy_lock(
+        $connection,
+        $database,
+        $matrixTable
+    );
+    $transactionActive = false;
     try {
+        if (!$connection->begin_transaction()) {
+            throw new RuntimeException('Could not start recipient matrix transaction');
+        }
+        $transactionActive = true;
+        $oldRoles = estab_assignment_function_roles($connection, $matrixTable);
+        $newRoles = estab_assignment_roles_from_matrix($matrix);
         estab_admin_write_matrix($connection, $matrixTable, $matrix);
+        $summary = estab_assignment_reconcile_accounts(
+            $connection,
+            $userTable,
+            $protocolTable,
+            $oldRoles,
+            $newRoles,
+            $actor,
+            $remoteAddress
+        );
         estab_admin_insert_audit(
             $connection,
             $protocolTable,
             'Empfängermatrix',
-            'Empfängermatrix atomar mit 20 Positionen aktualisiert.'
+            estab_assignment_matrix_audit('replace_active', $summary)
         );
         if (!$connection->commit()) {
             throw new RuntimeException('Could not commit recipient matrix replacement');
         }
+        $transactionActive = false;
     } catch (Throwable $exception) {
-        $connection->rollback();
+        if ($transactionActive) {
+            $connection->rollback();
+            $transactionActive = false;
+        }
         throw $exception;
+    } finally {
+        if ($transactionActive) {
+            $connection->rollback();
+        }
+        try {
+            estab_assignment_release_policy_lock($connection, $policyLockName);
+        } catch (Throwable $exception) {
+            error_log(
+                'eStab matrix policy-lock cleanup failed: '
+                . $exception->getMessage()
+            );
+        }
     }
 }
 
 /** Atomically make the submitted matrix both active and the single preset. */
 function estab_admin_replace_matrix_and_standard(
     mysqli $connection,
+    string $database,
     string $matrixTable,
     string $standardMatrixTable,
+    string $userTable,
     string $protocolTable,
-    array $matrix
+    array $matrix,
+    string $actor = 'unknown',
+    string $remoteAddress = ''
 ): void {
-    if (!$connection->begin_transaction()) {
-        throw new RuntimeException('Could not start recipient matrix transaction');
-    }
+    $policyLockName = estab_assignment_acquire_policy_lock(
+        $connection,
+        $database,
+        $matrixTable
+    );
+    $transactionActive = false;
     try {
+        if (!$connection->begin_transaction()) {
+            throw new RuntimeException('Could not start recipient matrix transaction');
+        }
+        $transactionActive = true;
+        $oldRoles = estab_assignment_function_roles($connection, $matrixTable);
+        $newRoles = estab_assignment_roles_from_matrix($matrix);
         // Keep a stable lock order across both administrative save actions.
         estab_admin_write_matrix($connection, $matrixTable, $matrix);
         estab_admin_write_matrix($connection, $standardMatrixTable, $matrix);
+        $summary = estab_assignment_reconcile_accounts(
+            $connection,
+            $userTable,
+            $protocolTable,
+            $oldRoles,
+            $newRoles,
+            $actor,
+            $remoteAddress
+        );
         estab_admin_insert_audit(
             $connection,
             $protocolTable,
             'Empfängermatrix',
-            'Aktive Empfängermatrix und Standardmatrix atomar mit je 20 Positionen aktualisiert.'
+            estab_assignment_matrix_audit(
+                'replace_active_and_standard',
+                $summary
+            )
         );
         if (!$connection->commit()) {
             throw new RuntimeException('Could not commit recipient matrix replacement');
         }
+        $transactionActive = false;
     } catch (Throwable $exception) {
-        $connection->rollback();
+        if ($transactionActive) {
+            $connection->rollback();
+            $transactionActive = false;
+        }
         throw $exception;
+    } finally {
+        if ($transactionActive) {
+            $connection->rollback();
+        }
+        try {
+            estab_assignment_release_policy_lock($connection, $policyLockName);
+        } catch (Throwable $exception) {
+            error_log(
+                'eStab matrix policy-lock cleanup failed: '
+                . $exception->getMessage()
+            );
+        }
     }
 }
 
@@ -398,21 +488,30 @@ function estab_admin_fetch_counter_maxima(
     mysqli $connection,
     string $messageTable,
     string $mode,
-    bool $forUpdate = false
+    bool $forUpdate = false,
+    ?int $incidentId = null
 ): array {
     $mode = estab_admin_validate_counter_mode($mode);
+    if ($incidentId === null) {
+        $incident = estab_incident_require_active($connection, $forUpdate);
+        $incidentId = (int) $incident['active_einsatz_id'];
+    } else {
+        $incidentId = estab_incident_positive_id($incidentId);
+    }
     $suffix = $forUpdate ? ' FOR UPDATE' : '';
     $quotedTable = estab_auth_table($messageTable);
 
     if ($mode === 'gemeinsam') {
         $statement = $connection->prepare(
             'SELECT `04_nummer` FROM ' . $quotedTable
+            . ' WHERE `einsatz_id` = ?'
             . ' ORDER BY `04_nummer` DESC, `00_lfd` DESC LIMIT 1' . $suffix
         );
         if (!$statement) {
             throw new RuntimeException('Could not prepare common counter lookup');
         }
         try {
+            $statement->bind_param('i', $incidentId);
             if (!$statement->execute()) {
                 throw new RuntimeException('Could not read common counter');
             }
@@ -428,7 +527,7 @@ function estab_admin_fetch_counter_maxima(
     $maxima = [];
     $statement = $connection->prepare(
         'SELECT `04_nummer` FROM ' . $quotedTable
-        . ' WHERE `04_richtung` = ?'
+        . ' WHERE `einsatz_id` = ? AND `04_richtung` = ?'
         . ' ORDER BY `04_nummer` DESC, `00_lfd` DESC LIMIT 1' . $suffix
     );
     if (!$statement) {
@@ -436,7 +535,7 @@ function estab_admin_fetch_counter_maxima(
     }
     try {
         foreach (['E' => 'e_nummer', 'A' => 'a_nummer'] as $direction => $field) {
-            $statement->bind_param('s', $direction);
+            $statement->bind_param('is', $incidentId, $direction);
             if (!$statement->execute()) {
                 throw new RuntimeException('Could not read split counter');
             }
@@ -524,11 +623,14 @@ function estab_admin_raise_message_counter(
             throw new RuntimeException('Could not start message-counter transaction');
         }
         try {
+            $incident = estab_incident_require_active($connection, true);
+            $incidentId = (int) $incident['active_einsatz_id'];
             $current = estab_admin_fetch_counter_maxima(
                 $connection,
                 $messageTable,
                 $mode,
-                true
+                true,
+                $incidentId
             );
             foreach ($current as $field => $maximum) {
                 $target = $values[$field] ?? null;
@@ -547,14 +649,14 @@ function estab_admin_raise_message_counter(
                     . $target . ' erhöht.';
                 $statement = $connection->prepare(
                     'INSERT INTO ' . $messageTableSql
-                    . ' (`04_richtung`, `04_nummer`, `12_inhalt`)'
-                    . " VALUES ('E', ?, ?)"
+                    . ' (`einsatz_id`, `04_richtung`, `04_nummer`, `12_inhalt`)'
+                    . " VALUES (?, 'E', ?, ?)"
                 );
                 if (!$statement) {
                     throw new RuntimeException('Could not prepare common counter message');
                 }
                 try {
-                    $statement->bind_param('is', $target, $text);
+                    $statement->bind_param('iis', $incidentId, $target, $text);
                     if (!$statement->execute()) {
                         throw new RuntimeException('Could not write common counter message');
                     }
@@ -571,15 +673,20 @@ function estab_admin_raise_message_counter(
 
                 $incomingStatement = $connection->prepare(
                     'INSERT INTO ' . $messageTableSql
-                    . ' (`04_richtung`, `04_nummer`, `12_inhalt`,'
+                    . ' (`einsatz_id`, `04_richtung`, `04_nummer`, `12_inhalt`,'
                     . ' `15_quitdatum`, `15_quitzeichen`)'
-                    . " VALUES ('E', ?, ?, NOW(), 'xxx')"
+                    . " VALUES (?, 'E', ?, ?, NOW(), 'xxx')"
                 );
                 if (!$incomingStatement) {
                     throw new RuntimeException('Could not prepare incoming counter message');
                 }
                 try {
-                    $incomingStatement->bind_param('is', $incoming, $text);
+                    $incomingStatement->bind_param(
+                        'iis',
+                        $incidentId,
+                        $incoming,
+                        $text
+                    );
                     if (!$incomingStatement->execute()) {
                         throw new RuntimeException('Could not write incoming counter message');
                     }
@@ -589,14 +696,20 @@ function estab_admin_raise_message_counter(
 
                 $outgoingStatement = $connection->prepare(
                     'INSERT INTO ' . $messageTableSql
-                    . ' (`03_zeichen`, `04_richtung`, `04_nummer`, `12_inhalt`)'
-                    . " VALUES ('xxx', 'A', ?, ?)"
+                    . ' (`einsatz_id`, `03_zeichen`, `04_richtung`,'
+                    . ' `04_nummer`, `12_inhalt`)'
+                    . " VALUES (?, 'xxx', 'A', ?, ?)"
                 );
                 if (!$outgoingStatement) {
                     throw new RuntimeException('Could not prepare outgoing counter message');
                 }
                 try {
-                    $outgoingStatement->bind_param('is', $outgoing, $text);
+                    $outgoingStatement->bind_param(
+                        'iis',
+                        $incidentId,
+                        $outgoing,
+                        $text
+                    );
                     if (!$outgoingStatement->execute()) {
                         throw new RuntimeException('Could not write outgoing counter message');
                     }
@@ -610,7 +723,8 @@ function estab_admin_raise_message_counter(
                 $connection,
                 $protocolTable,
                 'Nachrichtennummer Sync',
-                'Nachrichtenzähler nach Systemausfall auf ' . $auditValue . ' gesetzt.'
+                'Nachrichtenzähler nach Systemausfall auf ' . $auditValue . ' gesetzt.',
+                $incidentId
             );
             if (!$connection->commit()) {
                 throw new RuntimeException('Could not commit message-counter update');
@@ -625,7 +739,7 @@ function estab_admin_raise_message_counter(
     }
 }
 
-/** Reset all generated-print flags and audit the affected row count. */
+/** Reset generated-print flags only for the locked active incident. */
 function estab_admin_reset_print_flags(
     mysqli $connection,
     string $messageTable,
@@ -635,16 +749,19 @@ function estab_admin_reset_print_flags(
         throw new RuntimeException('Could not start print-flag transaction');
     }
     try {
+        $incident = estab_incident_require_active($connection, true);
+        $incidentId = (int) $incident['active_einsatz_id'];
         $statement = $connection->prepare(
             'UPDATE ' . estab_auth_table($messageTable)
-            . ' SET `x04_druck` = ? WHERE `x04_druck` <> ?'
+            . ' SET `x04_druck` = ?, `x05_druck_d` = NULL'
+            . ' WHERE `einsatz_id` = ? AND `x04_druck` <> ?'
         );
         if (!$statement) {
             throw new RuntimeException('Could not prepare print-flag reset');
         }
         try {
             $reset = 'f';
-            $statement->bind_param('ss', $reset, $reset);
+            $statement->bind_param('sis', $reset, $incidentId, $reset);
             if (!$statement->execute()) {
                 throw new RuntimeException('Could not reset print flags');
             }
@@ -657,7 +774,9 @@ function estab_admin_reset_print_flags(
             $connection,
             $protocolTable,
             'Grafikstatus Reset',
-            $affected . ' Grafikmarkierung(en) zurückgesetzt.'
+            $affected . ' Grafikmarkierung(en) für Einsatz '
+                . $incidentId . ' zurückgesetzt.',
+            $incidentId
         );
         if (!$connection->commit()) {
             throw new RuntimeException('Could not commit print-flag reset');

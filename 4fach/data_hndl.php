@@ -21,6 +21,7 @@ if (defined ("debug") && debug) { echo "<b>!File:". __FILE__ ."  Line:". __LINE_
 define ("validate",true);     // Soll das Formular überprüft werden
 require_once __DIR__ . "/tools.php";
 require_once __DIR__ . "/../app/auth.php";
+require_once __DIR__ . "/../app/assignment.php";
 require_once __DIR__ . "/../app/message_repository.php";
 
 if (validate){
@@ -39,16 +40,117 @@ if (validate){
     Funktion:  check_save_user ()
 
 \*******************************************************************************/
-function check_save_user (array $loginData, string &$loginError) {
-  global $conf_empf;
+function estab_login_account_lock_name (
+  string $database,
+  string $table,
+  string $code
+): string {
+  return "estab:login:".substr (
+    hash ("sha256", $database."\0".$table."\0".$code),
+    0,
+    52
+  );
+}
 
+function estab_login_lock_timeout (): int {
+  $timeout = defined ("ESTAB_LOGIN_LOCK_TIMEOUT_SECONDS")
+    ? constant ("ESTAB_LOGIN_LOCK_TIMEOUT_SECONDS")
+    : 10;
+  if (!is_int ($timeout) || $timeout < 0 || $timeout > 30) {
+    throw new RuntimeException ("Ungültiges Zeitlimit für die Kontoanmeldung");
+  }
+  return $timeout;
+}
+
+function estab_login_acquire_account_lock (
+  mysqli $connection,
+  string $lockName
+): void {
+  $timeout = estab_login_lock_timeout ();
+  $statement = $connection->prepare ("SELECT GET_LOCK(?, ?)");
+  if (!$statement) {
+    throw new RuntimeException ("Kontosperre konnte nicht vorbereitet werden");
+  }
+  try {
+    $statement->bind_param ("si", $lockName, $timeout);
+    if (!$statement->execute ()) {
+      throw new RuntimeException ("Kontosperre konnte nicht angefordert werden");
+    }
+    $result = $statement->get_result ();
+    $row = $result->fetch_row ();
+    $result->free ();
+    if (!is_array ($row) || (string) ($row [0] ?? "") !== "1") {
+      throw new RuntimeException ("Dieses Konto wird bereits angemeldet");
+    }
+  } finally {
+    $statement->close ();
+  }
+}
+
+function estab_login_release_account_lock (
+  mysqli $connection,
+  string $lockName
+): void {
+  $statement = $connection->prepare ("SELECT RELEASE_LOCK(?)");
+  if (!$statement) {
+    throw new RuntimeException ("Kontosperre konnte nicht freigegeben werden");
+  }
+  try {
+    $statement->bind_param ("s", $lockName);
+    if (!$statement->execute ()) {
+      throw new RuntimeException ("Kontosperre konnte nicht freigegeben werden");
+    }
+    $result = $statement->get_result ();
+    $row = $result->fetch_row ();
+    $result->free ();
+    if (!is_array ($row) || (string) ($row [0] ?? "") !== "1") {
+      throw new RuntimeException ("Kontosperre ging verloren");
+    }
+  } finally {
+    $statement->close ();
+  }
+}
+
+function estab_login_write_audit (
+  mysqli $connection,
+  string $table,
+  string $event,
+  string $details
+): void {
+  $query = "INSERT INTO ".estab_auth_table ($table)
+    ." (`p_zeit`, `p_was`, `p_ereignis`) VALUES (CURRENT_TIMESTAMP, ?, ?)";
+  $statement = $connection->prepare ($query);
+  if (!$statement) {
+    throw new RuntimeException ("Anmeldeprotokoll konnte nicht vorbereitet werden");
+  }
+  try {
+    $statement->bind_param ("ss", $event, $details);
+    if (!$statement->execute ()) {
+      throw new RuntimeException ("Anmeldeprotokoll konnte nicht geschrieben werden");
+    }
+  } finally {
+    $statement->close ();
+  }
+}
+
+function estab_login_clear_session_identity (): void {
+  unset (
+    $_SESSION ["vStab_benutzer"],
+    $_SESSION ["vStab_kuerzel"],
+    $_SESSION ["vStab_funktion"],
+    $_SESSION ["vStab_rolle"],
+    $_SESSION ["ROLLE"]
+  );
+  $_SESSION ["menue"] = "LOGIN";
+}
+
+function check_save_user (array $loginData, string &$loginError) {
   include ("../4fcfg/dbcfg.inc.php");
   include ("../4fcfg/e_cfg.inc.php");
 
-  $validation = estab_auth_validate_login ($loginData, is_array ($conf_empf) ? $conf_empf : array ());
   $loginFlow = estab_auth_login_flow ($loginData);
   $explicitLoginFlow = array_key_exists ("login_flow", $loginData);
-  if (!$validation ["valid"] || $loginFlow === null) {
+  if ($loginFlow === null) {
     $_SESSION ["menue"] = "LOGIN";
     $loginError = "Bitte prüfen Sie Name, Kürzel, Funktion und Kennwort.";
     return true;
@@ -59,15 +161,56 @@ function check_save_user (array $loginData, string &$loginError) {
     return true;
   }
 
-  $login = $validation ["data"];
   $connection = null;
+  $policyLockName = null;
+  $policyLockAcquired = false;
+  $accountLockName = null;
+  $accountLockAcquired = false;
+  $transactionActive = false;
   try {
     $connection = estab_auth_connect ($conf_4f_db);
-    $dbUser = estab_auth_fetch_user ($connection, $conf_4f_tbl ["benutzer"], $login ["kuerzel"]);
+    $policyLockName = estab_assignment_acquire_policy_lock (
+      $connection,
+      (string) $conf_4f_db ["datenbank"],
+      $conf_4f_tbl ["empfmtx"]
+    );
+    $policyLockAcquired = true;
+    $validation = estab_auth_validate_login_with_roles (
+      $loginData,
+      estab_assignment_function_roles (
+        $connection,
+        $conf_4f_tbl ["empfmtx"]
+      )
+    );
+    if (!$validation ["valid"]) {
+      $_SESSION ["menue"] = "LOGIN";
+      $loginError = "Bitte prüfen Sie Name, Kürzel, Funktion und Kennwort.";
+      return true;
+    }
+    $login = $validation ["data"];
+    $accountLockName = estab_login_account_lock_name (
+      $conf_4f_db ["datenbank"],
+      $conf_4f_tbl ["benutzer"],
+      $login ["kuerzel"]
+    );
+    estab_login_acquire_account_lock ($connection, $accountLockName);
+    $accountLockAcquired = true;
+    if (!$connection->begin_transaction ()) {
+      throw new RuntimeException ("Kontotransaktion konnte nicht gestartet werden");
+    }
+    $transactionActive = true;
+
+    // The lookup must happen after acquiring the account lock. This makes
+    // two simultaneous registrations deterministic even when no row exists.
+    $dbUser = estab_auth_fetch_user (
+      $connection,
+      $conf_4f_tbl ["benutzer"],
+      $login ["kuerzel"]
+    );
     $ip = estab_auth_remote_ip ($_SERVER);
     $forwardedIp = estab_auth_forwarded_ip (
       $_SERVER,
-      estab_env_bool ("ESTAB_TRUST_PROXY_HEADERS", false)
+      estab_request_trusts_proxy_headers ($_SERVER)
     );
 
     $dbaccess = new db_access ($conf_4f_db ["server"],
@@ -87,17 +230,34 @@ function check_save_user (array $loginData, string &$loginError) {
         $loginError = "Name, Kürzel oder Kennwort stimmen nicht mit dem bestehenden Konto überein.";
         return true;
       }
+      if (estab_auth_account_is_blocked ($dbUser)) {
+        $loginError = "Dieses Konto ist administrativ gesperrt. Wenden Sie sich an die zuständige Stelle.";
+        return true;
+      }
 
       $wasInactive = ((int) $dbUser ["aktiv"] === 0);
       if (!estab_auth_assignment_allowed ($dbUser, $login ["funktion"])) {
-        $loginError = "Dieses aktive Konto ist einer anderen Funktion zugeordnet. Melden Sie das Konto zuerst ab oder wählen Sie die zugeordnete Funktion.";
+        $loginError = "Dieses Konto ist einer anderen Funktion zugeordnet. Wählen Sie die administrativ zugewiesene Funktion.";
         return true;
+      }
+
+      // DDL commits implicitly in MariaDB. It therefore runs on its own
+      // connection, under a function-scoped advisory lock, before the account
+      // is activated. A failed or interrupted reconciliation leaves the
+      // account untouched and can safely be retried.
+      if ($login ["funktion"] != "A/W") {
+        $usertablename = $conf_4f_tbl ["usrtblprefix"].strtolower ($login ["funktion"])."_".$login ["kuerzel"];
+        $fkttblname = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($login ["funktion"]);
+        $dbaccess->create_user_table ($usertablename, $fkttblname);
       }
 
       if (session_status () !== PHP_SESSION_ACTIVE || !session_regenerate_id (true)) {
         throw new RuntimeException ("Die Sitzung konnte nicht erneuert werden");
       }
       unset ($_SESSION ["estab_csrf_token"]);
+      if (!estab_auth_session_id_is_valid (session_id ())) {
+        throw new RuntimeException ("Die erneuerte Sitzungskennung ist ungültig");
+      }
 
       $storedPassword = is_string ($passwordCheck ["replacement"])
         ? $passwordCheck ["replacement"]
@@ -110,8 +270,26 @@ function check_save_user (array $loginData, string &$loginError) {
         "fwdip" => $forwardedIp,
         "password" => $storedPassword,
         "kuerzel" => $login ["kuerzel"],
-      ), $wasInactive);
+      ));
 
+      $event = $wasInactive ? "Anmelden" : "Sessiondaten neu setzen";
+      estab_login_write_audit (
+        $connection,
+        $conf_4f_tbl ["protokoll"],
+        $event,
+        estab_auth_login_audit_details (
+          $wasInactive ? "existing_login" : "session_refresh",
+          $login,
+          session_id (),
+          $ip
+        )
+      );
+      if (!$connection->commit ()) {
+        throw new RuntimeException ("Kontotransaktion konnte nicht abgeschlossen werden");
+      }
+      $transactionActive = false;
+
+      // Only a committed account row may become an authenticated PHP session.
       $_SESSION ["vStab_benutzer"] = $login ["benutzer"];
       $_SESSION ["vStab_kuerzel"] = $login ["kuerzel"];
       $_SESSION ["vStab_funktion"] = $login ["funktion"];
@@ -119,20 +297,6 @@ function check_save_user (array $loginData, string &$loginError) {
       $_SESSION ["menue"] = "ROLLE";
       $_SESSION ["ROLLE"] = $login ["rolle"];
 
-      estab_auth_close ($connection);
-      $connection = null;
-
-      // Existing imported rows can still carry MyISAM/latin1 dynamic tables,
-      // even when their stale legacy `aktiv` flag is 1. The operation is
-      // idempotent, so reconcile all six tables after every successful login.
-      if ($login ["funktion"] != "A/W") {
-        $usertablename = $conf_4f_tbl ["usrtblprefix"].strtolower ($login ["funktion"])."_".$login ["kuerzel"];
-        $fkttblname = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($login ["funktion"]);
-        $dbaccess->create_user_table ($usertablename, $fkttblname);
-      }
-
-      $event = $wasInactive ? "Funktion Ummelden" : "Sessiondaten neu setzen";
-      protokolleintrag ($event, $login ["benutzer"].";".$login ["kuerzel"].";".$login ["funktion"].";".$login ["rolle"].";".session_id ().";".$ip);
       return false;
     }
 
@@ -145,12 +309,24 @@ function check_save_user (array $loginData, string &$loginError) {
       return true;
     }
 
+    if ($login ["funktion"] != "A/W") {
+      $usertablename = $conf_4f_tbl ["usrtblprefix"].strtolower ($login ["funktion"])."_".$login ["kuerzel"];
+      $fkttblname = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($login ["funktion"]);
+      $dbaccess->create_user_table ($usertablename, $fkttblname);
+    }
+
     if (session_status () !== PHP_SESSION_ACTIVE || !session_regenerate_id (true)) {
       throw new RuntimeException ("Die Sitzung konnte nicht erneuert werden");
     }
     unset ($_SESSION ["estab_csrf_token"]);
+    if (!estab_auth_session_id_is_valid (session_id ())) {
+      throw new RuntimeException ("Die erneuerte Sitzungskennung ist ungültig");
+    }
 
     $passwordHash = password_hash ($login ["password"], PASSWORD_DEFAULT);
+    if (!is_string ($passwordHash)) {
+      throw new RuntimeException ("Kennwort konnte nicht sicher gespeichert werden");
+    }
     estab_auth_insert_user ($connection, $conf_4f_tbl ["benutzer"], array (
       "benutzer" => $login ["benutzer"],
       "kuerzel" => $login ["kuerzel"],
@@ -162,6 +338,22 @@ function check_save_user (array $loginData, string &$loginError) {
       "password" => $passwordHash,
     ));
 
+    estab_login_write_audit (
+      $connection,
+      $conf_4f_tbl ["protokoll"],
+      "Anmelden",
+      estab_auth_login_audit_details (
+        "self_registration",
+        $login,
+        session_id (),
+        $ip
+      )
+    );
+    if (!$connection->commit ()) {
+      throw new RuntimeException ("Kontotransaktion konnte nicht abgeschlossen werden");
+    }
+    $transactionActive = false;
+
     $_SESSION ["vStab_benutzer"] = $login ["benutzer"];
     $_SESSION ["vStab_kuerzel"] = $login ["kuerzel"];
     $_SESSION ["vStab_funktion"] = $login ["funktion"];
@@ -169,22 +361,46 @@ function check_save_user (array $loginData, string &$loginError) {
     $_SESSION ["menue"] = "ROLLE";
     $_SESSION ["ROLLE"] = $login ["rolle"];
 
-    estab_auth_close ($connection);
-    $connection = null;
-
-    if ($login ["funktion"] != "A/W") {
-      $usertablename = $conf_4f_tbl ["usrtblprefix"].strtolower ($login ["funktion"])."_".$login ["kuerzel"];
-      $fkttblname = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($login ["funktion"]);
-      $dbaccess->create_user_table ($usertablename, $fkttblname);
-    }
-    protokolleintrag ("Anmelden", $login ["benutzer"].";".$login ["kuerzel"].";".$login ["funktion"].";".$login ["rolle"].";".session_id ().";".$ip);
     return false;
   } catch (Throwable $exception) {
+    if ($transactionActive && $connection instanceof mysqli) {
+      $connection->rollback ();
+      $transactionActive = false;
+    }
+    estab_login_clear_session_identity ();
     error_log ("eStab authentication failed: ".$exception->getMessage ());
-    $_SESSION ["menue"] = "LOGIN";
     $loginError = "Die Anmeldung konnte technisch nicht abgeschlossen werden. Versuchen Sie es erneut oder wenden Sie sich an die zuständige Stelle.";
     return true;
   } finally {
+    if ($transactionActive && $connection instanceof mysqli) {
+      $connection->rollback ();
+    }
+    if (
+      $connection instanceof mysqli
+      && $accountLockAcquired
+      && is_string ($accountLockName)
+      && $accountLockName !== ""
+    ) {
+      try {
+        estab_login_release_account_lock ($connection, $accountLockName);
+      } catch (Throwable $exception) {
+        // Closing the owning connection below is the fail-safe release.
+        error_log ("eStab account lock cleanup failed: ".$exception->getMessage ());
+      }
+    }
+    if (
+      $connection instanceof mysqli
+      && $policyLockAcquired
+      && is_string ($policyLockName)
+      && $policyLockName !== ""
+    ) {
+      try {
+        estab_assignment_release_policy_lock ($connection, $policyLockName);
+      } catch (Throwable $exception) {
+        // Closing the owning connection below is the fail-safe release.
+        error_log ("eStab assignment policy lock cleanup failed: ".$exception->getMessage ());
+      }
+    }
     if ($connection instanceof mysqli) {
       estab_auth_close ($connection);
     }
@@ -229,6 +445,23 @@ function check_and_save ($data){
 
   $messageConnection = estab_message_connect ($conf_4f_db);
   try {
+    try {
+      estab_incident_require_active ($messageConnection);
+    } catch (EstabNoActiveIncidentException) {
+      if (ob_get_level () > 0) {
+        @ob_clean ();
+      }
+      http_response_code (409);
+      header ("Content-Type: text/html; charset=UTF-8");
+      header ("Cache-Control: no-store");
+      echo "<!doctype html><html lang=\"de\"><meta charset=\"UTF-8\">";
+      echo "<title>Kein Einsatz aktiv</title><body>";
+      echo "<h1>Keine Eingabe möglich</h1>";
+      echo "<p>Derzeit ist kein Einsatz aktiv. Legen Sie in der Administration ".
+           "einen Einsatz an oder aktivieren Sie einen vorhandenen Einsatz.</p>";
+      echo "</body></html>";
+      exit;
+    }
 	switch ($data["task"]){
 		case "FM-Eingang":
     	case "FM-Eingang_Anhang":
@@ -300,7 +533,8 @@ function check_and_save ($data){
           "16_empf" => $data ["16_empf"],
           "x00_status" => 4,
           "x01_abschluss" => "f",
-        )
+        ),
+        $conf_4f_tbl ["anhang"]
       );
       protokolleintrag ("FM-Eingang", "message_id=".$storedMessage ["id"]);
     break;
@@ -392,7 +626,8 @@ function check_and_save ($data){
           "17_vermerke" => $data ["17_vermerke"],
           "x00_status" => 8,
           "x01_abschluss" => "t",
-        )
+        ),
+        $conf_4f_tbl ["anhang"]
       );
       protokolleintrag ("FM-Eingang-Sichter", "message_id=".$storedMessage ["id"]);
     	break;
@@ -462,7 +697,8 @@ function check_and_save ($data){
            "16_empf" => $data ["16_empf"],
            "x00_status" => 2,
            "x01_abschluss" => "f",
-         )
+         ),
+         $conf_4f_tbl ["anhang"]
        );
        protokolleintrag ("Stab-schreiben", "message_id=".$storedMessage ["id"]);
        set_msg_read ($storedMessage ["id"]) ;
@@ -559,7 +795,8 @@ function check_and_save ($data){
            "x01_abschluss" => "t",
            "x02_sperre" => "f",
            "x03_sperruser" => "",
-         )
+         ),
+         $conf_4f_tbl ["anhang"]
        );
        protokolleintrag ("Stab-gesprnoti", "message_id=".$storedMessage ["id"]);
        set_msg_read ($storedMessage ["id"]) ;
@@ -837,7 +1074,12 @@ function check_and_save ($data){
     );
     $connection = estab_message_connect ($conf_4f_db);
     try {
-      return estab_message_state_exists ($connection, $stateTable, $lfd) ? 1 : 0;
+      return estab_message_state_exists (
+        $connection,
+        $stateTable,
+        $lfd,
+        $conf_4f_tbl ["nachrichten"]
+      ) ? 1 : 0;
     } finally {
       estab_auth_close ($connection);
     }

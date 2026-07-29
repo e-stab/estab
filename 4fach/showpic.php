@@ -9,7 +9,10 @@
  */
 
 require_once __DIR__ . '/../app/file_access.php';
+require_once __DIR__ . '/../app/attachment.php';
 require __DIR__ . '/../4fcfg/config.inc.php';
+require __DIR__ . '/../4fcfg/dbcfg.inc.php';
+require __DIR__ . '/../4fcfg/e_cfg.inc.php';
 if (session_status() === PHP_SESSION_NONE) {
   session_start();
 }
@@ -48,17 +51,14 @@ if (session_status() !== PHP_SESSION_ACTIVE
   estab_preview_error (403, "Anmeldung erforderlich.");
 }
 
-$requested = isset ($_GET["file"]) ? (string) $_GET["file"] : "";
+$requested =
+  isset ($_GET["file"]) && is_string ($_GET["file"])
+    ? $_GET["file"]
+    : "";
 try {
-  $resolved = estab_file_resolve (
-    (string) $conf_4f["ablage_dir"],
-    "attachment",
-    $requested
-  );
+  $requested = estab_file_validate_name ("attachment", $requested);
 } catch (InvalidArgumentException) {
   estab_preview_error (400, "Ungültiger Anhangname.");
-} catch (RuntimeException) {
-  estab_preview_error (404, "Anhang nicht gefunden.");
 }
 
 $width = estab_preview_dimension ("width");
@@ -74,25 +74,94 @@ if ($width === null && $height === null && $zoom === null) {
   estab_preview_error (400, "Vorschaugröße fehlt.");
 }
 
-$imageInfo = @getimagesize ($resolved);
-$source = false;
-if ($imageInfo !== false && $imageInfo[0] > 0 && $imageInfo[1] > 0
-    && ($imageInfo[0] * $imageInfo[1]) <= 40000000) {
-  switch ($imageInfo[2]) {
-    case IMAGETYPE_GIF:
-      $source = @imagecreatefromgif ($resolved);
-    break;
-    case IMAGETYPE_JPEG:
-      $source = @imagecreatefromjpeg ($resolved);
-    break;
-    case IMAGETYPE_PNG:
-      $source = @imagecreatefrompng ($resolved);
-    break;
-    case IMAGETYPE_BMP:
-      $source = function_exists ("imagecreatefrombmp") ? @imagecreatefrombmp ($resolved) : false;
-    break;
+$storedName = pathinfo ($requested, PATHINFO_FILENAME);
+$extension = strtolower (pathinfo ($requested, PATHINFO_EXTENSION));
+$connection = null;
+$transactionActive = false;
+$stream = null;
+$failure = null;
+try {
+  $connection = estab_attachment_connection ($conf_4f_db);
+  if (!$connection->begin_transaction ()) {
+    throw new RuntimeException ("Could not start attachment preview transaction");
+  }
+  $transactionActive = true;
+  $attachment = estab_attachment_find (
+    $connection,
+    $conf_4f_tbl ["anhang"],
+    $storedName,
+    true
+  );
+  if (
+    !is_array ($attachment)
+    || !hash_equals (
+      strtolower ((string) ($attachment ["fileext"] ?? "")),
+      $extension
+    )
+  ) {
+    throw new EstabIncidentNotFoundException (
+      "Attachment does not belong to the active incident"
+    );
+  }
+  try {
+    $stream = estab_file_open (
+      (string) $conf_4f["ablage_dir"],
+      "attachment",
+      $requested
+    );
+  } catch (RuntimeException $exception) {
+    throw new EstabIncidentNotFoundException (
+      "Authorized attachment preview is unavailable",
+      previous: $exception
+    );
+  }
+  if (!$connection->commit ()) {
+    throw new RuntimeException ("Could not commit attachment preview transaction");
+  }
+  $transactionActive = false;
+} catch (EstabNoActiveIncidentException) {
+  $failure = array (409, "Kein Einsatz aktiv.");
+} catch (EstabIncidentNotFoundException) {
+  $failure = array (404, "Anhang nicht gefunden.");
+} catch (Throwable $exception) {
+  error_log ("eStab attachment preview scope failed: ".$exception->getMessage ());
+  $failure = array (503, "Der Anhang kann derzeit nicht geprüft werden.");
+} finally {
+  if ($connection instanceof mysqli) {
+    if ($transactionActive) {
+      $connection->rollback ();
+    }
+    estab_attachment_close ($connection);
+  }
+  if ($failure !== null && is_resource ($stream)) {
+    fclose ($stream);
+    $stream = null;
   }
 }
+if (is_array ($failure)) {
+  estab_preview_error ((int) $failure [0], (string) $failure [1]);
+}
+if (!is_resource ($stream)) {
+  estab_preview_error (503, "Der Anhang konnte nicht geöffnet werden.");
+}
+$imageBytes = stream_get_contents ($stream);
+fclose ($stream);
+if (!is_string ($imageBytes)) {
+  estab_preview_error (503, "Der Anhang konnte nicht gelesen werden.");
+}
+
+$imageInfo = @getimagesizefromstring ($imageBytes);
+$source = false;
+if ($imageInfo !== false && $imageInfo[0] > 0 && $imageInfo[1] > 0
+    && ($imageInfo[0] * $imageInfo[1]) <= 40000000
+    && in_array (
+      $imageInfo[2],
+      array (IMAGETYPE_GIF, IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_BMP),
+      true
+    )) {
+  $source = @imagecreatefromstring ($imageBytes);
+}
+unset ($imageBytes);
 
 if (!$source) {
   $targetWidth = $width ?? 250;

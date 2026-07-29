@@ -75,6 +75,30 @@ function estab_env_identifier(string $name, string $default): string
     return $value;
 }
 
+/** Read a decimal deployment integer within an explicit closed interval. */
+function estab_env_integer(
+    string $name,
+    int $default,
+    int $minimum,
+    int $maximum
+): int {
+    if ($minimum > $maximum) {
+        throw new LogicException('Invalid deployment integer bounds');
+    }
+    $value = estab_env($name, (string) $default) ?? (string) $default;
+    if (
+        preg_match('/\A(?:0|[1-9][0-9]*)\z/D', $value) !== 1
+        || strlen($value) > 10
+    ) {
+        throw new InvalidArgumentException("Invalid decimal integer in {$name}");
+    }
+    $integer = (int) $value;
+    if ($integer < $minimum || $integer > $maximum) {
+        throw new InvalidArgumentException("Integer in {$name} is outside its allowed range");
+    }
+    return $integer;
+}
+
 /** Normalise the optional deployment subdirectory to either "" or "name/". */
 function estab_base_path(): string
 {
@@ -129,7 +153,186 @@ function estab_application_url(string $relativePath): string
     return estab_application_root() . $relativePath;
 }
 
-/** Accept HTTPS forwarding only from an explicitly trusted, valid chain. */
+/**
+ * Parse a comma-separated proxy allowlist into validated IP/CIDR rules.
+ *
+ * Rules deliberately contain no hostnames: proxy trust must not change when
+ * DNS changes or is temporarily unavailable.
+ *
+ * @return list<string>
+ */
+function estab_parse_trusted_proxy_networks(?string $value): array
+{
+    if ($value === null || trim($value) === '') {
+        return [];
+    }
+    if (strlen($value) > 4096) {
+        throw new InvalidArgumentException('ESTAB_TRUSTED_PROXIES is too long');
+    }
+
+    $networks = [];
+    foreach (explode(',', $value) as $rawNetwork) {
+        $rawNetwork = trim($rawNetwork);
+        if ($rawNetwork === '' || substr_count($rawNetwork, '/') > 1) {
+            throw new InvalidArgumentException('Invalid trusted proxy network');
+        }
+
+        $parts = explode('/', $rawNetwork, 2);
+        $address = $parts[0];
+        $packed = @inet_pton($address);
+        if (
+            $packed === false
+            || filter_var($address, FILTER_VALIDATE_IP) === false
+        ) {
+            throw new InvalidArgumentException('Trusted proxies must be IP literals or CIDRs');
+        }
+
+        $maximumPrefix = strlen($packed) * 8;
+        $prefix = $maximumPrefix;
+        if (isset($parts[1])) {
+            if (
+                preg_match('/^(?:0|[1-9][0-9]{0,2})$/D', $parts[1]) !== 1
+                || (int) $parts[1] > $maximumPrefix
+            ) {
+                throw new InvalidArgumentException('Invalid trusted proxy CIDR prefix');
+            }
+            $prefix = (int) $parts[1];
+        }
+        if ($prefix === 0) {
+            throw new InvalidArgumentException(
+                'A catch-all network cannot be a trusted proxy allowlist'
+            );
+        }
+        $networks[] = $address . '/' . $prefix;
+        if (count($networks) > 128) {
+            throw new InvalidArgumentException('Too many trusted proxy networks');
+        }
+    }
+
+    return array_values(array_unique($networks));
+}
+
+/** Return whether one validated IP literal belongs to a validated CIDR rule. */
+function estab_ip_matches_proxy_network(string $address, string $network): bool
+{
+    [$networkAddress, $prefixText] = explode('/', $network, 2);
+    $packedAddress = @inet_pton($address);
+    $packedNetwork = @inet_pton($networkAddress);
+    if (
+        $packedAddress === false
+        || $packedNetwork === false
+        || strlen($packedAddress) !== strlen($packedNetwork)
+    ) {
+        return false;
+    }
+
+    $prefix = (int) $prefixText;
+    $wholeBytes = intdiv($prefix, 8);
+    $remainingBits = $prefix % 8;
+    if (
+        $wholeBytes > 0
+        && substr($packedAddress, 0, $wholeBytes)
+            !== substr($packedNetwork, 0, $wholeBytes)
+    ) {
+        return false;
+    }
+    if ($remainingBits === 0) {
+        return true;
+    }
+
+    $mask = (0xff << (8 - $remainingBits)) & 0xff;
+    return (ord($packedAddress[$wholeBytes]) & $mask)
+        === (ord($packedNetwork[$wholeBytes]) & $mask);
+}
+
+/** Trust proxy headers only when the direct peer matches the allowlist. */
+function estab_proxy_peer_is_trusted(array $server, array $networks): bool
+{
+    $peer = $server['REMOTE_ADDR'] ?? '';
+    if (
+        !is_string($peer)
+        || filter_var($peer, FILTER_VALIDATE_IP) === false
+    ) {
+        return false;
+    }
+    foreach ($networks as $network) {
+        if (estab_ip_matches_proxy_network($peer, $network)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Resolve the complete request-scoped proxy trust decision.
+ *
+ * Enabling forwarded headers without an allowlist is a deployment error, not
+ * a permissive fallback. Requests from other peers simply ignore the headers.
+ */
+function estab_request_trusts_proxy_headers(array $server): bool
+{
+    if (!estab_env_bool('ESTAB_TRUST_PROXY_HEADERS', false)) {
+        return false;
+    }
+    $networks = estab_parse_trusted_proxy_networks(
+        estab_env('ESTAB_TRUSTED_PROXIES', '')
+    );
+    if ($networks === []) {
+        throw new RuntimeException(
+            'ESTAB_TRUSTED_PROXIES is required when proxy headers are trusted'
+        );
+    }
+    return estab_proxy_peer_is_trusted($server, $networks);
+}
+
+/**
+ * Validate request-independent deployment values before serving traffic.
+ *
+ * Request-scoped peer matching remains in estab_request_trusts_proxy_headers;
+ * this check proves only that the configured trust policy is complete.
+ */
+function estab_validate_runtime_configuration(): void
+{
+    estab_env_identifier('ESTAB_DB_NAME', 'estab');
+    estab_env_integer('ESTAB_DB_PORT', 3306, 1, 65535);
+    estab_env_integer(
+        'ESTAB_UPLOAD_MAX_BYTES',
+        5242880,
+        1,
+        52428800
+    );
+    estab_env_integer(
+        'ESTAB_PDF_ATTACHMENT_MAX_BYTES',
+        52428800,
+        0,
+        104857600
+    );
+    estab_public_root();
+    estab_base_path();
+
+    foreach ([
+        'ESTAB_REVIEW_OUTGOING_MESSAGES' => false,
+        'ESTAB_ALLOW_SELF_REGISTRATION' => false,
+        'ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF' => false,
+        'ESTAB_TRUST_PROXY_HEADERS' => false,
+    ] as $name => $default) {
+        estab_env_bool($name, $default);
+    }
+
+    $networks = estab_parse_trusted_proxy_networks(
+        estab_env('ESTAB_TRUSTED_PROXIES', '')
+    );
+    if (
+        estab_env_bool('ESTAB_TRUST_PROXY_HEADERS', false)
+        && $networks === []
+    ) {
+        throw new RuntimeException(
+            'ESTAB_TRUSTED_PROXIES is required when proxy headers are trusted'
+        );
+    }
+}
+
+/** Accept HTTPS forwarding only from a trusted peer and a valid chain. */
 function estab_proxy_reports_https(array $server, bool $trustProxyHeaders): bool
 {
     if (!$trustProxyHeaders) {
@@ -149,9 +352,9 @@ function estab_proxy_reports_https(array $server, bool $trustProxyHeaders): bool
     return $protoChain[0] === 'https';
 }
 
-// Proxy transport headers affect secure-cookie handling only when the
-// deployment explicitly enables them. Every hop must contain a known token.
-if (estab_proxy_reports_https($_SERVER, estab_env_bool('ESTAB_TRUST_PROXY_HEADERS', false))) {
+// Proxy transport headers affect secure-cookie handling only when the direct
+// peer is allowlisted. Every forwarded hop must contain a known token.
+if (estab_proxy_reports_https($_SERVER, estab_request_trusts_proxy_headers($_SERVER))) {
     $_SERVER['HTTPS'] = 'on';
 }
 

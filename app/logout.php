@@ -7,7 +7,11 @@ require_once __DIR__ . '/auth.php';
 /** Capture the validated identity and request data needed after destruction. */
 function estab_logout_capture(array $session, array $server, string $sessionId): ?array
 {
-    $identity = estab_auth_session_identity($session);
+    // Logout is deliberately available even after this SID was superseded or
+    // the database became unavailable. It destroys the browser session first;
+    // the later database UPDATE remains bound to this exact SID and therefore
+    // cannot deactivate a newer login.
+    $identity = estab_auth_session_identity_shape($session);
     if (
         $identity === null
         || $sessionId === ''

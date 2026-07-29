@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/csrf.php';
+require_once __DIR__ . '/incident_ui.php';
 require_once __DIR__ . '/navigation.php';
 
 /** Return the configured browser root used by shared session controls. */
@@ -63,7 +64,9 @@ function estab_session_ui_markup(
     bool $compact = false,
     array $server = [],
     bool $popup = false,
-    bool $sidebar = false
+    bool $sidebar = false,
+    bool $includeNavigation = true,
+    ?array $incidentState = null
 ): string {
     $identity = estab_auth_session_identity($session);
     if ($identity === null) {
@@ -86,12 +89,14 @@ function estab_session_ui_markup(
     }
     $homeUrl = estab_application_root();
     $logoutUrl = estab_application_url('4fach/logout.php');
-    $navigation = estab_navigation_markup(
-        true,
-        $server === [] ? $_SERVER : $server,
-        $compact,
-        $sidebar
-    );
+    $navigation = $includeNavigation
+        ? estab_navigation_markup(
+            true,
+            $server === [] ? $_SERVER : $server,
+            $compact,
+            $sidebar
+        )
+        : '';
     $name = estab_auth_html($identity['benutzer']);
     $code = estab_auth_html($identity['kuerzel']);
     $function = estab_auth_html($identity['funktion']);
@@ -105,6 +110,9 @@ function estab_session_ui_markup(
             . 'Administrationszugang <strong data-estab-admin-user="'
             . estab_auth_html($adminUser) . '">'
             . estab_auth_html($adminUser) . '</strong></span>';
+    $incident = $incidentState === null
+        ? ''
+        : estab_incident_ui_markup($incidentState, $compact, $sidebar);
 
     return '<aside class="' . $barClass . '" data-estab-session-bar'
         . ($popup ? ' data-estab-popup-ui' : '')
@@ -138,6 +146,7 @@ function estab_session_ui_markup(
         . '</form>'
         . '</div>'
         . '</div>'
+        . $incident
         . $navigation
         . '</aside>'
         . ($compact ? '' : estab_session_ui_mainframe_guard())
@@ -155,7 +164,9 @@ function estab_session_ui_public_markup(
     array $server = [],
     ?string $loginDestination = null,
     bool $popup = false,
-    bool $sidebar = false
+    bool $sidebar = false,
+    bool $includeNavigation = true,
+    ?array $incidentState = null
 ): string {
     if ($sidebar && !$compact) {
         throw new InvalidArgumentException(
@@ -180,12 +191,14 @@ function estab_session_ui_public_markup(
     $loginUrl = estab_navigation_login_url($loginDestination);
     $effectiveServer = $server === [] ? $_SERVER : $server;
     $adminUser = estab_session_ui_admin_user($effectiveServer);
-    $navigation = estab_navigation_markup(
-        false,
-        $effectiveServer,
-        $compact,
-        $sidebar
-    );
+    $navigation = $includeNavigation
+        ? estab_navigation_markup(
+            false,
+            $effectiveServer,
+            $compact,
+            $sidebar
+        )
+        : '';
     $status = $adminUser === null
         ? '<span class="estab-session-anonymous">Nicht angemeldet</span>'
         : '<span class="estab-session-anonymous">'
@@ -194,6 +207,9 @@ function estab_session_ui_public_markup(
             . estab_auth_html($adminUser) . '</strong>'
             . '<span class="estab-session-admin-note">'
             . ' · Kein eStab-Funktionskonto angemeldet</span></span>';
+    $incident = $incidentState === null
+        ? ''
+        : estab_incident_ui_markup($incidentState, $compact, $sidebar);
 
     return '<aside class="' . $barClass . '" data-estab-public-bar'
         . ($popup ? ' data-estab-popup-ui' : '')
@@ -207,6 +223,7 @@ function estab_session_ui_public_markup(
         . '<a class="estab-button estab-button-login" href="'
         . estab_auth_html($loginUrl) . '" target="_top">Anmelden</a>'
         . '</div></div>'
+        . $incident
         . $navigation
         . '</aside>'
         . ($compact ? '' : estab_session_ui_mainframe_guard())
@@ -354,7 +371,10 @@ function estab_session_ui_current_markup(
     bool $compact = false,
     ?string $loginDestination = null,
     bool $popup = false,
-    bool $sidebar = false
+    bool $sidebar = false,
+    bool $includeNavigation = true,
+    bool $includeIncident = true,
+    ?array $incidentState = null
 ): string
 {
     if (session_status() !== PHP_SESSION_ACTIVE) {
@@ -368,22 +388,40 @@ function estab_session_ui_current_markup(
                 $_POST
             );
         }
+        if (
+            $includeIncident
+            && $incidentState === null
+            && PHP_SAPI !== 'cli'
+        ) {
+            $incidentState = estab_incident_ui_current_state();
+        }
         return estab_session_ui_public_markup(
             $compact,
             $_SERVER,
             $loginDestination,
             $popup,
-            $sidebar
+            $sidebar,
+            $includeNavigation,
+            $includeIncident ? $incidentState : null
         );
     }
 
+    if (
+        $includeIncident
+        && $incidentState === null
+        && PHP_SAPI !== 'cli'
+    ) {
+        $incidentState = estab_incident_ui_current_state();
+    }
     return estab_session_ui_markup(
         $session,
         estab_csrf_token(),
         $compact,
         $_SERVER,
         $popup,
-        $sidebar
+        $sidebar,
+        $includeNavigation,
+        $includeIncident ? $incidentState : null
     );
 }
 

@@ -16,6 +16,7 @@ estab_session_ui_start($_SESSION);
 $mode = estab_admin_validate_counter_mode((string) Nachweisung);
 $error = null;
 $submitted = [];
+$counterAvailable = true;
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     try {
@@ -58,6 +59,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             } catch (EstabAdminConflictException $exception) {
                 http_response_code(409);
                 $error = $exception->getMessage();
+            } catch (EstabNoActiveIncidentException) {
+                http_response_code(409);
+                $error = 'Ohne aktiven Einsatz kann der Nachrichtenzähler '
+                    . 'nicht verändert werden.';
+                $counterAvailable = false;
             } catch (Throwable $exception) {
                 error_log('eStab message counter update failed: ' . $exception->getMessage());
                 http_response_code(500);
@@ -78,10 +84,18 @@ try {
     } finally {
         estab_auth_close($connection);
     }
+} catch (EstabNoActiveIncidentException) {
+    http_response_code(409);
+    $error = 'Kein Einsatz aktiv. Aktivieren Sie zuerst einen Einsatz.';
+    $counterAvailable = false;
+    $current = $mode === 'gemeinsam'
+        ? ['ea_nummer' => 0]
+        : ['e_nummer' => 0, 'a_nummer' => 0];
 } catch (Throwable $exception) {
     error_log('eStab message counter lookup failed: ' . $exception->getMessage());
     http_response_code(500);
     $error = 'Der aktuelle Nachrichtenzähler konnte nicht gelesen werden.';
+    $counterAvailable = false;
     $current = $mode === 'gemeinsam'
         ? ['ea_nummer' => 0]
         : ['e_nummer' => 0, 'a_nummer' => 0];
@@ -95,39 +109,62 @@ $updated = ($_GET['updated'] ?? '') === '1';
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>eStab Nachrichtenzähler</title>
-  <style>
-    body { font: 16px/1.45 system-ui, sans-serif; max-width: 50rem; margin: 2rem auto; padding: 0 1rem; }
-    table { border-collapse: collapse; }
-    th, td { border: 1px solid #999; padding: .55rem; text-align: left; }
-    .error { color: #8b0000; font-weight: bold; }
-    .success { color: #075f23; font-weight: bold; }
-  </style>
+  <?= estab_session_ui_stylesheet() ?>
 </head>
-<body data-counter-mode="<?= estab_admin_html($mode) ?>">
-  <h1>Nachrichtennummer nach Systemausfall erhöhen</h1>
-  <p>Hier wird die letzte auf der Rückfallebene verwendete Nummer eingetragen.
-    Der Vorgang kann einen Zähler niemals absenken und erzeugt
-    Systemnachricht sowie Audit-Eintrag in derselben Transaktion.</p>
+<body class="estab-tool-page">
+  <main
+    class="estab-tool-main estab-tool-main-narrow"
+    data-counter-mode="<?= estab_admin_html($mode) ?>"
+    data-estab-counter-tool>
+    <header class="estab-tool-hero">
+      <p class="estab-tool-eyebrow">Administration · Notfallmaßnahme</p>
+      <h1>Nachrichtenzähler erhöhen</h1>
+      <p>Tragen Sie nach einem Systemausfall die letzte auf Papier verwendete
+        Nachrichtennummer ein. Der Zähler kann ausschließlich erhöht werden.</p>
+    </header>
 
-  <?php if ($updated): ?>
-    <p class="success">Der Nachrichtenzähler wurde erhöht.</p>
-  <?php endif; ?>
-  <?php if ($error !== null): ?>
-    <p class="error"><?= estab_admin_html($error) ?></p>
-  <?php endif; ?>
+    <aside class="estab-tool-notice" aria-label="Sicherheitswirkung">
+      <strong>Transaktional und einsatzbezogen:</strong>
+      <p>Die Korrektur gilt nur für den aktiven Einsatz und erzeugt
+        Systemnachricht sowie Audit-Eintrag in derselben Transaktion.
+        Ein vorhandener Höchstwert wird niemals abgesenkt.</p>
+    </aside>
 
-  <form method="post" action="set_number_after_crash.php" data-estab-dirty-guard
-    <?= $error !== null && $submitted !== []
-        ? 'data-estab-dirty-initial'
-        : '' ?>>
-    <?= estab_csrf_field() ?>
-    <input type="hidden" name="admin_action" value="raise_counter">
-    <table>
-      <tbody>
+    <?php if ($updated): ?>
+      <p class="estab-tool-feedback estab-tool-feedback-success" role="status">
+        Der Nachrichtenzähler wurde erhöht.
+      </p>
+    <?php endif; ?>
+    <?php if ($error !== null): ?>
+      <p class="estab-tool-feedback estab-tool-feedback-error" role="alert">
+        <?= estab_admin_html($error) ?>
+      </p>
+    <?php endif; ?>
+
+    <section class="estab-tool-panel" aria-labelledby="counter-form-title">
+      <header class="estab-tool-panel-heading">
+        <h2 id="counter-form-title">Letzte vergebene Nummer eintragen</h2>
+        <p>Aktuelle Werte werden direkt am jeweiligen Eingabefeld angezeigt.
+          Zulässig ist nur eine größere, positive ganze Zahl.</p>
+      </header>
+      <form
+        class="estab-tool-form"
+        method="post"
+        action="set_number_after_crash.php"
+        data-estab-dirty-guard
+        data-estab-requires-incident
+        <?= $error !== null && $submitted !== []
+            ? 'data-estab-dirty-initial'
+            : '' ?>>
+        <?= estab_csrf_field() ?>
+        <input type="hidden" name="admin_action" value="raise_counter">
+        <fieldset class="estab-tool-counter-grid">
+          <legend class="estab-visually-hidden">
+            Nachrichtennummern des aktiven Einsatzes
+          </legend>
       <?php if ($mode === 'gemeinsam'): ?>
-        <tr>
-          <th scope="row"><label for="ea_nummer">Ein-/Ausgangsnummer</label></th>
-          <td>
+          <div class="estab-tool-field estab-tool-field-wide">
+            <label for="ea_nummer">Ein-/Ausgangsnummer</label>
             <input
               id="ea_nummer"
               name="ea_nummer"
@@ -136,13 +173,13 @@ $updated = ($_GET['updated'] ?? '') === '1';
               max="<?= ESTAB_ADMIN_COUNTER_MAX ?>"
               required
               value="<?= estab_admin_html($submitted['ea_nummer'] ?? '') ?>">
-            <small>Aktueller Höchstwert: <strong id="current-common"><?= $current['ea_nummer'] ?></strong></small>
-          </td>
-        </tr>
+            <small>Aktueller Höchstwert:
+              <strong id="current-common"><?= $current['ea_nummer'] ?></strong>
+            </small>
+          </div>
       <?php else: ?>
-        <tr>
-          <th scope="row"><label for="e_nummer">Eingangsnummer</label></th>
-          <td>
+          <div class="estab-tool-field">
+            <label for="e_nummer">Eingangsnummer</label>
             <input
               id="e_nummer"
               name="e_nummer"
@@ -151,12 +188,12 @@ $updated = ($_GET['updated'] ?? '') === '1';
               max="<?= ESTAB_ADMIN_COUNTER_MAX ?>"
               required
               value="<?= estab_admin_html($submitted['e_nummer'] ?? '') ?>">
-            <small>Aktueller Höchstwert: <strong id="current-incoming"><?= $current['e_nummer'] ?></strong></small>
-          </td>
-        </tr>
-        <tr>
-          <th scope="row"><label for="a_nummer">Ausgangsnummer</label></th>
-          <td>
+            <small>Aktueller Höchstwert:
+              <strong id="current-incoming"><?= $current['e_nummer'] ?></strong>
+            </small>
+          </div>
+          <div class="estab-tool-field">
+            <label for="a_nummer">Ausgangsnummer</label>
             <input
               id="a_nummer"
               name="a_nummer"
@@ -165,16 +202,28 @@ $updated = ($_GET['updated'] ?? '') === '1';
               max="<?= ESTAB_ADMIN_COUNTER_MAX ?>"
               required
               value="<?= estab_admin_html($submitted['a_nummer'] ?? '') ?>">
-            <small>Aktueller Höchstwert: <strong id="current-outgoing"><?= $current['a_nummer'] ?></strong></small>
-          </td>
-        </tr>
+            <small>Aktueller Höchstwert:
+              <strong id="current-outgoing"><?= $current['a_nummer'] ?></strong>
+            </small>
+          </div>
       <?php endif; ?>
-      </tbody>
-    </table>
-    <p>
-      <button type="submit">Zähler atomar erhöhen</button>
-      <a href="admin.php">Abbrechen</a>
-    </p>
-  </form>
+        </fieldset>
+        <div class="estab-tool-actions">
+          <button
+            class="estab-button estab-button-primary"
+            type="submit"
+            <?= $counterAvailable ? '' : 'disabled' ?>>
+            Zähler atomar erhöhen
+          </button>
+          <a class="estab-button" href="admin.php">Abbrechen</a>
+        </div>
+      </form>
+    </section>
+
+    <footer class="estab-tool-footer">
+      <a href="admin.php">Zurück zur Administration</a>
+      <span>Diese Maßnahme ist ausschließlich für die dokumentierte Rückfallebene vorgesehen.</span>
+    </footer>
+  </main>
 </body>
 </html>

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/incident.php';
 
 /**
  * Return the distinct configured functions in their established display order.
@@ -184,24 +185,27 @@ function estab_sidebar_queue_profile(?array $identity): ?array
 /**
  * Build the fixed, prepared queue-count query for one legacy role profile.
  *
- * @return array{sql: string, parameters: list<string>}
+ * @return array{sql: string, parameters: list<int|string>}
  */
 function estab_sidebar_queue_query(
     string $queueSessionKey,
     string $messageTable,
     string $userTablePrefix,
     string $function,
-    bool $includeOutgoingForReview
+    bool $includeOutgoingForReview,
+    int $incidentId
 ): array {
     $messages = estab_auth_table($messageTable);
+    $incidentId = estab_incident_positive_id($incidentId);
 
     if ($queueSessionKey === 'old_que_aw') {
         return [
             'sql' => 'SELECT COUNT(*) FROM ' . $messages
-                . " WHERE `04_richtung` = 'A'"
+                . ' WHERE `einsatz_id` = ?'
+                . " AND `04_richtung` = 'A'"
                 . ' AND `03_datum` IS NULL'
                 . " AND `03_zeichen` = ''",
-            'parameters' => [],
+            'parameters' => [$incidentId],
         ];
     }
 
@@ -213,10 +217,11 @@ function estab_sidebar_queue_query(
 
         return [
             'sql' => 'SELECT COUNT(*) FROM ' . $messages
-                . ' WHERE `15_quitdatum` IS NULL'
+                . ' WHERE `einsatz_id` = ?'
+                . ' AND `15_quitdatum` IS NULL'
                 . " AND `15_quitzeichen` = ''"
                 . ' AND (' . $reviewScope . ')',
-            'parameters' => [],
+            'parameters' => [$incidentId],
         ];
     }
 
@@ -239,14 +244,21 @@ function estab_sidebar_queue_query(
     return [
         'sql' => 'SELECT GREATEST(0,'
             . ' (SELECT COUNT(*) FROM ' . $messages . ' AS `all_messages`'
-            . ' WHERE `all_messages`.`16_empf` LIKE ?)'
+            . ' WHERE `all_messages`.`einsatz_id` = ?'
+            . ' AND `all_messages`.`16_empf` LIKE ?)'
             . ' -'
             . ' (SELECT COUNT(*) FROM ' . $messages . ' AS `done_messages`'
             . ' INNER JOIN ' . $doneTable . ' AS `done_state`'
             . ' ON `done_messages`.`00_lfd` = `done_state`.`nachnum`'
-            . ' WHERE `done_messages`.`16_empf` LIKE ?)'
+            . ' WHERE `done_messages`.`einsatz_id` = ?'
+            . ' AND `done_messages`.`16_empf` LIKE ?)'
             . ')',
-        'parameters' => [$recipientPattern, $recipientPattern],
+        'parameters' => [
+            $incidentId,
+            $recipientPattern,
+            $incidentId,
+            $recipientPattern,
+        ],
     ];
 }
 
@@ -262,12 +274,17 @@ function estab_sidebar_queue_count(
     string $function,
     bool $includeOutgoingForReview
 ): int {
+    $incident = estab_incident_active($connection);
+    if ($incident === null) {
+        return 0;
+    }
     $query = estab_sidebar_queue_query(
         $queueSessionKey,
         $messageTable,
         $userTablePrefix,
         $function,
-        $includeOutgoingForReview
+        $includeOutgoingForReview,
+        (int) $incident['active_einsatz_id']
     );
     $statement = $connection->prepare($query['sql']);
     if (!$statement) {
@@ -529,7 +546,8 @@ function estab_sidebar_status_markup(
     ?DateTimeInterface $now = null,
     ?string $soundUrl = null,
     ?string $notificationSoundUrl = null,
-    string $freshnessState = 'current'
+    string $freshnessState = 'current',
+    string $incidentMarkup = ''
 ): string {
     $identity = estab_auth_session_identity($session);
     if ($identity === null) {
@@ -686,6 +704,7 @@ function estab_sidebar_status_markup(
         . '<span>' . estab_auth_html($now->format('d.m.Y')) . '</span>'
         . '</time>'
         . '</div>'
+        . $incidentMarkup
         . '<div class="estab-sidebar-freshness"'
         . ' data-estab-sidebar-freshness'
         . ' data-estab-status-freshness="' . $freshnessState . '"'

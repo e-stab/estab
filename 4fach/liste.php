@@ -194,7 +194,7 @@ class Listen extends kategorien {
       \*************************************************************************/
       case "Stab_lesen":  // ******  S T A B    l e s e n *****
           if ( debug ) { echo "<b>file:liste.php:_92 fkt:darstellungsart - switch (this->listenart):Stab_lesen </b><br>"; }
-          echo "\n<form action=\"".$conf_4f ["MainURL"]."\" method=\"POST\" target=\"mainframe\">\n";
+          echo "\n<form action=\"".estab_message_html ($conf_4f ["MainURL"])."\" method=\"POST\" target=\"mainframe\" data-estab-list-filter>\n";
           echo "<table><tbody>";
           echo "<tr>";
           echo "<td>";
@@ -268,24 +268,21 @@ class Listen extends kategorien {
         echo "<table><tbody>";
         echo "<tr>";
         if ($_SESSION["flt_find_mask"] == 1){
-          echo "\n<form action=\"".$conf_4f ["MainURL"]."\" method=\"POST\" target=\"mainframe\">\n";
           echo "<td>";
           if (isset ($_SESSION ["flt_search"]) ) { $defvalue = $_SESSION ["flt_search"] ;}
           else {$defvalue = "";}
-          echo "<div>";
           echo "<p>Suchbegriff: <input name=\"flt_search\" value=\"".estab_message_html ($defvalue)."\" type=\"text\" size=\"30\" maxlength=\"30\"></p>";
-          echo "<div>";
           echo "</td>";
           echo "<td>";
           echo "<input name=\"filter_suche\" value=\"suchen\" type=\"submit\">\n";
           echo "</td>";
-          echo "</div>";
         }
         echo "</tr>";
         echo "</tbody></table>";
         echo "</td>";
         echo "</tr>";
         echo "</tbody></table>";
+        echo "</form>\n";
       break;
 
 
@@ -301,7 +298,7 @@ class Listen extends kategorien {
       case "SIADMIN":  // ***************  SICHTER ADMINISTRATOR  *********************
       case "FMADMIN":
           if ( debug ) { echo "<b>file:liste.php:194 fkt:darstellungsart - switch (this->listenart):SIADMIN/FMADMIN </b><br>"; }
-          echo "\n<form action=\"".$conf_4f ["MainURL"]."\" method=\"POST\" target=\"mainframe\">\n";
+          echo "\n<form action=\"".estab_message_html ($conf_4f ["MainURL"])."\" method=\"POST\" target=\"mainframe\" data-estab-list-filter>\n";
           echo "<table><tbody>";
           echo "<tr>";
           echo "<td>";
@@ -355,24 +352,21 @@ class Listen extends kategorien {
         echo "<table><tbody>";
         echo "<tr>";
         if ($_SESSION["flt_find_mask"] == 1){
-          echo "\n<form action=\"".$conf_4f ["MainURL"]."\" method=\"POST\" target=\"mainframe\">\n";
           echo "<td>";
           if (isset ($_SESSION ["flt_search"]) ) { $defvalue = $_SESSION ["flt_search"] ;}
           else {$defvalue = "";}
-          echo "<div>";
           echo "<p>Suchbegriff: <input name=\"flt_search\" value=\"".estab_message_html ($defvalue)."\" type=\"text\" size=\"30\" maxlength=\"30\"></p>";
-          echo "<div>";
           echo "</td>";
           echo "<td>";
           echo "<input name=\"filter_suche\" value=\"suchen\" type=\"submit\">\n";
           echo "</td>";
-          echo "</div>";
         }
         echo "</tr>";
         echo "</tbody></table>";
         echo "</td>";
         echo "</tr>";
         echo "</tbody></table>";
+        echo "</form>\n";
 
 
       break;
@@ -635,7 +629,10 @@ class Listen extends kategorien {
 
     $messageTable = estab_message_table ((string) $conf_4f_tbl ["nachrichten"]);
     $parameters = array ();
-    $where = array ();
+    $where = array (
+      "m.`einsatz_id` = (SELECT `active_einsatz_id` ".
+      "FROM `nv_einsatz_status` WHERE `singleton_id` = 1)"
+    );
     $joins = array ();
     $select = "m.`00_lfd`, m.`09_vorrangstufe`, m.`04_richtung`, ".
       "m.`04_nummer`, m.`10_anschrift`, m.`12_abfzeit`, m.`12_inhalt`, ".
@@ -761,7 +758,8 @@ class Listen extends kategorien {
         $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
                              $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
         $query = "SELECT `00_lfd`,`07_durchspruch`, `08_befhinweis`, `08_befhinwausw`,`09_vorrangstufe`, `10_anschrift`, `12_abfzeit`, `12_inhalt` FROM `".$conf_4f_tbl ["nachrichten"]."`
-                  WHERE ((`04_richtung` = \"A\") AND (`03_datum` IS NULL) AND (`03_zeichen` = \"\")) order by `09_vorrangstufe` DESC, `12_abfzeit` ; ";
+                  WHERE `einsatz_id` = (SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1)
+                  AND ((`04_richtung` = \"A\") AND (`03_datum` IS NULL) AND (`03_zeichen` = \"\")) order by `09_vorrangstufe` DESC, `12_abfzeit` ; ";
         $result = $dbaccess->query_table ($query);
         if ($result != "" ){
           echo "<table style=\"text-align: center; background-color: rgb(255, 255, 255); \" border=\"1\" cellpadding=\"10\" cellspacing=\"1\">\n<tbody>\n";
@@ -772,9 +770,11 @@ class Listen extends kategorien {
           echo "<td>Inhalt</td>\n";
           echo "</tr>";
           foreach ($result as $row){
-            if ( ( $row["09_vorrangstufe"] != "" ) and ($row["09_vorrangstufe"] != "eee")){
-              echo "<tr style=\"background-color: rgb(255,255,100); color:#FFFFFF; font-weight:bold;\">\n";
-            }
+            $priorityStyle = ( $row["09_vorrangstufe"] != "" ) and
+              ($row["09_vorrangstufe"] != "eee")
+                ? " style=\"background-color: rgb(255,255,100); color:#000000; font-weight:bold;\""
+                : "";
+            echo "<tr".$priorityStyle.">\n";
             $abfzeit = convdatetimeto ($row["12_abfzeit"]);
             echo "<td>"; if (($row["12_abfzeit"] != "")) { estab_list_detail_action ("fm", "meldung", $row["00_lfd"], $abfzeit["stak"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
             echo "<td>"; if (($row["09_vorrangstufe"] != "")) { estab_list_detail_action ("fm", "meldung", $row["00_lfd"], $row["09_vorrangstufe"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
@@ -807,11 +807,11 @@ class Listen extends kategorien {
             // erledigt
           echo "<th align=\"center\">";
           echo "<p><img src=\"".$conf_design_path."/checked.gif\" alt=\"gepr&uuml;ft/erledigt\"></p>";
-          echo "</td>\n";
+          echo "</th>\n";
             // Transport
           echo "<th align=\"center\">";
           echo "<p><img src=\"".$conf_design_path."/transport.gif\" alt=\"Transportstatus\"></p>";
-          echo "</td>\n";
+          echo "</th>\n";
           echo "<th>Vorrang</th>\n";
           echo "<th>E/A</th>\n";
           echo "<th>Num</th>\n";
@@ -983,8 +983,8 @@ class Listen extends kategorien {
 			$dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
                              $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
 
-			$WHERE_inout = "WHERE ( ( `15_quitdatum` IS NULL ) AND ( `15_quitzeichen` = \"\" ) ) AND ( ( `04_richtung` =\"E\") OR ( (`03_datum` IS NOT NULL) AND ( `03_zeichen` != \"\" ) ) )";
-			$WHERE_in    = "WHERE ( ( `15_quitdatum` IS NULL ) AND ( `15_quitzeichen` = \"\" ) ) AND ( `04_richtung` =\"E\")";
+			$WHERE_inout = "WHERE `einsatz_id` = (SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1) AND ( ( `15_quitdatum` IS NULL ) AND ( `15_quitzeichen` = \"\" ) ) AND ( ( `04_richtung` =\"E\") OR ( (`03_datum` IS NOT NULL) AND ( `03_zeichen` != \"\" ) ) )";
+			$WHERE_in    = "WHERE `einsatz_id` = (SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1) AND ( ( `15_quitdatum` IS NULL ) AND ( `15_quitzeichen` = \"\" ) ) AND ( `04_richtung` =\"E\")";
 
 //order by `09_vorrangstufe` DESC, `12_abfzeit`; 
 
@@ -1021,9 +1021,11 @@ class Listen extends kategorien {
           echo "<td>Inhalt / Text</td>\n";
           echo "</tr>";
           foreach ($result as $row){
-           if ( ( $row["09_vorrangstufe"] != "" ) and ($row["09_vorrangstufe"] != "eee")){
-              echo "<tr style=\"background-color: rgb(220,0,0); color:#FFFFFF; font-weight:bold;\">\n";
-           }
+           $priorityStyle = ( $row["09_vorrangstufe"] != "" ) and
+             ($row["09_vorrangstufe"] != "eee")
+               ? " style=\"background-color: rgb(220,0,0); color:#FFFFFF; font-weight:bold;\""
+               : "";
+           echo "<tr".$priorityStyle.">\n";
            $abfzeit = convdatetimeto ($row["12_abfzeit"]);
            echo "<td>"; if (($row["12_abfzeit"] != "")) { estab_list_detail_action ("sichter", "meldung", $row["00_lfd"], $abfzeit["stak"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
            echo "<td>"; if (($row["09_vorrangstufe"] != "")) { estab_list_detail_action ("sichter", "meldung", $row["00_lfd"], $row["09_vorrangstufe"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
@@ -1083,9 +1085,11 @@ include ("../4fcfg/fkt_rolle.inc.php");
 
           foreach ($result as $row){
              // VORRANGSTUFE
-             if ( ( $row["09_vorrangstufe"] != "") and ( $row["09_vorrangstufe"] != "eee" ) ){
-               echo "<tr style=\"background-color: rgb(255,255,0); color:fm=meldung&FFFFFF; font-weight:bold;\">\n";
-             }
+             $priorityStyle = ( $row["09_vorrangstufe"] != "") and
+               ( $row["09_vorrangstufe"] != "eee" )
+                 ? " style=\"background-color: rgb(255,255,0); color:#000000; font-weight:bold;\""
+                 : "";
+             echo "<tr".$priorityStyle.">\n";
              echo "<td>";
              if ( ( $row["09_vorrangstufe"] != "") and ( $row["09_vorrangstufe"] != "eee" ) ) {
                estab_list_detail_action ("fm", $adminMessageRoute, $row["00_lfd"], $row["09_vorrangstufe"]);
@@ -1338,7 +1342,8 @@ include ("../4fcfg/fkt_rolle.inc.php");
         $query = "SELECT `00_lfd`,`09_vorrangstufe`,`04_richtung`, `04_nummer`, `10_anschrift`,
                          `12_abfzeit`, `12_inhalt`, `13_abseinheit`, `x01_abschluss`
                   FROM `".$conf_4f_tbl ["nachrichten"]."`
-                  WHERE 04_richtung = \"E\" order by 04_nummer ASC ; ";
+                  WHERE `einsatz_id` = (SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1)
+                  AND 04_richtung = \"E\" order by 04_nummer ASC ; ";
         $result = $dbaccess->query_table ($query);
         echo "<p align=\"center\"><big><big><big><b>Nachweisung Eingang</b></big></big></big></p>";
         if ( $result != "" ){
@@ -1353,6 +1358,7 @@ include ("../4fcfg/fkt_rolle.inc.php");
           echo "</tr>";
           if  ( $result != "" ) {
             foreach ($result as $row){
+               echo "<tr>\n";
                echo "<td>";
                if ( ( $row["09_vorrangstufe"] != "") and
                     ( $row["09_vorrangstufe"] != "eee" ) ) {
@@ -1400,7 +1406,8 @@ include ("../4fcfg/fkt_rolle.inc.php");
         $query = "SELECT `00_lfd`,`09_vorrangstufe`,`04_richtung`, `04_nummer`, `10_anschrift`,
                          `12_abfzeit`, `12_inhalt`, `13_abseinheit`, `x01_abschluss`
                   FROM `".$conf_4f_tbl ["nachrichten"]."`
-                  WHERE 04_richtung = \"A\" order by 04_nummer ASC ; ";
+                  WHERE `einsatz_id` = (SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1)
+                  AND 04_richtung = \"A\" order by 04_nummer ASC ; ";
         $result = $dbaccess->query_table ($query);
         echo "<p align=\"center\"><big><big><big><b>Nachweisung Ausgang</b></big></big></big></p>";
         if ( $result != "" ){
@@ -1415,6 +1422,7 @@ include ("../4fcfg/fkt_rolle.inc.php");
           echo "</tr>";
           if  ($result != "") {
             foreach ($result as $row){
+               echo "<tr>\n";
                echo "<td>";
                if ( ( $row["09_vorrangstufe"] != "") and ( $row["09_vorrangstufe"] != "eee" ) ) {
                  echo "<a>".estab_message_html ($row["09_vorrangstufe"])."</a>\n" ;
@@ -1460,7 +1468,8 @@ include ("../4fcfg/fkt_rolle.inc.php");
         $query = "SELECT `00_lfd`,`01_datum`,`01_zeichen`,`02_zeit`,`03_datum`, `09_vorrangstufe`,`04_richtung`,
                          `04_nummer`, `10_anschrift`, `12_inhalt`, `13_abseinheit`,`14_zeichen`, `x01_abschluss`
                   FROM `".$conf_4f_tbl ["nachrichten"]."`
-                  WHERE 1 order by 04_nummer ASC ; ";
+                  WHERE `einsatz_id` = (SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1)
+                  order by 04_nummer ASC ; ";
         $result = $dbaccess->query_table ($query);
         echo "<p align=\"center\"><big><big><big><b>Einsatz ".$conf_4f_db ["datenbank"]." - ". $conf_4f ["anschrift"]. "</big><br>Nachweisung Eingang / Ausgang</b></big></big></p>";
         if ( $result != "" ){
@@ -1479,6 +1488,7 @@ include ("../4fcfg/fkt_rolle.inc.php");
           echo "</tr>";
           if  ($result != "") {
             foreach ($result as $row){
+               echo "<tr>\n";
                echo "<td>";
                if ( ( $row["09_vorrangstufe"] != "") and ( $row["09_vorrangstufe"] != "eee" ) ) {
                  echo "<a>".estab_message_html ($row["09_vorrangstufe"])."</a>\n" ;
@@ -1568,8 +1578,6 @@ include ("../4fcfg/fkt_rolle.inc.php");
     } // switch
     if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### - fkt:createlist - switch_ENDE(listenart) ></b><br>";}  
   }
-//echo "</form>\n";
-
 } // class
 
 ?>

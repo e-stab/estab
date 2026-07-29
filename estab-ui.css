@@ -1270,6 +1270,185 @@ audio[data-estab-sidebar-audio] {
     background: #f0f0f0;
 }
 
+.estab-admin-dashboard-page {
+    background: #f3f6f9;
+    color: #17263a;
+    font: 16px/1.5 Arial, Helvetica, sans-serif;
+    margin: 0;
+    min-height: 100vh;
+}
+
+.estab-admin-dashboard {
+    box-sizing: border-box;
+    display: grid;
+    gap: 1.5rem;
+    margin: 0 auto;
+    max-width: 82rem;
+    padding: 2rem 1rem 3rem;
+}
+
+.estab-admin-dashboard-hero {
+    background:
+        linear-gradient(135deg, rgba(17, 47, 79, 0.97), rgba(39, 86, 130, 0.94));
+    border-radius: 14px;
+    box-shadow: 0 10px 28px rgba(17, 38, 63, 0.18);
+    color: #ffffff;
+    padding: clamp(1.35rem, 3vw, 2.3rem);
+}
+
+.estab-admin-dashboard-hero h1,
+.estab-admin-dashboard-hero p,
+.estab-admin-dashboard-section h2,
+.estab-admin-dashboard-section p {
+    margin-top: 0;
+}
+
+.estab-admin-dashboard-hero h1 {
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    line-height: 1.05;
+    margin-bottom: 0.7rem;
+}
+
+.estab-admin-dashboard-hero > p:last-child {
+    color: #e5eef7;
+    margin-bottom: 0;
+    max-width: 54rem;
+}
+
+.estab-admin-dashboard-eyebrow {
+    color: #f4ca70;
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    margin-bottom: 0.45rem;
+    text-transform: uppercase;
+}
+
+.estab-admin-dashboard-notice {
+    background: #fff8dd;
+    border: 1px solid #d5b45a;
+    border-left: 5px solid #b47a05;
+    border-radius: 10px;
+    color: #5b430e;
+    padding: 1rem 1.1rem;
+}
+
+.estab-admin-dashboard-section {
+    background: #ffffff;
+    border: 1px solid #c5d1dd;
+    border-radius: 12px;
+    box-shadow: 0 5px 18px rgba(31, 58, 86, 0.08);
+    padding: clamp(1rem, 2.5vw, 1.5rem);
+}
+
+.estab-admin-dashboard-section-heading {
+    margin-bottom: 1rem;
+}
+
+.estab-admin-dashboard-section-heading h2 {
+    color: #153c64;
+    font-size: 1.3rem;
+    margin-bottom: 0.25rem;
+}
+
+.estab-admin-dashboard-section-heading p {
+    color: #52657a;
+    margin-bottom: 0;
+    max-width: 58rem;
+}
+
+.estab-admin-dashboard-grid {
+    display: grid;
+    gap: 0.9rem;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+}
+
+.estab-admin-dashboard-card {
+    align-items: center;
+    background: #f8fafc;
+    border: 2px solid #c3d0de;
+    border-radius: 10px;
+    box-sizing: border-box;
+    color: #17263a;
+    display: grid;
+    gap: 0.9rem;
+    grid-template-columns: 3.25rem minmax(0, 1fr) auto;
+    min-height: 9.5rem;
+    padding: 1rem;
+    text-decoration: none;
+}
+
+.estab-admin-dashboard-card:hover {
+    background: #eef5fc;
+    border-color: #2b659a;
+    box-shadow: 0 7px 18px rgba(31, 75, 116, 0.15);
+}
+
+.estab-admin-dashboard-card:focus-visible {
+    outline: 4px solid #e5b247;
+    outline-offset: 3px;
+}
+
+.estab-admin-dashboard-number {
+    align-items: center;
+    background: #173f67;
+    border-radius: 999px;
+    color: #ffffff;
+    display: inline-flex;
+    font-size: 0.95rem;
+    font-weight: 800;
+    height: 3.25rem;
+    justify-content: center;
+    width: 3.25rem;
+}
+
+.estab-admin-dashboard-card-content {
+    display: grid;
+    gap: 0.35rem;
+    min-width: 0;
+}
+
+.estab-admin-dashboard-card-content strong {
+    color: #123a62;
+    font-size: 1.12rem;
+    line-height: 1.25;
+}
+
+.estab-admin-dashboard-card-content > span:last-child {
+    color: #506176;
+    overflow-wrap: anywhere;
+}
+
+.estab-admin-dashboard-badge {
+    color: #7a5100;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+}
+
+.estab-admin-dashboard-arrow {
+    color: #245c91;
+    font-size: 1.6rem;
+    font-weight: 800;
+}
+
+.estab-admin-dashboard-footer {
+    align-items: baseline;
+    color: #5b6a7c;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    justify-content: space-between;
+}
+
+.estab-admin-dashboard-footer a {
+    color: #214f7d;
+    font-weight: 800;
+    min-height: 2.75rem;
+    padding: 0.55rem 0;
+}
+
 .estab-export-page {
     background: #f3f6f9;
     color: #17263a;
@@ -1351,6 +1530,216 @@ audio[data-estab-sidebar-audio] {
     background: #fff0ef;
     border-color: #b52a24;
     color: #741a16;
+}
+
+.estab-incident-export-main {
+    max-width: 68rem;
+}
+
+.estab-incident-export-panel {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+}
+
+.estab-incident-export-form {
+    display: grid;
+    gap: 1rem;
+    margin: 0;
+}
+
+.estab-incident-export-field {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.estab-incident-export-field > span,
+.estab-incident-export-sections legend {
+    color: #183454;
+    font-weight: 800;
+}
+
+.estab-incident-export-field select {
+    background: #ffffff;
+    border: 1px solid #7d91a7;
+    border-radius: 8px;
+    box-sizing: border-box;
+    color: #17263a;
+    font: inherit;
+    min-height: 3rem;
+    padding: 0.65rem 0.75rem;
+    width: 100%;
+}
+
+.estab-incident-export-field select:focus-visible,
+.estab-incident-export-option input:focus-visible {
+    outline: 3px solid #f0b429;
+    outline-offset: 2px;
+}
+
+.estab-incident-export-sections {
+    border: 1px solid #c6d2df;
+    border-radius: 10px;
+    display: grid;
+    gap: 0.65rem;
+    margin: 0;
+    padding: 1rem;
+}
+
+.estab-incident-export-sections legend {
+    padding: 0 0.35rem;
+}
+
+.estab-incident-export-option {
+    align-items: start;
+    background: #f4f7fa;
+    border: 1px solid #d5dee8;
+    border-radius: 8px;
+    cursor: pointer;
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: auto minmax(0, 1fr);
+    min-height: 3rem;
+    padding: 0.75rem;
+}
+
+.estab-incident-export-option:hover {
+    background: #eaf1f8;
+    border-color: #7d91a7;
+}
+
+.estab-incident-export-option input {
+    height: 1.35rem;
+    margin: 0.1rem 0 0;
+    width: 1.35rem;
+}
+
+.estab-incident-export-option span {
+    display: grid;
+    gap: 0.15rem;
+}
+
+.estab-incident-export-option small,
+.estab-incident-export-limit {
+    color: #42546a;
+}
+
+.estab-incident-export-limit {
+    background: #eef4fa;
+    border-left: 5px solid #2b6397;
+    margin: 0;
+    padding: 0.8rem 0.9rem;
+}
+
+.estab-incident-indicator {
+    align-items: center;
+    border: 2px solid;
+    border-radius: 10px;
+    box-sizing: border-box;
+    display: grid;
+    gap: 0.2rem 1rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    margin: 0.75rem 1rem;
+    padding: 0.7rem 0.85rem;
+}
+
+.estab-incident-indicator-label {
+    font-size: 0.72rem;
+    font-weight: 800;
+    grid-column: 1 / -1;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.estab-incident-indicator strong {
+    font-size: 0.98rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.estab-incident-indicator > span:last-child,
+.estab-incident-indicator > a {
+    font-size: 0.84rem;
+    justify-self: end;
+}
+
+.estab-incident-indicator-active {
+    background: #163c2a;
+    border-color: #4fbd7a;
+    color: #f0fff5;
+}
+
+.estab-incident-indicator-active .estab-incident-indicator-label {
+    color: #9ee0b7;
+}
+
+.estab-incident-indicator-alert {
+    background: #5b1f24;
+    border-color: #ff737b;
+    color: #fff5f5;
+}
+
+.estab-incident-indicator-alert .estab-incident-indicator-label {
+    color: #ffb7bb;
+}
+
+.estab-incident-indicator-alert > a {
+    background: #ffffff;
+    border-radius: 7px;
+    color: #721c24;
+    font-weight: 800;
+    min-height: 2.4rem;
+    padding: 0.55rem 0.7rem;
+    text-align: center;
+    text-decoration: none;
+}
+
+.estab-incident-indicator-alert > a:hover,
+.estab-incident-indicator-alert > a:focus-visible {
+    background: #fff0f0;
+    outline: 3px solid #f0b429;
+    outline-offset: 2px;
+}
+
+.estab-incident-indicator-compact {
+    grid-template-columns: 1fr;
+    margin: 0.6rem 0.75rem;
+}
+
+.estab-incident-indicator-compact > span:last-child,
+.estab-incident-indicator-compact > a {
+    justify-self: stretch;
+}
+
+.estab-incident-indicator-sidebar {
+    margin: 0.75rem 0 0;
+}
+
+form[data-estab-incident-disabled="true"] {
+    opacity: 0.58;
+}
+
+form[data-estab-incident-disabled="true"]::before {
+    background: #fff0ef;
+    border: 2px solid #b52a24;
+    border-radius: 8px;
+    color: #741a16;
+    content: "Kein aktiver Einsatz – Eingaben sind gesperrt.";
+    display: block;
+    font: 700 0.95rem/1.4 Arial, Helvetica, sans-serif;
+    margin: 0 0 0.75rem;
+    padding: 0.75rem;
+}
+
+@media (max-width: 44rem) {
+    .estab-incident-indicator {
+        grid-template-columns: 1fr;
+        margin: 0.6rem 0.75rem;
+    }
+
+    .estab-incident-indicator > span:last-child,
+    .estab-incident-indicator > a {
+        justify-self: stretch;
+    }
 }
 
 .estab-export-create {
@@ -1651,6 +2040,552 @@ audio[data-estab-sidebar-audio] {
     font-weight: 700;
 }
 
+/*
+ * Shared administration and utility-page language.
+ *
+ * These classes deliberately mirror the administration dashboard and export
+ * surfaces. Standalone tools therefore keep one visual hierarchy instead of
+ * introducing page-local colour systems, controls and responsive behaviour.
+ */
+.estab-tool-page {
+    background: #f3f6f9;
+    color: #17263a;
+    font: 16px/1.5 Arial, Helvetica, sans-serif;
+    margin: 0;
+    min-height: 100vh;
+}
+
+.estab-tool-main {
+    box-sizing: border-box;
+    display: grid;
+    gap: 1.25rem;
+    margin: 0 auto;
+    max-width: 82rem;
+    padding: 2rem 1rem 3rem;
+}
+
+.estab-tool-main-wide {
+    max-width: 90rem;
+}
+
+.estab-tool-main-narrow {
+    max-width: 58rem;
+}
+
+.estab-tool-main *,
+.estab-tool-main *::before,
+.estab-tool-main *::after {
+    box-sizing: border-box;
+}
+
+.estab-tool-main .estab-button {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+.estab-tool-hero {
+    background:
+        linear-gradient(135deg, rgba(17, 47, 79, 0.97), rgba(39, 86, 130, 0.94));
+    border-radius: 14px;
+    box-shadow: 0 10px 28px rgba(17, 38, 63, 0.18);
+    color: #ffffff;
+    padding: clamp(1.35rem, 3vw, 2.3rem);
+}
+
+.estab-tool-hero h1,
+.estab-tool-hero p,
+.estab-tool-panel h2,
+.estab-tool-panel h3,
+.estab-tool-card h3 {
+    margin-top: 0;
+}
+
+.estab-tool-hero h1 {
+    font-size: clamp(1.8rem, 4vw, 2.8rem);
+    line-height: 1.1;
+    margin-bottom: 0.7rem;
+}
+
+.estab-tool-hero > p:last-child {
+    color: #e5eef7;
+    margin-bottom: 0;
+    max-width: 65rem;
+}
+
+.estab-tool-eyebrow {
+    color: #47627f;
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    margin: 0 0 0.4rem;
+    text-transform: uppercase;
+}
+
+.estab-tool-hero .estab-tool-eyebrow {
+    color: #f4ca70;
+}
+
+.estab-tool-panel,
+.estab-tool-card,
+.estab-tool-table-wrap {
+    background: #ffffff;
+    border: 1px solid #c5d1dd;
+    border-radius: 12px;
+    box-shadow: 0 5px 18px rgba(31, 58, 86, 0.08);
+}
+
+.estab-tool-panel {
+    padding: clamp(1rem, 2.5vw, 1.5rem);
+}
+
+.estab-tool-panel > .estab-tool-form {
+    margin-top: 1rem;
+}
+
+.estab-tool-panel-heading {
+    margin-bottom: 1rem;
+}
+
+.estab-tool-panel-heading h2 {
+    color: #153c64;
+    font-size: 1.35rem;
+    margin-bottom: 0.25rem;
+}
+
+.estab-tool-panel-heading > :last-child {
+    color: #52657a;
+    margin-bottom: 0;
+    max-width: 62rem;
+}
+
+.estab-tool-notice,
+.estab-tool-feedback,
+.estab-tool-status {
+    border: 2px solid;
+    border-radius: 10px;
+    margin: 0;
+    padding: 0.9rem 1rem;
+}
+
+.estab-tool-notice {
+    background: #eef4fa;
+    border-color: #7d9bbb;
+    border-left: 6px solid #2b6397;
+    color: #29435f;
+}
+
+.estab-tool-notice > :first-child,
+.estab-tool-notice > :last-child {
+    margin-top: 0;
+}
+
+.estab-tool-notice > :last-child {
+    margin-bottom: 0;
+}
+
+.estab-tool-notice-warning {
+    background: #fff8dd;
+    border-color: #d5b45a;
+    border-left-color: #b47a05;
+    color: #5b430e;
+}
+
+.estab-tool-feedback {
+    font-weight: 700;
+}
+
+.estab-tool-feedback-success {
+    background: #e7f6eb;
+    border-color: #2b7a42;
+    color: #174d2a;
+}
+
+.estab-tool-feedback-error {
+    background: #fff0ef;
+    border-color: #b52a24;
+    color: #741a16;
+}
+
+.estab-tool-status {
+    align-items: center;
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.estab-tool-status-active {
+    background: #e7f6eb;
+    border-color: #2b7a42;
+    color: #174d2a;
+}
+
+.estab-tool-status-danger {
+    background: #fff0ef;
+    border-color: #b52a24;
+    color: #741a16;
+}
+
+.estab-tool-status strong,
+.estab-tool-status span {
+    display: block;
+}
+
+.estab-tool-status strong {
+    font-size: 1.08rem;
+}
+
+.estab-tool-status form {
+    margin: 0;
+}
+
+.estab-tool-form {
+    display: grid;
+    gap: 1rem;
+    margin: 0;
+}
+
+.estab-tool-form-grid,
+.estab-tool-counter-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.estab-tool-counter-grid {
+    border: 0;
+    margin: 0;
+    padding: 0;
+}
+
+.estab-tool-field {
+    display: grid;
+    gap: 0.35rem;
+    min-width: 0;
+}
+
+.estab-tool-field-wide {
+    grid-column: 1 / -1;
+}
+
+.estab-tool-field > label,
+.estab-tool-field > span:first-child,
+.estab-tool-field legend {
+    color: #183454;
+    font-weight: 800;
+}
+
+.estab-tool-field input:not([type="checkbox"]):not([type="radio"]),
+.estab-tool-field textarea,
+.estab-tool-field select,
+.estab-tool-action-stack input[type="password"] {
+    background: #ffffff;
+    border: 1px solid #7d91a7;
+    border-radius: 8px;
+    color: #17263a;
+    font: inherit;
+    min-height: 2.8rem;
+    padding: 0.6rem 0.7rem;
+    width: 100%;
+}
+
+.estab-tool-field textarea {
+    min-height: 7rem;
+    resize: vertical;
+}
+
+.estab-tool-field input:focus-visible,
+.estab-tool-field textarea:focus-visible,
+.estab-tool-field select:focus-visible,
+.estab-tool-action-stack input:focus-visible {
+    outline: 3px solid #e5b247;
+    outline-offset: 2px;
+}
+
+.estab-tool-field small,
+.estab-tool-help {
+    color: #52657a;
+}
+
+.estab-tool-field:is(details),
+.estab-tool-field details,
+.estab-tool-details,
+.estab-tool-action-stack details {
+    background: #f8fafc;
+    border: 1px solid #c5d1dd;
+    border-radius: 9px;
+    padding: 0.35rem 0.65rem;
+}
+
+.estab-tool-field summary,
+.estab-tool-details > summary,
+.estab-tool-action-stack summary {
+    color: #214f7d;
+    cursor: pointer;
+    font-weight: 800;
+    min-height: 2.75rem;
+    padding: 0.55rem 0.25rem;
+}
+
+.estab-tool-field summary:focus-visible,
+.estab-tool-details > summary:focus-visible,
+.estab-tool-action-stack summary:focus-visible {
+    outline: 3px solid #e5b247;
+    outline-offset: 2px;
+}
+
+.estab-tool-actions {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.estab-tool-check {
+    align-items: center;
+    cursor: pointer;
+    display: inline-flex;
+    font-weight: 800;
+    gap: 0.55rem;
+    min-height: 2.75rem;
+}
+
+.estab-tool-check input {
+    height: 1.3rem;
+    width: 1.3rem;
+}
+
+.estab-tool-list,
+.estab-tool-action-stack {
+    display: grid;
+    gap: 0.85rem;
+}
+
+.estab-tool-card {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 1rem 1.1rem;
+}
+
+.estab-tool-card h3 {
+    margin-bottom: 0.45rem;
+}
+
+.estab-tool-card p {
+    overflow-wrap: anywhere;
+}
+
+.estab-tool-card-active {
+    border: 2px solid #2b7a42;
+}
+
+.estab-tool-card-code {
+    color: #214f7d;
+    display: inline-block;
+    font: 800 0.85rem/1.2 ui-monospace, SFMono-Regular, Consolas, monospace;
+    margin-bottom: 0.35rem;
+    overflow-wrap: anywhere;
+}
+
+.estab-tool-card-meta {
+    color: #52657a;
+    display: flex;
+    flex-wrap: wrap;
+    font-size: 0.93rem;
+    gap: 0.35rem 1rem;
+}
+
+.estab-tool-card-actions {
+    align-items: center;
+    display: flex;
+    justify-content: flex-end;
+    min-width: 9rem;
+}
+
+.estab-tool-badge {
+    border-radius: 999px;
+    display: inline-flex;
+    font-size: 0.85rem;
+    font-weight: 800;
+    padding: 0.3rem 0.65rem;
+    white-space: nowrap;
+}
+
+.estab-tool-badge-success {
+    background: #ddf5e6;
+    color: #145d35;
+}
+
+.estab-tool-badge-danger {
+    background: #ffe3e7;
+    color: #8c1424;
+}
+
+.estab-tool-badge-neutral {
+    background: #e8edf3;
+    color: #455368;
+}
+
+.estab-tool-table-wrap {
+    overflow-x: auto;
+}
+
+.estab-tool-table {
+    border-collapse: collapse;
+    min-width: 54rem;
+    width: 100%;
+}
+
+.estab-tool-table th,
+.estab-tool-table td {
+    border-bottom: 1px solid #cbd5e1;
+    padding: 0.85rem 1rem;
+    text-align: left;
+    vertical-align: top;
+}
+
+.estab-tool-table thead th {
+    background: #e8eef6;
+    color: #24344a;
+    font-size: 0.9rem;
+    letter-spacing: 0.02em;
+}
+
+.estab-tool-table tbody tr:last-child > * {
+    border-bottom: 0;
+}
+
+.estab-tool-table-number {
+    font-variant-numeric: tabular-nums;
+    text-align: right !important;
+    white-space: nowrap;
+}
+
+.estab-tool-identity strong,
+.estab-tool-identity span {
+    display: block;
+}
+
+.estab-tool-identity span {
+    color: #52657a;
+    font-size: 0.9rem;
+}
+
+.estab-tool-action-stack {
+    min-width: 20rem;
+}
+
+.estab-tool-action-stack form {
+    display: grid;
+    gap: 0.65rem;
+    margin: 0.45rem 0;
+}
+
+.estab-tool-action-stack label {
+    display: grid;
+    font-weight: 700;
+    gap: 0.25rem;
+}
+
+.estab-tool-empty {
+    color: #52657a;
+    margin: 0;
+    padding: 2rem 1rem;
+    text-align: center;
+}
+
+.estab-tool-footer {
+    align-items: baseline;
+    color: #5b6a7c;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    justify-content: space-between;
+}
+
+.estab-tool-footer a {
+    color: #214f7d;
+    font-weight: 800;
+    min-height: 2.75rem;
+    padding: 0.55rem 0;
+}
+
+.estab-tool-main code {
+    overflow-wrap: anywhere;
+}
+
+.estab-tool-matrix-table {
+    min-width: 68rem;
+}
+
+.estab-tool-matrix-options {
+    border: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.8rem;
+    margin: 0;
+    min-width: 0;
+    padding: 0;
+}
+
+.estab-tool-matrix-options .estab-tool-check {
+    font-weight: 700;
+    min-height: 2.5rem;
+}
+
+.estab-tool-logbook-table {
+    min-width: 56rem;
+}
+
+.estab-tool-legacy-content {
+    box-sizing: border-box;
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    padding-bottom: 0.35rem;
+    scrollbar-width: thin;
+}
+
+.estab-tool-legacy-content > :first-child {
+    margin-top: 0;
+}
+
+.estab-tool-legacy-content > :last-child {
+    margin-bottom: 0;
+}
+
+.estab-tool-legacy-content table {
+    border-collapse: collapse;
+}
+
+.estab-tool-legacy-content th,
+.estab-tool-legacy-content td {
+    padding: 0.45rem;
+}
+
+.estab-tool-legacy-content input:not([type="checkbox"]):not([type="radio"]):not([type="image"]),
+.estab-tool-legacy-content textarea,
+.estab-tool-legacy-content select {
+    box-sizing: border-box;
+    font: inherit;
+    max-width: 100%;
+    min-height: 2.5rem;
+}
+
+.estab-tool-legacy-content button,
+.estab-tool-legacy-content input[type="submit"] {
+    min-height: 2.75rem;
+}
+
+.estab-tool-legacy-content a:focus-visible,
+.estab-tool-legacy-content button:focus-visible,
+.estab-tool-legacy-content input:focus-visible,
+.estab-tool-legacy-content select:focus-visible,
+.estab-tool-legacy-content textarea:focus-visible {
+    outline: 3px solid #e5b247;
+    outline-offset: 2px;
+}
+
 @media (max-width: 42rem) {
     .estab-message-workspace-document,
     .estab-message-workspace {
@@ -1794,6 +2729,32 @@ audio[data-estab-sidebar-audio] {
         grid-template-columns: 4rem minmax(0, 1fr);
     }
 
+    .estab-admin-dashboard {
+        padding: 1rem 0.75rem 2rem;
+    }
+
+    .estab-admin-dashboard-card {
+        align-items: start;
+        gap: 0.75rem;
+        grid-template-columns: 2.75rem minmax(0, 1fr);
+        min-height: 0;
+        padding: 0.9rem;
+    }
+
+    .estab-admin-dashboard-number {
+        height: 2.75rem;
+        width: 2.75rem;
+    }
+
+    .estab-admin-dashboard-arrow {
+        display: none;
+    }
+
+    .estab-admin-dashboard-footer {
+        align-items: stretch;
+        display: grid;
+    }
+
     .estab-export-main {
         padding: 1rem 0.75rem 2rem;
     }
@@ -1837,6 +2798,102 @@ audio[data-estab-sidebar-audio] {
     .estab-export-manifest-list code {
         grid-column: 1;
     }
+
+    .estab-tool-main {
+        padding: 1rem 0.75rem 2rem;
+    }
+
+    .estab-tool-form-grid,
+    .estab-tool-counter-grid,
+    .estab-tool-status,
+    .estab-tool-card {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .estab-tool-field-wide {
+        grid-column: 1;
+    }
+
+    .estab-tool-status .estab-button,
+    .estab-tool-actions .estab-button {
+        width: 100%;
+    }
+
+    .estab-tool-card-actions {
+        justify-content: flex-start;
+        min-width: 0;
+    }
+
+    .estab-tool-table-responsive {
+        background: transparent;
+        border: 0;
+        box-shadow: none;
+        overflow: visible;
+    }
+
+    .estab-tool-table-responsive .estab-tool-table,
+    .estab-tool-table-responsive .estab-tool-table tbody,
+    .estab-tool-table-responsive .estab-tool-table tr,
+    .estab-tool-table-responsive .estab-tool-table th,
+    .estab-tool-table-responsive .estab-tool-table td {
+        display: block;
+        min-width: 0;
+        width: auto;
+    }
+
+    .estab-tool-table-responsive .estab-tool-table thead {
+        border: 0;
+        clip: rect(0 0 0 0);
+        clip-path: inset(50%);
+        height: 1px;
+        overflow: hidden;
+        position: absolute;
+        white-space: nowrap;
+        width: 1px;
+    }
+
+    .estab-tool-table-responsive .estab-tool-table tbody {
+        display: grid;
+        gap: 1rem;
+    }
+
+    .estab-tool-table-responsive .estab-tool-table tbody tr {
+        background: #ffffff;
+        border: 1px solid #c5d1dd;
+        border-radius: 10px;
+        box-shadow: 0 5px 18px rgba(31, 58, 86, 0.08);
+        overflow: hidden;
+    }
+
+    .estab-tool-table-responsive .estab-tool-table td {
+        border-bottom: 1px solid #cbd5e1;
+        padding: 0.75rem 1rem;
+        text-align: left !important;
+    }
+
+    .estab-tool-table-responsive .estab-tool-table td:last-child {
+        border-bottom: 0;
+    }
+
+    .estab-tool-table-responsive .estab-tool-table td::before {
+        color: #52657a;
+        content: attr(data-label);
+        display: block;
+        font-size: 0.76rem;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.2rem;
+        text-transform: uppercase;
+    }
+
+    .estab-tool-action-stack {
+        min-width: 0;
+    }
+
+    .estab-tool-footer {
+        align-items: stretch;
+        display: grid;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1861,7 +2918,199 @@ audio[data-estab-sidebar-audio] {
 
     .estab-export-create,
     .estab-export-actions,
-    .estab-export-back {
+    .estab-export-back,
+    .estab-admin-dashboard-notice,
+    .estab-tool-actions,
+    .estab-tool-footer {
         display: none !important;
+    }
+}
+
+/* Responsive BOS information workspace and its persistent document sidebar. */
+.estab-bos-sidebar {
+    align-content: start;
+}
+
+.estab-bos-document-navigation {
+    background: #172f4d;
+    border: 1px solid #45627f;
+    border-radius: 8px;
+    box-shadow: 0 3px 10px rgba(5, 14, 26, 0.3);
+    box-sizing: border-box;
+    color: #ffffff;
+    min-width: 0;
+    padding: 0.75rem;
+}
+
+.estab-bos-document-navigation .estab-sidebar-section-heading h1 {
+    font-size: 0.95rem;
+    margin: 0;
+}
+
+.estab-bos-document-list {
+    display: grid;
+    gap: 0.45rem;
+    list-style: none;
+    margin: 0.65rem 0 0;
+    padding: 0;
+}
+
+.estab-bos-document-list li {
+    min-width: 0;
+}
+
+.estab-bos-document-link {
+    align-items: flex-start;
+    background: #183654;
+    border: 1px solid #5d7692;
+    border-left: 4px solid transparent;
+    border-radius: 6px;
+    box-sizing: border-box;
+    color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 3.5rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    padding: 0.55rem 0.65rem;
+    text-decoration: none;
+    width: 100%;
+}
+
+.estab-bos-document-link:hover,
+.estab-bos-document-link:focus-visible {
+    background: #294b70;
+    outline: 3px solid #ffffff;
+    outline-offset: -3px;
+}
+
+.estab-bos-document-link[aria-current="page"] {
+    background: #294b70;
+    border-left-color: #e5b247;
+}
+
+.estab-bos-document-link strong {
+    font-size: 0.86rem;
+    line-height: 1.25;
+}
+
+.estab-bos-document-link span {
+    color: #c5d6e8;
+    font-size: 0.76rem;
+    line-height: 1.3;
+    margin-top: 0.12rem;
+}
+
+.estab-bos-embedded-document {
+    box-sizing: border-box;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+}
+
+.estab-bos-embedded-content {
+    background: #f4f7fa !important;
+    box-sizing: border-box;
+    color: #172033;
+    font-family: Arial, Helvetica, sans-serif;
+    margin: 0;
+    max-width: 100% !important;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    overflow-x: hidden;
+    padding: clamp(0.75rem, 2.5vw, 2rem);
+    width: auto !important;
+}
+
+.estab-bos-embedded-content *,
+.estab-bos-embedded-content *::before,
+.estab-bos-embedded-content *::after {
+    box-sizing: border-box;
+    max-width: 100%;
+}
+
+.estab-bos-embedded-content img {
+    height: auto !important;
+    max-width: 100% !important;
+    object-fit: contain;
+    width: auto !important;
+}
+
+.estab-bos-embedded-content table {
+    max-width: 100% !important;
+}
+
+.estab-bos-embedded-content pre {
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.estab-bos-welcome-page {
+    align-items: center;
+    display: grid;
+    min-height: 100dvh;
+}
+
+.estab-bos-welcome {
+    background: #ffffff;
+    border: 1px solid #8da2bd;
+    border-radius: 12px;
+    box-shadow: 0 5px 20px rgba(23, 32, 51, 0.12);
+    margin: 0 auto;
+    max-width: 48rem;
+    padding: clamp(1.25rem, 4vw, 2.5rem);
+}
+
+.estab-bos-welcome-kicker {
+    color: #214f7d;
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.estab-bos-welcome h1 {
+    color: #172f4d;
+    font-size: clamp(1.6rem, 4vw, 2.5rem);
+    margin: 0.35rem 0 0.75rem;
+}
+
+.estab-bos-welcome p {
+    line-height: 1.55;
+    margin: 0;
+}
+
+.estab-bos-welcome-hint {
+    background: #eef3f8;
+    border-left: 4px solid #e5b247;
+    border-radius: 5px;
+    color: #3b4a5d;
+    margin-top: 1.25rem !important;
+    padding: 0.8rem 0.9rem;
+}
+
+@media (max-width: 42rem) {
+    .estab-bos-embedded-content {
+        padding: 0.65rem;
+    }
+
+    .estab-bos-embedded-content table {
+        height: auto !important;
+        table-layout: fixed;
+        width: 100% !important;
+    }
+
+    .estab-bos-embedded-content td,
+    .estab-bos-embedded-content th {
+        height: auto !important;
+        overflow-wrap: anywhere;
+        width: auto !important;
+    }
+
+    .estab-bos-welcome {
+        border-radius: 8px;
+        padding: 1.25rem;
     }
 }

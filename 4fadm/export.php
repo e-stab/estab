@@ -273,10 +273,14 @@ $createdVisible = $createdId !== null && in_array($createdId, $listedIds, true);
   <title>eStab Einsatzexporte</title>
   <?= estab_session_ui_stylesheet() ?>
 </head>
-<body class="estab-export-page">
-  <main class="estab-export-main">
-    <header class="estab-export-hero">
-      <p class="estab-export-eyebrow">Administration · Datenaustausch</p>
+<body class="estab-tool-page estab-export-page">
+  <main
+    class="estab-tool-main estab-tool-main-wide estab-export-main"
+    data-estab-export-tool>
+    <header class="estab-tool-hero estab-export-hero">
+      <p class="estab-tool-eyebrow estab-export-eyebrow">
+        Administration · Datenaustausch
+      </p>
       <h1>Einsatzexporte</h1>
       <p>Jeder Export enthält alle Basistabellen als UTF-8-CSV, ein Manifest
         mit Datensatzanzahlen und SHA-256-Prüfsummen sowie ein ZIP-Archiv.
@@ -285,16 +289,25 @@ $createdVisible = $createdId !== null && in_array($createdId, $listedIds, true);
     </header>
 
     <?php if ($error !== null): ?>
-      <p class="estab-export-alert estab-export-alert-error" role="alert">
+      <p
+        class="estab-tool-feedback estab-tool-feedback-error
+          estab-export-alert estab-export-alert-error"
+        role="alert">
         <?= export_html($error) ?>
       </p>
     <?php elseif ($createdVisible): ?>
-      <p class="estab-export-alert estab-export-alert-success" role="status">
+      <p
+        class="estab-tool-feedback estab-tool-feedback-success
+          estab-export-alert estab-export-alert-success"
+        role="status">
         Der neue Export wurde vollständig erstellt und steht unten zum
         Download bereit.
       </p>
     <?php elseif ($deletedId !== null): ?>
-      <p class="estab-export-alert estab-export-alert-success" role="status">
+      <p
+        class="estab-tool-feedback estab-tool-feedback-success
+          estab-export-alert estab-export-alert-success"
+        role="status">
         Der ausgewählte Export wurde vollständig gelöscht.
       </p>
     <?php endif; ?>
@@ -471,9 +484,10 @@ $createdVisible = $createdId !== null && in_array($createdId, $listedIds, true);
       <?php endif; ?>
     </section>
 
-    <p class="estab-export-back">
+    <footer class="estab-tool-footer estab-export-back">
       <a href="admin.php">Zurück zu den administrativen Maßnahmen</a>
-    </p>
+      <span>Exporte bleiben bis zur ausdrücklichen Löschung persistent.</span>
+    </footer>
   </main>
 </body>
 </html>

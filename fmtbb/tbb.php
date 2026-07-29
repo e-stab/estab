@@ -5,22 +5,20 @@ if (ob_get_level () === 0) { ob_start (); }
 /******************************************************************************\
 technisches Betriebsbuch
 
-  Szenario "Kein Eintrag vorhanden, kein Einsatz definiert."
+  Szenario "Kein globaler Einsatz aktiv."
 
-    + Menue zur Eingabe der Einsatzdaten (Einsatzart und Ort)
-       - Anzeige des Eingabemenues
-       - Anlegen der Einsatztiteltabelle
-       - Eintragen der Einsatzdaten
+    + Roter Sperrhinweis mit Verweis auf die Einsatzverwaltung
+    + Keine fachlichen Eingaben
 
-  Szenario "Kein Eintrag vorhanden, Einsatzdaten eingegeben."
+  Szenario "Globaler Einsatz aktiv."
 
-       - Einsatzdaten aus Tabelle auslesen
-    + Anzeige der Einsatzdaten
-    + Anzeige der Schaltflaeche zur Eingabe eines TBB Eintrags
+    + Anzeige des globalen Einsatzkopfs
+    + Lesender Zugriff fuer jede angemeldete Funktion
+    + Eintragsfunktion fuer A/W in der Rolle Fernmelder
 
   Szenario "Schaltflaeche TBB-Eintrag wird betaetigt"
 
-    + Anzeige der Einsatzdaten
+    + Anzeige des globalen Einsatzkopfs
     + Anzeige des Menues zur Eingabe eines TBB Eintrags
 
    (C) Hajo Landmesser IuK Kreis Heinsberg
@@ -48,17 +46,13 @@ class tbb_liste {
   }
 
   function tbb_liste (){
-    $this->tbb_tableexist ();
-      if (debug == true){    echo "tbb_liste 1 ->"; var_dump ($this->tbb_titel_tbl); echo "<br>";}
-    if ( $this->tbb_titel_tbl ){
-      $this->read_out_tbbtitel ();
-    }
+    $this->read_out_tbbtitel ();
       if (debug == true){    echo "tbb_liste 2 ->"; var_dump ($this->tbb_titel_gesetzt); echo "<br>";}
-    $conf_tbb [0] = "<b>Lfd-Nr</b>";
-    $conf_tbb [1] = "<b>Datum/Zeit</b>";
-    $conf_tbb [2] = "<b>Darstellung der Ereignisse</b>";
-    $conf_tbb [3] = "<b>Bemerkung</b>";
-    $conf_tbb [4] = "<b>K&uuml;rzel</b>";
+    $conf_tbb [0] = "Lfd.-Nr.";
+    $conf_tbb [1] = "Datum/Zeit";
+    $conf_tbb [2] = "Darstellung der Ereignisse";
+    $conf_tbb [3] = "Bemerkung";
+    $conf_tbb [4] = "Kürzel";
     $this->spaltenanzahl = count ($conf_tbb);
     $this->spaltenkoepfe = $conf_tbb;
   }
@@ -81,12 +75,15 @@ class tbb_liste {
 
 \*****************************************************************************/
   function tbb_ueberschrift(){
-    echo "<big><big><big><big><span";
-    echo " style=\"color: rgb(255, 0, 0);\">T</span>echnisches<span";
-    echo " style=\"color: rgb(255, 0, 0);\">B</span>etriebs<span";
-    echo " style=\"color: rgb(255, 0, 0);\">b</span>uch";
-    echo "</big></big></big></big>";
-    echo "<br><br>";
+    echo "<header class=\"estab-tool-hero\">\n";
+    echo "<p class=\"estab-tool-eyebrow\">Einsatzdokumentation · TTB</p>\n";
+    echo "<h1>Technisches Betriebsbuch</h1>\n";
+    echo "<p>Chronologische Dokumentation des technischen Betriebs im aktiven ";
+    echo "Einsatz. ";
+    echo $this->tbb_authorized
+      ? "Ihre Funktion darf neue Einträge anlegen."
+      : "Ihre Funktion hat lesenden Zugriff.";
+    echo "</p>\n</header>\n";
   }
 
 
@@ -133,15 +130,10 @@ class tbb_liste {
 
 \*****************************************************************************/
   function speichen_tbbtitel ($daten){
-    include ("../4fcfg/dbcfg.inc.php");
-    include ("../4fcfg/e_cfg.inc.php");
-    $validation = estab_logbook_validate_title (is_array ($daten) ? $daten : array ());
-    if (!$validation ["valid"]) {
-      throw new InvalidArgumentException ("Ungültige Einsatzdaten");
-    }
-    $table = $conf_4f_tbl ["prefix"]."tbbtitel";
-    estab_logbook_create_title_table ($conf_4f_db, $table);
-    estab_logbook_insert_title ($conf_4f_db, $table, $validation ["data"]);
+    unset ($daten);
+    throw new LogicException (
+      "Einsatzdaten werden ausschließlich in der Administration verwaltet."
+    );
   }
 
 
@@ -149,12 +141,7 @@ class tbb_liste {
 
 \*****************************************************************************/
   function create_tbbtitel_tbl(){
-    include ("../4fcfg/dbcfg.inc.php");
-    include ("../4fcfg/e_cfg.inc.php");
-    estab_logbook_create_title_table (
-      $conf_4f_db,
-      $conf_4f_tbl ["prefix"]."tbbtitel"
-    );
+    // Legacy compatibility hook. Global incidents are migration-owned.
   }
 
 
@@ -162,15 +149,9 @@ class tbb_liste {
 
 \*****************************************************************************/
   function tbb_tableexist () {
-    include ("../4fcfg/dbcfg.inc.php");
-    include ("../4fcfg/e_cfg.inc.php");
-    $eq = estab_logbook_table_exists (
-      $conf_4f_db,
-      $conf_4f_tbl ["prefix"]."tbbtitel"
-    );
-    $this->tbb_titel_tbl = $eq ;
+    $this->tbb_titel_tbl = true;
 if (debug == true){ echo "tbb_tableexist==>"; var_dump($this->tbb_titel_tbl); echo "<br>"; }
-    return $eq;
+    return true;
   }
 
 
@@ -181,24 +162,19 @@ if (debug == true){ echo "tbb_tableexist==>"; var_dump($this->tbb_titel_tbl); ec
       if (debug == true){echo "read_out_tbbtitel<br>";}
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
-    $this->set_db_para ($conf_4f_db  ["server"],
-                        $conf_4f_db  ["datenbank"],
-                        $conf_tbl    ["tbb"],
-                        $conf_4f_db  ["user"],
-                        $conf_4f_db  ["password"] );
-
-    $query = "SELECT * FROM ".estab_auth_table ($conf_4f_tbl ["prefix"]."tbbtitel")
-      ." ORDER BY `lfd-nr` ASC LIMIT 1";
-    $result = $this->query_table ($query);
-
-      if (debug == true){echo "read_out_tbbtitel--result="; var_dump($result); echo "<br>";}
-
-    if ($result != ""){
-      $this->tbb_art = $result[1]["einsatz"] ;
-      $this->tbb_ort = $result[1]["ort"] ;
+    $incident = estab_logbook_active_incident ($conf_4f_db);
+    if (is_array ($incident)){
+      $this->tbb_art =
+        (string) ($incident ["kennung"] ?? "")." · ".
+        (string) ($incident ["name"] ?? "");
+      $this->tbb_ort = (string) ($incident ["ort"] ?? "") ;
       $this->tbb_titel_gesetzt = true;
+      $this->tbb_titel_tbl = true;
     } else {
+      $this->tbb_art = "";
+      $this->tbb_ort = "";
       $this->tbb_titel_gesetzt = false;
+      $this->tbb_titel_tbl = true;
     }
   }
 
@@ -209,23 +185,32 @@ if (debug == true){ echo "tbb_tableexist==>"; var_dump($this->tbb_titel_tbl); ec
 
 \*****************************************************************************/
   function tbb_pre_html (){
-    echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
-    echo "<html>\n";
+    echo "<!doctype html>\n";
+    echo "<html lang=\"de\">\n";
     echo "<head>\n";
-    echo "  <meta content=\"text/html; charset=UTF-8\" http-equiv=\"content-type\">\n";
+    echo "  <meta charset=\"UTF-8\">\n";
+    echo "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n";
     if (!$this->tbb_authorized) {
       echo "<meta http-equiv=\"refresh\" content=\"10\">\n";
     }
-    echo "  <title>TBB-Eintrag</title>\n";
+    echo "  <title>eStab Technisches Betriebsbuch</title>\n";
+    echo estab_session_ui_stylesheet ()."\n";
     echo "</head>\n";
-    echo "<body>\n";
+    echo "<body class=\"estab-tool-page\">\n";
+    echo "<main class=\"estab-tool-main estab-tool-main-wide\" ";
+    echo "data-estab-logbook=\"ttb\">\n";
   }
 
 /*****************************************************************************\
 
 \*****************************************************************************/
   function tbb_post_html () {
-    echo "<!-- tbb_GET_html -->\n";
+    echo "<footer class=\"estab-tool-footer\">\n";
+    echo "<a href=\"".estab_auth_html (estab_application_root ()).
+         "\">Zur eStab-Übersicht</a>\n";
+    echo "<span>Die Ansicht aktualisiert sich bei lesendem Zugriff automatisch.</span>\n";
+    echo "</footer>\n";
+    echo "</main>\n";
     echo "</body>\n";
     echo "</html>\n";
   }
@@ -266,21 +251,17 @@ if (debug == true){ echo "tbb_tableexist==>"; var_dump($this->tbb_titel_tbl); ec
 
 \*****************************************************************************/
   function tbb_menue (){
-    include ("../4fcfg/config.inc.php");
     $action = estab_auth_html (estab_application_url ("fmtbb/tbb.php"));
-    echo "<form action=\"".$action."\" method=\"GET\" >\n";
-    echo "<!-- Formularelemente und andere Elemente innerhalb des Formulars -->\n";
-    echo "<!-- tbb_menue -->\n";
-    echo "<table border=\"1\" cellspacing=\"2\" cellpeding=\"3\">\n";
-    echo "<tr>\n";
-    echo "<td>";
-//    echo "<input type=\"image\" name=\"tbb_eintrag\" value=\"tbb_eintrag\" src=\"".$conf_design_path."/logbook_entry.gif\">\n";
-	echo "<input type=\"image\" name=\"tbb_eintrag\" src=\"../4fach/button.php?type=menue&m_text=TBB-Eintrag&m_fs=10&m_form=rund&width=99&bg=mlightblue\" alt=\"Neuen TBB-Eintrag anlegen\">\n";
-    echo "</td>";
-    echo "</tr>";
-    echo "</table>";
-//    echo "<img src=\"http://localhost:80/kats/4fach/design/HS/timer.gif\">";
-    echo "</form>";
+    echo "<section class=\"estab-tool-panel\" aria-labelledby=\"ttb-action-title\">\n";
+    echo "<header class=\"estab-tool-panel-heading\">\n";
+    echo "<h2 id=\"ttb-action-title\">Neuer Betriebsbucheintrag</h2>\n";
+    echo "<p>Erfassen Sie ein technisches Ereignis im aktiven Einsatz.</p>\n";
+    echo "</header>\n";
+    echo "<form class=\"estab-tool-actions\" action=\"".$action."\" method=\"get\">\n";
+    echo "<button class=\"estab-button estab-button-primary\" ";
+    echo "type=\"submit\" name=\"tbb_menue\" value=\"eintrag\">";
+    echo "Neuen TTB-Eintrag anlegen</button>\n";
+    echo "</form>\n</section>\n";
   }
 
 /*****************************************************************************\
@@ -289,17 +270,13 @@ if (debug == true){ echo "tbb_tableexist==>"; var_dump($this->tbb_titel_tbl); ec
   function tbb_getdate ( ){
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
-    $this->set_db_para ($conf_4f_db  ["server"],
-                               $conf_4f_db  ["datenbank"],
-                               $conf_tbl    ["tbb"],
-                               $conf_4f_db  ["user"],
-                               $conf_4f_db  ["password"] );
-    $query = "SELECT * FROM ".estab_auth_table ($conf_tbl ["tbb"])
-      ." ORDER BY `tbb_lfd-nr` DESC";
-  if (debug == true){echo "tbb_getdate-->query=".$query; echo "<br>";}
-    $result = $this->query_table ($query);
+    $result = estab_logbook_entries (
+      $conf_4f_db,
+      $conf_tbl ["tbb"],
+      "tbb"
+    );
   if (debug == true){echo "tbb_getdate-->"; var_dump($result);echo "<br>";}
-    return $result;
+    return $result === array () ? "" : $result;
   }
 
 /*****************************************************************************\
@@ -332,78 +309,58 @@ var $lfd ;
 var $task ;
 
   function tbb_eintragsmenue ($data) {
-    include ("../4fcfg/config.inc.php");
+    unset ($data);
     $action = estab_auth_html (estab_application_url ("fmtbb/tbb.php"));
 
-    echo "<big><big>Eintrag ins \n";
-    echo "<span style=\"color: rgb(255, 0, 0); font-weight: bold;\">T</span>\n";
-    echo "echnisches";
-    echo "<span style=\"color: rgb(255, 0, 0); font-weight: bold;\">B</span>\n";
-    echo "etriebs";
-    echo "<span style=\"color: rgb(255, 0, 0); font-weight: bold;\">b</span>\n";
-    echo "uch<br>\n";
-    echo "<br>\n";
-    echo "</big></big>\n";
-    echo "<form method=\"POST\" action=\"".$action."\" name=\"tbbeintrag\" data-estab-dirty-guard>\n";
+    echo "<section class=\"estab-tool-panel\" aria-labelledby=\"ttb-entry-title\">\n";
+    echo "<header class=\"estab-tool-panel-heading\">\n";
+    echo "<h2 id=\"ttb-entry-title\">TTB-Eintrag erfassen</h2>\n";
+    echo "<p>Die Ereignisdarstellung ist verpflichtend; eine Bemerkung ist optional.</p>\n";
+    echo "</header>\n";
+    echo "<form class=\"estab-tool-form\" method=\"post\" action=\"".$action.
+         "\" name=\"tbbeintrag\" data-estab-dirty-guard ".
+         "data-estab-requires-incident>\n";
     echo estab_csrf_field ()."\n";
     echo "<input type=\"hidden\" name=\"logbook_action\" value=\"save_entry\">\n";
-    echo "<table style=\"text-align: left;\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\">\n";
-    echo "<tbody>\n";
-    echo "<tr>\n";
-    echo "<td><b>Darstellung der Ereignisse</b><br>\n";
-    echo "<textarea style=\"font-size:18px; font-weight:900;\" tabindex=\"1\" cols=\"80\" rows=\"4\" maxlength=\"10000\" required name=\"event\"></textarea></td>\n";
-    echo "</tr>\n";
-    echo "<tr>";
-    echo "<td><b>Bemerkung</b><br>";
-    echo "<textarea style=\"font-size:18px; font-weight:900;\" tabindex=\"2\" cols=\"80\" rows=\"4\" maxlength=\"10000\" name=\"comment\"></textarea></td>\n";
-    echo "</tr>\n";
-    echo "</tbody>\n";
-    echo "</table>\n";
-
-    echo "<table style=\"text-align: left;\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\">\n";
-    echo "<tbody>\n";
-    echo "<tr>\n";
-    echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"absenden\" alt=\"absenden\" tabindex=\"3\" src=\"".$conf_design_path."/ok.gif\"></td>\n";
-    echo "<td bgcolor=$color_button_nok><a href=\"".$action."\"><img alt=\"abbrechen\" src=\"".$conf_design_path."/cancel.gif\"></a></td>\n";
-    echo "</tr>\n";
-    echo "</tbody>\n";
-    echo "</table>\n";
-
-    echo "</form>\n";
+    echo "<div class=\"estab-tool-field\">\n";
+    echo "<label for=\"ttb-event\">Darstellung der Ereignisse</label>\n";
+    echo "<textarea id=\"ttb-event\" maxlength=\"10000\" required ";
+    echo "name=\"event\" autofocus></textarea>\n";
+    echo "<small>Höchstens 10.000 Zeichen.</small>\n</div>\n";
+    echo "<div class=\"estab-tool-field\">\n";
+    echo "<label for=\"ttb-comment\">Bemerkung</label>\n";
+    echo "<textarea id=\"ttb-comment\" maxlength=\"10000\" ";
+    echo "name=\"comment\"></textarea>\n";
+    echo "<small>Optional, höchstens 10.000 Zeichen.</small>\n</div>\n";
+    echo "<div class=\"estab-tool-actions\">\n";
+    echo "<button class=\"estab-button estab-button-primary\" type=\"submit\">";
+    echo "TTB-Eintrag speichern</button>\n";
+    echo "<a class=\"estab-button\" href=\"".$action."\">Abbrechen</a>\n";
+    echo "</div>\n</form>\n</section>\n";
   }
 
 /*****************************************************************************\
 
 \*****************************************************************************/
   function tbb_einsatzdaten (){
-    echo "<table width=\"500px\" style=\"text-align: left;\" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n";
-    echo "<tbody>\n";
-    echo "<tr>\n";
-      echo "<td>Einsatz</td>";
-      echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\">".estab_auth_html ($this->tbb_art)."</td>" ;
-    echo "</tr>";
-    echo "<tr>\n";
-      echo "<td>Ort</td>";
-      echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\">".estab_auth_html ($this->tbb_ort)."</td>" ;
-    echo "</tr>";
-/*   echo "<tr>\n";
-      echo "<td>Zeit</td>";
-      echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\">".$this->tbb_zeit."</td>" ;
-     echo "</tr>";
-*/
-    echo "</tbody>";
-    echo "</table>";
+    echo "<section class=\"estab-tool-status estab-tool-status-active\" ";
+    echo "aria-label=\"Aktiver Einsatz\">\n<div>\n";
+    echo "<span>Aktiver Einsatz</span>\n";
+    echo "<strong>".estab_auth_html ($this->tbb_art)."</strong>\n";
+    echo "<span>Ort: ".estab_auth_html (
+      $this->tbb_ort !== "" ? $this->tbb_ort : "nicht angegeben"
+    )."</span>\n";
+    echo "</div>\n</section>\n";
   }
 
 /*****************************************************************************\
 
 \*****************************************************************************/
   function headline (){
-    echo "<tr style=\"text-align: left; background-color: rgb(201, 201, 150);\">\n"; // Zeilenanfang
+    echo "<tr>\n";
     for ($i=0; $i<$this->spaltenanzahl; $i++){
-      echo "<td style=\" outline:1px solid black;\">\n";
-      echo $this->spaltenkoepfe [$i];
-      echo "</td>\n";
+      echo "<th scope=\"col\">".estab_auth_html ($this->spaltenkoepfe [$i]).
+           "</th>\n";
     }
     echo "</tr>";
   }
@@ -412,39 +369,10 @@ var $task ;
 
 \*****************************************************************************/
   function inputeinsatzstammdaten (){
-  include ("../4fcfg/config.inc.php");
-    $action = estab_auth_html (estab_application_url ("fmtbb/tbb.php"));
-    echo "<big><big><big><b>Einsatzdaten erfassen</b></big></big></big>\n";
-    echo "<!-- einsatzdatenmenue -->";
-    echo "<form method=\"POST\" action=\"".$action."\" name=\"Einsatzdaten\" data-estab-dirty-guard>\n";
-    echo estab_csrf_field ()."\n";
-    echo "<input type=\"hidden\" name=\"logbook_action\" value=\"save_title\">\n";
-    echo "<table style=\"text-align: left; width: 603px; height: 64px;\" border=\"1\" cellpadding=\"2\" cellspacing=\"2\">";
-    echo "<tbody>";
-    echo "<tr>";
-    echo "<td style=\"width: 100px;\">Einsatz</td>";
-    echo "<td style=\"width: 506px;\">";
-    echo "<input style=\"font-size:18px; font-weight:900;\" value=\"\" maxlength=\"255\" size=\"60\" required name=\"einsatz\">";
-    echo "</td>";
-    echo "</tr>";
-    echo "<tr>";
-    echo "<td style=\"width: 100px;\">Ort</td>";
-    echo "<td style=\"width: 506px;\">";
-    echo "<input style=\"font-size:18px; font-weight:900;\" value=\"\" maxlength=\"255\" size=\"60\" required name=\"ort\"></td>";
-    echo "</tr>";
-    echo "</tbody>";
-    echo "</table>";
-    if ($this->tbb_authorized){
-      echo "<table style=\"text-align: left;\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\">\n";
-      echo "<tbody>\n";
-      echo "<tr>\n";
-      echo "<td bgcolor=$color_button_ok><input type=\"image\" name=\"absenden\" alt=\"absenden\" tabindex=\"3\" src=\"".$conf_design_path."/ok.gif\"></td>\n";
-      echo "<td bgcolor=$color_button_nok><a href=\"".$action."\"><img alt=\"abbrechen\" src=\"".$conf_design_path."/cancel.gif\"></a></td>\n";
-      echo "</tr>\n";
-      echo "</tbody>\n";
-      echo "</table>\n";
-    }
-    echo "</form>";
+    echo "<aside class=\"estab-tool-notice estab-tool-notice-warning\">\n";
+    echo "<strong>Einsatzdaten werden global verwaltet.</strong>\n";
+    echo "<p>Legen Sie Einsätze ausschließlich in der Administration an und ";
+    echo "aktivieren Sie dort den gewünschten Einsatz.</p>\n</aside>\n";
   }
 
 /*****************************************************************************\
@@ -453,54 +381,53 @@ var $task ;
   function printlist ($daten){
     // Schreibe die Liste
     if ( $daten != "" ) {
-
-      echo "<table style=\"border-width:medium; border-color:#66CC66; border-style:solid; padding:1px;\" border=\"1\" cellpadding=\"5\" cellspacing=\"1\" bordercolor=black>\n";
-      echo "<tbody>\n";
+      echo "<section class=\"estab-tool-panel\" aria-labelledby=\"ttb-list-title\">\n";
+      echo "<header class=\"estab-tool-panel-heading\">\n";
+      echo "<h2 id=\"ttb-list-title\">Einträge des aktiven Einsatzes</h2>\n";
+      echo "<p>Jeder Eintrag weist zusätzlich das verantwortliche Kürzel aus.</p>\n";
+      echo "</header>\n";
+      echo "<div class=\"estab-tool-table-wrap estab-tool-table-responsive\">\n";
+      echo "<table class=\"estab-tool-table estab-tool-logbook-table\">\n";
+      echo "<caption class=\"estab-visually-hidden\">";
+      echo "Einträge im Technischen Betriebsbuch</caption>\n<thead>\n";
 
       $this->headline ();
+      echo "</thead>\n<tbody>\n";
 
       foreach ( $daten as $line ){
-//        var_dump ($line); echo "<br>";
-
         echo "<tr>";
-        echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\">\n";
+        echo "<td class=\"estab-tool-table-number\" data-label=\"Lfd.-Nr.\">\n";
         echo (int) $line ["tbb_lfd-nr"];
         echo "</td>\n";
-        echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\">";
-        echo $this->konv_datetime_taktime ($line ["tbb_time"]);
+        echo "<td data-label=\"Datum/Zeit\"><time>";
+        echo estab_auth_html ($this->konv_datetime_taktime ($line ["tbb_time"]));
+        echo "</time>";
         echo "</td>\n";
-        if ( $line ["tbb_aktion"] != "" ) {
-          echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\" >";
-          echo estab_auth_html ($line ["tbb_aktion"]);
-        } else {
-          echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\" >";
-          echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
-        }
+        echo "<td data-label=\"Darstellung der Ereignisse\">";
+        echo $line ["tbb_aktion"] != ""
+          ? nl2br (estab_auth_html ($line ["tbb_aktion"]), false)
+          : "<span aria-label=\"keine Angabe\">—</span>";
         echo "</td>\n";
-        if ( $line ["tbb_bemerk"] != "" ) {
-          echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\" >";
-          echo estab_auth_html ($line ["tbb_bemerk"]);
-        } else {
-          echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\" >";
-          echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
-        }
-
-        if ( $line ["tbb_kuerzel"] != "" ) {
-          echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\" >";
-          echo estab_auth_html ($line ["tbb_kuerzel"]);
-        } else {
-          echo "<td style=\" outline:1px solid black; font-size:18px; font-weight:900;\" >";
-          echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
-        }
-
+        echo "<td data-label=\"Bemerkung\">";
+        echo $line ["tbb_bemerk"] != ""
+          ? nl2br (estab_auth_html ($line ["tbb_bemerk"]), false)
+          : "<span aria-label=\"keine Angabe\">—</span>";
+        echo "</td>\n";
+        echo "<td data-label=\"Kürzel\">";
+        echo $line ["tbb_kuerzel"] != ""
+          ? estab_auth_html ($line ["tbb_kuerzel"])
+          : "<span aria-label=\"keine Angabe\">—</span>";
         echo "</td>\n";
         echo "</tr>\n";
       }
 
       echo "</tbody>\n";
       echo "</table>\n";
+      echo "</div>\n</section>\n";
     } else {
-      echo "<p>Noch keine TBB-Einträge vorhanden.</p>\n";
+      echo "<section class=\"estab-tool-panel\" aria-label=\"Keine TTB-Einträge\">\n";
+      echo "<p class=\"estab-tool-empty\">Noch keine TTB-Einträge vorhanden.</p>\n";
+      echo "</section>\n";
     }
   }
 
@@ -552,15 +479,13 @@ if ($requestMethod === "POST") {
     : "";
 
   try {
-    if ($action === "save_title") {
-      $validation = estab_logbook_validate_title ($_POST);
-      if (!$validation ["valid"]) {
-        estab_logbook_abort (422, "Einsatz und Ort sind erforderlich und auf 255 Zeichen begrenzt.");
-      }
-      $tbbobj->speichen_tbbtitel ($validation ["data"]);
-    } elseif ($action === "save_entry") {
+    if ($action === "save_entry") {
       if (!$tbbobj->tbb_titel_gesetzt) {
-        estab_logbook_abort (409, "Vor dem ersten TBB-Eintrag müssen Einsatzdaten erfasst werden.");
+        estab_logbook_abort (
+          409,
+          "Kein Einsatz ist aktiv. TBB-Eingaben sind gesperrt; aktivieren Sie ".
+          "zuerst einen Einsatz in der Administration."
+        );
       }
       $validation = estab_logbook_validate_entry ($_POST);
       if (!$validation ["valid"]) {
@@ -570,6 +495,13 @@ if ($requestMethod === "POST") {
     } else {
       estab_logbook_abort (400, "Unbekannte TBB-Aktion.");
     }
+  } catch (EstabNoActiveIncidentException $exception) {
+    error_log ("TBB write blocked: ".$exception->getMessage ());
+    estab_logbook_abort (
+      409,
+      "Kein Einsatz ist aktiv. TBB-Eingaben sind gesperrt; aktivieren Sie ".
+      "zuerst einen Einsatz in der Administration."
+    );
   } catch (Throwable $exception) {
     error_log ("TBB write failed: ".$exception->getMessage ());
     estab_logbook_abort (500, "Der TBB-Eintrag konnte nicht gespeichert werden.");
@@ -578,24 +510,16 @@ if ($requestMethod === "POST") {
   estab_logbook_redirect (estab_application_url ("fmtbb/tbb.php"));
 }
 
-if (!$tbbobj->tbb_titel_gesetzt) {
-  try {
-    $tbbobj->create_tbbtitel_tbl ();
-  } catch (Throwable $exception) {
-    error_log ("TBB title table creation failed: ".$exception->getMessage ());
-    estab_logbook_abort (500, "Das technische Betriebsbuch konnte nicht vorbereitet werden.");
-  }
-}
-
 $tbbobj->tbb_pre_html ();
 $tbbobj->tbb_ueberschrift ();
 
 if (!$tbbobj->tbb_titel_gesetzt) {
-  if ($berechtigt) {
-    $tbbobj->inputeinsatzstammdaten ();
-  } else {
-    echo "<p>Die Einsatzdaten wurden noch nicht durch A/W erfasst.</p>\n";
-  }
+  echo "<section class=\"estab-tool-status estab-tool-status-danger\" ";
+  echo "role=\"alert\" data-estab-no-active-incident><div>";
+  echo "<strong>Kein Einsatz aktiv – TTB-Eingaben sind gesperrt.</strong>";
+  echo "<span>";
+  echo "Legen Sie in der Administration einen Einsatz an oder aktivieren Sie ";
+  echo "einen vorhandenen Einsatz.</span></div></section>\n";
 } else {
   $tbbobj->tbb_einsatzdaten ();
   $entryFormRequested = isset ($_GET ["tbb_eintrag_x"])

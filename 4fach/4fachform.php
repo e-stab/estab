@@ -712,7 +712,9 @@ class nachrichten4fach {
     $dirtyInitial = $this->hasUnsavedValidationData
       ? " data-estab-dirty-initial"
       : "";
-    echo "<FORM style=\"\" method=\"POST\" action=\"".$conf_4f ["MainURL"]."\" name=\"4fach\" data-estab-dirty-guard".$dirtyInitial.">\n";
+    echo "<FORM style=\"\" method=\"POST\" action=\"".$conf_4f ["MainURL"].
+         "\" name=\"4fach\" data-estab-dirty-guard ".
+         "data-estab-requires-incident".$dirtyInitial.">\n";
     echo estab_csrf_field ();
     $this->show_menue_buttons (2, "oben");
     echo "<!-- **********4fachform.php-697-anfang-HAUPTTABELLE*********** -->\n";

@@ -18,7 +18,21 @@ echo "<html lang=\"de\"><head><meta charset=\"UTF-8\">\n";
 echo "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n";
 echo "<title>Nachweisung Eingang / Ausgang</title>\n";
 echo estab_session_ui_stylesheet ()."\n";
-echo "</head><body bgcolor=\"#DCDCFF\"><main>\n";
+echo "</head><body class=\"estab-tool-page\">\n";
+echo "<main class=\"estab-tool-main estab-tool-main-wide\" ";
+echo "data-estab-tracking-overview>\n";
+echo "<header class=\"estab-tool-hero\">\n";
+echo "<p class=\"estab-tool-eyebrow\">Nachrichten · Nachweisung</p>\n";
+echo "<h1>Nachweisung Eingang und Ausgang</h1>\n";
+echo "<p>Diese Übersicht zeigt die Nachweislisten des aktuell aktiven Einsatzes. ";
+echo "Filter und Detailaufrufe verändern keine Nachricht.</p>\n";
+echo "</header>\n";
+echo "<section class=\"estab-tool-panel\" aria-labelledby=\"tracking-list-title\">\n";
+echo "<header class=\"estab-tool-panel-heading\">\n";
+echo "<h2 id=\"tracking-list-title\">Nachrichtenübersicht</h2>\n";
+echo "<p>Breite Tabellen können innerhalb dieses Bereichs horizontal ";
+echo "gescrollt werden.</p>\n</header>\n";
+echo "<div class=\"estab-tool-legacy-content\">\n";
 
 
   if ( isset ($_GET) ) {
@@ -43,6 +57,11 @@ echo "</head><body bgcolor=\"#DCDCFF\"><main>\n";
     }
   }
 
-echo "</main></body></html>\n";
+echo "</div>\n</section>\n";
+echo "<footer class=\"estab-tool-footer\">\n";
+echo "<a href=\"".estab_auth_html (estab_application_root ())."\">";
+echo "Zur eStab-Übersicht</a>\n";
+echo "<span>Es werden ausschließlich Daten des aktiven Einsatzes angezeigt.</span>\n";
+echo "</footer>\n</main>\n</body></html>\n";
 
 ?>

@@ -10,6 +10,7 @@ if (PHP_SAPI !== 'cli' && empty($_SERVER['REMOTE_USER'])) {
 }
 
 require_once __DIR__ . '/../app/bootstrap.php';
+require_once __DIR__ . '/../app/readiness.php';
 require_once __DIR__ . '/../app/session_ui.php';
 estab_session_ui_start($_SESSION);
 
@@ -27,56 +28,14 @@ function system_status_label(bool $ready): string
     return $ready ? 'bereit' : 'nicht bereit';
 }
 
-$extensions = [];
-foreach (['mysqli', 'gd', 'mbstring', 'zip', 'Zend OPcache'] as $extension) {
-    $extensions[$extension] = extension_loaded($extension);
-}
-
-$databaseReady = false;
-$databaseTables = null;
-if ($extensions['mysqli']) {
-    try {
-        mysqli_report(MYSQLI_REPORT_OFF);
-        $database = mysqli_init();
-        if ($database !== false) {
-            $database->options(MYSQLI_OPT_CONNECT_TIMEOUT, 3);
-            $connected = @$database->real_connect(
-                estab_env('ESTAB_DB_HOST', 'db') ?? 'db',
-                estab_env('ESTAB_DB_USER', 'estab') ?? 'estab',
-                estab_env('ESTAB_DB_PASSWORD', '') ?? '',
-                estab_env_identifier('ESTAB_DB_NAME', 'estab'),
-                (int) (estab_env('ESTAB_DB_PORT', '3306') ?? '3306')
-            );
-            if ($connected) {
-                $result = @$database->query(
-                    'SELECT COUNT(*) AS table_count FROM information_schema.tables '
-                    . 'WHERE table_schema = DATABASE() AND table_type = \'BASE TABLE\''
-                );
-                if ($result instanceof mysqli_result) {
-                    $row = $result->fetch_assoc();
-                    $databaseTables = isset($row['table_count']) ? (int) $row['table_count'] : null;
-                    $databaseReady = $databaseTables !== null;
-                    $result->free();
-                }
-                $database->close();
-            }
-        }
-    } catch (Throwable) {
-        $databaseReady = false;
-    }
-}
-
-$databaseName = estab_env_identifier('ESTAB_DB_NAME', 'estab');
-$storageChecks = [
-    'Anhangsspeicher' => __DIR__ . '/../4fdata/' . $databaseName . '/anhang',
-    'Vordruckspeicher' => __DIR__ . '/../4fdata/' . $databaseName . '/vordruck',
-    'Einsatzexport' => estab_env('ESTAB_EXPORT_DIR', '/var/lib/estab/export') ?? '/var/lib/estab/export',
-];
-
-$storageReady = [];
-foreach ($storageChecks as $label => $directory) {
-    $storageReady[$label] = is_dir($directory) && is_writable($directory);
-}
+$readiness = estab_readiness_report();
+$checks = $readiness['checks'];
+$extensions = $readiness['extensions'];
+$databaseTables = $readiness['database_tables'];
+$storageReady = $readiness['storage'];
+$databaseReady = $checks['database'];
+$schemaReady = $checks['schema'];
+$configurationReady = $checks['configuration'];
 
 $environmentChecks = [
     'Öffentliche URL' => estab_env('ESTAB_PUBLIC_URL') !== null,
@@ -87,9 +46,8 @@ $environmentChecks = [
     'Admin-Secret' => estab_env('ESTAB_ADMIN_PASSWORD_FILE') !== null,
 ];
 
-$runtimeReady = PHP_VERSION_ID >= 80500 && !in_array(false, $extensions, true);
-$allStorageReady = !in_array(false, $storageReady, true);
-$overallReady = $runtimeReady && $databaseReady && $allStorageReady;
+$runtimeReady = $checks['php'] && $checks['extensions'];
+$overallReady = $readiness['ready'];
 
 ?><!doctype html>
 <html lang="de">
@@ -97,59 +55,209 @@ $overallReady = $runtimeReady && $databaseReady && $allStorageReady;
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>eStab Systemstatus</title>
-  <style>
-    body { font: 16px/1.45 system-ui, sans-serif; max-width: 72rem; margin: 2rem auto; padding: 0 1rem; }
-    table { border-collapse: collapse; width: 100%; margin: 1rem 0 2rem; }
-    th, td { border: 1px solid #aaa; padding: .45rem; text-align: left; }
-    .ready { color: #176b24; font-weight: 700; }
-    .failed { color: #9b1c1c; font-weight: 700; }
-    code { overflow-wrap: anywhere; }
-  </style>
+  <?= estab_session_ui_stylesheet() ?>
 </head>
-<body>
-  <h1>Systemstatus</h1>
-  <p class="<?= $overallReady ? 'ready' : 'failed' ?>">
-    Gesamtzustand: <?= $overallReady ? 'betriebsbereit' : 'Prüfung erforderlich' ?>
-  </p>
+<body class="estab-tool-page">
+  <main class="estab-tool-main" data-estab-system-status>
+    <header class="estab-tool-hero">
+      <p class="estab-tool-eyebrow">Administration · Diagnose</p>
+      <h1>Systemstatus</h1>
+      <p>Diese Ansicht prüft Laufzeit, Datenbank, persistente Speicher und die
+        wirksame Containerkonfiguration, ohne Secrets oder interne
+        Zugangsdaten offenzulegen.</p>
+    </header>
 
-  <h2>Laufzeit</h2>
-  <table>
-    <tbody>
-      <tr><th>PHP</th><td><?= system_status_html(PHP_VERSION) ?></td><td class="<?= $runtimeReady ? 'ready' : 'failed' ?>"><?= system_status_label($runtimeReady) ?></td></tr>
-      <?php foreach ($extensions as $extension => $loaded): ?>
-        <tr><th><?= system_status_html($extension) ?></th><td colspan="2" class="<?= $loaded ? 'ready' : 'failed' ?>"><?= $loaded ? 'geladen' : 'fehlt' ?></td></tr>
-      <?php endforeach; ?>
-    </tbody>
-  </table>
+    <section
+      class="estab-tool-status <?= $overallReady
+          ? 'estab-tool-status-active'
+          : 'estab-tool-status-danger' ?>"
+      role="<?= $overallReady ? 'status' : 'alert' ?>"
+      data-estab-readiness="<?= $overallReady ? 'ready' : 'failed' ?>">
+      <div>
+        <span>Gesamtzustand</span>
+        <strong>
+          <?= $overallReady ? 'Betriebsbereit' : 'Prüfung erforderlich' ?>
+        </strong>
+        <span>
+          <?= $overallReady
+              ? 'Alle verpflichtenden Bereitschaftsprüfungen waren erfolgreich.'
+              : 'Mindestens eine verpflichtende Prüfung ist fehlgeschlagen.' ?>
+        </span>
+      </div>
+    </section>
 
-  <h2>Datenbank</h2>
-  <table>
-    <tbody>
-      <tr><th>Verbindung und Lesetest</th><td class="<?= $databaseReady ? 'ready' : 'failed' ?>"><?= system_status_label($databaseReady) ?></td></tr>
-      <tr><th>Basistabellen</th><td><?= $databaseTables === null ? 'nicht ermittelbar' : (int) $databaseTables ?></td></tr>
-    </tbody>
-  </table>
+    <section class="estab-tool-panel" aria-labelledby="runtime-status-title">
+      <header class="estab-tool-panel-heading">
+        <h2 id="runtime-status-title">Laufzeit</h2>
+        <p>PHP-Version, Laufzeitkonfiguration und verpflichtende Erweiterungen.</p>
+      </header>
+      <div class="estab-tool-table-wrap estab-tool-table-responsive">
+        <table class="estab-tool-table">
+          <caption class="estab-visually-hidden">Status der PHP-Laufzeit</caption>
+          <thead>
+            <tr>
+              <th scope="col">Prüfung</th>
+              <th scope="col">Wert</th>
+              <th scope="col">Ergebnis</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td data-label="Prüfung">PHP</td>
+              <td data-label="Wert"><code><?= system_status_html(PHP_VERSION) ?></code></td>
+              <td data-label="Ergebnis">
+                <span class="estab-tool-badge <?= $runtimeReady
+                    ? 'estab-tool-badge-success'
+                    : 'estab-tool-badge-danger' ?>">
+                  <?= system_status_label($runtimeReady) ?>
+                </span>
+              </td>
+            </tr>
+            <tr>
+              <td data-label="Prüfung">Laufzeitkonfiguration</td>
+              <td data-label="Wert">Container- und PHP-Vorgaben</td>
+              <td data-label="Ergebnis">
+                <span class="estab-tool-badge <?= $configurationReady
+                    ? 'estab-tool-badge-success'
+                    : 'estab-tool-badge-danger' ?>">
+                  <?= system_status_label($configurationReady) ?>
+                </span>
+              </td>
+            </tr>
+            <?php foreach ($extensions as $extension => $loaded): ?>
+              <tr>
+                <td data-label="Prüfung">PHP-Erweiterung</td>
+                <td data-label="Wert"><code><?= system_status_html($extension) ?></code></td>
+                <td data-label="Ergebnis">
+                  <span class="estab-tool-badge <?= $loaded
+                      ? 'estab-tool-badge-success'
+                      : 'estab-tool-badge-danger' ?>">
+                    <?= $loaded ? 'geladen' : 'fehlt' ?>
+                  </span>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+    </section>
 
-  <h2>Persistente Speicher</h2>
-  <table>
-    <tbody>
-      <?php foreach ($storageReady as $label => $ready): ?>
-        <tr><th><?= system_status_html($label) ?></th><td class="<?= $ready ? 'ready' : 'failed' ?>"><?= system_status_label($ready) ?></td></tr>
-      <?php endforeach; ?>
-    </tbody>
-  </table>
+    <section class="estab-tool-panel" aria-labelledby="database-status-title">
+      <header class="estab-tool-panel-heading">
+        <h2 id="database-status-title">Datenbank</h2>
+        <p>Erreichbarkeit und Vollständigkeit des erwarteten Schemas.</p>
+      </header>
+      <div class="estab-tool-table-wrap estab-tool-table-responsive">
+        <table class="estab-tool-table">
+          <caption class="estab-visually-hidden">Status der Datenbank</caption>
+          <thead>
+            <tr>
+              <th scope="col">Prüfung</th>
+              <th scope="col">Ergebnis</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php foreach ([
+                'Verbindung und Lesetest' => $databaseReady,
+                'Schema, Matrix und Migrationen' => $schemaReady,
+            ] as $label => $ready): ?>
+              <tr>
+                <td data-label="Prüfung"><?= system_status_html($label) ?></td>
+                <td data-label="Ergebnis">
+                  <span class="estab-tool-badge <?= $ready
+                      ? 'estab-tool-badge-success'
+                      : 'estab-tool-badge-danger' ?>">
+                    <?= system_status_label($ready) ?>
+                  </span>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+            <tr>
+              <td data-label="Prüfung">Basistabellen</td>
+              <td data-label="Ergebnis">
+                <?= $databaseTables === null
+                    ? 'nicht ermittelbar'
+                    : (int) $databaseTables ?>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
 
-  <h2>Containerkonfiguration</h2>
-  <p>Datenbank, Verzeichnisse und Einsatzparameter werden im Container über Compose, Umgebungsvariablen und eingehängte Secret-Dateien bereitgestellt. Die historischen Web-Installer, Konfigurationsschreiber und <code>phpinfo()</code> sind deshalb deaktiviert.</p>
-  <table>
-    <tbody>
-      <?php foreach ($environmentChecks as $label => $configured): ?>
-        <tr><th><?= system_status_html($label) ?></th><td><?= $configured ? 'konfiguriert' : 'Standardwert aktiv' ?></td></tr>
-      <?php endforeach; ?>
-    </tbody>
-  </table>
+    <section class="estab-tool-panel" aria-labelledby="storage-status-title">
+      <header class="estab-tool-panel-heading">
+        <h2 id="storage-status-title">Persistente Speicher</h2>
+        <p>Schreib- und Lesebereitschaft der dauerhaft eingebundenen Datenpfade.</p>
+      </header>
+      <div class="estab-tool-table-wrap estab-tool-table-responsive">
+        <table class="estab-tool-table">
+          <caption class="estab-visually-hidden">Status der persistenten Speicher</caption>
+          <thead>
+            <tr>
+              <th scope="col">Speicher</th>
+              <th scope="col">Ergebnis</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php foreach ($storageReady as $label => $ready): ?>
+              <tr>
+                <td data-label="Speicher"><?= system_status_html($label) ?></td>
+                <td data-label="Ergebnis">
+                  <span class="estab-tool-badge <?= $ready
+                      ? 'estab-tool-badge-success'
+                      : 'estab-tool-badge-danger' ?>">
+                    <?= system_status_label($ready) ?>
+                  </span>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+    </section>
 
-  <p><a href="export.php">Einsatzexport öffnen</a></p>
-  <p><a href="admin.php">Zurück zu den administrativen Maßnahmen</a></p>
+    <section class="estab-tool-panel" aria-labelledby="configuration-status-title">
+      <header class="estab-tool-panel-heading">
+        <h2 id="configuration-status-title">Containerkonfiguration</h2>
+        <p>Datenbank, Verzeichnisse und Laufzeitparameter werden über Compose,
+          Umgebungsvariablen und eingehängte Secret-Dateien bereitgestellt.
+          Historische Web-Installer, Konfigurationsschreiber und
+          <code>phpinfo()</code> sind deshalb deaktiviert.</p>
+      </header>
+      <div class="estab-tool-table-wrap estab-tool-table-responsive">
+        <table class="estab-tool-table">
+          <caption class="estab-visually-hidden">
+            Wirksame nicht-sensible Containerkonfiguration
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Vorgabe</th>
+              <th scope="col">Zustand</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php foreach ($environmentChecks as $label => $configured): ?>
+              <tr>
+                <td data-label="Vorgabe"><?= system_status_html($label) ?></td>
+                <td data-label="Zustand">
+                  <span class="estab-tool-badge <?= $configured
+                      ? 'estab-tool-badge-success'
+                      : 'estab-tool-badge-neutral' ?>">
+                    <?= $configured ? 'konfiguriert' : 'Standardwert aktiv' ?>
+                  </span>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="estab-tool-footer">
+      <a href="admin.php">Zurück zur Administration</a>
+      <a href="export.php">Einsatzexporte öffnen</a>
+    </footer>
+  </main>
 </body>
 </html>

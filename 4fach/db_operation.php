@@ -100,6 +100,79 @@ class db_access {
     }
   }
 
+  function dynamic_schema_lock_name ($fkttblname) {
+    if (!is_string ($fkttblname) || $fkttblname === "") {
+      throw new InvalidArgumentException ("Dynamischer Funktionsname darf nicht leer sein");
+    }
+    // Every user of one function shares its *_erl, *_katego and
+    // *_kategolink tables. Locking by database and function therefore
+    // serialises exactly the DDL that can otherwise race.
+    return "estab:schema:".substr (
+      hash ("sha256", $this->db_name."\0".$fkttblname),
+      0,
+      51
+    );
+  }
+
+  function dynamic_schema_lock_timeout () {
+    $timeout = defined ("ESTAB_DYNAMIC_SCHEMA_LOCK_TIMEOUT_SECONDS")
+      ? constant ("ESTAB_DYNAMIC_SCHEMA_LOCK_TIMEOUT_SECONDS")
+      : 15;
+    if (!is_int ($timeout) || $timeout < 0 || $timeout > 30) {
+      throw new RuntimeException ("Ungueltiges Zeitlimit fuer dynamische Tabellen");
+    }
+    return $timeout;
+  }
+
+  function acquire_dynamic_schema_lock ($db, $lockname) {
+    if (!$db instanceof mysqli) {
+      throw new RuntimeException ("Datenbankverbindung fuer dynamische Tabellen fehlt");
+    }
+    $timeout = $this->dynamic_schema_lock_timeout ();
+    $statement = $db->prepare ("SELECT GET_LOCK(?, ?)");
+    if (!$statement) {
+      throw new RuntimeException ("Sperre fuer dynamische Tabellen konnte nicht vorbereitet werden");
+    }
+    try {
+      $statement->bind_param ("si", $lockname, $timeout);
+      if (!$statement->execute ()) {
+        throw new RuntimeException ("Sperre fuer dynamische Tabellen konnte nicht angefordert werden");
+      }
+      $result = $statement->get_result ();
+      $row = $result->fetch_row ();
+      $result->free ();
+      if (!is_array ($row) || (string) ($row [0] ?? "") !== "1") {
+        throw new RuntimeException ("Dynamische Tabellen werden bereits bearbeitet");
+      }
+    } finally {
+      $statement->close ();
+    }
+  }
+
+  function release_dynamic_schema_lock ($db, $lockname) {
+    if (!$db instanceof mysqli) {
+      throw new RuntimeException ("Datenbankverbindung fuer dynamische Tabellen fehlt");
+    }
+    $statement = $db->prepare ("SELECT RELEASE_LOCK(?)");
+    if (!$statement) {
+      throw new RuntimeException ("Sperre fuer dynamische Tabellen konnte nicht freigegeben werden");
+    }
+    try {
+      $statement->bind_param ("s", $lockname);
+      if (!$statement->execute ()) {
+        throw new RuntimeException ("Sperre fuer dynamische Tabellen konnte nicht freigegeben werden");
+      }
+      $result = $statement->get_result ();
+      $row = $result->fetch_row ();
+      $result->free ();
+      if (!is_array ($row) || (string) ($row [0] ?? "") !== "1") {
+        throw new RuntimeException ("Sperre fuer dynamische Tabellen ging verloren");
+      }
+    } finally {
+      $statement->close ();
+    }
+  }
+
   function create_user_table ($tablename, $fkttblname) {
     $user_read       = $this->quote_dynamic_table_identifier ($tablename, "_read");
     $function_done   = $this->quote_dynamic_table_identifier ($fkttblname, "_erl");
@@ -108,24 +181,26 @@ class db_access {
     $user_katego     = $this->quote_dynamic_table_identifier ($tablename, "_katego");
     $user_link       = $this->quote_dynamic_table_identifier ($tablename, "_kategolink");
 
-    $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw)
-       or die ("create_user_table [connect] Konnte keine Verbindung zur Datenbank herstellen");
+    $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw);
+    if (!$db instanceof mysqli) {
+      throw new RuntimeException (
+        "[create_user_table] Konnte keine Verbindung zur Datenbank herstellen"
+      );
+    }
     $this->execute_dynamic_schema_query (
       'SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci',
       $db
     );
-    $db_check = mysql_select_db ($this->db_name, $db)
-       or die ("[read_table] Auswahl der Datenbank fehlgeschlagen");
-
-    $mode_result = mysql_query ("SELECT @@SESSION.sql_mode", $db);
-    if (!$mode_result) {
+    if (!mysql_select_db ($this->db_name, $db)) {
+      mysql_close ($db);
       throw new RuntimeException (
-        "[create_user_table] SQL-Mode konnte nicht gelesen werden: ".mysql_error ($db)
+        "[create_user_table] Auswahl der Datenbank fehlgeschlagen"
       );
     }
-    $mode_row = mysql_fetch_row ($mode_result);
-    mysql_free_result ($mode_result);
-    $original_sql_mode = $mode_row [0];
+
+    $lockname = $this->dynamic_schema_lock_name ($fkttblname);
+    $lock_acquired = false;
+    $original_sql_mode = null;
 
     $create_queries = array (
       "CREATE TABLE IF NOT EXISTS ".$user_read." (
@@ -249,7 +324,21 @@ class db_access {
          ON ".$user_link." (`katego`, `msg`)"
     );
 
+    $operation_error = null;
     try {
+      $this->acquire_dynamic_schema_lock ($db, $lockname);
+      $lock_acquired = true;
+
+      $mode_result = mysql_query ("SELECT @@SESSION.sql_mode", $db);
+      if (!$mode_result) {
+        throw new RuntimeException (
+          "[create_user_table] SQL-Mode konnte nicht gelesen werden: ".mysql_error ($db)
+        );
+      }
+      $mode_row = mysql_fetch_row ($mode_result);
+      mysql_free_result ($mode_result);
+      $original_sql_mode = (string) ($mode_row [0] ?? "");
+
       // Only this connection is relaxed while invalid legacy zero dates are
       // made nullable. The original strict mode is restored in every case.
       $this->execute_dynamic_schema_query ("SET SESSION sql_mode = ''", $db);
@@ -259,13 +348,41 @@ class db_access {
       foreach ($migration_queries as $query) {
         $this->execute_dynamic_schema_query ($query, $db);
       }
-    } finally {
-      $escaped_sql_mode = mysql_real_escape_string ($original_sql_mode, $db);
-      $this->execute_dynamic_schema_query (
-        "SET SESSION sql_mode = '".$escaped_sql_mode."'",
-        $db
-      );
+    } catch (Throwable $exception) {
+      $operation_error = $exception;
     }
+
+    $cleanup_error = null;
+    if ($original_sql_mode !== null) {
+      try {
+        $escaped_sql_mode = mysql_real_escape_string ($original_sql_mode, $db);
+        $this->execute_dynamic_schema_query (
+          "SET SESSION sql_mode = '".$escaped_sql_mode."'",
+          $db
+        );
+      } catch (Throwable $exception) {
+        $cleanup_error = $exception;
+      }
+    }
+    if ($lock_acquired) {
+      try {
+        $this->release_dynamic_schema_lock ($db, $lockname);
+      } catch (Throwable $exception) {
+        if ($cleanup_error === null) {
+          $cleanup_error = $exception;
+        }
+      }
+    }
+
+    if ($operation_error instanceof Throwable) {
+      mysql_close ($db);
+      throw $operation_error;
+    }
+    if ($cleanup_error instanceof Throwable) {
+      mysql_close ($db);
+      throw $cleanup_error;
+    }
+    mysql_close ($db);
   }
 
 
