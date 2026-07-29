@@ -166,7 +166,7 @@ function incident_export_integration_insert_fixture(
             . ' `14_funktion`, `16_empf`, `17_vermerke`, `x00_status`,'
             . ' `x01_abschluss`, `x04_druck`)'
             . " VALUES (?, 'Fu', NOW(), ?, 'E', ?, ?, ?, 'eee', ?, ?, ?,"
-            . " NOW(), ?, ?, 'A/W', 'S2_rt,', ?, 8, 't', 't')"
+            . " NOW(), ?, ?, 'A/W', 'S2_rt,ALT_1_gn,', ?, 8, 't', 't')"
     );
     try {
         $remote = 'Leitstelle ' . $marker;
@@ -518,6 +518,12 @@ try {
             === [$selectedName],
         'Message-to-attachment relation was not scoped to the selected incident'
     );
+    $matrix = $bundle['recipient_matrix'] ?? null;
+    $assert(
+        is_array($matrix)
+            && array_sum(array_map('count', $matrix)) === 20,
+        'Message-form recipient matrix is missing or incomplete'
+    );
     $assert(
         ($bundle['attachments'][0]['stored_name'] ?? null) === $selectedName
             && ($bundle['attachments'][0]['message_ids'] ?? null)
@@ -571,10 +577,24 @@ try {
             && str_contains($pageContent, $selectedMarker . '-TTB')
             && str_contains(
                 $pageContent,
+                'Nachrichteninhalt ' . $selectedMarker
+            )
+            && str_contains($pageContent, 'EINGANG')
+            && str_contains($pageContent, 'AUSGANG')
+            && str_contains($pageContent, 'Nachweis-Nr.')
+            && str_contains($pageContent, 'Fm-Betriebsstelle')
+            && str_contains($pageContent, 'ALT_1 [gn]')
+            && str_contains(
+                $pageContent,
                 hash('sha256', $selectedPayload)
             )
+            && !str_contains($pageContent, 'Dienstgebrauch')
             && !str_contains($pageContent, $otherMarker),
-        'Rendered pages omit the attachment SHA-256 or contain another incident'
+        'Rendered pages omit the shared form, attachment SHA-256, or incident scope'
+    );
+    $assert(
+        !str_contains($pdf, '/Subtype /Image'),
+        'Rendered incident dossier still contains the coat of arms'
     );
     $assert(
         $downloadFilename === 'estab-einsatz-' . $selectedIncidentId

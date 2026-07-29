@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../../app/incident_pdf.php';
+require_once __DIR__ . '/pdf_test_fixture.php';
 
 $assertions = 0;
 $assert = static function (
@@ -47,7 +48,12 @@ try {
         'einsatzleitung' => 'Max Beispiel',
         'beschreibung' => 'Vollständiger Funktionsnachweis',
     ];
-    $pdf = new EstabIncidentPdf($incident, 1024 * 1024);
+    $recipientMatrix = estab_pdf_test_recipient_matrix();
+    $pdf = new EstabIncidentPdf(
+        $incident,
+        1024 * 1024,
+        $recipientMatrix
+    );
     $pdf->SetCompression(false);
     $embedded = $pdf->embedAttachment(
         $attachmentPath,
@@ -80,33 +86,29 @@ try {
         'tbb_kuerzel' => 'BER001',
         'tbb_funktion' => 'A/W',
     ]]);
-    $pdf->addMessages([[
+    $message = array_replace(estab_pdf_test_message_fixture(), [
         '00_lfd' => 7,
+        'einsatz_id' => 12,
         '04_richtung' => 'E',
         '04_nummer' => 1,
-        '09_vorrangstufe' => 'eee',
         '01_medium' => 'Fu',
         '01_datum' => '2026-07-29 10:33:00',
         '01_zeichen' => 'BER001',
         '02_zeit' => null,
-        '02_zeichen' => '',
         '03_datum' => null,
-        '03_zeichen' => '',
         '05_gegenstelle' => 'Leitstelle',
         '06_befweg' => 'Funk',
-        '08_befhinweis' => '',
         '10_anschrift' => 'Einsatzleitung',
+        '12_anhang' => 'EL0001.txt;',
         '12_abfzeit' => '2026-07-29 10:32:00',
+        '12_inhalt' => 'Sturmschaden &amp; Straßensperrung',
         '13_abseinheit' => 'Leitstelle',
         '14_zeichen' => 'BER001',
         '14_funktion' => 'A/W',
         '15_quitdatum' => null,
-        '15_quitzeichen' => '',
-        '16_empf' => 'S2_rt,',
-        '12_inhalt' => 'Sturmschaden &amp; Straßensperrung',
         '17_vermerke' => 'Bestätigt',
-        'x00_status' => 8,
-    ]], [7 => ['EL0001.txt']]);
+    ]);
+    $pdf->addMessages([$message], [7 => ['EL0001.txt']]);
     $pdf->addAttachmentIndex([[
         'display_name' => 'EL0001.txt · lage.txt',
         'stored_name' => $embedded['name'],
@@ -134,6 +136,34 @@ try {
     );
     $assert(str_ends_with($document, "%%EOF\n"), 'PDF trailer missing');
     $assert(strlen($document) > 5000, 'incident PDF is unexpectedly small');
+    foreach (
+        ['EINGANG', 'AUSGANG', 'Nachweis-Nr.', 'Fm-Betriebsstelle']
+        as $marker
+    ) {
+        $assert(
+            str_contains($document, $marker),
+            'incident PDF message form marker is missing: ' . $marker
+        );
+    }
+    $assert(
+        !str_contains($document, 'Dienstgebrauch')
+            && !str_contains($document, 'VS-NfD'),
+        'incident PDF message form still contains a VS marking'
+    );
+    $assert(
+        !str_contains($document, '/Subtype /Image'),
+        'incident PDF message form still contains the coat of arms'
+    );
+    $assert(
+        !str_contains($document, '/4fach/download.php')
+            && !str_contains($document, '/URI '),
+        'historical dossier contains an active-incident attachment link'
+    );
+    $assert(
+        str_contains($document, 'ALT_1 [gn]')
+            && str_contains($document, 'ALT2 [rt]'),
+        'historical recipients outside the current matrix are invisible'
+    );
     $assert(
         str_contains($document, '/EmbeddedFiles')
             && str_contains($document, '/Type /Filespec')
@@ -194,6 +224,30 @@ try {
             1024
         ),
         'attachment symlink accepted'
+    );
+
+    $longMessagePdf = new EstabIncidentPdf(
+        $incident,
+        1024,
+        $recipientMatrix
+    );
+    $longMessagePdf->SetCompression(false);
+    $longMessage = array_replace(estab_pdf_test_message_fixture(), [
+        '00_lfd' => 8,
+        'einsatz_id' => 12,
+        '12_inhalt' => str_repeat(
+            "Mehrseitiger Formularinhalt\n",
+            45
+        ) . 'ENDE-MEHRSEITIGER-VORDRUCK',
+    ]);
+    $longMessagePdf->addMessages([$longMessage], [8 => []]);
+    $longDocument = $longMessagePdf->Output('', 'S');
+    $assert(
+        $longMessagePdf->PageNo() > 1
+            && str_contains($longDocument, 'ENDE-MEHRSEITIGER-VORDRUCK')
+            && substr_count($longDocument, 'EINGANG')
+                === $longMessagePdf->PageNo(),
+        'long message did not continue across complete form-template pages'
     );
 
     $duplicatePdf = new EstabIncidentPdf($incident, 1024);

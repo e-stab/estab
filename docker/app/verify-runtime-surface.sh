@@ -73,7 +73,6 @@ menue.inc.php
 4fbak/fpdf/font/timesi.php
 4fbak/fpdf/font/zapfdingbats.php
 4fbak/fonts/georgiaz.ttf
-4fbak/logo.png
 4fcfg/color.inc.php
 4fcfg/config.inc.php
 4fcfg/d_cfg.inc.php

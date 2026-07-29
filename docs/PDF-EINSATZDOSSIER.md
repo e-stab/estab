@@ -15,10 +15,26 @@ Der Administrator wählt mindestens einen der folgenden Bereiche:
 - Originalanhänge zu den Nachrichtenvordrucken.
 
 Originalanhänge können nur zusammen mit den Nachrichtenvordrucken ausgewählt
-werden. ETB, TTB und Nachrichten werden als Textseiten in die PDF geschrieben
-und bleiben dadurch durchsuchbar. Anhänge werden nicht verlustbehaftet in
-Bilder umgewandelt: Jede abgeschlossene Originaldatei wird unverändert in den
-PDF-Katalog eingebettet. Das Anlagenverzeichnis nennt portablen Dateinamen,
+werden. ETB und TTB erscheinen als durchsuchbare Dossierseiten. Jede Nachricht
+wird dagegen mit exakt demselben A4-Formularrenderer ausgegeben wie unter
+**Generierte Vordrucke**. Dadurch stimmen Raster, Feldpositionen,
+Empfängerkennzeichnung und mehrseitiger Inhaltsfluss in Einzel- und
+Gesamtexport überein. Die gemeinsame Vorlage druckt weder eine
+VS-NfD-Kennzeichnung noch das frühere Wappen.
+
+Die Legacy-Datenbank speichert die Empfängermatrix nicht historisch pro
+Einsatz. Das Dossier liest deshalb die zum Exportzeitpunkt gültige Matrix im
+selben Datenbank-Snapshot. Eine im Nachrichtendatensatz gespeicherte Funktion,
+die darin nicht mehr vorkommt, wird nicht verschluckt oder in eine erfundene
+Rasterposition gesetzt: Unter dem Nachrichteninhalt erscheint einmal
+**Empfänger außerhalb aktueller Matrix** mit Funktion und gespeichertem
+Kopiekennzeichen, zum Beispiel `ALT_1 [gn]`.
+
+Anhänge werden nicht verlustbehaftet in Bilder umgewandelt: Jede abgeschlossene
+Originaldatei wird unverändert in den PDF-Katalog eingebettet. Ihr sicherer
+Dateiname steht zusätzlich im Nachrichtenvordruck. Bei einem historischen
+Einsatz wird dort bewusst kein Link auf den Downloadbereich des aktuell
+aktiven Einsatzes erzeugt. Das Anlagenverzeichnis nennt portablen Dateinamen,
 Medientyp, Größe, zugehörige Nachrichtendatensätze und SHA-256-Prüfsumme.
 Gängige PDF-Leser zeigen diese Dateien in ihrer Anlagenansicht an.
 
@@ -59,7 +75,12 @@ Die automatisierten Tests prüfen unter anderem:
 - eingebetteten PDF-1.7-Dateikatalog und SHA-256,
 - echte Extraktion des unveränderten Beispielanhangs,
 - durchsuchbaren Text für ETB, TTB und Nachrichten,
-- A4-Rendering ohne abgeschnittene oder überlappende Beschriftungen.
+- dieselben Formularmarker in Einzel- und Gesamtexport,
+- Abwesenheit von VS-NfD-Aufdruck, Wappen und Seitenbildern,
+- verlustfreie Anzeige nicht mehr in der Matrix vorhandener Empfänger,
+- pixelidentisches A4-Rendering beider Nachrichtenausgabepfade einschließlich
+  mehrseitigem Inhaltsfluss und produktivem Wechsel von Deckblatt, ETB und TTB
+  zur Formularseite.
 
 Der echte MariaDB-Nachweis `tests/integration/incident_export.php` legt
 ETB-, TTB-, Nachrichten- und Anhangdaten in zwei verschiedenen Einsätzen an,
@@ -69,6 +90,21 @@ Sektion exakt dessen Datensatz. Anschließend extrahiert er den tatsächlichen
 Originaldatei und prüft sowohl deren SHA-256 als auch den SHA-256-Wert der
 vollständigen PDF. Der Test läuft unmittelbar nach der Einsatzaktivierung im
 vollständigen Container-CI-Gate.
+
+Zusätzlich erzeugt `tests/php/pdf_template_render_fixture.php` aus identischen
+Nachrichten- und Matrixdaten Einzelvordruck, direkte Dossier-Nachrichtenseite,
+beide mehrseitigen Varianten sowie ein vollständiges Dossier in der
+produktiven Folge Deckblatt, ETB, TTB, Nachricht und Anlagenverzeichnis.
+`tests/static/pdf_render.sh` prüft sie mit Poppler: A4 und Seitenzahl über
+`pdfinfo`, Text, historischen Empfänger-Fallback und verbotene Aufdrucke über
+`pdftotext`, den konstanten linken Folgeseiteneinzug über dessen
+Bounding-Box-Ausgabe, fehlende Rasterbilder über `pdfimages`, pixelgleiche
+PNGs über `pdftoppm` und den unveränderten Originalanhang über `pdfdetach` und
+`cmp`. Auf der produktiven Dossierseite wird ausschließlich das absichtlich
+globale Seitenzahlfeld vom Pixelvergleich ausgenommen.
+GitHub Actions lädt PDFs, Textauszüge, Prüfinformationen und Render-PNGs
+14 Tage als `pdf-render-evidence-*` hoch. Eine sichtbare Verschiebung der
+Vorlage oder ein erneut eingebundenes Wappen sperrt damit die CI.
 
 Für die manuelle Abnahme sollte ein Dossier mit realistischen langen
 Einsatznamen, mehrseitigen Einträgen und allen in der Organisation verwendeten

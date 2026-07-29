@@ -203,6 +203,69 @@ function estab_incident_export_rows(
 }
 
 /**
+ * Read the complete active recipient matrix used by the message-form template.
+ *
+ * @return array<int,array<int,array{fkt:string}>>
+ */
+function estab_incident_export_recipient_matrix(mysqli $connection): array
+{
+    $statement = $connection->prepare(
+        'SELECT `mtx_x`, `mtx_y`, `mtx_fkt`'
+            . ' FROM ' . estab_auth_table('nv_empfmtx')
+            . ' ORDER BY `mtx_x`, `mtx_y`'
+    );
+    if (!$statement) {
+        throw new EstabIncidentExportDataException(
+            'Die Empfängermatrix konnte nicht gelesen werden.'
+        );
+    }
+    try {
+        if (!$statement->execute()) {
+            throw new EstabIncidentExportDataException(
+                'Die Empfängermatrix konnte nicht gelesen werden.'
+            );
+        }
+        $result = $statement->get_result();
+        if (!$result instanceof mysqli_result) {
+            throw new EstabIncidentExportDataException(
+                'Die Empfängermatrix konnte nicht gelesen werden.'
+            );
+        }
+        $matrix = [];
+        while (($row = $result->fetch_assoc()) !== null) {
+            $matrixRow = (int) ($row['mtx_x'] ?? 0);
+            $matrixColumn = (int) ($row['mtx_y'] ?? 0);
+            $function = trim((string) ($row['mtx_fkt'] ?? ''));
+            if (
+                $matrixRow < 1
+                || $matrixRow > 5
+                || $matrixColumn < 1
+                || $matrixColumn > 4
+                || (
+                    $function !== ''
+                    && preg_match('/\A[A-Za-z0-9_]{1,6}\z/D', $function) !== 1
+                )
+                || isset($matrix[$matrixRow][$matrixColumn])
+            ) {
+                throw new EstabIncidentExportDataException(
+                    'Die Empfängermatrix ist für den PDF-Export ungültig.'
+                );
+            }
+            $matrix[$matrixRow][$matrixColumn] = ['fkt' => $function];
+        }
+        $result->free();
+    } finally {
+        $statement->close();
+    }
+    if (array_sum(array_map('count', $matrix)) !== 20) {
+        throw new EstabIncidentExportDataException(
+            'Die Empfängermatrix ist für den PDF-Export unvollständig.'
+        );
+    }
+    return $matrix;
+}
+
+/**
  * Load the complete, immutable source bundle for one dossier.
  *
  * Missing files are a hard error when originals were requested.  The export
@@ -214,6 +277,7 @@ function estab_incident_export_rows(
  *   etb:list<array<string,mixed>>,
  *   ttb:list<array<string,mixed>>,
  *   messages:list<array<string,mixed>>,
+ *   recipient_matrix:array<int,array<int,array{fkt:string}>>,
  *   attachment_names_by_message:array<int,list<string>>,
  *   attachments:list<array<string,mixed>>,
  *   counts:array<string,int>
@@ -267,18 +331,24 @@ function estab_incident_export_load(
     }
 
     $messages = [];
+    $recipientMatrix = [];
     $attachmentNamesByMessage = [];
     if (in_array('messages', $sections, true)) {
+        $recipientMatrix = estab_incident_export_recipient_matrix($connection);
         $messages = estab_incident_export_rows(
             $connection,
-            'SELECT `00_lfd`, `01_medium`, `01_datum`, `01_zeichen`,'
+            'SELECT `00_lfd`, `einsatz_id`, `01_medium`, `01_datum`,'
+                . ' `01_zeichen`,'
                 . ' `02_zeit`, `02_zeichen`, `03_datum`, `03_zeichen`,'
                 . ' `04_richtung`, `04_nummer`, `05_gegenstelle`,'
-                . ' `06_befweg`, `08_befhinweis`, `09_vorrangstufe`,'
-                . ' `10_anschrift`, `12_anhang`, `12_inhalt`, `12_abfzeit`,'
+                . ' `06_befweg`, `06_befwegausw`, `07_durchspruch`,'
+                . ' `08_befhinweis`, `08_befhinwausw`, `09_vorrangstufe`,'
+                . ' `10_anschrift`, `11_gesprnotiz`, `12_anhang`,'
+                . ' `12_inhalt`, `12_abfzeit`,'
                 . ' `13_abseinheit`, `14_zeichen`, `14_funktion`,'
                 . ' `15_quitdatum`, `15_quitzeichen`, `16_empf`,'
-                . ' `17_vermerke`, `x00_status`'
+                . ' `17_vermerke`, `x00_status`, `x01_abschluss`,'
+                . ' `x04_druck`, `x05_druck_d`, `99_lstacc`'
                 . ' FROM `nv_nachrichten` WHERE `einsatz_id` = ?'
                 . ' ORDER BY COALESCE(`01_datum`, `12_abfzeit`), `00_lfd`',
             $incidentId,
@@ -384,6 +454,7 @@ function estab_incident_export_load(
         'etb' => $etb,
         'ttb' => $ttb,
         'messages' => $messages,
+        'recipient_matrix' => $recipientMatrix,
         'attachment_names_by_message' => $attachmentNamesByMessage,
         'attachments' => $attachments,
         'counts' => [
@@ -415,7 +486,20 @@ function estab_incident_export_pdf(
     }
     $actor = estab_incident_actor($actor);
     $generatedAt ??= new DateTimeImmutable('now');
-    $pdf = new EstabIncidentPdf($incident, $attachmentByteLimit);
+    $recipientMatrix = $bundle['recipient_matrix'] ?? null;
+    if (
+        in_array('messages', $sections, true)
+        && !is_array($recipientMatrix)
+    ) {
+        throw new EstabIncidentExportDataException(
+            'Die Empfängermatrix des PDF-Exports fehlt.'
+        );
+    }
+    $pdf = new EstabIncidentPdf(
+        $incident,
+        $attachmentByteLimit,
+        is_array($recipientMatrix) ? $recipientMatrix : null
+    );
 
     $embeddedIndex = [];
     if (in_array('attachments', $sections, true)) {

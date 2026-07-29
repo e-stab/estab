@@ -19,7 +19,8 @@ benötigte statische Assets und die öffentlich verlinkte Handbuch-PDF.
   `doku/Handbuch_eStab.pdf`;
 - für PDF-Vordrucke ausschließlich `4fbak/backup.php`,
   `4fbak/backup_pdf.php`, der verwendete FPDF-Kern, dessen eingebaute
-  Schriftmetriken und `4fbak/logo.png`;
+  Schriftmetriken; das nicht mehr gedruckte historische Wappen bleibt nur zur
+  Provenienz in Git und wird nicht in das Laufzeitimage kopiert;
 - `4fbak/fonts/georgiaz.ttf` als einzige TTF-Datei, weil die aktiven
   dynamischen Schaltflächen sie bei verfügbarer FreeType-Unterstützung
   verwenden.

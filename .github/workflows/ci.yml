@@ -33,6 +33,33 @@ jobs:
           php:8.5.8-cli-trixie@sha256:58b996c35ce0511cdbaa1fc0476a194fd0221097d721ff7df5af0b6f1a3d0202
           tests/static/run.sh
 
+      - name: Install PDF render verification tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends poppler-utils
+
+      - name: Render and compare both message-form PDF paths
+        env:
+          ESTAB_PDF_EVIDENCE_DIR: ${{ runner.temp }}/estab-pdf-evidence
+        run: |
+          mkdir -p "$ESTAB_PDF_EVIDENCE_DIR"
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE:/workspace:ro" \
+            --volume "$ESTAB_PDF_EVIDENCE_DIR:/evidence" \
+            --workdir /workspace \
+            php:8.5.8-cli-trixie@sha256:58b996c35ce0511cdbaa1fc0476a194fd0221097d721ff7df5af0b6f1a3d0202 \
+            php tests/php/pdf_template_render_fixture.php /evidence
+          bash tests/static/pdf_render.sh "$ESTAB_PDF_EVIDENCE_DIR"
+
+      - name: Upload PDF render evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pdf-render-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/estab-pdf-evidence
+          if-no-files-found: ignore
+          retention-days: 14
+
   compose-integration:
     name: Fresh Docker Compose integration (${{ matrix.arch }})
     needs: php-static

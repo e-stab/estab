@@ -223,7 +223,14 @@ Nachweisnummer und Richtung erneut. Die Dateien historischer Einsätze bleiben
 im persistenten Volume kollisionsfrei erhalten, sind aber nicht über die
 aktive Vordruckliste eines anderen Einsatzes abrufbar. Das
 [PDF-Einsatzdossier](PDF-EINSATZDOSSIER.md) erzeugt für ausgewählte
-historische Einsätze eine eigene zusammenhängende Darstellung.
+historische Einsätze eine eigene zusammenhängende Darstellung. Seine
+Nachrichtenseiten verwenden denselben A4-Formularrenderer wie die
+Einzelvordrucke, jedoch ohne Links in den Downloadbereich des aktuell aktiven
+Einsatzes. Die gemeinsame Vorlage enthält weder VS-NfD-Aufdruck noch Wappen;
+Originalanhänge liegen unverändert im eingebetteten Dateikatalog des Dossiers.
+Da die Legacy-Datenbank keine Matrixhistorie pro Einsatz besitzt, werden
+Empfängerfunktionen, die in der aktuellen Matrix fehlen, zusätzlich mit ihrem
+gespeicherten Kopiekennzeichen im Inhaltsbereich ausgeschrieben.
 
 ## Migrations- und Testnachweis
 

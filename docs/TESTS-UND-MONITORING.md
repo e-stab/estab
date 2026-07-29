@@ -111,7 +111,11 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   High-/Critical-CVE-Gate und
   prüfsummengebundenes Digest-Installationspaket,
 - Erzeugung lesbarer Nachrichtenvordrucke und eines durchsuchbaren
-  PDF-Einsatzdossiers mit sicher eingebetteten Originaldateien.
+  PDF-Einsatzdossiers mit sicher eingebetteten Originaldateien; beide
+  Nachrichtenausgabepfade werden ein- und mehrseitig mit Poppler pixelgleich
+  verglichen und auf stabilen Folgeseiteneinzug, sichtbare historische
+  Empfänger, fehlenden VS-NfD-Aufdruck, fehlendes Wappen sowie A4-Geometrie
+  geprüft.
 
 Ein Prozess-Exitcode ungleich null sperrt die Freigabe.
 
@@ -408,6 +412,21 @@ verglichen; Marker und Datei des anderen Einsatzes dürfen nicht vorkommen.
 Der Test stellt den benannten CI-Einsatz wieder aktiv, entfernt seine
 operativen Fixtures und verweigert ohne
 `ESTAB_INCIDENT_EXPORT_INTEGRATION=1` den Start.
+
+Der davon unabhängige Rendervertrag erzeugt mit
+`tests/php/pdf_template_render_fixture.php` aus exakt demselben
+Nachrichtendatensatz und derselben 5×4-Empfängermatrix einen Einzelvordruck,
+eine direkte Dossier-Nachrichtenseite, beide Varianten mit mehrseitigem Inhalt
+und ein vollständiges Dossier in der produktiven Folge Deckblatt, ETB, TTB,
+Nachricht und Anlagenverzeichnis. `tests/static/pdf_render.sh` verlangt A4,
+extrahiert Formulartext und Bounding Boxes, weist null Seitenbilder nach,
+prüft den konstanten linken Inhaltseinzug und rendert alle Varianten mit
+144 dpi. Ein- und mehrseitige Direktvarianten werden vollständig bytegenau
+verglichen; bei der Nachrichtenseite im vollständigen Dossier bleibt nur das
+absichtlich globale Feld `Seite 4/5` ausgespart. Anschließend extrahiert
+`pdfdetach` den eingebetteten Originalanhang und `cmp` vergleicht ihn mit der
+Quelldatei. Die CI bewahrt PDFs, PNGs, Text- und Werkzeuginformationen 14 Tage
+als Nachweisartefakt auf.
 
 Diese drei Tests sind bewusst in `tests/integration/ci.sh` orchestriert.
 Insbesondere der PDF-Test ist kein sicherer Einzelbefehl gegen einen

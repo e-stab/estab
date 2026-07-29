@@ -101,7 +101,6 @@ COPY 4fadm/admin.php \
 COPY 4fbak/backup.php \
     4fbak/backup_pdf.php \
     4fbak/fpdf.php \
-    4fbak/logo.png \
     ./4fbak/
 COPY 4fbak/fpdf/font/*.php ./4fbak/fpdf/font/
 # Dynamic button rendering uses this one historical font when FreeType exists.

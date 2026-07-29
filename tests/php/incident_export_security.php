@@ -137,6 +137,11 @@ foreach ([
     'FROM `nv_tbb` WHERE `einsatz_id` = ?',
     'FROM `nv_nachrichten` WHERE `einsatz_id` = ?',
     'WHERE `einsatz_id` = ? AND `status` = 1',
+    'estab_incident_export_recipient_matrix($connection)',
+    '`06_befwegausw`, `07_durchspruch`',
+    '`08_befhinwausw`, `09_vorrangstufe`',
+    '`10_anschrift`, `11_gesprnotiz`',
+    '`x04_druck`, `x05_druck_d`, `99_lstacc`',
     'estab_file_resolve(',
     'Ein Nachrichtenvordruck verweist auf einen nicht ',
     'hash(\'sha256\', $bytes)',
@@ -159,9 +164,37 @@ $dockerfile = file_get_contents(__DIR__ . '/../../Dockerfile');
 $runtimeVerifier = file_get_contents(
     __DIR__ . '/../../docker/app/verify-runtime-surface.sh'
 );
-foreach ([$controller, $dashboard, $dockerfile, $runtimeVerifier] as $surface) {
+$pdfRenderer = file_get_contents(__DIR__ . '/../../app/incident_pdf.php');
+$messageTemplate = file_get_contents(
+    __DIR__ . '/../../4fbak/backup_pdf.php'
+);
+foreach (
+    [
+        $controller,
+        $dashboard,
+        $dockerfile,
+        $runtimeVerifier,
+        $pdfRenderer,
+        $messageTemplate,
+    ] as $surface
+) {
     $assert(is_string($surface), 'Incident PDF integration source is unreadable');
 }
+$assert(
+    str_contains($pdfRenderer, 'extends vordruckaspdf')
+        && str_contains($pdfRenderer, '$this->set_message_form_data($message)')
+        && str_contains($pdfRenderer, 'parent::Header()')
+        && str_contains($pdfRenderer, 'parent::Footer()')
+        && !str_contains($pdfRenderer, "'Datensatz' => \$recordId"),
+    'Incident dossier does not reuse the generated message-form renderer'
+);
+$assert(
+    !str_contains($messageTemplate, 'Nur für den Dienstgebrauch')
+        && !str_contains($messageTemplate, '4fbak/logo.png')
+        && !str_contains($messageTemplate, '/logo.png')
+        && !str_contains($messageTemplate, "ini_set('memory_limit'"),
+    'Message-form template still prints removed assets or lowers dossier memory'
+);
 $assert(
     str_contains($controller, "empty(\$_SERVER['REMOTE_USER'])")
         && str_contains(
@@ -192,8 +225,10 @@ $assert(
 $assert(
     str_contains($dockerfile, '4fadm/incident_export.php')
         && str_contains($dockerfile, '4fadm/incidents.php')
+        && !str_contains($dockerfile, '4fbak/logo.png')
         && str_contains($runtimeVerifier, '4fadm/incident_export.php')
         && str_contains($runtimeVerifier, '4fadm/incidents.php')
+        && !str_contains($runtimeVerifier, '4fbak/logo.png')
         && str_contains($runtimeVerifier, 'app/incident_export.php')
         && str_contains($runtimeVerifier, 'app/incident_pdf.php'),
     'Container runtime omits incident PDF or incident management files'

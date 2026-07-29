@@ -336,6 +336,12 @@ Generierte einzelne Nachrichtenvordrucke liegen kollisionsfrei als
 `<datenbank> Einsatz-<einsatz_id> <nummer> <E|A>.pdf` in `estab_data`.
 Liste und Download autorisieren sie über den gedruckten Nachrichtendatensatz
 des aktiven Einsatzes; ein bloß im Volume vorhandener Dateiname genügt nicht.
+Einzelvordruck und Nachrichtenseiten des PDF-Einsatzdossiers verwenden
+denselben A4-Formularrenderer. Die Vorlage enthält weder eine
+VS-NfD-Kennzeichnung noch das frühere Wappen; Originalanhänge eines Dossiers
+bleiben unverändert im PDF-Dateikatalog eingebettet. Ist eine historische
+Empfängerfunktion in der heutigen Matrix nicht mehr vorhanden, bleibt sie mit
+ihrem gespeicherten Kopiekennzeichen ausdrücklich im Inhaltsbereich sichtbar.
 
 ## Dokumentation
 

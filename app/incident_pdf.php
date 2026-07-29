@@ -12,13 +12,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/legacy_php.php';
-if (!defined('FPDF_FONTPATH')) {
-    define(
-        'FPDF_FONTPATH',
-        __DIR__ . '/../4fbak/fpdf/font/'
-    );
-}
-require_once __DIR__ . '/../4fbak/fpdf.php';
+require_once __DIR__ . '/../4fbak/backup_pdf.php';
 
 const ESTAB_INCIDENT_PDF_DEFAULT_ATTACHMENT_BYTES = 50 * 1024 * 1024;
 const ESTAB_INCIDENT_PDF_MAX_ATTACHMENTS = 1000;
@@ -202,12 +196,19 @@ function estab_incident_pdf_read_attachment(
 /**
  * A searchable incident dossier with original files embedded in the catalog.
  */
-final class EstabIncidentPdf extends FPDF
+final class EstabIncidentPdf extends vordruckaspdf
 {
+    private const LAYOUT_DOSSIER = 'dossier';
+    private const LAYOUT_MESSAGE_FORM = 'message-form';
+
     private string $incidentLabel = 'eStab';
     private string $sectionTitle = 'Einsatzdossier';
     private int $attachmentByteLimit;
     private int $attachmentBytes = 0;
+    private string $nextPageLayout = self::LAYOUT_DOSSIER;
+
+    /** @var array<int,string> */
+    private array $pageLayouts = [];
 
     /**
      * @var list<array{
@@ -228,18 +229,19 @@ final class EstabIncidentPdf extends FPDF
 
     public function __construct(
         array $incident,
-        int $attachmentByteLimit = ESTAB_INCIDENT_PDF_DEFAULT_ATTACHMENT_BYTES
+        int $attachmentByteLimit = ESTAB_INCIDENT_PDF_DEFAULT_ATTACHMENT_BYTES,
+        ?array $recipientMatrix = null
     ) {
         if ($attachmentByteLimit < 0 || $attachmentByteLimit > 500 * 1024 * 1024) {
             throw new EstabIncidentPdfInputException(
                 'PDF attachment byte limit is invalid.'
             );
         }
-        parent::__construct('P', 'mm', 'A4');
+        $this->initialize_message_form_document($recipientMatrix);
+        $this->attachmentLinksEnabled = false;
         $this->PDFVersion = '1.7';
         $this->attachmentByteLimit = $attachmentByteLimit;
-        $this->SetMargins(16, 30, 16);
-        $this->SetAutoPageBreak(true, 20);
+        $this->configureDossierLayout();
         $this->AliasNbPages();
         $this->SetTitle(
             estab_incident_pdf_text(
@@ -260,8 +262,41 @@ final class EstabIncidentPdf extends FPDF
         $this->incidentLabel = $code . ' · ' . $name;
     }
 
+    public function AddPage($orientation = '', $format = '')
+    {
+        $this->pageLayouts[$this->PageNo() + 1] = $this->nextPageLayout;
+        parent::AddPage($orientation, $format);
+    }
+
+    private function isMessageFormPage(): bool
+    {
+        return ($this->pageLayouts[$this->PageNo()] ?? self::LAYOUT_DOSSIER)
+            === self::LAYOUT_MESSAGE_FORM;
+    }
+
+    private function configureDossierLayout(): void
+    {
+        $this->nextPageLayout = self::LAYOUT_DOSSIER;
+        $this->SetMargins(16, 30, 16);
+        $this->SetAutoPageBreak(true, 20);
+    }
+
+    private function configureMessageFormLayout(): void
+    {
+        $this->nextPageLayout = self::LAYOUT_MESSAGE_FORM;
+        $this->SetMargins(10, 10, 10);
+        $this->SetAutoPageBreak(
+            true,
+            $this->bottom - $this->point[38][1]
+        );
+    }
+
     public function Header()
     {
+        if ($this->isMessageFormPage()) {
+            parent::Header();
+            return;
+        }
         $this->SetFillColor(23, 47, 77);
         $this->Rect(0, 0, $this->w, 23, 'F');
         $this->SetTextColor(255, 255, 255);
@@ -289,6 +324,10 @@ final class EstabIncidentPdf extends FPDF
 
     public function Footer()
     {
+        if ($this->isMessageFormPage()) {
+            parent::Footer();
+            return;
+        }
         $this->SetY(-14);
         $this->SetDrawColor(141, 162, 189);
         $this->Line(16, $this->GetY(), $this->w - 16, $this->GetY());
@@ -307,9 +346,23 @@ final class EstabIncidentPdf extends FPDF
         );
     }
 
+    public function AcceptPageBreak()
+    {
+        if (!$this->isMessageFormPage()) {
+            return $this->AutoPageBreak;
+        }
+        if ($this->GetY() >= $this->point[38][1] - 10) {
+            $this->configureMessageFormLayout();
+            $this->AddPage();
+            $this->set_message_content_continuation_position();
+        }
+        return false;
+    }
+
     private function beginSection(string $title, bool $newPage = true): void
     {
         $this->sectionTitle = $title;
+        $this->configureDossierLayout();
         if ($newPage) {
             $this->AddPage();
         }
@@ -356,19 +409,6 @@ final class EstabIncidentPdf extends FPDF
         $this->SetFont('helvetica', '', 9);
         $this->SetTextColor(23, 32, 51);
         $this->MultiCell(0, 5.5, estab_incident_pdf_text($valueText));
-    }
-
-    /** Join non-empty display fields without leaving a separator-only value. */
-    private function joined(mixed ...$values): string
-    {
-        $parts = [];
-        foreach ($values as $value) {
-            $part = trim((string) $value);
-            if ($part !== '') {
-                $parts[] = $part;
-            }
-        }
-        return implode(' · ', $parts);
     }
 
     /** @param array<string,int> $counts */
@@ -499,12 +539,17 @@ final class EstabIncidentPdf extends FPDF
     ): void {
         $this->sectionTitle = 'Nachrichtenvordrucke';
         if ($messages === []) {
-            $this->AddPage();
+            $this->beginSection('Nachrichtenvordrucke');
             $this->heading('Nachrichtenvordrucke', 1);
             $this->paragraph(
                 'Für diesen Einsatz sind keine Nachrichtenvordrucke vorhanden.'
             );
             return;
+        }
+        if (!is_array($this->recipientMatrix)) {
+            throw new EstabIncidentPdfInputException(
+                'Recipient matrix is required for message forms.'
+            );
         }
 
         foreach ($messages as $message) {
@@ -513,64 +558,47 @@ final class EstabIncidentPdf extends FPDF
                     'Message rows must be arrays.'
                 );
             }
-            $this->AddPage();
             $recordId = (int) ($message['00_lfd'] ?? 0);
-            $direction = (string) ($message['04_richtung'] ?? '');
-            $number = (string) ($message['04_nummer'] ?? '');
-            $this->heading(
-                'Nachrichtenvordruck ' . $direction . ' ' . $number,
-                1
-            );
-            foreach ([
-                'Datensatz' => $recordId,
-                'Richtung / Nachweisnummer' =>
-                    trim($direction . ' ' . $number),
-                'Vorrang' => $message['09_vorrangstufe'] ?? '',
-                'Medium' => $message['01_medium'] ?? '',
-                'Aufnahme' => $this->joined(
-                    $message['01_datum'] ?? '',
-                    $message['01_zeichen'] ?? ''
-                ),
-                'Annahme' => $this->joined(
-                    $message['02_zeit'] ?? '',
-                    $message['02_zeichen'] ?? ''
-                ),
-                'Beförderung' => $this->joined(
-                    $message['03_datum'] ?? '',
-                    $message['03_zeichen'] ?? ''
-                ),
-                'Gegenstelle' => $message['05_gegenstelle'] ?? '',
-                'Beförderungsweg' => $message['06_befweg'] ?? '',
-                'Beförderungshinweis' => $message['08_befhinweis'] ?? '',
-                'Anschrift' => $message['10_anschrift'] ?? '',
-                'Abfassungszeit' => $message['12_abfzeit'] ?? '',
-                'Absender' => $message['13_abseinheit'] ?? '',
-                'Verfasser' => $this->joined(
-                    $message['14_zeichen'] ?? '',
-                    $message['14_funktion'] ?? ''
-                ),
-                'Quittung' => $this->joined(
-                    $message['15_quitdatum'] ?? '',
-                    $message['15_quitzeichen'] ?? ''
-                ),
-                'Empfänger' => $message['16_empf'] ?? '',
-                'Status' => $message['x00_status'] ?? '',
-            ] as $label => $value) {
-                $this->definition($label, $value);
+            if ($recordId < 1) {
+                throw new EstabIncidentPdfInputException(
+                    'Message rows require a positive record ID.'
+                );
             }
-            $this->heading('Inhalt', 2);
-            $this->paragraph((string) ($message['12_inhalt'] ?? ''));
-            if (trim((string) ($message['17_vermerke'] ?? '')) !== '') {
-                $this->heading('Vermerke', 2);
-                $this->paragraph((string) $message['17_vermerke']);
-            }
-            $attachments = $attachmentNamesByMessage[$recordId] ?? [];
-            if ($attachments !== []) {
-                $this->heading('Anhänge', 2);
-                foreach ($attachments as $attachment) {
-                    $this->paragraph('- ' . $attachment);
+            if (array_key_exists($recordId, $attachmentNamesByMessage)) {
+                $attachments = $attachmentNamesByMessage[$recordId];
+                if (!is_array($attachments)) {
+                    throw new EstabIncidentPdfInputException(
+                        'Message attachment names must be an array.'
+                    );
                 }
+                $validated = [];
+                foreach ($attachments as $attachment) {
+                    if (!is_string($attachment)) {
+                        throw new EstabIncidentPdfInputException(
+                            'Message attachment names must be text.'
+                        );
+                    }
+                    try {
+                        $validated[] = estab_file_validate_name(
+                            'attachment',
+                            $attachment
+                        );
+                    } catch (InvalidArgumentException $exception) {
+                        throw new EstabIncidentPdfInputException(
+                            'Message attachment name is unsafe.',
+                            0,
+                            $exception
+                        );
+                    }
+                }
+                $message['12_anhang'] = $validated === []
+                    ? ''
+                    : implode(';', $validated) . ';';
             }
+            $this->set_message_form_data($message);
+            $this->configureMessageFormLayout();
+            $this->AddPage();
+            $this->writedata_inhalt();
         }
     }
 
