@@ -9,9 +9,10 @@ Lesen, Anmeldung und Administration bleiben möglich, operative Eingaben sind
 jedoch gesperrt.
 
 Die zentrale PHP-API steht in `app/incident.php`. Die additive, wiederholbare
-Datenbankmigration steht in
-`docker/db/migrations/50-global-incidents.sql`. Die technische
-Administrationsseite ist `4fadm/incidents.php`.
+Datenbankfolge steht in den Migrationen
+`45-global-incidents-prepare.sql`, `50-global-incidents.sql` und
+`55-global-incidents-finish.sql`. Die technische Administrationsseite ist
+`4fadm/incidents.php`.
 
 Die verbindlichen Regeln sind:
 
@@ -226,18 +227,29 @@ historische Einsätze eine eigene zusammenhängende Darstellung.
 
 ## Migrations- und Testnachweis
 
-Migration 50 ist additiv und für eine unterbrochene DDL-Ausführung
-wiederholbar. Sie:
+Die checksum-gebundene Folge 45/50/55 ist additiv und für eine unterbrochene
+DDL-Ausführung wiederaufnehmbar. Sie:
 
-1. verweigert fremde Tabellen, Spalten, Routinen oder Trigger im reservierten
-   Namensraum,
-2. erstellt das Einsatzmodell und den Singleton,
-3. ergänzt die Einsatzspalten,
-4. erzeugt bei vorhandenen Daten genau einen geschlossenen
+1. prüft in Migration 45 vor jeder Einsatz-DDL alle zehn operativen
+   Basistabellen und beide historischen Zeitspalten,
+2. deaktiviert deren automatische `ON UPDATE`-Änderung für die Dauer des
+   Backfills,
+3. verweigert in der unveränderten Migration 50 fremde Tabellen, Spalten,
+   Routinen oder Trigger im reservierten Namensraum,
+4. erstellt das Einsatzmodell und den Singleton und ergänzt die
+   Einsatzspalten,
+5. erzeugt bei vorhandenen Daten genau einen geschlossenen
    `LEGACY-IMPORT`,
-5. weist nur die vorgefundenen `NULL`-Bestandszeilen diesem Einsatz zu,
-6. ergänzt Indexe und Fremdschlüssel,
-7. installiert erst danach die strikten Trigger.
+6. weist nur die vorgefundenen `NULL`-Bestandszeilen diesem Einsatz zu,
+7. ergänzt Indexe und Fremdschlüssel und installiert erst danach die strikten
+   Trigger,
+8. stellt in Migration 55 die kanonischen automatischen Zeitattribute wieder
+   her.
+
+Migration 50 bleibt bytegenau auf der bereits im Ledger verwendeten
+Prüfsumme. Vor- oder Nachbedingungen werden ausschließlich in neuen
+Versionsdateien ergänzt; weder der Ledger noch eine veröffentlichte SQL-Datei
+wird für ein Upgrade umgeschrieben.
 
 Der fokussierte Quell- und Validierungsvertrag ist
 `tests/php/incident_domain_security.php`. `tests/integration/incident_domain.php`

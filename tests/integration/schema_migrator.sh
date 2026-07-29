@@ -6,6 +6,7 @@ set -eu
 : "${ESTAB_DB_ROOT_PASSWORD_FILE:=/run/secrets/estab_db_root_password}"
 : "${ESTAB_MIGRATOR_BIN:=/usr/local/bin/estab-migrate}"
 : "${ESTAB_SCHEMA_BASELINE_FILE:=/opt/estab/schema/10-schema.sql}"
+: "${ESTAB_MIGRATIONS_DIR:=/opt/estab/migrations}"
 export ESTAB_SCHEMA_VERIFY_FILE=
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -16,10 +17,12 @@ retry_database="estab_baseline_retry_test_$$"
 guard_database="estab_baseline_guard_test_$$"
 collision_database="estab_standard_collision_test_$$"
 incident_guard_database="estab_incident_guard_test_$$"
+predecessor_database="estab_incident_predecessor_test_$$"
+incident_predecessor_checksum="6732e9c87f0532fce41ee9a58658bf4888fdf7c2ced1ed6bad75a756d6e08edf"
 
 for database_name in \
     "$test_database" "$retry_database" "$guard_database" "$collision_database" \
-    "$incident_guard_database"
+    "$incident_guard_database" "$predecessor_database"
 do
     case "$database_name" in
         *[!A-Za-z0-9_]*)
@@ -31,6 +34,13 @@ done
 if [ ! -r "$fixture" ] \
     || [ ! -r "$standard_matrix_fixture" ] \
     || [ ! -r "$ESTAB_SCHEMA_BASELINE_FILE" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/20-nullable-dates.sql" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/30-runtime-schema.sql" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/40-recipient-matrix-standard.sql" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/45-global-incidents-prepare.sql" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/50-global-incidents.sql" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/55-global-incidents-finish.sql" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/70-user-account-blocking.sql" ] \
     || [ ! -x "$ESTAB_MIGRATOR_BIN" ]; then
     echo "schema migrator test: fixture, baseline, or migrator is unavailable" >&2
     exit 1
@@ -101,7 +111,8 @@ DROP DATABASE IF EXISTS \`$test_database\`;
 DROP DATABASE IF EXISTS \`$retry_database\`;
 DROP DATABASE IF EXISTS \`$guard_database\`;
 DROP DATABASE IF EXISTS \`$collision_database\`;
-DROP DATABASE IF EXISTS \`$incident_guard_database\`" >/dev/null 2>&1 || true
+DROP DATABASE IF EXISTS \`$incident_guard_database\`;
+DROP DATABASE IF EXISTS \`$predecessor_database\`" >/dev/null 2>&1 || true
     rm -f -- "$client_defaults" "$failure_log"
     exit "$status"
 }
@@ -331,6 +342,204 @@ SELECT CONCAT(
        )")" \
     "blocked incomplete incident runtime was mutated or recorded"
 
+# Reproduce the exact predecessor installed on the local test deployment:
+# migration 50 is already applied with its immutable 6732... checksum, while
+# the new prepare/finish migrations do not exist in the ledger yet. The
+# migrator must apply those two missing versions around the skipped migration
+# without rewriting history or changing already imported timestamps.
+assert_equal "$incident_predecessor_checksum" "$(
+    sha256sum "$ESTAB_MIGRATIONS_DIR/50-global-incidents.sql" |
+        awk '{print $1}'
+)" \
+    "immutable incident migration 50 no longer has its released checksum"
+
+admin_query "
+DROP DATABASE IF EXISTS \`$predecessor_database\`;
+CREATE DATABASE \`$predecessor_database\`
+  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+mariadb \
+    --defaults-extra-file="$client_defaults" \
+    --database="$predecessor_database" \
+    < "$fixture"
+database_query "$predecessor_database" "
+DELETE FROM nv_anhang WHERE \`lfd-nr\` = 2;
+CREATE TABLE estab_schema_migrations (
+  version VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  checksum CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  state ENUM('applying','applied') NOT NULL,
+  run_id CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  started_at DATETIME(6) NOT NULL,
+  applied_at DATETIME(6) NULL,
+  PRIMARY KEY (version)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+
+for predecessor_migration in \
+    20-nullable-dates.sql \
+    30-runtime-schema.sql \
+    40-recipient-matrix-standard.sql \
+    50-global-incidents.sql \
+    70-user-account-blocking.sql
+do
+    predecessor_path="$ESTAB_MIGRATIONS_DIR/$predecessor_migration"
+    predecessor_migration_checksum=$(
+        sha256sum "$predecessor_path" | awk '{print $1}'
+    )
+    mariadb \
+        --defaults-extra-file="$client_defaults" \
+        --database="$predecessor_database" \
+        < "$predecessor_path"
+    database_query "$predecessor_database" "
+INSERT INTO estab_schema_migrations
+  (version, checksum, state, run_id, started_at, applied_at)
+VALUES
+  ('$predecessor_migration', '$predecessor_migration_checksum',
+   'applied', NULL, NOW(6), NOW(6))"
+done
+
+assert_equal "5|$incident_predecessor_checksum" "$(
+    database_query "$predecessor_database" "
+SELECT CONCAT(
+         COUNT(*), '|',
+         MAX(CASE WHEN version = '50-global-incidents.sql'
+                  THEN checksum ELSE '' END)
+       )
+  FROM estab_schema_migrations
+ WHERE state = 'applied'"
+)" \
+    "predecessor migration ledger was not reproduced exactly"
+
+predecessor_50_ledger_snapshot=$(
+    database_query "$predecessor_database" "
+SELECT CONCAT(
+         checksum, '|', state, '|', COALESCE(run_id, 'NULL'), '|',
+         DATE_FORMAT(started_at, '%Y-%m-%d %H:%i:%s.%f'), '|',
+         DATE_FORMAT(applied_at, '%Y-%m-%d %H:%i:%s.%f')
+       )
+  FROM estab_schema_migrations
+ WHERE version = '50-global-incidents.sql'"
+)
+predecessor_timestamp_snapshot=$(
+    database_query "$predecessor_database" "
+SELECT CONCAT(
+         (SELECT GROUP_CONCAT(
+                   CONCAT(\`00_lfd\`, ':',
+                          COALESCE(
+                            DATE_FORMAT(
+                              \`99_lstacc\`, '%Y-%m-%d %H:%i:%s'
+                            ),
+                            'NULL'
+                          ))
+                   ORDER BY \`00_lfd\` SEPARATOR ',')
+            FROM nv_nachrichten),
+         '|',
+         (SELECT GROUP_CONCAT(
+                   CONCAT(\`lfd-nr\`, ':',
+                          COALESCE(
+                            DATE_FORMAT(
+                              \`sich1_zeit\`, '%Y-%m-%d %H:%i:%s'
+                            ),
+                            'NULL'
+                          ))
+                   ORDER BY \`lfd-nr\` SEPARATOR ',')
+            FROM nv_bhp50)
+       )"
+)
+
+# The predecessor's automatic timestamps have only whole-second precision.
+# Cross a second boundary so an accidental ON UPDATE during 45/55 cannot
+# produce the same value as the snapshot and escape this regression.
+sleep 2
+ESTAB_DB_NAME="$predecessor_database" "$ESTAB_MIGRATOR_BIN"
+ESTAB_DB_NAME="$predecessor_database" "$ESTAB_MIGRATOR_BIN"
+
+prepare_checksum=$(
+    sha256sum "$ESTAB_MIGRATIONS_DIR/45-global-incidents-prepare.sql" |
+        awk '{print $1}'
+)
+finish_checksum=$(
+    sha256sum "$ESTAB_MIGRATIONS_DIR/55-global-incidents-finish.sql" |
+        awk '{print $1}'
+)
+assert_equal \
+    "7|7|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
+    "$(database_query "$predecessor_database" "
+SELECT CONCAT(
+         COUNT(*), '|',
+         SUM(state = 'applied'), '|',
+         MAX(CASE WHEN version = '45-global-incidents-prepare.sql'
+                  THEN checksum ELSE '' END), '|',
+         MAX(CASE WHEN version = '50-global-incidents.sql'
+                  THEN checksum ELSE '' END), '|',
+         MAX(CASE WHEN version = '55-global-incidents-finish.sql'
+                  THEN checksum ELSE '' END)
+       )
+  FROM estab_schema_migrations")" \
+    "predecessor upgrade rewrote history or omitted prepare/finish migrations"
+assert_equal "$predecessor_50_ledger_snapshot" "$(
+    database_query "$predecessor_database" "
+SELECT CONCAT(
+         checksum, '|', state, '|', COALESCE(run_id, 'NULL'), '|',
+         DATE_FORMAT(started_at, '%Y-%m-%d %H:%i:%s.%f'), '|',
+         DATE_FORMAT(applied_at, '%Y-%m-%d %H:%i:%s.%f')
+       )
+  FROM estab_schema_migrations
+ WHERE version = '50-global-incidents.sql'"
+)" \
+    "predecessor incident migration ledger row was rewritten"
+assert_equal "$predecessor_timestamp_snapshot" "$(
+    database_query "$predecessor_database" "
+SELECT CONCAT(
+         (SELECT GROUP_CONCAT(
+                   CONCAT(\`00_lfd\`, ':',
+                          COALESCE(
+                            DATE_FORMAT(
+                              \`99_lstacc\`, '%Y-%m-%d %H:%i:%s'
+                            ),
+                            'NULL'
+                          ))
+                   ORDER BY \`00_lfd\` SEPARATOR ',')
+            FROM nv_nachrichten),
+         '|',
+         (SELECT GROUP_CONCAT(
+                   CONCAT(\`lfd-nr\`, ':',
+                          COALESCE(
+                            DATE_FORMAT(
+                              \`sich1_zeit\`, '%Y-%m-%d %H:%i:%s'
+                            ),
+                            'NULL'
+                          ))
+                   ORDER BY \`lfd-nr\` SEPARATOR ',')
+            FROM nv_bhp50)
+       )"
+)" \
+    "predecessor prepare/finish upgrade changed imported timestamps"
+assert_equal "2|0" "$(database_query "$predecessor_database" "
+SELECT CONCAT(
+         (SELECT COUNT(*)
+            FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND (
+               (table_name = 'nv_nachrichten'
+                 AND column_name = '99_lstacc')
+               OR
+               (table_name = 'nv_bhp50'
+                 AND column_name = 'sich1_zeit')
+             )
+             AND is_nullable = 'YES'
+             AND column_default = 'NULL'
+             AND LOWER(extra) = 'on update current_timestamp()'), '|',
+         (SELECT COUNT(*)
+            FROM information_schema.routines
+           WHERE routine_schema = DATABASE()
+             AND routine_name IN (
+               'estab_migrate_45_prepare_preflight',
+               'estab_migrate_45_prepare_validate',
+               'estab_migrate_55_finish_preflight',
+               'estab_migrate_55_finish_validate'
+             ))
+       )")" \
+    "predecessor finish migration left timestamp guards or helper routines"
+
 admin_query "
 DROP DATABASE IF EXISTS \`$test_database\`;
 CREATE DATABASE \`$test_database\`
@@ -362,7 +571,7 @@ fixture_query "DELETE FROM nv_anhang WHERE \`lfd-nr\` = 2"
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
 
-assert_equal "5" "$(fixture_query "
+assert_equal "7" "$(fixture_query "
 SELECT COUNT(*) FROM estab_schema_migrations
  WHERE state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \

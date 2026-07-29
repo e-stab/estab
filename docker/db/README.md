@@ -70,6 +70,40 @@ idempotenten SQL-Anweisungen automatisch wiederaufnehmbar. Bereits
 veröffentlichte SQL-Dateien dürfen nie editiert werden; jede Änderung erhält
 die nächste Versionsdatei.
 
+Die Einsatzmigration bildet deshalb eine unveränderliche Dreierfolge:
+
+1. `45-global-incidents-prepare.sql` verlangt alle zehn operativen
+   Basistabellen und die beiden erwarteten Zeitspalten. Anschließend entfernt
+   sie vorübergehend deren `ON UPDATE CURRENT_TIMESTAMP`-Attribute und prüft
+   den vorbereiteten Zustand.
+2. `50-global-incidents.sql` bleibt bytegenau bei der bereits
+   checksum-gebundenen veröffentlichten Fassung. Sie erzeugt die
+   Einsatzdomäne und ordnet vorhandene operative Zeilen dem geschlossenen
+   `LEGACY-IMPORT` zu. Ihr verbindlicher SHA-256 lautet
+   `6732e9c87f0532fce41ee9a58658bf4888fdf7c2ced1ed6bad75a756d6e08edf`.
+3. `55-global-incidents-finish.sql` akzeptiert für einen crash-sicheren
+   Wiederanlauf nur die kanonisch vorbereiteten oder bereits
+   wiederhergestellten Definitionen. Sie aktiviert die beiden automatischen
+   Zeitattribute wieder und validiert den Endzustand.
+
+Dadurch kann ein Legacy-Backfill weder einen unvollständigen operativen
+Tabellenraum ergänzen noch `nv_nachrichten.99_lstacc` oder
+`nv_bhp50.sich1_zeit` auf den Migrationszeitpunkt setzen. Eine Datenbank, die
+Migration 50 bereits angewendet hat, führt beim nächsten Upgrade nur die noch
+fehlenden Schritte 45 und 55 aus; 50 wird ausschließlich bei identischem
+SHA-256 übersprungen. Readiness und `verify.sql` verlangen alle sieben
+Ledgerdatensätze.
+
+Bei `Checksum mismatch for applied migration` werden zuerst Containerlog,
+Image-Digest, die lokale Dateiprüfsumme und der betroffene Datensatz aus
+`estab_schema_migrations` ausschließlich lesend verglichen. Der Ledger darf
+weder gelöscht noch umgeschrieben und das Volume nicht durch eine
+Neuinstallation ersetzt werden. Die bereits angewendete SQL-Datei wird aus
+dem freigegebenen Commit beziehungsweise Image bytegenau wiederhergestellt;
+jede gewünschte Änderung kommt in eine neue Versionsdatei. Der ausführliche
+Ablauf steht unter
+[`docs/MIGRATION-UND-UPGRADE.md`](../../docs/MIGRATION-UND-UPGRADE.md#prüfsummenabweichung-sicher-untersuchen).
+
 Ausführen beziehungsweise erneut prüfen:
 
 ```sh
@@ -147,6 +181,17 @@ Integrationstest beweist beide Wiederaufnahmepunkte, die unveränderte
 Blockade manipulierter Inhalte und einer fremden Namenskollision sowie den
 zellgenauen Vergleich aller 20 normalisierten Zellen mit der historischen
 Sollbelegung.
+
+`migrations/45-global-incidents-prepare.sql`,
+`migrations/50-global-incidents.sql` und
+`migrations/55-global-incidents-finish.sql` führen die globale
+Einsatzzuordnung als unveränderliche Vorbereitungs-, Domänen- und
+Abschlussfolge ein. Migration 45 blockiert fehlende operative Tabellen vor
+der ersten Einsatz-DDL und deaktiviert die zwei automatischen
+Zeitstempeländerungen. Migration 50 bleibt mit ihrer erstmals angewendeten
+Prüfsumme unverändert. Migration 55 stellt die kanonischen Attribute wieder
+her. `migrations/70-user-account-blocking.sql` ergänzt anschließend die
+dauerhafte, kollisionsgeprüfte Kontosperre.
 
 Die Datumsmigration ist wiederholbar. Sie deaktiviert die Zero-Date-Modi nur
 für ihre eigene Sitzung und stellt den vorherigen SQL-Modus danach wieder

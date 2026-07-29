@@ -161,6 +161,12 @@ MariaDB-Abbruchpunkte: Die markierte eigene Standardmatrixtabelle wird leer
 neu befüllt oder mit bereits vollständigem kanonischem Seed ohne Abweichung
 abgeschlossen. Eine veränderte markierte Tabelle und eine fremde Tabelle
 gleichen Namens bleiben jeweils unverändert blockiert.
+Für die Einsatzfolge prüft er zusätzlich, dass Migration 45 einen
+unvollständigen operativen Bestand vor jeder Einsatz-DDL unverändert
+blockiert, die automatischen Zeitstempel während des Legacy-Backfills
+deaktiviert und Migration 55 ihre kanonischen Definitionen auch nach einem
+Wiederanlauf exakt wiederherstellt. Die veröffentlichte Migration 50 wird
+dabei mit ihrer unveränderten SHA-256-Prüfsumme gebunden.
 Anschließend migriert der Hauptlauf ein leeres Schema,
 führt PHP-, Datenbank-, Rollen-, HTTP- und Administrationsnachweise aus, prüft
 die Containerlogs und stellt Datenbank, Anhang-/Vordruckdaten sowie Exporte aus
@@ -1050,7 +1056,7 @@ sind:
   genau ein belegtes Stab-/FB-Rotkopieziel und keine Autosichtung auf leeren
   oder reinen Textzellen enthalten,
 - die exakt definierten Benutzer- und Anhangindizes vorhanden sind,
-- alle fünf versionierten Migrationen mit gültigem SHA-256 als angewendet
+- alle sieben versionierten Migrationen mit gültigem SHA-256 als angewendet
   protokolliert sind,
 - der Singleton des globalen Einsatzstatus, alle Einsatz-Fremdschlüssel und
   -Trigger sowie die dauerhafte Kontosperr-Spalte kanonisch vorhanden sind,
@@ -1058,7 +1064,7 @@ sind:
   erforderlichen Breiten besitzen,
 - Anhang-, Vordruck- und Exportverzeichnis beschreibbar sind.
 
-`docker/db/verify.sql` löst den aggregierten Schemacheck in 25 benannte
+`docker/db/verify.sql` löst den aggregierten Schemacheck in 26 benannte
 `*_ok`-Ergebnisfelder auf. Für einen gültigen Stand müssen alle den Wert `1`
 haben; die anschließende Abfrage nach abweichender Engine oder Collation darf
 keine Zeile liefern.

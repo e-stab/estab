@@ -14,40 +14,11 @@ DROP PROCEDURE IF EXISTS estab_migrate_50_preflight;
 DELIMITER //
 CREATE PROCEDURE estab_migrate_50_preflight()
 BEGIN
-  DECLARE required_operational_tables INTEGER DEFAULT 0;
   DECLARE owned_tables INTEGER DEFAULT 0;
   DECLARE conflicting_tables INTEGER DEFAULT 0;
   DECLARE existing_scope_columns INTEGER DEFAULT 0;
   DECLARE existing_routines INTEGER DEFAULT 0;
   DECLARE existing_triggers INTEGER DEFAULT 0;
-
-  -- A recognised but incomplete legacy namespace must not reach the first
-  -- ALTER TABLE and leave migration-owned incident tables behind. All ten
-  -- operational tables are part of every legitimate eStab installation; only
-  -- the two title tables may historically have been created lazily, and
-  -- migration 30 supplies those before this preflight runs.
-  SELECT COUNT(*) INTO required_operational_tables
-    FROM information_schema.tables
-   WHERE table_schema = DATABASE()
-     AND table_type = 'BASE TABLE'
-     AND table_name IN (
-       'nv_nachrichten',
-       'nv_anhang',
-       'nv_etb',
-       'nv_tbb',
-       'nv_ubb',
-       'nv_protokoll',
-       'nv_bhp50',
-       'nv_komplan',
-       'nv_etbtitel',
-       'nv_tbbtitel'
-     );
-
-  IF required_operational_tables <> 10 THEN
-    SIGNAL SQLSTATE '45000'
-      SET MESSAGE_TEXT =
-        'Incident migration blocked: required operational table is missing';
-  END IF;
 
   SELECT COUNT(*) INTO owned_tables
     FROM information_schema.tables
@@ -371,12 +342,7 @@ BEGIN
       SET legacy_id = LAST_INSERT_ID();
     END IF;
 
-    -- These two legacy tables contain ON UPDATE timestamps. Assigning each
-    -- timestamp to itself prevents the incident backfill from replacing NULL
-    -- or a real historic value with the migration time.
-    UPDATE `nv_nachrichten`
-       SET `einsatz_id` = legacy_id,
-           `99_lstacc` = `99_lstacc`
+    UPDATE `nv_nachrichten` SET `einsatz_id` = legacy_id
      WHERE `einsatz_id` IS NULL;
     UPDATE `nv_anhang` SET `einsatz_id` = legacy_id
      WHERE `einsatz_id` IS NULL;
@@ -388,9 +354,7 @@ BEGIN
      WHERE `einsatz_id` IS NULL;
     UPDATE `nv_protokoll` SET `einsatz_id` = legacy_id
      WHERE `einsatz_id` IS NULL;
-    UPDATE `nv_bhp50`
-       SET `einsatz_id` = legacy_id,
-           `sich1_zeit` = `sich1_zeit`
+    UPDATE `nv_bhp50` SET `einsatz_id` = legacy_id
      WHERE `einsatz_id` IS NULL;
     UPDATE `nv_komplan` SET `einsatz_id` = legacy_id
      WHERE `einsatz_id` IS NULL;

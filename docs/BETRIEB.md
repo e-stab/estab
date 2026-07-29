@@ -153,14 +153,21 @@ Tabelle automatisch fortgesetzt. Eine fremde gleichnamige Tabelle oder
 abweichende Inhalte bleiben unverändert gesperrt und müssen anhand von Backup,
 Tabellenkommentar und Migrationsledger geprüft werden.
 
-Migration 50 verlangt vor ihrer ersten Einsatz-Tabelle alle zehn
-einsatzrelevanten operativen Basistabellen. Fehlt in einem erkannten
-Legacy-Schema beispielsweise ETB, TTB oder Protokoll, bricht sie mit
+Die vorbereitende Migration 45 verlangt vor der unverändert veröffentlichten
+Einsatzmigration 50 alle zehn einsatzrelevanten operativen Basistabellen.
+Fehlt in einem erkannten Legacy-Schema beispielsweise ETB, TTB oder Protokoll,
+bricht sie mit
 `Incident migration blocked: required operational table is missing` ab und
 legt weder Einsatz-Tabellen noch einen erfolgreichen Ledgerdatensatz an. Ein
 solcher beschädigter Bestand wird nicht durch leere Ersatztabellen
 umgedeutet; er muss aus einem geprüften Backup beziehungsweise gegen die
-historische Schemaquelle vollständig rekonstruiert werden.
+historische Schemaquelle vollständig rekonstruiert werden. Migration 45
+entfernt außerdem für die Dauer des Backfills die beiden
+`ON UPDATE CURRENT_TIMESTAMP`-Attribute von
+`nv_nachrichten.99_lstacc` und `nv_bhp50.sich1_zeit`. Migration 55 stellt
+deren kanonische Definition nach Migration 50 wieder her. Dadurch bleiben
+historische Zeitwerte erhalten, ohne die bereits angewendete und
+checksum-gebundene Migration 50 nachträglich zu verändern.
 
 Der App-Service hängt mit `service_completed_successfully` von diesem Lauf ab.
 Bei SQL-Fehler, doppeltem Anhangnamen, geänderter Prüfsumme oder fehlgeschlagener
@@ -182,7 +189,7 @@ ihn anschließend wieder her.
 podman compose run --rm migrate
 ```
 
-Ein bereits aktueller Bestand meldet alle fünf Migrationen als vorhanden und
+Ein bereits aktueller Bestand meldet alle sieben Migrationen als vorhanden und
 führt trotzdem den vollständigen Read-only-Schematest aus. Die Ausgabe muss
 `Post-migration schema verification passed` und anschließend
 `All schema migrations are applied` enthalten. Erst danach sollte der Stack

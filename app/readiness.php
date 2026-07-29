@@ -290,11 +290,12 @@ function estab_readiness_schema_query(): string
         . "+ (SELECT COUNT(*) FROM nv_komplan WHERE einsatz_id IS NULL) "
         . "+ (SELECT COUNT(*) FROM nv_etbtitel WHERE einsatz_id IS NULL) "
         . "+ (SELECT COUNT(*) FROM nv_tbbtitel WHERE einsatz_id IS NULL) = 0) "
-        . "AND ((SELECT COUNT(*) FROM estab_schema_migrations) = 5) "
+        . "AND ((SELECT COUNT(*) FROM estab_schema_migrations) = 7) "
         . "AND ((SELECT COUNT(*) FROM estab_schema_migrations "
         . "WHERE version IN ('20-nullable-dates.sql','30-runtime-schema.sql',"
-        . "'40-recipient-matrix-standard.sql','50-global-incidents.sql',"
+        . "'40-recipient-matrix-standard.sql','45-global-incidents-prepare.sql',"
+        . "'50-global-incidents.sql','55-global-incidents-finish.sql',"
         . "'70-user-account-blocking.sql') "
         . "AND state = 'applied' "
-        . "AND checksum REGEXP BINARY '^[0-9a-f]{64}$') = 5)";
+        . "AND checksum REGEXP BINARY '^[0-9a-f]{64}$') = 7)";
 }

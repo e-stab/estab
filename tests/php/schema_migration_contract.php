@@ -25,8 +25,14 @@ $runtimeMigration = $read($root . '/docker/db/migrations/30-runtime-schema.sql')
 $standardMatrixMigration = $read(
     $root . '/docker/db/migrations/40-recipient-matrix-standard.sql'
 );
+$incidentPrepareMigration = $read(
+    $root . '/docker/db/migrations/45-global-incidents-prepare.sql'
+);
 $incidentMigration = $read(
     $root . '/docker/db/migrations/50-global-incidents.sql'
+);
+$incidentFinishMigration = $read(
+    $root . '/docker/db/migrations/55-global-incidents-finish.sql'
 );
 $userBlockingMigration = $read(
     $root . '/docker/db/migrations/70-user-account-blocking.sql'
@@ -252,10 +258,11 @@ $assert(
     'Global incident migration omits model, legacy boundary, or write guards'
 );
 $assert(
-    str_contains($incidentMigration, 'required_operational_tables')
-        && str_contains($incidentMigration, "table_type = 'BASE TABLE'")
+    str_contains($incidentPrepareMigration, 'estab_migrate_45_prepare_preflight')
+        && str_contains($incidentPrepareMigration, 'required_operational_tables')
+        && str_contains($incidentPrepareMigration, "table_type = 'BASE TABLE'")
         && str_contains(
-            $incidentMigration,
+            $incidentPrepareMigration,
             'Incident migration blocked: required operational table is missing'
         )
         && str_contains($schemaIntegration, 'estab_incident_guard_test_')
@@ -266,8 +273,29 @@ $assert(
     'Incident migration does not reject an incomplete legacy runtime before domain DDL'
 );
 $assert(
-    str_contains($incidentMigration, '`99_lstacc` = `99_lstacc`')
-        && str_contains($incidentMigration, '`sich1_zeit` = `sich1_zeit`')
+    hash('sha256', $incidentMigration)
+        === '6732e9c87f0532fce41ee9a58658bf4888fdf7c2ced1ed6bad75a756d6e08edf',
+    'Published global incident migration was changed instead of extended'
+);
+$assert(
+    str_contains($incidentPrepareMigration, 'estab_migrate_45_prepare_validate')
+        && str_contains($incidentPrepareMigration, "column_name = '99_lstacc'")
+        && str_contains($incidentPrepareMigration, "column_name = 'sich1_zeit'")
+        && str_contains($incidentPrepareMigration, "extra = ''")
+        && str_contains(
+            $incidentPrepareMigration,
+            'TIMESTAMP NULL DEFAULT NULL'
+        )
+        && str_contains($incidentFinishMigration, 'estab_migrate_55_finish_preflight')
+        && str_contains($incidentFinishMigration, 'estab_migrate_55_finish_validate')
+        && str_contains(
+            $incidentFinishMigration,
+            'ON UPDATE CURRENT_TIMESTAMP'
+        )
+        && str_contains(
+            $incidentFinishMigration,
+            "LOWER(extra) = 'on update current_timestamp()'"
+        )
         && str_contains(
             $schemaIntegration,
             'incident backfill changed a historic message last-access timestamp'
@@ -299,12 +327,16 @@ $assert(
         && str_contains($verify, 'incident_trigger_boundary_ok')
         && str_contains($verify, 'incident_assignment_ok')
         && str_contains($readiness, "'50-global-incidents.sql'")
+        && str_contains($readiness, "'45-global-incidents-prepare.sql'")
+        && str_contains($readiness, "'55-global-incidents-finish.sql'")
         && str_contains($readiness, "'70-user-account-blocking.sql'")
         && str_contains($verify, "'50-global-incidents.sql'")
+        && str_contains($verify, "'45-global-incidents-prepare.sql'")
+        && str_contains($verify, "'55-global-incidents-finish.sql'")
         && str_contains($verify, "'70-user-account-blocking.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 5')
-        && str_contains($readiness, 'estab_schema_migrations) = 5'),
-    'Migration ledger/readiness does not require all five release migrations'
+        && str_contains($verify, 'estab_schema_migrations`) = 7')
+        && str_contains($readiness, 'estab_schema_migrations) = 7'),
+    'Migration ledger/readiness does not require all seven release migrations'
 );
 $assert(
     str_contains($readiness, "require_once __DIR__ . '/bootstrap.php'")

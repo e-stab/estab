@@ -65,6 +65,10 @@ Derzeit sind folgende explizite Migrationen vorhanden:
 | `docker/db/migrations/20-nullable-dates.sql` | konvertiert historische `0000-00-00 00:00:00`-Werte zu `NULL` und macht die betroffenen Spalten nullable |
 | `docker/db/migrations/30-runtime-schema.sql` | erweitert Benutzer-, IP-, Nachrichtenkürzel- und Anhangfelder, stellt Laufzeitindizes und ETB-/TBB-Titeltabellen her, erzwingt eindeutige Anhangnamen und normalisiert vorhandene `nv_*`-Tabellen auf InnoDB/`utf8mb4` |
 | `docker/db/migrations/40-recipient-matrix-standard.sql` | ersetzt die frühere ausführbare `deault.fkt.php` durch genau eine persistente 20-Zellen-Standardmatrix einschließlich Rotkopie und Autosichtung |
+| `docker/db/migrations/45-global-incidents-prepare.sql` | prüft vor dem Einsatz-Backfill alle zehn operativen Basistabellen und setzt die beiden betroffenen Zeitspalten vorübergehend ohne automatisches `ON UPDATE` |
+| `docker/db/migrations/50-global-incidents.sql` | führt die globale Einsatzdomäne, den geschlossenen `LEGACY-IMPORT`, die Einsatzzuordnung und die Datenbank-Schreibgrenzen ein; diese veröffentlichte Fassung bleibt bytegenau unverändert |
+| `docker/db/migrations/55-global-incidents-finish.sql` | prüft den vorbereiteten beziehungsweise bereits fertigen Zustand und stellt die kanonischen `ON UPDATE CURRENT_TIMESTAMP`-Definitionen nach dem Einsatz-Backfill wieder her |
+| `docker/db/migrations/70-user-account-blocking.sql` | ergänzt die kollisionsgeprüfte dauerhafte Kontosperre |
 
 Das freigegebene Upgradeverfahren lautet:
 
@@ -83,6 +87,75 @@ Logs. Für jede Datei wird vor Ausführung SHA-256 berechnet. Die Tabelle
 Start- und Abschlusszeit. Ein bereits angewendeter Dateiname mit anderer
 Prüfsumme blockiert den Start: veröffentlichte Migrationen dürfen nie
 nachträglich geändert werden, sondern erhalten eine neue Versionsdatei.
+
+Die Migrationsfolge 45/50/55 ist ein bewusstes Beispiel für diese
+Unveränderlichkeitsregel. Migration 50 wurde bereits mit ihrer SHA-256-
+Prüfsumme protokolliert und wird deshalb nicht um nachträgliche
+Vorbereitungslogik erweitert. Migration 45 prüft den Legacy-Bestand und
+deaktiviert die beiden automatischen Aktualisierungsattribute vor dem
+Backfill. Migration 55 akzeptiert für einen sicheren Wiederanlauf nur die
+kanonisch vorbereitete oder bereits wiederhergestellte Spaltendefinition und
+aktiviert die Attribute abschließend wieder. Die App bleibt durch das
+Compose-Startgate während der gesamten Folge aus. In einer Datenbank, die
+Migration 50 bereits kennt, werden die fehlenden Migrationen 45 und 55 beim
+nächsten Upgrade angewendet, während 50 nur bei bytegleicher Prüfsumme
+übersprungen wird.
+
+Der verbindliche SHA-256 der unveränderten Datei
+`50-global-incidents.sql` ist:
+
+```text
+6732e9c87f0532fce41ee9a58658bf4888fdf7c2ced1ed6bad75a756d6e08edf
+```
+
+### Prüfsummenabweichung sicher untersuchen
+
+Die Meldung
+
+```text
+Checksum mismatch for applied migration: <datei>.sql
+```
+
+ist eine Schutzfunktion und kein Hinweis darauf, den Ledger zu bereinigen.
+Zuerst werden ausschließlich lesend Protokoll und lokale Prüfsumme erfasst:
+
+```console
+podman compose logs --no-color migrate
+sha256sum docker/db/migrations/<datei>.sql
+```
+
+Der zugehörige Ledgerdatensatz kann über die im
+[`docker/db/README.md`](../docker/db/README.md) dokumentierte private
+MariaDB-Optionsdatei mit folgender Abfrage gelesen werden:
+
+```sql
+SELECT `version`, `checksum`, `state`, `started_at`, `applied_at`
+FROM `estab_schema_migrations`
+WHERE `version` = '<datei>.sql';
+```
+
+Danach werden Git-Commit, Image-Digest und die unveränderte Migrationsdatei des
+zuletzt erfolgreichen Releases miteinander verglichen. Wurde eine
+veröffentlichte Datei im Arbeitsstand verändert, ist die sichere Korrektur:
+die bereits angewendete Fassung bytegenau wiederherstellen und die beabsichtigte
+Änderung als neue Versionsdatei formulieren. Genau deshalb liegen
+Vorbereitung und Abschluss der Einsatzmigration in 45 und 55, während 50
+unverändert bleibt.
+
+Folgende vermeintliche Abkürzungen sind nicht zulässig:
+
+- keinen `checksum`-Wert in `estab_schema_migrations` umschreiben,
+- keinen Ledgerdatensatz löschen, damit eine DDL-Migration erneut läuft,
+- kein Datenbank-Volume löschen oder durch eine leere Neuinstallation
+  ersetzen,
+- keine allgemeine Checksum-Ausnahme in den Runner einbauen.
+
+Vor einer korrigierten Wiederholung wird ein konsistentes Backup erzeugt.
+Anschließend werden ausschließlich das geprüfte Migrationsimage und der
+One-shot-Service neu erstellt. Ein verbliebener Zustand `applying` ist von
+einer reinen Prüfsummenabweichung zu unterscheiden und erfordert die
+gesonderte Prüfung der bereits ausgeführten, nicht transaktionalen
+DDL-Schritte.
 
 Die SQL-Dateien sind wiederholbar. Bei einem regulären SQL-Fehler entfernt der
 Runner ausschließlich seinen eigenen `applying`-Datensatz, sodass nach
