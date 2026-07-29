@@ -129,6 +129,7 @@ function estab_sidebar_fetch_configured_positions(
         $positions[] = ['rolle' => 'Stab', 'fkt' => $function];
     }
     $positions[] = ['rolle' => 'Stab', 'fkt' => 'Si'];
+    $positions[] = ['rolle' => 'Fernmelder', 'fkt' => 'LdF'];
     $positions[] = ['rolle' => 'Fernmelder', 'fkt' => 'A/W'];
     foreach ($adviserFunctions as $function) {
         $positions[] = ['rolle' => 'FB', 'fkt' => $function];
@@ -157,7 +158,14 @@ function estab_sidebar_queue_profile(?array $identity): ?array
         throw new InvalidArgumentException('Invalid sidebar queue identity');
     }
 
-    if ($role === 'Fernmelder') {
+    if ($role === 'Fernmelder' && $function === 'LdF') {
+        return [
+            'session_key' => 'old_que_ldf',
+            'sound_file' => 'notify_aw.wav',
+            'label' => 'Bei LdF',
+        ];
+    }
+    if ($role === 'Fernmelder' && $function === 'A/W') {
         return [
             'session_key' => 'old_que_aw',
             'sound_file' => 'notify_aw.wav',
@@ -198,13 +206,33 @@ function estab_sidebar_queue_query(
     $messages = estab_auth_table($messageTable);
     $incidentId = estab_incident_positive_id($incidentId);
 
+    if ($queueSessionKey === 'old_que_ldf') {
+        return [
+            'sql' => 'SELECT COUNT(*) FROM ' . $messages
+                . ' WHERE `einsatz_id` = ?'
+                . ' AND `x00_status` = 1'
+                . " AND `04_richtung` IN ('E','A')"
+                . ' AND `02_zeit` IS NULL'
+                . " AND `02_zeichen` = ''"
+                . ' AND `03_datum` IS NULL'
+                . " AND `03_zeichen` = ''"
+                . " AND `x01_abschluss` = 'f'",
+            'parameters' => [$incidentId],
+        ];
+    }
+
     if ($queueSessionKey === 'old_que_aw') {
         return [
             'sql' => 'SELECT COUNT(*) FROM ' . $messages
                 . ' WHERE `einsatz_id` = ?'
+                . ' AND `x00_status` = 2'
                 . " AND `04_richtung` = 'A'"
+                . ' AND `02_zeit` IS NOT NULL'
+                . " AND `02_zeichen` != ''"
+                . " AND `06_befwegausw` != ''"
                 . ' AND `03_datum` IS NULL'
-                . " AND `03_zeichen` = ''",
+                . " AND `03_zeichen` = ''"
+                . " AND `x01_abschluss` = 'f'",
             'parameters' => [$incidentId],
         ];
     }
@@ -218,6 +246,7 @@ function estab_sidebar_queue_query(
         return [
             'sql' => 'SELECT COUNT(*) FROM ' . $messages
                 . ' WHERE `einsatz_id` = ?'
+                . ' AND `x00_status` = 4'
                 . ' AND `15_quitdatum` IS NULL'
                 . " AND `15_quitzeichen` = ''"
                 . ' AND (' . $reviewScope . ')',
@@ -245,12 +274,16 @@ function estab_sidebar_queue_query(
         'sql' => 'SELECT GREATEST(0,'
             . ' (SELECT COUNT(*) FROM ' . $messages . ' AS `all_messages`'
             . ' WHERE `all_messages`.`einsatz_id` = ?'
+            . " AND (`all_messages`.`04_richtung` <> 'E'"
+            . ' OR `all_messages`.`x00_status` <> 1)'
             . ' AND `all_messages`.`16_empf` LIKE ?)'
             . ' -'
             . ' (SELECT COUNT(*) FROM ' . $messages . ' AS `done_messages`'
             . ' INNER JOIN ' . $doneTable . ' AS `done_state`'
             . ' ON `done_messages`.`00_lfd` = `done_state`.`nachnum`'
             . ' WHERE `done_messages`.`einsatz_id` = ?'
+            . " AND (`done_messages`.`04_richtung` <> 'E'"
+            . ' OR `done_messages`.`x00_status` <> 1)'
             . ' AND `done_messages`.`16_empf` LIKE ?)'
             . ')',
         'parameters' => [
@@ -377,7 +410,7 @@ function estab_sidebar_queue_notification(
     if (
         !in_array(
             $queueSessionKey,
-            ['old_que_aw', 'old_que_si', 'old_que_stab'],
+            ['old_que_ldf', 'old_que_aw', 'old_que_si', 'old_que_stab'],
             true
         )
     ) {
@@ -484,7 +517,14 @@ function estab_sidebar_workflow_actions(
                 'description' => 'Meldungseingang anzeigen',
             ];
         }
-    } elseif ($role === 'Fernmelder') {
+    } elseif ($role === 'Fernmelder' && $function === 'LdF') {
+        $actions[] = [
+            'key' => 'ldf_nachrichten',
+            'name' => 'ldf_nachrichten_x',
+            'label' => 'Disposition',
+            'description' => 'Rufnamen und Beförderungswege festlegen',
+        ];
+    } elseif ($role === 'Fernmelder' && $function === 'A/W') {
         $actions[] = [
             'key' => 'fm_eingang',
             'name' => 'fm_eingang_x',

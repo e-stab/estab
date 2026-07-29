@@ -72,7 +72,7 @@ function estab_admin_validate_matrix(array $input): array
                     $function !== ''
                     && preg_match('/\A[A-Za-z0-9_]{1,6}\z/D', $function) !== 1
                 )
-                || in_array(strtoupper($function), ['SI', 'A/W'], true)
+                || in_array(strtoupper($function), ['SI', 'A/W', 'LDF'], true)
             ) {
                 $errors[] = 'pos_' . $position;
             }

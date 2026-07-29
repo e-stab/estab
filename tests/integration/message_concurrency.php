@@ -108,15 +108,21 @@ function message_db_worker(array $arguments): never
                 echo "1\n";
                 break;
 
-            case 'save':
-                $success = estab_message_update_locked_outgoing(
+            case 'ldf-save':
+                $success = estab_message_update_locked_operator_stage(
                     $connection,
                     $messageTable,
                     $secondary,
-                    'aw0001',
+                    'ldf001',
+                    'A',
+                    1,
                     [
-                        '03_datum' => '2026-07-23 12:34:00',
-                        '03_zeichen' => 'aw0001',
+                        '02_zeit' => '2026-07-23 12:30:00',
+                        '02_zeichen' => 'ldf001',
+                        '05_gegenstelle' => 'Florian 1',
+                        '06_befweg' => 'Kanal 404',
+                        '06_befwegausw' => 'Fu',
+                        'x00_status' => 2,
                         'x02_sperre' => 'f',
                         'x03_sperruser' => '',
                     ]
@@ -124,12 +130,24 @@ function message_db_worker(array $arguments): never
                 echo $success ? "1\n" : "0\n";
                 break;
 
-            case 'reset':
-                echo estab_message_release_lock(
+            case 'aw-save':
+                $success = estab_message_update_locked_operator_stage(
                     $connection,
                     $messageTable,
-                    $secondary
-                ) ? "1\n" : "0\n";
+                    $secondary,
+                    'aw0001',
+                    'A',
+                    2,
+                    [
+                        '03_datum' => '2026-07-23 12:34:00',
+                        '03_zeichen' => 'aw0001',
+                        'x00_status' => 8,
+                        'x01_abschluss' => 't',
+                        'x02_sperre' => 'f',
+                        'x03_sperruser' => '',
+                    ]
+                );
+                echo $success ? "1\n" : "0\n";
                 break;
 
             default:
@@ -255,14 +273,21 @@ try {
     $messageSql = 'CREATE TABLE ' . estab_message_table($messageTable) . ' ('
         . ' `00_lfd` BIGINT NOT NULL AUTO_INCREMENT,'
         . ' `einsatz_id` BIGINT UNSIGNED NULL DEFAULT NULL,'
+        . " `02_zeit` DATETIME NULL DEFAULT NULL,"
+        . " `02_zeichen` VARCHAR(6) NOT NULL DEFAULT '',"
         . " `03_datum` DATETIME NULL DEFAULT NULL,"
         . " `03_zeichen` VARCHAR(6) NOT NULL DEFAULT '',"
         . " `04_richtung` CHAR(1) NOT NULL DEFAULT '',"
         . ' `04_nummer` BIGINT NOT NULL DEFAULT 0,'
+        . " `05_gegenstelle` VARCHAR(128) NOT NULL DEFAULT '',"
+        . " `06_befweg` VARCHAR(128) NOT NULL DEFAULT '',"
+        . " `06_befwegausw` VARCHAR(3) NOT NULL DEFAULT '',"
         . " `12_inhalt` TEXT NOT NULL,"
         . " `15_quitdatum` DATETIME NULL DEFAULT NULL,"
         . " `15_quitzeichen` VARCHAR(6) NOT NULL DEFAULT '',"
         . " `16_empf` VARCHAR(255) NOT NULL DEFAULT '',"
+        . ' `x00_status` SMALLINT NOT NULL DEFAULT 8,'
+        . " `x01_abschluss` CHAR(1) NOT NULL DEFAULT 'f',"
         . " `x02_sperre` CHAR(1) NOT NULL DEFAULT 'f',"
         . " `x03_sperruser` VARCHAR(6) NOT NULL DEFAULT '',"
         . ' PRIMARY KEY (`00_lfd`),'
@@ -378,89 +403,341 @@ try {
         'Recipient could not remove message state'
     );
 
-    // Save and administrator reset race on the same locked outgoing row.
-    // Exactly one conditional UPDATE may win.
+    // One real outgoing row proves the complete stage boundary. Status 1 is
+    // exclusively offered to LdF; A/W can reach it only after the LdF save
+    // atomically records its decision and advances the row to status 2.
     $raceMessageId = estab_message_insert(
         $connection,
         $messageTable,
         [
+            '02_zeit' => null,
+            '02_zeichen' => '',
             '03_datum' => null,
             '03_zeichen' => '',
             '04_richtung' => 'A',
             '04_nummer' => 51,
-            '12_inhalt' => 'lock race fixture',
+            '05_gegenstelle' => '',
+            '06_befweg' => '',
+            '06_befwegausw' => '',
+            '12_inhalt' => 'staged operator race fixture',
             '16_empf' => 'S1_rt',
+            'x00_status' => 1,
+            'x01_abschluss' => 'f',
             'x02_sperre' => 'f',
             'x03_sperruser' => '',
         ]
     );
+    $ldfIdentity = [
+        'kuerzel' => 'ldf001',
+        'funktion' => 'LdF',
+        'rolle' => 'Fernmelder',
+    ];
+    $awIdentity = [
+        'kuerzel' => 'aw0001',
+        'funktion' => 'A/W',
+        'rolle' => 'Fernmelder',
+    ];
+    $statusOneRow = estab_message_fetch_by_id(
+        $connection,
+        $messageTable,
+        $raceMessageId
+    );
+    message_db_assert(is_array($statusOneRow), 'Status-1 fixture disappeared');
     message_db_assert(
-        estab_message_acquire_outgoing_lock(
+        estab_message_object_allowed(
+            $ldfIdentity,
+            'telecommunications-lead-edit',
+            $statusOneRow
+        ),
+        'LdF was denied the real status-1 row'
+    );
+    message_db_assert(
+        !estab_message_object_allowed(
+            $awIdentity,
+            'telecommunications-edit',
+            $statusOneRow
+        ),
+        'A/W was allowed to bypass LdF on the real status-1 row'
+    );
+    message_db_assert(
+        !estab_message_acquire_operator_stage_lock(
             $connection,
             $messageTable,
             $raceMessageId,
+            'aw0001',
+            'A',
+            2
+        ),
+        'A/W acquired a status-2 lock before the LdF decision'
+    );
+    message_db_assert(
+        estab_message_acquire_operator_stage_lock(
+            $connection,
+            $messageTable,
+            $raceMessageId,
+            'ldf001',
+            'A',
+            1
+        ),
+        'LdF could not acquire the status-1 lock'
+    );
+    message_db_assert(
+        !estab_message_release_operator_stage_lock(
+            $connection,
+            $messageTable,
+            $raceMessageId,
+            'A',
+            1,
             'aw0001'
         ),
-        'Owner could not acquire outgoing lock'
+        'A/W released the LdF-owned status-1 lock'
+    );
+    $lockedStatusOneRow = estab_message_fetch_by_id(
+        $connection,
+        $messageTable,
+        $raceMessageId
     );
     message_db_assert(
-        !estab_message_acquire_outgoing_lock(
+        is_array($lockedStatusOneRow)
+            && estab_message_object_allowed(
+                $ldfIdentity,
+                'telecommunications-lead-outgoing-save',
+                $lockedStatusOneRow
+            )
+            && !estab_message_object_allowed(
+                $awIdentity,
+                'telecommunications-save',
+                $lockedStatusOneRow
+            ),
+        'The status-1 lock was not bound exclusively to LdF'
+    );
+    message_db_assert(
+        !estab_message_update_locked_operator_stage(
             $connection,
             $messageTable,
             $raceMessageId,
-            'aw0002'
+            'aw0001',
+            'A',
+            2,
+            [
+                '03_datum' => '2026-07-23 12:33:00',
+                '03_zeichen' => 'aw0001',
+                'x00_status' => 8,
+            ]
         ),
-        'Foreign operator acquired outgoing lock'
+        'A/W saved before the LdF stage was complete'
     );
-    message_db_assert(
-        !estab_message_release_lock(
-            $connection,
+
+    // Both parallel LdF requests carry the same once-valid lock and form data.
+    // The first one advances to status 2; the second must become a stale save.
+    $ldfRaceBarrier = sys_get_temp_dir() . '/estab-message-ldf-race-' . $token;
+    $barriers[] = $ldfRaceBarrier;
+    $ldfRaceWorkers = [
+        message_db_start_worker(
+            'ldf-save',
+            $ldfRaceBarrier,
+            'a',
             $messageTable,
-            $raceMessageId,
-            'aw0002'
+            (string) $raceMessageId
         ),
-        'Foreign operator released outgoing lock'
-    );
-    message_db_assert(
-        !estab_message_update_locked_outgoing(
-            $connection,
+        message_db_start_worker(
+            'ldf-save',
+            $ldfRaceBarrier,
+            'b',
             $messageTable,
-            $raceMessageId,
-            'aw0002',
-            ['03_datum' => '2026-07-23 12:33:00', '03_zeichen' => 'aw0002']
+            (string) $raceMessageId
         ),
-        'Foreign operator saved locked outgoing message'
-    );
-    $raceBarrier = sys_get_temp_dir() . '/estab-message-race-' . $token;
-    $barriers[] = $raceBarrier;
-    $raceWorkers = [
-        message_db_start_worker('save', $raceBarrier, 'a', $messageTable, (string) $raceMessageId),
-        message_db_start_worker('reset', $raceBarrier, 'b', $messageTable, (string) $raceMessageId),
     ];
-    message_db_wait_until_ready($raceBarrier, $raceWorkers);
-    message_db_open_barrier($raceBarrier);
-    $saveWon = message_db_finish_worker($raceWorkers[0]) === '1';
-    $resetWon = message_db_finish_worker($raceWorkers[1]) === '1';
-    message_db_assert(
-        $saveWon !== $resetWon,
-        'Save/reset race did not have exactly one winner'
+    message_db_wait_until_ready($ldfRaceBarrier, $ldfRaceWorkers);
+    message_db_open_barrier($ldfRaceBarrier);
+    $ldfSaveResults = array_map(
+        static fn (array $worker): string => message_db_finish_worker($worker),
+        $ldfRaceWorkers
     );
-    $raceRow = estab_message_fetch_by_id($connection, $messageTable, $raceMessageId);
-    message_db_assert(is_array($raceRow), 'Race target disappeared');
-    if ($saveWon) {
-        message_db_assert(
-            (string) $raceRow['03_zeichen'] === 'aw0001'
-                && (string) $raceRow['x02_sperre'] === 'f',
-            'Winning save did not persist owner transport state'
-        );
-    } else {
-        message_db_assert(
-            estab_datetime_is_unset($raceRow['03_datum'])
-                && (string) $raceRow['03_zeichen'] === ''
-                && (string) $raceRow['x02_sperre'] === 'f',
-            'Winning reset did not leave a pending unlocked row'
-        );
-    }
+    message_db_assert(
+        count(array_filter(
+            $ldfSaveResults,
+            static fn (string $result): bool => $result === '1'
+        )) === 1
+            && count(array_filter(
+                $ldfSaveResults,
+                static fn (string $result): bool => $result === '0'
+            )) === 1,
+        'Parallel LdF saves did not have exactly one winner'
+    );
+    $statusTwoRow = estab_message_fetch_by_id(
+        $connection,
+        $messageTable,
+        $raceMessageId
+    );
+    message_db_assert(
+        is_array($statusTwoRow)
+            && (int) $statusTwoRow['x00_status'] === 2
+            && (string) $statusTwoRow['02_zeit'] === '2026-07-23 12:30:00'
+            && (string) $statusTwoRow['02_zeichen'] === 'ldf001'
+            && (string) $statusTwoRow['05_gegenstelle'] === 'Florian 1'
+            && (string) $statusTwoRow['06_befweg'] === 'Kanal 404'
+            && (string) $statusTwoRow['06_befwegausw'] === 'Fu'
+            && estab_datetime_is_unset($statusTwoRow['03_datum'])
+            && (string) $statusTwoRow['03_zeichen'] === ''
+            && (string) $statusTwoRow['x02_sperre'] === 'f'
+            && (string) $statusTwoRow['x03_sperruser'] === '',
+        'Winning LdF save did not persist exactly one status-2 decision'
+    );
+    message_db_assert(
+        !estab_message_object_allowed(
+            $ldfIdentity,
+            'telecommunications-lead-edit',
+            $statusTwoRow
+        )
+            && estab_message_object_allowed(
+                $awIdentity,
+                'telecommunications-edit',
+                $statusTwoRow
+            ),
+        'The real status-2 row was not handed exclusively from LdF to A/W'
+    );
+    message_db_assert(
+        !estab_message_update_locked_operator_stage(
+            $connection,
+            $messageTable,
+            $raceMessageId,
+            'ldf001',
+            'A',
+            1,
+            [
+                '02_zeit' => '2026-07-23 12:31:00',
+                '02_zeichen' => 'ldf001',
+                'x00_status' => 2,
+            ]
+        ),
+        'A stale LdF save changed the completed status-1 stage'
+    );
+    message_db_assert(
+        !estab_message_acquire_operator_stage_lock(
+            $connection,
+            $messageTable,
+            $raceMessageId,
+            'ldf001',
+            'A',
+            1
+        ),
+        'LdF reacquired its completed status-1 stage'
+    );
+    message_db_assert(
+        estab_message_acquire_operator_stage_lock(
+            $connection,
+            $messageTable,
+            $raceMessageId,
+            'aw0001',
+            'A',
+            2
+        ),
+        'A/W could not acquire the LdF-completed status-2 row'
+    );
+    message_db_assert(
+        !estab_message_release_operator_stage_lock(
+            $connection,
+            $messageTable,
+            $raceMessageId,
+            'A',
+            2,
+            'ldf001'
+        ),
+        'LdF released the A/W-owned status-2 lock'
+    );
+    $lockedStatusTwoRow = estab_message_fetch_by_id(
+        $connection,
+        $messageTable,
+        $raceMessageId
+    );
+    message_db_assert(
+        is_array($lockedStatusTwoRow)
+            && estab_message_object_allowed(
+                $awIdentity,
+                'telecommunications-save',
+                $lockedStatusTwoRow
+            )
+            && !estab_message_object_allowed(
+                $ldfIdentity,
+                'telecommunications-lead-outgoing-save',
+                $lockedStatusTwoRow
+            ),
+        'The status-2 lock was not bound exclusively to A/W'
+    );
+
+    // The same stale-form race is repeated at the A/W stage. Advancing to
+    // status 8 must invalidate the second in-flight save at the SQL predicate.
+    $awRaceBarrier = sys_get_temp_dir() . '/estab-message-aw-race-' . $token;
+    $barriers[] = $awRaceBarrier;
+    $awRaceWorkers = [
+        message_db_start_worker(
+            'aw-save',
+            $awRaceBarrier,
+            'a',
+            $messageTable,
+            (string) $raceMessageId
+        ),
+        message_db_start_worker(
+            'aw-save',
+            $awRaceBarrier,
+            'b',
+            $messageTable,
+            (string) $raceMessageId
+        ),
+    ];
+    message_db_wait_until_ready($awRaceBarrier, $awRaceWorkers);
+    message_db_open_barrier($awRaceBarrier);
+    $awSaveResults = array_map(
+        static fn (array $worker): string => message_db_finish_worker($worker),
+        $awRaceWorkers
+    );
+    message_db_assert(
+        count(array_filter(
+            $awSaveResults,
+            static fn (string $result): bool => $result === '1'
+        )) === 1
+            && count(array_filter(
+                $awSaveResults,
+                static fn (string $result): bool => $result === '0'
+            )) === 1,
+        'Parallel A/W saves did not have exactly one winner'
+    );
+    $completedRow = estab_message_fetch_by_id(
+        $connection,
+        $messageTable,
+        $raceMessageId
+    );
+    message_db_assert(
+        is_array($completedRow)
+            && (int) $completedRow['x00_status'] === 8
+            && (string) $completedRow['x01_abschluss'] === 't'
+            && (string) $completedRow['03_datum'] === '2026-07-23 12:34:00'
+            && (string) $completedRow['03_zeichen'] === 'aw0001'
+            && (string) $completedRow['02_zeichen'] === 'ldf001'
+            && (string) $completedRow['05_gegenstelle'] === 'Florian 1'
+            && (string) $completedRow['06_befweg'] === 'Kanal 404'
+            && (string) $completedRow['06_befwegausw'] === 'Fu'
+            && (string) $completedRow['x02_sperre'] === 'f'
+            && (string) $completedRow['x03_sperruser'] === '',
+        'Winning A/W save did not complete exactly one immutable LdF decision'
+    );
+    message_db_assert(
+        !estab_message_update_locked_operator_stage(
+            $connection,
+            $messageTable,
+            $raceMessageId,
+            'aw0001',
+            'A',
+            2,
+            [
+                '03_datum' => '2026-07-23 12:35:00',
+                '03_zeichen' => 'aw0001',
+                'x00_status' => 8,
+            ]
+        ),
+        'A stale A/W save changed the completed status-2 stage'
+    );
 
     // Administrative repair and regular allocation share the same advisory
     // namespace. While admin owns it, the writer cannot add a row.

@@ -86,14 +86,29 @@ Kontosperre und Kennwortreset.
   Umgebungswerte akzeptieren ausschließlich `1/0`, `true/false`, `yes/no` oder
   `on/off`; Tippfehler führen absichtlich zu einem Fehler statt zu implizitem
   Aktivieren.
-- `ESTAB_REVIEW_OUTGOING_MESSAGES=false` ist der Containerstandard: Ein vom
-  Stab erstellter Ausgang wechselt nach dem Transport durch A/W direkt von
-  Status 2 auf Status 8. Mit dem strikt geparsten Wert `true` läuft derselbe
-  Ausgang von Status 2 zunächst auf Status 4 und muss anschließend durch Si
-  auf Status 8 gesichtet werden. Ist die Umgebungsvariable nicht gesetzt,
-  bleibt ein boolescher Legacy-Wert `si_in_out` aus der optionalen
-  `4fcfg/m_cfg.inc.php` wirksam; ein nicht boolescher Wert bricht absichtlich
-  ab.
+- Jede neue Ein- oder Ausgangsnachricht beginnt in Status 1 bei LdF. LdF
+  übersetzt beim Eingang den aufgenommenen Rufnamen in den Absender und setzt
+  beim Ausgang den Rufnamen der Gegenstelle sowie vorgesehenes
+  Beförderungsmedium und Freitextweg. A/W muss den eingehenden Rufnamen
+  erfassen, besitzt aber kein schreibbares Absenderfeld; auch serverseitig
+  werden Übertragungsversuche verworfen. LdF kann keinen leeren oder nur aus
+  Leerzeichen bestehenden Absender freigeben.
+  Danach läuft ein Eingang regulär `1 → 4 → 8` beziehungsweise bei bereits
+  erfolgter Autosichtung `1 → 8`. Ein Ausgang erreicht zunächst A/W in Status 2.
+  `ESTAB_REVIEW_OUTGOING_MESSAGES=false` ist der Containerstandard und führt
+  nach der tatsächlichen Beförderung über `1 → 2 → 8`. Mit dem strikt
+  geparsten Wert `true` gilt `1 → 2 → 4 → 8`, weil Si den Ausgang anschließend
+  sichten muss. Ist die Umgebungsvariable nicht gesetzt, bleibt ein boolescher
+  Legacy-Wert `si_in_out` aus der optionalen `4fcfg/m_cfg.inc.php` wirksam; ein
+  nicht boolescher Wert bricht absichtlich ab.
+- `message_transport.php` normalisiert die schreibbaren SET-Werte und übersetzt
+  `Fe`, `Fu`, `Me`, `FAX`/`Fax`, `FS`, `@` und `DFÜ` für die Anzeige in
+  verständliche Langformen. Die Nachweisung zeigt bei Eingängen dieses
+  Eingangsmedium. Bei Ausgängen kombiniert sie Medium und Freitextweg erst nach
+  gesetztem Beförderungszeitpunkt als tatsächlichen Beförderungsweg; vorher
+  lautet der Status „Noch nicht befördert“. Unbekannte Legacywerte bleiben
+  ausdrücklich als unbekannt sichtbar und durchlaufen die gemeinsame
+  HTML-Escaping-Grenze.
 - Der sichtbare Einstieg verwendet native Textbuttons, zugeordnete Labels,
   eindeutige Kennwortfelder und Inline-Fehler. Die beiden Konto-Flows bleiben
   getrennte Formulare, sodass ein Moduswechsel keine Zugangsdaten mitsendet.

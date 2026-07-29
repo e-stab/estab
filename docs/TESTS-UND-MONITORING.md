@@ -11,7 +11,7 @@ steht in der [Funktionsmatrix](FUNKTIONSNACHWEIS.md).
 | Quellprüfung | PHP-8.5-Lint, Kompatibilitäts-, Sicherheits-, Einsatz-, Benutzerverwaltungs-, Upload-, Export- und PDF-Regressionen |
 | Image-Build | benötigte PHP-Erweiterungen und Apache-Konfiguration |
 | Datenbank | echtes MariaDB-Schema, Einsatz-Singleton/Trigger, Kontosperre, Indizes, aktive und persistente Standardmatrix, Engines, Collations und Zero-Date-Freiheit |
-| HTTP | Header, direkte Endpunktfläche, 403-/400-/405-Grenzen, PNG-Antworten, Registrierung, sichtbare Sitzungsidentität, CSRF-Abmeldung, erneute Anmeldung, vollständige A/W-/Si-/S1-/S2-/S3-/POL-FB-Nachrichtenläufe in beiden Ausgangssichtungsmodi, Autosichtung, Zweitprüfung, Antworten/Weiterleiten, Kategorien- und ETB-/TBB-Rollengrenzen, reale Vordruckerzeugung/-auslieferung sowie optional Admin-Export |
+| HTTP | Header, direkte Endpunktfläche, 403-/400-/405-Grenzen, PNG-Antworten, Registrierung, sichtbare Sitzungsidentität, CSRF-Abmeldung, erneute Anmeldung, vollständige LdF-/A/W-/Si-/S1-/S2-/S3-/POL-FB-Nachrichtenläufe in beiden Ausgangssichtungsmodi, Autosichtung, Zweitprüfung, Antworten/Weiterleiten, Kategorien- und ETB-/TBB-Rollengrenzen, reale Vordruckerzeugung/-auslieferung sowie optional Admin-Export |
 | Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, acht stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, Matrixstandard-Bestätigungen, BOS-Disclosure, Logout sowie öffentliche und authentifizierte mobile Bedienung bei exakt 390 × 844 CSS-Pixeln |
 | Fachabnahme | kompletter Nachrichten-, Anhang-, PDF-, ETB-/TBB- und Restore-Ablauf |
 | Betrieb | kontinuierliche Readiness, Logs, Restarts, Kapazität und Backup-Alter |
@@ -75,6 +75,13 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   Workflow-Aktionen, POST-/CSRF-Verträge, Prepared Statements, sichere
   UTF-8-/Legacy-Entity-Ausgabe und die inerten Payloads Quotes, Ampersand,
   `<script>` sowie SQL-ähnlicher Text,
+- verpflichtende Rufnamen bei FM-Eingängen, nicht leere LdF-Übersetzungen,
+  exakte Sperrfreigabe beim Abbrechen und die anschließende Rückkehr in die
+  automatisch aktualisierte LdF-Warteschlange,
+- Medium-Normalisierung für `Fe`, `Fu`, `Me`, `FAX`/`Fax`, `FS`, `@` und
+  `DFÜ`, lesbare sowie HTML-sichere Nachweisausgabe, die Zusammenführung von
+  Medium und Freitextweg ohne Dopplung und den richtungsabhängigen
+  Listenvertrag „Eingangsmedium“ beziehungsweise „Beförderungsweg“,
 - erlaubte Bildbutton-Typen, Farb-/Größen-/Textgrenzen, öffentliche
   Endpunktverträge, vollständige Apache-Sperrlisten und eine CSP ohne
   `unsafe-eval`,
@@ -907,18 +914,33 @@ Für den zweiten Modus erstellt die CI ausschließlich den App-Dienst mit
 neuen Variantenkennung sowie `ESTAB_TEST_EXPECT_OUTGOING_REVIEW=enabled`.
 Dadurch sind beide Konfigurationen getrennt belegt:
 
-- Eingang: A/W legt Status 4 an; Si sichtet auf Status 8.
-- Ausgang im Standardmodus `false`: S1 legt Status 2 an; A/W transportiert
-  direkt auf Status 8.
-- Ausgang im optionalen Modus `true`: S1 legt Status 2 an; A/W transportiert
-  auf Status 4; Si sichtet anschließend auf Status 8.
+- Eingang: A/W nimmt die Nachricht in Status 1 auf; LdF übersetzt den Rufnamen
+  in den Absender und übergibt mit Status 4 an Si; Si schließt mit Status 8 ab.
+  War die Aufnahme bereits automatisch gesichtet, schließt LdF direkt über
+  `1 → 8` ab.
+- Ausgang im Standardmodus `false`: Die Stabsfunktion legt Status 1 an; LdF
+  bestimmt den Rufnamen der Gegenstelle und den vorgesehenen Beförderungsweg
+  und übergibt mit Status 2 an A/W; die tatsächliche Beförderung schließt direkt
+  mit Status 8 ab.
+- Ausgang im optionalen Modus `true`: Bis A/W gilt ebenfalls `1 → 2`; nach der
+  Beförderung folgt Status 4 und Si sichtet anschließend auf Status 8.
 
-Der Lauf registriert isolierte A/W-, Si-, S1-, S2-, S3- und POL/FB-Konten über
+Der Lauf registriert isolierte LdF-, A/W-, Si-, S1-, S2-, S3- und
+POL/FB-Konten über
 die öffentliche Kontooberfläche. Er prüft die gerenderten Listen und Aktionen,
 fehlende CSRF-Tokens mit HTTP 403, die erlaubten Stabsaktionen sowie verbotene
-Fernmelde-/Si-Aktionen des echten FB-Profils, A/W-Sperrbesitz, Status und
-Abschluss direkt in MariaDB, den erzeugten Ein-/Ausgangsvordruck sowie die
-exakten Empfängerfarben `S2_rt`, `S1_gn` und `S3_bl`.
+LdF-/Fernmelde-/Si-Aktionen des echten FB-Profils, stufengebundenen
+LdF-/A/W-Sperrbesitz, Status und Abschluss direkt in MariaDB, den erzeugten
+Ein-/Ausgangsvordruck sowie die exakten Empfängerfarben `S2_rt`, `S1_gn` und
+`S3_bl`.
+
+Die Nachweisung wird mit demselben Lauf fachlich geprüft: Eingänge müssen ihr
+aufgenommenes Medium in übersetzter Langform anzeigen. Bei Ausgängen bleibt der
+von LdF vorgesehene Weg bis zum gespeicherten Beförderungszeitpunkt als „Noch
+nicht befördert“ gekennzeichnet; erst danach erscheinen Medium und
+Freitextstrecke als tatsächlicher Beförderungsweg. Der statische Test
+`tests/php/message_transport_security.php` ergänzt dafür alle historischen
+Codes, unbekannte und nichtskalare Werte, Deduplizierung sowie HTML-Escaping.
 
 Beim Öffnen vergleicht der Lauf die sichtbaren, editierbaren Felder für
 Eingangs- und Beförderungszeit mit der PHP-Uhr im App-Container. Er sendet
@@ -946,7 +968,8 @@ erzeugte PDF-Vordruck muss erhalten bleiben.
 Abschließend liest POL/FB die zugestellte Eingangsnachricht und betätigt die
 tatsächlich gerenderten Aktionen „Antworten“ und „Weiterleiten“. Beide
 abgeleiteten Formulare werden gespeichert und müssen zwei getrennte
-Status-2-Ausgänge mit korrektem Zitat, Ziel, Absender, Funktionskennung und
+Status-1-Ausgänge für LdF mit korrektem Zitat, Ziel, Absender,
+Funktionskennung und
 Empfängern erzeugen. Der persönliche Lesestatus wird gesetzt, während der
 Fingerabdruck der Quellnachricht unverändert bleibt.
 

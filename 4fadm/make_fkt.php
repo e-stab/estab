@@ -65,7 +65,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         if (!$submitted['valid']) {
             http_response_code(422);
             $error = 'Die Matrix ist ungültig. Funktionen müssen eindeutig sein; '
-                . 'Si und A/W sind reserviert. Eine belegte Position muss als Rotkopie markiert sein.';
+                . 'Si, A/W und LdF sind reserviert. Eine belegte Position muss als Rotkopie markiert sein.';
         } else {
             try {
                 $connection = estab_auth_connect($conf_4f_db);
@@ -170,7 +170,8 @@ $updated = is_string($updatedValue) ? $updatedValue : '';
       aria-label="Auswirkung der Matrixänderung">
       <strong>Vor dem Speichern prüfen:</strong>
       <p>Funktionsnamen bestehen aus höchstens sechs Buchstaben, Ziffern oder
-        Unterstrichen. <code>Si</code> und <code>A/W</code> sind reserviert.
+        Unterstrichen. <code>Si</code>, <code>A/W</code> und
+        <code>LdF</code> sind reserviert.
         Genau eine belegte Position muss Rotkopie-Empfänger sein.</p>
       <p>„Standard laden“ verwirft die aktuellen Editorwerte.
         „Standard ersetzen“ überschreibt die einzige gespeicherte Vorlage;

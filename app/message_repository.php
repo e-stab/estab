@@ -536,6 +536,262 @@ function estab_message_update_locked_outgoing(
     );
 }
 
+/**
+ * Return the immutable SQL predicate for a staged LdF/A-W transition.
+ *
+ * Status 1 belongs exclusively to LdF. Status 2 belongs to A/W and is
+ * reachable only after LdF recorded an acceptance mark and a transport
+ * decision. The direction/status pairs are deliberately closed.
+ */
+function estab_message_operator_stage_predicate(
+    string $direction,
+    int $status
+): string {
+    if ($status === 1 && in_array($direction, ['E', 'A'], true)) {
+        return " AND `04_richtung` = '" . $direction . "'"
+            . ' AND `x00_status` = 1'
+            . ' AND `02_zeit` IS NULL AND `02_zeichen` = ?'
+            . ' AND `03_datum` IS NULL AND `03_zeichen` = ?'
+            . " AND `x01_abschluss` = 'f'";
+    }
+    if ($status === 2 && $direction === 'A') {
+        return " AND `04_richtung` = 'A'"
+            . ' AND `x00_status` = 2'
+            . ' AND `02_zeit` IS NOT NULL AND `02_zeichen` <> ?'
+            . ' AND `06_befwegausw` <> ?'
+            . ' AND `03_datum` IS NULL AND `03_zeichen` = ?'
+            . " AND `x01_abschluss` = 'f'";
+    }
+    throw new InvalidArgumentException('Invalid message operator stage');
+}
+
+/** Parameters matching estab_message_operator_stage_predicate(). */
+function estab_message_operator_stage_parameters(
+    string $direction,
+    int $status
+): array {
+    estab_message_operator_stage_predicate($direction, $status);
+    return $status === 1 ? ['', ''] : ['', '', ''];
+}
+
+/**
+ * Acquire one exact LdF/A-W stage without allowing stale queue identifiers to
+ * cross a workflow transition.
+ */
+function estab_message_acquire_operator_stage_lock(
+    mysqli $connection,
+    string $table,
+    mixed $recordId,
+    string $operatorCode,
+    string $direction,
+    int $status
+): bool {
+    $recordId = estab_message_positive_id($recordId);
+    if (preg_match('/\A[a-z0-9_]{1,6}\z/D', $operatorCode) !== 1) {
+        throw new InvalidArgumentException('Invalid message lock owner');
+    }
+    $stageSql = estab_message_operator_stage_predicate($direction, $status);
+    $stageParameters = estab_message_operator_stage_parameters(
+        $direction,
+        $status
+    );
+
+    return estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
+            $connection,
+            $table,
+            $recordId,
+            $operatorCode,
+            $stageSql,
+            $stageParameters
+        ): bool {
+            $incidentId = (int) $incident['active_einsatz_id'];
+            $statement = estab_message_execute(
+                $connection,
+                'UPDATE ' . estab_message_table($table)
+                    . " SET `x02_sperre` = 't', `x03_sperruser` = ?"
+                    . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
+                    . $stageSql
+                    . " AND (`x02_sperre` = 'f'"
+                    . " OR (`x02_sperre` = 't' AND `x03_sperruser` = ?))",
+                array_merge(
+                    [$operatorCode, $recordId, $incidentId],
+                    $stageParameters,
+                    [$operatorCode]
+                )
+            );
+            try {
+                if ($statement->affected_rows === 1) {
+                    return true;
+                }
+            } finally {
+                $statement->close();
+            }
+
+            $verification = estab_message_execute(
+                $connection,
+                'SELECT COUNT(*) FROM ' . estab_message_table($table)
+                    . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
+                    . $stageSql
+                    . " AND `x02_sperre` = 't' AND `x03_sperruser` = ?",
+                array_merge(
+                    [$recordId, $incidentId],
+                    $stageParameters,
+                    [$operatorCode]
+                )
+            );
+            try {
+                $row = $verification->get_result()->fetch_row();
+                return ((int) ($row[0] ?? 0)) === 1;
+            } finally {
+                $verification->close();
+            }
+        }
+    );
+}
+
+/** Save one exact LdF/A-W stage while the same operator still owns it. */
+function estab_message_update_locked_operator_stage(
+    mysqli $connection,
+    string $table,
+    mixed $recordId,
+    string $operatorCode,
+    string $direction,
+    int $status,
+    array $fields
+): bool {
+    $recordId = estab_message_positive_id($recordId);
+    if (preg_match('/\A[a-z0-9_]{1,6}\z/D', $operatorCode) !== 1) {
+        throw new InvalidArgumentException('Invalid message lock owner');
+    }
+    $fields = estab_message_fields($fields);
+    $stageSql = estab_message_operator_stage_predicate($direction, $status);
+    $stageParameters = estab_message_operator_stage_parameters(
+        $direction,
+        $status
+    );
+
+    return estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
+            $connection,
+            $table,
+            $recordId,
+            $operatorCode,
+            $fields,
+            $stageSql,
+            $stageParameters
+        ): bool {
+            $assignments = [];
+            foreach (array_keys($fields) as $column) {
+                $assignments[] = '`' . $column . '` = ?';
+            }
+            $statement = estab_message_execute(
+                $connection,
+                'UPDATE ' . estab_message_table($table)
+                    . ' SET ' . implode(', ', $assignments)
+                    . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
+                    . $stageSql
+                    . " AND `x02_sperre` = 't' AND `x03_sperruser` = ?",
+                array_merge(
+                    array_values($fields),
+                    [
+                        $recordId,
+                        (int) $incident['active_einsatz_id'],
+                    ],
+                    $stageParameters,
+                    [$operatorCode]
+                )
+            );
+            try {
+                return $statement->affected_rows === 1;
+            } finally {
+                $statement->close();
+            }
+        }
+    );
+}
+
+/** Release one exact LdF/A-W stage; null owner is reserved for reset. */
+function estab_message_release_operator_stage_lock(
+    mysqli $connection,
+    string $table,
+    mixed $recordId,
+    string $direction,
+    int $status,
+    ?string $operatorCode = null
+): bool {
+    $recordId = estab_message_positive_id($recordId);
+    if (
+        $operatorCode !== null
+        && preg_match('/\A[a-z0-9_]{1,6}\z/D', $operatorCode) !== 1
+    ) {
+        throw new InvalidArgumentException('Invalid message lock owner');
+    }
+    $stageSql = estab_message_operator_stage_predicate($direction, $status);
+    $stageParameters = estab_message_operator_stage_parameters(
+        $direction,
+        $status
+    );
+
+    return estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
+            $connection,
+            $table,
+            $recordId,
+            $operatorCode,
+            $stageSql,
+            $stageParameters
+        ): bool {
+            $sql = 'UPDATE ' . estab_message_table($table)
+                . " SET `x02_sperre` = 'f', `x03_sperruser` = ''"
+                . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
+                . $stageSql;
+            $parameters = array_merge(
+                [$recordId, (int) $incident['active_einsatz_id']],
+                $stageParameters
+            );
+            if ($operatorCode !== null) {
+                $sql .= " AND (`x02_sperre` = 'f' OR `x03_sperruser` = ?)";
+                $parameters[] = $operatorCode;
+            }
+            $statement = estab_message_execute(
+                $connection,
+                $sql,
+                $parameters
+            );
+            try {
+                if ($statement->affected_rows === 1) {
+                    return true;
+                }
+            } finally {
+                $statement->close();
+            }
+
+            $verification = estab_message_execute(
+                $connection,
+                'SELECT COUNT(*) FROM ' . estab_message_table($table)
+                    . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
+                    . $stageSql
+                    . " AND `x02_sperre` = 'f' AND `x03_sperruser` = ?",
+                array_merge(
+                    [$recordId, (int) $incident['active_einsatz_id']],
+                    $stageParameters,
+                    ['']
+                )
+            );
+            try {
+                $row = $verification->get_result()->fetch_row();
+                return ((int) ($row[0] ?? 0)) === 1;
+            } finally {
+                $verification->close();
+            }
+        }
+    );
+}
+
 /** Atomically finish a message that is still in the viewer queue. */
 function estab_message_update_pending_review(
     mysqli $connection,
@@ -567,6 +823,7 @@ function estab_message_update_pending_review(
             $sql = 'UPDATE ' . estab_message_table($table)
                 . ' SET ' . implode(', ', $assignments)
                 . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
+                . ' AND `x00_status` = 4'
                 . ' AND `15_quitdatum` IS NULL AND `15_quitzeichen` = ?'
                 . " AND (`04_richtung` = 'E'";
             if ($reviewOutgoing) {
@@ -1189,14 +1446,33 @@ function estab_message_object_allowed(
 ): bool {
     $isTelecommunications = ($identity['funktion'] ?? '') === 'A/W'
         && ($identity['rolle'] ?? '') === 'Fernmelder';
+    $isTelecommunicationsLead = ($identity['funktion'] ?? '') === 'LdF'
+        && ($identity['rolle'] ?? '') === 'Fernmelder';
     $isViewer = ($identity['funktion'] ?? '') === 'Si'
         && ($identity['rolle'] ?? '') === 'Stab';
     $isStaff = ($identity['funktion'] ?? '') !== 'Si'
         && in_array(($identity['rolle'] ?? ''), ['Stab', 'FB'], true);
-    $isPendingOutgoing = ($message['04_richtung'] ?? '') === 'A'
+    $status = filter_var(
+        $message['x00_status'] ?? null,
+        FILTER_VALIDATE_INT
+    );
+    $isPendingLead = $status === 1
+        && in_array(($message['04_richtung'] ?? ''), ['E', 'A'], true)
+        && estab_datetime_is_unset($message['02_zeit'] ?? null)
+        && (string) ($message['02_zeichen'] ?? '') === ''
         && estab_datetime_is_unset($message['03_datum'] ?? null)
-        && (string) ($message['03_zeichen'] ?? '') === '';
-    $isPendingReview = estab_datetime_is_unset($message['15_quitdatum'] ?? null)
+        && (string) ($message['03_zeichen'] ?? '') === ''
+        && (string) ($message['x01_abschluss'] ?? 'f') === 'f';
+    $isPendingOutgoing = $status === 2
+        && ($message['04_richtung'] ?? '') === 'A'
+        && !estab_datetime_is_unset($message['02_zeit'] ?? null)
+        && (string) ($message['02_zeichen'] ?? '') !== ''
+        && (string) ($message['06_befwegausw'] ?? '') !== ''
+        && estab_datetime_is_unset($message['03_datum'] ?? null)
+        && (string) ($message['03_zeichen'] ?? '') === ''
+        && (string) ($message['x01_abschluss'] ?? 'f') === 'f';
+    $isPendingReview = $status === 4
+        && estab_datetime_is_unset($message['15_quitdatum'] ?? null)
         && (string) ($message['15_quitzeichen'] ?? '') === ''
         && (
             ($message['04_richtung'] ?? '') === 'E'
@@ -1210,7 +1486,32 @@ function estab_message_object_allowed(
 
     return match ($operation) {
         'staff-read', 'staff-state' =>
-            $isStaff && estab_message_is_recipient($message, (string) $identity['funktion']),
+            $isStaff
+            && !(($message['04_richtung'] ?? '') === 'E' && $status === 1)
+            && estab_message_is_recipient(
+                $message,
+                (string) $identity['funktion']
+            ),
+        'telecommunications-lead-edit' =>
+            $isTelecommunicationsLead && $isPendingLead,
+        'telecommunications-lead-incoming-save' =>
+            $isTelecommunicationsLead
+            && $isPendingLead
+            && ($message['04_richtung'] ?? '') === 'E'
+            && ($message['x02_sperre'] ?? '') === 't'
+            && hash_equals(
+                (string) ($message['x03_sperruser'] ?? ''),
+                (string) ($identity['kuerzel'] ?? '')
+            ),
+        'telecommunications-lead-outgoing-save' =>
+            $isTelecommunicationsLead
+            && $isPendingLead
+            && ($message['04_richtung'] ?? '') === 'A'
+            && ($message['x02_sperre'] ?? '') === 't'
+            && hash_equals(
+                (string) ($message['x03_sperruser'] ?? ''),
+                (string) ($identity['kuerzel'] ?? '')
+            ),
         'telecommunications-edit' =>
             $isTelecommunications && $isPendingOutgoing,
         'telecommunications-save' =>
@@ -1224,9 +1525,11 @@ function estab_message_object_allowed(
         'viewer-review' => $isViewer && $isPendingReview,
         'telecommunications-admin' => $isTelecommunications,
         'viewer-admin' => $isViewer,
-        'telecommunications-reset' =>
-            $isTelecommunications
-            && $isPendingOutgoing
+        'telecommunications-reset', 'message-operator-reset' =>
+            (
+                ($isTelecommunications && $isPendingOutgoing)
+                || ($isTelecommunicationsLead && $isPendingLead)
+            )
             && ($message['x02_sperre'] ?? '') === 't',
         default => false,
     };

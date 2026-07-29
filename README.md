@@ -198,11 +198,40 @@ Der Benutzername für den Administrationsbereich steht in
 Administrationsanmeldung ist unabhängig von den eStab-Funktionsbenutzern.
 
 Mit `ESTAB_REVIEW_OUTGOING_MESSAGES=false` bleibt das veröffentlichte
-Standardverhalten erhalten: Nur Eingänge gehen nach dem Fernmelder zum
-Sichter; transportierte Ausgänge werden direkt abgeschlossen. Der strikt
-geparste Wert `true` aktiviert auch für Ausgänge den vollständigen Pfad
-Stab → A/W → Sichter. Nach einer Änderung muss der App-Container neu erzeugt
-und der Rollen-Workflow fachlich abgenommen werden.
+Standardverhalten erhalten: Nach der LdF-Entscheidung transportiert A/W einen
+Ausgang und schließt ihn direkt ab. Der strikt geparste Wert `true` aktiviert
+auch für Ausgänge die anschließende Sichtung. Nach einer Änderung muss der
+App-Container neu erzeugt und der Rollen-Workflow fachlich abgenommen werden.
+
+### Nachrichtenlauf und Nachweisung
+
+Jede neu aufgenommene oder verfasste Nachricht beginnt bei der Leitung des
+Fernmeldebetriebs (LdF). Die Statuswerte bezeichnen dabei eindeutig die
+aktuell zuständige Arbeitsstufe:
+
+| Status | Zuständig | Bedeutung |
+| --- | --- | --- |
+| `1` | LdF | Eingangsrufnamen in einen Absender übersetzen beziehungsweise beim Ausgang den Rufnamen der Gegenstelle und den vorgesehenen Beförderungsweg festlegen |
+| `2` | A/W | den vorbereiteten Ausgang tatsächlich befördern |
+| `4` | Si | die bereits angenommene oder beförderte Nachricht sichten |
+| `8` | abgeschlossen | Nachricht ist fertig bearbeitet und der Vordruck kann erzeugt werden |
+
+Ein Eingang läuft regulär über `1 → 4 → 8`; eine bereits automatisch
+gesichtete Aufnahme wird nach der LdF-Bearbeitung direkt mit `1 → 8`
+abgeschlossen. Ein Ausgang läuft im Standardmodus über `1 → 2 → 8` und mit
+aktivierter Ausgangssichtung über `1 → 2 → 4 → 8`.
+Beim Eingang erfasst A/W zwingend den empfangenen Rufnamen, kann das Feld
+„Absender“ aber weder im Formular noch über einen manipulierten Request
+schreiben. Erst LdF muss daraus einen nicht leeren Absender festlegen.
+
+Die Nachweisung unterscheidet Aufnahme und Beförderung bewusst. Beim Eingang
+zeigt sie das erfasste Eingangsmedium in Langform, etwa „Fernsprecher“, „Funk“,
+„Melder“, „Fax“, „Fernschreiber“ oder „Datenübertragung“. Beim Ausgang
+kombiniert sie das von LdF gewählte Medium mit dem ergänzenden Freitextweg.
+Dieser Wert gilt erst mit gespeichertem Beförderungszeitpunkt als tatsächlich
+befördert; zuvor steht dort eindeutig „Noch nicht befördert“. Leere Werte
+erscheinen als „Nicht dokumentiert“, unbekannte historische Medien sichtbar
+als „Unbekannt (…)“ und niemals als ausführbares HTML.
 
 Der Anmeldeeinstieg trennt zwei Vorgänge ausdrücklich: „Mit bestehendem Konto
 anmelden“ verlangt das bereits gespeicherte Kennwort und legt niemals ein Konto

@@ -81,24 +81,75 @@ $foreignStaff = ['kuerzel' => 'st0002', 'funktion' => 'S10', 'rolle' => 'Stab'];
 $viewer = ['kuerzel' => 'si0001', 'funktion' => 'Si', 'rolle' => 'Stab'];
 $radio = ['kuerzel' => 'aw0001', 'funktion' => 'A/W', 'rolle' => 'Fernmelder'];
 $otherRadio = ['kuerzel' => 'aw0002', 'funktion' => 'A/W', 'rolle' => 'Fernmelder'];
+$lead = ['kuerzel' => 'ld0001', 'funktion' => 'LdF', 'rolle' => 'Fernmelder'];
 $incoming = [
     '04_richtung' => 'E',
+    '02_zeit' => '2026-07-23 11:59:00',
+    '02_zeichen' => 'ld0001',
     '03_datum' => null,
     '03_zeichen' => '',
+    '06_befwegausw' => '',
     '15_quitdatum' => null,
     '15_quitzeichen' => '',
     '16_empf' => 'S1_rt,S2_bl',
+    'x00_status' => 4,
+    'x01_abschluss' => 'f',
     'x02_sperre' => 'f',
     'x03_sperruser' => '',
 ];
 $outgoing = $incoming + [];
 $outgoing['04_richtung'] = 'A';
+$outgoing['x00_status'] = 2;
+$outgoing['06_befwegausw'] = 'Fu';
 $outgoing['x02_sperre'] = 't';
 $outgoing['x03_sperruser'] = 'aw0001';
+$leadIncoming = $incoming;
+$leadIncoming['02_zeit'] = null;
+$leadIncoming['02_zeichen'] = '';
+$leadIncoming['x00_status'] = 1;
+$leadIncoming['x02_sperre'] = 't';
+$leadIncoming['x03_sperruser'] = 'ld0001';
+$leadOutgoing = $leadIncoming;
+$leadOutgoing['04_richtung'] = 'A';
 
 $assert(estab_message_object_allowed($staff, 'staff-read', $incoming), 'recipient denied');
 $assert(!estab_message_object_allowed($foreignStaff, 'staff-read', $incoming), 'substring recipient accepted');
 $assert(estab_message_object_allowed($viewer, 'viewer-review', $incoming), 'pending viewer item denied');
+$assert(
+    !estab_message_object_allowed($staff, 'staff-read', $leadIncoming),
+    'untranslated incoming item reached recipient queue'
+);
+$assert(
+    estab_message_object_allowed(
+        $lead,
+        'telecommunications-lead-edit',
+        $leadOutgoing
+    )
+        && estab_message_object_allowed(
+            $lead,
+            'telecommunications-lead-incoming-save',
+            $leadIncoming
+        )
+        && estab_message_object_allowed(
+            $lead,
+            'telecommunications-lead-outgoing-save',
+            $leadOutgoing
+        ),
+    'LdF staged object permissions are incomplete'
+);
+$assert(
+    !estab_message_object_allowed(
+        $radio,
+        'telecommunications-edit',
+        $leadOutgoing
+    )
+        && !estab_message_object_allowed(
+            $lead,
+            'telecommunications-lead-edit',
+            $outgoing
+        ),
+    'LdF and A/W stages overlap'
+);
 $assert(estab_message_object_allowed($radio, 'telecommunications-edit', $outgoing), 'pending outgoing denied');
 $assert(estab_message_object_allowed($radio, 'telecommunications-save', $outgoing), 'lock owner denied');
 $assert(!estab_message_object_allowed($otherRadio, 'telecommunications-save', $outgoing), 'foreign lock accepted');
@@ -126,7 +177,7 @@ $transported = $outgoing;
 $transported['03_datum'] = '2026-07-23 12:00:00';
 $transported['03_zeichen'] = 'aw0001';
 $assert(!estab_message_object_allowed($radio, 'telecommunications-save', $transported), 'transported row remained editable');
-$assert(estab_message_object_allowed($otherRadio, 'telecommunications-reset', $outgoing), 'locked pending reset denied');
+$assert(estab_message_object_allowed($otherRadio, 'message-operator-reset', $outgoing), 'locked pending reset denied');
 $recipientPattern = estab_message_recipient_pattern('S1');
 $assert(preg_match('/' . $recipientPattern . '/', 'S1_rt,S2_bl') === 1, 'exact SQL recipient pattern rejected');
 $assert(preg_match('/' . $recipientPattern . '/', 'S10_rt') === 0, 'SQL recipient pattern accepted substring');
@@ -271,8 +322,16 @@ $assert(
             "/message_db_start_worker\\(\\s*'state'/",
             $concurrencySource
         ) === 1
-        && str_contains($concurrencySource, "message_db_start_worker('save'")
-        && str_contains($concurrencySource, "message_db_start_worker('reset'")
+        && str_contains($concurrencySource, "'ldf-save'")
+        && str_contains($concurrencySource, "'aw-save'")
+        && str_contains(
+            $concurrencySource,
+            'estab_message_update_locked_operator_stage'
+        )
+        && str_contains(
+            $concurrencySource,
+            'estab_message_acquire_operator_stage_lock'
+        )
         && str_contains($concurrencySource, 'estab_admin_acquire_counter_lock'),
     'message concurrency integration coverage is incomplete'
 );

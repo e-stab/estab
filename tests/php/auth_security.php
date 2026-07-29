@@ -304,8 +304,14 @@ if ($registrationSetting === false) {
 $loginController = file_get_contents(dirname(__DIR__, 2) . '/4fach/data_hndl.php');
 $assert(is_string($loginController), 'login controller source readable');
 $assert(
-    substr_count($loginController, 'if ($login ["funktion"] != "A/W")') >= 2
-        && !str_contains($loginController, '$wasInactive && $login ["funktion"] != "A/W"'),
+    substr_count(
+        $loginController,
+        '!in_array ($login ["funktion"], array ("A/W", "LdF"), true)'
+    ) >= 2
+        && !str_contains(
+            $loginController,
+            '$wasInactive && !in_array ($login ["funktion"]'
+        ),
     'active imported users do not reconcile their legacy dynamic tables on login'
 );
 $assert(

@@ -208,22 +208,34 @@ $assert(
 $assert(
     $siIncomingQuery['parameters'] === [42]
         && str_contains($siIncomingQuery['sql'], '`einsatz_id` = ?')
+        && str_contains($siIncomingQuery['sql'], '`x00_status` = 4')
         && str_contains($siIncomingQuery['sql'], "`04_richtung` = 'E'")
         && !str_contains($siIncomingQuery['sql'], '`03_datum` IS NOT NULL')
+        && str_contains($siCombinedQuery['sql'], '`x00_status` = 4')
         && str_contains($siCombinedQuery['sql'], '`03_datum` IS NOT NULL')
         && str_contains($siCombinedQuery['sql'], "`03_zeichen` != ''"),
-    'review queue query ignores the configured incoming/outgoing scope'
+    'review queue query counts messages outside the visible status-four scope'
 );
 $assert(
     $staffQueueQuery['parameters'] === [42, '%S1%', 42, '%S1%']
         && substr_count($staffQueueQuery['sql'], '`nv_nachrichten`') === 2
         && substr_count($staffQueueQuery['sql'], '`einsatz_id` = ?') === 2
+        && str_contains(
+            $staffQueueQuery['sql'],
+            "(`all_messages`.`04_richtung` <> 'E'"
+                . ' OR `all_messages`.`x00_status` <> 1)'
+        )
+        && str_contains(
+            $staffQueueQuery['sql'],
+            "(`done_messages`.`04_richtung` <> 'E'"
+                . ' OR `done_messages`.`x00_status` <> 1)'
+        )
         && str_contains($staffQueueQuery['sql'], '`usr__fkt_s1_erl`')
         && str_contains(
             $staffQueueQuery['sql'],
             '`done_messages`.`00_lfd` = `done_state`.`nachnum`'
         ),
-    'staff queue query changed its recipient or done-state semantics'
+    'staff queue counts incoming status-one messages or changed recipient state'
 );
 foreach (
     [

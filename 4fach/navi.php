@@ -143,6 +143,12 @@
              break;
 
              case "Fernmelder" :
+                if (($_SESSION ["vStab_funktion"] ?? "") === "LdF") {
+                  echo "<tr><td>\n";
+                  echo "<input type=\"image\" name=\"ldf_nachrichten\" src=\"button.php?type=menue&m_text=Disposition&m_fs=10&m_form=rund\" alt=\"Disposition\">\n";
+                  echo "</td></tr>\n";
+                  break;
+                }
                   echo "<tr><td>\n";
                   echo "<input type=\"image\" name=\"fm_eingang\" src=\"button.php?type=menue&m_text=Eingang&m_fs=10&m_form=rund\" alt=\"Eingang\">\n";
                   echo "</td></tr>\n";

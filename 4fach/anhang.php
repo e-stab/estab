@@ -22,6 +22,7 @@ require_once __DIR__ . "/../app/attachment.php";
 require_once __DIR__ . "/../app/csrf.php";
 require_once __DIR__ . "/../app/file_access.php";
 require_once __DIR__ . "/../app/session_ui.php";
+require_once __DIR__ . "/../app/workflow.php";
 
 class fileupload extends file_upload {
   // fs - fileselectform Dateiauswahl
@@ -929,7 +930,15 @@ require_once ("./db_operation.php");  // Datenbank operationen
     $_SESSION["12_anhang"]       = estab_attachment_post_scalar ($_POST, "12_anhang");
     $_SESSION["12_inhalt"]       = estab_attachment_post_scalar ($_POST, "12_inhalt");
     $_SESSION["12_abfzeit"]      = estab_attachment_post_scalar ($_POST, "12_abfzeit");
-    $_SESSION["13_abseinheit"]   = estab_attachment_post_scalar ($_POST, "13_abseinheit");
+    $attachmentIdentity = estab_auth_session_identity ($_SESSION);
+    $attachmentTask = estab_attachment_post_scalar ($_POST, "task");
+    $incomingSenderProtected =
+      is_array ($attachmentIdentity)
+      && estab_workflow_is_telecommunications ($attachmentIdentity)
+      && str_starts_with ($attachmentTask, "FM-Eingang");
+    $_SESSION["13_abseinheit"] = $incomingSenderProtected
+      ? ""
+      : estab_attachment_post_scalar ($_POST, "13_abseinheit");
     $_SESSION["14_zeichen"]      = estab_attachment_post_scalar ($_POST, "14_zeichen");
     $_SESSION["14_funktion"]     = estab_attachment_post_scalar ($_POST, "14_funktion");
     $_SESSION["15_quitdatum"]    = estab_attachment_post_scalar ($_POST, "15_quitdatum");
@@ -975,6 +984,13 @@ require_once ("./db_operation.php");  // Datenbank operationen
     if (isset ($_SESSION["12_inhalt"])){       $data["12_inhalt"]       = $_SESSION["12_inhalt"];       unset ($_SESSION["12_inhalt"]);  }      else { $data["12_inhalt"]      = "";}
     if (isset ($_SESSION["12_abfzeit"])){      $data["12_abfzeit"]      = $_SESSION["12_abfzeit"];      unset ($_SESSION["12_abfzeit"]);  }     else { $data["12_abfzeit"]     = "";}
     if (isset ($_SESSION["13_abseinheit"])){   $data["13_abseinheit"]   = $_SESSION["13_abseinheit"];   unset ($_SESSION["13_abseinheit"]);  }  else { $data["13_abseinheit"]  = "";}
+    $restoreIdentity = estab_auth_session_identity ($_SESSION);
+    if (
+      is_array ($restoreIdentity)
+      && estab_workflow_is_telecommunications ($restoreIdentity)
+    ) {
+      $data ["13_abseinheit"] = "";
+    }
     if (isset ($_SESSION["14_zeichen"])){      $data["14_zeichen"]      = $_SESSION["14_zeichen"];      unset ($_SESSION["14_zeichen"]);  }     else { $data["14_zeichen"]     = "";}
     if (isset ($_SESSION["14_funktion"])){     $data["14_funktion"]     = $_SESSION["14_funktion"];     unset ($_SESSION["14_funktion"]);  }    else { $data["14_funktion"]    = "";}
     if (isset ($_SESSION["15_quitdatum"])){    $data["15_quitdatum"]    = $_SESSION["15_quitdatum"];    unset ($_SESSION["15_quitdatum"]); }    else { $data["15_quitdatum"]   = "";}

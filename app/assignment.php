@@ -111,6 +111,7 @@ function estab_assignment_function_roles(
     $roles = [
         'Si' => 'Stab',
         'A/W' => 'Fernmelder',
+        'LdF' => 'Fernmelder',
     ];
     $statement = $connection->prepare(
         'SELECT `mtx_fkt`, `mtx_rolle` FROM '
@@ -169,6 +170,7 @@ function estab_assignment_roles_from_matrix(array $matrix): array
     $roles = [
         'Si' => 'Stab',
         'A/W' => 'Fernmelder',
+        'LdF' => 'Fernmelder',
     ];
     foreach ($cells as $cell) {
         if (!is_array($cell)) {

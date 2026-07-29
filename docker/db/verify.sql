@@ -73,6 +73,9 @@ SELECT
          (BINARY assignment_user.`funktion` = BINARY 'A/W'
            AND BINARY assignment_user.`rolle` = BINARY 'Fernmelder')
          OR
+         (BINARY assignment_user.`funktion` = BINARY 'LdF'
+           AND BINARY assignment_user.`rolle` = BINARY 'Fernmelder')
+         OR
          EXISTS (
            SELECT 1
              FROM `nv_empfmtx` AS assignment_matrix

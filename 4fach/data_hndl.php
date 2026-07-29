@@ -23,6 +23,7 @@ require_once __DIR__ . "/tools.php";
 require_once __DIR__ . "/../app/auth.php";
 require_once __DIR__ . "/../app/assignment.php";
 require_once __DIR__ . "/../app/message_repository.php";
+require_once __DIR__ . "/../app/message_transport.php";
 
 if (validate){
   require_once __DIR__ . "/vali_data.php";
@@ -245,7 +246,7 @@ function check_save_user (array $loginData, string &$loginError) {
       // connection, under a function-scoped advisory lock, before the account
       // is activated. A failed or interrupted reconciliation leaves the
       // account untouched and can safely be retried.
-      if ($login ["funktion"] != "A/W") {
+      if (!in_array ($login ["funktion"], array ("A/W", "LdF"), true)) {
         $usertablename = $conf_4f_tbl ["usrtblprefix"].strtolower ($login ["funktion"])."_".$login ["kuerzel"];
         $fkttblname = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($login ["funktion"]);
         $dbaccess->create_user_table ($usertablename, $fkttblname);
@@ -309,7 +310,7 @@ function check_save_user (array $loginData, string &$loginError) {
       return true;
     }
 
-    if ($login ["funktion"] != "A/W") {
+    if (!in_array ($login ["funktion"], array ("A/W", "LdF"), true)) {
       $usertablename = $conf_4f_tbl ["usrtblprefix"].strtolower ($login ["funktion"])."_".$login ["kuerzel"];
       $fkttblname = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($login ["funktion"]);
       $dbaccess->create_user_table ($usertablename, $fkttblname);
@@ -527,11 +528,13 @@ function check_and_save ($data){
           "12_anhang" => $data ["12_anhang"],
           "12_inhalt" => $data ["12_inhalt"],
           "12_abfzeit" => konv_taktime_datetime ($data ["12_abfzeit"]),
-          "13_abseinheit" => $data ["13_abseinheit"],
+          // A/W records the received callsign only. The sender is translated
+          // and supplied by LdF in the following, locked workflow stage.
+          "13_abseinheit" => "",
           "14_zeichen" => $data ["14_zeichen"],
           "14_funktion" => $data ["14_funktion"],
           "16_empf" => $data ["16_empf"],
-          "x00_status" => 4,
+          "x00_status" => 1,
           "x01_abschluss" => "f",
         ),
         $conf_4f_tbl ["anhang"]
@@ -617,15 +620,17 @@ function check_and_save ($data){
           "12_anhang" => $data ["12_anhang"],
           "12_inhalt" => $data ["12_inhalt"],
           "12_abfzeit" => konv_taktime_datetime ($data ["12_abfzeit"]),
-          "13_abseinheit" => $data ["13_abseinheit"],
+          "13_abseinheit" => "",
           "14_zeichen" => $data ["14_zeichen"],
           "14_funktion" => $data ["14_funktion"],
           "15_quitdatum" => konv_taktime_datetime ($data ["15_quitdatum"]),
           "15_quitzeichen" => $data ["15_quitzeichen"],
           "16_empf" => $data ["16_empf"],
           "17_vermerke" => $data ["17_vermerke"],
-          "x00_status" => 8,
-          "x01_abschluss" => "t",
+          // Preserve the autosighting fields, but do not expose the message
+          // as complete before LdF has translated the sender.
+          "x00_status" => 1,
+          "x01_abschluss" => "f",
         ),
         $conf_4f_tbl ["anhang"]
       );
@@ -667,11 +672,6 @@ function check_and_save ($data){
          /*----------------------------------------------------*/
       }
 
-      if ($data ["02_zeit"] == "" ) {
-        $data ["02_zeit"] = convtodatetime ( date ("dm"),   date ("Hi") )  ;
-      }
-
-
        $data ["16_empf"] = $redcopy2."_rt,".$data ["14_funktion"]."_gn"; // Der Verfasser bekommt den gruenen
        $storedMessage = estab_message_insert_numbered (
          $messageConnection,
@@ -680,7 +680,8 @@ function check_and_save ($data){
          "A",
          Nachweisung === "getrennt",
          array (
-           "02_zeit" => $data ["02_zeit"],
+           // The acceptance mark belongs to LdF, not to the author.
+           "02_zeit" => null,
            "02_zeichen" => "",
            "07_durchspruch" => $data ["07_durchspruch"],
            "08_befhinweis" => $data ["08_befhinweis"],
@@ -695,7 +696,7 @@ function check_and_save ($data){
            "14_zeichen" => $data ["14_zeichen"],
            "14_funktion" => $data ["14_funktion"],
            "16_empf" => $data ["16_empf"],
-           "x00_status" => 2,
+           "x00_status" => 1,
            "x01_abschluss" => "f",
          ),
          $conf_4f_tbl ["anhang"]
@@ -803,10 +804,99 @@ function check_and_save ($data){
 
 		break;
 
+    case "LdF-Eingang":
+    case "LdF-Ausgang":
+      $ldfDirection = $data ["task"] === "LdF-Eingang" ? "E" : "A";
+      if ($data ["02_zeit"] == "") {
+        $data ["02_zeit"] = date ("Hi");
+      }
+      // The signed acceptance mark is an identity attribute. A forged form
+      // value must never choose another operator's code.
+      $data ["02_zeichen"] = (string) $_SESSION ["vStab_kuerzel"];
+
+      if (validate) {
+        $vali = new vali_data_form ($data);
+        $result = $vali->validatethis ();
+        $data = $vali->i_data;
+        if (!$result) {
+          $data ["02_zeichen"] = (string) $_SESSION ["vStab_kuerzel"];
+          $form = new nachrichten4fach (
+            $data,
+            $data ["task"],
+            $vali->validate
+          );
+          exit;
+        }
+      }
+
+      $ldfFields = array (
+        "02_zeit" => konv_taktime_datetime ($data ["02_zeit"]),
+        "02_zeichen" => (string) $_SESSION ["vStab_kuerzel"],
+        "x02_sperre" => "f",
+        "x03_sperruser" => "",
+      );
+      if ($ldfDirection === "E") {
+        $authoritativeIncoming = estab_message_fetch_by_id (
+          $messageConnection,
+          $conf_4f_tbl ["nachrichten"],
+          $data ["00_lfd"]
+        );
+        if (!is_array ($authoritativeIncoming)) {
+          throw new RuntimeException ("Incoming message disappeared");
+        }
+        $alreadyAutoSighted =
+          !estab_datetime_is_unset (
+            $authoritativeIncoming ["15_quitdatum"] ?? null
+          )
+          && (string) (
+            $authoritativeIncoming ["15_quitzeichen"] ?? ""
+          ) !== "";
+        $ldfFields ["13_abseinheit"] = trim (
+          (string) $data ["13_abseinheit"]
+        );
+        $ldfFields ["x00_status"] = $alreadyAutoSighted ? 8 : 4;
+        $ldfFields ["x01_abschluss"] = $alreadyAutoSighted ? "t" : "f";
+      } else {
+        $transportMedium = estab_message_medium_storage_value (
+          $data ["06_befwegausw"]
+        );
+        if ($transportMedium === null) {
+          throw new InvalidArgumentException (
+            "Ungültiger Beförderungsweg"
+          );
+        }
+        $ldfFields ["05_gegenstelle"] = trim (
+          (string) $data ["05_gegenstelle"]
+        );
+        $ldfFields ["06_befweg"] = trim ((string) $data ["06_befweg"]);
+        $ldfFields ["06_befwegausw"] = $transportMedium;
+        $ldfFields ["x00_status"] = 2;
+        $ldfFields ["x01_abschluss"] = "f";
+      }
+
+      $ldfSaved = estab_message_update_locked_operator_stage (
+        $messageConnection,
+        $conf_4f_tbl ["nachrichten"],
+        $data ["00_lfd"],
+        (string) $_SESSION ["vStab_kuerzel"],
+        $ldfDirection,
+        1,
+        $ldfFields
+      );
+      if (!$ldfSaved) {
+        throw new RuntimeException ("Message lock or LdF stage changed");
+      }
+      protokolleintrag (
+        $ldfDirection === "E" ? "LdF-Eingang" : "LdF-Ausgang",
+        "message_id=".estab_message_positive_id ($data ["00_lfd"])
+      );
+    break;
+
 		case "FM-Ausgang":
-			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>FM-Ausgang</big><br>\n";}		
+			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>FM-Ausgang</big><br>\n";}
 			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### - FM-Ausgang <br>\n";}
-      	if ($data ["03_datum"] == "" ) { $data ["03_datum"] = date ("Hi") ; }
+      if ($data ["03_datum"] == "" ) { $data ["03_datum"] = date ("Hi") ; }
+      $data ["03_zeichen"] = (string) $_SESSION ["vStab_kuerzel"];
 	      if (validate){
    	   	   /*----------------------------------------------------*/
 			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>"; var_dump ($data); echo "<br><br>";}
@@ -844,17 +934,17 @@ function check_and_save ($data){
         $transportStatus = 8;
         $transportClosed = "t";
        }
-       $transportSaved = estab_message_update_locked_outgoing (
+       $transportSaved = estab_message_update_locked_operator_stage (
          $messageConnection,
          $conf_4f_tbl ["nachrichten"],
          $data ["00_lfd"],
          (string) $_SESSION ["vStab_kuerzel"],
+         "A",
+         2,
          array (
            "03_datum" => konv_taktime_datetime ($data ["03_datum"]),
-           "03_zeichen" => $data ["03_zeichen"],
-           "05_gegenstelle" => $data ["05_gegenstelle"],
-           "06_befweg" => $data ["06_befweg"],
-           "06_befwegausw" => $data ["06_befwegausw"],
+           // As with LdF, the authenticated identity owns the mark.
+           "03_zeichen" => (string) $_SESSION ["vStab_kuerzel"],
            "x00_status" => $transportStatus,
            "x01_abschluss" => $transportClosed,
            "x02_sperre" => "f",
@@ -885,6 +975,7 @@ function check_and_save ($data){
        } // for 1.
 
       if ($data ["03_datum"] == "" ) { $data ["03_datum"] = date ("Hi") ; }
+      $data ["03_zeichen"] = (string) $_SESSION ["vStab_kuerzel"];
 
       if (validate){
 			if (debug){
@@ -916,17 +1007,16 @@ function check_and_save ($data){
            	exit ;
          }
       }
-      $transportAndReviewSaved = estab_message_update_locked_outgoing (
+      $transportAndReviewSaved = estab_message_update_locked_operator_stage (
         $messageConnection,
         $conf_4f_tbl ["nachrichten"],
         $data ["00_lfd"],
         (string) $_SESSION ["vStab_kuerzel"],
+        "A",
+        2,
         array (
           "03_datum" => konv_taktime_datetime ($data ["03_datum"]),
-          "03_zeichen" => $data ["03_zeichen"],
-          "05_gegenstelle" => $data ["05_gegenstelle"],
-          "06_befweg" => $data ["06_befweg"],
-          "06_befwegausw" => $data ["06_befwegausw"],
+          "03_zeichen" => (string) $_SESSION ["vStab_kuerzel"],
           "15_quitdatum" => konv_taktime_datetime ($data ["15_quitdatum"]),
           "15_quitzeichen" => $data ["15_quitzeichen"],
           "16_empf" => $data ["16_empf"],
@@ -1405,17 +1495,40 @@ function check_and_save ($data){
     $recordId = estab_message_positive_id ($lfd);
     $connection = estab_message_connect ($conf_4f_db);
     try {
-      if (!estab_message_release_lock (
+      $lockedMessage = estab_message_fetch_by_id (
         $connection,
         $conf_4f_tbl ["nachrichten"],
         $recordId
+      );
+      if (!is_array ($lockedMessage)) {
+        throw new RuntimeException ("Message lock reset target not found");
+      }
+      $stageStatus = (int) ($lockedMessage ["x00_status"] ?? 0);
+      $stageDirection = (string) (
+        $lockedMessage ["04_richtung"] ?? ""
+      );
+      if (
+        !(
+          ($stageStatus === 1
+            && in_array ($stageDirection, array ("E", "A"), true))
+          || ($stageStatus === 2 && $stageDirection === "A")
+        )
+      ) {
+        throw new RuntimeException ("Message is not in an operator stage");
+      }
+      if (!estab_message_release_operator_stage_lock (
+        $connection,
+        $conf_4f_tbl ["nachrichten"],
+        $recordId,
+        $stageDirection,
+        $stageStatus
       )) {
         throw new RuntimeException ("Message lock reset lost its target");
       }
     } finally {
       estab_auth_close ($connection);
     }
-    protokolleintrag ("Fernmelder Free_record", "message_id=".$recordId);
+    protokolleintrag ("Nachrichtensperre freigegeben", "message_id=".$recordId);
   }
 
 ?>

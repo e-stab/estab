@@ -316,8 +316,24 @@ $assert(
 $assert(
     str_contains($verify, 'active_user_assignments_valid_ok')
         && str_contains($verify, 'assignment_user.`aktiv` = 1')
+        && str_contains(
+            $verify,
+            "BINARY assignment_user.`funktion` = BINARY 'LdF'"
+        )
+        && str_contains(
+            $verify,
+            "BINARY assignment_user.`rolle` = BINARY 'Fernmelder'"
+        )
         && str_contains($verify, 'BINARY assignment_matrix.`mtx_fkt`')
         && str_contains($readiness, 'assignment_user.aktiv = 1')
+        && str_contains(
+            $readiness,
+            "BINARY assignment_user.funktion = BINARY 'LdF'"
+        )
+        && str_contains(
+            $readiness,
+            "BINARY assignment_user.rolle = BINARY 'Fernmelder'"
+        )
         && str_contains($readiness, 'BINARY assignment_matrix.mtx_fkt'),
     'Readiness does not reject active accounts with a stale function/role pair'
 );

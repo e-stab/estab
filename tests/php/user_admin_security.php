@@ -81,6 +81,7 @@ foreach ([
 }
 $functionRoles = [
     'A/W' => 'Fernmelder',
+    'LdF' => 'Fernmelder',
     'S1' => 'Stab',
     'S2' => 'FB',
 ];
@@ -90,6 +91,13 @@ $assert(
         'rolle' => 'Stab',
     ],
     'administrative assignment did not derive the role server-side'
+);
+$assert(
+    estab_user_admin_validate_assignment('LdF', $functionRoles) === [
+        'funktion' => 'LdF',
+        'rolle' => 'Fernmelder',
+    ],
+    'reserved LdF assignment was not provisioned with the Fernmelder role'
 );
 foreach (['', 'S3', 'S 1', "S1\0"] as $invalidFunction) {
     $assert(
@@ -450,6 +458,7 @@ $assert(
         && str_contains($assignmentSource, '$connection->prepare(')
         && str_contains($assignmentSource, "'Si' => 'Stab'")
         && str_contains($assignmentSource, "'A/W' => 'Fernmelder'")
+        && str_contains($assignmentSource, "'LdF' => 'Fernmelder'")
         && str_contains($assignmentSource, "['Stab', 'FB']"),
     'assignable functions are not derived from the server-controlled matrix'
 );

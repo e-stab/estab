@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . "/../app/message_transport.php";
+
 class vali_data_form {
 
   var $i_data ;      // Daten des Formulars
@@ -156,8 +158,13 @@ class vali_data_form {
   \*****************************************************************************/
   function checkallfields () {
     if (isset ($this->i_data ["01_medium"] ) )        {
-      $result = $this->datatest ( "text", $this->i_data ["01_medium"] ) ;
-      $this->validate["01_medium"] = $result ["l_data"] ;
+      $canonicalMedium = estab_message_medium_storage_value (
+        $this->i_data ["01_medium"]
+      );
+      $this->validate["01_medium"] = $canonicalMedium !== null;
+      if ($canonicalMedium !== null) {
+        $this->i_data ["01_medium"] = $canonicalMedium;
+      }
     }
 
     if (isset ( $this->i_data ["01_datum"] ))         {
@@ -189,9 +196,29 @@ class vali_data_form {
       $this->validate["03_zeichen"]  =  $result ["l_data"] ;
     }
 
-//    if (isset ( $this->i_data ["05_gegenstelle"] )) {  $this->validate["05_gegenstelle"]  = $this->i_datatest ( "zeit", $this->i_data ["05_gegenstelle"] ) ; }
-//    if (isset ( $this->i_data ["06_befweg"] ))      {  $this->validate["06_befweg"]  = $this->i_datatest ( "zeit", $this->i_data ["06_befweg06_befweg"] ) ; }
-//    if (isset ( $this->i_data ["06_befwegausw"] ))  {  $this->validate["06_befwegausw"]  = $this->i_datatest ( "zeit", $this->i_data ["06_befwegausw"] ) ; }
+    if (isset ($this->i_data ["05_gegenstelle"])) {
+      $value = $this->i_data ["05_gegenstelle"];
+      $this->validate ["05_gegenstelle"] =
+        is_string ($value)
+        && strlen (trim ($value)) > 0
+        && strlen ($value) <= 128
+        && preg_match ('//u', $value) === 1
+        && preg_match ('/[\p{C}]/u', $value) !== 1;
+    }
+    if (isset ($this->i_data ["06_befweg"])) {
+      $value = $this->i_data ["06_befweg"];
+      $this->validate ["06_befweg"] =
+        is_string ($value)
+        && strlen ($value) <= 128
+        && preg_match ('//u', $value) === 1
+        && preg_match ('/[\p{C}]/u', $value) !== 1;
+    }
+    if (isset ($this->i_data ["06_befwegausw"])) {
+      $this->validate ["06_befwegausw"] =
+        estab_message_medium_storage_value (
+          $this->i_data ["06_befwegausw"]
+        ) !== null;
+    }
 //    if (isset ( $this->i_data ["07_durchspruch"] )) {  $this->validate["07_durchspruch"]  = $this->i_datatest ( "zeit", $this->i_data ["07_durchspruch"] ) ; }
 //    if (isset ( $this->i_data ["08_befhinweis"] ))  {  $this->validate["08_befhinweis"]  = $this->i_datatest ( "zeit", $this->i_data ["08_befhinweis"] ) ; }
 //    if (isset ( $this->i_data ["08_befhinwausw"] )) {  $this->validate["08_befhinwausw"]  = $this->i_datatest ( "zeit", $this->i_data ["08_befhinwausw"] ) ; }
@@ -211,8 +238,9 @@ class vali_data_form {
       $this->validate["12_abfzeit"] = $result ["l_data"] ;
     }
     if (isset ( $this->i_data ["13_abseinheit"] ))    {
-      $result = $this->datatest ( "text", $this->i_data ["13_abseinheit"] ) ;
-      $this->validate["13_abseinheit"]  = $result ["l_data"];
+      $value = $this->i_data ["13_abseinheit"];
+      $this->validate["13_abseinheit"] =
+        is_string ($value) && strlen (trim ($value)) > 0;
     }
     if (isset ( $this->i_data ["14_zeichen"] ))       {
       $result = $this->datatest ( "kuerzel", $this->i_data ["14_zeichen"] ) ;
@@ -253,10 +281,10 @@ class vali_data_form {
           $zw = $this->validate["01_medium"] &&
                 $this->validate["01_datum"] &&
                 $this->validate["01_zeichen"] &&
+                $this->validate["05_gegenstelle"] &&
                 $this->validate["10_anschrift"] &&
                 $this->validate["12_inhalt"] &&
-                $this->validate["12_abfzeit"] &&
-                $this->validate["13_abseinheit"] ;
+                $this->validate["12_abfzeit"] ;
 
         break ;
       case "FM-Eingang_Sichter" :
@@ -264,10 +292,10 @@ class vali_data_form {
          $zw = ($this->validate["01_medium"] &&
                 $this->validate["01_datum"] &&
                 $this->validate["01_zeichen"] &&
+                $this->validate["05_gegenstelle"] &&
                 $this->validate["10_anschrift"] &&
                 $this->validate["12_inhalt"] &&
                 $this->validate["12_abfzeit"] &&
-                $this->validate["13_abseinheit"] &&
                 $this->validate["15_quitzeichen"] &&
                 $this->validate["15_quitdatum"] );
 
@@ -297,6 +325,18 @@ class vali_data_form {
       case "FM-Ausgang":
           $zw =($this->validate["03_datum"] &&
                 $this->validate["03_zeichen"]);
+        break ;
+      case "LdF-Eingang":
+          $zw = ($this->validate["02_zeit"] &&
+                 $this->validate["02_zeichen"] &&
+                 $this->validate["13_abseinheit"]);
+        break ;
+      case "LdF-Ausgang":
+          $zw = ($this->validate["02_zeit"] &&
+                 $this->validate["02_zeichen"] &&
+                 $this->validate["05_gegenstelle"] &&
+                 $this->validate["06_befwegausw"] &&
+                 $this->validate["06_befweg"]);
         break ;
       case "FM-Ausgang_Sichter":
           $zw =($this->validate["03_datum"] &&

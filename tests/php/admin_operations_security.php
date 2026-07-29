@@ -46,6 +46,13 @@ $invalid['pos_12'] = 'A/W';
 $assert(estab_admin_validate_matrix($invalid)['valid'] === false, 'reserved A/W function accepted');
 
 $invalid = $validMatrixInput;
+$invalid['pos_12'] = 'ldf';
+$assert(
+    estab_admin_validate_matrix($invalid)['valid'] === false,
+    'reserved LdF function accepted case-insensitively'
+);
+
+$invalid = $validMatrixInput;
 $invalid['pos_12'] = 'S2;SQL';
 $assert(estab_admin_validate_matrix($invalid)['valid'] === false, 'unsafe function identifier accepted');
 
@@ -239,7 +246,8 @@ $assert(
             'data-estab-confirm="replace-editor-with-standard"'
         )
         && str_contains($matrixPage, 'data-estab-confirm="replace-standard"')
-        && str_contains($matrixPage, 'bisherigen Standard ersetzen'),
+        && str_contains($matrixPage, 'bisherigen Standard ersetzen')
+        && str_contains($matrixPage, '<code>LdF</code> sind reserviert'),
     'matrix editor does not expose the three explicit database-backed preset actions'
 );
 $assert(

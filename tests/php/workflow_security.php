@@ -292,6 +292,110 @@ $staff = ['benutzer' => 'Staff', 'kuerzel' => 'staff1', 'funktion' => 'S1', 'rol
 $advisor = ['benutzer' => 'Advisor', 'kuerzel' => 'fb0001', 'funktion' => 'POL', 'rolle' => 'FB'];
 $viewer = ['benutzer' => 'Viewer', 'kuerzel' => 'si0001', 'funktion' => 'Si', 'rolle' => 'Stab'];
 $telecommunications = ['benutzer' => 'Radio', 'kuerzel' => 'aw0001', 'funktion' => 'A/W', 'rolle' => 'Fernmelder'];
+$telecommunicationsLead = ['benutzer' => 'Lead', 'kuerzel' => 'ldf001', 'funktion' => 'LdF', 'rolle' => 'Fernmelder'];
+
+$assert(
+    estab_workflow_is_telecommunications($telecommunications)
+        && !estab_workflow_is_telecommunications($telecommunicationsLead)
+        && estab_workflow_is_telecommunications_lead($telecommunicationsLead)
+        && !estab_workflow_is_telecommunications_lead($telecommunications)
+        && !estab_workflow_is_telecommunications(
+            array_replace($telecommunications, ['rolle' => 'Stab'])
+        )
+        && !estab_workflow_is_telecommunications_lead(
+            array_replace($telecommunicationsLead, ['rolle' => 'Stab'])
+        ),
+    'A/W and LdF telecommunications identities are not strictly separated'
+);
+
+$incomingTelecommunicationsTasks = [
+    'FM-Eingang',
+    'FM-Eingang_Sichter',
+    'FM-Eingang_Anhang',
+    'FM-Eingang_Anhang_Sichter',
+];
+foreach ($incomingTelecommunicationsTasks as $incomingTask) {
+    $assert(
+        estab_workflow_route_allowed(
+            $telecommunications,
+            'POST',
+            ['task' => $incomingTask]
+        )
+            && estab_workflow_route_allowed(
+                $telecommunications,
+                'POST',
+                ['task' => $incomingTask, '13_abseinheit' => '']
+            )
+            && estab_workflow_route_allowed(
+                $telecommunications,
+                'POST',
+                ['task' => $incomingTask, '13_abseinheit' => " \t"]
+            ),
+        $incomingTask . ' rejects an A/W request without a supplied sender'
+    );
+    foreach (['Leitstelle Nord', ' Leitstelle Nord ', ['Leitstelle Nord'], 42] as $forgedSender) {
+        $assert(
+            !estab_workflow_route_allowed(
+                $telecommunications,
+                'POST',
+                ['task' => $incomingTask, '13_abseinheit' => $forgedSender]
+            ),
+            $incomingTask . ' accepts an A/W-supplied sender'
+        );
+    }
+    $assert(
+        !estab_workflow_route_allowed(
+            $telecommunicationsLead,
+            'POST',
+            ['task' => $incomingTask]
+        ),
+        $incomingTask . ' is reachable through the LdF role'
+    );
+}
+
+foreach (['LdF-Eingang', 'LdF-Ausgang'] as $leadTask) {
+    $assert(
+        estab_workflow_route_allowed(
+            $telecommunicationsLead,
+            'POST',
+            ['task' => $leadTask, '00_lfd' => '1']
+        ),
+        $leadTask . ' is denied to LdF'
+    );
+    foreach ([$telecommunications, $staff, $viewer] as $nonLeadIdentity) {
+        $assert(
+            !estab_workflow_route_allowed(
+                $nonLeadIdentity,
+                'POST',
+                ['task' => $leadTask, '00_lfd' => '1']
+            ),
+            $leadTask . ' is reachable without the LdF role'
+        );
+    }
+}
+$assert(
+    estab_workflow_route_allowed(
+        $telecommunicationsLead,
+        'POST',
+        ['ldf' => 'meldung', '00_lfd' => '1']
+    )
+        && !estab_workflow_route_allowed(
+            $telecommunications,
+            'POST',
+            ['ldf' => 'meldung', '00_lfd' => '1']
+        )
+        && estab_workflow_route_allowed(
+            $telecommunicationsLead,
+            'POST',
+            ['ldf_nachrichten_x' => '1']
+        )
+        && !estab_workflow_route_allowed(
+            $telecommunications,
+            'POST',
+            ['ldf_nachrichten_x' => '1']
+        ),
+    'LdF message selection or navigation is not isolated from A/W'
+);
 
 $assert(
     !estab_workflow_route_allowed($staff, 'POST', $existingCredentials),
@@ -355,6 +459,13 @@ foreach (["x' OR 1=1", '-1', '01', [], null] as $unsafeCategory) {
 $assert(
     estab_workflow_message_operation(['stab' => 'meldung', '00_lfd' => '1']) === 'staff-read'
         && estab_workflow_message_operation(['fm' => 'meldung', '00_lfd' => '1']) === 'telecommunications-edit'
+        && estab_workflow_message_operation(['ldf' => 'meldung', '00_lfd' => '1']) === 'telecommunications-lead-edit'
+        && estab_workflow_message_operation(['task' => 'LdF-Eingang', '00_lfd' => '1'])
+            === 'telecommunications-lead-incoming-save'
+        && estab_workflow_message_operation(['task' => 'LdF-Ausgang', '00_lfd' => '1'])
+            === 'telecommunications-lead-outgoing-save'
+        && estab_workflow_message_operation(['reset_record' => '1'])
+            === 'message-operator-reset'
         && estab_workflow_message_operation(['action' => 'gelesen', 'todo' => 'set']) === 'staff-state',
     'message object operation mapping is incomplete'
 );
@@ -369,6 +480,10 @@ $assert(
     str_contains($mainController, 'estab_workflow_public_login_request')
         && str_contains($mainController, 'estab_workflow_route_allowed')
         && str_contains($mainController, 'estab_workflow_record_id')
+        && str_contains(
+            $mainController,
+            '$messageOperation === "message-operator-reset"'
+        )
         && str_contains($mainController, 'estab_csrf_is_valid')
         && str_contains($mainController, 'estab_workflow_legacy_login_without_csrf_allowed')
         && str_contains(

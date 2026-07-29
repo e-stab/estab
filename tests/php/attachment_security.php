@@ -357,6 +357,13 @@ $assert(
     'direct list and upload preparation handle database failures'
 );
 $assert(
+    str_contains(
+        $controllerSource,
+        'require_once __DIR__ . "/../app/workflow.php";'
+    ),
+    'attachment controller uses workflow role helpers without loading them'
+);
+$assert(
     preg_match(
         '/function fileselectwindow \(\)\s*\{\s*'
             . 'require \("\.\.\/4fcfg\/dbcfg\.inc\.php"\);\s*'
@@ -385,6 +392,81 @@ $assert(
         && str_contains($messageFormSource, 'if (!$this->feld[17])')
         && str_contains($messageFormSource, 'name=\\"17_vermerke\\"'),
     'returned A/W attachment form preserves address, copy selection and sighter notes'
+);
+
+$senderTaskBlock = [];
+$assert(
+    preg_match(
+        '/\$senderAssignedByLead\s*=\s*in_array\s*\(\s*'
+            . '\$this->task,\s*array\s*\((?<tasks>.*?)\),\s*true\s*\);/s',
+        $messageFormSource,
+        $senderTaskBlock
+    ) === 1,
+    'message form does not define the protected A/W incoming sender tasks'
+);
+$protectedSenderTasks = [];
+if (isset($senderTaskBlock['tasks'])) {
+    preg_match_all('/"([^"]+)"/', $senderTaskBlock['tasks'], $protectedSenderTasks);
+}
+$actualProtectedSenderTasks = $protectedSenderTasks[1] ?? [];
+$expectedProtectedSenderTasks = [
+    'FM-Eingang',
+    'FM-Eingang_Sichter',
+    'FM-Eingang_Anhang',
+    'FM-Eingang_Anhang_Sichter',
+];
+sort($actualProtectedSenderTasks);
+sort($expectedProtectedSenderTasks);
+$assert(
+    $actualProtectedSenderTasks === $expectedProtectedSenderTasks,
+    'message form sender protection does not cover exactly every A/W incoming task'
+);
+
+$protectedSenderRender = [];
+$assert(
+    preg_match(
+        '/if\s*\(\$senderAssignedByLead\)\s*\{'
+            . '(?<body>.*?)'
+            . '\}\s*elseif\s*\(!\$this->feld\s*\[13\]\)\s*\{/s',
+        $messageFormSource,
+        $protectedSenderRender
+    ) === 1,
+    'protected A/W sender rendering branch is missing'
+);
+$protectedSenderBody = $protectedSenderRender['body'] ?? '';
+$assert(
+    str_contains($protectedSenderBody, 'data-estab-readonly=\\"true\\"')
+        && str_contains($protectedSenderBody, 'Wird durch LdF aus dem Rufnamen ergänzt')
+        && !str_contains($protectedSenderBody, '<input')
+        && !str_contains($protectedSenderBody, 'name=\\"13_abseinheit\\"'),
+    'A/W incoming form renders a writable or named sender control'
+);
+
+$assert(
+    preg_match(
+        '/\$attachmentIdentity\s*=\s*estab_auth_session_identity\s*\(\$_SESSION\);\s*'
+            . '\$attachmentTask\s*=\s*estab_attachment_post_scalar\s*'
+            . '\(\$_POST,\s*"task"\);\s*'
+            . '\$incomingSenderProtected\s*=\s*'
+            . 'is_array\s*\(\$attachmentIdentity\)\s*&&\s*'
+            . 'estab_workflow_is_telecommunications\s*\(\$attachmentIdentity\)\s*&&\s*'
+            . 'str_starts_with\s*\(\$attachmentTask,\s*"FM-Eingang"\);\s*'
+            . '\$_SESSION\s*\["13_abseinheit"\]\s*=\s*'
+            . '\$incomingSenderProtected\s*\?\s*""\s*:\s*'
+            . 'estab_attachment_post_scalar\s*\(\$_POST,\s*"13_abseinheit"\);/s',
+        $controllerSource
+    ) === 1,
+    'attachment storage does not discard an A/W incoming sender'
+);
+$assert(
+    preg_match(
+        '/\$restoreIdentity\s*=\s*estab_auth_session_identity\s*\(\$_SESSION\);\s*'
+            . 'if\s*\(\s*is_array\s*\(\$restoreIdentity\)\s*&&\s*'
+            . 'estab_workflow_is_telecommunications\s*\(\$restoreIdentity\)\s*'
+            . '\)\s*\{\s*\$data\s*\["13_abseinheit"\]\s*=\s*"";\s*\}/s',
+        $controllerSource
+    ) === 1,
+    'attachment restore can return a sender to an A/W form'
 );
 $assert(
     preg_match('/estab_attachment_html\s*\(\s*\$file\s*\[\s*"comment"/', $controllerSource) === 1,

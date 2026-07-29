@@ -3,6 +3,7 @@ if (defined ("debug") && debug) { echo "<b>!File:". __FILE__ ."  Line:". __LINE_
 require_once __DIR__ . "/../app/auth.php";
 require_once __DIR__ . "/../app/csrf.php";
 require_once __DIR__ . "/../app/message_repository.php";
+require_once __DIR__ . "/../app/message_transport.php";
 include ("katego.php");
 include ("../4fcfg/e_cfg.inc.php");
 
@@ -23,7 +24,7 @@ function estab_list_state_action ($action, $recordId, $todo, $image, $alt) {
 
 /** Render a detail navigation as a CSRF-protected POST control. */
 function estab_list_detail_action ($route, $value, $recordId, $label, $large = false) {
-  if (!in_array ($route, array ("stab", "sichter", "fm"), true)) {
+  if (!in_array ($route, array ("stab", "sichter", "fm", "ldf"), true)) {
     throw new InvalidArgumentException ("Unbekannte Detailroute");
   }
   $safeRoute = estab_auth_html ($route);
@@ -183,6 +184,7 @@ class Listen extends kategorien {
                                F     M   M A   A
       \*************************************************************************/
       case "FMA":           /***** F M A ****/
+      case "LDF":           /***** L d F ****/
       break;
 
       /*************************************************************************\
@@ -644,6 +646,9 @@ class Listen extends kategorien {
       case "global":
         $identity = estab_auth_session_identity ($_SESSION);
         if ($identity === null) { throw new RuntimeException ("Ungueltige Sitzung"); }
+        // An incoming callsign is not a usable sender until LdF translated
+        // it. Keep that staged record out of operational recipient queues.
+        $where[] = "(m.`04_richtung` <> 'E' OR m.`x00_status` <> 1)";
 
         $prefix = (string) $conf_4f_tbl ["usrtblprefix"];
         $readTable = estab_message_table (estab_message_state_table (
@@ -753,12 +758,63 @@ class Listen extends kategorien {
     include ("../4fcfg/e_cfg.inc.php");
     if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>".$this->listenart."<br>";  }
     switch ($this->listenart){
+      case "LDF":
+        $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
+                             $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
+        $query = "SELECT `00_lfd`,`04_richtung`,`04_nummer`,`05_gegenstelle`,
+                         `09_vorrangstufe`,`10_anschrift`,`12_abfzeit`,
+                         `12_inhalt`,`13_abseinheit`
+                    FROM `".$conf_4f_tbl ["nachrichten"]."`
+                   WHERE `einsatz_id` = (SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1)
+                     AND `x00_status` = 1
+                     AND `02_zeit` IS NULL AND `02_zeichen` = \"\"
+                     AND `03_datum` IS NULL AND `03_zeichen` = \"\"
+                     AND `x01_abschluss` = \"f\"
+                ORDER BY `09_vorrangstufe` DESC, `12_abfzeit`;";
+        $result = $dbaccess->query_table ($query);
+        echo "<p align=\"center\"><big><big><b>LdF: Rufnamen und Beförderungswege</b></big></big></p>";
+        if ($result != "") {
+          echo "<table style=\"text-align:center;background-color:#fff\" border=\"1\" cellpadding=\"8\" cellspacing=\"1\"><tbody>";
+          echo "<tr style=\"background-color:#000;color:#fff;font-weight:bold\">";
+          echo "<th>E/A</th><th>Zeit</th><th>Vorrang</th><th>Rufname</th><th>Von/An</th><th>Inhalt</th></tr>";
+          foreach ($result as $row) {
+            $abfzeit = convdatetimeto ($row ["12_abfzeit"]);
+            $direction = (string) $row ["04_richtung"];
+            $address = $direction === "E"
+              ? ((string) $row ["13_abseinheit"] !== ""
+                ? $row ["13_abseinheit"]
+                : "Absender zu übersetzen")
+              : $row ["10_anschrift"];
+            echo "<tr>";
+            echo "<td>";
+            estab_list_detail_action ("ldf", "meldung", $row ["00_lfd"], $direction);
+            echo "</td><td>";
+            estab_list_detail_action ("ldf", "meldung", $row ["00_lfd"], $abfzeit ["stak"] ?? "");
+            echo "</td><td>";
+            estab_list_detail_action ("ldf", "meldung", $row ["00_lfd"], $row ["09_vorrangstufe"] ?: "—");
+            echo "</td><td>";
+            estab_list_detail_action ("ldf", "meldung", $row ["00_lfd"], $row ["05_gegenstelle"] ?: "noch offen");
+            echo "</td><td>";
+            estab_list_detail_action ("ldf", "meldung", $row ["00_lfd"], $address);
+            echo "</td><td style=\"text-align:left\">";
+            estab_list_detail_action ("ldf", "meldung", $row ["00_lfd"], $row ["12_inhalt"]);
+            echo "</td></tr>";
+          }
+          echo "</tbody></table>";
+        } else {
+          echo "<big><big>Zur Zeit keine Nachricht für die LdF</big></big>";
+        }
+      break;
+
       case "FMA":           /***** F M A ****/
         if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### - fkt:createlist - switch(listenart) -- case (FMA)<br>";} 	  
         $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
                              $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
         $query = "SELECT `00_lfd`,`07_durchspruch`, `08_befhinweis`, `08_befhinwausw`,`09_vorrangstufe`, `10_anschrift`, `12_abfzeit`, `12_inhalt` FROM `".$conf_4f_tbl ["nachrichten"]."`
                   WHERE `einsatz_id` = (SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1)
+                  AND `x00_status` = 2
+                  AND `02_zeit` IS NOT NULL AND `02_zeichen` != \"\"
+                  AND `06_befwegausw` != \"\"
                   AND ((`04_richtung` = \"A\") AND (`03_datum` IS NULL) AND (`03_zeichen` = \"\")) order by `09_vorrangstufe` DESC, `12_abfzeit` ; ";
         $result = $dbaccess->query_table ($query);
         if ($result != "" ){
@@ -887,7 +943,10 @@ class Listen extends kategorien {
              echo "<td align=\"center\">";
              if ( ( $row["04_richtung"] == "A") ){
                switch ( $row["X00_status"] ) {
-                 case 2: // liegt vor dem Fernmelder ==> rot
+                 case 1:
+                   echo "<p><img src=\"".$conf_design_path."/status_yellow.gif\" alt=\"liegt bei LdF: Rufname und Beförderungsweg festlegen\"></p>";
+                 break;
+                 case 2: // liegt vor dem Fernmelder
                    echo "<p><img src=\"".$conf_design_path."/status_yellow.gif\" alt=\"liegt vorm Fernmelder\"></p>";
                  break;
                  case 4: // liegt vor dem Sichter ==> gelb
@@ -983,8 +1042,8 @@ class Listen extends kategorien {
 			$dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
                              $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
 
-			$WHERE_inout = "WHERE `einsatz_id` = (SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1) AND ( ( `15_quitdatum` IS NULL ) AND ( `15_quitzeichen` = \"\" ) ) AND ( ( `04_richtung` =\"E\") OR ( (`03_datum` IS NOT NULL) AND ( `03_zeichen` != \"\" ) ) )";
-			$WHERE_in    = "WHERE `einsatz_id` = (SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1) AND ( ( `15_quitdatum` IS NULL ) AND ( `15_quitzeichen` = \"\" ) ) AND ( `04_richtung` =\"E\")";
+			$WHERE_inout = "WHERE `einsatz_id` = (SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1) AND `x00_status` = 4 AND ( ( `15_quitdatum` IS NULL ) AND ( `15_quitzeichen` = \"\" ) ) AND ( ( `04_richtung` =\"E\") OR ( (`03_datum` IS NOT NULL) AND ( `03_zeichen` != \"\" ) ) )";
+			$WHERE_in    = "WHERE `einsatz_id` = (SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1) AND `x00_status` = 4 AND ( ( `15_quitdatum` IS NULL ) AND ( `15_quitzeichen` = \"\" ) ) AND ( `04_richtung` =\"E\")";
 
 //order by `09_vorrangstufe` DESC, `12_abfzeit`; 
 
@@ -1339,7 +1398,7 @@ include ("../4fcfg/fkt_rolle.inc.php");
 	    if (debug) {echo "<b>file:liste.php:714 fkt:createlist - switch(listenart) -- case (FmNwE) ></b><br>";}
         $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
                              $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
-        $query = "SELECT `00_lfd`,`09_vorrangstufe`,`04_richtung`, `04_nummer`, `10_anschrift`,
+        $query = "SELECT `00_lfd`,`01_medium`,`09_vorrangstufe`,`04_richtung`, `04_nummer`, `10_anschrift`,
                          `12_abfzeit`, `12_inhalt`, `13_abseinheit`, `x01_abschluss`
                   FROM `".$conf_4f_tbl ["nachrichten"]."`
                   WHERE `einsatz_id` = (SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1)
@@ -1354,6 +1413,7 @@ include ("../4fcfg/fkt_rolle.inc.php");
           echo "<td>Num</td>\n";
           echo "<td>Von/An</td>";
           echo "<td>Abfasszeit</td>\n";
+          echo "<td>Eingangsmedium</td>\n";
           echo "<td>Inhalt</td>\n";
           echo "</tr>";
           if  ( $result != "" ) {
@@ -1389,6 +1449,14 @@ include ("../4fcfg/fkt_rolle.inc.php");
                  echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
                }
                echo "</td>\n";
+               echo "<td>";
+               $incomingMedium = estab_message_medium_text ($row["01_medium"] ?? "");
+               if ($incomingMedium !== "") {
+                 echo "<a>".estab_message_html ($incomingMedium)."</a>\n";
+               } else {
+                 echo "Nicht dokumentiert";
+               }
+               echo "</td>\n";
                echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { echo "<a>".estab_message_html ($row["12_inhalt"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
                echo "</tr>";
             }  // foreach $result
@@ -1403,7 +1471,8 @@ include ("../4fcfg/fkt_rolle.inc.php");
         if (debug) {echo "<b>file:liste.php:714 fkt:createlist - switch(listenart) -- case (FmNwA) ></b><br>";}
         $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
                              $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
-        $query = "SELECT `00_lfd`,`09_vorrangstufe`,`04_richtung`, `04_nummer`, `10_anschrift`,
+        $query = "SELECT `00_lfd`,`03_datum`,`06_befweg`,`06_befwegausw`,
+                         `09_vorrangstufe`,`04_richtung`, `04_nummer`, `10_anschrift`,
                          `12_abfzeit`, `12_inhalt`, `13_abseinheit`, `x01_abschluss`
                   FROM `".$conf_4f_tbl ["nachrichten"]."`
                   WHERE `einsatz_id` = (SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1)
@@ -1418,6 +1487,7 @@ include ("../4fcfg/fkt_rolle.inc.php");
           echo "<td>Num</td>\n";
           echo "<td>Von/An</td>";
           echo "<td>Abfasszeit</td>\n";
+          echo "<td>Beförderungsweg</td>\n";
           echo "<td>Inhalt</td>\n";
           echo "</tr>";
           if  ($result != "") {
@@ -1451,6 +1521,19 @@ include ("../4fcfg/fkt_rolle.inc.php");
                  echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
                }
                echo "</td>\n";
+               echo "<td>";
+               if (estab_datetime_is_unset ($row["03_datum"] ?? null)) {
+                 echo "Noch nicht befördert";
+               } else {
+                 $transportPath = estab_message_transport_text (
+                   $row["06_befwegausw"] ?? "",
+                   $row["06_befweg"] ?? ""
+                 );
+                 echo $transportPath !== ""
+                   ? estab_message_html ($transportPath)
+                   : "Nicht dokumentiert";
+               }
+               echo "</td>\n";
                echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { echo "<a>".estab_message_html ($row["12_inhalt"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
                echo "</tr>";
             }  // foreach $result
@@ -1465,7 +1548,8 @@ include ("../4fcfg/fkt_rolle.inc.php");
         if (debug) {echo "<b>file:liste.php:714 fkt:createlist - switch(listenart) -- case (FmNw) ></b><br>";}
         $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
                              $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
-        $query = "SELECT `00_lfd`,`01_datum`,`01_zeichen`,`02_zeit`,`03_datum`, `09_vorrangstufe`,`04_richtung`,
+        $query = "SELECT `00_lfd`,`01_medium`,`01_datum`,`01_zeichen`,`02_zeit`,`03_datum`,
+                         `06_befweg`,`06_befwegausw`, `09_vorrangstufe`,`04_richtung`,
                          `04_nummer`, `10_anschrift`, `12_inhalt`, `13_abseinheit`,`14_zeichen`, `x01_abschluss`
                   FROM `".$conf_4f_tbl ["nachrichten"]."`
                   WHERE `einsatz_id` = (SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1)
@@ -1482,7 +1566,8 @@ include ("../4fcfg/fkt_rolle.inc.php");
           echo "<td>Aufnahme</td>\n";
 //          echo "<td>Aufn.Z</td>\n";
           echo "<td>Annahme</td>\n";
-          echo "<td>Bef&ouml;rder</td>\n";
+          echo "<td>Beförderzeit</td>\n";
+          echo "<td>Übermittlungsweg</td>\n";
 //          echo "<td>Verfasser</td>\n";
           echo "<td>Inhalt</td>\n";
           echo "</tr>";
@@ -1555,6 +1640,24 @@ include ("../4fcfg/fkt_rolle.inc.php");
                  echo "<a>".$abzeit."</a>\n";
                } else {
                  echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
+               }
+               echo "</td>\n";
+               echo "<td>";
+               if (($row["04_richtung"] ?? "") === "E") {
+                 $trackingPath = estab_message_medium_text ($row["01_medium"] ?? "");
+                 echo $trackingPath !== ""
+                   ? estab_message_html ($trackingPath)
+                   : "Nicht dokumentiert";
+               } elseif (estab_datetime_is_unset ($row["03_datum"] ?? null)) {
+                 echo "Noch nicht befördert";
+               } else {
+                 $trackingPath = estab_message_transport_text (
+                   $row["06_befwegausw"] ?? "",
+                   $row["06_befweg"] ?? ""
+                 );
+                 echo $trackingPath !== ""
+                   ? estab_message_html ($trackingPath)
+                   : "Nicht dokumentiert";
                }
                echo "</td>\n";
                  // Verfasser

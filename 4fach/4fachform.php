@@ -100,6 +100,8 @@ class nachrichten4fach {
         "FM-Eingang_Anhang" => "01_datum",
         "FM-Eingang_Sichter" => "01_datum",
         "FM-Eingang_Anhang_Sichter" => "01_datum",
+        "LdF-Eingang" => "02_zeit",
+        "LdF-Ausgang" => "02_zeit",
         "FM-Ausgang" => "03_datum",
         "FM-Ausgang_Sichter" => "03_datum"
       ) [$this->task] ?? "";
@@ -238,6 +240,8 @@ class nachrichten4fach {
         }
         $this->bg   [11] = $this->feldbg [11]["i"] ;
         $this->feld [11] = false;
+        $this->bg   [13] = $this->feldbg [13]["i"] ;
+        $this->feld [13] = false;
 
       break;
       case "FM-Eingang_Sichter" :
@@ -253,16 +257,28 @@ class nachrichten4fach {
         // Ausser Gespraechsnotiz
         $this->bg [11]   = $this->feldbg [11]["i"] ;
         $this->feld [11] = false;
+        $this->bg [13]   = $this->feldbg [13]["i"] ;
+        $this->feld [13] = false;
 
+      break;
+      case "LdF-Eingang":
+        $this->bg [2] = $this->feldbg [2]["a"];
+        $this->feld [2] = true;
+        $this->bg [13] = $this->feldbg [13]["a"];
+        $this->feld [13] = true;
+      break;
+      case "LdF-Ausgang":
+        $this->bg [2] = $this->feldbg [2]["a"];
+        $this->feld [2] = true;
+        $this->bg [5] = $this->feldbg [5]["a"];
+        $this->feld [5] = true;
+        $this->bg [6] = $this->feldbg [6]["a"];
+        $this->feld [6] = true;
       break;
       // Weitergabe einer Meldung durch den Fernmelder
       case "FM-Ausgang" :
         $this->bg [3] = $this->feldbg [3]["a"] ;
         $this->feld [3] = true;
-        $this->bg [5] = $this->feldbg [5]["a"] ;
-        $this->feld [5] = true;
-        $this->bg [6] = $this->feldbg [6]["a"] ;
-        $this->feld [6] = true;
       break;
 
 
@@ -273,10 +289,6 @@ class nachrichten4fach {
 
         $this->bg [3] = $this->feldbg [3]["a"] ;
         $this->feld [3] = true;
-        $this->bg [5] = $this->feldbg [5]["a"] ;
-        $this->feld [5] = true;
-        $this->bg [6] = $this->feldbg [6]["a"] ;
-        $this->feld [6] = true;
         for ($i=15;$i<=17;$i++){
           $this->bg [$i] = $this->feldbg [$i]["a"] ;
           $this->feld [$i] = true;
@@ -636,13 +648,22 @@ class nachrichten4fach {
 
         case "FM-Ausgang":
         case "FM-Ausgang_Sichter":
+        case "LdF-Eingang":
+        case "LdF-Ausgang":
           echo "<td>\n";
           echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
           echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
           echo "<input type=\"image\" name=\"absenden\" src=\"button.php?type=menue&m_text=absenden&m_fs=10&m_form=rund&bg=lightblue\" alt=\"absenden\">\n";
           echo "</td>\n";
           echo "<td><input type=\"image\" name=\"abbrechen\" src=\"button.php?type=menue&m_text=abbrechen&m_fs=10&m_form=rund&bg=lightblue\" alt=\"abbrechen\"></td>\n";
-          if ($this->formdata["04_richtung"]=="A"){
+          if (
+            in_array (
+              $this->task,
+              array ("FM-Ausgang", "FM-Ausgang_Sichter"),
+              true
+            )
+            && $this->formdata["04_richtung"]=="A"
+          ){
             echo "<td><input type=\"image\" name=\"antwort\" src=\"button.php?type=menue&m_text=Antwort&m_fs=10&m_form=spitz&bg=lightblue\" alt=\"antworten\"></td>\n";
           }
 
@@ -777,8 +798,10 @@ class nachrichten4fach {
     echo "<input id=\"f_01_medium_fu\" name=\"01_medium\" value=\"Fu\" type=\"radio\" ".$param.$sel.">Fu";
     if ($this->formdata["01_medium"]=="Me") {$sel = "checked=\"checked\"";} else {$sel = "";}
     echo "<input id=\"f_01_medium_me\" name=\"01_medium\" value=\"Me\" type=\"radio\" ".$param.$sel.">Me";
-    if ($this->formdata["01_medium"]=="Fax") {$sel = "checked=\"checked\"";} else {$sel = "";}
-    echo "<input id=\"f_01_medium_fax\" name=\"01_medium\" value=\"Fax\" type=\"radio\" ".$param.$sel.">Fax";
+    if (strcasecmp ((string) $this->formdata["01_medium"], "FAX") === 0) {$sel = "checked=\"checked\"";} else {$sel = "";}
+    echo "<input id=\"f_01_medium_fax\" name=\"01_medium\" value=\"FAX\" type=\"radio\" ".$param.$sel.">Fax";
+    if ($this->formdata["01_medium"]=="FS") {$sel = "checked=\"checked\"";} else {$sel = "";}
+    echo "<input id=\"f_01_medium_fs\" name=\"01_medium\" value=\"FS\" type=\"radio\" ".$param.$sel.">FS";
     if ($this->formdata["01_medium"]=="@") {$sel = "checked=\"checked\"";} else {$sel = "";}
     echo "<input id=\"f_01_medium_at\" name=\"01_medium\" value=\"@\" type=\"radio\" ".$param.$sel.">@";
     echo "<br>\n";
@@ -832,9 +855,16 @@ class nachrichten4fach {
       if ( $this->errorselect ["02_zeit"] == false ){
       $this->showerrorinfo ("02_zeit");      }
       echo "<input id=\"f_02_zeit\" maxlength=\"13\" size=\"13\" name=\"02_zeit\" value=\"".$this->safe_message_value ("02_zeit")."\">&nbsp;\n";
-      if ( $this->errorselect ["02_zeichen"] == false ){
-      $this->showerrorinfo ("02_zeichen");      }
-      echo "<input id=\"f_02_zeichen\" maxlength=\"6\" size=\"6\" name=\"02_zeichen\" value=\"".$this->safe_message_value ("02_zeichen")."\"><br>\n";
+      if (in_array ($this->task, array ("LdF-Eingang", "LdF-Ausgang"), true)) {
+        echo "<strong id=\"f_02_zeichen\" data-estab-readonly=\"true\" ".
+             "aria-label=\"Zeichen wird aus der Anmeldung übernommen\">".
+             $this->safe_message_value ("02_zeichen")."</strong><br>\n";
+      } else {
+        if ( $this->errorselect ["02_zeichen"] == false ){
+          $this->showerrorinfo ("02_zeichen");
+        }
+        echo "<input id=\"f_02_zeichen\" maxlength=\"6\" size=\"6\" name=\"02_zeichen\" value=\"".$this->safe_message_value ("02_zeichen")."\"><br>\n";
+      }
     }
     echo "<div style=\"text-align: center;\">";
     echo "&nbsp;Uhrzeit &nbsp; &nbsp;Zeichen</td>\n";
@@ -972,8 +1002,10 @@ class nachrichten4fach {
     echo "<input id=\"f_06_befwegausw_fu\" name=\"06_befwegausw\" value=\"Fu\" type=\"radio\" ".$param.$sel.">Fu";
     if ($this->formdata["06_befwegausw"]=="Me") {$sel = "checked=\"checked\"";} else {$sel = "";}
     echo "<input id=\"f_06_befwegausw_me\" name=\"06_befwegausw\" value=\"Me\" type=\"radio\" ".$param.$sel.">Me";
-    if ($this->formdata["06_befwegausw"]=="Fax") {$sel = "checked=\"checked\"";} else {$sel = "";}
-    echo "<input id=\"f_06_befwegausw_fax\" name=\"06_befwegausw\" value=\"Fax\" type=\"radio\" ".$param.$sel.">Fax";
+    if (strcasecmp ((string) $this->formdata["06_befwegausw"], "FAX") === 0) {$sel = "checked=\"checked\"";} else {$sel = "";}
+    echo "<input id=\"f_06_befwegausw_fax\" name=\"06_befwegausw\" value=\"FAX\" type=\"radio\" ".$param.$sel.">Fax";
+    if ($this->formdata["06_befwegausw"]=="FS") {$sel = "checked=\"checked\"";} else {$sel = "";}
+    echo "<input id=\"f_06_befwegausw_fs\" name=\"06_befwegausw\" value=\"FS\" type=\"radio\" ".$param.$sel.">FS";
     if ($this->formdata["06_befwegausw"]=="@") {$sel = "checked=\"checked\"";} else {$sel = "";}
     echo "<input id=\"f_06_befwegausw_at\" name=\"06_befwegausw\" value=\"@\" type=\"radio\" ".$param.$sel.">@";
     echo "</tr>\n";
@@ -1200,8 +1232,19 @@ class nachrichten4fach {
     echo "<tbody>\n";
     echo "<tr>\n";
     // Zeile, Spalte 9,1    4096  13  Absender, Einheit
+    $senderAssignedByLead = in_array (
+      $this->task,
+      array (
+        "FM-Eingang", "FM-Eingang_Sichter",
+        "FM-Eingang_Anhang", "FM-Eingang_Anhang_Sichter"
+      ),
+      true
+    );
     echo "<td style=\"width: 100px; background-color: ".$this->bg[13].";\">Absender";
-    if ( $this->errorselect ["13_abseinheit"] == false ){
+    if (
+      !$senderAssignedByLead
+      && $this->errorselect ["13_abseinheit"] == false
+    ){
       $this->showerrorinfo ("13_abseinheit");    }
     echo "</td>\n";
     /****************************************************************************\
@@ -1209,7 +1252,10 @@ class nachrichten4fach {
     13_abseinheit
     \****************************************************************************/
     echo "<td style=\"text-align: left; width: 200px; background-color: ".$this->bg[13].";\">\n";
-    if (!$this->feld [13]){
+    if ($senderAssignedByLead) {
+      echo "<strong id=\"f_13_abseinheit\" data-estab-readonly=\"true\">".
+           "Wird durch LdF aus dem Rufnamen ergänzt</strong><br>\n";
+    } elseif (!$this->feld [13]){
       echo "<b><big>".$this->safe_message_value ("13_abseinheit")."</big></b>" ;
       echo "<br>";
       echo "<input id=\"f_13_abseinheit\" type=\"hidden\" name=\"13_abseinheit\" value=\"".$this->safe_message_value ("13_abseinheit")."\">\n";
@@ -1375,6 +1421,8 @@ class nachrichten4fach {
 
       case "Stab_lesen":
       case "Stab_schreiben":
+      case "LdF-Eingang":
+      case "LdF-Ausgang":
       case "FM-Ausgang":
       case "FM-Eingang":
       case "FM-Eingang_Anhang":

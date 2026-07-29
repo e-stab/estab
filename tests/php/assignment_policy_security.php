@@ -48,6 +48,7 @@ $roles = estab_assignment_roles_from_matrix([
 $assert(
     $roles === [
         'A/W' => 'Fernmelder',
+        'LdF' => 'Fernmelder',
         'POL' => 'FB',
         'S1' => 'Stab',
         'Si' => 'Stab',
@@ -62,9 +63,10 @@ $assert(
 );
 $legacyShape = estab_assignment_roles_as_conf_empf($roles);
 $assert(
-    count($legacyShape) === 4
+    count($legacyShape) === 5
         && ($legacyShape[1]['fkt'] ?? null) === 'A/W'
-        && ($legacyShape[4]['fkt'] ?? null) === 'Si',
+        && ($legacyShape[2]['fkt'] ?? null) === 'LdF'
+        && ($legacyShape[5]['fkt'] ?? null) === 'Si',
     'role map cannot be adapted to the legacy login configuration'
 );
 
@@ -144,6 +146,7 @@ foreach ([
 
 $assert(
     str_contains($policySource, 'SELECT GET_LOCK(?, ?)')
+        && substr_count($policySource, "'LdF' => 'Fernmelder'") === 2
         && str_contains($policySource, 'SELECT RELEASE_LOCK(?)')
         && str_contains($policySource, 'ORDER BY `kuerzel` FOR UPDATE')
         && str_contains($policySource, '`rolle` = ?')
@@ -233,8 +236,13 @@ $assert(
     str_contains($userPage, 'data-estab-assignment-orphaned')
         && str_contains($userPage, 'Zuordnung nicht mehr gültig')
         && str_contains($matrixPage, 'Betroffene Sitzungen')
+        && str_contains($matrixPage, '<code>LdF</code> sind reserviert')
         && str_contains($matrixPage, "\$conf_4f_tbl['benutzer']")
-        && str_contains($runtimeVerifier, 'app/assignment.php'),
+        && str_contains($runtimeVerifier, 'app/assignment.php')
+        && str_contains(
+            $legacyMatrixConfig,
+            'array ("fkt" => "LdF", "rolle" => "Fernmelder" )'
+        ),
     'administration does not expose policy impact or ship the policy boundary'
 );
 $assert(

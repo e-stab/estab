@@ -75,12 +75,14 @@ if ! printf '%s' "$identity_seed" | grep -Eq '^[a-f0-9]{5}$'; then
 fi
 
 aw_code="w${identity_seed}"
+ldf_code="d${identity_seed}"
 si_code="i${identity_seed}"
 s1_code="a${identity_seed}"
 s2_code="l${identity_seed}"
 s3_code="n${identity_seed}"
 pol_code="p${identity_seed}"
 aw_name="Workflow A-W ${identity_seed}"
+ldf_name="Workflow LdF ${identity_seed}"
 si_name="Workflow Si ${identity_seed}"
 s1_name="Workflow S1 ${identity_seed}"
 s2_name="Workflow S2 ${identity_seed}"
@@ -95,7 +97,7 @@ fm_admin_note="FMADMIN_${identity_seed}_${workflow_variant}"
 si_admin_note="SIADMIN_${identity_seed}_${workflow_variant}"
 
 for code in \
-    "$aw_code" "$si_code" "$s1_code" "$s2_code" "$s3_code" "$pol_code"
+    "$aw_code" "$ldf_code" "$si_code" "$s1_code" "$s2_code" "$s3_code" "$pol_code"
 do
     if ! printf '%s' "$code" | grep -Eq '^[a-z0-9_]{1,6}$'; then
         echo 'Message workflow HTTP: derived an unsafe user code' >&2
@@ -116,6 +118,7 @@ work_dir=$(mktemp -d /tmp/estab-message-workflow-http.XXXXXX)
 chmod 0700 "$work_dir"
 body=$work_dir/body.html
 aw_cookies=$work_dir/aw-cookies.txt
+ldf_cookies=$work_dir/ldf-cookies.txt
 si_cookies=$work_dir/si-cookies.txt
 s1_cookies=$work_dir/s1-cookies.txt
 s2_cookies=$work_dir/s2-cookies.txt
@@ -277,7 +280,7 @@ cleanup()
     cleanup_status=0
 
     for cookie_jar in \
-        "$aw_cookies" "$si_cookies" "$s1_cookies" "$s2_cookies" \
+        "$aw_cookies" "$ldf_cookies" "$si_cookies" "$s1_cookies" "$s2_cookies" \
         "$s3_cookies" "$pol_cookies"
     do
         purge_session_file "$cookie_jar" >/dev/null 2>&1 || cleanup_status=1
@@ -310,6 +313,7 @@ DELETE FROM \`nv_nachrichten\`
     OR \`12_inhalt\` LIKE '%${forward_marker}%';
 DELETE FROM \`nv_benutzer\`
  WHERE (\`kuerzel\` = '${aw_code}' AND \`benutzer\` = '${aw_name}' AND \`funktion\` = 'A/W')
+    OR (\`kuerzel\` = '${ldf_code}' AND \`benutzer\` = '${ldf_name}' AND \`funktion\` = 'LdF')
     OR (\`kuerzel\` = '${si_code}' AND \`benutzer\` = '${si_name}' AND \`funktion\` = 'Si')
     OR (\`kuerzel\` = '${s1_code}' AND \`benutzer\` = '${s1_name}' AND \`funktion\` = 'S1')
     OR (\`kuerzel\` = '${s2_code}' AND \`benutzer\` = '${s2_name}' AND \`funktion\` = 'S2')
@@ -364,7 +368,7 @@ SELECT CONCAT(
   '|',
   (SELECT COUNT(*) FROM \`nv_benutzer\`
     WHERE \`kuerzel\` IN (
-      '${aw_code}', '${si_code}', '${s1_code}', '${s2_code}', '${s3_code}',
+      '${aw_code}', '${ldf_code}', '${si_code}', '${s1_code}', '${s2_code}', '${s3_code}',
       '${pol_code}'
     )),
   '|',
@@ -732,6 +736,102 @@ provision_and_login_user()
     assert_session_identity "$name" "$code" "$function_name" "$role"
 }
 
+finish_ldf_incoming()
+{
+    ldf_marker=$1
+    ldf_record_id=$2
+    ldf_sender=$3
+
+    load_dashboard "$ldf_cookies" "LdF queue for $ldf_marker"
+    assert_body "$ldf_marker" "LdF queue for $ldf_marker"
+    assert_route_control ldf meldung "$ldf_record_id" "LdF incoming detail"
+    ldf_csrf=$(csrf_from_body)
+    ldf_clock_before=$(app_tactical_clock)
+    assert_status 200 "open LdF incoming for $ldf_marker" \
+        --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+        --request POST \
+        --data-urlencode "csrf_token=$ldf_csrf" \
+        --data-urlencode 'ldf=meldung' \
+        --data-urlencode "00_lfd=$ldf_record_id" \
+        "$base_url/4fach/mainindex.php"
+    ldf_clock_after=$(app_tactical_clock)
+    assert_no_runtime_error "LdF incoming form for $ldf_marker"
+    assert_body 'name="task" value="LdF-Eingang"' "LdF incoming task"
+    assert_current_editable_tactical_time_input \
+        f_02_zeit "$ldf_clock_before" "$ldf_clock_after" \
+        "LdF incoming acceptance time"
+    assert_body \
+        'id="f_02_zeichen" data-estab-readonly="true"' \
+        'LdF incoming authenticated code'
+    assert_body \
+        'id="f_13_abseinheit"' \
+        'LdF incoming sender translation field'
+    ldf_csrf=$(csrf_from_body)
+    ldf_time=$(date '+%H%M')
+    assert_status 200 "save LdF incoming for $ldf_marker" \
+        --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+        --request POST \
+        --data-urlencode "csrf_token=$ldf_csrf" \
+        --data-urlencode 'absenden_x=1' \
+        --data-urlencode 'task=LdF-Eingang' \
+        --data-urlencode "00_lfd=$ldf_record_id" \
+        --data-urlencode "02_zeit=$ldf_time" \
+        --data-urlencode '02_zeichen=forged' \
+        --data-urlencode "13_abseinheit=$ldf_sender" \
+        "$base_url/4fach/mainindex.php"
+    assert_no_runtime_error "saved LdF incoming for $ldf_marker"
+    assert_db_equals "${ldf_code}|${ldf_sender}" \
+        "LdF-authored incoming identity for $ldf_marker" \
+        "SELECT CONCAT(\`02_zeichen\`, '|', \`13_abseinheit\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${ldf_record_id};"
+}
+
+finish_ldf_outgoing()
+{
+    ldf_marker=$1
+    ldf_record_id=$2
+    ldf_callsign=$3
+    ldf_route=$4
+
+    load_dashboard "$ldf_cookies" "LdF queue for $ldf_marker"
+    assert_body "$ldf_marker" "LdF queue for $ldf_marker"
+    assert_route_control ldf meldung "$ldf_record_id" "LdF outgoing detail"
+    ldf_csrf=$(csrf_from_body)
+    assert_status 200 "open LdF outgoing for $ldf_marker" \
+        --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+        --request POST \
+        --data-urlencode "csrf_token=$ldf_csrf" \
+        --data-urlencode 'ldf=meldung' \
+        --data-urlencode "00_lfd=$ldf_record_id" \
+        "$base_url/4fach/mainindex.php"
+    assert_no_runtime_error "LdF outgoing form for $ldf_marker"
+    assert_body 'name="task" value="LdF-Ausgang"' "LdF outgoing task"
+    assert_body 'id="f_05_gegenstelle"' "LdF outgoing callsign field"
+    assert_body 'id="f_06_befweg"' "LdF outgoing transport route field"
+    assert_body 'id="f_06_befwegausw_fu"' "LdF outgoing medium controls"
+    assert_body_absent \
+        'id="f_03_datum" maxlength=' \
+        'LdF must not write transport completion time'
+    ldf_csrf=$(csrf_from_body)
+    ldf_time=$(date '+%H%M')
+    assert_status 200 "save LdF outgoing for $ldf_marker" \
+        --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+        --request POST \
+        --data-urlencode "csrf_token=$ldf_csrf" \
+        --data-urlencode 'absenden_x=1' \
+        --data-urlencode 'task=LdF-Ausgang' \
+        --data-urlencode "00_lfd=$ldf_record_id" \
+        --data-urlencode "02_zeit=$ldf_time" \
+        --data-urlencode '02_zeichen=forged' \
+        --data-urlencode "05_gegenstelle=$ldf_callsign" \
+        --data-urlencode "06_befweg=$ldf_route" \
+        --data-urlencode '06_befwegausw=Fu' \
+        "$base_url/4fach/mainindex.php"
+    assert_no_runtime_error "saved LdF outgoing for $ldf_marker"
+    assert_db_equals "2|${ldf_code}|${ldf_callsign}|${ldf_route}|Fu" \
+        "LdF-authored outgoing disposition for $ldf_marker" \
+        "SELECT CONCAT(\`x00_status\`, '|', \`02_zeichen\`, '|', \`05_gegenstelle\`, '|', \`06_befweg\`, '|', \`06_befwegausw\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${ldf_record_id};"
+}
+
 open_viewer_message()
 {
     marker=$1
@@ -787,7 +887,7 @@ fixture_collision=$(db_sql <<SQL
 SELECT CONCAT(
   (SELECT COUNT(*) FROM \`nv_benutzer\`
     WHERE \`kuerzel\` IN (
-      '${aw_code}', '${si_code}', '${s1_code}', '${s2_code}', '${s3_code}',
+      '${aw_code}', '${ldf_code}', '${si_code}', '${s1_code}', '${s2_code}', '${s3_code}',
       '${pol_code}'
     )),
   '|',
@@ -891,15 +991,21 @@ done
 
 mutation_started=true
 
-# Create six isolated functional accounts through the administrative domain
+# Create seven isolated functional accounts through the administrative domain
 # boundary, then exercise only the production bestandskonto login flow.
 # Keeping Si signed in makes both A/W forms use their genuine online-Si branch.
 provision_and_login_user "$aw_cookies" "$aw_name" "$aw_code" A/W Fernmelder
+provision_and_login_user "$ldf_cookies" "$ldf_name" "$ldf_code" LdF Fernmelder
 provision_and_login_user "$s1_cookies" "$s1_name" "$s1_code" S1 Stab
 provision_and_login_user "$s2_cookies" "$s2_name" "$s2_code" S2 Stab
 provision_and_login_user "$s3_cookies" "$s3_name" "$s3_code" S3 Stab
 provision_and_login_user "$pol_cookies" "$pol_name" "$pol_code" POL FB
 provision_and_login_user "$si_cookies" "$si_name" "$si_code" Si Stab
+load_sidebar "$ldf_cookies" 'LdF role navigation'
+assert_body 'name="ldf_nachrichten_x"' 'LdF disposition action'
+assert_body_absent 'name="fm_eingang_x"' 'LdF must not receive A/W input action'
+assert_body_absent 'name="fm_ausgang_x"' 'LdF must not receive A/W output action'
+assert_body_absent 'name="stab_schreiben_x"' 'LdF must not receive staff action'
 assert_db_equals 1 'online Si fixture' \
     "SELECT COUNT(*) FROM \`nv_benutzer\` WHERE \`kuerzel\`='${si_code}' AND \`funktion\`='Si' AND \`aktiv\`=1;"
 assert_db_equals 1 'isolated online Si fixture' \
@@ -961,6 +1067,12 @@ assert_no_runtime_error 'automatic-sighting incoming form'
 assert_body \
     'name="task" value="FM-Eingang_Sichter"' \
     'automatic-sighting form task'
+assert_body \
+    'Wird durch LdF aus dem Rufnamen ergänzt' \
+    'automatic-sighting sender responsibility'
+assert_body_absent \
+    'name="13_abseinheit"' \
+    'automatic-sighting A/W sender input'
 assert_current_editable_tactical_time_input \
     f_01_datum "$autosight_clock_before" "$autosight_clock_after" \
     'automatic-sighting receipt time'
@@ -993,7 +1105,6 @@ assert_status 200 'save automatic-sighting incoming message' \
     --data-urlencode '12_anhang=' \
     --data-urlencode "12_inhalt=$autosight_marker" \
     --data-urlencode "12_abfzeit=$tactical_time" \
-    --data-urlencode '13_abseinheit=E2E-Auto-Absender' \
     --data-urlencode '14_zeichen=' \
     --data-urlencode '14_funktion=' \
     --data-urlencode "15_quitdatum=$tactical_time" \
@@ -1018,10 +1129,23 @@ assert_numeric 'automatic-sighting message ID' "$autosight_id"
 assert_numeric 'automatic-sighting evidence number' "$autosight_number"
 autosight_form_cleanup_owned=true
 assert_message_state "$autosight_marker" \
+    "E|1|f|set|${aw_code}|S2_rt,POL_bl,|f||f" \
+    'automatic-sighting message awaiting LdF'
+if ! generated_form_check absent E "$autosight_number"; then
+    echo 'Message workflow HTTP: automatic sighting generated a form before LdF' >&2
+    exit 1
+fi
+load_dashboard "$pol_cookies" 'POL/FB before LdF automatic-sighting translation'
+assert_body_absent \
+    "$autosight_marker" \
+    'untranslated automatic-sighting message hidden from POL/FB'
+finish_ldf_incoming \
+    "$autosight_marker" "$autosight_id" 'E2E-Auto-Absender'
+assert_message_state "$autosight_marker" \
     "E|8|t|set|${aw_code}|S2_rt,POL_bl,|f||t" \
-    'automatic-sighting completed message'
+    'LdF-completed automatic-sighting message'
 if ! generated_form_check present E "$autosight_number"; then
-    echo 'Message workflow HTTP: automatic sighting generated no form' >&2
+    echo 'Message workflow HTTP: LdF automatic-sighting completion generated no form' >&2
     exit 1
 fi
 load_dashboard "$pol_cookies" 'POL/FB automatic-sighting recipient list'
@@ -1058,6 +1182,12 @@ incoming_clock_after=$(app_tactical_clock)
 assert_no_runtime_error 'A/W incoming form'
 assert_body 'name="task" value="FM-Eingang"' 'A/W incoming form'
 assert_body_absent 'name="task" value="FM-Eingang_Sichter"' 'A/W incoming form'
+assert_body \
+    'Wird durch LdF aus dem Rufnamen ergänzt' \
+    'A/W incoming sender responsibility'
+assert_body_absent \
+    'name="13_abseinheit"' \
+    'A/W incoming sender input'
 assert_current_editable_tactical_time_input \
     f_01_datum "$incoming_clock_before" "$incoming_clock_after" \
     'A/W receipt time'
@@ -1066,6 +1196,16 @@ tactical_time=$(date '+%H%M')
 incoming_backdated_clock=$(app_backdated_clock)
 incoming_backdated_tactical=${incoming_backdated_clock%%|*}
 incoming_backdated_sql=${incoming_backdated_clock#*|}
+assert_status 403 'reject A/W incoming sender overpost' \
+    --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$incoming_csrf" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=FM-Eingang' \
+    --data-urlencode '13_abseinheit=Gefälschter Absender' \
+    "$base_url/4fach/mainindex.php"
+assert_db_equals 0 'rejected A/W sender overpost created no message' \
+    "SELECT COUNT(*) FROM \`nv_nachrichten\` WHERE \`12_inhalt\`='${incoming_marker}';"
 assert_status 200 'save A/W incoming message' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
     --request POST \
@@ -1085,7 +1225,6 @@ assert_status 200 'save A/W incoming message' \
     --data-urlencode '12_anhang=' \
     --data-urlencode "12_inhalt=$incoming_marker" \
     --data-urlencode "12_abfzeit=$tactical_time" \
-    --data-urlencode '13_abseinheit=E2E-Absender' \
     --data-urlencode '14_zeichen=' \
     --data-urlencode '14_funktion=' \
     --data-urlencode '16_gncopy=' \
@@ -1107,14 +1246,29 @@ assert_numeric 'incoming message ID' "$incoming_id"
 assert_numeric 'incoming evidence number' "$incoming_number"
 assert_db_equals "$incoming_backdated_sql" 'edited A/W receipt time' \
     "SELECT DATE_FORMAT(\`01_datum\`, '%Y-%m-%d %H:%i:00') FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${incoming_id};"
+assert_db_equals '' 'A/W persisted no incoming sender' \
+    "SELECT \`13_abseinheit\` FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${incoming_id};"
 assert_message_state "$incoming_marker" \
-    'E|4|f|null||S2_rt,|f||f' \
-    'A/W incoming status 4'
+    'E|1|f|null||S2_rt,|f||f' \
+    'A/W incoming status 1 awaiting LdF'
 if ! generated_form_check absent E "$incoming_number"; then
     echo 'Message workflow HTTP: incoming form existed before completion' >&2
     exit 1
 fi
 incoming_form_cleanup_owned=true
+
+load_dashboard "$si_cookies" 'Si queue before incoming LdF translation'
+assert_body_absent \
+    "$incoming_marker" \
+    'untranslated incoming message hidden from Si'
+load_dashboard "$s2_cookies" 'S2 queue before incoming LdF translation'
+assert_body_absent \
+    "$incoming_marker" \
+    'untranslated incoming message hidden from recipients'
+finish_ldf_incoming "$incoming_marker" "$incoming_id" 'E2E-Absender'
+assert_message_state "$incoming_marker" \
+    'E|4|f|null||S2_rt,|f||f' \
+    'LdF-translated incoming status 4'
 
 finish_viewer_message "$incoming_marker" "$incoming_id" 'E2E incoming reviewed'
 assert_message_state "$incoming_marker" \
@@ -1535,7 +1689,7 @@ SQL
 )
 assert_numeric 'POL/FB answer message ID' "$reply_id"
 assert_db_equals \
-    "A|2|E2E-Absender|E2E-Einsatzleitung|${pol_code}|POL|S2_rt,POL_gn|1|1|1" \
+    "A|1|E2E-Absender|E2E-Einsatzleitung|${pol_code}|POL|S2_rt,POL_gn|1|1|1" \
     'persisted POL/FB answer' \
     "SELECT CONCAT(\`04_richtung\`, '|', \`x00_status\`, '|', \`10_anschrift\`, '|', \`13_abseinheit\`, '|', \`14_zeichen\`, '|', \`14_funktion\`, '|', \`16_empf\`, '|', LOCATE('Zitat: von E ${incoming_number}', \`12_inhalt\`) > 0, '|', LOCATE('${incoming_marker}', \`12_inhalt\`) > 0, '|', LOCATE('${reply_marker}', \`12_inhalt\`) > 0) FROM \`nv_nachrichten\` WHERE \`00_lfd\` = ${reply_id};"
 
@@ -1613,7 +1767,7 @@ SQL
 )
 assert_numeric 'POL/FB forwarding message ID' "$forward_id"
 assert_db_equals \
-    "A|2|E2E-Weiterleitungsziel|E2E-Einsatzleitung|${pol_code}|POL|S2_rt,POL_gn|1|1|1" \
+    "A|1|E2E-Weiterleitungsziel|E2E-Einsatzleitung|${pol_code}|POL|S2_rt,POL_gn|1|1|1" \
     'persisted POL/FB forwarding' \
     "SELECT CONCAT(\`04_richtung\`, '|', \`x00_status\`, '|', \`10_anschrift\`, '|', \`13_abseinheit\`, '|', \`14_zeichen\`, '|', \`14_funktion\`, '|', \`16_empf\`, '|', LOCATE('Zitat: von E ${incoming_number}', \`12_inhalt\`) > 0, '|', LOCATE('${incoming_marker}', \`12_inhalt\`) > 0, '|', LOCATE('${forward_marker}', \`12_inhalt\`) > 0) FROM \`nv_nachrichten\` WHERE \`00_lfd\` = ${forward_id};"
 assert_db_equals 1 'POL/FB source read state' \
@@ -1625,6 +1779,11 @@ if [ "$derived_source_after" != "$derived_source_before" ]; then
     echo 'Message workflow HTTP: answer or forwarding changed source message evidence' >&2
     exit 1
 fi
+
+finish_ldf_outgoing \
+    "$reply_marker" "$reply_id" 'E2E-Antwort-Rufname' 'E2E-Antwortweg'
+finish_ldf_outgoing \
+    "$forward_marker" "$forward_id" 'E2E-Weiter-Rufname' 'E2E-Weiterweg'
 
 # Leave the persistent administration-list mode through the actual rendered
 # A/W navigation control so the following transport queue is the normal one.
@@ -1644,8 +1803,8 @@ assert_body_absent \
 assert_body "$reply_marker" 'POL/FB answer in normal A/W outgoing queue'
 assert_body "$forward_marker" 'POL/FB forwarding in normal A/W outgoing queue'
 
-# Outgoing message: S1 writes status 2, A/W sees it in the transport queue and
-# acquires the record lock through the rendered detail control.
+# Outgoing message: S1 writes status 1, LdF translates the callsign and fixes
+# the route (status 2), then A/W records only the actual transport.
 load_dashboard "$s1_cookies" 'S1 dashboard before outgoing message'
 outgoing_csrf=$(csrf_from_body)
 assert_status 200 'open S1 outgoing form' \
@@ -1695,17 +1854,77 @@ SQL
 assert_numeric 'outgoing message ID' "$outgoing_id"
 assert_numeric 'outgoing evidence number' "$outgoing_number"
 assert_message_state "$outgoing_marker" \
-    'A|2|f|null||S2_rt,S1_gn|f||f' \
-    'S1 outgoing status 2'
+    'A|1|f|null||S2_rt,S1_gn|f||f' \
+    'S1 outgoing status 1'
 if ! generated_form_check absent A "$outgoing_number"; then
     echo 'Message workflow HTTP: outgoing form existed before completion' >&2
     exit 1
 fi
 outgoing_form_cleanup_owned=true
 
+load_dashboard "$s1_cookies" 'S1 list at outgoing status 1'
+assert_body "$outgoing_marker" 'S1 list at outgoing status 1'
+assert_body \
+    'alt="liegt bei LdF: Rufname und Beförderungsweg festlegen"' \
+    'S1 status-1 LdF indicator'
+load_dashboard "$aw_cookies" 'A/W queue before LdF disposition'
+assert_body_absent \
+    "$outgoing_marker" \
+    'status-1 outgoing hidden from A/W'
+load_dashboard "$ldf_cookies" 'LdF queue before tokenless lock test'
+assert_body "$outgoing_marker" 'LdF status-1 outgoing queue'
+assert_route_control ldf meldung "$outgoing_id" 'LdF outgoing detail control'
+assert_status 403 'reject tokenless LdF outgoing lock request' \
+    --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+    --request POST \
+    --data-urlencode 'ldf=meldung' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    "$base_url/4fach/mainindex.php"
+assert_message_state "$outgoing_marker" \
+    'A|1|f|null||S2_rt,S1_gn|f||f' \
+    'tokenless LdF request left outgoing unlocked'
+
+load_dashboard "$ldf_cookies" 'LdF queue before outgoing cancel'
+ldf_cancel_csrf=$(csrf_from_body)
+assert_status 200 'lock LdF outgoing message before cancel' \
+    --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$ldf_cancel_csrf" \
+    --data-urlencode 'ldf=meldung' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'LdF outgoing form before cancel'
+assert_body 'name="task" value="LdF-Ausgang"' 'LdF outgoing cancel form'
+ldf_cancel_csrf=$(csrf_from_body)
+assert_status 200 'cancel LdF outgoing disposition' \
+    --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$ldf_cancel_csrf" \
+    --data-urlencode 'abbrechen_x=1' \
+    --data-urlencode 'task=LdF-Ausgang' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'LdF outgoing queue after cancel'
+assert_body "$outgoing_marker" 'LdF queue after outgoing cancel'
+assert_route_control \
+    ldf meldung "$outgoing_id" 'LdF outgoing control after cancel'
+assert_message_state "$outgoing_marker" \
+    'A|1|f|null||S2_rt,S1_gn|f||f' \
+    'LdF cancel released the outgoing stage-one lock'
+
+finish_ldf_outgoing \
+    "$outgoing_marker" "$outgoing_id" 'E2E-Gegenstelle' 'E2E-Transport'
 load_dashboard "$s1_cookies" 'S1 list at outgoing status 2'
-assert_body "$outgoing_marker" 'S1 list at outgoing status 2'
 assert_body 'alt="liegt vorm Fernmelder"' 'S1 status-2 transport indicator'
+assert_status 200 'open tracking before outgoing transport' \
+    --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    "$base_url/4fach/nachwea.php?nwalle=1"
+assert_no_runtime_error 'tracking before outgoing transport'
+assert_body "$outgoing_marker" 'pending outgoing message in tracking'
+assert_body 'Noch nicht befördert' 'pending outgoing transport state'
+assert_body_absent \
+    'Funk · E2E-Transport' \
+    'LdF decision exposed as an already completed transport'
 load_dashboard "$aw_cookies" 'A/W transport queue at outgoing status 2'
 assert_body "$outgoing_marker" 'A/W transport queue at outgoing status 2'
 assert_route_control fm meldung "$outgoing_id" 'A/W outgoing detail control'
@@ -1735,6 +1954,12 @@ assert_no_runtime_error 'locked outgoing transport form'
 assert_body 'name="task" value="FM-Ausgang"' 'locked outgoing transport form'
 assert_body "name=\"00_lfd\" value=\"$outgoing_id\"" 'locked outgoing transport form'
 assert_body "name=\"03_zeichen\" value=\"$aw_code\"" 'locked outgoing transport form'
+assert_body_absent \
+    'id="f_05_gegenstelle" maxlength=' \
+    'A/W cannot rewrite LdF callsign'
+assert_body_absent \
+    'id="f_06_befweg" maxlength=' \
+    'A/W cannot rewrite LdF transport route'
 assert_current_editable_tactical_time_input \
     f_03_datum "$outgoing_clock_before" "$outgoing_clock_after" \
     'A/W transport time'
@@ -1779,14 +2004,18 @@ assert_status 200 'save A/W outgoing transport' \
     --data-urlencode 'task=FM-Ausgang' \
     --data-urlencode "00_lfd=$outgoing_id" \
     --data-urlencode "03_datum=$outgoing_backdated_tactical" \
-    --data-urlencode "03_zeichen=$aw_code" \
-    --data-urlencode '05_gegenstelle=E2E-Gegenstelle' \
-    --data-urlencode '06_befweg=E2E-Transport' \
-    --data-urlencode '06_befwegausw=Fu' \
+    --data-urlencode '03_zeichen=forged' \
+    --data-urlencode '05_gegenstelle=Manipulierte-Gegenstelle' \
+    --data-urlencode '06_befweg=Manipulierter-Weg' \
+    --data-urlencode '06_befwegausw=Me' \
     "$base_url/4fach/mainindex.php"
 assert_no_runtime_error 'saved A/W outgoing transport'
 assert_db_equals "$outgoing_backdated_sql" 'edited A/W transport time' \
     "SELECT DATE_FORMAT(\`03_datum\`, '%Y-%m-%d %H:%i:00') FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
+assert_db_equals \
+    "${aw_code}|E2E-Gegenstelle|E2E-Transport|Fu" \
+    'A/W transport preserved LdF decision and authenticated code' \
+    "SELECT CONCAT(\`03_zeichen\`, '|', \`05_gegenstelle\`, '|', \`06_befweg\`, '|', \`06_befwegausw\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
 
 outgoing_status=$(db_sql <<SQL
 SELECT \`x00_status\` FROM \`nv_nachrichten\`
@@ -1810,7 +2039,7 @@ case "$outgoing_status" in
             'Si-completed outgoing status 8'
         load_dashboard "$si_cookies" 'Si queue after outgoing completion'
         assert_body_absent "$outgoing_marker" 'Si queue after outgoing completion'
-        outgoing_path='2 -> 4 -> 8'
+        outgoing_path='1 -> 2 -> 4 -> 8'
         ;;
     8)
         if [ "$review_expectation" = enabled ]; then
@@ -1822,7 +2051,7 @@ case "$outgoing_status" in
             'A/W-completed outgoing status 8'
         load_dashboard "$si_cookies" 'Si queue with outgoing review disabled'
         assert_body_absent "$outgoing_marker" 'Si queue with outgoing review disabled'
-        outgoing_path='2 -> 8'
+        outgoing_path='1 -> 2 -> 8'
         ;;
     *)
         echo 'Message workflow HTTP: outgoing transport reached an invalid status' >&2
@@ -1848,5 +2077,13 @@ else
     assert_body_absent "$outgoing_marker" 'S3 non-recipient outgoing list'
 fi
 
+assert_status 200 'open combined transmission tracking' \
+    --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    "$base_url/4fach/nachwea.php?nwalle=1"
+assert_no_runtime_error 'combined transmission tracking'
+assert_body 'Nachweisung Eingang / Ausgang' 'combined tracking view'
+assert_body 'Übermittlungsweg' 'tracking transport-path column'
+assert_body 'Funk · E2E-Transport' 'tracking actual outgoing transport path'
+
 printf '%s\n' \
-    "Message workflow HTTP integration (${workflow_variant}): OK; incoming 4 -> 8, outgoing ${outgoing_path}; POL/FB, autosighting, SI-Admin, answer and forwarding verified"
+    "Message workflow HTTP integration (${workflow_variant}): OK; incoming 1 -> 4 -> 8, outgoing ${outgoing_path}; LdF, A/W, Nachweisung, POL/FB, autosighting, SI-Admin, answer and forwarding verified"

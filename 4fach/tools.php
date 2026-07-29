@@ -54,6 +54,7 @@ require_once __DIR__ . "/../app/navigation.php";
        echo "<meta http-equiv=\"refresh\" content=\"".$cfg ["itv"] ["status"]."\">\n";
      break;
      case "fmdliste":
+     case "ldfliste":
        echo "<meta http-equiv=\"pragma\" content=\"no cache\">\n";
        echo "<meta http-equiv=\"expires\" content=\"0\">\n";
        echo "<meta http-equiv=\"refresh\" content=\"".$cfg ["itv"] ["fmdliste"]."\">\n";

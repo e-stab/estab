@@ -35,6 +35,7 @@ if (count($_POST)>0) { $returnValue = $_POST; }  // POST Daten, wenn vorhanden s
 $returnValue += array (
   "task" => "",
   "fm" => "",
+  "ldf" => "",
   "stab" => "",
   "sichter" => "",
 );
@@ -86,6 +87,7 @@ if (
     || isset ($returnValue ["m2_abmelden_x"])
     || ($returnValue ["stab"] ?? "") === "meldung"
     || ($returnValue ["sichter"] ?? "") === "meldung"
+    || ($returnValue ["ldf"] ?? "") === "meldung"
     || in_array (($returnValue ["fm"] ?? ""), array (
       "meldung", "FM-Adminmeldung", "SI-Adminmeldung",
     ), true)
@@ -161,7 +163,8 @@ function estab_workflow_require_active_incident_for_post (
     || isset ($request ["reset_record"])
     || isset ($request ["stab_anhang_x"])
     || isset ($request ["fm_anhang_x"])
-    || (string) ($request ["fm"] ?? "") === "meldung";
+    || (string) ($request ["fm"] ?? "") === "meldung"
+    || (string) ($request ["ldf"] ?? "") === "meldung";
   if (!$operational) {
     return;
   }
@@ -208,7 +211,7 @@ $messageOperation = $workflowIdentity === null
   ? null
   : estab_workflow_message_operation ($returnValue);
 if ($messageOperation !== null) {
-  $messageRecordId = $messageOperation === "telecommunications-reset"
+  $messageRecordId = $messageOperation === "message-operator-reset"
     ? ($returnValue ["reset_record"] ?? null)
     : ($returnValue ["00_lfd"] ?? null);
   if (!is_int ($messageRecordId) || $messageRecordId < 1) {
@@ -647,6 +650,8 @@ ANTWORT % WEITERLEITUNG
 
   if ( $workflowTaskSubmitted and ( ( $returnValue["task"] == "Stab_schreiben" ) or
          ( $returnValue["task"] == "Stab_gesprnoti" ) or
+         ( $returnValue["task"] == "LdF-Eingang" ) or
+         ( $returnValue["task"] == "LdF-Ausgang" ) or
          ( $returnValue["task"] == "FM-Ausgang" ) or
          ( $returnValue["task"] == "FM-Ausgang_Sichter" ) or
          ( $returnValue["task"] == "FM-Admin" ) or
@@ -657,6 +662,25 @@ ANTWORT % WEITERLEITUNG
 	         ( $returnValue["task"] == "Stab_sichten" ) or
 	         ( $returnValue["task"] == "SI-Admin" ) ) ) {
     $returndata = $returnValue;
+
+    if (in_array (
+      $returnValue ["task"],
+      array (
+        "FM-Eingang", "FM-Eingang_Anhang",
+        "FM-Eingang_Sichter", "FM-Eingang_Anhang_Sichter"
+      ),
+      true
+    )) {
+      $submittedAutoSighting = str_contains (
+        $returnValue ["task"],
+        "_Sichter"
+      );
+      if ($submittedAutoSighting === sichter_online ()) {
+        // The client must not choose whether it may self-sight an incoming
+        // message. That decision is derived from the authoritative Si state.
+        estab_workflow_forbid ();
+      }
+    }
 
     if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br> Daten kommen vom Formular und können gespeichert werden";  echo "<br>\n";}
 
@@ -694,9 +718,14 @@ ANTWORT % WEITERLEITUNG
         resetframeset ();
       }
     }
-  } elseif ( ( ($returnValue["task"] == "FM-Ausgang_Sichter") OR
-               ($returnValue["task"] == "FM-Ausgang")
-             ) and
+  } elseif ( ( in_array (
+               $returnValue["task"],
+               array (
+                 "FM-Ausgang", "FM-Ausgang_Sichter",
+                 "LdF-Eingang", "LdF-Ausgang"
+               ),
+               true
+             ) ) and
              ($returnValue ["abbrechen_x"]) ) {
 
       /************************************************************************\
@@ -707,16 +736,32 @@ FM-Ausgang (Sichter) abgebrochen
 
        $lockConnection = estab_message_connect ($conf_4f_db);
        try {
-         if (!estab_message_release_lock (
+         $cancelIsLead = str_starts_with (
+           $returnValue ["task"],
+           "LdF-"
+         );
+         $cancelDirection = $returnValue ["task"] === "LdF-Eingang"
+           ? "E"
+           : "A";
+         if (!estab_message_release_operator_stage_lock (
            $lockConnection,
            $conf_4f_tbl ["nachrichten"],
            $returnValue ["00_lfd"],
+           $cancelDirection,
+           $cancelIsLead ? 1 : 2,
            $workflowIdentity ["kuerzel"]
          )) {
            throw new RuntimeException ("Message lock release lost its target");
          }
        } finally {
          estab_auth_close ($lockConnection);
+       }
+       if ($cancelIsLead) {
+         // Return to the LdF disposition queue after releasing the exact
+         // stage lock. Keeping the submitted task would suppress the queue
+         // renderer and leave the main frame empty.
+         $returnValue ["task"] = "";
+         $returnValue ["ldf"] = "";
        }
   }
 
@@ -1042,8 +1087,87 @@ ul#topmenu li.active {
         $list->createlist ();
    }
 
-   
-   
+
+
+/**********************************************************************\
+  --- L d F   D i s p o s i t i o n ---
+
+  Eingänge: Rufname in einen eindeutigen Absender übersetzen.
+  Ausgänge: Gegenstelle und verbindlichen Beförderungsweg festlegen.
+\**********************************************************************/
+  if (
+    is_array ($workflowIdentity)
+    && estab_workflow_is_telecommunications_lead ($workflowIdentity)
+    && $returnValue ["ldf"] !== "meldung"
+    && $returnValue ["task"] === ""
+    && !isset ($returnValue ["m2_abmelden_x"])
+  ) {
+    $css = "a:link { color:#000000; text-decoration:none; font-weight:normal; }\n".
+           "a:visited { color:#EE0000; text-decoration:none; font-weight:normal; }\n".
+           "a:hover { color:#EE0000; text-decoration:none; background-color:#FFFF99; font-weight:normal; }\n".
+           "a:active { color:#0000EE; background-color:#FFFF99; }\n".
+           "a:focus { color:#0000EE; background-color:#FFFF99; }";
+    pre_html (
+      "ldfliste",
+      "LdF-Disposition ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"],
+      $css
+    );
+    echo "<body bgcolor=\"#DCDCFF\">";
+    $list = new listen ("LDF", "");
+    $list->createlist ();
+  }
+
+  if ($returnValue ["ldf"] === "meldung") {
+    $lockConnection = estab_message_connect ($conf_4f_db);
+    try {
+      $leadCandidate = estab_message_fetch_by_id (
+        $lockConnection,
+        $conf_4f_tbl ["nachrichten"],
+        $returnValue ["00_lfd"]
+      );
+      if (!is_array ($leadCandidate)) {
+        throw new RuntimeException ("LdF message not found");
+      }
+      $leadDirection = (string) ($leadCandidate ["04_richtung"] ?? "");
+      $lockAcquired = estab_message_acquire_operator_stage_lock (
+        $lockConnection,
+        $conf_4f_tbl ["nachrichten"],
+        $returnValue ["00_lfd"],
+        $workflowIdentity ["kuerzel"],
+        $leadDirection,
+        1
+      );
+      $lockedMessage = estab_message_fetch_by_id (
+        $lockConnection,
+        $conf_4f_tbl ["nachrichten"],
+        $returnValue ["00_lfd"]
+      );
+    } finally {
+      estab_auth_close ($lockConnection);
+    }
+
+    if ($lockAcquired && is_array ($lockedMessage)) {
+      $formdata = $lockedMessage;
+      $formdata ["02_zeichen"] = $_SESSION ["vStab_kuerzel"];
+      $leadTask = $leadDirection === "E"
+        ? "LdF-Eingang"
+        : "LdF-Ausgang";
+      $form = new nachrichten4fach ($formdata, $leadTask, "");
+    } else {
+      $lockOwner = is_array ($lockedMessage)
+        ? (string) ($lockedMessage ["x03_sperruser"] ?? "")
+        : "";
+      echo "<big><big><big>Datensatz ist im Zugriff von <b>".
+           estab_message_html ($lockOwner)."!</b><br></big></big></big>";
+      echo "<p>Freigabe nur nach Prüfung durch die Leitung.</p>";
+      echo "<form method=\"post\" action=\"./mainindex.php\" target=\"_self\">";
+      echo estab_csrf_field ();
+      echo "<input type=\"hidden\" name=\"reset_record\" value=\"".
+           estab_auth_html ($returnValue ["00_lfd"])."\">";
+      echo "<button type=\"submit\">Datensatz freigeben</button></form>";
+    }
+  }
+
 /**********************************************************************\
   --- F e r n m e l d e r   E i n g a n g  ---
       Es wurde der "Eingang"-Button beim Fernmelder betÃ¤tigt.
@@ -1120,11 +1244,13 @@ if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>  ### FM Aus
 
     $lockConnection = estab_message_connect ($conf_4f_db);
     try {
-      $lockAcquired = estab_message_acquire_outgoing_lock (
+      $lockAcquired = estab_message_acquire_operator_stage_lock (
         $lockConnection,
         $conf_4f_tbl ["nachrichten"],
         $returnValue ["00_lfd"],
-        $workflowIdentity ["kuerzel"]
+        $workflowIdentity ["kuerzel"],
+        "A",
+        2
       );
       $lockedMessage = estab_message_fetch_by_id (
         $lockConnection,

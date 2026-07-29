@@ -167,6 +167,8 @@ function estab_readiness_schema_query(): string
         . "AND BINARY assignment_user.rolle = BINARY 'Stab') OR "
         . "(BINARY assignment_user.funktion = BINARY 'A/W' "
         . "AND BINARY assignment_user.rolle = BINARY 'Fernmelder') OR "
+        . "(BINARY assignment_user.funktion = BINARY 'LdF' "
+        . "AND BINARY assignment_user.rolle = BINARY 'Fernmelder') OR "
         . "EXISTS (SELECT 1 FROM nv_empfmtx AS assignment_matrix "
         . "WHERE assignment_matrix.mtx_typ = 'cb' "
         . "AND BINARY assignment_matrix.mtx_fkt "

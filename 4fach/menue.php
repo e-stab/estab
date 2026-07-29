@@ -113,6 +113,12 @@ function menue (){
                break;
 
                case "Fernmelder" :
+                 if (($_SESSION ["vStab_funktion"] ?? "") === "LdF") {
+                    echo "<td>\n";
+                    echo "<input type=\"image\" name=\"ldf_nachrichten\" src=\"".$conf_design_path."/outgoing_msg.gif\" alt=\"Disposition\">\n";
+                    echo "</td>\n";
+                    break;
+                 }
                     echo "<td>\n";
                     echo "<input type=\"image\" name=\"fm_eingang\" src=\"".$conf_design_path."/incoming_msg.gif\" alt=\"Eingang\">\n";
                     echo "</td>\n";

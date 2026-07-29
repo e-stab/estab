@@ -285,6 +285,13 @@ function estab_workflow_is_telecommunications(array $identity): bool
         && ($identity['rolle'] ?? '') === 'Fernmelder';
 }
 
+/** Leiter der Fernmeldebetriebsstelle: Rufnamen und Transportwege disponieren. */
+function estab_workflow_is_telecommunications_lead(array $identity): bool
+{
+    return ($identity['funktion'] ?? '') === 'LdF'
+        && ($identity['rolle'] ?? '') === 'Fernmelder';
+}
+
 function estab_workflow_is_viewer(array $identity): bool
 {
     return ($identity['funktion'] ?? '') === 'Si'
@@ -321,6 +328,7 @@ function estab_workflow_action_keys_allowed(array $request): bool
         'fm_eingang_x', 'fm_eingang_y',
         'fm_ausgang_x', 'fm_ausgang_y',
         'fm_admin_x', 'fm_admin_y',
+        'ldf_nachrichten_x', 'ldf_nachrichten_y',
         'si_admin_x', 'si_admin_y',
         'm2_benutzer_x', 'm2_benutzer_y',
         'm2_abmelden_x', 'm2_abmelden_y',
@@ -358,7 +366,7 @@ function estab_workflow_action_keys_allowed(array $request): bool
 function estab_workflow_message_operation(array $request): ?string
 {
     if (array_key_exists('reset_record', $request)) {
-        return 'telecommunications-reset';
+        return 'message-operator-reset';
     }
     if (isset($request['action'])) {
         return 'staff-state';
@@ -370,6 +378,8 @@ function estab_workflow_message_operation(array $request): ?string
             'Stab_lesen' => 'staff-read',
             'Stab_sichten' => 'viewer-review',
             'FM-Ausgang', 'FM-Ausgang_Sichter' => 'telecommunications-save',
+            'LdF-Eingang' => 'telecommunications-lead-incoming-save',
+            'LdF-Ausgang' => 'telecommunications-lead-outgoing-save',
             'FM-Admin' => 'telecommunications-admin',
             'SI-Admin' => 'viewer-admin',
             default => null,
@@ -381,6 +391,9 @@ function estab_workflow_message_operation(array $request): ?string
     }
     if (($request['sichter'] ?? '') === 'meldung') {
         return 'viewer-review';
+    }
+    if (($request['ldf'] ?? '') === 'meldung') {
+        return 'telecommunications-lead-edit';
     }
     return match ((string) ($request['fm'] ?? '')) {
         'meldung' => 'telecommunications-edit',
@@ -410,6 +423,8 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
     }
 
     $isTelecommunications = estab_workflow_is_telecommunications($identity);
+    $isTelecommunicationsLead =
+        estab_workflow_is_telecommunications_lead($identity);
     $isViewer = estab_workflow_is_viewer($identity);
     $isStaffWriter = estab_workflow_is_staff_writer($identity);
 
@@ -428,7 +443,7 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
     if (array_key_exists('reset_record', $request)) {
         if (
             $method !== 'POST'
-            || !$isTelecommunications
+            || (!$isTelecommunications && !$isTelecommunicationsLead)
             || estab_workflow_record_id($request['reset_record']) === null
         ) {
             return false;
@@ -443,12 +458,34 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
         $allowed = match ($task) {
             'Stab_schreiben', 'Stab_gesprnoti', 'Stab_lesen' => $isStaffWriter,
             'Stab_sichten', 'SI-Admin' => $isViewer,
+            'LdF-Eingang', 'LdF-Ausgang' => $isTelecommunicationsLead,
             'FM-Ausgang', 'FM-Ausgang_Sichter', 'FM-Admin',
             'FM-Eingang', 'FM-Eingang_Sichter',
             'FM-Eingang_Anhang', 'FM-Eingang_Anhang_Sichter' => $isTelecommunications,
             default => false,
         };
         if (!$allowed) {
+            return false;
+        }
+        if (
+            in_array(
+                $task,
+                [
+                    'FM-Eingang', 'FM-Eingang_Sichter',
+                    'FM-Eingang_Anhang', 'FM-Eingang_Anhang_Sichter',
+                ],
+                true
+            )
+            && (
+                array_key_exists('13_abseinheit', $request)
+                && (
+                    !is_string($request['13_abseinheit'])
+                    || trim($request['13_abseinheit']) !== ''
+                )
+            )
+        ) {
+            // A/W records only the received callsign. LdF is the sole actor
+            // that may translate it into the sender field.
             return false;
         }
     }
@@ -466,6 +503,17 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
         if (
             $method !== 'POST'
             || !$isViewer
+            || estab_workflow_record_id($request['00_lfd'] ?? null) === null
+        ) {
+            return false;
+        }
+    }
+    if (isset($request['ldf']) && (string) $request['ldf'] !== '') {
+        if (
+            !is_string($request['ldf'])
+            || $request['ldf'] !== 'meldung'
+            || !$isTelecommunicationsLead
+            || $method !== 'POST'
             || estab_workflow_record_id($request['00_lfd'] ?? null) === null
         ) {
             return false;
@@ -497,6 +545,7 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
         'fm_ausgang_x' => $isTelecommunications,
         'fm_admin_x' => $isTelecommunications,
         'fm_anhang_x' => $isTelecommunications,
+        'ldf_nachrichten_x' => $isTelecommunicationsLead,
         'stab_sichten_x' => $isViewer,
         'si_admin_x' => $isViewer,
     ];

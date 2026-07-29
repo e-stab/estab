@@ -1009,15 +1009,15 @@ assert_body 'value="16_12_gn"'
 # A/W form. Missing inactive controls such as 06_befweg and an initially empty
 # 12_anhang are deliberately not invented here: this request mirrors what a
 # browser submits. The blue and green recipient selections, every active
-# message value and the sighter note must survive upload and selection in the
-# returned form itself.
+# writable message value and the sighter note must survive upload and selection
+# in the returned form itself. The incoming sender deliberately has no request
+# field: only LdF translates the received callsign into that value.
 aw_workflow_csrf_token=$(csrf_from_body)
 aw_content_marker="AW_ATTACHMENT_FORM_STATE_$$"
 aw_note_marker="AW_ATTACHMENT_NOTE_STATE_$$"
 aw_counterpart_marker='AW-GEGENSTELLE-STATE'
 aw_transport_marker='AW-BEFOERDERUNG-STATE'
 aw_address_marker='AW-ANSCHRIFT-STATE'
-aw_sender_marker='AW-ABSENDER-STATE'
 aw_author_marker='awz001'
 aw_received_at='281915Jul2026'
 aw_written_at='1917'
@@ -1050,7 +1050,6 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode '11_gesprnotiz=' \
     --data-urlencode "12_inhalt=$aw_content_marker" \
     --data-urlencode "12_abfzeit=$aw_written_at" \
-    --data-urlencode "13_abseinheit=$aw_sender_marker" \
     --data-urlencode "14_zeichen=$aw_author_marker" \
     --data-urlencode '14_funktion=A/W' \
     --data-urlencode "15_quitdatum=$aw_reviewed_at" \
@@ -1301,7 +1300,8 @@ assert_body 'name="12_inhalt"'
 assert_body "$aw_content_marker"
 assert_body "name=\"12_anhang\" value=\"$aw_stored_attachment;\""
 assert_body "name=\"12_abfzeit\" value=\"$aw_written_at\""
-assert_body "name=\"13_abseinheit\" value=\"$aw_sender_marker\""
+assert_body 'Wird durch LdF aus dem Rufnamen ergänzt'
+assert_body_absent 'name="13_abseinheit"'
 assert_body "name=\"14_zeichen\" value=\"$aw_author_marker\""
 assert_body 'name="14_funktion" value="A/W"'
 assert_body "name=\"15_quitdatum\" value=\"$aw_reviewed_at\""

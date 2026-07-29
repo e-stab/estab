@@ -125,9 +125,10 @@ echo "FB  ="; print_r ($fb); echo "<br>";
                              "rolle" => "Stab" );
        }
      }
-       // Sichter und Fernmelder dazu
+       // Sichter und feste Fernmeldefunktionen dazu
      $conf_empf [$i++] = array ("fkt" => "Si",  "rolle" => "Stab" );
      $conf_empf [$i++] = array ("fkt" => "A/W", "rolle" => "Fernmelder" );
+     $conf_empf [$i++] = array ("fkt" => "LdF", "rolle" => "Fernmelder" );
      if ($fb != NULL){
        foreach ($fb as $fktdata){
          $conf_empf [$i++] = array(
