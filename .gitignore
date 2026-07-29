@@ -3,10 +3,12 @@
 .env.*
 !.env.example
 /.estab-ci-*
+/.estab-registry-bind.*
 /secrets/
 
 # Generated application state
 /4fdata/
+/backups/
 /var/
 /coverage/
 /tmp/

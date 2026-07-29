@@ -42,29 +42,100 @@ RUN set -eux; \
 WORKDIR /var/www/html
 
 COPY index.php health.php config.inc.php dbcfg.inc.php e_cfg.inc.php favicon.ico menue.inc.php estab-ui.css ./
-COPY 4fach/ ./4fach/
-COPY 4fadm/ ./4fadm/
-COPY 4fbak/ ./4fbak/
-COPY 4fcfg/ ./4fcfg/
-COPY 4fcss/ ./4fcss/
-COPY 4fexch/ ./4fexch/
-COPY 4fsym/ ./4fsym/
-COPY 4fueltg/ ./4fueltg/
-COPY app/ ./app/
-COPY br/ ./br/
-COPY doku/ ./doku/
-COPY fmtbb/ ./fmtbb/
-COPY language/ ./language/
-COPY sammlung/ ./sammlung/
+
+# The repository preserves the complete upstream history, but the runtime
+# image contains only exercised application code and assets. In particular,
+# the historical 4fadm/00.htpasswd is never copied; entrypoint.sh generates
+# the effective bcrypt file from the runtime secret below /run instead.
+COPY 4fach/4fachform.php \
+    4fach/anhang.php \
+    4fach/button.php \
+    4fach/counter.php \
+    4fach/createbutton.php \
+    4fach/data_hndl.php \
+    4fach/db_operation.php \
+    4fach/download.php \
+    4fach/index.php \
+    4fach/info.php \
+    4fach/katego.php \
+    4fach/kategobutton.php \
+    4fach/katgoedt.php \
+    4fach/liste.php \
+    4fach/logoff.php \
+    4fach/logout.php \
+    4fach/mainindex.php \
+    4fach/menue.php \
+    4fach/nachwea.php \
+    4fach/protokoll.php \
+    4fach/resetpic.php \
+    4fach/showpic.php \
+    4fach/status.php \
+    4fach/tools.php \
+    4fach/upload.php \
+    4fach/upload_class.php \
+    4fach/vali_data.php \
+    4fach/vordrucke.php \
+    4fach/vorgaben.php \
+    ./4fach/
+COPY 4fach/upload/upload.php ./4fach/upload/
+COPY 4fach/audio/*.wav ./4fach/audio/
+COPY 4fach/design/HS/*.gif \
+    4fach/design/HS/*.jpg \
+    4fach/design/HS/*.wav \
+    ./4fach/design/HS/
+COPY 4fach/design/mr/folder_global.gif ./4fach/design/mr/
+COPY 4fach/null.gif ./4fach/
+
+COPY 4fadm/admin.php \
+    4fadm/export.php \
+    4fadm/incident_export.php \
+    4fadm/incidents.php \
+    4fadm/make_fkt.php \
+    4fadm/set_number_after_crash.php \
+    4fadm/system_status.php \
+    4fadm/users.php \
+    ./4fadm/
+
+# Only the active PDF generator is shipped. The old bitmap generator, bundled
+# FPDF examples/documentation/archive and unused font collection stay in Git.
+COPY 4fbak/backup.php \
+    4fbak/backup_pdf.php \
+    4fbak/fpdf.php \
+    4fbak/logo.png \
+    ./4fbak/
+COPY 4fbak/fpdf/font/*.php ./4fbak/fpdf/font/
+# Dynamic button rendering uses this one historical font when FreeType exists.
+COPY 4fbak/fonts/georgiaz.ttf ./4fbak/fonts/
+
+COPY 4fcfg/color.inc.php \
+    4fcfg/config.inc.php \
+    4fcfg/d_cfg.inc.php \
+    4fcfg/dbcfg.inc.php \
+    4fcfg/e_cfg.inc.php \
+    4fcfg/fkt_rolle.inc.php \
+    4fcfg/para.inc.php \
+    ./4fcfg/
+COPY 4fsym/*.bmp \
+    4fsym/*.gif \
+    4fsym/*.jpg \
+    4fsym/*.png \
+    ./4fsym/
+COPY 4fueltg/ue_ltg.php 4fueltg/null.gif ./4fueltg/
+COPY app/*.php ./app/
+COPY doku/Handbuch_eStab.pdf ./doku/
+COPY fmtbb/tbb.php fmtbb/null.gif fmtbb/null.jpg ./fmtbb/
+COPY language/german/helptext.php \
+    language/german/hilfetext.php \
+    ./language/german/
 COPY stabinfo/ ./stabinfo/
-COPY stabetb/ ./stabetb/
-COPY ubltg/ ./ubltg/
+COPY stabetb/etb.php stabetb/null.gif stabetb/null.jpg ./stabetb/
 
 COPY docker/apache/estab.conf /etc/apache2/sites-available/estab.conf
 COPY docker/apache/ports.conf /etc/apache2/ports.conf
 COPY docker/php/estab.ini /usr/local/etc/php/conf.d/zz-estab.ini
 COPY docker/app/entrypoint.sh /usr/local/bin/estab-entrypoint
 COPY docker/app/healthcheck.php /usr/local/bin/estab-healthcheck
+COPY docker/app/verify-runtime-surface.sh /usr/local/bin/estab-verify-runtime-surface
 
 RUN set -eux; \
     a2ensite estab; \
@@ -72,9 +143,13 @@ RUN set -eux; \
         /var/www/html/4fdata \
         /var/lib/estab/export \
         /var/lib/php/sessions; \
-    chmod 0755 /usr/local/bin/estab-entrypoint /usr/local/bin/estab-healthcheck; \
+    chmod 0755 \
+        /usr/local/bin/estab-entrypoint \
+        /usr/local/bin/estab-healthcheck \
+        /usr/local/bin/estab-verify-runtime-surface; \
     find /var/www/html -xdev -type d ! -path '/var/www/html/4fdata*' -exec chmod 0755 '{}' +; \
-    find /var/www/html -xdev -type f ! -path '/var/www/html/4fdata/*' -exec chmod 0644 '{}' +
+    find /var/www/html -xdev -type f ! -path '/var/www/html/4fdata/*' -exec chmod 0644 '{}' +; \
+    estab-verify-runtime-surface /var/www/html
 
 EXPOSE 8080
 

@@ -46,6 +46,9 @@ case "$ESTAB_ADMIN_USER" in
     ''|*[!A-Za-z0-9_.-]*) echo "ESTAB_ADMIN_USER contains invalid characters" >&2; exit 1 ;;
 esac
 
+php -d display_errors=stderr -r \
+    'require "/var/www/html/app/bootstrap.php"; estab_validate_runtime_configuration();'
+
 data_root="/var/www/html/4fdata/$ESTAB_DB_NAME"
 install -d -o www-data -g www-data -m 0770 \
     "$data_root" \
