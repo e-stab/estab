@@ -213,7 +213,7 @@ try {
       </p>
       <h1>PDF-Einsatzdossier</h1>
       <p>Erstellen Sie für einen bestimmten Einsatz eine durchsuchbare PDF mit
-        ETB, TTB und allen Nachrichtenvordrucken. Auf Wunsch werden die
+        ETB, TBB und allen Nachrichtenvordrucken. Auf Wunsch werden die
         Originalanhänge direkt in die PDF eingebettet und im Anlagenverzeichnis
         mit SHA-256-Prüfsumme dokumentiert.</p>
     </header>
@@ -279,8 +279,8 @@ try {
                     'Alle ETB-Einträge dieses Einsatzes',
                 ],
                 'ttb' => [
-                    'Technisches Betriebsbuch (TTB)',
-                    'Alle TTB-Einträge dieses Einsatzes',
+                    'Technisches Betriebsbuch (TBB)',
+                    'Alle TBB-Einträge dieses Einsatzes',
                 ],
                 'messages' => [
                     'Nachrichtenvordrucke',

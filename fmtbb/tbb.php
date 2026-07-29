@@ -76,7 +76,7 @@ class tbb_liste {
 \*****************************************************************************/
   function tbb_ueberschrift(){
     echo "<header class=\"estab-tool-hero\">\n";
-    echo "<p class=\"estab-tool-eyebrow\">Einsatzdokumentation · TTB</p>\n";
+    echo "<p class=\"estab-tool-eyebrow\">Einsatzdokumentation · TBB</p>\n";
     echo "<h1>Technisches Betriebsbuch</h1>\n";
     echo "<p>Chronologische Dokumentation des technischen Betriebs im aktiven ";
     echo "Einsatz. ";
@@ -260,7 +260,7 @@ if (debug == true){ echo "tbb_tableexist==>"; var_dump($this->tbb_titel_tbl); ec
     echo "<form class=\"estab-tool-actions\" action=\"".$action."\" method=\"get\">\n";
     echo "<button class=\"estab-button estab-button-primary\" ";
     echo "type=\"submit\" name=\"tbb_menue\" value=\"eintrag\">";
-    echo "Neuen TTB-Eintrag anlegen</button>\n";
+    echo "Neuen TBB-Eintrag anlegen</button>\n";
     echo "</form>\n</section>\n";
   }
 
@@ -314,7 +314,7 @@ var $task ;
 
     echo "<section class=\"estab-tool-panel\" aria-labelledby=\"ttb-entry-title\">\n";
     echo "<header class=\"estab-tool-panel-heading\">\n";
-    echo "<h2 id=\"ttb-entry-title\">TTB-Eintrag erfassen</h2>\n";
+    echo "<h2 id=\"ttb-entry-title\">TBB-Eintrag erfassen</h2>\n";
     echo "<p>Die Ereignisdarstellung ist verpflichtend; eine Bemerkung ist optional.</p>\n";
     echo "</header>\n";
     echo "<form class=\"estab-tool-form\" method=\"post\" action=\"".$action.
@@ -334,7 +334,7 @@ var $task ;
     echo "<small>Optional, höchstens 10.000 Zeichen.</small>\n</div>\n";
     echo "<div class=\"estab-tool-actions\">\n";
     echo "<button class=\"estab-button estab-button-primary\" type=\"submit\">";
-    echo "TTB-Eintrag speichern</button>\n";
+    echo "TBB-Eintrag speichern</button>\n";
     echo "<a class=\"estab-button\" href=\"".$action."\">Abbrechen</a>\n";
     echo "</div>\n</form>\n</section>\n";
   }
@@ -425,8 +425,8 @@ var $task ;
       echo "</table>\n";
       echo "</div>\n</section>\n";
     } else {
-      echo "<section class=\"estab-tool-panel\" aria-label=\"Keine TTB-Einträge\">\n";
-      echo "<p class=\"estab-tool-empty\">Noch keine TTB-Einträge vorhanden.</p>\n";
+      echo "<section class=\"estab-tool-panel\" aria-label=\"Keine TBB-Einträge\">\n";
+      echo "<p class=\"estab-tool-empty\">Noch keine TBB-Einträge vorhanden.</p>\n";
       echo "</section>\n";
     }
   }
@@ -516,7 +516,7 @@ $tbbobj->tbb_ueberschrift ();
 if (!$tbbobj->tbb_titel_gesetzt) {
   echo "<section class=\"estab-tool-status estab-tool-status-danger\" ";
   echo "role=\"alert\" data-estab-no-active-incident><div>";
-  echo "<strong>Kein Einsatz aktiv – TTB-Eingaben sind gesperrt.</strong>";
+  echo "<strong>Kein Einsatz aktiv – TBB-Eingaben sind gesperrt.</strong>";
   echo "<span>";
   echo "Legen Sie in der Administration einen Einsatz an oder aktivieren Sie ";
   echo "einen vorhandenen Einsatz.</span></div></section>\n";

@@ -62,7 +62,7 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   DB-Fehlern, unveränderte Nicht-HTML-Antworten sowie SID-gebundene
   Statusänderung,
 - gemeinsames responsives Werkzeuggestell für die erreichbaren
-  Administrations-, Kategorien-, ETB-/TTB-, Nachweis- und
+  Administrations-, Kategorien-, ETB-/TBB-, Nachweis- und
   Meldungsübersichtsseiten einschließlich beschrifteter Felder,
   Tastaturfokus, responsiver Tabellenkarten und begrenzter Scrollflächen für
   unvermeidbar breite historische Fachformulare,
@@ -186,7 +186,7 @@ Docker wird `ESTAB_CONTAINER_CLI=docker` gesetzt oder die Variable weggelassen.
 Vor den allgemeinen Schreibtests aktiviert die CI über die Domänen-API den
 fest benannten Einsatz `CI-INTEGRATION`. Danach belegt sie die
 Benutzerverwaltung gegen MariaDB und erzeugt einen separaten historischen
-PDF-Testeinsatz. Dessen ETB, TTB, Nachricht und Originalanhang müssen aus
+PDF-Testeinsatz. Dessen ETB, TBB, Nachricht und Originalanhang müssen aus
 einem konsistenten Read-only-Snapshot exportiert werden, während gleichartige
 Daten des aktiven CI-Einsatzes ausgeschlossen bleiben. Der Test extrahiert
 den realen `/EmbeddedFile`-Stream und vergleicht Bytes und SHA-256 mit dem
@@ -403,7 +403,7 @@ fail-closed Readiness eines ungültig aktiven Kontos. Danach aktiviert
 `CI-INTEGRATION`.
 
 Direkt danach legt `tests/integration/incident_export.php` einen separaten
-Einsatz an, füllt in beiden Einsätzen je einen ETB-, TTB-, Nachrichten- und
+Einsatz an, füllt in beiden Einsätzen je einen ETB-, TBB-, Nachrichten- und
 Anhangdatensatz und macht den Export-Einsatz wieder historisch. Der
 konsistente Read-only-Snapshot muss exakt dessen vier Datensätze liefern. Aus
 der erzeugten PDF wird der tatsächliche `/EmbeddedFile`-Stream anhand seiner
@@ -417,7 +417,7 @@ Der davon unabhängige Rendervertrag erzeugt mit
 `tests/php/pdf_template_render_fixture.php` aus exakt demselben
 Nachrichtendatensatz und derselben 5×4-Empfängermatrix einen Einzelvordruck,
 eine direkte Dossier-Nachrichtenseite, beide Varianten mit mehrseitigem Inhalt
-und ein vollständiges Dossier in der produktiven Folge Deckblatt, ETB, TTB,
+und ein vollständiges Dossier in der produktiven Folge Deckblatt, ETB, TBB,
 Nachricht und Anlagenverzeichnis. `tests/static/pdf_render.sh` verlangt A4,
 extrahiert Formulartext und Bounding Boxes, weist null Seitenbilder nach,
 prüft den konstanten linken Inhaltseinzug und rendert alle Varianten mit
@@ -708,6 +708,18 @@ Chrome DevTools Protocol. Das Testkonto muss vorher mit der in
 Funktion `S1` zugewiesen sein. Im CI übernimmt das der eng auf
 `estab_ci`-Projekte begrenzte Provisionierer; öffentliche Selbstregistrierung
 bleibt ausgeschaltet:
+
+Für eine rein lesende Kontrolle der anonymen Startseite ist kein Testkonto
+erforderlich. Der gezielte Lauf prüft die korrekte TBB-Bezeichnung,
+Anmeldeziele, Kartengeometrie und Hoverzustände im echten Browser:
+
+```console
+ESTAB_TEST_BASE_URL=http://127.0.0.1:8080 \
+python3 -B tests/browser/headless_ui.py --overview-only
+```
+
+Der vollständige Akzeptanzlauf verwendet anschließend das eigens
+provisionierte Testkonto:
 
 ```console
 ESTAB_TEST_BASE_URL=http://127.0.0.1:18080 \
@@ -1043,7 +1055,7 @@ Mindestens zu prüfen:
   Datei ablehnen lassen,
 - Nachrichtenvordruck als PDF erzeugen und aus der geschützten
   Vordruckliste abrufen,
-- für einen inzwischen historischen Einsatz ein PDF-Dossier mit ETB, TTB,
+- für einen inzwischen historischen Einsatz ein PDF-Dossier mit ETB, TBB,
   Nachrichtenvordrucken und Originalanhängen erzeugen, die Anlagenansicht im
   vorgesehenen PDF-Programm öffnen und stichprobenartig eine eingebettete
   Datei samt dokumentierter SHA-256 gegen das Original prüfen,

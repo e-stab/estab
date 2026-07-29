@@ -127,7 +127,7 @@ fail-closed gesperrt. Als erster fachlicher Schritt wird unter
 `/4fadm/incidents.php` ein Einsatz angelegt und aktiviert; Kennung und Name
 müssen danach in der globalen Statusleiste erscheinen. Funktionskonten lassen
 sich unter `/4fadm/users.php` sperren, entsperren und mit einem neuen Kennwort
-versehen. Ein vollständiges ETB-/TTB-/Nachrichten-/Anhang-Dossier für einen
+versehen. Ein vollständiges ETB-/TBB-/Nachrichten-/Anhang-Dossier für einen
 aktiven oder historischen Einsatz erzeugt `/4fadm/incident_export.php`.
 Unter `/4fach/vordrucke.php` öffnen angemeldete Benutzer abgeschlossene
 Nachrichten des aktiven Einsatzes im jeweils aktuellen, mit dem Dossier
@@ -183,7 +183,7 @@ nicht.
 | `/4fadm/admin.php` | Administration | separates HTTP Basic Auth |
 | `/4fadm/incidents.php` | Einsätze anlegen, aktivieren und deaktivieren | HTTP Basic Auth, Session-CSRF und revisionsgesicherter globaler Status |
 | `/4fadm/users.php` | Benutzer anlegen, Funktionen fest zuweisen, sperren/entsperren und Kennwörter zurücksetzen | HTTP Basic Auth, Session-CSRF; Rollen werden serverseitig abgeleitet und aktive Sitzungen atomar widerrufen |
-| `/4fadm/incident_export.php` | ETB, TTB, Nachrichtenvordrucke und Originalanhänge eines Einsatzes als PDF-Dossier | HTTP Basic Auth, Session-CSRF, einsatzgebundene Abfragen und protokollierte SHA-256 |
+| `/4fadm/incident_export.php` | ETB, TBB, Nachrichtenvordrucke und Originalanhänge eines Einsatzes als PDF-Dossier | HTTP Basic Auth, Session-CSRF, einsatzgebundene Abfragen und protokollierte SHA-256 |
 | `/4fadm/system_status.php` | ausführlicher Laufzeitstatus | HTTP Basic Auth |
 | `/4fadm/export.php` | Einsatzexporte auflisten, erstellen, als ZIP herunterladen und einzeln löschen | HTTP Basic Auth; POST-Erstellung/-Löschung mit Session-CSRF; Download nur über validierte Exportkennung |
 | `/4fadm/make_fkt.php` | aktive Empfängermatrix und einzelne Standardmatrix atomar bearbeiten | HTTP Basic Auth, Session-CSRF; Rollenabgleich und Sitzungswiderruf committen mit der aktiven Matrix |
@@ -235,7 +235,7 @@ erfolgreicher Anmeldung direkt geöffnet. Freie Rücksprung-URLs werden nicht
 akzeptiert. Die Administration ist als eigener technischer Zugang markiert.
 
 Eine gemeinsame Navigation führt in stabiler Reihenfolge durch Übersicht,
-Nachrichtenvordruck, Meldungsübersicht, Vordrucke, ETB, TTB, Nachweisung und
+Nachrichtenvordruck, Meldungsübersicht, Vordrucke, ETB, TBB, Nachweisung und
 BOS-Info. Sie markiert den aktiven Bereich und öffnet interne Ziele immer im
 selben Browserkontext. Der Nachrichtenarbeitsbereich besteht aus genau zwei
 modernen `iframe`-Elementen: links der vollhohen `vorgaben`-Sidebar und rechts
@@ -263,7 +263,7 @@ Alle eigenständigen Fach- und Administrationsseiten verwenden darüber hinaus
 dasselbe responsive Werkzeuggestell: ein klarer Seitenkopf, Status- und
 Hinweisflächen, beschriftete Formularfelder, mindestens 44 Pixel große
 Aktionen sowie eine eindeutige Rücknavigation. Dazu gehören insbesondere
-Meldungsübersicht, Nachweisung, ETB, TTB, Vordrucke, Kategorienverwaltung,
+Meldungsübersicht, Nachweisung, ETB, TBB, Vordrucke, Kategorienverwaltung,
 Empfängermatrix, Einsatzverwaltung, Benutzerverwaltung, Exporte und
 Systemstatus. Breite Fach- und Prüftabellen bleiben auf kleinen Bildschirmen
 als Karten lesbar oder werden in einem ausdrücklich begrenzten Tabellenbereich

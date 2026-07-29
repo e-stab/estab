@@ -77,6 +77,7 @@ try {
         'etb_kuerzel' => 'ADA001',
         'etb_funktion' => 'S2',
     ]]);
+    // Accept the short-lived TTB spelling as an input alias, but render TBB.
     $pdf->addLogbook('TTB', [[
         'tbb_lfd-nr' => 1,
         'tbb_time' => '2026-07-29 10:32:00',
@@ -132,7 +133,12 @@ try {
     $assert(str_starts_with($document, '%PDF-1.7'), 'PDF version/header missing');
     $assert(
         str_contains($document, 'Funkkanal eingerichtet'),
-        'TTB columns were not mapped into the PDF'
+        'TBB columns were not mapped into the PDF'
+    );
+    $assert(
+        str_contains($document, 'TBB 1')
+            && !str_contains($document, 'TTB 1'),
+        'legacy TTB input alias was not rendered with the canonical TBB label'
     );
     $assert(str_ends_with($document, "%%EOF\n"), 'PDF trailer missing');
     $assert(strlen($document) > 5000, 'incident PDF is unexpectedly small');

@@ -117,6 +117,19 @@ macOS- und Linux-Pfaden gesucht.
 
 ## Ausführen
 
+Die anonyme Startseite lässt sich ohne Testkonto und ohne Änderungen an
+Anwendungsdaten gezielt prüfen. Dieser Lauf kontrolliert unter anderem die
+Bezeichnung `Technisches Betriebsbuch (TBB)`, die Anmeldeziele und das
+überlappungsfreie Kartenlayout:
+
+```sh
+ESTAB_TEST_BASE_URL=http://127.0.0.1:8080 \
+python3 tests/browser/headless_ui.py --overview-only
+```
+
+Der vollständige zustandsverändernde Akzeptanzlauf benötigt dagegen ein
+eigens dafür provisioniertes Testkonto:
+
 ```sh
 ESTAB_TEST_BASE_URL=http://127.0.0.1:8080 \
 ESTAB_TEST_LOGIN_NAME='Browser Test' \

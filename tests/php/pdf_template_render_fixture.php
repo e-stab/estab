@@ -103,10 +103,10 @@ $completeDossier->addLogbook('ETB', [[
     'etb_kuerzel' => 'REN001',
     'etb_funktion' => 'S2',
 ]]);
-$completeDossier->addLogbook('TTB', [[
+$completeDossier->addLogbook('TBB', [[
     'tbb_lfd-nr' => 1,
     'tbb_time' => '2026-07-29 08:05:00',
-    'tbb_aktion' => 'Produktionsnaher Layoutwechsel TTB',
+    'tbb_aktion' => 'Produktionsnaher Layoutwechsel TBB',
     'tbb_bemerk' => 'Unmittelbar vor der Nachrichtenvorlage',
     'tbb_benutzer' => 'Rendernachweis',
     'tbb_kuerzel' => 'REN002',

@@ -145,7 +145,7 @@ done
 grep -Fq 'Einsatzdossier' "$complete_dossier_pdf.page-1.layout.txt"
 grep -Fq 'Einsatztagebuch (ETB)' \
     "$complete_dossier_pdf.page-2.layout.txt"
-grep -Fq 'Technisches Betriebsbuch (TTB)' \
+grep -Fq 'Technisches Betriebsbuch (TBB)' \
     "$complete_dossier_pdf.page-3.layout.txt"
 for marker in EINGANG AUSGANG Nachweis-Nr. Fm-Betriebsstelle; do
     grep -Fq "$marker" "$complete_dossier_pdf.page-4.layout.txt"

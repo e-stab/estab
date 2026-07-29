@@ -10,12 +10,12 @@ Einsätze unverändert dokumentieren.
 Der Administrator wählt mindestens einen der folgenden Bereiche:
 
 - Einsatztagebuch (ETB),
-- Technisches Betriebsbuch (TTB),
+- Technisches Betriebsbuch (TBB),
 - alle Nachrichtenvordrucke des Einsatzes,
 - Originalanhänge zu den Nachrichtenvordrucken.
 
 Originalanhänge können nur zusammen mit den Nachrichtenvordrucken ausgewählt
-werden. ETB und TTB erscheinen als durchsuchbare Dossierseiten. Jede Nachricht
+werden. ETB und TBB erscheinen als durchsuchbare Dossierseiten. Jede Nachricht
 wird dagegen mit exakt demselben A4-Formularrenderer ausgegeben wie unter
 **Generierte Vordrucke**. Dadurch stimmen Raster, Feldpositionen,
 Empfängerkennzeichnung und mehrseitiger Inhaltsfluss in Einzel- und
@@ -81,21 +81,21 @@ interne Dateipfade.
 Die automatisierten Tests prüfen unter anderem:
 
 - strikte Einsatz- und Abschnittsauswahl,
-- vorbereitete, einsatzgebundene ETB-/TTB-/Nachrichten-/Anhangsabfragen,
+- vorbereitete, einsatzgebundene ETB-/TBB-/Nachrichten-/Anhangsabfragen,
 - Traversal-, Symlink-, MIME-, Größen- und Duplikatgrenzen,
 - eingebetteten PDF-1.7-Dateikatalog und SHA-256,
 - echte Extraktion des unveränderten Beispielanhangs,
-- durchsuchbaren Text für ETB, TTB und Nachrichten,
+- durchsuchbaren Text für ETB, TBB und Nachrichten,
 - dieselben Formularmarker in Einzel- und Gesamtexport,
 - aktuelle In-Memory-Ausgabe trotz unverändert erhaltener Archivdatei,
 - Abwesenheit von VS-NfD-Aufdruck, Wappen und Seitenbildern,
 - verlustfreie Anzeige nicht mehr in der Matrix vorhandener Empfänger,
 - pixelidentisches A4-Rendering beider Nachrichtenausgabepfade einschließlich
-  mehrseitigem Inhaltsfluss und produktivem Wechsel von Deckblatt, ETB und TTB
+  mehrseitigem Inhaltsfluss und produktivem Wechsel von Deckblatt, ETB und TBB
   zur Formularseite.
 
 Der echte MariaDB-Nachweis `tests/integration/incident_export.php` legt
-ETB-, TTB-, Nachrichten- und Anhangdaten in zwei verschiedenen Einsätzen an,
+ETB-, TBB-, Nachrichten- und Anhangdaten in zwei verschiedenen Einsätzen an,
 macht den ausgewählten Einsatz vor dem Lesen historisch und verlangt für jede
 Sektion exakt dessen Datensatz. Anschließend extrahiert er den tatsächlichen
 `/EmbeddedFile`-Stream aus der erzeugten PDF, vergleicht ihn bytegenau mit der
@@ -106,7 +106,7 @@ vollständigen Container-CI-Gate.
 Zusätzlich erzeugt `tests/php/pdf_template_render_fixture.php` aus identischen
 Nachrichten- und Matrixdaten Einzelvordruck, direkte Dossier-Nachrichtenseite,
 beide mehrseitigen Varianten sowie ein vollständiges Dossier in der
-produktiven Folge Deckblatt, ETB, TTB, Nachricht und Anlagenverzeichnis.
+produktiven Folge Deckblatt, ETB, TBB, Nachricht und Anlagenverzeichnis.
 `tests/static/pdf_render.sh` prüft sie mit Poppler: A4 und Seitenzahl über
 `pdfinfo`, Text, historischen Empfänger-Fallback und verbotene Aufdrucke über
 `pdftotext`, den konstanten linken Folgeseiteneinzug über dessen

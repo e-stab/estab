@@ -62,8 +62,8 @@ function estab_navigation_areas(): array
         ],
         [
             'key' => 'technical-log',
-            'label' => 'Technisches Betriebsbuch (TTB)',
-            'short_label' => 'TTB',
+            'label' => 'Technisches Betriebsbuch (TBB)',
+            'short_label' => 'TBB',
             'path' => 'fmtbb/tbb.php',
             'access' => 'protected',
         ],

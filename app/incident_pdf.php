@@ -5,7 +5,7 @@ declare(strict_types=1);
 /**
  * Self-contained PDF dossier for one eStab incident.
  *
- * The report renders ETB, TTB and message forms in a readable, searchable
+ * The report renders ETB, TBB and message forms in a readable, searchable
  * document. Every completed attachment is additionally embedded as its
  * original byte stream. This preserves formats that cannot safely be rendered
  * by FPDF (for example PDF, ODT, ZIP or video) without silently omitting them.
@@ -443,7 +443,7 @@ final class EstabIncidentPdf extends vordruckaspdf
         $this->heading('Umfang', 2);
         $labels = [
             'etb' => 'Einsatztagebuch (ETB)',
-            'ttb' => 'Technisches Betriebsbuch (TTB)',
+            'ttb' => 'Technisches Betriebsbuch (TBB)',
             'messages' => 'Nachrichtenvordrucke',
             'attachments' => 'Originalanhänge',
         ];
@@ -466,7 +466,10 @@ final class EstabIncidentPdf extends vordruckaspdf
     public function addLogbook(string $kind, array $rows): void
     {
         $kind = strtoupper($kind);
-        if (!in_array($kind, ['ETB', 'TTB'], true)) {
+        if ($kind === 'TTB') {
+            $kind = 'TBB';
+        }
+        if (!in_array($kind, ['ETB', 'TBB'], true)) {
             throw new EstabIncidentPdfInputException(
                 'Unknown logbook kind.'
             );
@@ -475,7 +478,7 @@ final class EstabIncidentPdf extends vordruckaspdf
         $this->beginSection(
             $kind === 'ETB'
                 ? 'Einsatztagebuch (ETB)'
-                : 'Technisches Betriebsbuch (TTB)'
+                : 'Technisches Betriebsbuch (TBB)'
         );
         $this->heading($this->sectionTitle, 1);
         if ($rows === []) {

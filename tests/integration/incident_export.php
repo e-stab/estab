@@ -110,8 +110,8 @@ function incident_export_integration_insert_fixture(
             . ' VALUES (?, NOW(), ?, ?, ?, ?, ?)'
     );
     try {
-        $action = $marker . '-TTB';
-        $remark = 'TTB scope proof ' . $marker;
+        $action = $marker . '-TBB';
+        $remark = 'TBB scope proof ' . $marker;
         $operator = 'PDF Integration';
         $function = 'A/W';
         $statement->bind_param(
@@ -495,12 +495,12 @@ try {
     );
     $assert(
         ($bundle['ttb'][0]['tbb_aktion'] ?? null)
-            === $selectedMarker . '-TTB'
+            === $selectedMarker . '-TBB'
             && !str_contains(
                 json_encode($bundle['ttb'], JSON_THROW_ON_ERROR),
                 $otherMarker
             ),
-        'TTB export crossed the selected incident boundary'
+        'TBB export crossed the selected incident boundary'
     );
     $assert(
         (int) ($bundle['messages'][0]['00_lfd'] ?? 0)
@@ -574,7 +574,7 @@ try {
     );
     $assert(
         str_contains($pageContent, $selectedMarker . '-ETB')
-            && str_contains($pageContent, $selectedMarker . '-TTB')
+            && str_contains($pageContent, $selectedMarker . '-TBB')
             && str_contains(
                 $pageContent,
                 'Nachrichteninhalt ' . $selectedMarker

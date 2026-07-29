@@ -89,7 +89,7 @@ $sections = [
                 'key' => 'incident-pdf',
                 'number' => '06',
                 'title' => 'PDF-Einsatzdossier',
-                'description' => 'ETB, TTB, Nachrichtenvordrucke und '
+                'description' => 'ETB, TBB, Nachrichtenvordrucke und '
                     . 'Originalanhänge eines gewählten Einsatzes als '
                     . 'durchsuchbare PDF ausgeben.',
                 'badge' => 'Dokumentation',

@@ -500,7 +500,7 @@ function estab_incident_export_pdf(
     }
     if (in_array('ttb', $sections, true)) {
         $pdf->addLogbook(
-            'TTB',
+            'TBB',
             is_array($bundle['ttb'] ?? null) ? $bundle['ttb'] : []
         );
     }

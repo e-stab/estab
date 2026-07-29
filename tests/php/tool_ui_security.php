@@ -252,7 +252,7 @@ $assert(
 
 foreach ([
     'stabetb/etb.php' => ['etb', 'ETB-Eintrag speichern', 'etb-event'],
-    'fmtbb/tbb.php' => ['ttb', 'TTB-Eintrag speichern', 'ttb-event'],
+    'fmtbb/tbb.php' => ['ttb', 'TBB-Eintrag speichern', 'ttb-event'],
 ] as $relativePath => [$kind, $saveLabel, $eventId]) {
     $logbook = str_replace('\\"', '"', $additionalSources[$relativePath]);
     $assert(

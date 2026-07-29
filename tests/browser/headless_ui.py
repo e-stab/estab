@@ -796,6 +796,16 @@ class BrowserAcceptance:
         self.cdp = cdp
         self.config = config
 
+    def run_overview(self) -> None:
+        """Check the anonymous start page without changing application data."""
+        self.cdp.call("Page.enable")
+        self.cdp.call("Runtime.enable")
+        self.cdp.call("Network.enable")
+        self.cdp.navigate(self.config.base_url + "/")
+        self._assert_anonymous_overview(registration_allowed=None)
+        self._assert_protected_cards()
+        self._assert_root_card_layout("anonyme Übersicht bei 1440 px")
+
     def run_bos(self) -> None:
         self.cdp.call("Page.enable")
         self.cdp.call("Runtime.enable")
@@ -2350,7 +2360,10 @@ class BrowserAcceptance:
             f"{description}: Keine mindestens 44 px großen Aktionen gefunden.",
         )
 
-    def _assert_anonymous_overview(self) -> None:
+    def _assert_anonymous_overview(
+        self,
+        registration_allowed: bool | None = False,
+    ) -> None:
         self._equal(
             self.cdp.evaluate(_visible_count_expression(None, "#estab-login")),
             1,
@@ -2361,17 +2374,31 @@ class BrowserAcceptance:
             "Mit bestehendem Konto anmelden",
             "Beschriftung des Anmeldebuttons",
         )
-        self._equal(
-            self.cdp.evaluate(_visible_count_expression(None, "#estab-register")),
-            0,
-            "unerwarteter Selbstregistrierungsbutton auf der anonymen Übersicht",
+        registration_count = self.cdp.evaluate(
+            _visible_count_expression(None, "#estab-register")
         )
+        if registration_allowed is None:
+            self._truth(
+                registration_count in (0, 1),
+                "Die anonyme Übersicht zeigt den Registrierungsbutton mehrfach.",
+            )
+        else:
+            self._equal(
+                registration_count,
+                1 if registration_allowed else 0,
+                (
+                    "Registrierungsbutton auf der anonymen Übersicht"
+                    if registration_allowed
+                    else "unerwarteter Selbstregistrierungsbutton "
+                        "auf der anonymen Übersicht"
+                ),
+            )
+        registration_visible = registration_count == 1
         flow_urls = self.cdp.evaluate(
             """
             (() => {
                 const existing = document.querySelector("#estab-login");
-                const fresh = document.querySelector("#estab-register");
-                if (!existing || fresh) return null;
+                if (!existing) return null;
                 const existingUrl = new URL(existing.href, location.href);
                 return {
                     existing: existingUrl.pathname + existingUrl.search
@@ -2384,20 +2411,33 @@ class BrowserAcceptance:
             str(flow_urls["existing"]).endswith("/4fach/index.php?login_flow=existing"),
             "Der Button für ein bestehendes Konto öffnet nicht den bestehenden Konto-Flow.",
         )
+        copy_expression = (
+            "text.includes('Bestehendes Konto') && "
+            "text.includes('Neues Konto anlegen') && "
+            "text.includes('Kürzel') && "
+            "text.includes('Registrierung')"
+            if registration_visible
+            else "text.includes('Bestehendes Konto') && "
+                "text.includes('nicht selbst angelegt') && "
+                "text.includes('Administration') && "
+                "text.includes('Benutzerverwaltung')"
+        )
         copy_is_clear = self.cdp.evaluate(
-            """
-            (() => {
+            f"""
+            (() => {{
                 const text = document.body.innerText.replace(/\\s+/g, " ");
-                return text.includes("Bestehendes Konto") &&
-                    text.includes("nicht selbst angelegt") &&
-                    text.includes("Administration") &&
-                    text.includes("Benutzerverwaltung");
-            })()
+                return {copy_expression};
+            }})()
             """
         )
         self._truth(
             copy_is_clear,
-            "Übersicht erklärt Bestandslogin und administrative Kontoanlage nicht klar.",
+            (
+                "Übersicht erklärt Bestandslogin und Neuanlage nicht klar."
+                if registration_visible
+                else "Übersicht erklärt Bestandslogin und administrative "
+                    "Kontoanlage nicht klar."
+            ),
         )
         self._equal(
             self.cdp.evaluate(
@@ -2448,6 +2488,24 @@ class BrowserAcceptance:
             public_navigation.get("locked"),
             6,
             "Anzahl anmeldepflichtiger Bereiche in der anonymen Navigation",
+        )
+        technical_log_label = self.cdp.evaluate(
+            """
+            (() => {
+                const link = document.querySelector(
+                    '.estab-menu-link[data-estab-nav-key="technical-log"]'
+                );
+                const title = link && link.querySelector(".estab-menu-title");
+                return title
+                    ? title.innerText.replace(/\\s+/g, " ").trim()
+                    : null;
+            })()
+            """
+        )
+        self._equal(
+            technical_log_label,
+            "Technisches Betriebsbuch (TBB)",
+            "Bezeichnung des Technischen Betriebsbuchs",
         )
 
     def _wait_for_authenticated_overview(self, description: str) -> None:
@@ -5163,6 +5221,14 @@ def parse_arguments() -> argparse.Namespace:
         help="nur Chrome/Chromium suchen und ohne Anwendungstest beenden",
     )
     parser.add_argument(
+        "--overview-only",
+        action="store_true",
+        help=(
+            "nur die anonyme Übersicht und ihr Kartenlayout prüfen, "
+            "ohne Anwendungsdaten zu verändern"
+        ),
+    )
+    parser.add_argument(
         "--export-only",
         action="store_true",
         help=(
@@ -5198,11 +5264,20 @@ def main() -> int:
         websocket = WebSocket(chrome.websocket_url, config.timeout)
         cdp = CDP(websocket, config.timeout)
         acceptance = BrowserAcceptance(cdp, config)
-        if arguments.export_only and arguments.bos_only:
-            raise TestFailure(
-                "--export-only und --bos-only können nicht kombiniert werden."
+        if sum(
+            (
+                arguments.overview_only,
+                arguments.export_only,
+                arguments.bos_only,
             )
-        if arguments.bos_only:
+        ) > 1:
+            raise TestFailure(
+                "--overview-only, --export-only und --bos-only "
+                "können nicht kombiniert werden."
+            )
+        if arguments.overview_only:
+            acceptance.run_overview()
+        elif arguments.bos_only:
             acceptance.run_bos()
         elif arguments.export_only:
             if not config.admin_user or not config.admin_password:

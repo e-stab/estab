@@ -164,7 +164,7 @@ Tabellenkommentar und Migrationsledger geprüft werden.
 
 Die vorbereitende Migration 45 verlangt vor der unverändert veröffentlichten
 Einsatzmigration 50 alle zehn einsatzrelevanten operativen Basistabellen.
-Fehlt in einem erkannten Legacy-Schema beispielsweise ETB, TTB oder Protokoll,
+Fehlt in einem erkannten Legacy-Schema beispielsweise ETB, TBB oder Protokoll,
 bricht sie mit
 `Incident migration blocked: required operational table is missing` ab und
 legt weder Einsatz-Tabellen noch einen erfolgreichen Ledgerdatensatz an. Ein
@@ -209,7 +209,7 @@ fachlich freigegeben werden.
 Eine Neuinstallation startet absichtlich ohne aktiven Einsatz. Anmeldung,
 Lesen und Administration funktionieren, operative Formulare bleiben jedoch
 gesperrt und zeigen den roten Hinweis „Kein Einsatz aktiv“. Vor der ersten
-Nachricht, dem ersten Anhang oder einem ETB-/TTB-Eintrag:
+Nachricht, dem ersten Anhang oder einem ETB-/TBB-Eintrag:
 
 1. `/4fadm/admin.php` mit dem separaten Basic-Auth-Zugang öffnen,
 2. **Einsätze** wählen,
@@ -291,7 +291,7 @@ weiterhin ausschließlich über `ESTAB_ADMIN_USER` und die
 [Benutzerverwaltung](BENUTZERVERWALTUNG.md).
 
 Unter `/4fadm/incident_export.php` kann derselbe Administrator einen aktiven
-oder historischen Einsatz als PDF-Dossier ausgeben. ETB, TTB,
+oder historischen Einsatz als PDF-Dossier ausgeben. ETB, TBB,
 Nachrichtenvordrucke und Originalanhänge sind einzeln wählbar; Anhänge
 erfordern die Nachrichten. Die Gesamtsumme eingebetteter Originaldateien
 begrenzt `ESTAB_PDF_ATTACHMENT_MAX_BYTES`. `0` deaktiviert nicht den
@@ -355,7 +355,7 @@ Validierungs- und Anhangsrückkehr erhalten.
 Eigenständige Fach- und Administrationsseiten verwenden dasselbe
 Werkzeuggestell mit Seitenkopf, Status-/Hinweisflächen, beschrifteten
 Formularfeldern, responsiven Tabellen und eindeutiger Rücknavigation. Das gilt
-unter anderem für Meldungsübersicht, Nachweisung, ETB, TTB,
+unter anderem für Meldungsübersicht, Nachweisung, ETB, TBB,
 Kategorienverwaltung, Empfängermatrix, Exporte und Systemstatus. Breite
 historische Fachformulare liegen in einem sichtbar begrenzten, horizontal
 scrollbaren Inhaltsbereich; das Gesamtdokument bleibt auf schmalen Geräten

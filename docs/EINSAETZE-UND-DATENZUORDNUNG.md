@@ -56,7 +56,7 @@ Folgende Tabellen erhalten eine indizierte, fremdschlüsselgesicherte
 | `nv_ubb` | Übungsbetriebsbuch | strikt |
 | `nv_bhp50` | BHP-50-/Patientendaten | strikt |
 | `nv_komplan` | einsatzbezogener Kommunikationsplan | strikt |
-| `nv_etbtitel`, `nv_tbbtitel` | historische ETB-/TTB-Kopfdaten | strikt |
+| `nv_etbtitel`, `nv_tbbtitel` | historische ETB-/TBB-Kopfdaten | strikt |
 | `nv_protokoll` | fachliche und globale Systemereignisse | bewusst optional |
 
 `nv_protokoll.einsatz_id` bleibt für globale Ereignisse `NULL`. Anmeldung,
@@ -158,7 +158,7 @@ Einsatz-API:
   Kategoriezuordnungen prüfen die aktive Nachricht innerhalb einer
   `estab_incident_with_active_write()`-Transaktion. Listen und Zähler lesen nur
   den aktiven Einsatz.
-- ETB und TTB verwenden die globalen Einsatzstammdaten als Kopf, schreiben
+- ETB und TBB verwenden die globalen Einsatzstammdaten als Kopf, schreiben
   unter dem gesperrten Singleton und filtern ihre chronologischen Listen nach
   Einsatz. Die alten lokalen Einsatz-anlegen-Formulare sind nicht mehr
   schreibend.
@@ -272,7 +272,7 @@ führt den Domänenvertrag in einer eigens migrierten MariaDB aus und prüft
 Parallelaktivierung, No-active-INSERT, Update-/Delete-Sperre,
 Reassignment-Versuch und konkurrierende Statusänderung. Der
 Schema-Migratortest belegt Legacy-Backfill und Wiederholbarkeit.
-`tests/integration/incident_export.php` erzeugt zusätzlich ETB, TTB,
+`tests/integration/incident_export.php` erzeugt zusätzlich ETB, TBB,
 Nachricht und Originalanhang in zwei Einsätzen, exportiert den inzwischen
 historischen ausgewählten Einsatz und extrahiert dessen PDF-`EmbeddedFile`
 bytegleich samt SHA-256. Der vollständige CI-Lauf schließt den

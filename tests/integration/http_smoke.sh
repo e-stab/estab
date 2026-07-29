@@ -1804,7 +1804,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/fmtbb/tbb.php"
 assert_body 'Ihre Funktion hat lesenden Zugriff.'
 assert_body_absent 'value="save_entry"'
-assert_body_absent 'Neuen TTB-Eintrag anlegen'
+assert_body_absent 'Neuen TBB-Eintrag anlegen'
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
