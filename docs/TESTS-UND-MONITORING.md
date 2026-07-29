@@ -881,6 +881,13 @@ Fernmelde-/Si-Aktionen des echten FB-Profils, A/W-Sperrbesitz, Status und
 Abschluss direkt in MariaDB, den erzeugten Ein-/Ausgangsvordruck sowie die
 exakten Empfängerfarben `S2_rt`, `S1_gn` und `S3_bl`.
 
+Beim Öffnen vergleicht der Lauf die sichtbaren, editierbaren Felder für
+Eingangs- und Beförderungszeit mit der PHP-Uhr im App-Container. Er sendet
+anschließend jeweils bewusst eine fünf Minuten zurückgesetzte vollständige
+taktische Zeit und vergleicht die gespeicherten `DATETIME`-Werte exakt mit
+MariaDB. Damit sind sowohl die Vorbelegung als auch ihre manuelle
+Überschreibbarkeit unabhängig von der Zeitzone des Testhosts belegt.
+
 Für die reale Autosichtung markiert der Test POL/FB ausschließlich in seiner
 wegwerfbaren Matrix als Ziel und schaltet das einzige isolierte Si-Konto
 offline. Das vom echten Eingangsformular automatisch ausgewählte Kontrollfeld

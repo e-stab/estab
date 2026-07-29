@@ -244,6 +244,12 @@ Fachaktion scrollt automatisch zum Inhalt und setzt den Tastaturfokus auf
 dessen Frame; der dort eingeblendete, mindestens 44 Pixel große Button „Menü“
 führt samt Fokus wieder zur Sidebar.
 
+Neue Eingangs- und Beförderungsvermerke zeigen beim Öffnen bereits die
+aktuelle, über `TZ` konfigurierte lokale Uhrzeit. Der Wert bleibt ein normales
+Eingabefeld und kann vor dem Absenden auf die tatsächliche Aufnahme- oder
+Beförderungszeit korrigiert werden. Akzeptiert werden `HHMM`, `DDHHMM` und die
+vollständige taktische Zeit `DDHHMMmmmYYYY`.
+
 Alle eigenständigen Fach- und Administrationsseiten verwenden darüber hinaus
 dasselbe responsive Werkzeuggestell: ein klarer Seitenkopf, Status- und
 Hinweisflächen, beschriftete Formularfelder, mindestens 44 Pixel große

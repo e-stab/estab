@@ -517,6 +517,55 @@ assert_db_equals()
     fi
 }
 
+app_tactical_clock()
+{
+    "$compose_engine" compose exec -T app \
+        php -r 'echo date("Hi");'
+}
+
+app_backdated_clock()
+{
+    "$compose_engine" compose exec -T app php -r '
+        $time = (new DateTimeImmutable("now"))->modify("-5 minutes");
+        echo $time->format("dHi")
+            . strtolower($time->format("M"))
+            . $time->format("Y|Y-m-d H:i:00");
+    '
+}
+
+assert_current_editable_tactical_time_input()
+{
+    field_id=$1
+    before_clock=$2
+    after_clock=$3
+    label=$4
+    input_tag=$(sed -n \
+        "s/.*\\(<input id=\"$field_id\"[^>]*>\\).*/\\1/p" \
+        "$body" | head -n 1)
+    input_value=$(printf '%s\n' "$input_tag" |
+        sed -n 's/.*[[:space:]]value="\([^"]*\)".*/\1/p')
+
+    if [ -z "$input_tag" ]; then
+        printf 'Message workflow HTTP: %s input is missing\n' "$label" >&2
+        exit 1
+    fi
+    if printf '%s\n' "$input_tag" |
+        grep -Eqi '(^|[[:space:]])(readonly|disabled)(=|[[:space:]>])|type[[:space:]]*=[[:space:]]*"hidden"'; then
+        printf 'Message workflow HTTP: %s input is not editable\n' "$label" >&2
+        exit 1
+    fi
+    case "$input_value" in
+        "$before_clock" | "$after_clock") ;;
+        *)
+            printf 'Message workflow HTTP: %s default is not the current app time\n' \
+                "$label" >&2
+            printf 'before: %s\nafter:  %s\nactual: %s\n' \
+                "$before_clock" "$after_clock" "$input_value" >&2
+            exit 1
+            ;;
+    esac
+}
+
 message_state()
 {
     marker=$1
@@ -900,16 +949,21 @@ assert_db_equals '1|0' 'autosighting fixture and offline Si' \
 
 load_dashboard "$aw_cookies" 'A/W dashboard before automatic sighting'
 autosight_csrf=$(csrf_from_body)
+autosight_clock_before=$(app_tactical_clock)
 assert_status 200 'open automatic-sighting incoming form' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
     --request POST \
     --data-urlencode "csrf_token=$autosight_csrf" \
     --data-urlencode 'fm_eingang_x=1' \
     "$base_url/4fach/mainindex.php"
+autosight_clock_after=$(app_tactical_clock)
 assert_no_runtime_error 'automatic-sighting incoming form'
 assert_body \
     'name="task" value="FM-Eingang_Sichter"' \
     'automatic-sighting form task'
+assert_current_editable_tactical_time_input \
+    f_01_datum "$autosight_clock_before" "$autosight_clock_after" \
+    'automatic-sighting receipt time'
 auto_checkbox=$(sed -n \
     's/.*name="\(16_32\)" value="\(16_32_bl\)" type="checkbox"[^>]*checked="checked".*/\1=\2/p' \
     "$body" | head -n 1)
@@ -993,17 +1047,25 @@ matrix_auto_mutated=false
 # (status 8), assigns the exact red/green/blue copies and closes it.
 load_dashboard "$aw_cookies" 'A/W dashboard before incoming capture'
 incoming_csrf=$(csrf_from_body)
+incoming_clock_before=$(app_tactical_clock)
 assert_status 200 'open A/W incoming form' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
     --request POST \
     --data-urlencode "csrf_token=$incoming_csrf" \
     --data-urlencode 'fm_eingang_x=1' \
     "$base_url/4fach/mainindex.php"
+incoming_clock_after=$(app_tactical_clock)
 assert_no_runtime_error 'A/W incoming form'
 assert_body 'name="task" value="FM-Eingang"' 'A/W incoming form'
 assert_body_absent 'name="task" value="FM-Eingang_Sichter"' 'A/W incoming form'
+assert_current_editable_tactical_time_input \
+    f_01_datum "$incoming_clock_before" "$incoming_clock_after" \
+    'A/W receipt time'
 incoming_csrf=$(csrf_from_body)
 tactical_time=$(date '+%H%M')
+incoming_backdated_clock=$(app_backdated_clock)
+incoming_backdated_tactical=${incoming_backdated_clock%%|*}
+incoming_backdated_sql=${incoming_backdated_clock#*|}
 assert_status 200 'save A/W incoming message' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
     --request POST \
@@ -1011,7 +1073,7 @@ assert_status 200 'save A/W incoming message' \
     --data-urlencode 'absenden_x=1' \
     --data-urlencode 'task=FM-Eingang' \
     --data-urlencode '01_medium=Fu' \
-    --data-urlencode "01_datum=$tactical_time" \
+    --data-urlencode "01_datum=$incoming_backdated_tactical" \
     --data-urlencode "01_zeichen=$aw_code" \
     --data-urlencode '05_gegenstelle=E2E-Gegenstelle' \
     --data-urlencode '07_durchspruch=D' \
@@ -1043,6 +1105,8 @@ SQL
 )
 assert_numeric 'incoming message ID' "$incoming_id"
 assert_numeric 'incoming evidence number' "$incoming_number"
+assert_db_equals "$incoming_backdated_sql" 'edited A/W receipt time' \
+    "SELECT DATE_FORMAT(\`01_datum\`, '%Y-%m-%d %H:%i:00') FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${incoming_id};"
 assert_message_state "$incoming_marker" \
     'E|4|f|null||S2_rt,|f||f' \
     'A/W incoming status 4'
@@ -1658,6 +1722,7 @@ assert_message_state "$outgoing_marker" \
 
 load_dashboard "$aw_cookies" 'A/W queue before locking outgoing'
 outgoing_csrf=$(csrf_from_body)
+outgoing_clock_before=$(app_tactical_clock)
 assert_status 200 'open and lock outgoing transport form' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
     --request POST \
@@ -1665,10 +1730,14 @@ assert_status 200 'open and lock outgoing transport form' \
     --data-urlencode 'fm=meldung' \
     --data-urlencode "00_lfd=$outgoing_id" \
     "$base_url/4fach/mainindex.php"
+outgoing_clock_after=$(app_tactical_clock)
 assert_no_runtime_error 'locked outgoing transport form'
 assert_body 'name="task" value="FM-Ausgang"' 'locked outgoing transport form'
 assert_body "name=\"00_lfd\" value=\"$outgoing_id\"" 'locked outgoing transport form'
 assert_body "name=\"03_zeichen\" value=\"$aw_code\"" 'locked outgoing transport form'
+assert_current_editable_tactical_time_input \
+    f_03_datum "$outgoing_clock_before" "$outgoing_clock_after" \
+    'A/W transport time'
 assert_message_state "$outgoing_marker" \
     "A|2|f|null||S2_rt,S1_gn|t|${aw_code}|f" \
     'A/W-owned outgoing lock'
@@ -1699,6 +1768,9 @@ assert_status 200 're-open owner-held outgoing lock' \
     "$base_url/4fach/mainindex.php"
 outgoing_csrf=$(csrf_from_body)
 tactical_time=$(date '+%H%M')
+outgoing_backdated_clock=$(app_backdated_clock)
+outgoing_backdated_tactical=${outgoing_backdated_clock%%|*}
+outgoing_backdated_sql=${outgoing_backdated_clock#*|}
 assert_status 200 'save A/W outgoing transport' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
     --request POST \
@@ -1706,13 +1778,15 @@ assert_status 200 'save A/W outgoing transport' \
     --data-urlencode 'absenden_x=1' \
     --data-urlencode 'task=FM-Ausgang' \
     --data-urlencode "00_lfd=$outgoing_id" \
-    --data-urlencode "03_datum=$tactical_time" \
+    --data-urlencode "03_datum=$outgoing_backdated_tactical" \
     --data-urlencode "03_zeichen=$aw_code" \
     --data-urlencode '05_gegenstelle=E2E-Gegenstelle' \
     --data-urlencode '06_befweg=E2E-Transport' \
     --data-urlencode '06_befwegausw=Fu' \
     "$base_url/4fach/mainindex.php"
 assert_no_runtime_error 'saved A/W outgoing transport'
+assert_db_equals "$outgoing_backdated_sql" 'edited A/W transport time' \
+    "SELECT DATE_FORMAT(\`03_datum\`, '%Y-%m-%d %H:%i:00') FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
 
 outgoing_status=$(db_sql <<SQL
 SELECT \`x00_status\` FROM \`nv_nachrichten\`

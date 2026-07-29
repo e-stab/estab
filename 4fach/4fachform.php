@@ -95,6 +95,22 @@ class nachrichten4fach {
           $this->formdata [$dateField] = "";
         }
       }
+      $editableTimestampField = array (
+        "FM-Eingang" => "01_datum",
+        "FM-Eingang_Anhang" => "01_datum",
+        "FM-Eingang_Sichter" => "01_datum",
+        "FM-Eingang_Anhang_Sichter" => "01_datum",
+        "FM-Ausgang" => "03_datum",
+        "FM-Ausgang_Sichter" => "03_datum"
+      ) [$this->task] ?? "";
+      if (
+        $editableTimestampField !== ""
+        && $this->formdata [$editableTimestampField] === ""
+      ) {
+        // Der sichtbare Standard entspricht dem bisherigen serverseitigen
+        // Leerwert-Fallback, bleibt im Formular aber frei korrigierbar.
+        $this->formdata [$editableTimestampField] = date ("Hi");
+      }
       if ((!isset($this->formdata ["17_vermerke"]))  or ($this->formdata ["17_vermerke"] == "0000-00-00 00:00:00")) { $this->formdata ["17_vermerke"] = ""; }
       $conversationNote = $this->formdata ["11_gesprnotiz"] ?? "";
       if ( ($conversationNote == "t") OR

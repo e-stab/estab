@@ -327,6 +327,13 @@ automatisch zur Inhaltszeile und setzt den Tastaturfokus auf den Inhaltsframe.
 Der dort sichtbare, mindestens 44 Pixel große Button „Menü“ führt samt Fokus
 zurück zur Sidebar.
 
+Beim erstmaligen Öffnen eines Eingangs- oder Beförderungsvermerks ist das
+Zeitfeld mit der aktuellen lokalen App-Zeit vorbelegt. Die Anwendung verwendet
+dafür `TZ` aus der Containerkonfiguration, standardmäßig `Europe/Berlin`. Das
+Feld bleibt editierbar; für eine Korrektur oder Rückdatierung sind `HHMM`,
+`DDHHMM` und `DDHHMMmmmYYYY` zulässig. Bereits eingegebene Werte bleiben bei
+Validierungs- und Anhangsrückkehr erhalten.
+
 Eigenständige Fach- und Administrationsseiten verwenden dasselbe
 Werkzeuggestell mit Seitenkopf, Status-/Hinweisflächen, beschrifteten
 Formularfeldern, responsiven Tabellen und eindeutiger Rücknavigation. Das gilt
