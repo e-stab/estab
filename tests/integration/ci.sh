@@ -324,7 +324,8 @@ incident_test_database() {
         | estab_dv_evidence_ci_test \
         | estab_dv_operations_ci_test \
         | estab_attachment_reservation_ci_test \
-        | estab_message_concurrency_ci_test) ;;
+        | estab_message_concurrency_ci_test \
+        | estab_message_suggestions_ci_test) ;;
         *)
             echo "CI integration: invalid isolated incident database name" >&2
             return 1
@@ -625,6 +626,11 @@ run_isolated_operational_integration \
     estab_message_concurrency_ci_test \
     tests/integration/message_concurrency.php
 
+run_isolated_operational_integration \
+    "active-incident message suggestions" \
+    estab_message_suggestions_ci_test \
+    tests/integration/message_suggestions.php
+
 roundtrip_token=$(printf '%s' "$COMPOSE_PROJECT_NAME" |
     openssl dgst -sha256 -r | awk '{ print substr($1, 1, 16) }')
 workflow_marker="ESTAB_BACKUP_ROUNDTRIP_${roundtrip_token}"
@@ -660,6 +666,55 @@ run_browser_acceptance() {
             export ESTAB_BROWSER_ARTIFACT_DIR="$ESTAB_CI_LOG_DIR/browser"
         fi
         run_timed 4m python3 -B tests/browser/headless_ui.py
+
+        echo "CI integration: running real-browser message suggestion acceptance"
+        suggestion_login_name=${ESTAB_TEST_TBB_NAME:-Logbook Integration A-W}
+        suggestion_login_code=${ESTAB_TEST_TBB_CODE:-e2l001}
+        suggestion_marker="BROWSER-GEGENSTELLE-${roundtrip_token}"
+        browser_login_password=$(tr -d '\r\n' <"$ESTAB_TEST_LOGIN_PASSWORD_FILE")
+        sh tests/integration/provision_user.sh \
+            "$suggestion_login_name" \
+            "$suggestion_login_code" \
+            A/W \
+            "$browser_login_password"
+        unset browser_login_password
+
+        cleanup_message_suggestion_browser_fixture() {
+            run_timed 2m "$container_cli" compose run --rm --no-deps -T \
+                --env "COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME" \
+                --env ESTAB_MESSAGE_SUGGESTION_BROWSER_FIXTURE=1 \
+                --env ESTAB_MESSAGE_SUGGESTION_FIXTURE_ACTION=delete \
+                --env \
+                    "ESTAB_MESSAGE_SUGGESTION_FIXTURE_MARKER=$suggestion_marker" \
+                --volume "$repo_root:/workspace:ro" \
+                --workdir /workspace \
+                app php -d auto_prepend_file= \
+                tests/integration/message_suggestion_browser_fixture.php \
+                >/dev/null 2>&1 || true
+        }
+        trap cleanup_message_suggestion_browser_fixture EXIT
+        run_timed 2m "$container_cli" compose run --rm --no-deps -T \
+            --env "COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME" \
+            --env ESTAB_MESSAGE_SUGGESTION_BROWSER_FIXTURE=1 \
+            --env ESTAB_MESSAGE_SUGGESTION_FIXTURE_ACTION=create \
+            --env "ESTAB_MESSAGE_SUGGESTION_FIXTURE_MARKER=$suggestion_marker" \
+            --volume "$repo_root:/workspace:ro" \
+            --workdir /workspace \
+            app php -d auto_prepend_file= \
+            tests/integration/message_suggestion_browser_fixture.php
+
+        export ESTAB_TEST_LOGIN_NAME=$suggestion_login_name
+        export ESTAB_TEST_LOGIN_CODE=$suggestion_login_code
+        export ESTAB_TEST_LOGIN_FUNCTION=A/W
+        export ESTAB_TEST_MESSAGE_SUGGESTION_MARKER=$suggestion_marker
+        if [[ -n ${ESTAB_CI_LOG_DIR:-} ]]; then
+            export \
+                ESTAB_BROWSER_ARTIFACT_DIR="$ESTAB_CI_LOG_DIR/browser-suggestions"
+        fi
+        run_timed 3m python3 -B tests/browser/headless_ui.py \
+            --message-suggestions
+        cleanup_message_suggestion_browser_fixture
+        trap - EXIT
     )
 }
 

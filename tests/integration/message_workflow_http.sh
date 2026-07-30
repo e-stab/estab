@@ -703,6 +703,30 @@ finish_ldf_incoming()
     assert_body \
         'id="f_13_abseinheit"' \
         'LdF incoming sender translation field'
+    assert_body \
+        'data-estab-incident-suggestions="sender"' \
+        'LdF incoming incident sender suggestions'
+    assert_body \
+        'list="estab-message-sender-suggestions-native"' \
+        'LdF incoming no-script sender suggestion fallback'
+    assert_body \
+        'aria-describedby="estab-message-sender-suggestions-hint"' \
+        'LdF incoming accessible sender suggestion hint'
+    assert_body \
+        'id="estab-message-sender-suggestions"' \
+        'LdF incoming sender listbox'
+    assert_body \
+        'role="combobox" aria-autocomplete="list"' \
+        'LdF incoming accessible sender combobox'
+    assert_body \
+        'role="listbox" aria-label="Vorschläge aus dem aktiven Einsatz"' \
+        'LdF incoming focus suggestion listbox'
+    assert_body \
+        'data-estab-message-suggestion-picker' \
+        'LdF incoming suggestion keyboard helper'
+    assert_body_absent \
+        'data-estab-incident-suggestions="callsign"' \
+        'LdF incoming cannot edit callsign suggestions'
     ldf_csrf=$(csrf_from_body)
     ldf_time=$(date '+%H%M')
     assert_status 200 "save LdF incoming for $ldf_marker" \
@@ -745,6 +769,33 @@ finish_ldf_outgoing()
     assert_no_runtime_error "LdF outgoing form for $ldf_marker"
     assert_body 'name="task" value="LdF-Ausgang"' "LdF outgoing task"
     assert_body 'id="f_05_gegenstelle"' "LdF outgoing callsign field"
+    assert_body \
+        'data-estab-incident-suggestions="callsign"' \
+        'LdF outgoing incident callsign suggestions'
+    assert_body \
+        'list="estab-message-callsign-suggestions-native"' \
+        'LdF outgoing no-script callsign suggestion fallback'
+    assert_body \
+        'aria-describedby="estab-message-callsign-suggestions-hint"' \
+        'LdF outgoing accessible callsign suggestion hint'
+    assert_body \
+        'id="estab-message-callsign-suggestions"' \
+        'LdF outgoing callsign listbox'
+    assert_body \
+        'role="combobox" aria-autocomplete="list"' \
+        'LdF outgoing accessible callsign combobox'
+    assert_body \
+        'role="listbox" aria-label="Vorschläge aus dem aktiven Einsatz"' \
+        'LdF outgoing focus suggestion listbox'
+    assert_body \
+        '<option value="E2E-Gegenstelle"></option>' \
+        'LdF outgoing suggestion from the previous active-incident message'
+    assert_body \
+        'data-estab-message-suggestion-picker' \
+        'LdF outgoing suggestion keyboard helper'
+    assert_body_absent \
+        'data-estab-incident-suggestions="sender"' \
+        'LdF outgoing cannot change sender through incident suggestions'
     assert_body \
         'id="f_fernmeldeplan_eintrag_id"' \
         "LdF outgoing S6 plan selector"
@@ -1305,11 +1356,38 @@ assert_no_runtime_error 'A/W incoming form'
 assert_body 'name="task" value="FM-Eingang"' 'A/W incoming form'
 assert_body_absent 'name="task" value="FM-Eingang_Sichter"' 'A/W incoming form'
 assert_body \
+    'data-estab-incident-suggestions="callsign"' \
+    'A/W incoming incident callsign suggestions'
+assert_body \
+    'list="estab-message-callsign-suggestions-native"' \
+    'A/W incoming no-script callsign suggestion fallback'
+assert_body \
+    'autocomplete="off"' \
+    'A/W incoming suggestion browser-autocomplete isolation'
+assert_body \
+    'aria-describedby="estab-message-callsign-suggestions-hint"' \
+    'A/W incoming accessible callsign suggestion hint'
+assert_body \
+    'id="estab-message-callsign-suggestions"' \
+    'A/W incoming callsign listbox'
+assert_body \
+    'role="combobox" aria-autocomplete="list"' \
+    'A/W incoming accessible callsign combobox'
+assert_body \
+    'role="listbox" aria-label="Vorschläge aus dem aktiven Einsatz"' \
+    'A/W incoming focus suggestion listbox'
+assert_body \
+    'data-estab-message-suggestion-picker' \
+    'A/W incoming suggestion keyboard helper'
+assert_body \
     'Wird durch LdF aus dem Rufnamen ergänzt' \
     'A/W incoming sender responsibility'
 assert_body_absent \
     'name="13_abseinheit"' \
     'A/W incoming sender input'
+assert_body_absent \
+    'data-estab-incident-suggestions="sender"' \
+    'A/W incoming sender suggestions'
 assert_current_editable_tactical_time_input \
     f_01_datum "$incoming_clock_before" "$incoming_clock_after" \
     'A/W receipt time'
@@ -1898,6 +1976,9 @@ assert_status 200 'open S1 outgoing form' \
     "$base_url/4fach/mainindex.php"
 assert_no_runtime_error 'S1 outgoing form'
 assert_body 'name="task" value="Stab_schreiben"' 'S1 outgoing form'
+assert_body_absent \
+    'data-estab-incident-suggestions=' \
+    'staff outgoing form incident suggestions'
 outgoing_csrf=$(csrf_from_body)
 tactical_time=$(date '+%H%M')
 assert_status 200 'save S1 outgoing message' \

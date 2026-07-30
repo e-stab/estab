@@ -206,6 +206,200 @@ function estab_read_require_operational_scope(
     return ['incident' => $incident, 'identity' => $selected];
 }
 
+/**
+ * Return the fixed message-field policy for incident-scoped suggestions.
+ *
+ * Callsigns are operational input for A/W and LdF. Translated senders are an
+ * LdF-only incoming-message responsibility; outgoing local organisations
+ * must never pollute that suggestion set.
+ *
+ * @return array{direction:?string}
+ */
+function estab_read_message_suggestion_policy(
+    array $identity,
+    string $field
+): array {
+    $function = $identity['funktion'] ?? null;
+    $role = $identity['rolle'] ?? null;
+    if (
+        $field === '05_gegenstelle'
+        && $role === 'Fernmelder'
+        && in_array($function, ['A/W', 'LdF'], true)
+    ) {
+        return ['direction' => null];
+    }
+    if (
+        $field === '13_abseinheit'
+        && $function === 'LdF'
+        && $role === 'Fernmelder'
+    ) {
+        return ['direction' => 'E'];
+    }
+    throw new EstabReadPermissionException(
+        'Diese Dienstfunktion darf keine Vorschläge für dieses Feld lesen.'
+    );
+}
+
+/**
+ * Normalize one legacy or current suggestion without pre-escaping its value.
+ */
+function estab_read_normalize_message_suggestion(mixed $value): ?string
+{
+    if (!is_string($value)) {
+        return null;
+    }
+    $decoded = estab_message_plain_text($value);
+    if (
+        preg_match('//u', $decoded) !== 1
+        || preg_match('/[\p{C}]/u', $decoded) === 1
+    ) {
+        return null;
+    }
+    $normalized = preg_replace('/\p{Z}+/u', ' ', $decoded);
+    $normalized = is_string($normalized) ? trim($normalized) : '';
+    if ($normalized === '') {
+        return null;
+    }
+    $length = function_exists('mb_strlen')
+        ? mb_strlen($normalized, 'UTF-8')
+        : strlen($normalized);
+    return $length <= 128 ? $normalized : null;
+}
+
+/**
+ * Load recent, unique values from the active incident for one fixed field.
+ *
+ * The exact selected hat is revalidated before the query and joined into the
+ * same SELECT snapshot together with account, capability, shift and incident
+ * state. A concurrent revocation or incident switch therefore degrades to an
+ * empty result instead of returning operational history.
+ *
+ * @return list<string>
+ */
+function estab_read_message_suggestions(
+    mysqli $connection,
+    string $messageTable,
+    array $identity,
+    string $field,
+    int $limit = 30
+): array {
+    if ($limit < 1 || $limit > 50) {
+        throw new InvalidArgumentException(
+            'Die Anzahl der Nachrichtenvorschläge ist ungültig.'
+        );
+    }
+    $scope = estab_read_require_operational_scope($connection, $identity);
+    $policy = estab_read_message_suggestion_policy(
+        $scope['identity'],
+        $field
+    );
+    $incidentId = (int) $scope['incident']['active_einsatz_id'];
+    $selected = $scope['identity'];
+    $assignmentId = (int) $selected['duty_assignment_id'];
+    $capability = estab_read_identity_capability($selected);
+    if ($capability === null) {
+        throw new EstabReadPermissionException(
+            'Diese Dienstfunktion besitzt keine Vorschlagsberechtigung.'
+        );
+    }
+    $table = estab_message_table($messageTable);
+    $column = match ($field) {
+        '05_gegenstelle' => '`05_gegenstelle`',
+        '13_abseinheit' => '`13_abseinheit`',
+        default => throw new InvalidArgumentException(
+            'Das Vorschlagsfeld ist ungültig.'
+        ),
+    };
+    $direction = $policy['direction'];
+    $sql = 'SELECT message.' . $column . ' AS `suggestion`'
+        . ' FROM ' . $table . ' AS message'
+        . ' JOIN (SELECT MAX(candidate.`00_lfd`) AS `last_id`'
+        . ' FROM ' . $table . ' AS candidate'
+        . ' JOIN `nv_dienstbesetzungen` AS assignment'
+        . ' ON assignment.`dienstbesetzung_id` = ?'
+        . ' JOIN `nv_dienstschichten` AS duty_shift'
+        . ' ON duty_shift.`dienstschicht_id`'
+        . ' = assignment.`dienstschicht_id`'
+        . ' JOIN `nv_einsatz_status` AS active'
+        . ' ON active.`singleton_id` = 1'
+        . ' AND active.`active_einsatz_id` = duty_shift.`einsatz_id`'
+        . ' JOIN `nv_einsaetze` AS incident'
+        . ' ON incident.`einsatz_id` = duty_shift.`einsatz_id`'
+        . ' JOIN `nv_benutzer` AS account'
+        . ' ON BINARY account.`kuerzel`'
+        . ' = BINARY assignment.`benutzer_kuerzel`'
+        . ' JOIN `nv_funktionsfaehigkeiten` AS capability'
+        . ' ON BINARY capability.`funktion`'
+        . ' = BINARY assignment.`funktion`'
+        . ' AND BINARY capability.`rolle` = BINARY assignment.`rolle`'
+        . ' WHERE duty_shift.`einsatz_id` = ?'
+        . " AND duty_shift.`status` = 'AKTIV'"
+        . " AND assignment.`status` = 'ANGENOMMEN'"
+        . " AND incident.`estab_status` = 'open'"
+        . ' AND BINARY account.`benutzer` = BINARY ?'
+        . ' AND BINARY assignment.`benutzer_kuerzel` = BINARY ?'
+        . ' AND BINARY assignment.`funktion` = BINARY ?'
+        . ' AND BINARY assignment.`rolle` = BINARY ?'
+        . ' AND BINARY capability.`faehigkeit` = BINARY ?'
+        . ' AND account.`aktiv` = 1'
+        . ' AND account.`estab_gesperrt` = 0'
+        . ' AND candidate.`einsatz_id` = duty_shift.`einsatz_id`'
+        . ' AND candidate.`einsatz_id` = ?'
+        . ' AND candidate.' . $column . ' IS NOT NULL'
+        . ' AND CHAR_LENGTH(TRIM(candidate.' . $column . ')) > 0';
+    $parameters = [
+        $assignmentId,
+        $incidentId,
+        $selected['benutzer'],
+        $selected['kuerzel'],
+        $selected['funktion'],
+        $selected['rolle'],
+        $capability,
+        $incidentId,
+    ];
+    if ($direction !== null) {
+        $sql .= ' AND candidate.`04_richtung` = ?';
+        $parameters[] = $direction;
+    }
+    $sql .= ' GROUP BY BINARY TRIM(candidate.' . $column . ')) AS latest'
+        . ' ON latest.`last_id` = message.`00_lfd`'
+        . ' ORDER BY message.`00_lfd` DESC';
+
+    $statement = estab_message_execute($connection, $sql, $parameters);
+    try {
+        $suggestions = [];
+        $seen = [];
+        $storedSuggestion = null;
+        if (!$statement->bind_result($storedSuggestion)) {
+            throw new RuntimeException(
+                'Nachrichtenvorschläge konnten nicht gelesen werden.'
+            );
+        }
+        while ($statement->fetch()) {
+            $suggestion = estab_read_normalize_message_suggestion(
+                $storedSuggestion
+            );
+            if ($suggestion === null) {
+                continue;
+            }
+            $key = function_exists('mb_strtolower')
+                ? mb_strtolower($suggestion, 'UTF-8')
+                : strtolower($suggestion);
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $suggestions[] = $suggestion;
+            if (count($suggestions) >= $limit) {
+                break;
+            }
+        }
+        return $suggestions;
+    } finally {
+        $statement->close();
+    }
+}
+
 /** Require one fixed capability for a privileged application area. */
 function estab_read_require_capability(
     mysqli $connection,

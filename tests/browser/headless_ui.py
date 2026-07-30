@@ -36,6 +36,7 @@ class TestConfig:
     login_code: str
     login_function: str
     login_password: str = dataclasses.field(repr=False)
+    message_suggestion_marker: str | None = None
     admin_user: str | None = None
     admin_password: str | None = dataclasses.field(default=None, repr=False)
     timeout: float = 25.0
@@ -90,6 +91,20 @@ class TestConfig:
             )
         if not re.fullmatch(r"[A-Za-z0-9_/-]{1,20}", login_function):
             raise TestFailure("ESTAB_TEST_LOGIN_FUNCTION enthält nicht unterstützte Zeichen.")
+        message_suggestion_marker = os.environ.get(
+            "ESTAB_TEST_MESSAGE_SUGGESTION_MARKER"
+        )
+        if (
+            message_suggestion_marker is not None
+            and re.fullmatch(
+                r"BROWSER-GEGENSTELLE-[a-f0-9]{16}",
+                message_suggestion_marker,
+            )
+            is None
+        ):
+            raise TestFailure(
+                "ESTAB_TEST_MESSAGE_SUGGESTION_MARKER ist ungültig."
+            )
 
         admin_user = os.environ.get("ESTAB_TEST_ADMIN_USER")
         admin_password = os.environ.get("ESTAB_TEST_ADMIN_PASSWORD")
@@ -118,6 +133,7 @@ class TestConfig:
             login_code=login_code,
             login_function=login_function,
             login_password=password,
+            message_suggestion_marker=message_suggestion_marker,
             admin_user=admin_user,
             admin_password=admin_password,
             timeout=timeout,
@@ -921,6 +937,298 @@ class BrowserAcceptance:
         )
         self._assert_mobile_bos_navigation(
             "öffentliche BOS-Infosammlung bei 390×844 px"
+        )
+
+    def run_message_suggestions(self) -> None:
+        marker = self.config.message_suggestion_marker
+        if self.config.login_function != "A/W" or marker is None:
+            raise TestFailure(
+                "--message-suggestions benötigt ein A/W-Konto und einen "
+                "gültigen Vorschlagsmarker."
+            )
+
+        self.cdp.call("Page.enable")
+        self.cdp.call("Runtime.enable")
+        self.cdp.call("Network.enable")
+        self.cdp.navigate(self.config.base_url + "/4fach/index.php?next=messages")
+        self._wait_for_frame("mainframe")
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                return Boolean(doc.querySelector(
+                    'button[name="login_flow"][value="existing"]'
+                ));
+                """,
+            ),
+            "Bestandskonto-Auswahl für den Vorschlagstest fehlt",
+        )
+        self.cdp.click(
+            "mainframe",
+            'button[name="login_flow"][value="existing"]',
+            "Bestandskonto für den Vorschlagstest anmelden",
+        )
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                return Boolean(
+                    doc.querySelector('input[name="benutzer"]')
+                    && doc.querySelector('input[name="kuerzel"]')
+                    && doc.querySelector('select[name="funktion"]')
+                    && doc.querySelector('input[name="kennwort1"]')
+                );
+                """,
+            ),
+            "Bestandskonto-Formular für den Vorschlagstest fehlt",
+        )
+        self.cdp.set_value(
+            "mainframe",
+            'input[name="benutzer"]',
+            self.config.login_name,
+            "A/W-Benutzername",
+        )
+        self.cdp.set_value(
+            "mainframe",
+            'input[name="kuerzel"]',
+            self.config.login_code,
+            "A/W-Kürzel",
+        )
+        self.cdp.set_value(
+            "mainframe",
+            'select[name="funktion"]',
+            self.config.login_function,
+            "A/W-Funktion",
+            select=True,
+        )
+        self.cdp.set_value(
+            "mainframe",
+            'input[name="kennwort1"]',
+            self.config.login_password,
+            "A/W-Kennwort",
+        )
+        self.cdp.click(
+            "mainframe",
+            'button.estab-button-primary[type="submit"]',
+            "A/W-Bestandskonto absenden",
+        )
+        self._wait_for_top_level_path(
+            "/4fach/fuehrungsstelle.php",
+            "Führungsstellenbetrieb für den Vorschlagstest fehlt",
+        )
+        self.cdp.wait_for(
+            """
+            document.readyState === "complete" &&
+            Boolean(document.querySelector(
+                'form input[name="operation_action"][value="select_hat"]'
+            )) &&
+            Boolean(document.querySelector(
+                'form input[name="dienstbesetzung_id"]'
+            ))
+            """,
+            "persönlich angenommene A/W-Dienstfunktion fehlt",
+        )
+        self.cdp.click(
+            None,
+            'form:has(input[name="operation_action"][value="select_hat"]) '
+            'button[type="submit"]',
+            "persönlich angenommene A/W-Dienstfunktion auswählen",
+        )
+        self._wait_for_authenticated_frames()
+        self.cdp.click(
+            "vorgaben",
+            'button[name="fm_eingang_x"]'
+            '[data-estab-workflow-key="fm_eingang"]',
+            "A/W-Eingangsformular öffnen",
+        )
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                const input = doc.querySelector("#f_05_gegenstelle");
+                const list = doc.querySelector(
+                    "#estab-message-callsign-suggestions"
+                );
+                const fallback = doc.querySelector(
+                    "#estab-message-callsign-suggestions-native"
+                );
+                return target.location.pathname.endsWith(
+                    "/4fach/mainindex.php"
+                ) && Boolean(
+                    input
+                    && list
+                    && fallback
+                    && input.getAttribute("role") === "combobox"
+                    && list.getAttribute("role") === "listbox"
+                );
+                """,
+            ),
+            "A/W-Rufnamen-Combobox wurde nicht gerendert",
+        )
+        self.cdp.click(
+            "mainframe",
+            "#f_05_gegenstelle",
+            "Rufname der Gegenstelle fokussieren",
+        )
+
+        marker_literal = json.dumps(marker)
+        focus_state = self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                f"""
+                const input = doc.querySelector("#f_05_gegenstelle");
+                const list = doc.querySelector(
+                    "#estab-message-callsign-suggestions"
+                );
+                const fallback = doc.querySelector(
+                    "#estab-message-callsign-suggestions-native"
+                );
+                const options = Array.from(
+                    list.querySelectorAll('[role="option"]')
+                );
+                return {{
+                    focused: doc.activeElement === input,
+                    expanded: input.getAttribute("aria-expanded"),
+                    nativeListDetached: !input.hasAttribute("list"),
+                    listVisible: !list.hidden
+                        && target.getComputedStyle(list).display !== "none",
+                    customMarker: options.some(
+                        option => option.textContent === {marker_literal}
+                    ),
+                    fallbackMarker: Array.from(fallback.options).some(
+                        option => option.value === {marker_literal}
+                    )
+                }};
+                """,
+            ),
+            "Vorschlagsliste öffnete sich beim echten Fokus nicht",
+        )
+        self._truth(
+            isinstance(focus_state, dict)
+            and focus_state.get("focused") is True
+            and focus_state.get("expanded") == "true"
+            and focus_state.get("nativeListDetached") is True
+            and focus_state.get("listVisible") is True
+            and focus_state.get("customMarker") is True
+            and focus_state.get("fallbackMarker") is True,
+            "Fokus-Listbox oder native Rückfalloption enthält den "
+            "einsatzbezogenen Rufnamen nicht.",
+        )
+
+        self.cdp.set_value(
+            "mainframe",
+            "#f_05_gegenstelle",
+            "BROWSER-GEGENSTELLE-",
+            "Vorschlagsfilter",
+        )
+        self.cdp.call(
+            "Input.dispatchKeyEvent",
+            {
+                "type": "keyDown",
+                "key": "ArrowDown",
+                "code": "ArrowDown",
+                "windowsVirtualKeyCode": 40,
+            },
+        )
+        self.cdp.call(
+            "Input.dispatchKeyEvent",
+            {
+                "type": "keyUp",
+                "key": "ArrowDown",
+                "code": "ArrowDown",
+                "windowsVirtualKeyCode": 40,
+            },
+        )
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                const input = doc.querySelector("#f_05_gegenstelle");
+                return Boolean(input.getAttribute("aria-activedescendant"));
+                """,
+            ),
+            "Pfeiltaste aktivierte keinen Rufnamenvorschlag",
+        )
+        self.cdp.call(
+            "Input.dispatchKeyEvent",
+            {
+                "type": "keyDown",
+                "key": "Enter",
+                "code": "Enter",
+                "windowsVirtualKeyCode": 13,
+            },
+        )
+        self.cdp.call(
+            "Input.dispatchKeyEvent",
+            {
+                "type": "keyUp",
+                "key": "Enter",
+                "code": "Enter",
+                "windowsVirtualKeyCode": 13,
+            },
+        )
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                f"""
+                const input = doc.querySelector("#f_05_gegenstelle");
+                const list = doc.querySelector(
+                    "#estab-message-callsign-suggestions"
+                );
+                return input.value === {marker_literal}
+                    && input.getAttribute("aria-expanded") === "false"
+                    && list.hidden;
+                """,
+            ),
+            "Tastaturauswahl übernahm den Rufnamenvorschlag nicht",
+        )
+
+        free_value = "Freie Gegenstelle 4711"
+        self.cdp.set_value(
+            "mainframe",
+            "#f_05_gegenstelle",
+            free_value,
+            "freie Rufnameneingabe",
+        )
+        free_state = self.cdp.evaluate(
+            _frame_expression(
+                "mainframe",
+                f"""
+                const input = doc.querySelector("#f_05_gegenstelle");
+                return {{
+                    value: input.value,
+                    expanded: input.getAttribute("aria-expanded")
+                }};
+                """,
+            )
+        )
+        self._truth(
+            isinstance(free_state, dict)
+            and free_state.get("value") == free_value
+            and free_state.get("expanded") == "false",
+            "freie Rufnameneingabe wurde durch die Vorschlagsliste verändert.",
+        )
+        self.cdp.set_value(
+            "mainframe",
+            "#f_05_gegenstelle",
+            "",
+            "Rufnamen-Testfeld zurücksetzen",
+        )
+        self.cdp.click(
+            "vorgaben",
+            "[data-estab-logout-form] button",
+            "A/W nach dem Vorschlagstest abmelden",
+        )
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                return Boolean(doc.querySelector(
+                    'button[name="login_flow"][value="existing"]'
+                ));
+                """,
+            ),
+            "anonyme Anmeldung nach dem A/W-Vorschlagstest fehlt",
         )
 
     def run(self) -> None:
@@ -5362,6 +5670,14 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="nur den öffentlichen responsiven BOS-Arbeitsbereich testen",
     )
+    parser.add_argument(
+        "--message-suggestions",
+        action="store_true",
+        help=(
+            "nur die einsatzbezogene A/W-Rufnamen-Combobox mit echtem "
+            "Fokus und Tastaturbedienung testen"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -5382,10 +5698,12 @@ def main() -> int:
                 arguments.overview_only,
                 arguments.export_only,
                 arguments.bos_only,
+                arguments.message_suggestions,
             )
         ) > 1:
             raise TestFailure(
-                "--overview-only, --export-only und --bos-only "
+                "--overview-only, --export-only, --bos-only und "
+                "--message-suggestions "
                 "können nicht kombiniert werden."
             )
         config = TestConfig.from_environment(
@@ -5406,6 +5724,8 @@ def main() -> int:
             acceptance.run_overview()
         elif arguments.bos_only:
             acceptance.run_bos()
+        elif arguments.message_suggestions:
+            acceptance.run_message_suggestions()
         elif arguments.export_only:
             if not config.admin_user or not config.admin_password:
                 raise TestFailure(

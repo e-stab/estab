@@ -261,6 +261,16 @@ Sichtervermerk erzeugen kann.
 Beim Eingang erfasst A/W zwingend den empfangenen Rufnamen, kann das Feld
 „Absender“ aber weder im Formular noch über einen manipulierten Request
 schreiben. Erst LdF muss daraus einen nicht leeren Absender festlegen.
+Beim Fokus auf „Rufname der Gegenstelle“ bietet das Formular A/W und LdF
+bisherige Rufnamen aus dem aktuell aktiven Einsatz in einer zugänglichen,
+per Tastatur bedienbaren Auswahlliste an.
+Für „Absender“ erhält ausschließlich LdF bei einem Eingang entsprechende
+Vorschläge. Die Liste übernimmt nichts automatisch: Eine freie Eingabe bleibt
+jederzeit möglich, die Browser-Autovervollständigung ist für diese Felder
+ausgeschaltet und ohne JavaScript bleibt die native Browserliste als
+Rückfalloption erhalten. Werte anderer Einsätze werden nicht offengelegt. Der lokale
+Absender eines Ausgangs bleibt davon unberührt und wird weiterhin
+serverseitig aus der Konfiguration gesetzt.
 Aufnahme-, Verfasser-, Sichter-, LdF- und Beförderungszeichen stammen aus der
 serverseitig geprüften Sitzung. Jeder erfolgreiche fachliche Übergang und sein
 strukturierter Feldnachweis werden atomar in einer append-only Hashkette

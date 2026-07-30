@@ -11,8 +11,8 @@ steht in der [Funktionsmatrix](FUNKTIONSNACHWEIS.md).
 | Quellprüfung | PHP-8.5-Lint, Kompatibilitäts-, Sicherheits-, Einsatz-, Benutzerverwaltungs-, Upload-, Export- und PDF-Regressionen |
 | Image-Build | benötigte PHP-Erweiterungen und Apache-Konfiguration |
 | Datenbank | echtes MariaDB-Schema, Einsatz-Singleton/Trigger, Kontosperre, Indizes, aktive und persistente Standardmatrix, Engines, Collations und Zero-Date-Freiheit |
-| HTTP | Header, direkte Endpunktfläche, 403-/400-/405-Grenzen, Registrierung, sichtbare Sitzungsidentität, CSRF-Abmeldung, erneute Anmeldung, verbindlicher Eingangs- und Ausgangslauf samt Rückgabe/Korrektur, Dienstbesetzung/Hutwechsel, S6-Plan, Melderlauf, Kategorien- und ETB-/TBB-Rollengrenzen, reale Vordruckerzeugung/-auslieferung sowie Admin-Export |
-| Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, neun stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, Matrixstandard-Bestätigungen, BOS-Disclosure, Logout sowie öffentliche und authentifizierte mobile Bedienung bei exakt 390 × 844 CSS-Pixeln |
+| HTTP | Header, direkte Endpunktfläche, 403-/400-/405-Grenzen, Registrierung, sichtbare Sitzungsidentität, CSRF-Abmeldung, erneute Anmeldung, verbindlicher Eingangs- und Ausgangslauf samt Rückgabe/Korrektur und einsatzgebundener Feldvorschläge, Dienstbesetzung/Hutwechsel, S6-Plan, Melderlauf, Kategorien- und ETB-/TBB-Rollengrenzen, reale Vordruckerzeugung/-auslieferung sowie Admin-Export |
+| Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, neun stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, A/W-Rufnamen-Listbox mit echtem Fokus, Filterung und Tastaturauswahl, Matrixstandard-Bestätigungen, BOS-Disclosure, Logout sowie öffentliche und authentifizierte mobile Bedienung bei exakt 390 × 844 CSS-Pixeln |
 | Fachabnahme | kompletter Nachrichten-, Anhang-, PDF-, ETB-/TBB- und Restore-Ablauf |
 | Betrieb | kontinuierliche Readiness, Logs, Restarts, Kapazität und Backup-Alter |
 
@@ -82,7 +82,10 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   UTF-8-/Legacy-Entity-Ausgabe und die inerten Payloads Quotes, Ampersand,
   `<script>` sowie SQL-ähnlicher Text,
 - verpflichtende Rufnamen bei FM-Eingängen, nicht leere LdF-Übersetzungen,
-  exakte Sperrfreigabe beim Abbrechen und die anschließende Rückkehr in die
+  rollen- und richtungsgebundene Fokus-Vorschläge für Rufname und Absender
+  ausschließlich aus dem aktuell aktiven Einsatz, weiterhin mögliche freie
+  Eingaben bei ausgeschalteter Browser-Autovervollständigung, exakte
+  Sperrfreigabe beim Abbrechen und die anschließende Rückkehr in die
   automatisch aktualisierte LdF-Warteschlange,
 - Medium-Normalisierung für `Fe`, `Fu`, `Me`, `FAX`/`Fax`, `FS`, `@` und
   `DFÜ`, lesbare sowie HTML-sichere Nachweisausgabe, die Zusammenführung von
@@ -1022,6 +1025,26 @@ Der Test belegt die beiden nicht konfigurierbaren Abläufe:
 - Rückgabe: Si gibt einen formal fehlerhaften Ausgang mit Pflichtgrund in
   Status 10 an den Verfasser zurück. Nur dieser korrigiert ihn und reicht
   erneut vollständig in Status 4 ein.
+
+Die Vorschlagsfunktion besitzt zusätzlich drei aufeinander abgestimmte
+Nachweise. `tests/php/message_suggestion_security.php` prüft den
+Fail-closed-Vertrag, die zugängliche Combobox/Listbox samt nativer
+No-Script-Rückfalloption, ausgeschaltetes Browser-Autocomplete und HTML-sichere
+Ausgabe. Der isolierte MariaDB-Test
+`tests/integration/message_suggestions.php` belegt die erneute Prüfung von
+aktivem Einsatz und ausgewählter Dienstbesetzung im selben Abfrage-Statement,
+die Rollen- und Richtungsgrenzen, akzentverschiedene Werte sowie, dass Werte
+eines anderen Einsatzes nicht erscheinen.
+`tests/integration/message_workflow_http.sh` prüft schließlich an den echten
+Formularen: A/W und LdF erhalten nur die zulässigen Rufnamenvorschläge, LdF bei
+Eingängen die Absendervorschläge; A/W-Eingang und Stab erhalten kein
+Absender-Eingabefeld. Keine Liste wählt einen Wert automatisch aus, freie
+Eingaben bleiben möglich und der lokale Ausgangsabsender wird weiterhin
+serverseitig gesetzt. `tests/browser/headless_ui.py --message-suggestions`
+meldet ein echtes A/W-Konto an und beweist mit einem kurzlebigen,
+einsatzgebundenen Marker Fokusöffnung, Filterung, Pfeiltaste/Eingabetaste,
+Übernahme, freie Eingabe und Logout im echten Chrome; das Fixture wird auch
+bei einem Testabbruch entfernt.
 
 Der Lauf registriert isolierte LdF-, A/W-, Si-, S1-, S2-, S3- und
 POL/FB-Konten über

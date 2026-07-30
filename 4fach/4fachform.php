@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . "/../app/csrf.php";
 require_once __DIR__ . "/../app/message_repository.php";
+require_once __DIR__ . "/../app/read_authorization.php";
 if (defined ("debug") && debug) { echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>4Fach Form</big><br>";  }
 /*****************************************************************************\
    Datei: 4fachform.php
@@ -114,6 +115,7 @@ class nachrichten4fach {
       if ($this->task === "LdF-Ausgang") {
         $this->activeTelecomRoutes = $this->load_active_telecom_routes ();
       }
+      $this->load_message_suggestions ();
       $this->plot_form () ;
     }
 
@@ -123,6 +125,8 @@ class nachrichten4fach {
     var $errorselect; // array, Felder die falsch eingegeben wurden.
     var $hasUnsavedValidationData = false;
     var $activeTelecomRoutes = array ();
+    var $messageSuggestionField = "";
+    var $messageSuggestions = array ();
 
     function load_active_telecom_routes () {
       global $conf_4f_db;
@@ -160,6 +164,268 @@ class nachrichten4fach {
       } finally {
         estab_auth_close ($connection);
       }
+    }
+
+    function load_message_suggestions () {
+      global $conf_4f_db, $conf_4f_tbl;
+      $field = match ($this->task) {
+        "FM-Eingang", "FM-Eingang_Anhang", "LdF-Ausgang" =>
+          "05_gegenstelle",
+        "LdF-Eingang" => "13_abseinheit",
+        default => "",
+      };
+      if ($field === "") {
+        return;
+      }
+      $this->messageSuggestionField = $field;
+      $connection = null;
+      try {
+        $identity = estab_read_session_identity ($_SESSION);
+        if (!is_array ($identity)) {
+          return;
+        }
+        $connection = estab_message_connect ($conf_4f_db);
+        $this->messageSuggestions = estab_read_message_suggestions (
+          $connection,
+          (string) $conf_4f_tbl ["nachrichten"],
+          $identity,
+          $field
+        );
+      } catch (Throwable $exception) {
+        // Suggestions are optional assistance. The guarded form remains
+        // usable if this read-only lookup is temporarily unavailable.
+        error_log ("eStab message suggestions are temporarily unavailable");
+        $this->messageSuggestions = array ();
+      } finally {
+        if ($connection instanceof mysqli) {
+          estab_auth_close ($connection);
+        }
+      }
+    }
+
+    function message_suggestion_definition ($field) {
+      if ($this->messageSuggestionField !== $field) {
+        return null;
+      }
+      return match ($field) {
+        "05_gegenstelle" => array (
+          "id" => "estab-message-callsign-suggestions",
+          "kind" => "callsign",
+        ),
+        "13_abseinheit" => array (
+          "id" => "estab-message-sender-suggestions",
+          "kind" => "sender",
+        ),
+        default => null,
+      };
+    }
+
+    function message_suggestion_input_attributes ($field) {
+      $definition = $this->message_suggestion_definition ($field);
+      if (!is_array ($definition)) {
+        return "";
+      }
+      $id = $definition ["id"];
+      return " list=\"".$id."-native\" autocomplete=\"off\"".
+        " data-estab-incident-suggestions=\"".$definition ["kind"]."\"".
+        " data-estab-suggestion-listbox=\"".$id."\"".
+        " role=\"combobox\" aria-autocomplete=\"list\"".
+        " aria-haspopup=\"listbox\" aria-expanded=\"false\"".
+        " aria-controls=\"".$id."\"".
+        " aria-describedby=\"".$id."-hint\"";
+    }
+
+    function show_message_suggestions ($field) {
+      $definition = $this->message_suggestion_definition ($field);
+      if (!is_array ($definition)) {
+        return;
+      }
+      $id = $definition ["id"];
+      echo "<datalist id=\"".$id."-native\" ".
+        "data-estab-incident-suggestion-list=\"".$definition ["kind"]."\">\n";
+      foreach ($this->messageSuggestions as $suggestion) {
+        echo "<option value=\"".estab_auth_html ($suggestion)."\"></option>\n";
+      }
+      echo "</datalist>\n";
+      echo "<div id=\"".$id."\" class=\"estab-message-suggestion-list\" ".
+        "role=\"listbox\" aria-label=\"Vorschläge aus dem aktiven Einsatz\" ".
+        "hidden>\n";
+      foreach ($this->messageSuggestions as $index => $suggestion) {
+        echo "<div id=\"".$id."-option-".$index."\" ".
+          "class=\"estab-message-suggestion-option\" role=\"option\" ".
+          "tabindex=\"-1\">".estab_auth_html ($suggestion)."</div>\n";
+      }
+      echo "</div>\n";
+      echo "<small id=\"".$id."-hint\" ".
+        "class=\"estab-message-suggestion-hint\">".
+        "Bisherige Werte aus dem aktiven Einsatz. Freie Eingabe bleibt ".
+        "möglich.</small>\n";
+    }
+
+    function show_message_suggestion_script () {
+      if ($this->messageSuggestionField === "") {
+        return;
+      }
+      echo <<<'HTML'
+<script data-estab-message-suggestion-picker>
+(function () {
+  "use strict";
+  var inputs = document.querySelectorAll(
+    "input[data-estab-incident-suggestions]"
+  );
+
+  function listFor(input) {
+    var id = input.getAttribute("data-estab-suggestion-listbox");
+    return id ? document.getElementById(id) : null;
+  }
+
+  function optionsFor(list) {
+    return Array.prototype.slice.call(
+      list.querySelectorAll('[role="option"]')
+    );
+  }
+
+  function setActive(input, options, active) {
+    for (var index = 0; index < options.length; index++) {
+      var selected = options[index] === active;
+      options[index].classList.toggle(
+        "estab-message-suggestion-option-active",
+        selected
+      );
+      options[index].setAttribute("aria-selected", selected ? "true" : "false");
+    }
+    if (active) {
+      input.setAttribute("aria-activedescendant", active.id);
+      active.scrollIntoView({block: "nearest"});
+    } else {
+      input.removeAttribute("aria-activedescendant");
+    }
+  }
+
+  function closeList(input, list) {
+    list.hidden = true;
+    input.setAttribute("aria-expanded", "false");
+    setActive(input, optionsFor(list), null);
+  }
+
+  function matchingOptions(input, list) {
+    var query = input.value.trim().toLocaleLowerCase();
+    var options = optionsFor(list);
+    var visible = [];
+    for (var index = 0; index < options.length; index++) {
+      var label = options[index].textContent.toLocaleLowerCase();
+      var matches = query === "" || label.indexOf(query) !== -1;
+      options[index].hidden = !matches;
+      if (matches) {
+        visible.push(options[index]);
+      }
+    }
+    setActive(input, options, null);
+    return visible;
+  }
+
+  function openList(input, list) {
+    var visible = matchingOptions(input, list);
+    list.hidden = visible.length === 0;
+    input.setAttribute(
+      "aria-expanded",
+      visible.length === 0 ? "false" : "true"
+    );
+    return visible;
+  }
+
+  function choose(input, list, option) {
+    input.value = option.textContent;
+    closeList(input, list);
+    input.focus();
+    input.dispatchEvent(new Event("change", {bubbles: true}));
+  }
+
+  for (var inputIndex = 0; inputIndex < inputs.length; inputIndex++) {
+    (function (input) {
+      var list = listFor(input);
+      if (!list) {
+        return;
+      }
+
+      // With JavaScript disabled, the native datalist remains the fallback.
+      // The custom listbox is used otherwise so focus behavior is identical
+      // even in browsers without HTMLInputElement.showPicker().
+      input.removeAttribute("list");
+
+      input.addEventListener("focus", function () {
+        openList(input, list);
+      });
+      input.addEventListener("input", function () {
+        openList(input, list);
+      });
+      input.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") {
+          closeList(input, list);
+          return;
+        }
+        var activeId = input.getAttribute("aria-activedescendant");
+        var active = activeId ? document.getElementById(activeId) : null;
+        if (event.key === "Enter" && active) {
+          event.preventDefault();
+          choose(input, list, active);
+          return;
+        }
+        if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
+          return;
+        }
+        event.preventDefault();
+        var visible = list.hidden
+          ? openList(input, list)
+          : matchingOptions(input, list);
+        if (visible.length === 0) {
+          return;
+        }
+        var current = visible.indexOf(active);
+        var next = event.key === "ArrowDown"
+          ? (current + 1) % visible.length
+          : (current <= 0 ? visible.length - 1 : current - 1);
+        setActive(input, optionsFor(list), visible[next]);
+      });
+      input.addEventListener("blur", function () {
+        window.setTimeout(function () {
+          if (!list.contains(document.activeElement)) {
+            closeList(input, list);
+          }
+        }, 0);
+      });
+      list.addEventListener("mousedown", function (event) {
+        var option = event.target.closest('[role="option"]');
+        if (option && list.contains(option)) {
+          event.preventDefault();
+        }
+      });
+      list.addEventListener("click", function (event) {
+        var option = event.target.closest('[role="option"]');
+        if (option && list.contains(option) && !option.hidden) {
+          choose(input, list, option);
+        }
+      });
+    })(inputs[inputIndex]);
+  }
+
+  document.addEventListener("mousedown", function (event) {
+    for (var index = 0; index < inputs.length; index++) {
+      var input = inputs[index];
+      var list = listFor(input);
+      if (
+        list
+        && event.target !== input
+        && !list.contains(event.target)
+      ) {
+        closeList(input, list);
+      }
+    }
+  });
+})();
+</script>
+HTML;
+      echo "\n";
     }
 
   // aktive und Inaktive Darstellungsfarben
@@ -299,6 +565,8 @@ class nachrichten4fach {
         // Verfasserzeichen und ausgeübte Funktion come from the login.
         $this->bg [14] = $this->feldbg [14]["a"];
         $this->feld [14] = false;
+        // The local organisation is derived from server configuration.
+        $this->feld [13] = false;
       break;
 
       case "Stab_lesen" :
@@ -996,7 +1264,10 @@ class nachrichten4fach {
       echo $this->safe_message_value ("05_gegenstelle");
       echo "</b></div>";
     } else {
-       echo "<input id=\"f_05_gegenstelle\" maxlength=\"80\" size=\"50\" name=\"05_gegenstelle\" value=\"".$this->safe_message_value ("05_gegenstelle")."\">\n";
+       echo "<div class=\"estab-message-suggestion-control\">\n";
+       echo "<input id=\"f_05_gegenstelle\" maxlength=\"128\" size=\"50\" name=\"05_gegenstelle\" value=\"".$this->safe_message_value ("05_gegenstelle")."\"".$this->message_suggestion_input_attributes ("05_gegenstelle").">\n";
+       $this->show_message_suggestions ("05_gegenstelle");
+       echo "</div>\n";
     }
     echo "</td>";
     echo "</tr>\n";
@@ -1377,9 +1648,10 @@ class nachrichten4fach {
       echo "<input id=\"f_13_abseinheit\" type=\"hidden\" name=\"13_abseinheit\" value=\"".$this->safe_message_value ("13_abseinheit")."\">\n";
     }
     else {
-      echo "<div style=\"text-align: left;\" >";
-      echo "<input id=\"f_13_abseinheit\" style=\"font-size:16px; font-weight:900;\" maxlength=\"30\" size=\"30\"
-              name=\"13_abseinheit\" value=\"".$this->safe_message_value ("13_abseinheit")."\">";
+      echo "<div class=\"estab-message-suggestion-control\">";
+      echo "<input id=\"f_13_abseinheit\" style=\"font-size:16px; font-weight:900;\" maxlength=\"128\" size=\"30\"
+              name=\"13_abseinheit\" value=\"".$this->safe_message_value ("13_abseinheit")."\"".$this->message_suggestion_input_attributes ("13_abseinheit").">";
+      $this->show_message_suggestions ("13_abseinheit");
       echo "</div>\n";
     }
     echo "Einheit/Einrichtung/Stelle";
@@ -1634,6 +1906,7 @@ class nachrichten4fach {
     $this->show_menue_buttons (2, "unten");
 
     echo "</FORM>\n";
+    $this->show_message_suggestion_script ();
 
   } // function plot_form
 

@@ -16,6 +16,69 @@
     width: 1px;
 }
 
+.estab-message-suggestion-control {
+    display: inline-block;
+    max-width: 100%;
+    text-align: left;
+    vertical-align: top;
+}
+
+.estab-message-suggestion-control > input {
+    box-sizing: border-box;
+    max-width: 100%;
+}
+
+.estab-message-suggestion-list {
+    background: #ffffff;
+    border: 2px solid #45627f;
+    border-radius: 6px;
+    box-shadow: 0 5px 14px rgba(5, 14, 26, 0.3);
+    box-sizing: border-box;
+    color: #172033;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 0.9rem;
+    margin-top: 0.2rem;
+    max-height: 14rem;
+    max-width: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0.2rem;
+    scrollbar-width: thin;
+    width: 100%;
+}
+
+.estab-message-suggestion-list[hidden],
+.estab-message-suggestion-option[hidden] {
+    display: none;
+}
+
+.estab-message-suggestion-option {
+    border-radius: 4px;
+    cursor: pointer;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+    padding: 0.45rem 0.55rem;
+}
+
+.estab-message-suggestion-option:hover,
+.estab-message-suggestion-option-active {
+    background: #dbeafe;
+    color: #102641;
+    outline: 2px solid #2563eb;
+    outline-offset: -2px;
+}
+
+.estab-message-suggestion-hint {
+    color: inherit;
+    display: block;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 0.78rem;
+    font-weight: 400;
+    line-height: 1.3;
+    margin-top: 0.2rem;
+    opacity: 0.78;
+}
+
 .estab-session-bar {
     background: #172f4d;
     border-bottom: 3px solid #e5b247;

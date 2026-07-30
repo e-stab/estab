@@ -95,6 +95,17 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   Inhalt aus und legt die Empfänger fest. A/W besitzt kein schreibbares
   Absenderfeld, auch serverseitig werden Übertragungsversuche verworfen.
   Der feste Eingangslauf ist `1 → 4 → 8`.
+- `read_authorization.php` liefert die serverseitig gerenderten
+  Vorschlagslisten für „Rufname der Gegenstelle“ und „Absender“. Die Abfrage
+  validiert den aktiven Einsatz und die exakt ausgewählte aktive
+  Dienstbesetzung erneut: Rufnamen sind nur für A/W und LdF verfügbar,
+  Absender nur für LdF bei Eingängen. Sie liest ausschließlich bisherige Werte
+  desselben aktiven Einsatzes, während der lokale Absender eines Ausgangs
+  weiterhin serverseitig bestimmt wird. Die Felder verwenden
+  `autocomplete="off"`; die zugängliche Listbox öffnet beim Fokus, ist mit
+  Pfeiltasten, Eingabetaste und Escape bedienbar, trifft keine automatische
+  Auswahl und schränkt freie Eingaben nicht ein. Ohne JavaScript bleibt ein
+  natives `datalist` als Rückfalloption erhalten.
 - Ein Ausgang beginnt in Status 4 bei Si. Si kann die schreibgeschützten
   Inhaltsfelder formal freigeben oder mit Pflichtgrund an den ursprünglichen
   Verfasser in Status 10 zurückgeben. Nach jeder Korrektur folgt erneut

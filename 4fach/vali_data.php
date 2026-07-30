@@ -199,10 +199,17 @@ class vali_data_form {
 
     if (isset ($this->i_data ["05_gegenstelle"])) {
       $value = $this->i_data ["05_gegenstelle"];
+      $valueLength = is_string ($value)
+        ? (
+          function_exists ("mb_strlen")
+            ? mb_strlen ($value, "UTF-8")
+            : strlen ($value)
+        )
+        : PHP_INT_MAX;
       $this->validate ["05_gegenstelle"] =
         is_string ($value)
         && strlen (trim ($value)) > 0
-        && strlen ($value) <= 128
+        && $valueLength <= 128
         && preg_match ('//u', $value) === 1
         && preg_match ('/[\p{C}]/u', $value) !== 1;
     }
@@ -249,8 +256,19 @@ class vali_data_form {
     }
     if (isset ( $this->i_data ["13_abseinheit"] ))    {
       $value = $this->i_data ["13_abseinheit"];
+      $valueLength = is_string ($value)
+        ? (
+          function_exists ("mb_strlen")
+            ? mb_strlen ($value, "UTF-8")
+            : strlen ($value)
+        )
+        : PHP_INT_MAX;
       $this->validate["13_abseinheit"] =
-        is_string ($value) && strlen (trim ($value)) > 0;
+        is_string ($value)
+        && strlen (trim ($value)) > 0
+        && $valueLength <= 128
+        && preg_match ('//u', $value) === 1
+        && preg_match ('/[\p{C}]/u', $value) !== 1;
     }
     if (isset ( $this->i_data ["14_zeichen"] ))       {
       $result = $this->datatest ( "kuerzel", $this->i_data ["14_zeichen"] ) ;
