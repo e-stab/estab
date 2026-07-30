@@ -47,10 +47,16 @@ if (!str_ends_with($document, "%%EOF\n")) {
 if (strlen($document) < 5000) {
     throw new RuntimeException('Generated PDF is unexpectedly small');
 }
-foreach (['EINGANG', 'AUSGANG', 'Nachweis-Nr.', 'Fm-Betriebsstelle'] as $marker) {
+foreach (
+    ['EINGANG', 'AUSGANG', 'Nachweis-Nr.', 'Fm-Betriebsstelle', 'Blitz']
+    as $marker
+) {
     if (!str_contains($document, $marker)) {
         throw new RuntimeException('Message form marker is missing: ' . $marker);
     }
+}
+if (str_contains($document, 'bbb')) {
+    throw new RuntimeException('Message form exposes a raw priority code');
 }
 if (
     !str_contains($document, 'ALT_1 [gn]')

@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . "/../app/csrf.php";
 require_once __DIR__ . "/../app/message_repository.php";
+require_once __DIR__ . "/../app/message_transport.php";
 require_once __DIR__ . "/../app/read_authorization.php";
 if (defined ("debug") && debug) { echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>4Fach Form</big><br>";  }
 /*****************************************************************************\
@@ -54,6 +55,9 @@ class nachrichten4fach {
         "05_gegenstelle", "06_befweg", "06_befwegausw",
         "fernmeldeplan_eintrag_id", "transportweg_bestaetigt",
         "transport_rueckgabegrund",
+        "incoming_transport_confirmed",
+        "incoming_transport_original_medium",
+        "incoming_transport_correction_reason",
         "07_durchspruch",
         "08_befhinwausw", "08_befhinweis", "09_vorrangstufe",
         "10_anschrift", "11_gesprnotiz", "12_abfzeit", "12_anhang",
@@ -65,11 +69,19 @@ class nachrichten4fach {
         $formDefaults,
         is_array ($formulardaten) ? $formulardaten : array ()
       );
+      if (
+        $this->task === "LdF-Eingang"
+        && $this->formdata ["incoming_transport_original_medium"] === ""
+      ) {
+        $this->formdata ["incoming_transport_original_medium"] =
+          $this->formdata ["01_medium"];
+      }
       if (isset($this->formdata ["00_lfd"])) {$this->lfd = $this->formdata ["00_lfd"];}
       $errorDefaults = array_fill_keys (array (
         "01_medium", "01_datum", "01_zeichen", "02_zeit", "02_zeichen",
         "03_datum", "03_zeit", "03_zeichen", "05_gegenstelle",
         "06_befweg", "06_befwegausw", "07_durchspruch",
+        "incoming_transport_confirmed",
         "08_befhinweis", "08_befhinwausw", "10_anschrift",
         "12_inhalt", "12_abfzeit", "13_abseinheit", "14_zeichen",
         "14_funktion", "15_quitdatum", "15_quitzeichen", "17_vermerke"
@@ -127,6 +139,8 @@ class nachrichten4fach {
     var $activeTelecomRoutes = array ();
     var $messageSuggestionField = "";
     var $messageSuggestions = array ();
+    var $messageSuggestionMetadata = array ();
+    var $messageMappingContext = "";
 
     function load_active_telecom_routes () {
       global $conf_4f_db;
@@ -185,12 +199,71 @@ class nachrichten4fach {
           return;
         }
         $connection = estab_message_connect ($conf_4f_db);
-        $this->messageSuggestions = estab_read_message_suggestions (
+        $history = estab_read_message_suggestions (
           $connection,
           (string) $conf_4f_tbl ["nachrichten"],
           $identity,
           $field
         );
+        $mapped = array ();
+        $mappingDirection = match ($this->task) {
+          "LdF-Eingang" => "E",
+          "LdF-Ausgang" => "A",
+          default => "",
+        };
+        if ($mappingDirection !== "" && (int) $this->lfd > 0) {
+          try {
+            $mapped = estab_read_ldf_mapping_suggestions (
+              $connection,
+              (string) $conf_4f_tbl ["nachrichten"],
+              $identity,
+              (int) $this->lfd,
+              $mappingDirection
+            );
+          } catch (Throwable $exception) {
+            // The generic active-incident history remains usable if the
+            // optional pair/S6 lookup is temporarily unavailable.
+            error_log ("eStab LdF mappings are temporarily unavailable");
+          }
+        }
+        $seen = array ();
+        foreach ($mapped as $mapping) {
+          $value = (string) ($mapping ["value"] ?? "");
+          if ($value === "") {
+            continue;
+          }
+          $key = function_exists ("mb_strtolower")
+            ? mb_strtolower ($value, "UTF-8")
+            : strtolower ($value);
+          if (isset ($seen [$key])) {
+            continue;
+          }
+          $seen [$key] = true;
+          $this->messageSuggestions [] = $value;
+          $this->messageSuggestionMetadata [$value] = array (
+            "source" => (string) ($mapping ["source"] ?? ""),
+            "match" => (string) ($mapping ["match"] ?? ""),
+            "matched_context" =>
+              (string) ($mapping ["matched_context"] ?? ""),
+          );
+          if ($this->messageMappingContext === "") {
+            $this->messageMappingContext =
+              (string) ($mapping ["context"] ?? "");
+          }
+        }
+        foreach ($history as $value) {
+          $key = function_exists ("mb_strtolower")
+            ? mb_strtolower ($value, "UTF-8")
+            : strtolower ($value);
+          if (isset ($seen [$key])) {
+            continue;
+          }
+          $seen [$key] = true;
+          $this->messageSuggestions [] = $value;
+          if (count ($this->messageSuggestions) >= 30) {
+            break;
+          }
+        }
       } catch (Throwable $exception) {
         // Suggestions are optional assistance. The guarded form remains
         // usable if this read-only lookup is temporarily unavailable.
@@ -235,6 +308,49 @@ class nachrichten4fach {
         " aria-describedby=\"".$id."-hint\"";
     }
 
+    function message_suggestion_presentation ($suggestion) {
+      $metadata = $this->messageSuggestionMetadata [$suggestion] ?? null;
+      if (!is_array ($metadata)) {
+        return array (
+          "source" => "",
+          "quality" => "",
+          "label" => "",
+          "matched_context" => "",
+        );
+      }
+      $source = (string) ($metadata ["source"] ?? "");
+      $match = (string) ($metadata ["match"] ?? "");
+      $sourceLabel = match ($source) {
+        "message" => "Bestätigtes Nachrichtenpaar",
+        "plan" => "Aktiver S6-Fernmeldeplan",
+        default => "",
+      };
+      $matchLabel = match ($match) {
+        "exact" => "Exakt",
+        "related" => "Ähnlich",
+        default => "",
+      };
+      if ($sourceLabel === "" || $matchLabel === "") {
+        return array (
+          "source" => "",
+          "quality" => "",
+          "label" => "",
+          "matched_context" => "",
+        );
+      }
+      $matchedContext = $match === "related"
+        ? (string) ($metadata ["matched_context"] ?? "")
+        : "";
+      return array (
+        "source" => $source,
+        "quality" => $match,
+        "label" => $match === "exact"
+          ? $sourceLabel
+          : $matchLabel." · ".$sourceLabel,
+        "matched_context" => $matchedContext,
+      );
+    }
+
     function show_message_suggestions ($field) {
       $definition = $this->message_suggestion_definition ($field);
       if (!is_array ($definition)) {
@@ -244,22 +360,69 @@ class nachrichten4fach {
       echo "<datalist id=\"".$id."-native\" ".
         "data-estab-incident-suggestion-list=\"".$definition ["kind"]."\">\n";
       foreach ($this->messageSuggestions as $suggestion) {
-        echo "<option value=\"".estab_auth_html ($suggestion)."\"></option>\n";
+        $presentation =
+          $this->message_suggestion_presentation ($suggestion);
+        $sourceLabel = (string) $presentation ["label"];
+        $matchedContext = (string) $presentation ["matched_context"];
+        $nativeLabel = $sourceLabel;
+        if ($nativeLabel !== "" && $matchedContext !== "") {
+          $nativeLabel .= " · Bezug: ".$matchedContext;
+        }
+        echo "<option value=\"".estab_auth_html ($suggestion)."\"".
+          ($nativeLabel === ""
+            ? ""
+            : " label=\"".estab_auth_html ($nativeLabel)."\"").
+          "></option>\n";
       }
       echo "</datalist>\n";
       echo "<div id=\"".$id."\" class=\"estab-message-suggestion-list\" ".
         "role=\"listbox\" aria-label=\"Vorschläge aus dem aktiven Einsatz\" ".
         "hidden>\n";
       foreach ($this->messageSuggestions as $index => $suggestion) {
+        $presentation =
+          $this->message_suggestion_presentation ($suggestion);
+        $source = (string) $presentation ["source"];
+        $quality = (string) $presentation ["quality"];
+        $sourceLabel = (string) $presentation ["label"];
+        $matchedContext = (string) $presentation ["matched_context"];
         echo "<div id=\"".$id."-option-".$index."\" ".
-          "class=\"estab-message-suggestion-option\" role=\"option\" ".
-          "tabindex=\"-1\">".estab_auth_html ($suggestion)."</div>\n";
+          "class=\"estab-message-suggestion-option".
+          ($sourceLabel === "" ? "" : " estab-message-mapping-option").
+          "\" role=\"option\" tabindex=\"-1\" ".
+          "data-estab-suggestion-value=\"".
+          estab_auth_html ($suggestion)."\"".
+          ($sourceLabel === ""
+            ? ""
+            : " data-estab-mapping-match=\"".
+              estab_auth_html ($source)."\"".
+              " data-estab-mapping-quality=\"".
+              estab_auth_html ($quality)."\"").
+          "><span class=\"estab-message-suggestion-value\">".
+          estab_auth_html ($suggestion)."</span>".
+          ($sourceLabel === ""
+            ? ""
+            : "<small class=\"estab-message-suggestion-source\">".
+              estab_auth_html ($sourceLabel).
+              ($matchedContext === ""
+                ? ""
+                : "<br><span ".
+                  "class=\"estab-message-suggestion-match-context\">".
+                  "Bezug: „".estab_auth_html ($matchedContext)."“</span>").
+              "</small>").
+          "</div>\n";
       }
       echo "</div>\n";
       echo "<small id=\"".$id."-hint\" ".
-        "class=\"estab-message-suggestion-hint\">".
-        "Bisherige Werte aus dem aktiven Einsatz. Freie Eingabe bleibt ".
-        "möglich.</small>\n";
+        "class=\"estab-message-suggestion-hint\">";
+      if ($this->messageMappingContext !== "") {
+        echo "Passende Zuordnungen zu „".
+          estab_auth_html ($this->messageMappingContext).
+          "“ stehen zuerst: abgeschlossene Nachrichten vor dem aktiven ".
+          "S6-Fernmeldeplan. ";
+      } else {
+        echo "Bisherige Werte aus dem aktiven Einsatz. ";
+      }
+      echo "Freie Eingabe bleibt möglich.</small>\n";
     }
 
     function show_message_suggestion_script () {
@@ -313,7 +476,10 @@ class nachrichten4fach {
     var options = optionsFor(list);
     var visible = [];
     for (var index = 0; index < options.length; index++) {
-      var label = options[index].textContent.toLocaleLowerCase();
+      var value = options[index].getAttribute(
+        "data-estab-suggestion-value"
+      ) || options[index].textContent;
+      var label = value.toLocaleLowerCase();
       var matches = query === "" || label.indexOf(query) !== -1;
       options[index].hidden = !matches;
       if (matches) {
@@ -335,7 +501,8 @@ class nachrichten4fach {
   }
 
   function choose(input, list, option) {
-    input.value = option.textContent;
+    input.value = option.getAttribute("data-estab-suggestion-value")
+      || option.textContent;
     closeList(input, list);
     input.focus();
     input.dispatchEvent(new Event("change", {bubbles: true}));
@@ -536,6 +703,10 @@ HTML;
 
       break;
       case "LdF-Eingang":
+        // LdF confirms or corrects only the incoming transport medium. The
+        // A/W receipt time and receipt mark in the same visual block stay
+        // immutable and are therefore not enabled through field bit 1.
+        $this->bg [1] = $this->feldbg [1]["a"];
         $this->bg [2] = $this->feldbg [2]["a"];
         $this->feld [2] = true;
         $this->bg [13] = $this->feldbg [13]["a"];
@@ -1079,7 +1250,9 @@ HTML;
     /****************************************************************************\
     |  Zeile, Spalte 2 , 1   Aufnahmevermerk  1   1   Eingang                    |
     \****************************************************************************/
-    if (!$this->feld [1]){
+    $incomingMediumEditable =
+      $this->feld [1] || $this->task === "LdF-Eingang";
+    if (!$incomingMediumEditable){
       $param = " disabled ";
       // Radio Button die deaktiviert sind liefern keinen Wert zurueck !!!
       echo "<input id=\"f_01_medium\" type=\"hidden\" name=\"01_medium\" value=\"".$this->safe_message_value ("01_medium")."\">\n";
@@ -1088,23 +1261,69 @@ HTML;
       $param = "";
     } 							
     echo "<td style=\"background-color: ".$this->bg[1]."; width: 250px; text-align: center; vertical-align: top;\"><!--005-->\n";
-    echo "<div style=\"text-align: center;\"><label for=\"01_medium\">Aufnahmevermerk<br></label></div>\n";
-    if ( ( $this->errorselect ["01_medium"] == false ) AND ($this->feld [1]) ) {
+    echo "<div id=\"estab-incoming-medium-label\" ".
+      "style=\"text-align: center;\">Aufnahmevermerk</div>\n";
+    if (
+      ($this->errorselect ["01_medium"] == false)
+      && $incomingMediumEditable
+    ) {
       $this->showerrorinfo ("01_medium");
     }
+    echo "<div role=\"radiogroup\" ".
+      "aria-labelledby=\"estab-incoming-medium-label\">\n";
     if ($this->formdata["01_medium"]=="Fe") {$sel = "checked=\"checked\"";} else {$sel = "";}
-    echo "<input id=\"f_01_medium_fe\" name=\"01_medium\" value=\"Fe\" type=\"radio\" ".$param.$sel.">Fe";
+    echo "<label for=\"f_01_medium_fe\"><input id=\"f_01_medium_fe\" name=\"01_medium\" value=\"Fe\" type=\"radio\" ".$param.$sel.">Fe</label>";
     if ($this->formdata["01_medium"]=="Fu") {$sel = "checked=\"checked\"";} else {$sel = "";}
-    echo "<input id=\"f_01_medium_fu\" name=\"01_medium\" value=\"Fu\" type=\"radio\" ".$param.$sel.">Fu";
+    echo "<label for=\"f_01_medium_fu\"><input id=\"f_01_medium_fu\" name=\"01_medium\" value=\"Fu\" type=\"radio\" ".$param.$sel.">Fu</label>";
     if ($this->formdata["01_medium"]=="Me") {$sel = "checked=\"checked\"";} else {$sel = "";}
-    echo "<input id=\"f_01_medium_me\" name=\"01_medium\" value=\"Me\" type=\"radio\" ".$param.$sel.">Me";
+    echo "<label for=\"f_01_medium_me\"><input id=\"f_01_medium_me\" name=\"01_medium\" value=\"Me\" type=\"radio\" ".$param.$sel.">Me</label>";
     if (strcasecmp ((string) $this->formdata["01_medium"], "FAX") === 0) {$sel = "checked=\"checked\"";} else {$sel = "";}
-    echo "<input id=\"f_01_medium_fax\" name=\"01_medium\" value=\"FAX\" type=\"radio\" ".$param.$sel.">Fax";
+    echo "<label for=\"f_01_medium_fax\"><input id=\"f_01_medium_fax\" name=\"01_medium\" value=\"FAX\" type=\"radio\" ".$param.$sel.">Fax</label>";
     if ($this->formdata["01_medium"]=="FS") {$sel = "checked=\"checked\"";} else {$sel = "";}
-    echo "<input id=\"f_01_medium_fs\" name=\"01_medium\" value=\"FS\" type=\"radio\" ".$param.$sel.">FS";
+    echo "<label for=\"f_01_medium_fs\"><input id=\"f_01_medium_fs\" name=\"01_medium\" value=\"FS\" type=\"radio\" ".$param.$sel.">FS</label>";
     if ($this->formdata["01_medium"]=="@") {$sel = "checked=\"checked\"";} else {$sel = "";}
-    echo "<input id=\"f_01_medium_at\" name=\"01_medium\" value=\"@\" type=\"radio\" ".$param.$sel.">@";
-    echo "<br>\n";
+    echo "<label for=\"f_01_medium_at\"><input id=\"f_01_medium_at\" name=\"01_medium\" value=\"@\" type=\"radio\" ".$param.$sel.">@</label>";
+    echo "</div>\n";
+    if ($this->task === "LdF-Eingang") {
+      $originalMedium = (string) (
+        $this->formdata ["incoming_transport_original_medium"] ?? ""
+      );
+      echo "<p class=\"estab-message-transport-confirmation\">".
+        "<strong>Eingangsweg durch LdF bestätigen</strong><br>".
+        "Prüfen Sie den von A/W aufgenommenen Weg. Bei einer Korrektur ".
+        "ist eine Begründung erforderlich.<br>".
+        "<span data-estab-incoming-transport-original=\"".
+        estab_message_html ($originalMedium)."\">Von A/W erfasst: <strong>".
+        estab_message_html (estab_message_medium_text ($originalMedium)).
+        "</strong></span></p>\n";
+      if (
+        $this->errorselect ["incoming_transport_confirmed"] == false
+        && $this->hasUnsavedValidationData
+      ) {
+        $this->showerrorinfo ("incoming_transport_confirmed");
+      }
+      $transportConfirmed = hash_equals (
+        "1",
+        (string) $this->formdata ["incoming_transport_confirmed"]
+      ) ? " checked" : "";
+      echo "<label for=\"f_incoming_transport_confirmed\" ".
+        "class=\"estab-message-transport-confirm-checkbox\">".
+        "<input id=\"f_incoming_transport_confirmed\" type=\"checkbox\" ".
+        "name=\"incoming_transport_confirmed\" value=\"1\" required ".
+        "data-estab-incoming-transport-confirmation=\"required\"".
+        $transportConfirmed."> ".
+        "Eingangsweg geprüft und bestätigt</label>\n";
+      echo "<label for=\"f_incoming_transport_correction_reason\" ".
+        "class=\"estab-message-transport-reason-label\">".
+        "Begründung nur bei Änderung</label>\n";
+      echo "<textarea id=\"f_incoming_transport_correction_reason\" ".
+        "name=\"incoming_transport_correction_reason\" maxlength=\"500\" ".
+        "rows=\"2\" cols=\"24\" ".
+        "placeholder=\"Warum wurde der Eingangsweg korrigiert?\">".
+        estab_message_html (
+          $this->formdata ["incoming_transport_correction_reason"]
+        )."</textarea>\n";
+    }
     if (!$this->feld [1]){
       if ( ( $this->formdata["01_datum"] != "") or
            ( $this->formdata["01_zeichen"] != "" ) ) {
@@ -1485,22 +1704,41 @@ HTML;
     if (((($this->formdata["09_vorrangstufe"]) != "" )) or (!$this->feld[9])) {
       echo "<div style=\"text-align: center; font-size:24px; font-weight:900;\"><big><big><b>";
       echo "<input id=\"09_vorrangstufe\" type=\"hidden\" name=\"09_vorrangstufe\" value=\"".$this->safe_message_value ("09_vorrangstufe")."\">\n";
-      echo $this->safe_message_value ("09_vorrangstufe");
+      echo estab_message_html (
+        estab_message_priority_label ($this->formdata ["09_vorrangstufe"])
+      );
       echo "</big></big></b></div>";
     } else {
-      echo "<select ".$param." name=\"09_vorrangstufe\" style=\"text-align: center; background-color:".$this->bg[9]."; font-size:xx-large; font-weight:bold;\">\n";
-      if ($this->formdata["09_vorrangstufe"]=="") {$sel = " selected ";} else {$sel = "";}
-      echo "<option ".$sel."></option>\n";
-      if ($this->formdata["09_vorrangstufe"]=="eee") {$sel = " selected ";} else {$sel = "";}
-      echo "<option ".$sel.">eee</option>\n";
-      if ($this->formdata["09_vorrangstufe"]=="sss") {$sel = " selected ";} else {$sel = "";}
-      echo "<option ".$sel.">sss</option>\n";
-      if ($this->formdata["09_vorrangstufe"]=="bbb") {$sel = " selected ";} else {$sel = "";}
-      echo "<option ".$sel." >bbb</option>\n";
-      if ($this->formdata["09_vorrangstufe"]=="aaa") {$sel = " selected ";} else {$sel = "";}
-      echo "<option ".$sel.">aaa</option>\n";
+      echo "<select id=\"f_09_vorrangstufe\" ".$param.
+        "name=\"09_vorrangstufe\" ".
+        "aria-describedby=\"estab-priority-warning\" ".
+        "style=\"text-align: center; background-color:".$this->bg[9].
+        "; font-size:x-large; font-weight:bold; max-width:100%;\">\n";
+      foreach (estab_message_priority_options () as $priorityOption) {
+        $value = (string) $priorityOption ["value"];
+        $selected = $this->formdata ["09_vorrangstufe"] === $value
+          ? " selected"
+          : "";
+        echo "<option value=\"".estab_message_html ($value)."\"".
+          $selected.">".
+          estab_message_html ($priorityOption ["label"]).
+          "</option>\n";
+      }
+      echo "</select>\n";
     }
-    echo "</select></td>\n";
+    $priorityWarning = $this->feld [9]
+      ? estab_message_priority_warning ("aaa")
+      : estab_message_priority_warning (
+          $this->formdata ["09_vorrangstufe"]
+        );
+    if ($priorityWarning !== "") {
+      echo "<small id=\"estab-priority-warning\" ".
+        "style=\"display:block; margin-top:0.35rem; font-size:0.72rem; ".
+        "line-height:1.2;\">".
+        estab_message_html ($priorityWarning).
+        "</small>\n";
+    }
+    echo "</td>\n";
     /****************************************************************************\
     // Zeile, Spalte 6,2   Anschrift      512 10  Anschrift
     10_anschrift

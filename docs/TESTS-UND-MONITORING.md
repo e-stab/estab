@@ -82,6 +82,9 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   UTF-8-/Legacy-Entity-Ausgabe und die inerten Payloads Quotes, Ampersand,
   `<script>` sowie SQL-ähnlicher Text,
 - verpflichtende Rufnamen bei FM-Eingängen, nicht leere LdF-Übersetzungen,
+  explizite LdF-Bestätigung des von A/W aufgenommenen Eingangswegs,
+  begründungspflichtige atomare Korrektur bei unveränderlicher A/W-Zeit und
+  unveränderlichem A/W-Zeichen,
   rollen- und richtungsgebundene Fokus-Vorschläge für Rufname und Absender
   ausschließlich aus dem aktuell aktiven Einsatz, weiterhin mögliche freie
   Eingaben bei ausgeschalteter Browser-Autovervollständigung, exakte
@@ -1014,9 +1017,11 @@ tests/integration/message_workflow_http.sh
 
 Der Test belegt die beiden nicht konfigurierbaren Abläufe:
 
-- Eingang: A/W nimmt die Nachricht auf und registriert sie in Status 1. LdF
-  übersetzt den Rufnamen in den Absender und übergibt mit Status 4 an Si. Si
-  wertet Inhalt und Zuständigkeit aus und schließt mit Status 8 ab.
+- Eingang: A/W nimmt Rufname, Medium, Zeit und Aufnahmezeichen auf und
+  registriert die Nachricht in Status 1. LdF übersetzt den Rufnamen in den
+  Absender, muss den Eingangsweg ausdrücklich bestätigen und darf ihn nur mit
+  Begründung korrigieren; danach übergibt LdF mit Status 4 an Si. Si wertet
+  Inhalt und Zuständigkeit aus und schließt mit Status 8 ab.
 - Ausgang: Die Stabsfunktion reicht in Status 4 bei Si ein. Si prüft nur die
   formale Richtigkeit und gibt mit Status 1 an LdF frei. LdF bestimmt Rufname
   der Gegenstelle und vorgesehenen Beförderungsweg und übergibt mit Status 2
@@ -1030,17 +1035,24 @@ Die Vorschlagsfunktion besitzt zusätzlich drei aufeinander abgestimmte
 Nachweise. `tests/php/message_suggestion_security.php` prüft den
 Fail-closed-Vertrag, die zugängliche Combobox/Listbox samt nativer
 No-Script-Rückfalloption, ausgeschaltetes Browser-Autocomplete und HTML-sichere
-Ausgabe. Der isolierte MariaDB-Test
+Ausgabe. Dazu gehören die festen LdF-Kontextfelder je Richtung, getrennte
+Wert-/Herkunftsattribute sowie die erneute Prüfung von Status, Sperrbesitz und
+ausgewählter Besetzung im selben Statement. Der isolierte MariaDB-Test
 `tests/integration/message_suggestions.php` belegt die erneute Prüfung von
 aktivem Einsatz und ausgewählter Dienstbesetzung im selben Abfrage-Statement,
 die Rollen- und Richtungsgrenzen, akzentverschiedene Werte sowie, dass Werte
-eines anderen Einsatzes nicht erscheinen.
+eines anderen Einsatzes nicht erscheinen. Er weist außerdem die Rangfolge
+„häufige abgeschlossene Nachrichtenpaare vor aktuell gültigem
+S6-Fernmeldeplan vor allgemeiner Historie“ für Eingang und Ausgang nach und
+entzieht die Vorschläge unmittelbar nach einem Sperrverlust.
 `tests/integration/message_workflow_http.sh` prüft schließlich an den echten
 Formularen: A/W und LdF erhalten nur die zulässigen Rufnamenvorschläge, LdF bei
-Eingängen die Absendervorschläge; A/W-Eingang und Stab erhalten kein
-Absender-Eingabefeld. Keine Liste wählt einen Wert automatisch aus, freie
-Eingaben bleiben möglich und der lokale Ausgangsabsender wird weiterhin
-serverseitig gesetzt. `tests/browser/headless_ui.py --message-suggestions`
+Eingängen die Absendervorschläge; LdF sieht zum gesperrten aktuellen Vordruck
+die priorisierte, sichtbar gekennzeichnete Zuordnung; A/W-Eingang und Stab
+erhalten kein Absender-Eingabefeld. Keine Liste wählt einen Wert automatisch
+aus, freie Eingaben bleiben möglich und der lokale Ausgangsabsender wird
+weiterhin serverseitig gesetzt.
+`tests/browser/headless_ui.py --message-suggestions`
 meldet ein echtes A/W-Konto an und beweist mit einem kurzlebigen,
 einsatzgebundenen Marker Fokusöffnung, Filterung, Pfeiltaste/Eingabetaste,
 Übernahme, freie Eingabe und Logout im echten Chrome; das Fixture wird auch
@@ -1062,6 +1074,18 @@ nicht befördert“ gekennzeichnet; erst danach erscheinen Medium und
 Freitextstrecke als tatsächlicher Beförderungsweg. Der statische Test
 `tests/php/message_transport_security.php` ergänzt dafür alle historischen
 Codes, unbekannte und nichtskalare Werte, Deduplizierung sowie HTML-Escaping.
+Der Eingangsweg wird zusätzlich in drei Negativ-/Positivstufen belegt: Ohne
+LdF-Bestätigung antwortet die Validierung mit HTTP 422 und die gesperrte
+Nachricht bleibt unverändert in Status 1; ein
+abweichendes Medium ohne Begründung liefert HTTP 409 und schreibt weder
+Nachricht noch Ereignis; erst Bestätigung plus Begründung aktualisiert das
+Medium und hängt Altwert, Neuwert, Korrekturgrund und authentifiziertes
+LdF-Kürzel an die Hashkette. Aufnahmezeit und A/W-Zeichen werden vor und nach
+diesem Übergang bytegenau verglichen; übermittelte Ersatzwerte werden schon
+vor dem Legacy-Validator verworfen. Ein zweiter, inzwischen veralteter
+Formularstand wird an der Objektberechtigung mit HTTP 403 abgewiesen und kann
+weder den abgeschlossenen Übergang ändern noch ein doppeltes LdF-Ereignis
+erzeugen.
 
 Beim Öffnen vergleicht der Lauf die sichtbaren, editierbaren Felder für
 Eingangs- und Beförderungszeit mit der PHP-Uhr im App-Container. Er sendet

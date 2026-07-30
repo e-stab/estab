@@ -13,6 +13,7 @@ require_once __DIR__ . '/datetime.php';
 require_once __DIR__ . '/dv_operations.php';
 require_once __DIR__ . '/incident.php';
 require_once __DIR__ . '/message_evidence.php';
+require_once __DIR__ . '/message_priority.php';
 
 /** @return array<string, true> */
 function estab_message_columns(): array
@@ -154,6 +155,13 @@ function estab_message_fields(array $fields): array
         }
         if (is_array($value) || is_object($value) || is_resource($value)) {
             throw new InvalidArgumentException('Invalid message value');
+        }
+        if ($column === '09_vorrangstufe') {
+            $priority = estab_message_priority_storage_value($value);
+            if ($priority === null) {
+                throw new InvalidArgumentException('Invalid message priority');
+            }
+            $value = $priority;
         }
         $validated[$column] = $value;
     }
@@ -890,6 +898,60 @@ function estab_message_acquire_operator_stage_lock(
     );
 }
 
+/**
+ * Fetch the exact active-incident operator stage while this operator owns it.
+ *
+ * This read is used when an editable workflow form must be rebuilt after a
+ * validation or domain conflict. Rehydrating immutable fields from the
+ * browser would let a forged POST change the evidence shown to the operator,
+ * even if persistence correctly ignored it.
+ */
+function estab_message_fetch_locked_operator_stage(
+    mysqli $connection,
+    string $table,
+    mixed $recordId,
+    string $operatorCode,
+    string $direction,
+    int $status
+): ?array {
+    $recordId = estab_message_positive_id($recordId);
+    if (preg_match('/\A[a-z0-9_]{1,6}\z/D', $operatorCode) !== 1) {
+        throw new InvalidArgumentException('Invalid message lock owner');
+    }
+    $incident = estab_incident_active($connection);
+    if ($incident === null) {
+        return null;
+    }
+    $stageSql = estab_message_operator_stage_predicate($direction, $status);
+    $stageParameters = estab_message_operator_stage_parameters(
+        $direction,
+        $status
+    );
+    $statement = estab_message_execute(
+        $connection,
+        'SELECT * FROM ' . estab_message_table($table)
+            . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
+            . $stageSql
+            . " AND `x02_sperre` = 't'"
+            . ' AND BINARY `x03_sperruser` = BINARY ?'
+            . ' LIMIT 1',
+        array_merge(
+            [
+                $recordId,
+                (int) $incident['active_einsatz_id'],
+            ],
+            $stageParameters,
+            [$operatorCode]
+        )
+    );
+    try {
+        $row = $statement->get_result()->fetch_assoc();
+        return is_array($row) ? $row : null;
+    } finally {
+        $statement->close();
+    }
+}
+
 /** Save one exact LdF/A-W stage while the same operator still owns it. */
 function estab_message_update_locked_operator_stage(
     mysqli $connection,
@@ -927,6 +989,138 @@ function estab_message_update_locked_operator_stage(
             $event
         ): bool {
             $incidentId = (int) $incident['active_einsatz_id'];
+            if ($direction === 'E' && $status === 1) {
+                if (
+                    ($event['snapshot']['incoming_transport_confirmed'] ?? null)
+                    !== true
+                ) {
+                    throw new EstabDvInputException(
+                        'Bestätigen Sie den von A/W erfassten Eingangsweg.'
+                    );
+                }
+                if (!array_key_exists('01_medium', $fields)) {
+                    throw new EstabDvInputException(
+                        'LdF muss den Eingangsweg bestätigen.'
+                    );
+                }
+                $requestedMedium = is_string($fields['01_medium'])
+                    && in_array(
+                        $fields['01_medium'],
+                        ['Fe', 'Fu', 'Me', 'FAX', 'FS', '@'],
+                        true
+                    )
+                    ? $fields['01_medium']
+                    : null;
+                if ($requestedMedium === null) {
+                    throw new EstabDvInputException(
+                        'Der bestätigte Eingangsweg ist ungültig.'
+                    );
+                }
+
+                // Read the A/W value under the same active-incident and lock
+                // predicate used by the update. Evidence must never trust a
+                // browser-supplied "previous" medium.
+                $previousMediumStatement = estab_message_execute(
+                    $connection,
+                    'SELECT `01_medium` FROM '
+                        . estab_message_table($table)
+                        . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
+                        . $stageSql
+                        . " AND `x02_sperre` = 't'"
+                        . ' AND BINARY `x03_sperruser` = BINARY ?'
+                        . ' FOR UPDATE',
+                    array_merge(
+                        [$recordId, $incidentId],
+                        $stageParameters,
+                        [$operatorCode]
+                    )
+                );
+                try {
+                    $previousMediumRow = $previousMediumStatement
+                        ->get_result()
+                        ->fetch_assoc();
+                } finally {
+                    $previousMediumStatement->close();
+                }
+                if (!is_array($previousMediumRow)) {
+                    return false;
+                }
+                $previousMedium = (string) (
+                    $previousMediumRow['01_medium'] ?? ''
+                );
+                if (
+                    !in_array(
+                        $previousMedium,
+                        ['Fe', 'Fu', 'Me', 'FAX', 'FS', '@'],
+                        true
+                    )
+                ) {
+                    throw new EstabDvConflictException(
+                        'Der von A/W dokumentierte Eingangsweg ist unvollständig.'
+                    );
+                }
+
+                $reasonValue = $event['snapshot'][
+                    'requested_transport_correction_reason'
+                ] ?? '';
+                if (!is_string($reasonValue)) {
+                    throw new EstabDvInputException(
+                        'Die Begründung der Wegkorrektur ist ungültig.'
+                    );
+                }
+                $correctionReason = trim($reasonValue);
+                $reasonLength = function_exists('mb_strlen')
+                    ? mb_strlen($correctionReason, 'UTF-8')
+                    : strlen($correctionReason);
+                $reasonWithoutAllowedWhitespace = str_replace(
+                    ["\t", "\r", "\n"],
+                    '',
+                    $correctionReason
+                );
+                if (
+                    preg_match('//u', $correctionReason) !== 1
+                    || $reasonLength > 500
+                    || preg_match(
+                        '/\p{C}/u',
+                        $reasonWithoutAllowedWhitespace
+                    ) === 1
+                ) {
+                    throw new EstabDvInputException(
+                        'Die Begründung der Wegkorrektur ist ungültig.'
+                    );
+                }
+
+                $transportCorrected = !hash_equals(
+                    $previousMedium,
+                    $requestedMedium
+                );
+                if ($transportCorrected && $correctionReason === '') {
+                    throw new EstabDvInputException(
+                        'Für die Korrektur des Eingangswegs ist eine '
+                            . 'Begründung erforderlich.'
+                    );
+                }
+                $fields['01_medium'] = $requestedMedium;
+                unset(
+                    $event['snapshot'][
+                        'requested_transport_correction_reason'
+                    ]
+                );
+                $event['snapshot']['incoming_transport_medium'] =
+                    $requestedMedium;
+                $event['snapshot']['incoming_transport_confirmed'] = true;
+                $event['snapshot']['transport_confirmed_by'] =
+                    $operatorCode;
+                $event['snapshot']['transport_corrected'] =
+                    $transportCorrected;
+                if ($transportCorrected) {
+                    $event['snapshot'][
+                        'previous_incoming_transport_medium'
+                    ] = $previousMedium;
+                    $event['snapshot']['transport_correction_reason'] =
+                        $correctionReason;
+                }
+            }
             if ($direction === 'A' && $status === 1) {
                 $previousRouteStatement = estab_message_execute(
                     $connection,

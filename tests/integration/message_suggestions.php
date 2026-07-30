@@ -111,13 +111,20 @@ $insertMessage = static function (
     string $direction,
     string $callsign,
     string $sender,
-    string $marker
+    string $marker,
+    string $address = '',
+    int $status = 8,
+    string $complete = 't',
+    string $lock = 'f',
+    string $lockUser = ''
 ): int {
     $statement = $connection->prepare(
         'INSERT INTO `nv_nachrichten`'
         . ' (`einsatz_id`, `04_richtung`, `05_gegenstelle`,'
-        . ' `12_inhalt`, `13_abseinheit`, `x00_status`, `x01_abschluss`)'
-        . " VALUES (?, ?, ?, ?, ?, 8, 't')"
+        . ' `10_anschrift`, `12_inhalt`, `13_abseinheit`,'
+        . ' `x00_status`, `x01_abschluss`, `x02_sperre`,'
+        . ' `x03_sperruser`, `x04_druck`)'
+        . " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 't')"
     );
     if (!$statement) {
         throw new RuntimeException(
@@ -126,12 +133,17 @@ $insertMessage = static function (
     }
     try {
         $statement->bind_param(
-            'issss',
+            'isssssisss',
             $incidentId,
             $direction,
             $callsign,
+            $address,
             $marker,
-            $sender
+            $sender,
+            $status,
+            $complete,
+            $lock,
+            $lockUser
         );
         $statement->execute();
         return (int) $connection->insert_id;
@@ -147,9 +159,10 @@ try {
         $connection,
         $incidentAId,
         'E',
-        'Nur Einsatz A',
-        'Absender Einsatz A',
-        'suggestion-history-a'
+        'Mapping Rufname',
+        'Fremder Absender aus Einsatz A',
+        'suggestion-history-a',
+        'Mapping Einheit'
     );
 
     $incidentB = $createIncident($connection, 'B', false);
@@ -427,6 +440,499 @@ try {
             '05_gegenstelle'
         ),
         'LdF gained history through another account’s active assignment'
+    );
+
+    // Pair-aware LdF mappings use completed messages first and the currently
+    // valid active S6 plan second. The pending current message is locked by the
+    // exact LdF assignment and supplies its context from the database.
+    $plan = estab_dv_create_telecom_plan(
+        $connection,
+        $incidentCId,
+        $identities['s6'],
+        [
+            'herkunft' => 'Mapping-Integration',
+            'gueltig_ab' => date('Y-m-d H:i:s', time() - 3600),
+            'gueltig_bis' => date('Y-m-d H:i:s', time() + 3600),
+            'betriebsleitung' => 'S6 Vorschlagsintegration',
+            'bemerkungen' => 'Pair-aware mapping fixture',
+        ]
+    );
+    $planId = (int) $plan['fernmeldeplan_id'];
+    estab_dv_add_telecom_entry(
+        $connection,
+        $incidentCId,
+        $planId,
+        $identities['s6'],
+        [
+            'betriebsstelle' => 'Mapping Einheit',
+            'rufname' => 'Mapping Rufname',
+            'medium' => 'Fu',
+            'kanal' => 'Mapping-1',
+            'bandlage' => 'G/U',
+            'verkehrsform' => 'Gegenverkehr',
+            'besondere_vermerke' => '',
+            'bemerkungen' => '',
+        ]
+    );
+    estab_dv_activate_telecom_plan(
+        $connection,
+        $incidentCId,
+        $planId,
+        $identities['s6']
+    );
+
+    foreach (['pair-in-1', 'pair-in-2'] as $marker) {
+        $insertMessage(
+            $connection,
+            $incidentCId,
+            'E',
+            'Mapping Rufname',
+            'Historischer Absender',
+            $marker
+        );
+    }
+    $insertMessage(
+        $connection,
+        $incidentCId,
+        'E',
+        'Mapping Rufname',
+        'Alternativer Absender',
+        'pair-in-alternative'
+    );
+    $insertMessage(
+        $connection,
+        $incidentCId,
+        'E',
+        'Mapping Rufname',
+        'Nicht abgeschlossener Absender',
+        'pair-in-incomplete',
+        '',
+        1,
+        'f'
+    );
+    $incomingCurrentId = $insertMessage(
+        $connection,
+        $incidentCId,
+        'E',
+        'Mapping Rufname',
+        '',
+        'pair-in-current',
+        '',
+        1,
+        'f',
+        't',
+        $accounts['ldf'][0]
+    );
+
+    foreach (['pair-out-1', 'pair-out-2'] as $marker) {
+        $insertMessage(
+            $connection,
+            $incidentCId,
+            'A',
+            'Historischer Rufname',
+            'Lokaler Absender',
+            $marker,
+            'Mapping Einheit'
+        );
+    }
+    $insertMessage(
+        $connection,
+        $incidentCId,
+        'A',
+        'Alternativer Rufname',
+        'Lokaler Absender',
+        'pair-out-alternative',
+        'Mapping Einheit'
+    );
+    $insertMessage(
+        $connection,
+        $incidentCId,
+        'A',
+        'Nicht abgeschlossener Rufname',
+        'Lokaler Absender',
+        'pair-out-incomplete',
+        'Mapping Einheit',
+        1,
+        'f'
+    );
+    $outgoingCurrentId = $insertMessage(
+        $connection,
+        $incidentCId,
+        'A',
+        '',
+        'Lokaler Absender',
+        'pair-out-current',
+        "Mapping Einheit\r\nEinsatzabschnitt",
+        1,
+        'f',
+        't',
+        $accounts['ldf'][0]
+    );
+
+    $incomingMappings = estab_read_ldf_mapping_suggestions(
+        $connection,
+        'nv_nachrichten',
+        $identities['ldf'],
+        $incomingCurrentId,
+        'E'
+    );
+    $assert(
+        $incomingMappings === [
+            [
+                'value' => 'Historischer Absender',
+                'source' => 'message',
+                'context' => 'Mapping Rufname',
+                'match' => 'exact',
+                'matched_context' => 'Mapping Rufname',
+            ],
+            [
+                'value' => 'Alternativer Absender',
+                'source' => 'message',
+                'context' => 'Mapping Rufname',
+                'match' => 'exact',
+                'matched_context' => 'Mapping Rufname',
+            ],
+            [
+                'value' => 'Mapping Einheit',
+                'source' => 'plan',
+                'context' => 'Mapping Rufname',
+                'match' => 'exact',
+                'matched_context' => 'Mapping Rufname',
+            ],
+        ],
+        'incoming LdF mapping did not prefer completed callsign/sender pairs '
+            . 'before the active S6 plan'
+    );
+    $outgoingMappings = estab_read_ldf_mapping_suggestions(
+        $connection,
+        'nv_nachrichten',
+        $identities['ldf'],
+        $outgoingCurrentId,
+        'A'
+    );
+    $assert(
+        $outgoingMappings === [
+            [
+                'value' => 'Historischer Rufname',
+                'source' => 'message',
+                'context' => 'Mapping Einheit Einsatzabschnitt',
+                'match' => 'related',
+                'matched_context' => 'Mapping Einheit',
+            ],
+            [
+                'value' => 'Alternativer Rufname',
+                'source' => 'message',
+                'context' => 'Mapping Einheit Einsatzabschnitt',
+                'match' => 'related',
+                'matched_context' => 'Mapping Einheit',
+            ],
+            [
+                'value' => 'Mapping Rufname',
+                'source' => 'plan',
+                'context' => 'Mapping Einheit Einsatzabschnitt',
+                'match' => 'related',
+                'matched_context' => 'Mapping Einheit',
+            ],
+        ],
+        'outgoing LdF mapping did not translate the address context into '
+            . 'ranked incident callsigns'
+    );
+    $assert(
+        !in_array(
+            'Fremder Absender aus Einsatz A',
+            array_column($incomingMappings, 'value'),
+            true
+        )
+            && !in_array(
+                'Nicht abgeschlossener Absender',
+                array_column($incomingMappings, 'value'),
+                true
+            )
+            && !in_array(
+                'Nicht abgeschlossener Rufname',
+                array_column($outgoingMappings, 'value'),
+                true
+        ),
+        'foreign-incident or incomplete pairs leaked into LdF mappings'
+    );
+
+    // Callsigns are operational identifiers: an incoming mapping must be
+    // exact after safe normalization, never a prefix/fuzzy result.
+    $insertMessage(
+        $connection,
+        $incidentCId,
+        'E',
+        'Prefix Rufname',
+        'Prefix Sender',
+        'pair-prefix-candidate'
+    );
+    $prefixCurrentId = $insertMessage(
+        $connection,
+        $incidentCId,
+        'E',
+        'Prefix Rufname 21',
+        '',
+        'pair-prefix-current',
+        '',
+        1,
+        'f',
+        't',
+        $accounts['ldf'][0]
+    );
+    $assert(
+        estab_read_ldf_mapping_suggestions(
+            $connection,
+            'nv_nachrichten',
+            $identities['ldf'],
+            $prefixCurrentId,
+            'E'
+        ) === [],
+        'incoming callsign prefix produced a false-positive sender mapping'
+    );
+
+    // utf8mb4_unicode_ci considers these pairs equal. The mapping boundary
+    // must not: Bär is not Bar and Straße is not Strasse.
+    foreach (
+        [
+            ['Bar', 'Sender Bar', 'pair-collation-bar'],
+            ['Bär', 'Sender Bär', 'pair-collation-baer'],
+            ['Strasse', 'Sender Strasse', 'pair-collation-strasse'],
+            ['Straße', 'Sender Straße', 'pair-collation-sz'],
+        ] as [$callsign, $sender, $marker]
+    ) {
+        $insertMessage(
+            $connection,
+            $incidentCId,
+            'E',
+            $callsign,
+            $sender,
+            $marker
+        );
+    }
+    foreach (
+        [
+            ['Bär', 'Sender Bär', 'pair-current-baer'],
+            ['Straße', 'Sender Straße', 'pair-current-sz'],
+        ] as [$callsign, $expectedSender, $marker]
+    ) {
+        $currentId = $insertMessage(
+            $connection,
+            $incidentCId,
+            'E',
+            $callsign,
+            '',
+            $marker,
+            '',
+            1,
+            'f',
+            't',
+            $accounts['ldf'][0]
+        );
+        $mappings = estab_read_ldf_mapping_suggestions(
+            $connection,
+            'nv_nachrichten',
+            $identities['ldf'],
+            $currentId,
+            'E'
+        );
+        $assert(
+            array_column($mappings, 'value') === [$expectedSender]
+                && array_column($mappings, 'match') === ['exact'],
+            'binary mapping comparison conflated callsign ' . $callsign
+        );
+    }
+
+    // Legacy escaped contexts and current raw UTF-8 contexts describe the
+    // same operational identifier after exactly one entity decode and
+    // whitespace compaction.
+    $insertMessage(
+        $connection,
+        $incidentCId,
+        'E',
+        "  Entity\t &amp;\r\n  &quot;Rufname&quot;  ",
+        'Entity Sender',
+        'pair-entity-candidate'
+    );
+    $entityCurrentId = $insertMessage(
+        $connection,
+        $incidentCId,
+        'E',
+        'Entity & "Rufname"',
+        '',
+        'pair-entity-current',
+        '',
+        1,
+        'f',
+        't',
+        $accounts['ldf'][0]
+    );
+    $assert(
+        estab_read_ldf_mapping_suggestions(
+            $connection,
+            'nv_nachrichten',
+            $identities['ldf'],
+            $entityCurrentId,
+            'E'
+        ) === [
+            [
+                'value' => 'Entity Sender',
+                'source' => 'message',
+                'context' => 'Entity & "Rufname"',
+                'match' => 'exact',
+                'matched_context' => 'Entity & "Rufname"',
+            ],
+        ],
+        'legacy entities or internal whitespace broke an exact mapping'
+    );
+    $insertMessage(
+        $connection,
+        $incidentCId,
+        'E',
+        'Double &amp;lt; Context',
+        'Double-decoded Sender',
+        'pair-double-entity-candidate'
+    );
+    $doubleEntityCurrentId = $insertMessage(
+        $connection,
+        $incidentCId,
+        'E',
+        'Double < Context',
+        '',
+        'pair-double-entity-current',
+        '',
+        1,
+        'f',
+        't',
+        $accounts['ldf'][0]
+    );
+    $assert(
+        estab_read_ldf_mapping_suggestions(
+            $connection,
+            'nv_nachrichten',
+            $identities['ldf'],
+            $doubleEntityCurrentId,
+            'E'
+        ) === [],
+        'legacy mapping context was decoded more than once'
+    );
+
+    // Outgoing operating-station annotations are related only at a real word
+    // boundary. An arbitrary substring and an accent-insensitive prefix must
+    // never become an authoritative callsign suggestion.
+    $wordBoundaryCurrentId = $insertMessage(
+        $connection,
+        $incidentCId,
+        'A',
+        '',
+        'Lokaler Absender',
+        'pair-word-boundary-current',
+        'Mapping Einheitlich',
+        1,
+        'f',
+        't',
+        $accounts['ldf'][0]
+    );
+    $assert(
+        estab_read_ldf_mapping_suggestions(
+            $connection,
+            'nv_nachrichten',
+            $identities['ldf'],
+            $wordBoundaryCurrentId,
+            'A'
+        ) === [],
+        'outgoing arbitrary substring produced a related callsign mapping'
+    );
+    $insertMessage(
+        $connection,
+        $incidentCId,
+        'A',
+        'Rufname Bar',
+        'Lokaler Absender',
+        'pair-out-collation-candidate',
+        'Bar'
+    );
+    $accentPrefixCurrentId = $insertMessage(
+        $connection,
+        $incidentCId,
+        'A',
+        '',
+        'Lokaler Absender',
+        'pair-out-collation-current',
+        'Bär Einsatzabschnitt',
+        1,
+        'f',
+        't',
+        $accounts['ldf'][0]
+    );
+    $assert(
+        estab_read_ldf_mapping_suggestions(
+            $connection,
+            'nv_nachrichten',
+            $identities['ldf'],
+            $accentPrefixCurrentId,
+            'A'
+        ) === [],
+        'outgoing related mapping used accent-insensitive prefix equality'
+    );
+
+    $assert(
+        estab_read_ldf_mapping_suggestions(
+            $connection,
+            'nv_nachrichten',
+            $identities['ldf'],
+            $incomingCurrentId,
+            'A'
+        ) === [],
+        'mapping accepted a direction that does not match the locked message'
+    );
+    $expectReadDenial(
+        static fn (): array => estab_read_ldf_mapping_suggestions(
+            $connection,
+            'nv_nachrichten',
+            $identities['aw'],
+            $incomingCurrentId,
+            'E'
+        ),
+        'A/W gained pair-aware LdF mappings'
+    );
+    $expectReadDenial(
+        static fn (): array => estab_read_ldf_mapping_suggestions(
+            $connection,
+            'nv_nachrichten',
+            $identities['s2'],
+            $outgoingCurrentId,
+            'A'
+        ),
+        'S2 gained pair-aware LdF mappings'
+    );
+    foreach ([0, 31] as $invalidMappingLimit) {
+        $expectInvalidInput(
+            static fn (): array => estab_read_ldf_mapping_suggestions(
+                $connection,
+                'nv_nachrichten',
+                $identities['ldf'],
+                $incomingCurrentId,
+                'E',
+                $invalidMappingLimit
+            ),
+            'invalid LdF mapping limit was accepted: '
+                . $invalidMappingLimit
+        );
+    }
+    $connection->query(
+        'UPDATE `nv_nachrichten`'
+        . " SET `x02_sperre` = 'f', `x03_sperruser` = ''"
+        . ' WHERE `00_lfd` = ' . $incomingCurrentId
+    );
+    $assert(
+        estab_read_ldf_mapping_suggestions(
+            $connection,
+            'nv_nachrichten',
+            $identities['ldf'],
+            $incomingCurrentId,
+            'E'
+        ) === [],
+        'a lost LdF message lock still exposed context mappings'
     );
 
     echo 'message suggestions integration: OK (' . $assertions

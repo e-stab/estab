@@ -26,6 +26,18 @@ $expectReadDenial = static function (
     }
     $assert(false, $message);
 };
+$expectInvalidInput = static function (
+    callable $operation,
+    string $message
+) use ($assert): void {
+    try {
+        $operation();
+    } catch (InvalidArgumentException) {
+        $assert(true, $message);
+        return;
+    }
+    $assert(false, $message);
+};
 
 $identity = static fn (
     string $code,
@@ -63,6 +75,39 @@ $assert(
         '13_abseinheit'
     ) === ['direction' => 'E'],
     'LdF sender suggestions are not limited to incoming messages'
+);
+$assert(
+    estab_read_ldf_mapping_policy($ldf, 'E') === [
+        'message_context' => '`05_gegenstelle`',
+        'message_target' => '`13_abseinheit`',
+        'plan_context' => '`rufname`',
+        'plan_target' => '`betriebsstelle`',
+    ],
+    'incoming LdF callsign-to-sender mapping changed'
+);
+$assert(
+    estab_read_ldf_mapping_policy($ldf, 'A') === [
+        'message_context' => '`10_anschrift`',
+        'message_target' => '`05_gegenstelle`',
+        'plan_context' => '`betriebsstelle`',
+        'plan_target' => '`rufname`',
+    ],
+    'outgoing LdF destination-to-callsign mapping changed'
+);
+$expectReadDenial(
+    static fn (): array => estab_read_ldf_mapping_policy($aw, 'E'),
+    'A/W gained LdF pair mappings'
+);
+$expectReadDenial(
+    static fn (): array => estab_read_ldf_mapping_policy(
+        $identity('ldf003', 'LdF', 'Stab'),
+        'A'
+    ),
+    'a forged LdF role gained pair mappings'
+);
+$expectInvalidInput(
+    static fn (): array => estab_read_ldf_mapping_policy($ldf, 'X'),
+    'an unknown LdF mapping direction was accepted'
 );
 foreach (
     [
@@ -119,6 +164,35 @@ $assert(
         && estab_read_normalize_message_suggestion("Funk\0Nord") === null,
     'a Unicode control character survived suggestion normalization'
 );
+$assert(
+    estab_read_normalize_mapping_context(
+        "  THW FGr N ONEU\r\n  Einsatzabschnitt  "
+    ) === 'THW FGr N ONEU Einsatzabschnitt',
+    'legitimate multiline mapping context is not compacted safely'
+);
+$assert(
+    estab_read_normalize_mapping_context("THW\0ONEU") === null,
+    'a forbidden mapping-context control character survived'
+);
+$mappingSql = estab_read_mapping_normalized_sql(
+    'candidate.`05_gegenstelle`'
+);
+$assert(
+    str_contains($mappingSql, 'LOWER(TRIM(REGEXP_REPLACE(')
+        && str_contains($mappingSql, "'[[:space:]]+'")
+        && str_contains($mappingSql, "'&quot;'")
+        && str_contains($mappingSql, "'&lt;'")
+        && str_contains($mappingSql, "'&gt;'")
+        && str_contains($mappingSql, "'&nbsp;'")
+        && str_contains($mappingSql, "'&amp;'"),
+    'mapping SQL does not normalize whitespace and one-pass legacy entities'
+);
+$expectInvalidInput(
+    static fn (): string => estab_read_mapping_normalized_sql(
+        'request.`browser_controlled_column`'
+    ),
+    'mapping SQL accepted a browser-controlled context expression'
+);
 
 $root = dirname(__DIR__, 2);
 $readSource = (string) file_get_contents(
@@ -140,7 +214,11 @@ $browserFixtureSource = (string) file_get_contents(
 foreach (
     [
         'function estab_read_message_suggestion_policy(',
+        'function estab_read_ldf_mapping_policy(',
         'function estab_read_normalize_message_suggestion(',
+        'function estab_read_normalize_mapping_context(',
+        'function estab_read_mapping_normalized_sql(',
+        'function estab_read_ldf_mapping_suggestions(',
         'function estab_read_message_suggestions(',
         'estab_read_require_operational_scope(',
         'estab_message_table($messageTable)',
@@ -167,6 +245,62 @@ $assert(
         && str_contains($readSource, "'direction' => 'E'"),
     'suggestion query does not use the fixed field/direction allowlist'
 );
+$assert(
+    substr_count(
+        $readSource,
+        "FROM (' . \$scopeSql . ') AS scope"
+    ) === 2
+        && str_contains(
+            $readSource,
+            "current_message.`x00_status` = 1"
+        )
+        && str_contains(
+            $readSource,
+            "current_message.`x02_sperre` IN ('t', '1')"
+        )
+        && str_contains(
+            $readSource,
+            "current_message.`x03_sperruser`"
+        ),
+    'mapping query does not rejoin the exact locked current message in both sources'
+);
+$assert(
+    str_contains($readSource, "candidate.`x00_status` = 8")
+        && str_contains(
+            $readSource,
+            "candidate.`x01_abschluss` IN ('t', '1')"
+        )
+        && str_contains(
+            $readSource,
+            "telecom_plan.`status` = 'AKTIV'"
+        )
+        && str_contains($readSource, "telecom_plan.`gueltig_ab` <= NOW()")
+        && str_contains($readSource, "telecom_plan.`gueltig_bis` >= NOW()"),
+    'mapping sources are not limited to completed pairs and a valid active S6 plan'
+);
+$assert(
+    strpos($readSource, "'message' AS `source_kind`")
+        < strpos($readSource, "'plan' AS `source_kind`")
+        && str_contains(
+            $readSource,
+            "ORDER BY mapped.`source_priority` ASC"
+        ),
+    'completed message mappings are not ranked before S6-plan mappings'
+);
+$assert(
+    str_contains($readSource, 'CAST(')
+        && str_contains($readSource, ' AS BINARY)')
+        && str_contains($readSource, "REGEXP_REPLACE(")
+        && str_contains($readSource, '$direction === \'A\'')
+        && str_contains($readSource, "'match' => \$storedMatch")
+        && str_contains(
+            $readSource,
+            "'matched_context' => \$matchedContext"
+        )
+        && !str_contains($readSource, 'LOCATE('),
+    'mapping comparison is not binary/exact with explicit outgoing-only '
+        . 'related-match evidence'
+);
 
 foreach (
     [
@@ -180,6 +314,13 @@ foreach (
         'role=\\"listbox\\"',
         'aria-describedby=\\"',
         'data-estab-message-suggestion-picker',
+        'data-estab-suggestion-value=\\"',
+        'data-estab-mapping-match=\\"',
+        'data-estab-mapping-quality=\\"',
+        'Bestätigtes Nachrichtenpaar',
+        'Aktiver S6-Fernmeldeplan',
+        'Ähnlich',
+        'Bezug:',
         'input.removeAttribute("list")',
         'event.key === "ArrowDown"',
         'event.key === "Escape"',
@@ -208,6 +349,15 @@ $assert(
         && str_contains($formSource, '"LdF-Eingang"')
         && str_contains($formSource, '"LdF-Ausgang"'),
     'suggestion controls do not cover all intended telecommunications tasks'
+);
+$assert(
+    str_contains($formSource, 'estab_read_ldf_mapping_suggestions (')
+        && str_contains(
+            $formSource,
+            'option.getAttribute("data-estab-suggestion-value")'
+        )
+        && str_contains($formSource, 'Freie Eingabe bleibt möglich.'),
+    'LdF mapping results are not safely selectable while preserving free input'
 );
 $assert(
     str_contains($formSource, 'estab_read_message_suggestions (')

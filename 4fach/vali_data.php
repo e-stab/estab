@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . "/../app/message_transport.php";
+require_once __DIR__ . "/../app/message_priority.php";
 
 class vali_data_form {
 
@@ -39,9 +40,12 @@ class vali_data_form {
      $this->validate ["06_befweg"]   = false ;
      $this->validate ["06_befwegausw"]   = false ;
      $this->validate ["fernmeldeplan_eintrag_id"] = false;
+     $this->validate ["incoming_transport_confirmed"] = false;
+     $this->validate ["incoming_transport_correction_reason"] = true;
      $this->validate ["07_durchspruch"]   = false ;
      $this->validate ["08_befhinweis"]   = false ;
      $this->validate ["08_befhinwausw"]   = false ;
+     $this->validate ["09_vorrangstufe"]   = false ;
      $this->validate ["10_anschrift"]   = false ;
      $this->validate ["12_inhalt"]   = false ;
      $this->validate ["12_abfzeit"]   = false ;
@@ -236,9 +240,47 @@ class vali_data_form {
           && preg_match ('/\A[1-9][0-9]*\z/D', $routeId) === 1
         );
     }
+    if (array_key_exists ("incoming_transport_confirmed", $this->i_data)) {
+      $this->validate ["incoming_transport_confirmed"] =
+        is_string ($this->i_data ["incoming_transport_confirmed"])
+        && hash_equals ("1", $this->i_data ["incoming_transport_confirmed"]);
+    }
+    if (
+      array_key_exists (
+        "incoming_transport_correction_reason",
+        $this->i_data
+      )
+    ) {
+      $reason = $this->i_data ["incoming_transport_correction_reason"];
+      $reasonLength = is_string ($reason)
+        ? (
+          function_exists ("mb_strlen")
+            ? mb_strlen (trim ($reason), "UTF-8")
+            : strlen (trim ($reason))
+        )
+        : PHP_INT_MAX;
+      $reasonWithoutAllowedWhitespace = is_string ($reason)
+        ? str_replace (array ("\t", "\r", "\n"), "", $reason)
+        : "";
+      $this->validate ["incoming_transport_correction_reason"] =
+        is_string ($reason)
+        && preg_match ('//u', $reason) === 1
+        && $reasonLength <= 500
+        && preg_match ('/\p{C}/u', $reasonWithoutAllowedWhitespace) !== 1;
+    }
 //    if (isset ( $this->i_data ["07_durchspruch"] )) {  $this->validate["07_durchspruch"]  = $this->i_datatest ( "zeit", $this->i_data ["07_durchspruch"] ) ; }
 //    if (isset ( $this->i_data ["08_befhinweis"] ))  {  $this->validate["08_befhinweis"]  = $this->i_datatest ( "zeit", $this->i_data ["08_befhinweis"] ) ; }
 //    if (isset ( $this->i_data ["08_befhinwausw"] )) {  $this->validate["08_befhinwausw"]  = $this->i_datatest ( "zeit", $this->i_data ["08_befhinwausw"] ) ; }
+
+    if (array_key_exists ("09_vorrangstufe", $this->i_data)) {
+      $priority = estab_message_priority_storage_value (
+        $this->i_data ["09_vorrangstufe"]
+      );
+      $this->validate ["09_vorrangstufe"] = $priority !== null;
+      if ($priority !== null) {
+        $this->i_data ["09_vorrangstufe"] = $priority;
+      }
+    }
 
     if (isset ( $this->i_data ["10_anschrift"] ))     {
       $result =  $this->datatest ( "text", $this->i_data ["10_anschrift"] ) ;
@@ -310,6 +352,7 @@ class vali_data_form {
                 $this->validate["01_datum"] &&
                 $this->validate["01_zeichen"] &&
                 $this->validate["05_gegenstelle"] &&
+                $this->validate["09_vorrangstufe"] &&
                 $this->validate["10_anschrift"] &&
                 $this->validate["12_inhalt"] &&
                 $this->validate["12_abfzeit"] ;
@@ -317,7 +360,8 @@ class vali_data_form {
         break ;
       case "Stab_schreiben":
       case "Stab_korrigieren":
-          $zw =($this->validate["10_anschrift"] &&
+          $zw =($this->validate["09_vorrangstufe"] &&
+                $this->validate["10_anschrift"] &&
                 $this->validate["12_inhalt"] &&
                 $this->validate["12_abfzeit"] &&
                 $this->validate["13_abseinheit"] &&
@@ -341,7 +385,12 @@ class vali_data_form {
                 $this->validate["03_zeichen"]);
         break ;
       case "LdF-Eingang":
-          $zw = ($this->validate["02_zeit"] &&
+          $zw = ($this->validate["01_medium"] &&
+                 $this->validate["incoming_transport_confirmed"] &&
+                 $this->validate[
+                   "incoming_transport_correction_reason"
+                 ] &&
+                 $this->validate["02_zeit"] &&
                  $this->validate["02_zeichen"] &&
                  $this->validate["13_abseinheit"]);
         break ;

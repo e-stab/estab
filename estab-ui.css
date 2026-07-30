@@ -55,9 +55,28 @@
 .estab-message-suggestion-option {
     border-radius: 4px;
     cursor: pointer;
+    display: grid;
+    gap: 0.1rem;
     line-height: 1.35;
     overflow-wrap: anywhere;
     padding: 0.45rem 0.55rem;
+}
+
+.estab-message-mapping-option {
+    background: #edf6ff;
+    border-left: 4px solid #2563eb;
+    padding-left: 0.45rem;
+}
+
+.estab-message-suggestion-value {
+    font-weight: 700;
+}
+
+.estab-message-suggestion-source {
+    color: #36536f;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
 }
 
 .estab-message-suggestion-option:hover,
@@ -77,6 +96,55 @@
     line-height: 1.3;
     margin-top: 0.2rem;
     opacity: 0.78;
+}
+
+.estab-message-transport-confirmation {
+    background: #eef5fc;
+    border-left: 4px solid #2563eb;
+    border-radius: 4px;
+    color: #172033;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 0.78rem;
+    line-height: 1.35;
+    margin: 0.5rem 0 0.35rem;
+    padding: 0.45rem 0.55rem;
+    text-align: left;
+}
+
+.estab-message-transport-confirmation
+    [data-estab-incoming-transport-original] {
+    display: inline-block;
+    margin-top: 0.3rem;
+}
+
+.estab-message-transport-confirm-checkbox,
+.estab-message-transport-reason-label {
+    color: #172033;
+    display: block;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 0.78rem;
+    line-height: 1.35;
+    margin-top: 0.35rem;
+    text-align: left;
+}
+
+.estab-message-transport-confirm-checkbox {
+    font-weight: 700;
+}
+
+.estab-message-transport-confirm-checkbox input {
+    margin: 0 0.3rem 0 0;
+    min-height: 1rem;
+    min-width: 1rem;
+    vertical-align: middle;
+}
+
+#f_incoming_transport_correction_reason {
+    box-sizing: border-box;
+    font-family: Arial, Helvetica, sans-serif;
+    margin-top: 0.15rem;
+    max-width: 100%;
+    width: 100%;
 }
 
 .estab-session-bar {

@@ -249,7 +249,7 @@ Die Statuswerte bezeichnen eindeutig die aktuell zuständige Arbeitsstufe:
 | `10` | Ausgang | Verfasser | zurückgegebenen Entwurf korrigieren und erneut zur formalen Sichtung einreichen |
 | `1` | Ausgang | LdF | Rufname der Gegenstelle und vorgesehenen Beförderungsweg festlegen |
 | `2` | Ausgang | A/W | den vorbereiteten Ausgang tatsächlich befördern |
-| `1` | Eingang | LdF | aufgenommenen Rufnamen in einen Absender übersetzen |
+| `1` | Eingang | LdF | aufgenommenen Rufnamen in einen Absender übersetzen und den von A/W erfassten Eingangsweg bestätigen oder begründet korrigieren |
 | `4` | Eingang | Si | Inhalt auswerten und Empfänger festlegen |
 | `8` | beide | abgeschlossen | Nachricht ist fertig bearbeitet und der Vordruck kann erzeugt werden |
 
@@ -260,17 +260,49 @@ bleibt die Nachricht in dessen Warteschlange, ohne dass A/W einen
 Sichtervermerk erzeugen kann.
 Beim Eingang erfasst A/W zwingend den empfangenen Rufnamen, kann das Feld
 „Absender“ aber weder im Formular noch über einen manipulierten Request
-schreiben. Erst LdF muss daraus einen nicht leeren Absender festlegen.
+schreiben. A/W erfasst außerdem Medium, Aufnahmezeit und Aufnahmezeichen.
+Erst LdF muss daraus einen nicht leeren Absender festlegen und den
+Eingangsweg ausdrücklich bestätigen. Ändert LdF das Medium, ist eine
+Begründung Pflicht; Aufnahmezeit und A/W-Zeichen bleiben unveränderlich.
+Bestätigung, ursprüngliches und bestätigtes Medium, etwaige Begründung und
+LdF-Identität werden atomar in der Nachrichten-Ereigniskette nachgewiesen.
 Beim Fokus auf „Rufname der Gegenstelle“ bietet das Formular A/W und LdF
 bisherige Rufnamen aus dem aktuell aktiven Einsatz in einer zugänglichen,
 per Tastatur bedienbaren Auswahlliste an.
 Für „Absender“ erhält ausschließlich LdF bei einem Eingang entsprechende
-Vorschläge. Die Liste übernimmt nichts automatisch: Eine freie Eingabe bleibt
-jederzeit möglich, die Browser-Autovervollständigung ist für diese Felder
-ausgeschaltet und ohne JavaScript bleibt die native Browserliste als
-Rückfalloption erhalten. Werte anderer Einsätze werden nicht offengelegt. Der lokale
-Absender eines Ausgangs bleibt davon unberührt und wird weiterhin
-serverseitig aus der Konfiguration gesetzt.
+Vorschläge. Für LdF nutzt die Liste zusätzlich den gesperrten aktuellen
+Vordruck als Kontext: Beim Eingang stehen bestätigte Zuordnungen vom
+aufgenommenen Gegenstellenrufnamen zum Absender zuerst, beim Ausgang
+bestätigte Zuordnungen von der Anschrift zum Gegenstellenrufnamen. Als
+bestätigt zählen ausschließlich abgeschlossene Nachrichtenpaare desselben
+aktiven Einsatzes; häufige und zuletzt verwendete Zuordnungen werden
+bevorzugt. Danach folgen passende Einträge des aktuell gültigen, aktiven
+S6-Fernmeldeplans und schließlich die allgemeine Einsatzhistorie. Die Herkunft
+ist im Formular sichtbar.
+Die Liste übernimmt nichts automatisch: Eine freie Eingabe bleibt jederzeit
+möglich, die Browser-Autovervollständigung ist für diese Felder ausgeschaltet
+und ohne JavaScript bleibt die native Browserliste als Rückfalloption
+erhalten. Aktiver Einsatz, Dienstbesetzung, Funktion, Rolle, Richtung und
+Sperrbesitz werden im selben Datenbank-Statement wie die Zuordnungen erneut
+geprüft; Werte anderer Einsätze werden nicht offengelegt. Der lokale Absender
+eines Ausgangs bleibt davon unberührt und wird weiterhin serverseitig aus der
+Konfiguration gesetzt.
+
+Vorrangsstufen werden überall mit denselben fachlichen Bezeichnungen
+angezeigt und verarbeitet: **keine**, **Sofort**, **Blitz** und
+**Staatsnot**. Warteschlangen sortieren ausdrücklich in dieser Reihenfolge
+von Staatsnot nach keine; sie verlassen sich nicht auf die interne
+MariaDB-`SET`-Reihenfolge. Staatsnot darf nur auf ausdrückliche Weisung einer
+hierzu berechtigten Stelle verwendet werden. eStab kann diese externe
+Berechtigung nicht selbst feststellen und weist deshalb im Formular darauf
+hin. Das historische interne Kürzel `eee` bleibt lesbar und bedeutet wie ein
+leerer Wert „keine“, wird bei neuen Vordrucken aber nicht mehr angeboten.
+Die internen Kürzel bleiben für bestehende Ereignishashes und rohe
+Tabellen-/CSV-Exporte unverändert; Bedienoberfläche und PDF drucken
+ausschließlich die verständlichen Bezeichnungen, bei „keine“ bleibt das
+Vorrangsfeld im PDF leer. Manipulierte Kombinationen oder unbekannte Werte
+werden beim Speichern abgewiesen.
+
 Aufnahme-, Verfasser-, Sichter-, LdF- und Beförderungszeichen stammen aus der
 serverseitig geprüften Sitzung. Jeder erfolgreiche fachliche Übergang und sein
 strukturierter Feldnachweis werden atomar in einer append-only Hashkette

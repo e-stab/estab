@@ -20,6 +20,7 @@ if (!defined('FPDF_FONTPATH')) {
 require_once __DIR__ . "/fpdf.php";
 require_once __DIR__ . "/../app/message_repository.php";
 require_once __DIR__ . "/../app/generated_form.php";
+require_once __DIR__ . "/../app/message_priority.php";
 // require_once ("./fpdf/ellipse/ellipse.php");
 
 /** Encode UTF-8 application text for FPDF's built-in Windows-1252 fonts. */
@@ -297,7 +298,8 @@ class vordruckaspdf extends PDF_Ellipse {
     $this->db_dataset ["07_durchspruch"]  = $data ["07_durchspruch"] ;
     $this->db_dataset ["08_befhinweis"]   = $data ["08_befhinweis"] ;
     $this->db_dataset ["08_befhinwausw"]  = $data ["08_befhinwausw"] ;
-    $this->db_dataset ["09_vorrangstufe"] = $data ["09_vorrangstufe"] ;
+    $this->db_dataset ["09_vorrangstufe"] =
+      estab_message_priority_document_label ($data ["09_vorrangstufe"]);
     $this->db_dataset ["10_anschrift"]    = $data ["10_anschrift"] ;
     $this->db_dataset ["11_gesprnotiz"]   = $data ["11_gesprnotiz"] == "t" ;
     $this->db_dataset ["12_anhang"]       = $data ["12_anhang"] ;

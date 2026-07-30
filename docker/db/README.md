@@ -247,7 +247,13 @@ mehr vorhanden sind.
 | ETB-/TBB-Titeltabellen erst bei Benutzung | Bereits initialisiert | Verhindert, dass der Legacy-Code nachträglich MyISAM-Tabellen ohne expliziten Zeichensatz erzeugt |
 
 Die Namen und fachlichen Wertebereiche (`SET`, Statusfelder, Richtungen,
-Prioritäten) bleiben unverändert. `nv_masterkategolink.msg` bleibt absichtlich
+Prioritäten) bleiben unverändert. Für `nv_nachrichten.09_vorrangstufe`
+übersetzt die Anwendung deshalb weiterhin die internen Werte `sss`, `bbb` und
+`aaa` nach **Sofort**, **Blitz** und **Staatsnot**; leer sowie das historische
+`eee` bedeuten **keine**. Neue Formulare bieten `eee` nicht mehr an. Die
+unveränderte Speicherung ist erforderlich, damit vorhandene
+Nachrichtenereignishashes und rohe Tabellen-/CSV-Exporte reproduzierbar
+bleiben. `nv_masterkategolink.msg` bleibt absichtlich
 eindeutig: Der bestehende Code aktualisiert und löscht ausschließlich anhand
 von `msg` und bildet damit genau eine Master-Kategorie je Nachricht ab. Es
 werden keine Foreign Keys ergänzt, weil die Legacy-Löschpfade keine definierte

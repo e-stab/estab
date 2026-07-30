@@ -36,7 +36,7 @@ einer ausgebildeten Einsatzkraft ersetzt.
 | S. 4-44/4-45 | S2 muss ständig in den Informationsfluss eingebunden sein und alle Ein- und Ausgänge als roten Durchschlag erhalten. | S2/Stab ist die einzige Fähigkeit `LAGE_DOKUMENTATION`; jede abgeschlossene Nachricht enthält die S2-Rotkopie, eine beliebige Umkonfiguration oder Autosichtung ist gesperrt. | `tests/php/admin_operations_security.php`, `tests/integration/message_workflow_http.sh`, Schema-Verifikation |
 | S. 4-45 | Die Einsatzdokumentation wird durch S2 sichergestellt; das ETB ist urkundlicher Nachweis und ein Jahr aufzubewahren. | S2 bleibt alleinige Lage-/Rotkopiefunktion. ETB-Schreiben verlangt die getrennte Fähigkeit `EINSATZTAGEBUCH`, die ausschließlich einer ausgewählten S2- oder ETB-Besetzung zugeordnet ist. Einträge sind anhängbar, unterscheiden Ereignis-/Erfassungszeit und werden nur durch begründete Gegenbuchung berichtigt. Formeller Abschluss setzt eine Mindestaufbewahrung von einem Jahr und unterstützt eine Aufbewahrungssperre. | `tests/php/logbook_security.php`, `tests/php/read_authorization_security.php`, `tests/integration/dv_evidence.php`, `tests/integration/dv_operations.php` |
 | S. 4-59/4-60 | S6 plant und führt den Telekommunikationseinsatz und stellt die Führbarkeit über geeignete Verbindungen sicher. | Nur die angenommene aktive S6-Funktion darf versionierte Fernmeldepläne erstellen und veröffentlichen. LdF kann nur einen aktuell gültigen, veröffentlichten Planweg disponieren; veröffentlichte Fassungen bleiben unveränderlich. | `tests/integration/dv_operations.php`, `tests/integration/message_workflow_http.sh` |
-| S. 4-63 | Der Sichter analysiert Eingänge inhaltlich und leitet sie an zuständige Bearbeiter weiter. | Eingänge laufen zwingend `A/W → LdF → Si`; Si setzt Empfänger und Abschluss. A/W darf den Absender nicht schreiben, LdF übersetzt den aufgenommenen Rufnamen. | `tests/php/workflow_security.php`, `tests/integration/message_workflow_http.sh` |
+| S. 4-63 | Der Sichter analysiert Eingänge inhaltlich und leitet sie an zuständige Bearbeiter weiter. | Eingänge laufen zwingend `A/W → LdF → Si`; Si setzt Empfänger und Abschluss. A/W darf den Absender nicht schreiben, LdF übersetzt den aufgenommenen Rufnamen und bestätigt den von A/W erfassten Eingangsweg. Eine Änderung verlangt eine Begründung und wird mit Alt-/Neuwert und LdF-Identität nachgewiesen; A/W-Aufnahmezeit und -zeichen bleiben unverändert. | `tests/php/workflow_security.php`, `tests/php/ldf_validation_security.php`, `tests/php/ldf_ui_flow_security.php`, `tests/integration/message_workflow_http.sh` |
 | S. 4-63 | Bei Ausgängen prüft Si nur Anschrift, Unterschrift/Zeichen und Funktion, nicht den Inhalt. | Ausgänge laufen zwingend `Verfasser → Si → LdF → A/W`. Si kann formal freigeben oder mit Pflichtgrund zurückgeben, aber keine Inhaltsfelder verändern. Nach Korrektur folgt die Sichtung erneut. | `tests/php/message_security.php`, `tests/integration/message_concurrency.php`, `tests/integration/message_workflow_http.sh` |
 | S. 4-64 | Der Melder darf den Inhalt nicht ändern, muss schnell zustellen, Rücknachrichten feststellen, zurückkehren, sich zurückmelden und den tatsächlichen Empfänger nennen. | Das Medium `Me` verlangt einen LdF-Auftrag und die Zustandskette Beauftragung, persönliche Übernahme, Übergabe mit Empfänger, Rückweg mit explizitem Rücknachrichtenvermerk und Rückkehr. Danach bestätigt ausschließlich die ausgewählte aktive LdF-Besetzung die Rückmeldung an die FmZt. Der Nachrichtenabschluss wartet auf die vollständige Kette. | `tests/integration/dv_operations.php`, `tests/integration/message_workflow_http.sh` |
 | S. 4-64 | Bis zur Rückkehr darf der Melder keine anderen Aufträge annehmen; in einer FüSt mit Stab gehört er zur FmZt und wird durch LdF eingesetzt. | Nur eine angenommene aktive A/W-Besetzung ist als Melder wählbar, ausschließlich LdF beauftragt. Während Übernahme, Übergabe und Rückweg sperrt eine zentrale Request-Grenze alle fremden operativen Schreibvorgänge dieses Kontos. | `tests/php/dv_operations_security.php`, `tests/integration/dv_operations.php` |
@@ -62,7 +62,7 @@ Darstellungsmerkmal:
 | `10` | Ausgang | Verfasser | korrigieren und erneut vollständig zur Sichtung einreichen |
 | `1` | Ausgang | LdF | Rufname der Gegenstelle übersetzen und vorgesehenen Beförderungsweg entscheiden |
 | `2` | Ausgang | A/W | Nachricht tatsächlich befördern und Zeit sowie realen Weg nachweisen |
-| `1` | Eingang | LdF | aufgenommenen Rufnamen übersetzen und Absender festlegen |
+| `1` | Eingang | LdF | aufgenommenen Rufnamen übersetzen, Absender festlegen und den von A/W erfassten Eingangsweg bestätigen oder begründet korrigieren |
 | `4` | Eingang | Si | Inhalt auswerten, Empfänger festlegen und weitergeben |
 | `8` | beide | abgeschlossen | nur lesen, nachweisen und exportieren |
 
@@ -78,7 +78,12 @@ Anschrift, Verfasserzeichen und Verfasserfunktion. Inhaltliche Änderungen sind
 in dieser Rolle technisch gesperrt. Eine Rückgabe verlangt einen Grund und
 erzeugt keine Abkürzung: Nach der Korrektur beginnt die formale Prüfung erneut.
 Für Eingänge bleibt die inhaltliche Auswertung und Empfängerzuordnung Aufgabe
-des Sichters.
+des Sichters. A/W erfasst Medium, Aufnahmezeit und Aufnahmezeichen. LdF muss
+das Medium vor der Weitergabe ausdrücklich bestätigen. Eine Korrektur ohne
+Begründung bleibt mit HTTP 409 in Status 1; bei erfolgreicher Korrektur werden
+ursprüngliches und bestätigtes Medium, Begründung und authentifiziertes
+LdF-Kürzel im Übergabeereignis gespeichert, ohne Aufnahmezeit oder
+Aufnahmezeichen umzuschreiben.
 
 Die bloße Eintragung eines Empfängers erteilt vor dieser Prüfung noch keinen
 Zugriff. Empfänger sehen Ein- und Ausgänge erst im abgeschlossenen Status

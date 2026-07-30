@@ -110,6 +110,7 @@ app/legacy_php.php
 app/logbook.php
 app/message_evidence.php
 app/logout.php
+app/message_priority.php
 app/message_repository.php
 app/message_transport.php
 app/navigation.php

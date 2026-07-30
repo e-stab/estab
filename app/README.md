@@ -91,21 +91,36 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   `on/off`; Tippfehler führen absichtlich zu einem Fehler statt zu implizitem
   Aktivieren.
 - Ein Eingang beginnt nach der Aufnahme durch A/W in Status 1 bei LdF. LdF
-  übersetzt den aufgenommenen Rufnamen in den Absender; danach wertet Si den
-  Inhalt aus und legt die Empfänger fest. A/W besitzt kein schreibbares
-  Absenderfeld, auch serverseitig werden Übertragungsversuche verworfen.
-  Der feste Eingangslauf ist `1 → 4 → 8`.
+  übersetzt den aufgenommenen Rufnamen in den Absender und bestätigt den von
+  A/W erfassten Eingangsweg; danach wertet Si den Inhalt aus und legt die
+  Empfänger fest. A/W besitzt kein schreibbares Absenderfeld, auch
+  serverseitig werden Übertragungsversuche verworfen. Eine Änderung des
+  Eingangsmediums durch LdF verlangt eine Begründung. Das Repository liest den
+  ursprünglichen A/W-Wert unter derselben Einsatz-, Status- und Sperrbedingung
+  `FOR UPDATE`, lässt Aufnahmezeit und Aufnahmezeichen unverändert und schreibt
+  Bestätigung, Alt-/Neuwert, Begründung und LdF-Kürzel in das hashverkettete
+  Übergabeereignis. Der feste Eingangslauf ist `1 → 4 → 8`.
 - `read_authorization.php` liefert die serverseitig gerenderten
   Vorschlagslisten für „Rufname der Gegenstelle“ und „Absender“. Die Abfrage
   validiert den aktiven Einsatz und die exakt ausgewählte aktive
   Dienstbesetzung erneut: Rufnamen sind nur für A/W und LdF verfügbar,
   Absender nur für LdF bei Eingängen. Sie liest ausschließlich bisherige Werte
-  desselben aktiven Einsatzes, während der lokale Absender eines Ausgangs
-  weiterhin serverseitig bestimmt wird. Die Felder verwenden
+  desselben aktiven Einsatzes. Für die exakt ausgewählte LdF-Besetzung
+  korreliert `estab_read_ldf_mapping_suggestions()` außerdem den
+  Gegenstellenrufnamen eines gesperrten Eingangs mit früheren Absendern
+  beziehungsweise die Anschrift eines gesperrten Ausgangs mit früheren
+  Gegenstellenrufnamen. Abgeschlossene Nachrichtenpaare stehen nach Häufigkeit
+  und Aktualität vor einem passenden aktuell gültigen S6-Fernmeldeplan; erst
+  danach folgt die allgemeine Einsatzhistorie. Dieselbe UNION-Abfrage bindet
+  Einsatz, Schicht, Besetzung, Konto, Funktionsfähigkeit, Richtung,
+  Nachrichtenstatus und Sperrinhaber erneut, sodass ein zwischenzeitlicher
+  Zuständigkeits- oder Sperrwechsel keine Daten freigibt. Der lokale Absender
+  eines Ausgangs wird weiterhin serverseitig bestimmt. Die Felder verwenden
   `autocomplete="off"`; die zugängliche Listbox öffnet beim Fokus, ist mit
   Pfeiltasten, Eingabetaste und Escape bedienbar, trifft keine automatische
-  Auswahl und schränkt freie Eingaben nicht ein. Ohne JavaScript bleibt ein
-  natives `datalist` als Rückfalloption erhalten.
+  Auswahl und schränkt freie Eingaben nicht ein. Herkunftskennzeichen werden
+  getrennt vom einzusetzenden Wert HTML-sicher gerendert. Ohne JavaScript
+  bleibt ein natives `datalist` als Rückfalloption erhalten.
 - Ein Ausgang beginnt in Status 4 bei Si. Si kann die schreibgeschützten
   Inhaltsfelder formal freigeben oder mit Pflichtgrund an den ursprünglichen
   Verfasser in Status 10 zurückgeben. Nach jeder Korrektur folgt erneut

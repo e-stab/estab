@@ -3,6 +3,7 @@
 define ("debug", false);
 session_start ();
 require_once __DIR__ . "/../app/auth.php";
+require_once __DIR__ . "/../app/message_priority.php";
 require_once __DIR__ . "/../app/read_authorization.php";
 require_once __DIR__ . "/../app/session_ui.php";
 estab_auth_require_session ($_SESSION);
@@ -225,7 +226,9 @@ class Listen {
       $query_where_arg2 = "";
     }
 */
-    $query_orderby_arg = "`04_nummer` DESC, `09_vorrangstufe` DESC ";
+    $query_orderby_arg =
+      estab_message_priority_order_sql ("`09_vorrangstufe`").
+      " DESC, `04_nummer` DESC ";
 	//$query_orderby_arg = "`04_nummer` ASC, `09_vorrangstufe` ASC ";
     $queryParameters = array ();
 
@@ -598,19 +601,17 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
 
     if  ($result != ""){
       foreach ($result as $row){
-         $priority = (
-           ($row["09_vorrangstufe"] ?? "") != ""
-           and ($row["09_vorrangstufe"] ?? "") != "eee"
+         $priority = estab_message_priority_requires_attention (
+           $row["09_vorrangstufe"] ?? null
          );
          echo estab_overview_row_start ($priority);
 
          // VORRANGSTUFE
          echo "<td>";
-         if ($priority) {
-           estab_overview_detail_link ($row["00_lfd"], $row["09_vorrangstufe"]);
-         } else {
-           echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
-         }
+         estab_overview_detail_link (
+           $row["00_lfd"],
+           estab_message_priority_label ($row["09_vorrangstufe"] ?? null)
+         );
          echo "</td>\n";
 
          // RICHTUNG Eingang / Ausgang
@@ -1538,22 +1539,25 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
 
     if (((($this->formdata["09_vorrangstufe"]) != "" )) or (!$this->feld[9])) {
       echo "<div style=\"text-align: center; font-size:24px; font-weight:900;\"><big><big><b>";
-      echo $this->safe_message_value ("09_vorrangstufe");
+      echo estab_message_html (
+        estab_message_priority_label ($this->formdata["09_vorrangstufe"])
+      );
       echo "</big></big></b></div>";
     } else {
-      echo "<select ".$param." name=\"09_vorrangstufe\">\n";
-      if ($this->formdata["09_vorrangstufe"]=="") {$sel = " selected ";} else {$sel = "";}
-      echo "<option ".$sel."></option>\n";
-      if ($this->formdata["09_vorrangstufe"]=="eee") {$sel = " selected ";} else {$sel = "";}
-      echo "<option ".$sel.">eee</option>\n";
-      if ($this->formdata["09_vorrangstufe"]=="sss") {$sel = " selected ";} else {$sel = "";}
-      echo "<option ".$sel.">sss</option>\n";
-      if ($this->formdata["09_vorrangstufe"]=="bbb") {$sel = " selected ";} else {$sel = "";}
-      echo "<option ".$sel.">bbb</option>\n";
-      if ($this->formdata["09_vorrangstufe"]=="aaa") {$sel = " selected ";} else {$sel = "";}
-      echo "<option ".$sel.">aaa</option>\n";
+      echo "<select ".$param." name=\"09_vorrangstufe\" aria-describedby=\"estab-priority-warning\">\n";
+      foreach (estab_message_priority_options () as $priorityOption) {
+        $selected = $this->formdata["09_vorrangstufe"] === $priorityOption["value"]
+          ? " selected"
+          : "";
+        echo "<option value=\"".estab_message_html ($priorityOption["value"])."\"".$selected.">".
+             estab_message_html ($priorityOption["label"])."</option>\n";
+      }
+      echo "</select>\n";
+      echo "<small id=\"estab-priority-warning\">".
+           estab_message_html (estab_message_priority_warning ("aaa")).
+           "</small>\n";
     }
-    echo "</select></td>\n";
+    echo "</td>\n";
 
     /****************************************************************************\
     // Zeile, Spalte 6,2   Anschrift      512 10  Anschrift

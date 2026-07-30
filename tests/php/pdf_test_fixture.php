@@ -30,7 +30,7 @@ function estab_pdf_test_message_fixture(): array
         '07_durchspruch' => 'D',
         '08_befhinweis' => 'Sofort weiterleiten',
         '08_befhinwausw' => 'sofort',
-        '09_vorrangstufe' => 'eee',
+        '09_vorrangstufe' => 'bbb',
         '10_anschrift' => 'Integrationsempfänger',
         '11_gesprnotiz' => 't',
         '12_abfzeit' => '2026-07-29 08:15:00',

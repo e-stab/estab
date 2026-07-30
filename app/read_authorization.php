@@ -241,6 +241,52 @@ function estab_read_message_suggestion_policy(
 }
 
 /**
+ * Return the fixed source/target pair for one LdF translation direction.
+ *
+ * Incoming messages translate the callsign recorded by A/W into the external
+ * sender/unit. Outgoing messages translate the staff-supplied destination into
+ * the callsign which LdF must address. The returned identifiers are constants,
+ * never browser-controlled SQL fragments.
+ *
+ * @return array{
+ *   message_context:string,
+ *   message_target:string,
+ *   plan_context:string,
+ *   plan_target:string
+ * }
+ */
+function estab_read_ldf_mapping_policy(
+    array $identity,
+    string $direction
+): array {
+    if (
+        ($identity['funktion'] ?? null) !== 'LdF'
+        || ($identity['rolle'] ?? null) !== 'Fernmelder'
+    ) {
+        throw new EstabReadPermissionException(
+            'Nur die ausgewählte LdF-Funktion darf Zuordnungen lesen.'
+        );
+    }
+    return match ($direction) {
+        'E' => [
+            'message_context' => '`05_gegenstelle`',
+            'message_target' => '`13_abseinheit`',
+            'plan_context' => '`rufname`',
+            'plan_target' => '`betriebsstelle`',
+        ],
+        'A' => [
+            'message_context' => '`10_anschrift`',
+            'message_target' => '`05_gegenstelle`',
+            'plan_context' => '`betriebsstelle`',
+            'plan_target' => '`rufname`',
+        ],
+        default => throw new InvalidArgumentException(
+            'Die Zuordnungsrichtung ist ungültig.'
+        ),
+    };
+}
+
+/**
  * Normalize one legacy or current suggestion without pre-escaping its value.
  */
 function estab_read_normalize_message_suggestion(mixed $value): ?string
@@ -264,6 +310,399 @@ function estab_read_normalize_message_suggestion(mixed $value): ?string
         ? mb_strlen($normalized, 'UTF-8')
         : strlen($normalized);
     return $length <= 128 ? $normalized : null;
+}
+
+/**
+ * Normalize the read-only context shown next to a mapping suggestion.
+ *
+ * Addresses may legitimately contain line breaks. They are collapsed for the
+ * compact hint while every other control character remains forbidden.
+ */
+function estab_read_normalize_mapping_context(mixed $value): ?string
+{
+    if (!is_string($value)) {
+        return null;
+    }
+    $decoded = estab_message_plain_text($value);
+    if (preg_match('//u', $decoded) !== 1) {
+        return null;
+    }
+    $normalized = preg_replace('/[\p{Z}\t\r\n]+/u', ' ', $decoded);
+    $normalized = is_string($normalized) ? trim($normalized) : '';
+    if (
+        $normalized === ''
+        || preg_match('/[\p{C}]/u', $normalized) === 1
+    ) {
+        return null;
+    }
+    $length = function_exists('mb_strlen')
+        ? mb_strlen($normalized, 'UTF-8')
+        : strlen($normalized);
+    return $length <= 1000 ? $normalized : null;
+}
+
+/**
+ * Build one fixed SQL expression for pair-mapping context comparison.
+ *
+ * The legacy application stored HTML-escaped text while current writes store
+ * raw UTF-8. Decode the common one-pass htmlspecialchars representations before
+ * collapsing whitespace. `&amp;` and its numeric forms deliberately come last:
+ * an old `&amp;lt;` value therefore becomes `&lt;`, never `<`, and is not
+ * decoded twice.
+ *
+ * The caller may only supply one of the repository-owned context expressions.
+ * The returned lowercase text still uses the column collation; comparisons
+ * must cast it to BINARY so utf8mb4_unicode_ci cannot conflate Bar/Bär or ss/ß.
+ */
+function estab_read_mapping_normalized_sql(string $expression): string
+{
+    if (!in_array(
+        $expression,
+        [
+            'candidate.`05_gegenstelle`',
+            'candidate.`10_anschrift`',
+            'plan_entry.`rufname`',
+            'plan_entry.`betriebsstelle`',
+            'scope.`context_value`',
+        ],
+        true
+    )) {
+        throw new InvalidArgumentException(
+            'Der SQL-Ausdruck für den Zuordnungskontext ist ungültig.'
+        );
+    }
+
+    $decoded = $expression;
+    foreach (
+        [
+            ['&quot;', 'CHAR(34)'],
+            ['&#34;', 'CHAR(34)'],
+            ['&#034;', 'CHAR(34)'],
+            ['&#x22;', 'CHAR(34)'],
+            ['&#X22;', 'CHAR(34)'],
+            ['&apos;', 'CHAR(39)'],
+            ['&#39;', 'CHAR(39)'],
+            ['&#039;', 'CHAR(39)'],
+            ['&#x27;', 'CHAR(39)'],
+            ['&#X27;', 'CHAR(39)'],
+            ['&lt;', 'CHAR(60)'],
+            ['&#60;', 'CHAR(60)'],
+            ['&#x3c;', 'CHAR(60)'],
+            ['&#x3C;', 'CHAR(60)'],
+            ['&#X3c;', 'CHAR(60)'],
+            ['&#X3C;', 'CHAR(60)'],
+            ['&gt;', 'CHAR(62)'],
+            ['&#62;', 'CHAR(62)'],
+            ['&#x3e;', 'CHAR(62)'],
+            ['&#x3E;', 'CHAR(62)'],
+            ['&#X3e;', 'CHAR(62)'],
+            ['&#X3E;', 'CHAR(62)'],
+            ['&nbsp;', 'CHAR(32)'],
+            ['&#160;', 'CHAR(32)'],
+            ['&#xa0;', 'CHAR(32)'],
+            ['&#xA0;', 'CHAR(32)'],
+            ['&#XA0;', 'CHAR(32)'],
+            ['&amp;', 'CHAR(38)'],
+            ['&#38;', 'CHAR(38)'],
+            ['&#038;', 'CHAR(38)'],
+            ['&#x26;', 'CHAR(38)'],
+            ['&#X26;', 'CHAR(38)'],
+        ] as [$entity, $replacement]
+    ) {
+        $decoded = "REPLACE({$decoded}, '{$entity}', {$replacement})";
+    }
+
+    return "LOWER(TRIM(REGEXP_REPLACE({$decoded}, '[[:space:]]+', ' ')))";
+}
+
+/**
+ * Return context-dependent LdF mappings for one currently locked message.
+ *
+ * Completed message pairs from the active incident are deliberately ranked
+ * before matching entries of the currently valid S6 telecommunications plan.
+ * The exact selected hat, account, capability, active shift/incident and
+ * current message lock are rejoined in both branches of the same UNION query.
+ * A concurrent revocation, incident switch or lock loss therefore yields no
+ * operational mapping instead of leaking stale incident data.
+ *
+ * @return list<array{
+ *   value:string,
+ *   source:string,
+ *   context:string,
+ *   match:string,
+ *   matched_context:string
+ * }>
+ */
+function estab_read_ldf_mapping_suggestions(
+    mysqli $connection,
+    string $messageTable,
+    array $identity,
+    mixed $messageId,
+    string $direction,
+    int $limit = 10
+): array {
+    if ($limit < 1 || $limit > 30) {
+        throw new InvalidArgumentException(
+            'Die Anzahl der Zuordnungsvorschläge ist ungültig.'
+        );
+    }
+    $messageId = estab_message_positive_id($messageId);
+    $scope = estab_read_require_operational_scope($connection, $identity);
+    $policy = estab_read_ldf_mapping_policy(
+        $scope['identity'],
+        $direction
+    );
+    $selected = $scope['identity'];
+    $incidentId = (int) $scope['incident']['active_einsatz_id'];
+    $assignmentId = (int) $selected['duty_assignment_id'];
+    $capability = estab_read_identity_capability($selected);
+    if ($capability !== 'FERNMELDEBETRIEB') {
+        throw new EstabReadPermissionException(
+            'Die ausgewählte Funktion besitzt keine LdF-Zuordnungsberechtigung.'
+        );
+    }
+
+    $table = estab_message_table($messageTable);
+    $messageContext = $policy['message_context'];
+    $messageTarget = $policy['message_target'];
+    $planContext = $policy['plan_context'];
+    $planTarget = $policy['plan_target'];
+
+    $scopeSql = 'SELECT duty_shift.`einsatz_id` AS `incident_id`,'
+        . ' current_message.' . $messageContext . ' AS `context_value`'
+        . ' FROM `nv_dienstbesetzungen` AS assignment'
+        . ' JOIN `nv_dienstschichten` AS duty_shift'
+        . ' ON duty_shift.`dienstschicht_id`'
+        . ' = assignment.`dienstschicht_id`'
+        . ' JOIN `nv_einsatz_status` AS active'
+        . ' ON active.`singleton_id` = 1'
+        . ' AND active.`active_einsatz_id` = duty_shift.`einsatz_id`'
+        . ' JOIN `nv_einsaetze` AS incident'
+        . ' ON incident.`einsatz_id` = duty_shift.`einsatz_id`'
+        . ' JOIN `nv_benutzer` AS account'
+        . ' ON BINARY account.`kuerzel`'
+        . ' = BINARY assignment.`benutzer_kuerzel`'
+        . ' JOIN `nv_funktionsfaehigkeiten` AS capability'
+        . ' ON BINARY capability.`funktion`'
+        . ' = BINARY assignment.`funktion`'
+        . ' AND BINARY capability.`rolle` = BINARY assignment.`rolle`'
+        . ' JOIN ' . $table . ' AS current_message'
+        . ' ON current_message.`00_lfd` = ?'
+        . ' AND current_message.`einsatz_id` = duty_shift.`einsatz_id`'
+        . ' AND current_message.`04_richtung` = ?'
+        . ' AND current_message.`x00_status` = 1'
+        . " AND current_message.`x01_abschluss` IN ('f', '0')"
+        . " AND current_message.`x02_sperre` IN ('t', '1')"
+        . ' AND BINARY current_message.`x03_sperruser`'
+        . ' = BINARY assignment.`benutzer_kuerzel`'
+        . ' WHERE assignment.`dienstbesetzung_id` = ?'
+        . ' AND duty_shift.`einsatz_id` = ?'
+        . " AND duty_shift.`status` = 'AKTIV'"
+        . " AND assignment.`status` = 'ANGENOMMEN'"
+        . " AND incident.`estab_status` = 'open'"
+        . ' AND BINARY account.`benutzer` = BINARY ?'
+        . ' AND BINARY assignment.`benutzer_kuerzel` = BINARY ?'
+        . ' AND BINARY assignment.`funktion` = BINARY ?'
+        . ' AND BINARY assignment.`rolle` = BINARY ?'
+        . ' AND BINARY capability.`faehigkeit` = BINARY ?'
+        . ' AND account.`aktiv` = 1'
+        . ' AND account.`estab_gesperrt` = 0';
+    $scopeParameters = [
+        $messageId,
+        $direction,
+        $assignmentId,
+        $incidentId,
+        $selected['benutzer'],
+        $selected['kuerzel'],
+        $selected['funktion'],
+        $selected['rolle'],
+        $capability,
+    ];
+
+    $scopeNormalized = estab_read_mapping_normalized_sql(
+        'scope.`context_value`'
+    );
+    $messageNormalized = estab_read_mapping_normalized_sql(
+        'candidate.' . $messageContext
+    );
+    $planNormalized = estab_read_mapping_normalized_sql(
+        'plan_entry.' . $planContext
+    );
+    $binaryEquals = static fn (string $left, string $right): string =>
+        'CAST(' . $left . ' AS BINARY) = CAST(' . $right . ' AS BINARY)';
+    $messageExact = $binaryEquals($messageNormalized, $scopeNormalized);
+    $planExact = $binaryEquals($planNormalized, $scopeNormalized);
+
+    // Incoming callsigns are identifiers and therefore exact-only. Outgoing
+    // operating-station addresses may carry a whitespace-separated annotation
+    // (for example an Einsatzabschnitt). Only that direction receives a
+    // symmetric, word-boundary prefix relation; arbitrary substrings such as
+    // "Einheit" in "Einheitlich" never match.
+    $relatedPrefix = static function (
+        string $short,
+        string $long
+    ) use ($binaryEquals): string {
+        return '(CHAR_LENGTH(' . $long . ') > CHAR_LENGTH(' . $short . ')'
+            . ' AND '
+            . $binaryEquals(
+                'LEFT(' . $long . ', CHAR_LENGTH(' . $short . '))',
+                $short
+            )
+            . ' AND SUBSTRING(' . $long . ', CHAR_LENGTH(' . $short
+            . ") + 1, 1) = ' ')";
+    };
+    $messageRelated = '('
+        . $relatedPrefix($messageNormalized, $scopeNormalized)
+        . ' OR '
+        . $relatedPrefix($scopeNormalized, $messageNormalized)
+        . ')';
+    $planRelated = '('
+        . $relatedPrefix($planNormalized, $scopeNormalized)
+        . ' OR '
+        . $relatedPrefix($scopeNormalized, $planNormalized)
+        . ')';
+    $messageMatch = $direction === 'A'
+        ? '(' . $messageExact . ' OR ' . $messageRelated . ')'
+        : $messageExact;
+    $planMatch = $direction === 'A'
+        ? '(' . $planExact . ' OR ' . $planRelated . ')'
+        : $planExact;
+
+    $sql = 'SELECT mapped.`suggestion`, mapped.`source_kind`,'
+        . ' mapped.`context_value`,'
+        . " CASE mapped.`match_priority` WHEN 0 THEN 'exact'"
+        . " ELSE 'related' END AS `match_kind`,"
+        . ' CASE mapped.`match_priority`'
+        . ' WHEN 0 THEN mapped.`exact_context`'
+        . ' ELSE mapped.`related_context` END AS `matched_context`'
+        . ' FROM ('
+        . ' SELECT MAX(TRIM(candidate.' . $messageTarget
+        . ')) AS `suggestion`,'
+        . " 'message' AS `source_kind`, 0 AS `source_priority`,"
+        . ' MIN(CASE WHEN ' . $messageExact
+        . ' THEN 0 ELSE 1 END) AS `match_priority`,'
+        . ' MAX(CASE WHEN ' . $messageExact
+        . ' THEN TRIM(candidate.' . $messageContext
+        . ') ELSE NULL END) AS `exact_context`,'
+        . ' MAX(CASE WHEN NOT (' . $messageExact
+        . ') THEN TRIM(candidate.' . $messageContext
+        . ') ELSE NULL END) AS `related_context`,'
+        . ' COUNT(*) AS `frequency`,'
+        . ' MAX(candidate.`00_lfd`) AS `recency`,'
+        . ' MAX(scope.`context_value`) AS `context_value`'
+        . ' FROM (' . $scopeSql . ') AS scope'
+        . ' JOIN ' . $table . ' AS candidate'
+        . ' ON candidate.`einsatz_id` = scope.`incident_id`'
+        . ' WHERE candidate.`04_richtung` = ?'
+        . ' AND candidate.`x00_status` = 8'
+        . " AND candidate.`x01_abschluss` IN ('t', '1')"
+        . ' AND candidate.' . $messageContext . ' IS NOT NULL'
+        . ' AND candidate.' . $messageTarget . ' IS NOT NULL'
+        . ' AND CHAR_LENGTH(TRIM(candidate.' . $messageContext . ')) > 0'
+        . ' AND CHAR_LENGTH(TRIM(candidate.' . $messageTarget . ')) > 0'
+        . ' AND ' . $messageMatch
+        . ' GROUP BY BINARY TRIM(candidate.' . $messageTarget . ')'
+        . ' UNION ALL'
+        . ' SELECT MAX(TRIM(plan_entry.' . $planTarget
+        . ')) AS `suggestion`,'
+        . " 'plan' AS `source_kind`, 1 AS `source_priority`,"
+        . ' MIN(CASE WHEN ' . $planExact
+        . ' THEN 0 ELSE 1 END) AS `match_priority`,'
+        . ' MAX(CASE WHEN ' . $planExact
+        . ' THEN TRIM(plan_entry.' . $planContext
+        . ') ELSE NULL END) AS `exact_context`,'
+        . ' MAX(CASE WHEN NOT (' . $planExact
+        . ') THEN TRIM(plan_entry.' . $planContext
+        . ') ELSE NULL END) AS `related_context`,'
+        . ' COUNT(*) AS `frequency`,'
+        . ' MAX(plan_entry.`fernmeldeplan_eintrag_id`) AS `recency`,'
+        . ' MAX(scope.`context_value`) AS `context_value`'
+        . ' FROM (' . $scopeSql . ') AS scope'
+        . ' JOIN `nv_fernmeldeplaene` AS telecom_plan'
+        . ' ON telecom_plan.`einsatz_id` = scope.`incident_id`'
+        . " AND telecom_plan.`status` = 'AKTIV'"
+        . ' AND telecom_plan.`gueltig_ab` <= NOW()'
+        . ' AND (telecom_plan.`gueltig_bis` IS NULL'
+        . ' OR telecom_plan.`gueltig_bis` >= NOW())'
+        . ' JOIN `nv_fernmeldeplan_eintraege` AS plan_entry'
+        . ' ON plan_entry.`fernmeldeplan_id`'
+        . ' = telecom_plan.`fernmeldeplan_id`'
+        . ' WHERE plan_entry.' . $planContext . ' IS NOT NULL'
+        . ' AND plan_entry.' . $planTarget . ' IS NOT NULL'
+        . ' AND CHAR_LENGTH(TRIM(plan_entry.' . $planContext . ')) > 0'
+        . ' AND CHAR_LENGTH(TRIM(plan_entry.' . $planTarget . ')) > 0'
+        . ' AND ' . $planMatch
+        . ' GROUP BY BINARY TRIM(plan_entry.' . $planTarget . ')'
+        . ') AS mapped'
+        . ' ORDER BY mapped.`source_priority` ASC,'
+        . ' mapped.`match_priority` ASC, mapped.`frequency` DESC,'
+        . ' mapped.`recency` DESC';
+    $parameters = array_merge(
+        $scopeParameters,
+        [$direction],
+        $scopeParameters
+    );
+    $statement = estab_message_execute($connection, $sql, $parameters);
+    try {
+        $storedSuggestion = null;
+        $storedSource = null;
+        $storedContext = null;
+        $storedMatch = null;
+        $storedMatchedContext = null;
+        if (
+            !$statement->bind_result(
+                $storedSuggestion,
+                $storedSource,
+                $storedContext,
+                $storedMatch,
+                $storedMatchedContext
+            )
+        ) {
+            throw new RuntimeException(
+                'LdF-Zuordnungen konnten nicht gelesen werden.'
+            );
+        }
+        $suggestions = [];
+        $seen = [];
+        while ($statement->fetch()) {
+            $suggestion = estab_read_normalize_message_suggestion(
+                $storedSuggestion
+            );
+            $context = estab_read_normalize_mapping_context($storedContext);
+            $matchedContext = estab_read_normalize_mapping_context(
+                $storedMatchedContext
+            );
+            if (
+                $suggestion === null
+                || $context === null
+                || $matchedContext === null
+                || !in_array($storedSource, ['message', 'plan'], true)
+                || !in_array($storedMatch, ['exact', 'related'], true)
+            ) {
+                continue;
+            }
+            $key = function_exists('mb_strtolower')
+                ? mb_strtolower($suggestion, 'UTF-8')
+                : strtolower($suggestion);
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $suggestions[] = [
+                'value' => $suggestion,
+                'source' => $storedSource,
+                'context' => $context,
+                'match' => $storedMatch,
+                'matched_context' => $matchedContext,
+            ];
+            if (count($suggestions) >= $limit) {
+                break;
+            }
+        }
+        return $suggestions;
+    } finally {
+        $statement->close();
+    }
 }
 
 /**

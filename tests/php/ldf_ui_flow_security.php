@@ -13,9 +13,154 @@ $assert = static function (bool $condition, string $message) use (&$assertions):
 $root = dirname(__DIR__, 2);
 $controller = file_get_contents($root . '/4fach/mainindex.php');
 $tools = file_get_contents($root . '/4fach/tools.php');
+$form = file_get_contents($root . '/4fach/4fachform.php');
+$handler = file_get_contents($root . '/4fach/data_hndl.php');
+$repository = file_get_contents($root . '/app/message_repository.php');
 
 $assert(is_string($controller), 'LdF controller source is unreadable');
 $assert(is_string($tools), 'HTML helper source is unreadable');
+$assert(is_string($form), 'LdF form source is unreadable');
+$assert(is_string($handler), 'LdF handler source is unreadable');
+$assert(is_string($repository), 'Message repository source is unreadable');
+
+$incomingRepositoryStart = strpos(
+    $repository,
+    "if (\$direction === 'E' && \$status === 1)"
+);
+$outgoingRepositoryStart = strpos(
+    $repository,
+    "if (\$direction === 'A' && \$status === 1)",
+    $incomingRepositoryStart === false ? 0 : $incomingRepositoryStart
+);
+$incomingRepository = (
+    $incomingRepositoryStart !== false
+    && $outgoingRepositoryStart !== false
+    && $outgoingRepositoryStart > $incomingRepositoryStart
+) ? substr(
+    $repository,
+    $incomingRepositoryStart,
+    $outgoingRepositoryStart - $incomingRepositoryStart
+) : '';
+
+$assert(
+    str_contains(
+        $form,
+        '$this->feld [1] || $this->task === "LdF-Eingang"'
+    )
+        && str_contains(
+            $form,
+            'data-estab-incoming-transport-confirmation=\\"required\\"'
+        )
+        && str_contains(
+            $form,
+            'name=\\"incoming_transport_correction_reason\\" maxlength=\\"500\\"'
+        )
+        && str_contains(
+            $form,
+            'Eingangsweg durch LdF bestätigen'
+        )
+        && str_contains(
+            $form,
+            'data-estab-incoming-transport-original=\\"'
+        )
+        && str_contains(
+            $form,
+            'role=\\"radiogroup\\"'
+        )
+        && str_contains(
+            $form,
+            '<label for=\\"f_01_medium_fu\\"><input id=\\"f_01_medium_fu\\"'
+        ),
+    'LdF incoming form does not expose the explicit route confirmation'
+);
+$assert(
+    str_contains(
+        $handler,
+        '$ldfFields ["01_medium"] = (string) $data ["01_medium"];'
+    )
+        && str_contains(
+            $handler,
+            '"incoming_transport_confirmed" => hash_equals ('
+        )
+        && str_contains(
+            $handler,
+            '"requested_transport_correction_reason" => trim ('
+        )
+        && str_contains(
+            $handler,
+            '$data ["01_datum"] = "";'
+        )
+        && str_contains(
+            $handler,
+            '$data ["01_zeichen"] = "";'
+        )
+        && str_contains(
+            $handler,
+            'catch (EstabDvInputException|EstabDvConflictException'
+        )
+        && str_contains(
+            $handler,
+            'function estab_rehydrate_ldf_incoming_form ('
+        )
+        && str_contains(
+            $handler,
+            '$rehydrated = array_replace ($locked, $editable);'
+        )
+        && str_contains(
+            $handler,
+            "if (!\$result) {\n          http_response_code (422);"
+        )
+        && str_contains(
+            $handler,
+            'function estab_render_ldf_stage_conflict (): never'
+        )
+        && str_contains(
+            $handler,
+            'if (!$ldfSaved) {'
+        )
+        && str_contains(
+            $handler,
+            'estab_render_ldf_stage_conflict ();'
+        ),
+    'LdF handler does not carry or safely rehydrate route evidence'
+);
+$assert(
+    str_contains(
+        $repository,
+        "if (\$direction === 'E' && \$status === 1)"
+    )
+        && str_contains(
+            $incomingRepository,
+            "'SELECT `01_medium` FROM '"
+        )
+        && str_contains(
+            $incomingRepository,
+            ". ' FOR UPDATE'"
+        )
+        && str_contains(
+            $repository,
+            "'previous_incoming_transport_medium'"
+        )
+        && str_contains($repository, "'transport_correction_reason'")
+        && str_contains($repository, "'transport_corrected'")
+        && str_contains(
+            $repository,
+            'Für die Korrektur des Eingangswegs ist eine '
+        )
+        && str_contains(
+            $repository,
+            'function estab_message_fetch_locked_operator_stage('
+        )
+        && str_contains(
+            $repository,
+            "' AND BINARY `x03_sperruser` = BINARY ?'"
+        )
+        && str_contains(
+            $repository,
+            "preg_match(\n                        '/\\p{C}/u'"
+        ),
+    'Repository does not atomically confirm and evidence the incoming route'
+);
 
 $cancelStart = strpos($controller, '} elseif ( ( in_array (');
 $cancelEnd = strpos(

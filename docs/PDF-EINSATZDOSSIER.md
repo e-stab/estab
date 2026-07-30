@@ -43,6 +43,13 @@ Empfängerkennzeichnung und mehrseitiger Inhaltsfluss in Einzel- und
 Gesamtexport überein. Die gemeinsame Vorlage druckt weder eine
 VS-NfD-Kennzeichnung noch das frühere Wappen.
 
+Auch die Vorrangsstufe durchläuft denselben zentralen Übersetzer:
+`sss`, `bbb` und `aaa` erscheinen im Einzelvordruck und im Dossier als
+**Sofort**, **Blitz** beziehungsweise **Staatsnot**. Ein leerer Wert und das
+historische `eee` lassen das Feld im PDF leer. Die gespeicherten internen
+Kürzel werden dafür nicht verändert; dadurch bleiben Nachrichtennachweise,
+Hashketten und rohe Tabellen-/CSV-Exporte reproduzierbar.
+
 Die Seite **Generierte Vordrucke** unterscheidet dabei bewusst Quelle und
 Darstellung: Beim Nachrichtenabschluss bleibt ein vollständiges PDF atomar im
 persistenten Einsatzspeicher archiviert. Der sichtbare Button **PDF im

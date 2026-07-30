@@ -419,6 +419,64 @@ function check_save_user (array $loginData, string &$loginError) {
   }
 } // function save_user
 
+/**
+ * Rebuild the LdF incoming form from the still locked database row.
+ *
+ * Only the fields which LdF is allowed to edit survive from the request.
+ * Every other visible value, especially the A/W receipt evidence, comes from
+ * the active-incident record again after validation or transaction failure.
+ */
+function estab_rehydrate_ldf_incoming_form (
+  mysqli $connection,
+  string $table,
+  string $operatorCode,
+  array $submitted
+): ?array {
+  $locked = estab_message_fetch_locked_operator_stage (
+    $connection,
+    $table,
+    $submitted ["00_lfd"] ?? null,
+    $operatorCode,
+    "E",
+    1
+  );
+  if (!is_array ($locked)) {
+    return null;
+  }
+
+  $editable = array ();
+  foreach (array (
+    "01_medium",
+    "02_zeit",
+    "13_abseinheit",
+    "incoming_transport_confirmed",
+    "incoming_transport_correction_reason",
+    "estab_route_error",
+  ) as $field) {
+    $value = $submitted [$field] ?? "";
+    $editable [$field] = is_string ($value) ? $value : "";
+  }
+
+  $rehydrated = array_replace ($locked, $editable);
+  $rehydrated ["00_lfd"] = $locked ["00_lfd"];
+  $rehydrated ["task"] = "LdF-Eingang";
+  $rehydrated ["02_zeichen"] = $operatorCode;
+  $rehydrated ["incoming_transport_original_medium"] =
+    (string) ($locked ["01_medium"] ?? "");
+
+  return $rehydrated;
+}
+
+/** Render a fail-closed conflict when an LdF stage or lock was lost. */
+function estab_render_ldf_stage_conflict (): never {
+  http_response_code (409);
+  echo "<div role=\"alert\" class=\"estab-message-transport-conflict\">";
+  echo "<h2>Nachricht wurde zwischenzeitlich geändert</h2>";
+  echo "<p>Die LdF-Sperre oder der Bearbeitungsstand ist nicht mehr gültig. ";
+  echo "Öffnen Sie die Nachricht erneut aus der Warteschlange.</p></div>";
+  exit;
+}
+
 
 /*****************************************************************************\
 
@@ -438,6 +496,8 @@ function check_and_save ($data){
     "fernmeldeplan_eintrag_id",
     "transportweg_bestaetigt",
     "transport_rueckgabegrund",
+    "incoming_transport_confirmed",
+    "incoming_transport_correction_reason",
     "07_durchspruch", "08_befhinweis", "08_befhinwausw",
     "09_vorrangstufe", "10_anschrift", "11_gesprnotiz",
     "12_anhang", "12_inhalt", "12_abfzeit", "13_abseinheit",
@@ -961,6 +1021,13 @@ function check_and_save ($data){
     case "LdF-Eingang":
     case "LdF-Ausgang":
       $ldfDirection = $data ["task"] === "LdF-Eingang" ? "E" : "A";
+      if ($ldfDirection === "E") {
+        // Receipt time and A/W mark are immutable evidence. Discard forged
+        // overposting before the legacy validator can parse or reflect it;
+        // the repository update below never contains either field.
+        $data ["01_datum"] = "";
+        $data ["01_zeichen"] = "";
+      }
       if ($data ["02_zeit"] == "") {
         $data ["02_zeit"] = date ("Hi");
       }
@@ -973,7 +1040,20 @@ function check_and_save ($data){
         $result = $vali->validatethis ();
         $data = $vali->i_data;
         if (!$result) {
+          http_response_code (422);
           $data ["02_zeichen"] = (string) $_SESSION ["vStab_kuerzel"];
+          if ($ldfDirection === "E") {
+            $rehydratedIncoming = estab_rehydrate_ldf_incoming_form (
+              $messageConnection,
+              (string) $conf_4f_tbl ["nachrichten"],
+              (string) $_SESSION ["vStab_kuerzel"],
+              $data
+            );
+            if (!is_array ($rehydratedIncoming)) {
+              estab_render_ldf_stage_conflict ();
+            }
+            $data = $rehydratedIncoming;
+          }
           $form = new nachrichten4fach (
             $data,
             $data ["task"],
@@ -990,6 +1070,11 @@ function check_and_save ($data){
         "x03_sperruser" => "",
       );
       if ($ldfDirection === "E") {
+        // A/W records the medium on receipt. LdF must explicitly confirm or
+        // correct that transport path before the message enters the Si queue.
+        // The validated canonical value is stored together with the signed
+        // LdF acceptance mark and becomes part of the immutable event trail.
+        $ldfFields ["01_medium"] = (string) $data ["01_medium"];
         $ldfFields ["13_abseinheit"] = trim (
           (string) $data ["13_abseinheit"]
         );
@@ -1026,6 +1111,16 @@ function check_and_save ($data){
             "snapshot" => $ldfDirection === "E"
               ? array (
                 "direction" => "E",
+                "incoming_transport_medium" =>
+                  $ldfFields ["01_medium"],
+                "incoming_transport_confirmed" => hash_equals (
+                  "1",
+                  (string) $data ["incoming_transport_confirmed"]
+                ),
+                "transport_confirmed_by" => $sessionCode,
+                "requested_transport_correction_reason" => trim (
+                  (string) $data ["incoming_transport_correction_reason"]
+                ),
                 "translated_sender" => $ldfFields ["13_abseinheit"],
                 "accepted_by" => $sessionCode,
               )
@@ -1040,11 +1135,26 @@ function check_and_save ($data){
           )
         );
       } catch (EstabDvInputException|EstabDvConflictException $exception) {
-        if ($ldfDirection !== "A") {
-          throw $exception;
-        }
         http_response_code (409);
         $data ["estab_route_error"] = $exception->getMessage ();
+        if ($ldfDirection === "E") {
+          $rehydratedIncoming = estab_rehydrate_ldf_incoming_form (
+            $messageConnection,
+            (string) $conf_4f_tbl ["nachrichten"],
+            (string) $_SESSION ["vStab_kuerzel"],
+            $data
+          );
+          if (!is_array ($rehydratedIncoming)) {
+            estab_render_ldf_stage_conflict ();
+          }
+          $data = $rehydratedIncoming;
+          $form = new nachrichten4fach (
+            $data,
+            "LdF-Eingang",
+            $vali->validate
+          );
+          exit;
+        }
         $routeValidation = $vali->validate;
         $routeValidation ["fernmeldeplan_eintrag_id"] = false;
         $form = new nachrichten4fach (
@@ -1055,7 +1165,7 @@ function check_and_save ($data){
         exit;
       }
       if (!$ldfSaved) {
-        throw new RuntimeException ("Message lock or LdF stage changed");
+        estab_render_ldf_stage_conflict ();
       }
       protokolleintrag (
         $ldfDirection === "E" ? "LdF-Eingang" : "LdF-Ausgang",

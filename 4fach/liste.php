@@ -3,6 +3,7 @@ if (defined ("debug") && debug) { echo "<b>!File:". __FILE__ ."  Line:". __LINE_
 require_once __DIR__ . "/../app/auth.php";
 require_once __DIR__ . "/../app/csrf.php";
 require_once __DIR__ . "/../app/message_repository.php";
+require_once __DIR__ . "/../app/message_priority.php";
 require_once __DIR__ . "/../app/message_transport.php";
 require_once __DIR__ . "/../app/read_authorization.php";
 include ("katego.php");
@@ -745,7 +746,9 @@ class Listen extends kategorien {
       $from = " FROM ".$messageTable." AS m ".implode (" ", $joins);
       $whereSql = implode (" AND ", $where);
       $query = "SELECT DISTINCT m.*".$from." WHERE ".$whereSql.
-        " ORDER BY m.`04_nummer` DESC, m.`09_vorrangstufe` DESC";
+        " ORDER BY ".
+        estab_message_priority_order_sql ("m.`09_vorrangstufe`").
+        " DESC, m.`04_nummer` DESC";
       $result = estab_message_query_rows (
         $messageConnection,
         $query,
@@ -794,7 +797,9 @@ class Listen extends kategorien {
                          AND `15_quitzeichen` != \"\")
                      )
                      AND `x01_abschluss` = \"f\"
-                ORDER BY `09_vorrangstufe` DESC, `12_abfzeit`;";
+                ORDER BY ".
+                estab_message_priority_order_sql ("`09_vorrangstufe`").
+                " DESC, `12_abfzeit`;";
         $result = $dbaccess->query_table ($query);
         echo "<p align=\"center\"><big><big><b>LdF: Rufnamen und Beförderungswege</b></big></big></p>";
         if ($result != "") {
@@ -815,7 +820,12 @@ class Listen extends kategorien {
             echo "</td><td>";
             estab_list_detail_action ("ldf", "meldung", $row ["00_lfd"], $abfzeit ["stak"] ?? "");
             echo "</td><td>";
-            estab_list_detail_action ("ldf", "meldung", $row ["00_lfd"], $row ["09_vorrangstufe"] ?: "—");
+            estab_list_detail_action (
+              "ldf",
+              "meldung",
+              $row ["00_lfd"],
+              estab_message_priority_label ($row ["09_vorrangstufe"])
+            );
             echo "</td><td>";
             estab_list_detail_action ("ldf", "meldung", $row ["00_lfd"], $row ["05_gegenstelle"] ?: "noch offen");
             echo "</td><td>";
@@ -841,7 +851,9 @@ class Listen extends kategorien {
                   AND `06_befwegausw` != \"\"
                   AND `15_quitdatum` IS NOT NULL
                   AND `15_quitzeichen` != \"\"
-                  AND ((`04_richtung` = \"A\") AND (`03_datum` IS NULL) AND (`03_zeichen` = \"\")) order by `09_vorrangstufe` DESC, `12_abfzeit` ; ";
+                  AND ((`04_richtung` = \"A\") AND (`03_datum` IS NULL) AND (`03_zeichen` = \"\")) order by ".
+                  estab_message_priority_order_sql ("`09_vorrangstufe`").
+                  " DESC, `12_abfzeit` ; ";
         $result = $dbaccess->query_table ($query);
         if ($result != "" ){
           echo "<table style=\"text-align: center; background-color: rgb(255, 255, 255); \" border=\"1\" cellpadding=\"10\" cellspacing=\"1\">\n<tbody>\n";
@@ -852,14 +864,22 @@ class Listen extends kategorien {
           echo "<td>Inhalt</td>\n";
           echo "</tr>";
           foreach ($result as $row){
-            $priorityStyle = ( $row["09_vorrangstufe"] != "" ) and
-              ($row["09_vorrangstufe"] != "eee")
+            $priorityStyle = estab_message_priority_requires_attention (
+              $row["09_vorrangstufe"]
+            )
                 ? " style=\"background-color: rgb(255,255,100); color:#000000; font-weight:bold;\""
                 : "";
             echo "<tr".$priorityStyle.">\n";
             $abfzeit = convdatetimeto ($row["12_abfzeit"]);
             echo "<td>"; if (($row["12_abfzeit"] != "")) { estab_list_detail_action ("fm", "meldung", $row["00_lfd"], $abfzeit["stak"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
-            echo "<td>"; if (($row["09_vorrangstufe"] != "")) { estab_list_detail_action ("fm", "meldung", $row["00_lfd"], $row["09_vorrangstufe"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+            echo "<td>";
+            estab_list_detail_action (
+              "fm",
+              "meldung",
+              $row["00_lfd"],
+              estab_message_priority_label ($row["09_vorrangstufe"])
+            );
+            echo "</td>\n";
             echo "<td>"; if (($row["10_anschrift"] != "")) { estab_list_detail_action ("fm", "meldung", $row["00_lfd"], $row["10_anschrift"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
             echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { estab_list_detail_action ("fm", "meldung", $row["00_lfd"], $row["12_inhalt"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";           echo "</tr>";
           }
@@ -915,7 +935,9 @@ class Listen extends kategorien {
              }
              echo "<tr style=\"background-color: ".$receiverbackground."; color:#FFFFFF; font-weight:bold;\">\n";
              // Liegt eine Vorrangstufe vor!!!
-             $vorrang = ( ( $row["09_vorrangstufe"] != "") and ( $row["09_vorrangstufe"] != "eee" ) );
+             $vorrang = estab_message_priority_requires_attention (
+               $row["09_vorrangstufe"]
+             );
              // 1. Spalte schon gelesen?
              $schongelesen = false;
              if ($dbschongelesen != "") {
@@ -992,10 +1014,12 @@ class Listen extends kategorien {
 
              echo "<td>";
               // Vorrangstufe
-             if ( ( $row["09_vorrangstufe"] != "") and ( $row["09_vorrangstufe"] != "eee" ) ) {
-               estab_list_detail_action ("stab", "meldung", $row["00_lfd"], $row["09_vorrangstufe"]);
-             } else {
-               echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";}
+             estab_list_detail_action (
+               "stab",
+               "meldung",
+               $row["00_lfd"],
+               estab_message_priority_label ($row["09_vorrangstufe"])
+             );
              echo "</td>\n";
               // Eingang / Ausgang
              echo "<td>"; if (($row["04_richtung"] != "")) { estab_list_detail_action ("stab", "meldung", $row["00_lfd"], $row["04_richtung"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
@@ -1086,7 +1110,9 @@ class Listen extends kategorien {
                          `10_anschrift`,
                          `12_abfzeit`,
                          `12_inhalt` FROM `".$conf_4f_tbl ["nachrichten"]."` ".$WHERE_inout."
-                       order by `09_vorrangstufe` DESC, `12_abfzeit`; ";
+                       order by ".
+                       estab_message_priority_order_sql ("`09_vorrangstufe`").
+                       " DESC, `12_abfzeit`; ";
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>Stab_sichten:".$query." </b><br>";}
         $result = $dbaccess->query_table ($query);
         if ($result != "" ){
@@ -1098,14 +1124,22 @@ class Listen extends kategorien {
           echo "<td>Inhalt / Text</td>\n";
           echo "</tr>";
           foreach ($result as $row){
-           $priorityStyle = ( $row["09_vorrangstufe"] != "" ) and
-             ($row["09_vorrangstufe"] != "eee")
+           $priorityStyle = estab_message_priority_requires_attention (
+             $row["09_vorrangstufe"]
+           )
                ? " style=\"background-color: rgb(220,0,0); color:#FFFFFF; font-weight:bold;\""
                : "";
            echo "<tr".$priorityStyle.">\n";
            $abfzeit = convdatetimeto ($row["12_abfzeit"]);
            echo "<td>"; if (($row["12_abfzeit"] != "")) { estab_list_detail_action ("sichter", "meldung", $row["00_lfd"], $abfzeit["stak"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
-           echo "<td>"; if (($row["09_vorrangstufe"] != "")) { estab_list_detail_action ("sichter", "meldung", $row["00_lfd"], $row["09_vorrangstufe"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+           echo "<td>";
+           estab_list_detail_action (
+             "sichter",
+             "meldung",
+             $row["00_lfd"],
+             estab_message_priority_label ($row["09_vorrangstufe"])
+           );
+           echo "</td>\n";
            echo "<td>"; if (($row["10_anschrift"] != "")) { estab_list_detail_action ("sichter", "meldung", $row["00_lfd"], $row["10_anschrift"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
            echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { estab_list_detail_action ("sichter", "meldung", $row["00_lfd"], $row["12_inhalt"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
            echo "</tr>";
@@ -1162,17 +1196,19 @@ include ("../4fcfg/fkt_rolle.inc.php");
 
           foreach ($result as $row){
              // VORRANGSTUFE
-             $priorityStyle = ( $row["09_vorrangstufe"] != "") and
-               ( $row["09_vorrangstufe"] != "eee" )
+             $priorityStyle = estab_message_priority_requires_attention (
+               $row["09_vorrangstufe"]
+             )
                  ? " style=\"background-color: rgb(255,255,0); color:#000000; font-weight:bold;\""
                  : "";
              echo "<tr".$priorityStyle.">\n";
              echo "<td>";
-             if ( ( $row["09_vorrangstufe"] != "") and ( $row["09_vorrangstufe"] != "eee" ) ) {
-               estab_list_detail_action ("fm", $adminMessageRoute, $row["00_lfd"], $row["09_vorrangstufe"]);
-             } else {
-               echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
-             }
+             estab_list_detail_action (
+               "fm",
+               $adminMessageRoute,
+               $row["00_lfd"],
+               estab_message_priority_label ($row["09_vorrangstufe"])
+             );
              echo "</td>\n";
 
              // RICHTUNG Eingang / Ausgang
@@ -1438,12 +1474,9 @@ include ("../4fcfg/fkt_rolle.inc.php");
             foreach ($result as $row){
                echo "<tr>\n";
                echo "<td>";
-               if ( ( $row["09_vorrangstufe"] != "") and
-                    ( $row["09_vorrangstufe"] != "eee" ) ) {
-                 echo "<a>".estab_message_html ($row["09_vorrangstufe"])."</a>\n" ;
-               } else {
-                 echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
-               }
+               echo "<a>".estab_message_html (
+                 estab_message_priority_label ($row["09_vorrangstufe"])
+               )."</a>\n" ;
                echo "</td>\n";
                echo "<td>"; if (($row["04_richtung"] != "")) { echo "<a>".estab_message_html ($row["04_richtung"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
                echo "<td>"; if (($row["04_nummer"] != "")) { echo "<a>".estab_message_html ($row["04_nummer"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
@@ -1512,10 +1545,9 @@ include ("../4fcfg/fkt_rolle.inc.php");
             foreach ($result as $row){
                echo "<tr>\n";
                echo "<td>";
-               if ( ( $row["09_vorrangstufe"] != "") and ( $row["09_vorrangstufe"] != "eee" ) ) {
-                 echo "<a>".estab_message_html ($row["09_vorrangstufe"])."</a>\n" ;
-               } else {
-                 echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";}
+               echo "<a>".estab_message_html (
+                 estab_message_priority_label ($row["09_vorrangstufe"])
+               )."</a>\n" ;
                echo "</td>\n";
                echo "<td>"; if (($row["04_richtung"] != "")) { echo "<a>".estab_message_html ($row["04_richtung"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
                echo "<td>"; if (($row["04_nummer"] != "")) { echo "<a>".estab_message_html ($row["04_nummer"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
@@ -1593,10 +1625,9 @@ include ("../4fcfg/fkt_rolle.inc.php");
             foreach ($result as $row){
                echo "<tr>\n";
                echo "<td>";
-               if ( ( $row["09_vorrangstufe"] != "") and ( $row["09_vorrangstufe"] != "eee" ) ) {
-                 echo "<a>".estab_message_html ($row["09_vorrangstufe"])."</a>\n" ;
-               } else {
-                 echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";}
+               echo "<a>".estab_message_html (
+                 estab_message_priority_label ($row["09_vorrangstufe"])
+               )."</a>\n" ;
                echo "</td>\n";
                echo "<td>"; if (($row["04_richtung"] != "")) { echo "<a>".estab_message_html ($row["04_richtung"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
                echo "<td>"; if (($row["04_nummer"] != "")) { echo "<a>".estab_message_html ($row["04_nummer"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";

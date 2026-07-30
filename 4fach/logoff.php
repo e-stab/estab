@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . "/../app/message_priority.php";
 /**********************************************************************************\
   Das Skript wird per include beim Abmelden ausgefÃ¼hrt.
 \**********************************************************************************/
@@ -42,7 +43,9 @@ if (debug){
                     ( (  `04_richtung`     =\"E\") OR
                       (  `03_datum`       IS NOT NULL ) AND
                       (  `03_zeichen`     != \"\" ) )
-              order by `09_vorrangstufe` DESC, `12_abfzeit`; ";
+              order by ".
+              estab_message_priority_order_sql ("`09_vorrangstufe`").
+              " DESC, `12_abfzeit`; ";
 
     if (debug) {echo "<br>QUERY ===".$query;  echo "<br>";}
 
@@ -62,12 +65,17 @@ if (debug){
       echo "<td>Inhalt / Text</td>\n";
       echo "</tr>";
       foreach ($result as $row){
-       if ( ( $row["09_vorrangstufe"] != "" ) and ($row["09_vorrangstufe"] != "eee")){
+       if (estab_message_priority_requires_attention (
+         $row["09_vorrangstufe"]
+       )){
           echo "<tr style=\"background-color: rgb(220,0,0); color:#FFFFFF; font-weight:bold;\">\n";
        }
        $abfzeit = convdatetimeto ($row["12_abfzeit"]);
        echo "<td>"; if (($row["12_abfzeit"] != "")) { echo "<a href=\"mainindex.php?sichter=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$abfzeit['stak']."</a>\n"; } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
-       echo "<td>"; if (($row["09_vorrangstufe"] != "")) { echo "<a href=\"mainindex.php?sichter=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["09_vorrangstufe"]."</a>\n" ; } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+       echo "<td><a href=\"mainindex.php?sichter=meldung&00_lfd=".
+            $row["00_lfd"]."\" target=\"_self\">".
+            estab_message_priority_label ($row["09_vorrangstufe"]).
+            "</a>\n</td>\n";
        echo "<td>"; if (($row["10_anschrift"] != "")) { echo "<a href=\"mainindex.php?sichter=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["10_anschrift"]."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
        echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { echo "<a href=\"mainindex.php?sichter=meldung&00_lfd=".$row["00_lfd"]."\" target=\"_self\">".$row["12_inhalt"]."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
        echo "</tr>";

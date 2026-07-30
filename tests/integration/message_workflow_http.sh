@@ -95,6 +95,8 @@ s6_name="Workflow S6 ${identity_seed}"
 pol_name="Workflow POL ${identity_seed}"
 incoming_marker="E2EIN_${identity_seed}_dv"
 outgoing_marker="E2EOUT_${identity_seed}_dv"
+mapping_incoming_marker="E2EMAPIN_${identity_seed}_dv"
+mapping_outgoing_marker="E2EMAPOUT_${identity_seed}_dv"
 reply_marker="E2EREPLY_${identity_seed}_dv"
 forward_marker="E2EFORWARD_${identity_seed}_dv"
 fm_admin_note="FMADMIN_${identity_seed}_dv"
@@ -110,7 +112,9 @@ do
     fi
 done
 for marker in \
-    "$incoming_marker" "$outgoing_marker" "$reply_marker" "$forward_marker"
+    "$incoming_marker" "$outgoing_marker" \
+    "$mapping_incoming_marker" "$mapping_outgoing_marker" \
+    "$reply_marker" "$forward_marker"
 do
     if ! printf '%s' "$marker" | grep -Eq '^[A-Za-z0-9_-]{1,64}$'; then
         echo 'Message workflow HTTP: derived an unsafe message marker' >&2
@@ -678,6 +682,8 @@ finish_ldf_incoming()
     ldf_marker=$1
     ldf_record_id=$2
     ldf_sender=$3
+    ldf_requested_medium=${4:-}
+    ldf_correction_reason=${5:-}
 
     load_dashboard "$ldf_cookies" "LdF queue for $ldf_marker"
     assert_body "$ldf_marker" "LdF queue for $ldf_marker"
@@ -704,6 +710,21 @@ finish_ldf_incoming()
         'id="f_13_abseinheit"' \
         'LdF incoming sender translation field'
     assert_body \
+        'id="f_01_medium_fu" name="01_medium" value="Fu" type="radio"' \
+        'LdF incoming transport medium control'
+    assert_body \
+        'data-estab-incoming-transport-confirmation="required"' \
+        'LdF incoming mandatory transport confirmation'
+    assert_body \
+        'name="incoming_transport_correction_reason" maxlength="500"' \
+        'LdF incoming transport correction reason'
+    assert_body_absent \
+        'name="01_datum"' \
+        'LdF cannot rewrite A/W receipt time'
+    assert_body_absent \
+        'name="01_zeichen"' \
+        'LdF cannot rewrite A/W receipt mark'
+    assert_body \
         'data-estab-incident-suggestions="sender"' \
         'LdF incoming incident sender suggestions'
     assert_body \
@@ -724,11 +745,122 @@ finish_ldf_incoming()
     assert_body \
         'data-estab-message-suggestion-picker' \
         'LdF incoming suggestion keyboard helper'
+    assert_body \
+        "value=\"$ldf_sender\" label=\"Bestätigtes Nachrichtenpaar\"" \
+        'LdF incoming contextual sender mapping'
+    assert_body \
+        'data-estab-mapping-match="message"' \
+        'LdF incoming mapping source marker'
+    assert_body \
+        'data-estab-mapping-quality="exact"' \
+        'LdF incoming exact mapping quality'
+    assert_body \
+        'Passende Zuordnungen zu „E2E-Gegenstelle“ stehen zuerst' \
+        'LdF incoming callsign mapping context'
     assert_body_absent \
         'data-estab-incident-suggestions="callsign"' \
         'LdF incoming cannot edit callsign suggestions'
+    ldf_original_medium=$(db_sql <<SQL
+SELECT \`01_medium\`
+  FROM \`nv_nachrichten\`
+ WHERE \`00_lfd\` = ${ldf_record_id};
+SQL
+)
+    case "$ldf_original_medium" in
+        Fe | Fu | Me | FAX | FS | @) ;;
+        *)
+            printf 'Message workflow HTTP: invalid A/W incoming medium: %s\n' \
+                "$ldf_original_medium" >&2
+            exit 1
+            ;;
+    esac
+    if [ -z "$ldf_requested_medium" ]; then
+        ldf_requested_medium=$ldf_original_medium
+    fi
+    ldf_receipt_evidence=$(db_sql <<SQL
+SELECT CONCAT(
+  DATE_FORMAT(\`01_datum\`, '%Y-%m-%d %H:%i:%s'),
+  '|',
+  \`01_zeichen\`
+)
+  FROM \`nv_nachrichten\`
+ WHERE \`00_lfd\` = ${ldf_record_id};
+SQL
+)
+    ldf_event_count_before=$(db_sql <<SQL
+SELECT COUNT(*)
+  FROM \`nv_nachrichten_ereignisse\`
+ WHERE \`message_id\` = ${ldf_record_id};
+SQL
+)
+
+    # A browser-required checkbox is repeated server-side: omitting it keeps
+    # the exact locked record at status 1 without appending evidence.
     ldf_csrf=$(csrf_from_body)
     ldf_time=$(date '+%H%M')
+    assert_status 422 "keep LdF incoming open without confirmation for $ldf_marker" \
+        --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+        --request POST \
+        --data-urlencode "csrf_token=$ldf_csrf" \
+        --data-urlencode 'absenden_x=1' \
+        --data-urlencode 'task=LdF-Eingang' \
+        --data-urlencode "00_lfd=$ldf_record_id" \
+        --data-urlencode "01_medium=$ldf_original_medium" \
+        --data-urlencode "02_zeit=$ldf_time" \
+        --data-urlencode "02_zeichen=$ldf_code" \
+        --data-urlencode "13_abseinheit=$ldf_sender" \
+        --data-urlencode 'incoming_transport_correction_reason=' \
+        "$base_url/4fach/mainindex.php"
+    assert_no_runtime_error \
+        "LdF incoming missing transport confirmation for $ldf_marker"
+    assert_body \
+        "data-estab-incoming-transport-original=\"$ldf_original_medium\"" \
+        "unconfirmed LdF form reloads the A/W medium for $ldf_marker"
+    assert_db_equals "1|${ldf_original_medium}" \
+        "unconfirmed LdF incoming remains pending for $ldf_marker" \
+        "SELECT CONCAT(\`x00_status\`, '|', \`01_medium\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${ldf_record_id};"
+    assert_db_equals "$ldf_event_count_before" \
+        "unconfirmed LdF incoming appends no evidence for $ldf_marker" \
+        "SELECT COUNT(*) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${ldf_record_id};"
+
+    if [ "$ldf_requested_medium" != "$ldf_original_medium" ]; then
+        # The repository compares against the A/W value read FOR UPDATE.
+        # A changed route without a reason cannot advance the workflow.
+        ldf_csrf=$(csrf_from_body)
+        assert_status 409 "reject unexplained LdF route correction for $ldf_marker" \
+            --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+            --request POST \
+            --data-urlencode "csrf_token=$ldf_csrf" \
+            --data-urlencode 'absenden_x=1' \
+            --data-urlencode 'task=LdF-Eingang' \
+            --data-urlencode "00_lfd=$ldf_record_id" \
+            --data-urlencode "01_medium=$ldf_requested_medium" \
+            --data-urlencode "02_zeit=$ldf_time" \
+            --data-urlencode "02_zeichen=$ldf_code" \
+            --data-urlencode "13_abseinheit=$ldf_sender" \
+            --data-urlencode 'incoming_transport_confirmed=1' \
+            --data-urlencode 'incoming_transport_correction_reason=' \
+            "$base_url/4fach/mainindex.php"
+        assert_no_runtime_error \
+            "rejected unexplained LdF route correction for $ldf_marker"
+        assert_body \
+            'Für die Korrektur des Eingangswegs ist eine Begründung erforderlich.' \
+            'LdF incoming route correction explanation'
+        assert_body \
+            "data-estab-incoming-transport-original=\"$ldf_original_medium\"" \
+            "corrected LdF form still shows the A/W medium for $ldf_marker"
+        assert_body \
+            "id=\"f_01_medium_me\" name=\"01_medium\" value=\"Me\" type=\"radio\" checked=\"checked\"" \
+            "corrected LdF form keeps the requested medium for $ldf_marker"
+        assert_db_equals "1|${ldf_original_medium}" \
+            "unexplained LdF route correction is atomic for $ldf_marker" \
+            "SELECT CONCAT(\`x00_status\`, '|', \`01_medium\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${ldf_record_id};"
+        assert_db_equals "$ldf_event_count_before" \
+            "unexplained LdF route correction appends no evidence for $ldf_marker" \
+            "SELECT COUNT(*) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${ldf_record_id};"
+    fi
+
+    ldf_csrf=$(csrf_from_body)
     assert_status 200 "save LdF incoming for $ldf_marker" \
         --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
         --request POST \
@@ -736,14 +868,63 @@ finish_ldf_incoming()
         --data-urlencode 'absenden_x=1' \
         --data-urlencode 'task=LdF-Eingang' \
         --data-urlencode "00_lfd=$ldf_record_id" \
+        --data-urlencode "01_medium=$ldf_requested_medium" \
+        --data-urlencode '01_datum=010100Jan2000' \
+        --data-urlencode '01_zeichen=forge' \
         --data-urlencode "02_zeit=$ldf_time" \
         --data-urlencode "02_zeichen=$ldf_code" \
         --data-urlencode "13_abseinheit=$ldf_sender" \
+        --data-urlencode 'incoming_transport_confirmed=1' \
+        --data-urlencode \
+            "incoming_transport_correction_reason=$ldf_correction_reason" \
         "$base_url/4fach/mainindex.php"
     assert_no_runtime_error "saved LdF incoming for $ldf_marker"
-    assert_db_equals "${ldf_code}|${ldf_sender}" \
+    assert_db_equals "${ldf_code}|${ldf_sender}|${ldf_requested_medium}" \
         "LdF-authored incoming identity for $ldf_marker" \
-        "SELECT CONCAT(\`02_zeichen\`, '|', \`13_abseinheit\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${ldf_record_id};"
+        "SELECT CONCAT(\`02_zeichen\`, '|', \`13_abseinheit\`, '|', \`01_medium\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${ldf_record_id};"
+    assert_db_equals "$ldf_receipt_evidence" \
+        "LdF keeps A/W receipt time and mark immutable for $ldf_marker" \
+        "SELECT CONCAT(DATE_FORMAT(\`01_datum\`, '%Y-%m-%d %H:%i:%s'), '|', \`01_zeichen\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${ldf_record_id};"
+    if [ "$ldf_requested_medium" != "$ldf_original_medium" ]; then
+        assert_db_equals \
+            "${ldf_requested_medium}|true|true|${ldf_original_medium}|${ldf_correction_reason}|${ldf_code}" \
+            "LdF incoming route correction evidence for $ldf_marker" \
+            "SELECT CONCAT(JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.incoming_transport_medium')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.incoming_transport_confirmed')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.transport_corrected')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.previous_incoming_transport_medium')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.transport_correction_reason')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.transport_confirmed_by'))) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${ldf_record_id} AND \`event_type\`='ldf_dispatched';"
+    else
+        assert_db_equals \
+            "${ldf_requested_medium}|true|false|${ldf_code}" \
+            "LdF incoming route confirmation evidence for $ldf_marker" \
+            "SELECT CONCAT(JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.incoming_transport_medium')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.incoming_transport_confirmed')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.transport_corrected')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.transport_confirmed_by'))) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${ldf_record_id} AND \`event_type\`='ldf_dispatched';"
+    fi
+
+    # This is the HTTP half of the repository's parallel-save proof: it
+    # represents the second tab whose once-valid form arrives after the first
+    # tab committed. Object authorization already rejects the stale stage
+    # before the repository boundary; it must never become a 500 or append a
+    # second LdF event.
+    ldf_csrf=$(csrf_from_body)
+    assert_status 403 "reject stale LdF incoming save for $ldf_marker" \
+        --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+        --request POST \
+        --data-urlencode "csrf_token=$ldf_csrf" \
+        --data-urlencode 'absenden_x=1' \
+        --data-urlencode 'task=LdF-Eingang' \
+        --data-urlencode "00_lfd=$ldf_record_id" \
+        --data-urlencode "01_medium=$ldf_requested_medium" \
+        --data-urlencode "02_zeit=$ldf_time" \
+        --data-urlencode "02_zeichen=$ldf_code" \
+        --data-urlencode "13_abseinheit=$ldf_sender" \
+        --data-urlencode 'incoming_transport_confirmed=1' \
+        --data-urlencode \
+            "incoming_transport_correction_reason=$ldf_correction_reason" \
+        "$base_url/4fach/mainindex.php"
+    assert_no_runtime_error "stale LdF incoming conflict for $ldf_marker"
+    assert_body \
+        'Aktion nicht erlaubt.' \
+        "stale LdF incoming authorization explanation for $ldf_marker"
+    assert_db_equals "$((ldf_event_count_before + 1))" \
+        "stale LdF incoming appends no duplicate evidence for $ldf_marker" \
+        "SELECT COUNT(*) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${ldf_record_id};"
 }
 
 finish_ldf_outgoing()
@@ -788,11 +969,25 @@ finish_ldf_outgoing()
         'role="listbox" aria-label="Vorschläge aus dem aktiven Einsatz"' \
         'LdF outgoing focus suggestion listbox'
     assert_body \
-        '<option value="E2E-Gegenstelle"></option>' \
+        'value="E2E-Gegenstelle"' \
         'LdF outgoing suggestion from the previous active-incident message'
     assert_body \
         'data-estab-message-suggestion-picker' \
         'LdF outgoing suggestion keyboard helper'
+    if [ "$ldf_marker" = "$outgoing_marker" ]; then
+        assert_body \
+            'value="E2E-Gegenstelle" label="Bestätigtes Nachrichtenpaar"' \
+            'LdF outgoing contextual callsign mapping'
+        assert_body \
+            'data-estab-mapping-match="message"' \
+            'LdF outgoing mapping source marker'
+        assert_body \
+            'data-estab-mapping-quality="exact"' \
+            'LdF outgoing exact mapping quality'
+        assert_body \
+            'Passende Zuordnungen zu „E2E-Zielstelle korrigiert“ stehen zuerst' \
+            'LdF outgoing address mapping context'
+    fi
     assert_body_absent \
         'data-estab-incident-suggestions="sender"' \
         'LdF outgoing cannot change sender through incident suggestions'
@@ -984,7 +1179,8 @@ SELECT CONCAT(
   '|',
   (SELECT COUNT(*) FROM \`nv_nachrichten\`
     WHERE \`12_inhalt\` IN (
-      '${incoming_marker}', '${outgoing_marker}'
+      '${incoming_marker}', '${outgoing_marker}',
+      '${mapping_incoming_marker}', '${mapping_outgoing_marker}'
     )
        OR \`12_inhalt\` LIKE '%${reply_marker}%'
        OR \`12_inhalt\` LIKE '%${forward_marker}%'),
@@ -1306,6 +1502,32 @@ telecom_plan_version=$(printf '%s' "$telecom_fixture" | cut -d'|' -f3)
 assert_numeric 'superseded S6 route fixture' "$telecom_replaced_route_id"
 assert_numeric 'active S6 route fixture' "$telecom_route_id"
 assert_numeric 'active S6 plan version' "$telecom_plan_version"
+
+# Seed two already completed pairs in the disposable database. The real LdF
+# forms below must recognize them as context matches while keeping the entered
+# value freely editable. x04_druck is set so this read-only assistance fixture
+# cannot enter the later unprinted-message workflow.
+db_sql >/dev/null <<SQL
+INSERT INTO \`nv_nachrichten\`
+  (
+    \`einsatz_id\`, \`04_richtung\`, \`05_gegenstelle\`,
+    \`10_anschrift\`, \`12_inhalt\`, \`13_abseinheit\`,
+    \`x00_status\`, \`x01_abschluss\`, \`x04_druck\`
+  )
+VALUES
+  (
+    ${active_incident_id}, 'E', 'E2E-Gegenstelle', '',
+    '${mapping_incoming_marker}', 'E2E-Absender', 8, 't', 't'
+  ),
+  (
+    ${active_incident_id}, 'A', 'E2E-Gegenstelle',
+    'E2E-Zielstelle korrigiert', '${mapping_outgoing_marker}',
+    '${authoritative_sender}', 8, 't', 't'
+  );
+SQL
+assert_db_equals 2 'completed pair-aware mapping fixtures' \
+    "SELECT COUNT(*) FROM \`nv_nachrichten\` WHERE \`einsatz_id\`=${active_incident_id} AND \`12_inhalt\` IN ('${mapping_incoming_marker}', '${mapping_outgoing_marker}') AND \`x00_status\`=8 AND \`x01_abschluss\` IN ('t','1');"
+
 load_sidebar "$ldf_cookies" 'LdF role navigation'
 assert_body 'name="ldf_nachrichten_x"' 'LdF disposition action'
 assert_body_absent 'name="fm_eingang_x"' 'LdF must not receive A/W input action'
@@ -1477,7 +1699,9 @@ load_dashboard "$s2_cookies" 'S2 queue before incoming LdF translation'
 assert_body_absent \
     "$incoming_marker" \
     'untranslated incoming message hidden from recipients'
-finish_ldf_incoming "$incoming_marker" "$incoming_id" 'E2E-Absender'
+finish_ldf_incoming \
+    "$incoming_marker" "$incoming_id" 'E2E-Absender' 'Me' \
+    'Nach Rücksprache als Melderweg bestätigt'
 assert_message_state "$incoming_marker" \
     'E|4|f|null||S2_rt,|f||f' \
     'LdF-translated incoming status 4'

@@ -44,6 +44,11 @@ for pdf_file in "$single_pdf" "$dossier_pdf"; do
     for marker in EINGANG AUSGANG Nachweis-Nr. Fm-Betriebsstelle; do
         grep -Fq "$marker" "$text_file"
     done
+    grep -Fq 'Blitz' "$text_file"
+    if grep -Fq 'bbb' "$text_file"; then
+        echo "PDF fixture exposes a raw priority code: $pdf_file" >&2
+        exit 1
+    fi
     grep -Fq 'Empfänger außerhalb aktueller Matrix:' "$text_file"
     grep -Fq 'ALT_1 [gn]' "$text_file"
     grep -Fq 'ALT2 [rt]' "$text_file"
@@ -193,6 +198,13 @@ for marker in EINGANG AUSGANG Nachweis-Nr. Fm-Betriebsstelle; do
     grep -Fq "$marker" \
         "$complete_dossier_pdf.page-$message_page.layout.txt"
 done
+grep -Fq 'Blitz' \
+    "$complete_dossier_pdf.page-$message_page.layout.txt"
+if grep -Fq 'bbb' \
+    "$complete_dossier_pdf.page-$message_page.layout.txt"; then
+    echo "Complete dossier exposes a raw priority code" >&2
+    exit 1
+fi
 grep -Fq 'Empfänger außerhalb aktueller Matrix:' \
     "$complete_dossier_pdf.page-$message_page.layout.txt"
 grep -Fq "Seite $message_page/$complete_page_count" \

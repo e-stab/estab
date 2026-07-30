@@ -59,6 +59,7 @@ for required_runtime_path in \
     app/dv_operations.php \
     app/dynamic_schema.php \
     app/message_evidence.php \
+    app/message_priority.php \
     app/message_transport.php \
     app/operational_guard.php \
     app/read_authorization.php
