@@ -20,7 +20,11 @@ liefert deren vollständigen Nachrichtendatensatz und validiert die gemeinsame
 5×4-Empfängermatrix für den aktuellen PDF-Abzug.
 `incident_export.php` und `incident_pdf.php` erzeugen das PDF-Dossier eines
 ausdrücklich ausgewählten Einsatzes; `user_admin.php` kapselt dauerhafte
-Kontosperre und Kennwortreset.
+Kontosperre und Kennwortreset. `message_evidence.php` speichert und prüft die
+append-only Nachrichtenereigniskette einschließlich Terminalbindung.
+`dv_operations.php` bildet Dienstschichten, Funktions-Hüte, S6-Planung,
+Melderlauf und Betriebsereigniskette ab. `operational_guard.php` ist die
+gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
 
 ## Sicherheits- und Kompatibilitätsentscheidungen
 
@@ -86,21 +90,21 @@ Kontosperre und Kennwortreset.
   Umgebungswerte akzeptieren ausschließlich `1/0`, `true/false`, `yes/no` oder
   `on/off`; Tippfehler führen absichtlich zu einem Fehler statt zu implizitem
   Aktivieren.
-- Jede neue Ein- oder Ausgangsnachricht beginnt in Status 1 bei LdF. LdF
-  übersetzt beim Eingang den aufgenommenen Rufnamen in den Absender und setzt
-  beim Ausgang den Rufnamen der Gegenstelle sowie vorgesehenes
-  Beförderungsmedium und Freitextweg. A/W muss den eingehenden Rufnamen
-  erfassen, besitzt aber kein schreibbares Absenderfeld; auch serverseitig
-  werden Übertragungsversuche verworfen. LdF kann keinen leeren oder nur aus
-  Leerzeichen bestehenden Absender freigeben.
-  Danach läuft ein Eingang regulär `1 → 4 → 8` beziehungsweise bei bereits
-  erfolgter Autosichtung `1 → 8`. Ein Ausgang erreicht zunächst A/W in Status 2.
-  `ESTAB_REVIEW_OUTGOING_MESSAGES=false` ist der Containerstandard und führt
-  nach der tatsächlichen Beförderung über `1 → 2 → 8`. Mit dem strikt
-  geparsten Wert `true` gilt `1 → 2 → 4 → 8`, weil Si den Ausgang anschließend
-  sichten muss. Ist die Umgebungsvariable nicht gesetzt, bleibt ein boolescher
-  Legacy-Wert `si_in_out` aus der optionalen `4fcfg/m_cfg.inc.php` wirksam; ein
-  nicht boolescher Wert bricht absichtlich ab.
+- Ein Eingang beginnt nach der Aufnahme durch A/W in Status 1 bei LdF. LdF
+  übersetzt den aufgenommenen Rufnamen in den Absender; danach wertet Si den
+  Inhalt aus und legt die Empfänger fest. A/W besitzt kein schreibbares
+  Absenderfeld, auch serverseitig werden Übertragungsversuche verworfen.
+  Der feste Eingangslauf ist `1 → 4 → 8`.
+- Ein Ausgang beginnt in Status 4 bei Si. Si kann die schreibgeschützten
+  Inhaltsfelder formal freigeben oder mit Pflichtgrund an den ursprünglichen
+  Verfasser in Status 10 zurückgeben. Nach jeder Korrektur folgt erneut
+  Status 4. Erst die Freigabe führt über LdF in Status 1 und A/W in Status 2
+  zum Abschluss in Status 8. Der feste Regellauf ist deshalb
+  `4 → 1 → 2 → 8`; Autosichtung und ein konfigurierbarer Sichtungs-Bypass
+  existieren nicht. Ist der disponierte Weg tatsächlich nicht verfügbar,
+  gibt A/W die Nachricht mit Pflichtgrund an LdF zurück; eine neue
+  Planwegentscheidung ist erforderlich und beide Dispositionen bleiben im
+  Ereignisnachweis erhalten.
 - `message_transport.php` normalisiert die schreibbaren SET-Werte und übersetzt
   `Fe`, `Fu`, `Me`, `FAX`/`Fax`, `FS`, `@` und `DFÜ` für die Anzeige in
   verständliche Langformen. Die Nachweisung zeigt bei Eingängen dieses
@@ -114,12 +118,12 @@ Kontosperre und Kennwortreset.
   getrennte Formulare, sodass ein Moduswechsel keine Zugangsdaten mitsendet.
   Jede Anmeldung und Neuanlage aus der Browseroberfläche erfordert bereits vor
   der Authentisierung ein sitzungsgebundenes CSRF-Token.
-- `navigation.php` liefert genau acht operative Bereiche in stabiler
+- `navigation.php` liefert genau neun operative Bereiche in stabiler
   Reihenfolge. Alle URLs laufen durch den zentralen Anwendungs-URL-Builder,
   interne Links verwenden den Top-Level-Browserkontext statt neue Tabs und
   genau der aus dem Requestpfad abgeleitete Bereich erhält
   `aria-current="page"`. Öffentlich sichtbar bleiben Übersicht und BOS-Info;
-  sechs geschützte Bereiche führen anonym mit ihrem symbolischen Ziel zum
+  sieben geschützte Bereiche führen anonym mit ihrem symbolischen Ziel zum
   Login. Administration und Handbuch sind getrennte Dienste.
 - Nach der Anmeldung rendert `session_ui.php` Name, Kürzel, Funktion und
   serverseitig abgeleitete Rolle HTML-escaped. Vor der Anmeldung rendert
@@ -139,18 +143,48 @@ Kontosperre und Kennwortreset.
   HTML-Marker der Leiste nicht unterdrücken. Der Nachrichtenarbeitsbereich
   besteht aus der durchgehenden `vorgaben`-Sidebar und dem rechten `mainframe`.
   Die Sidebar bündelt Arbeitszähler, Serverzeit,
-  Onlinebelegung, Identität, Logout, zehn dauerhaft sichtbare Bereichslinks
-  ohne Disclosure sowie rollenabhängige Fachaktionen. Der Hauptframe entfernt
-  seine Standalone-Leiste vor der ersten Darstellung. Das regelmäßig
-  ausgetauschte Statusfragment lässt Navigation, wiederhergestellten Fokus,
-  Scrollposition und das langlebige PCM-WAV-Audioelement bestehen. Positive
-  Zähler bleiben hervorgehoben; fehlgeschlagene vorbereitete Statusabfragen
+  Onlinebelegung, Identität, Logout, die nach ausgewähltem Funktions-Hut
+  gefilterten neun beziehungsweise zehn dauerhaft sichtbaren Bereichs- und
+  Dienstlinks ohne Disclosure sowie rollenabhängige Fachaktionen. Der
+  Hauptframe entfernt seine Standalone-Leiste vor der ersten Darstellung. Das
+  regelmäßig ausgetauschte Statusfragment lässt Navigation, wiederhergestellten
+  Fokus, Scrollposition und das langlebige PCM-WAV-Audioelement bestehen.
+  Positive Zähler bleiben hervorgehoben; fehlgeschlagene vorbereitete Statusabfragen
   melden `partial`/`unavailable` und lassen die Navigation intakt. Ein
   begrenzter Poll markiert HTTP-/Netzfehler als `stale`; unveränderte
   Live-Regionen bleiben als DOM-Knoten erhalten. Hörbare Hinweise benötigen je
   Tab eine erfolgreiche Browserfreigabe; die browserweite Ein-/Aus-Absicht
   wird über `localStorage` synchronisiert und verspätete `play()`-Ergebnisse
   werden generationsgebunden verworfen.
+- `dv_operations.php` trennt Personenkonto und einsatz-/schichtbezogene
+  Dienstfunktion. S2, Si, S6, LdF und A/W müssen vor Aktivierung mindestens
+  einmal persönlich angenommen sein; mehrere A/W sind erlaubt, andere
+  Funktionen nur einmal je laufender Schicht. Ungesperrte Offline-Konten
+  dürfen vorausgeplant werden; eine in der Websitzung persönlich gespeicherte
+  Annahme zählt auch nach Logout, weil `aktiv` ausschließlich den momentanen
+  Onlinezustand bezeichnet. Eine Übergabe wird administrativ initiiert und erst durch ein
+  Konto der Nachfolgeschicht bestätigt oder mit Pflichtgrund storniert. Ein
+  Konto darf mehrere ausdrücklich zugewiesene Hüte wählen. Die Session
+  speichert dabei die konkrete Besetzungs-ID, die bei jeder geschützten
+  Anfrage erneut geprüft wird. Ohne aktive Schicht bleibt jeder normale
+  operative Schreibpfad geschlossen.
+- `dynamic_schema.php` reconciliert die sechs historischen
+  Nachrichten-/Status-/Kategorietabellen für zusätzlich gewählte Stabs- und
+  FB-Funktionen unter einem datenbank-/funktionsgebundenen Advisory Lock.
+  Hutauswahl und -annahme führen das Reconcile strikt vor ihrer
+  Domänentransaktion aus; der Login-Wrapper verwendet dafür eine getrennte
+  DDL-Verbindung. Die eigenständige ETB-Funktion benötigt diese Tabellen nicht:
+  `EINSATZTAGEBUCH` ist eng auf S2 und ETB begrenzt, während
+  `LAGE_DOKUMENTATION`, Rotkopie und Meldungsübersicht ausschließlich S2
+  vorbehalten bleiben.
+- `operational_guard.php` sitzt am gemeinsamen Datenbank-
+  Konfigurationsübergang und behandelt unbekannte authentifizierte
+  `POST`-/`PUT`-/`PATCH`-/`DELETE`-Requests als operative Eingaben. Es gibt nur
+  enge Kontrollausnahmen für Administration, Wiederherstellung, Logout,
+  Dienstannahme/-wahl und die eigene Melder-Rückkehrkette. Ein übernommener
+  Melderauftrag blockiert bis zur Rückkehr insbesondere Nachrichten,
+  Kategorien, Gelesen-/Erledigt-Zustände, ETB/TBB und Anhänge. Auch ohne
+  aktiven Einsatz oder aktive Dienstschicht bleibt die Grenze fail-closed.
 - `export.php` veröffentlicht jeden Datenbankexport atomar als streng benannten
   Lauf und ZIP außerhalb des DocumentRoot. Die Administrationsseite listet nur
   reguläre, nicht verlinkte Archive unmittelbar im konfigurierten Exportroot.
@@ -179,6 +213,22 @@ Kontosperre und Kennwortreset.
   Formular nennt Formate und effektives Größenlimit, ohne interne Fehler oder
   ungefilterte Dateinamen auszugeben; „Abbrechen“ bleibt trotz verpflichtender
   Dateiauswahl jederzeit ohne Browservalidierung möglich.
+- `attachment_integrity.php` ist die gemeinsame Grenze für PDF-Dossier,
+  Tabellenexport, direkten Download, Bildvorschau und formalen
+  Einsatzabschluss. Download und Vorschau kopieren den einmal autorisiert
+  geöffneten Anhang unter Lesesperre in einen privaten temporären Datenstrom,
+  prüfen genau diesen Datenstrom und verarbeiten ausschließlich dasselbe,
+  zurückgespulte Handle. Neue Anhänge
+  erhalten beim atomaren Finalisieren SHA-256, Bytezahl und Serverzeit;
+  Migration 95
+  verhindert neue Legacy-Markierungen sowie jede spätere Änderung oder
+  Herabstufung des Nachweises. Exporte vergleichen die reale Datei erneut und
+  brechen bei Abweichung ab. Der Admin-Controller übergibt beim Schließen der
+  letzten aktiven Dienstschicht zwingend den konfigurierten Ablageroot, sodass
+  der Abschluss-Preflight ebenfalls die realen Bytes prüft und Schicht samt
+  Besetzungen bei Abweichung unverändert lässt. Beim Upgrade vorhandene Dateien bleiben ehrlich
+  als „Integrität beim Eingang nicht belegbar“ gekennzeichnet, weil ein heute
+  berechneter Hash ihre ursprünglichen Eingangsbytes nicht beweisen könnte.
 - Einzelne Nachrichtenvordrucke werden als
   `<datenbank> Einsatz-<einsatz_id> <nummer> <E|A>.pdf` über eine temporäre
   Datei und atomisches `rename` veröffentlicht. Liste und Download leiten den
@@ -206,9 +256,9 @@ Kontosperre und Kennwortreset.
 - Die Matrixadministration verwendet keine generierte oder eingebundene
   PHP-Konfiguration mehr. Aktive Matrix und die einzige gespeicherte
   Standardmatrix liegen in getrennten InnoDB-Tabellen und müssen jeweils
-  vollständig aus 20 eindeutigen Zellen bestehen. Genau eine belegte
-  Stab-/FB-Funktion ist Rotkopie; Rotkopie und Autosichtung sind auf leeren
-  oder reinen Textzellen verboten. „Nur aktive Matrix speichern“ ändert nur
+  vollständig aus 20 eindeutigen Zellen bestehen. S2/Stab ist das feste
+  Rotkopie- und Dokumentationsziel. Autosichtung ist deaktiviert; das
+  historische Datenbankfeld bleibt immer falsch. „Nur aktive Matrix speichern“ ändert nur
   die Laufzeitmatrix, „Standard laden“ ersetzt ausschließlich die noch
   ungespeicherten Editorwerte, und gemeinsames Speichern ersetzt beide
   Tabellen. Dieselbe Transaktion synchronisiert anschließend die
@@ -219,14 +269,12 @@ Kontosperre und Kennwortreset.
   und kann sich bis zur administrativen Neuzuweisung nicht anmelden.
   Matrix-, Konto- und kennwortfreie Auditänderungen committen gemeinsam; jeder
   Fehler rollt den vollständigen Vorgang zurück.
-- Der belegte A/W-Zweitprüfpfad `FM-Admin` ist auf ein autorisiertes
-  Nachrichtenobjekt und die Fernmelderrolle gebunden. Das Formular bietet
-  controllerkompatible Speichern-/Abbrechen-Aktionen und lässt ausschließlich
-  Quittierungszeichen, Empfängerfarben und Vermerk bearbeiten. Der
-  ursprüngliche Quittierungszeitpunkt ist sichtbar schreibgeschützt und wird
-  auch bei manipuliertem POST unverändert aus der Datenbank übernommen;
-  Nachrichteninhalt und Transportbelege (Felder 1–14) bleiben ebenfalls
-  unveränderlich.
+- Abgeschlossene Nachrichtenvordrucke haben keinen nachgelagerten
+  Bearbeitungspfad. Die früheren `FM-Admin`-/`SI-Admin`-Zweitsichtungen sind
+  aus der Laufzeitoberfläche entfernt: Quittierung, Sichtervermerk,
+  Empfängerfarben, Inhalt und Transportnachweis bleiben nach Status 8
+  unveränderlich. Persönliche Gelesen-/Erledigt-Markierungen liegen getrennt
+  vom Vordruck und verändern dessen fachlichen Nachweis nicht.
 - Bearbeitungsformulare markieren sich ausdrücklich mit
   `data-estab-dirty-guard`. Nur bei geändertem Zustand bestätigt der Browser
   einen globalen Bereichswechsel oder Logout; lokale Speichern-, Abbrechen-

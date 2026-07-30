@@ -234,12 +234,10 @@ Hostverzeichnisse. Diese Daten sind produktiv. `compose down --volumes`,
 „Clean“ beziehungsweise das Löschen eines Container-Manager-Projekts darf nur
 nach einem geprüften Vollbackup erfolgen.
 
-`ESTAB_REVIEW_OUTGOING_MESSAGES=false` erhält auch im Pull-only-/Synology-Paket
-den kompatiblen Direktabschluss transportierter Ausgänge. Mit `true` bleiben
-sie nach A/W-Transport offen, erscheinen beim Sichter und werden erst dort
-abgeschlossen. Der Wert wird strikt geparst; nach jeder Änderung ist nur der
-App-Container neu zu erzeugen und anschließend der vollständige Rollenpfad zu
-prüfen.
+Die formale Ausgangssichtung ist auch im Pull-only-/Synology-Paket
+verbindlich: Verfasser → Si → LdF → A/W. Sie ist nicht konfigurierbar. Fehlt
+eine aktive Sichterbesetzung, bleibt der Ausgang in der Warteschlange und wird
+nicht automatisch oder durch A/W freigegeben.
 
 `ESTAB_PDF_ATTACHMENT_MAX_BYTES` begrenzt die Gesamtsumme der unverändert in
 ein PDF-Einsatzdossier eingebetteten Originalanhänge. Der Standard sind
@@ -345,8 +343,11 @@ Bedienabnahme auf dem tatsächlichen NAS-Endgerät bleibt zusätzlich nötig.
    gesund sind und `migrate` erfolgreich mit Exitcode 0 beendet ist. Danach
    `/health.php` und die Administration prüfen, den ersten Einsatz anlegen und
    aktivieren, benötigte Funktionskonten in der Benutzerverwaltung anlegen und
-   deren feste Zuordnung kontrollieren und erst dann die fachliche Abnahme
-   beginnen.
+   deren feste Zuordnung kontrollieren. Anschließend eine Dienstschicht planen,
+   mindestens S2, Si, S6, LdF und A/W persönlichen Konten zuweisen, jede
+   Zuweisung durch die betreffende Person annehmen lassen und die Schicht erst
+   danach administrativ aktivieren. Vor der fachlichen Abnahme wählt jede
+   Person ihren angenommenen aktiven Funktions-Hut aus.
 
 Synology beschreibt denselben Projektassistenten als Kombination aus
 Projektname, Arbeitsverzeichnis und hochgeladener oder editierter

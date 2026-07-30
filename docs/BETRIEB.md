@@ -82,14 +82,17 @@ Wichtige Werte in `.env`:
 | `ESTAB_BASE_PATH` | leer | historischer Installationspfad im Document Root; im gelieferten Root-Image leer lassen |
 | `ESTAB_ORGANISATION` | `Einsatzleitung` | angezeigte Dienststelle/Organisation |
 | `ESTAB_AUTHORITY_CODE` | `EL` | Hoheits-/Organisationskürzel |
-| `ESTAB_REVIEW_OUTGOING_MESSAGES` | `false` | `false`: nur Eingänge sichten; `true`: auch transportierte Ausgänge erst nach Si-Sichtung abschließen |
 | `ESTAB_ALLOW_SELF_REGISTRATION` | `false` | optionale öffentliche Kompatibilitätsregistrierung; reguläre Konten werden administrativ angelegt |
 | `ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF` | `false` | erlaubt ausdrücklich benötigten direkten Legacy-Clients tokenlose Anmeldung; nicht für Browserbetrieb aktivieren |
 | `ESTAB_TRUST_PROXY_HEADERS` | `false` | erlaubt dem zusätzlich freigegebenen direkten Proxy validierte `X-Forwarded-*`-Ketten |
 | `ESTAB_TRUSTED_PROXIES` | leer | verpflichtende, kommaseparierte IP-/CIDR-Allowlist, sobald Proxy-Header aktiviert werden |
 | `ESTAB_UPLOAD_MAX_BYTES` | `20971520` | anwendungsseitige maximale Uploadgröße |
-| `ESTAB_PDF_ATTACHMENT_MAX_BYTES` | `52428800` | maximale Gesamtsumme eingebetteter Originalanhänge je PDF-Einsatzdossier; `0` deaktiviert Einbettungen |
+| `ESTAB_PDF_ATTACHMENT_MAX_BYTES` | `52428800` | maximale Gesamtsumme eingebetteter Anhänge je PDF-Einsatzdossier; `0` deaktiviert Einbettungen |
 | `TZ` | `Europe/Berlin` | Zeitzone von Anwendung und Datenbank |
+
+Die formale Sichtung jedes Ausgangs vor LdF und A/W ist eine feste
+fachliche Invariante. Sie besitzt bewusst keine Umgebungsvariable und kann in
+einer Installation nicht abgeschaltet werden.
 
 Die effektive Uploadgrenze ist der kleinste Wert aus
 `ESTAB_UPLOAD_MAX_BYTES`, PHPs `upload_max_filesize` von 20 MiB und
@@ -198,23 +201,33 @@ ihn anschließend wieder her.
 podman compose run --rm migrate
 ```
 
-Ein bereits aktueller Bestand meldet alle sieben Migrationen als vorhanden und
+Ein bereits aktueller Bestand meldet alle elf Migrationen einschließlich
+`96-etb-duty-function.sql` als vorhanden und
 führt trotzdem den vollständigen Read-only-Schematest aus. Die Ausgabe muss
 `Post-migration schema verification passed` und anschließend
 `All schema migrations are applied` enthalten. Erst danach sollte der Stack
 fachlich freigegeben werden.
 
-### 5. Ersten Einsatz aktivieren
+### 5. Ersten Einsatz und Dienstbetrieb aktivieren
 
-Eine Neuinstallation startet absichtlich ohne aktiven Einsatz. Anmeldung,
-Lesen und Administration funktionieren, operative Formulare bleiben jedoch
-gesperrt und zeigen den roten Hinweis „Kein Einsatz aktiv“. Vor der ersten
+Eine Neuinstallation startet absichtlich ohne aktiven Einsatz und ohne aktive
+Dienstschicht. Anmeldung, öffentliche Ansichten und Administration bleiben
+erreichbar; operative Lese- und Schreibpfade sind geschlossen. Vor der ersten
 Nachricht, dem ersten Anhang oder einem ETB-/TBB-Eintrag:
 
 1. `/4fadm/admin.php` mit dem separaten Basic-Auth-Zugang öffnen,
-2. **Einsätze** wählen,
-3. Kennung, Name und Beginn anlegen und „direkt aktivieren“ wählen,
-4. in der globalen Statusleiste auf allen Modulen Kennung und Name prüfen.
+2. unter **Einsätze** Kennung, Name und Beginn anlegen und den Einsatz
+   aktivieren,
+3. unter **Benutzerverwaltung** persönliche Konten für mindestens S2, Si, S6,
+   LdF und A/W anlegen,
+4. unter **Führungsstellenbetrieb** eine Dienstschicht planen und die
+   Funktionen ungesperrten persönlichen Konten zuweisen,
+5. jede Person ihre Zuweisungen unter `/4fach/fuehrungsstelle.php` selbst
+   annehmen lassen,
+6. die Schicht erst nach Annahme aller Pflichtfunktionen administrativ
+   aktivieren,
+7. vor operativer Arbeit die eigene angenommene aktive Dienstfunktion
+   auswählen und Einsatz, Schicht und Funktions-Hut in der Oberfläche prüfen.
 
 Ein Einsatzwechsel gilt systemweit für alle angemeldeten Browser. Er darf nur
 koordiniert erfolgen, wenn keine ungespeicherten Fachvorgänge offen sind.
@@ -292,10 +305,10 @@ weiterhin ausschließlich über `ESTAB_ADMIN_USER` und die
 
 Unter `/4fadm/incident_export.php` kann derselbe Administrator einen aktiven
 oder historischen Einsatz als PDF-Dossier ausgeben. ETB, TBB,
-Nachrichtenvordrucke und Originalanhänge sind einzeln wählbar; Anhänge
-erfordern die Nachrichten. Die Gesamtsumme eingebetteter Originaldateien
+Nachrichtenvordrucke und Anhänge sind einzeln wählbar; Anhänge
+erfordern die Nachrichten. Die Gesamtsumme eingebetteter Dateien
 begrenzt `ESTAB_PDF_ATTACHMENT_MAX_BYTES`. `0` deaktiviert nicht den
-PDF-Export, sondern nur das Einbetten von Originaldateien; ein Dossier mit
+PDF-Export, sondern nur das Einbetten von Dateien; ein Dossier mit
 gewählten Anhängen bricht dann sichtbar ab, statt Dateien auszulassen.
 
 Angemeldete Funktionsbenutzer öffnen unter `/4fach/vordrucke.php` die
@@ -324,18 +337,26 @@ Funktionswechsel führt der technische Administrator in der
 Benutzerverwaltung aus; dadurch endet eine vorhandene Sitzung und die nächste
 Anmeldung muss die neue Funktion verwenden.
 
-Die gemeinsame Navigation führt in derselben Reihenfolge durch Übersicht,
-Nachrichtenvordruck, Meldungsübersicht, Vordrucke, Einsatztagebuch,
-Technisches Betriebsbuch, Nachweisung und BOS-Info. Der aktuelle Bereich ist
-hervorgehoben; alle internen Ziele ersetzen die aktuelle Ansicht und erzeugen
-keine zusätzlichen Tabs. Der Nachrichtenvordruck verwendet genau zwei moderne
+Das gemeinsame Manifest führt in stabiler Reihenfolge durch neun operative
+Bereiche: Übersicht, Nachrichtenvordruck, Führungsstellenbetrieb,
+Meldungsübersicht, Vordrucke, Einsatztagebuch, Technisches Betriebsbuch,
+Nachweisung und BOS-Info. Administration und Handbuch sind zwei getrennte
+Dienste. Vor Auswahl eines Funktions-Huts bleiben nach der Anmeldung nur die
+vier öffentlichen beziehungsweise separat geschützten Ziele und der
+Führungsstellen-Bootstrap sichtbar. Mit ausgewähltem aktivem Hut zeigt die
+Navigation je nach Funktion neun oder zehn Bereichs- und Dienstlinks;
+Meldungsübersicht ist ausschließlich S2, Nachweisung ausschließlich LdF und
+A/W zugeordnet. Der aktuelle Bereich ist hervorgehoben; alle internen Ziele
+ersetzen die aktuelle Ansicht und erzeugen keine zusätzlichen Tabs. Der
+Nachrichtenvordruck verwendet genau zwei moderne
 `iframe`-Elemente: die vollhohe linke `vorgaben`-Sidebar und den rechten
 `mainframe`. In der Sidebar folgen auf die Statuskarte die Sitzungsidentität
 mit Logout, die zur angemeldeten Rolle passenden Textbuttons für Fachaktionen
-und danach alle dauerhaft sichtbaren Bereichslinks. Die frühere aufklappbare Auswahl
-„Bereich wechseln“ und ihre kleine eigene Scrollfläche entfallen. Bei geringer
-Höhe scrollt ausschließlich das gesamte Sidebar-Dokument, sodass Status,
-Navigation und Aktionen in einer durchgehenden Reihenfolge erreichbar bleiben.
+und danach die für den ausgewählten Hut sichtbaren Bereichs- und Dienstlinks.
+Die frühere aufklappbare Auswahl „Bereich wechseln“ und ihre kleine eigene
+Scrollfläche entfallen. Bei geringer Höhe scrollt ausschließlich das gesamte
+Sidebar-Dokument, sodass Status, Navigation und Aktionen in einer durchgehenden
+Reihenfolge erreichbar bleiben.
 Der BOS-Bereich verwendet dieselbe sichtbare Navigationslogik in einem
 responsiven Zwei-Spalten-Arbeitsbereich; es gibt dort ebenfalls kein
 aufklappbares Kleinmenü mit eigener Scrollfläche. Bis einschließlich 672
@@ -380,9 +401,10 @@ welchem Kontext gearbeitet wird. Der Button „Abmelden“ sendet einen
 CSRF-geschützten POST, beendet die gesamte eStab-Browsersitzung und führt mit
 HTTP 303 zum Anmeldeeinstieg zurück. Mehrere Tabs teilen sich dieselbe
 Browsersitzung und sind danach gemeinsam abgemeldet. Direkt geöffnete
-Status-/Zählerseiten zeigen die kompakte Leiste selbst; im
-Nachrichtenarbeitsbereich befindet sich die einzige sichtbare Identität in der
-Sidebar. Hilfe- und Problem-Popups zeigen die Leiste im jeweiligen Fenster.
+Fachseiten zeigen die Leiste selbst; im Nachrichtenarbeitsbereich befindet sich
+die einzige sichtbare Identität in der Sidebar. Die früheren eigenständigen
+Status-/Zählerhelfer gehören nicht mehr zur Runtime-Oberfläche. Hilfe- und
+Problem-Popups zeigen die Leiste im jeweiligen Fenster.
 
 Die Statuskarte am Anfang der Sidebar vereint den rollenabhängigen
 Arbeitszähler, Datum und Serverzeit sowie die Onlinebelegung aller
@@ -491,9 +513,10 @@ und schreiben nur nach POST plus Session-CSRF:
   ersetzen“ schreibt beide Tabellen gemeinsam in einer Transaktion. Laden
   verwirft aktuelle Editorwerte, Ersetzen überschreibt die vorherige Vorlage;
   beide Aktionen verlangen deshalb einen nativen Bestätigungsdialog. Im
-  read-only Image wird keine PHP-Konfigurationsdatei geschrieben. Rotkopie
-  und Autosichtung sind nur auf einer auswählbaren `Stab`-/`FB`-Funktion
-  zulässig. Das Speichern gleicht bestehende Konten atomar mit der neuen
+  read-only Image wird keine PHP-Konfigurationsdatei geschrieben. S2/Stab ist
+  in aktiver und Standardmatrix das feste Rotkopie-/Dokumentationsziel;
+  Autosichtung ist deaktiviert und kann im Editor nicht gesetzt werden. Das
+  Speichern gleicht bestehende Konten atomar mit der neuen
   Richtlinie ab: Rollenänderungen werden serverseitig übernommen und
   betroffene Sitzungen beendet. Für entfernte Funktionen bleiben Funktion und
   letzte Rolle als „Zuordnung nicht mehr gültig“ erhalten; das Konto wird
@@ -502,15 +525,20 @@ und schreiben nur nach POST plus Session-CSRF:
   Umbenennung oder Löschung dynamischer Legacy-Tabellen statt. Login,
   Kontoanlage, Neuzuweisung und Matrixspeichern teilen dafür einen globalen
   Lock; ein Konflikt antwortet mit HTTP 409. Nach dem Speichern müssen
-  Neuanmeldung, Sichtung, Rotkopie und Autosichtung mit den betroffenen
-  Funktionen fachlich geprüft werden.
+  Neuanmeldung, Sichtung und S2-Rotkopie mit den betroffenen Funktionen
+  fachlich geprüft werden.
 - **Nachrichtenzähler:** Ausschließlich nach dokumentiertem Systemausfall und
   mit dem betroffenen Einsatz als aktivem Einsatz die
   letzte tatsächlich auf Papier verwendete Nummer eintragen. Der Zielwert muss
   strikt größer als der angezeigte Höchstwert sein. Gemeinsame und getrennte
   Nachweisung werden getrennt behandelt; ein Absenken oder Teilupdate ist
-  ausgeschlossen. Die Maßnahme erzeugt Systemnachricht(en) und einen
-  einsatzgebundenen `nv_protokoll`-Eintrag.
+  ausgeschlossen. Eine aktive Dienstschicht ist Voraussetzung. Die Maßnahme
+  erzeugt keine fingierte Fachnachricht und keine erfundenen A/W-, LdF- oder
+  Si-Zeichen. Stattdessen schreibt sie den Zielwert als dediziertes,
+  unveränderliches `message_counter_repaired`-Ereignis in die verkettete
+  Betriebsspur der aktiven Schicht sowie in `nv_protokoll`. Die nächste echte
+  Nachricht erhält die Nummer nach dem größeren Wert aus Fachbestand und
+  diesem Wiederanlaufnachweis.
 - **PDF-Vordruckreset:** Die GET-Seite zeigt nur die Auswirkung für den
   aktiven Einsatz. Erst die bestätigte POST-Anforderung setzt dessen
   `x04_druck` zurück; historische Einsätze bleiben unverändert. Danach erzeugt

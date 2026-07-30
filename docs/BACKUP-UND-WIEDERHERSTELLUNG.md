@@ -358,6 +358,15 @@ ZIP herunterladen. Pro Tabelle entstehen:
 - Datensatzanzahl und SHA-256-Prüfsumme im `manifest.json`,
 - bei verfügbarer PHP-ZIP-Erweiterung zusätzlich ein ZIP-Archiv.
 
+Vor der Veröffentlichung prüft eStab alle nach Migration 95 finalisierten
+Anhangdateien gegen den beim Eingang unveränderlich gespeicherten SHA-256 und
+die Bytezahl. Eine Abweichung verhindert den gesamten Export. Das Manifest
+weist Anzahl der verifizierten Dateien und des beim Upgrade vorhandenen
+Legacy-Bestands getrennt aus; dessen Aussage lautet ausdrücklich
+**Integrität beim Eingang nicht belegbar**. Die CSV enthält zwar auch die
+Integritätsspalten, der Export erfindet für Legacy-Zeilen aber keinen
+rückwirkenden Eingangshash.
+
 CSV-Kopfzeilen und Werte, deren erstes Nicht-Leerraum-Zeichen `=`, `+`, `-`
 oder `@` ist, erhalten ein führendes Apostroph und werden dadurch beim Öffnen
 in Tabellenkalkulationen als Text behandelt. Der eindeutige NULL-Marker `\N`

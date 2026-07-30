@@ -38,7 +38,7 @@ auch Apache nur an `127.0.0.1:8080` gebunden.
 | `4fadm/` | Basic-Auth-geschützte Administration, Systemstatus und Einsatzexport |
 | `4fbak/` | aktive dateisysteminterne PDF-Erzeugung, historische FPDF-Komponente und der bereits im letzten Upstream-Release deaktivierte Bildgenerator |
 | `stabetb/`, `fmtbb/`, `ubltg/`, `sammlung/` | Einsatztagebuch, technisches Betriebsbuch und Zusatzmodule |
-| `app/` | Bootstrap, PHP-/MySQL-Kompatibilität, Authentisierung, gemeinsame Bereichsnavigation, Sitzungsanzeige und Abmeldung, CSRF, Datum, Nachrichten-/Kategoriezugriff, begrenzte PNG-Renderer, Anhang, Export und transaktionale Admin-Operationen |
+| `app/` | Bootstrap, PHP-/MySQL-Kompatibilität, Authentisierung, ausgewählte Dienstbesetzung, objektbezogene Leseberechtigung, gemeinsame Bereichsnavigation, Sitzungsanzeige und Abmeldung, CSRF, Datum, Nachrichten-/Kategoriezugriff, begrenzte PNG-Renderer, Anhang, Export und transaktionale Admin-Operationen |
 | `4fcfg/` | historische Konfigurationsschnittstelle, heute aus validierten Umgebungswerten gespeist |
 | `docker/` | Apache-/PHP-Härtung, Entrypoint, Datenbankschema und Migrationen |
 | `tests/` | statische, sicherheitsbezogene, Datenbank- und HTTP-Nachweise |
@@ -80,6 +80,33 @@ Es existieren zwei unabhängige Identitäten:
   Compose-Secret. Schreibende Admin-Formulare verlangen zusätzlich einen an
   die PHP-Sitzung gebundenen CSRF-Token.
 
+Apache lehnt `PATH_INFO` hinter ausführbaren PHP-Dateien generell ab. Die
+zentrale operative Schreibgrenze leitet Ausnahmen ausschließlich aus dem
+tatsächlich ausgeführten `SCRIPT_NAME` ab, nie aus der frei wählbaren
+Request-URI. Ein Suffix wie `mainindex.php/4fadm` kann dadurch weder die
+Basic-Auth-Grenze noch eine administrative Schreibausnahme vortäuschen.
+
+Die Anwendungssitzung weist nur das Konto nach. Für jeden operativen Lese- und
+Schreibzugriff müssen zusätzlich ein aktiver Einsatz und genau eine in der
+Sitzung ausgewählte, vom Benutzer persönlich angenommene aktive
+Dienstbesetzung bestehen. `select_hat` akzeptiert nur die positive ID einer
+eigenen, aktiven und angenommenen Besetzung und speichert exakt diese
+serverseitig in der PHP-Sitzung. Jeder normale operative Schreibpfad
+revalidiert diese ID gegen Konto, Funktion, Rolle, aktiven Einsatz und aktive
+Schicht; eine fremde, abgelaufene oder nur funktionsgleiche Besetzung genügt
+nicht. Eine Anmeldung ohne diesen ausgewählten Funktions-Hut bleibt für
+operative Daten wirkungslos. Die fachlichen Controller prüfen diese Grenze
+serverseitig erneut; ausgeblendete Links oder bereits geladene Seiten gelten
+nicht als Berechtigungsnachweis.
+
+Die einzige operative Pre-Hat-Ausnahme ist der Führungsstellen-Bootstrap. Er
+zeigt nur Einsatz-/Schichtgrunddaten sowie eigene Besetzungen und erlaubt
+persönliche Annahme, persönliche Übergabebestätigung und Auswahl der eigenen
+aktiven, angenommenen Besetzung. ETB, TBB, Nachrichten, Anhänge,
+Telekommunikationspläne und Melderaufträge bleiben bis zur Auswahl gesperrt.
+Öffentliche und unabhängig administrativ geschützte Bereiche folgen weiterhin
+ihren eigenen Grenzen.
+
 Neue Anwendungspasswörter werden über PHPs `PASSWORD_DEFAULT` gehasht.
 Historische Klartextwerte werden nur bei einer erfolgreichen Anmeldung
 akzeptiert und dabei transparent durch einen Hash ersetzt. Die Datenbankspalte
@@ -114,13 +141,20 @@ Zuordnung entsprechen. Nur `/4fadm/users.php` darf Funktion und daraus
 abgeleitete Rolle unter gemeinsamem Konto-Lock ändern; die Änderung setzt
 Onlinezustand und Sitzungsmetadaten atomar zurück und wird auditiert.
 
-`app/navigation.php` ist das kanonische Manifest für die acht operativen
+`app/navigation.php` ist das kanonische Manifest für die neun operativen
 Bereiche. Es definiert Schlüssel, Beschriftung, Reihenfolge, Zielpfad und
-Zugriffsklasse einmalig und löst den aktiven Bereich aus dem
-konfigurationsbereinigten Requestpfad auf. Alle Ziele passieren
-`estab_application_url()`, interne Links verwenden `target="_top"` und kein
-operativer Link öffnet einen neuen Tab. Administration und Handbuch bleiben
-als Dienste getrennt von den operativen Bereichen.
+Zugriffsklasse einschließlich der erforderlichen Dienstfähigkeit einmalig und
+löst den aktiven Bereich aus dem konfigurationsbereinigten Requestpfad auf.
+Alle Ziele passieren `estab_application_url()`, interne Links verwenden
+`target="_top"` und kein operativer Link öffnet einen neuen Tab.
+Administration und Handbuch bleiben als zwei Dienste getrennt von den neun
+operativen Bereichen. Anonym erscheinen alle elf Einstiege mit
+Anmeldehinweis. Nach der Anmeldung, aber vor Hutauswahl, zeigt sie nur die vier
+öffentlichen beziehungsweise separat geschützten Ziele und den
+Führungsstellen-Bootstrap. Mit ausgewähltem aktivem Funktions-Hut zeigt die
+Navigation neun beziehungsweise zehn Links:
+Meldungsübersicht ist ausschließlich S2/`LAGE_DOKUMENTATION`, Nachweisung
+ausschließlich LdF/`FERNMELDEBETRIEB` oder A/W/`BEFOERDERUNG` zugeordnet.
 
 Das Root-Menü klassifiziert jedes Ziel als öffentlich, Anwendung oder
 Administration und bindet passende Karten an dasselbe Navigationsmanifest.
@@ -155,14 +189,16 @@ Die früheren separaten Counter- und Statusframes werden nicht mehr eingebettet.
 Der rechte Inhaltsframe entfernt seine für Standalone-Aufrufe vorgesehene
 Leiste weiterhin unmittelbar per statischem Inline-Guard, sodass genau eine
 sichtbare Identität und ein Logout in der Sidebar verbleiben. Eigenständige
-Fachmodule und der Root-Einstieg erhalten die vollständige Variante; direkt
-aufgerufene Status-/Zählerseiten zeigen die kompakte Variante selbst.
+Fachmodule und der Root-Einstieg erhalten die vollständige Variante. Die
+historischen eigenständigen Status- und Zählerhelfer gehören nicht mehr zur
+erreichbaren Laufzeitoberfläche.
 
 Die Sidebar besitzt bewusst einen eigenen Navigationsmodus. Sie rendert zuerst
 eine Statuskarte mit rollenabhängigem Arbeitszähler, Serverzeit und
-Onlinebelegung, danach Identität und CSRF-geschützten Logout, sämtliche zehn
-Bereichs- und Dienstlinks und schließlich echte rollenabhängige Textbuttons für
-die Fachaktionen. Diese Links stehen ohne `<details>` oder
+Onlinebelegung, danach Identität und CSRF-geschützten Logout, anschließend die
+rollenabhängigen Fachaktionen und zuletzt die nach ausgewähltem Funktions-Hut
+gefilterten neun beziehungsweise zehn Bereichs- und Dienstlinks. Diese Links
+stehen ohne `<details>` oder
 „Bereich wechseln“-Disclosure dauerhaft bereit. Die Bereichsnavigation und
 Aktionsgruppen erzeugen keine eigenen Scrollcontainer; bei geringer
 Viewport-Höhe ist das vollständige Sidebar-Dokument die einzige vertikale
@@ -181,10 +217,11 @@ Button scrollt die Sidebar wieder vollständig in den Viewport und setzt den
 Fokus auf ihren Frame.
 
 `app/sidebar.php` erzeugt die semantische Statuskarte und den begrenzten
-Aktualisierungscode. Der angemeldete GET
-`/4fach/vorgaben.php?fragment=status` liefert ausschließlich das neue
-Statusfragment; ein anonymer Aufruf wird abgewiesen. Die Sidebar ersetzt nur
-diesen Knoten und lädt weder Identität, Navigation noch Aktionsformular neu.
+Aktualisierungscode. Der GET
+`/4fach/vorgaben.php?fragment=status` liefert ausschließlich bei gültiger
+Anmeldung, aktivem Einsatz und ausgewählter, persönlich angenommener aktiver
+Dienstbesetzung das neue Statusfragment. Die Sidebar ersetzt nur diesen Knoten
+und lädt weder Identität, Navigation noch Aktionsformular neu.
 Dadurch bleiben Dokument-Scrollposition und Tastaturfokus bei der regelmäßigen
 Aktualisierung erhalten; wird der mitersetzte Hinweiston-Schalter fokussiert,
 stellt die Aktualisierungslogik seinen Fokus gezielt am neuen Knoten wieder
@@ -290,8 +327,10 @@ Die Apache-Konfiguration:
   Benutzer-/Datenbankgeneratoren; ihre kontrollierten Dateisystem-Includes
   funktionieren weiterhin,
 - verweigert jeden direkten HTTP-Zugriff auf den persistenten `4fdata`-Baum;
-  Anhänge und Vordrucke werden ausschließlich nach einer gültigen
-  Anwendungssitzung durch den geprüften Download-Endpunkt ausgeliefert,
+  Anhänge und Vordrucke werden ausschließlich nach gültiger
+  Anwendungssitzung, aktivem Einsatz, ausgewählter aktiver Dienstbesetzung und
+  erneuter Objektberechtigung durch die geprüften Download-Endpunkte
+  ausgeliefert,
 - trennt beim Vordruckdownload den unveränderten Archivstream vom ausdrücklich
   gewählten aktuellen Layout-Abzug; beide verlangen denselben abgeschlossenen,
   gedruckten Datensatz des aktiven Einsatzes, der aktuelle Abzug validiert
@@ -321,15 +360,21 @@ syntaktische PNG-Dateien mit `nosniff`.
 `info.php` escaped die beiden begrenzten Textparameter als HTML.
 `language/german/helptext.php` liefert nur vorhandene Schlüssel aus dem
 intern eingebundenen Hilfetextarray; das Array selbst ist per HTTP gesperrt.
-Die eigenständige Ansicht `/4fach/status.php` bleibt für
-Kompatibilitätsaufrufe erreichbar, zeigt anonym aber nur einen neutralen
-Hinweis. Erst eine vollständig validierte Anwendungssitzung lädt Datenbank-
-und Rollenstatus. Der in die Sidebar eingebundene aktuelle Status verwendet
-stattdessen das ebenfalls sitzungsgeschützte Fragment von `vorgaben.php`.
+Die historischen eigenständigen Status- und Zählercontroller sind für direkte
+HTTP-Aufrufe gesperrt beziehungsweise aus der Laufzeitoberfläche entfernt.
+Aktueller Datenbank-, Einsatz-, Rollen- und Warteschlangenstatus wird
+ausschließlich über das geschützte Sidebar-Fragment von `vorgaben.php`
+ausgegeben.
 
 Alte direkte Upload-Endpunkte sind mit HTTP 410 deaktiviert. Der aktive
 Anhangpfad validiert Dateiname, MIME-Typ, Größe und Metadaten, reserviert Namen
 transaktional und verwendet für schreibende Formulare ein Session-CSRF-Token.
+Beim Finalisieren werden SHA-256, Bytezahl und Serverzeit zusammen mit dem
+Statuswechsel atomar persistiert. Migration 95 markiert nur die zu diesem
+Zeitpunkt bereits vorhandenen Zeilen als Legacy; Datenbank-Trigger verbieten
+für spätere Datensätze diesen Marker, einen finalen Status ohne vollständigen
+Nachweis, eine Herabstufung und jede Änderung des einmal gesicherten
+Nachweises.
 Die Upload- und Auslieferungsgrenzen behandeln `jpg`/`jpeg` sowie `tif`/`tiff`
 konsistent; Groß-/Kleinschreibung wird normalisiert, der Dateiinhalt aber mit
 Fileinfo erneut geprüft. Die Image-Erstellung verlangt außerdem ausdrücklich
@@ -347,6 +392,44 @@ Die Dateiauslieferung akzeptiert nur freigegebene Bereiche, Basenames und
 Dateitypen, löst Pfade unterhalb des erwarteten Wurzelverzeichnisses auf und
 verwirft ausbrechende Symlinks. Direkter Zugriff auf hochgeladene Bytes bleibt
 auf Apache-Ebene eine zweite Schutzlinie.
+
+Die Dateiberechtigung wird getrennt von dieser Pfad- und Integritätsprüfung
+ermittelt. Ein verknüpfter Anhang erbt die Leseberechtigung mindestens einer
+exakt über ein vollständiges, semikolongetrenntes Dateinamens-Token
+referenzierten Nachricht. Ein freier Anhang ist ausschließlich für seinen
+Uploader oder eine ausgewählte aktive S2-, Si- beziehungsweise LdF-Besetzung
+sichtbar. Liste, Download, Bildvorschau, Auswahl im Nachrichtenvordruck und
+der abschließende Nachrichtenspeicherpfad prüfen diese Berechtigung jeweils
+erneut. Eine Teilzeichenfolgensuche oder ein lediglich zuvor angezeigter
+Dateiname genügt nicht.
+
+`app/attachment_integrity.php` liest reguläre Dateien inode- und
+größenstabil und vergleicht bei neuen Anhängen den Inhalt mit dem
+persistierten Eingangsnachweis. PDF-Dossier, administrativer Tabellenexport,
+produktiver Abschluss-Preflight, authentifizierter Direktdownload und
+Bildvorschau verwenden dieselbe Grenze. Für Download und Vorschau wird die
+autorisierte Quelldatei nur einmal geöffnet, unter gemeinsamer Dateisperre in
+einen privaten temporären Stream kopiert und genau dieser Stream geprüft,
+zurückgespult und ausgeliefert beziehungsweise dekodiert. Eine
+Pfadsubstitution oder spätere Änderung der Quelldatei kann deshalb nicht die
+bereits geprüften Antwortbytes ersetzen. Eine fehlende oder abweichende neue
+Datei schlägt vor den Binär-/Bild-Headern geschlossen fehl. Bei
+Upgrade-Altbeständen
+wird nur die Verfügbarkeit geprüft und ausdrücklich
+„Integrität beim Eingang nicht belegbar“ ausgegeben; ein Hash der heutigen
+Bytes wird nicht als rückwirkender Eingangsbeweis umgedeutet. Auch der
+administrative POST zum Schließen der letzten aktiven Dienstschicht reicht den
+konfigurierten Ablageroot zwingend an denselben Preflight weiter. Ein formal
+gültiger Datenbanknachweis bei fehlenden oder gleichlang manipulierten Bytes
+führt deshalb zu HTTP 409, bevor Schicht oder Besetzungen beendet werden.
+
+Das einsatzbezogene PDF-Dossier besitzt neun unabhängig wählbare Abschnitte:
+ETB, TBB, Nachrichtenvordrucke, Anhänge, Nachrichtenereignisse,
+Dienstbetrieb, S6-Fernmeldepläne, Melderläufe und Betriebsereignisse. Es liest
+den ausdrücklich gewählten aktiven oder historischen Einsatz aus einem
+konsistenten Read-only-Snapshot. Nachrichtenseiten verwenden denselben
+Vordruckrenderer wie der Einzelabruf; neue Anhänge werden vor dem Laden und
+vor dem Einbetten erneut gegen SHA-256 und Bytezahl geprüft.
 
 Der Administrations-Export erzeugt CSV-Dateien anwendungsseitig; der
 MariaDB-Benutzer benötigt dafür kein globales `FILE`-Privileg. Die Oberfläche
@@ -389,11 +472,27 @@ einem Formatmerkmal voraus.
 Der zentrale Controller akzeptiert Detailansichten, Statusänderungen,
 Sichtungs-/Transport-Saves, Sperränderungen und Logout nur über POST mit
 Session-CSRF. Record- und Kategorie-IDs sind kanonische positive Ganzzahlen.
-Vor einem Nachrichtenpfad werden Rolle und Objekt gemeinsam geprüft:
-Stabsfunktionen sehen und markieren nur exakte Empfänger-Tokens, der Sichter
-nur weiterhin offene Sichtungsobjekte und A/W nur noch nicht transportierte
-Ausgänge. Ein Sperrinhaber wird über sein validiertes Kürzel gebunden.
+Vor jedem Nachrichtenpfad werden aktiver Einsatz, ausgewählte persönlich
+angenommene aktive Dienstbesetzung und Objekt gemeinsam geprüft. Eine normale
+Stabs- oder Fachberaterbesetzung darf eine Nachricht lesen, wenn ihre
+ausgewählte Funktion nach fachlichem Abschluss als vollständiger
+Empfänger-Token eingetragen ist oder sie die Nachricht selbst ausgehend
+erstellt hat. Si, LdF und A/W dürfen zusätzlich ihre aktuelle Warteschlange
+beziehungsweise Sperre sowie
+Nachrichten mit ihrer eigenen unveränderlichen Verarbeitungsmarke lesen.
+Vordruckliste, aktueller In-Memory-Abzug und Archivdownload erben exakt diese
+Objektregel. Ein Sperrinhaber wird über sein validiertes Kürzel gebunden.
 Historische GET-Detail- und GET-Mutationsaufrufe werden abgewiesen.
+
+Die einsatzbezogene Meldungsübersicht ist ausschließlich für eine ausgewählte
+aktive S2-Besetzung mit `LAGE_DOKUMENTATION` bestimmt. Die Nachweisung ist
+ausschließlich für eine ausgewählte aktive LdF-Besetzung mit
+`FERNMELDEBETRIEB` oder A/W-Besetzung mit `BEFOERDERUNG` bestimmt. ETB und TBB
+dürfen alle ausgewählten aktiven Funktions-Hüte lesen; ETB-Schreiben verlangt
+eine S2- oder ETB-Besetzung mit `EINSATZTAGEBUCH`, TBB-Schreiben eine
+A/W-Besetzung mit `BEFOERDERUNG`. Die getrennte
+`LAGE_DOKUMENTATION`-Fähigkeit und damit die Meldungsübersicht bleiben
+ausschließlich S2 vorbehalten.
 
 Die fachlichen Zustandsübergänge prüfen ihre Vorbedingung nochmals im
 ändernden SQL-Statement. Insbesondere kann nur der aktuelle A/W-Sperrinhaber
@@ -408,7 +507,13 @@ Altduplikate nicht stillschweigend.
 Die Vergabe der Nachweisnummer hält während `MAX(...)` und Insert einen
 datenbank-/tabellenbezogenen Advisory-Lock und eine InnoDB-Transaktion. Dieselbe
 Lock-Namensbildung verwendet die administrative Zählerreparatur. Damit kann
-eine Reparatur nicht parallel an einem regulären Writer vorbeilaufen.
+eine Reparatur nicht parallel an einem regulären Writer vorbeilaufen. Der
+Wiederanlaufwert liegt nicht als unvollständige System-„Nachricht“ in
+`nv_nachrichten`, sondern als hashverkettetes
+`message_counter_repaired`-Betriebsereignis der aktiven Dienstschicht vor.
+Normale Nummernvergabe verwendet das Maximum aus echten Nachrichten und diesem
+unveränderlichen Nachweis. Dadurch erzeugt die Reparatur weder einen
+Status-0-Datensatz noch einen dauerhaften Einsatzabschluss-Blocker.
 Idempotente Updates und Sperrfreigaben gelten nur nach einer expliziten
 Abfrage des erwarteten Zielzustands als erfolgreich; fehlende, fremde oder
 inzwischen weitergeschaltete Datensätze schlagen geschlossen fehl.
@@ -429,10 +534,11 @@ alle Werte gebunden und jeder Vorgang verwendet InnoDB-Transaktionen:
 
 - Die Empfängermatrix wird serverseitig als genau fünf mal vier Positionen
   validiert. Funktionen sind leer oder höchstens sechs alphanumerische
-  Zeichen/Unterstriche lang, `Si` und `A/W` bleiben reserviert, Rollen sind
-  leer, `Stab` oder `FB`, und genau eine auswählbare Funktion erhält die
-  Rotkopie. Rotkopie und Autosichtung sind auf `mtx_typ=cb`, eine nichtleere
-  Funktion und eine `Stab`-/`FB`-Rolle gebunden. Ein transaktionales `DELETE`
+  Zeichen/Unterstriche lang, `Si`, `A/W` und `LdF` bleiben reserviert, Rollen
+  sind leer, `Stab` oder `FB`. S2/Stab ist die feste Fähigkeit für Lage,
+  Dokumentation und den roten Durchschlag. Autosichtung ist fachlich
+  unzulässig; das historische Feld `mtx_auto` wird beim Speichern und bei der
+  Migration immer auf falsch gesetzt. Ein transaktionales `DELETE`
   plus 20 Prepared Inserts ersetzt die aktive Matrix. Eine zweite
   DB-gespeicherte 20-Zellen-Tabelle hält genau eine Standardmatrix; Laden ist
   nur ein CSRF-geschützter Editor-Read, während das Ersetzen von aktivem und
@@ -452,7 +558,9 @@ alle Werte gebunden und jeder Vorgang verwendet InnoDB-Transaktionen:
   parallele Admin-Anforderungen und reguläre Nachrichtenschreiber; Werte
   müssen sowohl im gemeinsamen als auch im getrennten Modus strikt über dem
   aktuellen Maximum liegen.
-  Systemnachricht(en) und Audit-Eintrag werden gemeinsam committed.
+  Ein hashverkettetes `message_counter_repaired`-Betriebsereignis und der
+  Audit-Eintrag werden gemeinsam committed; es entsteht keine unevidenzierte
+  Systemnachricht.
 - Der PDF-Vordruckreset setzt ausschließlich nach einem CSRF-geprüften POST die
   validierte Spalte `x04_druck` zurück und auditiert die Zahl betroffener
   Nachrichten.
@@ -465,7 +573,8 @@ Konflikt- oder Datenbankfehler führen nicht zu Teiländerungen.
 `app/category.php` ist die gemeinsame Daten- und Berechtigungsgrenze für die
 aktive Verwaltung `4fach/katgoedt.php`, die Auswahllisten in
 `4fach/katego.php` und das Kategorienband der Meldungsliste. Der Endpunkt
-verlangt immer eine gültige eStab-Sitzung.
+verlangt immer eine gültige eStab-Sitzung, einen aktiven Einsatz und eine
+ausgewählte, persönlich angenommene aktive Dienstbesetzung.
 `dbtyp` akzeptiert ausschließlich `master`, `fkt` oder `user`:
 
 - Master-Kategorien liegen in den fest konfigurierten Tabellen und dürfen nur
@@ -482,9 +591,12 @@ keine Daten. Anlegen, Ändern, Löschen und Zuordnen verlangen POST plus
 Session-CSRF und enden mit HTTP 303. Alle Werte sind gebundene Parameter,
 dynamische Identifier werden strikt validiert, und Kategorie-/Linkänderungen
 laufen in InnoDB-Transaktionen. Vor einer Nachrichtenzuordnung prüft die
-Nachrichtenablage zusätzlich objektbezogen einen exakten Empfänger-Token; eine
-fremde, lediglich positive Meldungs-ID reicht deshalb nicht aus. Das Löschen
-einer Kategorie entfernt ihre Zuordnungen in derselben Transaktion.
+Nachrichtenablage zusätzlich die vollständige aktuelle Nachrichten-Objektregel:
+terminale exakte Empfängerkopie oder eigener Ausgang für normale
+Stabs-/FB-Besetzungen, eigene Warteschlange/Sperre oder eigene unveränderliche
+Verarbeitungsmarke für Si, LdF und A/W. Eine fremde, lediglich positive
+Meldungs-ID reicht deshalb nicht aus. Das Löschen einer Kategorie entfernt
+ihre Zuordnungen in derselben Transaktion.
 
 Auch die Kategorienavigation der Meldungsliste verwendet ausschließlich die
 positive `lfd`, nicht den frei vergebenen Kategorienamen. Der Controller
@@ -493,9 +605,9 @@ Listenabfrage bindet diese ID. Damit bleiben Kategorienamen mit Quotes reine
 Daten und können nicht in den SQL-Filter gelangen.
 
 `katgoedt.php` bleibt ein aktiver, vom Apache erreichbarer Fachendpunkt; die
-Session-, Rollen-, CSRF- und Objektgrenzen liegen in PHP. Nur interne
-Implementierungs- und Konfigurationsverzeichnisse werden auf Webserver-Ebene
-gesperrt.
+Session-, Einsatz-, ausgewählte-Dienstbesetzungs-, Rollen-, CSRF- und
+Objektgrenzen liegen in PHP. Nur interne Implementierungs- und
+Konfigurationsverzeichnisse werden auf Webserver-Ebene gesperrt.
 
 ## Container- und Datengrenzen
 
@@ -570,6 +682,34 @@ erreichbar sein. Der Proxy überschreibt eingehende
 Zugriffslimits. Details stehen unter
 [Betrieb und Konfiguration](BETRIEB.md#reverse-proxy-und-tls).
 
+## CSRF-Nachweis der Laufzeitoberfläche
+
+Die paketierte Schreiboberfläche besitzt ein geschlossen geprüftes
+Controller-Inventar. `tests/php/csrf_security.php` entdeckt jeden direkten
+Aufruf der gemeinsamen POST-/CSRF-Grenze und verlangt für abgelehnte oder
+abgelaufene Tokens einen spezifischen, mutationsfreien Fehlerpfad, bevor ein
+generischer Fehlerhandler erreicht werden kann. Die Controllergrenze
+antwortet dabei mit HTTP 403; nur der darin eingebettete historische
+Uploaddialog bewertet die insgesamt ungültige Uploadanforderung bewusst mit
+HTTP 400. Der Vertrag umfasst:
+
+- `4fach/anhang.php`, `4fach/fuehrungsstelle.php`,
+  `4fach/katgoedt.php`, `4fach/logout.php`, `4fach/mainindex.php` und
+  `4fach/resetpic.php`,
+- `4fadm/export.php`, `4fadm/fuehrungsstelle.php`,
+  `4fadm/incident_export.php`, `4fadm/incidents.php`,
+  `4fadm/make_fkt.php`, `4fadm/set_number_after_crash.php` und
+  `4fadm/users.php`.
+
+ETB und TBB verwenden zusätzlich den gemeinsamen Logbuch-Wrapper; dessen
+Delegation an dieselbe CSRF-Grenze und die HTTP-403-Antwort sind im
+Logbuch-Sicherheitsvertrag geprüft. Nicht paketierte historische
+Formularartefakte sind im unterstützten Containerbetrieb keine
+Laufzeitoberfläche: Das Dockerfile kopiert ausschließlich die positive
+Runtime-Allowlist, der Runtime-Surface-Vertrag weist verbotene Altpfade zurück,
+und notwendige interne Include-Dateien sind über Apache nicht direkt
+erreichbar.
+
 ## Verbleibende Risiken
 
 Die Containerisierung macht aus dem historischen Code keine vollständig neu
@@ -577,13 +717,20 @@ entwickelte Anwendung. Für die Freigabe sind insbesondere zu berücksichtigen:
 
 - große Teile der Fachoberfläche bleiben Legacy-PHP und verwenden die
   kontrollierte MySQL-Kompatibilitätsschicht,
-- CSRF-Schutz ist für modernisierte schreibende Pfade vorhanden, aber nicht
-  pauschal für jede historische Formularaktion bewiesen,
 - die CSP benötigt für die historische Oberfläche weiterhin `unsafe-inline`,
-- es gibt in eStab selbst kein Rate Limiting und keine
-  Mehrfaktor-Authentisierung; die zentrale Verwaltung kann Funktionskonten
-  sperren, entsperren und Kennwörter zurücksetzen, bietet aber keine
-  abgestuften Administratorrollen oder externe Identity-Provider,
+- eStab besitzt kein anwendungsinternes Rate Limiting. Der vorgeschaltete,
+  allein zum App-Port zugelassene Reverse Proxy muss deshalb insbesondere
+  Anmeldung und Basic-Auth-Administration begrenzen und Fehlversuche
+  überwachen; fehlt diese Betriebsgrenze, bleibt das Risiko automatisierter
+  Kennwortversuche bestehen,
+- die Read-/Done-Statushelper werden nur hinter dem übergeordneten exakten
+  Request-Guard aufgerufen und serialisieren ihre Statusänderung, revalidieren
+  die ausgewählte Dienstbesetzungs-ID aber nicht nochmals innerhalb derselben
+  Helper-Transaktion. Diese Defense-in-Depth-Annahme muss bei jeder Änderung
+  des Aufrufgraphen durch die Guard- und Integrationstests erhalten bleiben,
+- es gibt keine Mehrfaktor-Authentisierung; die zentrale Verwaltung kann
+  Funktionskonten sperren, entsperren und Kennwörter zurücksetzen, bietet aber
+  keine abgestuften Administratorrollen oder externe Identity-Provider,
 - HTTP Basic Auth schützt Administration nur zusammen mit TLS ausreichend,
 - Einsatz-, Kommunikations- und gegebenenfalls Gesundheitsdaten erfordern
   strenge Zugriffs-, Protokollierungs-, Aufbewahrungs- und Löschregeln,

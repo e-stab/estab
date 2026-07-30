@@ -11,8 +11,8 @@ steht in der [Funktionsmatrix](FUNKTIONSNACHWEIS.md).
 | Quellprüfung | PHP-8.5-Lint, Kompatibilitäts-, Sicherheits-, Einsatz-, Benutzerverwaltungs-, Upload-, Export- und PDF-Regressionen |
 | Image-Build | benötigte PHP-Erweiterungen und Apache-Konfiguration |
 | Datenbank | echtes MariaDB-Schema, Einsatz-Singleton/Trigger, Kontosperre, Indizes, aktive und persistente Standardmatrix, Engines, Collations und Zero-Date-Freiheit |
-| HTTP | Header, direkte Endpunktfläche, 403-/400-/405-Grenzen, PNG-Antworten, Registrierung, sichtbare Sitzungsidentität, CSRF-Abmeldung, erneute Anmeldung, vollständige LdF-/A/W-/Si-/S1-/S2-/S3-/POL-FB-Nachrichtenläufe in beiden Ausgangssichtungsmodi, Autosichtung, Zweitprüfung, Antworten/Weiterleiten, Kategorien- und ETB-/TBB-Rollengrenzen, reale Vordruckerzeugung/-auslieferung sowie optional Admin-Export |
-| Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, acht stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, Matrixstandard-Bestätigungen, BOS-Disclosure, Logout sowie öffentliche und authentifizierte mobile Bedienung bei exakt 390 × 844 CSS-Pixeln |
+| HTTP | Header, direkte Endpunktfläche, 403-/400-/405-Grenzen, Registrierung, sichtbare Sitzungsidentität, CSRF-Abmeldung, erneute Anmeldung, verbindlicher Eingangs- und Ausgangslauf samt Rückgabe/Korrektur, Dienstbesetzung/Hutwechsel, S6-Plan, Melderlauf, Kategorien- und ETB-/TBB-Rollengrenzen, reale Vordruckerzeugung/-auslieferung sowie Admin-Export |
+| Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, neun stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, Matrixstandard-Bestätigungen, BOS-Disclosure, Logout sowie öffentliche und authentifizierte mobile Bedienung bei exakt 390 × 844 CSS-Pixeln |
 | Fachabnahme | kompletter Nachrichten-, Anhang-, PDF-, ETB-/TBB- und Restore-Ablauf |
 | Betrieb | kontinuierliche Readiness, Logs, Restarts, Kapazität und Backup-Alter |
 
@@ -44,10 +44,15 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   Session- und
   Passwortregeln sowie die fail-closed Proxy-Peer-Vertrauensgrenze mit
   IPv4-/IPv6-CIDR-Allowlist,
-- strikt boolescher Legacy-Fallback und Umgebungsoverride für die optionale
-  Ausgangssichtung sowie fehlersicheres Verhalten bei ungültigen Werten,
-- kanonische Reihenfolge, sichere URL-Auflösung, aktive Route und ausschließlich
-  erlaubte symbolische Anmeldeziele der gemeinsamen Navigation,
+- fehlende Laufzeit- und Umgebungsoptionen für Autosichtung oder eine
+  Umgehung der verpflichtenden Ausgangssichtung,
+- kanonische Reihenfolge, sichere URL-Auflösung, aktive Route, ausschließlich
+  erlaubte symbolische Anmeldeziele und das rollenabhängige Ausblenden der
+  spezialisierten Meldungsübersicht beziehungsweise Nachweisung; von neun
+  Bereichen und zwei Diensten bleiben vor Hutauswahl nur die vier
+  öffentlichen beziehungsweise separat geschützten Ziele und der
+  Führungsstellen-Bootstrap, danach je nach ausgewähltem Hut neun oder zehn
+  Links sichtbar,
 - zustandsabhängige Root-Menükarten mit genau einem Tastaturziel, sicherem
   Escaping, gleichem Browserkontext, sicherer Zielbeibehaltung und
   verständlicher Trennung von Anwendung, Administration und öffentlichen
@@ -71,7 +76,8 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   der `old_que_*`-Basiswerte, Auslösung ausschließlich bei einer späteren
   Erhöhung, ausdrückliche Browserfreigabe, langlebiges Audioelement und
   sichtbare Status-/Fehlerrückmeldung,
-- Nachrichten-IDs, Rollen-/Objektregeln, Empfänger-Tokens, erlaubte
+- Nachrichten-IDs, ausgewählte aktive Dienstbesetzung, Rollen-/Objektregeln,
+  Empfänger-Tokens, eigene Verfasser- und Verarbeitungsmarken, erlaubte
   Workflow-Aktionen, POST-/CSRF-Verträge, Prepared Statements, sichere
   UTF-8-/Legacy-Entity-Ausgabe und die inerten Payloads Quotes, Ampersand,
   `<script>` sowie SQL-ähnlicher Text,
@@ -87,24 +93,27 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   `unsafe-eval`,
 - CSRF-Token,
 - Empfängermatrix- und Standardmatrix-Validierung mit jeweils 20 eindeutigen
-  Positionen, genau einer gültigen Rotkopie und nur gültigen
-  Autosichtungszielen sowie getrennten Laden-/Speichern-Aktionen,
+  Positionen, genau S2/Stab als Rotkopie-/Dokumentationsziel und ausschließlich
+  falschen Autosichtungswerten sowie getrennten Laden-/Speichern-Aktionen,
   globalem Zuordnungslock, atomarer Matrix-/Kontenabstimmung,
   Rollen-Synchronisierung, Sitzungswiderruf, reparierbarem Waisenstatus,
   Zwei-Tabellen-Transaktion, lokalem Bestätigungsvertrag und ohne generierte
   PHP-Konfiguration; außerdem Nachrichtenzähler- und
   PDF-Vordruckreset-Validierung samt Prepared-Statement-, Transaktions-,
   Auth-/CSRF- und PRG-Vertrag,
-- Kategorien-Typen, positive IDs, sessionabgeleitete Tabellenräume,
-  Master-Rechte, doppelte Auswahllisten, HTML-Ausgabe sowie den
-  Prepared-Statement-, Transaktions-, Objektberechtigungs- und PRG-Vertrag,
+- Kategorien-Typen, positive IDs, ausgewählte aktive Dienstbesetzung,
+  sessionabgeleitete Tabellenräume, Master-Rechte, doppelte Auswahllisten,
+  HTML-Ausgabe sowie den Prepared-Statement-, Transaktions-,
+  Nachrichten-Objektberechtigungs- und PRG-Vertrag,
 - globalen Einsatz-Singleton, revisionsgesicherte Aktivierung,
   No-active-Eingabesperre, Einsatzzuordnung sämtlicher operativer Tabellen und
   einheitliche Statusbanner,
 - Kontosperre und Kennwortreset mit gemeinsamem Login-Lock,
   Sitzungswiderruf, auditgebundenem Rollback und ohne Klartextweitergabe,
 - Upload- und Anhangpfadvalidierung,
-- authentifizierte Dateiauslieferung samt Traversal-, Symlink- und
+- selected-hat- und objektgebundene Dateiauslieferung samt vererbter
+  Nachrichtenrechte, begrenzter Rechte für freie Anhänge, erneuter Prüfung bei
+  Auswahl und finalem Nachrichtenspeichern sowie Traversal-, Symlink- und
   Header-Injection-Schutz,
 - portabler Tabellenexport,
 - Compose-Startgate, private MariaDB-Optionsdatei, Migration-Ledger,
@@ -118,7 +127,8 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   High-/Critical-CVE-Gate und
   prüfsummengebundenes Digest-Installationspaket,
 - Erzeugung lesbarer Nachrichtenvordrucke und eines durchsuchbaren
-  PDF-Einsatzdossiers mit sicher eingebetteten Originaldateien; beide
+  PDF-Einsatzdossiers mit allen neun wählbaren Abschnitten und sicher
+  eingebetteten, gegen ihren Eingangsnachweis geprüften Dateien; beide
   Nachrichtenausgabepfade werden ein- und mehrseitig mit Poppler pixelgleich
   verglichen und auf stabilen Folgeseiteneinzug, sichtbare historische
   Empfänger, fehlenden VS-NfD-Aufdruck, fehlendes Wappen sowie A4-Geometrie
@@ -193,15 +203,15 @@ Docker wird `ESTAB_CONTAINER_CLI=docker` gesetzt oder die Variable weggelassen.
 Vor den allgemeinen Schreibtests aktiviert die CI über die Domänen-API den
 fest benannten Einsatz `CI-INTEGRATION`. Danach belegt sie die
 Benutzerverwaltung gegen MariaDB und erzeugt einen separaten historischen
-PDF-Testeinsatz. Dessen ETB, TBB, Nachricht und Originalanhang müssen aus
+PDF-Testeinsatz. Dessen ETB, TBB, Nachricht und Anhang mit Eingangsnachweis müssen aus
 einem konsistenten Read-only-Snapshot exportiert werden, während gleichartige
 Daten des aktiven CI-Einsatzes ausgeschlossen bleiben. Der Test extrahiert
 den realen `/EmbeddedFile`-Stream und vergleicht Bytes und SHA-256 mit dem
 Original, bevor er Testdaten und aktiven Einsatz wiederherstellt.
-Der vollständige Nachrichtenrollenlauf arbeitet zunächst mit
-`ESTAB_REVIEW_OUTGOING_MESSAGES=false`, erstellt dann nur den App-Container
-mit `true` neu, prüft beide Statuspfade und stellt anschließend den
-Standardwert `false` wieder her.
+Der vollständige Nachrichtenrollenlauf prüft genau den verbindlichen
+DV-Statuspfad. Eine Laufzeitumschaltung oder Autosichtung existiert nicht;
+damit kann die CI keine fachlich unzulässige Kurzstrecke versehentlich
+freigeben.
 Die HTTP-Stufe beweist dabei den Übersichts-Anmeldebutton, den
 Bestandskonto-Flow, die sichtbare Kontenauswahl, die standardmäßig fehlende
 öffentliche Kontoanlage, unveränderte Kontenzahlen und Passwort-Hashes bei
@@ -217,8 +227,11 @@ gleich-originige tokenlose Zugangsdaten HTTP 403 nach. Erst danach wird nur
 der App-Container kurz mit dem expliziten Wert `true` neu erstellt:
 `tests/integration/legacy_login_http.sh` belegt genau einen historischen
 Ein-Kennwort-Login, die weiterhin geschlossene Cross-Site-Grenze und den
-CSRF-geschützten Logout. Anschließend stellt die CI den sicheren Standard
-`false` wieder her, bevor Fachtests weiterlaufen.
+erreichbaren Führungsstellen-Bootstrap. Der Login wählt ausdrücklich keine
+Dienstfunktion: Ein Zugriff auf die privilegierte Vordruckliste bleibt bis zur
+persönlichen Hutauswahl mit HTTP 403 geschlossen. Der Lauf endet über den
+normalen CSRF-geschützten Logout. Anschließend stellt die CI den sicheren
+Standard `false` wieder her, bevor Fachtests weiterlaufen.
 Das Gate verwendet standardmäßig die auch für Laptop, LAN und Reverse Proxy
 empfohlene root-relative Einstellung `ESTAB_PUBLIC_URL=/`; absolute
 Basis-URLs und zusätzliche Pfade bleiben durch parametrisierte HTTP- und
@@ -414,28 +427,54 @@ Einsatz an, füllt in beiden Einsätzen je einen ETB-, TBB-, Nachrichten- und
 Anhangdatensatz und macht den Export-Einsatz wieder historisch. Der
 konsistente Read-only-Snapshot muss exakt dessen vier Datensätze liefern. Aus
 der erzeugten PDF wird der tatsächliche `/EmbeddedFile`-Stream anhand seiner
-deklarierten Länge extrahiert und bytegleich samt SHA-256 mit dem Original
-verglichen; Marker und Datei des anderen Einsatzes dürfen nicht vorkommen.
-Der Test stellt den benannten CI-Einsatz wieder aktiv, entfernt seine
-operativen Fixtures und verweigert ohne
+deklarierten Länge extrahiert und bytegleich samt SHA-256 mit der beim Eingang
+gebundenen Fixture verglichen; Marker und Datei des anderen Einsatzes dürfen
+nicht vorkommen. Anschließend ersetzt der Test die Datei durch gleich viele
+andere Bytes. Sowohl ein erneutes Laden als auch das Einbetten aus dem zuvor
+geladenen Bundle müssen wegen des unveränderlichen SHA-256-/Größennachweises
+scheitern. Derselbe Bytewechsel muss im produktiven Abschluss-Preflight als
+Integritätsfehler erscheinen; auch der tatsächliche Aufruf zum formalen
+Abschluss wird mit genau diesem Blocker zurückgewiesen.
+Der Test stellt den benannten CI-Einsatz wieder aktiv, lässt den isolierten
+historischen Nachweis für nachfolgende Export- und Restore-Prüfungen bestehen
+und verweigert ohne
 `ESTAB_INCIDENT_EXPORT_INTEGRATION=1` den Start.
+
+Der authentifizierte HTTP-Lauf prüft den Anhangdownload zusätzlich an seiner
+wirklichen Dateigrenze. Nach einem erfolgreichen Download mit
+Integritätsstatus und SHA-256-Header ersetzt er ein Byte, ohne die Dateigröße
+zu ändern. Download und Bildvorschau müssen vor `Content-Disposition`,
+`image/png` und vor Nutzbytes mit HTTP 409 abbrechen. Eine private
+Fixture-Sicherung wird auch bei vorzeitigem Testabbruch restauriert; erst der
+danach wieder bytegleiche Download darf erneut HTTP 200 liefern. Später
+verändert derselbe Lauf den Pflichtanhang nochmals unmittelbar vor dem echten
+Admin-POST zum Schließen der letzten aktiven Dienstschicht. Die Antwort muss
+HTTP 409 und genau den Anhang-Integritätsblocker enthalten; ein exakter
+Vorher-/Nachher-Snapshot aus Schichtstatus, Schichtendzeit sowie ID, Status und
+Ablösezeit jeder Funktionsbesetzung muss bytegleich bleiben.
 
 Der davon unabhängige Rendervertrag erzeugt mit
 `tests/php/pdf_template_render_fixture.php` aus exakt demselben
 Nachrichtendatensatz und derselben 5×4-Empfängermatrix einen Einzelvordruck,
 eine direkte Dossier-Nachrichtenseite, beide Varianten mit mehrseitigem Inhalt
-und ein vollständiges Dossier in der produktiven Folge Deckblatt, ETB, TBB,
-Nachricht und Anlagenverzeichnis. `tests/static/pdf_render.sh` verlangt A4,
-extrahiert Formulartext und Bounding Boxes, weist null Seitenbilder nach,
-prüft den konstanten linken Inhaltseinzug und rendert alle Varianten mit
-144 dpi. Ein- und mehrseitige Direktvarianten werden vollständig bytegenau
-verglichen; bei der Nachrichtenseite im vollständigen Dossier bleibt nur das
-absichtlich globale Feld `Seite 4/5` ausgespart. Anschließend extrahiert
-`pdfdetach` den eingebetteten Originalanhang und `cmp` vergleicht ihn mit der
-Quelldatei. Die CI bewahrt PDFs, PNGs, Text- und Werkzeuginformationen 14 Tage
+und ein vollständiges Dossier mit den neun Abschnitten ETB, TBB,
+Nachrichtenvordrucke, Anhänge, Nachrichtenereignisse, Dienstbetrieb,
+S6-Fernmeldepläne, Melderläufe und Betriebsereignisse.
+`tests/static/pdf_render.sh` verlangt A4 und mindestens zehn Seiten, extrahiert
+Formulartext und Bounding Boxes, weist null Seitenbilder nach, prüft die
+Überschriften und Nachweisstatus aller Abschnitte, den konstanten linken
+Inhaltseinzug und rendert alle Varianten mit 144 dpi. Ein- und mehrseitige
+Direktvarianten werden vollständig bytegenau verglichen; bei der
+Nachrichtenseite im vollständigen Dossier bleibt nur der absichtlich
+dossierglobale dynamische Seitenzähler ausgespart. Anschließend extrahiert
+`pdfdetach` den eingebetteten, am Eingang gebundenen Anhang und `cmp` vergleicht
+ihn mit der Quelldatei. Anlagenverzeichnis und Deckblatt müssen zusätzlich den
+Integritätsstatus nennen; bei Legacy lautet er ausdrücklich
+„Integrität beim Eingang nicht belegbar“. Die CI bewahrt PDFs, PNGs, Text- und
+Werkzeuginformationen 14 Tage
 als Nachweisartefakt auf.
 
-Die Fixture ruft für den Einzelvordruck denselben öffentlichen
+Die Fixture ruft für den Einzelvordruck denselben produktiven
 `render_message_form_document()`-Dienst auf wie der aktuelle Download unter
 `/4fach/vordrucke.php`; der produktive Archivgenerator delegiert ebenfalls an
 diese Methode. `tests/php/generated_form_security.php` bindet zusätzlich die
@@ -456,9 +495,13 @@ ausschließlich in ein wegwerfbares Projekt `estab_ci` beziehungsweise
 
 Diese Regression erzeugt sechs typische Legacy-Tabellen für Benutzer,
 Funktion und Kategorien als MyISAM/latin1, erhält repräsentative Daten und
-Duplikate und ruft die echte Bestandsmigration zweimal auf. Anschließend prüft
-sie InnoDB, `utf8mb4`, nullable Datumswerte, Indizes, Strict Mode,
-Identifier-Angriffe und die vollständige Fixture-Bereinigung:
+Duplikate und ruft den gemeinsamen, advisory-lock-geschützten
+Schema-Reconciler zweimal auf. Anschließend prüft sie InnoDB, `utf8mb4`,
+nullable Datumswerte, Indizes, Strict Mode, Identifier-Angriffe und die
+vollständige Fixture-Bereinigung. Der ergänzende
+`tests/integration/dv_operations.php` beweist darüber hinaus, dass eine real
+ausgewählte zusätzliche S3-Funktion dieselben sechs Tabellen vor dem
+Sitzungswechsel erhält und dass der tabellenlose ETB-Hut keine davon erhält:
 
 ```console
 ESTAB_TEST_DB_PASSWORD="$(tr -d '\r\n' < secrets/db_password.txt)" \
@@ -482,8 +525,13 @@ den Wegwerf-Stack.
 
 ### Datenbank-Integration der Anhangreservierung
 
-`tests/integration/attachment_reservation.php` verwendet eine zufällig
-benannte InnoDB-Wegwerftabelle und unabhängige MariaDB-Verbindungen. Der
+`tests/integration/attachment_reservation.php` verwendet einen zufällig
+benannten, nur für diesen Test aktivierten Einsatz, eine darin vollständig
+angenommene Dienstschicht, eine zufällig benannte InnoDB-Wegwerftabelle und
+unabhängige MariaDB-Verbindungen. Im Cleanup wird die Testschicht geschlossen
+und der zuvor aktive Einsatz wiederhergestellt. Damit hinterlässt der Test im
+eigentlichen Abnahme-Einsatz insbesondere keine historische Erstschicht, die
+eine spätere persönlich bestätigte Dienstaufnahme zu Recht sperren würde. Der
 Einzelaufruf entspricht dem Muster der übrigen PHP-Datenbanktests:
 
 ```console
@@ -546,6 +594,10 @@ Der Test beweist für die implementierte Repository-Grenze:
   fortlaufende Nachweisnummern,
 - der administrative Zähler-Lock blockiert einen regulären Writer und beide
   verwenden damit denselben Namespace,
+- die Zählerreparatur erzeugt ausschließlich ein hashverkettetes
+  Betriebsereignis, keine unevidenzierte Status-0-Nachricht; der nächste echte
+  Vordruck folgt unmittelbar auf den reparierten Papierwert und beide
+  Nachweisketten bleiben gültig,
 - ein fremdes A/W-Kürzel kann weder Sperre noch Save übernehmen und beim
   parallelen Save-/Reset-Rennen gewinnt genau eine konditionale Änderung,
 - zwei parallele Read-State-Inserts erzeugen trotz fehlendem Schema-Unique-Key
@@ -566,8 +618,11 @@ sichere HTML-Ausgabe beider Speicherformen, nicht den verlustfreien
 Roundtrip entity-förmiger Literale.
 
 Die Fixture-Tabellen werden beim Prozessende entfernt. Das vollständige
-CI-Gate führt diesen Test nach der parallelen Anhangreservierung und vor den
-HTTP-Abläufen aus.
+CI-Gate führt sowohl diesen Test als auch die parallele Anhangreservierung in
+je einer frisch migrierten, anschließend vollständig gelöschten
+Wegwerfdatenbank aus. Dadurch können deren absichtlich angelegte Konten,
+Einsätze und historische Schichten den nachfolgenden echten HTTP-Erstdienst
+nicht beeinflussen.
 
 ### HTTP-Smoke-Test
 
@@ -604,16 +659,33 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
 - HTTP 403 für interne beziehungsweise abgeschaltete Provisionierungspfade,
 - HTTP 410 für unsichere historische Direkt-Upload-Endpunkte,
 - HTTP 401 für den anonymen Administrationszugriff,
-- Image-Button-Login, Registrierung, authentifizierte Oberfläche und erneute
-  Anmeldung über Kontenliste und gespeicherten Passwort-Hash,
+- HTTP 403 für `PATH_INFO` hinter einem PHP-Endpunkt; ein gültiger
+  A/W-Bestandslogin mit CSRF darf über
+  `mainindex.php/4fadm` weder eine administrative Ausnahme erhalten noch
+  den vorbereiteten Nachrichtensperrbesitz verändern,
+- Image-Button-Login, nachweislich gesperrte öffentliche Registrierung,
+  authentifizierte Oberfläche und erneute Anmeldung über Kontenliste und
+  gespeicherten Passwort-Hash,
 - formulargebundene Beibehaltung eines erlaubten geschützten Zielbereichs
   durch Auswahl, Validierungsfehler und erfolgreiche Anmeldung,
 - exakt eine escaped Sitzungsleiste mit Name, Kürzel, Funktion, Rolle und
   Abmeldebutton auf Root-Einstieg, Hauptansicht, vollhoher Anwendungs-Sidebar,
-  direkten Status-/Zählerseiten, Nachrichtenübersicht, Nachweisung,
-  Übungsleitung, Anhängen, Vordrucken, Kategorien sowie ETB/TBB; der rechte
+  Meldungsübersicht, Nachweisung, Anhängen, Vordrucken, Kategorien sowie
+  ETB/TBB; jede operative Seite wird dabei mit der passenden ausgewählten,
+  persönlich angenommenen aktiven Dienstfunktion aufgerufen, der rechte
   `mainframe` vermeidet Duplikate und anonyme Fachseiten bleiben ohne
   vorgetäuschte eStab-Identität,
+- HTTP 403 für eine bloß angemeldete Sitzung ohne ausgewählten aktiven Hut
+  sowie für S1 auf Meldungsübersicht und Nachweisung; die positiven
+  Gegenproben verwenden S2 beziehungsweise LdF/A/W,
+- der eng begrenzte Pre-Hat-Führungsstellenpfad zeigt ausschließlich
+  Einsatz-/Schichtgrunddaten und eigene Besetzungen und erlaubt nur
+  persönliche Annahme, Übergabebestätigung und Auswahl einer eigenen aktiven,
+  angenommenen Besetzungs-ID; Plan-, Melder-, Nachrichten-, Anhangs- und
+  Logbuchzugriffe bleiben gesperrt,
+- jeder normale operative Schreibpfad revalidiert die exakt ausgewählte
+  Besetzungs-ID gegen Konto, Funktion, Rolle, aktiven Einsatz und aktive
+  Schicht; eine fremde, abgelaufene oder nur funktionsgleiche ID scheitert,
 - HTTP 405 für Logout per GET, HTTP 403 bei fehlendem oder falschem CSRF,
   Cookie-/Sitzungsende und 303-Rückleitung bei Erfolg sowie die
   SID-Grenze, durch die eine alte Sitzung eine neuere Anmeldung desselben
@@ -642,6 +714,10 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
   direkte Rückgabe nach der Anhangsauswahl muss Anschrift,
   sämtliche markanten Eingaben, Vermerk sowie blaue und grüne
   Empfängerzuordnung als weiterhin absendbare Formularwerte enthalten,
+- verknüpfte Anhänge übernehmen die Rechte ihrer exakt referenzierten
+  Nachricht, freie Anhänge bleiben auf Uploader, S2, Si und LdF begrenzt;
+  fremde Liste, Vorschau, Download, Auswahl und ein manipuliertes finales
+  Speichern müssen geschlossen scheitern,
 - Abschluss einer echten Gesprächsnotiz über den historischen Controller,
   anschließende Erzeugung durch den produktiven Vordruckgenerator, Auffinden in
   der geschützten Liste, aktuellen In-Memory-Download mit gemeinsamem
@@ -654,17 +730,22 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
   unbekannte, nichtskalare oder für Anhänge gesetzte Layoutparameter werden
   abgewiesen,
 - Basic-Auth-Adminseite mit escaped technischem Benutzernamen, ausdrücklicher
-  Trennung vom eStab-Funktionskonto sowie Exportverwaltung: zwei vollständige
+  Trennung vom eStab-Funktionskonto; der Schließ-POST der letzten aktiven
+  Dienstschicht prüft einen unmittelbar zuvor gleichlang manipulierten
+  Pflichtanhang und liefert HTTP 409 mit unveränderter Schicht und
+  unveränderten Funktionsbesetzungen; außerdem Exportverwaltung: zwei vollständige
   Exporte erzeugen, PRG-Rückleitungen und CSRF-Grenzen prüfen, Manifest und
   jede CSV-Prüfsumme in beiden heruntergeladenen ZIPs verifizieren, den
   Workflowmarker per CSV-Parser exakt in `nv_nachrichten.csv` nachweisen,
   Traversal und unbekannte IDs abweisen, genau einen Lauf löschen und den
   zweiten byteidentisch für den Backup-/Restore-Nachweis behalten,
-- Restore-Prüfmodus ohne Neuanlage: vorhandenes Konto und Nachricht erneut
-  öffnen, exakten Anhanginhalt und PDF-SHA vergleichen, globalen Einsatzkopf
-  sowie ETB-/TBB-Einträge nur lesen und Kennung, Manifest, Nachrichten-CSV
-  und ZIP-SHA des überlebenden Exportlaufs im wiederhergestellten Volume
-  prüfen.
+- Restore-Prüfmodus ohne Neuanlage: Das Nachrichtenworkflow-Gate übergibt die
+  Identität seines tatsächlich aktiven S1-Nachfolgers über eine private
+  CI-Zustandsdatei. Genau dieses vorhandene Konto wird nach dem Restore erneut
+  angemeldet und seine wiederhergestellte aktive Dienstbesetzung ausgewählt;
+  anschließend exakten Anhanginhalt und PDF-SHA vergleichen, globalen Einsatzkopf sowie
+  ETB-/TBB-Einträge nur lesen und Kennung, Manifest, Nachrichten-CSV und
+  ZIP-SHA des überlebenden Exportlaufs im wiederhergestellten Volume prüfen.
 
 ### Direkte HTTP-Oberfläche
 
@@ -695,8 +776,8 @@ Er weist nach:
   repräsentative aktive Icon-, Push-, Menü- und Kategoriebuttons,
 - HTTP 400 für entfernte Buttonarten, Arrays, unbekannte Farben sowie
   übergroße Schrift-, Breiten- und Textwerte,
-- ausschließlich bekannte Hilfetextschlüssel und einen anonym neutralen
-  Statusendpunkt ohne Rollenbelegung.
+- ausschließlich bekannte Hilfetextschlüssel sowie die Abwesenheit der
+  früheren eigenständigen Status-/Zähler-Helfer aus der Runtime-Oberfläche.
 
 Der Test und der statische Vertrag stellen zusätzlich sicher, dass unter
 `stabinfo/` keine `http://`-Fremdressource verblieben ist und alle zwölf
@@ -733,18 +814,22 @@ ESTAB_TEST_BASE_URL=http://127.0.0.1:18080 \
 ESTAB_TEST_LOGIN_NAME='Browser Test' \
 ESTAB_TEST_LOGIN_CODE=brw001 \
 ESTAB_TEST_LOGIN_FUNCTION=S1 \
+ESTAB_TEST_LOGIN_PASSWORD_FILE=secrets/test_login_password.txt \
 python3 -B tests/browser/headless_ui.py
 ```
 
-Ohne Kennwortvariable erzeugt der Test intern ein starkes ephemeres Kennwort
-und gibt es weder in Logs noch Diagnosen aus. Das Kürzel muss bei manuellen
-Wiederholungsläufen neu und höchstens sechs Zeichen lang sein.
+Das Kennwort muss zum zuvor provisionierten Testkonto passen. Fehlt sowohl
+`ESTAB_TEST_LOGIN_PASSWORD` als auch
+`ESTAB_TEST_LOGIN_PASSWORD_FILE`, bricht der vollständige Lauf verständlich
+ab; die rein lesenden beziehungsweise separat per Basic Auth geschützten
+Teilmodi benötigen es nicht. Zugangsdaten erscheinen weder in Logs noch
+Diagnosen.
 
-Der Ablauf klickt die getrennten Wege der Übersicht, öffnet die Neuanlage im
-Zwei-`iframe`-Nachrichtenarbeitsbereich, füllt das Formular aus und prüft
+Der Ablauf klickt die getrennten Wege der Übersicht, öffnet den Bestandslogin
+im Zwei-`iframe`-Nachrichtenarbeitsbereich, füllt das Formular aus und prüft
 insbesondere:
 
-- Anonyme Nutzer sehen alle acht Bereiche in stabiler Reihenfolge, genau eine
+- Anonyme Nutzer sehen alle neun Bereiche in stabiler Reihenfolge, genau eine
   aktive Markierung und sichere Anmeldeziele; direkte Zugriffe auf geschützte
   Endpunkte bleiben mit HTTP 403 geschützt.
 - Der Arbeitsbereich enthält in stabiler Reihenfolge ausschließlich die
@@ -753,16 +838,21 @@ insbesondere:
   der Sidebar ist genau eine sichtbare Sitzungsidentität mit Name, Kürzel,
   Funktion, Rolle und Logout vorhanden; der rechte Inhaltsframe dupliziert sie
   nicht.
-- Statuskarte, Identität, Navigation und Aktionen folgen ohne Überlappung
+- Statuskarte, Identität, Aktionen und Navigation folgen ohne Überlappung
   aufeinander. Arbeitszähler, Serverzeit, Onlinebelegung und die aktuelle
   Funktion sind vorhanden; die rollenabhängigen Fachaktionen sind echte,
   mindestens 44 Pixel große Textbuttons. Ein positiver Arbeitszähler besitzt
   eine dauerhaft sichtbare Warnstufe.
-- Alle zehn Bereichs- und Dienstlinks sind ohne Disclosure dauerhaft sichtbar,
-  mindestens 44 Pixel groß und besitzen weder eine eigene horizontale noch
-  vertikale Scrollfläche. Bei `1440 × 1000`, `1280 × 720` und `700 × 760`
-  CSS-Pixeln ist das Sidebar-Dokument die einzige vertikale Scrollfläche und
-  bleibt horizontal innerhalb seiner Breite.
+- Das Manifest enthält neun Bereiche und zwei Dienste. Nach der Anmeldung sind
+  vor Hutauswahl nur Übersicht, Führungsstellenbetrieb, BOS-Info,
+  Administration und Handbuch sichtbar. Nach der Auswahl erscheinen nur die
+  für den ausgewählten Hut zulässigen neun beziehungsweise zehn Links ohne
+  Disclosure dauerhaft; S2 erhält die Meldungsübersicht, LdF/A/W die
+  Nachweisung, andere Hüte keines der beiden Spezialziele. Alle sichtbaren
+  Links sind mindestens 44 Pixel groß und besitzen weder eine eigene
+  horizontale noch vertikale Scrollfläche. Bei `1440 × 1000`, `1280 × 720` und
+  `700 × 760` CSS-Pixeln ist das Sidebar-Dokument die einzige vertikale
+  Scrollfläche und bleibt horizontal innerhalb seiner Breite.
 - Ein echter Statusfragment-Refresh ersetzt genau eine Statuskarte und bewahrt
   sowohl die Scrollposition des Sidebar-Dokuments als auch den Tastaturfokus
   auf einem externen Aktionsbutton und auf dem ersetzten Hinweiston-Schalter.
@@ -831,13 +921,19 @@ ESTAB_TEST_BASE_URL=http://127.0.0.1:18080 \
 tests/integration/logbooks_http.sh
 ```
 
-Er weist nach, dass anonyme Zugriffe HTTP 403 erhalten, während jeder gültig
-angemeldete Benutzer ETB und TBB lesen kann. Beide Bücher zeigen den globalen
+Er weist nach, dass anonyme Lesezugriffe und eine bloß angemeldete Sitzung
+ohne ausgewählten aktiven Hut HTTP 403 erhalten. Ein operativer
+Schreibversuch einer angemeldeten Sitzung ohne persönlich ausgewählten Hut
+wird dagegen ausdrücklich durch die zentrale Betriebssperre mit HTTP 423
+abgewiesen. Jede ausgewählte, persönlich angenommene aktive Dienstfunktion
+darf ETB und TBB des aktiven Einsatzes lesen. Beide Bücher zeigen den globalen
 Einsatzkopf und besitzen kein lokales Titelformular mehr. Die jeweils
-fachfremde Sitzung erhält HTTP 200 samt gespeichertem Inhalt, aber kein
-Eintragsformular. Cross-Rollen-POSTs liefern HTTP 403. Nur die aktuell als
-Rotkopie markierte Funktion (Fresh-Standard: S2) darf ETB-Daten und nur A/W
-mit der Rolle Fernmelder TBB-Daten über POST und Session-CSRF-Token schreiben.
+fachfremde ausgewählte Sitzung erhält HTTP 200 samt gespeichertem Inhalt,
+aber kein Eintragsformular. Cross-Rollen-POSTs liefern HTTP 403. Nur S2 oder
+ETB mit `EINSATZTAGEBUCH` darf ETB-Daten und nur A/W mit `BEFOERDERUNG`
+TBB-Daten über POST und Session-CSRF-Token schreiben.
+Der Datenbanktest der Führungsstelle ergänzt die reale Si→ETB-Hutwahl und
+weist nach, dass Si dabei kein ETB-Schreibrecht erbt.
 Zusätzlich prüft der Test serverseitige Längengrenzen, inerte historische
 GET-Schreibparameter und HTML-Escaping.
 
@@ -858,19 +954,20 @@ ESTAB_CATEGORY_HTTP_TEST_ALLOW_MUTATION=true \
 tests/integration/categories_http.sh
 ```
 
-Nachgewiesen werden HTTP 403 ohne Sitzung, positive IDs, inerte
-GET-Schreibparameter, Session-CSRF und HTTP-303-PRG. S1 darf Funktions- und
+Nachgewiesen werden HTTP 403 ohne Sitzung oder ohne ausgewählten aktiven Hut,
+positive IDs, inerte GET-Schreibparameter, Session-CSRF und HTTP-303-PRG. S1
+darf mit seiner ausgewählten aktiven Dienstfunktion Funktions- und
 Benutzerkategorien seines eigenen Tabellenraums verwalten, aber weder
 Master-Kategorien ändern noch eine Master-Zuordnung einschleusen. S2/Rotkopie
 und `Si` erreichen die Masterverwaltung. CRUD, Zuordnung und Linkbereinigung
 werden direkt in MariaDB geprüft. Eine existierende Nachricht ohne exakten
-S1-Empfänger-Token liefert beim Zuordnungsversuch HTTP 403 und bleibt
+S1-Objektzugriff liefert beim Zuordnungsversuch HTTP 403 und bleibt
 unverändert. Kategorien mit SQL-ähnlichen Quotes sowie Beschreibungen mit
 Quotes, `&` und `<script>` werden bytegenau roh gespeichert, im HTML jedoch
 escaped und ohne ausführbares Script ausgegeben. Der Listenfilter wird mit der
-positiven Kategorie-ID erfolgreich ausgeführt und beim Löschen dieser Kategorie
-aus der Sitzung entfernt; der SQL-artige Name als Filterparameter wird mit
-HTTP 403 abgewiesen.
+positiven Kategorie-ID erfolgreich ausgeführt und beim Löschen dieser
+Kategorie aus der Sitzung entfernt; der SQL-artige Name als Filterparameter
+wird mit HTTP 403 abgewiesen.
 
 Vor den Kategorieänderungen betätigt derselbe Test außerdem die tatsächlich
 gerenderten Nachrichtenaktionen für „gelesen“ und „erledigt“. Fehlendes CSRF
@@ -881,8 +978,10 @@ Nachricht verschwindet aus der Standardliste, erscheint mit eingeschaltetem
 Erledigt-Filter wieder und wird am Ende auf ihren ursprünglichen Zustand
 zurückgesetzt.
 
-Ein Trap entfernt sämtliche Testkategorien, Links, die fremde Nachricht und
-das isolierte Si-Konto samt persönlicher Tabellen. Die CI führt diesen Test
+Ein Trap entfernt sämtliche Testkategorien, Links und die fremde Nachricht.
+Ein ausschließlich für den Einzellauf erzeugtes Si-Konto samt persönlicher
+Tabellen wird ebenfalls entfernt; eine bereits dienstlich zugewiesene
+CI-Besetzung bleibt bestehen. Die CI führt diesen Test
 nach HTTP-Smoke und ETB/TBB, aber vor Admin-Workflow und Backup-/Restore aus.
 
 ### Nachrichtenrollen-HTTP-Integration
@@ -891,11 +990,14 @@ nach HTTP-Smoke und ETB/TBB, aber vor Admin-Workflow und Backup-/Restore aus.
 dynamische Statustabellen und Vordrucke. Der Test startet deshalb nur mit
 `ESTAB_MESSAGE_WORKFLOW_HTTP_TEST_ALLOW_MUTATION=true` und einem Compose-Projekt
 namens `estab_ci` oder `estab_ci_*`. Das Projekt muss wegwerfbar,
-selbstregistrierungsfähig und mit der historischen Standardmatrix initialisiert
-sein.
+mit deaktivierter Selbstregistrierung und mit der historischen Standardmatrix
+initialisiert sein. Der vorangehende HTTP-Smoke aktiviert einen vollständigen
+Erstdienst. Der Nachrichtenrollentest plant seine eigene Nachfolgeschicht,
+lässt alle Konten persönlich annehmen und führt anschließend die zweistufige,
+durch das eingehende S1-Konto bestätigte Übergabe über die Produktions-Domain
+aus; er deaktiviert den zentralen Schreibguard zu keinem Zeitpunkt.
 
-Ein einzelner Lauf gegen den Standardmodus kann beispielsweise so gestartet
-werden:
+Ein einzelner Lauf kann beispielsweise so gestartet werden:
 
 ```console
 COMPOSE_PROJECT_NAME=estab_ci_message \
@@ -903,27 +1005,23 @@ ESTAB_TEST_COMPOSE_ENGINE=podman \
 ESTAB_TEST_BASE_URL=http://127.0.0.1:18080 \
 ESTAB_TEST_WORKFLOW_MARKER=MANUELLER_E2E_MARKER \
 ESTAB_TEST_ROLE_PASSWORD_FILE=/absoluter/pfad/role_password.txt \
-ESTAB_TEST_WORKFLOW_VARIANT=default \
-ESTAB_TEST_EXPECT_OUTGOING_REVIEW=disabled \
 ESTAB_MESSAGE_WORKFLOW_HTTP_TEST_ALLOW_MUTATION=true \
 tests/integration/message_workflow_http.sh
 ```
 
-Für den zweiten Modus erstellt die CI ausschließlich den App-Dienst mit
-`ESTAB_REVIEW_OUTGOING_MESSAGES=true` neu und startet denselben Test mit einer
-neuen Variantenkennung sowie `ESTAB_TEST_EXPECT_OUTGOING_REVIEW=enabled`.
-Dadurch sind beide Konfigurationen getrennt belegt:
+Der Test belegt die beiden nicht konfigurierbaren Abläufe:
 
-- Eingang: A/W nimmt die Nachricht in Status 1 auf; LdF übersetzt den Rufnamen
-  in den Absender und übergibt mit Status 4 an Si; Si schließt mit Status 8 ab.
-  War die Aufnahme bereits automatisch gesichtet, schließt LdF direkt über
-  `1 → 8` ab.
-- Ausgang im Standardmodus `false`: Die Stabsfunktion legt Status 1 an; LdF
-  bestimmt den Rufnamen der Gegenstelle und den vorgesehenen Beförderungsweg
-  und übergibt mit Status 2 an A/W; die tatsächliche Beförderung schließt direkt
-  mit Status 8 ab.
-- Ausgang im optionalen Modus `true`: Bis A/W gilt ebenfalls `1 → 2`; nach der
-  Beförderung folgt Status 4 und Si sichtet anschließend auf Status 8.
+- Eingang: A/W nimmt die Nachricht auf und registriert sie in Status 1. LdF
+  übersetzt den Rufnamen in den Absender und übergibt mit Status 4 an Si. Si
+  wertet Inhalt und Zuständigkeit aus und schließt mit Status 8 ab.
+- Ausgang: Die Stabsfunktion reicht in Status 4 bei Si ein. Si prüft nur die
+  formale Richtigkeit und gibt mit Status 1 an LdF frei. LdF bestimmt Rufname
+  der Gegenstelle und vorgesehenen Beförderungsweg und übergibt mit Status 2
+  an A/W. A/W weist tatsächlichen Weg und Zeit nach und schließt mit Status 8
+  ab.
+- Rückgabe: Si gibt einen formal fehlerhaften Ausgang mit Pflichtgrund in
+  Status 10 an den Verfasser zurück. Nur dieser korrigiert ihn und reicht
+  erneut vollständig in Status 4 ein.
 
 Der Lauf registriert isolierte LdF-, A/W-, Si-, S1-, S2-, S3- und
 POL/FB-Konten über
@@ -949,26 +1047,46 @@ taktische Zeit und vergleicht die gespeicherten `DATETIME`-Werte exakt mit
 MariaDB. Damit sind sowohl die Vorbelegung als auch ihre manuelle
 Überschreibbarkeit unabhängig von der Zeitzone des Testhosts belegt.
 
-Für die reale Autosichtung markiert der Test POL/FB ausschließlich in seiner
-wegwerfbaren Matrix als Ziel und schaltet das einzige isolierte Si-Konto
-offline. Das vom echten Eingangsformular automatisch ausgewählte Kontrollfeld
-wird unverändert abgesendet; Status 8, Quittierung, POL-Empfänger, Vordruck und
-sichtbare FB-Liste müssen daraus tatsächlich entstehen. Matrix und Si-Zustand
-werden noch im Lauf zurückgesetzt und im Cleanup erneut abgesichert.
+Zusätzlich manipuliert der Lauf Formulardaten und die historische
+Empfängermatrix, um eine Autosichtung oder einen übersprungenen Zuständigen zu
+erzwingen. Die Anwendung und die Datenbank müssen diese Abkürzung ablehnen;
+bei nicht besetztem Si bleibt die Nachricht unverändert in dessen
+Warteschlange.
 
-Danach öffnen A/W und Si jeweils ihren eigenen gerenderten
-FM-/SI-Admin-Zweitprüfpfad. Speichern und Abbrechen müssen vorhanden sein; nur
-Quittierungszeichen, Empfängerfarben und Vermerk dürfen bearbeitbar sein. Der
-ursprüngliche Quittierungszeitpunkt erscheint ausdrücklich schreibgeschützt.
-Echte CSRF-geschützte Änderungen mit manipuliertem Zeitwert dürfen den
-SHA-256-Fingerabdruck der Felder 1–14, den gespeicherten Zeitpunkt sowie
-Transport-, Sperr- und Abschlussbelege nicht verändern. Auch der bereits
-erzeugte PDF-Vordruck muss erhalten bleiben.
+Ein weiterer Negativpfad sendet beim A/W-Eingang verborgene `16_*`-
+Empfängerfelder und simuliert zusätzlich einen bereits vorhandenen fremden
+Empfängertoken. Vor dem terminalen Si-Abschluss müssen Liste, Detailaufruf und
+Gelesen-/Erledigt-Aktion jeweils HTTP 403 beziehungsweise keine sichtbare
+Zeile ergeben. Dieselbe Prüfung läuft für die S2-Rotkopie eines ausgehenden
+Status-4-Entwurfs und einer Status-10-Rückgabe. Die Verfasserfunktion behält
+den benötigten Zugriff; S2 erhält die Nachricht erst nach dem vollständigen
+Status-8-Abschluss. Damit wird nicht nur der Formularhandler, sondern dieselbe
+Zugriffsregel in Listen-SQL, Objekt-Gate und atomarem State-SQL geprüft.
+
+`tests/php/read_authorization_security.php` und die HTTP-Gegenproben erweitern
+diese Grenze auf alle Ausgabepfade. Eine Kontositzung ohne ausgewählte aktive
+Dienstbesetzung darf keine operative Nachricht lesen. Normaler Stab/FB erhält
+nur die terminale Empfängerkopie oder den eigenen Ausgang; Si, LdF und A/W nur
+ihre aktuelle Warteschlange/Sperre oder eine Nachricht mit eigener
+unveränderlicher Verarbeitungsmarke. Vordruckliste und beide Downloadvarianten
+verwenden dieselbe Nachricht. Verknüpfte Anhänge erben die Objektregel über
+exakte vollständige Dateinamens-Tokens; freie Anhänge bleiben auf Uploader,
+S2, Si und LdF begrenzt. Liste, Vorschau, Download, Auswahl und finaler
+Nachrichtensave werden getrennt negativ geprüft. Die Meldungsübersicht ist nur
+für S2, die Nachweisung nur für LdF beziehungsweise A/W erreichbar.
+
+Danach versucht der Lauf die historischen
+`FM-Admin`-/`SI-Admin`-Zweitsichtungen gegen einen abgeschlossenen Datensatz.
+Weder Navigation noch Controller dürfen einen solchen Bearbeitungspfad
+bereitstellen. Manipulierte Requests müssen abgewiesen werden; fachliche
+Felder, Quittierung, Empfängerfarben, Sichter- und Transportvermerk sowie der
+bereits erzeugte PDF-Vordruck bleiben unverändert. Persönliche
+Gelesen-/Erledigt-Markierungen werden davon getrennt geprüft.
 
 Abschließend liest POL/FB die zugestellte Eingangsnachricht und betätigt die
 tatsächlich gerenderten Aktionen „Antworten“ und „Weiterleiten“. Beide
 abgeleiteten Formulare werden gespeichert und müssen zwei getrennte
-Status-1-Ausgänge für LdF mit korrektem Zitat, Ziel, Absender,
+Status-4-Ausgänge für Si mit korrektem Zitat, Ziel, Absender,
 Funktionskennung und
 Empfängern erzeugen. Der persönliche Lesestatus wird gesetzt, während der
 Fingerabdruck der Quellnachricht unverändert bleibt.
@@ -1003,23 +1121,27 @@ Der Test verwendet das bereits im Datenbankcontainer gemountete Root-Secret
   gefährlichen Uploadhelfer sowie die direkt aufrufbaren Print-/FPDF-Bäume,
 - inerte historische GET-Schreibparameter und HTTP 403 ohne Session-CSRF,
 - vollständigen 5x4-Roundtrip für aktive und persistente Standardmatrix mit
-  exakt einer belegten Rotkopie und gültigen Autosichtungsflags; die dabei
+  S2/Stab als einzigem Rotkopie-/Dokumentationsziel und ausschließlich
+  falschen Autosichtungsflags; die dabei
   nicht betroffenen Benutzerkonten bleiben bytegenau unverändert, während der
   separate Zuordnungsrichtlinientest betroffene Konten abdeckt,
 - getrennte Semantik der drei Matrixaktionen: aktives Speichern lässt den
   Standard unverändert; Standard laden verändert weder Datenbank noch Audit;
-  gemeinsames Speichern kopiert alle 20 Zellen samt Rotkopie und Autosichtung,
+  gemeinsames Speichern kopiert alle 20 Zellen und normalisiert Rotkopie sowie
+  das inaktive Legacy-Autosichtungsfeld,
 - atomaren Rollback beider Matrixtabellen und des Audits: ein temporärer
   `BEFORE INSERT`-Trigger erzwingt einen Fehler in der Standardtabelle,
   anschließend stimmen die exakten Vorher-/Nachher-Snapshots aller Spalten
   beider Tabellen und die Auditanzahl überein,
 - zwei parallele, getrennte Admin-Sitzungen: genau eine darf denselben
   Nachrichtenzähler erhöhen; die andere erhält HTTP 409,
-- Systemnachricht, Audit und POST-only-PDF-Vordruckreset.
+- hashverketteter Zählernachweis ohne künstliche Fachnachricht, Audit und
+  POST-only-PDF-Vordruckreset.
 
 Ein Trap entfernt den temporären Fehlertrigger, stellt beide ursprünglichen
 Matrizen, alle vorherigen Grafikflags und die Auto-Inkremente wieder her und
-entfernt synthetische Nachrichten/Audits. Das ist eine zusätzliche
+entfernt die ausschließlich im Wegwerfprojekt erzeugten Audit-/Testdaten. Das
+ist eine zusätzliche
 Schutzschicht, keine Freigabe für den Lauf gegen Produktionsdaten. In der CI
 läuft dieser Test nach HTTP-Smoke, ETB/TBB, Kategorien- und
 Nachrichtenrollentest, aber vor dem eigenständigen
@@ -1062,10 +1184,15 @@ Mindestens zu prüfen:
   Neuanmeldung abweisen, anschließend entsperren und ein Kennwort
   zurücksetzen; altes Kennwort ablehnen und neues akzeptieren,
 - Berechtigungs-/Rollenzuordnung aus der Empfängermatrix kontrollieren,
+- jede verwendete Person ihre angenommene aktive Dienstfunktion auswählen
+  lassen; dieselben operativen Lesepfade mit bloßer Kontoanmeldung ohne
+  ausgewählten Hut abweisen,
 - eingehende und ausgehende Nachricht mit Richtung, Gegenstelle,
   Prioritätsstufe, Empfängern und Inhalt erfassen,
 - Weiterleitung, Sichtung, Quittierung, Statuswechsel und Listenfilter über
   zwei unterschiedliche Funktionssitzungen nachvollziehen,
+- mit S2 die Meldungsübersicht und mit LdF/A/W die Nachweisung öffnen; S1, Si
+  und S6 an den jeweils fremden Spezialzielen mit HTTP 403 abweisen,
 - für Fernmelder, Si und mindestens eine Stab-/FB-Sitzung den
   Hinweiston-Schalter im vorgesehenen Browser ausdrücklich aktivieren, den
   Testton tatsächlich anhören, nach der stillen ersten
@@ -1073,19 +1200,28 @@ Mindestens zu prüfen:
   Hinweis genau einmal physisch hören; mit ausgeschaltetem oder browserseitig
   blockiertem Ton zusätzlich die sichtbare Rückmeldung kontrollieren,
 - globale, funktionsbezogene und persönliche Kategorie anlegen, zuweisen,
-  suchen und entfernen,
+  suchen und entfernen; dieselben Seiten ohne ausgewählten aktiven Hut und
+  einen fremden Nachrichtenbezug abweisen,
 - zulässigen Anhang hochladen, Vorschau/Download prüfen und eine unzulässige
-  Datei ablehnen lassen,
+  Datei ablehnen lassen; verknüpften und freien Anhang zusätzlich mit
+  berechtigtem sowie fremdem Hut über Liste, Vorschau, Download, Auswahl und
+  manipulierten finalen Nachrichtensave prüfen,
 - Nachrichtenvordruck als PDF erzeugen und aus der geschützten
-  Vordruckliste abrufen,
-- für einen inzwischen historischen Einsatz ein PDF-Dossier mit ETB, TBB,
-  Nachrichtenvordrucken und Originalanhängen erzeugen, die Anlagenansicht im
-  vorgesehenen PDF-Programm öffnen und stichprobenartig eine eingebettete
-  Datei samt dokumentierter SHA-256 gegen das Original prüfen,
-- Einsatztagebuch und technisches Betriebsbuch mit der aktuell als Rotkopie
-  markierten Funktion (Fresh-Standard: S2) sowie A/W in der Rolle Fernmelder
-  beschreiben; anschließend beide Bücher mit der jeweils anderen angemeldeten
-  Funktion vollständig, aber ohne Schreibformular lesen und
+  Vordruckliste mit berechtigtem Hut abrufen und mit einem fremden Hut sowohl
+  Liste als auch aktuellen und archivierten Download abweisen,
+- für einen inzwischen historischen Einsatz ein PDF-Dossier mit allen neun
+  Abschnitten ETB, TBB, Nachrichtenvordrucke, Anhänge,
+  Nachrichtenereignisse, Dienstbetrieb, S6-Fernmeldepläne, Melderläufe und
+  Betriebsereignisse erzeugen, die Anlagenansicht im vorgesehenen
+  PDF-Programm öffnen und stichprobenartig eine eingebettete Datei samt
+  dokumentierter SHA-256 gegen das Original prüfen,
+- Einsatztagebuch einmal als S2 und einmal mit einer eigenständig zugewiesenen
+  ETB-Funktion, das technische Betriebsbuch mit A/W in der Rolle Fernmelder
+  beschreiben; bei einer ETB/Si-Mehrfachbesetzung ausdrücklich zwischen beiden
+  Hüten wechseln und den Si-Hut beim ETB-POST mit HTTP 403 abweisen;
+  anschließend beide Bücher mit der jeweils anderen ausgewählten
+  aktiven Dienstfunktion vollständig, aber ohne Schreibformular lesen, eine
+  bloß angemeldete Sitzung ohne ausgewählten Hut abweisen und
   Cross-Rollen-Schreibversuche mit HTTP 403 abweisen; Kommunikationsplan und
   alle lokal benötigten Zusatzmodule öffnen und je einen repräsentativen
   Datensatz anlegen/lesen,
@@ -1138,21 +1274,22 @@ sind:
   Schalter sowie eine gegebenenfalls aktivierte Proxy-Allowlist sind
   syntaktisch und in ihren erlaubten Wertebereichen gültig,
 - Datenbankverbindung und `SELECT 1` funktionieren,
-- 18 Runtime-Tabellen vorhanden sind: die 14 Basistabellen, die persistente
-  Standardmatrix und die drei Tabellen der globalen Einsatzdomäne,
+- alle Basistabellen sowie Einsatz-, Nachweis-, Dienstschicht-, S6- und
+  Meldertabellen in ihrer kanonischen Form vorhanden sind,
 - aktive und Standardmatrix jeweils genau 20 eindeutige 5x4-Positionen,
-  genau ein belegtes Stab-/FB-Rotkopieziel und keine Autosichtung auf leeren
-  oder reinen Textzellen enthalten,
+  genau S2/Stab als Rotkopie-/Dokumentationsziel und keinerlei aktive
+  Autosichtung enthalten,
 - die exakt definierten Benutzer- und Anhangindizes vorhanden sind,
-- alle sieben versionierten Migrationen mit gültigem SHA-256 als angewendet
-  protokolliert sind,
+- alle ausgelieferten versionierten Migrationen mit gültigem SHA-256 als
+  angewendet protokolliert sind,
 - der Singleton des globalen Einsatzstatus, alle Einsatz-Fremdschlüssel und
-  -Trigger sowie die dauerhafte Kontosperr-Spalte kanonisch vorhanden sind,
+  -Trigger, append-only Ereignisketten, formaler Abschluss/Aufbewahrung sowie
+  die dauerhafte Kontosperr-Spalte kanonisch vorhanden sind,
 - Benutzer-, IP-, Anhang- und alle sechs Nachrichten-Kürzelfelder die
   erforderlichen Breiten besitzen,
 - Anhang-, Vordruck- und Exportverzeichnis beschreibbar sind.
 
-`docker/db/verify.sql` löst den aggregierten Schemacheck in 26 benannte
+`docker/db/verify.sql` löst den aggregierten Schemacheck in benannte
 `*_ok`-Ergebnisfelder auf. Für einen gültigen Stand müssen alle den Wert `1`
 haben; die anschließende Abfrage nach abweichender Engine oder Collation darf
 keine Zeile liefern.

@@ -64,11 +64,52 @@ Derzeit sind folgende explizite Migrationen vorhanden:
 | --- | --- |
 | `docker/db/migrations/20-nullable-dates.sql` | konvertiert historische `0000-00-00 00:00:00`-Werte zu `NULL` und macht die betroffenen Spalten nullable |
 | `docker/db/migrations/30-runtime-schema.sql` | erweitert Benutzer-, IP-, Nachrichtenkürzel- und Anhangfelder, stellt Laufzeitindizes und ETB-/TBB-Titeltabellen her, erzwingt eindeutige Anhangnamen und normalisiert vorhandene `nv_*`-Tabellen auf InnoDB/`utf8mb4` |
-| `docker/db/migrations/40-recipient-matrix-standard.sql` | ersetzt die frühere ausführbare `deault.fkt.php` durch genau eine persistente 20-Zellen-Standardmatrix einschließlich Rotkopie und Autosichtung |
+| `docker/db/migrations/40-recipient-matrix-standard.sql` | ersetzt die frühere ausführbare `deault.fkt.php` durch genau eine persistente 20-Zellen-Standardmatrix; das historische Autosichtungsfeld wird nur noch als inaktives Kompatibilitätsfeld weitergeführt |
 | `docker/db/migrations/45-global-incidents-prepare.sql` | prüft vor dem Einsatz-Backfill alle zehn operativen Basistabellen und setzt die beiden betroffenen Zeitspalten vorübergehend ohne automatisches `ON UPDATE` |
 | `docker/db/migrations/50-global-incidents.sql` | führt die globale Einsatzdomäne, den geschlossenen `LEGACY-IMPORT`, die Einsatzzuordnung und die Datenbank-Schreibgrenzen ein; diese veröffentlichte Fassung bleibt bytegenau unverändert |
 | `docker/db/migrations/55-global-incidents-finish.sql` | prüft den vorbereiteten beziehungsweise bereits fertigen Zustand und stellt die kanonischen `ON UPDATE CURRENT_TIMESTAMP`-Definitionen nach dem Einsatz-Backfill wieder her |
 | `docker/db/migrations/70-user-account-blocking.sql` | ergänzt die kollisionsgeprüfte dauerhafte Kontosperre |
+| `docker/db/migrations/80-dv-evidence-retention.sql` | ergänzt den unveränderbaren Nachrichten- und ETB-Nachweis, den formalen Einsatzabschluss, die Mindestaufbewahrung von einem Jahr und eine zusätzliche Aufbewahrungssperre |
+| `docker/db/migrations/94-dv-organisational-controls.sql` | ergänzt Dienstschichten und Mehrfachfunktionen, den versionierten S6-Fernmeldeplan, den vollständigen Melderlauf sowie eine verkettete Ereignisspur dieser Betriebsabläufe; zugleich wird Autosichtung verbindlich deaktiviert und S2 als Rotkopie-/Dokumentationsfähigkeit normalisiert |
+| `docker/db/migrations/95-attachment-ingest-integrity.sql` | markiert beim Upgrade vorhandene Anhänge ausdrücklich als nicht rückwirkend belegbaren Legacy-Bestand und verlangt für jeden danach finalisierten Anhang einen unveränderlichen SHA-256-/Größen-/Serverzeit-Nachweis; Trigger verhindern neue Legacy-Markierungen, Herabstufung und nachträgliche Beweisänderung |
+| `docker/db/migrations/96-etb-duty-function.sql` | führt die eigenständig auswählbare ETB-Dienstfunktion ein, ordnet die Fähigkeit `EINSATZTAGEBUCH` sowohl S2 als auch ETB über den zusammengesetzten Schlüssel `(funktion, faehigkeit)` zu und belässt Rotkopie sowie `LAGE_DOKUMENTATION` ausschließlich bei S2 |
+
+Migration 95 klassifiziert vorhandene Zeilen bereits beim Hinzufügen der
+Spalte mit dem einmaligen Anfangswert `integrity_required=0` und stellt danach
+den Standardwert rein als Tabellenmetadatum auf `1`. Sie führt bewusst kein
+operatives `UPDATE nv_anhang` aus. Dadurch bleibt die allgemeine
+Einsatz-Schreibsperre unverändert wirksam und ein historischer, bereits
+geschlossener Import lässt sich trotzdem ehrlich als nicht rückwirkend
+belegbar kennzeichnen. Ihre nicht transaktionalen DDL-Phasen sind
+wiederanlauffähig: Eigentumsmarkierungen und exakte Formprüfungen akzeptieren
+nur die von der Migration selbst erzeugbaren Spaltenpräfixe, Constraints und
+Trigger. Gleichnamige fremde oder abweichende Objekte werden vor jeder
+weiteren Änderung abgewiesen. Der Schema-Integrationstest stellt gezielt nur
+die erste autocommittete Spalte her, startet den Migrator zweimal und weist
+anschließend Standardwert, alle vier Markierungen, beide Constraints, beide
+Trigger, den unveränderten Legacy-Datensatz und ein leeres
+Hilfsprozedur-Namensfeld nach.
+
+Migration 96 akzeptiert ausschließlich drei exakt geprüfte Zustände der
+migrationseigenen Fähigkeitstabelle: den fünfzeiligen Vorgänger mit altem
+ENUM und noch vorhandenem oder bereits entferntem globalen Unique-Index, den
+fünfzeiligen DDL-Zwischenstand mit erweitertem ENUM ohne diesen Index sowie
+den siebenzeiligen Endzustand. Spalten, Reihenfolge, Datentypen,
+Zeichensatz, Primärschlüssel `(funktion, faehigkeit)`, Indizes, ENUM-Werte und
+alle fachlichen Zeilen werden dabei vollständig verglichen. Die Migration
+entfernt den früheren global eindeutigen Fähigkeitsschlüssel, erweitert das
+ENUM um `EINSATZTAGEBUCH` und ergänzt genau die Schlüssel
+`S2/EINSATZTAGEBUCH` und `ETB/EINSATZTAGEBUCH`.
+
+Nach einem Prozessverlust zwischen den nicht transaktionalen DDL-Phasen wird
+zunächst das Migrationsledger nach dem unten beschriebenen Verfahren
+abgeglichen. Ein anschließender Wiederanlauf konvergiert nur aus einem dieser
+eigenen Zwischenstände. Gemischte Katalogdaten, ein abweichender
+Primärschlüssel oder fremde Indizes blockieren vor der nächsten Änderung und
+bleiben zur Untersuchung erhalten. `verify.sql` und die Laufzeit-Readiness
+verlangen danach exakt sieben Katalogzeilen, das vollständige neue ENUM,
+ausschließlich den zweispaltigen Primärschlüssel und alle elf angewendeten
+Migrationen einschließlich Version 96.
 
 Das freigegebene Upgradeverfahren lautet:
 

@@ -91,8 +91,25 @@ Tabellenraum ergänzen noch `nv_nachrichten.99_lstacc` oder
 `nv_bhp50.sich1_zeit` auf den Migrationszeitpunkt setzen. Eine Datenbank, die
 Migration 50 bereits angewendet hat, führt beim nächsten Upgrade nur die noch
 fehlenden Schritte 45 und 55 aus; 50 wird ausschließlich bei identischem
-SHA-256 übersprungen. Readiness und `verify.sql` verlangen alle sieben
+SHA-256 übersprungen. Readiness und `verify.sql` verlangen alle elf
 Ledgerdatensätze.
+
+`96-etb-duty-function.sql` löst die frühere globale Eindeutigkeit der
+Fähigkeit auf und verwendet den bereits vorhandenen Primärschlüssel
+`(funktion, faehigkeit)`. Dadurch besitzen S2 und die eigenständig
+auswählbare Funktion ETB jeweils einen eigenen Schlüssel für
+`EINSATZTAGEBUCH`; `LAGE_DOKUMENTATION` und die Rotkopie-Zuständigkeit bleiben
+ausschließlich bei S2. Die Migration prüft Tabelle, vier Spalten,
+Spaltenreihenfolge, altes oder neues ENUM, Primärschlüssel, Indizes und
+Katalogzeilen exakt. Sie akzeptiert nur den kanonischen fünfzeiligen
+Ausgangszustand, die von ihr selbst erzeugbaren DDL-Zwischenstände oder den
+kanonischen siebenzeiligen Endzustand. Nach kontrollierter Behandlung eines
+unterbrochenen Ledgerlaufs sind diese Zwischenstände idempotent
+wiederaufnehmbar; gemischte Daten, fremde Indizes und ein abweichender
+Primärschlüssel bleiben unverändert gesperrt. Die Schema-Verifikation verlangt
+abschließend das vollständige neue ENUM, genau sieben Katalogzeilen, keinen
+zusätzlichen Index und Version 96 unter insgesamt elf angewendeten
+Migrationen.
 
 Bei `Checksum mismatch for applied migration` werden zuerst Containerlog,
 Image-Digest, die lokale Dateiprüfsumme und der betroffene Datensatz aus
@@ -161,6 +178,19 @@ persistente ältere Containerdatenbanken an die Laufzeitanforderungen an:
 - `nv_benutzer`: Kürzel 6, Passwort 255 sowie `ip`/`fwdip` 45 Zeichen,
 - sechs Absender-/Bearbeiterfelder in `nv_nachrichten`: 6 Zeichen,
 - `nv_anhang`: Kürzel 6, Dateiendung 16 und Session-ID 128 Zeichen,
+- Migration 95: neue Anhangreservierungen sind
+  `integrity_required=1`; der Übergang zum finalen Status verlangt
+  unveränderlichen SHA-256, Bytezahl und Erfassungszeit. Nur beim Upgrade
+  bereits vorhandene Zeilen tragen den Legacy-Marker `0`. Dieser Wert wird
+  beim `ADD COLUMN` materialisiert; anschließend wechselt nur der
+  Spalten-Standard auf `1`. Ein operatives Backfill-`UPDATE`, das den
+  Einsatz-Guard für geschlossene Importdaten umgehen müsste, findet nicht
+  statt. Da MariaDB Schemaänderungen einzeln festschreibt, besitzt jede der
+  vier Spalten eine eindeutige Migrationsmarkierung. Ein Wiederanlauf
+  akzeptiert ausschließlich die kanonischen Spaltenpräfixe, den vollständigen
+  Constraint-Satz und eigene Triggerdefinitionen; fremde Namenskollisionen
+  blockieren. Der Integrationstest unterbricht die Migration absichtlich nach
+  der ersten Spalte und beweist die vollständige, idempotente Fortsetzung,
 - benannte Benutzer- und Anhangindizes einschließlich eindeutigem Dateinamen,
 - InnoDB/`utf8mb4` für die unmittelbar migrierten Laufzeittabellen.
 

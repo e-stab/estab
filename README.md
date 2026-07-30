@@ -121,19 +121,50 @@ Der Runner gibt `Post-migration schema verification passed` aus. Er verwendet
 das Root-Secret ausschließlich über eine private temporäre MariaDB-Optionsdatei;
 das Kennwort erscheint weder in Argumentliste noch Log.
 
-Eine Neuinstallation beginnt absichtlich ohne aktiven Einsatz. Dadurch sind
-Anmeldung und Administration erreichbar, operative Eingaben aber
-fail-closed gesperrt. Als erster fachlicher Schritt wird unter
-`/4fadm/incidents.php` ein Einsatz angelegt und aktiviert; Kennung und Name
-müssen danach in der globalen Statusleiste erscheinen. Funktionskonten lassen
-sich unter `/4fadm/users.php` sperren, entsperren und mit einem neuen Kennwort
-versehen. Ein vollständiges ETB-/TBB-/Nachrichten-/Anhang-Dossier für einen
+Eine Neuinstallation beginnt absichtlich ohne aktiven Einsatz und ohne aktive
+Dienstschicht. Anmeldung und Administration bleiben erreichbar, operative
+Eingaben sind aber fail-closed gesperrt. Die erste fachliche Einrichtung
+erfolgt in dieser Reihenfolge:
+
+1. Unter `/4fadm/incidents.php` einen Einsatz anlegen und aktivieren.
+2. Unter `/4fadm/users.php` persönliche Konten für mindestens S2, Si, S6,
+   LdF und A/W anlegen. Eine Person darf mehrere Funktionen übernehmen;
+   mehrere A/W-Besetzungen sind möglich.
+3. Unter `/4fadm/fuehrungsstelle.php` eine geplante Dienstschicht anlegen und
+   die Funktionen den tatsächlichen, ungesperrten Konten zuweisen. Konten
+   dürfen dabei noch offline sein; der Online-Status ist im Auswahlfeld
+   kenntlich gemacht.
+4. Jede Person meldet sich an und nimmt ihre Zuweisungen unter
+   `/4fach/fuehrungsstelle.php` selbst an.
+5. Erst wenn S2, Si, S6, LdF und A/W angenommen sind, aktiviert die
+   Administration die Schicht.
+6. S6 wählt den angenommenen Funktions-Hut, erstellt einen Fernmeldeplan mit
+   den vorgesehenen Wegen und veröffentlicht ihn. Erst danach kann LdF einen
+   Ausgang auf einen verbindlichen Weg disponieren.
+
+Eine Schichtübergabe wird von der Administration nur angefordert. Erst ein
+persönlich angemeldetes Konto mit angenommener Funktion der Nachfolgeschicht
+bestätigt sie und löst den atomaren Schichtwechsel aus. Fehlanforderungen
+bleiben als begründet stornierter Nachweis erhalten.
+
+Einsatz, aktive Arbeitsfunktion und gegebenenfalls fehlender Dienstbetrieb
+müssen danach in Statusleiste beziehungsweise Führungsstellenansicht
+eindeutig erkennbar sein. Ohne aktive Schicht nimmt eStab keine operative
+Eingabe an. Funktionskonten lassen sich unter `/4fadm/users.php` sperren,
+entsperren und mit einem neuen Kennwort versehen. Ein vollständiges
+ETB-/TBB-/Nachrichten-/Nachweis-/Dienst-/S6-/Melder-/Anhang-Dossier für einen
 aktiven oder historischen Einsatz erzeugt `/4fadm/incident_export.php`.
-Unter `/4fach/vordrucke.php` öffnen angemeldete Benutzer abgeschlossene
-Nachrichten des aktiven Einsatzes im jeweils aktuellen, mit dem Dossier
-gemeinsamen PDF-Layout. Die beim Nachrichtenabschluss atomar gespeicherte
-Archivdatei wird dabei weder ersetzt noch verändert und bleibt Bestandteil
-von Backup und Restore.
+Für operative Daten genügt eine Kontoanmeldung nicht: Zusätzlich müssen ein
+aktiver Einsatz und die exakte ID einer persönlich angenommenen, aktiven
+Dienstbesetzung in der Sitzung ausgewählt sein. Jeder operative Schreibpfad
+gleicht diese ID erneut mit Konto, Funktion, Rolle, aktivem Einsatz und aktiver
+Schicht in der Datenbank ab. Diese Grenze gilt auch für ETB, TBB, Kategorien,
+Nachrichten, Vordrucke und Anhänge. Unter `/4fach/vordrucke.php` erscheinen
+nur abgeschlossene Nachrichten des aktiven Einsatzes, die der ausgewählte
+Funktions-Hut nach der Nachrichten-Objektregel lesen darf. Der aktuelle Abzug
+verwendet das mit dem Dossier gemeinsame PDF-Layout. Die beim
+Nachrichtenabschluss atomar gespeicherte Archivdatei wird dabei weder ersetzt
+noch verändert und bleibt Bestandteil von Backup und Restore.
 Der Anhangdialog unterstützt echte JPEG-Bilder mit `.jpg` und `.jpeg`,
 prüft den MIME-Typ serverseitig und nennt das standardmäßige Uploadlimit von
 20 MiB direkt am Dateifeld.
@@ -175,15 +206,20 @@ nicht.
 | Pfad | Zweck | Schutz |
 | --- | --- | --- |
 | `/` | Einstieg, direkter Anmeldebutton und Modulübersicht | öffentlich bis zur Modulanmeldung |
-| `/4fach/index.php` | öffentlicher Einstieg in die vollständige Anwendung mit Kontoauswahl und Benutzeranmeldung | Fachfunktionen erst mit eStab-Sitzung |
+| `/4fach/index.php` | öffentlicher Einstieg in die vollständige Anwendung mit Kontoauswahl und Benutzeranmeldung | operative Daten erst mit eStab-Sitzung, aktivem Einsatz und ausgewählter, persönlich angenommener aktiver Dienstfunktion |
 | `/4fach/logout.php` | zentrale Abmeldung aus Sitzungsleiste und Nachrichtenarbeitsbereich | eStab-Sitzung, ausschließlich POST mit Session-CSRF |
-| `/4fach/status.php` | eigenständige Statusansicht für Kompatibilitätsaufrufe | anonym nur neutraler Hinweis, Rollenbelegung erst mit eStab-Sitzung |
-| `/4fach/katgoedt.php` | globale, Funktions- und persönliche Kategorien | eStab-Sitzung, Rollen-/Objektprüfung und CSRF für Änderungen |
-| `/4fach/vordrucke.php` | abgeschlossene Vordrucke des aktiven Einsatzes im aktuellen, mit dem Einsatzdossier gemeinsamen PDF-Layout öffnen | eStab-Sitzung; Einsatz-, Abschluss- und Druckstatus werden serverseitig erneut geprüft, das persistierte Archiv bleibt unverändert |
+| `/4fach/katgoedt.php` | globale, Funktions- und persönliche Kategorien | ausgewählte aktive Dienstfunktion; Rollenprüfung, bei Nachrichtenbezug zusätzlich Objektprüfung, CSRF für Änderungen |
+| `/4fach/fuehrungsstelle.php` | persönliche Dienstfunktionen annehmen/auswählen, freigegebenen S6-Plan lesen sowie S6- und Melderabläufe bearbeiten | eStab-Sitzung und aktiver Einsatz; vor Hutauswahl nur eigene Besetzungen, Annahme, Übergabebestätigung und Auswahl, danach exakte aktive Besetzungs-ID und Fachzuständigkeit |
+| `/4fueltg/ue_ltg.php` | einsatzgebundene Meldungsübersicht | ausschließlich ausgewählte aktive S2-Funktion mit `LAGE_DOKUMENTATION` |
+| `/4fach/nachwea.php` | Nachweisung der aufgenommenen und beförderten Nachrichten | ausschließlich ausgewählte aktive LdF- oder A/W-Funktion |
+| `/4fach/vordrucke.php` | abgeschlossene Vordrucke des aktiven Einsatzes im aktuellen, mit dem Einsatzdossier gemeinsamen PDF-Layout öffnen | ausgewählte aktive Dienstfunktion; zugrunde liegende Nachricht, Abschluss- und Druckstatus werden erneut geprüft, das persistierte Archiv bleibt unverändert |
+| `/4fach/anhang.php`, `/4fach/download.php`, `/4fach/showpic.php` | Anhänge auswählen, auflisten, herunterladen oder als Bildvorschau öffnen | ausgewählte aktive Dienstfunktion; verknüpfte Anhänge erben exakt die Leserechte mindestens einer verknüpften Nachricht, freie Anhänge sind nur für Uploader oder S2, Si und LdF sichtbar |
+| `/stabetb/etb.php`, `/fmtbb/tbb.php` | ETB und TBB des aktiven Einsatzes lesen und fachabhängig ergänzen | jede ausgewählte aktive Dienstfunktion darf lesen; ETB-Schreiben nur als S2 oder ETB mit `EINSATZTAGEBUCH`, TBB-Schreiben nur als A/W mit `BEFOERDERUNG` |
 | `/4fadm/admin.php` | Administration | separates HTTP Basic Auth |
 | `/4fadm/incidents.php` | Einsätze anlegen, aktivieren und deaktivieren | HTTP Basic Auth, Session-CSRF und revisionsgesicherter globaler Status |
+| `/4fadm/fuehrungsstelle.php` | Dienstschichten planen, Funktionen zuweisen, Schichten aktivieren/übergeben/schließen und Abschlussblocker prüfen | HTTP Basic Auth, Session-CSRF; Besetzungen und Übergaben werden einsatzgebunden und hashverkettet nachgewiesen |
 | `/4fadm/users.php` | Benutzer anlegen, Funktionen fest zuweisen, sperren/entsperren und Kennwörter zurücksetzen | HTTP Basic Auth, Session-CSRF; Rollen werden serverseitig abgeleitet und aktive Sitzungen atomar widerrufen |
-| `/4fadm/incident_export.php` | ETB, TBB, Nachrichtenvordrucke und Originalanhänge eines Einsatzes als PDF-Dossier | HTTP Basic Auth, Session-CSRF, einsatzgebundene Abfragen und protokollierte SHA-256 |
+| `/4fadm/incident_export.php` | neun wählbare PDF-Abschnitte: ETB, TBB, Nachrichtenvordrucke, Anhänge, Nachrichtenereignisse, Dienstbetrieb, S6-Fernmeldepläne, Melderläufe und Betriebsereignisse | HTTP Basic Auth, Session-CSRF, einsatzgebundene Abfragen; neue Anhänge werden gegen ihren unveränderlichen SHA-256-/Größennachweis geprüft, Legacy wird als nicht belegbar ausgewiesen |
 | `/4fadm/system_status.php` | ausführlicher Laufzeitstatus | HTTP Basic Auth |
 | `/4fadm/export.php` | Einsatzexporte auflisten, erstellen, als ZIP herunterladen und einzeln löschen | HTTP Basic Auth; POST-Erstellung/-Löschung mit Session-CSRF; Download nur über validierte Exportkennung |
 | `/4fadm/make_fkt.php` | aktive Empfängermatrix und einzelne Standardmatrix atomar bearbeiten | HTTP Basic Auth, Session-CSRF; Rollenabgleich und Sitzungswiderruf committen mit der aktiven Matrix |
@@ -197,32 +233,38 @@ Der Benutzername für den Administrationsbereich steht in
 `ESTAB_ADMIN_PASSWORD_SECRET_FILE` referenzierten Datei. Diese
 Administrationsanmeldung ist unabhängig von den eStab-Funktionsbenutzern.
 
-Mit `ESTAB_REVIEW_OUTGOING_MESSAGES=false` bleibt das veröffentlichte
-Standardverhalten erhalten: Nach der LdF-Entscheidung transportiert A/W einen
-Ausgang und schließt ihn direkt ab. Der strikt geparste Wert `true` aktiviert
-auch für Ausgänge die anschließende Sichtung. Nach einer Änderung muss der
-App-Container neu erzeugt und der Rollen-Workflow fachlich abgenommen werden.
+Die für Kapitel 4.3 der THW-DV 1-101 umgesetzten fachlichen Invarianten,
+Quellfassung, Aussagegrenzen und Abnahmeschritte stehen in
+[docs/DV-1-101-UMSETZUNG.md](docs/DV-1-101-UMSETZUNG.md). Die formale Sichtung
+eines Ausgangs ist verbindlicher Bestandteil des Nachrichtenlaufs und kann
+weder per Compose-Umgebung noch per Legacy-Konfiguration abgeschaltet werden.
 
 ### Nachrichtenlauf und Nachweisung
 
-Jede neu aufgenommene oder verfasste Nachricht beginnt bei der Leitung des
-Fernmeldebetriebs (LdF). Die Statuswerte bezeichnen dabei eindeutig die
-aktuell zuständige Arbeitsstufe:
+Die Statuswerte bezeichnen eindeutig die aktuell zuständige Arbeitsstufe:
 
-| Status | Zuständig | Bedeutung |
-| --- | --- | --- |
-| `1` | LdF | Eingangsrufnamen in einen Absender übersetzen beziehungsweise beim Ausgang den Rufnamen der Gegenstelle und den vorgesehenen Beförderungsweg festlegen |
-| `2` | A/W | den vorbereiteten Ausgang tatsächlich befördern |
-| `4` | Si | die bereits angenommene oder beförderte Nachricht sichten |
-| `8` | abgeschlossen | Nachricht ist fertig bearbeitet und der Vordruck kann erzeugt werden |
+| Status | Richtung | Zuständig | Bedeutung |
+| --- | --- | --- | --- |
+| `4` | Ausgang | Si | Anschrift, Verfasserzeichen und Verfasserfunktion formal prüfen; freigeben oder mit Pflichtgrund an den Verfasser zurückgeben |
+| `10` | Ausgang | Verfasser | zurückgegebenen Entwurf korrigieren und erneut zur formalen Sichtung einreichen |
+| `1` | Ausgang | LdF | Rufname der Gegenstelle und vorgesehenen Beförderungsweg festlegen |
+| `2` | Ausgang | A/W | den vorbereiteten Ausgang tatsächlich befördern |
+| `1` | Eingang | LdF | aufgenommenen Rufnamen in einen Absender übersetzen |
+| `4` | Eingang | Si | Inhalt auswerten und Empfänger festlegen |
+| `8` | beide | abgeschlossen | Nachricht ist fertig bearbeitet und der Vordruck kann erzeugt werden |
 
-Ein Eingang läuft regulär über `1 → 4 → 8`; eine bereits automatisch
-gesichtete Aufnahme wird nach der LdF-Bearbeitung direkt mit `1 → 8`
-abgeschlossen. Ein Ausgang läuft im Standardmodus über `1 → 2 → 8` und mit
-aktivierter Ausgangssichtung über `1 → 2 → 4 → 8`.
+Ein Eingang läuft immer über `1 → 4 → 8`. Ein Ausgang läuft über
+`4 → 1 → 2 → 8`; nach einer formalen Rückgabe entsteht
+`4 → 10 → 4 → 1 → 2 → 8`. Es gibt keine Autosichtung. Ist Si nicht besetzt,
+bleibt die Nachricht in dessen Warteschlange, ohne dass A/W einen
+Sichtervermerk erzeugen kann.
 Beim Eingang erfasst A/W zwingend den empfangenen Rufnamen, kann das Feld
 „Absender“ aber weder im Formular noch über einen manipulierten Request
 schreiben. Erst LdF muss daraus einen nicht leeren Absender festlegen.
+Aufnahme-, Verfasser-, Sichter-, LdF- und Beförderungszeichen stammen aus der
+serverseitig geprüften Sitzung. Jeder erfolgreiche fachliche Übergang und sein
+strukturierter Feldnachweis werden atomar in einer append-only Hashkette
+gespeichert.
 
 Die Nachweisung unterscheidet Aufnahme und Beförderung bewusst. Beim Eingang
 zeigt sie das erfasste Eingangsmedium in Langform, etwa „Fernsprecher“, „Funk“,
@@ -263,10 +305,24 @@ in jedem Formular des jeweiligen Browser-Tabs beibehalten und nach
 erfolgreicher Anmeldung direkt geöffnet. Freie Rücksprung-URLs werden nicht
 akzeptiert. Die Administration ist als eigener technischer Zugang markiert.
 
-Eine gemeinsame Navigation führt in stabiler Reihenfolge durch Übersicht,
-Nachrichtenvordruck, Meldungsübersicht, Vordrucke, ETB, TBB, Nachweisung und
-BOS-Info. Sie markiert den aktiven Bereich und öffnet interne Ziele immer im
-selben Browserkontext. Der Nachrichtenarbeitsbereich besteht aus genau zwei
+Das gemeinsame Manifest enthält in stabiler Reihenfolge neun operative
+Bereiche: Übersicht, Nachrichtenvordruck, Führungsstellenbetrieb,
+Meldungsübersicht, Vordrucke, ETB, TBB, Nachweisung und BOS-Info; hinzu kommen
+Administration und Handbuch als zwei Dienste. Anonym sind damit elf Links
+sichtbar. Nach der Anmeldung, aber vor Auswahl eines Funktions-Huts, bleiben
+nur Übersicht, Führungsstellenbetrieb, BOS-Info, Administration und Handbuch
+sichtbar. Der Führungsstellenbetrieb ist dabei der einzige operative
+Bootstrap: Er zeigt nur Einsatz-/Schichtgrunddaten und eigene Besetzungen und
+erlaubt persönliche Annahme, Übergabebestätigung sowie Auswahl einer eigenen
+aktiven, angenommenen Besetzungs-ID. ETB, TBB, Nachrichten, Anhänge,
+Fernmeldepläne und Melderaufträge bleiben bis dahin gesperrt. Nach der Auswahl
+blendet die Navigation unzulässige Spezialziele aus: Gewöhnliche
+Stab-/FB-Funktionen, Si und S6 sehen einschließlich der beiden Dienste neun
+Links; S2 sowie LdF und A/W sehen jeweils den einen für sie freigegebenen
+Spezialbereich und damit zehn. Die Endpunkte prüfen die
+Berechtigung unabhängig von dieser Navigation erneut. Der aktive Bereich wird
+markiert, interne Ziele öffnen immer im selben Browserkontext. Der
+Nachrichtenarbeitsbereich besteht aus genau zwei
 modernen `iframe`-Elementen: links der vollhohen `vorgaben`-Sidebar und rechts
 dem `mainframe` für die Fachansicht. Auf Status und Sitzungsidentität folgen
 zuerst die rollenabhängigen Fachaktionen und danach sämtliche dauerhaft
@@ -318,8 +374,8 @@ gesperrt. Der nicht messbare Zähler erscheint als „–“ und die Karte
 kennzeichnet ihre Daten als unvollständig beziehungsweise nicht verfügbar.
 Fehlgeschlagene oder hängende Browserabrufe wechseln sichtbar auf „Status
 nicht aktuell“ und werden zeitlich begrenzt; der nächste erfolgreiche Abruf
-meldet die Erholung. Direkt geöffnete Status-/Zählerseiten erhalten weiterhin
-eine kompakte Anzeige. Formulare mit
+meldet die Erholung. Die früheren eigenständigen Status-/Zähler-Helfer gehören
+nicht mehr zur Runtime-Oberfläche. Formulare mit
 ungespeicherten Fach- oder
 Administrationseingaben warnen vor einem globalen Bereichswechsel oder
 Logout. Hilfe- und Problemfenster prüfen dabei auch ungespeicherte Eingaben im
@@ -358,9 +414,13 @@ und [Tests, Funktionsnachweis und Monitoring](docs/TESTS-UND-MONITORING.md).
 Die aktive Nachrichtenablage speichert freie Texte als rohes UTF-8 und nutzt
 Prepared Statements. Detail-, Status-, Sichtungs-, Transport-, Sperr- und
 Logout-Aktionen sind POST-/CSRF-gebunden und werden zusätzlich gegen Rolle,
-Empfänger, Objektstatus und gegebenenfalls Sperrinhaber geprüft. Ein eigener
-MariaDB-Paralleltest deckt Nummernvergabe, Admin-/Writer-Zähler-Lock,
-konkurrierendes Save/Reset und deduplizierte Read-/Done-Zustände ab.
+ausgewählte aktive Dienstbesetzung, Empfänger, Objektstatus und gegebenenfalls
+Sperrinhaber geprüft. Normale Stab-/FB-Funktionen lesen nur eine terminale
+Empfängerkopie oder ihren eigenen Ausgang. Si, LdF und A/W lesen nur ihre
+aktuelle Warteschlange beziehungsweise Sperre oder Nachrichten mit ihrer
+eigenen unveränderlichen Bearbeitungsmarke. Ein eigener MariaDB-Paralleltest
+deckt Nummernvergabe, Admin-/Writer-Zähler-Lock, konkurrierendes Save/Reset und
+deduplizierte Read-/Done-Zustände ab.
 
 ## Persistente Daten
 
@@ -378,12 +438,19 @@ wegwerfbaren Test-Stack verwendet werden.
 
 Generierte einzelne Nachrichtenvordrucke liegen kollisionsfrei als
 `<datenbank> Einsatz-<einsatz_id> <nummer> <E|A>.pdf` in `estab_data`.
-Liste und Download autorisieren sie über den gedruckten Nachrichtendatensatz
-des aktiven Einsatzes; ein bloß im Volume vorhandener Dateiname genügt nicht.
+Liste und Download verlangen eine ausgewählte aktive Dienstfunktion und
+autorisieren den Vordruck über deren Leserecht am gedruckten
+Nachrichtendatensatz des aktiven Einsatzes; ein bloß im Volume vorhandener
+Dateiname genügt nicht. Verknüpfte Anhänge übernehmen dieselbe Objektgrenze
+über vollständige, semikolongetrennte Dateinamens-Tokens. Freie Anhänge bleiben
+auf den Uploader sowie S2, Si und LdF begrenzt; Auswahl und endgültiges
+Nachrichtenspeichern prüfen die Berechtigung erneut.
 Einzelvordruck und Nachrichtenseiten des PDF-Einsatzdossiers verwenden
 denselben A4-Formularrenderer. Die Vorlage enthält weder eine
-VS-NfD-Kennzeichnung noch das frühere Wappen; Originalanhänge eines Dossiers
-bleiben unverändert im PDF-Dateikatalog eingebettet. Ist eine historische
+VS-NfD-Kennzeichnung noch das frühere Wappen. Neue Anhänge eines Dossiers
+werden beim Eingang an SHA-256 und Bytezahl gebunden und vor dem Einbetten
+erneut geprüft; beim Upgrade vorhandene Legacy-Dateien heißen ausdrücklich
+„Integrität beim Eingang nicht belegbar“. Ist eine historische
 Empfängerfunktion in der heutigen Matrix nicht mehr vorhanden, bleibt sie mit
 ihrem gespeicherten Kopiekennzeichen ausdrücklich im Inhaltsbereich sichtbar.
 

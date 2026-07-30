@@ -45,7 +45,7 @@ Neue Installationen haben die öffentliche Selbstregistrierung
 - fester Funktion,
 - zweimal eingegebenem Startkennwort.
 
-Zuweisbar sind `A/W`, `Si` und die Stab-/FB-Funktionen der aktiven
+Zuweisbar sind `A/W`, `LdF`, `Si` und die Stab-/FB-Funktionen der aktiven
 Empfängermatrix. Der Browser übermittelt nur die Funktion; die Rolle wird
 serverseitig aus dieser autoritativen Zuordnung abgeleitet. Ein neues Konto
 startet abgemeldet, ungesperrt und ohne SID oder IP-Metadaten.
@@ -61,11 +61,29 @@ Importierte Legacy-Zeilen mit leerer Funktion oder Rolle bleiben reparierbar.
 Die alte leere Zuordnung und die neue gültige Zuordnung werden dabei
 kontrolliert im Audit festgehalten.
 
+### Konto und konkrete Dienstfunktion
+
+Die Kontofunktion ist die administrative Grundzuordnung. Für einen operativen
+Einsatz reicht sie allein nicht: Unter
+`/4fadm/fuehrungsstelle.php` weist die Administration dasselbe persönliche
+Konto einer geplanten Schicht und einer oder mehreren konkreten Funktionen zu.
+Die Person nimmt jede Zuweisung anschließend selbst unter
+`/4fach/fuehrungsstelle.php` an. Erst eine aktive Schicht mit passender
+angenommener Besetzung erlaubt operative Eingaben.
+
+Eine Person kann damit beispielsweise S2/S3 oder ETB/Si wahrnehmen, ohne
+mehrere Konten oder geteilte Kennwörter zu benötigen. Der Funktionswechsel
+speichert die genaue angenommene Besetzungs-ID in der serverseitigen Sitzung
+und wird bei jeder geschützten Anfrage erneut gegen aktive Schicht, Konto,
+Funktion und Rolle geprüft. Eine abgelöste oder geschlossene Besetzung
+verliert dadurch unmittelbar ihre Schreibberechtigung.
+
 ## Empfängermatrix als Zuordnungsrichtlinie
 
 Die aktive Empfängermatrix ist die autoritative Quelle für alle
-Stab-/FB-Funktionen und deren Rolle; `Si → Stab` und
-`A/W → Fernmelder` sind fest definiert. Login, Kontoanlage, Neuzuweisung und
+Stab-/FB-Funktionen und deren Rolle; `Si → Stab` sowie
+`A/W → Fernmelder` und `LdF → Fernmelder` sind fest definiert. Login,
+Kontoanlage, Neuzuweisung und
 aktives Matrixspeichern verwenden deshalb denselben globalen
 MariaDB-Advisory-Lock. Kontooperationen nehmen erst danach den
 kontospezifischen Login-Lock. Diese feste Reihenfolge

@@ -5,14 +5,18 @@
 Ein Einsatz ist der globale Datenraum für alle operativen Eingaben. Zu jedem
 Zeitpunkt gibt es systemweit entweder genau einen aktiven Einsatz oder keinen
 aktiven Einsatz. Der Zustand „kein Einsatz aktiv“ ist absichtlich gültig:
-Lesen, Anmeldung und Administration bleiben möglich, operative Eingaben sind
-jedoch gesperrt.
+Anmeldung, öffentliche Ansichten und Administration bleiben möglich,
+operative Lese- und Schreibpfade sind jedoch gesperrt.
 
 Die zentrale PHP-API steht in `app/incident.php`. Die additive, wiederholbare
 Datenbankfolge steht in den Migrationen
-`45-global-incidents-prepare.sql`, `50-global-incidents.sql` und
-`55-global-incidents-finish.sql`. Die technische Administrationsseite ist
-`4fadm/incidents.php`.
+`45-global-incidents-prepare.sql`, `50-global-incidents.sql`,
+`55-global-incidents-finish.sql`, `80-dv-evidence-retention.sql`,
+`94-dv-organisational-controls.sql`,
+`95-attachment-ingest-integrity.sql` und
+`96-etb-duty-function.sql`. Die technischen
+Administrationsoberflächen sind `4fadm/incidents.php` und
+`4fadm/fuehrungsstelle.php`.
 
 Die verbindlichen Regeln sind:
 
@@ -35,14 +39,24 @@ Die verbindlichen Regeln sind:
    nie still dem ersten später aktivierten Realeinsatz zugeschlagen.
 7. Einsätze werden nicht gelöscht. Damit bleiben Referenzen, Exporte und
    Auditnachweise dauerhaft eindeutig.
+8. Operative Eingaben benötigen zusätzlich eine aktive Dienstschicht und eine
+   vom betreffenden Konto angenommene, fachlich passende Dienstfunktion.
+9. „Nicht aktiv“ und „formal abgeschlossen“ sind getrennte Zustände. Ein
+   formaler Abschluss ist nur nach einer vollständigen Preflight-Prüfung
+   möglich und sperrt sämtliche weiteren operativen Änderungen.
 
 ## Datenmodell
 
 | Tabelle | Aufgabe |
 | --- | --- |
-| `nv_einsaetze` | Kennung, Name, Zeitraum, Ort, Organisation, Einsatzleitung, Beschreibung und erweiterbares JSON-Metadatenobjekt |
+| `nv_einsaetze` | Kennung, Name, Zeitraum, Ort, Organisation, Einsatzleitung, Beschreibung, formaler Abschluss, Mindestaufbewahrung, Legal Hold und erweiterbares JSON-Metadatenobjekt |
 | `nv_einsatz_status` | Genau eine Singleton-Zeile mit aktiver Einsatz-ID, monotoner Revision, Zeitpunkt und Akteur |
 | `nv_einsatz_ereignisse` | Unveränderliches Audit für Anlegen, Aktivieren und Deaktivieren |
+| `nv_nachrichtenereignis_kopf`, `nv_nachrichtenereignisse` | Pro Nachricht verketteter, unveränderlicher Zustands- und Terminalnachweis |
+| `nv_dienstschichten`, `nv_dienstbesetzungen`, `nv_dienstuebergaben` | Einsatzbezogener Dienstbetrieb mit persönlicher Annahme, Mehrfachfunktion und Ablösung |
+| `nv_fernmeldeplaene`, `nv_fernmeldeplan_eintraege` | Versionierte, nach Freigabe unveränderliche S6-Kommunikationsplanung |
+| `nv_melderauftraege` | Vollständige Melderkette vom LdF-Auftrag bis zur Rückmeldung |
+| `nv_betriebsereignis_kopf`, `nv_betriebsereignisse` | Einsatzbezogene Hashkette für Schicht-, Besetzungs-, Plan- und Melderereignisse |
 
 Folgende Tabellen erhalten eine indizierte, fremdschlüsselgesicherte
 `einsatz_id`:
@@ -81,6 +95,8 @@ Nicht jede Tabelle benötigt eine redundante Einsatz-ID:
   `nv_empfmtx` und `nv_empfmtx_standard` bleiben global.
 - `nv_benutzer`, Rollen, Sitzungsstatus und Kennwörter sind globale
   Systemidentitäten. Sie werden nicht mit jedem Einsatz dupliziert.
+  `nv_dienstbesetzungen` bindet diese Personen dagegen ausdrücklich an die
+  konkrete Einsatzschicht und Funktion.
 - `estab_schema_baselines` und `estab_schema_migrations` sind technischer
   Systemzustand.
 
@@ -118,6 +134,14 @@ die Transaktion, sperrt den Singleton, führt den Callback aus und committet
 oder rollt vollständig zurück. Ohne aktiven Einsatz wird
 `EstabNoActiveIncidentException` ausgelöst.
 
+Der gemeinsame Request-Guard ergänzt diese Einsatzgrenze um den
+Führungsstellenbetrieb: Auch bei aktivem Einsatz scheitert eine normale
+operative Eingabe, wenn keine Schicht aktiv ist, die angemeldete Person ihre
+Funktion nicht angenommen hat oder ein als Melder übernommener Auftrag sie bis
+zur Rückkehr bindet. Ausgenommen sind nur die eng begrenzten Kontrollschritte
+Anmeldung/Abmeldung, persönliche Dienstannahme und -auswahl,
+Melder-Rückkehrkette, Administration und Wiederherstellung.
+
 Administration:
 
 ```php
@@ -144,6 +168,38 @@ estab_incident_deactivate(
 ): array;
 ```
 
+Formaler Abschluss und Aufbewahrung:
+
+```php
+estab_incident_close_preflight(mysqli $db, int $id): array;
+estab_incident_close(
+    mysqli $db,
+    int $id,
+    int $expectedRevision,
+    string $actor,
+    array $input
+): array;
+estab_incident_set_legal_hold(
+    mysqli $db,
+    int $id,
+    bool $enabled,
+    string $reason,
+    string $actor
+): array;
+```
+
+Der Preflight blockiert unter anderem offene Nachrichten, Sperren,
+unvollständige Anhänge, fehlende oder vom SHA-256-/Größennachweis abweichende
+neue Anhangdateien, offene Dienstschichten/Besetzungen/Melderaufträge,
+Planentwürfe und ungültige Nachrichten- oder Betriebsereignisketten. Beim
+Upgrade vorhandene, erreichbare Anhänge blockieren nicht allein aufgrund
+fehlender rückwirkender Beweiskraft; die Oberfläche zählt sie ausdrücklich als
+„Integrität beim Eingang nicht belegbar“.
+Abschluss werden Zeitpunkt, Akteur, Vermerk und ein frühestes
+Aufbewahrungsende von einem Jahr gespeichert. Ein Legal Hold verlängert diese
+Grenze fachlich; er verkürzt sie nie. eStab führt keinen automatischen
+Fachdaten-Purge aus.
+
 ## Umgesetzte Laufzeitgrenzen
 
 Das Schema ist die letzte, aber nicht die einzige Schutzschicht. Die
@@ -154,6 +210,10 @@ Einsatz-API:
   Einsatzes. Ohne aktiven Einsatz erscheint ein roter Hinweis. Markierte
   operative Formulare werden im Browser deaktiviert; jeder POST-Controller
   prüft den Zustand zusätzlich serverseitig.
+- Die Führungsstellenansicht zeigt geplante beziehungsweise aktive Schicht,
+  persönliche Funktionszuweisungen und die aktuell gewählte Arbeitsfunktion.
+  Ohne aktive Schicht oder passende angenommene Besetzung bleibt jeder
+  normale operative POST serverseitig gesperrt.
 - Nachrichten, Sperren, Sichtung, Transport, Gelesen-/Erledigt-Zustände und
   Kategoriezuordnungen prüfen die aktive Nachricht innerhalb einer
   `estab_incident_with_active_write()`-Transaktion. Listen und Zähler lesen nur
@@ -235,15 +295,20 @@ historische Einsätze eine eigene zusammenhängende Darstellung. Seine
 Nachrichtenseiten verwenden denselben A4-Formularrenderer wie die
 Einzelvordrucke, jedoch ohne Links in den Downloadbereich des aktuell aktiven
 Einsatzes. Die gemeinsame Vorlage enthält weder VS-NfD-Aufdruck noch Wappen;
-Originalanhänge liegen unverändert im eingebetteten Dateikatalog des Dossiers.
+Anhänge liegen mit ihren gelesenen Bytes im eingebetteten Dateikatalog des
+Dossiers. Bei neuen Dateien belegt der beim Eingang gespeicherte SHA-256 samt
+Bytezahl die Übereinstimmung; beim Upgrade vorhandene Legacy-Dateien werden
+als „Integrität beim Eingang nicht belegbar“ ausgewiesen.
 Da die Legacy-Datenbank keine Matrixhistorie pro Einsatz besitzt, werden
 Empfängerfunktionen, die in der aktuellen Matrix fehlen, zusätzlich mit ihrem
 gespeicherten Kopiekennzeichen im Inhaltsbereich ausgeschrieben.
 
 ## Migrations- und Testnachweis
 
-Die checksum-gebundene Folge 45/50/55 ist additiv und für eine unterbrochene
-DDL-Ausführung wiederaufnehmbar. Sie:
+Die checksum-gebundene Folge 45/50/55/80/94/95/96 ist additiv. Ein harter
+Abbruch bleibt bis zur kontrollierten Prüfung des Migrationsledgers
+fail-closed; anschließend werden ausschließlich exakt erkannte,
+migrationseigene Zwischenstände fortgesetzt. Die ersten drei Migrationen:
 
 1. prüft in Migration 45 vor jeder Einsatz-DDL alle zehn operativen
    Basistabellen und beide historischen Zeitspalten,
@@ -261,6 +326,18 @@ DDL-Ausführung wiederaufnehmbar. Sie:
 8. stellt in Migration 55 die kanonischen automatischen Zeitattribute wieder
    her.
 
+Migration 80 ergänzt ohne Umschreiben historischer Fachdaten den
+Nachrichten-/ETB-Nachweis, den formalen Abschluss und die
+Aufbewahrungsgrenzen. Migration 94 ergänzt persönliche Dienstbesetzungen,
+S6-Planversionen, Melderaufträge und den verketteten Betriebsnachweis. Neue
+abgeschlossene Nachrichten werden an einen kanonischen Terminal-Snapshot
+gebunden. Ein historischer Import ohne einen damals nicht vorhandenen
+Terminal-Snapshot bleibt ausdrücklich als „nicht nachträglich belegbar“
+sichtbar; seine vorhandene Ereigniskette wird nicht erfunden oder umgedeutet.
+Migration 95 ergänzt den nicht rückwirkenden Anhang-Eingangsnachweis.
+Migration 96 führt die getrennte ETB-Dienstfunktion und ihre eng begrenzte
+`EINSATZTAGEBUCH`-Fähigkeit ein.
+
 Migration 50 bleibt bytegenau auf der bereits im Ledger verwendeten
 Prüfsumme. Vor- oder Nachbedingungen werden ausschließlich in neuen
 Versionsdateien ergänzt; weder der Ledger noch eine veröffentlichte SQL-Datei
@@ -272,8 +349,13 @@ führt den Domänenvertrag in einer eigens migrierten MariaDB aus und prüft
 Parallelaktivierung, No-active-INSERT, Update-/Delete-Sperre,
 Reassignment-Versuch und konkurrierende Statusänderung. Der
 Schema-Migratortest belegt Legacy-Backfill und Wiederholbarkeit.
+`tests/integration/dv_evidence.php` beweist Abschluss-Preflight,
+Append-only-ETB, Hashketten, Terminalbindung, Mindestaufbewahrung und Legal
+Hold. `tests/integration/dv_operations.php` beweist Pflichtbesetzung,
+Mehrfachfunktion, Schichtübergabe, S6-Versionierung, Melderbindung und die
+Schreibsperre ohne aktive Schicht.
 `tests/integration/incident_export.php` erzeugt zusätzlich ETB, TBB,
-Nachricht und Originalanhang in zwei Einsätzen, exportiert den inzwischen
+Nachricht und Anhang mit Eingangsnachweis in zwei Einsätzen, exportiert den inzwischen
 historischen ausgewählten Einsatz und extrahiert dessen PDF-`EmbeddedFile`
 bytegleich samt SHA-256. Der vollständige CI-Lauf schließt den
 Backup-/Restore-Roundtrip an.

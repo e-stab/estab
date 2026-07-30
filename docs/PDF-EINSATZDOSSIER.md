@@ -1,22 +1,43 @@
 # PDF-Einsatzdossier
 
 Über **Administration → PDF-Einsatzdossier** kann ein bestimmter Einsatz als
-eine zusammenhängende, durchsuchbare PDF ausgegeben werden. Der ausgewählte
-Einsatz muss dafür nicht aktiv sein; damit lassen sich auch abgeschlossene
-Einsätze unverändert dokumentieren.
+zusammenhängende, durchsuchbare DV-1-101-Einsatzdokumentation ausgegeben
+werden. Der ausgewählte Einsatz muss dafür nicht aktiv sein; damit lassen sich
+auch historische oder formal abgeschlossene Einsätze unverändert
+dokumentieren.
 
 ## Inhalt auswählen
 
-Der Administrator wählt mindestens einen der folgenden Bereiche:
+Der Administrator wählt mindestens einen der folgenden neun Bereiche. Beim
+Aufruf sind alle neun Bereiche ausgewählt:
 
 - Einsatztagebuch (ETB),
 - Technisches Betriebsbuch (TBB),
 - alle Nachrichtenvordrucke des Einsatzes,
-- Originalanhänge zu den Nachrichtenvordrucken.
+- Anhänge zu den Nachrichtenvordrucken samt Integritätsstatus,
+- Nachrichtenereignisse und Nachrichtennachweisköpfe,
+- Dienstschichten, Dienstbesetzungen, sämtliche Übergabeanforderungen
+  (`INITIIERT`, `STORNIERT`, `BESTAETIGT`) und abgeschlossene
+  Dienstübergaben,
+- S6-Fernmeldeplanversionen mit sämtlichen Planeinträgen,
+- Melderaufträge,
+- Betriebsereignisse und Betriebsnachweiskopf.
 
-Originalanhänge können nur zusammen mit den Nachrichtenvordrucken ausgewählt
-werden. ETB und TBB erscheinen als durchsuchbare Dossierseiten. Jede Nachricht
-wird dagegen mit exakt demselben A4-Formularrenderer ausgegeben wie unter
+Anhänge können nur zusammen mit den Nachrichtenvordrucken ausgewählt
+werden. Der Server verwirft unbekannte, mehrfachdeutige oder nicht kanonische
+Auswahlwerte; eine leere Auswahl wird nicht als scheinbar vollständiges
+Dossier akzeptiert.
+
+Das ETB weist neben Ereignis und Bemerkung auch Ereigniszeit,
+Erfassungszeit, Ereignistyp, Nachrichten- und Anhangsbezug, freien Bezug sowie
+eine etwaige Korrekturbeziehung aus. Dienstorganisation, S6-Planung und
+Melderbeförderung enthalten jeweils alle persistierten Status-, Zeit-,
+Gültigkeits-, Freigabe-, Empfänger-, Rückweg- und Abschlussfelder. Keine
+ausgewählte leere Sektion verschwindet still: Das Dossier sagt ausdrücklich,
+dass für den Einsatz keine entsprechenden Datensätze vorhanden sind.
+
+ETB und TBB erscheinen als durchsuchbare Dossierseiten. Jede Nachricht wird
+dagegen mit exakt demselben A4-Formularrenderer ausgegeben wie unter
 **Generierte Vordrucke**. Dadurch stimmen Raster, Feldpositionen,
 Empfängerkennzeichnung und mehrseitiger Inhaltsfluss in Einzel- und
 Gesamtexport überein. Die gemeinsame Vorlage druckt weder eine
@@ -42,26 +63,89 @@ Rasterposition gesetzt: Unter dem Nachrichteninhalt erscheint einmal
 Kopiekennzeichen, zum Beispiel `ALT_1 [gn]`.
 
 Anhänge werden nicht verlustbehaftet in Bilder umgewandelt: Jede abgeschlossene
-Originaldatei wird unverändert in den PDF-Katalog eingebettet. Ihr sicherer
+Datei wird mit ihren aktuell gelesenen Bytes in den PDF-Katalog eingebettet.
+Ihr sicherer
 Dateiname steht zusätzlich im Nachrichtenvordruck. Bei einem historischen
 Einsatz wird dort bewusst kein Link auf den Downloadbereich des aktuell
 aktiven Einsatzes erzeugt. Das Anlagenverzeichnis nennt portablen Dateinamen,
-Medientyp, Größe, zugehörige Nachrichtendatensätze und SHA-256-Prüfsumme.
+Medientyp, Größe, zugehörige Nachrichtendatensätze und den SHA-256 der
+eingebetteten Datei.
 Gängige PDF-Leser zeigen diese Dateien in ihrer Anlagenansicht an.
+
+Für nach Migration 95 eingegangene Dateien berechnet eStab beim atomaren
+Finalisieren SHA-256 und Bytezahl und speichert beide zusammen mit der
+Serverzeit unveränderlich in `nv_anhang`. Vor dem Laden und nochmals beim
+Einbetten vergleicht der Export die reale Datei mit diesem Eingangsnachweis.
+Fehlender Nachweis, abweichende Größe oder auch eine gleich große Datei mit
+anderem Inhalt bricht den Export ab. Eine nachträglich veränderte Datei wird
+damit nie als eingegangene Originaldatei zertifiziert.
+
+Migration 95 markiert ausschließlich die beim Upgrade bereits vorhandenen
+Zeilen als Legacy. Für sie kann ein heute berechneter Hash nicht beweisen,
+welche Bytes ursprünglich eingingen. Deckblatt und Anlagenverzeichnis nennen
+deshalb ausdrücklich **Integrität beim Eingang nicht belegbar** und zeigen
+einen Hash allenfalls als Prüfsumme der jetzt eingebetteten Datei, nie als
+nachträglich erfundenen Eingangsnachweis. Neue Datensätze können durch
+Datenbank-Trigger weder als Legacy angelegt noch nach der Finalisierung
+herabgestuft oder mit einem anderen Eingangsnachweis versehen werden.
+
+## Deckblatt, Abschluss und Nachweisstatus
+
+Das Deckblatt kennzeichnet den Rechtsstand unübersehbar:
+
+- Ein offener Einsatz trägt den roten Banner
+  **VORLÄUFIG – Einsatz nicht formal abgeschlossen**.
+- Ein formal geschlossener Einsatz trägt den grünen Banner
+  **FORMAL ABGESCHLOSSEN**.
+
+Zusätzlich nennt das Deckblatt Abschlusszeit, abschließende Identität,
+Abschlussvermerk, Mindestaufbewahrung bis, Legal-Hold-Status, Hold-Grund,
+Hold-Zeit und verantwortliche Identität. Ein historisch gesetztes `ende`
+ersetzt den formalen Abschluss nicht.
+
+Der Nachrichten-Nachweis wird nicht aus dem gespeicherten Kopfstatus
+übernommen. Innerhalb desselben konsistenten Snapshots berechnet eStab für
+jede Ereigniszeile erneut:
+
+- SHA-256 des unveränderten Feldsnapshots,
+- Vorgängerbeziehung innerhalb der jeweiligen Nachrichtenkette,
+- kanonischen Ereignis-Hash,
+- Ereignisanzahl und letzten Hash jedes Nachrichtennachweiskopfs,
+- einen stabilen Summenhash über alle Nachrichtennachweisköpfe.
+
+Für neue terminale Status-8-Ereignisse vergleicht der Export außerdem den
+vollständigen kanonischen Nachrichtensnapshot mit der im Snapshot gelesenen
+Livezeile. Druck-, Sperr- und Lesemarker gehören bewusst nicht zu dieser
+fachlichen Bindung. Eine fehlende oder abweichende neue Terminalbindung macht
+den Nachweis ungültig. Ein vor Einführung dieses Vertrags erzeugter
+`legacy_import` bleibt als gültig verketteter historischer Import sichtbar,
+wird aber getrennt als **historischer Import – keine Live-Bindung belegbar**
+gezählt; das Dossier behauptet dann nicht „vollständig gültig“.
+
+Auch die einsatzweite Betriebsereigniskette wird aus Sequenz, Objekttyp,
+Objekt-ID, Aktion, Akteur, Ereigniszeit, vollständigem JSON-Detail und
+Vorgänger-Hash neu berechnet. Der berechnete Endhash wird mit Sequenz und Hash
+des persistierten Betriebsnachweiskopfs verglichen. Das Deckblatt zeigt
+Nachrichten-Head-Summenhash und Betriebs-Head-Hash; die Detailsektionen weisen
+sämtliche Einzelköpfe, Hashes, Snapshots und Prüfergebnisse aus.
 
 ## Vollständigkeits- und Sicherheitsgrenzen
 
-Alle Datenbankabfragen sind mit der ausgewählten `einsatz_id` gebunden und
-werden in einem konsistenten MariaDB-Read-only-Snapshot gelesen. Ein
+Alle exportierten Fachdaten werden ausschließlich über vorbereitete SELECTs
+mit der ausgewählten `einsatz_id` gebunden und in einem konsistenten
+MariaDB-Read-only-Snapshot gelesen. Tabellen ohne eigene Einsatzspalte
+(`nv_dienstbesetzungen` und `nv_fernmeldeplan_eintraege`) werden über ihre
+einsatzgebundene Dienstschicht beziehungsweise Planversion eingegrenzt. Ein
 historischer Datensatz eines anderen Einsatzes oder eine während der
 Erzeugung erst hinzugekommene Teilmenge kann daher nicht versehentlich in das
 Dossier geraten. Für Anhänge gelten zusätzlich die zentrale
-Dateinamen-Allowlist, die Ablagegrenze und ein stabiler Datei-Lesevorgang. Fehlt
+Dateinamen-Allowlist, die Ablagegrenze, die gespeicherte
+SHA-256-/Größenbindung für neue Anhänge und ein stabiler Datei-Lesevorgang. Fehlt
 eine als abgeschlossen geführte Datei, ist ein Nachrichtenvordruck mit einem
 nicht abgeschlossenen Anhang verknüpft oder ändert sich eine Datei beim Lesen,
 wird kein scheinbar vollständiger Export ausgeliefert.
 
-Die Gesamtgröße eingebetteter Originaldateien ist standardmäßig auf
+Die Gesamtgröße eingebetteter Dateien ist standardmäßig auf
 `52428800` Byte (50 MiB) begrenzt. Sie kann in `.env` mit
 `ESTAB_PDF_ATTACHMENT_MAX_BYTES` zwischen 0 und 104857600 Byte eingestellt
 werden. Die Grenze schützt den 256-MiB-PHP-Prozess, weil die alte FPDF-Laufzeit
@@ -81,39 +165,55 @@ interne Dateipfade.
 Die automatisierten Tests prüfen unter anderem:
 
 - strikte Einsatz- und Abschnittsauswahl,
-- vorbereitete, einsatzgebundene ETB-/TBB-/Nachrichten-/Anhangsabfragen,
+- vorbereitete, einsatzgebundene Abfragen aller neun Bereiche,
+- neue ETB-Zeit-, Typ-, Referenz- und Korrekturfelder,
+- vollständige Dienst-, S6- und Melderketten,
+- Neuberechnung von Nachrichten- und Betriebsereignishashes samt Kopfvergleich,
+- Status-8-Terminalbindung einschließlich sichtbarer Legacy-Ausnahme,
+- Vorläufig-/Formal-Banner, Retention und Legal Hold,
 - Traversal-, Symlink-, MIME-, Größen- und Duplikatgrenzen,
 - eingebetteten PDF-1.7-Dateikatalog und SHA-256,
-- echte Extraktion des unveränderten Beispielanhangs,
+- echte Extraktion des unveränderten, am Eingang gebundenen Beispielanhangs,
+- Ablehnung einer nach dem Laden oder vor dem Export gleich groß manipulierten
+  Datei sowie ehrliche Legacy-Kennzeichnung ohne erfundenen Eingangshash,
 - durchsuchbaren Text für ETB, TBB und Nachrichten,
 - dieselben Formularmarker in Einzel- und Gesamtexport,
 - aktuelle In-Memory-Ausgabe trotz unverändert erhaltener Archivdatei,
 - Abwesenheit von VS-NfD-Aufdruck, Wappen und Seitenbildern,
 - verlustfreie Anzeige nicht mehr in der Matrix vorhandener Empfänger,
 - pixelidentisches A4-Rendering beider Nachrichtenausgabepfade einschließlich
-  mehrseitigem Inhaltsfluss und produktivem Wechsel von Deckblatt, ETB und TBB
-  zur Formularseite.
+  mehrseitigem Inhaltsfluss und produktivem Wechsel zwischen allen
+  Dossierabschnitten und der Formularseite.
 
 Der echte MariaDB-Nachweis `tests/integration/incident_export.php` legt
-ETB-, TBB-, Nachrichten- und Anhangdaten in zwei verschiedenen Einsätzen an,
-macht den ausgewählten Einsatz vor dem Lesen historisch und verlangt für jede
-Sektion exakt dessen Datensatz. Anschließend extrahiert er den tatsächlichen
-`/EmbeddedFile`-Stream aus der erzeugten PDF, vergleicht ihn bytegenau mit der
-Originaldatei und prüft sowohl deren SHA-256 als auch den SHA-256-Wert der
-vollständigen PDF. Der Test läuft unmittelbar nach der Einsatzaktivierung im
-vollständigen Container-CI-Gate.
+ETB-, TBB-, Nachrichten-, Terminalnachweis- und Anhangdaten in zwei
+verschiedenen Einsätzen an, macht den ausgewählten Einsatz vor dem Lesen
+historisch und verlangt für jede Sektion ausschließlich dessen Datensätze.
+Er prüft die neu berechnete Kette, den Nachrichtennachweiskopf und die
+Status-8-Livebindung. Leere Organisationssektionen werden explizit als leer
+geliefert und mit gültigem leeren Betriebsnachweis dargestellt. Anschließend
+extrahiert der Test den tatsächlichen `/EmbeddedFile`-Stream aus der erzeugten
+PDF, vergleicht ihn bytegenau mit der am Eingang gehashten Fixture und prüft
+sowohl deren SHA-256 als auch den SHA-256-Wert der vollständigen PDF. Danach
+ersetzt er die Datei durch gleich viele andere Bytes: Sowohl erneutes Laden
+als auch Einbetten aus dem schon geladenen Bundle müssen fail-closed
+scheitern. Der Test läuft
+unmittelbar nach der Einsatzaktivierung im vollständigen Container-CI-Gate.
 
 Zusätzlich erzeugt `tests/php/pdf_template_render_fixture.php` aus identischen
 Nachrichten- und Matrixdaten Einzelvordruck, direkte Dossier-Nachrichtenseite,
-beide mehrseitigen Varianten sowie ein vollständiges Dossier in der
-produktiven Folge Deckblatt, ETB, TBB, Nachricht und Anlagenverzeichnis.
+beide mehrseitigen Varianten sowie ein repräsentatives vollständiges Dossier
+in der produktiven Folge Deckblatt, ETB, TBB, Nachricht, Nachrichtennachweis,
+Dienstorganisation, S6-Planung, Melderauftrag, Betriebsnachweis und
+Anlagenverzeichnis.
 `tests/static/pdf_render.sh` prüft sie mit Poppler: A4 und Seitenzahl über
 `pdfinfo`, Text, historischen Empfänger-Fallback und verbotene Aufdrucke über
 `pdftotext`, den konstanten linken Folgeseiteneinzug über dessen
 Bounding-Box-Ausgabe, fehlende Rasterbilder über `pdfimages`, pixelgleiche
-PNGs über `pdftoppm` und den unveränderten Originalanhang über `pdfdetach` und
-`cmp`. Auf der produktiven Dossierseite wird ausschließlich das absichtlich
-globale Seitenzahlfeld vom Pixelvergleich ausgenommen.
+PNGs über `pdftoppm` und den am Eingang gebundenen Anhang über `pdfdetach` und
+`cmp`. Die zehn Seiten der repräsentativen Fixture werden vollständig zu PNG
+gerendert. Auf der produktiven Nachrichtenseite wird ausschließlich das
+absichtlich globale Seitenzahlfeld vom Pixelvergleich ausgenommen.
 GitHub Actions lädt PDFs, Textauszüge, Prüfinformationen und Render-PNGs
 14 Tage als `pdf-render-evidence-*` hoch. Eine sichtbare Verschiebung der
 Vorlage oder ein erneut eingebundenes Wappen sperrt damit die CI.
@@ -121,4 +221,5 @@ Vorlage oder ein erneut eingebundenes Wappen sperrt damit die CI.
 Für die manuelle Abnahme sollte ein Dossier mit realistischen langen
 Einsatznamen, mehrseitigen Einträgen und allen in der Organisation verwendeten
 Anhangstypen erstellt, in der vorgesehenen PDF-Anwendung geöffnet und die
-Anlagenansicht stichprobenartig gegen die Originaldateien geprüft werden.
+Anlagenansicht stichprobenartig gegen die Eingangsdateien sowie den angezeigten
+Integritätsstatus geprüft werden.
