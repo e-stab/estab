@@ -55,6 +55,52 @@ $assert(
         === estab_message_counter_lock_name('estab', 'nv_nachrichten'),
     'message counter lock namespace is not deterministic'
 );
+$terminalFixture = [
+    'einsatz_id' => '7',
+    '00_lfd' => '42',
+    '04_nummer' => '9',
+    '04_richtung' => 'A',
+    '06_befweg' => 'Kanal 404',
+    '06_befwegausw' => 'Fu',
+    'estab_fernmeldeplan_eintrag_id' => '12',
+    '12_inhalt' => 'Unveränderlicher Inhalt',
+    '16_empf' => 'S1_rt',
+    '17_vermerke' => 'Formal geprüft',
+    '20_master_katego' => '3',
+    'x00_status' => '8',
+    'x01_abschluss' => 't',
+    'x02_sperre' => 'f',
+    'x03_sperruser' => '',
+    'x04_druck' => 't',
+    'x05_druck_d' => '2026-07-23 13:00:00',
+    '99_lstacc' => '2026-07-23 13:01:00',
+];
+$terminalSnapshot = estab_message_terminal_snapshot($terminalFixture);
+$assert(
+    ($terminalSnapshot['00_lfd'] ?? null) === 42
+        && ($terminalSnapshot['estab_fernmeldeplan_eintrag_id'] ?? null) === 12
+        && ($terminalSnapshot['12_inhalt'] ?? null) === 'Unveränderlicher Inhalt'
+        && !array_key_exists('20_master_katego', $terminalSnapshot)
+        && !array_key_exists('x02_sperre', $terminalSnapshot)
+        && !array_key_exists('x04_druck', $terminalSnapshot)
+        && !array_key_exists('99_lstacc', $terminalSnapshot),
+    'terminal evidence snapshot includes mutable organisational/technical metadata'
+);
+$assert(
+    estab_message_terminal_snapshot_sha256($terminalFixture)
+        === estab_message_terminal_snapshot_sha256(
+            array_replace($terminalFixture, [
+                '20_master_katego' => '99',
+                'x04_druck' => 'f',
+                '99_lstacc' => '2030-01-01 00:00:00',
+            ])
+        )
+        && estab_message_terminal_snapshot_sha256($terminalFixture)
+            !== estab_message_terminal_snapshot_sha256(
+                array_replace($terminalFixture, ['06_befweg' => 'Anderer Weg'])
+            ),
+    'terminal evidence hash is unstable for metadata or blind to transport data'
+);
 
 $payload = "O'Reilly \"quoted\" & <script>alert(1)</script>; ' OR 1=1 --";
 $encoded = estab_message_html($payload);
@@ -77,6 +123,8 @@ $assert(
 );
 
 $staff = ['kuerzel' => 'st0001', 'funktion' => 'S1', 'rolle' => 'Stab'];
+$successorStaff = ['kuerzel' => 'st0003', 'funktion' => 'S1', 'rolle' => 'Stab'];
+$secondStaff = ['kuerzel' => 's20001', 'funktion' => 'S2', 'rolle' => 'Stab'];
 $foreignStaff = ['kuerzel' => 'st0002', 'funktion' => 'S10', 'rolle' => 'Stab'];
 $viewer = ['kuerzel' => 'si0001', 'funktion' => 'Si', 'rolle' => 'Stab'];
 $radio = ['kuerzel' => 'aw0001', 'funktion' => 'A/W', 'rolle' => 'Fernmelder'];
@@ -101,6 +149,8 @@ $outgoing = $incoming + [];
 $outgoing['04_richtung'] = 'A';
 $outgoing['x00_status'] = 2;
 $outgoing['06_befwegausw'] = 'Fu';
+$outgoing['15_quitdatum'] = '2026-07-23 11:58:00';
+$outgoing['15_quitzeichen'] = 'si0001';
 $outgoing['x02_sperre'] = 't';
 $outgoing['x03_sperruser'] = 'aw0001';
 $leadIncoming = $incoming;
@@ -111,10 +161,130 @@ $leadIncoming['x02_sperre'] = 't';
 $leadIncoming['x03_sperruser'] = 'ld0001';
 $leadOutgoing = $leadIncoming;
 $leadOutgoing['04_richtung'] = 'A';
+$leadOutgoing['15_quitdatum'] = '2026-07-23 11:58:00';
+$leadOutgoing['15_quitzeichen'] = 'si0001';
+$pendingOutgoingReview = $leadIncoming;
+$pendingOutgoingReview['04_richtung'] = 'A';
+$pendingOutgoingReview['x00_status'] = 4;
+$pendingOutgoingReview['x02_sperre'] = 'f';
+$pendingOutgoingReview['x03_sperruser'] = '';
+$pendingOutgoingReview['14_zeichen'] = 'st0001';
+$pendingOutgoingReview['14_funktion'] = 'S1';
+$returnedOutgoing = $pendingOutgoingReview;
+$returnedOutgoing['x00_status'] = 10;
+$returnedOutgoing['14_zeichen'] = 'st0001';
+$returnedOutgoing['14_funktion'] = 'S1';
+$returnedOutgoing['15_quitdatum'] = '2026-07-23 11:58:00';
+$returnedOutgoing['15_quitzeichen'] = 'si0001';
 
-$assert(estab_message_object_allowed($staff, 'staff-read', $incoming), 'recipient denied');
+$assert(
+    !estab_message_object_allowed($staff, 'staff-read', $incoming)
+        && !estab_message_object_allowed($staff, 'staff-state', $incoming),
+    'staff reached an incoming recipient before terminal Si review'
+);
 $assert(!estab_message_object_allowed($foreignStaff, 'staff-read', $incoming), 'substring recipient accepted');
 $assert(estab_message_object_allowed($viewer, 'viewer-review', $incoming), 'pending viewer item denied');
+$completedIncoming = $incoming;
+$completedIncoming['x00_status'] = 8;
+$completedIncoming['x01_abschluss'] = 't';
+$completedIncoming['15_quitdatum'] = '2026-07-23 12:01:00';
+$completedIncoming['15_quitzeichen'] = 'si0001';
+$assert(
+    estab_message_object_allowed($staff, 'staff-read', $completedIncoming)
+        && estab_message_object_allowed(
+            $staff,
+            'staff-state',
+            $completedIncoming
+        ),
+    'terminal incoming recipient denied'
+);
+$assert(
+    estab_message_object_allowed(
+        $viewer,
+        'viewer-review',
+        $pendingOutgoingReview
+    ),
+    'outgoing form was not offered to Si before LdF'
+);
+$assert(
+    estab_message_object_allowed(
+        $staff,
+        'staff-read',
+        $pendingOutgoingReview
+    )
+        && estab_message_object_allowed(
+            $staff,
+            'staff-state',
+            $pendingOutgoingReview
+        )
+        && !estab_message_object_allowed(
+            $secondStaff,
+            'staff-read',
+            $pendingOutgoingReview
+        )
+        && !estab_message_object_allowed(
+            $secondStaff,
+            'staff-state',
+            $pendingOutgoingReview
+        ),
+    'unreviewed outgoing object was not limited to its function author'
+);
+$assert(
+    !estab_message_object_allowed(
+        $lead,
+        'telecommunications-lead-edit',
+        $pendingOutgoingReview
+    ),
+    'LdF bypassed mandatory outgoing formal review'
+);
+$assert(
+    estab_message_object_allowed(
+        $staff,
+        'staff-correction',
+        $returnedOutgoing
+    )
+        && estab_message_object_allowed(
+            $successorStaff,
+            'staff-correction',
+            $returnedOutgoing
+        )
+        && !estab_message_object_allowed(
+            $foreignStaff,
+            'staff-correction',
+            $returnedOutgoing
+        ),
+    'returned outgoing form did not follow the responsible function'
+);
+$assert(
+    estab_message_object_allowed($staff, 'staff-read', $returnedOutgoing)
+        && !estab_message_object_allowed(
+            $secondStaff,
+            'staff-read',
+            $returnedOutgoing
+        )
+        && !estab_message_object_allowed(
+            $secondStaff,
+            'staff-state',
+            $returnedOutgoing
+        ),
+    'returned outgoing object leaked beyond its function author'
+);
+$completedOutgoing = $returnedOutgoing;
+$completedOutgoing['x00_status'] = 8;
+$completedOutgoing['x01_abschluss'] = 't';
+$assert(
+    estab_message_object_allowed(
+        $secondStaff,
+        'staff-read',
+        $completedOutgoing
+    )
+        && estab_message_object_allowed(
+            $secondStaff,
+            'staff-state',
+            $completedOutgoing
+        ),
+    'terminal outgoing recipient denied'
+);
 $assert(
     !estab_message_object_allowed($staff, 'staff-read', $leadIncoming),
     'untranslated incoming item reached recipient queue'
@@ -154,24 +324,35 @@ $assert(estab_message_object_allowed($radio, 'telecommunications-edit', $outgoin
 $assert(estab_message_object_allowed($radio, 'telecommunications-save', $outgoing), 'lock owner denied');
 $assert(!estab_message_object_allowed($otherRadio, 'telecommunications-save', $outgoing), 'foreign lock accepted');
 $assert(
-    estab_workflow_route_allowed(
+    !estab_workflow_route_allowed(
         $radio,
         'POST',
         ['task' => 'FM-Admin', '00_lfd' => '1', 'absenden_x' => '1']
     )
         && !estab_workflow_route_allowed(
-            $staff,
+            $viewer,
             'POST',
-            ['task' => 'FM-Admin', '00_lfd' => '1', 'absenden_x' => '1']
+            ['task' => 'SI-Admin', '00_lfd' => '1', 'absenden_x' => '1']
         ),
-    'FM admin submit is not restricted to the A/W role'
+    'completed-message administration still accepts mutation tasks'
 );
 $assert(
-    estab_workflow_message_operation(['task' => 'FM-Admin', '00_lfd' => '1'])
-        === 'telecommunications-admin'
+    estab_workflow_route_allowed(
+        $radio,
+        'POST',
+        ['fm' => 'FM-Adminmeldung', '00_lfd' => '1']
+    )
+        && estab_workflow_route_allowed(
+            $viewer,
+            'POST',
+            ['fm' => 'SI-Adminmeldung', '00_lfd' => '1']
+        )
+        && estab_workflow_message_operation(
+            ['fm' => 'FM-Adminmeldung', '00_lfd' => '1']
+        ) === 'telecommunications-admin'
         && estab_message_object_allowed($radio, 'telecommunications-admin', $incoming)
         && !estab_message_object_allowed($staff, 'telecommunications-admin', $incoming),
-    'FM admin submit bypasses its message-object permission'
+    'read-only administration is not restricted to its role and message'
 );
 $transported = $outgoing;
 $transported['03_datum'] = '2026-07-23 12:00:00';
@@ -201,9 +382,16 @@ foreach ([
 
 $assert(
     substr_count($listSource, "switch (\$empfcolor [\$recipientFunction] ?? '')") === 2
-        && substr_count($allMessagesSource, "switch (\$empfcolor [\$recipientFunction] ?? '')") === 1
-        && !str_contains($listSource, '$abfzeit[stak]'),
+        && !str_contains($listSource, '$abfzeit[stak]')
+        && str_contains($listSource, 'switch ( $row["x00_status"] )')
+        && !str_contains($listSource, '$row["X00_status"]'),
     'message lists do not handle missing recipient colors or timestamp keys safely'
+);
+$assert(
+    str_contains($allMessagesSource, 'http_response_code(410)')
+        && strpos($allMessagesSource, 'exit;')
+            < strpos($allMessagesSource, 'include ('),
+    'retired unrestricted all-message renderer can still execute'
 );
 $assert(
     substr_count($listSource, 'data-estab-list-filter') === 2
@@ -217,59 +405,50 @@ $assert(
 
 $fmAdminAccess = [];
 $fmAdminButtons = [];
-$fmAdminUpdate = [];
 $assert(
     preg_match(
         '/case\s+"FM-Admin"\s*:\s*case\s+"SI-Admin"\s*:(?<body>.*?)break;/s',
         $formSource,
         $fmAdminAccess
     ) === 1
-        && str_contains($fmAdminAccess['body'], 'for ($i=15;$i<=17;$i++)')
-        && !str_contains($fmAdminAccess['body'], 'for ($i=1;$i<=17;$i++)'),
-    'FM admin form exposes fields outside the persisted review section'
-);
-$assert(
-    str_contains($formSource, '$immutableAdminTimestamp = in_array')
-        && str_contains($formSource, 'data-estab-readonly=\\"true\\"')
-        && str_contains(
-            $formSource,
-            'id=\\"f_15_quitdatum_value\\" type=\\"hidden\\"'
-        )
-        && str_contains($formSource, 'Uhrzeit (fest)')
-        && str_contains(
-            $dataSource,
-            '"15_quitdatum" => $storedAdminMessage ["15_quitdatum"]'
-        ),
-    'FM/SI administration exposes or persists an editable review timestamp'
+        && !str_contains($fmAdminAccess['body'], '$this->feld [')
+        && !str_contains($fmAdminAccess['body'], '$this->bg ['),
+    'completed-message administration still enables editable fields'
 );
 $assert(
     preg_match(
-        '/case\s+"FM-Admin"\s*:\s*case\s+"Stab_sichten"\s*:\s*case\s+"SI-Admin"\s*:(?<body>.*?)break;/s',
+        '/case "FM-Admin":\s*case "SI-Admin":(?<body>.*?)break;/s',
         $formSource,
         $fmAdminButtons
     ) === 1
-        && str_contains($fmAdminButtons['body'], 'name=\\"task\\"')
-        && str_contains($fmAdminButtons['body'], 'name=\\"absenden\\"')
-        && str_contains($fmAdminButtons['body'], 'name=\\"abbrechen\\"'),
-    'FM admin form has no controller-compatible submit controls'
+        && str_contains(
+            $fmAdminButtons['body'],
+            'Abgeschlossener Nachweis – '
+        )
+        && !str_contains($fmAdminButtons['body'], 'name=\\"absenden')
+        && !str_contains($fmAdminButtons['body'], 'name=\\"task\\"'),
+    'completed-message administration is not a read-only evidence view'
 );
 $assert(
-    preg_match(
+    !preg_match(
         '/case "FM-Admin":\s*case "SI-Admin":(?<body>.*?)\s+break;/s',
-        $dataSource,
-        $fmAdminUpdate
-    ) === 1
-        && str_contains($fmAdminUpdate['body'], '"15_quitzeichen"')
-        && str_contains($fmAdminUpdate['body'], '"16_empf"')
-        && str_contains($fmAdminUpdate['body'], '"17_vermerke"')
-        && !str_contains($fmAdminUpdate['body'], '"12_inhalt"'),
-    'FM admin handler and editable review fields are no longer aligned'
+        $dataSource
+    ),
+    'completed-message administration still has a mutation handler'
+);
+$assert(
+    str_contains($formSource, 'data-estab-formal-review=')
+        && str_contains($formSource, 'name=\\"zurueckweisen_x\\"')
+        && str_contains($formSource, 'Formal geprüft – an FmZt')
+        && str_contains($formSource, 'An Verfasser zurückgeben'),
+    'mandatory outgoing formal-review controls are missing'
 );
 $assert(
     str_contains($mainSource, '($returnValue ["task"] ?? "") !== ""')
         && str_contains($mainSource, 'estab_csrf_require_post ($_SERVER, $_POST);')
-        && str_contains($mainSource, '( $returnValue["task"] == "FM-Admin" )'),
-    'FM admin submit is not covered by the authenticated CSRF save gate'
+        && !str_contains($mainSource, '$returnValue["task"] == "FM-Admin"')
+        && !str_contains($mainSource, '$returnValue["task"] == "SI-Admin"'),
+    'controller still dispatches completed-message administration writes'
 );
 
 $assert(
@@ -286,10 +465,70 @@ $assert(
     'conditional update/state/counter contracts are incomplete'
 );
 $assert(
+    str_contains(
+        $repositorySource,
+        'function estab_message_counter_repair_max('
+    )
+        && str_contains(
+            $repositorySource,
+            "'message_counter_repaired'"
+        )
+        && str_contains(
+            $repositorySource,
+            'max($messageMaximum, $repairMaximum) + 1'
+        ),
+    'normal allocation ignores the immutable administrative counter watermark'
+);
+$assert(
+    str_contains(
+        $repositorySource,
+        "AND `x01_abschluss` = 'f' AND `x00_status` <> 8"
+    )
+        && str_contains($repositorySource, 'estab_dv_resolve_active_route')
+        && str_contains(
+            $repositorySource,
+            "'estab_fernmeldeplan_eintrag_id'"
+        )
+        && str_contains(
+            $repositorySource,
+            'estab_dv_require_messenger_reported_for_message'
+        )
+        && str_contains(
+            $repositorySource,
+            'estab_message_require_attachment_scope('
+        )
+        && str_contains(
+            $repositorySource,
+            'Message attachment table is required for resubmission'
+        )
+        && str_contains(
+            $dataSource,
+            '$conf_4f_tbl ["anhang"]'
+        )
+        && str_contains($repositorySource, "'messenger_job_id'"),
+    'closed-row immutability, attachment, S6 route or messenger evidence gate is missing'
+);
+$assert(
     !str_contains($dataSource, 'htmlentities ($data ["12_inhalt"]')
         && !str_contains($dataSource, 'query_table_iu ($query)')
         && str_contains($dataSource, 'estab_message_state_set_for_recipient')
-        && str_contains($dataSource, 'estab_message_state_unset_for_recipient'),
+        && str_contains($dataSource, 'estab_message_state_unset_for_recipient')
+        && str_contains(
+            $dataSource,
+            '$data ["16_empf"] = $redcopy2."_rt,";'
+        )
+        && str_contains(
+            $repositorySource,
+            'function estab_message_staff_access_sql('
+        )
+        && str_contains(
+            $repositorySource,
+            '$isTerminalStaffRecipient || $isOutgoingAuthor'
+        )
+        && str_contains(
+            $listSource,
+            'estab_message_staff_access_sql ("m")'
+        ),
     'message writer still entity-encodes, concatenates writes or bypasses state ownership'
 );
 $assert(
@@ -304,6 +543,14 @@ $assert(
         && str_contains($listSource, 'estab_message_query_rows')
         && !str_contains($listSource, 'LIKE \"%".$_SESSION["flt_search"]'),
     'message form/list output or search boundary is incomplete'
+);
+$assert(
+    str_contains($formSource, '$errorDefaults = array_fill_keys')
+        && str_contains(
+            $formSource,
+            'is_array ($errorselect) ? $errorselect : array ()'
+        ),
+    'partial validation errors can trigger undefined form-field warnings'
 );
 $assert(
     str_contains($overviewSource, 'estab_message_positive_id')

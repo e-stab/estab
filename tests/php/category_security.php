@@ -207,6 +207,11 @@ $assert(
 );
 $assert(
     str_contains($endpoint, 'estab_auth_session_identity($_SESSION)')
+        && str_contains(
+            $endpoint,
+            'estab_read_require_operational_scope('
+        )
+        && substr_count($endpoint, 'estab_read_message(') >= 3
         && str_contains($endpoint, 'estab_csrf_require_post($_SERVER, $_POST)')
         && str_contains($endpoint, "['create', 'update', 'delete', 'assign']")
         && str_contains($endpoint, "header('Location: ' . \$location, true, 303)")

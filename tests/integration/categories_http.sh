@@ -166,7 +166,6 @@ DELETE FROM \`${user_read_table}\`
  WHERE \`nachnum\` = ${foreign_message_id};
 DELETE FROM \`${function_done_table}\`
  WHERE \`nachnum\` = ${foreign_message_id};
-DELETE FROM \`nv_benutzer\` WHERE \`kuerzel\` = '${si_code}';
 COMMIT;
 DROP TABLE IF EXISTS
   \`usr_si_${si_code}_read\`,
@@ -204,6 +203,9 @@ SQL
         fi
     fi
     if [ "$si_users_before" = 0 ]; then
+        db_sql >/dev/null 2>&1 <<SQL
+DELETE FROM \`nv_benutzer\` WHERE \`kuerzel\` = '${si_code}';
+SQL
         db_sql >/dev/null 2>&1 <<'SQL'
 DROP TABLE IF EXISTS
   `usr__fkt_si_erl`,
@@ -292,6 +294,59 @@ csrf_from_body()
     printf '%s' "$token"
 }
 
+active_hat_id_from_body()
+{
+    awk '
+        /name="operation_action"/ {
+            saw_action_name = 1
+        }
+        saw_action_name && /value="select_hat"/ {
+            in_select_form = 1
+            saw_action_name = 0
+        }
+        in_select_form && /name="dienstbesetzung_id"/ {
+            saw_assignment_name = 1
+        }
+        saw_assignment_name && match($0, /value="[0-9]+"/) {
+            value = substr($0, RSTART, RLENGTH)
+            gsub(/[^0-9]/, "", value)
+            print value
+            exit
+        }
+        in_select_form && /<\/form>/ {
+            in_select_form = 0
+            saw_assignment_name = 0
+        }
+    ' "$body"
+}
+
+select_active_hat()
+{
+    select_hat_cookie_jar=$1
+
+    assert_status 200 \
+        --cookie "$select_hat_cookie_jar" \
+        --cookie-jar "$select_hat_cookie_jar" \
+        "$base_url/4fach/fuehrungsstelle.php"
+    select_hat_assignment_id=$(active_hat_id_from_body)
+    case "$select_hat_assignment_id" in
+        '' | 0 | *[!0-9]*)
+            echo 'Category HTTP: no personal accepted active hat is selectable' >&2
+            sed -n '1,160p' "$body" >&2
+            exit 1
+            ;;
+    esac
+    select_hat_csrf=$(csrf_from_body)
+    assert_status 303 \
+        --cookie "$select_hat_cookie_jar" \
+        --cookie-jar "$select_hat_cookie_jar" \
+        --request POST \
+        --data-urlencode "csrf_token=$select_hat_csrf" \
+        --data-urlencode 'operation_action=select_hat' \
+        --data-urlencode "dienstbesetzung_id=$select_hat_assignment_id" \
+        "$base_url/4fach/fuehrungsstelle.php"
+}
+
 assert_numeric()
 {
     label=$1
@@ -351,28 +406,28 @@ login_existing()
 
 load_manager()
 {
-    cookie_jar=$1
-    type=$2
-    message_id=$3
+    manager_cookie_jar=$1
+    manager_type=$2
+    manager_message_id=$3
     assert_status 200 \
-        --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-        "$base_url/4fach/katgoedt.php?dbtyp=$type&msgno=$message_id"
+        --cookie "$manager_cookie_jar" --cookie-jar "$manager_cookie_jar" \
+        "$base_url/4fach/katgoedt.php?dbtyp=$manager_type&msgno=$manager_message_id"
 }
 
 load_message_detail()
 {
-    cookie_jar=$1
-    message_id=$2
+    detail_cookie_jar=$1
+    detail_message_id=$2
     assert_status 200 \
-        --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        --cookie "$detail_cookie_jar" --cookie-jar "$detail_cookie_jar" \
         "$base_url/4fach/mainindex.php"
     detail_csrf=$(csrf_from_body)
     assert_status 200 \
-        --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        --cookie "$detail_cookie_jar" --cookie-jar "$detail_cookie_jar" \
         --request POST \
         --data-urlencode "csrf_token=$detail_csrf" \
         --data-urlencode 'stab=meldung' \
-        --data-urlencode "00_lfd=$message_id" \
+        --data-urlencode "00_lfd=$detail_message_id" \
         "$base_url/4fach/mainindex.php"
 }
 
@@ -431,41 +486,42 @@ assert_workflow_state_controls_absent()
 
 create_category()
 {
-    cookie_jar=$1
-    type=$2
-    message_id=$3
-    name=$4
-    description=$5
-    load_manager "$cookie_jar" "$type" "$message_id"
-    csrf_token=$(csrf_from_body)
+    category_cookie_jar=$1
+    category_type=$2
+    category_message_id=$3
+    category_name=$4
+    category_description=$5
+    load_manager \
+        "$category_cookie_jar" "$category_type" "$category_message_id"
+    category_csrf_token=$(csrf_from_body)
     assert_status 303 \
-        --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        --cookie "$category_cookie_jar" --cookie-jar "$category_cookie_jar" \
         --request POST \
-        --data-urlencode "csrf_token=$csrf_token" \
+        --data-urlencode "csrf_token=$category_csrf_token" \
         --data-urlencode 'category_action=create' \
-        --data-urlencode "dbtyp=$type" \
-        --data-urlencode "msgno=$message_id" \
-        --data-urlencode "kategorie=$name" \
-        --data-urlencode "beschreibung=$description" \
+        --data-urlencode "dbtyp=$category_type" \
+        --data-urlencode "msgno=$category_message_id" \
+        --data-urlencode "kategorie=$category_name" \
+        --data-urlencode "beschreibung=$category_description" \
         "$base_url/4fach/katgoedt.php"
 }
 
 delete_category()
 {
-    cookie_jar=$1
-    type=$2
-    message_id=$3
-    category_id=$4
-    load_manager "$cookie_jar" "$type" "$message_id"
-    csrf_token=$(csrf_from_body)
+    delete_cookie_jar=$1
+    delete_type=$2
+    delete_message_id=$3
+    delete_category_id=$4
+    load_manager "$delete_cookie_jar" "$delete_type" "$delete_message_id"
+    delete_csrf_token=$(csrf_from_body)
     assert_status 303 \
-        --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        --cookie "$delete_cookie_jar" --cookie-jar "$delete_cookie_jar" \
         --request POST \
-        --data-urlencode "csrf_token=$csrf_token" \
+        --data-urlencode "csrf_token=$delete_csrf_token" \
         --data-urlencode 'category_action=delete' \
-        --data-urlencode "dbtyp=$type" \
-        --data-urlencode "msgno=$message_id" \
-        --data-urlencode "category_id=$category_id" \
+        --data-urlencode "dbtyp=$delete_type" \
+        --data-urlencode "msgno=$delete_message_id" \
+        --data-urlencode "category_id=$delete_category_id" \
         "$base_url/4fach/katgoedt.php"
 }
 
@@ -476,6 +532,20 @@ SELECT \`00_lfd\` FROM \`nv_nachrichten\`
 SQL
 )
 assert_numeric 'workflow message' "$message_id"
+
+# The main workflow marker is an outgoing draft still waiting for mandatory
+# formal Si review. S2 receives its red copy only at terminal status 8 and must
+# therefore use the completed conversation-note fixture for master-category
+# management instead of bypassing the message object boundary.
+redcopy_message_id=$(db_sql <<SQL
+SELECT \`00_lfd\` FROM \`nv_nachrichten\`
+ WHERE \`12_inhalt\` = '${workflow_marker}_VORDRUCK'
+   AND \`x00_status\` = 8
+   AND FIND_IN_SET('S2_rt', \`16_empf\`) > 0
+ ORDER BY \`00_lfd\` DESC LIMIT 1;
+SQL
+)
+assert_numeric 'terminal red-copy message' "$redcopy_message_id"
 
 message_auto_increment=$(db_sql <<'SQL'
 SELECT COALESCE(`AUTO_INCREMENT`, 1)
@@ -514,6 +584,9 @@ sh tests/integration/provision_user.sh \
 login_existing "$s1_cookies" "$s1_name" "$s1_code" "$s1_function" "$s1_password"
 login_existing "$s2_cookies" "$s2_name" "$s2_code" S2 "$s2_password"
 login_existing "$si_cookies" "$si_name" "$si_code" Si "$si_password"
+select_active_hat "$s1_cookies"
+select_active_hat "$s2_cookies"
+select_active_hat "$si_cookies"
 
 master_auto_increment=$(db_sql <<'SQL'
 SELECT COALESCE(`AUTO_INCREMENT`, 1)
@@ -657,7 +730,10 @@ assert_session_identity "$s1_name" "$s1_code" "$s1_function" Stab
 assert_status 403 --cookie "$s1_cookies" \
     "$base_url/4fach/katgoedt.php?dbtyp=master&msgno=$message_id"
 assert_body_absent 'data-estab-session-bar'
-load_manager "$s2_cookies" master "$message_id"
+assert_status 403 --cookie "$s2_cookies" \
+    "$base_url/4fach/katgoedt.php?dbtyp=master&msgno=$message_id"
+assert_body_absent 'data-estab-session-bar'
+load_manager "$s2_cookies" master "$redcopy_message_id"
 assert_session_identity "$s2_name" "$s2_code" S2 Stab
 load_manager "$si_cookies" master "$message_id"
 assert_session_identity "$si_name" "$si_code" Si Stab
@@ -706,7 +782,9 @@ SQL
 )
 assert_numeric 'user category' "$user_category_id"
 
-create_category "$s2_cookies" master "$message_id" 'MSTR&Q' 'Master & "quote"'
+create_category \
+    "$s2_cookies" master "$redcopy_message_id" \
+    'MSTR&Q' 'Master & "quote"'
 master_category_id=$(db_sql <<'SQL'
 SELECT `lfd` FROM `nv_masterkatego`
  WHERE HEX(`kategorie`) = '4D5354522651'
@@ -805,18 +883,18 @@ assert_db_equals 0 \
     "SELECT COUNT(*) FROM \`nv_masterkategolink\` WHERE \`msg\`=${foreign_message_id};"
 
 # Red-copy may assign a master category to the same recipient-authorised object.
-load_manager "$s2_cookies" master "$message_id"
+load_manager "$s2_cookies" master "$redcopy_message_id"
 csrf_token=$(csrf_from_body)
 assert_status 303 \
     --cookie "$s2_cookies" --cookie-jar "$s2_cookies" \
     --request POST \
     --data-urlencode "csrf_token=$csrf_token" \
     --data-urlencode 'category_action=assign' \
-    --data-urlencode "msglfd=$message_id" \
+    --data-urlencode "msglfd=$redcopy_message_id" \
     --data-urlencode "category_master_oben=$master_category_id" \
     "$base_url/4fach/katgoedt.php"
 assert_db_equals "$master_category_id" \
-    "SELECT \`katego\` FROM \`nv_masterkategolink\` WHERE \`msg\`=${message_id};"
+    "SELECT \`katego\` FROM \`nv_masterkategolink\` WHERE \`msg\`=${redcopy_message_id};"
 
 load_message_detail "$s1_cookies" "$message_id"
 assert_body 'Quotes &quot;&#039; &amp; &lt;script&gt;alert(1)&lt;/script&gt;'
@@ -845,11 +923,12 @@ assert_db_equals 0 \
 assert_status 200 --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
     "$base_url/4fach/mainindex.php"
 assert_body "$workflow_marker"
-delete_category "$s2_cookies" master "$message_id" "$master_category_id"
+delete_category \
+    "$s2_cookies" master "$redcopy_message_id" "$master_category_id"
 assert_db_equals 0 \
     "SELECT COUNT(*) FROM \`nv_masterkatego\` WHERE \`lfd\`=${master_category_id};"
 assert_db_equals 0 \
-    "SELECT COUNT(*) FROM \`nv_masterkategolink\` WHERE \`msg\`=${message_id};"
+    "SELECT COUNT(*) FROM \`nv_masterkategolink\` WHERE \`msg\`=${redcopy_message_id};"
 delete_category "$si_cookies" master "$message_id" "$si_master_category_id"
 assert_db_equals 0 \
     "SELECT COUNT(*) FROM \`nv_masterkatego\` WHERE \`lfd\`=${si_master_category_id};"

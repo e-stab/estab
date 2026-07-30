@@ -115,7 +115,6 @@ foreach ([
     'ESTAB_ADMIN_USER',
     'ESTAB_PUBLIC_URL',
     'ESTAB_BASE_PATH',
-    'ESTAB_REVIEW_OUTGOING_MESSAGES',
     'ESTAB_ALLOW_SELF_REGISTRATION',
     'ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF',
     'ESTAB_TRUST_PROXY_HEADERS',
@@ -131,20 +130,12 @@ foreach ([
         'Registry deployment drifted on ' . $environmentName
     );
 }
-$outgoingReviewComposeSetting =
-    'ESTAB_REVIEW_OUTGOING_MESSAGES: ${ESTAB_REVIEW_OUTGOING_MESSAGES:-false}';
 $assert(
-    str_contains($sourceCompose, $outgoingReviewComposeSetting)
-    && str_contains($registryCompose, $outgoingReviewComposeSetting)
-    && preg_match(
-        '/^ESTAB_REVIEW_OUTGOING_MESSAGES=false$/m',
-        $sourceEnvironment
-    ) === 1
-    && preg_match(
-        '/^ESTAB_REVIEW_OUTGOING_MESSAGES=false$/m',
-        $registryEnvironment
-    ) === 1,
-    'Outgoing-message review does not keep the published false default'
+    !str_contains($sourceCompose, 'ESTAB_REVIEW_OUTGOING_MESSAGES')
+    && !str_contains($registryCompose, 'ESTAB_REVIEW_OUTGOING_MESSAGES')
+    && !str_contains($sourceEnvironment, 'ESTAB_REVIEW_OUTGOING_MESSAGES')
+    && !str_contains($registryEnvironment, 'ESTAB_REVIEW_OUTGOING_MESSAGES'),
+    'Deployment still exposes an unsafe outgoing-review bypass'
 );
 $selfRegistrationComposeSetting =
     'ESTAB_ALLOW_SELF_REGISTRATION: ${ESTAB_ALLOW_SELF_REGISTRATION:-false}';

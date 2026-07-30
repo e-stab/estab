@@ -42,7 +42,10 @@ class TestConfig:
     startup_timeout: float = 15.0
 
     @classmethod
-    def from_environment(cls) -> "TestConfig":
+    def from_environment(
+        cls,
+        require_login_password: bool = True,
+    ) -> "TestConfig":
         base_url = os.environ.get("ESTAB_TEST_BASE_URL", "http://127.0.0.1:8080").rstrip("/")
         parsed = urllib.parse.urlsplit(base_url)
         if (
@@ -66,7 +69,17 @@ class TestConfig:
             except OSError as exc:
                 raise TestFailure("Die Datei aus ESTAB_TEST_LOGIN_PASSWORD_FILE ist nicht lesbar.") from exc
         if password is None:
-            password = secrets.token_urlsafe(32)
+            if require_login_password:
+                raise TestFailure(
+                    "Der vollständige Browsertest benötigt das Kennwort des "
+                    "vorher provisionierten Kontos in "
+                    "ESTAB_TEST_LOGIN_PASSWORD(_FILE)."
+                )
+            # Read-only/admin-only modes never submit this value. Keeping a
+            # non-empty placeholder lets them share one validated config
+            # object without pretending a random secret could authenticate an
+            # existing account.
+            password = "unused-in-this-browser-test-mode"
         if not password:
             raise TestFailure("Das konfigurierte Browser-Testkennwort darf nicht leer sein.")
         if not login_name.strip():
@@ -763,6 +776,7 @@ class BrowserAcceptance:
     navigation_keys = (
         "overview",
         "messages",
+        "command-post",
         "message-overview",
         "forms",
         "incident-log",
@@ -772,6 +786,7 @@ class BrowserAcceptance:
     )
     protected_card_keys = (
         "messages",
+        "command-post",
         "message-overview",
         "forms",
         "incident-log",
@@ -785,6 +800,7 @@ class BrowserAcceptance:
         "handbook",
     )
     protected_paths = (
+        "4fach/fuehrungsstelle.php",
         "4fach/vordrucke.php",
         "4fueltg/ue_ltg.php",
         "stabetb/etb.php",
@@ -795,6 +811,20 @@ class BrowserAcceptance:
     def __init__(self, cdp: CDP, config: TestConfig) -> None:
         self.cdp = cdp
         self.config = config
+
+    def _authenticated_navigation_keys(self) -> list[str]:
+        """Return only areas available to the exact selected duty function."""
+        keys = list(self.navigation_keys)
+        if self.config.login_function != "S2":
+            keys.remove("message-overview")
+        if self.config.login_function not in ("LdF", "A/W"):
+            keys.remove("tracking")
+        return keys
+
+    def _authenticated_navigation_link_count(self) -> int:
+        # The two public service links (administration and handbook) remain
+        # available alongside the duty-filtered operational areas.
+        return len(self._authenticated_navigation_keys()) + 2
 
     def run_overview(self) -> None:
         """Check the anonymous start page without changing application data."""
@@ -1005,8 +1035,33 @@ class BrowserAcceptance:
             "Bestandskonto anmelden",
         )
         self._wait_for_top_level_path(
+            "/4fach/fuehrungsstelle.php",
+            "Führungsstellenbetrieb wurde nach der Anmeldung nicht geöffnet",
+        )
+        self.cdp.wait_for(
+            """
+            document.readyState === "complete" &&
+            Boolean(document.querySelector(
+                'form input[name="operation_action"][value="select_hat"]'
+            )) &&
+            Boolean(document.querySelector(
+                'form input[name="dienstbesetzung_id"]'
+            ))
+            """,
+            "Persönlich angenommene aktive "
+            f"{self.config.login_function}-Dienstfunktion fehlt",
+        )
+        self.cdp.click(
+            None,
+            'form:has(input[name="operation_action"][value="select_hat"]) '
+            "button[type=\"submit\"]",
+            "persönlich angenommene "
+            f"{self.config.login_function}-Dienstfunktion auswählen",
+        )
+        self._wait_for_top_level_path(
             "/stabetb/etb.php",
-            "Einsatztagebuch wurde nach der Anmeldung nicht als angefordertes Ziel geöffnet",
+            "Einsatztagebuch wurde nach Auswahl der Dienstfunktion nicht "
+            "als angefordertes Ziel geöffnet",
         )
         self._assert_session_bar(
             None,
@@ -1225,6 +1280,7 @@ class BrowserAcceptance:
             "Einsatztagebuch wurde nicht über seine Root-Karte geöffnet",
         )
         self._assert_session_bar(None, "Einsatztagebuch", "incident-log")
+        self._assert_command_post_tool()
         self._assert_generated_forms_tool()
         self._assert_attachment_upload_form()
         if self.config.admin_user and self.config.admin_password:
@@ -1329,7 +1385,7 @@ class BrowserAcceptance:
                 """
                 document.readyState === "complete" &&
                 Boolean(document.querySelector("[data-estab-admin-dashboard]")) &&
-                document.querySelectorAll("[data-estab-admin-card]").length === 8 &&
+                document.querySelectorAll("[data-estab-admin-card]").length === 9 &&
                 Boolean(document.querySelector(
                     '[data-estab-public-bar] [data-estab-admin-user]'
                 ))
@@ -1584,6 +1640,65 @@ class BrowserAcceptance:
             self._assert_matrix_confirmations()
         finally:
             self.cdp.call("Network.setExtraHTTPHeaders", {"headers": {}})
+
+    def _assert_command_post_tool(self) -> None:
+        for width, height in ((1280, 800), (390, 844)):
+            self.cdp.call(
+                "Emulation.setDeviceMetricsOverride",
+                {
+                    "width": width,
+                    "height": height,
+                    "deviceScaleFactor": 1,
+                    "mobile": False,
+                    "screenWidth": width,
+                    "screenHeight": height,
+                },
+            )
+            self.cdp.navigate(
+                self.config.base_url + "/4fach/fuehrungsstelle.php"
+            )
+            self.cdp.wait_for(
+                """
+                document.readyState === "complete" &&
+                Boolean(document.querySelector("[data-estab-dv-operations]")) &&
+                Boolean(document.querySelector("aside[data-estab-session-bar]"))
+                """,
+                "Führungsstellenbetrieb wurde nicht vollständig geladen",
+            )
+            self._assert_session_bar(
+                None,
+                f"Führungsstellenbetrieb bei {width}×{height} px",
+                "command-post",
+            )
+            self._assert_tool_page_layout(
+                f"Führungsstellenbetrieb bei {width}×{height} px",
+                "[data-estab-dv-operations]",
+                mobile=width <= 390,
+                require_responsive_table=True,
+            )
+
+        self.cdp.call(
+            "Emulation.setDeviceMetricsOverride",
+            {
+                "width": 1440,
+                "height": 1000,
+                "deviceScaleFactor": 1,
+                "mobile": False,
+                "screenWidth": 1440,
+                "screenHeight": 1000,
+            },
+        )
+        self.cdp.navigate(self.config.base_url + "/stabetb/etb.php")
+        self._wait_for_top_level_path(
+            "/stabetb/etb.php",
+            "Einsatztagebuch wurde nach der Führungsstellenprüfung nicht "
+            "wieder geladen",
+        )
+        self._assert_session_bar(
+            None,
+            "Einsatztagebuch nach der Führungsstellenprüfung",
+            "incident-log",
+        )
 
     def _assert_generated_forms_tool(self) -> None:
         for width, height in ((1280, 800), (390, 844)):
@@ -2142,6 +2257,7 @@ class BrowserAcceptance:
             [
                 "incidents",
                 "users",
+                "command-post",
                 "matrix",
                 "counter",
                 "print-reset",
@@ -2486,7 +2602,7 @@ class BrowserAcceptance:
         )
         self._equal(
             public_navigation.get("locked"),
-            6,
+            7,
             "Anzahl anmeldepflichtiger Bereiche in der anonymen Navigation",
         )
         technical_log_label = self.cdp.evaluate(
@@ -2825,7 +2941,11 @@ class BrowserAcceptance:
             not state.get("hasDisclosure"),
             f"Bereichsnavigation ist in {location} noch eingeklappt.",
         )
-        self._equal(state.get("linkCount"), 10, f"Bereichslinks in {location}")
+        self._equal(
+            state.get("linkCount"),
+            self._authenticated_navigation_link_count(),
+            f"Bereichslinks in {location}",
+        )
         self._truth(
             state.get("linksFit") and state.get("navigationScrollFree"),
             f"Bereichslinks besitzen in {location} eigene Scroll- oder zu kleine Flächen.",
@@ -3190,7 +3310,8 @@ class BrowserAcceptance:
             and "letzter Abruf" in str(stale.get("text", ""))
             and stale.get("classed") is True
             and stale.get("focusPreserved") is True
-            and stale.get("navigationCount") == 10
+            and stale.get("navigationCount")
+                == self._authenticated_navigation_link_count()
             and result.get("recovered") is True
             and result.get("currentState") == "current"
             and result.get("currentText") == "Status wieder aktuell"
@@ -4923,7 +5044,7 @@ class BrowserAcceptance:
             f"Unbekannter erwarteter Navigationsbereich {expected_active_key!r}.",
         )
         selector = "aside[data-estab-session-bar]"
-        expected_navigation_keys = list(self.navigation_keys)
+        expected_navigation_keys = self._authenticated_navigation_keys()
         self._equal(
             self.cdp.evaluate(_visible_count_expression(frame_name, selector)),
             1,
@@ -5211,8 +5332,8 @@ def capture_diagnostics(cdp: CDP | None) -> pathlib.Path | None:
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Testet ESTAB-Anmeldung, Kontoanlage, Session-Anzeige und Logout "
-            "in einem echten Headless-Chrome."
+            "Testet ESTAB-Bestandslogin, Session-Anzeige, Navigation und "
+            "Logout in einem echten Headless-Chrome."
         )
     )
     parser.add_argument(
@@ -5256,14 +5377,6 @@ def main() -> int:
             print(f"Browser verfügbar: {binary} ({version})")
             return 0
         print(f"Browser: {version}")
-        config = TestConfig.from_environment()
-        chrome = ChromeProcess(binary, config.startup_timeout)
-        chrome.start()
-        if chrome.websocket_url is None:
-            raise TestFailure("Chrome hat keine Debugging-Adresse bereitgestellt.")
-        websocket = WebSocket(chrome.websocket_url, config.timeout)
-        cdp = CDP(websocket, config.timeout)
-        acceptance = BrowserAcceptance(cdp, config)
         if sum(
             (
                 arguments.overview_only,
@@ -5275,6 +5388,20 @@ def main() -> int:
                 "--overview-only, --export-only und --bos-only "
                 "können nicht kombiniert werden."
             )
+        config = TestConfig.from_environment(
+            require_login_password=not (
+                arguments.overview_only
+                or arguments.export_only
+                or arguments.bos_only
+            )
+        )
+        chrome = ChromeProcess(binary, config.startup_timeout)
+        chrome.start()
+        if chrome.websocket_url is None:
+            raise TestFailure("Chrome hat keine Debugging-Adresse bereitgestellt.")
+        websocket = WebSocket(chrome.websocket_url, config.timeout)
+        cdp = CDP(websocket, config.timeout)
+        acceptance = BrowserAcceptance(cdp, config)
         if arguments.overview_only:
             acceptance.run_overview()
         elif arguments.bos_only:

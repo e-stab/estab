@@ -3,6 +3,10 @@ SET NAMES utf8mb4;
 
 CREATE TABLE `nv_nachrichten` (
   `00_lfd` BIGINT NOT NULL AUTO_INCREMENT,
+  -- These dispatch/workflow fields were part of the historic paper-form
+  -- replacement even on databases predating the container migrations.
+  `04_richtung` SET('E','A') NOT NULL DEFAULT '',
+  `06_befwegausw` SET('Fe','Fu','Me','FAX','FS','@') NOT NULL DEFAULT '',
   `01_datum` DATETIME NOT NULL DEFAULT '0000-00-00 00:00:00',
   `01_zeichen` VARCHAR(3) NOT NULL DEFAULT '',
   `02_zeit` DATETIME NOT NULL DEFAULT '0000-00-00 00:00:00',
@@ -13,6 +17,8 @@ CREATE TABLE `nv_nachrichten` (
   `14_zeichen` VARCHAR(3) NOT NULL DEFAULT '',
   `15_quitdatum` DATETIME NOT NULL DEFAULT '0000-00-00 00:00:00',
   `15_quitzeichen` VARCHAR(3) NOT NULL DEFAULT '',
+  `x00_status` SMALLINT NOT NULL DEFAULT 0,
+  `x01_abschluss` BINARY(1) NOT NULL DEFAULT 'f',
   `x03_sperruser` VARCHAR(3) NOT NULL DEFAULT '',
   `x05_druck_d` DATETIME NOT NULL DEFAULT '0000-00-00 00:00:00',
   `99_lstacc` TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00'

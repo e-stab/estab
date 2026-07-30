@@ -98,7 +98,8 @@ $assert(
             'data-estab-navigation-mode="sidebar"'
         )
         && str_contains($sidebarMarkup, '<h2>Bereiche</h2>')
-        && str_contains($sidebarMarkup, '>Nachrichten</span>')
+        && str_contains($sidebarMarkup, '>Führungsstelle</span>')
+        && !str_contains($sidebarMarkup, '>Nachrichten</span>')
         && str_contains($sidebarMarkup, 'data-estab-user-code="ada001"')
         && str_contains($sidebarMarkup, 'data-estab-logout-form')
         && !str_contains($sidebarMarkup, '<details')
@@ -230,7 +231,7 @@ $assert(
         && substr_count(
             $publicSidebarMarkup,
             'data-estab-navigation-locked'
-        ) === 6
+        ) === 7
         && !str_contains($publicSidebarMarkup, '<details')
         && !str_contains($publicSidebarMarkup, '<summary')
         && !str_contains($publicSidebarMarkup, 'data-estab-session-bar')
@@ -497,8 +498,6 @@ $bufferedSurfaces = [
     '4fach/katgoedt.php',
     '4fach/vordrucke.php',
     '4fach/nachwea.php',
-    '4fach/counter.php',
-    '4fach/status.php',
     '4fueltg/ue_ltg.php',
     'stabetb/etb.php',
     'fmtbb/tbb.php',

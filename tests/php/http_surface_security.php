@@ -131,7 +131,6 @@ foreach ([
 $root = dirname(__DIR__, 2);
 $apache = (string) file_get_contents($root . '/docker/apache/estab.conf');
 $info = (string) file_get_contents($root . '/4fach/info.php');
-$status = (string) file_get_contents($root . '/4fach/status.php');
 $help = (string) file_get_contents($root . '/language/german/helptext.php');
 $tools = (string) file_get_contents($root . '/4fach/tools.php');
 $toolsNew = (string) file_get_contents($root . '/4fach/tools_neu.php');
@@ -162,7 +161,9 @@ $deniedByLocationPattern = static function (string $path) use ($locationPatterns
 
 $internalPaths = [
     '/4fach/4fachform.php',
+    '/4fach/all_msg.php',
     '/4fach/color.inc.php',
+    '/4fach/counter.php',
     '/4fach/data_hndl.php',
     '/4fach/data_hndl_gespr_A.php',
     '/4fach/data_hndl_gespr_E.php',
@@ -175,6 +176,7 @@ $internalPaths = [
     '/4fach/navi.php',
     '/4fach/protokoll.php',
     '/4fach/stab_status.php',
+    '/4fach/status.php',
     '/4fach/tools.php',
     '/4fach/tools.php/path-info',
     '/4fach/tools_neu.php',
@@ -207,6 +209,13 @@ $assert(
         && $deniedByLocationPattern('/4fadm/admmenue.inc.php')
         && $deniedByLocationPattern('/4fadm/admmenue.inc.php/path-info'),
     'Apache does not block direct *.inc.php requests'
+);
+$assert(
+    str_contains($apache, 'AcceptPathInfo Off')
+        && $deniedByLocationPattern('/4fach/mainindex.php/4fadm')
+        && $deniedByLocationPattern('/4fach/download.php/4fadm')
+        && $deniedByLocationPattern('/4fadm/incidents.php/unexpected'),
+    'Apache permits executable PHP path-info or an authorization suffix'
 );
 $assert(
     !str_contains($apache, "'unsafe-eval'")
@@ -244,6 +253,7 @@ $assert(
 $integrationCoverage = $httpSurface . $httpSmoke . $logbookHttp;
 foreach ([
     './4fach/index.php' => '/4fach/index.php',
+    './4fach/fuehrungsstelle.php' => '/4fach/fuehrungsstelle.php',
     './4fach/vordrucke.php' => '/4fach/vordrucke.php',
     './4fueltg/ue_ltg.php' => '/4fueltg/ue_ltg.php',
     './stabinfo/index.php' => '/stabinfo/index.php',
@@ -313,7 +323,6 @@ foreach ([
     '/4fach/createbutton.php',
     '/4fach/kategobutton.php',
     '/4fach/info.php',
-    '/4fach/status.php',
     '/language/german/helptext.php',
 ] as $publicPath) {
     $assert(
@@ -334,14 +343,4 @@ $assert(
         && str_contains($help, 'htmlspecialchars($title'),
     'helptext.php lacks an enumerated lookup and escaped title'
 );
-$identityBoundary = strpos($status, 'estab_auth_session_identity($_SESSION)');
-$legacyTools = strpos($status, "require_once __DIR__ . '/tools.php'");
-$assert(
-    $identityBoundary !== false
-        && $legacyTools !== false
-        && $identityBoundary < $legacyTools
-        && str_contains($status, 'Status erst nach Anmeldung verfügbar.'),
-    'status.php loads sensitive runtime helpers before its anonymous boundary'
-);
-
 echo "HTTP surface security: OK ({$assertions} assertions)\n";

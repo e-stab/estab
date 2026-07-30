@@ -41,6 +41,10 @@ if [ ! -r "$fixture" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/50-global-incidents.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/55-global-incidents-finish.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/70-user-account-blocking.sql" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/80-dv-evidence-retention.sql" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/94-dv-organisational-controls.sql" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/95-attachment-ingest-integrity.sql" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/96-etb-duty-function.sql" ] \
     || [ ! -x "$ESTAB_MIGRATOR_BIN" ]; then
     echo "schema migrator test: fixture, baseline, or migrator is unavailable" >&2
     exit 1
@@ -180,6 +184,237 @@ SELECT GROUP_CONCAT(table_name ORDER BY BINARY table_name SEPARATOR ',')
      'nv_einsatz_status', 'nv_einsatz_ereignisse'
    )")" \
     "retried baseline and migrations did not produce all runtime tables"
+
+# Removing the ledger simulates a lost final acknowledgement. A same-name
+# column without the exact ownership marker must not be adopted or rewritten.
+database_query "$retry_database" "
+DELETE FROM estab_schema_migrations
+ WHERE version = '95-attachment-ingest-integrity.sql';
+ALTER TABLE nv_anhang
+  MODIFY COLUMN integrity_required TINYINT UNSIGNED NOT NULL DEFAULT 1
+  COMMENT 'foreign-owner-must-survive'
+  AFTER md5hash"
+if ESTAB_DB_NAME="$retry_database" \
+    "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: foreign attachment-integrity column was accepted" >&2
+    exit 1
+fi
+if ! grep -q \
+    'Attachment integrity migration blocked: foreign column collision' \
+    "$failure_log"; then
+    echo "schema migrator test: integrity-column collision failure was not explicit" >&2
+    sed -n '1,160p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "foreign-owner-must-survive|0" "$(
+    database_query "$retry_database" "
+SELECT CONCAT(
+         (SELECT column_comment
+            FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_anhang'
+             AND column_name = 'integrity_required'), '|',
+         (SELECT COUNT(*)
+            FROM estab_schema_migrations
+           WHERE version = '95-attachment-ingest-integrity.sql')
+       )"
+)" \
+    "blocked attachment-integrity collision was changed or recorded"
+database_query "$retry_database" "
+ALTER TABLE nv_anhang
+  MODIFY COLUMN integrity_required TINYINT UNSIGNED NOT NULL DEFAULT 1
+  COMMENT 'estab:migration:95:integrity-required:v1'
+  AFTER md5hash"
+ESTAB_DB_NAME="$retry_database" "$ESTAB_MIGRATOR_BIN"
+
+# Reproduce the later durable boundary after the INSERT trigger was created
+# but before the UPDATE trigger and ledger acknowledgement. The exact owned
+# trigger must be accepted and the pair recreated canonically.
+database_query "$retry_database" "
+DELETE FROM estab_schema_migrations
+ WHERE version = '95-attachment-ingest-integrity.sql';
+DROP TRIGGER estab_attachment_integrity_bu"
+assert_equal "1|0" "$(database_query "$retry_database" "
+SELECT CONCAT(
+         (SELECT COUNT(*)
+            FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND trigger_name IN (
+               'estab_attachment_integrity_bi',
+               'estab_attachment_integrity_bu'
+             )), '|',
+         (SELECT COUNT(*)
+            FROM estab_schema_migrations
+           WHERE version = '95-attachment-ingest-integrity.sql')
+       )")" \
+    "partial attachment-integrity trigger phase was not reproduced"
+ESTAB_DB_NAME="$retry_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "2|1" "$(database_query "$retry_database" "
+SELECT CONCAT(
+         (SELECT COUNT(*)
+            FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND trigger_name IN (
+               'estab_attachment_integrity_bi',
+               'estab_attachment_integrity_bu'
+             )), '|',
+         (SELECT COUNT(*)
+            FROM estab_schema_migrations
+           WHERE version = '95-attachment-ingest-integrity.sql'
+             AND state = 'applied')
+       )")" \
+    "partial attachment-integrity trigger phase did not resume"
+
+# Reproduce process loss after migration 96 dropped the old global capability
+# uniqueness but before extending the ENUM/seeding the two ETB rows. The exact
+# owned prefix must converge, whereas a foreign primary key must fail before
+# the catalogue is changed or a ledger row is written.
+database_query "$retry_database" "
+DELETE FROM estab_schema_migrations
+ WHERE version = '96-etb-duty-function.sql';
+DELETE FROM nv_funktionsfaehigkeiten
+ WHERE faehigkeit = 'EINSATZTAGEBUCH';
+ALTER TABLE nv_funktionsfaehigkeiten
+  MODIFY faehigkeit ENUM(
+    'LAGE_DOKUMENTATION',
+    'SICHTUNG',
+    'FERNMELDEPLANUNG',
+    'FERNMELDEBETRIEB',
+    'BEFOERDERUNG'
+  ) NOT NULL"
+assert_equal "5|0|0" "$(database_query "$retry_database" "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM nv_funktionsfaehigkeiten), '|',
+         (SELECT COUNT(*) FROM information_schema.statistics
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_funktionsfaehigkeiten'
+             AND index_name = 'uq_funktionsfaehigkeit_eindeutig'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '96-etb-duty-function.sql')
+       )")" \
+    "partial ETB duty unique-index phase was not reproduced"
+ESTAB_DB_NAME="$retry_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "7|2|1|0" "$(database_query "$retry_database" "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM nv_funktionsfaehigkeiten), '|',
+         (SELECT COUNT(*) FROM nv_funktionsfaehigkeiten
+           WHERE faehigkeit = 'EINSATZTAGEBUCH'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '96-etb-duty-function.sql'
+             AND state = 'applied'), '|',
+         (SELECT COUNT(*) FROM information_schema.statistics
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_funktionsfaehigkeiten'
+             AND index_name <> 'PRIMARY')
+       )")" \
+    "partial ETB duty unique-index phase did not converge canonically"
+
+database_query "$retry_database" "
+DELETE FROM estab_schema_migrations
+ WHERE version = '96-etb-duty-function.sql';
+DELETE FROM nv_funktionsfaehigkeiten
+ WHERE faehigkeit = 'EINSATZTAGEBUCH'"
+assert_equal "5|1|0" "$(database_query "$retry_database" "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM nv_funktionsfaehigkeiten), '|',
+         (SELECT COUNT(*) FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_funktionsfaehigkeiten'
+             AND column_name = 'faehigkeit'
+             AND column_type LIKE '%EINSATZTAGEBUCH%'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '96-etb-duty-function.sql')
+       )")" \
+    "partial ETB duty enum phase was not reproduced"
+ESTAB_DB_NAME="$retry_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "7|2|1" "$(database_query "$retry_database" "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM nv_funktionsfaehigkeiten), '|',
+         (SELECT COUNT(*) FROM nv_funktionsfaehigkeiten
+           WHERE faehigkeit = 'EINSATZTAGEBUCH'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '96-etb-duty-function.sql'
+             AND state = 'applied')
+       )")" \
+    "partial ETB duty enum phase did not converge canonically"
+
+database_query "$retry_database" "
+DELETE FROM estab_schema_migrations
+ WHERE version = '96-etb-duty-function.sql'"
+ESTAB_DB_NAME="$retry_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "7|1" "$(database_query "$retry_database" "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM nv_funktionsfaehigkeiten), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '96-etb-duty-function.sql'
+             AND state = 'applied')
+       )")" \
+    "completed ETB duty catalogue without ledger did not converge"
+
+database_query "$retry_database" "
+DELETE FROM estab_schema_migrations
+ WHERE version = '96-etb-duty-function.sql';
+DELETE FROM nv_funktionsfaehigkeiten
+ WHERE funktion = 'S6' AND faehigkeit = 'FERNMELDEPLANUNG'"
+if ESTAB_DB_NAME="$retry_database" \
+    "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: mixed ETB duty catalogue was accepted" >&2
+    exit 1
+fi
+if ! grep -q \
+    'ETB duty migration blocked: capability catalogue is not canonical' \
+    "$failure_log"; then
+    echo "schema migrator test: mixed ETB duty catalogue failure was not explicit" >&2
+    sed -n '1,160p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "6|0" "$(database_query "$retry_database" "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM nv_funktionsfaehigkeiten), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '96-etb-duty-function.sql')
+       )")" \
+    "mixed ETB duty catalogue was changed or recorded"
+database_query "$retry_database" "
+INSERT INTO nv_funktionsfaehigkeiten
+  (funktion, rolle, faehigkeit, bezeichnung)
+VALUES ('S6', 'Stab', 'FERNMELDEPLANUNG', 'Fernmeldeplanung')"
+ESTAB_DB_NAME="$retry_database" "$ESTAB_MIGRATOR_BIN"
+
+database_query "$retry_database" "
+DELETE FROM estab_schema_migrations
+ WHERE version = '96-etb-duty-function.sql';
+ALTER TABLE nv_funktionsfaehigkeiten
+  DROP PRIMARY KEY,
+  ADD PRIMARY KEY (funktion, rolle, faehigkeit)"
+if ESTAB_DB_NAME="$retry_database" \
+    "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: ETB duty primary-key drift was accepted" >&2
+    exit 1
+fi
+if ! grep -q \
+    'ETB duty migration blocked: capability primary key is incompatible' \
+    "$failure_log"; then
+    echo "schema migrator test: capability primary-key failure was not explicit" >&2
+    sed -n '1,160p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "3|7|0" "$(database_query "$retry_database" "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM information_schema.statistics
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_funktionsfaehigkeiten'
+             AND index_name = 'PRIMARY'), '|',
+         (SELECT COUNT(*) FROM nv_funktionsfaehigkeiten), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '96-etb-duty-function.sql')
+       )")" \
+    "blocked ETB duty primary-key drift was changed or recorded"
+database_query "$retry_database" "
+ALTER TABLE nv_funktionsfaehigkeiten
+  DROP PRIMARY KEY,
+  ADD PRIMARY KEY (funktion, faehigkeit)"
+ESTAB_DB_NAME="$retry_database" "$ESTAB_MIGRATOR_BIN"
 
 # MariaDB commits CREATE TABLE independently of the seed transaction. Prove
 # both possible interruption points are resumable only for the migration-owned
@@ -461,7 +696,7 @@ finish_checksum=$(
         awk '{print $1}'
 )
 assert_equal \
-    "7|7|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
+    "11|11|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
     "$(database_query "$predecessor_database" "
 SELECT CONCAT(
          COUNT(*), '|',
@@ -567,11 +802,28 @@ SELECT COUNT(*) FROM estab_schema_migrations
  WHERE version = '30-runtime-schema.sql'")" \
     "failed runtime migration left an applied/in-progress record"
 
-fixture_query "DELETE FROM nv_anhang WHERE \`lfd-nr\` = 2"
+fixture_query "
+DELETE FROM nv_anhang WHERE \`lfd-nr\` = 2;
+
+-- Deliberately reproduce process loss after migration 95's first
+-- autocommitted ADD COLUMN. The migration ledger is absent, so the next
+-- migrator run must recognise this exact owned prefix, complete all later
+-- phases, and never reclassify the imported attachment as verified.
+ALTER TABLE nv_anhang
+  ADD COLUMN integrity_required TINYINT UNSIGNED NOT NULL DEFAULT 0
+  COMMENT 'estab:migration:95:integrity-required:v1'
+  AFTER md5hash"
+assert_equal "1|0|estab:migration:95:integrity-required:v1" "$(fixture_query "
+SELECT CONCAT(COUNT(*), '|', MAX(column_default), '|', MAX(column_comment))
+  FROM information_schema.columns
+ WHERE table_schema = DATABASE()
+   AND table_name = 'nv_anhang'
+   AND column_name = 'integrity_required'")" \
+    "deliberate partial attachment-integrity DDL was not reproduced"
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
 
-assert_equal "7" "$(fixture_query "
+assert_equal "11" "$(fixture_query "
 SELECT COUNT(*) FROM estab_schema_migrations
  WHERE state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
@@ -582,6 +834,50 @@ SELECT COUNT(*) FROM estab_schema_migrations
    AND state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
     "standard matrix migration was not recorded"
+assert_equal "1|1|1|1|9" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '80-dv-evidence-retention.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '94-dv-organisational-controls.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '95-attachment-ingest-integrity.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '96-etb-duty-function.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
+         (SELECT COUNT(*)
+            FROM information_schema.tables
+           WHERE table_schema = DATABASE()
+             AND table_name IN (
+               'nv_funktionsfaehigkeiten',
+               'nv_betriebsereignis_kopf',
+               'nv_betriebsereignisse',
+               'nv_dienstschichten',
+               'nv_dienstbesetzungen',
+               'nv_dienstuebergaben',
+               'nv_fernmeldeplaene',
+               'nv_fernmeldeplan_eintraege',
+               'nv_melderauftraege'
+             ))
+       )")" \
+    "DV evidence or organisational migration was not applied completely"
+assert_equal "20|20|1|0" "$(fixture_query "
+SELECT CONCAT(
+         COUNT(*), '|',
+         COUNT(DISTINCT mtx_x, mtx_y), '|',
+         SUM(mtx_fkt = 'S2' AND mtx_rolle = 'Stab'
+             AND mtx_rc2 IN ('t','1')), '|',
+         SUM(mtx_auto IN ('t','1'))
+       )
+  FROM nv_empfmtx")" \
+    "missing legacy active matrix was not restored with the DV recipient contract"
 assert_equal "20|20|20|1|0" "$(fixture_query "
 SELECT CONCAT(
          COUNT(*), '|',
@@ -636,6 +932,78 @@ SELECT COUNT(*)
      OR (column_name = 'id' AND character_maximum_length = 128)
    )")" \
     "attachment metadata widths were not migrated"
+assert_equal "4|2|1" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*)
+            FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_anhang'
+             AND column_name IN (
+               'integrity_required', 'ingest_sha256', 'ingest_size',
+               'integrity_captured_at'
+             )), '|',
+         (SELECT COUNT(*)
+            FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND trigger_name IN (
+               'estab_attachment_integrity_bi',
+               'estab_attachment_integrity_bu'
+             )), '|',
+         (SELECT COUNT(*)
+            FROM nv_anhang
+           WHERE integrity_required = 0
+             AND ingest_sha256 IS NULL
+             AND ingest_size IS NULL
+             AND integrity_captured_at IS NULL)
+       )")" \
+    "attachment integrity schema or explicit legacy marker is incomplete"
+assert_equal "4|1|4|2|2|0" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*)
+            FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_anhang'
+             AND column_name IN (
+               'integrity_required', 'ingest_sha256', 'ingest_size',
+               'integrity_captured_at'
+             )), '|',
+         (SELECT COUNT(*)
+            FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_anhang'
+             AND column_name = 'integrity_required'
+             AND column_default = '1'), '|',
+         (SELECT COUNT(*)
+            FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_anhang'
+             AND column_comment LIKE
+               'estab:migration:95:%:v1'), '|',
+         (SELECT COUNT(*)
+            FROM information_schema.table_constraints
+           WHERE constraint_schema = DATABASE()
+             AND table_name = 'nv_anhang'
+             AND constraint_name IN (
+               'chk_anhang_integrity_required',
+               'chk_anhang_integrity_shape'
+             )), '|',
+         (SELECT COUNT(*)
+            FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND event_object_table = 'nv_anhang'
+             AND trigger_name IN (
+               'estab_attachment_integrity_bi',
+               'estab_attachment_integrity_bu'
+             )), '|',
+         (SELECT COUNT(*)
+            FROM information_schema.routines
+           WHERE routine_schema = DATABASE()
+             AND routine_name IN (
+               'estab_migrate_95_preflight',
+               'estab_migrate_95_add_constraints'
+             ))
+       )")" \
+    "partial attachment-integrity migration did not converge canonically"
 assert_equal "funktion,aktiv" "$(fixture_query "
 SELECT GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',')
   FROM information_schema.statistics
@@ -765,8 +1133,8 @@ INSERT INTO nv_nachrichten
    \`14_zeichen\`, \`15_quitzeichen\`, \`x03_sperruser\`)
 VALUES ('wid', 'wid', 'wid', 'wid', 'wid', 'wid');
 SET @estab_width_message_id = LAST_INSERT_ID();
-INSERT INTO nv_anhang (filename, org_filename, kuerzel)
-VALUES ('SCHEMA-WIDTH-TEST', 'schema-width-test.txt', 'wid');
+INSERT INTO nv_anhang (filename, org_filename, kuerzel, status)
+VALUES ('SCHEMA-WIDTH-TEST', 'schema-width-test.txt', 'wid', 4);
 SET @estab_width_attachment_id = LAST_INSERT_ID();
 SET SESSION sql_mode =
   'STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';

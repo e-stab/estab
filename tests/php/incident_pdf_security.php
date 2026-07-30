@@ -34,7 +34,8 @@ if (!mkdir($temporaryRoot, 0700)) {
     throw new RuntimeException('Could not create PDF test directory');
 }
 $attachmentPath = $temporaryRoot . '/EL0001.txt';
-file_put_contents($attachmentPath, "Originalanlage\n");
+$attachmentPayload = "Originalanlage\n";
+file_put_contents($attachmentPath, $attachmentPayload);
 chmod($attachmentPath, 0600);
 
 try {
@@ -47,6 +48,15 @@ try {
         'organisation' => 'Kreis',
         'einsatzleitung' => 'Max Beispiel',
         'beschreibung' => 'Vollständiger Funktionsnachweis',
+        'estab_status' => 'open',
+        'estab_closed_at' => null,
+        'estab_closed_by' => null,
+        'estab_close_note' => null,
+        'estab_retain_until' => null,
+        'estab_legal_hold' => 0,
+        'estab_legal_hold_reason' => null,
+        'estab_legal_hold_at' => null,
+        'estab_legal_hold_by' => null,
     ];
     $recipientMatrix = estab_pdf_test_recipient_matrix();
     $pdf = new EstabIncidentPdf(
@@ -59,18 +69,67 @@ try {
         $attachmentPath,
         'Anlage-1-EL0001.txt',
         'text/plain',
-        'Originalanlage zu Nachricht E 1'
+        'Originalanlage zu Nachricht E 1',
+        hash('sha256', $attachmentPayload),
+        strlen($attachmentPayload)
     );
     $pdf->addCover(
         $incident,
-        ['etb', 'ttb', 'messages', 'attachments'],
-        ['etb' => 1, 'ttb' => 1, 'messages' => 1, 'attachments' => 1],
+        [
+            'etb',
+            'ttb',
+            'messages',
+            'attachments',
+            'message_evidence',
+            'duty',
+            's6_plans',
+            'courier',
+            'operations_evidence',
+        ],
+        [
+            'etb' => 1,
+            'ttb' => 1,
+            'messages' => 1,
+            'attachments' => 1,
+            'attachments_verified' => 1,
+            'attachments_legacy' => 0,
+            'message_evidence' => 1,
+            'duty' => 3,
+            's6_plans' => 1,
+            'courier' => 1,
+            'operations_evidence' => 1,
+        ],
         '29.07.2026 12:00:00',
-        'estab-admin'
+        'estab-admin',
+        [
+            'message' => [
+                'valid' => true,
+                'event_count' => 1,
+                'head_count' => 1,
+                'head_mismatches' => 0,
+                'head_set_sha256' => str_repeat('a', 64),
+                'terminal_binding_complete' => true,
+                'terminal_unverifiable' => 0,
+            ],
+            'operations' => [
+                'valid' => true,
+                'event_count' => 1,
+                'stored_sequence' => 1,
+                'stored_head_sha256' => str_repeat('b', 64),
+                'calculated_head_sha256' => str_repeat('b', 64),
+            ],
+        ]
     );
     $pdf->addLogbook('ETB', [[
         'etb_lfd-nr' => 1,
         'etb_time' => '2026-07-29 10:31:00',
+        'estab_event_time' => '2026-07-29 10:30:30.000000',
+        'estab_recorded_at' => '2026-07-29 10:31:00.000000',
+        'estab_event_type' => 'ereignis',
+        'estab_message_id' => 7,
+        'estab_attachment_id' => 4,
+        'estab_reference' => 'Lagekarte A',
+        'estab_correction_of' => null,
         'etb_aktion' => 'Einsatz eröffnet',
         'etb_bemerk' => 'Führungsstelle besetzt',
         'etb_benutzer' => 'Ada Beispiel',
@@ -110,12 +169,224 @@ try {
         '17_vermerke' => 'Bestätigt',
     ]);
     $pdf->addMessages([$message], [7 => ['EL0001.txt']]);
+    $pdf->addMessageEvidence(
+        [[
+            'event_id' => 10,
+            'einsatz_id' => 12,
+            'message_id' => 7,
+            'event_type' => 'incoming_routed',
+            'occurred_at' => '2026-07-29 10:34:00.000000',
+            'recorded_at' => '2026-07-29 10:34:01.000000',
+            'actor_user' => 'Sichter Beispiel',
+            'actor_code' => 'SICHT1',
+            'actor_function' => 'Si',
+            'from_status' => 4,
+            'to_status' => 8,
+            'field_snapshot' => '{"terminal_snapshot_sha256":"fixture"}',
+            'snapshot_sha256' => str_repeat('c', 64),
+            'previous_event_sha256' => null,
+            'event_sha256' => str_repeat('d', 64),
+        ]],
+        [[
+            'message_id' => 7,
+            'einsatz_id' => 12,
+            'event_count' => 1,
+            'last_event_sha256' => str_repeat('d', 64),
+            'updated_at' => '2026-07-29 10:34:01.000000',
+        ]],
+        [
+            'valid' => true,
+            'event_count' => 1,
+            'message_count' => 1,
+            'head_count' => 1,
+            'head_mismatches' => 0,
+            'broken_event_id' => null,
+            'head_set_sha256' => str_repeat('a', 64),
+            'terminal_count' => 1,
+            'terminal_mismatches' => 0,
+            'terminal_unverifiable' => 0,
+            'terminal_binding_complete' => true,
+        ]
+    );
+    $pdf->addDutyRecords(
+        [[
+            'dienstschicht_id' => 21,
+            'einsatz_id' => 12,
+            'nummer' => 1,
+            'bezeichnung' => 'Tagschicht',
+            'status' => 'UEBERGEBEN',
+            'vorgaenger_id' => null,
+            'erstellt_am' => '2026-07-29 08:00:00.000000',
+            'erstellt_von' => 'admin',
+            'aktiviert_am' => '2026-07-29 08:10:00.000000',
+            'beendet_am' => '2026-07-29 16:00:00.000000',
+        ]],
+        [[
+            'dienstbesetzung_id' => 31,
+            'dienstschicht_id' => 21,
+            'dienstschicht_nummer' => 1,
+            'benutzer_kuerzel' => 'SICHT1',
+            'funktion' => 'Si',
+            'rolle' => 'Stab',
+            'status' => 'ABGELOEST',
+            'zugewiesen_am' => '2026-07-29 08:01:00.000000',
+            'zugewiesen_von' => 'admin',
+            'angenommen_am' => '2026-07-29 08:02:00.000000',
+            'abgeloest_am' => '2026-07-29 16:00:00.000000',
+            'nachfolger_id' => 32,
+        ]],
+        [[
+            'dienstuebergabe_id' => 41,
+            'einsatz_id' => 12,
+            'von_dienstschicht_id' => 21,
+            'an_dienstschicht_id' => 22,
+            'zusammenfassung' => 'Offene Punkte vollständig übergeben',
+            'uebergeben_am' => '2026-07-29 16:00:00.000000',
+            'uebergeben_von' => 'admin',
+            'angenommen_von' => 'SICHT2',
+        ]],
+        [[
+            'dienstuebergabe_anfrage_id' => 42,
+            'einsatz_id' => 12,
+            'von_dienstschicht_id' => 21,
+            'an_dienstschicht_id' => 22,
+            'zusammenfassung' => 'Bestätigung der Nachfolge steht aus',
+            'status' => 'INITIIERT',
+            'initiiert_am' => '2026-07-29 15:55:00.000000',
+            'initiiert_von' => 'admin',
+            'bestaetigt_am' => null,
+            'bestaetigt_von' => null,
+            'bestaetigt_mit_besetzung_id' => null,
+            'dienstuebergabe_id' => null,
+            'storniert_am' => null,
+            'storniert_von' => null,
+            'stornierungsgrund' => null,
+        ], [
+            'dienstuebergabe_anfrage_id' => 43,
+            'einsatz_id' => 12,
+            'von_dienstschicht_id' => 21,
+            'an_dienstschicht_id' => 22,
+            'zusammenfassung' => 'Fehlanforderung',
+            'status' => 'STORNIERT',
+            'initiiert_am' => '2026-07-29 15:56:00.000000',
+            'initiiert_von' => 'admin',
+            'bestaetigt_am' => null,
+            'bestaetigt_von' => null,
+            'bestaetigt_mit_besetzung_id' => null,
+            'dienstuebergabe_id' => null,
+            'storniert_am' => '2026-07-29 15:57:00.000000',
+            'storniert_von' => 'admin',
+            'stornierungsgrund' => 'Falsche Nachfolgeschicht',
+        ], [
+            'dienstuebergabe_anfrage_id' => 44,
+            'einsatz_id' => 12,
+            'von_dienstschicht_id' => 21,
+            'an_dienstschicht_id' => 22,
+            'zusammenfassung' => 'Persönlich bestätigte Übergabe',
+            'status' => 'BESTAETIGT',
+            'initiiert_am' => '2026-07-29 15:58:00.000000',
+            'initiiert_von' => 'admin',
+            'bestaetigt_am' => '2026-07-29 16:00:00.000000',
+            'bestaetigt_von' => 'SICHT2',
+            'bestaetigt_mit_besetzung_id' => 32,
+            'dienstuebergabe_id' => 41,
+            'storniert_am' => null,
+            'storniert_von' => null,
+            'stornierungsgrund' => null,
+        ]]
+    );
+    $pdf->addS6Plans(
+        [[
+            'fernmeldeplan_id' => 51,
+            'einsatz_id' => 12,
+            'version' => 2,
+            'status' => 'AKTIV',
+            'einsatzbezeichnung' => 'Sturm Münster',
+            'herkunft' => 'S6 Führungsstelle',
+            'gueltig_ab' => '2026-07-29 10:00:00',
+            'gueltig_bis' => '2026-07-30 10:00:00',
+            'betriebsleitung' => 'LdF',
+            'bemerkungen' => 'Freigegebene Funkplanung',
+            'erstellt_am' => '2026-07-29 09:30:00.000000',
+            'erstellt_von' => 'S60001',
+            'freigegeben_am' => '2026-07-29 09:45:00.000000',
+            'freigegeben_von' => 'S60001',
+        ]],
+        [[
+            'fernmeldeplan_eintrag_id' => 61,
+            'fernmeldeplan_id' => 51,
+            'plan_version' => 2,
+            'sortierung' => 1,
+            'betriebsstelle' => 'Leitstelle',
+            'rufname' => 'Florian Leitstelle',
+            'medium' => 'Fu',
+            'kanal' => 'Kanal 4',
+            'bandlage' => '2 m',
+            'verkehrsform' => 'Sternverkehr',
+            'besondere_vermerke' => 'Vorrang',
+            'bemerkungen' => 'Stündliche Funkprobe',
+        ]]
+    );
+    $pdf->addCourierOrders([[
+        'melderauftrag_id' => 71,
+        'einsatz_id' => 12,
+        'nachricht_id' => 7,
+        'melder_kuerzel' => 'MELD01',
+        'ziel' => 'Leitstelle',
+        'status' => 'GEMELDET',
+        'beauftragt_am' => '2026-07-29 10:35:00.000000',
+        'beauftragt_von' => 'LDF001',
+        'uebernommen_am' => '2026-07-29 10:36:00.000000',
+        'tatsaechlicher_empfaenger' => 'Frau Zielperson',
+        'uebergeben_am' => '2026-07-29 10:45:00.000000',
+        'ruecknachricht_vorhanden' => true,
+        'ruecknachricht' => 'Empfang bestätigt',
+        'rueckweg_am' => '2026-07-29 10:46:00.000000',
+        'zurueck_am' => '2026-07-29 10:55:00.000000',
+        'abschlussvermerk' => 'Rückkehr gemeldet',
+        'gemeldet_am' => '2026-07-29 10:56:00.000000',
+        'gemeldet_an' => 'AW0001',
+        'abgebrochen_am' => null,
+        'abbruchgrund' => null,
+    ]]);
+    $pdf->addOperationsEvidence(
+        [[
+            'betriebsereignis_id' => 81,
+            'einsatz_id' => 12,
+            'sequenz' => 1,
+            'objekttyp' => 'MELDERAUFTRAG',
+            'objekt_id' => 71,
+            'aktion' => 'melderauftrag_gemeldet',
+            'akteur_kuerzel' => 'AW0001',
+            'akteur_funktion' => 'A/W',
+            'ereigniszeit' => '2026-07-29 10:56:00.000000',
+            'details_json' => '{"status":"GEMELDET"}',
+            'vorheriger_hash' => str_repeat('0', 64),
+            'ereignis_hash' => str_repeat('b', 64),
+        ]],
+        [[
+            'einsatz_id' => 12,
+            'letzte_sequenz' => 1,
+            'letzter_hash' => str_repeat('b', 64),
+        ]],
+        [
+            'valid' => true,
+            'event_count' => 1,
+            'failed_sequence' => null,
+            'calculated_head_sha256' => str_repeat('b', 64),
+            'stored_sequence' => 1,
+            'stored_head_sha256' => str_repeat('b', 64),
+        ]
+    );
     $pdf->addAttachmentIndex([[
         'display_name' => 'EL0001.txt · lage.txt',
         'stored_name' => $embedded['name'],
         'size' => $embedded['size'],
         'sha256' => $embedded['sha256'],
         'mime' => $embedded['mime'],
+        'integrity_state' => 'verified',
+        'integrity_statement' =>
+            'SHA-256 und Größe entsprechen dem Eingangsnachweis',
         'message_ids' => [7],
     ]]);
     $document = $pdf->Output('', 'S');
@@ -142,6 +413,28 @@ try {
     );
     $assert(str_ends_with($document, "%%EOF\n"), 'PDF trailer missing');
     $assert(strlen($document) > 5000, 'incident PDF is unexpectedly small');
+    foreach ([
+        'VORL',
+        'Nachrichten-Head-Summenhash',
+        'Ereigniszeit',
+        'Nachrichtenereignis',
+        'Dienstschicht',
+        'S6-Fernmeldeplan Version',
+        'Melderauftrag',
+        'cknachricht vorhanden',
+        'bergabeanforderung',
+        'INITIIERT',
+        'STORNIERT',
+        'BESTAETIGT',
+        'Betriebsereignis Sequenz',
+        'Aufbewahrung bis',
+        'Legal Hold',
+    ] as $marker) {
+        $assert(
+            str_contains($document, $marker),
+            'DV dossier marker is missing: ' . $marker
+        );
+    }
     foreach (
         ['EINGANG', 'AUSGANG', 'Nachweis-Nr.', 'Fm-Betriebsstelle']
         as $marker
@@ -196,6 +489,61 @@ try {
     $assert(
         $embedded['sha256'] === hash('sha256', "Originalanlage\n"),
         'embedded attachment SHA-256 differs'
+    );
+    $assertThrows(
+        static fn (): array => estab_incident_pdf_read_attachment(
+            $attachmentPath,
+            1024,
+            str_repeat('0', 64),
+            strlen($attachmentPayload)
+        ),
+        'PDF attachment read accepted a mismatching ingest SHA-256'
+    );
+
+    $closedIncident = array_replace($incident, [
+        'estab_status' => 'closed',
+        'estab_closed_at' => '2026-07-30 18:00:00.000000',
+        'estab_closed_by' => 'estab-admin',
+        'estab_close_note' => 'Abschlussprüfung vollständig',
+        'estab_retain_until' => '2027-07-30 18:00:00.000000',
+        'estab_legal_hold' => 1,
+        'estab_legal_hold_reason' => 'Behördliche Nachprüfung',
+        'estab_legal_hold_at' => '2026-07-30 18:05:00.000000',
+        'estab_legal_hold_by' => 'estab-admin',
+    ]);
+    $closedPdf = new EstabIncidentPdf($closedIncident, 1024);
+    $closedPdf->SetCompression(false);
+    $closedPdf->addCover(
+        $closedIncident,
+        ['etb'],
+        ['etb' => 0],
+        '30.07.2026 18:06:00',
+        'estab-admin',
+        [
+            'message' => [
+                'valid' => true,
+                'event_count' => 0,
+                'head_count' => 0,
+                'head_mismatches' => 0,
+                'head_set_sha256' => hash('sha256', ''),
+                'terminal_binding_complete' => true,
+                'terminal_unverifiable' => 0,
+            ],
+            'operations' => [
+                'valid' => true,
+                'event_count' => 0,
+                'stored_sequence' => 0,
+                'stored_head_sha256' => str_repeat('0', 64),
+                'calculated_head_sha256' => str_repeat('0', 64),
+            ],
+        ]
+    );
+    $closedDocument = $closedPdf->Output('', 'S');
+    $assert(
+        str_contains($closedDocument, 'FORMAL ABGESCHLOSSEN')
+            && str_contains($closedDocument, '2027-07-30 18:00:00.000000')
+            && str_contains($closedDocument, 'AKTIV'),
+        'Closed cover omits formal status, retention, or legal hold'
     );
 
     $assertThrows(

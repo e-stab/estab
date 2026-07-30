@@ -31,10 +31,26 @@ putenv('ESTAB_BASE_PATH=');
 
 $areas = estab_navigation_areas();
 $services = estab_navigation_services();
+$s1NavigationIdentity = [
+    'funktion' => 'S1',
+    'rolle' => 'Stab',
+    'duty_assignment_id' => 101,
+];
+$s2NavigationIdentity = [
+    'funktion' => 'S2',
+    'rolle' => 'Stab',
+    'duty_assignment_id' => 102,
+];
+$ldfNavigationIdentity = [
+    'funktion' => 'LdF',
+    'rolle' => 'Fernmelder',
+    'duty_assignment_id' => 103,
+];
 $assert(
     array_column($areas, 'key') === [
         'overview',
         'messages',
+        'command-post',
         'message-overview',
         'forms',
         'incident-log',
@@ -48,6 +64,7 @@ $assert(
     array_column($areas, 'label') === [
         'Übersicht',
         'Nachrichtenvordruck',
+        'Führungsstellenbetrieb',
         'Meldungsübersicht',
         'Vordrucke',
         'Einsatztagebuch (ETB)',
@@ -61,6 +78,7 @@ $assert(
     array_column($areas, 'short_label') === [
         'Übersicht',
         'Nachrichten',
+        'Führungsstelle',
         'Meldungen',
         'Vordrucke',
         'ETB',
@@ -74,6 +92,7 @@ $assert(
     array_column($areas, 'path') === [
         'index.php',
         '4fach/index.php',
+        '4fach/fuehrungsstelle.php',
         '4fueltg/ue_ltg.php',
         '4fach/vordrucke.php',
         'stabetb/etb.php',
@@ -99,7 +118,7 @@ $assert(
 $assert(
     estab_navigation_item_url($areas[0]) === '/'
         && estab_navigation_item_url($areas[1]) === '/4fach/index.php'
-        && estab_navigation_item_url($areas[6])
+        && estab_navigation_item_url($areas[7])
             === '/4fach/nachwea.php?nwalle',
     'root navigation URLs are not canonical'
 );
@@ -125,7 +144,7 @@ putenv('ESTAB_BASE_PATH=dispatch/site');
 $assert(
     estab_navigation_item_url($areas[0])
         === 'https://example.invalid/gateway/dispatch/site/'
-        && estab_navigation_item_url($areas[4])
+        && estab_navigation_item_url($areas[5])
             === 'https://example.invalid/gateway/dispatch/site/stabetb/etb.php'
         && estab_navigation_login_url()
             === 'https://example.invalid/gateway/dispatch/site/4fach/index.php'
@@ -138,6 +157,9 @@ $assert(
     estab_navigation_active_key([
         'SCRIPT_NAME' => '/gateway/dispatch/site/4fach/vordrucke.php',
     ]) === 'forms'
+        && estab_navigation_active_key([
+            'SCRIPT_NAME' => '/gateway/dispatch/site/4fach/fuehrungsstelle.php',
+        ]) === 'command-post'
         && estab_navigation_active_key([
             'REQUEST_URI' => '/gateway/dispatch/site/4fach/nachwea.php?nwalle',
         ]) === 'tracking'
@@ -201,10 +223,20 @@ foreach ([
 
 $authenticated = estab_navigation_markup(
     true,
-    ['SCRIPT_NAME' => '/4fach/vordrucke.php']
+    ['SCRIPT_NAME' => '/4fach/vordrucke.php'],
+    false,
+    false,
+    $s1NavigationIdentity
 );
 $expectedLabels = array_merge(
-    array_column($areas, 'label'),
+    array_column(array_values(array_filter(
+        $areas,
+        static fn (array $area): bool => !in_array(
+            $area['key'],
+            ['message-overview', 'tracking'],
+            true
+        )
+    )), 'label'),
     array_column($services, 'label')
 );
 $lastPosition = -1;
@@ -217,8 +249,8 @@ foreach ($expectedLabels as $label) {
     $lastPosition = is_int($position) ? $position : $lastPosition;
 }
 $assert(
-    substr_count($authenticated, 'data-estab-navigation-item') === 10
-        && substr_count($authenticated, 'target="_top"') === 10
+    substr_count($authenticated, 'data-estab-navigation-item') === 9
+        && substr_count($authenticated, 'target="_top"') === 9
         && substr_count($authenticated, 'aria-current="page"') === 1
         && str_contains(
             $authenticated,
@@ -233,10 +265,11 @@ $assert(
 );
 $assert(
     str_contains($authenticated, 'href="/"')
-        && str_contains(
+        && !str_contains(
             $authenticated,
             'href="/4fach/nachwea.php?nwalle"'
         )
+        && !str_contains($authenticated, 'href="/4fueltg/ue_ltg.php"')
         && str_contains($authenticated, 'href="/4fadm/admin.php"')
         && str_contains(
             $authenticated,
@@ -252,15 +285,77 @@ $assert(
     ) === 1,
     'active marker was not attached to the resolved item'
 );
+$s2Navigation = estab_navigation_markup(
+    true,
+    ['SCRIPT_NAME' => '/4fueltg/ue_ltg.php'],
+    false,
+    false,
+    $s2NavigationIdentity
+);
+$ldfNavigation = estab_navigation_markup(
+    true,
+    ['SCRIPT_NAME' => '/4fach/nachwea.php'],
+    false,
+    false,
+    $ldfNavigationIdentity
+);
+$assert(
+    str_contains($s2Navigation, 'href="/4fueltg/ue_ltg.php"')
+        && str_contains(
+            $s2Navigation,
+            'data-estab-navigation-duty-access="LAGE_DOKUMENTATION"'
+        )
+        && !str_contains(
+            $s2Navigation,
+            'href="/4fach/nachwea.php?nwalle"'
+        )
+        && str_contains(
+            $ldfNavigation,
+            'href="/4fach/nachwea.php?nwalle"'
+        )
+        && str_contains(
+            $ldfNavigation,
+            'data-estab-navigation-duty-access="FERNMELDE_NACHWEIS"'
+        )
+        && !str_contains(
+            $ldfNavigation,
+            'href="/4fueltg/ue_ltg.php"'
+        ),
+    'duty-specific navigation exposes a foreign privileged area'
+);
+$preHatNavigation = estab_navigation_markup(
+    true,
+    ['SCRIPT_NAME' => '/4fach/fuehrungsstelle.php'],
+    false,
+    false,
+    ['funktion' => 'S1', 'rolle' => 'Stab']
+);
+$assert(
+    substr_count(
+        $preHatNavigation,
+        'data-estab-navigation-item'
+    ) === 5
+        && str_contains(
+            $preHatNavigation,
+            'href="/4fach/fuehrungsstelle.php"'
+        )
+        && str_contains($preHatNavigation, 'href="/stabinfo/index.php"')
+        && str_contains($preHatNavigation, 'href="/4fadm/admin.php"')
+        && !str_contains($preHatNavigation, 'href="/4fach/index.php"')
+        && !str_contains($preHatNavigation, 'href="/stabetb/etb.php"')
+        && !str_contains($preHatNavigation, 'href="/fmtbb/tbb.php"'),
+    'authenticated pre-hat navigation exposes an operational area'
+);
 
 $anonymous = estab_navigation_markup(false, ['SCRIPT_NAME' => '/index.php']);
 $assert(
-    substr_count($anonymous, 'data-estab-navigation-locked') === 6
-        && substr_count($anonymous, 'Anmeldung erforderlich') === 6,
+    substr_count($anonymous, 'data-estab-navigation-locked') === 7
+        && substr_count($anonymous, 'Anmeldung erforderlich') === 7,
     'anonymous protected items do not expose their login requirement'
 );
 foreach ([
     'messages',
+    'command-post',
     'message-overview',
     'forms',
     'incident-log',
@@ -288,7 +383,10 @@ $assert(
 );
 $unrecognized = estab_navigation_markup(
     true,
-    ['SCRIPT_NAME' => '/unrelated.php']
+    ['SCRIPT_NAME' => '/unrelated.php'],
+    false,
+    false,
+    $s1NavigationIdentity
 );
 $assert(
     !str_contains($unrecognized, 'aria-current='),
@@ -298,7 +396,9 @@ $assert(
 $compact = estab_navigation_markup(
     true,
     ['REQUEST_URI' => '/stabinfo/index.php'],
-    true
+    true,
+    false,
+    $s1NavigationIdentity
 );
 $assert(
     str_contains($compact, 'data-estab-navigation')
@@ -312,10 +412,18 @@ $sidebar = estab_navigation_markup(
     true,
     ['REQUEST_URI' => '/4fach/index.php'],
     true,
-    true
+    true,
+    $s1NavigationIdentity
 );
 $expectedSidebarLabels = array_merge(
-    array_column($areas, 'short_label'),
+    array_column(array_values(array_filter(
+        $areas,
+        static fn (array $area): bool => !in_array(
+            $area['key'],
+            ['message-overview', 'tracking'],
+            true
+        )
+    )), 'short_label'),
     array_column($services, 'short_label')
 );
 $lastPosition = -1;
@@ -332,8 +440,8 @@ $assert(
         && str_contains($sidebar, 'data-estab-navigation-mode="sidebar"')
         && str_contains($sidebar, '<h2>Bereiche</h2>')
         && str_contains($sidebar, '<p>Arbeitsbereich wechseln</p>')
-        && substr_count($sidebar, 'data-estab-navigation-item') === 10
-        && substr_count($sidebar, 'target="_top"') === 10
+        && substr_count($sidebar, 'data-estab-navigation-item') === 9
+        && substr_count($sidebar, 'target="_top"') === 9
         && substr_count($sidebar, 'aria-current="page"') === 1
         && !str_contains($sidebar, '<details')
         && !str_contains($sidebar, '<summary'),
@@ -341,17 +449,14 @@ $assert(
 );
 $assert(
     str_contains($sidebar, '>Nachrichten</span>')
-        && str_contains($sidebar, '>Meldungen</span>')
+        && !str_contains($sidebar, '>Meldungen</span>')
         && str_contains($sidebar, '>ETB</span>')
         && str_contains($sidebar, '>TBB</span>')
         && str_contains(
             $sidebar,
             'aria-label="Nachrichtenvordruck" title="Nachrichtenvordruck"'
         )
-        && str_contains(
-            $sidebar,
-            'aria-label="Meldungsübersicht" title="Meldungsübersicht"'
-        )
+        && !str_contains($sidebar, 'aria-label="Meldungsübersicht"')
         && str_contains(
             $sidebar,
             'aria-label="Einsatztagebuch (ETB)"'
@@ -380,9 +485,9 @@ $assert(
         'data-estab-navigation-mode="sidebar"'
     )
         && substr_count(
-            $anonymousSidebar,
-            'data-estab-navigation-locked'
-        ) === 6
+        $anonymousSidebar,
+        'data-estab-navigation-locked'
+        ) === 7
         && str_contains(
             $anonymousSidebar,
             'href="/4fach/index.php?next=messages"'

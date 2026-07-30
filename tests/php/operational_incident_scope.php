@@ -34,6 +34,7 @@ $download = $source('4fach/download.php');
 $preview = $source('4fach/showpic.php');
 $protocol = $source('4fach/protokoll.php');
 $categories = $source('app/category.php');
+$readAuthorization = $source('app/read_authorization.php');
 
 $assert(
     str_contains($messages, "require_once __DIR__ . '/incident.php'"),
@@ -98,18 +99,22 @@ $assert(
     'attachment audit rows do not carry an incident'
 );
 $assert(
-    (str_contains($download, 'estab_attachment_find(')
-        || str_contains($download, 'estab_attachment_find ('))
-        && (str_contains($preview, 'estab_attachment_find(')
-            || str_contains($preview, 'estab_attachment_find (')),
+    (str_contains($download, 'estab_read_attachment(')
+        || str_contains($download, 'estab_read_attachment ('))
+        && (str_contains($preview, 'estab_read_attachment(')
+            || str_contains($preview, 'estab_read_attachment ('))
+        && str_contains(
+            $readAuthorization,
+            'estab_incident_require_active($connection, $forUpdate)'
+        ),
     'direct attachment delivery bypasses active-incident authorization'
 );
 $assert(
     str_contains($download, 'begin_transaction()')
-        && str_contains($download, '$storedName,')
+        && str_contains($download, '$readIdentity,')
         && str_contains($download, "            true\n        );")
         && str_contains($preview, 'begin_transaction ()')
-        && str_contains($preview, '$storedName,')
+        && str_contains($preview, '$readIdentity,')
         && str_contains($preview, "    true\n  );"),
     'file authorization is not serialized with active-incident switching'
 );
@@ -167,11 +172,14 @@ $assert(
     'an operational message or attachment form lacks the incident marker'
 );
 $assert(
-    str_contains(
-        $list,
-        'm.`einsatz_id` = (SELECT `active_einsatz_id`'
-    )
-        && substr_count($list, '`nv_einsatz_status`') >= 5
+    str_contains($list, 'estab_read_require_operational_scope (')
+        && str_contains(
+            $list,
+            '$incidentId = (int) $scope ["incident"] ["active_einsatz_id"];'
+        )
+        && str_contains($list, '$where = array ("m.`einsatz_id` = ?");')
+        && str_contains($list, 'estab_read_filter_messages (')
+        && str_contains($overview, 'estab_read_require_area (')
         && str_contains(
             $overview,
             '(SELECT `active_einsatz_id` FROM `nv_einsatz_status`'

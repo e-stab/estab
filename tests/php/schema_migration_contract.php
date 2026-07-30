@@ -37,12 +37,46 @@ $incidentFinishMigration = $read(
 $userBlockingMigration = $read(
     $root . '/docker/db/migrations/70-user-account-blocking.sql'
 );
+$dvEvidenceMigration = $read(
+    $root . '/docker/db/migrations/80-dv-evidence-retention.sql'
+);
+$dvOperationsMigration = $read(
+    $root . '/docker/db/migrations/94-dv-organisational-controls.sql'
+);
+$attachmentIntegrityMigration = $read(
+    $root . '/docker/db/migrations/95-attachment-ingest-integrity.sql'
+);
+$etbDutyMigration = $read(
+    $root . '/docker/db/migrations/96-etb-duty-function.sql'
+);
 $baseline = $read($root . '/docker/db/init/10-schema.sql');
 $verify = $read($root . '/docker/db/verify.sql');
 $health = $read($root . '/health.php');
 $readiness = $read($root . '/app/readiness.php');
 $systemStatus = $read($root . '/4fadm/system_status.php');
 $schemaIntegration = $read($root . '/tests/integration/schema_migrator.sh');
+require_once $root . '/app/readiness.php';
+
+$normaliseSql = static function (string $sql): string {
+    $normalised = preg_replace('/\s+/', ' ', trim($sql));
+    if (!is_string($normalised)) {
+        throw new RuntimeException('Could not normalise SQL contract source');
+    }
+    return $normalised;
+};
+$etbDutySql = $normaliseSql($etbDutyMigration);
+$verifySql = $normaliseSql($verify);
+$readinessSql = $normaliseSql(estab_readiness_schema_query());
+$oldCapabilityEnum = "enum('LAGE_DOKUMENTATION','SICHTUNG',"
+    . "'FERNMELDEPLANUNG','FERNMELDEBETRIEB','BEFOERDERUNG')";
+$newCapabilityEnum = "enum('LAGE_DOKUMENTATION','EINSATZTAGEBUCH',"
+    . "'SICHTUNG','FERNMELDEPLANUNG','FERNMELDEBETRIEB','BEFOERDERUNG')";
+$oldCapabilityEnumLiteral = "'"
+    . str_replace("'", "''", $oldCapabilityEnum)
+    . "'";
+$newCapabilityEnumLiteral = "'"
+    . str_replace("'", "''", $newCapabilityEnum)
+    . "'";
 
 $assert(
     preg_match('/^\s{2}migrate:\R/m', $compose) === 1,
@@ -244,6 +278,10 @@ $assert(
     && str_contains($verify, 'matrix_flag_targets_ok')
     && str_contains($verify, 'standard_matrix_flag_targets_ok')
     && str_contains($verify, "`mtx_auto` IN ('t', '1')")
+    && str_contains(
+        $verify,
+        "BINARY `mtx_fkt` = BINARY 'S2'"
+    )
     && str_contains($verify, 'schema_migrations_ok'),
     'Database verification omits runtime widths, indexes, standard matrix, or migration ledger'
 );
@@ -314,6 +352,326 @@ $assert(
     'User-account blocking migration is not part of the runtime schema gate'
 );
 $assert(
+    str_contains(
+        $dvEvidenceMigration,
+        'CREATE TABLE IF NOT EXISTS `nv_nachrichten_ereignisse`'
+    )
+        && str_contains(
+            $dvEvidenceMigration,
+            'CREATE TABLE IF NOT EXISTS `nv_nachrichten_nachweiskopf`'
+        )
+        && str_contains(
+            $dvEvidenceMigration,
+            'CREATE FUNCTION estab_message_event_hash'
+        )
+        && str_contains(
+            $dvEvidenceMigration,
+            'estab_message_events_bu_append_only'
+        )
+        && str_contains(
+            $dvEvidenceMigration,
+            'estab_incident_events_bd_append_only'
+        )
+        && str_contains($dvEvidenceMigration, '`estab_retain_until`')
+        && str_contains($dvEvidenceMigration, '`estab_legal_hold`')
+        && str_contains($dvEvidenceMigration, '`estab_event_time`')
+        && str_contains($dvEvidenceMigration, '`estab_recorded_at`')
+        && str_contains($verify, 'dv_evidence_schema_ok')
+        && str_contains($verify, 'dv_evidence_boundary_ok')
+        && str_contains(
+            $readiness,
+            "'80-dv-evidence-retention.sql'"
+        ),
+    'DV evidence, append-only ETB, closure, or retention is outside the schema gate'
+);
+$assert(
+    str_contains(
+        $dvOperationsMigration,
+        'CREATE TABLE IF NOT EXISTS `nv_dienstschichten`'
+    )
+        && str_contains(
+            $dvOperationsMigration,
+            'CREATE TABLE IF NOT EXISTS `nv_dienstbesetzungen`'
+        )
+        && str_contains(
+            $dvOperationsMigration,
+            'CREATE TABLE IF NOT EXISTS `nv_dienstuebergaben`'
+        )
+        && str_contains(
+            $dvOperationsMigration,
+            'CREATE TABLE IF NOT EXISTS `nv_fernmeldeplaene`'
+        )
+        && str_contains(
+            $dvOperationsMigration,
+            'CREATE TABLE IF NOT EXISTS `nv_fernmeldeplan_eintraege`'
+        )
+        && str_contains(
+            $dvOperationsMigration,
+            'CREATE TABLE IF NOT EXISTS `nv_melderauftraege`'
+        )
+        && str_contains(
+            $dvOperationsMigration,
+            '`estab_fernmeldeplan_eintrag_id`'
+        )
+        && str_contains(
+            $dvOperationsMigration,
+            'estab_dv94_message_route_update'
+        )
+        && str_contains(
+            $dvOperationsMigration,
+            'estab_dv94_event_update'
+        )
+        && str_contains(
+            $dvOperationsMigration,
+            'estab_dv94_event_head_update'
+        )
+        && str_contains($verify, 'dv_organisation_schema_ok')
+        && str_contains($verify, 'dv_organisation_boundary_ok')
+        && str_contains(
+            $readiness,
+            "'94-dv-organisational-controls.sql'"
+        ),
+    'DV duty, S6, messenger, route, or operational event schema is outside the gate'
+);
+$etbMigrationFragments = [
+    "table_name = 'nv_funktionsfaehigkeiten' AND table_type = 'BASE TABLE' "
+        . "AND engine = 'InnoDB' AND table_collation = "
+        . "'utf8mb4_unicode_ci' AND table_comment = "
+        . "'estab:migration:94-dv-organisational-controls:v1'"
+        => 'Migration 96 does not prove ownership of the capability table',
+    'IF total_columns <> 4 OR exact_columns <> 4'
+        => 'Migration 96 does not require exactly four canonical columns',
+    "column_name = 'funktion' AND ordinal_position = 1 "
+        . "AND data_type = 'varchar' AND column_type = 'varchar(6)' "
+        . "AND character_maximum_length = 6 AND character_set_name = "
+        . "'utf8mb4' AND collation_name = 'utf8mb4_unicode_ci' "
+        . "AND is_nullable = 'NO' AND column_default IS NULL AND extra = ''"
+        => 'Migration 96 does not require the exact function column',
+    "column_name = 'rolle' AND ordinal_position = 2 "
+        . "AND data_type = 'enum' AND column_type = "
+        . "'enum(''Stab'',''FB'',''Fernmelder'')' "
+        . "AND character_set_name = 'utf8mb4' "
+        . "AND collation_name = 'utf8mb4_unicode_ci' "
+        . "AND is_nullable = 'NO' AND column_default IS NULL AND extra = ''"
+        => 'Migration 96 does not require the exact role column',
+    "column_name = 'faehigkeit' AND ordinal_position = 3 "
+        . "AND data_type = 'enum' AND character_set_name = 'utf8mb4' "
+        . "AND collation_name = 'utf8mb4_unicode_ci' "
+        . "AND is_nullable = 'NO' AND column_default IS NULL AND extra = '' "
+        . "AND column_type IN ( {$oldCapabilityEnumLiteral}, "
+        . "{$newCapabilityEnumLiteral} )"
+        => 'Migration 96 does not limit capability to the old/new exact ENUM',
+    "column_name = 'bezeichnung' AND ordinal_position = 4 "
+        . "AND data_type = 'varchar' AND column_type = 'varchar(100)' "
+        . "AND character_maximum_length = 100 AND character_set_name = "
+        . "'utf8mb4' AND collation_name = 'utf8mb4_unicode_ci' "
+        . "AND is_nullable = 'NO' AND column_default IS NULL AND extra = ''"
+        => 'Migration 96 does not require the exact description column',
+    'IF total_primary_parts <> 2 OR exact_primary_parts <> 2'
+        => 'Migration 96 does not require the exact two-column primary key',
+    "(seq_in_index = 1 AND column_name = 'funktion') OR "
+        . "(seq_in_index = 2 AND column_name = 'faehigkeit')"
+        => 'Migration 96 does not bind the key to function and capability',
+    "index_name = 'uq_funktionsfaehigkeit_eindeutig' "
+        . "AND non_unique = 0 AND seq_in_index = 1 "
+        . "AND column_name = 'faehigkeit'"
+        => 'Migration 96 cannot recognise the old global unique key exactly',
+    'total_index_parts <> 2 + expected_unique_parts'
+        => 'Migration 96 does not reject foreign capability indexes',
+    "column_type = {$oldCapabilityEnumLiteral}"
+        => 'Migration 96 no longer recognises the exact predecessor ENUM',
+    "column_type = {$newCapabilityEnumLiteral}"
+        => 'Migration 96 does not require the exact final ENUM',
+    'total_rows = 5 AND base_rows = 5'
+        => 'Migration 96 does not recognise the exact five-row predecessor',
+    'total_rows = 7 AND final_rows = 7'
+        => 'Migration 96 does not recognise the exact seven-row final state',
+    "('S2', 'Stab', 'LAGE_DOKUMENTATION', 'Lage und Dokumentation')"
+        => 'Migration 96 omits the canonical S2 documentation capability',
+    "('S2', 'Stab', 'EINSATZTAGEBUCH', 'Einsatztagebuchführung')"
+        => 'Migration 96 omits the S2 ETB capability',
+    "('ETB', 'Stab', 'EINSATZTAGEBUCH', 'Einsatztagebuchführung')"
+        => 'Migration 96 omits the dedicated ETB duty capability',
+    "('Si', 'Stab', 'SICHTUNG', 'Sichter')"
+        => 'Migration 96 omits the canonical Si capability',
+    "('S6', 'Stab', 'FERNMELDEPLANUNG', 'Fernmeldeplanung')"
+        => 'Migration 96 omits the canonical S6 capability',
+    "('LdF', 'Fernmelder', 'FERNMELDEBETRIEB', "
+        . "'Leiter der Fernmeldezentrale')"
+        => 'Migration 96 omits the canonical LdF capability',
+    "('A/W', 'Fernmelder', 'BEFOERDERUNG', 'Aufnahme und Weitergabe')"
+        => 'Migration 96 omits the canonical A/W capability',
+    'IF known_state <> 1'
+        => 'Migration 96 does not reject every non-canonical prefix',
+    'DROP INDEX `uq_funktionsfaehigkeit_eindeutig`'
+        => 'Migration 96 does not remove global capability uniqueness',
+    'CREATE PROCEDURE estab_migrate_96_extend_enum()'
+        => 'Migration 96 does not isolate its resumable ENUM phase',
+    'ON DUPLICATE KEY UPDATE `rolle` = VALUES(`rolle`), '
+        . '`bezeichnung` = VALUES(`bezeichnung`)'
+        => 'Migration 96 does not resume its exact two-row seed idempotently',
+    'CREATE PROCEDURE estab_migrate_96_validate()'
+        => 'Migration 96 has no final catalogue validator',
+    'SELECT COUNT(*) FROM `nv_funktionsfaehigkeiten` ) <> 7'
+        => 'Migration 96 does not validate the final row count',
+    "index_name <> 'PRIMARY'"
+        => 'Migration 96 does not reject the obsolete or foreign final index',
+];
+foreach ($etbMigrationFragments as $fragment => $message) {
+    $assert(str_contains($etbDutySql, $fragment), $message);
+}
+
+foreach ([
+    '96-etb-duty-function.sql',
+    'partial ETB duty unique-index phase',
+    'partial ETB duty enum phase',
+    'completed ETB duty catalogue without ledger',
+    'mixed ETB duty catalogue',
+    'ETB duty primary-key drift',
+    'assert_equal "11"',
+] as $marker) {
+    $assert(
+        str_contains($schemaIntegration, $marker),
+        'Schema integration omits ETB migration evidence: ' . $marker
+    );
+}
+
+$finalCapabilityTuples = [
+    "('S2', 'Stab', 'LAGE_DOKUMENTATION', 'Lage und Dokumentation')",
+    "('S2', 'Stab', 'EINSATZTAGEBUCH', 'Einsatztagebuchführung')",
+    "('ETB', 'Stab', 'EINSATZTAGEBUCH', 'Einsatztagebuchführung')",
+    "('Si', 'Stab', 'SICHTUNG', 'Sichter')",
+    "('S6', 'Stab', 'FERNMELDEPLANUNG', 'Fernmeldeplanung')",
+    "('LdF', 'Fernmelder', 'FERNMELDEBETRIEB', "
+        . "'Leiter der Fernmeldezentrale')",
+    "('A/W', 'Fernmelder', 'BEFOERDERUNG', 'Aufnahme und Weitergabe')",
+];
+foreach ($finalCapabilityTuples as $tuple) {
+    $assert(
+        str_contains($verifySql, $tuple),
+        'verify.sql omits canonical capability tuple ' . $tuple
+    );
+    $assert(
+        str_contains($readinessSql, str_replace(', ', ',', $tuple)),
+        'Runtime readiness omits canonical capability tuple ' . $tuple
+    );
+}
+$assert(
+    str_contains(
+        $verifySql,
+        '(SELECT COUNT(*) FROM `nv_funktionsfaehigkeiten`) = 7'
+    )
+        && str_contains(
+            $verifySql,
+            "column_name = 'faehigkeit' AND data_type = 'enum' "
+                . "AND column_type = {$newCapabilityEnumLiteral} "
+                . "AND is_nullable = 'NO'"
+        )
+        && str_contains(
+            $verifySql,
+            "index_name = 'PRIMARY' AND non_unique = 0 AND ( "
+                . "(seq_in_index = 1 AND column_name = 'funktion') OR "
+                . "(seq_in_index = 2 AND column_name = 'faehigkeit') )"
+        )
+        && str_contains($verifySql, "index_name <> 'PRIMARY') = 0")
+        && str_contains(
+            $verifySql,
+            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 11'
+        )
+        && str_contains($verifySql, "'96-etb-duty-function.sql'")
+        && str_contains($verifySql, ") = 11) AS `schema_migrations_ok`"),
+    'verify.sql does not require the exact final ETB catalogue and ledger'
+);
+$assert(
+    str_contains(
+        $readinessSql,
+        '(SELECT COUNT(*) FROM nv_funktionsfaehigkeiten) = 7'
+    )
+        && str_contains(
+            $readinessSql,
+            "column_name = 'faehigkeit' AND data_type = 'enum' "
+                . "AND column_type = {$newCapabilityEnumLiteral} "
+                . "AND is_nullable = 'NO'"
+        )
+        && str_contains(
+            $readinessSql,
+            "index_name = 'PRIMARY' AND non_unique = 0 AND ("
+                . "(seq_in_index = 1 AND column_name = 'funktion') OR "
+                . "(seq_in_index = 2 AND column_name = 'faehigkeit'))"
+        )
+        && str_contains($readinessSql, "index_name <> 'PRIMARY') = 0")
+        && str_contains(
+            $readinessSql,
+            '(SELECT COUNT(*) FROM estab_schema_migrations) = 11'
+        )
+        && str_contains($readinessSql, "'96-etb-duty-function.sql'")
+        && str_contains(
+            $readinessSql,
+            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 11"
+        ),
+    'Runtime readiness does not require the exact final ETB catalogue and ledger'
+);
+$assert(
+    str_contains(
+        $attachmentIntegrityMigration,
+        'ADD COLUMN IF NOT EXISTS'
+    )
+        && str_contains(
+            $attachmentIntegrityMigration,
+            '`ingest_sha256`'
+        )
+        && str_contains(
+            $attachmentIntegrityMigration,
+            'estab:migration:95:integrity-required:v1'
+        )
+        && str_contains(
+            $attachmentIntegrityMigration,
+            'Attachment integrity migration blocked: foreign column collision'
+        )
+        && str_contains(
+            $attachmentIntegrityMigration,
+            'Attachment integrity migration blocked: foreign constraint collision'
+        )
+        && str_contains(
+            $attachmentIntegrityMigration,
+            'Attachment integrity migration blocked: foreign trigger collision'
+        )
+        && str_contains(
+            $attachmentIntegrityMigration,
+            'estab_migrate_95_add_constraints'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'deliberate partial attachment-integrity DDL was not reproduced'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'partial attachment-integrity migration did not converge canonically'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'blocked attachment-integrity collision was changed or recorded'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'partial attachment-integrity trigger phase did not resume'
+        )
+        && str_contains(
+            $attachmentIntegrityMigration,
+            'New attachment cannot be marked as unverifiable legacy data'
+        )
+        && str_contains(
+            $attachmentIntegrityMigration,
+            'Final attachment integrity evidence is immutable'
+        )
+        && str_contains($verify, 'attachment_integrity_schema_ok')
+        && str_contains(
+            $readiness,
+            "'95-attachment-ingest-integrity.sql'"
+        ),
+    'Attachment ingest integrity is outside the checksum-pinned schema gate'
+);
+$assert(
     str_contains($verify, 'active_user_assignments_valid_ok')
         && str_contains($verify, 'assignment_user.`aktiv` = 1')
         && str_contains(
@@ -346,13 +704,21 @@ $assert(
         && str_contains($readiness, "'45-global-incidents-prepare.sql'")
         && str_contains($readiness, "'55-global-incidents-finish.sql'")
         && str_contains($readiness, "'70-user-account-blocking.sql'")
+        && str_contains($readiness, "'80-dv-evidence-retention.sql'")
+        && str_contains($readiness, "'94-dv-organisational-controls.sql'")
+        && str_contains($readiness, "'95-attachment-ingest-integrity.sql'")
+        && str_contains($readiness, "'96-etb-duty-function.sql'")
         && str_contains($verify, "'50-global-incidents.sql'")
         && str_contains($verify, "'45-global-incidents-prepare.sql'")
         && str_contains($verify, "'55-global-incidents-finish.sql'")
         && str_contains($verify, "'70-user-account-blocking.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 7')
-        && str_contains($readiness, 'estab_schema_migrations) = 7'),
-    'Migration ledger/readiness does not require all seven release migrations'
+        && str_contains($verify, "'80-dv-evidence-retention.sql'")
+        && str_contains($verify, "'94-dv-organisational-controls.sql'")
+        && str_contains($verify, "'95-attachment-ingest-integrity.sql'")
+        && str_contains($verify, "'96-etb-duty-function.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 11')
+        && str_contains($readiness, 'estab_schema_migrations) = 11'),
+    'Migration ledger/readiness does not require all eleven release migrations'
 );
 $assert(
     str_contains($readiness, "require_once __DIR__ . '/bootstrap.php'")

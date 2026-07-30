@@ -138,10 +138,12 @@ $assert(
 $assert(
     str_contains($list, 'estab_generated_form_list_active')
         && !str_contains($list, 'estab_file_list(')
+        && str_contains($list, 'estab_read_filter_generated_forms')
         && str_contains($list, ") . '&layout=current';")
         && str_contains($list, 'PDF im aktuellen Layout öffnen')
-        && str_contains($download, 'estab_generated_form_require_active')
         && str_contains($download, 'estab_generated_form_fetch_active')
+        && str_contains($download, 'estab_read_require_identity_scope')
+        && str_contains($download, 'estab_read_message_allowed')
         && str_contains($download, 'estab_generated_form_recipient_matrix')
         && str_contains($download, 'render_message_form_document')
         && str_contains($download, '$currentLayout')

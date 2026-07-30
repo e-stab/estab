@@ -90,8 +90,9 @@ assert_png() {
 assert_status 200 "$base_url/"
 for label in \
     'Nachrichtenvordruck' \
-    'Vordrucke' \
+    'Führungsstellenbetrieb' \
     'Meldungsübersicht' \
+    'Vordrucke' \
     'BOS-Info' \
     'Administration' \
     'Einsatztagebuch' \
@@ -131,6 +132,7 @@ for asset in \
     /4fsym/el80.gif \
     /4fsym/iuk_80.jpg \
     /4fsym/4fach_aktiv.png \
+    /4fsym/iuk_hs80.png \
     /4fach/design/mr/folder_global.gif \
     /4fsym/all_msg.png \
     /4fsym/merke32.gif \
@@ -182,11 +184,7 @@ assert_body_fixed 'src="./vorgaben.php?next=tracking"'
 assert_status 400 "$base_url/4fach/index.php?login_flow=unknown"
 assert_status 400 "$base_url/4fach/index.php?next=administration"
 assert_status 400 "$base_url/4fach/index.php?next=https%3A%2F%2Fattacker.invalid"
-assert_nonempty_200 "$base_url/4fach/counter.php"
-if grep -Fq 'data-estab-session-bar' "$body"; then
-    printf 'HTTP surface: anonymous counter contains authenticated session UI\n' >&2
-    exit 1
-fi
+assert_status 403 "$base_url/4fach/counter.php"
 assert_status 200 "$base_url/4fach/vorgaben.php"
 assert_body_fixed 'data-estab-sidebar-root'
 assert_body_fixed 'data-estab-public-bar'
@@ -198,8 +196,8 @@ assert_body_fixed '>Anmelden</a>'
 navigation_item_count=$(
     grep -o 'data-estab-navigation-item' "$body" | wc -l | tr -d ' '
 )
-if [ "$navigation_item_count" != 10 ]; then
-    printf 'HTTP surface: anonymous sidebar contains %s navigation items, expected 10\n' \
+if [ "$navigation_item_count" != 11 ]; then
+    printf 'HTTP surface: anonymous sidebar contains %s navigation items, expected 11\n' \
         "$navigation_item_count" >&2
     exit 1
 fi
@@ -453,11 +451,6 @@ assert_status 400 "$base_url/language/german/helptext.php?Errorart=unbekannt"
 assert_status 400 --get --data-urlencode 'Errorart[]=01_medium' \
     "$base_url/language/german/helptext.php"
 
-assert_status 200 "$base_url/4fach/status.php"
-assert_body_fixed 'Status erst nach Anmeldung verfügbar.'
-if grep -Eq '>LS<|>S[1-6]<|>A/W<' "$body"; then
-    printf 'HTTP surface: anonymous status disclosed role occupancy\n' >&2
-    exit 1
-fi
+assert_status 403 "$base_url/4fach/status.php"
 
 printf 'HTTP surface integration: OK\n'

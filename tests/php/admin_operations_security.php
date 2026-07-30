@@ -20,21 +20,20 @@ for ($row = 1; $row <= ESTAB_ADMIN_MATRIX_ROWS; $row++) {
         $validMatrixInput['rolle_' . $position] = '';
     }
 }
-$validMatrixInput['pos_11'] = 'S1';
+$validMatrixInput['pos_11'] = 'S2';
 $validMatrixInput['rolle_11'] = 'Stab';
 $validMatrixInput['pos_12'] = 'POL';
 $validMatrixInput['rolle_12'] = 'FB';
-$validMatrixInput['stasi_12'] = '1';
 
 $validMatrix = estab_admin_validate_matrix($validMatrixInput);
 $assert($validMatrix['valid'] === true, 'valid 5x4 matrix rejected');
 $assert(count($validMatrix['data']['cells']) === 20, 'matrix does not contain exactly 20 cells');
 $assert($validMatrix['data']['redcopy'] === '11', 'red-copy position not retained');
 $assert($validMatrix['data']['cells']['11']['redcopy'] === true, 'red-copy cell not marked');
-$assert($validMatrix['data']['cells']['12']['auto'] === true, 'boolean auto flag not retained');
+$assert($validMatrix['data']['cells']['12']['auto'] === false, 'autosighting was enabled');
 
 $invalid = $validMatrixInput;
-$invalid['pos_12'] = 'S1';
+$invalid['pos_12'] = 'S2';
 $assert(estab_admin_validate_matrix($invalid)['valid'] === false, 'duplicate function accepted');
 
 $invalid = $validMatrixInput;
@@ -61,8 +60,8 @@ $invalid['rolle_12'] = 'Administrator';
 $assert(estab_admin_validate_matrix($invalid)['valid'] === false, 'unknown recipient role accepted');
 
 $invalid = $validMatrixInput;
-$invalid['stasi_12'] = 'yes';
-$assert(estab_admin_validate_matrix($invalid)['valid'] === false, 'non-boolean auto flag accepted');
+$invalid['stasi_12'] = '1';
+$assert(estab_admin_validate_matrix($invalid)['valid'] === false, 'autosighting flag accepted');
 
 $invalid = $validMatrixInput;
 $invalid['lagerot'] = '13';
@@ -76,10 +75,10 @@ $assert(
 );
 
 $invalid = $validMatrixInput;
-$invalid['rolle_12'] = '';
+$invalid['lagerot'] = '12';
 $assert(
     estab_admin_validate_matrix($invalid)['valid'] === false,
-    'roleless automatic-sighting target accepted'
+    'non-S2 Lage/documentation target accepted'
 );
 
 $assert(estab_admin_parse_counter_value('1') === 1, 'minimum counter rejected');
@@ -125,6 +124,10 @@ $messageTools = file_get_contents($root . '/4fach/tools.php');
 $messageDummy = file_get_contents($root . '/4fach/dummy.php');
 $apache = file_get_contents($root . '/docker/apache/estab.conf');
 $adminHttp = file_get_contents($root . '/tests/integration/admin_workflows_http.sh');
+$initialSchema = file_get_contents($root . '/docker/db/init/10-schema.sql');
+$dvMigration = file_get_contents(
+    $root . '/docker/db/migrations/94-dv-organisational-controls.sql'
+);
 foreach (
     [
         $helper, $assignmentPolicy, $matrixPage, $counterPage, $resetPage, $databaseConfig,
@@ -144,7 +147,7 @@ $assert(
 );
 
 $assert(
-    substr_count($helper, '$connection->prepare(') >= 12
+    substr_count($helper, '$connection->prepare(') >= 10
         && substr_count($helper, '->bind_param(') >= 9
         && str_contains($helper, 'estab_auth_table($table)'),
     'administrative database values are not consistently parameterized'
@@ -175,13 +178,22 @@ $assert(
         && substr_count($helper, 'WHERE `einsatz_id` = ?') >= 2
         && str_contains(
             $helper,
-            '(`einsatz_id`, `04_richtung`, `04_nummer`, `12_inhalt`)'
+            "'message_counter_repaired'"
+        )
+        && str_contains(
+            $helper,
+            'estab_dv_event_append('
+        )
+        && !str_contains(
+            $helper,
+            'eStab Systemmeldung.'
         )
         && str_contains(
             $helper,
             'SET `x04_druck` = ?, `x05_druck_d` = NULL'
         ),
-    'counter repair or print reset is not bound to the locked active incident'
+    'counter repair is not evidenced without a fake message or print reset '
+        . 'is not bound to the locked active incident'
 );
 $assert(
     str_contains(
@@ -258,9 +270,17 @@ $assert(
     'matrix editor still writes a generated PHP configuration file'
 );
 $assert(
-    str_contains($messageTools, "WHERE `mtx_auto` IN ('t','1')")
-        && str_contains($messageDummy, "WHERE `mtx_auto` IN ('t','1')"),
-    'runtime and editor disagree on accepted automatic-sighting flags'
+    !str_contains($messageTools, 'sichter_online')
+        && !str_contains($messageDummy, 'sichter_online')
+        && !str_contains($messageTools, '`mtx_auto`')
+        && !str_contains($messageDummy, '`mtx_auto`'),
+    'runtime still contains an automatic-sighting bypass'
+);
+$assert(
+    str_contains($helper, "\$type = \$function !== '' && \$role !== '' ? 'cb' : 't';")
+        && str_contains($initialSchema, "`mtx_typ` SET('cb','t')")
+        && str_contains($dvMigration, "`mtx_typ` SET('cb','t')"),
+    'supported recipient matrices are not restricted to canonical cb/t cells'
 );
 $assert(
     str_contains($adminHttp, 'refusing mutation outside an estab_ci project')
@@ -293,7 +313,10 @@ foreach ([$matrixPage, $counterPage, $resetPage] as $page) {
 
 $assert(
     str_contains($apache, '4fach/resetpic\\.php$')
-        && str_contains($apache, '<Location "/4fach/all_msg.php">')
+        && str_contains(
+            $apache,
+            '^/4fach/(?:all_msg|counter|status)\\.php$'
+        )
         && str_contains($apache, '^/4fach/upload/(?!upload\\.php$)')
         && str_contains($apache, '^/4fbak(?:/|$)')
         && str_contains($apache, '^/4fach/Print(?:/|$)')

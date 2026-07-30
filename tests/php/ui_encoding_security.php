@@ -28,8 +28,6 @@ $uiFiles = [
     '4fach/index.php',
     '4fach/mainindex.php',
     '4fach/vorgaben.php',
-    '4fach/counter.php',
-    '4fach/status.php',
     '4fach/anhang.php',
     '4fach/4fachform.php',
     '4fach/liste.php',

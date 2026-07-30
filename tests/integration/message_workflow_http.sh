@@ -23,25 +23,28 @@ cd "$repo_root"
 base_url=${ESTAB_TEST_BASE_URL:-http://127.0.0.1:8080}
 base_url=${base_url%/}
 workflow_marker=${ESTAB_TEST_WORKFLOW_MARKER:-}
-workflow_variant=${ESTAB_TEST_WORKFLOW_VARIANT:-default}
-review_expectation=${ESTAB_TEST_EXPECT_OUTGOING_REVIEW:-disabled}
 compose_engine=${ESTAB_TEST_COMPOSE_ENGINE:-docker}
+active_duty_state_file=${ESTAB_TEST_ACTIVE_DUTY_STATE_FILE:-}
 
 if ! printf '%s' "$workflow_marker" | grep -Eq '^[A-Za-z0-9_:-]{1,120}$'; then
     echo 'Message workflow HTTP: workflow marker is missing or unsafe' >&2
     exit 1
 fi
-if ! printf '%s' "$workflow_variant" | grep -Eq '^[a-z0-9_-]{1,20}$'; then
-    echo 'Message workflow HTTP: workflow variant is unsafe' >&2
-    exit 1
-fi
-case "$review_expectation" in
-    enabled | disabled | auto) ;;
-    *)
-        echo 'Message workflow HTTP: outgoing-review expectation must be enabled, disabled, or auto' >&2
+if [ -n "$active_duty_state_file" ]; then
+    case "$active_duty_state_file" in
+        /*) ;;
+        *)
+            echo 'Message workflow HTTP: active-duty state path must be absolute' >&2
+            exit 1
+            ;;
+    esac
+    active_duty_state_dir=$(dirname -- "$active_duty_state_file")
+    if [ ! -d "$active_duty_state_dir" ] \
+        || [ ! -w "$active_duty_state_dir" ]; then
+        echo 'Message workflow HTTP: active-duty state directory is not writable' >&2
         exit 1
-        ;;
-esac
+    fi
+fi
 case "$compose_engine" in
     docker | podman) ;;
     *)
@@ -67,7 +70,7 @@ if [ -z "$role_password" ]; then
 fi
 
 identity_seed=$(printf '%s:%s:%s' \
-    "$project_name" "$workflow_marker" "$workflow_variant" |
+    "$project_name" "$workflow_marker" "dv-mandatory" |
     openssl dgst -sha256 -r | awk '{ print substr($1, 1, 5) }')
 if ! printf '%s' "$identity_seed" | grep -Eq '^[a-f0-9]{5}$'; then
     echo 'Message workflow HTTP: could not derive isolated identities' >&2
@@ -80,6 +83,7 @@ si_code="i${identity_seed}"
 s1_code="a${identity_seed}"
 s2_code="l${identity_seed}"
 s3_code="n${identity_seed}"
+s6_code="x${identity_seed}"
 pol_code="p${identity_seed}"
 aw_name="Workflow A-W ${identity_seed}"
 ldf_name="Workflow LdF ${identity_seed}"
@@ -87,17 +91,18 @@ si_name="Workflow Si ${identity_seed}"
 s1_name="Workflow S1 ${identity_seed}"
 s2_name="Workflow S2 ${identity_seed}"
 s3_name="Workflow S3 ${identity_seed}"
+s6_name="Workflow S6 ${identity_seed}"
 pol_name="Workflow POL ${identity_seed}"
-incoming_marker="E2EIN_${identity_seed}_${workflow_variant}"
-outgoing_marker="E2EOUT_${identity_seed}_${workflow_variant}"
-autosight_marker="E2EAUTO_${identity_seed}_${workflow_variant}"
-reply_marker="E2EREPLY_${identity_seed}_${workflow_variant}"
-forward_marker="E2EFORWARD_${identity_seed}_${workflow_variant}"
-fm_admin_note="FMADMIN_${identity_seed}_${workflow_variant}"
-si_admin_note="SIADMIN_${identity_seed}_${workflow_variant}"
+incoming_marker="E2EIN_${identity_seed}_dv"
+outgoing_marker="E2EOUT_${identity_seed}_dv"
+reply_marker="E2EREPLY_${identity_seed}_dv"
+forward_marker="E2EFORWARD_${identity_seed}_dv"
+fm_admin_note="FMADMIN_${identity_seed}_dv"
+si_admin_note="SIADMIN_${identity_seed}_dv"
 
 for code in \
-    "$aw_code" "$ldf_code" "$si_code" "$s1_code" "$s2_code" "$s3_code" "$pol_code"
+    "$aw_code" "$ldf_code" "$si_code" "$s1_code" "$s2_code" "$s3_code" \
+    "$s6_code" "$pol_code"
 do
     if ! printf '%s' "$code" | grep -Eq '^[a-z0-9_]{1,6}$'; then
         echo 'Message workflow HTTP: derived an unsafe user code' >&2
@@ -105,8 +110,7 @@ do
     fi
 done
 for marker in \
-    "$incoming_marker" "$outgoing_marker" "$autosight_marker" \
-    "$reply_marker" "$forward_marker"
+    "$incoming_marker" "$outgoing_marker" "$reply_marker" "$forward_marker"
 do
     if ! printf '%s' "$marker" | grep -Eq '^[A-Za-z0-9_-]{1,64}$'; then
         echo 'Message workflow HTTP: derived an unsafe message marker' >&2
@@ -123,18 +127,22 @@ si_cookies=$work_dir/si-cookies.txt
 s1_cookies=$work_dir/s1-cookies.txt
 s2_cookies=$work_dir/s2-cookies.txt
 s3_cookies=$work_dir/s3-cookies.txt
+s6_cookies=$work_dir/s6-cookies.txt
 pol_cookies=$work_dir/pol-cookies.txt
 
 incoming_id=0
 incoming_number=0
 outgoing_id=0
 outgoing_number=0
-autosight_id=0
-autosight_number=0
+telecom_route_id=0
+telecom_route_b_id=0
+telecom_replaced_route_id=0
+telecom_plan_version=0
+telecom_plan_b_version=0
+telecom_route_text='CI Betriebsstelle · CI Rufname · Kanal 404 · G/U · Gegenverkehr'
+telecom_route_b_text='CI Ersatz-Betriebsstelle · CI Ersatz-Rufname · Kanal 505 · O/U · Wechselverkehr'
 incoming_form_cleanup_owned=false
 outgoing_form_cleanup_owned=false
-autosight_form_cleanup_owned=false
-matrix_auto_mutated=false
 mutation_started=false
 message_auto_increment=1
 protocol_auto_increment=1
@@ -279,144 +287,16 @@ cleanup()
     set +e
     cleanup_status=0
 
+    # Workflow messages and their hash-linked evidence are deliberately
+    # append-only. This test runs in ci.sh's disposable data volume and uses a
+    # collision-resistant marker, so cleanup must never delete or rewrite the
+    # canonical records merely to make the test repeatable.
     for cookie_jar in \
         "$aw_cookies" "$ldf_cookies" "$si_cookies" "$s1_cookies" "$s2_cookies" \
-        "$s3_cookies" "$pol_cookies"
+        "$s3_cookies" "$s6_cookies" "$pol_cookies"
     do
         purge_session_file "$cookie_jar" >/dev/null 2>&1 || cleanup_status=1
     done
-
-    if [ "$incoming_form_cleanup_owned" = true ] &&
-        [ "$incoming_number" -gt 0 ]; then
-        generated_form_check remove E "$incoming_number" >/dev/null 2>&1 ||
-            cleanup_status=1
-    fi
-    if [ "$outgoing_form_cleanup_owned" = true ] &&
-        [ "$outgoing_number" -gt 0 ]; then
-        generated_form_check remove A "$outgoing_number" >/dev/null 2>&1 ||
-            cleanup_status=1
-    fi
-    if [ "$autosight_form_cleanup_owned" = true ] &&
-        [ "$autosight_number" -gt 0 ]; then
-        generated_form_check remove E "$autosight_number" >/dev/null 2>&1 ||
-            cleanup_status=1
-    fi
-
-    if [ "$mutation_started" = true ]; then
-        db_sql >/dev/null 2>&1 <<SQL || cleanup_status=1
-START TRANSACTION;
-DELETE FROM \`nv_nachrichten\`
- WHERE \`12_inhalt\` IN (
-         '${incoming_marker}', '${outgoing_marker}', '${autosight_marker}'
-       )
-    OR \`12_inhalt\` LIKE '%${reply_marker}%'
-    OR \`12_inhalt\` LIKE '%${forward_marker}%';
-DELETE FROM \`nv_benutzer\`
- WHERE (\`kuerzel\` = '${aw_code}' AND \`benutzer\` = '${aw_name}' AND \`funktion\` = 'A/W')
-    OR (\`kuerzel\` = '${ldf_code}' AND \`benutzer\` = '${ldf_name}' AND \`funktion\` = 'LdF')
-    OR (\`kuerzel\` = '${si_code}' AND \`benutzer\` = '${si_name}' AND \`funktion\` = 'Si')
-    OR (\`kuerzel\` = '${s1_code}' AND \`benutzer\` = '${s1_name}' AND \`funktion\` = 'S1')
-    OR (\`kuerzel\` = '${s2_code}' AND \`benutzer\` = '${s2_name}' AND \`funktion\` = 'S2')
-    OR (\`kuerzel\` = '${s3_code}' AND \`benutzer\` = '${s3_name}' AND \`funktion\` = 'S3')
-    OR (\`kuerzel\` = '${pol_code}' AND \`benutzer\` = '${pol_name}' AND \`funktion\` = 'POL');
-DELETE FROM \`nv_protokoll\` WHERE \`p_lfd\` > ${protocol_auto_increment} - 1;
-COMMIT;
-DROP TABLE IF EXISTS
-  \`usr_s1_${s1_code}_read\`,
-  \`usr_s1_${s1_code}_katego\`,
-  \`usr_s1_${s1_code}_kategolink\`,
-  \`usr_s2_${s2_code}_read\`,
-  \`usr_s2_${s2_code}_katego\`,
-  \`usr_s2_${s2_code}_kategolink\`,
-  \`usr_s3_${s3_code}_read\`,
-  \`usr_s3_${s3_code}_katego\`,
-  \`usr_s3_${s3_code}_kategolink\`,
-  \`usr_si_${si_code}_read\`,
-  \`usr_si_${si_code}_katego\`,
-  \`usr_si_${si_code}_kategolink\`,
-  \`usr_pol_${pol_code}_read\`,
-  \`usr_pol_${pol_code}_katego\`,
-  \`usr_pol_${pol_code}_kategolink\`;
-ALTER TABLE \`nv_nachrichten\` AUTO_INCREMENT = ${message_auto_increment};
-ALTER TABLE \`nv_protokoll\` AUTO_INCREMENT = ${protocol_auto_increment};
-SQL
-
-        if [ "$matrix_auto_mutated" = true ]; then
-            db_sql >/dev/null 2>&1 <<'SQL' || cleanup_status=1
-UPDATE `nv_empfmtx`
-   SET `mtx_auto` = 'f'
- WHERE `mtx_fkt` = 'POL' AND `mtx_rolle` = 'FB';
-SQL
-        fi
-
-        drop_new_function_tables s1 "$s1_function_tables_before" >/dev/null 2>&1 ||
-            cleanup_status=1
-        drop_new_function_tables s2 "$s2_function_tables_before" >/dev/null 2>&1 ||
-            cleanup_status=1
-        drop_new_function_tables s3 "$s3_function_tables_before" >/dev/null 2>&1 ||
-            cleanup_status=1
-        drop_new_function_tables si "$si_function_tables_before" >/dev/null 2>&1 ||
-            cleanup_status=1
-        drop_new_function_tables pol "$pol_function_tables_before" >/dev/null 2>&1 ||
-            cleanup_status=1
-
-        cleanup_snapshot=$(db_sql 2>/dev/null <<SQL
-SELECT CONCAT(
-  (SELECT COUNT(*) FROM \`nv_nachrichten\`),
-  '|',
-  (SELECT COUNT(*) FROM \`nv_protokoll\`),
-  '|',
-  (SELECT COUNT(*) FROM \`nv_benutzer\`
-    WHERE \`kuerzel\` IN (
-      '${aw_code}', '${ldf_code}', '${si_code}', '${s1_code}', '${s2_code}', '${s3_code}',
-      '${pol_code}'
-    )),
-  '|',
-  (SELECT COUNT(*) FROM information_schema.tables
-    WHERE table_schema = DATABASE()
-      AND table_name IN (
-        'usr_s1_${s1_code}_read', 'usr_s1_${s1_code}_katego', 'usr_s1_${s1_code}_kategolink',
-        'usr_s2_${s2_code}_read', 'usr_s2_${s2_code}_katego', 'usr_s2_${s2_code}_kategolink',
-        'usr_s3_${s3_code}_read', 'usr_s3_${s3_code}_katego', 'usr_s3_${s3_code}_kategolink',
-        'usr_si_${si_code}_read', 'usr_si_${si_code}_katego', 'usr_si_${si_code}_kategolink',
-        'usr_pol_${pol_code}_read', 'usr_pol_${pol_code}_katego', 'usr_pol_${pol_code}_kategolink'
-      )),
-  '|',
-  (SELECT COUNT(*) FROM information_schema.tables
-    WHERE table_schema = DATABASE()
-      AND table_name IN ('usr__fkt_s1_erl', 'usr__fkt_s1_katego', 'usr__fkt_s1_kategolink')),
-  '|',
-  (SELECT COUNT(*) FROM information_schema.tables
-    WHERE table_schema = DATABASE()
-      AND table_name IN ('usr__fkt_s2_erl', 'usr__fkt_s2_katego', 'usr__fkt_s2_kategolink')),
-  '|',
-  (SELECT COUNT(*) FROM information_schema.tables
-    WHERE table_schema = DATABASE()
-      AND table_name IN ('usr__fkt_s3_erl', 'usr__fkt_s3_katego', 'usr__fkt_s3_kategolink')),
-  '|',
-  (SELECT COUNT(*) FROM information_schema.tables
-    WHERE table_schema = DATABASE()
-      AND table_name IN ('usr__fkt_si_erl', 'usr__fkt_si_katego', 'usr__fkt_si_kategolink')),
-  '|',
-  (SELECT COUNT(*) FROM information_schema.tables
-    WHERE table_schema = DATABASE()
-      AND table_name IN ('usr__fkt_pol_erl', 'usr__fkt_pol_katego', 'usr__fkt_pol_kategolink')),
-  '|',
-  (SELECT COUNT(*) FROM \`nv_empfmtx\`
-    WHERE \`mtx_fkt\` = 'POL'
-      AND \`mtx_rolle\` = 'FB'
-      AND \`mtx_auto\` IN ('t','1'))
-);
-SQL
-        )
-        expected_cleanup="${message_count_before}|${protocol_count_before}|0|0|${s1_function_tables_before}|${s2_function_tables_before}|${s3_function_tables_before}|${si_function_tables_before}|${pol_function_tables_before}|0"
-        if [ "$cleanup_snapshot" != "$expected_cleanup" ]; then
-            echo 'Message workflow HTTP: cleanup invariants failed' >&2
-            printf 'expected: %s\nactual:   %s\n' \
-                "$expected_cleanup" "$cleanup_snapshot" >&2
-            cleanup_status=1
-        fi
-    fi
 
     rm -rf -- "$work_dir"
     unset role_password
@@ -525,6 +405,14 @@ app_tactical_clock()
 {
     "$compose_engine" compose exec -T app \
         php -r 'echo date("Hi");'
+}
+
+app_authoritative_sender()
+{
+    "$compose_engine" compose exec -T app php -d auto_prepend_file= -r '
+        $sender = getenv("ESTAB_ORGANISATION");
+        echo is_string($sender) && $sender !== "" ? $sender : "Einsatzleitung";
+    '
 }
 
 app_backdated_clock()
@@ -732,8 +620,57 @@ provision_and_login_user()
         --data-urlencode 'absenden_x=1' \
         "$base_url/4fach/mainindex.php"
     assert_no_runtime_error "login response for $function_name"
-    load_dashboard "$cookie_jar" "dashboard for $function_name"
+
+    # A valid account login deliberately grants no operational access by
+    # itself. Before the test creates, personally accepts and activates the
+    # successor shift, only the narrow command-post bootstrap may be opened.
+    assert_status 200 "command-post bootstrap for $function_name" \
+        --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        "$base_url/4fach/fuehrungsstelle.php"
+    assert_no_runtime_error "command-post bootstrap for $function_name"
     assert_session_identity "$name" "$code" "$function_name" "$role"
+    assert_body 'data-estab-dv-operations' \
+        "command-post bootstrap marker for $function_name"
+    assert_body 'Noch nicht ausgewählt' \
+        "unselected duty function for $function_name"
+}
+
+select_personal_active_hat()
+{
+    hat_cookie_jar=$1
+    hat_user_code=$2
+    hat_function=$3
+    hat_label=$4
+
+    hat_assignment_id=$(db_sql <<SQL
+SELECT b.\`dienstbesetzung_id\`
+  FROM \`nv_dienstbesetzungen\` AS b
+  JOIN \`nv_dienstschichten\` AS s
+    ON s.\`dienstschicht_id\` = b.\`dienstschicht_id\`
+ WHERE s.\`einsatz_id\` = ${active_incident_id}
+   AND s.\`status\` = 'AKTIV'
+   AND b.\`status\` = 'ANGENOMMEN'
+   AND BINARY b.\`benutzer_kuerzel\` = BINARY '${hat_user_code}'
+   AND BINARY b.\`funktion\` = BINARY '${hat_function}'
+ ORDER BY b.\`dienstbesetzung_id\` DESC
+ LIMIT 1;
+SQL
+)
+    assert_numeric "accepted active ${hat_label} assignment" \
+        "$hat_assignment_id"
+    assert_status 200 "load Führungsstellen page as ${hat_label}" \
+        --cookie "$hat_cookie_jar" --cookie-jar "$hat_cookie_jar" \
+        "$base_url/4fach/fuehrungsstelle.php"
+    assert_no_runtime_error \
+        "Führungsstellen page before ${hat_label} hat selection"
+    hat_csrf=$(csrf_from_body)
+    assert_status 303 "select personal active ${hat_label} hat" \
+        --cookie "$hat_cookie_jar" --cookie-jar "$hat_cookie_jar" \
+        --request POST \
+        --data-urlencode "csrf_token=$hat_csrf" \
+        --data-urlencode 'operation_action=select_hat' \
+        --data-urlencode "dienstbesetzung_id=$hat_assignment_id" \
+        "$base_url/4fach/fuehrungsstelle.php"
 }
 
 finish_ldf_incoming()
@@ -776,7 +713,7 @@ finish_ldf_incoming()
         --data-urlencode 'task=LdF-Eingang' \
         --data-urlencode "00_lfd=$ldf_record_id" \
         --data-urlencode "02_zeit=$ldf_time" \
-        --data-urlencode '02_zeichen=forged' \
+        --data-urlencode "02_zeichen=$ldf_code" \
         --data-urlencode "13_abseinheit=$ldf_sender" \
         "$base_url/4fach/mainindex.php"
     assert_no_runtime_error "saved LdF incoming for $ldf_marker"
@@ -791,6 +728,8 @@ finish_ldf_outgoing()
     ldf_record_id=$2
     ldf_callsign=$3
     ldf_route=$4
+    ldf_route_id=${5:-$telecom_route_id}
+    ldf_route_text=${6:-$telecom_route_text}
 
     load_dashboard "$ldf_cookies" "LdF queue for $ldf_marker"
     assert_body "$ldf_marker" "LdF queue for $ldf_marker"
@@ -806,8 +745,18 @@ finish_ldf_outgoing()
     assert_no_runtime_error "LdF outgoing form for $ldf_marker"
     assert_body 'name="task" value="LdF-Ausgang"' "LdF outgoing task"
     assert_body 'id="f_05_gegenstelle"' "LdF outgoing callsign field"
-    assert_body 'id="f_06_befweg"' "LdF outgoing transport route field"
-    assert_body 'id="f_06_befwegausw_fu"' "LdF outgoing medium controls"
+    assert_body \
+        'id="f_fernmeldeplan_eintrag_id"' \
+        "LdF outgoing S6 plan selector"
+    assert_body \
+        "value=\"$ldf_route_id\"" \
+        "LdF outgoing selected S6 route"
+    assert_body_absent \
+        'name="06_befweg"' \
+        "LdF cannot submit a free transport route"
+    assert_body_absent \
+        'name="06_befwegausw"' \
+        "LdF cannot submit a free transport medium"
     assert_body_absent \
         'id="f_03_datum" maxlength=' \
         'LdF must not write transport completion time'
@@ -821,15 +770,17 @@ finish_ldf_outgoing()
         --data-urlencode 'task=LdF-Ausgang' \
         --data-urlencode "00_lfd=$ldf_record_id" \
         --data-urlencode "02_zeit=$ldf_time" \
-        --data-urlencode '02_zeichen=forged' \
+        --data-urlencode "02_zeichen=$ldf_code" \
         --data-urlencode "05_gegenstelle=$ldf_callsign" \
-        --data-urlencode "06_befweg=$ldf_route" \
-        --data-urlencode '06_befwegausw=Fu' \
+        --data-urlencode "fernmeldeplan_eintrag_id=$ldf_route_id" \
+        --data-urlencode "06_befweg=FORGED-$ldf_route" \
+        --data-urlencode '06_befwegausw=Me' \
         "$base_url/4fach/mainindex.php"
     assert_no_runtime_error "saved LdF outgoing for $ldf_marker"
-    assert_db_equals "2|${ldf_code}|${ldf_callsign}|${ldf_route}|Fu" \
+    assert_db_equals \
+        "2|${ldf_code}|${ldf_callsign}|Fu|${ldf_route_text}|${ldf_route_id}" \
         "LdF-authored outgoing disposition for $ldf_marker" \
-        "SELECT CONCAT(\`x00_status\`, '|', \`02_zeichen\`, '|', \`05_gegenstelle\`, '|', \`06_befweg\`, '|', \`06_befwegausw\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${ldf_record_id};"
+        "SELECT CONCAT(\`x00_status\`, '|', \`02_zeichen\`, '|', \`05_gegenstelle\`, '|', \`06_befwegausw\`, '|', \`06_befweg\`, '|', \`estab_fernmeldeplan_eintrag_id\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${ldf_record_id};"
 }
 
 open_viewer_message()
@@ -851,7 +802,10 @@ open_viewer_message()
     assert_no_runtime_error "Si review form for $marker"
     assert_body 'name="task" value="Stab_sichten"' "Si review form for $marker"
     assert_body "name=\"00_lfd\" value=\"$record_id\"" "Si review form for $marker"
-    assert_body "name=\"15_quitzeichen\" value=\"$si_code\"" "Si review form for $marker"
+    assert_body \
+        'id="f_15_quitzeichen" data-estab-readonly="true"' \
+        "Si signed review mark for $marker"
+    assert_body ">$si_code</strong>" "Si signed review mark for $marker"
     assert_body 'name="16_gncopy" type="radio"' "Si green-copy control"
     assert_body 'name="16_41" value="16_41_bl" type="checkbox"' "Si blue-copy control"
 }
@@ -875,11 +829,97 @@ finish_viewer_message()
         --data-urlencode "15_quitdatum=$tactical_time" \
         --data-urlencode "15_quitzeichen=$si_code" \
         --data-urlencode '16_gncopy=16_21_gn' \
+        --data-urlencode '16_32=16_32_bl' \
         --data-urlencode '16_41=16_41_bl' \
         --data-urlencode "17_vermerke=$note" \
         "$base_url/4fach/mainindex.php"
     assert_no_runtime_error "finished Si review for $marker"
 }
+
+open_viewer_outgoing()
+{
+    marker=$1
+    record_id=$2
+
+    load_dashboard "$si_cookies" "Si formal queue for $marker"
+    assert_body "$marker" "Si formal queue for $marker"
+    assert_route_control sichter meldung "$record_id" "Si formal queue for $marker"
+    viewer_csrf=$(csrf_from_body)
+    assert_status 200 "open Si formal review for $marker" \
+        --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+        --request POST \
+        --data-urlencode "csrf_token=$viewer_csrf" \
+        --data-urlencode 'sichter=meldung' \
+        --data-urlencode "00_lfd=$record_id" \
+        "$base_url/4fach/mainindex.php"
+    assert_no_runtime_error "Si formal review form for $marker"
+    assert_body 'name="task" value="Stab_sichten"' \
+        "Si formal review task for $marker"
+    assert_body 'data-estab-formal-review="outgoing"' \
+        "Si outgoing formal-review boundary for $marker"
+    assert_body 'Formal geprüft – an FmZt' \
+        "Si approve action for $marker"
+    assert_body 'An Verfasser zurückgeben' \
+        "Si return action for $marker"
+    assert_body_absent 'name="16_gncopy"' \
+        "Si cannot reroute outgoing message $marker"
+    assert_body_absent 'name="16_41"' \
+        "Si cannot add outgoing recipients for $marker"
+    assert_body_absent '<textarea id="f_12_inhalt"' \
+        "Si cannot edit outgoing content for $marker"
+}
+
+finish_viewer_outgoing()
+{
+    marker=$1
+    record_id=$2
+    note=$3
+
+    open_viewer_outgoing "$marker" "$record_id"
+    viewer_csrf=$(csrf_from_body)
+    tactical_time=$(date '+%H%M')
+    assert_status 200 "approve Si formal review for $marker" \
+        --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+        --request POST \
+        --data-urlencode "csrf_token=$viewer_csrf" \
+        --data-urlencode 'absenden_x=1' \
+        --data-urlencode 'task=Stab_sichten' \
+        --data-urlencode "00_lfd=$record_id" \
+        --data-urlencode "15_quitdatum=$tactical_time" \
+        --data-urlencode "15_quitzeichen=$si_code" \
+        --data-urlencode "17_vermerke=$note" \
+        "$base_url/4fach/mainindex.php"
+    assert_no_runtime_error "approved Si formal review for $marker"
+}
+
+return_viewer_outgoing()
+{
+    marker=$1
+    record_id=$2
+    note=$3
+
+    open_viewer_outgoing "$marker" "$record_id"
+    viewer_csrf=$(csrf_from_body)
+    tactical_time=$(date '+%H%M')
+    assert_status 200 "return Si formal review for $marker" \
+        --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+        --request POST \
+        --data-urlencode "csrf_token=$viewer_csrf" \
+        --data-urlencode 'zurueckweisen_x=1' \
+        --data-urlencode 'task=Stab_sichten' \
+        --data-urlencode "00_lfd=$record_id" \
+        --data-urlencode "15_quitdatum=$tactical_time" \
+        --data-urlencode "15_quitzeichen=$si_code" \
+        --data-urlencode "17_vermerke=$note" \
+        "$base_url/4fach/mainindex.php"
+    assert_no_runtime_error "returned Si formal review for $marker"
+}
+
+authoritative_sender=$(app_authoritative_sender)
+if [ -z "$authoritative_sender" ] || printf '%s' "$authoritative_sender" | grep -q '|'; then
+    echo 'Message workflow HTTP: unsafe authoritative sender fixture' >&2
+    exit 1
+fi
 
 # Prove this is a collision-free fixture before the first mutation. Dynamic
 # table names are part of the guard because a stale table must not be dropped.
@@ -888,12 +928,12 @@ SELECT CONCAT(
   (SELECT COUNT(*) FROM \`nv_benutzer\`
     WHERE \`kuerzel\` IN (
       '${aw_code}', '${ldf_code}', '${si_code}', '${s1_code}', '${s2_code}', '${s3_code}',
-      '${pol_code}'
+      '${s6_code}', '${pol_code}'
     )),
   '|',
   (SELECT COUNT(*) FROM \`nv_nachrichten\`
     WHERE \`12_inhalt\` IN (
-      '${incoming_marker}', '${outgoing_marker}', '${autosight_marker}'
+      '${incoming_marker}', '${outgoing_marker}'
     )
        OR \`12_inhalt\` LIKE '%${reply_marker}%'
        OR \`12_inhalt\` LIKE '%${forward_marker}%'),
@@ -991,7 +1031,7 @@ done
 
 mutation_started=true
 
-# Create seven isolated functional accounts through the administrative domain
+# Create eight isolated functional accounts through the administrative domain
 # boundary, then exercise only the production bestandskonto login flow.
 # Keeping Si signed in makes both A/W forms use their genuine online-Si branch.
 provision_and_login_user "$aw_cookies" "$aw_name" "$aw_code" A/W Fernmelder
@@ -999,8 +1039,222 @@ provision_and_login_user "$ldf_cookies" "$ldf_name" "$ldf_code" LdF Fernmelder
 provision_and_login_user "$s1_cookies" "$s1_name" "$s1_code" S1 Stab
 provision_and_login_user "$s2_cookies" "$s2_name" "$s2_code" S2 Stab
 provision_and_login_user "$s3_cookies" "$s3_name" "$s3_code" S3 Stab
+provision_and_login_user "$s6_cookies" "$s6_name" "$s6_code" S6 Stab
 provision_and_login_user "$pol_cookies" "$pol_name" "$pol_code" POL FB
 provision_and_login_user "$si_cookies" "$si_name" "$si_code" Si Stab
+
+# Establish the production write prerequisite through the complete duty-domain
+# lifecycle. Each account personally accepts its assigned hat before the shift
+# can be activated; the workflow test never disables the operational guard.
+ESTAB_TEST_SHIFT_AW_CODE=$aw_code \
+ESTAB_TEST_SHIFT_LDF_CODE=$ldf_code \
+ESTAB_TEST_SHIFT_SI_CODE=$si_code \
+ESTAB_TEST_SHIFT_S1_CODE=$s1_code \
+ESTAB_TEST_SHIFT_S2_CODE=$s2_code \
+ESTAB_TEST_SHIFT_S3_CODE=$s3_code \
+ESTAB_TEST_SHIFT_S6_CODE=$s6_code \
+ESTAB_TEST_SHIFT_POL_CODE=$pol_code \
+"$compose_engine" compose run --rm --no-deps -T \
+    --env "COMPOSE_PROJECT_NAME=$project_name" \
+    --env ESTAB_TEST_SHIFT_ALLOW_MUTATION=true \
+    --env ESTAB_TEST_SHIFT_AW_CODE \
+    --env ESTAB_TEST_SHIFT_LDF_CODE \
+    --env ESTAB_TEST_SHIFT_SI_CODE \
+    --env ESTAB_TEST_SHIFT_S1_CODE \
+    --env ESTAB_TEST_SHIFT_S2_CODE \
+    --env ESTAB_TEST_SHIFT_S3_CODE \
+    --env ESTAB_TEST_SHIFT_S6_CODE \
+    --env ESTAB_TEST_SHIFT_POL_CODE \
+    --volume "$repo_root:/workspace:ro" \
+    --workdir /workspace \
+    app php -d auto_prepend_file= tests/integration/activate_http_shift.php
+
+# Cross the real authenticated Führungsstellen controller before the remaining
+# message workflow uses its S6 route fixture. This proves that CSRF, personal
+# hat ownership, PRG redirects, the selected-hat session binding and the
+# immutable S6 plan audit all hold at the HTTP boundary rather than only in
+# direct domain calls.
+active_incident_id=$(db_sql <<'SQL'
+SELECT `active_einsatz_id`
+  FROM `nv_einsatz_status`
+ WHERE `singleton_id` = 1;
+SQL
+)
+assert_numeric 'active incident for Führungsstellen HTTP workflow' \
+    "$active_incident_id"
+s6_assignment_id=$(db_sql <<SQL
+SELECT b.\`dienstbesetzung_id\`
+  FROM \`nv_dienstbesetzungen\` AS b
+  JOIN \`nv_dienstschichten\` AS s
+    ON s.\`dienstschicht_id\` = b.\`dienstschicht_id\`
+ WHERE s.\`einsatz_id\` = ${active_incident_id}
+   AND s.\`status\` = 'AKTIV'
+   AND b.\`status\` = 'ANGENOMMEN'
+   AND BINARY b.\`benutzer_kuerzel\` = BINARY '${s6_code}'
+   AND b.\`funktion\` = 'S6'
+ ORDER BY b.\`dienstbesetzung_id\` DESC
+ LIMIT 1;
+SQL
+)
+assert_numeric 'accepted active S6 assignment' "$s6_assignment_id"
+
+assert_db_equals 0 'unselected S6 assignment audit baseline' \
+    "SELECT COUNT(*) FROM \`nv_betriebsereignisse\` WHERE \`einsatz_id\`=${active_incident_id} AND \`objekttyp\`='DIENSTBESETZUNG' AND \`objekt_id\`=${s6_assignment_id} AND \`aktion\`='active_hat_selected';"
+assert_status 403 'reject Führungsstellen POST without CSRF' \
+    --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
+    --request POST \
+    --data-urlencode 'operation_action=select_hat' \
+    --data-urlencode "dienstbesetzung_id=$s6_assignment_id" \
+    "$base_url/4fach/fuehrungsstelle.php"
+assert_db_equals 0 'CSRF-rejected S6 selection has no audit effect' \
+    "SELECT COUNT(*) FROM \`nv_betriebsereignisse\` WHERE \`einsatz_id\`=${active_incident_id} AND \`objekttyp\`='DIENSTBESETZUNG' AND \`objekt_id\`=${s6_assignment_id} AND \`aktion\`='active_hat_selected';"
+
+assert_status 200 'load Führungsstellen page as S1' \
+    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    "$base_url/4fach/fuehrungsstelle.php"
+assert_no_runtime_error 'S1 Führungsstellen page'
+s1_operations_csrf=$(csrf_from_body)
+assert_status 403 'reject selecting another account S6 hat' \
+    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$s1_operations_csrf" \
+    --data-urlencode 'operation_action=select_hat' \
+    --data-urlencode "dienstbesetzung_id=$s6_assignment_id" \
+    "$base_url/4fach/fuehrungsstelle.php"
+assert_db_equals 0 'foreign S6 hat selection has no audit effect' \
+    "SELECT COUNT(*) FROM \`nv_betriebsereignisse\` WHERE \`einsatz_id\`=${active_incident_id} AND \`objekttyp\`='DIENSTBESETZUNG' AND \`objekt_id\`=${s6_assignment_id} AND \`aktion\`='active_hat_selected';"
+
+assert_status 200 'load Führungsstellen page as S6' \
+    --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
+    "$base_url/4fach/fuehrungsstelle.php"
+assert_no_runtime_error 'S6 Führungsstellen page before hat selection'
+s6_operations_csrf=$(csrf_from_body)
+assert_status 303 'select personal active S6 hat' \
+    --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$s6_operations_csrf" \
+    --data-urlencode 'operation_action=select_hat' \
+    --data-urlencode "dienstbesetzung_id=$s6_assignment_id" \
+    "$base_url/4fach/fuehrungsstelle.php"
+assert_db_equals "${s6_code}|S6|${s6_assignment_id}" \
+    'selected S6 hat immutable audit event' \
+    "SELECT CONCAT(\`akteur_kuerzel\`, '|', \`akteur_funktion\`, '|', JSON_UNQUOTE(JSON_EXTRACT(\`details\`, '$.assignment_id'))) FROM \`nv_betriebsereignisse\` WHERE \`einsatz_id\`=${active_incident_id} AND \`objekttyp\`='DIENSTBESETZUNG' AND \`objekt_id\`=${s6_assignment_id} AND \`aktion\`='active_hat_selected' ORDER BY \`sequenz\` DESC LIMIT 1;"
+
+# Every following Fachschreibweg runs with the exact, personally selected
+# assignment in its own PHP session. An accepted primary function alone is
+# deliberately insufficient for either reads or operational mutations.
+select_personal_active_hat "$aw_cookies" "$aw_code" A/W A/W
+select_personal_active_hat "$ldf_cookies" "$ldf_code" LdF LdF
+select_personal_active_hat "$s1_cookies" "$s1_code" S1 S1
+select_personal_active_hat "$s2_cookies" "$s2_code" S2 S2
+select_personal_active_hat "$s3_cookies" "$s3_code" S3 S3
+select_personal_active_hat "$pol_cookies" "$pol_code" POL POL
+select_personal_active_hat "$si_cookies" "$si_code" Si Si
+
+http_plan_origin="CI_HTTP_POST_${identity_seed}"
+assert_status 200 'load Führungsstellen page for S6 plan creation' \
+    --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
+    "$base_url/4fach/fuehrungsstelle.php"
+assert_no_runtime_error 'S6 Führungsstellen page before plan creation'
+s6_operations_csrf=$(csrf_from_body)
+assert_status 303 'create S6 plan through Führungsstellen HTTP controller' \
+    --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$s6_operations_csrf" \
+    --data-urlencode 'operation_action=create_plan' \
+    --data-urlencode "herkunft=$http_plan_origin" \
+    --data-urlencode 'gueltig_ab=2026-01-01T00:00' \
+    --data-urlencode 'gueltig_bis=2099-12-31T23:59' \
+    --data-urlencode 'betriebsleitung=S6 HTTP Integrationsprüfung' \
+    --data-urlencode 'bemerkungen=Realer HTTP-Nachweis des S6-Fernmeldeplans' \
+    "$base_url/4fach/fuehrungsstelle.php"
+http_plan_id=$(db_sql <<SQL
+SELECT \`fernmeldeplan_id\`
+  FROM \`nv_fernmeldeplaene\`
+ WHERE \`einsatz_id\` = ${active_incident_id}
+   AND BINARY \`herkunft\` = BINARY '${http_plan_origin}'
+ ORDER BY \`fernmeldeplan_id\` DESC
+ LIMIT 1;
+SQL
+)
+assert_numeric 'HTTP-created S6 plan' "$http_plan_id"
+assert_db_equals "ENTWURF|${s6_code}" 'HTTP-created S6 plan ownership' \
+    "SELECT CONCAT(\`status\`, '|', \`erstellt_von\`) FROM \`nv_fernmeldeplaene\` WHERE \`fernmeldeplan_id\`=${http_plan_id} AND \`einsatz_id\`=${active_incident_id};"
+
+assert_status 200 'load Führungsstellen page for S6 route creation' \
+    --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
+    "$base_url/4fach/fuehrungsstelle.php"
+assert_no_runtime_error 'S6 Führungsstellen page before route creation'
+s6_operations_csrf=$(csrf_from_body)
+assert_status 303 'add S6 route through Führungsstellen HTTP controller' \
+    --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$s6_operations_csrf" \
+    --data-urlencode 'operation_action=add_plan_entry' \
+    --data-urlencode "fernmeldeplan_id=$http_plan_id" \
+    --data-urlencode 'betriebsstelle=HTTP Betriebsstelle' \
+    --data-urlencode 'rufname=HTTP Rufname' \
+    --data-urlencode 'medium=Fu' \
+    --data-urlencode 'kanal=HTTP-1' \
+    --data-urlencode 'bandlage=G/U' \
+    --data-urlencode 'verkehrsform=Gegenverkehr' \
+    --data-urlencode 'besondere_vermerke=Nur Integrationsprüfung' \
+    --data-urlencode 'bemerkungen=Über den echten Controller gespeichert' \
+    "$base_url/4fach/fuehrungsstelle.php"
+http_plan_entry_id=$(db_sql <<SQL
+SELECT \`fernmeldeplan_eintrag_id\`
+  FROM \`nv_fernmeldeplan_eintraege\`
+ WHERE \`fernmeldeplan_id\` = ${http_plan_id}
+ ORDER BY \`sortierung\` DESC
+ LIMIT 1;
+SQL
+)
+assert_numeric 'HTTP-created S6 route' "$http_plan_entry_id"
+
+assert_status 200 'load Führungsstellen page for S6 plan activation' \
+    --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
+    "$base_url/4fach/fuehrungsstelle.php"
+assert_no_runtime_error 'S6 Führungsstellen page before plan activation'
+s6_operations_csrf=$(csrf_from_body)
+assert_status 303 'activate S6 plan through Führungsstellen HTTP controller' \
+    --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$s6_operations_csrf" \
+    --data-urlencode 'operation_action=activate_plan' \
+    --data-urlencode "fernmeldeplan_id=$http_plan_id" \
+    "$base_url/4fach/fuehrungsstelle.php"
+assert_db_equals \
+    "AKTIV|${s6_code}|${s6_code}|HTTP Betriebsstelle|HTTP Rufname|Fu|HTTP-1|G/U|Gegenverkehr" \
+    'HTTP-created S6 plan persisted route and release' \
+    "SELECT CONCAT(p.\`status\`, '|', p.\`erstellt_von\`, '|', p.\`freigegeben_von\`, '|', e.\`betriebsstelle\`, '|', e.\`rufname\`, '|', e.\`medium\`, '|', e.\`kanal\`, '|', e.\`bandlage\`, '|', e.\`verkehrsform\`) FROM \`nv_fernmeldeplaene\` AS p JOIN \`nv_fernmeldeplan_eintraege\` AS e ON e.\`fernmeldeplan_id\`=p.\`fernmeldeplan_id\` WHERE p.\`fernmeldeplan_id\`=${http_plan_id} AND e.\`fernmeldeplan_eintrag_id\`=${http_plan_entry_id};"
+assert_db_equals '3|3|3' 'HTTP-created S6 plan immutable audit trail' \
+    "SELECT CONCAT(COUNT(*), '|', COUNT(DISTINCT \`aktion\`), '|', SUM(BINARY \`akteur_kuerzel\`=BINARY '${s6_code}')) FROM \`nv_betriebsereignisse\` WHERE \`einsatz_id\`=${active_incident_id} AND \`objekttyp\`='FERNMELDEPLAN' AND \`objekt_id\`=${http_plan_id} AND \`aktion\` IN ('plan_created','plan_entry_added','plan_activated');"
+
+# Publish both versions through the production S6 domain. Activating the
+# second version creates the immutable ERSETZT predecessor used by the stale
+# browser-choice test.
+telecom_fixture=$(
+    ESTAB_TEST_TELECOM_MODE=initial \
+    ESTAB_TEST_TELECOM_S6_CODE=$s6_code \
+    ESTAB_TEST_TELECOM_TOKEN=$identity_seed \
+    "$compose_engine" compose run --rm --no-deps -T \
+        --env "COMPOSE_PROJECT_NAME=$project_name" \
+        --env ESTAB_TEST_TELECOM_ALLOW_MUTATION=true \
+        --env ESTAB_TEST_TELECOM_MODE \
+        --env ESTAB_TEST_TELECOM_S6_CODE \
+        --env ESTAB_TEST_TELECOM_TOKEN \
+        --volume "$repo_root:/workspace:ro" \
+        --workdir /workspace \
+        app php -d auto_prepend_file= \
+        tests/integration/create_http_telecom_fixture.php |
+        tail -n 1
+)
+telecom_replaced_route_id=$(printf '%s' "$telecom_fixture" | cut -d'|' -f1)
+telecom_route_id=$(printf '%s' "$telecom_fixture" | cut -d'|' -f2)
+telecom_plan_version=$(printf '%s' "$telecom_fixture" | cut -d'|' -f3)
+assert_numeric 'superseded S6 route fixture' "$telecom_replaced_route_id"
+assert_numeric 'active S6 route fixture' "$telecom_route_id"
+assert_numeric 'active S6 plan version' "$telecom_plan_version"
 load_sidebar "$ldf_cookies" 'LdF role navigation'
 assert_body 'name="ldf_nachrichten_x"' 'LdF disposition action'
 assert_body_absent 'name="fm_eingang_x"' 'LdF must not receive A/W input action'
@@ -1008,8 +1262,8 @@ assert_body_absent 'name="fm_ausgang_x"' 'LdF must not receive A/W output action
 assert_body_absent 'name="stab_schreiben_x"' 'LdF must not receive staff action'
 assert_db_equals 1 'online Si fixture' \
     "SELECT COUNT(*) FROM \`nv_benutzer\` WHERE \`kuerzel\`='${si_code}' AND \`funktion\`='Si' AND \`aktiv\`=1;"
-assert_db_equals 1 'isolated online Si fixture' \
-    "SELECT COUNT(*) FROM \`nv_benutzer\` WHERE \`funktion\`='Si' AND \`aktiv\`=1;"
+assert_db_equals 1 'active-duty online Si fixture' \
+    "SELECT COUNT(*) FROM \`nv_benutzer\` AS account JOIN \`nv_dienstbesetzungen\` AS assignment ON BINARY assignment.\`benutzer_kuerzel\`=BINARY account.\`kuerzel\` JOIN \`nv_dienstschichten\` AS duty_shift ON duty_shift.\`dienstschicht_id\`=assignment.\`dienstschicht_id\` WHERE duty_shift.\`einsatz_id\`=${active_incident_id} AND duty_shift.\`status\`='AKTIV' AND assignment.\`status\`='ANGENOMMEN' AND BINARY assignment.\`funktion\`=BINARY 'Si' AND account.\`aktiv\`=1 AND account.\`estab_gesperrt\`=0;"
 
 # Prove the real FB profile before using POL as an automatic recipient. A
 # Fachberater gets the staff writer/reader controls, but neither the Si nor the
@@ -1034,138 +1288,6 @@ assert_status 403 'reject POL/FB viewer administration action' \
     --data-urlencode "csrf_token=$pol_csrf" \
     --data-urlencode 'si_admin_x=1' \
     "$base_url/4fach/mainindex.php"
-
-# Exercise automatic sighting, not only persistence of the matrix flag. POL is
-# temporarily marked as an autosighting target and Si is made offline in the
-# disposable fixture. The rendered FM-Eingang_Sichter form must derive the
-# checked POL control; the test submits that exact rendered default.
-matrix_auto_mutated=true
-db_sql >/dev/null <<SQL
-START TRANSACTION;
-UPDATE \`nv_empfmtx\`
-   SET \`mtx_auto\` = 't'
- WHERE \`mtx_fkt\` = 'POL' AND \`mtx_rolle\` = 'FB';
-UPDATE \`nv_benutzer\`
-   SET \`aktiv\` = 0
- WHERE \`kuerzel\` = '${si_code}' AND \`funktion\` = 'Si';
-COMMIT;
-SQL
-assert_db_equals '1|0' 'autosighting fixture and offline Si' \
-    "SELECT CONCAT((SELECT COUNT(*) FROM \`nv_empfmtx\` WHERE \`mtx_fkt\`='POL' AND \`mtx_auto\` IN ('t','1')), '|', (SELECT COUNT(*) FROM \`nv_benutzer\` WHERE \`funktion\`='Si' AND \`aktiv\`=1));"
-
-load_dashboard "$aw_cookies" 'A/W dashboard before automatic sighting'
-autosight_csrf=$(csrf_from_body)
-autosight_clock_before=$(app_tactical_clock)
-assert_status 200 'open automatic-sighting incoming form' \
-    --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
-    --request POST \
-    --data-urlencode "csrf_token=$autosight_csrf" \
-    --data-urlencode 'fm_eingang_x=1' \
-    "$base_url/4fach/mainindex.php"
-autosight_clock_after=$(app_tactical_clock)
-assert_no_runtime_error 'automatic-sighting incoming form'
-assert_body \
-    'name="task" value="FM-Eingang_Sichter"' \
-    'automatic-sighting form task'
-assert_body \
-    'Wird durch LdF aus dem Rufnamen ergänzt' \
-    'automatic-sighting sender responsibility'
-assert_body_absent \
-    'name="13_abseinheit"' \
-    'automatic-sighting A/W sender input'
-assert_current_editable_tactical_time_input \
-    f_01_datum "$autosight_clock_before" "$autosight_clock_after" \
-    'automatic-sighting receipt time'
-auto_checkbox=$(sed -n \
-    's/.*name="\(16_32\)" value="\(16_32_bl\)" type="checkbox"[^>]*checked="checked".*/\1=\2/p' \
-    "$body" | head -n 1)
-if [ "$auto_checkbox" != '16_32=16_32_bl' ]; then
-    echo 'Message workflow HTTP: POL autosighting default was not derived from the rendered form' >&2
-    exit 1
-fi
-
-autosight_csrf=$(csrf_from_body)
-tactical_time=$(date '+%H%M')
-assert_status 200 'save automatic-sighting incoming message' \
-    --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
-    --request POST \
-    --data-urlencode "csrf_token=$autosight_csrf" \
-    --data-urlencode 'absenden_x=1' \
-    --data-urlencode 'task=FM-Eingang_Sichter' \
-    --data-urlencode '01_medium=Fu' \
-    --data-urlencode "01_datum=$tactical_time" \
-    --data-urlencode "01_zeichen=$aw_code" \
-    --data-urlencode '05_gegenstelle=E2E-Auto-Gegenstelle' \
-    --data-urlencode '07_durchspruch=D' \
-    --data-urlencode '08_befhinweis=' \
-    --data-urlencode '08_befhinwausw=' \
-    --data-urlencode '09_vorrangstufe=eee' \
-    --data-urlencode '10_anschrift=E2E-Einsatzleitung' \
-    --data-urlencode '11_gesprnotiz=f' \
-    --data-urlencode '12_anhang=' \
-    --data-urlencode "12_inhalt=$autosight_marker" \
-    --data-urlencode "12_abfzeit=$tactical_time" \
-    --data-urlencode '14_zeichen=' \
-    --data-urlencode '14_funktion=' \
-    --data-urlencode "15_quitdatum=$tactical_time" \
-    --data-urlencode "15_quitzeichen=$aw_code" \
-    --data-urlencode "$auto_checkbox" \
-    --data-urlencode '16_gncopy=' \
-    --data-urlencode '17_vermerke=Automatisch ohne Si gesichtet' \
-    "$base_url/4fach/mainindex.php"
-assert_no_runtime_error 'saved automatic-sighting incoming message'
-
-autosight_id=$(db_sql <<SQL
-SELECT \`00_lfd\` FROM \`nv_nachrichten\`
- WHERE \`12_inhalt\` = '${autosight_marker}';
-SQL
-)
-autosight_number=$(db_sql <<SQL
-SELECT \`04_nummer\` FROM \`nv_nachrichten\`
- WHERE \`12_inhalt\` = '${autosight_marker}';
-SQL
-)
-assert_numeric 'automatic-sighting message ID' "$autosight_id"
-assert_numeric 'automatic-sighting evidence number' "$autosight_number"
-autosight_form_cleanup_owned=true
-assert_message_state "$autosight_marker" \
-    "E|1|f|set|${aw_code}|S2_rt,POL_bl,|f||f" \
-    'automatic-sighting message awaiting LdF'
-if ! generated_form_check absent E "$autosight_number"; then
-    echo 'Message workflow HTTP: automatic sighting generated a form before LdF' >&2
-    exit 1
-fi
-load_dashboard "$pol_cookies" 'POL/FB before LdF automatic-sighting translation'
-assert_body_absent \
-    "$autosight_marker" \
-    'untranslated automatic-sighting message hidden from POL/FB'
-finish_ldf_incoming \
-    "$autosight_marker" "$autosight_id" 'E2E-Auto-Absender'
-assert_message_state "$autosight_marker" \
-    "E|8|t|set|${aw_code}|S2_rt,POL_bl,|f||t" \
-    'LdF-completed automatic-sighting message'
-if ! generated_form_check present E "$autosight_number"; then
-    echo 'Message workflow HTTP: LdF automatic-sighting completion generated no form' >&2
-    exit 1
-fi
-load_dashboard "$pol_cookies" 'POL/FB automatic-sighting recipient list'
-assert_body "$autosight_marker" 'POL/FB automatic-sighting recipient list'
-assert_route_control \
-    stab meldung "$autosight_id" 'POL/FB automatic-sighting detail control'
-
-db_sql >/dev/null <<SQL
-START TRANSACTION;
-UPDATE \`nv_empfmtx\`
-   SET \`mtx_auto\` = 'f'
- WHERE \`mtx_fkt\` = 'POL' AND \`mtx_rolle\` = 'FB';
-UPDATE \`nv_benutzer\`
-   SET \`aktiv\` = 1
- WHERE \`kuerzel\` = '${si_code}' AND \`funktion\` = 'Si';
-COMMIT;
-SQL
-assert_db_equals '0|1' 'restored matrix and online Si' \
-    "SELECT CONCAT((SELECT COUNT(*) FROM \`nv_empfmtx\` WHERE \`mtx_fkt\`='POL' AND \`mtx_auto\` IN ('t','1')), '|', (SELECT COUNT(*) FROM \`nv_benutzer\` WHERE \`kuerzel\`='${si_code}' AND \`funktion\`='Si' AND \`aktiv\`=1));"
-matrix_auto_mutated=false
 
 # Incoming message: A/W captures a real form (status 4), Si reviews it
 # (status 8), assigns the exact red/green/blue copies and closes it.
@@ -1206,6 +1328,19 @@ assert_status 403 'reject A/W incoming sender overpost' \
     "$base_url/4fach/mainindex.php"
 assert_db_equals 0 'rejected A/W sender overpost created no message' \
     "SELECT COUNT(*) FROM \`nv_nachrichten\` WHERE \`12_inhalt\`='${incoming_marker}';"
+assert_status 403 'reject A/W incoming recipient overpost' \
+    --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$incoming_csrf" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=FM-Eingang' \
+    --data-urlencode '16_empf=S1_bl,' \
+    --data-urlencode '16_21=16_21_bl' \
+    --data-urlencode '16_gncopy=16_21_gn' \
+    --data-urlencode "12_inhalt=$incoming_marker" \
+    "$base_url/4fach/mainindex.php"
+assert_db_equals 0 'rejected A/W recipient overpost created no message' \
+    "SELECT COUNT(*) FROM \`nv_nachrichten\` WHERE \`12_inhalt\`='${incoming_marker}';"
 assert_status 200 'save A/W incoming message' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
     --request POST \
@@ -1227,7 +1362,6 @@ assert_status 200 'save A/W incoming message' \
     --data-urlencode "12_abfzeit=$tactical_time" \
     --data-urlencode '14_zeichen=' \
     --data-urlencode '14_funktion=' \
-    --data-urlencode '16_gncopy=' \
     --data-urlencode '17_vermerke=' \
     "$base_url/4fach/mainindex.php"
 assert_no_runtime_error 'saved A/W incoming message'
@@ -1269,15 +1403,78 @@ finish_ldf_incoming "$incoming_marker" "$incoming_id" 'E2E-Absender'
 assert_message_state "$incoming_marker" \
     'E|4|f|null||S2_rt,|f||f' \
     'LdF-translated incoming status 4'
+# Simulate a recipient token left by an older or bypassing writer. The list,
+# detail object gate and repository-backed state action must all remain closed
+# until Si reaches terminal status 8.
+db_sql <<SQL
+UPDATE \`nv_nachrichten\`
+   SET \`16_empf\` = 'S2_rt,S1_bl,'
+ WHERE \`00_lfd\` = ${incoming_id}
+   AND \`x00_status\` = 4;
+SQL
+load_dashboard "$s1_cookies" 'S1 queue before incoming Si review'
+assert_body_absent \
+    "$incoming_marker" \
+    'pending incoming message hidden despite forged staff recipient'
+s1_pending_csrf=$(csrf_from_body)
+assert_status 403 'reject S1 incoming detail before Si completion' \
+    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$s1_pending_csrf" \
+    --data-urlencode 'stab=meldung' \
+    --data-urlencode "00_lfd=$incoming_id" \
+    "$base_url/4fach/mainindex.php"
+assert_status 403 'reject S1 incoming state before Si completion' \
+    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$s1_pending_csrf" \
+    --data-urlencode 'action=gelesen' \
+    --data-urlencode 'todo=set' \
+    --data-urlencode "00_lfd=$incoming_id" \
+    "$base_url/4fach/mainindex.php"
+assert_db_equals 0 'pending incoming created no S1 read state' \
+    "SELECT COUNT(*) FROM \`usr_s1_${s1_code}_read\` WHERE \`nachnum\`=${incoming_id};"
+db_sql <<SQL
+UPDATE \`nv_nachrichten\`
+   SET \`16_empf\` = 'S2_rt,'
+ WHERE \`00_lfd\` = ${incoming_id}
+   AND \`x00_status\` = 4;
+SQL
+
+open_viewer_message "$incoming_marker" "$incoming_id"
+viewer_csrf=$(csrf_from_body)
+incoming_events_before_forgery=$(db_sql <<SQL
+SELECT COUNT(*) FROM \`nv_nachrichten_ereignisse\`
+ WHERE \`message_id\` = ${incoming_id};
+SQL
+)
+assert_status 403 'reject Si recipient suffix injection' \
+    --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$viewer_csrf" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=Stab_sichten' \
+    --data-urlencode "00_lfd=$incoming_id" \
+    --data-urlencode "15_quitzeichen=$si_code" \
+    --data-urlencode '16_21=16_21_bl,alle' \
+    --data-urlencode '17_vermerke=forged recipient suffix' \
+    "$base_url/4fach/mainindex.php"
+assert_db_equals \
+    "4|f|S2_rt,|${incoming_events_before_forgery}" \
+    'rejected Si recipient suffix changed no message evidence' \
+    "SELECT CONCAT(n.\`x00_status\`, '|', n.\`x01_abschluss\`, '|', n.\`16_empf\`, '|', (SELECT COUNT(*) FROM \`nv_nachrichten_ereignisse\` AS e WHERE e.\`message_id\`=n.\`00_lfd\`)) FROM \`nv_nachrichten\` AS n WHERE n.\`00_lfd\`=${incoming_id};"
 
 finish_viewer_message "$incoming_marker" "$incoming_id" 'E2E incoming reviewed'
 assert_message_state "$incoming_marker" \
-    "E|8|t|set|${si_code}|S2_rt,S1_gn,S3_bl,|f||t" \
+    "E|8|t|set|${si_code}|S2_rt,S1_gn,POL_bl,S3_bl,|f||t" \
     'Si-completed incoming status 8'
 if ! generated_form_check present E "$incoming_number"; then
     echo 'Message workflow HTTP: incoming completion generated no form' >&2
     exit 1
 fi
+assert_db_equals 'created,ldf_dispatched,incoming_routed' \
+    'incoming DV transition event order' \
+    "SELECT GROUP_CONCAT(\`event_type\` ORDER BY \`event_id\` SEPARATOR ',') FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${incoming_id};"
 
 load_dashboard "$si_cookies" 'Si queue after incoming completion'
 assert_body_absent "$incoming_marker" 'Si queue after incoming completion'
@@ -1292,9 +1489,9 @@ for recipient in s1 s2 s3; do
     assert_route_control stab meldung "$incoming_id" "$recipient incoming list"
 done
 
-# A/W now enters the rendered second-review administration path for the
-# completed message. The UI must expose only fields 15-17 as editable, and the
-# real CSRF-protected save must not alter message or transport evidence.
+# Completed messages are documentary evidence. A/W and Si may inspect the
+# administration archive, but neither UI nor forged POST may mutate a field or
+# append a transition event.
 incoming_admin_immutable_before=$(
     message_admin_immutable_fingerprint "$incoming_marker"
 )
@@ -1309,21 +1506,13 @@ SELECT DATE_FORMAT(\`15_quitdatum\`, '%Y-%m-%d %H:%i:%s')
  WHERE \`00_lfd\` = ${incoming_id};
 SQL
 )
-incoming_quit_clock_before=$(db_sql <<SQL
-SELECT DATE_FORMAT(\`15_quitdatum\`, '%H%i')
-  FROM \`nv_nachrichten\`
- WHERE \`00_lfd\` = ${incoming_id};
-SQL
-)
 if ! printf '%s' "$incoming_quit_timestamp_before" |
-    grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$' ||
-    ! printf '%s' "$incoming_quit_clock_before" |
-        grep -Eq '^[0-9]{4}$'; then
+    grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$'; then
     echo 'Message workflow HTTP: invalid completed incoming review timestamp' >&2
     exit 1
 fi
 assert_db_equals \
-    "${incoming_quit_timestamp_before}|${si_code}|S2_rt,S1_gn,S3_bl,|E2E incoming reviewed" \
+    "${incoming_quit_timestamp_before}|${si_code}|S2_rt,S1_gn,POL_bl,S3_bl,|E2E incoming reviewed" \
     'incoming review evidence before FM-Admin' \
     "SELECT CONCAT(DATE_FORMAT(\`15_quitdatum\`, '%Y-%m-%d %H:%i:%s'), '|', \`15_quitzeichen\`, '|', COALESCE(\`16_empf\`, ''), '|', COALESCE(\`17_vermerke\`, '')) FROM \`nv_nachrichten\` WHERE \`00_lfd\` = ${incoming_id};"
 
@@ -1350,101 +1539,31 @@ assert_status 200 'open completed incoming FM-Admin form' \
     --data-urlencode "00_lfd=$incoming_id" \
     "$base_url/4fach/mainindex.php"
 assert_no_runtime_error 'completed incoming FM-Admin form'
-assert_body 'name="task" value="FM-Admin"' 'FM-Admin form task'
-assert_body "name=\"00_lfd\" value=\"$incoming_id\"" 'FM-Admin form message'
-assert_body 'name="absenden"' 'FM-Admin save control'
-assert_body 'name="abbrechen"' 'FM-Admin cancel control'
-assert_body \
-    'id="f_15_quitdatum" data-estab-readonly="true"' \
-    'FM-Admin read-only acknowledgment time'
-assert_body \
-    'id="f_15_quitdatum_value" type="hidden" name="15_quitdatum"' \
-    'FM-Admin acknowledgment time compatibility value'
-assert_body_absent \
-    'id="f_15_quitdatum" maxlength=' \
-    'FM-Admin editable acknowledgment time'
-assert_body 'id="f_15_quitzeichen" maxlength="6"' 'FM-Admin acknowledgment code'
-assert_body 'name="16_gncopy" type="radio"' 'FM-Admin green-copy controls'
-assert_body 'name="16_21" value="16_21_bl" type="checkbox"' \
-    'FM-Admin blue-copy control'
-assert_body '<textarea cols="40" rows="10" name="17_vermerke"' \
-    'FM-Admin note control'
-assert_body '<input id="f_12_inhalt" type="hidden"' \
-    'FM-Admin immutable message content'
-assert_body '<input id="f_10_anschrift" type="hidden"' \
-    'FM-Admin immutable address'
-assert_body '<input id="f_14_zeichen" type="hidden"' \
-    'FM-Admin immutable author'
-assert_body '<input id="f_01_medium" type="hidden"' \
-    'FM-Admin immutable receive medium'
-assert_body \
-    'id="f_01_medium_fe" name="01_medium" value="Fe" type="radio"  disabled ' \
-    'FM-Admin disabled receive-medium controls'
-assert_body '<input id="f_06_befwegausw" type="hidden"' \
-    'FM-Admin immutable transport selection'
-assert_body \
-    'id="f_06_befwegausw_fe" name="06_befwegausw" value="Fe" type="radio"  disabled ' \
-    'FM-Admin disabled transport controls'
-assert_body '<input id="f_07_durchspruch" type="hidden"' \
-    'FM-Admin immutable message type'
-assert_body \
-    'id="f_07_durchspruch" name="07_durchspruch" value="D" type="radio"  disabled ' \
-    'FM-Admin disabled message-type controls'
-assert_body '<input id="f_08_befhinwausw" type="hidden"' \
-    'FM-Admin immutable transport-hint selection'
-assert_body \
-    'id="f_08_befhinwausw_fe" name="08_befhinwausw" value="Fe" type="radio"  disabled ' \
-    'FM-Admin disabled transport-hint controls'
-assert_body '<input id="09_vorrangstufe" type="hidden"' \
-    'FM-Admin immutable priority'
-assert_body '<input id="f_11_gesprnotiz" type="hidden"' \
-    'FM-Admin immutable conversation-note flag'
-assert_body \
-    'id="f_11_gesprnotiz" name="11_gesprnotiz" type="checkbox"  disabled ' \
-    'FM-Admin disabled conversation-note control'
-for forbidden_admin_control in \
-    'id="f_01_datum" maxlength=' \
-    'id="f_01_zeichen" maxlength=' \
-    'id="f_02_zeit" maxlength=' \
-    'id="f_02_zeichen" maxlength=' \
-    'id="f_03_datum" maxlength=' \
-    'id="f_03_zeichen" maxlength=' \
-    'id="f_04_nummer" maxlength=' \
-    'id="f_04_richtung" name=' \
-    'id="f_05_gegenstelle" maxlength=' \
-    'id="f_06_befweg" maxlength=' \
-    'id="f_08_befhinweis" maxlength=' \
-    '<select name="09_vorrangstufe"' \
-    '<textarea id="f_10_anschrift"' \
-    '<textarea id="f_12_inhalt"' \
-    'id="f_12_abfzeit" maxlength=' \
-    'id="f_13_abseinheit" style=' \
-    'id="f_14_zeichen" maxlength=' \
-    'id="f_14_funktion" maxlength='
-do
-    assert_body_absent "$forbidden_admin_control" \
-        'FM-Admin fields 1-14 read-only contract'
-done
-
-case "$incoming_quit_clock_before" in
-    2359) admin_submitted_quit_time=0001 ;;
-    *) admin_submitted_quit_time=2359 ;;
-esac
+assert_body 'Abgeschlossener Nachweis – ' 'FM-Admin immutable evidence banner'
+assert_body 'schreibgeschützt' 'FM-Admin immutable evidence banner'
+assert_body_absent 'name="task" value="FM-Admin"' 'FM-Admin mutation task'
+assert_body_absent 'name="absenden"' 'FM-Admin save control'
+assert_body_absent 'name="15_quitzeichen"' 'FM-Admin editable review mark'
+assert_body_absent 'name="16_gncopy"' 'FM-Admin editable distribution'
+assert_body_absent 'name="17_vermerke"' 'FM-Admin editable note'
+incoming_event_count_before=$(db_sql <<SQL
+SELECT COUNT(*) FROM \`nv_nachrichten_ereignisse\`
+ WHERE \`message_id\` = ${incoming_id};
+SQL
+)
 admin_csrf=$(csrf_from_body)
-assert_status 200 'save completed incoming FM-Admin review' \
+assert_status 403 'reject completed incoming FM-Admin mutation' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
     --request POST \
     --data-urlencode "csrf_token=$admin_csrf" \
     --data-urlencode 'absenden_x=1' \
     --data-urlencode 'task=FM-Admin' \
     --data-urlencode "00_lfd=$incoming_id" \
-    --data-urlencode "15_quitdatum=$admin_submitted_quit_time" \
     --data-urlencode "15_quitzeichen=$aw_code" \
     --data-urlencode '16_21=16_21_bl' \
     --data-urlencode '16_gncopy=16_41_gn' \
     --data-urlencode "17_vermerke=$fm_admin_note" \
     "$base_url/4fach/mainindex.php"
-assert_no_runtime_error 'saved completed incoming FM-Admin review'
 
 incoming_admin_immutable_after=$(
     message_admin_immutable_fingerprint "$incoming_marker"
@@ -1455,20 +1574,22 @@ if [ "$incoming_admin_immutable_after" != \
     exit 1
 fi
 assert_message_state "$incoming_marker" \
-    "E|8|t|set|${aw_code}|S2_rt,S1_bl,S3_gn,|f||t" \
+    "E|8|t|set|${si_code}|S2_rt,S1_gn,POL_bl,S3_bl,|f||t" \
     'FM-Admin preserved completed incoming state'
 assert_db_equals \
-    "${incoming_quit_timestamp_before}|${aw_code}|S2_rt,S1_bl,S3_gn,|${fm_admin_note}" \
-    'FM-Admin changed only editable second-review evidence and rejected timestamp tampering' \
+    "${incoming_quit_timestamp_before}|${si_code}|S2_rt,S1_gn,POL_bl,S3_bl,|E2E incoming reviewed" \
+    'FM-Admin rejected all completed-message changes' \
     "SELECT CONCAT(DATE_FORMAT(\`15_quitdatum\`, '%Y-%m-%d %H:%i:%s'), '|', \`15_quitzeichen\`, '|', COALESCE(\`16_empf\`, ''), '|', COALESCE(\`17_vermerke\`, '')) FROM \`nv_nachrichten\` WHERE \`00_lfd\` = ${incoming_id};"
+assert_db_equals "$incoming_event_count_before" \
+    'FM-Admin appended no event for rejected mutation' \
+    "SELECT COUNT(*) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\` = ${incoming_id};"
 if ! generated_form_check present E "$incoming_number"; then
     echo 'Message workflow HTTP: FM-Admin lost the completed incoming form' >&2
     exit 1
 fi
 
-# Si independently opens the corresponding second-review list and persists the
-# same deliberately narrow field set. This is a separate routed workflow, not
-# an inference from the analogous A/W form.
+# Si independently opens the same archive and gets the identical read-only
+# evidence boundary.
 si_admin_immutable_before=$(
     message_admin_immutable_fingerprint "$incoming_marker"
 )
@@ -1500,72 +1621,26 @@ assert_status 200 'open completed incoming SI-Admin form' \
     --data-urlencode "00_lfd=$incoming_id" \
     "$base_url/4fach/mainindex.php"
 assert_no_runtime_error 'completed incoming SI-Admin form'
-assert_body 'name="task" value="SI-Admin"' 'SI-Admin form task'
-assert_body "name=\"00_lfd\" value=\"$incoming_id\"" 'SI-Admin form message'
-assert_body 'name="absenden"' 'SI-Admin save control'
-assert_body 'name="abbrechen"' 'SI-Admin cancel control'
-assert_body \
-    'id="f_15_quitdatum" data-estab-readonly="true"' \
-    'SI-Admin read-only acknowledgment time'
-assert_body \
-    'id="f_15_quitdatum_value" type="hidden" name="15_quitdatum"' \
-    'SI-Admin acknowledgment time compatibility value'
-assert_body_absent \
-    'id="f_15_quitdatum" maxlength=' \
-    'SI-Admin editable acknowledgment time'
-assert_body 'id="f_15_quitzeichen" maxlength="6"' \
-    'SI-Admin acknowledgment code'
-assert_body 'name="16_gncopy" type="radio"' \
-    'SI-Admin green-copy controls'
-assert_body 'name="16_32" value="16_32_bl" type="checkbox"' \
-    'SI-Admin POL blue-copy control'
-assert_body '<textarea cols="40" rows="10" name="17_vermerke"' \
-    'SI-Admin note control'
-assert_body '<input id="f_12_inhalt" type="hidden"' \
-    'SI-Admin immutable message content'
-assert_body '<input id="f_10_anschrift" type="hidden"' \
-    'SI-Admin immutable address'
-for forbidden_si_admin_control in \
-    'id="f_01_datum" maxlength=' \
-    'id="f_01_zeichen" maxlength=' \
-    'id="f_02_zeit" maxlength=' \
-    'id="f_02_zeichen" maxlength=' \
-    'id="f_03_datum" maxlength=' \
-    'id="f_03_zeichen" maxlength=' \
-    'id="f_04_nummer" maxlength=' \
-    'id="f_04_richtung" name=' \
-    'id="f_05_gegenstelle" maxlength=' \
-    'id="f_06_befweg" maxlength=' \
-    '<textarea id="f_10_anschrift"' \
-    '<textarea id="f_12_inhalt"' \
-    'id="f_12_abfzeit" maxlength=' \
-    'id="f_13_abseinheit" style=' \
-    'id="f_14_zeichen" maxlength=' \
-    'id="f_14_funktion" maxlength='
-do
-    assert_body_absent "$forbidden_si_admin_control" \
-        'SI-Admin fields 1-14 read-only contract'
-done
-
-case "$incoming_quit_clock_before" in
-    0001) si_admin_submitted_quit_time=2359 ;;
-    *) si_admin_submitted_quit_time=0001 ;;
-esac
+assert_body 'Abgeschlossener Nachweis – ' 'SI-Admin immutable evidence banner'
+assert_body 'schreibgeschützt' 'SI-Admin immutable evidence banner'
+assert_body_absent 'name="task" value="SI-Admin"' 'SI-Admin mutation task'
+assert_body_absent 'name="absenden"' 'SI-Admin save control'
+assert_body_absent 'name="15_quitzeichen"' 'SI-Admin editable review mark'
+assert_body_absent 'name="16_gncopy"' 'SI-Admin editable distribution'
+assert_body_absent 'name="17_vermerke"' 'SI-Admin editable note'
 si_admin_csrf=$(csrf_from_body)
-assert_status 200 'save completed incoming SI-Admin review' \
+assert_status 403 'reject completed incoming SI-Admin mutation' \
     --cookie "$si_cookies" --cookie-jar "$si_cookies" \
     --request POST \
     --data-urlencode "csrf_token=$si_admin_csrf" \
     --data-urlencode 'absenden_x=1' \
     --data-urlencode 'task=SI-Admin' \
     --data-urlencode "00_lfd=$incoming_id" \
-    --data-urlencode "15_quitdatum=$si_admin_submitted_quit_time" \
     --data-urlencode "15_quitzeichen=$si_code" \
     --data-urlencode '16_32=16_32_bl' \
     --data-urlencode '16_gncopy=16_21_gn' \
     --data-urlencode "17_vermerke=$si_admin_note" \
     "$base_url/4fach/mainindex.php"
-assert_no_runtime_error 'saved completed incoming SI-Admin review'
 
 si_admin_immutable_after=$(
     message_admin_immutable_fingerprint "$incoming_marker"
@@ -1575,12 +1650,15 @@ if [ "$si_admin_immutable_after" != "$si_admin_immutable_before" ]; then
     exit 1
 fi
 assert_message_state "$incoming_marker" \
-    "E|8|t|set|${si_code}|S2_rt,S1_gn,POL_bl,|f||t" \
+    "E|8|t|set|${si_code}|S2_rt,S1_gn,POL_bl,S3_bl,|f||t" \
     'SI-Admin preserved completed incoming state'
 assert_db_equals \
-    "${incoming_quit_timestamp_before}|${si_code}|S2_rt,S1_gn,POL_bl,|${si_admin_note}" \
-    'SI-Admin changed only editable second-review evidence and rejected timestamp tampering' \
+    "${incoming_quit_timestamp_before}|${si_code}|S2_rt,S1_gn,POL_bl,S3_bl,|E2E incoming reviewed" \
+    'SI-Admin rejected all completed-message changes' \
     "SELECT CONCAT(DATE_FORMAT(\`15_quitdatum\`, '%Y-%m-%d %H:%i:%s'), '|', \`15_quitzeichen\`, '|', COALESCE(\`16_empf\`, ''), '|', COALESCE(\`17_vermerke\`, '')) FROM \`nv_nachrichten\` WHERE \`00_lfd\` = ${incoming_id};"
+assert_db_equals "$incoming_event_count_before" \
+    'SI-Admin appended no event for rejected mutation' \
+    "SELECT COUNT(*) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\` = ${incoming_id};"
 if ! generated_form_check present E "$incoming_number"; then
     echo 'Message workflow HTTP: SI-Admin lost the completed incoming form' >&2
     exit 1
@@ -1689,7 +1767,7 @@ SQL
 )
 assert_numeric 'POL/FB answer message ID' "$reply_id"
 assert_db_equals \
-    "A|1|E2E-Absender|E2E-Einsatzleitung|${pol_code}|POL|S2_rt,POL_gn|1|1|1" \
+    "A|4|E2E-Absender|${authoritative_sender}|${pol_code}|POL|S2_rt,POL_gn|1|1|1" \
     'persisted POL/FB answer' \
     "SELECT CONCAT(\`04_richtung\`, '|', \`x00_status\`, '|', \`10_anschrift\`, '|', \`13_abseinheit\`, '|', \`14_zeichen\`, '|', \`14_funktion\`, '|', \`16_empf\`, '|', LOCATE('Zitat: von E ${incoming_number}', \`12_inhalt\`) > 0, '|', LOCATE('${incoming_marker}', \`12_inhalt\`) > 0, '|', LOCATE('${reply_marker}', \`12_inhalt\`) > 0) FROM \`nv_nachrichten\` WHERE \`00_lfd\` = ${reply_id};"
 
@@ -1767,7 +1845,7 @@ SQL
 )
 assert_numeric 'POL/FB forwarding message ID' "$forward_id"
 assert_db_equals \
-    "A|1|E2E-Weiterleitungsziel|E2E-Einsatzleitung|${pol_code}|POL|S2_rt,POL_gn|1|1|1" \
+    "A|4|E2E-Weiterleitungsziel|${authoritative_sender}|${pol_code}|POL|S2_rt,POL_gn|1|1|1" \
     'persisted POL/FB forwarding' \
     "SELECT CONCAT(\`04_richtung\`, '|', \`x00_status\`, '|', \`10_anschrift\`, '|', \`13_abseinheit\`, '|', \`14_zeichen\`, '|', \`14_funktion\`, '|', \`16_empf\`, '|', LOCATE('Zitat: von E ${incoming_number}', \`12_inhalt\`) > 0, '|', LOCATE('${incoming_marker}', \`12_inhalt\`) > 0, '|', LOCATE('${forward_marker}', \`12_inhalt\`) > 0) FROM \`nv_nachrichten\` WHERE \`00_lfd\` = ${forward_id};"
 assert_db_equals 1 'POL/FB source read state' \
@@ -1780,6 +1858,10 @@ if [ "$derived_source_after" != "$derived_source_before" ]; then
     exit 1
 fi
 
+finish_viewer_outgoing \
+    "$reply_marker" "$reply_id" 'E2E answer formally approved'
+finish_viewer_outgoing \
+    "$forward_marker" "$forward_id" 'E2E forwarding formally approved'
 finish_ldf_outgoing \
     "$reply_marker" "$reply_id" 'E2E-Antwort-Rufname' 'E2E-Antwortweg'
 finish_ldf_outgoing \
@@ -1803,8 +1885,9 @@ assert_body_absent \
 assert_body "$reply_marker" 'POL/FB answer in normal A/W outgoing queue'
 assert_body "$forward_marker" 'POL/FB forwarding in normal A/W outgoing queue'
 
-# Outgoing message: S1 writes status 1, LdF translates the callsign and fixes
-# the route (status 2), then A/W records only the actual transport.
+# Outgoing message: S1 writes a draft for mandatory formal Si review. Si
+# returns it once, the original author corrects it, Si approves it, LdF
+# disposes the current S6 route and A/W confirms the actual transport.
 load_dashboard "$s1_cookies" 'S1 dashboard before outgoing message'
 outgoing_csrf=$(csrf_from_body)
 assert_status 200 'open S1 outgoing form' \
@@ -1854,23 +1937,173 @@ SQL
 assert_numeric 'outgoing message ID' "$outgoing_id"
 assert_numeric 'outgoing evidence number' "$outgoing_number"
 assert_message_state "$outgoing_marker" \
-    'A|1|f|null||S2_rt,S1_gn|f||f' \
-    'S1 outgoing status 1'
+    'A|4|f|null||S2_rt,S1_gn|f||f' \
+    'S1 outgoing status 4 awaiting formal Si review'
 if ! generated_form_check absent A "$outgoing_number"; then
     echo 'Message workflow HTTP: outgoing form existed before completion' >&2
     exit 1
 fi
 outgoing_form_cleanup_owned=true
 
+load_dashboard "$s1_cookies" 'S1 list at outgoing status 4'
+assert_body "$outgoing_marker" 'S1 list at outgoing status 4'
+assert_body 'alt="liegt vorm Sichter"' 'S1 status-4 Si indicator'
+load_dashboard "$s2_cookies" 'S2 list at outgoing status 4'
+assert_body_absent \
+    "$outgoing_marker" \
+    'status-4 outgoing hidden from foreign red-copy recipient'
+s2_pending_csrf=$(csrf_from_body)
+assert_status 403 'reject S2 outgoing detail at status 4' \
+    --cookie "$s2_cookies" --cookie-jar "$s2_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$s2_pending_csrf" \
+    --data-urlencode 'stab=meldung' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    "$base_url/4fach/mainindex.php"
+assert_status 403 'reject S2 outgoing state at status 4' \
+    --cookie "$s2_cookies" --cookie-jar "$s2_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$s2_pending_csrf" \
+    --data-urlencode 'action=gelesen' \
+    --data-urlencode 'todo=set' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    "$base_url/4fach/mainindex.php"
+assert_db_equals 0 'status-4 outgoing created no S2 read state' \
+    "SELECT COUNT(*) FROM \`usr_s2_${s2_code}_read\` WHERE \`nachnum\`=${outgoing_id};"
+load_dashboard "$aw_cookies" 'A/W queue before LdF disposition'
+assert_body_absent \
+    "$outgoing_marker" \
+    'status-4 outgoing hidden from A/W'
+load_dashboard "$ldf_cookies" 'LdF queue before formal Si review'
+assert_body_absent "$outgoing_marker" 'unreviewed outgoing hidden from LdF'
+
+return_viewer_outgoing \
+    "$outgoing_marker" "$outgoing_id" 'Anschrift fachlich präzisieren'
+assert_message_state "$outgoing_marker" \
+    "A|10|f|set|${si_code}|S2_rt,S1_gn|f||f" \
+    'Si returned outgoing to original author'
+load_dashboard "$ldf_cookies" 'LdF queue after Si return'
+assert_body_absent "$outgoing_marker" 'returned outgoing hidden from LdF'
+load_dashboard "$s2_cookies" 'foreign staff queue after Si return'
+assert_body_absent \
+    "$outgoing_marker" \
+    'returned outgoing hidden from foreign red-copy recipient'
+s2_csrf=$(csrf_from_body)
+assert_status 403 'reject S2 outgoing detail at status 10' \
+    --cookie "$s2_cookies" --cookie-jar "$s2_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$s2_csrf" \
+    --data-urlencode 'stab=meldung' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    "$base_url/4fach/mainindex.php"
+assert_status 403 'reject S2 outgoing state at status 10' \
+    --cookie "$s2_cookies" --cookie-jar "$s2_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$s2_csrf" \
+    --data-urlencode 'action=gelesen' \
+    --data-urlencode 'todo=set' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    "$base_url/4fach/mainindex.php"
+assert_db_equals 0 'status-10 outgoing created no S2 read state' \
+    "SELECT COUNT(*) FROM \`usr_s2_${s2_code}_read\` WHERE \`nachnum\`=${outgoing_id};"
+assert_status 403 'reject correction by another staff member' \
+    --cookie "$s2_cookies" --cookie-jar "$s2_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$s2_csrf" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=Stab_korrigieren' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    "$base_url/4fach/mainindex.php"
+
+load_dashboard "$s1_cookies" 'author queue for returned outgoing'
+assert_body "$outgoing_marker" 'returned outgoing in author queue'
+assert_route_control stab meldung "$outgoing_id" 'returned outgoing author detail'
+s1_csrf=$(csrf_from_body)
+assert_status 200 'open returned outgoing as original author' \
+    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$s1_csrf" \
+    --data-urlencode 'stab=meldung' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'returned outgoing correction form'
+assert_body 'name="task" value="Stab_korrigieren"' \
+    'returned outgoing correction task'
+assert_body 'Anschrift fachlich präzisieren' \
+    'returned outgoing reason visible to author'
+s1_csrf=$(csrf_from_body)
+tactical_time=$(date '+%H%M')
+assert_status 409 'reject forged attachment during correction resubmission' \
+    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$s1_csrf" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=Stab_korrigieren' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    --data-urlencode '07_durchspruch=D' \
+    --data-urlencode '08_befhinweis=' \
+    --data-urlencode '08_befhinwausw=' \
+    --data-urlencode '09_vorrangstufe=eee' \
+    --data-urlencode '10_anschrift=E2E-Zielstelle korrigiert' \
+    --data-urlencode '11_gesprnotiz=f' \
+    --data-urlencode '12_anhang=NICHTVORHANDEN.pdf;' \
+    --data-urlencode "12_inhalt=$outgoing_marker" \
+    --data-urlencode "12_abfzeit=$tactical_time" \
+    --data-urlencode '13_abseinheit=Gefälschter Absender' \
+    --data-urlencode "14_zeichen=$s1_code" \
+    --data-urlencode '14_funktion=S1' \
+    --data-urlencode '17_vermerke=Korrektur gemäß Rückgabe' \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'forged correction attachment rejection'
+assert_body 'gehört nicht zum aktiven Einsatz' \
+    'forged correction attachment error'
+assert_message_state "$outgoing_marker" \
+    "A|10|f|set|${si_code}|S2_rt,S1_gn|f||f" \
+    'forged correction attachment preserved returned status'
+assert_db_equals '' 'forged correction attachment did not mutate message' \
+    "SELECT \`12_anhang\` FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
+s1_csrf=$(csrf_from_body)
+assert_status 200 'resubmit corrected outgoing as original author' \
+    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$s1_csrf" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=Stab_korrigieren' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    --data-urlencode '07_durchspruch=D' \
+    --data-urlencode '08_befhinweis=' \
+    --data-urlencode '08_befhinwausw=' \
+    --data-urlencode '09_vorrangstufe=eee' \
+    --data-urlencode '10_anschrift=E2E-Zielstelle korrigiert' \
+    --data-urlencode '11_gesprnotiz=f' \
+    --data-urlencode '12_anhang=' \
+    --data-urlencode "12_inhalt=$outgoing_marker" \
+    --data-urlencode "12_abfzeit=$tactical_time" \
+    --data-urlencode '13_abseinheit=Gefälschter Absender' \
+    --data-urlencode "14_zeichen=$s1_code" \
+    --data-urlencode '14_funktion=S1' \
+    --data-urlencode '17_vermerke=Korrektur gemäß Rückgabe' \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'resubmitted corrected outgoing'
+assert_message_state "$outgoing_marker" \
+    'A|4|f|null||S2_rt,S1_gn|f||f' \
+    'corrected outgoing returned to formal Si queue'
+assert_db_equals \
+    "E2E-Zielstelle korrigiert|${authoritative_sender}|${s1_code}|S1" \
+    'correction preserved authenticated author and local sender' \
+    "SELECT CONCAT(\`10_anschrift\`, '|', \`13_abseinheit\`, '|', \`14_zeichen\`, '|', \`14_funktion\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
+
+finish_viewer_outgoing \
+    "$outgoing_marker" "$outgoing_id" 'Formal vollständig'
+assert_message_state "$outgoing_marker" \
+    "A|1|f|set|${si_code}|S2_rt,S1_gn|f||f" \
+    'Si-approved outgoing status 1'
+
 load_dashboard "$s1_cookies" 'S1 list at outgoing status 1'
 assert_body "$outgoing_marker" 'S1 list at outgoing status 1'
 assert_body \
     'alt="liegt bei LdF: Rufname und Beförderungsweg festlegen"' \
     'S1 status-1 LdF indicator'
-load_dashboard "$aw_cookies" 'A/W queue before LdF disposition'
-assert_body_absent \
-    "$outgoing_marker" \
-    'status-1 outgoing hidden from A/W'
 load_dashboard "$ldf_cookies" 'LdF queue before tokenless lock test'
 assert_body "$outgoing_marker" 'LdF status-1 outgoing queue'
 assert_route_control ldf meldung "$outgoing_id" 'LdF outgoing detail control'
@@ -1881,7 +2114,7 @@ assert_status 403 'reject tokenless LdF outgoing lock request' \
     --data-urlencode "00_lfd=$outgoing_id" \
     "$base_url/4fach/mainindex.php"
 assert_message_state "$outgoing_marker" \
-    'A|1|f|null||S2_rt,S1_gn|f||f' \
+    "A|1|f|set|${si_code}|S2_rt,S1_gn|f||f" \
     'tokenless LdF request left outgoing unlocked'
 
 load_dashboard "$ldf_cookies" 'LdF queue before outgoing cancel'
@@ -1909,8 +2142,46 @@ assert_body "$outgoing_marker" 'LdF queue after outgoing cancel'
 assert_route_control \
     ldf meldung "$outgoing_id" 'LdF outgoing control after cancel'
 assert_message_state "$outgoing_marker" \
-    'A|1|f|null||S2_rt,S1_gn|f||f' \
+    "A|1|f|set|${si_code}|S2_rt,S1_gn|f||f" \
     'LdF cancel released the outgoing stage-one lock'
+
+# A route from a superseded plan must fail while the record is locked, without
+# persisting browser-provided 06_* values or an invalid plan reference.
+load_dashboard "$ldf_cookies" 'LdF queue before superseded-route test'
+ldf_stale_csrf=$(csrf_from_body)
+assert_status 200 'lock outgoing for superseded-route test' \
+    --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$ldf_stale_csrf" \
+    --data-urlencode 'ldf=meldung' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'LdF form before superseded-route test'
+ldf_stale_csrf=$(csrf_from_body)
+tactical_time=$(date '+%H%M')
+assert_status 409 'reject superseded S6 route' \
+    --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$ldf_stale_csrf" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=LdF-Ausgang' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    --data-urlencode "02_zeit=$tactical_time" \
+    --data-urlencode "02_zeichen=$ldf_code" \
+    --data-urlencode '05_gegenstelle=Nicht-persistieren' \
+    --data-urlencode "fernmeldeplan_eintrag_id=$telecom_replaced_route_id" \
+    --data-urlencode '06_befweg=Gefälschter Weg' \
+    --data-urlencode '06_befwegausw=Me' \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'superseded S6 route rejection'
+assert_body \
+    'gehört nicht zum gültigen S6-Fernmeldeplan' \
+    'superseded S6 route error'
+assert_message_state "$outgoing_marker" \
+    "A|1|f|set|${si_code}|S2_rt,S1_gn|t|${ldf_code}|f" \
+    'superseded route preserved LdF lock and workflow'
+assert_db_equals '||0' 'superseded route persisted no disposition' \
+    "SELECT CONCAT(COALESCE(\`05_gegenstelle\`, ''), '|', COALESCE(\`06_befweg\`, ''), '|', COALESCE(\`estab_fernmeldeplan_eintrag_id\`, 0)) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
 
 finish_ldf_outgoing \
     "$outgoing_marker" "$outgoing_id" 'E2E-Gegenstelle' 'E2E-Transport'
@@ -1923,7 +2194,7 @@ assert_no_runtime_error 'tracking before outgoing transport'
 assert_body "$outgoing_marker" 'pending outgoing message in tracking'
 assert_body 'Noch nicht befördert' 'pending outgoing transport state'
 assert_body_absent \
-    'Funk · E2E-Transport' \
+    "Funk · ${telecom_route_text}" \
     'LdF decision exposed as an already completed transport'
 load_dashboard "$aw_cookies" 'A/W transport queue at outgoing status 2'
 assert_body "$outgoing_marker" 'A/W transport queue at outgoing status 2'
@@ -1936,7 +2207,7 @@ assert_status 403 'reject tokenless outgoing lock request' \
     --data-urlencode "00_lfd=$outgoing_id" \
     "$base_url/4fach/mainindex.php"
 assert_message_state "$outgoing_marker" \
-    'A|2|f|null||S2_rt,S1_gn|f||f' \
+    "A|2|f|set|${si_code}|S2_rt,S1_gn|f||f" \
     'tokenless request left outgoing unlocked'
 
 load_dashboard "$aw_cookies" 'A/W queue before locking outgoing'
@@ -1960,11 +2231,24 @@ assert_body_absent \
 assert_body_absent \
     'id="f_06_befweg" maxlength=' \
     'A/W cannot rewrite LdF transport route'
+assert_body 'data-estab-transport-confirmation="required"' \
+    'A/W mandatory transport-route confirmation'
+assert_body "Disponierter S6-Weg:</strong> Fu · ${telecom_route_text}" \
+    'A/W displays the authoritative S6 route'
+assert_body \
+    'name="transportweg_bestaetigt" value="1" required' \
+    'A/W transport-route confirmation control'
+assert_body \
+    'name="transport_rueckgabegrund"' \
+    'A/W required-reason input for impossible transport'
+assert_body \
+    'name="transport_nicht_moeglich_x"' \
+    'A/W return-to-LdF action for impossible transport'
 assert_current_editable_tactical_time_input \
     f_03_datum "$outgoing_clock_before" "$outgoing_clock_after" \
     'A/W transport time'
 assert_message_state "$outgoing_marker" \
-    "A|2|f|null||S2_rt,S1_gn|t|${aw_code}|f" \
+    "A|2|f|set|${si_code}|S2_rt,S1_gn|t|${aw_code}|f" \
     'A/W-owned outgoing lock'
 
 assert_status 403 'reject tokenless outgoing transport save' \
@@ -1977,11 +2261,11 @@ assert_status 403 'reject tokenless outgoing transport save' \
     --data-urlencode "03_zeichen=$aw_code" \
     "$base_url/4fach/mainindex.php"
 assert_message_state "$outgoing_marker" \
-    "A|2|f|null||S2_rt,S1_gn|t|${aw_code}|f" \
+    "A|2|f|set|${si_code}|S2_rt,S1_gn|t|${aw_code}|f" \
     'tokenless transport save preserved lock and status'
 
-# Re-open the owner-held lock idempotently to obtain the real form token, then
-# execute the configured transport transition.
+# Re-open the owner-held lock idempotently. A valid CSRF token without the
+# explicit route confirmation still must not complete the transport.
 load_dashboard "$aw_cookies" 'A/W queue before transport save'
 outgoing_csrf=$(csrf_from_body)
 assert_status 200 're-open owner-held outgoing lock' \
@@ -1991,6 +2275,125 @@ assert_status 200 're-open owner-held outgoing lock' \
     --data-urlencode 'fm=meldung' \
     --data-urlencode "00_lfd=$outgoing_id" \
     "$base_url/4fach/mainindex.php"
+outgoing_csrf=$(csrf_from_body)
+assert_status 409 'reject transport without S6 route confirmation' \
+    --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$outgoing_csrf" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=FM-Ausgang' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    --data-urlencode "03_datum=$tactical_time" \
+    --data-urlencode "03_zeichen=$aw_code" \
+    --data-urlencode '06_befweg=Gefälschter Weg' \
+    --data-urlencode '06_befwegausw=Me' \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'missing S6 route confirmation rejection'
+assert_body \
+    'Bestätigen Sie den disponierten S6-Beförderungsweg' \
+    'missing S6 route confirmation error'
+assert_message_state "$outgoing_marker" \
+    "A|2|f|set|${si_code}|S2_rt,S1_gn|t|${aw_code}|f" \
+    'missing route confirmation preserved transport lock'
+
+# A/W may not silently invent another route. An impossible disposition goes
+# back to LdF and requires an explicit, hash-linked reason.
+outgoing_csrf=$(csrf_from_body)
+assert_status 422 'reject transport return without mandatory reason' \
+    --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$outgoing_csrf" \
+    --data-urlencode 'transport_nicht_moeglich_x=1' \
+    --data-urlencode 'task=FM-Ausgang' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'missing transport-return reason rejection'
+assert_body \
+    'Für die Rückgabe an LdF ist ein Grund erforderlich' \
+    'mandatory transport-return reason error'
+assert_message_state "$outgoing_marker" \
+    "A|2|f|set|${si_code}|S2_rt,S1_gn|t|${aw_code}|f" \
+    'missing return reason preserved A/W ownership'
+
+outgoing_csrf=$(csrf_from_body)
+transport_return_reason='Disponierter Funkweg ist an der Gegenstelle ausgefallen'
+assert_status 200 'return impossible transport to LdF with reason' \
+    --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$outgoing_csrf" \
+    --data-urlencode 'transport_nicht_moeglich_x=1' \
+    --data-urlencode 'task=FM-Ausgang' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    --data-urlencode "transport_rueckgabegrund=$transport_return_reason" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'A/W return to LdF'
+assert_message_state "$outgoing_marker" \
+    "A|1|f|set|${si_code}|S2_rt,S1_gn|f||f" \
+    'A/W returned impossible transport to unlocked LdF stage'
+assert_db_equals \
+    "unset||${telecom_route_id}|Fu|${telecom_route_text}" \
+    'A/W return retained rejected route while clearing LdF completion mark' \
+    "SELECT CONCAT(IF(\`02_zeit\` IS NULL, 'unset', 'set'), '|', \`02_zeichen\`, '|', \`estab_fernmeldeplan_eintrag_id\`, '|', \`06_befwegausw\`, '|', \`06_befweg\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
+assert_db_equals \
+    "${transport_return_reason}|${telecom_route_id}|Fu|${telecom_route_text}" \
+    'A/W return event preserves reason and rejected S6 decision' \
+    "SELECT CONCAT(JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.transport_return_reason')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.rejected_telecom_plan_entry_id')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.rejected_transport_medium')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.rejected_transport_route'))) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${outgoing_id} AND \`event_type\`='aw_transport_returned';"
+
+# S6 publishes a successor plan with another immutable route through the same
+# production domain. The old route remains in message history, while only the
+# new active entry may be chosen.
+telecom_b_fixture=$(
+    ESTAB_TEST_TELECOM_MODE=successor \
+    ESTAB_TEST_TELECOM_S6_CODE=$s6_code \
+    ESTAB_TEST_TELECOM_TOKEN=$identity_seed \
+    "$compose_engine" compose run --rm --no-deps -T \
+        --env "COMPOSE_PROJECT_NAME=$project_name" \
+        --env ESTAB_TEST_TELECOM_ALLOW_MUTATION=true \
+        --env ESTAB_TEST_TELECOM_MODE \
+        --env ESTAB_TEST_TELECOM_S6_CODE \
+        --env ESTAB_TEST_TELECOM_TOKEN \
+        --volume "$repo_root:/workspace:ro" \
+        --workdir /workspace \
+        app php -d auto_prepend_file= \
+        tests/integration/create_http_telecom_fixture.php |
+        tail -n 1
+)
+telecom_route_b_id=$(printf '%s' "$telecom_b_fixture" | cut -d'|' -f1)
+telecom_plan_b_version=$(printf '%s' "$telecom_b_fixture" | cut -d'|' -f2)
+assert_numeric 'redisposition S6 route B fixture' "$telecom_route_b_id"
+assert_numeric 'redisposition S6 plan B version' "$telecom_plan_b_version"
+
+if printf '%s\n' \
+    "UPDATE \`nv_nachrichten\` SET \`estab_fernmeldeplan_eintrag_id\`=${telecom_route_b_id}, \`06_befwegausw\`='Fu', \`06_befweg\`='${telecom_route_b_text}' WHERE \`00_lfd\`=${outgoing_id};" \
+    | db_sql >/dev/null 2>&1
+then
+    echo 'Message workflow HTTP: route trigger accepted an unlocked direct replacement' >&2
+    exit 1
+fi
+assert_db_equals "$telecom_route_id" \
+    'route trigger retained route A outside locked LdF redisposition' \
+    "SELECT \`estab_fernmeldeplan_eintrag_id\` FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
+
+finish_ldf_outgoing \
+    "$outgoing_marker" "$outgoing_id" 'E2E-Gegenstelle' \
+    'E2E-Redisposition' "$telecom_route_b_id" "$telecom_route_b_text"
+assert_db_equals \
+    "${telecom_route_id}|${telecom_route_b_id}|${telecom_route_text}|${telecom_route_b_text}" \
+    'LdF redisposition event links rejected route A to active route B' \
+    "SELECT CONCAT(JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.previous_telecom_plan_entry_id')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.telecom_plan_entry_id')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.previous_transport_route')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.transport_route'))) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${outgoing_id} AND \`event_type\`='ldf_dispatched' ORDER BY \`event_id\` DESC LIMIT 1;"
+
+load_dashboard "$aw_cookies" 'A/W queue before confirmed transport save'
+outgoing_csrf=$(csrf_from_body)
+assert_status 200 'open A/W transport after LdF redisposition' \
+    --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$outgoing_csrf" \
+    --data-urlencode 'fm=meldung' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'A/W route-B confirmation form'
+assert_body "Disponierter S6-Weg:</strong> Fu · ${telecom_route_b_text}" \
+    'A/W sees only the newly disposed route B'
 outgoing_csrf=$(csrf_from_body)
 tactical_time=$(date '+%H%M')
 outgoing_backdated_clock=$(app_backdated_clock)
@@ -2004,60 +2407,48 @@ assert_status 200 'save A/W outgoing transport' \
     --data-urlencode 'task=FM-Ausgang' \
     --data-urlencode "00_lfd=$outgoing_id" \
     --data-urlencode "03_datum=$outgoing_backdated_tactical" \
-    --data-urlencode '03_zeichen=forged' \
+    --data-urlencode "03_zeichen=$aw_code" \
     --data-urlencode '05_gegenstelle=Manipulierte-Gegenstelle' \
     --data-urlencode '06_befweg=Manipulierter-Weg' \
     --data-urlencode '06_befwegausw=Me' \
+    --data-urlencode 'transportweg_bestaetigt=1' \
     "$base_url/4fach/mainindex.php"
 assert_no_runtime_error 'saved A/W outgoing transport'
 assert_db_equals "$outgoing_backdated_sql" 'edited A/W transport time' \
     "SELECT DATE_FORMAT(\`03_datum\`, '%Y-%m-%d %H:%i:00') FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
 assert_db_equals \
-    "${aw_code}|E2E-Gegenstelle|E2E-Transport|Fu" \
+    "${aw_code}|E2E-Gegenstelle|${telecom_route_b_text}|Fu|${telecom_route_b_id}" \
     'A/W transport preserved LdF decision and authenticated code' \
-    "SELECT CONCAT(\`03_zeichen\`, '|', \`05_gegenstelle\`, '|', \`06_befweg\`, '|', \`06_befwegausw\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
+    "SELECT CONCAT(\`03_zeichen\`, '|', \`05_gegenstelle\`, '|', \`06_befweg\`, '|', \`06_befwegausw\`, '|', \`estab_fernmeldeplan_eintrag_id\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
+assert_db_equals \
+    "true|${telecom_route_b_id}|Fu|${telecom_route_b_text}" \
+    'A/W event proves the confirmed database-bound transport route' \
+    "SELECT CONCAT(JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.transport_route_confirmed')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.telecom_plan_entry_id')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.transport_medium')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.transport_route'))) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${outgoing_id} AND \`event_type\`='aw_transported';"
+assert_db_equals \
+    "${telecom_plan_b_version}|${telecom_route_b_id}|Fu|${telecom_route_b_text}" \
+    'final LdF event proves active S6 successor plan and route B' \
+    "SELECT CONCAT(JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.telecom_plan_version')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.telecom_plan_entry_id')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.transport_medium')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.transport_route'))) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${outgoing_id} AND \`event_type\`='ldf_dispatched' ORDER BY \`event_id\` DESC LIMIT 1;"
+assert_db_equals 0 'forged transport values absent from event evidence' \
+    "SELECT COUNT(*) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${outgoing_id} AND (\`field_snapshot\` LIKE '%Manipulierter-Weg%' OR \`field_snapshot\` LIKE '%Gefälschter Weg%');"
 
 outgoing_status=$(db_sql <<SQL
 SELECT \`x00_status\` FROM \`nv_nachrichten\`
  WHERE \`12_inhalt\` = '${outgoing_marker}';
 SQL
 )
-case "$outgoing_status" in
-    4)
-        if [ "$review_expectation" = disabled ]; then
-            echo 'Message workflow HTTP: outgoing review was enabled unexpectedly' >&2
-            exit 1
-        fi
-        assert_message_state "$outgoing_marker" \
-            'A|4|f|null||S2_rt,S1_gn|f||f' \
-            'A/W transport status 4 awaiting Si'
-        load_dashboard "$aw_cookies" 'A/W queue after status-4 transport'
-        assert_body_absent "$outgoing_marker" 'A/W queue after status-4 transport'
-        finish_viewer_message "$outgoing_marker" "$outgoing_id" 'E2E outgoing reviewed'
-        assert_message_state "$outgoing_marker" \
-            "A|8|t|set|${si_code}|S2_rt,S1_gn,S3_bl,|f||t" \
-            'Si-completed outgoing status 8'
-        load_dashboard "$si_cookies" 'Si queue after outgoing completion'
-        assert_body_absent "$outgoing_marker" 'Si queue after outgoing completion'
-        outgoing_path='1 -> 2 -> 4 -> 8'
-        ;;
-    8)
-        if [ "$review_expectation" = enabled ]; then
-            echo 'Message workflow HTTP: outgoing review was bypassed unexpectedly' >&2
-            exit 1
-        fi
-        assert_message_state "$outgoing_marker" \
-            'A|8|t|null||S2_rt,S1_gn|f||t' \
-            'A/W-completed outgoing status 8'
-        load_dashboard "$si_cookies" 'Si queue with outgoing review disabled'
-        assert_body_absent "$outgoing_marker" 'Si queue with outgoing review disabled'
-        outgoing_path='1 -> 2 -> 8'
-        ;;
-    *)
-        echo 'Message workflow HTTP: outgoing transport reached an invalid status' >&2
-        exit 1
-        ;;
-esac
+if [ "$outgoing_status" != 8 ]; then
+    echo 'Message workflow HTTP: confirmed outgoing transport did not close' >&2
+    exit 1
+fi
+assert_message_state "$outgoing_marker" \
+    "A|8|t|set|${si_code}|S2_rt,S1_gn|f||t" \
+    'A/W-completed outgoing status 8'
+assert_db_equals \
+    'created,si_returned,author_resubmitted,si_approved,ldf_dispatched,aw_transport_returned,ldf_dispatched,aw_transported' \
+    'outgoing mandatory DV transition event order' \
+    "SELECT GROUP_CONCAT(\`event_type\` ORDER BY \`event_id\` SEPARATOR ',') FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${outgoing_id};"
+load_dashboard "$si_cookies" 'Si queue after outgoing completion'
+assert_body_absent "$outgoing_marker" 'Si queue after outgoing completion'
 
 if ! generated_form_check present A "$outgoing_number"; then
     echo 'Message workflow HTTP: outgoing completion generated no form' >&2
@@ -2071,11 +2462,7 @@ assert_body 'alt="Transport abgeschlossen!"' 'S1 completed-transport indicator'
 load_dashboard "$s2_cookies" 'S2 list after outgoing completion'
 assert_body "$outgoing_marker" 'S2 list after outgoing completion'
 load_dashboard "$s3_cookies" 'S3 list after outgoing completion'
-if [ "$outgoing_status" = 4 ]; then
-    assert_body "$outgoing_marker" 'S3 blue-copy outgoing list'
-else
-    assert_body_absent "$outgoing_marker" 'S3 non-recipient outgoing list'
-fi
+assert_body_absent "$outgoing_marker" 'S3 non-recipient outgoing list'
 
 assert_status 200 'open combined transmission tracking' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
@@ -2083,7 +2470,15 @@ assert_status 200 'open combined transmission tracking' \
 assert_no_runtime_error 'combined transmission tracking'
 assert_body 'Nachweisung Eingang / Ausgang' 'combined tracking view'
 assert_body 'Übermittlungsweg' 'tracking transport-path column'
-assert_body 'Funk · E2E-Transport' 'tracking actual outgoing transport path'
+assert_body "Funk · ${telecom_route_b_text}" \
+    'tracking actual outgoing transport path'
+
+if [ -n "$active_duty_state_file" ]; then
+    umask 077
+    printf '%s\n%s\n%s\n' "$s1_name" "$s1_code" S1 \
+        >"$active_duty_state_file"
+    chmod 0600 "$active_duty_state_file"
+fi
 
 printf '%s\n' \
-    "Message workflow HTTP integration (${workflow_variant}): OK; incoming 1 -> 4 -> 8, outgoing ${outgoing_path}; LdF, A/W, Nachweisung, POL/FB, autosighting, SI-Admin, answer and forwarding verified"
+    'Message workflow HTTP integration: OK; incoming 1 -> 4 -> 8, outgoing 4 -> 10 -> 4 -> 1 -> 2 -> 1 -> 2 -> 8; LdF, S6 route A/B redisposition, Si return/correction, A/W confirmation, immutable archive, Nachweisung, POL/FB, answer and forwarding verified'

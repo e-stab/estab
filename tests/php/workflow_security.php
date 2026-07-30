@@ -310,9 +310,7 @@ $assert(
 
 $incomingTelecommunicationsTasks = [
     'FM-Eingang',
-    'FM-Eingang_Sichter',
     'FM-Eingang_Anhang',
-    'FM-Eingang_Anhang_Sichter',
 ];
 foreach ($incomingTelecommunicationsTasks as $incomingTask) {
     $assert(
@@ -343,6 +341,22 @@ foreach ($incomingTelecommunicationsTasks as $incomingTask) {
             $incomingTask . ' accepts an A/W-supplied sender'
         );
     }
+    foreach ([
+        ['16_empf' => 'S1_bl,'],
+        ['16_empf' => ''],
+        ['16_gncopy' => '16_21_gn'],
+        ['16_21' => '16_21_bl'],
+        ['16_empf_sonst_21' => 'S1'],
+    ] as $forgedDistribution) {
+        $assert(
+            !estab_workflow_route_allowed(
+                $telecommunications,
+                'POST',
+                ['task' => $incomingTask] + $forgedDistribution
+            ),
+            $incomingTask . ' accepts browser-controlled distribution data'
+        );
+    }
     $assert(
         !estab_workflow_route_allowed(
             $telecommunicationsLead,
@@ -350,6 +364,21 @@ foreach ($incomingTelecommunicationsTasks as $incomingTask) {
             ['task' => $incomingTask]
         ),
         $incomingTask . ' is reachable through the LdF role'
+    );
+}
+$removedSelfReviewTasks = [
+    'FM-Eingang_Sichter',
+    'FM-Eingang_Anhang_Sichter',
+    'FM-Ausgang_Sichter',
+];
+foreach ($removedSelfReviewTasks as $removedTask) {
+    $assert(
+        !estab_workflow_route_allowed(
+            $telecommunications,
+            'POST',
+            ['task' => $removedTask]
+        ),
+        $removedTask . ' still permits A/W to replace the Sichter'
     );
 }
 
@@ -422,8 +451,133 @@ $assert(
 );
 
 $assert(estab_workflow_route_allowed($staff, 'POST', ['task' => 'Stab_schreiben']), 'staff write denied');
+$assert(estab_workflow_route_allowed(
+    $staff,
+    'POST',
+    [
+        'task' => 'Stab_gesprnoti',
+        '01_zeichen' => 'staff1',
+        '14_zeichen' => 'staff1',
+        '14_funktion' => 'S1',
+        '15_quitdatum' => '',
+        '15_quitzeichen' => '',
+    ]
+), 'self-recorded staff conversation note denied');
+foreach ([
+    ['01_zeichen' => 'forged'],
+    ['14_zeichen' => 'forged'],
+    ['14_funktion' => 'S6'],
+    ['15_quitdatum' => '30122000'],
+    ['15_quitzeichen' => 'si0001'],
+] as $forgedConversationMark) {
+    $assert(!estab_workflow_route_allowed(
+        $staff,
+        'POST',
+        ['task' => 'Stab_gesprnoti'] + $forgedConversationMark
+    ), 'forged conversation-note identity or review mark accepted');
+}
+$assert(estab_workflow_route_allowed(
+    $staff,
+    'POST',
+    [
+        'task' => 'Stab_korrigieren',
+        '14_zeichen' => 'staff1',
+        '14_funktion' => 'S1',
+    ]
+), 'returned staff correction denied');
+$assert(!estab_workflow_route_allowed(
+    $staff,
+    'POST',
+    [
+        'task' => 'Stab_korrigieren',
+        '14_zeichen' => 'forged',
+        '14_funktion' => 'S1',
+    ]
+), 'forged correction author mark accepted');
 $assert(estab_workflow_route_allowed($advisor, 'POST', ['stab' => 'meldung', '00_lfd' => '1']), 'advisor read denied');
 $assert(estab_workflow_route_allowed($viewer, 'POST', ['task' => 'Stab_sichten', '00_lfd' => '1']), 'viewer route denied');
+$assert(estab_workflow_route_allowed(
+    $viewer,
+    'POST',
+    [
+        'task' => 'Stab_sichten',
+        '00_lfd' => '1',
+        '15_quitzeichen' => 'si0001',
+        'zurueckweisen_x' => '1',
+    ]
+), 'viewer formal return denied');
+$assert(!estab_workflow_route_allowed(
+    $viewer,
+    'POST',
+    [
+        'task' => 'Stab_sichten',
+        '00_lfd' => '1',
+        '15_quitzeichen' => 'forged',
+    ]
+), 'forged Sichter mark accepted');
+
+$distributionMatrix = [
+    2 => [1 => ['fkt' => 'S1']],
+    3 => [2 => ['fkt' => 'POL']],
+];
+$assert(
+    estab_workflow_distribution_tokens(
+        [
+            '16_21' => '16_21_bl',
+            '16_32' => '16_32_bl',
+            '16_gncopy' => '16_21_gn',
+        ],
+        $distributionMatrix,
+        ['S2_rt', 'S1_bl']
+    ) === 'S2_rt,S1_bl,S1_gn,POL_bl,',
+    'recipient distribution is not matrix-derived, ordered and deduplicated'
+);
+foreach ([
+    ['16_21' => '16_21_bl,alle'],
+    ['16_21' => '16_21'],
+    ['16_25' => '16_25_bl'],
+    ['16_gncopy' => '16_21_gn,alle'],
+    ['16_empf' => 'alle,'],
+    ['16_empf_sonst_21' => 'alle'],
+    ['16_21' => ['16_21_bl']],
+] as $forgedDistribution) {
+    foreach ([
+        [$staff, 'Stab_gesprnoti'],
+        [$viewer, 'Stab_sichten'],
+    ] as [$distributionIdentity, $distributionTask]) {
+        $assert(
+            !estab_workflow_route_allowed(
+                $distributionIdentity,
+                'POST',
+                ['task' => $distributionTask] + $forgedDistribution
+            ),
+            $distributionTask . ' accepts forged recipient distribution'
+        );
+    }
+}
+$assert(
+    estab_workflow_route_allowed(
+        $staff,
+        'POST',
+        [
+            'task' => 'Stab_gesprnoti',
+            '16_21' => '16_21_bl',
+            '16_gncopy' => '16_32_gn',
+            '16_empf' => '',
+            '16_empf_sonst_21' => '',
+        ]
+    )
+        && estab_workflow_route_allowed(
+            $viewer,
+            'POST',
+            [
+                'task' => 'Stab_sichten',
+                '16_21' => '16_21_bl',
+                '16_gncopy' => '16_32_gn',
+            ]
+        ),
+    'exact matrix distribution controls were rejected'
+);
 $assert(estab_workflow_route_allowed($telecommunications, 'POST', ['fm' => 'meldung', '00_lfd' => '1']), 'A/W route denied');
 $assert(estab_workflow_route_allowed($telecommunications, 'POST', ['reset_record' => '1']), 'A/W reset denied');
 
@@ -458,6 +612,10 @@ foreach (["x' OR 1=1", '-1', '01', [], null] as $unsafeCategory) {
 
 $assert(
     estab_workflow_message_operation(['stab' => 'meldung', '00_lfd' => '1']) === 'staff-read'
+        && estab_workflow_message_operation([
+            'task' => 'Stab_korrigieren',
+            '00_lfd' => '1',
+        ]) === 'staff-correction'
         && estab_workflow_message_operation(['fm' => 'meldung', '00_lfd' => '1']) === 'telecommunications-edit'
         && estab_workflow_message_operation(['ldf' => 'meldung', '00_lfd' => '1']) === 'telecommunications-lead-edit'
         && estab_workflow_message_operation(['task' => 'LdF-Eingang', '00_lfd' => '1'])
@@ -493,6 +651,29 @@ $assert(
         && !str_contains($mainController, 'estab_login_destination'),
     'main controller does not enforce the central workflow gate'
 );
+$assert(
+    str_contains(
+        $mainController,
+        '$formdata ["13_abseinheit"]   = (string) $conf_4f ["anschrift"];'
+    )
+        && str_contains(
+            $mainController,
+            '$formdata ["14_zeichen"]      = $_SESSION ["vStab_kuerzel"];'
+        )
+        && str_contains(
+            $mainController,
+            '$formdata ["14_funktion"]     = $_SESSION ["vStab_funktion"];'
+        )
+        && str_contains(
+            $mainController,
+            '$formdata ["15_quitdatum"]    = "";'
+        )
+        && str_contains(
+            $mainController,
+            '$formdata ["15_quitzeichen"]  = "";'
+        ),
+    'conversation-note staging trusts browser identity, organisation or review marks'
+);
 
 $ciIntegration = file_get_contents(dirname(__DIR__) . '/integration/ci.sh');
 $defaultHttpSmoke = file_get_contents(dirname(__DIR__) . '/integration/http_smoke.sh');
@@ -527,8 +708,23 @@ $assert(
         && str_contains($legacyHttpSmoke, "Sec-Fetch-Site: cross-site")
         && str_contains($legacyHttpSmoke, "Sec-Fetch-Site: same-origin")
         && str_contains($legacyHttpSmoke, 'data-estab-session-bar')
+        && str_contains(
+            $legacyHttpSmoke,
+            '$base_url/4fach/fuehrungsstelle.php'
+        )
+        && str_contains(
+            $legacyHttpSmoke,
+            'assert_status 403 --cookie "$cookie_jar" --cookie-jar '
+                . '"$cookie_jar" \\' . "\n"
+                . '    "$base_url/4fach/vordrucke.php"'
+        )
+        && str_contains(
+            $legacyHttpSmoke,
+            'Wählen Sie zuerst eine persönlich angenommene Dienstfunktion.'
+        )
         && str_contains($legacyHttpSmoke, 'logout_action=logout'),
-    'isolated legacy HTTP acceptance omits origin isolation or session cleanup'
+    'isolated legacy HTTP acceptance omits origin isolation, selected-hat '
+        . 'fail-closed behavior or session cleanup'
 );
 
 printf("Workflow security tests: OK (%d assertions)\n", $assertions);

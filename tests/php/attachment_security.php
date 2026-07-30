@@ -93,6 +93,8 @@ $metadata = estab_attachment_validate_metadata([
     'kuerzel' => 'attacker-controlled',
     'time' => '2026-07-22 15:30:00',
     'md5hash' => 'ABCDEF0123456789ABCDEF0123456789',
+    'sha256' => str_repeat('A1', 32),
+    'size' => 1234,
 ], 'EL0001', ' ADA ');
 $assert($metadata['filename'] === 'EL0001', 'stored base name is bound to reservation');
 $assert($metadata['fileext'] === 'pdf', 'stored extension normalised');
@@ -100,6 +102,8 @@ $assert($metadata['org_filename'] === 'Lageplan.PDF', 'browser path removed from
 $assert($metadata['comment'] === 'Lage <Nord>', 'comment trimmed without corrupting text');
 $assert($metadata['kuerzel'] === 'ada', 'session code overrides submitted metadata');
 $assert($metadata['md5hash'] === 'abcdef0123456789abcdef0123456789', 'digest normalised');
+$assert($metadata['sha256'] === str_repeat('a1', 32), 'SHA-256 normalised');
+$assert($metadata['size'] === 1234, 'byte length retained');
 $assert(estab_attachment_extension_is_allowed('PDF'), 'supported extension accepted case-insensitively');
 $assert(estab_attachment_extension_is_allowed('JPEG'), 'JPEG alias accepted case-insensitively');
 $assert(estab_attachment_extension_is_allowed('TIFF'), 'TIFF alias matches the delivery allowlist');
@@ -111,6 +115,8 @@ $jpegMetadata = estab_attachment_validate_metadata([
     'comment' => 'Lagebild',
     'time' => '2026-07-22 15:30:00',
     'md5hash' => 'abcdef0123456789abcdef0123456789',
+    'sha256' => str_repeat('ab', 32),
+    'size' => 2048,
 ], 'EL0001', 'ada');
 $assert($jpegMetadata['fileext'] === 'jpeg', 'JPEG alias is stored in canonical lowercase');
 $assert($jpegMetadata['org_filename'] === 'Lagebild.JPEG', 'JPEG original name is preserved');
@@ -121,6 +127,8 @@ $invalidMetadata = [
     'comment' => 'Lage',
     'time' => '2026-07-22 15:30:00',
     'md5hash' => 'abcdef0123456789abcdef0123456789',
+    'sha256' => str_repeat('cd', 32),
+    'size' => 42,
 ];
 $sixCharacterCode = estab_attachment_validate_metadata($invalidMetadata, 'EL0001', 'abc123');
 $assert($sixCharacterCode['kuerzel'] === 'abc123', 'six-character login code accepted for attachments');
@@ -176,6 +184,22 @@ $assertRejected(
     ),
     'invalid metadata digest rejected'
 );
+$assertRejected(
+    static fn () => estab_attachment_validate_metadata(
+        array_replace($invalidMetadata, ['sha256' => 'not-a-sha256']),
+        'EL0001',
+        'ada'
+    ),
+    'invalid metadata SHA-256 rejected'
+);
+$assertRejected(
+    static fn () => estab_attachment_validate_metadata(
+        array_replace($invalidMetadata, ['size' => '42']),
+        'EL0001',
+        'ada'
+    ),
+    'non-integer metadata byte length rejected'
+);
 
 $escaped = estab_attachment_html('<a href="x">\'&');
 $assert($escaped === '&lt;a href=&quot;x&quot;&gt;&#039;&amp;', 'HTML text and attributes escaped');
@@ -189,18 +213,180 @@ $assert(estab_attachment_database_error_is_retryable(1205), 'lock timeout is ret
 $assert(estab_attachment_database_error_is_retryable(1213), 'deadlock is retryable');
 $assert(!estab_attachment_database_error_is_retryable(1048), 'invalid data error is not retried');
 
+$integrityFixtureRoot = sys_get_temp_dir()
+    . '/estab-attachment-download-' . bin2hex(random_bytes(8));
+$integrityFixturePath = $integrityFixtureRoot . '/EL0001.txt';
+$integrityOriginalPath = $integrityFixturePath . '.original';
+$integrityPayload = "verified attachment download fixture\n";
+$integrityStream = null;
+$legacyStream = null;
+if (!mkdir($integrityFixtureRoot, 0700, true)) {
+    throw new RuntimeException('Could not create attachment download fixture');
+}
+try {
+    if (
+        file_put_contents($integrityFixturePath, $integrityPayload)
+            !== strlen($integrityPayload)
+    ) {
+        throw new RuntimeException('Could not write attachment download fixture');
+    }
+    $integrityRow = [
+        'integrity_required' => 1,
+        'ingest_sha256' => hash('sha256', $integrityPayload),
+        'ingest_size' => strlen($integrityPayload),
+        'integrity_captured_at' => '2026-07-30 12:00:00.000001',
+    ];
+    $opened = estab_attachment_integrity_open_snapshot(
+        $integrityRow,
+        $integrityFixtureRoot,
+        'EL0001.txt'
+    );
+    $integrityStream = $opened['stream'];
+    $assert(
+        is_resource($integrityStream)
+            && $opened['state'] === 'verified'
+            && $opened['content_size'] === strlen($integrityPayload)
+            && $opened['sha256'] === hash('sha256', $integrityPayload),
+        'verified attachment snapshot has invalid integrity metadata'
+    );
+
+    if (
+        !rename($integrityFixturePath, $integrityOriginalPath)
+        || file_put_contents(
+            $integrityFixturePath,
+            str_repeat('X', strlen($integrityPayload))
+        ) !== strlen($integrityPayload)
+    ) {
+        throw new RuntimeException('Could not replace attachment pathname fixture');
+    }
+    $assert(
+        stream_get_contents($integrityStream) === $integrityPayload,
+        'verified download handle followed a later pathname replacement'
+    );
+    fclose($integrityStream);
+    $integrityStream = null;
+    unlink($integrityFixturePath);
+    rename($integrityOriginalPath, $integrityFixturePath);
+
+    $tamperedPayload = str_repeat('T', strlen($integrityPayload));
+    file_put_contents($integrityFixturePath, $tamperedPayload);
+    $tamperRejected = false;
+    try {
+        $unexpected = estab_attachment_integrity_open_snapshot(
+            $integrityRow,
+            $integrityFixtureRoot,
+            'EL0001.txt'
+        );
+        fclose($unexpected['stream']);
+    } catch (EstabAttachmentIntegrityException) {
+        $tamperRejected = true;
+    }
+    $assert(
+        $tamperRejected,
+        'same-size attachment tampering produced a verified download snapshot'
+    );
+
+    file_put_contents($integrityFixturePath, $integrityPayload);
+    $legacy = estab_attachment_integrity_open_snapshot(
+        [
+            'integrity_required' => 0,
+            'ingest_sha256' => null,
+            'ingest_size' => null,
+            'integrity_captured_at' => null,
+        ],
+        $integrityFixtureRoot,
+        'EL0001.txt'
+    );
+    $legacyStream = $legacy['stream'];
+    $assert(
+        $legacy['state'] === 'legacy_unverifiable'
+            && $legacy['statement']
+                === 'Integrität beim Eingang nicht belegbar'
+            && $legacy['sha256'] === null
+            && $legacy['content_size'] === strlen($integrityPayload)
+            && stream_get_contents($legacyStream) === $integrityPayload,
+        'legacy download snapshot invented an ingest proof or changed bytes'
+    );
+} finally {
+    if (is_resource($integrityStream)) {
+        fclose($integrityStream);
+    }
+    if (is_resource($legacyStream)) {
+        fclose($legacyStream);
+    }
+    if (is_file($integrityFixturePath)) {
+        unlink($integrityFixturePath);
+    }
+    if (is_file($integrityOriginalPath)) {
+        unlink($integrityOriginalPath);
+    }
+    rmdir($integrityFixtureRoot);
+}
+
 $attachmentSource = file_get_contents(__DIR__ . '/../../app/attachment.php');
+$integritySource = file_get_contents(
+    __DIR__ . '/../../app/attachment_integrity.php'
+);
+$downloadSource = file_get_contents(__DIR__ . '/../../4fach/download.php');
 $controllerSource = file_get_contents(__DIR__ . '/../../4fach/anhang.php');
 $messageFormSource = file_get_contents(__DIR__ . '/../../4fach/4fachform.php');
 $schemaSource = file_get_contents(__DIR__ . '/../../docker/db/init/10-schema.sql');
 $verifySource = file_get_contents(__DIR__ . '/../../docker/db/verify.sql');
+$integrityMigration = file_get_contents(
+    __DIR__ . '/../../docker/db/migrations/95-attachment-ingest-integrity.sql'
+);
 $assert(
     is_string($attachmentSource)
+        && is_string($integritySource)
+        && is_string($downloadSource)
         && is_string($controllerSource)
         && is_string($messageFormSource),
     'attachment and message-form sources readable'
 );
-$assert(is_string($schemaSource) && is_string($verifySource), 'container schema checks readable');
+$assert(
+    preg_match(
+        '/function estab_attachment_find\s*\(.*?SELECT .*?'
+            . '`integrity_required`.*?`ingest_sha256`.*?`ingest_size`.*?'
+            . '`integrity_captured_at`.*?WHERE `filename` = \?/s',
+        $attachmentSource
+    ) === 1,
+    'attachment lookup omits immutable ingest-integrity evidence'
+);
+$assert(
+    str_contains(
+        $integritySource,
+        'function estab_attachment_integrity_open_snapshot('
+    )
+        && str_contains($integritySource, '$snapshot = tmpfile();')
+        && str_contains(
+            $integritySource,
+            'stream_copy_to_stream($source, $snapshot)'
+        )
+        && str_contains(
+            $integritySource,
+            'estab_attachment_integrity_measure_stream($snapshot)'
+        )
+        && str_contains($downloadSource, '$attachmentIntegrity =')
+        && str_contains(
+            $downloadSource,
+            'estab_attachment_integrity_open_snapshot('
+        )
+        && str_contains(
+            $downloadSource,
+            "X-eStab-Attachment-Integrity: "
+        )
+        && str_contains(
+            $downloadSource,
+            "X-eStab-Attachment-SHA256: "
+        ),
+    'attachment download does not stream the exact verified private snapshot'
+);
+$assert(
+    is_string($schemaSource)
+        && is_string($verifySource)
+        && is_string($integrityMigration),
+    'container schema checks readable'
+);
 $assert(
     preg_match('/(?:mysql_query|query_table(?:_iu)?|->query\s*\()/i', $attachmentSource . $controllerSource) !== 1,
     'active attachment path contains no direct SQL execution'
@@ -245,6 +431,20 @@ $assert(
             'estab_attachment_store_upload ('
         ),
     'browser upload does not hold the active incident across file and DB finalisation'
+);
+$assert(
+    str_contains($controllerSource, 'estab_attachment_integrity_measure_file (')
+        && str_contains($attachmentSource, '`ingest_sha256` = ?')
+        && str_contains($attachmentSource, '`ingest_size` = ?')
+        && str_contains(
+            $attachmentSource,
+            '`integrity_captured_at` = NOW(6)'
+        )
+        && str_contains(
+            (string) $integrityMigration,
+            'Final attachment integrity evidence is immutable'
+        ),
+    'upload finalisation lacks immutable SHA-256/size ingest evidence'
 );
 $assert(
     str_contains(
@@ -380,10 +580,25 @@ $assert(
     'attachment form state safely accepts missing or non-scalar browser controls'
 );
 $assert(
-    str_contains($controllerSource, '[1-5][1-4])_gn')
-        && str_contains($controllerSource, '(?:_(bl))?')
-        && str_contains($controllerSource, '$recipientPattern')
-        && !str_contains($controllerSource, 'preg_match ("/\\\\A([^_]+)_([^_]+)_([^_]+)\\\\z/D"'),
+    str_contains($controllerSource, '$distributionRequest = array ();')
+        && str_contains(
+            $controllerSource,
+            '$distributionRequest ["16_gncopy"] = $_SESSION ["16_gncopy"];'
+        )
+        && str_contains(
+            $controllerSource,
+            '$distributionRequest [$recipientKey] = $_SESSION [$recipientKey];'
+        )
+        && str_contains(
+            $controllerSource,
+            '$data ["16_empf"] = estab_workflow_distribution_tokens ('
+        )
+        && str_contains($controllerSource, '$distributionRequest,')
+        && str_contains($controllerSource, '$empf_matrix')
+        && !str_contains(
+            $controllerSource,
+            '$data ["16_empf"] .= $recipientFunction'
+        ),
     'attachment recipient restore is constrained to real matrix positions and copy colours'
 );
 $assert(
@@ -411,9 +626,7 @@ if (isset($senderTaskBlock['tasks'])) {
 $actualProtectedSenderTasks = $protectedSenderTasks[1] ?? [];
 $expectedProtectedSenderTasks = [
     'FM-Eingang',
-    'FM-Eingang_Sichter',
     'FM-Eingang_Anhang',
-    'FM-Eingang_Anhang_Sichter',
 ];
 sort($actualProtectedSenderTasks);
 sort($expectedProtectedSenderTasks);

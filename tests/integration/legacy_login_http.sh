@@ -96,12 +96,31 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "funktion=$test_function" \
     --data-urlencode "kennwort1@$password_file" \
     "$base_url/4fach/mainindex.php"
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-    "$base_url/4fach/vordrucke.php"
 assert_body 'data-estab-session-bar'
 assert_body "data-estab-user-name=\"$test_name\""
 assert_body "data-estab-user-code=\"$test_code\""
 assert_body "data-estab-user-function=\"$test_function\""
+assert_body 'Der gewählte eStab-Bereich wird geöffnet'
+assert_body '4fach/fuehrungsstelle.php'
+
+# The compatibility switch changes only the pre-authentication CSRF boundary.
+# A successful historical login must still enter the regular command-post
+# bootstrap and may not inherit or fabricate a selected duty assignment.
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/fuehrungsstelle.php"
+assert_body 'data-estab-session-bar'
+assert_body "data-estab-user-name=\"$test_name\""
+assert_body 'data-estab-dv-operations'
+assert_body 'Noch nicht ausgewählt'
+
+# Generated forms are privileged operational data. They remain fail-closed
+# until this freshly authenticated session explicitly selects one personally
+# accepted duty assignment through the normal CSRF-protected workflow.
+assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/vordrucke.php"
+assert_body 'data-estab-session-bar'
+assert_body "data-estab-user-name=\"$test_name\""
+assert_body 'Wählen Sie zuerst eine persönlich angenommene Dienstfunktion.'
 
 logout_csrf=$(sed -n \
     's/.*name="csrf_token" value="\([a-f0-9][a-f0-9]*\)".*/\1/p' \

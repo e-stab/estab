@@ -13,7 +13,9 @@ Geprüft werden:
 - die sichtbaren, anonym verständlich zum Login führenden Modulkarten sowie
   HTTP 403 bei direkten Zugriffen auf geschützte Fachendpunkte;
 - das Anmelden eines zuvor über die Benutzerverwaltungs-API provisionierten
-  Funktionskontos im Zwei-`iframe`-Nachrichtenarbeitsbereich;
+  Funktionskontos, die anschließende Auswahl seiner persönlich angenommenen
+  aktiven Dienstfunktion und erst danach den Einstieg in den
+  Zwei-`iframe`-Nachrichtenarbeitsbereich;
 - genau eine sichtbare, dauerhaft verfügbare Session-Bar im gesamten
   Nachrichtenarbeitsbereich sowie Name, Kürzel, Funktion, abgeleitete Rolle,
   gemeinsame Navigation und Abmeldebutton in der vollhohen
@@ -21,12 +23,15 @@ Geprüft werden:
 - ausschließlich die beiden modernen `iframe`-Elemente `vorgaben` und
   `mainframe`, eine Statuskarte mit rollenabhängigem Zähler, Serverzeit und
   Onlinebelegung sowie echte rollenabhängige Textbuttons;
-- die acht Kernbereiche der gemeinsamen Navigation in stabiler Reihenfolge
-  sowie genau ein zum geöffneten Bereich passendes `aria-current="page"` und
-  Top-Level-Ziele für alle Kernlinks;
-- alle zehn Bereichs- und Dienstlinks dauerhaft sichtbar und mit mindestens
-  44 × 44 CSS-Pixeln Bedienfläche, ohne „Bereich wechseln“-Disclosure und ohne
-  eigene Scrollfläche; der sichtbare Link `Übersicht` verlässt den
+- die kanonischen neun Kernbereiche in stabiler Reihenfolge, nach der
+  Funktionsauswahl jedoch nur die für die aktive Dienstfunktion freigegebenen
+  Bereiche, sowie genau ein zum geöffneten Bereich passendes
+  `aria-current="page"` und Top-Level-Ziele für alle sichtbaren Kernlinks;
+- alle funktionsabhängig sichtbaren Bereichs- und Dienstlinks dauerhaft und
+  mit mindestens 44 × 44 CSS-Pixeln Bedienfläche, ohne
+  „Bereich wechseln“-Disclosure und ohne eigene Scrollfläche; für die im
+  Standardlauf verwendete Funktion S1 sind dies neun Links einschließlich
+  Administration und Handbuch. Der sichtbare Link `Übersicht` verlässt den
   Nachrichtenarbeitsbereich im Top-Level-Kontext;
 - die vollhohe Sidebar bei `1440x1000`, `1280x720` und `700x760`
   CSS-Pixeln: Status, Identität, Navigation und Aktionen überlappen nicht,
@@ -61,6 +66,10 @@ Geprüft werden:
 - das Öffnen des geschützten Einsatztagebuchs durch einen echten Klick auf
   seine Root-Karte, den richtigen Pfad und den aktiven Navigationsbereich
   `incident-log`;
+- die angemeldete Führungsstellenansicht bei `1280x800` und `390x844`
+  CSS-Pixeln mit genau einer Session-Bar, aktivem Navigationsbereich
+  `command-post`, vollständig innerhalb des Viewports liegendem Inhalt und
+  ohne horizontales Dokument-Scrolling;
 - ein echter Mausklick auf `Abmelden` im Einsatztagebuch, die ungültig
   gewordene Sitzung und die Rückkehr zur anonymen Übersicht;
 - das Kartenraster bei `1440`, `1120`, `800`, `700`, `672` und `390`
@@ -72,7 +81,7 @@ Geprüft werden:
   Modulkarten innerhalb der Breite bleiben, die Bereichsnavigation erreichbar
   ist und zentrale Login-Schaltflächen mindestens 44 Pixel hoch sind;
 - mit separaten ephemeren Admin-Testdaten die Basic-Auth-geschützte
-  Adminübersicht mit genau fünf klar getrennten Maßnahmen bei `1280x800` und
+  Adminübersicht mit neun klar getrennten Maßnahmen bei `1280x800` und
   `390x844` CSS-Pixeln: Navigation, Adminidentität und Karten bleiben sichtbar,
   die Karten überlappen sich nicht, erzeugen kein horizontales
   Dokument-Scrolling, sind vollständig klickbar und bilden mobil eine
@@ -91,6 +100,7 @@ Die stabile Reihenfolge der Navigationsbereiche lautet:
 ```text
 overview
 messages
+command-post
 message-overview
 forms
 incident-log
@@ -102,15 +112,19 @@ bos-info
 Die Navigation wird über `data-estab-navigation`, ihre Links über
 `data-estab-nav-key` und der aktive Bereich über `aria-current="page"`
 identifiziert. Der Link `overview` muss sichtbar mit `Übersicht` beschriftet
-sein. Diese stabilen Attribute vermeiden, dass der Test von rein gestalterischen
-CSS-Klassen oder übersetzten Modulbeschreibungen abhängt.
+sein. Nach Auswahl einer S1-Dienstfunktion werden `message-overview` und
+`tracking` ausgeblendet; S2 erhält `message-overview`, LdF und A/W erhalten
+`tracking`. Diese stabilen Attribute vermeiden, dass der Test von rein
+gestalterischen CSS-Klassen oder übersetzten Modulbeschreibungen abhängt.
 
 ## Voraussetzungen
 
-Die Anwendung muss laufen, die Selbstregistrierung muss freigeschaltet sein und
-das gewählte Kürzel darf noch nicht existieren. Für wiederholte Läufe sollte
-deshalb ein frisches Test-Deployment oder jedes Mal ein neues, höchstens sechs
-Zeichen langes Kürzel verwendet werden.
+Die Anwendung muss laufen. Für den vollständigen Lauf muss ein ausschließlich
+dafür bestimmtes Bestandskonto bereits über die Benutzerverwaltung angelegt,
+der Funktion `S1` zugewiesen und in der aktiven Dienstschicht persönlich
+angenommen sein. Öffentliche Selbstregistrierung bleibt ausgeschaltet. Der
+Test verändert dieses Konto nicht und verwendet keine produktiven
+Zugangsdaten.
 
 Chrome wird über `ESTAB_BROWSER_BINARY` oder automatisch an den üblichen
 macOS- und Linux-Pfaden gesucht.
@@ -135,6 +149,7 @@ ESTAB_TEST_BASE_URL=http://127.0.0.1:8080 \
 ESTAB_TEST_LOGIN_NAME='Browser Test' \
 ESTAB_TEST_LOGIN_CODE=brw001 \
 ESTAB_TEST_LOGIN_FUNCTION=S1 \
+ESTAB_TEST_LOGIN_PASSWORD_FILE=secrets/test_login_password.txt \
 python3 tests/browser/headless_ui.py
 ```
 
@@ -151,21 +166,20 @@ ESTAB_TEST_ADMIN_PASSWORD_FILE=secrets/admin_password.txt \
 python3 tests/browser/headless_ui.py --export-only
 ```
 
-Wenn weder `ESTAB_TEST_LOGIN_PASSWORD` noch
-`ESTAB_TEST_LOGIN_PASSWORD_FILE` gesetzt ist, erzeugt der Test intern mit
-`secrets.token_urlsafe(32)` ein starkes ephemeres Kennwort. Es wird niemals
-ausgegeben oder in einer Diagnosedatei gespeichert. Das ist der empfohlene Weg
-für ein wegwerfbares Test-Deployment.
-
-Falls sich ein späterer Testlauf erneut mit demselben Konto anmelden soll, kann
-das Kennwort stattdessen aus einer eigenen Test-Secret-Datei gelesen werden:
+Der vollständige Lauf benötigt das zum provisionierten Konto passende Kennwort
+aus einer eigenen Test-Secret-Datei:
 
 ```sh
 ESTAB_TEST_LOGIN_PASSWORD_FILE=secrets/test_login_password.txt \
 python3 tests/browser/headless_ui.py
 ```
 
-`ESTAB_TEST_LOGIN_PASSWORD` hat Vorrang, falls beide Varianten gesetzt sind.
+Ohne eine der beiden Kennwortvariablen bricht der vollständige Lauf
+verständlich ab; ein zufälliges Kennwort könnte ein vorhandenes Konto nicht
+authentisieren. Die lesenden Modi `--overview-only` und `--bos-only` sowie der
+unabhängig authentisierte Modus `--export-only` benötigen kein
+Anwendungskennwort. `ESTAB_TEST_LOGIN_PASSWORD` hat Vorrang, falls beide
+Varianten gesetzt sind.
 Produktive Kennwörter dürfen dafür nicht verwendet werden. Der optionale
 Export-Browsertest liest entsprechend nur den ephemeren Admin-Benutzer und
 das Admin-Kennwort des isolierten Test-Stacks. Der Test gibt keines der
@@ -176,11 +190,11 @@ Weitere Einstellungen:
 | Variable | Standard | Bedeutung |
 | --- | --- | --- |
 | `ESTAB_TEST_BASE_URL` | `http://127.0.0.1:8080` | Basis-URL des Test-Deployments |
-| `ESTAB_TEST_LOGIN_NAME` | `Browser Acceptance` | Anzeigename des neuen Kontos |
-| `ESTAB_TEST_LOGIN_CODE` | `brw001` | Neues Kürzel, 1–6 Zeichen |
+| `ESTAB_TEST_LOGIN_NAME` | `Browser Acceptance` | Anzeigename des provisionierten Testkontos |
+| `ESTAB_TEST_LOGIN_CODE` | `brw001` | Kürzel des provisionierten Testkontos, 1–6 Zeichen |
 | `ESTAB_TEST_LOGIN_FUNCTION` | `S1` | Im Formular vorhandene Funktion |
-| `ESTAB_TEST_LOGIN_PASSWORD` | zufällig erzeugt | Optionales, ausschließlich für diesen Browser-Test bestimmtes Kennwort |
-| `ESTAB_TEST_LOGIN_PASSWORD_FILE` | nicht gesetzt | Optionale Datei mit dem Testkennwort |
+| `ESTAB_TEST_LOGIN_PASSWORD` | nicht gesetzt | Kennwort des Testkontos; für den vollständigen Lauf erforderlich, sofern keine Datei gesetzt ist |
+| `ESTAB_TEST_LOGIN_PASSWORD_FILE` | nicht gesetzt | Bevorzugte Datei mit dem Kennwort des Testkontos |
 | `ESTAB_TEST_ADMIN_USER` | nicht gesetzt | Optionaler Admin-Benutzer des isolierten Test-Stacks; aktiviert zusammen mit einem Kennwort den Export-Browsertest |
 | `ESTAB_TEST_ADMIN_PASSWORD` | nicht gesetzt | Optionales ephemeres Admin-Testkennwort |
 | `ESTAB_TEST_ADMIN_PASSWORD_FILE` | nicht gesetzt | Bevorzugte Secret-Datei mit dem ephemeren Admin-Testkennwort |
@@ -214,9 +228,13 @@ außerdem sein temporäres Chrome-Profil.
 ## Abgrenzung
 
 Der bestehende Konto-Flow wird durch einen echten Klick bis zum korrekten
-Bestandsloginformular geprüft; die erfolgreiche Browseranmeldung verwendet
-weiterhin die Neuanlage eines wegwerfbaren Testkontos. Die HTTP-Integration
-weist die erfolgreiche Anmeldung eines vorhandenen Kontos separat nach.
+Bestandsloginformular und durch die erfolgreiche Anmeldung des zuvor
+provisionierten Wegwerf-Testkontos geprüft. Anschließend wählt der Benutzer
+seine bereits persönlich angenommene aktive Dienstbesetzung im
+Führungsstellenbetrieb aus; erst diese serverseitige Sitzungsbindung öffnet das
+vor der Anmeldung angeforderte Einsatztagebuch. Der Lauf legt weder Konten noch
+Dienstfunktionen an; diese administrativen Vorbedingungen und die persönliche
+Annahme weist die HTTP-Integration separat nach.
 
 Der Browserlauf prüft die vollständigen Klickpfade im Desktop-Viewport, die
 Sidebar zusätzlich bei `1440x1000`, `1280x720`, `700x760` und authentifiziert

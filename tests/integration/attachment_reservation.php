@@ -43,6 +43,36 @@ function attachment_db_config(): array
     ];
 }
 
+function attachment_db_identity(): array
+{
+    $name = getenv('ESTAB_TEST_ATTACHMENT_USER');
+    $code = getenv('ESTAB_TEST_ATTACHMENT_CODE');
+    $role = getenv('ESTAB_TEST_ATTACHMENT_ROLE');
+    $assignmentId = getenv('ESTAB_TEST_ATTACHMENT_ASSIGNMENT_ID');
+    if (
+        !is_string($name)
+        || $name === ''
+        || !is_string($code)
+        || preg_match('/\A[a-z0-9]{1,6}\z/D', $code) !== 1
+        || !is_string($role)
+        || $role === ''
+        || !is_string($assignmentId)
+        || preg_match('/\A[1-9][0-9]*\z/D', $assignmentId) !== 1
+    ) {
+        throw new RuntimeException(
+            'Attachment integration duty identity is incomplete'
+        );
+    }
+
+    return [
+        'benutzer' => $name,
+        'kuerzel' => $code,
+        'funktion' => 'A/W',
+        'rolle' => $role,
+        'duty_assignment_id' => (int) $assignmentId,
+    ];
+}
+
 function attachment_db_drop_fixture(array $config, string $table): void
 {
     try {
@@ -54,9 +84,141 @@ function attachment_db_drop_fixture(array $config, string $table): void
     }
 }
 
+/**
+ * Close the isolated fixture shift and restore the incident that was active
+ * before this test. A fresh connection makes this usable from both finally
+ * and the shutdown fallback after a failed/broken test connection.
+ */
+function attachment_db_restore_incident(
+    array $config,
+    ?int $previousIncidentId,
+    int $fixtureIncidentId,
+    int $fixtureShiftId
+): void {
+    if ($fixtureIncidentId < 1) {
+        return;
+    }
+
+    $connection = null;
+    $cleanupFailure = null;
+    try {
+        $connection = estab_attachment_connection($config);
+        $status = estab_incident_status($connection);
+        $activeIncidentId = $status['active_einsatz_id'] === null
+            ? null
+            : (int) $status['active_einsatz_id'];
+
+        if ($activeIncidentId === $fixtureIncidentId && $fixtureShiftId > 0) {
+            try {
+                $shift = $connection->prepare(
+                    'SELECT `status` FROM `nv_dienstschichten`'
+                    . ' WHERE `dienstschicht_id` = ? AND `einsatz_id` = ?'
+                    . ' LIMIT 1'
+                );
+                attachment_db_assert(
+                    $shift instanceof mysqli_stmt,
+                    'Could not prepare attachment shift cleanup'
+                );
+                try {
+                    $shift->bind_param(
+                        'ii',
+                        $fixtureShiftId,
+                        $fixtureIncidentId
+                    );
+                    attachment_db_assert(
+                        $shift->execute(),
+                        'Could not inspect attachment shift cleanup'
+                    );
+                    $shiftRow = $shift->get_result()->fetch_assoc();
+                } finally {
+                    $shift->close();
+                }
+                if (
+                    is_array($shiftRow)
+                    && in_array(
+                        (string) ($shiftRow['status'] ?? ''),
+                        ['GEPLANT', 'AKTIV'],
+                        true
+                    )
+                ) {
+                    estab_dv_close_shift(
+                        $connection,
+                        $fixtureIncidentId,
+                        $fixtureShiftId,
+                        'attachment-integration-cleanup'
+                    );
+                }
+            } catch (Throwable $exception) {
+                // Restoring the shared singleton remains mandatory even when
+                // closing a partially built fixture shift fails.
+                $cleanupFailure = $exception;
+            }
+            $status = estab_incident_status($connection);
+            $activeIncidentId = $status['active_einsatz_id'] === null
+                ? null
+                : (int) $status['active_einsatz_id'];
+        }
+
+        try {
+            if ($activeIncidentId === $fixtureIncidentId) {
+                if ($previousIncidentId !== null) {
+                    estab_incident_activate(
+                        $connection,
+                        $previousIncidentId,
+                        (int) $status['revision'],
+                        'attachment-integration-cleanup'
+                    );
+                } else {
+                    estab_incident_deactivate(
+                        $connection,
+                        $fixtureIncidentId,
+                        (int) $status['revision'],
+                        'attachment-integration-cleanup'
+                    );
+                }
+            } elseif (
+                $activeIncidentId === null
+                && $previousIncidentId !== null
+            ) {
+                estab_incident_activate(
+                    $connection,
+                    $previousIncidentId,
+                    (int) $status['revision'],
+                    'attachment-integration-cleanup'
+                );
+            } elseif (
+                $activeIncidentId !== $previousIncidentId
+                && $cleanupFailure === null
+            ) {
+                throw new RuntimeException(
+                    'Attachment cleanup found an unexpected active incident'
+                );
+            }
+        } catch (Throwable $exception) {
+            if ($cleanupFailure === null) {
+                $cleanupFailure = $exception;
+            }
+        }
+    } catch (Throwable $exception) {
+        if ($cleanupFailure === null) {
+            $cleanupFailure = $exception;
+        }
+    } finally {
+        if ($connection instanceof mysqli) {
+            estab_attachment_close($connection);
+        }
+    }
+
+    if ($cleanupFailure instanceof Throwable) {
+        throw $cleanupFailure;
+    }
+}
+
 function attachment_db_row(mysqli $connection, string $table, string $filename): ?array
 {
     $sql = 'SELECT `filename`, `fileext`, `org_filename`, `comment`, `md5hash`,'
+        . ' `integrity_required`, `ingest_sha256`, `ingest_size`,'
+        . ' `integrity_captured_at`,'
         . ' `date`, `kuerzel`, `status`, `id`'
         . ' FROM ' . estab_attachment_table($table) . ' WHERE `filename` = ? LIMIT 1';
     $statement = $connection->prepare($sql);
@@ -247,6 +409,7 @@ function attachment_db_worker(array $arguments): never
             $table,
             $prefix,
             $sessionId,
+            attachment_db_identity(),
             4,
             8,
             static function (int $attempt, int $code) use (&$retries): void {
@@ -360,6 +523,12 @@ $sessionA = 'it_a_' . $token;
 $sessionB = 'it_b_' . $token;
 $sessionC = 'it_c_' . $token;
 $barrier = sys_get_temp_dir() . '/estab-attachment-' . $token;
+$fixtureUser = '';
+$fixtureCode = '';
+$fixtureRole = '';
+$previousIncidentId = null;
+$fixtureIncidentId = 0;
+$fixtureShiftId = 0;
 $readyFiles = [
     $barrier . '.' . $sessionA . '.ready',
     $barrier . '.' . $sessionB . '.ready',
@@ -367,7 +536,25 @@ $readyFiles = [
 
 attachment_db_assert(strlen($table) <= 64, 'Fixture table identifier is too long');
 register_shutdown_function(
-    static function () use ($config, $table, $barrier, $readyFiles): void {
+    static function () use (
+        $config,
+        $table,
+        $barrier,
+        $readyFiles,
+        &$previousIncidentId,
+        &$fixtureIncidentId,
+        &$fixtureShiftId
+    ): void {
+        try {
+            attachment_db_restore_incident(
+                $config,
+                $previousIncidentId,
+                $fixtureIncidentId,
+                $fixtureShiftId
+            );
+        } catch (Throwable) {
+            // CI destroys the ephemeral volume; shutdown cleanup is best effort.
+        }
         attachment_db_drop_fixture($config, $table);
         @unlink($barrier);
         foreach ($readyFiles as $readyFile) {
@@ -387,6 +574,165 @@ try {
         $connectionA->thread_id !== $connectionB->thread_id,
         'Ownership checks require two independent MariaDB connections'
     );
+    $initialStatus = estab_incident_status($connectionA);
+    $previousIncidentId = $initialStatus['active_einsatz_id'] === null
+        ? null
+        : (int) $initialStatus['active_einsatz_id'];
+    $fixtureIncident = estab_incident_create(
+        $connectionA,
+        [
+            'kennung' => 'CI-ATT-' . strtoupper($token),
+            'name' => 'Attachment reservation ' . $token,
+            'beginn' => date('Y-m-d\TH:i'),
+            'beschreibung' =>
+                'Ephemerer Einsatz für isolierte Anhangreservierungen.',
+            'metadaten' => json_encode(
+                [
+                    'test' => 'attachment_reservation',
+                    'token' => $token,
+                ],
+                JSON_THROW_ON_ERROR
+            ),
+        ],
+        'attachment-integration',
+        false
+    );
+    $fixtureIncidentId = (int) (
+        $fixtureIncident['einsatz_id'] ?? 0
+    );
+    attachment_db_assert(
+        $fixtureIncidentId > 0
+            && $fixtureIncidentId !== ($previousIncidentId ?? 0),
+        'Could not create an isolated attachment incident'
+    );
+    $activationStatus = estab_incident_status($connectionA);
+    $activatedFixture = estab_incident_activate(
+        $connectionA,
+        $fixtureIncidentId,
+        (int) $activationStatus['revision'],
+        'attachment-integration'
+    );
+    attachment_db_assert(
+        (int) ($activatedFixture['active_einsatz_id'] ?? 0)
+            === $fixtureIncidentId,
+        'Could not activate the isolated attachment incident'
+    );
+    attachment_db_assert(
+        estab_dv_active_shift_summary(
+            $connectionA,
+            $fixtureIncidentId
+        ) === null,
+        'Attachment integration requires no pre-existing active duty shift'
+    );
+
+    $fixtureShift = estab_dv_create_shift(
+        $connectionA,
+        $fixtureIncidentId,
+        'Parallele Anhangreservierung ' . $token,
+        null,
+        'attachment-integration'
+    );
+    $fixtureShiftId = (int) ($fixtureShift['dienstschicht_id'] ?? 0);
+    attachment_db_assert(
+        $fixtureShiftId > 0,
+        'Could not create attachment duty shift'
+    );
+    $fixtureAssignmentId = 0;
+    $functionRoles = estab_dv_function_roles($connectionA);
+    foreach (
+        array_values(ESTAB_DV_REQUIRED_HATS)
+        as $functionIndex => $function
+    ) {
+        $assignment = estab_dv_role_for_function($functionRoles, $function);
+        $fixtureFunctionCode = 'a'
+            . base_convert((string) ($functionIndex + 1), 10, 36)
+            . substr($token, 0, 4);
+        $fixtureFunctionUser = 'Attachment '
+            . $assignment['funktion'] . ' ' . $token;
+        $fixturePassword = password_hash(
+            'Attachment integration ' . $fixtureFunctionCode,
+            PASSWORD_DEFAULT
+        );
+        $fixtureSid = 'attachment-' . $fixtureFunctionCode . '-' . $token;
+        $fixtureAccount = $connectionA->prepare(
+            'INSERT INTO `nv_benutzer`'
+            . ' (`benutzer`, `kuerzel`, `funktion`, `rolle`, `sid`,'
+            . ' `aktiv`, `estab_gesperrt`, `password`)'
+            . ' VALUES (?, ?, ?, ?, ?, 1, 0, ?)'
+        );
+        attachment_db_assert(
+            $fixtureAccount instanceof mysqli_stmt,
+            'Could not prepare attachment duty account'
+        );
+        try {
+            $fixtureAccount->bind_param(
+                'ssssss',
+                $fixtureFunctionUser,
+                $fixtureFunctionCode,
+                $assignment['funktion'],
+                $assignment['rolle'],
+                $fixtureSid,
+                $fixturePassword
+            );
+            attachment_db_assert(
+                $fixtureAccount->execute(),
+                "Could not create attachment {$function} duty account"
+            );
+        } finally {
+            $fixtureAccount->close();
+        }
+
+        $assignment = estab_dv_assign_hat(
+            $connectionA,
+            $fixtureIncidentId,
+            $fixtureShiftId,
+            $fixtureFunctionCode,
+            $function,
+            'attachment-integration'
+        );
+        $assignmentId = (int) (
+            $assignment['dienstbesetzung_id'] ?? 0
+        );
+        attachment_db_assert(
+            $assignmentId > 0,
+            "Could not assign attachment duty hat {$function}"
+        );
+        estab_dv_accept_hat(
+            $connectionA,
+            $fixtureIncidentId,
+            $assignmentId,
+            $fixtureFunctionCode
+        );
+        if ($function === 'A/W') {
+            $fixtureAssignmentId = $assignmentId;
+            $fixtureUser = $fixtureFunctionUser;
+            $fixtureCode = $fixtureFunctionCode;
+            $fixtureRole = (string) $assignment['rolle'];
+        }
+    }
+    attachment_db_assert(
+        $fixtureAssignmentId > 0
+            && $fixtureUser !== ''
+            && $fixtureCode !== ''
+            && $fixtureRole !== '',
+        'Attachment fixture did not create its selected A/W assignment'
+    );
+    estab_dv_activate_initial_shift(
+        $connectionA,
+        $fixtureIncidentId,
+        $fixtureShiftId,
+        'attachment-integration'
+    );
+    attachment_db_assert(
+        putenv('ESTAB_TEST_ATTACHMENT_USER=' . $fixtureUser)
+            && putenv('ESTAB_TEST_ATTACHMENT_CODE=' . $fixtureCode)
+            && putenv('ESTAB_TEST_ATTACHMENT_ROLE=' . $fixtureRole)
+            && putenv(
+                'ESTAB_TEST_ATTACHMENT_ASSIGNMENT_ID='
+                . $fixtureAssignmentId
+            ),
+        'Could not publish attachment duty identity to workers'
+    );
 
     $fixtureSql = 'CREATE TABLE ' . estab_attachment_table($table) . ' ('
         . ' `lfd-nr` BIGINT NOT NULL AUTO_INCREMENT,'
@@ -396,6 +742,11 @@ try {
         . " `org_filename` VARCHAR(255) NOT NULL DEFAULT '',"
         . " `comment` VARCHAR(255) NOT NULL DEFAULT '',"
         . " `md5hash` VARCHAR(32) NOT NULL DEFAULT '',"
+        . ' `integrity_required` TINYINT UNSIGNED NOT NULL DEFAULT 1,'
+        . ' `ingest_sha256` CHAR(64) CHARACTER SET ascii'
+        . ' COLLATE ascii_bin NULL DEFAULT NULL,'
+        . ' `ingest_size` BIGINT UNSIGNED NULL DEFAULT NULL,'
+        . ' `integrity_captured_at` DATETIME(6) NULL DEFAULT NULL,'
         . ' `date` DATETIME NULL DEFAULT NULL,'
         . ' `kuerzel` VARCHAR(6) NULL DEFAULT NULL,'
         . ' `status` TINYINT NOT NULL DEFAULT 1,'
@@ -468,15 +819,33 @@ try {
     );
 
     attachment_db_assert(
-        !estab_attachment_claim($connectionB, $table, $filenameA, $sessionB),
+        !estab_attachment_claim(
+            $connectionB,
+            $table,
+            $filenameA,
+            $sessionB,
+            attachment_db_identity()
+        ),
         'Foreign session claimed worker A reservation'
     );
     attachment_db_assert(
-        estab_attachment_claim($connectionA, $table, $filenameA, $sessionA),
+        estab_attachment_claim(
+            $connectionA,
+            $table,
+            $filenameA,
+            $sessionA,
+            attachment_db_identity()
+        ),
         'Owner could not claim its reservation'
     );
     attachment_db_assert(
-        !estab_attachment_claim($connectionA, $table, $filenameA, $sessionA),
+        !estab_attachment_claim(
+            $connectionA,
+            $table,
+            $filenameA,
+            $sessionA,
+            attachment_db_identity()
+        ),
         'Claim was not state-idempotent'
     );
     estab_attachment_release($connectionB, $table, $sessionB, $filenameA);
@@ -492,24 +861,47 @@ try {
         'comment' => 'Atomic attachment integration fixture',
         'time' => '2026-07-23 12:34:56',
         'md5hash' => md5('attachment-' . $token),
-    ], $filenameA, 'it001');
+        'sha256' => hash('sha256', 'attachment-' . $token),
+        'size' => strlen('attachment-' . $token),
+    ], $filenameA, (string) attachment_db_identity()['kuerzel']);
     attachment_db_assert(
-        !estab_attachment_finalize($connectionB, $table, $sessionB, $metadata),
+        !estab_attachment_finalize(
+            $connectionB,
+            $table,
+            $sessionB,
+            $metadata,
+            attachment_db_identity()
+        ),
         'Foreign session finalised an owned claim'
     );
     attachment_db_assert(
-        estab_attachment_finalize($connectionA, $table, $sessionA, $metadata),
+        estab_attachment_finalize(
+            $connectionA,
+            $table,
+            $sessionA,
+            $metadata,
+            attachment_db_identity()
+        ),
         'Owner could not finalise its claim'
     );
     attachment_db_assert(
-        !estab_attachment_finalize($connectionA, $table, $sessionA, $metadata),
+        !estab_attachment_finalize(
+            $connectionA,
+            $table,
+            $sessionA,
+            $metadata,
+            attachment_db_identity()
+        ),
         'Repeated finalisation unexpectedly changed the completed row'
     );
     $finalised = attachment_db_row($connectionB, $table, $filenameA);
     attachment_db_assert(
         (int) ($finalised['status'] ?? -1) === 1
             && ($finalised['id'] ?? null) === ''
-            && ($finalised['md5hash'] ?? null) === $metadata['md5hash'],
+            && ($finalised['md5hash'] ?? null) === $metadata['md5hash']
+            && ($finalised['ingest_sha256'] ?? null) === $metadata['sha256']
+            && (int) ($finalised['ingest_size'] ?? -1) === $metadata['size']
+            && ($finalised['integrity_captured_at'] ?? null) !== null,
         'Finalised metadata or state differs'
     );
     attachment_db_assert(
@@ -671,13 +1063,31 @@ try {
         'Owner release did not make reservation reusable'
     );
 
-    $reused = estab_attachment_reserve($connectionA, $table, $prefix, $sessionC);
+    $reused = estab_attachment_reserve(
+        $connectionA,
+        $table,
+        $prefix,
+        $sessionC,
+        attachment_db_identity()
+    );
     attachment_db_assert($reused === $filenameB, 'Released filename was not reused');
-    $reusedAgain = estab_attachment_reserve($connectionB, $table, $prefix, $sessionC);
+    $reusedAgain = estab_attachment_reserve(
+        $connectionB,
+        $table,
+        $prefix,
+        $sessionC,
+        attachment_db_identity()
+    );
     attachment_db_assert($reusedAgain === $filenameB, 'Same-session reservation is not idempotent');
     attachment_db_assert(attachment_db_count($connectionA, $table) === 2, 'Idempotent reserve added a row');
     attachment_db_assert(
-        estab_attachment_claim($connectionB, $table, $filenameB, $sessionC),
+        estab_attachment_claim(
+            $connectionB,
+            $table,
+            $filenameB,
+            $sessionC,
+            attachment_db_identity()
+        ),
         'Reservation owner could not claim through another DB connection'
     );
     estab_attachment_release($connectionA, $table, $sessionC, $filenameB);
@@ -693,7 +1103,8 @@ try {
         $connectionA,
         $table,
         $prefix,
-        $uploadSession
+        $uploadSession,
+        attachment_db_identity()
     );
     $storedUpload = estab_attachment_store_upload(
         $connectionA,
@@ -701,7 +1112,8 @@ try {
         'nv_protokoll',
         $uploadName,
         $uploadSession,
-        'it001',
+        (string) attachment_db_identity()['kuerzel'],
+        attachment_db_identity(),
         'Anhangdaten speichern',
         static fn (): array => [
             'filename' => $uploadName . '.pdf',
@@ -709,6 +1121,8 @@ try {
             'comment' => 'Incident-locked browser upload fixture',
             'time' => '2026-07-23 12:45:00',
             'md5hash' => md5('browser-upload-' . $token),
+            'sha256' => hash('sha256', 'browser-upload-' . $token),
+            'size' => strlen('browser-upload-' . $token),
         ],
         static fn (array $stored): string =>
             'integration;' . $stored['filename'] . '.' . $stored['fileext']
@@ -728,7 +1142,8 @@ try {
         $connectionA,
         $table,
         $prefix,
-        $failedSession
+        $failedSession,
+        attachment_db_identity()
     );
     try {
         estab_attachment_store_upload(
@@ -737,7 +1152,8 @@ try {
             'nv_protokoll',
             $failedName,
             $failedSession,
-            'it001',
+            (string) attachment_db_identity()['kuerzel'],
+            attachment_db_identity(),
             'Anhangdaten speichern',
             static function (): never {
                 throw new RuntimeException('deliberate upload callback failure');
@@ -771,6 +1187,18 @@ try {
         }
     }
     if ($connectionB instanceof mysqli) {
+        @$connectionB->rollback();
+    }
+    if ($connectionA instanceof mysqli) {
+        @$connectionA->rollback();
+    }
+    attachment_db_restore_incident(
+        $config,
+        $previousIncidentId,
+        $fixtureIncidentId,
+        $fixtureShiftId
+    );
+    if ($connectionB instanceof mysqli) {
         estab_attachment_close($connectionB);
     }
     if ($connectionA instanceof mysqli) {
@@ -781,6 +1209,10 @@ try {
     foreach ($readyFiles as $readyFile) {
         @unlink($readyFile);
     }
+    putenv('ESTAB_TEST_ATTACHMENT_USER');
+    putenv('ESTAB_TEST_ATTACHMENT_CODE');
+    putenv('ESTAB_TEST_ATTACHMENT_ROLE');
+    putenv('ESTAB_TEST_ATTACHMENT_ASSIGNMENT_ID');
 }
 
 $verification = estab_attachment_connection($config);

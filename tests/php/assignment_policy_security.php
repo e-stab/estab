@@ -36,11 +36,13 @@ for ($row = 1; $row <= 5; $row++) {
         ];
     }
 }
-$cells['11']['function'] = 'S1';
+$cells['11']['function'] = 'S2';
 $cells['11']['role'] = 'Stab';
 $cells['11']['redcopy'] = true;
 $cells['12']['function'] = 'POL';
 $cells['12']['role'] = 'FB';
+$cells['13']['function'] = 'S1';
+$cells['13']['role'] = 'Stab';
 $roles = estab_assignment_roles_from_matrix([
     'cells' => $cells,
     'redcopy' => '11',
@@ -51,6 +53,7 @@ $assert(
         'LdF' => 'Fernmelder',
         'POL' => 'FB',
         'S1' => 'Stab',
+        'S2' => 'Stab',
         'Si' => 'Stab',
     ],
     'canonical matrix did not produce the complete authoritative role map'
@@ -58,15 +61,16 @@ $assert(
 $assert(
     estab_assignment_is_current($roles, 'S1', 'Stab')
         && !estab_assignment_is_current($roles, 'S1', 'FB')
-        && !estab_assignment_is_current($roles, 'S2', 'Stab'),
+        && estab_assignment_is_current($roles, 'S2', 'Stab')
+        && !estab_assignment_is_current($roles, 'S3', 'Stab'),
     'current and orphaned assignments are not distinguished exactly'
 );
 $legacyShape = estab_assignment_roles_as_conf_empf($roles);
 $assert(
-    count($legacyShape) === 5
+    count($legacyShape) === 6
         && ($legacyShape[1]['fkt'] ?? null) === 'A/W'
         && ($legacyShape[2]['fkt'] ?? null) === 'LdF'
-        && ($legacyShape[5]['fkt'] ?? null) === 'Si',
+        && ($legacyShape[6]['fkt'] ?? null) === 'Si',
     'role map cannot be adapted to the legacy login configuration'
 );
 

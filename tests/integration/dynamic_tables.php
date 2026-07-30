@@ -493,8 +493,7 @@ test_assert(
     'Could not release competing account lock'
 );
 
-$registrationAccess = new db_access($server, $database, '', $username, $password);
-$schemaLockName = $registrationAccess->dynamic_schema_lock_name($functionBase);
+$schemaLockName = estab_dynamic_schema_lock_name($database, $functionBase);
 $escapedSchemaLockName = mysql_real_escape_string($schemaLockName, $link);
 test_assert(
     test_scalar("SELECT GET_LOCK('{$escapedSchemaLockName}', 0)", $link) === '1',

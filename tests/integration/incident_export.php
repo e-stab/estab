@@ -76,6 +76,25 @@ function incident_export_integration_insert_fixture(
     if (!chmod($attachmentPath, 0640)) {
         throw new RuntimeException('Could not secure incident export attachment');
     }
+    $attachmentDirectory = dirname($attachmentPath);
+    $directoryOwner = fileowner($attachmentDirectory);
+    $directoryGroup = filegroup($attachmentDirectory);
+    if (
+        !is_int($directoryOwner)
+        || !is_int($directoryGroup)
+        || (
+            fileowner($attachmentPath) !== $directoryOwner
+            && !chown($attachmentPath, $directoryOwner)
+        )
+        || (
+            filegroup($attachmentPath) !== $directoryGroup
+            && !chgrp($attachmentPath, $directoryGroup)
+        )
+    ) {
+        throw new RuntimeException(
+            'Could not align incident export attachment ownership'
+        );
+    }
 
     $statement = $connection->prepare(
         'INSERT INTO `nv_etb`'
@@ -132,22 +151,28 @@ function incident_export_integration_insert_fixture(
     $statement = $connection->prepare(
         'INSERT INTO `nv_anhang`'
             . ' (`einsatz_id`, `filename`, `fileext`, `org_filename`,'
-            . ' `comment`, `md5hash`, `date`, `kuerzel`, `status`, `id`)'
-            . ' VALUES (?, ?, ?, ?, ?, ?, NOW(), ?, 1, ?)'
+            . ' `comment`, `md5hash`, `integrity_required`,'
+            . ' `ingest_sha256`, `ingest_size`, `integrity_captured_at`,'
+            . ' `date`, `kuerzel`, `status`, `id`)'
+            . ' VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, NOW(6), NOW(), ?, 1, ?)'
     );
     try {
         $originalName = strtolower($marker) . '-original.txt';
         $comment = 'Attachment scope proof ' . $marker;
         $md5 = md5($payload);
+        $sha256 = hash('sha256', $payload);
+        $size = strlen($payload);
         $owner = 'pdf-integration-' . strtolower($marker);
         $statement->bind_param(
-            'isssssss',
+            'issssssiss',
             $incidentId,
             $attachmentBase,
             $attachmentExtension,
             $originalName,
             $comment,
             $md5,
+            $sha256,
+            $size,
             $operatorCode,
             $owner
         );
@@ -157,43 +182,112 @@ function incident_export_integration_insert_fixture(
         $statement->close();
     }
 
-    $statement = $connection->prepare(
-        'INSERT INTO `nv_nachrichten`'
-            . ' (`einsatz_id`, `01_medium`, `01_datum`, `01_zeichen`,'
-            . ' `04_richtung`, `04_nummer`, `05_gegenstelle`, `06_befweg`,'
-            . ' `09_vorrangstufe`, `10_anschrift`, `12_anhang`,'
-            . ' `12_inhalt`, `12_abfzeit`, `13_abseinheit`, `14_zeichen`,'
-            . ' `14_funktion`, `16_empf`, `17_vermerke`, `x00_status`,'
-            . ' `x01_abschluss`, `x04_druck`)'
-            . " VALUES (?, 'Fu', NOW(), ?, 'E', ?, ?, ?, 'eee', ?, ?, ?,"
-            . " NOW(), ?, ?, 'A/W', 'S2_rt,ALT_1_gn,', ?, 8, 't', 't')"
-    );
-    try {
-        $remote = 'Leitstelle ' . $marker;
-        $route = 'Funk ' . $marker;
-        $address = 'Einsatzleitung ' . $marker;
-        $attachmentReference = $attachmentName . ';';
-        $content = 'Nachrichteninhalt ' . $marker;
-        $sender = 'Absender ' . $marker;
-        $note = 'Vermerk ' . $marker;
-        $statement->bind_param(
-            'isissssssss',
-            $incidentId,
-            $operatorCode,
-            $messageNumber,
-            $remote,
-            $route,
-            $address,
-            $attachmentReference,
-            $content,
-            $sender,
-            $operatorCode,
-            $note
+    if (!$connection->begin_transaction()) {
+        throw new RuntimeException(
+            'Could not begin message evidence fixture transaction'
         );
-        $statement->execute();
-        $fixture['message_id'] = (int) $connection->insert_id;
-    } finally {
-        $statement->close();
+    }
+    try {
+        $statement = $connection->prepare(
+            'INSERT INTO `nv_nachrichten`'
+                . ' (`einsatz_id`, `01_medium`, `01_datum`, `01_zeichen`,'
+                . ' `04_richtung`, `04_nummer`, `05_gegenstelle`,'
+                . ' `06_befweg`, `09_vorrangstufe`, `10_anschrift`,'
+                . ' `12_anhang`, `12_inhalt`, `12_abfzeit`,'
+                . ' `13_abseinheit`, `14_zeichen`, `14_funktion`,'
+                . ' `16_empf`, `17_vermerke`, `x00_status`,'
+                . ' `x01_abschluss`, `x04_druck`)'
+                . " VALUES (?, 'Fu', NOW(), ?, 'E', ?, ?, ?, 'eee', ?, ?, ?,"
+                . " NOW(), ?, ?, 'A/W', 'S2_rt,ALT_1_gn,', ?, 8, 't', 't')"
+        );
+        try {
+            $remote = 'Leitstelle ' . $marker;
+            $route = 'Funk ' . $marker;
+            $address = 'Einsatzleitung ' . $marker;
+            $attachmentReference = $attachmentName . ';';
+            $content = 'Nachrichteninhalt ' . $marker;
+            $sender = 'Absender ' . $marker;
+            $note = 'Vermerk ' . $marker;
+            $statement->bind_param(
+                'isissssssss',
+                $incidentId,
+                $operatorCode,
+                $messageNumber,
+                $remote,
+                $route,
+                $address,
+                $attachmentReference,
+                $content,
+                $sender,
+                $operatorCode,
+                $note
+            );
+            $statement->execute();
+            $fixture['message_id'] = (int) $connection->insert_id;
+        } finally {
+            $statement->close();
+        }
+
+        $terminalStatement = $connection->prepare(
+            'SELECT `00_lfd`, `einsatz_id`, `01_medium`, `01_datum`,'
+                . ' `01_zeichen`, `02_zeit`, `02_zeichen`, `03_datum`,'
+                . ' `03_zeichen`, `04_richtung`, `04_nummer`,'
+                . ' `05_gegenstelle`, `06_befweg`, `06_befwegausw`,'
+                . ' `07_durchspruch`, `08_befhinweis`, `08_befhinwausw`,'
+                . ' `09_vorrangstufe`, `10_anschrift`, `11_gesprnotiz`,'
+                . ' `12_anhang`, `12_inhalt`, `12_abfzeit`,'
+                . ' `13_abseinheit`, `14_zeichen`, `14_funktion`,'
+                . ' `15_quitdatum`, `15_quitzeichen`, `16_empf`,'
+                . ' `17_vermerke`, `x00_status`, `x01_abschluss`,'
+                . ' `estab_fernmeldeplan_eintrag_id`'
+                . ' FROM `nv_nachrichten`'
+                . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
+        );
+        try {
+            $terminalMessageId = (int) $fixture['message_id'];
+            $terminalStatement->bind_param(
+                'ii',
+                $terminalMessageId,
+                $incidentId
+            );
+            $terminalStatement->execute();
+            $terminalMessage = $terminalStatement
+                ->get_result()
+                ->fetch_assoc();
+        } finally {
+            $terminalStatement->close();
+        }
+        if (!is_array($terminalMessage)) {
+            throw new RuntimeException('Could not reload terminal message');
+        }
+        estab_message_event_append(
+            $connection,
+            $incidentId,
+            (int) $fixture['message_id'],
+            'integration_completed',
+            [
+                'benutzer' => 'PDF Integration',
+                'kuerzel' => $operatorCode,
+                'funktion' => 'A/W',
+            ],
+            null,
+            8,
+            [
+                'direction' => 'E',
+                'terminal_message' =>
+                    estab_message_terminal_snapshot($terminalMessage),
+                'terminal_snapshot_sha256' =>
+                    estab_message_terminal_snapshot_sha256($terminalMessage),
+            ]
+        );
+        if (!$connection->commit()) {
+            throw new RuntimeException(
+                'Could not commit message evidence fixture'
+            );
+        }
+    } catch (Throwable $exception) {
+        $connection->rollback();
+        throw $exception;
     }
 }
 
@@ -356,6 +450,7 @@ $connection = estab_auth_connect($databaseConfig);
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 $failure = null;
 $originalIncidentId = 0;
+$otherIncidentId = 0;
 $selectedIncidentId = 0;
 $otherFixture = [];
 $selectedFixture = [];
@@ -368,8 +463,30 @@ try {
         'Incident export test requires the named CI incident'
     );
 
+    $otherCreated = estab_incident_create(
+        $connection,
+        [
+            'kennung' => 'PDF-OTHER-' . $token,
+            'name' => 'PDF-Export Fremdeinsatz ' . $token,
+            'beginn' => date('Y-m-d\TH:i', time() - 120),
+            'ort' => 'Andere Integrationsumgebung',
+            'organisation' => 'eStab CI',
+            'einsatzleitung' => 'Automatisierter Fremdtest',
+            'beschreibung' =>
+                'Negativkontrolle für einsatzgebundene PDF-SELECTs.',
+            'metadaten' => '{"zweck":"incident-pdf-cross-scope"}',
+        ],
+        $actor,
+        false
+    );
+    $otherIncidentId = (int) $otherCreated['einsatz_id'];
+    incident_export_integration_activate(
+        $connection,
+        $otherIncidentId,
+        $actor
+    );
     $otherFixture = incident_export_integration_empty_fixture(
-        $originalIncidentId,
+        $otherIncidentId,
         $otherMarker,
         $attachmentRoot,
         $otherName,
@@ -444,7 +561,17 @@ try {
         $bundle = estab_incident_export_load(
             $connection,
             $selectedIncidentId,
-            ['etb', 'ttb', 'messages', 'attachments'],
+            [
+                'etb',
+                'ttb',
+                'messages',
+                'attachments',
+                'message_evidence',
+                'duty',
+                's6_plans',
+                'courier',
+                'operations_evidence',
+            ],
             $attachmentRoot
         );
         $rendered = estab_incident_export_pdf(
@@ -470,7 +597,17 @@ try {
         'Dossier source resolved the wrong incident'
     );
     $assert(
-        $bundle['sections'] === ['etb', 'ttb', 'messages', 'attachments'],
+        $bundle['sections'] === [
+            'etb',
+            'ttb',
+            'messages',
+            'attachments',
+            'message_evidence',
+            'duty',
+            's6_plans',
+            'courier',
+            'operations_evidence',
+        ],
         'Dossier source changed the selected sections'
     );
     $assert(
@@ -479,6 +616,19 @@ try {
             'ttb' => 1,
             'messages' => 1,
             'attachments' => 1,
+            'attachments_verified' => 1,
+            'attachments_legacy' => 0,
+            'message_evidence' => 1,
+            'message_evidence_heads' => 1,
+            'duty' => 0,
+            'duty_shifts' => 0,
+            'duty_assignments' => 0,
+            'duty_handovers' => 0,
+            'duty_handover_requests' => 0,
+            's6_plans' => 0,
+            's6_plan_entries' => 0,
+            'courier' => 0,
+            'operations_evidence' => 0,
         ],
         'Dossier source did not return exactly the selected incident rows'
     );
@@ -487,6 +637,9 @@ try {
     $assert(
         ($bundle['etb'][0]['etb_aktion'] ?? null)
             === $selectedMarker . '-ETB'
+            && ($bundle['etb'][0]['estab_event_time'] ?? null) !== null
+            && ($bundle['etb'][0]['estab_recorded_at'] ?? null) !== null
+            && ($bundle['etb'][0]['estab_event_type'] ?? null) === 'ereignis'
             && !str_contains(
                 json_encode($bundle['etb'], JSON_THROW_ON_ERROR),
                 $otherMarker
@@ -514,6 +667,47 @@ try {
         'Message export crossed the selected incident boundary'
     );
     $assert(
+        count($bundle['message_events']) === 1
+            && count($bundle['message_evidence_heads']) === 1
+            && (int) (
+                $bundle['message_events'][0]['message_id'] ?? 0
+            ) === $selectedMessageId
+            && ($bundle['message_evidence_status']['valid'] ?? false) === true
+            && (
+                $bundle['message_evidence_status']
+                    ['terminal_binding_complete'] ?? false
+            ) === true
+            && (
+                $bundle['message_evidence_status']
+                    ['terminal_mismatches'] ?? -1
+            ) === 0
+            && !str_contains(
+                json_encode(
+                    $bundle['message_events'],
+                    JSON_THROW_ON_ERROR
+                ),
+                $otherMarker
+            ),
+        'Message evidence crossed the incident boundary or failed live binding'
+    );
+    $assert(
+        $bundle['duty_shifts'] === []
+            && $bundle['duty_assignments'] === []
+            && $bundle['duty_handovers'] === []
+            && $bundle['s6_plans'] === []
+            && $bundle['s6_plan_entries'] === []
+            && $bundle['courier_orders'] === []
+            && $bundle['operations_events'] === []
+            && (
+                $bundle['operations_evidence_status']['valid'] ?? false
+            ) === true
+            && (
+                $bundle['operations_evidence_status']
+                    ['stored_head_sha256'] ?? null
+            ) === str_repeat('0', 64),
+        'Empty DV evidence sections were not represented explicitly'
+    );
+    $assert(
         ($bundle['attachment_names_by_message'][$selectedMessageId] ?? null)
             === [$selectedName],
         'Message-to-attachment relation was not scoped to the selected incident'
@@ -526,6 +720,8 @@ try {
     );
     $assert(
         ($bundle['attachments'][0]['stored_name'] ?? null) === $selectedName
+            && ($bundle['attachments'][0]['integrity_state'] ?? null)
+                === 'verified'
             && ($bundle['attachments'][0]['message_ids'] ?? null)
                 === [$selectedMessageId]
             && hash_file(
@@ -586,6 +782,21 @@ try {
             && str_contains($pageContent, 'ALT_1 [gn]')
             && str_contains(
                 $pageContent,
+                'VORL'
+            )
+            && str_contains(
+                $pageContent,
+                'Nachrichtenereignisse und Nachweisk'
+            )
+            && str_contains($pageContent, 'Dienstorganisation')
+            && str_contains($pageContent, 'S6-Fernmeldeplanung')
+            && str_contains($pageContent, 'Melderauftr')
+            && str_contains(
+                $pageContent,
+                'Betriebsereignisse und Nachweiskopf'
+            )
+            && str_contains(
+                $pageContent,
                 hash('sha256', $selectedPayload)
             )
             && !str_contains($pageContent, 'Dienstgebrauch')
@@ -596,6 +807,108 @@ try {
         !str_contains($pdf, '/Subtype /Image'),
         'Rendered incident dossier still contains the coat of arms'
     );
+    $tamperedPayload = str_repeat('X', strlen($selectedPayload));
+    if ($tamperedPayload === $selectedPayload) {
+        $tamperedPayload[0] = 'Y';
+    }
+    try {
+        if (
+            file_put_contents(
+                (string) $selectedFixture['attachment_path'],
+                $tamperedPayload,
+                LOCK_EX
+            ) !== strlen($tamperedPayload)
+        ) {
+            throw new RuntimeException('Could not write tamper fixture');
+        }
+        $loadRejected = false;
+        try {
+            estab_incident_export_load(
+                $connection,
+                $selectedIncidentId,
+                $bundle['sections'],
+                $attachmentRoot
+            );
+        } catch (EstabIncidentExportDataException) {
+            $loadRejected = true;
+        }
+        $assert(
+            $loadRejected,
+            'Changed attachment was accepted while loading an export'
+        );
+
+        $renderRejected = false;
+        try {
+            estab_incident_export_pdf(
+                $bundle,
+                $actor,
+                1024 * 1024,
+                $generatedAt
+            );
+        } catch (EstabIncidentPdfInputException) {
+            $renderRejected = true;
+        }
+        $assert(
+            $renderRejected,
+            'Attachment changed after loading was embedded as ingest-original'
+        );
+
+        $tamperedPreflight = estab_incident_close_preflight(
+            $connection,
+            $selectedIncidentId,
+            $attachmentRoot
+        );
+        $assert(
+            ($tamperedPreflight['attachment_integrity_errors'] ?? 0) === 1
+                && ($tamperedPreflight['closable'] ?? true) === false,
+            'Formal-close preflight accepted a changed attachment'
+        );
+
+        $selectedStatus = incident_export_integration_activate(
+            $connection,
+            $selectedIncidentId,
+            $actor
+        );
+        $closeRejected = null;
+        try {
+            estab_incident_close(
+                $connection,
+                $selectedIncidentId,
+                (int) ($selectedStatus['revision'] ?? -1),
+                $actor,
+                [
+                    'ende' => date('Y-m-d\TH:i'),
+                    'close_note' =>
+                        'Tamper-Negativkontrolle; darf nie gespeichert werden.',
+                ],
+                $attachmentRoot
+            );
+        } catch (EstabIncidentCloseBlockedException $exception) {
+            $closeRejected = $exception;
+        }
+        $assert(
+            $closeRejected instanceof EstabIncidentCloseBlockedException
+                && (
+                    $closeRejected->preflight
+                        ['attachment_integrity_errors'] ?? 0
+                ) === 1
+                && (
+                    $closeRejected->preflight['closable'] ?? true
+                ) === false,
+            'Formal close did not reject a changed attachment'
+        );
+        incident_export_integration_activate(
+            $connection,
+            $originalIncidentId,
+            $actor
+        );
+    } finally {
+        file_put_contents(
+            (string) $selectedFixture['attachment_path'],
+            $selectedPayload,
+            LOCK_EX
+        );
+    }
     $assert(
         $downloadFilename === 'estab-einsatz-' . $selectedIncidentId
             . '-pdf-' . strtolower($token) . '-20260729-120000.pdf',
@@ -606,47 +919,12 @@ try {
 }
 
 try {
-    if ($selectedIncidentId > 0) {
-        incident_export_integration_activate(
-            $connection,
-            $selectedIncidentId,
-            $actor
-        );
-        incident_export_integration_delete_fixture(
-            $connection,
-            $selectedFixture
-        );
-    }
     if ($originalIncidentId > 0) {
         incident_export_integration_activate(
             $connection,
             $originalIncidentId,
             $actor
         );
-        incident_export_integration_delete_fixture(
-            $connection,
-            $otherFixture
-        );
-    }
-    if ($selectedIncidentId > 0) {
-        $statement = $connection->prepare(
-            'DELETE FROM `nv_einsatz_ereignisse` WHERE `einsatz_id` = ?'
-        );
-        try {
-            $statement->bind_param('i', $selectedIncidentId);
-            $statement->execute();
-        } finally {
-            $statement->close();
-        }
-        $statement = $connection->prepare(
-            'DELETE FROM `nv_einsaetze` WHERE `einsatz_id` = ?'
-        );
-        try {
-            $statement->bind_param('i', $selectedIncidentId);
-            $statement->execute();
-        } finally {
-            $statement->close();
-        }
     }
 } catch (Throwable $cleanupException) {
     if (!$failure instanceof Throwable) {
@@ -660,12 +938,6 @@ try {
         );
     }
 } finally {
-    foreach ([$selectedFixture, $otherFixture] as $fixture) {
-        $path = (string) ($fixture['attachment_path'] ?? '');
-        if ($path !== '' && is_file($path)) {
-            @unlink($path);
-        }
-    }
     estab_auth_close($connection);
 }
 
@@ -674,4 +946,5 @@ if ($failure instanceof Throwable) {
 }
 
 echo "incident export integration: OK ({$assertions} assertions, "
-    . "historical incident {$selectedIncidentId}, byte-identical EmbeddedFile)\n";
+    . "historical incident {$selectedIncidentId}, cross-scope incident "
+    . "{$otherIncidentId}, retained evidence, byte-identical EmbeddedFile)\n";

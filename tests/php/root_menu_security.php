@@ -158,4 +158,50 @@ $assert(
     'root menu accepted a navigation key that does not match its target'
 );
 
+$menuConfig = (string) file_get_contents(
+    dirname(__DIR__, 2) . '/menue.inc.php'
+);
+$expectedOperationalCards = [
+    'messages',
+    'command-post',
+    'message-overview',
+    'forms',
+    'incident-log',
+    'technical-log',
+    'tracking',
+    'bos-info',
+];
+$configuredOperationalCards = [];
+if (preg_match_all(
+    '/\\$menue\\[(\\d+)\\]\\["navigation_key"\\]\\s*=\\s*"([^"]+)"/',
+    $menuConfig,
+    $configuredCardMatches,
+    PREG_SET_ORDER
+) !== false) {
+    foreach ($configuredCardMatches as $configuredCardMatch) {
+        $configuredOperationalCards[(int) $configuredCardMatch[1]]
+            = $configuredCardMatch[2];
+    }
+}
+ksort($configuredOperationalCards, SORT_NUMERIC);
+$assert(
+    array_values($configuredOperationalCards) === $expectedOperationalCards,
+    'root menu cards diverge from the canonical operational order'
+);
+$assert(
+    str_contains(
+        $menuConfig,
+        '$menue[2]["link"] = "./4fach/fuehrungsstelle.php";'
+    )
+        && str_contains(
+            $menuConfig,
+            '$menue[2]["access"] = "application";'
+        )
+        && str_contains(
+            $menuConfig,
+            '$menue[2]["visible"] = true ;'
+        ),
+    'root menu does not expose the protected command-post card'
+);
+
 echo "root menu security: OK ({$assertions} assertions)\n";

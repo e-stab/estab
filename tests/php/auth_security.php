@@ -304,15 +304,19 @@ if ($registrationSetting === false) {
 $loginController = file_get_contents(dirname(__DIR__, 2) . '/4fach/data_hndl.php');
 $assert(is_string($loginController), 'login controller source readable');
 $assert(
-    substr_count(
+    str_contains(
         $loginController,
-        '!in_array ($login ["funktion"], array ("A/W", "LdF"), true)'
-    ) >= 2
+        'require_once __DIR__ . "/../app/dynamic_schema.php";'
+    )
+        && substr_count(
+            $loginController,
+            'estab_dynamic_schema_hat_requires_tables ('
+        ) === 2
         && !str_contains(
             $loginController,
-            '$wasInactive && !in_array ($login ["funktion"]'
+            '$wasInactive && estab_dynamic_schema_hat_requires_tables'
         ),
-    'active imported users do not reconcile their legacy dynamic tables on login'
+    'login does not apply the central dynamic-table policy to both account paths'
 );
 $assert(
     str_contains($loginController, '$loginFlow === "new"')
@@ -469,7 +473,11 @@ $assert(
 );
 
 $databaseOperations = file_get_contents(dirname(__DIR__, 2) . '/4fach/db_operation.php');
+$dynamicSchema = file_get_contents(
+    dirname(__DIR__, 2) . '/app/dynamic_schema.php'
+);
 $assert(is_string($databaseOperations), 'dynamic database operations source readable');
+$assert(is_string($dynamicSchema), 'shared dynamic schema source readable');
 $dynamicCreateStart = is_string($databaseOperations)
     ? strpos($databaseOperations, 'function create_user_table ')
     : false;
@@ -480,12 +488,111 @@ $dynamicCreate = $dynamicCreateStart !== false && $dynamicCreateEnd !== false
     ? substr($databaseOperations, $dynamicCreateStart, $dynamicCreateEnd - $dynamicCreateStart)
     : '';
 $assert(
-    str_contains($databaseOperations, 'SELECT GET_LOCK(?, ?)')
-        && str_contains($databaseOperations, 'SELECT RELEASE_LOCK(?)')
-        && str_contains($dynamicCreate, 'acquire_dynamic_schema_lock')
-        && str_contains($dynamicCreate, 'release_dynamic_schema_lock')
+    str_contains($dynamicCreate, 'estab_dynamic_schema_reconcile_bases (')
+        && str_contains($dynamicCreate, '$schema_db = mysql_connect (')
+        && str_contains($dynamicCreate, 'mysql_select_db ($this->db_name, $schema_db)')
+        && str_contains($dynamicCreate, 'finally {')
+        && str_contains($dynamicCreate, 'mysql_close ($schema_db);')
+        && !str_contains($dynamicCreate, 'GET_LOCK')
+        && !str_contains($dynamicCreate, 'RELEASE_LOCK')
+        && !str_contains($dynamicCreate, 'acquire_dynamic_schema_lock')
+        && !str_contains($dynamicCreate, 'release_dynamic_schema_lock')
         && !preg_match('/\\bor\\s+die\\s*\\(/', $dynamicCreate),
-    'dynamic schema DDL is not serialised or still terminates the login request with die()'
+    'db_access does not delegate dynamic DDL through an isolated connection'
+);
+$assert(
+    str_contains(
+        $dynamicSchema,
+        'function estab_dynamic_schema_identifier(string $identifier): string'
+    )
+        && str_contains($dynamicSchema, 'strlen($identifier) > 64')
+        && str_contains(
+            $dynamicSchema,
+            "preg_match('/\\A[A-Za-z_][A-Za-z0-9_]*\\z/D', \$identifier)"
+        )
+        && str_contains($dynamicSchema, "return '`' . \$identifier . '`';")
+        && !str_contains($dynamicSchema, '$_GET')
+        && !str_contains($dynamicSchema, '$_POST')
+        && !str_contains($dynamicSchema, '$_REQUEST'),
+    'central dynamic-schema identifiers are not strictly server-validated'
+);
+$assert(
+    str_contains($dynamicSchema, "prepare('SELECT GET_LOCK(?, ?)')")
+        && str_contains($dynamicSchema, "bind_param('si', \$lockName, \$timeout)")
+        && str_contains($dynamicSchema, "prepare('SELECT RELEASE_LOCK(?)')")
+        && str_contains($dynamicSchema, "bind_param('s', \$lockName)")
+        && str_contains(
+            $dynamicSchema,
+            "query('SELECT @@SESSION.in_transaction')"
+        )
+        && str_contains(
+            $dynamicSchema,
+            'estab_dynamic_schema_require_no_transaction($connection);'
+        )
+        && str_contains(
+            $dynamicSchema,
+            'estab_dynamic_schema_acquire($connection, $lockName);'
+        )
+        && str_contains(
+            $dynamicSchema,
+            'estab_dynamic_schema_release($connection, $lockName);'
+        )
+        && str_contains($dynamicSchema, 'throw new LogicException('),
+    'central dynamic DDL lacks its transaction or advisory-lock boundary'
+);
+$reconcileStart = strpos(
+    $dynamicSchema,
+    'function estab_dynamic_schema_reconcile_bases('
+);
+$reconcileEnd = $reconcileStart === false
+    ? false
+    : strpos(
+        $dynamicSchema,
+        '/**' . "\n" . ' * Return whether a hat participates',
+        $reconcileStart
+    );
+$reconcile = $reconcileStart !== false && $reconcileEnd !== false
+    ? substr($dynamicSchema, $reconcileStart, $reconcileEnd - $reconcileStart)
+    : '';
+$relaxMode = strpos(
+    $reconcile,
+    'estab_dynamic_schema_execute(' . "\n"
+        . '            $connection,' . "\n"
+        . '            "SET SESSION sql_mode = \'\'"'
+);
+$operationCatch = strpos(
+    $reconcile,
+    '} catch (Throwable $exception) {' . "\n"
+        . '        $operationError = $exception;'
+);
+$restoreMode = strpos(
+    $reconcile,
+    "\$connection->prepare('SET SESSION sql_mode = ?')"
+);
+$releaseLock = strpos(
+    $reconcile,
+    'estab_dynamic_schema_release($connection, $lockName);'
+);
+$assert(
+    $reconcile !== ''
+        && str_contains(
+            $reconcile,
+            "\$connection->query('SELECT @@SESSION.sql_mode')"
+        )
+        && str_contains(
+            $reconcile,
+            "\$restore->bind_param('s', \$originalSqlMode)"
+        )
+        && is_int($relaxMode)
+        && is_int($operationCatch)
+        && is_int($restoreMode)
+        && is_int($releaseLock)
+        && $relaxMode < $operationCatch
+        && $operationCatch < $restoreMode
+        && $restoreMode < $releaseLock
+        && str_contains($reconcile, 'if ($operationError instanceof Throwable)')
+        && str_contains($reconcile, 'if ($cleanupError instanceof Throwable)'),
+    'central dynamic DDL does not restore SQL mode and release its lock on failure'
 );
 
 echo "authentication security: OK ({$assertions} assertions)\n";

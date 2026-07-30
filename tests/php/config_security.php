@@ -38,44 +38,23 @@ $loadReviewOutgoing = static function (
 
 try {
     $assert(
-        $loadReviewOutgoing(false, null, null) === false,
-        'Outgoing review is not disabled by default'
+        $loadReviewOutgoing(false, null, null) === true,
+        'Mandatory outgoing review is not enabled'
     );
     $assert(
         $loadReviewOutgoing(true, true, null) === true
-            && $loadReviewOutgoing(true, false, null) === false,
-        'Boolean legacy m_cfg fallback is not preserved'
+            && $loadReviewOutgoing(true, false, null) === true,
+        'Legacy configuration can disable mandatory outgoing review'
     );
     $assert(
         $loadReviewOutgoing(true, false, 'true') === true
-            && $loadReviewOutgoing(true, true, 'false') === false,
-        'Environment setting does not override the legacy fallback'
+            && $loadReviewOutgoing(true, true, 'false') === true
+            && $loadReviewOutgoing(true, false, 'sometimes') === true,
+        'Environment configuration can alter mandatory outgoing review'
     );
-
-    $invalidEnvironmentRejected = false;
-    try {
-        $loadReviewOutgoing(true, true, 'sometimes');
-    } catch (InvalidArgumentException) {
-        $invalidEnvironmentRejected = true;
-    }
     $assert(
-        $invalidEnvironmentRejected,
-        'Invalid outgoing-review environment value was accepted'
-    );
-
-    $invalidLegacyRejected = true;
-    foreach ([null, 'false'] as $environmentValue) {
-        try {
-            $loadReviewOutgoing(true, 'true', $environmentValue);
-            $invalidLegacyRejected = false;
-        } catch (RuntimeException) {
-            // A configured environment must not hide malformed executable
-            // legacy configuration.
-        }
-    }
-    $assert(
-        $invalidLegacyRejected,
-        'Non-boolean legacy outgoing-review value was accepted'
+        $loadReviewOutgoing(true, 'false', null) === true,
+        'Malformed historical switch can alter mandatory outgoing review'
     );
 } finally {
     if ($originalEnvironment === false) {

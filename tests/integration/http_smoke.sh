@@ -99,11 +99,130 @@ if [ "$restore_verify_only" = true ]; then
     fi
 fi
 
+attachment_fixture_bytes() {
+    fixture_action=$1
+    fixture_name=$2
+    case "$fixture_action" in
+        tamper | restore) ;;
+        *)
+            printf 'HTTP smoke: invalid attachment fixture action\n' >&2
+            return 1
+            ;;
+    esac
+    if ! printf '%s' "$fixture_name" |
+        grep -Eq '^[A-Za-z0-9_-]{2,238}[.][A-Za-z0-9]{1,16}$'; then
+        printf 'HTTP smoke: unsafe attachment fixture name\n' >&2
+        return 1
+    fi
+    "$compose_engine" compose exec -T --user www-data app \
+        php -d auto_prepend_file= -r '
+        $action = $argv[1] ?? "";
+        $filename = $argv[2] ?? "";
+        require "/var/www/html/app/file_access.php";
+        $database = getenv("ESTAB_DB_NAME");
+        if (!is_string($database) || $database === "") {
+            $database = "estab";
+        }
+        $root = "/var/www/html/4fdata/" . $database . "/anhang";
+        $path = estab_file_resolve($root, "attachment", $filename);
+        $backup = sys_get_temp_dir() . "/estab-http-attachment-"
+            . hash("sha256", $filename) . ".backup";
+
+        if ($action === "tamper") {
+            if (is_file($backup)) {
+                fwrite(STDERR, "Attachment tamper backup already exists\n");
+                exit(2);
+            }
+            $stream = fopen($path, "r+b");
+            if ($stream === false || !flock($stream, LOCK_EX)) {
+                fwrite(STDERR, "Could not lock attachment fixture\n");
+                exit(3);
+            }
+            try {
+                $bytes = stream_get_contents($stream);
+                if (!is_string($bytes) || $bytes === "") {
+                    throw new RuntimeException("Attachment fixture is empty");
+                }
+                if (
+                    file_put_contents($backup, $bytes, LOCK_EX)
+                        !== strlen($bytes)
+                    || !chmod($backup, 0600)
+                ) {
+                    throw new RuntimeException(
+                        "Could not back up attachment fixture"
+                    );
+                }
+                $bytes[0] = chr(ord($bytes[0]) ^ 1);
+                if (
+                    !rewind($stream)
+                    || !ftruncate($stream, 0)
+                    || fwrite($stream, $bytes) !== strlen($bytes)
+                    || !fflush($stream)
+                    || (int) fstat($stream)["size"] !== strlen($bytes)
+                ) {
+                    throw new RuntimeException(
+                        "Could not tamper attachment fixture"
+                    );
+                }
+            } finally {
+                flock($stream, LOCK_UN);
+                fclose($stream);
+            }
+            exit(0);
+        }
+
+        if ($action !== "restore" || !is_file($backup)) {
+            fwrite(STDERR, "Attachment tamper backup is unavailable\n");
+            exit(4);
+        }
+        $bytes = file_get_contents($backup);
+        $stream = fopen($path, "r+b");
+        if (
+            !is_string($bytes)
+            || $stream === false
+            || !flock($stream, LOCK_EX)
+        ) {
+            fwrite(STDERR, "Could not open attachment fixture restore\n");
+            exit(5);
+        }
+        try {
+            if (
+                !rewind($stream)
+                || !ftruncate($stream, 0)
+                || fwrite($stream, $bytes) !== strlen($bytes)
+                || !fflush($stream)
+                || (int) fstat($stream)["size"] !== strlen($bytes)
+            ) {
+                throw new RuntimeException(
+                    "Could not restore attachment fixture"
+                );
+            }
+        } finally {
+            flock($stream, LOCK_UN);
+            fclose($stream);
+        }
+        if (!unlink($backup)) {
+            fwrite(STDERR, "Could not remove attachment fixture backup\n");
+            exit(6);
+        }
+    ' "$fixture_action" "$fixture_name"
+}
+
 work_dir=$(mktemp -d /tmp/estab-http-smoke.XXXXXX)
 readiness_schema_renamed=0
+tampered_attachment=
 cleanup_http_smoke() {
     status=$?
     trap - EXIT HUP INT TERM
+    if [ -n "$tampered_attachment" ]; then
+        attachment_fixture_bytes restore "$tampered_attachment" \
+            >/dev/null 2>&1 || {
+                printf '%s\n' \
+                    'HTTP smoke: emergency attachment restore failed' >&2
+                status=1
+            }
+        tampered_attachment=
+    fi
     if [ "$readiness_schema_renamed" -eq 1 ]; then
         printf '%s\n' \
             'RENAME TABLE estab_readiness_probe_matrix TO nv_empfmtx_standard;' |
@@ -234,6 +353,32 @@ assert_export_zip() {
             $archive->close();
             @unlink($temporary);
             fwrite(STDERR, "HTTP smoke: export manifest is missing or invalid\n");
+            exit(1);
+        }
+        $attachmentIntegrity = $manifest["attachment_integrity"] ?? null;
+        if (
+            !is_array($attachmentIntegrity)
+            || ($attachmentIntegrity["scheme"] ?? null)
+                !== "sha256-ingest-v1"
+            || ($attachmentIntegrity["files_checked"] ?? null) !== true
+            || !is_int($attachmentIntegrity["total"] ?? null)
+            || !is_int($attachmentIntegrity["verified"] ?? null)
+            || !is_int(
+                $attachmentIntegrity["legacy_unverifiable"] ?? null
+            )
+            || ($attachmentIntegrity["integrity_errors"] ?? null) !== 0
+            || ($attachmentIntegrity["statement"] ?? null)
+                !== "Integrität beim Eingang nicht belegbar"
+            || $attachmentIntegrity["verified"]
+                + $attachmentIntegrity["legacy_unverifiable"]
+                !== $attachmentIntegrity["total"]
+        ) {
+            $archive->close();
+            @unlink($temporary);
+            fwrite(
+                STDERR,
+                "HTTP smoke: attachment integrity manifest is invalid\n"
+            );
             exit(1);
         }
         foreach ($manifest["tables"] as $table) {
@@ -383,6 +528,31 @@ db_sql() {
             --raw \
             --database="$MARIADB_DATABASE"
     '
+}
+
+select_session_hat() {
+    hat_cookie_jar=$1
+    hat_assignment_id=$2
+    hat_label=$3
+    case "$hat_assignment_id" in
+        '' | 0 | *[!0-9]*)
+            printf 'HTTP smoke: invalid %s duty assignment: %s\n' \
+                "$hat_label" "$hat_assignment_id" >&2
+            exit 1
+            ;;
+    esac
+
+    assert_status 200 \
+        --cookie "$hat_cookie_jar" --cookie-jar "$hat_cookie_jar" \
+        "$base_url/4fach/fuehrungsstelle.php"
+    hat_csrf_token=$(csrf_from_body)
+    assert_status 303 \
+        --cookie "$hat_cookie_jar" --cookie-jar "$hat_cookie_jar" \
+        --request POST \
+        --data-urlencode "csrf_token=$hat_csrf_token" \
+        --data-urlencode 'operation_action=select_hat' \
+        --data-urlencode "dienstbesetzung_id=$hat_assignment_id" \
+        "$base_url/4fach/fuehrungsstelle.php"
 }
 
 vordruck_name_for_marker() {
@@ -562,10 +732,8 @@ assert_status 403 "$base_url/4fach/anhang.php"
 assert_status 403 "$base_url/4fach/download.php?area=attachment&file=EL0001.txt"
 assert_status 403 "$base_url/4fach/showpic.php?file=EL0001.txt"
 assert_status 403 "$base_url/4fach/vordrucke.php"
-assert_status 200 "$base_url/4fach/counter.php"
-assert_body_absent 'data-estab-session-bar'
-assert_status 200 "$base_url/4fach/status.php"
-assert_body_absent 'data-estab-session-bar'
+assert_status 403 "$base_url/4fach/counter.php"
+assert_status 403 "$base_url/4fach/status.php"
 assert_status 403 "$base_url/4fach/nachwea.php?nwalle=1"
 assert_status 403 "$base_url/4fueltg/ue_ltg.php"
 assert_status 403 "$base_url/stabetb/etb.php"
@@ -640,16 +808,39 @@ if [ "$restore_verify_only" = true ]; then
         --data-urlencode '2teskennwort=No' \
         --data-urlencode 'absenden_x=1' \
         "$base_url/4fach/mainindex.php"
+    restore_duty_assignment_id=$(
+        printf '%s\n' \
+            "SELECT assignment.dienstbesetzung_id
+               FROM nv_dienstbesetzungen AS assignment
+               JOIN nv_dienstschichten AS duty_shift
+                 ON duty_shift.dienstschicht_id =
+                    assignment.dienstschicht_id
+              WHERE duty_shift.einsatz_id = (
+                      SELECT active_einsatz_id
+                        FROM nv_einsatz_status
+                       WHERE singleton_id = 1
+                    )
+                AND duty_shift.status = 'AKTIV'
+                AND assignment.status = 'ANGENOMMEN'
+                AND BINARY assignment.benutzer_kuerzel =
+                    BINARY '${test_code}'
+              LIMIT 1;" |
+            db_sql
+    )
+    select_session_hat \
+        "$cookie_jar" "$restore_duty_assignment_id" 'restored primary'
+    assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        "$base_url/4fach/mainindex.php"
     assert_body 'Meldung/Seite:'
     restore_role=$(account_assignment "$test_code" | awk -F '	' '{print $2}')
     assert_session_bar "$test_name" "$test_code" "$test_function" "$restore_role"
 
-    assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-        "$base_url/4fach/mainindex.php"
     assert_body "$workflow_marker"
-    assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    # The restored S1 hat may read its own workflow object but does not acquire
+    # S2 Lage-/Dokumentationsrechte merely because the export was restored.
+    assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         "$base_url/4fueltg/ue_ltg.php"
-    assert_body "$workflow_marker"
+    assert_body_absent "$workflow_marker"
     assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         "$base_url/4fach/download.php?area=attachment&file=$restore_attachment"
     expected_attachment=$work_dir/expected-attachment.txt
@@ -788,8 +979,9 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode 'next=incident-log' \
     "$base_url/4fach/mainindex.php"
 assert_body 'Der gewählte eStab-Bereich wird geöffnet'
-assert_body "href=\"$expected_app_root/stabetb/etb.php\" target=\"_top\""
-assert_body "window.top.location.replace(\"$expected_app_root/stabetb/etb.php\")"
+assert_body "href=\"$expected_app_root/4fach/fuehrungsstelle.php\" target=\"_top\""
+assert_body \
+    "window.top.location.replace(\"$expected_app_root/4fach/fuehrungsstelle.php\")"
 assert_body_absent '//4fach/'
 if grep -Eq 'Fatal error|Uncaught (Error|TypeError)|Warning:' "$body"; then
     printf 'HTTP smoke: PHP runtime error leaked into authenticated response\n' >&2
@@ -801,6 +993,8 @@ if [ -z "$test_role" ]; then
     printf 'HTTP smoke: could not determine the authenticated account role\n' >&2
     exit 1
 fi
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/fuehrungsstelle.php"
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 
 # Disabled public registration must neither log in an existing code nor
@@ -876,12 +1070,114 @@ assert_status 403 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
 
 # A separately provisioned account keeps its administrative assignment across
 # logout; the login request can never repurpose the inactive row.
-legacy_registration_code=e2l001
-legacy_registration_name='Administrativ provisioniertes HTTP-Konto'
+legacy_registration_code=${ESTAB_TEST_TBB_CODE:-e2l001}
+legacy_registration_name=${ESTAB_TEST_TBB_NAME:-Logbook Integration A-W}
 assert_account_count 0 "$legacy_registration_code"
 sh tests/integration/provision_user.sh \
     "$legacy_registration_name" "$legacy_registration_code" A/W \
     "$collision_password"
+
+# A path appended after an executable PHP filename is never an authorization
+# boundary. Prove this with the exact historical lock-reset action while the
+# valid A/W session has no accepted duty hat: Apache must reject the request
+# and the locked message must remain byte-for-byte in its operator stage.
+guard_cookie_jar=$work_dir/path-info-guard-cookies.txt
+assert_status 200 --cookie "$guard_cookie_jar" \
+    --cookie-jar "$guard_cookie_jar" \
+    --request POST --data-urlencode 'login_flow=existing' \
+    "$base_url/4fach/mainindex.php"
+preauth_csrf_token=$(csrf_from_body)
+assert_status 200 --cookie "$guard_cookie_jar" \
+    --cookie-jar "$guard_cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$preauth_csrf_token" \
+    --data-urlencode 'login_flow=existing' \
+    --data-urlencode "benutzer=$legacy_registration_name" \
+    --data-urlencode "kuerzel=$legacy_registration_code" \
+    --data-urlencode 'funktion=A/W' \
+    --data-urlencode "kennwort1@$collision_password_file" \
+    --data-urlencode '2teskennwort=No' \
+    "$base_url/4fach/mainindex.php"
+path_info_csrf_token=$(csrf_from_body)
+path_info_marker="PATH_INFO_LOCK_GUARD_$$"
+path_info_record_id=$(
+    printf '%s\n' \
+        "INSERT INTO nv_nachrichten (einsatz_id, \`04_richtung\`, \`12_inhalt\`, \`x00_status\`, \`x02_sperre\`, \`x03_sperruser\`) VALUES ((SELECT active_einsatz_id FROM nv_einsatz_status WHERE singleton_id = 1), 'E', '${path_info_marker}', 1, 't', '${legacy_registration_code}'); SELECT LAST_INSERT_ID();" |
+        db_sql |
+        tail -n 1
+)
+case "$path_info_record_id" in
+    '' | 0 | *[!0-9]*)
+        printf 'HTTP smoke: path-info lock fixture was not created\n' >&2
+        exit 1
+        ;;
+esac
+assert_status 403 --cookie "$guard_cookie_jar" \
+    --cookie-jar "$guard_cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$path_info_csrf_token" \
+    --data-urlencode "reset_record=$path_info_record_id" \
+    "$base_url/4fach/mainindex.php/4fadm"
+path_info_lock_state=$(
+    printf "SELECT CONCAT(HEX(\`x02_sperre\`), '|', \`x03_sperruser\`, '|', \`x00_status\`, '|', \`04_richtung\`) FROM nv_nachrichten WHERE \`00_lfd\` = %s AND \`12_inhalt\` = '%s';\n" \
+        "$path_info_record_id" "$path_info_marker" |
+        db_sql
+)
+if [ "$path_info_lock_state" != "74|$legacy_registration_code|1|E" ]; then
+    printf 'HTTP smoke: PHP path-info changed the guarded message lock: %s\n' \
+        "$path_info_lock_state" >&2
+    exit 1
+fi
+printf "DELETE FROM nv_nachrichten WHERE \`00_lfd\` = %s AND \`12_inhalt\` = '%s';\n" \
+    "$path_info_record_id" "$path_info_marker" |
+    db_sql >/dev/null
+
+# Establish the central DV write prerequisite before the first Fachschreibweg.
+# The primary S1 and the A/W regression account already exist at this point;
+# the remaining mandatory functions are provisioned offline, personally
+# accepted through the production duty domain and activated as one complete
+# initial service. Later HTTP suites reuse these exact hats until the message
+# workflow performs a real, personally confirmed successor handover.
+shift_s2_name=${ESTAB_TEST_ETB_NAME:-Logbook Integration S2}
+shift_s2_code=${ESTAB_TEST_ETB_CODE:-e2s200}
+shift_si_name=${ESTAB_TEST_CATEGORY_SI_NAME:-Category Integration Si}
+shift_si_code=${ESTAB_TEST_CATEGORY_SI_CODE:-e2si00}
+shift_s6_code=${ESTAB_TEST_HTTP_S6_CODE:-e2s600}
+shift_ldf_code=${ESTAB_TEST_HTTP_LDF_CODE:-e2ldf0}
+sh tests/integration/provision_user.sh \
+    "$shift_s2_name" \
+    "$shift_s2_code" S2 \
+    "${ESTAB_TEST_ETB_PASSWORD:-Logbook-Test-S2-20260723}"
+sh tests/integration/provision_user.sh \
+    "$shift_si_name" \
+    "$shift_si_code" Si \
+    "${ESTAB_TEST_CATEGORY_SI_PASSWORD:-Category-Test-Si-20260723}"
+sh tests/integration/provision_user.sh \
+    'HTTP Integration S6' "$shift_s6_code" S6 \
+    'HTTP-Shift-S6-Only-20260730'
+sh tests/integration/provision_user.sh \
+    'HTTP Integration LdF' "$shift_ldf_code" LdF \
+    'HTTP-Shift-LdF-Only-20260730'
+
+ESTAB_TEST_SHIFT_AW_CODE=$legacy_registration_code \
+ESTAB_TEST_SHIFT_LDF_CODE=$shift_ldf_code \
+ESTAB_TEST_SHIFT_SI_CODE=$shift_si_code \
+ESTAB_TEST_SHIFT_S1_CODE=$test_code \
+ESTAB_TEST_SHIFT_S2_CODE=$shift_s2_code \
+ESTAB_TEST_SHIFT_S6_CODE=$shift_s6_code \
+"$compose_engine" compose run --rm --no-deps -T \
+    --env "COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-estab}" \
+    --env ESTAB_TEST_SHIFT_ALLOW_MUTATION=true \
+    --env ESTAB_TEST_SHIFT_AW_CODE \
+    --env ESTAB_TEST_SHIFT_LDF_CODE \
+    --env ESTAB_TEST_SHIFT_SI_CODE \
+    --env ESTAB_TEST_SHIFT_S1_CODE \
+    --env ESTAB_TEST_SHIFT_S2_CODE \
+    --env ESTAB_TEST_SHIFT_S6_CODE \
+    --volume "$repo_root:/workspace:ro" \
+    --workdir /workspace \
+    app php -d auto_prepend_file= tests/integration/activate_http_shift.php
+
 : > "$cookie_jar"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST --data-urlencode 'login_flow=existing' \
@@ -897,7 +1193,9 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "kennwort1@$collision_password_file" \
     --data-urlencode '2teskennwort=No' \
     "$base_url/4fach/mainindex.php"
-assert_status 200 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/fuehrungsstelle.php"
+unselected_write_csrf_token=$(csrf_from_body)
 assert_account_count 1 "$legacy_registration_code"
 legacy_assignment=$(account_assignment "$legacy_registration_code")
 if [ "$legacy_assignment" != "$(printf 'A/W\tFernmelder\t1')" ]; then
@@ -905,6 +1203,126 @@ if [ "$legacy_assignment" != "$(printf 'A/W\tFernmelder\t1')" ]; then
         "$legacy_assignment" >&2
     exit 1
 fi
+
+# A matching accepted primary function is not an implicit working hat. The
+# browser must select the exact personal assignment before any operational
+# write. First prove that another account's selected ID cannot be borrowed,
+# then prove that the still-unselected A/W POST is rejected before mutation.
+legacy_duty_assignment_id=$(
+    printf '%s\n' \
+        "SELECT assignment.dienstbesetzung_id
+           FROM nv_dienstbesetzungen AS assignment
+           JOIN nv_dienstschichten AS duty_shift
+             ON duty_shift.dienstschicht_id = assignment.dienstschicht_id
+          WHERE duty_shift.einsatz_id = (
+                  SELECT active_einsatz_id
+                    FROM nv_einsatz_status
+                   WHERE singleton_id = 1
+                )
+            AND duty_shift.status = 'AKTIV'
+            AND assignment.status = 'ANGENOMMEN'
+            AND BINARY assignment.benutzer_kuerzel =
+                BINARY '${legacy_registration_code}'
+            AND BINARY assignment.funktion = BINARY 'A/W'
+            AND BINARY assignment.rolle = BINARY 'Fernmelder'
+          LIMIT 1;" |
+        db_sql
+)
+foreign_duty_assignment_id=$(
+    printf '%s\n' \
+        "SELECT assignment.dienstbesetzung_id
+           FROM nv_dienstbesetzungen AS assignment
+           JOIN nv_dienstschichten AS duty_shift
+             ON duty_shift.dienstschicht_id = assignment.dienstschicht_id
+          WHERE duty_shift.einsatz_id = (
+                  SELECT active_einsatz_id
+                    FROM nv_einsatz_status
+                   WHERE singleton_id = 1
+                )
+            AND duty_shift.status = 'AKTIV'
+            AND assignment.status = 'ANGENOMMEN'
+            AND BINARY assignment.benutzer_kuerzel =
+                BINARY '${shift_s2_code}'
+            AND BINARY assignment.funktion = BINARY 'S2'
+            AND BINARY assignment.rolle = BINARY 'Stab'
+          LIMIT 1;" |
+        db_sql
+)
+primary_duty_assignment_id=$(
+    printf '%s\n' \
+        "SELECT assignment.dienstbesetzung_id
+           FROM nv_dienstbesetzungen AS assignment
+           JOIN nv_dienstschichten AS duty_shift
+             ON duty_shift.dienstschicht_id = assignment.dienstschicht_id
+          WHERE duty_shift.einsatz_id = (
+                  SELECT active_einsatz_id
+                    FROM nv_einsatz_status
+                   WHERE singleton_id = 1
+                )
+            AND duty_shift.status = 'AKTIV'
+            AND assignment.status = 'ANGENOMMEN'
+            AND BINARY assignment.benutzer_kuerzel =
+                BINARY '${test_code}'
+          LIMIT 1;" |
+        db_sql
+)
+case "$legacy_duty_assignment_id:$foreign_duty_assignment_id:$primary_duty_assignment_id" in
+    *[!0-9:]* | :* | *: | *::*)
+        printf 'HTTP smoke: selected-hat fixtures are missing: %s/%s/%s\n' \
+            "$legacy_duty_assignment_id" "$foreign_duty_assignment_id" \
+            "$primary_duty_assignment_id" >&2
+        exit 1
+        ;;
+esac
+if [ "$legacy_duty_assignment_id" = "$foreign_duty_assignment_id" ] \
+    || [ "$legacy_duty_assignment_id" = "$primary_duty_assignment_id" ] \
+    || [ "$foreign_duty_assignment_id" = "$primary_duty_assignment_id" ]; then
+    printf 'HTTP smoke: selected-hat fixtures collide\n' >&2
+    exit 1
+fi
+
+assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$unselected_write_csrf_token" \
+    --data-urlencode 'operation_action=select_hat' \
+    --data-urlencode \
+        "dienstbesetzung_id=$foreign_duty_assignment_id" \
+    "$base_url/4fach/fuehrungsstelle.php"
+
+unselected_write_marker="UNSELECTED-WRITE-GUARD-$$"
+unselected_write_before=$(
+    printf "SELECT COUNT(*) FROM nv_tbb WHERE tbb_aktion = '%s';\n" \
+        "$unselected_write_marker" |
+        db_sql
+)
+assert_status 423 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$unselected_write_csrf_token" \
+    --data-urlencode 'logbook_action=save_entry' \
+    --data-urlencode "event=$unselected_write_marker" \
+    --data-urlencode 'comment=must not persist' \
+    "$base_url/fmtbb/tbb.php"
+unselected_write_after=$(
+    printf "SELECT COUNT(*) FROM nv_tbb WHERE tbb_aktion = '%s';\n" \
+        "$unselected_write_marker" |
+        db_sql
+)
+if [ "$unselected_write_before" != "$unselected_write_after" ]; then
+    printf 'HTTP smoke: no-selected-hat request mutated TBB: %s -> %s\n' \
+        "$unselected_write_before" "$unselected_write_after" >&2
+    exit 1
+fi
+
+# The same browser may continue only after choosing its own accepted active
+# assignment through the production controller.
+assert_status 303 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$unselected_write_csrf_token" \
+    --data-urlencode 'operation_action=select_hat' \
+    --data-urlencode \
+        "dienstbesetzung_id=$legacy_duty_assignment_id" \
+    "$base_url/4fach/fuehrungsstelle.php"
+assert_status 200 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/vorgaben.php"
@@ -966,6 +1384,8 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "kennwort1@$collision_password_file" \
     --data-urlencode '2teskennwort=No' \
     "$base_url/4fach/mainindex.php"
+select_session_hat \
+    "$cookie_jar" "$legacy_duty_assignment_id" 're-authenticated A/W'
 assert_status 200 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
 legacy_assignment=$(account_assignment "$legacy_registration_code")
 if [ "$legacy_assignment" != "$(printf 'A/W\tFernmelder\t1')" ]; then
@@ -1000,10 +1420,9 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "csrf_token=$sidebar_csrf_token" \
     --data-urlencode 'fm_eingang_x=1' \
     "$base_url/4fach/mainindex.php"
-assert_body 'name="task" value="FM-Eingang_Sichter"'
-assert_body 'name="16_11" value="16_11_bl"'
-assert_body 'name="16_gncopy" type="radio"'
-assert_body 'value="16_12_gn"'
+assert_body 'name="task" value="FM-Eingang"'
+assert_body_absent 'name="15_quitzeichen"'
+assert_body_absent 'name="16_gncopy"'
 
 # Reproduce the 0.9.26c attachment regression through the real authenticated
 # A/W form. Missing inactive controls such as 06_befweg and an initially empty
@@ -1036,7 +1455,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$aw_workflow_csrf_token" \
     --data-urlencode 'anhang_plus_x=1' \
-    --data-urlencode 'task=FM-Eingang_Sichter' \
+    --data-urlencode 'task=FM-Eingang' \
     --data-urlencode '01_medium=Fu' \
     --data-urlencode "01_datum=$aw_received_at" \
     --data-urlencode "01_zeichen=$legacy_registration_code" \
@@ -1052,10 +1471,6 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "12_abfzeit=$aw_written_at" \
     --data-urlencode "14_zeichen=$aw_author_marker" \
     --data-urlencode '14_funktion=A/W' \
-    --data-urlencode "15_quitdatum=$aw_reviewed_at" \
-    --data-urlencode "15_quitzeichen=$legacy_registration_code" \
-    --data-urlencode '16_11=16_11_bl' \
-    --data-urlencode '16_gncopy=16_12_gn' \
     --data-urlencode "17_vermerke=$aw_note_marker" \
     "$base_url/4fach/mainindex.php"
 assert_body 'Liste der verfügbaren Dateien'
@@ -1282,11 +1697,12 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode 'ah_auswahl_x=1' \
     --data-urlencode "lfd_901=$aw_stored_attachment" \
     "$base_url/4fach/anhang.php"
-assert_body 'name="task" value="FM-Eingang_Anhang_Sichter"'
+assert_body 'name="task" value="FM-Eingang_Anhang"'
 assert_body_regex 'name="01_medium" value="Fu" type="radio"[^>]*checked="checked"' \
     'preserved A/W medium'
 assert_body "name=\"01_datum\" value=\"$aw_received_at\""
-assert_body "name=\"01_zeichen\" value=\"$legacy_registration_code\""
+assert_body "id=\"f_01_zeichen\" data-estab-readonly=\"true\""
+assert_body ">$legacy_registration_code</strong>"
 assert_body "name=\"05_gegenstelle\" value=\"$aw_counterpart_marker\""
 assert_body_regex 'name="07_durchspruch" value="S" type="radio"[^>]*checked="checked"' \
     'preserved A/W message type'
@@ -1304,16 +1720,13 @@ assert_body 'Wird durch LdF aus dem Rufnamen ergänzt'
 assert_body_absent 'name="13_abseinheit"'
 assert_body "name=\"14_zeichen\" value=\"$aw_author_marker\""
 assert_body 'name="14_funktion" value="A/W"'
-assert_body "name=\"15_quitdatum\" value=\"$aw_reviewed_at\""
-assert_body "name=\"15_quitzeichen\" value=\"$legacy_registration_code\""
+assert_body_absent 'name="15_quitdatum"'
+assert_body_absent 'name="15_quitzeichen"'
 assert_body 'A/W &amp; &lt;Beschreibung&gt;'
 assert_body_absent 'A/W &amp;amp; &amp;lt;Beschreibung&amp;gt;'
-assert_body_regex 'name="16_11" value="16_11_bl" type="checkbox"[^>]*checked="checked"' \
-    'preserved blue recipient'
-assert_body_regex 'name="16_gncopy" type="radio"[^>]*checked="checked"[^>]*value="16_12_gn"' \
-    'preserved green-copy recipient'
-assert_body_regex "name=\"17_vermerke\"[^>]*>$aw_note_marker</textarea>" \
-    'preserved submitted sighter note control'
+assert_body_absent 'name="16_gncopy"'
+assert_body "$aw_note_marker"
+assert_body_absent 'name="17_vermerke"'
 assert_body_absent 'Warning:'
 assert_session_bar "$legacy_registration_name" "$legacy_registration_code" \
     'A/W' 'Fernmelder'
@@ -1414,6 +1827,10 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode '2teskennwort=No' \
     --data-urlencode 'absenden_x=1' \
     "$base_url/4fach/mainindex.php"
+select_session_hat \
+    "$cookie_jar" "$primary_duty_assignment_id" 'primary workflow'
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/mainindex.php"
 assert_body 'Meldung/Seite:'
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 authenticated_session_id=$(session_cookie_from_jar "$cookie_jar")
@@ -1442,8 +1859,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST --data-urlencode 'stab_schreiben_x=1' \
     "$base_url/4fach/mainindex.php"
 assert_body 'name="task" value="Stab_schreiben"'
-assert_body 'name="14_zeichen"'
-assert_body 'maxlength="6"'
+assert_body "id=\"f_14_zeichen\" type=\"hidden\" name=\"14_zeichen\" value=\"$test_code\""
 workflow_csrf_token=$(sed -n 's/.*name="csrf_token" value="\([a-f0-9][a-f0-9]*\)".*/\1/p' "$body" | head -n 1)
 if ! printf '%s' "$workflow_csrf_token" | grep -Eq '^[a-f0-9]{64}$'; then
     printf 'HTTP smoke: workflow CSRF token missing\n' >&2
@@ -1535,12 +1951,66 @@ if ! cmp -s "$upload_file" "$body"; then
     printf 'HTTP smoke: downloaded attachment content differs\n' >&2
     exit 1
 fi
-for header in Content-Disposition Content-Security-Policy X-Content-Type-Options; do
+upload_sha256=$(file_sha256 "$upload_file")
+for header in \
+    Content-Disposition \
+    Content-Security-Policy \
+    X-Content-Type-Options \
+    X-eStab-Attachment-Integrity \
+    X-eStab-Attachment-SHA256
+do
     if ! grep -qi "^${header}:" "$headers"; then
         printf 'HTTP smoke: attachment response header missing: %s\n' "$header" >&2
         exit 1
     fi
 done
+if ! grep -Eiq '^X-eStab-Attachment-Integrity: verified' "$headers" \
+    || ! grep -Eiq \
+        "^X-eStab-Attachment-SHA256: $upload_sha256" "$headers"; then
+    printf 'HTTP smoke: attachment response has invalid integrity evidence\n' >&2
+    exit 1
+fi
+
+# A same-size byte change must fail before binary response headers or file
+# bytes are emitted. The fixture backup is private to the disposable app
+# container and the EXIT trap restores it if any assertion aborts.
+tampered_attachment=$stored_attachment
+attachment_fixture_bytes tamper "$tampered_attachment"
+assert_status 409 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --dump-header "$headers" \
+    "$base_url/4fach/download.php?area=attachment&file=$stored_attachment"
+assert_body 'Die Integrität des Anhangs konnte nicht bestätigt werden.'
+if grep -Eiq '^Content-Disposition:' "$headers" \
+    || cmp -s "$upload_file" "$body"; then
+    printf 'HTTP smoke: tampered attachment produced binary download output\n' >&2
+    exit 1
+fi
+assert_status 409 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --dump-header "$headers" \
+    "$base_url/4fach/showpic.php?file=$stored_attachment&width=160&height=80"
+assert_body 'Die Integrität des Anhangs konnte nicht bestätigt werden.'
+if grep -Eiq '^Content-Type: image/png' "$headers" \
+    || [ "$(od -An -tx1 -N8 "$body" | tr -d ' \n')" = \
+        '89504e470d0a1a0a' ]; then
+    printf 'HTTP smoke: tampered attachment produced preview bytes\n' >&2
+    exit 1
+fi
+attachment_fixture_bytes restore "$tampered_attachment"
+tampered_attachment=
+
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --dump-header "$headers" \
+    "$base_url/4fach/download.php?area=attachment&file=$stored_attachment"
+if ! cmp -s "$upload_file" "$body"; then
+    printf 'HTTP smoke: restored attachment content differs\n' >&2
+    exit 1
+fi
+if ! grep -Eiq '^X-eStab-Attachment-Integrity: verified' "$headers" \
+    || ! grep -Eiq \
+        "^X-eStab-Attachment-SHA256: $upload_sha256" "$headers"; then
+    printf 'HTTP smoke: restored attachment lost integrity evidence\n' >&2
+    exit 1
+fi
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --dump-header "$headers" \
@@ -1614,6 +2084,72 @@ assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 # layout must ignore that marker while the archive's exact byte sequence is
 # carried through the later backup/restore roundtrip.
 vordruck_marker="${workflow_marker}_VORDRUCK"
+forged_vordruck_marker="${workflow_marker}_FORGED_NOTE"
+assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$workflow_csrf_token" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=Stab_gesprnoti' \
+    --data-urlencode '01_medium=Fu' \
+    --data-urlencode '01_datum=' \
+    --data-urlencode '01_zeichen=forged' \
+    --data-urlencode '10_anschrift=HTTP-Fälschungstest' \
+    --data-urlencode "12_inhalt=$forged_vordruck_marker" \
+    --data-urlencode "12_abfzeit=$tactical_time" \
+    --data-urlencode '13_abseinheit=Fremde Einheit' \
+    --data-urlencode '14_zeichen=forged' \
+    --data-urlencode '14_funktion=S6' \
+    --data-urlencode '15_quitdatum=30122000' \
+    --data-urlencode '15_quitzeichen=si0001' \
+    "$base_url/4fach/mainindex.php"
+forged_vordruck_count=$(
+    printf "SELECT COUNT(*) FROM nv_nachrichten WHERE \`12_inhalt\` = '%s';\n" \
+        "$forged_vordruck_marker" | db_sql
+)
+if [ "$forged_vordruck_count" != 0 ]; then
+    printf 'HTTP smoke: forged conversation note reached persistent state\n' >&2
+    exit 1
+fi
+
+# Exercise the real two-step UI transition. Browser-supplied author,
+# organisation and fictitious review marks from the originating staff form
+# must be replaced before the conversation-note confirmation is rendered.
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$workflow_csrf_token" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=Stab_schreiben' \
+    --data-urlencode '01_medium=Fu' \
+    --data-urlencode '01_datum=' \
+    --data-urlencode '01_zeichen=forged' \
+    --data-urlencode '10_anschrift=HTTP-Vordruckempfänger' \
+    --data-urlencode '11_gesprnotiz=on' \
+    --data-urlencode '12_anhang=' \
+    --data-urlencode "12_inhalt=$vordruck_marker" \
+    --data-urlencode "12_abfzeit=$tactical_time" \
+    --data-urlencode '13_abseinheit=Browserseitig gefälschte Einheit' \
+    --data-urlencode "14_zeichen=$test_code" \
+    --data-urlencode "14_funktion=$test_function" \
+    --data-urlencode '15_quitdatum=30122000' \
+    --data-urlencode '15_quitzeichen=si0001' \
+    --data-urlencode '16_gncopy=' \
+    --data-urlencode '16_empf=' \
+    --data-urlencode '17_vermerke=Backup-Restore-Nachweis' \
+    "$base_url/4fach/mainindex.php"
+assert_body 'name="task" value="Stab_gesprnoti"'
+assert_body 'id="f_01_zeichen" data-estab-readonly="true"'
+assert_body_absent 'Browserseitig gefälschte Einheit'
+assert_body_absent 'name="15_quitdatum"'
+assert_body_absent 'name="15_quitzeichen"'
+staged_vordruck_count=$(
+    printf "SELECT COUNT(*) FROM nv_nachrichten WHERE \`12_inhalt\` = '%s';\n" \
+        "$vordruck_marker" | db_sql
+)
+if [ "$staged_vordruck_count" != 0 ]; then
+    printf 'HTTP smoke: conversation-note staging persisted prematurely\n' >&2
+    exit 1
+fi
+
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$workflow_csrf_token" \
@@ -1636,13 +2172,22 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "14_zeichen=$test_code" \
     --data-urlencode "14_funktion=$test_function" \
     --data-urlencode '15_quitdatum=' \
-    --data-urlencode "15_quitzeichen=$test_code" \
+    --data-urlencode '15_quitzeichen=' \
     --data-urlencode '16_gncopy=' \
     --data-urlencode '16_empf=' \
     --data-urlencode '17_vermerke=Backup-Restore-Nachweis' \
     "$base_url/4fach/mainindex.php"
 if grep -Eq 'Fatal error|Uncaught (Error|TypeError)|Warning:' "$body"; then
     printf 'HTTP smoke: PHP runtime error leaked while generating a form\n' >&2
+    exit 1
+fi
+conversation_evidence_count=$(
+    printf "SELECT COUNT(*) FROM nv_nachrichten n JOIN nv_nachrichten_ereignisse e ON e.message_id = n.\`00_lfd\` AND e.einsatz_id = n.einsatz_id WHERE n.\`12_inhalt\` = '%s' AND n.\`01_zeichen\` = '%s' AND n.\`14_zeichen\` = '%s' AND n.\`14_funktion\` = '%s' AND COALESCE(n.\`15_quitzeichen\`, '') = '' AND COALESCE(n.\`15_quitdatum\`, '') = '' AND e.event_type = 'conversation_note_created' AND e.actor_code = '%s' AND e.actor_function = '%s' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.object_type')) = 'conversation_note' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.author_code')) = '%s' AND JSON_EXTRACT(e.field_snapshot, '$.review_required') = FALSE;\n" \
+        "$vordruck_marker" "$test_code" "$test_code" "$test_function" \
+        "$test_code" "$test_function" "$test_code" | db_sql
+)
+if [ "$conversation_evidence_count" != 1 ]; then
+    printf 'HTTP smoke: conversation-note actor/mark evidence is inconsistent\n' >&2
     exit 1
 fi
 stored_vordruck=$(vordruck_name_for_marker "$vordruck_marker")
@@ -1785,14 +2330,14 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
 assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/mainindex.php?stab=meldung&00_lfd=1"
 
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+# The selected S1 hat may work with its own messages and read both books, but
+# neither inherits the LdF/A-W transport overview nor the S2 Lageübersicht.
+assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/nachwea.php?nwalle=1"
-assert_body 'Nachweisung Eingang / Ausgang'
-assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_body_absent 'Nachweisung Eingang / Ausgang'
+assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fueltg/ue_ltg.php"
-assert_body "$workflow_marker"
-assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+assert_body_absent "$workflow_marker"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/stabetb/etb.php"
 assert_body 'Ihre Funktion hat lesenden Zugriff.'
@@ -1866,20 +2411,14 @@ assert_body 'data-estab-sidebar-status'
 assert_body "data-estab-presence-function=\"$test_function\""
 assert_body 'data-estab-sound-toggle'
 assert_body_absent 'data-estab-sidebar-audio'
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/status.php"
-assert_body 'estab-session-bar-compact'
-assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/counter.php"
-assert_body 'estab-session-bar-compact'
-assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
-assert_status 200 --cookie "$cookie_jar" \
+assert_status 403 --cookie "$cookie_jar" \
     "$base_url/4fach/status.php?embedded=1"
-assert_body_absent 'data-estab-session-bar'
-assert_status 200 --cookie "$cookie_jar" \
+assert_status 403 --cookie "$cookie_jar" \
     "$base_url/4fach/counter.php?embedded=1"
-assert_body_absent 'data-estab-session-bar'
 
 logout_audit_before=$(logout_audit_count "$test_code")
 case "$logout_audit_before" in
@@ -1935,6 +2474,11 @@ assert_status 200 --cookie "$newer_cookie_jar" --cookie-jar "$newer_cookie_jar" 
     --data-urlencode '2teskennwort=No' \
     --data-urlencode 'absenden_x=1' \
     "$base_url/4fach/mainindex.php"
+select_session_hat \
+    "$newer_cookie_jar" "$primary_duty_assignment_id" 'newer browser'
+assert_status 200 \
+    --cookie "$newer_cookie_jar" --cookie-jar "$newer_cookie_jar" \
+    "$base_url/4fach/vordrucke.php"
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 newer_authenticated_session_id=$(session_cookie_from_jar "$newer_cookie_jar")
 if [ -z "$newer_authenticated_session_id" ]; then
@@ -1988,6 +2532,11 @@ assert_status 200 --cookie "$current_cookie_jar" --cookie-jar "$current_cookie_j
     --data-urlencode '2teskennwort=No' \
     --data-urlencode 'absenden_x=1' \
     "$base_url/4fach/mainindex.php"
+select_session_hat \
+    "$current_cookie_jar" "$primary_duty_assignment_id" 'current browser'
+assert_status 200 \
+    --cookie "$current_cookie_jar" --cookie-jar "$current_cookie_jar" \
+    "$base_url/4fach/vordrucke.php"
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 current_logout_csrf=$(csrf_from_body)
 current_authenticated_session_id=$(session_cookie_from_jar "$current_cookie_jar")
@@ -2084,11 +2633,134 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
         "$base_url/4fadm/incidents.php"
     assert_body 'data-estab-incident-admin'
     assert_body 'Einsätze verwalten'
+
+    # Expired or forged admin forms are authorization failures, not server
+    # errors. These requests stop before incident lookup, export rendering,
+    # audit, or any other domain mutation.
+    assert_status 403 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        --request POST \
+        --data-urlencode 'admin_action=create' \
+        "$base_url/4fadm/incidents.php"
+    assert_body 'Formularsitzung ist ungültig oder abgelaufen'
+    assert_status 403 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        --request POST \
+        --data-urlencode \
+            'csrf_token=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+        --data-urlencode 'einsatz_id=1' \
+        --data-urlencode 'include_messages=1' \
+        "$base_url/4fadm/incident_export.php"
+    assert_body 'Formularsitzung ist ungültig oder abgelaufen'
+
     assert_status 200 --config "$admin_curl_config" \
         --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
         "$base_url/4fadm/users.php"
     assert_body 'data-estab-user-admin'
     assert_body 'Benutzerverwaltung'
+
+    # The final active duty shift must verify the real attachment bytes, not
+    # merely the well-formed database evidence. Tamper the required fixture
+    # after rendering the CSRF-protected close form and immediately before its
+    # POST. The rejected transaction must leave both the shift and every hat
+    # byte-for-byte in their prior lifecycle state.
+    assert_status 200 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        "$base_url/4fadm/fuehrungsstelle.php"
+    assert_body 'data-estab-dv-admin'
+    close_shift_csrf=$(csrf_from_body)
+    close_shift_id=$(printf '%s\n' \
+        "SELECT dienstschicht_id FROM nv_dienstschichten WHERE einsatz_id = (SELECT active_einsatz_id FROM nv_einsatz_status WHERE singleton_id = 1) AND status = 'AKTIV' ORDER BY dienstschicht_id DESC LIMIT 1;" |
+        db_sql | tr -d '\r\n')
+    if ! printf '%s' "$close_shift_id" | grep -Eq '^[1-9][0-9]*$'; then
+        printf 'HTTP smoke: final-shift integrity test has no active shift\n' >&2
+        exit 1
+    fi
+    close_state_before=$(db_sql <<SQL
+SELECT CONCAT(
+         shift_row.status, '|',
+         COALESCE(
+           DATE_FORMAT(shift_row.beendet_am, '%Y-%m-%d %H:%i:%s.%f'),
+           'NULL'
+         ), '|',
+         COALESCE(
+           GROUP_CONCAT(
+             CONCAT(
+               hat.dienstbesetzung_id, ':', hat.status, ':',
+               COALESCE(
+                 DATE_FORMAT(hat.abgeloest_am, '%Y-%m-%d %H:%i:%s.%f'),
+                 'NULL'
+               )
+             )
+             ORDER BY hat.dienstbesetzung_id SEPARATOR ','
+           ),
+           ''
+         )
+       )
+  FROM nv_dienstschichten AS shift_row
+  LEFT JOIN nv_dienstbesetzungen AS hat
+    ON hat.dienstschicht_id = shift_row.dienstschicht_id
+ WHERE shift_row.dienstschicht_id = ${close_shift_id}
+ GROUP BY shift_row.dienstschicht_id, shift_row.status, shift_row.beendet_am;
+SQL
+)
+    case "$close_state_before" in
+        AKTIV\|NULL\|*:ANGENOMMEN:NULL*) ;;
+        *)
+            printf 'HTTP smoke: final-shift fixture is not actively staffed: %s\n' \
+                "$close_state_before" >&2
+            exit 1
+            ;;
+    esac
+
+    tampered_attachment=$stored_attachment
+    attachment_fixture_bytes tamper "$tampered_attachment"
+    assert_status 409 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        --request POST \
+        --data-urlencode "csrf_token=$close_shift_csrf" \
+        --data-urlencode 'admin_action=close_shift' \
+        --data-urlencode "dienstschicht_id=$close_shift_id" \
+        "$base_url/4fadm/fuehrungsstelle.php"
+    assert_body 'Anhang-Integritätsfehler: 1'
+    close_state_after=$(db_sql <<SQL
+SELECT CONCAT(
+         shift_row.status, '|',
+         COALESCE(
+           DATE_FORMAT(shift_row.beendet_am, '%Y-%m-%d %H:%i:%s.%f'),
+           'NULL'
+         ), '|',
+         COALESCE(
+           GROUP_CONCAT(
+             CONCAT(
+               hat.dienstbesetzung_id, ':', hat.status, ':',
+               COALESCE(
+                 DATE_FORMAT(hat.abgeloest_am, '%Y-%m-%d %H:%i:%s.%f'),
+                 'NULL'
+               )
+             )
+             ORDER BY hat.dienstbesetzung_id SEPARATOR ','
+           ),
+           ''
+         )
+       )
+  FROM nv_dienstschichten AS shift_row
+  LEFT JOIN nv_dienstbesetzungen AS hat
+    ON hat.dienstschicht_id = shift_row.dienstschicht_id
+ WHERE shift_row.dienstschicht_id = ${close_shift_id}
+ GROUP BY shift_row.dienstschicht_id, shift_row.status, shift_row.beendet_am;
+SQL
+)
+    if [ "$close_state_after" != "$close_state_before" ]; then
+        printf '%s\n' \
+            'HTTP smoke: rejected final-shift close changed shift or hats' >&2
+        printf 'before: %s\nafter:  %s\n' \
+            "$close_state_before" "$close_state_after" >&2
+        exit 1
+    fi
+    attachment_fixture_bytes restore "$tampered_attachment"
+    tampered_attachment=
+
     assert_status 200 --config "$admin_curl_config" \
         --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
         "$base_url/4fadm/incident_export.php"
@@ -2258,6 +2930,8 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
     assert_body "action=download&amp;export_id=$first_export_id"
     assert_body 'data-estab-export-delete'
     assert_body 'Inhalt und Prüfsummen anzeigen'
+    assert_body 'Anhangprüfung:'
+    assert_body 'Integrität beim Eingang nicht belegbar'
     assert_body_absent '/var/lib/estab/export'
 
     assert_status 200 --config "$admin_curl_config" \

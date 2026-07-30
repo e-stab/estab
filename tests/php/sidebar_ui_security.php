@@ -107,6 +107,10 @@ $assert(
 );
 
 $queueProfiles = [
+    'ldf' => estab_sidebar_queue_profile([
+        'rolle' => 'Fernmelder',
+        'funktion' => 'LdF',
+    ]),
     'aw' => estab_sidebar_queue_profile([
         'rolle' => 'Fernmelder',
         'funktion' => 'A/W',
@@ -131,6 +135,11 @@ $queueProfiles = [
 ];
 $assert(
     $queueProfiles === [
+        'ldf' => [
+            'session_key' => 'old_que_ldf',
+            'sound_file' => 'notify_aw.wav',
+            'label' => 'Bei LdF',
+        ],
         'aw' => [
             'session_key' => 'old_que_aw',
             'sound_file' => 'notify_aw.wav',
@@ -164,6 +173,14 @@ $assertThrows(
     'malformed queue identity accepted'
 );
 
+$ldfQueueQuery = estab_sidebar_queue_query(
+    'old_que_ldf',
+    'nv_nachrichten',
+    'usr_',
+    'LdF',
+    false,
+    42
+);
 $awQueueQuery = estab_sidebar_queue_query(
     'old_que_aw',
     'nv_nachrichten',
@@ -197,45 +214,78 @@ $staffQueueQuery = estab_sidebar_queue_query(
     42
 );
 $assert(
+    $ldfQueueQuery['parameters'] === [42]
+        && str_contains($ldfQueueQuery['sql'], '`einsatz_id` = ?')
+        && str_contains($ldfQueueQuery['sql'], '`x00_status` = 1')
+        && str_contains($ldfQueueQuery['sql'], "`04_richtung` IN ('E','A')")
+        && str_contains($ldfQueueQuery['sql'], "`04_richtung` = 'E'")
+        && str_contains($ldfQueueQuery['sql'], "`04_richtung` = 'A'")
+        && str_contains($ldfQueueQuery['sql'], '`15_quitdatum` IS NOT NULL')
+        && str_contains($ldfQueueQuery['sql'], "`15_quitzeichen` != ''")
+        && str_contains($ldfQueueQuery['sql'], '`02_zeit` IS NULL')
+        && str_contains($ldfQueueQuery['sql'], "`02_zeichen` = ''"),
+    'LdF queue allows an outgoing message without Sichter approval'
+);
+$assert(
     $awQueueQuery['parameters'] === [42]
         && str_contains($awQueueQuery['sql'], '`nv_nachrichten`')
         && str_contains($awQueueQuery['sql'], '`einsatz_id` = ?')
         && str_contains($awQueueQuery['sql'], "`04_richtung` = 'A'")
         && str_contains($awQueueQuery['sql'], '`03_datum` IS NULL')
-        && str_contains($awQueueQuery['sql'], "`03_zeichen` = ''"),
-    'outgoing queue query changed its legacy selection'
+        && str_contains($awQueueQuery['sql'], "`03_zeichen` = ''")
+        && str_contains($awQueueQuery['sql'], '`15_quitdatum` IS NOT NULL')
+        && str_contains($awQueueQuery['sql'], "`15_quitzeichen` != ''"),
+    'outgoing queue allows a message without Sichter approval'
 );
 $assert(
     $siIncomingQuery['parameters'] === [42]
         && str_contains($siIncomingQuery['sql'], '`einsatz_id` = ?')
         && str_contains($siIncomingQuery['sql'], '`x00_status` = 4')
-        && str_contains($siIncomingQuery['sql'], "`04_richtung` = 'E'")
+        && str_contains(
+            $siIncomingQuery['sql'],
+            "`04_richtung` IN ('E','A')"
+        )
         && !str_contains($siIncomingQuery['sql'], '`03_datum` IS NOT NULL')
         && str_contains($siCombinedQuery['sql'], '`x00_status` = 4')
-        && str_contains($siCombinedQuery['sql'], '`03_datum` IS NOT NULL')
-        && str_contains($siCombinedQuery['sql'], "`03_zeichen` != ''"),
-    'review queue query counts messages outside the visible status-four scope'
+        && str_contains(
+            $siCombinedQuery['sql'],
+            "`04_richtung` IN ('E','A')"
+        )
+        && $siIncomingQuery === $siCombinedQuery,
+    'mandatory review queue can still exclude outgoing messages'
 );
 $assert(
-    $staffQueueQuery['parameters'] === [42, '%S1%', 42, '%S1%']
+    $staffQueueQuery['parameters'] === [
+        42,
+        '(^|,)[[:space:]]*(alle|S1)(_[^,[:space:]]+)?[[:space:]]*(,|$)',
+        'S1',
+        42,
+        '(^|,)[[:space:]]*(alle|S1)(_[^,[:space:]]+)?[[:space:]]*(,|$)',
+        'S1',
+    ]
         && substr_count($staffQueueQuery['sql'], '`nv_nachrichten`') === 2
         && substr_count($staffQueueQuery['sql'], '`einsatz_id` = ?') === 2
         && str_contains(
             $staffQueueQuery['sql'],
-            "(`all_messages`.`04_richtung` <> 'E'"
-                . ' OR `all_messages`.`x00_status` <> 1)'
+            '(all_messages.`x00_status` = 8'
+                . ' AND all_messages.`16_empf` REGEXP ?)'
         )
         && str_contains(
             $staffQueueQuery['sql'],
-            "(`done_messages`.`04_richtung` <> 'E'"
-                . ' OR `done_messages`.`x00_status` <> 1)'
+            "(all_messages.`04_richtung` = 'A'"
+                . ' AND BINARY all_messages.`14_funktion` = BINARY ?)'
+        )
+        && str_contains(
+            $staffQueueQuery['sql'],
+            '(done_messages.`x00_status` = 8'
+                . ' AND done_messages.`16_empf` REGEXP ?)'
         )
         && str_contains($staffQueueQuery['sql'], '`usr__fkt_s1_erl`')
         && str_contains(
             $staffQueueQuery['sql'],
             '`done_messages`.`00_lfd` = `done_state`.`nachnum`'
         ),
-    'staff queue counts incoming status-one messages or changed recipient state'
+    'staff queue is not aligned with exact terminal-recipient/own-output access'
 );
 foreach (
     [
@@ -992,6 +1042,7 @@ $workflowNames = static fn (array $actions): array =>
 $staffActions = estab_sidebar_workflow_actions([
     'rolle' => 'Stab',
     'funktion' => 'S1',
+    'duty_assignment_id' => 101,
 ], 'ROLLE');
 $assert(
     $workflowKeys($staffActions) === [
@@ -1010,6 +1061,7 @@ $assert(
     $workflowKeys(estab_sidebar_workflow_actions([
         'rolle' => 'Stab',
         'funktion' => 'Si',
+        'duty_assignment_id' => 102,
     ], 'ROLLE')) === [
         'stab_sichten',
         'si_admin',
@@ -1021,6 +1073,7 @@ $assert(
     $workflowKeys(estab_sidebar_workflow_actions([
         'rolle' => 'Fernmelder',
         'funktion' => 'A/W',
+        'duty_assignment_id' => 103,
     ], 'ROLLE')) === [
         'fm_eingang',
         'fm_ausgang',
@@ -1034,6 +1087,7 @@ $assert(
     $workflowKeys(estab_sidebar_workflow_actions([
         'rolle' => 'FB',
         'funktion' => 'THW',
+        'duty_assignment_id' => 104,
     ], 'ROLLE')) === [
         'stab_schreiben',
         'stab_lesen',
@@ -1045,6 +1099,7 @@ $assert(
     $workflowKeys(estab_sidebar_workflow_actions([
         'rolle' => 'Administrator',
         'funktion' => 'Admin',
+        'duty_assignment_id' => 105,
     ], 'ROLLE')) === ['m2_benutzer'],
     'administrator sidebar lost the legacy user action'
 );
@@ -1053,13 +1108,22 @@ $assert(
         && estab_sidebar_workflow_actions([
             'rolle' => 'Stab',
             'funktion' => 'S1',
+            'duty_assignment_id' => 101,
         ], 'LOGIN') === [],
     'sidebar exposes role actions outside the authenticated role menu'
+);
+$assert(
+    estab_sidebar_workflow_actions([
+        'rolle' => 'Stab',
+        'funktion' => 'S1',
+    ], 'ROLLE') === [],
+    'sidebar exposes operational actions before selecting an active duty hat'
 );
 $assertThrows(
     static fn (): array => estab_sidebar_workflow_actions([
         'rolle' => ['invalid'],
         'funktion' => 'S1',
+        'duty_assignment_id' => 106,
     ], 'ROLLE'),
     'invalid sidebar workflow identity accepted'
 );

@@ -124,7 +124,8 @@ complete_images=$complete_dossier_pdf.images.txt
 pdfinfo "$complete_dossier_pdf" >"$complete_info"
 pdftotext -layout "$complete_dossier_pdf" "$complete_text"
 pdfimages -list "$complete_dossier_pdf" >"$complete_images"
-grep -Eq '^Pages:[[:space:]]+5$' "$complete_info"
+complete_page_count=$(awk '/^Pages:/ { print $2 }' "$complete_info")
+[ "$complete_page_count" -ge 10 ]
 grep -Eq '^Page size:[[:space:]]+595\.28 x 841\.89 pts \(A4\)$' \
     "$complete_info"
 if grep -Eiq 'Dienstgebrauch|VS-NfD' "$complete_text"; then
@@ -137,24 +138,65 @@ if awk 'NR > 2 && $1 ~ /^[0-9]+$/ { found = 1 } END { exit found ? 0 : 1 }' \
     exit 1
 fi
 
-for page_number in 1 2 3 4 5; do
+for marker in \
+    'VORLÄUFIG' \
+    'Aufbewahrung bis' \
+    'Legal Hold' \
+    'Nachrichten-Head-Summenhash' \
+    'Einsatztagebuch (ETB)' \
+    'Ereigniszeit' \
+    'Erfassungszeit' \
+    'Ereignistyp' \
+    'Technisches Betriebsbuch (TBB)' \
+    'Nachrichtenereignisse und Nachweisköpfe' \
+    'Terminalbindungen' \
+    'Dienstschichten, Besetzungen und Übergaben' \
+    'Übergabeanforderungen' \
+    'INITIIERT' \
+    'STORNIERT' \
+    'BESTAETIGT' \
+    'Stornierungsgrund' \
+    'S6-Fernmeldeplanversionen und Einträge' \
+    'Gültig ab' \
+    'Freigegeben am' \
+    'Melderaufträge' \
+    'Tatsächlicher Empfänger' \
+    'Rücknachricht vorhanden' \
+    'Rückweg am' \
+    'Betriebsereignisse und Nachweiskopf' \
+    'Gespeicherter Head-Hash' \
+    'Anlagenverzeichnis' \
+    'Integrität beim Eingang' \
+    'SHA-256 und Größe stimmen'
+do
+    grep -Fq "$marker" "$complete_text"
+done
+
+message_page=
+page_number=1
+while [ "$page_number" -le "$complete_page_count" ]; do
     pdftotext -layout -f "$page_number" -l "$page_number" \
         "$complete_dossier_pdf" \
         "$complete_dossier_pdf.page-$page_number.layout.txt"
+    if grep -Fq 'EINGANG' \
+        "$complete_dossier_pdf.page-$page_number.layout.txt"; then
+        [ -z "$message_page" ] || {
+            echo "Complete dossier contains more than one message-form page" >&2
+            exit 1
+        }
+        message_page=$page_number
+    fi
+    page_number=$((page_number + 1))
 done
-grep -Fq 'Einsatzdossier' "$complete_dossier_pdf.page-1.layout.txt"
-grep -Fq 'Einsatztagebuch (ETB)' \
-    "$complete_dossier_pdf.page-2.layout.txt"
-grep -Fq 'Technisches Betriebsbuch (TBB)' \
-    "$complete_dossier_pdf.page-3.layout.txt"
+[ -n "$message_page" ]
 for marker in EINGANG AUSGANG Nachweis-Nr. Fm-Betriebsstelle; do
-    grep -Fq "$marker" "$complete_dossier_pdf.page-4.layout.txt"
+    grep -Fq "$marker" \
+        "$complete_dossier_pdf.page-$message_page.layout.txt"
 done
 grep -Fq 'Empfänger außerhalb aktueller Matrix:' \
-    "$complete_dossier_pdf.page-4.layout.txt"
-grep -Fq 'Seite 4/5' "$complete_dossier_pdf.page-4.layout.txt"
-grep -Fq 'Anlagenverzeichnis' \
-    "$complete_dossier_pdf.page-5.layout.txt"
+    "$complete_dossier_pdf.page-$message_page.layout.txt"
+grep -Fq "Seite $message_page/$complete_page_count" \
+    "$complete_dossier_pdf.page-$message_page.layout.txt"
 
 pdftoppm -png -r 144 -singlefile -hide-annotations \
     "$single_pdf" "$fixture_dir/message-form-page"
@@ -166,8 +208,11 @@ cmp \
 
 pdftoppm -png -r 144 \
     "$complete_dossier_pdf" "$fixture_dir/dossier-all-page"
-for page_number in 1 2 3 4 5; do
-    [ -s "$fixture_dir/dossier-all-page-$page_number.png" ]
+page_number=1
+while [ "$page_number" -le "$complete_page_count" ]; do
+    page_suffix=$(printf "%0${#complete_page_count}d" "$page_number")
+    [ -s "$fixture_dir/dossier-all-page-$page_suffix.png" ]
+    page_number=$((page_number + 1))
 done
 
 compare_production_crop() {
@@ -179,7 +224,8 @@ compare_production_crop() {
     pdftoppm -png -r 144 -f 1 -l 1 -singlefile -hide-annotations \
         -x "$crop_x" -y "$crop_y" -W "$crop_width" -H "$crop_height" \
         "$single_pdf" "$fixture_dir/single-$crop_name"
-    pdftoppm -png -r 144 -f 4 -l 4 -singlefile -hide-annotations \
+    pdftoppm -png -r 144 -f "$message_page" -l "$message_page" \
+        -singlefile -hide-annotations \
         -x "$crop_x" -y "$crop_y" -W "$crop_width" -H "$crop_height" \
         "$complete_dossier_pdf" "$fixture_dir/dossier-all-$crop_name"
     cmp \
@@ -188,8 +234,8 @@ compare_production_crop() {
 }
 
 # The only excluded rectangle contains the intentionally dossier-global
-# "Seite 4/5" counter. Every other pixel of the productive message page must
-# equal the standalone form, including fields, grid and message content.
+# dossier-global page counter. Every other pixel of the productive message
+# page must equal the standalone form, including fields, grid and content.
 compare_production_crop top 0 0 1191 180
 compare_production_crop counter-left 0 180 840 50
 compare_production_crop counter-right 1020 180 171 50
@@ -199,5 +245,10 @@ pdfdetach -save 1 -o "$fixture_dir/extracted-attachment.txt" "$dossier_pdf"
 cmp \
     "$fixture_dir/original-attachment.txt" \
     "$fixture_dir/extracted-attachment.txt"
+pdfdetach -save 1 -o "$fixture_dir/extracted-complete-attachment.txt" \
+    "$complete_dossier_pdf"
+cmp \
+    "$fixture_dir/original-attachment.txt" \
+    "$fixture_dir/extracted-complete-attachment.txt"
 
 echo "PDF render comparison: OK"

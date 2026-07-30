@@ -611,6 +611,33 @@ try {
         32,
         JSON_THROW_ON_ERROR
     );
+    $integrityManifest = array_replace($validManifest, [
+        'attachment_integrity' => [
+            'scheme' => 'sha256-ingest-v1',
+            'files_checked' => true,
+            'total' => 3,
+            'verified' => 2,
+            'legacy_unverifiable' => 1,
+            'integrity_errors' => 0,
+            'statement' => 'Integrität beim Eingang nicht belegbar',
+        ],
+    ]);
+    file_put_contents(
+        $newerManifestPath,
+        json_encode($integrityManifest, JSON_THROW_ON_ERROR)
+    );
+    $normalisedIntegrityManifest = estab_export_read_manifest(
+        $base,
+        $newerId
+    );
+    export_assert(
+        (
+            $normalisedIntegrityManifest['attachment_integrity']
+                ['legacy_unverifiable'] ?? null
+        ) === 1,
+        'attachment integrity manifest was not normalised'
+    );
+    file_put_contents($newerManifestPath, $validManifestJson);
     $invalidManifests = [
         'malformed JSON' => '{',
         'relative date' => json_encode(
@@ -667,6 +694,21 @@ try {
         'invalid formula triggers' => json_encode(
             array_replace($validManifest, [
                 'spreadsheet_formula_triggers' => '=@',
+            ]),
+            JSON_THROW_ON_ERROR
+        ),
+        'invented attachment integrity evidence' => json_encode(
+            array_replace($validManifest, [
+                'attachment_integrity' => [
+                    'scheme' => 'sha256-ingest-v1',
+                    'files_checked' => true,
+                    'total' => 1,
+                    'verified' => 1,
+                    'legacy_unverifiable' => 0,
+                    'integrity_errors' => 1,
+                    'statement' =>
+                        'Integrität beim Eingang nicht belegbar',
+                ],
             ]),
             JSON_THROW_ON_ERROR
         ),
@@ -834,6 +876,14 @@ export_assert(
     str_contains($controllerSource, "adminAction === 'create_export'")
         && str_contains($controllerSource, "adminAction === 'delete_export'"),
     'controller uses an explicit administrative action allowlist'
+);
+export_assert(
+    str_contains($controllerSource, "(string) \$conf_4f['ablage_dir']")
+        && str_contains(
+            $controllerSource,
+            'Integrität beim Eingang nicht belegbar'
+        ),
+    'database export omits attachment verification or legacy disclosure'
 );
 export_assert(
     str_contains($controllerSource, 'estab_csrf_require_post($_SERVER, $_POST)')

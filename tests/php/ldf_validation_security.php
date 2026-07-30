@@ -65,21 +65,12 @@ $caseSection = static function (
     return substr($source, $start, $end - $start);
 };
 
-$incoming = $caseSection($source, 'FM-Eingang', 'FM-Eingang_Sichter');
-$incomingReviewed = $caseSection(
-    $source,
-    'FM-Eingang_Sichter',
-    'Stab_schreiben'
-);
+$incoming = $caseSection($source, 'FM-Eingang', 'Stab_schreiben');
 $leadIncoming = $caseSection($source, 'LdF-Eingang', 'LdF-Ausgang');
 
 $assert(
     str_contains($incoming, '$this->validate["05_gegenstelle"]'),
     'FM-Eingang does not require the validated callsign'
-);
-$assert(
-    str_contains($incomingReviewed, '$this->validate["05_gegenstelle"]'),
-    'FM-Eingang_Sichter does not require the validated callsign'
 );
 $assert(
     str_contains($leadIncoming, '$this->validate["13_abseinheit"]'),

@@ -77,7 +77,6 @@ export ESTAB_HTTP_PORT=${ESTAB_HTTP_PORT:-18080}
 export ESTAB_PUBLIC_URL=${ESTAB_PUBLIC_URL:-/}
 export ESTAB_ALLOW_SELF_REGISTRATION=false
 export ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF=false
-export ESTAB_REVIEW_OUTGOING_MESSAGES=false
 export ESTAB_UPLOAD_MAX_BYTES=20971520
 export ESTAB_TEST_COMPOSE_ENGINE=${ESTAB_TEST_COMPOSE_ENGINE:-$container_cli}
 export TZ=${TZ:-Europe/Berlin}
@@ -312,10 +311,22 @@ run_php_integration() {
 
 incident_test_database() {
     local action=$1
+    local database_name=${2:-estab_incident_ci_test}
     case "$action" in
         create | drop) ;;
         *)
             echo "CI integration: invalid incident test database action" >&2
+            return 1
+            ;;
+    esac
+    case "$database_name" in
+        estab_incident_ci_test \
+        | estab_dv_evidence_ci_test \
+        | estab_dv_operations_ci_test \
+        | estab_attachment_reservation_ci_test \
+        | estab_message_concurrency_ci_test) ;;
+        *)
+            echo "CI integration: invalid isolated incident database name" >&2
             return 1
             ;;
     esac
@@ -343,22 +354,23 @@ incident_test_database() {
         unset escaped_password
         chmod 0600 "$client_defaults"
 
+        database_name=$2
         case "$1" in
             create)
                 statement="
-                    DROP DATABASE IF EXISTS \`estab_incident_ci_test\`;
-                    CREATE DATABASE \`estab_incident_ci_test\`
+                    DROP DATABASE IF EXISTS \`$database_name\`;
+                    CREATE DATABASE \`$database_name\`
                       CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
                 ;;
             drop)
                 statement="
-                    DROP DATABASE IF EXISTS \`estab_incident_ci_test\`"
+                    DROP DATABASE IF EXISTS \`$database_name\`"
                 ;;
         esac
         mariadb \
             --defaults-extra-file="$client_defaults" \
             --execute="$statement"
-    ' incident-test-database "$action"
+    ' incident-test-database "$action" "$database_name"
 }
 
 run_incident_domain_integration() {
@@ -383,6 +395,91 @@ run_incident_domain_integration() {
         status=1
     fi
     if ! incident_test_database drop; then
+        status=1
+    fi
+    return "$status"
+}
+
+run_dv_evidence_integration() {
+    local status=0
+    local database_name=estab_dv_evidence_ci_test
+
+    echo "CI integration: creating an isolated DV evidence database"
+    incident_test_database create "$database_name"
+    if ! run_timed 4m "$container_cli" compose run --rm --no-deps -T \
+        --env "ESTAB_DB_NAME=$database_name" \
+        migrate; then
+        status=1
+    elif ! run_timed 4m "$container_cli" compose run --rm --no-deps -T \
+        --env ESTAB_DV_EVIDENCE_INTEGRATION=1 \
+        --env "ESTAB_DB_NAME=$database_name" \
+        --env ESTAB_DB_USER=root \
+        --env ESTAB_DB_PASSWORD_FILE=/run/secrets/incident_root_password \
+        --volume "$repo_root:/workspace:ro" \
+        --volume \
+            "$secret_dir/db_root_password.txt:/run/secrets/incident_root_password:ro" \
+        --workdir /workspace \
+        app php -d auto_prepend_file= tests/integration/dv_evidence.php; then
+        status=1
+    fi
+    if ! incident_test_database drop "$database_name"; then
+        status=1
+    fi
+    return "$status"
+}
+
+run_dv_operations_integration() {
+    local status=0
+    local database_name=estab_dv_operations_ci_test
+
+    echo "CI integration: creating an isolated DV operations database"
+    incident_test_database create "$database_name"
+    if ! run_timed 4m "$container_cli" compose run --rm --no-deps -T \
+        --env "ESTAB_DB_NAME=$database_name" \
+        migrate; then
+        status=1
+    elif ! run_timed 4m "$container_cli" compose run --rm --no-deps -T \
+        --env ESTAB_DV_OPERATIONS_INTEGRATION=1 \
+        --env "ESTAB_DB_NAME=$database_name" \
+        --env ESTAB_DB_USER=root \
+        --env ESTAB_DB_PASSWORD_FILE=/run/secrets/incident_root_password \
+        --volume "$repo_root:/workspace:ro" \
+        --volume \
+            "$secret_dir/db_root_password.txt:/run/secrets/incident_root_password:ro" \
+        --workdir /workspace \
+        app php -d auto_prepend_file= tests/integration/dv_operations.php; then
+        status=1
+    fi
+    if ! incident_test_database drop "$database_name"; then
+        status=1
+    fi
+    return "$status"
+}
+
+run_isolated_operational_integration() {
+    local label=$1
+    local database_name=$2
+    local test_file=$3
+    local status=0
+
+    echo "CI integration: creating an isolated ${label} database"
+    incident_test_database create "$database_name"
+    if ! run_timed 4m "$container_cli" compose run --rm --no-deps -T \
+        --env "ESTAB_DB_NAME=$database_name" \
+        migrate; then
+        status=1
+    elif ! run_timed 5m "$container_cli" compose run --rm --no-deps -T \
+        --env "ESTAB_DB_NAME=$database_name" \
+        --env ESTAB_DB_USER=root \
+        --env ESTAB_DB_PASSWORD_FILE=/run/secrets/incident_root_password \
+        --volume "$repo_root:/workspace:ro" \
+        --volume \
+            "$secret_dir/db_root_password.txt:/run/secrets/incident_root_password:ro" \
+        --workdir /workspace \
+        app php -d auto_prepend_file= "$test_file"; then
+        status=1
+    fi
+    if ! incident_test_database drop "$database_name"; then
         status=1
     fi
     return "$status"
@@ -483,6 +580,8 @@ fi
 
 verify_schema
 run_incident_domain_integration
+run_dv_evidence_integration
+run_dv_operations_integration
 run_php_integration "nullable-date migration" tests/integration/date_compatibility.php
 run_php_integration "user administration" tests/integration/user_admin.php
 run_php_integration \
@@ -516,12 +615,14 @@ run_timed 5m "$container_cli" compose run --rm --no-deps -T \
         exec php -d auto_prepend_file= tests/integration/dynamic_tables.php
     '
 
-run_php_integration \
+run_isolated_operational_integration \
     "parallel attachment reservation" \
+    estab_attachment_reservation_ci_test \
     tests/integration/attachment_reservation.php
 
-run_php_integration \
+run_isolated_operational_integration \
     "message concurrency and state ownership" \
+    estab_message_concurrency_ci_test \
     tests/integration/message_concurrency.php
 
 roundtrip_token=$(printf '%s' "$COMPOSE_PROJECT_NAME" |
@@ -536,37 +637,18 @@ export ESTAB_TEST_WORKFLOW_MARKER="$workflow_marker"
 echo "CI integration: checking the direct HTTP surface"
 run_timed 3m sh tests/integration/http_surface_http.sh
 
-if [[ $browser_test_enabled == true ]]; then
-    echo "CI integration: running real-browser menu and session acceptance"
-    reserved_login_codes=(
-        "$(printf '%s' "${ESTAB_TEST_LOGIN_CODE:-e2e001}" | tr '[:upper:]' '[:lower:]')"
-        "$(printf '%s' "${ESTAB_TEST_ETB_CODE:-e2s200}" | tr '[:upper:]' '[:lower:]')"
-        "$(printf '%s' "${ESTAB_TEST_TBB_CODE:-e2aw00}" | tr '[:upper:]' '[:lower:]')"
-        "$(printf '%s' "${ESTAB_TEST_CATEGORY_SI_CODE:-e2si00}" | tr '[:upper:]' '[:lower:]')"
-    )
-    browser_login_code=
-    for browser_prefix in b c d f g h j k; do
-        browser_candidate="${browser_prefix}${roundtrip_token:0:5}"
-        browser_collision=false
-        for reserved_login_code in "${reserved_login_codes[@]}"; do
-            if [[ $browser_candidate == "$reserved_login_code" ]]; then
-                browser_collision=true
-                break
-            fi
-        done
-        if [[ $browser_collision == false ]]; then
-            browser_login_code=$browser_candidate
-            break
-        fi
-    done
-    if [[ -z $browser_login_code ]]; then
-        echo "CI integration: could not allocate an isolated browser test code" >&2
-        exit 1
+run_browser_acceptance() {
+    if [[ $browser_test_enabled != true ]]; then
+        return 0
     fi
+    echo "CI integration: running real-browser menu and session acceptance"
     (
-        export ESTAB_TEST_LOGIN_NAME="Browser Acceptance"
-        export ESTAB_TEST_LOGIN_CODE="$browser_login_code"
-        export ESTAB_TEST_LOGIN_FUNCTION="S1"
+        # Reuse the S1 account accepted in the central HTTP duty shift. A
+        # browser-only account would correctly be denied by the operational
+        # guard and would no longer represent a deployable production flow.
+        export ESTAB_TEST_LOGIN_NAME=${ESTAB_TEST_LOGIN_NAME:-Container Integration}
+        export ESTAB_TEST_LOGIN_CODE=${ESTAB_TEST_LOGIN_CODE:-e2e001}
+        export ESTAB_TEST_LOGIN_FUNCTION=${ESTAB_TEST_LOGIN_FUNCTION:-S1}
         browser_login_password=$(tr -d '\r\n' <"$ESTAB_TEST_LOGIN_PASSWORD_FILE")
         sh tests/integration/provision_user.sh \
             "$ESTAB_TEST_LOGIN_NAME" \
@@ -579,7 +661,7 @@ if [[ $browser_test_enabled == true ]]; then
         fi
         run_timed 4m python3 -B tests/browser/headless_ui.py
     )
-fi
+}
 
 echo "CI integration: running authenticated HTTP smoke"
 export ESTAB_TEST_STATE_FILE="$http_state_file"
@@ -621,6 +703,11 @@ if [[ ! $restore_export_sha256 =~ ^[a-f0-9]{64}$ ]]; then
     exit 1
 fi
 
+# The authenticated smoke has now created and activated the complete initial
+# duty shift. Run the mutating browser acceptance only after that prerequisite
+# exists; its S1 account is one of the personally accepted hats.
+run_browser_acceptance
+
 echo "CI integration: proving the isolated tokenless legacy-login opt-in"
 export ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF=true
 run_timed 5m "$container_cli" compose up --detach --no-deps --force-recreate app
@@ -634,6 +721,11 @@ wait_for_healthy app 240
 assert_clean_app_logs
 
 echo "CI integration: running ETB/TBB HTTP integration"
+# The initial service uses the A/W account first created by http_smoke.sh.
+# Re-provisioning it here changes only account credentials/presence; its
+# accepted function-hat assignment remains the authoritative write boundary.
+export ESTAB_TEST_TBB_CODE=${ESTAB_TEST_TBB_CODE:-e2l001}
+export ESTAB_TEST_TBB_NAME=${ESTAB_TEST_TBB_NAME:-Logbook Integration A-W}
 run_timed 5m sh tests/integration/logbooks_http.sh
 
 echo "CI integration: running category HTTP integration"
@@ -641,32 +733,33 @@ export ESTAB_CATEGORY_HTTP_TEST_ALLOW_MUTATION=true
 run_timed 5m sh tests/integration/categories_http.sh
 unset ESTAB_CATEGORY_HTTP_TEST_ALLOW_MUTATION
 
-echo "CI integration: proving the default incoming and direct outgoing message workflows"
+echo "CI integration: proving the mandatory DV message workflows"
 export ESTAB_MESSAGE_WORKFLOW_HTTP_TEST_ALLOW_MUTATION=true
-export ESTAB_TEST_WORKFLOW_VARIANT=default
-export ESTAB_TEST_EXPECT_OUTGOING_REVIEW=disabled
+active_duty_state_file="$roundtrip_dir/active-duty-state"
+export ESTAB_TEST_ACTIVE_DUTY_STATE_FILE="$active_duty_state_file"
 run_timed 6m sh tests/integration/message_workflow_http.sh
 assert_clean_app_logs
-
-echo "CI integration: recreating the app with outgoing Si review enabled"
-export ESTAB_REVIEW_OUTGOING_MESSAGES=true
-run_timed 5m "$container_cli" compose up --detach --no-deps --force-recreate app
-wait_for_healthy app 240
-
-echo "CI integration: proving the complete outgoing 2 -> 4 -> 8 message workflow"
-export ESTAB_TEST_WORKFLOW_VARIANT=review
-export ESTAB_TEST_EXPECT_OUTGOING_REVIEW=enabled
-run_timed 6m sh tests/integration/message_workflow_http.sh
-assert_clean_app_logs
-
-echo "CI integration: restoring the default direct outgoing workflow"
-export ESTAB_REVIEW_OUTGOING_MESSAGES=false
-run_timed 5m "$container_cli" compose up --detach --no-deps --force-recreate app
-wait_for_healthy app 240
 unset \
     ESTAB_MESSAGE_WORKFLOW_HTTP_TEST_ALLOW_MUTATION \
-    ESTAB_TEST_WORKFLOW_VARIANT \
-    ESTAB_TEST_EXPECT_OUTGOING_REVIEW
+    ESTAB_TEST_ACTIVE_DUTY_STATE_FILE
+if [[ ! -f $active_duty_state_file ]]; then
+    echo "CI integration: active-duty state file is missing" >&2
+    exit 1
+fi
+active_duty_state_lines=$(wc -l <"$active_duty_state_file" | tr -d '[:space:]')
+if [[ $active_duty_state_lines != 3 ]]; then
+    echo "CI integration: active-duty state must contain exactly three lines" >&2
+    exit 1
+fi
+restore_login_name=$(sed -n '1p' "$active_duty_state_file")
+restore_login_code=$(sed -n '2p' "$active_duty_state_file")
+restore_login_function=$(sed -n '3p' "$active_duty_state_file")
+if [[ ! $restore_login_name =~ ^Workflow\ S1\ [a-f0-9]{5}$ \
+    || ! $restore_login_code =~ ^a[a-f0-9]{5}$ \
+    || $restore_login_function != S1 ]]; then
+    echo "CI integration: active-duty restore identity is invalid" >&2
+    exit 1
+fi
 
 echo "CI integration: running administrative workflow HTTP integration"
 export ESTAB_ADMIN_HTTP_TEST_ALLOW_MUTATION=true
@@ -723,12 +816,18 @@ export ESTAB_TEST_RESTORE_VERIFY_ONLY=true
 export ESTAB_TEST_RESTORE_ATTACHMENT="$restore_attachment"
 export ESTAB_TEST_RESTORE_VORDRUCK="$restore_vordruck"
 export ESTAB_TEST_RESTORE_VORDRUCK_SHA256="$restore_vordruck_sha256"
+export ESTAB_TEST_LOGIN_NAME="$restore_login_name"
+export ESTAB_TEST_LOGIN_CODE="$restore_login_code"
+export ESTAB_TEST_LOGIN_FUNCTION="$restore_login_function"
 run_timed 5m sh tests/integration/http_smoke.sh
 unset \
     ESTAB_TEST_RESTORE_VERIFY_ONLY \
     ESTAB_TEST_RESTORE_ATTACHMENT \
     ESTAB_TEST_RESTORE_VORDRUCK \
-    ESTAB_TEST_RESTORE_VORDRUCK_SHA256
+    ESTAB_TEST_RESTORE_VORDRUCK_SHA256 \
+    ESTAB_TEST_LOGIN_NAME \
+    ESTAB_TEST_LOGIN_CODE \
+    ESTAB_TEST_LOGIN_FUNCTION
 
 wait_for_healthy db 30
 wait_for_healthy app 60

@@ -39,6 +39,8 @@ assert_dockerfile_absent 'COPY doku/ ./doku/'
 assert_dockerfile_absent 'COPY language/ ./language/'
 assert_dockerfile_absent 'COPY ubltg/ ./ubltg/'
 assert_dockerfile_contains 'COPY 4fadm/admin.php'
+assert_dockerfile_contains '4fach/fuehrungsstelle.php'
+assert_dockerfile_contains '4fadm/fuehrungsstelle.php'
 assert_dockerfile_contains '4fadm/incident_export.php'
 assert_dockerfile_contains '4fadm/incidents.php'
 assert_dockerfile_contains '4fadm/users.php'
@@ -50,6 +52,24 @@ assert_dockerfile_contains 'COPY docker/app/verify-runtime-surface.sh /usr/local
 assert_dockerfile_contains 'estab-verify-runtime-surface /var/www/html'
 assert_dockerfile_contains '"fileinfo", "gd", "mbstring"'
 assert_dockerfile_contains 'gd_info()["JPEG Support"]'
+for required_runtime_path in \
+    4fach/fuehrungsstelle.php \
+    4fadm/fuehrungsstelle.php \
+    app/attachment_integrity.php \
+    app/dv_operations.php \
+    app/dynamic_schema.php \
+    app/message_evidence.php \
+    app/message_transport.php \
+    app/operational_guard.php \
+    app/read_authorization.php
+do
+    if ! sh "$verifier" --list-required |
+        grep -Fxq -- "$required_runtime_path"; then
+        printf 'Runtime surface contract: verifier is missing %s\n' \
+            "$required_runtime_path" >&2
+        exit 1
+    fi
+done
 
 sh "$verifier" --list-required | while IFS= read -r relative_path; do
     mkdir -p "$fixture/$(dirname -- "$relative_path")"

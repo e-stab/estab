@@ -61,18 +61,38 @@ foreach ($queueFiles as $file) {
 $toolsSource = (string) file_get_contents($root . '/4fach/tools.php');
 $listSource = (string) file_get_contents($root . '/4fach/liste.php');
 $logoffSource = (string) file_get_contents($root . '/4fach/logoff.php');
-foreach ([$toolsSource, $listSource, $logoffSource] as $source) {
+foreach ([$toolsSource, $logoffSource] as $source) {
     $assert(
         preg_match('/`15_quitdatum`\s+IS\s+NULL/', $source) === 1,
-        'Pending-viewer filter lost NULL semantics'
+        'Legacy pending-viewer filter lost NULL semantics'
     );
     $assert(
         preg_match('/`03_datum`\s+IS\s+NOT\s+NULL/', $source) === 1,
-        'Forwarded-message filter lost NULL semantics'
+        'Legacy completed-transport filter lost NULL semantics'
     );
 }
+$assert(
+    preg_match(
+        '/`x00_status`\s*=\s*4.*`15_quitdatum`\s+IS\s+NULL/s',
+        $listSource
+    ) === 1,
+    'Mandatory Si queue lost its nullable review predicate'
+);
+$assert(
+    preg_match(
+        '/`x00_status`\s*=\s*1.*`03_datum`\s+IS\s+NULL/s',
+        $listSource
+    ) === 1,
+    'LdF queue lost its nullable transport predicate'
+);
+$assert(
+    preg_match(
+        '/`x00_status`\s*=\s*2.*`03_datum`\s+IS\s+NULL/s',
+        $listSource
+    ) === 1,
+    'A/W queue lost its nullable transport predicate'
+);
 $assert(preg_match('/`03_datum`\s+IS\s+NULL/', $toolsSource) === 1, 'Outgoing queue lost NULL semantics');
-$assert(preg_match('/`03_datum`\s+IS\s+NULL/', $listSource) === 1, 'Outgoing list lost NULL semantics');
 
 foreach (['backup_pdf.php', 'backup_img.php'] as $backupFile) {
     $source = (string) file_get_contents($root . '/4fbak/' . $backupFile);

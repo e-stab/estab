@@ -309,7 +309,7 @@ write_matrix_payload()
         if [ -n "$changed_position" ] && [ "$position" = "$changed_position" ]; then
             function_name=$changed_function
             role=FB
-            auto=1
+            auto=0
         fi
         printf '&pos_%s=%s&rolle_%s=%s' \
             "$position" "$function_name" "$position" "$role" >>"$destination"
@@ -444,21 +444,47 @@ for legacy_matrix_control in absenden_x laden_x speichern_x; do
 done
 
 counter_before=$(db_sql <<'SQL'
-SELECT COALESCE(MAX(m.`04_nummer`), 0)
-  FROM `nv_nachrichten` AS m
-  JOIN `nv_einsatz_status` AS s
-    ON s.`singleton_id` = 1
-   AND s.`active_einsatz_id` = m.`einsatz_id`;
+SELECT GREATEST(
+         COALESCE((
+           SELECT MAX(m.`04_nummer`)
+             FROM `nv_nachrichten` AS m
+            WHERE m.`einsatz_id` = s.`active_einsatz_id`
+         ), 0),
+         COALESCE((
+           SELECT MAX(CAST(JSON_UNQUOTE(JSON_EXTRACT(
+                        e.`details`, '$.after.ea_nummer'
+                      )) AS UNSIGNED))
+             FROM `nv_betriebsereignisse` AS e
+            WHERE e.`einsatz_id` = s.`active_einsatz_id`
+              AND e.`objekttyp` = 'DIENSTSCHICHT'
+              AND e.`aktion` = 'message_counter_repaired'
+         ), 0)
+       )
+  FROM `nv_einsatz_status` AS s
+ WHERE s.`singleton_id` = 1;
 SQL
 )
 assert_status 200 --config "$admin_curl_config" \
     "$base_url/4fadm/set_number_after_crash.php?page=2&ea_nummer=999999999"
 counter_after_get=$(db_sql <<'SQL'
-SELECT COALESCE(MAX(m.`04_nummer`), 0)
-  FROM `nv_nachrichten` AS m
-  JOIN `nv_einsatz_status` AS s
-    ON s.`singleton_id` = 1
-   AND s.`active_einsatz_id` = m.`einsatz_id`;
+SELECT GREATEST(
+         COALESCE((
+           SELECT MAX(m.`04_nummer`)
+             FROM `nv_nachrichten` AS m
+            WHERE m.`einsatz_id` = s.`active_einsatz_id`
+         ), 0),
+         COALESCE((
+           SELECT MAX(CAST(JSON_UNQUOTE(JSON_EXTRACT(
+                        e.`details`, '$.after.ea_nummer'
+                      )) AS UNSIGNED))
+             FROM `nv_betriebsereignisse` AS e
+            WHERE e.`einsatz_id` = s.`active_einsatz_id`
+              AND e.`objekttyp` = 'DIENSTSCHICHT'
+              AND e.`aktion` = 'message_counter_repaired'
+         ), 0)
+       )
+  FROM `nv_einsatz_status` AS s
+ WHERE s.`singleton_id` = 1;
 SQL
 )
 if [ "$counter_before" != "$counter_after_get" ]; then
@@ -540,6 +566,49 @@ assert_status 200 --config "$admin_curl_config" \
     --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
     "$base_url/4fadm/make_fkt.php"
 matrix_csrf=$(csrf_from_body)
+
+# Automatic sighting cannot replace the qualified Si workflow required by
+# DV 1-101. Prove that a syntactically complete matrix carrying the historic
+# stasi_* flag is rejected without changing either matrix or the audit ledger.
+autosight_payload=$work_dir/matrix-autosight-invalid.txt
+write_matrix_payload \
+    "$autosight_payload" "$matrix_csrf" "$blank_position" \
+    save_matrix "$original_matrix" E2EAUT
+printf '&stasi_%s=1' "$blank_position" >>"$autosight_payload"
+matrix_audit_before_autosight=$(db_sql <<SQL
+SELECT COUNT(*) FROM \`nv_protokoll\`
+ WHERE \`p_lfd\` > ${audit_floor}
+   AND \`p_was\` = 'Empfängermatrix';
+SQL
+)
+assert_status 422 --config "$admin_curl_config" \
+    --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+    --request POST --header 'Content-Type: application/x-www-form-urlencoded' \
+    --data-binary "@$autosight_payload" \
+    "$base_url/4fadm/make_fkt.php"
+assert_body 'Die Matrix ist ungültig.'
+assert_body 'Autosichtung ist nicht'
+normalized_matrix >"$restored_matrix"
+cmp -s "$original_matrix" "$restored_matrix" || {
+    echo 'Admin HTTP: rejected autosighting changed the active matrix' >&2
+    exit 1
+}
+normalized_standard_matrix >"$observed_standard_matrix"
+cmp -s "$original_standard_matrix" "$observed_standard_matrix" || {
+    echo 'Admin HTTP: rejected autosighting changed the standard matrix' >&2
+    exit 1
+}
+matrix_audit_after_autosight=$(db_sql <<SQL
+SELECT COUNT(*) FROM \`nv_protokoll\`
+ WHERE \`p_lfd\` > ${audit_floor}
+   AND \`p_was\` = 'Empfängermatrix';
+SQL
+)
+if [ "$matrix_audit_before_autosight" != "$matrix_audit_after_autosight" ]; then
+    echo 'Admin HTTP: rejected autosighting wrote an audit mutation' >&2
+    exit 1
+fi
+
 changed_payload=$work_dir/matrix-changed.txt
 write_matrix_payload "$changed_payload" "$matrix_csrf" "$blank_position"
 assert_status 303 --config "$admin_curl_config" \
@@ -558,7 +627,7 @@ SELECT CONCAT(\`mtx_fkt\`, '|', \`mtx_rolle\`, '|',
  WHERE CONCAT(\`mtx_x\`, \`mtx_y\`) = '${blank_position}';
 SQL
 )
-if [ "$changed_cell" != 'E2EADM|FB|1' ]; then
+if [ "$changed_cell" != 'E2EADM|FB|0' ]; then
     echo 'Admin HTTP: matrix change was not persisted exactly' >&2
     exit 1
 fi
@@ -610,7 +679,7 @@ if [ "$matrix_audit_before_load" != "$matrix_audit_after_load" ]; then
 fi
 
 # The combined action persists an exact copy to both tables in one transaction,
-# including the automatic-sighting and red-copy flags.
+# including the red-copy flag while keeping forbidden autosighting disabled.
 save_both_payload=$work_dir/matrix-save-both.txt
 write_matrix_payload \
     "$save_both_payload" "$matrix_csrf" "$blank_position" \
@@ -691,7 +760,7 @@ SELECT CONCAT(\`mtx_fkt\`, '|', \`mtx_rolle\`, '|',
  WHERE CONCAT(\`mtx_x\`, \`mtx_y\`) = '${blank_position}';
 SQL
 )
-if [ "$changed_standard_cell" != 'E2EADM|FB|0|1' ]; then
+if [ "$changed_standard_cell" != 'E2EADM|FB|0|0' ]; then
     echo 'Admin HTTP: combined save lost a standard matrix flag' >&2
     exit 1
 fi
@@ -762,6 +831,17 @@ if [ "$counter_before" -ge 999999999 ]; then
     exit 1
 fi
 counter_target=$((counter_before + 1))
+counter_message_rows_before=$(db_sql <<SQL
+SELECT COUNT(*) FROM \`nv_nachrichten\`
+ WHERE \`einsatz_id\` = ${active_incident_id};
+SQL
+)
+counter_open_rows_before=$(db_sql <<SQL
+SELECT COUNT(*) FROM \`nv_nachrichten\`
+ WHERE \`einsatz_id\` = ${active_incident_id}
+   AND \`x00_status\` <> 8;
+SQL
+)
 
 assert_status 200 --config "$admin_curl_config" \
     --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
@@ -804,16 +884,48 @@ if [ "$counter_statuses" != '303 409 ' ]; then
         "$counter_statuses" >&2
     exit 1
 fi
-counter_rows=$(db_sql <<SQL
-SELECT COUNT(*) FROM \`nv_nachrichten\`
- WHERE \`einsatz_id\` = ${active_incident_id}
-   AND \`04_richtung\` = 'E'
-   AND \`04_nummer\` = ${counter_target}
-   AND \`12_inhalt\` LIKE 'eStab Systemmeldung.%Nachrichtenzähler wurde nach Systemausfall%';
+counter_message_state=$(db_sql <<SQL
+SELECT CONCAT(
+         COUNT(*), '|',
+         SUM(CASE WHEN \`x00_status\` <> 8 THEN 1 ELSE 0 END)
+       )
+  FROM \`nv_nachrichten\`
+ WHERE \`einsatz_id\` = ${active_incident_id};
 SQL
 )
-if [ "$counter_rows" != 1 ]; then
-    echo 'Admin HTTP: concurrent counter update did not create exactly one system message' >&2
+if [ "$counter_message_state" != "${counter_message_rows_before}|${counter_open_rows_before}" ]; then
+    echo 'Admin HTTP: counter repair created or changed a fachliche message blocker' >&2
+    exit 1
+fi
+counter_evidence=$(db_sql <<SQL
+SELECT CONCAT(
+         COUNT(*), '|',
+         COALESCE(MAX(JSON_UNQUOTE(JSON_EXTRACT(
+           \`details\`, '$.numbering_mode'
+         ))), ''), '|',
+         COALESCE(MAX(CAST(JSON_UNQUOTE(JSON_EXTRACT(
+           \`details\`, '$.after.ea_nummer'
+         )) AS UNSIGNED)), 0), '|',
+         COALESCE(MAX(CASE
+           WHEN \`ereignis_hash\` = (
+             SELECT \`letzter_hash\`
+               FROM \`nv_betriebsereignis_kopf\`
+              WHERE \`einsatz_id\` = ${active_incident_id}
+           )
+           THEN 1 ELSE 0 END), 0)
+       )
+  FROM \`nv_betriebsereignisse\`
+ WHERE \`einsatz_id\` = ${active_incident_id}
+   AND \`objekttyp\` = 'DIENSTSCHICHT'
+   AND \`aktion\` = 'message_counter_repaired'
+   AND CAST(JSON_UNQUOTE(JSON_EXTRACT(
+         \`details\`, '$.after.ea_nummer'
+       )) AS UNSIGNED) = ${counter_target};
+SQL
+)
+if [ "$counter_evidence" != "1|gemeinsam|${counter_target}|1" ]; then
+    printf 'Admin HTTP: counter repair lacks one head-linked evidence event: %s\n' \
+        "$counter_evidence" >&2
     exit 1
 fi
 

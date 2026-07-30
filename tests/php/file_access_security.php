@@ -176,6 +176,9 @@ try {
 $root = dirname(__DIR__, 2);
 $apache = (string) file_get_contents($root . '/docker/apache/estab.conf');
 $download = (string) file_get_contents($root . '/4fach/download.php');
+$attachmentIntegrity = (string) file_get_contents(
+    $root . '/app/attachment_integrity.php'
+);
 $preview = (string) file_get_contents($root . '/4fach/showpic.php');
 $forms = (string) file_get_contents($root . '/4fach/vordrucke.php');
 $menu = (string) file_get_contents($root . '/menue.inc.php');
@@ -188,29 +191,55 @@ $assert(
 );
 foreach ([$download, $preview, $forms] as $endpoint) {
     $assert(
-        str_contains($endpoint, 'estab_auth_session_is_authenticated'),
+        str_contains($endpoint, 'estab_read_session_identity'),
         'file endpoint lacks the authenticated-session boundary'
     );
 }
 $assert(
     str_contains($download, 'estab_file_open')
+        && str_contains(
+            $download,
+            'estab_attachment_integrity_open_snapshot('
+        )
         && str_contains($download, 'begin_transaction()')
         && str_contains($download, 'estab_file_stream_content_type($stream)')
-        && strpos($download, 'estab_file_open(') < strpos($download, '$connection->commit()')
+        && strpos(
+            $download,
+            'estab_attachment_integrity_open_snapshot('
+        ) < strpos($download, '$connection->commit()')
+        && str_contains(
+            $attachmentIntegrity,
+            'estab_attachment_integrity_measure_stream($snapshot)'
+        )
+        && str_contains($attachmentIntegrity, "'stream' => \$snapshot")
         && str_contains($download, 'X-Content-Type-Options: nosniff')
+        && str_contains($download, 'X-eStab-Attachment-Integrity: ')
         && str_contains($download, 'Content-Disposition: '),
-    'download endpoint lacks atomic authorization/open or safe response headers'
+    'download endpoint lacks an exact verified snapshot or safe response headers'
 );
 $assert(
-    str_contains($preview, 'estab_file_open')
+    str_contains(
+        $preview,
+        'estab_attachment_integrity_open_snapshot ('
+    )
         && str_contains($preview, 'begin_transaction ()')
-        && str_contains($preview, 'estab_attachment_find (')
-        && str_contains($preview, '$storedName,')
+        && str_contains($preview, 'estab_read_attachment (')
+        && str_contains($preview, '$requested,')
         && str_contains($preview, 'true')
-        && strpos($preview, 'estab_file_open (') < strpos($preview, '$connection->commit ()')
+        && strpos(
+            $preview,
+            'estab_attachment_integrity_open_snapshot ('
+        ) < strpos($preview, '$connection->commit ()')
         && str_contains($preview, 'getimagesizefromstring ($imageBytes)')
+        && str_contains($preview, 'X-eStab-Attachment-Integrity: ')
         && !str_contains($preview, 'realpath ($requested)'),
-    'preview endpoint lacks atomic authorization/open or safe in-memory decoding'
+    'preview endpoint lacks verified snapshot authorization or safe decoding'
+);
+$assert(
+    str_contains($download, 'estab_read_attachment(')
+        && str_contains($download, 'estab_read_message_allowed(')
+        && str_contains($forms, 'estab_read_filter_generated_forms('),
+    'file endpoints lack object-level attachment or message authorization'
 );
 $assert(
     str_contains($attachmentController, 'estab_file_download_url')
@@ -227,16 +256,42 @@ $assert(
         && !str_contains($pdf, '$link = "../anhang/"'),
     'generated PDF still embeds a direct attachment path'
 );
+$formsCardMatch = [];
+$formsCardFound = preg_match(
+    '/\\$menue\\[(\\d+)\\]\\["navigation_key"\\]\\s*=\\s*"forms"\\s*;/',
+    $menu,
+    $formsCardMatch
+) === 1;
+$formsCardIndex = $formsCardFound ? $formsCardMatch[1] : '';
 $assert(
-    str_contains($menu, '$menue[3]["link"] = "./4fach/vordrucke.php"')
-        && str_contains($menu, '$menue[3]["visible"] = true'),
-    'secure generated-form menu item is not active'
+    $formsCardFound
+        && str_contains(
+            $menu,
+            '$menue[' . $formsCardIndex
+                . ']["link"] = "./4fach/vordrucke.php";'
+        )
+        && str_contains(
+            $menu,
+            '$menue[' . $formsCardIndex . ']["access"] = "application";'
+        )
+        && str_contains(
+            $menu,
+            '$menue[' . $formsCardIndex . ']["visible"] = true'
+        ),
+    'secure canonical generated-form menu item is not active'
 );
 
-foreach (['4fach/4fachform.php', '4fach/all_msg.php', '4fueltg/ue_ltg.php'] as $legacyView) {
+foreach (['4fach/4fachform.php', '4fueltg/ue_ltg.php'] as $legacyView) {
     $source = (string) file_get_contents($root . '/' . $legacyView);
     $assert(str_contains($source, 'estab_file_download_url'), $legacyView . ' lacks secure download links');
     $assert(!str_contains($source, '$conf_4f ["ablage_uri"]'), $legacyView . ' still exposes 4fdata');
 }
+$retiredAllMessages = (string) file_get_contents($root . '/4fach/all_msg.php');
+$assert(
+    str_contains($retiredAllMessages, 'http_response_code(410)')
+        && strpos($retiredAllMessages, 'exit;')
+            < strpos($retiredAllMessages, 'include ('),
+    'retired unrestricted all-message renderer does not fail closed'
+);
 
 echo "file access security: OK ({$assertions} assertions)\n";
