@@ -13,8 +13,8 @@ Einsatz Tage Buch
   Szenario "Globaler Einsatz aktiv."
 
     + Anzeige des globalen Einsatzkopfs
-    + Lesender Zugriff fuer jede angemeldete Funktion
-    + Eintragsfunktion fuer die aktuell als Rotkopie markierte Funktion
+    + Lesender Zugriff nur mit ausgewaehlter, aktiver Dienstfunktion
+    + Eintragsfunktion nur mit der Faehigkeit EINSATZTAGEBUCH
 
   Szenario "Schaltflaeche ETB-Eintrag wird betaetigt"
 
@@ -35,7 +35,9 @@ class etb_liste {
   var $etb_funktion ;
   var $etb_kuerzel ;
   var $etb_benutzer ;
+  var $etb_rolle ;
   var $etb_authorized ;
+  public int $etb_duty_assignment_id = 0;
 
 /*****************************************************************************\
 
@@ -49,9 +51,12 @@ class etb_liste {
     $this->read_out_etbtitel ();
       if (debug == true){    echo "etb_liste 2 ->"; var_dump ($this->etb_titel_gesetzt); echo "<br>";}
     $conf_etb [0] = "Lfd.-Nr.";
-    $conf_etb [1] = "Datum/Zeit";
-    $conf_etb [2] = "Darstellung der Ereignisse";
-    $conf_etb [3] = "Bemerkung";
+    $conf_etb [1] = "Ereigniszeit";
+    $conf_etb [2] = "Art";
+    $conf_etb [3] = "Darstellung der Ereignisse";
+    $conf_etb [4] = "Bemerkung / Nachweise";
+    $conf_etb [5] = "Erfasst";
+    $conf_etb [6] = "Aktion";
 
     $this->spaltenanzahl = count ($conf_etb);
     $this->spaltenkoepfe = $conf_etb;
@@ -297,6 +302,8 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
         "funktion" => (string) $this->etb_funktion,
         "kuerzel" => (string) $this->etb_kuerzel,
         "benutzer" => (string) $this->etb_benutzer,
+        "rolle" => (string) $this->etb_rolle,
+        "duty_assignment_id" => $this->etb_duty_assignment_id,
       )
     );
   }
@@ -308,19 +315,50 @@ var $lfd ;
 var $task;
 
   function etb_eintragsmenue ($data) {
-    unset ($data);
+    $correctionId = is_int ($data) && $data > 0 ? $data : null;
     $action = estab_auth_html (estab_application_url ("stabetb/etb.php"));
 
     echo "<section class=\"estab-tool-panel\" aria-labelledby=\"etb-entry-title\">\n";
     echo "<header class=\"estab-tool-panel-heading\">\n";
-    echo "<h2 id=\"etb-entry-title\">ETB-Eintrag erfassen</h2>\n";
-    echo "<p>Die Ereignisdarstellung ist verpflichtend; eine Bemerkung ist optional.</p>\n";
+    echo "<h2 id=\"etb-entry-title\">";
+    echo $correctionId === null
+      ? "ETB-Eintrag erfassen"
+      : "ETB-Eintrag Nr. ".(int) $correctionId." berichtigen";
+    echo "</h2>\n";
+    echo "<p>Fachliche Ereigniszeit und Erfassungszeit werden getrennt und ";
+    echo "unveränderlich gespeichert. Fehler werden ausschließlich mit einem ";
+    echo "neuen Korrektureintrag berichtigt.</p>\n";
     echo "</header>\n";
     echo "<form class=\"estab-tool-form\" method=\"post\" action=\"".$action.
          "\" name=\"etbeintrag\" data-estab-dirty-guard ".
          "data-estab-requires-incident>\n";
     echo estab_csrf_field ()."\n";
     echo "<input type=\"hidden\" name=\"logbook_action\" value=\"save_entry\">\n";
+    if ($correctionId !== null) {
+      echo "<input type=\"hidden\" name=\"event_type\" value=\"korrektur\">\n";
+      echo "<input type=\"hidden\" name=\"correction_of\" value=\"".
+           (int) $correctionId."\">\n";
+    }
+    echo "<div class=\"estab-tool-form-grid\">\n";
+    echo "<div class=\"estab-tool-field\">\n";
+    echo "<label for=\"etb-event-time\">Fachliche Ereigniszeit</label>\n";
+    echo "<input id=\"etb-event-time\" type=\"datetime-local\" ";
+    echo "name=\"event_time\" required value=\"".
+         estab_auth_html (date ("Y-m-d\\TH:i"))."\">\n";
+    echo "<small>Wann ist das dokumentierte Ereignis tatsächlich eingetreten?</small>\n";
+    echo "</div>\n";
+    if ($correctionId === null) {
+      echo "<div class=\"estab-tool-field\">\n";
+      echo "<label for=\"etb-event-type\">Art des Eintrags</label>\n";
+      echo "<select id=\"etb-event-type\" name=\"event_type\" required>\n";
+      foreach (estab_logbook_entry_types () as $value => $label) {
+        if ($value === "korrektur") { continue; }
+        echo "<option value=\"".estab_auth_html ($value)."\">".
+             estab_auth_html ($label)."</option>\n";
+      }
+      echo "</select>\n</div>\n";
+    }
+    echo "</div>\n";
     echo "<div class=\"estab-tool-field\">\n";
     echo "<label for=\"etb-event\">Darstellung der Ereignisse</label>\n";
     echo "<textarea id=\"etb-event\" maxlength=\"10000\" required ";
@@ -331,6 +369,19 @@ var $task;
     echo "<textarea id=\"etb-comment\" maxlength=\"10000\" ";
     echo "name=\"comment\"></textarea>\n";
     echo "<small>Optional, höchstens 10.000 Zeichen.</small>\n</div>\n";
+    echo "<details class=\"estab-tool-field\">\n";
+    echo "<summary>Bezüge und Nachweise (optional)</summary>\n";
+    echo "<div class=\"estab-tool-form-grid\">\n";
+    echo "<div class=\"estab-tool-field\"><label for=\"etb-message-id\">";
+    echo "Nachrichten-ID</label><input id=\"etb-message-id\" type=\"number\" ";
+    echo "min=\"1\" step=\"1\" name=\"message_id\"></div>\n";
+    echo "<div class=\"estab-tool-field\"><label for=\"etb-attachment-id\">";
+    echo "Anhang-ID</label><input id=\"etb-attachment-id\" type=\"number\" ";
+    echo "min=\"1\" step=\"1\" name=\"attachment_id\"></div>\n";
+    echo "<div class=\"estab-tool-field estab-tool-field-wide\">";
+    echo "<label for=\"etb-reference\">Weiterer Akten-/Dokumentenbezug</label>";
+    echo "<input id=\"etb-reference\" maxlength=\"255\" name=\"reference\">";
+    echo "</div>\n</div>\n</details>\n";
     echo "<div class=\"estab-tool-actions\">\n";
     echo "<button class=\"estab-button estab-button-primary\" type=\"submit\">";
     echo "ETB-Eintrag speichern</button>\n";
@@ -398,19 +449,70 @@ var $task;
         echo "<td class=\"estab-tool-table-number\" data-label=\"Lfd.-Nr.\">\n";
         echo (int) $line ["etb_lfd-nr"];
         echo "</td>\n";
-        echo "<td data-label=\"Datum/Zeit\"><time>";
-        echo estab_auth_html ($this->konv_datetime_taktime ($line ["etb_time"]));
+        $eventTime = isset ($line ["estab_event_time"])
+          ? (string) $line ["estab_event_time"]
+          : (string) $line ["etb_time"];
+        $recordedAt = isset ($line ["estab_recorded_at"])
+          ? (string) $line ["estab_recorded_at"]
+          : (string) $line ["etb_time"];
+        $eventType = isset ($line ["estab_event_type"])
+          ? (string) $line ["estab_event_type"]
+          : "legacy_import";
+        $typeLabels = estab_logbook_entry_types ();
+        $typeLabel = $typeLabels [$eventType] ?? (
+          $eventType === "legacy_import" ? "Bestandseintrag" : $eventType
+        );
+        echo "<td data-label=\"Ereigniszeit\"><time>";
+        echo estab_auth_html ($this->konv_datetime_taktime ($eventTime));
         echo "</time>";
+        echo "</td>\n";
+        echo "<td data-label=\"Art\">".estab_auth_html ($typeLabel);
+        if (isset ($line ["estab_correction_of"]) &&
+            $line ["estab_correction_of"] !== null) {
+          echo "<br><small>zu Nr. ".(int) $line ["estab_correction_of"]."</small>";
+        }
         echo "</td>\n";
         echo "<td data-label=\"Darstellung der Ereignisse\">";
         echo $line ["etb_aktion"] != ""
           ? nl2br (estab_auth_html ($line ["etb_aktion"]), false)
           : "<span aria-label=\"keine Angabe\">—</span>";
         echo "</td>\n";
-        echo "<td data-label=\"Bemerkung\">";
+        echo "<td data-label=\"Bemerkung / Nachweise\">";
         echo $line ["etb_bemerk"] != ""
           ? nl2br (estab_auth_html ($line ["etb_bemerk"]), false)
           : "<span aria-label=\"keine Angabe\">—</span>";
+        $references = array ();
+        if (!empty ($line ["estab_message_id"])) {
+          $references [] = "Nachricht #".(int) $line ["estab_message_id"];
+        }
+        if (!empty ($line ["estab_attachment_id"])) {
+          $references [] = "Anhang #".(int) $line ["estab_attachment_id"];
+        }
+        if (!empty ($line ["estab_reference"])) {
+          $references [] = (string) $line ["estab_reference"];
+        }
+        if ($references !== array ()) {
+          echo "<br><small>".estab_auth_html (implode (" · ", $references)).
+               "</small>";
+        }
+        echo "</td>\n";
+        echo "<td data-label=\"Erfasst\">";
+        echo "<time>".estab_auth_html (
+          $this->konv_datetime_taktime ($recordedAt)
+        )."</time><br>";
+        echo "<small>".estab_auth_html ((string) ($line ["etb_benutzer"] ?? "")).
+             " · ".estab_auth_html ((string) ($line ["etb_funktion"] ?? "")).
+             " · ".estab_auth_html ((string) ($line ["etb_kuerzel"] ?? "")).
+             "</small></td>\n";
+        echo "<td data-label=\"Aktion\">";
+        if ($this->etb_authorized) {
+          echo "<a class=\"estab-button\" href=\"".
+               estab_auth_html (estab_application_url ("stabetb/etb.php")).
+               "?correct=".(int) $line ["etb_lfd-nr"]."\">";
+          echo "Berichtigen</a>";
+        } else {
+          echo "<span aria-label=\"keine Aktion\">—</span>";
+        }
         echo "</td>\n";
         echo "</tr>\n";
       }
@@ -434,31 +536,62 @@ if (session_status () !== PHP_SESSION_ACTIVE) {
   session_start ();
 }
 require_once __DIR__ . "/../app/logbook.php";
+require_once __DIR__ . "/../app/read_authorization.php";
 require_once __DIR__ . "/../app/session_ui.php";
 estab_auth_require_session ($_SESSION);
 
 include ("../4fcfg/dbcfg.inc.php");
 include ("../4fcfg/e_cfg.inc.php");
 
-$identity = estab_auth_session_identity ($_SESSION);
+$identity = estab_read_session_identity ($_SESSION);
 if (!is_array ($identity)) {
   estab_logbook_abort (403, "Anmeldung erforderlich.");
 }
 estab_session_ui_start ($_SESSION);
 
+$berechtigt = false;
+$dutyAssignmentId = null;
 try {
-  // Older databases used "1"; current matrices store the red-copy flag as "t".
-  $redcopyFunction = estab_logbook_redcopy_function (
-    $conf_4f_db,
-    $conf_4f_tbl ["empfmtx"]
+  $readConnection = estab_auth_connect ($conf_4f_db);
+  $readScope = estab_read_require_operational_scope (
+    $readConnection,
+    $identity
   );
+  $identity = $readScope ["identity"];
+  $dutyAssignmentId = estab_read_duty_assignment_id (
+    $identity ["duty_assignment_id"] ?? null
+  );
+  if ($dutyAssignmentId === null) {
+    throw new EstabReadPermissionException (
+      "Wählen Sie zuerst eine persönlich angenommene Dienstfunktion."
+    );
+  }
+  $berechtigt = estab_dv_has_selected_capability (
+    $readConnection,
+    (int) $readScope ["incident"]["active_einsatz_id"],
+    $identity,
+    "EINSATZTAGEBUCH"
+  );
+} catch (EstabNoActiveIncidentException $exception) {
+  estab_logbook_abort (
+    409,
+    "Kein Einsatz ist aktiv. Das Einsatztagebuch enthält derzeit keine ".
+    "freigegebenen Einsatzdaten."
+  );
+} catch (EstabReadPermissionException $exception) {
+  estab_logbook_abort (403, $exception->getMessage ());
 } catch (Throwable $exception) {
-  error_log ("ETB authorization lookup failed: ".$exception->getMessage ());
-  estab_logbook_abort (503, "Das Einsatztagebuch ist vorübergehend nicht verfügbar.");
+  error_log ("ETB read authorization failed: ".$exception->getMessage ());
+  estab_logbook_abort (
+    503,
+    "Die Leseberechtigung für das Einsatztagebuch kann derzeit nicht geprüft ".
+    "werden."
+  );
+} finally {
+  if (isset ($readConnection) && $readConnection instanceof mysqli) {
+    estab_auth_close ($readConnection);
+  }
 }
-
-$berechtigt = is_string ($redcopyFunction)
-  && strcasecmp ($identity ["funktion"], $redcopyFunction) === 0;
 
 $requestMethod = isset ($_SERVER ["REQUEST_METHOD"]) && is_string ($_SERVER ["REQUEST_METHOD"])
   ? strtoupper ($_SERVER ["REQUEST_METHOD"])
@@ -478,10 +611,15 @@ $etbobj->etb_authorized = $berechtigt;
 $etbobj->etb_funktion = $identity ["funktion"];
 $etbobj->etb_kuerzel = $identity ["kuerzel"];
 $etbobj->etb_benutzer = $identity ["benutzer"];
+$etbobj->etb_rolle = $identity ["rolle"];
+$etbobj->etb_duty_assignment_id = $dutyAssignmentId;
 
 if ($requestMethod === "POST") {
   if (!$berechtigt) {
-    estab_logbook_abort (403, "Nur die Red-Copy-Funktion darf ETB-Einträge schreiben.");
+    estab_logbook_abort (
+      403,
+      "Nur eine aktive S2- oder ETB-Funktion darf ETB-Einträge schreiben."
+    );
   }
   estab_logbook_require_csrf ($_SERVER, $_POST);
   $action = isset ($_POST ["logbook_action"]) && is_string ($_POST ["logbook_action"])
@@ -540,6 +678,13 @@ if (!$etbobj->etb_titel_gesetzt) {
     );
   if ($berechtigt && $entryFormRequested) {
     $etbobj->etb_eintragsmenue ("");
+  } elseif (
+    $berechtigt
+    && isset ($_GET ["correct"])
+    && is_string ($_GET ["correct"])
+    && preg_match ("/\\A[1-9][0-9]*\\z/D", $_GET ["correct"]) === 1
+  ) {
+    $etbobj->etb_eintragsmenue ((int) $_GET ["correct"]);
   } elseif ($berechtigt) {
     $etbobj->etb_menue ();
   }

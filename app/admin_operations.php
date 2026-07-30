@@ -43,11 +43,11 @@ function estab_admin_html(mixed $value): string
 /**
  * Validate all 20 recipient cells and return a canonical matrix.
  *
- * Empty cells cannot carry a role. Automatic sighting and the red-copy target
- * require a selectable function with a Stab/FB role; a label-only text cell
- * must never look operational. Function names are unique case-insensitively
- * because they become login/recipient identifiers throughout the legacy
- * runtime.
+ * Empty cells cannot carry a role. S2 is the mandatory Lage/Dokumentation
+ * capability and sole red-copy target. Automatic sighting is rejected because
+ * it cannot replace the qualified Sichter required by DV 1-101. Function names
+ * are unique case-insensitively because they become login/recipient
+ * identifiers throughout the legacy runtime.
  */
 function estab_admin_validate_matrix(array $input): array
 {
@@ -64,7 +64,7 @@ function estab_admin_validate_matrix(array $input): array
 
             $function = is_string($functionValue) ? trim($functionValue) : '';
             $role = is_string($roleValue) ? trim($roleValue) : '';
-            $auto = $autoValue !== null;
+            $auto = false;
 
             if (
                 !is_string($functionValue)
@@ -81,17 +81,11 @@ function estab_admin_validate_matrix(array $input): array
                 $errors[] = 'rolle_' . $position;
             }
 
-            if (
-                $autoValue !== null
-                && (!is_string($autoValue) || $autoValue !== '1')
-            ) {
+            if ($autoValue !== null) {
                 $errors[] = 'stasi_' . $position;
             }
 
-            if (
-                ($function === '' && $role !== '')
-                || ($auto && ($function === '' || $role === ''))
-            ) {
+            if ($function === '' && $role !== '') {
                 $errors[] = 'cell_' . $position;
             }
 
@@ -118,8 +112,8 @@ function estab_admin_validate_matrix(array $input): array
     $redcopy = is_string($redcopyValue) ? $redcopyValue : '';
     if (
         !array_key_exists($redcopy, $cells)
-        || $cells[$redcopy]['function'] === ''
-        || $cells[$redcopy]['role'] === ''
+        || $cells[$redcopy]['function'] !== 'S2'
+        || $cells[$redcopy]['role'] !== 'Stab'
     ) {
         $errors[] = 'lagerot';
     } else {
@@ -171,12 +165,17 @@ function estab_admin_fetch_matrix(mysqli $connection, string $table): array
                 throw new RuntimeException('Recipient matrix contains a duplicate position');
             }
             $isRedcopy = in_array((string) ($row['mtx_rc2'] ?? ''), ['1', 't'], true);
+            if (in_array((string) ($row['mtx_auto'] ?? ''), ['1', 't'], true)) {
+                throw new RuntimeException(
+                    'Die Empfängermatrix enthält eine unzulässige Autosichtung.'
+                );
+            }
             $cells[$position] = [
                 'row' => $matrixRow,
                 'column' => $matrixColumn,
                 'function' => (string) ($row['mtx_fkt'] ?? ''),
                 'role' => (string) ($row['mtx_rolle'] ?? ''),
-                'auto' => in_array((string) ($row['mtx_auto'] ?? ''), ['1', 't'], true),
+                'auto' => false,
                 'redcopy' => $isRedcopy,
             ];
             if ($isRedcopy) {
@@ -193,6 +192,15 @@ function estab_admin_fetch_matrix(mysqli $connection, string $table): array
 
     if (count($cells) !== ESTAB_ADMIN_MATRIX_ROWS * ESTAB_ADMIN_MATRIX_COLUMNS) {
         throw new RuntimeException('Recipient matrix must contain exactly 20 positions');
+    }
+    if (
+        $redcopy === ''
+        || ($cells[$redcopy]['function'] ?? null) !== 'S2'
+        || ($cells[$redcopy]['role'] ?? null) !== 'Stab'
+    ) {
+        throw new RuntimeException(
+            'S2 muss das Lage-/Dokumentationsziel der Rotkopie sein.'
+        );
     }
 
     return ['cells' => $cells, 'redcopy' => $redcopy];
@@ -281,7 +289,8 @@ function estab_admin_write_matrix(
             $type = $function !== '' && $role !== '' ? 'cb' : 't';
             $mode = 'ro';
             $redcopy = !empty($cell['redcopy']) ? 't' : 'f';
-            $auto = !empty($cell['auto']) ? '1' : '0';
+            // Legacy-schema compatibility only. Autosichtung is forbidden.
+            $auto = '0';
             $insert->bind_param(
                 'iissssss',
                 $row,
@@ -518,7 +527,17 @@ function estab_admin_fetch_counter_maxima(
             $result = $statement->get_result();
             $row = $result->fetch_row();
             $result->free();
-            return ['ea_nummer' => (int) ($row[0] ?? 0)];
+            return [
+                'ea_nummer' => max(
+                    (int) ($row[0] ?? 0),
+                    estab_message_counter_repair_max(
+                        $connection,
+                        $incidentId,
+                        false,
+                        'E'
+                    )
+                ),
+            ];
         } finally {
             $statement->close();
         }
@@ -542,7 +561,15 @@ function estab_admin_fetch_counter_maxima(
             $result = $statement->get_result();
             $row = $result->fetch_row();
             $result->free();
-            $maxima[$field] = (int) ($row[0] ?? 0);
+            $maxima[$field] = max(
+                (int) ($row[0] ?? 0),
+                estab_message_counter_repair_max(
+                    $connection,
+                    $incidentId,
+                    true,
+                    $direction
+                )
+            );
         }
     } finally {
         $statement->close();
@@ -604,7 +631,7 @@ function estab_admin_release_counter_lock(mysqli $connection, string $lockName):
 }
 
 /**
- * Increase the message counter and store system/audit records atomically.
+ * Increase the message counter and store evidence/audit records atomically.
  *
  * An advisory lock serializes concurrent administrative repairs; FOR UPDATE
  * also locks the selected sequence edge while the transaction is open.
@@ -614,9 +641,11 @@ function estab_admin_raise_message_counter(
     string $messageTable,
     string $protocolTable,
     string $mode,
-    array $values
+    array $values,
+    string $actor = 'administration'
 ): array {
     $mode = estab_admin_validate_counter_mode($mode);
+    $actor = estab_dv_actor($actor);
     $lockName = estab_admin_acquire_counter_lock($connection, $messageTable);
     try {
         if (!$connection->begin_transaction()) {
@@ -641,84 +670,60 @@ function estab_admin_raise_message_counter(
                 }
             }
 
-            $messageTableSql = estab_auth_table($messageTable);
-            if ($mode === 'gemeinsam') {
-                $target = $values['ea_nummer'];
-                $text = 'eStab Systemmeldung.'
-                    . "\n\nNachrichtenzähler wurde nach Systemausfall auf E/A"
-                    . $target . ' erhöht.';
-                $statement = $connection->prepare(
-                    'INSERT INTO ' . $messageTableSql
-                    . ' (`einsatz_id`, `04_richtung`, `04_nummer`, `12_inhalt`)'
-                    . " VALUES (?, 'E', ?, ?)"
+            $shiftStatement = $connection->prepare(
+                'SELECT `dienstschicht_id` FROM `nv_dienstschichten`'
+                . " WHERE `einsatz_id` = ? AND `status` = 'AKTIV'"
+                . ' ORDER BY `dienstschicht_id` DESC LIMIT 1 FOR UPDATE'
+            );
+            if (!$shiftStatement) {
+                throw new RuntimeException(
+                    'Could not prepare active shift for counter repair'
                 );
-                if (!$statement) {
-                    throw new RuntimeException('Could not prepare common counter message');
-                }
-                try {
-                    $statement->bind_param('iis', $incidentId, $target, $text);
-                    if (!$statement->execute()) {
-                        throw new RuntimeException('Could not write common counter message');
-                    }
-                } finally {
-                    $statement->close();
-                }
-                $auditValue = 'E/A' . $target;
-            } else {
-                $incoming = $values['e_nummer'];
-                $outgoing = $values['a_nummer'];
-                $text = 'eStab Systemmeldung.'
-                    . "\n\nNachrichtenzähler wurde nach Systemausfall auf E"
-                    . $incoming . '/A' . $outgoing . ' erhöht.';
-
-                $incomingStatement = $connection->prepare(
-                    'INSERT INTO ' . $messageTableSql
-                    . ' (`einsatz_id`, `04_richtung`, `04_nummer`, `12_inhalt`,'
-                    . ' `15_quitdatum`, `15_quitzeichen`)'
-                    . " VALUES (?, 'E', ?, ?, NOW(), 'xxx')"
+            }
+            try {
+                $shiftStatement->bind_param('i', $incidentId);
+                $shiftStatement->execute();
+                $shiftRow = $shiftStatement->get_result()->fetch_assoc();
+            } finally {
+                $shiftStatement->close();
+            }
+            if (!is_array($shiftRow)) {
+                throw new EstabAdminConflictException(
+                    'Der Nachrichtenzähler kann erst mit einer aktiven '
+                    . 'Dienstschicht erhöht werden.'
                 );
-                if (!$incomingStatement) {
-                    throw new RuntimeException('Could not prepare incoming counter message');
-                }
-                try {
-                    $incomingStatement->bind_param(
-                        'iis',
-                        $incidentId,
-                        $incoming,
-                        $text
-                    );
-                    if (!$incomingStatement->execute()) {
-                        throw new RuntimeException('Could not write incoming counter message');
-                    }
-                } finally {
-                    $incomingStatement->close();
-                }
-
-                $outgoingStatement = $connection->prepare(
-                    'INSERT INTO ' . $messageTableSql
-                    . ' (`einsatz_id`, `03_zeichen`, `04_richtung`,'
-                    . ' `04_nummer`, `12_inhalt`)'
-                    . " VALUES (?, 'xxx', 'A', ?, ?)"
+            }
+            $shiftId = (int) ($shiftRow['dienstschicht_id'] ?? 0);
+            if ($shiftId < 1) {
+                throw new RuntimeException(
+                    'Active shift for counter repair has no identifier'
                 );
-                if (!$outgoingStatement) {
-                    throw new RuntimeException('Could not prepare outgoing counter message');
-                }
-                try {
-                    $outgoingStatement->bind_param(
-                        'iis',
-                        $incidentId,
-                        $outgoing,
-                        $text
-                    );
-                    if (!$outgoingStatement->execute()) {
-                        throw new RuntimeException('Could not write outgoing counter message');
-                    }
-                } finally {
-                    $outgoingStatement->close();
-                }
-                $auditValue = 'E' . $incoming . ' / A' . $outgoing;
             }
 
+            // This is a recovery watermark in the immutable operational
+            // chain. It must never masquerade as a received/sent message with
+            // invented A/W, LdF or Si marks.
+            estab_dv_event_append(
+                $connection,
+                $incidentId,
+                'DIENSTSCHICHT',
+                $shiftId,
+                'message_counter_repaired',
+                $actor,
+                null,
+                [
+                    'version' => 1,
+                    'action' => 'message_counter_repaired',
+                    'reason' => 'paper_numbers_after_system_failure',
+                    'numbering_mode' => $mode,
+                    'before' => $current,
+                    'after' => $values,
+                    'actor' => $actor,
+                ]
+            );
+            $auditValue = $mode === 'gemeinsam'
+                ? 'E/A' . $values['ea_nummer']
+                : 'E' . $values['e_nummer'] . ' / A' . $values['a_nummer'];
             estab_admin_insert_audit(
                 $connection,
                 $protocolTable,

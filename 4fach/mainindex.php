@@ -24,6 +24,7 @@ require_once __DIR__ . "/../app/workflow.php";
 require_once __DIR__ . "/../app/csrf.php";
 require_once __DIR__ . "/../app/session_ui.php";
 require_once __DIR__ . "/../app/logout.php";
+require_once __DIR__ . "/../app/read_authorization.php";
 estab_session_ui_start ($_SESSION);
 
 $returnValue = array (); // no request data is a valid, warning-free state
@@ -133,6 +134,70 @@ include ("4fachform.php");              // Formular Behandlung 4fach Vordruck
 include ("liste.php");                  // erzeuge Ausgabelisten
 include ("data_hndl.php");              // Schnittstelle zur Datenbank
 
+/** Stop before any legacy list/query when no selected active duty exists. */
+function estab_workflow_render_read_gate (
+  int $status,
+  string $title,
+  string $message
+): never {
+  http_response_code ($status);
+  header ("Content-Type: text/html; charset=UTF-8");
+  header ("Cache-Control: private, no-store, max-age=0");
+  $commandPostUrl = estab_navigation_url_for_key ("command-post");
+  echo "<!doctype html><html lang=\"de\"><head><meta charset=\"UTF-8\">";
+  echo "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">";
+  echo estab_session_ui_stylesheet ();
+  echo "<title>".estab_auth_html ($title)."</title></head>";
+  echo "<body><main class=\"estab-auth-shell\">";
+  echo "<section class=\"estab-auth-card\" data-estab-duty-selection-required>";
+  echo "<h1>".estab_auth_html ($title)."</h1>";
+  echo "<p>".estab_auth_html ($message)."</p>";
+  echo "<p><a class=\"estab-button estab-button-primary\" href=\"".
+       estab_auth_html ($commandPostUrl).
+       "\" target=\"_top\">Führungsstellenbetrieb öffnen</a></p>";
+  echo "</section></main></body></html>";
+  exit;
+}
+
+$workflowSelectedIdentity = $workflowIdentity;
+if ($workflowIdentity !== null) {
+  $readGateConnection = null;
+  try {
+    $readGateConnection = estab_message_connect ($conf_4f_db);
+    $readScope = estab_read_require_operational_scope (
+      $readGateConnection,
+      estab_read_session_identity ($_SESSION) ?? array ()
+    );
+    $workflowSelectedIdentity = $readScope ["identity"];
+    $workflowIdentity = $workflowSelectedIdentity;
+  } catch (EstabNoActiveIncidentException $exception) {
+    estab_workflow_render_read_gate (
+      409,
+      "Kein Einsatz aktiv",
+      "Operative Nachrichten sind erst verfügbar, wenn in der ".
+      "Administration ein Einsatz aktiviert wurde."
+    );
+  } catch (EstabReadPermissionException $exception) {
+    estab_workflow_render_read_gate (
+      403,
+      "Dienstfunktion auswählen",
+      "Nehmen Sie zuerst Ihre persönliche Dienstfunktion an und wählen ".
+      "Sie sie für diese Sitzung aus."
+    );
+  } catch (Throwable $exception) {
+    error_log ("eStab main read gate failed: ".$exception->getMessage ());
+    estab_workflow_render_read_gate (
+      503,
+      "Dienststatus nicht verfügbar",
+      "Die aktive Dienstfunktion kann derzeit nicht geprüft werden."
+    );
+  } finally {
+    if ($readGateConnection instanceof mysqli) {
+      estab_auth_close ($readGateConnection);
+    }
+  }
+}
+
 /**
  * Reject authenticated operational POSTs before opening or changing domain
  * objects when the global incident input lock is closed.
@@ -154,6 +219,9 @@ function estab_workflow_require_active_incident_for_post (
   $submittedTask = (string) ($request ["task"] ?? "") !== ""
     && (
       isset ($request ["absenden_x"])
+      || isset ($request ["zurueckweisen_x"])
+      || isset ($request ["transport_nicht_moeglich_x"])
+      || isset ($request ["transport_nicht_moeglich_y"])
       || isset ($request ["antwort_x"])
       || isset ($request ["weiterleiten_x"])
       || isset ($request ["abbrechen_x"])
@@ -228,10 +296,13 @@ if ($messageOperation !== null) {
     if (
       !is_array ($objectMessage)
       || !estab_message_object_allowed (
-        $workflowIdentity,
+        $workflowSelectedIdentity,
         $messageOperation,
-        $objectMessage,
-        (bool) ($conf_4f ["si_in_out"] ?? true)
+        $objectMessage
+      )
+      || !estab_read_message_allowed (
+        $workflowSelectedIdentity,
+        $objectMessage
       )
     ) {
       estab_workflow_forbid ();
@@ -326,12 +397,11 @@ ANTWORT % WEITERLEITUNG
   $weiterantwort = false;
   if ( ( (isset($returnValue["weiterleiten_x"])) or
          (isset($returnValue["antwort_x"])) ) and
-         ( ( $returnValue["task"] == "FM-Ausgang" ) or
-         ( $returnValue["task"] == "FM-Ausgang_Sichter" ) ) )  {
+         ( $returnValue["task"] == "FM-Ausgang" ) )  {
     $weiterantwort = true;
     $_SESSION ["sw_data"] = $returnValue ;
   } elseif (  (isset($returnValue ["abbrechen_x"]) and (isset ($_SESSION["sw_data"]))) and
-              ( ( $returnValue["task"] == "FM-Eingang" ) or ( $returnValue["task"] == "FM-Eingang_Sichter" ) ) ) {
+              ( $returnValue["task"] == "FM-Eingang" ) ) {
     unset ($_SESSION["sw_data"]);
   }
 
@@ -622,10 +692,9 @@ ANTWORT % WEITERLEITUNG
       $error = check_save_user ($loginData, $loginError);
       if (!$error) {
         $_SESSION ["menue"] = "ROLLE";
-        if ($loginDestination !== null && $loginDestination !== "messages") {
-          estab_navigation_open_after_login ($loginDestination);
-        }
-        resetframeset ();
+        $_SESSION ["estab_pending_navigation_key"] =
+          $loginDestination ?? "messages";
+        estab_navigation_open_after_login ("command-post");
       }
     }
   }
@@ -645,48 +714,27 @@ ANTWORT % WEITERLEITUNG
 
 
   $workflowTaskSubmitted = isset ($returnValue ["absenden_x"])
+    || isset ($returnValue ["zurueckweisen_x"])
+    || isset ($returnValue ["transport_nicht_moeglich_x"])
+    || isset ($returnValue ["transport_nicht_moeglich_y"])
     || isset ($returnValue ["antwort_x"])
     || isset ($returnValue ["weiterleiten_x"]);
 
   if ( $workflowTaskSubmitted and ( ( $returnValue["task"] == "Stab_schreiben" ) or
+         ( $returnValue["task"] == "Stab_korrigieren" ) or
          ( $returnValue["task"] == "Stab_gesprnoti" ) or
          ( $returnValue["task"] == "LdF-Eingang" ) or
          ( $returnValue["task"] == "LdF-Ausgang" ) or
          ( $returnValue["task"] == "FM-Ausgang" ) or
-         ( $returnValue["task"] == "FM-Ausgang_Sichter" ) or
-         ( $returnValue["task"] == "FM-Admin" ) or
          ( $returnValue["task"] == "FM-Eingang" ) or
-         ( $returnValue["task"] == "FM-Eingang_Sichter" ) or
          ( $returnValue["task"] == "FM-Eingang_Anhang" ) or
-         ( $returnValue["task"] == "FM-Eingang_Anhang_Sichter" ) or
-	         ( $returnValue["task"] == "Stab_sichten" ) or
-	         ( $returnValue["task"] == "SI-Admin" ) ) ) {
+	         ( $returnValue["task"] == "Stab_sichten" ) ) ) {
     $returndata = $returnValue;
-
-    if (in_array (
-      $returnValue ["task"],
-      array (
-        "FM-Eingang", "FM-Eingang_Anhang",
-        "FM-Eingang_Sichter", "FM-Eingang_Anhang_Sichter"
-      ),
-      true
-    )) {
-      $submittedAutoSighting = str_contains (
-        $returnValue ["task"],
-        "_Sichter"
-      );
-      if ($submittedAutoSighting === sichter_online ()) {
-        // The client must not choose whether it may self-sight an incoming
-        // message. That decision is derived from the authoritative Si state.
-        estab_workflow_forbid ();
-      }
-    }
 
     if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br> Daten kommen vom Formular und können gespeichert werden";  echo "<br>\n";}
 
     if ( ( ($returnValue ["11_gesprnotiz"] ?? "") == "on" ) and
          ( !$_SESSION ["gesprnoti"] ) and
-         ( $returnValue ["task"] != "SI-Admin" ) and
          ( $returnValue ["task"] != "Stab_sichten" ) ){
         // Bei GesprÃ¤chsnotiz 2. Vorlage beim Verfasser fÃ¼r Sichtung
 
@@ -695,8 +743,12 @@ ANTWORT % WEITERLEITUNG
         $formdata = $returnValue ;
         $formdata ["01_zeichen"]      = $_SESSION ["vStab_kuerzel"];
         $formdata ["11_gesprnotiz"]   = "t";
+        $formdata ["13_abseinheit"]   = (string) $conf_4f ["anschrift"];
+        $formdata ["14_zeichen"]      = $_SESSION ["vStab_kuerzel"];
+        $formdata ["14_funktion"]     = $_SESSION ["vStab_funktion"];
         $formdata ["16_empf"]         = $redcopy2."_rt,".$_SESSION ["vStab_funktion"]."_gn" ;
-        $formdata ["15_quitzeichen"]  = $_SESSION ["vStab_kuerzel"];
+        $formdata ["15_quitdatum"]    = "";
+        $formdata ["15_quitzeichen"]  = "";
         $formdata ["task"]            = "Stab_gesprnoti";
         $form = new nachrichten4fach ($formdata, "Stab_gesprnoti", "");
         $_SESSION ["gesprnoti"] = true;
@@ -705,7 +757,13 @@ ANTWORT % WEITERLEITUNG
 
       if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### 369 check and save";  echo "<br>\n";}
 
-      check_and_save ($returndata);
+      try {
+        check_and_save ($returndata);
+      } catch (EstabReadPermissionException $exception) {
+        // Attachment filenames are object identifiers. A forged selection is
+        // indistinguishable from any other forbidden operational object.
+        estab_workflow_forbid ();
+      }
 
       // verhindert das erneute Speichern bei Betätigung von F5
       if (isset ($_SESSION ['gesprnoti'])) { unset ( $_SESSION ['gesprnoti'] ); }
@@ -721,7 +779,8 @@ ANTWORT % WEITERLEITUNG
   } elseif ( ( in_array (
                $returnValue["task"],
                array (
-                 "FM-Ausgang", "FM-Ausgang_Sichter",
+                 "Stab_korrigieren", "Stab_sichten",
+                 "FM-Ausgang",
                  "LdF-Eingang", "LdF-Ausgang"
                ),
                true
@@ -732,10 +791,21 @@ ANTWORT % WEITERLEITUNG
 FM-Ausgang (Sichter) abgebrochen
       \************************************************************************/
 
-       if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br> ".(($returnValue['task'] == FM-Ausgang_Sichter) and ($returnValue ['abbrechen_x'])) ;  echo "<br>\n";}
+       if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br> Nachrichtentransport abgebrochen";  echo "<br>\n";}
 
-       $lockConnection = estab_message_connect ($conf_4f_db);
-       try {
+       if (in_array (
+         $returnValue ["task"],
+         array ("Stab_korrigieren", "Stab_sichten"),
+         true
+       )) {
+         // These stages use an atomic compare-and-transition on submit and
+         // hold no long-lived record lock to release on cancellation.
+         $returnValue ["task"] = "";
+         $returnValue ["stab"] = "";
+         $returnValue ["sichter"] = "";
+       } else {
+         $lockConnection = estab_message_connect ($conf_4f_db);
+         try {
          $cancelIsLead = str_starts_with (
            $returnValue ["task"],
            "LdF-"
@@ -753,15 +823,16 @@ FM-Ausgang (Sichter) abgebrochen
          )) {
            throw new RuntimeException ("Message lock release lost its target");
          }
-       } finally {
-         estab_auth_close ($lockConnection);
-       }
-       if ($cancelIsLead) {
+         } finally {
+           estab_auth_close ($lockConnection);
+         }
+         if ($cancelIsLead) {
          // Return to the LdF disposition queue after releasing the exact
          // stage lock. Keeping the submitted task would suppress the queue
          // renderer and leave the main frame empty.
          $returnValue ["task"] = "";
          $returnValue ["ldf"] = "";
+         }
        }
   }
 
@@ -814,11 +885,10 @@ Daten kommen vom Formular und sollen als Antwort dienen.
 
      $formdata = $_SESSION ["sw_data"] ;
     if  (( isset ($formdata["antwort_x"]) ) and
-        ( ( $formdata["task"] == "FM-Ausgang" ) or
-          ( $formdata["task"] == "FM-Ausgang_Sichter" ) ) ) {
+        ( $formdata["task"] == "FM-Ausgang" ) ) {
 
       if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### antwort_x und FM_Ausgang(_Sichter) <br>\n";}
-//  A N T W O R T  --  "FM-Ausgang"  or "FM-Ausgang_Sichter"
+//  A N T W O R T  --  "FM-Ausgang"
       $aushilfe = $formdata ["10_anschrift"];
       $formdata ["01_zeichen"]  = $_SESSION ["vStab_kuerzel"];
       $formdata ["10_anschrift"] =  $formdata ["13_abseinheit"]."  ".$formdata["14_funktion"];
@@ -834,24 +904,15 @@ Daten kommen vom Formular und sollen als Antwort dienen.
       unset ($_SESSION ["sw_data"]);
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br>";} 
 
-      if (sichter_online()) {
-        $form = new nachrichten4fach ($formdata, "FM-Eingang", "");
-      } else {
-      	if ($conf_4f["si_in_out"] == true) { // Sichter alles oder nur Eingänge
-        		$formdata ["15_quitzeichen"]  = $_SESSION ["vStab_kuerzel"];
-        		$formdata ["16_empf"]         = "";
-        		$form = new nachrichten4fach ($formdata, "FM-Eingang_Sichter", "");
-    		} else {  // Sichter nur Eingänge
-				$form = new nachrichten4fach ($formdata, "FM-Eingang", "");    		
-    		} 
-      }
+      $form = new nachrichten4fach ($formdata, "FM-Eingang", "");
     }
 
 	 if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>  ### Weiterleitung <br>";} 
 
-    if ( (isset ($formdata["weiterleiten_x"])) and ( ($returnValue["task"] == "FM-Ausgang" ) or ($returnValue["task"] == "FM-Ausgang_Sichter") ) ) {
+    if ( (isset ($formdata["weiterleiten_x"])) and
+         ($returnValue["task"] == "FM-Ausgang") ) {
 
-// W E I T E R L E I T U N G  --  "FM-Ausgang"  or "FM-Ausgang_Sichter"
+// W E I T E R L E I T U N G  --  "FM-Ausgang"
 
       if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br> WEITERLEITUNG - FM-Ausgang(_Sichter)";  echo "<br>\n";}
 
@@ -865,13 +926,7 @@ Daten kommen vom Formular und sollen als Antwort dienen.
 
       unset ($_SESSION ["sw_data"]);
 
-      if (sichter_online()) {
-        $form = new nachrichten4fach ($formdata, "FM-Eingang", "");
-      } else {
-        $formdata ["15_quitzeichen"]  = $_SESSION ["vStab_kuerzel"];
-        $formdata ["16_empf"]         = "";
-        $form = new nachrichten4fach ($formdata, "FM-Eingang_Sichter", "");
-      }
+      $form = new nachrichten4fach ($formdata, "FM-Eingang", "");
     }
   } //  if (isset ($_SESSION ["sw_data"] ))
 
@@ -1019,7 +1074,17 @@ ul#topmenu li.active {
 
     set_msg_read ($returnValue["00_lfd"]);
     $formdata = get_msg_by_lfd ($returnValue["00_lfd"]);
-    $form = new nachrichten4fach ($formdata, "Stab_lesen", "");
+    $staffCanCorrect = is_array ($workflowIdentity)
+      && estab_message_object_allowed (
+        $workflowIdentity,
+        "staff-correction",
+        $formdata
+      );
+    $form = new nachrichten4fach (
+      $formdata,
+      $staffCanCorrect ? "Stab_korrigieren" : "Stab_lesen",
+      ""
+    );
   }
 
 
@@ -1181,13 +1246,7 @@ ul#topmenu li.active {
     $formdata ["01_zeichen"]  = $_SESSION ["vStab_kuerzel"];
     $formdata ["10_anschrift"]  = $conf_4f ["anschrift"];
 
-    if (sichter_online()) {
-     $form = new nachrichten4fach ($formdata, "FM-Eingang", "");
-    } else {
-     $formdata ["15_quitzeichen"]  = $_SESSION ["vStab_kuerzel"];
-     $formdata ["16_empf"]         = get_autosichter_targets("");
-     $form = new nachrichten4fach ($formdata, "FM-Eingang_Sichter", "");
-    }
+    $form = new nachrichten4fach ($formdata, "FM-Eingang", "");
   }
 
 
@@ -1269,18 +1328,7 @@ if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>  ### FM Aus
 
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>  ### <BR>";var_dump ($conf_4f);echo " <br>\n";}
 
-      if (sichter_online()) {
-        $form = new nachrichten4fach ($formdata, "FM-Ausgang", "");
-      } else {  // Sichter nicht online
-      	if ($conf_4f["si_in_out"] == true) { // Sichter alles oder nur Eingänge
-	        $formdata ["15_quitzeichen"]  = $_SESSION ["vStab_kuerzel"];
-   	     $formdata ["16_empf"]  .= ",".get_autosichter_targets($formdata["14_funktion"]);
-			  if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br>";  }
-  			  $form = new nachrichten4fach ($formdata, "FM-Ausgang_Sichter", "");
-    		} else {  // Sichter nur Eingänge
-				$form = new nachrichten4fach ($formdata, "FM-Ausgang", "");    		
-    		}   			  
-      }
+      $form = new nachrichten4fach ($formdata, "FM-Ausgang", "");
     } else {
       $lockOwner = is_array ($lockedMessage)
         ? (string) ($lockedMessage ["x03_sperruser"] ?? "")

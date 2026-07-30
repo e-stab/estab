@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/** A rejected session-bound form request, distinct from application failures. */
+final class EstabCsrfException extends RuntimeException
+{
+}
+
 /** Return the per-session CSRF token, creating it with a CSPRNG when needed. */
 function estab_csrf_token(): string
 {
@@ -35,6 +40,8 @@ function estab_csrf_is_valid(mixed $candidate): bool
 function estab_csrf_require_post(array $server, array $post): void
 {
     if (($server['REQUEST_METHOD'] ?? '') !== 'POST' || !estab_csrf_is_valid($post['csrf_token'] ?? null)) {
-        throw new RuntimeException('Ungültige oder abgelaufene Formularanforderung');
+        throw new EstabCsrfException(
+            'Ungültige oder abgelaufene Formularanforderung'
+        );
     }
 }

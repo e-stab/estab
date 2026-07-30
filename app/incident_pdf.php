@@ -116,7 +116,9 @@ function estab_incident_pdf_mime_name(mixed $value): string
  */
 function estab_incident_pdf_read_attachment(
     string $path,
-    int $remainingBytes
+    int $remainingBytes,
+    ?string $expectedSha256 = null,
+    ?int $expectedSize = null
 ): array {
     if (
         $path === ''
@@ -125,6 +127,22 @@ function estab_incident_pdf_read_attachment(
     ) {
         throw new EstabIncidentPdfInputException(
             'Embedded attachment path is invalid.'
+        );
+    }
+    if (($expectedSha256 === null) !== ($expectedSize === null)) {
+        throw new EstabIncidentPdfInputException(
+            'Embedded attachment integrity evidence is incomplete.'
+        );
+    }
+    if (
+        $expectedSha256 !== null
+        && (
+            preg_match('/\A[0-9a-f]{64}\z/D', $expectedSha256) !== 1
+            || $expectedSize < 0
+        )
+    ) {
+        throw new EstabIncidentPdfInputException(
+            'Embedded attachment integrity evidence is invalid.'
         );
     }
     $before = @lstat($path);
@@ -185,10 +203,23 @@ function estab_incident_pdf_read_attachment(
         fclose($handle);
     }
 
+    $sha256 = hash('sha256', $data);
+    if (
+        $expectedSha256 !== null
+        && (
+            strlen($data) !== $expectedSize
+            || !hash_equals($expectedSha256, $sha256)
+        )
+    ) {
+        throw new EstabIncidentPdfInputException(
+            'Embedded attachment differs from its ingest evidence.'
+        );
+    }
+
     return [
         'data' => $data,
         'size' => strlen($data),
-        'sha256' => hash('sha256', $data),
+        'sha256' => $sha256,
         'modified' => max(0, (int) ($before['mtime'] ?? 0)),
     ];
 }
@@ -408,23 +439,92 @@ final class EstabIncidentPdf extends vordruckaspdf
         $this->Cell(58, 5.5, estab_incident_pdf_text($label), 0, 0);
         $this->SetFont('helvetica', '', 9);
         $this->SetTextColor(23, 32, 51);
-        $this->MultiCell(0, 5.5, estab_incident_pdf_text($valueText));
+        $this->MultiCell(
+            0,
+            5.5,
+            estab_incident_pdf_text($valueText),
+            0,
+            'L'
+        );
     }
 
-    /** @param array<string,int> $counts */
+    private function recordHeading(string $text): void
+    {
+        $this->ensureSpace(14);
+        $this->SetFillColor(226, 233, 241);
+        $this->SetTextColor(23, 47, 77);
+        $this->SetFont('helvetica', 'B', 10);
+        $this->MultiCell(
+            0,
+            7,
+            estab_incident_pdf_text($text),
+            0,
+            'L',
+            true
+        );
+        $this->SetTextColor(23, 32, 51);
+    }
+
+    private function statusText(
+        bool $valid,
+        bool $terminalBindingComplete = true
+    ): string
+    {
+        if ($valid && !$terminalBindingComplete) {
+            return 'HASHKETTE GÜLTIG - historischer Import ohne '
+                . 'belegbare Live-Bindung';
+        }
+        return $valid
+            ? 'GÜLTIG - vollständig neu berechnet'
+            : 'UNGÜLTIG - Abweichung in Kette oder Nachweiskopf';
+    }
+
+    /**
+     * @param array<string,int> $counts
+     * @param array{
+     *   message?:array<string,mixed>,
+     *   operations?:array<string,mixed>
+     * } $evidence
+     */
     public function addCover(
         array $incident,
         array $selectedSections,
         array $counts,
         string $generatedAt,
-        string $generatedBy
+        string $generatedBy,
+        array $evidence = []
     ): void {
         $this->beginSection('Einsatzdossier');
         $this->heading('Einsatzdossier', 1);
+        $closed = (string) ($incident['estab_status'] ?? '') === 'closed';
+        $this->SetFillColor(
+            $closed ? 24 : 174,
+            $closed ? 120 : 62,
+            $closed ? 78 : 62
+        );
+        $this->SetTextColor(255, 255, 255);
+        $this->SetFont('helvetica', 'B', 14);
+        $this->MultiCell(
+            0,
+            11,
+            estab_incident_pdf_text(
+                $closed
+                    ? 'FORMAL ABGESCHLOSSEN'
+                    : 'VORLÄUFIG – Einsatz nicht formal abgeschlossen'
+            ),
+            0,
+            'C',
+            true
+        );
+        $this->Ln(3);
+        $this->SetTextColor(23, 32, 51);
         $this->paragraph(
-            'Dieser Export fasst die ausgewählten Einsatzdaten in einer '
-            . 'durchsuchbaren PDF zusammen. Originalanhänge werden im PDF '
-            . 'eingebettet und im Anlagenverzeichnis mit SHA-256 ausgewiesen.'
+            'Revisionsdossier aus einem konsistenten Datenbank-Snapshot. '
+            . 'Nachweisstatus und Head-Hashes wurden aus den geladenen '
+            . 'Ereignisreihen neu berechnet. Anhänge mit Eingangsnachweis '
+            . 'wurden vor dem Einbetten gegen SHA-256 und Größe geprüft. '
+            . 'Legacy-Anhänge sind ausdrücklich als „Integrität beim Eingang '
+            . 'nicht belegbar“ gekennzeichnet.'
         );
         $this->heading('Einsatz', 2);
         foreach ([
@@ -440,20 +540,120 @@ final class EstabIncidentPdf extends vordruckaspdf
             $this->definition($label, $value);
         }
 
+        $this->heading('Formaler Abschluss und Aufbewahrung', 2);
+        $this->definition(
+            'Formaler Status',
+            strtoupper((string) ($incident['estab_status'] ?? 'unbekannt'))
+        );
+        $this->definition(
+            'Abschluss',
+            implode(' · ', [
+                'Zeit: ' . (string) ($incident['estab_closed_at'] ?? '-'),
+                'Durch: ' . (string) ($incident['estab_closed_by'] ?? '-'),
+            ])
+        );
+        $this->definition(
+            'Abschlussvermerk',
+            $incident['estab_close_note'] ?? ''
+        );
+        $this->definition(
+            'Aufbewahrung bis',
+            $incident['estab_retain_until'] ?? ''
+        );
+        $legalHold = (int) ($incident['estab_legal_hold'] ?? 0) === 1;
+        $this->definition(
+            'Legal Hold',
+            ($legalHold ? 'AKTIV' : 'nicht aktiv')
+                . ' · Zeitpunkt: '
+                . (string) ($incident['estab_legal_hold_at'] ?? '-')
+                . ' · Durch: '
+                . (string) ($incident['estab_legal_hold_by'] ?? '-')
+        );
+        $this->definition(
+            'Legal-Hold-Grund',
+            $incident['estab_legal_hold_reason'] ?? ''
+        );
+
+        $messageEvidence = is_array($evidence['message'] ?? null)
+            ? $evidence['message']
+            : [];
+        $operationsEvidence = is_array($evidence['operations'] ?? null)
+            ? $evidence['operations']
+            : [];
+        $messageValid = ($messageEvidence['valid'] ?? false) === true;
+        $operationsValid = ($operationsEvidence['valid'] ?? false) === true;
+        $this->heading('Revisionsnachweise', 2);
+        $this->definition(
+            'Nachrichten-Nachweis',
+            $this->statusText(
+                $messageValid,
+                ($messageEvidence['terminal_binding_complete'] ?? false)
+                    === true
+            )
+                . ' · Ereignisse: '
+                . (string) ($messageEvidence['event_count'] ?? 0)
+                . ' · Köpfe: '
+                . (string) ($messageEvidence['head_count'] ?? 0)
+                . ' · Abweichungen: '
+                . (string) ($messageEvidence['head_mismatches'] ?? 0)
+                . ' · Historisch ohne Live-Bindung: '
+                . (string) (
+                    $messageEvidence['terminal_unverifiable'] ?? 0
+                )
+        );
+        $this->definition(
+            'Nachrichten-Head-Summenhash',
+            $messageEvidence['head_set_sha256'] ?? ''
+        );
+        $this->definition(
+            'Betriebsnachweis',
+            $this->statusText($operationsValid)
+                . ' · Ereignisse: '
+                . (string) ($operationsEvidence['event_count'] ?? 0)
+                . ' · Kopfsequenz: '
+                . (string) ($operationsEvidence['stored_sequence'] ?? 0)
+        );
+        $operationsHead = (string) (
+            $operationsEvidence['stored_head_sha256'] ?? ''
+        );
+        $calculatedOperationsHead = (string) (
+            $operationsEvidence['calculated_head_sha256'] ?? ''
+        );
+        if (
+            $calculatedOperationsHead !== ''
+            && $operationsHead !== $calculatedOperationsHead
+        ) {
+            $operationsHead .= ' · berechnet: ' . $calculatedOperationsHead;
+        }
+        $this->definition('Betriebs-Head-Hash', $operationsHead);
+
         $this->heading('Umfang', 2);
         $labels = [
             'etb' => 'Einsatztagebuch (ETB)',
             'ttb' => 'Technisches Betriebsbuch (TBB)',
             'messages' => 'Nachrichtenvordrucke',
             'attachments' => 'Originalanhänge',
+            'message_evidence' => 'Nachrichtenereignisse und Nachweisköpfe',
+            'duty' => 'Dienstschichten, Besetzungen und Übergaben',
+            's6_plans' => 'S6-Fernmeldeplanversionen und Einträge',
+            'courier' => 'Melderaufträge',
+            'operations_evidence' => 'Betriebsereignisse und Nachweiskopf',
         ];
+        $scope = [];
         foreach ($labels as $key => $label) {
             if (in_array($key, $selectedSections, true)) {
-                $this->definition(
-                    $label,
-                    (string) ($counts[$key] ?? 0)
-                );
+                $scope[] = $label . ': ' . (string) ($counts[$key] ?? 0);
             }
+        }
+        $this->definition('Ausgewählte Bereiche', implode(' · ', $scope));
+        if (in_array('attachments', $selectedSections, true)) {
+            $this->definition(
+                'Anhangintegrität',
+                'verifiziert: '
+                    . (string) ($counts['attachments_verified'] ?? 0)
+                    . ' · Integrität beim Eingang nicht belegbar: '
+                    . (string) ($counts['attachments_legacy'] ?? 0)
+            );
         }
         $this->heading('Erzeugung', 2);
         $this->definition('Zeitpunkt', $generatedAt);
@@ -498,22 +698,42 @@ final class EstabIncidentPdf extends vordruckaspdf
                     ?? $row['lfd']
                     ?? ''
             );
-            $time = (string) ($row[$prefix . '_time'] ?? '');
-            $this->SetFillColor(226, 233, 241);
-            $this->SetTextColor(23, 47, 77);
-            $this->SetFont('helvetica', 'B', 10);
-            $this->Cell(
-                0,
-                7,
-                estab_incident_pdf_text(
-                    $kind . ' ' . $number . ' · ' . $time
-                ),
-                0,
-                1,
-                'L',
-                true
+            $time = (string) (
+                $kind === 'ETB'
+                    ? ($row['estab_event_time'] ?? $row['etb_time'] ?? '')
+                    : ($row['tbb_time'] ?? '')
             );
-            $this->SetTextColor(23, 32, 51);
+            $this->recordHeading($kind . ' ' . $number . ' · ' . $time);
+            if ($kind === 'ETB') {
+                $this->definition(
+                    'Ereigniszeit',
+                    $row['estab_event_time'] ?? ''
+                );
+                $this->definition(
+                    'Erfassungszeit',
+                    $row['estab_recorded_at'] ?? ''
+                );
+                $this->definition(
+                    'Ereignistyp',
+                    $row['estab_event_type'] ?? ''
+                );
+                $this->definition(
+                    'Nachrichtenbezug',
+                    $row['estab_message_id'] ?? ''
+                );
+                $this->definition(
+                    'Anhangsbezug',
+                    $row['estab_attachment_id'] ?? ''
+                );
+                $this->definition(
+                    'Freier Bezug',
+                    $row['estab_reference'] ?? ''
+                );
+                $this->definition(
+                    'Korrektur von ETB',
+                    $row['estab_correction_of'] ?? ''
+                );
+            }
             $this->definition(
                 'Ereignis',
                 $row[$prefix . '_aktion'] ?? ''
@@ -528,6 +748,567 @@ final class EstabIncidentPdf extends vordruckaspdf
                 trim((string) ($row[$prefix . '_funktion'] ?? '')),
             ], static fn (string $part): bool => $part !== ''));
             $this->definition('Erfasst durch', $author);
+            $this->Ln(3);
+        }
+    }
+
+    /**
+     * @param list<array<string,mixed>> $events
+     * @param list<array<string,mixed>> $heads
+     * @param array<string,mixed> $status
+     */
+    public function addMessageEvidence(
+        array $events,
+        array $heads,
+        array $status
+    ): void {
+        $this->beginSection('Nachrichtennachweis');
+        $this->heading('Nachrichtenereignisse und Nachweisköpfe', 1);
+        $this->paragraph(
+            'Die nachfolgenden Hashketten wurden für diesen Export aus '
+            . 'sämtlichen geladenen Ereignissen neu berechnet und mit den '
+            . 'persistierten, einsatzgebundenen Nachweisköpfen verglichen.'
+        );
+        $this->heading('Prüfergebnis', 2);
+        $this->definition(
+            'Status',
+            $this->statusText(
+                ($status['valid'] ?? false) === true,
+                ($status['terminal_binding_complete'] ?? false) === true
+            )
+        );
+        $this->definition('Ereignisse', $status['event_count'] ?? 0);
+        $this->definition('Nachrichten', $status['message_count'] ?? 0);
+        $this->definition('Nachweisköpfe', $status['head_count'] ?? 0);
+        $this->definition(
+            'Kopfabweichungen',
+            $status['head_mismatches'] ?? 0
+        );
+        $this->definition(
+            'Erstes fehlerhaftes Event',
+            $status['broken_event_id'] ?? ''
+        );
+        $this->definition(
+            'Terminalbindungen',
+            (string) ($status['terminal_count'] ?? 0)
+                . ' · Abweichungen: '
+                . (string) ($status['terminal_mismatches'] ?? 0)
+        );
+        $this->definition(
+            'Historisch nicht belegbar',
+            $status['terminal_unverifiable'] ?? 0
+        );
+        $this->definition(
+            'Head-Summenhash',
+            $status['head_set_sha256'] ?? ''
+        );
+
+        $this->heading('Nachweisköpfe', 2);
+        if ($heads === []) {
+            $this->paragraph(
+                'Für diesen Einsatz sind keine Nachrichtennachweisköpfe '
+                . 'vorhanden.'
+            );
+        }
+        foreach ($heads as $head) {
+            if (!is_array($head)) {
+                throw new EstabIncidentPdfInputException(
+                    'Message evidence heads must be arrays.'
+                );
+            }
+            $this->recordHeading(
+                'Nachweiskopf Nachricht '
+                    . (string) ($head['message_id'] ?? '')
+            );
+            $this->definition('Einsatz-ID', $head['einsatz_id'] ?? '');
+            $this->definition('Nachrichten-ID', $head['message_id'] ?? '');
+            $this->definition('Ereignisanzahl', $head['event_count'] ?? '');
+            $this->definition(
+                'Letzter Event-Hash',
+                $head['last_event_sha256'] ?? ''
+            );
+            $this->definition('Aktualisiert', $head['updated_at'] ?? '');
+            $this->Ln(2);
+        }
+
+        $this->heading('Unveränderliche Nachrichtenereignisse', 2);
+        if ($events === []) {
+            $this->paragraph(
+                'Für diesen Einsatz sind keine Nachrichtenereignisse vorhanden.'
+            );
+            return;
+        }
+        foreach ($events as $event) {
+            if (!is_array($event)) {
+                throw new EstabIncidentPdfInputException(
+                    'Message evidence rows must be arrays.'
+                );
+            }
+            $this->recordHeading(
+                'Nachrichtenereignis '
+                    . (string) ($event['event_id'] ?? '')
+                    . ' · Nachricht '
+                    . (string) ($event['message_id'] ?? '')
+            );
+            foreach ([
+                'Einsatz-ID' => 'einsatz_id',
+                'Nachrichten-ID' => 'message_id',
+                'Ereignistyp' => 'event_type',
+                'Ereigniszeit' => 'occurred_at',
+                'Erfassungszeit' => 'recorded_at',
+                'Akteur' => 'actor_user',
+                'Akteurskürzel' => 'actor_code',
+                'Akteursfunktion' => 'actor_function',
+                'Status vorher' => 'from_status',
+                'Status nachher' => 'to_status',
+                'Feldsnapshot (JSON)' => 'field_snapshot',
+                'Snapshot-SHA-256' => 'snapshot_sha256',
+                'Vorgänger-Event-Hash' => 'previous_event_sha256',
+                'Event-SHA-256' => 'event_sha256',
+            ] as $label => $field) {
+                $this->definition($label, $event[$field] ?? '');
+            }
+            $this->Ln(3);
+        }
+    }
+
+    /**
+     * @param list<array<string,mixed>> $shifts
+     * @param list<array<string,mixed>> $assignments
+     * @param list<array<string,mixed>> $handovers
+     * @param list<array<string,mixed>> $handoverRequests
+     */
+    public function addDutyRecords(
+        array $shifts,
+        array $assignments,
+        array $handovers,
+        array $handoverRequests = []
+    ): void {
+        $this->beginSection('Dienstorganisation');
+        $this->heading('Dienstschichten, Besetzungen und Übergaben', 1);
+
+        $this->heading('Dienstschichten', 2);
+        if ($shifts === []) {
+            $this->paragraph('Es sind keine Dienstschichten vorhanden.');
+        }
+        foreach ($shifts as $shift) {
+            if (!is_array($shift)) {
+                throw new EstabIncidentPdfInputException(
+                    'Duty shifts must be arrays.'
+                );
+            }
+            $this->recordHeading(
+                'Dienstschicht '
+                    . (string) ($shift['nummer'] ?? '')
+                    . ' · '
+                    . (string) ($shift['bezeichnung'] ?? '')
+            );
+            foreach ([
+                'Dienstschicht-ID' => 'dienstschicht_id',
+                'Einsatz-ID' => 'einsatz_id',
+                'Nummer' => 'nummer',
+                'Bezeichnung' => 'bezeichnung',
+                'Status' => 'status',
+                'Vorgänger-ID' => 'vorgaenger_id',
+                'Erstellt am' => 'erstellt_am',
+                'Erstellt von' => 'erstellt_von',
+                'Aktiviert am' => 'aktiviert_am',
+                'Beendet am' => 'beendet_am',
+            ] as $label => $field) {
+                $this->definition($label, $shift[$field] ?? '');
+            }
+            $this->Ln(3);
+        }
+
+        $this->heading('Dienstbesetzungen', 2);
+        if ($assignments === []) {
+            $this->paragraph('Es sind keine Dienstbesetzungen vorhanden.');
+        }
+        foreach ($assignments as $assignment) {
+            if (!is_array($assignment)) {
+                throw new EstabIncidentPdfInputException(
+                    'Duty assignments must be arrays.'
+                );
+            }
+            $this->recordHeading(
+                'Besetzung '
+                    . (string) ($assignment['dienstbesetzung_id'] ?? '')
+                    . ' · Schicht '
+                    . (string) ($assignment['dienstschicht_nummer'] ?? '')
+                    . ' · '
+                    . (string) ($assignment['funktion'] ?? '')
+            );
+            foreach ([
+                'Dienstbesetzung-ID' => 'dienstbesetzung_id',
+                'Dienstschicht-ID' => 'dienstschicht_id',
+                'Schichtnummer' => 'dienstschicht_nummer',
+                'Benutzerkürzel' => 'benutzer_kuerzel',
+                'Funktion' => 'funktion',
+                'Rolle' => 'rolle',
+                'Status' => 'status',
+                'Zugewiesen am' => 'zugewiesen_am',
+                'Zugewiesen von' => 'zugewiesen_von',
+                'Angenommen am' => 'angenommen_am',
+                'Abgelöst am' => 'abgeloest_am',
+                'Nachfolger-ID' => 'nachfolger_id',
+            ] as $label => $field) {
+                $this->definition($label, $assignment[$field] ?? '');
+            }
+            $this->Ln(3);
+        }
+
+        $this->heading('Übergabeanforderungen', 2);
+        if ($handoverRequests === []) {
+            $this->paragraph(
+                'Es sind keine Übergabeanforderungen vorhanden.'
+            );
+        }
+        foreach ($handoverRequests as $request) {
+            if (!is_array($request)) {
+                throw new EstabIncidentPdfInputException(
+                    'Duty handover requests must be arrays.'
+                );
+            }
+            $this->recordHeading(
+                'Übergabeanforderung '
+                    . (string) (
+                        $request['dienstuebergabe_anfrage_id'] ?? ''
+                    )
+                    . ' · '
+                    . (string) ($request['status'] ?? '')
+            );
+            foreach ([
+                'Übergabeanforderung-ID' =>
+                    'dienstuebergabe_anfrage_id',
+                'Einsatz-ID' => 'einsatz_id',
+                'Von Dienstschicht' => 'von_dienstschicht_id',
+                'An Dienstschicht' => 'an_dienstschicht_id',
+                'Zusammenfassung' => 'zusammenfassung',
+                'Status' => 'status',
+                'Initiiert am' => 'initiiert_am',
+                'Initiiert von' => 'initiiert_von',
+                'Bestätigt am' => 'bestaetigt_am',
+                'Bestätigt von' => 'bestaetigt_von',
+                'Bestätigende Besetzung-ID' =>
+                    'bestaetigt_mit_besetzung_id',
+                'Finale Dienstübergabe-ID' => 'dienstuebergabe_id',
+                'Storniert am' => 'storniert_am',
+                'Storniert von' => 'storniert_von',
+                'Stornierungsgrund' => 'stornierungsgrund',
+            ] as $label => $field) {
+                $this->definition($label, $request[$field] ?? '');
+            }
+            $this->Ln(3);
+        }
+
+        $this->heading('Bestätigte Dienstübergaben', 2);
+        if ($handovers === []) {
+            $this->paragraph('Es sind keine Dienstübergaben vorhanden.');
+        }
+        foreach ($handovers as $handover) {
+            if (!is_array($handover)) {
+                throw new EstabIncidentPdfInputException(
+                    'Duty handovers must be arrays.'
+                );
+            }
+            $this->recordHeading(
+                'Dienstübergabe '
+                    . (string) ($handover['dienstuebergabe_id'] ?? '')
+            );
+            foreach ([
+                'Dienstübergabe-ID' => 'dienstuebergabe_id',
+                'Einsatz-ID' => 'einsatz_id',
+                'Von Dienstschicht' => 'von_dienstschicht_id',
+                'An Dienstschicht' => 'an_dienstschicht_id',
+                'Zusammenfassung' => 'zusammenfassung',
+                'Übergeben am' => 'uebergeben_am',
+                'Übergeben von' => 'uebergeben_von',
+                'Angenommen von' => 'angenommen_von',
+            ] as $label => $field) {
+                $this->definition($label, $handover[$field] ?? '');
+            }
+            $this->Ln(3);
+        }
+    }
+
+    /**
+     * @param list<array<string,mixed>> $plans
+     * @param list<array<string,mixed>> $entries
+     */
+    public function addS6Plans(array $plans, array $entries): void
+    {
+        $entriesByPlan = [];
+        foreach ($entries as $entry) {
+            if (!is_array($entry)) {
+                throw new EstabIncidentPdfInputException(
+                    'S6 plan entries must be arrays.'
+                );
+            }
+            $planId = (int) ($entry['fernmeldeplan_id'] ?? 0);
+            if ($planId < 1) {
+                throw new EstabIncidentPdfInputException(
+                    'S6 plan entries require a plan ID.'
+                );
+            }
+            $entriesByPlan[$planId][] = $entry;
+        }
+
+        $this->beginSection('S6-Fernmeldeplanung');
+        $this->heading('S6-Fernmeldeplanversionen und Einträge', 1);
+        if ($plans === []) {
+            if ($entries !== []) {
+                throw new EstabIncidentPdfInputException(
+                    'S6 plan entries have no incident plan.'
+                );
+            }
+            $this->paragraph(
+                'Für diesen Einsatz sind keine S6-Fernmeldepläne vorhanden.'
+            );
+            return;
+        }
+        $seenPlans = [];
+        foreach ($plans as $plan) {
+            if (!is_array($plan)) {
+                throw new EstabIncidentPdfInputException(
+                    'S6 plans must be arrays.'
+                );
+            }
+            $planId = (int) ($plan['fernmeldeplan_id'] ?? 0);
+            if ($planId < 1 || isset($seenPlans[$planId])) {
+                throw new EstabIncidentPdfInputException(
+                    'S6 plans require unique plan IDs.'
+                );
+            }
+            $seenPlans[$planId] = true;
+            $this->recordHeading(
+                'S6-Fernmeldeplan Version '
+                    . (string) ($plan['version'] ?? '')
+                    . ' · '
+                    . (string) ($plan['status'] ?? '')
+            );
+            foreach ([
+                'Fernmeldeplan-ID' => 'fernmeldeplan_id',
+                'Einsatz-ID' => 'einsatz_id',
+                'Version' => 'version',
+                'Status' => 'status',
+                'Einsatzbezeichnung' => 'einsatzbezeichnung',
+                'Herkunft' => 'herkunft',
+                'Gültig ab' => 'gueltig_ab',
+                'Gültig bis' => 'gueltig_bis',
+                'Betriebsleitung' => 'betriebsleitung',
+                'Bemerkungen' => 'bemerkungen',
+                'Erstellt am' => 'erstellt_am',
+                'Erstellt von' => 'erstellt_von',
+                'Freigegeben am' => 'freigegeben_am',
+                'Freigegeben von' => 'freigegeben_von',
+            ] as $label => $field) {
+                $this->definition($label, $plan[$field] ?? '');
+            }
+
+            $planEntries = $entriesByPlan[$planId] ?? [];
+            $this->heading(
+                'Einträge der Version '
+                    . (string) ($plan['version'] ?? ''),
+                2
+            );
+            if ($planEntries === []) {
+                $this->paragraph('Diese Planversion enthält keine Einträge.');
+            }
+            foreach ($planEntries as $entry) {
+                $this->recordHeading(
+                    'Planeintrag '
+                        . (string) (
+                            $entry['fernmeldeplan_eintrag_id'] ?? ''
+                        )
+                        . ' · '
+                        . (string) ($entry['rufname'] ?? '')
+                );
+                foreach ([
+                    'Planeintrag-ID' => 'fernmeldeplan_eintrag_id',
+                    'Fernmeldeplan-ID' => 'fernmeldeplan_id',
+                    'Planversion' => 'plan_version',
+                    'Sortierung' => 'sortierung',
+                    'Betriebsstelle' => 'betriebsstelle',
+                    'Rufname' => 'rufname',
+                    'Medium' => 'medium',
+                    'Kanal' => 'kanal',
+                    'Bandlage' => 'bandlage',
+                    'Verkehrsform' => 'verkehrsform',
+                    'Besondere Vermerke' => 'besondere_vermerke',
+                    'Bemerkungen' => 'bemerkungen',
+                ] as $label => $field) {
+                    $this->definition($label, $entry[$field] ?? '');
+                }
+                $this->Ln(2);
+            }
+            unset($entriesByPlan[$planId]);
+            $this->Ln(3);
+        }
+        if ($entriesByPlan !== []) {
+            throw new EstabIncidentPdfInputException(
+                'S6 plan entries refer to a missing incident plan.'
+            );
+        }
+    }
+
+    /** @param list<array<string,mixed>> $orders */
+    public function addCourierOrders(array $orders): void
+    {
+        $this->beginSection('Melderaufträge');
+        $this->heading('Melderaufträge', 1);
+        $this->paragraph(
+            'Dargestellt ist die vollständige Auftrags-, Empfänger-, '
+            . 'Rückweg- und Abschlusskette jedes Melderauftrags.'
+        );
+        if ($orders === []) {
+            $this->paragraph(
+                'Für diesen Einsatz sind keine Melderaufträge vorhanden.'
+            );
+            return;
+        }
+        foreach ($orders as $order) {
+            if (!is_array($order)) {
+                throw new EstabIncidentPdfInputException(
+                    'Courier orders must be arrays.'
+                );
+            }
+            $this->recordHeading(
+                'Melderauftrag '
+                    . (string) ($order['melderauftrag_id'] ?? '')
+                    . ' · '
+                    . (string) ($order['status'] ?? '')
+            );
+            foreach ([
+                'Melderauftrag-ID' => 'melderauftrag_id',
+                'Einsatz-ID' => 'einsatz_id',
+                'Nachrichten-ID' => 'nachricht_id',
+                'Melderkürzel' => 'melder_kuerzel',
+                'Ziel' => 'ziel',
+                'Status' => 'status',
+                'Beauftragt am' => 'beauftragt_am',
+                'Beauftragt von' => 'beauftragt_von',
+                'Übernommen am' => 'uebernommen_am',
+                'Tatsächlicher Empfänger' => 'tatsaechlicher_empfaenger',
+                'Übergeben am' => 'uebergeben_am',
+                'Rücknachricht vorhanden' => 'ruecknachricht_vorhanden',
+                'Rücknachricht' => 'ruecknachricht',
+                'Rückweg am' => 'rueckweg_am',
+                'Zurück am' => 'zurueck_am',
+                'Abschlussvermerk' => 'abschlussvermerk',
+                'Gemeldet am' => 'gemeldet_am',
+                'Gemeldet an' => 'gemeldet_an',
+                'Abgebrochen am' => 'abgebrochen_am',
+                'Abbruchgrund' => 'abbruchgrund',
+            ] as $label => $field) {
+                $value = $order[$field] ?? null;
+                if ($field === 'ruecknachricht_vorhanden') {
+                    $value = $value === null
+                        ? 'Nicht dokumentiert'
+                        : ((int) $value === 1 ? 'Ja' : 'Nein');
+                }
+                $this->definition($label, $value);
+            }
+            $this->Ln(3);
+        }
+    }
+
+    /**
+     * @param list<array<string,mixed>> $events
+     * @param list<array<string,mixed>> $heads
+     * @param array<string,mixed> $status
+     */
+    public function addOperationsEvidence(
+        array $events,
+        array $heads,
+        array $status
+    ): void {
+        $this->beginSection('Betriebsnachweis');
+        $this->heading('Betriebsereignisse und Nachweiskopf', 1);
+        $this->paragraph(
+            'Die einsatzweite Betriebsereigniskette umfasst Dienstbetrieb, '
+            . 'S6-Fernmeldeplanung und Melderbeförderung. Sequenzen, '
+            . 'Vorgänger- und Ereignishashes wurden neu berechnet.'
+        );
+        $this->heading('Prüfergebnis', 2);
+        $this->definition(
+            'Status',
+            $this->statusText(($status['valid'] ?? false) === true)
+        );
+        $this->definition('Ereignisse', $status['event_count'] ?? 0);
+        $this->definition(
+            'Fehlerhafte Sequenz',
+            $status['failed_sequence'] ?? ''
+        );
+        $this->definition(
+            'Berechneter Head-Hash',
+            $status['calculated_head_sha256'] ?? ''
+        );
+        $this->definition(
+            'Gespeicherte Kopfsequenz',
+            $status['stored_sequence'] ?? 0
+        );
+        $this->definition(
+            'Gespeicherter Head-Hash',
+            $status['stored_head_sha256'] ?? ''
+        );
+
+        $this->heading('Persistierter Nachweiskopf', 2);
+        if ($heads === []) {
+            $this->paragraph(
+                'Für die leere Betriebskette ist kein persistierter Kopf '
+                . 'vorhanden.'
+            );
+        }
+        foreach ($heads as $head) {
+            if (!is_array($head)) {
+                throw new EstabIncidentPdfInputException(
+                    'Operations evidence heads must be arrays.'
+                );
+            }
+            $this->recordHeading('Betriebsnachweiskopf');
+            $this->definition('Einsatz-ID', $head['einsatz_id'] ?? '');
+            $this->definition(
+                'Letzte Sequenz',
+                $head['letzte_sequenz'] ?? ''
+            );
+            $this->definition('Letzter Hash', $head['letzter_hash'] ?? '');
+        }
+
+        $this->heading('Unveränderliche Betriebsereignisse', 2);
+        if ($events === []) {
+            $this->paragraph(
+                'Für diesen Einsatz sind keine Betriebsereignisse vorhanden.'
+            );
+            return;
+        }
+        foreach ($events as $event) {
+            if (!is_array($event)) {
+                throw new EstabIncidentPdfInputException(
+                    'Operations evidence rows must be arrays.'
+                );
+            }
+            $this->recordHeading(
+                'Betriebsereignis Sequenz '
+                    . (string) ($event['sequenz'] ?? '')
+                    . ' · '
+                    . (string) ($event['objekttyp'] ?? '')
+            );
+            foreach ([
+                'Betriebsereignis-ID' => 'betriebsereignis_id',
+                'Einsatz-ID' => 'einsatz_id',
+                'Sequenz' => 'sequenz',
+                'Objekttyp' => 'objekttyp',
+                'Objekt-ID' => 'objekt_id',
+                'Aktion' => 'aktion',
+                'Akteurskürzel' => 'akteur_kuerzel',
+                'Akteursfunktion' => 'akteur_funktion',
+                'Ereigniszeit' => 'ereigniszeit',
+                'Details (JSON)' => 'details_json',
+                'Vorgänger-Hash' => 'vorheriger_hash',
+                'Ereignis-Hash' => 'ereignis_hash',
+            ] as $label => $field) {
+                $this->definition($label, $event[$field] ?? '');
+            }
             $this->Ln(3);
         }
     }
@@ -614,7 +1395,9 @@ final class EstabIncidentPdf extends vordruckaspdf
         string $path,
         string $name,
         string $mime,
-        string $description
+        string $description,
+        ?string $expectedSha256 = null,
+        ?int $expectedSize = null
     ): array {
         if (count($this->embeddedFiles) >= ESTAB_INCIDENT_PDF_MAX_ATTACHMENTS) {
             throw new EstabIncidentPdfInputException(
@@ -631,7 +1414,12 @@ final class EstabIncidentPdf extends vordruckaspdf
             }
         }
         $remaining = $this->attachmentByteLimit - $this->attachmentBytes;
-        $file = estab_incident_pdf_read_attachment($path, $remaining);
+        $file = estab_incident_pdf_read_attachment(
+            $path,
+            $remaining,
+            $expectedSha256,
+            $expectedSize
+        );
         $description = trim($description);
         if (
             strlen($description) > 1000
@@ -667,6 +1455,8 @@ final class EstabIncidentPdf extends vordruckaspdf
      *     size:int,
      *     sha256:string,
      *     mime:string,
+     *     integrity_state?:string,
+     *     integrity_statement?:string,
      *     message_ids?:list<int>
      * }> $attachments
      */
@@ -723,7 +1513,20 @@ final class EstabIncidentPdf extends vordruckaspdf
                     '.'
                 ) . ' Byte'
             );
-            $this->definition('SHA-256', $attachment['sha256'] ?? '');
+            $this->definition(
+                'SHA-256 der eingebetteten Datei',
+                $attachment['sha256'] ?? ''
+            );
+            $integrityState = (string) (
+                $attachment['integrity_state'] ?? ''
+            );
+            $this->definition(
+                'Integrität beim Eingang',
+                $integrityState === 'verified'
+                    ? 'Belegt: SHA-256 und Größe stimmen mit dem '
+                        . 'unveränderbaren Eingangsnachweis überein.'
+                    : 'Integrität beim Eingang nicht belegbar'
+            );
             $messageIds = $attachment['message_ids'] ?? [];
             if (is_array($messageIds) && $messageIds !== []) {
                 $this->definition(

@@ -573,7 +573,9 @@ function estab_auth_login_audit_details(
 function estab_auth_account_matches_session(
     array $storedUser,
     array $identity,
-    string $sessionId
+    string $sessionId,
+    ?mysqli $connection = null,
+    ?int $dutyAssignmentId = null
 ): bool {
     $storedSessionId = $storedUser['sid'] ?? null;
     if (
@@ -586,7 +588,7 @@ function estab_auth_account_matches_session(
         return false;
     }
 
-    return hash_equals($storedSessionId, $sessionId)
+    $accountMatches = hash_equals($storedSessionId, $sessionId)
         && hash_equals(
             strtolower(trim((string) ($storedUser['kuerzel'] ?? ''))),
             (string) ($identity['kuerzel'] ?? '')
@@ -594,15 +596,93 @@ function estab_auth_account_matches_session(
         && hash_equals(
             (string) ($storedUser['benutzer'] ?? ''),
             (string) ($identity['benutzer'] ?? '')
-        )
-        && hash_equals(
+        );
+    if (!$accountMatches) {
+        return false;
+    }
+
+    if ($dutyAssignmentId === null) {
+        return hash_equals(
             (string) ($storedUser['funktion'] ?? ''),
             (string) ($identity['funktion'] ?? '')
-        )
-        && hash_equals(
+        ) && hash_equals(
             (string) ($storedUser['rolle'] ?? ''),
             (string) ($identity['rolle'] ?? '')
         );
+    }
+
+    return $connection instanceof mysqli
+        && estab_auth_duty_assignment_matches_session(
+            $connection,
+            $dutyAssignmentId,
+            (string) ($identity['kuerzel'] ?? ''),
+            (string) ($identity['funktion'] ?? ''),
+            (string) ($identity['rolle'] ?? '')
+        );
+}
+
+/**
+ * Resolve an alternative session function only through an accepted hat in the
+ * singleton active incident's active shift.
+ *
+ * A duty assignment id is server-side PHP-session state, never a submitted
+ * function/role choice. Once a handover relieves that assignment, the next
+ * protected request fails closed.
+ */
+function estab_auth_duty_assignment_matches_session(
+    mysqli $connection,
+    int $assignmentId,
+    string $userCode,
+    string $function,
+    string $role
+): bool {
+    if (
+        $assignmentId < 1
+        || preg_match('/\A[a-z0-9_]{1,6}\z/D', $userCode) !== 1
+        || preg_match('/\A(?:A\/W|[A-Za-z0-9_]{1,6})\z/D', $function) !== 1
+        || !in_array($role, ['Stab', 'FB', 'Fernmelder'], true)
+    ) {
+        return false;
+    }
+    $statement = $connection->prepare(
+        'SELECT 1 FROM `nv_dienstbesetzungen` AS duty_assignment'
+        . ' JOIN `nv_dienstschichten` AS duty_shift'
+        . ' ON duty_shift.`dienstschicht_id`'
+        . ' = duty_assignment.`dienstschicht_id`'
+        . ' JOIN `nv_einsatz_status` AS active_incident'
+        . ' ON active_incident.`singleton_id` = 1'
+        . ' AND active_incident.`active_einsatz_id` = duty_shift.`einsatz_id`'
+        . ' JOIN `nv_einsaetze` AS incident'
+        . ' ON incident.`einsatz_id` = duty_shift.`einsatz_id`'
+        . ' WHERE duty_assignment.`dienstbesetzung_id` = ?'
+        . " AND duty_assignment.`status` = 'ANGENOMMEN'"
+        . " AND duty_shift.`status` = 'AKTIV'"
+        . " AND incident.`estab_status` = 'open'"
+        . ' AND BINARY duty_assignment.`benutzer_kuerzel` = BINARY ?'
+        . ' AND BINARY duty_assignment.`funktion` = BINARY ?'
+        . ' AND BINARY duty_assignment.`rolle` = BINARY ? LIMIT 1'
+    );
+    if (!$statement) {
+        throw new RuntimeException('Could not prepare duty-session validation');
+    }
+    try {
+        $statement->bind_param(
+            'isss',
+            $assignmentId,
+            $userCode,
+            $function,
+            $role
+        );
+        if (!$statement->execute()) {
+            throw new RuntimeException('Could not validate duty-session assignment');
+        }
+        $result = $statement->get_result();
+        $valid = $result->fetch_row() !== null;
+        $result->free();
+        return $valid;
+    } finally {
+        $statement->close();
+    }
 }
 
 /** Resolve the same session store used by 4fcfg/dbcfg.inc.php. */
@@ -674,6 +754,46 @@ function estab_auth_current_session_identity(
         }
         estab_auth_table($userTable);
 
+        $dutyAssignmentValue = $session['estab_duty_assignment_id'] ?? null;
+        $dutyAssignmentId = null;
+        if (
+            is_int($dutyAssignmentValue)
+            && $dutyAssignmentValue > 0
+        ) {
+            $dutyAssignmentId = $dutyAssignmentValue;
+        } elseif (
+            is_string($dutyAssignmentValue)
+            && preg_match(
+                '/\A[1-9][0-9]{0,18}\z/D',
+                $dutyAssignmentValue
+            ) === 1
+        ) {
+            $parsedDutyAssignment = filter_var(
+                $dutyAssignmentValue,
+                FILTER_VALIDATE_INT
+            );
+            if (!is_int($parsedDutyAssignment) || $parsedDutyAssignment < 1) {
+                throw new RuntimeException(
+                    'Authentication duty assignment is invalid'
+                );
+            }
+            $dutyAssignmentId = $parsedDutyAssignment;
+        } elseif ($dutyAssignmentValue !== null) {
+            throw new RuntimeException(
+                'Authentication duty assignment is invalid'
+            );
+        }
+        $authenticatedIdentity = $identity;
+        if ($dutyAssignmentId !== null) {
+            // The database check below binds this exact assignment to the
+            // current SID, account, function, role, active shift and incident.
+            // Returning it with the identity prevents downstream domain
+            // guards from silently falling back to the four-field account
+            // shape after authentication already proved the selected hat.
+            $authenticatedIdentity['duty_assignment_id'] =
+                $dutyAssignmentId;
+        }
+
         $cacheKey = hash('sha256', json_encode([
             'server' => (string) ($databaseConfig['server'] ?? ''),
             'user' => (string) ($databaseConfig['user'] ?? ''),
@@ -685,18 +805,20 @@ function estab_auth_current_session_identity(
             'table' => $userTable,
             'sid' => $sessionId,
             'identity' => $identity,
+            'duty_assignment_id' => $dutyAssignmentId,
         ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
 
         if ($useRequestCache && array_key_exists($cacheKey, $requestCache)) {
             if ($requestCache[$cacheKey] === true) {
                 $session['ROLLE'] = $identity['rolle'];
-                return $identity;
+                return $authenticatedIdentity;
             }
             estab_auth_invalidate_local_session($session);
             return null;
         }
 
         $connection = null;
+        $valid = false;
         try {
             $connection = estab_auth_connect($databaseConfig);
             $storedUser = estab_auth_fetch_session_user(
@@ -704,18 +826,19 @@ function estab_auth_current_session_identity(
                 $userTable,
                 $identity['kuerzel']
             );
+            $valid = is_array($storedUser)
+                && estab_auth_account_matches_session(
+                    $storedUser,
+                    $identity,
+                    $sessionId,
+                    $connection,
+                    $dutyAssignmentId
+                );
         } finally {
             if ($connection instanceof mysqli) {
                 estab_auth_close($connection);
             }
         }
-
-        $valid = is_array($storedUser)
-            && estab_auth_account_matches_session(
-                $storedUser,
-                $identity,
-                $sessionId
-            );
         if ($useRequestCache) {
             $requestCache[$cacheKey] = $valid;
         }
@@ -726,7 +849,7 @@ function estab_auth_current_session_identity(
 
         // Legacy routes still consult this duplicate role field.
         $session['ROLLE'] = $identity['rolle'];
-        return $identity;
+        return $authenticatedIdentity;
     } catch (Throwable $exception) {
         error_log(
             'eStab session validation failed: ' . $exception->getMessage()
@@ -811,8 +934,10 @@ function estab_auth_insert_user(mysqli $connection, string $table, array $user):
 /** Fetch users for the public status table through a prepared SELECT. */
 function estab_auth_fetch_users(mysqli $connection, string $table): array
 {
-    $sql = 'SELECT `benutzer`, `kuerzel`, `funktion`, `rolle`, `sid`, `aktiv`'
-        . ' FROM ' . estab_auth_table($table) . ' ORDER BY `aktiv` DESC, `kuerzel`';
+    $sql = 'SELECT `benutzer`, `kuerzel`, `funktion`, `rolle`, `sid`, `aktiv`,'
+        . ' `estab_gesperrt`'
+        . ' FROM ' . estab_auth_table($table)
+        . ' ORDER BY `estab_gesperrt`, `aktiv` DESC, `kuerzel`';
     $statement = $connection->prepare($sql);
     if (!$statement) {
         throw new RuntimeException('Could not prepare status lookup');

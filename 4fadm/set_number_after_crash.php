@@ -49,7 +49,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                         $conf_4f_tbl['nachrichten'],
                         $conf_4f_tbl['protokoll'],
                         $mode,
-                        $validation['data']
+                        $validation['data'],
+                        (string) ($_SERVER['REMOTE_USER'] ?? 'administration')
                     );
                 } finally {
                     estab_auth_close($connection);
@@ -126,8 +127,10 @@ $updated = ($_GET['updated'] ?? '') === '1';
     <aside class="estab-tool-notice" aria-label="Sicherheitswirkung">
       <strong>Transaktional und einsatzbezogen:</strong>
       <p>Die Korrektur gilt nur für den aktiven Einsatz und erzeugt
-        Systemnachricht sowie Audit-Eintrag in derselben Transaktion.
-        Ein vorhandener Höchstwert wird niemals abgesenkt.</p>
+        einen dedizierten Zählernachweis in der verketteten Betriebsspur sowie
+        einen Audit-Eintrag in derselben Transaktion. Sie erzeugt keine
+        fingierte Fachnachricht; ein vorhandener Höchstwert wird niemals
+        abgesenkt.</p>
     </aside>
 
     <?php if ($updated): ?>

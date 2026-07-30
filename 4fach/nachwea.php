@@ -2,14 +2,54 @@
 define("debug", false);
 session_start ();
 require_once __DIR__ . "/../app/auth.php";
+require_once __DIR__ . "/../app/read_authorization.php";
 require_once __DIR__ . "/../app/session_ui.php";
 estab_auth_require_session ($_SESSION);
-estab_session_ui_start ($_SESSION);
 include ("../4fcfg/config.inc.php");  // Konfigurationseinstellungen und Vorgaben
 include ("db_operation.php");        // Datenbank operationen
 include ("liste.php");          // erzeuge Ausgabelisten
 include ("data_hndl.php");      // propritÃ¤re  Datenbankoperationen
 //include ("menue.php");          // erzeuge MenÃ¼s
+
+$trackingReadIdentity = estab_read_session_identity ($_SESSION);
+$trackingAccessConnection = null;
+try {
+    if (!is_array ($trackingReadIdentity)) {
+        throw new EstabReadPermissionException ("Anmeldung erforderlich.");
+    }
+    $trackingAccessConnection = estab_auth_connect ($conf_4f_db);
+    estab_read_require_area (
+        $trackingAccessConnection,
+        $trackingReadIdentity,
+        "tracking"
+    );
+} catch (EstabNoActiveIncidentException) {
+    http_response_code (409);
+    header ("Content-Type: text/plain; charset=UTF-8");
+    header ("Cache-Control: no-store");
+    echo "Kein Einsatz aktiv.";
+    exit;
+} catch (EstabReadPermissionException) {
+    http_response_code (403);
+    header ("Content-Type: text/plain; charset=UTF-8");
+    header ("Cache-Control: no-store");
+    echo "Die Nachweisung ist nur für eine aktive LdF- oder A/W-Funktion verfügbar.";
+    exit;
+} catch (Throwable $exception) {
+    error_log (
+        "eStab tracking authorization failed: ".$exception->getMessage ()
+    );
+    http_response_code (503);
+    header ("Content-Type: text/plain; charset=UTF-8");
+    header ("Cache-Control: no-store");
+    echo "Die Leseberechtigung kann derzeit nicht geprüft werden.";
+    exit;
+} finally {
+    if ($trackingAccessConnection instanceof mysqli) {
+        estab_auth_close ($trackingAccessConnection);
+    }
+}
+estab_session_ui_start ($_SESSION);
 
 header ("Content-Type: text/html; charset=UTF-8");
 header ("Cache-Control: private, no-store, max-age=0");

@@ -555,7 +555,11 @@ class make_econf {
       throw new RuntimeException ("Datenbank konnte für den Export nicht ausgewählt werden");
     }
     $exportBase = estab_env ("ESTAB_EXPORT_DIR", "/var/lib/estab/export");
-    $export = estab_export_database ($db_hndl, (string) $exportBase);
+    $export = estab_export_database (
+      $db_hndl,
+      (string) $exportBase,
+      (string) $conf_4f ["ablage_dir"]
+    );
 
     echo "<table border=\"1\" cellspacing=\"2\" cellpadding=\"5\"><tbody>";
     echo "<tr><th>Tabelle</th><th>Datensätze</th><th>SHA-256</th></tr>";

@@ -18,7 +18,8 @@ require_once __DIR__ . '/auth.php';
  *     path: string,
  *     access: 'public'|'protected',
  *     root?: bool,
- *     hint?: string
+ *     hint?: string,
+ *     duty_access?: 'LAGE_DOKUMENTATION'|'FERNMELDE_NACHWEIS'
  * }>
  */
 function estab_navigation_areas(): array
@@ -40,11 +41,20 @@ function estab_navigation_areas(): array
             'access' => 'protected',
         ],
         [
+            'key' => 'command-post',
+            'label' => 'Führungsstellenbetrieb',
+            'short_label' => 'Führungsstelle',
+            'path' => '4fach/fuehrungsstelle.php',
+            'access' => 'protected',
+            'hint' => 'Dienst · S6 · Melder',
+        ],
+        [
             'key' => 'message-overview',
             'label' => 'Meldungsübersicht',
             'short_label' => 'Meldungen',
             'path' => '4fueltg/ue_ltg.php',
             'access' => 'protected',
+            'duty_access' => 'LAGE_DOKUMENTATION',
         ],
         [
             'key' => 'forms',
@@ -73,6 +83,7 @@ function estab_navigation_areas(): array
             'short_label' => 'Nachweisung',
             'path' => '4fach/nachwea.php?nwalle',
             'access' => 'protected',
+            'duty_access' => 'FERNMELDE_NACHWEIS',
         ],
         [
             'key' => 'bos-info',
@@ -225,6 +236,7 @@ function estab_navigation_validated_item(array $item): array
     $access = $item['access'] ?? null;
     $root = $item['root'] ?? false;
     $hint = $item['hint'] ?? '';
+    $dutyAccess = $item['duty_access'] ?? '';
 
     if (
         !is_string($key)
@@ -261,6 +273,18 @@ function estab_navigation_validated_item(array $item): array
     if (!is_string($hint)) {
         throw new InvalidArgumentException('Invalid navigation hint');
     }
+    if (
+        !is_string($dutyAccess)
+        || !in_array(
+            $dutyAccess,
+            ['', 'LAGE_DOKUMENTATION', 'FERNMELDE_NACHWEIS'],
+            true
+        )
+    ) {
+        throw new InvalidArgumentException(
+            'Invalid navigation duty-access class'
+        );
+    }
 
     // The shared helper is the final URL-policy boundary for every real path.
     estab_application_url($path);
@@ -273,7 +297,55 @@ function estab_navigation_validated_item(array $item): array
         'access' => $access,
         'root' => $root,
         'hint' => $hint,
+        'duty_access' => $dutyAccess,
     ];
+}
+
+/**
+ * Pure navigation hint for a server-validated selected duty identity.
+ *
+ * The endpoints repeat the authoritative DB capability check. Navigation only
+ * suppresses misleading links: a present duty assignment id has already been
+ * bound to the active accepted hat by app/auth.php.
+ */
+function estab_navigation_duty_access_allowed(
+    array $item,
+    ?array $identity
+): bool {
+    $item = estab_navigation_validated_item($item);
+    if ($item['access'] === 'public') {
+        return true;
+    }
+    $assignment = is_array($identity)
+        ? ($identity['duty_assignment_id'] ?? null)
+        : null;
+    $hasSelectedHat = (is_int($assignment) && $assignment > 0)
+        || (
+            is_string($assignment)
+            && preg_match('/\A[1-9][0-9]{0,18}\z/D', $assignment) === 1
+        );
+    if (!$hasSelectedHat) {
+        // This is the only protected bootstrap area able to accept/select a
+        // personal duty assignment. No other operational link is useful or
+        // safe before that server-validated selection exists.
+        return $item['key'] === 'command-post';
+    }
+    if ($item['duty_access'] === '') {
+        return true;
+    }
+    $tuple = [
+        (string) ($identity['funktion'] ?? ''),
+        (string) ($identity['rolle'] ?? ''),
+    ];
+    return match ($item['duty_access']) {
+        'LAGE_DOKUMENTATION' => $tuple === ['S2', 'Stab'],
+        'FERNMELDE_NACHWEIS' => in_array(
+            $tuple,
+            [['LdF', 'Fernmelder'], ['A/W', 'Fernmelder']],
+            true
+        ),
+        default => false,
+    };
 }
 
 /**
@@ -356,6 +428,9 @@ function estab_navigation_key_for_path(string $relativePath): ?string
     if ($relativePath === '4fach/nachwea.php') {
         return 'tracking';
     }
+    if ($relativePath === '4fach/fuehrungsstelle.php') {
+        return 'command-post';
+    }
     if ($relativePath === '4fach/resetpic.php') {
         return 'administration';
     }
@@ -416,9 +491,16 @@ function estab_navigation_item_markup(
     array $item,
     bool $authenticated,
     ?string $activeKey,
-    bool $shortLabel = false
+    bool $shortLabel = false,
+    ?array $identity = null
 ): string {
     $item = estab_navigation_validated_item($item);
+    if (
+        $authenticated
+        && !estab_navigation_duty_access_allowed($item, $identity)
+    ) {
+        return '';
+    }
     $locked = $item['access'] === 'protected' && !$authenticated;
     $url = $locked
         ? estab_navigation_login_url($item['key'])
@@ -429,6 +511,10 @@ function estab_navigation_item_markup(
     $lockedAttribute = $locked
         ? ' data-estab-navigation-locked'
         : '';
+    $dutyAccessAttribute = $item['duty_access'] === ''
+        ? ''
+        : ' data-estab-navigation-duty-access="'
+            . estab_auth_html($item['duty_access']) . '"';
     $hint = $item['hint'] === ''
         ? ''
         : '<span class="estab-navigation-hint">'
@@ -450,7 +536,8 @@ function estab_navigation_item_markup(
         . ' data-estab-navigation-key="' . estab_auth_html($item['key']) . '"'
         . ' data-estab-navigation-access="'
         . estab_auth_html($item['access']) . '"'
-        . $lockedAttribute . '>'
+        . $lockedAttribute
+        . $dutyAccessAttribute . '>'
         . '<a class="estab-navigation-link" href="'
         . estab_auth_html($url) . '" target="_top"'
         . ' data-estab-nav-key="' . estab_auth_html($item['key']) . '"'
@@ -468,7 +555,8 @@ function estab_navigation_group_markup(
     bool $authenticated,
     ?string $activeKey,
     string $group,
-    bool $shortLabels = false
+    bool $shortLabels = false,
+    ?array $identity = null
 ): string {
     if (preg_match('/\A[a-z][a-z0-9-]*\z/D', $group) !== 1) {
         throw new InvalidArgumentException('Invalid navigation group');
@@ -489,7 +577,8 @@ function estab_navigation_group_markup(
             $validated,
             $authenticated,
             $activeKey,
-            $shortLabels
+            $shortLabels,
+            $identity
         );
     }
 
@@ -509,7 +598,8 @@ function estab_navigation_markup(
     bool $authenticated,
     array $server = [],
     bool $compact = false,
-    bool $sidebar = false
+    bool $sidebar = false,
+    ?array $identity = null
 ): string {
     if ($sidebar && !$compact) {
         throw new InvalidArgumentException(
@@ -522,7 +612,8 @@ function estab_navigation_markup(
         $authenticated,
         $activeKey,
         'areas',
-        $sidebar
+        $sidebar,
+        $identity
     );
     $services = '<div class="estab-navigation-services">'
         . '<span class="estab-navigation-services-label">Service</span>'
@@ -531,7 +622,8 @@ function estab_navigation_markup(
             $authenticated,
             $activeKey,
             'services',
-            $sidebar
+            $sidebar,
+            $identity
         )
         . '</div>';
     $content = '<div class="estab-navigation-content">'

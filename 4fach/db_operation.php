@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . "/../app/dynamic_schema.php";
 //if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>DB-Operationen</big><br>";  }
 /*****************************************************************************\
    Datei: db_operation.php
@@ -77,314 +78,37 @@ class db_access {
   Funktion create_user_table ($tablename)
 \******************************************************************************/
 
-  function quote_dynamic_table_identifier ($basename, $suffix) {
-    if (!is_string($basename) || $basename === "") {
-      throw new InvalidArgumentException ("Dynamischer Tabellenname darf nicht leer sein");
-    }
-
-    $identifier = $basename.$suffix;
-    if ((strlen ($identifier) > 64) ||
-        (!preg_match ("/\\A[A-Za-z_][A-Za-z0-9_]*\\z/D", $identifier))) {
-      throw new InvalidArgumentException ("Ungueltiger dynamischer Tabellenname");
-    }
-
-    return "`".$identifier."`";
-  }
-
-  function execute_dynamic_schema_query ($query, $db) {
-    $result = mysql_query ($query, $db);
-    if (!$result) {
-      throw new RuntimeException (
-        "[create_user_table] Ungueltige Abfrage: ".mysql_error ($db)
-      );
-    }
-  }
-
-  function dynamic_schema_lock_name ($fkttblname) {
-    if (!is_string ($fkttblname) || $fkttblname === "") {
-      throw new InvalidArgumentException ("Dynamischer Funktionsname darf nicht leer sein");
-    }
-    // Every user of one function shares its *_erl, *_katego and
-    // *_kategolink tables. Locking by database and function therefore
-    // serialises exactly the DDL that can otherwise race.
-    return "estab:schema:".substr (
-      hash ("sha256", $this->db_name."\0".$fkttblname),
-      0,
-      51
-    );
-  }
-
-  function dynamic_schema_lock_timeout () {
-    $timeout = defined ("ESTAB_DYNAMIC_SCHEMA_LOCK_TIMEOUT_SECONDS")
-      ? constant ("ESTAB_DYNAMIC_SCHEMA_LOCK_TIMEOUT_SECONDS")
-      : 15;
-    if (!is_int ($timeout) || $timeout < 0 || $timeout > 30) {
-      throw new RuntimeException ("Ungueltiges Zeitlimit fuer dynamische Tabellen");
-    }
-    return $timeout;
-  }
-
-  function acquire_dynamic_schema_lock ($db, $lockname) {
-    if (!$db instanceof mysqli) {
-      throw new RuntimeException ("Datenbankverbindung fuer dynamische Tabellen fehlt");
-    }
-    $timeout = $this->dynamic_schema_lock_timeout ();
-    $statement = $db->prepare ("SELECT GET_LOCK(?, ?)");
-    if (!$statement) {
-      throw new RuntimeException ("Sperre fuer dynamische Tabellen konnte nicht vorbereitet werden");
-    }
-    try {
-      $statement->bind_param ("si", $lockname, $timeout);
-      if (!$statement->execute ()) {
-        throw new RuntimeException ("Sperre fuer dynamische Tabellen konnte nicht angefordert werden");
-      }
-      $result = $statement->get_result ();
-      $row = $result->fetch_row ();
-      $result->free ();
-      if (!is_array ($row) || (string) ($row [0] ?? "") !== "1") {
-        throw new RuntimeException ("Dynamische Tabellen werden bereits bearbeitet");
-      }
-    } finally {
-      $statement->close ();
-    }
-  }
-
-  function release_dynamic_schema_lock ($db, $lockname) {
-    if (!$db instanceof mysqli) {
-      throw new RuntimeException ("Datenbankverbindung fuer dynamische Tabellen fehlt");
-    }
-    $statement = $db->prepare ("SELECT RELEASE_LOCK(?)");
-    if (!$statement) {
-      throw new RuntimeException ("Sperre fuer dynamische Tabellen konnte nicht freigegeben werden");
-    }
-    try {
-      $statement->bind_param ("s", $lockname);
-      if (!$statement->execute ()) {
-        throw new RuntimeException ("Sperre fuer dynamische Tabellen konnte nicht freigegeben werden");
-      }
-      $result = $statement->get_result ();
-      $row = $result->fetch_row ();
-      $result->free ();
-      if (!is_array ($row) || (string) ($row [0] ?? "") !== "1") {
-        throw new RuntimeException ("Sperre fuer dynamische Tabellen ging verloren");
-      }
-    } finally {
-      $statement->close ();
-    }
-  }
-
   function create_user_table ($tablename, $fkttblname) {
-    $user_read       = $this->quote_dynamic_table_identifier ($tablename, "_read");
-    $function_done   = $this->quote_dynamic_table_identifier ($fkttblname, "_erl");
-    $function_katego = $this->quote_dynamic_table_identifier ($fkttblname, "_katego");
-    $function_link   = $this->quote_dynamic_table_identifier ($fkttblname, "_kategolink");
-    $user_katego     = $this->quote_dynamic_table_identifier ($tablename, "_katego");
-    $user_link       = $this->quote_dynamic_table_identifier ($tablename, "_kategolink");
-
-    $db = mysql_connect($this->db_server,$this->db_user, $this->db_pw);
-    if (!$db instanceof mysqli) {
+    // Keep the historic public method while delegating every caller to the
+    // shared reconciliation boundary also used by personal duty-hat changes.
+    // The separate connection is intentional: schema DDL commits implicitly
+    // and must never commit the surrounding login transaction.
+    $schema_db = mysql_connect (
+      $this->db_server,
+      $this->db_user,
+      $this->db_pw
+    );
+    if (!$schema_db instanceof mysqli) {
       throw new RuntimeException (
         "[create_user_table] Konnte keine Verbindung zur Datenbank herstellen"
       );
     }
-    $this->execute_dynamic_schema_query (
-      'SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci',
-      $db
-    );
-    if (!mysql_select_db ($this->db_name, $db)) {
-      mysql_close ($db);
-      throw new RuntimeException (
-        "[create_user_table] Auswahl der Datenbank fehlgeschlagen"
-      );
-    }
-
-    $lockname = $this->dynamic_schema_lock_name ($fkttblname);
-    $lock_acquired = false;
-    $original_sql_mode = null;
-
-    $create_queries = array (
-      "CREATE TABLE IF NOT EXISTS ".$user_read." (
-        `lfd` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Laufende Nummer',
-        `zeit` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Zeitpunkt der letzten Aenderung',
-        `nachnum` BIGINT NOT NULL COMMENT 'Nachrichtennummer',
-        `gelesen` DATETIME NULL DEFAULT NULL COMMENT 'Zeitpunkt, zu dem die Nachricht gelesen wurde',
-        PRIMARY KEY (`lfd`),
-        KEY `idx_nachnum` (`nachnum`)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-
-      "CREATE TABLE IF NOT EXISTS ".$function_done." (
-        `lfd` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Laufende Nummer',
-        `zeit` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Zeitpunkt der letzten Aenderung',
-        `nachnum` BIGINT NOT NULL COMMENT 'Nachrichtennummer',
-        `erledigt` DATETIME NULL DEFAULT NULL COMMENT 'Zeitpunkt, zu dem die Nachricht erledigt wurde',
-        PRIMARY KEY (`lfd`),
-        KEY `idx_nachnum` (`nachnum`)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-
-      "CREATE TABLE IF NOT EXISTS ".$function_katego." (
-        `lfd` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Laufende Nummer',
-        `kategorie` VARCHAR(10) NOT NULL COMMENT 'Benutzerdefinierte Kategorie',
-        `beschreibung` VARCHAR(254) NULL COMMENT 'Beschreibung zur Kategorie',
-        PRIMARY KEY (`lfd`),
-        KEY `idx_kategorie` (`kategorie`)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-
-      "CREATE TABLE IF NOT EXISTS ".$function_link." (
-        `lfd` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-        `msg` BIGINT NOT NULL,
-        `katego` BIGINT NOT NULL,
-        PRIMARY KEY (`lfd`),
-        KEY `idx_msg_katego` (`msg`, `katego`),
-        KEY `idx_katego_msg` (`katego`, `msg`)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-
-      "CREATE TABLE IF NOT EXISTS ".$user_katego." (
-        `lfd` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Laufende Nummer',
-        `kategorie` VARCHAR(10) NOT NULL COMMENT 'Benutzerdefinierte Kategorie',
-        `beschreibung` VARCHAR(254) NULL COMMENT 'Beschreibung zur Kategorie',
-        PRIMARY KEY (`lfd`),
-        KEY `idx_kategorie` (`kategorie`)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-
-      "CREATE TABLE IF NOT EXISTS ".$user_link." (
-        `lfd` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-        `msg` BIGINT NOT NULL,
-        `katego` BIGINT NOT NULL,
-        PRIMARY KEY (`lfd`),
-        KEY `idx_msg_katego` (`msg`, `katego`),
-        KEY `idx_katego_msg` (`katego`, `msg`)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
-    );
-
-    $migration_queries = array (
-      "ALTER TABLE ".$user_read."
-         MODIFY `lfd` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-         MODIFY `zeit` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-         MODIFY `nachnum` BIGINT NOT NULL,
-         MODIFY `gelesen` DATETIME NULL DEFAULT NULL,
-         ENGINE=InnoDB,
-         CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
-      "UPDATE ".$user_read."
-          SET `gelesen` = NULL
-        WHERE `gelesen` = '0000-00-00 00:00:00'",
-      "CREATE INDEX IF NOT EXISTS `idx_nachnum` ON ".$user_read." (`nachnum`)",
-
-      "ALTER TABLE ".$function_done."
-         MODIFY `lfd` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-         MODIFY `zeit` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-         MODIFY `nachnum` BIGINT NOT NULL,
-         MODIFY `erledigt` DATETIME NULL DEFAULT NULL,
-         ENGINE=InnoDB,
-         CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
-      "UPDATE ".$function_done."
-          SET `erledigt` = NULL
-        WHERE `erledigt` = '0000-00-00 00:00:00'",
-      "CREATE INDEX IF NOT EXISTS `idx_nachnum` ON ".$function_done." (`nachnum`)",
-
-      "ALTER TABLE ".$function_katego."
-         MODIFY `lfd` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-         MODIFY `kategorie` VARCHAR(10) NOT NULL,
-         MODIFY `beschreibung` VARCHAR(254) NULL,
-         ENGINE=InnoDB,
-         CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
-      "CREATE INDEX IF NOT EXISTS `idx_kategorie` ON ".$function_katego." (`kategorie`)",
-
-      "ALTER TABLE ".$function_link."
-         ADD COLUMN IF NOT EXISTS `lfd`
-           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY FIRST",
-      "ALTER TABLE ".$function_link."
-         MODIFY `msg` BIGINT NOT NULL,
-         MODIFY `katego` BIGINT NOT NULL,
-         ENGINE=InnoDB,
-         CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
-      "CREATE INDEX IF NOT EXISTS `idx_msg_katego`
-         ON ".$function_link." (`msg`, `katego`)",
-      "CREATE INDEX IF NOT EXISTS `idx_katego_msg`
-         ON ".$function_link." (`katego`, `msg`)",
-
-      "ALTER TABLE ".$user_katego."
-         MODIFY `lfd` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-         MODIFY `kategorie` VARCHAR(10) NOT NULL,
-         MODIFY `beschreibung` VARCHAR(254) NULL,
-         ENGINE=InnoDB,
-         CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
-      "CREATE INDEX IF NOT EXISTS `idx_kategorie` ON ".$user_katego." (`kategorie`)",
-
-      "ALTER TABLE ".$user_link."
-         ADD COLUMN IF NOT EXISTS `lfd`
-           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY FIRST",
-      "ALTER TABLE ".$user_link."
-         MODIFY `msg` BIGINT NOT NULL,
-         MODIFY `katego` BIGINT NOT NULL,
-         ENGINE=InnoDB,
-         CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
-      "CREATE INDEX IF NOT EXISTS `idx_msg_katego`
-         ON ".$user_link." (`msg`, `katego`)",
-      "CREATE INDEX IF NOT EXISTS `idx_katego_msg`
-         ON ".$user_link." (`katego`, `msg`)"
-    );
-
-    $operation_error = null;
     try {
-      $this->acquire_dynamic_schema_lock ($db, $lockname);
-      $lock_acquired = true;
-
-      $mode_result = mysql_query ("SELECT @@SESSION.sql_mode", $db);
-      if (!$mode_result) {
+      if (!mysql_select_db ($this->db_name, $schema_db)) {
         throw new RuntimeException (
-          "[create_user_table] SQL-Mode konnte nicht gelesen werden: ".mysql_error ($db)
+          "[create_user_table] Auswahl der Datenbank fehlgeschlagen"
         );
       }
-      $mode_row = mysql_fetch_row ($mode_result);
-      mysql_free_result ($mode_result);
-      $original_sql_mode = (string) ($mode_row [0] ?? "");
-
-      // Only this connection is relaxed while invalid legacy zero dates are
-      // made nullable. The original strict mode is restored in every case.
-      $this->execute_dynamic_schema_query ("SET SESSION sql_mode = ''", $db);
-      foreach ($create_queries as $query) {
-        $this->execute_dynamic_schema_query ($query, $db);
-      }
-      foreach ($migration_queries as $query) {
-        $this->execute_dynamic_schema_query ($query, $db);
-      }
-    } catch (Throwable $exception) {
-      $operation_error = $exception;
+      estab_dynamic_schema_reconcile_bases (
+        $schema_db,
+        $tablename,
+        $fkttblname
+      );
+    } finally {
+      mysql_close ($schema_db);
     }
-
-    $cleanup_error = null;
-    if ($original_sql_mode !== null) {
-      try {
-        $escaped_sql_mode = mysql_real_escape_string ($original_sql_mode, $db);
-        $this->execute_dynamic_schema_query (
-          "SET SESSION sql_mode = '".$escaped_sql_mode."'",
-          $db
-        );
-      } catch (Throwable $exception) {
-        $cleanup_error = $exception;
-      }
-    }
-    if ($lock_acquired) {
-      try {
-        $this->release_dynamic_schema_lock ($db, $lockname);
-      } catch (Throwable $exception) {
-        if ($cleanup_error === null) {
-          $cleanup_error = $exception;
-        }
-      }
-    }
-
-    if ($operation_error instanceof Throwable) {
-      mysql_close ($db);
-      throw $operation_error;
-    }
-    if ($cleanup_error instanceof Throwable) {
-      mysql_close ($db);
-      throw $cleanup_error;
-    }
-    mysql_close ($db);
+    return;
   }
-
 
   function read_table (){
     $this->result = array ();

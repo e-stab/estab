@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../app/generated_form.php';
+require_once __DIR__ . '/../app/read_authorization.php';
 require_once __DIR__ . '/../app/session_ui.php';
 require __DIR__ . '/../4fcfg/config.inc.php';
 require __DIR__ . '/../4fcfg/dbcfg.inc.php';
@@ -9,10 +10,10 @@ require __DIR__ . '/../4fcfg/e_cfg.inc.php';
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-if (
-    session_status() !== PHP_SESSION_ACTIVE
-    || !estab_auth_session_is_authenticated($_SESSION)
-) {
+$readIdentity = session_status() === PHP_SESSION_ACTIVE
+    ? estab_read_session_identity($_SESSION)
+    : null;
+if (!is_array($readIdentity)) {
     http_response_code(403);
     header('Content-Type: text/plain; charset=UTF-8');
     header('Cache-Control: no-store');
@@ -33,8 +34,19 @@ try {
         (string) $conf_4f_db['datenbank'],
         (string) $conf_4f['vordruck_dir']
     );
+    $files = estab_read_filter_generated_forms(
+        $connection,
+        $conf_4f_tbl['nachrichten'],
+        $files,
+        $readIdentity
+    );
 } catch (EstabNoActiveIncidentException) {
+    http_response_code(409);
     $noActiveIncident = true;
+} catch (EstabReadPermissionException) {
+    http_response_code(403);
+    $listError = 'Wählen Sie zuerst eine persönlich angenommene '
+        . 'Dienstfunktion.';
 } catch (Throwable $exception) {
     error_log('eStab generated-form list failed: ' . $exception->getMessage());
     http_response_code(503);

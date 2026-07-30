@@ -3,15 +3,55 @@
 define ("debug", false);
 session_start ();
 require_once __DIR__ . "/../app/auth.php";
+require_once __DIR__ . "/../app/read_authorization.php";
 require_once __DIR__ . "/../app/session_ui.php";
 estab_auth_require_session ($_SESSION);
-estab_session_ui_start ($_SESSION);
 
 include ("../4fcfg/config.inc.php");            // Konfigurationseinstellungen und Vorgaben
 include ("../4fach/db_operation.php");          // Datenbank operationen
 include ("../4fach/tools.php");                 // diverse Funktionen
 include ("../4fach/data_hndl.php");             // propritÃ¤re  Datenbankoperationen
 include ("../4fcfg/para.inc.php");              //
+
+$overviewReadIdentity = estab_read_session_identity ($_SESSION);
+$overviewAccessConnection = null;
+try {
+  if (!is_array ($overviewReadIdentity)) {
+    throw new EstabReadPermissionException ("Anmeldung erforderlich.");
+  }
+  $overviewAccessConnection = estab_auth_connect ($conf_4f_db);
+  estab_read_require_area (
+    $overviewAccessConnection,
+    $overviewReadIdentity,
+    "message-overview"
+  );
+} catch (EstabNoActiveIncidentException) {
+  http_response_code (409);
+  header ("Content-Type: text/plain; charset=UTF-8");
+  header ("Cache-Control: no-store");
+  echo "Kein Einsatz aktiv.";
+  exit;
+} catch (EstabReadPermissionException) {
+  http_response_code (403);
+  header ("Content-Type: text/plain; charset=UTF-8");
+  header ("Cache-Control: no-store");
+  echo "Die Meldungsübersicht ist der aktiven Lage/Dokumentation vorbehalten.";
+  exit;
+} catch (Throwable $exception) {
+  error_log (
+    "eStab message overview authorization failed: ".$exception->getMessage ()
+  );
+  http_response_code (503);
+  header ("Content-Type: text/plain; charset=UTF-8");
+  header ("Cache-Control: no-store");
+  echo "Die Leseberechtigung kann derzeit nicht geprüft werden.";
+  exit;
+} finally {
+  if ($overviewAccessConnection instanceof mysqli) {
+    estab_auth_close ($overviewAccessConnection);
+  }
+}
+estab_session_ui_start ($_SESSION);
 
 define ("inhalt_limit",true); // VerkÃ¼rzte Darstellung der Meldung ergÃ¤nzt mit  "..."
 

@@ -6,6 +6,8 @@
 
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/incident.php';
+require_once __DIR__ . '/dv_operations.php';
+require_once __DIR__ . '/attachment_integrity.php';
 
 final class EstabAttachmentDatabaseException extends RuntimeException
 {
@@ -174,6 +176,16 @@ function estab_attachment_validate_metadata(
     if (preg_match('/\A[a-f0-9]{32}\z/D', $md5) !== 1) {
         throw new InvalidArgumentException('Invalid attachment digest');
     }
+    $sha256 = isset($data['sha256']) && is_string($data['sha256'])
+        ? strtolower(trim($data['sha256']))
+        : '';
+    if (preg_match('/\A[a-f0-9]{64}\z/D', $sha256) !== 1) {
+        throw new InvalidArgumentException('Invalid attachment SHA-256');
+    }
+    $size = $data['size'] ?? null;
+    if (!is_int($size) || $size < 0) {
+        throw new InvalidArgumentException('Invalid attachment byte length');
+    }
 
     return [
         'filename' => $expectedReservation,
@@ -181,6 +193,8 @@ function estab_attachment_validate_metadata(
         'org_filename' => $original,
         'comment' => $comment,
         'md5hash' => $md5,
+        'sha256' => $sha256,
+        'size' => $size,
         'kuerzel' => $sessionCode,
         'date' => $timestamp,
     ];
@@ -271,6 +285,39 @@ function estab_attachment_close(mysqli $connection): void
     estab_auth_close($connection);
 }
 
+function estab_attachment_require_operational_identity(
+    mysqli $connection,
+    int $incidentId,
+    array $identity,
+    ?string $expectedCode = null
+): void {
+    estab_dv_require_active_hat_for_operational_write(
+        $connection,
+        $incidentId,
+        $identity
+    );
+    if ($expectedCode === null) {
+        return;
+    }
+    $shape = estab_auth_session_identity_shape([
+        'vStab_benutzer' => $identity['benutzer'] ?? null,
+        'vStab_kuerzel' => $identity['kuerzel'] ?? null,
+        'vStab_funktion' => $identity['funktion'] ?? null,
+        'vStab_rolle' => $identity['rolle'] ?? null,
+    ]);
+    if (
+        $shape === null
+        || !hash_equals(
+            estab_dv_code($expectedCode),
+            (string) $shape['kuerzel']
+        )
+    ) {
+        throw new EstabDvPermissionException(
+            'Anhang und angemeldete Dienstidentität stimmen nicht überein.'
+        );
+    }
+}
+
 /** Release an unclaimed reservation after the incident row is locked. */
 function estab_attachment_release_unclaimed_for_incident(
     mysqli $connection,
@@ -336,6 +383,7 @@ function estab_attachment_reserve(
     string $table,
     string $prefix,
     string $sessionId,
+    array $identity,
     int $width = 4,
     int $maxAttempts = 8,
     ?callable $retryObserver = null
@@ -359,6 +407,11 @@ function estab_attachment_reserve(
         try {
             $incident = estab_incident_require_active($connection, true);
             $incidentId = (int) $incident['active_einsatz_id'];
+            estab_attachment_require_operational_identity(
+                $connection,
+                $incidentId,
+                $identity
+            );
             estab_attachment_release_unclaimed_for_incident(
                 $connection,
                 $table,
@@ -487,7 +540,8 @@ function estab_attachment_claim(
     mysqli $connection,
     string $table,
     string $filename,
-    string $sessionId
+    string $sessionId,
+    array $identity
 ): bool {
     $filename = estab_attachment_validate_reservation_name($filename);
     $sessionId = estab_attachment_validate_session_id($sessionId);
@@ -497,9 +551,15 @@ function estab_attachment_claim(
             $connection,
             $table,
             $filename,
-            $sessionId
+            $sessionId,
+            $identity
         ): bool {
             $incidentId = (int) $incident['active_einsatz_id'];
+            estab_attachment_require_operational_identity(
+                $connection,
+                $incidentId,
+                $identity
+            );
             $sql = 'UPDATE ' . estab_attachment_table($table)
                 . ' SET `status` = 2'
                 . ' WHERE `filename` = ? AND `status` = 8 AND `id` = ?'
@@ -614,7 +674,8 @@ function estab_attachment_finalize(
     mysqli $connection,
     string $table,
     string $sessionId,
-    array $metadata
+    array $metadata,
+    array $identity
 ): bool {
     $sessionId = estab_attachment_validate_session_id($sessionId);
     $filename = estab_attachment_validate_reservation_name((string) ($metadata['filename'] ?? ''));
@@ -622,6 +683,15 @@ function estab_attachment_finalize(
     $original = (string) $metadata['org_filename'];
     $comment = (string) $metadata['comment'];
     $md5 = (string) $metadata['md5hash'];
+    $sha256 = isset($metadata['sha256'])
+        && is_string($metadata['sha256'])
+        && preg_match('/\A[a-f0-9]{64}\z/D', $metadata['sha256']) === 1
+        ? $metadata['sha256']
+        : throw new InvalidArgumentException('Invalid attachment SHA-256');
+    $size = $metadata['size'] ?? null;
+    if (!is_int($size) || $size < 0) {
+        throw new InvalidArgumentException('Invalid attachment byte length');
+    }
     $code = (string) $metadata['kuerzel'];
     $date = (string) $metadata['date'];
     return estab_incident_with_active_write(
@@ -633,15 +703,26 @@ function estab_attachment_finalize(
             $original,
             $comment,
             $md5,
+            $sha256,
+            $size,
             $code,
             $date,
             $filename,
-            $sessionId
+            $sessionId,
+            $identity
         ): bool {
             $incidentId = (int) $incident['active_einsatz_id'];
+            estab_attachment_require_operational_identity(
+                $connection,
+                $incidentId,
+                $identity,
+                $code
+            );
             $sql = 'UPDATE ' . estab_attachment_table($table)
                 . ' SET `fileext` = ?, `org_filename` = ?, `comment` = ?,'
-                . ' `md5hash` = ?,'
+                . ' `md5hash` = ?, `integrity_required` = 1,'
+                . ' `ingest_sha256` = ?, `ingest_size` = ?,'
+                . ' `integrity_captured_at` = NOW(6),'
                 . " `kuerzel` = ?, `date` = ?, `status` = 1, `id` = ''"
                 . ' WHERE `filename` = ? AND `status` = 2 AND `id` = ?'
                 . ' AND `einsatz_id` = ?';
@@ -654,11 +735,13 @@ function estab_attachment_finalize(
             }
             try {
                 $statement->bind_param(
-                    'ssssssssi',
+                    'sssssissssi',
                     $extension,
                     $original,
                     $comment,
                     $md5,
+                    $sha256,
+                    $size,
                     $code,
                     $date,
                     $filename,
@@ -699,6 +782,7 @@ function estab_attachment_store_upload(
     string $reservation,
     string $sessionId,
     string $sessionCode,
+    array $identity,
     string $event,
     callable $storeAndDescribe,
     callable $auditDetails
@@ -718,6 +802,12 @@ function estab_attachment_store_upload(
     try {
         $incident = estab_incident_require_active($connection, true);
         $incidentId = (int) $incident['active_einsatz_id'];
+        estab_attachment_require_operational_identity(
+            $connection,
+            $incidentId,
+            $identity,
+            $sessionCode
+        );
         estab_attachment_transaction_control(
             $connection,
             'SAVEPOINT estab_attachment_before_claim'
@@ -772,7 +862,10 @@ function estab_attachment_store_upload(
             $finalize = $connection->prepare(
                 'UPDATE ' . estab_attachment_table($attachmentTable)
                 . ' SET `fileext` = ?, `org_filename` = ?, `comment` = ?,'
-                . ' `md5hash` = ?, `kuerzel` = ?, `date` = ?,'
+                . ' `md5hash` = ?, `integrity_required` = 1,'
+                . ' `ingest_sha256` = ?, `ingest_size` = ?,'
+                . ' `integrity_captured_at` = NOW(6),'
+                . ' `kuerzel` = ?, `date` = ?,'
                 . " `status` = 1, `id` = ''"
                 . ' WHERE `filename` = ? AND `status` = 2 AND `id` = ?'
                 . ' AND `einsatz_id` = ?'
@@ -785,11 +878,13 @@ function estab_attachment_store_upload(
             }
             try {
                 $finalize->bind_param(
-                    'ssssssssi',
+                    'sssssissssi',
                     $metadata['fileext'],
                     $metadata['org_filename'],
                     $metadata['comment'],
                     $metadata['md5hash'],
+                    $metadata['sha256'],
+                    $metadata['size'],
                     $metadata['kuerzel'],
                     $metadata['date'],
                     $metadata['filename'],
@@ -922,7 +1017,8 @@ function estab_attachment_list(mysqli $connection, string $table): array
         return [];
     }
     $incidentId = (int) $incident['active_einsatz_id'];
-    $sql = 'SELECT `filename`, `fileext`, `org_filename`, `comment`, `md5hash`, `date`, `kuerzel`'
+    $sql = 'SELECT `filename`, `fileext`, `org_filename`, `comment`,'
+        . ' `md5hash`, `date`, `kuerzel`'
         . ' FROM ' . estab_attachment_table($table)
         . ' WHERE `status` = 1 AND `einsatz_id` = ?'
         . ' ORDER BY `filename` DESC';
@@ -965,7 +1061,9 @@ function estab_attachment_find(
         return null;
     }
     $incidentId = (int) $incident['active_einsatz_id'];
-    $sql = 'SELECT `filename`, `fileext`, `org_filename`, `comment`, `md5hash`, `date`, `kuerzel`'
+    $sql = 'SELECT `filename`, `fileext`, `org_filename`, `comment`,'
+        . ' `md5hash`, `integrity_required`, `ingest_sha256`,'
+        . ' `ingest_size`, `integrity_captured_at`, `date`, `kuerzel`'
         . ' FROM ' . estab_attachment_table($table)
         . ' WHERE `filename` = ? AND `status` = 1'
         . ' AND `einsatz_id` = ? LIMIT 1';

@@ -13,7 +13,7 @@ technisches Betriebsbuch
   Szenario "Globaler Einsatz aktiv."
 
     + Anzeige des globalen Einsatzkopfs
-    + Lesender Zugriff fuer jede angemeldete Funktion
+    + Lesender Zugriff nur mit ausgewaehlter, aktiver Dienstfunktion
     + Eintragsfunktion fuer A/W in der Rolle Fernmelder
 
   Szenario "Schaltflaeche TBB-Eintrag wird betaetigt"
@@ -35,7 +35,9 @@ class tbb_liste {
   var $tbb_funktion ;
   var $tbb_kuerzel ;
   var $tbb_benutzer ;
+  var $tbb_rolle ;
   var $tbb_authorized ;
+  public int $tbb_duty_assignment_id = 0;
 
 /*****************************************************************************\
 
@@ -298,6 +300,8 @@ if (debug == true){ echo "tbb_tableexist==>"; var_dump($this->tbb_titel_tbl); ec
         "funktion" => (string) $this->tbb_funktion,
         "kuerzel" => (string) $this->tbb_kuerzel,
         "benutzer" => (string) $this->tbb_benutzer,
+        "rolle" => (string) $this->tbb_rolle,
+        "duty_assignment_id" => $this->tbb_duty_assignment_id,
       )
     );
   }
@@ -438,17 +442,62 @@ if (session_status () !== PHP_SESSION_ACTIVE) {
   session_start ();
 }
 require_once __DIR__ . "/../app/logbook.php";
+require_once __DIR__ . "/../app/read_authorization.php";
 require_once __DIR__ . "/../app/session_ui.php";
 estab_auth_require_session ($_SESSION);
 
-$identity = estab_auth_session_identity ($_SESSION);
+include ("../4fcfg/dbcfg.inc.php");
+include ("../4fcfg/e_cfg.inc.php");
+
+$identity = estab_read_session_identity ($_SESSION);
 if (!is_array ($identity)) {
   estab_logbook_abort (403, "Anmeldung erforderlich.");
 }
 estab_session_ui_start ($_SESSION);
 
-$berechtigt = strcasecmp ($identity ["funktion"], "A/W") === 0
-  && strcasecmp ($identity ["rolle"], "Fernmelder") === 0;
+$berechtigt = false;
+$dutyAssignmentId = null;
+try {
+  $readConnection = estab_auth_connect ($conf_4f_db);
+  $readScope = estab_read_require_operational_scope (
+    $readConnection,
+    $identity
+  );
+  $identity = $readScope ["identity"];
+  $dutyAssignmentId = estab_read_duty_assignment_id (
+    $identity ["duty_assignment_id"] ?? null
+  );
+  if ($dutyAssignmentId === null) {
+    throw new EstabReadPermissionException (
+      "Wählen Sie zuerst eine persönlich angenommene Dienstfunktion."
+    );
+  }
+  $berechtigt = estab_dv_has_selected_capability (
+    $readConnection,
+    (int) $readScope ["incident"]["active_einsatz_id"],
+    $identity,
+    "BEFOERDERUNG"
+  );
+} catch (EstabNoActiveIncidentException $exception) {
+  estab_logbook_abort (
+    409,
+    "Kein Einsatz ist aktiv. Das technische Betriebsbuch enthält derzeit ".
+    "keine freigegebenen Einsatzdaten."
+  );
+} catch (EstabReadPermissionException $exception) {
+  estab_logbook_abort (403, $exception->getMessage ());
+} catch (Throwable $exception) {
+  error_log ("TBB read authorization failed: ".$exception->getMessage ());
+  estab_logbook_abort (
+    503,
+    "Die Leseberechtigung für das technische Betriebsbuch kann derzeit nicht ".
+    "geprüft werden."
+  );
+} finally {
+  if (isset ($readConnection) && $readConnection instanceof mysqli) {
+    estab_auth_close ($readConnection);
+  }
+}
 
 $requestMethod = isset ($_SERVER ["REQUEST_METHOD"]) && is_string ($_SERVER ["REQUEST_METHOD"])
   ? strtoupper ($_SERVER ["REQUEST_METHOD"])
@@ -468,10 +517,15 @@ $tbbobj->tbb_authorized = $berechtigt;
 $tbbobj->tbb_funktion = $identity ["funktion"];
 $tbbobj->tbb_kuerzel = $identity ["kuerzel"];
 $tbbobj->tbb_benutzer = $identity ["benutzer"];
+$tbbobj->tbb_rolle = $identity ["rolle"];
+$tbbobj->tbb_duty_assignment_id = $dutyAssignmentId;
 
 if ($requestMethod === "POST") {
   if (!$berechtigt) {
-    estab_logbook_abort (403, "Nur die Fernmeldefunktion A/W darf TBB-Einträge schreiben.");
+    estab_logbook_abort (
+      403,
+      "Nur eine aktive A/W-Funktion darf TBB-Einträge schreiben."
+    );
   }
   estab_logbook_require_csrf ($_SERVER, $_POST);
   $action = isset ($_POST ["logbook_action"]) && is_string ($_POST ["logbook_action"])

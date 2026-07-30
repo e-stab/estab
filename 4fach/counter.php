@@ -1,4 +1,20 @@
 <?php
+
+/*
+ * Retired standalone queue counter.
+ *
+ * The current sidebar/status component exposes incident-scoped workflow
+ * information. This unreferenced legacy controller queried global queues
+ * directly and could therefore disclose operational state without an
+ * authenticated, active duty assignment. The runtime image does not ship it;
+ * source deployments fail closed before starting a session or querying data.
+ */
+http_response_code(410);
+header('Content-Type: text/plain; charset=UTF-8');
+header('Cache-Control: no-store');
+echo 'Dieser alte Warteschlangenzähler ist stillgelegt.';
+exit;
+
 /*****************************************************************************\
    Datei: status.php
 

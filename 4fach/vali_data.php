@@ -38,6 +38,7 @@ class vali_data_form {
      $this->validate ["05_gegenstelle"]   = false ;
      $this->validate ["06_befweg"]   = false ;
      $this->validate ["06_befwegausw"]   = false ;
+     $this->validate ["fernmeldeplan_eintrag_id"] = false;
      $this->validate ["07_durchspruch"]   = false ;
      $this->validate ["08_befhinweis"]   = false ;
      $this->validate ["08_befhinwausw"]   = false ;
@@ -219,6 +220,15 @@ class vali_data_form {
           $this->i_data ["06_befwegausw"]
         ) !== null;
     }
+    if (isset ($this->i_data ["fernmeldeplan_eintrag_id"])) {
+      $routeId = $this->i_data ["fernmeldeplan_eintrag_id"];
+      $this->validate ["fernmeldeplan_eintrag_id"] =
+        (is_int ($routeId) && $routeId > 0)
+        || (
+          is_string ($routeId)
+          && preg_match ('/\A[1-9][0-9]*\z/D', $routeId) === 1
+        );
+    }
 //    if (isset ( $this->i_data ["07_durchspruch"] )) {  $this->validate["07_durchspruch"]  = $this->i_datatest ( "zeit", $this->i_data ["07_durchspruch"] ) ; }
 //    if (isset ( $this->i_data ["08_befhinweis"] ))  {  $this->validate["08_befhinweis"]  = $this->i_datatest ( "zeit", $this->i_data ["08_befhinweis"] ) ; }
 //    if (isset ( $this->i_data ["08_befhinwausw"] )) {  $this->validate["08_befhinwausw"]  = $this->i_datatest ( "zeit", $this->i_data ["08_befhinwausw"] ) ; }
@@ -287,20 +297,8 @@ class vali_data_form {
                 $this->validate["12_abfzeit"] ;
 
         break ;
-      case "FM-Eingang_Sichter" :
-      case "FM-Eingang_Anhang_Sichter" :
-         $zw = ($this->validate["01_medium"] &&
-                $this->validate["01_datum"] &&
-                $this->validate["01_zeichen"] &&
-                $this->validate["05_gegenstelle"] &&
-                $this->validate["10_anschrift"] &&
-                $this->validate["12_inhalt"] &&
-                $this->validate["12_abfzeit"] &&
-                $this->validate["15_quitzeichen"] &&
-                $this->validate["15_quitdatum"] );
-
-        break;
       case "Stab_schreiben":
+      case "Stab_korrigieren":
           $zw =($this->validate["10_anschrift"] &&
                 $this->validate["12_inhalt"] &&
                 $this->validate["12_abfzeit"] &&
@@ -317,9 +315,7 @@ class vali_data_form {
                 $this->validate["12_abfzeit"] &&
                 $this->validate["13_abseinheit"] &&
                 $this->validate["14_zeichen"] &&
-                $this->validate["14_funktion"] &&
-                $this->validate["15_quitzeichen"] &&
-                $this->validate["15_quitdatum"] ) ;
+                $this->validate["14_funktion"] ) ;
 
         break;
       case "FM-Ausgang":
@@ -335,14 +331,7 @@ class vali_data_form {
           $zw = ($this->validate["02_zeit"] &&
                  $this->validate["02_zeichen"] &&
                  $this->validate["05_gegenstelle"] &&
-                 $this->validate["06_befwegausw"] &&
-                 $this->validate["06_befweg"]);
-        break ;
-      case "FM-Ausgang_Sichter":
-          $zw =($this->validate["03_datum"] &&
-                $this->validate["03_zeichen"] &&
-                $this->validate["15_quitzeichen"] &&
-                $this->validate["15_quitdatum"]);
+                 $this->validate["fernmeldeplan_eintrag_id"]);
         break ;
       case "Stab_sichten":
          $zw = ($this->validate["15_quitzeichen"] &&

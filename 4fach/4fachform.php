@@ -50,46 +50,33 @@ class nachrichten4fach {
       $formDefaults = array_fill_keys (array (
         "00_lfd", "01_datum", "01_medium", "01_zeichen", "02_zeichen",
         "02_zeit", "03_datum", "03_zeichen", "04_nummer", "04_richtung",
-        "05_gegenstelle", "06_befweg", "06_befwegausw", "07_durchspruch",
+        "05_gegenstelle", "06_befweg", "06_befwegausw",
+        "fernmeldeplan_eintrag_id", "transportweg_bestaetigt",
+        "transport_rueckgabegrund",
+        "07_durchspruch",
         "08_befhinwausw", "08_befhinweis", "09_vorrangstufe",
         "10_anschrift", "11_gesprnotiz", "12_abfzeit", "12_anhang",
         "12_inhalt", "13_abseinheit", "14_funktion", "14_zeichen",
-        "15_quitdatum", "15_quitzeichen", "16_empf", "17_vermerke"
+        "15_quitdatum", "15_quitzeichen", "16_empf", "17_vermerke",
+        "estab_route_error"
       ), "");
       $this->formdata = array_replace (
         $formDefaults,
         is_array ($formulardaten) ? $formulardaten : array ()
       );
       if (isset($this->formdata ["00_lfd"])) {$this->lfd = $this->formdata ["00_lfd"];}
-      if ($errorselect != ""){
-        $this->errorselect = $errorselect;
-      } else {
-
-	  // errorselect zuruecksetzen
-         $this->errorselect ["01_medium"]   	= true ;
-         $this->errorselect ["01_datum"]    	= true ;
-         $this->errorselect ["01_zeichen"]   	= true ;
-         $this->errorselect ["02_zeit"]      	= true ;
-         $this->errorselect ["02_zeichen"]   	= true ;
-         $this->errorselect ["03_datum"]   	= true ;
-         $this->errorselect ["03_zeit"]   	= true ;
-         $this->errorselect ["03_zeichen"]   	= true ;
-         $this->errorselect ["05_gegenstelle"]  = true ;
-         $this->errorselect ["06_befweg"]     	= true ;
-         $this->errorselect ["06_befwegausw"] 	= true ;
-         $this->errorselect ["07_durchspruch"]  = true ;
-         $this->errorselect ["08_befhinweis"]   = true ;
-         $this->errorselect ["08_befhinwausw"]	= true ;
-         $this->errorselect ["10_anschrift"] 	= true ;
-         $this->errorselect ["12_inhalt"]   	= true ;
-         $this->errorselect ["12_abfzeit"]   	= true ;
-         $this->errorselect ["13_abseinheit"]   = true ;
-         $this->errorselect ["14_zeichen"] 	= true ;
-         $this->errorselect ["14_funktion"]   	= true ;
-         $this->errorselect ["15_quitdatum"]   	= true ;
-         $this->errorselect ["15_quitzeichen"] 	= true ;
-         $this->errorselect ["17_vermerke"] 	= true ;
-      }
+      $errorDefaults = array_fill_keys (array (
+        "01_medium", "01_datum", "01_zeichen", "02_zeit", "02_zeichen",
+        "03_datum", "03_zeit", "03_zeichen", "05_gegenstelle",
+        "06_befweg", "06_befwegausw", "07_durchspruch",
+        "08_befhinweis", "08_befhinwausw", "10_anschrift",
+        "12_inhalt", "12_abfzeit", "13_abseinheit", "14_zeichen",
+        "14_funktion", "15_quitdatum", "15_quitzeichen", "17_vermerke"
+      ), true);
+      $this->errorselect = array_replace (
+        $errorDefaults,
+        is_array ($errorselect) ? $errorselect : array ()
+      );
       foreach (array ("01_datum", "02_zeit", "03_datum", "12_abfzeit", "15_quitdatum") as $dateField) {
         if (!isset ($this->formdata [$dateField]) || estab_datetime_is_unset ($this->formdata [$dateField])) {
           $this->formdata [$dateField] = "";
@@ -98,12 +85,9 @@ class nachrichten4fach {
       $editableTimestampField = array (
         "FM-Eingang" => "01_datum",
         "FM-Eingang_Anhang" => "01_datum",
-        "FM-Eingang_Sichter" => "01_datum",
-        "FM-Eingang_Anhang_Sichter" => "01_datum",
         "LdF-Eingang" => "02_zeit",
         "LdF-Ausgang" => "02_zeit",
-        "FM-Ausgang" => "03_datum",
-        "FM-Ausgang_Sichter" => "03_datum"
+        "FM-Ausgang" => "03_datum"
       ) [$this->task] ?? "";
       if (
         $editableTimestampField !== ""
@@ -127,6 +111,9 @@ class nachrichten4fach {
       if (debug){
         echo "<br><big>4fach data 087="; var_dump ($this->formdata); echo "</big><br>";
       }
+      if ($this->task === "LdF-Ausgang") {
+        $this->activeTelecomRoutes = $this->load_active_telecom_routes ();
+      }
       $this->plot_form () ;
     }
 
@@ -135,6 +122,45 @@ class nachrichten4fach {
     var $lfd ;        // integer, laufende Nummer der Nachricht
     var $errorselect; // array, Felder die falsch eingegeben wurden.
     var $hasUnsavedValidationData = false;
+    var $activeTelecomRoutes = array ();
+
+    function load_active_telecom_routes () {
+      global $conf_4f_db;
+      $connection = estab_message_connect ($conf_4f_db);
+      try {
+        $incident = estab_incident_active ($connection);
+        if (!is_array ($incident)) {
+          return array ();
+        }
+        $plans = estab_dv_telecom_plans (
+          $connection,
+          (int) $incident ["active_einsatz_id"]
+        );
+        $routes = array ();
+        $now = time ();
+        foreach ($plans as $plan) {
+          $validFrom = strtotime ((string) ($plan ["gueltig_ab"] ?? ""));
+          $validUntil = ($plan ["gueltig_bis"] ?? null) === null
+            ? null
+            : strtotime ((string) $plan ["gueltig_bis"]);
+          if (
+            ($plan ["status"] ?? "") !== "AKTIV"
+            || $validFrom === false
+            || $validFrom > $now
+            || ($validUntil !== null && $validUntil < $now)
+          ) {
+            continue;
+          }
+          foreach (($plan ["eintraege"] ?? array ()) as $entry) {
+            $entry ["plan_version"] = (int) $plan ["version"];
+            $routes [] = $entry;
+          }
+        }
+        return $routes;
+      } finally {
+        estab_auth_close ($connection);
+      }
+    }
 
   // aktive und Inaktive Darstellungsfarben
 
@@ -156,8 +182,7 @@ class nachrichten4fach {
     Hintergrundfarben der Felder aktiv und inaktiv
   \****************************************************************************/
   function feldbgcolor (){
-    if ( ( $this->task == "FM-Eingang") or
-         ( $this->task == "FM-Eingang_Sichter" ) ) {
+    if ($this->task == "FM-Eingang") {
       $this->feldbg [ 1]["a"] = $this->bg_color_fmp_a;
       $this->feldbg [10]["a"] = $this->bg_color_fmp_a;
       $this->feldbg [12]["a"] = $this->bg_color_fmp_a;
@@ -244,23 +269,6 @@ class nachrichten4fach {
         $this->feld [13] = false;
 
       break;
-      case "FM-Eingang_Sichter" :
-      case "FM-Eingang_Anhang_Sichter"  :
-        $this->bg [1] = $this->feldbg [1]["a"] ;
-        $this->feld [1] = true;
-        $this->bg [5] = $this->feldbg [5]["a"] ;
-        $this->feld [5] = true;
-        for ($i=7;$i<=17;$i++){
-          $this->bg [$i] = $this->feldbg [$i]["a"] ;
-          $this->feld [$i] = true;
-        }
-        // Ausser Gespraechsnotiz
-        $this->bg [11]   = $this->feldbg [11]["i"] ;
-        $this->feld [11] = false;
-        $this->bg [13]   = $this->feldbg [13]["i"] ;
-        $this->feld [13] = false;
-
-      break;
       case "LdF-Eingang":
         $this->bg [2] = $this->feldbg [2]["a"];
         $this->feld [2] = true;
@@ -282,24 +290,15 @@ class nachrichten4fach {
       break;
 
 
-      // Weitergabe einer Meldung durch den Fernmelder mit Sichterfunktion
-      case "FM-Ausgang_Sichter" :
-
-        if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br>";  }
-
-        $this->bg [3] = $this->feldbg [3]["a"] ;
-        $this->feld [3] = true;
-        for ($i=15;$i<=17;$i++){
-          $this->bg [$i] = $this->feldbg [$i]["a"] ;
-          $this->feld [$i] = true;
-        }
-      break;
-
       case "Stab_schreiben" :
-        for ($i=7;$i<=14;$i++){
+      case "Stab_korrigieren" :
+        for ($i=7;$i<=13;$i++){
           $this->bg [$i] = $this->feldbg [$i]["a"] ;
           $this->feld [$i] = true;
         }
+        // Verfasserzeichen und ausgeübte Funktion come from the login.
+        $this->bg [14] = $this->feldbg [14]["a"];
+        $this->feld [14] = false;
       break;
 
       case "Stab_lesen" :
@@ -311,9 +310,14 @@ class nachrichten4fach {
       break;
 
       case "Stab_sichten" :
-        for ($i=15;$i<=17;$i++){
-          $this->bg [$i] = $this->feldbg [$i]["a"] ;
-          $this->feld [$i] = true;
+        $this->bg [15] = $this->feldbg [15]["a"];
+        $this->feld [15] = true;
+        $this->bg [17] = $this->feldbg [17]["a"];
+        $this->feld [17] = true;
+        if (($this->formdata ["04_richtung"] ?? "") === "E") {
+          // Incoming sighting includes the content-based distribution.
+          $this->bg [16] = $this->feldbg [16]["a"];
+          $this->feld [16] = true;
         }
       break;
       case "Stab_gesprnoti":
@@ -328,14 +332,18 @@ class nachrichten4fach {
           $this->bg [$i] = $this->feldbg [$i]["a"] ;
           $this->feld [$i] = true;
         }
+        // Author, organisation and review marks are authoritative metadata.
+        // They are shown for orientation but are never browser-editable.
+        $this->feld [13] = false;
+        $this->feld [14] = false;
+        $this->bg [15] = $this->feldbg [15]["i"];
+        $this->feld [15] = false;
       break;
 
       case "FM-Admin" :
       case "SI-Admin" :
-        for ($i=15;$i<=17;$i++){
-          $this->bg [$i] = $this->feldbg [$i]["a"] ;
-          $this->feld [$i] = true;
-        }
+        // Completed records are evidence. Administration is a read-only view;
+        // corrections require a new, explicitly linked record.
       break;
 
       default :
@@ -598,7 +606,6 @@ class nachrichten4fach {
           /*
                                           04Richtung      Antwort Weiterleitung
 
-          FM      FM-Eingang_Sichter              -       -         -
           FM      FM-Eingang                      -       -         -
           FM      FM-Ausgang                      A       X         -
 
@@ -631,10 +638,9 @@ class nachrichten4fach {
         break;
 
         case "FM-Eingang":
-        case "FM-Eingang_Sichter":
         case "Stab_schreiben":
+        case "Stab_korrigieren":
         case "FM-Eingang_Anhang":
-        case "FM-Eingang_Anhang_Sichter":
         case "Stab_gesprnoti":
           echo "<td>\n";
           echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
@@ -647,7 +653,6 @@ class nachrichten4fach {
         break;
 
         case "FM-Ausgang":
-        case "FM-Ausgang_Sichter":
         case "LdF-Eingang":
         case "LdF-Ausgang":
           echo "<td>\n";
@@ -656,12 +661,15 @@ class nachrichten4fach {
           echo "<input type=\"image\" name=\"absenden\" src=\"button.php?type=menue&m_text=absenden&m_fs=10&m_form=rund&bg=lightblue\" alt=\"absenden\">\n";
           echo "</td>\n";
           echo "<td><input type=\"image\" name=\"abbrechen\" src=\"button.php?type=menue&m_text=abbrechen&m_fs=10&m_form=rund&bg=lightblue\" alt=\"abbrechen\"></td>\n";
+          if ($this->task === "FM-Ausgang") {
+            echo "<td><button type=\"submit\" ".
+              "name=\"transport_nicht_moeglich_x\" value=\"1\" ".
+              "class=\"estab-danger\" formnovalidate ".
+              "title=\"Rückgabegrund angeben und an LdF zurückgeben\">".
+              "Beförderung nicht möglich – zurück an LdF</button></td>\n";
+          }
           if (
-            in_array (
-              $this->task,
-              array ("FM-Ausgang", "FM-Ausgang_Sichter"),
-              true
-            )
+            $this->task === "FM-Ausgang"
             && $this->formdata["04_richtung"]=="A"
           ){
             echo "<td><input type=\"image\" name=\"antwort\" src=\"button.php?type=menue&m_text=Antwort&m_fs=10&m_form=spitz&bg=lightblue\" alt=\"antworten\"></td>\n";
@@ -669,14 +677,33 @@ class nachrichten4fach {
 
         break;
         case "FM-Admin":
-        case "Stab_sichten":
         case "SI-Admin":
-          echo "<td>\n";
+          echo "<td colspan=\"2\"><strong>Abgeschlossener Nachweis – ".
+            "schreibgeschützt</strong></td>\n";
+        break;
+
+        case "Stab_sichten":
+          $isOutgoingFormalReview =
+            ($this->formdata ["04_richtung"] ?? "") === "A";
+          echo "<td data-estab-formal-review=\"".
+               ($isOutgoingFormalReview ? "outgoing" : "incoming")."\">\n";
           echo "<input type=\"hidden\" name=\"00_lfd\" value=\"".$this->lfd."\">\n";
           echo "<input type=\"hidden\" name=\"task\" value=\"".$this->task."\">\n";
-          echo "<input type=\"image\" name=\"absenden\" src=\"button.php?type=menue&m_text=absenden&m_fs=10&m_form=rund&bg=lightblue\" alt=\"absenden\">\n";
+          $approvalLabel = $isOutgoingFormalReview
+            ? "Formal geprüft – an FmZt"
+            : "Sichtung abschließen";
+          echo "<button type=\"submit\" name=\"absenden_x\" value=\"1\">".
+               estab_message_html ($approvalLabel)."</button>\n";
           echo "</td>\n";
-          echo "<td><input type=\"image\" name=\"abbrechen\" src=\"button.php?type=menue&m_text=abbrechen&m_fs=10&m_form=rund&bg=lightblue\" alt=\"abbrechen\"></td>\n";
+          if ($isOutgoingFormalReview) {
+            echo "<td><button type=\"submit\" name=\"zurueckweisen_x\" ".
+                 "value=\"1\" class=\"estab-danger\" ".
+                 "title=\"Ein Rückgabegrund im Feld Vermerke ist Pflicht\">".
+                 "An Verfasser zurückgeben</button></td>\n";
+          }
+          echo "<td><input type=\"image\" name=\"abbrechen\" ".
+               "src=\"button.php?type=menue&amp;m_text=abbrechen&amp;m_fs=10".
+               "&amp;m_form=rund&amp;bg=lightblue\" alt=\"abbrechen\"></td>\n";
         break;
      } // switch
     echo "</TR>";
@@ -743,6 +770,11 @@ class nachrichten4fach {
 
     pre_html ("N","Formular ".$this->task." ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"], ""); // Normaler Seitenaufbau ohne Auffrischung
     echo "<body style=\"text-align: left; background-color: rgb(220,220,255); \">\n"; //".$this->formbgcolor.";\">\n";
+    if ((string) $this->formdata ["estab_route_error"] !== "") {
+      echo "<div class=\"estab-alert estab-alert--danger\" role=\"alert\">".
+        estab_message_html ($this->formdata ["estab_route_error"]).
+        "</div>\n";
+    }
 
     include_once ("./katego.php");
 
@@ -825,9 +857,19 @@ class nachrichten4fach {
       $this->showerrorinfo ("01_datum");
     }
     echo "<input id=\"f_01_datum\" maxlength=\"13\" size=\"13\" name=\"01_datum\" value=\"".$this->safe_message_value ("01_datum")."\">\n";
-    if ( $this->errorselect ["01_zeichen"] == false ){
-      $this->showerrorinfo ("01_zeichen");    }
-    echo "<input id=\"f_01_zeichen\" maxlength=\"6\" size=\"6\" name=\"01_zeichen\" value=\"".$this->safe_message_value ("01_zeichen")."\">\n";
+    if (in_array (
+      $this->task,
+      array ("FM-Eingang", "FM-Eingang_Anhang", "Stab_gesprnoti"),
+      true
+    )) {
+      echo "<strong id=\"f_01_zeichen\" data-estab-readonly=\"true\" ".
+           "aria-label=\"Aufnahmezeichen wird aus der Anmeldung übernommen\">".
+           $this->safe_message_value ("01_zeichen")."</strong>\n";
+    } else {
+      if ( $this->errorselect ["01_zeichen"] == false ){
+        $this->showerrorinfo ("01_zeichen");    }
+      echo "<input id=\"f_01_zeichen\" maxlength=\"6\" size=\"6\" name=\"01_zeichen\" value=\"".$this->safe_message_value ("01_zeichen")."\">\n";
+    }
     }
     echo "<div style=\"text-align: center;\"><label for=\"01_datum\">Datum &nbsp; &nbsp;Uhrzeit &nbsp; &nbsp;</label><label for=\"01_zeichen\"></label>Zeichen</td></div>";
     /****************************************************************************\
@@ -974,6 +1016,42 @@ class nachrichten4fach {
     // Zeile, Spalte 4 , 2   32   6   Beförderungsweg
     06_befweg
     \****************************************************************************/
+    if ($this->task === "LdF-Ausgang") {
+      echo "<td colspan=\"2\" style=\"text-align: left; background-color: ".
+        $this->bg[6].";\">\n";
+      echo "<label for=\"f_fernmeldeplan_eintrag_id\"><b>".
+        "Gültiger S6-Fernmeldeweg</b></label><br>\n";
+      echo "<select id=\"f_fernmeldeplan_eintrag_id\" ".
+        "name=\"fernmeldeplan_eintrag_id\" required>\n";
+      echo "<option value=\"\">Bitte Fernmeldeweg auswählen</option>\n";
+      $selectedRoute = (string) (
+        $this->formdata ["fernmeldeplan_eintrag_id"] ?? ""
+      );
+      foreach ($this->activeTelecomRoutes as $route) {
+        $routeId = (string) $route ["fernmeldeplan_eintrag_id"];
+        $routeParts = array_values (array_filter (array (
+          trim ((string) ($route ["betriebsstelle"] ?? "")),
+          trim ((string) ($route ["rufname"] ?? "")),
+          trim ((string) ($route ["kanal"] ?? "")),
+          trim ((string) ($route ["bandlage"] ?? "")),
+          trim ((string) ($route ["verkehrsform"] ?? "")),
+        ), static fn ($part) => $part !== ""));
+        $routeLabel = "Plan v".(int) $route ["plan_version"]." · ".
+          (string) $route ["medium"]." · ".implode (" · ", $routeParts);
+        echo "<option value=\"".estab_message_html ($routeId)."\"".
+          ($selectedRoute === $routeId ? " selected" : "").">".
+          estab_message_html ($routeLabel)."</option>\n";
+      }
+      echo "</select>\n";
+      if ($this->activeTelecomRoutes === array ()) {
+        echo "<p class=\"estab-field-error\">Kein aktuell gültiger, ".
+          "freigegebener S6-Fernmeldeplan verfügbar.</p>\n";
+      } else {
+        echo "<small>Medium und Nachweisweg werden unveränderbar aus ".
+          "diesem Plan übernommen.</small>\n";
+      }
+      echo "</td>";
+    } else {
     echo "<td style=\"text-align: center; width: 446px; background-color: ".$this->bg[6].";\">\n";
     if (!$this->feld[6]) {
       echo "<div style=\"text-align: left;\"><b>";
@@ -1008,7 +1086,46 @@ class nachrichten4fach {
     echo "<input id=\"f_06_befwegausw_fs\" name=\"06_befwegausw\" value=\"FS\" type=\"radio\" ".$param.$sel.">FS";
     if ($this->formdata["06_befwegausw"]=="@") {$sel = "checked=\"checked\"";} else {$sel = "";}
     echo "<input id=\"f_06_befwegausw_at\" name=\"06_befwegausw\" value=\"@\" type=\"radio\" ".$param.$sel.">@";
+    }
     echo "</tr>\n";
+    if ($this->task === "FM-Ausgang") {
+      $routeSummary = implode (
+        " · ",
+        array_values (array_filter (array (
+          trim ((string) $this->formdata ["06_befwegausw"]),
+          trim ((string) $this->formdata ["06_befweg"]),
+        ), static fn (string $part): bool => $part !== ""))
+      );
+      $confirmationChecked =
+        (string) $this->formdata ["transportweg_bestaetigt"] === "1"
+          ? " checked"
+          : "";
+      echo "<tr data-estab-transport-confirmation=\"required\">\n";
+      echo "<td style=\"background-color: ".$this->bg[6].";\">".
+        "<strong>Beförderungsnachweis:</strong></td>\n";
+      echo "<td colspan=\"2\" style=\"background-color: ".$this->bg[6].
+        "; text-align:left;\">\n";
+      echo "<p><strong>Disponierter S6-Weg:</strong> ".
+        estab_message_html ($routeSummary)."</p>\n";
+      echo "<label for=\"f_transportweg_bestaetigt\">".
+        "<input id=\"f_transportweg_bestaetigt\" type=\"checkbox\" ".
+        "name=\"transportweg_bestaetigt\" value=\"1\" required".
+        $confirmationChecked."> ".
+        "Ich bestätige: Die Nachricht wurde über diesen Weg befördert.".
+        "</label>\n";
+      echo "<p><label for=\"f_transport_rueckgabegrund\">".
+        "<strong>Falls die Beförderung nicht möglich ist:</strong></label><br>\n";
+      echo "<textarea id=\"f_transport_rueckgabegrund\" ".
+        "name=\"transport_rueckgabegrund\" maxlength=\"2000\" rows=\"3\" ".
+        "placeholder=\"Pflichtangabe bei Rückgabe, z. B. Funkweg ausgefallen\">".
+        estab_message_html ($this->formdata ["transport_rueckgabegrund"]).
+        "</textarea></p>\n";
+      echo "<p>Mit „Beförderung nicht möglich“ geht die Nachricht samt ".
+        "Begründung zurück an LdF. Nur LdF kann anschließend einen anderen ".
+        "aktiven S6-Weg disponieren.</p>\n";
+      echo "</td>\n";
+      echo "</tr>\n";
+    }
     echo "</tbody>\n";
     echo "</table>\n";
     echo "</td>\n";
@@ -1235,8 +1352,7 @@ class nachrichten4fach {
     $senderAssignedByLead = in_array (
       $this->task,
       array (
-        "FM-Eingang", "FM-Eingang_Sichter",
-        "FM-Eingang_Anhang", "FM-Eingang_Anhang_Sichter"
+        "FM-Eingang", "FM-Eingang_Anhang"
       ),
       true
     );
@@ -1279,7 +1395,12 @@ class nachrichten4fach {
     } else {
       echo "<input id=\"f_14_zeichen\" maxlength=\"6\" size=\"6\" name=\"14_zeichen\" value=\"".$this->safe_message_value ("14_zeichen")."\"><br>\n";
     }
-    echo "Zeichen</td>\n";
+    $externalAuthorMark = in_array (
+      $this->task,
+      array ("FM-Eingang", "FM-Eingang_Anhang"),
+      true
+    );
+    echo ($externalAuthorMark ? "Externes Zeichen" : "Zeichen")."</td>\n";
     /****************************************************************************\
     // Zeile, Spalte 9,4 Funktion    8192 14  Zeichen Funktion
     14_funktion
@@ -1291,7 +1412,7 @@ class nachrichten4fach {
     } else {
       echo "<input id=\"f_14_funktion\" maxlength=\"25\" size=\"10\" name=\"14_funktion\" value=\"".$this->safe_message_value ("14_funktion")."\"".$param."><br>\n";
     }
-    echo "Funktion</td>\n";
+    echo ($externalAuthorMark ? "Externe Funktion" : "Funktion")."</td>\n";
     echo "</tr>\n";
     echo "</tbody>\n";
     echo "</table>\n";
@@ -1320,12 +1441,13 @@ class nachrichten4fach {
     echo "</td>\n";
     echo "<td style=\"width: 289px; background-color: ".$this->bg[15].";\">\n";
     $immutableAdminTimestamp = in_array ($this->task, array ("FM-Admin", "SI-Admin"), true);
+    $reviewIdentityBound = $this->task === "Stab_sichten";
     if (!$this->feld [15]){
       echo "<div style=\"text-align: left;\">";
       echo $this->safe_message_value ("15_quitdatum")."&nbsp;&nbsp;".$this->safe_message_value ("15_quitzeichen");
       echo "</div>\n";
     } else {
-      if ($immutableAdminTimestamp) {
+      if ($immutableAdminTimestamp || $reviewIdentityBound) {
         echo "<span id=\"f_15_quitdatum\" data-estab-readonly=\"true\" aria-label=\"Quittierungszeitpunkt schreibgeschützt\">".$this->safe_message_value ("15_quitdatum")."</span>\n";
         echo "<input id=\"f_15_quitdatum_value\" type=\"hidden\" name=\"15_quitdatum\" value=\"".$this->safe_message_value ("15_quitdatum")."\">&nbsp;\n";
       } else {
@@ -1333,9 +1455,15 @@ class nachrichten4fach {
           $this->showerrorinfo ("15_quitdatum");    }
         echo "<input id=\"f_15_quitdatum\" maxlength=\"13\" size=\"13\" name=\"15_quitdatum\" value=\"".$this->safe_message_value ("15_quitdatum")."\">&nbsp;\n";
       }
-      if ( $this->errorselect ["15_quitzeichen"] == false ){
-        $this->showerrorinfo ("15_quitzeichen");    }
-      echo "<input id=\"f_15_quitzeichen\" maxlength=\"6\" size=\"6\" name=\"15_quitzeichen\" value=\"".$this->safe_message_value ("15_quitzeichen")."\"><br>\n";
+      if ($reviewIdentityBound) {
+        echo "<strong id=\"f_15_quitzeichen\" data-estab-readonly=\"true\" ".
+             "aria-label=\"Sichterzeichen wird aus der Anmeldung übernommen\">".
+             $this->safe_message_value ("15_quitzeichen")."</strong><br>\n";
+      } else {
+        if ( $this->errorselect ["15_quitzeichen"] == false ){
+          $this->showerrorinfo ("15_quitzeichen");    }
+        echo "<input id=\"f_15_quitzeichen\" maxlength=\"6\" size=\"6\" name=\"15_quitzeichen\" value=\"".$this->safe_message_value ("15_quitzeichen")."\"><br>\n";
+      }
     }
     echo $immutableAdminTimestamp
       ? "&nbsp;Uhrzeit (fest) &nbsp; &nbsp;Zeichen</td>\n"
@@ -1353,14 +1481,26 @@ class nachrichten4fach {
       $param = " disabled ";}
     else {
       $param = "";}
+    $readonlyDistribution = $immutableAdminTimestamp
+      || (
+        $this->task === "Stab_sichten"
+        && ($this->formdata ["04_richtung"] ?? "") === "A"
+      );
+    if ($readonlyDistribution) {
+      $distribution = trim (
+        str_replace ("_", " · ", (string) $this->formdata ["16_empf"]),
+        " ,"
+      );
+      echo "<tr><td colspan=\"4\" data-estab-distribution-readonly=\"true\">";
+      echo "<strong>Dokumentierte Verteilung:</strong> ";
+      echo $distribution === "" ? "Keine" : estab_message_html ($distribution);
+      echo "</td></tr>\n";
+    } else {
     switch ($this->task) {
       case "SI-Admin":
-      case "FM-Eingang_Sichter":
       case "Stab_sichten":
       case "Stab_gesprnoti":
-      case "FM-Eingang_Anhang_Sichter":
       case "FM-Admin":
-      case "FM-Ausgang_Sichter":
       case "SI-Admin":
         for ($m=1; $m<=5; $m++){ // Zeilen
           echo "<tr>";
@@ -1421,6 +1561,7 @@ class nachrichten4fach {
 
       case "Stab_lesen":
       case "Stab_schreiben":
+      case "Stab_korrigieren":
       case "LdF-Eingang":
       case "LdF-Ausgang":
       case "FM-Ausgang":
@@ -1462,6 +1603,7 @@ class nachrichten4fach {
    break;
 
     } // switsch $this->task
+    }
 
     echo "</tbody>\n";
     echo "</table>\n";

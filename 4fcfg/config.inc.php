@@ -29,21 +29,15 @@ require_once __DIR__ . '/../app/bootstrap.php';
     $conf_4f["sounds"] = true ;
 
 
-	/* $conf_4f["si_in_out"]
-			true == Ein- und Ausgänge laufen über den Sichter
-		  false == nur Eingänge gehen über den Sichter
-	*/
-    $legacy_review_outgoing = $conf_4f["si_in_out"] ?? false;
-    if (!is_bool($legacy_review_outgoing)) {
-        throw new RuntimeException(
-            '4fcfg/m_cfg.inc.php: si_in_out must be a boolean'
-        );
-    }
-    $conf_4f["si_in_out"] = estab_env_bool(
-        "ESTAB_REVIEW_OUTGOING_MESSAGES",
-        $legacy_review_outgoing
-    );
-    unset($legacy_review_outgoing);
+    /*
+     * Die formale Sichtung jedes Ausgangs vor LdF und A/W ist ein fester
+     * Bestandteil des Nachrichtenlaufs nach DV 1-101. Der historische
+     * Schalter bleibt als immer wahrer Kompatibilitätswert erhalten, damit
+     * alter Anzeigecode keine undefinierte Konfiguration vorfindet. Weder
+     * m_cfg.inc.php noch eine Umgebungsvariable dürfen den Prüfschritt
+     * abschalten.
+     */
+    $conf_4f["si_in_out"] = true;
 
 
     /* getrennt : Eingang und Ausgang zählen für sich

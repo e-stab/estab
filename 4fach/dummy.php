@@ -302,50 +302,6 @@ require_once __DIR__ . "/../app/datetime.php";
     echo "</table>";
   }
 
-  /************************************************************************\
-     Function: sichter_online()
-     prÃ¼ft ob ein Sichter angemeldet ist
-  \************************************************************************/
-  function sichter_online (){
-    include ("../4fcfg/dbcfg.inc.php");
-    include ("../4fcfg/e_cfg.inc.php");
-    $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
-    $query = "SELECT count(*) FROM `".$conf_4f_tbl ["benutzer"]."` WHERE ( ( `funktion` = \"Si\" ) AND ( `aktiv` = 1 ));";
-    $result = $dbaccess->query_table_wert ($query);
-    return ($result[0] > 0);
-  }
-
-  /************************************************************************\
-     Function: get_autosichter_targets($ausnahme)
-     ermittelt die Ziele fÃ¼r die Autosichtung
-  \************************************************************************/
-  function get_autosichter_targets($ausnahme) {
-    include ("../4fcfg/dbcfg.inc.php");
-    include ("../4fcfg/e_cfg.inc.php");
-    include ("../4fcfg/fkt_rolle.inc.php");
-    $db = mysql_connect($conf_4f_db  ["server"],$conf_4f_db ["user"], $conf_4f_db  ["password"])
-       or die ("[query_table] Konnte keine Verbindung zur Datenbank herstellen");
-    mysql_query('SET NAMES utf8');   
-    $db_check = mysql_select_db ($conf_4f_db  ["datenbank"])
-       or die ("[query_table] Auswahl der Datenbank fehlgeschlagen");
-    $query = "SELECT
-                 mtx_fkt as `fkt` FROM ".$conf_4f_tbl ["empfmtx"]
-              ." WHERE `mtx_auto` IN ('t','1') ;" ;
-    $query_result = mysql_query ($query, $db) or
-       die("[query_table] <br>$query<br>103-".mysql_error()." ".mysql_errno());
-    $resultcount = mysql_num_rows($query_result);
-    $result = NULL;
-    for ($i=1;$i<=$resultcount;$i++){
-      $fkt = mysql_fetch_assoc($query_result);
-      if ($fkt['fkt'] != $ausnahme){
-        $result .= $fkt['fkt']."_bl,";
-      }
-    }
-    mysql_free_result($query_result);
-
-    return ($result);
-  }
-
 /******************************************************************************
 Gibt eine Tabelle aus in der alle angemeldeten Rollen und Funktionen
 bersichtlich dargestellt werden.

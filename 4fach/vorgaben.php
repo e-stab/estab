@@ -9,6 +9,7 @@ require_once __DIR__ . '/../app/csrf.php';
 require_once __DIR__ . '/../app/session_ui.php';
 require_once __DIR__ . '/../app/sidebar.php';
 require_once __DIR__ . '/../app/incident_ui.php';
+require_once __DIR__ . '/../app/read_authorization.php';
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 if (!is_string($method) || !in_array($method, ['GET', 'HEAD'], true)) {
@@ -80,6 +81,52 @@ include __DIR__ . '/../4fcfg/config.inc.php';
 include __DIR__ . '/../4fcfg/dbcfg.inc.php';
 include __DIR__ . '/../4fcfg/e_cfg.inc.php';
 
+$selectedIdentity = null;
+$readGateStatus = 200;
+$readGateMessage = '';
+if ($identity !== null) {
+    $scopeConnection = null;
+    try {
+        $scopeConnection = estab_auth_connect($conf_4f_db);
+        $scope = estab_read_require_operational_scope(
+            $scopeConnection,
+            estab_read_session_identity($_SESSION) ?? []
+        );
+        $selectedIdentity = $scope['identity'];
+    } catch (EstabNoActiveIncidentException $exception) {
+        $readGateStatus = 409;
+        $readGateMessage = 'Kein Einsatz ist aktiv.';
+    } catch (EstabReadPermissionException $exception) {
+        $readGateStatus = 403;
+        $readGateMessage =
+            'Wählen Sie zuerst eine aktive, persönlich angenommene '
+            . 'Dienstfunktion.';
+    } catch (Throwable $exception) {
+        error_log(
+            'eStab sidebar read gate failed: ' . $exception->getMessage()
+        );
+        $readGateStatus = 503;
+        $readGateMessage =
+            'Der operative Status kann derzeit nicht geprüft werden.';
+    } finally {
+        if ($scopeConnection instanceof mysqli) {
+            estab_auth_close($scopeConnection);
+        }
+    }
+}
+
+if ($statusFragment && $selectedIdentity === null) {
+    http_response_code($readGateStatus === 200 ? 403 : $readGateStatus);
+    header('Content-Type: text/plain; charset=UTF-8');
+    header('Cache-Control: no-store');
+    if ($method !== 'HEAD') {
+        echo $readGateMessage !== ''
+            ? $readGateMessage
+            : 'Aktive Dienstfunktion erforderlich.';
+    }
+    exit;
+}
+
 /**
  * Load live role occupancy and the current role-specific work queue.
  */
@@ -95,7 +142,7 @@ function estab_vorgaben_status_markup(
     bool $soundsEnabled,
     ?string $soundUrl
 ): string {
-    $identity = estab_auth_session_identity($session);
+    $identity = estab_read_session_identity($session);
     if ($identity === null) {
         return '';
     }
@@ -125,58 +172,65 @@ function estab_vorgaben_status_markup(
 
     if ($connection instanceof mysqli) {
         try {
-            $positions = estab_sidebar_fetch_configured_positions(
+            $scope = estab_read_require_operational_scope(
                 $connection,
-                $matrixTable
+                $identity
             );
-        } catch (Throwable $exception) {
-            $freshnessState = 'partial';
-            error_log(
-                'eStab sidebar matrix lookup failed: '
-                . $exception->getMessage()
-            );
-        }
-
-        try {
-            $users = estab_auth_fetch_users($connection, $userTable);
-        } catch (Throwable $exception) {
-            $freshnessState = 'partial';
-            error_log(
-                'eStab sidebar occupancy lookup failed: '
-                . $exception->getMessage()
-            );
-        }
-
-        try {
-            $queueSessionKey = $queueProfile['session_key'] ?? null;
-            if (is_string($queueSessionKey)) {
-                $queueCount = estab_sidebar_queue_count(
+            $identity = $scope['identity'];
+            try {
+                $positions = estab_sidebar_fetch_configured_positions(
                     $connection,
-                    $queueSessionKey,
-                    $messageTable,
-                    $userTablePrefix,
-                    $identity['funktion'],
-                    $includeOutgoingForReview
+                    $matrixTable
+                );
+            } catch (Throwable $exception) {
+                $freshnessState = 'partial';
+                error_log(
+                    'eStab sidebar matrix lookup failed: '
+                    . $exception->getMessage()
                 );
             }
-        } catch (Throwable $exception) {
-            $queueCount = null;
-            $freshnessState = 'partial';
-            error_log(
-                'eStab sidebar queue lookup failed: '
-                . $exception->getMessage()
-            );
-        }
 
-        try {
-            $incidentState = estab_incident_ui_state_from_status(
-                estab_incident_status($connection)
-            );
-        } catch (Throwable $exception) {
-            error_log(
-                'eStab sidebar incident lookup failed: '
-                . $exception->getMessage()
-            );
+            try {
+                $users = estab_auth_fetch_users($connection, $userTable);
+            } catch (Throwable $exception) {
+                $freshnessState = 'partial';
+                error_log(
+                    'eStab sidebar occupancy lookup failed: '
+                    . $exception->getMessage()
+                );
+            }
+
+            try {
+                $queueSessionKey = $queueProfile['session_key'] ?? null;
+                if (is_string($queueSessionKey)) {
+                    $queueCount = estab_sidebar_queue_count(
+                        $connection,
+                        $queueSessionKey,
+                        $messageTable,
+                        $userTablePrefix,
+                        $identity['funktion'],
+                        $includeOutgoingForReview
+                    );
+                }
+            } catch (Throwable $exception) {
+                $queueCount = null;
+                $freshnessState = 'partial';
+                error_log(
+                    'eStab sidebar queue lookup failed: '
+                    . $exception->getMessage()
+                );
+            }
+
+            try {
+                $incidentState = estab_incident_ui_state_from_status(
+                    estab_incident_status($connection)
+                );
+            } catch (Throwable $exception) {
+                error_log(
+                    'eStab sidebar incident lookup failed: '
+                    . $exception->getMessage()
+                );
+            }
         } finally {
             estab_auth_close($connection);
         }
@@ -205,14 +259,14 @@ function estab_vorgaben_status_markup(
     );
 }
 
-$queueProfile = $identity === null
+$queueProfile = $selectedIdentity === null
     ? null
-    : estab_sidebar_queue_profile($identity);
+    : estab_sidebar_queue_profile($selectedIdentity);
 $soundsEnabled = (bool) ($conf_4f['sounds'] ?? false);
 $soundUrl = $soundsEnabled && is_string($queueProfile['sound_file'] ?? null)
     ? estab_application_url('4fach/audio/' . $queueProfile['sound_file'])
     : null;
-$statusMarkup = $identity === null
+$statusMarkup = $selectedIdentity === null
     ? ''
     : estab_vorgaben_status_markup(
         $_SESSION,
@@ -233,12 +287,13 @@ if ($statusFragment) {
 }
 
 $menuState = $_SESSION['menue'] ?? '';
-$actions = estab_sidebar_workflow_actions($identity, $menuState);
+$actions = estab_sidebar_workflow_actions($selectedIdentity, $menuState);
+$navigationIdentity = $selectedIdentity ?? $identity;
 
 $refreshInterval = isset($cfg['itv']['status'])
     ? (int) $cfg['itv']['status']
     : 10;
-$refreshScript = $identity === null
+$refreshScript = $selectedIdentity === null
     ? ''
     : estab_sidebar_status_refresh_script(
         estab_application_url('4fach/vorgaben.php?fragment=status'),
@@ -265,13 +320,34 @@ $refreshScript = $identity === null
         false,
         false
     ) ?>
-    <?php if ($identity !== null): ?>
+    <?= estab_sidebar_active_hat_markup($_SESSION, $selectedIdentity) ?>
+    <?php if ($identity !== null && $selectedIdentity === null): ?>
+      <aside
+        class="estab-sidebar-duty-required"
+        data-estab-duty-selection-required
+        role="alert"
+      >
+        <strong>Dienstfunktion auswählen</strong>
+        <p>
+          Operative Daten und Aktionen werden erst nach persönlicher Annahme
+          und Auswahl einer aktiven Dienstfunktion angezeigt.
+        </p>
+        <a
+          class="estab-button estab-button-primary"
+          href="<?= estab_auth_html(
+              estab_navigation_url_for_key('command-post')
+          ) ?>"
+          target="_top"
+        >Führungsstellenbetrieb öffnen</a>
+      </aside>
+    <?php endif; ?>
+    <?php if ($selectedIdentity !== null): ?>
       <main class="estab-sidebar-workflow" data-estab-workflow-menu>
         <div class="estab-sidebar-section-heading">
           <h2>Aktionen</h2>
           <p>
-            <?= estab_auth_html($identity['funktion']) ?>
-            · <?= estab_auth_html($identity['rolle']) ?>
+            <?= estab_auth_html($selectedIdentity['funktion']) ?>
+            · <?= estab_auth_html($selectedIdentity['rolle']) ?>
           </p>
         </div>
         <?php if ($actions !== []): ?>
@@ -314,7 +390,8 @@ $refreshScript = $identity === null
         $identity !== null,
         $_SERVER,
         true,
-        true
+        true,
+        $navigationIdentity
     ) ?>
   </div>
   <?= estab_sidebar_audio_markup($soundUrl) ?>

@@ -50,11 +50,11 @@ COPY index.php health.php config.inc.php dbcfg.inc.php e_cfg.inc.php favicon.ico
 COPY 4fach/4fachform.php \
     4fach/anhang.php \
     4fach/button.php \
-    4fach/counter.php \
     4fach/createbutton.php \
     4fach/data_hndl.php \
     4fach/db_operation.php \
     4fach/download.php \
+    4fach/fuehrungsstelle.php \
     4fach/index.php \
     4fach/info.php \
     4fach/katego.php \
@@ -69,7 +69,6 @@ COPY 4fach/4fachform.php \
     4fach/protokoll.php \
     4fach/resetpic.php \
     4fach/showpic.php \
-    4fach/status.php \
     4fach/tools.php \
     4fach/upload.php \
     4fach/upload_class.php \
@@ -88,6 +87,7 @@ COPY 4fach/null.gif ./4fach/
 
 COPY 4fadm/admin.php \
     4fadm/export.php \
+    4fadm/fuehrungsstelle.php \
     4fadm/incident_export.php \
     4fadm/incidents.php \
     4fadm/make_fkt.php \

@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../app/file_access.php';
 require_once __DIR__ . '/../app/attachment.php';
 require_once __DIR__ . '/../app/generated_form.php';
+require_once __DIR__ . '/../app/read_authorization.php';
 require __DIR__ . '/../4fcfg/config.inc.php';
 require __DIR__ . '/../4fcfg/dbcfg.inc.php';
 require __DIR__ . '/../4fcfg/e_cfg.inc.php';
@@ -21,10 +22,10 @@ function estab_download_error(int $status, string $message): never
     exit;
 }
 
-if (
-    session_status() !== PHP_SESSION_ACTIVE
-    || !estab_auth_session_is_authenticated($_SESSION)
-) {
+$readIdentity = session_status() === PHP_SESSION_ACTIVE
+    ? estab_read_session_identity($_SESSION)
+    : null;
+if (!is_array($readIdentity)) {
     estab_download_error(403, 'Anmeldung erforderlich.');
 }
 
@@ -62,6 +63,8 @@ $renderMessage = null;
 $renderRecipientMatrix = null;
 $size = 0;
 $contentType = 'application/octet-stream';
+$attachment = null;
+$attachmentIntegrity = null;
 $failure = null;
 try {
     $connection = estab_auth_connect($conf_4f_db);
@@ -70,50 +73,51 @@ try {
     }
     $transactionActive = true;
     if ($area === 'attachment') {
-        $storedName = pathinfo($filename, PATHINFO_FILENAME);
-        $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-        $attachment = estab_attachment_find(
+        $attachment = estab_read_attachment(
             $connection,
             $conf_4f_tbl['anhang'],
-            $storedName,
+            $conf_4f_tbl['nachrichten'],
+            $filename,
+            $readIdentity,
             true
         );
-        if (
-            !is_array($attachment)
-            || !hash_equals(
-                strtolower((string) ($attachment['fileext'] ?? '')),
-                $extension
-            )
-        ) {
+        if (!is_array($attachment)) {
             throw new EstabIncidentNotFoundException(
-                'Attachment does not belong to the active incident'
+                'Attachment is missing or not readable'
             );
         }
         $root = (string) $conf_4f['ablage_dir'];
     } else {
         try {
-            if ($currentLayout) {
-                $activeForm = estab_generated_form_fetch_active(
-                    $connection,
-                    $conf_4f_tbl['nachrichten'],
-                    (string) $conf_4f_db['datenbank'],
-                    $filename,
-                    true
+            $activeForm = estab_generated_form_fetch_active(
+                $connection,
+                $conf_4f_tbl['nachrichten'],
+                (string) $conf_4f_db['datenbank'],
+                $filename,
+                true
+            );
+            $selectedIdentity = estab_read_require_identity_scope(
+                $connection,
+                (int) $activeForm['incident_id'],
+                $readIdentity
+            );
+            if (
+                !estab_read_message_allowed(
+                    $selectedIdentity,
+                    $activeForm['message']
+                )
+            ) {
+                throw new EstabIncidentNotFoundException(
+                    'Generated form is missing or not readable'
                 );
+            }
+            if ($currentLayout) {
                 $recipientMatrix = estab_generated_form_recipient_matrix(
                     $connection,
                     $conf_4f_tbl['empfmtx']
                 );
                 $renderMessage = $activeForm['message'];
                 $renderRecipientMatrix = $recipientMatrix;
-            } else {
-                estab_generated_form_require_active(
-                    $connection,
-                    $conf_4f_tbl['nachrichten'],
-                    (string) $conf_4f_db['datenbank'],
-                    $filename,
-                    true
-                );
             }
         } catch (InvalidArgumentException $exception) {
             throw new EstabIncidentNotFoundException(
@@ -136,7 +140,19 @@ try {
         }
     } else {
         try {
-            $stream = estab_file_open($root, $area, $filename);
+            if ($area === 'attachment') {
+                $attachmentIntegrity =
+                    estab_attachment_integrity_open_snapshot(
+                        $attachment,
+                        $root,
+                        $filename
+                    );
+                $stream = $attachmentIntegrity['stream'];
+            } else {
+                $stream = estab_file_open($root, $area, $filename);
+            }
+        } catch (EstabAttachmentIntegrityException $exception) {
+            throw $exception;
         } catch (RuntimeException $exception) {
             throw new EstabIncidentNotFoundException(
                 'Authorized file is unavailable',
@@ -153,7 +169,9 @@ try {
                 'Authorized file metadata is unavailable'
             );
         }
-        $size = (int) $stat['size'];
+        $size = is_array($attachmentIntegrity)
+            ? (int) $attachmentIntegrity['content_size']
+            : (int) $stat['size'];
         $contentType = estab_file_stream_content_type($stream);
     }
     if (!$connection->commit()) {
@@ -164,6 +182,17 @@ try {
     $failure = [409, 'Kein Einsatz aktiv.'];
 } catch (EstabIncidentNotFoundException) {
     $failure = [404, 'Datei nicht gefunden.'];
+} catch (EstabReadPermissionException) {
+    $failure = [403, 'Aktion nicht erlaubt.'];
+} catch (EstabAttachmentIntegrityException $exception) {
+    error_log(
+        'eStab attachment download integrity failed: '
+            . $exception->getMessage()
+    );
+    $failure = [
+        409,
+        'Die Integrität des Anhangs konnte nicht bestätigt werden.',
+    ];
 } catch (Throwable $exception) {
     error_log('eStab file download scope failed: ' . $exception->getMessage());
     $failure = [503, 'Die Dateiberechtigung kann derzeit nicht geprüft werden.'];
@@ -218,6 +247,21 @@ header('X-Content-Type-Options: nosniff');
 header('Content-Security-Policy: sandbox; default-src \'none\'');
 if ($currentLayout) {
     header('X-eStab-PDF-Layout: current');
+}
+if ($area === 'attachment' && is_array($attachmentIntegrity)) {
+    header(
+        'X-eStab-Attachment-Integrity: '
+            . (string) $attachmentIntegrity['state']
+    );
+    if (
+        $attachmentIntegrity['state'] === 'verified'
+        && is_string($attachmentIntegrity['sha256'])
+    ) {
+        header(
+            'X-eStab-Attachment-SHA256: '
+                . $attachmentIntegrity['sha256']
+        );
+    }
 }
 
 if (is_string($document)) {

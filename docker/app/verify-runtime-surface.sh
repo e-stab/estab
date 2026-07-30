@@ -10,11 +10,11 @@ menue.inc.php
 4fach/4fachform.php
 4fach/anhang.php
 4fach/button.php
-4fach/counter.php
 4fach/createbutton.php
 4fach/data_hndl.php
 4fach/db_operation.php
 4fach/download.php
+4fach/fuehrungsstelle.php
 4fach/index.php
 4fach/info.php
 4fach/katego.php
@@ -29,7 +29,6 @@ menue.inc.php
 4fach/protokoll.php
 4fach/resetpic.php
 4fach/showpic.php
-4fach/status.php
 4fach/tools.php
 4fach/upload.php
 4fach/upload/upload.php
@@ -52,6 +51,7 @@ menue.inc.php
 4fach/design/mr/folder_global.gif
 4fadm/admin.php
 4fadm/export.php
+4fadm/fuehrungsstelle.php
 4fadm/incident_export.php
 4fadm/incidents.php
 4fadm/make_fkt.php
@@ -89,11 +89,14 @@ menue.inc.php
 app/admin_operations.php
 app/assignment.php
 app/attachment.php
+app/attachment_integrity.php
 app/auth.php
 app/bootstrap.php
 app/category.php
 app/csrf.php
 app/datetime.php
+app/dv_operations.php
+app/dynamic_schema.php
 app/export.php
 app/file_access.php
 app/generated_form.php
@@ -105,10 +108,14 @@ app/incident_ui.php
 app/legacy_mysql.php
 app/legacy_php.php
 app/logbook.php
+app/message_evidence.php
 app/logout.php
 app/message_repository.php
+app/message_transport.php
 app/navigation.php
+app/operational_guard.php
 app/readiness.php
+app/read_authorization.php
 app/root_menu.php
 app/session_ui.php
 app/sidebar.php
@@ -126,6 +133,7 @@ forbidden_paths='
 4fach/.directory
 4fach/Print
 4fach/all_msg.php
+4fach/counter.php
 4fach/color.inc.php
 4fach/create_db.php
 4fach/create_dir.php
@@ -144,6 +152,7 @@ forbidden_paths='
 4fach/navi.php
 4fach/prototype.js
 4fach/stab_status.php
+4fach/status.php
 4fach/test.php
 4fach/tools_neu.php
 4fach/topmenue.php

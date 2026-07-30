@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/attachment_integrity.php';
+
 const ESTAB_EXPORT_MANIFEST_MAX_BYTES = 2097152;
 
 final class EstabExportNotFoundException extends RuntimeException
@@ -372,12 +374,41 @@ function estab_export_read_manifest(string $realBase, string $runId): ?array
         ];
     }
 
+    $attachmentIntegrity = null;
+    if (array_key_exists('attachment_integrity', $manifest)) {
+        $attachmentIntegrity = $manifest['attachment_integrity'];
+        if (
+            !is_array($attachmentIntegrity)
+            || ($attachmentIntegrity['scheme'] ?? null)
+                !== 'sha256-ingest-v1'
+            || ($attachmentIntegrity['files_checked'] ?? null) !== true
+            || !is_int($attachmentIntegrity['total'] ?? null)
+            || !is_int($attachmentIntegrity['verified'] ?? null)
+            || !is_int(
+                $attachmentIntegrity['legacy_unverifiable'] ?? null
+            )
+            || !is_int($attachmentIntegrity['integrity_errors'] ?? null)
+            || ($attachmentIntegrity['statement'] ?? null)
+                !== 'Integrität beim Eingang nicht belegbar'
+            || $attachmentIntegrity['total'] < 0
+            || $attachmentIntegrity['verified'] < 0
+            || $attachmentIntegrity['legacy_unverifiable'] < 0
+            || $attachmentIntegrity['integrity_errors'] !== 0
+            || $attachmentIntegrity['verified']
+                + $attachmentIntegrity['legacy_unverifiable']
+                !== $attachmentIntegrity['total']
+        ) {
+            return null;
+        }
+    }
+
     return [
         'created_at' => $createdAt->format(DateTimeInterface::ATOM),
         'database' => $manifest['database'],
         'table_count' => count($tables),
         'rows' => $totalRows,
         'tables' => $tables,
+        'attachment_integrity' => $attachmentIntegrity,
     ];
 }
 
@@ -1315,14 +1346,30 @@ function estab_export_table(mysqli $connection, string $table, string $directory
     ];
 }
 
-/** Export every base table and return paths plus a machine-readable manifest. */
-function estab_export_database(mysqli $connection, string $baseDirectory): array
+/**
+ * Export every base table after verifying all integrity-required attachments.
+ */
+function estab_export_database(
+    mysqli $connection,
+    string $baseDirectory,
+    string $attachmentRoot
+): array
 {
     $createdAt = new DateTimeImmutable('now');
     return estab_export_run_staged(
         $baseDirectory,
-        static function (array $scope) use ($connection, $createdAt): array {
+        static function (array $scope) use (
+            $connection,
+            $createdAt,
+            $attachmentRoot
+        ): array {
             $directory = $scope['staging_directory'];
+            $attachmentIntegrity = estab_attachment_integrity_summary(
+                $connection,
+                $attachmentRoot,
+                null,
+                true
+            );
             $catalogue = $connection->query(
                 "SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'"
             );
@@ -1373,6 +1420,18 @@ function estab_export_database(mysqli $connection, string $baseDirectory): array
                 // Older format-1 manifests omit both keys.
                 'spreadsheet_formula_prefix' => "'",
                 'spreadsheet_formula_triggers' => '=+-@',
+                'attachment_integrity' => [
+                    'scheme' => 'sha256-ingest-v1',
+                    'files_checked' => true,
+                    'total' => $attachmentIntegrity['total'],
+                    'verified' => $attachmentIntegrity['verified'],
+                    'legacy_unverifiable' =>
+                        $attachmentIntegrity['legacy_unverifiable'],
+                    'integrity_errors' =>
+                        $attachmentIntegrity['integrity_errors'],
+                    'statement' =>
+                        'Integrität beim Eingang nicht belegbar',
+                ],
                 'tables' => $exports,
             ];
             $manifestJson = json_encode(

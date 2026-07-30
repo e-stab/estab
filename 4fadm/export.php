@@ -10,7 +10,7 @@ if (PHP_SAPI !== 'cli' && empty($_SERVER['REMOTE_USER'])) {
 }
 
 require_once __DIR__ . '/../4fcfg/dbcfg.inc.php';
-require_once __DIR__ . '/../4fcfg/e_cfg.inc.php';
+require_once __DIR__ . '/../4fcfg/config.inc.php';
 require_once __DIR__ . '/../app/auth.php';
 require_once __DIR__ . '/../app/csrf.php';
 require_once __DIR__ . '/../app/export.php';
@@ -156,7 +156,11 @@ if ($requestMethod === 'POST') {
         try {
             $connection = estab_auth_connect($conf_4f_db);
             try {
-                $created = estab_export_database($connection, $exportDirectory);
+                $created = estab_export_database(
+                    $connection,
+                    $exportDirectory,
+                    (string) $conf_4f['ablage_dir']
+                );
             } finally {
                 estab_auth_close($connection);
             }
@@ -408,6 +412,20 @@ $createdVisible = $createdId !== null && in_array($createdId, $listedIds, true);
                 <p class="estab-export-card-note">
                   Das ZIP kann heruntergeladen werden; Manifestdetails sind
                   für diesen älteren oder unvollständigen Lauf nicht lesbar.
+                </p>
+              <?php elseif (is_array($manifest['attachment_integrity'])): ?>
+                <?php $attachmentIntegrity = $manifest['attachment_integrity']; ?>
+                <p class="estab-export-card-note">
+                  Anhangprüfung:
+                  <?= (int) $attachmentIntegrity['verified'] ?>
+                  mit SHA-256-/Größennachweis,
+                  <?= (int) $attachmentIntegrity['legacy_unverifiable'] ?>
+                  Legacy-Anhänge – Integrität beim Eingang nicht belegbar.
+                </p>
+              <?php else: ?>
+                <p class="estab-export-card-note estab-export-card-note-warning">
+                  Dieser ältere Export enthält keinen Nachweis einer
+                  Dateisystemprüfung der Anhänge.
                 </p>
               <?php endif; ?>
 

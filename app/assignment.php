@@ -151,7 +151,49 @@ function estab_assignment_function_roles(
         $statement->close();
     }
     uksort($roles, 'strnatcasecmp');
+    if (
+        !isset($roles['S2'])
+        || !hash_equals('Stab', $roles['S2'])
+        || !estab_assignment_matrix_has_mandatory_lage_target(
+            $connection,
+            $matrixTable
+        )
+    ) {
+        throw new RuntimeException(
+            'Die Empfängermatrix benötigt S2 als Lage-/Dokumentationsfunktion '
+            . 'und unveränderliches Rotkopieziel.'
+        );
+    }
     return $roles;
+}
+
+/** S2 is the mandatory Lage/Dokumentation capability and red-copy target. */
+function estab_assignment_matrix_has_mandatory_lage_target(
+    mysqli $connection,
+    string $matrixTable
+): bool {
+    $statement = $connection->prepare(
+        'SELECT COUNT(*) AS `anzahl` FROM ' . estab_auth_table($matrixTable)
+        . " WHERE `mtx_typ` = 'cb'"
+        . " AND BINARY `mtx_fkt` = BINARY 'S2'"
+        . " AND `mtx_rolle` = 'Stab'"
+        . " AND `mtx_rc2` IN ('t','1')"
+        . " AND `mtx_auto` NOT IN ('t','1')"
+    );
+    if (!$statement) {
+        throw new RuntimeException('Could not prepare Lage capability lookup');
+    }
+    try {
+        if (!$statement->execute()) {
+            throw new RuntimeException('Could not read Lage capability');
+        }
+        $result = $statement->get_result();
+        $count = (int) ($result->fetch_assoc()['anzahl'] ?? 0);
+        $result->free();
+        return $count === 1;
+    } finally {
+        $statement->close();
+    }
 }
 
 /**
@@ -172,6 +214,7 @@ function estab_assignment_roles_from_matrix(array $matrix): array
         'A/W' => 'Fernmelder',
         'LdF' => 'Fernmelder',
     ];
+    $lageTargets = 0;
     foreach ($cells as $cell) {
         if (!is_array($cell)) {
             throw new InvalidArgumentException('Invalid recipient matrix cell');
@@ -191,6 +234,19 @@ function estab_assignment_roles_from_matrix(array $matrix): array
             );
         }
         $roles[$function] = $role;
+        if (
+            $function === 'S2'
+            && $role === 'Stab'
+            && ($cell['redcopy'] ?? false) === true
+            && ($cell['auto'] ?? false) === false
+        ) {
+            $lageTargets++;
+        }
+    }
+    if ($lageTargets !== 1) {
+        throw new InvalidArgumentException(
+            'S2 must be the sole Lage/documentation red-copy target'
+        );
     }
     uksort($roles, 'strnatcasecmp');
     return $roles;

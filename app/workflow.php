@@ -316,6 +316,8 @@ function estab_workflow_action_keys_allowed(array $request): bool
         'abbrechen_x', 'abbrechen_y',
         'antwort_x', 'antwort_y',
         'weiterleiten_x', 'weiterleiten_y',
+        'zurueckweisen_x', 'zurueckweisen_y',
+        'transport_nicht_moeglich_x', 'transport_nicht_moeglich_y',
         'gelesen_x', 'gelesen_y',
         'anhang_plus_x', 'anhang_plus_y',
         'stab_anhang_x', 'stab_anhang_y',
@@ -362,6 +364,135 @@ function estab_workflow_action_keys_allowed(array $request): bool
     return true;
 }
 
+/**
+ * Parse the only recipient controls emitted by the message form.
+ *
+ * The browser submits matrix coordinates, never function names or copy-colour
+ * suffixes. The save boundary resolves every accepted coordinate against the
+ * current server-side matrix.
+ *
+ * @return array{blue:list<array{0:int,1:int}>,green:?array{0:int,1:int}}
+ */
+function estab_workflow_distribution_selection(array $request): array
+{
+    $blue = [];
+    $green = null;
+
+    foreach ($request as $field => $value) {
+        if (!is_string($field) || !str_starts_with($field, '16_')) {
+            continue;
+        }
+
+        if ($field === '16_gncopy') {
+            if ($value === '') {
+                continue;
+            }
+            if (
+                !is_string($value)
+                || preg_match('/\A16_([1-5])([1-4])_gn\z/D', $value, $parts) !== 1
+            ) {
+                throw new InvalidArgumentException(
+                    'Ungültige grüne Empfängerkopie'
+                );
+            }
+            $green = [(int) $parts[1], (int) $parts[2]];
+            continue;
+        }
+
+        if (
+            $field === '16_empf'
+            || preg_match('/\A16_empf_sonst_[1-5][1-4]\z/D', $field) === 1
+        ) {
+            if ($value === '') {
+                // Historical forms may submit an empty presentation field.
+                // It carries no authority and is intentionally ignored.
+                continue;
+            }
+            throw new InvalidArgumentException(
+                'Empfängerfunktionen dürfen nicht übermittelt werden'
+            );
+        }
+
+        if (
+            preg_match('/\A16_([1-5])([1-4])\z/D', $field, $parts) !== 1
+            || !is_string($value)
+            || !hash_equals($field . '_bl', $value)
+        ) {
+            // In particular, 16_empf and 16_empf_sonst_* are never trusted
+            // browser sources for a recipient function.
+            throw new InvalidArgumentException(
+                'Ungültige Empfängerverteilung'
+            );
+        }
+        $blue[] = [(int) $parts[1], (int) $parts[2]];
+    }
+
+    return ['blue' => $blue, 'green' => $green];
+}
+
+/**
+ * Resolve validated browser coordinates to canonical matrix recipient tokens.
+ */
+function estab_workflow_distribution_tokens(
+    array $request,
+    array $matrix,
+    array $requiredTokens = []
+): string {
+    $selection = estab_workflow_distribution_selection($request);
+    $tokens = [];
+    foreach ($requiredTokens as $requiredToken) {
+        if (
+            !is_string($requiredToken)
+            || preg_match(
+                '/\A[A-Za-z0-9_]{1,6}_(?:bl|gn|rt)\z/D',
+                $requiredToken
+            ) !== 1
+        ) {
+            throw new InvalidArgumentException(
+                'Ungültiger vorgeschriebener Empfänger'
+            );
+        }
+        $tokens[$requiredToken] = true;
+    }
+    $append = static function (
+        array $coordinate,
+        string $colour
+    ) use ($matrix, &$tokens): void {
+        [$row, $column] = $coordinate;
+        $function = $matrix[$row][$column]['fkt'] ?? null;
+        if (
+            !is_string($function)
+            || preg_match('/\A[A-Za-z0-9_]{1,6}\z/D', $function) !== 1
+        ) {
+            throw new InvalidArgumentException(
+                'Empfängerposition ist nicht belegt'
+            );
+        }
+        $tokens[$function . '_' . $colour] = true;
+    };
+
+    $blueCoordinates = [];
+    foreach ($selection['blue'] as [$row, $column]) {
+        $blueCoordinates[$row . ':' . $column] = true;
+    }
+    for ($row = 1; $row <= 5; $row++) {
+        for ($column = 1; $column <= 4; $column++) {
+            $coordinate = [$row, $column];
+            if (isset($blueCoordinates[$row . ':' . $column])) {
+                $append($coordinate, 'bl');
+            }
+            if (
+                is_array($selection['green'])
+                && $selection['green'] === $coordinate
+            ) {
+                $append($coordinate, 'gn');
+            }
+        }
+    }
+
+    return $tokens === [] ? '' : implode(',', array_keys($tokens)) . ',';
+}
+
 /** Return the object-level permission required by this request, if any. */
 function estab_workflow_message_operation(array $request): ?string
 {
@@ -376,8 +507,9 @@ function estab_workflow_message_operation(array $request): ?string
     if ($task !== '') {
         return match ($task) {
             'Stab_lesen' => 'staff-read',
+            'Stab_korrigieren' => 'staff-correction',
             'Stab_sichten' => 'viewer-review',
-            'FM-Ausgang', 'FM-Ausgang_Sichter' => 'telecommunications-save',
+            'FM-Ausgang' => 'telecommunications-save',
             'LdF-Eingang' => 'telecommunications-lead-incoming-save',
             'LdF-Ausgang' => 'telecommunications-lead-outgoing-save',
             'FM-Admin' => 'telecommunications-admin',
@@ -456,23 +588,29 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
         }
         $task = $request['task'];
         $allowed = match ($task) {
-            'Stab_schreiben', 'Stab_gesprnoti', 'Stab_lesen' => $isStaffWriter,
-            'Stab_sichten', 'SI-Admin' => $isViewer,
+            'Stab_schreiben', 'Stab_korrigieren',
+            'Stab_gesprnoti', 'Stab_lesen' => $isStaffWriter,
+            'Stab_sichten' => $isViewer,
             'LdF-Eingang', 'LdF-Ausgang' => $isTelecommunicationsLead,
-            'FM-Ausgang', 'FM-Ausgang_Sichter', 'FM-Admin',
-            'FM-Eingang', 'FM-Eingang_Sichter',
-            'FM-Eingang_Anhang', 'FM-Eingang_Anhang_Sichter' => $isTelecommunications,
+            'FM-Ausgang',
+            'FM-Eingang', 'FM-Eingang_Anhang' => $isTelecommunications,
             default => false,
         };
         if (!$allowed) {
             return false;
         }
+        if (in_array($task, ['Stab_sichten', 'Stab_gesprnoti'], true)) {
+            try {
+                estab_workflow_distribution_selection($request);
+            } catch (InvalidArgumentException) {
+                return false;
+            }
+        }
         if (
             in_array(
                 $task,
                 [
-                    'FM-Eingang', 'FM-Eingang_Sichter',
-                    'FM-Eingang_Anhang', 'FM-Eingang_Anhang_Sichter',
+                    'FM-Eingang', 'FM-Eingang_Anhang',
                 ],
                 true
             )
@@ -486,6 +624,78 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
         ) {
             // A/W records only the received callsign. LdF is the sole actor
             // that may translate it into the sender field.
+            return false;
+        }
+        if (
+            in_array($task, ['FM-Eingang', 'FM-Eingang_Anhang'], true)
+        ) {
+            foreach (array_keys($request) as $field) {
+                if (is_string($field) && str_starts_with($field, '16_')) {
+                    // Distribution is a result of the qualified Si review.
+                    // A/W cannot nominate recipients while recording an
+                    // incoming transmission, even through hidden legacy
+                    // controls or an attachment roundtrip.
+                    return false;
+                }
+            }
+        }
+
+        // Local operator marks are attributes of the authenticated session,
+        // never browser-selected form values. Missing values are accepted
+        // because the save handler supplies them authoritatively; a supplied
+        // value must match exactly.
+        $identityBoundFields = match ($task) {
+            'FM-Eingang', 'FM-Eingang_Anhang' => [
+                '01_zeichen' => (string) ($identity['kuerzel'] ?? ''),
+            ],
+            'Stab_schreiben', 'Stab_korrigieren' => [
+                '14_zeichen' => (string) ($identity['kuerzel'] ?? ''),
+                '14_funktion' => (string) ($identity['funktion'] ?? ''),
+            ],
+            'Stab_gesprnoti' => [
+                '01_zeichen' => (string) ($identity['kuerzel'] ?? ''),
+                '14_zeichen' => (string) ($identity['kuerzel'] ?? ''),
+                '14_funktion' => (string) ($identity['funktion'] ?? ''),
+                // A conversation note is a self-recorded staff object, not a
+                // fictitious Si/LdF review. The field remains empty.
+                '15_quitzeichen' => '',
+                '15_quitdatum' => '',
+            ],
+            'Stab_sichten' => [
+                '15_quitzeichen' => (string) ($identity['kuerzel'] ?? ''),
+            ],
+            'LdF-Eingang', 'LdF-Ausgang' => [
+                '02_zeichen' => (string) ($identity['kuerzel'] ?? ''),
+            ],
+            'FM-Ausgang' => [
+                '03_zeichen' => (string) ($identity['kuerzel'] ?? ''),
+            ],
+            default => [],
+        };
+        foreach ($identityBoundFields as $field => $expected) {
+            if (
+                array_key_exists($field, $request)
+                && (
+                    !is_string($request[$field])
+                    || !hash_equals($expected, $request[$field])
+                )
+            ) {
+                return false;
+            }
+        }
+
+        if (
+            (isset($request['zurueckweisen_x'])
+                || isset($request['zurueckweisen_y']))
+            && $task !== 'Stab_sichten'
+        ) {
+            return false;
+        }
+        if (
+            (isset($request['transport_nicht_moeglich_x'])
+                || isset($request['transport_nicht_moeglich_y']))
+            && $task !== 'FM-Ausgang'
+        ) {
             return false;
         }
     }

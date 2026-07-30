@@ -4,6 +4,7 @@ require_once __DIR__ . "/../app/auth.php";
 require_once __DIR__ . "/../app/csrf.php";
 require_once __DIR__ . "/../app/message_repository.php";
 require_once __DIR__ . "/../app/message_transport.php";
+require_once __DIR__ . "/../app/read_authorization.php";
 include ("katego.php");
 include ("../4fcfg/e_cfg.inc.php");
 
@@ -629,118 +630,132 @@ class Listen extends kategorien {
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
 
-    $messageTable = estab_message_table ((string) $conf_4f_tbl ["nachrichten"]);
-    $parameters = array ();
-    $where = array (
-      "m.`einsatz_id` = (SELECT `active_einsatz_id` ".
-      "FROM `nv_einsatz_status` WHERE `singleton_id` = 1)"
-    );
-    $joins = array ();
-    $select = "m.`00_lfd`, m.`09_vorrangstufe`, m.`04_richtung`, ".
-      "m.`04_nummer`, m.`10_anschrift`, m.`12_abfzeit`, m.`12_inhalt`, ".
-      "m.`13_abseinheit`, m.`14_funktion`, m.`16_empf`, ".
-      "m.`X00_status`, m.`x01_abschluss`";
-
-    switch ($listenart) {
-      case "Stab_lesen":
-      case "global":
-        $identity = estab_auth_session_identity ($_SESSION);
-        if ($identity === null) { throw new RuntimeException ("Ungueltige Sitzung"); }
-        // An incoming callsign is not a usable sender until LdF translated
-        // it. Keep that staged record out of operational recipient queues.
-        $where[] = "(m.`04_richtung` <> 'E' OR m.`x00_status` <> 1)";
-
-        $prefix = (string) $conf_4f_tbl ["usrtblprefix"];
-        $readTable = estab_message_table (estab_message_state_table (
-          $prefix, $identity ["funktion"], $identity ["kuerzel"], "read"
-        ));
-        $doneTable = estab_message_table (estab_message_state_table (
-          $prefix, $identity ["funktion"], $identity ["kuerzel"], "done"
-        ));
-        $functionBase = $prefix."_fkt_".strtolower ($identity ["funktion"]);
-        $userBase = $prefix.strtolower ($identity ["funktion"])."_".$identity ["kuerzel"];
-
-        $where[] = "m.`16_empf` REGEXP ?";
-        $parameters[] = "(^|,)[[:space:]]*(alle|".
-          preg_quote ($identity ["funktion"]).
-          ")(_[^,[:space:]]+)?[[:space:]]*(,|$)";
-
-        $displayFilters = (int) ($_SESSION["filter_darstellung"] ?? 1) === 1;
-        $searchActive = isset ($_SESSION["flt_search"]);
-        if ($displayFilters && !$searchActive) {
-          if ((int) ($_SESSION["filter_gelesen"] ?? 0) === 1) {
-            $where[] = "m.`00_lfd` IN (SELECT `nachnum` FROM ".$readTable.")";
-          }
-
-          $showDone = (int) ($_SESSION["filter_erledigt"] ?? 0) === 1;
-          $showOpen = (int) ($_SESSION["filter_unerledigt"] ?? 0) === 1;
-          if ($showDone xor $showOpen) {
-            $where[] = "m.`00_lfd` ".($showDone ? "" : "NOT ").
-              "IN (SELECT `nachnum` FROM ".$doneTable.")";
-          } elseif (!$showDone && !$showOpen) {
-            $where[] = "1 = 0";
-          }
-
-          $categorySpecs = array (
-            array ("ma_katego", $conf_4f_tbl ["masterkatego"], $conf_4f_tbl ["masterkategolk"], "ma"),
-            array ("fk_katego", $functionBase."_katego", $functionBase."_kategolink", "fk"),
-            array ("us_katego", $userBase."_katego", $userBase."_kategolink", "us"),
-          );
-          foreach ($categorySpecs as $spec) {
-            if (!isset ($_SESSION[$spec[0]])) { continue; }
-            $categoryId = estab_message_positive_id ($_SESSION[$spec[0]]);
-            $categoryTable = estab_message_table ((string) $spec[1]);
-            $linkTable = estab_message_table ((string) $spec[2]);
-            $alias = $spec[3];
-            $joins[] = "INNER JOIN ".$linkTable." AS ".$alias."l".
-              " ON ".$alias."l.`msg` = m.`00_lfd`";
-            $joins[] = "INNER JOIN ".$categoryTable." AS ".$alias."c".
-              " ON ".$alias."c.`lfd` = ".$alias."l.`katego`";
-            $where[] = $alias."c.`lfd` = ?";
-            $parameters[] = $categoryId;
-          }
-        }
-
-        if ($searchActive) {
-          $searchPattern = "%".(string) $_SESSION["flt_search"]."%";
-          $where[] = "(m.`04_nummer` LIKE ? OR m.`10_anschrift` LIKE ? OR ".
-            "m.`12_abfzeit` LIKE ? OR m.`12_inhalt` LIKE ? OR ".
-            "m.`13_abseinheit` LIKE ?)";
-          for ($i = 0; $i < 5; $i++) { $parameters[] = $searchPattern; }
-        }
-      break;
-
-      case "FMADMIN":
-      case "SIADMIN":
-        $displayFilters = (int) ($_SESSION["filter_darstellung"] ?? 1) === 1;
-        if (isset ($_SESSION["flt_search"])) {
-          $searchPattern = "%".(string) $_SESSION["flt_search"]."%";
-          $where[] = "(m.`04_nummer` LIKE ? OR m.`10_anschrift` LIKE ? OR ".
-            "m.`12_abfzeit` LIKE ? OR m.`12_inhalt` LIKE ? OR ".
-            "m.`13_abseinheit` LIKE ?)";
-          for ($i = 0; $i < 5; $i++) { $parameters[] = $searchPattern; }
-        }
-      break;
-
-      default:
-        throw new InvalidArgumentException ("Unbekannte Listenart");
-    }
-
-    $from = " FROM ".$messageTable." AS m ".
-      implode (" ", $joins);
-    $whereSql = $where === array () ? "1 = 1" : implode (" AND ", $where);
-    $countSql = "SELECT COUNT(DISTINCT m.`00_lfd`)".$from." WHERE ".$whereSql;
-    $query = "SELECT DISTINCT ".$select.$from." WHERE ".$whereSql.
-      " ORDER BY m.`04_nummer` DESC, m.`09_vorrangstufe` DESC";
-
     $messageConnection = estab_message_connect ($conf_4f_db);
     try {
-      if ($displayFilters) {
-        $count = estab_message_query_int ($messageConnection, $countSql, $parameters);
-        list ($start, $pageSize) = estab_list_page_window ($count);
-        $query .= " LIMIT ".$start.",".$pageSize;
+      $identity = estab_read_session_identity ($_SESSION);
+      if ($identity === null) {
+        throw new EstabReadPermissionException ("Anmeldung erforderlich.");
       }
-      $result = estab_message_query_rows ($messageConnection, $query, $parameters);
+      $scope = estab_read_require_operational_scope (
+        $messageConnection,
+        $identity
+      );
+      $identity = $scope ["identity"];
+      $incidentId = (int) $scope ["incident"] ["active_einsatz_id"];
+
+      $messageTable = estab_message_table (
+        (string) $conf_4f_tbl ["nachrichten"]
+      );
+      $parameters = array ($incidentId);
+      $where = array ("m.`einsatz_id` = ?");
+      $joins = array ();
+      $displayFilters =
+        (int) ($_SESSION["filter_darstellung"] ?? 1) === 1;
+
+      switch ($listenart) {
+        case "Stab_lesen":
+        case "global":
+          // Before the terminal workflow state, only the author may inspect
+          // their outgoing draft. Recipient copies use an exact token.
+          $where[] = estab_message_staff_access_sql ("m");
+          $parameters[] = estab_message_recipient_pattern (
+            $identity ["funktion"]
+          );
+          $parameters[] = $identity ["funktion"];
+
+          $prefix = (string) $conf_4f_tbl ["usrtblprefix"];
+          $readTable = estab_message_table (estab_message_state_table (
+            $prefix, $identity ["funktion"], $identity ["kuerzel"], "read"
+          ));
+          $doneTable = estab_message_table (estab_message_state_table (
+            $prefix, $identity ["funktion"], $identity ["kuerzel"], "done"
+          ));
+          $functionBase =
+            $prefix."_fkt_".strtolower ($identity ["funktion"]);
+          $userBase = $prefix.strtolower ($identity ["funktion"]).
+            "_".$identity ["kuerzel"];
+          $searchActive = isset ($_SESSION["flt_search"]);
+          if ($displayFilters && !$searchActive) {
+            if ((int) ($_SESSION["filter_gelesen"] ?? 0) === 1) {
+              $where[] =
+                "m.`00_lfd` IN (SELECT `nachnum` FROM ".$readTable.")";
+            }
+
+            $showDone = (int) ($_SESSION["filter_erledigt"] ?? 0) === 1;
+            $showOpen = (int) ($_SESSION["filter_unerledigt"] ?? 0) === 1;
+            if ($showDone xor $showOpen) {
+              $where[] = "m.`00_lfd` ".($showDone ? "" : "NOT ").
+                "IN (SELECT `nachnum` FROM ".$doneTable.")";
+            } elseif (!$showDone && !$showOpen) {
+              $where[] = "1 = 0";
+            }
+
+            $categorySpecs = array (
+              array ("ma_katego", $conf_4f_tbl ["masterkatego"], $conf_4f_tbl ["masterkategolk"], "ma"),
+              array ("fk_katego", $functionBase."_katego", $functionBase."_kategolink", "fk"),
+              array ("us_katego", $userBase."_katego", $userBase."_kategolink", "us"),
+            );
+            foreach ($categorySpecs as $spec) {
+              if (!isset ($_SESSION[$spec[0]])) { continue; }
+              $categoryId = estab_message_positive_id (
+                $_SESSION[$spec[0]]
+              );
+              $categoryTable = estab_message_table ((string) $spec[1]);
+              $linkTable = estab_message_table ((string) $spec[2]);
+              $alias = $spec[3];
+              $joins[] = "INNER JOIN ".$linkTable." AS ".$alias."l".
+                " ON ".$alias."l.`msg` = m.`00_lfd`";
+              $joins[] = "INNER JOIN ".$categoryTable." AS ".$alias."c".
+                " ON ".$alias."c.`lfd` = ".$alias."l.`katego`";
+              $where[] = $alias."c.`lfd` = ?";
+              $parameters[] = $categoryId;
+            }
+          }
+
+          if ($searchActive) {
+            $searchPattern = "%".(string) $_SESSION["flt_search"]."%";
+            $where[] =
+              "(m.`04_nummer` LIKE ? OR m.`10_anschrift` LIKE ? OR ".
+              "m.`12_abfzeit` LIKE ? OR m.`12_inhalt` LIKE ? OR ".
+              "m.`13_abseinheit` LIKE ?)";
+            for ($i = 0; $i < 5; $i++) {
+              $parameters[] = $searchPattern;
+            }
+          }
+        break;
+
+        case "FMADMIN":
+        case "SIADMIN":
+          if (isset ($_SESSION["flt_search"])) {
+            $searchPattern = "%".(string) $_SESSION["flt_search"]."%";
+            $where[] =
+              "(m.`04_nummer` LIKE ? OR m.`10_anschrift` LIKE ? OR ".
+              "m.`12_abfzeit` LIKE ? OR m.`12_inhalt` LIKE ? OR ".
+              "m.`13_abseinheit` LIKE ?)";
+            for ($i = 0; $i < 5; $i++) {
+              $parameters[] = $searchPattern;
+            }
+          }
+        break;
+
+        default:
+          throw new InvalidArgumentException ("Unbekannte Listenart");
+      }
+
+      $from = " FROM ".$messageTable." AS m ".implode (" ", $joins);
+      $whereSql = implode (" AND ", $where);
+      $query = "SELECT DISTINCT m.*".$from." WHERE ".$whereSql.
+        " ORDER BY m.`04_nummer` DESC, m.`09_vorrangstufe` DESC";
+      $result = estab_message_query_rows (
+        $messageConnection,
+        $query,
+        $parameters
+      );
+      $result = estab_read_filter_messages ($result, $identity);
+      if ($displayFilters) {
+        list ($start, $pageSize) = estab_list_page_window (count ($result));
+        $result = array_slice ($result, $start, $pageSize);
+      }
     } finally {
       estab_auth_close ($messageConnection);
     }
@@ -769,6 +784,15 @@ class Listen extends kategorien {
                      AND `x00_status` = 1
                      AND `02_zeit` IS NULL AND `02_zeichen` = \"\"
                      AND `03_datum` IS NULL AND `03_zeichen` = \"\"
+                     AND (
+                       (`04_richtung` = \"E\"
+                         AND `15_quitdatum` IS NULL
+                         AND `15_quitzeichen` = \"\")
+                       OR
+                       (`04_richtung` = \"A\"
+                         AND `15_quitdatum` IS NOT NULL
+                         AND `15_quitzeichen` != \"\")
+                     )
                      AND `x01_abschluss` = \"f\"
                 ORDER BY `09_vorrangstufe` DESC, `12_abfzeit`;";
         $result = $dbaccess->query_table ($query);
@@ -815,6 +839,8 @@ class Listen extends kategorien {
                   AND `x00_status` = 2
                   AND `02_zeit` IS NOT NULL AND `02_zeichen` != \"\"
                   AND `06_befwegausw` != \"\"
+                  AND `15_quitdatum` IS NOT NULL
+                  AND `15_quitzeichen` != \"\"
                   AND ((`04_richtung` = \"A\") AND (`03_datum` IS NULL) AND (`03_zeichen` = \"\")) order by `09_vorrangstufe` DESC, `12_abfzeit` ; ";
         $result = $dbaccess->query_table ($query);
         if ($result != "" ){
@@ -942,7 +968,7 @@ class Listen extends kategorien {
                // Status für ausgehende Nachrichten
              echo "<td align=\"center\">";
              if ( ( $row["04_richtung"] == "A") ){
-               switch ( $row["X00_status"] ) {
+               switch ( $row["x00_status"] ) {
                  case 1:
                    echo "<p><img src=\"".$conf_design_path."/status_yellow.gif\" alt=\"liegt bei LdF: Rufname und Beförderungsweg festlegen\"></p>";
                  break;
@@ -1042,15 +1068,18 @@ class Listen extends kategorien {
 			$dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
                              $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
 
-			$WHERE_inout = "WHERE `einsatz_id` = (SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1) AND `x00_status` = 4 AND ( ( `15_quitdatum` IS NULL ) AND ( `15_quitzeichen` = \"\" ) ) AND ( ( `04_richtung` =\"E\") OR ( (`03_datum` IS NOT NULL) AND ( `03_zeichen` != \"\" ) ) )";
-			$WHERE_in    = "WHERE `einsatz_id` = (SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1) AND `x00_status` = 4 AND ( ( `15_quitdatum` IS NULL ) AND ( `15_quitzeichen` = \"\" ) ) AND ( `04_richtung` =\"E\")";
+			/*
+			 * Status 4 ist die verbindliche Sichter-Warteschlange:
+			 * Eingang nach der LdF-Disposition, Ausgang vor LdF und A/W.
+			 * Ausgehende Vordrucke dürfen nicht mehr per Konfiguration an
+			 * dieser formalen Prüfung vorbeigeführt werden.
+			 */
+			$WHERE_inout = "WHERE `einsatz_id` = (SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1) AND `x00_status` = 4 AND ( ( `15_quitdatum` IS NULL ) AND ( `15_quitzeichen` = \"\" ) ) AND ( `04_richtung` IN (\"E\", \"A\") )";
 
 //order by `09_vorrangstufe` DESC, `12_abfzeit`; 
 
-
-		if($conf_4f["si_in_out"]) {  //  Ein- und Ausänge sichten
 			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### Ein- und Ausgänge sichten<br>"; }
-				$query = "SELECT `00_lfd`,`07_durchspruch`,
+			$query = "SELECT `00_lfd`,`07_durchspruch`,
                          `08_befhinweis`,
                          `08_befhinwausw`,
                          `09_vorrangstufe`,
@@ -1058,17 +1087,6 @@ class Listen extends kategorien {
                          `12_abfzeit`,
                          `12_inhalt` FROM `".$conf_4f_tbl ["nachrichten"]."` ".$WHERE_inout."
                        order by `09_vorrangstufe` DESC, `12_abfzeit`; ";
-      } else {
-       	if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### nur Eingänge sichten<br>"; }
-				$query = "SELECT `00_lfd`,`07_durchspruch`,
-                         `08_befhinweis`,
-                         `08_befhinwausw`,
-                         `09_vorrangstufe`,
-                         `10_anschrift`,
-                         `12_abfzeit`,
-                         `12_inhalt` FROM `".$conf_4f_tbl ["nachrichten"]."` ".$WHERE_in."
-                        order by `09_vorrangstufe` DESC, `12_abfzeit`; ";				
-		}
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>Stab_sichten:".$query." </b><br>";}
         $result = $dbaccess->query_table ($query);
         if ($result != "" ){

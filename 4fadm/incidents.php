@@ -10,6 +10,7 @@ if (PHP_SAPI !== 'cli' && empty($_SERVER['REMOTE_USER'])) {
 }
 
 require_once __DIR__ . '/../4fcfg/dbcfg.inc.php';
+require_once __DIR__ . '/../4fcfg/config.inc.php';
 require_once __DIR__ . '/../app/csrf.php';
 require_once __DIR__ . '/../app/incident.php';
 require_once __DIR__ . '/../app/session_ui.php';
@@ -107,6 +108,51 @@ if ($requestMethod === 'POST') {
                     'kennung' => '',
                 ];
                 $redirectResult = 'deactivated';
+            } elseif ($action === 'close') {
+                if (($_POST['confirm_close'] ?? null) !== '1') {
+                    throw new EstabIncidentInputException(
+                        'Bestätigen Sie den unwiderruflichen Einsatzabschluss.'
+                    );
+                }
+                $closed = estab_incident_close(
+                    $connection,
+                    estab_incident_positive_id($_POST['einsatz_id'] ?? null),
+                    estab_incident_revision($_POST['status_revision'] ?? null),
+                    estab_incident_actor($actor),
+                    $_POST,
+                    (string) $conf_4f['ablage_dir']
+                );
+                $_SESSION['estab_incident_flash'] = [
+                    'type' => 'closed',
+                    'kennung' => (string) ($closed['kennung'] ?? ''),
+                ];
+                $redirectResult = 'closed';
+            } elseif ($action === 'set_legal_hold') {
+                $held = estab_incident_set_legal_hold(
+                    $connection,
+                    estab_incident_positive_id($_POST['einsatz_id'] ?? null),
+                    true,
+                    $_POST['legal_hold_reason'] ?? null,
+                    estab_incident_actor($actor)
+                );
+                $_SESSION['estab_incident_flash'] = [
+                    'type' => 'legal_hold_set',
+                    'kennung' => (string) ($held['kennung'] ?? ''),
+                ];
+                $redirectResult = 'legal_hold_set';
+            } elseif ($action === 'release_legal_hold') {
+                $released = estab_incident_set_legal_hold(
+                    $connection,
+                    estab_incident_positive_id($_POST['einsatz_id'] ?? null),
+                    false,
+                    null,
+                    estab_incident_actor($actor)
+                );
+                $_SESSION['estab_incident_flash'] = [
+                    'type' => 'legal_hold_released',
+                    'kennung' => (string) ($released['kennung'] ?? ''),
+                ];
+                $redirectResult = 'legal_hold_released';
             } else {
                 throw new EstabIncidentInputException(
                     'Unbekannte administrative Aktion.'
@@ -116,12 +162,45 @@ if ($requestMethod === 'POST') {
             estab_auth_close($connection);
         }
         incident_admin_redirect((string) $redirectResult);
+    } catch (EstabCsrfException) {
+        http_response_code(403);
+        $error = 'Die Formularsitzung ist ungültig oder abgelaufen. '
+            . 'Bitte laden Sie die Seite neu.';
     } catch (EstabIncidentInputException $exception) {
         http_response_code(422);
         $error = $exception->getMessage();
     } catch (EstabIncidentNotFoundException $exception) {
         http_response_code(404);
         $error = $exception->getMessage();
+    } catch (EstabIncidentCloseBlockedException $exception) {
+        http_response_code(409);
+        $error = $exception->getMessage()
+            . ' Offen: ' . (int) ($exception->preflight['open_messages'] ?? 0)
+            . ' Nachrichten, '
+            . (int) ($exception->preflight['locked_messages'] ?? 0)
+            . ' Sperren und '
+            . (int) ($exception->preflight['incomplete_attachments'] ?? 0)
+            . ' unvollständige Anhänge; Anhang-Integritätsfehler: '
+            . (int) (
+                $exception->preflight['attachment_integrity_errors'] ?? 0
+            )
+            . '; Nachweisfehler: '
+            . (int) ($exception->preflight['evidence_errors'] ?? 0)
+            . '. Offen in der Führungsorganisation: '
+            . (int) ($exception->preflight['offene_schichten'] ?? 0)
+            . ' Schichten, '
+            . (int) ($exception->preflight['offene_besetzungen'] ?? 0)
+            . ' Besetzungen, '
+            . (int) ($exception->preflight['offene_melderauftraege'] ?? 0)
+            . ' Melderaufträge und '
+            . (int) (
+                $exception->preflight['offene_fernmeldeplanentwuerfe'] ?? 0
+            )
+            . ' Fernmeldeplanentwürfe und '
+            . (int) (
+                $exception->preflight['offene_uebergabeanforderungen'] ?? 0
+            )
+            . ' Übergabeanforderungen.';
     } catch (EstabIncidentConflictException $exception) {
         http_response_code(409);
         $error = $exception->getMessage()
@@ -139,11 +218,19 @@ if ($requestMethod === 'POST') {
 
 $status = null;
 $incidents = [];
+$activePreflight = null;
 try {
     $connection = estab_auth_connect($conf_4f_db);
     try {
         $status = estab_incident_status($connection);
         $incidents = estab_incident_list($connection);
+        if ($status['active_einsatz_id'] !== null) {
+            $activePreflight = estab_incident_close_preflight(
+                $connection,
+                (int) $status['active_einsatz_id'],
+                (string) $conf_4f['ablage_dir']
+            );
+        }
     } finally {
         estab_auth_close($connection);
     }
@@ -169,6 +256,12 @@ if (
             . ' wurde angelegt und aktiviert.',
         'activated' => 'Einsatz ' . $flash['kennung'] . ' ist jetzt aktiv.',
         'deactivated' => 'Der Einsatz wurde deaktiviert. Eingaben sind jetzt gesperrt.',
+        'closed' => 'Einsatz ' . $flash['kennung']
+            . ' wurde formal und unwiderruflich abgeschlossen.',
+        'legal_hold_set' => 'Für Einsatz ' . $flash['kennung']
+            . ' wurde eine Aufbewahrungssperre gesetzt.',
+        'legal_hold_released' => 'Die zusätzliche Aufbewahrungssperre für Einsatz '
+            . $flash['kennung'] . ' wurde aufgehoben. Die Mindestfrist bleibt bestehen.',
         default => null,
     };
 }
@@ -228,8 +321,80 @@ $activeId = is_array($status) ? $status['active_einsatz_id'] : null;
           <input type="hidden" name="einsatz_id" value="<?= (int) $activeId ?>">
           <input type="hidden" name="status_revision" value="<?= $currentRevision ?>">
           <button class="estab-button estab-button-danger" type="submit">
-            Einsatz deaktivieren
+            Einsatz pausieren
           </button>
+        </form>
+      </section>
+      <section class="estab-tool-panel" aria-labelledby="incident-close-title">
+        <header class="estab-tool-panel-heading">
+          <p class="estab-tool-eyebrow">Revisionssicherer Abschluss</p>
+          <h2 id="incident-close-title">Einsatz formal abschließen</h2>
+          <p>Der formale Abschluss ist unwiderruflich. Danach sind alle normalen
+            Fachdaten gesperrt und das ETB wird mindestens ein Jahr aufbewahrt.</p>
+        </header>
+        <?php if (is_array($activePreflight)): ?>
+          <p class="estab-tool-feedback <?= $activePreflight['closable']
+              ? 'estab-tool-feedback-success'
+              : 'estab-tool-feedback-error' ?>">
+            Abschlussprüfung:
+            <?= (int) $activePreflight['open_messages'] ?> offene Nachrichten,
+            <?= (int) $activePreflight['locked_messages'] ?> Nachrichtensperren,
+            <?= (int) $activePreflight['incomplete_attachments'] ?>
+            unvollständige Anhänge,
+            <?= (int) $activePreflight['attachment_integrity_errors'] ?>
+            Anhang-Integritätsfehler,
+            <?= (int) $activePreflight['legacy_attachments_unverifiable'] ?>
+            Legacy-Anhänge (Integrität beim Eingang nicht belegbar),
+            <?= (int) $activePreflight['offene_schichten'] ?> offene Schichten,
+            <?= (int) $activePreflight['offene_besetzungen'] ?> offene Besetzungen,
+            <?= (int) $activePreflight['offene_melderauftraege'] ?>
+            offene Melderaufträge,
+            <?= (int) $activePreflight['offene_fernmeldeplanentwuerfe'] ?>
+            Fernmeldeplanentwürfe,
+            <?= (int) $activePreflight['offene_uebergabeanforderungen'] ?>
+            offene Übergabeanforderungen und
+            <?= (int) $activePreflight['evidence_errors'] ?> Nachweisfehler.
+          </p>
+        <?php endif; ?>
+        <form class="estab-tool-form" method="post" data-estab-dirty-guard>
+          <?= estab_csrf_field() ?>
+          <input type="hidden" name="admin_action" value="close">
+          <input type="hidden" name="einsatz_id" value="<?= (int) $activeId ?>">
+          <input type="hidden" name="status_revision" value="<?= $currentRevision ?>">
+          <div class="estab-tool-form-grid">
+            <div class="estab-tool-field">
+              <label for="incident-actual-end">Tatsächliches Einsatzende *</label>
+              <input
+                id="incident-actual-end"
+                type="datetime-local"
+                name="ende"
+                required
+                value="<?= incident_admin_html(date('Y-m-d\TH:i')) ?>">
+            </div>
+            <div class="estab-tool-field estab-tool-field-wide">
+              <label for="incident-close-note">Abschlussvermerk *</label>
+              <textarea
+                id="incident-close-note"
+                name="close_note"
+                maxlength="10000"
+                required
+                placeholder="Abschlusslage, Übergabe und noch bestehende Nachweise"></textarea>
+            </div>
+          </div>
+          <label class="estab-tool-check">
+            <input type="checkbox" name="confirm_close" value="1" required>
+            Ich bestätige, dass alle Vorgänge abgeschlossen sind und der
+            Einsatz nicht wieder aktiviert werden kann.
+          </label>
+          <div class="estab-tool-actions">
+            <button
+              class="estab-button estab-button-danger"
+              type="submit"
+              <?= is_array($activePreflight) && !$activePreflight['closable']
+                  ? 'disabled' : '' ?>>
+              Einsatz unwiderruflich abschließen
+            </button>
+          </div>
         </form>
       </section>
     <?php endif; ?>
@@ -368,9 +533,7 @@ $activeId = is_array($status) ? $status['active_einsatz_id'] : null;
           <div class="estab-tool-list">
             <?php foreach ($incidents as $incident): ?>
               <?php
-                $ended = is_string($incident['ende'] ?? null)
-                    && $incident['ende'] !== ''
-                    && strcmp($incident['ende'], date('Y-m-d H:i:s')) < 0;
+                $ended = ($incident['estab_status'] ?? null) === 'closed';
               ?>
               <article class="estab-tool-card<?= $incident['ist_aktiv'] ? ' estab-tool-card-active' : '' ?>">
                 <div>
@@ -392,6 +555,31 @@ $activeId = is_array($status) ? $status['active_einsatz_id'] : null;
                   <?php if ($incident['beschreibung'] !== ''): ?>
                     <p><?= nl2br(incident_admin_html($incident['beschreibung']), false) ?></p>
                   <?php endif; ?>
+                  <?php if ($ended): ?>
+                    <p><strong>Formal abgeschlossen:</strong>
+                      <?= incident_admin_html(incident_admin_datetime(
+                          $incident['estab_closed_at'] ?? null
+                      )) ?>
+                      durch <?= incident_admin_html($incident['estab_closed_by'] ?? '') ?>.
+                      Aufbewahrung mindestens bis
+                      <?= incident_admin_html(incident_admin_datetime(
+                          $incident['estab_retain_until'] ?? null
+                      )) ?>.</p>
+                    <?php if (($incident['estab_close_note'] ?? '') !== ''): ?>
+                      <p><?= nl2br(
+                          incident_admin_html($incident['estab_close_note']),
+                          false
+                      ) ?></p>
+                    <?php endif; ?>
+                  <?php endif; ?>
+                  <?php if ($incident['estab_legal_hold']): ?>
+                    <p class="estab-tool-feedback estab-tool-feedback-error">
+                      <strong>Zusätzliche Aufbewahrungssperre aktiv.</strong>
+                      <?= incident_admin_html(
+                          $incident['estab_legal_hold_reason'] ?? ''
+                      ) ?>
+                    </p>
+                  <?php endif; ?>
                 </div>
                 <div class="estab-tool-card-actions">
                   <?php if ($incident['ist_aktiv']): ?>
@@ -400,7 +588,7 @@ $activeId = is_array($status) ? $status['active_einsatz_id'] : null;
                     </span>
                   <?php elseif ($ended): ?>
                     <span class="estab-tool-badge estab-tool-badge-neutral">
-                      Beendet
+                      Formal abgeschlossen
                     </span>
                   <?php else: ?>
                     <form method="post">
@@ -416,6 +604,34 @@ $activeId = is_array($status) ? $status['active_einsatz_id'] : null;
                         value="<?= $currentRevision ?>">
                       <button class="estab-button estab-button-primary" type="submit">
                         Aktivieren
+                      </button>
+                    </form>
+                  <?php endif; ?>
+                  <?php if ($incident['estab_legal_hold']): ?>
+                    <form method="post">
+                      <?= estab_csrf_field() ?>
+                      <input type="hidden" name="admin_action" value="release_legal_hold">
+                      <input type="hidden" name="einsatz_id"
+                        value="<?= (int) $incident['einsatz_id'] ?>">
+                      <button class="estab-button" type="submit">
+                        Zusatzsperre aufheben
+                      </button>
+                    </form>
+                  <?php else: ?>
+                    <form class="estab-tool-form" method="post">
+                      <?= estab_csrf_field() ?>
+                      <input type="hidden" name="admin_action" value="set_legal_hold">
+                      <input type="hidden" name="einsatz_id"
+                        value="<?= (int) $incident['einsatz_id'] ?>">
+                      <label>
+                        Grund der zusätzlichen Aufbewahrungssperre
+                        <input
+                          name="legal_hold_reason"
+                          maxlength="1000"
+                          required>
+                      </label>
+                      <button class="estab-button" type="submit">
+                        Aufbewahrungssperre setzen
                       </button>
                     </form>
                   <?php endif; ?>

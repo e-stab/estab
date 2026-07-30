@@ -311,7 +311,6 @@ function estab_validate_runtime_configuration(): void
     estab_base_path();
 
     foreach ([
-        'ESTAB_REVIEW_OUTGOING_MESSAGES' => false,
         'ESTAB_ALLOW_SELF_REGISTRATION' => false,
         'ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF' => false,
         'ESTAB_TRUST_PROXY_HEADERS' => false,

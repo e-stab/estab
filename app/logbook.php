@@ -4,10 +4,59 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/csrf.php';
+require_once __DIR__ . '/dv_operations.php';
 require_once __DIR__ . '/incident.php';
 
 const ESTAB_LOGBOOK_TITLE_MAX_LENGTH = 255;
 const ESTAB_LOGBOOK_TEXT_MAX_LENGTH = 10000;
+const ESTAB_LOGBOOK_REFERENCE_MAX_LENGTH = 255;
+
+/** @return array<string, string> */
+function estab_logbook_entry_types(): array
+{
+    return [
+        'ereignis' => 'Ereignis',
+        'entscheidung' => 'Entscheidung',
+        'lagebesprechung' => 'Lagebesprechung',
+        'auftrag' => 'Auftrag',
+        'information' => 'Information',
+        'korrektur' => 'Korrektur',
+    ];
+}
+
+/** Accept browser datetime-local and already normalised database timestamps. */
+function estab_logbook_event_time(mixed $value): ?string
+{
+    if (!is_string($value)) {
+        throw new EstabIncidentInputException('Ereigniszeit ist ungültig.');
+    }
+    $candidate = trim($value);
+    if (
+        preg_match(
+            '/\A[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\z/D',
+            $candidate
+        ) === 1
+    ) {
+        $date = DateTimeImmutable::createFromFormat(
+            '!Y-m-d H:i:s',
+            $candidate,
+            new DateTimeZone(date_default_timezone_get())
+        );
+        $errors = DateTimeImmutable::getLastErrors();
+        if (
+            $date instanceof DateTimeImmutable
+            && ($errors === false || (
+                (int) ($errors['warning_count'] ?? 0) === 0
+                && (int) ($errors['error_count'] ?? 0) === 0
+            ))
+            && $date->format('Y-m-d H:i:s') === $candidate
+        ) {
+            return $candidate;
+        }
+        throw new EstabIncidentInputException('Ereigniszeit ist ungültig.');
+    }
+    return estab_incident_datetime($candidate, 'Ereigniszeit', true);
+}
 
 /** Return the global active incident for ETB/TBB display, or null. */
 function estab_logbook_active_incident(array $databaseConfig): ?array
@@ -40,10 +89,13 @@ function estab_logbook_entries(
             return [];
         }
         $orderColumn = $kind . '_lfd-nr';
+        $orderSql = $kind === 'etb'
+            ? '`estab_event_time` DESC, `' . $orderColumn . '` DESC'
+            : '`' . $orderColumn . '` DESC';
         $statement = $connection->prepare(
             'SELECT * FROM ' . estab_auth_table($table)
             . ' WHERE `einsatz_id` = ?'
-            . ' ORDER BY `' . $orderColumn . '` DESC'
+            . ' ORDER BY ' . $orderSql
         );
         if (!$statement) {
             throw new RuntimeException('Could not prepare logbook listing');
@@ -112,6 +164,62 @@ function estab_logbook_validate_entry(array $input): array
         ? trim($input['comment'])
         : '';
     $errors = [];
+    $eventType = isset($input['event_type']) && is_string($input['event_type'])
+        ? trim($input['event_type'])
+        : 'ereignis';
+    if (!array_key_exists($eventType, estab_logbook_entry_types())) {
+        $errors[] = 'event_type';
+    }
+
+    try {
+        $eventTime = estab_logbook_event_time(
+            $input['event_time'] ?? date('Y-m-d\TH:i'),
+        );
+    } catch (EstabIncidentInputException) {
+        $eventTime = null;
+        $errors[] = 'event_time';
+    }
+
+    $messageId = null;
+    $attachmentId = null;
+    $correctionOf = null;
+    foreach ([
+        'message_id' => &$messageId,
+        'attachment_id' => &$attachmentId,
+        'correction_of' => &$correctionOf,
+    ] as $field => &$target) {
+        $candidate = $input[$field] ?? null;
+        if ($candidate === null || $candidate === '') {
+            $target = null;
+            continue;
+        }
+        try {
+            $target = estab_incident_positive_id($candidate, $field);
+        } catch (EstabIncidentInputException) {
+            $target = null;
+            $errors[] = $field;
+        }
+    }
+    unset($target);
+
+    if (
+        ($eventType === 'korrektur' && $correctionOf === null)
+        || ($eventType !== 'korrektur' && $correctionOf !== null)
+    ) {
+        $errors[] = 'correction_of';
+    }
+
+    $reference = isset($input['reference']) && is_string($input['reference'])
+        ? trim($input['reference'])
+        : '';
+    $referenceLength = estab_auth_text_length($reference);
+    if (
+        $referenceLength < 0
+        || $referenceLength > ESTAB_LOGBOOK_REFERENCE_MAX_LENGTH
+        || preg_match('/\p{C}/u', $reference) === 1
+    ) {
+        $errors[] = 'reference';
+    }
 
     $eventLength = estab_auth_text_length($event);
     if (
@@ -139,8 +247,138 @@ function estab_logbook_validate_entry(array $input): array
         'data' => [
             'event' => $event,
             'comment' => $comment,
+            'event_time' => $eventTime,
+            'event_type' => $eventType,
+            'message_id' => $messageId,
+            'attachment_id' => $attachmentId,
+            'reference' => $reference === '' ? null : $reference,
+            'correction_of' => $correctionOf,
         ],
     ];
+}
+
+/**
+ * Lock one referenced operational record and return its ownership metadata.
+ *
+ * The SQL is assembled exclusively by estab_logbook_validate_references()
+ * from fixed table/column names (or an identifier accepted by
+ * estab_auth_table()). Values remain bound parameters.
+ *
+ * @return array<string, mixed>|null
+ */
+function estab_logbook_reference_row(
+    mysqli $connection,
+    string $sql,
+    int $referenceId
+): ?array {
+    $statement = $connection->prepare($sql);
+    if (!$statement) {
+        throw new RuntimeException('Logbuchbezug konnte nicht vorbereitet werden.');
+    }
+    try {
+        $statement->bind_param('i', $referenceId);
+        if (!$statement->execute()) {
+            throw new RuntimeException('Logbuchbezug konnte nicht geprüft werden.');
+        }
+        $result = $statement->get_result();
+        $row = $result->fetch_assoc();
+        $result->free();
+        return is_array($row) ? $row : null;
+    } finally {
+        $statement->close();
+    }
+}
+
+/**
+ * Prove that every optional ETB reference belongs to the active incident.
+ *
+ * This runs inside estab_incident_with_active_write() and locks every target
+ * until the ETB insert commits. The database trigger repeats the invariant as
+ * a defence-in-depth boundary for writes that bypass this application API.
+ *
+ * Corrections always point directly to an immutable original entry. Pointing
+ * to another correction would create an ambiguous correction chain.
+ */
+function estab_logbook_validate_references(
+    mysqli $connection,
+    int $incidentId,
+    string $table,
+    array $entry
+): void {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $messageId = $entry['message_id'] ?? null;
+    if ($messageId !== null) {
+        $messageId = estab_incident_positive_id($messageId, 'Nachrichten-ID');
+        $message = estab_logbook_reference_row(
+            $connection,
+            'SELECT `einsatz_id` FROM `nv_nachrichten`'
+                . ' WHERE `00_lfd` = ? LIMIT 1 FOR UPDATE',
+            $messageId
+        );
+        if (
+            !is_array($message)
+            || (int) ($message['einsatz_id'] ?? 0) !== $incidentId
+        ) {
+            throw new EstabIncidentConflictException(
+                'Die referenzierte Nachricht gehört nicht zum aktiven Einsatz.'
+            );
+        }
+    }
+
+    $attachmentId = $entry['attachment_id'] ?? null;
+    if ($attachmentId !== null) {
+        $attachmentId = estab_incident_positive_id(
+            $attachmentId,
+            'Anhangs-ID'
+        );
+        $attachment = estab_logbook_reference_row(
+            $connection,
+            'SELECT `einsatz_id` FROM `nv_anhang`'
+                . ' WHERE `lfd-nr` = ? LIMIT 1 FOR UPDATE',
+            $attachmentId
+        );
+        if (
+            !is_array($attachment)
+            || (int) ($attachment['einsatz_id'] ?? 0) !== $incidentId
+        ) {
+            throw new EstabIncidentConflictException(
+                'Der referenzierte Anhang gehört nicht zum aktiven Einsatz.'
+            );
+        }
+    }
+
+    $correctionOf = $entry['correction_of'] ?? null;
+    if ($correctionOf === null) {
+        return;
+    }
+    $correctionOf = estab_incident_positive_id(
+        $correctionOf,
+        'Korrekturbezug'
+    );
+    $original = estab_logbook_reference_row(
+        $connection,
+        'SELECT `einsatz_id`, `estab_event_type`, `estab_correction_of`'
+            . ' FROM ' . estab_auth_table($table)
+            . ' WHERE `etb_lfd-nr` = ? LIMIT 1 FOR UPDATE',
+        $correctionOf
+    );
+    if (
+        !is_array($original)
+        || (int) ($original['einsatz_id'] ?? 0) !== $incidentId
+    ) {
+        throw new EstabIncidentConflictException(
+            'Der Korrekturbezug gehört nicht zum aktiven Einsatz.'
+        );
+    }
+    if (
+        ($original['estab_event_type'] ?? null) === 'korrektur'
+        || ($original['estab_correction_of'] ?? null) !== null
+    ) {
+        throw new EstabIncidentConflictException(
+            'Eine Korrektur muss direkt auf den ursprünglichen ETB-Eintrag '
+            . 'verweisen.'
+        );
+    }
 }
 
 /** Test whether a configured table exists without interpolating its name. */
@@ -236,14 +474,19 @@ function estab_logbook_insert_entry(
     string $kind,
     array $entry,
     array $identity
-): void {
+): int {
     if (!in_array($kind, ['etb', 'tbb'], true)) {
         throw new InvalidArgumentException('Invalid logbook kind');
     }
+    $validation = estab_logbook_validate_entry($entry);
+    if (!$validation['valid']) {
+        throw new InvalidArgumentException('Invalid logbook entry');
+    }
+    $entry = $validation['data'];
 
     $connection = estab_auth_connect($databaseConfig);
     try {
-        estab_incident_with_active_write(
+        return estab_incident_with_active_write(
             $connection,
             static function (array $incident) use (
                 $connection,
@@ -251,14 +494,39 @@ function estab_logbook_insert_entry(
                 $kind,
                 $entry,
                 $identity
-            ): void {
+            ): int {
                 $prefix = $kind . '_';
+                $incidentId = (int) $incident['active_einsatz_id'];
+                estab_dv_require_active_capability_for_operational_write(
+                    $connection,
+                    $incidentId,
+                    $identity,
+                    $kind === 'etb'
+                        ? 'EINSATZTAGEBUCH'
+                        : 'BEFOERDERUNG'
+                );
+                if ($kind === 'etb') {
+                    estab_logbook_validate_references(
+                        $connection,
+                        $incidentId,
+                        $table,
+                        $entry
+                    );
+                }
                 $sql = 'INSERT INTO ' . estab_auth_table($table)
                     . ' (`einsatz_id`, `' . $prefix . 'time`,'
                     . ' `' . $prefix . 'aktion`, `' . $prefix . 'bemerk`,'
                     . ' `' . $prefix . 'funktion`, `' . $prefix . 'kuerzel`,'
-                    . ' `' . $prefix . 'benutzer`)'
-                    . ' VALUES (?, NOW(), ?, ?, ?, ?, ?)';
+                    . ' `' . $prefix . 'benutzer`'
+                    . ($kind === 'etb'
+                        ? ', `estab_event_time`, `estab_event_type`,'
+                            . ' `estab_message_id`, `estab_attachment_id`,'
+                            . ' `estab_reference`, `estab_correction_of`'
+                        : '')
+                    . ')'
+                    . ($kind === 'etb'
+                        ? ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                        : ' VALUES (?, NOW(), ?, ?, ?, ?, ?)');
                 $statement = $connection->prepare($sql);
                 if (!$statement) {
                     throw new RuntimeException(
@@ -266,26 +534,57 @@ function estab_logbook_insert_entry(
                     );
                 }
                 try {
-                    $incidentId = (int) $incident['active_einsatz_id'];
                     $event = (string) ($entry['event'] ?? '');
                     $comment = (string) ($entry['comment'] ?? '');
                     $function = (string) ($identity['funktion'] ?? '');
                     $code = (string) ($identity['kuerzel'] ?? '');
                     $user = (string) ($identity['benutzer'] ?? '');
-                    $statement->bind_param(
-                        'isssss',
-                        $incidentId,
-                        $event,
-                        $comment,
-                        $function,
-                        $code,
-                        $user
-                    );
+                    if ($kind === 'etb') {
+                        $eventTime = (string) ($entry['event_time'] ?? '');
+                        $eventType = (string) ($entry['event_type'] ?? '');
+                        $messageId = $entry['message_id'] ?? null;
+                        $attachmentId = $entry['attachment_id'] ?? null;
+                        $reference = $entry['reference'] ?? null;
+                        $correctionOf = $entry['correction_of'] ?? null;
+                        $statement->bind_param(
+                            'issssssssiisi',
+                            $incidentId,
+                            $eventTime,
+                            $event,
+                            $comment,
+                            $function,
+                            $code,
+                            $user,
+                            $eventTime,
+                            $eventType,
+                            $messageId,
+                            $attachmentId,
+                            $reference,
+                            $correctionOf
+                        );
+                    } else {
+                        $statement->bind_param(
+                            'isssss',
+                            $incidentId,
+                            $event,
+                            $comment,
+                            $function,
+                            $code,
+                            $user
+                        );
+                    }
                     if (!$statement->execute()) {
                         throw new RuntimeException(
                             'Could not execute logbook entry insert'
                         );
                     }
+                    $entryId = (int) $connection->insert_id;
+                    if ($entryId < 1) {
+                        throw new RuntimeException(
+                            'Could not determine logbook entry ID'
+                        );
+                    }
+                    return $entryId;
                 } finally {
                     $statement->close();
                 }

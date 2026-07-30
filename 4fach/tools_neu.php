@@ -388,17 +388,6 @@ require_once __DIR__ . "/../app/datetime.php";
     echo "</table>";
   }
 
-  function sichter_online (){
-//    include ("../config.inc.php");
-    include ("../4fcfg/dbcfg.inc.php");
-    include ("../4fcfg/e_cfg.inc.php");
-    $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],$conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"]);
-    $query = "SELECT count(*) FROM `".$conf_4f_tbl ["benutzer"]."` WHERE ( ( `funktion` = \"Si\" ) AND ( `aktiv` = 1 ));";
-    $result = $dbaccess->query_table_wert ($query);
-    return ($result[0] > 0);
-  }
-
-
 /******************************************************************************
 Gibt eine Tabelle aus in der alle angemeldeten Rollen und Funktionen
 bersichtlich dargestellt werden.

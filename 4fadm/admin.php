@@ -44,6 +44,16 @@ $sections = [
                 'badge' => 'Zugriffsschutz',
                 'href' => 'users.php',
             ],
+            [
+                'key' => 'command-post',
+                'number' => '03',
+                'title' => 'Führungsstelle und Dienstschichten',
+                'description' => 'Schichten vorbereiten, mehrere '
+                    . 'Funktions-Hüte je Konto zuweisen und bestätigte '
+                    . 'Übergaben revisionssicher durchführen.',
+                'badge' => 'DV 1-101',
+                'href' => 'fuehrungsstelle.php',
+            ],
         ],
     ],
     [
@@ -53,16 +63,17 @@ $sections = [
         'items' => [
             [
                 'key' => 'matrix',
-                'number' => '03',
+                'number' => '04',
                 'title' => 'Empfängermatrix',
-                'description' => 'Funktionen, Rollen, Rotkopie und Autosichtung '
-                    . 'bearbeiten sowie einen geprüften Standard verwalten.',
+                'description' => 'Funktionen und Rollen bearbeiten; S2 bleibt '
+                    . 'verbindliche Lage-/Dokumentationsfunktion und '
+                    . 'Rotkopieziel.',
                 'badge' => 'Konfiguration',
                 'href' => 'make_fkt.php',
             ],
             [
                 'key' => 'counter',
-                'number' => '04',
+                'number' => '05',
                 'title' => 'Nachrichtenzähler',
                 'description' => 'Nach einem dokumentierten Systemausfall die '
                     . 'zuletzt auf Papier verwendete Nummer sicher erhöhen.',
@@ -71,7 +82,7 @@ $sections = [
             ],
             [
                 'key' => 'print-reset',
-                'number' => '05',
+                'number' => '06',
                 'title' => 'Vordruckmarkierungen zurücksetzen',
                 'description' => 'Abgeschlossene Nachrichten beim nächsten Lauf '
                     . 'erneut als PDF-Vordruck erzeugen lassen.',
@@ -87,7 +98,7 @@ $sections = [
         'items' => [
             [
                 'key' => 'incident-pdf',
-                'number' => '06',
+                'number' => '07',
                 'title' => 'PDF-Einsatzdossier',
                 'description' => 'ETB, TBB, Nachrichtenvordrucke und '
                     . 'Originalanhänge eines gewählten Einsatzes als '
@@ -97,7 +108,7 @@ $sections = [
             ],
             [
                 'key' => 'export',
-                'number' => '07',
+                'number' => '08',
                 'title' => 'Einsatzexporte',
                 'description' => 'Exporte erstellen, Manifest und Prüfsummen '
                     . 'ansehen, ZIP-Dateien herunterladen oder einzeln löschen.',
@@ -106,7 +117,7 @@ $sections = [
             ],
             [
                 'key' => 'system-status',
-                'number' => '08',
+                'number' => '09',
                 'title' => 'Systemstatus',
                 'description' => 'PHP, Datenbank, persistente Speicher und die '
                     . 'wirksame Containerkonfiguration kontrollieren.',

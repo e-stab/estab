@@ -33,10 +33,16 @@
                 "descr" => "Bearbeiten der Empf&auml;nger (Fachberater) im Sichterbereich sowie der Funktionen die sich anmelden k&ouml;nnen."),
 
     array ("acl"   => "",
+                "vis" => true,
+                "link"  => "./fuehrungsstelle.php",
+                "menue" => "F&uuml;hrungsstelle und Dienstschichten",
+                "descr" => "Dienstschichten, Mehrfachfunktionen und best&auml;tigte &Uuml;bergaben gem&auml;&szlig; DV 1-101 verwalten."),
+
+    array ("acl"   => "",
                 "vis" => false,
                 "link"  => "",
                 "menue" => "Ersatzsichter",
-                "descr" => "Sichtung durch: Fernmelder (A/W) oder automatische Sichtung."),
+                "descr" => "Nicht verfügbar: Sichtung erfordert eine besetzte Funktion Si."),
 
     array ("acl" => "",
                 "vis" => true,

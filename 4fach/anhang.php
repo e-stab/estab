@@ -21,8 +21,20 @@ include ("./upload_class.php");
 require_once __DIR__ . "/../app/attachment.php";
 require_once __DIR__ . "/../app/csrf.php";
 require_once __DIR__ . "/../app/file_access.php";
+require_once __DIR__ . "/../app/read_authorization.php";
 require_once __DIR__ . "/../app/session_ui.php";
 require_once __DIR__ . "/../app/workflow.php";
+
+function estab_attachment_current_identity (): array {
+  if (!isset ($_SESSION) || !is_array ($_SESSION)) {
+    throw new EstabDvPermissionException ("Anmeldung erforderlich.");
+  }
+  $identity = estab_auth_session_identity ($_SESSION);
+  if (!is_array ($identity)) {
+    throw new EstabDvPermissionException ("Anmeldung erforderlich.");
+  }
+  return $identity;
+}
 
 class fileupload extends file_upload {
   // fs - fileselectform Dateiauswahl
@@ -67,6 +79,7 @@ class fileupload extends file_upload {
         $conf_4f_tbl ["anhang"],
         $conf_4f ["hoheit"],
         session_id (),
+        estab_attachment_current_identity (),
         $this->filenamezero
       );
       return $this->fs_nextfilename;
@@ -179,7 +192,13 @@ class fileupload extends file_upload {
     require ("../4fcfg/e_cfg.inc.php");
     $connection = estab_attachment_connection ($conf_4f_db);
     try {
-      return estab_attachment_claim ($connection, $conf_4f_tbl ["anhang"], $filename, session_id ());
+      return estab_attachment_claim (
+        $connection,
+        $conf_4f_tbl ["anhang"],
+        $filename,
+        session_id (),
+        estab_attachment_current_identity ()
+      );
     } finally {
       estab_attachment_close ($connection);
     }
@@ -214,7 +233,8 @@ class fileupload extends file_upload {
         $connection,
         $conf_4f_tbl ["anhang"],
         session_id (),
-        $metadata
+        $metadata,
+        estab_attachment_current_identity ()
       );
       if (!$saved) {
         return false;
@@ -438,12 +458,52 @@ class fileupload extends file_upload {
 if (session_status () === PHP_SESSION_NONE) {
   session_start ();
 }
-if (!estab_auth_session_is_authenticated ($_SESSION)) {
+$attachmentPageIdentity = estab_read_session_identity ($_SESSION);
+if (!is_array ($attachmentPageIdentity)) {
   http_response_code (403);
   header ("Content-Type: text/plain; charset=UTF-8");
   header ("Cache-Control: no-store");
   echo "Anmeldung erforderlich.";
   exit;
+}
+$attachmentPageConnection = null;
+try {
+  require ("../4fcfg/dbcfg.inc.php");
+  require ("../4fcfg/e_cfg.inc.php");
+  $attachmentPageConnection = estab_attachment_connection ($conf_4f_db);
+  $attachmentPageIncident = estab_incident_require_active (
+    $attachmentPageConnection
+  );
+  estab_read_require_identity_scope (
+    $attachmentPageConnection,
+    (int) $attachmentPageIncident ["active_einsatz_id"],
+    $attachmentPageIdentity
+  );
+} catch (EstabNoActiveIncidentException) {
+  http_response_code (409);
+  header ("Content-Type: text/plain; charset=UTF-8");
+  header ("Cache-Control: no-store");
+  echo "Kein Einsatz aktiv.";
+  exit;
+} catch (EstabReadPermissionException) {
+  http_response_code (403);
+  header ("Content-Type: text/plain; charset=UTF-8");
+  header ("Cache-Control: no-store");
+  echo "Wählen Sie zuerst eine persönlich angenommene Dienstfunktion.";
+  exit;
+} catch (Throwable $exception) {
+  error_log (
+    "eStab attachment page authorization failed: ".$exception->getMessage ()
+  );
+  http_response_code (503);
+  header ("Content-Type: text/plain; charset=UTF-8");
+  header ("Cache-Control: no-store");
+  echo "Die Anhangberechtigung kann derzeit nicht geprüft werden.";
+  exit;
+} finally {
+  if ($attachmentPageConnection instanceof mysqli) {
+    estab_attachment_close ($attachmentPageConnection);
+  }
 }
 estab_session_ui_start ($_SESSION);
 
@@ -658,13 +718,10 @@ if ( debug == true ){
       }
     }
     unset ($_SESSION ["anhang_message_context"], $_SESSION ["anhang_menue"]);
-    if (sichter_online()) {
-      $form = new nachrichten4fach ($formdata, "FM-Eingang_Anhang", "");
-    } else {
-      $formdata ["15_quitzeichen"]  = $_SESSION ["vStab_kuerzel"];
-//      $formdata ["16_empf"]         = $_SESSION ["16_empf"]; //"";
-      $form = new nachrichten4fach ($formdata, "FM-Eingang_Anhang_Sichter", "");
-    }
+    // Returning from attachment selection never changes the signed workflow
+    // task and never lets A/W impersonate the mandatory Si review.
+    unset ($formdata ["15_quitdatum"], $formdata ["15_quitzeichen"]);
+    $form = new nachrichten4fach ($formdata, "FM-Eingang_Anhang", "");
     exit;
   }
 
@@ -699,7 +756,20 @@ require_once ("./db_operation.php");  // Datenbank operationen
     require ("../4fcfg/e_cfg.inc.php");
     $connection = estab_attachment_connection ($conf_4f_db);
     try {
-      return estab_attachment_list ($connection, $conf_4f_tbl ["anhang"]);
+      $identity = estab_read_session_identity ($_SESSION);
+      if (!is_array ($identity)) {
+        throw new EstabReadPermissionException ("Anmeldung erforderlich.");
+      }
+      $attachments = estab_attachment_list (
+        $connection,
+        $conf_4f_tbl ["anhang"]
+      );
+      return estab_read_filter_attachments (
+        $connection,
+        $conf_4f_tbl ["nachrichten"],
+        $attachments,
+        $identity
+      );
     } finally {
       estab_attachment_close ($connection);
     }
@@ -711,9 +781,11 @@ require_once ("./db_operation.php");  // Datenbank operationen
     benoetigte Datei:
   \**********************************************************************/
   function readrecord_from_db($anhangname){
-    $filename = pathinfo (basename ((string) $anhangname), PATHINFO_FILENAME);
     try {
-      $filename = estab_attachment_validate_reservation_name ($filename);
+      $requested = estab_file_validate_name (
+        "attachment",
+        (string) $anhangname
+      );
     } catch (InvalidArgumentException) {
       return array ();
     }
@@ -721,7 +793,17 @@ require_once ("./db_operation.php");  // Datenbank operationen
     require ("../4fcfg/e_cfg.inc.php");
     $connection = estab_attachment_connection ($conf_4f_db);
     try {
-      $result = estab_attachment_find ($connection, $conf_4f_tbl ["anhang"], $filename);
+      $identity = estab_read_session_identity ($_SESSION);
+      if (!is_array ($identity)) {
+        return array ();
+      }
+      $result = estab_read_attachment (
+        $connection,
+        $conf_4f_tbl ["anhang"],
+        $conf_4f_tbl ["nachrichten"],
+        $requested,
+        $identity
+      );
       return is_array ($result) ? array (1 => $result) : array ();
     } finally {
       estab_attachment_close ($connection);
@@ -996,39 +1078,34 @@ require_once ("./db_operation.php");  // Datenbank operationen
     if (isset ($_SESSION["15_quitdatum"])){    $data["15_quitdatum"]    = $_SESSION["15_quitdatum"];    unset ($_SESSION["15_quitdatum"]); }    else { $data["15_quitdatum"]   = "";}
     if (isset ($_SESSION["15_quitzeichen"])){  $data["15_quitzeichen"]  = $_SESSION["15_quitzeichen"];  unset ($_SESSION["15_quitzeichen"]); }  else { $data["15_quitzeichen"] = "";}
 
-    $gncopypos = "";
-    if (isset ($_SESSION["16_gncopy"]) &&
-        is_string ($_SESSION["16_gncopy"]) &&
-        preg_match ("/\\A16_([1-5][1-4])_gn\\z/D", $_SESSION["16_gncopy"], $gncopyParts)){
-      $gncopypos = $gncopyParts [1];
+    $distributionRequest = array ();
+    if (isset ($_SESSION["16_gncopy"])) {
+      $distributionRequest ["16_gncopy"] = $_SESSION ["16_gncopy"];
     }
     unset ($_SESSION["16_gncopy"]);
-		$data ["16_empf"] = "";
     for ($m=1; $m<=5; $m++){
       for ($n=1; $n<=4; $n++){
         $recipientKey = "16_".$m.$n;
-        if ( isset ( $_SESSION [$recipientKey] ) ) {
-          $recipientValue = is_string ($_SESSION [$recipientKey])
-            ? $_SESSION [$recipientKey]
-            : "";
-          $recipientPattern = "/\\A16_".$m.$n."(?:_(bl))?\\z/D";
-          if (preg_match ($recipientPattern, $recipientValue, $recipientParts)) {
-            $recipientFunction = (string) ($empf_matrix [$m][$n]["fkt"] ?? "");
-            $copyColor = $recipientParts [1] ?? "";
-            if ($recipientFunction !== "") {
-              $data ["16_empf"] .= $recipientFunction."_".$copyColor.",";
-            }
-          }
-//           echo "SESSION====".$_SESSION ["16_".$m.$n]." data=== ".$data ["16_empf"]."<br>";
+        if (isset ($_SESSION [$recipientKey])) {
+          $distributionRequest [$recipientKey] = $_SESSION [$recipientKey];
           unset ($_SESSION [$recipientKey]);
         }
-        if ((string) ($m.$n) === $gncopypos) {
-          $recipientFunction = (string) ($empf_matrix [$m][$n]["fkt"] ?? "");
-          if ($recipientFunction !== "") {
-            $data ["16_empf"] .= $recipientFunction."_gn,";
-          }
-        }
       }
+    }
+    try {
+      $data ["16_empf"] = estab_workflow_distribution_tokens (
+        $distributionRequest,
+        $empf_matrix
+      );
+    } catch (InvalidArgumentException $exception) {
+      // The request guard already rejects malformed browser values. Session
+      // restoration repeats the same boundary so stale/tampered state cannot
+      // turn into a function name.
+      error_log (
+        "eStab attachment recipient restore rejected: ".
+        $exception->getMessage ()
+      );
+      $data ["16_empf"] = "";
     }
     if (isset ($_SESSION["17_vermerke"])){     $data["17_vermerke"]     = $_SESSION["17_vermerke"];     unset ($_SESSION["17_vermerke"]); }
     return $data;
@@ -1097,6 +1174,7 @@ require_once ("./db_operation.php");  // Datenbank operationen
             $new_name,
             session_id (),
             (string) ($_SESSION ["vStab_kuerzel"] ?? ""),
+            estab_attachment_current_identity (),
             "Anhangdaten speichern",
             function () use (
               $my_upload,
@@ -1126,6 +1204,9 @@ require_once ("./db_operation.php");  // Datenbank operationen
                   "Die Dateiprüfsumme konnte nicht erstellt werden."
                 );
               }
+              $integrity = estab_attachment_integrity_measure_file (
+                $full_path
+              );
               return array (
                 "filename" => basename ($full_path),
                 "org_filename" => $upload ["name"],
@@ -1134,6 +1215,8 @@ require_once ("./db_operation.php");  // Datenbank operationen
                   : "",
                 "time" => $timestamp,
                 "md5hash" => $digest,
+                "sha256" => $integrity ["sha256"],
+                "size" => $integrity ["size"],
               );
             },
             static function (array $metadata): string {
@@ -1145,7 +1228,8 @@ require_once ("./db_operation.php");  // Datenbank operationen
                      estab_auth_remote_ip ($_SERVER).";".
                      $metadata ["filename"].".".$metadata ["fileext"].";".
                      $metadata ["org_filename"].";".
-                     $metadata ["date"];
+                     $metadata ["date"].";sha256=".$metadata ["sha256"].";".
+                     "bytes=".(string) $metadata ["size"];
             }
           );
         } finally {

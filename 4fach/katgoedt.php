@@ -18,6 +18,7 @@ require_once __DIR__ . '/../app/csrf.php';
 require_once __DIR__ . '/../app/session_ui.php';
 require_once __DIR__ . '/../app/category.php';
 require_once __DIR__ . '/../app/message_repository.php';
+require_once __DIR__ . '/../app/read_authorization.php';
 require_once __DIR__ . '/../4fcfg/config.inc.php';
 require_once __DIR__ . '/../4fcfg/dbcfg.inc.php';
 require_once __DIR__ . '/../4fcfg/e_cfg.inc.php';
@@ -208,6 +209,11 @@ function estab_category_render_manager(
 
 try {
     $connection = estab_auth_connect($conf_4f_db);
+    $readScope = estab_read_require_operational_scope(
+        $connection,
+        estab_read_session_identity($_SESSION) ?? []
+    );
+    $identity = $readScope['identity'];
     $redcopy = estab_category_redcopy_function(
         $connection,
         (string) $conf_4f_tbl['empfmtx']
@@ -220,6 +226,18 @@ try {
         } catch (Throwable) {
             estab_workflow_forbid();
         }
+        $activeIncident = estab_incident_active($connection);
+        if ($activeIncident === null) {
+            throw new EstabCategoryConflictException(
+                'Kategorien können nur während eines aktiven Einsatzes '
+                . 'geändert werden.'
+            );
+        }
+        estab_dv_require_active_hat_for_operational_write(
+            $connection,
+            (int) $activeIncident['active_einsatz_id'],
+            $identity
+        );
 
         $action = $_POST['category_action'] ?? null;
         if (!is_string($action) || !in_array(
@@ -235,10 +253,11 @@ try {
                 $_POST['msglfd'] ?? $_POST['message_id'] ?? null,
                 'Meldungs-ID'
             );
-            $message = estab_message_fetch_by_id(
+            $message = estab_read_message(
                 $connection,
                 (string) $conf_4f_tbl['nachrichten'],
-                $messageId
+                $messageId,
+                $identity
             );
             if (
                 !is_array($message)
@@ -287,6 +306,18 @@ try {
 
         $type = estab_category_validate_type($_POST['dbtyp'] ?? null);
         $messageId = estab_category_positive_id($_POST['msgno'] ?? null, 'Meldungs-ID');
+        if (
+            estab_read_message(
+                $connection,
+                (string) $conf_4f_tbl['nachrichten'],
+                $messageId,
+                $identity
+            ) === null
+        ) {
+            throw new EstabCategoryAuthorizationException(
+                'Keine Berechtigung für diese Meldung.'
+            );
+        }
         estab_category_require_management($type, $identity, $redcopy);
         $scope = estab_category_scope($type, $identity, $conf_4f_tbl);
         $status = '';
@@ -319,6 +350,18 @@ try {
 
     $type = estab_category_validate_type($_GET['dbtyp'] ?? null);
     $messageId = estab_category_positive_id($_GET['msgno'] ?? null, 'Meldungs-ID');
+    if (
+        estab_read_message(
+            $connection,
+            (string) $conf_4f_tbl['nachrichten'],
+            $messageId,
+            $identity
+        ) === null
+    ) {
+        throw new EstabCategoryAuthorizationException(
+            'Keine Berechtigung für diese Meldung.'
+        );
+    }
     estab_category_require_management($type, $identity, $redcopy);
     $scope = estab_category_scope($type, $identity, $conf_4f_tbl);
     $editing = null;
@@ -333,6 +376,12 @@ try {
     estab_category_render_manager($connection, $scope, $messageId, $editing, $status);
 } catch (EstabCategoryAuthorizationException $exception) {
     estab_category_endpoint_error(403, 'Aktion nicht erlaubt.');
+} catch (EstabReadPermissionException $exception) {
+    estab_category_endpoint_error(403, 'Aktion nicht erlaubt.');
+} catch (EstabNoActiveIncidentException $exception) {
+    estab_category_endpoint_error(409, 'Kein Einsatz ist aktiv.');
+} catch (EstabDvPermissionException $exception) {
+    estab_category_endpoint_error(423, $exception->getMessage());
 } catch (EstabCategoryNotFoundException $exception) {
     estab_category_endpoint_error(404, $exception->getMessage());
 } catch (EstabCategoryInputException|EstabCategoryConflictException $exception) {

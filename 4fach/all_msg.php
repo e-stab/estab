@@ -1,5 +1,19 @@
 <?php
 
+/*
+ * Retired unrestricted overview.
+ *
+ * This historical controller performed direct GET-driven message reads and
+ * cannot satisfy the active duty/capability and object-level authorization
+ * model. The runtime image does not ship it; source deployments fail closed
+ * here before any include, session, query, or HTML renderer can execute.
+ */
+http_response_code(410);
+header('Content-Type: text/plain; charset=UTF-8');
+header('Cache-Control: no-store');
+echo 'Diese alte Meldungsübersicht ist stillgelegt.';
+exit;
+
 include ("../4fcfg/config.inc.php");            // Konfigurationseinstellungen und Vorgaben
 include ("../4fach/db_operation.php");          // Datenbank operationen
 include ("../4fach/data_hndl.php");             // propritäre  Datenbankoperationen

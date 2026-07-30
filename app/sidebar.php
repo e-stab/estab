@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/incident.php';
+require_once __DIR__ . '/message_repository.php';
 
 /**
  * Return the distinct configured functions in their established display order.
@@ -216,6 +217,15 @@ function estab_sidebar_queue_query(
                 . " AND `02_zeichen` = ''"
                 . ' AND `03_datum` IS NULL'
                 . " AND `03_zeichen` = ''"
+                . ' AND ('
+                . "(`04_richtung` = 'E'"
+                . ' AND `15_quitdatum` IS NULL'
+                . " AND `15_quitzeichen` = '')"
+                . ' OR '
+                . "(`04_richtung` = 'A'"
+                . ' AND `15_quitdatum` IS NOT NULL'
+                . " AND `15_quitzeichen` != '')"
+                . ')'
                 . " AND `x01_abschluss` = 'f'",
             'parameters' => [$incidentId],
         ];
@@ -232,16 +242,21 @@ function estab_sidebar_queue_query(
                 . " AND `06_befwegausw` != ''"
                 . ' AND `03_datum` IS NULL'
                 . " AND `03_zeichen` = ''"
+                . ' AND `15_quitdatum` IS NOT NULL'
+                . " AND `15_quitzeichen` != ''"
                 . " AND `x01_abschluss` = 'f'",
             'parameters' => [$incidentId],
         ];
     }
 
     if ($queueSessionKey === 'old_que_si') {
-        $reviewScope = $includeOutgoingForReview
-            ? "(`04_richtung` = 'E'"
-                . " OR (`03_datum` IS NOT NULL AND `03_zeichen` != ''))"
-            : "`04_richtung` = 'E'";
+        /*
+         * DV 1-101, Abschnitt 4.3: Jeder Ausgang wird vor der Übergabe an
+         * LdF/A-W formal gesichtet.  Der historische Schalter bleibt nur in
+         * der Signatur, damit bestehende Aufrufer kompatibel bleiben; er darf
+         * den verbindlichen Prüfschritt nicht mehr abschalten.
+         */
+        unset($includeOutgoingForReview);
 
         return [
             'sql' => 'SELECT COUNT(*) FROM ' . $messages
@@ -249,7 +264,7 @@ function estab_sidebar_queue_query(
                 . ' AND `x00_status` = 4'
                 . ' AND `15_quitdatum` IS NULL'
                 . " AND `15_quitzeichen` = ''"
-                . ' AND (' . $reviewScope . ')',
+                . " AND `04_richtung` IN ('E','A')",
             'parameters' => [$incidentId],
         ];
     }
@@ -268,29 +283,29 @@ function estab_sidebar_queue_query(
     $doneTable = estab_auth_table(
         $userTablePrefix . '_fkt_' . strtolower($function) . '_erl'
     );
-    $recipientPattern = '%' . $function . '%';
+    $recipientPattern = estab_message_recipient_pattern($function);
+    $allAccess = estab_message_staff_access_sql('all_messages');
+    $doneAccess = estab_message_staff_access_sql('done_messages');
 
     return [
         'sql' => 'SELECT GREATEST(0,'
             . ' (SELECT COUNT(*) FROM ' . $messages . ' AS `all_messages`'
             . ' WHERE `all_messages`.`einsatz_id` = ?'
-            . " AND (`all_messages`.`04_richtung` <> 'E'"
-            . ' OR `all_messages`.`x00_status` <> 1)'
-            . ' AND `all_messages`.`16_empf` LIKE ?)'
+            . ' AND ' . $allAccess . ')'
             . ' -'
             . ' (SELECT COUNT(*) FROM ' . $messages . ' AS `done_messages`'
             . ' INNER JOIN ' . $doneTable . ' AS `done_state`'
             . ' ON `done_messages`.`00_lfd` = `done_state`.`nachnum`'
             . ' WHERE `done_messages`.`einsatz_id` = ?'
-            . " AND (`done_messages`.`04_richtung` <> 'E'"
-            . ' OR `done_messages`.`x00_status` <> 1)'
-            . ' AND `done_messages`.`16_empf` LIKE ?)'
+            . ' AND ' . $doneAccess . ')'
             . ')',
         'parameters' => [
             $incidentId,
             $recipientPattern,
+            $function,
             $incidentId,
             $recipientPattern,
+            $function,
         ],
     ];
 }
@@ -482,6 +497,18 @@ function estab_sidebar_workflow_actions(
     if ($identity === null || $menuState !== 'ROLLE') {
         return [];
     }
+    $assignment = $identity['duty_assignment_id'] ?? null;
+    if (
+        !(
+            (is_int($assignment) && $assignment > 0)
+            || (
+                is_string($assignment)
+                && preg_match('/\A[1-9][0-9]{0,18}\z/D', $assignment) === 1
+            )
+        )
+    ) {
+        return [];
+    }
     $role = $identity['rolle'] ?? null;
     $function = $identity['funktion'] ?? null;
     if (!is_string($role) || !is_string($function)) {
@@ -572,6 +599,37 @@ function estab_sidebar_workflow_actions(
     ];
 
     return $actions;
+}
+
+/** Render the server-selected duty hat without trusting request parameters. */
+function estab_sidebar_active_hat_markup(
+    array $session,
+    ?array $identity
+): string {
+    if ($identity === null) {
+        return '';
+    }
+    $assignment = $session['estab_duty_assignment_id'] ?? null;
+    if (
+        (!is_int($assignment) || $assignment < 1)
+        && (
+            !is_string($assignment)
+            || preg_match('/\A[1-9][0-9]{0,18}\z/D', $assignment) !== 1
+        )
+    ) {
+        return '';
+    }
+    return '<aside class="estab-sidebar-duty-hat"'
+        . ' data-estab-active-duty-hat'
+        . ' data-estab-duty-assignment="' . estab_auth_html((string) $assignment) . '">'
+        . '<span>Aktiver Funktions-Hut</span>'
+        . '<strong>' . estab_auth_html(
+            (string) $identity['funktion'] . ' · ' . (string) $identity['rolle']
+        ) . '</strong>'
+        . '<a href="' . estab_auth_html(
+            estab_application_url('4fach/fuehrungsstelle.php')
+        ) . '" target="_top">Dienstfunktion wechseln</a>'
+        . '</aside>';
 }
 
 /**

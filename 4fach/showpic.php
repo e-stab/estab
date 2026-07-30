@@ -10,6 +10,7 @@
 
 require_once __DIR__ . '/../app/file_access.php';
 require_once __DIR__ . '/../app/attachment.php';
+require_once __DIR__ . '/../app/read_authorization.php';
 require __DIR__ . '/../4fcfg/config.inc.php';
 require __DIR__ . '/../4fcfg/dbcfg.inc.php';
 require __DIR__ . '/../4fcfg/e_cfg.inc.php';
@@ -46,8 +47,10 @@ function estab_preview_placeholder (int $width, int $height): GdImage {
   return $image;
 }
 
-if (session_status() !== PHP_SESSION_ACTIVE
-    || !estab_auth_session_is_authenticated ($_SESSION)) {
+$readIdentity = session_status() === PHP_SESSION_ACTIVE
+  ? estab_read_session_identity ($_SESSION)
+  : null;
+if (!is_array ($readIdentity)) {
   estab_preview_error (403, "Anmeldung erforderlich.");
 }
 
@@ -74,11 +77,10 @@ if ($width === null && $height === null && $zoom === null) {
   estab_preview_error (400, "Vorschaugröße fehlt.");
 }
 
-$storedName = pathinfo ($requested, PATHINFO_FILENAME);
-$extension = strtolower (pathinfo ($requested, PATHINFO_EXTENSION));
 $connection = null;
 $transactionActive = false;
 $stream = null;
+$attachmentIntegrity = null;
 $failure = null;
 try {
   $connection = estab_attachment_connection ($conf_4f_db);
@@ -86,29 +88,28 @@ try {
     throw new RuntimeException ("Could not start attachment preview transaction");
   }
   $transactionActive = true;
-  $attachment = estab_attachment_find (
+  $attachment = estab_read_attachment (
     $connection,
     $conf_4f_tbl ["anhang"],
-    $storedName,
+    $conf_4f_tbl ["nachrichten"],
+    $requested,
+    $readIdentity,
     true
   );
-  if (
-    !is_array ($attachment)
-    || !hash_equals (
-      strtolower ((string) ($attachment ["fileext"] ?? "")),
-      $extension
-    )
-  ) {
+  if (!is_array ($attachment)) {
     throw new EstabIncidentNotFoundException (
-      "Attachment does not belong to the active incident"
+      "Attachment is missing or not readable"
     );
   }
   try {
-    $stream = estab_file_open (
+    $attachmentIntegrity = estab_attachment_integrity_open_snapshot (
+      $attachment,
       (string) $conf_4f["ablage_dir"],
-      "attachment",
       $requested
     );
+    $stream = $attachmentIntegrity ["stream"];
+  } catch (EstabAttachmentIntegrityException $exception) {
+    throw $exception;
   } catch (RuntimeException $exception) {
     throw new EstabIncidentNotFoundException (
       "Authorized attachment preview is unavailable",
@@ -123,6 +124,16 @@ try {
   $failure = array (409, "Kein Einsatz aktiv.");
 } catch (EstabIncidentNotFoundException) {
   $failure = array (404, "Anhang nicht gefunden.");
+} catch (EstabReadPermissionException) {
+  $failure = array (403, "Aktion nicht erlaubt.");
+} catch (EstabAttachmentIntegrityException $exception) {
+  error_log (
+    "eStab attachment preview integrity failed: ".$exception->getMessage ()
+  );
+  $failure = array (
+    409,
+    "Die Integrität des Anhangs konnte nicht bestätigt werden."
+  );
 } catch (Throwable $exception) {
   error_log ("eStab attachment preview scope failed: ".$exception->getMessage ());
   $failure = array (503, "Der Anhang kann derzeit nicht geprüft werden.");
@@ -205,5 +216,20 @@ header ("Content-Type: image/png");
 header ("Content-Disposition: inline; filename=preview.png");
 header ("Cache-Control: private, no-store");
 header ("X-Content-Type-Options: nosniff");
+if (is_array ($attachmentIntegrity)) {
+  header (
+    "X-eStab-Attachment-Integrity: "
+      .(string) $attachmentIntegrity ["state"]
+  );
+  if (
+    $attachmentIntegrity ["state"] === "verified"
+    && is_string ($attachmentIntegrity ["sha256"])
+  ) {
+    header (
+      "X-eStab-Attachment-SHA256: "
+        .$attachmentIntegrity ["sha256"]
+    );
+  }
+}
 imagepng ($target);
 $target = null;

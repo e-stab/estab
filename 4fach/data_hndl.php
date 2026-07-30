@@ -22,8 +22,11 @@ define ("validate",true);     // Soll das Formular überprüft werden
 require_once __DIR__ . "/tools.php";
 require_once __DIR__ . "/../app/auth.php";
 require_once __DIR__ . "/../app/assignment.php";
+require_once __DIR__ . "/../app/dynamic_schema.php";
 require_once __DIR__ . "/../app/message_repository.php";
 require_once __DIR__ . "/../app/message_transport.php";
+require_once __DIR__ . "/../app/read_authorization.php";
+require_once __DIR__ . "/../app/workflow.php";
 
 if (validate){
   require_once __DIR__ . "/vali_data.php";
@@ -246,7 +249,10 @@ function check_save_user (array $loginData, string &$loginError) {
       // connection, under a function-scoped advisory lock, before the account
       // is activated. A failed or interrupted reconciliation leaves the
       // account untouched and can safely be retried.
-      if (!in_array ($login ["funktion"], array ("A/W", "LdF"), true)) {
+      if (estab_dynamic_schema_hat_requires_tables (
+        $login ["funktion"],
+        $login ["rolle"]
+      )) {
         $usertablename = $conf_4f_tbl ["usrtblprefix"].strtolower ($login ["funktion"])."_".$login ["kuerzel"];
         $fkttblname = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($login ["funktion"]);
         $dbaccess->create_user_table ($usertablename, $fkttblname);
@@ -295,6 +301,7 @@ function check_save_user (array $loginData, string &$loginError) {
       $_SESSION ["vStab_kuerzel"] = $login ["kuerzel"];
       $_SESSION ["vStab_funktion"] = $login ["funktion"];
       $_SESSION ["vStab_rolle"] = $login ["rolle"];
+      unset ($_SESSION ["estab_duty_assignment_id"]);
       $_SESSION ["menue"] = "ROLLE";
       $_SESSION ["ROLLE"] = $login ["rolle"];
 
@@ -310,7 +317,10 @@ function check_save_user (array $loginData, string &$loginError) {
       return true;
     }
 
-    if (!in_array ($login ["funktion"], array ("A/W", "LdF"), true)) {
+    if (estab_dynamic_schema_hat_requires_tables (
+      $login ["funktion"],
+      $login ["rolle"]
+    )) {
       $usertablename = $conf_4f_tbl ["usrtblprefix"].strtolower ($login ["funktion"])."_".$login ["kuerzel"];
       $fkttblname = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($login ["funktion"]);
       $dbaccess->create_user_table ($usertablename, $fkttblname);
@@ -359,6 +369,7 @@ function check_save_user (array $loginData, string &$loginError) {
     $_SESSION ["vStab_kuerzel"] = $login ["kuerzel"];
     $_SESSION ["vStab_funktion"] = $login ["funktion"];
     $_SESSION ["vStab_rolle"] = $login ["rolle"];
+    unset ($_SESSION ["estab_duty_assignment_id"]);
     $_SESSION ["menue"] = "ROLLE";
     $_SESSION ["ROLLE"] = $login ["rolle"];
 
@@ -419,17 +430,106 @@ function check_and_save ($data){
   include ("../4fcfg/e_cfg.inc.php");
   include ("../4fcfg/fkt_rolle.inc.php");
 
+  $browserData = is_array ($data) ? $data : array ();
   $data = array_replace (array_fill_keys (array (
     "00_lfd", "01_medium", "01_datum", "01_zeichen",
     "02_zeit", "02_zeichen", "03_datum", "03_zeichen",
     "05_gegenstelle", "06_befweg", "06_befwegausw",
+    "fernmeldeplan_eintrag_id",
+    "transportweg_bestaetigt",
+    "transport_rueckgabegrund",
     "07_durchspruch", "08_befhinweis", "08_befhinwausw",
     "09_vorrangstufe", "10_anschrift", "11_gesprnotiz",
     "12_anhang", "12_inhalt", "12_abfzeit", "13_abseinheit",
     "14_zeichen", "14_funktion", "15_quitdatum",
     "15_quitzeichen", "16_empf", "16_gncopy", "17_vermerke",
     "task"
-  ), ""), is_array ($data) ? $data : array ());
+  ), ""), $browserData);
+
+  $sessionCode = (string) ($_SESSION ["vStab_kuerzel"] ?? "");
+  $sessionFunction = (string) ($_SESSION ["vStab_funktion"] ?? "");
+  $sessionUser = (string) ($_SESSION ["vStab_benutzer"] ?? "");
+  $sessionRole = (string) ($_SESSION ["vStab_rolle"] ?? "");
+  if (
+    preg_match ("/\\A[a-z0-9_]{1,6}\\z/D", $sessionCode) !== 1
+    || trim ($sessionUser) === ""
+    || trim ($sessionFunction) === ""
+    || !in_array ($sessionRole, array ("Stab", "FB", "Fernmelder"), true)
+    || strlen ($sessionFunction) > 25
+    || str_contains ($sessionFunction, "\0")
+  ) {
+    throw new RuntimeException ("Ungültige angemeldete Nachrichtenidentität");
+  }
+  $attachmentReadIdentity = estab_read_session_identity ($_SESSION);
+  if (!is_array ($attachmentReadIdentity)) {
+    throw new EstabReadPermissionException ("Anmeldung erforderlich.");
+  }
+  $messageActor = array (
+    "benutzer" => $sessionUser,
+    "kuerzel" => $sessionCode,
+    "funktion" => $sessionFunction,
+    "rolle" => $sessionRole,
+    "duty_assignment_id" =>
+      $attachmentReadIdentity ["duty_assignment_id"] ?? null,
+  );
+  $attachmentAuthorizer = static function (
+    mysqli $connection,
+    int $incidentId,
+    mixed $attachmentList
+  ) use (
+    $conf_4f_tbl,
+    $attachmentReadIdentity
+  ): void {
+    estab_read_require_attachment_use_scope (
+      $connection,
+      (string) $conf_4f_tbl ["anhang"],
+      (string) $conf_4f_tbl ["nachrichten"],
+      $incidentId,
+      $attachmentList,
+      $attachmentReadIdentity
+    );
+  };
+
+  // Local marks and the local sender identity are signed session attributes.
+  // The browser may display them, but it can neither choose nor forge them.
+  switch ($data ["task"]) {
+    case "FM-Eingang":
+    case "FM-Eingang_Anhang":
+      $data ["01_zeichen"] = $sessionCode;
+    break;
+
+    case "Stab_schreiben":
+    case "Stab_korrigieren":
+      $data ["13_abseinheit"] = (string) $conf_4f ["anschrift"];
+      $data ["14_zeichen"] = $sessionCode;
+      $data ["14_funktion"] = $sessionFunction;
+    break;
+
+    case "Stab_gesprnoti":
+      // A conversation note is completed by its author without pretending
+      // that Si or LdF reviewed it. All persisted local identity fields are
+      // derived from the accepted function hat, never from the browser.
+      $data ["01_zeichen"] = $sessionCode;
+      $data ["13_abseinheit"] = (string) $conf_4f ["anschrift"];
+      $data ["14_zeichen"] = $sessionCode;
+      $data ["14_funktion"] = $sessionFunction;
+      $data ["15_quitdatum"] = "";
+      $data ["15_quitzeichen"] = "";
+    break;
+
+    case "Stab_sichten":
+      $data ["15_quitzeichen"] = $sessionCode;
+    break;
+
+    case "LdF-Eingang":
+    case "LdF-Ausgang":
+      $data ["02_zeichen"] = $sessionCode;
+    break;
+
+    case "FM-Ausgang":
+      $data ["03_zeichen"] = $sessionCode;
+    break;
+  }
 
   if (($data ["11_gesprnotiz"] ?? "") == "on") {
     $data ["11_gesprnotiz"] = "t" ;
@@ -477,7 +577,9 @@ function check_and_save ($data){
             Daten in Datenbank mit einem INSERT
             INSERT INTO tabelle SET spalten_name=ausdruck, spalten_name=ausdruck, ...
       ******************************************************************************************************/
-			$data ["16_empf"] .= $redcopy2."_rt,";
+			// Until Si completes the substantive review, only the authoritative
+			// Lage/Dokumentation red copy exists. Never append browser data.
+			$data ["16_empf"] = $redcopy2."_rt,";
 			if ($data ["01_datum"] == "" ) { $data ["01_datum"] = date ("Hi") ; }
 			if ($data ["12_abfzeit"] == "" ) { $data ["12_abfzeit"] = date ("Hi") ; }
 			if (validate){
@@ -500,8 +602,12 @@ function check_and_save ($data){
 */
 
 				$data = $vali->i_data ;
+				// Re-assert after legacy validation as a defense-in-depth
+				// boundary against hidden 16_* fields and attachment state.
+				$data ["16_empf"] = $redcopy2."_rt,";
+				$data ["16_gncopy"] = "";
 
-        		if (!$result) {
+          if (!$result) {
           		$form = new nachrichten4fach ($data, $data["task"], $vali->validate);
           		exit ;
         		}
@@ -537,107 +643,27 @@ function check_and_save ($data){
           "x00_status" => 1,
           "x01_abschluss" => "f",
         ),
-        $conf_4f_tbl ["anhang"]
+        $conf_4f_tbl ["anhang"],
+        array (
+          "event_type" => "created",
+          "actor" => $messageActor,
+          "from_status" => null,
+          "to_status" => 1,
+          "snapshot" => array (
+            "direction" => "E",
+            "medium" => $data ["01_medium"],
+            "recorded_by" => $sessionCode,
+            "remote_callsign" => $data ["05_gegenstelle"],
+            "recipients" => $data ["16_empf"],
+            "content_sha256" => hash ("sha256", $data ["12_inhalt"]),
+          ),
+        ),
+        $attachmentAuthorizer
       );
       protokolleintrag ("FM-Eingang", "message_id=".$storedMessage ["id"]);
     break;
 
-		case "FM-Eingang_Sichter":
-		case "FM-Eingang_Anhang_Sichter" :
-			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>FM-Eingang_Sichter, FM-Eingang_Anhang_Sichter</big><br>\n";}
-       /*****************************************************************************************************
-           Betroffene Felder:
-            01_medium            01_datum   TTMM            01_zeit    SSMM            01_zeichen            05_gegenstelle            07_durchspruch;            08_befhinweis;
-            08_befhinwausw;            09_vorrangstufe;            10_anschrift;            11_gesprnotiz;            12_inhalt;            12_abfzeit;            13_abseinheit;
-            14_zeichen;            14_funktion;             15_quitdatum;          15_quitzeichen;          16_empf;          17_vermerke;
-        Workflow ==>
-            Ergaenzung Nachweisdaten (E und Nachweisnummer) 04_richtung 04_numme
-            Daten in Datenbank mit einem INSERT
-            INSERT INTO tabelle SET spalten_name=ausdruck, spalten_name=ausdruck, ...
-      ******************************************************************************************************/
-			$data ["16_empf"] = $redcopy2."_rt,";
-
-       	for (  $i = 1 ; $i <= 5 ; $i++ ){
-         	for ( $j = 1 ; $j <= 5 ; $j++ ){
-           		if ( isset ( $data ["16_".$i.$j] ) ) {
-             		list ($ord, $pos, $fkt) = explode ("_", $data ["16_".$i.$j]);
-             		$data ["16_empf"] .= $empf_matrix [$i][$j]["fkt"]."_".$fkt.",";
-           		}
-           		if ( $data ["16_gncopy"] == "16_".$i.$j."_gn" ) {
-             		$data ["16_empf"] .= $empf_matrix [$i][$j]["fkt"]."_gn,";
-           		}
-         	}
-       	}
-
-       	if ($data ["01_datum"] == "" ) { $data ["01_datum"] = date ("Hi") ; }
-       	if ($data ["12_abfzeit"] == "" ) { $data ["12_abfzeit"] = date ("Hi") ; }
-       	if ($data ["15_quitdatum"] == "" ) { $data ["15_quitdatum"] = date ("Hi") ; }
-
-        	if (validate){
-         	  /*----------------------------------------------------*/
-				if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>"; var_dump ($data); echo "<br>\n";}
-          	$vali = new vali_data_form ( $data ) ;
-          	$result = $vali->validatethis (); //checkdata ();
-/*
-          if (debug){
-            echo "DATAHNDL374=";
-            echo "<b>RESULT</b>";
-            var_dump ($result); echo "<br>";
-
-            echo "<b>vali-data</b>";
-            var_dump ($vali->i_data); echo "<br>";
-
-            echo "<b>vali-VALIDATE</b>";
-            var_dump ($vali->validate); echo "<br>";
-          }
-*/
-				$data = $vali->i_data ;
-				if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>"; var_dump ($data); echo "<br>\n";}          
-				if (!$result) {
-           		$form = new nachrichten4fach ($data, $data["task"], $vali->validate);
-           		exit ;
-          	}
-          		/*----------------------------------------------------*/
-        	}
-
-      $storedMessage = estab_message_insert_numbered (
-        $messageConnection,
-        $conf_4f_db ["datenbank"],
-        $conf_4f_tbl ["nachrichten"],
-        "E",
-        Nachweisung === "getrennt",
-        array (
-          "01_medium" => $data ["01_medium"],
-          "01_datum" => konv_taktime_datetime ($data ["01_datum"]),
-          "01_zeichen" => $data ["01_zeichen"],
-          "05_gegenstelle" => $data ["05_gegenstelle"],
-          "07_durchspruch" => $data ["07_durchspruch"],
-          "08_befhinweis" => $data ["08_befhinweis"],
-          "08_befhinwausw" => $data ["08_befhinwausw"],
-          "09_vorrangstufe" => $data ["09_vorrangstufe"],
-          "10_anschrift" => $data ["10_anschrift"],
-          "11_gesprnotiz" => $data ["11_gesprnotiz"],
-          "12_anhang" => $data ["12_anhang"],
-          "12_inhalt" => $data ["12_inhalt"],
-          "12_abfzeit" => konv_taktime_datetime ($data ["12_abfzeit"]),
-          "13_abseinheit" => "",
-          "14_zeichen" => $data ["14_zeichen"],
-          "14_funktion" => $data ["14_funktion"],
-          "15_quitdatum" => konv_taktime_datetime ($data ["15_quitdatum"]),
-          "15_quitzeichen" => $data ["15_quitzeichen"],
-          "16_empf" => $data ["16_empf"],
-          "17_vermerke" => $data ["17_vermerke"],
-          // Preserve the autosighting fields, but do not expose the message
-          // as complete before LdF has translated the sender.
-          "x00_status" => 1,
-          "x01_abschluss" => "f",
-        ),
-        $conf_4f_tbl ["anhang"]
-      );
-      protokolleintrag ("FM-Eingang-Sichter", "message_id=".$storedMessage ["id"]);
-    	break;
-
-    	case "Stab_schreiben":
+    case "Stab_schreiben":
 			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>Stab_schreiben</big><br>\n";}
 /*          07_durchspruch;          08_befhinweis;          08_befhinwausw;          09_vorrangstufe;          10_anschrift;          11_gesprnotiz;          12_inhalt;
           12_abfzeit;          13_abseinheit;          14_zeichen;          14_funktion;
@@ -696,14 +722,128 @@ function check_and_save ($data){
            "14_zeichen" => $data ["14_zeichen"],
            "14_funktion" => $data ["14_funktion"],
            "16_empf" => $data ["16_empf"],
-           "x00_status" => 1,
+           // Every outgoing message must pass the Sichter's formal check
+           // before it can enter the LdF/FmZt disposition chain.
+           "x00_status" => 4,
            "x01_abschluss" => "f",
          ),
-         $conf_4f_tbl ["anhang"]
+         $conf_4f_tbl ["anhang"],
+         array (
+           "event_type" => "created",
+           "actor" => $messageActor,
+           "from_status" => null,
+           "to_status" => 4,
+           "snapshot" => array (
+             "direction" => "A",
+             "address" => $data ["10_anschrift"],
+             "author_code" => $sessionCode,
+             "author_function" => $sessionFunction,
+             "recipients" => $data ["16_empf"],
+             "content_sha256" => hash ("sha256", $data ["12_inhalt"]),
+           ),
+         ),
+         $attachmentAuthorizer
        );
        protokolleintrag ("Stab-schreiben", "message_id=".$storedMessage ["id"]);
        set_msg_read ($storedMessage ["id"]) ;
     break;
+
+    case "Stab_korrigieren":
+      if ($data ["12_abfzeit"] == "") {
+        $data ["12_abfzeit"] = date ("Hi");
+      }
+      if (validate) {
+        $vali = new vali_data_form ($data);
+        $result = $vali->validatethis ();
+        $data = $vali->i_data;
+        // Re-assert session attributes after normalization as defense in depth.
+        $data ["13_abseinheit"] = (string) $conf_4f ["anschrift"];
+        $data ["14_zeichen"] = $sessionCode;
+        $data ["14_funktion"] = $sessionFunction;
+        if (!$result) {
+          $form = new nachrichten4fach (
+            $data,
+            "Stab_korrigieren",
+            $vali->validate
+          );
+          exit;
+        }
+      }
+
+      try {
+        $correctionSaved = estab_message_resubmit_returned_outgoing (
+          $messageConnection,
+          $conf_4f_tbl ["nachrichten"],
+          $data ["00_lfd"],
+          $sessionCode,
+          $sessionFunction,
+          array (
+          "07_durchspruch" => $data ["07_durchspruch"],
+          "08_befhinweis" => $data ["08_befhinweis"],
+          "08_befhinwausw" => $data ["08_befhinwausw"],
+          "09_vorrangstufe" => $data ["09_vorrangstufe"],
+          "10_anschrift" => $data ["10_anschrift"],
+          "11_gesprnotiz" => "f",
+          "12_anhang" => $data ["12_anhang"],
+          "12_inhalt" => $data ["12_inhalt"],
+          "12_abfzeit" => konv_taktime_datetime ($data ["12_abfzeit"]),
+          "13_abseinheit" => (string) $conf_4f ["anschrift"],
+          "14_zeichen" => $sessionCode,
+          "14_funktion" => $sessionFunction,
+          "15_quitdatum" => null,
+          "15_quitzeichen" => "",
+          "x00_status" => 4,
+          "x01_abschluss" => "f",
+          "x02_sperre" => "f",
+          "x03_sperruser" => "",
+          ),
+          array (
+          "event_type" => "author_resubmitted",
+          "actor" => $messageActor,
+          "from_status" => 10,
+          "to_status" => 4,
+          "snapshot" => array (
+            "address" => $data ["10_anschrift"],
+            "author_code" => $sessionCode,
+            "author_function" => $sessionFunction,
+            "content_sha256" => hash ("sha256", $data ["12_inhalt"]),
+            "correction_note" => $data ["17_vermerke"],
+          ),
+          ),
+          $conf_4f_tbl ["anhang"],
+          $attachmentAuthorizer
+        );
+      } catch (EstabIncidentConflictException $exception) {
+        http_response_code (409);
+        $data ["estab_route_error"] = $exception->getMessage ();
+        $form = new nachrichten4fach (
+          $data,
+          "Stab_korrigieren",
+          array ()
+        );
+        exit;
+      } catch (InvalidArgumentException $exception) {
+        http_response_code (422);
+        $data ["estab_route_error"] = $exception->getMessage ();
+        $form = new nachrichten4fach (
+          $data,
+          "Stab_korrigieren",
+          array ()
+        );
+        exit;
+      }
+      if (!$correctionSaved) {
+        throw new RuntimeException (
+          "Zurückgegebene Nachricht wurde zwischenzeitlich geändert"
+        );
+      }
+      protokolleintrag (
+        "Stab-korrigiert",
+        "message_id=".estab_message_positive_id ($data ["00_lfd"])
+      );
+      set_msg_read ($data ["00_lfd"]);
+    break;
+
     /****************************************************************************\
       SSSSS TTTTT AAAAA BBBB        GGGGG EEEEE SSSSS PPPP  RRRR  N   N  OOO  TTTTT IIIII
       S       T   A   A B   B       G     E     S     P   P R   R NN  N O   O   T     I
@@ -712,10 +852,9 @@ function check_and_save ($data){
       SSSSS   T   A   A BBBB  _____ GGGG  EEEEE SSSSS P     R   R N   N  OOO    T   IIIII
     \****************************************************************************/
     case "Stab_gesprnoti":
-		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>Stab_gesprnoti</big><br>\n";}    
+		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>Stab_gesprnoti</big><br>\n";}
       if ($data ["01_datum"] == "" )     { $data ["01_datum"]     = date ("Hi") ; }
       if ($data ["12_abfzeit"] == "" )   { $data ["12_abfzeit"]   = date ("Hi") ; }
-      if ($data ["15_quitdatum"] == "" ) { $data ["15_quitdatum"] = date ("Hi") ; }
 
       if (validate){
          /*----------------------------------------------------*/
@@ -755,19 +894,18 @@ function check_and_save ($data){
         $data ["02_zeit"] = convtodatetime ( date ("dm"),   date ("Hi") )  ;
       }
 
-       for (  $i = 1 ; $i <= 5 ; $i++ ){
-         for ( $j = 1 ; $j <= 5 ; $j++ ){
-           if ( isset ( $data ["16_".$i.$j] ) ) {
-             list ($ord, $pos, $fkt) = explode ("_", $data ["16_".$i.$j]);
-             $data ["16_empf"] .= $empf_matrix [$i][$j]["fkt"]."_".$fkt.",";
-           }
-           if ( $data ["16_gncopy"] == "16_".$i.$j."_gn" ) {
-             $data ["16_empf"] .= $empf_matrix [$i][$j]["fkt"]."_gn,";
-           }
-         }
-       }
+       $data ["16_empf"] = estab_workflow_distribution_tokens (
+         $browserData,
+         $empf_matrix,
+         array ($redcopy2."_rt", $sessionFunction."_gn")
+       );
        $data ["11_gesprnotiz"] = "t" ;
-       $data ["16_empf"] .= $redcopy2."_rt,".$data ["14_funktion"]."_gn"; // Der Verfasser bekommt den gruenen
+       $data ["01_zeichen"] = $sessionCode;
+       $data ["13_abseinheit"] = (string) $conf_4f ["anschrift"];
+       $data ["14_zeichen"] = $sessionCode;
+       $data ["14_funktion"] = $sessionFunction;
+       $data ["15_quitdatum"] = "";
+       $data ["15_quitzeichen"] = "";
        $storedMessage = estab_message_insert_numbered (
          $messageConnection,
          $conf_4f_db ["datenbank"],
@@ -797,7 +935,23 @@ function check_and_save ($data){
            "x02_sperre" => "f",
            "x03_sperruser" => "",
          ),
-         $conf_4f_tbl ["anhang"]
+         $conf_4f_tbl ["anhang"],
+         array (
+           "event_type" => "conversation_note_created",
+           "actor" => $messageActor,
+           "from_status" => null,
+           "to_status" => 8,
+           "snapshot" => array (
+             "direction" => "E",
+             "object_type" => "conversation_note",
+             "conversation_note" => true,
+             "author_code" => $sessionCode,
+             "author_function" => $sessionFunction,
+             "review_required" => false,
+             "content_sha256" => hash ("sha256", $data ["12_inhalt"]),
+           ),
+         ),
+         $attachmentAuthorizer
        );
        protokolleintrag ("Stab-gesprnoti", "message_id=".$storedMessage ["id"]);
        set_msg_read ($storedMessage ["id"]) ;
@@ -836,53 +990,70 @@ function check_and_save ($data){
         "x03_sperruser" => "",
       );
       if ($ldfDirection === "E") {
-        $authoritativeIncoming = estab_message_fetch_by_id (
-          $messageConnection,
-          $conf_4f_tbl ["nachrichten"],
-          $data ["00_lfd"]
-        );
-        if (!is_array ($authoritativeIncoming)) {
-          throw new RuntimeException ("Incoming message disappeared");
-        }
-        $alreadyAutoSighted =
-          !estab_datetime_is_unset (
-            $authoritativeIncoming ["15_quitdatum"] ?? null
-          )
-          && (string) (
-            $authoritativeIncoming ["15_quitzeichen"] ?? ""
-          ) !== "";
         $ldfFields ["13_abseinheit"] = trim (
           (string) $data ["13_abseinheit"]
         );
-        $ldfFields ["x00_status"] = $alreadyAutoSighted ? 8 : 4;
-        $ldfFields ["x01_abschluss"] = $alreadyAutoSighted ? "t" : "f";
+        // Missing Si staffing never closes or bypasses the viewer queue.
+        $ldfFields ["x00_status"] = 4;
+        $ldfFields ["x01_abschluss"] = "f";
       } else {
-        $transportMedium = estab_message_medium_storage_value (
-          $data ["06_befwegausw"]
-        );
-        if ($transportMedium === null) {
-          throw new InvalidArgumentException (
-            "Ungültiger Beförderungsweg"
-          );
-        }
         $ldfFields ["05_gegenstelle"] = trim (
           (string) $data ["05_gegenstelle"]
         );
-        $ldfFields ["06_befweg"] = trim ((string) $data ["06_befweg"]);
-        $ldfFields ["06_befwegausw"] = $transportMedium;
+        // The repository resolves this immutable ID again while holding the
+        // active incident transaction and derives medium/route from the
+        // currently valid S6 plan. Browser-supplied 06_* values are ignored.
+        $ldfFields ["estab_fernmeldeplan_eintrag_id"] =
+          estab_message_positive_id ($data ["fernmeldeplan_eintrag_id"]);
         $ldfFields ["x00_status"] = 2;
         $ldfFields ["x01_abschluss"] = "f";
       }
 
-      $ldfSaved = estab_message_update_locked_operator_stage (
-        $messageConnection,
-        $conf_4f_tbl ["nachrichten"],
-        $data ["00_lfd"],
-        (string) $_SESSION ["vStab_kuerzel"],
-        $ldfDirection,
-        1,
-        $ldfFields
-      );
+      try {
+        $ldfSaved = estab_message_update_locked_operator_stage (
+          $messageConnection,
+          $conf_4f_tbl ["nachrichten"],
+          $data ["00_lfd"],
+          (string) $_SESSION ["vStab_kuerzel"],
+          $ldfDirection,
+          1,
+          $ldfFields,
+          array (
+            "event_type" => "ldf_dispatched",
+            "actor" => $messageActor,
+            "from_status" => 1,
+            "to_status" => $ldfDirection === "E" ? 4 : 2,
+            "snapshot" => $ldfDirection === "E"
+              ? array (
+                "direction" => "E",
+                "translated_sender" => $ldfFields ["13_abseinheit"],
+                "accepted_by" => $sessionCode,
+              )
+              : array (
+                "direction" => "A",
+                "remote_callsign" => $ldfFields ["05_gegenstelle"],
+                "requested_telecom_plan_entry_id" =>
+                  $ldfFields ["estab_fernmeldeplan_eintrag_id"],
+                "accepted_by" => $sessionCode,
+              ),
+            "occurred_at" => $ldfFields ["02_zeit"],
+          )
+        );
+      } catch (EstabDvInputException|EstabDvConflictException $exception) {
+        if ($ldfDirection !== "A") {
+          throw $exception;
+        }
+        http_response_code (409);
+        $data ["estab_route_error"] = $exception->getMessage ();
+        $routeValidation = $vali->validate;
+        $routeValidation ["fernmeldeplan_eintrag_id"] = false;
+        $form = new nachrichten4fach (
+          $data,
+          "LdF-Ausgang",
+          $routeValidation
+        );
+        exit;
+      }
       if (!$ldfSaved) {
         throw new RuntimeException ("Message lock or LdF stage changed");
       }
@@ -892,9 +1063,74 @@ function check_and_save ($data){
       );
     break;
 
-		case "FM-Ausgang":
-			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>FM-Ausgang</big><br>\n";}
-			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### - FM-Ausgang <br>\n";}
+			case "FM-Ausgang":
+				if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>FM-Ausgang</big><br>\n";}
+				if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### - FM-Ausgang <br>\n";}
+      $transportReturn =
+        isset ($data ["transport_nicht_moeglich_x"])
+        || isset ($data ["transport_nicht_moeglich_y"]);
+      if ($transportReturn) {
+        $returnReason = trim ((string) $data ["transport_rueckgabegrund"]);
+        try {
+          if (
+            $returnReason === ""
+            || strlen ($returnReason) > 2000
+            || str_contains ($returnReason, "\0")
+          ) {
+            throw new EstabDvInputException (
+              "Für die Rückgabe an LdF ist ein Grund erforderlich."
+            );
+          }
+          $returnedToLdf = estab_message_update_locked_operator_stage (
+            $messageConnection,
+            $conf_4f_tbl ["nachrichten"],
+            $data ["00_lfd"],
+            (string) $_SESSION ["vStab_kuerzel"],
+            "A",
+            2,
+            array (
+              "02_zeit" => null,
+              "02_zeichen" => "",
+              "03_datum" => null,
+              "03_zeichen" => "",
+              "x00_status" => 1,
+              "x01_abschluss" => "f",
+              "x02_sperre" => "f",
+              "x03_sperruser" => "",
+            ),
+            array (
+              "event_type" => "aw_transport_returned",
+              "actor" => $messageActor,
+              "from_status" => 2,
+              "to_status" => 1,
+              "snapshot" => array (
+                "direction" => "A",
+                "returned_by" => $sessionCode,
+                "transport_return_reason" => $returnReason,
+              ),
+            )
+          );
+        } catch (EstabDvInputException|EstabDvConflictException $exception) {
+          http_response_code (
+            $exception instanceof EstabDvInputException ? 422 : 409
+          );
+          $data ["estab_route_error"] = $exception->getMessage ();
+          $form = new nachrichten4fach (
+            $data,
+            "FM-Ausgang",
+            array ()
+          );
+          exit;
+        }
+        if (!$returnedToLdf) {
+          throw new RuntimeException ("Message lock or status changed");
+        }
+        protokolleintrag (
+          "FM-Ausgang-Rückgabe",
+          "message_id=".estab_message_positive_id ($data ["00_lfd"])
+        );
+        break;
+      }
       if ($data ["03_datum"] == "" ) { $data ["03_datum"] = date ("Hi") ; }
       $data ["03_zeichen"] = (string) $_SESSION ["vStab_kuerzel"];
 	      if (validate){
@@ -924,164 +1160,191 @@ function check_and_save ($data){
            	exit ;
          }
       }
-		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### VOR conf_4f[\"si_in_out\"]".$conf_4f["si_in_out"]."<br>"; }      
-			if($conf_4f["si_in_out"]) {  //  Ein- und Ausänge sichten
-				if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### Ein- und Ausgänge sichten<br>"; }
-        $transportStatus = 4;
-        $transportClosed = "f";
-       } else {
-         if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### nur Eingänge sichten<br>"; }
-        $transportStatus = 8;
-        $transportClosed = "t";
+       try {
+         $transportSaved = estab_message_update_locked_operator_stage (
+           $messageConnection,
+           $conf_4f_tbl ["nachrichten"],
+           $data ["00_lfd"],
+           (string) $_SESSION ["vStab_kuerzel"],
+           "A",
+           2,
+           array (
+             "03_datum" => konv_taktime_datetime ($data ["03_datum"]),
+             // As with LdF, the authenticated identity owns the mark.
+             "03_zeichen" => (string) $_SESSION ["vStab_kuerzel"],
+             // Formal Si approval and LdF disposition are prerequisites of
+             // this exact stage; the transport therefore completes the form.
+             "x00_status" => 8,
+             "x01_abschluss" => "t",
+             "x02_sperre" => "f",
+             "x03_sperruser" => "",
+           ),
+           array (
+             "event_type" => "aw_transported",
+             "actor" => $messageActor,
+             "from_status" => 2,
+             "to_status" => 8,
+             "snapshot" => array (
+               "direction" => "A",
+               "transported_by" => $sessionCode,
+               "transported_at" =>
+                 konv_taktime_datetime ($data ["03_datum"]),
+               "transport_route_confirmed" =>
+                 hash_equals (
+                   "1",
+                   (string) $data ["transportweg_bestaetigt"]
+                 ),
+             ),
+             "occurred_at" => konv_taktime_datetime ($data ["03_datum"]),
+           )
+         );
+       } catch (EstabDvInputException|EstabDvConflictException $exception) {
+         http_response_code (409);
+         $data ["estab_route_error"] = $exception->getMessage ();
+         $form = new nachrichten4fach (
+           $data,
+           "FM-Ausgang",
+           $vali->validate
+         );
+         exit;
        }
-       $transportSaved = estab_message_update_locked_operator_stage (
-         $messageConnection,
-         $conf_4f_tbl ["nachrichten"],
-         $data ["00_lfd"],
-         (string) $_SESSION ["vStab_kuerzel"],
-         "A",
-         2,
-         array (
-           "03_datum" => konv_taktime_datetime ($data ["03_datum"]),
-           // As with LdF, the authenticated identity owns the mark.
-           "03_zeichen" => (string) $_SESSION ["vStab_kuerzel"],
-           "x00_status" => $transportStatus,
-           "x01_abschluss" => $transportClosed,
-           "x02_sperre" => "f",
-           "x03_sperruser" => "",
-         )
-       );
        if (!$transportSaved) {
          throw new RuntimeException ("Message lock or status changed");
        }
        protokolleintrag ("FM-Ausgang", "message_id=".estab_message_positive_id ($data ["00_lfd"]));
    break;
 
-		case "FM-Ausgang_Sichter":
-			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>FM-Ausgang_Sichter</big><br>\n";}
-		if ($data ["15_quitdatum"] == "" ) { $data ["15_quitdatum"] = date ("Hi") ; }
-		$data ["16_empf"] = $redcopy2."_rt,";
-
-      for (  $i = 1 ; $i <= 5 ; $i++ ){
-      	for ( $j = 1 ; $j <= 5 ; $j++ ){
-         	if ( isset ( $data ["16_".$i.$j] ) ) {
-            	list ($ord, $pos, $fkt) = explode ("_", $data ["16_".$i.$j]);
-             	$data ["16_empf"] .= $empf_matrix [$i][$j]["fkt"]."_".$fkt.",";
-           	} // if
-           	if ( $data ["16_gncopy"] == "16_".$i.$j."_gn" ) {
-            	$data ["16_empf"] .= $empf_matrix [$i][$j]["fkt"]."_gn,";
-           }
-         } // for 2.
-       } // for 1.
-
-      if ($data ["03_datum"] == "" ) { $data ["03_datum"] = date ("Hi") ; }
-      $data ["03_zeichen"] = (string) $_SESSION ["vStab_kuerzel"];
-
-      if (validate){
-			if (debug){
-         	echo "DATAHNDL FM-Ausgang_Sichter =";
-          	var_dump ($data); echo "<br><br>";
-        	}
-        	$vali = new vali_data_form ( $data ) ;
-        	$result = $vali->validatethis (); //checkdata ();
-/*        
-        if (debug){
-          echo "<b>DATA</b>";
-          var_dump ($data); echo "<br>";
-
-          echo "DATAHNDL667=";
-          echo "<b>RESULT</b>";
-          var_dump ($result); echo "<br><br>";
-
-          echo "<b>vali-data</b>";
-          var_dump ($vali->i_data); echo "<br><br>";
-
-          echo "<b>vali-VALIDATE</b>";
-          var_dump ($vali->validate); echo "<br>";
-        }
-*/
-        	$data = $vali->i_data ;
-
-         if (!$result) {
-         	$form = new nachrichten4fach ($data, $data["task"], $vali->validate);
-           	exit ;
-         }
-      }
-      $transportAndReviewSaved = estab_message_update_locked_operator_stage (
-        $messageConnection,
-        $conf_4f_tbl ["nachrichten"],
-        $data ["00_lfd"],
-        (string) $_SESSION ["vStab_kuerzel"],
-        "A",
-        2,
-        array (
-          "03_datum" => konv_taktime_datetime ($data ["03_datum"]),
-          "03_zeichen" => (string) $_SESSION ["vStab_kuerzel"],
-          "15_quitdatum" => konv_taktime_datetime ($data ["15_quitdatum"]),
-          "15_quitzeichen" => $data ["15_quitzeichen"],
-          "16_empf" => $data ["16_empf"],
-          "17_vermerke" => $data ["17_vermerke"],
-          "x00_status" => 8,
-          "x01_abschluss" => "t",
-          "x02_sperre" => "f",
-          "x03_sperruser" => "",
-        )
-      );
-      if (!$transportAndReviewSaved) {
-        throw new RuntimeException ("Message lock or status changed");
-      }
-      protokolleintrag ("FM-Ausgang-Sichter", "message_id=".estab_message_positive_id ($data ["00_lfd"]));
-		break;
-
-
-		case "Stab_sichten":
-			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>Stab_sichten</big><br>\n";}   
-/*
-          15_quitdatum;
-          15_quitzeichen;
-          16_empf;
-          17_vermerke;
-*/
-       $data ["16_empf"] = $redcopy2."_rt,";
-
-       for (  $i = 1 ; $i <= 5 ; $i++ ){
-         for ( $j = 1 ; $j <= 5 ; $j++ ){
-           if ( isset ( $data ["16_".$i.$j] ) ) {
-             list ($ord, $pos, $fkt) = explode ("_", $data ["16_".$i.$j]);
-             $data ["16_empf"] .= $empf_matrix [$i][$j]["fkt"]."_".$fkt.",";
-           }
-           if ( $data ["16_gncopy"] == "16_".$i.$j."_gn" ) {
-             $data ["16_empf"] .= $empf_matrix [$i][$j]["fkt"]."_gn,";
-           }
-         }
+			case "Stab_sichten":
+			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>Stab_sichten</big><br>\n";}
+       $reviewMessage = estab_message_fetch_by_id (
+         $messageConnection,
+         $conf_4f_tbl ["nachrichten"],
+         $data ["00_lfd"]
+       );
+       if (!is_array ($reviewMessage)) {
+         throw new RuntimeException ("Nachricht zur Sichtung nicht gefunden");
+       }
+       $reviewDirection = (string) ($reviewMessage ["04_richtung"] ?? "");
+       $isFormalReturn =
+         isset ($data ["zurueckweisen_x"])
+         || isset ($data ["zurueckweisen_y"]);
+       if ($isFormalReturn && $reviewDirection !== "A") {
+         throw new InvalidArgumentException (
+           "Nur Ausgangsnachrichten können formal zurückgegeben werden"
+         );
+       }
+       $formalOutgoingComplete =
+         trim ((string) ($reviewMessage ["10_anschrift"] ?? "")) !== ""
+         && trim ((string) ($reviewMessage ["13_abseinheit"] ?? "")) !== ""
+         && trim ((string) ($reviewMessage ["14_zeichen"] ?? "")) !== ""
+         && trim ((string) ($reviewMessage ["14_funktion"] ?? "")) !== "";
+       if (
+         $reviewDirection === "A"
+         && !$isFormalReturn
+         && !$formalOutgoingComplete
+       ) {
+         throw new InvalidArgumentException (
+           "Anschrift, Absender, Verfasserzeichen und Funktion sind ".
+           "unvollständig. Die Nachricht muss zurückgegeben werden."
+         );
+       }
+       if ($isFormalReturn && trim ((string) $data ["17_vermerke"]) === "") {
+         $data ["15_quitzeichen"] = $sessionCode;
+         $validationErrors = array_fill_keys (array (
+           "01_medium", "01_datum", "01_zeichen", "02_zeit", "02_zeichen",
+           "03_datum", "03_zeichen", "05_gegenstelle", "06_befweg",
+           "06_befwegausw", "07_durchspruch", "08_befhinweis",
+           "08_befhinwausw", "10_anschrift", "12_inhalt", "12_abfzeit",
+           "13_abseinheit", "14_zeichen", "14_funktion", "15_quitdatum",
+           "15_quitzeichen", "17_vermerke"
+         ), true);
+         $validationErrors ["17_vermerke"] = false;
+         $form = new nachrichten4fach (
+           array_replace ($reviewMessage, array (
+             "15_quitdatum" => $data ["15_quitdatum"],
+             "15_quitzeichen" => $sessionCode,
+             "17_vermerke" => $data ["17_vermerke"],
+           )),
+           "Stab_sichten",
+           $validationErrors
+         );
+         exit;
        }
 
-
-       if ($data ["15_quitdatum"] == "" ) {
-         $data ["15_quitdatum"] = date ("Hi")  ;
-       }  else {
-         $data ["15_quitdatum"] = $data ["15_quitdatum"] ;
+       if ($data ["15_quitdatum"] == "") {
+         $data ["15_quitdatum"] = date ("Hi");
        }
+       $reviewFields = array (
+         "15_quitdatum" => convtodatetime (
+           date ("dm"),
+           $data ["15_quitdatum"]
+         ),
+         "15_quitzeichen" => $sessionCode,
+         "17_vermerke" => $data ["17_vermerke"],
+         "x02_sperre" => "f",
+         "x03_sperruser" => "",
+       );
+       if ($reviewDirection === "E") {
+         // The Sichter's substantive incoming analysis chooses the recipients.
+         $data ["16_empf"] = estab_workflow_distribution_tokens (
+           $browserData,
+           $empf_matrix,
+           array ($redcopy2."_rt")
+         );
+         $reviewFields ["16_empf"] = $data ["16_empf"];
+         $reviewFields ["x00_status"] = 8;
+         $reviewFields ["x01_abschluss"] = "t";
+       } else {
+         // Outgoing review is formal only: address, author mark and function.
+         // Neither content nor recipient routing is accepted from the browser.
+         $reviewFields ["x00_status"] = $isFormalReturn ? 10 : 1;
+         $reviewFields ["x01_abschluss"] = "f";
+       }
+
        $reviewSaved = estab_message_update_pending_review (
          $messageConnection,
          $conf_4f_tbl ["nachrichten"],
          $data ["00_lfd"],
-         (bool) ($conf_4f ["si_in_out"] ?? true),
+         $reviewFields,
          array (
-           "15_quitdatum" => convtodatetime (date ("dm"), $data ["15_quitdatum"]),
-           "15_quitzeichen" => $data ["15_quitzeichen"],
-           "16_empf" => $data ["16_empf"],
-           "17_vermerke" => $data ["17_vermerke"],
-           "x00_status" => 8,
-           "x01_abschluss" => "t",
-           "x02_sperre" => "f",
-           "x03_sperruser" => "",
+           "event_type" => $reviewDirection === "E"
+             ? "incoming_routed"
+             : ($isFormalReturn ? "si_returned" : "si_approved"),
+           "actor" => $messageActor,
+           "from_status" => 4,
+           "to_status" => (int) $reviewFields ["x00_status"],
+           "snapshot" => $reviewDirection === "E"
+             ? array (
+               "direction" => "E",
+               "reviewed_by" => $sessionCode,
+               "recipients" => $reviewFields ["16_empf"],
+               "review_note" => $reviewFields ["17_vermerke"],
+             )
+             : array (
+               "direction" => "A",
+               "reviewed_by" => $sessionCode,
+               "address" => $reviewMessage ["10_anschrift"] ?? "",
+               "author_code" => $reviewMessage ["14_zeichen"] ?? "",
+               "author_function" => $reviewMessage ["14_funktion"] ?? "",
+               "reason" => $isFormalReturn
+                 ? $reviewFields ["17_vermerke"]
+                 : "",
+             ),
+           "occurred_at" => $reviewFields ["15_quitdatum"],
          )
        );
        if (!$reviewSaved) {
          throw new RuntimeException ("Message review status changed");
        }
-       protokolleintrag ("Stab_sichten", "message_id=".estab_message_positive_id ($data ["00_lfd"]));
+       $reviewEvent = $reviewDirection === "E"
+         ? "Stab-sichten-Eingang"
+         : ($isFormalReturn
+           ? "Stab-formal-zurueckgewiesen"
+           : "Stab-formal-freigegeben");
+       protokolleintrag (
+         $reviewEvent,
+         "message_id=".estab_message_positive_id ($data ["00_lfd"])
+       );
     break;
 
 		case "Nachweis":
@@ -1092,53 +1355,6 @@ function check_and_save ($data){
 */
    break;
 
-	case "FM-Admin":
-	case "SI-Admin":
-		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>FM-Admin, SI-Admin</big><br>\n";}
-       // Preserve the original review timestamp exactly. The administration
-       // form renders it read-only and only permits code, recipients and note.
-       $storedAdminMessage = estab_message_fetch_by_id (
-         $messageConnection,
-         $conf_4f_tbl ["nachrichten"],
-         $data ["00_lfd"]
-       );
-       if (!is_array ($storedAdminMessage)) {
-         throw new RuntimeException ("Message not found");
-       }
-       $data ["16_empf"] = $redcopy2."_rt,";
-       for (  $i = 1 ; $i <= 5 ; $i++ ){
-         for ( $j = 1 ; $j <= 5 ; $j++ ){
-           if ( isset ( $data ["16_".$i.$j] ) ) {
-             list ($ord, $pos, $fkt) = explode ("_", $data ["16_".$i.$j]);
-             $data ["16_empf"] .= $empf_matrix [$i][$j]["fkt"]."_".$fkt.",";
-           }
-           if ( $data ["16_gncopy"] == "16_".$i.$j."_gn" ) {
-             $data ["16_empf"] .= $empf_matrix [$i][$j]["fkt"]."_gn,";
-           }
-         }
-       }
-
-
-
-       if (!estab_message_update (
-         $messageConnection,
-         $conf_4f_tbl ["nachrichten"],
-         $data ["00_lfd"],
-         array (
-           "15_quitdatum" => $storedAdminMessage ["15_quitdatum"],
-           "15_quitzeichen" => $data ["15_quitzeichen"],
-           "16_empf" => $data ["16_empf"],
-           "17_vermerke" => $data ["17_vermerke"],
-         )
-       )) {
-         throw new RuntimeException ("Admin message update lost its target");
-       }
-       if ($data["task"] == "FM-Admin") {
-         protokolleintrag ("++ FM-Admin", "message_id=".estab_message_positive_id ($data ["00_lfd"]));
-       } else {
-         protokolleintrag ("++ SI-Admin", "message_id=".estab_message_positive_id ($data ["00_lfd"]));
-       }
-	    break;
 	  }
   } finally {
     estab_auth_close ($messageConnection);

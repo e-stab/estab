@@ -39,7 +39,17 @@ $requestMethod = $_SERVER['REQUEST_METHOD'] ?? '';
 $error = null;
 $incidents = [];
 $selectedIncidentId = null;
-$selectedSections = ['etb', 'ttb', 'messages', 'attachments'];
+$selectedSections = [
+    'etb',
+    'ttb',
+    'messages',
+    'attachments',
+    'message_evidence',
+    'duty',
+    's6_plans',
+    'courier',
+    'operations_evidence',
+];
 $attachmentByteLimit = estab_env_integer(
     'ESTAB_PDF_ATTACHMENT_MAX_BYTES',
     ESTAB_INCIDENT_PDF_DEFAULT_ATTACHMENT_BYTES,
@@ -154,6 +164,10 @@ if ($requestMethod === 'POST') {
         header('X-Robots-Tag: noindex, nofollow');
         echo $rendered['bytes'];
         exit;
+    } catch (EstabCsrfException) {
+        http_response_code(403);
+        $error = 'Die Formularsitzung ist ungültig oder abgelaufen. '
+            . 'Bitte laden Sie die Seite neu.';
     } catch (EstabIncidentExportInputException | EstabIncidentInputException $exception) {
         http_response_code(422);
         $error = $exception->getMessage();
@@ -212,10 +226,10 @@ try {
         Administration · Einsatzdokumentation
       </p>
       <h1>PDF-Einsatzdossier</h1>
-      <p>Erstellen Sie für einen bestimmten Einsatz eine durchsuchbare PDF mit
-        ETB, TBB und allen Nachrichtenvordrucken. Auf Wunsch werden die
-        Originalanhänge direkt in die PDF eingebettet und im Anlagenverzeichnis
-        mit SHA-256-Prüfsumme dokumentiert.</p>
+      <p>Erstellen Sie für einen bestimmten Einsatz ein revisionsfähiges,
+        durchsuchbares DV-1-101-Dossier. Der Standardumfang enthält alle
+        Tagebücher, Nachrichtenvordrucke und Nachweisketten sowie
+        Dienstorganisation, S6-Planung, Melderaufträge und Originalanhänge.</p>
     </header>
 
     <?php if ($error !== null): ?>
@@ -289,6 +303,26 @@ try {
                 'attachments' => [
                     'Originalanhänge',
                     'Nur zusammen mit Nachrichtenvordrucken; vollständig eingebettet',
+                ],
+                'message_evidence' => [
+                    'Nachrichtenereignisse und Nachweisköpfe',
+                    'Vollständige Ereignisketten, Snapshots, Head-Hashes und Prüfstatus',
+                ],
+                'duty' => [
+                    'Dienstorganisation',
+                    'Alle Dienstschichten, Besetzungen und Übergaben',
+                ],
+                's6_plans' => [
+                    'S6-Fernmeldeplanung',
+                    'Alle Planversionen und Einträge mit Gültigkeit und Freigabe',
+                ],
+                'courier' => [
+                    'Melderaufträge',
+                    'Komplette Auftrags-, Empfänger-, Rückweg- und Abschlusskette',
+                ],
+                'operations_evidence' => [
+                    'Betriebsereignisse und Nachweiskopf',
+                    'Unveränderliche Betriebskette mit neu berechnetem Hashstatus',
                 ],
             ] as $section => [$label, $description]): ?>
               <label class="estab-incident-export-option">

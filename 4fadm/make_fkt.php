@@ -65,7 +65,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         if (!$submitted['valid']) {
             http_response_code(422);
             $error = 'Die Matrix ist ungültig. Funktionen müssen eindeutig sein; '
-                . 'Si, A/W und LdF sind reserviert. Eine belegte Position muss als Rotkopie markiert sein.';
+                . 'Si, A/W und LdF sind reserviert. S2/Stab muss als '
+                . 'Lage-/Dokumentationsfunktion und Rotkopieziel vorhanden sein.';
         } else {
             try {
                 $connection = estab_auth_connect($conf_4f_db);
@@ -158,7 +159,7 @@ $updated = is_string($updatedValue) ? $updatedValue : '';
     <header class="estab-tool-hero">
       <p class="estab-tool-eyebrow">Administration · Konfiguration</p>
       <h1>Empfängermatrix bearbeiten</h1>
-      <p>Die aktive Matrix steuert Funktionen, Rollen, Autosichtung und
+      <p>Die aktive Matrix steuert Funktionen, Rollen und die fachliche
         Rotkopie. Geänderte Rollen werden auf zugewiesene Konten übertragen;
         entfernte Funktionen bleiben zur administrativen Neuzuweisung sichtbar.
         Betroffene Sitzungen werden beim Speichern beendet.</p>
@@ -171,8 +172,11 @@ $updated = is_string($updatedValue) ? $updatedValue : '';
       <strong>Vor dem Speichern prüfen:</strong>
       <p>Funktionsnamen bestehen aus höchstens sechs Buchstaben, Ziffern oder
         Unterstrichen. <code>Si</code>, <code>A/W</code> und
-        <code>LdF</code> sind reserviert.
-        Genau eine belegte Position muss Rotkopie-Empfänger sein.</p>
+        <code>LdF</code> sind reserviert. <code>S2</code> mit Rolle
+        <code>Stab</code> ist als Lage-/Dokumentationsfunktion verpflichtend
+        und muss das einzige Rotkopieziel sein. Autosichtung ist nicht
+        zulässig; die Sichtung wird immer durch eine besetzte Funktion
+        <code>Si</code> durchgeführt.</p>
       <p>„Standard laden“ verwirft die aktuellen Editorwerte.
         „Standard ersetzen“ überschreibt die einzige gespeicherte Vorlage;
         der vorherige Stand bleibt dann nur in einem Datenbankbackup erhalten.
@@ -232,8 +236,7 @@ $updated = is_string($updatedValue) ? $updatedValue : '';
                   <th scope="col">Position</th>
                   <th scope="col">Funktion</th>
                   <th scope="col">Rolle</th>
-                  <th scope="col">Autosichtung</th>
-                  <th scope="col">Rotkopie</th>
+                  <th scope="col">Lage/Dokumentation</th>
                 </tr>
               </thead>
               <tbody>
@@ -282,17 +285,7 @@ $updated = is_string($updatedValue) ? $updatedValue : '';
                         <?php endforeach; ?>
                       </fieldset>
                     </td>
-                    <td data-label="Autosichtung">
-                      <label class="estab-tool-check">
-                        <input
-                          type="checkbox"
-                          name="stasi_<?= $position ?>"
-                          value="1"
-                          <?= !empty($cell['auto']) ? 'checked' : '' ?>>
-                        automatisch
-                      </label>
-                    </td>
-                    <td data-label="Rotkopie">
+                    <td data-label="Lage/Dokumentation">
                       <label class="estab-tool-check">
                         <input
                           type="radio"
@@ -300,7 +293,7 @@ $updated = is_string($updatedValue) ? $updatedValue : '';
                           value="<?= $position ?>"
                           <?= !empty($cell['redcopy']) ? 'checked' : '' ?>
                           required>
-                        Rotkopie
+                        Pflicht-Rotkopie für S2
                       </label>
                     </td>
                   </tr>

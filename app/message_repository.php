@@ -10,7 +10,9 @@
 
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/datetime.php';
+require_once __DIR__ . '/dv_operations.php';
 require_once __DIR__ . '/incident.php';
+require_once __DIR__ . '/message_evidence.php';
 
 /** @return array<string, true> */
 function estab_message_columns(): array
@@ -23,6 +25,7 @@ function estab_message_columns(): array
             '03_datum', '03_zeichen',
             '04_richtung', '04_nummer',
             '05_gegenstelle', '06_befweg', '06_befwegausw',
+            'estab_fernmeldeplan_eintrag_id',
             '07_durchspruch', '08_befhinweis', '08_befhinwausw',
             '09_vorrangstufe', '10_anschrift', '11_gesprnotiz',
             '12_anhang', '12_inhalt', '12_abfzeit',
@@ -155,6 +158,125 @@ function estab_message_fields(array $fields): array
         $validated[$column] = $value;
     }
     return $validated;
+}
+
+/**
+ * Append one caller-supplied workflow event inside the current transaction.
+ *
+ * Keeping this adapter in the repository makes it impossible for a successful
+ * domain update to commit after a failed evidence insert.
+ *
+ * @param array{
+ *   event_type:string,
+ *   actor:array,
+ *   from_status:?int,
+ *   to_status:?int,
+ *   snapshot:array,
+ *   occurred_at?:?string
+ * } $event
+ */
+function estab_message_append_transition_evidence(
+    mysqli $connection,
+    int $incidentId,
+    int $messageId,
+    array $event
+): void {
+    foreach (
+        ['event_type', 'actor', 'from_status', 'to_status', 'snapshot']
+        as $required
+    ) {
+        if (!array_key_exists($required, $event)) {
+            throw new InvalidArgumentException('Incomplete message evidence');
+        }
+    }
+    if (!is_array($event['actor']) || !is_array($event['snapshot'])) {
+        throw new InvalidArgumentException('Invalid message evidence');
+    }
+    if (
+        !is_string($event['event_type'])
+        || (
+            $event['from_status'] !== null
+            && !is_int($event['from_status'])
+        )
+        || (
+            $event['to_status'] !== null
+            && !is_int($event['to_status'])
+        )
+        || (
+            array_key_exists('occurred_at', $event)
+            && $event['occurred_at'] !== null
+            && !is_string($event['occurred_at'])
+        )
+    ) {
+        throw new InvalidArgumentException('Invalid message evidence');
+    }
+    if ($event['to_status'] === 8) {
+        $terminalStatement = $connection->prepare(
+            'SELECT * FROM `nv_nachrichten`'
+                . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
+                . ' FOR UPDATE'
+        );
+        if (!$terminalStatement) {
+            throw new RuntimeException(
+                'Abgeschlossener Nachrichtennachweis konnte nicht vorbereitet werden.'
+            );
+        }
+        try {
+            $terminalStatement->bind_param(
+                'ii',
+                $messageId,
+                $incidentId
+            );
+            if (!$terminalStatement->execute()) {
+                throw new RuntimeException(
+                    'Abgeschlossener Nachrichtennachweis konnte nicht gelesen werden.'
+                );
+            }
+            $terminalMessage = $terminalStatement
+                ->get_result()
+                ->fetch_assoc();
+        } finally {
+            $terminalStatement->close();
+        }
+        if (
+            !is_array($terminalMessage)
+            || (int) ($terminalMessage['x00_status'] ?? 0) !== 8
+            || !in_array(
+                (string) ($terminalMessage['x01_abschluss'] ?? ''),
+                ['t', '1'],
+                true
+            )
+        ) {
+            throw new LogicException(
+                'Terminales Ereignis passt nicht zum abgeschlossenen Datensatz.'
+            );
+        }
+        $terminalSnapshot =
+            estab_message_terminal_snapshot($terminalMessage);
+        $event['snapshot']['terminal_message'] = $terminalSnapshot;
+        $event['snapshot']['terminal_snapshot_sha256'] =
+            estab_message_terminal_snapshot_sha256($terminalMessage);
+    }
+    // The guard runs inside the same active-incident transaction as the
+    // message mutation. If a duty shift is active, a forged/stale basic
+    // account context therefore rolls the domain update back together with
+    // its evidence instead of racing an incident or hat change.
+    estab_dv_require_active_hat_for_operational_write(
+        $connection,
+        $incidentId,
+        $event['actor']
+    );
+    estab_message_event_append(
+        $connection,
+        $incidentId,
+        $messageId,
+        $event['event_type'],
+        $event['actor'],
+        $event['from_status'],
+        $event['to_status'],
+        $event['snapshot'],
+        $event['occurred_at'] ?? null
+    );
 }
 
 /**
@@ -302,6 +424,73 @@ function estab_message_counter_lock_name(
 }
 
 /**
+ * Return the highest explicit paper-counter repair recorded in the immutable
+ * command-post event chain.
+ *
+ * A counter repair is operational evidence, not a fictitious message. Normal
+ * allocation therefore takes the maximum of real rows and this watermark.
+ */
+function estab_message_counter_repair_max(
+    mysqli $connection,
+    int $incidentId,
+    bool $separateNumbering,
+    string $direction
+): int {
+    $incidentId = estab_incident_positive_id($incidentId);
+    if (!in_array($direction, ['E', 'A'], true)) {
+        throw new InvalidArgumentException('Invalid message direction');
+    }
+    // A deployment can change between common and split paper numbering.
+    // Every prior repair remains a lower bound after such a configuration
+    // change: a common watermark applies to both directions, while common
+    // allocation must not reuse either split watermark.
+    $fields = $separateNumbering
+        ? [
+            $direction === 'E' ? 'e_nummer' : 'a_nummer',
+            'ea_nummer',
+        ]
+        : ['ea_nummer', 'e_nummer', 'a_nummer'];
+    $watermarks = array_map(
+        static fn (string $field): string =>
+            "COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(`details`, "
+            . "'$.after.{$field}')) AS UNSIGNED), 0)",
+        $fields
+    );
+    $statement = $connection->prepare(
+        'SELECT COALESCE(MAX(GREATEST('
+        . implode(', ', $watermarks)
+        . ')), 0)'
+        . ' FROM `nv_betriebsereignisse`'
+        . ' WHERE `einsatz_id` = ?'
+        . " AND `objekttyp` = 'DIENSTSCHICHT'"
+        . " AND `aktion` = 'message_counter_repaired'"
+    );
+    if (!$statement) {
+        throw new RuntimeException(
+            'Could not prepare message-counter repair lookup'
+        );
+    }
+    try {
+        $statement->bind_param('i', $incidentId);
+        if (!$statement->execute()) {
+            throw new RuntimeException(
+                'Could not read message-counter repair evidence'
+            );
+        }
+        $row = $statement->get_result()->fetch_row();
+    } finally {
+        $statement->close();
+    }
+    $maximum = (int) ($row[0] ?? 0);
+    if ($maximum < 0 || $maximum > 999999999) {
+        throw new RuntimeException(
+            'Message-counter repair evidence is outside the supported range'
+        );
+    }
+    return $maximum;
+}
+
+/**
  * Allocate the paper-log number and insert atomically.
  *
  * MariaDB advisory locking covers the empty-table case that MAX()+FOR UPDATE
@@ -317,7 +506,9 @@ function estab_message_insert_numbered(
     string $direction,
     bool $separateNumbering,
     array $fields,
-    ?string $attachmentTable = null
+    ?string $attachmentTable,
+    array $event,
+    ?callable $attachmentAuthorizer = null
 ): array {
     if (!in_array($direction, ['E', 'A'], true)) {
         throw new InvalidArgumentException('Invalid message direction');
@@ -347,7 +538,9 @@ function estab_message_insert_numbered(
                 $direction,
                 $separateNumbering,
                 $fields,
-                $attachmentTable
+                $attachmentTable,
+                $event,
+                $attachmentAuthorizer
             ): array {
                 $incidentId = (int) $incident['active_einsatz_id'];
                 if ($separateNumbering) {
@@ -373,7 +566,14 @@ function estab_message_insert_numbered(
                 } finally {
                     $numberStatement->close();
                 }
-                $number = ((int) ($numberRow[0] ?? 0)) + 1;
+                $messageMaximum = (int) ($numberRow[0] ?? 0);
+                $repairMaximum = estab_message_counter_repair_max(
+                    $connection,
+                    $incidentId,
+                    $separateNumbering,
+                    $direction
+                );
+                $number = max($messageMaximum, $repairMaximum) + 1;
                 if ($number < 1) {
                     throw new RuntimeException('Message number allocation overflowed');
                 }
@@ -395,12 +595,28 @@ function estab_message_insert_numbered(
                         $incidentId,
                         $fields['12_anhang']
                     );
+                    if ($attachmentAuthorizer === null) {
+                        throw new LogicException(
+                            'Message attachment authorizer is required'
+                        );
+                    }
+                    $attachmentAuthorizer(
+                        $connection,
+                        $incidentId,
+                        $fields['12_anhang']
+                    );
                 }
                 $recordId = estab_message_insert_for_incident(
                     $connection,
                     $table,
                     $fields,
                     $incidentId
+                );
+                estab_message_append_transition_evidence(
+                    $connection,
+                    $incidentId,
+                    $recordId,
+                    $event
                 );
                 return ['id' => $recordId, 'number' => $number];
             }
@@ -420,7 +636,8 @@ function estab_message_update(
     mysqli $connection,
     string $table,
     mixed $recordId,
-    array $fields
+    array $fields,
+    array $event
 ): bool {
     $recordId = estab_message_positive_id($recordId);
     $fields = estab_message_fields($fields);
@@ -430,7 +647,8 @@ function estab_message_update(
             $connection,
             $table,
             $recordId,
-            $fields
+            $fields,
+            $event
         ): bool {
             $incidentId = (int) $incident['active_einsatz_id'];
             $assignments = [];
@@ -444,11 +662,18 @@ function estab_message_update(
                 $connection,
                 'UPDATE ' . estab_message_table($table)
                     . ' SET ' . implode(', ', $assignments)
-                    . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?',
+                    . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
+                    . " AND `x01_abschluss` = 'f' AND `x00_status` <> 8",
                 $parameters
             );
             try {
                 if ($statement->affected_rows === 1) {
+                    estab_message_append_transition_evidence(
+                        $connection,
+                        $incidentId,
+                        $recordId,
+                        $event
+                    );
                     return true;
                 }
             } finally {
@@ -461,6 +686,8 @@ function estab_message_update(
             $verificationConditions = [
                 '`00_lfd` = ?',
                 '`einsatz_id` = ?',
+                "`x01_abschluss` = 'f'",
+                '`x00_status` <> 8',
             ];
             foreach ($fields as $column => $value) {
                 $verificationConditions[] = '`' . $column . '` <=> ?';
@@ -539,19 +766,30 @@ function estab_message_update_locked_outgoing(
 /**
  * Return the immutable SQL predicate for a staged LdF/A-W transition.
  *
- * Status 1 belongs exclusively to LdF. Status 2 belongs to A/W and is
- * reachable only after LdF recorded an acceptance mark and a transport
- * decision. The direction/status pairs are deliberately closed.
+ * Incoming status 1 belongs to LdF immediately after A/W registration.
+ * Outgoing status 1 belongs to LdF only after the Sichter recorded the
+ * mandatory formal approval. Status 2 belongs to A/W and is reachable only
+ * after both approvals and the LdF transport decision. The direction/status
+ * pairs are deliberately closed.
  */
 function estab_message_operator_stage_predicate(
     string $direction,
     int $status
 ): string {
-    if ($status === 1 && in_array($direction, ['E', 'A'], true)) {
+    if ($status === 1 && $direction === 'E') {
         return " AND `04_richtung` = '" . $direction . "'"
             . ' AND `x00_status` = 1'
             . ' AND `02_zeit` IS NULL AND `02_zeichen` = ?'
             . ' AND `03_datum` IS NULL AND `03_zeichen` = ?'
+            . ' AND `15_quitdatum` IS NULL AND `15_quitzeichen` = ?'
+            . " AND `x01_abschluss` = 'f'";
+    }
+    if ($status === 1 && $direction === 'A') {
+        return " AND `04_richtung` = 'A'"
+            . ' AND `x00_status` = 1'
+            . ' AND `02_zeit` IS NULL AND `02_zeichen` = ?'
+            . ' AND `03_datum` IS NULL AND `03_zeichen` = ?'
+            . ' AND `15_quitdatum` IS NOT NULL AND `15_quitzeichen` <> ?'
             . " AND `x01_abschluss` = 'f'";
     }
     if ($status === 2 && $direction === 'A') {
@@ -560,6 +798,7 @@ function estab_message_operator_stage_predicate(
             . ' AND `02_zeit` IS NOT NULL AND `02_zeichen` <> ?'
             . ' AND `06_befwegausw` <> ?'
             . ' AND `03_datum` IS NULL AND `03_zeichen` = ?'
+            . ' AND `15_quitdatum` IS NOT NULL AND `15_quitzeichen` <> ?'
             . " AND `x01_abschluss` = 'f'";
     }
     throw new InvalidArgumentException('Invalid message operator stage');
@@ -571,7 +810,7 @@ function estab_message_operator_stage_parameters(
     int $status
 ): array {
     estab_message_operator_stage_predicate($direction, $status);
-    return $status === 1 ? ['', ''] : ['', '', ''];
+    return $status === 1 ? ['', '', ''] : ['', '', '', ''];
 }
 
 /**
@@ -659,7 +898,8 @@ function estab_message_update_locked_operator_stage(
     string $operatorCode,
     string $direction,
     int $status,
-    array $fields
+    array $fields,
+    array $event
 ): bool {
     $recordId = estab_message_positive_id($recordId);
     if (preg_match('/\A[a-z0-9_]{1,6}\z/D', $operatorCode) !== 1) {
@@ -679,10 +919,238 @@ function estab_message_update_locked_operator_stage(
             $table,
             $recordId,
             $operatorCode,
+            $direction,
+            $status,
             $fields,
             $stageSql,
-            $stageParameters
+            $stageParameters,
+            $event
         ): bool {
+            $incidentId = (int) $incident['active_einsatz_id'];
+            if ($direction === 'A' && $status === 1) {
+                $previousRouteStatement = estab_message_execute(
+                    $connection,
+                    'SELECT `estab_fernmeldeplan_eintrag_id`,'
+                        . ' `06_befwegausw`, `06_befweg` FROM '
+                        . estab_message_table($table)
+                        . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
+                        . " AND `04_richtung` = 'A'"
+                        . ' AND `x00_status` = 1 FOR UPDATE',
+                    [$recordId, $incidentId]
+                );
+                try {
+                    $previousRoute = $previousRouteStatement
+                        ->get_result()
+                        ->fetch_assoc();
+                } finally {
+                    $previousRouteStatement->close();
+                }
+                if (!is_array($previousRoute)) {
+                    return false;
+                }
+                if (
+                    !array_key_exists(
+                        'estab_fernmeldeplan_eintrag_id',
+                        $fields
+                    )
+                ) {
+                    throw new EstabDvInputException(
+                        'Ein Weg aus dem aktiven S6-Fernmeldeplan ist erforderlich.'
+                    );
+                }
+                $routeEntryId = estab_message_positive_id(
+                    $fields['estab_fernmeldeplan_eintrag_id']
+                );
+                $previousRouteEntryId = (int) (
+                    $previousRoute['estab_fernmeldeplan_eintrag_id'] ?? 0
+                );
+                if (
+                    $previousRouteEntryId > 0
+                    && $routeEntryId === $previousRouteEntryId
+                ) {
+                    throw new EstabDvConflictException(
+                        'Nach einer Rückgabe ist ein anderer aktiver '
+                        . 'S6-Beförderungsweg zu disponieren.'
+                    );
+                }
+                $route = estab_dv_resolve_active_route(
+                    $connection,
+                    $incidentId,
+                    $routeEntryId
+                );
+                $routeParts = array_values(array_filter(
+                    [
+                        trim((string) ($route['betriebsstelle'] ?? '')),
+                        trim((string) ($route['rufname'] ?? '')),
+                        trim((string) ($route['kanal'] ?? '')),
+                        trim((string) ($route['bandlage'] ?? '')),
+                        trim((string) ($route['verkehrsform'] ?? '')),
+                    ],
+                    static fn (string $part): bool => $part !== ''
+                ));
+                $routeText = estab_message_excerpt(
+                    implode(' · ', $routeParts),
+                    128
+                );
+                if ($routeText === '') {
+                    throw new EstabDvConflictException(
+                        'Der ausgewählte Fernmeldeweg hat keine lesbare Bezeichnung.'
+                    );
+                }
+                $fields['estab_fernmeldeplan_eintrag_id'] = $routeEntryId;
+                $fields['06_befwegausw'] = (string) $route['medium'];
+                $fields['06_befweg'] = $routeText;
+                $event['snapshot']['telecom_plan_id'] =
+                    (int) $route['fernmeldeplan_id'];
+                $event['snapshot']['telecom_plan_version'] =
+                    (int) $route['version'];
+                $event['snapshot']['telecom_plan_entry_id'] = $routeEntryId;
+                $event['snapshot']['transport_medium'] =
+                    (string) $route['medium'];
+                $event['snapshot']['transport_route'] = $routeText;
+                $event['snapshot']['route'] = [
+                    'betriebsstelle' =>
+                        (string) ($route['betriebsstelle'] ?? ''),
+                    'rufname' => (string) ($route['rufname'] ?? ''),
+                    'kanal' => (string) ($route['kanal'] ?? ''),
+                    'bandlage' => (string) ($route['bandlage'] ?? ''),
+                    'verkehrsform' =>
+                        (string) ($route['verkehrsform'] ?? ''),
+                ];
+                if ($previousRouteEntryId > 0) {
+                    $event['snapshot']['redisposition'] = true;
+                    $event['snapshot']['previous_telecom_plan_entry_id'] =
+                        $previousRouteEntryId;
+                    $event['snapshot']['previous_transport_medium'] = trim(
+                        (string) ($previousRoute['06_befwegausw'] ?? '')
+                    );
+                    $event['snapshot']['previous_transport_route'] = trim(
+                        (string) ($previousRoute['06_befweg'] ?? '')
+                    );
+                }
+            }
+            if ($direction === 'A' && $status === 2) {
+                $targetStatus = (int) ($fields['x00_status'] ?? 0);
+                $mediumStatement = estab_message_execute(
+                    $connection,
+                    'SELECT `06_befwegausw`, `06_befweg`, '
+                        . '`estab_fernmeldeplan_eintrag_id` FROM '
+                        . estab_message_table($table)
+                        . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
+                        . " AND `04_richtung` = 'A'"
+                        . ' AND `x00_status` = 2 FOR UPDATE',
+                    [$recordId, $incidentId]
+                );
+                try {
+                    $mediumRow = $mediumStatement
+                        ->get_result()
+                        ->fetch_assoc();
+                } finally {
+                    $mediumStatement->close();
+                }
+                if (!is_array($mediumRow)) {
+                    return false;
+                }
+                $confirmedRouteId = (int) (
+                    $mediumRow['estab_fernmeldeplan_eintrag_id'] ?? 0
+                );
+                $confirmedMedium = trim(
+                    (string) ($mediumRow['06_befwegausw'] ?? '')
+                );
+                $confirmedRoute = trim(
+                    (string) ($mediumRow['06_befweg'] ?? '')
+                );
+                if (
+                    $confirmedRouteId < 1
+                    || $confirmedMedium === ''
+                    || $confirmedRoute === ''
+                ) {
+                    throw new EstabDvConflictException(
+                        'Der disponierte S6-Beförderungsweg ist unvollständig.'
+                    );
+                }
+
+                if ($targetStatus === 8) {
+                    if (
+                        ($event['snapshot']['transport_route_confirmed'] ?? null)
+                        !== true
+                    ) {
+                        throw new EstabDvInputException(
+                            'Bestätigen Sie den disponierten S6-Beförderungsweg.'
+                        );
+                    }
+                    // The immutable message row, not browser-supplied 06_*
+                    // fields, is the authoritative proof of the confirmation.
+                    $event['snapshot']['telecom_plan_entry_id'] =
+                        $confirmedRouteId;
+                    $event['snapshot']['transport_medium'] = $confirmedMedium;
+                    $event['snapshot']['transport_route'] = $confirmedRoute;
+                    if ($confirmedMedium === 'Me') {
+                        $messengerJob =
+                            estab_dv_require_messenger_reported_for_message(
+                                $connection,
+                                $incidentId,
+                                $recordId
+                            );
+                        $event['snapshot']['messenger_job_id'] =
+                            (int) $messengerJob['melderauftrag_id'];
+                        $event['snapshot']['messenger_status'] =
+                            (string) $messengerJob['status'];
+                        $event['snapshot']['messenger_reported_at'] =
+                            (string) $messengerJob['gemeldet_am'];
+                        $event['snapshot']['messenger_reported_to'] =
+                            (string) $messengerJob['gemeldet_an'];
+                    }
+                } elseif (
+                    $targetStatus === 1
+                    && ($event['event_type'] ?? null)
+                        === 'aw_transport_returned'
+                ) {
+                    $returnReason = trim(
+                        (string) (
+                            $event['snapshot']['transport_return_reason'] ?? ''
+                        )
+                    );
+                    if (
+                        $returnReason === ''
+                        || strlen($returnReason) > 2000
+                        || str_contains($returnReason, "\0")
+                    ) {
+                        throw new EstabDvInputException(
+                            'Für die Rückgabe an LdF ist ein Grund erforderlich.'
+                        );
+                    }
+                    $messengerHistory =
+                        estab_dv_require_no_open_messenger_for_redispatch(
+                            $connection,
+                            $incidentId,
+                            $recordId
+                        );
+                    $event['snapshot']['transport_return_reason'] =
+                        $returnReason;
+                    $event['snapshot']['rejected_telecom_plan_entry_id'] =
+                        $confirmedRouteId;
+                    $event['snapshot']['rejected_transport_medium'] =
+                        $confirmedMedium;
+                    $event['snapshot']['rejected_transport_route'] =
+                        $confirmedRoute;
+                    if ($messengerHistory !== []) {
+                        $event['snapshot']['previous_messenger_jobs'] =
+                            array_map(
+                                static fn (array $job): array => [
+                                    'melderauftrag_id' =>
+                                        (int) $job['melderauftrag_id'],
+                                    'status' => (string) $job['status'],
+                                ],
+                                $messengerHistory
+                            );
+                    }
+                } else {
+                    throw new EstabDvConflictException(
+                        'Ungültiger Übergang in der A/W-Beförderung.'
+                    );
+                }
+            }
             $assignments = [];
             foreach (array_keys($fields) as $column) {
                 $assignments[] = '`' . $column . '` = ?';
@@ -698,14 +1166,23 @@ function estab_message_update_locked_operator_stage(
                     array_values($fields),
                     [
                         $recordId,
-                        (int) $incident['active_einsatz_id'],
+                        $incidentId,
                     ],
                     $stageParameters,
                     [$operatorCode]
                 )
             );
             try {
-                return $statement->affected_rows === 1;
+                if ($statement->affected_rows !== 1) {
+                    return false;
+                }
+                estab_message_append_transition_evidence(
+                    $connection,
+                    $incidentId,
+                    $recordId,
+                    $event
+                );
+                return true;
             } finally {
                 $statement->close();
             }
@@ -792,13 +1269,20 @@ function estab_message_release_operator_stage_lock(
     );
 }
 
-/** Atomically finish a message that is still in the viewer queue. */
+/**
+ * Atomically transition a message that is still in the viewer queue.
+ *
+ * Incoming messages reach the queue after LdF translated the sender.
+ * Outgoing messages reach it before any LdF/A-W field is populated. The
+ * caller selects status 1 for formal approval, status 10 for a return to the
+ * author, or status 8 for completed incoming sighting.
+ */
 function estab_message_update_pending_review(
     mysqli $connection,
     string $table,
     mixed $recordId,
-    bool $reviewOutgoing,
-    array $fields
+    array $fields,
+    array $event
 ): bool {
     $recordId = estab_message_positive_id($recordId);
     $fields = estab_message_fields($fields);
@@ -808,8 +1292,8 @@ function estab_message_update_pending_review(
             $connection,
             $table,
             $recordId,
-            $reviewOutgoing,
-            $fields
+            $fields,
+            $event
         ): bool {
             $assignments = [];
             foreach (array_keys($fields) as $column) {
@@ -826,18 +1310,202 @@ function estab_message_update_pending_review(
                 . ' AND `x00_status` = 4'
                 . ' AND `15_quitdatum` IS NULL AND `15_quitzeichen` = ?'
                 . " AND (`04_richtung` = 'E'";
-            if ($reviewOutgoing) {
-                $sql .= " OR (`04_richtung` = 'A'"
-                    . ' AND `03_datum` IS NOT NULL AND `03_zeichen` <> ?)';
-            } else {
-                // Keep the parameter count stable while failing the outgoing branch.
-                $sql .= ' OR (? <> ?)';
-                $parameters[] = '';
-            }
+            $sql .= " OR (`04_richtung` = 'A'"
+                . ' AND `02_zeit` IS NULL AND `02_zeichen` = ?'
+                . ' AND `03_datum` IS NULL AND `03_zeichen` = ?)';
+            $parameters[] = '';
             $sql .= ')';
             $statement = estab_message_execute($connection, $sql, $parameters);
             try {
-                return $statement->affected_rows === 1;
+                if ($statement->affected_rows !== 1) {
+                    return false;
+                }
+                estab_message_append_transition_evidence(
+                    $connection,
+                    (int) $incident['active_einsatz_id'],
+                    $recordId,
+                    $event
+                );
+                return true;
+            } finally {
+                $statement->close();
+            }
+        }
+    );
+}
+
+/**
+ * Resubmit one formally returned outgoing message under its staff function.
+ *
+ * A shift successor who has accepted the same functional hat may continue the
+ * task; a different staff function may not. The evidence guard verifies the
+ * active accepted hat when a duty shift exists. Old and new responsibility
+ * remain explicit in the transition snapshot.
+ */
+function estab_message_resubmit_returned_outgoing(
+    mysqli $connection,
+    string $table,
+    mixed $recordId,
+    string $authorCode,
+    string $authorFunction,
+    array $fields,
+    array $event,
+    ?string $attachmentTable = null,
+    ?callable $attachmentAuthorizer = null
+): bool {
+    $recordId = estab_message_positive_id($recordId);
+    if (
+        preg_match('/\A[a-z0-9_]{1,6}\z/D', $authorCode) !== 1
+        || trim($authorFunction) === ''
+        || strlen($authorFunction) > 25
+        || str_contains($authorFunction, "\0")
+    ) {
+        throw new InvalidArgumentException('Invalid returned-message author');
+    }
+    $fields = estab_message_fields($fields);
+    if (
+        !hash_equals($authorCode, (string) ($fields['14_zeichen'] ?? ''))
+        || !hash_equals(
+            $authorFunction,
+            (string) ($fields['14_funktion'] ?? '')
+        )
+    ) {
+        throw new InvalidArgumentException(
+            'Returned-message responsibility does not match the actor'
+        );
+    }
+    return estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
+            $connection,
+            $table,
+            $recordId,
+            $authorCode,
+            $authorFunction,
+            $fields,
+            $event,
+            $attachmentTable,
+            $attachmentAuthorizer
+        ): bool {
+            $originalStatement = estab_message_execute(
+                $connection,
+                'SELECT `14_zeichen`, `14_funktion` FROM '
+                    . estab_message_table($table)
+                    . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
+                    . " AND `04_richtung` = 'A' AND `x00_status` = 10"
+                    . ' AND `02_zeit` IS NULL AND `02_zeichen` = ?'
+                    . ' AND `03_datum` IS NULL AND `03_zeichen` = ?'
+                    . ' AND `15_quitdatum` IS NOT NULL'
+                    . " AND `15_quitzeichen` <> ?"
+                    . " AND `x01_abschluss` = 'f'"
+                    . " AND `x02_sperre` = 'f'"
+                    . ' AND `x03_sperruser` = ? FOR UPDATE',
+                [
+                    $recordId,
+                    (int) $incident['active_einsatz_id'],
+                    '',
+                    '',
+                    '',
+                    '',
+                ]
+            );
+            try {
+                $originalMessage = $originalStatement
+                    ->get_result()
+                    ->fetch_assoc();
+            } finally {
+                $originalStatement->close();
+            }
+            if (
+                !is_array($originalMessage)
+                || !hash_equals(
+                    (string) ($originalMessage['14_funktion'] ?? ''),
+                    $authorFunction
+                )
+            ) {
+                return false;
+            }
+            if (array_key_exists('12_anhang', $fields)) {
+                if ($attachmentTable === null) {
+                    throw new LogicException(
+                        'Message attachment table is required for resubmission'
+                    );
+                }
+                estab_message_require_attachment_scope(
+                    $connection,
+                    $attachmentTable,
+                    (int) $incident['active_einsatz_id'],
+                    $fields['12_anhang']
+                );
+                if (
+                    (string) $fields['12_anhang'] !== ''
+                    && $attachmentAuthorizer === null
+                ) {
+                    throw new LogicException(
+                        'Message attachment authorizer is required'
+                    );
+                }
+                if (
+                    (string) $fields['12_anhang'] !== ''
+                    && $attachmentAuthorizer !== null
+                ) {
+                    $attachmentAuthorizer(
+                        $connection,
+                        (int) $incident['active_einsatz_id'],
+                        $fields['12_anhang']
+                    );
+                }
+            }
+
+            $assignments = [];
+            foreach (array_keys($fields) as $column) {
+                $assignments[] = '`' . $column . '` = ?';
+            }
+            $statement = estab_message_execute(
+                $connection,
+                'UPDATE ' . estab_message_table($table)
+                    . ' SET ' . implode(', ', $assignments)
+                    . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
+                    . " AND `04_richtung` = 'A' AND `x00_status` = 10"
+                    . ' AND `14_funktion` = ?'
+                    . ' AND `02_zeit` IS NULL AND `02_zeichen` = ?'
+                    . ' AND `03_datum` IS NULL AND `03_zeichen` = ?'
+                    . ' AND `15_quitdatum` IS NOT NULL'
+                    . " AND `15_quitzeichen` <> ?"
+                    . " AND `x01_abschluss` = 'f'"
+                    . " AND `x02_sperre` = 'f'"
+                    . ' AND `x03_sperruser` = ?',
+                array_merge(
+                    array_values($fields),
+                    [
+                        $recordId,
+                        (int) $incident['active_einsatz_id'],
+                        $authorFunction,
+                        '',
+                        '',
+                        '',
+                        '',
+                    ]
+                )
+            );
+            try {
+                if ($statement->affected_rows !== 1) {
+                    return false;
+                }
+                $event['snapshot']['original_author_code'] =
+                    (string) ($originalMessage['14_zeichen'] ?? '');
+                $event['snapshot']['original_author_function'] =
+                    (string) ($originalMessage['14_funktion'] ?? '');
+                $event['snapshot']['responsible_author_code'] = $authorCode;
+                $event['snapshot']['responsible_author_function'] =
+                    $authorFunction;
+                estab_message_append_transition_evidence(
+                    $connection,
+                    (int) $incident['active_einsatz_id'],
+                    $recordId,
+                    $event
+                );
+                return true;
             } finally {
                 $statement->close();
             }
@@ -1092,6 +1760,26 @@ function estab_message_recipient_pattern(string $function): string
         . ')(_[^,[:space:]]+)?[[:space:]]*(,|$)';
 }
 
+/**
+ * SQL object gate shared by staff lists and recipient-state mutations.
+ *
+ * Bind the exact recipient REGEXP first and the active function second.
+ * Foreign recipients receive an object only at terminal status 8. The
+ * function author may continue to inspect their own outgoing object while it
+ * moves through review, disposition, return and transport.
+ */
+function estab_message_staff_access_sql(string $alias = 'm'): string
+{
+    if (preg_match('/\A[A-Za-z][A-Za-z0-9_]*\z/D', $alias) !== 1) {
+        throw new InvalidArgumentException('Invalid message table alias');
+    }
+    $prefix = $alias . '.';
+    return '((' . $prefix . '`x00_status` = 8'
+        . ' AND ' . $prefix . '`16_empf` REGEXP ?)'
+        . " OR (" . $prefix . "`04_richtung` = 'A'"
+        . ' AND BINARY ' . $prefix . '`14_funktion` = BINARY ?))';
+}
+
 /** One advisory-lock namespace serializes set/unset for a state row. */
 function estab_message_state_lock_name(string $table, int $recordId): string
 {
@@ -1259,7 +1947,8 @@ function estab_message_state_set_for_recipient(
             $recordId,
             $dateColumn,
             $timestamp,
-            $recipientPattern
+            $recipientPattern,
+            $function
         ): bool {
             $incidentId = (int) $incident['active_einsatz_id'];
             $lockName = estab_message_acquire_state_lock(
@@ -1275,7 +1964,7 @@ function estab_message_state_set_for_recipient(
                         . ' SELECT m.`00_lfd`, ? FROM '
                         . estab_message_table($messageTable) . ' AS m'
                         . ' WHERE m.`00_lfd` = ? AND m.`einsatz_id` = ?'
-                        . ' AND m.`16_empf` REGEXP ?'
+                        . ' AND ' . estab_message_staff_access_sql('m')
                         . ' AND NOT EXISTS (SELECT 1 FROM '
                         . estab_message_table($stateTable)
                         . ' WHERE `nachnum` = ?)',
@@ -1284,6 +1973,7 @@ function estab_message_state_set_for_recipient(
                         $recordId,
                         $incidentId,
                         $recipientPattern,
+                        $function,
                         $recordId,
                     ]
                 );
@@ -1304,8 +1994,8 @@ function estab_message_state_set_for_recipient(
                         . ' INNER JOIN ' . estab_message_table($stateTable)
                         . ' AS s ON s.`nachnum` = m.`00_lfd`'
                         . ' WHERE m.`00_lfd` = ? AND m.`einsatz_id` = ?'
-                        . ' AND m.`16_empf` REGEXP ?',
-                    [$recordId, $incidentId, $recipientPattern]
+                        . ' AND ' . estab_message_staff_access_sql('m'),
+                    [$recordId, $incidentId, $recipientPattern, $function]
                 );
                 try {
                     $row = $verification->get_result()->fetch_row();
@@ -1340,7 +2030,8 @@ function estab_message_state_unset_for_recipient(
             $messageTable,
             $stateTable,
             $recordId,
-            $recipientPattern
+            $recipientPattern,
+            $function
         ): bool {
             $incidentId = (int) $incident['active_einsatz_id'];
             $lockName = estab_message_acquire_state_lock(
@@ -1355,8 +2046,8 @@ function estab_message_state_unset_for_recipient(
                         . ' INNER JOIN ' . estab_message_table($messageTable)
                         . ' AS m ON m.`00_lfd` = s.`nachnum`'
                         . ' WHERE s.`nachnum` = ? AND m.`einsatz_id` = ?'
-                        . ' AND m.`16_empf` REGEXP ?',
-                    [$recordId, $incidentId, $recipientPattern]
+                        . ' AND ' . estab_message_staff_access_sql('m'),
+                    [$recordId, $incidentId, $recipientPattern, $function]
                 );
                 try {
                     if ($statement->affected_rows > 0) {
@@ -1371,10 +2062,10 @@ function estab_message_state_unset_for_recipient(
                 $verification = estab_message_execute(
                     $connection,
                     'SELECT COUNT(*) FROM '
-                        . estab_message_table($messageTable)
-                        . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
-                        . ' AND `16_empf` REGEXP ?',
-                    [$recordId, $incidentId, $recipientPattern]
+                        . estab_message_table($messageTable) . ' AS m'
+                        . ' WHERE m.`00_lfd` = ? AND m.`einsatz_id` = ?'
+                        . ' AND ' . estab_message_staff_access_sql('m'),
+                    [$recordId, $incidentId, $recipientPattern, $function]
                 );
                 try {
                     $row = $verification->get_result()->fetch_row();
@@ -1441,8 +2132,7 @@ function estab_message_is_recipient(array $message, string $function): bool
 function estab_message_object_allowed(
     array $identity,
     string $operation,
-    array $message,
-    bool $reviewOutgoing = true
+    array $message
 ): bool {
     $isTelecommunications = ($identity['funktion'] ?? '') === 'A/W'
         && ($identity['rolle'] ?? '') === 'Fernmelder';
@@ -1456,48 +2146,92 @@ function estab_message_object_allowed(
         $message['x00_status'] ?? null,
         FILTER_VALIDATE_INT
     );
-    $isPendingLead = $status === 1
-        && in_array(($message['04_richtung'] ?? ''), ['E', 'A'], true)
+    $direction = (string) ($message['04_richtung'] ?? '');
+    $hasViewerApproval =
+        !estab_datetime_is_unset($message['15_quitdatum'] ?? null)
+        && (string) ($message['15_quitzeichen'] ?? '') !== '';
+    $isPendingIncomingLead = $status === 1
+        && $direction === 'E'
         && estab_datetime_is_unset($message['02_zeit'] ?? null)
         && (string) ($message['02_zeichen'] ?? '') === ''
         && estab_datetime_is_unset($message['03_datum'] ?? null)
         && (string) ($message['03_zeichen'] ?? '') === ''
+        && !$hasViewerApproval
         && (string) ($message['x01_abschluss'] ?? 'f') === 'f';
+    $isPendingOutgoingLead = $status === 1
+        && $direction === 'A'
+        && estab_datetime_is_unset($message['02_zeit'] ?? null)
+        && (string) ($message['02_zeichen'] ?? '') === ''
+        && estab_datetime_is_unset($message['03_datum'] ?? null)
+        && (string) ($message['03_zeichen'] ?? '') === ''
+        && $hasViewerApproval
+        && (string) ($message['x01_abschluss'] ?? 'f') === 'f';
+    $isPendingLead = $isPendingIncomingLead || $isPendingOutgoingLead;
     $isPendingOutgoing = $status === 2
-        && ($message['04_richtung'] ?? '') === 'A'
+        && $direction === 'A'
         && !estab_datetime_is_unset($message['02_zeit'] ?? null)
         && (string) ($message['02_zeichen'] ?? '') !== ''
         && (string) ($message['06_befwegausw'] ?? '') !== ''
         && estab_datetime_is_unset($message['03_datum'] ?? null)
         && (string) ($message['03_zeichen'] ?? '') === ''
+        && $hasViewerApproval
         && (string) ($message['x01_abschluss'] ?? 'f') === 'f';
     $isPendingReview = $status === 4
         && estab_datetime_is_unset($message['15_quitdatum'] ?? null)
         && (string) ($message['15_quitzeichen'] ?? '') === ''
         && (
-            ($message['04_richtung'] ?? '') === 'E'
-            || (
-                $reviewOutgoing
-                && ($message['04_richtung'] ?? '') === 'A'
-                && !estab_datetime_is_unset($message['03_datum'] ?? null)
-                && (string) ($message['03_zeichen'] ?? '') !== ''
+            (
+                $direction === 'E'
+                && !estab_datetime_is_unset($message['02_zeit'] ?? null)
+                && (string) ($message['02_zeichen'] ?? '') !== ''
             )
+            || (
+                $direction === 'A'
+                && estab_datetime_is_unset($message['02_zeit'] ?? null)
+                && (string) ($message['02_zeichen'] ?? '') === ''
+                && estab_datetime_is_unset($message['03_datum'] ?? null)
+                && (string) ($message['03_zeichen'] ?? '') === ''
+            )
+        );
+    $isReturnedToAuthor = $status === 10
+        && $direction === 'A'
+        && (string) ($message['14_zeichen'] ?? '') !== ''
+        && (string) ($message['14_funktion'] ?? '') !== ''
+        && hash_equals(
+            (string) ($message['14_funktion'] ?? ''),
+            (string) ($identity['funktion'] ?? '')
+        )
+        && estab_datetime_is_unset($message['02_zeit'] ?? null)
+        && (string) ($message['02_zeichen'] ?? '') === ''
+        && estab_datetime_is_unset($message['03_datum'] ?? null)
+        && (string) ($message['03_zeichen'] ?? '') === ''
+        && $hasViewerApproval
+        && (string) ($message['x01_abschluss'] ?? 'f') === 'f';
+    $isTerminalStaffRecipient = $status === 8
+        && estab_message_is_recipient(
+            $message,
+            (string) ($identity['funktion'] ?? '')
+        );
+    $isOutgoingAuthor = $direction === 'A'
+        && (string) ($message['14_funktion'] ?? '') !== ''
+        && hash_equals(
+            (string) ($message['14_funktion'] ?? ''),
+            (string) ($identity['funktion'] ?? '')
         );
 
     return match ($operation) {
         'staff-read', 'staff-state' =>
             $isStaff
-            && !(($message['04_richtung'] ?? '') === 'E' && $status === 1)
-            && estab_message_is_recipient(
-                $message,
-                (string) $identity['funktion']
-            ),
+            // Recipient copies become operative only at terminal status 8.
+            // The function author alone retains access to their own outgoing
+            // object while it moves through the mandatory workflow.
+            && ($isTerminalStaffRecipient || $isOutgoingAuthor),
+        'staff-correction' => $isStaff && $isReturnedToAuthor,
         'telecommunications-lead-edit' =>
             $isTelecommunicationsLead && $isPendingLead,
         'telecommunications-lead-incoming-save' =>
             $isTelecommunicationsLead
-            && $isPendingLead
-            && ($message['04_richtung'] ?? '') === 'E'
+            && $isPendingIncomingLead
             && ($message['x02_sperre'] ?? '') === 't'
             && hash_equals(
                 (string) ($message['x03_sperruser'] ?? ''),
@@ -1505,8 +2239,7 @@ function estab_message_object_allowed(
             ),
         'telecommunications-lead-outgoing-save' =>
             $isTelecommunicationsLead
-            && $isPendingLead
-            && ($message['04_richtung'] ?? '') === 'A'
+            && $isPendingOutgoingLead
             && ($message['x02_sperre'] ?? '') === 't'
             && hash_equals(
                 (string) ($message['x03_sperruser'] ?? ''),

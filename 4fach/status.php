@@ -2,6 +2,20 @@
 
 declare(strict_types=1);
 
+/*
+ * Retired standalone presence view.
+ *
+ * The maintained sidebar obtains incident-scoped status through vorgaben.php
+ * after validating the selected active duty assignment. This unreferenced
+ * controller exposed global function occupancy from a bare account session.
+ * It is excluded from the runtime image; source deployments fail closed here.
+ */
+http_response_code(410);
+header('Content-Type: text/plain; charset=UTF-8');
+header('Cache-Control: no-store');
+echo 'Diese alte Statusansicht ist stillgelegt.';
+exit;
+
 session_start();
 
 require_once __DIR__ . '/../app/auth.php';

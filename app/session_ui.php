@@ -72,6 +72,20 @@ function estab_session_ui_markup(
     if ($identity === null) {
         return '';
     }
+    $navigationIdentity = $identity;
+    $dutyAssignment = $session['estab_duty_assignment_id'] ?? null;
+    if (
+        (is_int($dutyAssignment) && $dutyAssignment > 0)
+        || (
+            is_string($dutyAssignment)
+            && preg_match(
+                '/\A[1-9][0-9]{0,18}\z/D',
+                $dutyAssignment
+            ) === 1
+        )
+    ) {
+        $navigationIdentity['duty_assignment_id'] = $dutyAssignment;
+    }
     if (preg_match('/\A[a-f0-9]{64}\z/D', $csrfToken) !== 1) {
         throw new InvalidArgumentException('Invalid session UI CSRF token');
     }
@@ -94,7 +108,8 @@ function estab_session_ui_markup(
             true,
             $server === [] ? $_SERVER : $server,
             $compact,
-            $sidebar
+            $sidebar,
+            $navigationIdentity
         )
         : '';
     $name = estab_auth_html($identity['benutzer']);

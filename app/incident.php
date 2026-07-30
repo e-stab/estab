@@ -14,12 +14,15 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/attachment_integrity.php';
 
 const ESTAB_INCIDENT_IDENTIFIER_MAX_LENGTH = 64;
 const ESTAB_INCIDENT_NAME_MAX_LENGTH = 255;
 const ESTAB_INCIDENT_SINGLE_LINE_MAX_LENGTH = 255;
 const ESTAB_INCIDENT_DESCRIPTION_MAX_LENGTH = 10000;
 const ESTAB_INCIDENT_METADATA_MAX_BYTES = 65535;
+const ESTAB_INCIDENT_CLOSE_NOTE_MAX_LENGTH = 10000;
+const ESTAB_INCIDENT_LEGAL_HOLD_REASON_MAX_LENGTH = 1000;
 
 final class EstabIncidentInputException extends InvalidArgumentException
 {
@@ -29,12 +32,23 @@ final class EstabIncidentNotFoundException extends RuntimeException
 {
 }
 
-final class EstabIncidentConflictException extends RuntimeException
+class EstabIncidentConflictException extends RuntimeException
 {
 }
 
 final class EstabNoActiveIncidentException extends RuntimeException
 {
+}
+
+final class EstabIncidentCloseBlockedException extends EstabIncidentConflictException
+{
+    /** @param array<string, int|bool> $preflight */
+    public function __construct(
+        string $message,
+        public readonly array $preflight
+    ) {
+        parent::__construct($message);
+    }
 }
 
 /**
@@ -331,7 +345,11 @@ function estab_incident_status(mysqli $connection, bool $forUpdate = false): arr
     $sql = 'SELECT s.`active_einsatz_id`, s.`revision`, s.`geaendert_am`,'
         . ' s.`geaendert_von`, e.`kennung`, e.`name`, e.`beginn`, e.`ende`,'
         . ' e.`ort`, e.`organisation`, e.`einsatzleitung`, e.`beschreibung`,'
-        . ' e.`metadaten`'
+        . ' e.`metadaten`, e.`estab_status`, e.`estab_closed_at`,'
+        . ' e.`estab_closed_by`, e.`estab_close_note`,'
+        . ' e.`estab_retain_until`, e.`estab_legal_hold`,'
+        . ' e.`estab_legal_hold_reason`, e.`estab_legal_hold_at`,'
+        . ' e.`estab_legal_hold_by`'
         . ' FROM `nv_einsatz_status` AS s'
         . ' LEFT JOIN `nv_einsaetze` AS e'
         . ' ON e.`einsatz_id` = s.`active_einsatz_id`'
@@ -353,6 +371,12 @@ function estab_incident_status(mysqli $connection, bool $forUpdate = false): arr
     }
     if ($row['active_einsatz_id'] !== null && $row['kennung'] === null) {
         throw new RuntimeException('Der globale Einsatzstatus ist inkonsistent.');
+    }
+    if (
+        $row['active_einsatz_id'] !== null
+        && ($row['estab_status'] ?? null) !== 'open'
+    ) {
+        throw new RuntimeException('Ein abgeschlossener Einsatz ist als aktiv markiert.');
     }
     $row['revision'] = estab_incident_revision((string) $row['revision']);
     if ($row['active_einsatz_id'] !== null) {
@@ -416,6 +440,10 @@ function estab_incident_list(mysqli $connection): array
         'SELECT e.`einsatz_id`, e.`kennung`, e.`name`, e.`beginn`, e.`ende`,'
         . ' e.`ort`, e.`organisation`, e.`einsatzleitung`, e.`beschreibung`,'
         . ' e.`metadaten`, e.`erstellt_am`, e.`erstellt_von`,'
+        . ' e.`estab_status`, e.`estab_closed_at`, e.`estab_closed_by`,'
+        . ' e.`estab_close_note`, e.`estab_retain_until`,'
+        . ' e.`estab_legal_hold`, e.`estab_legal_hold_reason`,'
+        . ' e.`estab_legal_hold_at`, e.`estab_legal_hold_by`,'
         . ' CASE WHEN s.`active_einsatz_id` = e.`einsatz_id` THEN 1 ELSE 0 END'
         . ' AS `ist_aktiv`'
         . ' FROM `nv_einsaetze` AS e'
@@ -434,6 +462,7 @@ function estab_incident_list(mysqli $connection): array
     foreach ($rows as &$row) {
         $row['einsatz_id'] = estab_incident_positive_id((string) $row['einsatz_id']);
         $row['ist_aktiv'] = (int) $row['ist_aktiv'] === 1;
+        $row['estab_legal_hold'] = (int) ($row['estab_legal_hold'] ?? 0) === 1;
     }
     unset($row);
     return $rows;
@@ -447,6 +476,10 @@ function estab_incident_find(mysqli $connection, int $incidentId): ?array
         'SELECT e.`einsatz_id`, e.`kennung`, e.`name`, e.`beginn`, e.`ende`,'
         . ' e.`ort`, e.`organisation`, e.`einsatzleitung`, e.`beschreibung`,'
         . ' e.`metadaten`, e.`erstellt_am`, e.`erstellt_von`,'
+        . ' e.`estab_status`, e.`estab_closed_at`, e.`estab_closed_by`,'
+        . ' e.`estab_close_note`, e.`estab_retain_until`,'
+        . ' e.`estab_legal_hold`, e.`estab_legal_hold_reason`,'
+        . ' e.`estab_legal_hold_at`, e.`estab_legal_hold_by`,'
         . ' CASE WHEN s.`active_einsatz_id` = e.`einsatz_id` THEN 1 ELSE 0 END'
         . ' AS `ist_aktiv`'
         . ' FROM `nv_einsaetze` AS e'
@@ -472,6 +505,7 @@ function estab_incident_find(mysqli $connection, int $incidentId): ?array
     }
     $row['einsatz_id'] = estab_incident_positive_id((string) $row['einsatz_id']);
     $row['ist_aktiv'] = (int) $row['ist_aktiv'] === 1;
+    $row['estab_legal_hold'] = (int) ($row['estab_legal_hold'] ?? 0) === 1;
     return $row;
 }
 
@@ -479,7 +513,11 @@ function estab_incident_find(mysqli $connection, int $incidentId): ?array
 function estab_incident_fetch_for_update(mysqli $connection, int $incidentId): array
 {
     $statement = $connection->prepare(
-        'SELECT `einsatz_id`, `kennung`, `name`, `beginn`, `ende`'
+        'SELECT `einsatz_id`, `kennung`, `name`, `beginn`, `ende`,'
+        . ' `estab_status`, `estab_closed_at`, `estab_closed_by`,'
+        . ' `estab_close_note`, `estab_retain_until`, `estab_legal_hold`,'
+        . ' `estab_legal_hold_reason`, `estab_legal_hold_at`,'
+        . ' `estab_legal_hold_by`'
         . ' FROM `nv_einsaetze` WHERE `einsatz_id` = ? FOR UPDATE'
     );
     if (!$statement) {
@@ -521,13 +559,9 @@ function estab_incident_activate_locked(
         );
     }
     $target = estab_incident_fetch_for_update($connection, $incidentId);
-    if (
-        is_string($target['ende'] ?? null)
-        && $target['ende'] !== ''
-        && strcmp($target['ende'], date('Y-m-d H:i:s')) < 0
-    ) {
+    if (($target['estab_status'] ?? null) !== 'open') {
         throw new EstabIncidentConflictException(
-            'Ein bereits beendeter Einsatz kann nicht aktiviert werden.'
+            'Ein formal abgeschlossener Einsatz kann nicht aktiviert werden.'
         );
     }
     if ((int) ($status['active_einsatz_id'] ?? 0) === $incidentId) {
@@ -794,4 +828,458 @@ function estab_incident_deactivate(
         $connection->rollback();
         throw $exception;
     }
+}
+
+/**
+ * Return the blockers that must be cleared before a formal incident close.
+ *
+ * The caller that intends to close must already hold both the singleton
+ * status row and the incident row FOR UPDATE.  This function deliberately
+ * performs no transaction management so the preflight and close stay one
+ * atomic administrative decision.
+ *
+ * @return array{
+ *   open_messages:int,
+ *   locked_messages:int,
+ *   incomplete_attachments:int,
+ *   attachment_integrity_errors:int,
+ *   legacy_attachments_unverifiable:int,
+ *   evidence_errors:int,
+ *   offene_schichten:int,
+ *   offene_besetzungen:int,
+ *   offene_melderauftraege:int,
+ *   offene_fernmeldeplanentwuerfe:int,
+ *   offene_uebergabeanforderungen:int,
+ *   betriebsereigniskette_gueltig:bool,
+ *   closable:bool
+ * }
+ */
+function estab_incident_close_preflight(
+    mysqli $connection,
+    int $incidentId,
+    ?string $attachmentRoot = null,
+    ?int $closingShiftId = null
+): array {
+    $incidentId = estab_incident_positive_id($incidentId);
+    if ($closingShiftId !== null) {
+        $closingShiftId = estab_incident_positive_id($closingShiftId);
+    }
+    $statement = $connection->prepare(
+        'SELECT'
+        . ' (SELECT COUNT(*) FROM `nv_nachrichten`'
+        . '   WHERE `einsatz_id` = ? AND `x00_status` <> 8)'
+        . ' AS `open_messages`,'
+        . ' (SELECT COUNT(*) FROM `nv_nachrichten`'
+        . "   WHERE `einsatz_id` = ? AND (`x02_sperre` IN ('t','1')"
+        . "     OR `x03_sperruser` <> '')) AS `locked_messages`,"
+        . ' (SELECT COUNT(*) FROM `nv_anhang`'
+        . '   WHERE `einsatz_id` = ? AND `status` IN (2, 8))'
+        . ' AS `incomplete_attachments`'
+    );
+    if (!$statement) {
+        throw new RuntimeException('Abschlussprüfung konnte nicht vorbereitet werden.');
+    }
+    try {
+        $statement->bind_param('iii', $incidentId, $incidentId, $incidentId);
+        if (!$statement->execute()) {
+            throw new RuntimeException('Abschlussprüfung konnte nicht ausgeführt werden.');
+        }
+        $result = $statement->get_result();
+        $row = $result->fetch_assoc();
+        $result->free();
+    } finally {
+        $statement->close();
+    }
+    if (!is_array($row)) {
+        throw new RuntimeException('Abschlussprüfung lieferte kein Ergebnis.');
+    }
+    $preflight = [
+        'open_messages' => (int) ($row['open_messages'] ?? 0),
+        'locked_messages' => (int) ($row['locked_messages'] ?? 0),
+        'incomplete_attachments' => (int) ($row['incomplete_attachments'] ?? 0),
+    ];
+    if ($attachmentRoot !== null) {
+        $attachmentIntegrity = estab_attachment_integrity_summary(
+            $connection,
+            $attachmentRoot,
+            $incidentId,
+            false
+        );
+        $preflight['attachment_integrity_errors'] =
+            (int) $attachmentIntegrity['integrity_errors'];
+        $preflight['legacy_attachments_unverifiable'] =
+            (int) $attachmentIntegrity['legacy_unverifiable'];
+    } else {
+        // Compatibility for non-web maintenance callers: still reject a
+        // malformed required database proof. The production close path always
+        // supplies the storage root and additionally verifies the live bytes.
+        $integrityStatement = $connection->prepare(
+            'SELECT'
+                . ' SUM(CASE WHEN `status` = 1'
+                . ' AND `integrity_required` = 1'
+                . ' AND (`ingest_sha256` IS NULL'
+                . " OR `ingest_sha256` NOT REGEXP BINARY '^[0-9a-f]{64}$'"
+                . ' OR `ingest_size` IS NULL'
+                . ' OR `integrity_captured_at` IS NULL)'
+                . ' THEN 1 ELSE 0 END) AS `integrity_errors`,'
+                . ' SUM(CASE WHEN `status` = 1'
+                . ' AND `integrity_required` = 0'
+                . ' THEN 1 ELSE 0 END) AS `legacy_attachments`'
+                . ' FROM `nv_anhang` WHERE `einsatz_id` = ?'
+        );
+        if (!$integrityStatement) {
+            throw new RuntimeException(
+                'Anhangintegritätsprüfung konnte nicht vorbereitet werden.'
+            );
+        }
+        $integrityRow = null;
+        try {
+            $integrityStatement->bind_param('i', $incidentId);
+            if (!$integrityStatement->execute()) {
+                throw new RuntimeException(
+                    'Anhangintegritätsprüfung konnte nicht ausgeführt werden.'
+                );
+            }
+            $integrityResult = $integrityStatement->get_result();
+            if (!$integrityResult instanceof mysqli_result) {
+                throw new RuntimeException(
+                    'Anhangintegritätsprüfung lieferte kein Ergebnis.'
+                );
+            }
+            $integrityRow = $integrityResult->fetch_assoc();
+            $integrityResult->free();
+        } finally {
+            $integrityStatement->close();
+        }
+        if (!is_array($integrityRow)) {
+            throw new RuntimeException(
+                'Anhangintegritätsprüfung lieferte kein Ergebnis.'
+            );
+        }
+        $preflight['attachment_integrity_errors'] =
+            (int) ($integrityRow['integrity_errors'] ?? 0);
+        $preflight['legacy_attachments_unverifiable'] =
+            (int) ($integrityRow['legacy_attachments'] ?? 0);
+    }
+    require_once __DIR__ . '/message_evidence.php';
+    $evidence = estab_message_evidence_verify($connection, $incidentId);
+    $messageEvidenceErrors = $evidence['valid']
+        ? 0
+        : max(
+            1,
+            (int) ($evidence['head_mismatches'] ?? 0)
+                + (($evidence['broken_event_id'] ?? null) === null ? 0 : 1)
+        );
+    require_once __DIR__ . '/dv_operations.php';
+    $operations = estab_dv_incident_closure_blockers(
+        $connection,
+        $incidentId,
+        $closingShiftId
+    );
+    $preflight['offene_schichten'] =
+        (int) ($operations['offene_schichten'] ?? 0);
+    $preflight['offene_besetzungen'] =
+        (int) ($operations['offene_besetzungen'] ?? 0);
+    $preflight['offene_melderauftraege'] =
+        (int) ($operations['offene_melderauftraege'] ?? 0);
+    $preflight['offene_fernmeldeplanentwuerfe'] =
+        (int) ($operations['offene_fernmeldeplanentwuerfe'] ?? 0);
+    $preflight['offene_uebergabeanforderungen'] =
+        (int) ($operations['offene_uebergabeanforderungen'] ?? 0);
+    $preflight['betriebsereigniskette_gueltig'] =
+        (bool) ($operations['betriebsereigniskette_gueltig'] ?? false);
+    $preflight['betriebsereignisse'] =
+        (int) ($operations['betriebsereignisse'] ?? 0);
+    $preflight['evidence_errors'] = $messageEvidenceErrors
+        + ($preflight['betriebsereigniskette_gueltig'] ? 0 : 1);
+    $preflight['closable'] = $preflight['open_messages'] === 0
+        && $preflight['locked_messages'] === 0
+        && $preflight['incomplete_attachments'] === 0
+        && $preflight['attachment_integrity_errors'] === 0
+        && $preflight['offene_schichten'] === 0
+        && $preflight['offene_besetzungen'] === 0
+        && $preflight['offene_melderauftraege'] === 0
+        && $preflight['offene_fernmeldeplanentwuerfe'] === 0
+        && $preflight['offene_uebergabeanforderungen'] === 0
+        && $preflight['evidence_errors'] === 0;
+    return $preflight;
+}
+
+/**
+ * Validate the operator-supplied actual end and close note.
+ *
+ * `ende` may be backdated to the factual end of operations.  The immutable
+ * `estab_closed_at` column always records the server time of the administrative
+ * close separately.
+ *
+ * @return array{ende:string, note:string}
+ */
+function estab_incident_validate_close(array $input, string $incidentStart): array
+{
+    $end = estab_incident_datetime(
+        $input['ende'] ?? date('Y-m-d\TH:i'),
+        'Tatsächliches Einsatzende',
+        true
+    );
+    if ($end === null || strcmp($end, $incidentStart) < 0) {
+        throw new EstabIncidentInputException(
+            'Das tatsächliche Einsatzende darf nicht vor dem Beginn liegen.'
+        );
+    }
+    if (strcmp($end, date('Y-m-d H:i:s', time() + 300)) > 0) {
+        throw new EstabIncidentInputException(
+            'Das tatsächliche Einsatzende darf nicht in der Zukunft liegen.'
+        );
+    }
+    return [
+        'ende' => $end,
+        'note' => estab_incident_text(
+            $input['close_note'] ?? '',
+            'Abschlussvermerk',
+            ESTAB_INCIDENT_CLOSE_NOTE_MAX_LENGTH,
+            true
+        ),
+    ];
+}
+
+/**
+ * Formally and irreversibly close the currently active incident.
+ *
+ * This is intentionally distinct from estab_incident_deactivate(): pausing
+ * permits later activation, while close sets immutable close evidence,
+ * establishes at least one year of retention, and can never be reversed.
+ */
+function estab_incident_close(
+    mysqli $connection,
+    int $expectedIncidentId,
+    int $expectedRevision,
+    string $actor,
+    array $input,
+    ?string $attachmentRoot = null
+): array {
+    $expectedIncidentId = estab_incident_positive_id($expectedIncidentId);
+    $expectedRevision = estab_incident_revision($expectedRevision);
+    $actor = estab_incident_actor($actor);
+
+    if (!$connection->begin_transaction()) {
+        throw new RuntimeException('Einsatzabschluss konnte nicht begonnen werden.');
+    }
+    try {
+        $status = estab_incident_status($connection, true);
+        if (
+            (int) $status['revision'] !== $expectedRevision
+            || (int) ($status['active_einsatz_id'] ?? 0) !== $expectedIncidentId
+        ) {
+            throw new EstabIncidentConflictException(
+                'Der aktive Einsatz wurde zwischenzeitlich geändert.'
+            );
+        }
+        $incident = estab_incident_fetch_for_update($connection, $expectedIncidentId);
+        if (($incident['estab_status'] ?? null) !== 'open') {
+            throw new EstabIncidentConflictException(
+                'Der Einsatz ist bereits formal abgeschlossen.'
+            );
+        }
+        $close = estab_incident_validate_close(
+            $input,
+            (string) ($incident['beginn'] ?? '')
+        );
+        $preflight = estab_incident_close_preflight(
+            $connection,
+            $expectedIncidentId,
+            $attachmentRoot
+        );
+        if (!$preflight['closable']) {
+            throw new EstabIncidentCloseBlockedException(
+                'Der Einsatz kann erst nach Abschluss aller offenen Vorgänge '
+                . 'formal geschlossen werden.',
+                $preflight
+            );
+        }
+
+        $nextRevision = $expectedRevision + 1;
+        $statusStatement = $connection->prepare(
+            'UPDATE `nv_einsatz_status`'
+            . ' SET `active_einsatz_id` = NULL, `revision` = ?,'
+            . ' `geaendert_am` = NOW(6), `geaendert_von` = ?'
+            . ' WHERE `singleton_id` = 1 AND `active_einsatz_id` = ?'
+            . ' AND `revision` = ?'
+        );
+        if (!$statusStatement) {
+            throw new RuntimeException('Einsatzabschluss konnte nicht vorbereitet werden.');
+        }
+        try {
+            $statusStatement->bind_param(
+                'isii',
+                $nextRevision,
+                $actor,
+                $expectedIncidentId,
+                $expectedRevision
+            );
+            if (
+                !$statusStatement->execute()
+                || $statusStatement->affected_rows !== 1
+            ) {
+                throw new EstabIncidentConflictException(
+                    'Der aktive Einsatz wurde zwischenzeitlich geändert.'
+                );
+            }
+        } finally {
+            $statusStatement->close();
+        }
+
+        $closeStatement = $connection->prepare(
+            'UPDATE `nv_einsaetze`'
+            . " SET `ende` = ?, `estab_status` = 'closed',"
+            . ' `estab_closed_at` = NOW(6), `estab_closed_by` = ?,'
+            . ' `estab_close_note` = ?,'
+            . ' `estab_retain_until` = DATE_ADD(NOW(6), INTERVAL 1 YEAR)'
+            . " WHERE `einsatz_id` = ? AND `estab_status` = 'open'"
+        );
+        if (!$closeStatement) {
+            throw new RuntimeException('Einsatzabschluss konnte nicht vorbereitet werden.');
+        }
+        try {
+            $closeStatement->bind_param(
+                'sssi',
+                $close['ende'],
+                $actor,
+                $close['note'],
+                $expectedIncidentId
+            );
+            if (
+                !$closeStatement->execute()
+                || $closeStatement->affected_rows !== 1
+            ) {
+                throw new EstabIncidentConflictException(
+                    'Der Einsatz wurde zwischenzeitlich abgeschlossen.'
+                );
+            }
+        } finally {
+            $closeStatement->close();
+        }
+
+        $closed = estab_incident_fetch_for_update($connection, $expectedIncidentId);
+        estab_incident_audit(
+            $connection,
+            $expectedIncidentId,
+            'abgeschlossen',
+            $actor,
+            $nextRevision,
+            [
+                'tatsaechliches_ende' => $close['ende'],
+                'abschlussvermerk' => $close['note'],
+                'aufbewahrung_bis' => $closed['estab_retain_until'],
+                'preflight' => $preflight,
+            ]
+        );
+        if (!$connection->commit()) {
+            throw new RuntimeException('Einsatzabschluss konnte nicht gespeichert werden.');
+        }
+        return [
+            'einsatz_id' => $expectedIncidentId,
+            'kennung' => (string) ($incident['kennung'] ?? ''),
+            'status' => 'closed',
+            'closed_at' => $closed['estab_closed_at'],
+            'retain_until' => $closed['estab_retain_until'],
+            'status_revision' => $nextRevision,
+        ];
+    } catch (Throwable $exception) {
+        $connection->rollback();
+        throw $exception;
+    }
+}
+
+/**
+ * Set or release a durable legal hold independently of the one-year minimum.
+ *
+ * Releasing a hold never shortens `estab_retain_until`.
+ */
+function estab_incident_set_legal_hold(
+    mysqli $connection,
+    int $incidentId,
+    bool $enabled,
+    mixed $reason,
+    string $actor
+): array {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $actor = estab_incident_actor($actor);
+    $normalizedReason = $enabled
+        ? estab_incident_text(
+            $reason,
+            'Grund der Aufbewahrungssperre',
+            ESTAB_INCIDENT_LEGAL_HOLD_REASON_MAX_LENGTH,
+            true
+        )
+        : null;
+
+    if (!$connection->begin_transaction()) {
+        throw new RuntimeException('Aufbewahrungssperre konnte nicht begonnen werden.');
+    }
+    try {
+        $incident = estab_incident_fetch_for_update($connection, $incidentId);
+        $enabledInt = $enabled ? 1 : 0;
+        $statement = $connection->prepare(
+            'UPDATE `nv_einsaetze`'
+            . ' SET `estab_legal_hold` = ?, `estab_legal_hold_reason` = ?,'
+            . ' `estab_legal_hold_at` = NOW(6), `estab_legal_hold_by` = ?'
+            . ' WHERE `einsatz_id` = ?'
+        );
+        if (!$statement) {
+            throw new RuntimeException(
+                'Aufbewahrungssperre konnte nicht vorbereitet werden.'
+            );
+        }
+        try {
+            $statement->bind_param(
+                'issi',
+                $enabledInt,
+                $normalizedReason,
+                $actor,
+                $incidentId
+            );
+            if (!$statement->execute() || $statement->affected_rows !== 1) {
+                throw new RuntimeException(
+                    'Aufbewahrungssperre konnte nicht gespeichert werden.'
+                );
+            }
+        } finally {
+            $statement->close();
+        }
+        estab_incident_audit(
+            $connection,
+            $incidentId,
+            $enabled ? 'legal_hold_gesetzt' : 'legal_hold_geloest',
+            $actor,
+            null,
+            ['grund' => $normalizedReason]
+        );
+        if (!$connection->commit()) {
+            throw new RuntimeException(
+                'Aufbewahrungssperre konnte nicht gespeichert werden.'
+            );
+        }
+        $incident['estab_legal_hold'] = $enabled;
+        $incident['estab_legal_hold_reason'] = $normalizedReason;
+        $incident['estab_legal_hold_by'] = $actor;
+        return $incident;
+    } catch (Throwable $exception) {
+        $connection->rollback();
+        throw $exception;
+    }
+}
+
+/** Explain whether the retention model permits a later administrative purge. */
+function estab_incident_retention_state(array $incident): array
+{
+    $hold = (bool) ($incident['estab_legal_hold'] ?? false);
+    $retainUntil = $incident['estab_retain_until'] ?? null;
+    $expired = is_string($retainUntil)
+        && $retainUntil !== ''
+        && strcmp($retainUntil, date('Y-m-d H:i:s.u')) <= 0;
+    return [
+        'legal_hold' => $hold,
+        'retain_until' => is_string($retainUntil) ? $retainUntil : null,
+        'deletion_allowed' => !$hold && $expired,
+    ];
 }

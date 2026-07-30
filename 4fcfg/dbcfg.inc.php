@@ -22,4 +22,12 @@ $conf_tbl     ["etb"]           = "nv_etb";
 $conf_tbl     ["tbb"]           = "nv_tbb"; 
 $conf_tbl     ["ubb"]           = "nv_ubb";
 
+require_once __DIR__ . '/../app/operational_guard.php';
+estab_operational_write_enforce(
+    $conf_4f_db,
+    isset($_SESSION) && is_array($_SESSION) ? $_SESSION : [],
+    $_SERVER,
+    $_POST
+);
+
 ?>
