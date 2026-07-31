@@ -169,7 +169,8 @@ try {
     $sidOne = 'mxsid' . bin2hex(random_bytes(8));
     $statement = $secondConnection->prepare(
         'UPDATE `nv_benutzer` SET `aktiv` = 1, `sid` = ?,'
-        . " `ip` = '192.0.2.30', `fwdip` = '198.51.100.31'"
+        . " `ip` = '192.0.2.30', `fwdip` = '198.51.100.31',"
+        . ' `estab_letzte_aktivitaet` = UTC_TIMESTAMP(6)'
         . ' WHERE `kuerzel` = ?'
     );
     assignment_test_assert(
@@ -403,7 +404,8 @@ try {
     $sidTwo = 'mxsid' . bin2hex(random_bytes(8));
     $statement = $secondConnection->prepare(
         'UPDATE `nv_benutzer` SET `aktiv` = 1, `sid` = ?,'
-        . " `ip` = '192.0.2.32', `fwdip` = '198.51.100.33'"
+        . " `ip` = '192.0.2.32', `fwdip` = '198.51.100.33',"
+        . ' `estab_letzte_aktivitaet` = UTC_TIMESTAMP(6)'
         . ' WHERE `kuerzel` = ?'
     );
     assignment_test_assert(
@@ -547,7 +549,8 @@ try {
 
     // A manually reactivated orphan proves the operational readiness guard.
     $statement = $secondConnection->prepare(
-        'UPDATE `nv_benutzer` SET `aktiv` = 1, `sid` = ?'
+        'UPDATE `nv_benutzer` SET `aktiv` = 1, `sid` = ?,'
+        . ' `estab_letzte_aktivitaet` = UTC_TIMESTAMP(6)'
         . ' WHERE `kuerzel` = ?'
     );
     assignment_test_assert(

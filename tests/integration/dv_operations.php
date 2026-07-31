@@ -201,8 +201,8 @@ try {
     $insertUser = $connection->prepare(
         'INSERT INTO `nv_benutzer`'
         . ' (`benutzer`, `kuerzel`, `funktion`, `rolle`, `sid`, `aktiv`,'
-        . ' `estab_gesperrt`, `password`)'
-        . ' VALUES (?, ?, ?, ?, ?, 1, 0, ?)'
+        . ' `estab_letzte_aktivitaet`, `estab_gesperrt`, `password`)'
+        . ' VALUES (?, ?, ?, ?, ?, 1, UTC_TIMESTAMP(6), 0, ?)'
     );
     if (!$insertUser) {
         throw new RuntimeException('Could not prepare DV integration accounts');
@@ -1214,7 +1214,8 @@ try {
     );
     $secondShiftId = (int) $secondShift['dienstschicht_id'];
     $setSuccessorOnline = $connection->prepare(
-        'UPDATE `nv_benutzer` SET `aktiv` = ?'
+        'UPDATE `nv_benutzer` SET `aktiv` = ?,'
+        . ' `estab_letzte_aktivitaet` = UTC_TIMESTAMP(6)'
         . ' WHERE BINARY `kuerzel` = BINARY ?'
     );
     if (!$setSuccessorOnline) {

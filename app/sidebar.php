@@ -17,7 +17,8 @@ require_once __DIR__ . '/message_repository.php';
 function estab_sidebar_positions(
     array $configuredPositions,
     array $users,
-    array $identity
+    array $identity,
+    ?DateTimeInterface $now = null
 ): array {
     $positions = [];
     $seen = [];
@@ -57,7 +58,10 @@ function estab_sidebar_positions(
         $append($position['rolle'] ?? null, $position['fkt'] ?? null);
     }
     foreach ($users as $user) {
-        if (!is_array($user) || (int) ($user['aktiv'] ?? 0) !== 1) {
+        if (
+            !is_array($user)
+            || !estab_auth_presence_has_session($user, $now)
+        ) {
             continue;
         }
         $append($user['rolle'] ?? null, $user['funktion'] ?? null);
@@ -685,64 +689,117 @@ function estab_sidebar_status_markup(
     }
 
     $now ??= new DateTimeImmutable('now');
-    $active = [];
-    $activeUsers = 0;
+    $online = [];
+    $inactive = [];
+    $onlineUsers = 0;
+    $currentPresence = 'expired';
     foreach ($users as $user) {
         if (
             !is_array($user)
-            || (int) ($user['aktiv'] ?? 0) !== 1
             || !is_string($user['rolle'] ?? null)
             || !is_string($user['funktion'] ?? null)
         ) {
             continue;
         }
-        $role = trim($user['rolle']);
-        $function = trim($user['funktion']);
+        $presence = estab_auth_presence_state($user, $now);
+        if (!in_array($presence, ['online', 'inactive'], true)) {
+            continue;
+        }
+        $isCurrentAccount = hash_equals(
+            (string) $identity['kuerzel'],
+            strtolower(trim((string) ($user['kuerzel'] ?? '')))
+        );
+        if ($isCurrentAccount) {
+            $currentPresence = $presence;
+        }
+        $role = $isCurrentAccount
+            ? (string) $identity['rolle']
+            : trim($user['rolle']);
+        $function = $isCurrentAccount
+            ? (string) $identity['funktion']
+            : trim($user['funktion']);
         if ($role === '' || $function === '') {
             continue;
         }
         $key = $role . "\0" . $function;
-        $active[$key] = ($active[$key] ?? 0) + 1;
-        $activeUsers++;
+        if ($presence === 'online') {
+            $online[$key] = ($online[$key] ?? 0) + 1;
+            $onlineUsers++;
+        } else {
+            $inactive[$key] = ($inactive[$key] ?? 0) + 1;
+        }
     }
 
     $currentKey = $identity['rolle'] . "\0" . $identity['funktion'];
-    if (($active[$currentKey] ?? 0) < 1) {
-        $active[$currentKey] = 1;
-        $activeUsers++;
-    }
 
     $chips = '';
     foreach (
-        estab_sidebar_positions($configuredPositions, $users, $identity)
+        estab_sidebar_positions($configuredPositions, $users, $identity, $now)
         as $position
     ) {
         $role = $position['rolle'];
         $function = $position['funktion'];
         $key = $role . "\0" . $function;
-        $count = $active[$key] ?? 0;
+        $onlineCount = $online[$key] ?? 0;
+        $inactiveCount = $inactive[$key] ?? 0;
+        $sessionCount = $onlineCount + $inactiveCount;
         $isCurrent = $key === $currentKey;
-        $state = $isCurrent ? 'current' : ($count > 0 ? 'online' : 'offline');
+        $isMixed = $onlineCount > 0 && $inactiveCount > 0;
+        $isCurrentInactive = $isCurrent && $currentPresence === 'inactive';
+        $state = $isCurrent
+            ? 'current'
+            : ($onlineCount > 0
+                ? 'online'
+                : ($inactiveCount > 0 ? 'inactive' : 'offline'));
         $stateText = $isCurrent
-            ? 'Ihre aktuelle Funktion'
-            : ($count > 0 ? 'online' : 'nicht besetzt');
-        $display = $function === 'A/W' && $count > 0
-            ? $count . ' A/W'
+            ? 'Ihre aktuelle Funktion, '
+                . ($currentPresence === 'online' ? 'aktiv' : 'inaktiv')
+            : ($isMixed
+                ? $onlineCount . ' aktiv, ' . $inactiveCount . ' inaktiv'
+                : ($onlineCount > 0
+                ? 'aktiv'
+                : ($inactiveCount > 0
+                    ? 'seit mindestens 15 Minuten inaktiv'
+                    : 'abgemeldet')));
+        $display = $function === 'A/W' && $sessionCount > 0
+            ? $sessionCount . ' A/W'
             : $function;
+        $visiblePresenceNote = $isCurrentInactive
+            ? 'Sie: inaktiv'
+            : ($isMixed
+                ? $onlineCount . ' aktiv · ' . $inactiveCount . ' inaktiv'
+                : '');
         $accessible = $role . ', Funktion ' . $function . ': ' . $stateText;
-        if ($count > 1 && $function !== 'A/W') {
-            $accessible .= ', ' . $count . ' Personen';
+        if ($sessionCount > 1 && $function !== 'A/W') {
+            $accessible .= ', ' . $sessionCount . ' Personen';
         }
 
         $chips .= '<li class="estab-sidebar-presence'
-            . ' estab-sidebar-presence-' . $state . '"'
+            . ' estab-sidebar-presence-' . $state
+            . ($isMixed ? ' estab-sidebar-presence-mixed' : '')
+            . ($isCurrentInactive
+                ? ' estab-sidebar-presence-current-inactive'
+                : '')
+            . ($visiblePresenceNote !== ''
+                ? ' estab-sidebar-presence-has-note'
+                : '')
+            . '"'
             . ' data-estab-presence-state="' . $state . '"'
             . ' data-estab-presence-role="' . estab_auth_html($role) . '"'
             . ' data-estab-presence-function="'
             . estab_auth_html($function) . '"'
+            . ($isCurrent
+                ? ' data-estab-current-activity="'
+                    . estab_auth_html($currentPresence) . '"'
+                : '')
             . ' aria-label="' . estab_auth_html($accessible) . '">'
             . '<span class="estab-sidebar-presence-dot" aria-hidden="true"></span>'
-            . '<span>' . estab_auth_html($display) . '</span>'
+            . '<span class="estab-sidebar-presence-label">'
+            . estab_auth_html($display) . '</span>'
+            . ($visiblePresenceNote === ''
+                ? ''
+                : '<small class="estab-sidebar-presence-note">'
+                    . estab_auth_html($visiblePresenceNote) . '</small>')
             . '</li>';
     }
 
@@ -750,9 +807,9 @@ function estab_sidebar_status_markup(
     $queueState = $queueCount === null
         ? 'unavailable'
         : ($queueCount > 0 ? 'has-work' : 'empty');
-    $onlineText = $activeUsers === 1
-        ? '1 Person online'
-        : $activeUsers . ' Personen online';
+    $onlineText = $onlineUsers === 1
+        ? '1 Person aktiv'
+        : $onlineUsers . ' Personen aktiv';
     $machineTime = $now->format(DateTimeInterface::ATOM);
     $notify = $notificationSoundUrl === null ? '0' : '1';
     $notificationClass = $notificationSoundUrl === null
@@ -812,16 +869,17 @@ function estab_sidebar_status_markup(
         . estab_auth_html($freshnessText) . '</span>'
         . '</div>'
         . '<div class="estab-sidebar-presence-heading">'
-        . '<h2>Online-Übersicht</h2>'
-        . '<span data-estab-online-count="' . $activeUsers . '">'
+        . '<h2>Aktivitätsübersicht</h2>'
+        . '<span data-estab-online-count="' . $onlineUsers . '">'
         . estab_auth_html($onlineText) . '</span>'
         . '</div>'
         . '<ul class="estab-sidebar-presence-grid"'
         . ' aria-label="Besetzung der Funktionen">' . $chips . '</ul>'
         . '<div class="estab-sidebar-presence-legend" aria-label="Legende">'
-        . '<span><i class="online" aria-hidden="true"></i>Online</span>'
+        . '<span><i class="online" aria-hidden="true"></i>Aktiv</span>'
+        . '<span><i class="inactive" aria-hidden="true"></i>Inaktiv (15 Min.)</span>'
         . '<span><i class="current" aria-hidden="true"></i>Ihre Funktion</span>'
-        . '<span><i class="offline" aria-hidden="true"></i>Unbesetzt</span>'
+        . '<span><i class="offline" aria-hidden="true"></i>Abgemeldet</span>'
         . '</div>'
         . $soundControl
         . $notificationText
@@ -852,12 +910,23 @@ function estab_sidebar_status_refresh_script(
             | JSON_UNESCAPED_SLASHES
             | JSON_THROW_ON_ERROR
     );
+    $encodedLoginUrl = json_encode(
+        estab_application_url('4fach/index.php')
+            . '?login_flow=existing&interrupted=1',
+        JSON_HEX_TAG
+            | JSON_HEX_AMP
+            | JSON_HEX_APOS
+            | JSON_HEX_QUOT
+            | JSON_UNESCAPED_SLASHES
+            | JSON_THROW_ON_ERROR
+    );
 
     return '<script data-estab-sidebar-refresh data-refresh-seconds="'
         . $intervalSeconds . '" data-timeout-ms="'
         . $timeoutMilliseconds . '">'
         . '(function(){'
         . 'var busy=false;'
+        . 'var loginUrl=' . $encodedLoginUrl . ';'
         . 'var storageKey="estab.sidebar.sounds";'
         . 'var soundsEnabled=false;'
         . 'var soundState="inactive";'
@@ -1015,6 +1084,8 @@ function estab_sidebar_status_refresh_script(
         . 'credentials:"same-origin",cache:"no-store",'
         . 'headers:{"X-Requested-With":"eStab-Sidebar"},'
         . 'signal:controller.signal});'
+        . 'if(response.status===401){try{window.top.location.assign(loginUrl);}'
+        . 'catch(ignore){window.location.assign(loginUrl);}return false;}'
         . 'if(!response.ok){markStatusStale();return false;}'
         . 'var html=await response.text();'
         . 'var parsed=new DOMParser().parseFromString(html,"text/html");'

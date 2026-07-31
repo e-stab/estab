@@ -20,6 +20,7 @@ ini_set('log_errors', '1');
 ini_set('default_charset', 'UTF-8');
 ini_set('session.use_strict_mode', '1');
 ini_set('session.use_only_cookies', '1');
+ini_set('session.gc_maxlifetime', '43200');
 ini_set('session.cookie_httponly', '1');
 ini_set('session.cookie_samesite', 'Lax');
 

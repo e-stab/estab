@@ -322,6 +322,8 @@ function estab_user_admin_release_account_lock(
  *   funktion:string,
  *   rolle:string,
  *   aktiv:int|string,
+ *   estab_sitzung_vorhanden:int|string,
+ *   estab_letzte_aktivitaet:?string,
  *   estab_gesperrt:int|string
  * }>
  */
@@ -329,9 +331,13 @@ function estab_user_admin_list(
     mysqli $connection,
     string $userTable
 ): array {
+    estab_auth_expire_stale_sessions($connection, $userTable);
     $statement = $connection->prepare(
         'SELECT `benutzer`, `kuerzel`, `funktion`, `rolle`, `aktiv`,'
-        . ' `estab_gesperrt` FROM ' . estab_auth_table($userTable)
+        . ' (`sid` REGEXP BINARY \'^[A-Za-z0-9,-]{1,50}$\')'
+        . ' AS `estab_sitzung_vorhanden`,'
+        . ' `estab_gesperrt`, `estab_letzte_aktivitaet` FROM '
+        . estab_auth_table($userTable)
         . ' ORDER BY `estab_gesperrt` DESC, `benutzer`, `kuerzel`'
     );
     if (!$statement) {

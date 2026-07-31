@@ -187,6 +187,8 @@ $sessionIdentity = [
 $storedSessionUser = $sessionIdentity + [
     'sid' => 'current-session-123',
     'aktiv' => '1',
+    'estab_gesperrt' => '0',
+    'estab_letzte_aktivitaet' => gmdate('Y-m-d H:i:s.000000'),
 ];
 $assert(
     estab_auth_account_matches_session(
@@ -227,6 +229,70 @@ foreach (['', 'contains space', str_repeat('a', 51), 'slash/not-allowed'] as $in
         'unsafe session ID accepted'
     );
 }
+$presenceNow = new DateTimeImmutable('2026-07-31 12:00:00', new DateTimeZone('UTC'));
+$presenceUser = $sessionIdentity + [
+    'sid' => 'presence-session-123',
+    'aktiv' => 1,
+    'estab_gesperrt' => 0,
+    'estab_letzte_aktivitaet' => '2026-07-31 11:45:01.000000',
+];
+$assert(estab_auth_presence_idle_seconds() === 900, 'presence threshold changed');
+$assert(estab_auth_session_idle_seconds() === 43200, 'idle logout threshold changed');
+$assert(
+    estab_auth_presence_state($presenceUser, $presenceNow) === 'online',
+    'user became inactive before fifteen idle minutes'
+);
+$assert(
+    estab_auth_presence_state(
+        array_replace($presenceUser, [
+            'estab_letzte_aktivitaet' => '2026-07-31 11:45:00.000000',
+        ]),
+        $presenceNow
+    ) === 'inactive',
+    'exact fifteen-minute boundary did not become inactive'
+);
+$assert(
+    estab_auth_presence_has_session(
+        array_replace($presenceUser, [
+            'estab_letzte_aktivitaet' => '2026-07-31 00:00:01.000000',
+        ]),
+        $presenceNow
+    ),
+    'session expired before twelve idle hours'
+);
+$assert(
+    estab_auth_presence_state(
+        array_replace($presenceUser, [
+            'estab_letzte_aktivitaet' => '2026-07-31 00:00:00.000000',
+        ]),
+        $presenceNow
+    ) === 'expired',
+    'exact twelve-hour idle boundary remained authenticated'
+);
+foreach ([
+    ['estab_letzte_aktivitaet' => null],
+    ['estab_letzte_aktivitaet' => 'not-a-date'],
+    ['estab_letzte_aktivitaet' => '2026-07-31 12:00:01.000000'],
+] as $invalidActivity) {
+    $assert(
+        estab_auth_presence_state(
+            array_replace($presenceUser, $invalidActivity),
+            $presenceNow
+        ) === 'expired',
+        'missing, malformed, or future activity did not fail closed'
+    );
+}
+$assert(
+    estab_auth_presence_state(
+        array_replace($presenceUser, ['aktiv' => 0]),
+        $presenceNow
+    ) === 'signed_out'
+        && estab_auth_presence_state(
+            array_replace($presenceUser, ['estab_gesperrt' => 1]),
+            $presenceNow
+        ) === 'blocked',
+    'signed-out and blocked presence states are not distinct'
+);
 $auditSessionId = 'audit-session-20260729';
 $auditPassword = 'must-never-reach-the-audit';
 $auditIdentity = [

@@ -323,6 +323,7 @@ $account = [
     'sid' => 'valid-session-123',
     'aktiv' => 1,
     'estab_gesperrt' => 0,
+    'estab_letzte_aktivitaet' => gmdate('Y-m-d H:i:s.000000'),
 ];
 $identity = [
     'benutzer' => 'Hans, Dieter',
@@ -416,9 +417,14 @@ $assert(
     $listSource !== ''
         && str_contains($listSource, '`estab_gesperrt`')
         && !str_contains($listSource, '`password`')
-        && !str_contains($listSource, '`sid`')
+        && str_contains(
+            $listSource,
+            '`sid` REGEXP BINARY'
+        )
+        && str_contains($listSource, '^[A-Za-z0-9,-]{1,50}$')
+        && str_contains($listSource, 'AS `estab_sitzung_vorhanden`')
         && !str_contains($listSource, '`ip`'),
-    'account list reads credential or session material'
+    'account list reads reusable credential or network-session material'
 );
 $assert(
     $blockSource !== ''
@@ -565,7 +571,7 @@ $assert(
     substr_count($authSource, '`estab_gesperrt`') >= 2
         && str_contains(
             $authSource,
-            '|| estab_auth_account_is_blocked($storedUser)'
+            '|| !estab_auth_presence_has_session($storedUser, $now)'
         ),
     'authoritative session validation ignores administrative blocking'
 );

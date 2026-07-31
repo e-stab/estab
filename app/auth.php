@@ -230,6 +230,121 @@ function estab_auth_account_is_blocked(array $storedUser): bool
     return (int) ($storedUser['estab_gesperrt'] ?? 0) === 1;
 }
 
+/** A signed-in user is shown as inactive after this many idle seconds. */
+function estab_auth_presence_idle_seconds(): int
+{
+    return 15 * 60;
+}
+
+/** An application session is revoked after this many idle seconds. */
+function estab_auth_session_idle_seconds(): int
+{
+    return 12 * 60 * 60;
+}
+
+/** Parse the UTC DATETIME(6) written by the authentication boundary. */
+function estab_auth_activity_time(mixed $value): ?DateTimeImmutable
+{
+    if (
+        !is_string($value)
+        || preg_match(
+            '/\A([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})'
+                . '(?:\.([0-9]{1,6}))?\z/D',
+            $value,
+            $matches
+        ) !== 1
+    ) {
+        return null;
+    }
+    $normalised = $matches[1] . '.'
+        . str_pad((string) ($matches[2] ?? ''), 6, '0');
+    $time = DateTimeImmutable::createFromFormat(
+        '!Y-m-d H:i:s.u',
+        $normalised,
+        new DateTimeZone('UTC')
+    );
+    $errors = DateTimeImmutable::getLastErrors();
+    if (
+        !$time instanceof DateTimeImmutable
+        || (is_array($errors) && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))
+        || $time->format('Y-m-d H:i:s.u') !== $normalised
+    ) {
+        return null;
+    }
+    return $time;
+}
+
+/**
+ * Resolve one account's shared presence/session state.
+ *
+ * `aktiv` remains the revocable legacy session flag. The separate activity
+ * timestamp controls only the visible 15-minute presence and the authoritative
+ * 12-hour idle timeout. Missing, malformed and future timestamps fail closed.
+ *
+ * @return 'blocked'|'signed_out'|'expired'|'inactive'|'online'
+ */
+function estab_auth_presence_state(
+    array $storedUser,
+    ?DateTimeInterface $now = null
+): string {
+    if (estab_auth_account_is_blocked($storedUser)) {
+        return 'blocked';
+    }
+    $storedSessionId = $storedUser['sid'] ?? null;
+    $hasSessionMarker = array_key_exists(
+        'estab_sitzung_vorhanden',
+        $storedUser
+    )
+        ? (int) $storedUser['estab_sitzung_vorhanden'] === 1
+        : is_string($storedSessionId)
+            && estab_auth_session_id_is_valid($storedSessionId);
+    if (
+        (int) ($storedUser['aktiv'] ?? 0) !== 1
+        || !$hasSessionMarker
+    ) {
+        return 'signed_out';
+    }
+
+    $activity = estab_auth_activity_time(
+        $storedUser['estab_letzte_aktivitaet'] ?? null
+    );
+    if ($activity === null) {
+        return 'expired';
+    }
+    $now ??= new DateTimeImmutable('now', new DateTimeZone('UTC'));
+    $utcNow = DateTimeImmutable::createFromInterface($now)->setTimezone(
+        new DateTimeZone('UTC')
+    );
+    $idleSeconds = $utcNow->getTimestamp() - $activity->getTimestamp();
+    if ($idleSeconds < 0 || $idleSeconds >= estab_auth_session_idle_seconds()) {
+        return 'expired';
+    }
+    if ($idleSeconds >= estab_auth_presence_idle_seconds()) {
+        return 'inactive';
+    }
+    return 'online';
+}
+
+/** Return whether the row still represents an authenticated session. */
+function estab_auth_presence_has_session(
+    array $storedUser,
+    ?DateTimeInterface $now = null
+): bool {
+    return in_array(
+        estab_auth_presence_state($storedUser, $now),
+        ['online', 'inactive'],
+        true
+    );
+}
+
+/** Return whether the account counts as recently active in status views. */
+function estab_auth_user_is_online(
+    array $storedUser,
+    ?DateTimeInterface $now = null
+): bool {
+    return estab_auth_presence_state($storedUser, $now) === 'online';
+}
+
 /** Accept only a syntactically valid direct peer address. */
 function estab_auth_remote_ip(array $server): string
 {
@@ -458,7 +573,7 @@ function estab_auth_close(mysqli $connection): void
 function estab_auth_fetch_user(mysqli $connection, string $table, string $code): ?array
 {
     $sql = 'SELECT `benutzer`, `kuerzel`, `funktion`, `rolle`, `sid`, `ip`, `fwdip`,'
-        . ' `aktiv`, `estab_gesperrt`, `password`'
+        . ' `aktiv`, `estab_gesperrt`, `estab_letzte_aktivitaet`, `password`'
         . ' FROM ' . estab_auth_table($table) . ' WHERE `kuerzel` = ? LIMIT 1';
     $statement = $connection->prepare($sql);
     if (!$statement) {
@@ -485,7 +600,7 @@ function estab_auth_fetch_session_user(
     string $code
 ): ?array {
     $sql = 'SELECT `benutzer`, `kuerzel`, `funktion`, `rolle`, `sid`, `aktiv`,'
-        . ' `estab_gesperrt`'
+        . ' `estab_gesperrt`, `estab_letzte_aktivitaet`'
         . ' FROM ' . estab_auth_table($table) . ' WHERE `kuerzel` = ? LIMIT 1';
     $statement = $connection->prepare($sql);
     if (!$statement) {
@@ -575,15 +690,15 @@ function estab_auth_account_matches_session(
     array $identity,
     string $sessionId,
     ?mysqli $connection = null,
-    ?int $dutyAssignmentId = null
+    ?int $dutyAssignmentId = null,
+    ?DateTimeInterface $now = null
 ): bool {
     $storedSessionId = $storedUser['sid'] ?? null;
     if (
         !is_string($storedSessionId)
         || !estab_auth_session_id_is_valid($storedSessionId)
         || !estab_auth_session_id_is_valid($sessionId)
-        || (int) ($storedUser['aktiv'] ?? 0) !== 1
-        || estab_auth_account_is_blocked($storedUser)
+        || !estab_auth_presence_has_session($storedUser, $now)
     ) {
         return false;
     }
@@ -826,14 +941,26 @@ function estab_auth_current_session_identity(
                 $userTable,
                 $identity['kuerzel']
             );
+            $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
             $valid = is_array($storedUser)
                 && estab_auth_account_matches_session(
                     $storedUser,
                     $identity,
                     $sessionId,
                     $connection,
-                    $dutyAssignmentId
+                    $dutyAssignmentId,
+                    $now
                 );
+            if (!$valid && is_array($storedUser)) {
+                // The exact SID condition prevents an expired or superseded
+                // browser from clearing a newer login of the same account.
+                estab_auth_mark_logged_out(
+                    $connection,
+                    $userTable,
+                    $identity['kuerzel'],
+                    $sessionId
+                );
+            }
         } finally {
             if ($connection instanceof mysqli) {
                 estab_auth_close($connection);
@@ -873,7 +1000,8 @@ function estab_auth_update_user(
 ): void {
     $sql = 'UPDATE ' . estab_auth_table($table)
         . ' SET `rolle` = ?, `sid` = ?, `ip` = ?, `fwdip` = ?,'
-        . ' `aktiv` = 1, `password` = ?'
+        . ' `aktiv` = 1, `estab_letzte_aktivitaet` = UTC_TIMESTAMP(6),'
+        . ' `password` = ?'
         . ' WHERE `kuerzel` = ? AND `funktion` = ?'
         . ' AND `estab_gesperrt` = 0';
     $statement = $connection->prepare($sql);
@@ -905,8 +1033,9 @@ function estab_auth_update_user(
 function estab_auth_insert_user(mysqli $connection, string $table, array $user): void
 {
     $sql = 'INSERT INTO ' . estab_auth_table($table)
-        . ' (`benutzer`, `kuerzel`, `funktion`, `rolle`, `sid`, `ip`, `fwdip`, `password`, `aktiv`)'
-        . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)';
+        . ' (`benutzer`, `kuerzel`, `funktion`, `rolle`, `sid`, `ip`, `fwdip`,'
+        . ' `password`, `aktiv`, `estab_letzte_aktivitaet`)'
+        . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, UTC_TIMESTAMP(6))';
     $statement = $connection->prepare($sql);
     if (!$statement) {
         throw new RuntimeException('Could not prepare account insert');
@@ -931,11 +1060,74 @@ function estab_auth_insert_user(mysqli $connection, string $table, array $user):
     }
 }
 
-/** Fetch users for the public status table through a prepared SELECT. */
+/** Revoke every legacy/stale SID whose 12-hour idle window has elapsed. */
+function estab_auth_expire_stale_sessions(
+    mysqli $connection,
+    string $table
+): int {
+    $sql = 'UPDATE ' . estab_auth_table($table)
+        . " SET `aktiv` = 0, `sid` = '', `ip` = '', `fwdip` = ''"
+        . ' WHERE `aktiv` = 1 AND ('
+        . "`sid` = '' OR `estab_letzte_aktivitaet` IS NULL"
+        . ' OR `estab_letzte_aktivitaet` > UTC_TIMESTAMP(6)'
+        . ' OR `estab_letzte_aktivitaet` <= UTC_TIMESTAMP(6)'
+        . ' - INTERVAL 43200 SECOND)';
+    $statement = $connection->prepare($sql);
+    if (!$statement) {
+        throw new RuntimeException('Could not prepare stale-session cleanup');
+    }
+    try {
+        if (!$statement->execute()) {
+            throw new RuntimeException('Could not expire stale sessions');
+        }
+        return $statement->affected_rows;
+    } finally {
+        $statement->close();
+    }
+}
+
+/** Record one genuine browser interaction for the exact current SID. */
+function estab_auth_touch_activity(
+    mysqli $connection,
+    string $table,
+    string $code,
+    string $sessionId
+): bool {
+    if (
+        preg_match('/\A[a-z0-9_]{1,6}\z/D', $code) !== 1
+        || !estab_auth_session_id_is_valid($sessionId)
+    ) {
+        return false;
+    }
+    $sql = 'UPDATE ' . estab_auth_table($table)
+        . ' SET `estab_letzte_aktivitaet` = UTC_TIMESTAMP(6)'
+        . ' WHERE `kuerzel` = ? AND `sid` = ? AND `aktiv` = 1'
+        . ' AND `estab_gesperrt` = 0'
+        . ' AND `estab_letzte_aktivitaet` IS NOT NULL'
+        . ' AND `estab_letzte_aktivitaet` <= UTC_TIMESTAMP(6)'
+        . ' AND `estab_letzte_aktivitaet` > UTC_TIMESTAMP(6)'
+        . ' - INTERVAL 43200 SECOND';
+    $statement = $connection->prepare($sql);
+    if (!$statement) {
+        throw new RuntimeException('Could not prepare activity update');
+    }
+    try {
+        $statement->bind_param('ss', $code, $sessionId);
+        if (!$statement->execute()) {
+            throw new RuntimeException('Could not update session activity');
+        }
+        return $statement->affected_rows === 1;
+    } finally {
+        $statement->close();
+    }
+}
+
+/** Fetch users for status views through one canonical presence boundary. */
 function estab_auth_fetch_users(mysqli $connection, string $table): array
 {
+    estab_auth_expire_stale_sessions($connection, $table);
     $sql = 'SELECT `benutzer`, `kuerzel`, `funktion`, `rolle`, `sid`, `aktiv`,'
-        . ' `estab_gesperrt`'
+        . ' `estab_gesperrt`, `estab_letzte_aktivitaet`'
         . ' FROM ' . estab_auth_table($table)
         . ' ORDER BY `estab_gesperrt`, `aktiv` DESC, `kuerzel`';
     $statement = $connection->prepare($sql);

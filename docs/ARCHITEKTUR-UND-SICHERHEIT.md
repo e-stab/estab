@@ -90,6 +90,43 @@ Es existieren zwei unabhängige Identitäten:
   Schreibende Admin-Formulare verlangen zusätzlich einen an die PHP-Sitzung
   gebundenen CSRF-Token.
 
+Für die Anwendungssitzung sind Sitzungsbestand und Präsenz bewusst getrennt.
+`nv_benutzer.aktiv` und die exakte gespeicherte SID bilden weiterhin die
+widerrufbare Anmeldegrenze. Das von Migration 100 ergänzte UTC-Feld
+`estab_letzte_aktivitaet DATETIME(6)` bestimmt zusätzlich den sichtbaren
+Aktivitätszustand und das serverseitige Leerlaufende:
+
+- weniger als 15 Minuten ohne echte Interaktion: `online`,
+- ab 15 Minuten: `inactive`, wobei die Fachsitzung noch gültig bleibt,
+- ab 12 Stunden: `expired`; die SID und ihre IP-Metadaten werden widerrufen.
+
+Fehlende, syntaktisch ungültige oder zukünftige Aktivitätswerte werden nicht
+geschätzt, sondern fail-closed als abgelaufen behandelt. Jede geschützte
+Anfrage validiert Konto, Sperre, SID und 12-Stunden-Grenze erneut gegen die
+Datenbankzeile. Die periodische Bereinigung der Benutzerlisten entfernt
+zusätzlich abgelaufene SIDs, auch wenn der zugehörige Browser keinen weiteren
+Request sendet. `session.gc_maxlifetime` ist in Bootstrap und Container-PHP
+auf dieselben 43.200 Sekunden gesetzt; maßgeblich für den fachlichen Widerruf
+bleibt dennoch der Datenbankzeitstempel und nicht die probabilistische
+PHP-Session-Garbage-Collection.
+
+Die gemeinsame HTML-Sitzungsleiste registriert ausschließlich echte
+Zeiger-, Tastatur-, Formular-, Rad- und Touchinteraktion sowie die bewusste
+Rückkehr in ein sichtbares Fenster. Sie sendet höchstens einmal pro Minute
+einen gleich-originigen POST an `/4fach/activity.php`. Dieser Request verlangt
+Session-CSRF, Kontokürzel und exakt die in der Datenbank gespeicherte SID; er
+kann weder eine abgelaufene noch eine gesperrte Sitzung wiederbeleben. Es gibt
+bewusst keinen Intervall- oder Seitenlade-Heartbeat. Statuspolls, automatische
+Refreshes und bloße Hintergrundtabs verlängern weder die 15-Minuten-Anzeige
+noch die 12-Stunden-Sitzung. Antwortet der Aktivitätsendpunkt mit HTTP 401,
+führt der Monitor den Top-Level-Kontext zum Bestandslogin.
+
+Der vorgelagerte HTTP-Basic-Administrationszugang ist von diesem Mechanismus
+unabhängig. Seine Browser-Credentials werden weder in
+`estab_letzte_aktivitaet` geschrieben noch durch das 12-Stunden-Fachsession-
+Timeout widerrufen; eine zugleich bestehende eStab-Fachsitzung bleibt auch auf
+Administrationsseiten separat erkennbar.
+
 Apache lehnt `PATH_INFO` hinter ausführbaren PHP-Dateien generell ab. Die
 zentrale operative Schreibgrenze leitet Ausnahmen ausschließlich aus dem
 tatsächlich ausgeführten `SCRIPT_NAME` ab, nie aus der frei wählbaren
@@ -176,10 +213,12 @@ Rückmeldung zuverlässig darstellen. Die öffentliche Benutzerliste dient nur
 zur Vorbelegung; pro Zeile wird genau eine Auswahlaktion übertragen.
 Bereits authentifizierte Sitzungen müssen sich vor einer anderen Anmeldung
 oder Kontoerstellung abmelden. Bei jedem Bestandskonto muss die übermittelte
-Funktion unabhängig vom Onlinezustand exakt der gespeicherten administrativen
-Zuordnung entsprechen. Nur `/4fadm/users.php` darf Funktion und daraus
-abgeleitete Rolle unter gemeinsamem Konto-Lock ändern; die Änderung setzt
-Onlinezustand und Sitzungsmetadaten atomar zurück und wird auditiert.
+Funktion unabhängig vom Sitzungs- oder Präsenzzustand exakt der gespeicherten
+administrativen Zuordnung entsprechen. Nur `/4fadm/users.php` darf Funktion
+und daraus abgeleitete Rolle unter gemeinsamem Konto-Lock ändern; die
+Änderung setzt Sitzungs- und Präsenzstatus samt Sitzungsmetadaten atomar
+zurück und wird
+auditiert.
 
 `app/navigation.php` ist das kanonische Manifest für die neun operativen
 Bereiche. Es definiert Schlüssel, Beschriftung, Reihenfolge, Zielpfad und
@@ -242,8 +281,10 @@ bewusst nicht als operative Wiederherstellung eingestuft und bleiben auf der
 harten Ablehnungsgrenze. Andere HTTP-Methoden bleiben 403. Ist zwar eine
 Kontositzung vorhanden, aber noch keine persönlich ausgewählte
 Dienstfunktion, führt ein separater 303 bei GET/HEAD ausschließlich zum
-Führungsstellenbetrieb; Schreibversuche bleiben 403. Rollen-, Objekt-, CSRF-,
-Polling- und Bildberechtigungen bleiben davon unberührt.
+Führungsstellenbetrieb; Schreibversuche bleiben 403. Rollen-, Objekt-, CSRF-
+und Bildberechtigungen bleiben davon unberührt. Das authentifizierte
+Statusfragment verwendet HTTP 401 für eine fehlende oder abgelaufene
+Fachsitzung, damit ausschließlich der Sidebar-Poller zum Login wechseln kann.
 
 Die ausgewählten HTML-Controller verwenden
 `app/session_ui.php` als gemeinsame Ausgabegrenze. Ohne Fachsitzung zeigt die
@@ -279,7 +320,7 @@ erreichbaren Laufzeitoberfläche.
 
 Die Sidebar besitzt bewusst einen eigenen Navigationsmodus. Sie rendert zuerst
 eine Statuskarte mit rollenabhängigem Arbeitszähler, Serverzeit und
-Onlinebelegung, danach Identität und CSRF-geschützten Logout, anschließend die
+Aktivitätsübersicht, danach Identität und CSRF-geschützten Logout, anschließend die
 rollenabhängigen Fachaktionen und zuletzt die nach ausgewähltem Funktions-Hut
 gefilterten neun beziehungsweise zehn Bereichs- und Dienstlinks. Diese Links
 stehen ohne `<details>` oder
@@ -306,6 +347,12 @@ Aktualisierungscode. Der GET
 Anmeldung, aktivem Einsatz und ausgewählter, persönlich angenommener aktiver
 Dienstbesetzung das neue Statusfragment. Die Sidebar ersetzt nur diesen Knoten
 und lädt weder Identität, Navigation noch Aktionsformular neu.
+Der Renderer klassifiziert angemeldete Konten zentral als innerhalb von
+15 Minuten aktiv oder danach inaktiv; nach 12 Stunden erscheinen sie nicht
+mehr als angemeldet. Der GET aktualisiert den Aktivitätszeitstempel nicht und
+ruft den Aktivitätsendpunkt nicht auf. Ein erfolgreicher Poll hält deshalb keine
+unbeaufsichtigte Sitzung künstlich am Leben. HTTP 401 bedeutet, dass die
+Fachsitzung nicht mehr gültig ist, und führt den Top-Level-Kontext zum Login.
 Dadurch bleiben Dokument-Scrollposition und Tastaturfokus bei der regelmäßigen
 Aktualisierung erhalten; wird der mitersetzte Hinweiston-Schalter fokussiert,
 stellt die Aktualisierungslogik seinen Fokus gezielt am neuen Knoten wieder
@@ -387,7 +434,7 @@ Transaktion.
 `4fach/logout.php` akzeptiert nur einen angemeldeten POST mit gültigem
 Session-CSRF und leitet nach Erfolg mit HTTP 303 zum Anmeldeeinstieg weiter.
 Die lokale Sitzung und alle Anwendungs-Cookies werden vor der
-Datenbanknachführung beendet. Das Setzen des Benutzerstatus auf inaktiv ist an
+Datenbanknachführung beendet. Das Setzen des Benutzerstatus auf abgemeldet ist an
 Kürzel und die in der Datenbank gespeicherte SID gebunden. So kann ein später
 abgeschickter Logout einer alten Sitzung eine neuere Anmeldung desselben
 Kontos nicht deaktivieren. Audit- oder Datenbankfehler lassen die lokale

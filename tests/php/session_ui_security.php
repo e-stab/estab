@@ -74,6 +74,18 @@ $assert(
     str_contains($markup, 'name="csrf_token" value="' . $token . '"'),
     'logout form CSRF token missing'
 );
+$assert(
+    substr_count($markup, 'data-estab-activity-monitor') === 1
+        && str_contains($markup, '4fach/activity.php')
+        && str_contains($markup, 'var throttle=60000')
+        && str_contains($markup, '"pointerdown","pointermove","keydown","input","change","wheel","touchstart"')
+        && str_contains($markup, 'credentials:"same-origin"')
+        && str_contains($markup, 'keepalive:true')
+        && str_contains($markup, 'response.status===401')
+        && str_contains($markup, 'window.top.location.assign(login)')
+        && !str_contains($markup, 'setInterval('),
+    'activity monitor is not interaction-driven, throttled, or expiry-safe'
+);
 
 $compact = estab_session_ui_markup($identity, $token, true);
 $assert(
@@ -187,7 +199,8 @@ $assert(
             'data-estab-nav-key="bos-info" aria-current="page"'
         )
         && !str_contains($publicMarkup, 'data-estab-session-bar')
-        && !str_contains($publicMarkup, 'data-estab-logout-form'),
+        && !str_contains($publicMarkup, 'data-estab-logout-form')
+        && !str_contains($publicMarkup, 'data-estab-activity-monitor'),
     'public navigation falsely claims a session or omits its login route'
 );
 $assert(

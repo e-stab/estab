@@ -8,6 +8,7 @@ health.php
 estab-ui.css
 menue.inc.php
 4fach/4fachform.php
+4fach/activity.php
 4fach/anhang.php
 4fach/button.php
 4fach/createbutton.php

@@ -749,9 +749,23 @@
     padding: 0.25rem;
 }
 
-.estab-sidebar-presence > span:last-child {
+.estab-sidebar-presence-label {
     min-width: 0;
     overflow-wrap: anywhere;
+}
+
+.estab-sidebar-presence-has-note {
+    flex-wrap: wrap;
+    line-height: 1.05;
+    min-height: 2.8rem;
+}
+
+.estab-sidebar-presence-note {
+    color: #f3ead5;
+    flex: 0 0 100%;
+    font-size: 0.58rem;
+    font-weight: 600;
+    text-align: center;
 }
 
 .estab-sidebar-presence-dot,
@@ -782,6 +796,32 @@
 .estab-sidebar-presence-current .estab-sidebar-presence-dot,
 .estab-sidebar-presence-legend i.current {
     background: #f2c966;
+}
+
+.estab-sidebar-presence-inactive {
+    background: #413821;
+    border-color: #b99a55;
+    color: #f1e4c4;
+}
+
+.estab-sidebar-presence-inactive .estab-sidebar-presence-dot,
+.estab-sidebar-presence-legend i.inactive {
+    background: #d7b96f;
+}
+
+.estab-sidebar-presence-mixed {
+    background: linear-gradient(135deg, #163e35 0 50%, #413821 50%);
+    border-color: #b9aa68;
+}
+
+.estab-sidebar-presence-current-inactive {
+    background: #413821;
+    border-color: #e5b247;
+    box-shadow: inset 0 0 0 1px #e5b247;
+}
+
+.estab-sidebar-presence-current-inactive .estab-sidebar-presence-dot {
+    background: #d7b96f;
 }
 
 .estab-sidebar-presence-offline {
@@ -1417,6 +1457,10 @@ audio[data-estab-sidebar-audio] {
 
 .estab-account-active {
     background: #e3f6d5;
+}
+
+.estab-account-idle {
+    background: #fff4d6;
 }
 
 .estab-account-inactive {
@@ -2572,6 +2616,11 @@ form[data-estab-incident-disabled="true"]::before {
 .estab-tool-badge-danger {
     background: #ffe3e7;
     color: #8c1424;
+}
+
+.estab-tool-badge-warning {
+    background: #fff0c7;
+    color: #72510c;
 }
 
 .estab-tool-badge-neutral {

@@ -9,8 +9,10 @@ werden.
 ## Kontostatus
 
 Die historische Spalte `nv_benutzer.aktiv` beschreibt ausschließlich, ob eine
-Anwendungssitzung aktiv ist. Sie kann deshalb keine dauerhafte administrative
-Sperre abbilden: Eine normale Abmeldung setzt sie ebenfalls auf `0`.
+Anwendungssitzung noch besteht. Sie beschreibt weder die aktuelle
+Browseraktivität noch eine dauerhafte administrative Sperre: Eine normale oder
+automatische Abmeldung setzt sie ebenfalls auf `0`, während ein seit mehr als
+15 Minuten untätiger, aber noch gültiger Benutzer zunächst `aktiv = 1` bleibt.
 
 Die Migration `70-user-account-blocking.sql` ergänzt stattdessen das
 namespaced Feld
@@ -33,6 +35,40 @@ noch eine „letzter Administrator“-Sonderregel: Das Sperren sämtlicher
 eStab-Funktionskonten sperrt den getrennten technischen
 Administrationszugang nicht.
 
+### Präsenz und automatisches Sitzungsende
+
+Migration `100-session-presence.sql` ergänzt das nullable UTC-Feld
+`nv_benutzer.estab_letzte_aktivitaet DATETIME(6)` und den Index
+`idx_benutzer_presence (aktiv, estab_gesperrt, estab_letzte_aktivitaet)`. Die
+zentrale Authentisierungsgrenze leitet daraus fünf voneinander getrennte
+Zustände ab: gesperrt, abgemeldet, abgelaufen, inaktiv und aktiv.
+
+- Bis 15 Minuten nach der letzten echten Browserinteraktion erscheint das
+  Konto als „Aktiv“.
+- Ab 15 Minuten erscheint es als „Inaktiv“, bleibt aber bis zur
+  12-Stunden-Grenze angemeldet und arbeitsfähig.
+- Ab 12 Stunden ohne echte Interaktion ist die Sitzung serverseitig
+  abgelaufen. `aktiv`, `sid`, `ip` und `fwdip` werden SID-gebunden
+  beziehungsweise durch die zentrale Bereinigung widerrufen; ein geschützter
+  Aufruf verlangt danach eine neue Anmeldung.
+
+Die gemeinsame Sitzungsleiste meldet Zeiger-, Tastatur-, Formular-, Rad- und
+Touchinteraktionen sowie eine bewusste Rückkehr in das sichtbare Fenster an
+`/4fach/activity.php`. Der Endpunkt akzeptiert ausschließlich POST mit
+gültiger eStab-Sitzung, exakter gespeicherter SID und Session-CSRF. Ein
+gemeinsamer Browsermarker begrenzt die Datenbankaktualisierung über Tabs und
+Frames auf höchstens einmal pro Minute. Seitenaufrufe allein, automatische
+Refreshes und das regelmäßig geladene Statusfragment zählen nicht als
+Aktivität. Fehlende, ungültige oder in der Zukunft liegende Zeitwerte werden
+fail-closed als abgelaufen behandelt.
+
+Beim Upgrade können bereits als aktiv markierte Legacy-Sitzungen keine
+verlässliche letzte Interaktion nachweisen. Migration 100 widerruft sie daher
+einmalig; alle betroffenen Funktionsbenutzer melden sich nach dem Upgrade neu
+an. Die Migration errät keinen Zeitpunkt und gewährt alten SIDs kein neues
+12-Stunden-Fenster. Der unabhängige HTTP-Basic-Administrationszugang wird
+davon nicht abgemeldet und ist nicht Teil dieser Präsenzanzeige.
+
 ## Konten anlegen und Funktionen zuweisen
 
 Neue Installationen haben die öffentliche Selbstregistrierung
@@ -51,8 +87,9 @@ serverseitig aus dieser autoritativen Zuordnung abgeleitet. Ein neues Konto
 startet abgemeldet, ungesperrt und ohne SID oder IP-Metadaten.
 
 Die Funktion ist eine administrative Berechtigungszuordnung und nicht Teil des
-Onlinezustands. Deshalb kann ein Konto sie weder während einer aktiven Sitzung
-noch nach dem Abmelden durch eine andere Auswahl im Loginformular ändern. Eine
+Sitzungs- oder Präsenzzustands. Deshalb kann ein Konto sie weder während einer
+aktiven Sitzung noch nach dem Abmelden durch eine andere Auswahl im
+Loginformular ändern. Eine
 Neuzuweisung ist ausschließlich in der Benutzerverwaltung möglich. Sie setzt
 `funktion` und die daraus abgeleitete `rolle` gemeinsam, löscht `aktiv`, `sid`,
 `ip` sowie `fwdip` und beendet damit eine vorhandene Sitzung.
@@ -103,7 +140,7 @@ abgeglichen:
 - Bleibt eine Funktion erhalten, ändert sich aber ihre Rolle, wird nur die
   serverabgeleitete Rolle korrigiert. Eine vorhandene Sitzung wird widerrufen.
 - Wird eine Funktion entfernt, bleiben Funktion und bisherige Rolle als
-  revisionsfähige Zuordnung erhalten. SID, IP-Metadaten und Onlinezustand
+  revisionsfähige Zuordnung erhalten. SID, IP-Metadaten und Sitzungsstatus
   werden entfernt; eine neue Anmeldung ist nicht möglich.
 - Die Benutzerverwaltung kennzeichnet eine solche Zeile als
   „Zuordnung nicht mehr gültig“. Der Administrator weist dort eine aktuell

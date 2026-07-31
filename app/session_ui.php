@@ -165,7 +165,98 @@ function estab_session_ui_markup(
         . $navigation
         . '</aside>'
         . ($compact ? '' : estab_session_ui_mainframe_guard())
-        . estab_session_ui_dirty_guard_script($popup);
+        . estab_session_ui_dirty_guard_script($popup)
+        . estab_session_ui_activity_script($csrfToken, $identity['kuerzel']);
+}
+
+/**
+ * Report genuine browser interaction without turning polling into activity.
+ *
+ * One shared localStorage timestamp throttles nested same-origin frames and
+ * tabs of the same account to at most one database write per minute. There is
+ * deliberately no interval and no page-load heartbeat.
+ */
+function estab_session_ui_activity_script(
+    string $csrfToken,
+    string $userCode
+): string {
+    if (
+        preg_match('/\A[a-f0-9]{64}\z/D', $csrfToken) !== 1
+        || preg_match('/\A[a-z0-9_]{1,6}\z/D', $userCode) !== 1
+    ) {
+        throw new InvalidArgumentException('Invalid activity monitor context');
+    }
+    $activityUrl = json_encode(
+        estab_application_url('4fach/activity.php'),
+        JSON_HEX_TAG
+            | JSON_HEX_AMP
+            | JSON_HEX_APOS
+            | JSON_HEX_QUOT
+            | JSON_UNESCAPED_SLASHES
+            | JSON_THROW_ON_ERROR
+    );
+    $loginUrl = json_encode(
+        estab_navigation_login_url(null, true),
+        JSON_HEX_TAG
+            | JSON_HEX_AMP
+            | JSON_HEX_APOS
+            | JSON_HEX_QUOT
+            | JSON_UNESCAPED_SLASHES
+            | JSON_THROW_ON_ERROR
+    );
+    $token = json_encode(
+        $csrfToken,
+        JSON_HEX_TAG
+            | JSON_HEX_AMP
+            | JSON_HEX_APOS
+            | JSON_HEX_QUOT
+            | JSON_THROW_ON_ERROR
+    );
+    $storageKey = json_encode(
+        'estab.activity.' . $userCode,
+        JSON_HEX_TAG
+            | JSON_HEX_AMP
+            | JSON_HEX_APOS
+            | JSON_HEX_QUOT
+            | JSON_THROW_ON_ERROR
+    );
+
+    return '<script data-estab-activity-monitor>'
+        . '(function(){'
+        . 'var endpoint=' . $activityUrl . ';'
+        . 'var login=' . $loginUrl . ';'
+        . 'var token=' . $token . ';'
+        . 'var storageKey=' . $storageKey . ';'
+        . 'var throttle=60000;var pending=false;var memoryLast=0;'
+        . 'function lastSignal(){try{var value=Number('
+        . 'localStorage.getItem(storageKey)||0);if(Number.isFinite(value)'
+        . '&&value>memoryLast){memoryLast=value;}}catch(ignore){}'
+        . 'return memoryLast;}'
+        . 'function remember(value){memoryLast=value;try{'
+        . 'localStorage.setItem(storageKey,String(value));}catch(ignore){}}'
+        . 'function forget(value){if(memoryLast===value){memoryLast=0;}'
+        . 'try{if(Number(localStorage.getItem(storageKey)||0)===value){'
+        . 'localStorage.removeItem(storageKey);}}catch(ignore){}}'
+        . 'function expired(){try{window.top.location.assign(login);}'
+        . 'catch(ignore){window.location.assign(login);}}'
+        . 'function report(){if(pending){return;}var now=Date.now();'
+        . 'if(now-lastSignal()<throttle){return;}remember(now);pending=true;'
+        . 'fetch(endpoint,{method:"POST",credentials:"same-origin",'
+        . 'cache:"no-store",keepalive:true,headers:{'
+        . '"Content-Type":"application/x-www-form-urlencoded;charset=UTF-8",'
+        . '"X-Requested-With":"eStab-Activity"},body:'
+        . '"csrf_token="+encodeURIComponent(token)})'
+        . '.then(function(response){pending=false;if(response.status===401){'
+        . 'expired();return;}if(!response.ok){forget(now);}})'
+        . '.catch(function(){pending=false;forget(now);});}'
+        . '["pointerdown","pointermove","keydown","input","change","wheel","touchstart"]'
+        . '.forEach(function(name){document.addEventListener(name,report,'
+        . '{capture:true,passive:true});});'
+        . 'window.addEventListener("focus",report,{passive:true});'
+        . 'document.addEventListener("visibilitychange",function(){'
+        . 'if(document.visibilityState==="visible"){report();}},{passive:true});'
+        . '})();'
+        . '</script>';
 }
 
 /**

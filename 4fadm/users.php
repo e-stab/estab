@@ -417,12 +417,12 @@ if (
                       $storedRole
                   );
               $orphaned = $manageable && !$assignmentCurrent;
-              $active = !$blocked
-                  && !$orphaned
-                  && (int) ($user['aktiv'] ?? 0) === 1;
+              $presence = estab_auth_presence_state($user);
+              $active = !$blocked && !$orphaned && $presence === 'online';
+              $idle = !$blocked && !$orphaned && $presence === 'inactive';
               $statusClass = !$manageable || $blocked || $orphaned
                   ? 'blocked'
-                  : ($active ? 'online' : 'offline');
+                  : ($active ? 'online' : ($idle ? 'idle' : 'offline'));
               $statusLabel = !$manageable
                   ? 'Ungültiges Legacy-Kürzel'
                   : (
@@ -434,7 +434,11 @@ if (
                           )
                           : ($blocked
                           ? 'Gesperrt'
-                          : ($active ? 'Angemeldet' : 'Abgemeldet'))
+                          : ($active
+                              ? 'Aktiv'
+                              : ($idle
+                                  ? 'Inaktiv (seit mindestens 15 Minuten)'
+                                  : 'Abgemeldet')))
                   );
             ?>
             <tr data-estab-user="<?= estab_admin_html($code) ?>"
@@ -455,7 +459,7 @@ if (
                 <?php endif; ?>
               </td>
               <td data-label="Status">
-                <span class="estab-tool-badge estab-tool-badge-<?= $statusClass === 'online' ? 'success' : ($statusClass === 'blocked' ? 'danger' : 'neutral') ?>">
+                <span class="estab-tool-badge estab-tool-badge-<?= $statusClass === 'online' ? 'success' : ($statusClass === 'idle' ? 'warning' : ($statusClass === 'blocked' ? 'danger' : 'neutral')) ?>">
                   <?= $statusLabel ?>
                 </span>
               </td>

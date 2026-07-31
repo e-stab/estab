@@ -317,8 +317,9 @@ try {
     $statement = $connection->prepare(
         'INSERT INTO `nv_benutzer`'
         . ' (`benutzer`, `kuerzel`, `funktion`, `rolle`, `sid`, `ip`,'
-        . ' `fwdip`, `aktiv`, `estab_gesperrt`, `password`)'
-        . ' VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0, ?)'
+        . ' `fwdip`, `aktiv`, `estab_letzte_aktivitaet`, `estab_gesperrt`,'
+        . ' `password`)'
+        . ' VALUES (?, ?, ?, ?, ?, ?, ?, 1, UTC_TIMESTAMP(6), 0, ?)'
     );
     user_admin_test_assert(
         $statement instanceof mysqli_stmt,
@@ -510,7 +511,8 @@ try {
     // when the durable block is removed.
     $statement = $connection->prepare(
         "UPDATE `nv_benutzer` SET `aktiv` = 1, `sid` = ?,"
-        . " `ip` = '192.0.2.31', `fwdip` = '198.51.100.32'"
+        . " `ip` = '192.0.2.31', `fwdip` = '198.51.100.32',"
+        . ' `estab_letzte_aktivitaet` = UTC_TIMESTAMP(6)'
         . ' WHERE `kuerzel` = ? AND `estab_gesperrt` = 1'
     );
     user_admin_test_assert(

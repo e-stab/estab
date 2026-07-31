@@ -331,6 +331,36 @@ SELECT
        AND column_default = '0') = 1)
        AS `user_blocking_schema_ok`,
   ((SELECT COUNT(*)
+      FROM information_schema.columns
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_benutzer'
+       AND column_name = 'estab_letzte_aktivitaet'
+       AND data_type = 'datetime'
+       AND datetime_precision = 6
+       AND is_nullable = 'YES'
+       AND extra = ''
+       AND column_comment =
+         'estab:migration:100:last-browser-activity-utc:v1') = 1
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.statistics
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_benutzer'
+       AND index_name = 'idx_benutzer_presence'
+       AND index_type = 'BTREE'
+       AND non_unique = 1
+       AND sub_part IS NULL) = 3
+   AND
+   (SELECT GROUP_CONCAT(
+             column_name ORDER BY seq_in_index SEPARATOR ','
+           )
+      FROM information_schema.statistics
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_benutzer'
+       AND index_name = 'idx_benutzer_presence') =
+     'aktiv,estab_gesperrt,estab_letzte_aktivitaet')
+       AS `user_presence_schema_ok`,
+  ((SELECT COUNT(*)
       FROM information_schema.tables
      WHERE table_schema = DATABASE()
        AND table_name IN (
@@ -833,7 +863,7 @@ SELECT
          OR `integrity_captured_at` IS NULL
        )) = 0)
        AS `attachment_integrity_schema_ok`,
-  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 14
+  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 15
    AND
    (SELECT COUNT(*)
       FROM `estab_schema_migrations`
@@ -851,10 +881,11 @@ SELECT
        '96-etb-duty-function.sql',
        '97-incident-command-post-name.sql',
        '98-official-message-form-fields.sql',
-       '99-message-list-search.sql'
+       '99-message-list-search.sql',
+       '100-session-presence.sql'
      )
        AND `state` = 'applied'
-       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 14)
+       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 15)
        AS `schema_migrations_ok`;
 
 SELECT `table_name`, `engine`, `table_collation`

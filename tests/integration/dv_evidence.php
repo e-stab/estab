@@ -173,8 +173,9 @@ try {
     $insertEvidenceUser = $connection->prepare(
         'INSERT INTO `nv_benutzer`'
         . ' (`benutzer`, `kuerzel`, `funktion`, `rolle`, `sid`, `aktiv`,'
-        . ' `estab_gesperrt`, `password`)'
-        . " VALUES ('Evidence Integration', 'evi', 'S2', 'Stab', ?, 1, 0, ?)"
+        . ' `estab_letzte_aktivitaet`, `estab_gesperrt`, `password`)'
+        . " VALUES ('Evidence Integration', 'evi', 'S2', 'Stab', ?, 1,"
+        . ' UTC_TIMESTAMP(6), 0, ?)'
     );
     $insertEvidenceUser->bind_param(
         'ss',

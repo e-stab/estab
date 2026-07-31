@@ -48,6 +48,7 @@ if [ ! -r "$fixture" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/97-incident-command-post-name.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/98-official-message-form-fields.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/99-message-list-search.sql" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/100-session-presence.sql" ] \
     || [ ! -x "$ESTAB_MIGRATOR_BIN" ]; then
     echo "schema migrator test: fixture, baseline, or migrator is unavailable" >&2
     exit 1
@@ -951,7 +952,7 @@ finish_checksum=$(
         awk '{print $1}'
 )
 assert_equal \
-    "14|14|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
+    "15|15|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
     "$(database_query "$predecessor_database" "
 SELECT CONCAT(
          COUNT(*), '|',
@@ -1060,6 +1061,11 @@ SELECT COUNT(*) FROM estab_schema_migrations
 fixture_query "
 DELETE FROM nv_anhang WHERE \`lfd-nr\` = 2;
 
+-- A legacy browser can leave this flag behind indefinitely. Migration 100
+-- must revoke it because no trustworthy activity timestamp exists yet.
+UPDATE nv_benutzer
+   SET aktiv = 1, sid = 'legacy-session', ip = '192.0.2.10';
+
 -- Deliberately reproduce process loss after migration 95's first
 -- autocommitted ADD COLUMN. The migration ledger is absent, so the next
 -- migrator run must recognise this exact owned prefix, complete all later
@@ -1092,7 +1098,7 @@ SELECT GROUP_CONCAT(
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
 
-assert_equal "14" "$(fixture_query "
+assert_equal "15" "$(fixture_query "
 SELECT COUNT(*) FROM estab_schema_migrations
  WHERE state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
@@ -1103,7 +1109,7 @@ SELECT COUNT(*) FROM estab_schema_migrations
    AND state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
     "standard matrix migration was not recorded"
-assert_equal "1|1|1|1|1|1|1|9" "$(fixture_query "
+assert_equal "1|1|1|1|1|1|1|1|9" "$(fixture_query "
 SELECT CONCAT(
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '80-dv-evidence-retention.sql'
@@ -1133,6 +1139,10 @@ SELECT CONCAT(
            WHERE version = '99-message-list-search.sql'
              AND state = 'applied'
              AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '100-session-presence.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
          (SELECT COUNT(*)
             FROM information_schema.tables
            WHERE table_schema = DATABASE()
@@ -1149,6 +1159,40 @@ SELECT CONCAT(
              ))
        )")" \
     "DV evidence or organisational migration was not applied completely"
+assert_equal "1|3|aktiv,estab_gesperrt,estab_letzte_aktivitaet|0||NULL|0" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*)
+            FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_benutzer'
+             AND column_name = 'estab_letzte_aktivitaet'
+             AND data_type = 'datetime'
+             AND datetime_precision = 6
+             AND is_nullable = 'YES'
+             AND column_comment =
+               'estab:migration:100:last-browser-activity-utc:v1'), '|',
+         (SELECT COUNT(*)
+            FROM information_schema.statistics
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_benutzer'
+             AND index_name = 'idx_benutzer_presence'), '|',
+         (SELECT GROUP_CONCAT(
+                   column_name ORDER BY seq_in_index SEPARATOR ','
+                 )
+            FROM information_schema.statistics
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_benutzer'
+             AND index_name = 'idx_benutzer_presence'), '|',
+         (SELECT aktiv FROM nv_benutzer WHERE kuerzel = 'abc'), '|',
+         (SELECT sid FROM nv_benutzer WHERE kuerzel = 'abc'), '|',
+         COALESCE((SELECT CAST(estab_letzte_aktivitaet AS CHAR)
+            FROM nv_benutzer WHERE kuerzel = 'abc'), 'NULL'), '|',
+         (SELECT COUNT(*)
+            FROM information_schema.routines
+           WHERE routine_schema = DATABASE()
+             AND routine_name LIKE 'estab_migrate_100_%')
+       )")" \
+    "session-presence migration was not canonical or retained a legacy SID"
 assert_equal "$legacy_message_snapshot" "$(fixture_query "
 SELECT GROUP_CONCAT(
          CONCAT(
@@ -1278,6 +1322,159 @@ fixture_query "ALTER TABLE nv_nachrichten DROP INDEX ft_nachrichten_suche"
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
 assert_equal "$canonical_message_indexes" "$(message_index_snapshot)" \
     "message-list indexes did not recover after removing the collision"
+
+# Migration 100 may lose its ledger acknowledgement after the owned activity
+# column was committed but before the presence index was created. The exact
+# owned column must be adopted, the missing index added, and the ledger entry
+# restored without operator intervention.
+fixture_query "
+DELETE FROM estab_schema_migrations
+ WHERE version = '100-session-presence.sql';
+ALTER TABLE nv_benutzer
+  DROP INDEX idx_benutzer_presence"
+assert_equal "1|0|0" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*)
+            FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_benutzer'
+             AND column_name = 'estab_letzte_aktivitaet'
+             AND data_type = 'datetime'
+             AND datetime_precision = 6
+             AND is_nullable = 'YES'
+             AND column_comment =
+               'estab:migration:100:last-browser-activity-utc:v1'), '|',
+         (SELECT COUNT(*)
+            FROM information_schema.statistics
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_benutzer'
+             AND index_name = 'idx_benutzer_presence'), '|',
+         (SELECT COUNT(*)
+            FROM estab_schema_migrations
+           WHERE version = '100-session-presence.sql')
+       )")" \
+    "partial session-presence column phase was not reproduced"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "3|aktiv,estab_gesperrt,estab_letzte_aktivitaet|1" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*)
+            FROM information_schema.statistics
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_benutzer'
+             AND index_name = 'idx_benutzer_presence'
+             AND index_type = 'BTREE'
+             AND non_unique = 1
+             AND sub_part IS NULL), '|',
+         (SELECT GROUP_CONCAT(
+                   column_name ORDER BY seq_in_index SEPARATOR ','
+                 )
+            FROM information_schema.statistics
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_benutzer'
+             AND index_name = 'idx_benutzer_presence'), '|',
+         (SELECT COUNT(*)
+            FROM estab_schema_migrations
+           WHERE version = '100-session-presence.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$')
+       )")" \
+    "partial session-presence migration did not resume canonically"
+
+# A same-name activity column without the exact ownership marker is foreign.
+# It must survive unchanged and must never receive an applied ledger record.
+fixture_query "
+DELETE FROM estab_schema_migrations
+ WHERE version = '100-session-presence.sql';
+ALTER TABLE nv_benutzer
+  MODIFY COLUMN estab_letzte_aktivitaet DATETIME(6) NULL DEFAULT NULL
+  COMMENT 'foreign-session-activity-owner'
+  AFTER estab_gesperrt"
+if ESTAB_DB_NAME="$test_database" \
+    "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: foreign session activity column was accepted" >&2
+    exit 1
+fi
+if ! grep -q \
+    'Session-presence migration blocked: foreign activity column collision' \
+    "$failure_log"; then
+    echo "schema migrator test: session activity column collision failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "foreign-session-activity-owner|0" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT column_comment
+            FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_benutzer'
+             AND column_name = 'estab_letzte_aktivitaet'), '|',
+         (SELECT COUNT(*)
+            FROM estab_schema_migrations
+           WHERE version = '100-session-presence.sql')
+       )")" \
+    "blocked session activity column collision was changed or recorded"
+fixture_query "
+ALTER TABLE nv_benutzer
+  MODIFY COLUMN estab_letzte_aktivitaet DATETIME(6) NULL DEFAULT NULL
+  COMMENT 'estab:migration:100:last-browser-activity-utc:v1'
+  AFTER estab_gesperrt"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+
+# The owned index name is equally protected: a different column order must
+# block before any schema rewrite or ledger acknowledgement takes place.
+fixture_query "
+DELETE FROM estab_schema_migrations
+ WHERE version = '100-session-presence.sql';
+ALTER TABLE nv_benutzer
+  DROP INDEX idx_benutzer_presence,
+  ADD INDEX idx_benutzer_presence (
+    estab_gesperrt, aktiv, estab_letzte_aktivitaet
+  )"
+if ESTAB_DB_NAME="$test_database" \
+    "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: foreign session presence index was accepted" >&2
+    exit 1
+fi
+if ! grep -q \
+    'Session-presence migration blocked: foreign presence index collision' \
+    "$failure_log"; then
+    echo "schema migrator test: session presence index collision failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "estab_gesperrt,aktiv,estab_letzte_aktivitaet|0" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT GROUP_CONCAT(
+                   column_name ORDER BY seq_in_index SEPARATOR ','
+                 )
+            FROM information_schema.statistics
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_benutzer'
+             AND index_name = 'idx_benutzer_presence'), '|',
+         (SELECT COUNT(*)
+            FROM estab_schema_migrations
+           WHERE version = '100-session-presence.sql')
+       )")" \
+    "blocked session presence index collision was changed or recorded"
+fixture_query "ALTER TABLE nv_benutzer DROP INDEX idx_benutzer_presence"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "aktiv,estab_gesperrt,estab_letzte_aktivitaet|1" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT GROUP_CONCAT(
+                   column_name ORDER BY seq_in_index SEPARATOR ','
+                 )
+            FROM information_schema.statistics
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_benutzer'
+             AND index_name = 'idx_benutzer_presence'), '|',
+         (SELECT COUNT(*)
+            FROM estab_schema_migrations
+           WHERE version = '100-session-presence.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$')
+       )")" \
+    "session presence index did not recover after removing the collision"
 assert_equal "1|1|1|2|4|0" "$(fixture_query "
 SELECT CONCAT(
          (SELECT COUNT(*)

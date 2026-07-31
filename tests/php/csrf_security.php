@@ -56,6 +56,7 @@ foreach (
  */
 $root = dirname(__DIR__, 2);
 $expectedControllers = [
+    '4fach/activity.php',
     '4fach/anhang.php',
     '4fach/fuehrungsstelle.php',
     '4fach/katgoedt.php',

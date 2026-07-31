@@ -232,12 +232,19 @@ ihn anschließend wieder her.
 podman compose run --rm migrate
 ```
 
-Ein bereits aktueller Bestand meldet alle vierzehn Migrationen einschließlich
-`99-message-list-search.sql` als vorhanden und
+Ein bereits aktueller Bestand meldet alle fünfzehn Migrationen einschließlich
+`100-session-presence.sql` als vorhanden und
 führt trotzdem den vollständigen Read-only-Schematest aus. Die Ausgabe muss
 `Post-migration schema verification passed` und anschließend
 `All schema migrations are applied` enthalten. Erst danach sollte der Stack
 fachlich freigegeben werden.
+
+Migration 100 ergänzt den UTC-Zeitstempel und Index für die
+Aktivitätsübersicht. Da vor dem Upgrade bereits aktive SIDs keine verlässliche
+letzte Browserinteraktion besitzen, werden sie einmalig abgemeldet. Dieser
+erwartete Sicherheitsübergang betrifft ausschließlich eStab-Funktionskonten:
+Nach dem Upgrade müssen sich diese Benutzer neu anmelden. Der separate
+HTTP-Basic-Administrationszugang bleibt verfügbar.
 
 ### 5. Ersten Einsatz und Dienstbetrieb aktivieren
 
@@ -348,6 +355,33 @@ weiterhin ausschließlich über `ESTAB_ADMIN_USER` und die
 `admin_password.txt`-Secret-Datei geändert. Details und Auditvertrag stehen in
 [Benutzerverwaltung](BENUTZERVERWALTUNG.md).
 
+### Präsenz und Leerlaufabmeldung
+
+Die Aktivitätsübersicht wertet ausschließlich echte Browserinteraktion aus.
+Ohne Zeiger-, Tastatur-, Formular-, Rad- oder Touchinteraktion beziehungsweise
+bewusste Rückkehr in das sichtbare Fenster wechselt ein angemeldeter Benutzer
+nach 15 Minuten zu „Inaktiv“. Das ist zunächst nur ein Präsenzzustand: Die
+Fachsitzung und eine persönlich angenommene Dienstbesetzung bleiben gültig.
+
+Nach 12 Stunden ohne echte Interaktion widerruft die Anwendung die
+Fachsitzung serverseitig. Der nächste geschützte Seitenaufruf führt zum
+Bestandslogin; ein nicht verarbeitetes Formular wird nicht automatisch erneut
+gesendet. Die Browseroberfläche meldet Aktivität über einen
+Session-CSRF-geschützten POST an `/4fach/activity.php`, geteilt über Tabs und
+Frames und höchstens einmal pro Minute. Der automatische Statusabruf unter
+`/4fach/vorgaben.php?fragment=status`, andere Refreshes und ein bloß offener
+Tab gelten nicht als Aktivität. Eine unbeaufsichtigte Statusanzeige hält eine
+Sitzung daher nicht unbegrenzt online.
+
+Die PHP-Laufzeit verwendet dazu in `docker/php/estab.ini` und im Bootstrap
+`session.gc_maxlifetime = 43200`. Der autoritative Ablauf wird trotzdem bei
+jeder Authentisierungsprüfung aus dem UTC-Datenbankzeitstempel ermittelt; die
+PHP-Garbage-Collection allein ist kein Sicherheitsnachweis. Fehlende,
+ungültige oder zukünftige Zeitwerte laufen fail-closed ab. Diese Fristen sind
+keine `.env`-Option und gelten für alle Fachkonten gleich. HTTP Basic Auth für
+`/4fadm` wird vom Browser separat verwaltet und unterliegt nicht diesem
+Fachsession-Timeout.
+
 Unter `/4fadm/incident_export.php` kann derselbe Administrator einen aktiven
 oder historischen Einsatz als PDF-Dossier ausgeben. ETB, TBB,
 Nachrichtenvordrucke und Anhänge sind einzeln wählbar; Anhänge
@@ -379,8 +413,8 @@ höchstens sechs Buchstaben, Ziffern oder `_` sowie die organisatorisch
 zugeteilte Funktion sind Pflichtangaben; die Rolle ist nicht frei wählbar.
 Die öffentliche Kontenliste übernimmt bei Auswahl nur Name, Kürzel und
 Funktion, niemals das Kennwort.
-Ein Konto kann unabhängig von seinem Onlinezustand nicht durch eine
-abweichende Funktionsauswahl die Rolle wechseln. Einen vorgesehenen
+Ein Konto kann unabhängig von seinem Sitzungs- oder Präsenzzustand nicht durch
+eine abweichende Funktionsauswahl die Rolle wechseln. Einen vorgesehenen
 Funktionswechsel führt der technische Administrator in der
 Benutzerverwaltung aus; dadurch endet eine vorhandene Sitzung und die nächste
 Anmeldung muss die neue Funktion verwenden.
@@ -460,8 +494,10 @@ eingebettetes Login noch ein direkt geöffneter Tab erfordern eine manuelle
 Änderung der Browseradresse. Ist das Konto bereits angemeldet, aber noch keine
 persönliche Dienstfunktion ausgewählt, führt ein GET/HEAD per HTTP 303
 stattdessen zum Führungsstellenbetrieb; ein Schreibversuch bleibt HTTP 403.
-Rollen-, Objekt-, CSRF-, Polling- und Subresource-Anfragen werden nicht
-umgelenkt und behalten ihre 403-Grenzen.
+Rollen-, Objekt-, CSRF- und Subresource-Anfragen werden nicht umgelenkt und
+behalten ihre 403-Grenzen. Das Statusfragment liefert bei fehlender oder
+abgelaufener Fachsitzung stattdessen HTTP 401, damit die Sidebar den
+Top-Level-Login öffnet.
 Übersicht und BOS-Info bleiben öffentlich; die Administration ist als
 separater technischer Zugang markiert.
 
@@ -481,13 +517,19 @@ Status-/Zählerhelfer gehören nicht mehr zur Runtime-Oberfläche. Hilfe- und
 Problem-Popups zeigen die Leiste im jeweiligen Fenster.
 
 Die Statuskarte am Anfang der Sidebar vereint den rollenabhängigen
-Arbeitszähler, Datum und Serverzeit sowie die Onlinebelegung aller
-konfigurierten Funktionen. Die Anwendung lädt regelmäßig ausschließlich das
+Arbeitszähler, Datum und Serverzeit sowie die Aktivitätsübersicht aller
+konfigurierten Funktionen. „Aktiv“ bedeutet eine bestätigte echte Interaktion
+innerhalb der letzten 15 Minuten; ältere noch gültige Fachsitzungen erscheinen
+als „Inaktiv“. Die Anwendung lädt regelmäßig ausschließlich das
 authentifizierte Statusfragment
 `/4fach/vorgaben.php?fragment=status` nach und ersetzt nur diese Karte. Das
 Sidebar-Dokument, die Bereichslinks und die Aktionsbuttons werden dabei nicht
 neu geladen; Tastaturfokus und Scrollposition bleiben auch dann erhalten, wenn
-der Hinweiston-Schalter fokussiert ist. Ein Zähler größer null bleibt bis zur
+der Hinweiston-Schalter fokussiert ist. Dieser GET aktualisiert den
+Aktivitätszeitstempel nicht und zählt nicht als Interaktion. Antwortet er nach
+dem 12-Stunden-Ablauf mit
+HTTP 401, öffnet die Oberfläche den Bestandslogin im Top-Level-Kontext. Ein
+Zähler größer null bleibt bis zur
 Abarbeitung dauerhaft kontrastreich markiert. Schlägt die Datenbankabfrage
 fehl, zeigt der Zähler „–“; Identität, Navigation und Aktionen bleiben
 verfügbar, der letzte erfolgreiche `old_que_*`-Basiswert bleibt unverändert und

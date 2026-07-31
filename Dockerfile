@@ -53,6 +53,7 @@ COPY index.php health.php config.inc.php dbcfg.inc.php e_cfg.inc.php favicon.ico
 # admin-auth initializer generates the effective bcrypt file at runtime.
 COPY 4fach/4fachform.php \
     4fach/official_message_form.php \
+    4fach/activity.php \
     4fach/anhang.php \
     4fach/button.php \
     4fach/createbutton.php \

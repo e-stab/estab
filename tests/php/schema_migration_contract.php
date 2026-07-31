@@ -58,6 +58,9 @@ $officialMessageFieldsMigration = $read(
 $messageListSearchMigration = $read(
     $root . '/docker/db/migrations/99-message-list-search.sql'
 );
+$sessionPresenceMigration = $read(
+    $root . '/docker/db/migrations/100-session-presence.sql'
+);
 $baseline = $read($root . '/docker/db/init/10-schema.sql');
 $verify = $read($root . '/docker/db/verify.sql');
 $health = $read($root . '/health.php');
@@ -77,6 +80,7 @@ $etbDutySql = $normaliseSql($etbDutyMigration);
 $commandPostSql = $normaliseSql($commandPostMigration);
 $officialMessageFieldsSql = $normaliseSql($officialMessageFieldsMigration);
 $messageListSearchSql = $normaliseSql($messageListSearchMigration);
+$sessionPresenceSql = $normaliseSql($sessionPresenceMigration);
 $baselineSql = $normaliseSql($baseline);
 $verifySql = $normaliseSql($verify);
 $readinessSql = $normaliseSql(estab_readiness_schema_query());
@@ -504,6 +508,45 @@ foreach ([
         );
     }
 }
+$sessionPresenceFragments = [
+    'Session-presence migration blocked: user table is missing or incompatible'
+        => 'Migration 100 does not require the canonical user table',
+    'Session-presence migration blocked: foreign activity column collision'
+        => 'Migration 100 does not reject a foreign activity column',
+    'Session-presence migration blocked: foreign presence index collision'
+        => 'Migration 100 does not reject a foreign presence index',
+    'CREATE PROCEDURE estab_migrate_100_add_activity()'
+        => 'Migration 100 has no resumable activity-column phase',
+    'CREATE PROCEDURE estab_migrate_100_add_index()'
+        => 'Migration 100 has no resumable presence-index phase',
+    'CREATE PROCEDURE estab_migrate_100_validate()'
+        => 'Migration 100 has no final schema validator',
+    'estab:migration:100:last-browser-activity-utc:v1'
+        => 'Migration 100 does not own its UTC activity column',
+    'ADD INDEX `idx_benutzer_presence`'
+        => 'Migration 100 does not create the canonical presence index',
+    "SET `aktiv` = 0, `sid` = '', `ip` = '', `fwdip` = ''"
+        => 'Migration 100 does not revoke unprovable legacy sessions',
+];
+foreach ($sessionPresenceFragments as $fragment => $message) {
+    $assert(str_contains($sessionPresenceSql, $fragment), $message);
+}
+foreach ([
+    'verify.sql' => $verifySql,
+    'runtime readiness' => $readinessSql,
+] as $contractName => $runtimeSchemaContract) {
+    foreach ([
+        'estab_letzte_aktivitaet',
+        'idx_benutzer_presence',
+        'aktiv,estab_gesperrt,estab_letzte_aktivitaet',
+        'estab:migration:100:last-browser-activity-utc:v1',
+    ] as $fragment) {
+        $assert(
+            str_contains($runtimeSchemaContract, $fragment),
+            $contractName . ' does not enforce session presence: ' . $fragment
+        );
+    }
+}
 $assert(
     str_contains($incidentMigration, 'CREATE TABLE IF NOT EXISTS `nv_einsaetze`')
         && str_contains($incidentMigration, 'CREATE TABLE IF NOT EXISTS `nv_einsatz_status`')
@@ -802,11 +845,12 @@ foreach ([
     '97-incident-command-post-name.sql',
     '98-official-message-form-fields.sql',
     '99-message-list-search.sql',
+    '100-session-presence.sql',
     'incident command-post name migration was not canonical or invented history',
     'message-list search indexes were not canonical after migration',
     'partial message-list index migration did not resume canonically',
     'blocked message-list search-index collision was changed or recorded',
-    'assert_equal "14"',
+    'assert_equal "15"',
 ] as $marker) {
     $assert(
         str_contains($schemaIntegration, $marker),
@@ -854,7 +898,7 @@ $assert(
         && str_contains($verifySql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $verifySql,
-            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 14'
+            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 15'
         )
         && str_contains($verifySql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -866,7 +910,8 @@ $assert(
             "'98-official-message-form-fields.sql'"
         )
         && str_contains($verifySql, "'99-message-list-search.sql'")
-        && str_contains($verifySql, ") = 14) AS `schema_migrations_ok`"),
+        && str_contains($verifySql, "'100-session-presence.sql'")
+        && str_contains($verifySql, ") = 15) AS `schema_migrations_ok`"),
     'verify.sql does not require the exact final ETB catalogue and ledger'
 );
 $assert(
@@ -889,7 +934,7 @@ $assert(
         && str_contains($readinessSql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $readinessSql,
-            '(SELECT COUNT(*) FROM estab_schema_migrations) = 14'
+            '(SELECT COUNT(*) FROM estab_schema_migrations) = 15'
         )
         && str_contains($readinessSql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -901,9 +946,10 @@ $assert(
             "'98-official-message-form-fields.sql'"
         )
         && str_contains($readinessSql, "'99-message-list-search.sql'")
+        && str_contains($readinessSql, "'100-session-presence.sql'")
         && str_contains(
             $readinessSql,
-            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 14"
+            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 15"
         ),
     'Runtime readiness does not require the exact final ETB catalogue and ledger'
 );
@@ -1016,6 +1062,10 @@ $assert(
             $readiness,
             "'99-message-list-search.sql'"
         )
+        && str_contains(
+            $readiness,
+            "'100-session-presence.sql'"
+        )
         && str_contains($verify, "'50-global-incidents.sql'")
         && str_contains($verify, "'45-global-incidents-prepare.sql'")
         && str_contains($verify, "'55-global-incidents-finish.sql'")
@@ -1027,9 +1077,10 @@ $assert(
         && str_contains($verify, "'97-incident-command-post-name.sql'")
         && str_contains($verify, "'98-official-message-form-fields.sql'")
         && str_contains($verify, "'99-message-list-search.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 14')
-        && str_contains($readiness, 'estab_schema_migrations) = 14'),
-    'Migration ledger/readiness does not require all fourteen release migrations'
+        && str_contains($verify, "'100-session-presence.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 15')
+        && str_contains($readiness, 'estab_schema_migrations) = 15'),
+    'Migration ledger/readiness does not require all fifteen release migrations'
 );
 $assert(
     str_contains($readiness, "require_once __DIR__ . '/bootstrap.php'")

@@ -449,8 +449,11 @@ foreach ($handoverRequests as $handoverRequest) {
           <label>Benutzerkonto
             <select name="benutzer_kuerzel" required>
               <?php foreach ($users as $user): ?>
-                <?php $userBlocked =
-                    (int) ($user['estab_gesperrt'] ?? 0) === 1; ?>
+                <?php
+                $userBlocked =
+                    (int) ($user['estab_gesperrt'] ?? 0) === 1;
+                $userPresence = estab_auth_presence_state($user);
+                ?>
                 <option value="<?= estab_admin_html($user['kuerzel']) ?>"
                   <?= $userBlocked ? 'disabled' : '' ?>>
                   <?= estab_admin_html(
@@ -459,9 +462,13 @@ foreach ($handoverRequests as $handoverRequest) {
                           $userBlocked
                               ? 'gesperrt'
                               : (
-                                  (int) ($user['aktiv'] ?? 0) === 1
-                                      ? 'online'
-                                      : 'nicht angemeldet'
+                                  $userPresence === 'online'
+                                      ? 'aktiv'
+                                      : (
+                                          $userPresence === 'inactive'
+                                              ? 'inaktiv (15+ Min.)'
+                                              : 'nicht angemeldet'
+                                      )
                               )
                       )
                   ) ?>

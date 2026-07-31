@@ -242,7 +242,7 @@ assert_body_fixed 'data-estab-navigation-mode="sidebar"'
 assert_body_absent_fixed '<summary'
 assert_status 400 "$base_url/4fach/vorgaben.php?next=administration"
 assert_status 400 "$base_url/4fach/vorgaben.php?unexpected=1"
-assert_status 403 "$base_url/4fach/vorgaben.php?fragment=status"
+assert_status 401 "$base_url/4fach/vorgaben.php?fragment=status"
 assert_body_fixed 'Anmeldung erforderlich.'
 assert_body_absent_fixed 'data-estab-sidebar-status'
 assert_status 400 "$base_url/4fach/vorgaben.php?fragment=unknown"
@@ -282,6 +282,10 @@ assert_status 303 --request POST \
     --data-urlencode 'logout_action=logout' \
     "$base_url/4fach/logout.php"
 assert_header_fixed "Location: $expected_app_root/"
+assert_status 405 "$base_url/4fach/activity.php"
+assert_status 401 --request POST \
+    --data-urlencode 'csrf_token=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+    "$base_url/4fach/activity.php"
 
 for protected_route in \
     '4fach/fuehrungsstelle.php|command-post|index.php' \

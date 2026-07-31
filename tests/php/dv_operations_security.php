@@ -94,6 +94,16 @@ $assert(
     ) === 'logout',
     'logout is not an explicit control exception'
 );
+$assert(
+    estab_operational_control_exception(
+        [
+            'REQUEST_METHOD' => 'POST',
+            'SCRIPT_NAME' => '/4fach/activity.php',
+        ],
+        ['csrf_token' => str_repeat('a', 64)]
+    ) === 'session-activity',
+    'session activity is not an explicit non-operational control exception'
+);
 foreach (ESTAB_OPERATIONAL_MESSENGER_LIFECYCLE_ACTIONS as $transition) {
     $assert(
         estab_operational_control_exception(

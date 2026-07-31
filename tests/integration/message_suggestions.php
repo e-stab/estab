@@ -229,8 +229,8 @@ try {
     $insertUser = $connection->prepare(
         'INSERT INTO `nv_benutzer`'
         . ' (`benutzer`, `kuerzel`, `funktion`, `rolle`, `sid`, `aktiv`,'
-        . ' `estab_gesperrt`, `password`)'
-        . ' VALUES (?, ?, ?, ?, ?, 1, 0, ?)'
+        . ' `estab_letzte_aktivitaet`, `estab_gesperrt`, `password`)'
+        . ' VALUES (?, ?, ?, ?, ?, 1, UTC_TIMESTAMP(6), 0, ?)'
     );
     if (!$insertUser) {
         throw new RuntimeException(

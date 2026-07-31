@@ -783,6 +783,33 @@ account_assignment() {
         "$account_code" | db_sql
 }
 
+account_activity_timestamp() {
+    account_code=$1
+    case "$account_code" in
+        '' | *[!a-z0-9_]*) printf 'HTTP smoke: unsafe activity account code\n' >&2; exit 1 ;;
+    esac
+    printf "SELECT DATE_FORMAT(estab_letzte_aktivitaet, '%%Y-%%m-%%d %%H:%%i:%%s.%%f') FROM nv_benutzer WHERE kuerzel = '%s';\n" \
+        "$account_code" | db_sql
+}
+
+account_activity_is_recent() {
+    account_code=$1
+    case "$account_code" in
+        '' | *[!a-z0-9_]*) printf 'HTTP smoke: unsafe activity account code\n' >&2; exit 1 ;;
+    esac
+    printf "SELECT IF(estab_letzte_aktivitaet BETWEEN UTC_TIMESTAMP(6) - INTERVAL 30 SECOND AND UTC_TIMESTAMP(6), 1, 0) FROM nv_benutzer WHERE kuerzel = '%s';\n" \
+        "$account_code" | db_sql
+}
+
+account_session_storage() {
+    account_code=$1
+    case "$account_code" in
+        '' | *[!a-z0-9_]*) printf 'HTTP smoke: unsafe session account code\n' >&2; exit 1 ;;
+    esac
+    printf "SELECT CONCAT(aktiv, '|', IF(sid = '', 'empty', 'set')) FROM nv_benutzer WHERE kuerzel = '%s';\n" \
+        "$account_code" | db_sql
+}
+
 logout_audit_count() {
     account_code=$1
     case "$account_code" in
@@ -868,6 +895,10 @@ assert_status 303 --request POST \
     --data-urlencode 'logout_action=logout' \
     "$base_url/4fach/logout.php"
 assert_header_fixed "Location: $expected_app_root/"
+assert_status 405 "$base_url/4fach/activity.php"
+assert_status 401 --request POST \
+    --data-urlencode 'csrf_token=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+    "$base_url/4fach/activity.php"
 assert_status 410 "$base_url/4fach/upload.php"
 assert_status 410 "$base_url/4fach/upload/upload.php"
 assert_status 401 "$base_url/4fadm/admin.php"
@@ -2918,6 +2949,58 @@ assert_body 'data-estab-sidebar-status'
 assert_body "data-estab-presence-function=\"$test_function\""
 assert_body 'data-estab-sound-toggle'
 assert_body_absent 'data-estab-sidebar-audio'
+
+# Presence is based on genuine browser interaction, not on the sidebar's
+# automatic status polling. Keep the authoritative session valid but make it
+# old enough to cross the 15-minute display boundary, then prove repeated
+# polling neither refreshes the timestamp nor disguises the inactive state.
+activity_backdate_rows=$(
+    printf "UPDATE nv_benutzer SET estab_letzte_aktivitaet = UTC_TIMESTAMP(6) - INTERVAL 16 MINUTE WHERE kuerzel = '%s' AND aktiv = 1; SELECT ROW_COUNT();\n" \
+        "$test_code" | db_sql | tail -n 1
+)
+if [ "$activity_backdate_rows" != 1 ]; then
+    printf 'HTTP smoke: could not backdate the active presence fixture\n' >&2
+    exit 1
+fi
+inactive_activity_before=$(account_activity_timestamp "$test_code")
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/vorgaben.php?fragment=status"
+assert_body 'data-estab-current-activity="inactive"'
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/vorgaben.php?fragment=status"
+assert_body 'data-estab-current-activity="inactive"'
+if [ "$(account_activity_timestamp "$test_code")" != "$inactive_activity_before" ]; then
+    printf 'HTTP smoke: sidebar status polling refreshed user activity\n' >&2
+    exit 1
+fi
+
+# A forged activity report must be rejected without altering the timestamp.
+# The session-bound token then proves that the dedicated endpoint records a
+# real interaction and immediately returns the current account to "online".
+case "$older_logout_csrf" in
+    0*) wrong_activity_csrf="1${older_logout_csrf#?}" ;;
+    *) wrong_activity_csrf="0${older_logout_csrf#?}" ;;
+esac
+assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$wrong_activity_csrf" \
+    "$base_url/4fach/activity.php"
+if [ "$(account_activity_timestamp "$test_code")" != "$inactive_activity_before" ]; then
+    printf 'HTTP smoke: rejected activity report changed the timestamp\n' >&2
+    exit 1
+fi
+assert_status 204 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$older_logout_csrf" \
+    "$base_url/4fach/activity.php"
+if [ "$(account_activity_is_recent "$test_code")" != 1 ]; then
+    printf 'HTTP smoke: accepted activity report did not refresh presence\n' >&2
+    exit 1
+fi
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/vorgaben.php?fragment=status"
+assert_body 'data-estab-current-activity="online"'
+
 assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/status.php"
 assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
@@ -3121,6 +3204,57 @@ fi
 assert_status 200 --cookie "$current_cookie_jar" "$base_url/"
 assert_body 'id="estab-login"'
 assert_body_absent 'data-estab-session-bar'
+
+# Verify the authoritative 12-hour idle timeout on a dedicated account so the
+# preceding multi-browser and logout-audit scenarios remain independent. The
+# status endpoint must reject the expired browser and revoke its reusable SID
+# before any subsequent protected route redirects to the normal login flow.
+idle_account_name='HTTP Idle Timeout Integration'
+idle_account_code=idle01
+sh tests/integration/provision_user.sh \
+    "$idle_account_name" "$idle_account_code" S3 "$test_password"
+idle_cookie_jar=$work_dir/idle-cookies.txt
+assert_status 200 --cookie "$idle_cookie_jar" --cookie-jar "$idle_cookie_jar" \
+    --request POST --data-urlencode 'login_flow=existing' \
+    "$base_url/4fach/mainindex.php"
+idle_preauth_csrf=$(csrf_from_body)
+assert_status 200 --cookie "$idle_cookie_jar" --cookie-jar "$idle_cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$idle_preauth_csrf" \
+    --data-urlencode 'login_flow=existing' \
+    --data-urlencode "benutzer=$idle_account_name" \
+    --data-urlencode "kuerzel=$idle_account_code" \
+    --data-urlencode 'funktion=S3' \
+    --data-urlencode "kennwort1@$login_password_file" \
+    --data-urlencode '2teskennwort=No' \
+    --data-urlencode 'absenden_x=1' \
+    "$base_url/4fach/mainindex.php"
+if [ "$(account_session_storage "$idle_account_code")" != '1|set' ] ||
+    [ "$(account_activity_is_recent "$idle_account_code")" != 1 ]; then
+    printf 'HTTP smoke: dedicated idle account did not establish a fresh session\n' >&2
+    exit 1
+fi
+idle_backdate_rows=$(
+    printf "UPDATE nv_benutzer SET estab_letzte_aktivitaet = UTC_TIMESTAMP(6) - INTERVAL 43200 SECOND WHERE kuerzel = '%s' AND aktiv = 1; SELECT ROW_COUNT();\n" \
+        "$idle_account_code" | db_sql | tail -n 1
+)
+if [ "$idle_backdate_rows" != 1 ]; then
+    printf 'HTTP smoke: could not backdate the idle-timeout fixture\n' >&2
+    exit 1
+fi
+assert_status 401 --cookie "$idle_cookie_jar" --cookie-jar "$idle_cookie_jar" \
+    "$base_url/4fach/vorgaben.php?fragment=status"
+if [ "$(account_session_storage "$idle_account_code")" != '0|empty' ]; then
+    printf 'HTTP smoke: expired idle session retained its active SID\n' >&2
+    exit 1
+fi
+assert_status 303 --cookie "$idle_cookie_jar" --cookie-jar "$idle_cookie_jar" \
+    "$base_url/4fach/vordrucke.php"
+if ! grep -Eiq '^Location: .*4fach/index[.]php[?]login_flow=existing' "$headers"; then
+    printf 'HTTP smoke: expired idle session did not return to login\n' >&2
+    sed -n '1,30p' "$headers" >&2
+    exit 1
+fi
 
 admin_password=${ESTAB_TEST_ADMIN_PASSWORD:-}
 if [ -z "$admin_password" ] && [ -n "${ESTAB_TEST_ADMIN_PASSWORD_FILE:-}" ]; then

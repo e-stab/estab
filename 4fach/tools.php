@@ -426,6 +426,7 @@ bersichtlich dargestellt werden.
       }
     }
     $aktiv    = " rgb(100, 250,  20); color:&000000; "; // was (100, 250,  20)
+    $idle     = " rgb(235, 190,  85); color:&000000; ";
     $inaktiv  = " rgb(200, 200, 200); color:&FFFF00; "; // was (250,  60,  30)
     $self     = " rgb(250,  60,  30); color:&ffffff; "; // was ( 50, 180, 220);
 
@@ -437,9 +438,17 @@ bersichtlich dargestellt werden.
 
     if ($benutzer !== array ()){
       foreach ($benutzer as $user){
-        if ($user['aktiv'] == 1 ) {          $userstatus [$user['rolle']]  [$user['funktion']]  = $aktiv;}
+        $presence = estab_auth_presence_state ($user);
+        if ($presence === "online") {
+          $userstatus [$user['rolle']][$user['funktion']] = $aktiv;
+        } elseif (
+          $presence === "inactive"
+          && ($userstatus [$user['rolle']][$user['funktion']] ?? null) !== $aktiv
+        ) {
+          $userstatus [$user['rolle']][$user['funktion']] = $idle;
+        }
 
-        if ( ($user ["funktion"] == "A/W") AND ($user["aktiv"] == 1) ){ $fernm_aw ++;}
+        if ( ($user ["funktion"] == "A/W") AND in_array ($presence, array ("online", "inactive"), true) ){ $fernm_aw ++;}
       }
     }
     if (isset ($_SESSION ["vStab_rolle"], $_SESSION ["vStab_funktion"])) {
@@ -652,13 +661,21 @@ bersichtlich dargestellt werden.
       }
       echo "</tr>\n";
       foreach ($benutzer as $user){
+        $presence = estab_auth_presence_state ($user);
         $isCurrentSession = (string) ($user ["sid"] ?? "") !== ""
-          && session_id () === (string) $user ["sid"];
-        $isActive = (int) ($user ["aktiv"] ?? 0) === 1;
-        $rowClass = $isActive ? "estab-account-active" : "estab-account-inactive";
+          && session_id () === (string) $user ["sid"]
+          && in_array ($presence, array ("online", "inactive"), true);
+        $rowClass = $presence === "online"
+          ? "estab-account-active"
+          : ($presence === "inactive" ? "estab-account-idle" : "estab-account-inactive");
         $statusText = $isCurrentSession
-          ? "Aktuelle Sitzung"
-          : ($isActive ? "Angemeldet" : "Abgemeldet");
+          ? ($presence === "online" ? "Aktuelle Sitzung · aktiv" : "Aktuelle Sitzung · inaktiv")
+          : match ($presence) {
+              "online" => "Aktiv",
+              "inactive" => "Inaktiv (seit mindestens 15 Minuten)",
+              "blocked" => "Gesperrt",
+              default => "Abgemeldet",
+            };
         echo "<tr class=\"".$rowClass."\">";
         $identityToken = $loginSelectable ? estab_auth_identity_token ($user) : "";
         foreach (array ("benutzer", "kuerzel", "rolle", "funktion") as $column) {

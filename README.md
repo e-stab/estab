@@ -176,8 +176,8 @@ erfolgt in dieser Reihenfolge:
    mehrere A/W-Besetzungen sind möglich.
 3. Unter `/4fadm/fuehrungsstelle.php` eine geplante Dienstschicht anlegen und
    die Funktionen den tatsächlichen, ungesperrten Konten zuweisen. Konten
-   dürfen dabei noch offline sein; der Online-Status ist im Auswahlfeld
-   kenntlich gemacht.
+   dürfen dabei aktiv, inaktiv oder abgemeldet sein; der Präsenzstatus ist im
+   Auswahlfeld kenntlich gemacht.
 4. Jede Person meldet sich an und nimmt ihre Zuweisungen unter
    `/4fach/fuehrungsstelle.php` selbst an.
 5. Erst wenn S2, Si, S6, LdF und A/W angenommen sind, aktiviert die
@@ -275,6 +275,7 @@ entstehen. OCI-Tags – auch `latest` – gibt es absichtlich nicht.
 | --- | --- | --- |
 | `/` | Einstieg, direkter Anmeldebutton und Modulübersicht | öffentlich bis zur Modulanmeldung |
 | `/4fach/index.php` | öffentlicher Einstieg in die vollständige Anwendung mit Kontoauswahl und Benutzeranmeldung | operative Daten erst mit eStab-Sitzung, aktivem Einsatz und ausgewählter, persönlich angenommener aktiver Dienstfunktion |
+| `/4fach/activity.php` | meldet echte Interaktion einer angemeldeten Browseroberfläche | ausschließlich POST mit eStab-Sitzung, exakter SID und Session-CSRF; Statuspolling ruft den Endpunkt nicht auf |
 | `/4fach/logout.php` | zentrale Abmeldung aus Sitzungsleiste und Nachrichtenarbeitsbereich | eStab-Sitzung, ausschließlich POST mit Session-CSRF |
 | `/4fach/katgoedt.php` | globale, Funktions- und persönliche Kategorien | ausgewählte aktive Dienstfunktion; Rollenprüfung, bei Nachrichtenbezug zusätzlich Objektprüfung, CSRF für Änderungen |
 | `/4fach/fuehrungsstelle.php` | persönliche Dienstfunktionen annehmen/auswählen, freigegebenen S6-Plan lesen sowie S6- und Melderabläufe bearbeiten | eStab-Sitzung und aktiver Einsatz; vor Hutauswahl nur eigene Besetzungen, Annahme, Übergabebestätigung und Auswahl, danach exakte aktive Besetzungs-ID und Fachzuständigkeit |
@@ -401,6 +402,17 @@ wird sie bewusst aktiviert, verlangt sie eine Kennwortbestätigung und meldet
 niemals still ein vorhandenes Konto an. Beide Browserabläufe sind bereits vor
 der Anmeldung an ein Session-CSRF-Token gebunden.
 
+Eine bestehende Anmeldung und die sichtbare Präsenz sind getrennte Zustände.
+Nach 15 Minuten ohne echte Browserinteraktion zeigt die Aktivitätsübersicht
+das Konto als „Inaktiv“; die Sitzung bleibt zunächst gültig. Nach 12 Stunden
+ohne solche Interaktion widerruft die serverseitige Authentisierungsgrenze die
+Sitzung und führt beim nächsten geschützten Aufruf zum Bestandslogin. Maus-,
+Tastatur- und Formulareingaben werden höchstens einmal pro Minute über einen
+SID- und CSRF-gebundenen POST gemeldet. Automatische Seitenaktualisierungen,
+das regelmäßig geladene Statusfragment und ein bloß geöffnetes Browserfenster
+verlängern die Fristen nicht. Der getrennte HTTP-Basic-Zugang der
+Administration besitzt einen eigenen, vom Browser verwalteten Lebenszyklus.
+
 Ändert der Administrator die aktive Empfängermatrix, werden geänderte Rollen
 in derselben Transaktion in die betroffenen Konten übernommen und deren
 Sitzungen widerrufen. Entfernte Funktionen werden nicht automatisch
@@ -438,9 +450,11 @@ nicht gespeichert wurde und erneut erfasst werden muss. Alte operative
 GET-Querys des Nachrichtencontrollers werden ebenfalls vollständig verworfen
 und führen ausschließlich zum erlaubten Ziel `messages`. Zugangsdaten oder
 Login-Metadaten in einer solchen GET-Query bleiben dagegen eine harte
-Ablehnung. Rollen-, Objekt-, CSRF-, Polling- und Bildendpunkte behalten ihre
-knappen 403-Sicherheitsgrenzen. Die Administration ist als eigener technischer
-Zugang markiert.
+Ablehnung. Rollen-, Objekt-, CSRF- und Bildendpunkte behalten ihre knappen
+403-Sicherheitsgrenzen. Das authentifizierte Statusfragment antwortet bei
+fehlender oder abgelaufener Sitzung mit HTTP 401, damit die Sidebar den
+Top-Level-Login öffnet. Die Administration ist als eigener technischer Zugang
+markiert.
 
 Das gemeinsame Manifest enthält in stabiler Reihenfolge neun operative
 Bereiche: Übersicht, Nachrichtenvordruck, Führungsstellenbetrieb,
@@ -500,10 +514,15 @@ abgeleiteter Rolle. Der Button „Abmelden“ beendet die lokale Sitzung auch be
 einer nachgelagerten Datenbankstörung, löscht die Anwendungscookies und führt
 anschließend zum Anmeldeeinstieg zurück. Oberhalb von Identität, Logout,
 Bereichslinks und rollenabhängigen Textbuttons bündelt die Sidebar den
-passenden Arbeitszähler, Serverzeit und Onlinebelegung in einer Statuskarte.
+passenden Arbeitszähler, Serverzeit und die Aktivitätsübersicht in einer
+Statuskarte. Sie unterscheidet „Aktiv“, „Inaktiv (15 Min.)“, die eigene
+Funktion und abgemeldete Funktionen; nur innerhalb der letzten 15 Minuten
+bestätigte echte Interaktion zählt als aktiv.
 Nur dieses Statusfragment wird regelmäßig aktualisiert; Fokus und
 Scrollposition des Sidebar-Dokuments bleiben dabei auch am Hinweiston-Schalter
-erhalten. Offene Meldungen bleiben unabhängig vom einmaligen Tonsignal
+erhalten. Sein automatischer Abruf gilt ausdrücklich nicht als Aktivität und
+verlängert weder die 15-Minuten-Anzeige noch das 12-Stunden-Sitzungsfenster.
+Offene Meldungen bleiben unabhängig vom einmaligen Tonsignal
 dauerhaft farblich hervorgehoben. Ist die Statusdatenbank oder der globale
 Einsatzstatus vorübergehend nicht erreichbar, bleiben Navigation, Abmeldung
 und Administration bedienbar; operative Eingaben werden jedoch fail-closed

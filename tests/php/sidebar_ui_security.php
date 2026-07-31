@@ -37,6 +37,12 @@ $identity = [
     'rolle' => 'Stab',
 ];
 $invalidUtf8 = "\xC3\x28";
+$now = new DateTimeImmutable('2026-07-28T19:03:00+02:00');
+$activityAt = static function (string $modifier) use ($now): string {
+    return $now->setTimezone(new DateTimeZone('UTC'))
+        ->modify($modifier)
+        ->format('Y-m-d H:i:s.u');
+};
 $configuredPositions = [
     1 => ['rolle' => 'Stab', 'fkt' => 'LS'],
     2 => ['rolle' => ' Stab ', 'fkt' => ' S1 '],
@@ -50,24 +56,49 @@ $configuredPositions = [
 ];
 $users = [
     [
+        'kuerzel' => 'ada001',
         'rolle' => 'Stab',
         'funktion' => 'S1',
+        'sid' => 'sidebar-current-1',
         'aktiv' => 1,
+        'estab_gesperrt' => 0,
+        'estab_letzte_aktivitaet' => $activityAt('-1 minute'),
     ],
     [
+        'kuerzel' => 'aw001',
         'rolle' => 'Fernmelder',
         'funktion' => 'A/W',
+        'sid' => 'sidebar-aw-1',
         'aktiv' => 1,
+        'estab_gesperrt' => 0,
+        'estab_letzte_aktivitaet' => $activityAt('-2 minutes'),
     ],
     [
+        'kuerzel' => 'aw002',
         'rolle' => 'Fernmelder',
         'funktion' => 'A/W',
+        'sid' => 'sidebar-aw-2',
         'aktiv' => 1,
+        'estab_gesperrt' => 0,
+        'estab_letzte_aktivitaet' => $activityAt('-16 minutes'),
     ],
     [
+        'kuerzel' => 'xss001',
         'rolle' => '<script>',
         'funktion' => 'X&"',
+        'sid' => 'sidebar-xss-1',
         'aktiv' => 1,
+        'estab_gesperrt' => 0,
+        'estab_letzte_aktivitaet' => $activityAt('-3 minutes'),
+    ],
+    [
+        'kuerzel' => 'thw001',
+        'rolle' => 'FB',
+        'funktion' => 'THW',
+        'sid' => 'sidebar-thw-1',
+        'aktiv' => 1,
+        'estab_gesperrt' => 0,
+        'estab_letzte_aktivitaet' => $activityAt('-16 minutes'),
     ],
     [
         'rolle' => 'Inactive',
@@ -77,14 +108,18 @@ $users = [
     [
         'rolle' => ['invalid'],
         'funktion' => 'Array',
+        'sid' => 'sidebar-invalid-1',
         'aktiv' => 1,
+        'estab_gesperrt' => 0,
+        'estab_letzte_aktivitaet' => $activityAt('-1 minute'),
     ],
 ];
 
 $positions = estab_sidebar_positions(
     $configuredPositions,
     $users,
-    $identity
+    $identity,
+    $now
 );
 $assert(
     $positions === [
@@ -507,7 +542,6 @@ if ($originalBasePath === false) {
     putenv('ESTAB_BASE_PATH=' . $originalBasePath);
 }
 
-$now = new DateTimeImmutable('2026-07-28T19:03:00+02:00');
 $markup = estab_sidebar_status_markup(
     $session,
     $configuredPositions,
@@ -537,23 +571,49 @@ $assert(
             'data-estab-status-freshness="current"'
         )
         && str_contains($markup, '>Status aktuell</span>')
-        && str_contains($markup, '<h2>Online-Übersicht</h2>')
+        && str_contains($markup, '<h2>Aktivitätsübersicht</h2>')
         && str_contains($markup, 'data-estab-notify="0"')
         && !str_contains($markup, 'data-estab-sound-toggle'),
     'sidebar status omitted queue, deterministic server time, date, or heading'
 );
 $assert(
-    str_contains($markup, 'data-estab-online-count="4"')
-        && str_contains($markup, '4 Personen online')
+    str_contains($markup, 'data-estab-online-count="3"')
+        && str_contains($markup, '3 Personen aktiv')
         && str_contains($markup, '>2 A/W</span>')
         && str_contains(
             $markup,
-            'aria-label="Fernmelder, Funktion A/W: online"'
+            'aria-label="Fernmelder, Funktion A/W: 1 aktiv, 1 inaktiv"'
         )
-        && str_contains($markup, 'Online</span>')
+        && str_contains($markup, 'Aktiv</span>')
+        && str_contains($markup, 'Inaktiv (15 Min.)</span>')
         && str_contains($markup, 'Ihre Funktion</span>')
-        && str_contains($markup, 'Unbesetzt</span>'),
+        && str_contains($markup, 'Abgemeldet</span>')
+        && str_contains($markup, 'estab-sidebar-presence-mixed')
+        && str_contains($markup, '>1 aktiv · 1 inaktiv</small>'),
     'sidebar presence summary lost counts, state text, or its visible legend'
+);
+
+$inactiveCurrentUsers = $users;
+$inactiveCurrentUsers[0]['estab_letzte_aktivitaet'] = $activityAt('-16 minutes');
+$inactiveCurrentMarkup = estab_sidebar_status_markup(
+    $session,
+    $configuredPositions,
+    $inactiveCurrentUsers,
+    'Offen',
+    0,
+    $now
+);
+$assert(
+    str_contains(
+        $inactiveCurrentMarkup,
+        'estab-sidebar-presence-current-inactive'
+    )
+        && str_contains($inactiveCurrentMarkup, '>Sie: inaktiv</small>')
+        && str_contains(
+            $inactiveCurrentMarkup,
+            'data-estab-current-activity="inactive"'
+        ),
+    'current user inactivity is not visibly distinguishable in the sidebar'
 );
 
 $stateMatches = [];
@@ -568,7 +628,7 @@ $assert(
             'offline',
             'current',
             'online',
-            'offline',
+            'inactive',
             'online',
         ]
         && substr_count(
@@ -581,7 +641,7 @@ $assert(
     str_contains($markup, 'Offen &amp; &lt;b&gt;&quot;')
         && str_contains(
             $markup,
-            '&lt;script&gt;, Funktion X&amp;&quot;: online'
+            '&lt;script&gt;, Funktion X&amp;&quot;: aktiv'
         )
         && !str_contains($markup, 'Offen & <b>"')
         && !str_contains($markup, '<script>'),
@@ -676,12 +736,12 @@ $assert(
             'data-estab-queue-state="unavailable"'
         )
         && str_contains($unavailableMarkup, '>–</strong>')
-        && str_contains($unavailableMarkup, 'data-estab-online-count="1"')
+        && str_contains($unavailableMarkup, 'data-estab-online-count="0"')
         && str_contains(
             $unavailableMarkup,
             'data-estab-presence-state="current"'
         ),
-    'unavailable queue or absent current database row is not represented safely'
+    'unavailable queue or absent current database row is falsely counted active'
 );
 $emptyQueueMarkup = estab_sidebar_status_markup(
     $session,
@@ -838,6 +898,8 @@ $assert(
             $refresh,
             '?fragment=status\u0026probe=\u003C/script\u003E\u0022'
         )
+        && str_contains($refresh, 'response.status===401')
+        && str_contains($refresh, 'window.top.location.assign(loginUrl)')
         && !str_contains($refresh, 'probe=</script>"')
         && substr_count($refresh, '</script>') === 1,
     'sidebar refresh URL is executable, unescaped, or ignores its minimum interval'

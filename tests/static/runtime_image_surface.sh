@@ -68,6 +68,7 @@ assert_dockerfile_absent 'COPY doku/ ./doku/'
 assert_dockerfile_absent 'COPY language/ ./language/'
 assert_dockerfile_absent 'COPY ubltg/ ./ubltg/'
 assert_dockerfile_contains 'COPY 4fadm/admin.php'
+assert_dockerfile_contains '4fach/activity.php'
 assert_dockerfile_contains '4fach/fuehrungsstelle.php'
 assert_dockerfile_contains '4fadm/fuehrungsstelle.php'
 assert_dockerfile_contains '4fadm/incident_export.php'
@@ -86,6 +87,7 @@ assert_dockerfile_contains 'command -v setpriv >/dev/null'
 assert_dockerfile_contains 'command -v getfacl >/dev/null'
 assert_dockerfile_contains 'command -v setfacl >/dev/null'
 for required_runtime_path in \
+    4fach/activity.php \
     4fach/fuehrungsstelle.php \
     4fadm/fuehrungsstelle.php \
     app/attachment_integrity.php \

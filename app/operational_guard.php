@@ -19,6 +19,7 @@ const ESTAB_OPERATIONAL_CONTROL_EXCEPTIONS = [
     'administration',
     'backup-recovery',
     'logout',
+    'session-activity',
     'legacy-logout',
     'account-image-recovery',
     'duty-accept',
@@ -134,6 +135,9 @@ function estab_operational_control_exception(
     }
     if (estab_operational_path_ends_with($path, '/4fach/logout.php')) {
         return 'logout';
+    }
+    if (estab_operational_path_ends_with($path, '/4fach/activity.php')) {
+        return 'session-activity';
     }
     if (
         estab_operational_path_ends_with($path, '/4fach/mainindex.php')

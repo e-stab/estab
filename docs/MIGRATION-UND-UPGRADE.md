@@ -75,6 +75,8 @@ Derzeit sind folgende explizite Migrationen vorhanden:
 | `docker/db/migrations/96-etb-duty-function.sql` | führt die eigenständig auswählbare ETB-Dienstfunktion ein, ordnet die Fähigkeit `EINSATZTAGEBUCH` sowohl S2 als auch ETB über den zusammengesetzten Schlüssel `(funktion, faehigkeit)` zu und belässt Rotkopie sowie `LAGE_DOKUMENTATION` ausschließlich bei S2 |
 | `docker/db/migrations/97-incident-command-post-name.sql` | ergänzt den einsatzbezogenen, nullable Führungsstellennamen mit eindeutiger Eigentumsmarkierung; vorhandene Einsätze bleiben absichtlich `NULL`, weil Einsatzname, Organisation und Einsatzleitung keine belegbaren historischen Ersatzwerte sind |
 | `docker/db/migrations/98-official-message-form-fields.sql` | ergänzt die amtlichen, getrennt persistierten Nachrichtenvordruckfelder `11_rufnummer` und `12_betreff`; Bestandsnachrichten behalten alle vorhandenen Werte und erhalten für beide neuen Angaben ausschließlich den leeren Standardwert |
+| `docker/db/migrations/99-message-list-search.sql` | ersetzt den früheren Inhalts-Volltextindex durch den siebenfeldrigen Suchindex und ergänzt die beiden einsatzgebundenen BTREE-Indizes für skalierbare Meldungslisten |
+| `docker/db/migrations/100-session-presence.sql` | ergänzt den UTC-Zeitstempel der letzten echten Browserinteraktion und den Präsenzindex; bereits aktive Legacy-SIDs ohne belegbaren Zeitpunkt werden beim Upgrade einmalig widerrufen |
 
 Migration 95 klassifiziert vorhandene Zeilen bereits beim Hinzufügen der
 Spalte mit dem einmaligen Anfangswert `integrity_required=0` und stellt danach
@@ -110,8 +112,8 @@ eigenen Zwischenstände. Gemischte Katalogdaten, ein abweichender
 Primärschlüssel oder fremde Indizes blockieren vor der nächsten Änderung und
 bleiben zur Untersuchung erhalten. `verify.sql` und die Laufzeit-Readiness
 verlangen danach exakt sieben Katalogzeilen, das vollständige neue ENUM,
-ausschließlich den zweispaltigen Primärschlüssel und alle vierzehn
-angewendeten Migrationen einschließlich Version 99.
+ausschließlich den zweispaltigen Primärschlüssel und alle fünfzehn
+angewendeten Migrationen einschließlich Version 100.
 
 Migration 97 fügt `nv_einsaetze.fuehrungsstellenname` als
 `VARCHAR(128) NULL` unmittelbar hinter `organisation` und
@@ -159,6 +161,25 @@ Sie prüft vor der ersten DDL-Phase alle eigenen Indexnamen, legt zuerst den
 breiteren Volltextindex an und entfernt erst danach den alten Index. Bereits
 vollständig ausgeführte Phasen werden beim Wiederanlauf akzeptiert; fremde
 gleichnamige Definitionen blockieren unverändert.
+
+Migration 100 verlangt die kanonische Benutzertabelle samt bestehender
+Kontosperre und ergänzt ausschließlich
+`estab_letzte_aktivitaet DATETIME(6) NULL` mit eindeutiger
+Eigentumsmarkierung sowie den BTREE-Index
+`idx_benutzer_presence (aktiv, estab_gesperrt, estab_letzte_aktivitaet)`.
+Fehlende oder exakt eigene Zwischenstände sind wiederaufnehmbar; gleichnamige
+fremde Spalten- oder Indexdefinitionen blockieren vor einer weiteren
+Änderung. Hilfsprozeduren werden nach jeder Phase entfernt.
+
+Bereits vor dem Upgrade mit `aktiv = 1` gespeicherte Zeilen besitzen keinen
+vertrauenswürdigen Aktivitätszeitpunkt. Die Migration setzt sie deshalb
+einmalig auf abgemeldet und leert SID sowie IP-Metadaten, statt ihnen
+stillschweigend ein neues 12-Stunden-Fenster zu gewähren. Nach dem Upgrade ist
+eine Neuanmeldung aller zuvor aktiven eStab-Funktionskonten erforderlich. Der
+separate HTTP-Basic-Administrationszugang ist davon nicht betroffen. Neue
+Logins schreiben den UTC-Zeitstempel; echte Browserinteraktion aktualisiert
+ihn später ausschließlich über den Session-CSRF- und SID-gebundenen
+Aktivitätsendpunkt. Automatische Statuspolls aktualisieren ihn nicht.
 
 Das freigegebene Upgradeverfahren lautet:
 

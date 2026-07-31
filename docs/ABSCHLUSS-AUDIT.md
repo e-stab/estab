@@ -26,9 +26,10 @@ dokumentiertes, freigegebenes App-/Migrator-Digestpaar.
 | Skalierbare Nachrichtensuche | Meldungsübersicht und beide Varianten der zweiten Sichtung teilen immer sichtbare Suche, kombinierbare Filter, Filterchips, eindeutige Treffer-/Seitenangaben, stabile Sortierung und responsive Ergebnisdarstellung. Zählung und Seite werden serverseitig nach Einsatz- und Rechtegrenze bestimmt. | 99 Parser-/SQL-Assertions, 108 UI-Assertions, authentifizierter S2-/A/W-/Si-HTTP-Lauf sowie 141 MariaDB-Assertions mit 10.000 Ziel- und 257 Fremdeinsatzmeldungen |
 | Dienstvorschriftsgebundener Betrieb | Aktiver Einsatz, Führungsstellenname, Dienstschichten, persönliche Funktionsbesetzung, verbindlicher Eingangs-/Ausgangslauf, Sichtung, LdF-Entscheidung, Transportnachweis, S6-Plan, Melderlauf und unveränderliche Ereignisketten | MariaDB-Integrationen: Einsatz 40 Assertions, DV-Nachweis 38 Assertions, DV-Betrieb 102 Assertions und 73 Ereignisse; vollständiger HTTP-Nachrichtenlauf |
 | Benutzer- und Rollenschutz | Administrativ provisionierte Konten, Sperren, Entsperren, Kennwortreset, Sitzungswiderruf, feste serverseitige Funktion/Rolle | Benutzerverwaltung 95 Assertions; Zuweisungsrichtlinie 59 Assertions |
+| Belastbare Präsenzanzeige | Echte Browserinteraktion hält die Fachsitzung aktiv; nach 15 Minuten erscheint sie inaktiv, nach 12 Stunden wird sie serverseitig widerrufen. Statuspolls und automatische Refreshes zählen nicht. Der Aktivitätsendpunkt verlangt POST, gültige SID und Session-CSRF; PHP-GC ist auf 43.200 Sekunden angeglichen. HTTP Basic Auth bleibt separat. | Grenzwertmatrix in `tests/php/auth_security.php`; Monitorvertrag in `tests/php/session_ui_security.php`; Aktiv-/Inaktivdarstellung in `tests/php/sidebar_ui_security.php`; Endpoint- und Sitzungsablauf in `tests/integration/http_surface_http.sh` und `tests/integration/http_smoke.sh` |
 | Einsatzbezogene Daten und Exporte | ETB, TTB, Nachrichten, Anhänge, Vordrucke, Tabellenexport und PDF-Dossier bleiben einsatzgebunden | HTTP-, Export-, PDF- und Restore-Integrationen; PDF-Dossier 26 Assertions |
 | Reproduzierbare Herkunft | 13 Git-Ref-Snapshots und ein separater Dokument-r85-Baum sind selbsttragend gebunden | `migration/verify_provenance.py --self-test`: 14 Subjects sowie beide Manipulationsfälle grün |
-| Sicherer Containerstart | Gepinnte PHP-/MariaDB-Basen, 33 Schema-Prüfungen, checksumgebundene Migrationen, Health-Gates und getrennte Netze | vollständiger Podman-CI-Lauf und PHP-8.5-Suite |
+| Sicherer Containerstart | Gepinnte PHP-/MariaDB-Basen, 34 Schema-Prüfungen, fünfzehn checksumgebundene Migrationen, Health-Gates und getrennte Netze | vollständiger Podman-CI-Lauf und PHP-8.5-Suite |
 | Isoliertes Admin-Kennwort | Nur der netzlose One-shot `admin-auth-init` liest das Klartextsecret. Die App erhält ausschließlich eine bcrypt-Datei mit Kostenfaktor 12 schreibgeschützt. | 11 Secret-Isolationsassertionen sowie Container-Inspect und HTTP 401/200 |
 | NAS-/Registry-Betrieb | Pull-only Compose, digestgebundene Releaseidentität, private Konfigurations-/Secret-Snapshots, bestehende und getrennte Speicherquellen, engine-weite Wartungssperre sowie fail-closed Backup/Restore | Registry-Vertrag 56 Assertions; Release-, Backup- und Restore-Operator-Tests; echter Named-Volume- und Bind-Mount-Lauf |
 | Wiederherstellbarkeit | Logischer MariaDB-Dump und beide Dateibereiche werden im aktuellen Format 3 verifiziert und kontrolliert wiederhergestellt. Archivdaten werden über interaktive Standardeingabe in netzlose Hilfscontainer übertragen; Format 2 bleibt nur für den exakten Same-Host-Kompatibilitätsfall lesbar. | Format-3-Bind-Restore, anschließender vollständiger benannter Volume-Roundtrip, Marker-/SHA-256-, Login-, Export- und Schemanachweis |
@@ -52,12 +53,14 @@ destruktiven Backup-/Restore-Roundtrip mit `CI integration: OK`.
 Der Lauf umfasste unter anderem:
 
 - frischen Image-Build und vollständige Migration auf MariaDB 11.8,
-- 33 Schema-Prüfungen,
+- 34 Schema-Prüfungen,
 - Pull-only-Start mit benannten Volumes,
 - Pull-only-Start mit drei echten Bind-Mounts,
 - Format-3-Backup, kontrollierte Verfälschung und produktiven Restore,
 - echten Chrome-Lauf mit zwölf Anmelde-/Navigationsschritten,
 - HTTP-Fachläufe für Nachricht, Kategorie, ETB/TBB und Administration,
+- HTTP-Präsenznachweis mit inertem Statuspoll, Aktivitäts-POST,
+  15-Minuten-Inaktivzustand und serverseitigem 12-Stunden-Widerruf,
 - authentifizierte Suche, kombinierte Filter, Leertreffer und Reset in der
   S2-Meldungsübersicht sowie der A/W- und Si-Zweitsichtung,
 - 10.000 einsatzgebundene und 257 verwechslungsfähige Fremdeinsatzmeldungen
@@ -71,7 +74,7 @@ SELinux-Enforcing-System ausgeführt. Er ist deshalb kein Nachweis für das
 tatsächliche Relabeling unter SELinux; die dafür im Testhandbuch beschriebene
 Abnahme bleibt offen.
 
-Die abschließende statische PHP-8.5-Suite lintete 243 aktive PHP-Dateien.
+Die abschließende statische PHP-8.5-Suite lintete 244 aktive PHP-Dateien.
 Alle Sicherheitsverträge, 56 Registry-Assertions, 72 Assertions zur
 WAV-/Signalintegrität, die Operator-Shelltests, der Provenienznachweis und der
 PDF-Smoke-Test mit 14.335 Byte waren grün. Zusätzlich bestanden beide

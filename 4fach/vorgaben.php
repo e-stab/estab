@@ -62,7 +62,7 @@ session_start();
 
 $identity = estab_auth_session_identity($_SESSION);
 if ($statusFragment && $identity === null) {
-    http_response_code(403);
+    http_response_code(401);
     header('Content-Type: text/plain; charset=UTF-8');
     header('Cache-Control: no-store');
     if ($method !== 'HEAD') {

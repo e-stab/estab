@@ -11,7 +11,7 @@ steht in der [Funktionsmatrix](FUNKTIONSNACHWEIS.md).
 | Quellprüfung | netzloser Herkunftsnachweis für 13 Git-Ref-Snapshots (Trunk, vier Branches, sechs SVN-Tags, zwei SourceForge-Release-Tags) und einen separaten Dokument-r85-Baum, GitHub-Workflow-Prüfung mit festgelegtem Actionlint 1.7.12, PHP-8.5-Lint, Kompatibilitäts-, Sicherheits-, Einsatz-, Benutzerverwaltungs-, amtlicher Nachrichtenvordruck-, Upload-, Export- und PDF-Regressionen |
 | Image-Build | benötigte PHP-Erweiterungen und Apache-Konfiguration |
 | Datenbank | echtes MariaDB-Schema, Einsatz-Singleton/Trigger, Kontosperre, Indizes, aktive und persistente Standardmatrix, Engines, Collations und Zero-Date-Freiheit |
-| HTTP | Header, direkte Endpunktfläche, 303-Weiterleitung anonymer geschützter Aufrufe zum allowlist-gebundenen Bestandslogin samt sichtbarem Rückweg, 403-/400-/405-Grenzen, Registrierung, sichtbare Sitzungsidentität, CSRF-Abmeldung, erneute Anmeldung, verbindlicher Eingangs- und Ausgangslauf samt Rückgabe/Korrektur und einsatzgebundener Feldvorschläge, Dienstbesetzung/Hutwechsel, S6-Plan, Melderlauf, Kategorien- und ETB-/TBB-Rollengrenzen, reale Vordruckerzeugung/-auslieferung sowie Admin-Export |
+| HTTP | Header, direkte Endpunktfläche, 303-Weiterleitung anonymer geschützter Aufrufe zum allowlist-gebundenen Bestandslogin samt sichtbarem Rückweg, 403-/400-/405-Grenzen, Registrierung, sichtbare Sitzungsidentität, CSRF-gebundene Aktivitätsmeldung und Abmeldung, 15-Minuten-Präsenz sowie 12-Stunden-Leerlaufende, erneute Anmeldung, verbindlicher Eingangs- und Ausgangslauf samt Rückgabe/Korrektur und einsatzgebundener Feldvorschläge, Dienstbesetzung/Hutwechsel, S6-Plan, Melderlauf, Kategorien- und ETB-/TBB-Rollengrenzen, reale Vordruckerzeugung/-auslieferung sowie Admin-Export |
 | Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, direkte ETB-/Nachrichten-/Anhang-/Kategorie-Anmeldung ohne Sackgasse oder verschachtelten Arbeitsbereich, sicherer Login-Abbruch, neun stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, A/W-Rufnamen-Listbox mit echtem Fokus, Filterung und Tastaturauswahl, Matrixstandard-Bestätigungen, BOS-Disclosure, Logout sowie öffentliche und authentifizierte mobile Bedienung bei exakt 390 × 844 CSS-Pixeln |
 | Fachabnahme | kompletter Nachrichten-, Anhang-, PDF-, ETB-/TBB- und Restore-Ablauf |
 | Betrieb | kontinuierliche Readiness, Logs, Restarts, Kapazität und Backup-Alter |
@@ -79,8 +79,9 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
 - PHP-8.5-Laufzeit- und Legacy-Konstruktor-Kompatibilität,
 - `NULL`-/Zero-Date-Behandlung,
 - Anmelde-, administrative Kontoanlage-, unveränderliche Funktionsbindungs-,
-  Session- und
-  Passwortregeln sowie die fail-closed Proxy-Peer-Vertrauensgrenze mit
+  Session- und Passwortregeln einschließlich exakter Aktivitätsgrenzen bei
+  15 Minuten beziehungsweise 12 Stunden, fail-closed Behandlung fehlender,
+  ungültiger und zukünftiger Zeitwerte sowie die Proxy-Peer-Vertrauensgrenze mit
   IPv4-/IPv6-CIDR-Allowlist,
 - fehlende Laufzeit- und Umgebungsoptionen für Autosichtung oder eine
   Umgehung der verpflichtenden Ausgangssichtung,
@@ -103,7 +104,10 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   `estab:show-content`-Kommunikation, Dirty-Form-Guard, eindeutige
   Abmeldeformulare, POST-/CSRF-Vertrag, lokale Session-Zerstörung bei
   DB-Fehlern, unveränderte Nicht-HTML-Antworten sowie SID-gebundene
-  Statusänderung,
+  Statusänderung; der Aktivitätsmonitor reagiert nur auf echte
+  Browserinteraktion, drosselt gemeinsam über Tabs und Frames auf einen POST
+  pro Minute, verwendet CSRF und `keepalive`, besitzt keinen Intervall- oder
+  Seitenlade-Heartbeat und leitet bei HTTP 401 zum Login,
 - vollständige RIFF/WAVE- und PCM-16-Prüfung aller drei
   Warteschlangensignale einschließlich festem SHA-256, Kanalzahl, Abtastrate,
   Framezahl, Dauer, Signalspitze und Mindest-RMS; ein beschädigter,
@@ -285,10 +289,15 @@ Schreibgrenzen sowie die amtlichen Nachrichtenvordruckfelder aus Migration 98.
 Der Schema-Test startet Migration 98 zweimal, prüft die exakt markierten
 Spalten `11_rufnummer` und `12_betreff`, deren leere Bestandswerte und den
 unveränderten historischen Nachrichteninhalt. Readiness und `verify.sql`
-verlangen alle vierzehn Ledgerzeilen einschließlich Version 99 sowie die
+verlangen alle fünfzehn Ledgerzeilen einschließlich Version 100 sowie die
 exakten drei Such-/Listenindizes. Migration 99 wird vollständig, nach einem
 simulierten phasenweisen Abbruch und nach einer fremden Indexkollision
 ausgeführt; erst der bereinigte Wiederanlauf darf den Ledgerstand schreiben.
+Migration 100 wird gegen einen zuvor aktiv markierten Legacy-Benutzer
+ausgeführt. Der Test belegt die exakt markierte nullable
+`DATETIME(6)`-Spalte, den dreispaltigen Präsenzindex, die einmalige Löschung
+der unbelegbaren SID-/IP-Metadaten und das Fehlen zurückgelassener
+Hilfsroutinen.
 Anschließend migriert der Hauptlauf ein leeres Schema,
 führt PHP-, Datenbank-, Rollen-, HTTP- und Administrationsnachweise aus, prüft
 die Containerlogs und stellt Datenbank, Anhang-/Vordruckdaten sowie Exporte aus
@@ -855,6 +864,12 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
   Cookie-/Sitzungsende und 303-Rückleitung bei Erfolg sowie die
   SID-Grenze, durch die eine alte Sitzung eine neuere Anmeldung desselben
   Kontos nicht deaktiviert,
+- HTTP 405 für den Aktivitätsendpunkt per GET, HTTP 401 ohne gültige
+  Fachsitzung und HTTP 403 bei fehlendem oder falschem CSRF; ein gültiger
+  SID-gebundener POST aktualisiert ausschließlich den eigenen UTC-Zeitstempel,
+  der Statusfragment-Poll lässt ihn dagegen bytegleich, nach 15 Minuten zeigt
+  die Übersicht „Inaktiv“ und nach 12 Stunden widerruft die nächste
+  Authentisierungsprüfung SID sowie Online-Metadaten und verlangt den Login,
 - sitzungsgebundene Voranmelde-CSRF-Tokens, HTTP 403 ohne Token im Browserflow
   und HTTP 403 für erkannte Cross-Site-Requests im explizit aktivierten
   Legacy-Kompatibilitätsmodus,
@@ -1033,8 +1048,9 @@ insbesondere:
   Funktion, Rolle und Logout vorhanden; der rechte Inhaltsframe dupliziert sie
   nicht.
 - Statuskarte, Identität, Aktionen und Navigation folgen ohne Überlappung
-  aufeinander. Arbeitszähler, Serverzeit, Onlinebelegung und die aktuelle
-  Funktion sind vorhanden; die rollenabhängigen Fachaktionen sind echte,
+  aufeinander. Arbeitszähler, Serverzeit, Aktivitätsübersicht mit getrennten
+  Aktiv-/Inaktivzuständen und die aktuelle Funktion sind vorhanden; die
+  rollenabhängigen Fachaktionen sind echte,
   mindestens 44 Pixel große Textbuttons. Ein positiver Arbeitszähler besitzt
   eine dauerhaft sichtbare Warnstufe.
 - Das Manifest enthält neun Bereiche und zwei Dienste. Nach der Anmeldung sind
@@ -1053,7 +1069,8 @@ insbesondere:
   Ein simulierter HTTP-503-Abruf markiert die weiter bedienbare Karte als nicht
   aktuell; der folgende erfolgreiche Abruf meldet die Erholung. Statisch sind
   zusätzlich der begrenzte `AbortController`-Timeout sowie serverseitige
-  `partial`-/`unavailable`-Zustände abgesichert.
+  `partial`-/`unavailable`-Zustände abgesichert. Der Refresh selbst löst keine
+  Aktivitätsmeldung aus; HTTP 401 führt den Top-Level-Kontext zum Login.
   Der Link „Übersicht“ verlässt den Zwei-`iframe`-Arbeitsbereich weiterhin im
   Top-Level-Kontext.
 - Die eingebundene Audioquelle ist gleich-originig, besitzt einen
@@ -1540,7 +1557,8 @@ sind:
 - aktive und Standardmatrix jeweils genau 20 eindeutige 5x4-Positionen,
   genau S2/Stab als Rotkopie-/Dokumentationsziel und keinerlei aktive
   Autosichtung enthalten,
-- die exakt definierten Benutzer- und Anhangindizes vorhanden sind,
+- die exakt definierten Benutzer-, Präsenz- und Anhangindizes sowie der
+  UTC-Aktivitätszeitstempel vorhanden sind,
 - alle ausgelieferten versionierten Migrationen mit gültigem SHA-256 als
   angewendet protokolliert sind,
 - der Singleton des globalen Einsatzstatus, alle Einsatz-Fremdschlüssel und
@@ -1554,6 +1572,14 @@ sind:
 `*_ok`-Ergebnisfelder auf. Für einen gültigen Stand müssen alle den Wert `1`
 haben; die anschließende Abfrage nach abweichender Engine oder Collation darf
 keine Zeile liefern.
+
+Ein regulärer „Inaktiv“-Status nach 15 Minuten ist kein Readiness-Fehler. Die
+Präsenzanzeige ist eine fachliche Laufzeitsicht, während Readiness nur ihre
+kanonische Timestamp-/Indexgrundlage prüft. Ein Konto, dessen
+12-Stunden-Grenze erreicht ist, wird bei der nächsten Authentisierungs- oder
+Benutzerlistenprüfung widerrufen. Der Monitor darf dafür keinen künstlichen
+Heartbeat senden; insbesondere ist ein wiederholter GET auf das
+Statusfragment kein zulässiger Sitzungsnachweis.
 
 Der Speichercheck legt kurzzeitig eine kleine Probe-Datei an und entfernt sie
 wieder. Bei Konfigurations- oder Laufzeitfehlern liefert der Endpunkt HTTP 503

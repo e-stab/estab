@@ -224,8 +224,9 @@ Annahme, Ende, personeller Nachfolger und Bemerkung werden nachvollziehbar
 gespeichert. Ein ungesperrtes Konto darf bereits offline für eine geplante
 Schicht eingeteilt werden. In der Weboberfläche verlangt die persönliche
 Annahme eine gültige Anmeldung und ein ungesperrtes Konto. Die gespeicherte
-Annahme bleibt nach einer Abmeldung fachlich gültig; `nv_benutzer.aktiv` ist
-nur momentaner Onlinezustand und kein Gültigkeitsmerkmal. Ein gesperrtes Konto
+Annahme bleibt nach einer Abmeldung fachlich gültig; weder der widerrufbare
+Sitzungsmarker `nv_benutzer.aktiv` noch der 15-Minuten-Präsenzzustand sind
+fachliche Gültigkeitsmerkmale. Ein gesperrtes Konto
 erfüllt dagegen keine Pflichtbesetzung für Aktivierung oder Übergabe.
 
 Eine Übergabe ist bewusst zweistufig. Die Administration initiiert sie mit
