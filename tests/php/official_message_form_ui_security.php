@@ -50,6 +50,27 @@ $assert = static function (bool $condition, string $message) use (&$assertions):
 };
 
 $fixture = new OfficialMessageFormHelpFixture();
+$fixture->formdata = [
+    'estab_ttb_lfd' => '142',
+    '04_nummer' => '9142',
+];
+$assert(
+    $fixture->official_message_ttb_evidence_text() === '142',
+    'The official form does not prefer the incident-local TBB evidence number'
+);
+$fixture->formdata = ['04_nummer' => '9142'];
+$assert(
+    $fixture->official_message_ttb_evidence_text()
+        === 'noch kein TBB-Nachweis',
+    'The official form disguises the technical message number as TBB evidence'
+);
+$fixture->formdata = ['estab_ttb_lfd' => '0', '04_nummer' => '9142'];
+$assert(
+    $fixture->official_message_ttb_evidence_text()
+        === 'noch kein TBB-Nachweis',
+    'The official form invents a TBB evidence number from an invalid link'
+);
+$fixture->formdata = [];
 $definitions = $fixture->official_message_help_definitions();
 $assert(
     array_keys($definitions) === range(1, 20),
@@ -427,6 +448,23 @@ $assert(
         && is_string($css)
         && is_string($dockerfile),
     'Official form implementation files are not readable'
+);
+$assert(
+    str_contains($view, 'official_message_ttb_evidence_text()')
+        && str_contains($view, "return 'noch kein TBB-Nachweis';")
+        && str_contains(
+            $view,
+            "\$value = \$this->formdata['estab_ttb_lfd'] ?? null;"
+        )
+        && !str_contains(
+            $view,
+            ": (string) (\$this->formdata['04_nummer'] ?? '')"
+        )
+        && str_contains(
+            $view,
+            "\$this->safe_message_value('04_nummer')"
+        ),
+    'The official form does not separate visible TBB evidence from its hidden technical message value'
 );
 
 $officialLabels = [

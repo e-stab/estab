@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . '/app/generated_form.php';
+require_once dirname(__DIR__, 2) . '/4fbak/backup_pdf.php';
 
 $assertions = 0;
 $assert = static function (bool $condition, string $message) use (&$assertions): void {
@@ -24,6 +25,29 @@ $assert(
         'direction' => 'E',
     ],
     'canonical generated-form filename does not round-trip'
+);
+
+$untrackedMessageForm = new vordruckaspdf([
+    'einsatz_id' => 17,
+    '04_nummer' => 42,
+    '04_richtung' => 'E',
+    'estab_ttb_lfd' => null,
+]);
+$assert(
+    $untrackedMessageForm->messageNumber === 42
+        && $untrackedMessageForm->db_dataset['04_nummer'] === '',
+    'conversation note conflates its archive identity with a TBB number'
+);
+$trackedMessageForm = new vordruckaspdf([
+    'einsatz_id' => 17,
+    '04_nummer' => 42,
+    '04_richtung' => 'E',
+    'estab_ttb_lfd' => 9,
+]);
+$assert(
+    $trackedMessageForm->messageNumber === 42
+        && $trackedMessageForm->db_dataset['04_nummer'] === 9,
+    'message form does not separate message and TBB book numbers'
 );
 
 foreach ([
@@ -129,9 +153,33 @@ $assert(
     'legacy generator is not locked and scoped to the active incident'
 );
 $assert(
+    substr_count($helper, 'AS `estab_ttb_lfd`') === 2
+        && str_contains($helper, 'tbb.`estab_message_id` = message_row.`00_lfd`')
+        && substr_count(
+            $helper,
+            "BINARY tbb.`estab_entry_type` = BINARY 'nachricht'"
+        ) === 2
+        && !str_contains($helper, "tbb.`estab_entry_type` = 'nachricht'")
+        && str_contains(
+            $helper,
+            'ORDER BY tbb.`estab_book_lfd`, tbb.`tbb_lfd-nr` LIMIT 1'
+        ),
+    'generated-form queue or current-layout read lacks the local TBB number'
+);
+$assert(
     str_contains($pdf, 'estab_generated_form_filename')
         && str_contains($pdf, 'estab_generated_form_publish')
         && str_contains($pdf, '$this->db_dataset ["einsatz_id"]')
+        && str_contains(
+            $pdf,
+            "\$this->messageNumber,\n"
+                . '      $this->db_dataset ["04_richtung"]'
+        )
+        && !str_contains(
+            $pdf,
+            "\$this->db_dataset [\"04_nummer\"],\n"
+                . '      $this->db_dataset ["04_richtung"]'
+        )
         && str_contains($pdf, 'function render_message_form_document()')
         && str_contains($pdf, 'function Error ($message)')
         && str_contains(

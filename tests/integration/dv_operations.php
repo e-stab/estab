@@ -90,6 +90,115 @@ $scalar = static function (
         $statement->close();
     }
 };
+$logbookEvidenceSnapshot = static function (
+    mysqli $connection,
+    int $incidentId
+) use ($scalar): array {
+    return [
+        'etb' => (string) $scalar(
+            $connection,
+            "SELECT CONCAT(COUNT(*), ':', COALESCE(MAX(`estab_book_lfd`), 0))"
+                . ' FROM `nv_etb` WHERE `einsatz_id` = ?',
+            'i',
+            $incidentId
+        ),
+        'ttb' => (string) $scalar(
+            $connection,
+            "SELECT CONCAT(COUNT(*), ':', COALESCE(MAX(`estab_book_lfd`), 0))"
+                . ' FROM `nv_tbb` WHERE `einsatz_id` = ?',
+            'i',
+            $incidentId
+        ),
+        'heads' => (string) $scalar(
+            $connection,
+            "SELECT COALESCE(GROUP_CONCAT(CONCAT(`buchart`, ':', `next_lfd`)"
+                . " ORDER BY `buchart` SEPARATOR ','), '')"
+                . ' FROM `nv_logbuch_koepfe` WHERE `einsatz_id` = ?',
+            'i',
+            $incidentId
+        ),
+        'dv_events' => (int) $scalar(
+            $connection,
+            'SELECT COUNT(*) FROM `nv_betriebsereignisse`'
+                . ' WHERE `einsatz_id` = ?',
+            'i',
+            $incidentId
+        ),
+        'dv_event_head' => (string) ($scalar(
+            $connection,
+            "SELECT CONCAT(`letzte_sequenz`, ':', `letzter_hash`)"
+                . ' FROM `nv_betriebsereignis_kopf` WHERE `einsatz_id` = ?',
+            'i',
+            $incidentId
+        ) ?? ''),
+        'incident_events' => (int) $scalar(
+            $connection,
+            'SELECT COUNT(*) FROM `nv_einsatz_ereignisse`'
+                . ' WHERE `einsatz_id` = ?',
+            'i',
+            $incidentId
+        ),
+        'protocol' => (int) $scalar(
+            $connection,
+            'SELECT COUNT(*) FROM `nv_protokoll` WHERE `einsatz_id` = ?',
+            'i',
+            $incidentId
+        ),
+    ];
+};
+$handoverStateSnapshot = static function (
+    mysqli $connection,
+    int $incidentId,
+    int $requestId
+) use ($scalar): array {
+    return [
+        'shifts' => (string) $scalar(
+            $connection,
+            "SELECT COALESCE(GROUP_CONCAT(CONCAT(`dienstschicht_id`, ':',"
+                . " `status`, ':', COALESCE(CAST(`aktiviert_am` AS CHAR), ''),"
+                . " ':', COALESCE(CAST(`beendet_am` AS CHAR), ''))"
+                . " ORDER BY `dienstschicht_id` SEPARATOR ','), '')"
+                . ' FROM `nv_dienstschichten` WHERE `einsatz_id` = ?',
+            'i',
+            $incidentId
+        ),
+        'request' => (string) ($scalar(
+            $connection,
+            "SELECT CONCAT(`status`, ':',"
+                . " COALESCE(CAST(`bestaetigt_am` AS CHAR), ''), ':',"
+                . " COALESCE(`bestaetigt_von`, ''), ':',"
+                . " COALESCE(`bestaetigt_mit_besetzung_id`, 0), ':',"
+                . " COALESCE(`dienstuebergabe_id`, 0))"
+                . ' FROM `nv_dienstuebergabe_anfragen`'
+                . ' WHERE `dienstuebergabe_anfrage_id` = ?',
+            'i',
+            $requestId
+        ) ?? ''),
+        'handovers' => (string) $scalar(
+            $connection,
+            "SELECT CONCAT(COUNT(*), ':',"
+                . ' COALESCE(MAX(`dienstuebergabe_id`), 0))'
+                . ' FROM `nv_dienstuebergaben` WHERE `einsatz_id` = ?',
+            'i',
+            $incidentId
+        ),
+        'assignments' => (string) $scalar(
+            $connection,
+            "SELECT COALESCE(GROUP_CONCAT(CONCAT("
+                . " assignment.`dienstbesetzung_id`, ':', assignment.`status`,"
+                . " ':', COALESCE(CAST(assignment.`abgeloest_am` AS CHAR), ''),"
+                . " ':', COALESCE(assignment.`nachfolger_id`, 0))"
+                . " ORDER BY assignment.`dienstbesetzung_id` SEPARATOR ','), '')"
+                . ' FROM `nv_dienstbesetzungen` AS assignment'
+                . ' JOIN `nv_dienstschichten` AS shift_row'
+                . ' ON shift_row.`dienstschicht_id` ='
+                . ' assignment.`dienstschicht_id`'
+                . ' WHERE shift_row.`einsatz_id` = ?',
+            'i',
+            $incidentId
+        ),
+    ];
+};
 
 $suffix = substr(bin2hex(random_bytes(4)), 0, 4);
 $codes = [
@@ -102,6 +211,8 @@ $codes = [
     'messenger' => 'g' . $suffix,
     's6' => 'h' . $suffix,
     's2_successor' => 'i' . $suffix,
+    's1_extension' => 'j' . $suffix,
+    'aw_extension' => 'k' . $suffix,
 ];
 $actor = 'dv-operations-integration';
 $assignments = [];
@@ -227,6 +338,13 @@ try {
                 'S2',
                 'Stab',
                 'Nachfolgende Lage/Dokumentation',
+            ],
+            [$codes['s1_extension'], 'S1', 'Stab', 'Schichterweiterung S1'],
+            [
+                $codes['aw_extension'],
+                'A/W',
+                'Fernmelder',
+                'Zusätzliche Aufnahme/Weitergabe',
             ],
         ];
         foreach ($users as [$code, $function, $role, $name]) {
@@ -373,15 +491,346 @@ try {
         $assignments['s6'],
         $codes['s6']
     );
+    $unacceptedOutgoing = estab_dv_assign_hat(
+        $connection,
+        $incidentId,
+        $shiftId,
+        $codes['ldf_duplicate'],
+        'A/W',
+        $actor
+    );
+    $unacceptedOutgoingAssignmentId =
+        (int) $unacceptedOutgoing['dienstbesetzung_id'];
     $assert(
         estab_dv_shift_required_hats($connection, $shiftId) === [],
         'accepted initial shift still reports missing mandatory functions'
+    );
+
+    // A complete roster must not compensate for an incomplete factual
+    // logbook header. Simulate a legacy/incomplete record, then prove the
+    // rejected activation leaves the shift, both books, their heads and all
+    // audit chains byte-for-byte at the same logical state.
+    $clearHeader = $connection->prepare(
+        'UPDATE `nv_einsaetze` SET `organisation` = ? WHERE `einsatz_id` = ?'
+    );
+    if (!$clearHeader) {
+        throw new RuntimeException('Could not prepare incomplete-header fixture');
+    }
+    try {
+        $missingOrganisation = '';
+        $clearHeader->bind_param('si', $missingOrganisation, $incidentId);
+        $clearHeader->execute();
+    } finally {
+        $clearHeader->close();
+    }
+    $incompleteHeaderEvidence = $logbookEvidenceSnapshot(
+        $connection,
+        $incidentId
+    );
+    $incompleteHeaderShift = (string) $scalar(
+        $connection,
+        "SELECT CONCAT(`status`, '|', COALESCE(CAST(`aktiviert_am` AS CHAR), ''))"
+            . ' FROM `nv_dienstschichten` WHERE `dienstschicht_id` = ?',
+        'i',
+        $shiftId
+    );
+    $expect(
+        EstabDvConflictException::class,
+        static fn (): null => (
+            estab_dv_activate_initial_shift(
+                $connection,
+                $incidentId,
+                $shiftId,
+                $actor
+            ) ?? null
+        ),
+        'an incomplete mandatory logbook header activated the initial shift'
+    );
+    $assert(
+        $logbookEvidenceSnapshot($connection, $incidentId)
+            === $incompleteHeaderEvidence
+            && (string) $scalar(
+                $connection,
+                "SELECT CONCAT(`status`, '|',"
+                    . " COALESCE(CAST(`aktiviert_am` AS CHAR), ''))"
+                    . ' FROM `nv_dienstschichten`'
+                    . ' WHERE `dienstschicht_id` = ?',
+                'i',
+                $shiftId
+            ) === $incompleteHeaderShift
+            && $incompleteHeaderShift === 'GEPLANT|',
+        'rejected incomplete-header activation left partial shift, logbook, '
+            . 'head or audit mutations'
+    );
+    estab_incident_update_logbook_header(
+        $connection,
+        $incidentId,
+        [
+            'organisation' => 'THW',
+            'einsatzleitung' => 'Leitung Integration',
+            'beschreibung' => 'Isolierter Nachweis der DV-Abläufe.',
+            'expected_organisation' => '',
+            'expected_einsatzleitung' => 'Leitung Integration',
+            'expected_beschreibung' => 'Isolierter Nachweis der DV-Abläufe.',
+        ],
+        $actor
+    );
+    $assert(
+        estab_logbook_lifecycle_missing_header(
+            estab_incident_status($connection)
+        ) === [],
+        'completed mandatory logbook header remained incomplete'
+    );
+
+    // Force the final audit write to fail after shift activation and both
+    // opening rows have executed. The surrounding incident transaction must
+    // restore every mutation, including the local-number head rows.
+    $openingRollbackEvidence = $logbookEvidenceSnapshot(
+        $connection,
+        $incidentId
+    );
+    $openingRollbackShift = (string) $scalar(
+        $connection,
+        "SELECT CONCAT(`status`, '|', COALESCE(CAST(`aktiviert_am` AS CHAR), ''))"
+            . ' FROM `nv_dienstschichten` WHERE `dienstschicht_id` = ?',
+        'i',
+        $shiftId
+    );
+    $expect(
+        RuntimeException::class,
+        static fn (): null => (
+            estab_dv_activate_initial_shift(
+                $connection,
+                $incidentId,
+                $shiftId,
+                $actor,
+                'estab_test_missing_protocol'
+            ) ?? null
+        ),
+        'an injected opening audit failure did not abort activation'
+    );
+    $assert(
+        $logbookEvidenceSnapshot($connection, $incidentId)
+            === $openingRollbackEvidence
+            && (string) $scalar(
+                $connection,
+                "SELECT CONCAT(`status`, '|',"
+                    . " COALESCE(CAST(`aktiviert_am` AS CHAR), ''))"
+                    . ' FROM `nv_dienstschichten`'
+                    . ' WHERE `dienstschicht_id` = ?',
+                'i',
+                $shiftId
+            ) === $openingRollbackShift
+            && $openingRollbackShift === 'GEPLANT|',
+        'failed initial opening retained a partial shift, ETB/TBB row, head '
+            . 'or audit event'
     );
     estab_dv_activate_initial_shift(
         $connection,
         $incidentId,
         $shiftId,
         $actor
+    );
+    $assert(
+        (int) $scalar(
+            $connection,
+            'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = ?'
+                . ' AND `estab_book_lfd` = 1'
+                . " AND `estab_event_type` = 'ohne'"
+                . " AND `etb_aktion` LIKE '%Einsatztagebuch eröffnet%'"
+                . " AND `etb_aktion` LIKE '%Einsatzbeginn:%'"
+                . " AND `etb_aktion` NOT LIKE '%Zweiter Leiter FmZt%'",
+            'i',
+            $incidentId
+        ) === 1
+            && (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = ?'
+                    . ' AND `estab_book_lfd` = 1'
+                    . " AND `estab_entry_type` = 'betrieb_personal'"
+                    . " AND `estab_personnel_duty` LIKE '%Betriebsaufnahme%'",
+                'i',
+                $incidentId
+            ) === 1,
+        'initial shift activation did not atomically open ETB and TBB at local number 1'
+    );
+    $activeAssignmentCount = (int) $scalar(
+        $connection,
+        'SELECT COUNT(*) FROM `nv_dienstbesetzungen`'
+            . ' WHERE `dienstschicht_id` = ?',
+        'i',
+        $shiftId
+    );
+    $activeEtbAssignmentRejection = $expect(
+        EstabDvConflictException::class,
+        static fn (): array => estab_dv_assign_hat(
+            $connection,
+            $incidentId,
+            $shiftId,
+            $codes['si_duplicate'],
+            'ETB',
+            $actor
+        ),
+        'active shift accepted an ETB assignment that would replace its writer'
+    );
+    $assert(
+        str_contains(
+            $activeEtbAssignmentRejection->getMessage(),
+            'dokumentierte und bestätigte Schichtübergabe'
+        )
+            && (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_dienstbesetzungen`'
+                    . ' WHERE `dienstschicht_id` = ?',
+                'i',
+                $shiftId
+            ) === $activeAssignmentCount,
+        'rejected active-shift ETB assignment was unclear or mutated the roster'
+    );
+
+    // A running shift may be expanded without pretending that personnel were
+    // present in opening row 1. Assignment alone is not yet effective; the
+    // person's acceptance appends immutable book evidence in the same
+    // transaction. A non-Fm function belongs only in the ETB.
+    $s1Extension = estab_dv_assign_hat(
+        $connection,
+        $incidentId,
+        $shiftId,
+        $codes['s1_extension'],
+        'S1',
+        $actor
+    );
+    $s1ExtensionId = (int) $s1Extension['dienstbesetzung_id'];
+    $assert(
+        ($s1Extension['active_shift_extension'] ?? null) === true
+            && ($s1Extension['schicht_status'] ?? null) === 'AKTIV',
+        'active-shift S1 extension was not identified as an extension'
+    );
+    $s1ExtensionBefore = $logbookEvidenceSnapshot($connection, $incidentId);
+    $expect(
+        RuntimeException::class,
+        static fn (): array => estab_dv_accept_hat(
+            $connection,
+            $incidentId,
+            $s1ExtensionId,
+            $codes['s1_extension'],
+            'estab_test_missing_protocol'
+        ),
+        'an injected extension-audit failure did not abort acceptance'
+    );
+    $assert(
+        (string) $scalar(
+            $connection,
+            'SELECT `status` FROM `nv_dienstbesetzungen`'
+                . ' WHERE `dienstbesetzung_id` = ?',
+            'i',
+            $s1ExtensionId
+        ) === 'ZUGEWIESEN'
+            && $logbookEvidenceSnapshot($connection, $incidentId)
+                === $s1ExtensionBefore,
+        'failed active-shift acceptance retained assignment, ETB/TBB, head '
+            . 'or audit mutations'
+    );
+    $acceptedS1Extension = estab_dv_accept_hat(
+        $connection,
+        $incidentId,
+        $s1ExtensionId,
+        $codes['s1_extension']
+    );
+    $assert(
+        ($acceptedS1Extension['active_shift_extension'] ?? null) === true
+            && (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = ?'
+                    . " AND `etb_aktion` LIKE '%Schichtbesetzung erweitert%'"
+                    . " AND `etb_aktion` LIKE '%Schichterweiterung S1%'",
+                'i',
+                $incidentId
+            ) === 1
+            && (string) $scalar(
+                $connection,
+                "SELECT CONCAT(COUNT(*), ':',"
+                    . " COALESCE(MAX(`estab_book_lfd`), 0)) FROM `nv_tbb`"
+                    . ' WHERE `einsatz_id` = ?',
+                'i',
+                $incidentId
+            ) === $s1ExtensionBefore['ttb'],
+        'accepted S1 extension was not written exactly once to the ETB only'
+    );
+    $expect(
+        EstabDvConflictException::class,
+        static fn (): array => estab_dv_assign_hat(
+            $connection,
+            $incidentId,
+            $shiftId,
+            $codes['si_duplicate'],
+            'S1',
+            $actor
+        ),
+        'an occupied non-A/W function was replaced inside the active shift'
+    );
+
+    // A/W is deliberately multi-seat. Additional operating personnel is a
+    // genuine extension and must appear in both ETB and TBB.
+    $awExtension = estab_dv_assign_hat(
+        $connection,
+        $incidentId,
+        $shiftId,
+        $codes['aw_extension'],
+        'A/W',
+        $actor
+    );
+    $awExtensionId = (int) $awExtension['dienstbesetzung_id'];
+    $awExtensionBefore = $logbookEvidenceSnapshot($connection, $incidentId);
+    $acceptedAwExtension = estab_dv_accept_hat(
+        $connection,
+        $incidentId,
+        $awExtensionId,
+        $codes['aw_extension']
+    );
+    $assert(
+        ($acceptedAwExtension['active_shift_extension'] ?? null) === true
+            && (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = ?'
+                    . " AND `etb_aktion` LIKE '%Zusätzliche Aufnahme/Weitergabe%'",
+                'i',
+                $incidentId
+            ) === 1
+            && (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = ?'
+                    . " AND `estab_entry_type` = 'betrieb_personal'"
+                    . " AND `estab_personnel_duty`"
+                    . " LIKE '%Zusätzliche Aufnahme/Weitergabe%'",
+                'i',
+                $incidentId
+            ) === 1
+            && (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = ?',
+                'i',
+                $incidentId
+            ) === ((int) explode(':', $awExtensionBefore['etb'], 2)[0]) + 1
+            && (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = ?',
+                'i',
+                $incidentId
+            ) === ((int) explode(':', $awExtensionBefore['ttb'], 2)[0]) + 1,
+        'accepted active A/W extension was not appended atomically to ETB and TBB'
+    );
+    $expect(
+        EstabDvConflictException::class,
+        static fn (): array => estab_dv_assign_hat(
+            $connection,
+            $incidentId,
+            $shiftId,
+            $codes['aw_extension'],
+            'A/W',
+            $actor
+        ),
+        'the same person received the same active A/W function twice'
     );
 
     $connection->begin_transaction();
@@ -496,6 +945,17 @@ try {
         'accepted S3 hat did not receive all six legacy state/category tables'
     );
 
+    $conversationTtbBefore = (string) $scalar(
+        $connection,
+        "SELECT CONCAT("
+            . "(SELECT CONCAT(COUNT(*), ':', COALESCE(MAX(`estab_book_lfd`), 0))"
+            . " FROM `nv_tbb` WHERE `einsatz_id` = ?), '|',"
+            . "(SELECT `next_lfd` FROM `nv_logbuch_koepfe`"
+            . " WHERE `einsatz_id` = ? AND `buchart` = 'TTB'))",
+        'ii',
+        $incidentId,
+        $incidentId
+    );
     $conversation = estab_message_insert_numbered(
         $connection,
         $databaseName,
@@ -536,8 +996,34 @@ try {
     );
     $conversationMessageId = (int) $conversation['id'];
     $assert(
-        $conversationMessageId > 0,
-        'selected S3 hat could not create a real conversation note'
+        $conversationMessageId > 0
+            && (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_tbb`'
+                    . ' WHERE `einsatz_id` = ? AND `estab_message_id` = ?',
+                'ii',
+                $incidentId,
+                $conversationMessageId
+            ) === 0
+            && (string) $scalar(
+                $connection,
+                "SELECT CONCAT("
+                    . "(SELECT CONCAT(COUNT(*), ':',"
+                    . " COALESCE(MAX(`estab_book_lfd`), 0)) FROM `nv_tbb`"
+                    . " WHERE `einsatz_id` = ?), '|',"
+                    . "(SELECT `next_lfd` FROM `nv_logbuch_koepfe`"
+                    . " WHERE `einsatz_id` = ? AND `buchart` = 'TTB'))",
+                'ii',
+                $incidentId,
+                $incidentId
+            ) === $conversationTtbBefore
+            && (estab_message_fetch_for_incident_by_id(
+                $connection,
+                'nv_nachrichten',
+                $conversationMessageId,
+                $incidentId
+            )['estab_ttb_lfd'] ?? null) === null,
+        'conversation note consumed a TTB number or exposed a message TTB reference'
     );
     $stateTimestamp = date('Y-m-d H:i:s');
     $assert(
@@ -822,7 +1308,7 @@ try {
     $assert(
         count($listedShifts) === 1
             && (int) $listedShifts[0]['dienstschicht_id'] === $shiftId
-            && count($listedShifts[0]['besetzungen']) === 8,
+            && count($listedShifts[0]['besetzungen']) === 11,
         'real duty-shift UI read model did not return the active staffing'
     );
     $expect(
@@ -857,21 +1343,21 @@ try {
         $etbEntryId > 0,
         'active ETB hat could not write through EINSATZTAGEBUCH capability'
     );
-    $s2EntryId = estab_logbook_insert_entry(
-        $databaseConfig,
-        'nv_etb',
-        'etb',
-        [
-            'event' => 'Lage/Dokumentation fachlich bestätigt',
-            'comment' => 'S2 führt das Einsatztagebuch.',
-            'event_time' => date('Y-m-d H:i:s'),
-            'event_type' => 'information',
-        ],
-        $s2Identity
-    );
-    $assert(
-        $s2EntryId > 0,
-        'active S2 lost its additional EINSATZTAGEBUCH capability'
+    $expect(
+        EstabDvPermissionException::class,
+        static fn (): int => estab_logbook_insert_entry(
+            $databaseConfig,
+            'nv_etb',
+            'etb',
+            [
+                'event' => 'Unzulässiger paralleler ETB-Eintrag',
+                'comment' => 'Eine eigene ETB-Funktion ist bestimmt.',
+                'event_time' => date('Y-m-d H:i:s'),
+                'event_type' => 'ohne',
+            ],
+            $s2Identity
+        ),
+        'S2 wrote in parallel although an accepted ETB writer was designated'
     );
 
     $expect(
@@ -1054,7 +1540,11 @@ try {
     );
     $candidateCodes = array_column($messengerCandidates, 'kuerzel');
     sort($candidateCodes);
-    $expectedCandidateCodes = [$codes['aw'], $codes['messenger']];
+    $expectedCandidateCodes = [
+        $codes['aw'],
+        $codes['messenger'],
+        $codes['aw_extension'],
+    ];
     sort($expectedCandidateCodes);
     $assert(
         $candidateCodes === $expectedCandidateCodes
@@ -1280,6 +1770,9 @@ try {
         );
         $secondAssignments[$assignmentKey] =
             (int) $assignment['dienstbesetzung_id'];
+        if ($assignmentKey === 'etb') {
+            continue;
+        }
         estab_dv_accept_hat(
             $connection,
             $incidentId,
@@ -1290,6 +1783,59 @@ try {
     $assert(
         estab_dv_shift_required_hats($connection, $secondShiftId) === [],
         'offline but accepted unblocked account did not fulfil planned staffing'
+    );
+    $unacceptedSuccessor = estab_dv_assign_hat(
+        $connection,
+        $incidentId,
+        $secondShiftId,
+        $codes['ldf_duplicate'],
+        'A/W',
+        $actor
+    );
+    $unacceptedSuccessorAssignmentId =
+        (int) $unacceptedSuccessor['dienstbesetzung_id'];
+    $assert(
+        (string) $scalar(
+            $connection,
+            'SELECT `status` FROM `nv_dienstbesetzungen`'
+                . ' WHERE `dienstbesetzung_id` = ?',
+            'i',
+            $unacceptedSuccessorAssignmentId
+        ) === 'ZUGEWIESEN',
+        'unaccepted successor roster fixture is not assigned-only'
+    );
+    $expect(
+        EstabDvPermissionException::class,
+        static fn (): int => estab_dv_initiate_handover_shift(
+            $connection,
+            $incidentId,
+            $shiftId,
+            $secondShiftId,
+            'Unzulässige administrative Übergabe ohne persönliche Besetzung.',
+            $assignments['s2'],
+            [
+                'benutzer' => 'Integration Administration',
+                'kuerzel' => 'admin',
+                'funktion' => 'S2',
+                'rolle' => 'Stab',
+            ],
+            $actor
+        ),
+        'administrator initiated a handover without a personal accepted hat'
+    );
+    $expect(
+        EstabDvPermissionException::class,
+        static fn (): int => estab_dv_initiate_handover_shift(
+            $connection,
+            $incidentId,
+            $shiftId,
+            $secondShiftId,
+            'Unzulässige Übergabe mit fremder Besetzungs-ID.',
+            $assignments['s2'],
+            $awIdentity,
+            $actor
+        ),
+        'personally logged-in A/W claimed another accepted assignment for handover'
     );
     $expect(
         EstabDvConflictException::class,
@@ -1329,6 +1875,8 @@ try {
                 $shiftId,
                 $secondShiftId,
                 'Unzulässig mit gesperrter Pflichtbesetzung.',
+                $assignments['s2'],
+                $s2Identity,
                 $actor
             ),
             'blocked account fulfilled handover mandatory staffing'
@@ -1347,6 +1895,8 @@ try {
                 $shiftId,
                 $secondShiftId,
                 'Unzulässige Übergabe bei unterwegs befindlichem Melder.',
+                $assignments['s2'],
+                $s2Identity,
                 $actor
             ) ?? null
         ),
@@ -1593,19 +2143,40 @@ try {
             && $uploadCallbackCalls === 1,
         'reported messenger did not regain JPEG attachment write access'
     );
+    estab_dv_require_active_hat_for_operational_write(
+        $connection,
+        $incidentId,
+        $messengerIdentity
+    );
+    $expect(
+        EstabDvPermissionException::class,
+        static fn (): int => estab_logbook_insert_entry(
+            $databaseConfig,
+            'nv_tbb',
+            'tbb',
+            [
+                'entry_type' => 'betrieb_personal',
+                'personnel_duty' => 'Melder zurück in der Führungsstelle',
+                'comment' => 'Rückkehr und Abschlussmeldung sind nachgewiesen.',
+            ],
+            $messengerIdentity
+        ),
+        'second A/W wrote in parallel although another TBB writer was designated'
+    );
     $tbbEntryId = estab_logbook_insert_entry(
         $databaseConfig,
         'nv_tbb',
         'tbb',
         [
-            'event' => 'Melder zurück in der Führungsstelle',
-            'comment' => 'Rückkehr und Abschlussmeldung sind nachgewiesen.',
+            'entry_type' => 'betrieb_personal',
+            'personnel_duty' => 'Melder zurück in der Führungsstelle',
+            'comment' => 'TBB-Nachtrag durch die bestimmte A/W-Funktion.',
         ],
-        $messengerIdentity
+        $awIdentity
     );
     $assert(
         $tbbEntryId > 0,
-        'reported messenger did not regain normal operational write access'
+        'designated A/W could not record the returned messenger in the TBB'
     );
     $expect(
         EstabDvConflictException::class,
@@ -1741,6 +2312,8 @@ try {
         $shiftId,
         $secondShiftId,
         'Vollständige Lage-, Nachrichten- und Auftragsübergabe.',
+        $assignments['s2'],
+        $s2Identity,
         $actor
     );
     $assert(
@@ -1783,6 +2356,8 @@ try {
         $shiftId,
         $secondShiftId,
         'Vollständige Lage-, Nachrichten- und Auftragsübergabe.',
+        $assignments['s2'],
+        $s2Identity,
         $actor
     );
     $expect(
@@ -1829,17 +2404,467 @@ try {
     );
     $setSuccessorOnline->execute();
     $setSuccessorOnline->close();
+    $etbCountBeforeHandover = (int) $scalar(
+        $connection,
+        'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = ?',
+        'i',
+        $incidentId
+    );
+    $tbbCountBeforeHandover = (int) $scalar(
+        $connection,
+        'SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = ?',
+        'i',
+        $incidentId
+    );
+    $etbLastBeforeHandover = (int) $scalar(
+        $connection,
+        'SELECT MAX(`estab_book_lfd`) FROM `nv_etb` WHERE `einsatz_id` = ?',
+        'i',
+        $incidentId
+    );
+    $tbbLastBeforeHandover = (int) $scalar(
+        $connection,
+        'SELECT MAX(`estab_book_lfd`) FROM `nv_tbb` WHERE `einsatz_id` = ?',
+        'i',
+        $incidentId
+    );
+    $incomingHandoverIdentity = [
+        'benutzer' => 'Nachfolgende Lage/Dokumentation',
+        'kuerzel' => $codes['s2_successor'],
+        'funktion' => 'S2',
+        'rolle' => 'Stab',
+    ];
+    $handoverRollbackEvidence = $logbookEvidenceSnapshot(
+        $connection,
+        $incidentId
+    );
+    $handoverRollbackState = $handoverStateSnapshot(
+        $connection,
+        $incidentId,
+        $handoverRequestId
+    );
+    $handoverCompletionProbe = estab_dv_database_now($connection);
+    $handoverCompletionTime = DateTimeImmutable::createFromFormat(
+        'Y-m-d H:i:s.u',
+        $handoverCompletionProbe
+    );
+    if (!$handoverCompletionTime instanceof DateTimeImmutable) {
+        throw new RuntimeException('Could not parse handover completion probe');
+    }
+    $inconsistentCompletionProbe = $handoverCompletionTime
+        ->modify('+1 second')
+        ->format('Y-m-d H:i:s.u');
+    $handoverSummary = (string) $scalar(
+        $connection,
+        'SELECT `zusammenfassung` FROM `nv_dienstuebergabe_anfragen`'
+            . ' WHERE `dienstuebergabe_anfrage_id` = ?',
+        'i',
+        $handoverRequestId
+    );
+    $transitionProbeShifts = static function (
+        mysqli $database,
+        int $oldShiftId,
+        int $newShiftId,
+        string $completedAt
+    ): void {
+        $closeProbe = $database->prepare(
+            "UPDATE `nv_dienstschichten` SET `status` = 'UEBERGEBEN',"
+                . ' `beendet_am` = ? WHERE `dienstschicht_id` = ?'
+                . " AND `status` = 'AKTIV'"
+        );
+        $activateProbe = $database->prepare(
+            "UPDATE `nv_dienstschichten` SET `status` = 'AKTIV',"
+                . ' `aktiviert_am` = ? WHERE `dienstschicht_id` = ?'
+                . " AND `status` = 'GEPLANT'"
+        );
+        if (!$closeProbe || !$activateProbe) {
+            $closeProbe?->close();
+            $activateProbe?->close();
+            throw new RuntimeException('Could not prepare handover time probe');
+        }
+        try {
+            $closeProbe->bind_param('si', $completedAt, $oldShiftId);
+            $activateProbe->bind_param('si', $completedAt, $newShiftId);
+            $closeProbe->execute();
+            $activateProbe->execute();
+        } finally {
+            $closeProbe->close();
+            $activateProbe->close();
+        }
+    };
+    $connection->begin_transaction();
+    try {
+        $transitionProbeShifts(
+            $connection,
+            $shiftId,
+            $secondShiftId,
+            $handoverCompletionProbe
+        );
+        $expect(
+            mysqli_sql_exception::class,
+            static function () use (
+                $connection,
+                $incidentId,
+                $shiftId,
+                $secondShiftId,
+                $handoverSummary,
+                $inconsistentCompletionProbe,
+                $codes
+            ): void {
+                $statement = $connection->prepare(
+                    'INSERT INTO `nv_dienstuebergaben`'
+                        . ' (`einsatz_id`, `von_dienstschicht_id`,'
+                        . ' `an_dienstschicht_id`, `zusammenfassung`,'
+                        . ' `uebergeben_am`, `uebergeben_von`,'
+                        . ' `angenommen_von`) VALUES (?, ?, ?, ?, ?, ?, ?)'
+                );
+                try {
+                    $statement->bind_param(
+                        'iiissss',
+                        $incidentId,
+                        $shiftId,
+                        $secondShiftId,
+                        $handoverSummary,
+                        $inconsistentCompletionProbe,
+                        $codes['s2'],
+                        $codes['s2_successor']
+                    );
+                    $statement->execute();
+                } finally {
+                    $statement->close();
+                }
+            },
+            'database accepted contradictory completed-handover times'
+        );
+    } finally {
+        $connection->rollback();
+    }
+    $connection->begin_transaction();
+    try {
+        $transitionProbeShifts(
+            $connection,
+            $shiftId,
+            $secondShiftId,
+            $handoverCompletionProbe
+        );
+        $insertProbe = $connection->prepare(
+            'INSERT INTO `nv_dienstuebergaben`'
+                . ' (`einsatz_id`, `von_dienstschicht_id`,'
+                . ' `an_dienstschicht_id`, `zusammenfassung`,'
+                . ' `uebergeben_am`, `uebergeben_von`, `angenommen_von`)'
+                . ' VALUES (?, ?, ?, ?, ?, ?, ?)'
+        );
+        try {
+            $insertProbe->bind_param(
+                'iiissss',
+                $incidentId,
+                $shiftId,
+                $secondShiftId,
+                $handoverSummary,
+                $handoverCompletionProbe,
+                $codes['s2'],
+                $codes['s2_successor']
+            );
+            $insertProbe->execute();
+            $probeHandoverId = (int) $connection->insert_id;
+        } finally {
+            $insertProbe->close();
+        }
+        $expect(
+            mysqli_sql_exception::class,
+            static function () use (
+                $connection,
+                $handoverRequestId,
+                $secondAssignments,
+                $codes,
+                $probeHandoverId,
+                $inconsistentCompletionProbe
+            ): void {
+                $statement = $connection->prepare(
+                    'UPDATE `nv_dienstuebergabe_anfragen`'
+                        . " SET `status` = 'BESTAETIGT',"
+                        . ' `bestaetigt_am` = ?, `bestaetigt_von` = ?,'
+                        . ' `bestaetigt_mit_besetzung_id` = ?,'
+                        . ' `dienstuebergabe_id` = ?'
+                        . ' WHERE `dienstuebergabe_anfrage_id` = ?'
+                );
+                try {
+                    $statement->bind_param(
+                        'ssiii',
+                        $inconsistentCompletionProbe,
+                        $codes['s2_successor'],
+                        $secondAssignments['s2'],
+                        $probeHandoverId,
+                        $handoverRequestId
+                    );
+                    $statement->execute();
+                } finally {
+                    $statement->close();
+                }
+            },
+            'database accepted contradictory handover confirmation times'
+        );
+    } finally {
+        $connection->rollback();
+    }
+    $assert(
+        $logbookEvidenceSnapshot($connection, $incidentId)
+            === $handoverRollbackEvidence
+            && $handoverStateSnapshot(
+                $connection,
+                $incidentId,
+                $handoverRequestId
+            ) === $handoverRollbackState,
+        'rejected direct handover time contradictions changed durable evidence'
+    );
+    $connection->query(
+        'DROP TRIGGER IF EXISTS `estab_test_handover_audit_failure`'
+    );
+    $connection->query(
+        'CREATE TRIGGER `estab_test_handover_audit_failure`'
+        . ' BEFORE INSERT ON `nv_protokoll` FOR EACH ROW'
+        . ' BEGIN IF @estab_test_fail_handover = 1'
+        . " AND BINARY NEW.`p_was` = BINARY 'DV Übergabe' THEN"
+        . " SIGNAL SQLSTATE '45000'"
+        . " SET MESSAGE_TEXT = 'injected handover audit failure';"
+        . ' END IF; END'
+    );
+    try {
+        $connection->query('SET @estab_test_fail_handover = 1');
+        $expect(
+            mysqli_sql_exception::class,
+            static fn (): null => (
+                estab_dv_confirm_handover_shift(
+                    $connection,
+                    $incidentId,
+                    $handoverRequestId,
+                    $secondAssignments['s2'],
+                    $incomingHandoverIdentity
+                ) ?? null
+            ),
+            'an injected final handover-audit failure did not abort confirmation'
+        );
+    } finally {
+        $connection->query('SET @estab_test_fail_handover = NULL');
+        $connection->query(
+            'DROP TRIGGER `estab_test_handover_audit_failure`'
+        );
+    }
+    $assert(
+        $logbookEvidenceSnapshot($connection, $incidentId)
+            === $handoverRollbackEvidence
+            && $handoverStateSnapshot(
+                $connection,
+                $incidentId,
+                $handoverRequestId
+            ) === $handoverRollbackState
+            && str_starts_with(
+                (string) ($handoverRollbackState['request'] ?? ''),
+                'INITIIERT:'
+            ),
+        'failed handover retained partial shifts, assignments, request, '
+            . 'handover, ETB/TBB, heads or audit mutations'
+    );
     estab_dv_confirm_handover_shift(
         $connection,
         $incidentId,
         $handoverRequestId,
         $secondAssignments['s2'],
-        [
-            'benutzer' => 'Nachfolgende Lage/Dokumentation',
-            'kuerzel' => $codes['s2_successor'],
-            'funktion' => 'S2',
-            'rolle' => 'Stab',
-        ]
+        $incomingHandoverIdentity
+    );
+    $handoverInitiatedAt = (string) $scalar(
+        $connection,
+        "SELECT DATE_FORMAT(`initiiert_am`, '%Y-%m-%d %H:%i:%s.%f')"
+            . ' FROM `nv_dienstuebergabe_anfragen`'
+            . ' WHERE `dienstuebergabe_anfrage_id` = ?',
+        'i',
+        $handoverRequestId
+    );
+    $handoverTakenOverAt = (string) $scalar(
+        $connection,
+        "SELECT DATE_FORMAT(`bestaetigt_am`, '%Y-%m-%d %H:%i:%s.%f')"
+            . ' FROM `nv_dienstuebergabe_anfragen`'
+            . ' WHERE `dienstuebergabe_anfrage_id` = ?',
+        'i',
+        $handoverRequestId
+    );
+    $handoverInitiatedDisplay = estab_logbook_lifecycle_display_timestamp(
+        $handoverInitiatedAt
+    );
+    $handoverTakenOverDisplay = estab_logbook_lifecycle_display_timestamp(
+        $handoverTakenOverAt
+    );
+    $activeEtbAcceptanceEvidence = $logbookEvidenceSnapshot(
+        $connection,
+        $incidentId
+    );
+    $activeEtbAcceptanceRejection = $expect(
+        EstabDvConflictException::class,
+        static fn (): array => estab_dv_accept_hat(
+            $connection,
+            $incidentId,
+            $secondAssignments['etb'],
+            $codes['si']
+        ),
+        'planned ETB assignment displaced S2 after its shift became active'
+    );
+    $assert(
+        str_contains(
+            $activeEtbAcceptanceRejection->getMessage(),
+            'dokumentierte und bestätigte Schichtübergabe'
+        )
+            && (string) $scalar(
+                $connection,
+                'SELECT `status` FROM `nv_dienstbesetzungen`'
+                    . ' WHERE `dienstbesetzung_id` = ?',
+                'i',
+                $secondAssignments['etb']
+            ) === 'ZUGEWIESEN'
+            && $logbookEvidenceSnapshot($connection, $incidentId)
+                === $activeEtbAcceptanceEvidence,
+        'rejected active-shift ETB acceptance changed assignment or evidence'
+    );
+    $assert(
+        (int) $scalar(
+            $connection,
+            'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = ?',
+            'i',
+            $incidentId
+        ) === $etbCountBeforeHandover + 1
+            && (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = ?',
+                'i',
+                $incidentId
+            ) === $tbbCountBeforeHandover + 1
+            && (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = ?'
+                    . ' AND `estab_book_lfd` = ?'
+                    . " AND `etb_aktion` LIKE '%Dienstübergabe%'"
+                    . " AND `etb_aktion` LIKE CONCAT('%Letzte ETB-Nr. vor der Übergabe: ', ?, '.%')",
+                'iii',
+                $incidentId,
+                $etbLastBeforeHandover + 1,
+                $etbLastBeforeHandover
+            ) === 1
+            && (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = ?'
+                    . ' AND `estab_book_lfd` = ?'
+                    . " AND `estab_personnel_duty` LIKE '%Dienstübergabe%'"
+                    . " AND `estab_personnel_duty` LIKE CONCAT('%Letzte TBB-Nr. vor der Übergabe: ', ?, '.%')",
+                'iii',
+                $incidentId,
+                $tbbLastBeforeHandover + 1,
+                $tbbLastBeforeHandover
+            ) === 1
+            && (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = ?'
+                    . ' AND `estab_book_lfd` = ?'
+                    . " AND `etb_aktion` LIKE '%Zweiter Leiter FmZt%'",
+                'ii',
+                $incidentId,
+                $etbLastBeforeHandover + 1
+            ) === 0
+            && (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = ?'
+                    . ' AND `estab_book_lfd` = ?'
+                    . " AND `estab_personnel_duty` LIKE '%Zweiter Leiter FmZt%'",
+                'ii',
+                $incidentId,
+                $tbbLastBeforeHandover + 1
+            ) === 0
+            && (string) $scalar(
+                $connection,
+                'SELECT `status` FROM `nv_dienstbesetzungen`'
+                    . ' WHERE `dienstbesetzung_id` = ?',
+                'i',
+                $unacceptedOutgoingAssignmentId
+            ) === 'ZURUECKGEZOGEN'
+            && (string) $scalar(
+                $connection,
+                'SELECT `status` FROM `nv_dienstbesetzungen`'
+                    . ' WHERE `dienstbesetzung_id` = ?',
+                'i',
+                $unacceptedSuccessorAssignmentId
+            ) === 'ZUGEWIESEN',
+        'confirmed shift handover was not appended atomically to both logbooks'
+    );
+    $handoverEtbText = (string) $scalar(
+        $connection,
+        'SELECT `etb_aktion` FROM `nv_etb` WHERE `einsatz_id` = ?'
+            . ' AND `estab_book_lfd` = ?',
+        'ii',
+        $incidentId,
+        $etbLastBeforeHandover + 1
+    );
+    $handoverTbbText = (string) $scalar(
+        $connection,
+        'SELECT `estab_personnel_duty` FROM `nv_tbb`'
+            . ' WHERE `einsatz_id` = ? AND `estab_book_lfd` = ?',
+        'ii',
+        $incidentId,
+        $tbbLastBeforeHandover + 1
+    );
+    $assert(
+        $handoverInitiatedAt !== ''
+            && $handoverTakenOverAt !== ''
+            && strcmp($handoverInitiatedAt, $handoverTakenOverAt) <= 0
+            && str_contains(
+                $handoverEtbText,
+                'Persönlich übergeben von'
+            )
+            && str_contains(
+                $handoverEtbText,
+                '[' . $codes['s2'] . '] um ' . $handoverInitiatedDisplay
+            )
+            && str_contains($handoverEtbText, $handoverInitiatedDisplay)
+            && str_contains(
+                $handoverEtbText,
+                'persönlich übernommen von'
+            )
+            && str_contains(
+                $handoverEtbText,
+                '[' . $codes['s2_successor'] . '] um '
+                    . $handoverTakenOverDisplay
+            )
+            && str_contains($handoverEtbText, $handoverTakenOverDisplay)
+            && str_contains(
+                $handoverTbbText,
+                '[' . $codes['s2'] . '] um ' . $handoverInitiatedDisplay
+            )
+            && str_contains(
+                $handoverTbbText,
+                '[' . $codes['s2_successor'] . '] um '
+                    . $handoverTakenOverDisplay
+            )
+            && !str_contains(
+                $handoverEtbText . $handoverTbbText,
+                'keine dokumentierte Besetzung'
+            )
+            && (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_dienstuebergabe_anfragen` AS request'
+                    . ' JOIN `nv_dienstuebergaben` AS handover'
+                    . ' ON handover.`dienstuebergabe_id` ='
+                    . ' request.`dienstuebergabe_id`'
+                    . ' JOIN `nv_dienstschichten` AS old_shift'
+                    . ' ON old_shift.`dienstschicht_id` ='
+                    . ' request.`von_dienstschicht_id`'
+                    . ' JOIN `nv_dienstschichten` AS new_shift'
+                    . ' ON new_shift.`dienstschicht_id` ='
+                    . ' request.`an_dienstschicht_id`'
+                    . ' WHERE request.`dienstuebergabe_anfrage_id` = ?'
+                    . ' AND request.`bestaetigt_am` = handover.`uebergeben_am`'
+                    . ' AND request.`bestaetigt_am` = old_shift.`beendet_am`'
+                    . ' AND request.`bestaetigt_am` = new_shift.`aktiviert_am`',
+                'i',
+                $handoverRequestId
+            ) === 1,
+        'handover and takeover persons or their separate times are missing'
     );
     $assert(
         !estab_auth_duty_assignment_matches_session(

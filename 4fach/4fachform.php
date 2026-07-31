@@ -1265,8 +1265,8 @@ HTML;
     // Zeile, Spalte 1,2    AUSGANG    2  2   Ausgang Annahmevermerk Befoerderungsvermerk
     echo "<td style=\"text-align: center; background-color: ".$this->bg[2]."; width: 400px;\">\n"; // 427px
     echo "<div style=\"text-align: center; width: 405px;\">AUSGANG</div>\n"; // 450px
-    // Zeile, Spalte 1,3    Nachweisung   8   4   Nachweis Nummer E A
-    echo "<td style=\"text-align: center; width: 150px; background-color: ".$this->bg[4].";\">Nachweisnummer</td>\n";
+    // Zeile, Spalte 1,3    incident-local TBB evidence number and direction
+    echo "<td style=\"text-align: center; width: 150px; background-color: ".$this->bg[4].";\">TBB-Nachweis</td>\n";
     echo "</tr>\n";
     echo "<tr>\n";
     /****************************************************************************\
@@ -1455,32 +1455,17 @@ HTML;
     echo "</table>\n";
     echo "</td>\n";
     /****************************************************************************\
-    // Zeile, Spalte 2 , 4    8   4   Nachweis Nummer E A
+    // Zeile, Spalte 2 , 4    incident-local TBB evidence number and direction
     04_richtung;
     04_nummer;
     \****************************************************************************/
-    echo "<td style=\"width: 150px; background-color: ".$this->bg[4]."; text-align: left; vertical-align: top;\">Nachweis Nr.";
-    if (!$this->feld[4]) {
-        echo "<div style=\"text-align: center;\"><b><big><big><big>";
-        echo $this->safe_message_value ("04_richtung")."&nbsp; &nbsp;".$this->safe_message_value ("04_nummer");
-        echo "</big></big></big></b></div>";
-        echo "<input id=\"f_04_richtung\" type=\"hidden\" name=\"04_richtung\" value=\"".$this->safe_message_value ("04_richtung")."\">\n";
-        echo "<input id=\"f_04_nummer\" type=\"hidden\" name=\"04_nummer\" value=\"".$this->safe_message_value ("04_nummer")."\">\n";
-    } else {
-      echo "<input id=\"f_04_nummer\" maxlength=\"6\" size=\"6\" name=\"04_nummer\" value=\"".$this->safe_message_value ("04_nummer")."\"><br>\n";
-      if (!$this->feld[4]) {
-        $param = " disabled ";
-        // Radio Button die deaktiviert sind liefern keinen Wert zurck !!!
-        echo "<input id=\"f_04_richtung\" type=\"hidden\" name=\"04_richtung\" value=\"".$this->safe_message_value ("04_richtung")."\">\n";
-      }
-      else {
-        $param = "";
-      }
-      if ($this->formdata["04_richtung"]=="E") {$sel = "checked=\"checked\"";} else {$sel = "";}
-      echo "<input id=\"f_04_richtung\" name=\"04_richtung\" value=\"E\" type=\"radio\" ".$param.$sel.">E<br>\n";
-      if ($this->formdata["04_richtung"]=="A") {$sel = "checked=\"checked\"";} else {$sel = "";}
-      echo "<input id=\"f_04_richtung\" name=\"04_richtung\" value=\"A\" type=\"radio\" ".$param.$sel.">A<br>\n";
-    }
+    echo "<td style=\"width: 150px; background-color: ".$this->bg[4]."; text-align: left; vertical-align: top;\">TBB-Nachweis";
+    echo "<div style=\"text-align: center;\"><b>";
+    echo estab_message_html ($this->official_message_ttb_evidence_text ()).
+      "<br>".$this->safe_message_value ("04_richtung");
+    echo "</b></div>";
+    echo "<input id=\"f_04_richtung\" type=\"hidden\" name=\"04_richtung\" value=\"".$this->safe_message_value ("04_richtung")."\">\n";
+    echo "<input type=\"hidden\" name=\"04_nummer\" value=\"".$this->safe_message_value ("04_nummer")."\">\n";
     echo "</td>\n";
     echo "</tr>\n";
     echo "</tbody>\n";

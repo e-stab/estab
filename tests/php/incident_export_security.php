@@ -78,6 +78,30 @@ $throws(
 );
 
 $assert(
+    estab_incident_export_logbook_scope('all') === [
+        'mode' => 'all',
+        'shift_id' => null,
+    ],
+    'Whole-logbook scope changed'
+);
+$assert(
+    estab_incident_export_logbook_scope('shift:42') === [
+        'mode' => 'shift',
+        'shift_id' => 42,
+    ],
+    'Canonical shift scope was not parsed'
+);
+foreach ([null, '', 'shift:0', 'shift:01', 'shift:-1', 'shift:1x', ['all']]
+    as $invalidScope) {
+    $throws(
+        static fn (): array => estab_incident_export_logbook_scope(
+            $invalidScope
+        ),
+        'Invalid logbook scope was accepted'
+    );
+}
+
+$assert(
     estab_incident_export_message_attachments('EL0001.pdf;EL0002.txt;')
         === ['EL0001.pdf', 'EL0002.txt'],
     'Message attachments were not parsed'
@@ -141,6 +165,26 @@ $throws(
         'EL0001.txt'
     ),
     'Invalid embedded attachment position was accepted'
+);
+$assert(
+    estab_incident_export_etb_attachment_number_map(12, [[
+        'estab_book_lfd' => 17,
+        'estab_attachment_id' => 4,
+    ]]) === [4 => ['ETB 12-17-1']],
+    'Incident export did not derive the official ETB attachment number'
+);
+$throws(
+    static fn (): array => estab_incident_export_etb_attachment_number_map(
+        12,
+        [[
+            'estab_book_lfd' => 17,
+            'estab_attachment_id' => 4,
+        ], [
+            'estab_book_lfd' => 18,
+            'estab_attachment_id' => 4,
+        ]]
+    ),
+    'Ambiguous repeated ETB attachment link was exported'
 );
 
 $integrityFixture = tempnam(sys_get_temp_dir(), 'estab-integrity-');
@@ -410,9 +454,34 @@ $source = file_get_contents(__DIR__ . '/../../app/incident_export.php');
 if (!is_string($source)) {
     throw new RuntimeException('Could not read incident export source');
 }
+$assert(
+    str_contains(
+        $source,
+        "BINARY ttb_row.`estab_entry_type` = BINARY 'nachricht'"
+    )
+        && str_contains(
+            $source,
+            "' ORDER BY ttb_row.`estab_book_lfd`,'"
+        )
+        && str_contains(
+            $source,
+            "' ttb_row.`tbb_lfd-nr` LIMIT 1)'"
+        )
+        && !str_contains(
+            $source,
+            "ttb_row.`estab_entry_type` = 'nachricht'"
+        ),
+    'Incident export accepts a case-variant or non-deterministic TBB proof'
+);
 foreach ([
-    'FROM `nv_etb` WHERE `einsatz_id` = ?',
-    'FROM `nv_tbb` WHERE `einsatz_id` = ?',
+    'FROM `nv_etb` AS entry_row',
+    'FROM `nv_tbb` AS entry_row',
+    'LEFT JOIN `nv_etb` AS correction_row',
+    'LEFT JOIN `nv_tbb` AS correction_row',
+    'correction_row.`estab_book_lfd`',
+    'AS `estab_correction_book_lfd`',
+    'correction_row.`einsatz_id` = entry_row.`einsatz_id`',
+    'WHERE entry_row.`einsatz_id` = ?',
     'FROM `nv_nachrichten` WHERE `einsatz_id` = ?',
     'FROM `nv_nachrichten_ereignisse`',
     'FROM `nv_nachrichten_nachweiskopf`',
@@ -441,9 +510,17 @@ foreach ([
     '`x04_druck`, `x05_druck_d`, `99_lstacc`',
     '`estab_event_time`,',
     '`estab_correction_of`,',
+    'entry_row.`estab_shift_id`,',
+    'entry_row.`estab_assignment`,',
+    "' AND entry_row.`estab_shift_id` = ?'",
+    'estab_incident_export_resolve_logbook_scope(',
+    'WHERE `einsatz_id` = ? AND `dienstschicht_id` = ?',
+    "'logbook_scope' => \$resolvedLogbookScope",
     'estab_message_terminal_snapshot_stored_version(',
     'estab_message_terminal_snapshot_matches_live(',
     'estab_incident_export_operations_evidence_status(',
+    'estab_incident_export_etb_attachment_number_map(',
+    "'etb_attachment_numbers'",
     'estab_file_resolve(',
     'Ein Nachrichtenvordruck verweist auf einen nicht ',
     'hash(\'sha256\', $bytes)',
@@ -491,6 +568,26 @@ $assert(
     'Incident dossier does not reuse the generated message-form renderer'
 );
 $assert(
+    str_contains($pdfRenderer, "'estab_correction_book_lfd'")
+        && str_contains(
+            $pdfRenderer,
+            'Korrekturverweis vorhanden; lokale ETB-Nr. nicht auflösbar.'
+        )
+        && str_contains(
+            $pdfRenderer,
+            'Korrekturverweis vorhanden; lokale TBB-Nr. nicht auflösbar.'
+        )
+        && !str_contains(
+            $pdfRenderer,
+            "['estab_book_lfd', 'estab_buch_lfd', 'etb_lfd-nr', 'lfd']"
+        )
+        && !str_contains(
+            $pdfRenderer,
+            "['estab_book_lfd', 'estab_buch_lfd', 'tbb_lfd-nr', 'lfd']"
+        ),
+    'PDF renderer can still label global logbook IDs as local numbers'
+);
+$assert(
     !str_contains($messageTemplate, 'Nur für den Dienstgebrauch')
         && !str_contains($messageTemplate, '4fbak/logo.png')
         && !str_contains($messageTemplate, '/logo.png')
@@ -528,10 +625,29 @@ $assert(
 );
 $assert(
     str_contains($controller, "'pdf_export'")
+        && str_contains($controller, "\$_POST['logbook_scope'] ?? 'all'")
+        && str_contains(
+            $controller,
+            "'logbook_scope' => \$bundle['logbook_scope']"
+        )
+        && str_contains($controller, 'name="logbook_scope"')
         && str_contains($controller, "'sha256' => \$rendered['sha256']")
         && str_contains($controller, "header('Content-Type: application/pdf')")
         && str_contains($controller, "Content-Security-Policy: sandbox"),
     'Incident PDF response or audit boundary is incomplete'
+);
+$assert(
+    str_contains(
+        $controller,
+        'ETB-Einträge gemäß der oben gewählten ETB/TBB-Ausgabe'
+    )
+        && str_contains(
+            $controller,
+            'TBB-Einträge gemäß der oben gewählten ETB/TBB-Ausgabe'
+        )
+        && !str_contains($controller, 'Alle ETB-Einträge dieses Einsatzes')
+        && !str_contains($controller, 'Alle TBB-Einträge dieses Einsatzes'),
+    'Incident export descriptions contradict the selected logbook scope'
 );
 $assert(
     str_contains($dashboard, "'key' => 'incident-pdf'")

@@ -129,6 +129,22 @@ $assert(
     'message detail view emits duplicate or unbalanced body elements'
 );
 $assert(
+    str_contains(
+        $messageFormSource,
+        'estab_message_list_tbb_evidence_label (array ('
+    )
+        && str_contains(
+            $messageFormSource,
+            '"estab_tbb_book_lfd" => $this->formdata ["estab_ttb_lfd"] ?? null'
+        )
+        && substr_count($messageFormSource, 'TBB-Nachweis') >= 2
+        && !str_contains(
+            $messageFormSource,
+            '$this->safe_message_value ("04_nummer")'
+        ),
+    'message detail view still presents the technical message number as TBB evidence'
+);
+$assert(
     substr_count($navigationSource, '<form action=') === 1
         && substr_count($navigationSource, '</form>') === 1
         && substr_count($displayControlsSource, '<form action=') === 1
@@ -148,11 +164,15 @@ $assert(
     'message table has no ordered thead/tbody structure'
 );
 $assert(
-    str_contains($tableSource, "'Nachweis'")
+    str_contains($tableSource, "'TBB-Nachweis'")
         && str_contains($tableSource, "'Betreff und Inhalt'")
         && str_contains(
             $tableSource,
             'estab_message_priority_requires_attention'
+        )
+        && str_contains(
+            $tableSource,
+            'estab_message_list_tbb_evidence_label($row)'
         )
         && str_contains($tableSource, 'estab_message_list_recipient_labels')
         && str_contains($tableSource, '$openControl($row)'),

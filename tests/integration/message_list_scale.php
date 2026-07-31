@@ -134,7 +134,8 @@ $runList = static function (
     $count = (int) ($countRows[0]['treffer'] ?? -1);
     $window = estab_message_list_page_window($count, $filters);
     $sql = 'SELECT m.`00_lfd`, m.`einsatz_id`, m.`04_richtung`,'
-        . ' m.`04_nummer`, m.`09_vorrangstufe`, m.`12_betreff`,'
+        . ' ' . estab_message_list_tbb_number_select_sql('m') . ','
+        . ' m.`09_vorrangstufe`, m.`12_betreff`,'
         . ' m.`12_inhalt`, m.`12_abfzeit`, m.`16_empf`, m.`x00_status`'
         . ' FROM `nv_nachrichten` AS m WHERE ' . $where
         . ' ORDER BY ' . estab_message_list_order_sql($filters, 'm')
@@ -213,7 +214,7 @@ $activateIncident = static function (
  * Insert deterministic rows through one reused native prepared statement.
  *
  * @return list<array{
- *   id:int,number:int,direction:string,priority:string,status:int,
+ *   id:int,archive_number:int,tbb_number:int,direction:string,priority:string,status:int,
  *   time:string,recipient:string,fulltext:bool,short:bool
  * }>
  */
@@ -235,6 +236,34 @@ $insertMessages = static function (
     if (!$statement instanceof mysqli_stmt) {
         throw new RuntimeException('Could not prepare scale fixture insert');
     }
+    $shiftStatement = $database->prepare(
+        'INSERT INTO `nv_dienstschichten`'
+            . ' (`einsatz_id`, `nummer`, `bezeichnung`, `erstellt_von`)'
+            . ' VALUES (?, 1, ?, ?)'
+    );
+    $evidenceStatement = $database->prepare(
+        'INSERT INTO `nv_tbb`'
+            . ' (`einsatz_id`, `estab_shift_id`, `tbb_time`, `tbb_aktion`,'
+            . ' `tbb_bemerk`, `tbb_benutzer`, `tbb_kuerzel`, `tbb_funktion`,'
+            . ' `estab_event_time`, `estab_entry_type`, `estab_message_id`,'
+            . ' `estab_message_route`)'
+            . " VALUES (?, ?, ?, 'Skalierungsnachweis', '',"
+            . " 'eStab-System', 'system', '', ?, 'nachricht', ?,"
+            . " 'Nachricht im TTB nachgewiesen')"
+    );
+    if (
+        !$shiftStatement instanceof mysqli_stmt
+        || !$evidenceStatement instanceof mysqli_stmt
+    ) {
+        $statement->close();
+        if ($shiftStatement instanceof mysqli_stmt) {
+            $shiftStatement->close();
+        }
+        if ($evidenceStatement instanceof mysqli_stmt) {
+            $evidenceStatement->close();
+        }
+        throw new RuntimeException('Could not prepare TTB scale fixture');
+    }
 
     $records = [];
     $priorities = ['', 'sss', 'bbb', 'aaa', 'eee'];
@@ -248,9 +277,19 @@ $insertMessages = static function (
         throw new RuntimeException('Could not begin scale fixture transaction');
     }
     try {
+        $shiftLabel = 'Nachrichtenlisten-Lasttest';
+        $shiftStatement->execute([
+            $incidentId,
+            $shiftLabel,
+            'message-list-scale-integration',
+        ]);
+        $shiftId = (int) $database->insert_id;
+        if ($shiftId < 1) {
+            throw new RuntimeException('Could not create TTB fixture shift');
+        }
         for ($index = 1; $index <= $rowCount; $index++) {
             $direction = $index % 2 === 0 ? 'E' : 'A';
-            $number = $foreign ? 900000 + $index : $index;
+            $number = ($foreign ? 900000 : 500000) + $index;
             $priority = $priorities[($index - 1) % count($priorities)];
             $status = $statuses[($index - 1) % count($statuses)];
             $time = gmdate(
@@ -303,10 +342,19 @@ $insertMessages = static function (
                 $recipient,
                 $status,
             ]);
+            $messageId = (int) $database->insert_id;
+            $evidenceStatement->execute([
+                $incidentId,
+                $shiftId,
+                $time,
+                $time,
+                $messageId,
+            ]);
             if (!$foreign) {
                 $records[] = [
-                    'id' => (int) $database->insert_id,
-                    'number' => $number,
+                    'id' => $messageId,
+                    'archive_number' => $number,
+                    'tbb_number' => $index,
                     'direction' => $direction,
                     'priority' => $priority,
                     'status' => $status,
@@ -325,6 +373,8 @@ $insertMessages = static function (
         throw $exception;
     } finally {
         $statement->close();
+        $shiftStatement->close();
+        $evidenceStatement->close();
     }
     return $records;
 };
@@ -475,10 +525,10 @@ try {
     );
     $assert(
         array_map(
-            static fn (array $row): int => (int) $row['04_nummer'],
+            static fn (array $row): int => (int) $row['estab_tbb_book_lfd'],
             $unfiltered['rows']
         ) === range(10000, 9976),
-        'newest page is not stably ordered by timestamp and row id'
+        'newest page lost its canonical TTB evidence numbers'
     );
 
     $pageTwoFilters = ['sort' => 'newest', 'page_size' => 25, 'page' => 2];
@@ -501,10 +551,10 @@ try {
     );
     $assert(
         array_map(
-            static fn (array $row): int => (int) $row['04_nummer'],
+            static fn (array $row): int => (int) $row['estab_tbb_book_lfd'],
             $pageTwo['rows']
         ) === range(9975, 9951),
-        'second stable page returned the wrong message numbers'
+        'second stable page returned the wrong TTB evidence numbers'
     );
 
     $combinedFilters = [
@@ -533,7 +583,7 @@ try {
     usort(
         $combinedExpected,
         static fn (array $left, array $right): int =>
-            $left['number'] <=> $right['number']
+            $left['tbb_number'] <=> $right['tbb_number']
                 ?: $left['id'] <=> $right['id']
     );
     $combined = $runList($connection, $targetIncidentId, $combinedFilters);
@@ -545,9 +595,9 @@ try {
     );
     $assert(
         array_map(
-            static fn (array $row): int => (int) $row['04_nummer'],
+            static fn (array $row): int => (int) $row['estab_tbb_book_lfd'],
             $combined['rows']
-        ) === array_slice(array_column($combinedExpected, 'number'), 0, 100),
+        ) === array_slice(array_column($combinedExpected, 'tbb_number'), 0, 100),
         'combined structured filters returned incorrect or unstable rows'
     );
 
@@ -572,9 +622,9 @@ try {
     );
     $assert(
         array_map(
-            static fn (array $row): int => (int) $row['04_nummer'],
+            static fn (array $row): int => (int) $row['estab_tbb_book_lfd'],
             $fulltext['rows']
-        ) === array_column($fulltextExpected, 'number'),
+        ) === array_column($fulltextExpected, 'tbb_number'),
         'full-text prefix search returned wrong rows'
     );
 
@@ -591,21 +641,20 @@ try {
     $assert(
         $short['count'] === count($shortExpected)
             && array_map(
-                static fn (array $row): int => (int) $row['04_nummer'],
+                static fn (array $row): int => (int) $row['estab_tbb_book_lfd'],
                 $short['rows']
-            ) === array_column($shortExpected, 'number'),
+            ) === array_column($shortExpected, 'tbb_number'),
         'short-token literal search returned wrong rows'
     );
 
     $numberExpected = array_values(array_filter(
         $records,
-        static fn (array $record): bool =>
-            $record['number'] === 4242 || $record['id'] === 4242
+        static fn (array $record): bool => $record['tbb_number'] === 4242
     ));
     usort(
         $numberExpected,
         static fn (array $left, array $right): int =>
-            $left['number'] <=> $right['number']
+            $left['tbb_number'] <=> $right['tbb_number']
                 ?: $left['id'] <=> $right['id']
     );
     $number = $runList(
@@ -616,15 +665,62 @@ try {
     $maximumQueryDuration = max($maximumQueryDuration, $number['duration']);
     $assert(
         $number['count'] === count($numberExpected)
-            && $number['count'] === 2,
-        'exact message/row number search returned wrong count'
+            && $number['count'] === 1,
+        'exact TTB evidence number search returned wrong count'
     );
     $assert(
         array_map(
-            static fn (array $row): int => (int) $row['00_lfd'],
+            static fn (array $row): int => (int) $row['estab_tbb_book_lfd'],
             $number['rows']
-        ) === array_column($numberExpected, 'id'),
-        'exact message/row number search returned wrong rows'
+        ) === array_column($numberExpected, 'tbb_number'),
+        'exact TTB evidence number search returned wrong rows'
+    );
+    $numberKeys = $explainKeys(
+        $connection,
+        $number['sql'],
+        $number['params']
+    );
+    $assert(
+        in_array('idx_tbb_message', $numberKeys, true),
+        'EXPLAIN did not use the TTB message-link index for canonical '
+            . 'evidence search/display: ' . implode(', ', $numberKeys)
+    );
+
+    $archiveOnlyNumber = (int) $numberExpected[0]['archive_number'];
+    $archiveOnly = $runList(
+        $connection,
+        $targetIncidentId,
+        [
+            'q' => (string) $archiveOnlyNumber,
+            'sort' => 'number_asc',
+            'page_size' => 25,
+        ]
+    );
+    $maximumQueryDuration = max($maximumQueryDuration, $archiveOnly['duration']);
+    $assert(
+        $archiveOnly['count'] === 0,
+        'internal/archive message number was exposed as a TTB evidence number'
+    );
+
+    $maximumGlobalId = max(array_column($records, 'id'));
+    $assert(
+        is_int($maximumGlobalId)
+            && $maximumGlobalId > ESTAB_MESSAGE_LIST_SCALE_TARGET_ROWS,
+        'fixture does not contain an unambiguous global-only record ID'
+    );
+    $globalOnly = $runList(
+        $connection,
+        $targetIncidentId,
+        [
+            'q' => (string) $maximumGlobalId,
+            'sort' => 'number_asc',
+            'page_size' => 25,
+        ]
+    );
+    $maximumQueryDuration = max($maximumQueryDuration, $globalOnly['duration']);
+    $assert(
+        $globalOnly['count'] === 0,
+        'global message ID was exposed as a TTB evidence number'
     );
 
     $lastPage = $runList(
@@ -714,7 +810,7 @@ try {
             ],
             $directionKeys
         ) !== [],
-        'EXPLAIN did not use an indexed direction/number page path: '
+        'EXPLAIN did not use the incident/direction message prefilter: '
             . implode(', ', $directionKeys)
     );
     $directionCountFilter = estab_message_list_filter_sql(
@@ -737,8 +833,8 @@ try {
             $directionCountKeys,
             true
         ),
-        'EXPLAIN did not use the incident/direction/number index for the '
-            . 'prepared production count path: '
+        'EXPLAIN did not use the incident/direction archive index for the '
+            . 'prepared basic count path: '
             . implode(', ', $directionCountKeys)
     );
 

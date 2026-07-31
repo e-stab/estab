@@ -54,9 +54,11 @@ class tbb_liste {
       if (debug == true){    echo "tbb_liste 2 ->"; var_dump ($this->tbb_titel_gesetzt); echo "<br>";}
     $conf_tbb [0] = "Lfd.-Nr.";
     $conf_tbb [1] = "Datum/Zeit";
-    $conf_tbb [2] = "Darstellung der Ereignisse";
-    $conf_tbb [3] = "Bemerkung";
-    $conf_tbb [4] = "Kürzel";
+    $conf_tbb [2] = "Betrieb / Personal / Dienst";
+    $conf_tbb [3] = "Kanal / Rufgruppe / Bedienung";
+    $conf_tbb [4] = "Nachricht von / an";
+    $conf_tbb [5] = "Betriebsablauf / Ereignis / Störung";
+    $conf_tbb [6] = "Quittung / Empfänger / Aushändigung";
     $this->spaltenanzahl = count ($conf_tbb);
     $this->spaltenkoepfe = $conf_tbb;
   }
@@ -269,7 +271,9 @@ if (debug == true){ echo "tbb_tableexist==>"; var_dump($this->tbb_titel_tbl); ec
     echo "<section class=\"estab-tool-panel\" aria-labelledby=\"ttb-action-title\">\n";
     echo "<header class=\"estab-tool-panel-heading\">\n";
     echo "<h2 id=\"ttb-action-title\">Neuer Betriebsbucheintrag</h2>\n";
-    echo "<p>Erfassen Sie ein technisches Ereignis im aktiven Einsatz.</p>\n";
+    echo "<p>Erfassen Sie Betrieb, Personal, Funkkanäle, Nachrichtenweg, ";
+    echo "Störungen oder die Aushändigung in den dafür vorgesehenen ";
+    echo "Bereichen des Fb Fü 44.</p>\n";
     echo "</header>\n";
     echo "<form class=\"estab-tool-actions\" action=\"".$action."\" method=\"get\">\n";
     echo "<button class=\"estab-button estab-button-primary\" ";
@@ -299,7 +303,10 @@ if (debug == true){ echo "tbb_tableexist==>"; var_dump($this->tbb_titel_tbl); ec
   function speichen_tbb_eintrag ($daten){
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
-    $validation = estab_logbook_validate_entry (is_array ($daten) ? $daten : array ());
+    $validation = estab_logbook_validate_entry (
+      is_array ($daten) ? $daten : array (),
+      "tbb"
+    );
     if (!$validation ["valid"]) {
       throw new InvalidArgumentException ("Ungültiger TBB-Eintrag");
     }
@@ -325,29 +332,97 @@ var $lfd ;
 var $task ;
 
   function tbb_eintragsmenue ($data) {
-    unset ($data);
+    $correctionId = is_int ($data) && $data > 0 ? $data : null;
     $action = estab_auth_html (estab_application_url ("fmtbb/tbb.php"));
 
     echo "<section class=\"estab-tool-panel\" aria-labelledby=\"ttb-entry-title\">\n";
     echo "<header class=\"estab-tool-panel-heading\">\n";
-    echo "<h2 id=\"ttb-entry-title\">TBB-Eintrag erfassen</h2>\n";
-    echo "<p>Die Ereignisdarstellung ist verpflichtend; eine Bemerkung ist optional.</p>\n";
+    echo "<h2 id=\"ttb-entry-title\">";
+    echo $correctionId === null
+      ? "TBB-Eintrag erfassen"
+      : "Ausgewählten TBB-Eintrag berichtigen";
+    echo "</h2>\n";
+    echo "<p>Füllen Sie mindestens einen fachlichen Bereich aus. Gespeicherte ";
+    echo "Einträge bleiben unverändert; eine Berichtigung wird als neuer, ";
+    echo "verknüpfter Eintrag angehängt.</p>\n";
     echo "</header>\n";
     echo "<form class=\"estab-tool-form\" method=\"post\" action=\"".$action.
          "\" name=\"tbbeintrag\" data-estab-dirty-guard ".
          "data-estab-requires-incident>\n";
     echo estab_csrf_field ()."\n";
     echo "<input type=\"hidden\" name=\"logbook_action\" value=\"save_entry\">\n";
+    if ($correctionId !== null) {
+      echo "<input type=\"hidden\" name=\"entry_type\" value=\"korrektur\">\n";
+      echo "<input type=\"hidden\" name=\"correction_of\" value=\"".
+           (int) $correctionId."\">\n";
+    }
+    echo "<div class=\"estab-tool-form-grid\">\n";
     echo "<div class=\"estab-tool-field\">\n";
-    echo "<label for=\"ttb-event\">Darstellung der Ereignisse</label>\n";
-    echo "<textarea id=\"ttb-event\" maxlength=\"10000\" required ";
-    echo "name=\"event\" autofocus></textarea>\n";
-    echo "<small>Höchstens 10.000 Zeichen.</small>\n</div>\n";
+    echo "<label for=\"ttb-event-time\">Zeitpunkt des Vorgangs</label>\n";
+    echo "<input id=\"ttb-event-time\" type=\"datetime-local\" ";
+    echo "name=\"event_time\" required value=\"".
+         estab_auth_html (date ("Y-m-d\\TH:i"))."\">\n";
+    echo "<small>Die unveränderliche Erfassungszeit wird zusätzlich ";
+    echo "automatisch gespeichert.</small>\n</div>\n";
+    if ($correctionId === null) {
+      echo "<div class=\"estab-tool-field\">\n";
+      echo "<label for=\"ttb-entry-type\">Primärer Bereich</label>\n";
+      echo "<select id=\"ttb-entry-type\" name=\"entry_type\" required>\n";
+      foreach (estab_logbook_ttb_manual_entry_types () as $value => $label) {
+        if ($value === "korrektur") { continue; }
+        echo "<option value=\"".estab_auth_html ($value)."\">".
+             estab_auth_html ($label)."</option>\n";
+      }
+      echo "</select>\n<small>Bestimmt die fachliche Einordnung; mehrere ";
+      echo "Inhaltsspalten dürfen gemeinsam befüllt werden.</small>\n</div>\n";
+    }
+    echo "</div>\n";
+    echo "<p class=\"estab-tool-feedback\">Nachrichtenbeförderungen werden ";
+    echo "automatisch und genau einmal aus dem verbindlichen Nachrichtenworkflow ";
+    echo "übernommen. Der Bereich „Nachricht von / an“ kann deshalb nicht ";
+    echo "als manueller Primärbereich gewählt werden.</p>\n";
+    echo "<p class=\"estab-tool-feedback\"><strong>Eigenständiger Nachweis:</strong> ";
+    echo "Formulieren Sie jeden Eintrag so, dass das TBB auch ohne Anlagen in ";
+    echo "Grundzügen verständlich bleibt.</p>\n";
+    $fields = array (
+      "personnel_duty" => array (
+        "Betrieb, Personal und Dienstübergabe",
+        "Betriebsaufnahme/-ende, Einsatzbereitschaft, Namen und Funktionen, Ablösung sowie Dienstübergabe/-übernahme."
+      ),
+      "channel" => array (
+        "Kanal, Rufgruppe und Bedienung",
+        "Kanal/Rufgruppe, Betriebsart, Bedienung sowie Wechsel mit bisherigem und neuem Wert."
+      ),
+      "message_route" => array (
+        "Nachricht von / an",
+        "Gegenstelle und Richtung einer aufgenommenen oder weitergegebenen Nachricht."
+      ),
+      "operations" => array (
+        "Betriebsablauf, Ereignis und Störung",
+        "Betriebsvorgang, besondere Ereignisse, Störung/Unterbrechung und deren Beseitigung."
+      ),
+      "receipt" => array (
+        "Quittung, Empfänger und Aushändigung",
+        "Empfangsbestätigung, Empfänger sowie Zeitpunkt und Person der Aushändigung."
+      ),
+    );
+    foreach ($fields as $name => $field) {
+      $id = "ttb-".str_replace ("_", "-", $name);
+      echo "<div class=\"estab-tool-field\">\n";
+      echo "<label for=\"".$id."\">".estab_auth_html ($field [0])."</label>\n";
+      echo "<textarea id=\"".$id."\" maxlength=\"10000\" name=\"".
+           estab_auth_html ($name)."\"".
+           ($name === "operations" ? " autofocus" : "")."></textarea>\n";
+      echo "<small>".estab_auth_html ($field [1]).
+           " Höchstens 10.000 Zeichen.</small>\n</div>\n";
+    }
     echo "<div class=\"estab-tool-field\">\n";
-    echo "<label for=\"ttb-comment\">Bemerkung</label>\n";
+    echo "<label for=\"ttb-comment\">Zusätzlicher Nachweis".
+         ($correctionId !== null ? " / Korrekturbegründung *" : "")."</label>\n";
     echo "<textarea id=\"ttb-comment\" maxlength=\"10000\" ";
-    echo "name=\"comment\"></textarea>\n";
-    echo "<small>Optional, höchstens 10.000 Zeichen.</small>\n</div>\n";
+    echo "name=\"comment\"".($correctionId !== null ? " required" : "")."></textarea>\n";
+    echo "<small>Optional; bei einer Berichtigung verpflichtend. Höchstens ";
+    echo "10.000 Zeichen.</small>\n</div>\n";
     echo "<div class=\"estab-tool-actions\">\n";
     echo "<button class=\"estab-button estab-button-primary\" type=\"submit\">";
     echo "TBB-Eintrag speichern</button>\n";
@@ -405,7 +480,9 @@ var $task ;
       echo "<section class=\"estab-tool-panel\" aria-labelledby=\"ttb-list-title\">\n";
       echo "<header class=\"estab-tool-panel-heading\">\n";
       echo "<h2 id=\"ttb-list-title\">Einträge des aktiven Einsatzes</h2>\n";
-      echo "<p>Jeder Eintrag weist zusätzlich das verantwortliche Kürzel aus.</p>\n";
+      echo "<p>Die Ansicht folgt den sieben Spalten des Fb Fü 44. Die ";
+      echo "laufende Nummer gilt nur für dieses TBB und wird beim Speichern ";
+      echo "unveränderlich vergeben.</p>\n";
       echo "</header>\n";
       echo "<div class=\"estab-tool-table-wrap estab-tool-table-responsive\">\n";
       echo "<table class=\"estab-tool-table estab-tool-logbook-table\">\n";
@@ -415,30 +492,71 @@ var $task ;
       $this->headline ();
       echo "</thead>\n<tbody>\n";
 
+      $localById = array ();
+      foreach ($daten as $row) {
+        $localById [(int) ($row ["tbb_lfd-nr"] ?? 0)] =
+          (int) ($row ["estab_book_lfd"] ?? $row ["tbb_lfd-nr"] ?? 0);
+      }
       foreach ( $daten as $line ){
         echo "<tr>";
         echo "<td class=\"estab-tool-table-number\" data-label=\"Lfd.-Nr.\">\n";
-        echo (int) $line ["tbb_lfd-nr"];
+        echo (int) ($line ["estab_book_lfd"] ?? $line ["tbb_lfd-nr"]);
+        $entryType = (string) ($line ["estab_entry_type"] ?? "legacy_import");
+        $typeLabels = estab_logbook_ttb_entry_types ();
+        $entryLabel = $typeLabels [$entryType] ?? (
+          $entryType === "legacy_import" ? "Bestandseintrag" : $entryType
+        );
+        echo "<br><small>".estab_auth_html ($entryLabel)."</small>";
+        if (!empty ($line ["estab_correction_of"])) {
+          $targetId = (int) $line ["estab_correction_of"];
+          echo "<br><small>zu Nr. ".(int) ($localById [$targetId] ?? $targetId).
+               "</small>";
+        }
+        if (
+          $this->tbb_authorized
+          && $entryType !== "korrektur"
+          && empty ($line ["estab_correction_of"])
+        ) {
+          echo "<br><a class=\"estab-button\" href=\"".
+               estab_auth_html (estab_application_url ("fmtbb/tbb.php")).
+               "?correct=".(int) $line ["tbb_lfd-nr"]."\">Berichtigen</a>";
+        }
         echo "</td>\n";
         echo "<td data-label=\"Datum/Zeit\"><time>";
-        echo estab_auth_html ($this->konv_datetime_taktime ($line ["tbb_time"]));
-        echo "</time>";
+        $eventTime = (string) ($line ["estab_event_time"] ?? $line ["tbb_time"]);
+        $recordedAt = (string) ($line ["estab_recorded_at"] ?? $line ["tbb_time"]);
+        echo estab_auth_html ($this->konv_datetime_taktime ($eventTime));
+        echo "</time><br><small>Erfasst ".estab_auth_html (
+          $this->konv_datetime_taktime ($recordedAt)
+        )."<br>".estab_auth_html ((string) ($line ["tbb_benutzer"] ?? "")).
+        " · ".estab_auth_html ((string) ($line ["tbb_funktion"] ?? "")).
+        " · ".estab_auth_html ((string) ($line ["tbb_kuerzel"] ?? "")).
+        "</small>";
         echo "</td>\n";
-        echo "<td data-label=\"Darstellung der Ereignisse\">";
-        echo $line ["tbb_aktion"] != ""
-          ? nl2br (estab_auth_html ($line ["tbb_aktion"]), false)
-          : "<span aria-label=\"keine Angabe\">—</span>";
-        echo "</td>\n";
-        echo "<td data-label=\"Bemerkung\">";
-        echo $line ["tbb_bemerk"] != ""
-          ? nl2br (estab_auth_html ($line ["tbb_bemerk"]), false)
-          : "<span aria-label=\"keine Angabe\">—</span>";
-        echo "</td>\n";
-        echo "<td data-label=\"Kürzel\">";
-        echo $line ["tbb_kuerzel"] != ""
-          ? estab_auth_html ($line ["tbb_kuerzel"])
-          : "<span aria-label=\"keine Angabe\">—</span>";
-        echo "</td>\n";
+        $contentColumns = array (
+          "estab_personnel_duty" => "Betrieb / Personal / Dienst",
+          "estab_channel" => "Kanal / Rufgruppe / Bedienung",
+          "estab_message_route" => "Nachricht von / an",
+          "estab_operations" => "Betriebsablauf / Ereignis / Störung",
+          "estab_receipt" => "Quittung / Empfänger / Aushändigung",
+        );
+        foreach ($contentColumns as $column => $label) {
+          $value = (string) ($line [$column] ?? "");
+          if ($column === "estab_operations" && $value === "") {
+            $value = (string) ($line ["tbb_aktion"] ?? "");
+          }
+          echo "<td data-label=\"".estab_auth_html ($label)."\">";
+          echo $value !== ""
+            ? nl2br (estab_auth_html ($value), false)
+            : "<span aria-label=\"keine Angabe\">—</span>";
+          if ($column === "estab_operations" &&
+              (string) ($line ["tbb_bemerk"] ?? "") !== "") {
+            echo "<br><small>Nachweis: ".nl2br (estab_auth_html (
+              (string) $line ["tbb_bemerk"]
+            ), false)."</small>";
+          }
+          echo "</td>\n";
+        }
         echo "</tr>\n";
       }
 
@@ -479,6 +597,8 @@ if (
 estab_session_ui_start ($_SESSION);
 
 $berechtigt = false;
+$hatTbbCapability = false;
+$istTbbFuehrung = false;
 $dutyAssignmentId = null;
 try {
   $readConnection = estab_auth_connect ($conf_4f_db);
@@ -495,12 +615,19 @@ try {
       "Wählen Sie zuerst eine persönlich angenommene Dienstfunktion."
     );
   }
-  $berechtigt = estab_dv_has_selected_capability (
+  $hatTbbCapability = estab_dv_has_selected_capability (
     $readConnection,
     (int) $readScope ["incident"]["active_einsatz_id"],
     $identity,
     "BEFOERDERUNG"
   );
+  $istTbbFuehrung = estab_logbook_is_designated_writer (
+    $readConnection,
+    (int) $readScope ["incident"]["active_einsatz_id"],
+    $identity,
+    "tbb"
+  );
+  $berechtigt = $hatTbbCapability && $istTbbFuehrung;
 } catch (EstabNoActiveIncidentException $exception) {
   estab_logbook_abort (
     409,
@@ -573,14 +700,21 @@ if ($requestMethod === "POST") {
           "zuerst einen Einsatz in der Administration."
         );
       }
-      $validation = estab_logbook_validate_entry ($_POST);
+      $validation = estab_logbook_validate_entry ($_POST, "tbb");
       if (!$validation ["valid"]) {
-        estab_logbook_abort (422, "Der TBB-Eintrag ist leer oder überschreitet 10000 Zeichen.");
+        estab_logbook_abort (
+          422,
+          "Der TBB-Eintrag ist ungültig, leer oder überschreitet 10000 Zeichen."
+        );
       }
       $tbbobj->speichen_tbb_eintrag ($validation ["data"]);
     } else {
       estab_logbook_abort (400, "Unbekannte TBB-Aktion.");
     }
+  } catch (EstabDvPermissionException $exception) {
+    estab_logbook_abort (403, $exception->getMessage ());
+  } catch (EstabIncidentConflictException|EstabDvConflictException $exception) {
+    estab_logbook_abort (409, $exception->getMessage ());
   } catch (EstabIncidentConfigurationException $exception) {
     error_log ("TBB write blocked by incident configuration: ".
       $exception->getMessage ());
@@ -633,8 +767,25 @@ if (!$tbbobj->tbb_titel_gesetzt) {
     );
   if ($tbbobj->tbb_authorized && $entryFormRequested) {
     $tbbobj->tbb_eintragsmenue ("");
+  } elseif (
+    $tbbobj->tbb_authorized
+    && isset ($_GET ["correct"])
+    && is_string ($_GET ["correct"])
+    && preg_match ("/\\A[1-9][0-9]*\\z/D", $_GET ["correct"]) === 1
+  ) {
+    $tbbobj->tbb_eintragsmenue ((int) $_GET ["correct"]);
   } elseif ($tbbobj->tbb_authorized) {
     $tbbobj->tbb_menue ();
+  } else {
+    echo "<aside class=\"estab-tool-notice estab-tool-notice-warning\">\n";
+    echo "<strong>TBB schreibgeschützt.</strong>\n<p>";
+    echo $hatTbbCapability && !$istTbbFuehrung
+      ? "Eine andere angenommene A/W-Besetzung führt das Technische ".
+        "Betriebsbuch in dieser Schicht. Sie können alle Einträge lesen, ".
+        "aber keine parallelen Einträge anlegen."
+      : "Die ausgewählte Dienstfunktion darf das Technische Betriebsbuch ".
+        "lesen, aber nicht führen.";
+    echo "</p>\n</aside>\n";
   }
   $tbbobj->printlist ($tbbobj->tbb_getdate ());
 }

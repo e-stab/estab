@@ -208,7 +208,8 @@ class Listen {
         $this->filters
       );
       $this->filters ["page"] = $this->pageWindow ["page"];
-      $query = "SELECT m.`00_lfd`,m.`04_richtung`,m.`04_nummer`,".
+      $query = "SELECT m.`00_lfd`,m.`04_richtung`,".
+        estab_message_list_tbb_number_select_sql ("m").",".
         "m.`05_gegenstelle`,m.`09_vorrangstufe`,m.`10_anschrift`,".
         "m.`11_rufnummer`,m.`12_betreff`,m.`12_inhalt`,".
         "m.`12_abfzeit`,m.`13_abseinheit`,m.`14_funktion`,".
@@ -243,10 +244,15 @@ class Listen {
 
     $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
                          $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
+    $messageAlias = estab_message_list_alias (
+      (string) $conf_4f_tbl ["nachrichten"]
+    );
     $query_select_arg = $conf_4f_tbl ["nachrichten"].".`00_lfd`, ".
                         $conf_4f_tbl ["nachrichten"].".`09_vorrangstufe`, ".
                         $conf_4f_tbl ["nachrichten"].".`04_richtung`, ".
-                        $conf_4f_tbl ["nachrichten"].".`04_nummer`, ".
+                        estab_message_list_tbb_number_select_sql (
+                          $messageAlias
+                        ).", ".
                         $conf_4f_tbl ["nachrichten"].".`10_anschrift`, ".
                         $conf_4f_tbl ["nachrichten"].".`12_abfzeit`, ".
                         $conf_4f_tbl ["nachrichten"].".`12_inhalt`, ".
@@ -271,21 +277,23 @@ class Listen {
 
 /*
     if ($_SESSION["ueb_flt_darstellung"] == "1" ){
-      $query_where_arg3 = ""; //" AND (`".$conf_4f_tbl ["nachrichten"]."`.`04_nummer` ".$donewhat." IN  ( select `".$tblusername."_erl`.`nachnum` from `".$tblusername."_erl` where 1))";
+      $query_where_arg3 = "";
     } else {
       $query_where_arg2 = "";
     }
 */
     $query_orderby_arg =
       estab_message_priority_order_sql ("`09_vorrangstufe`").
-      " DESC, `04_nummer` DESC ";
-	//$query_orderby_arg = "`04_nummer` ASC, `09_vorrangstufe` ASC ";
+      " DESC, COALESCE(".
+      estab_message_list_tbb_number_sql ($messageAlias).
+      ", 0) DESC ";
     $queryParameters = array ($incidentId);
 
     if (isset ($_SESSION["ueb_flt_search"])) {
       $searchPattern = "%".(string) $_SESSION["ueb_flt_search"]."%";
       $query_search = "(".
-          "(".$conf_4f_tbl ["nachrichten"].".`04_nummer` LIKE ?) OR ".
+          "(CAST(".estab_message_list_tbb_number_sql ($messageAlias).
+          " AS CHAR) LIKE ?) OR ".
           "(".$conf_4f_tbl ["nachrichten"].".`10_anschrift` LIKE ?) OR ".
           "(".$conf_4f_tbl ["nachrichten"].".`12_abfzeit` LIKE ?) OR ".
           "(".$conf_4f_tbl ["nachrichten"].".`12_inhalt` LIKE ?) OR ".
@@ -672,7 +680,7 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
           $recordId = estab_message_positive_id ($row ["00_lfd"] ?? null);
           $label = "Vordruck ".
             estab_message_list_direction_label ($row ["04_richtung"] ?? "").
-            " ".(string) ($row ["04_nummer"] ?? $recordId)." öffnen";
+            " – ".estab_message_list_tbb_evidence_label ($row)." öffnen";
           echo "<a class=\"estab-button estab-button-primary ".
             "estab-message-list-open\" href=\"".
             estab_message_html (estab_overview_url (array (
@@ -1105,7 +1113,7 @@ var_dump ($this->formdata); echo "<br>";
     echo "<tr><!-- 1. Zeile der Tabelle -->\n";
     echo "<td style=\"height: 113px; width: 800px;\">\n";
 
-    echo "\n\n<!-- ********** TABLE   Eingang | Ausgang | Nachweisnummer  *********** -->\n";
+    echo "\n\n<!-- ********** TABLE   Eingang | Ausgang | TBB-Nachweis  *********** -->\n";
 
     echo "<table style=\"text-align: left; background-color: ".$this->rbl_bg_color."; height: 32px;\" border=\"1\" cellpadding=\"1\" cellspacing=\"0\">\n";
     echo "<tbody>\n";
@@ -1120,8 +1128,8 @@ var_dump ($this->formdata); echo "<br>";
     echo "</td><!--002-->\n";
     // Zeile, Spalte 1,2    AUSGANG    2  2   Ausgang Annahmevermerk Befoerderungsvermerk
     echo "<td style=\"text-align: center; background-color: ".$this->bg[2]."; width: 427px;\"><!--003-->\nAUSGANG</td><!--003-->\n";
-    // Zeile, Spalte 1,3    Nachweisung   8   4   Nachweis Nummer E A
-    echo "<td style=\"text-align: center; width: 150px; background-color: ".$this->bg[4].";\"><!--004-->\nNachweisnummer</td><!--004-->\n";
+    // Zeile, Spalte 1,3    incident-local TBB evidence number and direction
+    echo "<td style=\"text-align: center; width: 150px; background-color: ".$this->bg[4].";\"><!--004-->\nTBB-Nachweis</td><!--004-->\n";
     echo "</tr><!--002-->\n";
 
     echo "<tr><!--003-->\n";
@@ -1275,32 +1283,19 @@ var_dump ($this->formdata); echo "<br>";
     echo "</td>\n";
 
     /****************************************************************************\
-    // Zeile, Spalte 2 , 4    8   4   Nachweis Nummer E A
+    // Zeile, Spalte 2 , 4    incident-local TBB evidence number and direction
     04_richtung;
     04_nummer;
     \****************************************************************************/
-    echo "<td style=\"width: 150px; background-color: ".$this->bg[4]."; text-align: left; vertical-align: top;\">Nachweis Nr.";
-
-    if (!$this->feld[4]) {
-        echo "<div style=\"text-align: center;\"><b><big><big><big>";
-        echo $this->safe_message_value ("04_richtung")."&nbsp; &nbsp;".$this->safe_message_value ("04_nummer");
-        echo "</big></big></big></b></div>";
-    } else {
-      echo "<input maxlength=\"6\" size=\"6\" name=\"04_nummer\" value=\"".$this->safe_message_value ("04_nummer")."\"><br>\n";
-      if (!$this->feld[4]) {
-        $param = " disabled ";
-        // Radio Button die deaktiviert sind liefern keinen Wert zurck !!!
-        echo "<input type=\"hidden\" name=\"04_richtung\" value=\"".$this->safe_message_value ("04_richtung")."\">\n";
-      }
-      else {
-        $param = "";
-      }
-
-      if ($this->formdata["04_richtung"]=="E") {$sel = "checked=\"checked\"";} else {$sel = "";}
-      echo "<input name=\"04_richtung\" value=\"E\" type=\"radio\" ".$param.$sel.">E<br>\n";
-      if ($this->formdata["04_richtung"]=="A") {$sel = "checked=\"checked\"";} else {$sel = "";}
-      echo "<input name=\"04_richtung\" value=\"A\" type=\"radio\" ".$param.$sel.">A<br>\n";
-    }
+    echo "<td style=\"width: 150px; background-color: ".$this->bg[4]."; text-align: left; vertical-align: top;\">TBB-Nachweis";
+    $ttbEvidenceLabel = estab_message_list_tbb_evidence_label (array (
+      "estab_tbb_book_lfd" => $this->formdata ["estab_ttb_lfd"] ?? null,
+    ));
+    echo "<div style=\"text-align: center;\"><b>".
+      estab_message_html ($ttbEvidenceLabel)."<br>".
+      estab_message_html (estab_message_list_direction_label (
+        $this->formdata ["04_richtung"] ?? ""
+      ))."</b></div>";
 
     echo "</td>\n";
     echo "</tr>\n";

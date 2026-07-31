@@ -55,6 +55,36 @@ function estab_message_list_alias(string $alias): string
     return $alias;
 }
 
+/**
+ * Return the canonical, incident-local TTB evidence number for one message.
+ *
+ * `nv_nachrichten.04_nummer` is a historical/internal message number and
+ * `00_lfd` is a global technical key. Neither is a TTB evidence number. The
+ * correlated subquery deliberately selects only the first entry whose type
+ * is byte-exactly `nachricht` in the same incident.
+ */
+function estab_message_list_tbb_number_sql(string $alias = 'm'): string
+{
+    $alias = estab_message_list_alias($alias);
+    return '(SELECT estab_tbb_proof.`estab_book_lfd`'
+        . ' FROM `nv_tbb` AS estab_tbb_proof'
+        . ' WHERE estab_tbb_proof.`einsatz_id` = '
+        . $alias . '.`einsatz_id`'
+        . ' AND estab_tbb_proof.`estab_message_id` = '
+        . $alias . '.`00_lfd`'
+        . " AND BINARY estab_tbb_proof.`estab_entry_type`"
+        . " = BINARY 'nachricht'"
+        . ' ORDER BY estab_tbb_proof.`estab_book_lfd`,'
+        . ' estab_tbb_proof.`tbb_lfd-nr` LIMIT 1)';
+}
+
+/** Return the canonical TTB evidence number as the shared result alias. */
+function estab_message_list_tbb_number_select_sql(string $alias = 'm'): string
+{
+    return estab_message_list_tbb_number_sql($alias)
+        . ' AS `estab_tbb_book_lfd`';
+}
+
 /** Return a UTF-8 character count without accepting malformed input. */
 function estab_message_list_text_length(string $value): int
 {
@@ -572,9 +602,7 @@ function estab_message_list_filter_sql(
             $queryValue
         );
         if ($exactNumber !== null) {
-            $search[] = $column('04_nummer') . ' = ?';
-            $parameters[] = $exactNumber;
-            $search[] = $column('00_lfd') . ' = ?';
+            $search[] = estab_message_list_tbb_number_sql($alias) . ' = ?';
             $parameters[] = $exactNumber;
         }
         $fulltextColumns = implode(',', array_map(
@@ -646,6 +674,7 @@ function estab_message_list_order_sql(
     $column = static fn (string $name): string =>
         $alias . '.`' . $name . '`';
     $id = $column('00_lfd');
+    $tbbNumber = estab_message_list_tbb_number_sql($alias);
     $priorityOrder = str_replace(
         '`09_vorrangstufe`',
         $column('09_vorrangstufe'),
@@ -658,8 +687,10 @@ function estab_message_list_order_sql(
         'newest' => $column('12_abfzeit') . ' DESC, ' . $id . ' DESC',
         'oldest' => $column('12_abfzeit') . ' IS NULL ASC, '
             . $column('12_abfzeit') . ' ASC, ' . $id . ' ASC',
-        'number_desc' => $column('04_nummer') . ' DESC, ' . $id . ' DESC',
-        'number_asc' => $column('04_nummer') . ' ASC, ' . $id . ' ASC',
+        'number_desc' => 'COALESCE(' . $tbbNumber . ', 0) DESC, '
+            . $id . ' DESC',
+        'number_asc' => 'COALESCE(' . $tbbNumber . ', 4294967296) ASC, '
+            . $id . ' ASC',
         default => throw new InvalidArgumentException(
             'Invalid message-list sort'
         ),

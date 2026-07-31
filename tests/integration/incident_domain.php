@@ -113,6 +113,8 @@ try {
             'ort' => 'Testort A',
             'organisation' => 'Organisation A',
             'fuehrungsstellenname' => $commandPostA,
+            'einsatzleitung' => 'Einsatzleitung A',
+            'beschreibung' => 'Einsatzauftrag und Ausgangslage A',
         ],
         'integration-test',
         false
@@ -126,6 +128,8 @@ try {
             'ort' => 'Testort B',
             'organisation' => 'Organisation B',
             'fuehrungsstellenname' => $commandPostB,
+            'einsatzleitung' => 'Einsatzleitung B',
+            'beschreibung' => 'Einsatzauftrag und Ausgangslage B',
         ],
         'integration-test',
         false
@@ -147,6 +151,9 @@ try {
                     'kennung' => 'TEST-MISSING-COMMAND-POST',
                     'name' => 'Missing command post',
                     'beginn' => date('Y-m-d\TH:i', time() - 60),
+                    'organisation' => 'Organisation Test',
+                    'einsatzleitung' => 'Einsatzleitung Test',
+                    'beschreibung' => 'Einsatzauftrag Test',
                 ],
                 'integration-test',
                 false
@@ -162,7 +169,10 @@ try {
                     'kennung' => 'TEST-LONG-COMMAND-POST',
                     'name' => 'Long command post',
                     'beginn' => date('Y-m-d\TH:i', time() - 60),
+                    'organisation' => 'Organisation Test',
                     'fuehrungsstellenname' => str_repeat('x', 129),
+                    'einsatzleitung' => 'Einsatzleitung Test',
+                    'beschreibung' => 'Einsatzauftrag Test',
                 ],
                 'integration-test',
                 false
@@ -178,7 +188,10 @@ try {
                     'kennung' => 'TEST-A-001',
                     'name' => 'Duplicate A',
                     'beginn' => date('Y-m-d\TH:i', time() - 60),
+                    'organisation' => 'Organisation Duplikat',
                     'fuehrungsstellenname' => 'Führungsstelle Duplikat',
+                    'einsatzleitung' => 'Einsatzleitung Duplikat',
+                    'beschreibung' => 'Einsatzauftrag Duplikat',
                 ],
                 'integration-test',
                 false

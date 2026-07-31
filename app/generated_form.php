@@ -143,11 +143,20 @@ function estab_generated_form_fetch_pending(
     if ($limit < 1 || $limit > 1000) {
         throw new InvalidArgumentException('Invalid generated-form batch size');
     }
+    $messageTableSql = estab_auth_table($messageTable);
     $statement = $connection->prepare(
-        'SELECT * FROM ' . estab_auth_table($messageTable)
-        . " WHERE `einsatz_id` = ? AND `x04_druck` = 'f'"
-        . " AND `x01_abschluss` = 't'"
-        . ' ORDER BY `00_lfd` LIMIT ? FOR UPDATE'
+        'SELECT message_row.*,'
+        . ' (SELECT tbb.`estab_book_lfd` FROM `nv_tbb` AS tbb'
+        . '   WHERE tbb.`einsatz_id` = message_row.`einsatz_id`'
+        . '     AND tbb.`estab_message_id` = message_row.`00_lfd`'
+        . "     AND BINARY tbb.`estab_entry_type` = BINARY 'nachricht'"
+        . '   ORDER BY tbb.`estab_book_lfd`, tbb.`tbb_lfd-nr` LIMIT 1)'
+        . ' AS `estab_ttb_lfd`'
+        . ' FROM ' . $messageTableSql . ' AS message_row'
+        . " WHERE message_row.`einsatz_id` = ?"
+        . " AND message_row.`x04_druck` = 'f'"
+        . " AND message_row.`x01_abschluss` = 't'"
+        . ' ORDER BY message_row.`00_lfd` LIMIT ? FOR UPDATE'
     );
     if (!$statement) {
         throw new RuntimeException('Could not prepare generated-form queue');
@@ -375,10 +384,19 @@ function estab_generated_form_fetch_active(
     }
 
     $statement = $connection->prepare(
-        'SELECT * FROM ' . estab_auth_table($messageTable)
-        . " WHERE `einsatz_id` = ? AND `04_nummer` = ?"
-        . " AND `04_richtung` = ? AND `x04_druck` = 't'"
-        . " AND `x01_abschluss` = 't' LIMIT 1"
+        'SELECT message_row.*,'
+        . ' (SELECT tbb.`estab_book_lfd` FROM `nv_tbb` AS tbb'
+        . '   WHERE tbb.`einsatz_id` = message_row.`einsatz_id`'
+        . '     AND tbb.`estab_message_id` = message_row.`00_lfd`'
+        . "     AND BINARY tbb.`estab_entry_type` = BINARY 'nachricht'"
+        . '   ORDER BY tbb.`estab_book_lfd`, tbb.`tbb_lfd-nr` LIMIT 1)'
+        . ' AS `estab_ttb_lfd`'
+        . ' FROM ' . estab_auth_table($messageTable) . ' AS message_row'
+        . " WHERE message_row.`einsatz_id` = ?"
+        . " AND message_row.`04_nummer` = ?"
+        . " AND message_row.`04_richtung` = ?"
+        . " AND message_row.`x04_druck` = 't'"
+        . " AND message_row.`x01_abschluss` = 't' LIMIT 1"
         . ($forUpdate ? ' FOR UPDATE' : '')
     );
     if (!$statement) {

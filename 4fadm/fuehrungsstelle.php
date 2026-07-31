@@ -13,6 +13,7 @@ require_once __DIR__ . '/../app/session_ui.php';
 
 estab_admin_require_http_auth($_SERVER);
 estab_session_ui_start($_SESSION);
+$handoverIdentity = estab_auth_session_identity($_SESSION);
 
 header('Content-Type: text/html; charset=UTF-8');
 header('Cache-Control: private, no-store, max-age=0');
@@ -62,7 +63,7 @@ if ($requestMethod === 'POST') {
                 $conf_4f_tbl['empfmtx']
             );
             try {
-                estab_dv_assign_hat(
+                $assignedHat = estab_dv_assign_hat(
                     $connection,
                     $incidentId,
                     estab_dv_positive_id(
@@ -78,7 +79,11 @@ if ($requestMethod === 'POST') {
             } finally {
                 estab_assignment_release_policy_lock($connection, $policyLock);
             }
-            dv_admin_redirect('hat_assigned');
+            dv_admin_redirect(
+                ($assignedHat['active_shift_extension'] ?? false) === true
+                    ? 'hat_extension_assigned'
+                    : 'hat_assigned'
+            );
         }
         if ($action === 'activate_shift') {
             estab_dv_activate_initial_shift(
@@ -95,6 +100,16 @@ if ($requestMethod === 'POST') {
             dv_admin_redirect('shift_activated');
         }
         if ($action === 'handover_shift') {
+            if (
+                !is_array($handoverIdentity)
+                || !isset($handoverIdentity['duty_assignment_id'])
+            ) {
+                throw new EstabDvPermissionException(
+                    'Melden Sie sich zusätzlich persönlich an und wählen Sie '
+                    . 'eine angenommene Funktion der aktiven Schicht, bevor '
+                    . 'Sie die Übergabe anfordern.'
+                );
+            }
             estab_dv_initiate_handover_shift(
                 $connection,
                 $incidentId,
@@ -107,6 +122,8 @@ if ($requestMethod === 'POST') {
                     'Übernehmende Schicht'
                 ),
                 $_POST['zusammenfassung'] ?? null,
+                (int) $handoverIdentity['duty_assignment_id'],
+                $handoverIdentity,
                 $actor,
                 $conf_4f_tbl['protokoll']
             );
@@ -236,10 +253,13 @@ try {
 $flashMessages = [
     'shift_created' => 'Die geplante Dienstschicht wurde angelegt.',
     'hat_assigned' => 'Die Funktionsbesetzung wurde verbindlich zugewiesen.',
+    'hat_extension_assigned' =>
+        'Die Ergänzung wurde zugewiesen. Sie wird erst mit der persönlichen '
+        . 'Annahme wirksam und dann automatisch im ETB nachgewiesen.',
     'shift_activated' => 'Die erste Dienstschicht ist jetzt aktiv.',
     'shift_handover_initiated' =>
-        'Die Übergabe wurde angefordert. Ein persönlich angemeldetes Konto '
-        . 'der Nachfolgeschicht muss sie jetzt bestätigen.',
+        'Die übergebende Person hat die Übergabe angefordert. Eine persönlich '
+        . 'angemeldete Person der Nachfolgeschicht muss sie jetzt bestätigen.',
     'shift_handover_cancelled' =>
         'Die unbestätigte Übergabeanforderung wurde mit Begründung '
         . 'revisionssicher storniert.',
@@ -288,6 +308,15 @@ foreach ($handoverRequests as $handoverRequest) {
       mehrere getrennte Funktionen übernehmen; jede Funktion muss sie selbst
       in der eStab-Oberfläche annehmen.</p>
   </header>
+
+  <section class="estab-tool-status" aria-label="Unterstützter Betriebsmodus">
+    <strong>Unterstützter Betriebsmodus: Führungsstelle mit eingerichteter
+      Fernmeldebetriebsstelle.</strong>
+    <span>Deshalb sind LdF und A/W Pflichtbesetzungen und eStab führt je
+      Einsatz genau ein TBB. Führungsstellen ohne eigene
+      Fernmeldebetriebsstelle (reiner ETB-Betrieb) gehören derzeit nicht zum
+      unterstützten Produktumfang.</span>
+  </section>
 
   <?php if ($error !== null): ?>
     <p class="estab-tool-feedback estab-tool-feedback-error" role="alert">
@@ -524,11 +553,26 @@ foreach ($handoverRequests as $handoverRequest) {
                 <textarea name="zusammenfassung" maxlength="10000"
                   required></textarea>
               </label>
-              <p class="estab-tool-feedback">Die Administration fordert die
-                Übergabe nur an. Ein persönlich angemeldetes Konto mit
-                angenommener Funktion in der Nachfolgeschicht bestätigt sie
-                anschließend im Führungsstellenbetrieb.</p>
-              <button class="estab-button estab-button-primary" type="submit">
+              <?php if (is_array($handoverIdentity)
+                  && isset($handoverIdentity['duty_assignment_id'])): ?>
+                <p class="estab-tool-feedback">Persönlich übergebend:
+                  <strong><?= estab_admin_html(
+                      $handoverIdentity['benutzer'] . ' ['
+                      . $handoverIdentity['kuerzel'] . '] · '
+                      . $handoverIdentity['funktion'] . ' ('
+                      . $handoverIdentity['rolle'] . ')'
+                  ) ?></strong>. Die übernehmende Person bestätigt danach
+                  mit ihrer angenommenen Funktion.</p>
+              <?php else: ?>
+                <p class="estab-tool-feedback estab-tool-feedback-error">
+                  Vor der Anforderung muss die übergebende Person sich
+                  <a href="../4fach/fuehrungsstelle.php">persönlich anmelden
+                  und ihre aktive Dienstfunktion wählen</a>.</p>
+              <?php endif; ?>
+              <button class="estab-button estab-button-primary" type="submit"
+                <?= is_array($handoverIdentity)
+                    && isset($handoverIdentity['duty_assignment_id'])
+                    ? '' : 'disabled' ?>>
                 Übergabe verbindlich anfordern
               </button>
             </form>
@@ -552,10 +596,48 @@ foreach ($handoverRequests as $handoverRequest) {
     <?php endforeach; ?>
 
     <?php if ($activeShift !== null): ?>
+      <?php
+      $occupiedActiveFunctions = [];
+      $activeHasLogbookWriter = false;
+      foreach ($activeShift['besetzungen'] as $activeHat) {
+          if (in_array(
+              $activeHat['status'] ?? null,
+              ['ZUGEWIESEN', 'ANGENOMMEN'],
+              true
+          )) {
+              $occupiedActiveFunctions[] = (string) $activeHat['funktion'];
+          }
+          if (
+              ($activeHat['status'] ?? null) === 'ANGENOMMEN'
+              && in_array(
+                  (string) ($activeHat['funktion'] ?? ''),
+                  ['ETB', 'S2'],
+                  true
+              )
+          ) {
+              $activeHasLogbookWriter = true;
+          }
+      }
+      $occupiedActiveFunctions = array_values(array_unique(
+          $occupiedActiveFunctions
+      ));
+      $activeExtensionRoles = array_filter(
+          $functionRoles,
+          static fn (string $role, string $function): bool => (
+              $function === 'A/W'
+              || !in_array($function, $occupiedActiveFunctions, true)
+          ) && !($function === 'ETB' && $activeHasLogbookWriter),
+          ARRAY_FILTER_USE_BOTH
+      );
+      ?>
       <section class="estab-tool-panel">
         <header class="estab-tool-panel-heading">
           <h2>Aktive Schicht #<?= (int) $activeShift['nummer'] ?></h2>
-          <p><?= estab_admin_html($activeShift['bezeichnung']) ?></p>
+          <p><?= estab_admin_html($activeShift['bezeichnung']) ?> · Eine
+            zusätzliche, bislang unbesetzte Funktion kann während des
+            laufenden Betriebs ergänzt werden. Die bereits bestimmte
+            ETB-Führung wechselt ausschließlich mit einer bestätigten
+            Schichtübergabe.</p>
         </header>
         <div class="estab-tool-table-wrap">
           <table class="estab-tool-table">
@@ -573,6 +655,64 @@ foreach ($handoverRequests as $handoverRequest) {
             </tbody>
           </table>
         </div>
+        <form class="estab-tool-form" method="post"
+          action="fuehrungsstelle.php">
+          <?= estab_csrf_field() ?>
+          <input type="hidden" name="admin_action" value="assign_hat">
+          <input type="hidden" name="dienstschicht_id"
+            value="<?= (int) $activeShift['dienstschicht_id'] ?>">
+          <h3>Laufende Schichtbesetzung erweitern</h3>
+          <p>Die Zuweisung allein ändert den Betrieb noch nicht. Erst wenn die
+            betroffene Person sie selbst annimmt, wird sie wirksam und
+            automatisch im ETB dokumentiert. LdF- und A/W-Ergänzungen werden
+            zusätzlich im TBB nachgewiesen. Bereits besetzte Funktionen
+            können nicht ausgetauscht werden; dafür ist eine geordnete
+            Schichtübergabe erforderlich. Weitere A/W-Kräfte dürfen ergänzt
+            werden. Eine ETB-Ergänzung, die S2 oder ETB als bestimmten
+            Schreiber verdrängen würde, wird nicht angeboten.</p>
+          <label>Benutzerkonto
+            <select name="benutzer_kuerzel" required>
+              <?php foreach ($users as $user): ?>
+                <?php
+                $userBlocked =
+                    (int) ($user['estab_gesperrt'] ?? 0) === 1;
+                $userPresence = estab_auth_presence_state($user);
+                ?>
+                <option value="<?= estab_admin_html($user['kuerzel']) ?>"
+                  <?= $userBlocked ? 'disabled' : '' ?>>
+                  <?= estab_admin_html(
+                      $user['benutzer'] . ' (' . $user['kuerzel'] . ') · '
+                      . (
+                          $userBlocked
+                              ? 'gesperrt'
+                              : (
+                                  $userPresence === 'online'
+                                      ? 'aktiv'
+                                      : (
+                                          $userPresence === 'inactive'
+                                              ? 'inaktiv (15+ Min.)'
+                                              : 'nicht angemeldet'
+                                      )
+                              )
+                      )
+                  ) ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+          <label>Neue oder zusätzliche A/W-Funktion
+            <select name="funktion" required>
+              <?php foreach ($activeExtensionRoles as $function => $role): ?>
+                <option value="<?= estab_admin_html($function) ?>">
+                  <?= estab_admin_html($function . ' · ' . $role) ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </label>
+          <button class="estab-button" type="submit">
+            Ergänzung verbindlich zuweisen
+          </button>
+        </form>
         <?php if ($plannedShifts === []
             && !$hasOpenHandover
             && ($finalShiftPreflight['closable'] ?? false)): ?>
@@ -617,6 +757,12 @@ foreach ($handoverRequests as $handoverRequest) {
           <dd><?= $blockers['betriebsereigniskette_gueltig']
               ? 'gültig'
               : 'FEHLER' ?></dd>
+          <?php if (is_array($finalShiftPreflight)): ?>
+            <dt>ETB und TBB</dt>
+            <dd><?= $finalShiftPreflight['logbuecher_eroeffnet']
+                ? 'eröffnet'
+                : 'noch nicht eröffnet' ?></dd>
+          <?php endif; ?>
         </dl>
       </section>
     <?php endif; ?>

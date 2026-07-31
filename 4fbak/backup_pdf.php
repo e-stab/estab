@@ -204,6 +204,7 @@ class vordruckaspdf extends PDF_Ellipse {
   var $image ;
 
   var $db_dataset ;
+  var $messageNumber ;
   var $recipientMatrix ;
   var $attachmentLinksEnabled = true ;
   var $unmatchedRecipientLabels = array () ;
@@ -251,6 +252,7 @@ class vordruckaspdf extends PDF_Ellipse {
     $this->color_bl = array ( "r" =>   0, "g" =>   0, "b" => 255 );
     $this->recipientMatrix = is_array ($recipientMatrix) ? $recipientMatrix : null;
     $this->db_dataset = array ();
+    $this->messageNumber = null;
     $this->empfarray = array ();
     $this->unmatchedRecipientLabels = array ();
   }
@@ -292,7 +294,14 @@ class vordruckaspdf extends PDF_Ellipse {
 
     $this->db_dataset ["03_zeichen"]      = $data ["03_zeichen"] ;
     $this->db_dataset ["04_richtung"]     = $data ["04_richtung"] ;
-    $this->db_dataset ["04_nummer"]       = $data ["04_nummer"] ;
+    // The message number is the stable archive identity. The visible
+    // "Nachweis-Nr." is instead the first linked TBB book number and may be
+    // empty for an internal conversation note that never entered the TBB.
+    $this->messageNumber                   = $data ["04_nummer"] ?? null ;
+    $this->db_dataset ["04_nummer"]       =
+      array_key_exists ("estab_ttb_lfd", $data)
+        ? ($data ["estab_ttb_lfd"] ?? "")
+        : ($data ["04_nummer"] ?? "") ;
     $this->db_dataset ["05_gegenstelle"]  = $data ["05_gegenstelle"] ;
     $this->db_dataset ["06_befweg"]       = $data ["06_befweg"] ;
     $this->db_dataset ["06_befwegausw"]   = $data ["06_befwegausw"] ;
@@ -1222,7 +1231,7 @@ class vordruckaspdf extends PDF_Ellipse {
     $filename = estab_generated_form_filename (
       $conf_4f_db ["datenbank"],
       $this->db_dataset ["einsatz_id"],
-      $this->db_dataset ["04_nummer"],
+      $this->messageNumber,
       $this->db_dataset ["04_richtung"]
     );
     $document = $this->render_message_form_document ();

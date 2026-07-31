@@ -62,6 +62,7 @@ menue.inc.php
 4fbak/backup.php
 4fbak/backup_pdf.php
 4fbak/fpdf.php
+4fbak/thw.png
 4fbak/fpdf/font/courier.php
 4fbak/fpdf/font/helvetica.php
 4fbak/fpdf/font/helveticab.php
@@ -109,6 +110,8 @@ app/incident_ui.php
 app/legacy_mysql.php
 app/legacy_php.php
 app/logbook.php
+app/logbook_lifecycle.php
+app/logbook_numbering.php
 app/message_evidence.php
 app/logout.php
 app/message_priority.php

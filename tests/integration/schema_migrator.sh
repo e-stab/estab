@@ -18,11 +18,14 @@ guard_database="estab_baseline_guard_test_$$"
 collision_database="estab_standard_collision_test_$$"
 incident_guard_database="estab_incident_guard_test_$$"
 predecessor_database="estab_incident_predecessor_test_$$"
+logbook_upgrade_database="estab_logbook_upgrade_test_$$"
 incident_predecessor_checksum="6732e9c87f0532fce41ee9a58658bf4888fdf7c2ced1ed6bad75a756d6e08edf"
+command_post_predecessor_checksum="68a32692bf90d6987539e36076f0ecfea32f46ca870c06efc55ebaef4d75a1c4"
 
 for database_name in \
     "$test_database" "$retry_database" "$guard_database" "$collision_database" \
-    "$incident_guard_database" "$predecessor_database"
+    "$incident_guard_database" "$predecessor_database" \
+    "$logbook_upgrade_database"
 do
     case "$database_name" in
         *[!A-Za-z0-9_]*)
@@ -49,6 +52,8 @@ if [ ! -r "$fixture" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/98-official-message-form-fields.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/99-message-list-search.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/100-session-presence.sql" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/110-etb-tbb-rules.sql" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/111-logbook-shift-assignment.sql" ] \
     || [ ! -x "$ESTAB_MIGRATOR_BIN" ]; then
     echo "schema migrator test: fixture, baseline, or migrator is unavailable" >&2
     exit 1
@@ -61,6 +66,17 @@ fi
 umask 077
 client_defaults=$(mktemp "${TMPDIR:-/tmp}/estab-migration-test-client.XXXXXX")
 failure_log=$(mktemp "${TMPDIR:-/tmp}/estab-migration-test-failure.XXXXXX")
+concurrency_log=$(mktemp "${TMPDIR:-/tmp}/estab-logbook-concurrency.XXXXXX")
+pre_110_migrations=$(mktemp -d "${TMPDIR:-/tmp}/estab-pre-110-migrations.XXXXXX")
+
+for migration_path in "$ESTAB_MIGRATIONS_DIR"/*.sql; do
+    case "$(basename "$migration_path")" in
+        110-etb-tbb-rules.sql|111-logbook-shift-assignment.sql)
+            continue
+            ;;
+    esac
+    cp "$migration_path" "$pre_110_migrations/"
+done
 
 escape_option_value()
 {
@@ -182,8 +198,11 @@ DROP DATABASE IF EXISTS \`$retry_database\`;
 DROP DATABASE IF EXISTS \`$guard_database\`;
 DROP DATABASE IF EXISTS \`$collision_database\`;
 DROP DATABASE IF EXISTS \`$incident_guard_database\`;
-DROP DATABASE IF EXISTS \`$predecessor_database\`" >/dev/null 2>&1 || true
-    rm -f -- "$client_defaults" "$failure_log"
+DROP DATABASE IF EXISTS \`$predecessor_database\`;
+DROP DATABASE IF EXISTS \`$logbook_upgrade_database\`" >/dev/null 2>&1 || true
+    rm -f -- "$client_defaults" "$failure_log" "$concurrency_log"
+    rm -f -- "$pre_110_migrations"/*.sql
+    rmdir "$pre_110_migrations" 2>/dev/null || true
     exit "$status"
 }
 trap cleanup EXIT HUP INT TERM
@@ -199,6 +218,292 @@ assert_equal()
         exit 1
     fi
 }
+
+assert_equal "ON|ON" "$(admin_query "
+SELECT CONCAT(@@GLOBAL.innodb_snapshot_isolation, '|',
+              @@SESSION.innodb_snapshot_isolation)")" \
+    "MariaDB default snapshot isolation is not enabled for concurrency tests"
+
+# Simulate a real upgrade in which every released migration through 100 is
+# already recorded with its immutable checksum. Migration 110 must reject an
+# ambiguous historic attachment link before changing the schema, then upgrade
+# cleanly once the operator resolves that ambiguity without rewriting history.
+assert_equal "$command_post_predecessor_checksum" "$(
+    sha256sum "$ESTAB_MIGRATIONS_DIR/97-incident-command-post-name.sql" |
+        awk '{print $1}'
+)" \
+    "immutable command-post migration 97 no longer has its released checksum"
+admin_query "
+DROP DATABASE IF EXISTS \`$logbook_upgrade_database\`;
+CREATE DATABASE \`$logbook_upgrade_database\`
+  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+ESTAB_DB_NAME="$logbook_upgrade_database" \
+ESTAB_MIGRATIONS_DIR="$pre_110_migrations" "$ESTAB_MIGRATOR_BIN"
+assert_equal "15|15|$command_post_predecessor_checksum|3" "$(
+    database_query "$logbook_upgrade_database" "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM estab_schema_migrations), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE state = 'applied'), '|',
+         (SELECT checksum FROM estab_schema_migrations
+           WHERE version = '97-incident-command-post-name.sql'), '|',
+         (SELECT COUNT(*) FROM information_schema.routines
+           WHERE routine_schema = DATABASE()
+             AND routine_name IN (
+               'estab_incident_for_insert', 'estab_incident_for_update',
+               'estab_incident_for_delete'
+             ) AND routine_definition NOT LIKE '%FOR UPDATE%')
+       )"
+)" \
+    "pre-110 upgrade fixture does not preserve the released migration ledger"
+pre_110_ledger_snapshot=$(
+    database_query "$logbook_upgrade_database" "
+SELECT GROUP_CONCAT(CONCAT(version, ':', checksum, ':', state)
+                    ORDER BY version SEPARATOR ',')
+  FROM estab_schema_migrations"
+)
+database_query "$logbook_upgrade_database" "
+INSERT INTO nv_einsaetze
+  (kennung, name, beginn, ende, ort, organisation, fuehrungsstellenname,
+   einsatzleitung, beschreibung, metadaten, erstellt_am, erstellt_von)
+VALUES
+  ('SCHEMA-ATTACHMENT-UPGRADE', 'Attachment upgrade fixture', NOW(), NULL,
+   '', '', 'Upgrade command post', '',
+   'Ambiguous attachment evidence must block migration 110.', '{}', NOW(6),
+   'schema-migrator-test');
+SET @upgrade_incident_id = LAST_INSERT_ID();
+UPDATE nv_einsatz_status
+   SET active_einsatz_id = @upgrade_incident_id,
+       revision = revision + 1,
+       geaendert_am = NOW(6),
+       geaendert_von = 'schema-migrator-test'
+ WHERE singleton_id = 1;
+INSERT INTO nv_anhang (filename, org_filename, kuerzel, status)
+VALUES ('SCHEMA-ATTACHMENT-UPGRADE', 'upgrade-evidence.txt', 'upg', 4);
+SET @upgrade_attachment_id = LAST_INSERT_ID();
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type, estab_attachment_id)
+VALUES
+  (NOW(), 'Erster Anlagenbezug', '', 'Schema Test', 'upg', 'S2',
+   NOW(6), 'ohne', @upgrade_attachment_id),
+  (NOW(), 'Mehrdeutiger Anlagenbezug', '', 'Schema Test', 'upg', 'S2',
+   NOW(6), 'ohne', @upgrade_attachment_id)"
+if ESTAB_DB_NAME="$logbook_upgrade_database" \
+    "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: duplicate historic ETB attachment was accepted" >&2
+    exit 1
+fi
+if ! grep -q \
+    'Logbook rules migration blocked: duplicate ETB attachment link' \
+    "$failure_log"; then
+    echo "schema migrator test: duplicate ETB attachment failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "0|0|0" "$(database_query "$logbook_upgrade_database" "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '110-etb-tbb-rules.sql'), '|',
+         (SELECT COUNT(*) FROM information_schema.tables
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_logbuch_koepfe'), '|',
+         (SELECT COUNT(*) FROM information_schema.columns
+           WHERE table_schema = DATABASE() AND table_name = 'nv_etb'
+             AND column_name = 'estab_book_lfd')
+       )")" \
+    "blocked attachment upgrade changed schema or migration history"
+
+# Test-only operator resolution: remove one ambiguous legacy reference. The
+# released delete trigger is deliberately dropped only in this isolated DB;
+# migration 110 recreates the canonical append-only trigger during upgrade.
+database_query "$logbook_upgrade_database" "
+DROP TRIGGER estab_etb_bd_einsatz;
+DELETE FROM nv_etb
+ WHERE \`etb_lfd-nr\` = (
+   SELECT duplicate_id FROM (
+     SELECT MAX(\`etb_lfd-nr\`) AS duplicate_id FROM nv_etb
+      WHERE estab_attachment_id = (
+        SELECT \`lfd-nr\` FROM nv_anhang
+         WHERE filename = 'SCHEMA-ATTACHMENT-UPGRADE'
+      )
+   ) AS duplicate_row
+ )"
+ESTAB_DB_NAME="$logbook_upgrade_database" "$ESTAB_MIGRATOR_BIN"
+ESTAB_DB_NAME="$logbook_upgrade_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "$pre_110_ledger_snapshot" "$(
+    database_query "$logbook_upgrade_database" "
+SELECT GROUP_CONCAT(CONCAT(version, ':', checksum, ':', state)
+                    ORDER BY version SEPARATOR ',')
+  FROM estab_schema_migrations
+ WHERE version NOT IN (
+   '110-etb-tbb-rules.sql', '111-logbook-shift-assignment.sql'
+ )"
+)" \
+    "migration 110 upgrade rewrote a released migration ledger row"
+assert_equal "1|1|1|3|1|2|1" "$(database_query "$logbook_upgrade_database" "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '110-etb-tbb-rules.sql' AND state = 'applied'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '111-logbook-shift-assignment.sql'
+             AND state = 'applied'), '|',
+         (SELECT COUNT(*) FROM information_schema.statistics
+           WHERE table_schema = DATABASE() AND table_name = 'nv_etb'
+             AND index_name = 'uq_etb_attachment_id'
+             AND non_unique = 0 AND column_name = 'estab_attachment_id'), '|',
+         (SELECT COUNT(*) FROM information_schema.routines
+           WHERE routine_schema = DATABASE()
+             AND routine_name IN (
+               'estab_incident_for_insert', 'estab_incident_for_update',
+               'estab_incident_for_delete'
+             ) AND routine_definition LIKE '%FOR UPDATE%'), '|',
+         (SELECT COUNT(*) FROM nv_etb
+           WHERE estab_attachment_id = (
+             SELECT \`lfd-nr\` FROM nv_anhang
+              WHERE filename = 'SCHEMA-ATTACHMENT-UPGRADE'
+           )), '|',
+         (SELECT next_lfd FROM nv_logbuch_koepfe
+           WHERE einsatz_id = (
+             SELECT einsatz_id FROM nv_einsaetze
+              WHERE kennung = 'SCHEMA-ATTACHMENT-UPGRADE'
+           ) AND buchart = 'ETB'), '|',
+         (SELECT COUNT(*) FROM nv_etb
+           WHERE estab_shift_id IS NULL
+             AND estab_writer_assignment_id IS NULL
+             AND estab_assignee_assignment_id IS NULL
+             AND estab_assignment IS NULL)
+       )")" \
+    "logbook upgrade omitted immutable-ledger, locking, history, or attachment rules"
+
+# A running shift may gain a genuinely new function, but a function that was
+# already occupied in that shift cannot be replaced or reoccupied later.
+database_query "$logbook_upgrade_database" "
+INSERT INTO nv_benutzer
+  (benutzer, kuerzel, funktion, rolle, aktiv, password)
+VALUES
+  ('Upgrade S2', 's2a', 'S2', 'Stab', 1, ''),
+  ('Upgrade ETB', 'etba', 'ETB', 'Stab', 1, ''),
+  ('Upgrade Si', 'sia', 'Si', 'Stab', 1, ''),
+  ('Upgrade S6', 's6a', 'S6', 'Stab', 1, ''),
+  ('Upgrade LdF', 'ldfa', 'LdF', 'Fernmelder', 1, ''),
+  ('Upgrade A/W', 'awa', 'A/W', 'Fernmelder', 1, ''),
+  ('Additional A/W', 'awb', 'A/W', 'Fernmelder', 1, ''),
+  ('Upgrade S3', 's3a', 'S3', 'Stab', 1, ''),
+  ('Replacement S2', 's2b', 'S2', 'Stab', 1, '');
+INSERT INTO nv_dienstschichten
+  (einsatz_id, nummer, bezeichnung, status, erstellt_von)
+SELECT einsatz_id, 1, 'Upgrade shift', 'GEPLANT', 'schema-migrator-test'
+  FROM nv_einsaetze WHERE kennung = 'SCHEMA-ATTACHMENT-UPGRADE';
+SET @upgrade_shift_id = LAST_INSERT_ID();
+INSERT INTO nv_dienstbesetzungen
+  (dienstschicht_id, benutzer_kuerzel, funktion, rolle, status,
+   zugewiesen_von)
+VALUES
+  (@upgrade_shift_id, 's2a', 'S2', 'Stab', 'ZUGEWIESEN', 'schema-test'),
+  (@upgrade_shift_id, 'etba', 'ETB', 'Stab', 'ZUGEWIESEN', 'schema-test'),
+  (@upgrade_shift_id, 'sia', 'Si', 'Stab', 'ZUGEWIESEN', 'schema-test'),
+  (@upgrade_shift_id, 's6a', 'S6', 'Stab', 'ZUGEWIESEN', 'schema-test'),
+  (@upgrade_shift_id, 'ldfa', 'LdF', 'Fernmelder', 'ZUGEWIESEN', 'schema-test'),
+  (@upgrade_shift_id, 'awa', 'A/W', 'Fernmelder', 'ZUGEWIESEN', 'schema-test');
+UPDATE nv_dienstbesetzungen
+   SET status = 'ANGENOMMEN', angenommen_am = NOW(6)
+ WHERE dienstschicht_id = @upgrade_shift_id;
+UPDATE nv_dienstschichten
+   SET status = 'AKTIV', aktiviert_am = NOW(6)
+ WHERE dienstschicht_id = @upgrade_shift_id;
+INSERT INTO nv_dienstbesetzungen
+  (dienstschicht_id, benutzer_kuerzel, funktion, rolle, status,
+   zugewiesen_von)
+VALUES
+  (@upgrade_shift_id, 's3a', 'S3', 'Stab', 'ZUGEWIESEN', 'schema-test');
+INSERT INTO nv_dienstbesetzungen
+  (dienstschicht_id, benutzer_kuerzel, funktion, rolle, status,
+   zugewiesen_von)
+VALUES
+  (@upgrade_shift_id, 'awb', 'A/W', 'Fernmelder', 'ZUGEWIESEN', 'schema-test');
+UPDATE nv_dienstbesetzungen
+   SET status = 'ABGELOEST', abgeloest_am = NOW(6)
+ WHERE dienstschicht_id = @upgrade_shift_id
+   AND BINARY funktion = BINARY 'S2'"
+upgrade_shift_id=$(database_query "$logbook_upgrade_database" "
+SELECT dienstschicht_id FROM nv_dienstschichten
+ WHERE bezeichnung = 'Upgrade shift'")
+if database_query "$logbook_upgrade_database" "
+INSERT INTO nv_dienstbesetzungen
+  (dienstschicht_id, benutzer_kuerzel, funktion, rolle, status,
+   zugewiesen_von)
+VALUES
+  ($upgrade_shift_id, 's2b', 'S2', 'Stab', 'ZUGEWIESEN', 'schema-test')" \
+    >"$failure_log" 2>&1; then
+    echo "schema migrator test: active-shift function replacement was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'Active duty shift function was already assigned' \
+    "$failure_log"; then
+    echo "schema migrator test: active-shift reuse failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "AKTIV|8|1|0|1|2" "$(
+    database_query "$logbook_upgrade_database" "
+SELECT CONCAT(
+         shift_row.status, '|',
+         (SELECT COUNT(*) FROM nv_dienstbesetzungen
+           WHERE dienstschicht_id = shift_row.dienstschicht_id), '|',
+         (SELECT COUNT(*) FROM nv_dienstbesetzungen
+           WHERE dienstschicht_id = shift_row.dienstschicht_id
+             AND BINARY funktion = BINARY 'S3'), '|',
+         (SELECT COUNT(*) FROM nv_dienstbesetzungen
+           WHERE dienstschicht_id = shift_row.dienstschicht_id
+             AND BINARY benutzer_kuerzel = BINARY 's2b'), '|',
+         (SELECT COUNT(*) FROM nv_dienstbesetzungen
+           WHERE dienstschicht_id = shift_row.dienstschicht_id
+             AND BINARY funktion = BINARY 'S2'
+             AND status = 'ABGELOEST'), '|',
+         (SELECT COUNT(*) FROM nv_dienstbesetzungen
+           WHERE dienstschicht_id = shift_row.dienstschicht_id
+             AND BINARY funktion = BINARY 'A/W')
+       )
+  FROM nv_dienstschichten AS shift_row
+ WHERE shift_row.bezeichnung = 'Upgrade shift'"
+)" \
+    "active-shift extension or no-replacement evidence is incomplete"
+
+if database_query "$logbook_upgrade_database" "
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type, estab_attachment_id,
+   estab_shift_id, estab_writer_assignment_id)
+SELECT NOW(), 'Doppelter Anlagenbezug', '', 'Upgrade ETB', 'etba', 'ETB',
+       NOW(6), 'ohne', \`lfd-nr\`, $upgrade_shift_id,
+       (SELECT dienstbesetzung_id FROM nv_dienstbesetzungen
+         WHERE dienstschicht_id = $upgrade_shift_id
+           AND BINARY benutzer_kuerzel = BINARY 'etba')
+  FROM nv_anhang
+ WHERE filename = 'SCHEMA-ATTACHMENT-UPGRADE'" >"$failure_log" 2>&1; then
+    echo "schema migrator test: duplicate ETB attachment link was accepted" >&2
+    exit 1
+fi
+if ! grep -Eq 'Duplicate entry|uq_etb_attachment_id' "$failure_log"; then
+    echo "schema migrator test: ETB attachment uniqueness failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "1|2" "$(database_query "$logbook_upgrade_database" "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM nv_etb
+           WHERE estab_attachment_id = (
+             SELECT \`lfd-nr\` FROM nv_anhang
+              WHERE filename = 'SCHEMA-ATTACHMENT-UPGRADE'
+           )), '|',
+         (SELECT next_lfd FROM nv_logbuch_koepfe
+           WHERE einsatz_id = (
+             SELECT einsatz_id FROM nv_einsaetze
+              WHERE kennung = 'SCHEMA-ATTACHMENT-UPGRADE'
+           ) AND buchart = 'ETB')
+       )")" \
+    "rejected duplicate attachment changed ETB evidence or its local counter"
 
 admin_query "
 DROP DATABASE IF EXISTS \`$retry_database\`;
@@ -952,7 +1257,7 @@ finish_checksum=$(
         awk '{print $1}'
 )
 assert_equal \
-    "15|15|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
+    "17|17|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
     "$(database_query "$predecessor_database" "
 SELECT CONCAT(
          COUNT(*), '|',
@@ -1061,6 +1366,30 @@ SELECT COUNT(*) FROM estab_schema_migrations
 fixture_query "
 DELETE FROM nv_anhang WHERE \`lfd-nr\` = 2;
 
+-- Historic logbook rows deliberately use event times which differ from their
+-- global primary-key order. Migration 110 must number them by recorded time
+-- and then by the stable global key without rewriting their original text.
+INSERT INTO nv_etb
+  (\`etb_lfd-nr\`, etb_time, etb_aktion, etb_bemerk,
+   etb_benutzer, etb_kuerzel, etb_funktion)
+VALUES
+  (10, '2020-01-01 11:00:00', 'ETB später', 'Bemerkung 10',
+   'Legacy User', 'abc', 'S2'),
+  (20, '2020-01-01 10:00:00', 'ETB zuerst', 'Bemerkung 20',
+   'Legacy User', 'abc', 'S2'),
+  (30, '2020-01-01 10:00:00', 'ETB danach', 'Bemerkung 30',
+   'Legacy User', 'abc', 'S2');
+INSERT INTO nv_tbb
+  (\`tbb_lfd-nr\`, tbb_time, tbb_aktion, tbb_bemerk,
+   tbb_benutzer, tbb_kuerzel, tbb_funktion)
+VALUES
+  (10, '2020-01-01 11:00:00', 'Kanalwechsel', 'auf 2 m',
+   'Legacy User', 'abc', 'LdF'),
+  (20, '2020-01-01 10:00:00', 'Dienstübernahme', 'vollständig',
+   'Legacy User', 'abc', 'LdF'),
+  (30, '2020-01-01 10:00:00', 'Quittung', 'erteilt',
+   'Legacy User', 'abc', 'LdF');
+
 -- A legacy browser can leave this flag behind indefinitely. Migration 100
 -- must revoke it because no trustworthy activity timestamp exists yet.
 UPDATE nv_benutzer
@@ -1098,7 +1427,7 @@ SELECT GROUP_CONCAT(
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
 
-assert_equal "15" "$(fixture_query "
+assert_equal "17" "$(fixture_query "
 SELECT COUNT(*) FROM estab_schema_migrations
  WHERE state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
@@ -1109,7 +1438,7 @@ SELECT COUNT(*) FROM estab_schema_migrations
    AND state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
     "standard matrix migration was not recorded"
-assert_equal "1|1|1|1|1|1|1|1|9" "$(fixture_query "
+assert_equal "1|1|1|1|1|1|1|1|1|1|9" "$(fixture_query "
 SELECT CONCAT(
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '80-dv-evidence-retention.sql'
@@ -1141,6 +1470,14 @@ SELECT CONCAT(
              AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '100-session-presence.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '110-etb-tbb-rules.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '111-logbook-shift-assignment.sql'
              AND state = 'applied'
              AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
          (SELECT COUNT(*)
@@ -1193,6 +1530,221 @@ SELECT CONCAT(
              AND routine_name LIKE 'estab_migrate_100_%')
        )")" \
     "session-presence migration was not canonical or retained a legacy SID"
+assert_equal "1|12|11|3|10|0" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM information_schema.tables
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_logbuch_koepfe'
+             AND table_comment = 'estab:migration:110:logbook-heads:v1'), '|',
+         (SELECT COUNT(*) FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND ((table_name = 'nv_etb'
+                   AND column_name = 'estab_book_lfd')
+               OR (table_name = 'nv_tbb' AND column_name IN (
+                 'estab_book_lfd', 'estab_event_time', 'estab_recorded_at',
+                 'estab_entry_type', 'estab_message_id',
+                 'estab_personnel_duty', 'estab_channel',
+                 'estab_message_route', 'estab_operations', 'estab_receipt',
+                 'estab_correction_of'
+               )))), '|',
+         (SELECT COUNT(*) FROM information_schema.statistics
+           WHERE table_schema = DATABASE()
+             AND index_name IN (
+               'uq_etb_einsatz_book_lfd', 'uq_tbb_einsatz_book_lfd',
+               'uq_etb_attachment_id', 'idx_tbb_einsatz_event_time',
+               'idx_tbb_message', 'idx_tbb_correction'
+             )), '|',
+         (SELECT COUNT(*) FROM information_schema.referential_constraints
+           WHERE constraint_schema = DATABASE()
+             AND constraint_name IN (
+               'fk_logbuch_koepfe_einsatz', 'fk_tbb_message',
+               'fk_tbb_correction'
+             )), '|',
+         (SELECT COUNT(*) FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND trigger_name IN (
+               'estab_einsaetze_bu_evidence',
+               'estab_einsaetze_bu_logbook_retention',
+               'estab_einsaetze_ai_logbook_heads',
+               'estab_etb_bi_einsatz', 'estab_etb_bu_einsatz',
+               'estab_etb_bd_einsatz', 'estab_tbb_bi_einsatz',
+               'estab_tbb_bu_einsatz', 'estab_tbb_bd_einsatz',
+               'estab_dv94_hat_insert'
+             )), '|',
+         (SELECT COUNT(*) FROM information_schema.routines
+           WHERE routine_schema = DATABASE()
+             AND routine_name LIKE 'estab_migrate_110_%')
+       )")" \
+    "incident-local ETB/TBB numbering and append-only TTB rules are not canonical"
+assert_equal "6|9|5|4|3|3|0" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM information_schema.columns
+           WHERE table_schema = DATABASE() AND (
+             (table_name = 'nv_etb' AND column_name = 'estab_shift_id'
+               AND data_type = 'bigint' AND column_type LIKE '%unsigned%'
+               AND is_nullable = 'YES'
+               AND column_comment = 'estab:migration:111:etb-shift:v1')
+             OR (table_name = 'nv_etb'
+               AND column_name = 'estab_writer_assignment_id'
+               AND data_type = 'bigint' AND column_type LIKE '%unsigned%'
+               AND is_nullable = 'YES'
+               AND column_comment = 'estab:migration:111:etb-writer:v1')
+             OR (table_name = 'nv_etb'
+               AND column_name = 'estab_assignee_assignment_id'
+               AND data_type = 'bigint' AND column_type LIKE '%unsigned%'
+               AND is_nullable = 'YES'
+               AND column_comment = 'estab:migration:111:etb-assignee:v1')
+             OR (table_name = 'nv_etb' AND column_name = 'estab_assignment'
+               AND column_type = 'varchar(255)'
+               AND character_set_name = 'utf8mb4'
+               AND collation_name = 'utf8mb4_unicode_ci'
+               AND is_nullable = 'YES'
+               AND column_comment =
+                 'estab:migration:111:etb-assignment-snapshot:v1')
+             OR (table_name = 'nv_tbb' AND column_name = 'estab_shift_id'
+               AND data_type = 'bigint' AND column_type LIKE '%unsigned%'
+               AND is_nullable = 'YES'
+               AND column_comment = 'estab:migration:111:tbb-shift:v1')
+             OR (table_name = 'nv_tbb'
+               AND column_name = 'estab_writer_assignment_id'
+               AND data_type = 'bigint' AND column_type LIKE '%unsigned%'
+               AND is_nullable = 'YES'
+               AND column_comment = 'estab:migration:111:tbb-writer:v1')
+           )), '|',
+         (SELECT COUNT(*) FROM information_schema.statistics
+           WHERE table_schema = DATABASE() AND sub_part IS NULL AND (
+             (table_name = 'nv_etb'
+               AND index_name = 'idx_etb_einsatz_shift_book'
+               AND non_unique = 1 AND index_type = 'BTREE'
+               AND ((seq_in_index = 1 AND column_name = 'einsatz_id')
+                 OR (seq_in_index = 2 AND column_name = 'estab_shift_id')
+                 OR (seq_in_index = 3 AND column_name = 'estab_book_lfd')))
+             OR (table_name = 'nv_etb'
+               AND index_name = 'idx_etb_writer_assignment'
+               AND non_unique = 1 AND index_type = 'BTREE'
+               AND seq_in_index = 1
+               AND column_name = 'estab_writer_assignment_id')
+             OR (table_name = 'nv_etb'
+               AND index_name = 'idx_etb_assignee_assignment'
+               AND non_unique = 1 AND index_type = 'BTREE'
+               AND seq_in_index = 1
+               AND column_name = 'estab_assignee_assignment_id')
+             OR (table_name = 'nv_tbb'
+               AND index_name = 'idx_tbb_einsatz_shift_book'
+               AND non_unique = 1 AND index_type = 'BTREE'
+               AND ((seq_in_index = 1 AND column_name = 'einsatz_id')
+                 OR (seq_in_index = 2 AND column_name = 'estab_shift_id')
+                 OR (seq_in_index = 3 AND column_name = 'estab_book_lfd')))
+             OR (table_name = 'nv_tbb'
+               AND index_name = 'idx_tbb_writer_assignment'
+               AND non_unique = 1 AND index_type = 'BTREE'
+               AND seq_in_index = 1
+               AND column_name = 'estab_writer_assignment_id')
+           )), '|',
+         (SELECT COUNT(*)
+            FROM information_schema.referential_constraints AS relation
+            JOIN information_schema.key_column_usage AS key_column
+              ON key_column.constraint_schema = relation.constraint_schema
+             AND key_column.table_name = relation.table_name
+             AND key_column.constraint_name = relation.constraint_name
+           WHERE relation.constraint_schema = DATABASE()
+             AND relation.update_rule = 'RESTRICT'
+             AND relation.delete_rule = 'RESTRICT'
+             AND (
+               (relation.constraint_name = 'fk_etb_shift'
+                 AND relation.table_name = 'nv_etb'
+                 AND relation.referenced_table_name = 'nv_dienstschichten'
+                 AND key_column.column_name = 'estab_shift_id'
+                 AND key_column.referenced_column_name = 'dienstschicht_id')
+               OR (relation.constraint_name = 'fk_etb_writer_assignment'
+                 AND relation.table_name = 'nv_etb'
+                 AND relation.referenced_table_name = 'nv_dienstbesetzungen'
+                 AND key_column.column_name = 'estab_writer_assignment_id'
+                 AND key_column.referenced_column_name = 'dienstbesetzung_id')
+               OR (relation.constraint_name = 'fk_etb_assignee_assignment'
+                 AND relation.table_name = 'nv_etb'
+                 AND relation.referenced_table_name = 'nv_dienstbesetzungen'
+                 AND key_column.column_name = 'estab_assignee_assignment_id'
+                 AND key_column.referenced_column_name = 'dienstbesetzung_id')
+               OR (relation.constraint_name = 'fk_tbb_shift'
+                 AND relation.table_name = 'nv_tbb'
+                 AND relation.referenced_table_name = 'nv_dienstschichten'
+                 AND key_column.column_name = 'estab_shift_id'
+                 AND key_column.referenced_column_name = 'dienstschicht_id')
+               OR (relation.constraint_name = 'fk_tbb_writer_assignment'
+                 AND relation.table_name = 'nv_tbb'
+                 AND relation.referenced_table_name = 'nv_dienstbesetzungen'
+                 AND key_column.column_name = 'estab_writer_assignment_id'
+                 AND key_column.referenced_column_name = 'dienstbesetzung_id')
+             )), '|',
+         (SELECT COUNT(*) FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND action_timing = 'BEFORE'
+             AND ((trigger_name = 'estab_etb_bi_einsatz'
+                   AND event_manipulation = 'INSERT'
+                   AND action_statement LIKE
+                         '%ETB entry requires a duty shift%'
+                   AND action_statement LIKE
+                         '%ETB assignee does not belong to its duty shift%'
+                   AND action_statement LIKE
+                         '%SET NEW.\`estab_assignment\` = assignment_snapshot%')
+               OR (trigger_name = 'estab_tbb_bi_einsatz'
+                   AND event_manipulation = 'INSERT'
+                   AND action_statement LIKE
+                         '%TTB entry requires a duty shift%'
+                   AND action_statement LIKE
+                         '%TTB writer does not belong to its duty shift%')
+               OR (trigger_name = 'estab_log111_handover_insert_time'
+                   AND event_manipulation = 'INSERT'
+                   AND action_statement LIKE
+                         '%Duty handover completion times are inconsistent%')
+               OR (trigger_name = 'estab_log111_handover_confirm_time'
+                   AND event_manipulation = 'UPDATE'
+                   AND action_statement LIKE
+                         '%Duty handover confirmation times are inconsistent%'))), '|',
+         (SELECT COUNT(*) FROM nv_etb
+           WHERE estab_shift_id IS NULL
+             AND estab_writer_assignment_id IS NULL
+             AND estab_assignee_assignment_id IS NULL
+             AND estab_assignment IS NULL), '|',
+         (SELECT COUNT(*) FROM nv_tbb
+           WHERE estab_shift_id IS NULL
+             AND estab_writer_assignment_id IS NULL), '|',
+         (SELECT COUNT(*) FROM information_schema.routines
+           WHERE routine_schema = DATABASE()
+             AND routine_name LIKE 'estab_migrate_111_%')
+       )")" \
+    "historical logbook rows did not retain unknown shift provenance"
+assert_equal "10:3,20:1,30:2|10:3,20:1,30:2|4|4" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT GROUP_CONCAT(CONCAT(\`etb_lfd-nr\`, ':', estab_book_lfd)
+                  ORDER BY \`etb_lfd-nr\` SEPARATOR ',') FROM nv_etb), '|',
+         (SELECT GROUP_CONCAT(CONCAT(\`tbb_lfd-nr\`, ':', estab_book_lfd)
+                  ORDER BY \`tbb_lfd-nr\` SEPARATOR ',') FROM nv_tbb), '|',
+         (SELECT next_lfd FROM nv_logbuch_koepfe
+           WHERE buchart = 'ETB'), '|',
+         (SELECT next_lfd FROM nv_logbuch_koepfe
+           WHERE buchart = 'TTB')
+       )")" \
+    "historic logbook rows were not deterministically numbered"
+assert_equal "3|3|1|1|0" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM nv_tbb
+           WHERE estab_entry_type = 'legacy_import'), '|',
+         (SELECT COUNT(*) FROM nv_tbb
+           WHERE estab_event_time = tbb_time
+             AND estab_recorded_at = tbb_time), '|',
+         (SELECT COUNT(*) FROM nv_tbb WHERE \`tbb_lfd-nr\` = 10
+           AND estab_operations LIKE 'Betriebsvorgang: Kanalwechsel%'), '|',
+         (SELECT COUNT(*) FROM nv_tbb WHERE \`tbb_lfd-nr\` = 10
+           AND estab_operations LIKE '%Bemerkung: auf 2 m'), '|',
+         (SELECT COUNT(*) FROM nv_einsaetze
+           WHERE estab_status = 'closed'
+             AND (estab_closed_at IS NULL OR estab_retain_until IS NULL
+               OR estab_retain_until
+                    < DATE_ADD(estab_closed_at, INTERVAL 10 YEAR)))
+       )")" \
+    "historic TTB text or ten-year incident retention was not preserved honestly"
 assert_equal "$legacy_message_snapshot" "$(fixture_query "
 SELECT GROUP_CONCAT(
          CONCAT(
@@ -1475,6 +2027,294 @@ SELECT CONCAT(
              AND checksum REGEXP BINARY '^[0-9a-f]{64}$')
        )")" \
     "session presence index did not recover after removing the collision"
+
+# Reproduce process loss during migration 110 after its columns, numbering and
+# most indexes exist, but before the message FK/index and final TTB delete guard
+# are durable. Every owned phase must converge without renumbering history.
+logbook_number_snapshot="$(fixture_query "
+SELECT CONCAT(
+         (SELECT GROUP_CONCAT(CONCAT(\`etb_lfd-nr\`, ':', estab_book_lfd)
+                  ORDER BY \`etb_lfd-nr\` SEPARATOR ',') FROM nv_etb), '|',
+         (SELECT GROUP_CONCAT(CONCAT(\`tbb_lfd-nr\`, ':', estab_book_lfd)
+                  ORDER BY \`tbb_lfd-nr\` SEPARATOR ',') FROM nv_tbb)
+       )")"
+fixture_query "
+INSERT INTO nv_einsaetze
+  (kennung, name, beginn, ende, ort, organisation, fuehrungsstellenname,
+   einsatzleitung, beschreibung, metadaten, erstellt_am, erstellt_von)
+VALUES
+  ('SCHEMA-EMPTY-UPGRADE', 'Empty pre-existing incident', NOW(), NULL,
+   '', '', 'Empty command post', '', 'No logbook rows yet.', '{}', NOW(6),
+   'schema-migrator-test');
+DELETE FROM estab_schema_migrations
+ WHERE version IN (
+   '110-etb-tbb-rules.sql', '111-logbook-shift-assignment.sql'
+ );
+DROP TRIGGER estab_einsaetze_ai_logbook_heads;
+DELETE FROM nv_logbuch_koepfe
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze
+    WHERE kennung = 'SCHEMA-EMPTY-UPGRADE'
+ );
+ALTER TABLE nv_tbb DROP FOREIGN KEY fk_tbb_message;
+ALTER TABLE nv_tbb DROP INDEX idx_tbb_message;
+DROP TRIGGER estab_tbb_bd_einsatz"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "$logbook_number_snapshot|2|1|1|1|2|ETB:1,TTB:1" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT GROUP_CONCAT(CONCAT(\`etb_lfd-nr\`, ':', estab_book_lfd)
+                  ORDER BY \`etb_lfd-nr\` SEPARATOR ',') FROM nv_etb), '|',
+         (SELECT GROUP_CONCAT(CONCAT(\`tbb_lfd-nr\`, ':', estab_book_lfd)
+                  ORDER BY \`tbb_lfd-nr\` SEPARATOR ',') FROM nv_tbb), '|',
+         (SELECT COUNT(*) FROM information_schema.statistics
+           WHERE table_schema = DATABASE() AND table_name = 'nv_tbb'
+             AND index_name = 'idx_tbb_message'), '|',
+         (SELECT COUNT(*) FROM information_schema.referential_constraints
+           WHERE constraint_schema = DATABASE()
+             AND constraint_name = 'fk_tbb_message'), '|',
+         (SELECT COUNT(*) FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND trigger_name = 'estab_tbb_bd_einsatz'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '110-etb-tbb-rules.sql'
+             AND state = 'applied'), '|',
+         (SELECT COUNT(*) FROM nv_logbuch_koepfe
+           WHERE einsatz_id = (
+             SELECT einsatz_id FROM nv_einsaetze
+              WHERE kennung = 'SCHEMA-EMPTY-UPGRADE'
+           )), '|',
+         (SELECT GROUP_CONCAT(CONCAT(buchart, ':', next_lfd)
+                  ORDER BY buchart SEPARATOR ',')
+            FROM nv_logbuch_koepfe
+           WHERE einsatz_id = (
+             SELECT einsatz_id FROM nv_einsaetze
+              WHERE kennung = 'SCHEMA-EMPTY-UPGRADE'
+           ))
+       )")" \
+    "partial logbook migration did not restore empty pre-existing book heads canonically"
+
+# A same-name TTB column without migration 110's ownership marker is foreign.
+# The migrator must fail before changing it or acknowledging the migration.
+fixture_query "
+DELETE FROM estab_schema_migrations
+ WHERE version IN (
+   '110-etb-tbb-rules.sql', '111-logbook-shift-assignment.sql'
+ );
+ALTER TABLE nv_tbb
+  MODIFY COLUMN estab_message_id BIGINT NULL DEFAULT NULL
+  COMMENT 'foreign-tbb-message-owner'
+  AFTER estab_entry_type"
+if ESTAB_DB_NAME="$test_database" \
+    "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: foreign logbook column was accepted" >&2
+    exit 1
+fi
+if ! grep -q \
+    'Logbook rules migration blocked: foreign or partial TTB column collision' \
+    "$failure_log"; then
+    echo "schema migrator test: logbook column collision failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "foreign-tbb-message-owner|0" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT column_comment FROM information_schema.columns
+           WHERE table_schema = DATABASE() AND table_name = 'nv_tbb'
+             AND column_name = 'estab_message_id'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '110-etb-tbb-rules.sql')
+       )")" \
+    "blocked logbook column collision was changed or recorded"
+fixture_query "
+ALTER TABLE nv_tbb
+  MODIFY COLUMN estab_message_id BIGINT NULL DEFAULT NULL
+  COMMENT 'estab:migration:110:tbb-message:v1'
+  AFTER estab_entry_type"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+
+# Reproduce process loss during migration 111 after only a canonical prefix
+# was durably committed. Nullable provenance remains unknown on historic rows;
+# all missing columns, indexes, constraints and insert triggers must converge.
+fixture_query "
+DELETE FROM estab_schema_migrations
+ WHERE version = '111-logbook-shift-assignment.sql';
+DROP TRIGGER estab_etb_bi_einsatz;
+DROP TRIGGER estab_tbb_bi_einsatz;
+ALTER TABLE nv_etb
+  DROP FOREIGN KEY fk_etb_assignee_assignment,
+  DROP INDEX idx_etb_assignee_assignment,
+  DROP COLUMN estab_assignment,
+  DROP COLUMN estab_assignee_assignment_id;
+ALTER TABLE nv_tbb
+  DROP FOREIGN KEY fk_tbb_writer_assignment,
+  DROP INDEX idx_tbb_writer_assignment,
+  DROP COLUMN estab_writer_assignment_id"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "1|6|5|5|4|3|3" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '111-logbook-shift-assignment.sql'
+             AND state = 'applied'), '|',
+         (SELECT COUNT(*) FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND ((table_name = 'nv_etb' AND column_name IN (
+                    'estab_shift_id', 'estab_writer_assignment_id',
+                    'estab_assignee_assignment_id', 'estab_assignment'
+                  )) OR (table_name = 'nv_tbb' AND column_name IN (
+                    'estab_shift_id', 'estab_writer_assignment_id'
+                  )))), '|',
+         (SELECT COUNT(DISTINCT index_name)
+            FROM information_schema.statistics
+           WHERE table_schema = DATABASE() AND index_name IN (
+             'idx_etb_einsatz_shift_book', 'idx_etb_writer_assignment',
+             'idx_etb_assignee_assignment', 'idx_tbb_einsatz_shift_book',
+             'idx_tbb_writer_assignment'
+           )), '|',
+         (SELECT COUNT(*) FROM information_schema.referential_constraints
+           WHERE constraint_schema = DATABASE() AND constraint_name IN (
+             'fk_etb_shift', 'fk_etb_writer_assignment',
+             'fk_etb_assignee_assignment', 'fk_tbb_shift',
+             'fk_tbb_writer_assignment'
+           )), '|',
+         (SELECT COUNT(*) FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND ((trigger_name = 'estab_etb_bi_einsatz'
+                   AND action_statement LIKE
+                         '%ETB entry requires a duty shift%')
+               OR (trigger_name = 'estab_tbb_bi_einsatz'
+                   AND action_statement LIKE
+                         '%TTB entry requires a duty shift%')
+               OR (trigger_name = 'estab_log111_handover_insert_time'
+                   AND action_statement LIKE
+                         '%Duty handover completion times are inconsistent%')
+               OR (trigger_name = 'estab_log111_handover_confirm_time'
+                   AND action_statement LIKE
+                         '%Duty handover confirmation times are inconsistent%'))), '|',
+         (SELECT COUNT(*) FROM nv_etb
+           WHERE estab_shift_id IS NULL
+             AND estab_writer_assignment_id IS NULL
+             AND estab_assignee_assignment_id IS NULL
+             AND estab_assignment IS NULL), '|',
+         (SELECT COUNT(*) FROM nv_tbb
+           WHERE estab_shift_id IS NULL
+             AND estab_writer_assignment_id IS NULL)
+       )")" \
+    "partial logbook shift migration did not resume canonically"
+
+# A same-name provenance column without migration 111's ownership marker is
+# foreign. It must survive unchanged and receive no ledger acknowledgement.
+fixture_query "
+DELETE FROM estab_schema_migrations
+ WHERE version = '111-logbook-shift-assignment.sql';
+ALTER TABLE nv_etb
+  MODIFY COLUMN estab_assignment VARCHAR(255)
+    CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL
+    COMMENT 'foreign-logbook-assignment-owner'
+    AFTER estab_assignee_assignment_id"
+if ESTAB_DB_NAME="$test_database" \
+    "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: foreign logbook shift column was accepted" >&2
+    exit 1
+fi
+if ! grep -q \
+    'Logbook shift migration blocked: foreign column collision' \
+    "$failure_log"; then
+    echo "schema migrator test: logbook shift column collision was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "foreign-logbook-assignment-owner|0" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT column_comment FROM information_schema.columns
+           WHERE table_schema = DATABASE() AND table_name = 'nv_etb'
+             AND column_name = 'estab_assignment'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '111-logbook-shift-assignment.sql')
+       )")" \
+    "blocked logbook shift collision was changed or recorded"
+fixture_query "
+ALTER TABLE nv_etb
+  MODIFY COLUMN estab_assignment VARCHAR(255)
+    CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL
+    COMMENT 'estab:migration:111:etb-assignment-snapshot:v1'
+    AFTER estab_assignee_assignment_id"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+
+# A same-name handover-time trigger with foreign logic must not be dropped or
+# silently replaced when migration 111 is resumed.
+fixture_query "
+DELETE FROM estab_schema_migrations
+ WHERE version = '111-logbook-shift-assignment.sql';
+DROP TRIGGER estab_log111_handover_insert_time;
+CREATE TRIGGER estab_log111_handover_insert_time
+  BEFORE INSERT ON nv_dienstuebergaben
+  FOR EACH ROW SET @estab_foreign_handover_time_trigger = 1"
+if ESTAB_DB_NAME="$test_database" \
+    "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: foreign handover time trigger was accepted" >&2
+    exit 1
+fi
+if ! grep -q \
+    'Logbook shift migration blocked: foreign trigger collision' \
+    "$failure_log"; then
+    echo "schema migrator test: handover trigger collision was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "1|0" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND trigger_name = 'estab_log111_handover_insert_time'
+             AND action_statement LIKE
+                   '%estab_foreign_handover_time_trigger%'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '111-logbook-shift-assignment.sql')
+       )")" \
+    "blocked handover trigger collision was changed or recorded"
+fixture_query "DROP TRIGGER estab_log111_handover_insert_time"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+
+# A constraint with the owned name and target table but a different local
+# column is still foreign. This proves the migration checks KEY_COLUMN_USAGE.
+fixture_query "
+DELETE FROM estab_schema_migrations
+ WHERE version = '111-logbook-shift-assignment.sql';
+ALTER TABLE nv_etb
+  DROP FOREIGN KEY fk_etb_assignee_assignment;
+ALTER TABLE nv_etb
+  ADD CONSTRAINT fk_etb_assignee_assignment
+    FOREIGN KEY (estab_writer_assignment_id)
+    REFERENCES nv_dienstbesetzungen (dienstbesetzung_id)
+    ON UPDATE RESTRICT ON DELETE RESTRICT"
+if ESTAB_DB_NAME="$test_database" \
+    "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: foreign logbook shift constraint was accepted" >&2
+    exit 1
+fi
+if ! grep -q \
+    'Logbook shift migration blocked: foreign constraint collision' \
+    "$failure_log"; then
+    echo "schema migrator test: logbook shift constraint collision was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "estab_writer_assignment_id|0" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT column_name FROM information_schema.key_column_usage
+           WHERE constraint_schema = DATABASE()
+             AND table_name = 'nv_etb'
+             AND constraint_name = 'fk_etb_assignee_assignment'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '111-logbook-shift-assignment.sql')
+       )")" \
+    "blocked logbook shift constraint collision was changed or recorded"
+fixture_query "ALTER TABLE nv_etb
+  DROP FOREIGN KEY fk_etb_assignee_assignment"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+
 assert_equal "1|1|1|2|4|0" "$(fixture_query "
 SELECT CONCAT(
          (SELECT COUNT(*)
@@ -1832,12 +2672,151 @@ UPDATE nv_nachrichten
  WHERE \`00_lfd\` = @estab_width_message_id;
 UPDATE nv_benutzer
    SET kuerzel = 'abc123',
+       aktiv = 1,
        ip = '2001:db8:1:2:3:4:5:6',
        fwdip = '2001:db8:6:5:4:3:2:1'
  WHERE kuerzel = 'abc';
 UPDATE nv_anhang
    SET kuerzel = 'abc123'
  WHERE \`lfd-nr\` = @estab_width_attachment_id;
+INSERT INTO nv_dienstschichten
+  (einsatz_id, nummer, bezeichnung, status, erstellt_von)
+VALUES
+  (@estab_width_incident_id, 1, 'Schema width shift', 'GEPLANT',
+   'schema-migrator-test');
+SET @estab_width_shift_id = LAST_INSERT_ID();
+INSERT INTO nv_dienstbesetzungen
+  (dienstschicht_id, benutzer_kuerzel, funktion, rolle, status,
+   zugewiesen_von)
+VALUES
+  (@estab_width_shift_id, 'abc123', 'S2', 'Stab', 'ZUGEWIESEN',
+   'schema-migrator-test'),
+  (@estab_width_shift_id, 'abc123', 'Si', 'Stab', 'ZUGEWIESEN',
+   'schema-migrator-test'),
+  (@estab_width_shift_id, 'abc123', 'S6', 'Stab', 'ZUGEWIESEN',
+   'schema-migrator-test'),
+  (@estab_width_shift_id, 'abc123', 'LdF', 'Fernmelder', 'ZUGEWIESEN',
+   'schema-migrator-test'),
+  (@estab_width_shift_id, 'abc123', 'A/W', 'Fernmelder', 'ZUGEWIESEN',
+   'schema-migrator-test');
+SELECT dienstbesetzung_id INTO @estab_width_s2_assignment_id
+  FROM nv_dienstbesetzungen
+ WHERE dienstschicht_id = @estab_width_shift_id
+   AND BINARY funktion = BINARY 'S2';
+SELECT dienstbesetzung_id INTO @estab_width_aw_assignment_id
+  FROM nv_dienstbesetzungen
+ WHERE dienstschicht_id = @estab_width_shift_id
+   AND BINARY funktion = BINARY 'A/W';
+UPDATE nv_dienstbesetzungen
+   SET status = 'ANGENOMMEN', angenommen_am = NOW(6)
+ WHERE dienstschicht_id = @estab_width_shift_id;
+UPDATE nv_dienstschichten
+   SET status = 'AKTIV', aktiviert_am = NOW(6)
+ WHERE dienstschicht_id = @estab_width_shift_id;
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type, estab_shift_id,
+   estab_writer_assignment_id)
+VALUES
+  (NOW(), 'Erster ETB-Eintrag', '', 'Legacy User', 'abc123', 'S2',
+   NOW(6), 'ohne', @estab_width_shift_id,
+   @estab_width_s2_assignment_id);
+INSERT INTO nv_tbb
+  (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
+   tbb_funktion, estab_event_time, estab_entry_type, estab_message_id,
+   estab_channel, estab_shift_id)
+VALUES
+  (NOW(), 'Nachricht aufgenommen', '', 'eStab-System', 'system', '',
+   NOW(6), 'nachricht', @estab_width_message_id, 'BOS-Kanal 25',
+   @estab_width_shift_id);
+SET @estab_first_tbb_id = LAST_INSERT_ID();
+
+INSERT INTO nv_einsaetze
+  (kennung, name, beginn, ende, ort, organisation, fuehrungsstellenname,
+   einsatzleitung, beschreibung, metadaten, erstellt_am, erstellt_von)
+VALUES
+  ('SCHEMA-LOGBOOK-SECOND', 'Second logbook incident', NOW(), NULL, '', '',
+   'Second command post', '', 'Second numbering scope.', '{}', NOW(6),
+   'schema-migrator-test');
+SET @estab_second_incident_id = LAST_INSERT_ID();
+UPDATE nv_einsatz_status
+   SET active_einsatz_id = @estab_second_incident_id,
+       revision = revision + 1,
+       geaendert_am = NOW(6),
+       geaendert_von = 'schema-migrator-test'
+ WHERE singleton_id = 1;
+INSERT INTO nv_nachrichten (\`12_inhalt\`)
+VALUES ('Second incident message');
+SET @estab_second_message_id = LAST_INSERT_ID();
+INSERT INTO nv_dienstschichten
+  (einsatz_id, nummer, bezeichnung, status, erstellt_von)
+VALUES
+  (@estab_second_incident_id, 1, 'Second schema shift', 'GEPLANT',
+   'schema-migrator-test');
+SET @estab_second_shift_id = LAST_INSERT_ID();
+INSERT INTO nv_dienstbesetzungen
+  (dienstschicht_id, benutzer_kuerzel, funktion, rolle, status,
+   zugewiesen_von)
+VALUES
+  (@estab_second_shift_id, 'abc123', 'S2', 'Stab', 'ZUGEWIESEN',
+   'schema-migrator-test'),
+  (@estab_second_shift_id, 'abc123', 'Si', 'Stab', 'ZUGEWIESEN',
+   'schema-migrator-test'),
+  (@estab_second_shift_id, 'abc123', 'S6', 'Stab', 'ZUGEWIESEN',
+   'schema-migrator-test'),
+  (@estab_second_shift_id, 'abc123', 'LdF', 'Fernmelder', 'ZUGEWIESEN',
+   'schema-migrator-test'),
+  (@estab_second_shift_id, 'abc123', 'A/W', 'Fernmelder', 'ZUGEWIESEN',
+   'schema-migrator-test');
+SELECT dienstbesetzung_id INTO @estab_second_s2_assignment_id
+  FROM nv_dienstbesetzungen
+ WHERE dienstschicht_id = @estab_second_shift_id
+   AND BINARY funktion = BINARY 'S2';
+UPDATE nv_dienstbesetzungen
+   SET status = 'ANGENOMMEN', angenommen_am = NOW(6)
+ WHERE dienstschicht_id = @estab_second_shift_id;
+UPDATE nv_dienstschichten
+   SET status = 'AKTIV', aktiviert_am = NOW(6)
+ WHERE dienstschicht_id = @estab_second_shift_id;
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type, estab_shift_id,
+   estab_writer_assignment_id)
+VALUES
+  (NOW(), 'Eigenständiger ETB-Eintrag', '', 'Legacy User', 'abc123', 'S2',
+   NOW(6), 'A', @estab_second_shift_id,
+   @estab_second_s2_assignment_id);
+INSERT INTO nv_tbb
+  (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
+   tbb_funktion, estab_event_time, estab_entry_type, estab_message_id,
+   estab_message_route, estab_shift_id)
+VALUES
+  (NOW(), 'Nachrichtenweg', '', 'eStab-System', 'system', '',
+   NOW(6), 'nachricht', @estab_second_message_id, 'über Funk',
+   @estab_second_shift_id);
+
+UPDATE nv_einsatz_status
+   SET active_einsatz_id = @estab_width_incident_id,
+       revision = revision + 1,
+       geaendert_am = NOW(6),
+       geaendert_von = 'schema-migrator-test'
+ WHERE singleton_id = 1;
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type, estab_shift_id,
+   estab_writer_assignment_id)
+VALUES
+  (NOW(), 'Zweiter ETB-Eintrag', '', 'Legacy User', 'abc123', 'S2',
+   NOW(6), 'E', @estab_width_shift_id,
+   @estab_width_s2_assignment_id);
+INSERT INTO nv_tbb
+  (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
+   tbb_funktion, estab_event_time, estab_entry_type, estab_correction_of,
+   estab_operations, estab_shift_id, estab_writer_assignment_id)
+VALUES
+  (NOW(), 'Korrektur', '', 'Legacy User', 'abc123', 'A/W',
+   NOW(6), 'korrektur', @estab_first_tbb_id, 'Kanalbezeichnung berichtigt',
+   @estab_width_shift_id, @estab_width_aw_assignment_id);
 UPDATE nv_einsatz_status
    SET active_einsatz_id = NULL,
        revision = revision + 1,
@@ -1864,6 +2843,1155 @@ SELECT CONCAT(kuerzel, '|', ip, '|', fwdip)
 assert_equal "abc123" "$(fixture_query "
 SELECT kuerzel FROM nv_anhang WHERE filename = 'SCHEMA-WIDTH-TEST'")" \
     "six-character attachment user code was not accepted"
+assert_equal "1,2|1,2|3|3|1" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT GROUP_CONCAT(estab_book_lfd ORDER BY estab_book_lfd)
+            FROM nv_etb WHERE einsatz_id = (
+              SELECT einsatz_id FROM nv_einsaetze
+               WHERE kennung = 'SCHEMA-WIDTH-TEST'
+            )), '|',
+         (SELECT GROUP_CONCAT(estab_book_lfd ORDER BY estab_book_lfd)
+            FROM nv_tbb WHERE einsatz_id = (
+              SELECT einsatz_id FROM nv_einsaetze
+               WHERE kennung = 'SCHEMA-WIDTH-TEST'
+            )), '|',
+         (SELECT next_lfd FROM nv_logbuch_koepfe
+           WHERE einsatz_id = (
+             SELECT einsatz_id FROM nv_einsaetze
+              WHERE kennung = 'SCHEMA-WIDTH-TEST'
+           ) AND buchart = 'ETB'), '|',
+         (SELECT next_lfd FROM nv_logbuch_koepfe
+           WHERE einsatz_id = (
+             SELECT einsatz_id FROM nv_einsaetze
+              WHERE kennung = 'SCHEMA-WIDTH-TEST'
+           ) AND buchart = 'TTB'), '|',
+         (SELECT COUNT(*) FROM nv_tbb AS entry_row
+           JOIN nv_nachrichten AS message_row
+             ON message_row.\`00_lfd\` = entry_row.estab_message_id
+            AND message_row.einsatz_id = entry_row.einsatz_id
+          WHERE entry_row.einsatz_id = (
+            SELECT einsatz_id FROM nv_einsaetze
+             WHERE kennung = 'SCHEMA-WIDTH-TEST'
+          ) AND entry_row.estab_entry_type = 'nachricht'
+            AND BINARY entry_row.tbb_kuerzel = BINARY 'system'
+            AND BINARY entry_row.tbb_benutzer = BINARY 'eStab-System')
+       )")" \
+    "first incident did not receive canonical local logbook sequences or message link"
+assert_equal "1|1|2|2" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT GROUP_CONCAT(estab_book_lfd ORDER BY estab_book_lfd)
+            FROM nv_etb WHERE einsatz_id = (
+              SELECT einsatz_id FROM nv_einsaetze
+               WHERE kennung = 'SCHEMA-LOGBOOK-SECOND'
+            )), '|',
+         (SELECT GROUP_CONCAT(estab_book_lfd ORDER BY estab_book_lfd)
+            FROM nv_tbb WHERE einsatz_id = (
+              SELECT einsatz_id FROM nv_einsaetze
+               WHERE kennung = 'SCHEMA-LOGBOOK-SECOND'
+            )), '|',
+         (SELECT next_lfd FROM nv_logbuch_koepfe
+           WHERE einsatz_id = (
+             SELECT einsatz_id FROM nv_einsaetze
+              WHERE kennung = 'SCHEMA-LOGBOOK-SECOND'
+           ) AND buchart = 'ETB'), '|',
+         (SELECT next_lfd FROM nv_logbuch_koepfe
+           WHERE einsatz_id = (
+             SELECT einsatz_id FROM nv_einsaetze
+              WHERE kennung = 'SCHEMA-LOGBOOK-SECOND'
+           ) AND buchart = 'TTB')
+       )")" \
+    "second incident did not start independent ETB/TBB sequences at one"
+
+# Exercise migration 111's write boundary in an isolated incident so the
+# established numbering/concurrency fixtures below retain their exact counts.
+fixture_query "
+INSERT INTO nv_einsaetze
+  (kennung, name, beginn, ende, ort, organisation, fuehrungsstellenname,
+   einsatzleitung, beschreibung, metadaten, erstellt_am, erstellt_von)
+VALUES
+  ('SCHEMA-SHIFT-RULES', 'Shift provenance rules', NOW(), NULL, '', '',
+   'Shift rules command post', '',
+   'Duty-shift provenance boundary fixture.', '{}', NOW(6),
+   'schema-migrator-test');
+SET @estab_rules_incident_id = LAST_INSERT_ID();
+UPDATE nv_einsatz_status
+   SET active_einsatz_id = @estab_rules_incident_id,
+       revision = revision + 1,
+       geaendert_am = NOW(6),
+       geaendert_von = 'schema-migrator-test'
+ WHERE singleton_id = 1;
+INSERT INTO nv_dienstschichten
+  (einsatz_id, nummer, bezeichnung, status, erstellt_von)
+VALUES
+  (@estab_rules_incident_id, 1, 'Shift provenance fixture', 'GEPLANT',
+   'schema-migrator-test');
+SET @estab_rules_shift_id = LAST_INSERT_ID();
+INSERT INTO nv_dienstbesetzungen
+  (dienstschicht_id, benutzer_kuerzel, funktion, rolle, status,
+   zugewiesen_von)
+VALUES
+  (@estab_rules_shift_id, 'abc123', 'S2', 'Stab', 'ZUGEWIESEN',
+   'schema-migrator-test'),
+  (@estab_rules_shift_id, 'abc123', 'Si', 'Stab', 'ZUGEWIESEN',
+   'schema-migrator-test'),
+  (@estab_rules_shift_id, 'abc123', 'S6', 'Stab', 'ZUGEWIESEN',
+   'schema-migrator-test'),
+  (@estab_rules_shift_id, 'abc123', 'LdF', 'Fernmelder', 'ZUGEWIESEN',
+   'schema-migrator-test'),
+  (@estab_rules_shift_id, 'abc123', 'A/W', 'Fernmelder', 'ZUGEWIESEN',
+   'schema-migrator-test'),
+  (@estab_rules_shift_id, 'abc123', 'ETB', 'Stab', 'ZUGEWIESEN',
+   'schema-migrator-test');
+UPDATE nv_dienstbesetzungen
+   SET status = 'ANGENOMMEN', angenommen_am = NOW(6)
+ WHERE dienstschicht_id = @estab_rules_shift_id
+   AND funktion IN ('S2', 'Si', 'S6', 'LdF', 'A/W');
+UPDATE nv_dienstschichten
+   SET status = 'AKTIV', aktiviert_am = NOW(6)
+ WHERE dienstschicht_id = @estab_rules_shift_id;
+INSERT INTO nv_benutzer
+  (benutzer, kuerzel, funktion, rolle, aktiv, password, estab_gesperrt)
+VALUES
+  ('Gesperrte Zuordnung', 'as111', 'S3', 'Stab', 1, '', 0);
+INSERT INTO nv_dienstbesetzungen
+  (dienstschicht_id, benutzer_kuerzel, funktion, rolle, status,
+   zugewiesen_von)
+VALUES
+  (@estab_rules_shift_id, 'as111', 'S3', 'Stab', 'ZUGEWIESEN',
+   'schema-migrator-test');
+UPDATE nv_dienstbesetzungen
+   SET status = 'ANGENOMMEN', angenommen_am = NOW(6)
+ WHERE dienstschicht_id = @estab_rules_shift_id
+   AND BINARY benutzer_kuerzel = BINARY 'as111'
+   AND BINARY funktion = BINARY 'S3';
+UPDATE nv_benutzer SET estab_gesperrt = 1 WHERE kuerzel = 'as111'"
+rules_shift_id=$(fixture_query "
+SELECT dienstschicht_id FROM nv_dienstschichten
+ WHERE bezeichnung = 'Shift provenance fixture'")
+rules_s2_assignment_id=$(fixture_query "
+SELECT assignment.dienstbesetzung_id
+  FROM nv_dienstbesetzungen AS assignment
+  JOIN nv_dienstschichten AS shift_row
+    ON shift_row.dienstschicht_id = assignment.dienstschicht_id
+ WHERE shift_row.bezeichnung = 'Shift provenance fixture'
+   AND BINARY assignment.funktion = BINARY 'S2'")
+rules_aw_assignment_id=$(fixture_query "
+SELECT assignment.dienstbesetzung_id
+  FROM nv_dienstbesetzungen AS assignment
+  JOIN nv_dienstschichten AS shift_row
+    ON shift_row.dienstschicht_id = assignment.dienstschicht_id
+ WHERE shift_row.bezeichnung = 'Shift provenance fixture'
+   AND BINARY assignment.funktion = BINARY 'A/W'")
+rules_pending_etb_assignment_id=$(fixture_query "
+SELECT assignment.dienstbesetzung_id
+  FROM nv_dienstbesetzungen AS assignment
+  JOIN nv_dienstschichten AS shift_row
+    ON shift_row.dienstschicht_id = assignment.dienstschicht_id
+ WHERE shift_row.bezeichnung = 'Shift provenance fixture'
+   AND BINARY assignment.funktion = BINARY 'ETB'")
+if fixture_query "
+UPDATE nv_dienstbesetzungen
+   SET status = 'ANGENOMMEN', angenommen_am = NOW(6)
+ WHERE dienstbesetzung_id = $rules_pending_etb_assignment_id" \
+    >"$failure_log" 2>&1; then
+    echo "schema migrator test: active-shift ETB writer replacement was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'Active shift ETB writer change requires confirmed handover' \
+    "$failure_log"; then
+    echo "schema migrator test: active-shift ETB writer rejection was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "ZUGEWIESEN|NULL" "$(fixture_query "
+SELECT CONCAT(status, '|', COALESCE(CAST(angenommen_am AS CHAR), 'NULL'))
+  FROM nv_dienstbesetzungen
+ WHERE dienstbesetzung_id = $rules_pending_etb_assignment_id")" \
+    "rejected active-shift ETB writer change mutated its assignment"
+rules_locked_assignee_id=$(fixture_query "
+SELECT assignment.dienstbesetzung_id
+  FROM nv_dienstbesetzungen AS assignment
+  JOIN nv_dienstschichten AS shift_row
+    ON shift_row.dienstschicht_id = assignment.dienstschicht_id
+ WHERE shift_row.bezeichnung = 'Shift provenance fixture'
+   AND BINARY assignment.benutzer_kuerzel = BINARY 'as111'")
+second_shift_id=$(fixture_query "
+SELECT dienstschicht_id FROM nv_dienstschichten
+ WHERE bezeichnung = 'Second schema shift'")
+second_s2_assignment_id=$(fixture_query "
+SELECT assignment.dienstbesetzung_id
+  FROM nv_dienstbesetzungen AS assignment
+  JOIN nv_dienstschichten AS shift_row
+    ON shift_row.dienstschicht_id = assignment.dienstschicht_id
+ WHERE shift_row.bezeichnung = 'Second schema shift'
+   AND BINARY assignment.funktion = BINARY 'S2'")
+
+if fixture_query "
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type)
+VALUES
+  (NOW(), 'Ohne Schicht', '', 'Schema Test', 'wid', 'S2', NOW(6),
+   'ohne')" >"$failure_log" 2>&1; then
+    echo "schema migrator test: ETB entry without a duty shift was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'ETB entry requires a duty shift' "$failure_log"; then
+    echo "schema migrator test: ETB entry without a duty shift was not rejected explicitly" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+if fixture_query "
+INSERT INTO nv_tbb
+  (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
+   tbb_funktion, estab_event_time, estab_entry_type, estab_operations)
+VALUES
+  (NOW(), 'Ohne Schicht', '', 'Schema Test', 'wid', 'LdF', NOW(6),
+   'betriebsereignis', 'Fehlende Schicht')" >"$failure_log" 2>&1; then
+    echo "schema migrator test: TTB entry without a duty shift was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'TTB entry requires a duty shift' "$failure_log"; then
+    echo "schema migrator test: TTB entry without a duty shift was not rejected explicitly" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+if fixture_query "
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type, estab_shift_id)
+VALUES
+  (NOW(), 'Fremde Schicht', '', 'eStab-System', 'system', '', NOW(6),
+   'ohne', $second_shift_id)" >"$failure_log" 2>&1; then
+    echo "schema migrator test: ETB duty shift from another incident was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'ETB duty shift targets another incident' "$failure_log"; then
+    echo "schema migrator test: ETB duty shift from another incident was not rejected explicitly" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+if fixture_query "
+INSERT INTO nv_tbb
+  (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
+   tbb_funktion, estab_event_time, estab_entry_type, estab_operations,
+   estab_shift_id)
+VALUES
+  (NOW(), 'Fremde Schicht', '', 'eStab-System', 'system', '', NOW(6),
+   'betriebsereignis', 'Fremder Einsatz', $second_shift_id)" \
+    >"$failure_log" 2>&1; then
+    echo "schema migrator test: TTB duty shift from another incident was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'TTB duty shift targets another incident' "$failure_log"; then
+    echo "schema migrator test: TTB duty shift from another incident was not rejected explicitly" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+if fixture_query "
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type, estab_shift_id,
+   estab_writer_assignment_id)
+VALUES
+  (NOW(), 'Fremder Schreiber', '', 'Legacy User', 'abc123', 'S2', NOW(6),
+   'ohne', $rules_shift_id, $second_s2_assignment_id)" \
+    >"$failure_log" 2>&1; then
+    echo "schema migrator test: ETB writer from another duty shift was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'ETB writer does not belong to its duty shift' "$failure_log"; then
+    echo "schema migrator test: ETB writer from another duty shift was not rejected explicitly" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+if fixture_query "
+INSERT INTO nv_tbb
+  (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
+   tbb_funktion, estab_event_time, estab_entry_type, estab_operations,
+   estab_shift_id, estab_writer_assignment_id)
+VALUES
+  (NOW(), 'Fremder Schreiber', '', 'Schema Test', 'wid', 'LdF', NOW(6),
+   'betriebsereignis', 'Fremde Besetzung', $rules_shift_id,
+   $second_s2_assignment_id)" >"$failure_log" 2>&1; then
+    echo "schema migrator test: TTB writer from another duty shift was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'TTB writer does not belong to its duty shift' "$failure_log"; then
+    echo "schema migrator test: TTB writer from another duty shift was not rejected explicitly" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+if fixture_query "
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type, estab_shift_id,
+   estab_writer_assignment_id, estab_assignee_assignment_id,
+   estab_assignment)
+VALUES
+  (NOW(), 'Fremde Zuordnung', '', 'Legacy User', 'abc123', 'S2', NOW(6),
+   'ohne', $rules_shift_id, $rules_s2_assignment_id,
+   $second_s2_assignment_id, 'Browser-Freitext')" >"$failure_log" 2>&1; then
+    echo "schema migrator test: ETB assignee from another duty shift was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'ETB assignee does not belong to its duty shift' "$failure_log"; then
+    echo "schema migrator test: ETB assignee from another duty shift was not rejected explicitly" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+if fixture_query "
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type, estab_shift_id,
+   estab_writer_assignment_id, estab_assignment)
+VALUES
+  (NOW(), 'Freier Browsertext', '', 'Legacy User', 'abc123', 'S2', NOW(6),
+   'ohne', $rules_shift_id, $rules_s2_assignment_id,
+   'Browser-Freitext')" >"$failure_log" 2>&1; then
+    echo "schema migrator test: browser ETB assignment text was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'ETB assignee snapshot requires an assignment' "$failure_log"; then
+    echo "schema migrator test: browser ETB assignment text was accepted without an assignment" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+if fixture_query "
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type, estab_shift_id,
+   estab_writer_assignment_id)
+VALUES
+  (NOW(), 'Falsche Schreiberidentität', '', 'Browser-Fälschung', 'abc123',
+   'S2', NOW(6), 'ohne', $rules_shift_id, $rules_s2_assignment_id)" \
+    >"$failure_log" 2>&1; then
+    echo "schema migrator test: mismatched ETB writer identity was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'ETB writer identity or status is invalid' "$failure_log"; then
+    echo "schema migrator test: mismatched ETB writer identity was not rejected explicitly" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+if fixture_query "
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type, estab_shift_id,
+   estab_writer_assignment_id)
+VALUES
+  (NOW(), 'Nicht angenommene ETB-Führung', '', 'Legacy User', 'abc123',
+   'ETB', NOW(6), 'ohne', $rules_shift_id,
+   $rules_pending_etb_assignment_id)" >"$failure_log" 2>&1; then
+    echo "schema migrator test: unaccepted ETB writer was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'ETB writer identity or status is invalid' "$failure_log"; then
+    echo "schema migrator test: unaccepted ETB writer was not rejected explicitly" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+if fixture_query "
+INSERT INTO nv_tbb
+  (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
+   tbb_funktion, estab_event_time, estab_entry_type, estab_operations,
+   estab_shift_id, estab_writer_assignment_id)
+VALUES
+  (NOW(), 'Falsche TTB-Funktion', '', 'Legacy User', 'abc123', 'S2',
+   NOW(6), 'betriebsereignis', 'Nicht A/W', $rules_shift_id,
+   $rules_s2_assignment_id)" >"$failure_log" 2>&1; then
+    echo "schema migrator test: non-A/W TTB writer was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'TTB writer identity or status is invalid' "$failure_log"; then
+    echo "schema migrator test: non-A/W TTB writer was not rejected explicitly" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+if fixture_query "
+INSERT INTO nv_tbb
+  (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
+   tbb_funktion, estab_event_time, estab_entry_type, estab_operations,
+   estab_shift_id, estab_writer_assignment_id)
+VALUES
+  (NOW(), 'Falsche TTB-Identität', '', 'Browser-Fälschung', 'abc123', 'A/W',
+   NOW(6), 'betriebsereignis', 'Identität abweichend', $rules_shift_id,
+   $rules_aw_assignment_id)" >"$failure_log" 2>&1; then
+    echo "schema migrator test: mismatched TTB writer identity was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'TTB writer identity or status is invalid' "$failure_log"; then
+    echo "schema migrator test: mismatched TTB writer identity was not rejected explicitly" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+for invalid_assignee_id in \
+    "$rules_pending_etb_assignment_id" "$rules_locked_assignee_id"; do
+    if fixture_query "
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type, estab_shift_id,
+   estab_writer_assignment_id, estab_assignee_assignment_id)
+VALUES
+  (NOW(), 'Ungültiger Zuordnungsstatus', '', 'Legacy User', 'abc123', 'S2',
+   NOW(6), 'A', $rules_shift_id, $rules_s2_assignment_id,
+   $invalid_assignee_id)" >"$failure_log" 2>&1; then
+        echo "schema migrator test: unaccepted or blocked ETB assignee was accepted" >&2
+        exit 1
+    fi
+    if ! grep -q 'ETB assignee identity or status is invalid' "$failure_log"; then
+        echo "schema migrator test: unaccepted or blocked ETB assignee was not rejected explicitly" >&2
+        sed -n '1,120p' "$failure_log" >&2
+        exit 1
+    fi
+done
+fixture_query "UPDATE nv_benutzer
+   SET estab_gesperrt = 0, aktiv = 0
+ WHERE kuerzel = 'as111'"
+fixture_query "UPDATE nv_benutzer SET aktiv = 0 WHERE kuerzel = 'abc123'"
+if fixture_query "
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type, estab_shift_id,
+   estab_writer_assignment_id)
+VALUES
+  (NOW(), 'Deaktiviertes Konto', '', 'Legacy User', 'abc123', 'S2', NOW(6),
+   'ohne', $rules_shift_id, $rules_s2_assignment_id)" \
+    >"$failure_log" 2>&1; then
+    echo "schema migrator test: deactivated ETB writer account was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'ETB writer identity or status is invalid' "$failure_log"; then
+    echo "schema migrator test: deactivated ETB writer was not rejected explicitly" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+fixture_query "UPDATE nv_benutzer SET aktiv = 1 WHERE kuerzel = 'abc123'"
+
+fixture_query "
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type, estab_shift_id)
+VALUES
+  (NOW(), 'System ETB', '', 'eStab-System', 'system', '', NOW(6), 'ohne',
+   $rules_shift_id);
+INSERT INTO nv_tbb
+  (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
+   tbb_funktion, estab_event_time, estab_entry_type, estab_operations,
+   estab_shift_id)
+VALUES
+  (NOW(), 'System TTB', '', 'eStab-System', 'system', '', NOW(6),
+   'betriebsereignis', 'Systemnachweis', $rules_shift_id);
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type, estab_shift_id,
+   estab_writer_assignment_id, estab_assignee_assignment_id,
+   estab_assignment)
+VALUES
+  (NOW(), 'Manuelles ETB', '', 'Legacy User', 'abc123', 'S2', NOW(6), 'E',
+   $rules_shift_id, $rules_s2_assignment_id, $rules_locked_assignee_id,
+   'Manipulierter Browser-Freitext');
+SET @estab_rules_manual_etb_id = LAST_INSERT_ID();
+INSERT INTO nv_tbb
+  (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
+   tbb_funktion, estab_event_time, estab_entry_type, estab_operations,
+   estab_shift_id, estab_writer_assignment_id)
+VALUES
+  (NOW(), 'Manuelles TTB', '', 'Legacy User', 'abc123', 'A/W', NOW(6),
+   'betriebsereignis', 'Manueller Nachweis', $rules_shift_id,
+   $rules_aw_assignment_id)"
+rules_manual_etb_id=$(fixture_query "
+SELECT \`etb_lfd-nr\` FROM nv_etb
+ WHERE einsatz_id = (SELECT einsatz_id FROM nv_einsaetze
+   WHERE kennung = 'SCHEMA-SHIFT-RULES')
+   AND estab_book_lfd = 2")
+for invalid_reference in "Freitext" "02" "99"; do
+    if fixture_query "
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type, estab_shift_id,
+   estab_reference)
+VALUES
+  (NOW(), 'Ungültige Referenz', '', 'eStab-System', 'system', '', NOW(6),
+   'ohne', $rules_shift_id, '$invalid_reference')" \
+        >"$failure_log" 2>&1; then
+        echo "schema migrator test: invalid ETB reference was accepted" >&2
+        exit 1
+    fi
+    if [ "$invalid_reference" = "99" ]; then
+        expected_reference_error='ETB reference target is not an earlier incident entry'
+    else
+        expected_reference_error='ETB reference must be a canonical local number'
+    fi
+    if ! grep -q "$expected_reference_error" "$failure_log"; then
+        echo "schema migrator test: invalid ETB reference was not rejected explicitly" >&2
+        sed -n '1,120p' "$failure_log" >&2
+        exit 1
+    fi
+done
+for correction_reference in "NULL" "'1'"; do
+    if fixture_query "
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type, estab_shift_id,
+   estab_reference, estab_correction_of)
+VALUES
+  (NOW(), 'Falscher Korrekturbezug', '', 'eStab-System', 'system', '', NOW(6),
+   'korrektur', $rules_shift_id, $correction_reference,
+   $rules_manual_etb_id)" >"$failure_log" 2>&1; then
+        echo "schema migrator test: noncanonical ETB correction reference was accepted" >&2
+        exit 1
+    fi
+    if ! grep -q 'ETB correction requires canonical local reference' \
+        "$failure_log"; then
+        echo "schema migrator test: noncanonical correction reference was not rejected explicitly" >&2
+        sed -n '1,120p' "$failure_log" >&2
+        exit 1
+    fi
+done
+fixture_query "
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type, estab_shift_id,
+   estab_writer_assignment_id, estab_reference)
+VALUES
+  (NOW(), 'Referenzzweig eins', '', 'Legacy User', 'abc123', 'S2', NOW(6),
+   'A', $rules_shift_id, $rules_s2_assignment_id, '2'),
+  (NOW(), 'Referenzzweig zwei', '', 'Legacy User', 'abc123', 'S2', NOW(6),
+   'B', $rules_shift_id, $rules_s2_assignment_id, '2');
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type, estab_shift_id,
+   estab_writer_assignment_id, estab_reference)
+VALUES
+  (NOW(), 'Referenzkette', '', 'Legacy User', 'abc123', 'S2', NOW(6), 'E',
+   $rules_shift_id, $rules_s2_assignment_id, '3');
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type, estab_shift_id,
+   estab_writer_assignment_id, estab_reference, estab_correction_of)
+VALUES
+  (NOW(), 'Kanonische Korrektur', '', 'Legacy User', 'abc123', 'S2', NOW(6),
+   'korrektur', $rules_shift_id, $rules_s2_assignment_id, '2',
+   $rules_manual_etb_id)"
+assert_equal "6|2|8|6|1|0" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM nv_etb WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-SHIFT-RULES')), '|',
+         (SELECT COUNT(*) FROM nv_tbb WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-SHIFT-RULES')), '|',
+         (SELECT COUNT(*) FROM (
+           SELECT estab_shift_id FROM nv_etb WHERE einsatz_id = (
+             SELECT einsatz_id FROM nv_einsaetze
+              WHERE kennung = 'SCHEMA-SHIFT-RULES')
+           UNION ALL
+           SELECT estab_shift_id FROM nv_tbb WHERE einsatz_id = (
+             SELECT einsatz_id FROM nv_einsaetze
+              WHERE kennung = 'SCHEMA-SHIFT-RULES')
+         ) AS entry_row WHERE estab_shift_id = $rules_shift_id), '|',
+         (SELECT COUNT(*) FROM (
+           SELECT estab_writer_assignment_id AS writer_id FROM nv_etb
+            WHERE einsatz_id = (SELECT einsatz_id FROM nv_einsaetze
+              WHERE kennung = 'SCHEMA-SHIFT-RULES')
+           UNION ALL
+           SELECT estab_writer_assignment_id AS writer_id FROM nv_tbb
+            WHERE einsatz_id = (SELECT einsatz_id FROM nv_einsaetze
+              WHERE kennung = 'SCHEMA-SHIFT-RULES')
+         ) AS writer_row WHERE writer_id IS NOT NULL), '|',
+         (SELECT COUNT(*) FROM nv_etb WHERE einsatz_id = (
+             SELECT einsatz_id FROM nv_einsaetze
+              WHERE kennung = 'SCHEMA-SHIFT-RULES')
+           AND estab_assignee_assignment_id = $rules_locked_assignee_id
+           AND BINARY estab_assignment = BINARY
+             'S3 (Stab): Gesperrte Zuordnung [as111]'), '|',
+         (SELECT COUNT(*) FROM nv_etb WHERE einsatz_id = (
+             SELECT einsatz_id FROM nv_einsaetze
+              WHERE kennung = 'SCHEMA-SHIFT-RULES')
+           AND estab_assignment LIKE '%Browser-Freitext%')
+       )")" \
+    "valid same-shift system and manual logbook entries were not accepted"
+assert_equal "3:2,4:2,5:3,6:2|2" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT GROUP_CONCAT(CONCAT(estab_book_lfd, ':', estab_reference)
+                  ORDER BY estab_book_lfd SEPARATOR ',')
+            FROM nv_etb
+           WHERE einsatz_id = (SELECT einsatz_id FROM nv_einsaetze
+             WHERE kennung = 'SCHEMA-SHIFT-RULES')
+             AND estab_reference IS NOT NULL), '|',
+         (SELECT original.estab_book_lfd
+            FROM nv_etb AS correction
+            JOIN nv_etb AS original
+              ON original.\`etb_lfd-nr\` = correction.estab_correction_of
+             AND original.einsatz_id = correction.einsatz_id
+           WHERE correction.einsatz_id = (SELECT einsatz_id FROM nv_einsaetze
+             WHERE kennung = 'SCHEMA-SHIFT-RULES')
+             AND correction.estab_event_type = 'korrektur')
+       )")" \
+    "canonical ETB reference branches, chain, or correction target were lost"
+if fixture_query "
+UPDATE nv_etb
+   SET estab_assignment = 'Nachträglich verändert'
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze WHERE kennung = 'SCHEMA-SHIFT-RULES'
+ ) AND estab_assignee_assignment_id = $rules_locked_assignee_id" \
+    >"$failure_log" 2>&1; then
+    echo "schema migrator test: canonical ETB assignment snapshot was mutable" >&2
+    exit 1
+fi
+if ! grep -q 'ETB entries are append-only; write a correction' \
+    "$failure_log"; then
+    echo "schema migrator test: canonical ETB assignment snapshot was not immutable" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "S3 (Stab): Gesperrte Zuordnung [as111]" "$(fixture_query "
+SELECT estab_assignment FROM nv_etb
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze WHERE kennung = 'SCHEMA-SHIFT-RULES'
+ ) AND estab_assignee_assignment_id = $rules_locked_assignee_id")" \
+    "canonical ETB assignment snapshot was not generated by the database"
+
+# Re-activate the first test incident to prove the insert validation order and
+# the unconditional append-only TTB boundary with explicit database errors.
+fixture_query "
+UPDATE nv_einsatz_status
+   SET active_einsatz_id = (
+         SELECT einsatz_id FROM nv_einsaetze
+          WHERE kennung = 'SCHEMA-WIDTH-TEST'
+       ),
+       revision = revision + 1,
+       geaendert_am = NOW(6),
+       geaendert_von = 'schema-migrator-test'
+ WHERE singleton_id = 1"
+width_shift_id=$(fixture_query "
+SELECT dienstschicht_id FROM nv_dienstschichten
+ WHERE bezeichnung = 'Schema width shift'")
+width_s2_assignment_id=$(fixture_query "
+SELECT assignment.dienstbesetzung_id
+  FROM nv_dienstbesetzungen AS assignment
+  JOIN nv_dienstschichten AS shift_row
+    ON shift_row.dienstschicht_id = assignment.dienstschicht_id
+ WHERE shift_row.bezeichnung = 'Schema width shift'
+   AND BINARY assignment.funktion = BINARY 'S2'")
+width_aw_assignment_id=$(fixture_query "
+SELECT assignment.dienstbesetzung_id
+  FROM nv_dienstbesetzungen AS assignment
+  JOIN nv_dienstschichten AS shift_row
+    ON shift_row.dienstschicht_id = assignment.dienstschicht_id
+ WHERE shift_row.bezeichnung = 'Schema width shift'
+   AND BINARY assignment.funktion = BINARY 'A/W'")
+
+# Separate database sessions contend for the same two head rows. The row lock
+# and unique incident/book key must yield complete, gap-free sequences.
+: > "$concurrency_log"
+concurrency_pids=
+concurrency_counter=1
+while [ "$concurrency_counter" -le 8 ]; do
+    (
+        database_query "$test_database" "
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type, estab_shift_id,
+   estab_writer_assignment_id)
+VALUES
+  (NOW(), 'Concurrent ETB $concurrency_counter', '', 'Legacy User', 'abc123',
+   'S2', NOW(6), 'ohne', $width_shift_id,
+   $width_s2_assignment_id)" >>"$concurrency_log" 2>&1
+    ) &
+    concurrency_pids="$concurrency_pids $!"
+    (
+        database_query "$test_database" "
+INSERT INTO nv_tbb
+  (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
+   tbb_funktion, estab_event_time, estab_entry_type, estab_operations,
+   estab_shift_id, estab_writer_assignment_id)
+VALUES
+  (NOW(), 'Concurrent TTB $concurrency_counter', '', 'Legacy User', 'abc123',
+   'A/W', NOW(6), 'betriebsereignis',
+   'Parallel erfasst $concurrency_counter', $width_shift_id,
+   $width_aw_assignment_id)" >>"$concurrency_log" 2>&1
+    ) &
+    concurrency_pids="$concurrency_pids $!"
+    concurrency_counter=$((concurrency_counter + 1))
+done
+for concurrency_pid in $concurrency_pids; do
+    if ! wait "$concurrency_pid"; then
+        echo "schema migrator test: concurrent logbook insert failed" >&2
+        sed -n '1,160p' "$concurrency_log" >&2
+        exit 1
+    fi
+done
+assert_equal "10|10|1|10|11|10|10|1|10|11" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM nv_etb WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-WIDTH-TEST')), '|',
+         (SELECT COUNT(DISTINCT estab_book_lfd) FROM nv_etb
+           WHERE einsatz_id = (SELECT einsatz_id FROM nv_einsaetze
+             WHERE kennung = 'SCHEMA-WIDTH-TEST')), '|',
+         (SELECT MIN(estab_book_lfd) FROM nv_etb WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-WIDTH-TEST')), '|',
+         (SELECT MAX(estab_book_lfd) FROM nv_etb WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-WIDTH-TEST')), '|',
+         (SELECT next_lfd FROM nv_logbuch_koepfe WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-WIDTH-TEST') AND buchart = 'ETB'), '|',
+         (SELECT COUNT(*) FROM nv_tbb WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-WIDTH-TEST')), '|',
+         (SELECT COUNT(DISTINCT estab_book_lfd) FROM nv_tbb
+           WHERE einsatz_id = (SELECT einsatz_id FROM nv_einsaetze
+             WHERE kennung = 'SCHEMA-WIDTH-TEST')), '|',
+         (SELECT MIN(estab_book_lfd) FROM nv_tbb WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-WIDTH-TEST')), '|',
+         (SELECT MAX(estab_book_lfd) FROM nv_tbb WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-WIDTH-TEST')), '|',
+         (SELECT next_lfd FROM nv_logbuch_koepfe WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-WIDTH-TEST') AND buchart = 'TTB')
+       )")" \
+    "concurrent ETB/TBB inserts did not allocate complete unique local numbers"
+
+# A new incident must own both empty heads before any book entry can race.
+# Concurrent first entries then contend only for the already-visible head rows.
+fixture_query "
+INSERT INTO nv_einsaetze
+  (kennung, name, beginn, ende, ort, organisation, fuehrungsstellenname,
+   einsatzleitung, beschreibung, metadaten, erstellt_am, erstellt_von)
+VALUES
+  ('SCHEMA-LOGBOOK-PRECREATED', 'Pre-created-head concurrency incident',
+   NOW(), NULL, '', '', 'Pre-created-head command post', '',
+   'Concurrent first entries use pre-created logbook heads.', '{}', NOW(6),
+   'schema-migrator-test');
+UPDATE nv_einsatz_status
+   SET active_einsatz_id = LAST_INSERT_ID(),
+       revision = revision + 1,
+       geaendert_am = NOW(6),
+       geaendert_von = 'schema-migrator-test'
+ WHERE singleton_id = 1;
+SET @estab_precreated_incident_id = (
+  SELECT einsatz_id FROM nv_einsaetze
+   WHERE kennung = 'SCHEMA-LOGBOOK-PRECREATED'
+);
+INSERT INTO nv_dienstschichten
+  (einsatz_id, nummer, bezeichnung, status, erstellt_von)
+VALUES
+  (@estab_precreated_incident_id, 1, 'Pre-created-head shift', 'GEPLANT',
+   'schema-migrator-test');
+SET @estab_precreated_shift_id = LAST_INSERT_ID();
+INSERT INTO nv_dienstbesetzungen
+  (dienstschicht_id, benutzer_kuerzel, funktion, rolle, status,
+   zugewiesen_von)
+VALUES
+  (@estab_precreated_shift_id, 'abc123', 'S2', 'Stab', 'ZUGEWIESEN',
+   'schema-migrator-test'),
+  (@estab_precreated_shift_id, 'abc123', 'Si', 'Stab', 'ZUGEWIESEN',
+   'schema-migrator-test'),
+  (@estab_precreated_shift_id, 'abc123', 'S6', 'Stab', 'ZUGEWIESEN',
+   'schema-migrator-test'),
+  (@estab_precreated_shift_id, 'abc123', 'LdF', 'Fernmelder', 'ZUGEWIESEN',
+   'schema-migrator-test'),
+  (@estab_precreated_shift_id, 'abc123', 'A/W', 'Fernmelder', 'ZUGEWIESEN',
+   'schema-migrator-test');
+UPDATE nv_dienstbesetzungen
+   SET status = 'ANGENOMMEN', angenommen_am = NOW(6)
+ WHERE dienstschicht_id = @estab_precreated_shift_id;
+UPDATE nv_dienstschichten
+   SET status = 'AKTIV', aktiviert_am = NOW(6)
+ WHERE dienstschicht_id = @estab_precreated_shift_id"
+assert_equal "2|ETB:1,TTB:1|0|0" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM nv_logbuch_koepfe
+           WHERE einsatz_id = (
+             SELECT einsatz_id FROM nv_einsaetze
+              WHERE kennung = 'SCHEMA-LOGBOOK-PRECREATED'
+           )), '|',
+         (SELECT GROUP_CONCAT(CONCAT(buchart, ':', next_lfd)
+                  ORDER BY buchart SEPARATOR ',')
+            FROM nv_logbuch_koepfe
+           WHERE einsatz_id = (
+             SELECT einsatz_id FROM nv_einsaetze
+              WHERE kennung = 'SCHEMA-LOGBOOK-PRECREATED'
+           )), '|',
+         (SELECT COUNT(*) FROM nv_etb WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-LOGBOOK-PRECREATED')), '|',
+         (SELECT COUNT(*) FROM nv_tbb WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-LOGBOOK-PRECREATED'))
+       )")" \
+    "new incident did not receive both empty book heads before first entry"
+precreated_shift_id=$(fixture_query "
+SELECT dienstschicht_id FROM nv_dienstschichten
+ WHERE bezeichnung = 'Pre-created-head shift'")
+precreated_s2_assignment_id=$(fixture_query "
+SELECT assignment.dienstbesetzung_id
+  FROM nv_dienstbesetzungen AS assignment
+  JOIN nv_dienstschichten AS shift_row
+    ON shift_row.dienstschicht_id = assignment.dienstschicht_id
+ WHERE shift_row.bezeichnung = 'Pre-created-head shift'
+   AND BINARY assignment.funktion = BINARY 'S2'")
+precreated_aw_assignment_id=$(fixture_query "
+SELECT assignment.dienstbesetzung_id
+  FROM nv_dienstbesetzungen AS assignment
+  JOIN nv_dienstschichten AS shift_row
+    ON shift_row.dienstschicht_id = assignment.dienstschicht_id
+ WHERE shift_row.bezeichnung = 'Pre-created-head shift'
+   AND BINARY assignment.funktion = BINARY 'A/W'")
+: > "$concurrency_log"
+concurrency_pids=
+concurrency_counter=1
+while [ "$concurrency_counter" -le 4 ]; do
+    (
+        database_query "$test_database" "
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type, estab_shift_id,
+   estab_writer_assignment_id)
+VALUES
+  (NOW(), 'First-head ETB $concurrency_counter', '', 'Legacy User', 'abc123',
+   'S2', NOW(6), 'ohne', $precreated_shift_id,
+   $precreated_s2_assignment_id)" >>"$concurrency_log" 2>&1
+    ) &
+    concurrency_pids="$concurrency_pids $!"
+    (
+        database_query "$test_database" "
+INSERT INTO nv_tbb
+  (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
+   tbb_funktion, estab_event_time, estab_entry_type, estab_operations,
+   estab_shift_id, estab_writer_assignment_id)
+VALUES
+  (NOW(), 'First-head TTB $concurrency_counter', '', 'Legacy User', 'abc123',
+   'A/W', NOW(6), 'betriebsereignis',
+   'Erste parallele Erfassung $concurrency_counter', $precreated_shift_id,
+   $precreated_aw_assignment_id)" \
+            >>"$concurrency_log" 2>&1
+    ) &
+    concurrency_pids="$concurrency_pids $!"
+    concurrency_counter=$((concurrency_counter + 1))
+done
+for concurrency_pid in $concurrency_pids; do
+    if ! wait "$concurrency_pid"; then
+        echo "schema migrator test: concurrent first-entry insert failed" >&2
+        sed -n '1,160p' "$concurrency_log" >&2
+        exit 1
+    fi
+done
+assert_equal "4|4|1|4|5|4|4|1|4|5" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM nv_etb WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-LOGBOOK-PRECREATED')), '|',
+         (SELECT COUNT(DISTINCT estab_book_lfd) FROM nv_etb
+           WHERE einsatz_id = (SELECT einsatz_id FROM nv_einsaetze
+             WHERE kennung = 'SCHEMA-LOGBOOK-PRECREATED')), '|',
+         (SELECT MIN(estab_book_lfd) FROM nv_etb WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-LOGBOOK-PRECREATED')), '|',
+         (SELECT MAX(estab_book_lfd) FROM nv_etb WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-LOGBOOK-PRECREATED')), '|',
+         (SELECT next_lfd FROM nv_logbuch_koepfe WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-LOGBOOK-PRECREATED') AND buchart = 'ETB'), '|',
+         (SELECT COUNT(*) FROM nv_tbb WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-LOGBOOK-PRECREATED')), '|',
+         (SELECT COUNT(DISTINCT estab_book_lfd) FROM nv_tbb
+           WHERE einsatz_id = (SELECT einsatz_id FROM nv_einsaetze
+             WHERE kennung = 'SCHEMA-LOGBOOK-PRECREATED')), '|',
+         (SELECT MIN(estab_book_lfd) FROM nv_tbb WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-LOGBOOK-PRECREATED')), '|',
+         (SELECT MAX(estab_book_lfd) FROM nv_tbb WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-LOGBOOK-PRECREATED')), '|',
+         (SELECT next_lfd FROM nv_logbuch_koepfe WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-LOGBOOK-PRECREATED') AND buchart = 'TTB')
+       )")" \
+    "first concurrent ETB/TBB entries did not use pre-created book heads"
+
+# The book triggers must never recreate missing infrastructure. A damaged head
+# fails closed, leaves the book unchanged, and can be repaired explicitly.
+fixture_query "
+DELETE FROM nv_logbuch_koepfe
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze
+    WHERE kennung = 'SCHEMA-LOGBOOK-PRECREATED'
+ ) AND buchart = 'ETB'"
+if fixture_query "
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type, estab_shift_id,
+   estab_writer_assignment_id)
+VALUES
+  (NOW(), 'Missing-head ETB', '', 'Legacy User', 'abc123', 'S2',
+   NOW(6), 'ohne', $precreated_shift_id,
+   $precreated_s2_assignment_id)" >"$failure_log" 2>&1; then
+    echo "schema migrator test: missing ETB head was recreated by entry trigger" >&2
+    exit 1
+fi
+if ! grep -q 'ETB book head is missing' "$failure_log"; then
+    echo "schema migrator test: missing ETB head was not rejected explicitly" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+fixture_query "
+INSERT INTO nv_logbuch_koepfe (einsatz_id, buchart, next_lfd)
+SELECT einsatz_id, 'ETB', 5 FROM nv_einsaetze
+ WHERE kennung = 'SCHEMA-LOGBOOK-PRECREATED';
+DELETE FROM nv_logbuch_koepfe
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze
+    WHERE kennung = 'SCHEMA-LOGBOOK-PRECREATED'
+ ) AND buchart = 'TTB'"
+if fixture_query "
+INSERT INTO nv_tbb
+  (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
+   tbb_funktion, estab_event_time, estab_entry_type, estab_operations,
+   estab_shift_id, estab_writer_assignment_id)
+VALUES
+  (NOW(), 'Missing-head TTB', '', 'Legacy User', 'abc123', 'A/W',
+   NOW(6), 'betriebsereignis', 'Darf nicht gespeichert werden',
+   $precreated_shift_id, $precreated_aw_assignment_id)" \
+    >"$failure_log" 2>&1; then
+    echo "schema migrator test: missing TTB head was recreated by entry trigger" >&2
+    exit 1
+fi
+if ! grep -q 'TTB book head is missing' "$failure_log"; then
+    echo "schema migrator test: missing TTB head was not rejected explicitly" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+fixture_query "
+INSERT INTO nv_logbuch_koepfe (einsatz_id, buchart, next_lfd)
+SELECT einsatz_id, 'TTB', 5 FROM nv_einsaetze
+ WHERE kennung = 'SCHEMA-LOGBOOK-PRECREATED'"
+assert_equal "4|4|ETB:5,TTB:5" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM nv_etb WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-LOGBOOK-PRECREATED')), '|',
+         (SELECT COUNT(*) FROM nv_tbb WHERE einsatz_id = (
+           SELECT einsatz_id FROM nv_einsaetze
+            WHERE kennung = 'SCHEMA-LOGBOOK-PRECREATED')), '|',
+         (SELECT GROUP_CONCAT(CONCAT(buchart, ':', next_lfd)
+                  ORDER BY buchart SEPARATOR ',')
+            FROM nv_logbuch_koepfe WHERE einsatz_id = (
+              SELECT einsatz_id FROM nv_einsaetze
+               WHERE kennung = 'SCHEMA-LOGBOOK-PRECREATED'
+            ))
+       )")" \
+    "missing book-head failures changed entries or local counters"
+fixture_query "
+UPDATE nv_einsatz_status
+   SET active_einsatz_id = (
+         SELECT einsatz_id FROM nv_einsaetze
+          WHERE kennung = 'SCHEMA-WIDTH-TEST'
+       ),
+       revision = revision + 1,
+       geaendert_am = NOW(6),
+       geaendert_von = 'schema-migrator-test'
+ WHERE singleton_id = 1"
+if fixture_query "
+INSERT INTO nv_etb
+  (etb_time, etb_aktion, etb_bemerk, etb_benutzer, etb_kuerzel,
+   etb_funktion, estab_event_time, estab_event_type, estab_shift_id,
+   estab_writer_assignment_id)
+VALUES (NOW(), 'Unzulässig', '', 'Schema Test', 'wid', 'S2',
+        NOW(6), 'legacy_import', $width_shift_id,
+        $width_s2_assignment_id)" >"$failure_log" 2>&1; then
+    echo "schema migrator test: new legacy ETB type was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'ETB entry type is not permitted' "$failure_log"; then
+    echo "schema migrator test: invalid ETB type failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+if fixture_query "
+INSERT INTO nv_tbb
+  (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
+   tbb_funktion, estab_event_time, estab_entry_type, estab_shift_id,
+   estab_writer_assignment_id)
+VALUES (NOW(), '', '', 'Legacy User', 'abc123', 'A/W', NOW(6), 'kanal',
+        $width_shift_id, $width_aw_assignment_id)" \
+    >"$failure_log" 2>&1; then
+    echo "schema migrator test: empty TTB entry was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'TTB entry requires at least one content area' "$failure_log"; then
+    echo "schema migrator test: empty TTB failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+if fixture_query "
+INSERT INTO nv_tbb
+  (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
+   tbb_funktion, estab_event_time, estab_entry_type,
+   estab_message_route, estab_shift_id)
+VALUES
+  (NOW(), 'Unverknüpfter Nachrichtennachweis', '', 'eStab-System', 'system',
+   '', NOW(6), 'nachricht', 'ohne verbindliche Nachricht',
+   $width_shift_id)" >"$failure_log" 2>&1; then
+    echo "schema migrator test: unlinked TTB message row was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'TTB message entry requires canonical message link' \
+    "$failure_log"; then
+    echo "schema migrator test: unlinked TTB message failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+if fixture_query "
+INSERT INTO nv_tbb
+  (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
+   tbb_funktion, estab_event_time, estab_entry_type, estab_message_id,
+   estab_channel, estab_shift_id)
+SELECT NOW(), 'Manueller Link mit falschem Typ', '', 'eStab-System', 'system',
+       '', NOW(6), 'kanal', \`00_lfd\`, 'BOS-Kanal 25', $width_shift_id
+  FROM nv_nachrichten
+ WHERE \`12_inhalt\` = 'Schema width fixture'" >"$failure_log" 2>&1; then
+    echo "schema migrator test: non-message TTB row linked a message" >&2
+    exit 1
+fi
+if ! grep -q 'TTB message link requires canonical message entry' \
+    "$failure_log"; then
+    echo "schema migrator test: wrong-type message link failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+if fixture_query "
+INSERT INTO nv_tbb
+  (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
+   tbb_funktion, estab_event_time, estab_entry_type, estab_message_id,
+   estab_message_route, estab_shift_id, estab_writer_assignment_id)
+SELECT NOW(), 'Manuell erzeugter Nachrichtennachweis', '', 'Legacy User', 'abc123',
+       'A/W', NOW(6), 'nachricht', \`00_lfd\`, 'manueller Link',
+       $width_shift_id, $width_aw_assignment_id
+  FROM nv_nachrichten
+ WHERE \`12_inhalt\` = 'Schema width fixture'" >"$failure_log" 2>&1; then
+    echo "schema migrator test: manual TTB row linked a message" >&2
+    exit 1
+fi
+if ! grep -q 'TTB message link requires system-generated evidence' \
+    "$failure_log"; then
+    echo "schema migrator test: manual message link failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+if fixture_query "
+INSERT INTO nv_tbb
+  (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
+   tbb_funktion, estab_event_time, estab_entry_type, estab_message_id,
+   estab_message_route, estab_shift_id)
+SELECT NOW(), 'Doppelter Nachrichtennachweis', '', 'eStab-System', 'system',
+       '', NOW(6), 'nachricht', \`00_lfd\`, 'doppelter Link', $width_shift_id
+  FROM nv_nachrichten
+ WHERE \`12_inhalt\` = 'Schema width fixture'" >"$failure_log" 2>&1; then
+    echo "schema migrator test: duplicate canonical TTB message row was accepted" >&2
+    exit 1
+fi
+if ! grep -Eq 'Duplicate entry|idx_tbb_message' "$failure_log"; then
+    echo "schema migrator test: duplicate message evidence failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+if fixture_query "
+INSERT INTO nv_tbb
+  (tbb_time, tbb_aktion, tbb_bemerk, tbb_benutzer, tbb_kuerzel,
+   tbb_funktion, estab_event_time, estab_entry_type, estab_message_id,
+   estab_message_route, estab_shift_id)
+SELECT NOW(), 'Falscher Einsatz', '', 'eStab-System', 'system', '',
+       NOW(6), 'nachricht', \`00_lfd\`, 'unzulässiger Link', $width_shift_id
+  FROM nv_nachrichten
+ WHERE \`12_inhalt\` = 'Second incident message'" >"$failure_log" 2>&1; then
+    echo "schema migrator test: cross-incident TTB message link was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'TTB message link targets another incident' "$failure_log"; then
+    echo "schema migrator test: cross-incident TTB link failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "10|11|1" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM nv_tbb
+           WHERE einsatz_id = (
+             SELECT einsatz_id FROM nv_einsaetze
+              WHERE kennung = 'SCHEMA-WIDTH-TEST'
+           )), '|',
+         (SELECT next_lfd FROM nv_logbuch_koepfe
+           WHERE einsatz_id = (
+             SELECT einsatz_id FROM nv_einsaetze
+              WHERE kennung = 'SCHEMA-WIDTH-TEST'
+           ) AND buchart = 'TTB'), '|',
+         (SELECT COUNT(*) FROM nv_tbb AS entry_row
+           JOIN nv_nachrichten AS message_row
+             ON message_row.\`00_lfd\` = entry_row.estab_message_id
+            AND message_row.einsatz_id = entry_row.einsatz_id
+          WHERE entry_row.einsatz_id = (
+            SELECT einsatz_id FROM nv_einsaetze
+             WHERE kennung = 'SCHEMA-WIDTH-TEST'
+          ) AND entry_row.estab_entry_type = 'nachricht'
+            AND BINARY entry_row.tbb_kuerzel = BINARY 'system'
+            AND BINARY entry_row.tbb_benutzer = BINARY 'eStab-System')
+       )")" \
+    "rejected TTB message links changed evidence or consumed a local number"
+if fixture_query "
+UPDATE nv_tbb SET tbb_bemerk = 'mutiert'
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze WHERE kennung = 'SCHEMA-WIDTH-TEST'
+ ) AND estab_book_lfd = 1" >"$failure_log" 2>&1; then
+    echo "schema migrator test: TTB update was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'TTB entries are append-only; write a correction' "$failure_log"; then
+    echo "schema migrator test: TTB update failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+if fixture_query "
+DELETE FROM nv_tbb
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze WHERE kennung = 'SCHEMA-WIDTH-TEST'
+ ) AND estab_book_lfd = 1" >"$failure_log" 2>&1; then
+    echo "schema migrator test: TTB delete was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'TTB entries are protected by retention policy' "$failure_log"; then
+    echo "schema migrator test: TTB delete failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "11|11" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT next_lfd FROM nv_logbuch_koepfe
+           WHERE einsatz_id = (
+             SELECT einsatz_id FROM nv_einsaetze
+              WHERE kennung = 'SCHEMA-WIDTH-TEST'
+           ) AND buchart = 'ETB'), '|',
+         (SELECT next_lfd FROM nv_logbuch_koepfe
+           WHERE einsatz_id = (
+             SELECT einsatz_id FROM nv_einsaetze
+              WHERE kennung = 'SCHEMA-WIDTH-TEST'
+           ) AND buchart = 'TTB')
+       )")" \
+    "rejected logbook inserts consumed a local sequence number"
+fixture_query "
+UPDATE nv_einsatz_status
+   SET active_einsatz_id = NULL,
+       revision = revision + 1,
+       geaendert_am = NOW(6),
+       geaendert_von = 'schema-migrator-test'
+ WHERE singleton_id = 1"
 assert_equal "S1|1" "$(fixture_query "
 SELECT CONCAT(
          (SELECT \`01_zeichen\` FROM nv_nachrichten WHERE \`00_lfd\` = 1),

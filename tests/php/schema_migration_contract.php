@@ -61,6 +61,12 @@ $messageListSearchMigration = $read(
 $sessionPresenceMigration = $read(
     $root . '/docker/db/migrations/100-session-presence.sql'
 );
+$logbookRulesMigration = $read(
+    $root . '/docker/db/migrations/110-etb-tbb-rules.sql'
+);
+$logbookShiftMigration = $read(
+    $root . '/docker/db/migrations/111-logbook-shift-assignment.sql'
+);
 $baseline = $read($root . '/docker/db/init/10-schema.sql');
 $verify = $read($root . '/docker/db/verify.sql');
 $health = $read($root . '/health.php');
@@ -81,9 +87,64 @@ $commandPostSql = $normaliseSql($commandPostMigration);
 $officialMessageFieldsSql = $normaliseSql($officialMessageFieldsMigration);
 $messageListSearchSql = $normaliseSql($messageListSearchMigration);
 $sessionPresenceSql = $normaliseSql($sessionPresenceMigration);
+$logbookRulesSql = $normaliseSql($logbookRulesMigration);
+$logbookShiftSql = $normaliseSql($logbookShiftMigration);
 $baselineSql = $normaliseSql($baseline);
 $verifySql = $normaliseSql($verify);
 $readinessSql = $normaliseSql(estab_readiness_schema_query());
+$etbInsertTriggerStart = strpos(
+    $logbookShiftSql,
+    'CREATE TRIGGER `estab_etb_bi_einsatz`'
+);
+$etbAssigneePolicyStart = strpos(
+    $logbookShiftSql,
+    'IF NEW.`estab_assignee_assignment_id` IS NULL',
+    is_int($etbInsertTriggerStart) ? $etbInsertTriggerStart : 0
+);
+$etbAssigneePolicyEnd = strpos(
+    $logbookShiftSql,
+    'IF NEW.`estab_message_id` IS NOT NULL',
+    is_int($etbAssigneePolicyStart) ? $etbAssigneePolicyStart : 0
+);
+$etbAssigneePolicySql = is_int($etbAssigneePolicyStart)
+    && is_int($etbAssigneePolicyEnd)
+    ? substr(
+        $logbookShiftSql,
+        $etbAssigneePolicyStart,
+        $etbAssigneePolicyEnd - $etbAssigneePolicyStart
+    )
+    : '';
+$sqlParenthesesAreBalanced = static function (string $sql): bool {
+    $depth = 0;
+    $quote = null;
+    $length = strlen($sql);
+    for ($offset = 0; $offset < $length; $offset++) {
+        $character = $sql[$offset];
+        if ($quote !== null) {
+            if ($character === $quote) {
+                if ($offset + 1 < $length && $sql[$offset + 1] === $quote) {
+                    $offset++;
+                    continue;
+                }
+                $quote = null;
+            }
+            continue;
+        }
+        if ($character === "'" || $character === '"' || $character === '`') {
+            $quote = $character;
+            continue;
+        }
+        if ($character === '(') {
+            $depth++;
+        } elseif ($character === ')') {
+            $depth--;
+            if ($depth < 0) {
+                return false;
+            }
+        }
+    }
+    return $quote === null && $depth === 0;
+};
 $oldCapabilityEnum = "enum('LAGE_DOKUMENTATION','SICHTUNG',"
     . "'FERNMELDEPLANUNG','FERNMELDEBETRIEB','BEFOERDERUNG')";
 $newCapabilityEnum = "enum('LAGE_DOKUMENTATION','EINSATZTAGEBUCH',"
@@ -289,6 +350,47 @@ foreach ([
     );
 }
 $assert(
+    $sqlParenthesesAreBalanced($verifySql)
+        && $sqlParenthesesAreBalanced($readinessSql),
+    'Runtime schema verification SQL has unbalanced parentheses or quotes'
+);
+$assert(
+    $etbAssigneePolicySql !== ''
+        && !str_contains($etbAssigneePolicySql, 'account.`aktiv` = 1')
+        && str_contains(
+            $etbAssigneePolicySql,
+            'account.`estab_gesperrt` = 0'
+        ),
+    'Migration 111 treats session presence as ETB assignee validity'
+);
+$assert(
+    preg_match(
+        "/\(\(SELECT COUNT\(\*\) FROM information_schema\.tables "
+            . ".*?table_name = 'nv_logbuch_koepfe'.*?\) = 1 AND "
+            . "\(SELECT COUNT\(\*\) FROM information_schema\.columns "
+            . ".*?\) = 12 AND \(SELECT COUNT\(\*\) FROM "
+            . "information_schema\.columns .*?\) = 6\) "
+            . "AS `logbook_schema_ok`/s",
+        $verifySql
+    ) === 1,
+    'verify.sql closes logbook_schema_ok before the migration-111 columns'
+);
+$assert(
+    preg_match(
+        "/\(\(SELECT COUNT\(\*\) FROM information_schema\.statistics "
+            . ".*?\) = 11 AND \(SELECT COUNT\(\*\) FROM "
+            . "information_schema\.statistics .*?\) = 9 AND "
+            . "\(SELECT COUNT\(\*\) FROM "
+            . "information_schema\.referential_constraints .*?\) = 3 AND "
+            . "\(SELECT COUNT\(\*\) FROM "
+            . "information_schema\.referential_constraints AS relation "
+            . ".*?information_schema\.key_column_usage AS key_column "
+            . ".*?\) = 5\) AS `logbook_indexes_ok`/s",
+        $verifySql
+    ) === 1,
+    'verify.sql closes logbook_indexes_ok before the migration-111 keys'
+);
+$assert(
     str_contains($verify, 'runtime_code_widths_ok')
     && str_contains($verify, 'official_message_fields_ok')
     && str_contains($verify, 'message_list_indexes_ok')
@@ -417,6 +519,450 @@ foreach ([
         );
     }
 }
+$logbookMigrationFragments = [
+    'Logbook rules migration blocked: foreign logbook-head table collision'
+        => 'Migration 110 does not reject a foreign head-table collision',
+    'Logbook rules migration blocked: foreign ETB book-number column collision'
+        => 'Migration 110 does not reject a foreign ETB-number collision',
+    'Logbook rules migration blocked: foreign or partial TTB column collision'
+        => 'Migration 110 does not reject a foreign/partial TTB schema',
+    'Logbook rules migration blocked: foreign logbook index collision'
+        => 'Migration 110 does not reject foreign logbook indexes',
+    'Logbook rules migration blocked: foreign trigger collision'
+        => 'Migration 110 does not reject foreign trigger definitions',
+    'CREATE TABLE IF NOT EXISTS `nv_logbuch_koepfe`'
+        => 'Migration 110 does not create per-incident book heads',
+    'estab:migration:110:logbook-heads:v1'
+        => 'Migration 110 does not own its book-head table',
+    'CREATE TRIGGER `estab_einsaetze_ai_logbook_heads` AFTER INSERT ON `nv_einsaetze`'
+        => 'Migration 110 does not create both book heads with each incident',
+    "(NEW.`einsatz_id`, 'ETB', 1), (NEW.`einsatz_id`, 'TTB', 1)"
+        => 'Migration 110 does not initialise both empty books at number one',
+    'ROW_NUMBER() OVER ( PARTITION BY `einsatz_id` ORDER BY `estab_recorded_at`, `etb_lfd-nr` )'
+        => 'Migration 110 does not deterministically number historic ETB rows',
+    'ROW_NUMBER() OVER ( PARTITION BY `einsatz_id` ORDER BY `estab_recorded_at`, `tbb_lfd-nr` )'
+        => 'Migration 110 does not deterministically number historic TTB rows',
+    'ADD UNIQUE INDEX `uq_etb_einsatz_book_lfd` (`einsatz_id`, `estab_book_lfd`)'
+        => 'Migration 110 does not enforce incident-local ETB numbers',
+    'ADD UNIQUE INDEX `uq_etb_attachment_id` (`estab_attachment_id`)'
+        => 'Migration 110 does not assign an attachment to at most one ETB row',
+    'Logbook rules migration blocked: duplicate ETB attachment link'
+        => 'Migration 110 does not block ambiguous historic ETB attachment links',
+    'ADD UNIQUE INDEX `uq_tbb_einsatz_book_lfd` (`einsatz_id`, `estab_book_lfd`)'
+        => 'Migration 110 does not enforce incident-local TTB numbers',
+    '`next_lfd` = LAST_INSERT_ID(`next_lfd` + 1)'
+        => 'Migration 110 does not atomically allocate numbers under a head-row write lock',
+    'ETB book head is missing'
+        => 'Migration 110 does not fail closed when the ETB head is missing',
+    'TTB book head is missing'
+        => 'Migration 110 does not fail closed when the TTB head is missing',
+    'ETB entry type is not permitted'
+        => 'Migration 110 does not validate canonical ETB entry kinds',
+    'TTB entry type is not permitted'
+        => 'Migration 110 does not validate canonical TTB entry kinds',
+    'TTB entry requires at least one content area'
+        => 'Migration 110 accepts empty operational TTB entries',
+    'TTB message link targets another incident'
+        => 'Migration 110 does not enforce incident-safe TTB message links',
+    'TTB message link requires canonical message entry'
+        => 'Migration 110 lets non-message TTB rows link a message',
+    'TTB message link requires system-generated evidence'
+        => 'Migration 110 does not protect the system-generated message marker',
+    'ADD UNIQUE INDEX `idx_tbb_message` (`einsatz_id`, `estab_message_id`)'
+        => 'Migration 110 does not make message evidence incident-locally unique',
+    'ADD CONSTRAINT `fk_tbb_message`'
+        => 'Migration 110 does not constrain TTB message links',
+    'TTB entries are append-only; write a correction'
+        => 'Migration 110 does not make TTB updates append-only',
+    'TTB entries are protected by retention policy'
+        => 'Migration 110 does not protect TTB rows from deletion',
+    'Logbook rules migration failed: operational locking reads are incomplete'
+        => 'Migration 110 does not validate snapshot-safe operational reads',
+    "shift_row.`status` IN ('GEPLANT','AKTIV')"
+        => 'Migration 110 does not permit a genuine active-shift extension',
+    'Active duty shift function was already assigned'
+        => 'Migration 110 permits active-shift replacement or reoccupation',
+    "BINARY NEW.`funktion` <> BINARY 'A/W'"
+        => 'Migration 110 blocks legitimate multi-staffed active A/W extension',
+    "SET `estab_entry_type` = 'legacy_import'"
+        => 'Migration 110 does not mark imported TTB evidence honestly',
+    "CONCAT('Betriebsvorgang: ', `tbb_aktion`)"
+        => 'Migration 110 does not retain historic TTB action text',
+    "CONCAT('Bemerkung: ', `tbb_bemerk`)"
+        => 'Migration 110 does not retain historic TTB remark text',
+    'DATE_ADD(`estab_closed_at`, INTERVAL 10 YEAR)'
+        => 'Migration 110 does not establish the ten-year retention floor',
+    'Formal incident close is irreversible'
+        => 'Migration 110 does not restore the irreversible-close rule',
+    'Formal incident close evidence is immutable'
+        => 'Migration 110 does not restore immutable close evidence',
+    'Active incident must be deactivated before close'
+        => 'Migration 110 does not restore the active-close guard',
+    'CREATE PROCEDURE estab_migrate_110_validate()'
+        => 'Migration 110 has no final canonical validator',
+];
+foreach ($logbookMigrationFragments as $fragment => $message) {
+    $assert(str_contains($logbookRulesSql, $fragment), $message);
+}
+$assert(
+    substr_count(
+        $logbookRulesSql,
+        'WHERE `singleton_id` = 1 FOR UPDATE;'
+    ) >= 3,
+    'Migration 110 does not replace all three operational functions with locking reads'
+);
+$triggerMatch = [];
+$assert(
+    preg_match(
+        '/CREATE TRIGGER `estab_etb_bi_einsatz` .*? END\/\//s',
+        $logbookRulesSql,
+        $triggerMatch
+    ) === 1
+        && !str_contains($triggerMatch[0] ?? '', 'INSERT INTO `nv_logbuch_koepfe`'),
+    'ETB insert trigger still creates a head instead of requiring the incident head'
+);
+$triggerMatch = [];
+$assert(
+    preg_match(
+        '/CREATE TRIGGER `estab_tbb_bi_einsatz` .*? END\/\//s',
+        $logbookRulesSql,
+        $triggerMatch
+    ) === 1
+        && !str_contains($triggerMatch[0] ?? '', 'INSERT INTO `nv_logbuch_koepfe`'),
+    'TTB insert trigger still creates a head instead of requiring the incident head'
+);
+$tbbInsertTrigger = $triggerMatch[0] ?? '';
+$assert(
+    str_contains(
+        $tbbInsertTrigger,
+        "BINARY NEW.`estab_entry_type` <> BINARY 'nachricht'"
+    )
+        && str_contains(
+            $tbbInsertTrigger,
+            "BINARY COALESCE(NEW.`tbb_kuerzel`, '') <> BINARY 'system'"
+        )
+        && str_contains(
+            $tbbInsertTrigger,
+            "BINARY COALESCE(NEW.`tbb_benutzer`, '') <> BINARY 'eStab-System'"
+        ),
+    'TTB insert trigger does not authenticate canonical message evidence markers'
+);
+$assert(
+    str_contains($logbookRulesSql, "BINARY NEW.`estab_event_type` = BINARY 'ohne'")
+        && str_contains($logbookRulesSql, "BINARY NEW.`estab_event_type` = BINARY 'A'")
+        && str_contains($logbookRulesSql, "BINARY NEW.`estab_event_type` = BINARY 'B'")
+        && str_contains($logbookRulesSql, "BINARY NEW.`estab_event_type` = BINARY 'E'")
+        && str_contains($logbookRulesSql, "BINARY NEW.`estab_event_type` = BINARY 'K'")
+        && str_contains($logbookRulesSql, "BINARY NEW.`estab_event_type` = BINARY 'W'")
+        && str_contains($logbookRulesSql, "BINARY NEW.`estab_event_type` = BINARY 'korrektur'"),
+    'Migration 110 does not enforce all official ETB entry kinds exactly'
+);
+$assert(
+    str_contains($logbookRulesSql, "BINARY NEW.`estab_entry_type` = BINARY 'betrieb_personal'")
+        && str_contains($logbookRulesSql, "BINARY NEW.`estab_entry_type` = BINARY 'kanal'")
+        && str_contains($logbookRulesSql, "BINARY NEW.`estab_entry_type` = BINARY 'nachricht'")
+        && str_contains($logbookRulesSql, "BINARY NEW.`estab_entry_type` = BINARY 'betriebsereignis'")
+        && str_contains($logbookRulesSql, "BINARY NEW.`estab_entry_type` = BINARY 'quittung'")
+        && str_contains($logbookRulesSql, "BINARY NEW.`estab_entry_type` = BINARY 'korrektur'"),
+    'Migration 110 does not enforce all official TTB entry kinds exactly'
+);
+$assert(
+    str_contains(
+        $logbookRulesMigration,
+        'OR BINARY `estab_entry_type` NOT IN ('
+    )
+        && str_contains(
+            $logbookRulesMigration,
+            "BINARY `estab_entry_type` <> BINARY 'legacy_import'"
+        )
+        && str_contains(
+            $verify,
+            'OR BINARY `estab_entry_type` NOT IN ('
+        )
+        && str_contains(
+            $verify,
+            "BINARY `estab_entry_type` <> BINARY 'legacy_import'"
+        )
+        && str_contains(
+            $readiness,
+            'OR BINARY estab_entry_type NOT IN ('
+        )
+        && str_contains(
+            $readiness,
+            "BINARY estab_entry_type <> BINARY 'legacy_import'"
+        )
+        && !str_contains(
+            $logbookRulesMigration,
+            'OR `estab_entry_type` NOT IN ('
+        )
+        && !str_contains($verify, 'OR `estab_entry_type` NOT IN (')
+        && !str_contains($readiness, 'OR estab_entry_type NOT IN ('),
+    'Migration, verification, or readiness accepts case-variant TTB types'
+);
+$logbookShiftMigrationFragments = [
+    'Historic rows deliberately stay NULL'
+        => 'Migration 111 no longer documents the no-invention history policy',
+    'CREATE PROCEDURE estab_migrate_111_preflight()'
+        => 'Migration 111 has no collision preflight',
+    'Logbook shift migration blocked: foreign column collision'
+        => 'Migration 111 does not reject foreign columns',
+    'Logbook shift migration blocked: foreign index collision'
+        => 'Migration 111 does not reject foreign indexes',
+    'Logbook shift migration blocked: foreign constraint collision'
+        => 'Migration 111 does not reject foreign constraints',
+    'Logbook shift migration blocked: foreign trigger collision'
+        => 'Migration 111 does not reject foreign insert triggers',
+    'CREATE PROCEDURE estab_migrate_111_add_columns()'
+        => 'Migration 111 has no resumable column phase',
+    'CREATE PROCEDURE estab_migrate_111_add_indexes()'
+        => 'Migration 111 has no resumable index phase',
+    'CREATE PROCEDURE estab_migrate_111_add_foreign_keys()'
+        => 'Migration 111 has no resumable foreign-key phase',
+    'CREATE PROCEDURE estab_migrate_111_validate()'
+        => 'Migration 111 has no final validator',
+    'estab:migration:111:etb-shift:v1'
+        => 'Migration 111 does not own the ETB shift column',
+    'estab:migration:111:etb-writer:v1'
+        => 'Migration 111 does not own the ETB writer column',
+    'estab:migration:111:etb-assignee:v1'
+        => 'Migration 111 does not own the ETB assignee column',
+    'estab:migration:111:etb-assignment-snapshot:v1'
+        => 'Migration 111 does not own the ETB assignment snapshot',
+    'estab:migration:111:tbb-shift:v1'
+        => 'Migration 111 does not own the TTB shift column',
+    'estab:migration:111:tbb-writer:v1'
+        => 'Migration 111 does not own the TTB writer column',
+    'ADD INDEX `idx_etb_einsatz_shift_book` (`einsatz_id`, `estab_shift_id`, `estab_book_lfd`)'
+        => 'Migration 111 does not add the canonical ETB shift index',
+    'ADD INDEX `idx_etb_writer_assignment` (`estab_writer_assignment_id`)'
+        => 'Migration 111 does not index ETB writer assignments',
+    'ADD INDEX `idx_etb_assignee_assignment` (`estab_assignee_assignment_id`)'
+        => 'Migration 111 does not index ETB assignee assignments',
+    'ADD INDEX `idx_tbb_einsatz_shift_book` (`einsatz_id`, `estab_shift_id`, `estab_book_lfd`)'
+        => 'Migration 111 does not add the canonical TTB shift index',
+    'ADD INDEX `idx_tbb_writer_assignment` (`estab_writer_assignment_id`)'
+        => 'Migration 111 does not index TTB writer assignments',
+    'ADD CONSTRAINT `fk_etb_shift` FOREIGN KEY (`estab_shift_id`) REFERENCES `nv_dienstschichten` (`dienstschicht_id`) ON UPDATE RESTRICT ON DELETE RESTRICT'
+        => 'Migration 111 does not constrain the ETB shift canonically',
+    'ADD CONSTRAINT `fk_etb_writer_assignment` FOREIGN KEY (`estab_writer_assignment_id`) REFERENCES `nv_dienstbesetzungen` (`dienstbesetzung_id`) ON UPDATE RESTRICT ON DELETE RESTRICT'
+        => 'Migration 111 does not constrain the ETB writer canonically',
+    'ADD CONSTRAINT `fk_etb_assignee_assignment` FOREIGN KEY (`estab_assignee_assignment_id`) REFERENCES `nv_dienstbesetzungen` (`dienstbesetzung_id`) ON UPDATE RESTRICT ON DELETE RESTRICT'
+        => 'Migration 111 does not constrain the ETB assignee canonically',
+    'ADD CONSTRAINT `fk_tbb_shift` FOREIGN KEY (`estab_shift_id`) REFERENCES `nv_dienstschichten` (`dienstschicht_id`) ON UPDATE RESTRICT ON DELETE RESTRICT'
+        => 'Migration 111 does not constrain the TTB shift canonically',
+    'ADD CONSTRAINT `fk_tbb_writer_assignment` FOREIGN KEY (`estab_writer_assignment_id`) REFERENCES `nv_dienstbesetzungen` (`dienstbesetzung_id`) ON UPDATE RESTRICT ON DELETE RESTRICT'
+        => 'Migration 111 does not constrain the TTB writer canonically',
+    'ETB entry requires a duty shift'
+        => 'Migration 111 accepts ETB rows without a duty shift',
+    'ETB duty shift targets another incident'
+        => 'Migration 111 accepts an ETB shift from another incident',
+    'Manual ETB entry requires its duty assignment'
+        => 'Migration 111 accepts manual ETB rows without a writer assignment',
+    'ETB writer does not belong to its duty shift'
+        => 'Migration 111 accepts an ETB writer from another shift',
+    'ETB writer identity or status is invalid'
+        => 'Migration 111 trusts an inactive or mismatched ETB writer',
+    'ETB assignee does not belong to its duty shift'
+        => 'Migration 111 accepts an ETB assignee from another shift',
+    'ETB assignee identity or status is invalid'
+        => 'Migration 111 trusts an unaccepted or blocked ETB assignee',
+    'ETB assignee snapshot requires an assignment'
+        => 'Migration 111 trusts an unbound browser assignee snapshot',
+    'SET NEW.`estab_assignment` = assignment_snapshot'
+        => 'Migration 111 does not replace browser text with the canonical snapshot',
+    'ETB reference must be a canonical local number'
+        => 'Migration 111 accepts browser free text as a new ETB reference',
+    'ETB reference target is not an earlier incident entry'
+        => 'Migration 111 accepts a missing or foreign ETB reference target',
+    'ETB correction requires canonical local reference'
+        => 'Migration 111 stores a correction reference as a global key',
+    'TTB entry requires a duty shift'
+        => 'Migration 111 accepts TTB rows without a duty shift',
+    'TTB duty shift targets another incident'
+        => 'Migration 111 accepts a TTB shift from another incident',
+    'Manual TTB entry requires its duty assignment'
+        => 'Migration 111 accepts manual TTB rows without a writer assignment',
+    'TTB writer does not belong to its duty shift'
+        => 'Migration 111 accepts a TTB writer from another shift',
+    'TTB writer identity or status is invalid'
+        => 'Migration 111 trusts an inactive, mismatched, or non-A/W TTB writer',
+    'TTB message entry requires canonical message link'
+        => 'Migration 111 accepts a new unlinked TTB message record',
+    'estab_log111_handover_insert_time'
+        => 'Migration 111 has no completed-handover time guard',
+    'Duty handover completion times are inconsistent'
+        => 'Migration 111 accepts contradictory completed-handover times',
+    'estab_log111_handover_confirm_time'
+        => 'Migration 111 has no handover-confirmation time guard',
+    'Duty handover confirmation times are inconsistent'
+        => 'Migration 111 accepts contradictory confirmation times',
+];
+foreach ($logbookShiftMigrationFragments as $fragment => $message) {
+    $assert(str_contains($logbookShiftSql, $fragment), $message);
+}
+$assert(
+    substr_count($logbookShiftSql, 'BIGINT UNSIGNED NULL DEFAULT NULL') >= 5
+        && str_contains(
+            $logbookShiftSql,
+            '`estab_assignment` VARCHAR(255) CHARACTER SET utf8mb4 '
+                . 'COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL'
+        ),
+    'Migration 111 does not keep all six provenance columns nullable for history'
+);
+$assert(
+    preg_match(
+        '/UPDATE `nv_(?:etb|tbb)` SET `estab_(?:shift|writer|assignee|assignment)/',
+        $logbookShiftSql
+    ) !== 1,
+    'Migration 111 invents shift or assignment provenance for historical rows'
+);
+$shiftTbbTriggerMatch = [];
+$assert(
+    preg_match(
+        '/CREATE TRIGGER `estab_tbb_bi_einsatz` .*? END\/\//s',
+        $logbookShiftSql,
+        $shiftTbbTriggerMatch
+    ) === 1
+        && str_contains(
+            $shiftTbbTriggerMatch[0] ?? '',
+            "BINARY NEW.`estab_entry_type` = BINARY 'nachricht'"
+        )
+        && str_contains(
+            $shiftTbbTriggerMatch[0] ?? '',
+            'NEW.`estab_message_id` IS NULL'
+        )
+        && str_contains(
+            $shiftTbbTriggerMatch[0] ?? '',
+            'TTB message entry requires canonical message link'
+        )
+        && !str_contains(
+            $logbookShiftSql,
+            "UPDATE `nv_tbb` SET `estab_entry_type`"
+        ),
+    'Migration 111 does not reserve linked message evidence prospectively '
+        . 'while preserving historic TTB classifications'
+);
+$assert(
+    str_contains($logbookShiftSql, 'information_schema.key_column_usage')
+        && str_contains($logbookShiftSql, 'referenced_column_name'),
+    'Migration 111 does not compare foreign-key column mappings canonically'
+);
+foreach ([
+    'verify.sql' => $verifySql,
+    'runtime readiness' => $readinessSql,
+] as $contractName => $runtimeSchemaContract) {
+    foreach ([
+        'nv_logbuch_koepfe',
+        'estab_book_lfd',
+        'estab_personnel_duty',
+        'estab_message_route',
+        'estab_message_id',
+        'estab_operations',
+        'uq_etb_einsatz_book_lfd',
+        'uq_etb_attachment_id',
+        'uq_tbb_einsatz_book_lfd',
+        'idx_tbb_einsatz_event_time',
+        'idx_tbb_message',
+        'fk_tbb_message',
+        'fk_tbb_correction',
+        '110-etb-tbb-rules.sql',
+        'estab_shift_id',
+        'estab_writer_assignment_id',
+        'estab_assignee_assignment_id',
+        'estab_assignment',
+        'idx_etb_einsatz_shift_book',
+        'idx_etb_writer_assignment',
+        'idx_etb_assignee_assignment',
+        'idx_tbb_einsatz_shift_book',
+        'idx_tbb_writer_assignment',
+        'fk_etb_shift',
+        'fk_etb_writer_assignment',
+        'fk_etb_assignee_assignment',
+        'fk_tbb_shift',
+        'fk_tbb_writer_assignment',
+        'ETB entry requires a duty shift',
+        'TTB entry requires a duty shift',
+        'ETB writer identity or status is invalid',
+        'TTB writer identity or status is invalid',
+        'TTB message entry requires canonical message link',
+        'estab_log111_handover_insert_time',
+        'Duty handover completion times are inconsistent',
+        'estab_log111_handover_confirm_time',
+        'Duty handover confirmation times are inconsistent',
+        'Active shift ETB writer change requires confirmed handover',
+        'ETB reference must be a canonical local number',
+        'ETB correction requires canonical local reference',
+        'SET NEW.`estab_assignment` = assignment_snapshot',
+        '111-logbook-shift-assignment.sql',
+    ] as $fragment) {
+        $assert(
+            str_contains($runtimeSchemaContract, $fragment),
+            $contractName . ' does not enforce logbook rule: ' . $fragment
+        );
+    }
+    $assert(
+        str_contains($runtimeSchemaContract, "routine_definition LIKE '%FOR UPDATE%'"),
+        $contractName . ' does not require snapshot-safe operational functions'
+    );
+    $assert(
+        str_contains($runtimeSchemaContract, 'estab_dv94_hat_insert')
+            && str_contains(
+                $runtimeSchemaContract,
+                'Active duty shift function was already assigned'
+            )
+            && str_contains($runtimeSchemaContract, 'estab_dv94_hat_update')
+            && str_contains(
+                $runtimeSchemaContract,
+                'Active shift ETB writer change requires confirmed handover'
+            ),
+        $contractName . ' does not require the active-shift extension boundary'
+    );
+}
+$assert(
+    preg_match(
+        "/index_name = 'idx_tbb_message'\\s+AND non_unique = 0"
+            . ".*?seq_in_index = 1 AND column_name = 'einsatz_id'"
+            . ".*?seq_in_index = 2 AND column_name = 'estab_message_id'/s",
+        $verifySql,
+    ) === 1
+        && str_contains(
+            $verifySql,
+            "BINARY COALESCE(`tbb_kuerzel`, '') <> BINARY 'system'"
+        )
+        && str_contains(
+            $verifySql,
+            "BINARY COALESCE(`tbb_benutzer`, '') <> BINARY 'eStab-System'"
+        ),
+    'verify.sql does not validate unique system-generated TTB message evidence'
+);
+$assert(
+    str_contains($readinessSql, 'AND non_unique = 0 AND ((seq_in_index = 1 ')
+        && str_contains(
+            $readinessSql,
+            "BINARY COALESCE(tbb_kuerzel,'') <> BINARY 'system'"
+        )
+        && str_contains(
+            $readinessSql,
+            "BINARY COALESCE(tbb_benutzer,'') <> BINARY 'eStab-System'"
+        ),
+    'Runtime readiness does not validate unique system-generated TTB message evidence'
+);
+$assert(
+    preg_match(
+        "/index_name = 'idx_tbb_message'.*?"
+            . "column_name = 'estab_message_id'\)\)\)\)\) = 11\) AND "
+            . "\(\(SELECT COUNT\(\*\) FROM information_schema\.statistics "
+            . ".*?index_name = 'idx_etb_einsatz_shift_book'/s",
+        $readinessSql,
+    ) === 1
+        && preg_match(
+            "/BINARY COALESCE\(tbb_benutzer,''\) <> BINARY 'eStab-System'"
+                . "\)\)\) = 0\) AND \(\(SELECT COUNT\(\*\) FROM nv_tbb "
+                . "AS entry_row/s",
+            $readinessSql,
+        ) === 1,
+    'Runtime readiness accidentally nests independent ETB/TBB schema checks'
+);
 $assert(
     !str_contains($officialMessageFieldsSql, 'UPDATE `nv_nachrichten`'),
     'Migration 98 rewrites historical message data'
@@ -850,13 +1396,56 @@ foreach ([
     'message-list search indexes were not canonical after migration',
     'partial message-list index migration did not resume canonically',
     'blocked message-list search-index collision was changed or recorded',
-    'assert_equal "15"',
+    '110-etb-tbb-rules.sql',
+    'incident-local ETB/TBB numbering and append-only TTB rules are not canonical',
+    'partial logbook migration did not restore empty pre-existing book heads canonically',
+    'blocked logbook column collision was changed or recorded',
+    '111-logbook-shift-assignment.sql',
+    'historical logbook rows did not retain unknown shift provenance',
+    'partial logbook shift migration did not resume canonically',
+    'blocked logbook shift collision was changed or recorded',
+    'ETB entry without a duty shift was not rejected explicitly',
+    'TTB entry without a duty shift was not rejected explicitly',
+    'ETB duty shift from another incident was not rejected explicitly',
+    'TTB duty shift from another incident was not rejected explicitly',
+    'ETB writer from another duty shift was not rejected explicitly',
+    'TTB writer from another duty shift was not rejected explicitly',
+    'ETB assignee from another duty shift was not rejected explicitly',
+    'canonical ETB assignment snapshot was not generated by the database',
+    'browser ETB assignment text was accepted without an assignment',
+    'valid same-shift system and manual logbook entries were not accepted',
+    'concurrent ETB/TBB inserts did not allocate complete unique local numbers',
+    'new incident did not receive both empty book heads before first entry',
+    'first concurrent ETB/TBB entries did not use pre-created book heads',
+    'missing ETB head was not rejected explicitly',
+    'missing TTB head was not rejected explicitly',
+    'MariaDB default snapshot isolation is not enabled for concurrency tests',
+    'assert_equal "17"',
 ] as $marker) {
     $assert(
         str_contains($schemaIntegration, $marker),
         'Schema integration omits ETB migration evidence: ' . $marker
     );
 }
+
+foreach ([
+    'source compose' => $compose,
+    'verify.sql' => $verify,
+    'runtime readiness' => $readiness,
+] as $contractName => $contractSource) {
+    $assert(
+        !str_contains($contractSource, 'innodb_snapshot_isolation'),
+        $contractName . ' overrides MariaDB snapshot-isolation defaults'
+    );
+}
+$assert(
+    !str_contains($schemaIntegration, 'innodb_snapshot_isolation=OFF')
+        && str_contains(
+            $schemaIntegration,
+            '@@GLOBAL.innodb_snapshot_isolation'
+        ),
+    'Schema integration overrides rather than verifies default snapshot isolation'
+);
 
 $finalCapabilityTuples = [
     "('S2', 'Stab', 'LAGE_DOKUMENTATION', 'Lage und Dokumentation')",
@@ -898,7 +1487,7 @@ $assert(
         && str_contains($verifySql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $verifySql,
-            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 15'
+            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 17'
         )
         && str_contains($verifySql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -911,7 +1500,12 @@ $assert(
         )
         && str_contains($verifySql, "'99-message-list-search.sql'")
         && str_contains($verifySql, "'100-session-presence.sql'")
-        && str_contains($verifySql, ") = 15) AS `schema_migrations_ok`"),
+        && str_contains($verifySql, "'110-etb-tbb-rules.sql'")
+        && str_contains(
+            $verifySql,
+            "'111-logbook-shift-assignment.sql'"
+        )
+        && str_contains($verifySql, ") = 17) AS `schema_migrations_ok`"),
     'verify.sql does not require the exact final ETB catalogue and ledger'
 );
 $assert(
@@ -934,7 +1528,7 @@ $assert(
         && str_contains($readinessSql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $readinessSql,
-            '(SELECT COUNT(*) FROM estab_schema_migrations) = 15'
+            '(SELECT COUNT(*) FROM estab_schema_migrations) = 17'
         )
         && str_contains($readinessSql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -947,9 +1541,14 @@ $assert(
         )
         && str_contains($readinessSql, "'99-message-list-search.sql'")
         && str_contains($readinessSql, "'100-session-presence.sql'")
+        && str_contains($readinessSql, "'110-etb-tbb-rules.sql'")
         && str_contains(
             $readinessSql,
-            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 15"
+            "'111-logbook-shift-assignment.sql'"
+        )
+        && str_contains(
+            $readinessSql,
+            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 17"
         ),
     'Runtime readiness does not require the exact final ETB catalogue and ledger'
 );
@@ -1066,6 +1665,14 @@ $assert(
             $readiness,
             "'100-session-presence.sql'"
         )
+        && str_contains(
+            $readiness,
+            "'110-etb-tbb-rules.sql'"
+        )
+        && str_contains(
+            $readiness,
+            "'111-logbook-shift-assignment.sql'"
+        )
         && str_contains($verify, "'50-global-incidents.sql'")
         && str_contains($verify, "'45-global-incidents-prepare.sql'")
         && str_contains($verify, "'55-global-incidents-finish.sql'")
@@ -1078,9 +1685,11 @@ $assert(
         && str_contains($verify, "'98-official-message-form-fields.sql'")
         && str_contains($verify, "'99-message-list-search.sql'")
         && str_contains($verify, "'100-session-presence.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 15')
-        && str_contains($readiness, 'estab_schema_migrations) = 15'),
-    'Migration ledger/readiness does not require all fifteen release migrations'
+        && str_contains($verify, "'110-etb-tbb-rules.sql'")
+        && str_contains($verify, "'111-logbook-shift-assignment.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 17')
+        && str_contains($readiness, 'estab_schema_migrations) = 17'),
+    'Migration ledger/readiness does not require all seventeen release migrations'
 );
 $assert(
     str_contains($readiness, "require_once __DIR__ . '/bootstrap.php'")

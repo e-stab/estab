@@ -53,6 +53,220 @@ $assert(
     estab_logbook_validate_entry(['event' => ['nested'], 'comment' => ''])['valid'] === false,
     'non-scalar event accepted'
 );
+$assignedEntry = estab_logbook_validate_entry([
+    'event' => 'Aufgabe für S3',
+    'comment' => '',
+    'assignee_assignment_id' => '17',
+]);
+$assert(
+    $assignedEntry['valid'] === true
+        && $assignedEntry['data']['assignee_assignment_id'] === 17
+        && estab_logbook_validate_entry([
+            'event' => 'Ungültige Zuordnung',
+            'assignee_assignment_id' => '0',
+        ])['valid'] === false
+        && estab_logbook_validate_entry([
+            'entry_type' => 'betriebsereignis',
+            'operations' => 'TTB ohne ETB-Zuordnung',
+            'assignee_assignment_id' => '17',
+        ], 'tbb')['valid'] === false,
+    'optional ETB assignment validation is incomplete'
+);
+$referencedEntry = estab_logbook_validate_entry([
+    'event' => 'Folgeeintrag',
+    'reference' => '17',
+]);
+$assert(
+    $referencedEntry['valid'] === true
+        && $referencedEntry['data']['reference'] === '17'
+        && estab_logbook_validate_entry([
+            'event' => 'Freitextbezug',
+            'reference' => 'Lagekarte Nord',
+        ])['valid'] === false
+        && estab_logbook_validate_entry([
+            'event' => 'Nicht kanonisch',
+            'reference' => '017',
+        ])['valid'] === false
+        && estab_logbook_validate_entry([
+            'event' => 'Zu große Nummer',
+            'reference' => '4294967296',
+        ])['valid'] === false,
+    'new ETB references are not canonical local book numbers'
+);
+$referenceRows = [
+    ['estab_book_lfd' => 1, 'estab_reference' => null],
+    ['estab_book_lfd' => 2, 'estab_reference' => '1'],
+    ['estab_book_lfd' => 3, 'estab_reference' => '1'],
+    ['estab_book_lfd' => 4, 'estab_reference' => '2'],
+    ['estab_book_lfd' => 5, 'estab_reference' => 'Bestandsakte 3'],
+];
+$forwardReference = estab_logbook_etb_reference_graph(
+    $referenceRows,
+    1,
+    'forward',
+    1
+);
+$backwardReference = estab_logbook_etb_reference_graph(
+    $referenceRows,
+    4,
+    'backward',
+    5
+);
+$assert(
+    array_column($forwardReference['rows'], 'estab_book_lfd') === [1, 2, 3]
+        && $forwardReference['truncated'] === true
+        && array_column(
+            $backwardReference['rows'],
+            'estab_book_lfd'
+        ) === [4, 2, 1]
+        && $backwardReference['truncated'] === false,
+    'bounded branched ETB reference traversal is incorrect'
+);
+$graphRejectedMissing = false;
+try {
+    estab_logbook_etb_reference_graph($referenceRows, 99, 'forward', 5);
+} catch (EstabIncidentConflictException) {
+    $graphRejectedMissing = true;
+}
+$assert(
+    $graphRejectedMissing
+        && estab_logbook_stored_etb_reference_number('Bestandsakte 3') === null,
+    'ETB reference evaluation accepted a missing target or inferred legacy text'
+);
+$assert(
+    estab_logbook_assignment_snapshot([
+        'funktion' => 'S3',
+        'rolle' => 'Stab',
+        'benutzer' => 'Beispiel, Erika',
+        'benutzer_kuerzel' => 'bei',
+    ]) === 'S3 (Stab): Beispiel, Erika [bei]',
+    'immutable ETB assignment snapshot is not deterministic'
+);
+$assert(
+    array_keys(estab_logbook_entry_types())
+        === ['ohne', 'A', 'B', 'E', 'K', 'W', 'korrektur']
+        && estab_logbook_normalize_etb_type('auftrag') === 'B'
+        && estab_logbook_normalize_etb_type('entscheidung') === 'ohne',
+    'official ETB classifications or legacy normalization are incomplete'
+);
+$assert(
+    (estab_logbook_ttb_entry_types()['nachricht'] ?? null)
+        === 'Nachricht von / an'
+        && !array_key_exists(
+            'nachricht',
+            estab_logbook_ttb_manual_entry_types()
+        )
+        && array_keys(estab_logbook_ttb_manual_entry_types()) === [
+            'betrieb_personal',
+            'kanal',
+            'betriebsereignis',
+            'quittung',
+            'korrektur',
+        ],
+    'manual TTB types expose the reserved message-workflow classification '
+        . 'or historic message labels are no longer readable'
+);
+$assert(
+    estab_logbook_etb_attachment_number(12, 17) === 'ETB 12-17-1'
+        && estab_logbook_parse_etb_attachment_number('ETB 12-17-1') === [
+            'incident_id' => 12,
+            'entry_number' => 17,
+            'unit_number' => 1,
+        ]
+        && estab_logbook_parse_etb_attachment_number('12-17-1') !== null
+        && estab_logbook_parse_etb_attachment_number('EL0001') === null,
+    'ETB attachment numbering is not stable or parseable'
+);
+$validTbb = estab_logbook_validate_entry([
+    'entry_type' => 'kanal',
+    'event_time' => '2026-07-31T12:34',
+    'personnel_duty' => 'A/W Beispiel im Dienst',
+    'channel' => 'Rufgruppe THW 1',
+    'message_route' => 'Leitstelle an Führungsstelle',
+    'operations' => 'Nachricht aufgenommen',
+    'receipt' => 'Quittung AB1234',
+], 'tbb');
+$assert(
+    $validTbb['valid'] === true
+        && $validTbb['data']['event_type'] === 'kanal'
+        && $validTbb['data']['event_time'] === '2026-07-31 12:34:00'
+        && $validTbb['data']['message_id'] === null
+        && str_contains(
+            (string) $validTbb['data']['event'],
+            'Nachricht von / an: Leitstelle an Führungsstelle'
+        ),
+    'official structured TTB entry did not validate or retain its evidence'
+);
+$assert(
+    estab_logbook_validate_entry([
+        'entry_type' => 'nachricht',
+        'event_time' => '2026-07-31T12:34',
+        'message_route' => 'Leitstelle an Führungsstelle',
+    ], 'tbb')['valid'] === false,
+    'manual unlinked TTB message evidence was accepted'
+);
+$assert(
+    estab_logbook_validate_entry([
+        'entry_type' => 'nachricht',
+        'event_time' => '2026-07-31T12:34',
+        'message_route' => 'Leitstelle an Führungsstelle',
+        'message_id' => '42',
+    ], 'tbb')['valid'] === false,
+    'manual TTB entry claimed the canonical internal message link'
+);
+$assert(
+    estab_logbook_validate_entry([
+        'entry_type' => 'betriebsereignis',
+        'event_time' => '2026-07-31T12:34',
+    ], 'tbb')['valid'] === false,
+    'empty structured TTB entry was accepted'
+);
+$assert(
+    estab_logbook_validate_entry([
+        'entry_type' => 'korrektur',
+        'event_time' => '2026-07-31T12:34',
+        'operations' => 'Berichtigter Nachweis',
+        'correction_of' => '1',
+        'comment' => '',
+    ], 'tbb')['valid'] === false,
+    'TTB correction without a reason was accepted'
+);
+$writerRoster = [[
+    'dienstbesetzung_id' => 1,
+    'benutzer_kuerzel' => 's2a',
+    'benutzer' => 'S2 Beispiel',
+    'funktion' => 'S2',
+    'rolle' => 'Stab',
+], [
+    'dienstbesetzung_id' => 2,
+    'benutzer_kuerzel' => 'etb1',
+    'benutzer' => 'ETB Beispiel',
+    'funktion' => 'ETB',
+    'rolle' => 'Stab',
+], [
+    'dienstbesetzung_id' => 4,
+    'benutzer_kuerzel' => 'aw2',
+    'benutzer' => 'A/W Zwei',
+    'funktion' => 'A/W',
+    'rolle' => 'Fernmelder',
+], [
+    'dienstbesetzung_id' => 3,
+    'benutzer_kuerzel' => 'aw1',
+    'benutzer' => 'A/W Eins',
+    'funktion' => 'A/W',
+    'rolle' => 'Fernmelder',
+]];
+$assert(
+    str_contains(
+        estab_logbook_lifecycle_writer_text($writerRoster, 'etb'),
+        'ETB Beispiel [etb1]'
+    )
+        && str_contains(
+            estab_logbook_lifecycle_writer_text($writerRoster, 'tbb'),
+            'A/W Eins [aw1]'
+        ),
+    'designated ETB/TBB writers are not selected deterministically'
+);
 $assert(
     estab_auth_html('<script>alert("x")</script>')
         === '&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;',
@@ -61,6 +275,11 @@ $assert(
 
 $root = dirname(__DIR__, 2);
 $helper = file_get_contents($root . '/app/logbook.php');
+$lifecycle = file_get_contents($root . '/app/logbook_lifecycle.php');
+$messageRepository = file_get_contents($root . '/app/message_repository.php');
+$incidentDomain = file_get_contents($root . '/app/incident.php');
+$incidentPdf = file_get_contents($root . '/app/incident_pdf.php');
+$operationsDomain = file_get_contents($root . '/app/dv_operations.php');
 $etb = file_get_contents($root . '/stabetb/etb.php');
 $tbb = file_get_contents($root . '/fmtbb/tbb.php');
 $httpSmoke = file_get_contents($root . '/tests/integration/http_smoke.sh');
@@ -72,6 +291,11 @@ $messageWorkflowHttp = file_get_contents(
 );
 if (
     !is_string($helper)
+    || !is_string($lifecycle)
+    || !is_string($messageRepository)
+    || !is_string($incidentDomain)
+    || !is_string($incidentPdf)
+    || !is_string($operationsDomain)
     || !is_string($etb)
     || !is_string($tbb)
     || !is_string($httpSmoke)
@@ -257,11 +481,140 @@ $assert(
 );
 $assert(
     str_contains($helper, 'function estab_logbook_validate_references(')
+        && str_contains($helper, 'function estab_logbook_etb_reference_target(')
         && str_contains($helper, 'FROM `nv_nachrichten`')
         && str_contains($helper, 'FROM `nv_anhang`')
         && str_contains($helper, '`estab_correction_of`')
         && substr_count($helper, 'LIMIT 1 FOR UPDATE') >= 3,
     'ETB references are not locked and checked against the active incident'
+);
+$assert(
+    str_contains($helper, 'function estab_logbook_available_etb_attachments(')
+        && str_contains($helper, 'attachment_row.`status` = 1')
+        && str_contains($helper, 'AND NOT EXISTS (')
+        && str_contains($helper, 'Der Anhang besitzt bereits eine ETB-Anlagennummer')
+        && str_contains($helper, "(int) (\$attachment['status'] ?? 0) !== 1")
+        && str_contains($helper, 'estab_logbook_parse_etb_attachment_number(')
+        && str_contains($helper, 'attachment_row.`org_filename` LIKE ?'),
+    'ETB attachments are not finalized, unique, selectable, or searchable'
+);
+$assert(
+    str_contains($helper, 'function estab_logbook_designated_writer_assignment(')
+        && str_contains($helper, 'function estab_logbook_is_designated_writer(')
+        && str_contains($helper, "\$orderSql = '`estab_book_lfd` DESC';")
+        && str_contains($helper, '`estab_personnel_duty`')
+        && str_contains($helper, '`estab_message_route`')
+        && str_contains($helper, '`estab_receipt`'),
+    'single-writer rule, incident-local ordering, or official TTB fields are missing'
+);
+$assert(
+    str_contains($helper, 'function estab_logbook_ttb_manual_entry_types(): array')
+        && str_contains($helper, "unset(\$types['nachricht']);")
+        && str_contains($tbb, 'estab_logbook_ttb_manual_entry_types ()')
+        && str_contains($tbb, 'das TBB auch ohne Anlagen in ')
+        && str_contains($tbb, 'Grundzügen verständlich bleibt.'),
+    'manual TTB UI or validation exposes message evidence or omits the '
+        . 'standalone-comprehensibility instruction'
+);
+$assert(
+    str_contains($helper, 'function estab_logbook_manual_writer_context(')
+        && str_contains($helper, 'function estab_logbook_etb_assignee_context(')
+        && str_contains($helper, 'function estab_logbook_active_assignment_options(')
+        && str_contains($helper, 'estab_logbook_assignment_snapshot($row)')
+        && str_contains($helper, "assignment.`status` = 'ANGENOMMEN'")
+        && str_contains($helper, "duty_shift.`status` = 'AKTIV'")
+        && str_contains($helper, 'LIMIT 1 FOR UPDATE')
+        && str_contains($helper, '`estab_shift_id`')
+        && str_contains($helper, '`estab_writer_assignment_id`')
+        && str_contains($helper, '`estab_assignee_assignment_id`')
+        && str_contains($helper, '`estab_assignment`'),
+    'manual logbook rows are not bound to a locked shift, writer, or assignee'
+);
+$designatedStart = strpos(
+    $helper,
+    'function estab_logbook_designated_writer_assignment('
+);
+$designatedEnd = strpos(
+    $helper,
+    'function estab_logbook_manual_writer_context(',
+    is_int($designatedStart) ? $designatedStart : 0
+);
+$designatedSource = is_int($designatedStart) && is_int($designatedEnd)
+    ? substr($helper, $designatedStart, $designatedEnd - $designatedStart)
+    : '';
+$assignmentOptionsStart = strpos(
+    $helper,
+    'function estab_logbook_active_assignment_options('
+);
+$assignmentOptionsSource = is_int($assignmentOptionsStart)
+    && is_int($designatedStart)
+    ? substr(
+        $helper,
+        $assignmentOptionsStart,
+        $designatedStart - $assignmentOptionsStart
+    )
+    : '';
+$manualWriterStart = $designatedEnd;
+$manualWriterEnd = strpos(
+    $helper,
+    'function estab_logbook_etb_assignee_context(',
+    is_int($manualWriterStart) ? $manualWriterStart : 0
+);
+$manualWriterSource = is_int($manualWriterStart) && is_int($manualWriterEnd)
+    ? substr($helper, $manualWriterStart, $manualWriterEnd - $manualWriterStart)
+    : '';
+$assigneeStart = $manualWriterEnd;
+$assigneeEnd = strpos(
+    $helper,
+    'function estab_logbook_is_designated_writer(',
+    is_int($assigneeStart) ? $assigneeStart : 0
+);
+$assigneeSource = is_int($assigneeStart) && is_int($assigneeEnd)
+    ? substr($helper, $assigneeStart, $assigneeEnd - $assigneeStart)
+    : '';
+$assert(
+    !str_contains($designatedSource, '`nv_benutzer`')
+        && !str_contains($designatedSource, '`estab_gesperrt`')
+        && str_contains($manualWriterSource, 'account.`aktiv` = 1')
+        && str_contains($manualWriterSource, 'account.`estab_gesperrt` = 0')
+        && !str_contains($assignmentOptionsSource, 'account.`aktiv` = 1')
+        && str_contains(
+            $assignmentOptionsSource,
+            'account.`estab_gesperrt` = 0'
+        )
+        && !str_contains($assigneeSource, 'account.`aktiv` = 1')
+        && str_contains($assigneeSource, 'account.`estab_gesperrt` = 0'),
+    'writer presence or offline ETB assignee account policy is unsafe'
+);
+$assert(
+    str_contains($lifecycle, 'function estab_logbook_lifecycle_open_books(')
+        && str_contains($lifecycle, 'function estab_logbook_lifecycle_handover(')
+        && str_contains($lifecycle, 'function estab_logbook_lifecycle_close_books(')
+        && str_contains($lifecycle, 'function estab_logbook_lifecycle_message_transport(')
+        && str_contains($operationsDomain, 'estab_logbook_lifecycle_open_books(')
+        && str_contains($operationsDomain, 'estab_logbook_lifecycle_handover(')
+        && str_contains($incidentDomain, 'estab_logbook_lifecycle_close_books(')
+        && str_contains($lifecycle, ". 'Einsatzbeginn: ' . \$begin")
+        && str_contains($lifecycle, 'string $handedOverAt')
+        && str_contains($lifecycle, 'string $takenOverAt')
+        && str_contains($lifecycle, 'Persönlich übergeben von')
+        && str_contains($lifecycle, 'persönlich übernommen von')
+        && str_contains(
+            $lifecycle,
+            "BINARY `estab_entry_type` = BINARY 'nachricht'"
+        )
+        && !str_contains(
+            $lifecycle,
+            "`estab_entry_type` = 'nachricht'"
+        )
+        && str_contains($operationsDomain, 'function estab_dv_database_now(')
+        && str_contains($operationsDomain, "'handed_over_at' => \$initiatedAt")
+        && str_contains($operationsDomain, "'taken_over_at' => \$confirmedAt")
+        && substr_count(
+            $messageRepository,
+            'estab_logbook_lifecycle_message_transport('
+        ) === 2,
+    'automatic opening, handover, close, or message-transport evidence is not wired'
 );
 
 foreach (['ETB' => $etb, 'TBB' => $tbb] as $name => $source) {
@@ -427,6 +780,75 @@ $assert(
         && !str_contains($tbb, '$readonly')
         && !str_contains($tbb, 'Keine Berechtigung für das technische Betriebsbuch'),
     'TBB selected-hat readers must remain writable only by Beförderung'
+);
+$assert(
+    str_contains($etb, 'ETB durchsuchen und filtern')
+        && str_contains($etb, 'ETB-Nr. oder Bestandsbezug')
+        && str_contains($etb, 'for=\"etb-search-assignment\">Zuordnung</label>')
+        && str_contains($etb, 'name=\"zuordnung\"')
+        && str_contains($etb, 'Filter zurücksetzen')
+        && str_contains($helper, 'entry_row.`etb_aktion` LIKE ?')
+        && str_contains($helper, 'entry_row.`estab_reference` LIKE ?')
+        && str_contains($helper, 'entry_row.`estab_assignment` LIKE ?')
+        && str_contains($helper, 'entry_row.`estab_book_lfd` = ?')
+        && str_contains($helper, "'entscheidung'")
+        && str_contains($helper, "'auftrag'")
+        && str_contains($helper, 'estab_auth_text_length($value)')
+        && str_contains($helper, '$length < 0'),
+    'ETB full-text, type, number/reference search is incomplete'
+);
+$assert(
+    str_contains($etb, 'Referenz auf ETB-Nr.</label>')
+        && str_contains($etb, 'ETB-Referenzen auswerten')
+        && str_contains($etb, 'name=\"referenz_start\"')
+        && str_contains($etb, 'name=\"referenz_richtung\"')
+        && str_contains($etb, 'name=\"referenz_tiefe\"')
+        && str_contains($etb, 'Druckansicht öffnen')
+        && str_contains($helper, 'function estab_logbook_etb_reference_graph(')
+        && str_contains($helper, "['forward', 'backward']")
+        && str_contains($helper, 'LIMIT 1 FOR UPDATE'),
+    'ETB reference input or interactive bounded evaluation is incomplete'
+);
+$assert(
+    str_contains($etb, 'Zuordnung (optional)</label>')
+        && str_contains($etb, '<select id=\"etb-assignee-assignment\"')
+        && str_contains($etb, 'name=\"assignee_assignment_id\"')
+        && !str_contains(
+            $etb,
+            '<input id=\"etb-assignee-assignment\"'
+        )
+        && str_contains($etb, 'estab_logbook_active_assignment_options (')
+        && str_contains($etb, 'Zuordnung: ')
+        && str_contains(
+            $etb,
+            'wird nicht in das amtliche PDF-Formblatt übernommen'
+        )
+        && !str_contains($etb, '$_POST ["estab_shift_id"]')
+        && !str_contains($etb, '$_POST ["estab_writer_assignment_id"]'),
+    'ETB assignment selector, browser display, or server-owned writer fields are unsafe'
+);
+$assert(
+    !str_contains($incidentPdf, 'estab_assignment'),
+    'internal ETB workflow assignment leaked into the official PDF form'
+);
+$assert(
+    str_contains($etb, '>ETB-Anlage</label>')
+        && str_contains($etb, '<select id=\"etb-attachment-id\"')
+        && !str_contains(
+            $etb,
+            'Anhang-ID</label><input id=\"etb-attachment-id\"'
+        )
+        && str_contains($etb, 'ETB-Anlagennummer (z. B. ETB 12-17-1)')
+        && str_contains($etb, 'auch ohne ')
+        && str_contains($etb, 'Öffnen einer Anlage verständlich bleiben')
+        && str_contains($etb, 'estab_logbook_etb_attachment_number ('),
+    'ETB attachment selection or official number presentation is incomplete'
+);
+$assert(
+    str_contains($etb, '$eventType !== "korrektur"')
+        && str_contains($tbb, '$entryType !== "korrektur"')
+        && !str_contains($tbb, 'name=\"ttb-message-id\"'),
+    'correction rows remain recursively correctable or manual TBB message links leak'
 );
 
 echo "logbook security: OK ({$assertions} assertions)\n";

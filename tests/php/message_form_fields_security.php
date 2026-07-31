@@ -95,13 +95,17 @@ $assert(
 $newFollowup = estab_message_followup_new_record([
     '00_lfd' => 73,
     'msglfd' => '73',
+    'estab_ttb_lfd' => '142',
+    '04_nummer' => '9142',
     '12_betreff' => 'AW: Lage Süd',
 ]);
 $assert(
     $newFollowup['00_lfd'] === ''
         && !array_key_exists('msglfd', $newFollowup)
+        && !array_key_exists('estab_ttb_lfd', $newFollowup)
+        && $newFollowup['04_nummer'] === '9142'
         && $newFollowup['12_betreff'] === 'AW: Lage Süd',
-    'Derived follow-up retained the source record identity'
+    'Derived follow-up retained source record or visible TBB identity'
 );
 try {
     estab_message_derived_subject('Lage', 'XX');

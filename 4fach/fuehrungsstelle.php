@@ -88,7 +88,7 @@ if ($requestMethod === 'POST') {
         $incidentId = (int) $incident['active_einsatz_id'];
         $code = (string) $identity['kuerzel'];
         if ($action === 'accept_hat') {
-            estab_dv_accept_hat(
+            $acceptedHat = estab_dv_accept_hat(
                 $connection,
                 $incidentId,
                 estab_dv_positive_id(
@@ -100,7 +100,11 @@ if ($requestMethod === 'POST') {
                 $conf_4f_tbl['empfmtx'],
                 $conf_4f_tbl['usrtblprefix']
             );
-            dv_operations_redirect('hat_accepted');
+            dv_operations_redirect(
+                ($acceptedHat['active_shift_extension'] ?? false) === true
+                    ? 'hat_extension_accepted'
+                    : 'hat_accepted'
+            );
         }
         if ($action === 'select_hat') {
             $selectedHat = estab_dv_select_session_hat(
@@ -378,6 +382,9 @@ try {
 
 $flashMessages = [
     'hat_accepted' => 'Die Dienstfunktion wurde persönlich angenommen.',
+    'hat_extension_accepted' =>
+        'Die Ergänzung der aktiven Schicht wurde persönlich angenommen und '
+        . 'automatisch in den vorgeschriebenen Betriebsbüchern nachgewiesen.',
     'hat_selected' => 'Die aktive Arbeitsfunktion wurde gewechselt.',
     'shift_handover_confirmed' =>
         'Sie haben die Schichtübernahme persönlich bestätigt. Die '
@@ -485,8 +492,10 @@ foreach ($plans as $plan) {
       <header class="estab-tool-panel-heading">
         <h2>Meine Dienstfunktionen</h2>
         <p>Eine Zuweisung wird erst wirksam, nachdem Sie sie persönlich
-          angenommen haben. In einer aktiven Schicht können Sie anschließend
-          zwischen mehreren angenommenen Funktionen wechseln.</p>
+          angenommen haben. Das gilt auch für eine Ergänzung der aktiven
+          Schicht; deren Annahme wird automatisch im ETB und bei
+          Fernmeldebetriebspersonal zusätzlich im TBB dokumentiert. Zwischen
+          mehreren angenommenen Funktionen können Sie anschließend wechseln.</p>
       </header>
       <?php if ($hats === []): ?>
         <p class="estab-tool-empty">Ihrem Konto ist in der aktuellen oder
@@ -517,7 +526,11 @@ foreach ($plans as $plan) {
                 ) ?></td>
                 <td data-label="Aktion">
                   <?php if ($hat['status'] === 'ZUGEWIESEN'
-                      && $hat['schicht_status'] === 'GEPLANT'): ?>
+                      && in_array(
+                          $hat['schicht_status'],
+                          ['GEPLANT', 'AKTIV'],
+                          true
+                      )): ?>
                     <form method="post" action="fuehrungsstelle.php">
                       <?= estab_csrf_field() ?>
                       <input type="hidden" name="operation_action"
@@ -525,7 +538,9 @@ foreach ($plans as $plan) {
                       <input type="hidden" name="dienstbesetzung_id"
                         value="<?= (int) $hat['dienstbesetzung_id'] ?>">
                       <button class="estab-button estab-button-primary"
-                        type="submit">Verbindlich annehmen</button>
+                        type="submit"><?= $hat['schicht_status'] === 'AKTIV'
+                            ? 'Schichterweiterung annehmen'
+                            : 'Verbindlich annehmen' ?></button>
                     </form>
                   <?php elseif ($hat['status'] === 'ANGENOMMEN'
                       && $hat['schicht_status'] === 'AKTIV'): ?>

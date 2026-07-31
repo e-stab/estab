@@ -42,6 +42,24 @@ function estab_message_list_direction_label(mixed $direction): string
     };
 }
 
+/** Describe the canonical TTB link without inventing a fallback number. */
+function estab_message_list_tbb_evidence_label(array $row): string
+{
+    $value = $row['estab_tbb_book_lfd'] ?? null;
+    if (
+        (is_int($value) && $value > 0)
+        || (
+            is_string($value)
+            && preg_match('/\A[1-9][0-9]{0,9}\z/D', $value) === 1
+            && (int) $value > 0
+            && (int) $value <= 4294967295
+        )
+    ) {
+        return 'TBB-Nachweis ' . (string) ((int) $value);
+    }
+    return 'noch kein TBB-Nachweis';
+}
+
 function estab_message_list_datetime_label(mixed $value): string
 {
     if (estab_datetime_is_unset($value) || !is_string($value)) {
@@ -104,8 +122,8 @@ function estab_message_list_sort_options(): array
         'priority_newest' => 'Vorrang zuerst, dann neueste',
         'newest' => 'Neueste zuerst',
         'oldest' => 'Älteste zuerst',
-        'number_desc' => 'Höchste Nachweisnummer zuerst',
-        'number_asc' => 'Niedrigste Nachweisnummer zuerst',
+        'number_desc' => 'Höchste TBB-Nachweisnummer zuerst',
+        'number_asc' => 'Niedrigste TBB-Nachweisnummer zuerst',
     ];
 }
 
@@ -196,10 +214,11 @@ function estab_message_list_render_controls(
     echo '<input id="' . $domPrefix . '-q" type="search" name="ml_q" '
         . 'value="' . estab_auth_html((string) ($filters['q'] ?? '')) . '" '
         . 'maxlength="120" autocomplete="off" enterkeyhint="search" '
-        . 'placeholder="z. B. 142, Betreff, Rufname oder Stichwort" '
+        . 'placeholder="z. B. 142 (TBB-Nachweis), Betreff oder Rufname" '
         . 'aria-describedby="' . $helpId . '">';
-    echo '<small id="' . $helpId . '">Durchsucht Nummer, Betreff, Rufname, '
-        . 'Rufnummer, Von, An, Verfasserfunktion und Nachrichtentext.</small>';
+    echo '<small id="' . $helpId . '">Durchsucht TBB-Nachweisnummer, Betreff, '
+        . 'Rufname, Rufnummer, Von, An, Verfasserfunktion und '
+        . 'Nachrichtentext.</small>';
     echo '</label>';
     echo '<button class="estab-button estab-button-primary" type="submit" '
         . 'name="ml_apply" value="1">Suchen</button>';
@@ -415,7 +434,7 @@ function estab_message_list_render_table(array $rows, callable $openControl): vo
         . 'des aktiven Einsatzes</caption>';
     echo '<thead><tr>';
     foreach ([
-        'Nachweis', 'Zeitpunkt', 'Von und An', 'Betreff und Inhalt',
+        'TBB-Nachweis', 'Zeitpunkt', 'Von und An', 'Betreff und Inhalt',
         'Bearbeitungsstand', 'Verteilung', 'Aktion',
     ] as $heading) {
         echo '<th scope="col">' . estab_auth_html($heading) . '</th>';
@@ -451,9 +470,9 @@ function estab_message_list_render_table(array $rows, callable $openControl): vo
         $storedPriority = estab_message_priority_storage_value(
             $row['09_vorrangstufe'] ?? null
         );
-        echo '<td data-label="Nachweis"><strong class="estab-message-list-route">'
+        echo '<td data-label="TBB-Nachweis"><strong class="estab-message-list-route">'
             . estab_auth_html(estab_message_list_direction_label($direction))
-            . ' ' . estab_auth_html((string) ($row['04_nummer'] ?? '–'))
+            . ' · ' . estab_auth_html(estab_message_list_tbb_evidence_label($row))
             . '</strong><span class="estab-message-list-priority'
             . ($urgent ? ' estab-message-list-priority--urgent' : '')
             . '" data-priority="'

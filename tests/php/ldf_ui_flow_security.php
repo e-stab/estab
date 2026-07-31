@@ -139,7 +139,7 @@ $assert(
     )
         && str_contains(
             $incomingRepository,
-            "'SELECT `01_medium` FROM '"
+            "'SELECT `01_medium`, `13_abseinheit`, `05_gegenstelle` FROM '"
         )
         && str_contains(
             $incomingRepository,
@@ -166,7 +166,12 @@ $assert(
         && str_contains(
             $repository,
             "preg_match(\n                        '/\\p{C}/u'"
-        ),
+        )
+        && str_contains(
+            $repository,
+            'estab_logbook_lifecycle_message_transport_correction('
+        )
+        && str_contains($repository, '$incomingTbbCorrection'),
     'Repository does not atomically confirm and evidence the incoming route'
 );
 

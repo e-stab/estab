@@ -58,6 +58,7 @@ class vordruckasimg {
   var $image ;
 
   var $db_dataset ;
+  var $messageNumber ;
 
   /*******************************************************************************
             Klassen Konstruktor
@@ -105,7 +106,13 @@ class vordruckasimg {
 
     $this->db_dataset ["03_zeichen"]      = $data ["03_zeichen"] ;
     $this->db_dataset ["04_richtung"]     = $data ["04_richtung"] ;
-    $this->db_dataset ["04_nummer"]       = $data ["04_nummer"] ;
+    // Keep the technical archive identity separate from the visible TBB
+    // Nachweis number, which is legitimately empty when no TBB row exists.
+    $this->messageNumber                   = $data ["04_nummer"] ?? null ;
+    $this->db_dataset ["04_nummer"]       =
+      array_key_exists ("estab_ttb_lfd", $data)
+        ? ($data ["estab_ttb_lfd"] ?? "")
+        : ($data ["04_nummer"] ?? "") ;
     $this->db_dataset ["05_gegenstelle"]  = $data ["05_gegenstelle"] ;
     $this->db_dataset ["06_befweg"]       = $data ["06_befweg"] ;
     $this->db_dataset ["06_befwegausw"]   = $data ["06_befwegausw"] ;
@@ -595,7 +602,7 @@ class vordruckasimg {
         // Datenbankname und Nachweisung
 
       $filename = $conf_4f ["vordruck_dir"]."/".$conf_4f_db ["datenbank"]." ".
-                  $this->db_dataset ["04_nummer"]." ".$this->db_dataset ["04_richtung"] ;
+                  $this->messageNumber." ".$this->db_dataset ["04_richtung"] ;
       if (outputtyp == "png") { imagepng($this->image, $filename.".png"); }
       if (outputtyp == "jpg") { imagejpeg($this->image, $filename.".jpg"); }
 //    }

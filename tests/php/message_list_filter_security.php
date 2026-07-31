@@ -337,36 +337,59 @@ $assert(
 $numericFulltextSql = estab_message_list_filter_sql(array_replace($defaults, [
     'q' => '000123',
 ]));
+$canonicalTbbNumberSql = estab_message_list_tbb_number_sql('m');
 $assert(
-    str_contains($numericFulltextSql['sql'], 'm.`04_nummer` = ?')
-        && str_contains($numericFulltextSql['sql'], 'm.`00_lfd` = ?')
+    str_contains(
+        $numericFulltextSql['sql'],
+        $canonicalTbbNumberSql . ' = ?'
+    )
+        && str_contains(
+            $canonicalTbbNumberSql,
+            'estab_tbb_proof.`einsatz_id` = m.`einsatz_id`'
+        )
+        && str_contains(
+            $canonicalTbbNumberSql,
+            'estab_tbb_proof.`estab_message_id` = m.`00_lfd`'
+        )
+        && str_contains(
+            $canonicalTbbNumberSql,
+            "BINARY estab_tbb_proof.`estab_entry_type` = BINARY 'nachricht'"
+        )
+        && str_contains(
+            $canonicalTbbNumberSql,
+            'ORDER BY estab_tbb_proof.`estab_book_lfd`,'
+        )
+        && !str_contains($numericFulltextSql['sql'], 'm.`04_nummer` = ?')
+        && !str_contains($numericFulltextSql['sql'], 'm.`00_lfd` = ?')
         && str_contains($numericFulltextSql['sql'], 'MATCH(')
-        && $numericFulltextSql['params'] === [123, 123, '+000123*'],
-    'Numeric FULLTEXT search lacks exact message-number and record-ID paths'
+        && $numericFulltextSql['params'] === [123, '+000123*'],
+    'Numeric search does not use only the canonical incident-local TTB evidence number'
 );
 $shortNumericSql = estab_message_list_filter_sql(array_replace($defaults, [
     'q' => '12',
 ]));
 $assert(
-    str_contains($shortNumericSql['sql'], 'm.`04_nummer` = ?')
-        && str_contains($shortNumericSql['sql'], 'm.`00_lfd` = ?')
+    str_contains($shortNumericSql['sql'], $canonicalTbbNumberSql . ' = ?')
+        && !str_contains($shortNumericSql['sql'], 'm.`04_nummer` = ?')
+        && !str_contains($shortNumericSql['sql'], 'm.`00_lfd` = ?')
         && !str_contains($shortNumericSql['sql'], 'MATCH(')
         && substr_count($shortNumericSql['sql'], "LIKE ? ESCAPE '!'") === 7
-        && array_slice($shortNumericSql['params'], 0, 2) === [12, 12]
-        && array_slice($shortNumericSql['params'], 2)
+        && $shortNumericSql['params'][0] === 12
+        && array_slice($shortNumericSql['params'], 1)
             === array_fill(0, 7, '%12%'),
-    'Short numeric search did not combine exact IDs with literal fallback'
+    'Short numeric search did not combine the TTB number with literal fallback'
 );
 $overflowNumeric = str_repeat('9', 120);
 $overflowNumericSql = estab_message_list_filter_sql(array_replace($defaults, [
     'q' => $overflowNumeric,
 ]));
 $assert(
-    str_contains($overflowNumericSql['sql'], 'm.`04_nummer` = ?')
-        && str_contains($overflowNumericSql['sql'], 'm.`00_lfd` = ?')
+    str_contains($overflowNumericSql['sql'], $canonicalTbbNumberSql . ' = ?')
+        && !str_contains($overflowNumericSql['sql'], 'm.`04_nummer` = ?')
+        && !str_contains($overflowNumericSql['sql'], 'm.`00_lfd` = ?')
         && $overflowNumericSql['params'][0] === $overflowNumeric
-        && $overflowNumericSql['params'][1] === $overflowNumeric,
-    'Overflow-sized numeric search lost its exact bound predicates'
+        && count($overflowNumericSql['params']) === 2,
+    'Overflow-sized numeric search lost its canonical TTB bound predicate'
 );
 foreach (
     ['Brand+Süd', '-Brand', 'Brand*', '"Brand Süd"']
@@ -463,8 +486,17 @@ $assert(
     str_contains($orders['priority_newest'], 'CASE BINARY n.`09_vorrangstufe`')
         && str_contains($orders['newest'], 'n.`12_abfzeit` DESC')
         && str_contains($orders['oldest'], 'n.`12_abfzeit` IS NULL ASC')
-        && str_contains($orders['number_desc'], 'n.`04_nummer` DESC')
-        && str_contains($orders['number_asc'], 'n.`04_nummer` ASC'),
+        && str_contains(
+            $orders['number_desc'],
+            'COALESCE(' . estab_message_list_tbb_number_sql('n') . ', 0) DESC'
+        )
+        && str_contains(
+            $orders['number_asc'],
+            'COALESCE(' . estab_message_list_tbb_number_sql('n')
+                . ', 4294967296) ASC'
+        )
+        && !str_contains($orders['number_desc'], 'n.`04_nummer`')
+        && !str_contains($orders['number_asc'], 'n.`04_nummer`'),
     'Sort expressions no longer implement their labels'
 );
 foreach ([null, '', 'drop'] as $sort) {

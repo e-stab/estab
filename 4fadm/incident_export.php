@@ -38,7 +38,9 @@ function incident_export_actor(array $server): string
 $requestMethod = $_SERVER['REQUEST_METHOD'] ?? '';
 $error = null;
 $incidents = [];
+$logbookShiftOptions = [];
 $selectedIncidentId = null;
+$selectedLogbookScope = 'all';
 $selectedSections = [
     'etb',
     'ttb',
@@ -64,6 +66,12 @@ if ($requestMethod === 'POST') {
             $_POST['einsatz_id'] ?? null
         );
         $selectedSections = estab_incident_export_sections($_POST);
+        $parsedLogbookScope = estab_incident_export_logbook_scope(
+            $_POST['logbook_scope'] ?? 'all'
+        );
+        $selectedLogbookScope = $parsedLogbookScope['mode'] === 'shift'
+            ? 'shift:' . (string) $parsedLogbookScope['shift_id']
+            : 'all';
         $actor = incident_export_actor($_SERVER);
 
         $connection = estab_auth_connect($conf_4f_db);
@@ -85,7 +93,8 @@ if ($requestMethod === 'POST') {
                     $connection,
                     $selectedIncidentId,
                     $selectedSections,
-                    (string) $conf_4f['ablage_dir']
+                    (string) $conf_4f['ablage_dir'],
+                    $selectedLogbookScope
                 );
                 $generatedAt = new DateTimeImmutable('now');
                 $rendered = estab_incident_export_pdf(
@@ -127,6 +136,7 @@ if ($requestMethod === 'POST') {
                     null,
                     [
                         'sections' => $selectedSections,
+                        'logbook_scope' => $bundle['logbook_scope'],
                         'counts' => $bundle['counts'],
                         'pdf_bytes' => strlen($rendered['bytes']),
                         'attachment_bytes' =>
@@ -197,6 +207,9 @@ try {
     $connection = estab_auth_connect($conf_4f_db);
     try {
         $incidents = estab_incident_list($connection);
+        $logbookShiftOptions = estab_incident_export_shift_options(
+            $connection
+        );
     } finally {
         estab_auth_close($connection);
     }
@@ -266,7 +279,7 @@ try {
 
           <label class="estab-incident-export-field">
             <span>Einsatz</span>
-            <select name="einsatz_id" required>
+            <select name="einsatz_id" id="incident-export-incident" required>
               <option value="">Bitte auswählen</option>
               <?php foreach ($incidents as $incident): ?>
                 <?php $incidentId = (int) ($incident['einsatz_id'] ?? 0); ?>
@@ -290,16 +303,70 @@ try {
             </select>
           </label>
 
+          <label class="estab-incident-export-field">
+            <span>ETB/TBB-Ausgabe</span>
+            <select
+              name="logbook_scope"
+              id="incident-export-logbook-scope"
+              required>
+              <option value="all"
+                <?= $selectedLogbookScope === 'all' ? 'selected' : '' ?>>
+                Gesamtbuch · alle Dienstschichten
+              </option>
+              <?php foreach ($incidents as $incident): ?>
+                <?php
+                $scopeIncidentId = (int) ($incident['einsatz_id'] ?? 0);
+                $incidentShifts = array_values(array_filter(
+                    $logbookShiftOptions,
+                    static fn (array $shift): bool =>
+                        (int) ($shift['einsatz_id'] ?? 0) === $scopeIncidentId
+                ));
+                ?>
+                <?php if ($incidentShifts !== []): ?>
+                  <optgroup
+                    label="<?= incident_export_html(
+                        (string) ($incident['kennung'] ?? '')
+                            . ' · ' . (string) ($incident['name'] ?? '')
+                    ) ?>">
+                    <?php foreach ($incidentShifts as $shift): ?>
+                      <?php
+                      $shiftId = (int) ($shift['dienstschicht_id'] ?? 0);
+                      $shiftValue = 'shift:' . $shiftId;
+                      ?>
+                      <option
+                        value="<?= incident_export_html($shiftValue) ?>"
+                        data-incident-id="<?= $scopeIncidentId ?>"
+                        <?= $selectedLogbookScope === $shiftValue
+                            ? 'selected'
+                            : '' ?>>
+                        <?= incident_export_html(
+                            'Dienstschicht '
+                                . (string) ($shift['nummer'] ?? '')
+                                . ' · '
+                                . (string) ($shift['bezeichnung'] ?? '')
+                                . ' (' . (string) ($shift['status'] ?? '') . ')'
+                        ) ?>
+                      </option>
+                    <?php endforeach; ?>
+                  </optgroup>
+                <?php endif; ?>
+              <?php endforeach; ?>
+            </select>
+            <small>Eine einzelne Dienstschicht filtert ausschließlich ETB und
+              TBB. Nachrichtenvordrucke, Anhänge und alle weiteren ausgewählten
+              Bereiche bleiben vollständig einsatzweit.</small>
+          </label>
+
           <fieldset class="estab-incident-export-sections">
             <legend>Inhalte</legend>
             <?php foreach ([
                 'etb' => [
                     'Einsatztagebuch (ETB)',
-                    'Alle ETB-Einträge dieses Einsatzes',
+                    'ETB-Einträge gemäß der oben gewählten ETB/TBB-Ausgabe',
                 ],
                 'ttb' => [
                     'Technisches Betriebsbuch (TBB)',
-                    'Alle TBB-Einträge dieses Einsatzes',
+                    'TBB-Einträge gemäß der oben gewählten ETB/TBB-Ausgabe',
                 ],
                 'messages' => [
                     'Nachrichtenvordrucke',
@@ -370,5 +437,28 @@ try {
       <a href="incidents.php">Einsätze verwalten</a>
     </footer>
   </main>
+  <script>
+  (() => {
+    const incident = document.getElementById('incident-export-incident');
+    const scope = document.getElementById('incident-export-logbook-scope');
+    if (!(incident instanceof HTMLSelectElement)
+        || !(scope instanceof HTMLSelectElement)) {
+      return;
+    }
+    const synchronizeShifts = () => {
+      const incidentId = incident.value;
+      for (const option of scope.options) {
+        const optionIncidentId = option.dataset.incidentId || '';
+        option.disabled = optionIncidentId !== ''
+          && optionIncidentId !== incidentId;
+      }
+      if (scope.selectedOptions[0]?.disabled) {
+        scope.value = 'all';
+      }
+    };
+    incident.addEventListener('change', synchronizeShifts);
+    synchronizeShifts();
+  })();
+  </script>
 </body>
 </html>

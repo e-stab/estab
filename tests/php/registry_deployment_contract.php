@@ -75,6 +75,11 @@ $assert(
     'Source, registry, and migrator do not pin the same MariaDB index digest'
 );
 $assert(
+    !str_contains($sourceCompose, 'innodb_snapshot_isolation')
+    && !str_contains($registryCompose, 'innodb_snapshot_isolation'),
+    'Source or registry deployment overrides MariaDB snapshot-isolation defaults'
+);
+$assert(
     str_contains(
         $appDockerfile,
         'php:8.5.8-apache-trixie@sha256:eacc0d98992683cb46e4f8f44b2418a0323855dc8b59d32dc54f7a9b90a966dd'

@@ -362,6 +362,27 @@ assert_body_absent 'GET_WRITE_MUST_FAIL'
 assert_global_incident_header "$s2_cookies" stabetb/etb.php
 assert_global_incident_header "$aw_cookies" fmtbb/tbb.php
 
+assert_status 200 --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    "$base_url/fmtbb/tbb.php?tbb_eintrag_x=1"
+assert_body 'das TBB auch ohne Anlagen in'
+assert_body 'Grundzügen verständlich bleibt.'
+assert_body_absent '<option value="nachricht">'
+assert_no_runtime_error
+reserved_message_marker="LOGBOOK_TBB_RESERVED_MESSAGE_$$"
+csrf_token=$(csrf_from_body)
+assert_status 422 \
+    --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$csrf_token" \
+    --data-urlencode 'logbook_action=save_entry' \
+    --data-urlencode 'entry_type=nachricht' \
+    --data-urlencode "message_route=$reserved_message_marker" \
+    "$base_url/fmtbb/tbb.php"
+assert_body 'Der TBB-Eintrag ist ungültig'
+assert_status 200 --cookie "$aw_cookies" "$base_url/fmtbb/tbb.php"
+assert_body_absent "$reserved_message_marker"
+assert_no_runtime_error
+
 # Prove the shared server-side length limit through a real ETB write request.
 assert_status 200 --cookie "$s2_cookies" --cookie-jar "$s2_cookies" \
     "$base_url/stabetb/etb.php?etb_eintrag_x=1"

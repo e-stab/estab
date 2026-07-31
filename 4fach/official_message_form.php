@@ -9,6 +9,33 @@
  */
 trait EstabOfficialMessageFormView
 {
+    /**
+     * Render only the incident-local TBB evidence number linked to this
+     * message. The historic 04_nummer remains a technical workflow/archive
+     * value and must never be presented as the TBB book number.
+     */
+    function official_message_ttb_evidence_text(): string
+    {
+        $value = $this->formdata['estab_ttb_lfd'] ?? null;
+        if (is_int($value) && $value > 0) {
+            return (string) $value;
+        }
+        if (
+            is_string($value)
+            && preg_match('/\A[1-9][0-9]*\z/D', $value) === 1
+        ) {
+            $parsed = filter_var(
+                $value,
+                FILTER_VALIDATE_INT,
+                ['options' => ['min_range' => 1, 'max_range' => PHP_INT_MAX]]
+            );
+            if (is_int($parsed)) {
+                return (string) $parsed;
+            }
+        }
+        return 'noch kein TBB-Nachweis';
+    }
+
     /** @return array<int, array{title:string,text:string}> */
     function official_message_help_definitions(): array
     {
@@ -1485,28 +1512,18 @@ HTML;
             . 'Technisches<br>Betriebsbuch';
         $this->official_message_help(5);
         echo '</div><label for="f_04_nummer">Nr.</label>';
-        $ttbNumber = (string)($this->formdata['04_nummer'] ?? '');
-        if ($ttbNumber === '0') {
-            $ttbNumber = '';
-        }
-        if ((bool)$this->feld[4]) {
-            echo '<input id="f_04_nummer" class="estab-official-input" '
-                . 'name="04_nummer" value="'
-                . estab_message_html($ttbNumber) . '" inputmode="numeric">';
-        } else {
-            echo '<input type="hidden" name="04_nummer" value="'
-                . $this->safe_message_value('04_nummer') . '">'
-                . '<span id="f_04_nummer" class="estab-official-readonly">'
-                . ($ttbNumber === '' ? '&nbsp;' : estab_message_html($ttbNumber))
-                . '</span>';
-        }
+        echo '<input type="hidden" name="04_nummer" value="'
+            . $this->safe_message_value('04_nummer') . '">'
+            . '<span id="f_04_nummer" class="estab-official-readonly">'
+            . estab_message_html($this->official_message_ttb_evidence_text())
+            . '</span>';
         $this->official_message_radio_group(
             '04_richtung',
             [
                 ['value' => 'E', 'label' => 'Eingang', 'id' => 'eingang'],
                 ['value' => 'A', 'label' => 'Ausgang', 'id' => 'ausgang'],
             ],
-            (bool)$this->feld[4],
+            false,
             'Richtung im Technischen Betriebsbuch'
         );
         echo '<span class="estab-official-print-number">4</span></section>';

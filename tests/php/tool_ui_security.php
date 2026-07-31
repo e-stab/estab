@@ -252,7 +252,7 @@ $assert(
 
 foreach ([
     'stabetb/etb.php' => ['etb', 'ETB-Eintrag speichern', 'etb-event'],
-    'fmtbb/tbb.php' => ['ttb', 'TBB-Eintrag speichern', 'ttb-event'],
+    'fmtbb/tbb.php' => ['ttb', 'TBB-Eintrag speichern', 'ttb-entry-type'],
 ] as $relativePath => [$kind, $saveLabel, $eventId]) {
     $logbook = str_replace('\\"', '"', $additionalSources[$relativePath]);
     $assert(
@@ -265,6 +265,20 @@ foreach ([
             && !str_contains($logbook, 'type="image"'),
         strtoupper($kind) . ' retains legacy controls or lacks responsive UI'
     );
+    if ($kind === 'ttb') {
+        foreach ([
+            'personnel_duty',
+            'channel',
+            'message_route',
+            'operations',
+            'receipt',
+        ] as $officialField) {
+            $assert(
+                str_contains($logbook, '"' . $officialField . '" => array'),
+                'TTB omits official structured field ' . $officialField
+            );
+        }
+    }
 }
 
 $tracking = str_replace(

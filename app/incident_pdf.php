@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/legacy_php.php';
 require_once __DIR__ . '/incident.php';
+require_once __DIR__ . '/logbook_numbering.php';
 require_once __DIR__ . '/../4fbak/backup_pdf.php';
 
 const ESTAB_INCIDENT_PDF_DEFAULT_ATTACHMENT_BYTES = 50 * 1024 * 1024;
@@ -40,6 +41,49 @@ function estab_incident_pdf_command_post_label(array $incident): string
             $exception
         );
     }
+}
+
+/** Build the auditable ETB/TBB selection printed on the dossier cover. */
+function estab_incident_pdf_logbook_scope_label(array $scope): string
+{
+    $mode = $scope['mode'] ?? 'all';
+    if ($mode === 'all') {
+        return 'Gesamtbuch (alle Dienstschichten einschließlich historischer '
+            . 'Einträge ohne Schichtzuordnung)';
+    }
+    if ($mode !== 'shift') {
+        throw new EstabIncidentPdfInputException(
+            'Logbook scope metadata is invalid.'
+        );
+    }
+
+    $shiftId = $scope['shift_id'] ?? null;
+    $number = $scope['number'] ?? null;
+    if (!is_int($shiftId) || $shiftId < 1 || !is_int($number) || $number < 1) {
+        throw new EstabIncidentPdfInputException(
+            'Shift scope metadata is incomplete.'
+        );
+    }
+    $name = trim((string) ($scope['name'] ?? ''));
+    $status = trim((string) ($scope['status'] ?? ''));
+    $compactTime = static function (mixed $value): string {
+        $time = trim((string) $value);
+        return preg_replace('/\.0{1,6}\z/D', '', $time) ?? $time;
+    };
+    $createdAt = $compactTime($scope['created_at'] ?? '');
+    $activatedAt = $compactTime($scope['activated_at'] ?? '');
+    $endedAt = $compactTime($scope['ended_at'] ?? '');
+
+    return implode(' · ', [
+        'Nur Dienstschicht ' . $number
+            . ($name !== '' ? ' · ' . $name : ''),
+        'ID: ' . $shiftId,
+        'Status: ' . ($status !== '' ? $status : 'nicht erfasst'),
+        'erstellt: ' . ($createdAt !== '' ? $createdAt : 'nicht erfasst'),
+        'aktiv: '
+            . ($activatedAt !== '' ? $activatedAt : 'nicht erfasst'),
+        'bis: ' . ($endedAt !== '' ? $endedAt : 'nicht erfasst'),
+    ]);
 }
 
 /** Convert application UTF-8 to the Windows-1252 encoding of FPDF core fonts. */
@@ -252,16 +296,44 @@ final class EstabIncidentPdf extends vordruckaspdf
 {
     private const LAYOUT_DOSSIER = 'dossier';
     private const LAYOUT_MESSAGE_FORM = 'message-form';
+    private const LAYOUT_ETB_FORM = 'etb-form';
+    private const LAYOUT_TBB_FORM = 'tbb-form';
+
+    private const ETB_PAGE_TOTAL_ALIAS = '{etb#}';
+    private const TBB_PAGE_TOTAL_ALIAS = '{tbb#}';
+    private const THW_MARK_PATH = __DIR__ . '/../4fbak/thw.png';
+
+    /** @var array{0:int,1:int,2:int} */
+    private const ETB_TITLE_FILL = [32, 69, 138];
+
+    /** @var array{0:int,1:int,2:int} */
+    private const TBB_TITLE_FILL = [64, 55, 137];
 
     private string $commandPostLabel = 'Führungsstelle historisch nicht erfasst';
     private string $incidentLabel = 'Einsatz nicht erfasst';
+    private string $commandPostName = 'historisch nicht erfasst';
+    private string $logbookIncidentLabel = 'nicht erfasst';
+    private string $incidentBeginDate = '';
+    private string $tbbWorkplace = '';
+    private bool $incidentClosed = false;
+    private int $etbIdentifier = 0;
     private string $sectionTitle = 'Einsatzdossier';
     private int $attachmentByteLimit;
     private int $attachmentBytes = 0;
     private string $nextPageLayout = self::LAYOUT_DOSSIER;
+    private string $nextLogbookPageDate = '';
 
     /** @var array<int,string> */
     private array $pageLayouts = [];
+
+    /** @var array<int,int> */
+    private array $logbookPageNumbers = [];
+
+    /** @var array<int,string> */
+    private array $logbookPageDates = [];
+
+    /** @var array{ETB:int,TBB:int} */
+    private array $logbookPageCounts = ['ETB' => 0, 'TBB' => 0];
 
     /**
      * @var list<array{
@@ -312,6 +384,14 @@ final class EstabIncidentPdf extends vordruckaspdf
                 'Incident identity is incomplete.'
             );
         }
+        $incidentId = $incident['einsatz_id'] ?? null;
+        if (
+            is_int($incidentId)
+            || (is_string($incidentId)
+                && preg_match('/\A[1-9][0-9]*\z/D', $incidentId) === 1)
+        ) {
+            $this->etbIdentifier = (int) $incidentId;
+        }
         $commandPostName = estab_incident_pdf_command_post_label($incident);
         $historicalCommandPost = !array_key_exists(
             'fuehrungsstellenname',
@@ -323,6 +403,37 @@ final class EstabIncidentPdf extends vordruckaspdf
                 : 'Führungsstelle: ' . $commandPostName
         );
         $this->incidentLabel = 'Einsatz: ' . $code . ' · ' . $name;
+        $this->commandPostName = $commandPostName;
+        $this->logbookIncidentLabel = $code . ' · ' . $name;
+        $this->incidentClosed = (string) ($incident['estab_status'] ?? '')
+            === 'closed';
+        $this->incidentBeginDate = $this->logbookDate(
+            $incident['beginn'] ?? ''
+        );
+        foreach ([
+            'tbb_arbeitsplatz',
+            'fernmeldearbeitsplatz',
+            'arbeitsplatz',
+        ] as $workplaceField) {
+            if (!array_key_exists($workplaceField, $incident)) {
+                continue;
+            }
+            $workplace = $incident[$workplaceField];
+            if (
+                is_array($workplace)
+                || is_object($workplace)
+                || is_resource($workplace)
+            ) {
+                throw new EstabIncidentPdfInputException(
+                    'Incident TBB workplace must be scalar.'
+                );
+            }
+            $workplace = trim((string) $workplace);
+            if ($workplace !== '') {
+                $this->tbbWorkplace = $workplace;
+                break;
+            }
+        }
     }
 
     /**
@@ -360,21 +471,101 @@ final class EstabIncidentPdf extends vordruckaspdf
         return rtrim(substr($encoded, 0, $minimum)) . $suffix;
     }
 
+    /** Return a stable German calendar date without changing its timezone. */
+    private function logbookDate(mixed $value): string
+    {
+        if (is_array($value) || is_object($value) || is_resource($value)) {
+            throw new EstabIncidentPdfInputException(
+                'Logbook date must be scalar.'
+            );
+        }
+        $candidate = trim((string) $value);
+        if ($candidate === '') {
+            return '';
+        }
+        if (
+            preg_match('/\A([0-9]{4})-([0-9]{2})-([0-9]{2})/D', $candidate, $match)
+                === 1
+        ) {
+            return $match[3] . '.' . $match[2] . '.' . $match[1];
+        }
+        return $candidate;
+    }
+
+    /** Format one database timestamp for the narrow official table column. */
+    private function logbookDateTime(mixed $value): string
+    {
+        if (is_array($value) || is_object($value) || is_resource($value)) {
+            throw new EstabIncidentPdfInputException(
+                'Logbook timestamp must be scalar.'
+            );
+        }
+        $candidate = trim((string) $value);
+        if ($candidate === '') {
+            return '';
+        }
+        if (
+            preg_match(
+                '/\A([0-9]{4})-([0-9]{2})-([0-9]{2})[ T]'
+                    . '([0-9]{2}):([0-9]{2})/D',
+                $candidate,
+                $match
+            ) === 1
+        ) {
+            return $match[3] . '.' . $match[2] . '.' . $match[1]
+                . "\n" . $match[4] . ':' . $match[5];
+        }
+        return $candidate;
+    }
+
+    private function currentPageLayout(): string
+    {
+        return $this->pageLayouts[$this->PageNo()]
+            ?? self::LAYOUT_DOSSIER;
+    }
+
     public function AddPage($orientation = '', $format = '')
     {
-        $this->pageLayouts[$this->PageNo() + 1] = $this->nextPageLayout;
+        $pageNumber = $this->PageNo() + 1;
+        $layout = $this->nextPageLayout;
+        $this->pageLayouts[$pageNumber] = $layout;
+        if ($layout === self::LAYOUT_ETB_FORM) {
+            $this->logbookPageCounts['ETB']++;
+            $this->logbookPageNumbers[$pageNumber] =
+                $this->logbookPageCounts['ETB'];
+            $this->logbookPageDates[$pageNumber] =
+                $this->nextLogbookPageDate;
+        } elseif ($layout === self::LAYOUT_TBB_FORM) {
+            $this->logbookPageCounts['TBB']++;
+            $this->logbookPageNumbers[$pageNumber] =
+                $this->logbookPageCounts['TBB'];
+        }
         parent::AddPage($orientation, $format);
     }
 
     private function isMessageFormPage(): bool
     {
-        return ($this->pageLayouts[$this->PageNo()] ?? self::LAYOUT_DOSSIER)
-            === self::LAYOUT_MESSAGE_FORM;
+        return $this->currentPageLayout() === self::LAYOUT_MESSAGE_FORM;
+    }
+
+    private function isLogbookFormPage(): bool
+    {
+        return in_array(
+            $this->currentPageLayout(),
+            [self::LAYOUT_ETB_FORM, self::LAYOUT_TBB_FORM],
+            true
+        );
     }
 
     private function configureDossierLayout(): void
     {
         $this->nextPageLayout = self::LAYOUT_DOSSIER;
+        // FPDF restores the state that was active before AddPage(). Keep later
+        // dossier and message-form pages independent from a preceding table.
+        $this->SetDrawColor(0);
+        $this->SetFillColor(0);
+        $this->SetTextColor(0);
+        $this->SetLineWidth(0.2);
         $this->SetMargins(16, 30, 16);
         $this->SetAutoPageBreak(true, 20);
     }
@@ -389,10 +580,350 @@ final class EstabIncidentPdf extends vordruckaspdf
         );
     }
 
+    private function configureEtbFormLayout(string $pageDate): void
+    {
+        $this->nextPageLayout = self::LAYOUT_ETB_FORM;
+        $this->nextLogbookPageDate = $pageDate !== ''
+            ? $pageDate
+            : $this->incidentBeginDate;
+        $this->SetMargins(12, 50, 12);
+        $this->SetAutoPageBreak(false, 0);
+    }
+
+    private function configureTbbFormLayout(): void
+    {
+        $this->nextPageLayout = self::LAYOUT_TBB_FORM;
+        $this->SetMargins(8, 48, 8);
+        $this->SetAutoPageBreak(false, 0);
+    }
+
+    /** Draw the title band shared by Fb Fü 2 and Fb Fü 44. */
+    private function drawLogbookTitleBand(
+        float $x,
+        float $y,
+        float $width,
+        string $formCode,
+        string $title,
+        float $codeWidth,
+        float $markWidth,
+        float $height,
+        array $titleFill
+    ): void {
+        if (
+            count($titleFill) !== 3
+            || array_filter(
+                $titleFill,
+                static fn (mixed $component): bool => !is_int($component)
+                    || $component < 0
+                    || $component > 255
+            ) !== []
+        ) {
+            throw new EstabIncidentPdfInputException(
+                'Logbook title color is invalid.'
+            );
+        }
+        if (!is_file(self::THW_MARK_PATH) || is_link(self::THW_MARK_PATH)) {
+            throw new EstabIncidentPdfInputException(
+                'THW header mark is unavailable.'
+            );
+        }
+
+        $titleWidth = $width - $codeWidth - $markWidth;
+        $this->SetLineWidth(0.2);
+        $this->SetDrawColor(43, 55, 73);
+        $this->SetFillColor(
+            $titleFill[0],
+            $titleFill[1],
+            $titleFill[2]
+        );
+        $this->SetTextColor(23, 32, 51);
+        $this->SetFont('helvetica', 'B', 7.5);
+        $this->SetXY($x, $y);
+        $this->Cell(
+            $codeWidth,
+            $height,
+            estab_incident_pdf_text($formCode),
+            1,
+            0,
+            'C'
+        );
+        $this->SetTextColor(255, 255, 255);
+        $this->SetFont('helvetica', 'B', 10);
+        $this->Cell(
+            $titleWidth,
+            $height,
+            estab_incident_pdf_text($title),
+            1,
+            0,
+            'C',
+            true
+        );
+        $markX = $x + $codeWidth + $titleWidth;
+        $this->SetXY($markX, $y);
+        $this->Cell($markWidth, $height, '', 1, 0);
+
+        $markPadding = 1.0;
+        $symbolSize = max(1.0, $height - 2.0 * $markPadding);
+        $symbolX = $markX + $markWidth - $symbolSize - $markPadding;
+        $symbolY = $y + $markPadding;
+        $wordmarkWidth = max(
+            1.0,
+            $symbolX - $markX - 1.5 * $markPadding
+        );
+        $this->SetTextColor(23, 47, 77);
+        $this->SetFont('helvetica', 'B', $height >= 9.0 ? 6.6 : 6.0);
+        $this->SetXY($markX + $markPadding, $y + 0.7);
+        $this->Cell(
+            $wordmarkWidth,
+            ($height - 1.4) / 2.0,
+            estab_incident_pdf_text('Technisches'),
+            0,
+            0,
+            'C'
+        );
+        $this->SetXY(
+            $markX + $markPadding,
+            $y + ($height - 1.4) / 2.0
+        );
+        $this->Cell(
+            $wordmarkWidth,
+            ($height - 1.4) / 2.0,
+            estab_incident_pdf_text('Hilfswerk'),
+            0,
+            0,
+            'C'
+        );
+        $this->Image(
+            self::THW_MARK_PATH,
+            $symbolX,
+            $symbolY,
+            $symbolSize,
+            $symbolSize,
+            'PNG'
+        );
+        $this->SetTextColor(23, 32, 51);
+    }
+
+    /** Draw centered, wrapped text inside an already outlined table cell. */
+    private function drawCenteredCellText(
+        float $x,
+        float $y,
+        float $width,
+        float $height,
+        string $text,
+        float $lineHeight
+    ): void {
+        $lines = $this->wrappedTextLines($width, $text);
+        $textHeight = count($lines) * $lineHeight;
+        $lineY = $y + max(0.0, ($height - $textHeight) / 2.0);
+        foreach ($lines as $line) {
+            $this->SetXY($x, $lineY);
+            $this->Cell($width, $lineHeight, $line, 0, 0, 'C');
+            $lineY += $lineHeight;
+        }
+    }
+
+    /** Draw the official four-column Fb Fü 2 page head. */
+    private function drawEtbHeader(): void
+    {
+        $x = 12.0;
+        $width = 186.0;
+        $this->drawLogbookTitleBand(
+            $x,
+            9.0,
+            $width,
+            'Fb Fü 2',
+            'Einsatztagebuch',
+            24.0,
+            40.0,
+            9.0,
+            self::ETB_TITLE_FILL
+        );
+
+        $this->SetDrawColor(43, 55, 73);
+        $this->SetTextColor(23, 32, 51);
+        $this->Rect($x, 20.0, 146.0, 14.0);
+        $this->SetFont('helvetica', 'B', 7.5);
+        $this->SetXY($x + 2.0, 24.2);
+        $this->Cell(20.0, 4.0, estab_incident_pdf_text('Einsatz:'), 0, 0);
+        $this->SetFont('helvetica', '', 7.5);
+        $this->SetXY($x + 22.0, 24.2);
+        $this->Cell(
+            122.0,
+            4.0,
+            $this->fittedHeaderLine($this->logbookIncidentLabel, 120.0),
+            0,
+            0
+        );
+
+        $page = $this->PageNo();
+        $bookPage = $this->logbookPageNumbers[$page] ?? 1;
+        $pageDate = $this->logbookPageDates[$page]
+            ?? $this->incidentBeginDate;
+        $this->Rect($x + 146.0, 20.0, 40.0, 14.0);
+        $this->SetFont('helvetica', 'B', 7.0);
+        $this->SetXY($x + 148.0, 21.5);
+        $this->Cell(11.0, 4.0, estab_incident_pdf_text('Datum:'), 0, 0);
+        $this->SetFont('helvetica', '', 7.0);
+        $this->Cell(
+            25.0,
+            4.0,
+            $this->fittedHeaderLine($pageDate, 24.0),
+            0,
+            0
+        );
+        $this->SetFont('helvetica', 'B', 7.0);
+        $this->SetXY($x + 148.0, 27.2);
+        $this->Cell(10.0, 4.0, estab_incident_pdf_text('Seite:'), 0, 0);
+        $this->SetFont('helvetica', '', 7.0);
+        $this->Cell(
+            26.0,
+            4.0,
+            estab_incident_pdf_text(
+                $bookPage . ' von ' . self::ETB_PAGE_TOTAL_ALIAS
+            ),
+            0,
+            0
+        );
+
+        $widths = [14.0, 34.0, 100.0, 38.0];
+        $labels = [
+            "Lfd.\nNr.",
+            'Datum/Uhrzeit',
+            'Darstellung der Ereignisse',
+            'Bemerkungen',
+        ];
+        $headerY = 36.0;
+        $headerHeight = 13.0;
+        $cellX = $x;
+        $this->SetFillColor(235, 237, 240);
+        $this->SetFont('helvetica', 'B', 7.2);
+        foreach ($widths as $index => $cellWidth) {
+            $this->Rect($cellX, $headerY, $cellWidth, $headerHeight, 'DF');
+            $this->drawCenteredCellText(
+                $cellX,
+                $headerY,
+                $cellWidth,
+                $headerHeight,
+                $labels[$index],
+                3.6
+            );
+            $cellX += $cellWidth;
+        }
+        $this->SetXY($x, 49.0);
+    }
+
+    /** Draw the official seven-column Fb Fü 44 page head. */
+    private function drawTbbHeader(): void
+    {
+        $x = 8.0;
+        $width = 281.0;
+        $this->drawLogbookTitleBand(
+            $x,
+            6.0,
+            $width,
+            'Fb Fü 44',
+            'Technisches Betriebsbuch',
+            23.0,
+            46.0,
+            8.0,
+            self::TBB_TITLE_FILL
+        );
+
+        $page = $this->PageNo();
+        $bookPage = $this->logbookPageNumbers[$page] ?? 1;
+        $detailY = 16.0;
+        $detailHeight = 9.0;
+        $detailWidths = [150.0, 95.0, 36.0];
+        $detailLabels = [
+            ['Fernmeldebetriebsstelle:', $this->commandPostName],
+            ['Arbeitsplatz:', $this->tbbWorkplace],
+            [
+                'Seite:',
+                $bookPage . ' von ' . self::TBB_PAGE_TOTAL_ALIAS,
+            ],
+        ];
+        $detailX = $x;
+        foreach ($detailWidths as $index => $detailWidth) {
+            $this->Rect(
+                $detailX,
+                $detailY,
+                $detailWidth,
+                $detailHeight
+            );
+            $label = $detailLabels[$index][0];
+            $value = $detailLabels[$index][1];
+            $labelWidth = $index === 0 ? 42.0 : ($index === 1 ? 25.0 : 11.0);
+            $this->SetFont('helvetica', 'B', 6.5);
+            $this->SetXY($detailX + 1.5, $detailY + 2.5);
+            $this->Cell(
+                $labelWidth,
+                4.0,
+                estab_incident_pdf_text($label),
+                0,
+                0
+            );
+            $this->SetFont('helvetica', '', 6.5);
+            $this->Cell(
+                max(1.0, $detailWidth - $labelWidth - 3.0),
+                4.0,
+                $this->fittedHeaderLine(
+                    $value,
+                    max(1.0, $detailWidth - $labelWidth - 4.0)
+                ),
+                0,
+                0
+            );
+            $detailX += $detailWidth;
+        }
+
+        $widths = [10.0, 22.0, 63.0, 48.0, 40.0, 68.0, 30.0];
+        $labels = [
+            "Lfd.\nNr.",
+            "Datum/\nUhrzeit",
+            "- Einsatz- und Betriebsbereitschaft\n"
+                . "- Namen des Betriebspersonals\n"
+                . "- Ablösungen\n"
+                . "- Dienst übergeben/übernommen\n"
+                . '- Betriebsende',
+            "- Kanal\n- Bedingung\n- Kanalwechsel durchgeführt\n"
+                . '(alter/neuer Kanal)',
+            'Nachricht an/von',
+            "Betriebsablauf/Ereignis\nStörung/Störungsbeseitigung",
+            "Quittung\nEmpfänger\nAusgehändigt",
+        ];
+        $headerY = 27.0;
+        $headerHeight = 20.0;
+        $cellX = $x;
+        $this->SetFillColor(235, 237, 240);
+        $this->SetFont('helvetica', 'B', 5.4);
+        foreach ($widths as $index => $cellWidth) {
+            $this->Rect($cellX, $headerY, $cellWidth, $headerHeight, 'DF');
+            $this->drawCenteredCellText(
+                $cellX,
+                $headerY,
+                $cellWidth,
+                $headerHeight,
+                $labels[$index],
+                2.9
+            );
+            $cellX += $cellWidth;
+        }
+        $this->SetXY($x, 47.0);
+    }
+
     public function Header()
     {
         if ($this->isMessageFormPage()) {
             parent::Header();
+            return;
+        }
+        if ($this->currentPageLayout() === self::LAYOUT_ETB_FORM) {
+            $this->drawEtbHeader();
+            return;
+        }
+        if ($this->currentPageLayout() === self::LAYOUT_TBB_FORM) {
+            $this->drawTbbHeader();
             return;
         }
         $this->SetFillColor(23, 47, 77);
@@ -439,6 +970,50 @@ final class EstabIncidentPdf extends vordruckaspdf
             parent::Footer();
             return;
         }
+        if ($this->currentPageLayout() === self::LAYOUT_ETB_FORM) {
+            $this->SetDrawColor(43, 55, 73);
+            $this->SetLineWidth(0.25);
+            $this->Line(37.0, $this->h - 17.0, 84.0, $this->h - 17.0);
+            $this->Line(126.0, $this->h - 17.0, 173.0, $this->h - 17.0);
+            $this->SetTextColor(23, 32, 51);
+            $this->SetFont('helvetica', '', 6.5);
+            $this->SetXY(32.0, $this->h - 15.5);
+            $this->Cell(
+                57.0,
+                4.0,
+                estab_incident_pdf_text('Leiter/-in Führungsstelle'),
+                0,
+                0,
+                'C'
+            );
+            $this->SetXY(121.0, $this->h - 15.5);
+            $this->Cell(
+                57.0,
+                4.0,
+                estab_incident_pdf_text('ETB-Führer/-in'),
+                0,
+                0,
+                'C'
+            );
+            return;
+        }
+        if ($this->currentPageLayout() === self::LAYOUT_TBB_FORM) {
+            $this->SetDrawColor(43, 55, 73);
+            $this->SetLineWidth(0.25);
+            $this->Line(18.0, $this->h - 13.0, 88.0, $this->h - 13.0);
+            $this->SetTextColor(23, 32, 51);
+            $this->SetFont('helvetica', '', 6.5);
+            $this->SetXY(18.0, $this->h - 11.5);
+            $this->Cell(
+                70.0,
+                4.0,
+                estab_incident_pdf_text('Leiter/-in Fernmeldebetrieb (LdF)'),
+                0,
+                0,
+                'C'
+            );
+            return;
+        }
         $this->SetY(-14);
         $this->SetDrawColor(141, 162, 189);
         $this->Line(16, $this->GetY(), $this->w - 16, $this->GetY());
@@ -459,6 +1034,9 @@ final class EstabIncidentPdf extends vordruckaspdf
 
     public function AcceptPageBreak()
     {
+        if ($this->isLogbookFormPage()) {
+            return false;
+        }
         if (!$this->isMessageFormPage()) {
             return $this->AutoPageBreak;
         }
@@ -468,6 +1046,22 @@ final class EstabIncidentPdf extends vordruckaspdf
             $this->set_message_content_continuation_position();
         }
         return false;
+    }
+
+    /** Replace section-local page totals before FPDF compresses page streams. */
+    public function _putpages()
+    {
+        foreach ($this->pages as $page => $content) {
+            $this->pages[$page] = str_replace(
+                [self::ETB_PAGE_TOTAL_ALIAS, self::TBB_PAGE_TOTAL_ALIAS],
+                [
+                    (string) $this->logbookPageCounts['ETB'],
+                    (string) $this->logbookPageCounts['TBB'],
+                ],
+                $content
+            );
+        }
+        parent::_putpages();
     }
 
     private function beginSection(string $title, bool $newPage = true): void
@@ -565,6 +1159,7 @@ final class EstabIncidentPdf extends vordruckaspdf
      *   message?:array<string,mixed>,
      *   operations?:array<string,mixed>
      * } $evidence
+     * @param array<string,mixed> $logbookScope
      */
     public function addCover(
         array $incident,
@@ -572,7 +1167,8 @@ final class EstabIncidentPdf extends vordruckaspdf
         array $counts,
         string $generatedAt,
         string $generatedBy,
-        array $evidence = []
+        array $evidence = [],
+        array $logbookScope = []
     ): void {
         $this->beginSection('Einsatzdossier');
         $this->heading('Einsatzdossier', 1);
@@ -709,16 +1305,20 @@ final class EstabIncidentPdf extends vordruckaspdf
         $this->definition('Betriebs-Head-Hash', $operationsHead);
 
         $this->heading('Umfang', 2);
+        $this->definition(
+            'Logbuchauswahl',
+            estab_incident_pdf_logbook_scope_label($logbookScope)
+        );
         $labels = [
-            'etb' => 'Einsatztagebuch (ETB)',
-            'ttb' => 'Technisches Betriebsbuch (TBB)',
+            'etb' => 'ETB',
+            'ttb' => 'TBB',
             'messages' => 'Nachrichtenvordrucke',
             'attachments' => 'Originalanhänge',
-            'message_evidence' => 'Nachrichtenereignisse und Nachweisköpfe',
-            'duty' => 'Dienstschichten, Besetzungen und Übergaben',
-            's6_plans' => 'S6-Fernmeldeplanversionen und Einträge',
+            'message_evidence' => 'Nachrichten-Nachweis',
+            'duty' => 'Dienstorganisation',
+            's6_plans' => 'S6-Fernmeldeplanung',
             'courier' => 'Melderaufträge',
-            'operations_evidence' => 'Betriebsereignisse und Nachweiskopf',
+            'operations_evidence' => 'Betriebsnachweis',
         ];
         $scope = [];
         foreach ($labels as $key => $label) {
@@ -736,9 +1336,564 @@ final class EstabIncidentPdf extends vordruckaspdf
                     . (string) ($counts['attachments_legacy'] ?? 0)
             );
         }
-        $this->heading('Erzeugung', 2);
-        $this->definition('Zeitpunkt', $generatedAt);
-        $this->definition('Administrationszugang', $generatedBy);
+        $this->definition(
+            'Erzeugung',
+            $generatedAt . ' · Administrationszugang: ' . $generatedBy
+        );
+    }
+
+    /** Return one optional scalar row field without inventing a value. */
+    private function logbookRowValue(array $row, string $field): string
+    {
+        if (!array_key_exists($field, $row) || $row[$field] === null) {
+            return '';
+        }
+        $value = $row[$field];
+        if (is_array($value) || is_object($value) || is_resource($value)) {
+            throw new EstabIncidentPdfInputException(
+                'Logbook field must be scalar: ' . $field
+            );
+        }
+        return trim((string) $value);
+    }
+
+    /** Return the first populated scalar among compatible schema aliases. */
+    private function firstLogbookRowValue(array $row, array $fields): string
+    {
+        foreach ($fields as $field) {
+            $value = $this->logbookRowValue($row, $field);
+            if ($value !== '') {
+                return $value;
+            }
+        }
+        return '';
+    }
+
+    /**
+     * Join distinct populated row values, optionally with an official label.
+     *
+     * @param list<array{0:string,1:string}> $fields
+     */
+    private function joinedLogbookRowValues(array $row, array $fields): string
+    {
+        $values = [];
+        foreach ($fields as [$field, $label]) {
+            $value = $this->logbookRowValue($row, $field);
+            if ($value === '') {
+                continue;
+            }
+            $line = $label . $value;
+            if (!in_array($line, $values, true)) {
+                $values[] = $line;
+            }
+        }
+        return implode("\n", $values);
+    }
+
+    /** Append a non-empty unique line to one printable table field. */
+    private function appendLogbookLine(
+        string $content,
+        string $value,
+        string $label = ''
+    ): string {
+        $value = trim($value);
+        if ($value === '') {
+            return $content;
+        }
+        $line = $label . $value;
+        $lines = $content === '' ? [] : explode("\n", $content);
+        if (!in_array($line, $lines, true)) {
+            $lines[] = $line;
+        }
+        return implode("\n", $lines);
+    }
+
+    /** Render the session-bound author without adding a non-official column. */
+    private function logbookAuthor(array $row, string $prefix): string
+    {
+        if (
+            strtolower($this->logbookRowValue(
+                $row,
+                $prefix . '_kuerzel'
+            )) === 'system'
+        ) {
+            return 'Automatisch durch eStab erzeugt';
+        }
+        $parts = [];
+        foreach (['benutzer', 'kuerzel', 'funktion'] as $suffix) {
+            $value = $this->logbookRowValue(
+                $row,
+                $prefix . '_' . $suffix
+            );
+            if ($value !== '') {
+                $parts[] = $value;
+            }
+        }
+        return implode(' - ', $parts);
+    }
+
+    /**
+     * Wrap an encoded core-font string exactly within one FPDF cell width.
+     *
+     * @return list<string>
+     */
+    private function wrappedTextLines(float $width, mixed $value): array
+    {
+        $text = estab_incident_pdf_text($value);
+        $text = str_replace("\r", '', $text);
+        if ($text === '') {
+            return [''];
+        }
+        $fontWidths = $this->CurrentFont['cw'] ?? null;
+        if (!is_array($fontWidths) || $this->FontSize <= 0) {
+            throw new EstabIncidentPdfInputException(
+                'PDF font is not ready for logbook wrapping.'
+            );
+        }
+        $maximumWidth = max(1.0, $width - 2.0 * $this->cMargin)
+            * 1000.0 / $this->FontSize;
+        $length = strlen($text);
+        while ($length > 0 && $text[$length - 1] === "\n") {
+            $length--;
+        }
+        if ($length === 0) {
+            return [''];
+        }
+
+        $lines = [];
+        $separator = -1;
+        $lineStart = 0;
+        $position = 0;
+        $lineWidth = 0.0;
+        while ($position < $length) {
+            $character = $text[$position];
+            if ($character === "\n") {
+                $lines[] = rtrim(
+                    substr($text, $lineStart, $position - $lineStart)
+                );
+                $position++;
+                $separator = -1;
+                $lineStart = $position;
+                $lineWidth = 0.0;
+                continue;
+            }
+            if ($character === ' ') {
+                $separator = $position;
+            }
+            $lineWidth += (float) ($fontWidths[$character] ?? 600);
+            if ($lineWidth > $maximumWidth) {
+                if ($separator < $lineStart) {
+                    if ($position === $lineStart) {
+                        $position++;
+                    }
+                    $lines[] = rtrim(
+                        substr($text, $lineStart, $position - $lineStart)
+                    );
+                    $lineStart = $position;
+                } else {
+                    $lines[] = rtrim(
+                        substr($text, $lineStart, $separator - $lineStart)
+                    );
+                    $position = $separator + 1;
+                    $lineStart = $position;
+                }
+                $separator = -1;
+                $lineWidth = 0.0;
+                continue;
+            }
+            $position++;
+        }
+        if ($position > $lineStart) {
+            $lines[] = rtrim(substr($text, $lineStart, $position - $lineStart));
+        }
+        return $lines === [] ? [''] : $lines;
+    }
+
+    /** Draw the fine ruled writing grid used by the official paper forms. */
+    private function drawLogbookWritingGrid(
+        float $x,
+        float $y,
+        float $width,
+        float $height,
+        float $lineHeight,
+        float $padding,
+        float $reservedTop = 0.0
+    ): void {
+        if (
+            $width <= 0.0
+            || $height <= 0.0
+            || $lineHeight <= 0.0
+            || $padding < 0.0
+            || $reservedTop < 0.0
+        ) {
+            throw new EstabIncidentPdfInputException(
+                'Logbook writing grid dimensions are invalid.'
+            );
+        }
+
+        $bottom = $y + $height;
+        $ruleY = $y + $padding + $lineHeight;
+        $firstAllowedRule = $y + $reservedTop;
+        $this->SetDrawColor(190, 196, 205);
+        $this->SetLineWidth(0.08);
+        while ($ruleY < $bottom - 0.1) {
+            if ($ruleY > $firstAllowedRule + 0.01) {
+                $this->Line($x, $ruleY, $x + $width, $ruleY);
+            }
+            $ruleY += $lineHeight;
+        }
+    }
+
+    /** Draw one vertically aligned table-row fragment on the current page. */
+    private function drawLogbookRowChunk(
+        array $widths,
+        array $wrappedColumns,
+        int $lineOffset,
+        int $lineCount,
+        float $lineHeight,
+        float $padding,
+        float $minimumHeight,
+        bool $continuation
+    ): float {
+        $rowY = $this->GetY();
+        $rowHeight = max(
+            $minimumHeight,
+            $lineCount * $lineHeight + 2.0 * $padding
+        );
+        $cellX = $this->lMargin;
+        $this->drawLogbookWritingGrid(
+            $cellX,
+            $rowY,
+            array_sum($widths),
+            $rowHeight,
+            $lineHeight,
+            $padding
+        );
+        $this->SetDrawColor(70, 78, 90);
+        $this->SetLineWidth(0.18);
+        foreach ($widths as $index => $cellWidth) {
+            $this->Rect($cellX, $rowY, $cellWidth, $rowHeight);
+            $lines = array_slice(
+                $wrappedColumns[$index] ?? [''],
+                $lineOffset,
+                $lineCount
+            );
+            if ($continuation && $index === 0) {
+                $lines = [($wrappedColumns[0][0] ?? '')];
+            } elseif ($continuation && $index === 1) {
+                $lines = [estab_incident_pdf_text('Fortsetzung')];
+            }
+            $lineY = $rowY + $padding;
+            foreach ($lines as $line) {
+                $this->SetXY($cellX, $lineY);
+                $this->Cell(
+                    $cellWidth,
+                    $lineHeight,
+                    $line,
+                    0,
+                    0,
+                    $index <= 1 ? 'C' : 'L'
+                );
+                $lineY += $lineHeight;
+            }
+            $cellX += $cellWidth;
+        }
+        $this->SetXY($this->lMargin, $rowY + $rowHeight);
+        return $rowHeight;
+    }
+
+    private function startLogbookPage(string $kind, string $date): void
+    {
+        if ($kind === 'ETB') {
+            $this->configureEtbFormLayout($date);
+            $this->AddPage('P', 'A4');
+            $this->SetFont('helvetica', '', 7.5);
+            $this->SetTextColor(23, 32, 51);
+            return;
+        }
+        $this->configureTbbFormLayout();
+        $this->AddPage('L', 'A4');
+        $this->SetFont('helvetica', '', 6.0);
+        $this->SetTextColor(23, 32, 51);
+    }
+
+    private function logbookBodyBottom(string $kind): float
+    {
+        return $kind === 'ETB' ? $this->h - 23.0 : $this->h - 19.0;
+    }
+
+    /**
+     * Mark the unused remainder of the last closed form as not writable.
+     *
+     * The THW examples require the empty part of the final ETB/TBB sheet to
+     * be crossed out. Keeping the column grid visible also makes the digital
+     * form immediately comparable with a closed paper book.
+     *
+     * @param list<float> $widths
+     */
+    private function strikeUnusedLogbookArea(
+        string $kind,
+        array $widths
+    ): void {
+        if (!$this->incidentClosed) {
+            return;
+        }
+        $top = $this->GetY();
+        $bottom = $this->logbookBodyBottom($kind);
+        if ($bottom - $top < 3.0) {
+            return;
+        }
+
+        $left = $this->lMargin;
+        $right = $left + array_sum($widths);
+        $lineHeight = $kind === 'ETB' ? 4.1 : 3.35;
+        $padding = $kind === 'ETB' ? 1.4 : 1.0;
+        $this->drawLogbookWritingGrid(
+            $left,
+            $top,
+            $right - $left,
+            $bottom - $top,
+            $lineHeight,
+            $padding,
+            6.0
+        );
+        $this->SetDrawColor(70, 78, 90);
+        $this->SetLineWidth(0.18);
+        $this->Rect($left, $top, $right - $left, $bottom - $top);
+        $columnX = $left;
+        foreach (array_slice($widths, 0, -1) as $width) {
+            $columnX += $width;
+            $this->Line($columnX, $top, $columnX, $bottom);
+        }
+        $this->SetLineWidth(0.45);
+        $this->Line($left, $bottom, $right, $top);
+        $this->SetXY($left, $top);
+        $this->SetFont('helvetica', 'I', $kind === 'ETB' ? 7.0 : 6.0);
+        $this->Cell(
+            $right - $left,
+            min(6.0, $bottom - $top),
+            estab_incident_pdf_text('Nicht beschriebener Bereich'),
+            0,
+            0,
+            'C'
+        );
+        $this->SetY($bottom);
+    }
+
+    /**
+     * @return array{columns:list<string>,date:string}
+     */
+    private function etbPrintableRow(array $row): array
+    {
+        $number = $this->firstLogbookRowValue(
+            $row,
+            ['estab_book_lfd', 'estab_buch_lfd', 'lfd']
+        );
+        $recordedAt = $this->firstLogbookRowValue(
+            $row,
+            ['estab_recorded_at', 'etb_time', 'estab_event_time']
+        );
+        $event = $this->firstLogbookRowValue(
+            $row,
+            ['etb_aktion', 'estab_betriebsvorgang', 'event']
+        );
+        $remarks = $this->firstLogbookRowValue(
+            $row,
+            ['etb_bemerk', 'comment']
+        );
+
+        $attachmentId = $this->logbookRowValue(
+            $row,
+            'estab_attachment_id'
+        );
+        if ($attachmentId !== '') {
+            $attachmentNumber = $this->logbookRowValue(
+                $row,
+                'estab_attachment_number'
+            );
+            if (
+                $attachmentNumber === ''
+                && $this->etbIdentifier > 0
+                && preg_match('/\A[1-9][0-9]*\z/D', $number) === 1
+            ) {
+                $attachmentNumber = estab_logbook_etb_attachment_number(
+                    $this->etbIdentifier,
+                    (int) $number
+                );
+            }
+            $remarks = $this->appendLogbookLine(
+                $remarks,
+                $attachmentNumber !== ''
+                    ? $attachmentNumber
+                    : '#' . $attachmentId,
+                'Anlage: '
+            );
+        }
+        $correctionOf = $this->logbookRowValue(
+            $row,
+            'estab_correction_book_lfd'
+        );
+        $hasCorrectionLink = $correctionOf !== ''
+            || $this->logbookRowValue($row, 'estab_correction_of') !== '';
+        $reference = $this->logbookRowValue($row, 'estab_reference');
+        if ($reference !== '' && !$hasCorrectionLink) {
+            $remarks = $this->appendLogbookLine(
+                $remarks,
+                $reference,
+                'Referenz: '
+            );
+        }
+        if ($correctionOf !== '') {
+            $remarks = $this->appendLogbookLine(
+                $remarks,
+                $correctionOf,
+                'Korrektur zu ETB-Nr.: '
+            );
+        } elseif ($this->logbookRowValue($row, 'estab_correction_of') !== '') {
+            $remarks = $this->appendLogbookLine(
+                $remarks,
+                'Korrekturverweis vorhanden; lokale ETB-Nr. nicht auflösbar.'
+            );
+        }
+        $author = $this->logbookAuthor($row, 'etb');
+        if ($author !== '') {
+            $remarks = $this->appendLogbookLine(
+                $remarks,
+                $author,
+                'Erfasst durch: '
+            );
+        }
+
+        return [
+            'columns' => [
+                $number,
+                $this->logbookDateTime($recordedAt),
+                $event,
+                $remarks,
+            ],
+            'date' => $this->logbookDate($recordedAt),
+        ];
+    }
+
+    /**
+     * @return array{columns:list<string>,date:string}
+     */
+    private function tbbPrintableRow(array $row): array
+    {
+        $number = $this->firstLogbookRowValue(
+            $row,
+            ['estab_book_lfd', 'estab_buch_lfd', 'lfd']
+        );
+        $eventTime = $this->firstLogbookRowValue(
+            $row,
+            ['estab_event_time', 'tbb_time', 'estab_recorded_at']
+        );
+        $service = $this->joinedLogbookRowValues($row, [
+            ['estab_personnel_duty', ''],
+            ['estab_dienst_personal', ''],
+            ['estab_tbb_dienst_personal', ''],
+            ['tbb_dienst_personal', ''],
+            ['tbb_betrieb_personal', ''],
+            ['tbb_bereitschaft', ''],
+        ]);
+        $channel = $this->joinedLogbookRowValues($row, [
+            ['estab_channel', 'Kanal/Rufgruppe: '],
+            ['estab_kanal_rufgruppe', 'Kanal/Rufgruppe: '],
+            ['estab_tbb_kanal_rufgruppe', 'Kanal/Rufgruppe: '],
+            ['tbb_kanal_rufgruppe', 'Kanal/Rufgruppe: '],
+            ['tbb_kanal', 'Kanal/Rufgruppe: '],
+            ['estab_verbindungszustand', 'Verbindungszustand: '],
+            ['estab_tbb_verbindungszustand', 'Verbindungszustand: '],
+            ['tbb_verbindungszustand', 'Verbindungszustand: '],
+        ]);
+        $message = $this->joinedLogbookRowValues($row, [
+            ['estab_message_route', ''],
+            ['estab_nachricht_von', 'Von: '],
+            ['estab_tbb_nachricht_von', 'Von: '],
+            ['tbb_nachricht_von', 'Von: '],
+            ['estab_nachricht_an', 'An: '],
+            ['estab_tbb_nachricht_an', 'An: '],
+            ['tbb_nachricht_an', 'An: '],
+        ]);
+        $operation = $this->joinedLogbookRowValues($row, [
+            ['estab_operations', ''],
+            ['estab_betriebsvorgang', ''],
+            ['estab_tbb_betriebsvorgang', ''],
+            ['tbb_betriebsvorgang', ''],
+            ['estab_stoerung_abstellung', 'Störung/Abstellung: '],
+            ['estab_tbb_stoerung_abstellung', 'Störung/Abstellung: '],
+            ['tbb_stoerung_abstellung', 'Störung/Abstellung: '],
+        ]);
+        $receipt = $this->joinedLogbookRowValues($row, [
+            ['estab_receipt', ''],
+            ['estab_empfang_nachweis', ''],
+            ['estab_tbb_empfang_nachweis', ''],
+            ['tbb_empfang_nachweis', ''],
+            ['tbb_quittung', ''],
+        ]);
+
+        // New rows keep a compatibility summary in tbb_aktion, while the
+        // official form must place each fact in exactly one of its five
+        // specialist columns. Use legacy text only when no structured
+        // content is available at all.
+        if (
+            $service === ''
+            && $channel === ''
+            && $message === ''
+            && $operation === ''
+            && $receipt === ''
+        ) {
+            $operation = $this->appendLogbookLine(
+                $operation,
+                $this->logbookRowValue($row, 'tbb_aktion')
+            );
+        }
+        // tbb_bemerk is not the compatibility summary. It carries the
+        // separately entered correction reason, handover summary or closing
+        // note and therefore remains part of the official operations column.
+        // appendLogbookLine also prevents duplication after legacy backfill.
+        $operation = $this->appendLogbookLine(
+            $operation,
+            $this->logbookRowValue($row, 'tbb_bemerk'),
+            'Bemerkung: '
+        );
+        $correctionOf = $this->logbookRowValue(
+            $row,
+            'estab_correction_book_lfd'
+        );
+        if ($correctionOf !== '') {
+            $operation = $this->appendLogbookLine(
+                $operation,
+                $correctionOf,
+                'Korrektur zu TBB-Nr.: '
+            );
+        } elseif ($this->logbookRowValue($row, 'estab_correction_of') !== '') {
+            $operation = $this->appendLogbookLine(
+                $operation,
+                'Korrekturverweis vorhanden; lokale TBB-Nr. nicht auflösbar.'
+            );
+        }
+        $author = $this->logbookAuthor($row, 'tbb');
+        if ($author !== '') {
+            $operation = $this->appendLogbookLine(
+                $operation,
+                $author,
+                'Erfasst durch: '
+            );
+        }
+
+        return [
+            'columns' => [
+                $number,
+                $this->logbookDateTime($eventTime),
+                $service,
+                $channel,
+                $message,
+                $operation,
+                $receipt,
+            ],
+            'date' => $this->logbookDate($eventTime),
+        ];
     }
 
     /**
@@ -755,82 +1910,160 @@ final class EstabIncidentPdf extends vordruckaspdf
                 'Unknown logbook kind.'
             );
         }
-        $prefix = $kind === 'ETB' ? 'etb' : 'tbb';
-        $this->beginSection(
-            $kind === 'ETB'
-                ? 'Einsatztagebuch (ETB)'
-                : 'Technisches Betriebsbuch (TBB)'
-        );
-        $this->heading($this->sectionTitle, 1);
-        if ($rows === []) {
-            $this->paragraph('Für diesen Einsatz sind keine Einträge vorhanden.');
-            return;
+        if ($this->logbookPageCounts[$kind] !== 0) {
+            throw new EstabIncidentPdfInputException(
+                'Logbook section was already rendered.'
+            );
         }
 
+        // Correction links use stable global primary keys internally. The
+        // official forms must show the incident-local running number instead.
+        $localNumberByGlobalId = [];
+        $globalIdField = $kind === 'ETB' ? 'etb_lfd-nr' : 'tbb_lfd-nr';
         foreach ($rows as $row) {
             if (!is_array($row)) {
                 throw new EstabIncidentPdfInputException(
                     'Logbook rows must be arrays.'
                 );
             }
-            $this->ensureSpace(28);
-            $number = (string) (
-                $row[$prefix . '_lfd-nr']
-                    ?? $row['lfd']
-                    ?? ''
+            $globalId = $this->logbookRowValue($row, $globalIdField);
+            $localNumber = $this->firstLogbookRowValue(
+                $row,
+                ['estab_book_lfd', 'estab_buch_lfd']
             );
-            $time = (string) (
-                $kind === 'ETB'
-                    ? ($row['estab_event_time'] ?? $row['etb_time'] ?? '')
-                    : ($row['tbb_time'] ?? '')
-            );
-            $this->recordHeading($kind . ' ' . $number . ' · ' . $time);
-            if ($kind === 'ETB') {
-                $this->definition(
-                    'Ereigniszeit',
-                    $row['estab_event_time'] ?? ''
-                );
-                $this->definition(
-                    'Erfassungszeit',
-                    $row['estab_recorded_at'] ?? ''
-                );
-                $this->definition(
-                    'Ereignistyp',
-                    $row['estab_event_type'] ?? ''
-                );
-                $this->definition(
-                    'Nachrichtenbezug',
-                    $row['estab_message_id'] ?? ''
-                );
-                $this->definition(
-                    'Anhangsbezug',
-                    $row['estab_attachment_id'] ?? ''
-                );
-                $this->definition(
-                    'Freier Bezug',
-                    $row['estab_reference'] ?? ''
-                );
-                $this->definition(
-                    'Korrektur von ETB',
-                    $row['estab_correction_of'] ?? ''
+            if ($globalId !== '' && $localNumber !== '') {
+                $localNumberByGlobalId[$globalId] = $localNumber;
+            }
+        }
+
+        $printableRows = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                throw new EstabIncidentPdfInputException(
+                    'Logbook rows must be arrays.'
                 );
             }
-            $this->definition(
-                'Ereignis',
-                $row[$prefix . '_aktion'] ?? ''
+            $correctionOf = $this->logbookRowValue(
+                $row,
+                'estab_correction_of'
             );
-            $this->definition(
-                'Bemerkung',
-                $row[$prefix . '_bemerk'] ?? ''
-            );
-            $author = implode(' · ', array_filter([
-                trim((string) ($row[$prefix . '_benutzer'] ?? '')),
-                trim((string) ($row[$prefix . '_kuerzel'] ?? '')),
-                trim((string) ($row[$prefix . '_funktion'] ?? '')),
-            ], static fn (string $part): bool => $part !== ''));
-            $this->definition('Erfasst durch', $author);
-            $this->Ln(3);
+            if (
+                $correctionOf !== ''
+                && array_key_exists($correctionOf, $localNumberByGlobalId)
+            ) {
+                $row['estab_correction_book_lfd'] =
+                    $localNumberByGlobalId[$correctionOf];
+            }
+            $printableRows[] = $kind === 'ETB'
+                ? $this->etbPrintableRow($row)
+                : $this->tbbPrintableRow($row);
         }
+        if ($printableRows === []) {
+            $printableRows[] = [
+                'columns' => $kind === 'ETB'
+                    ? ['', '', 'Keine Einträge vorhanden.', '']
+                    : ['', '', '', '', '', 'Keine Einträge vorhanden.', ''],
+                'date' => $this->incidentBeginDate,
+            ];
+        }
+
+        $widths = $kind === 'ETB'
+            ? [14.0, 34.0, 100.0, 38.0]
+            : [10.0, 22.0, 63.0, 48.0, 40.0, 68.0, 30.0];
+        $lineHeight = $kind === 'ETB' ? 4.1 : 3.35;
+        $padding = $kind === 'ETB' ? 1.4 : 1.0;
+        $minimumHeight = $kind === 'ETB' ? 8.0 : 7.0;
+
+        $firstDate = (string) ($printableRows[0]['date'] ?? '');
+        $this->startLogbookPage($kind, $firstDate);
+        foreach ($printableRows as $printableRow) {
+            $columns = $printableRow['columns'] ?? null;
+            if (!is_array($columns) || count($columns) !== count($widths)) {
+                throw new EstabIncidentPdfInputException(
+                    'Printable logbook row is incomplete.'
+                );
+            }
+            $this->SetFont(
+                'helvetica',
+                '',
+                $kind === 'ETB' ? 7.5 : 6.0
+            );
+            $wrappedColumns = [];
+            $maximumLines = 1;
+            foreach ($columns as $index => $column) {
+                $wrapped = $this->wrappedTextLines($widths[$index], $column);
+                $wrappedColumns[] = $wrapped;
+                $maximumLines = max($maximumLines, count($wrapped));
+            }
+
+            $bodyTop = $kind === 'ETB' ? 49.0 : 47.0;
+            $bodyBottom = $this->logbookBodyBottom($kind);
+            $fullHeight = max(
+                $minimumHeight,
+                $maximumLines * $lineHeight + 2.0 * $padding
+            );
+            $available = $bodyBottom - $this->GetY();
+            if (
+                $this->GetY() > $bodyTop + 0.1
+                && $fullHeight <= $bodyBottom - $bodyTop
+                && $fullHeight > $available
+            ) {
+                $this->startLogbookPage(
+                    $kind,
+                    (string) ($printableRow['date'] ?? '')
+                );
+            }
+
+            $offset = 0;
+            while ($offset < $maximumLines) {
+                $available = $bodyBottom - $this->GetY();
+                $remaining = $maximumLines - $offset;
+                $chunkLines = min(
+                    $remaining,
+                    max(
+                        0,
+                        (int) floor(
+                            ($available - 2.0 * $padding) / $lineHeight
+                        )
+                    )
+                );
+                while (
+                    $chunkLines > 0
+                    && max(
+                        $minimumHeight,
+                        $chunkLines * $lineHeight + 2.0 * $padding
+                    ) > $available + 0.001
+                ) {
+                    $chunkLines--;
+                }
+                if ($chunkLines < 1) {
+                    $this->startLogbookPage(
+                        $kind,
+                        (string) ($printableRow['date'] ?? '')
+                    );
+                    continue;
+                }
+                $this->drawLogbookRowChunk(
+                    $widths,
+                    $wrappedColumns,
+                    $offset,
+                    $chunkLines,
+                    $lineHeight,
+                    $padding,
+                    $minimumHeight,
+                    $offset > 0
+                );
+                $offset += $chunkLines;
+                if ($offset < $maximumLines) {
+                    $this->startLogbookPage(
+                        $kind,
+                        (string) ($printableRow['date'] ?? '')
+                    );
+                }
+            }
+        }
+        $this->strikeUnusedLogbookArea($kind, $widths);
+        $this->configureDossierLayout();
     }
 
     /**
@@ -1102,7 +2335,7 @@ final class EstabIncidentPdf extends vordruckaspdf
                 'Von Dienstschicht' => 'von_dienstschicht_id',
                 'An Dienstschicht' => 'an_dienstschicht_id',
                 'Zusammenfassung' => 'zusammenfassung',
-                'Übergeben am' => 'uebergeben_am',
+                'Übernahme bestätigt am' => 'uebergeben_am',
                 'Übergeben von' => 'uebergeben_von',
                 'Angenommen von' => 'angenommen_von',
             ] as $label => $field) {
@@ -1538,6 +2771,8 @@ final class EstabIncidentPdf extends vordruckaspdf
      *     mime:string,
      *     integrity_state?:string,
      *     integrity_statement?:string,
+     *     archive_name?:string,
+     *     etb_attachment_numbers?:list<string>,
      *     message_ids?:list<int>
      * }> $attachments
      */
@@ -1580,6 +2815,40 @@ final class EstabIncidentPdf extends vordruckaspdf
             $this->definition(
                 'Eingebettete Datei',
                 $attachment['stored_name'] ?? ''
+            );
+            $archiveName = trim((string) (
+                $attachment['archive_name'] ?? ''
+            ));
+            if ($archiveName !== '') {
+                $this->definition('Ablagekennzeichen', $archiveName);
+            }
+            $etbNumbers = $attachment['etb_attachment_numbers'] ?? [];
+            if (!is_array($etbNumbers)) {
+                throw new EstabIncidentPdfInputException(
+                    'ETB attachment numbers must be an array.'
+                );
+            }
+            $validatedEtbNumbers = [];
+            foreach ($etbNumbers as $etbNumber) {
+                if (
+                    !is_string($etbNumber)
+                    || estab_logbook_parse_etb_attachment_number(
+                        $etbNumber
+                    ) === null
+                ) {
+                    throw new EstabIncidentPdfInputException(
+                        'ETB attachment number is invalid.'
+                    );
+                }
+                $validatedEtbNumbers[] = $etbNumber;
+            }
+            $this->definition(
+                'ETB-Anlagennummer',
+                $validatedEtbNumbers !== []
+                    ? implode(', ', array_values(array_unique(
+                        $validatedEtbNumbers
+                    )))
+                    : 'Nicht als ETB-Anlage zugeordnet'
             );
             $this->definition(
                 'Typ',

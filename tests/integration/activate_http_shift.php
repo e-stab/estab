@@ -181,6 +181,36 @@ try {
                 . 'handover confirmation'
             );
         }
+        $outgoingStatement = $connection->prepare(
+            'SELECT assignment.`dienstbesetzung_id`,'
+            . ' assignment.`benutzer_kuerzel`, assignment.`funktion`,'
+            . ' assignment.`rolle`, account.`benutzer`'
+            . ' FROM `nv_dienstbesetzungen` AS assignment'
+            . ' JOIN `nv_benutzer` AS account'
+            . ' ON BINARY account.`kuerzel` ='
+            . ' BINARY assignment.`benutzer_kuerzel`'
+            . ' WHERE assignment.`dienstschicht_id` = ?'
+            . " AND assignment.`status` = 'ANGENOMMEN'"
+            . ' AND account.`aktiv` = 1 AND account.`estab_gesperrt` = 0'
+            . ' ORDER BY assignment.`dienstbesetzung_id` LIMIT 1'
+        );
+        if (!$outgoingStatement) {
+            throw new RuntimeException(
+                'HTTP workflow fixture could not inspect the outgoing account'
+            );
+        }
+        try {
+            $outgoingStatement->bind_param('i', $predecessorId);
+            $outgoingStatement->execute();
+            $outgoing = $outgoingStatement->get_result()->fetch_assoc();
+        } finally {
+            $outgoingStatement->close();
+        }
+        if (!is_array($outgoing)) {
+            throw new RuntimeException(
+                'Predecessor HTTP shift requires a personal outgoing assignment'
+            );
+        }
         $requestId = estab_dv_initiate_handover_shift(
             $connection,
             $incidentId,
@@ -188,6 +218,13 @@ try {
             $shiftId,
             'Automatisierter, persönlich bestätigter Wechsel des '
                 . 'HTTP-Integrationsdienstes.',
+            (int) $outgoing['dienstbesetzung_id'],
+            [
+                'benutzer' => (string) $outgoing['benutzer'],
+                'kuerzel' => (string) $outgoing['benutzer_kuerzel'],
+                'funktion' => (string) $outgoing['funktion'],
+                'rolle' => (string) $outgoing['rolle'],
+            ],
             $actor
         );
         estab_dv_confirm_handover_shift(

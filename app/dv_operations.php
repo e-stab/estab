@@ -15,6 +15,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/assignment.php';
 require_once __DIR__ . '/dynamic_schema.php';
 require_once __DIR__ . '/incident.php';
+require_once __DIR__ . '/logbook_lifecycle.php';
 
 const ESTAB_DV_REQUIRED_HATS = ['S2', 'Si', 'S6', 'LdF', 'A/W'];
 const ESTAB_DV_MEDIA = ['Fe', 'Fu', 'Me', 'FAX', 'FS', '@'];
@@ -118,6 +119,33 @@ function estab_dv_datetime(
     );
 }
 
+/** Read the MariaDB clock once for one atomic duty-shift transition. */
+function estab_dv_database_now(mysqli $connection): string
+{
+    $result = $connection->query(
+        "SELECT DATE_FORMAT(NOW(6), '%Y-%m-%d %H:%i:%s.%f') AS `recorded_at`"
+    );
+    if (!$result) {
+        throw new RuntimeException('Zeitpunkt der Dienstübergabe konnte nicht gelesen werden.');
+    }
+    try {
+        $row = $result->fetch_assoc();
+    } finally {
+        $result->free();
+    }
+    $value = is_array($row) ? ($row['recorded_at'] ?? null) : null;
+    if (
+        !is_string($value)
+        || preg_match(
+            '/\A\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{6}\z/D',
+            $value
+        ) !== 1
+    ) {
+        throw new RuntimeException('Zeitpunkt der Dienstübergabe ist ungültig.');
+    }
+    return $value;
+}
+
 function estab_dv_actor(mixed $value): string
 {
     return estab_dv_text($value, 'Akteur', 128);
@@ -189,7 +217,9 @@ function estab_dv_role_for_function(array $roles, mixed $functionValue): array
  * transaction.  Accept/select repeat the exact assignment, account, incident,
  * function and role predicates under row locks afterwards.
  *
- * @return array{funktion:string,rolle:string,benutzer_kuerzel:string}
+ * @param string|list<string> $shiftStatus one or more permitted shift states
+ * @return array{funktion:string,rolle:string,benutzer_kuerzel:string,
+ *   schicht_status:string}
  */
 function estab_dv_prepare_assignment_schema(
     mysqli $connection,
@@ -197,18 +227,23 @@ function estab_dv_prepare_assignment_schema(
     int $assignmentId,
     string $userCode,
     string $assignmentStatus,
-    string $shiftStatus,
+    string|array $shiftStatus,
     bool $requireActiveAccount,
     string $matrixTable = 'nv_empfmtx',
     string $userTablePrefix = 'usr_'
 ): array {
+    $shiftStatuses = is_string($shiftStatus)
+        ? [$shiftStatus]
+        : array_values($shiftStatus);
     if (
         !in_array(
             $assignmentStatus,
             ['ZUGEWIESEN', 'ANGENOMMEN'],
             true
         )
-        || !in_array($shiftStatus, ['GEPLANT', 'AKTIV'], true)
+        || $shiftStatuses === []
+        || count(array_unique($shiftStatuses)) !== count($shiftStatuses)
+        || array_diff($shiftStatuses, ['GEPLANT', 'AKTIV']) !== []
     ) {
         throw new LogicException(
             'Ungültige Vorbedingung für dynamische Funktionstabellen.'
@@ -253,7 +288,11 @@ function estab_dv_prepare_assignment_schema(
     }
     if (
         !hash_equals($assignmentStatus, (string) $row['status'])
-        || !hash_equals($shiftStatus, (string) $row['schicht_status'])
+        || !in_array(
+            (string) $row['schicht_status'],
+            $shiftStatuses,
+            true
+        )
     ) {
         throw new EstabDvConflictException(
             'Die Funktionsbesetzung befindet sich nicht mehr im erwarteten '
@@ -290,6 +329,7 @@ function estab_dv_prepare_assignment_schema(
         'funktion' => $canonical['funktion'],
         'rolle' => $canonical['rolle'],
         'benutzer_kuerzel' => $userCode,
+        'schicht_status' => (string) $row['schicht_status'],
     ];
 }
 
@@ -822,10 +862,80 @@ function estab_dv_assign_hat(
             } finally {
                 $shift->close();
             }
-            if (!is_array($shiftRow) || $shiftRow['status'] !== 'GEPLANT') {
+            $shiftStatus = (string) ($shiftRow['status'] ?? '');
+            if (!in_array($shiftStatus, ['GEPLANT', 'AKTIV'], true)) {
                 throw new EstabDvConflictException(
-                    'Besetzungen können nur einer geplanten Schicht zugewiesen werden.'
+                    'Besetzungen können nur einer geplanten oder aktiven '
+                    . 'Schicht zugewiesen werden.'
                 );
+            }
+            if ($shiftStatus === 'AKTIV' && $assignment['funktion'] === 'ETB') {
+                $currentWriter = $connection->prepare(
+                    'SELECT assignment.`dienstbesetzung_id`'
+                    . ' FROM `nv_dienstbesetzungen` AS assignment'
+                    . ' WHERE assignment.`dienstschicht_id` = ?'
+                    . " AND assignment.`status` = 'ANGENOMMEN'"
+                    . " AND assignment.`funktion` IN ('ETB','S2')"
+                    . ' ORDER BY CASE assignment.`funktion`'
+                    . " WHEN 'ETB' THEN 0 ELSE 1 END,"
+                    . ' assignment.`dienstbesetzung_id` LIMIT 1 FOR UPDATE'
+                );
+                if (!$currentWriter) {
+                    throw new RuntimeException(
+                        'Bestehende ETB-Führung konnte nicht geprüft werden.'
+                    );
+                }
+                try {
+                    $currentWriter->bind_param('i', $shiftId);
+                    $currentWriter->execute();
+                    $wouldReplaceWriter =
+                        $currentWriter->get_result()->fetch_row() !== null;
+                } finally {
+                    $currentWriter->close();
+                }
+                if ($wouldReplaceWriter) {
+                    throw new EstabDvConflictException(
+                        'Die ETB-Funktion kann in der aktiven Schicht nicht '
+                        . 'zugewiesen werden, weil bereits eine ETB-Führung '
+                        . 'bestimmt ist. Ein Wechsel ist ausschließlich über '
+                        . 'eine dokumentierte und bestätigte Schichtübergabe '
+                        . 'zulässig.'
+                    );
+                }
+            }
+            if ($shiftStatus === 'AKTIV' && $assignment['funktion'] !== 'A/W') {
+                $occupied = $connection->prepare(
+                    'SELECT 1 FROM `nv_dienstbesetzungen`'
+                    . ' WHERE `dienstschicht_id` = ?'
+                    . ' AND BINARY `funktion` = BINARY ?'
+                    . " AND `status` IN ('ZUGEWIESEN','ANGENOMMEN')"
+                    . ' LIMIT 1 FOR UPDATE'
+                );
+                if (!$occupied) {
+                    throw new RuntimeException(
+                        'Bestehende Funktionsbesetzung konnte nicht geprüft '
+                        . 'werden.'
+                    );
+                }
+                try {
+                    $occupied->bind_param(
+                        'is',
+                        $shiftId,
+                        $assignment['funktion']
+                    );
+                    $occupied->execute();
+                    $alreadyOccupied =
+                        $occupied->get_result()->fetch_row() !== null;
+                } finally {
+                    $occupied->close();
+                }
+                if ($alreadyOccupied) {
+                    throw new EstabDvConflictException(
+                        'Diese Funktion ist in der aktiven Schicht bereits '
+                        . 'besetzt. Ein Austausch ist ausschließlich über '
+                        . 'eine geordnete Schichtübergabe möglich.'
+                    );
+                }
             }
             $user = $connection->prepare(
                 'SELECT `estab_gesperrt` FROM `nv_benutzer`'
@@ -906,12 +1016,16 @@ function estab_dv_assign_hat(
                     'function' => $assignment['funktion'],
                     'role' => $assignment['rolle'],
                     'actor' => $actor,
+                    'shift_status' => $shiftStatus,
+                    'active_shift_extension' => $shiftStatus === 'AKTIV',
                 ]
             );
             return [
                 'dienstbesetzung_id' => $assignmentId,
                 'funktion' => $assignment['funktion'],
                 'rolle' => $assignment['rolle'],
+                'schicht_status' => $shiftStatus,
+                'active_shift_extension' => $shiftStatus === 'AKTIV',
             ];
         }
     );
@@ -935,7 +1049,7 @@ function estab_dv_accept_hat(
         $assignmentId,
         $userCode,
         'ZUGEWIESEN',
-        'GEPLANT',
+        ['GEPLANT', 'AKTIV'],
         false,
         $matrixTable,
         $userTablePrefix
@@ -955,8 +1069,12 @@ function estab_dv_accept_hat(
                 throw new EstabDvConflictException('Der Einsatz ist nicht mehr aktiv.');
             }
             $select = $connection->prepare(
-                'SELECT b.`benutzer_kuerzel`, b.`funktion`, b.`rolle`,'
+                'SELECT b.`dienstschicht_id`, b.`benutzer_kuerzel`,'
+                . ' b.`funktion`, b.`rolle`,'
                 . ' b.`status`, s.`status` AS `schicht_status`,'
+                . ' s.`nummer` AS `schicht_nummer`,'
+                . ' s.`bezeichnung` AS `schicht_bezeichnung`,'
+                . ' u.`benutzer` AS `benutzer_name`,'
                 . ' u.`aktiv` AS `benutzer_aktiv`,'
                 . ' u.`estab_gesperrt` AS `benutzer_gesperrt`'
                 . ' FROM `nv_dienstbesetzungen` AS b'
@@ -995,7 +1113,15 @@ function estab_dv_accept_hat(
             }
             if (
                 $row['status'] !== 'ZUGEWIESEN'
-                || $row['schicht_status'] !== 'GEPLANT'
+                || !hash_equals(
+                    (string) $prepared['schicht_status'],
+                    (string) $row['schicht_status']
+                )
+                || !in_array(
+                    (string) $row['schicht_status'],
+                    ['GEPLANT', 'AKTIV'],
+                    true
+                )
             ) {
                 throw new EstabDvConflictException(
                     'Die Funktionsbesetzung kann nicht mehr angenommen werden.'
@@ -1007,16 +1133,60 @@ function estab_dv_accept_hat(
                     . 'annehmen.'
                 );
             }
+            if (
+                (string) $row['schicht_status'] === 'AKTIV'
+                && (string) $row['funktion'] === 'ETB'
+            ) {
+                $currentWriter = $connection->prepare(
+                    'SELECT assignment.`dienstbesetzung_id`'
+                    . ' FROM `nv_dienstbesetzungen` AS assignment'
+                    . ' WHERE assignment.`dienstschicht_id` = ?'
+                    . " AND assignment.`status` = 'ANGENOMMEN'"
+                    . " AND assignment.`funktion` IN ('ETB','S2')"
+                    . ' AND assignment.`dienstbesetzung_id` <> ?'
+                    . ' ORDER BY CASE assignment.`funktion`'
+                    . " WHEN 'ETB' THEN 0 ELSE 1 END,"
+                    . ' assignment.`dienstbesetzung_id` LIMIT 1 FOR UPDATE'
+                );
+                if (!$currentWriter) {
+                    throw new RuntimeException(
+                        'Bestehende ETB-Führung konnte nicht geprüft werden.'
+                    );
+                }
+                try {
+                    $shiftId = (int) $row['dienstschicht_id'];
+                    $currentWriter->bind_param(
+                        'ii',
+                        $shiftId,
+                        $assignmentId
+                    );
+                    $currentWriter->execute();
+                    $wouldReplaceWriter =
+                        $currentWriter->get_result()->fetch_row() !== null;
+                } finally {
+                    $currentWriter->close();
+                }
+                if ($wouldReplaceWriter) {
+                    throw new EstabDvConflictException(
+                        'Die ETB-Funktion kann in der aktiven Schicht nicht '
+                        . 'angenommen werden, weil bereits eine ETB-Führung '
+                        . 'bestimmt ist. Ein Wechsel ist ausschließlich über '
+                        . 'eine dokumentierte und bestätigte Schichtübergabe '
+                        . 'zulässig.'
+                    );
+                }
+            }
+            $acceptedAt = date('Y-m-d H:i:s');
             $update = $connection->prepare(
                 "UPDATE `nv_dienstbesetzungen` SET `status` = 'ANGENOMMEN',"
-                . ' `angenommen_am` = NOW(6)'
+                . ' `angenommen_am` = ?'
                 . " WHERE `dienstbesetzung_id` = ? AND `status` = 'ZUGEWIESEN'"
             );
             if (!$update) {
                 throw new RuntimeException('Annahme konnte nicht vorbereitet werden.');
             }
             try {
-                $update->bind_param('i', $assignmentId);
+                $update->bind_param('si', $acceptedAt, $assignmentId);
                 if (!$update->execute() || $update->affected_rows !== 1) {
                     throw new EstabDvConflictException(
                         'Die Besetzung wurde zwischenzeitlich geändert.'
@@ -1024,6 +1194,22 @@ function estab_dv_accept_hat(
                 }
             } finally {
                 $update->close();
+            }
+            $activeShiftExtension =
+                (string) $row['schicht_status'] === 'AKTIV';
+            if ($activeShiftExtension) {
+                estab_logbook_lifecycle_shift_extension(
+                    $connection,
+                    $incidentId,
+                    (int) $row['dienstschicht_id'],
+                    (int) $row['schicht_nummer'],
+                    (string) $row['schicht_bezeichnung'],
+                    $acceptedAt,
+                    (string) $row['benutzer_name'],
+                    $userCode,
+                    (string) $row['funktion'],
+                    (string) $row['rolle']
+                );
             }
             estab_dv_audit(
                 $connection,
@@ -1036,12 +1222,16 @@ function estab_dv_accept_hat(
                     'target' => $userCode,
                     'function' => (string) $row['funktion'],
                     'role' => (string) $row['rolle'],
+                    'shift_status' => (string) $row['schicht_status'],
+                    'active_shift_extension' => $activeShiftExtension,
                 ]
             );
             return [
                 'dienstbesetzung_id' => $assignmentId,
                 'funktion' => (string) $row['funktion'],
                 'rolle' => (string) $row['rolle'],
+                'schicht_status' => (string) $row['schicht_status'],
+                'active_shift_extension' => $activeShiftExtension,
             ];
         }
     );
@@ -1129,6 +1319,14 @@ function estab_dv_activate_initial_shift(
                     'Pflichtfunktionen sind nicht angenommen: ' . implode(', ', $missing)
                 );
             }
+            $missingHeader = estab_logbook_lifecycle_missing_header($incident);
+            if ($missingHeader !== []) {
+                throw new EstabDvConflictException(
+                    'Die Dienstschicht kann erst nach Vervollständigung der '
+                    . 'Logbuch-Stammdaten aktiviert werden. Es fehlen: '
+                    . implode(', ', array_values($missingHeader))
+                );
+            }
             $update = $connection->prepare(
                 "UPDATE `nv_dienstschichten` SET `status` = 'AKTIV',"
                 . ' `aktiviert_am` = NOW(6)'
@@ -1148,6 +1346,11 @@ function estab_dv_activate_initial_shift(
             } finally {
                 $update->close();
             }
+            estab_logbook_lifecycle_open_books(
+                $connection,
+                $incident,
+                $shiftId
+            );
             estab_dv_audit(
                 $connection,
                 $protocolTable,
@@ -1169,6 +1372,8 @@ function estab_dv_initiate_handover_shift(
     int $fromShiftId,
     int $toShiftId,
     mixed $summaryValue,
+    int $outgoingAssignmentId,
+    array $outgoingIdentity,
     string $adminActor,
     string $protocolTable = 'nv_protokoll'
 ): int {
@@ -1191,6 +1396,22 @@ function estab_dv_initiate_handover_shift(
         'Übergabezusammenfassung',
         10000
     );
+    $outgoingAssignmentId = estab_dv_positive_id(
+        $outgoingAssignmentId,
+        'Persönlich übergebende Dienstbesetzung'
+    );
+    $outgoingShape = estab_auth_session_identity_shape([
+        'vStab_benutzer' => $outgoingIdentity['benutzer'] ?? null,
+        'vStab_kuerzel' => $outgoingIdentity['kuerzel'] ?? null,
+        'vStab_funktion' => $outgoingIdentity['funktion'] ?? null,
+        'vStab_rolle' => $outgoingIdentity['rolle'] ?? null,
+    ]);
+    if ($outgoingShape === null) {
+        throw new EstabDvPermissionException(
+            'Die Übergabe muss durch eine persönlich angemeldete Person der '
+            . 'aktiven Schicht angefordert werden.'
+        );
+    }
     $adminActor = estab_dv_actor($adminActor);
 
     return estab_incident_with_active_write(
@@ -1201,6 +1422,8 @@ function estab_dv_initiate_handover_shift(
             $fromShiftId,
             $toShiftId,
             $summary,
+            $outgoingAssignmentId,
+            $outgoingShape,
             $adminActor,
             $protocolTable
         ): int {
@@ -1246,6 +1469,48 @@ function estab_dv_initiate_handover_shift(
                 throw new EstabDvConflictException(
                     'Die ausgewählten Schichten bilden keine gültige '
                     . 'Übergabe.'
+                );
+            }
+            $outgoingConfirmation = $connection->prepare(
+                'SELECT assignment.`funktion`, assignment.`rolle`,'
+                . ' account.`benutzer` FROM `nv_dienstbesetzungen` AS assignment'
+                . ' JOIN `nv_benutzer` AS account'
+                . ' ON BINARY account.`kuerzel` ='
+                . ' BINARY assignment.`benutzer_kuerzel`'
+                . ' WHERE assignment.`dienstbesetzung_id` = ?'
+                . ' AND assignment.`dienstschicht_id` = ?'
+                . " AND assignment.`status` = 'ANGENOMMEN'"
+                . ' AND BINARY assignment.`benutzer_kuerzel` = BINARY ?'
+                . ' AND BINARY assignment.`funktion` = BINARY ?'
+                . ' AND BINARY assignment.`rolle` = BINARY ?'
+                . ' AND account.`aktiv` = 1 AND account.`estab_gesperrt` = 0'
+                . ' LIMIT 1 FOR UPDATE'
+            );
+            if (!$outgoingConfirmation) {
+                throw new RuntimeException(
+                    'Persönlich übergebende Besetzung konnte nicht geprüft werden.'
+                );
+            }
+            try {
+                $outgoingConfirmation->bind_param(
+                    'iisss',
+                    $outgoingAssignmentId,
+                    $fromShiftId,
+                    $outgoingShape['kuerzel'],
+                    $outgoingShape['funktion'],
+                    $outgoingShape['rolle']
+                );
+                $outgoingConfirmation->execute();
+                $outgoingAssignment = $outgoingConfirmation
+                    ->get_result()
+                    ->fetch_assoc();
+            } finally {
+                $outgoingConfirmation->close();
+            }
+            if (!is_array($outgoingAssignment)) {
+                throw new EstabDvPermissionException(
+                    'Nur eine persönlich angemeldete und angenommene '
+                    . 'Dienstfunktion der aktiven Schicht darf übergeben.'
                 );
             }
             $missing = estab_dv_shift_required_hats(
@@ -1303,7 +1568,7 @@ function estab_dv_initiate_handover_shift(
                     $fromShiftId,
                     $toShiftId,
                     $summary,
-                    $adminActor
+                    $outgoingShape['kuerzel']
                 );
                 try {
                     $insert->execute();
@@ -1332,6 +1597,11 @@ function estab_dv_initiate_handover_shift(
                     'to_shift_id' => $toShiftId,
                     'actor' => $adminActor,
                     'admin_actor' => $adminActor,
+                    'outgoing_assignment_id' => $outgoingAssignmentId,
+                    'outgoing_person' => (string) $outgoingAssignment['benutzer'],
+                    'outgoing_code' => $outgoingShape['kuerzel'],
+                    'outgoing_function' => $outgoingShape['funktion'],
+                    'outgoing_role' => $outgoingShape['rolle'],
                     'confirmation_pending' => true,
                 ]
             );
@@ -1559,7 +1829,9 @@ function estab_dv_confirm_handover_shift(
             }
             $requestStatement = $connection->prepare(
                 'SELECT `von_dienstschicht_id`, `an_dienstschicht_id`,'
-                . ' `zusammenfassung`, `initiiert_von`, `status`'
+                . ' `zusammenfassung`, `initiiert_von`, `status`,'
+                . " DATE_FORMAT(`initiiert_am`, '%Y-%m-%d %H:%i:%s.%f')"
+                . ' AS `initiiert_am`'
                 . ' FROM `nv_dienstuebergabe_anfragen`'
                 . ' WHERE `dienstuebergabe_anfrage_id` = ?'
                 . ' AND `einsatz_id` = ? FOR UPDATE'
@@ -1592,6 +1864,7 @@ function estab_dv_confirm_handover_shift(
             $toShiftId = (int) $request['an_dienstschicht_id'];
             $summary = (string) $request['zusammenfassung'];
             $outgoingActor = (string) $request['initiiert_von'];
+            $initiatedAt = (string) $request['initiiert_am'];
             $incomingActor = $shape['kuerzel'];
             $select = $connection->prepare(
                 'SELECT `dienstschicht_id`, `status`, `vorgaenger_id`'
@@ -1621,6 +1894,41 @@ function estab_dv_confirm_handover_shift(
             ) {
                 throw new EstabDvConflictException(
                     'Die ausgewählten Schichten bilden keine gültige Übergabe.'
+                );
+            }
+            $outgoingConfirmation = $connection->prepare(
+                'SELECT 1 FROM `nv_dienstbesetzungen` AS assignment'
+                . ' JOIN `nv_benutzer` AS account'
+                . ' ON BINARY account.`kuerzel` ='
+                . ' BINARY assignment.`benutzer_kuerzel`'
+                . ' WHERE assignment.`dienstschicht_id` = ?'
+                . " AND assignment.`status` = 'ANGENOMMEN'"
+                . ' AND BINARY assignment.`benutzer_kuerzel` = BINARY ?'
+                . ' AND account.`aktiv` = 1 AND account.`estab_gesperrt` = 0'
+                . ' LIMIT 1 FOR UPDATE'
+            );
+            if (!$outgoingConfirmation) {
+                throw new RuntimeException(
+                    'Persönliche Übergabe konnte nicht geprüft werden.'
+                );
+            }
+            try {
+                $outgoingConfirmation->bind_param(
+                    'is',
+                    $fromShiftId,
+                    $outgoingActor
+                );
+                $outgoingConfirmation->execute();
+                $outgoingStillAssigned = $outgoingConfirmation
+                    ->get_result()
+                    ->fetch_row() !== null;
+            } finally {
+                $outgoingConfirmation->close();
+            }
+            if (!$outgoingStillAssigned) {
+                throw new EstabDvPermissionException(
+                    'Die persönlich übergebende Person hat keine angenommene '
+                    . 'Funktion mehr in der aktiven Schicht.'
                 );
             }
             $missing = estab_dv_shift_required_hats($connection, $toShiftId);
@@ -1745,14 +2053,15 @@ function estab_dv_confirm_handover_shift(
                     . (string) $newHat['rolle'];
                 $successorHats[$key][] = $newHat;
             }
+            $confirmedAt = estab_dv_database_now($connection);
             $close = $connection->prepare(
                 "UPDATE `nv_dienstschichten` SET `status` = 'UEBERGEBEN',"
-                . ' `beendet_am` = NOW(6)'
+                . ' `beendet_am` = ?'
                 . " WHERE `dienstschicht_id` = ? AND `status` = 'AKTIV'"
             );
             $activate = $connection->prepare(
                 "UPDATE `nv_dienstschichten` SET `status` = 'AKTIV',"
-                . ' `aktiviert_am` = NOW(6)'
+                . ' `aktiviert_am` = ?'
                 . " WHERE `dienstschicht_id` = ? AND `status` = 'GEPLANT'"
             );
             if (!$close || !$activate) {
@@ -1761,8 +2070,8 @@ function estab_dv_confirm_handover_shift(
                 throw new RuntimeException('Schichtübergabe konnte nicht vorbereitet werden.');
             }
             try {
-                $close->bind_param('i', $fromShiftId);
-                $activate->bind_param('i', $toShiftId);
+                $close->bind_param('si', $confirmedAt, $fromShiftId);
+                $activate->bind_param('si', $confirmedAt, $toShiftId);
                 if (
                     !$close->execute()
                     || $close->affected_rows !== 1
@@ -1779,7 +2088,7 @@ function estab_dv_confirm_handover_shift(
             }
             $relieve = $connection->prepare(
                 "UPDATE `nv_dienstbesetzungen` SET `status` = 'ABGELOEST',"
-                . ' `abgeloest_am` = NOW(6), `nachfolger_id` = ?'
+                . ' `abgeloest_am` = ?, `nachfolger_id` = ?'
                 . ' WHERE `dienstbesetzung_id` = ?'
                 . " AND `status` = 'ANGENOMMEN'"
             );
@@ -1809,7 +2118,8 @@ function estab_dv_confirm_handover_shift(
                         : null;
                     $assignmentId = (int) $oldHat['dienstbesetzung_id'];
                     $relieve->bind_param(
-                        'ii',
+                        'sii',
+                        $confirmedAt,
                         $successorId,
                         $assignmentId
                     );
@@ -1829,6 +2139,59 @@ function estab_dv_confirm_handover_shift(
                 unset($oldHat);
             } finally {
                 $relieve->close();
+            }
+            $pendingHatStatement = $connection->prepare(
+                'SELECT `dienstbesetzung_id`, `benutzer_kuerzel`,'
+                . ' `funktion`, `rolle` FROM `nv_dienstbesetzungen`'
+                . ' WHERE `dienstschicht_id` = ?'
+                . " AND `status` = 'ZUGEWIESEN'"
+                . ' ORDER BY `dienstbesetzung_id` FOR UPDATE'
+            );
+            if (!$pendingHatStatement) {
+                throw new RuntimeException(
+                    'Nicht übernommene Altbesetzungen konnten nicht gelesen werden.'
+                );
+            }
+            try {
+                $pendingHatStatement->bind_param('i', $fromShiftId);
+                $pendingHatStatement->execute();
+                $pendingHatResult = $pendingHatStatement->get_result();
+                $pendingOldHats = $pendingHatResult->fetch_all(MYSQLI_ASSOC);
+                $pendingHatResult->free();
+            } finally {
+                $pendingHatStatement->close();
+            }
+            if ($pendingOldHats !== []) {
+                $withdrawPending = $connection->prepare(
+                    "UPDATE `nv_dienstbesetzungen`"
+                    . " SET `status` = 'ZURUECKGEZOGEN',"
+                    . ' `abgeloest_am` = ?'
+                    . ' WHERE `dienstschicht_id` = ?'
+                    . " AND `status` = 'ZUGEWIESEN'"
+                );
+                if (!$withdrawPending) {
+                    throw new RuntimeException(
+                        'Nicht übernommene Altbesetzungen konnten nicht beendet werden.'
+                    );
+                }
+                try {
+                    $withdrawPending->bind_param(
+                        'si',
+                        $confirmedAt,
+                        $fromShiftId
+                    );
+                    if (
+                        !$withdrawPending->execute()
+                        || $withdrawPending->affected_rows
+                            !== count($pendingOldHats)
+                    ) {
+                        throw new RuntimeException(
+                            'Nicht übernommene Altbesetzungen konnten nicht beendet werden.'
+                        );
+                    }
+                } finally {
+                    $withdrawPending->close();
+                }
             }
             foreach ($oldHats as $oldHat) {
                 estab_dv_audit(
@@ -1851,23 +2214,43 @@ function estab_dv_confirm_handover_shift(
                     ]
                 );
             }
+            foreach ($pendingOldHats as $pendingOldHat) {
+                estab_dv_audit(
+                    $connection,
+                    $protocolTable,
+                    $incidentId,
+                    'DV Besetzung',
+                    [
+                        'action' => 'hat_withdrawn_by_handover',
+                        'assignment_id' =>
+                            (int) $pendingOldHat['dienstbesetzung_id'],
+                        'target' =>
+                            (string) $pendingOldHat['benutzer_kuerzel'],
+                        'function' => (string) $pendingOldHat['funktion'],
+                        'role' => (string) $pendingOldHat['rolle'],
+                        'actor' => $outgoingActor,
+                        'to_shift_id' => $toShiftId,
+                    ]
+                );
+            }
             $insert = $connection->prepare(
                 'INSERT INTO `nv_dienstuebergaben`'
                 . ' (`einsatz_id`, `von_dienstschicht_id`,'
                 . ' `an_dienstschicht_id`, `zusammenfassung`,'
-                . ' `uebergeben_von`, `angenommen_von`)'
-                . ' VALUES (?, ?, ?, ?, ?, ?)'
+                . ' `uebergeben_am`, `uebergeben_von`, `angenommen_von`)'
+                . ' VALUES (?, ?, ?, ?, ?, ?, ?)'
             );
             if (!$insert) {
                 throw new RuntimeException('Übergabenachweis konnte nicht vorbereitet werden.');
             }
             try {
                 $insert->bind_param(
-                    'iiisss',
+                    'iiissss',
                     $incidentId,
                     $fromShiftId,
                     $toShiftId,
                     $summary,
+                    $confirmedAt,
                     $outgoingActor,
                     $incomingActor
                 );
@@ -1881,7 +2264,7 @@ function estab_dv_confirm_handover_shift(
             $confirmRequest = $connection->prepare(
                 'UPDATE `nv_dienstuebergabe_anfragen`'
                 . " SET `status` = 'BESTAETIGT',"
-                . ' `bestaetigt_am` = NOW(6), `bestaetigt_von` = ?,'
+                . ' `bestaetigt_am` = ?, `bestaetigt_von` = ?,'
                 . ' `bestaetigt_mit_besetzung_id` = ?,'
                 . ' `dienstuebergabe_id` = ?'
                 . ' WHERE `dienstuebergabe_anfrage_id` = ?'
@@ -1894,7 +2277,8 @@ function estab_dv_confirm_handover_shift(
             }
             try {
                 $confirmRequest->bind_param(
-                    'siii',
+                    'ssiii',
+                    $confirmedAt,
                     $incomingActor,
                     $confirmingAssignmentId,
                     $handoverId,
@@ -1912,6 +2296,17 @@ function estab_dv_confirm_handover_shift(
             } finally {
                 $confirmRequest->close();
             }
+            estab_logbook_lifecycle_handover(
+                $connection,
+                $incidentId,
+                $fromShiftId,
+                $toShiftId,
+                $summary,
+                $outgoingActor,
+                $incomingActor,
+                $initiatedAt,
+                $confirmedAt
+            );
             estab_dv_audit(
                 $connection,
                 $protocolTable,
@@ -1926,6 +2321,8 @@ function estab_dv_confirm_handover_shift(
                     'actor' => $outgoingActor,
                     'admin_actor' => $outgoingActor,
                     'confirmed_by_successor' => $incomingActor,
+                    'handed_over_at' => $initiatedAt,
+                    'taken_over_at' => $confirmedAt,
                 ]
             );
         }
@@ -2101,6 +2498,9 @@ function estab_dv_close_shift(
                             'offene Übergabeanforderungen',
                     ];
                     $open = [];
+                    if (!$preflight['logbuecher_eroeffnet']) {
+                        $open[] = 'ETB/TBB nicht eröffnet';
+                    }
                     foreach ($labels as $key => $label) {
                         $count = (int) ($preflight[$key] ?? 0);
                         if ($count > 0) {

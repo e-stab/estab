@@ -231,7 +231,9 @@ function estab_message_followup_contact_fields(
 function estab_message_followup_new_record(array $draft): array
 {
     $draft['00_lfd'] = '';
-    unset($draft['msglfd']);
+    // A reply/forward is not linked to a TBB row until its own transport is
+    // documented. Never carry the source message's visible evidence number.
+    unset($draft['msglfd'], $draft['estab_ttb_lfd']);
     return $draft;
 }
 
@@ -809,6 +811,25 @@ function estab_message_insert_numbered(
                     $recordId,
                     $event
                 );
+                // Internal Gesprächsnotizen share the legacy incoming-message
+                // storage shape but are not received radio/telephone traffic
+                // and therefore must not consume a TBB number.
+                if (
+                    $direction === 'E'
+                    && ($event['event_type'] ?? null)
+                        !== 'conversation_note_created'
+                ) {
+                    $occurredAt = is_string($event['occurred_at'] ?? null)
+                        ? (string) $event['occurred_at']
+                        : date('Y-m-d H:i:s');
+                    estab_logbook_lifecycle_message_transport(
+                        $connection,
+                        $incidentId,
+                        $recordId,
+                        $occurredAt,
+                        'E'
+                    );
+                }
                 return ['id' => $recordId, 'number' => $number];
             }
         );
@@ -1172,6 +1193,7 @@ function estab_message_update_locked_operator_stage(
             $event
         ): bool {
             $incidentId = (int) $incident['active_einsatz_id'];
+            $incomingTbbCorrection = null;
             if ($direction === 'E' && $status === 1) {
                 if (
                     ($event['snapshot']['incoming_transport_confirmed'] ?? null)
@@ -1205,7 +1227,7 @@ function estab_message_update_locked_operator_stage(
                 // browser-supplied "previous" medium.
                 $previousMediumStatement = estab_message_execute(
                     $connection,
-                    'SELECT `01_medium` FROM '
+                    'SELECT `01_medium`, `13_abseinheit`, `05_gegenstelle` FROM '
                         . estab_message_table($table)
                         . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
                         . $stageSql
@@ -1231,6 +1253,17 @@ function estab_message_update_locked_operator_stage(
                 $previousMedium = (string) (
                     $previousMediumRow['01_medium'] ?? ''
                 );
+                $previousSenderUnit = trim((string) (
+                    $previousMediumRow['13_abseinheit'] ?? ''
+                ));
+                $previousCallsign = trim((string) (
+                    $previousMediumRow['05_gegenstelle'] ?? ''
+                ));
+                $previousSender = $previousSenderUnit !== ''
+                    ? $previousSenderUnit
+                    : ($previousCallsign !== ''
+                        ? $previousCallsign
+                        : 'nicht angegeben');
                 if (
                     !in_array(
                         $previousMedium,
@@ -1303,6 +1336,25 @@ function estab_message_update_locked_operator_stage(
                     $event['snapshot']['transport_correction_reason'] =
                         $correctionReason;
                 }
+                $confirmedSender = trim((string) (
+                    $fields['13_abseinheit'] ?? ''
+                ));
+                if ($confirmedSender === '') {
+                    throw new EstabDvInputException(
+                        'LdF muss den Absender der Eingangsnachricht übersetzen.'
+                    );
+                }
+                $incomingTbbCorrection = [
+                    'before' => [
+                        'medium' => $previousMedium,
+                        'sender' => $previousSender,
+                    ],
+                    'after' => [
+                        'medium' => $requestedMedium,
+                        'sender' => $confirmedSender,
+                    ],
+                    'reason' => $correctionReason,
+                ];
             }
             if ($direction === 'A' && $status === 1) {
                 $previousRouteStatement = estab_message_execute(
@@ -1559,6 +1611,38 @@ function estab_message_update_locked_operator_stage(
                     $recordId,
                     $event
                 );
+                if (is_array($incomingTbbCorrection)) {
+                    $occurredAt = is_string($event['occurred_at'] ?? null)
+                        ? (string) $event['occurred_at']
+                        : date('Y-m-d H:i:s');
+                    estab_logbook_lifecycle_message_transport_correction(
+                        $connection,
+                        $incidentId,
+                        $recordId,
+                        $occurredAt,
+                        $operatorCode,
+                        $incomingTbbCorrection['before'],
+                        $incomingTbbCorrection['after'],
+                        (string) $incomingTbbCorrection['reason']
+                    );
+                }
+                if (
+                    $direction === 'A'
+                    && $status === 2
+                    && (int) ($fields['x00_status'] ?? 0) === 8
+                    && ($event['event_type'] ?? null) === 'aw_transported'
+                ) {
+                    $occurredAt = is_string($event['occurred_at'] ?? null)
+                        ? (string) $event['occurred_at']
+                        : date('Y-m-d H:i:s');
+                    estab_logbook_lifecycle_message_transport(
+                        $connection,
+                        $incidentId,
+                        $recordId,
+                        $occurredAt,
+                        'A'
+                    );
+                }
                 return true;
             } finally {
                 $statement->close();
@@ -1906,10 +1990,19 @@ function estab_message_fetch_for_incident_by_id(
 ): ?array {
     $recordId = estab_message_positive_id($recordId);
     $incidentId = estab_incident_positive_id($incidentId);
+    $quotedTable = estab_message_table($table);
     $statement = estab_message_execute(
         $connection,
-        'SELECT * FROM ' . estab_message_table($table)
-            . ' WHERE `00_lfd` = ? AND `einsatz_id` = ? LIMIT 1',
+        'SELECT message_row.*,'
+            . ' (SELECT ttb_row.`estab_book_lfd` FROM `nv_tbb` AS ttb_row'
+            . ' WHERE ttb_row.`einsatz_id` = message_row.`einsatz_id`'
+            . ' AND ttb_row.`estab_message_id` = message_row.`00_lfd`'
+            . " AND BINARY ttb_row.`estab_entry_type` = BINARY 'nachricht'"
+            . ' ORDER BY ttb_row.`estab_book_lfd`,'
+            . ' ttb_row.`tbb_lfd-nr` LIMIT 1)'
+            . ' AS `estab_ttb_lfd` FROM ' . $quotedTable . ' AS message_row'
+            . ' WHERE message_row.`00_lfd` = ?'
+            . ' AND message_row.`einsatz_id` = ? LIMIT 1',
         [$recordId, $incidentId]
     );
     try {

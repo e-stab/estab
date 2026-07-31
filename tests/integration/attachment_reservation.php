@@ -623,7 +623,9 @@ try {
             'kennung' => 'CI-ATT-' . strtoupper($token),
             'name' => 'Attachment reservation ' . $token,
             'beginn' => date('Y-m-d\TH:i'),
+            'organisation' => 'eStab CI',
             'fuehrungsstellenname' => $fixtureCommandPostName,
+            'einsatzleitung' => 'Automatisierte Anhangprüfung',
             'beschreibung' =>
                 'Ephemerer Einsatz für isolierte Anhangreservierungen.',
             'metadaten' => json_encode(

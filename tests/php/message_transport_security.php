@@ -153,6 +153,14 @@ $assert(
             '$incidentId = $this->required_incident_id ();'
         )
         && str_contains(
+            $combinedRows,
+            'estab_message_list_tbb_number_select_sql ("m")'
+        )
+        && str_contains(
+            $combined,
+            'estab_message_list_tbb_evidence_label ($row)'
+        )
+        && str_contains(
             $combined,
             '$incidentUi = $trackingData ["incident"];'
         )
@@ -201,12 +209,28 @@ $assert(
             $incoming,
             '$incidentId = $this->required_incident_id ();'
         )
-        && str_contains($incoming, 'WHERE `einsatz_id` = ?')
+        && str_contains($incoming, 'WHERE m.`einsatz_id` = ?')
+        && str_contains(
+            $incoming,
+            'estab_message_list_tbb_number_select_sql ("m")'
+        )
+        && str_contains(
+            $incoming,
+            'estab_message_list_tbb_evidence_label ($row)'
+        )
         && str_contains(
             $outgoing,
             '$incidentId = $this->required_incident_id ();'
         )
-        && str_contains($outgoing, 'WHERE `einsatz_id` = ?')
+        && str_contains($outgoing, 'WHERE m.`einsatz_id` = ?')
+        && str_contains(
+            $outgoing,
+            'estab_message_list_tbb_number_select_sql ("m")'
+        )
+        && str_contains(
+            $outgoing,
+            'estab_message_list_tbb_evidence_label ($row)'
+        )
         && str_contains(
             $trackingPageSource,
             '} catch (EstabIncidentConfigurationException) {'

@@ -73,6 +73,7 @@ try {
                 'beginn' => date('Y-m-d\TH:i'),
                 'organisation' => 'eStab CI',
                 'fuehrungsstellenname' => $commandPostName,
+                'einsatzleitung' => 'Automatisierte CI-Einsatzleitung',
                 'beschreibung' =>
                     'Fest benannter Einsatz für operative CI-Schreibtests.',
                 'metadaten' => '{"zweck":"ci-integration"}',

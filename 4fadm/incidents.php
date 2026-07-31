@@ -97,6 +97,18 @@ if ($requestMethod === 'POST') {
                     'kennung' => (string) ($updated['kennung'] ?? ''),
                 ];
                 $redirectResult = 'command_post_updated';
+            } elseif ($action === 'update_logbook_header') {
+                $updated = estab_incident_update_logbook_header(
+                    $connection,
+                    estab_incident_positive_id($_POST['einsatz_id'] ?? null),
+                    $_POST,
+                    estab_incident_actor($actor)
+                );
+                $_SESSION['estab_incident_flash'] = [
+                    'type' => 'logbook_header_updated',
+                    'kennung' => (string) ($updated['kennung'] ?? ''),
+                ];
+                $redirectResult = 'logbook_header_updated';
             } elseif ($action === 'activate') {
                 $activated = estab_incident_activate(
                     $connection,
@@ -270,6 +282,8 @@ if (
         'activated' => 'Einsatz ' . $flash['kennung'] . ' ist jetzt aktiv.',
         'command_post_updated' => 'Der Führungsstellenname für Einsatz '
             . $flash['kennung'] . ' wurde gespeichert.',
+        'logbook_header_updated' => 'Die Pflichtangaben für ETB und TBB des '
+            . 'Einsatzes ' . $flash['kennung'] . ' wurden gespeichert.',
         'deactivated' => 'Der Einsatz wurde deaktiviert. Eingaben sind jetzt gesperrt.',
         'closed' => 'Einsatz ' . $flash['kennung']
             . ' wurde formal und unwiderruflich abgeschlossen.',
@@ -285,6 +299,9 @@ $old = $requestMethod === 'POST' ? $_POST : [];
 $defaultStart = date('Y-m-d\TH:i');
 $currentRevision = is_array($status) ? (int) $status['revision'] : 0;
 $activeId = is_array($status) ? $status['active_einsatz_id'] : null;
+$activeMissingHeader = is_array($status) && $activeId !== null
+    ? estab_logbook_lifecycle_missing_header($status)
+    : [];
 
 ?><!doctype html>
 <html lang="de">
@@ -336,6 +353,11 @@ $activeId = is_array($status) ? $status['active_einsatz_id'] : null;
           <?php endif; ?>
           <span><?= incident_admin_html(incident_admin_datetime($status['beginn'])) ?>
             bis <?= incident_admin_html(incident_admin_datetime($status['ende'])) ?></span>
+          <?php if ($activeMissingHeader !== []): ?>
+            <span><strong>Logbuchbetrieb noch gesperrt.</strong> Es fehlen:
+              <?= incident_admin_html(implode(', ', $activeMissingHeader)) ?>.
+            </span>
+          <?php endif; ?>
         </div>
         <form method="post">
           <?= estab_csrf_field() ?>
@@ -352,7 +374,8 @@ $activeId = is_array($status) ? $status['active_einsatz_id'] : null;
           <p class="estab-tool-eyebrow">Revisionssicherer Abschluss</p>
           <h2 id="incident-close-title">Einsatz formal abschließen</h2>
           <p>Der formale Abschluss ist unwiderruflich. Danach sind alle normalen
-            Fachdaten gesperrt und das ETB wird mindestens ein Jahr aufbewahrt.</p>
+            Fachdaten gesperrt und ETB sowie TBB werden mindestens zehn Jahre
+            aufbewahrt.</p>
         </header>
         <?php if (is_array($activePreflight)): ?>
           <p class="estab-tool-feedback <?= $activePreflight['closable']
@@ -376,6 +399,10 @@ $activeId = is_array($status) ? $status['active_einsatz_id'] : null;
             <?= (int) $activePreflight['offene_uebergabeanforderungen'] ?>
             offene Übergabeanforderungen und
             <?= (int) $activePreflight['evidence_errors'] ?> Nachweisfehler.
+            ETB und TBB sind
+            <?= $activePreflight['logbuecher_eroeffnet']
+                ? 'ordnungsgemäß eröffnet.'
+                : 'noch nicht durch die erste Dienstschicht eröffnet.' ?>
           </p>
         <?php endif; ?>
         <form class="estab-tool-form" method="post" data-estab-dirty-guard>
@@ -508,27 +535,38 @@ $activeId = is_array($status) ? $status['active_einsatz_id'] : null;
                 value="<?= incident_admin_html($old['ort'] ?? '') ?>">
             </div>
             <div class="estab-tool-field">
-              <label for="incident-organisation">Organisation</label>
+              <label for="incident-organisation">Bedarfsträger *</label>
               <input
                 id="incident-organisation"
                 name="organisation"
+                required
                 maxlength="255"
                 value="<?= incident_admin_html($old['organisation'] ?? '') ?>">
+              <small>Organisation oder Stelle, in deren Auftrag der Einsatz
+                geführt wird.</small>
             </div>
             <div class="estab-tool-field">
-              <label for="incident-lead">Einsatzleitung</label>
+              <label for="incident-lead">
+                Verantwortliche Einsatz-/Führungsleitung *
+              </label>
               <input
                 id="incident-lead"
                 name="einsatzleitung"
+                required
                 maxlength="255"
                 value="<?= incident_admin_html($old['einsatzleitung'] ?? '') ?>">
             </div>
             <div class="estab-tool-field estab-tool-field-wide">
-              <label for="incident-description">Beschreibung</label>
+              <label for="incident-description">
+                Einsatzauftrag und Ausgangslage *
+              </label>
               <textarea
                 id="incident-description"
                 name="beschreibung"
+                required
                 maxlength="10000"><?= incident_admin_html($old['beschreibung'] ?? '') ?></textarea>
+              <small>So vollständig, dass der Eröffnungseintrag ohne weitere
+                Anlage verständlich bleibt.</small>
             </div>
             <details class="estab-tool-field estab-tool-field-wide">
               <summary>Weitere strukturierte Metadaten (optional)</summary>
@@ -588,7 +626,7 @@ $activeId = is_array($status) ? $status['active_einsatz_id'] : null;
                       <span>Ort: <?= incident_admin_html($incident['ort']) ?></span>
                     <?php endif; ?>
                     <?php if ($incident['organisation'] !== ''): ?>
-                      <span>Organisation:
+                      <span>Bedarfsträger:
                         <?= incident_admin_html($incident['organisation']) ?></span>
                     <?php endif; ?>
                     <?php if (($incident['fuehrungsstellenname'] ?? null) !== null): ?>
@@ -631,6 +669,71 @@ $activeId = is_array($status) ? $status['active_einsatz_id'] : null;
                   <?php endif; ?>
                 </div>
                 <div class="estab-tool-card-actions">
+                  <?php if (
+                      !$ended
+                      && !($incident['logbuchkopf_gesperrt'] ?? true)
+                  ): ?>
+                    <?php
+                      $headerMissing = estab_logbook_lifecycle_missing_header(
+                          $incident
+                      );
+                    ?>
+                    <details class="estab-tool-field"
+                      <?= $headerMissing !== [] ? 'open' : '' ?>>
+                      <summary>Pflichtangaben für ETB und TBB</summary>
+                      <?php if ($headerMissing !== []): ?>
+                        <p class="estab-tool-feedback estab-tool-feedback-error">
+                          Vor Aktivierung der ersten Dienstschicht fehlen:
+                          <?= incident_admin_html(implode(', ', $headerMissing)) ?>.
+                        </p>
+                      <?php endif; ?>
+                      <form class="estab-tool-form" method="post"
+                        data-estab-dirty-guard>
+                        <?= estab_csrf_field() ?>
+                        <input type="hidden" name="admin_action"
+                          value="update_logbook_header">
+                        <input type="hidden" name="einsatz_id"
+                          value="<?= (int) $incident['einsatz_id'] ?>">
+                        <?php foreach (
+                            ['organisation', 'einsatzleitung', 'beschreibung']
+                            as $expectedField
+                        ): ?>
+                          <input type="hidden"
+                            name="expected_<?= $expectedField ?>"
+                            value="<?= incident_admin_html(
+                                $incident[$expectedField] ?? ''
+                            ) ?>">
+                        <?php endforeach; ?>
+                        <label>
+                          Bedarfsträger *
+                          <input name="organisation" required maxlength="255"
+                            value="<?= incident_admin_html(
+                                $incident['organisation'] ?? ''
+                            ) ?>">
+                        </label>
+                        <label>
+                          Verantwortliche Einsatz-/Führungsleitung *
+                          <input name="einsatzleitung" required maxlength="255"
+                            value="<?= incident_admin_html(
+                                $incident['einsatzleitung'] ?? ''
+                            ) ?>">
+                        </label>
+                        <label>
+                          Einsatzauftrag und Ausgangslage *
+                          <textarea name="beschreibung" required
+                            maxlength="10000"><?= incident_admin_html(
+                                $incident['beschreibung'] ?? ''
+                            ) ?></textarea>
+                        </label>
+                        <small>Nach Aktivierung der ersten Dienstschicht sind
+                          diese Angaben Bestandteil der Eröffnungseinträge und
+                          nicht mehr veränderbar.</small>
+                        <button class="estab-button" type="submit">
+                          Logbuch-Stammdaten speichern
+                        </button>
+                      </form>
+                    </details>
+                  <?php endif; ?>
                   <?php if (
                       !$ended
                       && (int) (
@@ -714,7 +817,7 @@ $activeId = is_array($status) ? $status['active_einsatz_id'] : null;
                         value="<?= $currentRevision ?>">
                       <button class="estab-button estab-button-primary"
                         type="submit"
-                        <?= ($incident['fuehrungsstellenname'] ?? null) === null
+                        <?= estab_logbook_lifecycle_missing_header($incident) !== []
                             ? 'disabled' : '' ?>>
                         Aktivieren
                       </button>

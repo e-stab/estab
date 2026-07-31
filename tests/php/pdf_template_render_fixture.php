@@ -106,6 +106,108 @@ $completeAttachment = $completeDossier->embedAttachment(
     hash('sha256', $attachmentPayload),
     strlen($attachmentPayload)
 );
+$etbRows = [[
+    'estab_book_lfd' => 1,
+    'estab_shift_id' => 17,
+    'etb_lfd-nr' => 9001,
+    'etb_time' => '2026-07-29 08:00:00',
+    'estab_event_time' => '2026-07-29 07:59:30.000000',
+    'estab_recorded_at' => '2026-07-29 08:00:00.000000',
+    'estab_event_type' => 'message_reference',
+    'estab_message_id' => 1,
+    'estab_attachment_id' => 4,
+    'estab_reference' => 'Lagekarte Abschnitt Nord',
+    'estab_assignment' => 'ZUORDNUNG-NUR-SUCHHILFE',
+    'estab_correction_of' => null,
+    'etb_aktion' => 'EVENTSPALTE Produktionsnaher Layoutwechsel ETB',
+    'etb_bemerk' => 'BEMERKUNGSSPALTE Vor der Nachrichtenvorlage',
+    'etb_benutzer' => 'Rendernachweis',
+    'etb_kuerzel' => 'REN001',
+    'etb_funktion' => 'S2',
+], [
+    'estab_book_lfd' => 2,
+    'estab_shift_id' => 17,
+    'etb_lfd-nr' => 9002,
+    'etb_time' => '2026-07-29 08:01:00',
+    'estab_event_time' => '2026-07-29 08:00:30.000000',
+    'estab_recorded_at' => '2026-07-29 08:01:00.000000',
+    'estab_event_type' => 'ereignis',
+    'estab_message_id' => null,
+    'estab_attachment_id' => null,
+    'estab_reference' => null,
+    'estab_correction_of' => null,
+    'etb_aktion' => str_repeat(
+        "Mehrseitiger ETB-Eintrag mit vollständig wiederholtem Formkopf.\n",
+        78
+    ) . 'ETB-LANGTEXT-ENDE',
+    'etb_bemerk' => 'Fortsetzungsnachweis',
+    'etb_benutzer' => 'Rendernachweis',
+    'etb_kuerzel' => 'REN001',
+    'etb_funktion' => 'ETB',
+]];
+$tbbRows = [[
+    'estab_book_lfd' => 1,
+    'estab_shift_id' => 17,
+    'tbb_lfd-nr' => 9101,
+    'tbb_time' => '2026-07-29 08:05:00',
+    'estab_event_time' => '2026-07-29 08:04:30.000000',
+    'estab_recorded_at' => '2026-07-29 08:05:00.000000',
+    'estab_entry_type' => 'betrieb_personal',
+    'estab_personnel_duty' => 'DIENSTSPALTE LdF und Fernmelder im Dienst',
+    'estab_channel' => 'KANALSPALTE THW 1',
+    'estab_verbindungszustand' => 'betriebsbereit',
+    'estab_message_route' =>
+        'NACHRICHTVON Leitstelle an NACHRICHTAN Führungsstelle',
+    'estab_message_id' => 1,
+    'estab_operations' =>
+        'BETRIEBSSPALTE Produktionsnaher Layoutwechsel TBB',
+    'estab_stoerung_abstellung' => 'keine Störung',
+    'estab_receipt' => 'QUITTUNGSSPALTE REN002',
+    'estab_correction_of' => null,
+    'tbb_aktion' => 'Kompatibilitätszusammenfassung nicht erneut drucken',
+    'tbb_bemerk' => 'Zusatzbemerkung genau einmal drucken',
+    'tbb_benutzer' => 'Rendernachweis',
+    'tbb_kuerzel' => 'REN002',
+    'tbb_funktion' => 'A/W',
+], [
+    'estab_book_lfd' => 2,
+    'estab_shift_id' => 17,
+    'tbb_lfd-nr' => 9102,
+    'tbb_time' => '2026-07-29 08:06:00',
+    'estab_event_time' => '2026-07-29 08:05:30.000000',
+    'estab_recorded_at' => '2026-07-29 08:06:00.000000',
+    'estab_entry_type' => 'legacy_import',
+    'tbb_aktion' => 'Legacy-Betriebsvorgang bleibt sichtbar',
+    'tbb_bemerk' => 'Legacy-Bemerkung bleibt sichtbar',
+    'tbb_benutzer' => 'Rendernachweis',
+    'tbb_kuerzel' => 'REN002',
+    'tbb_funktion' => 'A/W',
+], [
+    'estab_book_lfd' => 3,
+    'estab_shift_id' => 17,
+    'tbb_lfd-nr' => 9103,
+    'tbb_time' => '2026-07-29 08:07:00',
+    'estab_event_time' => '2026-07-29 08:06:30.000000',
+    'estab_recorded_at' => '2026-07-29 08:07:00.000000',
+    'estab_entry_type' => 'betriebsereignis',
+    'estab_personnel_duty' => '',
+    'estab_channel' => '',
+    'estab_verbindungszustand' => '',
+    'estab_message_route' => '',
+    'estab_message_id' => null,
+    'estab_operations' => str_repeat(
+        "Mehrseitiger TBB-Eintrag im amtlichen Betriebsablauffeld.\n",
+        82
+    ) . 'TBB-LANGTEXT-ENDE',
+    'estab_stoerung_abstellung' => '',
+    'estab_receipt' => '',
+    'estab_correction_of' => null,
+    'tbb_aktion' => '',
+    'tbb_bemerk' => 'Fortsetzungsnachweis',
+    'tbb_benutzer' => 'Rendernachweis',
+    'tbb_kuerzel' => 'REN002',
+    'tbb_funktion' => 'A/W',
+]];
 $sections = [
     'etb',
     'ttb',
@@ -152,33 +254,20 @@ $completeDossier->addCover(
             'stored_head_sha256' => str_repeat('b', 64),
             'calculated_head_sha256' => str_repeat('b', 64),
         ],
+    ],
+    [
+        'mode' => 'shift',
+        'shift_id' => 17,
+        'number' => 2,
+        'name' => 'Nachtschicht Rendernachweis',
+        'status' => 'UEBERGEBEN',
+        'created_at' => '2026-07-29 17:00:00.000000',
+        'activated_at' => '2026-07-29 18:00:00.000000',
+        'ended_at' => '2026-07-30 06:00:00.000000',
     ]
 );
-$completeDossier->addLogbook('ETB', [[
-    'etb_lfd-nr' => 1,
-    'etb_time' => '2026-07-29 08:00:00',
-    'estab_event_time' => '2026-07-29 07:59:30.000000',
-    'estab_recorded_at' => '2026-07-29 08:00:00.000000',
-    'estab_event_type' => 'message_reference',
-    'estab_message_id' => 1,
-    'estab_attachment_id' => null,
-    'estab_reference' => 'Lagekarte Abschnitt Nord',
-    'estab_correction_of' => null,
-    'etb_aktion' => 'Produktionsnaher Layoutwechsel ETB',
-    'etb_bemerk' => 'Vor der Nachrichtenvorlage',
-    'etb_benutzer' => 'Rendernachweis',
-    'etb_kuerzel' => 'REN001',
-    'etb_funktion' => 'S2',
-]]);
-$completeDossier->addLogbook('TBB', [[
-    'tbb_lfd-nr' => 1,
-    'tbb_time' => '2026-07-29 08:05:00',
-    'tbb_aktion' => 'Produktionsnaher Layoutwechsel TBB',
-    'tbb_bemerk' => 'Unmittelbar vor der Nachrichtenvorlage',
-    'tbb_benutzer' => 'Rendernachweis',
-    'tbb_kuerzel' => 'REN002',
-    'tbb_funktion' => 'A/W',
-]]);
+$completeDossier->addLogbook('ETB', $etbRows);
+$completeDossier->addLogbook('TBB', $tbbRows);
 $completeDossier->addMessages(
     [$message],
     [1 => ['Render-Anlage.txt']]
@@ -396,17 +485,92 @@ $completeDossier->addOperationsEvidence(
     ]
 );
 $completeDossier->addAttachmentIndex([[
-    'display_name' => 'Render-Anlage.txt',
+    'display_name' => 'ETB 1-1-1 · Render-Anlage.txt',
     'stored_name' => $completeAttachment['name'],
+    'archive_name' => 'EL0001.txt',
     'size' => $completeAttachment['size'],
     'sha256' => $completeAttachment['sha256'],
     'mime' => $completeAttachment['mime'],
     'integrity_state' => 'verified',
     'integrity_statement' =>
         'SHA-256 und Größe entsprechen dem Eingangsnachweis',
+    'etb_attachment_numbers' => ['ETB 1-1-1'],
     'message_ids' => [1],
 ]]);
 $completeDossierBytes = $completeDossier->Output('', 'S');
+
+$etbForm = new EstabIncidentPdf($incident, 1024 * 1024, $matrix);
+$etbForm->SetCompression(false);
+$etbForm->addLogbook('ETB', $etbRows);
+$etbFormBytes = $etbForm->Output('', 'S');
+
+$tbbForm = new EstabIncidentPdf($incident, 1024 * 1024, $matrix);
+$tbbForm->SetCompression(false);
+$tbbForm->addLogbook('TBB', $tbbRows);
+$tbbFormBytes = $tbbForm->Output('', 'S');
+
+$crossShiftCorrectionForm = new EstabIncidentPdf(
+    $incident,
+    1024 * 1024,
+    $matrix
+);
+$crossShiftCorrectionForm->SetCompression(false);
+$crossShiftCorrectionForm->addLogbook('ETB', [array_replace($etbRows[1], [
+    'etb_lfd-nr' => 987654,
+    'estab_event_type' => 'korrektur',
+    'estab_correction_of' => 876543,
+    'estab_correction_book_lfd' => 7,
+    'estab_reference' => '7',
+    'etb_aktion' => 'ETB-KORREKTUR-AUS-ANDERER-SCHICHT',
+    'etb_bemerk' => 'Original ist nicht Teil der gefilterten Zeilen',
+])]);
+$crossShiftCorrectionForm->addLogbook('TBB', [array_replace($tbbRows[1], [
+    'tbb_lfd-nr' => 987655,
+    'estab_entry_type' => 'korrektur',
+    'estab_correction_of' => 876544,
+    'estab_correction_book_lfd' => 8,
+    'tbb_aktion' => 'TBB-KORREKTUR-AUS-ANDERER-SCHICHT',
+    'tbb_bemerk' => 'Original ist nicht Teil der gefilterten Zeilen',
+])]);
+$crossShiftCorrectionFormBytes = $crossShiftCorrectionForm->Output('', 'S');
+
+$closedIncident = array_replace($incident, [
+    'estab_status' => 'closed',
+    'ende' => '2026-07-29 18:00:00',
+    'estab_closed_at' => '2026-07-29 18:00:00.000000',
+    'estab_closed_by' => 'PDF-Rendernachweis',
+    'estab_close_note' => 'Formaler Abschluss des Rendernachweises',
+    'estab_retain_until' => '2036-07-29 18:00:00.000000',
+]);
+$closedEtbForm = new EstabIncidentPdf(
+    $closedIncident,
+    1024 * 1024,
+    $matrix
+);
+$closedEtbForm->SetCompression(false);
+$closedEtbForm->addLogbook('ETB', [array_replace($etbRows[0], [
+    'etb_aktion' => 'Einsatztagebuch formal abgeschlossen.',
+    'etb_bemerk' => 'Abschluss nach vollständiger Prüfung',
+])]);
+$closedEtbFormBytes = $closedEtbForm->Output('', 'S');
+
+$closedTbbForm = new EstabIncidentPdf(
+    $closedIncident,
+    1024 * 1024,
+    $matrix
+);
+$closedTbbForm->SetCompression(false);
+$closedTbbForm->addLogbook('TBB', [array_replace($tbbRows[0], [
+    'estab_personnel_duty' => '',
+    'estab_channel' => '',
+    'estab_message_route' => '',
+    'estab_message_id' => null,
+    'estab_operations' => 'Technisches Betriebsbuch formal abgeschlossen.',
+    'estab_receipt' => 'LdF Rendernachweis',
+    'tbb_aktion' => '',
+    'tbb_bemerk' => '',
+])]);
+$closedTbbFormBytes = $closedTbbForm->Output('', 'S');
 
 $maximumIncident = array_replace($incident, [
     'kennung' => 'MAX-' . str_repeat('K', 60),
@@ -436,6 +600,11 @@ foreach ([
     'dossier-message-form.pdf' => $dossierBytes,
     'long-message-form.pdf' => $longSingleBytes,
     'dossier-long-message-form.pdf' => $longDossierBytes,
+    'etb-form.pdf' => $etbFormBytes,
+    'tbb-form.pdf' => $tbbFormBytes,
+    'cross-shift-correction.pdf' => $crossShiftCorrectionFormBytes,
+    'etb-form-closed.pdf' => $closedEtbFormBytes,
+    'tbb-form-closed.pdf' => $closedTbbFormBytes,
     'dossier-all.pdf' => $completeDossierBytes,
     'dossier-maximum-header.pdf' => $maximumHeaderDossierBytes,
 ] as $filename => $bytes) {

@@ -80,6 +80,66 @@ try {
         $status['active_einsatz_id'] === null,
         'isolated evidence database unexpectedly has an active incident'
     );
+    $unopenedCreated = estab_incident_create(
+        $connection,
+        [
+            'kennung' => 'DV-EVIDENCE-UNOPENED',
+            'name' => 'Noch nicht eröffneter Einsatz',
+            'beginn' => date('Y-m-d\TH:i', time() - 900),
+            'ort' => 'Integration',
+            'organisation' => 'THW-Ausbildungsnachweis',
+            'fuehrungsstellenname' => 'Führungsstelle ohne Schicht',
+            'einsatzleitung' => 'Leitung Eröffnungsprüfung',
+            'beschreibung' => 'Negativprüfung vor der ersten Dienstschicht.',
+        ],
+        'evidence-integration',
+        true,
+        (int) $status['revision']
+    );
+    $unopenedIncidentId = (int) $unopenedCreated['einsatz_id'];
+    $unopenedSnapshotSql = "SELECT CONCAT("
+        . "(SELECT `estab_status` FROM `nv_einsaetze` WHERE `einsatz_id` = "
+        . $unopenedIncidentId . "), '|',"
+        . "(SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = "
+        . $unopenedIncidentId . "), '|',"
+        . "(SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = "
+        . $unopenedIncidentId . "), '|',"
+        . "(SELECT GROUP_CONCAT(CONCAT(`buchart`, ':', `next_lfd`)"
+        . " ORDER BY `buchart` SEPARATOR ',') FROM `nv_logbuch_koepfe`"
+        . " WHERE `einsatz_id` = " . $unopenedIncidentId . "))";
+    $unopenedSnapshot = (string) $scalar($connection, $unopenedSnapshotSql);
+    $assert(
+        $unopenedSnapshot === 'open|0|0|ETB:1,TTB:1',
+        'new unopened incident did not start with two empty local book heads'
+    );
+    $unopenedFailure = $fails(static fn (): array => estab_incident_close(
+        $connection,
+        $unopenedIncidentId,
+        (int) $unopenedCreated['status_revision'],
+        'evidence-integration',
+        [
+            'ende' => date('Y-m-d\TH:i'),
+            'close_note' => 'Darf ohne ordnungsgemäße Eröffnung nicht schließen.',
+        ]
+    ));
+    $unopenedStatus = estab_incident_status($connection);
+    $assert(
+        $unopenedFailure instanceof EstabIncidentCloseBlockedException
+            && (string) $scalar($connection, $unopenedSnapshotSql)
+                === $unopenedSnapshot
+            && (int) ($unopenedStatus['active_einsatz_id'] ?? 0)
+                === $unopenedIncidentId
+            && (int) $unopenedStatus['revision']
+                === (int) $unopenedCreated['status_revision'],
+        'formal close of an active unopened incident wrote rows or changed state'
+    );
+    estab_incident_deactivate(
+        $connection,
+        $unopenedIncidentId,
+        (int) $unopenedStatus['revision'],
+        'evidence-integration'
+    );
+    $status = estab_incident_status($connection);
     $foreignCreated = estab_incident_create(
         $connection,
         [
@@ -87,13 +147,24 @@ try {
             'name' => 'Fremder Referenzeinsatz',
             'beginn' => date('Y-m-d\TH:i', time() - 7200),
             'ort' => 'Integration',
+            'organisation' => 'THW-Ausbildungsnachweis',
             'fuehrungsstellenname' => 'Führungsstelle Evidenz Fremd',
+            'einsatzleitung' => 'Leitung Fremdevidenz',
+            'beschreibung' => 'Getrennter Referenzeinsatz für Negativprüfungen.',
         ],
         'evidence-integration',
         true,
         (int) $status['revision']
     );
     $foreignIncidentId = (int) $foreignCreated['einsatz_id'];
+    $foreignShift = estab_dv_create_shift(
+        $connection,
+        $foreignIncidentId,
+        'Fremde Referenzschicht',
+        null,
+        'evidence-integration'
+    );
+    $foreignShiftId = (int) $foreignShift['dienstschicht_id'];
     $connection->begin_transaction();
     try {
         $statement = $connection->prepare(
@@ -135,15 +206,16 @@ try {
         'INSERT INTO `nv_etb`'
         . ' (`einsatz_id`, `etb_time`, `etb_aktion`, `etb_bemerk`,'
         . ' `etb_funktion`, `etb_kuerzel`, `etb_benutzer`,'
-        . ' `estab_event_time`, `estab_event_type`)'
+        . ' `estab_event_time`, `estab_event_type`, `estab_shift_id`)'
         . " VALUES (?, ?, 'ETB-Eintrag eines anderen Einsatzes', '',"
-        . " 'S2', 'evi', 'Evidence Integration', ?, 'information')"
+        . " '', 'system', 'eStab-System', ?, 'ohne', ?)"
     );
     $foreignEtb->bind_param(
-        'iss',
+        'issi',
         $foreignIncidentId,
         $foreignEventTime,
-        $foreignEventTime
+        $foreignEventTime,
+        $foreignShiftId
     );
     $foreignEtb->execute();
     $foreignEntryId = (int) $connection->insert_id;
@@ -157,7 +229,10 @@ try {
             'name' => 'DV Evidenztest',
             'beginn' => date('Y-m-d\TH:i', time() - 3600),
             'ort' => 'Integration',
+            'organisation' => 'THW-Ausbildungsnachweis',
             'fuehrungsstellenname' => 'Führungsstelle Evidenz',
+            'einsatzleitung' => 'Leitung Evidenzintegration',
+            'beschreibung' => 'Prüfung des unveränderlichen ETB-/TBB-Nachweises.',
         ],
         'evidence-integration',
         true,
@@ -184,6 +259,42 @@ try {
     );
     $insertEvidenceUser->execute();
     $insertEvidenceUser->close();
+    foreach ([
+        ['evw', 'Nicht angenommene Altplanung'],
+        ['eva', 'Offene Planungszuweisung'],
+        ['evo', 'Angenommene Offline-Besetzung'],
+    ] as [$extraCode, $extraName]) {
+        $extraPassword = password_hash(
+            'DV evidence roster ' . $extraCode,
+            PASSWORD_DEFAULT
+        );
+        if (!is_string($extraPassword)) {
+            throw new RuntimeException('Could not hash roster fixture password');
+        }
+        $extraUser = $connection->prepare(
+            'INSERT INTO `nv_benutzer`'
+            . ' (`benutzer`, `kuerzel`, `funktion`, `rolle`, `sid`, `aktiv`,'
+            . ' `estab_letzte_aktivitaet`, `estab_gesperrt`, `password`)'
+            . " VALUES (?, ?, 'A/W', 'Fernmelder', ?, 1,"
+            . ' UTC_TIMESTAMP(6), 0, ?)'
+        );
+        if (!$extraUser) {
+            throw new RuntimeException('Could not prepare roster fixture user');
+        }
+        try {
+            $extraSession = 'dv-evidence-' . $extraCode;
+            $extraUser->bind_param(
+                'ssss',
+                $extraName,
+                $extraCode,
+                $extraSession,
+                $extraPassword
+            );
+            $extraUser->execute();
+        } finally {
+            $extraUser->close();
+        }
+    }
     $evidenceShift = estab_dv_create_shift(
         $connection,
         $incidentId,
@@ -193,6 +304,7 @@ try {
     );
     $evidenceShiftId = (int) $evidenceShift['dienstschicht_id'];
     $evidenceAssignmentId = 0;
+    $evidenceAwAssignmentId = 0;
     foreach (ESTAB_DV_REQUIRED_HATS as $function) {
         $assignment = estab_dv_assign_hat(
             $connection,
@@ -210,11 +322,54 @@ try {
         );
         if ($function === 'S2') {
             $evidenceAssignmentId = (int) $assignment['dienstbesetzung_id'];
+        } elseif ($function === 'A/W') {
+            $evidenceAwAssignmentId = (int) $assignment['dienstbesetzung_id'];
         }
     }
+    $withdrawnRoster = estab_dv_assign_hat(
+        $connection,
+        $incidentId,
+        $evidenceShiftId,
+        'evw',
+        'A/W',
+        'evidence-integration'
+    );
+    $withdrawnRosterId = (int) $withdrawnRoster['dienstbesetzung_id'];
+    $connection->query(
+        "UPDATE `nv_dienstbesetzungen` SET `status` = 'ZURUECKGEZOGEN',"
+        . ' `abgeloest_am` = NOW(6) WHERE `dienstbesetzung_id` = '
+        . $withdrawnRosterId
+    );
+    $assignedRoster = estab_dv_assign_hat(
+        $connection,
+        $incidentId,
+        $evidenceShiftId,
+        'eva',
+        'A/W',
+        'evidence-integration'
+    );
+    $assignedRosterId = (int) $assignedRoster['dienstbesetzung_id'];
+    $offlineRoster = estab_dv_assign_hat(
+        $connection,
+        $incidentId,
+        $evidenceShiftId,
+        'evo',
+        'A/W',
+        'evidence-integration'
+    );
+    $offlineRosterId = (int) $offlineRoster['dienstbesetzung_id'];
+    estab_dv_accept_hat(
+        $connection,
+        $incidentId,
+        $offlineRosterId,
+        'evo'
+    );
+    $connection->query(
+        "UPDATE `nv_benutzer` SET `aktiv` = 0 WHERE `kuerzel` = 'evo'"
+    );
     $assert(
-        $evidenceAssignmentId > 0,
-        'evidence fixture did not create the selected S2 duty assignment'
+        $evidenceAssignmentId > 0 && $evidenceAwAssignmentId > 0,
+        'evidence fixture did not create its selected S2 and A/W assignments'
     );
     $actor['duty_assignment_id'] = $evidenceAssignmentId;
     estab_dv_activate_initial_shift(
@@ -222,6 +377,48 @@ try {
         $incidentId,
         $evidenceShiftId,
         'evidence-integration'
+    );
+    $assert(
+        (int) $scalar(
+            $connection,
+            'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = '
+                . $incidentId
+                . " AND `estab_book_lfd` = 1 AND (`etb_aktion`"
+                . " LIKE '%Nicht angenommene Altplanung%' OR `etb_aktion`"
+                . " LIKE '%Offene Planungszuweisung%')"
+        ) === 0,
+        'opening logbook roster included assigned or withdrawn planning rows'
+    );
+    $assignmentOptions = estab_logbook_active_assignment_options(
+        $databaseConfig
+    );
+    mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+    $assignmentOptionIds = array_map(
+        static fn (array $option): int =>
+            (int) ($option['dienstbesetzung_id'] ?? 0),
+        $assignmentOptions
+    );
+    $offlineAssignmentSnapshot = '';
+    foreach ($assignmentOptions as $assignmentOption) {
+        if (
+            (int) ($assignmentOption['dienstbesetzung_id'] ?? 0)
+                === $offlineRosterId
+        ) {
+            $offlineAssignmentSnapshot = (string) (
+                $assignmentOption['estab_assignment'] ?? ''
+            );
+        }
+    }
+    $assert(
+        in_array($evidenceAssignmentId, $assignmentOptionIds, true)
+            && in_array($evidenceAwAssignmentId, $assignmentOptionIds, true)
+            && in_array($offlineRosterId, $assignmentOptionIds, true)
+            && !in_array($withdrawnRosterId, $assignmentOptionIds, true)
+            && !in_array($assignedRosterId, $assignmentOptionIds, true)
+            && $offlineAssignmentSnapshot
+                === 'A/W (Fernmelder): Angenommene Offline-Besetzung [evo]',
+        'ETB assignment selector exposed a non-accepted roster row or an '
+            . 'unstable display snapshot'
     );
 
     $connection->begin_transaction();
@@ -483,6 +680,28 @@ try {
         );
     }
 
+    foreach (
+        [$withdrawnRosterId, $assignedRosterId, 900000000]
+        as $invalidAssigneeId
+    ) {
+        $assert(
+            $fails(static fn (): int => estab_logbook_insert_entry(
+                $databaseConfig,
+                'nv_etb',
+                'etb',
+                [
+                    'event' => 'Unzulässige ETB-Zuordnung',
+                    'comment' => '',
+                    'event_time' => date('Y-m-d H:i:s'),
+                    'event_type' => 'A',
+                    'assignee_assignment_id' => $invalidAssigneeId,
+                ],
+                $actor
+            )) instanceof EstabIncidentConflictException,
+            'application accepted a missing, unaccepted, or withdrawn ETB '
+                . 'assignment'
+        );
+    }
     $entryId = estab_logbook_insert_entry(
         $databaseConfig,
         'nv_etb',
@@ -491,11 +710,15 @@ try {
             'event' => 'Einsatzleitung trifft Entscheidung',
             'comment' => 'Nachricht als Entscheidungsgrundlage',
             'event_time' => date('Y-m-d H:i:s', time() - 120),
-            'event_type' => 'entscheidung',
+            'event_type' => 'W',
             'message_id' => $messageId,
             'attachment_id' => null,
-            'reference' => 'Beschluss 1',
+            'reference' => '1',
             'correction_of' => null,
+            'assignee_assignment_id' => $offlineRosterId,
+            'estab_shift_id' => 900000000,
+            'estab_writer_assignment_id' => 900000000,
+            'estab_assignment' => 'FORGED ETB ASSIGNMENT',
         ],
         $actor
     );
@@ -512,6 +735,10 @@ try {
             'attachment_id' => null,
             'reference' => null,
             'correction_of' => $entryId,
+            'assignee_assignment_id' => $evidenceAssignmentId,
+            'estab_shift_id' => 900000000,
+            'estab_writer_assignment_id' => 900000000,
+            'estab_assignment' => 'FORGED ETB CORRECTION ASSIGNMENT',
         ],
         $actor
     );
@@ -522,8 +749,66 @@ try {
                 $connection,
                 'SELECT `estab_correction_of` FROM `nv_etb`'
                 . ' WHERE `etb_lfd-nr` = ' . $correctionId
-            ) === $entryId,
-        'ETB correction did not append a reference to the original'
+            ) === $entryId
+            && (int) $scalar(
+                $connection,
+                'SELECT `estab_book_lfd` FROM `nv_etb`'
+                    . ' WHERE `etb_lfd-nr` = ' . $entryId
+            ) === 2
+            && (int) $scalar(
+                $connection,
+                'SELECT `estab_book_lfd` FROM `nv_etb`'
+                . ' WHERE `etb_lfd-nr` = ' . $correctionId
+            ) === 3
+            && (string) $scalar(
+                $connection,
+                'SELECT `estab_reference` FROM `nv_etb`'
+                . ' WHERE `etb_lfd-nr` = ' . $correctionId
+            ) === '2'
+            && (string) $scalar(
+                $connection,
+                "SELECT CONCAT(`estab_shift_id`, '|',"
+                    . " `estab_writer_assignment_id`, '|',"
+                    . " `estab_assignee_assignment_id`, '|',"
+                    . " `estab_assignment`) FROM `nv_etb`"
+                    . ' WHERE `etb_lfd-nr` = ' . $entryId
+            ) === $evidenceShiftId . '|' . $evidenceAssignmentId . '|'
+                . $offlineRosterId
+                . '|A/W (Fernmelder): Angenommene Offline-Besetzung [evo]'
+            && (string) $scalar(
+                $connection,
+                "SELECT CONCAT(`estab_shift_id`, '|',"
+                    . " `estab_writer_assignment_id`, '|',"
+                    . " `estab_assignee_assignment_id`, '|',"
+                    . " `estab_assignment`) FROM `nv_etb`"
+                    . ' WHERE `etb_lfd-nr` = ' . $correctionId
+            ) === $evidenceShiftId . '|' . $evidenceAssignmentId . '|'
+                . $evidenceAssignmentId
+                . '|S2 (Stab): Evidence Integration [evi]',
+        'ETB correction, assignment snapshot, writer/shift binding, or '
+            . 'incident-local sequence is incomplete'
+    );
+    $assignedAwRows = estab_logbook_entries(
+        $databaseConfig,
+        'nv_etb',
+        'etb',
+        ['assignment' => 'A/W (Fernmelder)']
+    );
+    $assignedS2Rows = estab_logbook_entries(
+        $databaseConfig,
+        'nv_etb',
+        'etb',
+        ['assignment' => 'S2 (Stab)']
+    );
+    mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+    $assert(
+        count($assignedAwRows) === 1
+            && (int) ($assignedAwRows[0]['etb_lfd-nr'] ?? 0) === $entryId
+            && count($assignedS2Rows) === 1
+            && (int) ($assignedS2Rows[0]['etb_lfd-nr'] ?? 0)
+                === $correctionId,
+        'separate ETB assignment filter did not isolate original and '
+            . 'correction snapshots'
     );
     $assert(
         $fails(static fn (): bool => $connection->query(
@@ -550,7 +835,7 @@ try {
             'event_time' => date('Y-m-d H:i:s'),
             'event_type' => $referenceField === 'correction_of'
                 ? 'korrektur'
-                : 'information',
+                : 'ohne',
             $referenceField => $referenceId,
         ];
         $assert(
@@ -573,14 +858,16 @@ try {
     ] as $referenceColumn => $referenceId) {
         $eventType = $referenceColumn === 'estab_correction_of'
             ? 'korrektur'
-            : 'information';
+            : 'ohne';
         $assert(
             $fails(static fn (): bool => $connection->query(
                 'INSERT INTO `nv_etb`'
                 . ' (`einsatz_id`, `etb_time`, `etb_aktion`, `etb_bemerk`,'
+                . ' `etb_kuerzel`, `etb_benutzer`, `estab_shift_id`,'
                 . ' `estab_event_time`, `estab_event_type`, `'
                 . $referenceColumn . '`) VALUES ('
-                . $incidentId . ", NOW(), 'cross incident', '', NOW(), '"
+                . $incidentId . ", NOW(), 'cross incident', '', 'system',"
+                . " 'eStab-System', " . $evidenceShiftId . ", NOW(), '"
                 . $eventType . "', " . $referenceId . ')'
             )) instanceof mysqli_sql_exception,
             'database accepted cross-incident ETB ' . $referenceColumn
@@ -609,9 +896,11 @@ try {
         $fails(static fn (): bool => $connection->query(
             'INSERT INTO `nv_etb`'
             . ' (`einsatz_id`, `etb_time`, `etb_aktion`, `etb_bemerk`,'
+            . ' `etb_kuerzel`, `etb_benutzer`, `estab_shift_id`,'
             . ' `estab_event_time`, `estab_event_type`,'
             . ' `estab_correction_of`) VALUES ('
-            . $incidentId . ", NOW(), 'correction chain', '', NOW(),"
+            . $incidentId . ", NOW(), 'correction chain', '', 'system',"
+            . " 'eStab-System', " . $evidenceShiftId . ', NOW(),'
             . " 'korrektur', " . $correctionId . ')'
         )) instanceof mysqli_sql_exception,
         'database accepted an ambiguous ETB correction chain'
@@ -620,10 +909,12 @@ try {
     $selfReferenceFailure = $fails(static fn (): bool => $connection->query(
         'INSERT INTO `nv_etb`'
         . ' (`etb_lfd-nr`, `einsatz_id`, `etb_time`, `etb_aktion`,'
-        . ' `etb_bemerk`, `estab_event_time`, `estab_event_type`,'
+        . ' `etb_bemerk`, `etb_kuerzel`, `etb_benutzer`,'
+        . ' `estab_shift_id`, `estab_event_time`, `estab_event_type`,'
         . ' `estab_correction_of`) VALUES ('
         . $selfReferenceId . ', ' . $incidentId
-        . ", NOW(), 'self correction', '', NOW(), 'korrektur', "
+        . ", NOW(), 'self correction', '', 'system', 'eStab-System', "
+        . $evidenceShiftId . ", NOW(), 'korrektur', "
         . $selfReferenceId . ')'
     ));
     $assert(
@@ -633,6 +924,112 @@ try {
                 'cannot reference itself'
             ),
         'database accepted an ETB correction self-reference'
+    );
+
+    $awActor = [
+        'benutzer' => 'Evidence Integration',
+        'kuerzel' => 'evi',
+        'funktion' => 'A/W',
+        'rolle' => 'Fernmelder',
+        'duty_assignment_id' => $evidenceAwAssignmentId,
+    ];
+    $tbbEntryId = estab_logbook_insert_entry(
+        $databaseConfig,
+        'nv_tbb',
+        'tbb',
+        [
+            'entry_type' => 'kanal',
+            'event_time' => date('Y-m-d H:i:s', time() - 30),
+            'personnel_duty' => 'A/W Evidence Integration im Dienst',
+            'channel' => 'Rufgruppe THW 1',
+            'message_route' => 'Leitstelle an Führungsstelle Evidenz',
+            'operations' => 'Abgeschlossene Nachricht nachgewiesen',
+            'receipt' => 'Quittung evi',
+            'comment' => 'Strukturierter TBB-Prüfeintrag',
+        ],
+        $awActor
+    );
+    $tbbCorrectionId = estab_logbook_insert_entry(
+        $databaseConfig,
+        'nv_tbb',
+        'tbb',
+        [
+            'entry_type' => 'korrektur',
+            'event_time' => date('Y-m-d H:i:s'),
+            'operations' => 'Quittungszeichen fachlich berichtigt',
+            'receipt' => 'Quittung evi-korr',
+            'correction_of' => $tbbEntryId,
+            'comment' => 'Schreibfehler im Quittungszeichen',
+        ],
+        $awActor
+    );
+    // The compatibility connector used by estab_logbook_insert_entry()
+    // deliberately disables mysqli exception reporting while it opens its
+    // private connection. Restore strict reporting before exercising the
+    // database immutability triggers through this long-lived test connection.
+    mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+    $assert(
+        $tbbEntryId > 0
+            && $tbbCorrectionId > $tbbEntryId
+            && (int) $scalar(
+                $connection,
+                'SELECT `estab_book_lfd` FROM `nv_tbb`'
+                    . ' WHERE `tbb_lfd-nr` = ' . $tbbEntryId
+            ) === 2
+            && (int) $scalar(
+                $connection,
+                'SELECT `estab_book_lfd` FROM `nv_tbb`'
+                    . ' WHERE `tbb_lfd-nr` = ' . $tbbCorrectionId
+            ) === 3
+            && (int) $scalar(
+                $connection,
+                'SELECT `estab_correction_of` FROM `nv_tbb`'
+                    . ' WHERE `tbb_lfd-nr` = ' . $tbbCorrectionId
+            ) === $tbbEntryId
+            && (string) $scalar(
+                $connection,
+                "SELECT CONCAT(`estab_shift_id`, '|',"
+                    . ' `estab_writer_assignment_id`) FROM `nv_tbb`'
+                    . ' WHERE `tbb_lfd-nr` = ' . $tbbEntryId
+            ) === $evidenceShiftId . '|' . $evidenceAwAssignmentId
+            && (string) $scalar(
+                $connection,
+                "SELECT CONCAT(`estab_shift_id`, '|',"
+                    . ' `estab_writer_assignment_id`) FROM `nv_tbb`'
+                    . ' WHERE `tbb_lfd-nr` = ' . $tbbCorrectionId
+            ) === $evidenceShiftId . '|' . $evidenceAwAssignmentId,
+        'structured TBB entry/correction, writer/shift binding, or '
+            . 'incident-local sequence is incomplete'
+    );
+    $tbbUpdateFailure = $fails(static fn (): bool => $connection->query(
+        "UPDATE `nv_tbb` SET `tbb_aktion` = 'tampered'"
+            . ' WHERE `tbb_lfd-nr` = ' . $tbbEntryId
+    ));
+    $tbbDeleteFailure = $fails(static fn (): bool => $connection->query(
+        'DELETE FROM `nv_tbb` WHERE `tbb_lfd-nr` = ' . $tbbEntryId
+    ));
+    $assert(
+        $tbbUpdateFailure instanceof mysqli_sql_exception
+            && $tbbDeleteFailure instanceof mysqli_sql_exception,
+        'TBB evidence remained mutable or deletable (update: '
+            . ($tbbUpdateFailure?->getMessage() ?? 'accepted')
+            . '; delete: '
+            . ($tbbDeleteFailure?->getMessage() ?? 'accepted') . ')'
+    );
+    $assert(
+        $fails(static fn (): int => estab_logbook_insert_entry(
+            $databaseConfig,
+            'nv_tbb',
+            'tbb',
+            [
+                'entry_type' => 'nachricht',
+                'event_time' => date('Y-m-d H:i:s'),
+                'message_route' => 'Einsatzfremde Nachricht',
+                'message_id' => $foreignMessageId,
+            ],
+                $awActor
+        )) instanceof InvalidArgumentException,
+        'application accepted a manual canonical TBB message link'
     );
 
     estab_dv_close_shift(
@@ -749,20 +1146,127 @@ try {
         'evidence-integration'
     );
 
+    // Fail the final lifecycle audit after both close rows, status deactivation
+    // and incident close evidence have executed. The outer transaction must
+    // restore every mutation, including both incident-local sequence heads.
+    $closeSnapshotSql = "SELECT CONCAT("
+        . "(SELECT CONCAT(COALESCE(`active_einsatz_id`, 0), ':', `revision`,"
+        . " ':', CAST(`geaendert_am` AS CHAR), ':', `geaendert_von`)"
+        . " FROM `nv_einsatz_status` WHERE `singleton_id` = 1), '|',"
+        . "(SELECT CONCAT(`estab_status`, ':', COALESCE(CAST(`ende` AS CHAR), ''),"
+        . " ':', COALESCE(CAST(`estab_closed_at` AS CHAR), ''), ':',"
+        . " COALESCE(`estab_closed_by`, ''), ':', COALESCE(`estab_close_note`, ''),"
+        . " ':', COALESCE(CAST(`estab_retain_until` AS CHAR), ''))"
+        . " FROM `nv_einsaetze` WHERE `einsatz_id` = " . $incidentId . "), '|',"
+        . "(SELECT CONCAT(COUNT(*), ':', COALESCE(MAX(`estab_book_lfd`), 0))"
+        . " FROM `nv_etb` WHERE `einsatz_id` = " . $incidentId . "), '|',"
+        . "(SELECT CONCAT(COUNT(*), ':', COALESCE(MAX(`estab_book_lfd`), 0))"
+        . " FROM `nv_tbb` WHERE `einsatz_id` = " . $incidentId . "), '|',"
+        . "(SELECT GROUP_CONCAT(CONCAT(`buchart`, ':', `next_lfd`)"
+        . " ORDER BY `buchart` SEPARATOR ',') FROM `nv_logbuch_koepfe`"
+        . " WHERE `einsatz_id` = " . $incidentId . "), '|',"
+        . "(SELECT CONCAT(COUNT(*), ':', COALESCE(MAX(`ereignis_id`), 0))"
+        . " FROM `nv_einsatz_ereignisse` WHERE `einsatz_id` = "
+        . $incidentId . "))";
+    $closeRollbackSnapshot = (string) $scalar($connection, $closeSnapshotSql);
+    $closeInput = [
+        'ende' => date('Y-m-d\TH:i'),
+        'close_note' => 'Alle offenen Vorgänge und Nachweise geprüft.',
+    ];
+    $connection->query('DROP TRIGGER IF EXISTS `estab_test_close_audit_failure`');
+    $connection->query(
+        'CREATE TRIGGER `estab_test_close_audit_failure`'
+        . ' BEFORE INSERT ON `nv_einsatz_ereignisse` FOR EACH ROW'
+        . ' BEGIN IF @estab_test_fail_close = 1'
+        . " AND BINARY NEW.`aktion` = BINARY 'abgeschlossen' THEN"
+        . " SIGNAL SQLSTATE '45000'"
+        . " SET MESSAGE_TEXT = 'injected close audit failure';"
+        . ' END IF; END'
+    );
+    try {
+        $connection->query('SET @estab_test_fail_close = 1');
+        $closeFailure = $fails(static fn (): array => estab_incident_close(
+            $connection,
+            $incidentId,
+            $revision,
+            'evidence-integration',
+            $closeInput
+        ));
+    } finally {
+        $connection->query('SET @estab_test_fail_close = NULL');
+        $connection->query('DROP TRIGGER `estab_test_close_audit_failure`');
+    }
+    $assert(
+        $closeFailure instanceof mysqli_sql_exception
+            && (string) $scalar($connection, $closeSnapshotSql)
+                === $closeRollbackSnapshot
+            && estab_incident_close_preflight($connection, $incidentId)['closable'],
+        'injected formal-close failure retained partial ETB/TBB, head, status, '
+            . 'incident or audit mutations'
+    );
+
+    $etbBeforeClose = (int) $scalar(
+        $connection,
+        'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = ' . $incidentId
+    );
+    $tbbBeforeClose = (int) $scalar(
+        $connection,
+        'SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = ' . $incidentId
+    );
     $closed = estab_incident_close(
         $connection,
         $incidentId,
         $revision,
         'evidence-integration',
-        [
-            'ende' => date('Y-m-d\TH:i'),
-            'close_note' => 'Alle offenen Vorgänge und Nachweise geprüft.',
-        ]
+        $closeInput
     );
     $assert(
         $closed['status'] === 'closed'
-            && strtotime((string) $closed['retain_until']) >= time() + 364 * 86400,
-        'formal close did not establish immutable one-year retention'
+            && strtotime((string) $closed['retain_until'])
+                >= strtotime('+10 years') - 300,
+        'formal close did not establish immutable ten-year retention'
+    );
+    $assert(
+        (int) $scalar(
+            $connection,
+            'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = ' . $incidentId
+        ) === $etbBeforeClose + 1
+            && (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = ' . $incidentId
+            ) === $tbbBeforeClose + 1
+            && (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = '
+                    . $incidentId
+                    . " AND `etb_aktion` LIKE '%Einsatztagebuch geschlossen%'"
+            ) === 1
+            && (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = '
+                    . $incidentId
+                    . " AND `estab_personnel_duty` LIKE '%Betriebsende%'"
+                    . " AND `estab_personnel_duty`"
+                    . " NOT LIKE '%Nicht angenommene Altplanung%'"
+                    . " AND `estab_personnel_duty`"
+                    . " NOT LIKE '%Offene Planungszuweisung%'"
+            ) === 1
+            && (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = '
+                    . $incidentId
+                    . " AND `etb_aktion` LIKE '%Einsatztagebuch geschlossen%'"
+                    . " AND (`etb_aktion` LIKE '%Nicht angenommene Altplanung%'"
+                    . " OR `etb_aktion` LIKE '%Offene Planungszuweisung%')"
+            ) === 0
+            && (string) $scalar(
+                $connection,
+                "SELECT GROUP_CONCAT(`status` ORDER BY `dienstbesetzung_id`"
+                    . " SEPARATOR ',') FROM `nv_dienstbesetzungen`"
+                    . ' WHERE `dienstbesetzung_id` IN ('
+                    . $withdrawnRosterId . ',' . $assignedRosterId . ')'
+            ) === 'ZURUECKGEZOGEN,ZURUECKGEZOGEN',
+        'formal incident close did not append final ETB and TBB evidence atomically'
     );
     $assert(
         estab_incident_status($connection)['active_einsatz_id'] === null,

@@ -75,6 +75,7 @@ assert_dockerfile_contains '4fadm/incident_export.php'
 assert_dockerfile_contains '4fadm/incidents.php'
 assert_dockerfile_contains '4fadm/users.php'
 assert_dockerfile_contains 'COPY 4fbak/backup.php'
+assert_dockerfile_contains '4fbak/thw.png'
 assert_dockerfile_contains 'COPY app/*.php ./app/'
 assert_dockerfile_contains 'COPY 4fbak/fpdf/font/*.php ./4fbak/fpdf/font/'
 assert_dockerfile_contains 'COPY doku/Handbuch_eStab.pdf ./doku/'
@@ -90,9 +91,12 @@ for required_runtime_path in \
     4fach/activity.php \
     4fach/fuehrungsstelle.php \
     4fadm/fuehrungsstelle.php \
+    4fbak/thw.png \
     app/attachment_integrity.php \
     app/dv_operations.php \
     app/dynamic_schema.php \
+    app/logbook_lifecycle.php \
+    app/logbook_numbering.php \
     app/message_evidence.php \
     app/message_priority.php \
     app/message_transport.php \

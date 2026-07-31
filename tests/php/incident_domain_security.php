@@ -111,6 +111,9 @@ $requiredCommandPostFixture = [
     'kennung' => 'TEST-001',
     'name' => 'Test',
     'beginn' => '2026-07-30T08:00',
+    'organisation' => 'Landkreis Muster',
+    'einsatzleitung' => 'Einsatzleitung Muster',
+    'beschreibung' => 'Führungsstelle einrichten und Lage bewältigen.',
 ];
 foreach ([null, '', " \t "] as $missingCommandPostName) {
     $assert(
@@ -236,6 +239,7 @@ foreach ([
     'estab_incident_command_post_name',
     'estab_incident_lock_command_post_for_write',
     'estab_incident_update_command_post_name',
+    'estab_incident_update_logbook_header',
     'estab_incident_activate',
     'estab_incident_deactivate',
     'estab_incident_require_active',

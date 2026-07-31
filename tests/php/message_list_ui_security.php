@@ -171,8 +171,8 @@ foreach ([
             && str_contains($controls, 'aria-describedby="')
             && str_contains(
                 $controls,
-                'Durchsucht Nummer, Betreff, Rufname, Rufnummer, Von, An, '
-                    . 'Verfasserfunktion und Nachrichtentext.'
+                'Durchsucht TBB-Nachweisnummer, Betreff, Rufname, Rufnummer, '
+                    . 'Von, An, Verfasserfunktion und Nachrichtentext.'
             ),
         $surface . ' search label or scope help is incomplete'
     );
@@ -326,7 +326,8 @@ $rows = [
     [
         '00_lfd' => 41,
         '04_richtung' => 'E',
-        '04_nummer' => 142,
+        '04_nummer' => 9142,
+        'estab_tbb_book_lfd' => 142,
         '05_gegenstelle' => 'Florian <script>alert("station")</script>',
         '09_vorrangstufe' => 'bbb',
         '10_anschrift' => 'S2 & Lage',
@@ -341,7 +342,8 @@ $rows = [
     [
         '00_lfd' => 42,
         '04_richtung' => 'A',
-        '04_nummer' => 143,
+        '04_nummer' => 9143,
+        'estab_tbb_book_lfd' => null,
         '05_gegenstelle' => 'Florian West',
         '09_vorrangstufe' => '',
         '10_anschrift' => 'Einsatzabschnitt West',
@@ -383,6 +385,13 @@ foreach ([
             && substr_count($table, '<th scope="col">') === 7
             && substr_count($table, 'data-label=') === 14,
         $surface . ' result table lacks semantic or responsive labels'
+    );
+    $assert(
+        str_contains($table, 'TBB-Nachweis 142')
+            && str_contains($table, 'noch kein TBB-Nachweis')
+            && !str_contains($table, '9142')
+            && !str_contains($table, '9143'),
+        $surface . ' substitutes an internal message number for TBB evidence'
     );
     $assertOneOpenPerRow($table, 2, $surface);
     $assert(
@@ -519,7 +528,11 @@ $assert(
     $overviewGetList !== ''
         && is_int($overviewTableConfig)
         && is_int($overviewTableUse)
-        && $overviewTableConfig < $overviewTableUse,
+        && $overviewTableConfig < $overviewTableUse
+        && str_contains(
+            $overviewGetList,
+            'estab_message_list_tbb_number_select_sql ("m")'
+        ),
     'Overview list method uses table configuration outside its method scope'
 );
 
@@ -540,6 +553,10 @@ $secondCase = (
 $assert(
     $secondCase !== ''
         && str_contains($listSource, 'message_list_ui.php')
+        && str_contains(
+            $listExecutableSource,
+            'estab_message_list_tbb_number_select_sql ("m")'
+        )
         && str_contains($secondCase, 'estab_message_list_render_controls')
         && str_contains($secondCase, 'estab_message_list_render_resultbar')
         && str_contains($secondCase, 'estab_message_list_render_table')

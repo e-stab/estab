@@ -234,13 +234,14 @@ $assert(
         '" ORDER BY ".'
             . "\n        estab_message_priority_order_sql "
             . '("m.`09_vorrangstufe`").'
-            . "\n        \" DESC, m.`04_nummer` DESC\""
+            . "\n        \" DESC, COALESCE(\"."
+            . 'estab_message_list_tbb_number_sql ("m")'
         )
         && str_contains(
             $sources['message-list-filter'],
             'estab_message_priority_order_sql('
         ),
-    'General message views do not sort priority before the unique message number'
+    'General message views do not sort priority before the canonical TTB number'
 );
 $assert(
     str_contains($sources['overview'], 'estab_message_list_order_sql')

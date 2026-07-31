@@ -25,6 +25,7 @@ $assert = static function (
 /**
  * @return array{
  *   incident_id:int,
+ *   shift_id:int,
  *   etb_id:int,
  *   ttb_id:int,
  *   message_id:int,
@@ -44,6 +45,7 @@ function incident_export_integration_empty_fixture(
 ): array {
     return [
         'incident_id' => $incidentId,
+        'shift_id' => 0,
         'etb_id' => 0,
         'ttb_id' => 0,
         'message_id' => 0,
@@ -55,6 +57,154 @@ function incident_export_integration_empty_fixture(
     ];
 }
 
+function incident_export_integration_create_shift(
+    mysqli $connection,
+    int $incidentId,
+    int $number,
+    string $label,
+    string $actor
+): int {
+    $statement = $connection->prepare(
+        'INSERT INTO `nv_dienstschichten`'
+            . ' (`einsatz_id`, `nummer`, `bezeichnung`, `status`, `erstellt_von`)'
+            . " VALUES (?, ?, ?, 'GEPLANT', ?)"
+    );
+    try {
+        $statement->bind_param('iiss', $incidentId, $number, $label, $actor);
+        $statement->execute();
+        return (int) $connection->insert_id;
+    } finally {
+        $statement->close();
+    }
+}
+
+/** @return array{etb_id:int,ttb_id:int} */
+function incident_export_integration_insert_logbook_pair(
+    mysqli $connection,
+    int $incidentId,
+    int $shiftId,
+    string $marker
+): array {
+    $statement = $connection->prepare(
+        'INSERT INTO `nv_etb`'
+            . ' (`einsatz_id`, `estab_shift_id`, `etb_time`, `etb_aktion`,'
+            . ' `etb_bemerk`, `etb_benutzer`, `etb_kuerzel`, `etb_funktion`,'
+            . ' `estab_event_time`, `estab_event_type`)'
+            . " VALUES (?, ?, NOW(), ?, ?, 'eStab-System', 'system',"
+            . " 'System', NOW(6), 'ohne')"
+    );
+    try {
+        $action = $marker . '-ETB';
+        $remark = 'ETB scope proof ' . $marker;
+        $statement->bind_param(
+            'iiss',
+            $incidentId,
+            $shiftId,
+            $action,
+            $remark
+        );
+        $statement->execute();
+        $etbId = (int) $connection->insert_id;
+    } finally {
+        $statement->close();
+    }
+
+    $statement = $connection->prepare(
+        'INSERT INTO `nv_tbb`'
+            . ' (`einsatz_id`, `estab_shift_id`, `tbb_time`, `tbb_aktion`,'
+            . ' `tbb_bemerk`, `tbb_benutzer`, `tbb_kuerzel`, `tbb_funktion`,'
+            . ' `estab_event_time`, `estab_entry_type`, `estab_operations`)'
+            . " VALUES (?, ?, NOW(), ?, ?, 'eStab-System', 'system',"
+            . " 'System', NOW(6), 'betriebsereignis', ?)"
+    );
+    try {
+        $action = $marker . '-TBB';
+        $remark = 'TBB scope proof ' . $marker;
+        $statement->bind_param(
+            'iisss',
+            $incidentId,
+            $shiftId,
+            $action,
+            $remark,
+            $action
+        );
+        $statement->execute();
+        $ttbId = (int) $connection->insert_id;
+    } finally {
+        $statement->close();
+    }
+
+    return ['etb_id' => $etbId, 'ttb_id' => $ttbId];
+}
+
+/** @return array{etb_id:int,ttb_id:int} */
+function incident_export_integration_insert_logbook_corrections(
+    mysqli $connection,
+    int $incidentId,
+    int $shiftId,
+    string $marker,
+    int $originalEtbId,
+    int $originalEtbBookLfd,
+    int $originalTtbId
+): array {
+    $statement = $connection->prepare(
+        'INSERT INTO `nv_etb`'
+            . ' (`einsatz_id`, `estab_shift_id`, `etb_time`, `etb_aktion`,'
+            . ' `etb_bemerk`, `etb_benutzer`, `etb_kuerzel`, `etb_funktion`,'
+            . ' `estab_event_time`, `estab_event_type`,'
+            . ' `estab_reference`, `estab_correction_of`)'
+            . " VALUES (?, ?, NOW(), ?, ?, 'eStab-System', 'system',"
+            . " 'System', NOW(6), 'korrektur', ?, ?)"
+    );
+    try {
+        $action = $marker . '-ETB';
+        $remark = 'Schichtübergreifende ETB-Korrektur ' . $marker;
+        $reference = (string) $originalEtbBookLfd;
+        $statement->bind_param(
+            'iisssi',
+            $incidentId,
+            $shiftId,
+            $action,
+            $remark,
+            $reference,
+            $originalEtbId
+        );
+        $statement->execute();
+        $etbId = (int) $connection->insert_id;
+    } finally {
+        $statement->close();
+    }
+
+    $statement = $connection->prepare(
+        'INSERT INTO `nv_tbb`'
+            . ' (`einsatz_id`, `estab_shift_id`, `tbb_time`, `tbb_aktion`,'
+            . ' `tbb_bemerk`, `tbb_benutzer`, `tbb_kuerzel`, `tbb_funktion`,'
+            . ' `estab_event_time`, `estab_entry_type`, `estab_operations`,'
+            . ' `estab_correction_of`)'
+            . " VALUES (?, ?, NOW(), ?, ?, 'eStab-System', 'system',"
+            . " 'System', NOW(6), 'korrektur', ?, ?)"
+    );
+    try {
+        $action = $marker . '-TBB';
+        $remark = 'Schichtübergreifende TBB-Korrektur ' . $marker;
+        $statement->bind_param(
+            'iisssi',
+            $incidentId,
+            $shiftId,
+            $action,
+            $remark,
+            $action,
+            $originalTtbId
+        );
+        $statement->execute();
+        $ttbId = (int) $connection->insert_id;
+    } finally {
+        $statement->close();
+    }
+
+    return ['etb_id' => $etbId, 'ttb_id' => $ttbId];
+}
+
 /** @param array<string,mixed> $fixture */
 function incident_export_integration_insert_fixture(
     mysqli $connection,
@@ -62,6 +212,7 @@ function incident_export_integration_insert_fixture(
     int $messageNumber
 ): void {
     $incidentId = (int) $fixture['incident_id'];
+    $shiftId = (int) $fixture['shift_id'];
     $marker = (string) $fixture['marker'];
     $attachmentName = (string) $fixture['attachment_name'];
     $attachmentPath = (string) $fixture['attachment_path'];
@@ -96,57 +247,17 @@ function incident_export_integration_insert_fixture(
         );
     }
 
-    $statement = $connection->prepare(
-        'INSERT INTO `nv_etb`'
-            . ' (`einsatz_id`, `etb_time`, `etb_aktion`, `etb_bemerk`,'
-            . ' `etb_benutzer`, `etb_kuerzel`, `etb_funktion`)'
-            . ' VALUES (?, NOW(), ?, ?, ?, ?, ?)'
-    );
-    try {
-        $action = $marker . '-ETB';
-        $remark = 'ETB scope proof ' . $marker;
-        $operator = 'PDF Integration';
-        $function = 'S2';
-        $statement->bind_param(
-            'isssss',
-            $incidentId,
-            $action,
-            $remark,
-            $operator,
-            $operatorCode,
-            $function
-        );
-        $statement->execute();
-        $fixture['etb_id'] = (int) $connection->insert_id;
-    } finally {
-        $statement->close();
+    if ($shiftId < 1) {
+        throw new RuntimeException('Incident export fixture has no duty shift');
     }
-
-    $statement = $connection->prepare(
-        'INSERT INTO `nv_tbb`'
-            . ' (`einsatz_id`, `tbb_time`, `tbb_aktion`, `tbb_bemerk`,'
-            . ' `tbb_benutzer`, `tbb_kuerzel`, `tbb_funktion`)'
-            . ' VALUES (?, NOW(), ?, ?, ?, ?, ?)'
+    $logbookRows = incident_export_integration_insert_logbook_pair(
+        $connection,
+        $incidentId,
+        $shiftId,
+        $marker
     );
-    try {
-        $action = $marker . '-TBB';
-        $remark = 'TBB scope proof ' . $marker;
-        $operator = 'PDF Integration';
-        $function = 'A/W';
-        $statement->bind_param(
-            'isssss',
-            $incidentId,
-            $action,
-            $remark,
-            $operator,
-            $operatorCode,
-            $function
-        );
-        $statement->execute();
-        $fixture['ttb_id'] = (int) $connection->insert_id;
-    } finally {
-        $statement->close();
-    }
+    $fixture['etb_id'] = $logbookRows['etb_id'];
+    $fixture['ttb_id'] = $logbookRows['ttb_id'];
 
     $statement = $connection->prepare(
         'INSERT INTO `nv_anhang`'
@@ -461,6 +572,9 @@ $failure = null;
 $originalIncidentId = 0;
 $otherIncidentId = 0;
 $selectedIncidentId = 0;
+$otherShiftId = 0;
+$selectedShiftId = 0;
+$selectedSecondShiftId = 0;
 $otherFixture = [];
 $selectedFixture = [];
 
@@ -502,6 +616,14 @@ try {
         $otherName,
         $otherPayload
     );
+    $otherShiftId = incident_export_integration_create_shift(
+        $connection,
+        $otherIncidentId,
+        1,
+        'Fremdschicht ' . $token,
+        $actor
+    );
+    $otherFixture['shift_id'] = $otherShiftId;
     incident_export_integration_insert_fixture(
         $connection,
         $otherFixture,
@@ -544,10 +666,35 @@ try {
         $selectedName,
         $selectedPayload
     );
+    $selectedShiftId = incident_export_integration_create_shift(
+        $connection,
+        $selectedIncidentId,
+        1,
+        'Tagschicht ' . $token,
+        $actor
+    );
+    $selectedSecondShiftId = incident_export_integration_create_shift(
+        $connection,
+        $selectedIncidentId,
+        2,
+        'Nachtschicht ' . $token,
+        $actor
+    );
+    $selectedFixture['shift_id'] = $selectedShiftId;
     incident_export_integration_insert_fixture(
         $connection,
         $selectedFixture,
         920001
+    );
+    $secondShiftMarker = $selectedMarker . '-SHIFT-2';
+    incident_export_integration_insert_logbook_corrections(
+        $connection,
+        $selectedIncidentId,
+        $selectedSecondShiftId,
+        $secondShiftMarker,
+        (int) $selectedFixture['etb_id'],
+        1,
+        (int) $selectedFixture['ttb_id']
     );
 
     incident_export_integration_activate(
@@ -628,17 +775,27 @@ try {
         'Dossier source changed the selected sections'
     );
     $assert(
+        ($bundle['logbook_scope']['mode'] ?? null) === 'all'
+            && array_key_exists('shift_id', $bundle['logbook_scope'])
+            && $bundle['logbook_scope']['shift_id'] === null
+            && str_contains(
+                (string) ($bundle['logbook_scope']['display_label'] ?? ''),
+                'Gesamtbuch'
+            ),
+        'Default dossier scope is not the complete ETB/TBB book'
+    );
+    $assert(
         $bundle['counts'] === [
-            'etb' => 1,
-            'ttb' => 1,
+            'etb' => 2,
+            'ttb' => 2,
             'messages' => 1,
             'attachments' => 1,
             'attachments_verified' => 1,
             'attachments_legacy' => 0,
             'message_evidence' => 1,
             'message_evidence_heads' => 1,
-            'duty' => 0,
-            'duty_shifts' => 0,
+            'duty' => 2,
+            'duty_shifts' => 2,
             'duty_assignments' => 0,
             'duty_handovers' => 0,
             'duty_handover_requests' => 0,
@@ -654,9 +811,22 @@ try {
     $assert(
         ($bundle['etb'][0]['etb_aktion'] ?? null)
             === $selectedMarker . '-ETB'
+            && (int) ($bundle['etb'][0]['estab_shift_id'] ?? 0)
+                === $selectedShiftId
+            && ($bundle['etb'][0]['estab_assignment'] ?? null) === null
+            && ($bundle['etb'][1]['etb_aktion'] ?? null)
+                === $secondShiftMarker . '-ETB'
+            && (int) ($bundle['etb'][1]['estab_shift_id'] ?? 0)
+                === $selectedSecondShiftId
+            && (int) (
+                $bundle['etb'][1]['estab_correction_of'] ?? 0
+            ) === (int) $selectedFixture['etb_id']
+            && (int) (
+                $bundle['etb'][1]['estab_correction_book_lfd'] ?? 0
+            ) === 1
             && ($bundle['etb'][0]['estab_event_time'] ?? null) !== null
             && ($bundle['etb'][0]['estab_recorded_at'] ?? null) !== null
-            && ($bundle['etb'][0]['estab_event_type'] ?? null) === 'ereignis'
+            && ($bundle['etb'][0]['estab_event_type'] ?? null) === 'ohne'
             && !str_contains(
                 json_encode($bundle['etb'], JSON_THROW_ON_ERROR),
                 $otherMarker
@@ -666,11 +836,169 @@ try {
     $assert(
         ($bundle['ttb'][0]['tbb_aktion'] ?? null)
             === $selectedMarker . '-TBB'
+            && (int) ($bundle['ttb'][0]['estab_shift_id'] ?? 0)
+                === $selectedShiftId
+            && ($bundle['ttb'][1]['tbb_aktion'] ?? null)
+                === $secondShiftMarker . '-TBB'
+            && (int) ($bundle['ttb'][1]['estab_shift_id'] ?? 0)
+                === $selectedSecondShiftId
+            && (int) (
+                $bundle['ttb'][1]['estab_correction_of'] ?? 0
+            ) === (int) $selectedFixture['ttb_id']
+            && (int) (
+                $bundle['ttb'][1]['estab_correction_book_lfd'] ?? 0
+            ) === 1
             && !str_contains(
                 json_encode($bundle['ttb'], JSON_THROW_ON_ERROR),
                 $otherMarker
             ),
         'TBB export crossed the selected incident boundary'
+    );
+
+    $filteredBundle = estab_incident_export_load(
+        $connection,
+        $selectedIncidentId,
+        $bundle['sections'],
+        $attachmentRoot,
+        'shift:' . $selectedShiftId
+    );
+    $assert(
+        ($filteredBundle['logbook_scope']['mode'] ?? null) === 'shift'
+            && (int) (
+                $filteredBundle['logbook_scope']['shift_id'] ?? 0
+            ) === $selectedShiftId
+            && (int) ($filteredBundle['logbook_scope']['number'] ?? 0) === 1
+            && ($filteredBundle['logbook_scope']['name'] ?? null)
+                === 'Tagschicht ' . $token
+            && ($filteredBundle['logbook_scope']['status'] ?? null)
+                === 'GEPLANT'
+            && array_key_exists(
+                'created_at',
+                $filteredBundle['logbook_scope']
+            )
+            && array_key_exists(
+                'activated_at',
+                $filteredBundle['logbook_scope']
+            )
+            && array_key_exists(
+                'ended_at',
+                $filteredBundle['logbook_scope']
+            ),
+        'Selected shift metadata is incomplete or belongs to the wrong shift'
+    );
+    $assert(
+        ($filteredBundle['counts']['etb'] ?? -1) === 1
+            && ($filteredBundle['counts']['ttb'] ?? -1) === 1
+            && ($filteredBundle['counts']['messages'] ?? -1) === 1
+            && ($filteredBundle['counts']['attachments'] ?? -1) === 1
+            && ($filteredBundle['counts']['duty_shifts'] ?? -1) === 2
+            && ($filteredBundle['etb'][0]['etb_aktion'] ?? null)
+                === $selectedMarker . '-ETB'
+            && ($filteredBundle['ttb'][0]['tbb_aktion'] ?? null)
+                === $selectedMarker . '-TBB'
+            && !str_contains(
+                json_encode([
+                    $filteredBundle['etb'],
+                    $filteredBundle['ttb'],
+                ], JSON_THROW_ON_ERROR),
+                $secondShiftMarker
+            ),
+        'Shift scope did not filter only ETB/TBB while retaining dossier data'
+    );
+    $filteredRendered = estab_incident_export_pdf(
+        $filteredBundle,
+        $actor,
+        1024 * 1024,
+        $generatedAt
+    );
+    $filteredPageText = implode(
+        "\n",
+        incident_export_integration_page_streams($filteredRendered['bytes'])
+    );
+    $assert(
+        str_contains(
+            $filteredPageText,
+            'Nur Dienstschicht 1'
+        )
+            && str_contains($filteredPageText, 'Tagschicht ' . $token)
+            && str_contains($filteredPageText, $selectedMarker . '-ETB')
+            && str_contains($filteredPageText, $selectedMarker . '-TBB')
+            && !str_contains($filteredPageText, $secondShiftMarker),
+        'Filtered PDF cover or logbook pages do not match the selected shift'
+    );
+
+    $correctionBundle = estab_incident_export_load(
+        $connection,
+        $selectedIncidentId,
+        ['etb', 'ttb'],
+        $attachmentRoot,
+        'shift:' . $selectedSecondShiftId
+    );
+    $assert(
+        ($correctionBundle['counts']['etb'] ?? -1) === 1
+            && ($correctionBundle['counts']['ttb'] ?? -1) === 1
+            && (int) (
+                $correctionBundle['etb'][0]
+                    ['estab_correction_book_lfd'] ?? 0
+            ) === 1
+            && (int) (
+                $correctionBundle['ttb'][0]
+                    ['estab_correction_book_lfd'] ?? 0
+            ) === 1
+            && (int) (
+                $correctionBundle['etb'][0]['estab_correction_of'] ?? 0
+            ) === (int) $selectedFixture['etb_id']
+            && (int) (
+                $correctionBundle['ttb'][0]['estab_correction_of'] ?? 0
+            ) === (int) $selectedFixture['ttb_id'],
+        'Cross-shift correction did not resolve the original local book number'
+    );
+    $correctionRendered = estab_incident_export_pdf(
+        $correctionBundle,
+        $actor,
+        1024 * 1024,
+        $generatedAt
+    );
+    $correctionPageText = implode(
+        "\n",
+        incident_export_integration_page_streams(
+            $correctionRendered['bytes']
+        )
+    );
+    $assert(
+        str_contains($correctionPageText, 'Korrektur zu ETB-Nr.: 1')
+            && str_contains($correctionPageText, 'Korrektur zu TBB-Nr.: 1')
+            && !str_contains(
+                $correctionPageText,
+                'Korrektur zu ETB-Nr.: '
+                    . (string) $selectedFixture['etb_id']
+            )
+            && !str_contains(
+                $correctionPageText,
+                'Korrektur zu TBB-Nr.: '
+                    . (string) $selectedFixture['ttb_id']
+            ),
+        'Filtered PDF labels a global primary key as a local book number'
+    );
+
+    $foreignShiftRejected = false;
+    try {
+        estab_incident_export_load(
+            $connection,
+            $selectedIncidentId,
+            ['etb', 'ttb'],
+            $attachmentRoot,
+            'shift:' . $otherShiftId
+        );
+    } catch (EstabIncidentExportInputException $exception) {
+        $foreignShiftRejected = str_contains(
+            $exception->getMessage(),
+            'gehört nicht zum ausgewählten Einsatz'
+        );
+    }
+    $assert(
+        $foreignShiftRejected,
+        'A foreign incident shift was accepted as an ETB/TBB filter'
     );
     $assert(
         (int) ($bundle['messages'][0]['00_lfd'] ?? 0)
@@ -712,7 +1040,13 @@ try {
         'Message evidence crossed the incident boundary or failed live binding'
     );
     $assert(
-        $bundle['duty_shifts'] === []
+        count($bundle['duty_shifts']) === 2
+            && (int) (
+                $bundle['duty_shifts'][0]['dienstschicht_id'] ?? 0
+            ) === $selectedShiftId
+            && (int) (
+                $bundle['duty_shifts'][1]['dienstschicht_id'] ?? 0
+            ) === $selectedSecondShiftId
             && $bundle['duty_assignments'] === []
             && $bundle['duty_handovers'] === []
             && $bundle['s6_plans'] === []
@@ -791,8 +1125,11 @@ try {
     );
     $assert(
         str_contains($pageContent, $selectedCommandPost)
+            && str_contains($pageContent, 'Gesamtbuch')
             && str_contains($pageContent, $selectedMarker . '-ETB')
             && str_contains($pageContent, $selectedMarker . '-TBB')
+            && str_contains($pageContent, $secondShiftMarker . '-ETB')
+            && str_contains($pageContent, $secondShiftMarker . '-TBB')
             && str_contains(
                 $pageContent,
                 'Nachrichteninhalt ' . $selectedMarker
@@ -832,8 +1169,11 @@ try {
         'Rendered pages omit the shared form, attachment SHA-256, or incident scope'
     );
     $assert(
-        !str_contains($pdf, '/Subtype /Image'),
-        'Rendered incident dossier still contains the coat of arms'
+        str_contains($pdf, '/Subtype /Image')
+            && str_contains($pdf, '/Width 400')
+            && str_contains($pdf, '/Height 396')
+            && str_contains($pdf, '/BitsPerComponent 1'),
+        'Rendered incident dossier lacks the permitted THW header mark'
     );
     $tamperedPayload = str_repeat('X', strlen($selectedPayload));
     if ($tamperedPayload === $selectedPayload) {

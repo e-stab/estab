@@ -39,7 +39,40 @@ file_put_contents($attachmentPath, $attachmentPayload);
 chmod($attachmentPath, 0600);
 
 try {
+    $assert(
+        str_contains(
+            estab_incident_pdf_logbook_scope_label([]),
+            'Gesamtbuch'
+        ),
+        'Default logbook scope is not the complete book'
+    );
+    $assertThrows(
+        static fn (): string => estab_incident_pdf_logbook_scope_label([
+            'mode' => 'shift',
+            'shift_id' => 1,
+        ]),
+        'Incomplete shift metadata was accepted for the PDF cover'
+    );
+    $shiftScopeLabel = estab_incident_pdf_logbook_scope_label([
+        'mode' => 'shift',
+        'shift_id' => 23,
+        'number' => 2,
+        'name' => 'Nachtschicht',
+        'status' => 'UEBERGEBEN',
+        'created_at' => '2026-07-29 17:00:00.000000',
+        'activated_at' => '2026-07-29 18:00:00.000000',
+        'ended_at' => '2026-07-30 06:00:00.000000',
+    ]);
+    $assert(
+        str_contains($shiftScopeLabel, 'Nachtschicht')
+            && str_contains($shiftScopeLabel, 'ID: 23')
+            && str_contains($shiftScopeLabel, 'UEBERGEBEN')
+            && str_contains($shiftScopeLabel, '2026-07-29 18:00:00')
+            && str_contains($shiftScopeLabel, '2026-07-30 06:00:00'),
+        'Shift scope label omits identity, status, or times'
+    );
     $incident = [
+        'einsatz_id' => 12,
         'kennung' => 'EL-2026-001',
         'name' => 'Sturm Münster',
         'beginn' => '2026-07-29 10:30:00',
@@ -119,10 +152,21 @@ try {
                 'stored_head_sha256' => str_repeat('b', 64),
                 'calculated_head_sha256' => str_repeat('b', 64),
             ],
+        ],
+        [
+            'mode' => 'shift',
+            'shift_id' => 23,
+            'number' => 2,
+            'name' => 'Nachtschicht',
+            'status' => 'UEBERGEBEN',
+            'created_at' => '2026-07-29 17:00:00.000000',
+            'activated_at' => '2026-07-29 18:00:00.000000',
+            'ended_at' => '2026-07-30 06:00:00.000000',
         ]
     );
     $pdf->addLogbook('ETB', [[
-        'etb_lfd-nr' => 1,
+        'estab_book_lfd' => 1,
+        'etb_lfd-nr' => 9001,
         'etb_time' => '2026-07-29 10:31:00',
         'estab_event_time' => '2026-07-29 10:30:30.000000',
         'estab_recorded_at' => '2026-07-29 10:31:00.000000',
@@ -130,6 +174,7 @@ try {
         'estab_message_id' => 7,
         'estab_attachment_id' => 4,
         'estab_reference' => 'Lagekarte A',
+        'estab_assignment' => 'ZUORDNUNG-NICHT-IM-FORMBLATT',
         'estab_correction_of' => null,
         'etb_aktion' => 'Einsatz eröffnet',
         'etb_bemerk' => 'Führungsstelle besetzt',
@@ -139,10 +184,36 @@ try {
     ]]);
     // Accept the short-lived TTB spelling as an input alias, but render TBB.
     $pdf->addLogbook('TTB', [[
-        'tbb_lfd-nr' => 1,
+        'estab_book_lfd' => 1,
+        'tbb_lfd-nr' => 9101,
         'tbb_time' => '2026-07-29 10:32:00',
-        'tbb_aktion' => 'Funkkanal eingerichtet',
-        'tbb_bemerk' => '',
+        'estab_event_time' => '2026-07-29 10:31:30.000000',
+        'estab_recorded_at' => '2026-07-29 10:32:00.000000',
+        'estab_entry_type' => 'betrieb_personal',
+        'estab_personnel_duty' => 'TBB-DIENSTSPALTE',
+        'estab_channel' => 'TBB-KANALSPALTE',
+        'estab_verbindungszustand' => 'betriebsbereit',
+        'estab_message_route' => 'TBB-NACHRICHT-VON an TBB-NACHRICHT-AN',
+        'estab_message_id' => 7,
+        'estab_operations' => 'TBB-BETRIEBSSPALTE',
+        'estab_stoerung_abstellung' => 'TBB-STOERUNGSSPALTE',
+        'estab_receipt' => 'TBB-QUITTUNGSSPALTE',
+        'estab_correction_of' => null,
+        'tbb_aktion' => 'Kompatibilitätszusammenfassung TBB-DIENSTSPALTE '
+            . 'TBB-KANALSPALTE TBB-BETRIEBSSPALTE',
+        'tbb_bemerk' => 'Zusatzbemerkung genau einmal drucken',
+        'tbb_benutzer' => 'Berta Beispiel',
+        'tbb_kuerzel' => 'BER001',
+        'tbb_funktion' => 'A/W',
+    ], [
+        'estab_book_lfd' => 2,
+        'tbb_lfd-nr' => 9102,
+        'tbb_time' => '2026-07-29 10:33:00',
+        'estab_event_time' => '2026-07-29 10:33:00.000000',
+        'estab_recorded_at' => '2026-07-29 10:33:01.000000',
+        'estab_entry_type' => 'legacy_import',
+        'tbb_aktion' => 'Legacy-Betriebsvorgang bleibt sichtbar',
+        'tbb_bemerk' => 'Legacy-Bemerkung bleibt sichtbar',
         'tbb_benutzer' => 'Berta Beispiel',
         'tbb_kuerzel' => 'BER001',
         'tbb_funktion' => 'A/W',
@@ -382,12 +453,14 @@ try {
     $pdf->addAttachmentIndex([[
         'display_name' => 'EL0001.txt · lage.txt',
         'stored_name' => $embedded['name'],
+        'archive_name' => 'EL0001.txt',
         'size' => $embedded['size'],
         'sha256' => $embedded['sha256'],
         'mime' => $embedded['mime'],
         'integrity_state' => 'verified',
         'integrity_statement' =>
             'SHA-256 und Größe entsprechen dem Eingangsnachweis',
+        'etb_attachment_numbers' => ['ETB 12-1-1'],
         'message_ids' => [7],
     ]]);
     $document = $pdf->Output('', 'S');
@@ -404,13 +477,62 @@ try {
 
     $assert(str_starts_with($document, '%PDF-1.7'), 'PDF version/header missing');
     $assert(
-        str_contains($document, 'Funkkanal eingerichtet'),
-        'TBB columns were not mapped into the PDF'
+        str_contains($document, 'Nur Dienstschicht 2')
+            && str_contains($document, 'UEBERGEBEN'),
+        'Shift-filter metadata is missing from the dossier cover'
     );
     $assert(
-        str_contains($document, 'TBB 1')
-            && !str_contains($document, 'TTB 1'),
-        'legacy TTB input alias was not rendered with the canonical TBB label'
+        !str_contains($document, 'ZUORDNUNG-NICHT-IM-FORMBLATT'),
+        'ETB search assignment leaked into the official form layout'
+    );
+    $assert(
+        !str_contains($document, 'Nachricht: #7'),
+        'A technical message primary key leaked into an official ETB/TBB column'
+    );
+    $assert(
+        str_contains($document, 'Fb F')
+            && str_contains($document, 'Einsatztagebuch')
+            && str_contains($document, 'Technisches Betriebsbuch')
+            && str_contains($document, 'Darstellung der Ereignisse')
+            && str_contains($document, 'Fernmeldebetriebsstelle')
+            && str_contains($document, 'Betriebsablauf/Ereignis')
+            && str_contains($document, 'ETB-F')
+            && str_contains($document, 'Fernmeldebetrieb')
+            && str_contains($document, 'LdF')
+            && str_contains($document, 'ETB 12-1-1')
+            && str_contains($document, 'ETB-Anlagennummer')
+            && str_contains($document, 'Ablagekennzeichen'),
+        'official ETB/TBB form heads or signature fields are missing'
+    );
+    $assert(
+        str_contains($document, 'TBB-DIENSTSPALTE')
+            && str_contains($document, 'TBB-KANALSPALTE')
+            && str_contains($document, 'TBB-NACHRICHT-VON')
+            && str_contains($document, 'TBB-NACHRICHT-AN')
+            && str_contains($document, 'TBB-BETRIEBSSPALTE')
+            && str_contains($document, 'TBB-STOERUNGSSPALTE')
+            && str_contains($document, 'TBB-QUITTUNGSSPALTE')
+            && substr_count($document, 'TBB-DIENSTSPALTE') === 1
+            && substr_count($document, 'TBB-KANALSPALTE') === 1
+            && substr_count($document, 'TBB-BETRIEBSSPALTE') === 1
+            && substr_count(
+                $document,
+                'Zusatzbemerkung genau einmal drucken'
+            ) === 1
+            && str_contains(
+                $document,
+                estab_incident_pdf_text(
+                    'Legacy-Betriebsvorgang bleibt sichtbar'
+                )
+            )
+            && str_contains($document, 'Legacy-Bemerkung bleibt sichtbar'),
+        'structured or legacy TBB fields were not mapped into Fb Fü 44'
+    );
+    $assert(
+        str_contains($document, '/MediaBox [0 0 841.89 595.28]')
+            && !str_contains($document, '{etb#}')
+            && !str_contains($document, '{tbb#}'),
+        'TBB is not landscape or a logbook page alias leaked'
     );
     $assert(str_ends_with($document, "%%EOF\n"), 'PDF trailer missing');
     $assert(strlen($document) > 5000, 'incident PDF is unexpectedly small');
@@ -451,9 +573,33 @@ try {
             && !str_contains($document, 'VS-NfD'),
         'incident PDF message form still contains a VS marking'
     );
+    $messageOnlyPdf = new EstabIncidentPdf(
+        $incident,
+        1024 * 1024,
+        $recipientMatrix
+    );
+    $messageOnlyPdf->SetCompression(false);
+    $messageOnlyPdf->addMessages([$message], [7 => ['EL0001.txt']]);
+    $messageOnlyDocument = $messageOnlyPdf->Output('', 'S');
     $assert(
-        !str_contains($document, '/Subtype /Image'),
+        !str_contains($messageOnlyDocument, '/Subtype /Image'),
         'incident PDF message form still contains the coat of arms'
+    );
+    $assert(
+        str_contains($document, '/Subtype /Image')
+            && str_contains($document, '/Width 400')
+            && str_contains($document, '/Height 396')
+            && str_contains($document, '/BitsPerComponent 1'),
+        'ETB/TBB form heads do not contain the existing THW gear mark'
+    );
+    $assert(
+        str_contains($document, '0.125 0.271 0.541 rg')
+            && str_contains($document, '0.251 0.216 0.537 rg'),
+        'ETB blue and TBB violet title bands are not distinct'
+    );
+    $assert(
+        substr_count($document, '0.745 0.769 0.804 RG') >= 2,
+        'ETB/TBB writing grids are missing from the official form bodies'
     );
     $assert(
         !str_contains($document, '/4fach/download.php')
@@ -491,6 +637,86 @@ try {
     $assert(
         $embedded['sha256'] === hash('sha256', "Originalanlage\n"),
         'embedded attachment SHA-256 differs'
+    );
+
+    $crossShiftPdf = new EstabIncidentPdf($incident, 1024);
+    $crossShiftPdf->SetCompression(false);
+    $crossShiftPdf->addLogbook('ETB', [[
+        'estab_book_lfd' => 22,
+        'etb_lfd-nr' => 987654,
+        'estab_event_time' => '2026-07-30 01:00:00.000000',
+        'estab_recorded_at' => '2026-07-30 01:00:01.000000',
+        'estab_event_type' => 'korrektur',
+        'estab_correction_of' => 876543,
+        'estab_correction_book_lfd' => 7,
+        'estab_reference' => '7',
+        'etb_aktion' => 'Schichtübergreifende ETB-Korrektur',
+        'etb_bemerk' => 'Original liegt in einer anderen Dienstschicht',
+        'etb_benutzer' => 'eStab-System',
+        'etb_kuerzel' => 'system',
+        'etb_funktion' => 'System',
+    ]]);
+    $crossShiftPdf->addLogbook('TBB', [[
+        'estab_book_lfd' => 23,
+        'tbb_lfd-nr' => 987655,
+        'estab_event_time' => '2026-07-30 01:01:00.000000',
+        'estab_recorded_at' => '2026-07-30 01:01:01.000000',
+        'estab_entry_type' => 'korrektur',
+        'estab_correction_of' => 876544,
+        'estab_correction_book_lfd' => 8,
+        'estab_operations' => 'Schichtübergreifende TBB-Korrektur',
+        'tbb_bemerk' => 'Original liegt in einer anderen Dienstschicht',
+        'tbb_benutzer' => 'eStab-System',
+        'tbb_kuerzel' => 'system',
+        'tbb_funktion' => 'System',
+    ]]);
+    $crossShiftDocument = $crossShiftPdf->Output('', 'S');
+    $assert(
+        str_contains($crossShiftDocument, 'Korrektur zu ETB-Nr.: 7')
+            && str_contains($crossShiftDocument, 'Korrektur zu TBB-Nr.: 8')
+            && substr_count(
+                $crossShiftDocument,
+                'Korrektur zu ETB-Nr.: 7'
+            ) === 1
+            && !str_contains($crossShiftDocument, 'Referenz: 7')
+            && !str_contains($crossShiftDocument, '876543')
+            && !str_contains($crossShiftDocument, '876544')
+            && !str_contains($crossShiftDocument, '987654')
+            && !str_contains($crossShiftDocument, '987655'),
+        'Cross-shift correction exposes a global primary key as book number'
+    );
+
+    $unresolvedPdf = new EstabIncidentPdf($incident, 1024);
+    $unresolvedPdf->SetCompression(false);
+    $unresolvedPdf->addLogbook('ETB', [[
+        'etb_lfd-nr' => 777777,
+        'estab_event_time' => '2026-07-30 01:02:00.000000',
+        'estab_recorded_at' => '2026-07-30 01:02:01.000000',
+        'estab_event_type' => 'korrektur',
+        'estab_correction_of' => 888888,
+        'etb_aktion' => 'Nicht auflösbarer Testverweis',
+        'etb_bemerk' => '',
+    ]]);
+    $unresolvedPdf->addLogbook('TBB', [[
+        'tbb_lfd-nr' => 777778,
+        'estab_event_time' => '2026-07-30 01:03:00.000000',
+        'estab_recorded_at' => '2026-07-30 01:03:01.000000',
+        'estab_entry_type' => 'korrektur',
+        'estab_correction_of' => 888889,
+        'estab_operations' => 'Nicht auflösbarer Testverweis',
+        'tbb_bemerk' => '',
+    ]]);
+    $unresolvedDocument = $unresolvedPdf->Output('', 'S');
+    $assert(
+        substr_count(
+            $unresolvedDocument,
+            'Korrekturverweis vorhanden'
+        ) === 2
+            && !str_contains($unresolvedDocument, '777777')
+            && !str_contains($unresolvedDocument, '777778')
+            && !str_contains($unresolvedDocument, '888888')
+            && !str_contains($unresolvedDocument, '888889'),
+        'Unresolved correction renders a global primary key as book number'
     );
     $assertThrows(
         static fn (): array => estab_incident_pdf_read_attachment(

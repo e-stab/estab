@@ -25,6 +25,61 @@ final class EstabIncidentExportDataException extends RuntimeException
 }
 
 /**
+ * Build the immutable ETB number assigned to every linked digital attachment.
+ *
+ * @param list<array<string,mixed>> $rows
+ * @return array<int,list<string>> map keyed by the technical attachment ID
+ */
+function estab_incident_export_etb_attachment_number_map(
+    int $incidentId,
+    array $rows
+): array {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $numbers = [];
+    foreach ($rows as $row) {
+        if (!is_array($row)) {
+            throw new EstabIncidentExportDataException(
+                'Die ETB-Anlagenzuordnung ist ungültig.'
+            );
+        }
+        $attachmentId = $row['estab_attachment_id'] ?? null;
+        if ($attachmentId === null || $attachmentId === '') {
+            continue;
+        }
+        try {
+            $attachmentId = estab_incident_positive_id(
+                $attachmentId,
+                'Anhangs-ID'
+            );
+            $entryNumber = estab_incident_positive_id(
+                $row['estab_book_lfd'] ?? null,
+                'ETB-Nummer'
+            );
+        } catch (EstabIncidentInputException $exception) {
+            throw new EstabIncidentExportDataException(
+                'Die ETB-Anlagenzuordnung enthält ungültige Nummern.',
+                0,
+                $exception
+            );
+        }
+        if (isset($numbers[$attachmentId])) {
+            throw new EstabIncidentExportDataException(
+                'Ein Anhang ist mehreren ETB-Einträgen zugeordnet und besitzt '
+                    . 'dadurch keine eindeutige ETB-Anlagennummer.'
+            );
+        }
+        $numbers[$attachmentId] = [
+            estab_logbook_etb_attachment_number(
+                $incidentId,
+                $entryNumber
+            ),
+        ];
+    }
+
+    return $numbers;
+}
+
+/**
  * Validate the nine user-selectable dossier sections.
  *
  * @return list<string>
@@ -76,6 +131,168 @@ function estab_incident_export_sections(mixed $input): array
         );
     }
     return $selected;
+}
+
+/**
+ * Parse the operator-selected ETB/TBB output scope without numeric coercion.
+ *
+ * @return array{mode:'all'|'shift',shift_id:?int}
+ */
+function estab_incident_export_logbook_scope(mixed $value): array
+{
+    if ($value === 'all') {
+        return [
+            'mode' => 'all',
+            'shift_id' => null,
+        ];
+    }
+    if (
+        !is_string($value)
+        || preg_match('/\Ashift:([1-9][0-9]*)\z/D', $value, $match) !== 1
+    ) {
+        throw new EstabIncidentExportInputException(
+            'Die Logbuchauswahl ist ungültig. Wählen Sie das Gesamtbuch oder '
+                . 'eine Dienstschicht aus.'
+        );
+    }
+
+    try {
+        $shiftId = estab_incident_positive_id(
+            $match[1],
+            'Dienstschicht-ID'
+        );
+    } catch (EstabIncidentInputException $exception) {
+        throw new EstabIncidentExportInputException(
+            'Die gewählte Dienstschicht ist ungültig.',
+            0,
+            $exception
+        );
+    }
+
+    return [
+        'mode' => 'shift',
+        'shift_id' => $shiftId,
+    ];
+}
+
+/**
+ * Return all shifts which may be offered by the administrative export UI.
+ * The export boundary validates the selected incident again inside its
+ * consistent read-only snapshot; these rows are display options only.
+ *
+ * @return list<array<string,mixed>>
+ */
+function estab_incident_export_shift_options(mysqli $connection): array
+{
+    $result = $connection->query(
+        'SELECT s.`dienstschicht_id`, s.`einsatz_id`, s.`nummer`,'
+            . ' s.`bezeichnung`, s.`status`, s.`erstellt_am`,'
+            . ' s.`aktiviert_am`, s.`beendet_am`,'
+            . ' e.`kennung` AS `einsatz_kennung`,'
+            . ' e.`name` AS `einsatz_name`'
+            . ' FROM `nv_dienstschichten` AS s'
+            . ' JOIN `nv_einsaetze` AS e ON e.`einsatz_id` = s.`einsatz_id`'
+            . ' ORDER BY e.`einsatz_id` DESC, s.`nummer`, s.`dienstschicht_id`'
+    );
+    if (!$result instanceof mysqli_result) {
+        throw new EstabIncidentExportDataException(
+            'Die Dienstschichten für die Logbuchauswahl konnten nicht gelesen '
+                . 'werden.'
+        );
+    }
+    try {
+        return $result->fetch_all(MYSQLI_ASSOC);
+    } finally {
+        $result->free();
+    }
+}
+
+/**
+ * Resolve one scope inside the dossier snapshot and prove incident ownership.
+ *
+ * @param array{mode:'all'|'shift',shift_id:?int} $scope
+ * @return array<string,mixed>
+ */
+function estab_incident_export_resolve_logbook_scope(
+    mysqli $connection,
+    int $incidentId,
+    array $scope
+): array {
+    if (($scope['mode'] ?? null) === 'all') {
+        return [
+            'mode' => 'all',
+            'shift_id' => null,
+            'number' => null,
+            'name' => null,
+            'status' => null,
+            'created_at' => null,
+            'activated_at' => null,
+            'ended_at' => null,
+            'display_label' => 'Gesamtbuch (alle Dienstschichten)',
+        ];
+    }
+
+    $shiftId = $scope['shift_id'] ?? null;
+    if (!is_int($shiftId) || $shiftId < 1) {
+        throw new EstabIncidentExportInputException(
+            'Die gewählte Dienstschicht ist ungültig.'
+        );
+    }
+    $statement = $connection->prepare(
+        'SELECT `dienstschicht_id`, `nummer`, `bezeichnung`, `status`,'
+            . ' `erstellt_am`, `aktiviert_am`, `beendet_am`'
+            . ' FROM `nv_dienstschichten`'
+            . ' WHERE `einsatz_id` = ? AND `dienstschicht_id` = ?'
+            . ' LIMIT 1'
+    );
+    if (!$statement) {
+        throw new EstabIncidentExportDataException(
+            'Die gewählte Dienstschicht konnte nicht geprüft werden.'
+        );
+    }
+    try {
+        $statement->bind_param('ii', $incidentId, $shiftId);
+        if (!$statement->execute()) {
+            throw new EstabIncidentExportDataException(
+                'Die gewählte Dienstschicht konnte nicht geprüft werden.'
+            );
+        }
+        $result = $statement->get_result();
+        if (!$result instanceof mysqli_result) {
+            throw new EstabIncidentExportDataException(
+                'Die gewählte Dienstschicht konnte nicht geprüft werden.'
+            );
+        }
+        try {
+            $row = $result->fetch_assoc();
+        } finally {
+            $result->free();
+        }
+    } finally {
+        $statement->close();
+    }
+    if (!is_array($row)) {
+        throw new EstabIncidentExportInputException(
+            'Die gewählte Dienstschicht gehört nicht zum ausgewählten Einsatz.'
+        );
+    }
+
+    $number = (int) ($row['nummer'] ?? 0);
+    $name = trim((string) ($row['bezeichnung'] ?? ''));
+    $status = trim((string) ($row['status'] ?? ''));
+    return [
+        'mode' => 'shift',
+        'shift_id' => (int) $row['dienstschicht_id'],
+        'number' => $number,
+        'name' => $name,
+        'status' => $status,
+        'created_at' => $row['erstellt_am'] ?? null,
+        'activated_at' => $row['aktiviert_am'] ?? null,
+        'ended_at' => $row['beendet_am'] ?? null,
+        'display_label' => 'Nur Dienstschicht ' . $number
+            . ($name !== '' ? ' · ' . $name : '')
+            . ($status !== '' ? ' (' . $status . ')' : ''),
+    ];
 }
 
 /**
@@ -192,6 +409,52 @@ function estab_incident_export_rows(
     }
     try {
         $statement->bind_param('i', $incidentId);
+        if (!$statement->execute()) {
+            throw new EstabIncidentExportDataException($failure);
+        }
+        $result = $statement->get_result();
+        if (!$result instanceof mysqli_result) {
+            throw new EstabIncidentExportDataException($failure);
+        }
+        try {
+            return $result->fetch_all(MYSQLI_ASSOC);
+        } finally {
+            $result->free();
+        }
+    } finally {
+        $statement->close();
+    }
+}
+
+/**
+ * Execute an incident-scoped ETB/TBB SELECT, optionally narrowed to one shift.
+ * A filtered query always binds both the incident and shift identifiers so a
+ * caller can never select a foreign shift by identifier alone.
+ *
+ * @return list<array<string,mixed>>
+ */
+function estab_incident_export_logbook_rows(
+    mysqli $connection,
+    string $sql,
+    int $incidentId,
+    ?int $shiftId,
+    string $failure
+): array {
+    if ($shiftId === null) {
+        return estab_incident_export_rows(
+            $connection,
+            $sql,
+            $incidentId,
+            $failure
+        );
+    }
+
+    $statement = $connection->prepare($sql);
+    if (!$statement) {
+        throw new EstabIncidentExportDataException($failure);
+    }
+    try {
+        $statement->bind_param('ii', $incidentId, $shiftId);
         if (!$statement->execute()) {
             throw new EstabIncidentExportDataException($failure);
         }
@@ -613,6 +876,7 @@ function estab_incident_export_operations_evidence_status(
  * @return array{
  *   incident:array<string,mixed>,
  *   sections:list<string>,
+ *   logbook_scope:array<string,mixed>,
  *   etb:list<array<string,mixed>>,
  *   ttb:list<array<string,mixed>>,
  *   messages:list<array<string,mixed>>,
@@ -638,7 +902,8 @@ function estab_incident_export_load(
     mysqli $connection,
     int $incidentId,
     array $sections,
-    string $attachmentRoot
+    string $attachmentRoot,
+    mixed $logbookScope = 'all'
 ): array {
     $incidentId = estab_incident_positive_id($incidentId);
     $sections = estab_incident_export_sections(array_combine(
@@ -654,33 +919,84 @@ function estab_incident_export_load(
             'Der ausgewählte Einsatz wurde nicht gefunden.'
         );
     }
+    $parsedLogbookScope = estab_incident_export_logbook_scope($logbookScope);
+    $resolvedLogbookScope = estab_incident_export_resolve_logbook_scope(
+        $connection,
+        $incidentId,
+        $parsedLogbookScope
+    );
+    $shiftId = ($resolvedLogbookScope['mode'] ?? null) === 'shift'
+        ? (int) ($resolvedLogbookScope['shift_id'] ?? 0)
+        : null;
 
     $etb = [];
     if (in_array('etb', $sections, true)) {
-        $etb = estab_incident_export_rows(
+        $etb = estab_incident_export_logbook_rows(
             $connection,
-            'SELECT `etb_lfd-nr`, `etb_time`, `estab_event_time`,'
-                . ' `estab_recorded_at`, `estab_event_type`,'
-                . ' `estab_message_id`, `estab_attachment_id`,'
-                . ' `estab_reference`, `estab_correction_of`,'
-                . ' `etb_aktion`, `etb_bemerk`, `etb_benutzer`,'
-                . ' `etb_kuerzel`, `etb_funktion`'
-                . ' FROM `nv_etb` WHERE `einsatz_id` = ?'
-                . ' ORDER BY `estab_event_time`, `etb_lfd-nr`',
+            'SELECT entry_row.`etb_lfd-nr`, entry_row.`estab_book_lfd`,'
+                . ' entry_row.`etb_time`, entry_row.`estab_event_time`,'
+                . ' entry_row.`estab_recorded_at`,'
+                . ' entry_row.`estab_event_type`,'
+                . ' entry_row.`estab_message_id`,'
+                . ' entry_row.`estab_attachment_id`,'
+                . ' entry_row.`estab_reference`,'
+                . ' entry_row.`estab_correction_of`,'
+                . ' correction_row.`estab_book_lfd`'
+                . ' AS `estab_correction_book_lfd`,'
+                . ' entry_row.`estab_shift_id`,'
+                . ' entry_row.`estab_assignment`,'
+                . ' entry_row.`etb_aktion`, entry_row.`etb_bemerk`,'
+                . ' entry_row.`etb_benutzer`, entry_row.`etb_kuerzel`,'
+                . ' entry_row.`etb_funktion`'
+                . ' FROM `nv_etb` AS entry_row'
+                . ' LEFT JOIN `nv_etb` AS correction_row'
+                . ' ON correction_row.`etb_lfd-nr` ='
+                . ' entry_row.`estab_correction_of`'
+                . ' AND correction_row.`einsatz_id` = entry_row.`einsatz_id`'
+                . ' WHERE entry_row.`einsatz_id` = ?'
+                . ($shiftId === null
+                    ? ''
+                    : ' AND entry_row.`estab_shift_id` = ?')
+                . ' ORDER BY entry_row.`estab_book_lfd`',
             $incidentId,
+            $shiftId,
             'Das Einsatztagebuch konnte nicht gelesen werden.'
         );
     }
 
     $ttb = [];
     if (in_array('ttb', $sections, true)) {
-        $ttb = estab_incident_export_rows(
+        $ttb = estab_incident_export_logbook_rows(
             $connection,
-            'SELECT `tbb_lfd-nr`, `tbb_time`, `tbb_aktion`, `tbb_bemerk`,'
-                . ' `tbb_benutzer`, `tbb_kuerzel`, `tbb_funktion`'
-                . ' FROM `nv_tbb` WHERE `einsatz_id` = ?'
-                . ' ORDER BY `tbb_time`, `tbb_lfd-nr`',
+            'SELECT entry_row.`tbb_lfd-nr`, entry_row.`estab_book_lfd`,'
+                . ' entry_row.`tbb_time`, entry_row.`estab_event_time`,'
+                . ' entry_row.`estab_recorded_at`,'
+                . ' entry_row.`estab_entry_type`,'
+                . ' entry_row.`estab_message_id`,'
+                . ' entry_row.`estab_shift_id`,'
+                . ' entry_row.`estab_personnel_duty`,'
+                . ' entry_row.`estab_channel`,'
+                . ' entry_row.`estab_message_route`,'
+                . ' entry_row.`estab_operations`,'
+                . ' entry_row.`estab_receipt`,'
+                . ' entry_row.`estab_correction_of`,'
+                . ' correction_row.`estab_book_lfd`'
+                . ' AS `estab_correction_book_lfd`,'
+                . ' entry_row.`tbb_aktion`, entry_row.`tbb_bemerk`,'
+                . ' entry_row.`tbb_benutzer`, entry_row.`tbb_kuerzel`,'
+                . ' entry_row.`tbb_funktion`'
+                . ' FROM `nv_tbb` AS entry_row'
+                . ' LEFT JOIN `nv_tbb` AS correction_row'
+                . ' ON correction_row.`tbb_lfd-nr` ='
+                . ' entry_row.`estab_correction_of`'
+                . ' AND correction_row.`einsatz_id` = entry_row.`einsatz_id`'
+                . ' WHERE entry_row.`einsatz_id` = ?'
+                . ($shiftId === null
+                    ? ''
+                    : ' AND entry_row.`estab_shift_id` = ?')
+                . ' ORDER BY entry_row.`estab_book_lfd`',
             $incidentId,
+            $shiftId,
             'Das Technische Betriebsbuch konnte nicht gelesen werden.'
         );
     }
@@ -704,6 +1020,13 @@ function estab_incident_export_load(
                 . ' `15_quitdatum`, `15_quitzeichen`, `16_empf`,'
                 . ' `17_vermerke`, `x00_status`, `x01_abschluss`,'
                 . ' `x04_druck`, `x05_druck_d`, `99_lstacc`,'
+                . ' (SELECT ttb_row.`estab_book_lfd` FROM `nv_tbb` AS ttb_row'
+                . ' WHERE ttb_row.`einsatz_id` = `nv_nachrichten`.`einsatz_id`'
+                . ' AND ttb_row.`estab_message_id` = `nv_nachrichten`.`00_lfd`'
+                . " AND BINARY ttb_row.`estab_entry_type` = BINARY 'nachricht'"
+                . ' ORDER BY ttb_row.`estab_book_lfd`,'
+                . ' ttb_row.`tbb_lfd-nr` LIMIT 1)'
+                . ' AS `estab_ttb_lfd`,'
                 . ' `estab_fernmeldeplan_eintrag_id`'
                 . ' FROM `nv_nachrichten` WHERE `einsatz_id` = ?'
                 . ' ORDER BY COALESCE(`01_datum`, `12_abfzeit`), `00_lfd`',
@@ -786,6 +1109,23 @@ function estab_incident_export_load(
 
     $attachments = [];
     if (in_array('attachments', $sections, true)) {
+        $etbAttachmentLinks = in_array('etb', $sections, true)
+            && $shiftId === null
+            ? $etb
+            : estab_incident_export_rows(
+                $connection,
+                'SELECT `estab_book_lfd`, `estab_attachment_id`'
+                    . ' FROM `nv_etb` WHERE `einsatz_id` = ?'
+                    . ' AND `estab_attachment_id` IS NOT NULL'
+                    . ' ORDER BY `estab_book_lfd`',
+                $incidentId,
+                'Die ETB-Anlagenzuordnungen konnten nicht gelesen werden.'
+            );
+        $etbAttachmentNumbers =
+            estab_incident_export_etb_attachment_number_map(
+                $incidentId,
+                $etbAttachmentLinks
+            );
         $attachmentRows = estab_incident_export_rows(
             $connection,
             'SELECT `lfd-nr`, `filename`, `fileext`, `org_filename`,'
@@ -807,6 +1147,12 @@ function estab_incident_export_load(
         }
 
         foreach ($attachmentRows as $position => $attachment) {
+            $attachmentId = (int) ($attachment['lfd-nr'] ?? 0);
+            if ($attachmentId < 1) {
+                throw new EstabIncidentExportDataException(
+                    'Ein Einsatzanhang besitzt keine gültige Identität.'
+                );
+            }
             $base = (string) ($attachment['filename'] ?? '');
             $extension = strtolower((string) ($attachment['fileext'] ?? ''));
             $storedName = $base . '.' . $extension;
@@ -845,17 +1191,29 @@ function estab_incident_export_load(
                     $exception
                 );
             }
+            $etbNumbers = $etbAttachmentNumbers[$attachmentId] ?? [];
+            $embeddedSourceName = $storedName;
+            if (count($etbNumbers) === 1) {
+                $embeddedSourceName = str_replace(
+                    ' ',
+                    '-',
+                    $etbNumbers[0]
+                ) . '--' . $storedName;
+            }
             $embeddedName = estab_incident_export_embedded_name(
                 $position + 1,
-                $storedName
+                $embeddedSourceName
             );
+            $displayPrefix = $etbNumbers !== []
+                ? implode(', ', $etbNumbers) . ' · '
+                : '';
             $attachments[] = [
                 'path' => $path,
                 'stored_name' => $storedName,
                 'embedded_name' => $embeddedName,
-                'display_name' => $original !== ''
+                'display_name' => $displayPrefix . ($original !== ''
                     ? $storedName . ' · ' . $original
-                    : $storedName,
+                    : $storedName),
                 'description' => $comment !== ''
                     ? $comment
                     : (
@@ -872,6 +1230,7 @@ function estab_incident_export_load(
                 'message_ids' => array_values(array_unique(
                     $messageIdsByName[$storedName] ?? []
                 )),
+                'etb_attachment_numbers' => $etbNumbers,
             ];
         }
 
@@ -1029,6 +1388,7 @@ function estab_incident_export_load(
     return [
         'incident' => $incident,
         'sections' => $sections,
+        'logbook_scope' => $resolvedLogbookScope,
         'etb' => $etb,
         'ttb' => $ttb,
         'messages' => $messages,
@@ -1142,6 +1502,9 @@ function estab_incident_export_pdf(
                     $attachment['display_name'] ?? ''
                 ),
                 'stored_name' => $embedded['name'],
+                'archive_name' => (string) (
+                    $attachment['stored_name'] ?? ''
+                ),
                 'size' => $embedded['size'],
                 'sha256' => $embedded['sha256'],
                 'mime' => $embedded['mime'],
@@ -1154,6 +1517,9 @@ function estab_incident_export_pdf(
                 'message_ids' => is_array(
                     $attachment['message_ids'] ?? null
                 ) ? $attachment['message_ids'] : [],
+                'etb_attachment_numbers' => is_array(
+                    $attachment['etb_attachment_numbers'] ?? null
+                ) ? $attachment['etb_attachment_numbers'] : [],
             ];
         }
     }
@@ -1171,7 +1537,10 @@ function estab_incident_export_pdf(
             'operations' => is_array(
                 $bundle['operations_evidence_status'] ?? null
             ) ? $bundle['operations_evidence_status'] : [],
-        ]
+        ],
+        is_array($bundle['logbook_scope'] ?? null)
+            ? $bundle['logbook_scope']
+            : []
     );
     if (in_array('etb', $sections, true)) {
         $pdf->addLogbook(

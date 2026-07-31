@@ -137,12 +137,15 @@ function estab_list_combined_tracking_rows (
     $connection,
     "SELECT m.`00_lfd`,m.`01_medium`,m.`01_datum`,m.`01_zeichen`,"
       ."m.`02_zeit`,m.`03_datum`,m.`06_befweg`,m.`06_befwegausw`,"
-      ."m.`09_vorrangstufe`,m.`04_richtung`,m.`04_nummer`,"
+      ."m.`09_vorrangstufe`,m.`04_richtung`,"
+      .estab_message_list_tbb_number_select_sql ("m").","
       ."m.`10_anschrift`,m.`12_inhalt`,m.`13_abseinheit`,"
       ."m.`14_zeichen`,m.`x01_abschluss`"
       ." FROM ".$messageTable." AS m"
       ." WHERE m.`einsatz_id` = ?"
-      ." ORDER BY m.`04_nummer` ASC",
+      ." ORDER BY COALESCE(".
+        estab_message_list_tbb_number_sql ("m").", 4294967296) ASC,"
+      ." m.`00_lfd` ASC",
     array ($incidentId)
   );
 }
@@ -822,7 +825,8 @@ class Listen extends kategorien {
 
     $query = "SELECT m.`00_lfd`,m.`01_zeichen`,m.`02_zeit`,".
       "m.`02_zeichen`,m.`03_datum`,m.`03_zeichen`,m.`04_richtung`,".
-      "m.`04_nummer`,m.`05_gegenstelle`,m.`06_befwegausw`,".
+      estab_message_list_tbb_number_select_sql ("m").",".
+      "m.`05_gegenstelle`,m.`06_befwegausw`,".
       "m.`09_vorrangstufe`,m.`10_anschrift`,m.`11_rufnummer`,".
       "m.`12_betreff`,m.`12_inhalt`,m.`12_abfzeit`,".
       "m.`13_abseinheit`,m.`14_funktion`,m.`15_quitdatum`,".
@@ -948,7 +952,8 @@ class Listen extends kategorien {
           if ($searchActive) {
             $searchPattern = "%".(string) $_SESSION["flt_search"]."%";
             $where[] =
-              "(m.`04_nummer` LIKE ? OR m.`10_anschrift` LIKE ? OR ".
+              "(CAST(".estab_message_list_tbb_number_sql ("m").
+              " AS CHAR) LIKE ? OR m.`10_anschrift` LIKE ? OR ".
               "m.`12_abfzeit` LIKE ? OR m.`12_inhalt` LIKE ? OR ".
               "m.`13_abseinheit` LIKE ?)";
             for ($i = 0; $i < 5; $i++) {
@@ -963,10 +968,13 @@ class Listen extends kategorien {
 
       $from = " FROM ".$messageTable." AS m ".implode (" ", $joins);
       $whereSql = implode (" AND ", $where);
-      $query = "SELECT DISTINCT m.*".$from." WHERE ".$whereSql.
+      $query = "SELECT DISTINCT m.*,".
+        estab_message_list_tbb_number_select_sql ("m").
+        $from." WHERE ".$whereSql.
         " ORDER BY ".
         estab_message_priority_order_sql ("m.`09_vorrangstufe`").
-        " DESC, m.`04_nummer` DESC";
+        " DESC, COALESCE(".estab_message_list_tbb_number_sql ("m").
+        ", 0) DESC, m.`12_abfzeit` DESC, m.`00_lfd` DESC";
       $result = estab_message_query_rows (
         $messageConnection,
         $query,
@@ -996,7 +1004,7 @@ class Listen extends kategorien {
     switch ($this->listenart){
       case "LDF":
         $incidentId = $this->required_incident_id ();
-        $query = "SELECT `00_lfd`,`04_richtung`,`04_nummer`,`05_gegenstelle`,
+        $query = "SELECT `00_lfd`,`04_richtung`,`05_gegenstelle`,
                          `09_vorrangstufe`,`10_anschrift`,`12_abfzeit`,
                          `12_inhalt`,`13_abseinheit`
                     FROM `".$conf_4f_tbl ["nachrichten"]."`
@@ -1152,7 +1160,7 @@ class Listen extends kategorien {
           echo "</th>\n";
           echo "<th>Vorrang</th>\n";
           echo "<th>E/A</th>\n";
-          echo "<th>Num</th>\n";
+          echo "<th>TBB-Nachweis</th>\n";
           echo "<th>Von</th>";
           echo "<th>An</th>";
           echo "<th>Abfasszeit</th>\n";
@@ -1259,8 +1267,15 @@ class Listen extends kategorien {
              echo "</td>\n";
               // Eingang / Ausgang
              echo "<td>"; if (($row["04_richtung"] != "")) { estab_list_detail_action ("stab", "meldung", $row["00_lfd"], $row["04_richtung"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
-              // Nachweisnummer
-             echo "<td>"; if (($row["04_nummer"] != "")) { estab_list_detail_action ("stab", "meldung", $row["00_lfd"], $row["04_nummer"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+              // Einsatzlokaler Nachrichtennachweis im TTB
+             echo "<td>";
+             estab_list_detail_action (
+               "stab",
+               "meldung",
+               $row["00_lfd"],
+               estab_message_list_tbb_evidence_label ($row)
+             );
+             echo "</td>\n";
               // Muss der Absender oder die Absendende Einheit unter von / an
              if ($row["04_richtung"] == "A" ) { // von = 14_funktion an=10_anschrift
                 // Ausgang VON
@@ -1452,7 +1467,7 @@ class Listen extends kategorien {
               $label = "Vordruck ".
                 estab_message_list_direction_label (
                   $row ["04_richtung"] ?? ""
-                )." ".(string) ($row ["04_nummer"] ?? $recordId).
+                )." – ".estab_message_list_tbb_evidence_label ($row).
                 " öffnen";
               estab_list_detail_action (
                 "fm",
@@ -1605,11 +1620,17 @@ class Listen extends kategorien {
       case "FmNwE":  // *****  F M N W E ingang ******
 	    if (debug) {echo "<b>file:liste.php:714 fkt:createlist - switch(listenart) -- case (FmNwE) ></b><br>";}
         $incidentId = $this->required_incident_id ();
-        $query = "SELECT `00_lfd`,`01_medium`,`09_vorrangstufe`,`04_richtung`, `04_nummer`, `10_anschrift`,
-                         `12_abfzeit`, `12_inhalt`, `13_abseinheit`, `x01_abschluss`
-                  FROM `".$conf_4f_tbl ["nachrichten"]."`
-                  WHERE `einsatz_id` = ?
-                  AND 04_richtung = \"E\" order by 04_nummer ASC ; ";
+        $query = "SELECT m.`00_lfd`,m.`01_medium`,m.`09_vorrangstufe`,".
+                  "m.`04_richtung`,".
+                  estab_message_list_tbb_number_select_sql ("m").",".
+                  "m.`10_anschrift`,m.`12_abfzeit`,m.`12_inhalt`,".
+                  "m.`13_abseinheit`,m.`x01_abschluss`".
+                  " FROM `".$conf_4f_tbl ["nachrichten"]."` AS m".
+                  " WHERE m.`einsatz_id` = ?".
+                  " AND m.`04_richtung` = \"E\"".
+                  " ORDER BY COALESCE(".
+                  estab_message_list_tbb_number_sql ("m").
+                  ", 4294967296) ASC, m.`00_lfd` ASC";
         $messageConnection = estab_message_connect ($conf_4f_db);
         try {
           $result = estab_message_query_rows (
@@ -1627,7 +1648,7 @@ class Listen extends kategorien {
           echo "<tr style=\"background-color: rgb(240,240,200); color:#000000; font-weight:bold;\">\n";
           echo "<td>Vorrang</td>\n";
           echo "<td>E/A</td>\n";
-          echo "<td>Num</td>\n";
+          echo "<td>TBB-Nachweis</td>\n";
           echo "<td>Von/An</td>";
           echo "<td>Abfasszeit</td>\n";
           echo "<td>Eingangsmedium</td>\n";
@@ -1642,7 +1663,9 @@ class Listen extends kategorien {
                )."</a>\n" ;
                echo "</td>\n";
                echo "<td>"; if (($row["04_richtung"] != "")) { echo "<a>".estab_message_html ($row["04_richtung"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
-               echo "<td>"; if (($row["04_nummer"] != "")) { echo "<a>".estab_message_html ($row["04_nummer"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+               echo "<td><a>".estab_message_html (
+                 estab_message_list_tbb_evidence_label ($row)
+               )."</a></td>\n";
                if ($row["04_richtung"] == "A" ) {
                  echo "<td>";
                  if (($row["10_anschrift"] != "")) {
@@ -1684,12 +1707,18 @@ class Listen extends kategorien {
       case "FmNwA":  // *****  F M N W A usgang ******
         if (debug) {echo "<b>file:liste.php:714 fkt:createlist - switch(listenart) -- case (FmNwA) ></b><br>";}
         $incidentId = $this->required_incident_id ();
-        $query = "SELECT `00_lfd`,`03_datum`,`06_befweg`,`06_befwegausw`,
-                         `09_vorrangstufe`,`04_richtung`, `04_nummer`, `10_anschrift`,
-                         `12_abfzeit`, `12_inhalt`, `13_abseinheit`, `x01_abschluss`
-                  FROM `".$conf_4f_tbl ["nachrichten"]."`
-                  WHERE `einsatz_id` = ?
-                  AND 04_richtung = \"A\" order by 04_nummer ASC ; ";
+        $query = "SELECT m.`00_lfd`,m.`03_datum`,m.`06_befweg`,".
+                  "m.`06_befwegausw`,m.`09_vorrangstufe`,".
+                  "m.`04_richtung`,".
+                  estab_message_list_tbb_number_select_sql ("m").",".
+                  "m.`10_anschrift`,m.`12_abfzeit`,m.`12_inhalt`,".
+                  "m.`13_abseinheit`,m.`x01_abschluss`".
+                  " FROM `".$conf_4f_tbl ["nachrichten"]."` AS m".
+                  " WHERE m.`einsatz_id` = ?".
+                  " AND m.`04_richtung` = \"A\"".
+                  " ORDER BY COALESCE(".
+                  estab_message_list_tbb_number_sql ("m").
+                  ", 4294967296) ASC, m.`00_lfd` ASC";
         $messageConnection = estab_message_connect ($conf_4f_db);
         try {
           $result = estab_message_query_rows (
@@ -1707,7 +1736,7 @@ class Listen extends kategorien {
           echo "<tr style=\"background-color: rgb(240,240,200); color:#000000; font-weight:bold;\">\n";
           echo "<td>Vorrang</td>\n";
           echo "<td>E/A</td>\n";
-          echo "<td>Num</td>\n";
+          echo "<td>TBB-Nachweis</td>\n";
           echo "<td>Von/An</td>";
           echo "<td>Abfasszeit</td>\n";
           echo "<td>Beförderungsweg</td>\n";
@@ -1722,7 +1751,9 @@ class Listen extends kategorien {
                )."</a>\n" ;
                echo "</td>\n";
                echo "<td>"; if (($row["04_richtung"] != "")) { echo "<a>".estab_message_html ($row["04_richtung"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
-               echo "<td>"; if (($row["04_nummer"] != "")) { echo "<a>".estab_message_html ($row["04_nummer"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+               echo "<td><a>".estab_message_html (
+                 estab_message_list_tbb_evidence_label ($row)
+               )."</a></td>\n";
                if ($row["04_richtung"] == "A" ) {
                  echo "<td>";
                  if (($row["10_anschrift"] != "")) {
@@ -1792,7 +1823,7 @@ class Listen extends kategorien {
           echo "<tr style=\"background-color: rgb(240,240,200); color:#000000; font-weight:bold;\">\n";
           echo "<td>Vorrang</td>\n";
           echo "<td>E/A</td>\n";
-          echo "<td>Num</td>\n";
+          echo "<td>TBB-Nachweis</td>\n";
           echo "<td>Von/An</td>";
           echo "<td>Aufnahme</td>\n";
 //          echo "<td>Aufn.Z</td>\n";
@@ -1811,7 +1842,9 @@ class Listen extends kategorien {
                )."</a>\n" ;
                echo "</td>\n";
                echo "<td>"; if (($row["04_richtung"] != "")) { echo "<a>".estab_message_html ($row["04_richtung"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
-               echo "<td>"; if (($row["04_nummer"] != "")) { echo "<a>".estab_message_html ($row["04_nummer"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+               echo "<td><a>".estab_message_html (
+                 estab_message_list_tbb_evidence_label ($row)
+               )."</a></td>\n";
                if ($row["04_richtung"] == "A" ) {
                  echo "<td>";
                  if (($row["10_anschrift"] != "")) {

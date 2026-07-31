@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../app/message_repository.php';
 require_once __DIR__ . '/../../app/admin_operations.php';
+require_once __DIR__ . '/../../app/generated_form.php';
 
 function message_db_assert(bool $condition, string $message): void
 {
@@ -176,8 +177,15 @@ function message_db_worker(array $arguments): never
                     $secondary,
                     false,
                     [
+                        '01_medium' => 'Fu',
+                        '01_zeichen' => 'state1',
+                        '05_gegenstelle' => 'Leitstelle-' . $workerKey,
+                        '06_befweg' => '',
+                        '06_befwegausw' => '',
                         '10_anschrift' => 'FORGED-INCOMING-' . $workerKey,
+                        '12_betreff' => 'Eingang ' . $workerKey,
                         '12_inhalt' => 'parallel-' . $workerKey,
+                        '13_abseinheit' => '',
                         '16_empf' => 'S1_rt',
                         'x00_status' => 8,
                         'x01_abschluss' => 't',
@@ -441,7 +449,9 @@ try {
             'kennung' => 'CI-MSG-' . strtoupper($token),
             'name' => 'Message concurrency ' . $token,
             'beginn' => date('Y-m-d\TH:i'),
+            'organisation' => 'eStab CI',
             'fuehrungsstellenname' => $commandPostName,
+            'einsatzleitung' => 'Automatisierte Nachrichtenprüfung',
             'beschreibung' => 'Ephemerer kanonischer Nachrichten-Datenraum',
             'metadaten' => json_encode(
                 ['test' => 'message_concurrency', 'token' => $token],
@@ -1033,6 +1043,13 @@ try {
         $initialShiftId,
         $successorShiftId,
         'Nachrichtenlage und offener Korrekturauftrag vollständig übergeben.',
+        $initialDutyAssignments['state1|S2'],
+        [
+            'benutzer' => 'Concurrency S2',
+            'kuerzel' => 'state1',
+            'funktion' => 'S2',
+            'rolle' => 'Stab',
+        ],
         'message-concurrency'
     );
     message_db_assert(

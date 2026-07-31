@@ -756,6 +756,19 @@ $assert(
 );
 $assert(
     str_contains(
+        $repositorySource,
+        "AND BINARY ttb_row.`estab_entry_type` = BINARY 'nachricht'"
+    )
+        && str_contains($repositorySource, 'AS `estab_ttb_lfd`')
+        && str_contains(
+            $repositorySource,
+            'ORDER BY ttb_row.`estab_book_lfd`,'
+        )
+        && str_contains($repositorySource, 'ttb_row.`tbb_lfd-nr` LIMIT 1)'),
+    'message detail lookup does not select the first exact incident-local TBB evidence row'
+);
+$assert(
+    str_contains(
         $mainSource,
         'new listen ("Stab_sichten", "STSI", $workflowIncidentId)'
     )

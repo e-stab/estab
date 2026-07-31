@@ -266,17 +266,18 @@ $entry = estab_logbook_validate_entry([
     'event' => 'Entscheidung der Einsatzleitung',
     'comment' => 'Begründung dokumentiert',
     'event_time' => '2026-07-30T12:34',
-    'event_type' => 'entscheidung',
+    'event_type' => 'W',
     'message_id' => '42',
     'attachment_id' => '7',
-    'reference' => 'Az. 123',
+    'reference' => '17',
 ]);
 $assert(
     $entry['valid'] === true
         && $entry['data']['event_time'] === '2026-07-30 12:34:00'
-        && $entry['data']['event_type'] === 'entscheidung'
+        && $entry['data']['event_type'] === 'W'
         && $entry['data']['message_id'] === 42
-        && $entry['data']['attachment_id'] === 7,
+        && $entry['data']['attachment_id'] === 7
+        && $entry['data']['reference'] === '17',
     'structured ETB entry did not validate'
 );
 $assert(
@@ -290,7 +291,7 @@ $assert(
 $assert(
     estab_logbook_validate_entry([
         'event' => 'Normaler Eintrag mit verstecktem Korrekturbezug',
-        'event_type' => 'ereignis',
+        'event_type' => 'ohne',
         'event_time' => '2026-07-30T12:34',
         'correction_of' => '1',
     ])['valid'] === false,
@@ -299,6 +300,9 @@ $assert(
 
 $migration = $read(
     $root . '/docker/db/migrations/80-dv-evidence-retention.sql'
+);
+$logbookMigration = $read(
+    $root . '/docker/db/migrations/110-etb-tbb-rules.sql'
 );
 $incident = $read($root . '/app/incident.php');
 $evidence = $read($root . '/app/message_evidence.php');
@@ -359,11 +363,18 @@ $assert(
         && str_contains($incident, 'function estab_incident_close(')
         && str_contains($incident, 'function estab_incident_set_legal_hold(')
         && str_contains($incident, '`status` IN (2, 8)')
-        && str_contains($incident, "DATE_ADD(NOW(6), INTERVAL 1 YEAR)")
+        && str_contains($incident, "DATE_ADD(NOW(6), INTERVAL 10 YEAR)")
         && str_contains($incident, 'estab_message_evidence_verify(')
         && str_contains($incident, 'estab_dv_incident_closure_blockers(')
         && str_contains($incident, "['offene_melderauftraege']"),
     'formal close omits preflight, live reservations, retention, or evidence verification'
+);
+$assert(
+    str_contains($logbookMigration, 'estab_book_lfd')
+        && str_contains($logbookMigration, 'Closed incident requires ten-year retention')
+        && str_contains($logbookMigration, 'TTB entries are append-only; write a correction')
+        && str_contains($logbookMigration, 'TTB entry requires at least one content area'),
+    'ETB/TBB migration omits local numbering, ten-year retention, or append-only TBB rules'
 );
 $assert(
     str_contains($etb, 'Fachliche Ereigniszeit')

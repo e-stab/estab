@@ -166,6 +166,7 @@ $databaseConfig = $read('4fcfg/dbcfg.inc.php');
 $operationalGuard = $read('app/operational_guard.php');
 $csrf = $read('app/csrf.php');
 $logbook = $read('app/logbook.php');
+$logbookLifecycle = $read('app/logbook_lifecycle.php');
 $auth = $read('app/auth.php');
 $migration = $read(
     'docker/db/migrations/94-dv-organisational-controls.sql'
@@ -325,8 +326,91 @@ $assert(
         $dv,
         "const ESTAB_DV_REQUIRED_HATS = ['S2', 'Si', 'S6', 'LdF', 'A/W'];"
     )
-        && str_contains($adminUi, 'S2, Si, S6, LdF und A/W'),
+        && str_contains($adminUi, 'S2, Si, S6, LdF und A/W')
+        && str_contains($adminUi, 'Unterstützter Betriebsmodus')
+        && str_contains(
+            $adminUi,
+            'Führungsstelle mit eingerichteter'
+        )
+        && str_contains($adminUi, 'Fernmeldebetriebsstelle (reiner ETB-Betrieb)')
+        && str_contains($adminUi, 'unterstützten Produktumfang'),
     'S6 is not a required, operator-visible duty assignment'
+);
+$assert(
+    str_contains($dv, "['GEPLANT', 'AKTIV']")
+        && str_contains($dv, "\$shiftStatus === 'AKTIV'")
+        && str_contains($dv, "\$assignment['funktion'] !== 'A/W'")
+        && str_contains(
+            $dv,
+            "\$assignment['funktion'] === 'ETB'"
+        )
+        && str_contains(
+            $dv,
+            "(string) \$row['funktion'] === 'ETB'"
+        )
+        && substr_count(
+            $dv,
+            'eine dokumentierte und bestätigte Schichtübergabe'
+        ) === 2
+        && str_contains(
+            $dv,
+            "'besetzt. Ein Austausch ist ausschließlich über '"
+        )
+        && str_contains(
+            $dv,
+            "'eine geordnete Schichtübergabe möglich.'"
+        )
+        && str_contains(
+            $dv,
+            'estab_logbook_lifecycle_shift_extension('
+        )
+        && str_contains($dv, "'active_shift_extension'")
+        && str_contains(
+            $logbookLifecycle,
+            'function estab_logbook_lifecycle_shift_extension('
+        )
+        && str_contains(
+            $logbookLifecycle,
+            "if (!in_array(\$function, ['LdF', 'A/W', 'TBB'], true))"
+        )
+        && str_contains(
+            $logbookLifecycle,
+            'estab_logbook_lifecycle_insert_etb('
+        )
+        && str_contains(
+            $logbookLifecycle,
+            'estab_logbook_lifecycle_insert_ttb('
+        )
+        && !str_contains(
+            $logbookLifecycle,
+            'ETB-Führung von der bisherigen S2-Besetzung'
+        ),
+    'active-shift extension is not append-only, personally accepted or '
+        . 'separated between ETB and telecommunications TBB evidence'
+);
+$assert(
+    str_contains($adminUi, 'Laufende Schichtbesetzung erweitern')
+        && str_contains($adminUi, 'Weitere A/W-Kräfte dürfen ergänzt')
+        && str_contains($adminUi, '$activeExtensionRoles')
+        && str_contains($operationsUi, 'Schichterweiterung annehmen')
+        && str_contains($operationsUi, "['GEPLANT', 'AKTIV']")
+        && str_contains(
+            $dvIntegration,
+            'accepted active A/W extension was not appended atomically'
+        )
+        && str_contains(
+            $dvIntegration,
+            'an occupied non-A/W function was replaced inside the active shift'
+        )
+        && str_contains(
+            $dvIntegration,
+            'active shift accepted an ETB assignment that would replace its writer'
+        )
+        && str_contains(
+            $dvIntegration,
+            'planned ETB assignment displaced S2 after its shift became active'
+        ),
+    'active-shift extension is not explained in both UIs or proven by tests'
 );
 $acceptPrepare = strpos($dv, '$prepared = estab_dv_prepare_assignment_schema(');
 $acceptTransaction = strpos(
@@ -500,9 +584,18 @@ $assert(
             $dv,
             'AND BINARY assignment.`benutzer_kuerzel` = BINARY ?'
         )
+        && str_contains($dv, '$outgoingAssignmentId')
+        && str_contains($dv, '$outgoingShape')
+        && str_contains($dv, '$outgoingStillAssigned')
+        && str_contains($dv, 'function estab_dv_database_now(')
+        && str_contains($dv, "DATE_FORMAT(`initiiert_am`,")
+        && str_contains($dv, "'handed_over_at' => \$initiatedAt")
+        && str_contains($dv, "'taken_over_at' => \$confirmedAt")
+        && str_contains($adminUi, '$handoverIdentity')
+        && str_contains($adminUi, "isset(\$handoverIdentity['duty_assignment_id'])")
         && str_contains($migration, "'INITIIERT','BESTAETIGT','STORNIERT'")
         && str_contains($migration, '`stornierungsgrund` TEXT NULL'),
-    'two-stage personally confirmed and cancellable handover is incomplete'
+    'two-sided personally confirmed and cancellable handover is incomplete'
 );
 $assert(
     str_contains(
