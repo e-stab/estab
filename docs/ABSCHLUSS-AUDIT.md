@@ -29,24 +29,24 @@ dokumentiertes, freigegebenes App-/Migrator-Digestpaar.
 | Reproduzierbare Herkunft | 13 Git-Ref-Snapshots und ein separater Dokument-r85-Baum sind selbsttragend gebunden | `migration/verify_provenance.py --self-test`: 14 Subjects sowie beide Manipulationsfälle grün |
 | Sicherer Containerstart | Gepinnte PHP-/MariaDB-Basen, 31 Schema-Prüfungen, checksumgebundene Migrationen, Health-Gates und getrennte Netze | vollständiger Podman-CI-Lauf und PHP-8.5-Suite |
 | Isoliertes Admin-Kennwort | Nur der netzlose One-shot `admin-auth-init` liest das Klartextsecret. Die App erhält ausschließlich eine bcrypt-Datei mit Kostenfaktor 12 schreibgeschützt. | 11 Secret-Isolationsassertionen sowie Container-Inspect und HTTP 401/200 |
-| NAS-/Registry-Betrieb | Pull-only Compose, digestgebundene Releaseidentität, bestehende und getrennte Speicherquellen, engine-weite Wartungssperre sowie fail-closed Backup/Restore | Registry-Vertrag 52 Assertions; Release-, Backup- und Restore-Operator-Tests; echter Named-Volume- und Bind-Mount-Lauf |
-| Wiederherstellbarkeit | Logischer MariaDB-Dump und beide Dateibereiche werden verifiziert und kontrolliert wiederhergestellt. Archivdaten werden über interaktive Standardeingabe in netzlose Hilfscontainer übertragen. | Format-2-Bind-Restore, anschließender vollständiger benannter Volume-Roundtrip, Marker-/SHA-256-, Login-, Export- und Schemanachweis |
+| NAS-/Registry-Betrieb | Pull-only Compose, digestgebundene Releaseidentität, private Konfigurations-/Secret-Snapshots, bestehende und getrennte Speicherquellen, engine-weite Wartungssperre sowie fail-closed Backup/Restore | Registry-Vertrag 56 Assertions; Release-, Backup- und Restore-Operator-Tests; echter Named-Volume- und Bind-Mount-Lauf |
+| Wiederherstellbarkeit | Logischer MariaDB-Dump und beide Dateibereiche werden im aktuellen Format 3 verifiziert und kontrolliert wiederhergestellt. Archivdaten werden über interaktive Standardeingabe in netzlose Hilfscontainer übertragen; Format 2 bleibt nur für den exakten Same-Host-Kompatibilitätsfall lesbar. | Format-3-Bind-Restore, anschließender vollständiger benannter Volume-Roundtrip, Marker-/SHA-256-, Login-, Export- und Schemanachweis |
 
 ## Abschließende automatische Läufe
 
 Ausgeführt wurde:
 
 ```console
-COMPOSE_PROJECT_NAME=estab_ci_release_20260731 \
+COMPOSE_PROJECT_NAME=estab_ci_final_20260731 \
 ESTAB_CONTAINER_CLI=podman \
-ESTAB_HTTP_PORT=18110 \
-ESTAB_REGISTRY_HTTP_PORT=18111 \
+ESTAB_HTTP_PORT=18280 \
+ESTAB_REGISTRY_HTTP_PORT=18281 \
 ESTAB_BROWSER_TEST=required \
-ESTAB_CI_LOG_DIR=/private/tmp/estab-ci-release-evidence \
 bash tests/integration/ci.sh
 ```
 
-Ergebnis: `CI integration: OK`.
+Der Lauf endete nach dem Pflicht-Browser-Gate und dem vollständigen
+destruktiven Backup-/Restore-Roundtrip mit `CI integration: OK`.
 
 Der Lauf umfasste unter anderem:
 
@@ -54,17 +54,25 @@ Der Lauf umfasste unter anderem:
 - 31 Schema-Prüfungen,
 - Pull-only-Start mit benannten Volumes,
 - Pull-only-Start mit drei echten Bind-Mounts,
-- Format-2-Backup, kontrollierte Verfälschung und produktiven Restore,
+- Format-3-Backup, kontrollierte Verfälschung und produktiven Restore,
 - echten Chrome-Lauf mit zwölf Anmelde-/Navigationsschritten,
 - HTTP-Fachläufe für Nachricht, Kategorie, ETB/TBB und Administration,
 - Rollen-, Parallelitäts-, Anhang-, Einsatz-, PDF- und Exportnachweise,
 - vollständige Löschung und Neuerstellung der CI-Volumes mit anschließendem
   Login-, Datei-, PDF-, Export- und Datenbanknachweis.
 
-Die abschließende statische PHP-8.5-Suite lintete 233 aktive PHP-Dateien.
-Alle Sicherheitsverträge, 52 Registry-Assertions, die Operator-Shelltests,
-der Provenienznachweis und der PDF-Smoke-Test mit 14.055 Byte waren grün.
-Shell-Syntax und `git diff --check` waren ebenfalls fehlerfrei.
+Dieser lokale Podman-Lauf wurde nicht auf einem nachgewiesenen
+SELinux-Enforcing-System ausgeführt. Er ist deshalb kein Nachweis für das
+tatsächliche Relabeling unter SELinux; die dafür im Testhandbuch beschriebene
+Abnahme bleibt offen.
+
+Die abschließende statische PHP-8.5-Suite lintete 234 aktive PHP-Dateien.
+Alle Sicherheitsverträge, 56 Registry-Assertions, 72 Assertions zur
+WAV-/Signalintegrität, die Operator-Shelltests, der Provenienznachweis und der
+PDF-Smoke-Test mit 14.055 Byte waren grün. Zusätzlich bestanden beide
+GitHub-Actions-Workflows die vollständige Prüfung mit dem festgelegten
+Actionlint-1.7.12-Index-Digest. Shell-Syntax und `git diff --check` waren
+ebenfalls fehlerfrei.
 
 ## Git- und Remote-Stand
 
@@ -103,7 +111,9 @@ Vor einer öffentlichen oder produktiven Freigabe bleiben zwingend:
 4. Auf dem tatsächlichen Zielgerät beziehungsweise Synology-NAS installieren,
    Backup und Restore proben sowie Port-, TLS-, Benutzer- und
    Dateiberechtigungen abnehmen.
-5. Physische Hörbarkeit der Warteschlangensignale prüfen.
+5. Physische Hörbarkeit der Warteschlangensignale prüfen; RIFF/WAVE,
+   PCM-16, SHA-256, Dauer, Signalspitze und Mindest-RMS sind bereits
+   automatisiert belegt.
 6. Repräsentative PDFs in den tatsächlich eingesetzten PDF-Viewern prüfen.
 7. Die historische Funktions-, Rollen-, Formular- und Empfängermatrix mit
    fachkundigen Anwendern vollständig abnehmen.

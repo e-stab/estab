@@ -15,9 +15,11 @@ direkt ins Internet gestellt werden.
 
 ## Schnellstart für eine neue Installation
 
-Vorausgesetzt werden Docker mit Compose v2 oder Podman mit einem
-Compose-Provider sowie `openssl` und `curl`. Der Schnellstart setzt
-`engine=podman`; für Docker wird dort nur `engine=docker` gewählt.
+Vorausgesetzt werden Docker oder Podman mit einem Compose-Provider sowie
+`openssl` und `curl`. Der Schnellstart setzt `engine=podman`; für Docker wird
+dort nur `engine=docker` gewählt. Das Pull-only-Paket prüft die tatsächlich
+benötigten Compose-Fähigkeiten, statt sich auf eine bloße Versionsangabe zu
+verlassen.
 
 ```console
 cp .env.example .env
@@ -36,6 +38,25 @@ Stack starten:
 engine=podman
 compose() { "$engine" compose "$@"; }
 
+estab_http_port=$(
+    LC_ALL=C awk '
+        index($0, "ESTAB_HTTP_PORT=") == 1 {
+            matches++
+            value = substr($0, length("ESTAB_HTTP_PORT=") + 1)
+        }
+        END {
+            if (matches != 1 || value !~ /^[0-9]+$/ ||
+                value + 0 < 1 || value + 0 > 65535) {
+                exit 1
+            }
+            print value
+        }
+    ' .env
+) || {
+    printf 'ESTAB_HTTP_PORT fehlt oder ist in .env ungültig\n' >&2
+    exit 1
+}
+
 compose config >/dev/null
 compose build --pull migrate app
 compose up -d
@@ -52,7 +73,7 @@ wait_for_estab()
     estab_deadline=$(( $(date +%s) + 300 ))
     while :; do
         if estab_health=$(curl --fail --silent --max-time 5 \
-            http://127.0.0.1:8080/health.php 2>/dev/null) &&
+            "http://127.0.0.1:$estab_http_port/health.php" 2>/dev/null) &&
             printf '%s\n' "$estab_health" |
                 grep -Fq '"status":"ready"'; then
             printf '%s\n' "$estab_health"
@@ -115,11 +136,19 @@ eingehängt noch als Umgebungswert vorhanden. `app` darf erst starten, wenn
 beide Initialisierungen erfolgreich mit Exitcode 0 beendet wurden. Vor dem
 ersten Start einer neuen Version auf einem vorhandenen Datenvolume ist
 deshalb immer ein Vollbackup Pflicht.
+Die Compose-Mounts enthalten außerdem die standardisierten `z`/`Z`-Optionen,
+damit Secrets und dedizierte Datenpfade auch mit rootlosem Podman unter
+SELinux `Enforcing` erreichbar bleiben, ohne die Containerkennzeichnung
+abzuschalten.
 
 Die Schleife wartet höchstens fünf Minuten, bricht bei einem klar
 fehlgeschlagenen Datenbank-, Authentisierungs-, Migrator- oder App-Service
 vorzeitig mit Status und den letzten Logs ab und benötigt kein
-providerabhängiges Compose-`--wait`.
+providerabhängiges Compose-`--wait`. Sie liest `ESTAB_HTTP_PORT` exakt aus
+`.env`, statt stillschweigend Port 8080 anzunehmen. Die lokale Abfrage über
+`127.0.0.1` passt zum Standard-Bind und zu `ESTAB_HTTP_BIND=0.0.0.0`; bei
+einer Bindung ausschließlich an eine andere konkrete Hostadresse muss diese
+Adresse auch in der Health-URL verwendet werden.
 Für Docker genügt `engine=docker`. Eine erfolgreiche Bereitschaftsprüfung
 liefert HTTP 200 und `"status":"ready"`. Zusätzlich sollte nach
 Erstinstallation, Upgrade und Wiederherstellung das vollständige Schema
@@ -207,31 +236,38 @@ dass keine SQL-Datei aus einem Git-Checkout auf das Zielgerät gemountet wird.
 
 Im Repository ist noch kein freigegebener Image-Stand mit Manifest-Digests
 dokumentiert. Der Publish-Workflow ist manuell, akzeptiert ausschließlich
-einen gleichnamigen vorhandenen Git-/OCI-Tag und pusht jeden Dockerfile-Build
-genau einmal unter einem ausdrücklich nicht finalen Candidate-Tag. Native
-`amd64`- und `arm64`-Jobs ziehen danach die exakten Candidate-Index-Digests und
+einen vorhandenen und gegen Update/Löschen geschützten Git-Tag und pusht jeden
+Dockerfile-Build genau einmal digest-only ohne OCI-Tag. Native
+`amd64`- und `arm64`-Jobs ziehen danach die exakten Index-Digests und
 führen damit Fresh-/Restore-CI, Attestations-, SBOM-/Provenance- und
 High-/Critical-CVE-Gates aus; der echte Browsertest ist auf `amd64`
 verpflichtend. Erst wenn beide Architekturen grün sind, erzeugt ein separater
-Job ein verstecktes Draft-Release, lädt beide Paketdateien hoch und wieder
-herunter, prüft ihre Checksummen, promotet genau die getesteten Digests ohne
-Rebuild und macht das Draft-Release ganz zuletzt sichtbar. Der Ablauf bleibt
-zusätzlich durch Rechtebestätigung, zwei Repositoryvariablen und ein zwingend
-mit Required Reviewer geschütztes GitHub-Environment gesperrt. Selbst diese
-Freigaben genügen nicht: Der Workflow verlangt zusätzlich nicht leere,
-versionierte Dateien `LICENSE` und `THIRD_PARTY_NOTICES.md`. Solange die
-Rechteprüfung diese konkreten Auslieferungsartefakte nicht hervorgebracht hat,
-ist ein Publish technisch unmöglich.
+  Job ein verstecktes Draft-Release und lädt Installations- und dauerhaftes
+  Evidence-Archiv samt ihrer beiden äußeren SHA-256-Dateien hoch und wieder
+  herunter. Erst nach vollständiger Prüfung der vier Assets und des
+  Tag-Rulesets macht er das Draft-Release ganz zuletzt sichtbar. Danach müssen
+  GitHub `isImmutable=true`, exakt diese vier Assets
+  und eine gültige Release-Attestation ausweisen. Der Ablauf bleibt zusätzlich
+  durch Rechtebestätigung, drei Repositoryvariablen, ein nur in den
+  Policy-Schritten verwendetes administratives Ruleset-Prüftoken und ein
+  zwingend mit Required Reviewer geschütztes GitHub-Environment gesperrt.
+  Selbst diese Freigaben
+  genügen nicht: Der Workflow verlangt zusätzlich nicht leere, versionierte
+  Dateien `LICENSE` und `THIRD_PARTY_NOTICES.md`. Solange die Rechteprüfung
+  diese konkreten Auslieferungsartefakte nicht hervorgebracht hat, ist ein
+  Publish technisch unmöglich.
 
-Candidate-Tags, ein verstecktes Draft-Release oder nur teilweise vorhandene
-Finaltags sind kein Release und dürfen nicht installiert werden. Verwendbar
-sind nur die beiden Digests aus einem sichtbaren, vollständig geprüften
-GitHub-Releasepaket mit `compose.yaml`, gebundener `.env.example`, Runbooks und
-atomarem Backup-Helfer sowie rein lesendem Backup-Verifier.
+Bloße GHCR-Digestobjekte oder ein verstecktes Draft-Release sind kein Release
+und dürfen nicht installiert werden. Verwendbar sind nur die beiden Digests
+aus einem sichtbaren, als unveränderlich und
+  attestiert nachgewiesenen GitHub-Release mit exakt vier geprüften Assets.
+  Das Installationspaket enthält `compose.yaml`, gebundene `.env.example`,
+  Runbooks, atomaren Backup-Helfer und rein lesenden Backup-Verifier; das
+  separate Evidence-Archiv bewahrt die nativen Tests, SBOM, Provenance,
+  Schwachstellenscans und Attestationsnachweise dauerhaft.
 Der [Recovery-Ablauf](deploy/registry/README.md#unvollständigen-publish-lauf-behandeln)
-berücksichtigt, dass zwei GHCR-Repositories und GitHub Releases nicht atomar
-gemeinsam geändert werden können. Einen `latest`-Pfad gibt es absichtlich
-nicht.
+berücksichtigt, dass Digest-Pushes und GitHub Releases nicht atomar gemeinsam
+entstehen. OCI-Tags – auch `latest` – gibt es absichtlich nicht.
 
 ## Zugänge
 
@@ -525,17 +561,21 @@ deduplizierte Read-/Done-Zustände ab.
 
 ## Persistente Daten
 
-Compose verwaltet drei benannte Volumes:
+Compose verwaltet drei fachliche Datenvolumes und zusätzlich das nur für den
+abgeleiteten Admin-Hash verwendete Auth-Volume:
 
 | Volume | Containerpfad | Inhalt |
 | --- | --- | --- |
 | `estab_db` | `/var/lib/mysql` | MariaDB-Datenbestand |
 | `estab_data` | `/var/www/html/4fdata` | Anhänge und erzeugte Vordrucke |
 | `estab_export` | `/var/lib/estab/export` | im Administrationsbereich manuell verwaltete Tabellenexporte |
+| `estab_auth` | `/var/lib/estab/auth` im Initialisierer, `/run/estab-auth` in der App | aus dem Admin-Secret abgeleitete bcrypt-Datei |
 
-`podman compose down` behält diese Volumes. `podman compose down --volumes`
-löscht sie und darf nur nach einem geprüften Backup oder für einen ausdrücklich
-wegwerfbaren Test-Stack verwendet werden.
+`podman compose down` behält alle vier Volumes. `podman compose down --volumes`
+löscht sie; insbesondere die drei fachlichen Datenvolumes dürfen nur nach
+einem geprüften Backup oder für einen ausdrücklich wegwerfbaren Test-Stack
+entfernt werden. `estab_auth` ist aus dem geschützten Admin-Secret
+reproduzierbar und gehört nicht zum fachlichen Vollbackup.
 
 Generierte einzelne Nachrichtenvordrucke liegen kollisionsfrei als
 `<datenbank> Einsatz-<einsatz_id> <nummer> <E|A>.pdf` in `estab_data`.

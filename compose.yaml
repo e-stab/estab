@@ -13,11 +13,10 @@ services:
       MARIADB_PASSWORD_FILE: /run/secrets/estab_db_password
       MARIADB_ROOT_PASSWORD_FILE: /run/secrets/estab_db_root_password
       TZ: ${TZ:-Europe/Berlin}
-    secrets:
-      - estab_db_password
-      - estab_db_root_password
     volumes:
-      - estab_db:/var/lib/mysql
+      - estab_db:/var/lib/mysql:Z
+      - ${ESTAB_DB_PASSWORD_SECRET_FILE:-./secrets/db_password.txt}:/run/secrets/estab_db_password:ro,z
+      - ${ESTAB_DB_ROOT_PASSWORD_SECRET_FILE:-./secrets/db_root_password.txt}:/run/secrets/estab_db_root_password:ro,z
     networks:
       - database
     healthcheck:
@@ -43,8 +42,8 @@ services:
       ESTAB_DB_PORT: "3306"
       ESTAB_DB_NAME: ${ESTAB_DB_NAME:-estab}
       ESTAB_DB_ROOT_PASSWORD_FILE: /run/secrets/estab_db_root_password
-    secrets:
-      - estab_db_root_password
+    volumes:
+      - ${ESTAB_DB_ROOT_PASSWORD_SECRET_FILE:-./secrets/db_root_password.txt}:/run/secrets/estab_db_root_password:ro,z
     networks:
       - database
     security_opt:
@@ -62,10 +61,9 @@ services:
     environment:
       ESTAB_ADMIN_USER: ${ESTAB_ADMIN_USER:-estab-admin}
       ESTAB_ADMIN_PASSWORD_FILE: /run/secrets/estab_admin_password
-    secrets:
-      - estab_admin_password
     volumes:
-      - estab_auth:/var/lib/estab/auth
+      - estab_auth:/var/lib/estab/auth:z
+      - ${ESTAB_ADMIN_PASSWORD_SECRET_FILE:-./secrets/admin_password.txt}:/run/secrets/estab_admin_password:ro,Z
     network_mode: none
     security_opt:
       - no-new-privileges:true
@@ -102,12 +100,11 @@ services:
       ESTAB_EXPORT_DIR: /var/lib/estab/export
       ESTAB_ADMIN_USER: ${ESTAB_ADMIN_USER:-estab-admin}
       TZ: ${TZ:-Europe/Berlin}
-    secrets:
-      - estab_db_password
     volumes:
-      - estab_data:/var/www/html/4fdata
-      - estab_export:/var/lib/estab/export
-      - estab_auth:/run/estab-auth:ro
+      - estab_data:/var/www/html/4fdata:z
+      - estab_export:/var/lib/estab/export:z
+      - estab_auth:/run/estab-auth:ro,z
+      - ${ESTAB_DB_PASSWORD_SECRET_FILE:-./secrets/db_password.txt}:/run/secrets/estab_db_password:ro,z
     ports:
       - "${ESTAB_HTTP_BIND:-127.0.0.1}:${ESTAB_HTTP_PORT:-8080}:8080"
     networks:
@@ -121,14 +118,6 @@ services:
       retries: 5
     security_opt:
       - no-new-privileges:true
-
-secrets:
-  estab_db_password:
-    file: ${ESTAB_DB_PASSWORD_SECRET_FILE:-./secrets/db_password.txt}
-  estab_db_root_password:
-    file: ${ESTAB_DB_ROOT_PASSWORD_SECRET_FILE:-./secrets/db_root_password.txt}
-  estab_admin_password:
-    file: ${ESTAB_ADMIN_PASSWORD_SECRET_FILE:-./secrets/admin_password.txt}
 
 volumes:
   estab_db:

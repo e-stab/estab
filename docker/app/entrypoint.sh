@@ -59,13 +59,100 @@ esac
 php -d display_errors=stderr -r \
     'require "/var/www/html/app/bootstrap.php"; estab_validate_runtime_configuration();'
 
-data_root="/var/www/html/4fdata/$ESTAB_DB_NAME"
-install -d -o www-data -g www-data -m 0770 \
-    "$data_root" \
-    "$data_root/anhang" \
-    "$data_root/vordruck" \
-    "${ESTAB_EXPORT_DIR:-/var/lib/estab/export}" \
-    /var/lib/php/sessions
+prepare_writable_directory() {
+    writable_directory=$1
+    if [ -L "$writable_directory" ] ||
+        { [ -e "$writable_directory" ] && [ ! -d "$writable_directory" ]; }; then
+        echo "Writable application path must be a real directory: $writable_directory" >&2
+        exit 1
+    fi
+    if ! install -d -o www-data -g www-data -m 0770 "$writable_directory"; then
+        echo "Cannot assign writable application path to www-data: $writable_directory" >&2
+        exit 1
+    fi
+    if ! setfacl -b -k -- "$writable_directory"; then
+        echo "Cannot remove extended ACLs from writable application path: $writable_directory" >&2
+        exit 1
+    fi
+    if ! chown www-data:www-data "$writable_directory" ||
+        ! chmod 0770 "$writable_directory"; then
+        echo "Cannot normalize writable application path metadata: $writable_directory" >&2
+        exit 1
+    fi
+    if ! getfacl -cp -- "$writable_directory" |
+        LC_ALL=C awk '
+          /^$/ {
+            next
+          }
+          $0 == "user::rwx" {
+            owner++
+            next
+          }
+          $0 == "group::rwx" {
+            group++
+            next
+          }
+          $0 == "other::---" {
+            other++
+            next
+          }
+          {
+            extended = 1
+          }
+          END {
+            if (owner != 1 || group != 1 || other != 1 || extended) {
+              exit 1
+            }
+          }
+        '; then
+        echo "Writable application path retains an extended or access-granting ACL: $writable_directory" >&2
+        exit 1
+    fi
+    if [ -L "$writable_directory" ] ||
+        [ -z "$(find "$writable_directory" -prune -type d \
+            -perm 0770 -print)" ]; then
+        echo "Writable application path does not have mode 0770: $writable_directory" >&2
+        exit 1
+    fi
+    if [ -z "$(find "$writable_directory" -prune -type d \
+        -user www-data -group www-data -print)" ]; then
+        printf 'Writable application path uses provider-mapped ownership; verifying effective www-data access: %s\n' \
+            "$writable_directory" >&2
+    fi
+    if ! setpriv --reuid=www-data --regid=www-data --clear-groups \
+        sh -ceu '
+            probe_root=$1
+            write_probe=
+            cleanup_write_probe()
+            {
+                [ -z "$write_probe" ] || rm -f -- "$write_probe"
+            }
+            trap cleanup_write_probe EXIT
+            trap "exit 129" HUP
+            trap "exit 130" INT
+            trap "exit 143" TERM
+            write_probe=$(mktemp \
+                "$probe_root/.estab-entrypoint-write-probe.XXXXXX")
+            printf "www-data-write-probe\n" >"$write_probe"
+            test "$(cat "$write_probe")" = "www-data-write-probe"
+            rm -f -- "$write_probe"
+            write_probe=
+        ' estab-write-probe "$writable_directory"; then
+        echo "Writable application path is not writable by www-data: $writable_directory" >&2
+        exit 1
+    fi
+}
+
+app_data_root=/var/www/html/4fdata
+export_root=${ESTAB_EXPORT_DIR:-/var/lib/estab/export}
+prepare_writable_directory "$app_data_root"
+prepare_writable_directory "$export_root"
+
+data_root="$app_data_root/$ESTAB_DB_NAME"
+prepare_writable_directory "$data_root"
+prepare_writable_directory "$data_root/anhang"
+prepare_writable_directory "$data_root/vordruck"
+prepare_writable_directory /var/lib/php/sessions
 
 admin_auth_file=/run/estab-auth/admin.htpasswd
 if [ -L "$admin_auth_file" ] ||

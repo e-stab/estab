@@ -35,22 +35,25 @@ Die technischen GHCR- und Multi-Arch-Dateien sind vorbereitet; im Repository
 ist noch kein freigegebener Image-Stand samt Manifest-Digests dokumentiert.
 Eine öffentliche Binärverteilung bleibt bis zur dokumentierten Rechteklärung
 des historischen Gesamtbestands gesperrt. Der manuelle Workflow verlangt zwei
-Repository-Freigabevariablen, eine ausdrückliche Bestätigung, einen bestehenden
-gleichnamigen Git-Tag und das Environment `container-publish`. Dieses
+Freigabevariablen, eine ausdrückliche Bestätigung, einen bestehenden
+tagweit gegen Update/Löschen geschützten Git-Tag und das Environment
+`container-publish`. Dieses
 Environment muss vor Aktivierung einen Required Reviewer besitzen. Zusätzlich
 verweigert der Preflight jede Veröffentlichung, solange die aus der
 Rechteprüfung hervorgehenden, versionierten Dateien `LICENSE` und
 `THIRD_PARTY_NOTICES.md` fehlen oder leer sind; Repositoryvariablen und
 Checkbox allein können diese konkrete Grenze nicht übergehen.
 
-Der Workflow veröffentlicht zunächst nur laufbezogene Candidate-Tags. Die
-exakten Multi-Arch-Digests werden anschließend nativ auf `amd64` und `arm64`
-ausgeführt und geprüft; erst danach dürfen dieselben Digests ohne Rebuild die
-Finaltags erhalten. Für Installationen gilt ausschließlich ein sichtbares
-GitHub-Release mit beiden prüfsummengebundenen Paketdateien als freigegeben.
-Candidate-Tags, ein verstecktes Draft-Release oder nur ein einzelner Finaltag
-sind ausdrücklich kein installierbarer Stand. Die kontrollierte Behandlung
-solcher Zwischenstände beschreibt das
+Der Workflow veröffentlicht die Multi-Arch-Indizes ausschließlich digest-only
+ohne OCI-Tags. Die exakten Digests werden anschließend nativ auf `amd64` und
+`arm64` ausgeführt und geprüft. Für Installationen gilt ausschließlich ein sichtbares
+GitHub-Release als freigegeben, das GitHub als unveränderlich ausweist, dessen
+Release-Attestation erfolgreich geprüft wurde und das exakt vier
+prüfsummengebundene Assets enthält: Installations- und dauerhaftes
+Evidence-Archiv samt je einer äußeren SHA-256-Datei. Bloße Digestobjekte, ein
+verstecktes Draft-Release oder ein unvollständiger Assetsatz sind ausdrücklich
+kein installierbarer Stand. Die kontrollierte
+Behandlung solcher Zwischenstände beschreibt das
 [Registry-Runbook](../deploy/registry/README.md#unvollständigen-publish-lauf-behandeln).
 
 ## Erstinstallation
@@ -126,6 +129,12 @@ Proxy-Allowlist. Ports außerhalb `1` bis `65535`, Uploadgrenzen außerhalb
 syntaktisch ungültige Werte beenden den Container mit einem klaren
 Konfigurationsfehler. `/health.php` und der administrative Systemstatus
 verwenden dieselbe Prüfung.
+Zusätzlich normalisiert er ausschließlich die sechs dokumentierten
+schreibbaren App-/Export-/Sitzungsverzeichnisse auf `www-data:www-data`,
+Modus `0770` und eine leere erweiterte beziehungsweise Default-POSIX-ACL.
+Damit kann ein vorhandener Named-User-ACL-Eintrag nicht durch das Setzen der
+Gruppenmaske unbemerkt aktiviert werden; eine nicht prüfbare ACL beendet den
+Start.
 
 Die Datenbank-Initialisierung wertet Datenbankname, Benutzer und
 Datenbank-Secrets nur aus, wenn `/var/lib/mysql` leer ist. Nach dem ersten
@@ -514,9 +523,12 @@ Messung aktualisiert ihn, aber nur eine Erhöhung fordert genau einmal die
 rollenabhängige Wiedergabe an. Ein unveränderter oder kleinerer Wert löst
 nichts aus. Ist die Warteschlange vorübergehend nicht messbar, bleibt der
 letzte erfolgreiche Basiswert erhalten. Diese Auslöse- und Browsermechanik ist
-automatisiert geprüft. Für die Betriebsabnahme muss der Ton nach ausdrücklicher
-Aktivierung auf jedem vorgesehenen Browser und Endgerät zusätzlich tatsächlich
-angehört werden; die Automation kann physische Hörbarkeit nicht beweisen.
+automatisiert geprüft. Zusätzlich bindet die Quellprüfung jeden Ton per
+SHA-256 und parst RIFF/WAVE, PCM-16, Kanäle, Abtastrate, Framezahl und Dauer;
+Signalspitze und Mindest-RMS schließen eine stumme Datei aus. Für die
+Betriebsabnahme muss der Ton nach ausdrücklicher Aktivierung auf jedem
+vorgesehenen Browser und Endgerät trotzdem tatsächlich angehört werden; die
+Automation kann physische Hörbarkeit nicht beweisen.
 
 Wurde in einem dafür markierten Formular ein Wert geändert oder eine Datei
 ausgewählt, fragt die Oberfläche vor einem globalen Bereichswechsel oder

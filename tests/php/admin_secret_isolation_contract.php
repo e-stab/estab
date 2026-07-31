@@ -55,8 +55,11 @@ foreach ([
         str_contains($initService, 'entrypoint:')
         && str_contains($initService, 'estab-init-admin-auth')
         && str_contains($initService, 'ESTAB_ADMIN_PASSWORD_FILE: /run/secrets/estab_admin_password')
-        && str_contains($initService, '- estab_admin_password')
-        && str_contains($initService, '- estab_auth:/var/lib/estab/auth')
+        && str_contains(
+            $initService,
+            '${ESTAB_ADMIN_PASSWORD_SECRET_FILE:-./secrets/admin_password.txt}:/run/secrets/estab_admin_password:ro,Z'
+        )
+        && str_contains($initService, '- estab_auth:/var/lib/estab/auth:z')
         && str_contains($initService, 'network_mode: none')
         && str_contains($initService, 'restart: "no"'),
         "{$label} Compose does not isolate cleartext initialization in a networkless one-shot service"
@@ -64,7 +67,7 @@ foreach ([
     $assert(
         str_contains($appService, 'admin-auth-init:')
         && str_contains($appService, 'condition: service_completed_successfully')
-        && str_contains($appService, '- estab_auth:/run/estab-auth:ro')
+        && str_contains($appService, '- estab_auth:/run/estab-auth:ro,z')
         && !str_contains($appService, 'estab_admin_password')
         && !str_contains($appService, 'ESTAB_ADMIN_PASSWORD')
         && !str_contains($appService, '/run/secrets/estab_admin_password'),

@@ -8,7 +8,7 @@ steht in der [Funktionsmatrix](FUNKTIONSNACHWEIS.md).
 
 | Ebene | Nachweis |
 | --- | --- |
-| Quellprüfung | netzloser Herkunftsnachweis für 13 Git-Ref-Snapshots (Trunk, vier Branches, sechs SVN-Tags, zwei SourceForge-Release-Tags) und einen separaten Dokument-r85-Baum, PHP-8.5-Lint, Kompatibilitäts-, Sicherheits-, Einsatz-, Benutzerverwaltungs-, Upload-, Export- und PDF-Regressionen |
+| Quellprüfung | netzloser Herkunftsnachweis für 13 Git-Ref-Snapshots (Trunk, vier Branches, sechs SVN-Tags, zwei SourceForge-Release-Tags) und einen separaten Dokument-r85-Baum, GitHub-Workflow-Prüfung mit festgelegtem Actionlint 1.7.12, PHP-8.5-Lint, Kompatibilitäts-, Sicherheits-, Einsatz-, Benutzerverwaltungs-, Upload-, Export- und PDF-Regressionen |
 | Image-Build | benötigte PHP-Erweiterungen und Apache-Konfiguration |
 | Datenbank | echtes MariaDB-Schema, Einsatz-Singleton/Trigger, Kontosperre, Indizes, aktive und persistente Standardmatrix, Engines, Collations und Zero-Date-Freiheit |
 | HTTP | Header, direkte Endpunktfläche, 303-Weiterleitung anonymer geschützter Aufrufe zum allowlist-gebundenen Bestandslogin samt sichtbarem Rückweg, 403-/400-/405-Grenzen, Registrierung, sichtbare Sitzungsidentität, CSRF-Abmeldung, erneute Anmeldung, verbindlicher Eingangs- und Ausgangslauf samt Rückgabe/Korrektur und einsatzgebundener Feldvorschläge, Dienstbesetzung/Hutwechsel, S6-Plan, Melderlauf, Kategorien- und ETB-/TBB-Rollengrenzen, reale Vordruckerzeugung/-auslieferung sowie Admin-Export |
@@ -17,6 +17,25 @@ steht in der [Funktionsmatrix](FUNKTIONSNACHWEIS.md).
 | Betrieb | kontinuierliche Readiness, Logs, Restarts, Kapazität und Backup-Alter |
 
 ## Statische Tests
+
+Die Workflow-Prüfung läuft im CI vor den übrigen Quelltests mit dem
+festgelegten Multi-Arch-Index-Digest des offiziellen Actionlint-Images. Sie
+prüft beide Dateien unter `.github/workflows/` einschließlich
+Ausdruckskontexten, Matrixwerten, Jobabhängigkeiten, Aktionsparametern und den
+eingebetteten Shell-/Python-Blöcken. Lokal ist derselbe read-only Lauf:
+
+```console
+podman run --rm \
+  --volume "$PWD:/repo:ro" \
+  --workdir /repo \
+  docker.io/rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+```
+
+Für Docker wird nur `podman` durch `docker` ersetzt. Der
+`registry_deployment_contract.php` bindet Name, Digest, schreibgeschützten
+Mount und Arbeitsverzeichnis zusätzlich statisch, damit die Prüfung nicht
+unbemerkt aus dem CI entfernt oder auf einen veränderlichen Tag umgestellt
+wird.
 
 Mit lokalem PHP 8.5:
 
@@ -29,11 +48,22 @@ CLI-Image:
 
 ```console
 podman run --rm \
+  --user 65534:65534 \
   --volume "$PWD:/workspace:ro" \
   --workdir /workspace \
   php:8.5.8-cli-trixie@sha256:58b996c35ce0511cdbaa1fc0476a194fd0221097d721ff7df5af0b6f1a3d0202 \
   tests/static/run.sh
 ```
+
+CI führt diesen Quelltest ebenfalls mit der festen unprivilegierten
+UID/GID `65534:65534` und schreibgeschütztem Workspace aus. Das ist Teil des
+Deployment-Nachweises: Die Registry-Tests müssen ihren privaten
+Non-root-Laufzeitzustand tatsächlich unter einem isolierten
+`XDG_STATE_HOME` anlegen, schützen, wiederverwenden und bereinigen können,
+ohne Rootrechte oder Schreibzugriff auf den Checkout. Der für einen
+administrativen Synology-/Docker-Aufruf vorgesehene Rootpfad
+`/var/lib/estab-deploy` bleibt zusätzlich im statischen Vertrag gebunden; die
+Tests schreiben dafür nicht in das `/var/lib` des Testcontainers.
 
 Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
 `tests/php/` aus. Dazu gehören unter anderem:
@@ -74,6 +104,10 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   Abmeldeformulare, POST-/CSRF-Vertrag, lokale Session-Zerstörung bei
   DB-Fehlern, unveränderte Nicht-HTML-Antworten sowie SID-gebundene
   Statusänderung,
+- vollständige RIFF/WAVE- und PCM-16-Prüfung aller drei
+  Warteschlangensignale einschließlich festem SHA-256, Kanalzahl, Abtastrate,
+  Framezahl, Dauer, Signalspitze und Mindest-RMS; ein beschädigter,
+  ausgetauschter oder stummer Ton beendet die Quellprüfung,
 - gemeinsames responsives Werkzeuggestell für die erreichbaren
   Administrations-, Kategorien-, ETB-/TBB-, Nachweis- und
   Meldungsübersichtsseiten einschließlich beschrifteter Felder,
@@ -169,12 +203,41 @@ ESTAB_BROWSER_TEST=required \
 tests/integration/ci.sh
 ```
 
+Der am 31. Juli 2026 tatsächlich vollständig beendete Abschlusslauf verwendete
+das isolierte Compose-Projekt `estab_ci_final_20260731`, Port `18280` für die
+App und Port `18281` für das Pull-only-Registry-Projekt:
+
+```console
+COMPOSE_PROJECT_NAME=estab_ci_final_20260731 \
+ESTAB_CONTAINER_CLI=podman \
+ESTAB_HTTP_PORT=18280 \
+ESTAB_REGISTRY_HTTP_PORT=18281 \
+ESTAB_BROWSER_TEST=required \
+bash tests/integration/ci.sh
+```
+
+Er führte damit das Pflicht-Browser-Gate aus und endete erst nach dem
+vollständigen destruktiven Backup-/Restore-Roundtrip mit
+`CI integration: OK`. Dieser lokale Podman-Lauf fand nicht auf einem
+nachgewiesenen SELinux-Enforcing-System statt und gilt daher ausdrücklich nicht
+als SELinux-Relabel-Nachweis.
+
 Bei Podman liegen die kurzlebigen Verzeichnisse unterhalb des ausgecheckten
 Repositorys, damit Podman Desktop den Hostpfad sicher in seine VM einhängen
 kann. `.gitignore` und `.dockerignore` schließen sie aus; der Exit-Trap entfernt
 sie auch nach einem Fehler. Docker verwendet standardmäßig `RUNNER_TEMP` oder
 `/tmp`. Ein anderer bereits vorhandener, schreibbarer Pfad kann für beide
 Engines explizit mit `ESTAB_CI_TEMP_PARENT` gesetzt werden.
+
+Die statischen Verträge und `compose config` prüfen zusätzlich, dass Secret-,
+Daten-, Export- und Auth-Mounts ihre erforderlichen `z`/`Z`-Optionen behalten
+und dass Backup/Restore nur `--volumes-from <exakte-ID>:z` verwenden. Ein
+Linux-Lauf ohne aktives SELinux beweist jedoch kein tatsächliches Relabel.
+Vor der Freigabe für Fedora/RHEL muss daher einmal auf einem dedizierten
+Rootless-Podman-System mit `getenforce` = `Enforcing` das vollständige Gate
+einschließlich Backup und Restore ausgeführt werden. Ein Ergebnis auf
+`Permissive` oder `Disabled` ist nur der allgemeine Podman-Nachweis und darf
+nicht als SELinux-Nachweis dokumentiert werden.
 
 Der normale lokale und Standard-CI-Lauf baut die festgelegten Images frisch
 und startet sie zusätzlich in einem zweiten, pull-only
@@ -283,14 +346,13 @@ Evidenzverzeichnis unabhängig vom Ergebnis für 14 Tage als
 nachvollziehbar wie ein fehlgeschlagener; Secrets dürfen in diesem Verzeichnis
 nie abgelegt werden.
 
-## Publish-Gate für exakt gebaute Candidate-Images
+## Publish-Gate für exakt gebaute Digest-Images
 
 Der manuelle Publish-Workflow baut App und Migrator nicht erneut zwischen Test
-und Veröffentlichung. Nach den Rechte-, Tag- und Environment-Gates baut und
-pusht er jeden Dockerfile genau einmal als Multi-Arch-Index unter einem
-laufbezogenen `candidate-*`-Tag. Die zurückgegebenen beiden Index-Digests und
-der tatsächliche Candidate-Tag werden als Stage-Outputs an die nachfolgenden
-Jobs gebunden.
+und Veröffentlichung. Nach den Rechte-, Tag-, Ruleset- und Environment-Gates
+baut und pusht er jeden Dockerfile genau einmal als Multi-Arch-Index mit
+`push-by-digest=true`; es wird kein OCI-Tag erzeugt. Die zurückgegebenen beiden
+Index-Digests werden als Stage-Outputs an die nachfolgenden Jobs gebunden.
 
 Je ein nativer Runner auf `amd64` und `arm64` führt anschließend
 `tests/integration/verify_release_candidate.sh` aus. Der Nachweis bindet:
@@ -318,8 +380,8 @@ Image-IDs, SBOM, Provenance, strukturierte Attestationsprüfung,
 Trivy-Ausgaben, CI-/Browser-Evidence und eine `SHA256SUMS`. Bei einem Fehler
 wird stattdessen die bis dahin vorhandene separate
 `publish-diagnostics-*`-Sammlung für sieben Tage gesichert. Scheitert eine
-Architektur oder schon der Candidate-Build, entstehen weder Finaltags noch
-ein GitHub-Release.
+Architektur oder schon der Build, entsteht kein GitHub-Release; OCI-Tags
+entstehen in keinem Pfad.
 
 Der Release-Job lädt zusätzlich vor der Sichtbarkeit ein 90 Tage aufbewahrtes
 `publication-evidence-*`-Artefakt mit Git-Tag, Commit, beiden endgültigen
@@ -328,24 +390,30 @@ dieser Evidence-Upload fehl, bleibt das Draft-Release unsichtbar.
 
 Erst der von beiden Architekturen abhängige Release-Job:
 
-1. erzeugt ein verstecktes Draft-Release,
-2. lädt Archiv und äußere SHA-256-Datei hoch und wieder herunter,
-3. prüft die äußere sowie alle inneren Paketprüfsummen,
-4. promotet exakt die getesteten App-/Migrator-Digests ohne Rebuild per
-   `imagetools create`,
-5. vergleicht beide Finaltags erneut mit den Stage-Digests und
-6. veröffentlicht das Draft-Release erst nach erneuter Asset-, Digest- und
-   Attestationsprüfung.
+1. verlangt aktivierte Immutable Releases, ein aktives tagweites Ruleset ohne
+   Bypass sowie den unveränderten Remote-Git-Tag auf `GITHUB_SHA`,
+2. erzeugt ein verstecktes Draft-Release,
+3. lädt Installations- und Evidence-Archiv samt äußerer SHA-256-Datei hoch und
+   wieder herunter,
+4. prüft die äußeren sowie alle inneren Paketprüfsummen,
+5. prüft beide digestgenauen GHCR-Referenzen erneut,
+6. veröffentlicht das Draft-Release erst nach erneuter Policy-, Asset-,
+   Digest- und Attestationsprüfung und
+7. verlangt danach mit begrenzten Wiederholungen `isImmutable=true`, exakt
+   vier Assets, erfolgreiche `gh release verify`- und
+   `gh release verify-asset`-Prüfungen sowie erneut Tag-Ruleset und
+   Remote-Tag-Commit.
 
-Die beiden GHCR-Repositories und GitHub Releases besitzen keine gemeinsame
-atomare Transaktion. Candidate-Tags bleiben deshalb als nicht-finale Evidence
-erhalten. Vor Promotion versucht der Workflow ein selbst erzeugtes
-fehlerhaftes Draft-Release zu entfernen; ab Promotionsbeginn bleibt ein
-verstecktes Draft-Release absichtlich als Recovery-Anker bestehen, weil ein
-oder beide Finaltags schon gesetzt sein können. Ein erfolgreicher
-Veröffentlichungsaufruf kann außerdem trotz fehlgeschlagener Abschlussabfrage
-bereits sichtbar sein. Diese
-Zwischenstände dürfen nie installiert oder blind erneut überschrieben werden;
+Die Digest-Pushes und GitHub Releases besitzen keine gemeinsame atomare
+Transaktion. Ein fehlgeschlagener Lauf kann unbenannte Digestobjekte, aber
+keine Candidate- oder Finaltags hinterlassen. Vor Sichtbarkeit versucht der
+Workflow nach jedem späteren Jobfehler, ausschließlich das anhand seiner
+numerischen Release-ID und vollständigen Metadaten wiedererkannte eigene
+Draft-Release zu entfernen. Die Fehlerbereinigung verweigert sichtbare,
+unveränderliche oder fremd veränderte Releases. Ein erfolgreicher
+Veröffentlichungsaufruf kann trotz fehlgeschlagener Abschlussabfrage bereits
+sichtbar sein. Diese Zwischenstände dürfen nie installiert oder blind erneut
+bearbeitet werden;
 der kontrollierte Ablauf steht unter
 [Unvollständigen Publish-Lauf behandeln](../deploy/registry/README.md#unvollständigen-publish-lauf-behandeln).
 
@@ -1300,10 +1368,12 @@ Empfängermatrix. Als fachliche Referenz dient das
 [historische Anwendungshandbuch](../doku/Handbuch_eStab.pdf); seine alten
 Installations- und Sicherheitskapitel gelten nicht.
 
-Insbesondere beweist die Automation keine physische Hörbarkeit. Sie prüft
-PCM-WAV-Daten, Opt-in-Zustand, sichtbaren Rückfall und den angeforderten
-Wiedergabeaufruf; Lautsprecher, Lautstärke, Betriebssystem-, Browser- und
-Geräteeinstellungen müssen manuell abgenommen werden.
+Insbesondere beweist die Automation keine physische Hörbarkeit. Sie bindet
+alle drei Dateien per SHA-256, parst RIFF/WAVE und PCM-16, prüft Kanäle,
+Abtastrate, Framezahl, Dauer, Signalspitze und Mindest-RMS sowie
+Opt-in-Zustand, sichtbaren Rückfall und den angeforderten Wiedergabeaufruf.
+Lautsprecher, Lautstärke, Betriebssystem-, Browser- und Geräteeinstellungen
+müssen manuell abgenommen werden.
 
 Mindestens zu prüfen:
 

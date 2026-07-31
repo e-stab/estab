@@ -83,9 +83,10 @@ Es existieren zwei unabhängige Identitäten:
 - Der gesamte Pfad `/4fadm` sowie der historisch unter `/4fach/resetpic.php`
   liegende PDF-Vordruckreset werden vom Apache mit einer vor dem Webstart
   atomar erzeugten bcrypt-`htpasswd` geschützt. Das Admin-Kennwort stammt aus
-  einem separaten Compose-Secret, das ausschließlich der netzlose
-  `admin-auth-init`-Service erhält. Der App-Service mountet die abgeleitete
-  Datei schreibgeschützt; PHP kann das Klartextsecret weder sehen noch öffnen.
+  einem separaten schreibgeschützten Secret-Dateimount, den ausschließlich der
+  netzlose `admin-auth-init`-Service erhält. Der App-Service mountet die
+  abgeleitete Datei schreibgeschützt; PHP kann das Klartextsecret weder sehen
+  noch öffnen.
   Schreibende Admin-Formulare verlangen zusätzlich einen an die PHP-Sitzung
   gebundenen CSRF-Token.
 
@@ -349,9 +350,12 @@ hervorgehobene Statuskarte sind der nichtakustische Rückfall, wenn Ton
 ausgeschaltet, vom Browser blockiert oder nicht unterstützt wird. Ein
 monotoner Generationszähler verwirft asynchrone `play()`-Ergebnisse, sobald der
 Nutzer oder ein anderer Tab den Zustand inzwischen geändert hat. Automatische
-Tests können Dateiformat, Zustandswechsel, parallele beziehungsweise spät
-auflösende Wiedergabeversuche und angeforderte Wiedergabe, nicht aber die
-physische Hörbarkeit auf Lautsprecher oder Endgerät belegen.
+Tests binden die drei Dateien per SHA-256, parsen RIFF/WAVE und PCM-16 und
+prüfen Kanäle, Abtastrate, Framezahl, Dauer, Signalspitze und Mindest-RMS.
+Zustandswechsel, parallele beziehungsweise spät auflösende
+Wiedergabeversuche und die angeforderte Wiedergabe sind ebenfalls belegt;
+nicht automatisierbar bleibt die physische Hörbarkeit auf Lautsprecher oder
+Endgerät.
 
 Schreibformulare, bei denen ein globaler Wechsel Daten verlieren kann,
 aktivieren explizit `data-estab-dirty-guard`. Die gemeinsame Leiste vergleicht
@@ -715,7 +719,12 @@ Konfigurationsverzeichnisse werden auf Webserver-Ebene gesperrt.
 - Alle drei Services verwenden `no-new-privileges`.
 - Der Datenbankport ist nicht veröffentlicht.
 - Secrets werden als Dateien eingebunden und sind aus Git und Build-Kontext
-  ausgeschlossen.
+  ausgeschlossen. Die schreibgeschützten Bind-Mounts und alle gemeinsam
+  verwendeten Datenvolumes tragen die standardisierte SELinux-Option `z`;
+  ausschließlich verwendete Mounts tragen `Z`. Dadurch funktionieren Docker
+  und Podman auch bei `Enforcing`, ohne `privileged` oder eine deaktivierte
+  Containerkennzeichnung. Der produktive Helfer lässt nur dedizierte,
+  ACL-geprüfte Hostpfade zu, bevor Compose ein Relabel durchführen darf.
 - Nur Datenbank und One-shot-Migrator erhalten das MariaDB-Root-Secret. Der
   Migrator übergibt es dem Client durch eine private temporäre Optionsdatei,
   nicht als Prozessargument.
@@ -745,10 +754,10 @@ Konfigurationsverzeichnisse werden auf Webserver-Ebene gesperrt.
   Teil des Freigabenachweises.
 - Die pull-only Distribution verlangt zwei explizite, gemeinsam freigegebene
   App-/Migrator-Referenzen. Der Publish-Workflow ist manuell, global
-  serialisiert, an einen gleichnamigen Git-Tag, zwei Repositoryvariablen und
+  serialisiert, an einen geschützten Git-Tag, drei Repositoryvariablen und
   ein Required-Reviewer-Environment gebunden. Er baut und pusht beide
-  Kandidaten jeweils genau einmal unter nicht-finalen Candidate-Tags,
-  überschreibt keine vorhandenen OCI-Tags und führt das komplette
+  Indizes jeweils genau einmal digest-only, erzeugt oder überschreibt keine
+  OCI-Tags und führt das komplette
   Laufzeit-/Restore-Gate nativ auf amd64 und arm64 aus. Für beide
   Plattformmanifeste werden SPDX-SBOM und Build-Provenance angefordert und
   nach dem Push inhaltlich eingelesen; zusätzlich wird die separat
@@ -758,10 +767,19 @@ Konfigurationsverzeichnisse werden auf Webserver-Ebene gesperrt.
   blockiert. Ausnahmen sind auf den konkreten Binärpfad begrenzt, begründet und
   mit Ablaufdatum versehen. Das erfolgreiche Imagepaar wird zusammen mit
   Compose, digestgebundener Konfigurationsvorlage, Runbooks und Backup-Verifier
-  als prüfsummengebundenes unveränderliches GitHub-Releasepaket veröffentlicht.
-  `latest` wird weder publiziert noch als Deploymentstandard akzeptiert. Eine
-  öffentliche Veröffentlichung bleibt bis zur separaten Rechteprüfung des
-  historischen Gesamtbestands gesperrt.
+  als prüfsummengebundenes Installationspaket veröffentlicht. Ein separates,
+  ebenfalls prüfsummengebundenes dauerhaftes Evidence-Asset enthält beide
+  nativen Testergebnisse, OCI-Metadaten, SBOM, Provenance,
+  Schwachstellenscans, Attestationsbundles und den zum Releasezeitpunkt
+  bezogenen Trusted Root. Sichtbarkeit genügt nicht: Der Workflow verlangt
+  anschließend `isImmutable=true`, exakt die vier Installations-/Evidence-
+  Assets und eine gültige GitHub-Release-Attestation. Für die netzlose
+  Vorsorge exportiert der gebundene Helfer App, Migrator und MariaDB-Basis als
+  digesttreue Multi-Arch-OCI-Archive und prüft eine administrativ befüllte
+  kontrollierte Registry ausschließlich über Digestreferenzen. Der Helfer
+  selbst schreibt keine Registry-Tags. `latest` wird weder publiziert noch als
+  Deploymentstandard akzeptiert. Eine öffentliche Veröffentlichung bleibt bis
+  zur separaten Rechteprüfung des historischen Gesamtbestands gesperrt.
 
 Benannte Volumes sind keine Sicherung. Schutz vor Hostverlust, Fehlbedienung
 oder beschädigten Daten bietet nur das getrennte Verfahren unter

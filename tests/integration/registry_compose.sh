@@ -21,6 +21,7 @@ bind_data=
 bind_export=
 backup_parent=
 production_backup=
+portable_backup=
 
 case "$container_cli" in
     docker | podman) ;;
@@ -96,11 +97,43 @@ bind_db=$bind_root/data/db
 bind_data=$bind_root/data/4fdata
 bind_export=$bind_root/data/export
 backup_parent=$bind_root/backups
-production_backup=$backup_parent/production-v2
+production_backup=$backup_parent/production-v3
+portable_backup=$backup_parent/named-to-bind-v3
 mkdir -p "$bind_db" "$bind_data" "$bind_export" "$backup_parent"
-chmod 0700 "$bind_root/data" "$backup_parent"
+chmod 0700 \
+    "$bind_root/data" \
+    "$bind_db" \
+    "$bind_data" \
+    "$bind_export" \
+    "$backup_parent"
 printf '%s\n' "$bind_project" >"$bind_root/.estab-ci-bind-storage"
 chmod 0600 "$bind_root/.estab-ci-bind-storage"
+
+portable_mode()
+{
+    mode_path=$1
+    if mode_value=$(stat -c '%a' "$mode_path" 2>/dev/null); then
+        :
+    elif mode_value=$(stat -f '%Lp' "$mode_path" 2>/dev/null); then
+        :
+    else
+        echo "Registry compose integration: cannot inspect host directory mode" >&2
+        return 1
+    fi
+    printf '%s\n' "$mode_value"
+}
+
+for documented_private_directory in \
+    "$bind_root/data" \
+    "$bind_db" \
+    "$bind_data" \
+    "$bind_export"
+do
+    if [ "$(portable_mode "$documented_private_directory")" != 700 ]; then
+        echo "Registry compose integration: documented bind directory is not mode 0700" >&2
+        exit 1
+    fi
+done
 
 export ESTAB_APP_IMAGE=$app_image
 export ESTAB_MIGRATE_IMAGE=$migrate_image
@@ -540,6 +573,41 @@ verify_bind_mounts()
     assert_bind_mount "$bind_app_id" "$bind_export" /var/lib/estab/export
 }
 
+verify_writable_app_roots()
+{
+    compose exec -T app sh -ceu '
+        for writable_root in \
+            /var/www/html/4fdata \
+            /var/lib/estab/export
+        do
+            test -n "$(find "$writable_root" -prune -type d \
+                -perm 0770 -print)"
+        done
+    '
+    compose exec -T --user www-data app sh -ceu '
+        for writable_root in \
+            /var/www/html/4fdata \
+            /var/lib/estab/export
+        do
+            write_probe=$(mktemp \
+                "$writable_root/.estab-entrypoint-write-probe.XXXXXX")
+            printf "www-data-write-probe\n" >"$write_probe"
+            test "$(cat "$write_probe")" = "www-data-write-probe"
+            rm -f -- "$write_probe"
+        done
+    '
+    for writable_host_root in "$bind_data" "$bind_export"; do
+        if [ "$(portable_mode "$writable_host_root")" != 770 ]; then
+            echo "Registry compose integration: app entrypoint did not normalize bind root to mode 0770" >&2
+            return 1
+        fi
+    done
+    if [ "$(portable_mode "$bind_root/data")" != 700 ]; then
+        echo "Registry compose integration: app entrypoint changed the private data parent" >&2
+        return 1
+    fi
+}
+
 database_client()
 {
     compose exec -T db sh -ceu '
@@ -589,6 +657,36 @@ container_file_sha256()
         awk 'NR == 1 && $1 ~ /^[0-9a-f]{64}$/ { print $1 }'
 }
 
+backup_storage_field()
+{
+    storage_role=$1
+    storage_field=$2
+    LC_ALL=C awk -F '	' \
+        -v role="$storage_role" \
+        -v field="$storage_field" '
+          $1 == role && NF == 5 {
+            matches++
+            value = $field
+          }
+          END {
+            if (matches != 1 || value == "") {
+              exit 1
+            }
+            print value
+          }
+        ' "$portable_backup/storage-sources.txt"
+}
+
+bind_marker="ESTAB_REGISTRY_BIND_${project}"
+case "$bind_marker" in
+    *[!A-Za-z0-9_-]*)
+        echo "Registry compose integration: generated marker is unsafe" >&2
+        exit 1
+        ;;
+esac
+data_marker_path="/var/www/html/4fdata/${ESTAB_DB_NAME:-estab}/anhang/.estab-bind-data-marker"
+export_marker_path=/var/lib/estab/export/.estab-bind-export-marker
+
 use_named_storage
 active_project=$project
 verify_default_project_stability
@@ -598,6 +696,93 @@ compose down --volumes --remove-orphans --timeout 20 >/dev/null 2>&1
 echo "Registry compose integration: starting pull-only named-volume stack"
 compose up --detach --pull never
 verify_stack
+
+echo "Registry compose integration: seeding a portable named-volume backup"
+printf "DELETE FROM nv_protokoll WHERE p_was = 'registry-bind';\nINSERT INTO nv_protokoll (p_was, p_ereignis) VALUES ('registry-bind', '%s');\n" \
+    "$bind_marker" |
+    database_client >/dev/null
+if [ "$(database_marker_count)" != 1 ]; then
+    echo "Registry compose integration: portable database marker was not stored" >&2
+    exit 1
+fi
+printf '%s\n' "$bind_marker" |
+    compose exec -T --user www-data app sh -ceu '
+        IFS= read -r bind_marker
+        data_root="/var/www/html/4fdata/$ESTAB_DB_NAME"
+        test -d "$data_root/anhang"
+        test -d /var/lib/estab/export
+        umask 077
+        printf "%s\n" "$bind_marker" >"$data_root/anhang/.estab-bind-data-marker"
+        printf "%s\n" "$bind_marker" >/var/lib/estab/export/.estab-bind-export-marker
+    '
+portable_data_marker_sha256=$(container_file_sha256 "$data_marker_path")
+portable_export_marker_sha256=$(container_file_sha256 "$export_marker_path")
+if [ -z "$portable_data_marker_sha256" ] ||
+    [ -z "$portable_export_marker_sha256" ]; then
+    echo "Registry compose integration: portable marker checksum is missing" >&2
+    exit 1
+fi
+(
+    cd "$repo_root/deploy/registry"
+    COMPOSE_PROJECT_NAME=$project \
+    ESTAB_CONTAINER_CLI=$container_cli \
+    ESTAB_BACKUP_HEALTH_TIMEOUT_SECONDS=240 \
+        sh "$backup_operator" "$portable_backup"
+)
+grep -Fqx 'estab-full-backup-v3' "$portable_backup/backup-format.txt"
+sh "$backup_verifier" "$portable_backup" "${ESTAB_DB_NAME:-estab}"
+if ! LC_ALL=C awk -F '	' '
+  FNR == NR {
+    if ($1 == "database") {
+      if (NF != 3 || image_seen++) {
+        exit 1
+      }
+      image_reference = $2
+    }
+    next
+  }
+  $1 == "database" {
+    if (NF != 2 || release_seen++) {
+      exit 1
+    }
+    release_reference = $2
+  }
+  END {
+    prefix = "docker.io/library/mariadb@sha256:"
+    digest = substr(image_reference, length(prefix) + 1)
+    if (image_seen != 1 ||
+        release_seen != 1 ||
+        image_reference != release_reference ||
+        substr(image_reference, 1, length(prefix)) != prefix ||
+        length(digest) != 64 ||
+        digest ~ /[^0-9a-f]/) {
+      exit 1
+    }
+  }
+' "$portable_backup/image-references.txt" \
+    "$portable_backup/release-identity.txt"; then
+    echo "Registry compose integration: database image reference is not canonical and engine-independent" >&2
+    exit 1
+fi
+if ! LC_ALL=C awk -F '	' '
+  NF != 5 || $3 != "volume" || $4 == "-" {
+    exit 1
+  }
+  END {
+    if (NR != 3) {
+      exit 1
+    }
+  }
+' "$portable_backup/storage-sources.txt"; then
+    echo "Registry compose integration: source backup is not fully named-volume based" >&2
+    exit 1
+fi
+portable_db_name=$(backup_storage_field database 4)
+portable_db_source=$(backup_storage_field database 5)
+portable_app_name=$(backup_storage_field application 4)
+portable_app_source=$(backup_storage_field application 5)
+portable_export_name=$(backup_storage_field export 4)
+portable_export_source=$(backup_storage_field export 5)
 
 compose down --volumes --remove-orphans --timeout 20
 project_resources_empty "$project"
@@ -611,14 +796,85 @@ compose down --volumes --remove-orphans --timeout 20 >/dev/null 2>&1
 compose up --detach --pull never
 verify_stack
 verify_bind_mounts
+verify_writable_app_roots
 
-bind_marker="ESTAB_REGISTRY_BIND_${project}"
-case "$bind_marker" in
-    *[!A-Za-z0-9_-]*)
-        echo "Registry compose integration: generated marker is unsafe" >&2
-        exit 1
-        ;;
-esac
+echo "Registry compose integration: rejecting an incomplete Named-to-Bind restore"
+if (
+    cd "$repo_root/deploy/registry"
+    COMPOSE_PROJECT_NAME=$bind_project \
+    ESTAB_CONTAINER_CLI=$container_cli \
+    ESTAB_RESTORE_HEALTH_TIMEOUT_SECONDS=240 \
+        sh "$restore_operator" \
+            --confirm-project "$bind_project" \
+            --remap-project "$project=$bind_project" \
+            --remap-storage "database:$portable_db_source=$bind_db" \
+            --remap-volume "database:$portable_db_name=-" \
+            --remap-storage "application:$portable_app_source=$bind_data" \
+            --remap-volume "application:$portable_app_name=-" \
+            --remap-storage "export:$portable_export_source=$bind_export" \
+            --remap-volume "export:$portable_export_name=-" \
+            "$portable_backup"
+); then
+    echo "Registry compose integration: missing mount-type remaps were accepted" >&2
+    exit 1
+fi
+if [ "$(database_marker_count)" != 0 ]; then
+    echo "Registry compose integration: rejected portable restore changed the database" >&2
+    exit 1
+fi
+compose exec -T app sh -ceu '
+    data_root="/var/www/html/4fdata/$ESTAB_DB_NAME"
+    test ! -e "$data_root/anhang/.estab-bind-data-marker"
+    test ! -e /var/lib/estab/export/.estab-bind-export-marker
+'
+
+echo "Registry compose integration: restoring Format 3 from Named Volumes into a separate Bind project"
+(
+    cd "$repo_root/deploy/registry"
+    COMPOSE_PROJECT_NAME=$bind_project \
+    ESTAB_CONTAINER_CLI=$container_cli \
+    ESTAB_RESTORE_HEALTH_TIMEOUT_SECONDS=240 \
+        sh "$restore_operator" \
+            --confirm-project "$bind_project" \
+            --remap-project "$project=$bind_project" \
+            --remap-mount-type database:volume=bind \
+            --remap-storage "database:$portable_db_source=$bind_db" \
+            --remap-volume "database:$portable_db_name=-" \
+            --remap-mount-type application:volume=bind \
+            --remap-storage "application:$portable_app_source=$bind_data" \
+            --remap-volume "application:$portable_app_name=-" \
+            --remap-mount-type export:volume=bind \
+            --remap-storage "export:$portable_export_source=$bind_export" \
+            --remap-volume "export:$portable_export_name=-" \
+            "$portable_backup"
+)
+sh "$backup_verifier" "$portable_backup" "${ESTAB_DB_NAME:-estab}"
+verify_bind_mounts
+verify_writable_app_roots
+wait_for_app
+curl --fail --silent --show-error --max-time 20 \
+    "http://127.0.0.1:$http_port/health.php" |
+    grep -Fq '"status":"ready"'
+if [ "$(database_marker_count)" != 1 ]; then
+    echo "Registry compose integration: portable database marker differs" >&2
+    exit 1
+fi
+if [ "$(container_file_sha256 "$data_marker_path")" != "$portable_data_marker_sha256" ] ||
+    [ "$(container_file_sha256 "$export_marker_path")" != "$portable_export_marker_sha256" ]; then
+    echo "Registry compose integration: portable file marker checksum differs" >&2
+    exit 1
+fi
+portable_restored_data_marker=$(compose exec -T app sh -ceu \
+    'cat "/var/www/html/4fdata/$ESTAB_DB_NAME/anhang/.estab-bind-data-marker"')
+portable_restored_export_marker=$(compose exec -T app \
+    cat /var/lib/estab/export/.estab-bind-export-marker)
+if [ "$portable_restored_data_marker" != "$bind_marker" ] ||
+    [ "$portable_restored_export_marker" != "$bind_marker" ]; then
+    echo "Registry compose integration: portable marker content differs" >&2
+    exit 1
+fi
+project_resources_empty "$project"
+
 printf "DELETE FROM nv_protokoll WHERE p_was = 'registry-bind';\nINSERT INTO nv_protokoll (p_was, p_ereignis) VALUES ('registry-bind', '%s');\n" \
     "$bind_marker" |
     database_client >/dev/null
@@ -642,8 +898,6 @@ printf '%s\n' "$bind_marker" |
         printf "%s\n" "$bind_marker" >/var/lib/estab/export/.estab-bind-export-marker
     '
 
-data_marker_path="/var/www/html/4fdata/${ESTAB_DB_NAME:-estab}/anhang/.estab-bind-data-marker"
-export_marker_path=/var/lib/estab/export/.estab-bind-export-marker
 data_marker_sha256=$(container_file_sha256 "$data_marker_path")
 export_marker_sha256=$(container_file_sha256 "$export_marker_path")
 if [ -z "$data_marker_sha256" ] || [ -z "$export_marker_sha256" ]; then
@@ -651,7 +905,7 @@ if [ -z "$data_marker_sha256" ] || [ -z "$export_marker_sha256" ]; then
     exit 1
 fi
 
-echo "Registry compose integration: creating a production format-2 backup"
+echo "Registry compose integration: creating a production format-3 backup"
 (
     cd "$repo_root/deploy/registry"
     COMPOSE_PROJECT_NAME=$bind_project \
@@ -660,7 +914,7 @@ echo "Registry compose integration: creating a production format-2 backup"
         sh "$backup_operator" "$production_backup"
 )
 [ -d "$production_backup" ] && [ ! -L "$production_backup" ]
-grep -Fqx 'estab-full-backup-v2' "$production_backup/backup-format.txt"
+grep -Fqx 'estab-full-backup-v3' "$production_backup/backup-format.txt"
 sh "$backup_verifier" "$production_backup" "${ESTAB_DB_NAME:-estab}"
 
 echo "Registry compose integration: corrupting controlled restore fixtures"
@@ -688,7 +942,7 @@ if [ "$(container_file_sha256 "$data_marker_path")" = "$data_marker_sha256" ] ||
     exit 1
 fi
 
-echo "Registry compose integration: restoring exactly the production format-2 backup"
+echo "Registry compose integration: restoring exactly the production format-3 backup"
 if (
     cd "$repo_root/deploy/registry"
     COMPOSE_PROJECT_NAME=$bind_project \
@@ -716,6 +970,7 @@ fi
 )
 sh "$backup_verifier" "$production_backup" "${ESTAB_DB_NAME:-estab}"
 verify_bind_mounts
+verify_writable_app_roots
 compose run --rm --no-deps -T migrate
 wait_for_app
 curl --fail --silent --show-error --max-time 20 \

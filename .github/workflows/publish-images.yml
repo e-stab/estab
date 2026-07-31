@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: Existing Git tag and immutable OCI tag for both images
+        description: Existing protected Git tag used for the digest-only release
         required: true
         type: string
       redistribution_cleared:
@@ -16,8 +16,8 @@ on:
 permissions:
   contents: read
 
-# Publishing is serialized across every ref. Two dispatches must never race for
-# the same immutable registry tags.
+# Publishing is serialized across every ref. Image publication itself is
+# digest-only; the protected Git tag and immutable GitHub Release name the pair.
 concurrency:
   group: publish-images
   cancel-in-progress: false
@@ -27,11 +27,13 @@ jobs:
     name: Validate manual release gates
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    environment: container-publish
     env:
       RELEASE_IMAGE_TAG: ${{ inputs.image_tag }}
       REDISTRIBUTION_CLEARED: ${{ inputs.redistribution_cleared }}
       CONTAINER_PUBLISH_ENABLED: ${{ vars.ESTAB_CONTAINER_PUBLISH_ENABLED }}
       PUBLISH_REVIEWER_CONFIGURED: ${{ vars.ESTAB_CONTAINER_PUBLISH_REVIEWER_CONFIGURED }}
+      RELEASE_TAG_RULESET_ID: ${{ vars.ESTAB_RELEASE_TAG_RULESET_ID }}
       RELEASE_REPOSITORY: ${{ github.repository }}
       RELEASE_REF_TYPE: ${{ github.ref_type }}
       RELEASE_REF_NAME: ${{ github.ref_name }}
@@ -43,6 +45,8 @@ jobs:
 
       - name: Validate repository, tag, rights, and reviewer gates
         shell: bash
+        env:
+          RELEASE_POLICY_TOKEN: ${{ secrets.ESTAB_RELEASE_POLICY_TOKEN }}
         run: |
           set -euo pipefail
           if [[ "$RELEASE_REPOSITORY" != "e-stab/estab" ]]; then
@@ -59,6 +63,14 @@ jobs:
           fi
           if [[ "$REDISTRIBUTION_CLEARED" != "true" ]]; then
             echo "Rights and license review has not been confirmed." >&2
+            exit 1
+          fi
+          if [[ -z "$RELEASE_POLICY_TOKEN" ]]; then
+            echo "ESTAB_RELEASE_POLICY_TOKEN is not configured." >&2
+            exit 1
+          fi
+          if [[ ! "$RELEASE_TAG_RULESET_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo "ESTAB_RELEASE_TAG_RULESET_ID is not configured as a positive ruleset ID." >&2
             exit 1
           fi
           for redistribution_file in LICENSE THIRD_PARTY_NOTICES.md; do
@@ -83,9 +95,16 @@ jobs:
             echo "The selected Git tag does not resolve to the checked-out commit." >&2
             exit 1
           fi
+          GH_TOKEN="$RELEASE_POLICY_TOKEN" \
+            tools/verify-github-release-policy.sh \
+              "$GITHUB_REPOSITORY" \
+              "$RELEASE_IMAGE_TAG" \
+              "$GITHUB_SHA" \
+              "$RELEASE_TAG_RULESET_ID" \
+              >"$RUNNER_TEMP/github-release-policy-preflight.json"
 
   stage:
-    name: Build immutable candidate image pair
+    name: Build digest-only image pair
     needs: preflight
     runs-on: ubuntu-24.04
     timeout-minutes: 75
@@ -98,12 +117,10 @@ jobs:
     outputs:
       app_digest: ${{ steps.push_app.outputs.digest }}
       migrate_digest: ${{ steps.push_migrate.outputs.digest }}
-      candidate_tag: ${{ steps.candidate_metadata.outputs.tag }}
     env:
       APP_IMAGE: ghcr.io/e-stab/estab
       MIGRATE_IMAGE: ghcr.io/e-stab/estab-migrate
       RELEASE_IMAGE_TAG: ${{ inputs.image_tag }}
-      CANDIDATE_IMAGE_TAG: candidate-${{ github.run_id }}-${{ github.run_attempt }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Check out repository
@@ -131,29 +148,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Record immutable candidate identity
-        id: candidate_metadata
-        shell: bash
-        run: printf 'tag=%s\n' "$CANDIDATE_IMAGE_TAG" >>"$GITHUB_OUTPUT"
-
-      - name: Refuse existing immutable tags
+      - name: Refuse an existing GitHub release
         shell: bash
         run: |
           set -euo pipefail
-          for image in "$APP_IMAGE" "$MIGRATE_IMAGE"; do
-            for tag in "$RELEASE_IMAGE_TAG" "$CANDIDATE_IMAGE_TAG"; do
-              if output=$(docker buildx imagetools inspect \
-                  "$image:$tag" 2>&1); then
-                echo "Refusing to overwrite existing image tag: $image:$tag" >&2
-                exit 1
-              fi
-              if ! grep -Eqi 'manifest unknown|not found|no such manifest' <<<"$output"; then
-                echo "Could not prove that $image:$tag is absent:" >&2
-                printf '%s\n' "$output" >&2
-                exit 1
-              fi
-            done
-          done
           if release_output=$(gh release view "$RELEASE_IMAGE_TAG" 2>&1); then
             echo "Refusing to reuse existing GitHub release: $RELEASE_IMAGE_TAG" >&2
             exit 1
@@ -165,18 +163,16 @@ jobs:
             exit 1
           fi
 
-      # Each Dockerfile is built and pushed exactly once. This candidate tag is
-      # deliberately not a release tag and may remain as immutable build
-      # evidence when a later verification gate fails.
-      - name: Push application candidate
+      # BuildKit pushes each index by content digest without creating or
+      # overwriting any mutable OCI tag.
+      - name: Push application index by digest
         id: push_app
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           file: Dockerfile
           platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ env.APP_IMAGE }}:${{ env.CANDIDATE_IMAGE_TAG }}
+          outputs: type=image,name=${{ env.APP_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -186,15 +182,14 @@ jobs:
           cache-from: type=gha,scope=estab
           cache-to: type=gha,mode=max,scope=estab
 
-      - name: Push migration candidate
+      - name: Push migration index by digest
         id: push_migrate
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           file: docker/db/Dockerfile.migrate
           platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ env.MIGRATE_IMAGE }}:${{ env.CANDIDATE_IMAGE_TAG }}
+          outputs: type=image,name=${{ env.MIGRATE_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -220,7 +215,7 @@ jobs:
           push-to-registry: true
           create-storage-record: false
 
-      - name: Verify candidate indexes and build evidence
+      - name: Verify digest-only indexes and build evidence
         shell: bash
         env:
           APP_DIGEST: ${{ steps.push_app.outputs.digest }}
@@ -230,20 +225,12 @@ jobs:
           verify_index() {
             local image=$1
             local digest=$2
-            local candidate_digest
             local manifest
             local platform
             local sbom
             local provenance
             if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
               echo "Build did not return a valid index digest for $image." >&2
-              exit 1
-            fi
-            candidate_digest=$(docker buildx imagetools inspect \
-              "$image:$CANDIDATE_IMAGE_TAG" |
-              awk '$1 == "Digest:" { print $2; exit }')
-            if [[ "$candidate_digest" != "$digest" ]]; then
-              echo "Candidate tag for $image does not resolve to its build digest." >&2
               exit 1
             fi
             manifest=$(docker buildx imagetools inspect "$image@$digest" --raw)
@@ -274,6 +261,8 @@ jobs:
             done
             gh attestation verify "oci://$image@$digest" \
               --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow \
+              "$GITHUB_REPOSITORY/.github/workflows/publish-images.yml" \
               --bundle-from-oci \
               --source-digest "$GITHUB_SHA" >/dev/null
           }
@@ -281,7 +270,7 @@ jobs:
           verify_index "$MIGRATE_IMAGE" "$MIGRATE_DIGEST"
 
   verify_candidate:
-    name: Verify release candidate (${{ matrix.arch }})
+    name: Verify exact release digests (${{ matrix.arch }})
     needs: stage
     strategy:
       fail-fast: false
@@ -328,7 +317,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Pull and verify exact native candidate images
+      - name: Pull and verify exact native image digests
         shell: bash
         env:
           ESTAB_PREBUILT_APP_IMAGE: ${{ env.APP_IMAGE }}@${{ env.APP_DIGEST }}
@@ -341,7 +330,7 @@ jobs:
             "$ESTAB_PREBUILT_MIGRATE_IMAGE" \
             "$ESTAB_RELEASE_EVIDENCE_DIR"
 
-      - name: Run complete fresh-stack gate against exact candidate digests
+      - name: Run complete fresh-stack gate against exact digests
         timeout-minutes: 55
         env:
           ESTAB_PREBUILT_APP_IMAGE: ${{ env.APP_IMAGE }}@${{ env.APP_DIGEST }}
@@ -349,7 +338,7 @@ jobs:
           ESTAB_CI_LOG_DIR: ${{ runner.temp }}/estab-ci-logs
         run: bash tests/integration/ci.sh
 
-      - name: Scan exact application candidate for fixable high or critical vulnerabilities
+      - name: Scan exact application digest for fixable high or critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ env.APP_IMAGE }}@${{ env.APP_DIGEST }}
@@ -362,7 +351,7 @@ jobs:
           output: ${{ runner.temp }}/estab-release-evidence/trivy-app.txt
           exit-code: "1"
 
-      - name: Scan exact migration candidate for fixable high or critical vulnerabilities
+      - name: Scan exact migration digest for fixable high or critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ env.MIGRATE_IMAGE }}@${{ env.MIGRATE_DIGEST }}
@@ -417,7 +406,7 @@ jobs:
             printf 'result=passed\n'
             printf 'architecture=%s\n' '${{ matrix.arch }}'
             printf 'browser_gate=%s\n' '${{ matrix.browser }}'
-            printf 'candidate_tag=%s\n' '${{ needs.stage.outputs.candidate_tag }}'
+            printf 'registry_publication=digest-only\n'
             printf 'integration_gate=passed\n'
             printf 'vulnerability_gate=passed\n'
             printf 'attestation_gate=passed\n'
@@ -460,16 +449,17 @@ jobs:
           retention-days: 7
 
   release:
-    name: Promote verified digests and publish installation bundle
+    name: Publish verified digests and installation bundle
     needs:
       - stage
       - verify_candidate
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     environment: container-publish
     permissions:
+      actions: read
       contents: write
-      packages: write
+      packages: read
       attestations: read
     env:
       APP_IMAGE: ghcr.io/e-stab/estab
@@ -477,7 +467,7 @@ jobs:
       APP_DIGEST: ${{ needs.stage.outputs.app_digest }}
       MIGRATE_DIGEST: ${{ needs.stage.outputs.migrate_digest }}
       RELEASE_IMAGE_TAG: ${{ inputs.image_tag }}
-      CANDIDATE_IMAGE_TAG: ${{ needs.stage.outputs.candidate_tag }}
+      RELEASE_TAG_RULESET_ID: ${{ vars.ESTAB_RELEASE_TAG_RULESET_ID }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Check out repository
@@ -499,43 +489,64 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Recheck immutable publication targets
+      - name: Download and validate native release evidence
         shell: bash
+        env:
+          RELEASE_EVIDENCE_DIR: ${{ runner.temp }}/estab-${{ inputs.image_tag }}-evidence
         run: |
           set -euo pipefail
-          resolve_digest() {
-            docker buildx imagetools inspect "$1" |
-              awk '$1 == "Digest:" { print $2; exit }'
+          test ! -e "$RELEASE_EVIDENCE_DIR"
+          install -d -m 0755 "$RELEASE_EVIDENCE_DIR/architectures"
+          cp deploy/registry/RELEASE-EVIDENCE.md \
+            "$RELEASE_EVIDENCE_DIR/README.md"
+
+          verify_architecture_evidence() {
+            local architecture=$1
+            local evidence_dir="$RELEASE_EVIDENCE_DIR/architectures/$architecture"
+            local artifact_name
+            artifact_name="publish-evidence-${architecture}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            install -d -m 0755 "$evidence_dir"
+            gh run download "$GITHUB_RUN_ID" \
+              --repo "$GITHUB_REPOSITORY" \
+              --name "$artifact_name" \
+              --dir "$evidence_dir"
+            (
+              cd "$evidence_dir"
+              sha256sum --check SHA256SUMS
+            )
+            grep -Fqx 'result=passed' "$evidence_dir/result.env"
+            grep -Fqx "architecture=$architecture" "$evidence_dir/result.env"
+            grep -Fqx "git_commit=$GITHUB_SHA" "$evidence_dir/candidate.env"
+            grep -Fqx "reference=$APP_IMAGE@$APP_DIGEST" \
+              "$evidence_dir/app-image.env"
+            grep -Fqx "reference=$MIGRATE_IMAGE@$MIGRATE_DIGEST" \
+              "$evidence_dir/migrate-image.env"
+            test "sha256:$(sha256sum "$evidence_dir/app-index.json" |
+              awk '{ print $1 }')" = "$APP_DIGEST"
+            test "sha256:$(sha256sum "$evidence_dir/migrate-index.json" |
+              awk '{ print $1 }')" = "$MIGRATE_DIGEST"
           }
-          assert_absent() {
-            local reference=$1
-            local output
-            if output=$(docker buildx imagetools inspect "$reference" 2>&1); then
-              echo "Refusing to overwrite existing image tag: $reference" >&2
-              exit 1
-            fi
-            if ! grep -Eqi 'manifest unknown|not found|no such manifest' <<<"$output"; then
-              echo "Could not prove that $reference is absent:" >&2
-              printf '%s\n' "$output" >&2
-              exit 1
-            fi
-          }
+
+          verify_architecture_evidence amd64
+          verify_architecture_evidence arm64
+
+      - name: Recheck digest availability and GitHub release policy
+        shell: bash
+        env:
+          RELEASE_EVIDENCE_DIR: ${{ runner.temp }}/estab-${{ inputs.image_tag }}-evidence
+          RELEASE_POLICY_TOKEN: ${{ secrets.ESTAB_RELEASE_POLICY_TOKEN }}
+        run: |
+          set -euo pipefail
           for digest in "$APP_DIGEST" "$MIGRATE_DIGEST"; do
             if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
               echo "Stage output is not a valid image digest." >&2
               exit 1
             fi
           done
-          if [[ "$(resolve_digest "$APP_IMAGE:$CANDIDATE_IMAGE_TAG")" != "$APP_DIGEST" ]]; then
-            echo "Application candidate tag changed after verification." >&2
-            exit 1
-          fi
-          if [[ "$(resolve_digest "$MIGRATE_IMAGE:$CANDIDATE_IMAGE_TAG")" != "$MIGRATE_DIGEST" ]]; then
-            echo "Migration candidate tag changed after verification." >&2
-            exit 1
-          fi
-          assert_absent "$APP_IMAGE:$RELEASE_IMAGE_TAG"
-          assert_absent "$MIGRATE_IMAGE:$RELEASE_IMAGE_TAG"
+          docker buildx imagetools inspect "$APP_IMAGE@$APP_DIGEST" \
+            >/dev/null
+          docker buildx imagetools inspect "$MIGRATE_IMAGE@$MIGRATE_DIGEST" \
+            >/dev/null
           if release_output=$(gh release view "$RELEASE_IMAGE_TAG" 2>&1); then
             echo "Refusing to reuse existing GitHub release: $RELEASE_IMAGE_TAG" >&2
             exit 1
@@ -546,14 +557,72 @@ jobs:
             printf '%s\n' "$release_output" >&2
             exit 1
           fi
-          gh attestation verify "oci://$APP_IMAGE@$APP_DIGEST" \
-            --repo "$GITHUB_REPOSITORY" \
-            --bundle-from-oci \
-            --source-digest "$GITHUB_SHA" >/dev/null
-          gh attestation verify "oci://$MIGRATE_IMAGE@$MIGRATE_DIGEST" \
-            --repo "$GITHUB_REPOSITORY" \
-            --bundle-from-oci \
-            --source-digest "$GITHUB_SHA" >/dev/null
+          trust_dir="$RELEASE_EVIDENCE_DIR/trust"
+          install -d -m 0755 "$trust_dir"
+          GH_TOKEN="$RELEASE_POLICY_TOKEN" \
+            tools/verify-github-release-policy.sh \
+              "$GITHUB_REPOSITORY" \
+              "$RELEASE_IMAGE_TAG" \
+              "$GITHUB_SHA" \
+              "$RELEASE_TAG_RULESET_ID" \
+              >"$trust_dir/github-policy-before-draft.json"
+          gh attestation trusted-root >"$trust_dir/trusted-root.jsonl"
+          test -s "$trust_dir/trusted-root.jsonl"
+
+          verify_and_record_attestation() {
+            local role=$1
+            local image=$2
+            local digest=$3
+            local online_result="$trust_dir/$role-online-verification.json"
+            local bundle="$trust_dir/$role-attestations.jsonl"
+            local offline_result="$trust_dir/$role-offline-verification.json"
+            local index_file
+            index_file="$RELEASE_EVIDENCE_DIR/architectures/amd64/$role-index.json"
+
+            gh attestation verify "oci://$image@$digest" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow \
+              "$GITHUB_REPOSITORY/.github/workflows/publish-images.yml" \
+              --bundle-from-oci \
+              --source-digest "$GITHUB_SHA" \
+              --format=json >"$online_result"
+            jq -e '
+              type == "array" and length > 0
+              and all(.[];
+                (.attestation | type == "object")
+                and (.verificationResult | type == "object")
+              )
+            ' "$online_result" >/dev/null
+            jq -c '.[].attestation' "$online_result" >"$bundle"
+            test -s "$bundle"
+
+            # The raw OCI index bytes hash to the published image digest. This
+            # permits a real bundle/root verification without registry access.
+            test "sha256:$(sha256sum "$index_file" |
+              awk '{ print $1 }')" = "$digest"
+            gh attestation verify "$index_file" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow \
+              "$GITHUB_REPOSITORY/.github/workflows/publish-images.yml" \
+              --bundle "$bundle" \
+              --custom-trusted-root "$trust_dir/trusted-root.jsonl" \
+              --source-digest "$GITHUB_SHA" \
+              --format=json >"$offline_result"
+            jq -e 'type == "array" and length > 0' \
+              "$offline_result" >/dev/null
+          }
+
+          verify_and_record_attestation app "$APP_IMAGE" "$APP_DIGEST"
+          verify_and_record_attestation migrate \
+            "$MIGRATE_IMAGE" "$MIGRATE_DIGEST"
+          {
+            printf 'repository=%s\n' "$GITHUB_REPOSITORY"
+            printf 'git_commit=%s\n' "$GITHUB_SHA"
+            printf 'workflow=%s\n' \
+              "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            printf 'online_bundle_from_oci=passed\n'
+            printf 'local_bundle_with_release_trusted_root=passed\n'
+          } >"$trust_dir/policy.env"
 
       - name: Build immutable installation bundle
         id: bundle
@@ -572,6 +641,9 @@ jobs:
           cp deploy/registry/restore.sh "$bundle_root/restore.sh"
           cp deploy/registry/verify-backup.sh "$bundle_root/verify-backup.sh"
           cp deploy/registry/verify-release.sh "$bundle_root/verify-release.sh"
+          cp deploy/registry/offline-images.sh "$bundle_root/offline-images.sh"
+          cp deploy/registry/RELEASE-EVIDENCE.md \
+            "$bundle_root/RELEASE-EVIDENCE.md"
           cp LICENSE THIRD_PARTY_NOTICES.md "$bundle_root/"
           sed \
             -e 's#^backup_verifier=deploy/registry/verify-backup.sh$#backup_verifier=./verify-backup.sh#' \
@@ -615,29 +687,22 @@ jobs:
             echo "checksum_path=$RUNNER_TEMP/$bundle_name.tar.gz.sha256"
           } >>"$GITHUB_OUTPUT"
 
-      - name: Verify draft assets and promote exact digests
+      - name: Create and verify the complete release draft
+        id: release_draft
         shell: bash
         env:
           BUNDLE_NAME: ${{ steps.bundle.outputs.bundle_name }}
           BUNDLE_PATH: ${{ steps.bundle.outputs.bundle_path }}
           CHECKSUM_PATH: ${{ steps.bundle.outputs.checksum_path }}
-          RELEASE_EVIDENCE_DIR: ${{ runner.temp }}/estab-release-evidence
+          RELEASE_EVIDENCE_DIR: ${{ runner.temp }}/${{ steps.bundle.outputs.bundle_name }}-evidence
         run: |
           set -Eeuo pipefail
-          draft_created=false
-          promotion_started=false
-          cleanup_owned_draft() {
-            local status=$?
-            if ((status != 0)) &&
-                [[ "$draft_created" == true ]] &&
-                [[ "$promotion_started" == false ]]; then
-              gh release delete "$RELEASE_IMAGE_TAG" --yes >/dev/null 2>&1 || true
-            fi
-            exit "$status"
-          }
-          trap cleanup_owned_draft EXIT
-
           notes="$RUNNER_TEMP/release-notes.md"
+          release_name="eStab $RELEASE_IMAGE_TAG"
+          owned_release_identity="$RUNNER_TEMP/owned-release-identity.json"
+          owned_release_assets_dir="$RUNNER_TEMP/owned-release-assets"
+          expected_release_assets="$RUNNER_TEMP/owned-release-assets.json"
+          install -d -m 0700 "$owned_release_assets_dir"
           {
             echo "Verifiziertes eStab-Containerpaar für linux/amd64 und linux/arm64."
             echo
@@ -647,38 +712,191 @@ jobs:
             echo "Das Installationspaket enthält Compose, eine bereits auf beide"
             echo "Manifest-Digests gebundene Konfigurationsvorlage, Runbook und"
             echo "den prüfsummengebundenen Backup-Verifier."
+            echo "Das separate Evidence-Archiv bewahrt SBOM, Provenance,"
+            echo "Attestationsbundles und beide nativen Testergebnisse dauerhaft."
             echo
             echo "Vor dem Entpacken:"
             echo "\`sha256sum --check $BUNDLE_NAME.tar.gz.sha256\`"
+            echo "\`sha256sum --check $BUNDLE_NAME-evidence.tar.gz.sha256\`"
           } >"$notes"
-          gh release create "$RELEASE_IMAGE_TAG" \
-            --verify-tag \
-            --draft \
-            --latest=false \
-            --title "eStab $RELEASE_IMAGE_TAG" \
-            --notes-file "$notes"
-          draft_created=true
 
-          existing_assets=$(gh release view "$RELEASE_IMAGE_TAG" \
-            --json assets --jq '.assets[].name')
-          for asset_name in \
-            "$BUNDLE_NAME.tar.gz" \
-            "$BUNDLE_NAME.tar.gz.sha256"
-          do
-            if printf '%s\n' "$existing_assets" |
-                grep -Fqx "$asset_name"; then
-              echo "Refusing to overwrite existing release asset: $asset_name" >&2
+          create_request="$RUNNER_TEMP/create-release.json"
+          created_release="$RUNNER_TEMP/created-release.json"
+          jq -n \
+            --arg tag "$RELEASE_IMAGE_TAG" \
+            --arg target "$GITHUB_SHA" \
+            --arg name "$release_name" \
+            --rawfile body "$notes" '{
+              tag_name: $tag,
+              target_commitish: $target,
+              name: $name,
+              body: $body,
+              draft: true,
+              prerelease: false,
+              generate_release_notes: false,
+              make_latest: "false"
+            }' >"$create_request"
+          gh api --method POST \
+            "repos/$GITHUB_REPOSITORY/releases" \
+            --input "$create_request" >"$created_release"
+          owned_release_id=$(jq -r '.id // empty' "$created_release")
+          if [[ ! "$owned_release_id" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Created draft release has no valid exact database ID." >&2
+            exit 1
+          fi
+          printf 'release_id=%s\n' "$owned_release_id" >>"$GITHUB_OUTPUT"
+          jq '{
+            id,
+            node_id,
+            created_at,
+            author: {
+              id: .author.id,
+              node_id: .author.node_id,
+              login: .author.login
+            }
+          }' "$created_release" >"$owned_release_identity"
+
+          verify_owned_release_metadata() {
+            local release_json=$1
+            local expected_draft=$2
+            jq -e \
+              --argjson id "$owned_release_id" \
+              --arg tag "$RELEASE_IMAGE_TAG" \
+              --arg target "$GITHUB_SHA" \
+              --arg name "$release_name" \
+              --argjson draft "$expected_draft" \
+              --rawfile body "$notes" \
+              --slurpfile identity "$owned_release_identity" '
+                .id == $id
+                and {
+                  id,
+                  node_id,
+                  created_at,
+                  author: {
+                    id: .author.id,
+                    node_id: .author.node_id,
+                    login: .author.login
+                  }
+                } == $identity[0]
+                and (.node_id | type == "string" and length > 0)
+                and (.created_at | type == "string" and length > 0)
+                and (.author.id | type == "number" and . > 0)
+                and (.author.node_id | type == "string" and length > 0)
+                and (.author.login | type == "string" and length > 0)
+                and .tag_name == $tag
+                and .target_commitish == $target
+                and .name == $name
+                and .body == $body
+                and .draft == $draft
+                and .prerelease == false
+                and (
+                  if $draft
+                  then .immutable == false and .published_at == null
+                  else true
+                  end
+                )
+              ' "$release_json" >/dev/null
+          }
+
+          upload_owned_release_asset() {
+            local asset_path=$1
+            local asset_name
+            local asset_response
+            local expected_digest
+            local expected_size
+            asset_name=$(basename -- "$asset_path")
+            if [[ ! "$asset_name" =~ ^[a-z0-9][a-z0-9._-]{0,254}$ ]] ||
+                [[ ! -f "$asset_path" ]] ||
+                [[ -L "$asset_path" ]]; then
+              echo "Refusing unsafe release asset: $asset_path" >&2
               exit 1
             fi
-          done
-          gh release upload "$RELEASE_IMAGE_TAG" \
-            "$BUNDLE_PATH" "$CHECKSUM_PATH"
+            asset_response="$owned_release_assets_dir/$asset_name.json"
+            expected_digest="sha256:$(sha256sum "$asset_path" |
+              awk '{ print $1 }')"
+            expected_size=$(wc -c <"$asset_path" | tr -d '[:space:]')
+            curl --fail-with-body --silent --show-error --location \
+              --request POST \
+              --header 'Accept: application/vnd.github+json' \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              --header 'Content-Type: application/octet-stream' \
+              --data-binary "@$asset_path" \
+              "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$owned_release_id/assets?name=$asset_name" \
+              >"$asset_response"
+            jq -e \
+              --arg name "$asset_name" \
+              --arg digest "$expected_digest" \
+              --argjson size "$expected_size" '
+                (.id | type == "number" and . > 0)
+                and .name == $name
+                and .state == "uploaded"
+                and .size == $size
+                and .digest == $digest
+              ' "$asset_response" >/dev/null
+          }
+
+          refresh_and_verify_owned_release() {
+            local current_release=$RUNNER_TEMP/current-owned-release.json
+            jq -s '
+              map({
+                id,
+                name,
+                state,
+                size,
+                digest
+              }) | sort_by(.name)
+            ' "$owned_release_assets_dir"/*.json >"$expected_release_assets"
+            gh api \
+              "repos/$GITHUB_REPOSITORY/releases/$owned_release_id" \
+              >"$current_release"
+            verify_owned_release_metadata "$current_release" true
+            jq -e --slurpfile expected "$expected_release_assets" '
+              ([.assets[] | {
+                id,
+                name,
+                state,
+                size,
+                digest
+              }] | sort_by(.name)) == $expected[0]
+            ' "$current_release" >/dev/null
+          }
+
+          download_owned_release_asset() {
+            local asset_name=$1
+            local destination=$2
+            local asset_id
+            local download_tmp
+            asset_id=$(jq -r --arg name "$asset_name" '
+              .[] | select(.name == $name) | .id
+            ' "$expected_release_assets")
+            if [[ ! "$asset_id" =~ ^[1-9][0-9]*$ ]]; then
+              echo "Expected release asset has no exact database ID: $asset_name" >&2
+              exit 1
+            fi
+            download_tmp=$(mktemp "$RUNNER_TEMP/estab-release-asset.XXXXXX")
+            curl --fail --silent --show-error --location \
+              --header 'Accept: application/octet-stream' \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" \
+              --output "$download_tmp"
+            mv -- "$download_tmp" "$destination"
+          }
+
+          verify_owned_release_metadata "$created_release" true
+          jq -e '.assets == []' "$created_release" >/dev/null
+          upload_owned_release_asset "$BUNDLE_PATH"
+          upload_owned_release_asset "$CHECKSUM_PATH"
+          refresh_and_verify_owned_release
 
           verification_dir=$(mktemp -d "$RUNNER_TEMP/estab-release-verify.XXXXXX")
-          gh release download "$RELEASE_IMAGE_TAG" \
-            --dir "$verification_dir" \
-            --pattern "$BUNDLE_NAME.tar.gz" \
-            --pattern "$BUNDLE_NAME.tar.gz.sha256"
+          download_owned_release_asset \
+            "$BUNDLE_NAME.tar.gz" \
+            "$verification_dir/$BUNDLE_NAME.tar.gz"
+          download_owned_release_asset \
+            "$BUNDLE_NAME.tar.gz.sha256" \
+            "$verification_dir/$BUNDLE_NAME.tar.gz.sha256"
           cmp "$CHECKSUM_PATH" \
             "$verification_dir/$BUNDLE_NAME.tar.gz.sha256"
           (
@@ -688,57 +906,13 @@ jobs:
             cd "$BUNDLE_NAME"
             sha256sum --check SHA256SUMS
           )
-          release_state=$(gh release view "$RELEASE_IMAGE_TAG" \
-            --json isDraft,assets)
-          jq -e --arg archive "$BUNDLE_NAME.tar.gz" \
-            --arg checksum "$BUNDLE_NAME.tar.gz.sha256" '
-              .isDraft == true
-              and ([.assets[].name] | sort) == ([$archive, $checksum] | sort)
-            ' <<<"$release_state" >/dev/null
-
-          # Promotion only retags the already-tested indexes. There is no
-          # Dockerfile rebuild between native verification and release.
-          assert_absent() {
-            local reference=$1
-            local output
-            if output=$(docker buildx imagetools inspect "$reference" 2>&1); then
-              echo "Refusing to overwrite existing image tag: $reference" >&2
-              exit 1
-            fi
-            if ! grep -Eqi 'manifest unknown|not found|no such manifest' <<<"$output"; then
-              echo "Could not prove that $reference is absent:" >&2
-              printf '%s\n' "$output" >&2
-              exit 1
-            fi
-          }
-          assert_absent "$APP_IMAGE:$RELEASE_IMAGE_TAG"
-          assert_absent "$MIGRATE_IMAGE:$RELEASE_IMAGE_TAG"
-          promotion_started=true
-          docker buildx imagetools create \
-            --tag "$APP_IMAGE:$RELEASE_IMAGE_TAG" \
-            "$APP_IMAGE@$APP_DIGEST"
-          docker buildx imagetools create \
-            --tag "$MIGRATE_IMAGE:$RELEASE_IMAGE_TAG" \
-            "$MIGRATE_IMAGE@$MIGRATE_DIGEST"
-
-          resolve_digest() {
-            docker buildx imagetools inspect "$1" |
-              awk '$1 == "Digest:" { print $2; exit }'
-          }
-          final_app_digest=$(resolve_digest "$APP_IMAGE:$RELEASE_IMAGE_TAG")
-          final_migrate_digest=$(resolve_digest "$MIGRATE_IMAGE:$RELEASE_IMAGE_TAG")
-          if [[ "$final_app_digest" != "$APP_DIGEST" ||
-              "$final_migrate_digest" != "$MIGRATE_DIGEST" ]]; then
-            echo "A promoted release tag does not match its verified digest." >&2
-            exit 1
-          fi
 
           install -d -m 0755 "$RELEASE_EVIDENCE_DIR"
           {
             printf 'git_tag=%s\n' "$RELEASE_IMAGE_TAG"
             printf 'git_commit=%s\n' "$GITHUB_SHA"
-            printf 'app_reference=%s@%s\n' "$APP_IMAGE" "$final_app_digest"
-            printf 'migrate_reference=%s@%s\n' "$MIGRATE_IMAGE" "$final_migrate_digest"
+            printf 'app_reference=%s@%s\n' "$APP_IMAGE" "$APP_DIGEST"
+            printf 'migrate_reference=%s@%s\n' "$MIGRATE_IMAGE" "$MIGRATE_DIGEST"
             printf 'bundle_sha256=%s\n' \
               "$(sha256sum "$BUNDLE_PATH" | awk '{ print $1 }')"
           } >"$RELEASE_EVIDENCE_DIR/publication.env"
@@ -746,15 +920,73 @@ jobs:
             "$RELEASE_EVIDENCE_DIR/"
           (
             cd "$RELEASE_EVIDENCE_DIR"
-            sha256sum -- * >SHA256SUMS
+            {
+              printf 'Format: estab-release-evidence-v1\n'
+              printf 'Git-Tag: %s\n' "$RELEASE_IMAGE_TAG"
+              printf 'Git-Commit: %s\n' "$GITHUB_SHA"
+              printf 'App-Image: %s@%s\n' "$APP_IMAGE" "$APP_DIGEST"
+              printf 'Migrator-Image: %s@%s\n' \
+                "$MIGRATE_IMAGE" "$MIGRATE_DIGEST"
+              printf 'Installationsarchiv: %s.tar.gz\n' "$BUNDLE_NAME"
+              printf 'Workflow: %s/%s/actions/runs/%s\n' \
+                "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
+            } >EVIDENCE
+            checksums_tmp=$(mktemp \
+              "$RUNNER_TEMP/estab-permanent-evidence-sha.XXXXXX")
+            trap 'rm -f -- "$checksums_tmp"' EXIT
+            find . -type f ! -path './SHA256SUMS' -print0 |
+              LC_ALL=C sort -z |
+              xargs -0 sha256sum >"$checksums_tmp"
+            mv -- "$checksums_tmp" SHA256SUMS
+            trap - EXIT
             sha256sum --check SHA256SUMS
           )
+          evidence_name="$BUNDLE_NAME-evidence"
+          evidence_path="$RUNNER_TEMP/$evidence_name.tar.gz"
+          evidence_checksum_path="$evidence_path.sha256"
+          tar -C "$RUNNER_TEMP" -czf "$evidence_path" "$evidence_name"
+          (
+            cd "$RUNNER_TEMP"
+            sha256sum "$evidence_name.tar.gz" \
+              >"$evidence_name.tar.gz.sha256"
+          )
+
+          upload_owned_release_asset "$evidence_path"
+          upload_owned_release_asset "$evidence_checksum_path"
+          refresh_and_verify_owned_release
+
+          permanent_evidence_check=$(mktemp -d \
+            "$RUNNER_TEMP/estab-evidence-verify.XXXXXX")
+          download_owned_release_asset \
+            "$evidence_name.tar.gz" \
+            "$permanent_evidence_check/$evidence_name.tar.gz"
+          download_owned_release_asset \
+            "$evidence_name.tar.gz.sha256" \
+            "$permanent_evidence_check/$evidence_name.tar.gz.sha256"
+          cmp "$evidence_checksum_path" \
+            "$permanent_evidence_check/$evidence_name.tar.gz.sha256"
+          (
+            cd "$permanent_evidence_check"
+            sha256sum --check "$evidence_name.tar.gz.sha256"
+            tar -xzf "$evidence_name.tar.gz"
+            cd "$evidence_name"
+            sha256sum --check SHA256SUMS
+            test -s trust/app-online-verification.json
+            test -s trust/migrate-online-verification.json
+            test -s trust/app-attestations.jsonl
+            test -s trust/migrate-attestations.jsonl
+            test -s architectures/amd64/app-sbom.json
+            test -s architectures/arm64/app-sbom.json
+            grep -Fqx 'result=passed' architectures/amd64/result.env
+            grep -Fqx 'result=passed' architectures/arm64/result.env
+          )
+          refresh_and_verify_owned_release
 
       - name: Upload publication evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: publication-evidence-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/estab-release-evidence
+          path: ${{ runner.temp }}/estab-${{ inputs.image_tag }}-evidence
           if-no-files-found: error
           retention-days: 90
 
@@ -762,56 +994,334 @@ jobs:
         shell: bash
         env:
           BUNDLE_NAME: ${{ steps.bundle.outputs.bundle_name }}
+          BUNDLE_PATH: ${{ steps.bundle.outputs.bundle_path }}
           CHECKSUM_PATH: ${{ steps.bundle.outputs.checksum_path }}
+          EVIDENCE_NAME: ${{ steps.bundle.outputs.bundle_name }}-evidence
+          EVIDENCE_PATH: ${{ runner.temp }}/${{ steps.bundle.outputs.bundle_name }}-evidence.tar.gz
+          EVIDENCE_CHECKSUM_PATH: ${{ runner.temp }}/${{ steps.bundle.outputs.bundle_name }}-evidence.tar.gz.sha256
+          OWNED_RELEASE_ID: ${{ steps.release_draft.outputs.release_id }}
+          RELEASE_POLICY_TOKEN: ${{ secrets.ESTAB_RELEASE_POLICY_TOKEN }}
         run: |
           set -euo pipefail
+          notes="$RUNNER_TEMP/release-notes.md"
+          release_name="eStab $RELEASE_IMAGE_TAG"
+          owned_release_identity="$RUNNER_TEMP/owned-release-identity.json"
+          expected_release_assets="$RUNNER_TEMP/owned-release-assets.json"
+          if [[ ! "$OWNED_RELEASE_ID" =~ ^[1-9][0-9]*$ ]] ||
+              [[ ! -s "$owned_release_identity" ]] ||
+              [[ ! -s "$expected_release_assets" ]] ||
+              [[ ! -s "$notes" ]]; then
+            echo "The exact owned draft identity is unavailable." >&2
+            exit 1
+          fi
+
+          verify_owned_release() {
+            local release_json=$1
+            local expected_draft=$2
+            jq -e \
+              --argjson id "$OWNED_RELEASE_ID" \
+              --arg tag "$RELEASE_IMAGE_TAG" \
+              --arg target "$GITHUB_SHA" \
+              --arg name "$release_name" \
+              --argjson draft "$expected_draft" \
+              --rawfile body "$notes" \
+              --slurpfile identity "$owned_release_identity" \
+              --slurpfile expected_assets "$expected_release_assets" '
+                .id == $id
+                and {
+                  id,
+                  node_id,
+                  created_at,
+                  author: {
+                    id: .author.id,
+                    node_id: .author.node_id,
+                    login: .author.login
+                  }
+                } == $identity[0]
+                and (.node_id | type == "string" and length > 0)
+                and (.created_at | type == "string" and length > 0)
+                and (.author.id | type == "number" and . > 0)
+                and (.author.node_id | type == "string" and length > 0)
+                and (.author.login | type == "string" and length > 0)
+                and .tag_name == $tag
+                and .target_commitish == $target
+                and .name == $name
+                and .body == $body
+                and .draft == $draft
+                and .prerelease == false
+                and (
+                  if $draft
+                  then .immutable == false and .published_at == null
+                  else (.published_at | type == "string" and length > 0)
+                  end
+                )
+                and (
+                  [.assets[] | {
+                    id,
+                    name,
+                    state,
+                    size,
+                    digest
+                  }] | sort_by(.name)
+                ) == $expected_assets[0]
+              ' "$release_json" >/dev/null
+          }
+
+          refresh_owned_release() {
+            local expected_draft=$1
+            local destination=$2
+            gh api \
+              "repos/$GITHUB_REPOSITORY/releases/$OWNED_RELEASE_ID" \
+              >"$destination"
+            verify_owned_release "$destination" "$expected_draft"
+          }
+
+          download_owned_release_asset() {
+            local asset_name=$1
+            local destination=$2
+            local asset_id
+            local download_tmp
+            asset_id=$(jq -r --arg name "$asset_name" '
+              .[] | select(.name == $name) | .id
+            ' "$expected_release_assets")
+            if [[ ! "$asset_id" =~ ^[1-9][0-9]*$ ]]; then
+              echo "Expected release asset has no exact database ID: $asset_name" >&2
+              exit 1
+            fi
+            download_tmp=$(mktemp "$RUNNER_TEMP/estab-release-asset.XXXXXX")
+            curl --fail --silent --show-error --location \
+              --header 'Accept: application/octet-stream' \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" \
+              --output "$download_tmp"
+            mv -- "$download_tmp" "$destination"
+          }
+
+          release_state="$RUNNER_TEMP/owned-release-before-publish.json"
+          refresh_owned_release true "$release_state"
           final_asset_check=$(mktemp -d "$RUNNER_TEMP/estab-release-final-check.XXXXXX")
-          gh release download "$RELEASE_IMAGE_TAG" \
-            --dir "$final_asset_check" \
-            --pattern "$BUNDLE_NAME.tar.gz" \
-            --pattern "$BUNDLE_NAME.tar.gz.sha256"
+          download_owned_release_asset \
+            "$BUNDLE_NAME.tar.gz" \
+            "$final_asset_check/$BUNDLE_NAME.tar.gz"
+          download_owned_release_asset \
+            "$BUNDLE_NAME.tar.gz.sha256" \
+            "$final_asset_check/$BUNDLE_NAME.tar.gz.sha256"
+          download_owned_release_asset \
+            "$EVIDENCE_NAME.tar.gz" \
+            "$final_asset_check/$EVIDENCE_NAME.tar.gz"
+          download_owned_release_asset \
+            "$EVIDENCE_NAME.tar.gz.sha256" \
+            "$final_asset_check/$EVIDENCE_NAME.tar.gz.sha256"
           cmp "$CHECKSUM_PATH" \
             "$final_asset_check/$BUNDLE_NAME.tar.gz.sha256"
+          cmp "$EVIDENCE_CHECKSUM_PATH" \
+            "$final_asset_check/$EVIDENCE_NAME.tar.gz.sha256"
           (
             cd "$final_asset_check"
             sha256sum --check "$BUNDLE_NAME.tar.gz.sha256"
+            sha256sum --check "$EVIDENCE_NAME.tar.gz.sha256"
+            tar -xzf "$EVIDENCE_NAME.tar.gz"
+            (
+              cd "$EVIDENCE_NAME"
+              sha256sum --check SHA256SUMS
+            )
           )
-          resolve_digest() {
-            docker buildx imagetools inspect "$1" |
-              awk '$1 == "Digest:" { print $2; exit }'
-          }
-          if [[ "$(resolve_digest "$APP_IMAGE:$RELEASE_IMAGE_TAG")" != "$APP_DIGEST" ||
-              "$(resolve_digest "$MIGRATE_IMAGE:$RELEASE_IMAGE_TAG")" != "$MIGRATE_DIGEST" ]]; then
-            echo "A release tag changed before publication." >&2
-            exit 1
-          fi
+          docker buildx imagetools inspect "$APP_IMAGE@$APP_DIGEST" \
+            >/dev/null
+          docker buildx imagetools inspect "$MIGRATE_IMAGE@$MIGRATE_DIGEST" \
+            >/dev/null
           gh attestation verify "oci://$APP_IMAGE@$APP_DIGEST" \
             --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow \
+            "$GITHUB_REPOSITORY/.github/workflows/publish-images.yml" \
             --bundle-from-oci \
             --source-digest "$GITHUB_SHA" >/dev/null
           gh attestation verify "oci://$MIGRATE_IMAGE@$MIGRATE_DIGEST" \
             --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow \
+            "$GITHUB_REPOSITORY/.github/workflows/publish-images.yml" \
             --bundle-from-oci \
             --source-digest "$GITHUB_SHA" >/dev/null
-          release_state=$(gh release view "$RELEASE_IMAGE_TAG" \
-            --json isDraft,assets)
-          jq -e --arg archive "$BUNDLE_NAME.tar.gz" \
-            --arg checksum "$BUNDLE_NAME.tar.gz.sha256" '
-              .isDraft == true
-              and ([.assets[].name] | sort) == ([$archive, $checksum] | sort)
-            ' <<<"$release_state" >/dev/null
-          gh release edit "$RELEASE_IMAGE_TAG" --draft=false
-          published_state=$(gh release view "$RELEASE_IMAGE_TAG" \
-            --json isDraft,assets)
-          jq -e --arg archive "$BUNDLE_NAME.tar.gz" \
-            --arg checksum "$BUNDLE_NAME.tar.gz.sha256" '
-              .isDraft == false
-              and ([.assets[].name] | sort) == ([$archive, $checksum] | sort)
-            ' <<<"$published_state" >/dev/null
+          refresh_owned_release true "$release_state"
+          GH_TOKEN="$RELEASE_POLICY_TOKEN" \
+            tools/verify-github-release-policy.sh \
+              "$GITHUB_REPOSITORY" \
+              "$RELEASE_IMAGE_TAG" \
+              "$GITHUB_SHA" \
+              "$RELEASE_TAG_RULESET_ID" \
+              >"$RUNNER_TEMP/github-policy-before-publish.json"
+          publish_request="$RUNNER_TEMP/publish-owned-release.json"
+          published_response="$RUNNER_TEMP/published-owned-release.json"
+          jq -n \
+            --arg tag "$RELEASE_IMAGE_TAG" \
+            --arg target "$GITHUB_SHA" \
+            --arg name "$release_name" \
+            --rawfile body "$notes" '{
+              tag_name: $tag,
+              target_commitish: $target,
+              name: $name,
+              body: $body,
+              draft: false,
+              prerelease: false,
+              make_latest: "false"
+            }' >"$publish_request"
+          gh api --method PATCH \
+            "repos/$GITHUB_REPOSITORY/releases/$OWNED_RELEASE_ID" \
+            --input "$publish_request" >"$published_response"
+          verify_owned_release "$published_response" false
+          published_state=
+          published_state_verified=false
+          for attempt in {1..12}; do
+            if published_state=$(gh api \
+                "repos/$GITHUB_REPOSITORY/releases/$OWNED_RELEASE_ID" 2>&1) &&
+                verify_owned_release <(printf '%s\n' "$published_state") false &&
+                jq -e '.immutable == true' \
+                  <<<"$published_state" >/dev/null 2>&1; then
+              published_state_verified=true
+              break
+            fi
+            if ((attempt < 12)); then
+              sleep 5
+            fi
+          done
+          if [[ "$published_state_verified" != true ]]; then
+            echo "Published release did not become immutable with the exact assets." >&2
+            printf '%s\n' "$published_state" >&2
+            exit 1
+          fi
+          tag_release=$(gh api \
+            "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_IMAGE_TAG")
+          jq -e --argjson id "$OWNED_RELEASE_ID" '.id == $id' \
+            <<<"$tag_release" >/dev/null
+          release_attestation_verified=false
+          release_verification_error="$RUNNER_TEMP/github-release-attestation.stderr"
+          for attempt in {1..12}; do
+            if gh release verify \
+                "$RELEASE_IMAGE_TAG" \
+                --repo "$GITHUB_REPOSITORY" \
+                --format json \
+                >"$RUNNER_TEMP/github-release-attestation.json" \
+                2>"$release_verification_error"; then
+              release_attestation_verified=true
+              break
+            fi
+            if ((attempt < 12)); then
+              sleep 5
+            fi
+          done
+          if [[ "$release_attestation_verified" != true ]]; then
+            echo "Published immutable release attestation did not verify." >&2
+            cat "$release_verification_error" >&2
+            exit 1
+          fi
+          jq -e 'type == "object" or type == "array"' \
+            "$RUNNER_TEMP/github-release-attestation.json" >/dev/null
+          asset_attestation_dir="$RUNNER_TEMP/github-release-asset-attestations"
+          install -d -m 0755 "$asset_attestation_dir"
+          for verified_asset in \
+              "$BUNDLE_PATH" \
+              "$CHECKSUM_PATH" \
+              "$EVIDENCE_PATH" \
+              "$EVIDENCE_CHECKSUM_PATH"
+          do
+            verified_asset_name=$(basename -- "$verified_asset")
+            gh release verify-asset \
+              "$RELEASE_IMAGE_TAG" \
+              "$verified_asset" \
+              --repo "$GITHUB_REPOSITORY" \
+              --format json \
+              >"$asset_attestation_dir/$verified_asset_name.json"
+            jq -e 'type == "object" or type == "array"' \
+              "$asset_attestation_dir/$verified_asset_name.json" >/dev/null
+          done
+          GH_TOKEN="$RELEASE_POLICY_TOKEN" \
+            tools/verify-github-release-policy.sh \
+              "$GITHUB_REPOSITORY" \
+              "$RELEASE_IMAGE_TAG" \
+              "$GITHUB_SHA" \
+              "$RELEASE_TAG_RULESET_ID" \
+              >"$RUNNER_TEMP/github-policy-after-publish.json"
           {
             echo "### Verifiziertes eStab-Imagepaar"
             echo
             echo "- App: \`$APP_IMAGE@$APP_DIGEST\`"
             echo "- Migrator: \`$MIGRATE_IMAGE@$MIGRATE_DIGEST\`"
             echo "- Installationspaket: \`$BUNDLE_NAME.tar.gz\`"
+            echo "- Dauerhafte Evidence: \`$EVIDENCE_NAME.tar.gz\`"
           } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Retain final GitHub publication policy evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: github-publication-policy-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/github-policy-before-publish.json
+            ${{ runner.temp }}/github-policy-after-publish.json
+            ${{ runner.temp }}/github-release-attestation.json
+            ${{ runner.temp }}/github-release-asset-attestations
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Delete only this run's still-private draft after failure
+        if: ${{ failure() && steps.release_draft.outputs.release_id != '' }}
+        shell: bash
+        env:
+          OWNED_RELEASE_ID: ${{ steps.release_draft.outputs.release_id }}
+        run: |
+          set -euo pipefail
+          notes="$RUNNER_TEMP/release-notes.md"
+          release_name="eStab $RELEASE_IMAGE_TAG"
+          owned_release_identity="$RUNNER_TEMP/owned-release-identity.json"
+          current_release="$RUNNER_TEMP/owned-release-cleanup-check.json"
+          if [[ ! "$OWNED_RELEASE_ID" =~ ^[1-9][0-9]*$ ]] ||
+              [[ ! -s "$owned_release_identity" ]] ||
+              [[ ! -s "$notes" ]]; then
+            echo "::warning::Exact owned-draft identity is unavailable; refusing cleanup."
+            exit 0
+          fi
+          if ! gh api \
+              "repos/$GITHUB_REPOSITORY/releases/$OWNED_RELEASE_ID" \
+              >"$current_release"; then
+            echo "::warning::Owned release is absent or unreadable; no cleanup performed."
+            exit 0
+          fi
+          if ! jq -e \
+              --argjson id "$OWNED_RELEASE_ID" \
+              --arg tag "$RELEASE_IMAGE_TAG" \
+              --arg target "$GITHUB_SHA" \
+              --arg name "$release_name" \
+              --rawfile body "$notes" \
+              --slurpfile identity "$owned_release_identity" '
+                .id == $id
+                and {
+                  id,
+                  node_id,
+                  created_at,
+                  author: {
+                    id: .author.id,
+                    node_id: .author.node_id,
+                    login: .author.login
+                  }
+                } == $identity[0]
+                and (.node_id | type == "string" and length > 0)
+                and (.created_at | type == "string" and length > 0)
+                and (.author.id | type == "number" and . > 0)
+                and (.author.node_id | type == "string" and length > 0)
+                and (.author.login | type == "string" and length > 0)
+                and .tag_name == $tag
+                and .target_commitish == $target
+                and .name == $name
+                and .body == $body
+                and .draft == true
+                and .prerelease == false
+                and .immutable == false
+                and .published_at == null
+              ' "$current_release" >/dev/null; then
+            echo "::warning::Release is no longer the exact private draft created by this run; refusing cleanup."
+            exit 0
+          fi
+          gh api --method DELETE \
+            "repos/$GITHUB_REPOSITORY/releases/$OWNED_RELEASE_ID" \
+            >/dev/null
+          echo "::notice::Deleted this failed run's exact private draft release."

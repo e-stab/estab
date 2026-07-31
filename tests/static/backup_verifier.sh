@@ -56,6 +56,65 @@ EOF
 )
 sh "$verifier" "$valid_v2" estab >/dev/null
 
+valid_v3=$work_dir/valid-v3
+cp -R "$valid_v2" "$valid_v3"
+printf 'estab-full-backup-v3\n' >"$valid_v3/backup-format.txt"
+cat >"$valid_v3/release-identity.txt" <<'EOF'
+app	ghcr.io/e-stab/estab@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+migrate	ghcr.io/e-stab/estab-migrate@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+database	mariadb@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+EOF
+(
+    cd "$valid_v3"
+    sha256sum \
+        4fdata.tar.gz \
+        backup-created-utc.txt \
+        backup-format.txt \
+        database-name.txt \
+        database.sql \
+        export.tar.gz \
+        image-references.txt \
+        project-name.txt \
+        release-identity.txt \
+        storage-sources.txt \
+        >SHA256SUMS
+)
+sh "$verifier" "$valid_v3" estab >/dev/null
+
+invalid_v3_identity=$work_dir/invalid-v3-identity
+cp -R "$valid_v3" "$invalid_v3_identity"
+sed 's/sha256:aaaaaaaa/sha256:dddddddd/' \
+    "$valid_v3/release-identity.txt" \
+    >"$invalid_v3_identity/release-identity.txt"
+(
+    cd "$invalid_v3_identity"
+    sha256sum \
+        4fdata.tar.gz \
+        backup-created-utc.txt \
+        backup-format.txt \
+        database-name.txt \
+        database.sql \
+        export.tar.gz \
+        image-references.txt \
+        project-name.txt \
+        release-identity.txt \
+        storage-sources.txt \
+        >SHA256SUMS
+)
+if sh "$verifier" "$invalid_v3_identity" estab >/dev/null 2>&1; then
+    printf 'Backup verifier test: release identity differing from diagnostic image records accepted\n' >&2
+    exit 1
+fi
+
+unbound_v3_identity=$work_dir/unbound-v3-identity
+cp -R "$valid_v3" "$unbound_v3_identity"
+grep -v 'release-identity.txt$' "$valid_v3/SHA256SUMS" \
+    >"$unbound_v3_identity/SHA256SUMS"
+if sh "$verifier" "$unbound_v3_identity" estab >/dev/null 2>&1; then
+    printf 'Backup verifier test: unbound format-3 release identity accepted\n' >&2
+    exit 1
+fi
+
 invalid_v2_metadata=$work_dir/invalid-v2-metadata
 cp -R "$valid_v2" "$invalid_v2_metadata"
 printf 'database\t/var/lib/mysql\tbind\t-\trelative/path\n' \
@@ -158,6 +217,43 @@ if sh "$verifier" "$malformed_archive" estab >/dev/null 2>&1; then
     printf 'Backup verifier test: malformed tar archive accepted\n' >&2
     exit 1
 fi
+
+make_unsafe_archive()
+{
+    unsafe_kind=$1
+    unsafe_output=$2
+    unsafe_source=$work_dir/unsafe-archive-source
+    rm -rf -- "$unsafe_source"
+    mkdir "$unsafe_source"
+    printf 'must never escape\n' >"$unsafe_source/payload"
+    case "$unsafe_kind" in
+        parent) unsafe_name='../escape' ;;
+        absolute) unsafe_name='/escape' ;;
+        *) exit 1 ;;
+    esac
+    if tar --version 2>/dev/null | grep -Fq 'GNU tar'; then
+        tar -P -C "$unsafe_source" -czf "$unsafe_output" \
+            --transform="s#^payload\$#$unsafe_name#" payload
+    else
+        tar -P -C "$unsafe_source" -czf "$unsafe_output" \
+            -s "#^payload\$#$unsafe_name#" payload
+    fi
+}
+
+for unsafe_kind in parent absolute; do
+    unsafe_archive=$work_dir/unsafe-archive-$unsafe_kind
+    cp -R "$valid" "$unsafe_archive"
+    make_unsafe_archive "$unsafe_kind" "$unsafe_archive/4fdata.tar.gz"
+    (
+        cd "$unsafe_archive"
+        sha256sum database.sql 4fdata.tar.gz export.tar.gz >SHA256SUMS
+    )
+    if sh "$verifier" "$unsafe_archive" estab >/dev/null 2>&1; then
+        printf 'Backup verifier test: %s archive path accepted\n' \
+            "$unsafe_kind" >&2
+        exit 1
+    fi
+done
 
 wrong_database=$work_dir/wrong-database
 cp -R "$valid" "$wrong_database"

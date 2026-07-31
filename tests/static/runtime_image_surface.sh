@@ -33,6 +33,31 @@ assert_dockerfile_absent()
 sh -n "$verifier"
 sh -n "$admin_initializer"
 sh -n "$app_entrypoint"
+for writable_root_contract in \
+    'prepare_writable_directory "$app_data_root"' \
+    'prepare_writable_directory "$export_root"' \
+    'prepare_writable_directory "$data_root"' \
+    'prepare_writable_directory "$data_root/anhang"' \
+    'prepare_writable_directory "$data_root/vordruck"' \
+    'prepare_writable_directory /var/lib/php/sessions' \
+    'install -d -o www-data -g www-data -m 0770' \
+    'setfacl -b -k -- "$writable_directory"' \
+    'getfacl -cp -- "$writable_directory"' \
+    '[ -L "$writable_directory" ]' \
+    '-perm 0770' \
+    '-user www-data -group www-data' \
+    'setpriv --reuid=www-data --regid=www-data --clear-groups'
+do
+    if ! grep -Fq -- "$writable_root_contract" "$app_entrypoint"; then
+        printf 'Runtime surface contract: entrypoint is missing writable-root contract %s\n' \
+            "$writable_root_contract" >&2
+        exit 1
+    fi
+done
+if grep -Fq -- '/var/lib/mysql' "$app_entrypoint"; then
+    printf 'Runtime surface contract: app entrypoint must not change the database mount\n' >&2
+    exit 1
+fi
 assert_dockerfile_absent 'COPY 4fach/ ./4fach/'
 assert_dockerfile_absent 'COPY 4fadm/ ./4fadm/'
 assert_dockerfile_absent 'COPY 4fbak/ ./4fbak/'
@@ -57,6 +82,9 @@ assert_dockerfile_contains 'COPY docker/app/init-admin-auth.sh /usr/local/bin/es
 assert_dockerfile_contains 'estab-verify-runtime-surface /var/www/html'
 assert_dockerfile_contains '"fileinfo", "gd", "mbstring"'
 assert_dockerfile_contains 'gd_info()["JPEG Support"]'
+assert_dockerfile_contains 'command -v setpriv >/dev/null'
+assert_dockerfile_contains 'command -v getfacl >/dev/null'
+assert_dockerfile_contains 'command -v setfacl >/dev/null'
 for required_runtime_path in \
     4fach/fuehrungsstelle.php \
     4fadm/fuehrungsstelle.php \

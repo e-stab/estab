@@ -32,8 +32,13 @@ $backupOperator = $read($root . '/deploy/registry/backup.sh');
 $backupVerifier = $read($root . '/deploy/registry/verify-backup.sh');
 $restoreOperator = $read($root . '/deploy/registry/restore.sh');
 $restoreStaticTest = $read($root . '/tests/static/restore_operator.sh');
+$backupOperatorStaticTest = $read($root . '/tests/static/backup_operator.sh');
+$backupVerifierStaticTest = $read($root . '/tests/static/backup_verifier.sh');
 $releaseVerifier = $read($root . '/deploy/registry/verify-release.sh');
 $deploymentOperator = $read($root . '/deploy/registry/deploy.sh');
+$offlineHelper = $read($root . '/deploy/registry/offline-images.sh');
+$releaseEvidenceGuide = $read($root . '/deploy/registry/RELEASE-EVIDENCE.md');
+$offlineStaticTest = $read($root . '/tests/static/offline_images.sh');
 $staticRunner = $read($root . '/tests/static/run.sh');
 $trivyIgnore = $read($root . '/.trivyignore.yaml');
 $ci = $read($root . '/tests/integration/ci.sh');
@@ -77,15 +82,25 @@ $assert(
     'Application base does not pin the verified PHP multi-architecture index'
 );
 $assert(
+    str_contains($ciWorkflow, 'Validate GitHub Actions workflows')
+    && str_contains(
+        $ciWorkflow,
+        'docker.io/rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667'
+    )
+    && str_contains($ciWorkflow, '--volume "$GITHUB_WORKSPACE:/repo:ro"')
+    && str_contains($ciWorkflow, '--workdir /repo'),
+    'CI does not validate every workflow with the pinned read-only actionlint image'
+);
+$assert(
     substr_count($registryCompose, 'condition: service_healthy') === 2
     && str_contains($registryCompose, 'condition: service_completed_successfully'),
     'Registry application start is not gated by healthy DB and successful migration'
 );
 foreach ([
-    '${ESTAB_DB_DATA_SOURCE:-estab_db}:/var/lib/mysql',
-    '${ESTAB_APP_DATA_SOURCE:-estab_data}:/var/www/html/4fdata',
-    '${ESTAB_EXPORT_DATA_SOURCE:-estab_export}:/var/lib/estab/export',
-    'estab_auth:/run/estab-auth:ro',
+    '${ESTAB_DB_DATA_SOURCE:-estab_db}:/var/lib/mysql:Z',
+    '${ESTAB_APP_DATA_SOURCE:-estab_data}:/var/www/html/4fdata:z',
+    '${ESTAB_EXPORT_DATA_SOURCE:-estab_export}:/var/lib/estab/export:z',
+    'estab_auth:/run/estab-auth:ro,z',
 ] as $volumeMapping) {
     $assert(
         str_contains($registryCompose, $volumeMapping),
@@ -103,6 +118,27 @@ foreach ([
         'Registry deployment is missing file-backed secret ' . $secretName
     );
 }
+$assert(
+    substr_count(
+        $registryCompose,
+        '${ESTAB_DB_PASSWORD_SECRET_FILE:-./secrets/db_password.txt}:/run/secrets/estab_db_password:ro,z'
+    ) === 2
+    && substr_count(
+        $registryCompose,
+        '${ESTAB_DB_ROOT_PASSWORD_SECRET_FILE:-./secrets/db_root_password.txt}:/run/secrets/estab_db_root_password:ro,z'
+    ) === 2
+    && substr_count(
+        $registryCompose,
+        '${ESTAB_ADMIN_PASSWORD_SECRET_FILE:-./secrets/admin_password.txt}:/run/secrets/estab_admin_password:ro,Z'
+    ) === 1
+    && !str_contains($registryCompose, 'create_host_path:')
+    && !str_contains($registryCompose, 'selinux:')
+    && !str_contains($registryCompose, "\nsecrets:")
+    && !str_contains($registryCompose, "\n    secrets:")
+    && !str_contains($registryCompose, 'label=disable')
+    && !str_contains($registryCompose, 'privileged:'),
+    'Registry file secrets and data mounts are not safely share-labelled for Docker and Podman on SELinux'
+);
 foreach ([
     'ESTAB_DB_DATA_SOURCE',
     'ESTAB_APP_DATA_SOURCE',
@@ -177,9 +213,12 @@ $assert(
     && str_contains($registryReadme, '@sha256:')
     && str_contains($registryReadme, 'Vollbackup')
     && str_contains($registryReadme, 'Unvollständigen Publish-Lauf behandeln')
-    && str_contains($registryReadme, 'Candidate-Tag')
+    && str_contains($registryReadme, 'push-by-digest=true')
+    && str_contains($registryReadme, 'ESTAB_RELEASE_TAG_RULESET_ID')
     && str_contains($registryReadme, 'verstecktes Draft')
-    && str_contains($registryReadme, 'Required Reviewer'),
+    && str_contains($registryReadme, 'Required Reviewer')
+    && str_contains($registryReadme, 'RELEASE-EVIDENCE.md')
+    && str_contains($registryReadme, 'skopeo copy --all --preserve-digests'),
     'Registry runbook omits architecture, Synology, digest, backup, or release recovery'
 );
 $assert(
@@ -207,7 +246,8 @@ $assert(
     && str_contains($workflow, 'RELEASE_REF_TYPE')
     && str_contains($workflow, 'RELEASE_REF_NAME')
     && str_contains($workflow, 'e-stab/estab')
-    && str_contains($workflow, 'Refuse existing immutable tags')
+    && str_contains($workflow, 'Refuse an existing GitHub release')
+    && str_contains($workflow, 'tools/verify-github-release-policy.sh')
     && str_contains($workflow, 'The mutable latest tag is deliberately unsupported.')
     && !str_contains($workflow, 'publish_latest'),
     'Publishing is not globally serialized, Git-tag-bound, immutable, or latest-free'
@@ -269,7 +309,7 @@ $assert(
     && str_contains($ciWorkflow, 'Fresh Docker Compose integration (${{ matrix.arch }})')
     && str_contains($workflow, 'runner: ubuntu-24.04')
     && str_contains($workflow, 'runner: ubuntu-24.04-arm')
-    && str_contains($workflow, 'Verify release candidate (${{ matrix.arch }})')
+    && str_contains($workflow, 'Verify exact release digests (${{ matrix.arch }})')
     && str_contains($workflow, 'ESTAB_BROWSER_TEST: ${{ matrix.browser }}'),
     'CI or release verification does not execute the container suite natively on amd64 and arm64'
 );
@@ -282,10 +322,16 @@ $assert(
         'docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a'
     ) === 2
     && !str_contains($workflow, 'push: false')
-    && substr_count($workflow, 'push: true') === 2
-    && str_contains($workflow, 'name: Build immutable candidate image pair')
-    && str_contains($workflow, 'CANDIDATE_IMAGE_TAG: candidate-')
-    && str_contains($workflow, 'candidate_tag: ${{ steps.candidate_metadata.outputs.tag }}')
+    && !preg_match('/^\s+push:\s+true\s*$/m', $workflow)
+    && substr_count(
+        $workflow,
+        'push-by-digest=true,name-canonical=true,push=true'
+    ) === 2
+    && !preg_match('/^\s+tags:/m', $workflow)
+    && str_contains($workflow, 'name: Build digest-only image pair')
+    && !str_contains($workflow, 'CANDIDATE_IMAGE_TAG')
+    && !str_contains($workflow, 'candidate_tag:')
+    && str_contains($workflow, 'registry_publication=digest-only')
     && str_contains($workflow, 'APP_DIGEST: ${{ needs.stage.outputs.app_digest }}')
     && str_contains($workflow, 'MIGRATE_DIGEST: ${{ needs.stage.outputs.migrate_digest }}')
     && str_contains($workflow, 'ESTAB_PREBUILT_APP_IMAGE:')
@@ -305,7 +351,7 @@ $assert(
     && str_contains($workflow, 'Upload failure diagnostics')
     && str_contains($workflow, 'retention-days: 90')
     && str_contains($workflow, 'retention-days: 7'),
-    'Publish workflow omits its single-build candidate, exact-digest native gates, or retained evidence'
+    'Publish workflow omits digest-only builds, exact-digest native gates, or retained evidence'
 );
 $assert(
     is_executable($root . '/tests/integration/verify_release_candidate.sh')
@@ -347,15 +393,34 @@ $assert(
     && !str_contains($workflow, 'org.opencontainers.image.licenses'),
     'Publish workflow omits an image or asserts an unverified license'
 );
-$releaseDraftPosition = strpos($workflow, 'gh release create "$RELEASE_IMAGE_TAG"');
-$releaseUploadPosition = strpos($workflow, 'gh release upload "$RELEASE_IMAGE_TAG"');
-$releaseDownloadPosition = strpos($workflow, 'gh release download "$RELEASE_IMAGE_TAG"');
-$releasePromotionPosition = strpos($workflow, 'docker buildx imagetools create');
+$releaseDraftPosition = strpos(
+    $workflow,
+    'create_request="$RUNNER_TEMP/create-release.json"'
+);
+$releaseUploadPosition = strpos(
+    $workflow,
+    'upload_owned_release_asset "$BUNDLE_PATH"'
+);
+$releaseDownloadPosition = strpos(
+    $workflow,
+    '"$verification_dir/$BUNDLE_NAME.tar.gz"'
+);
+$permanentEvidencePosition = strpos(
+    $workflow,
+    'evidence_name="$BUNDLE_NAME-evidence"'
+);
 $publicationEvidencePosition = strpos($workflow, 'name: publication-evidence-${{ github.run_id }}-');
-$releasePublishPosition = strpos($workflow, 'gh release edit "$RELEASE_IMAGE_TAG" --draft=false');
+$releasePublishPosition = strpos(
+    $workflow,
+    'publish_request="$RUNNER_TEMP/publish-owned-release.json"'
+);
+$releaseCleanupPosition = strpos(
+    $workflow,
+    "name: Delete only this run's still-private draft after failure"
+);
 $assert(
     str_contains($workflow, 'contents: write')
-    && str_contains($workflow, 'name: Promote verified digests and publish installation bundle')
+    && str_contains($workflow, 'name: Publish verified digests and installation bundle')
     && str_contains($workflow, '- verify_candidate')
     && str_contains($workflow, 'Build immutable installation bundle')
     && str_contains($workflow, 'deploy/registry/backup.sh')
@@ -363,6 +428,8 @@ $assert(
     && str_contains($workflow, 'deploy/registry/restore.sh')
     && str_contains($workflow, 'deploy/registry/verify-backup.sh')
     && str_contains($workflow, 'deploy/registry/verify-release.sh')
+    && str_contains($workflow, 'deploy/registry/offline-images.sh')
+    && str_contains($workflow, 'deploy/registry/RELEASE-EVIDENCE.md')
     && str_contains($workflow, 'cp LICENSE THIRD_PARTY_NOTICES.md "$bundle_root/"')
     && str_contains(
         $workflow,
@@ -387,31 +454,223 @@ $assert(
     && str_contains($workflow, 'sha256sum -- * .env.example')
     && str_contains($workflow, 'sha256sum "$bundle_name.tar.gz"')
     && !str_contains($workflow, 'sha256sum "$RUNNER_TEMP/$bundle_name.tar.gz"')
-    && str_contains($workflow, 'gh release create "$RELEASE_IMAGE_TAG"')
-    && str_contains($workflow, '--draft')
-    && str_contains($workflow, '--latest=false')
-    && str_contains($workflow, 'gh release upload "$RELEASE_IMAGE_TAG"')
-    && substr_count($workflow, 'gh release download "$RELEASE_IMAGE_TAG"') === 2
-    && substr_count($workflow, 'docker buildx imagetools create') === 2
-    && str_contains($workflow, 'gh release edit "$RELEASE_IMAGE_TAG" --draft=false')
-    && str_contains($workflow, 'cleanup_owned_draft')
-    && str_contains($workflow, 'promotion_started=true')
-    && str_contains($workflow, 'A promoted release tag does not match its verified digest.')
+    && str_contains($workflow, '"repos/$GITHUB_REPOSITORY/releases"')
+    && str_contains($workflow, 'draft: true')
+    && substr_count($workflow, 'make_latest: "false"') === 2
+    && str_contains(
+        $workflow,
+        'https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$owned_release_id/assets?name=$asset_name'
+    )
+    && str_contains(
+        $workflow,
+        'https://api.github.com/repos/$GITHUB_REPOSITORY/releases/assets/$asset_id'
+    )
+    && !str_contains($workflow, 'docker buildx imagetools create')
+    && !str_contains($workflow, 'gh release create ')
+    && !str_contains($workflow, 'gh release upload ')
+    && !str_contains($workflow, 'gh release download ')
+    && !str_contains($workflow, 'gh release edit ')
+    && str_contains($workflow, 'id: release_draft')
+    && str_contains(
+        $workflow,
+        'OWNED_RELEASE_ID: ${{ steps.release_draft.outputs.release_id }}'
+    )
+    && substr_count(
+        $workflow,
+        '"repos/$GITHUB_REPOSITORY/releases/$OWNED_RELEASE_ID"'
+    ) >= 4
+    && str_contains($workflow, 'gh api --method PATCH')
+    && str_contains($workflow, 'expected_release_assets')
+    && str_contains($workflow, 'owned_release_identity')
+    && str_contains($workflow, '.digest == $digest')
+    && str_contains($workflow, '.size == $size')
+    && str_contains($workflow, '.id == $id')
+    && str_contains(
+        $workflow,
+        "if: \${{ failure() && steps.release_draft.outputs.release_id != '' }}"
+    )
+    && str_contains($workflow, '.draft == true')
+    && str_contains($workflow, '.immutable == false')
+    && str_contains($workflow, '.published_at == null')
+    && str_contains(
+        $workflow,
+        '"repos/$GITHUB_REPOSITORY/releases/$owned_release_id"'
+    )
+    && !str_contains($workflow, 'gh release delete "$RELEASE_IMAGE_TAG"')
+    && !str_contains($workflow, 'promotion_started')
+    && str_contains($workflow, 'Create and verify the complete release draft')
     && str_contains($workflow, 'name: publication-evidence-${{ github.run_id }}-')
     && str_contains($workflow, '"$BUNDLE_NAME.tar.gz.sha256"')
-    && str_contains($workflow, 'Refusing to overwrite existing release asset: $asset_name')
+    && str_contains($workflow, 'Refusing unsafe release asset: $asset_path')
     && $releaseDraftPosition !== false
     && $releaseUploadPosition !== false
     && $releaseDownloadPosition !== false
-    && $releasePromotionPosition !== false
+    && $permanentEvidencePosition !== false
     && $publicationEvidencePosition !== false
     && $releasePublishPosition !== false
+    && $releaseCleanupPosition !== false
     && $releaseDraftPosition < $releaseUploadPosition
     && $releaseUploadPosition < $releaseDownloadPosition
-    && $releaseDownloadPosition < $releasePromotionPosition
-    && $releasePromotionPosition < $publicationEvidencePosition
-    && $publicationEvidencePosition < $releasePublishPosition,
-    'Publish workflow does not verify hidden draft assets before digest-only promotion and final visibility'
+    && $releaseDownloadPosition < $permanentEvidencePosition
+    && $permanentEvidencePosition < $publicationEvidencePosition
+    && $publicationEvidencePosition < $releasePublishPosition
+    && $releasePublishPosition < $releaseCleanupPosition,
+    'Publish workflow does not verify hidden draft assets before final visibility'
+);
+$assert(
+    str_contains($workflow, 'actions: read')
+    && str_contains($workflow, 'Download and validate native release evidence')
+    && str_contains($workflow, 'gh run download "$GITHUB_RUN_ID"')
+    && str_contains(
+        $workflow,
+        'artifact_name="publish-evidence-${architecture}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"'
+    )
+    && str_contains($workflow, 'verify_architecture_evidence amd64')
+    && str_contains($workflow, 'verify_architecture_evidence arm64')
+    && str_contains($workflow, 'gh attestation trusted-root')
+    && substr_count(
+        $workflow,
+        '$GITHUB_REPOSITORY/.github/workflows/publish-images.yml'
+    ) >= 4
+    && str_contains($workflow, '--format=json >"$online_result"')
+    && str_contains($workflow, "jq -c '.[].attestation'")
+    && str_contains($workflow, '--bundle "$bundle"')
+    && str_contains($workflow, '--custom-trusted-root')
+    && str_contains($workflow, '--format=json >"$offline_result"')
+    && str_contains($workflow, 'Format: estab-release-evidence-v1')
+    && str_contains($workflow, 'find . -type f')
+    && str_contains($workflow, 'evidence_name="$BUNDLE_NAME-evidence"')
+    && str_contains(
+        $workflow,
+        'sha256sum --check $BUNDLE_NAME-evidence.tar.gz.sha256'
+    )
+    && str_contains(
+        $workflow,
+        'upload_owned_release_asset "$evidence_path"'
+    )
+    && str_contains(
+        $workflow,
+        'upload_owned_release_asset "$evidence_checksum_path"'
+    )
+    && str_contains($workflow, 'sha256sum --check "$evidence_name.tar.gz.sha256"')
+    && str_contains($workflow, 'test -s trust/app-online-verification.json')
+    && str_contains($workflow, 'test -s trust/migrate-online-verification.json')
+    && str_contains($workflow, 'test -s architectures/amd64/app-sbom.json')
+    && str_contains($workflow, 'test -s architectures/arm64/app-sbom.json')
+    && str_contains(
+        $workflow,
+        ') == $expected_assets[0]'
+    )
+    && substr_count(
+        $workflow,
+        'secrets.ESTAB_RELEASE_POLICY_TOKEN'
+    ) === 3
+    && str_contains($workflow, 'vars.ESTAB_RELEASE_TAG_RULESET_ID')
+    && substr_count(
+        $workflow,
+        'tools/verify-github-release-policy.sh'
+    ) === 4
+    && !str_contains($workflow, 'ESTAB_IMMUTABLE_RELEASES_READ_TOKEN')
+    && !str_contains($workflow, 'IMMUTABLE_RELEASES_READ_TOKEN')
+    && str_contains($workflow, ".immutable == true")
+    && str_contains($workflow, 'published_state_verified=false')
+    && str_contains(
+        $workflow,
+        'Published release did not become immutable with the exact assets.'
+    )
+    && str_contains($workflow, 'gh release verify')
+    && str_contains($workflow, 'gh release verify-asset')
+    && str_contains($workflow, 'for verified_asset in')
+    && str_contains($workflow, '--format json')
+    && str_contains($workflow, 'github-policy-after-publish.json')
+    && str_contains($workflow, 'github-publication-policy-')
+    && str_contains($workflow, 'Dauerhafte Evidence'),
+    'Release evidence is not preserved, checksummed, attestation-bound, immutable, and release-visible'
+);
+$assert(
+    is_executable($root . '/deploy/registry/offline-images.sh')
+    && is_executable($root . '/tests/static/offline_images.sh')
+    && str_contains($offlineHelper, '"$release_verifier" "$script_dir"')
+    && substr_count(
+        $offlineHelper,
+        'skopeo copy --all --preserve-digests'
+    ) === 3
+    && str_contains($offlineHelper, 'oci-archive:')
+    && !str_contains($offlineHelper, 'docker-archive:')
+    && str_contains($offlineHelper, 'skopeo manifest-digest')
+    && str_contains($offlineHelper, 'platform.architecture == "amd64"')
+    && str_contains($offlineHelper, 'platform.architecture == "arm64"')
+    && str_contains($offlineHelper, 'actual_digest=$(manifest_digest')
+    && str_contains($offlineHelper, '[ "$actual_digest" = "$expected_digest" ]')
+    && str_contains($offlineHelper, 'OFFLINE-IMAGES')
+    && str_contains($offlineHelper, 'check-mirror:2')
+    && !str_contains($offlineHelper, 'mirror:3')
+    && str_contains($offlineHelper, 'Compose must contain exactly one image for services.db')
+    && str_contains(
+        $offlineHelper,
+        'database_reference=docker.io/library/mariadb@$database_digest'
+    )
+    && str_contains($offlineHelper, 'database.oci.tar')
+    && str_contains($offlineHelper, 'mirror_database_repository=$verified_prefix/estab-db')
+    && str_contains($offlineHelper, 'archive directory contains an unbound entry')
+    && str_contains(
+        $offlineHelper,
+        'archive directory must contain exactly the canonical five files'
+    )
+    && str_contains($offlineHelper, 'must be an absolute path')
+    && str_contains($offlineHelper, 'must not contain control characters')
+    && str_contains($offlineHelper, 'contains an unsafe path component')
+    && str_contains($offlineHelper, "must not contain ':' because OCI transport paths end at the first colon")
+    && str_contains(
+        $offlineHelper,
+        'registry prefix must start with an explicit registry host'
+    )
+    && !str_contains($offlineHelper, 'copy_tag_if_absent')
+    && !str_contains($offlineHelper, 'staging_tag=')
+    && str_contains($offlineHelper, 'mkdir -m 0700 "$archive_directory"')
+    && str_contains($offlineHelper, '.estab-export-in-progress')
+    && str_contains(
+        $offlineHelper,
+        'incomplete reserved archive retained for inspection'
+    )
+    && str_contains($releaseEvidenceGuide, 'vier dauerhafte GitHub-Release-')
+    && str_contains($releaseEvidenceGuide, 'Admin-Workstation')
+    && str_contains($releaseEvidenceGuide, 'gh attestation verify')
+    && str_contains($releaseEvidenceGuide, '--bundle-from-oci')
+    && str_contains($releaseEvidenceGuide, '--signer-workflow')
+    && str_contains($releaseEvidenceGuide, '--custom-trusted-root')
+    && str_contains($releaseEvidenceGuide, 'spätere Schlüsselwiderrufe')
+    && str_contains(
+        $releaseEvidenceGuide,
+        'skopeo copy --all --preserve-digests'
+    )
+    && str_contains($releaseEvidenceGuide, 'services.db.image')
+    && str_contains($releaseEvidenceGuide, 'database.oci.tar')
+    && str_contains($releaseEvidenceGuide, '<prefix>/estab-db@sha256:')
+    && str_contains(
+        $releaseEvidenceGuide,
+        'ESTAB_RELEASE_POLICY_TOKEN'
+    )
+    && str_contains($releaseEvidenceGuide, 'ESTAB_RELEASE_TAG_RULESET_ID')
+    && str_contains(
+        $releaseEvidenceGuide,
+        'schreibt selbst keine Registry-Tags'
+    )
+    && str_contains($offlineStaticTest, 'OFFLINE_BAD_DIGEST=1')
+    && str_contains($offlineStaticTest, 'OFFLINE_BAD_DATABASE_DIGEST=1')
+    && str_contains($offlineStaticTest, 'OFFLINE_BAD_ARCH=1')
+    && str_contains($offlineStaticTest, 'duplicate-database')
+    && str_contains($offlineStaticTest, 'extra-entry')
+    && str_contains($offlineStaticTest, 'missing-database')
+    && str_contains($offlineStaticTest, 'control-target')
+    && str_contains($offlineStaticTest, 'colon-transport')
+    && str_contains($offlineStaticTest, 'hostless-prefix')
+    && str_contains($offlineStaticTest, 'mirror verification trusted a mutable tag')
+    && str_contains($offlineStaticTest, 'failed export unexpectedly succeeded')
+    && str_contains($offlineStaticTest, 'public-export-parent')
+    && str_contains($offlineStaticTest, 'helper still mutates registry tags')
+    && str_contains($staticRunner, 'tests/static/offline_images.sh'),
+    'Offline multi-architecture export and registry recovery are not fail-closed or tested'
 );
 foreach ([$appDockerfile, $migrateDockerfile] as $dockerfile) {
     $assert(
@@ -453,9 +712,9 @@ $assert(
     'Registry integration does not create, guard, and inspect real host bind mounts'
 );
 $assert(
-    str_contains($integration, 'production_backup=$backup_parent/production-v2')
+    str_contains($integration, 'production_backup=$backup_parent/production-v3')
     && str_contains($integration, 'sh "$backup_operator" "$production_backup"')
-    && str_contains($integration, "'estab-full-backup-v2'")
+    && str_contains($integration, "'estab-full-backup-v3'")
     && substr_count(
         $integration,
         'sh "$backup_verifier" "$production_backup" "${ESTAB_DB_NAME:-estab}"'
@@ -470,7 +729,18 @@ $assert(
     && str_contains($integration, '.estab-bind-data-marker')
     && str_contains($integration, '.estab-bind-export-marker')
     && str_contains($integration, 'database_marker_count')
-    && str_contains($integration, 'restored marker content differs'),
+    && str_contains($integration, 'restored marker content differs')
+    && str_contains($integration, 'portable_backup=$backup_parent/named-to-bind-v3')
+    && str_contains($integration, 'source backup is not fully named-volume based')
+    && str_contains($integration, '--remap-project "$project=$bind_project"')
+    && substr_count(
+        $integration,
+        '--remap-mount-type database:volume=bind'
+    ) >= 1
+    && str_contains($integration, 'missing mount-type remaps were accepted')
+    && str_contains($integration, 'portable database marker differs')
+    && str_contains($integration, 'portable file marker checksum differs')
+    && str_contains($integration, 'project_resources_empty "$project"'),
     'Registry integration does not prove an exact database/file bind backup and restore'
 );
 $assert(
@@ -518,14 +788,30 @@ $assert(
         '"$verify_release" --inspect-images "$script_dir"'
     )
     && str_contains($deploymentOperator, 'compose up --detach')
-    && str_contains($deploymentOperator, '--env-file "$script_dir/.env"')
-    && str_contains($deploymentOperator, '-f "$script_dir/compose.yaml"')
+    && str_contains(
+        $deploymentOperator,
+        '--env-file "$active_compose_environment"'
+    )
+    && str_contains($deploymentOperator, '-f "$active_compose_file"')
+    && str_contains($deploymentOperator, 'create_runtime_snapshot')
+    && str_contains($deploymentOperator, 'snapshot-$snapshot_identity')
+    && str_contains($deploymentOperator, 'verify_runtime_secret_snapshot')
+    && str_contains($deploymentOperator, 'prune_unreferenced_runtime_snapshots')
+    && str_contains(
+        $deploymentOperator,
+        'retaining referenced private snapshot'
+    )
+    && str_contains($deploymentOperator, 'verify_no_extended_acl')
+    && str_contains($deploymentOperator, "It's Linux mode")
     && str_contains($deploymentOperator, 'compose.override.yaml')
     && str_contains($deploymentOperator, 'running\ healthy')
     && str_contains($deploymentOperator, 'migrate_state')
     && str_contains($deploymentOperator, 'admin_auth_state')
     && str_contains($deploymentOperator, 'admin-auth-init ($admin_auth_state)')
-    && str_contains($deploymentOperator, 'COMPOSE_ENV_FILES')
+    && str_contains(
+        $deploymentOperator,
+        'COMPOSE_* process overrides are forbidden'
+    )
     && str_contains(
         $deploymentOperator,
         'Compose runtime overrides must not be set in the process environment'
@@ -555,6 +841,8 @@ $assert(
     && str_contains($releaseVerifier, 'org.opencontainers.image.revision')
     && str_contains($releaseVerifier, 'THIRD_PARTY_NOTICES.md')
     && str_contains($releaseVerifier, 'restore.sh')
+    && str_contains($releaseVerifier, 'RELEASE-EVIDENCE.md')
+    && str_contains($releaseVerifier, 'offline-images.sh')
     && str_contains($releaseVerifier, 'bound release entry is not a readable regular file')
     && str_contains($registryReadme, 'sh ./deploy.sh check')
     && str_contains($registryReadme, 'sh ./deploy.sh pull')
@@ -576,10 +864,13 @@ $assert(
     && str_contains($backupOperator, 'mariadb-dump')
     && str_contains($backupOperator, '/var/www/html/4fdata')
     && str_contains($backupOperator, '/var/lib/estab/export')
-    && str_contains($backupOperator, '--volumes-from "$app_container"')
+    && str_contains($backupOperator, '--volumes-from "${app_container}:z"')
+    && !str_contains($backupOperator, '--volumes-from "$app_container"')
     && str_contains($backupOperator, 'backup-format.txt')
+    && str_contains($backupOperator, 'estab-full-backup-v3')
     && str_contains($backupOperator, 'storage-sources.txt')
     && str_contains($backupOperator, 'image-references.txt')
+    && str_contains($backupOperator, 'release-identity.txt')
     && str_contains($backupOperator, 'image_digest_hex=${image_digest#sha256:}')
     && str_contains($backupOperator, '*[!0123456789abcdef]*')
     && str_contains($backupOperator, '[ "${#image_digest_hex}" -eq 64 ]')
@@ -604,28 +895,50 @@ $assert(
     && str_contains($backupOperator, 'wait_for_healthy app "$app_container"')
     && str_contains($backupOperator, 'wait_for_healthy db "$db_container"')
     && str_contains($backupOperator, 'restart_application')
-    && str_contains($backupOperator, '"$move_cli" "$staged_before_publication" "$backup_target"')
+    && str_contains($backupOperator, 'if ! "$mkdir_cli" "$backup_target"; then')
+    && str_contains($backupOperator, 'publication_target_reserved=1')
+    && str_contains($backupOperator, 'target-owner.txt')
+    && str_contains($backupOperator, '"$move_cli" "$publication_source" "$publication_destination"')
     && !str_contains($backupOperator, '-nT')
-    && str_contains($backupOperator, 'atomic backup publication could not be proven')
+    && str_contains($backupOperator, 'atomic no-clobber reservation failed')
+    && str_contains($backupOperator, 'reserved no-clobber backup publication could not be proven')
     && str_contains($backupOperator, "trap 'cleanup 129' HUP")
     && str_contains($backupOperator, "trap 'cleanup 130' INT")
     && str_contains($backupOperator, "trap 'cleanup 143' TERM")
+    && str_contains($backupOperatorStaticTest, 'v3 manifest does not bind every expected file')
+    && str_contains($backupOperatorStaticTest, 'release-identity.txt')
+    && str_contains($backupOperatorStaticTest, 'concurrent target creation was overwritten')
+    && str_contains($backupOperatorStaticTest, 'foreign target must remain untouched')
+    && str_contains($backupOperatorStaticTest, '${app_id}:z')
     && str_contains($staticRunner, 'tests/static/backup_operator.sh'),
-    'Operator backup does not fail closed, capture every data source, bind metadata, and publish atomically'
+    'Operator backup does not fail closed, capture every data source, bind metadata, and publish without clobbering'
 );
 $assert(
     is_executable($root . '/deploy/registry/restore.sh')
     && str_contains(
         $restoreOperator,
-        '--confirm-project COMPOSE_PROJECT ABSOLUTE_BACKUP_DIRECTORY'
+        'Usage: $0 --confirm-project TARGET_PROJECT'
     )
-    && str_contains($restoreOperator, 'production restore requires the fully bound backup format 2')
-    && str_contains($restoreOperator, 'backup project $backup_project does not match --confirm-project')
+    && str_contains($restoreOperator, '[--remap-project SOURCE=TARGET]')
+    && str_contains($restoreOperator, '[--remap-mount-type ROLE:SOURCE=TARGET]')
+    && str_contains($restoreOperator, '[--remap-storage ROLE:SOURCE=TARGET]')
+    && str_contains($restoreOperator, '[--remap-volume ROLE:SOURCE=TARGET]')
+    && str_contains($restoreOperator, '[--allow-runtime-image-id-change]')
+    && str_contains($restoreOperator, 'production restore requires the fully bound backup format 2 or 3')
+    && str_contains($restoreOperator, 'provide the exact explicit --remap-project SOURCE=TARGET')
     && str_contains($restoreOperator, 'runtime storage mounts do not match')
-    && str_contains($restoreOperator, 'runtime image references or digests do not match')
+    && str_contains($restoreOperator, 'runtime image IDs differ from the backup')
+    && str_contains($restoreOperator, 'Config.Image references differ from the backup release identity')
+    && str_contains($restoreOperator, 'same canonical @sha256 manifest identity')
+    && str_contains($restoreOperator, 'mutable or local tags are forbidden')
+    && str_contains($restoreOperator, 'format-2 backups cannot authorize runtime image ID changes')
     && str_contains($restoreOperator, 'ESTAB_RESTORE_HEALTH_TIMEOUT_SECONDS')
     && substr_count($restoreOperator, 'verify_backup ||') >= 5
-    && str_contains($restoreOperator, '"$container_cli" stop "$app_container"')
+    && str_contains($restoreOperator, 'stop_restore_app_at_boundary')
+    && str_contains(
+        $restoreOperator,
+        '"$container_cli" stop "$restore_app_container"'
+    )
     && str_contains($restoreOperator, 'destructive_started=1')
     && str_contains(
         $restoreOperator,
@@ -639,7 +952,8 @@ $assert(
         $restoreOperator,
         '"$container_cli" start --attach "$migrate_container"'
     )
-    && str_contains($restoreOperator, '--volumes-from "$app_container"')
+    && str_contains($restoreOperator, '--volumes-from "${app_container}:z"')
+    && !str_contains($restoreOperator, '--volumes-from "$app_container"')
     && substr_count(
         $restoreOperator,
         '"$container_cli" run --rm --interactive --network none'
@@ -650,7 +964,10 @@ $assert(
         '"$container_cli" exec -i "$app_container" estab-healthcheck'
     )
     && str_contains($restoreOperator, 'RECOVERY REQUIRED for project')
-    && str_contains($restoreOperator, 'the application is intentionally stopped')
+    && str_contains(
+        $restoreOperator,
+        'the exact application container ID, project, stopped flag, and non-running lifecycle status are proven'
+    )
     && str_contains($restoreOperator, 'estab-maintenance-lock-$confirmed_project')
     && str_contains($restoreOperator, 'org.e-stab.maintenance-operation=restore')
     && str_contains($restoreOperator, '"$container_cli" run --detach')
@@ -661,8 +978,15 @@ $assert(
     && str_contains($restoreOperator, 'lost before file restore')
     && str_contains($restoreOperator, 'verify_storage_source_separation')
     && str_contains($restoreOperator, 'verify_operator_path_separation "$backup_dir"')
-    && str_contains($restoreOperator, 'backup directory overlaps a productive storage source')
+    && str_contains(
+        $restoreOperator,
+        'die "$separation_label overlaps a productive storage source"'
+    )
     && str_contains($restoreOperator, '.Destination .RW')
+    && str_contains(
+        $restoreOperator,
+        'verify_mount_read_write database "$db_container" /var/lib/mysql'
+    )
     && str_contains($restoreOperator, 'productive storage mount is not explicitly read/write')
     && str_contains($restoreOperator, 'verify_file_mount_writes')
     && str_contains($restoreOperator, '.estab-restore-write-probe.XXXXXX')
@@ -677,10 +1001,16 @@ $assert(
     && str_contains($restoreOperator, 'single_container admin-auth-init')
     && str_contains($restoreOperator, 'admin_auth_exit_code')
     && substr_count($restoreOperator, 'verify_admin_auth_state') >= 3
-    && str_contains($restoreOperator, 'admin authentication initializer does not use the verified app image')
+    && str_contains($restoreOperator, 'admin authentication initializer does not use the current verified app image')
     && str_contains($restoreStaticTest, 'FAKE_READ_ONLY_MOUNT=4fdata')
+    && str_contains($restoreStaticTest, 'FAKE_READ_ONLY_MOUNT=database')
     && str_contains($restoreStaticTest, 'FAKE_UNWRITABLE_MOUNTS=1')
     && str_contains($restoreStaticTest, 'FAKE_ADMIN_AUTH_EXIT_CODE=42')
+    && str_contains($restoreStaticTest, 'Named-to-Bind change without type remaps accepted')
+    && str_contains($restoreStaticTest, 'incorrect mount-type remap accepted')
+    && str_contains($restoreStaticTest, 'partial mount-type remaps accepted')
+    && str_contains($restoreStaticTest, 'mutable release references authorized a runtime-ID change')
+    && str_contains($restoreStaticTest, '--allow-runtime-image-id-change')
     && str_contains($restoreStaticTest, 'database_operation_count')
     && str_contains($staticRunner, 'tests/static/restore_operator.sh'),
     'Operator restore is not explicitly confirmed, metadata-bound, fail-closed, and health-gated'
@@ -689,8 +1019,8 @@ $assert(
     str_contains($backupVerifier, 'sha256sum -c SHA256SUMS')
     && str_contains($backupVerifier, 'shasum -a 256 -c SHA256SUMS')
     && str_contains($backupVerifier, 'gzip -t "$archive"')
-    && substr_count($backupVerifier, 'tar -tzf "$archive"') >= 1
-    && str_contains($backupVerifier, 'tar -tvzf "$archive"')
+    && substr_count($backupVerifier, 'tar -P -tzf "$archive"') >= 1
+    && str_contains($backupVerifier, 'tar -P -tvzf "$archive"')
     && str_contains($backupVerifier, "'-- MariaDB dump'")
     && str_contains($backupVerifier, "'-- Dump completed on '")
     && str_contains($backupVerifier, 'expected_manifest_names=')
@@ -698,10 +1028,15 @@ $assert(
     && str_contains($backupVerifier, '$created_database" != "$expected_database')
     && str_contains($backupVerifier, 'BACKUP_DIRECTORY EXPECTED_DATABASE')
     && str_contains($backupVerifier, 'estab-full-backup-v2')
+    && str_contains($backupVerifier, 'estab-full-backup-v3')
     && str_contains($backupVerifier, 'backup-created-utc.txt')
     && str_contains($backupVerifier, 'storage-sources.txt')
     && str_contains($backupVerifier, 'image-references.txt')
-    && str_contains($backupVerifier, 'format v2 contains an unbound or missing directory entry')
+    && str_contains($backupVerifier, 'release-identity.txt')
+    && str_contains($backupVerifier, 'canonical release identity is invalid')
+    && str_contains($backupVerifier, 'format %s contains an unbound or missing directory entry')
+    && str_contains($backupVerifierStaticTest, 'estab-full-backup-v3')
+    && str_contains($backupVerifierStaticTest, 'unbound format-3 release identity accepted')
     && str_contains($backupRunbook, 'deploy/registry/backup.sh')
     && str_contains($backupRunbook, 'deploy/registry/restore.sh')
     && str_contains($backupRunbook, '--confirm-project "$confirmed_project"')
@@ -709,8 +1044,12 @@ $assert(
     && str_contains($backupRunbook, 'vollständige Verifier')
     && str_contains($backupRunbook, '`estab-maintenance-lock-<COMPOSE_PROJECT_NAME>`')
     && str_contains($backupRunbook, 'gemeldete exakte Container-ID')
-    && str_contains($backupRunbook, 'globalen Lock absichtlich bei')
+    && str_contains($backupRunbook, 'behält den globalen Lock')
     && str_contains($backupRunbook, '`admin-auth-init`')
+    && str_contains($backupRunbook, '`--allow-runtime-image-id-change`')
+    && str_contains($backupRunbook, '`--remap-mount-type`')
+    && str_contains($backupRunbook, 'Veränderliche Tags')
+    && str_contains($backupRunbook, 'Format 2 bleibt')
     && str_contains($backupRunbook, '`RECOVERY REQUIRED`'),
     'Restore runbook lacks the guarded operator and repeated verification boundaries'
 );

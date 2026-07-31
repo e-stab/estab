@@ -6,7 +6,8 @@ Ein vollständiger eStab-Sicherungssatz besteht aus:
 2. dem gesamten `estab_data`-Volume mit Anhängen und Vordrucken,
 3. dem gesamten `estab_export`-Volume,
 4. prüfsummengebundenen Angaben zu Zeitpunkt, Compose-Projekt, Datenbank,
-   effektiven Speicherquellen und den drei tatsächlich laufenden Image-Digests,
+   effektiven Speicherquellen, der architekturunabhängigen Release-Identität
+   und den drei tatsächlich laufenden Image-IDs,
 5. einer getrennt geschützten Kopie von Konfiguration und Secret-Dateien.
 
 Nur die Kombination aus Datenbank und passendem Dateibaum stellt einen Einsatz
@@ -19,8 +20,11 @@ einer festgelegten Frist gelöscht werden.
 `deploy/registry/backup.sh` ist der produktive Operator-Helfer. Im
 veröffentlichten Pull-only-Paket liegt er direkt als `backup.sh`. Er muss aus
 dem Verzeichnis des laufenden Compose-Projekts aufgerufen werden. Das Ziel ist
-absichtlich ein ausdrücklicher absoluter Pfad, sein Elternverzeichnis muss
-bereits existieren und der Zielordner selbst darf noch nicht existieren.
+absichtlich ein ausdrücklicher absoluter Pfad. Sein Elternverzeichnis muss
+bereits existieren, dem ausführenden Benutzer gehören und exakt Modus `0700`
+haben; der Zielordner selbst darf noch nicht existieren. Diese private
+Vertrauensgrenze verhindert, dass ein anderer Hostbenutzer die reservierte
+Veröffentlichung während des Backups austauscht.
 
 ```console
 mkdir -p "$(pwd -P)/backups"
@@ -47,20 +51,22 @@ Der Helfer erwirbt atomar den engine-weiten Container-Namen
 `deploy.sh up` verwenden dieselbe Sperre, auch aus anderen Releaseordnern.
 Der Lock läuft netzlos mit dem verifizierten App-Image und ohne
 Restart-Policy; nach einem Host-/Engine-Absturz bleibt sein Name fail-closed.
-Zusätzlich
-schützt `.estab-backup.lock` im Elternverzeichnis des Ziels die atomare
+Zusätzlich schützt `.estab-backup.lock` im Elternverzeichnis des Ziels die
 Veröffentlichung gegen einen zweiten Backup-Prozess. Existiert eine der
 Sperren bereits, bricht der Lauf geschlossen ab. Lock-Labels protokollieren
 Projekt, Operation, Eigentümerkennung und UTC-Startzeit. Ein verwaister Lock
 darf erst über die gemeldete exakte Container-ID entfernt werden, nachdem
 sicher bewiesen wurde, dass keine Wartungsoperation mehr läuft.
 
-Das private Staging und der Zielordner sind Geschwister unter diesem
-geschützten Elternverzeichnis. Nach erneuter Zielprüfung genügt deshalb ein
-portables `mv SOURCE TARGET` als atomares Rename; GNU-spezifisches `mv -nT`
-ist weder unter Linux noch macOS, BusyBox oder Synology erforderlich. Das Ziel
-darf nie vorher existieren und wird nach dem Rename erneut vollständig
-verifiziert.
+Das private Staging und der Zielordner liegen unter demselben geschützten
+Elternverzeichnis. Nach vollständiger Staging-Verifikation reserviert ein
+einziges `mkdir TARGET` den endgültigen Namen atomar und ohne Überschreiben.
+Gewinnt ein fremder Erzeuger die Race, schlägt diese Reservierung fehl; dessen
+Verzeichnis und Inhalt bleiben unangetastet. Erst im selbst reservierten, durch
+`umask 077` geschützten Ziel werden die exakt bekannten Dateien auf ihre
+endgültigen Namen verschoben und anschließend erneut vollständig verifiziert.
+Damit hängt die No-Clobber-Garantie weder von GNU-`mv -nT` noch vom
+unterschiedlichen Verzeichnisverhalten von GNU-, BSD- oder BusyBox-`mv` ab.
 
 Vor dem Stoppen der Anwendung müssen `app` und `db` nicht nur laufen, sondern
 laut Container-Inspect den Status `healthy` besitzen und genau einem
@@ -81,31 +87,52 @@ von ihr enthalten werden.
 
 Alle Ergebnisse entstehen zunächst in einem privaten, zufällig benannten
 Geschwisterverzeichnis. Auch bei einem Fehler oder Signal wird ein Neustart
-von `app` versucht und dabei bis zu ihrem echten `healthy`-Status gewartet;
-ausschließlich das streng geprüfte Staging und der selbst erworbene Lock
-werden aufgeräumt. Erst wenn App-Neustart, Health-Prüfung, Prüfsummen und
-`verify-backup.sh` erfolgreich waren und das Ziel unter dem Lock weiterhin
-nicht existiert, wird das Staging mit einer Umbenennung als fertiger
-Backupordner veröffentlicht. Ein fehlgeschlagener Lauf überschreibt niemals
-eine ältere Sicherung.
+von `app` versucht und dabei bis zu ihrem echten `healthy`-Status gewartet.
+Das streng geprüfte Staging und ein nachweislich selbst reserviertes,
+unvollständiges Ziel werden auf bekannten Dateinamen aufgeräumt; fremde oder
+unerwartet veränderte Ziele bleiben fail-closed stehen. Nach einem harten
+Prozess- oder Hostabbruch kann daher ein geschützter unvollständiger Zielname
+zusammen mit `.estab-backup.lock` zur Diagnose verbleiben und darf erst nach
+Prüfung gezielt entfernt werden. Als erfolgreich gilt ausschließlich der
+erneut vollständig verifizierte exakte Format-3-Dateisatz. Ein
+fehlgeschlagener Lauf überschreibt oder ergänzt niemals eine ältere oder
+gleichzeitig fremd erzeugte Sicherung.
 
-Format 2 enthält neben `database.sql`, `4fdata.tar.gz` und `export.tar.gz`:
+Das aktuelle Format 3 enthält neben `database.sql`, `4fdata.tar.gz` und
+`export.tar.gz`:
 
 - `backup-format.txt` und `backup-created-utc.txt`,
 - `project-name.txt` und `database-name.txt`,
 - `storage-sources.txt` mit Typ, Laufzeitziel, Volume-Name und Hostquelle,
-- `image-references.txt` mit Referenz und Runtime-SHA-256 für App, Migrator und
-  MariaDB,
+- `release-identity.txt` mit der effektiven `Config.Image`-Referenz für App,
+  Migrator und MariaDB als architekturunabhängiger Release-Identität,
+- `image-references.txt` mit derselben Referenz und der
+  architekturabhängigen Runtime-Image-ID für Diagnose und exakte
+  Same-Host-Prüfung,
 - `SHA256SUMS`, das sämtliche Payload- und Metadatendateien bindet.
 
 Docker liefert diese Runtime-ID als `sha256:<64 Kleinhexzeichen>`, Podman je
 nach Version als nackte 64-stellige Kleinhex-ID. Der Backup-Helfer schreibt
 beide Darstellungen einheitlich mit `sha256:`; abweichende Zeichen, Länge oder
-Präfixe führen vor dem Stoppen der App zum Abbruch.
+Präfixe führen vor dem Stoppen der App zum Abbruch. Format 3 erlaubt neben
+`SHA256SUMS` ausschließlich diese zehn gebundenen Dateien. Der Verifier
+verlangt außerdem, dass jede Referenz in `release-identity.txt` bytegenau zur
+Referenz derselben Rolle in `image-references.txt` passt. Zusätzliche Dateien,
+Verzeichnisse, Links, fehlende Einträge oder doppelte Rollen lassen den
+Preflight fehlschlagen.
 
-Format 2 erlaubt neben `SHA256SUMS` ausschließlich diese neun gebundenen
-Dateien. Zusätzliche Dateien, Verzeichnisse oder Links lassen den Preflight
-fehlschlagen.
+Auch manifestgebundene `Config.Image`-Referenzen werden
+providerunabhängig kanonisiert. Ein redundanter Tag vor `@sha256:` entfällt,
+kurze Docker-Hub-Namen werden zu `docker.io/library/…` beziehungsweise
+`docker.io/…` erweitert und `index.docker.io` wird als `docker.io`
+geschrieben. Ein ausdrücklich angegebener Registry-Port wie
+`registry.example:5443/…` bleibt dabei Teil des Registry-Namens. Dadurch
+bezeichnen zum Beispiel `mariadb:11.8.8@sha256:…` von einem Provider und
+`docker.io/library/mariadb@sha256:…` von einem anderen dieselbe gebundene
+Release-Identität. Veränderliche Tags und lokale Referenzen ohne
+Manifest-Digest werden absichtlich nicht umgedeutet: Sie eignen sich nur für
+den exakten Same-Runtime-Restore und können keine Runtime-ID-Abweichung
+autorisieren.
 
 `.env` und die drei Secret-Dateien werden bewusst nicht unverschlüsselt in
 dasselbe Verzeichnis kopiert. Sie gehören in einen getrennten Secret-Manager
@@ -113,11 +140,19 @@ oder ein verschlüsseltes, zugriffsbeschränktes Konfigurationsbackup. Bei einer
 Wiederherstellung des bestehenden MariaDB-Volumes müssen die
 Datenbank-Secrets zum dort gespeicherten Benutzerstand passen.
 
-Der lesende Verifier akzeptiert weiterhin ältere, nach diesem Runbook erzeugte
-Sätze, deren `SHA256SUMS` exakt die drei Payloaddateien nennt. Ungebundene
-historische Sidecar-Dateien wie `container-images.txt` bleiben dabei lediglich
-Hinweise und werden nicht nachträglich als kryptographisch belegt behandelt.
-Neue Sicherungen werden ausschließlich im gebundenen Format 2 erzeugt.
+Der lesende Verifier akzeptiert weiterhin Format 2 sowie ältere, nach diesem
+Runbook erzeugte Sätze, deren `SHA256SUMS` exakt die drei Payloaddateien nennt.
+Format 2 besitzt gebundene Runtime-Image-Datensätze, aber keine getrennte
+Release-Identität; es ist deshalb nur für einen exakten Restore mit denselben
+Runtime-Image-IDs, demselben Compose-Projekt und exakt denselben Speicher-,
+Mounttyp- und Volume-Angaben geeignet. Sämtliche Projekt-, Speicher-,
+Mounttyp- und Volume-Remaps sowie
+`--allow-runtime-image-id-change` sind für Format 2 verboten. Ungebundene
+historische Sidecar-Dateien wie
+`container-images.txt` bleiben lediglich Hinweise und werden nicht
+nachträglich als kryptographisch belegt behandelt. Legacy-Sätze bleiben
+verifier-only. Neue Sicherungen werden ausschließlich im gebundenen Format 3
+erzeugt.
 
 ## Prüfung eines Sicherungssatzes
 
@@ -150,16 +185,20 @@ Das vollständige CI-Gate automatisiert zwei destruktiv guardierte Roundtrips:
    unverändert nachweisbar sein. Die ETB-/TBB-Prüfung ist dabei absichtlich
    read-only, damit fehlende Daten den Lauf beenden und nicht unbemerkt neu
    angelegt werden.
-2. Der Pull-only-Lauf startet dasselbe App-/Migrator-Imagepaar mit drei echten
-   temporären Host-Bind-Mounts. Container-Inspect muss deren Typ, Quelle und
-   Ziel exakt bestätigen. Anschließend werden ein Datenbankmarker und je ein
-   Dateimarker in `4fdata` und `export` gesichert. Der Test verfälscht den
-   Datenbankmarker logisch und ergänzt veraltete Testdaten in den beiden
-   Dateibereichen; der rohe MariaDB-Bind-Mount wird nicht geleert. Nach
-   Restore müssen Migrator, Readiness, Datenbankmarker, beide
-   Dateiinhalte und deren SHA-256 unverändert sein. Ein grünes Ergebnis wird
-   erst nach Entfernung beider Compose-Projekte, ihrer Container, Volumes und
-   Netzwerke sowie des temporären Hostbaums ausgegeben.
+2. Der Pull-only-Lauf erzeugt auf dem echten Docker- beziehungsweise
+   Podman-Provider zunächst ein Format-3-Backup aus drei Named Volumes. Dabei
+   muss die MariaDB-Referenz in beiden Metadatendateien kanonisch als
+   `docker.io/library/mariadb@sha256:…` erscheinen. Danach startet er dasselbe
+   App-/Migrator-Imagepaar in einem anderen Projekt mit drei echten temporären
+   Host-Bind-Mounts. Container-Inspect muss deren Typ, Quelle und Ziel exakt
+   bestätigen und der Restore muss den vollständigen
+   Named-Volume-zu-Bind-Remap durchsetzen. Der Test verfälscht den zuvor
+   gesicherten Datenbankmarker logisch und ergänzt veraltete Testdaten in den
+   beiden Dateibereichen; der rohe MariaDB-Bind-Mount wird nicht geleert. Nach
+   Restore müssen Migrator, Readiness, Datenbankmarker, beide Dateiinhalte
+   und deren SHA-256 unverändert sein. Ein grünes Ergebnis wird erst nach
+   Entfernung beider Compose-Projekte, ihrer Container, Volumes und Netzwerke
+   sowie des temporären Hostbaums ausgegeben.
 
 ## Vollständige Wiederherstellung
 
@@ -196,27 +235,100 @@ Health-Wait auf standardmäßig 240 Sekunden und akzeptiert Werte von 1 bis
 3600.
 
 Vor dem Aufruf müssen `.env` und Secrets aus dem getrennt geschützten
-Konfigurationsbackup stammen. App-, Migrator- und MariaDB-Image sowie die drei
-Speicherquellen müssen exakt dem wiederherzustellenden Sicherungssatz
-entsprechen. Das Compose-Projekt muss bereits einmal vollständig angelegt
-worden sein, damit `app`, `migrate` und `db` eindeutig als je ein Container
-prüfbar sind. Für ein Pull-only-Paket werden die im Backup protokollierten
-App-/Migrator-Referenzen verwendet; ein lokaler Build ist dort nicht Teil des
-Restore-Ablaufs.
+Konfigurationsbackup stammen. Das Compose-Projekt muss bereits einmal
+vollständig angelegt worden sein, damit `app`, `migrate` und `db` eindeutig
+als je ein Container prüfbar sind. Für ein Pull-only-Paket werden die im
+Backup protokollierten App-/Migrator-Referenzen verwendet; ein lokaler Build
+ist dort nicht Teil des Restore-Ablaufs.
 
-Der Helfer akzeptiert ausschließlich das vollständig gebundene Format 2.
-Ältere Legacy-Sätze bleiben mit `verify-backup.sh` lesbar, besitzen aber keine
+Ohne weitere Optionen gilt fail-closed der Same-Host-Vertrag: Compose-Projekt,
+alle drei Mountziele, Mounttypen, Volume-Namen, Speicherquellen,
+`Config.Image`-Referenzen und Runtime-Image-IDs müssen bytegenau dem Backup
+entsprechen. Der oben gezeigte Standardaufruf nimmt keinerlei Umbenennung oder
+Pfadableitung vor.
+
+Für einen bewusst auf ein anderes Compose-Projekt, andere Speicherpfade oder
+eine andere CPU-Architektur übertragenen Format-3-Satz muss jede tatsächliche
+Abweichung explizit als `alt=neu` angegeben werden. Beispiel:
+
+```console
+restore_dir=/mnt/restore/20260723-120000
+source_project=estab
+target_project=estab_dr
+old_db_source=/var/lib/docker/volumes/estab_estab_db/_data
+new_db_source=/srv/estab-dr/data/db
+old_app_source=/srv/estab/data/4fdata
+new_app_source=/srv/estab-dr/data/4fdata
+old_export_source=/srv/estab/data/export
+new_export_source=/srv/estab-dr/data/export
+
+ESTAB_CONTAINER_CLI=docker \
+  sh ./restore.sh \
+    --confirm-project "$target_project" \
+    --remap-project "$source_project=$target_project" \
+    --remap-mount-type "database:volume=bind" \
+    --remap-storage "database:$old_db_source=$new_db_source" \
+    --remap-volume "database:${source_project}_estab_db=-" \
+    --remap-storage "application:$old_app_source=$new_app_source" \
+    --remap-storage "export:$old_export_source=$new_export_source" \
+    --allow-runtime-image-id-change \
+    "$restore_dir"
+```
+
+Die Rollen für `--remap-mount-type`, `--remap-storage` und `--remap-volume`
+sind ausschließlich `database`, `application` und `export`. Ein Remap muss
+exakt den im Backup gespeicherten Wert auf den aktuell inspizierten Wert
+abbilden. `--remap-mount-type` akzeptiert nur `volume` und `bind`.
+`--remap-volume` bestätigt das inspectierte Namensfeld; `-` bezeichnet dabei
+den absichtlich namenlosen Bind-Mount. Bei einem Wechsel von Named Volume zu
+Bind sind Typ, Name und Quelle somit drei getrennte, zwingende Bestätigungen.
+Dasselbe gilt umgekehrt für Bind zu Named Volume.
+
+Fehlende, falsche, doppelte, teilweise oder für unveränderte Werte unnötige
+Remaps werden abgewiesen. Ein anderer Compose-Projektname leitet insbesondere
+keinen Mounttyp, Volume-Namen und keinen Engine-Speicherpfad implizit ab. Sind
+auch `application` und `export` im Quellbackup Named Volumes und am Ziel
+Bind-Mounts, benötigen beide Rollen jeweils dasselbe Tripel aus
+`--remap-mount-type ROLE:volume=bind`,
+`--remap-volume ROLE:ALTER_NAME=-` und
+`--remap-storage ROLE:ALTER_PFAD=NEUER_PFAD`.
+
+`--allow-runtime-image-id-change` ist die ausdrückliche Bestätigung des
+Bedieners, dass eine abweichende lokale Runtime-ID erwartet wird, etwa beim
+Wechsel von Architektur oder Container-Engine. Der Helfer kann die äußere
+Ursache dieser Abweichung nicht technisch beweisen. Er begrenzt die Ausnahme
+deshalb auf Format 3 und verlangt, dass die kanonisierte aktuelle
+`Config.Image`-Referenz jeder Rolle mit der kanonisierten Referenz aus
+`release-identity.txt` übereinstimmt und jede Referenz auf
+`@sha256:<64 Kleinhexzeichen>` endet. Dieser Digest muss die verwendete
+kanonische Multi-Arch-Index-Identität des Releases sein.
+Providerabhängige Schreibweisen wie kurzer Docker-Hub-Name oder redundanter
+Tag vor demselben Digest dürfen sich unterscheiden; Registry-Host,
+gegebenenfalls Registry-Port, Repository und Digest dürfen es nicht.
+Veränderliche Tags und lokale Referenzen können selbst bei gesetzter Option
+niemals eine Runtime-ID-Abweichung autorisieren. Bleiben die Runtime-IDs
+gleich, ist ein lokaler oder tagbasierter Quellsatz ohne diese Option
+weiterhin exakt auf demselben Runtime-Stand wiederherstellbar.
+
+Der Helfer akzeptiert die vollständig gebundenen Formate 2 und 3.
+Format 2 bleibt aus Kompatibilitätsgründen ausschließlich für den exakten
+Same-Host-Restore lesbar. Es kann wegen der fehlenden getrennten
+Release-Identität weder `--allow-runtime-image-id-change` noch irgendeinen
+Projekt-, Speicher-, Mounttyp- oder Volume-Remap verwenden. Ältere
+Legacy-Sätze bleiben mit `verify-backup.sh` lesbar, besitzen aber keine
 kryptographisch gebundenen Projekt-, Mount- und Image-Metadaten und werden
-deshalb nicht automatisch produktiv eingespielt. Vor der ersten Änderung
-prüft `restore.sh`:
+nicht automatisch produktiv eingespielt. Vor der ersten Änderung prüft
+`restore.sh`:
 
-- Prüfsummen, Dump, Archive und sämtliche Format-2-Metadaten,
-- Backup-Projekt, `--confirm-project` und die Projektlabels aller drei
-  Laufzeitcontainer auf exakte Gleichheit,
+- Prüfsummen, Dump, Archive und sämtliche Metadaten des erkannten Formats,
+- Backup-Projekt, `--confirm-project`, einen gegebenen exakten Projekt-Remap
+  und die Projektlabels aller drei Laufzeitcontainer,
 - den Datenbanknamen aus Backup und laufender MariaDB,
-- Ziel, Typ, Volume-Name und Quelle aller drei produktiven Mounts,
-- den expliziten Read/Write-Status von `4fdata` und Exportdaten,
-- Referenz und Runtime-SHA-256 von App, Migrator und MariaDB,
+- Ziel, Typ, Volume-Name und Quelle aller drei produktiven Mounts sowie jeden
+  hierfür erforderlichen rollenbezogenen Remap,
+- den expliziten Read/Write-Status von Datenbank, `4fdata` und Exportdaten,
+- kanonische Release-Referenz und Runtime-Image-ID von App, Migrator und
+  MariaDB nach den obigen Regeln,
 - Exitcode 0 und das exakte App-Image von `admin-auth-init`,
 - einen echten `healthy`-Status der Datenbank innerhalb des Zeitlimits.
 
@@ -225,6 +337,64 @@ Restores und `deploy.sh up`, unabhängig vom Releaseordner. Vor destruktiven
 Grenzen werden exakte ID, verifiziertes Image, Labels und laufender Status
 erneut geprüft. Ein verwaister Lock darf erst über die gemeldete exakte ID
 entfernt werden, nachdem keine Wartungsoperation mehr läuft.
+
+Bei jedem Projekt-Remap oder rollenbezogenen Speicheridentitäts-Remap
+(`--remap-mount-type`, `--remap-storage` oder `--remap-volume`) durchsucht der
+Helfer darüber hinaus den gesamten Containerbestand derselben Engine,
+ausdrücklich einschließlich gestoppter Container. Das gilt auch, wenn der
+Compose-Projektname unverändert bleibt. Bind- und Volume-Quellen jedes fremden
+Containers dürfen weder gleich einer Zielspeicherquelle sein noch über oder
+unter ihr liegen. Diese Bestands- und Überlappungsprüfung läuft unter der
+Wartungssperre vor dem privaten Snapshot sowie erneut unmittelbar vor
+Datenbankimport und Dateiwiederherstellung. Ein gestoppener alter
+Projektcontainer schützt also
+nicht vor einem Konflikt; er muss nach gesonderter Prüfung entfernt oder auf
+einen eindeutig getrennten Speicher umgestellt werden.
+
+Noch vor dem Stoppen der App erstellt `restore.sh` aus dem verifizierten
+Sicherungssatz einen privaten, vollständigen Restore-Snapshot. Die Prüfsumme
+des ursprünglichen `SHA256SUMS` wird vor und nach der Kopie verglichen,
+anschließend wird der kopierte exakte Format-2- beziehungsweise
+Format-3-Dateisatz erneut vollständig verifiziert. Ab diesem Punkt öffnen
+Datenbankimport und Archivwiederherstellung ausschließlich Dateien dieses
+Snapshots; spätere Änderungen am ursprünglichen Quellverzeichnis können den
+laufenden Restore daher nicht mehr austauschen.
+
+Standardmäßig entsteht der zufällig benannte Ordner
+`.estab-restore-snapshot.…` im Elternverzeichnis des Backup-Pfads. Liegt das
+Backup auf einem schreibgeschützten Medium oder soll der zusätzliche
+Platzverbrauch getrennt werden, muss vor dem Aufruf ein vorhandenes,
+absolutes und geschütztes Ziel angegeben werden:
+
+```console
+snapshot_parent=/srv/estab-restore-snapshots
+mkdir -p "$snapshot_parent"
+chmod 0700 "$snapshot_parent"
+ESTAB_RESTORE_SNAPSHOT_PARENT="$snapshot_parent" \
+ESTAB_CONTAINER_CLI=docker \
+  sh ./restore.sh \
+    --confirm-project estab \
+    "$restore_dir"
+```
+
+Das Elternverzeichnis muss ein echtes, beschreibbares Verzeichnis sein, darf
+nicht `/`, das Backup selbst oder ein Unterverzeichnis des Backups sein und
+muss `root` oder dem ausführenden Benutzer gehören. `0700` ist der empfohlene
+Modus; gruppen- oder weltbeschreibbare Eltern werden nur mit gesetztem
+Sticky-Bit akzeptiert. Snapshot-Ordner erhalten `0700`, ihre Dateien `0600`.
+Der Ort darf nicht mit einer produktiven Speicherquelle überlappen. Vor jedem
+Restore muss dort mindestens Platz für einen vollständigen zusätzlichen
+Sicherungssatz zuzüglich Reserve für temporäre Providerdaten und Logs
+vorhanden sein. Schlägt Anlage, Kopie oder Verifikation fehl, geschieht dies
+vor der ersten Datenmutation.
+
+Nach einem erfolgreichen Restore sowie nach jedem Abbruch vor der ersten
+Datenmutation entfernt der Helfer ausschließlich den von ihm nachgewiesenen
+Snapshot mit seinem exakten bekannten Inventar. Unerwartete Einträge oder ein
+geänderter Pfad verhindern die automatische Entfernung fail-closed. Schlägt
+der Restore nach Beginn des Datenbankimports fehl, bleibt der weiterhin
+verifizierte Snapshot dagegen als Recovery-Anker erhalten und sein absoluter
+Pfad wird ausdrücklich ausgegeben.
 
 Erst danach stoppt der Helfer die App. Noch vor dem Start beziehungsweise
 Import der Datenbank legt ein netzloser, schreibgeschützter Hilfscontainer mit
@@ -256,9 +426,14 @@ Schlägt ein Schritt vor dem ersten Import fehl, bleiben die Nutzdaten
 unverändert und eine zuvor laufende App wird wieder bis `healthy` gestartet.
 Sobald der Datenbankimport begonnen hat, bleibt die App bei jedem Fehler
 absichtlich gestoppt. Die Meldung `RECOVERY REQUIRED` nennt die letzte Phase
-und behält den globalen Lock absichtlich bei. Nach Ursachenbehebung muss
-bewiesen werden, dass kein Restore mehr läuft, exakt die gemeldete Lock-ID
-entfernt und derselbe verifizierte Restore erneut ausgeführt werden. Eine
+und behält den globalen Lock sowie den verifizierten Recovery-Snapshot
+absichtlich bei. Nach Ursachenbehebung muss bewiesen werden, dass kein Restore
+mehr läuft, exakt die gemeldete Lock-ID entfernt und `restore.sh` mit dem
+ausgegebenen Snapshot-Pfad erneut ausgeführt werden. Das ursprüngliche
+Backupverzeichnis ist hierfür nicht erneut zu öffnen. Der als Quelle
+übergebene Recovery-Snapshot wird nicht stillschweigend gelöscht; erst nach
+erfolgreicher fachlicher Abnahme muss er gemäß der festgelegten
+Aufbewahrungsregel archiviert oder kontrolliert entfernt werden. Eine
 teilweise wiederhergestellte Datenbank oder ein
 teilweise entpackter Dateibaum darf niemals manuell als produktiv freigegeben
 werden.

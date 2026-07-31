@@ -34,7 +34,25 @@ fi
 backup_format=legacy
 if [ -e "$backup_dir/backup-format.txt" ] ||
     [ -L "$backup_dir/backup-format.txt" ]; then
-    backup_format=v2
+    if [ ! -f "$backup_dir/backup-format.txt" ] ||
+        [ -L "$backup_dir/backup-format.txt" ] ||
+        [ ! -r "$backup_dir/backup-format.txt" ]; then
+        printf 'Backup verification: backup format metadata is not a readable regular file.\n' >&2
+        exit 1
+    fi
+    format_record=$(sed -n '1p' "$backup_dir/backup-format.txt")
+    case "$format_record" in
+        estab-full-backup-v2)
+            backup_format=v2
+            ;;
+        estab-full-backup-v3)
+            backup_format=v3
+            ;;
+        *)
+            printf 'Backup verification: unsupported backup format metadata.\n' >&2
+            exit 1
+            ;;
+    esac
     expected_manifest_names='4fdata.tar.gz
 backup-created-utc.txt
 backup-format.txt
@@ -44,13 +62,25 @@ export.tar.gz
 image-references.txt
 project-name.txt
 storage-sources.txt'
+    if [ "$backup_format" = v3 ]; then
+        expected_manifest_names='4fdata.tar.gz
+backup-created-utc.txt
+backup-format.txt
+database-name.txt
+database.sql
+export.tar.gz
+image-references.txt
+project-name.txt
+release-identity.txt
+storage-sources.txt'
+    fi
 else
     expected_manifest_names='4fdata.tar.gz
 database.sql
 export.tar.gz'
 fi
 
-if [ "$backup_format" = v2 ]; then
+if [ "$backup_format" != legacy ]; then
     expected_directory_names='4fdata.tar.gz
 SHA256SUMS
 backup-created-utc.txt
@@ -61,15 +91,29 @@ export.tar.gz
 image-references.txt
 project-name.txt
 storage-sources.txt'
+    if [ "$backup_format" = v3 ]; then
+        expected_directory_names='4fdata.tar.gz
+SHA256SUMS
+backup-created-utc.txt
+backup-format.txt
+database-name.txt
+database.sql
+export.tar.gz
+image-references.txt
+project-name.txt
+release-identity.txt
+storage-sources.txt'
+    fi
     actual_directory_names=$(
-        find "$backup_dir" -mindepth 1 -maxdepth 1 -exec basename {} \; |
+        find "$backup_dir"/. ! -name . -prune -exec basename {} \; |
             LC_ALL=C sort
     ) || {
         printf 'Backup verification: cannot inspect backup directory entries.\n' >&2
         exit 1
     }
     if [ "$actual_directory_names" != "$expected_directory_names" ]; then
-        printf 'Backup verification: format v2 contains an unbound or missing directory entry.\n' >&2
+        printf 'Backup verification: format %s contains an unbound or missing directory entry.\n' \
+            "$backup_format" >&2
         exit 1
     fi
 fi
@@ -144,9 +188,13 @@ if [ -z "$created_database" ] ||
     exit 1
 fi
 
-if [ "$backup_format" = v2 ]; then
+if [ "$backup_format" != legacy ]; then
     if ! awk '
-      NR != 1 || $0 != "estab-full-backup-v2" { exit 1 }
+      NR != 1 ||
+      ($0 != "estab-full-backup-v2" &&
+       $0 != "estab-full-backup-v3") {
+        exit 1
+      }
       END { if (NR != 1) exit 1 }
     ' "$backup_dir/backup-format.txt"; then
         printf 'Backup verification: unsupported backup format metadata.\n' >&2
@@ -234,20 +282,60 @@ if [ "$backup_format" = v2 ]; then
         printf 'Backup verification: image-reference metadata is invalid.\n' >&2
         exit 1
     fi
+
+    if [ "$backup_format" = v3 ]; then
+        if ! LC_ALL=C awk -F '	' '
+          NR == FNR {
+            if (NF != 3 ||
+                ($1 != "app" && $1 != "migrate" && $1 != "database") ||
+                image_seen[$1]++ ||
+                $2 !~ /^[A-Za-z0-9_.\/:@+-]+$/) {
+              exit 1
+            }
+            image_reference[$1] = $2
+            next
+          }
+          NR != FNR {
+            if (NF != 2 ||
+                ($1 != "app" && $1 != "migrate" && $1 != "database") ||
+                release_seen[$1]++ ||
+                $2 !~ /^[A-Za-z0-9_.\/:@+-]+$/ ||
+                $2 != image_reference[$1]) {
+              exit 1
+            }
+          }
+          END {
+            if (image_seen["app"] != 1 ||
+                image_seen["migrate"] != 1 ||
+                image_seen["database"] != 1 ||
+                release_seen["app"] != 1 ||
+                release_seen["migrate"] != 1 ||
+                release_seen["database"] != 1) {
+              exit 1
+            }
+          }
+        ' "$backup_dir/image-references.txt" \
+            "$backup_dir/release-identity.txt"; then
+            printf 'Backup verification: canonical release identity is invalid or differs from the diagnostic image records.\n' >&2
+            exit 1
+        fi
+    fi
 fi
 
 verify_archive()
 {
     archive=$1
-    gzip -t "$archive"
-    archive_names=$(tar -tzf "$archive") || return 1
+    gzip -t "$archive" || return 1
+    # -P preserves absolute member names while listing. Without it GNU tar
+    # silently strips the leading slash before this safety check can see it.
+    archive_names=$(tar -P -tzf "$archive") || return 1
     printf '%s\n' "$archive_names" | awk '
       length($0) == 0 { next }
       /^\// || /(^|\/)\.\.(\/|$)/ { exit 1 }
       { entries++ }
       END { if (!entries) exit 1 }
-    '
-    archive_details=$(tar -tvzf "$archive") || return 1
+    ' || return 1
+    archive_details=$(tar -P -tvzf "$archive") || return 1
     printf '%s\n' "$archive_details" | awk '
       length($0) == 0 { next }
       substr($1, 1, 1) == "-" || substr($1, 1, 1) == "d" {
@@ -256,7 +344,7 @@ verify_archive()
       }
       { exit 1 }
       END { if (!entries) exit 1 }
-    '
+    ' || return 1
 }
 
 verify_archive "$data_archive" || {

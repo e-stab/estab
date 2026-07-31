@@ -72,11 +72,13 @@ for bound_name in \
     .env.example \
     compose.yaml \
     README.md \
+    RELEASE-EVIDENCE.md \
     BACKUP-UND-WIEDERHERSTELLUNG.md \
     LICENSE \
     THIRD_PARTY_NOTICES.md \
     deploy.sh \
     verify-release.sh \
+    offline-images.sh \
     backup.sh \
     verify-backup.sh \
     restore.sh
@@ -95,6 +97,7 @@ EOF
 for executable_name in \
     deploy.sh \
     verify-release.sh \
+    offline-images.sh \
     backup.sh \
     verify-backup.sh \
     restore.sh
@@ -104,6 +107,7 @@ do
 done
 for nonempty_name in \
     README.md \
+    RELEASE-EVIDENCE.md \
     BACKUP-UND-WIEDERHERSTELLUNG.md \
     LICENSE \
     THIRD_PARTY_NOTICES.md

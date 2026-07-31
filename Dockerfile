@@ -15,6 +15,7 @@ ENV APACHE_DOCUMENT_ROOT=/var/www/html \
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
+        acl \
         apache2-utils \
         libfreetype6 \
         libfreetype6-dev \
@@ -27,6 +28,9 @@ RUN set -eux; \
     docker-php-ext-configure gd --with-freetype --with-jpeg; \
     docker-php-ext-install -j1 gd mysqli zip; \
     php -r 'foreach (["fileinfo", "gd", "mbstring", "mysqli", "Zend OPcache", "zip"] as $extension) { if (!extension_loaded($extension)) { fwrite(STDERR, "Missing PHP extension: $extension\n"); exit(1); } } if (!(gd_info()["JPEG Support"] ?? false)) { fwrite(STDERR, "Missing GD JPEG support\n"); exit(1); }'; \
+    command -v setpriv >/dev/null; \
+    command -v getfacl >/dev/null; \
+    command -v setfacl >/dev/null; \
     a2enmod auth_basic authn_file headers; \
     a2dissite 000-default; \
     apt-get purge -y --auto-remove \
@@ -140,6 +144,9 @@ COPY docker/app/healthcheck.php /usr/local/bin/estab-healthcheck
 COPY docker/app/verify-runtime-surface.sh /usr/local/bin/estab-verify-runtime-surface
 
 RUN set -eux; \
+    command -v setpriv >/dev/null; \
+    command -v getfacl >/dev/null; \
+    command -v setfacl >/dev/null; \
     a2ensite estab; \
     install -d -o www-data -g www-data -m 0770 \
         /var/www/html/4fdata \
