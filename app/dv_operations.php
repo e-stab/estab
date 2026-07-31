@@ -2647,7 +2647,12 @@ function estab_dv_select_session_hat(
         throw new RuntimeException('Dienstfunktionswechsel konnte nicht begonnen werden.');
     }
     try {
-        estab_dv_require_incident($connection, $incidentId, true);
+        $incident = estab_dv_require_incident(
+            $connection,
+            $incidentId,
+            true
+        );
+        estab_incident_lock_command_post_for_write($connection, $incident);
         $statement = $connection->prepare(
             'SELECT b.`dienstbesetzung_id`, b.`benutzer_kuerzel`, b.`funktion`,'
             . ' b.`rolle` FROM `nv_dienstbesetzungen` AS b'

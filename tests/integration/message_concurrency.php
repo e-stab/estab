@@ -176,6 +176,7 @@ function message_db_worker(array $arguments): never
                     $secondary,
                     false,
                     [
+                        '10_anschrift' => 'FORGED-INCOMING-' . $workerKey,
                         '12_inhalt' => 'parallel-' . $workerKey,
                         '16_empf' => 'S1_rt',
                         'x00_status' => 8,
@@ -377,6 +378,7 @@ $tables = [$stateTable];
 $barriers = [];
 $previousIncidentId = null;
 $testIncidentId = null;
+$commandPostName = 'Führungsstelle Nachrichten ' . $token;
 
 foreach ($tables as $table) {
     message_db_assert(strlen($table) <= 64, 'Fixture identifier is too long');
@@ -439,6 +441,7 @@ try {
             'kennung' => 'CI-MSG-' . strtoupper($token),
             'name' => 'Message concurrency ' . $token,
             'beginn' => date('Y-m-d\TH:i'),
+            'fuehrungsstellenname' => $commandPostName,
             'beschreibung' => 'Ephemerer kanonischer Nachrichten-Datenraum',
             'metadaten' => json_encode(
                 ['test' => 'message_concurrency', 'token' => $token],
@@ -625,6 +628,18 @@ try {
         ) === 2,
         'Parallel numbered rows are not distinct'
     );
+    message_db_assert(
+        estab_message_query_int(
+            $connection,
+            'SELECT COUNT(*) FROM '
+                . estab_message_table($messageTable)
+                . ' WHERE `einsatz_id` = ?'
+                . " AND `12_inhalt` LIKE 'parallel-%'"
+                . ' AND BINARY `10_anschrift` = BINARY ?',
+            [$testIncidentId, $commandPostName]
+        ) === 2,
+        'Incoming repository writes trusted forged local destinations'
+    );
 
     // Even without a schema UNIQUE key, concurrent state writers produce one
     // logical row, and list reads defend against old duplicate rows.
@@ -734,7 +749,7 @@ try {
             '06_befwegausw' => '',
             '10_anschrift' => 'THW Musterstadt',
             '12_inhalt' => 'staged operator race fixture',
-            '13_abseinheit' => 'THW Führungsstelle',
+            '13_abseinheit' => 'FORGED-OUTGOING-CREATE',
             '14_zeichen' => 'staff1',
             '14_funktion' => 'S1',
             '15_quitdatum' => null,
@@ -824,7 +839,11 @@ try {
         $messageTable,
         $raceMessageId
     );
-    message_db_assert(is_array($statusFourRow), 'Status-4 fixture disappeared');
+    message_db_assert(
+        is_array($statusFourRow)
+            && (string) $statusFourRow['13_abseinheit'] === $commandPostName,
+        'Status-4 fixture lost its incident-authoritative local sender'
+    );
     message_db_assert(
         estab_message_object_allowed($siIdentity, 'viewer-review', $statusFourRow),
         'Si was denied the real status-4 outgoing row'
@@ -1043,7 +1062,7 @@ try {
             [
                 '10_anschrift' => 'THW Musterstadt korrigiert',
                 '12_inhalt' => 'staged operator race fixture',
-                '13_abseinheit' => 'THW Führungsstelle',
+                '13_abseinheit' => 'FORGED-OUTGOING-RESUBMIT',
                 '14_zeichen' => 'next01',
                 '14_funktion' => 'S1',
                 '15_quitdatum' => null,
@@ -1076,6 +1095,8 @@ try {
             && (int) $resubmittedRow['x00_status'] === 4
             && (string) $resubmittedRow['14_zeichen'] === 'next01'
             && (string) $resubmittedRow['14_funktion'] === 'S1'
+            && (string) $resubmittedRow['13_abseinheit']
+                === $commandPostName
             && estab_datetime_is_unset($resubmittedRow['15_quitdatum'])
             && (string) $resubmittedRow['15_quitzeichen'] === '',
         'Shift successor resubmission lost responsibility or review reset'

@@ -80,7 +80,6 @@ Wichtige Werte in `.env`:
 | `ESTAB_HTTP_PORT` | `8080` | veröffentlichter Hostport |
 | `ESTAB_PUBLIC_URL` | `/` | portable Browser-Basis; nur bei garantiert einer externen Adresse auf eine absolute HTTP(S)-URL setzen |
 | `ESTAB_BASE_PATH` | leer | historischer Installationspfad im Document Root; im gelieferten Root-Image leer lassen |
-| `ESTAB_ORGANISATION` | `Einsatzleitung` | angezeigte Dienststelle/Organisation |
 | `ESTAB_AUTHORITY_CODE` | `EL` | Hoheits-/Organisationskürzel |
 | `ESTAB_ALLOW_SELF_REGISTRATION` | `false` | optionale öffentliche Kompatibilitätsregistrierung; reguläre Konten werden administrativ angelegt |
 | `ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF` | `false` | erlaubt ausdrücklich benötigten direkten Legacy-Clients tokenlose Anmeldung; nicht für Browserbetrieb aktivieren |
@@ -89,6 +88,14 @@ Wichtige Werte in `.env`:
 | `ESTAB_UPLOAD_MAX_BYTES` | `20971520` | anwendungsseitige maximale Uploadgröße |
 | `ESTAB_PDF_ATTACHMENT_MAX_BYTES` | `52428800` | maximale Gesamtsumme eingebetteter Anhänge je PDF-Einsatzdossier; `0` deaktiviert Einbettungen |
 | `TZ` | `Europe/Berlin` | Zeitzone von Anwendung und Datenbank |
+
+Der Name der Führungsstelle ist ausdrücklich **keine** Umgebungsvariable.
+Die Administration speichert ihn für jeden Einsatz getrennt. Er bezeichnet
+die lokale Anschrift beziehungsweise Absendereinheit auf
+Nachrichtenvordrucken und ist weder der Einsatzname noch die
+Trägerorganisation oder die Einsatzleitung. Ein alter
+`ESTAB_ORGANISATION`-Eintrag in einer bestehenden `.env` ist obsolet und
+sollte entfernt werden; er wird nicht als Führungsstellenname übernommen.
 
 Die formale Sichtung jedes Ausgangs vor LdF und A/W ist eine feste
 fachliche Invariante. Sie besitzt bewusst keine Umgebungsvariable und kann in
@@ -201,8 +208,8 @@ ihn anschließend wieder her.
 podman compose run --rm migrate
 ```
 
-Ein bereits aktueller Bestand meldet alle elf Migrationen einschließlich
-`96-etb-duty-function.sql` als vorhanden und
+Ein bereits aktueller Bestand meldet alle zwölf Migrationen einschließlich
+`97-incident-command-post-name.sql` als vorhanden und
 führt trotzdem den vollständigen Read-only-Schematest aus. Die Ausgabe muss
 `Post-migration schema verification passed` und anschließend
 `All schema migrations are applied` enthalten. Erst danach sollte der Stack
@@ -216,8 +223,8 @@ erreichbar; operative Lese- und Schreibpfade sind geschlossen. Vor der ersten
 Nachricht, dem ersten Anhang oder einem ETB-/TBB-Eintrag:
 
 1. `/4fadm/admin.php` mit dem separaten Basic-Auth-Zugang öffnen,
-2. unter **Einsätze** Kennung, Name und Beginn anlegen und den Einsatz
-   aktivieren,
+2. unter **Einsätze** Kennung, Einsatzname, Name der Führungsstelle und Beginn
+   anlegen und den Einsatz aktivieren,
 3. unter **Benutzerverwaltung** persönliche Konten für mindestens S2, Si, S6,
    LdF und A/W anlegen,
 4. unter **Führungsstellenbetrieb** eine Dienstschicht planen und die
@@ -233,6 +240,20 @@ Ein Einsatzwechsel gilt systemweit für alle angemeldeten Browser. Er darf nur
 koordiniert erfolgen, wenn keine ungespeicherten Fachvorgänge offen sind.
 Historische Daten bleiben ihrem vorherigen Einsatz zugeordnet und werden
 nicht in den neuen Statusraum umgehängt.
+
+Migration 97 lässt den Führungsstellennamen bestehender Einsätze bewusst
+`NULL`: Einsatzname, Organisation und Einsatzleitung wären keine belegbaren
+historischen Ersatzwerte. Ein offener Alt-Einsatz muss deshalb unter
+**Einsätze** einmalig mit seinem tatsächlichen Führungsstellennamen bestätigt
+werden, bevor er aktiviert oder weiter operativ beschrieben werden kann. Die
+einmalige Bestätigung eines solchen Fehlwerts ist auch dann zulässig, wenn
+bereits historische Fachdaten vorhanden sind. Ein schon belegter Name kann
+nur bis zur ersten operativen Eintragung korrigiert werden; danach ist er
+durch den dauerhaften Erstschreib-Sperrmarker unveränderlich. Das Löschen
+einzelner Fachdaten entsperrt ihn nicht. Formal abgeschlossene Alt-Einsätze
+bleiben unverändert. Bei einem aktiven offenen Alt-Einsatz melden Statusleiste
+und Administration „Name fehlt“ beziehungsweise „Einsatz unvollständig“; die
+historische PDF-Ausgabe kennzeichnet den Wert als „historisch nicht erfasst“.
 
 ## Normaler Lebenszyklus
 
@@ -310,6 +331,9 @@ erfordern die Nachrichten. Die Gesamtsumme eingebetteter Dateien
 begrenzt `ESTAB_PDF_ATTACHMENT_MAX_BYTES`. `0` deaktiviert nicht den
 PDF-Export, sondern nur das Einbetten von Dateien; ein Dossier mit
 gewählten Anhängen bricht dann sichtbar ab, statt Dateien auszulassen.
+Führungsstellenname, Einsatzkennung und Einsatzname werden getrennt
+ausgewiesen. Ein historisch fehlender Führungsstellenname wird niemals aus
+einer Umgebungsvariable oder einem anderen Stammdatum ergänzt.
 
 Angemeldete Funktionsbenutzer öffnen unter `/4fach/vordrucke.php` die
 abgeschlossenen Vordrucke des aktiven Einsatzes. Der sichtbare Download wird

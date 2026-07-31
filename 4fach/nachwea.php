@@ -18,16 +18,27 @@ try {
         throw new EstabReadPermissionException ("Anmeldung erforderlich.");
     }
     $trackingAccessConnection = estab_auth_connect ($conf_4f_db);
-    estab_read_require_area (
+    $trackingScope = estab_read_require_area (
         $trackingAccessConnection,
         $trackingReadIdentity,
         "tracking"
     );
+    $trackingIncidentId = (int) (
+        $trackingScope ["incident"]["active_einsatz_id"]
+    );
+    estab_incident_command_post_name ($trackingScope ["incident"]);
 } catch (EstabNoActiveIncidentException) {
     http_response_code (409);
     header ("Content-Type: text/plain; charset=UTF-8");
     header ("Cache-Control: no-store");
     echo "Kein Einsatz aktiv.";
+    exit;
+} catch (EstabIncidentConfigurationException) {
+    http_response_code (409);
+    header ("Content-Type: text/plain; charset=UTF-8");
+    header ("Cache-Control: no-store");
+    echo "Für den aktiven Einsatz fehlt der Führungsstellenname. "
+        ."Legen Sie ihn zuerst in der Einsatzverwaltung fest.";
     exit;
 } catch (EstabReadPermissionException) {
     http_response_code (403);
@@ -74,28 +85,39 @@ echo "<p>Breite Tabellen können innerhalb dieses Bereichs horizontal ";
 echo "gescrollt werden.</p>\n</header>\n";
 echo "<div class=\"estab-tool-legacy-content\">\n";
 
-
+try {
   if ( isset ($_GET) ) {
     if ( isset ($_GET["nwe"]) ) {
-      $list = new listen ("FmNwE", "");
+      $list = new listen ("FmNwE", "", $trackingIncidentId);
       $list->createlist ();
     }
     if ( isset ($_GET["nwa"]) ) {
-      $list = new listen ("FmNwA", "");
+      $list = new listen ("FmNwA", "", $trackingIncidentId);
       $list->createlist ();
     }
     if ( isset ($_GET["nwalle"]) ) {
       if (Nachweisung == "gemeinsam"){
-        $list = new listen ("FmNw", "");
+        $list = new listen ("FmNw", "", $trackingIncidentId);
         $list->createlist ();
       } elseif (Nachweisung == "getrennt") {
-        $list = new listen ("FmNwE", "");
+        $list = new listen ("FmNwE", "", $trackingIncidentId);
         $list->createlist ();
-        $list = new listen ("FmNwA", "");
+        $list = new listen ("FmNwA", "", $trackingIncidentId);
         $list->createlist ();
       }
     }
   }
+} catch (EstabIncidentConfigurationException) {
+  if (ob_get_level () > 0) {
+    @ob_clean ();
+  }
+  http_response_code (409);
+  header ("Content-Type: text/plain; charset=UTF-8");
+  header ("Cache-Control: no-store");
+  echo "Für den aktiven Einsatz fehlt der Führungsstellenname. "
+      ."Legen Sie ihn zuerst in der Einsatzverwaltung fest.";
+  exit;
+}
 
 echo "</div>\n</section>\n";
 echo "<footer class=\"estab-tool-footer\">\n";

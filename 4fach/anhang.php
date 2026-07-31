@@ -479,6 +479,9 @@ try {
     (int) $attachmentPageIncident ["active_einsatz_id"],
     $attachmentPageIdentity
   );
+  $attachmentCommandPostName = estab_incident_command_post_name (
+    $attachmentPageIncident
+  );
 } catch (EstabNoActiveIncidentException) {
   http_response_code (409);
   header ("Content-Type: text/plain; charset=UTF-8");
@@ -490,6 +493,12 @@ try {
   header ("Content-Type: text/plain; charset=UTF-8");
   header ("Cache-Control: no-store");
   echo "Wählen Sie zuerst eine persönlich angenommene Dienstfunktion.";
+  exit;
+} catch (EstabIncidentConfigurationException) {
+  http_response_code (409);
+  header ("Content-Type: text/plain; charset=UTF-8");
+  header ("Cache-Control: no-store");
+  echo "Für den aktiven Einsatz fehlt der Führungsstellenname.";
   exit;
 } catch (Throwable $exception) {
   error_log (
@@ -645,7 +654,7 @@ if ( debug == true ){
       $formdata ["12_anhang"]   = $anhang;
       $formdata ["12_inhalt"]  .= $inhalt;
 
-      $formdata ["13_abseinheit"]  = $conf_4f     ["anschrift"];
+      $formdata ["13_abseinheit"] = $attachmentCommandPostName;
       $formdata ["14_zeichen"]     = $_SESSION["vStab_kuerzel"];
       $formdata ["14_funktion"]    = $_SESSION["vStab_funktion"];
     }
@@ -714,7 +723,7 @@ if ( debug == true ){
         $formdata ["01_zeichen"] = $_SESSION ["vStab_kuerzel"];
       }
       if (($formdata ["10_anschrift"] ?? "") === "") {
-        $formdata ["10_anschrift"] = $conf_4f ["anschrift"];
+        $formdata ["10_anschrift"] = $attachmentCommandPostName;
       }
     }
     unset ($_SESSION ["anhang_message_context"], $_SESSION ["anhang_menue"]);
@@ -760,15 +769,22 @@ require_once ("./db_operation.php");  // Datenbank operationen
       if (!is_array ($identity)) {
         throw new EstabReadPermissionException ("Anmeldung erforderlich.");
       }
-      $attachments = estab_attachment_list (
+      $readScope = estab_read_require_operational_scope (
         $connection,
-        $conf_4f_tbl ["anhang"]
+        $identity
       );
-      return estab_read_filter_attachments (
+      $incidentId = (int) $readScope ["incident"]["active_einsatz_id"];
+      $attachments = estab_attachment_list_for_incident (
+        $connection,
+        $conf_4f_tbl ["anhang"],
+        $incidentId
+      );
+      return estab_read_filter_attachments_for_incident (
         $connection,
         $conf_4f_tbl ["nachrichten"],
         $attachments,
-        $identity
+        $readScope ["identity"],
+        $incidentId
       );
     } finally {
       estab_attachment_close ($connection);

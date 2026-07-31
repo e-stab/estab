@@ -107,6 +107,36 @@ Telekommunikationspläne und Melderaufträge bleiben bis zur Auswahl gesperrt.
 Öffentliche und unabhängig administrativ geschützte Bereiche folgen weiterhin
 ihren eigenen Grenzen.
 
+### Einsatzgebundene Führungsstellenidentität
+
+`nv_einsaetze.fuehrungsstellenname` ist die autoritative lokale
+Anschrift/Absendereinheit eines Einsatzes. Einsatzname, Trägerorganisation und
+Einsatzleitung sind getrennte Tatsachen; weder diese Felder noch Browserdaten
+oder eine Umgebungsvariable dürfen als Ersatz dienen. Neue Einsätze verlangen
+den Wert bereits beim Anlegen.
+
+Migration 97 lässt bestehende Einsätze absichtlich `NULL`. Ein offener
+Alt-Einsatz bleibt bis zur einmaligen administrativen Bestätigung für weitere
+operative Eingaben gesperrt und kann ohne Namen nicht neu aktiviert werden.
+Die `NULL`-zu-Wert-Erstbestätigung ist trotz vorhandener historischer
+Fachdaten möglich. Ein bereits belegter Name darf nur vor dem ersten
+operativen Datensatz korrigiert werden; danach sowie bei formal
+abgeschlossenen Einsätzen ist er unveränderlich.
+`fuehrungsstellenname_gesperrt` hält diese Grenze dauerhaft fest; Löschen
+einzelner Fachdaten kann sie nicht zurücksetzen. Der zentrale
+Anwendungs-Writer und die Legacy-DB-Trigger validieren den Namen und setzen
+den Marker atomar in derselben Transaktion wie die erste Fachänderung.
+Direkte Änderungen an Name oder Marker werden durch DB-Trigger blockiert.
+Erwarteter Altwert, Transaktionssperre und Einsatz-Audit schützen die
+Adminänderung zusätzlich gegen veraltete parallele Formulare.
+
+Die Status- und Führungsstellenansichten zeigen den Namen als eigene
+HTML-escaped Identität. Fehlt er bei einem historischen aktiven Einsatz,
+erscheint der rote unvollständige Zustand und der zentrale Schreibguard
+schlägt geschlossen fehl. PDF- und Tabellenexporte bleiben für historische
+Nachweise lesbar, kennzeichnen den Fehlwert aber ausdrücklich, statt einen
+Fallback zu erfinden.
+
 Neue Anwendungspasswörter werden über PHPs `PASSWORD_DEFAULT` gehasht.
 Historische Klartextwerte werden nur bei einer erfolgreichen Anmeldung
 akzeptiert und dabei transparent durch einen Hash ersetzt. Die Datenbankspalte
@@ -430,6 +460,9 @@ den ausdrücklich gewählten aktiven oder historischen Einsatz aus einem
 konsistenten Read-only-Snapshot. Nachrichtenseiten verwenden denselben
 Vordruckrenderer wie der Einzelabruf; neue Anhänge werden vor dem Laden und
 vor dem Einbetten erneut gegen SHA-256 und Bytezahl geprüft.
+Führungsstellenname, Einsatzkennung und Einsatzname werden getrennt in
+Auswahl, Deckblatt und Seitenkopf geführt. Ein historischer `NULL`-Wert heißt
+sichtbar „historisch nicht erfasst“.
 
 Der Administrations-Export erzeugt CSV-Dateien anwendungsseitig; der
 MariaDB-Benutzer benötigt dafür kein globales `FILE`-Privileg. Die Oberfläche
@@ -452,6 +485,15 @@ Parameter in vorbereitete Statements. Nur fest erlaubte Nachrichtenspalten
 und syntaktisch validierte Tabellennamen dürfen Identifier werden. Audittexte
 enthalten bei diesen Vorgängen nur die positive `message_id`, nicht den
 Nachrichteninhalt.
+
+Beim Anlegen und bei den betroffenen Übergängen sperrt dieselbe
+Schreibtransaktion den aktiven Einsatz und bindet die lokale
+Nachrichtenidentität an dessen Führungsstellennamen: Ein Eingang erhält ihn
+als Anschrift, ein Ausgang als Absendereinheit; eine interne Gesprächsnotiz
+wird entsprechend lokal gebunden. Manipulierte Formfelder, ein veralteter
+Formularstandard oder eine Prozessumgebung können diese Werte nicht
+überschreiben. Fehlt der Name, bricht der gesamte fachliche Schreibvorgang
+ohne Teilcommit ab.
 
 Bestandsdaten aus älteren Releases können bereits HTML-Entities enthalten.
 Die Ausgabeschicht decodiert diese Kompatibilitätsdarstellung genau einmal und
@@ -493,6 +535,12 @@ eine S2- oder ETB-Besetzung mit `EINSATZTAGEBUCH`, TBB-Schreiben eine
 A/W-Besetzung mit `BEFOERDERUNG`. Die getrennte
 `LAGE_DOKUMENTATION`-Fähigkeit und damit die Meldungsübersicht bleiben
 ausschließlich S2 vorbehalten.
+
+Die einmal autorisierte Einsatz-ID wird bis in jede Warteschlangen-,
+Nachweis- und Detailabfrage explizit weitergereicht. Ein paralleler
+administrativer Einsatzwechsel kann daher höchstens eine bereits geladene
+Ansicht veralten lassen, aber niemals Daten des neuen Einsatzes unter der
+alten Berechtigung oder Überschrift anzeigen.
 
 Die fachlichen Zustandsübergänge prüfen ihre Vorbedingung nochmals im
 ändernden SQL-Statement. Insbesondere kann nur der aktuelle A/W-Sperrinhaber

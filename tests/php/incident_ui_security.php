@@ -43,6 +43,8 @@ $active = estab_incident_ui_state_from_status([
     'active_einsatz_id' => 7,
     'kennung' => 'EL-2026-007',
     'name' => 'Sturm & Hochwasser',
+    'fuehrungsstellenname' =>
+        'FüSt "Nord" & <script>alert(1)</script>',
     'beginn' => '2026-07-29 12:34:00',
     'ort' => '<Leitstelle>',
 ]);
@@ -53,7 +55,18 @@ $assert(
         && str_contains($activeMarkup, 'EL-2026-007')
         && str_contains($activeMarkup, '29.07.2026 12:34')
         && str_contains($activeMarkup, '&lt;Leitstelle&gt;')
+        && str_contains(
+            $activeMarkup,
+            'data-estab-command-post-name="FüSt &quot;Nord&quot; '
+                . '&amp; &lt;script&gt;alert(1)&lt;/script&gt;"'
+        )
+        && str_contains(
+            $activeMarkup,
+            '<strong>FüSt &quot;Nord&quot; &amp; '
+                . '&lt;script&gt;alert(1)&lt;/script&gt;</strong>'
+        )
         && !str_contains($activeMarkup, '<Leitstelle>')
+        && !str_contains($activeMarkup, '<script>alert(1)</script>')
         && !str_contains($activeMarkup, 'incident-input-guard'),
     'Active incident banner is incomplete or unsafe'
 );
@@ -61,6 +74,45 @@ $assert(
     str_contains($activeMarkup, 'estab-incident-indicator-compact')
         && str_contains($activeMarkup, 'estab-incident-indicator-sidebar'),
     'Compact sidebar incident presentation is missing'
+);
+
+$incomplete = estab_incident_ui_state_from_status([
+    'active_einsatz_id' => 8,
+    'kennung' => 'LEGACY-IMPORT',
+    'name' => 'Historischer Einsatz',
+    'fuehrungsstellenname' => null,
+    'beginn' => '2020-01-01 00:00:00',
+    'ort' => '',
+]);
+$assert(
+    $incomplete['active'] === true
+        && array_key_exists(
+            'fuehrungsstellenname',
+            $incomplete['incident']
+        )
+        && $incomplete['incident']['fuehrungsstellenname'] === null,
+    'historical NULL command-post state was replaced with invented data'
+);
+$incompleteMarkup = estab_incident_ui_markup($incomplete);
+$assert(
+    str_contains(
+        $incompleteMarkup,
+        'data-estab-incident-state="incomplete"'
+    )
+        && str_contains($incompleteMarkup, 'data-estab-incident-id="8"')
+        && str_contains($incompleteMarkup, 'Führungsstellenname fehlt')
+        && str_contains($incompleteMarkup, 'Name der Führungsstelle fehlt.')
+        && str_contains($incompleteMarkup, 'Operative Eingaben sind gesperrt.')
+        && str_contains($incompleteMarkup, '4fadm/incidents.php')
+        && str_contains(
+            $incompleteMarkup,
+            'data-estab-incident-input-guard'
+        )
+        && !str_contains(
+            $incompleteMarkup,
+            'data-estab-incident-state="active"'
+        ),
+    'historical incomplete incident does not fail closed in the shared UI'
 );
 
 $unavailable = estab_incident_ui_markup([

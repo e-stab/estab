@@ -316,9 +316,11 @@ assert_body_regex() {
 
 assert_export_zip() {
     expected_marker=${1:-}
+    expected_command_post=${2:-}
     "$compose_engine" compose run --rm --no-deps -T \
         app php -d auto_prepend_file= -r '
         $expectedMarker = $argv[1] ?? "";
+        $expectedCommandPost = $argv[2] ?? "";
         $bytes = stream_get_contents(STDIN);
         $temporary = tempnam(sys_get_temp_dir(), "estab-export-http-");
         if (
@@ -438,9 +440,54 @@ assert_export_zip() {
                 exit(1);
             }
         }
+        if ($expectedCommandPost !== "") {
+            $csv = $archive->getFromName("nv_einsaetze.csv");
+            $stream = fopen("php://temp", "w+b");
+            if (
+                !is_string($csv)
+                || $stream === false
+                || fwrite($stream, $csv) !== strlen($csv)
+                || !rewind($stream)
+            ) {
+                $archive->close();
+                @unlink($temporary);
+                fwrite(STDERR, "HTTP smoke: incident export could not be read\n");
+                exit(1);
+            }
+            $headers = fgetcsv($stream, null, ";", "\"", "");
+            $identifierIndex = is_array($headers)
+                ? array_search("kennung", $headers, true)
+                : false;
+            $commandPostIndex = is_array($headers)
+                ? array_search("fuehrungsstellenname", $headers, true)
+                : false;
+            $found = false;
+            if (is_int($identifierIndex) && is_int($commandPostIndex)) {
+                while (($row = fgetcsv($stream, null, ";", "\"", "")) !== false) {
+                    if (
+                        ($row[$identifierIndex] ?? null) === "CI-INTEGRATION"
+                        && ($row[$commandPostIndex] ?? null)
+                            === $expectedCommandPost
+                    ) {
+                        $found = true;
+                        break;
+                    }
+                }
+            }
+            fclose($stream);
+            if (!$found) {
+                $archive->close();
+                @unlink($temporary);
+                fwrite(
+                    STDERR,
+                    "HTTP smoke: incident command-post name is missing from export\n"
+                );
+                exit(1);
+            }
+        }
         $archive->close();
         @unlink($temporary);
-        ' "$expected_marker" <"$body"
+        ' "$expected_marker" "$expected_command_post" <"$body"
 }
 
 assert_session_bar() {
@@ -885,6 +932,7 @@ if [ "$restore_verify_only" = true ]; then
         "$base_url/stabetb/etb.php"
     assert_body 'data-estab-incident-code="CI-INTEGRATION"'
     assert_body 'Automatisierter CI-Integrationstest'
+    assert_body 'CI-Führungsstelle Nord'
     assert_body_absent 'value="save_title"'
     assert_body 'LOGBOOK_ETB_ENTRY_E2E'
     assert_session_bar "$test_name" "$test_code" "$test_function" "$restore_role"
@@ -896,6 +944,7 @@ if [ "$restore_verify_only" = true ]; then
         "$base_url/fmtbb/tbb.php"
     assert_body 'data-estab-incident-code="CI-INTEGRATION"'
     assert_body 'Automatisierter CI-Integrationstest'
+    assert_body 'CI-Führungsstelle Nord'
     assert_body_absent 'value="save_title"'
     assert_body 'LOGBOOK_TBB_ENTRY_E2E'
     assert_session_bar "$test_name" "$test_code" "$test_function" "$restore_role"
@@ -1102,7 +1151,7 @@ path_info_csrf_token=$(csrf_from_body)
 path_info_marker="PATH_INFO_LOCK_GUARD_$$"
 path_info_record_id=$(
     printf '%s\n' \
-        "INSERT INTO nv_nachrichten (einsatz_id, \`04_richtung\`, \`12_inhalt\`, \`x00_status\`, \`x02_sperre\`, \`x03_sperruser\`) VALUES ((SELECT active_einsatz_id FROM nv_einsatz_status WHERE singleton_id = 1), 'E', '${path_info_marker}', 1, 't', '${legacy_registration_code}'); SELECT LAST_INSERT_ID();" |
+        "SET @estab_path_info_incident = (SELECT active_einsatz_id FROM nv_einsatz_status WHERE singleton_id = 1); INSERT INTO nv_nachrichten (einsatz_id, \`04_richtung\`, \`12_inhalt\`, \`x00_status\`, \`x02_sperre\`, \`x03_sperruser\`) VALUES (@estab_path_info_incident, 'E', '${path_info_marker}', 1, 't', '${legacy_registration_code}'); SET @estab_path_info_incident = NULL; SELECT LAST_INSERT_ID();" |
         db_sql |
         tail -n 1
 )
@@ -2633,6 +2682,9 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
         "$base_url/4fadm/incidents.php"
     assert_body 'data-estab-incident-admin'
     assert_body 'Einsätze verwalten'
+    assert_body 'name="fuehrungsstellenname"'
+    assert_body 'maxlength="128"'
+    assert_body 'CI-Führungsstelle Nord'
 
     # Expired or forged admin forms are authorization failures, not server
     # errors. These requests stop before incident lookup, export rendering,
@@ -2969,7 +3021,7 @@ SQL
         printf 'HTTP smoke: export download does not start with ZIP magic\n' >&2
         exit 1
     fi
-    assert_export_zip "$workflow_marker"
+    assert_export_zip "$workflow_marker" 'CI-Führungsstelle Nord'
 
     assert_status 400 --config "$admin_curl_config" \
         "$base_url/4fadm/export.php?action=download&export_id=..%2Fescape"
@@ -3039,7 +3091,7 @@ SQL
 
     assert_status 200 --config "$admin_curl_config" \
         "$base_url/4fadm/export.php?action=download&export_id=$second_export_id"
-    assert_export_zip "$workflow_marker"
+    assert_export_zip "$workflow_marker" 'CI-Führungsstelle Nord'
     survivor_zip=$work_dir/survivor-export.zip
     cp "$body" "$survivor_zip"
 

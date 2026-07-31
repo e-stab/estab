@@ -204,6 +204,7 @@ assert_global_incident_header()
     assert_body 'data-estab-incident-code="CI-INTEGRATION"'
     assert_body 'CI-INTEGRATION'
     assert_body 'Automatisierter CI-Integrationstest'
+    assert_body 'CI-Führungsstelle Nord'
     assert_body_absent 'value="save_title"'
     assert_no_runtime_error
 }

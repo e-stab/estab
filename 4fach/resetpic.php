@@ -46,6 +46,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             http_response_code(409);
             $error = 'Ohne aktiven Einsatz können keine '
                 . 'Vordruckmarkierungen zurückgesetzt werden.';
+        } catch (EstabIncidentConfigurationException) {
+            http_response_code(409);
+            $error = 'Für den aktiven Einsatz fehlt der Name der '
+                . 'Führungsstelle. Die Vordruckmarkierungen bleiben '
+                . 'unverändert.';
         } catch (Throwable $exception) {
             error_log('eStab print flag reset failed: ' . $exception->getMessage());
             http_response_code(500);

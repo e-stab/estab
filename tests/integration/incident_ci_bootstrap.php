@@ -43,6 +43,7 @@ $assert = static function (bool $condition, string $message) use (&$assertions):
 
 $identifier = 'CI-INTEGRATION';
 $actor = 'ci-integration';
+$commandPostName = 'CI-Führungsstelle Nord';
 try {
     $status = estab_incident_status($connection);
     $incidents = array_values(array_filter(
@@ -71,6 +72,7 @@ try {
                 'name' => 'Automatisierter CI-Integrationstest',
                 'beginn' => date('Y-m-d\TH:i'),
                 'organisation' => 'eStab CI',
+                'fuehrungsstellenname' => $commandPostName,
                 'beschreibung' =>
                     'Fest benannter Einsatz für operative CI-Schreibtests.',
                 'metadaten' => '{"zweck":"ci-integration"}',
@@ -95,7 +97,8 @@ try {
     $active = estab_incident_require_active($connection);
     $assert(
         $active['active_einsatz_id'] === $incidentId
-            && ($active['kennung'] ?? null) === $identifier,
+            && ($active['kennung'] ?? null) === $identifier
+            && ($active['fuehrungsstellenname'] ?? null) === $commandPostName,
         'CI incident is not the authoritative active incident'
     );
 
@@ -118,7 +121,10 @@ try {
             ($incident['kennung'] ?? null) === $identifier
     ));
     $assert(
-        count($matching) === 1 && ($matching[0]['ist_aktiv'] ?? false) === true,
+        count($matching) === 1
+            && ($matching[0]['ist_aktiv'] ?? false) === true
+            && ($matching[0]['fuehrungsstellenname'] ?? null)
+                === $commandPostName,
         'CI incident list does not expose one active named incident'
     );
 } finally {

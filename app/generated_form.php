@@ -195,20 +195,20 @@ function estab_generated_form_mark_published(
 }
 
 /**
- * Return only real files backed by printed rows of the active incident.
+ * Return only real files backed by printed rows of one captured incident.
  *
  * @return list<array{
  *   name:string,size:int,modified:int,message_id:int,number:int,direction:string
  * }>
  */
-function estab_generated_form_list_active(
+function estab_generated_form_list_for_incident(
     mysqli $connection,
     string $messageTable,
     string $database,
-    string $root
+    string $root,
+    mixed $incidentId
 ): array {
-    $incident = estab_incident_require_active($connection);
-    $incidentId = (int) $incident['active_einsatz_id'];
+    $incidentId = estab_incident_positive_id($incidentId);
     $statement = $connection->prepare(
         'SELECT `00_lfd`, `04_nummer`, `04_richtung` FROM '
         . estab_auth_table($messageTable)
@@ -267,6 +267,32 @@ function estab_generated_form_list_active(
         }
     }
     return $files;
+}
+
+/**
+ * Return real generated files from the currently active incident.
+ *
+ * Callers that already captured authorization scope must use
+ * estab_generated_form_list_for_incident().
+ *
+ * @return list<array{
+ *   name:string,size:int,modified:int,message_id:int,number:int,direction:string
+ * }>
+ */
+function estab_generated_form_list_active(
+    mysqli $connection,
+    string $messageTable,
+    string $database,
+    string $root
+): array {
+    $incident = estab_incident_require_active($connection);
+    return estab_generated_form_list_for_incident(
+        $connection,
+        $messageTable,
+        $database,
+        $root,
+        $incident['active_einsatz_id']
+    );
 }
 
 /**

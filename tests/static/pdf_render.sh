@@ -25,6 +25,7 @@ done
 single_pdf=$fixture_dir/message-form.pdf
 dossier_pdf=$fixture_dir/dossier-message-form.pdf
 complete_dossier_pdf=$fixture_dir/dossier-all.pdf
+maximum_header_pdf=$fixture_dir/dossier-maximum-header.pdf
 long_single_pdf=$fixture_dir/long-message-form.pdf
 long_dossier_pdf=$fixture_dir/dossier-long-message-form.pdf
 for pdf_file in "$single_pdf" "$dossier_pdf"; do
@@ -62,6 +63,55 @@ for pdf_file in "$single_pdf" "$dossier_pdf"; do
         exit 1
     fi
 done
+
+[ -f "$maximum_header_pdf" ] || {
+    echo "Missing maximum-value PDF header fixture: $maximum_header_pdf" >&2
+    exit 1
+}
+maximum_header_info=$maximum_header_pdf.info.txt
+maximum_header_text=$maximum_header_pdf.layout.txt
+maximum_header_bbox=$maximum_header_pdf.bbox.html
+pdfinfo "$maximum_header_pdf" >"$maximum_header_info"
+pdftotext -layout -f 1 -l 1 \
+    "$maximum_header_pdf" "$maximum_header_text"
+pdftotext -bbox -f 1 -l 1 \
+    "$maximum_header_pdf" "$maximum_header_bbox"
+grep -Eq '^Page size:[[:space:]]+595\.28 x 841\.89 pts \(A4\)$' \
+    "$maximum_header_info"
+grep -Eq '^[[:space:]]*Führungsstelle: F+' "$maximum_header_text"
+grep -Eq '^[[:space:]]*Einsatz: MAX-K+' "$maximum_header_text"
+[ "$(grep -Ec '\.\.\.$' "$maximum_header_text")" -ge 2 ]
+awk '
+    /<word / {
+        x_min = ""
+        x_max = ""
+        y_max = ""
+        for (field = 1; field <= NF; field++) {
+            value = $field
+            if (value ~ /^xMin=/) {
+                gsub(/[^0-9.]/, "", value)
+                x_min = value
+            } else if (value ~ /^xMax=/) {
+                gsub(/[^0-9.]/, "", value)
+                x_max = value
+            } else if (value ~ /^yMax=/) {
+                gsub(/[^0-9.]/, "", value)
+                y_max = value
+            }
+        }
+        if (y_max != "" && (y_max + 0) <= 66 && \
+            ((x_min + 0) < 44 || (x_max + 0) > 551)) {
+            bad = 1
+        }
+    }
+    END { exit bad ? 1 : 0 }
+' "$maximum_header_bbox" || {
+    echo "Maximum-value dossier header exceeds its A4 bounds" >&2
+    exit 1
+}
+pdftoppm -png -r 144 -f 1 -l 1 -singlefile -hide-annotations \
+    "$maximum_header_pdf" "$fixture_dir/dossier-maximum-header-page"
+[ -s "$fixture_dir/dossier-maximum-header-page.png" ]
 
 long_page_count=
 for pdf_file in "$long_single_pdf" "$long_dossier_pdf"; do
@@ -145,6 +195,7 @@ fi
 
 for marker in \
     'VORLÄUFIG' \
+    'Führungsstelle Musterstadt' \
     'Aufbewahrung bis' \
     'Legal Hold' \
     'Nachrichten-Head-Summenhash' \

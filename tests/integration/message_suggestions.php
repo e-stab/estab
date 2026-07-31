@@ -85,6 +85,7 @@ $createIncident = static function (
             'beginn' => date('Y-m-d\TH:i', time() - 3600),
             'ort' => 'Integrationsprüfung',
             'organisation' => 'THW',
+            'fuehrungsstellenname' => 'Führungsstelle Vorschlag ' . $suffix,
             'einsatzleitung' => 'Testleitung',
             'beschreibung' => 'Isolierter Vorschlagsdatensatz ' . $suffix,
         ],

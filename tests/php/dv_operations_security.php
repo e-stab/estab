@@ -167,6 +167,26 @@ $dynamicSchema = $read('app/dynamic_schema.php');
 $dvIntegration = $read('tests/integration/dv_operations.php');
 $operationsUi = $read('4fach/fuehrungsstelle.php');
 $adminUi = $read('4fadm/fuehrungsstelle.php');
+$assert(
+    str_contains(
+        $operationalGuard,
+        'estab_incident_command_post_name($incident);'
+    )
+        && str_contains(
+            $operationalGuard,
+            'catch (EstabIncidentConfigurationException)'
+        )
+        && str_contains(
+            $operationalGuard,
+            'noch kein Name der Führungsstelle festgelegt'
+        ),
+    'request-wide write guard accepts an incomplete active incident'
+);
+$assert(
+    str_contains($operationsUi, 'EstabIncidentConfigurationException')
+        && str_contains($adminUi, 'EstabIncidentConfigurationException'),
+    'duty-station controllers turn a missing command-post name into HTTP 500'
+);
 $httpSmoke = $read('tests/integration/http_smoke.sh');
 
 $assert(
@@ -611,6 +631,13 @@ $assert(
             'estab_attachment_require_operational_identity('
         ) >= 5,
     'attachment reserve/claim/finalize/upload domain lacks the duty guard'
+);
+$assert(
+    str_contains(
+        $dv,
+        'estab_incident_lock_command_post_for_write($connection, $incident);'
+    ),
+    'session duty selection accepts an incident without a command-post name'
 );
 $assert(
     str_contains(

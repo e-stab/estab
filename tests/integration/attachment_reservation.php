@@ -246,6 +246,41 @@ function attachment_db_count(mysqli $connection, string $table): int
     return (int) ($row[0] ?? -1);
 }
 
+function attachment_db_incident_count(
+    mysqli $connection,
+    string $table,
+    int $incidentId
+): int {
+    $statement = $connection->prepare(
+        'SELECT COUNT(*) FROM ' . estab_attachment_table($table)
+            . ' WHERE `einsatz_id` = ?'
+    );
+    attachment_db_assert(
+        $statement instanceof mysqli_stmt,
+        'Could not prepare incident-scoped fixture count'
+    );
+    try {
+        $statement->bind_param('i', $incidentId);
+        attachment_db_assert(
+            $statement->execute(),
+            'Could not execute incident-scoped fixture count'
+        );
+        $result = $statement->get_result();
+        attachment_db_assert(
+            $result instanceof mysqli_result,
+            'Could not read incident-scoped fixture count'
+        );
+        try {
+            $row = $result->fetch_row();
+        } finally {
+            $result->free();
+        }
+        return (int) ($row[0] ?? -1);
+    } finally {
+        $statement->close();
+    }
+}
+
 function attachment_db_status_counter(mysqli $connection, string $name): int
 {
     if ($name !== 'Innodb_deadlocks') {
@@ -523,6 +558,7 @@ $sessionA = 'it_a_' . $token;
 $sessionB = 'it_b_' . $token;
 $sessionC = 'it_c_' . $token;
 $barrier = sys_get_temp_dir() . '/estab-attachment-' . $token;
+$blockedUploadPath = $barrier . '.blocked-upload';
 $fixtureUser = '';
 $fixtureCode = '';
 $fixtureRole = '';
@@ -540,6 +576,7 @@ register_shutdown_function(
         $config,
         $table,
         $barrier,
+        $blockedUploadPath,
         $readyFiles,
         &$previousIncidentId,
         &$fixtureIncidentId,
@@ -557,6 +594,7 @@ register_shutdown_function(
         }
         attachment_db_drop_fixture($config, $table);
         @unlink($barrier);
+        @unlink($blockedUploadPath);
         foreach ($readyFiles as $readyFile) {
             @unlink($readyFile);
         }
@@ -578,12 +616,14 @@ try {
     $previousIncidentId = $initialStatus['active_einsatz_id'] === null
         ? null
         : (int) $initialStatus['active_einsatz_id'];
+    $fixtureCommandPostName = 'Führungsstelle Anhang ' . $token;
     $fixtureIncident = estab_incident_create(
         $connectionA,
         [
             'kennung' => 'CI-ATT-' . strtoupper($token),
             'name' => 'Attachment reservation ' . $token,
             'beginn' => date('Y-m-d\TH:i'),
+            'fuehrungsstellenname' => $fixtureCommandPostName,
             'beschreibung' =>
                 'Ephemerer Einsatz für isolierte Anhangreservierungen.',
             'metadaten' => json_encode(
@@ -757,6 +797,211 @@ try {
         . ' KEY `idx_id` (`id`)'
         . ' ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci';
     attachment_db_assert($connectionA->query($fixtureSql), 'Could not create attachment fixture');
+
+    $reservationRowsBeforeMissingCommandPost = attachment_db_count(
+        $connectionA,
+        $table
+    );
+    $protocolRowsBeforeMissingCommandPost = attachment_db_incident_count(
+        $connectionA,
+        'nv_protokoll',
+        $fixtureIncidentId
+    );
+    $lifecycleRowsBeforeMissingCommandPost = attachment_db_incident_count(
+        $connectionA,
+        'nv_einsatz_ereignisse',
+        $fixtureIncidentId
+    );
+    attachment_db_assert(
+        $reservationRowsBeforeMissingCommandPost === 0,
+        'Missing-command-post probe requires an empty reservation fixture'
+    );
+
+    // Model a migrated historical NULL without weakening the production API,
+    // which deliberately never permits clearing a populated name.
+    attachment_db_assert(
+        $connectionA->query(
+            'SET @estab_command_post_migration_write = 1'
+        ),
+        'Could not enter the historical command-post fixture boundary'
+    );
+    try {
+        $clearCommandPost = $connectionA->prepare(
+            'UPDATE `nv_einsaetze`'
+                . ' SET `fuehrungsstellenname` = NULL,'
+                . ' `fuehrungsstellenname_gesperrt` = 0'
+                . ' WHERE `einsatz_id` = ?'
+        );
+        attachment_db_assert(
+            $clearCommandPost instanceof mysqli_stmt,
+            'Could not prepare missing command-post fixture'
+        );
+        try {
+            $clearCommandPost->bind_param('i', $fixtureIncidentId);
+            attachment_db_assert(
+                $clearCommandPost->execute()
+                    && $clearCommandPost->affected_rows === 1,
+                'Could not clear the fixture command-post name'
+            );
+        } finally {
+            $clearCommandPost->close();
+        }
+    } finally {
+        attachment_db_assert(
+            $connectionA->query(
+                'SET @estab_command_post_migration_write = NULL'
+            ),
+            'Could not leave the historical command-post fixture boundary'
+        );
+    }
+
+    $blockedUploadCallbackRan = false;
+    $blockedAuditCallbackRan = false;
+    @unlink($blockedUploadPath);
+    try {
+        $reservationFailure = null;
+        try {
+            estab_attachment_reserve(
+                $connectionA,
+                $table,
+                $prefix,
+                'it_missing_reserve_' . $token,
+                attachment_db_identity()
+            );
+        } catch (Throwable $exception) {
+            $reservationFailure = $exception;
+        }
+        attachment_db_assert(
+            $reservationFailure instanceof EstabIncidentConfigurationException,
+            'Reservation without a command-post name did not fail closed'
+        );
+
+        $storeFailure = null;
+        $blockedReservation = 'IT9999';
+        try {
+            estab_attachment_store_upload(
+                $connectionA,
+                $table,
+                'nv_protokoll',
+                $blockedReservation,
+                'it_missing_upload_' . $token,
+                (string) attachment_db_identity()['kuerzel'],
+                attachment_db_identity(),
+                'Anhangdaten speichern',
+                static function () use (
+                    &$blockedUploadCallbackRan,
+                    $blockedUploadPath,
+                    $blockedReservation,
+                    $token
+                ): array {
+                    $blockedUploadCallbackRan = true;
+                    file_put_contents(
+                        $blockedUploadPath,
+                        'must-not-be-written',
+                        LOCK_EX
+                    );
+                    return [
+                        'filename' => $blockedReservation . '.pdf',
+                        'org_filename' => 'must-not-be-stored.pdf',
+                        'comment' => 'Blocked command-post upload fixture',
+                        'time' => '2026-07-23 12:40:00',
+                        'md5hash' => md5('blocked-upload-' . $token),
+                        'sha256' => hash(
+                            'sha256',
+                            'blocked-upload-' . $token
+                        ),
+                        'size' => strlen('blocked-upload-' . $token),
+                    ];
+                },
+                static function (array $stored) use (
+                    &$blockedAuditCallbackRan
+                ): string {
+                    $blockedAuditCallbackRan = true;
+                    return 'must-not-audit;' . $stored['filename'];
+                }
+            );
+        } catch (Throwable $exception) {
+            $storeFailure = $exception;
+        }
+        attachment_db_assert(
+            $storeFailure instanceof EstabIncidentConfigurationException,
+            'Upload without a command-post name did not fail closed'
+        );
+        attachment_db_assert(
+            !$blockedUploadCallbackRan
+                && !$blockedAuditCallbackRan
+                && !is_file($blockedUploadPath),
+            'Blocked upload executed a callback or created a file'
+        );
+        attachment_db_assert(
+            attachment_db_count($connectionA, $table)
+                === $reservationRowsBeforeMissingCommandPost,
+            'Blocked attachment operation changed reservation rows'
+        );
+        attachment_db_assert(
+            attachment_db_incident_count(
+                $connectionA,
+                'nv_protokoll',
+                $fixtureIncidentId
+            ) === $protocolRowsBeforeMissingCommandPost
+                && attachment_db_incident_count(
+                    $connectionA,
+                    'nv_einsatz_ereignisse',
+                    $fixtureIncidentId
+                ) === $lifecycleRowsBeforeMissingCommandPost,
+            'Blocked attachment operation wrote an audit side effect'
+        );
+    } finally {
+        // Restore the isolated fixture directly so the probe itself creates
+        // no lifecycle audit and the existing concurrency flow stays intact.
+        attachment_db_assert(
+            $connectionA->query(
+                'SET @estab_command_post_migration_write = 1'
+            ),
+            'Could not enter the command-post restoration boundary'
+        );
+        try {
+            $restoreCommandPost = $connectionA->prepare(
+                'UPDATE `nv_einsaetze`'
+                    . ' SET `fuehrungsstellenname` = ?,'
+                    . ' `fuehrungsstellenname_gesperrt` = 1'
+                    . ' WHERE `einsatz_id` = ?'
+                    . ' AND `fuehrungsstellenname` IS NULL'
+            );
+            attachment_db_assert(
+                $restoreCommandPost instanceof mysqli_stmt,
+                'Could not prepare command-post fixture restoration'
+            );
+            try {
+                $restoreCommandPost->bind_param(
+                    'si',
+                    $fixtureCommandPostName,
+                    $fixtureIncidentId
+                );
+                attachment_db_assert(
+                    $restoreCommandPost->execute()
+                        && $restoreCommandPost->affected_rows === 1,
+                    'Could not restore the fixture command-post name'
+                );
+            } finally {
+                $restoreCommandPost->close();
+            }
+        } finally {
+            attachment_db_assert(
+                $connectionA->query(
+                    'SET @estab_command_post_migration_write = NULL'
+                ),
+                'Could not leave the command-post restoration boundary'
+            );
+        }
+        @unlink($blockedUploadPath);
+    }
+    attachment_db_assert(
+        estab_incident_command_post_name(
+            estab_incident_status($connectionA)
+        ) === $fixtureCommandPostName,
+        'Fixture command-post name was not restored after the blocked probe'
+    );
 
     attachment_db_prove_deferred_result_timeout($connectionA, $connectionB, $table);
     attachment_db_assert(
@@ -1206,6 +1451,7 @@ try {
     }
     attachment_db_drop_fixture($config, $table);
     @unlink($barrier);
+    @unlink($blockedUploadPath);
     foreach ($readyFiles as $readyFile) {
         @unlink($readyFile);
     }

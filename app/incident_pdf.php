@@ -12,6 +12,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/legacy_php.php';
+require_once __DIR__ . '/incident.php';
 require_once __DIR__ . '/../4fbak/backup_pdf.php';
 
 const ESTAB_INCIDENT_PDF_DEFAULT_ATTACHMENT_BYTES = 50 * 1024 * 1024;
@@ -19,6 +20,26 @@ const ESTAB_INCIDENT_PDF_MAX_ATTACHMENTS = 1000;
 
 final class EstabIncidentPdfInputException extends InvalidArgumentException
 {
+}
+
+/** Return the incident-owned command-post label without inventing history. */
+function estab_incident_pdf_command_post_label(array $incident): string
+{
+    if (
+        !array_key_exists('fuehrungsstellenname', $incident)
+        || $incident['fuehrungsstellenname'] === null
+    ) {
+        return 'historisch nicht erfasst';
+    }
+    try {
+        return estab_incident_command_post_name($incident);
+    } catch (EstabIncidentConfigurationException $exception) {
+        throw new EstabIncidentPdfInputException(
+            'Incident command-post name is invalid.',
+            0,
+            $exception
+        );
+    }
 }
 
 /** Convert application UTF-8 to the Windows-1252 encoding of FPDF core fonts. */
@@ -232,7 +253,8 @@ final class EstabIncidentPdf extends vordruckaspdf
     private const LAYOUT_DOSSIER = 'dossier';
     private const LAYOUT_MESSAGE_FORM = 'message-form';
 
-    private string $incidentLabel = 'eStab';
+    private string $commandPostLabel = 'Führungsstelle historisch nicht erfasst';
+    private string $incidentLabel = 'Einsatz nicht erfasst';
     private string $sectionTitle = 'Einsatzdossier';
     private int $attachmentByteLimit;
     private int $attachmentBytes = 0;
@@ -290,7 +312,52 @@ final class EstabIncidentPdf extends vordruckaspdf
                 'Incident identity is incomplete.'
             );
         }
-        $this->incidentLabel = $code . ' · ' . $name;
+        $commandPostName = estab_incident_pdf_command_post_label($incident);
+        $historicalCommandPost = !array_key_exists(
+            'fuehrungsstellenname',
+            $incident
+        ) || $incident['fuehrungsstellenname'] === null;
+        $this->commandPostLabel = (
+            $historicalCommandPost
+                ? 'Führungsstelle historisch nicht erfasst'
+                : 'Führungsstelle: ' . $commandPostName
+        );
+        $this->incidentLabel = 'Einsatz: ' . $code . ' · ' . $name;
+    }
+
+    /**
+     * Encode and shorten one PDF header line to its actual rendered width.
+     *
+     * Core-font output is single-byte after conversion. A binary search keeps
+     * the result deterministic and avoids emitting text beyond the A4 header.
+     */
+    private function fittedHeaderLine(string $value, float $maximumWidth): string
+    {
+        $encoded = estab_incident_pdf_text($value);
+        if ($this->GetStringWidth($encoded) <= $maximumWidth) {
+            return $encoded;
+        }
+
+        $suffix = '...';
+        $suffixWidth = $this->GetStringWidth($suffix);
+        if ($suffixWidth > $maximumWidth) {
+            return '';
+        }
+        $minimum = 0;
+        $maximum = strlen($encoded);
+        while ($minimum < $maximum) {
+            $candidate = intdiv($minimum + $maximum + 1, 2);
+            $candidateText = rtrim(substr($encoded, 0, $candidate));
+            if (
+                $this->GetStringWidth($candidateText) + $suffixWidth
+                    <= $maximumWidth
+            ) {
+                $minimum = $candidate;
+            } else {
+                $maximum = $candidate - 1;
+            }
+        }
+        return rtrim(substr($encoded, 0, $minimum)) . $suffix;
     }
 
     public function AddPage($orientation = '', $format = '')
@@ -340,12 +407,25 @@ final class EstabIncidentPdf extends vordruckaspdf
             0,
             1
         );
+        $headerWidth = max(1.0, $this->w - 34.0);
         $this->SetFont('helvetica', '', 8);
         $this->SetX(16);
         $this->Cell(
             0,
-            4,
-            estab_incident_pdf_text($this->incidentLabel),
+            3.5,
+            $this->fittedHeaderLine(
+                $this->commandPostLabel,
+                $headerWidth
+            ),
+            0,
+            1
+        );
+        $this->SetFont('helvetica', '', 7.5);
+        $this->SetX(16);
+        $this->Cell(
+            0,
+            3.5,
+            $this->fittedHeaderLine($this->incidentLabel, $headerWidth),
             0,
             1
         );
@@ -534,6 +614,7 @@ final class EstabIncidentPdf extends vordruckaspdf
             'Ende' => $incident['ende'] ?? '',
             'Ort' => $incident['ort'] ?? '',
             'Organisation' => $incident['organisation'] ?? '',
+            'Führungsstelle' => estab_incident_pdf_command_post_label($incident),
             'Einsatzleitung' => $incident['einsatzleitung'] ?? '',
             'Beschreibung' => $incident['beschreibung'] ?? '',
         ] as $label => $value) {

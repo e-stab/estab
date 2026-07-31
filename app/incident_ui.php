@@ -40,6 +40,8 @@ function estab_incident_ui_state_from_status(array $status): array
             'einsatz_id' => $incidentId,
             'kennung' => $code,
             'name' => $name,
+            'fuehrungsstellenname' =>
+                $status['fuehrungsstellenname'] ?? null,
             'beginn' => $status['beginn'] ?? null,
             'ort' => $status['ort'] ?? '',
         ],
@@ -180,6 +182,24 @@ function estab_incident_ui_markup(
     if ($code === '' || $name === '') {
         throw new InvalidArgumentException('Active incident UI identity is invalid');
     }
+    try {
+        $commandPostName = estab_incident_command_post_name($incident);
+    } catch (EstabIncidentConfigurationException) {
+        $adminUrl = estab_application_url('4fadm/incidents.php');
+        return '<section class="' . $class
+            . ' estab-incident-indicator-alert"'
+            . ' data-estab-incident-state="incomplete"'
+            . ' data-estab-incident-id="' . $id . '"'
+            . ' role="alert" aria-label="Führungsstellenname fehlt">'
+            . '<span class="estab-incident-indicator-label">'
+            . 'Einsatz unvollständig</span>'
+            . '<strong>Name der Führungsstelle fehlt.</strong>'
+            . '<span>Operative Eingaben sind gesperrt.</span>'
+            . '<a href="' . estab_auth_html($adminUrl)
+            . '" target="_top">Führungsstellenname festlegen</a>'
+            . '</section>'
+            . estab_incident_ui_input_guard_script();
+    }
     $details = array_values(array_filter([
         estab_incident_ui_datetime($incident['beginn'] ?? null),
         trim((string) ($incident['ort'] ?? '')),
@@ -190,10 +210,14 @@ function estab_incident_ui_markup(
         . ' data-estab-incident-state="active"'
         . ' data-estab-incident-id="' . $id . '"'
         . ' data-estab-incident-code="' . estab_auth_html($code) . '"'
+        . ' data-estab-command-post-name="'
+        . estab_auth_html($commandPostName) . '"'
         . ' aria-label="Aktiver Einsatz">'
-        . '<span class="estab-incident-indicator-label">Aktiver Einsatz</span>'
-        . '<strong>' . estab_auth_html($code)
-        . ' · ' . estab_auth_html($name) . '</strong>'
+        . '<span class="estab-incident-indicator-label">'
+        . 'Aktive Führungsstelle</span>'
+        . '<strong>' . estab_auth_html($commandPostName) . '</strong>'
+        . '<span>Einsatz: ' . estab_auth_html($code)
+        . ' · ' . estab_auth_html($name) . '</span>'
         . ($details === []
             ? ''
             : '<span>' . estab_auth_html(implode(' · ', $details)) . '</span>')

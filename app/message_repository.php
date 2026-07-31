@@ -318,6 +318,35 @@ function estab_message_insert_for_incident(
     }
 }
 
+/**
+ * Bind local message identity to the incident locked by the write transaction.
+ *
+ * Incoming messages are addressed to the local command post. Outgoing
+ * messages and internal conversation notes originate there. Browser fields,
+ * stale form defaults and installation environment values are never
+ * authoritative for these identities.
+ */
+function estab_message_bind_command_post(
+    array $fields,
+    array $incident,
+    mixed $direction = null
+): array {
+    $direction = $direction ?? ($fields['04_richtung'] ?? null);
+    if (!is_string($direction) || !in_array($direction, ['E', 'A'], true)) {
+        throw new InvalidArgumentException('Invalid message direction');
+    }
+    $commandPostName = estab_incident_command_post_name($incident);
+    if ($direction === 'E') {
+        $fields['10_anschrift'] = $commandPostName;
+        if ((string) ($fields['11_gesprnotiz'] ?? '') === 't') {
+            $fields['13_abseinheit'] = $commandPostName;
+        }
+    } else {
+        $fields['13_abseinheit'] = $commandPostName;
+    }
+    return $fields;
+}
+
 /** Insert one message atomically into the globally active incident. */
 function estab_message_insert(
     mysqli $connection,
@@ -326,12 +355,18 @@ function estab_message_insert(
 ): int {
     return estab_incident_with_active_write(
         $connection,
-        static fn (array $incident): int => estab_message_insert_for_incident(
+        static function (array $incident) use (
             $connection,
             $table,
-            $fields,
-            (int) $incident['active_einsatz_id']
-        )
+            $fields
+        ): int {
+            return estab_message_insert_for_incident(
+                $connection,
+                $table,
+                estab_message_bind_command_post($fields, $incident),
+                (int) $incident['active_einsatz_id']
+            );
+        }
     );
 }
 
@@ -588,6 +623,11 @@ function estab_message_insert_numbered(
 
                 $fields['04_richtung'] = $direction;
                 $fields['04_nummer'] = $number;
+                $fields = estab_message_bind_command_post(
+                    $fields,
+                    $incident,
+                    $direction
+                );
                 if (
                     array_key_exists('12_anhang', $fields)
                     && (string) $fields['12_anhang'] !== ''
@@ -1581,6 +1621,11 @@ function estab_message_resubmit_returned_outgoing(
             $attachmentTable,
             $attachmentAuthorizer
         ): bool {
+            $fields = estab_message_bind_command_post(
+                $fields,
+                $incident,
+                'A'
+            );
             $originalStatement = estab_message_execute(
                 $connection,
                 'SELECT `14_zeichen`, `14_funktion` FROM '
@@ -1707,7 +1752,36 @@ function estab_message_resubmit_returned_outgoing(
     );
 }
 
-/** Fetch one complete message by positive primary key. */
+/** Fetch one complete message from one explicitly captured incident. */
+function estab_message_fetch_for_incident_by_id(
+    mysqli $connection,
+    string $table,
+    mixed $recordId,
+    mixed $incidentId
+): ?array {
+    $recordId = estab_message_positive_id($recordId);
+    $incidentId = estab_incident_positive_id($incidentId);
+    $statement = estab_message_execute(
+        $connection,
+        'SELECT * FROM ' . estab_message_table($table)
+            . ' WHERE `00_lfd` = ? AND `einsatz_id` = ? LIMIT 1',
+        [$recordId, $incidentId]
+    );
+    try {
+        $row = $statement->get_result()->fetch_assoc();
+        return is_array($row) ? $row : null;
+    } finally {
+        $statement->close();
+    }
+}
+
+/**
+ * Fetch one complete message from the active incident.
+ *
+ * Callers that already captured an incident scope must use
+ * estab_message_fetch_for_incident_by_id() so a concurrent activation cannot
+ * replace their authorization boundary.
+ */
 function estab_message_fetch_by_id(
     mysqli $connection,
     string $table,
@@ -1718,18 +1792,12 @@ function estab_message_fetch_by_id(
     if ($incident === null) {
         return null;
     }
-    $statement = estab_message_execute(
+    return estab_message_fetch_for_incident_by_id(
         $connection,
-        'SELECT * FROM ' . estab_message_table($table)
-            . ' WHERE `00_lfd` = ? AND `einsatz_id` = ? LIMIT 1',
-        [$recordId, (int) $incident['active_einsatz_id']]
+        $table,
+        $recordId,
+        $incident['active_einsatz_id']
     );
-    try {
-        $row = $statement->get_result()->fetch_assoc();
-        return is_array($row) ? $row : null;
-    } finally {
-        $statement->close();
-    }
 }
 
 /** Run a prepared read query and return all associative rows. */

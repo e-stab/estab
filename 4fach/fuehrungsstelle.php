@@ -215,7 +215,11 @@ if ($requestMethod === 'POST') {
     } catch (EstabDvPermissionException $exception) {
         http_response_code(403);
         $error = $exception->getMessage();
-    } catch (EstabDvConflictException | EstabNoActiveIncidentException $exception) {
+    } catch (
+        EstabDvConflictException
+        | EstabIncidentConfigurationException
+        | EstabNoActiveIncidentException $exception
+    ) {
         http_response_code(409);
         $error = $exception->getMessage();
     } catch (Throwable $exception) {
@@ -409,6 +413,18 @@ foreach ($plans as $plan) {
   </header>
 
   <section class="estab-tool-status estab-tool-status-active">
+    <?php if (
+        is_array($status)
+        && $status['active_einsatz_id'] !== null
+        && ($status['fuehrungsstellenname'] ?? null) !== null
+    ): ?>
+      <div>
+        <span>Führungsstelle</span>
+        <strong><?= dv_operations_html(
+            $status['fuehrungsstellenname']
+        ) ?></strong>
+      </div>
+    <?php endif; ?>
     <div>
       <span>Angemeldet als</span>
       <strong><?= dv_operations_html(
@@ -443,6 +459,15 @@ foreach ($plans as $plan) {
     <section class="estab-tool-status estab-tool-status-danger" role="alert">
       <strong>Kein Einsatz aktiv.</strong>
       <span>Operative Aktionen und Dienstbesetzungen sind gesperrt.</span>
+    </section>
+  <?php elseif (($status['fuehrungsstellenname'] ?? null) === null): ?>
+    <section class="estab-tool-status estab-tool-status-danger" role="alert">
+      <strong>Name der Führungsstelle fehlt.</strong>
+      <span>Operative Aktionen sind gesperrt, bis der Name am Einsatz
+        festgelegt wurde.</span>
+      <a class="estab-button" href="../4fadm/incidents.php">
+        Zur Einsatzverwaltung
+      </a>
     </section>
   <?php else: ?>
     <?php if (!is_array($activeDutyShift)): ?>

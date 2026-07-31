@@ -440,6 +440,8 @@ $token = strtoupper(bin2hex(random_bytes(6)));
 $actor = 'incident-export-integration';
 $selectedMarker = 'PDF-SELECTED-' . $token;
 $otherMarker = 'PDF-OTHER-' . $token;
+$selectedCommandPost = 'COMMAND-POST-SELECTED-' . $token;
+$otherCommandPost = 'COMMAND-POST-OTHER-' . $token;
 $selectedName = 'PX' . $token . 'S.txt';
 $otherName = 'PX' . $token . 'O.txt';
 $selectedPayload = "Embedded selected incident {$token}\n"
@@ -471,6 +473,7 @@ try {
             'beginn' => date('Y-m-d\TH:i', time() - 120),
             'ort' => 'Andere Integrationsumgebung',
             'organisation' => 'eStab CI',
+            'fuehrungsstellenname' => $otherCommandPost,
             'einsatzleitung' => 'Automatisierter Fremdtest',
             'beschreibung' =>
                 'Negativkontrolle für einsatzgebundene PDF-SELECTs.',
@@ -506,6 +509,7 @@ try {
             'beginn' => date('Y-m-d\TH:i', time() - 60),
             'ort' => 'Integrationsumgebung',
             'organisation' => 'eStab CI',
+            'fuehrungsstellenname' => $selectedCommandPost,
             'einsatzleitung' => 'Automatisierter Test',
             'beschreibung' =>
                 'Isolierter Einsatz für den MariaDB-PDF-Exportnachweis.',
@@ -593,7 +597,13 @@ try {
     $assert(
         (int) ($bundle['incident']['einsatz_id'] ?? 0)
             === $selectedIncidentId
-            && ($bundle['incident']['kennung'] ?? null) === 'PDF-' . $token,
+            && ($bundle['incident']['kennung'] ?? null) === 'PDF-' . $token
+            && ($bundle['incident']['fuehrungsstellenname'] ?? null)
+                === $selectedCommandPost
+            && !str_contains(
+                json_encode($bundle['incident'], JSON_THROW_ON_ERROR),
+                $otherCommandPost
+            ),
         'Dossier source resolved the wrong incident'
     );
     $assert(
@@ -769,7 +779,8 @@ try {
         incident_export_integration_page_streams($pdf)
     );
     $assert(
-        str_contains($pageContent, $selectedMarker . '-ETB')
+        str_contains($pageContent, $selectedCommandPost)
+            && str_contains($pageContent, $selectedMarker . '-ETB')
             && str_contains($pageContent, $selectedMarker . '-TBB')
             && str_contains(
                 $pageContent,
@@ -800,7 +811,8 @@ try {
                 hash('sha256', $selectedPayload)
             )
             && !str_contains($pageContent, 'Dienstgebrauch')
-            && !str_contains($pageContent, $otherMarker),
+            && !str_contains($pageContent, $otherMarker)
+            && !str_contains($pageContent, $otherCommandPost),
         'Rendered pages omit the shared form, attachment SHA-256, or incident scope'
     );
     $assert(

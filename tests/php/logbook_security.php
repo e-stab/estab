@@ -314,6 +314,61 @@ foreach (['ETB' => $etb, 'TBB' => $tbb] as $name => $source) {
         "{$name} reads logbook data before checking the selected active hat"
     );
     $assert(
+        str_contains(
+            $source,
+            'var $' . $prefix . '_einsatz_aktiv = false;'
+        )
+            && str_contains(
+                $source,
+                '$this->' . $prefix . '_einsatz_aktiv = true;'
+            )
+            && str_contains(
+                $source,
+                'estab_incident_command_post_name ($incident)'
+            )
+            && str_contains(
+                $source,
+                'catch (EstabIncidentConfigurationException) {'
+            )
+            && str_contains($source, 'data-estab-incident-incomplete')
+            && substr_count(
+                $source,
+                'if ($' . $prefix . 'obj->' . $prefix
+                    . '_einsatz_aktiv)'
+            ) >= 2,
+        "{$name} renders an incomplete active incident as writable or active"
+    );
+    $assert(
+        str_contains(
+            $source,
+            '$' . $prefix . 'obj->' . $prefix . '_authorized ='
+        )
+            && str_contains(
+                $source,
+                '$berechtigt && $' . $prefix . 'obj->' . $prefix
+                    . '_titel_gesetzt;'
+            )
+            && str_contains(
+                $source,
+                'if ($' . $prefix . 'obj->' . $prefix
+                    . '_authorized && $entryFormRequested)'
+            )
+            && !str_contains(
+                $source,
+                'if ($berechtigt && $entryFormRequested)'
+            ),
+        "{$name} offers an entry menu while the active incident is incomplete"
+    );
+    $assert(
+        preg_match(
+            '/catch \\(EstabIncidentConfigurationException \\$exception\\) \\{'
+                . '.*?estab_logbook_abort \\(\\s*409,\\s*'
+                . '"Der aktive Einsatz ist unvollständig\\./s',
+            $source
+        ) === 1,
+        "{$name} maps an incident configuration write failure to HTTP 409"
+    );
+    $assert(
         str_contains($source, 'var $' . $prefix . '_rolle ;')
             && str_contains(
                 $source,

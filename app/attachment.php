@@ -406,6 +406,7 @@ function estab_attachment_reserve(
         }
         try {
             $incident = estab_incident_require_active($connection, true);
+            estab_incident_lock_command_post_for_write($connection, $incident);
             $incidentId = (int) $incident['active_einsatz_id'];
             estab_attachment_require_operational_identity(
                 $connection,
@@ -801,6 +802,7 @@ function estab_attachment_store_upload(
     $transactionActive = true;
     try {
         $incident = estab_incident_require_active($connection, true);
+        estab_incident_lock_command_post_for_write($connection, $incident);
         $incidentId = (int) $incident['active_einsatz_id'];
         estab_attachment_require_operational_identity(
             $connection,
@@ -1010,13 +1012,13 @@ function estab_attachment_store_upload(
     }
 }
 
-function estab_attachment_list(mysqli $connection, string $table): array
+function estab_attachment_list_for_incident(
+    mysqli $connection,
+    string $table,
+    mixed $incidentId
+): array
 {
-    $incident = estab_incident_active($connection);
-    if ($incident === null) {
-        return [];
-    }
-    $incidentId = (int) $incident['active_einsatz_id'];
+    $incidentId = estab_incident_positive_id($incidentId);
     $sql = 'SELECT `filename`, `fileext`, `org_filename`, `comment`,'
         . ' `md5hash`, `date`, `kuerzel`'
         . ' FROM ' . estab_attachment_table($table)
@@ -1046,27 +1048,35 @@ function estab_attachment_list(mysqli $connection, string $table): array
     }
 }
 
-function estab_attachment_find(
+function estab_attachment_list(mysqli $connection, string $table): array
+{
+    $incident = estab_incident_active($connection);
+    return $incident === null
+        ? []
+        : estab_attachment_list_for_incident(
+            $connection,
+            $table,
+            $incident['active_einsatz_id']
+        );
+}
+
+function estab_attachment_find_for_incident(
     mysqli $connection,
     string $table,
     string $filename,
+    mixed $incidentId,
     bool $forUpdate = false
 ): ?array
 {
     $filename = estab_attachment_validate_reservation_name($filename);
-    $incident = $forUpdate
-        ? estab_incident_require_active($connection, true)
-        : estab_incident_active($connection);
-    if ($incident === null) {
-        return null;
-    }
-    $incidentId = (int) $incident['active_einsatz_id'];
+    $incidentId = estab_incident_positive_id($incidentId);
     $sql = 'SELECT `filename`, `fileext`, `org_filename`, `comment`,'
         . ' `md5hash`, `integrity_required`, `ingest_sha256`,'
         . ' `ingest_size`, `integrity_captured_at`, `date`, `kuerzel`'
         . ' FROM ' . estab_attachment_table($table)
         . ' WHERE `filename` = ? AND `status` = 1'
-        . ' AND `einsatz_id` = ? LIMIT 1';
+        . ' AND `einsatz_id` = ? LIMIT 1'
+        . ($forUpdate ? ' FOR UPDATE' : '');
     $statement = $connection->prepare($sql);
     if (!$statement) {
         throw new EstabAttachmentDatabaseException('Could not prepare attachment lookup', $connection->errno);
@@ -1093,6 +1103,27 @@ function estab_attachment_find(
     } finally {
         $statement->close();
     }
+}
+
+function estab_attachment_find(
+    mysqli $connection,
+    string $table,
+    string $filename,
+    bool $forUpdate = false
+): ?array {
+    $filename = estab_attachment_validate_reservation_name($filename);
+    $incident = $forUpdate
+        ? estab_incident_require_active($connection, true)
+        : estab_incident_active($connection);
+    return $incident === null
+        ? null
+        : estab_attachment_find_for_incident(
+            $connection,
+            $table,
+            $filename,
+            $incident['active_einsatz_id'],
+            $forUpdate
+        );
 }
 
 /** Prepared audit insert for attachment-influenced values. */

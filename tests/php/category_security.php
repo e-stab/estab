@@ -229,8 +229,27 @@ $assert(
         && str_contains(
             $helper,
             "estab_message_object_allowed(\$identity, 'staff-read', \$message)"
+        )
+        && str_contains(
+            $helper,
+            'estab_dv_require_active_hat_for_operational_write('
+        )
+        && str_contains(
+            $helper,
+            'estab_category_redcopy_function('
+        )
+        && str_contains($helper, '$matrixTable,')
+        && str_contains($helper, '$forUpdate ? \' FOR UPDATE\' : \'\'')
+        && str_contains(
+            $helper,
+            "estab_category_require_management(\n"
+                . "                    'master',"
+        )
+        && str_contains(
+            $endpoint,
+            "(string) \$conf_4f_tbl['empfmtx']"
         ),
-    'category authorisation is not tied to red-copy/Si and session table scope'
+    'category authorisation is not revalidated against the locked incident'
 );
 $assert(
     str_contains($facade, "name = 'category_' . \$this->dbtyp . '_' . \$position")

@@ -653,6 +653,7 @@ function estab_admin_raise_message_counter(
         }
         try {
             $incident = estab_incident_require_active($connection, true);
+            estab_incident_lock_command_post_for_write($connection, $incident);
             $incidentId = (int) $incident['active_einsatz_id'];
             $current = estab_admin_fetch_counter_maxima(
                 $connection,
@@ -755,6 +756,7 @@ function estab_admin_reset_print_flags(
     }
     try {
         $incident = estab_incident_require_active($connection, true);
+        estab_incident_lock_command_post_for_write($connection, $incident);
         $incidentId = (int) $incident['active_einsatz_id'];
         $statement = $connection->prepare(
             'UPDATE ' . estab_auth_table($messageTable)

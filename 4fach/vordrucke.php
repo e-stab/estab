@@ -28,17 +28,24 @@ $noActiveIncident = false;
 $connection = null;
 try {
     $connection = estab_auth_connect($conf_4f_db);
-    $files = estab_generated_form_list_active(
+    $readScope = estab_read_require_operational_scope(
+        $connection,
+        $readIdentity
+    );
+    $incidentId = (int) $readScope['incident']['active_einsatz_id'];
+    $files = estab_generated_form_list_for_incident(
         $connection,
         $conf_4f_tbl['nachrichten'],
         (string) $conf_4f_db['datenbank'],
-        (string) $conf_4f['vordruck_dir']
+        (string) $conf_4f['vordruck_dir'],
+        $incidentId
     );
-    $files = estab_read_filter_generated_forms(
+    $files = estab_read_filter_generated_forms_for_incident(
         $connection,
         $conf_4f_tbl['nachrichten'],
         $files,
-        $readIdentity
+        $readScope['identity'],
+        $incidentId
     );
 } catch (EstabNoActiveIncidentException) {
     http_response_code(409);

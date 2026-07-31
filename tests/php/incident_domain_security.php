@@ -34,11 +34,16 @@ $valid = estab_incident_validate_create([
     'ende' => '2026-07-30T09:45',
     'ort' => 'Kreisgebiet',
     'organisation' => 'Feuerwehr & THW',
+    'fuehrungsstellenname' => '  FüSt Süd  ',
     'einsatzleitung' => 'EL Süd',
     'beschreibung' => "Erste Lage\nZweite Zeile",
     'metadaten' => '{"aktenzeichen":"A/42","stufe":2}',
 ]);
 $assert($valid['kennung'] === '2026-HW_001', 'identifier was not canonicalised');
+$assert(
+    $valid['fuehrungsstellenname'] === 'FüSt Süd',
+    'command-post name was not required and normalised'
+);
 $assert(
     $valid['beginn'] === '2026-07-29 08:15:00'
         && $valid['ende'] === '2026-07-30 09:45:00',
@@ -102,6 +107,74 @@ $assert(
     estab_incident_metadata('') === '{}',
     'empty metadata does not become a valid empty object'
 );
+$requiredCommandPostFixture = [
+    'kennung' => 'TEST-001',
+    'name' => 'Test',
+    'beginn' => '2026-07-30T08:00',
+];
+foreach ([null, '', " \t "] as $missingCommandPostName) {
+    $assert(
+        $throws(
+            EstabIncidentInputException::class,
+            static fn (): array => estab_incident_validate_create(
+                $requiredCommandPostFixture + [
+                    'fuehrungsstellenname' => $missingCommandPostName,
+                ]
+            )
+        ),
+        'incident creation accepted a missing command-post name'
+    );
+}
+foreach ([
+    ['not', 'text'],
+    str_repeat('Ä', ESTAB_INCIDENT_COMMAND_POST_NAME_MAX_LENGTH + 1),
+    "FüSt\nNord",
+    "FüSt\u{202E}Nord",
+    "\u{00A0}\u{2007}",
+    "\xC3\x28",
+] as $invalidCommandPostName) {
+    $assert(
+        $throws(
+            EstabIncidentInputException::class,
+            static fn (): array => estab_incident_validate_create(
+                $requiredCommandPostFixture + [
+                    'fuehrungsstellenname' => $invalidCommandPostName,
+                ]
+            )
+        ),
+        'incident creation accepted an invalid command-post name'
+    );
+}
+$maximumCommandPost = estab_incident_validate_create(
+    $requiredCommandPostFixture + [
+        'fuehrungsstellenname' => str_repeat(
+            'Ä',
+            ESTAB_INCIDENT_COMMAND_POST_NAME_MAX_LENGTH
+        ),
+    ]
+);
+$assert(
+    estab_auth_text_length($maximumCommandPost['fuehrungsstellenname'])
+        === ESTAB_INCIDENT_COMMAND_POST_NAME_MAX_LENGTH,
+    'command-post limit was applied to bytes instead of UTF-8 characters'
+);
+$assert(
+    estab_incident_command_post_name([
+        'fuehrungsstellenname' => ' FüSt Einsatz 7 ',
+    ]) === 'FüSt Einsatz 7',
+    'authoritative command-post name was not normalised'
+);
+$assert(
+    $throws(
+        EstabIncidentConfigurationException::class,
+        static fn (): string => estab_incident_command_post_name([
+            'fuehrungsstellenname' => null,
+            'organisation' => 'Nicht als Ersatz verwenden',
+            'name' => 'Auch kein Ersatz',
+        ])
+    ),
+    'historical NULL command-post name was silently invented from incident data'
+);
 $assert(
     $throws(
         EstabIncidentInputException::class,
@@ -160,6 +233,9 @@ foreach ([
     'estab_incident_find',
     'estab_incident_list',
     'estab_incident_create',
+    'estab_incident_command_post_name',
+    'estab_incident_lock_command_post_for_write',
+    'estab_incident_update_command_post_name',
     'estab_incident_activate',
     'estab_incident_deactivate',
     'estab_incident_require_active',
@@ -170,6 +246,22 @@ foreach ([
         'public incident API is missing ' . $function
     );
 }
+$assert(
+    substr_count($library, 'e.`fuehrungsstellenname`') >= 3
+        && str_contains(
+            $library,
+            '`fuehrungsstellenname`, `einsatzleitung`, `beschreibung`'
+        )
+        && str_contains(
+            $library,
+            'estab_incident_lock_command_post_for_write($connection, $incident);'
+        )
+        && str_contains(
+            $library,
+            'estab_incident_command_post_name($target);'
+        ),
+    'command-post identity is missing from reads, writes, or activation guards'
+);
 $assert(
     str_contains($library, 'SELECT s.`active_einsatz_id`')
         && str_contains($library, "if (\$forUpdate) {\n        \$sql .= ' FOR UPDATE';")
@@ -349,6 +441,7 @@ foreach ([
     'ende',
     'ort',
     'organisation',
+    'fuehrungsstellenname',
     'einsatzleitung',
     'beschreibung',
     'metadaten',
@@ -358,5 +451,34 @@ foreach ([
         'admin incident metadata field is missing: ' . $field
     );
 }
+$assert(
+    str_contains(
+        $page,
+        'maxlength="<?= ESTAB_INCIDENT_COMMAND_POST_NAME_MAX_LENGTH ?>"'
+    )
+        && str_contains(
+            $page,
+            'name="expected_fuehrungsstellenname"'
+        )
+        && str_contains(
+            $page,
+            '$action === \'update_command_post_name\''
+        )
+        && str_contains(
+            $page,
+            'incident_admin_html(' . "\n"
+                . '                            $incident[\'fuehrungsstellenname\']'
+        )
+        && str_contains(
+            $page,
+            '$incident[\'fuehrungsstellenname_gesperrt\'] ?? 1'
+        )
+        && str_contains($page, 'data-estab-command-post-readonly')
+        && str_contains(
+            $page,
+            'Er ist nicht über die Bedienoberfläche'
+        ),
+    'admin command-post input, optimistic update, or HTML boundary is incomplete'
+);
 
 echo "incident domain security: OK ({$assertions} assertions)\n";

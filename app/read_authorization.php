@@ -1016,10 +1016,11 @@ function estab_read_message(
         (int) $incident['active_einsatz_id'],
         $identity
     );
-    $message = estab_message_fetch_by_id(
+    $message = estab_message_fetch_for_incident_by_id(
         $connection,
         $messageTable,
-        $recordId
+        $recordId,
+        $incident['active_einsatz_id']
     );
     return is_array($message)
         && estab_read_message_allowed($selected, $message)
@@ -1040,19 +1041,17 @@ function estab_read_filter_messages(
     ));
 }
 
-/** Filter generated-form metadata through its authoritative message object. */
-function estab_read_filter_generated_forms(
+/**
+ * Filter generated-form metadata through messages from one captured incident.
+ */
+function estab_read_filter_generated_forms_for_incident(
     mysqli $connection,
     string $messageTable,
     array $forms,
-    array $identity
+    array $selectedIdentity,
+    mixed $incidentId
 ): array {
-    $incident = estab_incident_require_active($connection);
-    $selected = estab_read_require_identity_scope(
-        $connection,
-        (int) $incident['active_einsatz_id'],
-        $identity
-    );
+    $incidentId = estab_incident_positive_id($incidentId);
     $visible = [];
     foreach ($forms as $form) {
         if (!is_array($form)) {
@@ -1065,19 +1064,37 @@ function estab_read_filter_generated_forms(
         } catch (InvalidArgumentException) {
             continue;
         }
-        $message = estab_message_fetch_by_id(
+        $message = estab_message_fetch_for_incident_by_id(
             $connection,
             $messageTable,
-            $messageId
+            $messageId,
+            $incidentId
         );
         if (
             is_array($message)
-            && estab_read_message_allowed($selected, $message)
+            && estab_read_message_allowed($selectedIdentity, $message)
         ) {
             $visible[] = $form;
         }
     }
     return $visible;
+}
+
+/** Filter active-incident form metadata for an uncaptured caller. */
+function estab_read_filter_generated_forms(
+    mysqli $connection,
+    string $messageTable,
+    array $forms,
+    array $identity
+): array {
+    $scope = estab_read_require_operational_scope($connection, $identity);
+    return estab_read_filter_generated_forms_for_incident(
+        $connection,
+        $messageTable,
+        $forms,
+        $scope['identity'],
+        $scope['incident']['active_einsatz_id']
+    );
 }
 
 /**
@@ -1229,20 +1246,17 @@ function estab_read_attachment_filename(array $attachment): ?string
     }
 }
 
-/** Filter an already incident-scoped attachment list by inherited rights. */
-function estab_read_filter_attachments(
+/**
+ * Filter an attachment list through one captured incident and identity.
+ */
+function estab_read_filter_attachments_for_incident(
     mysqli $connection,
     string $messageTable,
     array $attachments,
-    array $identity
+    array $selectedIdentity,
+    mixed $incidentId
 ): array {
-    $incident = estab_incident_require_active($connection);
-    $incidentId = (int) $incident['active_einsatz_id'];
-    $selected = estab_read_require_identity_scope(
-        $connection,
-        $incidentId,
-        $identity
-    );
+    $incidentId = estab_incident_positive_id($incidentId);
     $messageMap = estab_read_attachment_message_map(
         $connection,
         $messageTable,
@@ -1257,7 +1271,7 @@ function estab_read_filter_attachments(
         if (
             $filename !== null
             && estab_read_attachment_allowed(
-                $selected,
+                $selectedIdentity,
                 $attachment,
                 $messageMap[$filename] ?? []
             )
@@ -1266,6 +1280,23 @@ function estab_read_filter_attachments(
         }
     }
     return $visible;
+}
+
+/** Filter an attachment list for an uncaptured active-incident caller. */
+function estab_read_filter_attachments(
+    mysqli $connection,
+    string $messageTable,
+    array $attachments,
+    array $identity
+): array {
+    $scope = estab_read_require_operational_scope($connection, $identity);
+    return estab_read_filter_attachments_for_incident(
+        $connection,
+        $messageTable,
+        $attachments,
+        $scope['identity'],
+        $scope['incident']['active_einsatz_id']
+    );
 }
 
 /**
@@ -1295,10 +1326,11 @@ function estab_read_attachment(
     $extension = strtolower(
         pathinfo($requestedFilename, PATHINFO_EXTENSION)
     );
-    $attachment = estab_attachment_find(
+    $attachment = estab_attachment_find_for_incident(
         $connection,
         $attachmentTable,
         $base,
+        $incidentId,
         $forUpdate
     );
     if (

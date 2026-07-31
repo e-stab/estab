@@ -640,6 +640,14 @@ $assert(
         && str_contains($mainController, 'estab_workflow_record_id')
         && str_contains(
             $mainController,
+            'estab_message_fetch_for_incident_by_id ('
+        )
+        && str_contains(
+            $mainController,
+            '$workflowIncidentId = (int) ('
+        )
+        && str_contains(
+            $mainController,
             '$messageOperation === "message-operator-reset"'
         )
         && str_contains($mainController, 'estab_csrf_is_valid')
@@ -651,11 +659,22 @@ $assert(
         && !str_contains($mainController, 'estab_login_destination'),
     'main controller does not enforce the central workflow gate'
 );
+$commandPostLoadPosition = strpos(
+    $mainController,
+    '$activeCommandPostName = estab_incident_command_post_name ('
+);
+$conversationCommandPostPosition = strpos(
+    $mainController,
+    '$formdata ["13_abseinheit"] = $activeCommandPostName;'
+);
 $assert(
-    str_contains(
-        $mainController,
-        '$formdata ["13_abseinheit"]   = (string) $conf_4f ["anschrift"];'
-    )
+    is_int($commandPostLoadPosition)
+        && is_int($conversationCommandPostPosition)
+        && $commandPostLoadPosition < $conversationCommandPostPosition
+        && str_contains(
+            $mainController,
+            'check_and_save ($returndata, $activeCommandPostName);'
+        )
         && str_contains(
             $mainController,
             '$formdata ["14_zeichen"]      = $_SESSION ["vStab_kuerzel"];'
@@ -671,8 +690,9 @@ $assert(
         && str_contains(
             $mainController,
             '$formdata ["15_quitzeichen"]  = "";'
-        ),
-    'conversation-note staging trusts browser identity, organisation or review marks'
+        )
+        && !str_contains($mainController, 'ESTAB_ORGANISATION'),
+    'conversation-note staging is not bound to incident and session authority'
 );
 
 $ciIntegration = file_get_contents(dirname(__DIR__) . '/integration/ci.sh');

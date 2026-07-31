@@ -297,7 +297,8 @@ try {
                 (string) $conf_4f_tbl['nachrichten'],
                 $identity,
                 $scopes,
-                $assignments
+                $assignments,
+                (string) $conf_4f_tbl['empfmtx']
             );
             estab_category_endpoint_redirect(
                 'mainindex.php'

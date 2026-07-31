@@ -17,7 +17,7 @@ include ("./4fcfg/config.inc.php");
     $conf_menue["foreground_color"] = "rgb(240, 240, 240)";
 
 
-    $conf_menue["einrichtung"] = "Einsatzleitung";
+    $conf_menue["einrichtung"] = "eStab";
     $conf_menue["titel"] = "eStab Webschnittstelle BETA Version 0.9";
 //      $conf_menue["symbole"] = "./symbole/";
     $conf_menue["sym_top_left"] = $conf_menue ["symbole"]."el80.gif";

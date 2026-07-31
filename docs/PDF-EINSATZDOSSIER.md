@@ -6,6 +6,16 @@ werden. Der ausgewählte Einsatz muss dafür nicht aktiv sein; damit lassen sich
 auch historische oder formal abgeschlossene Einsätze unverändert
 dokumentieren.
 
+Die Einsatz-Auswahl nennt Führungsstellenname, Einsatzkennung und
+Einsatzname getrennt. Im Dossier stehen diese Angaben ebenfalls getrennt auf
+dem Deckblatt; der Seitenkopf führt Führungsstelle und Einsatzidentität in
+zwei getrennten, auf die verfügbare A4-Breite gekürzten Zeilen.
+Ein vor Migration 97 angelegter Einsatz ohne bestätigten
+Führungsstellennamen wird ausdrücklich mit **Führungsstelle historisch nicht
+erfasst** beziehungsweise **historisch nicht erfasst** gekennzeichnet.
+Einsatzname, Organisation, Einsatzleitung und Umgebung werden nicht als
+scheinbarer Ersatz verwendet.
+
 ## Inhalt auswählen
 
 Der Administrator wählt mindestens einen der folgenden neun Bereiche. Beim
@@ -42,6 +52,13 @@ dagegen mit exakt demselben A4-Formularrenderer ausgegeben wie unter
 Empfängerkennzeichnung und mehrseitiger Inhaltsfluss in Einzel- und
 Gesamtexport überein. Die gemeinsame Vorlage druckt weder eine
 VS-NfD-Kennzeichnung noch das frühere Wappen.
+
+Bei nach Migration 97 neu erfassten Nachrichten stammt die lokale Anschrift
+eines Eingangs beziehungsweise die lokale Absendereinheit eines Ausgangs aus
+dem Führungsstellennamen des in derselben Schreibtransaktion gesperrten
+Einsatzes. Der PDF-Renderer gibt diese gespeicherten Nachrichtendaten wieder;
+ein Browserwert oder eine globale Konfiguration kann beim Export keine andere
+Identität einschleusen.
 
 Auch die Vorrangsstufe durchläuft denselben zentralen Übersetzer:
 `sss`, `bbb` und `aaa` erscheinen im Einzelvordruck und im Dossier als
@@ -172,6 +189,9 @@ interne Dateipfade.
 Die automatisierten Tests prüfen unter anderem:
 
 - strikte Einsatz- und Abschnittsauswahl,
+- getrennte Darstellung von Führungsstellenname, Einsatzkennung und
+  Einsatzname sowie die ehrliche Kennzeichnung eines historischen
+  `NULL`-Werts,
 - vorbereitete, einsatzgebundene Abfragen aller neun Bereiche,
 - neue ETB-Zeit-, Typ-, Referenz- und Korrekturfelder,
 - vollständige Dienst-, S6- und Melderketten,
@@ -216,11 +236,13 @@ Anlagenverzeichnis.
 `tests/static/pdf_render.sh` prüft sie mit Poppler: A4 und Seitenzahl über
 `pdfinfo`, Text, historischen Empfänger-Fallback und verbotene Aufdrucke über
 `pdftotext`, den konstanten linken Folgeseiteneinzug über dessen
-Bounding-Box-Ausgabe, fehlende Rasterbilder über `pdfimages`, pixelgleiche
-PNGs über `pdftoppm` und den am Eingang gebundenen Anhang über `pdfdetach` und
-`cmp`. Die zehn Seiten der repräsentativen Fixture werden vollständig zu PNG
-gerendert. Auf der produktiven Nachrichtenseite wird ausschließlich das
-absichtlich globale Seitenzahlfeld vom Pixelvergleich ausgenommen.
+Bounding-Box-Ausgabe sowie einen eigenen Maximalwert-Fall mit 128 Zeichen
+Führungsstelle, 64 Zeichen Kennung und 255 Zeichen Einsatzname. Fehlende
+Rasterbilder werden über `pdfimages`, pixelgleiche PNGs über `pdftoppm` und
+der am Eingang gebundene Anhang über `pdfdetach` und `cmp` geprüft. Die zehn
+Seiten der repräsentativen Fixture werden vollständig zu PNG gerendert. Auf
+der produktiven Nachrichtenseite wird ausschließlich das absichtlich globale
+Seitenzahlfeld vom Pixelvergleich ausgenommen.
 GitHub Actions lädt PDFs, Textauszüge, Prüfinformationen und Render-PNGs
 14 Tage als `pdf-render-evidence-*` hoch. Eine sichtbare Verschiebung der
 Vorlage oder ein erneut eingebundenes Wappen sperrt damit die CI.

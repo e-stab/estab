@@ -65,6 +65,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 $error = 'Ohne aktiven Einsatz kann der Nachrichtenzähler '
                     . 'nicht verändert werden.';
                 $counterAvailable = false;
+            } catch (EstabIncidentConfigurationException) {
+                http_response_code(409);
+                $error = 'Für den aktiven Einsatz fehlt der Name der '
+                    . 'Führungsstelle. Legen Sie ihn zuerst in der '
+                    . 'Einsatzverwaltung fest.';
+                $counterAvailable = false;
             } catch (Throwable $exception) {
                 error_log('eStab message counter update failed: ' . $exception->getMessage());
                 http_response_code(500);
@@ -77,10 +83,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 try {
     $connection = estab_auth_connect($conf_4f_db);
     try {
+        $counterIncident = estab_incident_require_active($connection);
+        estab_incident_command_post_name($counterIncident);
         $current = estab_admin_fetch_counter_maxima(
             $connection,
             $conf_4f_tbl['nachrichten'],
-            $mode
+            $mode,
+            false,
+            (int) $counterIncident['active_einsatz_id']
         );
     } finally {
         estab_auth_close($connection);
@@ -88,6 +98,13 @@ try {
 } catch (EstabNoActiveIncidentException) {
     http_response_code(409);
     $error = 'Kein Einsatz aktiv. Aktivieren Sie zuerst einen Einsatz.';
+    $counterAvailable = false;
+    $current = $mode === 'gemeinsam'
+        ? ['ea_nummer' => 0]
+        : ['e_nummer' => 0, 'a_nummer' => 0];
+} catch (EstabIncidentConfigurationException) {
+    http_response_code(409);
+    $error = 'Für den aktiven Einsatz fehlt der Name der Führungsstelle.';
     $counterAvailable = false;
     $current = $mode === 'gemeinsam'
         ? ['ea_nummer' => 0]

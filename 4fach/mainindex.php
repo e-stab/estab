@@ -160,6 +160,8 @@ function estab_workflow_render_read_gate (
 }
 
 $workflowSelectedIdentity = $workflowIdentity;
+$workflowIncidentId = null;
+$activeCommandPostName = "";
 if ($workflowIdentity !== null) {
   $readGateConnection = null;
   try {
@@ -170,6 +172,12 @@ if ($workflowIdentity !== null) {
     );
     $workflowSelectedIdentity = $readScope ["identity"];
     $workflowIdentity = $workflowSelectedIdentity;
+    $workflowIncidentId = (int) (
+      $readScope ["incident"]["active_einsatz_id"]
+    );
+    $activeCommandPostName = estab_incident_command_post_name (
+      $readScope ["incident"]
+    );
   } catch (EstabNoActiveIncidentException $exception) {
     estab_workflow_render_read_gate (
       409,
@@ -183,6 +191,13 @@ if ($workflowIdentity !== null) {
       "Dienstfunktion auswählen",
       "Nehmen Sie zuerst Ihre persönliche Dienstfunktion an und wählen ".
       "Sie sie für diese Sitzung aus."
+    );
+  } catch (EstabIncidentConfigurationException $exception) {
+    estab_workflow_render_read_gate (
+      409,
+      "Führungsstellenname fehlt",
+      "Legen Sie in der Administration zuerst den Namen der Führungsstelle ".
+      "für den aktiven Einsatz fest."
     );
   } catch (Throwable $exception) {
     error_log ("eStab main read gate failed: ".$exception->getMessage ());
@@ -288,10 +303,11 @@ if ($messageOperation !== null) {
   $objectConnection = null;
   try {
     $objectConnection = estab_message_connect ($conf_4f_db);
-    $objectMessage = estab_message_fetch_by_id (
+    $objectMessage = estab_message_fetch_for_incident_by_id (
       $objectConnection,
       $conf_4f_tbl ["nachrichten"],
-      $messageRecordId
+      $messageRecordId,
+      $workflowIncidentId
     );
     if (
       !is_array ($objectMessage)
@@ -743,7 +759,7 @@ ANTWORT % WEITERLEITUNG
         $formdata = $returnValue ;
         $formdata ["01_zeichen"]      = $_SESSION ["vStab_kuerzel"];
         $formdata ["11_gesprnotiz"]   = "t";
-        $formdata ["13_abseinheit"]   = (string) $conf_4f ["anschrift"];
+        $formdata ["13_abseinheit"] = $activeCommandPostName;
         $formdata ["14_zeichen"]      = $_SESSION ["vStab_kuerzel"];
         $formdata ["14_funktion"]     = $_SESSION ["vStab_funktion"];
         $formdata ["16_empf"]         = $redcopy2."_rt,".$_SESSION ["vStab_funktion"]."_gn" ;
@@ -758,7 +774,7 @@ ANTWORT % WEITERLEITUNG
       if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### 369 check and save";  echo "<br>\n";}
 
       try {
-        check_and_save ($returndata);
+        check_and_save ($returndata, $activeCommandPostName);
       } catch (EstabReadPermissionException $exception) {
         // Attachment filenames are object identifiers. A forged selection is
         // indistinguishable from any other forbidden operational object.
@@ -847,9 +863,8 @@ Daten kommen vom Formular und sollen als Antwort dienen.
     if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### Antwort <br> ";}
 
     $formdata = $returnValue ;
-    $aushilfe = $formdata ["10_anschrift"];
     $formdata ["10_anschrift"] =  $formdata ["13_abseinheit"]."  ".$formdata["14_funktion"];
-    $formdata ["13_abseinheit"] = $aushilfe ;
+    $formdata ["13_abseinheit"] = $activeCommandPostName;
     $formdata ["12_abfzeit"] = "" ;
     $formdata ["14_zeichen"]     = $_SESSION["vStab_kuerzel"];
     $formdata ["14_funktion"]    = $_SESSION["vStab_funktion"];
@@ -874,7 +889,7 @@ Daten kommen vom Formular und sollen als Antwort dienen.
     $formdata ["04_richtung"] = "";
     $formdata ["04_nummer"] = "";
     $formdata ["11_gesprnotiz"] = "";
-    $formdata ["13_abseinheit"]  = $conf_4f     ["anschrift"];
+    $formdata ["13_abseinheit"] = $activeCommandPostName;
     $formdata ["12_abfzeit"] = "" ;
     $formdata ["14_zeichen"]     = $_SESSION["vStab_kuerzel"];
     $formdata ["14_funktion"]    = $_SESSION["vStab_funktion"];
@@ -951,7 +966,7 @@ $formdata = array (); // setze die Formulardaten zurueck
   if ( (isset ( $returnValue["stab_schreiben_x"] )) and !$gesprnotizsichter ) {
 
     if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br>  _GET[stab_schreiben_x] )) and !gesprnotizsichter ";  echo "<br>\n";}
-    $formdata ["13_abseinheit"]  = $conf_4f     ["anschrift"];
+    $formdata ["13_abseinheit"] = $activeCommandPostName;
     $formdata ["14_zeichen"]     = $_SESSION["vStab_kuerzel"];
     $formdata ["14_funktion"]    = $_SESSION["vStab_funktion"];
     $form = new nachrichten4fach ($formdata, "Stab_schreiben", "");
@@ -1148,7 +1163,7 @@ ul#topmenu li.active {
           $css
         ); // Normaler Seitenaufbau mit Auffrischung
         echo "<body bgcolor=\"#DCDCFF\">";
-        $list = new listen ("Stab_sichten", "STSI");
+        $list = new listen ("Stab_sichten", "STSI", $workflowIncidentId);
         $list->createlist ();
    }
 
@@ -1178,17 +1193,18 @@ ul#topmenu li.active {
       $css
     );
     echo "<body bgcolor=\"#DCDCFF\">";
-    $list = new listen ("LDF", "");
+    $list = new listen ("LDF", "", $workflowIncidentId);
     $list->createlist ();
   }
 
   if ($returnValue ["ldf"] === "meldung") {
     $lockConnection = estab_message_connect ($conf_4f_db);
     try {
-      $leadCandidate = estab_message_fetch_by_id (
+      $leadCandidate = estab_message_fetch_for_incident_by_id (
         $lockConnection,
         $conf_4f_tbl ["nachrichten"],
-        $returnValue ["00_lfd"]
+        $returnValue ["00_lfd"],
+        $workflowIncidentId
       );
       if (!is_array ($leadCandidate)) {
         throw new RuntimeException ("LdF message not found");
@@ -1202,10 +1218,11 @@ ul#topmenu li.active {
         $leadDirection,
         1
       );
-      $lockedMessage = estab_message_fetch_by_id (
+      $lockedMessage = estab_message_fetch_for_incident_by_id (
         $lockConnection,
         $conf_4f_tbl ["nachrichten"],
-        $returnValue ["00_lfd"]
+        $returnValue ["00_lfd"],
+        $workflowIncidentId
       );
     } finally {
       estab_auth_close ($lockConnection);
@@ -1244,7 +1261,7 @@ ul#topmenu li.active {
 //    if ($pre_01medium != "") { $formdata ["01_medium"]   = $pre_01medium;}
 
     $formdata ["01_zeichen"]  = $_SESSION ["vStab_kuerzel"];
-    $formdata ["10_anschrift"]  = $conf_4f ["anschrift"];
+    $formdata ["10_anschrift"] = $activeCommandPostName;
 
     $form = new nachrichten4fach ($formdata, "FM-Eingang", "");
   }
@@ -1288,7 +1305,7 @@ ul#topmenu li.active {
           "a:focus { color:#0000EE; background-color:#FFFF99;  }";
     pre_html ("fmdliste","FMD Ausgang ".$conf_4f ["Titelkurz"]."".$conf_4f ["Version"],$css); // Normaler Seitenaufbau mit Auffrischung
     echo "<body bgcolor=\"#DCDCFF\">";
-    $list = new listen ("FMA", "");
+    $list = new listen ("FMA", "", $workflowIncidentId);
     $list->createlist ();
   }
 
@@ -1311,10 +1328,11 @@ if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>  ### FM Aus
         "A",
         2
       );
-      $lockedMessage = estab_message_fetch_by_id (
+      $lockedMessage = estab_message_fetch_for_incident_by_id (
         $lockConnection,
         $conf_4f_tbl ["nachrichten"],
-        $returnValue ["00_lfd"]
+        $returnValue ["00_lfd"],
+        $workflowIncidentId
       );
     } finally {
       estab_auth_close ($lockConnection);

@@ -84,6 +84,19 @@ if ($requestMethod === 'POST') {
                     'kennung' => $created['kennung'],
                 ];
                 $redirectResult = $activate ? 'created_active' : 'created';
+            } elseif ($action === 'update_command_post_name') {
+                $updated = estab_incident_update_command_post_name(
+                    $connection,
+                    estab_incident_positive_id($_POST['einsatz_id'] ?? null),
+                    $_POST['fuehrungsstellenname'] ?? null,
+                    $_POST['expected_fuehrungsstellenname'] ?? null,
+                    estab_incident_actor($actor)
+                );
+                $_SESSION['estab_incident_flash'] = [
+                    'type' => 'command_post_updated',
+                    'kennung' => (string) ($updated['kennung'] ?? ''),
+                ];
+                $redirectResult = 'command_post_updated';
             } elseif ($action === 'activate') {
                 $activated = estab_incident_activate(
                     $connection,
@@ -255,6 +268,8 @@ if (
         'created_active' => 'Einsatz ' . $flash['kennung']
             . ' wurde angelegt und aktiviert.',
         'activated' => 'Einsatz ' . $flash['kennung'] . ' ist jetzt aktiv.',
+        'command_post_updated' => 'Der Führungsstellenname für Einsatz '
+            . $flash['kennung'] . ' wurde gespeichert.',
         'deactivated' => 'Der Einsatz wurde deaktiviert. Eingaben sind jetzt gesperrt.',
         'closed' => 'Einsatz ' . $flash['kennung']
             . ' wurde formal und unwiderruflich abgeschlossen.',
@@ -312,6 +327,13 @@ $activeId = is_array($status) ? $status['active_einsatz_id'] : null;
           <span>Aktiver Einsatz</span>
           <strong><?= incident_admin_html($status['kennung']) ?>
             · <?= incident_admin_html($status['name']) ?></strong>
+          <?php if (($status['fuehrungsstellenname'] ?? null) === null): ?>
+            <span><strong>Name der Führungsstelle fehlt – Eingaben bleiben
+              gesperrt.</strong></span>
+          <?php else: ?>
+            <span>Führungsstelle:
+              <?= incident_admin_html($status['fuehrungsstellenname']) ?></span>
+          <?php endif; ?>
           <span><?= incident_admin_html(incident_admin_datetime($status['beginn'])) ?>
             bis <?= incident_admin_html(incident_admin_datetime($status['ende'])) ?></span>
         </div>
@@ -444,6 +466,23 @@ $activeId = is_array($status) ? $status['active_einsatz_id'] : null;
                 value="<?= incident_admin_html($old['name'] ?? '') ?>">
             </div>
             <div class="estab-tool-field">
+              <label for="incident-command-post-name">
+                Name der Führungsstelle *
+              </label>
+              <input
+                id="incident-command-post-name"
+                name="fuehrungsstellenname"
+                required
+                maxlength="<?= ESTAB_INCIDENT_COMMAND_POST_NAME_MAX_LENGTH ?>"
+                placeholder="z. B. FüSt Kirchheim/Teck"
+                value="<?= incident_admin_html(
+                    $old['fuehrungsstellenname'] ?? ''
+                ) ?>">
+              <small>Die lokale Anschrift beziehungsweise Absendereinheit
+                aller Nachrichten dieses Einsatzes. Nicht mit Einsatzname,
+                Trägerorganisation oder Einsatzleitung verwechseln.</small>
+            </div>
+            <div class="estab-tool-field">
               <label for="incident-start">Beginn *</label>
               <input
                 id="incident-start"
@@ -501,7 +540,8 @@ $activeId = is_array($status) ? $status['active_einsatz_id'] : null;
                 spellcheck="false"
                 placeholder='{"aktenzeichen":"..."}'><?= incident_admin_html($old['metadaten'] ?? '') ?></textarea>
               <small>Nur für zusätzliche organisationsspezifische Angaben;
-                Ort, Organisation und Einsatzleitung gehören in die Felder oben.</small>
+                Ort, Führungsstelle, Organisation und Einsatzleitung gehören
+                in die Felder oben.</small>
             </details>
           </div>
           <div class="estab-tool-actions">
@@ -551,6 +591,15 @@ $activeId = is_array($status) ? $status['active_einsatz_id'] : null;
                       <span>Organisation:
                         <?= incident_admin_html($incident['organisation']) ?></span>
                     <?php endif; ?>
+                    <?php if (($incident['fuehrungsstellenname'] ?? null) !== null): ?>
+                      <span>Führungsstelle:
+                        <?= incident_admin_html(
+                            $incident['fuehrungsstellenname']
+                        ) ?></span>
+                    <?php else: ?>
+                      <span><strong>Führungsstellenname noch nicht
+                        festgelegt</strong></span>
+                    <?php endif; ?>
                   </div>
                   <?php if ($incident['beschreibung'] !== ''): ?>
                     <p><?= nl2br(incident_admin_html($incident['beschreibung']), false) ?></p>
@@ -582,6 +631,67 @@ $activeId = is_array($status) ? $status['active_einsatz_id'] : null;
                   <?php endif; ?>
                 </div>
                 <div class="estab-tool-card-actions">
+                  <?php if (
+                      !$ended
+                      && (int) (
+                          $incident['fuehrungsstellenname_gesperrt'] ?? 1
+                      ) === 0
+                  ): ?>
+                    <form class="estab-tool-form" method="post"
+                      data-estab-dirty-guard>
+                      <?= estab_csrf_field() ?>
+                      <input type="hidden" name="admin_action"
+                        value="update_command_post_name">
+                      <input type="hidden" name="einsatz_id"
+                        value="<?= (int) $incident['einsatz_id'] ?>">
+                      <input type="hidden"
+                        name="expected_fuehrungsstellenname"
+                        value="<?= incident_admin_html(
+                            $incident['fuehrungsstellenname'] ?? ''
+                        ) ?>">
+                      <label>
+                        Name der Führungsstelle
+                        <input
+                          name="fuehrungsstellenname"
+                          required
+                          maxlength="<?=
+                            ESTAB_INCIDENT_COMMAND_POST_NAME_MAX_LENGTH
+                          ?>"
+                          value="<?= incident_admin_html(
+                              $incident['fuehrungsstellenname'] ?? ''
+                          ) ?>"
+                          placeholder="z. B. FüSt Kirchheim/Teck">
+                      </label>
+                      <?php if (
+                          ($incident['fuehrungsstellenname'] ?? null) === null
+                      ): ?>
+                        <small>Historischer Fehlwert: Nach dem Speichern ist
+                          der Name wegen der vorhandenen Einsatzdaten
+                          revisionssicher unveränderlich.</small>
+                      <?php else: ?>
+                        <small>Bis zur ersten operativen Eintragung kann der
+                          Name korrigiert werden. Danach ist er
+                          revisionssicher unveränderlich.</small>
+                      <?php endif; ?>
+                      <button class="estab-button" type="submit">
+                        Führungsstellenname speichern
+                      </button>
+                    </form>
+                  <?php elseif (
+                      ($incident['fuehrungsstellenname'] ?? null) !== null
+                  ): ?>
+                    <div
+                      class="estab-tool-field"
+                      data-estab-command-post-readonly>
+                      <span>Name der Führungsstelle</span>
+                      <strong><?= incident_admin_html(
+                          $incident['fuehrungsstellenname']
+                      ) ?></strong>
+                      <small>Der am Einsatz bestätigte Name wird hier nur
+                        angezeigt. Er ist nicht über die Bedienoberfläche
+                        änderbar.</small>
+                    </div>
+                  <?php endif; ?>
                   <?php if ($incident['ist_aktiv']): ?>
                     <span class="estab-tool-badge estab-tool-badge-success">
                       Aktiv
@@ -602,7 +712,10 @@ $activeId = is_array($status) ? $status['active_einsatz_id'] : null;
                         type="hidden"
                         name="status_revision"
                         value="<?= $currentRevision ?>">
-                      <button class="estab-button estab-button-primary" type="submit">
+                      <button class="estab-button estab-button-primary"
+                        type="submit"
+                        <?= ($incident['fuehrungsstellenname'] ?? null) === null
+                            ? 'disabled' : '' ?>>
                         Aktivieren
                       </button>
                     </form>

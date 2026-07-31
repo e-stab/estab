@@ -180,29 +180,37 @@ function estab_category_scope(
 /** Read the currently configured red-copy function. */
 function estab_category_redcopy_function(
     mysqli $connection,
-    string $matrixTable
+    string $matrixTable,
+    bool $forUpdate = false
 ): ?string {
-    $sql = 'SELECT `mtx_fkt` FROM ' . estab_auth_table($matrixTable)
-        . ' WHERE `mtx_rc2` IN (?, ?) ORDER BY `mtx_lfd` LIMIT 1';
+    $sql = 'SELECT `mtx_fkt`, `mtx_rc2` FROM '
+        . estab_auth_table($matrixTable)
+        . ' ORDER BY `mtx_lfd`'
+        . ($forUpdate ? ' FOR UPDATE' : '');
     $statement = $connection->prepare($sql);
     if (!$statement) {
         throw new RuntimeException('Redcopy-Abfrage konnte nicht vorbereitet werden.');
     }
     try {
-        $trueText = 't';
-        $trueNumber = '1';
-        $statement->bind_param('ss', $trueText, $trueNumber);
         if (!$statement->execute()) {
             throw new RuntimeException('Redcopy-Abfrage ist fehlgeschlagen.');
         }
         $result = $statement->get_result();
-        $row = $result->fetch_assoc();
-        $result->free();
-        if (!is_array($row) || !is_string($row['mtx_fkt'] ?? null)) {
+        try {
+            while ($row = $result->fetch_assoc()) {
+                if (!in_array((string) ($row['mtx_rc2'] ?? ''), ['t', '1'], true)) {
+                    continue;
+                }
+                if (!is_string($row['mtx_fkt'] ?? null)) {
+                    return null;
+                }
+                $function = trim($row['mtx_fkt']);
+                return $function === '' ? null : $function;
+            }
             return null;
+        } finally {
+            $result->free();
         }
-        $function = trim($row['mtx_fkt']);
-        return $function === '' ? null : $function;
     } finally {
         $statement->close();
     }
@@ -550,7 +558,8 @@ function estab_category_assign(
     string $messageTable,
     array $identity,
     array $scopes,
-    array $assignments
+    array $assignments,
+    string $matrixTable = 'nv_empfmtx'
 ): void {
     if ($messageId < 1 || $assignments === []) {
         throw new EstabCategoryInputException('Kategoriezuordnung ist unvollständig.');
@@ -573,9 +582,27 @@ function estab_category_assign(
             $messageTable,
             $identity,
             $scopes,
-            $assignments
+            $assignments,
+            $matrixTable
         ): void {
             $incidentId = (int) $incident['active_einsatz_id'];
+            estab_dv_require_active_hat_for_operational_write(
+                $connection,
+                $incidentId,
+                $identity
+            );
+            if (array_key_exists('master', $assignments)) {
+                $lockedRedcopy = estab_category_redcopy_function(
+                    $connection,
+                    $matrixTable,
+                    true
+                );
+                estab_category_require_management(
+                    'master',
+                    $identity,
+                    $lockedRedcopy
+                );
+            }
             $message = estab_category_lock_message(
                 $connection,
                 $messageTable,

@@ -37,6 +37,7 @@ $incident = [
     'ende' => null,
     'ort' => 'Musterstadt',
     'organisation' => 'Kreis Musterstadt',
+    'fuehrungsstellenname' => 'Führungsstelle Musterstadt',
     'einsatzleitung' => 'Leitung Rendernachweis',
     'beschreibung' => 'Repräsentatives DV-1-101-Einsatzdossier',
     'estab_status' => 'open',
@@ -407,12 +408,36 @@ $completeDossier->addAttachmentIndex([[
 ]]);
 $completeDossierBytes = $completeDossier->Output('', 'S');
 
+$maximumIncident = array_replace($incident, [
+    'kennung' => 'MAX-' . str_repeat('K', 60),
+    'name' => str_repeat('N', ESTAB_INCIDENT_NAME_MAX_LENGTH),
+    'fuehrungsstellenname' => str_repeat(
+        'F',
+        ESTAB_INCIDENT_COMMAND_POST_NAME_MAX_LENGTH
+    ),
+]);
+$maximumHeaderDossier = new EstabIncidentPdf(
+    $maximumIncident,
+    1024 * 1024,
+    $matrix
+);
+$maximumHeaderDossier->SetCompression(false);
+$maximumHeaderDossier->addCover(
+    $maximumIncident,
+    [],
+    [],
+    '29.07.2026 08:30:00 CEST',
+    'PDF-Maximalwert-Rendernachweis'
+);
+$maximumHeaderDossierBytes = $maximumHeaderDossier->Output('', 'S');
+
 foreach ([
     'message-form.pdf' => $singleBytes,
     'dossier-message-form.pdf' => $dossierBytes,
     'long-message-form.pdf' => $longSingleBytes,
     'dossier-long-message-form.pdf' => $longDossierBytes,
     'dossier-all.pdf' => $completeDossierBytes,
+    'dossier-maximum-header.pdf' => $maximumHeaderDossierBytes,
 ] as $filename => $bytes) {
     if (
         !str_starts_with($bytes, '%PDF-')

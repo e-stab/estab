@@ -134,7 +134,8 @@ Das vollständige CI-Gate automatisiert zwei destruktiv guardierte Roundtrips:
    erkannten Testcontainer und benannten Test-Volumes, legt alle drei Volumes
    leer neu an und spielt die Sicherung zurück. Danach müssen Schema,
    bestehendes Konto, Nachricht, exakter Anhanginhalt, SHA-256 des
-   persistierten PDF-Vordrucks, den globalen Einsatzkopf, vorhandene
+   persistierten PDF-Vordrucks, den globalen Einsatzkopf einschließlich
+   einsatzbezogenem Führungsstellennamen, vorhandene
    ETB-/TBB-Einträge sowie
    Kennung und SHA-256 des zuvor per Manifest/CSV geprüften Export-ZIP
    unverändert nachweisbar sein. Die ETB-/TBB-Prüfung ist dabei absichtlich
@@ -338,7 +339,10 @@ Danach folgen HTTP-Smoke-Test und fachliche Abnahme aus
 Nachrichtenfluss, Anhänge, PDF/Vordruck, ETB/TBB und Einsatzexport. Der
 automatisierte Restore-Zweig vergleicht dabei nicht nur Dateinamen: Er verlangt
 den ursprünglichen Anhanginhalt, den gespeicherten PDF-SHA-256 und den
-gespeicherten SHA-256 des genau bezeichneten Export-ZIP.
+gespeicherten SHA-256 des genau bezeichneten Export-ZIP. Für einen nach
+Migration 97 angelegten Einsatz muss außerdem derselbe Führungsstellenname
+erhalten bleiben; ein historischer `NULL`-Wert darf beim Restore nicht aus
+Organisation, Einsatzname oder Umgebung ergänzt werden.
 
 Der Vordruck-SHA-256 bezieht sich ausdrücklich auf die beim Abschluss
 persistierte Archivdatei. Die Benutzeroberfläche rendert unter
@@ -357,6 +361,12 @@ ZIP herunterladen. Pro Tabelle entstehen:
 - `\N` als eindeutige Darstellung von SQL `NULL`,
 - Datensatzanzahl und SHA-256-Prüfsumme im `manifest.json`,
 - bei verfügbarer PHP-ZIP-Erweiterung zusätzlich ein ZIP-Archiv.
+
+Die `nv_einsaetze`-CSV führt `fuehrungsstellenname` und dessen dauerhaften
+Sperrmarker getrennt von `name`, `organisation` und `einsatzleitung`. Ein
+historisch nicht erfasster Wert bleibt dabei der eindeutige rohe
+SQL-NULL-Marker `\N`; nur die historische PDF-Ausgabe beschriftet ihn
+zusätzlich als „historisch nicht erfasst“.
 
 Vor der Veröffentlichung prüft eStab alle nach Migration 95 finalisierten
 Anhangdateien gegen den beim Eingang unveränderlich gespeicherten SHA-256 und

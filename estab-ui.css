@@ -2972,8 +2972,17 @@ form[data-estab-incident-disabled="true"]::before {
     }
 
     .estab-tool-card-actions {
+        align-items: stretch;
+        display: grid;
         justify-content: flex-start;
         min-width: 0;
+        width: 100%;
+    }
+
+    .estab-tool-card-actions > form,
+    .estab-tool-card-actions .estab-button {
+        min-width: 0;
+        width: 100%;
     }
 
     .estab-tool-table-responsive {

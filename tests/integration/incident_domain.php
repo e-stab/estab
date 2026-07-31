@@ -8,6 +8,7 @@ if (getenv('ESTAB_INCIDENT_INTEGRATION') !== '1') {
 }
 
 require_once dirname(__DIR__, 2) . '/app/incident.php';
+require_once dirname(__DIR__, 2) . '/app/message_repository.php';
 require_once dirname(__DIR__, 2) . '/app/readiness.php';
 
 $databaseName = getenv('ESTAB_DB_NAME') ?: '';
@@ -100,6 +101,9 @@ try {
         'database accepted an operational insert without an active incident'
     );
 
+    $originalCommandPostA = str_repeat('Ä', 128);
+    $commandPostA = $originalCommandPostA;
+    $commandPostB = 'Führungsstelle Integration B';
     $incidentA = estab_incident_create(
         $connection,
         [
@@ -107,6 +111,8 @@ try {
             'name' => 'Integration A',
             'beginn' => date('Y-m-d\TH:i', time() - 60),
             'ort' => 'Testort A',
+            'organisation' => 'Organisation A',
+            'fuehrungsstellenname' => $commandPostA,
         ],
         'integration-test',
         false
@@ -118,13 +124,52 @@ try {
             'name' => 'Integration B',
             'beginn' => date('Y-m-d\TH:i', time() - 60),
             'ort' => 'Testort B',
+            'organisation' => 'Organisation B',
+            'fuehrungsstellenname' => $commandPostB,
         ],
         'integration-test',
         false
     );
     $idA = (int) $incidentA['einsatz_id'];
     $idB = (int) $incidentB['einsatz_id'];
-    $assert($idA > 0 && $idB > $idA, 'incident creation returned invalid IDs');
+    $assert(
+        $idA > 0
+            && $idB > $idA
+            && ($incidentA['fuehrungsstellenname_gesperrt'] ?? null) === 0
+            && ($incidentB['fuehrungsstellenname_gesperrt'] ?? null) === 0,
+        'incident creation returned invalid IDs or a premature command-post lock'
+    );
+    $assert(
+        $fails(
+            static fn (): array => estab_incident_create(
+                $connection,
+                [
+                    'kennung' => 'TEST-MISSING-COMMAND-POST',
+                    'name' => 'Missing command post',
+                    'beginn' => date('Y-m-d\TH:i', time() - 60),
+                ],
+                'integration-test',
+                false
+            )
+        ) instanceof EstabIncidentInputException,
+        'incident creation accepted a missing command-post name'
+    );
+    $assert(
+        $fails(
+            static fn (): array => estab_incident_create(
+                $connection,
+                [
+                    'kennung' => 'TEST-LONG-COMMAND-POST',
+                    'name' => 'Long command post',
+                    'beginn' => date('Y-m-d\TH:i', time() - 60),
+                    'fuehrungsstellenname' => str_repeat('x', 129),
+                ],
+                'integration-test',
+                false
+            )
+        ) instanceof EstabIncidentInputException,
+        'incident creation accepted a command-post name over 128 characters'
+    );
     $assert(
         $fails(
             static fn (): array => estab_incident_create(
@@ -133,12 +178,43 @@ try {
                     'kennung' => 'TEST-A-001',
                     'name' => 'Duplicate A',
                     'beginn' => date('Y-m-d\TH:i', time() - 60),
+                    'fuehrungsstellenname' => 'Führungsstelle Duplikat',
                 ],
                 'integration-test',
                 false
             )
         ) instanceof EstabIncidentConflictException,
         'duplicate stable incident identifier was not reported as a conflict'
+    );
+
+    $commandPostA = 'Führungsstelle Integration A berichtigt';
+    $updatedIncidentA = estab_incident_update_command_post_name(
+        $connection,
+        $idA,
+        $commandPostA,
+        $originalCommandPostA,
+        'integration-test'
+    );
+    $assert(
+        ($updatedIncidentA['fuehrungsstellenname'] ?? null) === $commandPostA
+            && $queryValue(
+                $connection,
+                'SELECT `fuehrungsstellenname` FROM `nv_einsaetze`'
+                    . ' WHERE `einsatz_id` = ' . $idA
+            ) === $commandPostA,
+        'command-post name could not be corrected before operational data'
+    );
+    $assert(
+        $fails(
+            static fn (): array => estab_incident_update_command_post_name(
+                $connection,
+                $idA,
+                'Führungsstelle aus veraltetem Formular',
+                $originalCommandPostA,
+                'stale-integration-test'
+            )
+        ) instanceof EstabIncidentConflictException,
+        'stale expected command-post name overwrote a newer correction'
     );
 
     $status = estab_incident_activate(
@@ -148,7 +224,10 @@ try {
         'integration-test'
     );
     $assert(
-        $status['active_einsatz_id'] === $idA && $status['revision'] === 1,
+        $status['active_einsatz_id'] === $idA
+            && $status['revision'] === 1
+            && $status['fuehrungsstellenname'] === $commandPostA
+            && $status['fuehrungsstellenname_gesperrt'] === 0,
         'first incident activation did not advance the singleton revision'
     );
     $assert(
@@ -172,8 +251,46 @@ try {
             $connection,
             'SELECT `einsatz_id` FROM `nv_nachrichten`'
                 . ' WHERE `00_lfd` = ' . $messageA
-        ) === $idA,
-        'legacy insert was not assigned to the active incident'
+        ) === $idA
+            && (int) $queryValue(
+                $connection,
+                'SELECT `fuehrungsstellenname_gesperrt`'
+                    . ' FROM `nv_einsaetze` WHERE `einsatz_id` = ' . $idA
+            ) === 1,
+        'legacy insert was not assigned or did not lock its command-post identity'
+    );
+    foreach ([
+        'UPDATE `nv_einsaetze` SET `fuehrungsstellenname` = '
+            . "CONCAT(`fuehrungsstellenname`, ' ')"
+            . ' WHERE `einsatz_id` = ' . $idA,
+        'UPDATE `nv_einsaetze` SET `fuehrungsstellenname_gesperrt` = 0'
+            . ' WHERE `einsatz_id` = ' . $idA,
+    ] as $directManipulationSql) {
+        $directManipulation = $fails(
+            static fn (): bool => $connection->query($directManipulationSql)
+        );
+        $assert(
+            $directManipulation instanceof mysqli_sql_exception
+                && (int) $directManipulation->getCode() === 1644,
+            'direct or PAD-space command-post manipulation bypassed the trigger'
+        );
+    }
+    $assert(
+        $fails(
+            static fn (): array => estab_incident_update_command_post_name(
+                $connection,
+                $idA,
+                'Führungsstelle nach erster Betriebszeile',
+                $commandPostA,
+                'integration-test'
+            )
+        ) instanceof EstabIncidentConflictException
+            && $queryValue(
+                $connection,
+                'SELECT `fuehrungsstellenname` FROM `nv_einsaetze`'
+                    . ' WHERE `einsatz_id` = ' . $idA
+            ) === $commandPostA,
+        'command-post name changed after the first operational row'
     );
     $assert(
         $fails(
@@ -217,6 +334,60 @@ try {
     );
     $assert($writtenId > $messageA, 'active write transaction returned no row');
 
+    $connection->query('SET @estab_command_post_migration_write = 1');
+    try {
+        $connection->query(
+            'UPDATE `nv_einsaetze`'
+                . ' SET `fuehrungsstellenname` = NULL,'
+                . ' `fuehrungsstellenname_gesperrt` = 0'
+                . ' WHERE `einsatz_id` = ' . $idA
+        );
+    } finally {
+        $connection->query(
+            'SET @estab_command_post_migration_write = NULL'
+        );
+    }
+    $missingCommandPostWrite = $fails(
+        static fn (): mixed => estab_incident_with_active_write(
+            $connection,
+            static function (array $_active) use ($connection): bool {
+                return $connection->query(
+                    "INSERT INTO `nv_nachrichten` (`12_inhalt`)"
+                        . " VALUES ('must not write without command post')"
+                );
+            }
+        )
+    );
+    $assert(
+        $missingCommandPostWrite instanceof EstabIncidentConfigurationException
+            && (int) $queryValue(
+                $connection,
+                "SELECT COUNT(*) FROM `nv_nachrichten`"
+                    . " WHERE `12_inhalt` = 'must not write without command post'"
+            ) === 0,
+        'operational write succeeded for a historical incident without a command post'
+    );
+    foreach ([
+        static fn (): bool => $connection->query(
+            "INSERT INTO `nv_nachrichten` (`12_inhalt`)"
+                . " VALUES ('legacy write without command post')"
+        ),
+        static fn (): bool => $connection->query(
+            "UPDATE `nv_nachrichten` SET `12_inhalt` = 'legacy update blocked'"
+                . ' WHERE `00_lfd` = ' . $messageA
+        ),
+        static fn (): bool => $connection->query(
+            'DELETE FROM `nv_nachrichten` WHERE `00_lfd` = ' . $messageA
+        ),
+    ] as $legacyWriteWithoutCommandPost) {
+        $legacyFailure = $fails($legacyWriteWithoutCommandPost);
+        $assert(
+            $legacyFailure instanceof mysqli_sql_exception
+                && (int) $legacyFailure->getCode() === 1644,
+            'legacy database writer bypassed the missing command-post boundary'
+        );
+    }
+
     $status = estab_incident_deactivate(
         $connection,
         $idA,
@@ -226,6 +397,52 @@ try {
     $assert(
         $status['active_einsatz_id'] === null && $status['revision'] === 2,
         'deactivation did not clear and revise the singleton'
+    );
+    $assert(
+        $fails(
+            static fn (): array => estab_incident_activate(
+                $connection,
+                $idA,
+                2,
+                'integration-test'
+            )
+        ) instanceof EstabIncidentConfigurationException
+            && estab_incident_status($connection)['active_einsatz_id'] === null,
+        'historical incident without a command post was activated'
+    );
+    $completedIncidentA = estab_incident_update_command_post_name(
+        $connection,
+        $idA,
+        $commandPostA,
+        '',
+        'integration-test'
+    );
+    $assert(
+        ($completedIncidentA['fuehrungsstellenname'] ?? null) === $commandPostA
+            && ($completedIncidentA['fuehrungsstellenname_gesperrt'] ?? null) === 1
+            && $queryValue(
+                $connection,
+                'SELECT `fuehrungsstellenname` FROM `nv_einsaetze`'
+                    . ' WHERE `einsatz_id` = ' . $idA
+            ) === $commandPostA
+            && (int) $queryValue(
+                $connection,
+                'SELECT `fuehrungsstellenname_gesperrt`'
+                    . ' FROM `nv_einsaetze` WHERE `einsatz_id` = ' . $idA
+            ) === 1,
+        'historical NULL command-post name could not be completed despite old data'
+    );
+    $assert(
+        $fails(
+            static fn (): array => estab_incident_update_command_post_name(
+                $connection,
+                $idA,
+                'Führungsstelle zweite Vervollständigung',
+                $commandPostA,
+                'integration-test'
+            )
+        ) instanceof EstabIncidentConflictException,
+        'historical command-post name remained mutable after one-time completion'
     );
     foreach ([
         static fn (): bool => $connection->query(
@@ -266,8 +483,28 @@ try {
         'integration-test'
     );
     $assert(
-        $status['active_einsatz_id'] === $idB && $status['revision'] === 3,
+        $status['active_einsatz_id'] === $idB
+            && $status['revision'] === 3
+            && $status['fuehrungsstellenname'] === $commandPostB
+            && $status['fuehrungsstellenname_gesperrt'] === 0,
         'second incident activation failed'
+    );
+    $historicalMessageA = estab_message_fetch_for_incident_by_id(
+        $connection,
+        'nv_nachrichten',
+        $messageA,
+        $idA
+    );
+    $assert(
+        is_array($historicalMessageA)
+            && (int) $historicalMessageA['einsatz_id'] === $idA
+            && estab_message_fetch_for_incident_by_id(
+                $connection,
+                'nv_nachrichten',
+                $messageA,
+                $idB
+            ) === null,
+        'explicit message fetch crossed its captured incident after activation'
     );
     $assert(
         $fails(
@@ -290,6 +527,26 @@ try {
                 . ' WHERE `00_lfd` = ' . $messageB
         ) === $idB,
         'second active incident did not receive its own row'
+    );
+    $connection->query(
+        'DELETE FROM `nv_nachrichten` WHERE `00_lfd` = ' . $messageB
+    );
+    $assert(
+        $fails(
+            static fn (): array => estab_incident_update_command_post_name(
+                $connection,
+                $idB,
+                'Führungsstelle nach gelöschtem ersten Datensatz',
+                $commandPostB,
+                'integration-test'
+            )
+        ) instanceof EstabIncidentConflictException
+            && (int) $queryValue(
+                $connection,
+                'SELECT `fuehrungsstellenname_gesperrt`'
+                    . ' FROM `nv_einsaetze` WHERE `einsatz_id` = ' . $idB
+            ) === 1,
+        'durable command-post lock disappeared with the last operational row'
     );
 
     $connection->query(
@@ -333,7 +590,16 @@ try {
         is_array($found)
             && $found['ist_aktiv'] === true
             && $found['kennung'] === 'TEST-B-001'
-            && count($listed) === 2,
+            && $found['fuehrungsstellenname'] === $commandPostB
+            && count($listed) === 2
+            && array_column(
+                $listed,
+                'fuehrungsstellenname',
+                'kennung'
+            ) === [
+                'TEST-B-001' => $commandPostB,
+                'TEST-A-001' => $commandPostA,
+            ],
         'incident find/list reader lost active or archive state'
     );
 
@@ -370,7 +636,10 @@ try {
         'concurrent-integration-test'
     );
     $assert(
-        $status['active_einsatz_id'] === $idA && $status['revision'] === 4,
+        $status['active_einsatz_id'] === $idA
+            && $status['revision'] === 4
+            && $status['fuehrungsstellenname'] === $commandPostA
+            && $status['fuehrungsstellenname_gesperrt'] === 1,
         'serialized activation did not succeed after the lock was released'
     );
 } finally {

@@ -45,6 +45,7 @@ if [ ! -r "$fixture" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/94-dv-organisational-controls.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/95-attachment-ingest-integrity.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/96-etb-duty-function.sql" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/97-incident-command-post-name.sql" ] \
     || [ ! -x "$ESTAB_MIGRATOR_BIN" ]; then
     echo "schema migrator test: fixture, baseline, or migrator is unavailable" >&2
     exit 1
@@ -416,6 +417,196 @@ ALTER TABLE nv_funktionsfaehigkeiten
   ADD PRIMARY KEY (funktion, faehigkeit)"
 ESTAB_DB_NAME="$retry_database" "$ESTAB_MIGRATOR_BIN"
 
+# Migration 97 may be interrupted after its autocommitted ADD COLUMN but before
+# the ledger acknowledgement. Only the exact owned VARCHAR(128) shape is
+# resumable; a same-name foreign or narrower field must remain untouched.
+database_query "$retry_database" "
+DELETE FROM estab_schema_migrations
+ WHERE version = '97-incident-command-post-name.sql';
+ALTER TABLE nv_einsaetze
+  MODIFY COLUMN fuehrungsstellenname VARCHAR(127)
+    CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+    NULL DEFAULT NULL
+    COMMENT 'foreign-command-post-owner'
+    AFTER organisation"
+if ESTAB_DB_NAME="$retry_database" \
+    "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: foreign command-post column was accepted" >&2
+    exit 1
+fi
+if ! grep -q \
+    'Command-post name migration blocked: foreign column collision' \
+    "$failure_log"; then
+    echo "schema migrator test: command-post collision failure was not explicit" >&2
+    sed -n '1,160p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "varchar(127)|foreign-command-post-owner|0" "$(
+    database_query "$retry_database" "
+SELECT CONCAT(
+         (SELECT column_type
+            FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_einsaetze'
+             AND column_name = 'fuehrungsstellenname'), '|',
+         (SELECT column_comment
+            FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_einsaetze'
+             AND column_name = 'fuehrungsstellenname'), '|',
+         (SELECT COUNT(*)
+            FROM estab_schema_migrations
+           WHERE version = '97-incident-command-post-name.sql')
+       )"
+)" \
+    "blocked command-post column was changed or recorded"
+database_query "$retry_database" "
+ALTER TABLE nv_einsaetze
+  MODIFY COLUMN fuehrungsstellenname VARCHAR(128)
+    CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+    NULL DEFAULT NULL
+    COMMENT 'estab:migration:97:incident-command-post-name:v1'
+    AFTER organisation"
+ESTAB_DB_NAME="$retry_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "varchar(128)|1" "$(database_query "$retry_database" "
+SELECT CONCAT(
+         (SELECT column_type
+            FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_einsaetze'
+             AND column_name = 'fuehrungsstellenname'
+             AND column_comment =
+               'estab:migration:97:incident-command-post-name:v1'), '|',
+         (SELECT COUNT(*)
+            FROM estab_schema_migrations
+           WHERE version = '97-incident-command-post-name.sql'
+             AND state = 'applied')
+       )")" \
+	    "owned partial command-post column did not resume canonically"
+
+database_query "$retry_database" "
+DELETE FROM estab_schema_migrations
+ WHERE version = '97-incident-command-post-name.sql';
+ALTER TABLE nv_einsaetze
+  MODIFY COLUMN fuehrungsstellenname_gesperrt TINYINT NOT NULL DEFAULT 0
+    COMMENT 'foreign-command-post-lock-owner'
+    AFTER fuehrungsstellenname"
+if ESTAB_DB_NAME="$retry_database" \
+    "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: foreign command-post lock was accepted" >&2
+    exit 1
+fi
+if ! grep -q \
+    'Command-post name migration blocked: foreign lock column collision' \
+    "$failure_log"; then
+    echo "schema migrator test: command-post lock collision was not explicit" >&2
+    sed -n '1,160p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "tinyint(4)|foreign-command-post-lock-owner|0" "$(
+    database_query "$retry_database" "
+SELECT CONCAT(
+         (SELECT column_type
+            FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_einsaetze'
+             AND column_name = 'fuehrungsstellenname_gesperrt'), '|',
+         (SELECT column_comment
+            FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_einsaetze'
+             AND column_name = 'fuehrungsstellenname_gesperrt'), '|',
+         (SELECT COUNT(*)
+            FROM estab_schema_migrations
+           WHERE version = '97-incident-command-post-name.sql')
+       )"
+)" \
+    "blocked command-post lock column was changed or recorded"
+database_query "$retry_database" "
+ALTER TABLE nv_einsaetze
+  MODIFY COLUMN fuehrungsstellenname_gesperrt TINYINT UNSIGNED
+    NOT NULL DEFAULT 0
+    COMMENT 'estab:migration:97:incident-command-post-lock:v1'
+    AFTER fuehrungsstellenname"
+ESTAB_DB_NAME="$retry_database" "$ESTAB_MIGRATOR_BIN"
+
+database_query "$retry_database" "
+DELETE FROM estab_schema_migrations
+ WHERE version = '97-incident-command-post-name.sql';
+DROP FUNCTION estab_incident_command_post_for_write;
+CREATE FUNCTION estab_incident_command_post_for_write(
+  requested_incident BIGINT UNSIGNED
+) RETURNS BIGINT UNSIGNED
+DETERMINISTIC NO SQL
+COMMENT 'foreign-command-post-routine'
+RETURN requested_incident"
+if ESTAB_DB_NAME="$retry_database" \
+    "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: foreign command-post routine was accepted" >&2
+    exit 1
+fi
+if ! grep -q \
+    'Command-post name migration blocked: foreign routine collision' \
+    "$failure_log"; then
+    echo "schema migrator test: command-post routine collision was not explicit" >&2
+    sed -n '1,160p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "foreign-command-post-routine|0" "$(
+    database_query "$retry_database" "
+SELECT CONCAT(
+         (SELECT routine_comment
+            FROM information_schema.routines
+           WHERE routine_schema = DATABASE()
+             AND routine_name =
+               'estab_incident_command_post_for_write'), '|',
+         (SELECT COUNT(*)
+            FROM estab_schema_migrations
+           WHERE version = '97-incident-command-post-name.sql')
+       )"
+)" \
+    "blocked command-post routine was changed or recorded"
+database_query "$retry_database" "
+DROP FUNCTION estab_incident_command_post_for_write"
+ESTAB_DB_NAME="$retry_database" "$ESTAB_MIGRATOR_BIN"
+
+database_query "$retry_database" "
+DELETE FROM estab_schema_migrations
+ WHERE version = '97-incident-command-post-name.sql';
+DROP TRIGGER estab_command_post_incident_insert;
+CREATE TRIGGER estab_command_post_incident_insert
+BEFORE INSERT ON nv_einsaetze FOR EACH ROW
+SET NEW.name = NEW.name"
+if ESTAB_DB_NAME="$retry_database" \
+    "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: foreign command-post trigger was accepted" >&2
+    exit 1
+fi
+if ! grep -q \
+    'Command-post name migration blocked: foreign trigger collision' \
+    "$failure_log"; then
+    echo "schema migrator test: command-post trigger collision was not explicit" >&2
+    sed -n '1,160p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "SET NEW.name = NEW.name|0" "$(
+    database_query "$retry_database" "
+SELECT CONCAT(
+         (SELECT action_statement
+            FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND trigger_name =
+               'estab_command_post_incident_insert'), '|',
+         (SELECT COUNT(*)
+            FROM estab_schema_migrations
+           WHERE version = '97-incident-command-post-name.sql')
+       )"
+)" \
+    "blocked command-post trigger was changed or recorded"
+database_query "$retry_database" "
+DROP TRIGGER estab_command_post_incident_insert"
+ESTAB_DB_NAME="$retry_database" "$ESTAB_MIGRATOR_BIN"
+
 # MariaDB commits CREATE TABLE independently of the seed transaction. Prove
 # both possible interruption points are resumable only for the migration-owned
 # table: after CREATE with zero rows and after the canonical seed commit.
@@ -696,7 +887,7 @@ finish_checksum=$(
         awk '{print $1}'
 )
 assert_equal \
-    "11|11|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
+    "12|12|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
     "$(database_query "$predecessor_database" "
 SELECT CONCAT(
          COUNT(*), '|',
@@ -823,7 +1014,7 @@ SELECT CONCAT(COUNT(*), '|', MAX(column_default), '|', MAX(column_comment))
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
 
-assert_equal "11" "$(fixture_query "
+assert_equal "12" "$(fixture_query "
 SELECT COUNT(*) FROM estab_schema_migrations
  WHERE state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
@@ -834,7 +1025,7 @@ SELECT COUNT(*) FROM estab_schema_migrations
    AND state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
     "standard matrix migration was not recorded"
-assert_equal "1|1|1|1|9" "$(fixture_query "
+assert_equal "1|1|1|1|1|9" "$(fixture_query "
 SELECT CONCAT(
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '80-dv-evidence-retention.sql'
@@ -850,6 +1041,10 @@ SELECT CONCAT(
              AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '96-etb-duty-function.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '97-incident-command-post-name.sql'
              AND state = 'applied'
              AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
          (SELECT COUNT(*)
@@ -868,6 +1063,81 @@ SELECT CONCAT(
              ))
        )")" \
     "DV evidence or organisational migration was not applied completely"
+assert_equal "1|1|1|2|4|0" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*)
+            FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_einsaetze'
+             AND column_name = 'fuehrungsstellenname'
+             AND column_type = 'varchar(128)'
+             AND character_set_name = 'utf8mb4'
+             AND collation_name = 'utf8mb4_unicode_ci'
+             AND is_nullable = 'YES'
+             AND (
+               column_default IS NULL
+               OR UPPER(column_default) = 'NULL'
+             )
+             AND ordinal_position = (
+               SELECT ordinal_position + 1
+                 FROM information_schema.columns
+                WHERE table_schema = DATABASE()
+                  AND table_name = 'nv_einsaetze'
+                  AND column_name = 'organisation'
+             )
+	             AND column_comment =
+	               'estab:migration:97:incident-command-post-name:v1'), '|',
+         (SELECT COUNT(*)
+            FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_einsaetze'
+             AND column_name = 'fuehrungsstellenname_gesperrt'
+             AND data_type = 'tinyint'
+             AND column_type LIKE 'tinyint%unsigned'
+             AND is_nullable = 'NO'
+             AND column_default = '0'
+             AND ordinal_position = (
+               SELECT ordinal_position + 2
+                 FROM information_schema.columns
+                WHERE table_schema = DATABASE()
+                  AND table_name = 'nv_einsaetze'
+                  AND column_name = 'organisation'
+             )
+             AND column_comment =
+               'estab:migration:97:incident-command-post-lock:v1'), '|',
+         (SELECT COUNT(*) FROM nv_einsaetze
+           WHERE kennung = 'LEGACY-IMPORT'
+             AND fuehrungsstellenname IS NULL
+             AND fuehrungsstellenname_gesperrt = 0), '|',
+         (SELECT COUNT(*)
+            FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND trigger_name IN (
+               'estab_command_post_incident_insert',
+               'estab_command_post_incident_update'
+             )), '|',
+         (SELECT COUNT(*)
+            FROM information_schema.routines
+           WHERE routine_schema = DATABASE()
+             AND routine_type = 'FUNCTION'
+             AND routine_name IN (
+               'estab_incident_command_post_for_write',
+               'estab_incident_for_insert',
+               'estab_incident_for_update',
+               'estab_incident_for_delete'
+             )), '|',
+         (SELECT COUNT(*)
+            FROM information_schema.routines
+           WHERE routine_schema = DATABASE()
+             AND routine_name IN (
+               'estab_migrate_97_preflight',
+               'estab_migrate_97_add_column',
+               'estab_migrate_97_add_lock_column',
+               'estab_migrate_97_validate',
+               'estab_migrate_97_final_validate'
+             ))
+       )")" \
+    "incident command-post name migration was not canonical or invented history"
 assert_equal "20|20|1|0" "$(fixture_query "
 SELECT CONCAT(
          COUNT(*), '|',
@@ -1115,10 +1385,12 @@ if ! grep -q 'Operational update targets inactive incident' "$failure_log"; then
 fi
 fixture_query "
 INSERT INTO nv_einsaetze
-  (kennung, name, beginn, ende, ort, organisation, einsatzleitung,
+  (kennung, name, beginn, ende, ort, organisation, fuehrungsstellenname,
+   einsatzleitung,
    beschreibung, metadaten, erstellt_am, erstellt_von)
 VALUES
-  ('SCHEMA-WIDTH-TEST', 'Schema width test', NOW(), NULL, '', '', '',
+  ('SCHEMA-WIDTH-TEST', 'Schema width test', NOW(), NULL, '', '',
+   'Schema migration command post', '',
    'Isolated schema-migrator fixture.', '{}', NOW(6),
    'schema-migrator-test');
 SET @estab_width_incident_id = LAST_INSERT_ID();

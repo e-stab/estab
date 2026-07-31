@@ -238,7 +238,10 @@ $assert(
 $assert(
     str_contains($download, 'estab_read_attachment(')
         && str_contains($download, 'estab_read_message_allowed(')
-        && str_contains($forms, 'estab_read_filter_generated_forms('),
+        && str_contains(
+            $forms,
+            'estab_read_filter_generated_forms_for_incident('
+        ),
     'file endpoints lack object-level attachment or message authorization'
 );
 $assert(

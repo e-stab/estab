@@ -122,6 +122,56 @@ $assert(
     'legacy entity row did not render safely'
 );
 
+$commandPostIncident = [
+    'fuehrungsstellenname' => ' FüSt Einsatz 7 ',
+];
+putenv('ESTAB_ORGANISATION=GLOBAL-CONFIG-MUST-NOT-APPEAR');
+$boundIncoming = estab_message_bind_command_post([
+    '04_richtung' => 'E',
+    '10_anschrift' => 'vom Browser gefälscht',
+    '11_gesprnotiz' => 'f',
+    '13_abseinheit' => 'Leitstelle Gegenstelle',
+], $commandPostIncident);
+$assert(
+    $boundIncoming['10_anschrift'] === 'FüSt Einsatz 7'
+        && $boundIncoming['13_abseinheit'] === 'Leitstelle Gegenstelle',
+    'repository did not authoritatively address an incoming message locally'
+);
+$boundConversationNote = estab_message_bind_command_post([
+    '04_richtung' => 'E',
+    '10_anschrift' => 'vom Browser gefälscht',
+    '11_gesprnotiz' => 't',
+    '13_abseinheit' => 'vom Browser gefälscht',
+], $commandPostIncident);
+$assert(
+    $boundConversationNote['10_anschrift'] === 'FüSt Einsatz 7'
+        && $boundConversationNote['13_abseinheit'] === 'FüSt Einsatz 7',
+    'repository did not bind both sides of an internal conversation note'
+);
+$boundOutgoing = estab_message_bind_command_post([
+    '04_richtung' => 'A',
+    '10_anschrift' => 'Leitstelle Gegenstelle',
+    '13_abseinheit' => 'vom Browser gefälscht',
+], $commandPostIncident);
+$assert(
+    $boundOutgoing['10_anschrift'] === 'Leitstelle Gegenstelle'
+        && $boundOutgoing['13_abseinheit'] === 'FüSt Einsatz 7',
+    'repository did not authoritatively bind the outgoing sender'
+);
+putenv('ESTAB_ORGANISATION');
+try {
+    estab_message_bind_command_post(
+        ['04_richtung' => 'A'],
+        [
+            'fuehrungsstellenname' => null,
+            'organisation' => 'Nicht als Ersatz verwenden',
+        ]
+    );
+    $assert(false, 'repository accepted an incident without command-post identity');
+} catch (EstabIncidentConfigurationException) {
+    $assert(true, 'repository rejected an incomplete historical incident');
+}
+
 $staff = ['kuerzel' => 'st0001', 'funktion' => 'S1', 'rolle' => 'Stab'];
 $successorStaff = ['kuerzel' => 'st0003', 'funktion' => 'S1', 'rolle' => 'Stab'];
 $secondStaff = ['kuerzel' => 's20001', 'funktion' => 'S2', 'rolle' => 'Stab'];
@@ -373,9 +423,21 @@ $allMessagesSource = file_get_contents($root . '/4fach/all_msg.php');
 $overviewSource = file_get_contents($root . '/4fueltg/ue_ltg.php');
 $pdfSource = file_get_contents($root . '/4fbak/backup_pdf.php');
 $concurrencySource = file_get_contents($root . '/tests/integration/message_concurrency.php');
+$incidentSource = file_get_contents($root . '/app/incident.php');
+$incidentConfigSource = file_get_contents($root . '/4fcfg/e_cfg.inc.php');
+$environmentSource = file_get_contents($root . '/.env.example');
+$composeSource = file_get_contents($root . '/compose.yaml');
+$registryEnvironmentSource = file_get_contents(
+    $root . '/deploy/registry/.env.example'
+);
+$registryComposeSource = file_get_contents(
+    $root . '/deploy/registry/compose.yaml'
+);
 foreach ([
     $repositorySource, $dataSource, $mainSource, $formSource,
     $listSource, $allMessagesSource, $overviewSource, $pdfSource, $concurrencySource,
+    $incidentSource, $incidentConfigSource, $environmentSource, $composeSource,
+    $registryEnvironmentSource, $registryComposeSource,
 ] as $source) {
     $assert(is_string($source), 'security source unreadable');
 }
@@ -456,6 +518,50 @@ $assert(
         && str_contains($repositorySource, 'SELECT GET_LOCK(?, 10)')
         && str_contains($repositorySource, "require_once __DIR__ . '/datetime.php'"),
     'prepared/concurrent repository contract missing'
+);
+$assert(
+    str_contains(
+        $repositorySource,
+        'function estab_message_bind_command_post('
+    )
+        && substr_count(
+            $repositorySource,
+            'estab_message_bind_command_post('
+        ) >= 4
+        && str_contains(
+            $repositorySource,
+            '$commandPostName = estab_incident_command_post_name($incident);'
+        )
+        && str_contains(
+            $mainSource,
+            '$activeCommandPostName = estab_incident_command_post_name ('
+        )
+        && str_contains(
+            $dataSource,
+            'function check_and_save ($data, $activeCommandPostName)'
+        )
+        && str_contains(
+            $dataSource,
+            'estab_incident_command_post_name ($messageIncident);'
+        ),
+    'incident command-post identity is not authoritative at repository writes'
+);
+$assert(
+    !str_contains(
+        implode("\n", [
+            $repositorySource,
+            $dataSource,
+            $mainSource,
+            $incidentSource,
+            $incidentConfigSource,
+            $environmentSource,
+            $composeSource,
+            $registryEnvironmentSource,
+            $registryComposeSource,
+        ]),
+        'ESTAB_ORGANISATION'
+    ),
+    'installation environment still acts as a command-post identity source'
 );
 $assert(
     !str_contains($repositorySource, 'affected_rows >= 0')
@@ -555,8 +661,61 @@ $assert(
 $assert(
     str_contains($overviewSource, 'estab_message_positive_id')
         && str_contains($overviewSource, 'estab_message_query_rows')
-        && !str_contains($overviewSource, 'LIKE \"%".$_SESSION["ueb_flt_search"]'),
+        && !str_contains($overviewSource, 'LIKE \"%".$_SESSION["ueb_flt_search"]')
+        && str_contains(
+            $overviewSource,
+            '$overviewReadScope ["incident"]["active_einsatz_id"]'
+        )
+        && str_contains($overviewSource, '.`einsatz_id` = ?')
+        && str_contains(
+            $overviewSource,
+            'estab_message_fetch_for_incident_by_id ('
+        )
+        && !str_contains(
+            $overviewSource,
+            '(SELECT `active_einsatz_id` FROM `nv_einsatz_status`'
+        ),
     'overview ID/search boundary is incomplete'
+);
+$fetchWrapperStart = strpos(
+    $repositorySource,
+    'function estab_message_fetch_by_id('
+);
+$fetchWrapperEnd = strpos(
+    $repositorySource,
+    '/** Run a prepared read query',
+    $fetchWrapperStart === false ? 0 : $fetchWrapperStart
+);
+$fetchWrapper = (
+    $fetchWrapperStart !== false
+    && $fetchWrapperEnd !== false
+    && $fetchWrapperEnd > $fetchWrapperStart
+) ? substr(
+    $repositorySource,
+    $fetchWrapperStart,
+    $fetchWrapperEnd - $fetchWrapperStart
+) : '';
+$assert(
+    $fetchWrapper !== ''
+        && strpos($fetchWrapper, 'estab_message_positive_id($recordId)')
+            < strpos($fetchWrapper, 'estab_incident_active($connection)'),
+    'compatibility message lookup resolves ambient state before validating its ID'
+);
+$assert(
+    str_contains(
+        $mainSource,
+        'new listen ("Stab_sichten", "STSI", $workflowIncidentId)'
+    )
+        && str_contains(
+            $mainSource,
+            'new listen ("LDF", "", $workflowIncidentId)'
+        )
+        && str_contains(
+            $mainSource,
+            'new listen ("FMA", "", $workflowIncidentId)'
+        )
+        && !str_contains($mainSource, 'estab_message_fetch_by_id ('),
+    'main workflow re-resolves the active incident after its authorization gate'
 );
 $assert(
     str_contains($pdfSource, 'estab_message_plain_text')

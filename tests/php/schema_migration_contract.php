@@ -49,6 +49,9 @@ $attachmentIntegrityMigration = $read(
 $etbDutyMigration = $read(
     $root . '/docker/db/migrations/96-etb-duty-function.sql'
 );
+$commandPostMigration = $read(
+    $root . '/docker/db/migrations/97-incident-command-post-name.sql'
+);
 $baseline = $read($root . '/docker/db/init/10-schema.sql');
 $verify = $read($root . '/docker/db/verify.sql');
 $health = $read($root . '/health.php');
@@ -65,6 +68,7 @@ $normaliseSql = static function (string $sql): string {
     return $normalised;
 };
 $etbDutySql = $normaliseSql($etbDutyMigration);
+$commandPostSql = $normaliseSql($commandPostMigration);
 $verifySql = $normaliseSql($verify);
 $readinessSql = $normaliseSql(estab_readiness_schema_query());
 $oldCapabilityEnum = "enum('LAGE_DOKUMENTATION','SICHTUNG',"
@@ -521,6 +525,58 @@ foreach ($etbMigrationFragments as $fragment => $message) {
     $assert(str_contains($etbDutySql, $fragment), $message);
 }
 
+$commandPostMigrationFragments = [
+    "table_name = 'nv_einsaetze' AND table_type = 'BASE TABLE' "
+        . "AND engine = 'InnoDB' AND table_collation = "
+        . "'utf8mb4_unicode_ci' AND table_comment = "
+        . "'estab:migration:50-global-incidents:v1'"
+        => 'Migration 97 does not prove ownership of the incident table',
+    "column_name = 'fuehrungsstellenname' AND data_type = 'varchar' "
+        . "AND column_type = 'varchar(128)' "
+        . "AND character_maximum_length = 128 "
+        . "AND character_set_name = 'utf8mb4' "
+        . "AND collation_name = 'utf8mb4_unicode_ci' "
+        . "AND is_nullable = 'YES' AND ( column_default IS NULL "
+        . "OR UPPER(column_default) = 'NULL' )"
+        => 'Migration 97 does not require the exact command-post column',
+    'estab:migration:97:incident-command-post-name:v1'
+        => 'Migration 97 does not mark ownership of its column',
+    'estab:migration:97:incident-command-post-lock:v1'
+        => 'Migration 97 does not own a durable command-post lock column',
+    'estab:migration:97:incident-command-post-write-lock:v1'
+        => 'Migration 97 does not own its legacy-writer lock function',
+    'BINARY `fuehrungsstellenname` <> BINARY TRIM(`fuehrungsstellenname`)'
+        => 'Migration 97 still relies on PAD-SPACE command-post comparison',
+    'estab_command_post_incident_insert'
+        => 'Migration 97 does not protect direct incident inserts',
+    'estab_command_post_incident_update'
+        => 'Migration 97 does not protect direct name/lock changes',
+    'estab_incident_command_post_for_write'
+        => 'Migration 97 does not fail closed and lock legacy writes',
+    'Command-post name migration blocked: foreign column collision'
+        => 'Migration 97 does not reject a foreign column collision',
+    'CREATE PROCEDURE estab_migrate_97_add_column()'
+        => 'Migration 97 has no resumable column phase',
+    'CREATE PROCEDURE estab_migrate_97_validate()'
+        => 'Migration 97 has no final validator',
+    'SET @estab_command_post_migration_write = 1;'
+        => 'Migration 97 cannot resume its marker backfill behind its own trigger',
+    'SET @estab_command_post_migration_write = NULL;'
+        => 'Migration 97 leaks its privileged marker-backfill session flag',
+    'Existing incidents deliberately remain NULL'
+        => 'Migration 97 no longer documents the no-invention legacy policy',
+];
+foreach ($commandPostMigrationFragments as $fragment => $message) {
+    $assert(str_contains($commandPostSql, $fragment), $message);
+}
+$assert(
+    !str_contains(
+        $commandPostSql,
+        'SET `fuehrungsstellenname` ='
+    ),
+    'Migration 97 invents a command-post name for historical incidents'
+);
+
 foreach ([
     '96-etb-duty-function.sql',
     'partial ETB duty unique-index phase',
@@ -528,7 +584,9 @@ foreach ([
     'completed ETB duty catalogue without ledger',
     'mixed ETB duty catalogue',
     'ETB duty primary-key drift',
-    'assert_equal "11"',
+    '97-incident-command-post-name.sql',
+    'incident command-post name migration was not canonical or invented history',
+    'assert_equal "12"',
 ] as $marker) {
     $assert(
         str_contains($schemaIntegration, $marker),
@@ -576,10 +634,14 @@ $assert(
         && str_contains($verifySql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $verifySql,
-            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 11'
+            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 12'
         )
         && str_contains($verifySql, "'96-etb-duty-function.sql'")
-        && str_contains($verifySql, ") = 11) AS `schema_migrations_ok`"),
+        && str_contains(
+            $verifySql,
+            "'97-incident-command-post-name.sql'"
+        )
+        && str_contains($verifySql, ") = 12) AS `schema_migrations_ok`"),
     'verify.sql does not require the exact final ETB catalogue and ledger'
 );
 $assert(
@@ -602,12 +664,16 @@ $assert(
         && str_contains($readinessSql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $readinessSql,
-            '(SELECT COUNT(*) FROM estab_schema_migrations) = 11'
+            '(SELECT COUNT(*) FROM estab_schema_migrations) = 12'
         )
         && str_contains($readinessSql, "'96-etb-duty-function.sql'")
         && str_contains(
             $readinessSql,
-            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 11"
+            "'97-incident-command-post-name.sql'"
+        )
+        && str_contains(
+            $readinessSql,
+            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 12"
         ),
     'Runtime readiness does not require the exact final ETB catalogue and ledger'
 );
@@ -708,6 +774,10 @@ $assert(
         && str_contains($readiness, "'94-dv-organisational-controls.sql'")
         && str_contains($readiness, "'95-attachment-ingest-integrity.sql'")
         && str_contains($readiness, "'96-etb-duty-function.sql'")
+        && str_contains(
+            $readiness,
+            "'97-incident-command-post-name.sql'"
+        )
         && str_contains($verify, "'50-global-incidents.sql'")
         && str_contains($verify, "'45-global-incidents-prepare.sql'")
         && str_contains($verify, "'55-global-incidents-finish.sql'")
@@ -716,9 +786,10 @@ $assert(
         && str_contains($verify, "'94-dv-organisational-controls.sql'")
         && str_contains($verify, "'95-attachment-ingest-integrity.sql'")
         && str_contains($verify, "'96-etb-duty-function.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 11')
-        && str_contains($readiness, 'estab_schema_migrations) = 11'),
-    'Migration ledger/readiness does not require all eleven release migrations'
+        && str_contains($verify, "'97-incident-command-post-name.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 12')
+        && str_contains($readiness, 'estab_schema_migrations) = 12'),
+    'Migration ledger/readiness does not require all twelve release migrations'
 );
 $assert(
     str_contains($readiness, "require_once __DIR__ . '/bootstrap.php'")

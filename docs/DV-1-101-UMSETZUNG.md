@@ -42,7 +42,17 @@ einer ausgebildeten Einsatzkraft ersetzt.
 | S. 4-64 | Bis zur Rückkehr darf der Melder keine anderen Aufträge annehmen; in einer FüSt mit Stab gehört er zur FmZt und wird durch LdF eingesetzt. | Nur eine angenommene aktive A/W-Besetzung ist als Melder wählbar, ausschließlich LdF beauftragt. Während Übernahme, Übergabe und Rückweg sperrt eine zentrale Request-Grenze alle fremden operativen Schreibvorgänge dieses Kontos. | `tests/php/dv_operations_security.php`, `tests/integration/dv_operations.php` |
 | S. 4-64 | LdF verantwortet den Fernmeldebetrieb und unterweist, unterstützt und überwacht das Betriebspersonal. | LdF ist eine gesonderte, schichtgebundene Funktion. Sie übersetzt Rufnamen, entscheidet den Planweg, beauftragt Melder und überwacht die sichtbaren Melderzustände; A/W kann diese Entscheidungen nicht vorwegnehmen. | `tests/integration/message_workflow_http.sh`, `tests/integration/dv_operations.php` |
 | S. 4-70 bis 4-73 | Die Führungsstelle besitzt benannte Funktionen; Kombinationen S1/S4, S2/S3 sowie ETB/Si sind möglich. | Persönliche Konten und einsatz-/schichtbezogene Funktions-Hüte sind getrennt. Mehrfachzuweisung ist möglich, jede Zuweisung wird persönlich angenommen; S2, Si, S6, LdF und A/W sind vor Schichtaktivierung Pflicht. Pro Nicht-A/W-Funktion gibt es nur eine aktive Besetzung. Der Datenbanktest wechselt real S2→S3 sowie Si→ETB und prüft Funktionstabellen, Gesprächsvermerk, Gelesen-/Erledigt-Zustand, Kategorien und getrennte Rechte. | `tests/integration/dv_operations.php`, `tests/php/dv_operations_security.php`, Authentifizierungs- und Schema-Verifikation |
-| S. 4-73 | Die Arbeitsfähigkeit hängt von zweckmäßiger Organisation und raschem Informationsfluss ab. | Einsatz, aktive Schicht, gewählte Funktion, Warteschlangen und aktuelle Zuständigkeit sind sichtbar. Ohne aktiven Einsatz oder aktive Schicht wird serverseitig keine operative Eingabe angenommen. | HTTP-/Browser-Abnahme sowie `tests/integration/message_workflow_http.sh` |
+| S. 4-73 | Die Arbeitsfähigkeit hängt von zweckmäßiger Organisation und raschem Informationsfluss ab. | Führungsstellenname, Einsatz, aktive Schicht, gewählte Funktion, Warteschlangen und aktuelle Zuständigkeit sind sichtbar. Der Führungsstellenname ist die einsatzbezogene lokale Nachrichtenanschrift/-absendereinheit und von Einsatzname, Trägerorganisation sowie Einsatzleitung getrennt. Ohne aktiven Einsatz, bestätigten Führungsstellennamen oder aktive Schicht wird serverseitig keine operative Eingabe angenommen. | Schema-, Einsatzdomänen-, HTTP- und Browser-Abnahme sowie `tests/integration/message_workflow_http.sh` |
+
+Die Führungsstellenidentität wird nicht aus einer Installationseinstellung
+abgeleitet. Neue Einsätze verlangen sie in der Administration. Bei
+Bestands-Einsätzen bleibt ein vor Migration 97 unbekannter Wert ehrlich
+`NULL` und muss vor weiterer operativer Arbeit einmalig bestätigt werden.
+Nach der ersten operativen Eintragung ist ein bestätigter Wert
+durch einen dauerhaften, atomar gesetzten Sperrmarker unveränderlich. Beim
+Nachrichtenschreiben bindet die gesperrte Einsatztransaktion Eingänge an diese
+lokale Anschrift und Ausgänge an diese Absendereinheit; Browser- und
+Umgebungswerte können die Zuordnung nicht ersetzen.
 
 Die Dienstvorschrift verlangt daneben Ausbildung, fachliche Qualifikation,
 Weisungsorganisation, räumliche Arbeitsplätze, Lagekarte und physische
@@ -310,6 +320,10 @@ Nachrichtenereignisse, Dienstbetrieb, S6-Fernmeldepläne, Melderläufe und
 Betriebsereignisse. Sie werden einsatzgebunden aus einem konsistenten
 Datenbanksnapshot ausgegeben. Offene beziehungsweise noch nicht formal
 abgeschlossene Einsätze werden im Dossier deutlich als vorläufig bezeichnet.
+Führungsstellenname, Einsatzkennung und Einsatzname erscheinen getrennt.
+Fehlt der Führungsstellenname in einem historischen Einsatz, lautet die
+Kennzeichnung ausdrücklich „historisch nicht erfasst“; Organisation,
+Einsatzleitung und Umgebung werden nicht als Ersatz ausgegeben.
 
 Die maschinenlesbaren Exporte und Backups bleiben zusätzlich erforderlich:
 Eine PDF ist ein lesbarer Abzug, aber kein Ersatz für Datenbank,
@@ -351,6 +365,10 @@ sein:
     Annahme/Übergabebestätigung und Auswahl einer eigenen Besetzungs-ID sind
     möglich; fremde oder abgelaufene IDs sowie Plan-, Melder-, Nachrichten-,
     Anhangs- und Logbuchzugriffe bleiben gesperrt.
+15. Führungsstellennamen getrennt von Einsatzname, Organisation und
+    Einsatzleitung anlegen; historischen Fehlwert einmalig bestätigen,
+    weitere Eingaben vorher und Änderungen nach dem ersten operativen
+    Datensatz abweisen sowie Anzeige, Nachrichtenvordruck und Dossier prüfen.
 
 Die konkreten automatisierten Testdateien und das Freigabeprotokoll stehen in
 `FUNKTIONSNACHWEIS.md` und `TESTS-UND-MONITORING.md`.

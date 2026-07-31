@@ -218,7 +218,10 @@ $assert(
     str_contains($queueRenderer, '$returnValue ["task"] === ""')
         && str_contains($queueRenderer, 'pre_html (')
         && str_contains($queueRenderer, '"ldfliste"')
-        && str_contains($queueRenderer, 'new listen ("LDF", "")')
+        && str_contains(
+            $queueRenderer,
+            'new listen ("LDF", "", $workflowIncidentId)'
+        )
         && str_contains($queueRenderer, '$list->createlist ();'),
     'neutral LdF routing no longer renders the disposition queue'
 );

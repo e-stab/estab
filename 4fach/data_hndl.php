@@ -481,12 +481,16 @@ function estab_render_ldf_stage_conflict (): never {
 /*****************************************************************************\
 
 \*****************************************************************************/
-function check_and_save ($data){
+function check_and_save ($data, $activeCommandPostName){
   if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>check_and_save</big><br>\n";}
   include ("../4fcfg/config.inc.php");
   include ("../4fcfg/dbcfg.inc.php");
   include ("../4fcfg/e_cfg.inc.php");
   include ("../4fcfg/fkt_rolle.inc.php");
+
+  $activeCommandPostName = estab_incident_command_post_name (array (
+    "fuehrungsstellenname" => $activeCommandPostName,
+  ));
 
   $browserData = is_array ($data) ? $data : array ();
   $data = array_replace (array_fill_keys (array (
@@ -560,7 +564,7 @@ function check_and_save ($data){
 
     case "Stab_schreiben":
     case "Stab_korrigieren":
-      $data ["13_abseinheit"] = (string) $conf_4f ["anschrift"];
+      $data ["13_abseinheit"] = $activeCommandPostName;
       $data ["14_zeichen"] = $sessionCode;
       $data ["14_funktion"] = $sessionFunction;
     break;
@@ -570,7 +574,7 @@ function check_and_save ($data){
       // that Si or LdF reviewed it. All persisted local identity fields are
       // derived from the accepted function hat, never from the browser.
       $data ["01_zeichen"] = $sessionCode;
-      $data ["13_abseinheit"] = (string) $conf_4f ["anschrift"];
+      $data ["13_abseinheit"] = $activeCommandPostName;
       $data ["14_zeichen"] = $sessionCode;
       $data ["14_funktion"] = $sessionFunction;
       $data ["15_quitdatum"] = "";
@@ -607,19 +611,28 @@ function check_and_save ($data){
   $messageConnection = estab_message_connect ($conf_4f_db);
   try {
     try {
-      estab_incident_require_active ($messageConnection);
-    } catch (EstabNoActiveIncidentException) {
+      $messageIncident = estab_incident_require_active ($messageConnection);
+      estab_incident_command_post_name ($messageIncident);
+    } catch (
+      EstabNoActiveIncidentException
+      | EstabIncidentConfigurationException $exception
+    ) {
       if (ob_get_level () > 0) {
         @ob_clean ();
       }
       http_response_code (409);
       header ("Content-Type: text/html; charset=UTF-8");
       header ("Cache-Control: no-store");
+      $configurationMissing =
+        $exception instanceof EstabIncidentConfigurationException;
       echo "<!doctype html><html lang=\"de\"><meta charset=\"UTF-8\">";
-      echo "<title>Kein Einsatz aktiv</title><body>";
+      echo "<title>Eingaben gesperrt</title><body>";
       echo "<h1>Keine Eingabe möglich</h1>";
-      echo "<p>Derzeit ist kein Einsatz aktiv. Legen Sie in der Administration ".
-           "einen Einsatz an oder aktivieren Sie einen vorhandenen Einsatz.</p>";
+      echo $configurationMissing
+        ? "<p>Für den aktiven Einsatz fehlt der Name der Führungsstelle. ".
+          "Legen Sie ihn zuerst in der Einsatzverwaltung fest.</p>"
+        : "<p>Derzeit ist kein Einsatz aktiv. Legen Sie in der Administration ".
+          "einen Einsatz an oder aktivieren Sie einen vorhandenen Einsatz.</p>";
       echo "</body></html>";
       exit;
     }
@@ -817,7 +830,7 @@ function check_and_save ($data){
         $result = $vali->validatethis ();
         $data = $vali->i_data;
         // Re-assert session attributes after normalization as defense in depth.
-        $data ["13_abseinheit"] = (string) $conf_4f ["anschrift"];
+        $data ["13_abseinheit"] = $activeCommandPostName;
         $data ["14_zeichen"] = $sessionCode;
         $data ["14_funktion"] = $sessionFunction;
         if (!$result) {
@@ -847,7 +860,7 @@ function check_and_save ($data){
           "12_anhang" => $data ["12_anhang"],
           "12_inhalt" => $data ["12_inhalt"],
           "12_abfzeit" => konv_taktime_datetime ($data ["12_abfzeit"]),
-          "13_abseinheit" => (string) $conf_4f ["anschrift"],
+          "13_abseinheit" => $activeCommandPostName,
           "14_zeichen" => $sessionCode,
           "14_funktion" => $sessionFunction,
           "15_quitdatum" => null,
@@ -961,7 +974,7 @@ function check_and_save ($data){
        );
        $data ["11_gesprnotiz"] = "t" ;
        $data ["01_zeichen"] = $sessionCode;
-       $data ["13_abseinheit"] = (string) $conf_4f ["anschrift"];
+       $data ["13_abseinheit"] = $activeCommandPostName;
        $data ["14_zeichen"] = $sessionCode;
        $data ["14_funktion"] = $sessionFunction;
        $data ["15_quitdatum"] = "";

@@ -253,10 +253,18 @@ function estab_operational_write_enforce(
                 . 'Administration.'
             );
         }
+        estab_incident_command_post_name($incident);
         estab_dv_require_active_hat_for_operational_write(
             $connection,
             (int) $incident['active_einsatz_id'],
             $identity
+        );
+    } catch (EstabIncidentConfigurationException) {
+        estab_operational_write_abort(
+            423,
+            'Operative Eingaben sind gesperrt, weil für den aktiven Einsatz '
+            . 'noch kein Name der Führungsstelle festgelegt wurde. Ergänzen '
+            . 'Sie ihn zuerst in der Einsatzverwaltung.'
         );
     } catch (EstabDvPermissionException $exception) {
         estab_operational_write_abort(423, $exception->getMessage());

@@ -323,14 +323,47 @@ $assert(
     'tracking lacks its telecommunications area gate'
 );
 $assert(
-    str_contains($sources['forms'], 'estab_read_filter_generated_forms')
+    str_contains(
+        $sources['messages'],
+        'function estab_message_fetch_for_incident_by_id('
+    )
+        && substr_count(
+            $sources['read-boundary'],
+            'estab_message_fetch_for_incident_by_id('
+        ) >= 2
+        && str_contains(
+            $sources['read-boundary'],
+            "scope['incident']['active_einsatz_id']"
+        )
+        && str_contains(
+            $sources['read-boundary'],
+            'estab_attachment_find_for_incident('
+        ),
+    'object reads re-resolve ambient active incident after authorization'
+);
+$assert(
+    str_contains(
+        $sources['forms'],
+        'estab_read_filter_generated_forms_for_incident'
+    )
+        && str_contains(
+            $sources['forms'],
+            'estab_generated_form_list_for_incident'
+        )
         && str_contains($sources['download'], 'estab_read_message_allowed'),
     'generated forms are not authorized through their message object'
 );
 $assert(
     str_contains($sources['download'], 'estab_read_attachment(')
         && str_contains($sources['preview'], 'estab_read_attachment (')
-        && str_contains($sources['attachments'], 'estab_read_filter_attachments')
+        && str_contains(
+            $sources['attachments'],
+            'estab_read_filter_attachments_for_incident'
+        )
+        && str_contains(
+            $sources['attachments'],
+            'estab_attachment_list_for_incident'
+        )
         && str_contains($sources['attachments'], 'estab_read_attachment ('),
     'attachment list/download/preview/selection do not share one policy'
 );

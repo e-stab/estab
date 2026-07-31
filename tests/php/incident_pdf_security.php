@@ -46,6 +46,7 @@ try {
         'ende' => null,
         'ort' => 'Münster',
         'organisation' => 'Kreis',
+        'fuehrungsstellenname' => 'FueSt-Sued-42',
         'einsatzleitung' => 'Max Beispiel',
         'beschreibung' => 'Vollständiger Funktionsnachweis',
         'estab_status' => 'open',
@@ -429,6 +430,7 @@ try {
         'Betriebsereignis Sequenz',
         'Aufbewahrung bis',
         'Legal Hold',
+        'FueSt-Sued-42',
     ] as $marker) {
         $assert(
             str_contains($document, $marker),
@@ -542,8 +544,36 @@ try {
     $assert(
         str_contains($closedDocument, 'FORMAL ABGESCHLOSSEN')
             && str_contains($closedDocument, '2027-07-30 18:00:00.000000')
+            && str_contains($closedDocument, 'FueSt-Sued-42')
             && str_contains($closedDocument, 'AKTIV'),
-        'Closed cover omits formal status, retention, or legal hold'
+        'Closed cover omits command post, formal status, retention, or legal hold'
+    );
+
+    $historicalIncident = array_replace($incident, [
+        'fuehrungsstellenname' => null,
+    ]);
+    $historicalPdf = new EstabIncidentPdf($historicalIncident, 1024);
+    $historicalPdf->SetCompression(false);
+    $historicalPdf->addCover(
+        $historicalIncident,
+        [],
+        [],
+        '30.07.2026 18:06:00',
+        'estab-admin'
+    );
+    $historicalDocument = $historicalPdf->Output('', 'S');
+    $assert(
+        str_contains(
+            $historicalDocument,
+            estab_incident_pdf_text(
+                'Führungsstelle historisch nicht erfasst'
+            )
+        )
+            && str_contains(
+                $historicalDocument,
+                'historisch nicht erfasst'
+            ),
+        'historical PDF silently invents or omits a command-post identity'
     );
 
     $assertThrows(

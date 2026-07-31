@@ -345,7 +345,7 @@ $assert(
 );
 $assert(
     preg_match(
-        '/function estab_attachment_find\s*\(.*?SELECT .*?'
+        '/function estab_attachment_find_for_incident\s*\(.*?SELECT .*?'
             . '`integrity_required`.*?`ingest_sha256`.*?`ingest_size`.*?'
             . '`integrity_captured_at`.*?WHERE `filename` = \?/s',
         $attachmentSource
@@ -404,6 +404,46 @@ $assert(
 );
 $assert(str_contains($attachmentSource, 'begin_transaction()'), 'reservation starts a transaction');
 $assert(substr_count($attachmentSource, 'FOR UPDATE') >= 2, 'reservation candidates are locked');
+$attachmentFindStart = strpos(
+    $attachmentSource,
+    'function estab_attachment_find('
+);
+$attachmentFindEnd = strpos(
+    $attachmentSource,
+    '/** Prepared audit insert',
+    $attachmentFindStart === false ? 0 : $attachmentFindStart
+);
+$attachmentFindWrapper = (
+    $attachmentFindStart !== false
+    && $attachmentFindEnd !== false
+    && $attachmentFindEnd > $attachmentFindStart
+) ? substr(
+    $attachmentSource,
+    $attachmentFindStart,
+    $attachmentFindEnd - $attachmentFindStart
+) : '';
+$assert(
+    str_contains(
+        $attachmentSource,
+        ". (\$forUpdate ? ' FOR UPDATE' : '')"
+    )
+        && $attachmentFindWrapper !== ''
+        && strpos(
+            $attachmentFindWrapper,
+            'estab_attachment_validate_reservation_name($filename)'
+        ) < strpos(
+            $attachmentFindWrapper,
+            'estab_incident_require_active($connection, true)'
+        ),
+    'attachment compatibility lookup does not validate first or honor its row-lock flag'
+);
+$assert(
+    substr_count(
+        $attachmentSource,
+        'estab_incident_lock_command_post_for_write($connection, $incident);'
+    ) >= 2,
+    'reservation or upload accepts an active incident without a command-post name'
+);
 $assert(
     str_contains($attachmentSource, 'WHERE `filename` = ? AND `status` = 8 AND `id` = ?'),
     'claim requires exact active reservation and owner'

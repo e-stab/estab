@@ -29,8 +29,10 @@ class tbb_liste {
 
   var $tbb_titel_tbl     = false ;
   var $tbb_titel_gesetzt = false;
+  var $tbb_einsatz_aktiv = false;
   var $tbb_art ;
   var $tbb_ort ;
+  var $tbb_fuehrungsstelle ;
 
   var $tbb_funktion ;
   var $tbb_kuerzel ;
@@ -166,15 +168,25 @@ if (debug == true){ echo "tbb_tableexist==>"; var_dump($this->tbb_titel_tbl); ec
     include ("../4fcfg/e_cfg.inc.php");
     $incident = estab_logbook_active_incident ($conf_4f_db);
     if (is_array ($incident)){
+      $this->tbb_einsatz_aktiv = true;
       $this->tbb_art =
         (string) ($incident ["kennung"] ?? "")." · ".
         (string) ($incident ["name"] ?? "");
       $this->tbb_ort = (string) ($incident ["ort"] ?? "") ;
-      $this->tbb_titel_gesetzt = true;
+      try {
+        $this->tbb_fuehrungsstelle =
+          estab_incident_command_post_name ($incident);
+        $this->tbb_titel_gesetzt = true;
+      } catch (EstabIncidentConfigurationException) {
+        $this->tbb_fuehrungsstelle = "";
+        $this->tbb_titel_gesetzt = false;
+      }
       $this->tbb_titel_tbl = true;
     } else {
+      $this->tbb_einsatz_aktiv = false;
       $this->tbb_art = "";
       $this->tbb_ort = "";
+      $this->tbb_fuehrungsstelle = "";
       $this->tbb_titel_gesetzt = false;
       $this->tbb_titel_tbl = true;
     }
@@ -351,6 +363,11 @@ var $task ;
     echo "aria-label=\"Aktiver Einsatz\">\n<div>\n";
     echo "<span>Aktiver Einsatz</span>\n";
     echo "<strong>".estab_auth_html ($this->tbb_art)."</strong>\n";
+    echo "<span>Führungsstelle: ".estab_auth_html (
+      $this->tbb_fuehrungsstelle !== ""
+        ? $this->tbb_fuehrungsstelle
+        : "nicht festgelegt"
+    )."</span>\n";
     echo "<span>Ort: ".estab_auth_html (
       $this->tbb_ort !== "" ? $this->tbb_ort : "nicht angegeben"
     )."</span>\n";
@@ -513,7 +530,8 @@ try {
   error_log ("TBB initialization failed: ".$exception->getMessage ());
   estab_logbook_abort (503, "Das technische Betriebsbuch ist vorübergehend nicht verfügbar.");
 }
-$tbbobj->tbb_authorized = $berechtigt;
+$tbbobj->tbb_authorized =
+  $berechtigt && $tbbobj->tbb_titel_gesetzt;
 $tbbobj->tbb_funktion = $identity ["funktion"];
 $tbbobj->tbb_kuerzel = $identity ["kuerzel"];
 $tbbobj->tbb_benutzer = $identity ["benutzer"];
@@ -535,6 +553,14 @@ if ($requestMethod === "POST") {
   try {
     if ($action === "save_entry") {
       if (!$tbbobj->tbb_titel_gesetzt) {
+        if ($tbbobj->tbb_einsatz_aktiv) {
+          estab_logbook_abort (
+            409,
+            "Der aktive Einsatz ist unvollständig. TBB-Eingaben sind ".
+            "gesperrt; ergänzen Sie zuerst den Namen der Führungsstelle in ".
+            "der Administration."
+          );
+        }
         estab_logbook_abort (
           409,
           "Kein Einsatz ist aktiv. TBB-Eingaben sind gesperrt; aktivieren Sie ".
@@ -549,6 +575,14 @@ if ($requestMethod === "POST") {
     } else {
       estab_logbook_abort (400, "Unbekannte TBB-Aktion.");
     }
+  } catch (EstabIncidentConfigurationException $exception) {
+    error_log ("TBB write blocked by incident configuration: ".
+      $exception->getMessage ());
+    estab_logbook_abort (
+      409,
+      "Der aktive Einsatz ist unvollständig. TBB-Eingaben sind gesperrt; ".
+      "ergänzen Sie zuerst den Namen der Führungsstelle in der Administration."
+    );
   } catch (EstabNoActiveIncidentException $exception) {
     error_log ("TBB write blocked: ".$exception->getMessage ());
     estab_logbook_abort (
@@ -569,11 +603,20 @@ $tbbobj->tbb_ueberschrift ();
 
 if (!$tbbobj->tbb_titel_gesetzt) {
   echo "<section class=\"estab-tool-status estab-tool-status-danger\" ";
-  echo "role=\"alert\" data-estab-no-active-incident><div>";
-  echo "<strong>Kein Einsatz aktiv – TBB-Eingaben sind gesperrt.</strong>";
-  echo "<span>";
-  echo "Legen Sie in der Administration einen Einsatz an oder aktivieren Sie ";
-  echo "einen vorhandenen Einsatz.</span></div></section>\n";
+  echo "role=\"alert\" ";
+  if ($tbbobj->tbb_einsatz_aktiv) {
+    echo "data-estab-incident-incomplete><div>";
+    echo "<strong>Aktiver Einsatz unvollständig – TBB-Eingaben sind ";
+    echo "gesperrt.</strong>";
+    echo "<span>Ergänzen Sie in der Administration zuerst den Namen der ";
+    echo "Führungsstelle.</span></div></section>\n";
+  } else {
+    echo "data-estab-no-active-incident><div>";
+    echo "<strong>Kein Einsatz aktiv – TBB-Eingaben sind gesperrt.</strong>";
+    echo "<span>";
+    echo "Legen Sie in der Administration einen Einsatz an oder aktivieren Sie ";
+    echo "einen vorhandenen Einsatz.</span></div></section>\n";
+  }
 } else {
   $tbbobj->tbb_einsatzdaten ();
   $entryFormRequested = isset ($_GET ["tbb_eintrag_x"])
@@ -582,9 +625,9 @@ if (!$tbbobj->tbb_titel_gesetzt) {
       && is_string ($_GET ["tbb_menue"])
       && $_GET ["tbb_menue"] === "eintrag"
     );
-  if ($berechtigt && $entryFormRequested) {
+  if ($tbbobj->tbb_authorized && $entryFormRequested) {
     $tbbobj->tbb_eintragsmenue ("");
-  } elseif ($berechtigt) {
+  } elseif ($tbbobj->tbb_authorized) {
     $tbbobj->tbb_menue ();
   }
   $tbbobj->printlist ($tbbobj->tbb_getdate ());

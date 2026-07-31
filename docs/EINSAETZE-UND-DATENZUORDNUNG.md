@@ -14,7 +14,8 @@ Datenbankfolge steht in den Migrationen
 `55-global-incidents-finish.sql`, `80-dv-evidence-retention.sql`,
 `94-dv-organisational-controls.sql`,
 `95-attachment-ingest-integrity.sql` und
-`96-etb-duty-function.sql`. Die technischen
+`96-etb-duty-function.sql` sowie
+`97-incident-command-post-name.sql`. Die technischen
 Administrationsoberflächen sind `4fadm/incidents.php` und
 `4fadm/fuehrungsstelle.php`.
 
@@ -22,26 +23,29 @@ Die verbindlichen Regeln sind:
 
 1. Eine dauerhaft eindeutige Kennung identifiziert einen Einsatz in Anzeige,
    Export und Archiv.
-2. Der Singleton `nv_einsatz_status` verweist auf höchstens einen aktiven
+2. Jeder neue Einsatz besitzt einen eigenen Führungsstellennamen. Er ist die
+   lokale Anschrift/Absendereinheit für Nachrichten und weder Einsatzname,
+   Trägerorganisation noch Einsatzleitung.
+3. Der Singleton `nv_einsatz_status` verweist auf höchstens einen aktiven
    Einsatz.
-3. Aktivieren und Deaktivieren sperren den Singleton mit `SELECT ... FOR
+4. Aktivieren und Deaktivieren sperren den Singleton mit `SELECT ... FOR
    UPDATE`, prüfen die vom Browser gesehene Revision und schreiben Status plus
    Audit in einer Transaktion.
-4. Ein vollständiger operativer Schreibvorgang verwendet
+5. Ein vollständiger operativer Schreibvorgang verwendet
    `estab_incident_with_active_write()`. Dadurch kann der aktive Einsatz nicht
    zwischen Hauptdatensatz, Nebenstatus und Audit wechseln.
-5. Datenbanktrigger bilden die letzte Sperre für noch nicht umgestellte
+6. Datenbanktrigger bilden die letzte Sperre für noch nicht umgestellte
    Legacy-Schreiber: INSERT ohne aktiven Einsatz scheitert; UPDATE und DELETE
    sind nur für den unverändert zugeordneten, derzeit aktiven Einsatz
    zulässig. Ein Einsatz kann nie umgehängt werden.
-6. Bestandsdaten werden ausschließlich während der Migration dem
+7. Bestandsdaten werden ausschließlich während der Migration dem
    geschlossenen, reservierten Einsatz `LEGACY-IMPORT` zugeordnet. Sie werden
    nie still dem ersten später aktivierten Realeinsatz zugeschlagen.
-7. Einsätze werden nicht gelöscht. Damit bleiben Referenzen, Exporte und
+8. Einsätze werden nicht gelöscht. Damit bleiben Referenzen, Exporte und
    Auditnachweise dauerhaft eindeutig.
-8. Operative Eingaben benötigen zusätzlich eine aktive Dienstschicht und eine
+9. Operative Eingaben benötigen zusätzlich eine aktive Dienstschicht und eine
    vom betreffenden Konto angenommene, fachlich passende Dienstfunktion.
-9. „Nicht aktiv“ und „formal abgeschlossen“ sind getrennte Zustände. Ein
+10. „Nicht aktiv“ und „formal abgeschlossen“ sind getrennte Zustände. Ein
    formaler Abschluss ist nur nach einer vollständigen Preflight-Prüfung
    möglich und sperrt sämtliche weiteren operativen Änderungen.
 
@@ -49,14 +53,47 @@ Die verbindlichen Regeln sind:
 
 | Tabelle | Aufgabe |
 | --- | --- |
-| `nv_einsaetze` | Kennung, Name, Zeitraum, Ort, Organisation, Einsatzleitung, Beschreibung, formaler Abschluss, Mindestaufbewahrung, Legal Hold und erweiterbares JSON-Metadatenobjekt |
+| `nv_einsaetze` | Kennung, Einsatzname, Zeitraum, Ort, Organisation, eigener Führungsstellenname, Einsatzleitung, Beschreibung, formaler Abschluss, Mindestaufbewahrung, Legal Hold und erweiterbares JSON-Metadatenobjekt |
 | `nv_einsatz_status` | Genau eine Singleton-Zeile mit aktiver Einsatz-ID, monotoner Revision, Zeitpunkt und Akteur |
-| `nv_einsatz_ereignisse` | Unveränderliches Audit für Anlegen, Aktivieren und Deaktivieren |
+| `nv_einsatz_ereignisse` | Unveränderliches Audit für Anlegen, Führungsstellenänderungen, Aktivieren und Deaktivieren |
 | `nv_nachrichtenereignis_kopf`, `nv_nachrichtenereignisse` | Pro Nachricht verketteter, unveränderlicher Zustands- und Terminalnachweis |
 | `nv_dienstschichten`, `nv_dienstbesetzungen`, `nv_dienstuebergaben` | Einsatzbezogener Dienstbetrieb mit persönlicher Annahme, Mehrfachfunktion und Ablösung |
 | `nv_fernmeldeplaene`, `nv_fernmeldeplan_eintraege` | Versionierte, nach Freigabe unveränderliche S6-Kommunikationsplanung |
 | `nv_melderauftraege` | Vollständige Melderkette vom LdF-Auftrag bis zur Rückmeldung |
 | `nv_betriebsereignis_kopf`, `nv_betriebsereignisse` | Einsatzbezogene Hashkette für Schicht-, Besetzungs-, Plan- und Melderereignisse |
+
+### Einsatzname, Organisation und Führungsstelle
+
+Die Stammdaten beantworten unterschiedliche Fragen und dürfen nicht
+gegenseitig als Fallback verwendet werden:
+
+| Feld | Bedeutung |
+| --- | --- |
+| Einsatzname | Bezeichnung des Ereignisses oder Auftrags |
+| Organisation | Trägerorganisation des Einsatzes |
+| Führungsstellenname | lokale Anschrift beziehungsweise Absendereinheit der digitalen Nachrichtenvordrucke |
+| Einsatzleitung | leitende Person oder organisatorische Leitungsangabe |
+
+Neue Einsätze verlangen den Führungsstellennamen bereits beim Anlegen.
+Migration 97 lässt bestehende Werte bewusst `NULL`. Ein offener historischer
+Einsatz muss vor Aktivierung oder weiterer operativer Eingabe einmalig in der
+Administration mit dem tatsächlichen Namen bestätigt werden; diese
+Erstbestätigung ist auch bei bereits vorhandenen Fachdaten erlaubt. Danach
+wird jede Änderung zusammen mit Alt-/Neuwert und Akteur auditiert. Ein schon
+belegter Name kann nur bis zum ersten Datensatz in Nachrichten, Anhängen,
+ETB, TBB, Dienstschichten, Fernmeldeplänen oder Melderaufträgen korrigiert
+werden und ist anschließend über `fuehrungsstellenname_gesperrt` dauerhaft
+unveränderlich. Die erste Fachänderung setzt den Marker in derselben
+Transaktion; auch das spätere Löschen der Fachzeile hebt ihn nicht auf.
+Formal abgeschlossene Einsätze werden nicht nachträglich verändert.
+
+Statusleisten, Führungsstellenansicht, ETB/TBB, Nachweisung, Exportauswahl und
+PDF-Dossier zeigen den Führungsstellennamen getrennt von Kennung und
+Einsatzname. Bei einem aktiven historischen `NULL`-Wert melden Statusleiste
+und Administration „Name fehlt“ beziehungsweise „Einsatz unvollständig“. Das
+historische PDF sagt „historisch nicht erfasst“, während der Tabellenexport
+den eindeutigen SQL-NULL-Marker bewahrt. Eine Umgebungseinstellung oder ein
+Browserfeld ist niemals Quelle dieses Stammdatums.
 
 Folgende Tabellen erhalten eine indizierte, fremdschlüsselgesicherte
 `einsatz_id`:
@@ -117,7 +154,8 @@ estab_incident_list(mysqli $db): array;
 
 Ein Status-/Active-Array enthält mindestens `active_einsatz_id`, `revision`,
 `kennung`, `name`, `beginn`, `ende`, `ort`, `organisation`,
-`einsatzleitung`, `beschreibung` und `metadaten`.
+`fuehrungsstellenname`, `fuehrungsstellenname_gesperrt`, `einsatzleitung`,
+`beschreibung` und `metadaten`.
 
 Operative Writer:
 
@@ -151,6 +189,14 @@ estab_incident_create(
     string $actor,
     bool $activate,
     ?int $expectedRevision = null
+): array;
+
+estab_incident_update_command_post_name(
+    mysqli $db,
+    int $id,
+    mixed $value,
+    mixed $expectedValue,
+    string $actor
 ): array;
 
 estab_incident_activate(
@@ -195,7 +241,7 @@ Planentwürfe und ungültige Nachrichten- oder Betriebsereignisketten. Beim
 Upgrade vorhandene, erreichbare Anhänge blockieren nicht allein aufgrund
 fehlender rückwirkender Beweiskraft; die Oberfläche zählt sie ausdrücklich als
 „Integrität beim Eingang nicht belegbar“.
-Abschluss werden Zeitpunkt, Akteur, Vermerk und ein frühestes
+Beim Abschluss werden Zeitpunkt, Akteur, Vermerk und ein frühestes
 Aufbewahrungsende von einem Jahr gespeichert. Ein Legal Hold verlängert diese
 Grenze fachlich; er verkürzt sie nie. eStab führt keinen automatischen
 Fachdaten-Purge aus.
@@ -206,10 +252,11 @@ Das Schema ist die letzte, aber nicht die einzige Schutzschicht. Die
 produktiven Leser und Schreiber verwenden zusätzlich die zentrale
 Einsatz-API:
 
-- Die gemeinsame Status-/Sitzungsleiste zeigt Kennung und Name des aktiven
-  Einsatzes. Ohne aktiven Einsatz erscheint ein roter Hinweis. Markierte
-  operative Formulare werden im Browser deaktiviert; jeder POST-Controller
-  prüft den Zustand zusätzlich serverseitig.
+- Die gemeinsame Status-/Sitzungsleiste zeigt Führungsstellenname, Kennung und
+  Name des aktiven Einsatzes. Ohne aktiven Einsatz oder bei einem historischen
+  Einsatz ohne bestätigten Führungsstellennamen erscheint ein roter Hinweis.
+  Markierte operative Formulare werden im Browser deaktiviert; jeder
+  POST-Controller prüft den Zustand zusätzlich serverseitig.
 - Die Führungsstellenansicht zeigt geplante beziehungsweise aktive Schicht,
   persönliche Funktionszuweisungen und die aktuell gewählte Arbeitsfunktion.
   Ohne aktive Schicht oder passende angenommene Besetzung bleibt jeder
@@ -217,11 +264,14 @@ Einsatz-API:
 - Nachrichten, Sperren, Sichtung, Transport, Gelesen-/Erledigt-Zustände und
   Kategoriezuordnungen prüfen die aktive Nachricht innerhalb einer
   `estab_incident_with_active_write()`-Transaktion. Listen und Zähler lesen nur
-  den aktiven Einsatz.
-- ETB und TBB verwenden die globalen Einsatzstammdaten als Kopf, schreiben
-  unter dem gesperrten Singleton und filtern ihre chronologischen Listen nach
-  Einsatz. Die alten lokalen Einsatz-anlegen-Formulare sind nicht mehr
-  schreibend.
+  den aktiven Einsatz. Beim Schreiben bindet dieselbe gesperrte
+  Einsatztransaktion die lokale Anschrift eines Eingangs beziehungsweise die
+  Absendereinheit eines Ausgangs an den Führungsstellennamen; ein Formularwert
+  oder eine Umgebungsvorgabe kann ihn nicht ersetzen.
+- ETB und TBB verwenden die globalen Einsatzstammdaten einschließlich
+  Führungsstellennamen als Kopf, schreiben unter dem gesperrten Singleton und
+  filtern ihre chronologischen Listen nach Einsatz. Die alten lokalen
+  Einsatz-anlegen-Formulare sind nicht mehr schreibend.
 - Nachrichtenzähler-Reparatur und PDF-Vordruckreset benötigen einen aktiven
   Einsatz und ändern ausschließlich dessen Nachrichten. Login, Logout,
   Benutzer- und Konfigurationsverwaltung bleiben bewusst globale Vorgänge.
@@ -305,7 +355,7 @@ gespeicherten Kopiekennzeichen im Inhaltsbereich ausgeschrieben.
 
 ## Migrations- und Testnachweis
 
-Die checksum-gebundene Folge 45/50/55/80/94/95/96 ist additiv. Ein harter
+Die checksum-gebundene Folge 45/50/55/80/94/95/96/97 ist additiv. Ein harter
 Abbruch bleibt bis zur kontrollierten Prüfung des Migrationsledgers
 fail-closed; anschließend werden ausschließlich exakt erkannte,
 migrationseigene Zwischenstände fortgesetzt. Die ersten drei Migrationen:
@@ -336,7 +386,10 @@ Terminal-Snapshot bleibt ausdrücklich als „nicht nachträglich belegbar“
 sichtbar; seine vorhandene Ereigniskette wird nicht erfunden oder umgedeutet.
 Migration 95 ergänzt den nicht rückwirkenden Anhang-Eingangsnachweis.
 Migration 96 führt die getrennte ETB-Dienstfunktion und ihre eng begrenzte
-`EINSATZTAGEBUCH`-Fähigkeit ein.
+`EINSATZTAGEBUCH`-Fähigkeit ein. Migration 97 ergänzt den nullable
+Führungsstellennamen sowie dessen nicht-nullbaren dauerhaften Sperrmarker,
+ohne aus anderen Stammdaten oder einer Umgebungsvorgabe historische Werte zu
+erfinden.
 
 Migration 50 bleibt bytegenau auf der bereits im Ledger verwendeten
 Prüfsumme. Vor- oder Nachbedingungen werden ausschließlich in neuen

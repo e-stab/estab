@@ -102,6 +102,64 @@ function estab_list_page_window ($resultCount) {
   $_SESSION["filter_rescount"] = $resultCount;
   return array ($start, $pageSize);
 }
+
+/**
+ * Read the combined transmission log for one already captured incident.
+ *
+ * The incident ID is deliberately explicit. A concurrent activation after
+ * the caller captured the heading may therefore make the response stale, but
+ * it can never mix the old heading with rows from the newly active incident.
+ *
+ * @return list<array<string,mixed>>
+ */
+function estab_list_combined_tracking_rows (
+  mysqli $connection,
+  string $messageTable,
+  int $incidentId
+): array {
+  $messageTable = estab_message_table ($messageTable);
+  $incidentId = estab_message_positive_id ($incidentId);
+  return estab_message_query_rows (
+    $connection,
+    "SELECT m.`00_lfd`,m.`01_medium`,m.`01_datum`,m.`01_zeichen`,"
+      ."m.`02_zeit`,m.`03_datum`,m.`06_befweg`,m.`06_befwegausw`,"
+      ."m.`09_vorrangstufe`,m.`04_richtung`,m.`04_nummer`,"
+      ."m.`10_anschrift`,m.`12_inhalt`,m.`13_abseinheit`,"
+      ."m.`14_zeichen`,m.`x01_abschluss`"
+      ." FROM ".$messageTable." AS m"
+      ." WHERE m.`einsatz_id` = ?"
+      ." ORDER BY m.`04_nummer` ASC",
+    array ($incidentId)
+  );
+}
+
+/**
+ * Read the heading and rows for an incident already authorised by the caller.
+ *
+ * @return array{
+ *   incident:array<string,mixed>,
+ *   rows:list<array<string,mixed>>
+ * }
+ */
+function estab_list_combined_tracking_data (
+  mysqli $connection,
+  int $incidentId,
+  string $messageTable
+): array {
+  $incidentId = estab_message_positive_id ($incidentId);
+  $incident = estab_incident_find ($connection, $incidentId);
+  if (!is_array ($incident)) {
+    throw new RuntimeException ("Einsatz für Nachweisung nicht gefunden");
+  }
+  return array (
+    "incident" => $incident,
+    "rows" => estab_list_combined_tracking_rows (
+      $connection,
+      $messageTable,
+      $incidentId
+    ),
+  );
+}
 /*****************************************************************************\
    Datei: liste.php
 
@@ -132,12 +190,13 @@ class Listen extends kategorien {
   var $flt_start_msg;
   var $flt_gelesen ;
   var $flt_erledigt;
+  var $incidentId;
 
 
   // Listengestaltung
 
-  function __construct ($welche, $user){
-    $this->listen ($welche, $user);
+  function __construct ($welche, $user, $incidentId = null){
+    $this->listen ($welche, $user, $incidentId);
   }
 
 /******************************************************************************\
@@ -160,14 +219,26 @@ class Listen extends kategorien {
 /******************************************************************************\
 
 \******************************************************************************/
-  function listen ($welche, $user){
+  function listen ($welche, $user, $incidentId = null){
     $this->listenart = $welche;
     $this->benutzer  = $user;
+    $this->incidentId = $incidentId === null
+      ? null
+      : estab_message_positive_id ($incidentId);
     if (isset($_SESSION["filter_darstellung"])) { $this->flt_status   = $_SESSION["filter_darstellung"]; } else { $this->flt_status = NULL; } ;
     if (isset($_SESSION["filter_anzahl"])) { $this->flt_msg_pro_seite = $_SESSION["filter_anzahl"] ;     } else { $this->flt_msg_pro_seite = NULL; } ;
     if (isset($_SESSION["startmit"])) { $this->flt_start_msg          = $_SESSION["startmit"];           } else { $this->flt_start_msg = NULL; } ;
     if (isset($_SESSION["gelesene"])) { $this->flt_gelesen            = $_SESSION["gelesene"] ;          } else { $this->flt_gelesen  = NULL; } ;
     if (isset($_SESSION["erledigte"])) { $this->flt_erledigt          = $_SESSION["erledigte"] ;         } else { $this->flt_erledigt = NULL; } ;
+  }
+
+  function required_incident_id (){
+    if ($this->incidentId === null) {
+      throw new RuntimeException (
+        "Für diese Liste wurde kein autorisierter Einsatz übergeben"
+      );
+    }
+    return estab_message_positive_id ($this->incidentId);
   }
 
 /******************************************************************************\
@@ -777,13 +848,12 @@ class Listen extends kategorien {
     if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>".$this->listenart."<br>";  }
     switch ($this->listenart){
       case "LDF":
-        $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
-                             $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
+        $incidentId = $this->required_incident_id ();
         $query = "SELECT `00_lfd`,`04_richtung`,`04_nummer`,`05_gegenstelle`,
                          `09_vorrangstufe`,`10_anschrift`,`12_abfzeit`,
                          `12_inhalt`,`13_abseinheit`
                     FROM `".$conf_4f_tbl ["nachrichten"]."`
-                   WHERE `einsatz_id` = (SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1)
+                   WHERE `einsatz_id` = ?
                      AND `x00_status` = 1
                      AND `02_zeit` IS NULL AND `02_zeichen` = \"\"
                      AND `03_datum` IS NULL AND `03_zeichen` = \"\"
@@ -800,7 +870,17 @@ class Listen extends kategorien {
                 ORDER BY ".
                 estab_message_priority_order_sql ("`09_vorrangstufe`").
                 " DESC, `12_abfzeit`;";
-        $result = $dbaccess->query_table ($query);
+        $messageConnection = estab_message_connect ($conf_4f_db);
+        try {
+          $result = estab_message_query_rows (
+            $messageConnection,
+            $query,
+            array ($incidentId)
+          );
+        } finally {
+          estab_auth_close ($messageConnection);
+        }
+        $result = $result === array () ? "" : $result;
         echo "<p align=\"center\"><big><big><b>LdF: Rufnamen und Beförderungswege</b></big></big></p>";
         if ($result != "") {
           echo "<table style=\"text-align:center;background-color:#fff\" border=\"1\" cellpadding=\"8\" cellspacing=\"1\"><tbody>";
@@ -841,11 +921,10 @@ class Listen extends kategorien {
       break;
 
       case "FMA":           /***** F M A ****/
-        if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### - fkt:createlist - switch(listenart) -- case (FMA)<br>";} 	  
-        $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
-                             $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
+        if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### - fkt:createlist - switch(listenart) -- case (FMA)<br>";}
+        $incidentId = $this->required_incident_id ();
         $query = "SELECT `00_lfd`,`07_durchspruch`, `08_befhinweis`, `08_befhinwausw`,`09_vorrangstufe`, `10_anschrift`, `12_abfzeit`, `12_inhalt` FROM `".$conf_4f_tbl ["nachrichten"]."`
-                  WHERE `einsatz_id` = (SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1)
+                  WHERE `einsatz_id` = ?
                   AND `x00_status` = 2
                   AND `02_zeit` IS NOT NULL AND `02_zeichen` != \"\"
                   AND `06_befwegausw` != \"\"
@@ -854,7 +933,17 @@ class Listen extends kategorien {
                   AND ((`04_richtung` = \"A\") AND (`03_datum` IS NULL) AND (`03_zeichen` = \"\")) order by ".
                   estab_message_priority_order_sql ("`09_vorrangstufe`").
                   " DESC, `12_abfzeit` ; ";
-        $result = $dbaccess->query_table ($query);
+        $messageConnection = estab_message_connect ($conf_4f_db);
+        try {
+          $result = estab_message_query_rows (
+            $messageConnection,
+            $query,
+            array ($incidentId)
+          );
+        } finally {
+          estab_auth_close ($messageConnection);
+        }
+        $result = $result === array () ? "" : $result;
         if ($result != "" ){
           echo "<table style=\"text-align: center; background-color: rgb(255, 255, 255); \" border=\"1\" cellpadding=\"10\" cellspacing=\"1\">\n<tbody>\n";
           echo "<tr style=\"background-color: rgb(0,0,0); color:#FFFFFF; font-weight:bold;\">\n";
@@ -1089,8 +1178,7 @@ class Listen extends kategorien {
 
       case "Stab_sichten":   /*********** S t a b   s i c h t e n ************/
 			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>fkt:createlist - switch(listenart) -- case (Stab_sichten) </b><br>";}
-			$dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
-                             $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
+			$incidentId = $this->required_incident_id ();
 
 			/*
 			 * Status 4 ist die verbindliche Sichter-Warteschlange:
@@ -1098,7 +1186,7 @@ class Listen extends kategorien {
 			 * Ausgehende Vordrucke dürfen nicht mehr per Konfiguration an
 			 * dieser formalen Prüfung vorbeigeführt werden.
 			 */
-			$WHERE_inout = "WHERE `einsatz_id` = (SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1) AND `x00_status` = 4 AND ( ( `15_quitdatum` IS NULL ) AND ( `15_quitzeichen` = \"\" ) ) AND ( `04_richtung` IN (\"E\", \"A\") )";
+			$WHERE_inout = "WHERE `einsatz_id` = ? AND `x00_status` = 4 AND ( ( `15_quitdatum` IS NULL ) AND ( `15_quitzeichen` = \"\" ) ) AND ( `04_richtung` IN (\"E\", \"A\") )";
 
 //order by `09_vorrangstufe` DESC, `12_abfzeit`; 
 
@@ -1114,7 +1202,17 @@ class Listen extends kategorien {
                        estab_message_priority_order_sql ("`09_vorrangstufe`").
                        " DESC, `12_abfzeit`; ";
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>Stab_sichten:".$query." </b><br>";}
-        $result = $dbaccess->query_table ($query);
+        $messageConnection = estab_message_connect ($conf_4f_db);
+        try {
+          $result = estab_message_query_rows (
+            $messageConnection,
+            $query,
+            array ($incidentId)
+          );
+        } finally {
+          estab_auth_close ($messageConnection);
+        }
+        $result = $result === array () ? "" : $result;
         if ($result != "" ){
           echo "<table style=\"text-align: center; background-color: rgb(255, 255, 255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
           echo "<tr style=\"background-color: rgb(240,240,200); color:#000000; font-weight:bold;\">\n";
@@ -1450,14 +1548,23 @@ include ("../4fcfg/fkt_rolle.inc.php");
 
       case "FmNwE":  // *****  F M N W E ingang ******
 	    if (debug) {echo "<b>file:liste.php:714 fkt:createlist - switch(listenart) -- case (FmNwE) ></b><br>";}
-        $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
-                             $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
+        $incidentId = $this->required_incident_id ();
         $query = "SELECT `00_lfd`,`01_medium`,`09_vorrangstufe`,`04_richtung`, `04_nummer`, `10_anschrift`,
                          `12_abfzeit`, `12_inhalt`, `13_abseinheit`, `x01_abschluss`
                   FROM `".$conf_4f_tbl ["nachrichten"]."`
-                  WHERE `einsatz_id` = (SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1)
+                  WHERE `einsatz_id` = ?
                   AND 04_richtung = \"E\" order by 04_nummer ASC ; ";
-        $result = $dbaccess->query_table ($query);
+        $messageConnection = estab_message_connect ($conf_4f_db);
+        try {
+          $result = estab_message_query_rows (
+            $messageConnection,
+            $query,
+            array ($incidentId)
+          );
+        } finally {
+          estab_auth_close ($messageConnection);
+        }
+        $result = $result === array () ? "" : $result;
         echo "<p align=\"center\"><big><big><big><b>Nachweisung Eingang</b></big></big></big></p>";
         if ( $result != "" ){
           echo "<table style=\"text-align: center; background-color: rgb(255,255,255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
@@ -1520,15 +1627,24 @@ include ("../4fcfg/fkt_rolle.inc.php");
 
       case "FmNwA":  // *****  F M N W A usgang ******
         if (debug) {echo "<b>file:liste.php:714 fkt:createlist - switch(listenart) -- case (FmNwA) ></b><br>";}
-        $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
-                             $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
+        $incidentId = $this->required_incident_id ();
         $query = "SELECT `00_lfd`,`03_datum`,`06_befweg`,`06_befwegausw`,
                          `09_vorrangstufe`,`04_richtung`, `04_nummer`, `10_anschrift`,
                          `12_abfzeit`, `12_inhalt`, `13_abseinheit`, `x01_abschluss`
                   FROM `".$conf_4f_tbl ["nachrichten"]."`
-                  WHERE `einsatz_id` = (SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1)
+                  WHERE `einsatz_id` = ?
                   AND 04_richtung = \"A\" order by 04_nummer ASC ; ";
-        $result = $dbaccess->query_table ($query);
+        $messageConnection = estab_message_connect ($conf_4f_db);
+        try {
+          $result = estab_message_query_rows (
+            $messageConnection,
+            $query,
+            array ($incidentId)
+          );
+        } finally {
+          estab_auth_close ($messageConnection);
+        }
+        $result = $result === array () ? "" : $result;
         echo "<p align=\"center\"><big><big><big><b>Nachweisung Ausgang</b></big></big></big></p>";
         if ( $result != "" ){
           echo "<table style=\"text-align: center; background-color: rgb(255,255,255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
@@ -1596,16 +1712,25 @@ include ("../4fcfg/fkt_rolle.inc.php");
 
       case "FmNw":  // *****  F M N W  ******
         if (debug) {echo "<b>file:liste.php:714 fkt:createlist - switch(listenart) -- case (FmNw) ></b><br>";}
-        $dbaccess = new db_access ($conf_4f_db ["server"], $conf_4f_db ["datenbank"],
-                             $conf_4f_tbl ["benutzer"], $conf_4f_db ["user"],  $conf_4f_db ["password"] );
-        $query = "SELECT `00_lfd`,`01_medium`,`01_datum`,`01_zeichen`,`02_zeit`,`03_datum`,
-                         `06_befweg`,`06_befwegausw`, `09_vorrangstufe`,`04_richtung`,
-                         `04_nummer`, `10_anschrift`, `12_inhalt`, `13_abseinheit`,`14_zeichen`, `x01_abschluss`
-                  FROM `".$conf_4f_tbl ["nachrichten"]."`
-                  WHERE `einsatz_id` = (SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1)
-                  order by 04_nummer ASC ; ";
-        $result = $dbaccess->query_table ($query);
-        echo "<p align=\"center\"><big><big><big><b>Einsatz ".$conf_4f_db ["datenbank"]." - ". $conf_4f ["anschrift"]. "</big><br>Nachweisung Eingang / Ausgang</b></big></big></p>";
+        $incidentId = $this->required_incident_id ();
+        $messageConnection = estab_message_connect ($conf_4f_db);
+        try {
+          $trackingData = estab_list_combined_tracking_data (
+            $messageConnection,
+            $incidentId,
+            (string) $conf_4f_tbl ["nachrichten"]
+          );
+        } finally {
+          estab_auth_close ($messageConnection);
+        }
+        $incidentUi = $trackingData ["incident"];
+        $trackingRows = $trackingData ["rows"];
+        $result = $trackingRows === array () ? "" : $trackingRows;
+        $commandPostName = estab_incident_command_post_name ($incidentUi);
+        echo "<p align=\"center\"><big><big><big><b>Führungsstelle ".
+             estab_message_html ($commandPostName)." – Einsatz ".
+             estab_message_html ($incidentUi ["kennung"] ?? "").
+             "</big><br>Nachweisung Eingang / Ausgang</b></big></big></p>";
         if ( $result != "" ){
           echo "<table style=\"text-align: center; background-color: rgb(255,255,255); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n<tbody>\n";
           echo "<tr style=\"background-color: rgb(240,240,200); color:#000000; font-weight:bold;\">\n";

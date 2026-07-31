@@ -175,6 +175,10 @@ $assert(
 $assert(
     substr_count($helper, 'estab_incident_require_active($connection, true)')
         >= 2
+        && substr_count(
+            $helper,
+            'estab_incident_lock_command_post_for_write($connection, $incident);'
+        ) >= 2
         && substr_count($helper, 'WHERE `einsatz_id` = ?') >= 2
         && str_contains(
             $helper,
@@ -193,7 +197,7 @@ $assert(
             'SET `x04_druck` = ?, `x05_druck_d` = NULL'
         ),
     'counter repair is not evidenced without a fake message or print reset '
-        . 'is not bound to the locked active incident'
+        . 'is not bound to the fully configured, locked active incident'
 );
 $assert(
     str_contains(
@@ -203,7 +207,15 @@ $assert(
         && str_contains($counterPage, 'data-estab-requires-incident')
         && str_contains($resetPage, 'data-estab-requires-incident')
         && str_contains($counterPage, 'EstabNoActiveIncidentException')
-        && str_contains($resetPage, 'EstabNoActiveIncidentException'),
+        && str_contains($resetPage, 'EstabNoActiveIncidentException')
+        && str_contains(
+            $counterPage,
+            'EstabIncidentConfigurationException'
+        )
+        && str_contains(
+            $resetPage,
+            'EstabIncidentConfigurationException'
+        ),
     'incident-scoped administrative actions lack audit or fail-closed UI gates'
 );
 $assert(

@@ -73,6 +73,7 @@ Derzeit sind folgende explizite Migrationen vorhanden:
 | `docker/db/migrations/94-dv-organisational-controls.sql` | ergänzt Dienstschichten und Mehrfachfunktionen, den versionierten S6-Fernmeldeplan, den vollständigen Melderlauf sowie eine verkettete Ereignisspur dieser Betriebsabläufe; zugleich wird Autosichtung verbindlich deaktiviert und S2 als Rotkopie-/Dokumentationsfähigkeit normalisiert |
 | `docker/db/migrations/95-attachment-ingest-integrity.sql` | markiert beim Upgrade vorhandene Anhänge ausdrücklich als nicht rückwirkend belegbaren Legacy-Bestand und verlangt für jeden danach finalisierten Anhang einen unveränderlichen SHA-256-/Größen-/Serverzeit-Nachweis; Trigger verhindern neue Legacy-Markierungen, Herabstufung und nachträgliche Beweisänderung |
 | `docker/db/migrations/96-etb-duty-function.sql` | führt die eigenständig auswählbare ETB-Dienstfunktion ein, ordnet die Fähigkeit `EINSATZTAGEBUCH` sowohl S2 als auch ETB über den zusammengesetzten Schlüssel `(funktion, faehigkeit)` zu und belässt Rotkopie sowie `LAGE_DOKUMENTATION` ausschließlich bei S2 |
+| `docker/db/migrations/97-incident-command-post-name.sql` | ergänzt den einsatzbezogenen, nullable Führungsstellennamen mit eindeutiger Eigentumsmarkierung; vorhandene Einsätze bleiben absichtlich `NULL`, weil Einsatzname, Organisation und Einsatzleitung keine belegbaren historischen Ersatzwerte sind |
 
 Migration 95 klassifiziert vorhandene Zeilen bereits beim Hinzufügen der
 Spalte mit dem einmaligen Anfangswert `integrity_required=0` und stellt danach
@@ -108,8 +109,37 @@ eigenen Zwischenstände. Gemischte Katalogdaten, ein abweichender
 Primärschlüssel oder fremde Indizes blockieren vor der nächsten Änderung und
 bleiben zur Untersuchung erhalten. `verify.sql` und die Laufzeit-Readiness
 verlangen danach exakt sieben Katalogzeilen, das vollständige neue ENUM,
-ausschließlich den zweispaltigen Primärschlüssel und alle elf angewendeten
-Migrationen einschließlich Version 96.
+ausschließlich den zweispaltigen Primärschlüssel und alle zwölf angewendeten
+Migrationen einschließlich Version 97.
+
+Migration 97 fügt `nv_einsaetze.fuehrungsstellenname` als
+`VARCHAR(128) NULL` unmittelbar hinter `organisation` und
+`fuehrungsstellenname_gesperrt` als `TINYINT UNSIGNED NOT NULL DEFAULT 0`
+direkt dahinter ein. Der Name bleibt für Bestandszeilen bewusst leer; weder
+Einsatzname, Organisation, Einsatzleitung noch Umgebung werden als Ersatz
+übernommen. Damit wird keine historische lokale Anschrift/Absendereinheit
+erfunden. Die DDL ist wiederanlauffähig und akzeptiert nur fehlende oder exakt
+markierte eigene Spalten, Routinen und Trigger; gleichnamige fremde Objekte
+blockieren vor jeder Übernahme.
+
+Die Migration erweitert außerdem die DB-Schreibgrenze: Ein Legacy-Writer muss
+den Namen des aktiven Einsatzes validieren und setzt beim ersten operativen
+Schreiben den Sperrmarker in derselben Transaktion. Direkte Manipulationen von
+Name oder Marker werden blockiert. Historische `NULL`-Zeilen bleiben zunächst
+entsperrt, damit der belegte Wert trotz Altdaten einmalig ergänzt werden kann;
+diese Ergänzung setzt den Marker sofort.
+
+Nach dem Upgrade verlangt die Anwendung für jeden **neuen** Einsatz einen
+gültigen Führungsstellennamen. Ein offener Bestands-Einsatz mit `NULL` muss in
+der Administration einmalig mit dem belegten tatsächlichen Namen bestätigt
+werden, bevor er aktiviert oder weiter operativ beschrieben werden kann.
+Diese einmalige `NULL`-zu-Wert-Bestätigung ist trotz vorhandener historischer
+Fachdaten zulässig. Ein bereits belegter Wert kann nur vor der ersten
+operativen Eintragung korrigiert werden und ist danach unveränderlich; ein
+formal abgeschlossener Einsatz bleibt unverändert. Der dauerhafte Marker
+bleibt auch nach dem Löschen einzelner Fachdaten gesetzt. Historische Exporte
+bleiben auch ohne Nachtrag möglich; die menschenlesbare PDF-Ausgabe
+kennzeichnet den Fehlwert ausdrücklich als „historisch nicht erfasst“.
 
 Das freigegebene Upgradeverfahren lautet:
 

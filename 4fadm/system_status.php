@@ -39,7 +39,6 @@ $configurationReady = $checks['configuration'];
 
 $environmentChecks = [
     'Öffentliche URL' => estab_env('ESTAB_PUBLIC_URL') !== null,
-    'Organisation' => estab_env('ESTAB_ORGANISATION') !== null,
     'Hoheitszeichen' => estab_env('ESTAB_AUTHORITY_CODE') !== null,
     'Exportverzeichnis' => estab_env('ESTAB_EXPORT_DIR') !== null,
     'DB-Secret' => estab_env('ESTAB_DB_PASSWORD_FILE') !== null,

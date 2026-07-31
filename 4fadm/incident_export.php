@@ -276,6 +276,11 @@ try {
                   <?= incident_export_html(
                       (string) ($incident['kennung'] ?? '')
                           . ' · ' . (string) ($incident['name'] ?? '')
+                          . ' · Führungsstelle: '
+                          . (string) (
+                              $incident['fuehrungsstellenname']
+                                  ?? 'historisch nicht erfasst'
+                          )
                           . (($incident['ist_aktiv'] ?? false)
                               ? ' (aktiv)'
                               : '')

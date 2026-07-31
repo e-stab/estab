@@ -29,8 +29,10 @@ class etb_liste {
 
   var $etb_titel_tbl     = false ;
   var $etb_titel_gesetzt = false;
+  var $etb_einsatz_aktiv = false;
   var $etb_art ;
   var $etb_ort ;
+  var $etb_fuehrungsstelle ;
 
   var $etb_funktion ;
   var $etb_kuerzel ;
@@ -168,15 +170,25 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
     include ("../4fcfg/e_cfg.inc.php");
     $incident = estab_logbook_active_incident ($conf_4f_db);
     if (is_array ($incident)){
+      $this->etb_einsatz_aktiv = true;
       $this->etb_art =
         (string) ($incident ["kennung"] ?? "")." · ".
         (string) ($incident ["name"] ?? "");
       $this->etb_ort = (string) ($incident ["ort"] ?? "") ;
-      $this->etb_titel_gesetzt = true;
+      try {
+        $this->etb_fuehrungsstelle =
+          estab_incident_command_post_name ($incident);
+        $this->etb_titel_gesetzt = true;
+      } catch (EstabIncidentConfigurationException) {
+        $this->etb_fuehrungsstelle = "";
+        $this->etb_titel_gesetzt = false;
+      }
       $this->etb_titel_tbl = true;
     } else {
+      $this->etb_einsatz_aktiv = false;
       $this->etb_art = "";
       $this->etb_ort = "";
+      $this->etb_fuehrungsstelle = "";
       $this->etb_titel_gesetzt = false;
       $this->etb_titel_tbl = true;
     }
@@ -397,6 +409,11 @@ var $task;
     echo "aria-label=\"Aktiver Einsatz\">\n<div>\n";
     echo "<span>Aktiver Einsatz</span>\n";
     echo "<strong>".estab_auth_html ($this->etb_art)."</strong>\n";
+    echo "<span>Führungsstelle: ".estab_auth_html (
+      $this->etb_fuehrungsstelle !== ""
+        ? $this->etb_fuehrungsstelle
+        : "nicht festgelegt"
+    )."</span>\n";
     echo "<span>Ort: ".estab_auth_html (
       $this->etb_ort !== "" ? $this->etb_ort : "nicht angegeben"
     )."</span>\n";
@@ -607,7 +624,8 @@ try {
   error_log ("ETB initialization failed: ".$exception->getMessage ());
   estab_logbook_abort (503, "Das Einsatztagebuch ist vorübergehend nicht verfügbar.");
 }
-$etbobj->etb_authorized = $berechtigt;
+$etbobj->etb_authorized =
+  $berechtigt && $etbobj->etb_titel_gesetzt;
 $etbobj->etb_funktion = $identity ["funktion"];
 $etbobj->etb_kuerzel = $identity ["kuerzel"];
 $etbobj->etb_benutzer = $identity ["benutzer"];
@@ -629,6 +647,14 @@ if ($requestMethod === "POST") {
   try {
     if ($action === "save_entry") {
       if (!$etbobj->etb_titel_gesetzt) {
+        if ($etbobj->etb_einsatz_aktiv) {
+          estab_logbook_abort (
+            409,
+            "Der aktive Einsatz ist unvollständig. ETB-Eingaben sind ".
+            "gesperrt; ergänzen Sie zuerst den Namen der Führungsstelle in ".
+            "der Administration."
+          );
+        }
         estab_logbook_abort (
           409,
           "Kein Einsatz ist aktiv. ETB-Eingaben sind gesperrt; aktivieren Sie ".
@@ -643,6 +669,14 @@ if ($requestMethod === "POST") {
     } else {
       estab_logbook_abort (400, "Unbekannte ETB-Aktion.");
     }
+  } catch (EstabIncidentConfigurationException $exception) {
+    error_log ("ETB write blocked by incident configuration: ".
+      $exception->getMessage ());
+    estab_logbook_abort (
+      409,
+      "Der aktive Einsatz ist unvollständig. ETB-Eingaben sind gesperrt; ".
+      "ergänzen Sie zuerst den Namen der Führungsstelle in der Administration."
+    );
   } catch (EstabNoActiveIncidentException $exception) {
     error_log ("ETB write blocked: ".$exception->getMessage ());
     estab_logbook_abort (
@@ -663,11 +697,20 @@ $etbobj->etb_ueberschrift ();
 
 if (!$etbobj->etb_titel_gesetzt) {
   echo "<section class=\"estab-tool-status estab-tool-status-danger\" ";
-  echo "role=\"alert\" data-estab-no-active-incident><div>";
-  echo "<strong>Kein Einsatz aktiv – ETB-Eingaben sind gesperrt.</strong>";
-  echo "<span>";
-  echo "Legen Sie in der Administration einen Einsatz an oder aktivieren Sie ";
-  echo "einen vorhandenen Einsatz.</span></div></section>\n";
+  echo "role=\"alert\" ";
+  if ($etbobj->etb_einsatz_aktiv) {
+    echo "data-estab-incident-incomplete><div>";
+    echo "<strong>Aktiver Einsatz unvollständig – ETB-Eingaben sind ";
+    echo "gesperrt.</strong>";
+    echo "<span>Ergänzen Sie in der Administration zuerst den Namen der ";
+    echo "Führungsstelle.</span></div></section>\n";
+  } else {
+    echo "data-estab-no-active-incident><div>";
+    echo "<strong>Kein Einsatz aktiv – ETB-Eingaben sind gesperrt.</strong>";
+    echo "<span>";
+    echo "Legen Sie in der Administration einen Einsatz an oder aktivieren Sie ";
+    echo "einen vorhandenen Einsatz.</span></div></section>\n";
+  }
 } else {
   $etbobj->etb_einsatzdaten ();
   $entryFormRequested = isset ($_GET ["etb_eintrag_x"])
@@ -676,16 +719,16 @@ if (!$etbobj->etb_titel_gesetzt) {
       && is_string ($_GET ["etb_menue"])
       && $_GET ["etb_menue"] === "eintrag"
     );
-  if ($berechtigt && $entryFormRequested) {
+  if ($etbobj->etb_authorized && $entryFormRequested) {
     $etbobj->etb_eintragsmenue ("");
   } elseif (
-    $berechtigt
+    $etbobj->etb_authorized
     && isset ($_GET ["correct"])
     && is_string ($_GET ["correct"])
     && preg_match ("/\\A[1-9][0-9]*\\z/D", $_GET ["correct"]) === 1
   ) {
     $etbobj->etb_eintragsmenue ((int) $_GET ["correct"]);
-  } elseif ($berechtigt) {
+  } elseif ($etbobj->etb_authorized) {
     $etbobj->etb_menue ();
   }
   $etbobj->printlist ($etbobj->etb_getdate ());

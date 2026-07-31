@@ -139,6 +139,7 @@ try {
             'beginn' => date('Y-m-d\TH:i', time() - 3600),
             'ort' => 'Integrationsprüfung',
             'organisation' => 'THW',
+            'fuehrungsstellenname' => 'Führungsstelle DV-Operationen',
             'einsatzleitung' => 'Leitung Integration',
             'beschreibung' => 'Isolierter Nachweis der DV-Abläufe.',
         ],
@@ -573,6 +574,32 @@ try {
         'user',
         $s3Identity,
         $categoryConfig
+    );
+    $masterScope = estab_category_scope(
+        'master',
+        $s3Identity,
+        $categoryConfig
+    );
+    $masterCategoryId = estab_category_create(
+        $connection,
+        $masterScope,
+        ['kategorie' => 'M' . $suffix, 'beschreibung' => 'Master-Sperrtest']
+    );
+    $expect(
+        EstabCategoryAuthorizationException::class,
+        static fn (): null => (
+            estab_category_assign(
+                $connection,
+                $conversationMessageId,
+                'nv_nachrichten',
+                $s3Identity,
+                ['master' => $masterScope],
+                ['master' => $masterCategoryId],
+                'nv_empfmtx'
+            ) ?? null
+        ),
+        'composed category API accepted a master assignment without '
+            . 'locked Si/redcopy authority'
     );
     $functionCategoryId = estab_category_create(
         $connection,

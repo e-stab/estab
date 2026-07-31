@@ -154,6 +154,7 @@ if ($requestMethod === 'POST') {
     } catch (
         EstabDvConflictException
         | EstabAssignmentBusyException
+        | EstabIncidentConfigurationException
         | EstabNoActiveIncidentException $exception
     ) {
         http_response_code(409);
@@ -305,12 +306,27 @@ foreach ($handoverRequests as $handoverRequest) {
       <span>Aktivieren Sie zuerst einen Einsatz; Dienstbesetzungen sind strikt
         einsatzgebunden.</span>
     </section>
+  <?php elseif (($status['fuehrungsstellenname'] ?? null) === null): ?>
+    <section class="estab-tool-status estab-tool-status-danger" role="alert">
+      <strong>Name der Führungsstelle fehlt.</strong>
+      <span>Ergänzen Sie zuerst den aktiven Einsatz. Dienstschichten und
+        operative Vorgänge bleiben bis dahin gesperrt.</span>
+      <a class="estab-button" href="incidents.php">
+        Führungsstellenname festlegen
+      </a>
+    </section>
   <?php else: ?>
     <section class="estab-tool-status estab-tool-status-active">
       <div>
         <span>Aktiver Einsatz</span>
         <strong><?= estab_admin_html(
             $status['kennung'] . ' · ' . $status['name']
+        ) ?></strong>
+      </div>
+      <div>
+        <span>Führungsstelle</span>
+        <strong><?= estab_admin_html(
+            $status['fuehrungsstellenname']
         ) ?></strong>
       </div>
       <div>

@@ -17,7 +17,23 @@ $registrationAllowed = estab_auth_self_registration_allowed();
 include __DIR__ . '/menue.inc.php';
 
 $pageTitle = estab_auth_html((string) $conf_menue['titel']);
-$organisation = estab_auth_html((string) $conf_menue['einrichtung']);
+$organisationLabel = (string) $conf_menue['einrichtung'];
+if ($authenticated) {
+    $incidentState = estab_incident_ui_current_state();
+    if (
+        ($incidentState['active'] ?? false) === true
+        && is_array($incidentState['incident'] ?? null)
+    ) {
+        try {
+            $organisationLabel = estab_incident_command_post_name(
+                $incidentState['incident']
+            );
+        } catch (EstabIncidentConfigurationException) {
+            $organisationLabel = 'Führungsstellenname nicht festgelegt';
+        }
+    }
+}
+$organisation = estab_auth_html($organisationLabel);
 $background = estab_auth_html((string) $conf_menue['background_color']);
 $foreground = estab_auth_html((string) $conf_menue['foreground_color']);
 $leftSymbol = estab_auth_html((string) $conf_menue['sym_top_left']);

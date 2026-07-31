@@ -151,10 +151,15 @@ foreach ([$etb, $tbb] as $bookSource) {
 $assert(
     str_contains(
         $dataHandler,
-        'estab_incident_require_active ($messageConnection);'
+        '$messageIncident = estab_incident_require_active ($messageConnection);'
     )
-        && str_contains($dataHandler, 'Kein Einsatz aktiv'),
-    'message controller lacks an understandable early no-incident failure'
+        && str_contains(
+            $dataHandler,
+            'estab_incident_command_post_name ($messageIncident);'
+        )
+        && str_contains($dataHandler, 'Derzeit ist kein Einsatz aktiv')
+        && str_contains($dataHandler, 'fehlt der Name der Führungsstelle'),
+    'message controller lacks an understandable early incident-configuration failure'
 );
 $assert(
     str_contains(
@@ -181,6 +186,11 @@ $assert(
         && str_contains($list, 'estab_read_filter_messages (')
         && str_contains($overview, 'estab_read_require_area (')
         && str_contains(
+            $overview,
+            '$overviewReadScope ["incident"]["active_einsatz_id"]'
+        )
+        && str_contains($overview, '.`einsatz_id` = ?')
+        && !str_contains(
             $overview,
             '(SELECT `active_einsatz_id` FROM `nv_einsatz_status`'
         ),

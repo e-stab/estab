@@ -27,7 +27,7 @@ openssl rand -base64 36 > secrets/admin_password.txt
 chmod 0600 secrets/*.txt
 ```
 
-Danach die organisations- und netzbezogenen Werte in `.env` prüfen und den
+Danach die bereitstellungs- und netzbezogenen Werte in `.env` prüfen und den
 Stack starten:
 
 ```console
@@ -126,7 +126,10 @@ Dienstschicht. Anmeldung und Administration bleiben erreichbar, operative
 Eingaben sind aber fail-closed gesperrt. Die erste fachliche Einrichtung
 erfolgt in dieser Reihenfolge:
 
-1. Unter `/4fadm/incidents.php` einen Einsatz anlegen und aktivieren.
+1. Unter `/4fadm/incidents.php` einen Einsatz mit einem **Namen der
+   Führungsstelle** anlegen und aktivieren. Diese lokale
+   Anschrift/Absendereinheit ist ein eigenes Pflichtfeld und darf nicht mit
+   Einsatzname, Trägerorganisation oder Einsatzleitung verwechselt werden.
 2. Unter `/4fadm/users.php` persönliche Konten für mindestens S2, Si, S6,
    LdF und A/W anlegen. Eine Person darf mehrere Funktionen übernehmen;
    mehrere A/W-Besetzungen sind möglich.
@@ -142,16 +145,29 @@ erfolgt in dieser Reihenfolge:
    den vorgesehenen Wegen und veröffentlicht ihn. Erst danach kann LdF einen
    Ausgang auf einen verbindlichen Weg disponieren.
 
+Migration 97 lässt Führungsstellennamen bereits vorhandener Einsätze bewusst
+`NULL`, statt einen Wert aus Einsatzname, Organisation, Einsatzleitung oder
+Umgebung zu erfinden. Ein offener Alt-Einsatz muss vor Aktivierung oder
+weiteren operativen Eingaben einmalig unter `/4fadm/incidents.php` mit dem
+tatsächlichen Namen bestätigt werden. Diese Erstbestätigung ist auch bei
+vorhandenen historischen Fachdaten möglich. Ein schon belegter Name kann nur
+bis zur ersten operativen Eintragung korrigiert werden und ist danach
+unveränderlich; dafür speichert der Einsatz einen dauerhaften
+Erstschreib-Sperrmarker. Auch das spätere Löschen einzelner Fachdaten hebt
+diese Sperre nicht auf. Formal abgeschlossene Alt-Einsätze bleiben
+unverändert.
+
 Eine Schichtübergabe wird von der Administration nur angefordert. Erst ein
 persönlich angemeldetes Konto mit angenommener Funktion der Nachfolgeschicht
 bestätigt sie und löst den atomaren Schichtwechsel aus. Fehlanforderungen
 bleiben als begründet stornierter Nachweis erhalten.
 
-Einsatz, aktive Arbeitsfunktion und gegebenenfalls fehlender Dienstbetrieb
-müssen danach in Statusleiste beziehungsweise Führungsstellenansicht
-eindeutig erkennbar sein. Ohne aktive Schicht nimmt eStab keine operative
-Eingabe an. Funktionskonten lassen sich unter `/4fadm/users.php` sperren,
-entsperren und mit einem neuen Kennwort versehen. Ein vollständiges
+Führungsstellenname, Einsatz, aktive Arbeitsfunktion und gegebenenfalls
+fehlender Dienstbetrieb müssen danach in Statusleiste beziehungsweise
+Führungsstellenansicht eindeutig erkennbar sein. Ohne gültigen
+Führungsstellennamen oder aktive Schicht nimmt eStab keine operative Eingabe
+an. Funktionskonten lassen sich unter `/4fadm/users.php` sperren, entsperren
+und mit einem neuen Kennwort versehen. Ein vollständiges
 ETB-/TBB-/Nachrichten-/Nachweis-/Dienst-/S6-/Melder-/Anhang-Dossier für einen
 aktiven oder historischen Einsatz erzeugt `/4fadm/incident_export.php`.
 Für operative Daten genügt eine Kontoanmeldung nicht: Zusätzlich müssen ein
@@ -216,7 +232,7 @@ nicht.
 | `/4fach/anhang.php`, `/4fach/download.php`, `/4fach/showpic.php` | Anhänge auswählen, auflisten, herunterladen oder als Bildvorschau öffnen | ausgewählte aktive Dienstfunktion; verknüpfte Anhänge erben exakt die Leserechte mindestens einer verknüpften Nachricht, freie Anhänge sind nur für Uploader oder S2, Si und LdF sichtbar |
 | `/stabetb/etb.php`, `/fmtbb/tbb.php` | ETB und TBB des aktiven Einsatzes lesen und fachabhängig ergänzen | jede ausgewählte aktive Dienstfunktion darf lesen; ETB-Schreiben nur als S2 oder ETB mit `EINSATZTAGEBUCH`, TBB-Schreiben nur als A/W mit `BEFOERDERUNG` |
 | `/4fadm/admin.php` | Administration | separates HTTP Basic Auth |
-| `/4fadm/incidents.php` | Einsätze anlegen, aktivieren und deaktivieren | HTTP Basic Auth, Session-CSRF und revisionsgesicherter globaler Status |
+| `/4fadm/incidents.php` | Einsätze samt Führungsstellennamen anlegen, historische Fehlwerte einmalig bestätigen, aktivieren und deaktivieren | HTTP Basic Auth, Session-CSRF, revisionsgesicherter globaler Status; die erste operative Eintragung setzt atomar einen dauerhaften Sperrmarker für den bestätigten Führungsstellennamen |
 | `/4fadm/fuehrungsstelle.php` | Dienstschichten planen, Funktionen zuweisen, Schichten aktivieren/übergeben/schließen und Abschlussblocker prüfen | HTTP Basic Auth, Session-CSRF; Besetzungen und Übergaben werden einsatzgebunden und hashverkettet nachgewiesen |
 | `/4fadm/users.php` | Benutzer anlegen, Funktionen fest zuweisen, sperren/entsperren und Kennwörter zurücksetzen | HTTP Basic Auth, Session-CSRF; Rollen werden serverseitig abgeleitet und aktive Sitzungen atomar widerrufen |
 | `/4fadm/incident_export.php` | neun wählbare PDF-Abschnitte: ETB, TBB, Nachrichtenvordrucke, Anhänge, Nachrichtenereignisse, Dienstbetrieb, S6-Fernmeldepläne, Melderläufe und Betriebsereignisse | HTTP Basic Auth, Session-CSRF, einsatzgebundene Abfragen; neue Anhänge werden gegen ihren unveränderlichen SHA-256-/Größennachweis geprüft, Legacy wird als nicht belegbar ausgewiesen |
@@ -285,8 +301,11 @@ und ohne JavaScript bleibt die native Browserliste als Rückfalloption
 erhalten. Aktiver Einsatz, Dienstbesetzung, Funktion, Rolle, Richtung und
 Sperrbesitz werden im selben Datenbank-Statement wie die Zuordnungen erneut
 geprüft; Werte anderer Einsätze werden nicht offengelegt. Der lokale Absender
-eines Ausgangs bleibt davon unberührt und wird weiterhin serverseitig aus der
-Konfiguration gesetzt.
+eines Ausgangs bleibt davon unberührt: Er wird serverseitig aus dem
+autoritativen Führungsstellennamen des in derselben Schreibtransaktion
+gesperrten Einsatzes gesetzt. Eingänge werden an dieselbe lokale
+Führungsstelle adressiert. Browserwerte, Einsatzname, Organisation,
+Einsatzleitung und Umgebungsvariablen sind dafür keine Ersatzquelle.
 
 Vorrangsstufen werden überall mit denselben fachlichen Bezeichnungen
 angezeigt und verarbeitet: **keine**, **Sofort**, **Blitz** und
@@ -495,6 +514,11 @@ erneut geprüft; beim Upgrade vorhandene Legacy-Dateien heißen ausdrücklich
 „Integrität beim Eingang nicht belegbar“. Ist eine historische
 Empfängerfunktion in der heutigen Matrix nicht mehr vorhanden, bleibt sie mit
 ihrem gespeicherten Kopiekennzeichen ausdrücklich im Inhaltsbereich sichtbar.
+Führungsstellenname, Einsatzkennung und Einsatzname erscheinen getrennt in
+Statusanzeige, Exportauswahl und PDF-Dossier. Bei einem vor Migration 97
+angelegten Einsatz ohne bestätigten Führungsstellennamen erfindet der
+PDF-Export keinen Ersatz, sondern kennzeichnet ihn ausdrücklich als
+„historisch nicht erfasst“.
 
 ## Dokumentation
 

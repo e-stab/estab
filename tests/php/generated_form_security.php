@@ -114,8 +114,17 @@ $incidentExport = (string) file_get_contents(
 
 $assert(
     str_contains($backup, 'estab_incident_require_active ($connection, true)')
+        && str_contains(
+            $backup,
+            'estab_incident_command_post_name ($incident)'
+        )
         && str_contains($backup, 'estab_generated_form_fetch_pending')
         && str_contains($backup, 'estab_generated_form_mark_published')
+        && str_contains(
+            $backup,
+            'EstabIncidentConfigurationException $exception'
+        )
+        && str_contains($backup, 'http_response_code (409)')
         && !str_contains($backup, "where ((`x04_druck` = 'f')"),
     'legacy generator is not locked and scoped to the active incident'
 );
@@ -136,9 +145,17 @@ $assert(
     'PDF writer can still collide across incidents or publish partial bytes'
 );
 $assert(
-    str_contains($list, 'estab_generated_form_list_active')
+    str_contains($list, 'estab_read_require_operational_scope')
+        && str_contains(
+            $list,
+            'estab_generated_form_list_for_incident'
+        )
         && !str_contains($list, 'estab_file_list(')
-        && str_contains($list, 'estab_read_filter_generated_forms')
+        && str_contains(
+            $list,
+            'estab_read_filter_generated_forms_for_incident'
+        )
+        && substr_count($list, '$incidentId') >= 3
         && str_contains($list, ") . '&layout=current';")
         && str_contains($list, 'PDF im aktuellen Layout öffnen')
         && str_contains($download, 'estab_generated_form_fetch_active')
@@ -153,7 +170,7 @@ $assert(
             $helper,
             'estab_incident_require_active($connection, $forUpdate)'
         ),
-    'generated-form list or download lacks locked active-incident authorization'
+    'generated-form list or download lacks one captured incident authorization'
 );
 $assert(
     str_contains($helper, 'AND `einsatz_id` = ?')

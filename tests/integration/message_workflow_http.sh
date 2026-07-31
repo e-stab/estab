@@ -411,12 +411,16 @@ app_tactical_clock()
         php -r 'echo date("Hi");'
 }
 
-app_authoritative_sender()
+incident_authoritative_sender()
 {
-    "$compose_engine" compose exec -T app php -d auto_prepend_file= -r '
-        $sender = getenv("ESTAB_ORGANISATION");
-        echo is_string($sender) && $sender !== "" ? $sender : "Einsatzleitung";
-    '
+    db_sql <<'SQL'
+SELECT e.`fuehrungsstellenname`
+  FROM `nv_einsatz_status` AS s
+  JOIN `nv_einsaetze` AS e
+    ON e.`einsatz_id` = s.`active_einsatz_id`
+ WHERE s.`singleton_id` = 1
+   AND e.`estab_status` = 'open';
+SQL
 }
 
 app_backdated_clock()
@@ -1161,9 +1165,13 @@ return_viewer_outgoing()
     assert_no_runtime_error "returned Si formal review for $marker"
 }
 
-authoritative_sender=$(app_authoritative_sender)
+authoritative_sender=$(incident_authoritative_sender)
 if [ -z "$authoritative_sender" ] || printf '%s' "$authoritative_sender" | grep -q '|'; then
     echo 'Message workflow HTTP: unsafe authoritative sender fixture' >&2
+    exit 1
+fi
+if [ "$authoritative_sender" = 'GLOBAL-CONFIG-MUST-NOT-APPEAR' ]; then
+    echo 'Message workflow HTTP: installation-wide organisation remained authoritative' >&2
     exit 1
 fi
 
@@ -1682,6 +1690,9 @@ assert_db_equals "$incoming_backdated_sql" 'edited A/W receipt time' \
     "SELECT DATE_FORMAT(\`01_datum\`, '%Y-%m-%d %H:%i:00') FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${incoming_id};"
 assert_db_equals '' 'A/W persisted no incoming sender' \
     "SELECT \`13_abseinheit\` FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${incoming_id};"
+assert_db_equals "$authoritative_sender" \
+    'A/W incoming local destination came from active incident' \
+    "SELECT \`10_anschrift\` FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${incoming_id};"
 assert_message_state "$incoming_marker" \
     'E|1|f|null||S2_rt,|f||f' \
     'A/W incoming status 1 awaiting LdF'
@@ -2025,7 +2036,7 @@ assert_body \
     'name="10_anschrift">E2E-Absender  </textarea>' \
     'derived answer destination'
 assert_body \
-    'name="13_abseinheit" value="E2E-Einsatzleitung"' \
+    "name=\"13_abseinheit\" value=\"$authoritative_sender\"" \
     'derived answer sender'
 assert_body \
     "name=\"14_zeichen\" value=\"$pol_code\"" \
@@ -2241,6 +2252,9 @@ SQL
 )
 assert_numeric 'outgoing message ID' "$outgoing_id"
 assert_numeric 'outgoing evidence number' "$outgoing_number"
+assert_db_equals "$authoritative_sender" \
+    'new outgoing local sender came from active incident' \
+    "SELECT \`13_abseinheit\` FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
 assert_message_state "$outgoing_marker" \
     'A|4|f|null||S2_rt,S1_gn|f||f' \
     'S1 outgoing status 4 awaiting formal Si review'
@@ -2774,6 +2788,8 @@ assert_status 200 'open combined transmission tracking' \
     "$base_url/4fach/nachwea.php?nwalle=1"
 assert_no_runtime_error 'combined transmission tracking'
 assert_body 'Nachweisung Eingang / Ausgang' 'combined tracking view'
+assert_body "Führungsstelle ${authoritative_sender} – Einsatz" \
+    'combined tracking incident-bound command-post heading'
 assert_body 'Übermittlungsweg' 'tracking transport-path column'
 assert_body "Funk · ${telecom_route_b_text}" \
     'tracking actual outgoing transport path'

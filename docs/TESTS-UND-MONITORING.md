@@ -138,7 +138,8 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   Nachrichtenausgabepfade werden ein- und mehrseitig mit Poppler pixelgleich
   verglichen und auf stabilen Folgeseiteneinzug, sichtbare historische
   Empfänger, fehlenden VS-NfD-Aufdruck, fehlendes Wappen sowie A4-Geometrie
-  geprüft.
+  geprüft; ein eigener Maximalwert-Fall bindet beide gekürzten Kopfzeilen an
+  ihre tatsächlichen Poppler-Bounding-Boxes.
 
 Ein Prozess-Exitcode ungleich null sperrt die Freigabe.
 
@@ -194,6 +195,13 @@ blockiert, die automatischen Zeitstempel während des Legacy-Backfills
 deaktiviert und Migration 55 ihre kanonischen Definitionen auch nach einem
 Wiederanlauf exakt wiederherstellt. Die veröffentlichte Migration 50 wird
 dabei mit ihrer unveränderten SHA-256-Prüfsumme gebunden.
+Migration 97 wird als zwölfte Migration separat geprüft: Sie darf nur die
+exakt markierte nullable Spalte `fuehrungsstellenname`, ihren nicht-nullbaren
+Sperrmarker und die eigenen DB-Schreibgrenzen ergänzen, muss historische
+Namen unverändert `NULL` lassen und fremde gleichnamige Spalten, Routinen oder
+Trigger fail-closed abweisen. Readiness und `verify.sql` verlangen danach die
+exakten Spaltenpositionen/-attribute, gültige kanonische Werte, Marker,
+Schreibgrenzen und alle zwölf Ledgerzeilen einschließlich Version 97.
 Anschließend migriert der Hauptlauf ein leeres Schema,
 führt PHP-, Datenbank-, Rollen-, HTTP- und Administrationsnachweise aus, prüft
 die Containerlogs und stellt Datenbank, Anhang-/Vordruckdaten sowie Exporte aus
@@ -409,6 +417,22 @@ vollständig migrierte Datenbank. Er startet nur mit
 `estab_incident_*test`. Dadurch können No-active-Trigger,
 Parallelaktivierung, Update-/Delete-Sperren und ein harter
 MariaDB-Lock-Timeout belegt werden, ohne den Hauptbestand umzuschalten.
+
+Die Einsatzverträge decken zusätzlich den Führungsstellennamen ab: Ein neuer
+Einsatz benötigt ihn, ein migrierter `NULL`-Wert muss vor Aktivierung oder
+weiteren operativen Eingaben einmalig administrativ bestätigt werden, und ein
+schon belegter Wert wird mit dem ersten operativen Datensatz durch einen
+dauerhaften Marker unveränderlich. Direkte Legacy-Inserts ohne Namen,
+Direktänderungen, Rand-Leerraum, reine Unicode-Leerraumwerte und
+Insert→Delete→Umbenennen müssen scheitern.
+Die Nachrichtengrenze muss die lokale Eingangsanschrift beziehungsweise
+Ausgangs-Absendereinheit aus dem im selben Writer gesperrten Einsatz binden
+und manipulierte Browser- oder Umgebungswerte ignorieren. Statusanzeige,
+ETB/TBB, Nachweisung, Exportauswahl und PDF-Nachweis werden auf denselben
+einsatzbezogenen Wert geprüft. Bei historischem `NULL` melden Statusleiste und
+Administration den fehlenden beziehungsweise unvollständigen Zustand; das
+historische PDF sagt „historisch nicht erfasst“ und der CSV-Export bewahrt
+`NULL`.
 
 Im Haupt-CI-Bestand prüft `tests/integration/user_admin.php` zunächst
 Kontoanlage, serverseitig abgeleitete feste Funktionszuordnung,
@@ -1050,8 +1074,11 @@ Formularen: A/W und LdF erhalten nur die zulässigen Rufnamenvorschläge, LdF be
 Eingängen die Absendervorschläge; LdF sieht zum gesperrten aktuellen Vordruck
 die priorisierte, sichtbar gekennzeichnete Zuordnung; A/W-Eingang und Stab
 erhalten kein Absender-Eingabefeld. Keine Liste wählt einen Wert automatisch
-aus, freie Eingaben bleiben möglich und der lokale Ausgangsabsender wird
-weiterhin serverseitig gesetzt.
+aus und freie Eingaben bleiben möglich. Die lokale Eingangsanschrift und
+Ausgangs-Absendereinheit müssen dem per Join gelesenen Führungsstellennamen
+des aktiven Einsatzes entsprechen; ein absichtlich gesetzter
+`ESTAB_ORGANISATION`-Poisonwert darf weder in Datenbank noch Ausgabe
+erscheinen.
 `tests/browser/headless_ui.py --message-suggestions`
 meldet ein echtes A/W-Konto an und beweist mit einem kurzlebigen,
 einsatzgebundenen Marker Fokusöffnung, Filterung, Pfeiltaste/Eingabetaste,
@@ -1222,8 +1249,15 @@ Geräteeinstellungen müssen manuell abgenommen werden.
 Mindestens zu prüfen:
 
 - zwei Testeinsätze nacheinander aktivieren, die globale Statusanzeige auf
-  allen Modulen kontrollieren und nach Deaktivierung die rote
-  No-active-Warnung sowie gesperrte operative Formulare prüfen,
+  allen Modulen auf Führungsstellenname, Kennung und Einsatzname kontrollieren
+  und nach Deaktivierung die rote No-active-Warnung sowie gesperrte operative
+  Formulare prüfen,
+- einen offenen migrierten Testeinsatz ohne Führungsstellennamen in
+  Statusleiste und Administration als fehlend/unvollständig anzeigen lassen,
+  seine Aktivierung und operative Eingabe abweisen, im historischen PDF
+  „historisch nicht erfasst“ prüfen, den tatsächlichen Namen einmalig
+  administrativ bestätigen und nach der ersten operativen Eintragung jede
+  weitere Änderung abweisen,
 - neuen Benutzer für jede tatsächlich verwendete Funktion in der
   Benutzerverwaltung anlegen, abmelden und mit demselben Kennwort erneut
   anmelden; eine abweichende Funktion vor und nach dem Logout abweisen,
@@ -1261,7 +1295,8 @@ Mindestens zu prüfen:
   Nachrichtenereignisse, Dienstbetrieb, S6-Fernmeldepläne, Melderläufe und
   Betriebsereignisse erzeugen, die Anlagenansicht im vorgesehenen
   PDF-Programm öffnen und stichprobenartig eine eingebettete Datei samt
-  dokumentierter SHA-256 gegen das Original prüfen,
+  dokumentierter SHA-256 gegen das Original prüfen; dabei
+  Führungsstellenname, Einsatzkennung und Einsatzname getrennt kontrollieren,
 - Einsatztagebuch einmal als S2 und einmal mit einer eigenständig zugewiesenen
   ETB-Funktion, das technische Betriebsbuch mit A/W in der Rolle Fernmelder
   beschreiben; bei einer ETB/Si-Mehrfachbesetzung ausdrücklich zwischen beiden

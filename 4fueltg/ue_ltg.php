@@ -16,15 +16,19 @@ include ("../4fcfg/para.inc.php");              //
 
 $overviewReadIdentity = estab_read_session_identity ($_SESSION);
 $overviewAccessConnection = null;
+$overviewIncidentId = null;
 try {
   if (!is_array ($overviewReadIdentity)) {
     throw new EstabReadPermissionException ("Anmeldung erforderlich.");
   }
   $overviewAccessConnection = estab_auth_connect ($conf_4f_db);
-  estab_read_require_area (
+  $overviewReadScope = estab_read_require_area (
     $overviewAccessConnection,
     $overviewReadIdentity,
     "message-overview"
+  );
+  $overviewIncidentId = (int) (
+    $overviewReadScope ["incident"]["active_einsatz_id"]
   );
 } catch (EstabNoActiveIncidentException) {
   http_response_code (409);
@@ -140,11 +144,12 @@ class Listen {
 
   var $listenart;
   var $benutzer;
+  var $incidentId;
 
   // Listengestaltung
 
-  function __construct ($welche, $user){
-    $this->listen ($welche, $user);
+  function __construct ($welche, $user, $incidentId = null){
+    $this->listen ($welche, $user, $incidentId);
   }
 
 /******************************************************************************\
@@ -207,10 +212,9 @@ class Listen {
 
     $query_from_arg   = $conf_4f_tbl ["nachrichten"]; //.", ".$tblusername."_read , ".$tblusername."_erl ";
 
+    $incidentId = $this->required_incident_id ();
     $query_where_arg1 =
-      $conf_4f_tbl ["nachrichten"].".`einsatz_id` = ".
-      "(SELECT `active_einsatz_id` FROM `nv_einsatz_status` ".
-      "WHERE `singleton_id` = 1)";
+      $conf_4f_tbl ["nachrichten"].".`einsatz_id` = ?";
 
 //    if ($_SESSION [flt_gelesen]  != 1){$readwhat = " NOT ";} else {$readwhat = " ";}
 
@@ -230,7 +234,7 @@ class Listen {
       estab_message_priority_order_sql ("`09_vorrangstufe`").
       " DESC, `04_nummer` DESC ";
 	//$query_orderby_arg = "`04_nummer` ASC, `09_vorrangstufe` ASC ";
-    $queryParameters = array ();
+    $queryParameters = array ($incidentId);
 
     if (isset ($_SESSION["ueb_flt_search"])) {
       $searchPattern = "%".(string) $_SESSION["ueb_flt_search"]."%";
@@ -240,7 +244,10 @@ class Listen {
           "(".$conf_4f_tbl ["nachrichten"].".`12_abfzeit` LIKE ?) OR ".
           "(".$conf_4f_tbl ["nachrichten"].".`12_inhalt` LIKE ?) OR ".
           "(".$conf_4f_tbl ["nachrichten"].".`13_abseinheit` LIKE ?) )";
-      $queryParameters = array_fill (0, 5, $searchPattern);
+      $queryParameters = array_merge (
+        $queryParameters,
+        array_fill (0, 5, $searchPattern)
+      );
 
 
       $querycount = "SELECT COUNT(*) FROM ".$query_from_arg." WHERE ".
@@ -383,10 +390,22 @@ echo "Ist es die letzte Seite  ="; if ($is_last_page){echo "Ja";} else {echo "Ne
 /******************************************************************************\
 
 \******************************************************************************/
-  function listen ($welche, $user){
+  function listen ($welche, $user, $incidentId = null){
     $this->listenart = $welche;
     $this->benutzer  = $user;
+    $this->incidentId = $incidentId === null
+      ? null
+      : estab_message_positive_id ($incidentId);
 //    echo "listenart =".$this->listenart."- benutzer = ".$this->benutzer."<br>";
+  }
+
+  function required_incident_id (){
+    if ($this->incidentId === null) {
+      throw new RuntimeException (
+        "Für die Übersicht wurde kein autorisierter Einsatz übergeben"
+      );
+    }
+    return estab_message_positive_id ($this->incidentId);
   }
 
 
@@ -2113,10 +2132,11 @@ if (count($_POST)>0) { $returnValue = $_POST; }  // POST Daten, wenn vorhanden s
       }
       $messageConnection = estab_message_connect ($conf_4f_db);
       try {
-        $formdata = estab_message_fetch_by_id (
+        $formdata = estab_message_fetch_for_incident_by_id (
           $messageConnection,
           $conf_4f_tbl ["nachrichten"],
-          $overviewRecordId
+          $overviewRecordId,
+          $overviewIncidentId
         );
       } finally {
         estab_auth_close ($messageConnection);
@@ -2144,7 +2164,7 @@ if (count($_POST)>0) { $returnValue = $_POST; }  // POST Daten, wenn vorhanden s
     }
 
 
-    $list = new listen ("SIADMIN", "");
+    $list = new listen ("SIADMIN", "", $overviewIncidentId);
     $list->createlist ();
   }
 

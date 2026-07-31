@@ -18,6 +18,7 @@ require_once __DIR__ . '/attachment_integrity.php';
 
 const ESTAB_INCIDENT_IDENTIFIER_MAX_LENGTH = 64;
 const ESTAB_INCIDENT_NAME_MAX_LENGTH = 255;
+const ESTAB_INCIDENT_COMMAND_POST_NAME_MAX_LENGTH = 128;
 const ESTAB_INCIDENT_SINGLE_LINE_MAX_LENGTH = 255;
 const ESTAB_INCIDENT_DESCRIPTION_MAX_LENGTH = 10000;
 const ESTAB_INCIDENT_METADATA_MAX_BYTES = 65535;
@@ -33,6 +34,10 @@ final class EstabIncidentNotFoundException extends RuntimeException
 }
 
 class EstabIncidentConflictException extends RuntimeException
+{
+}
+
+final class EstabIncidentConfigurationException extends EstabIncidentConflictException
 {
 }
 
@@ -145,7 +150,14 @@ function estab_incident_text(
     if (!is_string($value) || preg_match('//u', $value) !== 1) {
         throw new EstabIncidentInputException($label . ' muss gültiger Text sein.');
     }
-    $text = trim($value);
+    $text = preg_replace(
+        '/\A[\p{Z}\s]+|[\p{Z}\s]+\z/u',
+        '',
+        $value
+    );
+    if (!is_string($text)) {
+        throw new EstabIncidentInputException($label . ' muss gültiger Text sein.');
+    }
     $length = estab_auth_text_length($text);
     if (
         ($required && $text === '')
@@ -173,6 +185,77 @@ function estab_incident_text(
         );
     }
     return $text;
+}
+
+/**
+ * Return the authoritative command-post name stored on an incident.
+ *
+ * Historical incidents created before migration 97 may deliberately contain
+ * NULL. They must be completed by an administrator; neither organisation,
+ * incident name nor a current environment value is a safe substitute.
+ */
+function estab_incident_command_post_name(array $incident): string
+{
+    try {
+        return estab_incident_text(
+            $incident['fuehrungsstellenname'] ?? null,
+            'Name der Führungsstelle',
+            ESTAB_INCIDENT_COMMAND_POST_NAME_MAX_LENGTH,
+            true
+        );
+    } catch (EstabIncidentInputException $exception) {
+        throw new EstabIncidentConfigurationException(
+            'Für diesen Einsatz ist noch kein gültiger Führungsstellenname '
+            . 'festgelegt.',
+            0,
+            $exception
+        );
+    }
+}
+
+/**
+ * Validate and durably lock the active incident's command-post identity.
+ *
+ * Migration 97 installs the SQL function used here and by the legacy table
+ * triggers. Its UPDATE participates in the caller's transaction, so a failed
+ * operational write rolls the first-write marker back as well.
+ */
+function estab_incident_lock_command_post_for_write(
+    mysqli $connection,
+    array &$incident
+): string {
+    $name = estab_incident_command_post_name($incident);
+    $incidentId = estab_incident_positive_id(
+        $incident['active_einsatz_id'] ?? null
+    );
+    $statement = $connection->prepare(
+        'SELECT estab_incident_command_post_for_write(?)'
+    );
+    if (!$statement) {
+        throw new RuntimeException(
+            'Führungsstellenidentität konnte nicht gesperrt werden.'
+        );
+    }
+    try {
+        $statement->bind_param('i', $incidentId);
+        if (!$statement->execute()) {
+            throw new RuntimeException(
+                'Führungsstellenidentität konnte nicht gesperrt werden.'
+            );
+        }
+        $result = $statement->get_result();
+        $row = $result->fetch_row();
+        $result->free();
+    } finally {
+        $statement->close();
+    }
+    if ((int) ($row[0] ?? 0) !== $incidentId) {
+        throw new RuntimeException(
+            'Führungsstellenidentität wurde nicht verbindlich gesperrt.'
+        );
+    }
+    $incident['fuehrungsstellenname_gesperrt'] = 1;
+    return $name;
 }
 
 /**
@@ -275,6 +358,12 @@ function estab_incident_validate_create(array $input): array
             ESTAB_INCIDENT_SINGLE_LINE_MAX_LENGTH,
             false
         ),
+        'fuehrungsstellenname' => estab_incident_text(
+            $input['fuehrungsstellenname'] ?? null,
+            'Name der Führungsstelle',
+            ESTAB_INCIDENT_COMMAND_POST_NAME_MAX_LENGTH,
+            true
+        ),
         'einsatzleitung' => estab_incident_text(
             $input['einsatzleitung'] ?? '',
             'Einsatzleitung',
@@ -344,7 +433,9 @@ function estab_incident_status(mysqli $connection, bool $forUpdate = false): arr
 {
     $sql = 'SELECT s.`active_einsatz_id`, s.`revision`, s.`geaendert_am`,'
         . ' s.`geaendert_von`, e.`kennung`, e.`name`, e.`beginn`, e.`ende`,'
-        . ' e.`ort`, e.`organisation`, e.`einsatzleitung`, e.`beschreibung`,'
+        . ' e.`ort`, e.`organisation`, e.`fuehrungsstellenname`,'
+        . ' e.`fuehrungsstellenname_gesperrt`,'
+        . ' e.`einsatzleitung`, e.`beschreibung`,'
         . ' e.`metadaten`, e.`estab_status`, e.`estab_closed_at`,'
         . ' e.`estab_closed_by`, e.`estab_close_note`,'
         . ' e.`estab_retain_until`, e.`estab_legal_hold`,'
@@ -383,6 +474,8 @@ function estab_incident_status(mysqli $connection, bool $forUpdate = false): arr
         $row['active_einsatz_id'] = estab_incident_positive_id(
             (string) $row['active_einsatz_id']
         );
+        $row['fuehrungsstellenname_gesperrt'] =
+            (int) ($row['fuehrungsstellenname_gesperrt'] ?? -1);
     }
     return $row;
 }
@@ -422,6 +515,7 @@ function estab_incident_with_active_write(
     }
     try {
         $incident = estab_incident_require_active($connection, true);
+        estab_incident_lock_command_post_for_write($connection, $incident);
         $result = $operation($incident);
         if (!$connection->commit()) {
             throw new RuntimeException('Einsatztransaktion konnte nicht gespeichert werden.');
@@ -438,7 +532,9 @@ function estab_incident_list(mysqli $connection): array
 {
     $result = $connection->query(
         'SELECT e.`einsatz_id`, e.`kennung`, e.`name`, e.`beginn`, e.`ende`,'
-        . ' e.`ort`, e.`organisation`, e.`einsatzleitung`, e.`beschreibung`,'
+        . ' e.`ort`, e.`organisation`, e.`fuehrungsstellenname`,'
+        . ' e.`fuehrungsstellenname_gesperrt`,'
+        . ' e.`einsatzleitung`, e.`beschreibung`,'
         . ' e.`metadaten`, e.`erstellt_am`, e.`erstellt_von`,'
         . ' e.`estab_status`, e.`estab_closed_at`, e.`estab_closed_by`,'
         . ' e.`estab_close_note`, e.`estab_retain_until`,'
@@ -462,6 +558,8 @@ function estab_incident_list(mysqli $connection): array
     foreach ($rows as &$row) {
         $row['einsatz_id'] = estab_incident_positive_id((string) $row['einsatz_id']);
         $row['ist_aktiv'] = (int) $row['ist_aktiv'] === 1;
+        $row['fuehrungsstellenname_gesperrt'] =
+            (int) ($row['fuehrungsstellenname_gesperrt'] ?? -1);
         $row['estab_legal_hold'] = (int) ($row['estab_legal_hold'] ?? 0) === 1;
     }
     unset($row);
@@ -474,7 +572,9 @@ function estab_incident_find(mysqli $connection, int $incidentId): ?array
     $incidentId = estab_incident_positive_id($incidentId);
     $statement = $connection->prepare(
         'SELECT e.`einsatz_id`, e.`kennung`, e.`name`, e.`beginn`, e.`ende`,'
-        . ' e.`ort`, e.`organisation`, e.`einsatzleitung`, e.`beschreibung`,'
+        . ' e.`ort`, e.`organisation`, e.`fuehrungsstellenname`,'
+        . ' e.`fuehrungsstellenname_gesperrt`,'
+        . ' e.`einsatzleitung`, e.`beschreibung`,'
         . ' e.`metadaten`, e.`erstellt_am`, e.`erstellt_von`,'
         . ' e.`estab_status`, e.`estab_closed_at`, e.`estab_closed_by`,'
         . ' e.`estab_close_note`, e.`estab_retain_until`,'
@@ -505,6 +605,8 @@ function estab_incident_find(mysqli $connection, int $incidentId): ?array
     }
     $row['einsatz_id'] = estab_incident_positive_id((string) $row['einsatz_id']);
     $row['ist_aktiv'] = (int) $row['ist_aktiv'] === 1;
+    $row['fuehrungsstellenname_gesperrt'] =
+        (int) ($row['fuehrungsstellenname_gesperrt'] ?? -1);
     $row['estab_legal_hold'] = (int) ($row['estab_legal_hold'] ?? 0) === 1;
     return $row;
 }
@@ -514,6 +616,7 @@ function estab_incident_fetch_for_update(mysqli $connection, int $incidentId): a
 {
     $statement = $connection->prepare(
         'SELECT `einsatz_id`, `kennung`, `name`, `beginn`, `ende`,'
+        . ' `fuehrungsstellenname`, `fuehrungsstellenname_gesperrt`,'
         . ' `estab_status`, `estab_closed_at`, `estab_closed_by`,'
         . ' `estab_close_note`, `estab_retain_until`, `estab_legal_hold`,'
         . ' `estab_legal_hold_reason`, `estab_legal_hold_at`,'
@@ -537,7 +640,258 @@ function estab_incident_fetch_for_update(mysqli $connection, int $incidentId): a
     if (!is_array($row)) {
         throw new EstabIncidentNotFoundException('Der Einsatz wurde nicht gefunden.');
     }
+    $row['fuehrungsstellenname_gesperrt'] =
+        (int) ($row['fuehrungsstellenname_gesperrt'] ?? -1);
     return $row;
+}
+
+/** Return whether immutable or operational data already exists for an incident. */
+function estab_incident_has_operational_data(
+    mysqli $connection,
+    int $incidentId
+): bool {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $statement = $connection->prepare(
+        'SELECT ('
+        . ' EXISTS(SELECT 1 FROM `nv_nachrichten` WHERE `einsatz_id` = ?)'
+        . ' OR EXISTS(SELECT 1 FROM `nv_anhang` WHERE `einsatz_id` = ?)'
+        . ' OR EXISTS(SELECT 1 FROM `nv_etb` WHERE `einsatz_id` = ?)'
+        . ' OR EXISTS(SELECT 1 FROM `nv_tbb` WHERE `einsatz_id` = ?)'
+        . ' OR EXISTS(SELECT 1 FROM `nv_ubb` WHERE `einsatz_id` = ?)'
+        . ' OR EXISTS(SELECT 1 FROM `nv_protokoll` WHERE `einsatz_id` = ?)'
+        . ' OR EXISTS(SELECT 1 FROM `nv_bhp50` WHERE `einsatz_id` = ?)'
+        . ' OR EXISTS(SELECT 1 FROM `nv_komplan` WHERE `einsatz_id` = ?)'
+        . ' OR EXISTS(SELECT 1 FROM `nv_etbtitel` WHERE `einsatz_id` = ?)'
+        . ' OR EXISTS(SELECT 1 FROM `nv_tbbtitel` WHERE `einsatz_id` = ?)'
+        . ' OR EXISTS(SELECT 1 FROM `nv_dienstschichten` WHERE `einsatz_id` = ?)'
+        . ' OR EXISTS(SELECT 1 FROM `nv_dienstuebergaben` WHERE `einsatz_id` = ?)'
+        . ' OR EXISTS(SELECT 1 FROM `nv_dienstuebergabe_anfragen`'
+        . ' WHERE `einsatz_id` = ?)'
+        . ' OR EXISTS(SELECT 1 FROM `nv_fernmeldeplaene` WHERE `einsatz_id` = ?)'
+        . ' OR EXISTS(SELECT 1 FROM `nv_melderauftraege` WHERE `einsatz_id` = ?)'
+        . ' OR EXISTS(SELECT 1 FROM `nv_betriebsereignisse`'
+        . ' WHERE `einsatz_id` = ?)'
+        . ' OR EXISTS(SELECT 1 FROM `nv_betriebsereignis_kopf`'
+        . ' WHERE `einsatz_id` = ?)'
+        . ')'
+    );
+    if (!$statement) {
+        throw new RuntimeException(
+            'Einsatzdaten konnten nicht zur Änderung geprüft werden.'
+        );
+    }
+    try {
+        $statement->bind_param(
+            'iiiiiiiiiiiiiiiii',
+            $incidentId,
+            $incidentId,
+            $incidentId,
+            $incidentId,
+            $incidentId,
+            $incidentId,
+            $incidentId,
+            $incidentId,
+            $incidentId,
+            $incidentId,
+            $incidentId,
+            $incidentId,
+            $incidentId,
+            $incidentId,
+            $incidentId,
+            $incidentId,
+            $incidentId
+        );
+        if (!$statement->execute()) {
+            throw new RuntimeException(
+                'Einsatzdaten konnten nicht zur Änderung geprüft werden.'
+            );
+        }
+        $result = $statement->get_result();
+        $row = $result->fetch_row();
+        $result->free();
+    } finally {
+        $statement->close();
+    }
+    return (int) ($row[0] ?? 0) === 1;
+}
+
+/**
+ * Set or correct the command-post name while preserving historical identity.
+ *
+ * A migrated NULL value may be confirmed once even when data already exists.
+ * A populated value becomes immutable as soon as any operational record has
+ * been written. The expected previous value prevents stale admin forms from
+ * overwriting a concurrent correction.
+ */
+function estab_incident_update_command_post_name(
+    mysqli $connection,
+    int $incidentId,
+    mixed $value,
+    mixed $expectedValue,
+    string $actor
+): array {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $name = estab_incident_text(
+        $value,
+        'Name der Führungsstelle',
+        ESTAB_INCIDENT_COMMAND_POST_NAME_MAX_LENGTH,
+        true
+    );
+    if (!is_string($expectedValue)) {
+        throw new EstabIncidentInputException(
+            'Bisheriger Führungsstellenname ist ungültig.'
+        );
+    }
+    $expected = estab_incident_text(
+        $expectedValue,
+        'Bisheriger Führungsstellenname',
+        ESTAB_INCIDENT_COMMAND_POST_NAME_MAX_LENGTH,
+        false
+    );
+    $actor = estab_incident_actor($actor);
+
+    if (!$connection->begin_transaction()) {
+        throw new RuntimeException(
+            'Führungsstellenname konnte nicht geändert werden.'
+        );
+    }
+    try {
+        $incident = estab_incident_fetch_for_update($connection, $incidentId);
+        if (($incident['estab_status'] ?? null) !== 'open') {
+            throw new EstabIncidentConflictException(
+                'Ein formal abgeschlossener Einsatz kann nicht geändert werden.'
+            );
+        }
+        $currentRaw = $incident['fuehrungsstellenname'] ?? null;
+        if ($currentRaw !== null && !is_string($currentRaw)) {
+            throw new EstabIncidentConfigurationException(
+                'Der gespeicherte Führungsstellenname ist ungültig.'
+            );
+        }
+        $current = $currentRaw === null
+            ? ''
+            : estab_incident_command_post_name($incident);
+        if (
+            ($currentRaw === null && $expected !== '')
+            || (
+                is_string($currentRaw)
+                && !hash_equals($currentRaw, $expected)
+            )
+        ) {
+            throw new EstabIncidentConflictException(
+                'Der Führungsstellenname wurde zwischenzeitlich geändert.'
+            );
+        }
+        $lockedRaw = $incident['fuehrungsstellenname_gesperrt'] ?? null;
+        if (!in_array((string) $lockedRaw, ['0', '1'], true)) {
+            throw new EstabIncidentConfigurationException(
+                'Die Sperre des Führungsstellennamens ist ungültig.'
+            );
+        }
+        $locked = (int) $lockedRaw === 1;
+        if (is_string($currentRaw) && hash_equals($currentRaw, $name)) {
+            if (!$connection->commit()) {
+                throw new RuntimeException(
+                    'Führungsstellenname konnte nicht bestätigt werden.'
+                );
+            }
+            $incident['fuehrungsstellenname'] = $name;
+            return $incident;
+        }
+        if ($locked) {
+            throw new EstabIncidentConflictException(
+                'Der Führungsstellenname ist nach der ersten operativen '
+                . 'Eintragung unveränderlich.'
+            );
+        }
+        $hasOperationalData = estab_incident_has_operational_data(
+            $connection,
+            $incidentId
+        );
+        if (is_string($currentRaw) && $hasOperationalData) {
+            throw new EstabIncidentConfigurationException(
+                'Die dauerhafte Sperre des Führungsstellennamens fehlt.'
+            );
+        }
+        $nextLocked = $currentRaw === null && $hasOperationalData ? 1 : 0;
+
+        $statement = $connection->prepare(
+            'UPDATE `nv_einsaetze` SET `fuehrungsstellenname` = ?,'
+            . ' `fuehrungsstellenname_gesperrt` = ?'
+            . ' WHERE `einsatz_id` = ? AND `estab_status` = ?'
+            . ' AND `fuehrungsstellenname_gesperrt` = 0'
+            . ' AND ((? = 1 AND `fuehrungsstellenname` IS NULL)'
+            . ' OR (? = 0 AND BINARY `fuehrungsstellenname` = BINARY ?))'
+        );
+        if (!$statement) {
+            throw new RuntimeException(
+                'Führungsstellenname konnte nicht vorbereitet werden.'
+            );
+        }
+        $open = 'open';
+        $expectedNull = $currentRaw === null ? 1 : 0;
+        if (
+            !$connection->query(
+                'SET @estab_command_post_admin_write_id = ' . $incidentId
+            )
+        ) {
+            throw new RuntimeException(
+                'Führungsstellenänderung konnte nicht autorisiert werden.'
+            );
+        }
+        try {
+            $statement->bind_param(
+                'siisiis',
+                $name,
+                $nextLocked,
+                $incidentId,
+                $open,
+                $expectedNull,
+                $expectedNull,
+                $expected
+            );
+            if (
+                !$statement->execute()
+                || $statement->affected_rows !== 1
+            ) {
+                throw new EstabIncidentConflictException(
+                    'Der Führungsstellenname wurde zwischenzeitlich geändert.'
+                );
+            }
+        } finally {
+            $statement->close();
+            $connection->query(
+                'SET @estab_command_post_admin_write_id = NULL'
+            );
+        }
+        estab_incident_audit(
+            $connection,
+            $incidentId,
+            'fuehrungsstelle_geaendert',
+            $actor,
+            null,
+            [
+                'vorher' => $currentRaw,
+                'nachher' => $name,
+                'erstbestaetigung' => $currentRaw === null,
+                'dauerhaft_gesperrt' => $nextLocked === 1,
+            ]
+        );
+        if (!$connection->commit()) {
+            throw new RuntimeException(
+                'Führungsstellenname konnte nicht gespeichert werden.'
+            );
+        }
+        $incident['fuehrungsstellenname'] = $name;
+        $incident['fuehrungsstellenname_gesperrt'] = $nextLocked;
+        return $incident;
+    } catch (Throwable $exception) {
+        $connection->query(
+            'SET @estab_command_post_admin_write_id = NULL'
+        );
+        $connection->rollback();
+        throw $exception;
+    }
 }
 
 /**
@@ -564,6 +918,7 @@ function estab_incident_activate_locked(
             'Ein formal abgeschlossener Einsatz kann nicht aktiviert werden.'
         );
     }
+    estab_incident_command_post_name($target);
     if ((int) ($status['active_einsatz_id'] ?? 0) === $incidentId) {
         return $status;
     }
@@ -642,22 +997,24 @@ function estab_incident_create(
         $statement = $connection->prepare(
             'INSERT INTO `nv_einsaetze`'
             . ' (`kennung`, `name`, `beginn`, `ende`, `ort`, `organisation`,'
-            . ' `einsatzleitung`, `beschreibung`, `metadaten`,'
+            . ' `fuehrungsstellenname`, `einsatzleitung`, `beschreibung`,'
+            . ' `metadaten`,'
             . ' `erstellt_am`, `erstellt_von`)'
-            . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(6), ?)'
+            . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(6), ?)'
         );
         if (!$statement) {
             throw new RuntimeException('Einsatz konnte nicht vorbereitet werden.');
         }
         try {
             $statement->bind_param(
-                'ssssssssss',
+                'sssssssssss',
                 $data['kennung'],
                 $data['name'],
                 $data['beginn'],
                 $data['ende'],
                 $data['ort'],
                 $data['organisation'],
+                $data['fuehrungsstellenname'],
                 $data['einsatzleitung'],
                 $data['beschreibung'],
                 $data['metadaten'],
@@ -685,7 +1042,10 @@ function estab_incident_create(
             'angelegt',
             $actor,
             null,
-            ['kennung' => $data['kennung']]
+            [
+                'kennung' => $data['kennung'],
+                'fuehrungsstellenname' => $data['fuehrungsstellenname'],
+            ]
         );
         if ($activate) {
             $status = estab_incident_activate_locked(
@@ -703,6 +1063,8 @@ function estab_incident_create(
             'einsatz_id' => $incidentId,
             'kennung' => $data['kennung'],
             'name' => $data['name'],
+            'fuehrungsstellenname' => $data['fuehrungsstellenname'],
+            'fuehrungsstellenname_gesperrt' => 0,
             'aktiv' => $activate,
             'status_revision' => $activate ? $status['revision'] : null,
         ];
