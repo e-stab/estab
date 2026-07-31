@@ -53,6 +53,15 @@ for pdf_file in "$single_pdf" "$dossier_pdf"; do
     grep -Fq 'Empfänger außerhalb aktueller Matrix:' "$text_file"
     grep -Fq 'ALT_1 [gn]' "$text_file"
     grep -Fq 'ALT2 [rt]' "$text_file"
+    grep -Fq 'Ruf Nr.' "$text_file"
+    grep -Fq '0711 123456' "$text_file"
+    grep -Fq 'Lagebetreff Nord' "$text_file"
+    subject_line=$(grep -Fn 'Lagebetreff Nord' "$text_file" | head -n 1 | cut -d: -f1)
+    content_line=$(grep -Fn 'eStab PDF Funktionsnachweis' "$text_file" | head -n 1 | cut -d: -f1)
+    [ "$subject_line" -lt "$content_line" ] || {
+        echo "PDF subject is not above the message text: $pdf_file" >&2
+        exit 1
+    }
     if grep -Eiq 'Dienstgebrauch|VS-NfD' "$text_file"; then
         echo "PDF fixture still contains a VS marking: $pdf_file" >&2
         exit 1
@@ -257,6 +266,10 @@ if grep -Fq 'bbb' \
     exit 1
 fi
 grep -Fq 'Empfänger außerhalb aktueller Matrix:' \
+    "$complete_dossier_pdf.page-$message_page.layout.txt"
+grep -Fq '0711 123456' \
+    "$complete_dossier_pdf.page-$message_page.layout.txt"
+grep -Fq 'Lagebetreff Nord' \
     "$complete_dossier_pdf.page-$message_page.layout.txt"
 grep -Fq "Seite $message_page/$complete_page_count" \
     "$complete_dossier_pdf.page-$message_page.layout.txt"

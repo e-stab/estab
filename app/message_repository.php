@@ -28,8 +28,9 @@ function estab_message_columns(): array
             '05_gegenstelle', '06_befweg', '06_befwegausw',
             'estab_fernmeldeplan_eintrag_id',
             '07_durchspruch', '08_befhinweis', '08_befhinwausw',
-            '09_vorrangstufe', '10_anschrift', '11_gesprnotiz',
-            '12_anhang', '12_inhalt', '12_abfzeit',
+            '09_vorrangstufe', '10_anschrift',
+            '11_rufnummer', '11_gesprnotiz',
+            '12_anhang', '12_betreff', '12_inhalt', '12_abfzeit',
             '13_abseinheit', '14_zeichen', '14_funktion',
             '15_quitdatum', '15_quitzeichen',
             '16_empf', '17_vermerke', '20_master_katego',
@@ -106,6 +107,134 @@ function estab_message_excerpt(mixed $value, int $limit): string
     return substr($text, 0, $limit);
 }
 
+/**
+ * Normalize one official-form single-line value at the persistence boundary.
+ *
+ * A null result denotes malformed UTF-8, a non-string value, forbidden
+ * control/line-break characters, an empty required value or an overlong
+ * value. Optional empty strings remain valid.
+ */
+function estab_message_single_line_value(
+    mixed $value,
+    int $maxLength,
+    bool $allowEmpty
+): ?string {
+    if (
+        !is_string($value)
+        || $maxLength < 1
+        || preg_match('//u', $value) !== 1
+        || preg_match('/\p{C}/u', $value) === 1
+        || preg_match('/\R/u', $value) === 1
+    ) {
+        return null;
+    }
+
+    $normalized = preg_replace(
+        '/\A[\p{Z}\s]+|[\p{Z}\s]+\z/u',
+        '',
+        $value
+    );
+    if (!is_string($normalized)) {
+        return null;
+    }
+    $length = estab_auth_text_length($normalized);
+    if (
+        $length < 0
+        || $length > $maxLength
+        || (!$allowEmpty && $length === 0)
+    ) {
+        return null;
+    }
+    return $normalized;
+}
+
+/**
+ * Build the authoritative AW:/WG: subject without trusting browser fields.
+ *
+ * Existing identical prefixes are canonicalized instead of duplicated. A
+ * legacy source without a subject still yields the explicit action marker.
+ */
+function estab_message_derived_subject(mixed $source, string $action): string
+{
+    if (!in_array($action, ['AW', 'WG'], true)) {
+        throw new InvalidArgumentException('Invalid derived-message action');
+    }
+
+    $subject = estab_message_single_line_value($source, 255, true);
+    if ($subject === null) {
+        $subject = '';
+    }
+    $marker = $action . ':';
+    if (
+        preg_match(
+            '/\A' . preg_quote($marker, '/') . '[\p{Z}\s]*(.*)\z/iu',
+            $subject,
+            $matches
+        ) === 1
+    ) {
+        $subject = (string) ($matches[1] ?? '');
+    }
+
+    $separator = $subject === '' ? '' : ' ';
+    $available = 255
+        - estab_auth_text_length($marker)
+        - estab_auth_text_length($separator);
+    if (estab_auth_text_length($subject) > $available) {
+        if (function_exists('mb_substr')) {
+            $subject = mb_substr($subject, 0, $available, 'UTF-8');
+        } else {
+            $characters = preg_split('//u', $subject, -1, PREG_SPLIT_NO_EMPTY);
+            $subject = is_array($characters)
+                ? implode('', array_slice($characters, 0, $available))
+                : '';
+        }
+    }
+    return $marker . $separator . $subject;
+}
+
+/**
+ * Return the contact fields shared by every reply/forward entry point.
+ *
+ * Replies retain a safe authoritative phone number; forwards deliberately
+ * start without one because their counterparty has not been selected yet.
+ *
+ * @return array{11_rufnummer:string,12_betreff:string}
+ */
+function estab_message_followup_contact_fields(
+    array $source,
+    string $action
+): array {
+    return [
+        '11_rufnummer' => $action === 'AW'
+            ? (
+                estab_message_single_line_value(
+                    $source['11_rufnummer'] ?? '',
+                    128,
+                    true
+                ) ?? ''
+            )
+            : '',
+        '12_betreff' => estab_message_derived_subject(
+            $source['12_betreff'] ?? '',
+            $action
+        ),
+    ];
+}
+
+/**
+ * Turn a derived reply/forward draft into a genuinely new message record.
+ *
+ * The source row id is useful while deriving the quoted content, but must not
+ * survive into the rendered draft. In particular, the attachment workflow
+ * accepts record ids only for an explicitly authorised correction.
+ */
+function estab_message_followup_new_record(array $draft): array
+{
+    $draft['00_lfd'] = '';
+    unset($draft['msglfd']);
+    return $draft;
+}
+
 function estab_message_connect(array $databaseConfig): mysqli
 {
     return estab_auth_connect($databaseConfig);
@@ -162,6 +291,20 @@ function estab_message_fields(array $fields): array
                 throw new InvalidArgumentException('Invalid message priority');
             }
             $value = $priority;
+        }
+        if ($column === '11_rufnummer' || $column === '12_betreff') {
+            $value = estab_message_single_line_value(
+                $value,
+                $column === '11_rufnummer' ? 128 : 255,
+                $column === '11_rufnummer'
+            );
+            if ($value === null) {
+                throw new InvalidArgumentException(
+                    $column === '11_rufnummer'
+                        ? 'Invalid message phone number'
+                        : 'Invalid message subject'
+                );
+            }
         }
         $validated[$column] = $value;
     }
@@ -1628,7 +1771,7 @@ function estab_message_resubmit_returned_outgoing(
             );
             $originalStatement = estab_message_execute(
                 $connection,
-                'SELECT `14_zeichen`, `14_funktion` FROM '
+                'SELECT `14_zeichen`, `14_funktion`, `17_vermerke` FROM '
                     . estab_message_table($table)
                     . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
                     . " AND `04_richtung` = 'A' AND `x00_status` = 10"
@@ -1738,6 +1881,8 @@ function estab_message_resubmit_returned_outgoing(
                 $event['snapshot']['responsible_author_code'] = $authorCode;
                 $event['snapshot']['responsible_author_function'] =
                     $authorFunction;
+                $event['snapshot']['correction_note'] =
+                    (string) ($originalMessage['17_vermerke'] ?? '');
                 estab_message_append_transition_evidence(
                     $connection,
                     (int) $incident['active_einsatz_id'],

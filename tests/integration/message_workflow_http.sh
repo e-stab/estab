@@ -94,7 +94,10 @@ s3_name="Workflow S3 ${identity_seed}"
 s6_name="Workflow S6 ${identity_seed}"
 pol_name="Workflow POL ${identity_seed}"
 incoming_marker="E2EIN_${identity_seed}_dv"
+incoming_phone="+49 711 ${identity_seed}"
+incoming_subject="E2E Eingang ${identity_seed}"
 outgoing_marker="E2EOUT_${identity_seed}_dv"
+outgoing_subject="E2E Ausgang ${identity_seed}"
 mapping_incoming_marker="E2EMAPIN_${identity_seed}_dv"
 mapping_outgoing_marker="E2EMAPOUT_${identity_seed}_dv"
 reply_marker="E2EREPLY_${identity_seed}_dv"
@@ -378,6 +381,123 @@ csrf_from_body()
         exit 1
     fi
     printf '%s' "$token"
+}
+
+recipient_matrix_revision_from_body()
+{
+    revision=$(sed -n \
+        's/.*name="recipient_matrix_revision" value="\([a-f0-9][a-f0-9]*\)".*/\1/p' \
+        "$body" | head -n 1)
+    if ! printf '%s' "$revision" | grep -Eq '^[a-f0-9]{64}$'; then
+        echo 'Message workflow HTTP: recipient-matrix revision missing' >&2
+        sed -n '1,120p' "$body" >&2
+        exit 1
+    fi
+    printf '%s' "$revision"
+}
+
+attachment_flow_from_body()
+{
+    flow_token=$(sed -n \
+        's/.*name="attachment_flow" value="\([a-f0-9][a-f0-9]*\)".*/\1/p' \
+        "$body" | head -n 1)
+    if ! printf '%s' "$flow_token" | grep -Eq '^[a-f0-9]{32}$'; then
+        echo 'Message workflow HTTP: attachment flow token missing' >&2
+        sed -n '1,120p' "$body" >&2
+        exit 1
+    fi
+    printf '%s' "$flow_token"
+}
+
+roundtrip_staff_followup_attachment()
+{
+    label=$1
+    destination=$2
+    phone=$3
+    subject=$4
+    draft_content=$5
+
+    followup_csrf=$(csrf_from_body)
+    followup_matrix_revision=$(recipient_matrix_revision_from_body)
+    assert_status 422 "$label malformed attachment draft" \
+        --cookie "$pol_cookies" --cookie-jar "$pol_cookies" \
+        --request POST \
+        --data-urlencode "csrf_token=$followup_csrf" \
+        --data-urlencode \
+            "recipient_matrix_revision=$followup_matrix_revision" \
+        --data-urlencode 'anhang_plus_x=1' \
+        --data-urlencode 'task=Stab_schreiben' \
+        --data-urlencode '00_lfd=' \
+        --data-urlencode "10_anschrift=$destination" \
+        --data-urlencode "11_rufnummer=$phone" \
+        --data-urlencode "12_betreff=$subject" \
+        --data-urlencode '12_inhalt[]=unzulässiger Arraywert' \
+        --data-urlencode '13_abseinheit=Browser-Manipulation' \
+        --data-urlencode "14_zeichen=$pol_code" \
+        --data-urlencode '14_funktion=POL' \
+        "$base_url/4fach/mainindex.php"
+    assert_no_runtime_error "$label malformed attachment draft"
+    assert_body 'Die Anhangverwaltung wurde nicht geöffnet' \
+        "$label malformed attachment draft explanation"
+    assert_body "name=\"13_abseinheit\" value=\"$authoritative_sender\"" \
+        "$label malformed draft authoritative sender"
+    assert_body "name=\"14_zeichen\" value=\"$pol_code\"" \
+        "$label malformed draft authoritative author code"
+    assert_body 'name="14_funktion" value="POL"' \
+        "$label malformed draft authoritative author function"
+    assert_body_absent 'Browser-Manipulation' \
+        "$label malformed draft rejected sender"
+
+    followup_csrf=$(csrf_from_body)
+    followup_matrix_revision=$(recipient_matrix_revision_from_body)
+    assert_status 200 "$label attachment picker" \
+        --cookie "$pol_cookies" --cookie-jar "$pol_cookies" \
+        --request POST \
+        --data-urlencode "csrf_token=$followup_csrf" \
+        --data-urlencode \
+            "recipient_matrix_revision=$followup_matrix_revision" \
+        --data-urlencode 'anhang_plus_x=1' \
+        --data-urlencode 'task=Stab_schreiben' \
+        --data-urlencode '00_lfd=' \
+        --data-urlencode '04_richtung=' \
+        --data-urlencode '04_nummer=' \
+        --data-urlencode '07_durchspruch=D' \
+        --data-urlencode '08_befhinweis=' \
+        --data-urlencode '08_befhinwausw=' \
+        --data-urlencode '09_vorrangstufe=eee' \
+        --data-urlencode "10_anschrift=$destination" \
+        --data-urlencode "11_rufnummer=$phone" \
+        --data-urlencode '11_gesprnotiz=f' \
+        --data-urlencode '12_anhang=' \
+        --data-urlencode "12_betreff=$subject" \
+        --data-urlencode "12_inhalt=$draft_content" \
+        --data-urlencode '12_abfzeit=' \
+        --data-urlencode "13_abseinheit=$authoritative_sender" \
+        --data-urlencode "14_zeichen=$pol_code" \
+        --data-urlencode '14_funktion=POL' \
+        "$base_url/4fach/mainindex.php"
+    assert_no_runtime_error "$label attachment picker"
+    assert_body 'Liste der verfügbaren Dateien' "$label attachment picker"
+    attachment_csrf=$(csrf_from_body)
+    attachment_flow=$(attachment_flow_from_body)
+    assert_status 200 "$label attachment return" \
+        --cookie "$pol_cookies" --cookie-jar "$pol_cookies" \
+        --request POST \
+        --data-urlencode "csrf_token=$attachment_csrf" \
+        --data-urlencode "attachment_flow=$attachment_flow" \
+        --data-urlencode 'ah_abbrechen_x=1' \
+        "$base_url/4fach/anhang.php"
+    assert_no_runtime_error "$label attachment return"
+    assert_body 'name="task" value="Stab_schreiben"' \
+        "$label attachment return task"
+    assert_body 'name="00_lfd" value=""' \
+        "$label attachment return new record id"
+    assert_body "name=\"12_betreff\" value=\"$subject\"" \
+        "$label attachment return subject"
+    assert_body "$draft_content" "$label attachment return content"
+    assert_body \
+        "name=\"recipient_matrix_revision\" value=\"$followup_matrix_revision\"" \
+        "$label attachment return recipient-matrix revision"
 }
 
 assert_numeric()
@@ -1056,8 +1176,11 @@ open_viewer_message()
         'id="f_15_quitzeichen" data-estab-readonly="true"' \
         "Si signed review mark for $marker"
     assert_body ">$si_code</strong>" "Si signed review mark for $marker"
+    assert_body_absent 'name="15_quitdatum"' \
+        "Si completion time is server-generated for $marker"
     assert_body 'name="16_gncopy" type="radio"' "Si green-copy control"
     assert_body 'name="16_41" value="16_41_bl" type="checkbox"' "Si blue-copy control"
+    viewer_matrix_revision=$(recipient_matrix_revision_from_body)
 }
 
 finish_viewer_message()
@@ -1068,16 +1191,30 @@ finish_viewer_message()
 
     open_viewer_message "$marker" "$record_id"
     viewer_csrf=$(csrf_from_body)
-    tactical_time=$(date '+%H%M')
+    assert_status 403 "reject forged Si completion time for $marker" \
+        --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+        --request POST \
+        --data-urlencode "csrf_token=$viewer_csrf" \
+        --data-urlencode \
+            "recipient_matrix_revision=$viewer_matrix_revision" \
+        --data-urlencode 'absenden_x=1' \
+        --data-urlencode 'task=Stab_sichten' \
+        --data-urlencode "00_lfd=$record_id" \
+        --data-urlencode '15_quitdatum=0101' \
+        --data-urlencode '16_gncopy=16_21_gn' \
+        --data-urlencode '16_32=16_32_bl' \
+        --data-urlencode '16_41=16_41_bl' \
+        --data-urlencode "17_vermerke=$note" \
+        "$base_url/4fach/mainindex.php"
     assert_status 200 "finish Si review for $marker" \
         --cookie "$si_cookies" --cookie-jar "$si_cookies" \
         --request POST \
         --data-urlencode "csrf_token=$viewer_csrf" \
+        --data-urlencode \
+            "recipient_matrix_revision=$viewer_matrix_revision" \
         --data-urlencode 'absenden_x=1' \
         --data-urlencode 'task=Stab_sichten' \
         --data-urlencode "00_lfd=$record_id" \
-        --data-urlencode "15_quitdatum=$tactical_time" \
-        --data-urlencode "15_quitzeichen=$si_code" \
         --data-urlencode '16_gncopy=16_21_gn' \
         --data-urlencode '16_32=16_32_bl' \
         --data-urlencode '16_41=16_41_bl' \
@@ -1117,6 +1254,7 @@ open_viewer_outgoing()
         "Si cannot add outgoing recipients for $marker"
     assert_body_absent '<textarea id="f_12_inhalt"' \
         "Si cannot edit outgoing content for $marker"
+    viewer_matrix_revision=$(recipient_matrix_revision_from_body)
 }
 
 finish_viewer_outgoing()
@@ -1127,16 +1265,15 @@ finish_viewer_outgoing()
 
     open_viewer_outgoing "$marker" "$record_id"
     viewer_csrf=$(csrf_from_body)
-    tactical_time=$(date '+%H%M')
     assert_status 200 "approve Si formal review for $marker" \
         --cookie "$si_cookies" --cookie-jar "$si_cookies" \
         --request POST \
         --data-urlencode "csrf_token=$viewer_csrf" \
+        --data-urlencode \
+            "recipient_matrix_revision=$viewer_matrix_revision" \
         --data-urlencode 'absenden_x=1' \
         --data-urlencode 'task=Stab_sichten' \
         --data-urlencode "00_lfd=$record_id" \
-        --data-urlencode "15_quitdatum=$tactical_time" \
-        --data-urlencode "15_quitzeichen=$si_code" \
         --data-urlencode "17_vermerke=$note" \
         "$base_url/4fach/mainindex.php"
     assert_no_runtime_error "approved Si formal review for $marker"
@@ -1150,16 +1287,15 @@ return_viewer_outgoing()
 
     open_viewer_outgoing "$marker" "$record_id"
     viewer_csrf=$(csrf_from_body)
-    tactical_time=$(date '+%H%M')
     assert_status 200 "return Si formal review for $marker" \
         --cookie "$si_cookies" --cookie-jar "$si_cookies" \
         --request POST \
         --data-urlencode "csrf_token=$viewer_csrf" \
+        --data-urlencode \
+            "recipient_matrix_revision=$viewer_matrix_revision" \
         --data-urlencode 'zurueckweisen_x=1' \
         --data-urlencode 'task=Stab_sichten' \
         --data-urlencode "00_lfd=$record_id" \
-        --data-urlencode "15_quitdatum=$tactical_time" \
-        --data-urlencode "15_quitzeichen=$si_code" \
         --data-urlencode "17_vermerke=$note" \
         "$base_url/4fach/mainindex.php"
     assert_no_runtime_error "returned Si formal review for $marker"
@@ -1405,6 +1541,20 @@ select_personal_active_hat "$s2_cookies" "$s2_code" S2 S2
 select_personal_active_hat "$s3_cookies" "$s3_code" S3 S3
 select_personal_active_hat "$pol_cookies" "$pol_code" POL POL
 select_personal_active_hat "$si_cookies" "$si_code" Si Si
+
+# The attachment controller is a direct endpoint as well as an included
+# message workflow. A selected hat alone must not grant upload authority to
+# LdF or Si when their menu route deliberately offers no attachment action.
+assert_status 403 'reject direct attachment administration as LdF' \
+    --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+    "$base_url/4fach/anhang.php"
+assert_body 'darf die Anhangverwaltung nicht öffnen' \
+    'direct LdF attachment rejection'
+assert_status 403 'reject direct attachment administration as Si' \
+    --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+    "$base_url/4fach/anhang.php"
+assert_body 'darf die Anhangverwaltung nicht öffnen' \
+    'direct Si attachment rejection'
 
 http_plan_origin="CI_HTTP_POST_${identity_seed}"
 assert_status 200 'load Führungsstellen page for S6 plan creation' \
@@ -1664,8 +1814,10 @@ assert_status 200 'save A/W incoming message' \
     --data-urlencode '08_befhinwausw=' \
     --data-urlencode '09_vorrangstufe=eee' \
     --data-urlencode '10_anschrift=E2E-Einsatzleitung' \
+    --data-urlencode "11_rufnummer=$incoming_phone" \
     --data-urlencode '11_gesprnotiz=f' \
     --data-urlencode '12_anhang=' \
+    --data-urlencode "12_betreff=$incoming_subject" \
     --data-urlencode "12_inhalt=$incoming_marker" \
     --data-urlencode "12_abfzeit=$tactical_time" \
     --data-urlencode '14_zeichen=' \
@@ -1673,6 +1825,10 @@ assert_status 200 'save A/W incoming message' \
     --data-urlencode '17_vermerke=' \
     "$base_url/4fach/mainindex.php"
 assert_no_runtime_error 'saved A/W incoming message'
+assert_db_equals \
+    "${incoming_phone}|${incoming_subject}" \
+    'persisted official incoming phone and subject' \
+    "SELECT CONCAT(\`11_rufnummer\`, '|', \`12_betreff\`) FROM \`nv_nachrichten\` WHERE \`12_inhalt\`='${incoming_marker}';"
 
 incoming_id=$(db_sql <<SQL
 SELECT \`00_lfd\` FROM \`nv_nachrichten\`
@@ -1765,6 +1921,8 @@ assert_status 403 'reject Si recipient suffix injection' \
     --cookie "$si_cookies" --cookie-jar "$si_cookies" \
     --request POST \
     --data-urlencode "csrf_token=$viewer_csrf" \
+    --data-urlencode \
+        "recipient_matrix_revision=$viewer_matrix_revision" \
     --data-urlencode 'absenden_x=1' \
     --data-urlencode 'task=Stab_sichten' \
     --data-urlencode "00_lfd=$incoming_id" \
@@ -2012,8 +2170,8 @@ assert_status 200 'open incoming message as POL/FB for answer' \
     "$base_url/4fach/mainindex.php"
 assert_no_runtime_error 'POL/FB incoming read form for answer'
 assert_body 'name="task" value="Stab_lesen"' 'POL/FB incoming read task'
-assert_body 'name="antwort"' 'POL/FB answer control'
-assert_body 'name="weiterleiten"' 'POL/FB forward control'
+assert_body 'name="antwort_x"' 'POL/FB answer control'
+assert_body 'name="weiterleiten_x"' 'POL/FB forward control'
 
 pol_csrf=$(csrf_from_body)
 assert_status 200 'derive POL/FB answer form' \
@@ -2026,6 +2184,8 @@ assert_status 200 'derive POL/FB answer form' \
     --data-urlencode '04_richtung=E' \
     --data-urlencode "04_nummer=$incoming_number" \
     --data-urlencode '10_anschrift=E2E-Einsatzleitung' \
+    --data-urlencode '11_rufnummer=Browser-Manipulation' \
+    --data-urlencode '12_betreff=Browser-Manipulation' \
     --data-urlencode "12_inhalt=$incoming_marker" \
     --data-urlencode '13_abseinheit=E2E-Absender' \
     --data-urlencode '14_funktion=' \
@@ -2044,11 +2204,30 @@ assert_body \
 assert_body \
     'name="14_funktion" value="POL"' \
     'derived answer author function'
+assert_body \
+    "name=\"11_rufnummer\" value=\"$incoming_phone\"" \
+    'derived answer authoritative phone number'
+assert_body \
+    "name=\"12_betreff\" value=\"AW: $incoming_subject\"" \
+    'derived answer authoritative subject'
+assert_body 'name="00_lfd" value=""' 'derived answer new record id'
+assert_body 'name="msglfd" value=""' 'derived answer new message id'
+assert_body_absent \
+    "name=\"00_lfd\" value=\"$incoming_id\"" \
+    'derived answer source record id'
+assert_body_absent 'Browser-Manipulation' \
+    'derived answer browser message-field overpost'
 assert_body "Zitat: von E $incoming_number" 'derived answer quote reference'
 assert_body "$incoming_marker" 'derived answer quoted content'
 
 reply_content=$(printf 'Zitat: von E %s\n"%s"\n%s' \
     "$incoming_number" "$incoming_marker" "$reply_marker")
+roundtrip_staff_followup_attachment \
+    'derived POL/FB answer' \
+    'E2E-Absender' \
+    "$incoming_phone" \
+    "AW: $incoming_subject" \
+    "$reply_content"
 pol_csrf=$(csrf_from_body)
 assert_status 200 'save POL/FB answer' \
     --cookie "$pol_cookies" --cookie-jar "$pol_cookies" \
@@ -2062,8 +2241,10 @@ assert_status 200 'save POL/FB answer' \
     --data-urlencode '08_befhinwausw=' \
     --data-urlencode '09_vorrangstufe=eee' \
     --data-urlencode '10_anschrift=E2E-Absender' \
+    --data-urlencode "11_rufnummer=$incoming_phone" \
     --data-urlencode '11_gesprnotiz=f' \
     --data-urlencode '12_anhang=' \
+    --data-urlencode "12_betreff=AW: $incoming_subject" \
     --data-urlencode "12_inhalt=$reply_content" \
     --data-urlencode '12_abfzeit=' \
     --data-urlencode '13_abseinheit=E2E-Einsatzleitung' \
@@ -2080,9 +2261,9 @@ SQL
 )
 assert_numeric 'POL/FB answer message ID' "$reply_id"
 assert_db_equals \
-    "A|4|E2E-Absender|${authoritative_sender}|${pol_code}|POL|S2_rt,POL_gn|1|1|1" \
+    "A|4|E2E-Absender|${authoritative_sender}|${pol_code}|POL|S2_rt,POL_gn|${incoming_phone}|AW: ${incoming_subject}|1|1|1" \
     'persisted POL/FB answer' \
-    "SELECT CONCAT(\`04_richtung\`, '|', \`x00_status\`, '|', \`10_anschrift\`, '|', \`13_abseinheit\`, '|', \`14_zeichen\`, '|', \`14_funktion\`, '|', \`16_empf\`, '|', LOCATE('Zitat: von E ${incoming_number}', \`12_inhalt\`) > 0, '|', LOCATE('${incoming_marker}', \`12_inhalt\`) > 0, '|', LOCATE('${reply_marker}', \`12_inhalt\`) > 0) FROM \`nv_nachrichten\` WHERE \`00_lfd\` = ${reply_id};"
+    "SELECT CONCAT(\`04_richtung\`, '|', \`x00_status\`, '|', \`10_anschrift\`, '|', \`13_abseinheit\`, '|', \`14_zeichen\`, '|', \`14_funktion\`, '|', \`16_empf\`, '|', \`11_rufnummer\`, '|', \`12_betreff\`, '|', LOCATE('Zitat: von E ${incoming_number}', \`12_inhalt\`) > 0, '|', LOCATE('${incoming_marker}', \`12_inhalt\`) > 0, '|', LOCATE('${reply_marker}', \`12_inhalt\`) > 0) FROM \`nv_nachrichten\` WHERE \`00_lfd\` = ${reply_id};"
 
 load_dashboard "$pol_cookies" 'POL/FB list before forwarding'
 assert_body "$incoming_marker" 'POL/FB list before forwarding'
@@ -2107,6 +2288,8 @@ assert_status 200 'derive POL/FB forwarding form' \
     --data-urlencode '04_richtung=E' \
     --data-urlencode "04_nummer=$incoming_number" \
     --data-urlencode '10_anschrift=E2E-Einsatzleitung' \
+    --data-urlencode '11_rufnummer=Browser-Manipulation' \
+    --data-urlencode '12_betreff=Browser-Manipulation' \
     --data-urlencode "12_inhalt=$incoming_marker" \
     --data-urlencode '13_abseinheit=E2E-Absender' \
     --data-urlencode '14_funktion=' \
@@ -2122,11 +2305,30 @@ assert_body \
 assert_body \
     'name="14_funktion" value="POL"' \
     'derived forwarding author function'
+assert_body \
+    'name="11_rufnummer" value=""' \
+    'derived forwarding empty phone number'
+assert_body \
+    "name=\"12_betreff\" value=\"WG: $incoming_subject\"" \
+    'derived forwarding authoritative subject'
+assert_body 'name="00_lfd" value=""' 'derived forwarding new record id'
+assert_body 'name="msglfd" value=""' 'derived forwarding new message id'
+assert_body_absent \
+    "name=\"00_lfd\" value=\"$incoming_id\"" \
+    'derived forwarding source record id'
+assert_body_absent 'Browser-Manipulation' \
+    'derived forwarding browser message-field overpost'
 assert_body "Zitat: von E $incoming_number" 'derived forwarding quote reference'
 assert_body "$incoming_marker" 'derived forwarding quoted content'
 
 forward_content=$(printf 'Zitat: von E %s\n"%s"\n%s' \
     "$incoming_number" "$incoming_marker" "$forward_marker")
+roundtrip_staff_followup_attachment \
+    'derived POL/FB forwarding' \
+    'E2E-Weiterleitungsziel' \
+    '' \
+    "WG: $incoming_subject" \
+    "$forward_content"
 pol_csrf=$(csrf_from_body)
 assert_status 200 'save POL/FB forwarding' \
     --cookie "$pol_cookies" --cookie-jar "$pol_cookies" \
@@ -2140,8 +2342,10 @@ assert_status 200 'save POL/FB forwarding' \
     --data-urlencode '08_befhinwausw=' \
     --data-urlencode '09_vorrangstufe=eee' \
     --data-urlencode '10_anschrift=E2E-Weiterleitungsziel' \
+    --data-urlencode '11_rufnummer=' \
     --data-urlencode '11_gesprnotiz=f' \
     --data-urlencode '12_anhang=' \
+    --data-urlencode "12_betreff=WG: $incoming_subject" \
     --data-urlencode "12_inhalt=$forward_content" \
     --data-urlencode '12_abfzeit=' \
     --data-urlencode '13_abseinheit=E2E-Einsatzleitung' \
@@ -2158,9 +2362,9 @@ SQL
 )
 assert_numeric 'POL/FB forwarding message ID' "$forward_id"
 assert_db_equals \
-    "A|4|E2E-Weiterleitungsziel|${authoritative_sender}|${pol_code}|POL|S2_rt,POL_gn|1|1|1" \
+    "A|4|E2E-Weiterleitungsziel|${authoritative_sender}|${pol_code}|POL|S2_rt,POL_gn||WG: ${incoming_subject}|1|1|1" \
     'persisted POL/FB forwarding' \
-    "SELECT CONCAT(\`04_richtung\`, '|', \`x00_status\`, '|', \`10_anschrift\`, '|', \`13_abseinheit\`, '|', \`14_zeichen\`, '|', \`14_funktion\`, '|', \`16_empf\`, '|', LOCATE('Zitat: von E ${incoming_number}', \`12_inhalt\`) > 0, '|', LOCATE('${incoming_marker}', \`12_inhalt\`) > 0, '|', LOCATE('${forward_marker}', \`12_inhalt\`) > 0) FROM \`nv_nachrichten\` WHERE \`00_lfd\` = ${forward_id};"
+    "SELECT CONCAT(\`04_richtung\`, '|', \`x00_status\`, '|', \`10_anschrift\`, '|', \`13_abseinheit\`, '|', \`14_zeichen\`, '|', \`14_funktion\`, '|', \`16_empf\`, '|', \`11_rufnummer\`, '|', \`12_betreff\`, '|', LOCATE('Zitat: von E ${incoming_number}', \`12_inhalt\`) > 0, '|', LOCATE('${incoming_marker}', \`12_inhalt\`) > 0, '|', LOCATE('${forward_marker}', \`12_inhalt\`) > 0) FROM \`nv_nachrichten\` WHERE \`00_lfd\` = ${forward_id};"
 assert_db_equals 1 'POL/FB source read state' \
     "SELECT COUNT(*) FROM \`usr_pol_${pol_code}_read\` WHERE \`nachnum\` = ${incoming_id};"
 derived_source_after=$(
@@ -2228,8 +2432,10 @@ assert_status 200 'save S1 outgoing message' \
     --data-urlencode '08_befhinwausw=' \
     --data-urlencode '09_vorrangstufe=eee' \
     --data-urlencode '10_anschrift=E2E-Zielstelle' \
+    --data-urlencode '11_rufnummer=' \
     --data-urlencode '11_gesprnotiz=f' \
     --data-urlencode '12_anhang=' \
+    --data-urlencode "12_betreff=$outgoing_subject" \
     --data-urlencode "12_inhalt=$outgoing_marker" \
     --data-urlencode "12_abfzeit=$tactical_time" \
     --data-urlencode '13_abseinheit=E2E-Einsatzleitung' \
@@ -2350,7 +2556,35 @@ assert_body 'name="task" value="Stab_korrigieren"' \
     'returned outgoing correction task'
 assert_body 'Anschrift fachlich präzisieren' \
     'returned outgoing reason visible to author'
+assert_body_absent 'name="17_vermerke"' \
+    'returned outgoing reason is not author-editable'
+assert_body_absent 'name="11_gesprnotiz"' \
+    'returned outgoing cannot submit a conversation-note state'
+assert_body \
+    'id="f_11_gesprnotiz" class="estab-official-box-choice" type="checkbox" disabled' \
+    'returned outgoing conversation-note indicator is read-only'
 s1_csrf=$(csrf_from_body)
+assert_status 403 'reject forged author correction note' \
+    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$s1_csrf" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=Stab_korrigieren' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    --data-urlencode '17_vermerke=Browserseitig erfundener Korrekturvermerk' \
+    "$base_url/4fach/mainindex.php"
+assert_status 403 'reject conversation-note conversion during correction' \
+    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$s1_csrf" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=Stab_korrigieren' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    --data-urlencode '11_gesprnotiz=on' \
+    "$base_url/4fach/mainindex.php"
+assert_message_state "$outgoing_marker" \
+    "A|10|f|set|${si_code}|S2_rt,S1_gn|f||f" \
+    'conversation-note overpost preserved returned outgoing status'
 tactical_time=$(date '+%H%M')
 assert_status 409 'reject forged attachment during correction resubmission' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
@@ -2364,14 +2598,14 @@ assert_status 409 'reject forged attachment during correction resubmission' \
     --data-urlencode '08_befhinwausw=' \
     --data-urlencode '09_vorrangstufe=eee' \
     --data-urlencode '10_anschrift=E2E-Zielstelle korrigiert' \
-    --data-urlencode '11_gesprnotiz=f' \
+    --data-urlencode '11_rufnummer=' \
     --data-urlencode '12_anhang=NICHTVORHANDEN.pdf;' \
+    --data-urlencode "12_betreff=$outgoing_subject" \
     --data-urlencode "12_inhalt=$outgoing_marker" \
     --data-urlencode "12_abfzeit=$tactical_time" \
     --data-urlencode '13_abseinheit=Gefälschter Absender' \
     --data-urlencode "14_zeichen=$s1_code" \
     --data-urlencode '14_funktion=S1' \
-    --data-urlencode '17_vermerke=Korrektur gemäß Rückgabe' \
     "$base_url/4fach/mainindex.php"
 assert_no_runtime_error 'forged correction attachment rejection'
 assert_body 'gehört nicht zum aktiven Einsatz' \
@@ -2394,14 +2628,14 @@ assert_status 200 'resubmit corrected outgoing as original author' \
     --data-urlencode '08_befhinwausw=' \
     --data-urlencode '09_vorrangstufe=eee' \
     --data-urlencode '10_anschrift=E2E-Zielstelle korrigiert' \
-    --data-urlencode '11_gesprnotiz=f' \
+    --data-urlencode '11_rufnummer=' \
     --data-urlencode '12_anhang=' \
+    --data-urlencode "12_betreff=$outgoing_subject" \
     --data-urlencode "12_inhalt=$outgoing_marker" \
     --data-urlencode "12_abfzeit=$tactical_time" \
     --data-urlencode '13_abseinheit=Gefälschter Absender' \
     --data-urlencode "14_zeichen=$s1_code" \
     --data-urlencode '14_funktion=S1' \
-    --data-urlencode '17_vermerke=Korrektur gemäß Rückgabe' \
     "$base_url/4fach/mainindex.php"
 assert_no_runtime_error 'resubmitted corrected outgoing'
 assert_message_state "$outgoing_marker" \
@@ -2411,6 +2645,10 @@ assert_db_equals \
     "E2E-Zielstelle korrigiert|${authoritative_sender}|${s1_code}|S1" \
     'correction preserved authenticated author and local sender' \
     "SELECT CONCAT(\`10_anschrift\`, '|', \`13_abseinheit\`, '|', \`14_zeichen\`, '|', \`14_funktion\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
+assert_db_equals \
+    'Anschrift fachlich präzisieren' \
+    'correction evidence retained the authoritative Sichter return reason' \
+    "SELECT JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.correction_note')) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${outgoing_id} AND \`event_type\`='author_resubmitted';"
 
 finish_viewer_outgoing \
     "$outgoing_marker" "$outgoing_id" 'Formal vollständig'
@@ -2543,7 +2781,12 @@ outgoing_clock_after=$(app_tactical_clock)
 assert_no_runtime_error 'locked outgoing transport form'
 assert_body 'name="task" value="FM-Ausgang"' 'locked outgoing transport form'
 assert_body "name=\"00_lfd\" value=\"$outgoing_id\"" 'locked outgoing transport form'
-assert_body "name=\"03_zeichen\" value=\"$aw_code\"" 'locked outgoing transport form'
+assert_body \
+    'id="f_03_zeichen" data-estab-readonly="true"' \
+    'locked outgoing transport form uses authenticated A/W mark'
+assert_body_absent \
+    'name="03_zeichen"' \
+    'A/W cannot rewrite its authenticated transport mark'
 assert_body_absent \
     'id="f_05_gegenstelle" maxlength=' \
     'A/W cannot rewrite LdF callsign'

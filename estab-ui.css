@@ -3058,6 +3058,1516 @@ form[data-estab-incident-disabled="true"]::before {
     }
 }
 
+/* -------------------------------------------------------------------------
+ * Amtlicher Nachrichtenvordruck
+ *
+ * The sheet intentionally uses a fixed grid: responsive layouts scroll the
+ * document instead of rearranging official cells. Application controls around
+ * it remain fluid.
+ * ---------------------------------------------------------------------- */
+
+body.estab-message-form-body {
+    background: #e7edf3 !important;
+    color: #172033;
+    font-family: Arial, Helvetica, sans-serif;
+    margin: 0;
+    min-width: 0;
+}
+
+.estab-message-form-page,
+.estab-message-form-page * {
+    box-sizing: border-box;
+}
+
+.estab-message-form-page {
+    margin: 0 auto;
+    max-width: 82rem;
+    padding: clamp(0.75rem, 2.5vw, 1.75rem);
+}
+
+.estab-message-page-header {
+    align-items: center;
+    background: #173a5e;
+    border-left: 6px solid #e4b443;
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(17, 38, 63, 0.14);
+    color: #ffffff;
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+    padding: clamp(1rem, 3vw, 1.5rem);
+}
+
+.estab-message-page-header h1 {
+    color: #ffffff;
+    font-size: clamp(1.55rem, 4vw, 2.2rem);
+    line-height: 1.1;
+    margin: 0.2rem 0 0.35rem;
+}
+
+.estab-message-page-header p {
+    color: #e7eff7;
+    margin: 0;
+    max-width: 52rem;
+}
+
+.estab-message-page-header .estab-section-kicker,
+.estab-message-workflow-panel .estab-section-kicker {
+    color: #e4b443;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+}
+
+.estab-message-task-badge,
+.estab-message-readonly-badge {
+    background: #edf4fb;
+    border: 1px solid #9db2c7;
+    border-radius: 999px;
+    color: #173a5e;
+    flex: 0 0 auto;
+    font-size: 0.78rem;
+    font-weight: 800;
+    padding: 0.45rem 0.7rem;
+}
+
+.estab-message-actionbar {
+    align-items: center;
+    background: rgba(255, 255, 255, 0.97);
+    border: 1px solid #b8c7d5;
+    border-radius: 9px;
+    box-shadow: 0 5px 16px rgba(31, 58, 86, 0.1);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    margin: 0 0 0.85rem;
+    padding: 0.65rem;
+    position: relative;
+    z-index: 30;
+}
+
+.estab-message-actionbar[data-estab-message-actions="top"] {
+    position: sticky;
+    top: 0.4rem;
+}
+
+.estab-message-actionbar[data-estab-message-actions="bottom"] {
+    margin: 1rem 0 0;
+}
+
+.estab-message-actionbar .estab-button {
+    min-height: 2.55rem;
+    padding: 0.55rem 0.8rem;
+}
+
+.estab-button-secondary {
+    background: #eef4fa;
+    border-color: #45698e;
+    color: #173a5e;
+}
+
+.estab-button-ghost {
+    background: transparent;
+    border-color: #7d8d9e;
+    color: #34495e;
+}
+
+.estab-message-categories {
+    background: #ffffff;
+    border: 1px solid #bdcad8;
+    border-radius: 8px;
+    margin: 0 0 0.85rem;
+    padding: 0.15rem 0.8rem;
+}
+
+.estab-message-categories > summary {
+    color: #173a5e;
+    cursor: pointer;
+    font-weight: 800;
+    padding: 0.65rem 0;
+}
+
+.estab-message-category-grid {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    padding: 0 0 0.8rem;
+}
+
+.estab-message-category-grid section {
+    background: #f3f7fb;
+    border: 1px solid #ced9e4;
+    border-radius: 6px;
+    display: grid;
+    gap: 0.35rem;
+    padding: 0.65rem;
+}
+
+.estab-message-category-grid a {
+    color: #1d5d91;
+}
+
+.estab-message-category-current {
+    color: #40566d;
+    display: grid;
+    font-size: 0.82rem;
+    gap: 0.1rem;
+}
+
+.estab-message-category-description {
+    color: #5c6f82;
+    line-height: 1.35;
+}
+
+.estab-message-workflow-panel {
+    align-items: start;
+    background: #ffffff;
+    border: 1px solid #b9c8d7;
+    border-left: 5px solid #315f8b;
+    border-radius: 9px;
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: minmax(12rem, 0.7fr) minmax(18rem, 1.3fr);
+    margin-bottom: 1rem;
+    padding: 1rem;
+}
+
+.estab-message-workflow-panel h2 {
+    color: #173a5e;
+    font-size: 1.15rem;
+    margin: 0.25rem 0 0.35rem;
+}
+
+.estab-message-workflow-panel p {
+    line-height: 1.45;
+    margin: 0;
+}
+
+.estab-message-workflow-fields {
+    display: grid;
+    gap: 0.7rem;
+}
+
+.estab-message-workflow-fields fieldset {
+    background: #f4f7fa;
+    border: 1px solid #c5d1dd;
+    border-radius: 7px;
+    display: grid;
+    gap: 0.45rem;
+    margin: 0;
+    min-width: 0;
+    padding: 0.75rem;
+}
+
+.estab-message-workflow-fields legend {
+    color: #173a5e;
+    font-weight: 800;
+    padding: 0 0.35rem;
+}
+
+.estab-message-workflow-choice-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem 1rem;
+}
+
+.estab-message-workflow-choice-row label {
+    align-items: center;
+    display: inline-flex;
+    gap: 0.35rem;
+}
+
+.estab-message-workflow-fields input:not([type="checkbox"]):not([type="radio"]),
+.estab-message-workflow-fields select,
+.estab-message-workflow-fields textarea {
+    background: #ffffff;
+    border: 1px solid #879aae;
+    border-radius: 5px;
+    color: #172033;
+    font: inherit;
+    max-width: 100%;
+    padding: 0.5rem 0.6rem;
+    width: 100%;
+}
+
+.estab-message-workflow-fields input:focus,
+.estab-message-workflow-fields select:focus,
+.estab-message-workflow-fields textarea:focus {
+    outline: 3px solid #e4b443;
+    outline-offset: 1px;
+}
+
+.estab-message-workflow-readonly {
+    color: #536476;
+    font-size: 0.9rem;
+}
+
+.estab-message-form-scroll {
+    background: #cfd8e1;
+    border: 1px solid #a6b5c4;
+    border-radius: 10px;
+    max-width: 100%;
+    overflow: auto;
+    overscroll-behavior-inline: contain;
+    padding: clamp(0.55rem, 2vw, 1.25rem);
+    scrollbar-color: #496a8a #e7edf3;
+}
+
+.estab-message-form-scroll:focus-visible {
+    outline: 4px solid #e4b443;
+    outline-offset: 2px;
+}
+
+.estab-official-message-form {
+    --estab-official-blue: #a2d9f7;
+    --estab-official-line: #000000;
+    background: var(--estab-official-blue);
+    box-shadow: 0 12px 30px rgba(22, 37, 52, 0.2);
+    color: #000000;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 1rem;
+    margin: 0 auto;
+    min-width: 56rem;
+    position: relative;
+    width: 56rem;
+}
+
+.estab-official-message-form h2,
+.estab-official-message-form h3,
+.estab-official-message-form p {
+    color: inherit;
+    font-family: inherit;
+}
+
+.estab-official-message-form input,
+.estab-official-message-form textarea,
+.estab-official-message-form button {
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+.estab-official-zone {
+    display: grid;
+    grid-template-columns: 5.25rem minmax(0, 1fr);
+    position: relative;
+}
+
+.estab-official-vertical-title {
+    align-self: center;
+    font-size: 1.55rem;
+    font-weight: 500;
+    grid-column: 1;
+    justify-self: center;
+    letter-spacing: 0.01em;
+    margin: 0;
+    transform: rotate(180deg);
+    writing-mode: vertical-rl;
+}
+
+.estab-official-section-rule {
+    background: #000000;
+    height: 4px;
+    margin-left: 3.4rem;
+}
+
+.estab-official-fmz-grid {
+    border: 2px solid var(--estab-official-line);
+    display: grid;
+    grid-column: 2;
+    grid-template-columns: repeat(10, minmax(0, 1fr));
+    grid-template-rows: 2.45rem 1.85rem 7.1rem 4.4rem;
+}
+
+.estab-official-actual-medium {
+    border-bottom: 1.5px solid var(--estab-official-line);
+    border-right: 1.5px solid var(--estab-official-line);
+    grid-column: 1 / 9;
+    grid-row: 1;
+    padding: 0.2rem 0.55rem;
+    position: relative;
+}
+
+.estab-official-actual-medium .estab-official-choice-group,
+.estab-official-desired-medium .estab-official-choice-group {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    height: 100%;
+}
+
+.estab-official-actual-medium .estab-official-choice-group label,
+.estab-official-desired-medium .estab-official-choice-group label {
+    align-items: center;
+    display: flex;
+    gap: 0.4rem;
+    min-width: 0;
+    white-space: nowrap;
+}
+
+.estab-official-direction-headings {
+    border-bottom: 1.5px solid var(--estab-official-line);
+    border-right: 1.5px solid var(--estab-official-line);
+    display: grid;
+    grid-column: 1 / 9;
+    grid-row: 2;
+    grid-template-columns: 1fr 2fr;
+    text-align: center;
+}
+
+.estab-official-direction-headings strong {
+    align-items: center;
+    display: flex;
+    font-weight: 400;
+    justify-content: center;
+}
+
+.estab-official-direction-headings strong + strong {
+    border-left: 1.5px solid var(--estab-official-line);
+}
+
+.estab-official-stamps {
+    border-bottom: 1.5px solid var(--estab-official-line);
+    border-right: 1.5px solid var(--estab-official-line);
+    display: grid;
+    grid-column: 1 / 9;
+    grid-row: 3;
+    grid-template-columns: 1fr 1.016fr 1.07fr;
+}
+
+.estab-official-stamp {
+    display: grid;
+    grid-template-rows: 1.9rem minmax(2.6rem, 1fr) 1.55rem;
+    min-width: 0;
+    position: relative;
+}
+
+.estab-official-stamp + .estab-official-stamp {
+    border-left: 1.5px solid var(--estab-official-line);
+}
+
+.estab-official-cell-heading {
+    line-height: 1.12;
+    padding: 0.35rem 0.55rem;
+    position: relative;
+}
+
+.estab-official-stamp > .estab-official-cell-heading {
+    font-weight: 600;
+    padding-right: 1.8rem;
+    text-align: center;
+}
+
+.estab-official-stamp-entry {
+    align-items: center;
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(2.4rem, 0.65fr);
+    min-width: 0;
+    padding: 0;
+    position: relative;
+}
+
+.estab-official-stamp-datetime,
+.estab-official-stamp-mark {
+    align-items: center;
+    align-self: stretch;
+    display: flex;
+    min-width: 0;
+    padding: 0.15rem 0.35rem;
+    position: relative;
+}
+
+.estab-official-stamp-datetime {
+    grid-column: 1;
+}
+
+.estab-official-stamp-mark {
+    border-left: 1px solid var(--estab-official-line);
+    grid-column: 2;
+}
+
+.estab-official-stamp-datetime > .estab-official-input,
+.estab-official-stamp-datetime > .estab-official-readonly,
+.estab-official-stamp-mark > .estab-official-input,
+.estab-official-stamp-mark > .estab-official-readonly {
+    position: relative;
+    z-index: 2;
+}
+
+.estab-official-stamp-datetime:not(:focus-within)
+    > .estab-official-input,
+.estab-official-stamp-datetime:not(:focus-within)
+    > .estab-official-readonly {
+    color: transparent;
+}
+
+.estab-official-stamp-datetime--time-only > .estab-official-input,
+.estab-official-stamp-datetime--time-only > .estab-official-readonly {
+    margin-left: 50%;
+    width: 50%;
+}
+
+.estab-official-stamp-visual-cell {
+    align-items: center;
+    bottom: 0;
+    box-sizing: border-box;
+    display: flex;
+    font-size: 0.72rem;
+    justify-content: center;
+    overflow: hidden;
+    padding: 0.15rem 0.2rem;
+    pointer-events: none;
+    position: absolute;
+    top: 0;
+    width: 50%;
+    z-index: 3;
+}
+
+.estab-official-stamp-visual-cell > span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.estab-official-stamp-datetime:focus-within
+    .estab-official-stamp-visual-cell > span {
+    visibility: hidden;
+}
+
+.estab-official-stamp-visual-cell--date {
+    left: 0;
+}
+
+.estab-official-stamp-visual-cell--time {
+    border-left: 1px solid var(--estab-official-line);
+    right: 0;
+}
+
+.estab-official-stamp-labels {
+    border-top: 1px solid var(--estab-official-line);
+    display: grid;
+    font-size: 0.78rem;
+    grid-template-columns: 1fr 1fr 0.65fr;
+}
+
+.estab-official-stamp-labels span {
+    align-items: center;
+    display: flex;
+    justify-content: center;
+}
+
+.estab-official-stamp-labels span + span {
+    border-left: 1px solid var(--estab-official-line);
+}
+
+.estab-official-ttb {
+    display: grid;
+    gap: 0.25rem;
+    grid-column: 9 / 11;
+    grid-row: 1 / 4;
+    grid-template-columns: 2rem 1fr;
+    grid-template-rows: auto 2.2rem auto;
+    padding: 0.25rem 0.35rem;
+    position: relative;
+}
+
+.estab-official-ttb .estab-official-cell-heading {
+    grid-column: 1 / 3;
+    padding: 0 1.75rem 0 0;
+}
+
+.estab-official-ttb > label {
+    align-self: center;
+    grid-column: 1;
+}
+
+.estab-official-ttb > .estab-official-input,
+.estab-official-ttb > .estab-official-readonly {
+    border: 1.5px solid var(--estab-official-line);
+    box-sizing: border-box;
+    grid-column: 2;
+    min-height: 2.2rem;
+}
+
+.estab-official-ttb > .estab-official-choice-group {
+    display: grid;
+    gap: 0.45rem;
+    grid-column: 1 / 3;
+    padding-left: 1.75rem;
+}
+
+.estab-official-ttb > .estab-official-choice-group label {
+    align-items: center;
+    display: flex;
+    gap: 0.4rem;
+}
+
+.estab-official-callsign {
+    display: grid;
+    grid-column: 1 / 11;
+    grid-row: 4;
+    grid-template-columns: 33% minmax(0, 1fr);
+    position: relative;
+}
+
+.estab-official-callsign > .estab-official-cell-heading {
+    border-right: 1.5px solid var(--estab-official-line);
+    font-size: 1.05rem;
+    padding-right: 2rem;
+}
+
+.estab-official-callsign > .estab-official-cell-heading span {
+    font-size: 0.92rem;
+}
+
+.estab-official-field-value,
+.estab-official-address-value,
+.estab-official-phone-value,
+.estab-official-sender-value,
+.estab-official-composition-value {
+    align-items: center;
+    display: flex;
+    min-width: 0;
+    padding: 0.25rem 0.45rem;
+}
+
+.estab-official-field-value > *,
+.estab-official-address-value > *,
+.estab-official-phone-value > *,
+.estab-official-sender-value > *,
+.estab-official-composition-value > * {
+    min-width: 0;
+    width: 100%;
+}
+
+.estab-official-zone--content {
+    background: var(--estab-official-blue);
+    border-left: 2px solid var(--estab-official-line);
+    border-right: 2px solid var(--estab-official-line);
+    display: block;
+    margin-left: 5.25rem;
+    position: relative;
+}
+
+.estab-official-zone--content::before {
+    background: var(--estab-official-blue);
+    bottom: 0;
+    content: "";
+    left: -5.25rem;
+    position: absolute;
+    top: 0;
+    width: 5.25rem;
+    z-index: 0;
+}
+
+.estab-official-copy-distribution {
+    bottom: 6.5rem;
+    box-sizing: border-box;
+    display: grid;
+    font-size: 0.43rem;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    left: -5.25rem;
+    line-height: 1.12;
+    padding: 0.35rem 0.15rem;
+    position: absolute;
+    top: 9rem;
+    width: 5.25rem;
+    z-index: 2;
+}
+
+.estab-official-copy-distribution span {
+    align-self: center;
+    justify-self: center;
+    max-height: 29rem;
+    transform: rotate(180deg);
+    writing-mode: vertical-rl;
+}
+
+.estab-official-punch-hole {
+    background: #ffffff;
+    border: 1px solid #cad2d8;
+    border-radius: 50%;
+    box-sizing: border-box;
+    height: 2rem;
+    left: -2.4rem;
+    position: absolute;
+    width: 2rem;
+    z-index: 4;
+}
+
+.estab-official-punch-hole--upper {
+    top: calc(19% - 1rem);
+}
+
+.estab-official-punch-hole--lower {
+    top: calc(82% - 1rem);
+}
+
+.estab-official-desired-medium {
+    border-bottom: 1.5px solid var(--estab-official-line);
+    height: 2.55rem;
+    padding: 0.2rem 0.55rem;
+    position: relative;
+}
+
+.estab-official-type-priority {
+    border-bottom: 1.5px solid var(--estab-official-line);
+    display: grid;
+    grid-template-columns: 61% 39%;
+    min-height: 2.55rem;
+}
+
+.estab-official-type,
+.estab-official-priority {
+    padding: 0.2rem 0.55rem;
+    position: relative;
+}
+
+.estab-official-priority {
+    border-left: 1.5px solid var(--estab-official-line);
+}
+
+.estab-official-type .estab-official-choice-group,
+.estab-official-priority .estab-official-choice-group {
+    align-items: center;
+    display: flex;
+    gap: 1.7rem;
+    height: 100%;
+}
+
+.estab-official-type label,
+.estab-official-priority label {
+    align-items: center;
+    display: flex;
+    gap: 0.45rem;
+}
+
+.estab-official-address-block {
+    border-bottom: 1.5px solid var(--estab-official-line);
+    display: grid;
+    grid-template-columns: 19.8% 60.3% 19.9%;
+    grid-template-rows: 3rem 4.9rem;
+    min-height: 7.9rem;
+}
+
+.estab-official-address-label,
+.estab-official-phone-label {
+    border-right: 1.5px solid var(--estab-official-line);
+    position: relative;
+}
+
+.estab-official-address-label {
+    border-bottom: 1.5px solid var(--estab-official-line);
+    grid-column: 1;
+    grid-row: 1;
+}
+
+.estab-official-address-value {
+    grid-column: 2;
+    grid-row: 1;
+}
+
+.estab-official-address-value .estab-official-textarea {
+    height: 100%;
+}
+
+.estab-official-phone-label {
+    grid-column: 1;
+    grid-row: 2;
+}
+
+.estab-official-phone-value {
+    border-left: 1.5px solid var(--estab-official-line);
+    grid-column: 2;
+    grid-row: 2;
+}
+
+.estab-official-conversation {
+    border-left: 1.5px solid var(--estab-official-line);
+    display: grid;
+    grid-column: 3;
+    grid-row: 1 / 3;
+    grid-template-rows: 3rem 1fr;
+    position: relative;
+    text-align: center;
+}
+
+.estab-official-conversation > .estab-official-cell-heading {
+    border-bottom: 1.5px solid var(--estab-official-line);
+    font-size: 1rem;
+    padding-right: 1.8rem;
+}
+
+.estab-official-standalone-check {
+    align-items: center;
+    display: flex;
+    justify-content: center;
+}
+
+.estab-official-standalone-check .estab-official-box-choice {
+    height: 2.35rem;
+    width: 2.35rem;
+}
+
+.estab-official-subject {
+    border-bottom: 1.5px solid var(--estab-official-line);
+    display: grid;
+    grid-template-columns: 19.8% minmax(0, 1fr);
+    min-height: 3rem;
+    position: relative;
+}
+
+.estab-official-subject > .estab-official-cell-heading {
+    border-right: 1.5px solid var(--estab-official-line);
+    padding-right: 1.8rem;
+}
+
+.estab-official-message-text {
+    background-image: repeating-linear-gradient(
+        to bottom,
+        transparent 0,
+        transparent calc(2.75rem - 1.5px),
+        var(--estab-official-line) calc(2.75rem - 1.5px),
+        var(--estab-official-line) 2.75rem
+    );
+    border-bottom: 1.5px solid var(--estab-official-line);
+    height: 33rem;
+    position: relative;
+}
+
+.estab-official-message-text > .estab-official-help-anchor {
+    right: 0.45rem;
+    top: 0.45rem;
+}
+
+.estab-official-message-text .estab-official-textarea,
+.estab-official-message-text .estab-official-readonly--multiline {
+    font-size: 1.05rem;
+    height: 100%;
+    line-height: 2.75rem;
+    padding: 0 2.6rem 0 0.75rem;
+}
+
+.estab-official-sender {
+    border-bottom: 1.5px solid var(--estab-official-line);
+    display: grid;
+    grid-template-columns: 19.8% minmax(0, 1fr);
+    min-height: 3.2rem;
+    position: relative;
+}
+
+.estab-official-sender-label,
+.estab-official-composition-label {
+    border-right: 1.5px solid var(--estab-official-line);
+}
+
+.estab-official-composition {
+    border-bottom: 1.5px solid var(--estab-official-line);
+    display: grid;
+    grid-template-columns: 19.8% 40.9% 39.3%;
+    min-height: 3.2rem;
+}
+
+.estab-official-composition-value {
+    border-right: 1.5px solid var(--estab-official-line);
+}
+
+.estab-official-author {
+    display: grid;
+    grid-template-columns: 61% 20% 19%;
+    min-height: 3rem;
+}
+
+.estab-official-author > div {
+    align-items: end;
+    display: grid;
+    min-width: 0;
+    padding: 0.2rem 0.4rem;
+    position: relative;
+    text-align: center;
+}
+
+.estab-official-author > div + div {
+    border-left: 1.5px solid var(--estab-official-line);
+}
+
+.estab-official-author-mark,
+.estab-official-author-function {
+    grid-template-rows: minmax(1.25rem, 1fr) auto;
+}
+
+.estab-official-zone--review {
+    min-height: 15.5rem;
+}
+
+.estab-official-review-grid {
+    border: 2px solid var(--estab-official-line);
+    display: grid;
+    grid-column: 2;
+    grid-template-columns: 61% 39%;
+    grid-template-rows: 4.7rem minmax(10.5rem, 1fr);
+}
+
+.estab-official-receipt {
+    border-bottom: 1.5px solid var(--estab-official-line);
+    border-right: 1.5px solid var(--estab-official-line);
+    display: grid;
+    grid-column: 1;
+    grid-row: 1;
+    grid-template-columns: 11.5rem minmax(0, 1fr);
+    grid-template-rows: 2.8rem 1.7rem;
+    position: relative;
+}
+
+.estab-official-receipt > .estab-official-cell-heading {
+    border-right: 1.5px solid var(--estab-official-line);
+    grid-column: 1;
+    grid-row: 1;
+}
+
+.estab-official-receipt-value {
+    align-items: center;
+    display: grid;
+    gap: 0.35rem;
+    grid-column: 2;
+    grid-row: 1;
+    grid-template-columns: 2fr 1fr;
+    padding: 0.2rem 0.4rem;
+}
+
+.estab-official-receipt-labels {
+    border-top: 1px solid var(--estab-official-line);
+    display: grid;
+    grid-column: 1 / 3;
+    grid-row: 2;
+    grid-template-columns: 1fr 1fr;
+    text-align: center;
+}
+
+.estab-official-distribution {
+    border-right: 1.5px solid var(--estab-official-line);
+    grid-column: 1;
+    grid-row: 2;
+    padding: 0.35rem 0.65rem 0.55rem;
+    position: relative;
+}
+
+.estab-official-distribution > .estab-official-cell-heading {
+    height: 0;
+    padding: 0;
+}
+
+.estab-official-distribution-grid {
+    display: grid;
+    gap: 0.55rem;
+    grid-template-columns: 1.45fr 1fr 1fr;
+}
+
+.estab-official-distribution-grid section {
+    min-width: 0;
+}
+
+.estab-official-lead-grid {
+    display: grid;
+    gap: 0.25rem;
+    grid-template-columns: 43% minmax(0, 57%);
+}
+
+.estab-official-lead-director,
+.estab-official-lead-sections {
+    min-width: 0;
+}
+
+.estab-official-lead-sections {
+    display: grid;
+    grid-template-rows: repeat(6, minmax(1.45rem, 1fr));
+}
+
+.estab-official-distribution-grid h3 {
+    font-size: 0.9rem;
+    font-weight: 500;
+    margin: 0 0 0.25rem;
+}
+
+.estab-official-recipient {
+    align-items: center;
+    border-bottom: 1px solid var(--estab-official-line);
+    display: grid;
+    gap: 0.25rem;
+    grid-template-columns: 1.35rem minmax(0, 1fr);
+    min-height: 1.55rem;
+}
+
+.estab-official-recipient > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.estab-official-recipient-box {
+    border: 2px solid #000000;
+    box-sizing: border-box;
+    display: block;
+    height: 1.45rem;
+    width: 1.45rem;
+}
+
+.estab-official-copy-choice {
+    accent-color: #13833b;
+    height: 0.72rem;
+    margin: 0;
+    width: 0.72rem;
+}
+
+.estab-official-box-choice[data-estab-copy-color="blue"]:checked::after {
+    background: #215cbd;
+}
+
+.estab-official-box-choice[data-estab-copy-color="green"]:checked::after {
+    background: #13833b;
+}
+
+.estab-official-box-choice[data-estab-copy-color="red"]:checked::after {
+    background: #c6262e;
+}
+
+.estab-official-box-choice[data-estab-copy-color="yellow"]:checked::after {
+    background: #d3a600;
+}
+
+.estab-official-copy-choice[data-estab-copy-color="green"] {
+    accent-color: #13833b;
+}
+
+.estab-official-copy-legend {
+    display: flex;
+    font-size: 0.65rem;
+    gap: 0.65rem;
+    margin: 0.4rem 0 0;
+}
+
+.estab-official-copy-legend span {
+    align-items: center;
+    display: inline-flex;
+    gap: 0.2rem;
+}
+
+.estab-copy-blue,
+.estab-copy-green {
+    border-radius: 50%;
+    display: inline-block;
+    height: 0.55rem;
+    width: 0.55rem;
+}
+
+.estab-copy-blue {
+    background: #215cbd;
+}
+
+.estab-copy-green {
+    background: #13833b;
+}
+
+.estab-official-distribution-record {
+    font-size: 0.68rem;
+    margin: 0.35rem 0 0;
+    overflow-wrap: anywhere;
+}
+
+.estab-official-distribution-empty {
+    border-bottom: 1px solid var(--estab-official-line);
+    display: block;
+    min-height: 1.55rem;
+}
+
+.estab-official-notes {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    position: relative;
+}
+
+.estab-official-notes > .estab-official-cell-heading {
+    border-bottom: 1.5px solid var(--estab-official-line);
+    min-height: 2.8rem;
+    padding-right: 2rem;
+}
+
+.estab-official-notes .estab-official-textarea,
+.estab-official-notes .estab-official-readonly--multiline {
+    height: calc(100% - 2.8rem);
+    min-height: 10rem;
+    padding: 0.55rem;
+}
+
+.estab-official-input,
+.estab-official-textarea,
+.estab-official-readonly {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 0;
+    color: #000000;
+    display: block;
+    font-size: 1rem;
+    font-weight: 500;
+    margin: 0;
+    max-width: 100%;
+    min-height: 2rem;
+    padding: 0.25rem 0.4rem;
+    width: 100%;
+}
+
+.estab-official-textarea {
+    resize: none;
+}
+
+.estab-official-readonly {
+    align-items: center;
+    display: flex;
+    overflow-wrap: anywhere;
+}
+
+.estab-official-readonly--multiline {
+    align-items: flex-start;
+    display: block;
+    overflow: auto;
+    white-space: normal;
+}
+
+.estab-official-input:hover,
+.estab-official-textarea:hover {
+    background: rgba(255, 255, 255, 0.18);
+    border-color: rgba(0, 0, 0, 0.38);
+}
+
+.estab-official-input:focus,
+.estab-official-textarea:focus,
+.estab-official-box-choice:focus-visible,
+.estab-official-copy-choice:focus-visible {
+    background: #ffffff;
+    outline: 3px solid #174f82;
+    outline-offset: 1px;
+    position: relative;
+    z-index: 5;
+}
+
+.estab-official-input[aria-invalid="true"],
+.estab-official-textarea[aria-invalid="true"] {
+    border-color: #9d1c16;
+    box-shadow: inset 0 0 0 1px #9d1c16;
+}
+
+.estab-official-field-error {
+    background: #9d1c16;
+    color: #ffffff;
+    font-size: 0.65rem;
+    font-weight: 800;
+    padding: 0.1rem 0.25rem;
+    position: absolute;
+    right: 0.25rem;
+    top: 0.2rem;
+    z-index: 8;
+}
+
+.estab-official-box-choice {
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(255, 255, 255, 0.55);
+    border: 2px solid #000000;
+    border-radius: 0;
+    flex: 0 0 auto;
+    height: 1.45rem;
+    margin: 0;
+    position: relative;
+    width: 1.45rem;
+}
+
+.estab-official-box-choice:checked::after {
+    background: #000000;
+    content: "";
+    inset: 0.22rem;
+    position: absolute;
+}
+
+.estab-official-box-choice:disabled {
+    cursor: default;
+    opacity: 1;
+}
+
+.estab-official-print-number {
+    bottom: 0.08rem;
+    font-size: 0.52rem;
+    left: 0.22rem;
+    line-height: 1;
+    position: absolute;
+}
+
+.estab-official-help-anchor {
+    display: inline-block;
+    line-height: 1;
+    position: absolute;
+    right: 0.22rem;
+    top: 0.2rem;
+    z-index: 20;
+}
+
+.estab-official-help-button {
+    align-items: center;
+    background: #ffffff;
+    border: 1.5px solid #000000;
+    border-radius: 50%;
+    color: #000000;
+    cursor: pointer;
+    display: inline-flex;
+    font-size: 0.72rem;
+    font-style: italic;
+    font-weight: 800;
+    height: 1.3rem;
+    justify-content: center;
+    line-height: 1;
+    padding: 0;
+    width: 1.3rem;
+}
+
+.estab-official-help-button:hover,
+.estab-official-help-button:focus-visible,
+.estab-official-help-button[aria-expanded="true"] {
+    background: #173a5e;
+    border-color: #173a5e;
+    color: #ffffff;
+    outline: 3px solid #e4b443;
+    outline-offset: 1px;
+}
+
+.estab-official-help-dialog {
+    background: #ffffff;
+    border: 2px solid #173a5e;
+    border-radius: 8px;
+    box-shadow: 0 12px 32px rgba(10, 25, 42, 0.3);
+    color: #172033;
+    display: flex;
+    flex-direction: column;
+    font-size: 0.9rem;
+    gap: 0.55rem;
+    line-height: 1.4;
+    max-height: min(28rem, calc(100dvh - 1.5rem));
+    overflow: auto;
+    padding: 0.8rem;
+    position: fixed;
+    text-align: left;
+    width: min(23rem, calc(100vw - 1.5rem));
+    z-index: 1000;
+}
+
+.estab-official-help-dialog[hidden] {
+    display: none !important;
+}
+
+.estab-official-help-dialog strong {
+    color: #173a5e;
+}
+
+.estab-official-help-close {
+    align-self: flex-start;
+    background: #eef4fa;
+    border: 1px solid #45698e;
+    border-radius: 5px;
+    color: #173a5e;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 800;
+    padding: 0.4rem 0.55rem;
+}
+
+.estab-message-attachment-list {
+    background: #ffffff;
+    border: 1px solid #b8c7d5;
+    border-radius: 8px;
+    margin-top: 1rem;
+    padding: 0.85rem 1rem;
+}
+
+.estab-message-distribution-extras {
+    background: #ffffff;
+    border: 1px solid #b8c7d5;
+    border-left: 5px solid #45698e;
+    border-radius: 8px;
+    color: #172033;
+    margin-top: 1rem;
+    padding: 0.85rem 1rem;
+}
+
+.estab-message-distribution-extras h2 {
+    color: #173a5e;
+    font-size: 1.05rem;
+    margin: 0.15rem 0 0.25rem;
+}
+
+.estab-message-distribution-extras p {
+    color: #536476;
+    font-size: 0.86rem;
+    margin: 0 0 0.7rem;
+}
+
+.estab-message-distribution-extra-grid {
+    display: grid;
+    gap: 0.45rem 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.estab-message-distribution-extra-grid .estab-official-recipient {
+    grid-template-columns: 1.45rem minmax(0, 1fr);
+}
+
+.estab-message-green-copy {
+    border: 1px solid #b8c7d5;
+    border-radius: 8px;
+    display: grid;
+    gap: 0.35rem 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    margin: 0.9rem 0 0;
+    padding: 0.75rem;
+}
+
+.estab-message-green-copy legend {
+    color: #173a5e;
+    font-weight: 800;
+    padding: 0 0.35rem;
+}
+
+.estab-message-green-copy p {
+    grid-column: 1 / -1;
+}
+
+.estab-message-green-copy label {
+    align-items: center;
+    border: 1px solid #c5d1dc;
+    border-radius: 7px;
+    cursor: pointer;
+    display: flex;
+    gap: 0.55rem;
+    min-height: 2.75rem;
+    padding: 0.45rem 0.65rem;
+}
+
+.estab-message-green-copy input {
+    flex: 0 0 auto;
+    height: 1.25rem;
+    width: 1.25rem;
+}
+
+.estab-message-attachment-list h2 {
+    color: #173a5e;
+    font-size: 1.05rem;
+    margin: 0 0 0.45rem;
+}
+
+.estab-message-attachment-list a {
+    color: #155b91;
+    font-size: 1rem !important;
+    overflow-wrap: anywhere;
+}
+
+.estab-official-message-form .estab-message-suggestion-control {
+    display: block;
+    position: relative;
+    width: 100%;
+}
+
+.estab-official-message-form .estab-message-suggestion-list {
+    left: 0;
+    position: absolute;
+    top: 100%;
+    z-index: 100;
+}
+
+.estab-official-message-form .estab-message-suggestion-hint {
+    display: none;
+}
+
+@media (max-width: 56rem) {
+    .estab-message-form-page {
+        padding: 0.5rem;
+    }
+
+    .estab-message-page-header {
+        align-items: flex-start;
+        border-radius: 7px;
+        flex-direction: column;
+    }
+
+    .estab-message-actionbar[data-estab-message-actions="top"] {
+        position: relative;
+        top: auto;
+    }
+
+    .estab-message-workflow-panel {
+        grid-template-columns: 1fr;
+    }
+
+    .estab-message-form-scroll::before {
+        color: #34495e;
+        content: "Zum vollständigen Vordruck horizontal wischen";
+        display: block;
+        font-size: 0.78rem;
+        font-weight: 700;
+        margin: 0 0 0.5rem;
+    }
+}
+
+@media (max-width: 34rem) {
+    .estab-message-actionbar {
+        align-items: stretch;
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+
+    .estab-message-actionbar .estab-button {
+        width: 100%;
+    }
+}
+
+@media print {
+    @page {
+        margin: 7mm;
+        size: A4 portrait;
+    }
+
+    body.estab-message-form-body {
+        background: #ffffff !important;
+        margin: 0 !important;
+    }
+
+    body.estab-message-form-body .estab-session-bar,
+    .estab-message-page-header,
+    .estab-message-actionbar,
+    .estab-message-categories,
+    .estab-message-workflow-panel,
+    .estab-message-distribution-extras,
+    .estab-message-attachment-list,
+    .estab-official-help-anchor {
+        display: none !important;
+    }
+
+    .estab-message-form-page,
+    .estab-message-form-scroll {
+        background: #ffffff;
+        border: 0;
+        margin: 0;
+        max-width: none;
+        overflow: visible;
+        padding: 0;
+    }
+
+    .estab-message-form-scroll::before {
+        content: none !important;
+        display: none !important;
+    }
+
+    .estab-official-message-form {
+        break-inside: avoid-page;
+        box-shadow: none;
+        margin: 0 auto;
+        min-width: 56rem;
+        page-break-inside: avoid;
+        print-color-adjust: exact;
+        width: 56rem;
+        -webkit-print-color-adjust: exact;
+        zoom: 0.78;
+    }
+
+    .estab-official-fmz-grid {
+        grid-template-rows: 2.15rem 1.65rem 6.25rem 3.85rem;
+    }
+
+    .estab-official-stamp {
+        grid-template-rows: 1.7rem minmax(2.25rem, 1fr) 1.35rem;
+    }
+
+    .estab-official-address-block {
+        grid-template-rows: 2.7rem 4.2rem;
+        min-height: 6.9rem;
+    }
+
+    .estab-official-conversation {
+        grid-template-rows: 2.7rem 1fr;
+    }
+
+    .estab-official-message-text {
+        background-image: repeating-linear-gradient(
+            to bottom,
+            transparent 0,
+            transparent calc(2.475rem - 1.5px),
+            var(--estab-official-line) calc(2.475rem - 1.5px),
+            var(--estab-official-line) 2.475rem
+        );
+        height: 29.7rem;
+    }
+
+    .estab-official-message-text .estab-official-textarea,
+    .estab-official-message-text .estab-official-readonly--multiline {
+        line-height: 2.475rem;
+    }
+
+    .estab-official-zone--review {
+        min-height: 14rem;
+    }
+
+    .estab-official-review-grid {
+        grid-template-rows: 4.2rem minmax(8.8rem, 1fr);
+    }
+
+    .estab-official-receipt {
+        grid-template-rows: 2.55rem 1.45rem;
+    }
+
+    .estab-official-distribution {
+        padding: 0.25rem 0.5rem 0.35rem;
+    }
+
+    .estab-official-distribution-grid {
+        gap: 0.35rem;
+    }
+
+    .estab-official-recipient,
+    .estab-official-distribution-empty {
+        min-height: 0.85rem;
+    }
+
+    .estab-official-distribution-grid h3 {
+        font-size: 0.8rem;
+        margin-bottom: 0.15rem;
+    }
+
+    .estab-official-distribution-grid .estab-official-recipient {
+        font-size: 0.75rem;
+        grid-template-columns: 0.95rem minmax(0, 1fr);
+    }
+
+    .estab-official-distribution-grid .estab-official-box-choice {
+        border-width: 1px;
+        height: 0.9rem;
+        width: 0.9rem;
+    }
+
+    .estab-official-distribution-grid .estab-official-copy-choice {
+        height: 0.6rem;
+        width: 0.6rem;
+    }
+
+    .estab-official-zone,
+    .estab-official-section-rule {
+        break-inside: avoid-page;
+        page-break-inside: avoid;
+    }
+
+    .estab-official-input,
+    .estab-official-textarea,
+    .estab-official-readonly {
+        background: transparent;
+        border-color: transparent;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .estab-sidebar-status-notification {
         animation: none;

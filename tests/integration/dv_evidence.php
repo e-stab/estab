@@ -227,11 +227,20 @@ try {
     try {
         $statement = $connection->prepare(
             'INSERT INTO `nv_nachrichten`'
-            . ' (`einsatz_id`, `12_inhalt`, `x00_status`, `x01_abschluss`)'
-            . " VALUES (?, ?, 8, 't')"
+            . ' (`einsatz_id`, `11_rufnummer`, `12_betreff`, `12_inhalt`,'
+            . ' `x00_status`, `x01_abschluss`)'
+            . " VALUES (?, ?, ?, ?, 8, 't')"
         );
+        $number = '0711 123456';
+        $subject = 'Lagemeldung';
         $body = 'Abgeschlossene Testnachricht';
-        $statement->bind_param('is', $incidentId, $body);
+        $statement->bind_param(
+            'isss',
+            $incidentId,
+            $number,
+            $subject,
+            $body
+        );
         $statement->execute();
         $messageId = (int) $connection->insert_id;
         $statement->close();
@@ -287,6 +296,161 @@ try {
             && $verified['event_count'] === 2
             && $verified['message_count'] === 1,
         'valid message evidence chain did not verify'
+    );
+    $v2FieldSnapshot = json_decode(
+        (string) $scalar(
+            $connection,
+            'SELECT `field_snapshot` FROM `nv_nachrichten_ereignisse`'
+                . ' WHERE `event_id` = ' . $secondEvent
+        ),
+        true,
+        64,
+        JSON_THROW_ON_ERROR
+    );
+    $assert(
+        is_array($v2FieldSnapshot)
+            && ($v2FieldSnapshot['terminal_snapshot_version'] ?? null)
+                === ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V2
+            && (
+                $v2FieldSnapshot['terminal_message']['11_rufnummer'] ?? null
+            ) === $number
+            && (
+                $v2FieldSnapshot['terminal_message']['12_betreff'] ?? null
+            ) === $subject,
+        'new terminal event did not persist the complete V2 snapshot'
+    );
+
+    // Reproduce a byte-compatible terminal event written before the V2
+    // fields existed. It deliberately has no version marker; the verifier
+    // must interpret it as V1 and compare the live row with the V1 field set.
+    $connection->begin_transaction();
+    try {
+        $legacyStatement = $connection->prepare(
+            'INSERT INTO `nv_nachrichten`'
+                . ' (`einsatz_id`, `12_inhalt`, `x00_status`,'
+                . ' `x01_abschluss`)'
+                . " VALUES (?, 'Historischer V1-Nachweis', 8, 't')"
+        );
+        $legacyStatement->bind_param('i', $incidentId);
+        $legacyStatement->execute();
+        $legacyMessageId = (int) $connection->insert_id;
+        $legacyStatement->close();
+
+        $legacyResult = $connection->query(
+            'SELECT * FROM `nv_nachrichten` WHERE `00_lfd` = '
+                . $legacyMessageId . ' FOR UPDATE'
+        );
+        $legacyMessage = $legacyResult->fetch_assoc();
+        $legacyResult->free();
+        if (!is_array($legacyMessage)) {
+            throw new RuntimeException('Could not read historic V1 fixture');
+        }
+        $legacyTerminal = estab_message_terminal_snapshot(
+            $legacyMessage,
+            ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V1
+        );
+        $legacyTerminalDigest = estab_message_terminal_snapshot_sha256(
+            $legacyMessage,
+            ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V1
+        );
+        $legacyFieldSnapshot = estab_message_evidence_snapshot([
+            'terminal_message' => $legacyTerminal,
+            'terminal_snapshot_sha256' => $legacyTerminalDigest,
+        ]);
+        $legacySnapshotDigest = hash('sha256', $legacyFieldSnapshot);
+        $legacyOccurredAt = '2026-07-29 11:00:00.000000';
+        $legacyRecordedAt = estab_message_evidence_datetime(
+            estab_message_evidence_database_now($connection),
+            'Erfassungszeit'
+        );
+        $legacyEventType = 'historischer_v1';
+        $legacyActorUser = 'Historischer Nachweis';
+        $legacyActorCode = 'alt';
+        $legacyActorFunction = 'Si';
+        $legacyFromStatus = null;
+        $legacyToStatus = 8;
+        $legacyPreviousHash = null;
+        $legacyEventHash = estab_message_evidence_event_hash(
+            $incidentId,
+            $legacyMessageId,
+            $legacyEventType,
+            $legacyOccurredAt,
+            $legacyRecordedAt,
+            $legacyActorUser,
+            $legacyActorCode,
+            $legacyActorFunction,
+            $legacyFromStatus,
+            $legacyToStatus,
+            $legacySnapshotDigest,
+            $legacyPreviousHash
+        );
+        $legacyEventStatement = $connection->prepare(
+            'INSERT INTO `nv_nachrichten_ereignisse`'
+                . ' (`einsatz_id`, `message_id`, `event_type`, `occurred_at`,'
+                . ' `recorded_at`, `actor_user`, `actor_code`,'
+                . ' `actor_function`, `from_status`, `to_status`,'
+                . ' `field_snapshot`, `snapshot_sha256`,'
+                . ' `previous_event_sha256`, `event_sha256`)'
+                . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        );
+        $legacyEventStatement->bind_param(
+            'iissssssiissss',
+            $incidentId,
+            $legacyMessageId,
+            $legacyEventType,
+            $legacyOccurredAt,
+            $legacyRecordedAt,
+            $legacyActorUser,
+            $legacyActorCode,
+            $legacyActorFunction,
+            $legacyFromStatus,
+            $legacyToStatus,
+            $legacyFieldSnapshot,
+            $legacySnapshotDigest,
+            $legacyPreviousHash,
+            $legacyEventHash
+        );
+        $legacyEventStatement->execute();
+        $legacyEventId = (int) $connection->insert_id;
+        $legacyEventStatement->close();
+        $connection->commit();
+    } catch (Throwable $exception) {
+        $connection->rollback();
+        throw $exception;
+    }
+    $legacyDecoded = json_decode(
+        (string) $scalar(
+            $connection,
+            'SELECT `field_snapshot` FROM `nv_nachrichten_ereignisse`'
+                . ' WHERE `event_id` = ' . $legacyEventId
+        ),
+        true,
+        64,
+        JSON_THROW_ON_ERROR
+    );
+    $verifiedWithV1 = estab_message_evidence_verify(
+        $connection,
+        $incidentId
+    );
+    $assert(
+        is_array($legacyDecoded)
+            && !array_key_exists(
+                'terminal_snapshot_version',
+                $legacyDecoded
+            )
+            && !array_key_exists(
+                '11_rufnummer',
+                $legacyDecoded['terminal_message']
+            )
+            && !array_key_exists(
+                '12_betreff',
+                $legacyDecoded['terminal_message']
+            )
+            && $verifiedWithV1['valid']
+            && $verifiedWithV1['event_count'] === 3
+            && $verifiedWithV1['message_count'] === 2
+            && $verifiedWithV1['terminal_binding_complete'],
+        'implicit V1 terminal evidence no longer verifies against the live row'
     );
 
     $assert(

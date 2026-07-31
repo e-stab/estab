@@ -264,8 +264,9 @@ class vordruckaspdf extends PDF_Ellipse {
       "02_zeit", "02_zeichen", "03_datum", "03_zeichen", "04_richtung",
       "04_nummer", "05_gegenstelle", "06_befweg", "06_befwegausw",
       "07_durchspruch", "08_befhinweis", "08_befhinwausw",
-      "09_vorrangstufe", "10_anschrift", "11_gesprnotiz", "12_anhang",
-      "12_inhalt", "12_abfzeit", "13_abseinheit", "14_zeichen",
+      "09_vorrangstufe", "10_anschrift", "11_rufnummer",
+      "11_gesprnotiz", "12_anhang", "12_betreff", "12_inhalt",
+      "12_abfzeit", "13_abseinheit", "14_zeichen",
       "14_funktion", "15_quitdatum", "15_quitzeichen", "16_empf",
       "17_vermerke", "x00_status", "x01_abschluss", "x04_druck",
       "x05_druck_d", "99_lstacc"
@@ -301,8 +302,10 @@ class vordruckaspdf extends PDF_Ellipse {
     $this->db_dataset ["09_vorrangstufe"] =
       estab_message_priority_document_label ($data ["09_vorrangstufe"]);
     $this->db_dataset ["10_anschrift"]    = $data ["10_anschrift"] ;
+    $this->db_dataset ["11_rufnummer"]    = $data ["11_rufnummer"] ;
     $this->db_dataset ["11_gesprnotiz"]   = $data ["11_gesprnotiz"] == "t" ;
     $this->db_dataset ["12_anhang"]       = $data ["12_anhang"] ;
+    $this->db_dataset ["12_betreff"]      = $data ["12_betreff"] ;
     $this->db_dataset ["12_inhalt"]       = $data ["12_inhalt"] ;
 
     $this->db_dataset ["12_abfzeit"] = estab_datetime_is_unset ($data ["12_abfzeit"])
@@ -709,6 +712,27 @@ class vordruckaspdf extends PDF_Ellipse {
     $this->draw_linebypoint (  34, 37, $this->fline00, $this->color_sw);
     $this->draw_linebypoint (  26, 57, $this->fline00, $this->color_sw);
 
+    // Der Betreff belegt die amtliche Inhalts-Kopfzeile. Der eigentliche
+    // Nachrichtentext beginnt darunter und bleibt über Folgeseiten identisch
+    // eingerückt.
+    $subjectBottom = $this->border ['top'] + $this->point [34][1] + 10;
+    $this->draw_line (
+      $this->border ['left'] + $this->point [34][0],
+      $subjectBottom,
+      $this->border ['left'] + $this->point [37][0],
+      $subjectBottom,
+      $this->fline00,
+      $this->color_sw
+    );
+    $this->draw_line (
+      $this->border ['left'] + $this->point [34][0] + 34,
+      $this->border ['top'] + $this->point [34][1],
+      $this->border ['left'] + $this->point [34][0] + 34,
+      $subjectBottom,
+      $this->fline00,
+      $this->color_sw
+    );
+
     $this->draw_linebypoint (  38, 40, $this->fline00, $this->color_sw);
     $this->draw_linebypoint (  41, 45, $this->fline00, $this->color_sw);
     $this->draw_linebypoint (  39, 47, $this->fline00, $this->color_sw);
@@ -746,6 +770,7 @@ class vordruckaspdf extends PDF_Ellipse {
 
     $this->draw_text (   2,  61,  0, $this->color_sw, $this->fontsize00, "n", "o", "l", "Vorrang" );
     $this->draw_text (  35,  61,  0, $this->color_sw, $this->fontsize00, "n", "o", "l", "Anschrift" );
+    $this->draw_text (  35,  69,  0, $this->color_sw, $this->fontsize00, "n", "o", "l", "Ruf Nr." );
     $this->draw_text ( 137,  61,  0, $this->color_sw, $this->fontsize00, "n", "o", "l", "Gesprächsnotiz" );
 
     $this->draw_text ( $this->point [34][0]+2,
@@ -795,6 +820,50 @@ class vordruckaspdf extends PDF_Ellipse {
 
     $this->MultiCell ($delta_x, 5, $text);
 //    $this->MultiCell (0,5,$text);
+  }
+
+  /**
+   * Draw one field value on a single official-form line without crossing the
+   * neighbouring cell. FPDF core fonts use Windows-1252, so byte-wise fitting
+   * is deterministic after conversion.
+   */
+  function draw_fitted_textfield (
+    $x1,
+    $y1,
+    $x2,
+    $color,
+    $size,
+    $ntext
+  ) {
+    $x1 += $this->border ['left'];
+    $y1 += $this->border ['top'];
+    $x2 += $this->border ['left'];
+
+    $this->SetTextColor ($color['r'], $color['g'], $color['b']);
+    $this->SetFont ("helvetica", "B", $size);
+    $plain = preg_replace (
+      "/[\\r\\n]+/",
+      " ",
+      estab_message_plain_text ($ntext)
+    );
+    $text = estab_fpdf_text ($plain === null ? "" : $plain);
+    $maximumWidth = max (0, $x2 - $x1 - 1);
+    if ($this->GetStringWidth ($text) > $maximumWidth) {
+      $suffix = "...";
+      $maximumTextWidth = max (
+        0,
+        $maximumWidth - $this->GetStringWidth ($suffix)
+      );
+      while (
+        $text !== ""
+        && $this->GetStringWidth ($text) > $maximumTextWidth
+      ) {
+        $text = rtrim (substr ($text, 0, -1));
+      }
+      $text .= $suffix;
+    }
+    $this->SetXY ($x1, $y1);
+    $this->Cell ($maximumWidth, 5, $text, 0, 0, "L");
   }
 
   var $empfarray ;
@@ -950,13 +1019,34 @@ class vordruckaspdf extends PDF_Ellipse {
                        $this->color_bl,
                        $this->fontsize35, "b", "o", "z",
                        $this->db_dataset ["09_vorrangstufe"] );
-      // Anschrift
-    $this->draw_textfield ( $this->point[31][0],
-                            $this->point[31][1]+5,
-                            $this->point[36][0],
-                            $this->point[36][1],
-                            $this->color_bl,
-                            $this->db_dataset ["10_anschrift"]);
+      // Anschrift und Rufnummer stehen wie im amtlichen Vordruck gemeinsam
+      // neben dem Gesprächsnotiz-Feld.
+    $this->draw_fitted_textfield (
+      $this->point[31][0]+23,
+      $this->point[31][1]+1,
+      $this->point[36][0],
+      $this->color_bl,
+      $this->fontsize01,
+      $this->db_dataset ["10_anschrift"]
+    );
+    $this->draw_fitted_textfield (
+      $this->point[31][0]+23,
+      $this->point[31][1]+9,
+      $this->point[36][0],
+      $this->color_bl,
+      $this->fontsize01,
+      $this->db_dataset ["11_rufnummer"]
+    );
+
+      // Betreff in der eigenen Inhalts-Kopfzeile.
+    $this->draw_fitted_textfield (
+      $this->point[34][0]+36,
+      $this->point[34][1]+1,
+      $this->point[37][0],
+      $this->color_bl,
+      $this->fontsize01,
+      $this->db_dataset ["12_betreff"]
+    );
 
 
       // Anfassungszeit
@@ -1006,7 +1096,7 @@ class vordruckaspdf extends PDF_Ellipse {
 
   function writedata_inhalt () {
     $this->draw_textfield ( $this->point[34][0]+5,
-                            $this->point[34][1]+5,
+                            $this->point[34][1]+15,
                             $this->point[40][0]-10,
                             $this->point[40][1]-5,
                             $this->color_bl,
@@ -1047,7 +1137,7 @@ class vordruckaspdf extends PDF_Ellipse {
   function set_message_content_continuation_position () {
     $this->SetXY (
       $this->point[34][0] + $this->border['left'] + 5,
-      $this->point[34][1] + $this->border['top'] + 5
+      $this->point[34][1] + $this->border['top'] + 15
     );
   }
 

@@ -14,6 +14,10 @@ declare(strict_types=1);
 require_once __DIR__ . '/incident.php';
 
 const ESTAB_MESSAGE_EVIDENCE_SNAPSHOT_MAX_BYTES = 1048576;
+const ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V1 = 1;
+const ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V2 = 2;
+const ESTAB_MESSAGE_TERMINAL_SNAPSHOT_CURRENT =
+    ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V2;
 
 final class EstabMessageEvidenceInputException extends InvalidArgumentException
 {
@@ -138,10 +142,24 @@ function estab_message_evidence_snapshot(array $snapshot): string
  * form. Everything that documents receipt, disposition, transport, content,
  * distribution, review and completion remains comparison-relevant.
  *
+ * A missing version on an already persisted event is interpreted as V1.
+ * Callers creating a new snapshot use V2 by default.
+ *
  * @return array<string, int|string|null>
  */
-function estab_message_terminal_snapshot(array $message): array
+function estab_message_terminal_snapshot(
+    array $message,
+    int $version = ESTAB_MESSAGE_TERMINAL_SNAPSHOT_CURRENT
+): array
 {
+    if (!in_array($version, [
+        ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V1,
+        ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V2,
+    ], true)) {
+        throw new EstabMessageEvidenceInputException(
+            'Die Version des Terminalnachweises ist ungültig.'
+        );
+    }
     $integerFields = [
         'einsatz_id',
         '00_lfd',
@@ -156,13 +174,24 @@ function estab_message_terminal_snapshot(array $message): array
         '04_richtung',
         '05_gegenstelle', '06_befweg', '06_befwegausw',
         '07_durchspruch', '08_befhinweis', '08_befhinwausw',
-        '09_vorrangstufe', '10_anschrift', '11_gesprnotiz',
+        '09_vorrangstufe', '10_anschrift',
+    ];
+    if ($version >= ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V2) {
+        $textFields[] = '11_rufnummer';
+    }
+    $textFields = array_merge($textFields, [
+        '11_gesprnotiz',
+    ]);
+    if ($version >= ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V2) {
+        $textFields[] = '12_betreff';
+    }
+    $textFields = array_merge($textFields, [
         '12_anhang', '12_inhalt', '12_abfzeit',
         '13_abseinheit', '14_zeichen', '14_funktion',
         '15_quitdatum', '15_quitzeichen',
         '16_empf', '17_vermerke',
         'x01_abschluss',
-    ];
+    ]);
 
     $snapshot = [];
     foreach ($integerFields as $field) {
@@ -177,14 +206,130 @@ function estab_message_terminal_snapshot(array $message): array
 }
 
 /** Stable digest used by terminal events, verification and exports. */
-function estab_message_terminal_snapshot_sha256(array $message): string
+function estab_message_terminal_snapshot_sha256(
+    array $message,
+    int $version = ESTAB_MESSAGE_TERMINAL_SNAPSHOT_CURRENT
+): string
 {
     return hash(
         'sha256',
         estab_message_evidence_snapshot(
-            estab_message_terminal_snapshot($message)
+            estab_message_terminal_snapshot($message, $version)
         )
     );
+}
+
+/**
+ * Resolve the version protected by one stored event snapshot.
+ *
+ * Historic snapshots did not carry a version marker and are therefore
+ * exactly V1. Unknown or type-confused markers fail closed.
+ */
+function estab_message_terminal_snapshot_stored_version(
+    array $fieldSnapshot
+): ?int {
+    if (!array_key_exists('terminal_snapshot_version', $fieldSnapshot)) {
+        return ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V1;
+    }
+    $version = $fieldSnapshot['terminal_snapshot_version'];
+    if (
+        !is_int($version)
+        || !in_array($version, [
+            ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V1,
+            ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V2,
+        ], true)
+    ) {
+        return null;
+    }
+    return $version;
+}
+
+/**
+ * V1 can prove only the historic form fields, so later fields must be empty.
+ *
+ * Missing keys are accepted for snapshots written before the schema extension;
+ * a live row uses the migration-owned empty-string defaults. Any actual value
+ * would otherwise be silently excluded from the V1 digest.
+ */
+function estab_message_terminal_snapshot_v1_extensions_empty(
+    array $message
+): bool {
+    foreach (['11_rufnummer', '12_betreff'] as $field) {
+        if (
+            array_key_exists($field, $message)
+            && $message[$field] !== null
+            && $message[$field] !== ''
+        ) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/** V1 accepts only empty extensions; V2 requires both fields in its digest. */
+function estab_message_terminal_snapshot_has_version_fields(
+    array $terminalMessage,
+    int $version
+): bool {
+    if ($version === ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V1) {
+        return estab_message_terminal_snapshot_v1_extensions_empty(
+            $terminalMessage
+        );
+    }
+    return $version === ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V2
+        && array_key_exists('11_rufnummer', $terminalMessage)
+        && array_key_exists('12_betreff', $terminalMessage);
+}
+
+/** Validate an embedded terminal snapshot against its stored version. */
+function estab_message_terminal_snapshot_embedded_valid(
+    array $terminalMessage,
+    mixed $digest,
+    int $version
+): bool {
+    return is_string($digest)
+        && preg_match('/\A[0-9a-f]{64}\z/D', $digest) === 1
+        && estab_message_terminal_snapshot_has_version_fields(
+            $terminalMessage,
+            $version
+        )
+        && hash_equals(
+            $digest,
+            estab_message_terminal_snapshot_sha256(
+                $terminalMessage,
+                $version
+            )
+        );
+}
+
+/**
+ * Bind an embedded terminal snapshot to the live row using its stored version.
+ */
+function estab_message_terminal_snapshot_matches_live(
+    array $terminalMessage,
+    string $digest,
+    array $liveMessage,
+    int $version
+): bool {
+    if (
+        !estab_message_terminal_snapshot_embedded_valid(
+            $terminalMessage,
+            $digest,
+            $version
+        )
+        || !estab_message_terminal_snapshot_has_version_fields(
+            $liveMessage,
+            $version
+        )
+    ) {
+        return false;
+    }
+    return hash_equals(
+        $digest,
+        estab_message_terminal_snapshot_sha256($liveMessage, $version)
+    )
+        && estab_message_terminal_snapshot($terminalMessage, $version)
+            === estab_message_terminal_snapshot($liveMessage, $version);
 }
 
 /** Require the caller's mysqli handle to be inside an active transaction. */
@@ -366,10 +511,18 @@ function estab_message_event_append(
         }
         // Always replace caller values with the locked canonical row. This
         // makes the low-level append API as safe as the repository adapter.
+        $fieldSnapshot['terminal_snapshot_version'] =
+            ESTAB_MESSAGE_TERMINAL_SNAPSHOT_CURRENT;
         $fieldSnapshot['terminal_message'] =
-            estab_message_terminal_snapshot($terminalMessage);
+            estab_message_terminal_snapshot(
+                $terminalMessage,
+                ESTAB_MESSAGE_TERMINAL_SNAPSHOT_CURRENT
+            );
         $fieldSnapshot['terminal_snapshot_sha256'] =
-            estab_message_terminal_snapshot_sha256($terminalMessage);
+            estab_message_terminal_snapshot_sha256(
+                $terminalMessage,
+                ESTAB_MESSAGE_TERMINAL_SNAPSHOT_CURRENT
+            );
     }
     $actorUser = estab_message_evidence_actor_field(
         $actor['benutzer'] ?? null,
@@ -581,6 +734,11 @@ function estab_message_evidence_verify(
             $terminalDigest = is_array($decodedSnapshot)
                 ? ($decodedSnapshot['terminal_snapshot_sha256'] ?? null)
                 : null;
+            $terminalVersion = is_array($decodedSnapshot)
+                ? estab_message_terminal_snapshot_stored_version(
+                    $decodedSnapshot
+                )
+                : null;
             if (
                 (string) ($row['event_type'] ?? '') === 'legacy_import'
                 && (!is_array($terminalMessage) || !is_string($terminalDigest))
@@ -588,19 +746,23 @@ function estab_message_evidence_verify(
                 $legacyUnverifiable[$messageId] = true;
             } elseif (
                 !is_array($terminalMessage)
-                || !is_string($terminalDigest)
-                || preg_match('/\A[0-9a-f]{64}\z/D', $terminalDigest) !== 1
-                || !hash_equals(
+                || !is_int($terminalVersion)
+                || !estab_message_terminal_snapshot_embedded_valid(
+                    $terminalMessage,
                     $terminalDigest,
-                    estab_message_terminal_snapshot_sha256($terminalMessage)
+                    $terminalVersion
                 )
             ) {
                 $terminalMismatches++;
             } else {
                 $terminalByMessage[$messageId] = [
                     'snapshot' =>
-                        estab_message_terminal_snapshot($terminalMessage),
+                        estab_message_terminal_snapshot(
+                            $terminalMessage,
+                            $terminalVersion
+                        ),
                     'sha256' => $terminalDigest,
+                    'version' => $terminalVersion,
                 ];
             }
         }
@@ -705,12 +867,12 @@ function estab_message_evidence_verify(
         $liveMessage = $liveMessages[$messageId] ?? null;
         if (
             !is_array($liveMessage)
-            || !hash_equals(
+            || !estab_message_terminal_snapshot_matches_live(
+                $terminal['snapshot'],
                 (string) $terminal['sha256'],
-                estab_message_terminal_snapshot_sha256($liveMessage)
+                $liveMessage,
+                (int) $terminal['version']
             )
-            || estab_message_terminal_snapshot($liveMessage)
-                !== $terminal['snapshot']
         ) {
             $terminalMismatches++;
         }

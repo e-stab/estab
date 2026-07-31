@@ -68,6 +68,174 @@ $assert(
     'canonical snapshot hash changed unexpectedly'
 );
 
+$terminalFixture = [
+    'einsatz_id' => '7',
+    '00_lfd' => '42',
+    '04_nummer' => '9',
+    '04_richtung' => 'A',
+    '06_befweg' => 'Kanal 404',
+    '06_befwegausw' => 'Fu',
+    'estab_fernmeldeplan_eintrag_id' => '12',
+    '11_rufnummer' => '0711 123456',
+    '12_betreff' => 'Lagemeldung',
+    '12_inhalt' => 'Unveränderlicher Inhalt',
+    '16_empf' => 'S1_rt',
+    '17_vermerke' => 'Formal geprüft',
+    'x00_status' => '8',
+    'x01_abschluss' => 't',
+];
+$terminalV1 = estab_message_terminal_snapshot(
+    $terminalFixture,
+    ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V1
+);
+$terminalV1Json = estab_message_evidence_snapshot($terminalV1);
+$assert(
+    !array_key_exists('11_rufnummer', $terminalV1)
+        && !array_key_exists('12_betreff', $terminalV1)
+        && hash('sha256', $terminalV1Json)
+            === 'd037221829cd8a2d9e9ac82c039eebbc80fc598113025f4070dc9a83c270db86',
+    'historic V1 terminal snapshot changed after the field extension'
+);
+$assert(
+    estab_message_terminal_snapshot_sha256(
+        $terminalFixture,
+        ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V1
+    ) === 'd037221829cd8a2d9e9ac82c039eebbc80fc598113025f4070dc9a83c270db86',
+    'historic V1 terminal digest no longer round-trips exactly'
+);
+$terminalV2 = estab_message_terminal_snapshot($terminalFixture);
+$terminalV2Digest = estab_message_terminal_snapshot_sha256($terminalFixture);
+$assert(
+    ESTAB_MESSAGE_TERMINAL_SNAPSHOT_CURRENT
+        === ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V2
+        && ($terminalV2['11_rufnummer'] ?? null) === '0711 123456'
+        && ($terminalV2['12_betreff'] ?? null) === 'Lagemeldung'
+        && !hash_equals(
+            'd037221829cd8a2d9e9ac82c039eebbc80fc598113025f4070dc9a83c270db86',
+            $terminalV2Digest
+        ),
+    'new terminal snapshots are not V2-bound to number and subject'
+);
+$assert(
+    estab_message_terminal_snapshot_stored_version([])
+        === ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V1
+        && estab_message_terminal_snapshot_stored_version([
+            'terminal_snapshot_version' => 2,
+        ]) === ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V2
+        && estab_message_terminal_snapshot_stored_version([
+            'terminal_snapshot_version' => '2',
+        ]) === null
+        && estab_message_terminal_snapshot_stored_version([
+            'terminal_snapshot_version' => 3,
+        ]) === null,
+    'stored terminal snapshot version does not default V1 and fail closed'
+);
+$terminalV1Digest = estab_message_terminal_snapshot_sha256(
+    $terminalV1,
+    ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V1
+);
+$terminalV1CompatibleLive = array_replace($terminalFixture, [
+    '11_rufnummer' => '',
+    '12_betreff' => '',
+]);
+$assert(
+    estab_message_terminal_snapshot_embedded_valid(
+        $terminalV1,
+        $terminalV1Digest,
+        ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V1
+    )
+        && estab_message_terminal_snapshot_matches_live(
+            $terminalV1,
+            $terminalV1Digest,
+            $terminalV1CompatibleLive,
+            ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V1
+        ),
+    'V1 evidence no longer supports historic rows with empty extension fields'
+);
+$assert(
+    !estab_message_terminal_snapshot_matches_live(
+        $terminalV1,
+        $terminalV1Digest,
+        array_replace($terminalV1CompatibleLive, [
+            '11_rufnummer' => '0711 999999',
+        ]),
+        ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V1
+    )
+        && !estab_message_terminal_snapshot_matches_live(
+            $terminalV1,
+            $terminalV1Digest,
+            array_replace($terminalV1CompatibleLive, [
+                '12_betreff' => 'Nicht durch V1 gebundener Betreff',
+            ]),
+            ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V1
+        ),
+    'V1 evidence silently treated populated extension fields as proven'
+);
+$terminalV1WithUnprotectedField = array_replace($terminalV1, [
+    '11_rufnummer' => 'Nicht durch V1 gebunden',
+]);
+$assert(
+    !estab_message_terminal_snapshot_embedded_valid(
+        $terminalV1WithUnprotectedField,
+        estab_message_terminal_snapshot_sha256(
+            $terminalV1WithUnprotectedField,
+            ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V1
+        ),
+        ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V1
+    ),
+    'V1 embedded evidence accepted an unhashed extension-field value'
+);
+$assert(
+    estab_message_terminal_snapshot_embedded_valid(
+        $terminalV2,
+        $terminalV2Digest,
+        ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V2
+    )
+        && estab_message_terminal_snapshot_matches_live(
+            $terminalV2,
+            $terminalV2Digest,
+            $terminalFixture,
+            ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V2
+        )
+        && !estab_message_terminal_snapshot_matches_live(
+            $terminalV2,
+            $terminalV2Digest,
+            array_replace($terminalFixture, [
+                '11_rufnummer' => '0711 999999',
+            ]),
+            ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V2
+        )
+        && !estab_message_terminal_snapshot_matches_live(
+            $terminalV2,
+            $terminalV2Digest,
+            array_replace($terminalFixture, [
+                '12_betreff' => 'Manipulierter Betreff',
+            ]),
+            ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V2
+        ),
+    'V2 live binding is blind to number or subject'
+);
+$terminalV2WithoutSubject = $terminalV2;
+unset($terminalV2WithoutSubject['12_betreff']);
+$assert(
+    !estab_message_terminal_snapshot_embedded_valid(
+        $terminalV2WithoutSubject,
+        estab_message_terminal_snapshot_sha256(
+            $terminalV2WithoutSubject,
+            ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V2
+        ),
+        ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V2
+    )
+        && $throws(
+            EstabMessageEvidenceInputException::class,
+            static fn (): array => estab_message_terminal_snapshot(
+                $terminalFixture,
+                3
+            )
+        ),
+    'incomplete or unknown-version terminal evidence was accepted'
+);
+
 $eventHash = estab_message_evidence_event_hash(
     7,
     42,

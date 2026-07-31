@@ -147,6 +147,50 @@ SELECT
   ((SELECT COUNT(*)
       FROM information_schema.columns
      WHERE table_schema = DATABASE()
+       AND table_name = 'nv_nachrichten'
+       AND character_set_name = 'utf8mb4'
+       AND collation_name = 'utf8mb4_unicode_ci'
+       AND is_nullable = 'NO'
+       AND HEX(column_default) = '2727'
+       AND extra = ''
+       AND (
+         (
+           column_name = '11_rufnummer'
+           AND data_type = 'varchar'
+           AND column_type = 'varchar(128)'
+           AND character_maximum_length = 128
+           AND column_comment =
+             'estab:migration:98:message-counterparty-number:v1'
+         )
+         OR
+         (
+           column_name = '12_betreff'
+           AND data_type = 'varchar'
+           AND column_type = 'varchar(255)'
+           AND character_maximum_length = 255
+           AND column_comment = 'estab:migration:98:message-subject:v1'
+         )
+       )) = 2
+   AND
+   ((SELECT CONCAT(
+       GROUP_CONCAT(
+         column_name ORDER BY ordinal_position SEPARATOR ','
+       ),
+       ':',
+       MAX(ordinal_position) - MIN(ordinal_position)
+     )
+       FROM information_schema.columns
+      WHERE table_schema = DATABASE()
+        AND table_name = 'nv_nachrichten'
+        AND column_name IN (
+          '10_anschrift', '11_rufnummer', '11_gesprnotiz',
+          '12_betreff', '12_anhang'
+        )) =
+        '10_anschrift,11_rufnummer,11_gesprnotiz,12_betreff,12_anhang:4'))
+       AS `official_message_fields_ok`,
+  ((SELECT COUNT(*)
+      FROM information_schema.columns
+     WHERE table_schema = DATABASE()
        AND table_name = 'nv_benutzer'
        AND (
          (column_name = 'password' AND character_maximum_length = 255)
@@ -729,7 +773,7 @@ SELECT
          OR `integrity_captured_at` IS NULL
        )) = 0)
        AS `attachment_integrity_schema_ok`,
-  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 12
+  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 13
    AND
    (SELECT COUNT(*)
       FROM `estab_schema_migrations`
@@ -745,10 +789,11 @@ SELECT
        '94-dv-organisational-controls.sql',
        '95-attachment-ingest-integrity.sql',
        '96-etb-duty-function.sql',
-       '97-incident-command-post-name.sql'
+       '97-incident-command-post-name.sql',
+       '98-official-message-form-fields.sql'
      )
        AND `state` = 'applied'
-       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 12)
+       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 13)
        AS `schema_migrations_ok`;
 
 SELECT `table_name`, `engine`, `table_collation`

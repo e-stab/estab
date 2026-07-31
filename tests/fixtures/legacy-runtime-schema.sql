@@ -13,6 +13,12 @@ CREATE TABLE `nv_nachrichten` (
   `02_zeichen` VARCHAR(3) NOT NULL DEFAULT '',
   `03_datum` DATETIME NOT NULL DEFAULT '0000-00-00 00:00:00',
   `03_zeichen` VARCHAR(3) NOT NULL DEFAULT '',
+  -- These content fields existed in the historical four-copy message form.
+  -- Keep them in the supported legacy fixture so later migrations can add the
+  -- two new official-form fields at their canonical physical positions.
+  `10_anschrift` VARCHAR(255) NOT NULL DEFAULT '',
+  `11_gesprnotiz` BINARY(1) NOT NULL DEFAULT 'f',
+  `12_anhang` TEXT NULL,
   `12_abfzeit` DATETIME NOT NULL DEFAULT '0000-00-00 00:00:00',
   `14_zeichen` VARCHAR(3) NOT NULL DEFAULT '',
   `15_quitdatum` DATETIME NOT NULL DEFAULT '0000-00-00 00:00:00',

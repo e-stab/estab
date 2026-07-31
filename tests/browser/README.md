@@ -72,6 +72,28 @@ Geprüft werden:
 - ein geändertes Nachrichtenfeld, der native Verlustwarnungsdialog, der nach
   Ablehnen unveränderte Formularwert und der erst nach Bestätigen ausgeführte
   Bereichswechsel;
+- den amtlichen Nachrichtenvordruck im echten Browser: drei unverändert
+  geordnete Zonen, feste 896-Pixel-Blattbreite, schwarzes Raster, den
+  Blauton `#A2D9F7`, fehlenden VS-NfD-Aufdruck und fehlende Bilder sowie alle
+  20 eindeutig zugeordneten Ausfüllhilfen; Außenklick und `Escape` schließen
+  mit korrektem Fokus, jeder Dialog erhält beim Öffnen selbst den Fokus,
+  Dialoge bleiben im Viewport und bei `390x844` liegt
+  ausschließlich das Blatt in seinem beschrifteten horizontalen
+  Scrollbereich; die drei Zeitstempel besitzen jeweils getrennte berechnete
+  Datum-/Uhrzeit-/Hdz.-Zellen bei nur einem zugänglichen Backend-Zeitfeld,
+  ein alleiniger Zeitwert liegt ausschließlich in der Uhrzeitzelle,
+  Anschrift und Rufnummer überdecken sich nicht, der linke Steg ist
+  durchgehend blau und Legende sowie beide weißen Lochmarken liegen sichtbar
+  im Blatt; der feste Verteiler enthält Leiter sowie S1–S6 einschließlich S5
+  und jeweils genau sechs Zeilen für Fachberater und Verbindungsstellen;
+  dynamische Empfänger und die gemeinsame Auswahl für keinen oder genau einen
+  Empfänger der einen grünen Durchschrift liegen als digitale Ergänzung
+  außerhalb des amtlichen Blatts; nach dem echten Rendern wird das Formular
+  mit rund 184,9 mm Blattbreite druckisoliert und per Chrome-`Page.printToPDF`
+  auf genau ein A4-Seitenobjekt geprüft, ohne mobilen Wischhinweis oder
+  Fragmentierung; anschließend öffnet der Test genau die von Chrome erzeugten
+  PDF-Bytes erneut in Chromes integriertem PDF-Renderer und prüft im
+  sichtbaren Renderergebnis die blaue Formularfläche und das schwarze Raster;
 - interne Karten der angemeldeten Übersicht ohne neues Browser-Tab;
 - das Öffnen der Infosammlung BOS durch einen echten Klick auf ihre Root-Karte,
   die gemeinsame Darstellungshülle der historischen Dokumente und die

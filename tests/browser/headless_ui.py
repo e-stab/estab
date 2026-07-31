@@ -22,11 +22,144 @@ import tempfile
 import time
 import urllib.parse
 import urllib.request
+import zlib
 from typing import Any
 
 
 class TestFailure(RuntimeError):
     """Expected test or environment failure with a user-facing message."""
+
+
+def _png_rgb_content_summary(payload: bytes) -> dict[str, int]:
+    """Decode Chrome's 8-bit RGB(A) PNG without an external image library."""
+    if not payload.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise TestFailure("Chrome lieferte keinen gültigen PNG-Bildnachweis.")
+    offset = 8
+    width = height = bit_depth = colour_type = interlace = -1
+    compressed = bytearray()
+    while offset + 12 <= len(payload):
+        length = struct.unpack(">I", payload[offset : offset + 4])[0]
+        chunk_type = payload[offset + 4 : offset + 8]
+        chunk_end = offset + 12 + length
+        if chunk_end > len(payload):
+            raise TestFailure("Chromes PNG-Bildnachweis ist abgeschnitten.")
+        chunk = payload[offset + 8 : offset + 8 + length]
+        if chunk_type == b"IHDR":
+            if len(chunk) != 13:
+                raise TestFailure("Chromes PNG-Kopfdaten sind ungültig.")
+            (
+                width,
+                height,
+                bit_depth,
+                colour_type,
+                _compression,
+                _filter,
+                interlace,
+            ) = struct.unpack(">IIBBBBB", chunk)
+        elif chunk_type == b"IDAT":
+            compressed.extend(chunk)
+        elif chunk_type == b"IEND":
+            break
+        offset = chunk_end
+    channels = {2: 3, 6: 4}.get(colour_type)
+    if (
+        width <= 0
+        or height <= 0
+        or bit_depth != 8
+        or channels is None
+        or interlace != 0
+        or not compressed
+    ):
+        raise TestFailure("Chromes PNG-Format kann nicht sicher geprüft werden.")
+    try:
+        scanlines = zlib.decompress(bytes(compressed))
+    except zlib.error as exc:
+        raise TestFailure("Chromes PNG-Bilddaten sind nicht lesbar.") from exc
+    stride = width * channels
+    if len(scanlines) != height * (stride + 1):
+        raise TestFailure("Chromes PNG-Bildmaße stimmen nicht mit den Bilddaten überein.")
+
+    previous = bytearray(stride)
+    position = 0
+    blue_pixels = 0
+    dark_pixels = 0
+    non_white_pixels = 0
+    blue_min_x = width
+    blue_max_x = -1
+    blue_min_y = height
+    blue_max_y = -1
+    decoded_rows: list[bytes] = []
+
+    def paeth(left: int, above: int, upper_left: int) -> int:
+        prediction = left + above - upper_left
+        left_distance = abs(prediction - left)
+        above_distance = abs(prediction - above)
+        upper_left_distance = abs(prediction - upper_left)
+        if left_distance <= above_distance and left_distance <= upper_left_distance:
+            return left
+        if above_distance <= upper_left_distance:
+            return above
+        return upper_left
+
+    for row_index in range(height):
+        filter_type = scanlines[position]
+        position += 1
+        current = bytearray(scanlines[position : position + stride])
+        position += stride
+        if filter_type not in {0, 1, 2, 3, 4}:
+            raise TestFailure("Chromes PNG verwendet einen unbekannten Zeilenfilter.")
+        for index in range(stride):
+            left = current[index - channels] if index >= channels else 0
+            above = previous[index]
+            upper_left = previous[index - channels] if index >= channels else 0
+            if filter_type == 1:
+                current[index] = (current[index] + left) & 0xFF
+            elif filter_type == 2:
+                current[index] = (current[index] + above) & 0xFF
+            elif filter_type == 3:
+                current[index] = (current[index] + ((left + above) // 2)) & 0xFF
+            elif filter_type == 4:
+                current[index] = (
+                    current[index] + paeth(left, above, upper_left)
+                ) & 0xFF
+        for index in range(0, stride, channels):
+            red, green, blue = current[index : index + 3]
+            if abs(red - 162) <= 8 and abs(green - 217) <= 8 and abs(blue - 247) <= 8:
+                blue_pixels += 1
+                column = index // channels
+                blue_min_x = min(blue_min_x, column)
+                blue_max_x = max(blue_max_x, column)
+                blue_min_y = min(blue_min_y, row_index)
+                blue_max_y = max(blue_max_y, row_index)
+            if red <= 55 and green <= 55 and blue <= 55:
+                dark_pixels += 1
+            if red < 245 or green < 245 or blue < 245:
+                non_white_pixels += 1
+        decoded_rows.append(bytes(current))
+        previous = current
+
+    blue_bounds_width = 0
+    blue_bounds_height = 0
+    dark_pixels_in_blue_bounds = 0
+    if blue_max_x >= blue_min_x and blue_max_y >= blue_min_y:
+        blue_bounds_width = blue_max_x - blue_min_x + 1
+        blue_bounds_height = blue_max_y - blue_min_y + 1
+        for row in decoded_rows[blue_min_y : blue_max_y + 1]:
+            for column in range(blue_min_x, blue_max_x + 1):
+                index = column * channels
+                red, green, blue = row[index : index + 3]
+                if red <= 55 and green <= 55 and blue <= 55:
+                    dark_pixels_in_blue_bounds += 1
+    return {
+        "width": width,
+        "height": height,
+        "blue_pixels": blue_pixels,
+        "blue_bounds_width": blue_bounds_width,
+        "blue_bounds_height": blue_bounds_height,
+        "dark_pixels_in_blue_bounds": dark_pixels_in_blue_bounds,
+        "dark_pixels": dark_pixels,
+        "non_white_pixels": non_white_pixels,
+    }
 
 
 @dataclasses.dataclass(frozen=True)
@@ -4984,6 +5117,7 @@ class BrowserAcceptance:
             ),
             "fachliches Nachrichtenformular wurde nicht im Inhaltsframe geöffnet",
         )
+        official_form_document = self._assert_official_message_form()
         self.cdp.set_value(
             "mainframe",
             field_selector,
@@ -5043,6 +5177,1093 @@ class BrowserAcceptance:
         )
 
         click_overview_and_handle_dialog(True, "Bestätigen")
+        self._assert_official_message_form_print(official_form_document)
+
+    def _assert_official_message_form(self) -> str:
+        desktop_state = self.cdp.evaluate(
+            _frame_expression(
+                "mainframe",
+                """
+                const form = doc.querySelector(
+                    "[data-estab-official-message-form]"
+                );
+                const zones = Array.from(
+                    doc.querySelectorAll("[data-estab-form-zone]")
+                );
+                const buttons = Array.from(
+                    doc.querySelectorAll("[data-estab-form-help]")
+                );
+                const dialogs = Array.from(
+                    doc.querySelectorAll(".estab-official-help-dialog")
+                );
+                const content = doc.querySelector(
+                    '[data-estab-form-zone="nachricht"]'
+                );
+                const fmGrid = doc.querySelector(".estab-official-fmz-grid");
+                const reviewGrid = doc.querySelector(
+                    ".estab-official-review-grid"
+                );
+                const copyLegend = doc.querySelector(
+                    "[data-estab-copy-distribution]"
+                );
+                const punchHoles = Array.from(
+                    doc.querySelectorAll("[data-estab-punch-hole]")
+                );
+                const addressValue = doc.querySelector(
+                    ".estab-official-address-value"
+                );
+                const phoneValue = doc.querySelector(
+                    ".estab-official-phone-value"
+                );
+                const ttb = doc.querySelector(".estab-official-ttb");
+                const callsign = doc.querySelector(
+                    ".estab-official-callsign"
+                );
+                const callsignLabel = callsign?.querySelector(
+                    ":scope > .estab-official-cell-heading"
+                );
+                const addressBlock = doc.querySelector(
+                    ".estab-official-address-block"
+                );
+                const addressLabel = doc.querySelector(
+                    ".estab-official-address-label"
+                );
+                const addressValueColumn = doc.querySelector(
+                    ".estab-official-address-value"
+                );
+                const conversationColumn = doc.querySelector(
+                    ".estab-official-conversation"
+                );
+                const composition = doc.querySelector(
+                    ".estab-official-composition"
+                );
+                const compositionLabel = doc.querySelector(
+                    ".estab-official-composition-label"
+                );
+                const compositionValue = doc.querySelector(
+                    ".estab-official-composition-value"
+                );
+                const extraDistribution = doc.querySelector(
+                    ".estab-message-distribution-extras"
+                );
+                const leadRecipients = Array.from(
+                    doc.querySelectorAll(
+                        ".estab-official-distribution-grid > section:first-child "
+                        + ".estab-official-recipient > span:last-child"
+                    )
+                );
+                const leadDirector = doc.querySelectorAll(
+                    ".estab-official-lead-director "
+                    + "> .estab-official-recipient"
+                );
+                const leadSections = doc.querySelectorAll(
+                    ".estab-official-lead-sections "
+                    + "> .estab-official-recipient"
+                );
+                const adviserRows = doc.querySelectorAll(
+                    '[data-estab-recipient-group="adviser"] '
+                    + "> .estab-official-recipient"
+                );
+                const liaisonRows = doc.querySelectorAll(
+                    '[data-estab-recipient-group="liaison"] '
+                    + "> .estab-official-recipient"
+                );
+                const extraRecipients = extraDistribution
+                    ? Array.from(
+                        extraDistribution.querySelectorAll(
+                            ".estab-official-recipient > span:last-child"
+                        )
+                    )
+                    : [];
+                const copyControls = Array.from(
+                    doc.querySelectorAll("[data-estab-copy-color]")
+                );
+                const readonlyCopyControls = Array.from(
+                    doc.querySelectorAll(
+                        ".estab-official-copy-indicator"
+                    )
+                );
+                const activeOfficialRecipients = Array.from(
+                    doc.querySelectorAll(
+                        ".estab-official-distribution-grid "
+                        + ".estab-official-recipient"
+                        + ":not([data-estab-recipient-unavailable])"
+                    )
+                );
+                const stamps = Array.from(
+                    doc.querySelectorAll(".estab-official-stamp")
+                );
+                const ratio = (element, container) => {
+                    if (!element || !container) return 0;
+                    const containerWidth =
+                        container.getBoundingClientRect().width;
+                    return containerWidth > 0
+                        ? element.getBoundingClientRect().width / containerWidth
+                        : 0;
+                };
+                const compositionRect = composition?.getBoundingClientRect();
+                const compositionValueRect =
+                    compositionValue?.getBoundingClientRect();
+                const stampGeometry = stamps.length === 3
+                    && stamps.every(stamp => {
+                        const dateCell = stamp.querySelector(
+                            '[data-estab-stamp-cell="datum"]'
+                        );
+                        const timeCell = stamp.querySelector(
+                            '[data-estab-stamp-cell="uhrzeit"]'
+                        );
+                        const markCell = stamp.querySelector(
+                            '[data-estab-stamp-cell="hdz"]'
+                        );
+                        const backend = stamp.querySelector(
+                            "[data-estab-single-backend-field]"
+                        );
+                        if (!dateCell || !timeCell || !markCell || !backend) {
+                            return false;
+                        }
+                        const fieldName = backend.getAttribute(
+                            "data-estab-single-backend-field"
+                        );
+                        const control = fieldName
+                            ? doc.getElementById("f_" + fieldName)
+                            : null;
+                        const describedBy = control?.getAttribute(
+                            "aria-describedby"
+                        ) || backend.getAttribute("aria-describedby");
+                        const description = describedBy
+                            ? doc.getElementById(describedBy)
+                            : null;
+                        const dateRect = dateCell.getBoundingClientRect();
+                        const timeRect = timeCell.getBoundingClientRect();
+                        const markRect = markCell.getBoundingClientRect();
+                        const timeStyle = target.getComputedStyle(timeCell);
+                        const markStyle = target.getComputedStyle(markCell);
+                        return Boolean(
+                            fieldName
+                            && control
+                            && description?.textContent.includes(
+                                "Ein gemeinsames Eingabefeld"
+                            )
+                            && doc.querySelectorAll(
+                                '[name="' + fieldName + '"]'
+                            ).length <= 1
+                            && !doc.querySelector(
+                                '[name="' + fieldName + '_datum"],'
+                                + '[name="' + fieldName + '_uhrzeit"]'
+                            )
+                            && Math.abs(dateRect.right - timeRect.left) <= 1
+                            && Math.abs(timeRect.right - markRect.left) <= 1
+                            && dateRect.width > 20
+                            && timeRect.width > 20
+                            && markRect.width > 20
+                            && parseFloat(timeStyle.borderLeftWidth) >= 1
+                            && parseFloat(markStyle.borderLeftWidth) >= 1
+                        );
+                    });
+                const stampWidths = stamps.map(stamp =>
+                    stamp.getBoundingClientRect().width
+                );
+                const stampWidthRatios = stampWidths.length === 3
+                    && stampWidths[0] > 0
+                    ? stampWidths.map(width => width / stampWidths[0])
+                    : [];
+                const stampCellRatios = stamps.map(stamp => {
+                    const cells = ["datum", "uhrzeit", "hdz"].map(name =>
+                        stamp.querySelector(
+                            '[data-estab-stamp-cell="' + name + '"]'
+                        )?.getBoundingClientRect().width || 0
+                    );
+                    const total = cells.reduce((sum, width) => sum + width, 0);
+                    return total > 0
+                        ? cells.map(width => width / total)
+                        : [];
+                });
+                const helpNumbers = buttons.map(button => Number(
+                    button.getAttribute("data-estab-form-help")
+                ));
+                const sortedHelpNumbers = helpNumbers.slice().sort(
+                    (left, right) => left - right
+                );
+                const allHelpWorks = buttons.length === 20
+                    && dialogs.length === 20
+                    && new Set(helpNumbers).size === 20
+                    && sortedHelpNumbers.every(
+                        (number, index) => number === index + 1
+                    )
+                    && buttons.every(button => {
+                        const dialog = doc.getElementById(
+                            button.getAttribute("aria-controls")
+                        );
+                        if (!dialog) return false;
+                        button.click();
+                        const visible = !dialog.hidden
+                            && button.getAttribute("aria-expanded") === "true"
+                            && doc.activeElement === dialog
+                            && dialogs.filter(item => !item.hidden).length === 1
+                            && Boolean(
+                                doc.getElementById(
+                                    dialog.getAttribute("aria-labelledby")
+                                )?.textContent.trim()
+                            )
+                            && Boolean(
+                                doc.getElementById(
+                                    dialog.getAttribute("aria-describedby")
+                                )?.textContent.trim()
+                            );
+                        button.click();
+                        return visible
+                            && dialog.hidden
+                            && button.getAttribute("aria-expanded") === "false"
+                            && doc.activeElement === button;
+                    });
+                /*
+                 * Opening every help dialog deliberately moves browser focus.
+                 * Chrome may scroll the document while doing so, therefore all
+                 * position-dependent rectangles must be captured afterwards.
+                 */
+                const formRect = form && form.getBoundingClientRect();
+                const contentRect = content && content.getBoundingClientRect();
+                const legendRect = copyLegend
+                    && copyLegend.getBoundingClientRect();
+                const addressRect = addressValue
+                    ? addressValue.getBoundingClientRect()
+                    : null;
+                const phoneRect = phoneValue
+                    ? phoneValue.getBoundingClientRect()
+                    : null;
+                const contentGutterStyle = content
+                    ? target.getComputedStyle(content, "::before")
+                    : null;
+                const contentStyle = content
+                    ? target.getComputedStyle(content)
+                    : null;
+                return {
+                    zones: zones.map(zone =>
+                        zone.getAttribute("data-estab-form-zone")
+                    ),
+                    helpButtons: buttons.length,
+                    dialogs: dialogs.length,
+                    allHelpWorks,
+                    formWidth: formRect ? formRect.width : 0,
+                    formMinWidth: form
+                        ? target.getComputedStyle(form).minWidth
+                        : "",
+                    contentBackground: content
+                        ? target.getComputedStyle(content).backgroundColor
+                        : "",
+                    contentBorder: content
+                        ? target.getComputedStyle(content).borderLeftColor
+                        : "",
+                    contentGutterBackground: contentGutterStyle
+                        ? contentGutterStyle.backgroundColor
+                        : "",
+                    contentGutterWidth: contentGutterStyle
+                        ? contentGutterStyle.width
+                        : "",
+                    referenceProportions: {
+                        ttb: ratio(ttb, fmGrid),
+                        callsignLabel: ratio(callsignLabel, callsign),
+                        addressLabel: ratio(addressLabel, addressBlock),
+                        addressValue: ratio(
+                            addressValueColumn,
+                            addressBlock
+                        ),
+                        conversation: ratio(
+                            conversationColumn,
+                            addressBlock
+                        ),
+                        compositionLabel: ratio(
+                            compositionLabel,
+                            composition
+                        ),
+                        compositionValue: ratio(
+                            compositionValue,
+                            composition
+                        ),
+                        compositionBlank:
+                            compositionRect && compositionValueRect
+                                ? (
+                                    compositionRect.right
+                                    - compositionValueRect.right
+                                ) / compositionRect.width
+                                : 0
+                    },
+                    addressPhoneNonOverlap: Boolean(
+                        addressRect && phoneRect
+                        && Math.abs(addressRect.left - phoneRect.left) <= 1
+                        && Math.abs(addressRect.right - phoneRect.right) <= 1
+                        && addressRect.bottom <= phoneRect.top + 1
+                    ),
+                    alignedGridEdges: Boolean(
+                        fmGrid && content && reviewGrid
+                        && Math.abs(
+                            fmGrid.getBoundingClientRect().left
+                                - content.getBoundingClientRect().left
+                        ) <= 1
+                        && Math.abs(
+                            reviewGrid.getBoundingClientRect().left
+                                - content.getBoundingClientRect().left
+                        ) <= 1
+                    ),
+                    stampGeometry,
+                    stampWidthRatios,
+                    stampCellRatios,
+                    copyLegend: copyLegend
+                        ? Array.from(
+                            copyLegend.querySelectorAll(
+                                "[data-estab-copy-sheet]"
+                            )
+                        ).map(item => item.textContent.replace(/\\s+/g, " ").trim())
+                        : [],
+                    legendInsideLeftStrip: Boolean(
+                        formRect && contentRect && legendRect
+                        && legendRect.left >= formRect.left - 1
+                        && legendRect.right <= contentRect.left
+                            + parseFloat(
+                                contentStyle?.borderLeftWidth || "0"
+                            )
+                            + 1
+                        && legendRect.width >= 80
+                        && legendRect.width <= 86
+                    ),
+                    legendGeometry: formRect && contentRect && legendRect
+                        ? {
+                            formLeft: formRect.left,
+                            contentLeft: contentRect.left,
+                            legendLeft: legendRect.left,
+                            legendRight: legendRect.right,
+                            legendWidth: legendRect.width
+                        }
+                        : null,
+                    punchHoleRatios: contentRect
+                        ? punchHoles.map(hole => {
+                            const rect = hole.getBoundingClientRect();
+                            return {
+                                x: (rect.left + rect.width / 2 - formRect.left)
+                                    / formRect.width,
+                                y: (rect.top + rect.height / 2 - contentRect.top)
+                                    / contentRect.height,
+                                diameter: rect.width,
+                                round: target.getComputedStyle(hole).borderRadius,
+                                background: target.getComputedStyle(
+                                    hole
+                                ).backgroundColor,
+                                visible: target.getComputedStyle(hole).display
+                                    !== "none"
+                                    && target.getComputedStyle(hole).visibility
+                                    === "visible"
+                                    && target.getComputedStyle(hole).opacity
+                                    !== "0"
+                                    && Number(
+                                        target.getComputedStyle(hole).zIndex
+                                    ) >= 4
+                            };
+                        })
+                        : [],
+                    leadRecipients: leadRecipients.map(
+                        item => item.textContent.trim()
+                    ),
+                    fixedDistributorGeometry: leadDirector.length === 1
+                        && leadSections.length === 6
+                        && adviserRows.length === 6
+                        && liaisonRows.length === 6,
+                    extraRecipients: extraRecipients.map(
+                        item => item.textContent.trim()
+                    ),
+                    extrasOutsideOfficialSheet: Boolean(
+                        !extraDistribution
+                        || (form && !form.contains(extraDistribution))
+                    ),
+                    extraControlsPersisted: Boolean(
+                        !extraDistribution
+                        || (
+                            extraDistribution.querySelector(
+                                ".estab-official-box-choice, "
+                                + ".estab-official-copy-choice"
+                            )
+                            && Array.from(
+                                extraDistribution.querySelectorAll(
+                                    ".estab-official-box-choice, "
+                                    + ".estab-official-copy-choice"
+                                )
+                            ).every(control =>
+                                Boolean(
+                                    control.getAttribute("aria-label")
+                                    && (control.disabled || control.name)
+                                )
+                            )
+                        )
+                    ),
+                    editableCopyControlsAbsent:
+                        copyControls.length === 0,
+                    readonlyCopyControlsLabeled:
+                        activeOfficialRecipients.length > 0
+                        && activeOfficialRecipients.every(recipient =>
+                            Boolean(
+                                recipient.querySelector(
+                                    ":scope > .estab-official-copy-indicator"
+                                )
+                            )
+                        )
+                        && readonlyCopyControls.every(control =>
+                            control.disabled
+                            && Boolean(control.getAttribute("aria-label"))
+                            && control.getAttribute("aria-label").includes(
+                                "schreibgeschützt"
+                            )
+                        ),
+                    copyControlsLabeledAndColoured:
+                        copyControls.every(control =>
+                            ["blue", "green", "red", "yellow"].includes(
+                                control.getAttribute("data-estab-copy-color")
+                            )
+                            && Boolean(control.getAttribute("aria-label"))
+                        ),
+                    timeOnlyStampCount: stamps.filter(stamp =>
+                        stamp.querySelector(
+                            '[data-estab-stamp-time-only="true"]'
+                        )
+                    ).length,
+                    requiredGuideText: {
+                        two: doc.querySelector(
+                            "#estab-form-help-2-description"
+                        )?.textContent || "",
+                        four: doc.querySelector(
+                            "#estab-form-help-4-description"
+                        )?.textContent || "",
+                        fourteen: doc.querySelector(
+                            "#estab-form-help-14-description"
+                        )?.textContent || ""
+                    },
+                    noImages: Boolean(form && !form.querySelector("img")),
+                    noEmblemPlaceholder: Boolean(
+                        form && !form.querySelector(
+                            ".estab-official-emblem-omission"
+                        )
+                    ),
+                    noClassification: Boolean(
+                        form && !form.innerText.includes("VS-NfD")
+                    )
+                };
+                """,
+            )
+        )
+        reference_proportions = (
+            desktop_state.get("referenceProportions", {})
+            if isinstance(desktop_state, dict)
+            else {}
+        )
+        self._truth(
+            isinstance(desktop_state, dict)
+            and desktop_state.get("zones")
+                == ["fm-zentrale", "nachricht", "sichter"]
+            and desktop_state.get("helpButtons") == 20
+            and desktop_state.get("dialogs") == 20
+            and desktop_state.get("allHelpWorks") is True
+            and 895 <= desktop_state.get("formWidth", 0) <= 897
+            and desktop_state.get("formMinWidth") == "896px"
+            and desktop_state.get("contentBackground")
+                == "rgb(162, 217, 247)"
+            and desktop_state.get("contentBorder") == "rgb(0, 0, 0)"
+            and desktop_state.get("contentGutterBackground")
+                == "rgb(162, 217, 247)"
+            and desktop_state.get("contentGutterWidth") == "84px"
+            and abs(reference_proportions.get("ttb", 0) - 0.20) <= 0.005
+            and abs(
+                reference_proportions.get("callsignLabel", 0) - 0.33
+            ) <= 0.005
+            and abs(
+                reference_proportions.get("addressLabel", 0) - 0.198
+            ) <= 0.005
+            and abs(
+                reference_proportions.get("addressValue", 0) - 0.603
+            ) <= 0.005
+            and abs(
+                reference_proportions.get("conversation", 0) - 0.199
+            ) <= 0.005
+            and abs(
+                reference_proportions.get("compositionLabel", 0) - 0.198
+            ) <= 0.005
+            and abs(
+                reference_proportions.get("compositionValue", 0) - 0.409
+            ) <= 0.005
+            and abs(
+                reference_proportions.get("compositionBlank", 0) - 0.393
+            ) <= 0.005
+            and desktop_state.get("addressPhoneNonOverlap") is True
+            and desktop_state.get("alignedGridEdges") is True
+            and desktop_state.get("stampGeometry") is True
+            and len(desktop_state.get("stampWidthRatios", [])) == 3
+            and abs(desktop_state["stampWidthRatios"][0] - 1.0) <= 0.02
+            and abs(desktop_state["stampWidthRatios"][1] - 1.016) <= 0.03
+            and abs(desktop_state["stampWidthRatios"][2] - 1.07) <= 0.03
+            and len(desktop_state.get("stampCellRatios", [])) == 3
+            and all(
+                len(ratios) == 3
+                and 0.35 <= ratios[0] <= 0.40
+                and 0.35 <= ratios[1] <= 0.40
+                and 0.22 <= ratios[2] <= 0.28
+                for ratios in desktop_state.get("stampCellRatios", [])
+            )
+            and desktop_state.get("copyLegend")
+                == [
+                    "Blatt 1 (blau) Sachgebiet/Fachber./Verbindungsstelle",
+                    "Blatt 2 (grün) Sachgebiet/Fachber./Verbindungsstelle",
+                    "Blatt 3 (rot) Sachgebiet 2 Lage",
+                    "Blatt 4 (gelb) Techn. Betriebsbuch",
+                ]
+            and desktop_state.get("legendInsideLeftStrip") is True
+            and len(desktop_state.get("punchHoleRatios", [])) == 2
+            and all(
+                31 <= hole.get("diameter", 0) <= 33
+                and hole.get("round") in {"16px", "50%"}
+                and 0 <= hole.get("x", -1) <= 0.095
+                and hole.get("background") == "rgb(255, 255, 255)"
+                and hole.get("visible") is True
+                for hole in desktop_state.get("punchHoleRatios", [])
+            )
+            and 0.18 <= desktop_state["punchHoleRatios"][0].get("y", 0) <= 0.20
+            and 0.81 <= desktop_state["punchHoleRatios"][1].get("y", 0) <= 0.83
+            and "Datum mindestens zweistellig"
+                in desktop_state.get("requiredGuideText", {}).get("two", "")
+            and "Datum mindestens zweistellig"
+                in desktop_state.get("requiredGuideText", {}).get("four", "")
+            and "Blockschrift"
+                in desktop_state.get("requiredGuideText", {}).get("fourteen", "")
+            and desktop_state.get("leadRecipients")
+                == ["Leiter", "S1", "S2", "S3", "S4", "S5", "S6"]
+            and "S5" not in desktop_state.get("extraRecipients", [])
+            and desktop_state.get("fixedDistributorGeometry") is True
+            and desktop_state.get("extrasOutsideOfficialSheet") is True
+            and desktop_state.get("extraControlsPersisted") is True
+            and desktop_state.get("editableCopyControlsAbsent") is True
+            and desktop_state.get("readonlyCopyControlsLabeled") is True
+            and desktop_state.get("copyControlsLabeledAndColoured") is True
+            and desktop_state.get("timeOnlyStampCount") == 1
+            and desktop_state.get("noImages") is True
+            and desktop_state.get("noEmblemPlaceholder") is True
+            and desktop_state.get("noClassification") is True,
+            "Amtliches Dreizonen-Raster, Blauton oder die 20 Hilfen "
+            "weichen im echten Browser ab. Messwerte: "
+            + json.dumps(
+                desktop_state,
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+        )
+
+        self.cdp.click(
+            "mainframe",
+            '[data-estab-form-help="1"]',
+            "erste Ausfüllhilfe des Nachrichtenvordrucks",
+        )
+        dialog_state = self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                const button = doc.querySelector(
+                    '[data-estab-form-help="1"]'
+                );
+                const dialog = button
+                    ? doc.getElementById(button.getAttribute("aria-controls"))
+                    : null;
+                if (!button || !dialog || dialog.hidden) return false;
+                const rect = dialog.getBoundingClientRect();
+                return {
+                    expanded: button.getAttribute("aria-expanded"),
+                    focused: doc.activeElement === dialog,
+                    visibleDialogs: Array.from(
+                        doc.querySelectorAll(".estab-official-help-dialog")
+                    ).filter(item => !item.hidden).length,
+                    bounded: rect.left >= 0
+                        && rect.top >= 0
+                        && rect.right <= target.innerWidth
+                        && rect.bottom <= target.innerHeight
+                };
+                """,
+            ),
+            "erste Ausfüllhilfe wurde nicht sichtbar geöffnet",
+        )
+        self._truth(
+            dialog_state.get("expanded") == "true"
+            and dialog_state.get("focused") is True
+            and dialog_state.get("visibleDialogs") == 1
+            and dialog_state.get("bounded") is True,
+            "Ausfüllhilfe liegt außerhalb des sichtbaren Browserfensters.",
+        )
+        self.cdp.click(
+            "mainframe",
+            "#f_12_betreff",
+            "Betrefffeld außerhalb der geöffneten Ausfüllhilfe",
+        )
+        self._truth(
+            self.cdp.evaluate(
+                _frame_expression(
+                    "mainframe",
+                    """
+                    const button = doc.querySelector(
+                        '[data-estab-form-help="1"]'
+                    );
+                    const dialog = button
+                        ? doc.getElementById(
+                            button.getAttribute("aria-controls")
+                        )
+                        : null;
+                    return Boolean(
+                        dialog
+                        && dialog.hidden
+                        && button.getAttribute("aria-expanded") === "false"
+                        && doc.activeElement === doc.querySelector(
+                            "#f_12_betreff"
+                        )
+                    );
+                    """,
+                )
+            ),
+            "Außenklick schloss die Hilfe nicht am angeklickten Formularfeld.",
+        )
+
+        self.cdp.click(
+            "mainframe",
+            '[data-estab-form-help="1"]',
+            "erste Ausfüllhilfe für Schließen-Schaltfläche",
+        )
+        self.cdp.click(
+            "mainframe",
+            '[data-estab-form-help-close="1"]',
+            "Schließen-Schaltfläche der ersten Ausfüllhilfe",
+        )
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                const button = doc.querySelector(
+                    '[data-estab-form-help="1"]'
+                );
+                const dialog = button
+                    ? doc.getElementById(button.getAttribute("aria-controls"))
+                    : null;
+                return Boolean(
+                    dialog
+                    && dialog.hidden
+                    && button.getAttribute("aria-expanded") === "false"
+                    && doc.activeElement === button
+                );
+                """,
+            ),
+            "Schließen-Schaltfläche gab den Fokus nicht an die Ausfüllhilfe zurück",
+        )
+
+        self.cdp.click(
+            "mainframe",
+            '[data-estab-form-help="20"]',
+            "letzte Ausfüllhilfe des Nachrichtenvordrucks",
+        )
+        self.cdp.call(
+            "Input.dispatchKeyEvent",
+            {
+                "type": "keyDown",
+                "key": "Escape",
+                "code": "Escape",
+                "windowsVirtualKeyCode": 27,
+            },
+        )
+        self.cdp.call(
+            "Input.dispatchKeyEvent",
+            {
+                "type": "keyUp",
+                "key": "Escape",
+                "code": "Escape",
+                "windowsVirtualKeyCode": 27,
+            },
+        )
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                const button = doc.querySelector(
+                    '[data-estab-form-help="20"]'
+                );
+                const dialog = button
+                    ? doc.getElementById(button.getAttribute("aria-controls"))
+                    : null;
+                return Boolean(
+                    dialog
+                    && dialog.hidden
+                    && button.getAttribute("aria-expanded") === "false"
+                    && doc.activeElement === button
+                );
+                """,
+            ),
+            "Escape schloss die letzte Ausfüllhilfe nicht mit Fokusrückgabe",
+        )
+
+        self.cdp.call(
+            "Emulation.setDeviceMetricsOverride",
+            {
+                "width": 390,
+                "height": 844,
+                "deviceScaleFactor": 1,
+                "mobile": False,
+                "screenWidth": 390,
+                "screenHeight": 844,
+            },
+        )
+        mobile_state = self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                const scroll = doc.querySelector(
+                    ".estab-message-form-scroll"
+                );
+                const form = doc.querySelector(
+                    "[data-estab-official-message-form]"
+                );
+                if (!scroll || !form) return false;
+                return {
+                    viewportWidth: doc.documentElement.clientWidth,
+                    bodyScrollWidth: doc.body.scrollWidth,
+                    scrollClientWidth: scroll.clientWidth,
+                    scrollWidth: scroll.scrollWidth,
+                    formWidth: form.getBoundingClientRect().width
+                };
+                """,
+            ),
+            "mobiles Nachrichtenvordruck-Raster wurde nicht aufgebaut",
+        )
+        self._truth(
+            mobile_state.get("viewportWidth", 0) <= 390
+            and mobile_state.get("bodyScrollWidth", 9999)
+                <= mobile_state.get("viewportWidth", 0) + 1
+            and mobile_state.get("scrollWidth", 0)
+                > mobile_state.get("scrollClientWidth", 0)
+            and 895 <= mobile_state.get("formWidth", 0) <= 897,
+            "Das amtliche Raster bleibt mobil nicht in seinem beschrifteten "
+            "Scrollbereich.",
+        )
+        self.cdp.call(
+            "Emulation.setDeviceMetricsOverride",
+            {
+                "width": 1440,
+                "height": 1000,
+                "deviceScaleFactor": 1,
+                "mobile": False,
+                "screenWidth": 1440,
+                "screenHeight": 1000,
+            },
+        )
+        print_document = self.cdp.evaluate(
+            _frame_expression(
+                "mainframe",
+                """
+                return "<!doctype html>" + doc.documentElement.outerHTML;
+                """,
+            )
+        )
+        self._truth(
+            isinstance(print_document, str)
+            and "data-estab-official-message-form" in print_document,
+            "Der echte Nachrichtenvordruck konnte nicht für den Drucknachweis gesichert werden.",
+        )
+        return print_document
+
+    def _assert_official_message_form_print(self, print_document: str) -> None:
+        self._wait_for_authenticated_overview(
+            "angemeldete Übersicht fehlt vor dem Drucknachweis"
+        )
+        source = json.dumps(print_document)
+        self._truth(
+            self.cdp.evaluate(
+                f"""
+                (() => {{
+                    document.open();
+                    document.write({source});
+                    document.close();
+                    return true;
+                }})()
+                """
+            )
+            is True,
+            "Der gesicherte Nachrichtenvordruck konnte nicht druckisoliert werden.",
+        )
+        self.cdp.call(
+            "Emulation.setDeviceMetricsOverride",
+            {
+                "width": 390,
+                "height": 844,
+                "deviceScaleFactor": 1,
+                "mobile": False,
+                "screenWidth": 390,
+                "screenHeight": 844,
+            },
+        )
+        self.cdp.call("Emulation.setEmulatedMedia", {"media": "print"})
+        print_state = self.cdp.wait_for(
+            """
+            (() => {
+                const sheet = document.querySelector(
+                    "[data-estab-official-message-form]"
+                );
+                const scroll = document.querySelector(
+                    ".estab-message-form-scroll"
+                );
+                const content = document.querySelector(
+                    '[data-estab-form-zone="nachricht"]'
+                );
+                if (
+                    document.readyState !== "complete"
+                    || !sheet
+                    || !scroll
+                    || !content
+                ) return false;
+                const sheetStyle = getComputedStyle(sheet);
+                const sheetRect = sheet.getBoundingClientRect();
+                const pseudo = getComputedStyle(scroll, "::before");
+                const contentBlue = getComputedStyle(content).backgroundColor;
+                if (
+                    sheetStyle.zoom !== "0.78"
+                    || contentBlue !== "rgb(162, 217, 247)"
+                    || sheetRect.width < 695
+                    || sheetRect.height <= 0
+                ) return false;
+                return {
+                    x: sheetRect.left + window.scrollX,
+                    y: sheetRect.top + window.scrollY,
+                    width: sheetRect.width,
+                    height: sheetRect.height,
+                    zoom: sheetStyle.zoom,
+                    breakInside: sheetStyle.breakInside,
+                    pseudoContent: pseudo.content,
+                    pseudoDisplay: pseudo.display,
+                    blue: contentBlue,
+                    zones: document.querySelectorAll(
+                        "[data-estab-form-zone]"
+                    ).length
+                };
+            })()
+            """,
+            "Druck-CSS des echten Nachrichtenvordrucks wurde nicht berechnet",
+        )
+        self._truth(
+            print_state.get("zones") == 3
+            and print_state.get("blue") == "rgb(162, 217, 247)"
+            and print_state.get("zoom") == "0.78"
+            and print_state.get("breakInside") in {"avoid", "avoid-page"}
+            and print_state.get("pseudoContent") in {"none", "normal"}
+            and print_state.get("pseudoDisplay") == "none"
+            and 695 <= print_state.get("width", 0) <= 705
+            and 0 < print_state.get("height", 9999) <= 1069.7,
+            "Das echte Drucklayout passt nicht fragmentierungsfrei in den "
+            "bedruckbaren A4-Bereich oder enthält den mobilen Wischhinweis.",
+        )
+
+        pdf_result = self.cdp.call(
+            "Page.printToPDF",
+            {
+                "printBackground": True,
+                "displayHeaderFooter": False,
+                "preferCSSPageSize": True,
+                "transferMode": "ReturnAsBase64",
+            },
+        )
+        encoded_pdf = pdf_result.get("data")
+        try:
+            pdf_bytes = base64.b64decode(encoded_pdf, validate=True)
+        except (TypeError, ValueError) as exc:
+            raise TestFailure(
+                "Chrome lieferte keinen gültigen PDF-Drucknachweis."
+            ) from exc
+        page_count = len(re.findall(rb"/Type\s*/Page\b", pdf_bytes))
+        media_box = re.search(
+            rb"/MediaBox\s*\[\s*([+-]?[0-9.]+)\s+([+-]?[0-9.]+)\s+"
+            rb"([+-]?[0-9.]+)\s+([+-]?[0-9.]+)\s*\]",
+            pdf_bytes,
+        )
+        media_width = 0.0
+        media_height = 0.0
+        if media_box is not None:
+            media_width = float(media_box.group(3)) - float(media_box.group(1))
+            media_height = float(media_box.group(4)) - float(media_box.group(2))
+        self._truth(
+            pdf_bytes.startswith(b"%PDF-")
+            and len(pdf_bytes) > 5000
+            and page_count == 1
+            and 590 <= media_width <= 600
+            and 837 <= media_height <= 846,
+            "Chromes echter Drucknachweis ist nicht genau eine A4-Hochformatseite.",
+        )
+
+        screenshot_result = self.cdp.call(
+            "Page.captureScreenshot",
+            {
+                "format": "png",
+                "fromSurface": True,
+                "captureBeyondViewport": True,
+                "clip": {
+                    "x": max(0.0, float(print_state.get("x", 0))),
+                    "y": max(0.0, float(print_state.get("y", 0))),
+                    "width": float(print_state.get("width", 0)),
+                    "height": float(print_state.get("height", 0)),
+                    "scale": 1,
+                },
+            },
+        )
+        encoded_screenshot = screenshot_result.get("data")
+        try:
+            screenshot_bytes = base64.b64decode(
+                encoded_screenshot,
+                validate=True,
+            )
+        except (TypeError, ValueError) as exc:
+            raise TestFailure(
+                "Chrome lieferte keinen gültigen Bildnachweis des Druckformulars."
+            ) from exc
+        screenshot_summary = _png_rgb_content_summary(screenshot_bytes)
+        screenshot_pixels = (
+            screenshot_summary["width"] * screenshot_summary["height"]
+        )
+        self._truth(
+            len(screenshot_bytes) > 20000
+            and abs(
+                screenshot_summary["width"]
+                - round(float(print_state.get("width", 0)))
+            ) <= 2
+            and abs(
+                screenshot_summary["height"]
+                - round(float(print_state.get("height", 0)))
+            ) <= 2
+            and screenshot_summary["blue_pixels"]
+                >= screenshot_pixels * 0.35
+            and screenshot_summary["dark_pixels"]
+                >= screenshot_pixels * 0.003
+            and screenshot_summary["non_white_pixels"]
+                >= screenshot_pixels * 0.45,
+            "Chromes Bildnachweis enthält nicht die sichtbare blaue "
+            "Formularfläche mit schwarzem Raster und Inhalt.",
+        )
+
+        self._assert_rendered_pdf_bytes(pdf_bytes)
+        self.cdp.navigate(self.config.base_url + "/")
+
+    def _assert_rendered_pdf_bytes(self, pdf_bytes: bytes) -> None:
+        encoded_pdf = base64.b64encode(pdf_bytes).decode("ascii")
+        pdf_data_url = "data:application/pdf;base64," + encoded_pdf
+        try:
+            decoded_data_url = base64.b64decode(
+                pdf_data_url.partition(",")[2],
+                validate=True,
+            )
+        except (TypeError, ValueError) as exc:
+            raise TestFailure(
+                "Der PDF-Drucknachweis konnte nicht bytegenau an Chrome "
+                "übergeben werden."
+            ) from exc
+        self._truth(
+            decoded_data_url == pdf_bytes,
+            "Die an Chrome übergebene PDF-Daten-URL weicht vom erzeugten "
+            "Byte-Stream ab.",
+        )
+
+        self.cdp.call("Emulation.setEmulatedMedia", {"media": "screen"})
+        self.cdp.call(
+            "Emulation.setDeviceMetricsOverride",
+            {
+                "width": 1440,
+                "height": 1000,
+                "deviceScaleFactor": 1,
+                "mobile": False,
+                "screenWidth": 1440,
+                "screenHeight": 1000,
+            },
+        )
+        navigation = self.cdp.call("Page.navigate", {"url": pdf_data_url})
+        self._truth(
+            not navigation.get("errorText")
+            and navigation.get("isDownload") is not True,
+            "Chrome hat den erzeugten PDF-Byte-Stream nicht im integrierten "
+            "PDF-Renderer geöffnet.",
+        )
+        expected_url = json.dumps(pdf_data_url)
+        viewer_state = self.cdp.wait_for(
+            f"""
+            (() => {{
+                const embedder = Array.from(
+                    document.querySelectorAll('link[href], embed[type]')
+                ).some(element =>
+                    element.href?.startsWith('chrome-extension://')
+                        && element.href.endsWith('/pdf_embedder.css')
+                    || element.tagName === 'EMBED'
+                        && element.type === 'application/pdf'
+                );
+                if (
+                    document.readyState !== "complete"
+                    || location.href !== {expected_url}
+                    || document.contentType !== "application/pdf"
+                    || !embedder
+                ) return false;
+                return {{
+                    contentType: document.contentType,
+                    exactLocation: location.href === {expected_url},
+                    embedder
+                }};
+            }})()
+            """,
+            "Chrome hat den exakten PDF-Byte-Stream nicht im PDF-Viewer geladen",
+        )
+        self._truth(
+            viewer_state.get("contentType") == "application/pdf"
+            and viewer_state.get("exactLocation") is True
+            and viewer_state.get("embedder") is True,
+            "Der geladene Chrome-PDF-Viewer ist nicht an den exakten "
+            "Druck-Byte-Stream gebunden.",
+        )
+
+        rendered_summary: dict[str, int] | None = None
+        rendered_bytes = b""
+        deadline = time.monotonic() + self.config.timeout
+        while time.monotonic() < deadline:
+            screenshot_result = self.cdp.call(
+                "Page.captureScreenshot",
+                {
+                    "format": "png",
+                    "fromSurface": True,
+                },
+            )
+            encoded_screenshot = screenshot_result.get("data")
+            try:
+                rendered_bytes = base64.b64decode(
+                    encoded_screenshot,
+                    validate=True,
+                )
+            except (TypeError, ValueError) as exc:
+                raise TestFailure(
+                    "Chrome lieferte kein gültiges Bild des erzeugten PDFs."
+                ) from exc
+            summary = _png_rgb_content_summary(rendered_bytes)
+            pixel_count = summary["width"] * summary["height"]
+            blue_bounds_area = (
+                summary["blue_bounds_width"]
+                * summary["blue_bounds_height"]
+            )
+            if (
+                len(rendered_bytes) > 20000
+                and summary["width"] >= 1200
+                and summary["height"] >= 800
+                and summary["blue_pixels"] >= pixel_count * 0.20
+                and summary["blue_bounds_width"] >= 500
+                and summary["blue_bounds_height"] >= 400
+                and summary["dark_pixels_in_blue_bounds"]
+                    >= blue_bounds_area * 0.01
+            ):
+                rendered_summary = summary
+                break
+            time.sleep(0.1)
+
+        self._truth(
+            rendered_summary is not None,
+            "Der exakte PDF-Byte-Stream enthält im Chrome-Renderer nicht "
+            "die sichtbare blaue Formularfläche mit schwarzem Raster.",
+        )
 
     def _assert_narrow_overview(self) -> None:
         state = self.cdp.evaluate(

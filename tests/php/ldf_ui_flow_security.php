@@ -104,7 +104,15 @@ $assert(
         )
         && str_contains(
             $handler,
-            '$rehydrated = array_replace ($locked, $editable);'
+            'function estab_rehydrate_locked_operator_form ('
+        )
+        && str_contains(
+            $handler,
+            '$rehydrated = estab_rehydrate_authoritative_message_form ('
+        )
+        && str_contains(
+            $handler,
+            '$rehydrated ["incoming_transport_original_medium"] ='
         )
         && str_contains(
             $handler,

@@ -48,7 +48,16 @@ if (strlen($document) < 5000) {
     throw new RuntimeException('Generated PDF is unexpectedly small');
 }
 foreach (
-    ['EINGANG', 'AUSGANG', 'Nachweis-Nr.', 'Fm-Betriebsstelle', 'Blitz']
+    [
+        'EINGANG',
+        'AUSGANG',
+        'Nachweis-Nr.',
+        'Fm-Betriebsstelle',
+        'Blitz',
+        'Ruf Nr.',
+        '0711 123456',
+        'Lagebetreff Nord',
+    ]
     as $marker
 ) {
     if (!str_contains($document, $marker)) {

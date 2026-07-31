@@ -95,16 +95,11 @@ function estab_overview_row_start ($priority) {
 }
 
 function estab_overview_recipient_cell ($copyColor, array $backgroundColors) {
-  if (
-    in_array ($copyColor, array ("rt", "gn", "bl"), true)
-    && isset ($backgroundColors [$copyColor])
-  ) {
-    return "<td style=\"text-align: center; background-color: ".
-           estab_message_html ($backgroundColors [$copyColor])."; \">X</td>";
-  }
-
-  return "<td style=\"text-align: center; background-color: rgb(250, 250, 250); \">".
-         "<p><img src=\"null.gif\" alt=\"leer\"></p></td>";
+  return estab_recipient_copy_cell_html (
+    $copyColor,
+    $backgroundColors,
+    "<p><img src=\"null.gif\" alt=\"leer\"></p>"
+  );
 }
 
 function estab_overview_empty_row ($columnCount) {
@@ -168,17 +163,7 @@ class Listen {
 
 
   function explodereceiver ( $empf){
-    $fktcopycolor = array ();
-    $receiver = explode (",",$empf);
-    for ($i=0; $i < count( $receiver ); $i++ ) {
-      $token = trim ((string) $receiver [$i]);
-      if ($token === "") { continue; }
-      $hilfeaus = explode ("_", $token, 2);
-      $function = trim ((string) ($hilfeaus[0] ?? ""));
-      if ($function === "") { continue; }
-      $fktcopycolor[$function] = (string) ($hilfeaus[1] ?? "");
-    }
-    return $fktcopycolor;
+    return estab_recipient_copy_map ($empf);
   }
 
 

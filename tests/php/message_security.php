@@ -443,11 +443,22 @@ foreach ([
 }
 
 $assert(
-    substr_count($listSource, "switch (\$empfcolor [\$recipientFunction] ?? '')") === 2
+    substr_count(
+        $listSource,
+        'estab_recipient_copy_cell_html ('
+    ) === 2
+        && substr_count(
+            $listSource,
+            '$empfcolor [$recipientFunction] ?? ""'
+        ) === 2
+        && str_contains(
+            $listSource,
+            'estab_recipient_copy_background ('
+        )
         && !str_contains($listSource, '$abfzeit[stak]')
         && str_contains($listSource, 'switch ( $row["x00_status"] )')
         && !str_contains($listSource, '$row["X00_status"]'),
-    'message lists do not handle missing recipient colors or timestamp keys safely'
+    'message lists do not handle missing/multicolour recipients or timestamp/status keys safely'
 );
 $assert(
     str_contains($allMessagesSource, 'http_response_code(410)')
@@ -518,6 +529,21 @@ $assert(
         && str_contains($repositorySource, 'SELECT GET_LOCK(?, 10)')
         && str_contains($repositorySource, "require_once __DIR__ . '/datetime.php'"),
     'prepared/concurrent repository contract missing'
+);
+$assert(
+    str_contains(
+        $repositorySource,
+        'SELECT `14_zeichen`, `14_funktion`, `17_vermerke` FROM '
+    )
+        && str_contains(
+            $repositorySource,
+            "\$event['snapshot']['correction_note'] ="
+        )
+        && !str_contains(
+            $dataSource,
+            '"correction_note" => $data ["17_vermerke"]'
+        ),
+    'author resubmission evidence accepts a browser-selected correction note'
 );
 $assert(
     str_contains(

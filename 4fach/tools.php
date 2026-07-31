@@ -761,19 +761,124 @@ bersichtlich dargestellt werden.
 
 /******************************************************************************\
 
-  Welche Farbe bekommt welcher Empfaenger
+  Welche Farben bekommt welcher Empfaenger
 
 \******************************************************************************/
-  function extraiereempfaenger ($empf){
-    $receiver = explode (",",$empf);
-	$fktcopycolor = NULL;
-    for ($i=0; $i < count( $receiver ); $i++ ) {	  
-	  if (preg_match ( "/_/", $receiver [$i] ) != 0) {
-        $hilfeaus = explode ( "_", $receiver [$i] ) ;
-        $fktcopycolor[$hilfeaus[0]] = $hilfeaus [1] ;
-	  } 
+  function estab_recipient_copy_map ($empf){
+    $coloursByFunction = array ();
+    foreach (explode (",", (string) $empf) as $token) {
+      $token = trim ((string) $token);
+      if (
+        preg_match (
+          "/\\A(.+)_(bl|gn|rt|ge|gb)\\z/Di",
+          $token,
+          $parts
+        ) !== 1
+      ) {
+        continue;
+      }
+      $function = trim ((string) $parts [1]);
+      $colour = strtolower ((string) $parts [2]);
+      if ($function === "") {
+        continue;
+      }
+      $existing = isset ($coloursByFunction [$function])
+        ? explode (",", $coloursByFunction [$function])
+        : array ();
+      if (!in_array ($colour, $existing, true)) {
+        $existing [] = $colour;
+      }
+      $coloursByFunction [$function] = implode (",", $existing);
     }
-    return $fktcopycolor;
+    return $coloursByFunction;
+  }
+
+  function estab_recipient_copy_colours ($copyColours){
+    $result = array ();
+    foreach (explode (",", (string) $copyColours) as $colour) {
+      $colour = strtolower (trim ((string) $colour));
+      if (
+        in_array ($colour, array ("bl", "gn", "rt", "ge", "gb"), true)
+        && !in_array ($colour, $result, true)
+      ) {
+        $result [] = $colour;
+      }
+    }
+    return $result;
+  }
+
+  function estab_recipient_copy_background (
+    $copyColours,
+    array $backgroundColours,
+    $defaultColour
+  ){
+    $resolved = array ();
+    foreach (estab_recipient_copy_colours ($copyColours) as $colour) {
+      $lookup = $colour === "gb" ? "ge" : $colour;
+      if (isset ($backgroundColours [$lookup])) {
+        $resolved [] = (string) $backgroundColours [$lookup];
+      }
+    }
+    if (count ($resolved) === 0) {
+      return (string) $defaultColour;
+    }
+    if (count ($resolved) === 1) {
+      return $resolved [0];
+    }
+    $segments = array ();
+    $count = count ($resolved);
+    foreach ($resolved as $index => $colour) {
+      $start = ($index * 100) / $count;
+      $end = (($index + 1) * 100) / $count;
+      $segments [] = $colour." ".$start."%";
+      $segments [] = $colour." ".$end."%";
+    }
+    return "linear-gradient(to right, ".implode (", ", $segments).")";
+  }
+
+  function estab_recipient_copy_cell_html (
+    $copyColours,
+    array $backgroundColours,
+    $emptyMarkup
+  ){
+    $colours = estab_recipient_copy_colours ($copyColours);
+    if (count ($colours) === 0) {
+      return "<td style=\"text-align: center; background: rgb(250, 250, 250); \">".
+        (string) $emptyMarkup."</td>";
+    }
+    $background = estab_recipient_copy_background (
+      $copyColours,
+      $backgroundColours,
+      "rgb(250, 250, 250)"
+    );
+    $names = array (
+      "bl" => "blau",
+      "gn" => "grün",
+      "rt" => "rot",
+      "ge" => "gelb",
+      "gb" => "gelb",
+    );
+    $labels = array ();
+    foreach ($colours as $colour) {
+      $labels [] = $names [$colour];
+    }
+    return "<td style=\"text-align: center; background: ".
+      htmlspecialchars (
+        $background,
+        ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5,
+        "UTF-8"
+      ).
+      ";\" title=\"".
+      htmlspecialchars (
+        "Durchschriften: ".implode (", ", $labels),
+        ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5,
+        "UTF-8"
+      ).
+      "\">X</td>";
+  }
+
+  function extraiereempfaenger ($empf){
+    return estab_recipient_copy_map ($empf);
   }
 
 

@@ -8,7 +8,7 @@ steht in der [Funktionsmatrix](FUNKTIONSNACHWEIS.md).
 
 | Ebene | Nachweis |
 | --- | --- |
-| Quellprüfung | netzloser Herkunftsnachweis für 13 Git-Ref-Snapshots (Trunk, vier Branches, sechs SVN-Tags, zwei SourceForge-Release-Tags) und einen separaten Dokument-r85-Baum, GitHub-Workflow-Prüfung mit festgelegtem Actionlint 1.7.12, PHP-8.5-Lint, Kompatibilitäts-, Sicherheits-, Einsatz-, Benutzerverwaltungs-, Upload-, Export- und PDF-Regressionen |
+| Quellprüfung | netzloser Herkunftsnachweis für 13 Git-Ref-Snapshots (Trunk, vier Branches, sechs SVN-Tags, zwei SourceForge-Release-Tags) und einen separaten Dokument-r85-Baum, GitHub-Workflow-Prüfung mit festgelegtem Actionlint 1.7.12, PHP-8.5-Lint, Kompatibilitäts-, Sicherheits-, Einsatz-, Benutzerverwaltungs-, amtlicher Nachrichtenvordruck-, Upload-, Export- und PDF-Regressionen |
 | Image-Build | benötigte PHP-Erweiterungen und Apache-Konfiguration |
 | Datenbank | echtes MariaDB-Schema, Einsatz-Singleton/Trigger, Kontosperre, Indizes, aktive und persistente Standardmatrix, Engines, Collations und Zero-Date-Freiheit |
 | HTTP | Header, direkte Endpunktfläche, 303-Weiterleitung anonymer geschützter Aufrufe zum allowlist-gebundenen Bestandslogin samt sichtbarem Rückweg, 403-/400-/405-Grenzen, Registrierung, sichtbare Sitzungsidentität, CSRF-Abmeldung, erneute Anmeldung, verbindlicher Eingangs- und Ausgangslauf samt Rückgabe/Korrektur und einsatzgebundener Feldvorschläge, Dienstbesetzung/Hutwechsel, S6-Plan, Melderlauf, Kategorien- und ETB-/TBB-Rollengrenzen, reale Vordruckerzeugung/-auslieferung sowie Admin-Export |
@@ -204,14 +204,14 @@ tests/integration/ci.sh
 ```
 
 Der am 31. Juli 2026 tatsächlich vollständig beendete Abschlusslauf verwendete
-das isolierte Compose-Projekt `estab_ci_final_20260731`, Port `18280` für die
-App und Port `18281` für das Pull-only-Registry-Projekt:
+das isolierte Compose-Projekt `estab_ci_official_form_release`, Port `18382`
+für die App und Port `18383` für das Pull-only-Registry-Projekt:
 
 ```console
-COMPOSE_PROJECT_NAME=estab_ci_final_20260731 \
+COMPOSE_PROJECT_NAME=estab_ci_official_form_release \
 ESTAB_CONTAINER_CLI=podman \
-ESTAB_HTTP_PORT=18280 \
-ESTAB_REGISTRY_HTTP_PORT=18281 \
+ESTAB_HTTP_PORT=18382 \
+ESTAB_REGISTRY_HTTP_PORT=18383 \
 ESTAB_BROWSER_TEST=required \
 bash tests/integration/ci.sh
 ```
@@ -276,7 +276,11 @@ Sperrmarker und die eigenen DB-Schreibgrenzen ergänzen, muss historische
 Namen unverändert `NULL` lassen und fremde gleichnamige Spalten, Routinen oder
 Trigger fail-closed abweisen. Readiness und `verify.sql` verlangen danach die
 exakten Spaltenpositionen/-attribute, gültige kanonische Werte, Marker,
-Schreibgrenzen und alle zwölf Ledgerzeilen einschließlich Version 97.
+Schreibgrenzen sowie die amtlichen Nachrichtenvordruckfelder aus Migration 98.
+Der Schema-Test startet Migration 98 zweimal, prüft die exakt markierten
+Spalten `11_rufnummer` und `12_betreff`, deren leere Bestandswerte und den
+unveränderten historischen Nachrichteninhalt. Readiness und `verify.sql`
+verlangen alle dreizehn Ledgerzeilen einschließlich Version 98.
 Anschließend migriert der Hauptlauf ein leeres Schema,
 führt PHP-, Datenbank-, Rollen-, HTTP- und Administrationsnachweise aus, prüft
 die Containerlogs und stellt Datenbank, Anhang-/Vordruckdaten sowie Exporte aus
@@ -1399,6 +1403,14 @@ Mindestens zu prüfen:
   ausgewählten Hut abweisen,
 - eingehende und ausgehende Nachricht mit Richtung, Gegenstelle,
   Prioritätsstufe, Empfängern und Inhalt erfassen,
+- den Bildschirmvordruck bei Desktopbreite und bei 390 Pixeln direkt mit den
+  beiden Referenzunterlagen vergleichen: Dreizonenraster, Zellfolge,
+  Beschriftungen, Linien und Blauton müssen übereinstimmen; auf 390 Pixeln
+  darf nur das Blatt horizontal scrollen,
+- alle 20 Informationsdialoge einzeln per Maus und Tastatur öffnen, Inhalt und
+  Zuordnung zum Feld prüfen sowie Schließen-Knopf, `Escape`, Außenklick und
+  Fokus-Rückgabe kontrollieren; zusätzlich eine Bildschirmdruckprobe ohne
+  Bedienleisten, Informationsdialoge, VS-NfD-Aufdruck und Wappen erstellen,
 - Weiterleitung, Sichtung, Quittierung, Statuswechsel und Listenfilter über
   zwei unterschiedliche Funktionssitzungen nachvollziehen,
 - mit S2 die Meldungsübersicht und mit LdF/A/W die Nachweisung öffnen; S1, Si

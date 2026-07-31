@@ -8,9 +8,917 @@ require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/incident.php';
 require_once __DIR__ . '/dv_operations.php';
 require_once __DIR__ . '/attachment_integrity.php';
+require_once __DIR__ . '/workflow.php';
 
 final class EstabAttachmentDatabaseException extends RuntimeException
 {
+}
+
+class EstabAttachmentContextException extends RuntimeException
+{
+}
+
+final class EstabAttachmentDraftException extends EstabAttachmentContextException
+{
+    public function __construct(
+        string $message,
+        private readonly array $draft = [],
+        ?Throwable $previous = null
+    ) {
+        parent::__construct($message, 0, $previous);
+    }
+
+    /** Safe scalar values that can be returned to the original form. */
+    public function draft(): array
+    {
+        return $this->draft;
+    }
+}
+
+const ESTAB_ATTACHMENT_ORIGIN_MAX_FLOWS = 16;
+const ESTAB_ATTACHMENT_ORIGIN_DRAFT_MAX_BYTES = 1048576;
+const ESTAB_ATTACHMENT_ORIGIN_DRAFTS_MAX_BYTES = 8388608;
+const ESTAB_ATTACHMENT_ORIGIN_ATTACHMENT_LIST_MAX_BYTES = 65535;
+
+/** Tasks whose editable message form may enter the attachment picker. */
+function estab_attachment_origin_tasks(): array
+{
+    return [
+        'FM-Eingang',
+        'FM-Eingang_Anhang',
+        'Stab_schreiben',
+        'Stab_korrigieren',
+        'Stab_gesprnoti',
+    ];
+}
+
+/**
+ * Return the authoritative identity fields used to bind an attachment flow.
+ *
+ * A selected duty assignment is mandatory: the account alone is not an
+ * operational identity and must not be able to resume another duty hat's
+ * unfinished message form.
+ */
+function estab_attachment_origin_identity(array $identity): array
+{
+    $shape = estab_auth_session_identity_shape([
+        'vStab_benutzer' => $identity['benutzer'] ?? null,
+        'vStab_kuerzel' => $identity['kuerzel'] ?? null,
+        'vStab_funktion' => $identity['funktion'] ?? null,
+        'vStab_rolle' => $identity['rolle'] ?? null,
+    ]);
+    try {
+        $assignmentId = estab_incident_positive_id(
+            $identity['duty_assignment_id'] ?? null,
+            'Dienstbesetzungs-ID'
+        );
+    } catch (InvalidArgumentException $exception) {
+        throw new EstabAttachmentContextException(
+            'Der Anhangvorgang besitzt keine gültige Dienstbesetzung.',
+            previous: $exception
+        );
+    }
+    if ($shape === null) {
+        throw new EstabAttachmentContextException(
+            'Der Anhangvorgang besitzt keine gültige Benutzeridentität.'
+        );
+    }
+    return $shape + ['duty_assignment_id' => $assignmentId];
+}
+
+function estab_attachment_origin_role_allowed(array $identity, string $task): bool
+{
+    if (in_array($task, ['FM-Eingang', 'FM-Eingang_Anhang'], true)) {
+        return estab_workflow_is_telecommunications($identity);
+    }
+    if (
+        in_array(
+            $task,
+            ['Stab_schreiben', 'Stab_korrigieren', 'Stab_gesprnoti'],
+            true
+        )
+    ) {
+        return estab_workflow_is_staff_writer($identity);
+    }
+    return false;
+}
+
+/**
+ * Create a server-owned attachment origin after the main route/object gate.
+ *
+ * For a correction the record id is copied from the already authorised row,
+ * then compared with the submitted hidden field. New-message forms may not
+ * smuggle a record id into the session context.
+ *
+ * @return array{
+ *   version:int,
+ *   flow_token:string,
+ *   incident_id:int,
+ *   duty_assignment_id:int,
+ *   benutzer:string,
+ *   kuerzel:string,
+ *   funktion:string,
+ *   rolle:string,
+ *   task:string,
+ *   record_id:?int
+ * }
+ */
+function estab_attachment_origin_context_create(
+    array $identity,
+    mixed $incidentId,
+    array $request,
+    ?array $authorizedMessage = null
+): array {
+    $identity = estab_attachment_origin_identity($identity);
+    try {
+        $incidentId = estab_incident_positive_id($incidentId);
+    } catch (InvalidArgumentException $exception) {
+        throw new EstabAttachmentContextException(
+            'Der Anhangvorgang besitzt keinen gültigen Einsatz.',
+            previous: $exception
+        );
+    }
+    $task = $request['task'] ?? null;
+    if (
+        !is_string($task)
+        || !in_array($task, estab_attachment_origin_tasks(), true)
+        || !estab_attachment_origin_role_allowed($identity, $task)
+    ) {
+        throw new EstabAttachmentContextException(
+            'Dieser Nachrichtenvordruck darf keine Anhänge übernehmen.'
+        );
+    }
+    if (array_key_exists('attachment_flow', $request)) {
+        throw new EstabAttachmentContextException(
+            'Ein Anhangvorgang darf nicht durch den Browser vorgegeben werden.'
+        );
+    }
+
+    $recordId = null;
+    if ($task === 'Stab_korrigieren') {
+        if (!is_array($authorizedMessage)) {
+            throw new EstabAttachmentContextException(
+                'Der zu korrigierende Datensatz wurde nicht autorisiert.'
+            );
+        }
+        try {
+            $recordId = estab_incident_positive_id(
+                $authorizedMessage['00_lfd'] ?? null,
+                'Nachrichten-ID'
+            );
+            $messageIncidentId = estab_incident_positive_id(
+                $authorizedMessage['einsatz_id'] ?? null
+            );
+            $requestedRecordId = estab_incident_positive_id(
+                $request['00_lfd'] ?? null,
+                'Nachrichten-ID'
+            );
+        } catch (InvalidArgumentException $exception) {
+            throw new EstabAttachmentContextException(
+                'Der zu korrigierende Datensatz ist ungültig.',
+                previous: $exception
+            );
+        }
+        if (
+            $messageIncidentId !== $incidentId
+            || $requestedRecordId !== $recordId
+        ) {
+            throw new EstabAttachmentContextException(
+                'Der zu korrigierende Datensatz stimmt nicht mit dem '
+                . 'autorisierten Nachrichtenvordruck überein.'
+            );
+        }
+    } elseif (
+        array_key_exists('00_lfd', $request)
+        && $request['00_lfd'] !== ''
+    ) {
+        throw new EstabAttachmentContextException(
+            'Ein neuer Nachrichtenvordruck darf keine Datensatz-ID enthalten.'
+        );
+    }
+
+    try {
+        $flowToken = bin2hex(random_bytes(16));
+    } catch (Throwable $exception) {
+        throw new EstabAttachmentContextException(
+            'Der Anhangvorgang konnte nicht sicher initialisiert werden.',
+            previous: $exception
+        );
+    }
+
+    return [
+        'version' => 1,
+        'flow_token' => $flowToken,
+        'incident_id' => $incidentId,
+        'duty_assignment_id' => $identity['duty_assignment_id'],
+        'benutzer' => $identity['benutzer'],
+        'kuerzel' => $identity['kuerzel'],
+        'funktion' => $identity['funktion'],
+        'rolle' => $identity['rolle'],
+        'task' => $task,
+        'record_id' => $recordId,
+    ];
+}
+
+/**
+ * Validate a stored origin against the current server identity and request.
+ *
+ * The browser may echo task/id fields, but it can never select them. All
+ * continuation POSTs additionally carry an unpredictable flow token so two
+ * open browser tabs cannot accidentally resume each other's message form.
+ */
+function estab_attachment_origin_context_validate(
+    mixed $stored,
+    array $identity,
+    mixed $incidentId,
+    array $request = [],
+    bool $requireFlowToken = false
+): array {
+    if (!is_array($stored) || ($stored['version'] ?? null) !== 1) {
+        throw new EstabAttachmentContextException(
+            'Der gespeicherte Anhangvorgang ist ungültig oder abgelaufen.'
+        );
+    }
+    $identity = estab_attachment_origin_identity($identity);
+    try {
+        $incidentId = estab_incident_positive_id($incidentId);
+        $storedIncidentId = estab_incident_positive_id(
+            $stored['incident_id'] ?? null
+        );
+        $storedAssignmentId = estab_incident_positive_id(
+            $stored['duty_assignment_id'] ?? null,
+            'Dienstbesetzungs-ID'
+        );
+    } catch (InvalidArgumentException $exception) {
+        throw new EstabAttachmentContextException(
+            'Der gespeicherte Anhangvorgang ist ungültig.',
+            previous: $exception
+        );
+    }
+    $task = $stored['task'] ?? null;
+    $flowToken = $stored['flow_token'] ?? null;
+    if (
+        !is_string($task)
+        || !in_array($task, estab_attachment_origin_tasks(), true)
+        || !estab_attachment_origin_role_allowed($identity, $task)
+        || !is_string($flowToken)
+        || preg_match('/\A[a-f0-9]{32}\z/D', $flowToken) !== 1
+        || $storedIncidentId !== $incidentId
+        || $storedAssignmentId !== $identity['duty_assignment_id']
+    ) {
+        throw new EstabAttachmentContextException(
+            'Der gespeicherte Anhangvorgang gehört nicht zur aktuellen '
+            . 'Dienstfunktion oder zum aktiven Einsatz.'
+        );
+    }
+    foreach (['benutzer', 'kuerzel', 'funktion', 'rolle'] as $field) {
+        if (
+            !isset($stored[$field])
+            || !is_string($stored[$field])
+            || !hash_equals($identity[$field], $stored[$field])
+        ) {
+            throw new EstabAttachmentContextException(
+                'Der gespeicherte Anhangvorgang gehört nicht zur aktuellen '
+                . 'Benutzeridentität.'
+            );
+        }
+    }
+
+    $recordId = null;
+    if ($task === 'Stab_korrigieren') {
+        try {
+            $recordId = estab_incident_positive_id(
+                $stored['record_id'] ?? null,
+                'Nachrichten-ID'
+            );
+        } catch (InvalidArgumentException $exception) {
+            throw new EstabAttachmentContextException(
+                'Der gespeicherte Korrekturdatensatz ist ungültig.',
+                previous: $exception
+            );
+        }
+    } elseif (($stored['record_id'] ?? null) !== null) {
+        throw new EstabAttachmentContextException(
+            'Ein neuer Nachrichtenvordruck enthält unerwartet eine Datensatz-ID.'
+        );
+    }
+
+    if (array_key_exists('task', $request)) {
+        if (!is_string($request['task']) || !hash_equals($task, $request['task'])) {
+            throw new EstabAttachmentContextException(
+                'Die angeforderte Aufgabe stimmt nicht mit dem Anhangvorgang überein.'
+            );
+        }
+    }
+    if (array_key_exists('00_lfd', $request)) {
+        if ($task === 'Stab_korrigieren') {
+            try {
+                $requestRecordId = estab_incident_positive_id(
+                    $request['00_lfd'],
+                    'Nachrichten-ID'
+                );
+            } catch (InvalidArgumentException $exception) {
+                throw new EstabAttachmentContextException(
+                    'Die angeforderte Datensatz-ID ist ungültig.',
+                    previous: $exception
+                );
+            }
+            if ($requestRecordId !== $recordId) {
+                throw new EstabAttachmentContextException(
+                    'Die angeforderte Datensatz-ID stimmt nicht mit dem '
+                    . 'Anhangvorgang überein.'
+                );
+            }
+        } elseif ($request['00_lfd'] !== '') {
+            throw new EstabAttachmentContextException(
+                'Ein neuer Nachrichtenvordruck darf keine Datensatz-ID enthalten.'
+            );
+        }
+    }
+
+    $submittedFlowToken = $request['attachment_flow'] ?? null;
+    if (
+        $requireFlowToken
+        || array_key_exists('attachment_flow', $request)
+    ) {
+        if (
+            !is_string($submittedFlowToken)
+            || !hash_equals($flowToken, $submittedFlowToken)
+        ) {
+            throw new EstabAttachmentContextException(
+                'Der Anhangvorgang ist ungültig oder wurde in einem anderen '
+                . 'Browserfenster ersetzt.'
+            );
+        }
+    }
+
+    return $stored;
+}
+
+/** Parse the unguessable browser/server correlation token of one attachment flow. */
+function estab_attachment_origin_flow_token(mixed $token): string
+{
+    if (
+        !is_string($token)
+        || preg_match('/\A[a-f0-9]{32}\z/D', $token) !== 1
+    ) {
+        throw new EstabAttachmentContextException(
+            'Der Anhangvorgang besitzt keinen gültigen Flow-Token.'
+        );
+    }
+    return $token;
+}
+
+/**
+ * Store one independently resumable origin without replacing other tabs.
+ *
+ * The bounded map avoids retaining abandoned drafts for an unbounded number
+ * of tabs during a long-running operational session.
+ */
+function estab_attachment_origin_context_store(
+    array &$session,
+    array $context,
+    int $maximumFlows = ESTAB_ATTACHMENT_ORIGIN_MAX_FLOWS,
+    ?callable $releaseEvictedFlow = null
+): string {
+    if (
+        $maximumFlows < 2
+        || $maximumFlows > ESTAB_ATTACHMENT_ORIGIN_MAX_FLOWS
+    ) {
+        throw new InvalidArgumentException('Invalid attachment flow limit');
+    }
+    $token = estab_attachment_origin_flow_token(
+        $context['flow_token'] ?? null
+    );
+    if (
+        array_key_exists('anhang_origin_contexts', $session)
+        && !is_array($session['anhang_origin_contexts'])
+    ) {
+        throw new EstabAttachmentContextException(
+            'Die gespeicherten Anhangvorgänge sind ungültig.'
+        );
+    }
+    if (
+        array_key_exists('anhang_origin_drafts', $session)
+        && !is_array($session['anhang_origin_drafts'])
+    ) {
+        throw new EstabAttachmentContextException(
+            'Die gespeicherten Nachrichtenentwürfe sind ungültig.'
+        );
+    }
+    $contexts = $session['anhang_origin_contexts'] ?? [];
+    if (count($contexts) > $maximumFlows) {
+        throw new EstabAttachmentContextException(
+            'Zu viele gespeicherte Anhangvorgänge.'
+        );
+    }
+    while (count($contexts) >= $maximumFlows && !isset($contexts[$token])) {
+        $expiredToken = array_key_first($contexts);
+        if (!is_string($expiredToken)) {
+            throw new EstabAttachmentContextException(
+                'Die gespeicherten Anhangvorgänge sind ungültig.'
+            );
+        }
+        $expiredContext = $contexts[$expiredToken] ?? null;
+        if (!is_array($expiredContext) || $releaseEvictedFlow === null) {
+            throw new EstabAttachmentContextException(
+                'Zu viele offene Anhangvorgänge. Schließen Sie zuerst einen '
+                . 'älteren Nachrichtenvordruck.'
+            );
+        }
+        // Release any DB reservation before the only context that can derive
+        // its isolated owner is removed from the session.
+        $releaseEvictedFlow($expiredContext);
+        unset($contexts[$expiredToken]);
+        if (is_array($session['anhang_origin_drafts'] ?? null)) {
+            unset($session['anhang_origin_drafts'][$expiredToken]);
+        }
+    }
+    $contexts[$token] = $context;
+    $session['anhang_origin_contexts'] = $contexts;
+    // A legacy singleton must never become an alternative authority source.
+    unset($session['anhang_origin_context'], $session['anhang_message_context']);
+    return $token;
+}
+
+/** Return one exact flow context; no token means no message-form flow. */
+function estab_attachment_origin_context_find(
+    array $session,
+    mixed $token
+): ?array {
+    $token = estab_attachment_origin_flow_token($token);
+    $contexts = $session['anhang_origin_contexts'] ?? null;
+    if ($contexts === null) {
+        return null;
+    }
+    if (!is_array($contexts)) {
+        throw new EstabAttachmentContextException(
+            'Die gespeicherten Anhangvorgänge sind ungültig.'
+        );
+    }
+    $context = $contexts[$token] ?? null;
+    return is_array($context) ? $context : null;
+}
+
+/** Exact scalar fields that one unsaved official message form may retain. */
+function estab_attachment_origin_draft_fields(): array
+{
+    static $fields = null;
+    if ($fields === null) {
+        $fields = array_fill_keys([
+            '01_medium', '01_datum', '01_zeichen', '05_gegenstelle',
+            '06_befweg', '06_befwegausw', '07_durchspruch',
+            '08_befhinweis', '08_befhinwausw', '09_vorrangstufe',
+            '10_anschrift', '11_rufnummer', '11_gesprnotiz',
+            '12_anhang', '12_betreff', '12_inhalt', '12_abfzeit',
+            '13_abseinheit', '14_zeichen', '14_funktion',
+            '15_quitdatum', '15_quitzeichen', '16_gncopy',
+            'recipient_matrix_revision',
+            '17_vermerke',
+        ], true);
+        for ($row = 1; $row <= 5; $row++) {
+            for ($column = 1; $column <= 4; $column++) {
+                $fields['16_' . $row . $column] = true;
+            }
+        }
+    }
+    return $fields;
+}
+
+/**
+ * Copy only the official form's scalar values into a resumable draft.
+ *
+ * Invalid browser arrays or byte sequences are replaced only in the safe
+ * return payload and then rejected, so every other valid field can still be
+ * shown to the operator without becoming session authority.
+ */
+function estab_attachment_origin_draft_from_request(
+    array $request,
+    array $identity,
+    array $context
+): array {
+    $draft = [];
+    $invalid = false;
+    foreach ([
+        '01_medium', '01_datum', '01_zeichen', '05_gegenstelle',
+        '06_befweg', '06_befwegausw', '07_durchspruch',
+        '08_befhinweis', '08_befhinwausw', '09_vorrangstufe',
+        '10_anschrift', '11_rufnummer', '11_gesprnotiz',
+        '12_anhang', '12_betreff', '12_inhalt', '12_abfzeit',
+        '14_zeichen', '14_funktion', '15_quitdatum',
+        '15_quitzeichen', '16_gncopy', 'recipient_matrix_revision',
+        '17_vermerke',
+    ] as $field) {
+        $value = $request[$field] ?? '';
+        if (!is_string($value) || preg_match('//u', $value) !== 1) {
+            $value = '';
+            $invalid = true;
+        }
+        $draft[$field] = $value;
+    }
+
+    $task = is_string($context['task'] ?? null)
+        ? $context['task']
+        : '';
+    $sender = $request['13_abseinheit'] ?? '';
+    if (
+        estab_workflow_is_telecommunications($identity)
+        && str_starts_with($task, 'FM-Eingang')
+    ) {
+        $draft['13_abseinheit'] = '';
+    } elseif (!is_string($sender) || preg_match('//u', $sender) !== 1) {
+        $draft['13_abseinheit'] = '';
+        $invalid = true;
+    } else {
+        $draft['13_abseinheit'] = $sender;
+    }
+
+    for ($row = 1; $row <= 5; $row++) {
+        for ($column = 1; $column <= 4; $column++) {
+            $field = '16_' . $row . $column;
+            if (!array_key_exists($field, $request)) {
+                continue;
+            }
+            $value = $request[$field];
+            if (!is_string($value) || preg_match('//u', $value) !== 1) {
+                $invalid = true;
+                continue;
+            }
+            if ($value !== '') {
+                $draft[$field] = $value;
+            }
+        }
+    }
+    if ($invalid) {
+        throw new EstabAttachmentDraftException(
+            'Der Nachrichtenentwurf enthält ungültige Formularwerte. '
+            . 'Prüfen Sie die markierten Eingaben und versuchen Sie es erneut.',
+            $draft
+        );
+    }
+    return $draft;
+}
+
+/** Rebuild the editable form from a safe draft without trusting route fields. */
+function estab_attachment_origin_draft_form_data(
+    array $draft,
+    array $context,
+    ?array $originMessage,
+    array $recipientMatrix,
+    bool $strictDistribution = true,
+    string $redCopyFunction = '',
+    array $requiredDistributionTokens = []
+): array {
+    $allowedFields = estab_attachment_origin_draft_fields();
+    foreach ($draft as $field => $value) {
+        if (
+            !is_string($field)
+            || !isset($allowedFields[$field])
+            || !is_string($value)
+            || preg_match('//u', $value) !== 1
+        ) {
+            throw new EstabAttachmentContextException(
+                'Der Nachrichtenentwurf kann nicht sicher angezeigt werden.'
+            );
+        }
+    }
+    $task = is_string($context['task'] ?? null)
+        ? $context['task']
+        : '';
+    $distributionRequest = [];
+    foreach ($draft as $field => $value) {
+        if (
+            $field === '16_gncopy'
+            || $field === 'recipient_matrix_revision'
+            || preg_match('/\A16_[1-5][1-4]\z/D', $field)
+        ) {
+            $distributionRequest[$field] = $value;
+        }
+    }
+    try {
+        estab_workflow_require_recipient_matrix_revision(
+            $distributionRequest,
+            $recipientMatrix,
+            $redCopyFunction
+        );
+        $distribution = estab_workflow_distribution_tokens(
+            $distributionRequest,
+            $recipientMatrix,
+            $requiredDistributionTokens
+        );
+    } catch (InvalidArgumentException $exception) {
+        if ($strictDistribution) {
+            throw new EstabAttachmentDraftException(
+                'Die Empfängerauswahl des Nachrichtenentwurfs ist ungültig.',
+                $draft,
+                $exception
+            );
+        }
+        $distribution = '';
+    }
+
+    $data = $draft;
+    $data['16_empf'] = $distribution;
+    if ($task === 'Stab_korrigieren') {
+        if (!is_array($originMessage)) {
+            throw new EstabAttachmentContextException(
+                'Der Korrekturdatensatz kann nicht wiederhergestellt werden.'
+            );
+        }
+        $editable = [
+            '07_durchspruch', '08_befhinweis', '08_befhinwausw',
+            '09_vorrangstufe', '10_anschrift', '11_rufnummer',
+            '11_gesprnotiz', '12_anhang', '12_betreff',
+            '12_inhalt', '12_abfzeit',
+        ];
+        $correction = $originMessage;
+        foreach ($editable as $field) {
+            if (array_key_exists($field, $draft)) {
+                $correction[$field] = $draft[$field];
+            }
+        }
+        $data = $correction;
+    }
+    $data['00_lfd'] = $task === 'Stab_korrigieren'
+        ? (int) ($context['record_id'] ?? 0)
+        : '';
+    return $data;
+}
+
+/**
+ * Validate one draft and return its actual PHP-session storage footprint.
+ *
+ * Byte limits intentionally apply after UTF-8 validation: this bounds memory
+ * and session-file growth without splitting or miscounting multibyte text.
+ */
+function estab_attachment_origin_draft_bytes(array $draft): int
+{
+    $allowedFields = estab_attachment_origin_draft_fields();
+    if (count($draft) > count($allowedFields)) {
+        throw new EstabAttachmentDraftException(
+            'Der Nachrichtenentwurf enthält zu viele Felder.',
+            $draft
+        );
+    }
+    foreach ($draft as $field => $value) {
+        if (
+            !is_string($field)
+            || !isset($allowedFields[$field])
+            || !is_string($value)
+        ) {
+            throw new EstabAttachmentDraftException(
+                'Der Nachrichtenentwurf enthält ein ungültiges Feld.',
+                $draft
+            );
+        }
+        if (preg_match('//u', $value) !== 1) {
+            throw new EstabAttachmentDraftException(
+                'Der Nachrichtenentwurf enthält ungültiges UTF-8.',
+                $draft
+            );
+        }
+        if (
+            $field === '12_anhang'
+            && strlen($value)
+                > ESTAB_ATTACHMENT_ORIGIN_ATTACHMENT_LIST_MAX_BYTES
+        ) {
+            throw new EstabAttachmentDraftException(
+                'Die Anhangliste des Nachrichtenentwurfs ist zu groß.',
+                $draft
+            );
+        }
+    }
+    $bytes = strlen(serialize($draft));
+    if ($bytes > ESTAB_ATTACHMENT_ORIGIN_DRAFT_MAX_BYTES) {
+        throw new EstabAttachmentDraftException(
+            'Der Nachrichtenentwurf ist zu groß. Kürzen Sie den Text, bevor '
+            . 'Sie die Anhangverwaltung öffnen.',
+            $draft
+        );
+    }
+    return $bytes;
+}
+
+/** Validate the complete bounded draft map before mutating the session. */
+function estab_attachment_origin_drafts_bytes(
+    array $drafts,
+    array $contexts
+): int {
+    if (
+        count($drafts) > ESTAB_ATTACHMENT_ORIGIN_MAX_FLOWS
+        || count($contexts) > ESTAB_ATTACHMENT_ORIGIN_MAX_FLOWS
+    ) {
+        throw new EstabAttachmentDraftException(
+            'Zu viele Nachrichtenentwürfe sind gleichzeitig geöffnet.'
+        );
+    }
+    foreach ($drafts as $token => $draft) {
+        $token = estab_attachment_origin_flow_token($token);
+        if (!is_array($draft) || !is_array($contexts[$token] ?? null)) {
+            throw new EstabAttachmentContextException(
+                'Die gespeicherten Nachrichtenentwürfe sind ungültig.'
+            );
+        }
+        estab_attachment_origin_draft_bytes($draft);
+    }
+    $bytes = strlen(serialize($drafts));
+    if ($bytes > ESTAB_ATTACHMENT_ORIGIN_DRAFTS_MAX_BYTES) {
+        throw new EstabAttachmentDraftException(
+            'Die offenen Nachrichtenentwürfe belegen zu viel '
+            . 'Sitzungsspeicher. Schließen Sie zuerst einen anderen Entwurf.'
+        );
+    }
+    return $bytes;
+}
+
+/**
+ * Atomically admit one new context together with its already validated draft.
+ *
+ * The complete prospective session map is checked before an eviction callback
+ * can release a reservation. Only after that callback succeeds are both maps
+ * replaced, so an invalid candidate cannot evict or leave an empty context.
+ */
+function estab_attachment_origin_flow_store(
+    array &$session,
+    array $context,
+    array $draft,
+    int $maximumFlows = ESTAB_ATTACHMENT_ORIGIN_MAX_FLOWS,
+    ?callable $releaseEvictedFlow = null
+): string {
+    if (
+        $maximumFlows < 2
+        || $maximumFlows > ESTAB_ATTACHMENT_ORIGIN_MAX_FLOWS
+    ) {
+        throw new InvalidArgumentException('Invalid attachment flow limit');
+    }
+    $token = estab_attachment_origin_flow_token(
+        $context['flow_token'] ?? null
+    );
+    try {
+        estab_attachment_origin_draft_bytes($draft);
+    } catch (EstabAttachmentDraftException $exception) {
+        throw new EstabAttachmentDraftException(
+            $exception->getMessage(),
+            $draft,
+            $exception
+        );
+    }
+    foreach (['anhang_origin_contexts', 'anhang_origin_drafts'] as $key) {
+        if (array_key_exists($key, $session) && !is_array($session[$key])) {
+            throw new EstabAttachmentContextException(
+                'Die gespeicherten Anhangvorgänge sind ungültig.'
+            );
+        }
+    }
+    $contexts = $session['anhang_origin_contexts'] ?? [];
+    $drafts = $session['anhang_origin_drafts'] ?? [];
+    if (count($contexts) > $maximumFlows) {
+        throw new EstabAttachmentContextException(
+            'Zu viele gespeicherte Anhangvorgänge.'
+        );
+    }
+    try {
+        estab_attachment_origin_drafts_bytes($drafts, $contexts);
+    } catch (EstabAttachmentDraftException $exception) {
+        throw new EstabAttachmentDraftException(
+            $exception->getMessage(),
+            $draft,
+            $exception
+        );
+    }
+
+    $evictedContext = null;
+    $evictedToken = null;
+    if (count($contexts) >= $maximumFlows && !isset($contexts[$token])) {
+        $evictedToken = array_key_first($contexts);
+        $evictedContext = is_string($evictedToken)
+            ? ($contexts[$evictedToken] ?? null)
+            : null;
+        if (!is_string($evictedToken) || !is_array($evictedContext)) {
+            throw new EstabAttachmentContextException(
+                'Die gespeicherten Anhangvorgänge sind ungültig.'
+            );
+        }
+        if ($releaseEvictedFlow === null) {
+            throw new EstabAttachmentDraftException(
+                'Zu viele Nachrichtenvordrucke sind gleichzeitig geöffnet. '
+                . 'Schließen Sie zuerst einen älteren Entwurf.',
+                $draft
+            );
+        }
+        unset($contexts[$evictedToken], $drafts[$evictedToken]);
+    }
+
+    $contexts[$token] = $context;
+    $drafts[$token] = $draft;
+    try {
+        estab_attachment_origin_drafts_bytes($drafts, $contexts);
+    } catch (EstabAttachmentDraftException $exception) {
+        throw new EstabAttachmentDraftException(
+            $exception->getMessage(),
+            $draft,
+            $exception
+        );
+    }
+
+    if (is_array($evictedContext)) {
+        // The callback owns the database transaction. If it fails, neither
+        // server-side session map has been mutated.
+        $releaseEvictedFlow($evictedContext);
+    }
+    $session['anhang_origin_contexts'] = $contexts;
+    $session['anhang_origin_drafts'] = $drafts;
+    unset($session['anhang_origin_context'], $session['anhang_message_context']);
+    return $token;
+}
+
+/** Bind the unsaved form fields to the same token as their origin context. */
+function estab_attachment_origin_draft_store(
+    array &$session,
+    array $context,
+    array $draft
+): void {
+    $token = estab_attachment_origin_flow_token(
+        $context['flow_token'] ?? null
+    );
+    $stored = estab_attachment_origin_context_find($session, $token);
+    if (!is_array($stored)) {
+        throw new EstabAttachmentContextException(
+            'Der Entwurf besitzt keinen aktiven Anhangvorgang.'
+        );
+    }
+    if (
+        array_key_exists('anhang_origin_drafts', $session)
+        && !is_array($session['anhang_origin_drafts'])
+    ) {
+        throw new EstabAttachmentContextException(
+            'Die gespeicherten Nachrichtenentwürfe sind ungültig.'
+        );
+    }
+    $contexts = $session['anhang_origin_contexts'] ?? null;
+    if (!is_array($contexts)) {
+        throw new EstabAttachmentContextException(
+            'Der Entwurf besitzt keinen gültigen Anhangvorgang.'
+        );
+    }
+    $drafts = $session['anhang_origin_drafts'] ?? [];
+    $drafts[$token] = $draft;
+    // Validate the candidate map before the first session mutation. A size
+    // rejection therefore preserves every existing draft and reservation;
+    // this initial store runs before the new flow can reserve a filename.
+    estab_attachment_origin_drafts_bytes($drafts, $contexts);
+    $session['anhang_origin_drafts'] = $drafts;
+}
+
+/** Read, but do not consume, the independently stored draft of one tab. */
+function estab_attachment_origin_draft_find(
+    array $session,
+    array $context
+): array {
+    $token = estab_attachment_origin_flow_token(
+        $context['flow_token'] ?? null
+    );
+    $drafts = $session['anhang_origin_drafts'] ?? null;
+    if ($drafts === null) {
+        return [];
+    }
+    $contexts = $session['anhang_origin_contexts'] ?? null;
+    if (!is_array($drafts) || !is_array($contexts)) {
+        throw new EstabAttachmentContextException(
+            'Die gespeicherten Nachrichtenentwürfe sind ungültig.'
+        );
+    }
+    estab_attachment_origin_drafts_bytes($drafts, $contexts);
+    $draft = $drafts[$token] ?? null;
+    return is_array($draft) ? $draft : [];
+}
+
+/**
+ * Remove exactly one completed flow, or only obsolete singleton markers.
+ *
+ * Omitting a token deliberately leaves every token-indexed tab untouched.
+ */
+function estab_attachment_origin_context_clear(
+    array &$session,
+    mixed $token = null
+): void {
+    unset($session['anhang_origin_context'], $session['anhang_message_context']);
+    if ($token === null) {
+        return;
+    }
+    $token = estab_attachment_origin_flow_token($token);
+    if (is_array($session['anhang_origin_contexts'] ?? null)) {
+        unset($session['anhang_origin_contexts'][$token]);
+        if ($session['anhang_origin_contexts'] === []) {
+            unset($session['anhang_origin_contexts']);
+        }
+    }
+    if (is_array($session['anhang_origin_drafts'] ?? null)) {
+        unset($session['anhang_origin_drafts'][$token]);
+        if ($session['anhang_origin_drafts'] === []) {
+            unset($session['anhang_origin_drafts']);
+        }
+    }
 }
 
 function estab_attachment_table(string $table): string
@@ -33,6 +941,37 @@ function estab_attachment_validate_session_id(string $sessionId): string
         throw new InvalidArgumentException('Invalid attachment session id');
     }
     return $sessionId;
+}
+
+/** Isolate upload reservations of parallel message tabs in one PHP session. */
+function estab_attachment_reservation_owner_id(
+    string $sessionId,
+    ?array $context = null
+): string {
+    $sessionId = estab_attachment_validate_session_id($sessionId);
+    if ($context === null) {
+        return $sessionId;
+    }
+    $token = estab_attachment_origin_flow_token(
+        $context['flow_token'] ?? null
+    );
+    return estab_attachment_validate_session_id(
+        'flow-' . hash('sha256', $sessionId . "\0" . $token)
+    );
+}
+
+/** Release unfinished reservations owned by exactly one message-form flow. */
+function estab_attachment_release_origin_reservation(
+    mysqli $connection,
+    string $table,
+    string $sessionId,
+    array $context
+): void {
+    estab_attachment_release(
+        $connection,
+        $table,
+        estab_attachment_reservation_owner_id($sessionId, $context)
+    );
 }
 
 function estab_attachment_validate_reservation_name(string $filename, ?string $prefix = null): string
@@ -77,6 +1016,49 @@ function estab_attachment_allowed_extensions(): array
 function estab_attachment_extension_is_allowed(string $extension): bool
 {
     return in_array(strtolower($extension), estab_attachment_allowed_extensions(), true);
+}
+
+/** Merge two semicolon-separated message attachment lists without duplicates. */
+function estab_attachment_merge_message_references(
+    mixed $existing,
+    mixed $selected
+): string {
+    $references = [];
+    foreach ([$existing, $selected] as $list) {
+        if (!is_string($list)) {
+            continue;
+        }
+        foreach (explode(';', $list) as $reference) {
+            $reference = trim($reference);
+            if ($reference === '') {
+                continue;
+            }
+            if (
+                str_contains($reference, '/')
+                || str_contains($reference, '\\')
+            ) {
+                continue;
+            }
+            $base = pathinfo($reference, PATHINFO_FILENAME);
+            $extension = strtolower(pathinfo($reference, PATHINFO_EXTENSION));
+            try {
+                $base = estab_attachment_validate_reservation_name($base);
+            } catch (InvalidArgumentException) {
+                continue;
+            }
+            if (
+                preg_match('/\A[a-z0-9]{1,16}\z/D', $extension) !== 1
+                || !estab_attachment_extension_is_allowed($extension)
+            ) {
+                continue;
+            }
+            $canonical = $base . '.' . $extension;
+            $references[$canonical] = true;
+        }
+    }
+    return $references === []
+        ? ''
+        : implode(';', array_keys($references)) . ';';
 }
 
 function estab_attachment_database_error_is_retryable(int $code): bool

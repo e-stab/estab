@@ -388,6 +388,11 @@ function estab_incident_export_message_evidence_status(
             $terminalHash = is_array($snapshotValue)
                 ? ($snapshotValue['terminal_snapshot_sha256'] ?? null)
                 : null;
+            $terminalVersion = is_array($snapshotValue)
+                ? estab_message_terminal_snapshot_stored_version(
+                    $snapshotValue
+                )
+                : null;
             if (
                 (string) ($event['event_type'] ?? '') === 'legacy_import'
                 && (!is_array($terminalMessage) || !is_string($terminalHash))
@@ -396,27 +401,17 @@ function estab_incident_export_message_evidence_status(
             } else {
                 $terminalCount++;
                 $liveMessage = $knownMessages[$messageId] ?? null;
-                $liveSnapshot = is_array($liveMessage)
-                    ? estab_message_terminal_snapshot($liveMessage)
-                    : null;
-                $liveHash = is_array($liveMessage)
-                    ? estab_message_terminal_snapshot_sha256($liveMessage)
-                    : '';
-                $embeddedHash = is_array($terminalMessage)
-                    ? hash(
-                        'sha256',
-                        estab_message_evidence_snapshot($terminalMessage)
-                    )
-                    : '';
                 if (
-                    !is_array($liveSnapshot)
+                    !is_array($liveMessage)
                     || !is_array($terminalMessage)
                     || !is_string($terminalHash)
-                    || !hash_equals($terminalHash, $embeddedHash)
-                    || !hash_equals($terminalHash, $liveHash)
-                    || estab_message_evidence_canonical_value(
-                        $terminalMessage
-                    ) !== $liveSnapshot
+                    || !is_int($terminalVersion)
+                    || !estab_message_terminal_snapshot_matches_live(
+                        $terminalMessage,
+                        $terminalHash,
+                        $liveMessage,
+                        $terminalVersion
+                    )
                 ) {
                     $terminalMismatches++;
                     if ($brokenEventId === null) {
@@ -703,8 +698,8 @@ function estab_incident_export_load(
                 . ' `04_richtung`, `04_nummer`, `05_gegenstelle`,'
                 . ' `06_befweg`, `06_befwegausw`, `07_durchspruch`,'
                 . ' `08_befhinweis`, `08_befhinwausw`, `09_vorrangstufe`,'
-                . ' `10_anschrift`, `11_gesprnotiz`, `12_anhang`,'
-                . ' `12_inhalt`, `12_abfzeit`,'
+                . ' `10_anschrift`, `11_rufnummer`, `11_gesprnotiz`,'
+                . ' `12_anhang`, `12_betreff`, `12_inhalt`, `12_abfzeit`,'
                 . ' `13_abseinheit`, `14_zeichen`, `14_funktion`,'
                 . ' `15_quitdatum`, `15_quitzeichen`, `16_empf`,'
                 . ' `17_vermerke`, `x00_status`, `x01_abschluss`,'
@@ -740,8 +735,9 @@ function estab_incident_export_load(
                 . ' `03_zeichen`, `04_richtung`, `04_nummer`,'
                 . ' `05_gegenstelle`, `06_befweg`, `06_befwegausw`,'
                 . ' `07_durchspruch`, `08_befhinweis`, `08_befhinwausw`,'
-                . ' `09_vorrangstufe`, `10_anschrift`, `11_gesprnotiz`,'
-                . ' `12_anhang`, `12_inhalt`, `12_abfzeit`,'
+                . ' `09_vorrangstufe`, `10_anschrift`, `11_rufnummer`,'
+                . ' `11_gesprnotiz`, `12_anhang`, `12_betreff`,'
+                . ' `12_inhalt`, `12_abfzeit`,'
                 . ' `13_abseinheit`, `14_zeichen`, `14_funktion`,'
                 . ' `15_quitdatum`, `15_quitzeichen`, `16_empf`,'
                 . ' `17_vermerke`, `x00_status`, `x01_abschluss`,'

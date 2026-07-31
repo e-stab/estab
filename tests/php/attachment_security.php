@@ -20,6 +20,773 @@ $assertRejected = static function (callable $callback, string $message) use ($as
     }
     $assert($rejected, $message);
 };
+$assertContextRejected = static function (
+    callable $callback,
+    string $message
+) use ($assert): void {
+    $rejected = false;
+    try {
+        $callback();
+    } catch (EstabAttachmentContextException) {
+        $rejected = true;
+    }
+    $assert($rejected, $message);
+};
+
+$staffIdentity = [
+    'benutzer' => 'Erika Einsatz',
+    'kuerzel' => 'ee',
+    'funktion' => 'S1',
+    'rolle' => 'Stab',
+    'duty_assignment_id' => 41,
+];
+$telecommunicationsIdentity = [
+    'benutzer' => 'Anton Funk',
+    'kuerzel' => 'af',
+    'funktion' => 'A/W',
+    'rolle' => 'Fernmelder',
+    'duty_assignment_id' => 42,
+];
+$staffWriteContext = estab_attachment_origin_context_create(
+    $staffIdentity,
+    9,
+    ['task' => 'Stab_schreiben', '00_lfd' => '']
+);
+$assert(
+    $staffWriteContext['task'] === 'Stab_schreiben'
+        && $staffWriteContext['record_id'] === null
+        && $staffWriteContext['incident_id'] === 9
+        && $staffWriteContext['duty_assignment_id'] === 41
+        && preg_match(
+            '/\A[a-f0-9]{32}\z/D',
+            $staffWriteContext['flow_token']
+        ) === 1,
+    'new staff attachment origin is not bound to its server identity and incident'
+);
+$validatedWriteContext = estab_attachment_origin_context_validate(
+    $staffWriteContext,
+    $staffIdentity,
+    9,
+    [
+        'task' => 'Stab_schreiben',
+        '00_lfd' => '',
+        'attachment_flow' => $staffWriteContext['flow_token'],
+    ],
+    true
+);
+$assert(
+    $validatedWriteContext === $staffWriteContext,
+    'valid attachment continuation does not preserve the exact origin context'
+);
+$conversationContext = estab_attachment_origin_context_create(
+    $staffIdentity,
+    9,
+    ['task' => 'Stab_gesprnoti', '00_lfd' => '']
+);
+$assert(
+    $conversationContext['task'] === 'Stab_gesprnoti',
+    'conversation-note attachment origin changes its workflow task'
+);
+$recipientMatrix = [
+    1 => [
+        1 => ['fkt' => 'S1', 'rolle' => 'Stab'],
+        2 => ['fkt' => 'AB_C', 'rolle' => 'Stab'],
+    ],
+];
+$recipientMatrixRevision = estab_workflow_recipient_matrix_revision(
+    $recipientMatrix,
+    'LdF'
+);
+$conversationDraft = estab_attachment_origin_draft_from_request(
+    [
+        '12_betreff' => 'Lageänderung',
+        '12_inhalt' => 'Entwurf mit Anhang',
+        '16_12' => '16_12_bl',
+        'recipient_matrix_revision' => $recipientMatrixRevision,
+    ],
+    $staffIdentity,
+    $conversationContext
+);
+$assert(
+    $conversationDraft['recipient_matrix_revision']
+        === $recipientMatrixRevision
+        && $conversationDraft['16_12'] === '16_12_bl'
+        && $conversationDraft['16_gncopy'] === '',
+    'attachment draft drops the matrix revision or its coordinate selections'
+);
+$conversationFormData = estab_attachment_origin_draft_form_data(
+    $conversationDraft,
+    $conversationContext,
+    null,
+    $recipientMatrix,
+    true,
+    'LdF',
+    ['LdF_rt', 'S1_gn']
+);
+$assert(
+    $conversationFormData['16_empf'] === 'LdF_rt,S1_gn,AB_C_bl,'
+        && $conversationFormData['recipient_matrix_revision']
+            === $recipientMatrixRevision,
+    'central conversation attachment return loses the exact blue coordinate or server-required red/author-green copies'
+);
+$changedRecipientMatrix = $recipientMatrix;
+$changedRecipientMatrix[1][1]['fkt'] = 'S2';
+$staleMatrixRejected = false;
+try {
+    estab_attachment_origin_draft_form_data(
+        $conversationDraft,
+        $conversationContext,
+        null,
+        $changedRecipientMatrix,
+        true,
+        'LdF',
+        ['LdF_rt', 'S1_gn']
+    );
+} catch (EstabAttachmentDraftException) {
+    $staleMatrixRejected = true;
+}
+$assert(
+    $staleMatrixRejected,
+    'central attachment return silently remaps stale recipient coordinates'
+);
+$safeStaleFormData = estab_attachment_origin_draft_form_data(
+    $conversationDraft,
+    $conversationContext,
+    null,
+    $changedRecipientMatrix,
+    false,
+    'LdF',
+    ['LdF_rt', 'S1_gn']
+);
+$assert(
+    $safeStaleFormData['16_empf'] === ''
+        && $safeStaleFormData['recipient_matrix_revision']
+            === $recipientMatrixRevision,
+    'non-strict 422 recovery invents recipients after a matrix change'
+);
+$flowSession = [];
+$writeToken = estab_attachment_origin_context_store(
+    $flowSession,
+    $staffWriteContext
+);
+estab_attachment_origin_draft_store(
+    $flowSession,
+    $staffWriteContext,
+    ['12_inhalt' => 'Entwurf Tab A']
+);
+$conversationToken = estab_attachment_origin_context_store(
+    $flowSession,
+    $conversationContext
+);
+estab_attachment_origin_draft_store(
+    $flowSession,
+    $conversationContext,
+    ['12_inhalt' => 'Entwurf Tab B']
+);
+$assert(
+    $writeToken !== $conversationToken
+        && estab_attachment_origin_context_find(
+            $flowSession,
+            $writeToken
+        ) === $staffWriteContext
+        && estab_attachment_origin_context_find(
+            $flowSession,
+            $conversationToken
+        ) === $conversationContext
+        && estab_attachment_origin_draft_find(
+            $flowSession,
+            $staffWriteContext
+        )['12_inhalt'] === 'Entwurf Tab A'
+        && estab_attachment_origin_draft_find(
+            $flowSession,
+            $conversationContext
+        )['12_inhalt'] === 'Entwurf Tab B',
+    'two browser tabs overwrite each other\'s attachment context or draft'
+);
+$limitContext = estab_attachment_origin_context_create(
+    $staffIdentity,
+    9,
+    ['task' => 'Stab_schreiben', '00_lfd' => '']
+);
+$limitSession = [];
+estab_attachment_origin_context_store($limitSession, $limitContext);
+$normalAttachmentReferences = [];
+for ($attachmentNumber = 1; $attachmentNumber <= 100; $attachmentNumber++) {
+    $normalAttachmentReferences[] = sprintf(
+        'EL%04d.pdf',
+        $attachmentNumber
+    );
+}
+$normalMultibyteBody = str_repeat(
+    "Führung 🚒 – Lageänderung\n",
+    8000
+);
+$normalDraft = [
+    '12_inhalt' => $normalMultibyteBody,
+    '12_anhang' => implode(';', $normalAttachmentReferences) . ';',
+    '17_vermerke' => 'Rückfrage an die Führungsstelle – bestätigt.',
+];
+estab_attachment_origin_draft_store(
+    $limitSession,
+    $limitContext,
+    $normalDraft
+);
+$assert(
+    estab_attachment_origin_draft_find(
+        $limitSession,
+        $limitContext
+    ) === $normalDraft
+        && estab_attachment_origin_draft_bytes($normalDraft)
+            < ESTAB_ATTACHMENT_ORIGIN_DRAFT_MAX_BYTES,
+    'bounded draft storage changes normal UTF-8 text or 100 attachment references'
+);
+$validLimitSession = $limitSession;
+$assertContextRejected(
+    static function () use (&$limitSession, $limitContext): void {
+        estab_attachment_origin_draft_store(
+            $limitSession,
+            $limitContext,
+            ['12_inhalt' => ['nested browser value']]
+        );
+    },
+    'nested draft value bypasses scalar session storage'
+);
+$assert(
+    $limitSession === $validLimitSession,
+    'nested draft rejection partially mutated the valid session state'
+);
+$assertContextRejected(
+    static function () use (&$limitSession, $limitContext): void {
+        estab_attachment_origin_draft_store(
+            $limitSession,
+            $limitContext,
+            ['12_inhalt' => "ungültig\xC3\x28"]
+        );
+    },
+    'malformed UTF-8 is retained in an attachment draft'
+);
+$assertContextRejected(
+    static function () use (&$limitSession, $limitContext): void {
+        estab_attachment_origin_draft_store(
+            $limitSession,
+            $limitContext,
+            ['browser_selected_task' => 'Stab_korrigieren']
+        );
+    },
+    'unexpected browser field is retained in an attachment draft'
+);
+$assertContextRejected(
+    static function () use (&$limitSession, $limitContext): void {
+        estab_attachment_origin_draft_store(
+            $limitSession,
+            $limitContext,
+            [
+                '12_anhang' => str_repeat(
+                    'A',
+                    ESTAB_ATTACHMENT_ORIGIN_ATTACHMENT_LIST_MAX_BYTES + 1
+                ),
+            ]
+        );
+    },
+    'attachment draft exceeds the database-safe reference-list boundary'
+);
+$assertContextRejected(
+    static function () use (&$limitSession, $limitContext): void {
+        estab_attachment_origin_draft_store(
+            $limitSession,
+            $limitContext,
+            [
+                '12_inhalt' => str_repeat(
+                    'N',
+                    ESTAB_ATTACHMENT_ORIGIN_DRAFT_MAX_BYTES
+                ),
+            ]
+        );
+    },
+    'one oversized message draft exhausts PHP session storage'
+);
+$assert(
+    $limitSession === $validLimitSession
+        && estab_attachment_origin_draft_find(
+            $limitSession,
+            $limitContext
+        ) === $normalDraft,
+    'rejected draft replaces or deletes the last valid unsaved message'
+);
+
+$totalLimitSession = [];
+$totalContexts = [];
+for ($draftNumber = 1; $draftNumber <= 9; $draftNumber++) {
+    $totalContext = estab_attachment_origin_context_create(
+        $staffIdentity,
+        9,
+        ['task' => 'Stab_schreiben', '00_lfd' => '']
+    );
+    estab_attachment_origin_context_store(
+        $totalLimitSession,
+        $totalContext
+    );
+    estab_attachment_origin_draft_store(
+        $totalLimitSession,
+        $totalContext,
+        ['12_inhalt' => str_repeat((string) $draftNumber, 850000)]
+    );
+    $totalContexts[] = $totalContext;
+}
+$tenthTotalContext = estab_attachment_origin_context_create(
+    $staffIdentity,
+    9,
+    ['task' => 'Stab_schreiben', '00_lfd' => '']
+);
+estab_attachment_origin_context_store(
+    $totalLimitSession,
+    $tenthTotalContext
+);
+$totalSessionBeforeRejection = $totalLimitSession;
+$assertContextRejected(
+    static function () use (
+        &$totalLimitSession,
+        $tenthTotalContext
+    ): void {
+        estab_attachment_origin_draft_store(
+            $totalLimitSession,
+            $tenthTotalContext,
+            ['12_inhalt' => str_repeat('X', 850000)]
+        );
+    },
+    'aggregate draft storage exceeds its bounded 16-flow session budget'
+);
+$assert(
+    $totalLimitSession === $totalSessionBeforeRejection
+        && count($totalLimitSession['anhang_origin_drafts']) === 9
+        && estab_attachment_origin_draft_find(
+            $totalLimitSession,
+            $totalContexts[0]
+        )['12_inhalt'] === str_repeat('1', 850000),
+    'aggregate-size rejection loses an older draft or leaves a partial new one'
+);
+$assertRejected(
+    static fn () => estab_attachment_origin_context_store(
+        $totalLimitSession,
+        $tenthTotalContext,
+        ESTAB_ATTACHMENT_ORIGIN_MAX_FLOWS + 1
+    ),
+    'attachment context map can be configured beyond the audited 16-flow cap'
+);
+
+$atomicSession = [];
+$atomicContexts = [];
+$unexpectedAtomicReleases = [];
+for ($flowNumber = 1; $flowNumber <= 16; $flowNumber++) {
+    $atomicContext = estab_attachment_origin_context_create(
+        $staffIdentity,
+        9,
+        ['task' => 'Stab_schreiben', '00_lfd' => '']
+    );
+    estab_attachment_origin_flow_store(
+        $atomicSession,
+        $atomicContext,
+        ['12_inhalt' => 'Atomarer Entwurf ' . $flowNumber],
+        ESTAB_ATTACHMENT_ORIGIN_MAX_FLOWS,
+        static function (array $released) use (
+            &$unexpectedAtomicReleases
+        ): void {
+            $unexpectedAtomicReleases[] = $released;
+        }
+    );
+    $atomicContexts[] = $atomicContext;
+}
+$assert(
+    count($atomicSession['anhang_origin_contexts']) === 16
+        && count($atomicSession['anhang_origin_drafts']) === 16
+        && $unexpectedAtomicReleases === [],
+    'atomic flow store evicts before the audited 16-flow capacity is reached'
+);
+$oversizedAtomicContext = estab_attachment_origin_context_create(
+    $staffIdentity,
+    9,
+    ['task' => 'Stab_schreiben', '00_lfd' => '']
+);
+$atomicBeforeOversize = $atomicSession;
+$assertContextRejected(
+    static function () use (
+        &$atomicSession,
+        $oversizedAtomicContext,
+        &$unexpectedAtomicReleases
+    ): void {
+        estab_attachment_origin_flow_store(
+            $atomicSession,
+            $oversizedAtomicContext,
+            [
+                '12_inhalt' => str_repeat(
+                    'X',
+                    ESTAB_ATTACHMENT_ORIGIN_DRAFT_MAX_BYTES
+                ),
+            ],
+            ESTAB_ATTACHMENT_ORIGIN_MAX_FLOWS,
+            static function (array $released) use (
+                &$unexpectedAtomicReleases
+            ): void {
+                $unexpectedAtomicReleases[] = $released;
+            }
+        );
+    },
+    'oversized seventeenth draft reaches eviction before validation'
+);
+$assert(
+    $atomicSession === $atomicBeforeOversize
+        && $unexpectedAtomicReleases === []
+        && estab_attachment_origin_context_find(
+            $atomicSession,
+            $oversizedAtomicContext['flow_token']
+        ) === null,
+    'oversized draft evicts an old flow, releases a reservation, or leaves an empty context'
+);
+$invalidAtomicContext = estab_attachment_origin_context_create(
+    $staffIdentity,
+    9,
+    ['task' => 'Stab_schreiben', '00_lfd' => '']
+);
+$assertContextRejected(
+    static function () use (
+        &$atomicSession,
+        $invalidAtomicContext,
+        &$unexpectedAtomicReleases
+    ): void {
+        estab_attachment_origin_flow_store(
+            $atomicSession,
+            $invalidAtomicContext,
+            ['12_inhalt' => ['nested']],
+            ESTAB_ATTACHMENT_ORIGIN_MAX_FLOWS,
+            static function (array $released) use (
+                &$unexpectedAtomicReleases
+            ): void {
+                $unexpectedAtomicReleases[] = $released;
+            }
+        );
+    },
+    'invalid seventeenth draft reaches eviction before scalar validation'
+);
+$assert(
+    $atomicSession === $atomicBeforeOversize
+        && $unexpectedAtomicReleases === []
+        && estab_attachment_origin_context_find(
+            $atomicSession,
+            $invalidAtomicContext['flow_token']
+        ) === null,
+    'invalid draft mutates the full flow map or invokes reservation cleanup'
+);
+
+$validSeventeenthContext = estab_attachment_origin_context_create(
+    $staffIdentity,
+    9,
+    ['task' => 'Stab_schreiben', '00_lfd' => '']
+);
+$atomicReleases = [];
+$validSeventeenthToken = estab_attachment_origin_flow_store(
+    $atomicSession,
+    $validSeventeenthContext,
+    ['12_inhalt' => 'Gültiger siebzehnter Entwurf'],
+    ESTAB_ATTACHMENT_ORIGIN_MAX_FLOWS,
+    static function (array $released) use (&$atomicReleases): void {
+        $atomicReleases[] = $released;
+    }
+);
+$assert(
+    $atomicReleases === [$atomicContexts[0]]
+        && estab_attachment_origin_context_find(
+            $atomicSession,
+            $atomicContexts[0]['flow_token']
+        ) === null
+        && !isset(
+            $atomicSession['anhang_origin_drafts'][
+                $atomicContexts[0]['flow_token']
+            ]
+        )
+        && estab_attachment_origin_context_find(
+            $atomicSession,
+            $validSeventeenthToken
+        ) === $validSeventeenthContext
+        && estab_attachment_origin_draft_find(
+            $atomicSession,
+            $validSeventeenthContext
+        )['12_inhalt'] === 'Gültiger siebzehnter Entwurf',
+    'valid full-capacity replacement is not committed with exact reservation cleanup'
+);
+
+$callbackFailureContext = estab_attachment_origin_context_create(
+    $staffIdentity,
+    9,
+    ['task' => 'Stab_schreiben', '00_lfd' => '']
+);
+$atomicBeforeCallbackFailure = $atomicSession;
+$callbackFailureCaught = false;
+try {
+    estab_attachment_origin_flow_store(
+        $atomicSession,
+        $callbackFailureContext,
+        ['12_inhalt' => 'Entwurf bei Cleanup-Fehler'],
+        ESTAB_ATTACHMENT_ORIGIN_MAX_FLOWS,
+        static function (array $released): void {
+            throw new RuntimeException('simulated reservation release failure');
+        }
+    );
+} catch (RuntimeException $exception) {
+    $callbackFailureCaught = true;
+}
+$assert(
+    $callbackFailureCaught
+        && $atomicSession === $atomicBeforeCallbackFailure
+        && estab_attachment_origin_context_find(
+            $atomicSession,
+            $callbackFailureContext['flow_token']
+        ) === null,
+    'reservation cleanup failure leaves partially replaced context/draft maps'
+);
+$writeReservationOwner = estab_attachment_reservation_owner_id(
+    'session-safe_123',
+    $staffWriteContext
+);
+$conversationReservationOwner = estab_attachment_reservation_owner_id(
+    'session-safe_123',
+    $conversationContext
+);
+$assert(
+    $writeReservationOwner !== $conversationReservationOwner
+        && $writeReservationOwner === estab_attachment_reservation_owner_id(
+            'session-safe_123',
+            $staffWriteContext
+        )
+        && estab_attachment_reservation_owner_id('session-safe_123') ===
+            'session-safe_123',
+    'parallel attachment tabs share or destabilise their upload reservation owner'
+);
+estab_attachment_origin_context_clear($flowSession, $writeToken);
+$assert(
+    estab_attachment_origin_context_find($flowSession, $writeToken) === null
+        && estab_attachment_origin_context_find(
+            $flowSession,
+            $conversationToken
+        ) === $conversationContext
+        && estab_attachment_origin_draft_find(
+            $flowSession,
+            $conversationContext
+        )['12_inhalt'] === 'Entwurf Tab B',
+    'finishing one attachment flow deletes another browser tab'
+);
+estab_attachment_origin_context_clear($flowSession);
+$assert(
+    estab_attachment_origin_context_find(
+        $flowSession,
+        $conversationToken
+    ) === $conversationContext,
+    'opening the global attachment overview deletes a message-form flow'
+);
+$boundedSession = [];
+estab_attachment_origin_context_store(
+    $boundedSession,
+    $staffWriteContext,
+    2
+);
+estab_attachment_origin_draft_store(
+    $boundedSession,
+    $staffWriteContext,
+    ['12_inhalt' => 'Alter begrenzter Entwurf']
+);
+estab_attachment_origin_context_store(
+    $boundedSession,
+    $conversationContext,
+    2
+);
+$thirdContext = estab_attachment_origin_context_create(
+    $staffIdentity,
+    9,
+    ['task' => 'Stab_schreiben', '00_lfd' => '']
+);
+$assertContextRejected(
+    static fn () => estab_attachment_origin_context_store(
+        $boundedSession,
+        $thirdContext,
+        2
+    ),
+    'flow-limit eviction drops a context without releasing its reservation'
+);
+$evictedContexts = [];
+$thirdToken = estab_attachment_origin_context_store(
+    $boundedSession,
+    $thirdContext,
+    2,
+    static function (array $context) use (&$evictedContexts): void {
+        $evictedContexts[] = $context;
+    }
+);
+$assert(
+    $evictedContexts === [$staffWriteContext]
+        && estab_attachment_origin_context_find(
+            $boundedSession,
+            $writeToken
+        ) === null
+        && estab_attachment_origin_context_find(
+            $boundedSession,
+            $conversationToken
+        ) === $conversationContext
+        && estab_attachment_origin_context_find(
+            $boundedSession,
+            $thirdToken
+        ) === $thirdContext
+        && !isset(
+            $boundedSession['anhang_origin_drafts'][$writeToken]
+        ),
+    'bounded flow eviction runs after cleanup or deletes the wrong tab'
+);
+$assertContextRejected(
+    static fn () => estab_attachment_origin_context_validate(
+        $conversationContext,
+        $staffIdentity,
+        9,
+        ['attachment_flow' => $writeToken],
+        true
+    ),
+    'one tab can validate itself with another tab\'s flow token'
+);
+$assert(
+    estab_attachment_origin_context_find(
+        $flowSession,
+        $conversationToken
+    ) === $conversationContext,
+    'a mismatching flow token mutated the valid server-side context'
+);
+$correctionMessage = [
+    '00_lfd' => 73,
+    'einsatz_id' => 9,
+];
+$correctionContext = estab_attachment_origin_context_create(
+    $staffIdentity,
+    9,
+    ['task' => 'Stab_korrigieren', '00_lfd' => 73],
+    $correctionMessage
+);
+$assert(
+    $correctionContext['task'] === 'Stab_korrigieren'
+        && $correctionContext['record_id'] === 73,
+    'correction attachment origin does not use the authorised server record'
+);
+foreach (['FM-Eingang', 'FM-Eingang_Anhang'] as $incomingTask) {
+    $incomingContext = estab_attachment_origin_context_create(
+        $telecommunicationsIdentity,
+        9,
+        ['task' => $incomingTask, '00_lfd' => '']
+    );
+    $assert(
+        $incomingContext['task'] === $incomingTask
+            && $incomingContext['record_id'] === null,
+        'telecommunications attachment origin changes the exact incoming task'
+    );
+}
+$assertContextRejected(
+    static fn () => estab_attachment_origin_context_create(
+        $staffIdentity,
+        9,
+        ['task' => 'FM-Eingang', '00_lfd' => '']
+    ),
+    'staff identity can forge a telecommunications attachment origin'
+);
+$assertContextRejected(
+    static fn () => estab_attachment_origin_context_create(
+        $telecommunicationsIdentity,
+        9,
+        ['task' => 'Stab_schreiben', '00_lfd' => '']
+    ),
+    'telecommunications identity can forge a staff attachment origin'
+);
+$assertContextRejected(
+    static fn () => estab_attachment_origin_context_create(
+        $staffIdentity,
+        9,
+        ['task' => 'Stab_schreiben', '00_lfd' => '73']
+    ),
+    'new-message attachment origin accepts a browser-selected record id'
+);
+$assertContextRejected(
+    static fn () => estab_attachment_origin_context_create(
+        $staffIdentity,
+        9,
+        ['task' => 'Stab_korrigieren', '00_lfd' => 74],
+        $correctionMessage
+    ),
+    'correction attachment origin accepts a record id differing from the authorised row'
+);
+$assertContextRejected(
+    static fn () => estab_attachment_origin_context_create(
+        $staffIdentity,
+        9,
+        ['task' => 'Stab_korrigieren', '00_lfd' => 73]
+    ),
+    'correction attachment origin exists without an authorised message row'
+);
+$assertContextRejected(
+    static fn () => estab_attachment_origin_context_validate(
+        $staffWriteContext,
+        $staffIdentity,
+        10
+    ),
+    'attachment origin survives an active-incident switch'
+);
+$otherDutyIdentity = $staffIdentity;
+$otherDutyIdentity['duty_assignment_id'] = 99;
+$assertContextRejected(
+    static fn () => estab_attachment_origin_context_validate(
+        $staffWriteContext,
+        $otherDutyIdentity,
+        9
+    ),
+    'attachment origin survives a selected-duty switch'
+);
+$assertContextRejected(
+    static fn () => estab_attachment_origin_context_validate(
+        $staffWriteContext,
+        $staffIdentity,
+        9,
+        ['task' => 'Stab_gesprnoti']
+    ),
+    'attachment continuation accepts a task different from its server context'
+);
+$assertContextRejected(
+    static fn () => estab_attachment_origin_context_validate(
+        $correctionContext,
+        $staffIdentity,
+        9,
+        ['00_lfd' => 74]
+    ),
+    'attachment continuation accepts a different correction record id'
+);
+$assertContextRejected(
+    static fn () => estab_attachment_origin_context_validate(
+        $staffWriteContext,
+        $staffIdentity,
+        9,
+        ['attachment_flow' => str_repeat('0', 32)],
+        true
+    ),
+    'attachment continuation accepts another browser flow token'
+);
+$assertContextRejected(
+    static fn () => estab_attachment_origin_context_validate(
+        $staffWriteContext,
+        $staffIdentity,
+        9,
+        [],
+        true
+    ),
+    'attachment continuation succeeds without its browser flow token'
+);
+$assert(
+    estab_attachment_merge_message_references(
+        'EL0001.PDF;EL0002.jpg;',
+        'EL0002.JPG;EL0003.jpeg;../../bad.php;../../bad.pdf;'
+    ) === 'EL0001.pdf;EL0002.jpg;EL0003.jpeg;',
+    'attachment selection does not preserve existing valid references safely'
+);
 
 $assert(estab_attachment_validate_prefix(' el ') === 'EL', 'authority prefix is normalised');
 $assertRejected(
@@ -329,6 +1096,9 @@ $integritySource = file_get_contents(
 );
 $downloadSource = file_get_contents(__DIR__ . '/../../4fach/download.php');
 $controllerSource = file_get_contents(__DIR__ . '/../../4fach/anhang.php');
+$mainControllerSource = file_get_contents(
+    __DIR__ . '/../../4fach/mainindex.php'
+);
 $messageFormSource = file_get_contents(__DIR__ . '/../../4fach/4fachform.php');
 $schemaSource = file_get_contents(__DIR__ . '/../../docker/db/init/10-schema.sql');
 $verifySource = file_get_contents(__DIR__ . '/../../docker/db/verify.sql');
@@ -340,6 +1110,7 @@ $assert(
         && is_string($integritySource)
         && is_string($downloadSource)
         && is_string($controllerSource)
+        && is_string($mainControllerSource)
         && is_string($messageFormSource),
     'attachment and message-form sources readable'
 );
@@ -546,6 +1317,32 @@ $assert(
         && str_contains($controllerSource, 'session_status () === PHP_SESSION_NONE'),
     'attachment menu actions are not scalar-safe POSTs with enforced CSRF'
 );
+$csrfBoundary = strpos(
+    $controllerSource,
+    'estab_csrf_require_post ($_SERVER, $_POST);'
+);
+$contextBoundary = strpos(
+    $controllerSource,
+    'estab_attachment_origin_context_find ('
+);
+$contextCatch = [];
+$contextCatchFound = preg_match(
+    '/catch \(EstabAttachmentContextException \$exception\) \{'
+        . '(?<body>.*?)\n\} catch \(EstabNoActiveIncidentException\)/s',
+    $controllerSource,
+    $contextCatch
+) === 1;
+$assert(
+    is_int($csrfBoundary)
+        && is_int($contextBoundary)
+        && $csrfBoundary < $contextBoundary
+        && $contextCatchFound
+        && !str_contains(
+            (string) ($contextCatch['body'] ?? ''),
+            'estab_attachment_origin_context_clear'
+        ),
+    'attachment context is read or deleted before CSRF/token rejection'
+);
 $assert(
     str_contains($controllerSource, '$_SESSION ["anhang_menue"] ?? null')
         && str_contains($controllerSource, '$attachmentMenuState !== 100')
@@ -555,17 +1352,244 @@ $assert(
     'direct attachment entry normalises missing or malformed menu state'
 );
 $assert(
-    str_contains($controllerSource, '$_SESSION ["anhang_message_context"] = true')
+    str_contains(
+        $mainControllerSource,
+        'estab_attachment_origin_context_create ('
+    )
+        && str_contains(
+            $mainControllerSource,
+            'estab_attachment_origin_draft_from_request ('
+        )
+        && str_contains(
+            $mainControllerSource,
+            'estab_attachment_origin_flow_store ('
+        )
+        && !str_contains(
+            $mainControllerSource,
+            'estab_attachment_origin_context_clear ($_SESSION)'
+        )
+        && str_contains(
+            $attachmentSource,
+            'function estab_attachment_origin_context_validate('
+        )
+        && str_contains(
+            $attachmentSource,
+            'function estab_attachment_origin_flow_store('
+        )
+        && str_contains(
+            $attachmentSource,
+            'function estab_attachment_origin_context_find('
+        )
+        && str_contains($attachmentSource, 'random_bytes(16)')
+        && str_contains(
+            $controllerSource,
+            'estab_attachment_origin_context_validate ('
+        )
+        && str_contains(
+            $controllerSource,
+            'name=\\"attachment_flow\\"'
+        )
+        && str_contains(
+            $controllerSource,
+            '$attachmentInternalRequest ? 100 : 110'
+        )
+        && !str_contains(
+            $controllerSource,
+            '&& !isset ($_POST ["anhang_plus_x"])'
+        )
+        && !str_contains(
+            $controllerSource,
+            '$_SESSION ["anhang_message_context"] = true'
+        )
+        && preg_match(
+            '/(?<![A-Za-z0-9_])store_formdata\s*\(\$attachmentOriginContext\)/',
+            $controllerSource
+        ) !== 1
         && substr_count($controllerSource, '$attachmentMessageContext &&') === 2
         && str_contains(
             $controllerSource,
             'Zum Übernehmen von Anhängen öffnen Sie bitte zuerst einen Nachrichtenvordruck.'
         ),
-    'attachment selection is bound to a message-form context'
+    'attachment selection is not bound to a server-owned, per-browser message origin'
+);
+$draftCatchStart = strpos(
+    $mainControllerSource,
+    '} catch (EstabAttachmentDraftException $exception) {'
+);
+$contextCatchStart = strpos(
+    $mainControllerSource,
+    '} catch (EstabAttachmentContextException $exception) {'
+);
+$assert(
+    is_int($draftCatchStart)
+        && is_int($contextCatchStart)
+        && $draftCatchStart < $contextCatchStart
+        && str_contains($mainControllerSource, 'http_response_code (422);')
+        && str_contains(
+            $mainControllerSource,
+            '$formdata ["estab_route_error"] ='
+        )
+        && str_contains(
+            $mainControllerSource,
+            'estab_attachment_origin_draft_form_data ('
+        )
+        && str_contains(
+            $mainControllerSource,
+            '$form = new nachrichten4fach ('
+        )
+        && str_contains(
+            $mainControllerSource,
+            'bleiben in diesem Formular erhalten.'
+        ),
+    'draft-limit failure reaches a generic 403/500 instead of the preserved message form'
+);
+$draftCatchBody = (
+    is_int($draftCatchStart)
+    && is_int($contextCatchStart)
+    && $contextCatchStart > $draftCatchStart
+) ? substr(
+    $mainControllerSource,
+    $draftCatchStart,
+    $contextCatchStart - $draftCatchStart
+) : '';
+$assert(
+    str_contains(
+        $draftCatchBody,
+        'array ("Stab_schreiben", "Stab_gesprnoti")'
+    )
+        && str_contains(
+            $draftCatchBody,
+            '$formdata ["13_abseinheit"] = $activeCommandPostName;'
+        )
+        && str_contains(
+            $draftCatchBody,
+            '$workflowSelectedIdentity ["kuerzel"]'
+        )
+        && str_contains(
+            $draftCatchBody,
+            '$workflowSelectedIdentity ["funktion"]'
+        )
+        && str_contains(
+            $draftCatchBody,
+            '$formdata ["01_zeichen"] = $formdata ["14_zeichen"];'
+        )
+        && strpos(
+            $draftCatchBody,
+            '$formdata ["13_abseinheit"] = $activeCommandPostName;'
+        ) < strpos(
+            $draftCatchBody,
+            '$form = new nachrichten4fach ('
+        ),
+    'rejected staff attachment drafts can display browser-owned identity metadata'
+);
+$atomicStoreStart = strpos(
+    $attachmentSource,
+    'function estab_attachment_origin_flow_store('
+);
+$atomicStoreEnd = strpos(
+    $attachmentSource,
+    '/** Bind the unsaved form fields',
+    is_int($atomicStoreStart) ? $atomicStoreStart : 0
+);
+$atomicStoreSource = is_int($atomicStoreStart) && is_int($atomicStoreEnd)
+    ? substr(
+        $attachmentSource,
+        $atomicStoreStart,
+        $atomicStoreEnd - $atomicStoreStart
+    )
+    : '';
+$atomicReleasePosition = strpos(
+    $atomicStoreSource,
+    '$releaseEvictedFlow($evictedContext);'
+);
+$atomicSessionCommitPosition = strpos(
+    $atomicStoreSource,
+    '$session[\'anhang_origin_contexts\'] = $contexts;'
+);
+$atomicCandidateValidationPosition = strrpos(
+    $atomicStoreSource,
+    'estab_attachment_origin_drafts_bytes($drafts, $contexts);'
+);
+$assert(
+    $atomicStoreSource !== ''
+        && substr_count(
+            $atomicStoreSource,
+            'estab_attachment_origin_drafts_bytes('
+        ) >= 2
+        && is_int($atomicReleasePosition)
+        && is_int($atomicSessionCommitPosition)
+        && is_int($atomicCandidateValidationPosition)
+        && $atomicCandidateValidationPosition < $atomicReleasePosition
+        && $atomicReleasePosition < $atomicSessionCommitPosition,
+    'context/draft maps or reservation cleanup run before the full candidate validation'
+);
+$assert(
+    str_contains(
+        $controllerSource,
+        'estab_message_fetch_for_incident_by_id ('
+    )
+        && str_contains(
+            $controllerSource,
+            '"staff-correction"'
+        )
+        && str_contains(
+            $controllerSource,
+            'estab_read_message_allowed ('
+        )
+        && str_contains(
+            $controllerSource,
+            '$attachmentOriginContext ["record_id"]'
+        ),
+    'correction attachment continuation does not reauthorise its exact record'
+);
+$assert(
+    preg_match_all(
+        '/\$attachmentOriginTask\s*=\s*\(string\)/',
+        $controllerSource
+    ) === 2
+        && substr_count(
+            $controllerSource,
+            '$attachmentOriginTask,'
+        ) === 2
+        && !str_contains(
+            $controllerSource,
+            'new nachrichten4fach ($formdata, "Stab_schreiben", "")'
+        )
+        && !str_contains(
+            $controllerSource,
+            'new nachrichten4fach ($formdata, "FM-Eingang_Anhang", "")'
+        ),
+    'attachment return changes the exact originating workflow task'
+);
+$assert(
+    str_contains(
+        $controllerSource,
+        'estab_workflow_is_staff_writer ($attachmentPageIdentity)'
+    )
+        && str_contains(
+            $controllerSource,
+            'estab_workflow_is_telecommunications ($attachmentPageIdentity)'
+        )
+        && str_contains(
+            $controllerSource,
+            '$correctionData = $originMessage;'
+        )
+        && str_contains(
+            $controllerSource,
+            '"17_vermerke"'
+        )
+        && substr_count(
+            $controllerSource,
+            'estab_attachment_merge_message_references ('
+        ) === 2,
+    'attachment return loses FB access, correction evidence, or existing attachments'
 );
 $assert(
     str_contains($controllerSource, 'Die Anhangübersicht wurde direkt geöffnet.')
-        && str_contains($controllerSource, 'anhang_menue ($attachmentContextNotice)')
+        && str_contains(
+            $controllerSource,
+            'anhang_menue ($attachmentContextNotice, $attachmentOriginContext)'
+        )
         && str_contains(
             $controllerSource,
             'Hier können Sie vorhandene Anhänge ansehen oder neue Dateien hochladen.'
@@ -605,7 +1629,7 @@ $assert(
 );
 $assert(
     preg_match(
-        '/function fileselectwindow \(\)\s*\{\s*'
+        '/function fileselectwindow \(\$messageContext = null\)\s*\{\s*'
             . 'require \("\.\.\/4fcfg\/dbcfg\.inc\.php"\);\s*'
             . 'require \("\.\.\/4fcfg\/config\.inc\.php"\);/',
         $controllerSource
@@ -613,21 +1637,67 @@ $assert(
     'upload finalisation loads the complete database configuration in function scope'
 );
 $assert(
-    str_contains($controllerSource, 'function estab_attachment_post_scalar')
-        && str_contains($controllerSource, 'array_key_exists ($key, $post)')
-        && str_contains($controllerSource, 'is_string ($post [$key])')
-        && substr_count($controllerSource, 'estab_attachment_post_scalar ($_POST,') >= 22,
-    'attachment form state safely accepts missing or non-scalar browser controls'
+    str_contains(
+        $mainControllerSource,
+        'estab_attachment_origin_draft_from_request ('
+    )
+        && str_contains(
+            $mainControllerSource,
+            'estab_attachment_origin_flow_store ('
+        )
+        && str_contains(
+            $controllerSource,
+            'estab_attachment_origin_draft_find ($_SESSION, $originContext)'
+        )
+        && str_contains(
+            $controllerSource,
+            '$this->reservation_owner_id ()'
+        )
+        && str_contains(
+            $controllerSource,
+            'estab_attachment_release_message_flow_reservation ('
+        ),
+    'attachment form state or unfinished upload is not isolated/cleaned per flow'
+);
+$assert(
+    str_contains(
+        $controllerSource,
+        '!estab_workflow_is_staff_writer ($attachmentPageIdentity)'
+    )
+        && str_contains(
+            $controllerSource,
+            '!estab_workflow_is_telecommunications ($attachmentPageIdentity)'
+        ),
+    'direct attachment endpoint admits a duty role without upload authority'
+);
+$assert(
+    str_contains(
+        $controllerSource,
+        '$formdata ["01_zeichen"] = $_SESSION ["vStab_kuerzel"];'
+    )
+        && str_contains(
+            $controllerSource,
+            '$formdata ["14_zeichen"] = $_SESSION ["vStab_kuerzel"];'
+        )
+        && str_contains(
+            $controllerSource,
+            '$formdata ["14_funktion"] = $_SESSION ["vStab_funktion"];'
+        ),
+    'attachment return loses visible session-bound author or receipt marks'
 );
 $assert(
     str_contains($controllerSource, '$distributionRequest = array ();')
         && str_contains(
             $controllerSource,
-            '$distributionRequest ["16_gncopy"] = $_SESSION ["16_gncopy"];'
+            '$distributionRequest ["recipient_matrix_revision"] ='
         )
         && str_contains(
             $controllerSource,
-            '$distributionRequest [$recipientKey] = $_SESSION [$recipientKey];'
+            '$distributionRequest ["16_gncopy"] = $draft ["16_gncopy"];'
+        )
+        && str_contains(
+            $controllerSource,
+            '$distributionRequest [$recipientKey] = $draft [$recipientKey];'
         )
         && str_contains(
             $controllerSource,
@@ -635,11 +1705,163 @@ $assert(
         )
         && str_contains($controllerSource, '$distributionRequest,')
         && str_contains($controllerSource, '$empf_matrix')
+        && str_contains(
+            $controllerSource,
+            'estab_workflow_require_recipient_matrix_revision ('
+        )
+        && str_contains($controllerSource, '(string) $redcopy2')
         && !str_contains(
             $controllerSource,
             '$data ["16_empf"] .= $recipientFunction'
         ),
     'attachment recipient restore is constrained to real matrix positions and copy colours'
+);
+$draftFieldsStart = strpos(
+    $attachmentSource,
+    'function estab_attachment_origin_draft_fields()'
+);
+$draftFormDataStart = strpos(
+    $attachmentSource,
+    'function estab_attachment_origin_draft_form_data('
+);
+$draftFormDataEnd = strpos(
+    $attachmentSource,
+    "/**\n * Validate one draft",
+    is_int($draftFormDataStart) ? $draftFormDataStart : 0
+);
+$draftFormDataSource = (
+    is_int($draftFormDataStart)
+    && is_int($draftFormDataEnd)
+    && $draftFormDataEnd > $draftFormDataStart
+) ? substr(
+    $attachmentSource,
+    $draftFormDataStart,
+    $draftFormDataEnd - $draftFormDataStart
+) : '';
+$centralRevisionCheck = strpos(
+    $draftFormDataSource,
+    'estab_workflow_require_recipient_matrix_revision('
+);
+$centralDistributionBuild = strpos(
+    $draftFormDataSource,
+    'estab_workflow_distribution_tokens('
+);
+$assert(
+    is_int($draftFieldsStart)
+        && is_int($draftFormDataStart)
+        && str_contains(
+            substr(
+                $attachmentSource,
+                $draftFieldsStart,
+                $draftFormDataStart - $draftFieldsStart
+            ),
+            "'recipient_matrix_revision'"
+        )
+        && str_contains(
+            $draftFormDataSource,
+            "\$field === 'recipient_matrix_revision'"
+        )
+        && is_int($centralRevisionCheck)
+        && is_int($centralDistributionBuild)
+        && $centralRevisionCheck < $centralDistributionBuild
+        && str_contains($draftFormDataSource, '$redCopyFunction')
+        && str_contains(
+            $draftFormDataSource,
+            '$requiredDistributionTokens'
+        )
+        && str_contains(
+            $draftFormDataSource,
+            'if ($strictDistribution) {'
+        )
+        && str_contains(
+            $draftFormDataSource,
+            'throw new EstabAttachmentDraftException('
+        ),
+    'central attachment draft does not retain and verify the exact recipient-matrix revision before reconstruction'
+);
+$assert(
+    str_contains(
+        $mainControllerSource,
+        'estab_attachment_origin_draft_form_data ('
+    )
+        && str_contains(
+            $draftCatchBody,
+            '(string) $redcopy2'
+        )
+        && str_contains(
+            $draftCatchBody,
+            '$recoveryTask === "Stab_gesprnoti"'
+        )
+        && str_contains(
+            $draftCatchBody,
+            '$requiredRecoveryRecipients'
+        )
+        && str_contains(
+            $draftCatchBody,
+            '."_gn"'
+        ),
+    'central attachment recovery omits the matrix revision binding or the conversation-note red/author-green copies'
+);
+$legacyRestoreStart = strpos(
+    $controllerSource,
+    'function restore_formdata ($originContext, $originMessage = null)'
+);
+$legacyRestoreEnd = strpos(
+    $controllerSource,
+    'function fileselectwindow ($messageContext = null)',
+    is_int($legacyRestoreStart) ? $legacyRestoreStart : 0
+);
+$legacyRestoreSource = (
+    is_int($legacyRestoreStart)
+    && is_int($legacyRestoreEnd)
+    && $legacyRestoreEnd > $legacyRestoreStart
+) ? substr(
+    $controllerSource,
+    $legacyRestoreStart,
+    $legacyRestoreEnd - $legacyRestoreStart
+) : '';
+$legacyRevisionCheck = strpos(
+    $legacyRestoreSource,
+    'estab_workflow_require_recipient_matrix_revision ('
+);
+$legacyDistributionBuild = strpos(
+    $legacyRestoreSource,
+    'estab_workflow_distribution_tokens ('
+);
+$assert(
+    $legacyRestoreSource !== ''
+        && str_contains(
+            $legacyRestoreSource,
+            '"recipient_matrix_revision"'
+        )
+        && str_contains(
+            $legacyRestoreSource,
+            '$draft ["recipient_matrix_revision"]'
+        )
+        && is_int($legacyRevisionCheck)
+        && is_int($legacyDistributionBuild)
+        && $legacyRevisionCheck < $legacyDistributionBuild
+        && str_contains($legacyRestoreSource, '(string) $redcopy2')
+        && str_contains(
+            $legacyRestoreSource,
+            '$originTask === "Stab_gesprnoti"'
+        )
+        && str_contains(
+            $legacyRestoreSource,
+            '$requiredDistributionTokens'
+        )
+        && str_contains($legacyRestoreSource, '."_gn"'),
+    'legacy attachment return does not restore the verified matrix coordinates plus conversation-note red/author-green copies'
+);
+$assert(
+    preg_match(
+        '/catch \(InvalidArgumentException \$exception\) \{.*?'
+            . 'http_response_code \(409\);.*?'
+            . 'Die Empfängermatrix wurde während des Anhangvorgangs geändert\..*?'
+            . 'exit;/s',
+        $legacyRestoreSource
+    ) === 1,
+    'legacy attachment return does not stop stale matrix drafts with an explicit 409 response'
 );
 $assert(
     str_contains($controllerSource, '($formdata ["10_anschrift"] ?? "") === ""')
@@ -696,20 +1918,27 @@ $assert(
 );
 
 $assert(
-    preg_match(
-        '/\$attachmentIdentity\s*=\s*estab_auth_session_identity\s*\(\$_SESSION\);\s*'
-            . '\$attachmentTask\s*=\s*estab_attachment_post_scalar\s*'
-            . '\(\$_POST,\s*"task"\);\s*'
-            . '\$incomingSenderProtected\s*=\s*'
-            . 'is_array\s*\(\$attachmentIdentity\)\s*&&\s*'
-            . 'estab_workflow_is_telecommunications\s*\(\$attachmentIdentity\)\s*&&\s*'
-            . 'str_starts_with\s*\(\$attachmentTask,\s*"FM-Eingang"\);\s*'
-            . '\$_SESSION\s*\["13_abseinheit"\]\s*=\s*'
-            . '\$incomingSenderProtected\s*\?\s*""\s*:\s*'
-            . 'estab_attachment_post_scalar\s*\(\$_POST,\s*"13_abseinheit"\);/s',
-        $controllerSource
-    ) === 1,
-    'attachment storage does not discard an A/W incoming sender'
+    str_contains(
+        $attachmentSource,
+        'function estab_attachment_origin_draft_from_request('
+    )
+        && str_contains(
+            $attachmentSource,
+            'estab_workflow_is_telecommunications($identity)'
+        )
+        && str_contains(
+            $attachmentSource,
+            "str_starts_with(\$task, 'FM-Eingang')"
+        )
+        && str_contains(
+            $attachmentSource,
+            "\$draft['13_abseinheit'] = '';"
+        )
+        && !str_contains(
+            $controllerSource,
+            'estab_attachment_post_scalar ($_POST, "13_abseinheit")'
+        ),
+    'attachment storage trusts the browser task or does not discard an A/W incoming sender'
 );
 $assert(
     preg_match(

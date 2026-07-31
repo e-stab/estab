@@ -47,6 +47,8 @@ class vali_data_form {
      $this->validate ["08_befhinwausw"]   = false ;
      $this->validate ["09_vorrangstufe"]   = false ;
      $this->validate ["10_anschrift"]   = false ;
+     $this->validate ["11_rufnummer"]   = false ;
+     $this->validate ["12_betreff"]   = false ;
      $this->validate ["12_inhalt"]   = false ;
      $this->validate ["12_abfzeit"]   = false ;
      $this->validate ["13_abseinheit"]   = false ;
@@ -286,7 +288,27 @@ class vali_data_form {
       $result =  $this->datatest ( "text", $this->i_data ["10_anschrift"] ) ;
       $this->validate["10_anschrift"]  = $result ["l_data"];
     }
-    if (isset ( $this->i_data ["12_inhalt"] ))        {
+    if (array_key_exists ("11_rufnummer", $this->i_data)) {
+      $phoneNumber = estab_message_single_line_value (
+        $this->i_data ["11_rufnummer"],
+        128,
+        true
+      );
+      $this->validate ["11_rufnummer"] = $phoneNumber !== null;
+      // Never reflect malformed scalar/UTF-8 input into the form.
+      $this->i_data ["11_rufnummer"] = $phoneNumber ?? "";
+    }
+    if (array_key_exists ("12_betreff", $this->i_data)) {
+      $subject = estab_message_single_line_value (
+        $this->i_data ["12_betreff"],
+        255,
+        false
+      );
+      $this->validate ["12_betreff"] = $subject !== null;
+      // Keep the invalid marker while giving the renderer a safe scalar.
+      $this->i_data ["12_betreff"] = $subject ?? "";
+    }
+	    if (isset ( $this->i_data ["12_inhalt"] ))        {
        $result = $this->datatest ( "text", $this->i_data ["12_inhalt"] ) ;
       $this->validate["12_inhalt"]  =  $result ["l_data"];
     }
@@ -352,17 +374,21 @@ class vali_data_form {
                 $this->validate["01_datum"] &&
                 $this->validate["01_zeichen"] &&
                 $this->validate["05_gegenstelle"] &&
-                $this->validate["09_vorrangstufe"] &&
-                $this->validate["10_anschrift"] &&
-                $this->validate["12_inhalt"] &&
+	                $this->validate["09_vorrangstufe"] &&
+	                $this->validate["10_anschrift"] &&
+                $this->validate["11_rufnummer"] &&
+                $this->validate["12_betreff"] &&
+	                $this->validate["12_inhalt"] &&
                 $this->validate["12_abfzeit"] ;
 
         break ;
       case "Stab_schreiben":
       case "Stab_korrigieren":
-          $zw =($this->validate["09_vorrangstufe"] &&
-                $this->validate["10_anschrift"] &&
-                $this->validate["12_inhalt"] &&
+	          $zw =($this->validate["09_vorrangstufe"] &&
+	                $this->validate["10_anschrift"] &&
+                $this->validate["11_rufnummer"] &&
+                $this->validate["12_betreff"] &&
+	                $this->validate["12_inhalt"] &&
                 $this->validate["12_abfzeit"] &&
                 $this->validate["13_abseinheit"] &&
                 $this->validate["14_zeichen"] &&
@@ -371,9 +397,11 @@ class vali_data_form {
         break ;
       case "Stab_gesprnoti":
           $zw =($this->validate["01_medium"] &&
-                $this->validate["01_datum"] &&
-                $this->validate["10_anschrift"] &&
-                $this->validate["12_inhalt"] &&
+	                $this->validate["01_datum"] &&
+	                $this->validate["10_anschrift"] &&
+                $this->validate["11_rufnummer"] &&
+                $this->validate["12_betreff"] &&
+	                $this->validate["12_inhalt"] &&
                 $this->validate["12_abfzeit"] &&
                 $this->validate["13_abseinheit"] &&
                 $this->validate["14_zeichen"] &&

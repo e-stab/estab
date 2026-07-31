@@ -210,6 +210,10 @@ attachment_fixture_bytes() {
 
 work_dir=$(mktemp -d /tmp/estab-http-smoke.XXXXXX)
 readiness_schema_renamed=0
+readiness_message_order_changed=0
+conversation_matrix_fixture_changed=0
+conversation_matrix_original_rc2=f
+conversation_matrix_original_auto=f
 tampered_attachment=
 cleanup_http_smoke() {
     status=$?
@@ -228,6 +232,29 @@ cleanup_http_smoke() {
             'RENAME TABLE estab_readiness_probe_matrix TO nv_empfmtx_standard;' |
             db_sql >/dev/null 2>&1 || {
                 printf 'HTTP smoke: emergency readiness-schema restore failed\n' >&2
+                status=1
+            }
+    fi
+    if [ "$readiness_message_order_changed" -eq 1 ]; then
+        printf '%s\n' \
+            'ALTER TABLE nv_nachrichten MODIFY COLUMN `12_anhang` TEXT NULL AFTER `12_betreff`;' |
+            db_sql >/dev/null 2>&1 || {
+                printf '%s\n' \
+                    'HTTP smoke: emergency message-column order restore failed' >&2
+                status=1
+            }
+    fi
+    if [ "$conversation_matrix_fixture_changed" -eq 1 ]; then
+        printf '%s\n' \
+            "UPDATE nv_empfmtx
+                SET mtx_typ = 't', mtx_fkt = '', mtx_rolle = '',
+                    mtx_mode = 'ro',
+                    mtx_rc2 = '$conversation_matrix_original_rc2',
+                    mtx_auto = '$conversation_matrix_original_auto'
+              WHERE mtx_x = 5 AND mtx_y = 4;" |
+            db_sql >/dev/null 2>&1 || {
+                printf '%s\n' \
+                    'HTTP smoke: emergency recipient-matrix restore failed' >&2
                 status=1
             }
     fi
@@ -546,6 +573,30 @@ csrf_from_body() {
         exit 1
     fi
     printf '%s' "$token"
+}
+
+recipient_matrix_revision_from_body() {
+    revision=$(sed -n \
+        's/.*name="recipient_matrix_revision" value="\([a-f0-9][a-f0-9]*\)".*/\1/p' \
+        "$body" | head -n 1)
+    if ! printf '%s' "$revision" | grep -Eq '^[a-f0-9]{64}$'; then
+        printf 'HTTP smoke: recipient-matrix revision missing\n' >&2
+        sed -n '1,80p' "$body" >&2
+        exit 1
+    fi
+    printf '%s' "$revision"
+}
+
+attachment_flow_from_body() {
+    flow_token=$(sed -n \
+        's/.*name="attachment_flow" value="\([a-f0-9][a-f0-9]*\)".*/\1/p' \
+        "$body" | head -n 1)
+    if ! printf '%s' "$flow_token" | grep -Eq '^[a-f0-9]{32}$'; then
+        printf 'HTTP smoke: attachment flow token missing\n' >&2
+        sed -n '1,80p' "$body" >&2
+        exit 1
+    fi
+    printf '%s' "$flow_token"
 }
 
 session_cookie_from_jar() {
@@ -1511,11 +1562,14 @@ assert_body_absent 'name="16_gncopy"'
 # in the returned form itself. The incoming sender deliberately has no request
 # field: only LdF translates the received callsign into that value.
 aw_workflow_csrf_token=$(csrf_from_body)
+aw_recipient_matrix_revision=$(recipient_matrix_revision_from_body)
 aw_content_marker="AW_ATTACHMENT_FORM_STATE_$$"
 aw_note_marker="AW_ATTACHMENT_NOTE_STATE_$$"
 aw_counterpart_marker='AW-GEGENSTELLE-STATE'
 aw_transport_marker='AW-BEFOERDERUNG-STATE'
 aw_address_marker='AW-ANSCHRIFT-STATE'
+aw_phone_marker='+49 711 123456'
+aw_subject_marker='AW-EINGANG-BETREFF'
 aw_author_marker='awz001'
 aw_received_at='281915Jul2026'
 aw_written_at='1917'
@@ -1533,11 +1587,12 @@ aw_upload_md5=$(openssl dgst -md5 -r "$aw_upload_file" | awk '{print $1}')
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$aw_workflow_csrf_token" \
+    --data-urlencode \
+        "recipient_matrix_revision=$aw_recipient_matrix_revision" \
     --data-urlencode 'anhang_plus_x=1' \
     --data-urlencode 'task=FM-Eingang' \
     --data-urlencode '01_medium=Fu' \
     --data-urlencode "01_datum=$aw_received_at" \
-    --data-urlencode "01_zeichen=$legacy_registration_code" \
     --data-urlencode "05_gegenstelle=$aw_counterpart_marker" \
     --data-urlencode '06_befwegausw=' \
     --data-urlencode '07_durchspruch=S' \
@@ -1545,7 +1600,9 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode '08_befhinwausw=Fax' \
     --data-urlencode '09_vorrangstufe=sss' \
     --data-urlencode "10_anschrift=$aw_address_marker" \
+    --data-urlencode "11_rufnummer=$aw_phone_marker" \
     --data-urlencode '11_gesprnotiz=' \
+    --data-urlencode "12_betreff=$aw_subject_marker" \
     --data-urlencode "12_inhalt=$aw_content_marker" \
     --data-urlencode "12_abfzeit=$aw_written_at" \
     --data-urlencode "14_zeichen=$aw_author_marker" \
@@ -1555,12 +1612,14 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
 assert_body 'Liste der verfügbaren Dateien'
 assert_body_absent 'Warning:'
 aw_attachment_menu_csrf_token=$(csrf_from_body)
+aw_attachment_flow=$(attachment_flow_from_body)
 aw_reservations_before_csrf=$(active_attachment_reservation_count)
 
 assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode \
         'csrf_token=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+    --data-urlencode "attachment_flow=$aw_attachment_flow" \
     --data-urlencode 'ah_upload_x=1' \
     "$base_url/4fach/anhang.php"
 assert_body 'ungültig oder abgelaufen'
@@ -1577,6 +1636,7 @@ assert_body 'nur per Formular'
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$aw_attachment_menu_csrf_token" \
+    --data-urlencode "attachment_flow=$aw_attachment_flow" \
     --data-urlencode 'ah_upload_x=1' \
     "$base_url/4fach/anhang.php"
 assert_body 'Anhang hochladen'
@@ -1605,6 +1665,7 @@ fi
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --form "csrf_token=$aw_attachment_csrf_token" \
+    --form "attachment_flow=$aw_attachment_flow" \
     --form "fs_nextfilename=$aw_reserved_name" \
     --form 'fs_comment=A/W & <Beschreibung>' \
     --form "fs_shortname=$legacy_registration_code" \
@@ -1650,6 +1711,7 @@ fi
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$aw_attachment_menu_csrf_token" \
+    --data-urlencode "attachment_flow=$aw_attachment_flow" \
     --data-urlencode 'ah_upload_x=1' \
     "$base_url/4fach/anhang.php"
 oversized_jpeg_csrf_token=$(csrf_from_body)
@@ -1684,6 +1746,7 @@ fi
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --form "csrf_token=$oversized_jpeg_csrf_token" \
+    --form "attachment_flow=$aw_attachment_flow" \
     --form "fs_nextfilename=$oversized_jpeg_reserved_name" \
     --form 'fs_comment=Zu großes JPEG' \
     --form "fs_shortname=$legacy_registration_code" \
@@ -1716,6 +1779,7 @@ assert_body 'Datei nicht gefunden'
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$aw_attachment_menu_csrf_token" \
+    --data-urlencode "attachment_flow=$aw_attachment_flow" \
     --data-urlencode 'ah_upload_x=1' \
     "$base_url/4fach/anhang.php"
 fake_jpeg_csrf_token=$(csrf_from_body)
@@ -1743,6 +1807,7 @@ printf 'plain text must never pass as JPEG\n' >"$fake_jpeg_file"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --form "csrf_token=$fake_jpeg_csrf_token" \
+    --form "attachment_flow=$aw_attachment_flow" \
     --form "fs_nextfilename=$fake_jpeg_reserved_name" \
     --form 'fs_comment=Manipulierter JPEG-Test' \
     --form "fs_shortname=$legacy_registration_code" \
@@ -1773,14 +1838,16 @@ assert_body 'Datei nicht gefunden'
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$aw_attachment_menu_csrf_token" \
+    --data-urlencode "attachment_flow=$aw_attachment_flow" \
     --data-urlencode 'ah_auswahl_x=1' \
     --data-urlencode "lfd_901=$aw_stored_attachment" \
     "$base_url/4fach/anhang.php"
-assert_body 'name="task" value="FM-Eingang_Anhang"'
+assert_body 'name="task" value="FM-Eingang"'
 assert_body_regex 'name="01_medium" value="Fu" type="radio"[^>]*checked="checked"' \
     'preserved A/W medium'
 assert_body "name=\"01_datum\" value=\"$aw_received_at\""
 assert_body "id=\"f_01_zeichen\" data-estab-readonly=\"true\""
+assert_body ">$legacy_registration_code</strong>"
 assert_body ">$legacy_registration_code</strong>"
 assert_body "name=\"05_gegenstelle\" value=\"$aw_counterpart_marker\""
 assert_body_regex 'name="07_durchspruch" value="S" type="radio"[^>]*checked="checked"' \
@@ -1791,6 +1858,8 @@ assert_body_regex 'name="08_befhinwausw" value="Fax" type="radio"[^>]*checked="c
 assert_body 'name="09_vorrangstufe" value="sss"'
 assert_body_regex "name=\"10_anschrift\">$aw_address_marker</textarea>" \
     'preserved A/W address'
+assert_body "name=\"11_rufnummer\" value=\"$aw_phone_marker\""
+assert_body "name=\"12_betreff\" value=\"$aw_subject_marker\""
 assert_body 'name="12_inhalt"'
 assert_body "$aw_content_marker"
 assert_body "name=\"12_anhang\" value=\"$aw_stored_attachment;\""
@@ -1801,6 +1870,8 @@ assert_body "name=\"14_zeichen\" value=\"$aw_author_marker\""
 assert_body 'name="14_funktion" value="A/W"'
 assert_body_absent 'name="15_quitdatum"'
 assert_body_absent 'name="15_quitzeichen"'
+assert_body \
+    "name=\"recipient_matrix_revision\" value=\"$aw_recipient_matrix_revision\""
 assert_body 'A/W &amp; &lt;Beschreibung&gt;'
 assert_body_absent 'A/W &amp;amp; &amp;lt;Beschreibung&amp;gt;'
 assert_body_absent 'name="16_gncopy"'
@@ -1944,17 +2015,65 @@ if ! printf '%s' "$workflow_csrf_token" | grep -Eq '^[a-f0-9]{64}$'; then
     printf 'HTTP smoke: workflow CSRF token missing\n' >&2
     exit 1
 fi
+workflow_recipient_matrix_revision=$(recipient_matrix_revision_from_body)
 
 if [ -z "$workflow_marker" ]; then
     workflow_marker="ESTAB_HTTP_WORKFLOW_$(date +%s)_$$"
 fi
+workflow_phone='+49 711 7654321'
+workflow_subject="HTTP-Anhang ${workflow_marker}"
 upload_file=$work_dir/workflow.txt
 printf '%s\n' "$workflow_marker" > "$upload_file"
 tactical_time=$(date '+%H%M')
 
+# A rejected draft must return the user to this exact message form with a
+# useful error instead of creating a half-initialised attachment flow. Keep
+# markers at both ends to prove that the controller rehydrates the submitted
+# work rather than rendering an empty form after the size check fails.
+oversized_draft_file=$work_dir/oversized-message.txt
+oversized_draft_start="${workflow_marker}_DRAFT_BEGIN"
+oversized_draft_end="${workflow_marker}_DRAFT_END"
+printf '%s\n' "$oversized_draft_start" > "$oversized_draft_file"
+dd if=/dev/zero bs=1048576 count=1 2>/dev/null |
+    tr '\000' 'N' >> "$oversized_draft_file"
+printf '\n%s\n' "$oversized_draft_end" >> "$oversized_draft_file"
+assert_status 422 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$workflow_csrf_token" \
+    --data-urlencode \
+        "recipient_matrix_revision=$workflow_recipient_matrix_revision" \
+    --data-urlencode 'anhang_plus_x=1' \
+    --data-urlencode 'task=Stab_schreiben' \
+    --data-urlencode '07_durchspruch=D' \
+    --data-urlencode '10_anschrift=HTTP-Integrationsempfänger' \
+    --data-urlencode "11_rufnummer=$workflow_phone" \
+    --data-urlencode "12_betreff=$workflow_subject" \
+    --data-urlencode "12_inhalt@$oversized_draft_file" \
+    --data-urlencode "12_abfzeit=$tactical_time" \
+    --data-urlencode '13_abseinheit=HTTP-Integration' \
+    --data-urlencode "14_zeichen=$test_code" \
+    --data-urlencode "14_funktion=$test_function" \
+    "$base_url/4fach/mainindex.php"
+assert_body 'name="task" value="Stab_schreiben"'
+assert_body 'role="alert"'
+assert_body 'Die Anhangverwaltung wurde nicht geöffnet:'
+assert_body 'bleiben in diesem Formular erhalten.'
+assert_body "$workflow_subject"
+assert_body "$workflow_phone"
+assert_body "$oversized_draft_start"
+assert_body "$oversized_draft_end"
+assert_body_absent 'Liste der verfügbaren Dateien'
+assert_body_absent 'name="attachment_flow"'
+assert_body_absent 'Fatal error'
+assert_body_absent 'Warning'
+workflow_csrf_token=$(csrf_from_body)
+workflow_recipient_matrix_revision=$(recipient_matrix_revision_from_body)
+
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$workflow_csrf_token" \
+    --data-urlencode \
+        "recipient_matrix_revision=$workflow_recipient_matrix_revision" \
     --data-urlencode 'anhang_plus_x=1' \
     --data-urlencode 'task=Stab_schreiben' \
     --data-urlencode '01_medium=' \
@@ -1968,8 +2087,10 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode '08_befhinwausw=' \
     --data-urlencode '09_vorrangstufe=' \
     --data-urlencode '10_anschrift=HTTP-Integrationsempfänger' \
+    --data-urlencode "11_rufnummer=$workflow_phone" \
     --data-urlencode '11_gesprnotiz=f' \
     --data-urlencode '12_anhang=' \
+    --data-urlencode "12_betreff=$workflow_subject" \
     --data-urlencode "12_inhalt=$workflow_marker" \
     --data-urlencode "12_abfzeit=$tactical_time" \
     --data-urlencode '13_abseinheit=HTTP-Integration' \
@@ -1983,10 +2104,80 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
 assert_body 'Liste der verfügbaren Dateien'
 assert_body_absent 'Liste der verfÃ¼gbaren Dateien'
 attachment_menu_csrf_token=$(csrf_from_body)
+attachment_flow=$(attachment_flow_from_body)
+
+# Two message-form tabs and the standalone attachment overview must not share
+# an origin, draft, or menu state. A forged/stale token and the historical
+# browser-controlled `anhang_plus_x` exception must not consume either flow.
+parallel_marker="${workflow_marker}_PARALLEL_TAB"
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$workflow_csrf_token" \
+    --data-urlencode \
+        "recipient_matrix_revision=$workflow_recipient_matrix_revision" \
+    --data-urlencode 'anhang_plus_x=1' \
+    --data-urlencode 'task=Stab_schreiben' \
+    --data-urlencode '00_lfd=' \
+    --data-urlencode '07_durchspruch=D' \
+    --data-urlencode '10_anschrift=HTTP-Mehrtab-Empfänger' \
+    --data-urlencode '12_betreff=HTTP-Mehrtab' \
+    --data-urlencode "12_inhalt=$parallel_marker" \
+    --data-urlencode "14_zeichen=$test_code" \
+    --data-urlencode "14_funktion=$test_function" \
+    "$base_url/4fach/mainindex.php"
+assert_body 'Liste der verfügbaren Dateien'
+parallel_attachment_flow=$(attachment_flow_from_body)
+if [ "$parallel_attachment_flow" = "$attachment_flow" ]; then
+    printf 'HTTP smoke: parallel attachment tabs share one flow token\n' >&2
+    exit 1
+fi
+
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$workflow_csrf_token" \
+    --data-urlencode 'stab_anhang_x=1' \
+    "$base_url/4fach/mainindex.php"
+assert_body 'Hier können Sie vorhandene Anhänge ansehen oder neue Dateien hochladen.'
+
+assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "attachment_flow=$parallel_attachment_flow" \
+    --data-urlencode 'ah_upload_x=1' \
+    "$base_url/4fach/anhang.php"
+assert_body 'ungültig oder abgelaufen'
+
+assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$attachment_menu_csrf_token" \
+    --data-urlencode 'attachment_flow=00000000000000000000000000000000' \
+    --data-urlencode 'ah_upload_x=1' \
+    "$base_url/4fach/anhang.php"
+assert_body 'ungültig oder nicht mehr autorisiert'
+
+assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$attachment_menu_csrf_token" \
+    --data-urlencode 'anhang_plus_x=1' \
+    --data-urlencode 'ah_auswahl_x=1' \
+    "$base_url/4fach/anhang.php"
+assert_body 'ungültig oder nicht mehr autorisiert'
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$attachment_menu_csrf_token" \
+    --data-urlencode "attachment_flow=$parallel_attachment_flow" \
+    --data-urlencode 'ah_abbrechen_x=1' \
+    "$base_url/4fach/anhang.php"
+assert_body 'name="task" value="Stab_schreiben"'
+assert_body "$parallel_marker"
+assert_body_absent "$workflow_marker</textarea>"
+assert_body \
+    "name=\"recipient_matrix_revision\" value=\"$workflow_recipient_matrix_revision\""
+
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$attachment_menu_csrf_token" \
+    --data-urlencode "attachment_flow=$attachment_flow" \
     --data-urlencode 'ah_upload_x=1' \
     "$base_url/4fach/anhang.php"
 assert_body 'Anhang hochladen'
@@ -2010,6 +2201,7 @@ fi
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --form "csrf_token=$csrf_token" \
+    --form "attachment_flow=$attachment_flow" \
     --form "fs_nextfilename=$reserved_name" \
     --form "fs_comment=HTTP integration attachment" \
     --form "fs_shortname=$test_code" \
@@ -2114,15 +2306,22 @@ assert_body_absent 'Warning:'
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$attachment_menu_csrf_token" \
+    --data-urlencode "attachment_flow=$attachment_flow" \
     --data-urlencode 'ah_auswahl_x=1' \
     --data-urlencode "lfd_999=$stored_attachment" \
     "$base_url/4fach/anhang.php"
 assert_body "value=\"$stored_attachment;\""
+assert_body 'name="task" value="Stab_schreiben"'
+assert_body "name=\"11_rufnummer\" value=\"$workflow_phone\""
+assert_body "name=\"12_betreff\" value=\"$workflow_subject\""
+workflow_recipient_matrix_revision=$(recipient_matrix_revision_from_body)
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$workflow_csrf_token" \
+    --data-urlencode \
+        "recipient_matrix_revision=$workflow_recipient_matrix_revision" \
     --data-urlencode 'absenden_x=1' \
     --data-urlencode 'task=Stab_schreiben' \
     --data-urlencode '02_zeit=' \
@@ -2131,8 +2330,10 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode '08_befhinwausw=' \
     --data-urlencode '09_vorrangstufe=' \
     --data-urlencode '10_anschrift=HTTP-Integrationsempfänger' \
+    --data-urlencode "11_rufnummer=$workflow_phone" \
     --data-urlencode '11_gesprnotiz=f' \
     --data-urlencode "12_anhang=$stored_attachment;" \
+    --data-urlencode "12_betreff=$workflow_subject" \
     --data-urlencode "12_inhalt=$workflow_marker" \
     --data-urlencode "12_abfzeit=$tactical_time" \
     --data-urlencode '13_abseinheit=HTTP-Integration' \
@@ -2164,9 +2365,68 @@ assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 # carried through the later backup/restore roundtrip.
 vordruck_marker="${workflow_marker}_VORDRUCK"
 forged_vordruck_marker="${workflow_marker}_FORGED_NOTE"
+vordruck_subject='HTTP Gesprächsnotiz'
+
+# Use one otherwise empty matrix cell to prove that coordinate binding and
+# recipient rehydration preserve a legitimate function containing an
+# underscore. The EXIT trap restores the exact fresh-install cell even when an
+# assertion aborts this disposable test halfway through.
+conversation_matrix_cell=$(
+    printf '%s\n' \
+        "SELECT CONCAT(mtx_x, ':', mtx_y, ':', mtx_typ, ':', mtx_fkt,
+                       ':', mtx_rolle, ':', mtx_mode, ':', mtx_rc2,
+                       ':', mtx_auto)
+           FROM nv_empfmtx
+          WHERE mtx_x = 5 AND mtx_y = 4;" |
+        db_sql
+)
+case "$conversation_matrix_cell" in
+    '5:4:t:::ro:f:f')
+        conversation_matrix_original_rc2=f
+        conversation_matrix_original_auto=f
+        ;;
+    '5:4:t:::ro:f:0')
+        conversation_matrix_original_rc2=f
+        conversation_matrix_original_auto=0
+        ;;
+    '5:4:t:::ro:0:f')
+        conversation_matrix_original_rc2=0
+        conversation_matrix_original_auto=f
+        ;;
+    '5:4:t:::ro:0:0')
+        conversation_matrix_original_rc2=0
+        conversation_matrix_original_auto=0
+        ;;
+    *)
+        printf 'HTTP smoke: underscore-recipient fixture cell is not empty: %s\n' \
+            "$conversation_matrix_cell" >&2
+        exit 1
+        ;;
+esac
+printf '%s\n' \
+    "UPDATE nv_empfmtx
+        SET mtx_typ = 'cb', mtx_fkt = 'AB_C', mtx_rolle = 'FB',
+            mtx_mode = 'ro', mtx_rc2 = 'f', mtx_auto = 'f'
+      WHERE mtx_x = 5 AND mtx_y = 4;" |
+    db_sql >/dev/null
+conversation_matrix_fixture_changed=1
+
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST --data-urlencode 'stab_schreiben_x=1' \
+    "$base_url/4fach/mainindex.php"
+assert_body 'name="task" value="Stab_schreiben"'
+assert_body \
+    'aria-label="AB_C, keine Durchschrift ausgewählt, schreibgeschützt"'
+assert_body_absent 'name="16_54" value="16_54_bl" type="checkbox"'
+assert_body '>AB_C</span>'
+workflow_csrf_token=$(csrf_from_body)
+conversation_matrix_revision=$(recipient_matrix_revision_from_body)
+
 assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$workflow_csrf_token" \
+    --data-urlencode \
+        "recipient_matrix_revision=$conversation_matrix_revision" \
     --data-urlencode 'absenden_x=1' \
     --data-urlencode 'task=Stab_gesprnoti' \
     --data-urlencode '01_medium=Fu' \
@@ -2196,14 +2456,18 @@ fi
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$workflow_csrf_token" \
+    --data-urlencode \
+        "recipient_matrix_revision=$conversation_matrix_revision" \
     --data-urlencode 'absenden_x=1' \
     --data-urlencode 'task=Stab_schreiben' \
     --data-urlencode '01_medium=Fu' \
     --data-urlencode '01_datum=' \
     --data-urlencode '01_zeichen=forged' \
     --data-urlencode '10_anschrift=HTTP-Vordruckempfänger' \
+    --data-urlencode '11_rufnummer=' \
     --data-urlencode '11_gesprnotiz=on' \
     --data-urlencode '12_anhang=' \
+    --data-urlencode "12_betreff=$vordruck_subject" \
     --data-urlencode "12_inhalt=$vordruck_marker" \
     --data-urlencode "12_abfzeit=$tactical_time" \
     --data-urlencode '13_abseinheit=Browserseitig gefälschte Einheit' \
@@ -2220,6 +2484,46 @@ assert_body 'id="f_01_zeichen" data-estab-readonly="true"'
 assert_body_absent 'Browserseitig gefälschte Einheit'
 assert_body_absent 'name="15_quitdatum"'
 assert_body_absent 'name="15_quitzeichen"'
+assert_body_absent 'name="16_gncopy"'
+assert_body 'name="16_54" value="16_54_bl" type="checkbox"'
+staged_note_csrf_token=$(csrf_from_body)
+staged_note_matrix_revision=$(recipient_matrix_revision_from_body)
+if [ "$staged_note_matrix_revision" = \
+    "$workflow_recipient_matrix_revision" ]; then
+    printf '%s\n' \
+        'HTTP smoke: recipient-matrix revision did not change for AB_C fixture' >&2
+    exit 1
+fi
+
+assert_status 409 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$workflow_csrf_token" \
+    --data-urlencode \
+        "recipient_matrix_revision=$workflow_recipient_matrix_revision" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=Stab_gesprnoti' \
+    --data-urlencode '01_medium=Fu' \
+    --data-urlencode '01_datum=' \
+    --data-urlencode "01_zeichen=$test_code" \
+    --data-urlencode '02_zeit=' \
+    --data-urlencode '07_durchspruch=D' \
+    --data-urlencode '09_vorrangstufe=' \
+    --data-urlencode '10_anschrift=HTTP-Vordruckempfänger' \
+    --data-urlencode '11_rufnummer=' \
+    --data-urlencode '11_gesprnotiz=f' \
+    --data-urlencode '12_anhang=' \
+    --data-urlencode "12_betreff=$vordruck_subject" \
+    --data-urlencode "12_inhalt=$vordruck_marker" \
+    --data-urlencode "12_abfzeit=$tactical_time" \
+    --data-urlencode "14_zeichen=$test_code" \
+    --data-urlencode "14_funktion=$test_function" \
+    --data-urlencode '16_54=16_54_bl' \
+    --data-urlencode '17_vermerke=Backup-Restore-Nachweis' \
+    "$base_url/4fach/mainindex.php"
+assert_body 'Nachricht wurde zwischenzeitlich geändert'
+assert_body 'Die Empfängermatrix'
+assert_body_absent 'Fatal error'
+assert_body_absent 'Warning:'
 staged_vordruck_count=$(
     printf "SELECT COUNT(*) FROM nv_nachrichten WHERE \`12_inhalt\` = '%s';\n" \
         "$vordruck_marker" | db_sql
@@ -2229,9 +2533,105 @@ if [ "$staged_vordruck_count" != 0 ]; then
     exit 1
 fi
 
+# The attachment picker must return to the exact staged conversation-note
+# task. It must not silently downgrade the form to a normal staff message.
+assert_status 422 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$staged_note_csrf_token" \
+    --data-urlencode \
+        "recipient_matrix_revision=$staged_note_matrix_revision" \
+    --data-urlencode 'anhang_plus_x=1' \
+    --data-urlencode 'task=Stab_gesprnoti' \
+    --data-urlencode '00_lfd=' \
+    --data-urlencode '01_medium=Fu' \
+    --data-urlencode '01_datum=' \
+    --data-urlencode '07_durchspruch=D' \
+    --data-urlencode '10_anschrift=HTTP-Vordruckempfänger' \
+    --data-urlencode '11_rufnummer=' \
+    --data-urlencode '11_gesprnotiz=f' \
+    --data-urlencode '12_anhang=' \
+    --data-urlencode "12_betreff=$vordruck_subject" \
+    --data-urlencode "12_inhalt=$vordruck_marker" \
+    --data-urlencode "12_abfzeit=$tactical_time" \
+    --data-urlencode "14_zeichen=$test_code" \
+    --data-urlencode "14_funktion=$test_function" \
+    --data-urlencode '16_54=16_54_bl' \
+    --data-urlencode '17_vermerke[]=unzulässiger Arraywert' \
+    "$base_url/4fach/mainindex.php"
+assert_body 'name="task" value="Stab_gesprnoti"'
+assert_body 'Die Anhangverwaltung wurde nicht geöffnet:'
+assert_body "$vordruck_marker"
+assert_body_regex \
+    'name="16_54" value="16_54_bl" type="checkbox"[^>]*checked' \
+    '422 conversation-note underscore recipient'
+assert_body_absent 'name="16_gncopy"'
+assert_body_absent 'name="attachment_flow"'
+assert_body_absent 'Fatal error'
+assert_body_absent 'Warning:'
+rejected_vordruck_count=$(
+    printf "SELECT COUNT(*) FROM nv_nachrichten WHERE \`12_inhalt\` = '%s';\n" \
+        "$vordruck_marker" |
+        db_sql
+)
+if [ "$rejected_vordruck_count" != 0 ]; then
+    printf '%s\n' \
+        'HTTP smoke: rejected conversation-note draft reached persistent state' >&2
+    exit 1
+fi
+staged_note_csrf_token=$(csrf_from_body)
+staged_note_matrix_revision=$(recipient_matrix_revision_from_body)
+
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
-    --data-urlencode "csrf_token=$workflow_csrf_token" \
+    --data-urlencode "csrf_token=$staged_note_csrf_token" \
+    --data-urlencode \
+        "recipient_matrix_revision=$staged_note_matrix_revision" \
+    --data-urlencode 'anhang_plus_x=1' \
+    --data-urlencode 'task=Stab_gesprnoti' \
+    --data-urlencode '00_lfd=' \
+    --data-urlencode '01_medium=Fu' \
+    --data-urlencode '01_datum=' \
+    --data-urlencode '07_durchspruch=D' \
+    --data-urlencode '10_anschrift=HTTP-Vordruckempfänger' \
+    --data-urlencode '11_rufnummer=' \
+    --data-urlencode '11_gesprnotiz=f' \
+    --data-urlencode '12_anhang=' \
+    --data-urlencode "12_betreff=$vordruck_subject" \
+    --data-urlencode "12_inhalt=$vordruck_marker" \
+    --data-urlencode "12_abfzeit=$tactical_time" \
+    --data-urlencode "14_zeichen=$test_code" \
+    --data-urlencode "14_funktion=$test_function" \
+    --data-urlencode '16_54=16_54_bl' \
+    --data-urlencode '15_quitdatum=' \
+    --data-urlencode '15_quitzeichen=' \
+    --data-urlencode '17_vermerke=Backup-Restore-Nachweis' \
+    "$base_url/4fach/mainindex.php"
+assert_body 'Liste der verfügbaren Dateien'
+staged_note_attachment_csrf=$(csrf_from_body)
+staged_note_attachment_flow=$(attachment_flow_from_body)
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$staged_note_attachment_csrf" \
+    --data-urlencode \
+        "attachment_flow=$staged_note_attachment_flow" \
+    --data-urlencode 'ah_abbrechen_x=1' \
+    "$base_url/4fach/anhang.php"
+assert_body 'name="task" value="Stab_gesprnoti"'
+assert_body "$vordruck_marker"
+assert_body ">$test_code</strong>"
+assert_body_regex \
+    'name="16_54" value="16_54_bl" type="checkbox"[^>]*checked' \
+    'attachment-returned conversation-note underscore recipient'
+assert_body_absent 'name="16_gncopy"'
+assert_body_absent 'name="task" value="Stab_schreiben"'
+staged_note_return_csrf=$(csrf_from_body)
+staged_note_matrix_revision=$(recipient_matrix_revision_from_body)
+
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$staged_note_return_csrf" \
+    --data-urlencode \
+        "recipient_matrix_revision=$staged_note_matrix_revision" \
     --data-urlencode 'absenden_x=1' \
     --data-urlencode 'task=Stab_gesprnoti' \
     --data-urlencode '01_medium=Fu' \
@@ -2243,8 +2643,10 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode '08_befhinwausw=' \
     --data-urlencode '09_vorrangstufe=' \
     --data-urlencode '10_anschrift=HTTP-Vordruckempfänger' \
+    --data-urlencode '11_rufnummer=' \
     --data-urlencode '11_gesprnotiz=f' \
     --data-urlencode '12_anhang=' \
+    --data-urlencode "12_betreff=$vordruck_subject" \
     --data-urlencode "12_inhalt=$vordruck_marker" \
     --data-urlencode "12_abfzeit=$tactical_time" \
     --data-urlencode '13_abseinheit=HTTP-Vordrucktest' \
@@ -2252,7 +2654,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "14_funktion=$test_function" \
     --data-urlencode '15_quitdatum=' \
     --data-urlencode '15_quitzeichen=' \
-    --data-urlencode '16_gncopy=' \
+    --data-urlencode '16_54=16_54_bl' \
     --data-urlencode '16_empf=' \
     --data-urlencode '17_vermerke=Backup-Restore-Nachweis' \
     "$base_url/4fach/mainindex.php"
@@ -2269,6 +2671,29 @@ if [ "$conversation_evidence_count" != 1 ]; then
     printf 'HTTP smoke: conversation-note actor/mark evidence is inconsistent\n' >&2
     exit 1
 fi
+conversation_distribution=$(
+    printf "SELECT \`16_empf\` FROM nv_nachrichten WHERE \`12_inhalt\` = '%s';\n" \
+        "$vordruck_marker" |
+        db_sql
+)
+if [ "$conversation_distribution" != \
+    "S2_rt,${test_function}_gn,AB_C_bl," ]; then
+    printf '%s\n' \
+        'HTTP smoke: conversation-note red/author-green/underscore-blue distribution differs' >&2
+    printf 'actual: %s\n' "$conversation_distribution" >&2
+    exit 1
+fi
+
+printf '%s\n' \
+    "UPDATE nv_empfmtx
+        SET mtx_typ = 't', mtx_fkt = '', mtx_rolle = '',
+            mtx_mode = 'ro',
+            mtx_rc2 = '$conversation_matrix_original_rc2',
+            mtx_auto = '$conversation_matrix_original_auto'
+      WHERE mtx_x = 5 AND mtx_y = 4;" |
+    db_sql >/dev/null
+conversation_matrix_fixture_changed=0
+
 stored_vordruck=$(vordruck_name_for_marker "$vordruck_marker")
 if ! printf '%s' "$stored_vordruck" |
     grep -Eq '^[A-Za-z0-9_]+ Einsatz-[1-9][0-9]* [1-9][0-9]* [EA][.]pdf$'; then
@@ -2367,6 +2792,7 @@ assert_body 'Datei nicht gefunden'
 # Raw UTF-8 message storage must preserve punctuation and SQL-shaped text,
 # while every HTML list/search reflection remains inert.
 security_payload="MSGSEC 'quoted' \"double\" & <script>alert(\"x\")</script> ' OR 1=1 --"
+security_subject='Sicherer UTF-8-Betreff äöü'
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$workflow_csrf_token" \
@@ -2378,8 +2804,10 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode '08_befhinwausw=' \
     --data-urlencode '09_vorrangstufe=' \
     --data-urlencode "10_anschrift=Security ' & Empfänger" \
+    --data-urlencode '11_rufnummer=' \
     --data-urlencode '11_gesprnotiz=f' \
     --data-urlencode '12_anhang=' \
+    --data-urlencode "12_betreff=$security_subject" \
     --data-urlencode "12_inhalt=$security_payload" \
     --data-urlencode "12_abfzeit=$tactical_time" \
     --data-urlencode '13_abseinheit=HTTP-Sicherheit' \
@@ -2969,6 +3397,45 @@ SQL
         'RENAME TABLE estab_readiness_probe_matrix TO nv_empfmtx_standard;' |
         db_sql >/dev/null
     readiness_schema_renamed=0
+    assert_status 200 "$base_url/health.php"
+    assert_body '"schema":true'
+
+    readiness_message_order=$(printf '%s\n' \
+        "SELECT CONCAT(GROUP_CONCAT(column_name ORDER BY ordinal_position SEPARATOR ','), ':', MAX(ordinal_position) - MIN(ordinal_position)) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'nv_nachrichten' AND column_name IN ('10_anschrift','11_rufnummer','11_gesprnotiz','12_betreff','12_anhang');" |
+        db_sql | tr -d '\r\n')
+    if [ "$readiness_message_order" != \
+        '10_anschrift,11_rufnummer,11_gesprnotiz,12_betreff,12_anhang:4' ]; then
+        printf '%s\n' \
+            'HTTP smoke: message-column order probe has an unsafe schema precondition' >&2
+        exit 1
+    fi
+    readiness_message_order_changed=1
+    printf '%s\n' \
+        'ALTER TABLE nv_nachrichten MODIFY COLUMN `12_anhang` TEXT NULL AFTER `12_inhalt`;' |
+        db_sql >/dev/null
+
+    assert_status 503 "$base_url/health.php"
+    assert_body '"schema":false'
+    verify_order_drift_failures=$(db_sql <docker/db/verify.sql | awk -F '\t' '
+        NR == 1 {
+            failures = 0
+            for (column = 1; column <= NF; column++) {
+                if ($column != "1") failures++
+            }
+            print failures
+            exit
+        }
+    ')
+    if [ "$verify_order_drift_failures" != 1 ]; then
+        printf 'HTTP smoke: verify.sql did not isolate message-column order drift (%s failures)\n' \
+            "$verify_order_drift_failures" >&2
+        exit 1
+    fi
+
+    printf '%s\n' \
+        'ALTER TABLE nv_nachrichten MODIFY COLUMN `12_anhang` TEXT NULL AFTER `12_betreff`;' |
+        db_sql >/dev/null
+    readiness_message_order_changed=0
     assert_status 200 "$base_url/health.php"
     assert_body '"schema":true'
 

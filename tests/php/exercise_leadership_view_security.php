@@ -14,7 +14,11 @@ $assert = static function (bool $condition, string $message) use (&$assertions):
 
 $root = dirname(__DIR__, 2);
 $source = file_get_contents($root . '/4fueltg/ue_ltg.php');
-$assert(is_string($source), 'exercise leadership view source unreadable');
+$toolsSource = file_get_contents($root . '/4fach/tools.php');
+$assert(
+    is_string($source) && is_string($toolsSource),
+    'exercise leadership view or recipient helper source unreadable'
+);
 
 /**
  * Extract one repository-owned function or method for source contracts and
@@ -80,6 +84,22 @@ $navigationSource = $extractFunction($source, 'listen_navi');
 $displayControlsSource = $extractFunction($source, 'darstellungs_art');
 $listSource = $extractFunction($source, 'createlist');
 $messageFormSource = $extractFunction($source, 'plot_form');
+$recipientMapSource = $extractFunction(
+    $toolsSource,
+    'estab_recipient_copy_map'
+);
+$recipientColoursSource = $extractFunction(
+    $toolsSource,
+    'estab_recipient_copy_colours'
+);
+$recipientBackgroundSource = $extractFunction(
+    $toolsSource,
+    'estab_recipient_copy_background'
+);
+$recipientCellHtmlSource = $extractFunction(
+    $toolsSource,
+    'estab_recipient_copy_cell_html'
+);
 
 $assert(
     preg_match('/\$_SERVER\s*\[\s*["\']PHP_SELF["\']\s*\]/', $source) !== 1,
@@ -139,12 +159,20 @@ $assert(
 );
 
 foreach ([
+    'estab_recipient_copy_map',
+    'estab_recipient_copy_colours',
+    'estab_recipient_copy_background',
+    'estab_recipient_copy_cell_html',
     'estab_overview_url',
     'estab_overview_row_start',
     'estab_overview_recipient_cell',
     'estab_overview_empty_row',
 ] as $functionName) {
     eval(match ($functionName) {
+        'estab_recipient_copy_map' => $recipientMapSource,
+        'estab_recipient_copy_colours' => $recipientColoursSource,
+        'estab_recipient_copy_background' => $recipientBackgroundSource,
+        'estab_recipient_copy_cell_html' => $recipientCellHtmlSource,
         'estab_overview_url' => $overviewUrlSource,
         'estab_overview_row_start' => $rowStartSource,
         'estab_overview_recipient_cell' => $recipientCellSource,
@@ -218,6 +246,17 @@ $assertRowStructure = static function (
 };
 
 $colors = ['rt' => 'rgb(255,0,0)', 'gn' => 'rgb(0,255,0)', 'bl' => 'rgb(0,0,255)'];
+$copyMap = estab_recipient_copy_map(
+    'AB_C_bl,AB_C_gn,S1_bl,S1_gn,S2_rt,'
+);
+$assert(
+    $copyMap === [
+        'AB_C' => 'bl,gn',
+        'S1' => 'bl,gn',
+        'S2' => 'rt',
+    ],
+    'underscore recipient functions or multiple copies collapse in list parsing'
+);
 $normalRow = estab_overview_row_start(false)
     . estab_overview_recipient_cell('', $colors)
     . '</tr>';
@@ -227,15 +266,21 @@ $priorityRow = estab_overview_row_start(true)
 $unknownColorRow = estab_overview_row_start(false)
     . estab_overview_recipient_cell('unexpected', $colors)
     . '</tr>';
+$multipleCopyRow = estab_overview_row_start(false)
+    . estab_overview_recipient_cell('bl,gn', $colors)
+    . '</tr>';
 $emptyRow = estab_overview_empty_row(9);
 
 $assertRowStructure($normalRow, 1, 'normal row');
 $assertRowStructure($priorityRow, 1, 'priority row');
 $assertRowStructure($unknownColorRow, 1, 'unknown recipient color row');
+$assertRowStructure($multipleCopyRow, 1, 'multiple-copy recipient row');
 $assertRowStructure($emptyRow, 1, 'empty result row');
 $assert(
     str_contains($normalRow, 'alt="leer"')
         && str_contains($priorityRow, '>X</td>')
+        && str_contains($multipleCopyRow, 'linear-gradient(')
+        && str_contains($multipleCopyRow, 'Durchschriften: blau, grün')
         && str_contains($unknownColorRow, 'alt="leer"')
         && str_contains($emptyRow, 'colspan="9"'),
     'representative message table branch content changed'

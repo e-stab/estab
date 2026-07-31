@@ -206,12 +206,16 @@ $liveMessage = [
     '00_lfd' => 7,
     '04_nummer' => 1,
     '04_richtung' => 'E',
+    '11_rufnummer' => '0711 123456',
+    '12_betreff' => 'Lagemeldung',
     '12_inhalt' => 'Terminal gebundener Inhalt',
     'x00_status' => 8,
     'x01_abschluss' => 't',
 ];
 $terminalSnapshot = estab_message_terminal_snapshot($liveMessage);
 $fieldSnapshot = estab_message_evidence_snapshot([
+    'terminal_snapshot_version' =>
+        ESTAB_MESSAGE_TERMINAL_SNAPSHOT_CURRENT,
     'terminal_message' => $terminalSnapshot,
     'terminal_snapshot_sha256' =>
         estab_message_terminal_snapshot_sha256($liveMessage),
@@ -254,6 +258,45 @@ $assert(
         && $messageStatus['terminal_mismatches'] === 0,
     'Valid terminal message evidence was rejected'
 );
+$v1LiveMessage = array_replace($liveMessage, [
+    '11_rufnummer' => '',
+    '12_betreff' => '',
+]);
+$v1TerminalSnapshot = estab_message_terminal_snapshot(
+    $v1LiveMessage,
+    ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V1
+);
+$v1FieldSnapshot = estab_message_evidence_snapshot([
+    'terminal_message' => $v1TerminalSnapshot,
+    'terminal_snapshot_sha256' =>
+        estab_message_terminal_snapshot_sha256(
+            $v1LiveMessage,
+            ESTAB_MESSAGE_TERMINAL_SNAPSHOT_V1
+        ),
+]);
+$v1MessageEvent = array_replace($messageEvent, [
+    'field_snapshot' => $v1FieldSnapshot,
+    'snapshot_sha256' => hash('sha256', $v1FieldSnapshot),
+]);
+$v1MessageEvent['event_sha256'] =
+    estab_incident_export_message_event_hash(12, $v1MessageEvent);
+$v1MessageHead = array_replace($messageHead, [
+    'last_event_sha256' => $v1MessageEvent['event_sha256'],
+]);
+$v1Status = estab_incident_export_message_evidence_status(
+    12,
+    [$v1LiveMessage],
+    [$v1MessageEvent],
+    [$v1MessageHead]
+);
+$assert(
+    !array_key_exists('11_rufnummer', $v1TerminalSnapshot)
+        && !array_key_exists('12_betreff', $v1TerminalSnapshot)
+        && $v1Status['valid'] === true
+        && $v1Status['terminal_binding_complete'] === true
+        && $v1Status['terminal_mismatches'] === 0,
+    'Implicit V1 terminal evidence was not exported as valid'
+);
 $tamperedMessage = $liveMessage;
 $tamperedMessage['12_inhalt'] = 'Nachträglich manipuliert';
 $tamperedStatus = estab_incident_export_message_evidence_status(
@@ -267,6 +310,23 @@ $assert(
         && $tamperedStatus['terminal_mismatches'] === 1,
     'Terminal event was not compared with the live status-8 message'
 );
+foreach ([
+    '11_rufnummer' => '0711 999999',
+    '12_betreff' => 'Manipulierter Betreff',
+] as $field => $value) {
+    $tamperedV2Message = array_replace($liveMessage, [$field => $value]);
+    $tamperedV2Status = estab_incident_export_message_evidence_status(
+        12,
+        [$tamperedV2Message],
+        [$messageEvent],
+        [$messageHead]
+    );
+    $assert(
+        $tamperedV2Status['valid'] === false
+            && $tamperedV2Status['terminal_mismatches'] === 1,
+        'V2 export evidence did not bind ' . $field
+    );
+}
 $legacySnapshot = '{"legacy_import":true}';
 $legacyEvent = array_replace($messageEvent, [
     'event_type' => 'legacy_import',
@@ -375,12 +435,14 @@ foreach ([
     'estab_incident_export_recipient_matrix($connection)',
     '`06_befwegausw`, `07_durchspruch`',
     '`08_befhinwausw`, `09_vorrangstufe`',
-    '`10_anschrift`, `11_gesprnotiz`',
+    '`10_anschrift`, `11_rufnummer`',
+    '`11_gesprnotiz`, `12_anhang`, `12_betreff`',
     '`ruecknachricht_vorhanden`, `ruecknachricht`',
     '`x04_druck`, `x05_druck_d`, `99_lstacc`',
     '`estab_event_time`,',
     '`estab_correction_of`,',
-    'estab_message_terminal_snapshot_sha256(',
+    'estab_message_terminal_snapshot_stored_version(',
+    'estab_message_terminal_snapshot_matches_live(',
     'estab_incident_export_operations_evidence_status(',
     'estab_file_resolve(',
     'Ein Nachrichtenvordruck verweist auf einen nicht ',
@@ -434,6 +496,21 @@ $assert(
         && !str_contains($messageTemplate, '/logo.png')
         && !str_contains($messageTemplate, "ini_set('memory_limit'"),
     'Message-form template still prints removed assets or lowers dossier memory'
+);
+$assert(
+    str_contains($messageTemplate, '$data ["11_rufnummer"]')
+        && str_contains($messageTemplate, '$data ["12_betreff"]')
+        && str_contains(
+            $messageTemplate,
+            '$this->db_dataset ["11_rufnummer"]'
+        )
+        && str_contains(
+            $messageTemplate,
+            '$this->db_dataset ["12_betreff"]'
+        )
+        && str_contains($messageTemplate, '"Ruf Nr."')
+        && str_contains($messageTemplate, 'function draw_fitted_textfield'),
+    'Message-form PDF omits the official phone or subject fields'
 );
 $assert(
     str_contains($controller, "empty(\$_SERVER['REMOTE_USER'])")

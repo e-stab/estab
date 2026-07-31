@@ -328,6 +328,7 @@ estab_workflow_require_active_incident_for_post (
 $messageOperation = $workflowIdentity === null
   ? null
   : estab_workflow_message_operation ($returnValue);
+$objectMessage = null;
 if ($messageOperation !== null) {
   $messageRecordId = $messageOperation === "message-operator-reset"
     ? ($returnValue ["reset_record"] ?? null)
@@ -446,11 +447,32 @@ if ($messageOperation !== null) {
 ANTWORT % WEITERLEITUNG
 *******************************************************************/
   $weiterantwort = false;
-  if ( ( (isset($returnValue["weiterleiten_x"])) or
-         (isset($returnValue["antwort_x"])) ) and
+  $telecommunicationsAnswerRequested = isset ($returnValue ["antwort_x"]);
+  $telecommunicationsForwardRequested =
+    isset ($returnValue ["weiterleiten_x"]);
+  if (
+    $telecommunicationsAnswerRequested
+    && $telecommunicationsForwardRequested
+    && $returnValue ["task"] == "FM-Ausgang"
+  ) {
+    estab_workflow_forbid ();
+  }
+  if ( ( ($telecommunicationsForwardRequested) or
+         ($telecommunicationsAnswerRequested) ) and
          ( $returnValue["task"] == "FM-Ausgang" ) )  {
+    if (!is_array ($objectMessage)) {
+      estab_workflow_forbid ();
+    }
     $weiterantwort = true;
-    $_SESSION ["sw_data"] = $returnValue ;
+    // The follow-up form is derived solely from the record admitted by the
+    // object gate. Browser-hidden message data is never an authority.
+    $_SESSION ["sw_data"] = $objectMessage;
+    $_SESSION ["sw_data"]["task"] = "FM-Ausgang";
+    $_SESSION ["sw_data"][
+      $telecommunicationsAnswerRequested
+        ? "antwort_x"
+        : "weiterleiten_x"
+    ] = "1";
   } elseif (  (isset($returnValue ["abbrechen_x"]) and (isset ($_SESSION["sw_data"]))) and
               ( $returnValue["task"] == "FM-Eingang" ) ) {
     unset ($_SESSION["sw_data"]);
@@ -511,6 +533,140 @@ ANTWORT % WEITERLEITUNG
 
   // Aufruf von Anhang vom 4fach Vordruck aus ==> es könnte schon Inhalt im Formular vorhanden sein
   if ( isset ($returnValue["anhang_plus_x"])) {
+    $attachmentOriginContext = null;
+    $attachmentOriginDraft = null;
+    try {
+      $attachmentOriginContext =
+        estab_attachment_origin_context_create (
+          is_array ($workflowSelectedIdentity)
+            ? $workflowSelectedIdentity
+            : array (),
+          $workflowIncidentId,
+          $returnValue,
+          is_array ($objectMessage) ? $objectMessage : null
+        );
+      $attachmentOriginDraft =
+        estab_attachment_origin_draft_from_request (
+          $returnValue,
+          is_array ($workflowSelectedIdentity)
+            ? $workflowSelectedIdentity
+            : array (),
+          $attachmentOriginContext
+        );
+      // This local variable is visible only to the server-side include below.
+      // Direct browser requests must always supply their own flow token.
+      $attachmentInternalFlowToken =
+        estab_attachment_origin_flow_store (
+          $_SESSION,
+          $attachmentOriginContext,
+          $attachmentOriginDraft,
+          ESTAB_ATTACHMENT_ORIGIN_MAX_FLOWS,
+          static function (array $evictedContext) use (
+            $conf_4f_db,
+            $conf_4f_tbl
+          ): void {
+            $evictionConnection =
+              estab_attachment_connection ($conf_4f_db);
+            try {
+              estab_attachment_release_origin_reservation (
+                $evictionConnection,
+                $conf_4f_tbl ["anhang"],
+                session_id (),
+                $evictedContext
+              );
+            } finally {
+              estab_attachment_close ($evictionConnection);
+            }
+          }
+        );
+    } catch (EstabAttachmentDraftException $exception) {
+      error_log (
+        "eStab attachment draft rejected: ".$exception->getMessage ()
+      );
+      $safeDraft = $exception->draft ();
+      if ($safeDraft === array () && is_array ($attachmentOriginDraft)) {
+        $safeDraft = $attachmentOriginDraft;
+      }
+      $recoveryTask = (string) (
+        $attachmentOriginContext ["task"] ??
+        ($returnValue ["task"] ?? "")
+      );
+      $requiredRecoveryRecipients = array ();
+      if ($recoveryTask === "Stab_gesprnoti") {
+        $requiredRecoveryRecipients = array (
+          (string) $redcopy2."_rt",
+          (string) (
+            $workflowSelectedIdentity ["funktion"] ?? ""
+          )."_gn",
+        );
+      }
+      try {
+        $formdata = estab_attachment_origin_draft_form_data (
+          $safeDraft,
+          is_array ($attachmentOriginContext)
+            ? $attachmentOriginContext
+            : array (
+              "task" => (string) ($returnValue ["task"] ?? ""),
+              "record_id" => $returnValue ["00_lfd"] ?? null,
+            ),
+          is_array ($objectMessage) ? $objectMessage : null,
+          $empf_matrix,
+          false,
+          (string) $redcopy2,
+          $requiredRecoveryRecipients
+        );
+        if (in_array (
+          $recoveryTask,
+          array ("Stab_schreiben", "Stab_gesprnoti"),
+          true
+        )) {
+          $formdata ["13_abseinheit"] = $activeCommandPostName;
+          $formdata ["14_zeichen"] = (string) (
+            $workflowSelectedIdentity ["kuerzel"] ?? ""
+          );
+          $formdata ["14_funktion"] = (string) (
+            $workflowSelectedIdentity ["funktion"] ?? ""
+          );
+          if ($recoveryTask === "Stab_gesprnoti") {
+            $formdata ["01_zeichen"] = $formdata ["14_zeichen"];
+          }
+        }
+      } catch (Throwable $renderException) {
+        error_log (
+          "eStab attachment draft recovery failed: ".
+          $renderException->getMessage ()
+        );
+        estab_workflow_forbid ();
+      }
+      $formdata ["estab_route_error"] =
+        "Die Anhangverwaltung wurde nicht geöffnet: ".
+        $exception->getMessage ().
+        " Ihre bisherigen Eingaben wurden nicht in den Anhang-Flow ".
+        "übernommen und bleiben in diesem Formular erhalten.";
+      http_response_code (422);
+      header ("Cache-Control: private, no-store, max-age=0");
+      $form = new nachrichten4fach (
+        $formdata,
+        (string) ($attachmentOriginContext ["task"] ??
+          ($returnValue ["task"] ?? "")),
+        array ()
+      );
+      exit;
+    } catch (EstabAttachmentContextException $exception) {
+      error_log (
+        "eStab attachment origin rejected: ".$exception->getMessage ()
+      );
+      estab_workflow_forbid ();
+    } catch (Throwable $exception) {
+      error_log (
+        "eStab attachment flow cleanup failed: ".$exception->getMessage ()
+      );
+      http_response_code (503);
+      header ("Content-Type: text/plain; charset=UTF-8");
+      header ("Cache-Control: no-store");
+      echo "Der Anhangvorgang kann derzeit nicht sicher geöffnet werden.";
+      exit;
+    }
     $_SESSION ["anhang_menue"] = "100";
     include ("anhang.php");
     exit;
@@ -524,7 +680,9 @@ ANTWORT % WEITERLEITUNG
   if ( ( isset ( $returnValue["stab_anhang_x"] ) or  isset ( $returnValue["fm_anhang_x"] )
        ) and  ( !isset( $returnValue["ah_auswahl_x"] ) ) )  {
 
-    if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br>";} 
+    if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br>";}
+    // The sidebar opens a standalone overview. Token-indexed message drafts in
+    // other tabs remain independently resumable.
     $_SESSION ["anhang_menue"] = 100;
     include ("anhang.php");
     $menue1 = "anhang";
@@ -789,7 +947,7 @@ ANTWORT % WEITERLEITUNG
 
     if ( ( ($returnValue ["11_gesprnotiz"] ?? "") == "on" ) and
          ( !$_SESSION ["gesprnoti"] ) and
-         ( $returnValue ["task"] != "Stab_sichten" ) ){
+         ( $returnValue ["task"] == "Stab_schreiben" ) ){
         // Bei GesprÃ¤chsnotiz 2. Vorlage beim Verfasser fÃ¼r Sichtung
 
         if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br> ### Gesprächsnotiz == 2. Sichtung<br>\n";}
@@ -895,34 +1053,60 @@ Daten kommen vom Formular und sollen als Antwort dienen.
 \**********************************************************************/
 
 // A N T W O R T
-  if ( ( isset ($returnValue["antwort_x"]) ) and ( $returnValue["task"] == "Stab_lesen" ) ) {
+  $staffAnswerRequested = isset ($returnValue ["antwort_x"])
+    && $returnValue ["task"] == "Stab_lesen";
+  $staffForwardRequested = isset ($returnValue ["weiterleiten_x"])
+    && $returnValue ["task"] == "Stab_lesen";
+  if ($staffAnswerRequested && $staffForwardRequested) {
+    estab_workflow_forbid ();
+  }
+  if ($staffAnswerRequested) {
 //  A N T W O R T  --  "Stab_lesen"
 
     if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### Antwort <br> ";}
 
-    $formdata = $returnValue ;
+    if (!is_array ($objectMessage)) {
+      estab_workflow_forbid ();
+    }
+    $formdata = $objectMessage;
     $formdata ["10_anschrift"] =  $formdata ["13_abseinheit"]."  ".$formdata["14_funktion"];
     $formdata ["13_abseinheit"] = $activeCommandPostName;
+    $formdata = array_replace (
+      $formdata,
+      estab_message_followup_contact_fields ($objectMessage, "AW")
+    );
     $formdata ["12_abfzeit"] = "" ;
     $formdata ["14_zeichen"]     = $_SESSION["vStab_kuerzel"];
     $formdata ["14_funktion"]    = $_SESSION["vStab_funktion"];
     $formdata ["12_inhalt"] = "Zitat: von ".$formdata["04_richtung"]." ".$formdata["04_nummer"]." \n\"".$formdata ["12_inhalt"]."\"\n";
     $formdata ["04_richtung"] = "";
     $formdata ["04_nummer"] = "";
+    $formdata = estab_message_followup_new_record ($formdata);
     $form = new nachrichten4fach ($formdata, "Stab_schreiben", "");
   }
 
 // Weiterleitung
-  if ( (isset ($returnValue["weiterleiten_x"])) and
-       ($returnValue["task"] == "Stab_lesen") and
-     ( ($returnValue ["04_richtung"] == "E") or
-       ($returnValue ["04_richtung"] == "A") ) ) {
+  if ($staffForwardRequested) {
+    if (
+      !is_array ($objectMessage)
+      || !in_array (
+        (string) ($objectMessage ["04_richtung"] ?? ""),
+        array ("E", "A"),
+        true
+      )
+    ) {
+      estab_workflow_forbid ();
+    }
 
     if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br> ### 225 WEITERLEITUNG - Stab_lesen";  echo "<br>\n";}
 
-    $formdata = $returnValue ;
+    $formdata = $objectMessage;
     // W E I T E R L E I T U N G  --  "Stab_lesen" ---- "E" Anschrift frei; Absender normal
     $formdata ["10_anschrift"] = "";
+    $formdata = array_replace (
+      $formdata,
+      estab_message_followup_contact_fields ($objectMessage, "WG")
+    );
     $formdata ["12_inhalt"] = "Zitat: von ".$formdata["04_richtung"]." ".$formdata["04_nummer"]." \n\"".$formdata ["12_inhalt"]."\"\n";
     $formdata ["04_richtung"] = "";
     $formdata ["04_nummer"] = "";
@@ -931,6 +1115,7 @@ Daten kommen vom Formular und sollen als Antwort dienen.
     $formdata ["12_abfzeit"] = "" ;
     $formdata ["14_zeichen"]     = $_SESSION["vStab_kuerzel"];
     $formdata ["14_funktion"]    = $_SESSION["vStab_funktion"];
+    $formdata = estab_message_followup_new_record ($formdata);
     $form = new nachrichten4fach ($formdata, "Stab_schreiben", "");
   }
 
@@ -946,6 +1131,10 @@ Daten kommen vom Formular und sollen als Antwort dienen.
       $formdata ["01_zeichen"]  = $_SESSION ["vStab_kuerzel"];
       $formdata ["10_anschrift"] =  $formdata ["13_abseinheit"]."  ".$formdata["14_funktion"];
       $formdata ["13_abseinheit"] = $aushilfe ;
+      $formdata = array_replace (
+        $formdata,
+        estab_message_followup_contact_fields ($formdata, "AW")
+      );
       $formdata ["12_abfzeit"] = "" ;
       $formdata ["12_inhalt"] = "Zitat: von ".$formdata["04_richtung"]." ".$formdata["04_nummer"]." \n\"".$formdata ["12_inhalt"]."\"\n";
       $formdata ["04_richtung"] = "";
@@ -955,15 +1144,16 @@ Daten kommen vom Formular und sollen als Antwort dienen.
       $formdata ["03_datum"] = "";
       $formdata ["03_zeichen"] = "";
       unset ($_SESSION ["sw_data"]);
-		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br>";} 
+		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br>";}
 
+      $formdata = estab_message_followup_new_record ($formdata);
       $form = new nachrichten4fach ($formdata, "FM-Eingang", "");
     }
 
 	 if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>  ### Weiterleitung <br>";} 
 
     if ( (isset ($formdata["weiterleiten_x"])) and
-         ($returnValue["task"] == "FM-Ausgang") ) {
+         ($formdata["task"] == "FM-Ausgang") ) {
 
 // W E I T E R L E I T U N G  --  "FM-Ausgang"
 
@@ -972,6 +1162,10 @@ Daten kommen vom Formular und sollen als Antwort dienen.
       $aushilfe = $formdata ["10_anschrift"];
       $formdata ["10_anschrift"] =  $formdata ["13_abseinheit"]."  ".$formdata["14_funktion"];
       $formdata ["13_abseinheit"] = $aushilfe ;
+      $formdata = array_replace (
+        $formdata,
+        estab_message_followup_contact_fields ($formdata, "WG")
+      );
       $formdata ["12_abfzeit"] = "" ;
       $formdata ["12_inhalt"] = "Zitat: von ".$formdata["04_richtung"]." ".$formdata["04_nummer"]." \n\n\"".$formdata ["12_inhalt"]."\"\n\n";
       $formdata ["04_richtung"] = "";
@@ -979,6 +1173,7 @@ Daten kommen vom Formular und sollen als Antwort dienen.
 
       unset ($_SESSION ["sw_data"]);
 
+      $formdata = estab_message_followup_new_record ($formdata);
       $form = new nachrichten4fach ($formdata, "FM-Eingang", "");
     }
   } //  if (isset ($_SESSION ["sw_data"] ))

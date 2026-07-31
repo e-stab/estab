@@ -62,12 +62,7 @@ class Listen {
 
 
   function explodereceiver ( $empf){
-    $receiver = explode (",",$empf);
-    for ($i=0; $i < count( $receiver ); $i++ ) {
-      $hilfeaus = explode ( "_", $receiver [$i] ) ;
-      $fktcopycolor[$hilfeaus[0]] = $hilfeaus [1] ;
-    }
-    return $fktcopycolor;
+    return estab_recipient_copy_map ($empf);
   }
 
 
@@ -492,24 +487,11 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
          for ( $i=1; $i<= count ($conf_empf); $i++ ) {
            if ( ( $conf_empf [$i]["fkt"] != "Si" ) and ( $conf_empf [$i]["fkt"] != "A/W" ) ) {
              $recipientFunction = $conf_empf [$i]['fkt'];
-             switch ($empfcolor [$recipientFunction] ?? '') {
-               case "rt":
-                                 echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["rt"]."; \">";
-                                 echo "X";
-               break;
-               case "gn":
-                 echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["gn"]."; \">";
-                                 echo "X";
-                                break;
-               case "bl":
-                 echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["bl"]."; \">";
-                         echo "X";
-                           break;
-               default:
-                 echo "<td style=\"text-align: center; background-color: rgb(250, 250, 250); \">";
-                 echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
-             }
-             echo "</td>";
+             echo estab_recipient_copy_cell_html (
+               $empfcolor [$recipientFunction] ?? "",
+               $cfg ["vbg"],
+               "<p><img src=\"null.gif\" alt=\"leer\"></p>"
+             );
            }
          }
 

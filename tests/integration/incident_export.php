@@ -193,30 +193,36 @@ function incident_export_integration_insert_fixture(
                 . ' (`einsatz_id`, `01_medium`, `01_datum`, `01_zeichen`,'
                 . ' `04_richtung`, `04_nummer`, `05_gegenstelle`,'
                 . ' `06_befweg`, `09_vorrangstufe`, `10_anschrift`,'
-                . ' `12_anhang`, `12_inhalt`, `12_abfzeit`,'
+                . ' `11_rufnummer`, `12_anhang`, `12_betreff`,'
+                . ' `12_inhalt`, `12_abfzeit`,'
                 . ' `13_abseinheit`, `14_zeichen`, `14_funktion`,'
                 . ' `16_empf`, `17_vermerke`, `x00_status`,'
                 . ' `x01_abschluss`, `x04_druck`)'
                 . " VALUES (?, 'Fu', NOW(), ?, 'E', ?, ?, ?, 'eee', ?, ?, ?,"
-                . " NOW(), ?, ?, 'A/W', 'S2_rt,ALT_1_gn,', ?, 8, 't', 't')"
+                . " ?, ?, NOW(), ?, ?, 'A/W', 'S2_rt,ALT_1_gn,', ?,"
+                . " 8, 't', 't')"
         );
         try {
             $remote = 'Leitstelle ' . $marker;
             $route = 'Funk ' . $marker;
             $address = 'Einsatzleitung ' . $marker;
+            $phone = '0711-' . $marker;
             $attachmentReference = $attachmentName . ';';
+            $subject = 'Lagebetreff ' . $marker;
             $content = 'Nachrichteninhalt ' . $marker;
             $sender = 'Absender ' . $marker;
             $note = 'Vermerk ' . $marker;
             $statement->bind_param(
-                'isissssssss',
+                'isissssssssss',
                 $incidentId,
                 $operatorCode,
                 $messageNumber,
                 $remote,
                 $route,
                 $address,
+                $phone,
                 $attachmentReference,
+                $subject,
                 $content,
                 $sender,
                 $operatorCode,
@@ -234,8 +240,9 @@ function incident_export_integration_insert_fixture(
                 . ' `03_zeichen`, `04_richtung`, `04_nummer`,'
                 . ' `05_gegenstelle`, `06_befweg`, `06_befwegausw`,'
                 . ' `07_durchspruch`, `08_befhinweis`, `08_befhinwausw`,'
-                . ' `09_vorrangstufe`, `10_anschrift`, `11_gesprnotiz`,'
-                . ' `12_anhang`, `12_inhalt`, `12_abfzeit`,'
+                . ' `09_vorrangstufe`, `10_anschrift`, `11_rufnummer`,'
+                . ' `11_gesprnotiz`, `12_anhang`, `12_betreff`,'
+                . ' `12_inhalt`, `12_abfzeit`,'
                 . ' `13_abseinheit`, `14_zeichen`, `14_funktion`,'
                 . ' `15_quitdatum`, `15_quitzeichen`, `16_empf`,'
                 . ' `17_vermerke`, `x00_status`, `x01_abschluss`,'
@@ -668,6 +675,10 @@ try {
     $assert(
         (int) ($bundle['messages'][0]['00_lfd'] ?? 0)
             === $selectedMessageId
+            && ($bundle['messages'][0]['11_rufnummer'] ?? null)
+                === '0711-' . $selectedMarker
+            && ($bundle['messages'][0]['12_betreff'] ?? null)
+                === 'Lagebetreff ' . $selectedMarker
             && ($bundle['messages'][0]['12_inhalt'] ?? null)
                 === 'Nachrichteninhalt ' . $selectedMarker
             && !str_contains(
@@ -785,6 +796,11 @@ try {
             && str_contains(
                 $pageContent,
                 'Nachrichteninhalt ' . $selectedMarker
+            )
+            && str_contains($pageContent, '0711-' . $selectedMarker)
+            && str_contains(
+                $pageContent,
+                'Lagebetreff ' . $selectedMarker
             )
             && str_contains($pageContent, 'EINGANG')
             && str_contains($pageContent, 'AUSGANG')

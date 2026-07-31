@@ -552,6 +552,14 @@ $assert(estab_workflow_route_allowed(
     $staff,
     'POST',
     [
+        'task' => 'Stab_schreiben',
+        '11_gesprnotiz' => 'on',
+    ]
+), 'new staff message can no longer start a conversation note');
+$assert(estab_workflow_route_allowed(
+    $staff,
+    'POST',
+    [
         'task' => 'Stab_gesprnoti',
         '01_zeichen' => 'staff1',
         '14_zeichen' => 'staff1',
@@ -612,11 +620,71 @@ $assert(!estab_workflow_route_allowed(
         '15_quitzeichen' => 'forged',
     ]
 ), 'forged Sichter mark accepted');
+$assert(!estab_workflow_route_allowed(
+    $viewer,
+    'POST',
+    [
+        'task' => 'Stab_sichten',
+        '00_lfd' => '1',
+        '15_quitdatum' => '0101',
+    ]
+), 'browser-selected Sichter completion time accepted');
+$assert(!estab_workflow_route_allowed(
+    $staff,
+    'POST',
+    [
+        'task' => 'Stab_korrigieren',
+        '00_lfd' => '1',
+        '17_vermerke' => 'Browserseitig erfundener Korrekturvermerk',
+    ]
+), 'author correction accepted a forged Sichter return reason');
+foreach (['on', 'f'] as $forgedConversationState) {
+    $assert(!estab_workflow_route_allowed(
+        $staff,
+        'POST',
+        [
+            'task' => 'Stab_korrigieren',
+            '00_lfd' => '1',
+            '11_gesprnotiz' => $forgedConversationState,
+        ]
+    ), 'author correction accepted an overposted conversation-note state');
+}
 
 $distributionMatrix = [
     2 => [1 => ['fkt' => 'S1']],
     3 => [2 => ['fkt' => 'POL']],
 ];
+$matrixRevision = estab_workflow_recipient_matrix_revision(
+    $distributionMatrix,
+    'S2'
+);
+$assert(
+    preg_match('/\A[a-f0-9]{64}\z/D', $matrixRevision) === 1,
+    'recipient matrix revision is not a deterministic SHA-256 value'
+);
+estab_workflow_require_recipient_matrix_revision(
+    ['recipient_matrix_revision' => $matrixRevision],
+    $distributionMatrix,
+    'S2'
+);
+foreach ([
+    [],
+    ['recipient_matrix_revision' => str_repeat('0', 64)],
+    ['recipient_matrix_revision' => $matrixRevision],
+] as $revisionRequest) {
+    $mutatedMatrix = $distributionMatrix;
+    $mutatedMatrix[2][1]['fkt'] = 'AB_C';
+    try {
+        estab_workflow_require_recipient_matrix_revision(
+            $revisionRequest,
+            $mutatedMatrix,
+            'S2'
+        );
+        $assert(false, 'missing, forged or stale recipient matrix accepted');
+    } catch (InvalidArgumentException) {
+        $assert(true, 'missing, forged or stale recipient matrix rejected');
+    }
+}
 $assert(
     estab_workflow_distribution_tokens(
         [
@@ -659,7 +727,7 @@ $assert(
         [
             'task' => 'Stab_gesprnoti',
             '16_21' => '16_21_bl',
-            '16_gncopy' => '16_32_gn',
+            '16_gncopy' => '',
             '16_empf' => '',
             '16_empf_sonst_21' => '',
         ]
@@ -674,6 +742,17 @@ $assert(
             ]
         ),
     'exact matrix distribution controls were rejected'
+);
+$assert(
+    !estab_workflow_route_allowed(
+        $staff,
+        'POST',
+        [
+            'task' => 'Stab_gesprnoti',
+            '16_gncopy' => '16_32_gn',
+        ]
+    ),
+    'conversation note accepted a second browser-selected green copy'
 );
 $assert(estab_workflow_route_allowed($telecommunications, 'POST', ['fm' => 'meldung', '00_lfd' => '1']), 'A/W route denied');
 $assert(estab_workflow_route_allowed($telecommunications, 'POST', ['reset_record' => '1']), 'A/W reset denied');

@@ -74,6 +74,7 @@ Derzeit sind folgende explizite Migrationen vorhanden:
 | `docker/db/migrations/95-attachment-ingest-integrity.sql` | markiert beim Upgrade vorhandene Anhänge ausdrücklich als nicht rückwirkend belegbaren Legacy-Bestand und verlangt für jeden danach finalisierten Anhang einen unveränderlichen SHA-256-/Größen-/Serverzeit-Nachweis; Trigger verhindern neue Legacy-Markierungen, Herabstufung und nachträgliche Beweisänderung |
 | `docker/db/migrations/96-etb-duty-function.sql` | führt die eigenständig auswählbare ETB-Dienstfunktion ein, ordnet die Fähigkeit `EINSATZTAGEBUCH` sowohl S2 als auch ETB über den zusammengesetzten Schlüssel `(funktion, faehigkeit)` zu und belässt Rotkopie sowie `LAGE_DOKUMENTATION` ausschließlich bei S2 |
 | `docker/db/migrations/97-incident-command-post-name.sql` | ergänzt den einsatzbezogenen, nullable Führungsstellennamen mit eindeutiger Eigentumsmarkierung; vorhandene Einsätze bleiben absichtlich `NULL`, weil Einsatzname, Organisation und Einsatzleitung keine belegbaren historischen Ersatzwerte sind |
+| `docker/db/migrations/98-official-message-form-fields.sql` | ergänzt die amtlichen, getrennt persistierten Nachrichtenvordruckfelder `11_rufnummer` und `12_betreff`; Bestandsnachrichten behalten alle vorhandenen Werte und erhalten für beide neuen Angaben ausschließlich den leeren Standardwert |
 
 Migration 95 klassifiziert vorhandene Zeilen bereits beim Hinzufügen der
 Spalte mit dem einmaligen Anfangswert `integrity_required=0` und stellt danach
@@ -109,8 +110,8 @@ eigenen Zwischenstände. Gemischte Katalogdaten, ein abweichender
 Primärschlüssel oder fremde Indizes blockieren vor der nächsten Änderung und
 bleiben zur Untersuchung erhalten. `verify.sql` und die Laufzeit-Readiness
 verlangen danach exakt sieben Katalogzeilen, das vollständige neue ENUM,
-ausschließlich den zweispaltigen Primärschlüssel und alle zwölf angewendeten
-Migrationen einschließlich Version 97.
+ausschließlich den zweispaltigen Primärschlüssel und alle dreizehn
+angewendeten Migrationen einschließlich Version 98.
 
 Migration 97 fügt `nv_einsaetze.fuehrungsstellenname` als
 `VARCHAR(128) NULL` unmittelbar hinter `organisation` und
@@ -140,6 +141,16 @@ formal abgeschlossener Einsatz bleibt unverändert. Der dauerhafte Marker
 bleibt auch nach dem Löschen einzelner Fachdaten gesetzt. Historische Exporte
 bleiben auch ohne Nachtrag möglich; die menschenlesbare PDF-Ausgabe
 kennzeichnet den Fehlwert ausdrücklich als „historisch nicht erfasst“.
+
+Migration 98 ergänzt `nv_nachrichten.11_rufnummer` als
+`VARCHAR(128) NOT NULL DEFAULT ''` und `nv_nachrichten.12_betreff` als
+`VARCHAR(255) NOT NULL DEFAULT ''`. Beide Spalten tragen eine eindeutige
+Eigentumsmarkierung. Jede DDL-Phase ist wiederanlauffähig; fehlende Spalten
+werden ergänzt, exakt kanonische eigene Spalten werden akzeptiert und
+gleichnamige fremde Definitionen blockieren den Start. Die Migration führt
+kein Daten-`UPDATE` aus. Dadurch bleiben sämtliche bestehenden
+Nachrichtenwerte unverändert und die neuen Felder sind bei historischen
+Nachrichten eindeutig leer.
 
 Das freigegebene Upgradeverfahren lautet:
 

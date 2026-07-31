@@ -203,15 +203,7 @@ class Listen extends kategorien {
 
 \******************************************************************************/
   function explodereceiver ( $empf) {
-    $fktcopycolor = array ();
-    $receiver = explode (",",$empf);
-    for ($i=0; $i < count( $receiver ); $i++ ) {
-      $hilfeaus = explode ( "_", $receiver [$i] ) ;
-      if (($hilfeaus[0] ?? "") !== "") {
-        $fktcopycolor[$hilfeaus[0]] = $hilfeaus [1] ?? "";
-      }
-    }
-    return $fktcopycolor;
+    return estab_recipient_copy_map ($empf);
   }
 
 
@@ -1015,14 +1007,14 @@ class Listen extends kategorien {
           foreach ($result as $row){
              $hilf = $this->explodereceiver ( $row ["16_empf"] );
              $receivercolor = $hilf [ $_SESSION ['vStab_funktion'] ] ?? ""; // Empfaenger dieser Zeile
-             switch ($receivercolor){
-               case "rt":  $receiverbackground = $cfg ["lbg"] ["rt"];   break;
-               case "gn":  $receiverbackground = $cfg ["lbg"] ["gn"];   break;
-               case "bl":  $receiverbackground = $cfg ["lbg"] ["bl"];   break;
-               case "ge":  $receiverbackground = $cfg ["lbg"] ["ge"];   break;
-               default:    $receiverbackground = $cfg ["lbg"] ["dflt"];
-             }
-             echo "<tr style=\"background-color: ".$receiverbackground."; color:#FFFFFF; font-weight:bold;\">\n";
+             $receiverbackground = estab_recipient_copy_background (
+               $receivercolor,
+               $cfg ["lbg"],
+               $cfg ["lbg"] ["dflt"]
+             );
+             echo "<tr style=\"background: ".
+               estab_message_html ($receiverbackground).
+               "; color:#FFFFFF; font-weight:bold;\">\n";
              // Liegt eine Vorrangstufe vor!!!
              $vorrang = estab_message_priority_requires_attention (
                $row["09_vorrangstufe"]
@@ -1361,24 +1353,11 @@ include ("../4fcfg/fkt_rolle.inc.php");
              for ( $i=1; $i<= count ($conf_empf); $i++ ) {
                if ( ( $conf_empf [$i]["fkt"] != "Si" ) and ( $conf_empf [$i]["fkt"] != "A/W" ) ) {
                  $recipientFunction = $conf_empf [$i]['fkt'];
-                 switch ($empfcolor [$recipientFunction] ?? '') {
-                  case "rt":
-                   echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["rt"]."; \">";
-                   echo "X";
-                  break;
-                  case "gn":
-                   echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["gn"]."; \">";
-                   echo "X";
-                  break;
-                  case "bl":
-                   echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["bl"]."; \">";
-                   echo "X";
-                  break;
-                  default:
-                   echo "<td style=\"text-align: center; background-color: rgb(250, 250, 250); \">";
-                   echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
-                 }
-                 echo "</td>";
+                 echo estab_recipient_copy_cell_html (
+                   $empfcolor [$recipientFunction] ?? "",
+                   $cfg ["vbg"],
+                   "<p><img src=\"null.gif\" alt=\"leer\"></p>"
+                 );
                }
              }
 
@@ -1507,24 +1486,11 @@ include ("../4fcfg/fkt_rolle.inc.php");
              for ( $i=1; $i<= count ($conf_empf); $i++ ) {
                if ( ( $conf_empf [$i]["fkt"] != "Si" ) and ( $conf_empf [$i]["fkt"] != "A/W" ) ) {
                  $recipientFunction = $conf_empf [$i]['fkt'];
-                 switch ($empfcolor [$recipientFunction] ?? '') {
-                  case "rt":
-                   echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["rt"]."; \">";
-                   echo "X";
-                  break;
-                  case "gn":
-                   echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["gn"]."; \">";
-                   echo "X";
-                  break;
-                  case "bl":
-                   echo "<td style=\"text-align: center; background-color: ".$cfg["vbg"]["bl"]."; \">";
-                   echo "X";
-                  break;
-                  default:
-                   echo "<td style=\"text-align: center; background-color: rgb(250, 250, 250); \">";
-                   echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
-                 }
-                 echo "</td>";
+                 echo estab_recipient_copy_cell_html (
+                   $empfcolor [$recipientFunction] ?? "",
+                   $cfg ["vbg"],
+                   "<p><img src=\"null.gif\" alt=\"leer\"></p>"
+                 );
                }
              }
 

@@ -420,61 +420,198 @@ function check_save_user (array $loginData, string &$loginError) {
 } // function save_user
 
 /**
- * Rebuild the LdF incoming form from the still locked database row.
+ * Merge unsaved input into an authoritative message row for one exact task.
  *
- * Only the fields which LdF is allowed to edit survive from the request.
- * Every other visible value, especially the A/W receipt evidence, comes from
- * the active-incident record again after validation or transaction failure.
+ * The database row is always the base. The request may only contribute fields
+ * which the official form makes editable in this workflow step. Read-only
+ * timestamps, marks, routing, review notes and distribution evidence therefore
+ * cannot disappear or be forged on a validation/conflict response.
  */
+function estab_rehydrate_authoritative_message_form (
+  array $authoritative,
+  array $submitted,
+  string $task,
+  array $serverValues = array ()
+): array {
+  $editableFields = match ($task) {
+    "Stab_korrigieren" => array (
+      "07_durchspruch",
+      "08_befhinweis",
+      "08_befhinwausw",
+      "09_vorrangstufe",
+      "10_anschrift",
+      "11_rufnummer",
+      "12_anhang",
+      "12_betreff",
+      "12_inhalt",
+      "12_abfzeit",
+      "estab_route_error",
+    ),
+    "LdF-Eingang" => array (
+      "01_medium",
+      "02_zeit",
+      "13_abseinheit",
+      "incoming_transport_confirmed",
+      "incoming_transport_correction_reason",
+      "estab_route_error",
+    ),
+    "LdF-Ausgang" => array (
+      "02_zeit",
+      "05_gegenstelle",
+      "fernmeldeplan_eintrag_id",
+      "estab_route_error",
+    ),
+    "FM-Ausgang" => array (
+      "03_datum",
+      "transportweg_bestaetigt",
+      "transport_rueckgabegrund",
+      "estab_route_error",
+    ),
+    default => throw new InvalidArgumentException (
+      "Unbekannter Workflow für die Formularwiederherstellung"
+    ),
+  };
+
+  $editable = array ();
+  foreach ($editableFields as $field) {
+    $value = $submitted [$field] ?? "";
+    $editable [$field] = is_string ($value) ? $value : "";
+  }
+
+  $rehydrated = array_replace (
+    $authoritative,
+    $editable,
+    $serverValues
+  );
+  $rehydrated ["00_lfd"] = $authoritative ["00_lfd"] ?? "";
+  $rehydrated ["task"] = $task;
+
+  return $rehydrated;
+}
+
+/** Rebuild an exact LdF/A-W form from its still locked database row. */
+function estab_rehydrate_locked_operator_form (
+  mysqli $connection,
+  string $table,
+  string $operatorCode,
+  string $task,
+  array $submitted
+): ?array {
+  [$direction, $status, $serverValues] = match ($task) {
+    "LdF-Eingang" => array (
+      "E",
+      1,
+      array ("02_zeichen" => $operatorCode),
+    ),
+    "LdF-Ausgang" => array (
+      "A",
+      1,
+      array ("02_zeichen" => $operatorCode),
+    ),
+    "FM-Ausgang" => array (
+      "A",
+      2,
+      array ("03_zeichen" => $operatorCode),
+    ),
+    default => throw new InvalidArgumentException (
+      "Unbekannte gesperrte Nachrichtenstufe"
+    ),
+  };
+  $locked = estab_message_fetch_locked_operator_stage (
+    $connection,
+    $table,
+    $submitted ["00_lfd"] ?? null,
+    $operatorCode,
+    $direction,
+    $status
+  );
+  if (!is_array ($locked)) {
+    return null;
+  }
+
+  $rehydrated = estab_rehydrate_authoritative_message_form (
+    $locked,
+    $submitted,
+    $task,
+    $serverValues
+  );
+  if ($task === "LdF-Eingang") {
+    $rehydrated ["incoming_transport_original_medium"] =
+      (string) ($locked ["01_medium"] ?? "");
+  }
+
+  return $rehydrated;
+}
+
+/** Rebuild the LdF incoming form from the still locked database row. */
 function estab_rehydrate_ldf_incoming_form (
   mysqli $connection,
   string $table,
   string $operatorCode,
   array $submitted
 ): ?array {
-  $locked = estab_message_fetch_locked_operator_stage (
+  return estab_rehydrate_locked_operator_form (
     $connection,
     $table,
-    $submitted ["00_lfd"] ?? null,
     $operatorCode,
-    "E",
-    1
+    "LdF-Eingang",
+    $submitted
   );
-  if (!is_array ($locked)) {
+}
+
+/** Rebuild an authorised returned outgoing form from the active incident. */
+function estab_rehydrate_staff_correction_form (
+  mysqli $connection,
+  string $table,
+  array $actor,
+  string $commandPostName,
+  array $submitted
+): ?array {
+  $message = estab_message_fetch_by_id (
+    $connection,
+    $table,
+    $submitted ["00_lfd"] ?? null
+  );
+  if (
+    !is_array ($message)
+    || !estab_message_object_allowed (
+      $actor,
+      "staff-correction",
+      $message
+    )
+    || (string) ($message ["x02_sperre"] ?? "") !== "f"
+    || (string) ($message ["x03_sperruser"] ?? "") !== ""
+  ) {
     return null;
   }
 
-  $editable = array ();
-  foreach (array (
-    "01_medium",
-    "02_zeit",
-    "13_abseinheit",
-    "incoming_transport_confirmed",
-    "incoming_transport_correction_reason",
-    "estab_route_error",
-  ) as $field) {
-    $value = $submitted [$field] ?? "";
-    $editable [$field] = is_string ($value) ? $value : "";
-  }
-
-  $rehydrated = array_replace ($locked, $editable);
-  $rehydrated ["00_lfd"] = $locked ["00_lfd"];
-  $rehydrated ["task"] = "LdF-Eingang";
-  $rehydrated ["02_zeichen"] = $operatorCode;
-  $rehydrated ["incoming_transport_original_medium"] =
-    (string) ($locked ["01_medium"] ?? "");
-
-  return $rehydrated;
+  return estab_rehydrate_authoritative_message_form (
+    $message,
+    $submitted,
+    "Stab_korrigieren",
+    array (
+      "11_gesprnotiz" => "f",
+      "13_abseinheit" => $commandPostName,
+      "14_zeichen" => (string) ($actor ["kuerzel"] ?? ""),
+      "14_funktion" => (string) ($actor ["funktion"] ?? ""),
+    )
+  );
 }
 
-/** Render a fail-closed conflict when an LdF stage or lock was lost. */
-function estab_render_ldf_stage_conflict (): never {
+/** Render a fail-closed conflict when an editable message stage was lost. */
+function estab_render_message_stage_conflict (string $stage): never {
   http_response_code (409);
   echo "<div role=\"alert\" class=\"estab-message-transport-conflict\">";
   echo "<h2>Nachricht wurde zwischenzeitlich geändert</h2>";
-  echo "<p>Die LdF-Sperre oder der Bearbeitungsstand ist nicht mehr gültig. ";
+  echo "<p>".estab_auth_html ($stage).
+    " oder der Bearbeitungsstand ist nicht mehr gültig. ";
   echo "Öffnen Sie die Nachricht erneut aus der Warteschlange.</p></div>";
   exit;
+}
+
+/** Render the established LdF conflict wording. */
+function estab_render_ldf_stage_conflict (): never {
+  estab_render_message_stage_conflict ("Die LdF-Sperre");
 }
 
 
@@ -503,10 +640,12 @@ function check_and_save ($data, $activeCommandPostName){
     "incoming_transport_confirmed",
     "incoming_transport_correction_reason",
     "07_durchspruch", "08_befhinweis", "08_befhinwausw",
-    "09_vorrangstufe", "10_anschrift", "11_gesprnotiz",
-    "12_anhang", "12_inhalt", "12_abfzeit", "13_abseinheit",
+    "09_vorrangstufe", "10_anschrift", "11_rufnummer",
+    "11_gesprnotiz", "12_anhang", "12_betreff", "12_inhalt",
+    "12_abfzeit", "13_abseinheit",
     "14_zeichen", "14_funktion", "15_quitdatum",
-    "15_quitzeichen", "16_empf", "16_gncopy", "17_vermerke",
+    "15_quitzeichen", "16_empf", "16_gncopy",
+    "recipient_matrix_revision", "17_vermerke",
     "task"
   ), ""), $browserData);
 
@@ -682,7 +821,7 @@ function check_and_save ($data, $activeCommandPostName){
 
           if (!$result) {
           		$form = new nachrichten4fach ($data, $data["task"], $vali->validate);
-          		exit ;
+            exit ;
         		}
         			/*----------------------------------------------------*/
       }
@@ -703,8 +842,10 @@ function check_and_save ($data, $activeCommandPostName){
           "08_befhinwausw" => $data ["08_befhinwausw"],
           "09_vorrangstufe" => $data ["09_vorrangstufe"],
           "10_anschrift" => $data ["10_anschrift"],
+          "11_rufnummer" => $data ["11_rufnummer"],
           "11_gesprnotiz" => $data ["11_gesprnotiz"],
           "12_anhang" => $data ["12_anhang"],
+          "12_betreff" => $data ["12_betreff"],
           "12_inhalt" => $data ["12_inhalt"],
           "12_abfzeit" => konv_taktime_datetime ($data ["12_abfzeit"]),
           // A/W records the received callsign only. The sender is translated
@@ -787,8 +928,10 @@ function check_and_save ($data, $activeCommandPostName){
            "08_befhinwausw" => $data ["08_befhinwausw"],
            "09_vorrangstufe" => $data ["09_vorrangstufe"],
            "10_anschrift" => $data ["10_anschrift"],
+           "11_rufnummer" => $data ["11_rufnummer"],
            "11_gesprnotiz" => $data ["11_gesprnotiz"],
            "12_anhang" => $data ["12_anhang"],
+           "12_betreff" => $data ["12_betreff"],
            "12_inhalt" => $data ["12_inhalt"],
            "12_abfzeit" => konv_taktime_datetime ($data ["12_abfzeit"]),
            "13_abseinheit" => $data ["13_abseinheit"],
@@ -834,8 +977,20 @@ function check_and_save ($data, $activeCommandPostName){
         $data ["14_zeichen"] = $sessionCode;
         $data ["14_funktion"] = $sessionFunction;
         if (!$result) {
+          $rehydratedCorrection = estab_rehydrate_staff_correction_form (
+            $messageConnection,
+            (string) $conf_4f_tbl ["nachrichten"],
+            $messageActor,
+            $activeCommandPostName,
+            $data
+          );
+          if (!is_array ($rehydratedCorrection)) {
+            estab_render_message_stage_conflict (
+              "Die Korrekturberechtigung"
+            );
+          }
           $form = new nachrichten4fach (
-            $data,
+            $rehydratedCorrection,
             "Stab_korrigieren",
             $vali->validate
           );
@@ -856,8 +1011,10 @@ function check_and_save ($data, $activeCommandPostName){
           "08_befhinwausw" => $data ["08_befhinwausw"],
           "09_vorrangstufe" => $data ["09_vorrangstufe"],
           "10_anschrift" => $data ["10_anschrift"],
+          "11_rufnummer" => $data ["11_rufnummer"],
           "11_gesprnotiz" => "f",
           "12_anhang" => $data ["12_anhang"],
+          "12_betreff" => $data ["12_betreff"],
           "12_inhalt" => $data ["12_inhalt"],
           "12_abfzeit" => konv_taktime_datetime ($data ["12_abfzeit"]),
           "13_abseinheit" => $activeCommandPostName,
@@ -880,7 +1037,6 @@ function check_and_save ($data, $activeCommandPostName){
             "author_code" => $sessionCode,
             "author_function" => $sessionFunction,
             "content_sha256" => hash ("sha256", $data ["12_inhalt"]),
-            "correction_note" => $data ["17_vermerke"],
           ),
           ),
           $conf_4f_tbl ["anhang"],
@@ -889,8 +1045,20 @@ function check_and_save ($data, $activeCommandPostName){
       } catch (EstabIncidentConflictException $exception) {
         http_response_code (409);
         $data ["estab_route_error"] = $exception->getMessage ();
+        $rehydratedCorrection = estab_rehydrate_staff_correction_form (
+          $messageConnection,
+          (string) $conf_4f_tbl ["nachrichten"],
+          $messageActor,
+          $activeCommandPostName,
+          $data
+        );
+        if (!is_array ($rehydratedCorrection)) {
+          estab_render_message_stage_conflict (
+            "Die Korrekturberechtigung"
+          );
+        }
         $form = new nachrichten4fach (
-          $data,
+          $rehydratedCorrection,
           "Stab_korrigieren",
           array ()
         );
@@ -898,16 +1066,28 @@ function check_and_save ($data, $activeCommandPostName){
       } catch (InvalidArgumentException $exception) {
         http_response_code (422);
         $data ["estab_route_error"] = $exception->getMessage ();
+        $rehydratedCorrection = estab_rehydrate_staff_correction_form (
+          $messageConnection,
+          (string) $conf_4f_tbl ["nachrichten"],
+          $messageActor,
+          $activeCommandPostName,
+          $data
+        );
+        if (!is_array ($rehydratedCorrection)) {
+          estab_render_message_stage_conflict (
+            "Die Korrekturberechtigung"
+          );
+        }
         $form = new nachrichten4fach (
-          $data,
+          $rehydratedCorrection,
           "Stab_korrigieren",
           array ()
         );
         exit;
       }
       if (!$correctionSaved) {
-        throw new RuntimeException (
-          "Zurückgegebene Nachricht wurde zwischenzeitlich geändert"
+        estab_render_message_stage_conflict (
+          "Die Korrekturberechtigung"
         );
       }
       protokolleintrag (
@@ -928,6 +1108,38 @@ function check_and_save ($data, $activeCommandPostName){
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>Stab_gesprnoti</big><br>\n";}
       if ($data ["01_datum"] == "" )     { $data ["01_datum"]     = date ("Hi") ; }
       if ($data ["12_abfzeit"] == "" )   { $data ["12_abfzeit"]   = date ("Hi") ; }
+
+      try {
+        estab_workflow_require_recipient_matrix_revision (
+          $browserData,
+          $empf_matrix,
+          (string) $redcopy2
+        );
+      } catch (InvalidArgumentException $exception) {
+        estab_render_message_stage_conflict ("Die Empfängermatrix");
+      }
+      if (trim ((string) ($browserData ["16_gncopy"] ?? "")) !== "") {
+        // The sole green conversation-note copy belongs to the author and is
+        // derived below from the authenticated function, never from a radio
+        // choice that could create a second green copy.
+        estab_workflow_forbid ();
+      }
+
+      /*
+       * Preserve the browser's validated coordinate selections before the
+       * legacy validator can re-render the form. Recipient function names
+       * remain server-owned because the coordinates are resolved exclusively
+       * through the authoritative matrix.
+       */
+      try {
+        $data ["16_empf"] = estab_workflow_distribution_tokens (
+          $browserData,
+          $empf_matrix,
+          array ($redcopy2."_rt", $sessionFunction."_gn")
+        );
+      } catch (InvalidArgumentException $exception) {
+        estab_workflow_forbid ();
+      }
 
       if (validate){
          /*----------------------------------------------------*/
@@ -994,8 +1206,10 @@ function check_and_save ($data, $activeCommandPostName){
            "08_befhinwausw" => $data ["08_befhinwausw"],
            "09_vorrangstufe" => $data ["09_vorrangstufe"],
            "10_anschrift" => $data ["10_anschrift"],
+           "11_rufnummer" => $data ["11_rufnummer"],
            "11_gesprnotiz" => $data ["11_gesprnotiz"],
            "12_anhang" => $data ["12_anhang"],
+           "12_betreff" => $data ["12_betreff"],
            "12_inhalt" => $data ["12_inhalt"],
            "12_abfzeit" => konv_taktime_datetime ($data ["12_abfzeit"]),
            "13_abseinheit" => $data ["13_abseinheit"],
@@ -1033,7 +1247,10 @@ function check_and_save ($data, $activeCommandPostName){
 
     case "LdF-Eingang":
     case "LdF-Ausgang":
-      $ldfDirection = $data ["task"] === "LdF-Eingang" ? "E" : "A";
+      $ldfTask = $data ["task"] === "LdF-Eingang"
+        ? "LdF-Eingang"
+        : "LdF-Ausgang";
+      $ldfDirection = $ldfTask === "LdF-Eingang" ? "E" : "A";
       if ($ldfDirection === "E") {
         // Receipt time and A/W mark are immutable evidence. Discard forged
         // overposting before the legacy validator can parse or reflect it;
@@ -1054,22 +1271,20 @@ function check_and_save ($data, $activeCommandPostName){
         $data = $vali->i_data;
         if (!$result) {
           http_response_code (422);
-          $data ["02_zeichen"] = (string) $_SESSION ["vStab_kuerzel"];
-          if ($ldfDirection === "E") {
-            $rehydratedIncoming = estab_rehydrate_ldf_incoming_form (
-              $messageConnection,
-              (string) $conf_4f_tbl ["nachrichten"],
-              (string) $_SESSION ["vStab_kuerzel"],
-              $data
-            );
-            if (!is_array ($rehydratedIncoming)) {
-              estab_render_ldf_stage_conflict ();
-            }
-            $data = $rehydratedIncoming;
+          $rehydratedLead = estab_rehydrate_locked_operator_form (
+            $messageConnection,
+            (string) $conf_4f_tbl ["nachrichten"],
+            (string) $_SESSION ["vStab_kuerzel"],
+            $ldfTask,
+            $data
+          );
+          if (!is_array ($rehydratedLead)) {
+            estab_render_ldf_stage_conflict ();
           }
+          $data = $rehydratedLead;
           $form = new nachrichten4fach (
             $data,
-            $data ["task"],
+            $ldfTask,
             $vali->validate
           );
           exit;
@@ -1150,29 +1365,24 @@ function check_and_save ($data, $activeCommandPostName){
       } catch (EstabDvInputException|EstabDvConflictException $exception) {
         http_response_code (409);
         $data ["estab_route_error"] = $exception->getMessage ();
-        if ($ldfDirection === "E") {
-          $rehydratedIncoming = estab_rehydrate_ldf_incoming_form (
-            $messageConnection,
-            (string) $conf_4f_tbl ["nachrichten"],
-            (string) $_SESSION ["vStab_kuerzel"],
-            $data
-          );
-          if (!is_array ($rehydratedIncoming)) {
-            estab_render_ldf_stage_conflict ();
-          }
-          $data = $rehydratedIncoming;
-          $form = new nachrichten4fach (
-            $data,
-            "LdF-Eingang",
-            $vali->validate
-          );
-          exit;
+        $rehydratedLead = estab_rehydrate_locked_operator_form (
+          $messageConnection,
+          (string) $conf_4f_tbl ["nachrichten"],
+          (string) $_SESSION ["vStab_kuerzel"],
+          $ldfTask,
+          $data
+        );
+        if (!is_array ($rehydratedLead)) {
+          estab_render_ldf_stage_conflict ();
         }
+        $data = $rehydratedLead;
         $routeValidation = $vali->validate;
-        $routeValidation ["fernmeldeplan_eintrag_id"] = false;
+        if ($ldfDirection === "A") {
+          $routeValidation ["fernmeldeplan_eintrag_id"] = false;
+        }
         $form = new nachrichten4fach (
           $data,
-          "LdF-Ausgang",
+          $ldfTask,
           $routeValidation
         );
         exit;
@@ -1238,15 +1448,25 @@ function check_and_save ($data, $activeCommandPostName){
             $exception instanceof EstabDvInputException ? 422 : 409
           );
           $data ["estab_route_error"] = $exception->getMessage ();
+          $rehydratedTransport = estab_rehydrate_locked_operator_form (
+            $messageConnection,
+            (string) $conf_4f_tbl ["nachrichten"],
+            (string) $_SESSION ["vStab_kuerzel"],
+            "FM-Ausgang",
+            $data
+          );
+          if (!is_array ($rehydratedTransport)) {
+            estab_render_message_stage_conflict ("Die A/W-Sperre");
+          }
           $form = new nachrichten4fach (
-            $data,
+            $rehydratedTransport,
             "FM-Ausgang",
             array ()
           );
           exit;
         }
         if (!$returnedToLdf) {
-          throw new RuntimeException ("Message lock or status changed");
+          estab_render_message_stage_conflict ("Die A/W-Sperre");
         }
         protokolleintrag (
           "FM-Ausgang-Rückgabe",
@@ -1279,8 +1499,22 @@ function check_and_save ($data, $activeCommandPostName){
 */
 			$data = $vali->i_data ;
          if (!$result) {
-				$form = new nachrichten4fach ($data, $data["task"], $vali->validate);
-           	exit ;
+            $rehydratedTransport = estab_rehydrate_locked_operator_form (
+              $messageConnection,
+              (string) $conf_4f_tbl ["nachrichten"],
+              (string) $_SESSION ["vStab_kuerzel"],
+              "FM-Ausgang",
+              $data
+            );
+            if (!is_array ($rehydratedTransport)) {
+              estab_render_message_stage_conflict ("Die A/W-Sperre");
+            }
+				$form = new nachrichten4fach (
+              $rehydratedTransport,
+              "FM-Ausgang",
+              $vali->validate
+            );
+            exit;
          }
       }
        try {
@@ -1324,15 +1558,25 @@ function check_and_save ($data, $activeCommandPostName){
        } catch (EstabDvInputException|EstabDvConflictException $exception) {
          http_response_code (409);
          $data ["estab_route_error"] = $exception->getMessage ();
+         $rehydratedTransport = estab_rehydrate_locked_operator_form (
+           $messageConnection,
+           (string) $conf_4f_tbl ["nachrichten"],
+           (string) $_SESSION ["vStab_kuerzel"],
+           "FM-Ausgang",
+           $data
+         );
+         if (!is_array ($rehydratedTransport)) {
+           estab_render_message_stage_conflict ("Die A/W-Sperre");
+         }
          $form = new nachrichten4fach (
-           $data,
+           $rehydratedTransport,
            "FM-Ausgang",
            $vali->validate
          );
          exit;
        }
        if (!$transportSaved) {
-         throw new RuntimeException ("Message lock or status changed");
+         estab_render_message_stage_conflict ("Die A/W-Sperre");
        }
        protokolleintrag ("FM-Ausgang", "message_id=".estab_message_positive_id ($data ["00_lfd"]));
    break;
@@ -1377,7 +1621,8 @@ function check_and_save ($data, $activeCommandPostName){
            "01_medium", "01_datum", "01_zeichen", "02_zeit", "02_zeichen",
            "03_datum", "03_zeichen", "05_gegenstelle", "06_befweg",
            "06_befwegausw", "07_durchspruch", "08_befhinweis",
-           "08_befhinwausw", "10_anschrift", "12_inhalt", "12_abfzeit",
+           "08_befhinwausw", "10_anschrift", "11_rufnummer",
+           "12_betreff", "12_inhalt", "12_abfzeit",
            "13_abseinheit", "14_zeichen", "14_funktion", "15_quitdatum",
            "15_quitzeichen", "17_vermerke"
          ), true);
@@ -1394,9 +1639,9 @@ function check_and_save ($data, $activeCommandPostName){
          exit;
        }
 
-       if ($data ["15_quitdatum"] == "") {
-         $data ["15_quitdatum"] = date ("Hi");
-       }
+       // The sighting time is evidence of the successful server-side
+       // transition. Browser values are rejected by the workflow gate.
+       $data ["15_quitdatum"] = date ("Hi");
        $reviewFields = array (
          "15_quitdatum" => convtodatetime (
            date ("dm"),
@@ -1408,6 +1653,15 @@ function check_and_save ($data, $activeCommandPostName){
          "x03_sperruser" => "",
        );
        if ($reviewDirection === "E") {
+         try {
+           estab_workflow_require_recipient_matrix_revision (
+             $browserData,
+             $empf_matrix,
+             (string) $redcopy2
+           );
+         } catch (InvalidArgumentException $exception) {
+           estab_render_message_stage_conflict ("Die Empfängermatrix");
+         }
          // The Sichter's substantive incoming analysis chooses the recipients.
          $data ["16_empf"] = estab_workflow_distribution_tokens (
            $browserData,
@@ -1811,6 +2065,9 @@ function check_and_save ($data, $activeCommandPostName){
     }
     if (!estab_datetime_is_unset ($data["02_zeit"])){
       $data["02_zeit"]   = konv_datetime_taktime ($data["02_zeit"]);
+    }
+    if (!estab_datetime_is_unset ($data["03_datum"])){
+      $data["03_datum"]   = konv_datetime_taktime ($data["03_datum"]);
     }
     if (!estab_datetime_is_unset ($data["12_abfzeit"])){
       $data["12_abfzeit"] = konv_datetime_taktime ($data["12_abfzeit"]);

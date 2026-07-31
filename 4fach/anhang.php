@@ -37,7 +37,39 @@ function estab_attachment_current_identity (): array {
   return $identity;
 }
 
+function estab_attachment_release_message_flow_reservation (
+  array $context
+): void {
+  require ("../4fcfg/dbcfg.inc.php");
+  require ("../4fcfg/e_cfg.inc.php");
+  $connection = null;
+  try {
+    $connection = estab_attachment_connection ($conf_4f_db);
+    estab_attachment_release_origin_reservation (
+      $connection,
+      $conf_4f_tbl ["anhang"],
+      session_id (),
+      $context
+    );
+  } catch (Throwable $exception) {
+    error_log (
+      "eStab attachment flow cleanup failed: ".$exception->getMessage ()
+    );
+    http_response_code (503);
+    header ("Content-Type: text/plain; charset=UTF-8");
+    header ("Cache-Control: no-store");
+    echo "Der Anhangvorgang konnte nicht sicher abgeschlossen werden. ".
+         "Bitte versuchen Sie es erneut.";
+    exit;
+  } finally {
+    if ($connection instanceof mysqli) {
+      estab_attachment_close ($connection);
+    }
+  }
+}
+
 class fileupload extends file_upload {
+  var $message_context = null;
   // fs - fileselectform Dateiauswahl
   var $fs_savename;     // Einlagerungsdateiname  HSxxxxx
   var $fs_uplname;      // Uploaddateiname
@@ -53,6 +85,13 @@ class fileupload extends file_upload {
   var $ff_kuerzel  ;    // Kuerzel des Fm
 
   var $filenamezero = 4; // Anzahl der Zahlen
+
+  function reservation_owner_id () {
+    return estab_attachment_reservation_owner_id (
+      session_id (),
+      is_array ($this->message_context) ? $this->message_context : null
+    );
+  }
 
   /***************************************************************************\
     Funktion: get_next_filename_from_db ()
@@ -79,7 +118,7 @@ class fileupload extends file_upload {
         $connection,
         $conf_4f_tbl ["anhang"],
         $conf_4f ["hoheit"],
-        session_id (),
+        $this->reservation_owner_id (),
         estab_attachment_current_identity (),
         $this->filenamezero
       );
@@ -101,7 +140,11 @@ class fileupload extends file_upload {
     require ("../4fcfg/e_cfg.inc.php");
     $connection = estab_attachment_connection ($conf_4f_db);
     try {
-      estab_attachment_release_unclaimed ($connection, $tbl, session_id ());
+      estab_attachment_release_unclaimed (
+        $connection,
+        $tbl,
+        $this->reservation_owner_id ()
+      );
     } finally {
       estab_attachment_close ($connection);
     }
@@ -118,7 +161,11 @@ class fileupload extends file_upload {
     require ("../4fcfg/e_cfg.inc.php");
     $connection = estab_attachment_connection ($conf_4f_db);
     try {
-      estab_attachment_release ($connection, $conf_4f_tbl ["anhang"], session_id ());
+      estab_attachment_release (
+        $connection,
+        $conf_4f_tbl ["anhang"],
+        $this->reservation_owner_id ()
+      );
     } finally {
       estab_attachment_close ($connection);
     }
@@ -176,7 +223,12 @@ class fileupload extends file_upload {
     $connection = estab_attachment_connection ($conf_4f_db);
     try {
       if ((string) $change === "4") {
-        estab_attachment_release ($connection, $conf_4f_tbl ["anhang"], session_id (), $filename);
+        estab_attachment_release (
+          $connection,
+          $conf_4f_tbl ["anhang"],
+          $this->reservation_owner_id (),
+          $filename
+        );
         return true;
       }
       if ((string) $change === "8") {
@@ -197,7 +249,7 @@ class fileupload extends file_upload {
         $connection,
         $conf_4f_tbl ["anhang"],
         $filename,
-        session_id (),
+        $this->reservation_owner_id (),
         estab_attachment_current_identity ()
       );
     } finally {
@@ -210,7 +262,12 @@ class fileupload extends file_upload {
     require ("../4fcfg/e_cfg.inc.php");
     $connection = estab_attachment_connection ($conf_4f_db);
     try {
-      estab_attachment_release ($connection, $conf_4f_tbl ["anhang"], session_id (), $filename);
+      estab_attachment_release (
+        $connection,
+        $conf_4f_tbl ["anhang"],
+        $this->reservation_owner_id (),
+        $filename
+      );
     } finally {
       estab_attachment_close ($connection);
     }
@@ -233,7 +290,7 @@ class fileupload extends file_upload {
       $saved = estab_attachment_finalize (
         $connection,
         $conf_4f_tbl ["anhang"],
-        session_id (),
+        $this->reservation_owner_id (),
         $metadata,
         estab_attachment_current_identity ()
       );
@@ -357,7 +414,7 @@ class fileupload extends file_upload {
   }
 
 
-  function fileselectform ($predata) {
+  function fileselectform ($predata, $messageContext = null) {
     require ("../4fcfg/config.inc.php");
     $formAction = estab_attachment_html ($_SERVER['PHP_SELF'] ?? "anhang.php");
     $newFilename = estab_attachment_html ($predata["newfilename"] ?? "");
@@ -379,6 +436,13 @@ class fileupload extends file_upload {
          "action=\"".$formAction."\" data-estab-dirty-guard ".
          "data-estab-requires-incident data-estab-attachment-upload>\n";
     echo estab_csrf_field ()."\n";
+    $attachmentFlowToken = is_array ($messageContext)
+      ? ($messageContext ["flow_token"] ?? null)
+      : null;
+    if (is_string ($attachmentFlowToken)) {
+      echo "<input type=\"hidden\" name=\"attachment_flow\" value=\"".
+           estab_attachment_html ($attachmentFlowToken)."\">\n";
+    }
     echo "<fieldset>\n";
     echo "<legend><big>Anhang hochladen</big></legend>\n";
     echo "<table style=\"text-align: left; width: 745px; height: 170px;\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" bgcolor=\"#E0E0E0\">\n";
@@ -474,22 +538,168 @@ if (
 ) {
   estab_navigation_select_duty ($_SERVER);
 }
+$attachmentRequestMethod = strtoupper (
+  (string) ($_SERVER ["REQUEST_METHOD"] ?? "GET")
+);
+$attachmentInternalRequest =
+  isset ($attachmentInternalFlowToken)
+  && is_string ($attachmentInternalFlowToken);
+$attachmentGetActionRequested = false;
+foreach (array ("ah_auswahl_x", "ah_abbrechen_x", "ah_upload_x") as $key) {
+  $attachmentGetActionRequested =
+    $attachmentGetActionRequested || isset ($_GET [$key]);
+}
+if ($attachmentGetActionRequested) {
+  http_response_code (405);
+  header ("Allow: POST");
+  header ("Content-Type: text/plain; charset=UTF-8");
+  header ("Cache-Control: no-store");
+  echo "Diese Anhang-Aktion ist nur per Formular möglich.";
+  exit;
+}
+// Every direct or internally included POST has a CSRF field. Validate it
+// before looking up, replacing or deleting any flow-owned session state.
+if ($attachmentRequestMethod === "POST") {
+  try {
+    estab_csrf_require_post ($_SERVER, $_POST);
+  } catch (RuntimeException $exception) {
+    http_response_code (403);
+    header ("Content-Type: text/plain; charset=UTF-8");
+    header ("Cache-Control: no-store");
+    error_log (
+      "eStab attachment CSRF validation failed: ".
+      $exception->getMessage ()
+    );
+    echo "Die Anhang-Aktion ist ungültig oder abgelaufen.";
+    exit;
+  }
+}
 $attachmentPageConnection = null;
+$attachmentOriginContext = null;
+$attachmentOriginMessage = null;
+$attachmentRequestFlowToken = null;
 try {
+  if (
+    !$attachmentInternalRequest
+    && (
+      isset ($_POST ["anhang_plus_x"])
+      || isset ($_POST ["anhang_plus_y"])
+    )
+  ) {
+    throw new EstabAttachmentContextException (
+      "Der Browser darf keinen internen Anhang-Start markieren."
+    );
+  }
+  if ($attachmentInternalRequest) {
+    if (array_key_exists ("attachment_flow", $_POST)) {
+      throw new EstabAttachmentContextException (
+        "Ein interner Anhang-Start darf keinen Browser-Flow enthalten."
+      );
+    }
+    $attachmentRequestFlowToken =
+      estab_attachment_origin_flow_token ($attachmentInternalFlowToken);
+  } elseif (array_key_exists ("attachment_flow", $_POST)) {
+    $attachmentRequestFlowToken =
+      estab_attachment_origin_flow_token ($_POST ["attachment_flow"]);
+  }
+
   require ("../4fcfg/dbcfg.inc.php");
   require ("../4fcfg/e_cfg.inc.php");
   $attachmentPageConnection = estab_attachment_connection ($conf_4f_db);
   $attachmentPageIncident = estab_incident_require_active (
     $attachmentPageConnection
   );
-  estab_read_require_identity_scope (
+  $attachmentPageIdentity = estab_read_require_identity_scope (
     $attachmentPageConnection,
     (int) $attachmentPageIncident ["active_einsatz_id"],
     $attachmentPageIdentity
   );
+  if (
+    !estab_workflow_is_staff_writer ($attachmentPageIdentity)
+    && !estab_workflow_is_telecommunications ($attachmentPageIdentity)
+  ) {
+    throw new EstabReadPermissionException (
+      "Diese Dienstfunktion darf die Anhangverwaltung nicht öffnen."
+    );
+  }
   $attachmentCommandPostName = estab_incident_command_post_name (
     $attachmentPageIncident
   );
+  $storedAttachmentOrigin = $attachmentRequestFlowToken === null
+    ? null
+    : estab_attachment_origin_context_find (
+      $_SESSION,
+      $attachmentRequestFlowToken
+    );
+  if ($attachmentRequestFlowToken !== null && !is_array ($storedAttachmentOrigin)) {
+    throw new EstabAttachmentContextException (
+      "Für diesen Anhang-Flow fehlt der serverseitige Ursprung."
+    );
+  }
+  if (is_array ($storedAttachmentOrigin)) {
+    $attachmentOriginContext =
+      estab_attachment_origin_context_validate (
+        $storedAttachmentOrigin,
+        $attachmentPageIdentity,
+        (int) $attachmentPageIncident ["active_einsatz_id"],
+        $_POST,
+        !$attachmentInternalRequest
+      );
+    if (
+      ($attachmentOriginContext ["task"] ?? null) ===
+        "Stab_korrigieren"
+    ) {
+      $attachmentOriginMessage =
+        estab_message_fetch_for_incident_by_id (
+          $attachmentPageConnection,
+          $conf_4f_tbl ["nachrichten"],
+          $attachmentOriginContext ["record_id"] ?? null,
+          (int) $attachmentPageIncident ["active_einsatz_id"]
+        );
+      if (
+        !is_array ($attachmentOriginMessage)
+        || !estab_message_object_allowed (
+          $attachmentPageIdentity,
+          "staff-correction",
+          $attachmentOriginMessage
+        )
+        || !estab_read_message_allowed (
+          $attachmentPageIdentity,
+          $attachmentOriginMessage
+        )
+      ) {
+        throw new EstabAttachmentContextException (
+          "Der Korrekturdatensatz ist nicht mehr für diesen ".
+          "Anhangvorgang freigegeben."
+        );
+      }
+    }
+  } elseif (
+    isset ($_POST ["ah_auswahl_x"])
+    || isset ($_POST ["ah_abbrechen_x"])
+    || (
+      array_key_exists ("task", $_POST)
+      && $_POST ["task"] !== ""
+    )
+    || (
+      array_key_exists ("00_lfd", $_POST)
+      && $_POST ["00_lfd"] !== ""
+    )
+  ) {
+    throw new EstabAttachmentContextException (
+      "Für diese Anhang-Anforderung fehlt der serverseitige Ursprung."
+    );
+  }
+} catch (EstabAttachmentContextException $exception) {
+  error_log (
+    "eStab attachment context rejected: ".$exception->getMessage ()
+  );
+  http_response_code (403);
+  header ("Content-Type: text/plain; charset=UTF-8");
+  header ("Cache-Control: no-store");
+  echo "Der Anhangvorgang ist ungültig oder nicht mehr autorisiert. ".
+       "Öffnen Sie den Nachrichtenvordruck erneut.";
+  exit;
 } catch (EstabNoActiveIncidentException) {
   http_response_code (409);
   header ("Content-Type: text/plain; charset=UTF-8");
@@ -500,7 +710,8 @@ try {
   http_response_code (403);
   header ("Content-Type: text/plain; charset=UTF-8");
   header ("Cache-Control: no-store");
-  echo "Wählen Sie zuerst eine persönlich angenommene Dienstfunktion.";
+  echo "Die ausgewählte Dienstfunktion darf die Anhangverwaltung nicht ".
+       "öffnen oder ist nicht mehr aktiv.";
   exit;
 } catch (EstabIncidentConfigurationException) {
   http_response_code (409);
@@ -526,42 +737,8 @@ estab_session_ui_start ($_SESSION);
 
 if (!defined ("debug")) { define ("debug", false); }
 
-$attachmentMessageContext =
-  ($_SESSION ["anhang_message_context"] ?? null) === true;
+$attachmentMessageContext = is_array ($attachmentOriginContext);
 $attachmentContextNotice = "";
-$attachmentMenuActionKeys = array (
-  "ah_auswahl_x",
-  "ah_abbrechen_x",
-  "ah_upload_x",
-);
-$attachmentGetActionRequested = false;
-$attachmentPostActionRequested = false;
-foreach ($attachmentMenuActionKeys as $attachmentMenuActionKey) {
-  $attachmentGetActionRequested =
-    $attachmentGetActionRequested || isset ($_GET [$attachmentMenuActionKey]);
-  $attachmentPostActionRequested =
-    $attachmentPostActionRequested || isset ($_POST [$attachmentMenuActionKey]);
-}
-if ($attachmentGetActionRequested) {
-  http_response_code (405);
-  header ("Allow: POST");
-  header ("Content-Type: text/plain; charset=UTF-8");
-  header ("Cache-Control: no-store");
-  echo "Diese Anhang-Aktion ist nur per Formular möglich.";
-  exit;
-}
-if ($attachmentPostActionRequested) {
-  try {
-    estab_csrf_require_post ($_SERVER, $_POST);
-  } catch (RuntimeException $exception) {
-    http_response_code (403);
-    header ("Content-Type: text/plain; charset=UTF-8");
-    header ("Cache-Control: no-store");
-    error_log ("eStab attachment menu CSRF validation failed: ".$exception->getMessage ());
-    echo "Die Anhang-Aktion ist ungültig oder abgelaufen.";
-    exit;
-  }
-}
 $attachmentSelectionRequested =
   isset ($_POST ["ah_auswahl_x"]) || isset ($_POST ["ah_abbrechen_x"]);
 if ($attachmentSelectionRequested && !$attachmentMessageContext) {
@@ -617,7 +794,7 @@ if ( debug == true ){
   Anhang ausgewaehlt und kann in Vordruck uebernommen werde
 \**********************************************************************/
   if ( $attachmentMessageContext &&
-       ($_SESSION ["vStab_rolle"]== "Stab") and
+       estab_workflow_is_staff_writer ($attachmentPageIdentity) and
        ( (isset ($_POST["ah_auswahl_x"])) OR
          (isset ($_POST["ah_abbrechen_x"]))
        )
@@ -656,18 +833,40 @@ if ( debug == true ){
       $inhalt .= $selectedName." - ".(string) $db_data[1]["comment"].
                  " - ".$anhang_date."\n";
     }
-    $formdata = restore_formdata ();
+    $formdata = restore_formdata (
+      $attachmentOriginContext,
+      $attachmentOriginMessage
+    );
+    $attachmentOriginTask =
+      (string) ($attachmentOriginContext ["task"] ?? "");
+    $formdata ["13_abseinheit"] = $attachmentCommandPostName;
+    $formdata ["14_zeichen"] = $_SESSION ["vStab_kuerzel"];
+    $formdata ["14_funktion"] = $_SESSION ["vStab_funktion"];
+    if ($attachmentOriginTask === "Stab_gesprnoti") {
+      $formdata ["01_zeichen"] = $_SESSION ["vStab_kuerzel"];
+    }
 
     if (isset ($_POST["ah_auswahl_x"])) {
-      $formdata ["12_anhang"]   = $anhang;
+      $formdata ["12_anhang"] =
+        estab_attachment_merge_message_references (
+          $formdata ["12_anhang"] ?? "",
+          $anhang
+        );
       $formdata ["12_inhalt"]  .= $inhalt;
-
-      $formdata ["13_abseinheit"] = $attachmentCommandPostName;
-      $formdata ["14_zeichen"]     = $_SESSION["vStab_kuerzel"];
-      $formdata ["14_funktion"]    = $_SESSION["vStab_funktion"];
     }
-    unset ($_SESSION ["anhang_message_context"], $_SESSION ["anhang_menue"]);
-    $form = new nachrichten4fach ($formdata, "Stab_schreiben", "");
+    estab_attachment_release_message_flow_reservation (
+      $attachmentOriginContext
+    );
+    estab_attachment_origin_context_clear (
+      $_SESSION,
+      $attachmentOriginContext ["flow_token"] ?? null
+    );
+    unset ($_SESSION ["anhang_menue"]);
+    $form = new nachrichten4fach (
+      $formdata,
+      $attachmentOriginTask,
+      ""
+    );
     exit;
 
   }
@@ -679,7 +878,7 @@ if ( debug == true ){
 \**********************************************************************/
     // Anhang ausgewaelt und kann in Vordruck uebernommen werden
   if ( $attachmentMessageContext &&
-       ( ($_SESSION ["vStab_rolle"]== "Fernmelder")  )and
+       estab_workflow_is_telecommunications ($attachmentPageIdentity) and
        ( (isset ($_POST["ah_auswahl_x"])) OR
          (isset ($_POST["ah_abbrechen_x"]))
        )
@@ -717,7 +916,8 @@ if ( debug == true ){
       $inhalt .= $selectedName." - ".(string) $db_data[1]["comment"].
                  " - ".$anhang_date."\n";
     }
-    $formdata = restore_formdata ();
+    $formdata = restore_formdata ($attachmentOriginContext);
+    $formdata ["01_zeichen"] = $_SESSION ["vStab_kuerzel"];
     if ( debug == true ){
       echo "<b>anhang.php 623 restore_formdata</b>";
       echo "<br>\n";
@@ -725,20 +925,34 @@ if ( debug == true ){
     }
 
     if (isset ($_POST["ah_auswahl_x"])) {
-      $formdata ["12_anhang"]   = $anhang;
+      $formdata ["12_anhang"] =
+        estab_attachment_merge_message_references (
+          $formdata ["12_anhang"] ?? "",
+          $anhang
+        );
       $formdata ["12_inhalt"]  .= $inhalt;
-      if (($formdata ["01_zeichen"] ?? "") === "") {
-        $formdata ["01_zeichen"] = $_SESSION ["vStab_kuerzel"];
-      }
       if (($formdata ["10_anschrift"] ?? "") === "") {
         $formdata ["10_anschrift"] = $attachmentCommandPostName;
       }
     }
-    unset ($_SESSION ["anhang_message_context"], $_SESSION ["anhang_menue"]);
+    $attachmentOriginTask =
+      (string) ($attachmentOriginContext ["task"] ?? "");
+    estab_attachment_release_message_flow_reservation (
+      $attachmentOriginContext
+    );
+    estab_attachment_origin_context_clear (
+      $_SESSION,
+      $attachmentOriginContext ["flow_token"] ?? null
+    );
+    unset ($_SESSION ["anhang_menue"]);
     // Returning from attachment selection never changes the signed workflow
     // task and never lets A/W impersonate the mandatory Si review.
     unset ($formdata ["15_quitdatum"], $formdata ["15_quitzeichen"]);
-    $form = new nachrichten4fach ($formdata, "FM-Eingang_Anhang", "");
+    $form = new nachrichten4fach (
+      $formdata,
+      $attachmentOriginTask,
+      ""
+    );
     exit;
   }
 
@@ -857,10 +1071,9 @@ require_once ("./db_operation.php");  // Datenbank operationen
 /**********************************************************************\
    function: anhang_menue
 \**********************************************************************/
-  function anhang_menue ($notice = ""){
+  function anhang_menue ($notice = "", $messageContext = null){
     include ("../4fcfg/config.inc.php");
-    $hasMessageContext =
-      ($_SESSION ["anhang_message_context"] ?? null) === true;
+    $hasMessageContext = is_array ($messageContext);
     if (is_string ($notice) && $notice !== "") {
       echo "<p role=\"status\"><b>".estab_attachment_html ($notice)."</b></p>\n";
     }
@@ -871,6 +1084,13 @@ require_once ("./db_operation.php");  // Datenbank operationen
     echo "<form name=\"uploadform\" enctype=\"multipart/form-data\" method=\"post\" ".
          "action=\"anhang.php\" data-estab-requires-incident>\n";
     echo estab_csrf_field ()."\n";
+    $attachmentFlowToken = is_array ($messageContext)
+      ? ($messageContext ["flow_token"] ?? null)
+      : null;
+    if (is_string ($attachmentFlowToken)) {
+      echo "<input type=\"hidden\" name=\"attachment_flow\" value=\"".
+           estab_attachment_html ($attachmentFlowToken)."\">\n";
+    }
     echo "<!-- anhang.php Formularelemente und andere Elemente innerhalb des Formulars -->\n";
 
         echo "<fieldset>";
@@ -979,8 +1199,9 @@ require_once ("./db_operation.php");  // Datenbank operationen
 
 \***********************************************************************/
 
-  function fileselect () {
+  function fileselect ($messageContext = null) {
     $instanz = new fileupload ();
+    $instanz->message_context = $messageContext;
     $instanz->pre_html("Upload");
     try {
       $instanz->get_next_filename_from_db();
@@ -996,7 +1217,7 @@ require_once ("./db_operation.php");  // Datenbank operationen
     $data["newfilename"]  =  $instanz->fs_nextfilename;
     $data["kuerzel"]      =  $_SESSION["vStab_kuerzel"];
     $data["time"]         =  date("dHiMY");
-    $instanz->fileselectform ($data);
+    $instanz->fileselectform ($data, $messageContext);
     $instanz->post_html ();
     $_SESSION ["anhang_submenue"] =  110;
   }
@@ -1004,92 +1225,37 @@ require_once ("./db_operation.php");  // Datenbank operationen
   /****************************************************************************\
     Funktion: file_unselect
   \****************************************************************************/
-  function file_unselect (){
+  function file_unselect ($messageContext = null){
     $instanz = new fileupload ();
+    $instanz->message_context = $messageContext;
     $instanz->reset_reservation ();
   }
 
   /***************************************************************************\
 
   \***************************************************************************/
-  function estab_attachment_post_scalar ($post, $key) {
-    if (!is_array ($post) || !array_key_exists ($key, $post)) {
-      return "";
-    }
-    return is_string ($post [$key]) ? $post [$key] : "";
-  }
-
-  function store_formdata () {
-    if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big>store_formdata</big></big><br>";  }
-    $_SESSION["01_medium"]       = estab_attachment_post_scalar ($_POST, "01_medium");
-    $_SESSION["01_datum"]        = estab_attachment_post_scalar ($_POST, "01_datum");
-    $_SESSION["01_zeichen"]      = estab_attachment_post_scalar ($_POST, "01_zeichen");
-    $_SESSION["05_gegenstelle"]  = estab_attachment_post_scalar ($_POST, "05_gegenstelle");
-    $_SESSION["06_befweg"]       = estab_attachment_post_scalar ($_POST, "06_befweg");
-    $_SESSION["06_befwegausw"]   = estab_attachment_post_scalar ($_POST, "06_befwegausw");
-    $_SESSION["07_durchspruch"]  = estab_attachment_post_scalar ($_POST, "07_durchspruch");
-    $_SESSION["08_befhinweis"]   = estab_attachment_post_scalar ($_POST, "08_befhinweis");
-    $_SESSION["08_befhinwausw"]  = estab_attachment_post_scalar ($_POST, "08_befhinwausw");
-    $_SESSION["09_vorrangstufe"] = estab_attachment_post_scalar ($_POST, "09_vorrangstufe");
-    $_SESSION["10_anschrift"]    = estab_attachment_post_scalar ($_POST, "10_anschrift");
-    $_SESSION["11_gesprnotiz"]   = estab_attachment_post_scalar ($_POST, "11_gesprnotiz");
-    $_SESSION["12_anhang"]       = estab_attachment_post_scalar ($_POST, "12_anhang");
-    $_SESSION["12_inhalt"]       = estab_attachment_post_scalar ($_POST, "12_inhalt");
-    $_SESSION["12_abfzeit"]      = estab_attachment_post_scalar ($_POST, "12_abfzeit");
-    $attachmentIdentity = estab_auth_session_identity ($_SESSION);
-    $attachmentTask = estab_attachment_post_scalar ($_POST, "task");
-    $incomingSenderProtected =
-      is_array ($attachmentIdentity)
-      && estab_workflow_is_telecommunications ($attachmentIdentity)
-      && str_starts_with ($attachmentTask, "FM-Eingang");
-    $_SESSION["13_abseinheit"] = $incomingSenderProtected
-      ? ""
-      : estab_attachment_post_scalar ($_POST, "13_abseinheit");
-    $_SESSION["14_zeichen"]      = estab_attachment_post_scalar ($_POST, "14_zeichen");
-    $_SESSION["14_funktion"]     = estab_attachment_post_scalar ($_POST, "14_funktion");
-    $_SESSION["15_quitdatum"]    = estab_attachment_post_scalar ($_POST, "15_quitdatum");
-    $_SESSION["15_quitzeichen"]  = estab_attachment_post_scalar ($_POST, "15_quitzeichen");
-    $_SESSION["16_gncopy"]       = estab_attachment_post_scalar ($_POST, "16_gncopy");
-    for ($m=1; $m<=5; $m++){
-      for ($n=1; $n<=4; $n++){
-        $recipientKey = "16_".$m.$n;
-        $recipientValue = estab_attachment_post_scalar ($_POST, $recipientKey);
-        if ($recipientValue !== "") {
-          $_SESSION[$recipientKey] = $recipientValue;
-        } else {
-          unset ($_SESSION[$recipientKey]);
-        }
-//        echo "key==="."16_".$m.$n."  SESSION=====".$_SESSION["16_".$m.$n]."<br>";
-      }
-    }
-    $_SESSION["17_vermerke"] = estab_attachment_post_scalar ($_POST, "17_vermerke");
-  }
-
   /***************************************************************************\
   \***************************************************************************/
-  function restore_formdata () {
+  function restore_formdata ($originContext, $originMessage = null) {
     require ("../4fcfg/fkt_rolle.inc.php");
     if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big> restore_formdata</big></big><br>";  }
-    if (isset ($_SESSION["01_medium"])){       $data["01_medium"]       = $_SESSION["01_medium"];       unset ($_SESSION["01_medium"]);  }      else { $data["01_medium"]      = "";}
-    if (isset ($_SESSION["01_datum"])){        $data["01_datum"]        = $_SESSION["01_datum"];        unset ($_SESSION["01_datum"]);  }       else { $data["01_datum"]       = "";}
-    if (isset ($_SESSION["01_zeichen"])){      $data["01_zeichen"]      = $_SESSION["01_zeichen"];      unset ($_SESSION["01_zeichen"]);  }     else { $data["01_zeichen"]     = "";}
-	if (isset ($_SESSION["02_zeichen"])){      $data["02_zeichen"]      = $_SESSION["02_zeichen"];      unset ($_SESSION["02_zeichen"]);  }     else { $data["02_zeichen"]     = "";}
-	if (isset ($_SESSION["03_zeichen"])){      $data["03_zeichen"]      = $_SESSION["03_zeichen"];      unset ($_SESSION["03_zeichen"]);  }     else { $data["03_zeichen"]     = "";}
-	if (isset ($_SESSION["04_richtung"])){     $data["04_richtung"]     = $_SESSION["04_richtung"];     unset ($_SESSION["04_richtung"]);  }    else { $data["04_richtung"]    = "";}
-	if (isset ($_SESSION["04_nummer"])){       $data["04_nummer"]       = $_SESSION["04_nummer"];       unset ($_SESSION["04_nummer"]);  }      else { $data["04_nummer"]      = "";}
-    if (isset ($_SESSION["05_gegenstelle"])){  $data["05_gegenstelle"]  = $_SESSION["05_gegenstelle"];  unset ($_SESSION["05_gegenstelle"]);  } else { $data["05_gegenstelle"] = "";}
-    if (isset ($_SESSION["06_befweg"])){       $data["06_befweg"]       = $_SESSION["06_befweg"];       unset ($_SESSION["06_befweg"]);  }      else { $data["06_befweg"]      = "";}
-    if (isset ($_SESSION["06_befwegausw"])){   $data["06_befwegausw"]   = $_SESSION["06_befwegausw"];   unset ($_SESSION["06_befwegausw"]);  }  else { $data["06_befwegausw"]  = "";}
-    if (isset ($_SESSION["07_durchspruch"])){  $data["07_durchspruch"]  = $_SESSION["07_durchspruch"];  unset ($_SESSION["07_durchspruch"]);  } else { $data["07_durchspruch"] = "";}
-    if (isset ($_SESSION["08_befhinweis"])){   $data["08_befhinweis"]   = $_SESSION["08_befhinweis"];   unset ($_SESSION["08_befhinweis"]);  }  else { $data["08_befhinweis"]  = "";}
-    if (isset ($_SESSION["08_befhinwausw"])){  $data["08_befhinwausw"]  = $_SESSION["08_befhinwausw"];  unset ($_SESSION["08_befhinwausw"]);  } else { $data["08_befhinwausw"] = "";}
-    if (isset ($_SESSION["09_vorrangstufe"])){ $data["09_vorrangstufe"] = $_SESSION["09_vorrangstufe"]; unset ($_SESSION["09_vorrangstufe"]);  }else { $data["09_vorrangstufe"]= "";}
-    if (isset ($_SESSION["10_anschrift"])){    $data["10_anschrift"]    = $_SESSION["10_anschrift"];    unset ($_SESSION["10_anschrift"]);  }   else { $data["10_anschrift"]   = "";}
-    if (isset ($_SESSION["11_gesprnotiz"])){   $data["11_gesprnotiz"]   = $_SESSION["11_gesprnotiz"];   unset ($_SESSION["11_gesprnotiz"]);  }  else { $data["11_gesprnotiz"]  = "";}
-    if (isset ($_SESSION["12_anhang"])){       $data["12_anhang"]       = $_SESSION["12_anhang"];       unset ($_SESSION["12_anhang"]);  }      else { $data["12_anhang"]      = "";}
-    if (isset ($_SESSION["12_inhalt"])){       $data["12_inhalt"]       = $_SESSION["12_inhalt"];       unset ($_SESSION["12_inhalt"]);  }      else { $data["12_inhalt"]      = "";}
-    if (isset ($_SESSION["12_abfzeit"])){      $data["12_abfzeit"]      = $_SESSION["12_abfzeit"];      unset ($_SESSION["12_abfzeit"]);  }     else { $data["12_abfzeit"]     = "";}
-    if (isset ($_SESSION["13_abseinheit"])){   $data["13_abseinheit"]   = $_SESSION["13_abseinheit"];   unset ($_SESSION["13_abseinheit"]);  }  else { $data["13_abseinheit"]  = "";}
+    $draft = estab_attachment_origin_draft_find ($_SESSION, $originContext);
+    $data = array_fill_keys (array (
+      "01_medium", "01_datum", "01_zeichen", "02_zeichen",
+      "03_zeichen", "04_richtung", "04_nummer", "05_gegenstelle",
+      "06_befweg", "06_befwegausw", "07_durchspruch",
+      "08_befhinweis", "08_befhinwausw", "09_vorrangstufe",
+      "10_anschrift", "11_rufnummer", "11_gesprnotiz", "12_anhang",
+      "12_betreff", "12_inhalt", "12_abfzeit", "13_abseinheit",
+      "14_zeichen", "14_funktion", "15_quitdatum", "15_quitzeichen",
+      "recipient_matrix_revision",
+      "17_vermerke",
+    ), "");
+    foreach ($data as $draftField => $unused) {
+      if (is_string ($draft [$draftField] ?? null)) {
+        $data [$draftField] = $draft [$draftField];
+      }
+    }
     $restoreIdentity = estab_auth_session_identity ($_SESSION);
     if (
       is_array ($restoreIdentity)
@@ -1097,46 +1263,95 @@ require_once ("./db_operation.php");  // Datenbank operationen
     ) {
       $data ["13_abseinheit"] = "";
     }
-    if (isset ($_SESSION["14_zeichen"])){      $data["14_zeichen"]      = $_SESSION["14_zeichen"];      unset ($_SESSION["14_zeichen"]);  }     else { $data["14_zeichen"]     = "";}
-    if (isset ($_SESSION["14_funktion"])){     $data["14_funktion"]     = $_SESSION["14_funktion"];     unset ($_SESSION["14_funktion"]);  }    else { $data["14_funktion"]    = "";}
-    if (isset ($_SESSION["15_quitdatum"])){    $data["15_quitdatum"]    = $_SESSION["15_quitdatum"];    unset ($_SESSION["15_quitdatum"]); }    else { $data["15_quitdatum"]   = "";}
-    if (isset ($_SESSION["15_quitzeichen"])){  $data["15_quitzeichen"]  = $_SESSION["15_quitzeichen"];  unset ($_SESSION["15_quitzeichen"]); }  else { $data["15_quitzeichen"] = "";}
-
-    $distributionRequest = array ();
-    if (isset ($_SESSION["16_gncopy"])) {
-      $distributionRequest ["16_gncopy"] = $_SESSION ["16_gncopy"];
+    $originTask = is_array ($originContext)
+      && is_string ($originContext ["task"] ?? null)
+      ? $originContext ["task"]
+      : "";
+    $requiredDistributionTokens = array ();
+    if ($originTask === "Stab_gesprnoti") {
+      $requiredDistributionTokens = array (
+        (string) $redcopy2."_rt",
+        (string) ($restoreIdentity ["funktion"] ?? "")."_gn",
+      );
     }
-    unset ($_SESSION["16_gncopy"]);
+    $distributionRequest = array ();
+    if (is_string ($draft ["recipient_matrix_revision"] ?? null)) {
+      $distributionRequest ["recipient_matrix_revision"] =
+        $draft ["recipient_matrix_revision"];
+    }
+    if (is_string ($draft ["16_gncopy"] ?? null)) {
+      $distributionRequest ["16_gncopy"] = $draft ["16_gncopy"];
+    }
     for ($m=1; $m<=5; $m++){
       for ($n=1; $n<=4; $n++){
         $recipientKey = "16_".$m.$n;
-        if (isset ($_SESSION [$recipientKey])) {
-          $distributionRequest [$recipientKey] = $_SESSION [$recipientKey];
-          unset ($_SESSION [$recipientKey]);
+        if (is_string ($draft [$recipientKey] ?? null)) {
+          $distributionRequest [$recipientKey] = $draft [$recipientKey];
         }
       }
     }
     try {
+      estab_workflow_require_recipient_matrix_revision (
+        $distributionRequest,
+        $empf_matrix,
+        (string) $redcopy2
+      );
       $data ["16_empf"] = estab_workflow_distribution_tokens (
         $distributionRequest,
-        $empf_matrix
+        $empf_matrix,
+        $requiredDistributionTokens
       );
     } catch (InvalidArgumentException $exception) {
-      // The request guard already rejects malformed browser values. Session
-      // restoration repeats the same boundary so stale/tampered state cannot
-      // turn into a function name.
       error_log (
         "eStab attachment recipient restore rejected: ".
         $exception->getMessage ()
       );
-      $data ["16_empf"] = "";
+      http_response_code (409);
+      header ("Content-Type: text/plain; charset=UTF-8");
+      header ("Cache-Control: no-store");
+      echo "Die Empfängermatrix wurde während des Anhangvorgangs geändert. ".
+           "Öffnen Sie den Nachrichtenvordruck erneut.";
+      exit;
     }
-    if (isset ($_SESSION["17_vermerke"])){     $data["17_vermerke"]     = $_SESSION["17_vermerke"];     unset ($_SESSION["17_vermerke"]); }
+    if ($originTask === "Stab_korrigieren") {
+      if (!is_array ($originMessage)) {
+        throw new EstabAttachmentContextException (
+          "Der Korrekturdatensatz kann nicht wiederhergestellt werden."
+        );
+      }
+      // Only fields editable in the correction form come from the draft.
+      // Workflow state, routing, author/reviewer evidence and the immutable
+      // return reason are rehydrated from the freshly authorised row.
+      $editableCorrectionFields = array (
+        "07_durchspruch",
+        "08_befhinweis",
+        "08_befhinwausw",
+        "09_vorrangstufe",
+        "10_anschrift",
+        "11_rufnummer",
+        "11_gesprnotiz",
+        "12_anhang",
+        "12_betreff",
+        "12_inhalt",
+        "12_abfzeit",
+      );
+      $correctionData = $originMessage;
+      foreach ($editableCorrectionFields as $editableCorrectionField) {
+        if (array_key_exists ($editableCorrectionField, $data)) {
+          $correctionData [$editableCorrectionField] =
+            $data [$editableCorrectionField];
+        }
+      }
+      $data = $correctionData;
+    }
+    $data ["00_lfd"] = $originTask === "Stab_korrigieren"
+      ? (int) ($originContext ["record_id"] ?? 0)
+      : "";
     return $data;
   }
 
 
-  function fileselectwindow (){
+  function fileselectwindow ($messageContext = null){
     require ("../4fcfg/dbcfg.inc.php");
     require ("../4fcfg/config.inc.php");
     try {
@@ -1145,11 +1360,13 @@ require_once ("./db_operation.php");  // Datenbank operationen
       http_response_code (400);
       error_log ("eStab attachment CSRF validation failed: ".$exception->getMessage ());
       echo "<big><big><b>Die Upload-Anforderung ist ungültig oder abgelaufen.</b></big></big>";
-      anhang_menue ();
+      anhang_menue ("", $messageContext);
       exit;
     }
     if (!isset($_POST["abbrechen_x"]) && isset($_POST["absenden_x"])) {
       $my_upload = new fileupload;
+      $my_upload->message_context = $messageContext;
+      $reservationOwner = $my_upload->reservation_owner_id ();
       $my_upload->upload_dir = rtrim ($conf_4f ["ablage_dir"], "/\\")."/";
       $my_upload->extensions = array_map (
         static fn ($extension) => ".".$extension,
@@ -1196,7 +1413,7 @@ require_once ("./db_operation.php");  // Datenbank operationen
             $conf_4f_tbl ["anhang"],
             $conf_4f_tbl ["protokoll"],
             $new_name,
-            session_id (),
+            $reservationOwner,
             (string) ($_SESSION ["vStab_kuerzel"] ?? ""),
             estab_attachment_current_identity (),
             "Anhangdaten speichern",
@@ -1287,7 +1504,7 @@ require_once ("./db_operation.php");  // Datenbank operationen
               estab_attachment_release (
                 $releaseConnection,
                 $conf_4f_tbl ["anhang"],
-                session_id (),
+                $reservationOwner,
                 $new_name
               );
             } finally {
@@ -1302,25 +1519,31 @@ require_once ("./db_operation.php");  // Datenbank operationen
         }
       }
     } else {
-      file_unselect ();
+      file_unselect ($messageContext);
     }
     unset ($_SESSION ["UPLOAD"]);
-    anhang_menue ();
+    anhang_menue ("", $messageContext);
     exit;
   }
 
 
-  $attachmentMenuState = $_SESSION ["anhang_menue"] ?? null;
-  if ($attachmentMenuState === "100" || $attachmentMenuState === "110") {
-    $attachmentMenuState = (int) $attachmentMenuState;
-  }
-  if ($attachmentMenuState !== 100 && $attachmentMenuState !== 110) {
-    $attachmentMenuState = 110;
-    $_SESSION ["anhang_menue"] = 110;
-    unset ($_SESSION ["anhang_message_context"]);
-    if ($attachmentContextNotice === "") {
-      $attachmentContextNotice =
-        "Die Anhangübersicht wurde direkt geöffnet.";
+  if ($attachmentMessageContext) {
+    // A message flow needs state 100 only during its server-side initial
+    // include. Every later token-bearing request is an independent state-110
+    // continuation and never reads or writes the global overview state.
+    $attachmentMenuState = $attachmentInternalRequest ? 100 : 110;
+  } else {
+    $attachmentMenuState = $_SESSION ["anhang_menue"] ?? null;
+    if ($attachmentMenuState === "100" || $attachmentMenuState === "110") {
+      $attachmentMenuState = (int) $attachmentMenuState;
+    }
+    if ($attachmentMenuState !== 100 && $attachmentMenuState !== 110) {
+      $attachmentMenuState = 110;
+      $_SESSION ["anhang_menue"] = 110;
+      if ($attachmentContextNotice === "") {
+        $attachmentContextNotice =
+          "Die Anhangübersicht wurde direkt geöffnet.";
+      }
     }
   }
 
@@ -1328,24 +1551,23 @@ require_once ("./db_operation.php");  // Datenbank operationen
 
     case 100: // Auswahlmenue
         if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big> 100 --> Auswahlmenue</big></big><br>";  }
-        store_formdata();
-        $_SESSION ["anhang_message_context"] = true;
-        anhang_menue ();
-        $_SESSION["anhang_menue"] = 110;
+        anhang_menue ("", $attachmentOriginContext);
+        if (!$attachmentMessageContext) {
+          $_SESSION["anhang_menue"] = 110;
+        }
     break;
 
     case 110: // UPLOAD Menue
         if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big> 110 --> UPLOADMENUE</big></big><br>";  }        
 
         if ( isset ($_POST ["ah_upload_x"])){
-          fileselect ();
+          fileselect ($attachmentOriginContext);
           break;
         }
 
         if ( isset ($_POST ["ah_abbrechen_x"])){
           unset ($_SESSION["anhang_menue"]);
           unset ($_SESSION["anhang"]);
-          unset ($_SESSION ["anhang_message_context"]);
           $_SESSION["anhang_result"] = "abbrechen" ;
           header("Location: ".$conf_4f ["MainURL"]);
           exit;
@@ -1354,9 +1576,9 @@ require_once ("./db_operation.php");  // Datenbank operationen
         if ( (isset ($_POST["absenden_x"] )) OR
              (isset ($_POST["abbrechen_x"]))){
 
-          fileselectwindow ();
+          fileselectwindow ($attachmentOriginContext);
         }
-        anhang_menue ($attachmentContextNotice);
+        anhang_menue ($attachmentContextNotice, $attachmentOriginContext);
     break;
 
     default:

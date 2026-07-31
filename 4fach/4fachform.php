@@ -3,6 +3,7 @@ require_once __DIR__ . "/../app/csrf.php";
 require_once __DIR__ . "/../app/message_repository.php";
 require_once __DIR__ . "/../app/message_transport.php";
 require_once __DIR__ . "/../app/read_authorization.php";
+require_once __DIR__ . "/official_message_form.php";
 if (defined ("debug") && debug) { echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>4Fach Form</big><br>";  }
 /*****************************************************************************\
    Datei: 4fachform.php
@@ -34,6 +35,8 @@ include ("../4fcfg/e_cfg.inc.php");
 \*****************************************************************************/
 class nachrichten4fach {
 
+    use EstabOfficialMessageFormView;
+
 	/*************************************************************************
 	   Konstruktor der Klasse: nachrichten4fach
 
@@ -60,7 +63,8 @@ class nachrichten4fach {
         "incoming_transport_correction_reason",
         "07_durchspruch",
         "08_befhinwausw", "08_befhinweis", "09_vorrangstufe",
-        "10_anschrift", "11_gesprnotiz", "12_abfzeit", "12_anhang",
+        "10_anschrift", "11_rufnummer", "11_gesprnotiz",
+        "12_betreff", "12_abfzeit", "12_anhang",
         "12_inhalt", "13_abseinheit", "14_funktion", "14_zeichen",
         "15_quitdatum", "15_quitzeichen", "16_empf", "17_vermerke",
         "estab_route_error"
@@ -83,7 +87,8 @@ class nachrichten4fach {
         "06_befweg", "06_befwegausw", "07_durchspruch",
         "incoming_transport_confirmed",
         "08_befhinweis", "08_befhinwausw", "10_anschrift",
-        "12_inhalt", "12_abfzeit", "13_abseinheit", "14_zeichen",
+        "11_rufnummer", "12_betreff", "12_inhalt", "12_abfzeit",
+        "13_abseinheit", "14_zeichen",
         "14_funktion", "15_quitdatum", "15_quitzeichen", "17_vermerke"
       ), true);
       $this->errorselect = array_replace (
@@ -93,6 +98,18 @@ class nachrichten4fach {
       foreach (array ("01_datum", "02_zeit", "03_datum", "12_abfzeit", "15_quitdatum") as $dateField) {
         if (!isset ($this->formdata [$dateField]) || estab_datetime_is_unset ($this->formdata [$dateField])) {
           $this->formdata [$dateField] = "";
+        } elseif (
+          is_string ($this->formdata [$dateField])
+          && preg_match (
+            '/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/D',
+            $this->formdata [$dateField]
+          ) === 1
+        ) {
+          // Datenbankwerte können aus dem normalen Abruf sowie aus Fehler-
+          // und Anhang-Rückwegen stammen. Am gemeinsamen Render-Rand werden
+          // sie genau einmal in die taktische Schreibweise umgewandelt.
+          $this->formdata [$dateField] =
+            konv_datetime_taktime ($this->formdata [$dateField]);
         }
       }
       $editableTimestampField = array (
@@ -738,6 +755,13 @@ HTML;
         $this->feld [14] = false;
         // The local organisation is derived from server configuration.
         $this->feld [13] = false;
+        if ($this->task === "Stab_korrigieren") {
+          // A formally returned outgoing message remains an outgoing message.
+          // Its author may correct content, but may not convert the object into
+          // an independently completed conversation note.
+          $this->bg [11] = $this->feldbg [11]["i"];
+          $this->feld [11] = false;
+        }
       break;
 
       case "Stab_lesen" :
@@ -819,32 +843,22 @@ HTML;
         && is_string($this->formdata["16_empf"])
         ? $this->formdata["16_empf"]
         : ""; // Zeile mit den Empfaengern aus der DB
-      // Wandel die Textzeile mit den Empfaengern in ein ARRAY um
-    $empf_array_color = explode (",",$empf_text);
-
-    for ( $i=0; $i < count ( $empf_array_color ); $i++ ) {
-        //  die Farbe der Kopie
-      if  (preg_match('/_/', $empf_array_color [$i]) > 0)	{ list ( $fkt, $cpycol ) = explode ("_", $empf_array_color [$i]);
-        if ( $fkt != "" ){
-          $empf_array [$i]['fkt'] = $fkt ;
-          $empf_array [$i]['cpy'] = $cpycol ;
-          if ($fkt == $_SESSION ['vStab_funktion']) {
-            $this->fktmsgbgcolor = $cpycol ;
-          }
-        }
-      }
-	}
+    $empf_array = estab_recipient_copy_map ($empf_text);
+    $sessionFunction = (string) ($_SESSION ['vStab_funktion'] ?? "");
+    if (isset ($empf_array [$sessionFunction])) {
+      $sessionColours = estab_recipient_copy_colours (
+        $empf_array [$sessionFunction]
+      );
+      $this->fktmsgbgcolor = $sessionColours [0] ?? "";
+    }
     $sonstcount = 2;
     for ($i=1; $i <= 5 ; $i++){
       for ($j=1; $j <= 4 ; $j++){
-        if (isset ($empf_array)){
-          foreach ($empf_array as $empfaenger){
-            if ( ( strtoupper ( $empfaenger['fkt'] ) ==  strtoupper ( $empf_matrix [$i][$j]["fkt"]) ) and
-                 ( $empf_matrix [$i][$j]["fkt"] != "" ) ){
-              $this->empfarray [$i][$j]["checked"] = true;
-              $this->empfarray [$i][$j]["cpycol"] = $empfaenger['cpy'];
-            }
-          }
+        $matrixFunction = (string) $empf_matrix [$i][$j]["fkt"];
+        if ($matrixFunction !== "" && isset ($empf_array [$matrixFunction])) {
+          $this->empfarray [$i][$j]["checked"] = true;
+          $this->empfarray [$i][$j]["cpycol"] =
+            $empf_array [$matrixFunction];
         }
       }
     }
@@ -1183,6 +1197,14 @@ HTML;
    mailto://hajo.landmesser@iuk-heinsberg.de
 \*****************************************************************************/
   function plot_form (){
+    $this->plot_official_message_form ();
+  }
+
+  /**
+   * Retained as a migration reference while all runtime rendering uses the
+   * official, accessible grid from official_message_form.php.
+   */
+  function plot_legacy_form (){
 
     include ("../4fcfg/config.inc.php");
     include ("../4fcfg/para.inc.php");

@@ -52,6 +52,9 @@ $etbDutyMigration = $read(
 $commandPostMigration = $read(
     $root . '/docker/db/migrations/97-incident-command-post-name.sql'
 );
+$officialMessageFieldsMigration = $read(
+    $root . '/docker/db/migrations/98-official-message-form-fields.sql'
+);
 $baseline = $read($root . '/docker/db/init/10-schema.sql');
 $verify = $read($root . '/docker/db/verify.sql');
 $health = $read($root . '/health.php');
@@ -69,6 +72,7 @@ $normaliseSql = static function (string $sql): string {
 };
 $etbDutySql = $normaliseSql($etbDutyMigration);
 $commandPostSql = $normaliseSql($commandPostMigration);
+$officialMessageFieldsSql = $normaliseSql($officialMessageFieldsMigration);
 $verifySql = $normaliseSql($verify);
 $readinessSql = $normaliseSql(estab_readiness_schema_query());
 $oldCapabilityEnum = "enum('LAGE_DOKUMENTATION','SICHTUNG',"
@@ -277,6 +281,7 @@ foreach ([
 }
 $assert(
     str_contains($verify, 'runtime_code_widths_ok')
+    && str_contains($verify, 'official_message_fields_ok')
     && str_contains($verify, 'runtime_attachment_indexes_ok')
     && str_contains($verify, 'standard_matrix_row_count_ok')
     && str_contains($verify, 'matrix_flag_targets_ok')
@@ -288,6 +293,123 @@ $assert(
     )
     && str_contains($verify, 'schema_migrations_ok'),
     'Database verification omits runtime widths, indexes, standard matrix, or migration ledger'
+);
+$officialMessageFieldDefinitions = [
+    [
+        'baseline' => '`11_rufnummer` VARCHAR(128) NOT NULL DEFAULT \'\'',
+        'migration' => 'ADD COLUMN `11_rufnummer` VARCHAR(128)',
+        'ownership' => 'estab:migration:98:message-counterparty-number:v1',
+    ],
+    [
+        'baseline' => '`12_betreff` VARCHAR(255) NOT NULL DEFAULT \'\'',
+        'migration' => 'ADD COLUMN `12_betreff` VARCHAR(255)',
+        'ownership' => 'estab:migration:98:message-subject:v1',
+    ],
+];
+foreach ($officialMessageFieldDefinitions as $fieldDefinition) {
+    $assert(
+        str_contains($baseline, $fieldDefinition['baseline'])
+            && str_contains($baseline, $fieldDefinition['ownership']),
+        'Fresh schema omits canonical official message field '
+            . $fieldDefinition['baseline']
+    );
+    $assert(
+        str_contains(
+            $officialMessageFieldsMigration,
+            $fieldDefinition['migration']
+        )
+            && str_contains(
+                $officialMessageFieldsMigration,
+                $fieldDefinition['ownership']
+            ),
+        'Migration 98 omits canonical official message field '
+            . $fieldDefinition['migration']
+    );
+}
+$officialMessageMigrationFragments = [
+    "table_name = 'nv_nachrichten' AND table_type = 'BASE TABLE' "
+        . "AND engine = 'InnoDB' AND table_collation = 'utf8mb4_unicode_ci'"
+        => 'Migration 98 does not require the canonical message table',
+    'Official message fields migration blocked: foreign counterparty-number column collision'
+        => 'Migration 98 does not reject a foreign counterparty-number column',
+    'Official message fields migration blocked: foreign subject column collision'
+        => 'Migration 98 does not reject a foreign subject column',
+    'Official message fields migration blocked: required legacy form column is missing'
+        => 'Migration 98 does not fail explicitly on a damaged legacy form schema',
+    'CREATE PROCEDURE estab_migrate_98_add_counterparty_number()'
+        => 'Migration 98 has no resumable counterparty-number phase',
+    'CREATE PROCEDURE estab_migrate_98_add_subject()'
+        => 'Migration 98 has no resumable subject phase',
+    'CREATE PROCEDURE estab_migrate_98_validate()'
+        => 'Migration 98 has no final schema validator',
+    'Historical messages keep'
+        => 'Migration 98 no longer documents its no-rewrite policy',
+];
+foreach ($officialMessageMigrationFragments as $fragment => $message) {
+    $assert(str_contains($officialMessageFieldsSql, $fragment), $message);
+}
+$assert(
+    substr_count(
+        $officialMessageFieldsMigration,
+        'AFTER `10_anschrift`'
+    ) === 2
+        && substr_count(
+            $officialMessageFieldsMigration,
+            'AFTER `11_gesprnotiz`'
+        ) === 2
+        && str_contains(
+            $officialMessageFieldsMigration,
+            'MODIFY COLUMN `11_rufnummer` VARCHAR(128)'
+        )
+        && str_contains(
+            $officialMessageFieldsMigration,
+            'MODIFY COLUMN `12_betreff` VARCHAR(255)'
+        ),
+    'Migration 98 does not converge missing and existing fields to baseline order'
+);
+$assert(
+    str_contains(
+        $officialMessageFieldsSql,
+        "number_column.ordinal_position = address_column.ordinal_position + 1"
+    )
+        && str_contains(
+            $officialMessageFieldsSql,
+            "note_column.ordinal_position = number_column.ordinal_position + 1"
+        )
+        && str_contains(
+            $officialMessageFieldsSql,
+            "subject_column.ordinal_position = note_column.ordinal_position + 1"
+        )
+        && str_contains(
+            $officialMessageFieldsSql,
+            "attachment_column.ordinal_position = subject_column.ordinal_position + 1"
+        )
+        && str_contains(
+            $officialMessageFieldsMigration,
+            'physical column order differs from baseline'
+        ),
+    'Migration 98 does not validate the physical field order against the baseline'
+);
+$officialMessageRuntimeOrderFragments = [
+    "column_name ORDER BY ordinal_position SEPARATOR ','",
+    "MAX(ordinal_position) - MIN(ordinal_position)",
+    "10_anschrift,11_rufnummer,11_gesprnotiz,12_betreff,12_anhang:4",
+];
+foreach ([
+    'verify.sql' => $verifySql,
+    'runtime readiness' => $readinessSql,
+] as $contractName => $runtimeSchemaContract) {
+    foreach ($officialMessageRuntimeOrderFragments as $fragment) {
+        $assert(
+            str_contains($runtimeSchemaContract, $fragment),
+            $contractName . ' does not fail closed on official message field '
+                . 'order drift: ' . $fragment
+        );
+    }
+}
+$assert(
+    !str_contains($officialMessageFieldsSql, 'UPDATE `nv_nachrichten`'),
+    'Migration 98 rewrites historical message data'
 );
 $assert(
     str_contains($incidentMigration, 'CREATE TABLE IF NOT EXISTS `nv_einsaetze`')
@@ -585,8 +707,9 @@ foreach ([
     'mixed ETB duty catalogue',
     'ETB duty primary-key drift',
     '97-incident-command-post-name.sql',
+    '98-official-message-form-fields.sql',
     'incident command-post name migration was not canonical or invented history',
-    'assert_equal "12"',
+    'assert_equal "13"',
 ] as $marker) {
     $assert(
         str_contains($schemaIntegration, $marker),
@@ -634,14 +757,18 @@ $assert(
         && str_contains($verifySql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $verifySql,
-            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 12'
+            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 13'
         )
         && str_contains($verifySql, "'96-etb-duty-function.sql'")
         && str_contains(
             $verifySql,
             "'97-incident-command-post-name.sql'"
         )
-        && str_contains($verifySql, ") = 12) AS `schema_migrations_ok`"),
+        && str_contains(
+            $verifySql,
+            "'98-official-message-form-fields.sql'"
+        )
+        && str_contains($verifySql, ") = 13) AS `schema_migrations_ok`"),
     'verify.sql does not require the exact final ETB catalogue and ledger'
 );
 $assert(
@@ -664,7 +791,7 @@ $assert(
         && str_contains($readinessSql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $readinessSql,
-            '(SELECT COUNT(*) FROM estab_schema_migrations) = 12'
+            '(SELECT COUNT(*) FROM estab_schema_migrations) = 13'
         )
         && str_contains($readinessSql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -673,7 +800,11 @@ $assert(
         )
         && str_contains(
             $readinessSql,
-            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 12"
+            "'98-official-message-form-fields.sql'"
+        )
+        && str_contains(
+            $readinessSql,
+            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 13"
         ),
     'Runtime readiness does not require the exact final ETB catalogue and ledger'
 );
@@ -778,6 +909,10 @@ $assert(
             $readiness,
             "'97-incident-command-post-name.sql'"
         )
+        && str_contains(
+            $readiness,
+            "'98-official-message-form-fields.sql'"
+        )
         && str_contains($verify, "'50-global-incidents.sql'")
         && str_contains($verify, "'45-global-incidents-prepare.sql'")
         && str_contains($verify, "'55-global-incidents-finish.sql'")
@@ -787,9 +922,10 @@ $assert(
         && str_contains($verify, "'95-attachment-ingest-integrity.sql'")
         && str_contains($verify, "'96-etb-duty-function.sql'")
         && str_contains($verify, "'97-incident-command-post-name.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 12')
-        && str_contains($readiness, 'estab_schema_migrations) = 12'),
-    'Migration ledger/readiness does not require all twelve release migrations'
+        && str_contains($verify, "'98-official-message-form-fields.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 13')
+        && str_contains($readiness, 'estab_schema_migrations) = 13'),
+    'Migration ledger/readiness does not require all thirteen release migrations'
 );
 $assert(
     str_contains($readiness, "require_once __DIR__ . '/bootstrap.php'")

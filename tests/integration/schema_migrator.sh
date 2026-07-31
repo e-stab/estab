@@ -46,6 +46,7 @@ if [ ! -r "$fixture" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/95-attachment-ingest-integrity.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/96-etb-duty-function.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/97-incident-command-post-name.sql" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/98-official-message-form-fields.sql" ] \
     || [ ! -x "$ESTAB_MIGRATOR_BIN" ]; then
     echo "schema migrator test: fixture, baseline, or migrator is unavailable" >&2
     exit 1
@@ -887,7 +888,7 @@ finish_checksum=$(
         awk '{print $1}'
 )
 assert_equal \
-    "12|12|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
+    "13|13|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
     "$(database_query "$predecessor_database" "
 SELECT CONCAT(
          COUNT(*), '|',
@@ -1011,10 +1012,24 @@ SELECT CONCAT(COUNT(*), '|', MAX(column_default), '|', MAX(column_comment))
    AND table_name = 'nv_anhang'
    AND column_name = 'integrity_required'")" \
     "deliberate partial attachment-integrity DDL was not reproduced"
+legacy_message_snapshot="$(fixture_query "
+SELECT GROUP_CONCAT(
+         CONCAT(
+           \`00_lfd\`, ':',
+           HEX(\`01_zeichen\`), ':',
+           HEX(\`02_zeichen\`), ':',
+           HEX(\`03_zeichen\`), ':',
+           HEX(\`14_zeichen\`), ':',
+           HEX(\`15_quitzeichen\`), ':',
+           HEX(\`x03_sperruser\`)
+         )
+         ORDER BY \`00_lfd\` SEPARATOR ','
+       )
+  FROM nv_nachrichten")"
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
 
-assert_equal "12" "$(fixture_query "
+assert_equal "13" "$(fixture_query "
 SELECT COUNT(*) FROM estab_schema_migrations
  WHERE state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
@@ -1025,7 +1040,7 @@ SELECT COUNT(*) FROM estab_schema_migrations
    AND state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
     "standard matrix migration was not recorded"
-assert_equal "1|1|1|1|1|9" "$(fixture_query "
+assert_equal "1|1|1|1|1|1|9" "$(fixture_query "
 SELECT CONCAT(
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '80-dv-evidence-retention.sql'
@@ -1047,6 +1062,10 @@ SELECT CONCAT(
            WHERE version = '97-incident-command-post-name.sql'
              AND state = 'applied'
              AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '98-official-message-form-fields.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
          (SELECT COUNT(*)
             FROM information_schema.tables
            WHERE table_schema = DATABASE()
@@ -1063,6 +1082,74 @@ SELECT CONCAT(
              ))
        )")" \
     "DV evidence or organisational migration was not applied completely"
+assert_equal "$legacy_message_snapshot" "$(fixture_query "
+SELECT GROUP_CONCAT(
+         CONCAT(
+           \`00_lfd\`, ':',
+           HEX(\`01_zeichen\`), ':',
+           HEX(\`02_zeichen\`), ':',
+           HEX(\`03_zeichen\`), ':',
+           HEX(\`14_zeichen\`), ':',
+           HEX(\`15_quitzeichen\`), ':',
+           HEX(\`x03_sperruser\`)
+         )
+         ORDER BY \`00_lfd\` SEPARATOR ','
+       )
+  FROM nv_nachrichten")" \
+    "official message field migration changed existing message data"
+assert_equal "1|1|10_anschrift,11_rufnummer,11_gesprnotiz,12_betreff,12_anhang:4|2|0" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*)
+            FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_nachrichten'
+             AND column_name = '11_rufnummer'
+             AND column_type = 'varchar(128)'
+             AND character_set_name = 'utf8mb4'
+             AND collation_name = 'utf8mb4_unicode_ci'
+             AND is_nullable = 'NO'
+             AND HEX(column_default) = '2727'
+             AND column_comment =
+               'estab:migration:98:message-counterparty-number:v1'), '|',
+         (SELECT COUNT(*)
+            FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_nachrichten'
+             AND column_name = '12_betreff'
+             AND column_type = 'varchar(255)'
+             AND character_set_name = 'utf8mb4'
+             AND collation_name = 'utf8mb4_unicode_ci'
+             AND is_nullable = 'NO'
+             AND HEX(column_default) = '2727'
+             AND column_comment =
+               'estab:migration:98:message-subject:v1'), '|',
+         (SELECT CONCAT(
+                   GROUP_CONCAT(
+                     column_name ORDER BY ordinal_position SEPARATOR ','
+                   ),
+                   ':',
+                   MAX(ordinal_position) - MIN(ordinal_position)
+                 )
+            FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_nachrichten'
+             AND column_name IN (
+               '10_anschrift', '11_rufnummer', '11_gesprnotiz',
+               '12_betreff', '12_anhang'
+             )), '|',
+         (SELECT COUNT(*) FROM nv_nachrichten
+           WHERE \`11_rufnummer\` = '' AND \`12_betreff\` = ''), '|',
+         (SELECT COUNT(*)
+            FROM information_schema.routines
+           WHERE routine_schema = DATABASE()
+             AND routine_name IN (
+               'estab_migrate_98_preflight',
+               'estab_migrate_98_add_counterparty_number',
+               'estab_migrate_98_add_subject',
+               'estab_migrate_98_validate'
+             ))
+       )")" \
+    "official message fields migration was not canonical or left helpers"
 assert_equal "1|1|1|2|4|0" "$(fixture_query "
 SELECT CONCAT(
          (SELECT COUNT(*)

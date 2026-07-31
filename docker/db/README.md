@@ -177,6 +177,9 @@ persistente ältere Containerdatenbanken an die Laufzeitanforderungen an:
 
 - `nv_benutzer`: Kürzel 6, Passwort 255 sowie `ip`/`fwdip` 45 Zeichen,
 - sechs Absender-/Bearbeiterfelder in `nv_nachrichten`: 6 Zeichen,
+- Migration 98: getrennte, amtliche Felder für Rufnummer der Gegenstelle
+  (`11_rufnummer`) und Betreff (`12_betreff`); vorhandene Nachrichtenwerte
+  werden nicht umgeschrieben und beide neuen Felder starten leer,
 - `nv_anhang`: Kürzel 6, Dateiendung 16 und Session-ID 128 Zeichen,
 - Migration 95: neue Anhangreservierungen sind
   `integrity_required=1`; der Übergang zum finalen Status verlangt

@@ -25,7 +25,11 @@ CREATE TABLE IF NOT EXISTS `nv_nachrichten` (
   `08_befhinwausw` SET('Fe','Fu','Me','FAX','FS','@') NOT NULL DEFAULT '',
   `09_vorrangstufe` SET('eee','sss','bbb','aaa') NOT NULL DEFAULT '',
   `10_anschrift` VARCHAR(255) NOT NULL DEFAULT '',
+  `11_rufnummer` VARCHAR(128) NOT NULL DEFAULT ''
+    COMMENT 'estab:migration:98:message-counterparty-number:v1',
   `11_gesprnotiz` BINARY(1) NOT NULL DEFAULT 'f',
+  `12_betreff` VARCHAR(255) NOT NULL DEFAULT ''
+    COMMENT 'estab:migration:98:message-subject:v1',
   `12_anhang` TEXT NULL,
   `12_inhalt` LONGTEXT NOT NULL,
   `12_abfzeit` DATETIME NULL DEFAULT NULL,

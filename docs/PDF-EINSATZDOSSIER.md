@@ -204,6 +204,7 @@ Die automatisierten Tests prüfen unter anderem:
 - Ablehnung einer nach dem Laden oder vor dem Export gleich groß manipulierten
   Datei sowie ehrliche Legacy-Kennzeichnung ohne erfundenen Eingangshash,
 - durchsuchbaren Text für ETB, TBB und Nachrichten,
+- Rufnummer und Betreff in der amtlichen Reihenfolge vor dem Nachrichtentext,
 - dieselben Formularmarker in Einzel- und Gesamtexport,
 - aktuelle In-Memory-Ausgabe trotz unverändert erhaltener Archivdatei,
 - Abwesenheit von VS-NfD-Aufdruck, Wappen und Seitenbildern,
