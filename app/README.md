@@ -13,7 +13,10 @@ weiterhin öffentlich benötigten Legacy-Bildbuttons. `admin_operations.php`
 bildet die vorbereitete, transaktionale Persistenzgrenze für aktive
 Empfängermatrix, Standardmatrix, Nachrichtenzähler und Grafikreset.
 `incident.php` und `incident_ui.php` bilden den globalen Einsatzstatus,
-Eingabegate und Statusbanner. `attachment.php` hält Reservierung, Dateiablage,
+Eingabegate und Statusbanner. `logbook_lifecycle.php` kapselt Eröffnung,
+Übergabe, Abschluss und Aufbewahrungszustand der beiden Einsatzbücher;
+`logbook_numbering.php` vergibt deren einsatzlokale laufende Nummern atomar.
+`attachment.php` hält Reservierung, Dateiablage,
 Metadaten und Audit in demselben Einsatzkontext. `generated_form.php`
 autorisiert die einzelnen einsatzbezogen benannten Nachrichtenvordrucke,
 liefert deren vollständigen Nachrichtendatensatz und validiert die gemeinsame
@@ -207,8 +210,12 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   Funktionen nur einmal je laufender Schicht. Ungesperrte Offline-Konten
   dürfen vorausgeplant werden; eine in der Websitzung persönlich gespeicherte
   Annahme zählt auch nach Logout, weil `aktiv` ausschließlich den momentanen
-  Onlinezustand bezeichnet. Eine Übergabe wird administrativ initiiert und erst durch ein
-  Konto der Nachfolgeschicht bestätigt oder mit Pflichtgrund storniert. Ein
+  Onlinezustand bezeichnet. Eine Übergabe initiiert ausschließlich die
+  persönlich angemeldete, ausgewählte und angenommene Besetzung der aktiven
+  Schicht. Eine persönlich angenommene Besetzung der Nachfolgeschicht bestätigt
+  sie. Nur die Administration kann eine noch offene Fehlanforderung mit
+  Pflichtgrund stornieren. Initiierungs- und Bestätigungszeit werden getrennt
+  aus der Datenbankuhr in den ETB-/TBB-Übergabezeilen nachgewiesen. Ein
   Konto darf mehrere ausdrücklich zugewiesene Hüte wählen. Die Session
   speichert dabei die konkrete Besetzungs-ID, die bei jeder geschützten
   Anfrage erneut geprüft wird. Ohne aktive Schicht bleibt jeder normale

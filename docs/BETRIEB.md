@@ -101,7 +101,7 @@ Der Name der Führungsstelle ist ausdrücklich **keine** Umgebungsvariable.
 Die Administration speichert ihn für jeden Einsatz getrennt. Er bezeichnet
 die lokale Anschrift beziehungsweise Absendereinheit auf
 Nachrichtenvordrucken und ist weder der Einsatzname noch die
-Trägerorganisation oder die Einsatzleitung. Ein alter
+Bedarfsträger oder die Einsatzleitung. Ein alter
 `ESTAB_ORGANISATION`-Eintrag in einer bestehenden `.env` ist obsolet und
 sollte entfernt werden; er wird nicht als Führungsstellenname übernommen.
 
@@ -232,8 +232,8 @@ ihn anschließend wieder her.
 podman compose run --rm migrate
 ```
 
-Ein bereits aktueller Bestand meldet alle fünfzehn Migrationen einschließlich
-`100-session-presence.sql` als vorhanden und
+Ein bereits aktueller Bestand meldet alle siebzehn Migrationen einschließlich
+`111-logbook-shift-assignment.sql` als vorhanden und
 führt trotzdem den vollständigen Read-only-Schematest aus. Die Ausgabe muss
 `Post-migration schema verification passed` und anschließend
 `All schema migrations are applied` enthalten. Erst danach sollte der Stack
@@ -246,6 +246,21 @@ erwartete Sicherheitsübergang betrifft ausschließlich eStab-Funktionskonten:
 Nach dem Upgrade müssen sich diese Benutzer neu anmelden. Der separate
 HTTP-Basic-Administrationszugang bleibt verfügbar.
 
+Migration 110 ergänzt die einsatzlokalen ETB-/TBB-Nummern, exakt zwei
+sperrbare Buchköpfe pro Einsatz, strukturierte TBB-Felder,
+einen eindeutigen ETB-Anhangsbezug, Append-only-/Korrekturgrenzen und die
+zehnjährige Mindestaufbewahrung. Bereits
+geführte Bücher werden deterministisch nummeriert und als Legacy-Bestand
+erhalten; neue Eröffnungstatsachen werden nicht rückwirkend erfunden. Neue
+Einsätze erhalten ihre leeren Köpfe `ETB:1` und `TTB:1` unmittelbar durch den
+Einsatz-Insert-Trigger. Ein fehlender Kopf wird bei einer Eintragung nicht
+neu erzeugt, sondern als Datenbankfehler gemeldet. Die MariaDB-
+Standardisolation `REPEATABLE READ` bleibt unverändert; insbesondere bleiben
+die konsistenten Read-only-Export-Snapshots aktiv.
+Der grüne technische Stand ersetzt nicht die von der ETB-/TBB-Unterlage
+verlangte formale THW-Freigabe. Quelle, Hash und Abnahmevorbehalt stehen in
+[DV-1-101-UMSETZUNG.md](DV-1-101-UMSETZUNG.md).
+
 ### 5. Ersten Einsatz und Dienstbetrieb aktivieren
 
 Eine Neuinstallation startet absichtlich ohne aktiven Einsatz und ohne aktive
@@ -254,8 +269,11 @@ erreichbar; operative Lese- und Schreibpfade sind geschlossen. Vor der ersten
 Nachricht, dem ersten Anhang oder einem ETB-/TBB-Eintrag:
 
 1. `/4fadm/admin.php` mit dem separaten Basic-Auth-Zugang öffnen,
-2. unter **Einsätze** Kennung, Einsatzname, Name der Führungsstelle und Beginn
-   anlegen und den Einsatz aktivieren,
+2. unter **Einsätze** Kennung, genaue Einsatzbezeichnung, Beginn,
+   Bedarfsträger, Name der Führungsstelle, verantwortliche
+   Einsatz-/Führungsleitung sowie Einsatzauftrag/Ausgangslage anlegen und den
+   Einsatz aktivieren; beim Anlegen müssen genau die beiden noch leeren
+   Nummernköpfe `ETB:1` und `TTB:1` entstehen,
 3. unter **Benutzerverwaltung** persönliche Konten für mindestens S2, Si, S6,
    LdF und A/W anlegen,
 4. unter **Führungsstellenbetrieb** eine Dienstschicht planen und die
@@ -263,9 +281,84 @@ Nachricht, dem ersten Anhang oder einem ETB-/TBB-Eintrag:
 5. jede Person ihre Zuweisungen unter `/4fach/fuehrungsstelle.php` selbst
    annehmen lassen,
 6. die Schicht erst nach Annahme aller Pflichtfunktionen administrativ
-   aktivieren,
+   aktivieren; die erste Aktivierung eröffnet ETB und TBB atomar mit lokaler
+   Nummer 1 und nennt den Einsatzbeginn ausdrücklich im ersten ETB-Text,
 7. vor operativer Arbeit die eigene angenommene aktive Dienstfunktion
    auswählen und Einsatz, Schicht und Funktions-Hut in der Oberfläche prüfen.
+
+Eine Schichtübergabe wird nicht allein durch den technischen Administrator
+gezeichnet. Eine persönlich angemeldete, ausgewählte und angenommene
+Besetzung der aktiven Schicht initiiert sie mit der Zusammenfassung; eine
+persönlich angenommene Besetzung der Nachfolgeschicht bestätigt sie. Erst die
+Bestätigung wechselt die Schichten und schreibt beide Logbuchzeilen. Darin
+erscheinen nur tatsächlich abgelöste alte beziehungsweise angenommene neue
+Statusbesetzungen.
+
+Während einer laufenden Schicht darf die Administration eine bislang
+unbesetzte Funktion ergänzen. Die Zuweisung ist erst wirksam, nachdem die
+betroffene Person sie unter `/4fach/fuehrungsstelle.php` selbst angenommen
+hat. Danach muss eine neue ETB-Zeile vorhanden sein; für LdF oder A/W
+zusätzlich eine TBB-Zeile. Mehrere unterschiedliche A/W-Besetzungen sind als
+Aufstockung zulässig. Eine ETB-Ergänzung, die eine angenommene ETB- oder
+S2-Besetzung als bestimmten Schreiber verdrängen würde, wird in der aktiven
+Schicht bereits bei der Zuweisung und nochmals bei der Annahme abgewiesen.
+Auch eine noch in der Planung zugewiesene ETB-Funktion darf nach Aktivierung
+nicht nachträglich übernehmen. Für jeden Wechsel der ETB-Führung ist eine
+Nachfolgeschicht vorzubereiten und dokumentiert sowie bestätigt zu übergeben.
+
+Eine ETB-Anlage wird optional beim Erfassen des ETB-Eintrags aus den
+finalisierten, noch unbenutzten Anhängen des aktiven Einsatzes ausgewählt.
+Nach dem Speichern zeigt eStab
+`ETB {einsatz_id}-{estab_book_lfd}-1`; ein Ablagekennzeichen wie `EL0001`
+bleibt getrennt. Dieselbe Datei darf nicht erneut als ETB-Anlage angeboten
+oder verknüpft werden. Über die ETB-Suche lassen sich leere Gesamtliste,
+Volltext, Art, lokale Nummer/Bezug, ETB-Anlagennummer, Ablage-/Dateiname und
+Bearbeitungszuordnung kombinieren. Die optionale Zuordnung wird aus den
+angenommenen Besetzungen der aktiven Schicht ausgewählt, beim Speichern erneut
+geprüft und als unveränderlicher Snapshot abgelegt. Sie bleibt eine Suchhilfe
+der Webansicht und erscheint nicht im amtlichen Fb-Fü-2-PDF.
+
+Das Feld **Referenz auf ETB-Nr.** nimmt bei neuen Einträgen ausschließlich die
+positive lokale Nummer eines bereits vorhandenen ETB-Eintrags desselben
+Einsatzes an. Freitext, führende Nullen, technische Primärschlüssel und
+unbekannte Nummern werden abgewiesen. Historische freie Bestandsbezüge bleiben
+les- und suchbar, werden aber nicht als nachträglich konstruierte Verknüpfung
+ausgewertet. Bei einer Berichtigung ermittelt der Server die sichtbare lokale
+Nummer aus dem unveränderlichen Original; sie wird nicht vom Browser
+übernommen.
+
+Unter **ETB-Referenzen auswerten** lässt sich zu einer lokalen Startnummer der
+vorwärts gerichtete, gegebenenfalls verzweigte Nachweis aller referenzierenden
+Einträge oder rückwärts der Bezugspfad anzeigen. Die Auswertungstiefe ist auf
+1 bis 25 begrenzt. Eine abgeschnittene Auswertung wird ausdrücklich markiert;
+**Druckansicht öffnen** erzeugt eine auf diesen Referenznachweis beschränkte
+Ansicht.
+
+Jede neue manuelle ETB-/TTB-Zeile speichert aktive Schicht und schreibende
+Dienstbesetzung. Automatische Systemzeilen speichern die Schicht ohne
+menschliche Schreiberzuordnung; historische Zeilen behalten nach Migration
+111 mangels belegbarer Herkunft `NULL`.
+
+Die designierte Buchführung wird unabhängig vom aktuellen Kontozustand als
+erste angenommene ETB-, ersatzweise S2-Besetzung beziehungsweise als erste
+angenommene A/W-Besetzung bestimmt. Wird genau dieses Konto deaktiviert oder
+gesperrt, bleibt das Schreiben geschlossen; eStab befördert nicht unbemerkt
+die nächste fachlich passende Person. Vor der Fortsetzung ist eine
+dokumentierte Ablösung beziehungsweise Übergabe erforderlich. Beim manuellen
+Insert prüft auch die Datenbank angenommene Besetzung, aktive Schicht,
+übereinstimmende Konto-/Kürzel-/Funktionsidentität sowie ein aktives,
+ungesperrtes Konto.
+
+Der Dossierexport weist ETB-Anlagennummer und Ablagekennzeichen im
+Fb-Fü-2-Abzug beziehungsweise Anlagenverzeichnis aus. Für ETB/TBB wählt die
+Administration das Gesamtbuch oder eine Dienstschicht. Die Schichtwahl filtert
+nur diese beiden Buchabschnitte; Nachrichtenvordrucke, Anhänge und alle
+weiteren ausgewählten Abschnitte bleiben einsatzweit. Deckblatt und
+`pdf_export`-Audit dokumentieren den aufgelösten Umfang.
+
+Ein formaler Einsatzabschluss ist vor diesem Eröffnungsablauf nicht möglich:
+Der Preflight verlangt mindestens eine aktivierte Schicht sowie exakt je eine
+ETB- und TBB-Eröffnungszeile mit lokaler Nummer 1.
 
 Ein Einsatzwechsel gilt systemweit für alle angemeldeten Browser. Er darf nur
 koordiniert erfolgen, wenn keine ungespeicherten Fachvorgänge offen sind.
@@ -273,7 +366,7 @@ Historische Daten bleiben ihrem vorherigen Einsatz zugeordnet und werden
 nicht in den neuen Statusraum umgehängt.
 
 Migration 97 lässt den Führungsstellennamen bestehender Einsätze bewusst
-`NULL`: Einsatzname, Organisation und Einsatzleitung wären keine belegbaren
+`NULL`: Einsatzname, Bedarfsträger und Einsatzleitung wären keine belegbaren
 historischen Ersatzwerte. Ein offener Alt-Einsatz muss deshalb unter
 **Einsätze** einmalig mit seinem tatsächlichen Führungsstellennamen bestätigt
 werden, bevor er aktiviert oder weiter operativ beschrieben werden kann. Die
@@ -772,7 +865,9 @@ Export-Volume und werden nicht automatisch gelöscht. Vollständige einzelne
 Läufe können unter `/4fadm/export.php` nach einer ausdrücklichen zweiten
 Bestätigung gelöscht werden. Das ersetzt keine Aufbewahrungsregel: Für beide
 Bereiche sind weiterhin Frist, Verantwortlichkeit und Kapazitätsalarm
-festzulegen.
+festzulegen. Unabhängig von der Exportdatei sperrt die Einsatzdomäne ETB, TBB
+und übrige Fachdaten eines formal geschlossenen Einsatzes mindestens zehn
+Jahre ab Abschluss; ein Legal Hold kann die Frist verlängern.
 
 Eine Sicherung und ein regelmäßig geprobter Restore sind in
 [Backup und Wiederherstellung](BACKUP-UND-WIEDERHERSTELLUNG.md) beschrieben.

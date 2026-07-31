@@ -69,7 +69,7 @@ Derzeit sind folgende explizite Migrationen vorhanden:
 | `docker/db/migrations/50-global-incidents.sql` | führt die globale Einsatzdomäne, den geschlossenen `LEGACY-IMPORT`, die Einsatzzuordnung und die Datenbank-Schreibgrenzen ein; diese veröffentlichte Fassung bleibt bytegenau unverändert |
 | `docker/db/migrations/55-global-incidents-finish.sql` | prüft den vorbereiteten beziehungsweise bereits fertigen Zustand und stellt die kanonischen `ON UPDATE CURRENT_TIMESTAMP`-Definitionen nach dem Einsatz-Backfill wieder her |
 | `docker/db/migrations/70-user-account-blocking.sql` | ergänzt die kollisionsgeprüfte dauerhafte Kontosperre |
-| `docker/db/migrations/80-dv-evidence-retention.sql` | ergänzt den unveränderbaren Nachrichten- und ETB-Nachweis, den formalen Einsatzabschluss, die Mindestaufbewahrung von einem Jahr und eine zusätzliche Aufbewahrungssperre |
+| `docker/db/migrations/80-dv-evidence-retention.sql` | ergänzte ursprünglich den unveränderbaren Nachrichten- und ETB-Nachweis, den formalen Einsatzabschluss, eine Mindestaufbewahrung von einem Jahr und eine zusätzliche Aufbewahrungssperre; Migration 110 hebt diese Untergrenze anschließend verbindlich auf zehn Jahre an |
 | `docker/db/migrations/94-dv-organisational-controls.sql` | ergänzt Dienstschichten und Mehrfachfunktionen, den versionierten S6-Fernmeldeplan, den vollständigen Melderlauf sowie eine verkettete Ereignisspur dieser Betriebsabläufe; zugleich wird Autosichtung verbindlich deaktiviert und S2 als Rotkopie-/Dokumentationsfähigkeit normalisiert |
 | `docker/db/migrations/95-attachment-ingest-integrity.sql` | markiert beim Upgrade vorhandene Anhänge ausdrücklich als nicht rückwirkend belegbaren Legacy-Bestand und verlangt für jeden danach finalisierten Anhang einen unveränderlichen SHA-256-/Größen-/Serverzeit-Nachweis; Trigger verhindern neue Legacy-Markierungen, Herabstufung und nachträgliche Beweisänderung |
 | `docker/db/migrations/96-etb-duty-function.sql` | führt die eigenständig auswählbare ETB-Dienstfunktion ein, ordnet die Fähigkeit `EINSATZTAGEBUCH` sowohl S2 als auch ETB über den zusammengesetzten Schlüssel `(funktion, faehigkeit)` zu und belässt Rotkopie sowie `LAGE_DOKUMENTATION` ausschließlich bei S2 |
@@ -77,6 +77,8 @@ Derzeit sind folgende explizite Migrationen vorhanden:
 | `docker/db/migrations/98-official-message-form-fields.sql` | ergänzt die amtlichen, getrennt persistierten Nachrichtenvordruckfelder `11_rufnummer` und `12_betreff`; Bestandsnachrichten behalten alle vorhandenen Werte und erhalten für beide neuen Angaben ausschließlich den leeren Standardwert |
 | `docker/db/migrations/99-message-list-search.sql` | ersetzt den früheren Inhalts-Volltextindex durch den siebenfeldrigen Suchindex und ergänzt die beiden einsatzgebundenen BTREE-Indizes für skalierbare Meldungslisten |
 | `docker/db/migrations/100-session-presence.sql` | ergänzt den UTC-Zeitstempel der letzten echten Browserinteraktion und den Präsenzindex; bereits aktive Legacy-SIDs ohne belegbaren Zeitpunkt werden beim Upgrade einmalig widerrufen |
+| `docker/db/migrations/110-etb-tbb-rules.sql` | ergänzt einsatzlokale fortlaufende ETB-/TBB-Nummern samt exakt zwei vorab angelegten und gesperrten Buchköpfen je Einsatz, strukturierte TBB-Felder und Bezüge, den eindeutigen ETB-Anhangsbezug, Append-only-/Korrekturregeln, Erweiterungen aktiver Schichten mit A/W-Mehrfachbesetzung, die zehnjährige Aufbewahrungsuntergrenze und den deterministischen Legacy-Backfill |
+| `docker/db/migrations/111-logbook-shift-assignment.sql` | ergänzt nullable Schicht- und Schreiberprovenienz für ETB/TBB sowie die optionale ETB-Bearbeitungszuordnung mit unveränderlichem Snapshot; neue Zeilen werden durch Fremdschlüssel und Insert-Trigger geprüft, der Besetzungs-Update-Trigger verhindert eine verspätete ETB-Annahme mit Schreiberwechsel in der aktiven Schicht, historische Zeilen bleiben mangels belegbarer Herkunft `NULL` |
 
 Migration 95 klassifiziert vorhandene Zeilen bereits beim Hinzufügen der
 Spalte mit dem einmaligen Anfangswert `integrity_required=0` und stellt danach
@@ -112,8 +114,8 @@ eigenen Zwischenstände. Gemischte Katalogdaten, ein abweichender
 Primärschlüssel oder fremde Indizes blockieren vor der nächsten Änderung und
 bleiben zur Untersuchung erhalten. `verify.sql` und die Laufzeit-Readiness
 verlangen danach exakt sieben Katalogzeilen, das vollständige neue ENUM,
-ausschließlich den zweispaltigen Primärschlüssel und alle fünfzehn
-angewendeten Migrationen einschließlich Version 100.
+ausschließlich den zweispaltigen Primärschlüssel und alle siebzehn
+angewendeten Migrationen einschließlich Version 111.
 
 Migration 97 fügt `nv_einsaetze.fuehrungsstellenname` als
 `VARCHAR(128) NULL` unmittelbar hinter `organisation` und
@@ -180,6 +182,116 @@ separate HTTP-Basic-Administrationszugang ist davon nicht betroffen. Neue
 Logins schreiben den UTC-Zeitstempel; echte Browserinteraktion aktualisiert
 ihn später ausschließlich über den Session-CSRF- und SID-gebundenen
 Aktivitätsendpunkt. Automatische Statuspolls aktualisieren ihn nicht.
+
+Migration 110 verlangt die von den Einsatz-, ETB-Nachweis- und
+Dienstschichtmigrationen erzeugten Vorgängerstrukturen. Sie reserviert den
+Namensraum für `nv_logbuch_koepfe`, lokale Buchnummern, strukturierte
+TBB-Spalten, Indexe, Fremdschlüssel und Trigger und bricht bei einer
+gleichnamigen fremden oder nur teilweise passenden Definition vor der nächsten
+Änderung ab. Wiederanläufe akzeptieren ausschließlich fehlende, klar als eigen
+markierte Zwischenstände oder den vollständig kanonischen Endstand.
+
+Beim Daten-Backfill gilt:
+
+- ETB und TBB erhalten je Einsatz getrennte `estab_book_lfd`-Nummern ab 1.
+  Die Reihenfolge wird deterministisch nach der vorhandenen Erfassungszeit und
+  danach dem stabilen globalen Legacy-Primärschlüssel gebildet.
+- Der jeweils nächste Wert wird in `nv_logbuch_koepfe` rekonstruiert. Für
+  jeden vorhandenen Einsatz müssen danach exakt zwei Zeilen bestehen, `ETB`
+  und `TTB`; zusätzliche oder fehlende Köpfe blockieren den Abschluss der
+  Migration.
+- Der neue `AFTER INSERT`-Trigger auf `nv_einsaetze` legt für jeden später
+  erzeugten Einsatz im selben Statement `ETB:1` und `TTB:1` an. ETB-/TBB-
+  Inserts sperren und erhöhen nur den vorhandenen Kopf. Sie besitzen bewusst
+  keinen konkurrierenden „falls fehlt: anlegen“-Pfad; ein beschädigter Kopf
+  führt zu einem expliziten Fehler, ohne Eintrag oder Nummernverbrauch.
+- Diese Zeilensperre ist mit der unveränderten MariaDB-Standardisolation
+  `REPEATABLE READ` ausgelegt. Die Migration schaltet Snapshot-Isolation nicht
+  ab; der Export verwendet weiterhin eine explizite konsistente
+  Read-only-Snapshot-Transaktion.
+- Historische TBB-Zeilen werden als `legacy_import` gekennzeichnet. Ihre
+  bisherige Aktion und Bemerkung bleiben sichtbar und werden zusätzlich ohne
+  fachliche Umdeutung in den strukturierten Betriebsbereich übernommen.
+- TBB-Ereignis- und Erfassungszeit werden aus der vorhandenen `tbb_time`
+  initialisiert. Die Migration erfindet keine damals nicht gespeicherten
+  Personal-, Kanal-, Nachrichten- oder Quittungsdaten.
+- Bereits vorhandene ETB-Anhangsbezüge werden vor der Indexphase geprüft.
+  Verweist derselbe Anhang auf mehrere ETB-Zeilen, bricht Migration 110 mit
+  `duplicate ETB attachment link` ab. Sie löscht keine Verknüpfung und wählt
+  keinen vermeintlichen Gewinner. Der anschließende eindeutige Index
+  `uq_etb_attachment_id` erzwingt dieselbe Regel für alle neuen Einträge.
+- Der Dienstbesetzungs-Trigger erlaubt bei einer aktiven Schicht eine bisher
+  nicht belegte Funktion und mehrere unterschiedliche A/W-Besetzungen. Für
+  jede andere Funktion blockiert bereits eine frühere Zuweisung in derselben
+  aktiven Schicht eine vermeintliche Ersetzung; dafür ist die
+  Schichtübergabe vorgesehen.
+
+Nach dem Backfill erzwingen eindeutige `(einsatz_id, estab_book_lfd)`-Indexe
+die lokale Nummer, Fremdschlüssel einsatzsichere Nachrichten- und
+Korrekturbezüge und Trigger die zulässigen ETB-Kennzeichen beziehungsweise
+TBB-Eintragsarten. `UPDATE` und `DELETE` werden für beide Bücher abgewiesen;
+eine Berichtigung wird als neuer, direkt auf den Originaleintrag verweisender
+Datensatz angelegt. Bereits formal geschlossene Einsätze werden auf mindestens
+zehn Jahre ab `estab_closed_at` verlängert, ohne ein späteres bestehendes Ende
+zu verkürzen. Der neue Abschluss-Trigger verhindert anschließend jede kürzere
+Frist.
+
+Der Anwendungs-Preflight ergänzt die Schemaregel: Ein Einsatz ohne mindestens
+eine aktivierte Schicht und ohne exakt je eine Eröffnungszeile Nummer 1 in ETB
+und TBB kann nicht formal geschlossen werden. Damit kann ein vorbereiteter
+Einsatz nicht an der vorgeschriebenen Bucheröffnung vorbei in den
+Aufbewahrungszustand wechseln.
+
+Die Anwendung ergänzt darüber hinaus keine historischen Tatsachen. Nur bei
+einem neuen, noch leeren Buch erzeugt die Aktivierung der ersten
+Dienstschicht die fachlichen Eröffnungszeilen; der erste ETB-Text nennt den
+gespeicherten Einsatzbeginn ausdrücklich. Bestandszeilen erhalten zwar lokale
+Nummern, aber keinen nachträglich erfundenen Pflichtkopf, keine Besetzung und
+keine Quittung.
+
+Migration 111 ergänzt an `nv_etb` die nullable Spalten `estab_shift_id`,
+`estab_writer_assignment_id`, `estab_assignee_assignment_id` und
+`estab_assignment`; `nv_tbb` erhält `estab_shift_id` und
+`estab_writer_assignment_id`. Einsatz-/Schicht- und
+Besetzungsfremdschlüssel verwenden `RESTRICT`, die einsatz- und
+schichtbezogenen Buchindexe tragen die PDF-Auswahl. Gleichnamige fremde
+Spalten, Indexe, Fremdschlüssel oder nicht kanonische Trigger blockieren vor
+der Übernahme; eigene DDL-Zwischenstände sind wiederaufnehmbar.
+
+Zwei zusätzliche Trigger binden bei neuen Übergaben den Abschlussdatensatz,
+die Bestätigungsanfrage und beide Schichtwechsel an denselben von der
+Anwendung einmal gelesenen Datenbankzeitpunkt. Die frühere Initiierungszeit
+bleibt davon getrennt als tatsächliche Übergabezeit erhalten. Ein fremder
+gleichnamiger Zeittrigger blockiert die Migration ebenso wie die übrigen
+Objektkollisionen.
+
+Neue manuelle Zeilen benötigen Schicht und Schreiberbesetzung derselben
+Schicht. Der Insert-Trigger verlangt zusätzlich eine aktive Schicht, eine
+angenommene Schreiberbesetzung, übereinstimmende Benutzer-/Kürzel-/
+Funktionsidentität und ein aktives, ungesperrtes Konto; für ETB ist die
+Funktion ETB oder S2, für TBB A/W. Automatische Zeilen benötigen ebenfalls die
+Schicht, müssen die menschliche Schreiber-ID aber leer lassen. Eine optionale
+ETB-Zuordnung darf nur auf eine angenommene Besetzung derselben aktiven Schicht
+mit ungesperrtem Konto zeigen. Ihr Online-/Präsenzstatus ist kein fachliches
+Gültigkeitsmerkmal. Der Trigger ignoriert einen behaupteten Browsertext und
+erzeugt den Snapshot
+`Funktion (Rolle): Name [Kürzel]` aus den referenzierten Daten. Die Migration
+führt bewusst kein historisches Provenienz-Backfill aus: Alle neuen Felder
+bleiben bei vorhandenen ETB-/TTB-Zeilen `NULL`, weil weder Dienstschicht noch
+schreibende Person rückwirkend beweisbar sind.
+
+Der erneuerte ETB-Insert-Trigger akzeptiert neue Referenzen nur als
+kanonische, positive, bereits vorhandene lokale ETB-Nummer desselben Einsatzes.
+Für Korrekturen muss diese öffentliche Nummer exakt zur intern gebundenen
+direkten Originalzeile passen. Historischer Freitext wird durch die Migration
+nicht umgedeutet oder überschrieben.
+
+Fachgrundlage für diese Migration ist das bereitgestellte Handbuch ETB/TBB,
+Version 1.0, Stand März 2022, SHA-256
+`2457d1deccd01892655bbc329b08885a0b3c8b3ebfb6372c79997d3427d1ae59`.
+Migration und grüner Schemacheck stellen keine formale THW-Freigabe des
+elektronischen Verfahrens dar; der vollständige Vorbehalt ist in
+[DV-1-101-UMSETZUNG.md](DV-1-101-UMSETZUNG.md) festgehalten.
 
 Das freigegebene Upgradeverfahren lautet:
 

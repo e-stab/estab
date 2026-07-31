@@ -157,7 +157,7 @@ ihren eigenen Grenzen.
 ### Einsatzgebundene Führungsstellenidentität
 
 `nv_einsaetze.fuehrungsstellenname` ist die autoritative lokale
-Anschrift/Absendereinheit eines Einsatzes. Einsatzname, Trägerorganisation und
+Anschrift/Absendereinheit eines Einsatzes. Einsatzname, Bedarfsträger und
 Einsatzleitung sind getrennte Tatsachen; weder diese Felder noch Browserdaten
 oder eine Umgebungsvariable dürfen als Ersatz dienen. Neue Einsätze verlangen
 den Wert bereits beim Anlegen.
@@ -561,12 +561,21 @@ Das einsatzbezogene PDF-Dossier besitzt neun unabhängig wählbare Abschnitte:
 ETB, TBB, Nachrichtenvordrucke, Anhänge, Nachrichtenereignisse,
 Dienstbetrieb, S6-Fernmeldepläne, Melderläufe und Betriebsereignisse. Es liest
 den ausdrücklich gewählten aktiven oder historischen Einsatz aus einem
-konsistenten Read-only-Snapshot. Nachrichtenseiten verwenden denselben
+konsistenten Read-only-Snapshot. Die Anwendung belässt MariaDB bei der
+Standardisolation `REPEATABLE READ`; der Export startet ausdrücklich eine
+read-only Transaktion mit konsistentem Snapshot. Nachrichtenseiten verwenden denselben
 Vordruckrenderer wie der Einzelabruf; neue Anhänge werden vor dem Laden und
 vor dem Einbetten erneut gegen SHA-256 und Bytezahl geprüft.
 Führungsstellenname, Einsatzkennung und Einsatzname werden getrennt in
 Auswahl, Deckblatt und Seitenkopf geführt. Ein historischer `NULL`-Wert heißt
 sichtbar „historisch nicht erfasst“.
+
+Zusätzlich wählt die Administration den ETB-/TTB-Umfang als Gesamtbuch oder
+als eine zum Einsatz gehörende Dienstschicht. Die Auswahl wird innerhalb des
+Snapshots nochmals auf Einsatzzugehörigkeit geprüft und als vorbereiteter
+`estab_shift_id`-Filter ausschließlich auf ETB und TBB angewendet. Alle anderen
+gewählten Sektionen bleiben einsatzweit. Der aufgelöste Umfang samt
+Schichtmetadaten fließt in Deckblatt und `pdf_export`-Audit ein.
 
 Der Administrations-Export erzeugt CSV-Dateien anwendungsseitig; der
 MariaDB-Benutzer benötigt dafür kein globales `FILE`-Privileg. Die Oberfläche
@@ -635,10 +644,129 @@ aktive S2-Besetzung mit `LAGE_DOKUMENTATION` bestimmt. Die Nachweisung ist
 ausschließlich für eine ausgewählte aktive LdF-Besetzung mit
 `FERNMELDEBETRIEB` oder A/W-Besetzung mit `BEFOERDERUNG` bestimmt. ETB und TBB
 dürfen alle ausgewählten aktiven Funktions-Hüte lesen; ETB-Schreiben verlangt
-eine S2- oder ETB-Besetzung mit `EINSATZTAGEBUCH`, TBB-Schreiben eine
-A/W-Besetzung mit `BEFOERDERUNG`. Die getrennte
+zusätzlich genau die als Schreiber bestimmte Besetzung. Die zuerst
+zugewiesene angenommene ETB-Besetzung hat Vorrang, ersatzweise die erste
+angenommene S2-Besetzung mit `EINSATZTAGEBUCH`; beim TBB ist es die erste
+angenommene A/W-Besetzung mit `BEFOERDERUNG`. Weitere fachlich fähige
+Besetzungen bleiben lesend. Die getrennte
 `LAGE_DOKUMENTATION`-Fähigkeit und damit die Meldungsübersicht bleiben
 ausschließlich S2 vorbehalten.
+
+Der Kontozustand beeinflusst die Designation bewusst nicht: Eine Sperrung oder
+Deaktivierung der bestimmten Person blockiert den Writer, statt still die
+nächste geeignete Besetzung vorzuziehen. Die Anwendung sperrt und prüft die
+konkrete Designation und die Sitzungsidentität erneut. Der Insert-Trigger
+bildet die unabhängige Persistenzgrenze und verlangt angenommene Besetzung,
+aktive einsatzgleiche Schicht, passende Benutzer-/Kürzel-/Funktionsidentität
+sowie ein aktives, ungesperrtes Konto. Erst eine fachlich dokumentierte
+Ablösung darf die Schreiberherkunft ändern.
+
+Lokale ETB-/TBB-Nummern werden durch genau zwei je Einsatz vorab angelegte
+Datenbankköpfe vergeben. Der Einsatz-Insert-Trigger erzeugt atomar `ETB:1` und
+`TTB:1`; jeder Buch-Insert sperrt und erhöht nur seinen vorhandenen Kopf. Ein
+fehlender Kopf wird nicht im konkurrierenden Buchtrigger repariert, sondern
+fail-closed abgewiesen. Globale Legacy-Primärschlüssel sind keine fachlichen
+Nummern. Eröffnung bei erster Schichtaktivierung, bestätigte Übergabe und
+formaler Abschluss hängen ihre Buchzeilen innerhalb der jeweiligen
+Fachtransaktion an. Ein Abschluss vor mindestens einer aktivierten Schicht und
+exakt je einer Eröffnungszeile Nummer 1 ist gesperrt. `UPDATE` und `DELETE`
+beider Bücher sind durch Trigger gesperrt; eine Korrektur ist eine neue,
+direkt auf das Original verweisende Zeile. Die zehnjährige
+Mindestaufbewahrung wird ebenfalls in der Datenbank geprüft. Diese technischen
+Grenzen ersetzen keine formale THW-Freigabe des elektronischen
+ETB-/TBB-Verfahrens.
+
+Der erste ETB-Eintrag enthält den gespeicherten Einsatzbeginn ausdrücklich im
+Text. Eine spätere manuelle ETB-Zeile darf optional genau einen finalisierten,
+einsatzgleichen und noch unbenutzten Anhang binden. Seine sichtbare Nummer
+`ETB {einsatz_id}-{estab_book_lfd}-1` wird aus Einsatz und erst im Commit
+vergebener lokaler Buchnummer abgeleitet; der Upload gilt als eine gebündelte
+digitale Einheit des einzigen ETB-Buchstroms. Ein Ablagekennzeichen wie
+`EL0001` bleibt getrennt. Der Anwendungswriter sperrt Anhang und bestehenden
+Bezug mit `FOR UPDATE`; `UNIQUE(estab_attachment_id)` und der ETB-Insert-
+Trigger bilden die zweite Grenze. Die Oberfläche bietet nur finalisierte,
+unbenutzte Kandidaten an und durchsucht Volltext, Art, lokale Nummern, Bezüge,
+ETB-Anlagennummer sowie Ablage-/Originaldateinamen stets einsatzgebunden.
+
+Migration 111 bindet jede neue manuelle ETB-/TTB-Zeile an die gesperrte aktive
+Dienstschicht und an die serverseitig ermittelte schreibende
+Dienstbesetzungs-ID. Automatische Systemzeilen tragen dieselbe
+Schichtprovenienz, müssen ihre menschliche Schreiberzuordnung aber `NULL`
+lassen. Bestandszeilen werden nicht rückwirkend einer vermuteten Schicht oder
+Person zugeordnet und behalten dort `NULL`.
+
+Ein ETB-Eintrag darf zusätzlich optional eine angenommene Besetzung derselben
+aktiven Schicht als Bearbeitungs- und Suchhilfe referenzieren. Die Auswahl-ID
+wird unter `FOR UPDATE` erneut geprüft; der Insert-Trigger erzeugt daraus den
+unveränderlichen Snapshot `Funktion (Rolle): Name [Kürzel]`. Freier
+Browsertext kann ihn nicht ersetzen. Webliste, Volltext- und Zuordnungsfilter
+verwenden den Snapshot, der amtliche PDF-Renderer dagegen ausdrücklich nicht.
+
+Die öffentliche ETB-Referenz ist die einsatzlokale Buchnummer, nicht der
+globale Primärschlüssel. Neue Werte werden als kanonische positive
+Dezimalzahl ohne führende Nullen validiert und unter dem Einsatz-Lock auf einen
+bereits vorhandenen Eintrag desselben Einsatzes aufgelöst. Bei Korrekturen
+bleibt intern die direkte Originalzeile gebunden; ihre sichtbare Referenz wird
+serverseitig aus deren lokaler Nummer abgeleitet. Historischer Freitext bleibt
+unverändert les- und suchbar, wird aber nicht als Graphkante interpretiert.
+Die nur lesende Auswertung traversiert ausschließlich den aktiven Einsatz,
+merkt bereits besuchte Zeilen und begrenzt die gewünschte Vorwärts- oder
+Rückwärtstiefe auf 1 bis 25. Vorwärts bleiben Verzweigungen erhalten;
+rückwärts folgt sie der gespeicherten direkten Referenz.
+
+Eine aktive Schicht kann administrativ nur um eine noch nicht belegte Funktion
+ergänzt werden; A/W ist die bewusst mehrfach besetzbare Ausnahme. Erst die
+persönliche Annahme durch das zugewiesene Konto macht die Erweiterung wirksam
+und hängt atomar eine ETB-Zeile sowie für LdF/A/W zusätzlich eine
+TBB-Zeile an. Der Austausch einer anderen bereits belegten Funktion bleibt
+dem Übergabeverfahren vorbehalten.
+Eine ETB-Ergänzung, die eine angenommene ETB- oder S2-Besetzung als bestimmten
+Schreiber verdrängen würde, ist in der aktiven Schicht schon bei der
+Zuweisung gesperrt. Der Annahmepfad und der Datenbank-Trigger prüfen dies
+erneut, damit auch eine noch während der Planung zugewiesene ETB-Funktion nach
+Aktivierung nicht still übernehmen kann. Ein Schreiberwechsel erfolgt nur über
+die dokumentierte und bestätigte Schichtübergabe.
+
+Die zweistufige Schichtübergabe bindet authentifizierten Initiator und
+bestätigende Nachfolgebesetzung: Nur eine persönlich angemeldete, ausgewählte
+und angenommene Besetzung der aktiven Schicht initiiert; nur eine persönlich
+angenommene Besetzung der Nachfolgeschicht bestätigt. Initiierungs- und
+Bestätigungszeit stammen getrennt aus der Datenbankuhr und erscheinen als
+Übergabe- beziehungsweise Übernahmezeit in beiden Büchern. Zwei zusätzliche
+Datenbanktrigger erzwingen, dass Übernahmebestätigung, abgeschlossener
+Übergabenachweis sowie Ende und Beginn der beiden Schichten denselben
+Bestätigungszeitpunkt tragen und nicht vor der Initiierung liegen. In die ETB-/TBB-
+Zeilen gelangen nach dem Statuswechsel ausschließlich `ABGELOEST`-Besetzungen
+der alten und `ANGENOMMEN`-Besetzungen der neuen Schicht, keine bloßen
+Planungszeilen. Nur die PDF-Linien sind für eine anschließende manuelle
+Unterschrift vorgesehen; die Webaktionen sind keine digitale Signatur.
+
+Automatische Nachrichtenbeförderung schreibt den exakten TBB-Typ
+`nachricht`. Generator, Nachrichtendetail und Dossier ermitteln nur aus diesem
+Typ die erste lokale Nachweisnummer. Der Typ ist für automatisch erzeugte,
+einsatzgleich verknüpfte Transporte reserviert; PHP-Domäne und Datenbanktrigger
+weisen neue manuelle beziehungsweise unverknüpfte Zeilen ab, ohne historischen
+Bestand umzuschreiben. Meldungsübersicht, zweite Sichtung und Nachweislisten
+verwenden dieselbe Nummer für Anzeige, numerische Suche und Sortierung und
+kennzeichnen einen noch ausstehenden Transport ohne Ersatznummer. Eine
+LdF-Absenderübersetzung oder
+begründete Eingangswegkorrektur erzeugt daneben einen append-only Eintrag des
+Typs `korrektur` mit direktem Originalbezug; sie ersetzt die gedruckte
+Ursprungsnummer nicht. Der TBB-PDF-Renderer verteilt neue strukturierte Fakten
+jeweils nur in ihre Fachspalte und ignoriert dabei die redundante
+Kompatibilitätszusammenfassung aus `tbb_aktion`. `tbb_bemerk` ist dagegen eine
+eigenständige Bemerkung und erscheint auch bei strukturierten Zeilen genau
+einmal in der Betriebsspalte. Nur vollständig unstrukturierter Legacy-Bestand
+verwendet `tbb_aktion` als Inhaltsrückfall. ETB druckt die Erfassungszeit, TBB
+die fachliche Vorgangszeit. Nur bei formal geschlossenen
+Büchern streicht der Renderer den unbeschriebenen Rest der letzten
+Formularseite diagonal; ein offener vorläufiger Abzug bleibt fortführbar.
+Beide Buchabschnitte können als Gesamtbuch oder für genau eine Dienstschicht
+ausgegeben werden. Das Gesamtbuch nimmt auch historische Zeilen mit
+unbekannter Schichtprovenienz auf; eine Schichtausgabe enthält nur Zeilen mit
+der exakt gespeicherten Schicht-ID. Deckblatt, Seitenzahlen und Buchsignaturen
+werden aus dem tatsächlich ausgegebenen Satz neu berechnet, ohne die lokalen
+Buchnummern umzunummerieren.
 
 Die einmal autorisierte Einsatz-ID wird bis in jede Warteschlangen-,
 Nachweis- und Detailabfrage explizit weitergereicht. Ein paralleler

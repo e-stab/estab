@@ -245,6 +245,36 @@ Prüfsumme unverändert. Migration 55 stellt die kanonischen Attribute wieder
 her. `migrations/70-user-account-blocking.sql` ergänzt anschließend die
 dauerhafte, kollisionsgeprüfte Kontosperre.
 
+Der aktuelle Ledger umfasst siebzehn checksumgebundene Migrationen bis
+`migrations/111-logbook-shift-assignment.sql`. Migration 110 führt die
+einsatzlokalen ETB-/TTB-Nummern, Buchköpfe, strukturierten TBB-Inhalt,
+Append-only-Regeln und zehnjährige Aufbewahrungsuntergrenze ein. Migration 111
+ergänzt nullable Schicht-/Schreiberfremdschlüssel für beide Bücher und die
+optionale ETB-Bearbeitungszuordnung. Sie reserviert außerdem neue TBB-Zeilen
+des Typs `nachricht` für systemgenerierte, kanonisch verknüpfte Transporte und
+erzwingt einen gemeinsamen Abschlusszeitpunkt für bestätigte Übergabe,
+abgeschlossenen Übergabenachweis und Schichtwechsel; Initiierungszeit und Bestätigungszeit bleiben
+getrennt. Neue manuelle Zeilen müssen Schicht und
+menschliche Schreiberbesetzung belegen. Der Trigger verlangt eine aktive
+einsatzgleiche Schicht, eine angenommene Besetzung, passende Konto-/Kürzel-/
+Funktionsidentität und ein aktives, ungesperrtes Konto. Automatische
+Systemzeilen tragen die Schicht ohne menschlichen Schreiber. Der
+ETB-Zuordnungssnapshot wird nur aus einer angenommenen Besetzung derselben
+aktiven Schicht mit ungesperrtem Konto erzeugt; Online-/Sitzungsstatus sind
+dafür keine fachlichen Gültigkeitsmerkmale. Er kann nicht als freier
+Browsertext eingeschleust werden. Neue ETB-Referenzen sind kanonische
+positive lokale Nummern vorhandener Einträge desselben Einsatzes;
+Korrekturreferenz und intern gebundenes Original müssen übereinstimmen.
+Historische Zeilen bleiben in den neuen Provenienzfeldern bewusst `NULL`, weil
+die Migration keine nicht belegbare Herkunft erfindet und freie
+Bestandsreferenzen nicht umdeutet.
+
+`verify.sql` und die Laufzeit-Readiness verlangen alle siebzehn Ledgerzeilen,
+die sechs neuen Spalten, ihre kanonischen Indexe und Fremdschlüssel sowie die
+erweiterten ETB-/TTB-Insert-Trigger. Ein aktueller Migratorlauf endet erst nach
+`Post-migration schema verification passed` und
+`All schema migrations are applied` erfolgreich.
+
 Die Datumsmigration ist wiederholbar. Sie deaktiviert die Zero-Date-Modi nur
 für ihre eigene Sitzung und stellt den vorherigen SQL-Modus danach wieder
 her. Alle gültigen Zeitstempel bleiben bytegleich; auch `99_lstacc` wird

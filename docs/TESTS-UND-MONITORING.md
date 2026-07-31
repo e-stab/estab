@@ -212,22 +212,25 @@ ESTAB_BROWSER_TEST=required \
 tests/integration/ci.sh
 ```
 
-Der am 31. Juli 2026 tatsächlich vollständig beendete Abschlusslauf verwendete
-das isolierte Compose-Projekt `estab_ci_official_form_release`, Port `18382`
-für die App und Port `18383` für das Pull-only-Registry-Projekt:
+Der am 1. August 2026 tatsächlich vollständig beendete Abschlusslauf verwendete
+das isolierte Compose-Projekt `estab_ci_etb_tbb_final9`, Port `18090` für die
+App und den daraus abgeleiteten Port `18091` für das Pull-only-Registry-Projekt:
 
 ```console
-COMPOSE_PROJECT_NAME=estab_ci_official_form_release \
+COMPOSE_PROJECT_NAME=estab_ci_etb_tbb_final9 \
 ESTAB_CONTAINER_CLI=podman \
-ESTAB_HTTP_PORT=18382 \
-ESTAB_REGISTRY_HTTP_PORT=18383 \
+ESTAB_HTTP_PORT=18090 \
 ESTAB_BROWSER_TEST=required \
 bash tests/integration/ci.sh
 ```
 
 Er führte damit das Pflicht-Browser-Gate aus und endete erst nach dem
 vollständigen destruktiven Backup-/Restore-Roundtrip mit
-`CI integration: OK`. Dieser lokale Podman-Lauf fand nicht auf einem
+`CI integration: OK`. Er verifizierte 38 Schema-Checks, 57 Assertions des
+Registry-Deployment-Vertrags, 130 Assertions des ETB-/TBB-DV-Betriebs,
+33 Assertions des Incident-Exports und 145 Assertions der Nachrichtenlisten-
+Skalierung mit 10.257 Zeilen; die statische Suite lintete 246 aktive
+PHP-Dateien. Dieser lokale Podman-Lauf fand nicht auf einem
 nachgewiesenen SELinux-Enforcing-System statt und gilt daher ausdrücklich nicht
 als SELinux-Relabel-Nachweis.
 
@@ -289,7 +292,7 @@ Schreibgrenzen sowie die amtlichen Nachrichtenvordruckfelder aus Migration 98.
 Der Schema-Test startet Migration 98 zweimal, prüft die exakt markierten
 Spalten `11_rufnummer` und `12_betreff`, deren leere Bestandswerte und den
 unveränderten historischen Nachrichteninhalt. Readiness und `verify.sql`
-verlangen alle fünfzehn Ledgerzeilen einschließlich Version 100 sowie die
+verlangen alle siebzehn Ledgerzeilen einschließlich Version 111 sowie die
 exakten drei Such-/Listenindizes. Migration 99 wird vollständig, nach einem
 simulierten phasenweisen Abbruch und nach einer fremden Indexkollision
 ausgeführt; erst der bereinigte Wiederanlauf darf den Ledgerstand schreiben.
@@ -298,6 +301,49 @@ ausgeführt. Der Test belegt die exakt markierte nullable
 `DATETIME(6)`-Spalte, den dreispaltigen Präsenzindex, die einmalige Löschung
 der unbelegbaren SID-/IP-Metadaten und das Fehlen zurückgelassener
 Hilfsroutinen.
+Migration 110 wird mit historischen ETB-/TBB-Zeilen geprüft, deren globale
+Primärschlüsselreihenfolge bewusst von ihrer Erfassungszeit abweicht. Der Test
+verlangt je Einsatz und Buch die deterministische lokale Reihenfolge,
+unveränderte Legacy-Texte, exakt zwei korrekt fortgesetzte Buchköpfe je
+Einsatz, den `AFTER INSERT`-Trigger für neue Einsätze, die strukturierten
+TBB-Spalten, eindeutige lokale Indexe, Nachrichten-/Korrekturbezüge,
+den eindeutigen ETB-Anhangsindex, Append-only-Trigger und eine auf zehn Jahre
+angehobene Abschlussfrist. Ein historischer Mehrfachbezug desselben Anhangs
+muss das Upgrade explizit blockieren, ohne Daten oder Migrationsledger zu
+verändern. Ein neu
+angelegter Einsatz muss schon vor seinem ersten Buchsatz `ETB:1` und `TTB:1`
+besitzen; konkurrierende erste ETB-/TBB-Inserts müssen unter der unveränderten
+MariaDB-Standardisolation `REPEATABLE READ` lückenlos fortsetzen. Wird ein
+Kopf kontrolliert entfernt, muss der Buch-Insert explizit scheitern, ohne ihn
+selbst neu anzulegen oder eine Nummer zu verbrauchen. Ein
+simulierter eigener DDL-Zwischenstand muss konvergieren; eine gleichnamige
+fremde Spalte bleibt unverändert blockiert und darf keinen Ledgerabschluss
+erzeugen. Der Zweitlauf muss vollständig idempotent sein.
+Der gleiche MariaDB-Lauf prüft die Triggergrenze für aktive Schichten: eine
+neue Funktion und mehrere unterschiedliche A/W-Besetzungen sind zulässig,
+eine bereits vorhandene Nicht-A/W-Funktion bleibt dagegen bis zur geordneten
+Übergabe gesperrt.
+
+Migration 111 wird mit vorhandenem Legacy-Bestand, neuen manuellen und
+automatischen ETB-/TTB-Zeilen sowie einer optionalen ETB-Zuordnung geprüft.
+Historische Herkunft muss in allen neuen Feldern `NULL` bleiben. Neue manuelle
+Zeilen müssen Schicht und Schreiberbesetzung derselben aktiven Schicht tragen;
+der Trigger weist nicht angenommene Besetzungen, inaktive Schichten,
+abweichende Benutzer-/Kürzel-/Funktionsidentitäten sowie inaktive oder
+gesperrte Konten ab. Systemzeilen müssen eine Schicht, aber eine leere
+menschliche Schreiber-ID besitzen. Der Zuordnungssnapshot muss aus einer
+angenommenen Besetzung derselben aktiven Schicht mit ungesperrtem Konto
+stammen; Abmeldung und Präsenzstatus dürfen die angenommene Besetzung nicht
+fachlich entwerten. Der Snapshot muss einen gefälschten Browsertext
+verdrängen. Neue
+ETB-Referenzen müssen als kanonische lokale Nummer auf einen vorhandenen
+einsatzgleichen Eintrag zeigen; bei Korrekturen müssen öffentliche Nummer und
+internes Original übereinstimmen. Der Test simuliert eigene
+DDL-Zwischenstände und fremde Kollisionen für Spalten, Indexe,
+Fremdschlüssel und Trigger; nur der kanonische Wiederanlauf darf die
+siebzehnte Ledgerzeile schreiben. Zweitlauf, 38-feldrige `verify.sql`-Prüfung
+und vollständiger Schema-Migrator-Integrationstest sind grün.
+
 Anschließend migriert der Hauptlauf ein leeres Schema,
 führt PHP-, Datenbank-, Rollen-, HTTP- und Administrationsnachweise aus, prüft
 die Containerlogs und stellt Datenbank, Anhang-/Vordruckdaten sowie Exporte aus
@@ -566,6 +612,14 @@ geladenen Bundle müssen wegen des unveränderlichen SHA-256-/Größennachweises
 scheitern. Derselbe Bytewechsel muss im produktiven Abschluss-Preflight als
 Integritätsfehler erscheinen; auch der tatsächliche Aufruf zum formalen
 Abschluss wird mit genau diesem Blocker zurückgewiesen.
+Der Exporttest lädt denselben historischen Einsatz außerdem einmal als
+Gesamtbuch und einmal für eine einzelne Dienstschicht. Im zweiten Lauf dürfen
+nur ETB und TBB auf die gespeicherte Schicht-ID eingeschränkt sein;
+Nachrichten, Anhänge, Nachweise, Dienstbetrieb, S6-Pläne, Melderläufe und
+Betriebsereignisse müssen einsatzweit unverändert bleiben. Deckblatt und
+Auditdetail werden gegen Nummer, Bezeichnung, Status und Zeiten der gewählten
+Schicht geprüft; eine Schicht eines anderen Einsatzes sowie nicht kanonische
+Auswahlwerte müssen scheitern.
 Der Test stellt den benannten CI-Einsatz wieder aktiv, lässt den isolierten
 historischen Nachweis für nachfolgende Export- und Restore-Prüfungen bestehen
 und verweigert ohne
@@ -587,23 +641,65 @@ Ablösezeit jeder Funktionsbesetzung muss bytegleich bleiben.
 Der davon unabhängige Rendervertrag erzeugt mit
 `tests/php/pdf_template_render_fixture.php` aus exakt demselben
 Nachrichtendatensatz und derselben 5×4-Empfängermatrix einen Einzelvordruck,
-eine direkte Dossier-Nachrichtenseite, beide Varianten mit mehrseitigem Inhalt
-und ein vollständiges Dossier mit den neun Abschnitten ETB, TBB,
-Nachrichtenvordrucke, Anhänge, Nachrichtenereignisse, Dienstbetrieb,
-S6-Fernmeldepläne, Melderläufe und Betriebsereignisse.
-`tests/static/pdf_render.sh` verlangt A4 und mindestens zehn Seiten, extrahiert
-Formulartext und Bounding Boxes, weist null Seitenbilder nach, prüft die
-Überschriften und Nachweisstatus aller Abschnitte, den konstanten linken
-Inhaltseinzug und rendert alle Varianten mit 144 dpi. Ein- und mehrseitige
-Direktvarianten werden vollständig bytegenau verglichen; bei der
-Nachrichtenseite im vollständigen Dossier bleibt nur der absichtlich
-dossierglobale dynamische Seitenzähler ausgespart. Anschließend extrahiert
-`pdfdetach` den eingebetteten, am Eingang gebundenen Anhang und `cmp` vergleicht
-ihn mit der Quelldatei. Anlagenverzeichnis und Deckblatt müssen zusätzlich den
-Integritätsstatus nennen; bei Legacy lautet er ausdrücklich
-„Integrität beim Eingang nicht belegbar“. Die CI bewahrt PDFs, PNGs, Text- und
-Werkzeuginformationen 14 Tage
-als Nachweisartefakt auf.
+eine direkte Dossier-Nachrichtenseite, beide Varianten mit mehrseitigem Inhalt,
+mehrseitige eigenständige ETB-/TBB-Formularfixtures und ein vollständiges
+Dossier mit den neun Abschnitten ETB, TBB, Nachrichtenvordrucke, Anhänge,
+Nachrichtenereignisse, Dienstbetrieb, S6-Fernmeldepläne, Melderläufe und
+Betriebsereignisse.
+
+`tests/static/pdf_render.sh` verlangt für jede ETB-Seite A4 hoch, „Fb Fü 2“,
+vier feste Spalten, lokalen Seitenzähler sowie die Linien für Leiter/-in
+Führungsstelle und ETB-Führer/-in. Für jede TBB-Seite verlangt er A4 quer,
+„Fb Fü 44“, sieben feste Spalten, Fernmeldebetriebsstelle/Arbeitsplatz, lokalen
+Seitenzähler und die LdF-Linie. Textmarker und Bounding Boxes müssen in ihrer
+vorgesehenen Spalte liegen; globale Legacy-Primärschlüssel und ungelöste
+Seitenplatzhalter dürfen nicht erscheinen. Lange Einträge müssen Formkopf,
+lokale Nummer und „Fortsetzung“ auf Folgeseiten wiederholen. Legacy-Aktion und
+-Bemerkung bleiben sichtbar, ohne fehlende strukturierte Inhalte zu erfinden.
+Bei neuen strukturierten Zeilen muss jeder Inhalt exakt einmal in seiner
+Fachspalte stehen. Die redundante Kompatibilitätszusammenfassung aus
+`tbb_aktion` darf nicht zusätzlich in der Betriebsspalte erscheinen;
+`tbb_bemerk` muss als eigenständige Bemerkung auch bei einer strukturierten
+Zeile genau einmal dort stehen. Der ETB-Zeitwert muss aus
+`estab_recorded_at`, der TBB-Zeitwert
+aus `estab_event_time` stammen. Zusätzliche geschlossene ETB-/TBB-Fixtures
+müssen den diagonal gestrichenen, als „Nicht beschriebener Bereich“
+markierten Rest der letzten Formularseite enthalten; offene Fixtures dürfen
+diese Abschlussmarkierung nicht erhalten.
+
+Die Prüfung weist Nachrichtenvordruck-Seiten ohne Bilder nach; im
+Gesamtdossier ist ausschließlich das bestehende 400-x-396-Pixel-THW-
+Kopfzeichen der ETB-/TBB-Formblätter zulässig. Sie rendert alle Varianten mit
+144 dpi. Jede eigenständige ETB-/TBB-Seite muss pixelgenau mit ihrer
+entsprechenden Seite im vollständigen Dossier übereinstimmen. Ein- und mehrseitige
+Nachrichtenvordruckvarianten werden ebenfalls vollständig bytegenau
+verglichen; bei der Nachrichtenseite im vollständigen Dossier bleibt nur der
+absichtlich dossierglobale dynamische Seitenzähler ausgespart. Anschließend
+extrahiert `pdfdetach` den eingebetteten, am Eingang gebundenen Anhang und
+`cmp` vergleicht ihn mit der Quelldatei. Anlagenverzeichnis und Deckblatt
+müssen zusätzlich den Integritätsstatus nennen; bei Legacy lautet er
+ausdrücklich „Integrität beim Eingang nicht belegbar“. Die CI bewahrt PDFs,
+PNGs, Text- und Werkzeuginformationen 14 Tage als Nachweisartefakt auf.
+Ein ETB-Anhang muss dabei im Fb Fü 2 und Anlagenverzeichnis die abgeleitete
+Nummer `ETB {einsatz_id}-{estab_book_lfd}-1` tragen, während sein separates
+Ablagekennzeichen erhalten bleibt. Ein mehrfach verknüpfter Anhang muss den
+Export als mehrdeutigen Datenbestand blockieren.
+Eine nur für Websuche und Arbeitssteuerung gespeicherte
+ETB-Bearbeitungszuordnung ist als Negativmarker im Fixture enthalten und darf
+in keinem amtlichen Fb-Fü-2-Text erscheinen. Der Gesamtbuch-/Schichtumfang muss
+hingegen auf dem Deckblatt sichtbar und in der Schichtvariante mit neu
+berechneten ETB-/TTB-Seitenzahlen konsistent sein.
+
+Der gezielte Stand dieser Verträge lautet
+`incident export security: OK (105 assertions)` und
+`incident PDF security: OK (56 assertions)`; Template-Fixtures und
+Poppler-Rendervergleich sind ebenfalls grün. Der Renderfall enthält eine
+schichtübergreifende Korrektur: Ein einsatzgebundener Self-Join muss deren
+globale Original-ID zur lokalen Buchnummer auflösen, ohne globale
+Primärschlüssel als laufende oder Korrekturbezugnummer zu drucken. Die
+zugehörigen PHP-Dateien linten. Der MariaDB-Integrationstest ist mit 33
+Assertions im frischen Gesamt-Compose-Lauf grün; die statischen und visuellen
+Teilläufe ersetzen diesen Lauf nicht.
 
 Die Fixture ruft für den Einzelvordruck denselben produktiven
 `render_message_form_document()`-Dienst auf wie der aktuelle Download unter
@@ -611,7 +707,11 @@ Die Fixture ruft für den Einzelvordruck denselben produktiven
 diese Methode. `tests/php/generated_form_security.php` bindet zusätzlich die
 vollständige Matrixvalidierung, den abgeschlossenen und gedruckten
 Aktiveinsatz-Datensatz, den strikt skalaren `layout=current`-Schalter und den
-weiterhin getrennten Archivstream. Im echten HTTP-Smoke werden beide Pfade
+weiterhin getrennten Archivstream. Seine TBB-Unterabfrage, das
+Nachrichtendetail und der Dossierexport akzeptieren für die gedruckte lokale
+Nummer ausschließlich den exakten automatischen Typ `nachricht`; ein
+referenzierter Korrektureintrag darf die Nummer nicht ersetzen. Im echten
+HTTP-Smoke werden beide Pfade
 abgerufen: Der aktuelle Abzug muss den Marker
 `X-eStab-PDF-Layout: current` tragen, der parameterlose Archivpfad behält
 seinen SHA-256 über den destruktiven Backup-/Restore-Roundtrip.
@@ -1121,7 +1221,7 @@ werden vom Fehler-Artefakt hochgeladen. Alle Variablen und die Browsererkennung
 sind in
 [`tests/browser/README.md`](../tests/browser/README.md) dokumentiert.
 
-### ETB-/TBB-HTTP-Integration
+### ETB-/TBB-HTTP-Integration und Lebenszyklus
 
 Der getrennte, idempotente Logbuchtest registriert je eine S2- und
 A/W-Funktionssitzung und verwendet bei einem Wiederholungslauf dieselben
@@ -1141,12 +1241,107 @@ darf ETB und TBB des aktiven Einsatzes lesen. Beide Bücher zeigen den globalen
 Einsatzkopf und besitzen kein lokales Titelformular mehr. Die jeweils
 fachfremde ausgewählte Sitzung erhält HTTP 200 samt gespeichertem Inhalt,
 aber kein Eintragsformular. Cross-Rollen-POSTs liefern HTTP 403. Nur S2 oder
-ETB mit `EINSATZTAGEBUCH` darf ETB-Daten und nur A/W mit `BEFOERDERUNG`
-TBB-Daten über POST und Session-CSRF-Token schreiben.
+ETB mit `EINSATZTAGEBUCH` kommt für die ETB-Führung und nur A/W mit
+`BEFOERDERUNG` für die TBB-Führung infrage. Innerhalb dieser Menge bestimmt
+die Datenbankabfrage genau eine schreibende Besetzungs-ID: ETB bevorzugt die
+erste angenommene ETB-, sonst die erste angenommene S2-Besetzung; TBB die
+erste angenommene A/W-Besetzung. Weitere fachlich fähige Hüte erhalten kein
+Formular und werden beim manipulierten POST mit HTTP 403 abgewiesen.
+Die Designation wird ohne Kontostatusfilter bestimmt: Wird ihr Konto
+deaktiviert oder gesperrt, muss der Writer geschlossen bleiben und darf nicht
+still zur nächsten geeigneten Besetzung wechseln. App- und Datenbanktests
+prüfen daneben Annahmestatus, aktive einsatzgleiche Schicht, identische
+Benutzer-/Kürzel-/Funktionsdaten und ein aktives, ungesperrtes Konto.
 Der Datenbanktest der Führungsstelle ergänzt die reale Si→ETB-Hutwahl und
 weist nach, dass Si dabei kein ETB-Schreibrecht erbt.
-Zusätzlich prüft der Test serverseitige Längengrenzen, inerte historische
-GET-Schreibparameter und HTML-Escaping.
+Zusätzlich prüft der Test lokale statt globaler Nummern, A/B/E/K/W-Arten,
+strukturierte TBB-Inhaltsfelder, direkte Korrekturbezüge, serverseitige
+Längengrenzen, inerte historische GET-Schreibparameter und HTML-Escaping.
+Der statische UI-/Abfragevertrag ergänzt eine ungefilterte Gesamtliste sowie
+einzeln beziehungsweise kombiniert gesetzten Volltext-, Art- und
+Nummer-/Bezugsfilter. Er bindet lokale Nummer, Korrektur-/Nachrichten-/
+Anhangsbezug, kanonische lokale und historische Bestandsreferenz,
+Ablage-/Originaldateiname und die vollständige ETB-Anlagennummer. Weitere
+statische und MariaDB-Verträge verlangen, dass die
+Eingabe nur finalisierte, unbenutzte Anhänge des aktiven Einsatzes anbietet,
+eine optionale Auswahl `ETB {einsatz_id}-{estab_book_lfd}-1` erhält und eine
+zweite Verknüpfung in Anwendung beziehungsweise Datenbank abgewiesen wird.
+
+Neue ETB-Referenzen werden mit vorhandener positiver lokaler Nummer desselben
+Einsatzes akzeptiert; leerer Wert bleibt optional. Freitext, führende Nullen,
+globale technische IDs, unbekannte Nummern und einsatzfremde Ziele müssen
+scheitern. Historische Freitextwerte bleiben les- und suchbar, zählen aber
+nicht als Graphkante. Die Tests bauen eine verzweigte Vorwärtskette und einen
+Rückwärtspfad auf, prüfen Tiefen 1 bis 25, Abbruchmarkierung,
+Zyklen-/Mehrfachbesuchsschutz und die referenzbeschränkte Druckansicht. Bei
+einer Korrektur darf der Request keine öffentliche Referenz erfinden: Der
+Server bindet direkt das unveränderliche Original und leitet dessen lokale
+Nummer kanonisch ab.
+
+Die Tests füllen zusätzlich die optionale ETB-Bearbeitungszuordnung aus einer
+angenommenen Besetzung der aktiven Schicht. Auswahl, Schreibtransaktion und
+Insert-Trigger müssen fremde Schicht-/Einsatz-IDs sowie frei behauptete
+Snapshots abweisen; gespeichert wird exakt
+`Funktion (Rolle): Name [Kürzel]`. Volltext- und separater Zuordnungsfilter
+müssen den Snapshot finden, die Webliste muss ihn HTML-neutral anzeigen und
+der amtliche PDF-Renderer darf ihn nicht enthalten. Jeder manuelle ETB-/TBB-
+Insert muss Schicht und tatsächliche Schreiberbesetzung serverseitig ableiten,
+selbst wenn der Request gefälschte Provenienzfelder mitsendet. Automatische
+Zeilen müssen die Schicht ohne menschliche Schreiber-ID speichern.
+
+Der Dienstschicht-/Einsatztest deckt den Lebenszyklus ab. Ein unvollständiger
+Pflichtkopf blockiert die erste Schichtaktivierung ohne Teiländerung. Die
+erfolgreiche Aktivierung muss ETB und TBB atomar mit lokaler Nummer 1 eröffnen
+und Einsatz einschließlich ausdrücklich ausgeschriebenem Einsatzbeginn,
+Bedarfsträger, Auftrag/Ausgangslage, Leitung, Besetzung, LdF und
+A/W/TBB-Führung enthalten. Der Test injiziert nach Schichtänderung und beiden
+Eröffnungszeilen einen fehlschlagenden Audit-Write; Schicht, ETB, TBB,
+Buchköpfe und Ereignisnachweis müssen danach exakt dem Vorherzustand
+entsprechen. Eine Übergabe muss persönlich durch eine ausgewählte angenommene
+Besetzung der aktiven Schicht initiiert und persönlich durch eine angenommene
+Besetzung der Nachfolgeschicht bestätigt werden. Beide Bücher führen nur die
+tatsächlich abgelösten alten und angenommenen neuen Statusbesetzungen samt
+jeweils letzter Nummer fort. Zusätzlich müssen Initiierungs- und
+Bestätigungszeit getrennt als Übergabe- und Übernahmezeit in beiden
+Logbuchzeilen stehen; Schichtwechsel, Übergabeobjekt und Bestätigungsanfrage
+verwenden denselben atomar gelesenen Bestätigungszeitpunkt. Der formale
+Einsatzabschluss muss vor der ersten Schicht/Eröffnung blockieren; nach
+sauberem Preflight muss er je eine letzte Zeile mit tatsächlichem Ende erzeugen
+und die zehnjährige Mindestaufbewahrung setzen.
+
+Für die aktive Schichterweiterung weist derselbe Datenbanktest nach, dass die
+Administration zunächst nur zuweist und erst die persönlich betroffene Person
+die Besetzung annimmt. Eine S1-Ergänzung erzeugt genau eine ETB- und keine
+TBB-Zeile; eine zusätzliche A/W-Besetzung erzeugt atomar je eine ETB- und
+TBB-Zeile. Derselben Person kann A/W nicht doppelt zugewiesen werden, mehrere
+unterschiedliche A/W sind zulässig und eine bereits vorhandene andere
+Funktion kann nicht innerhalb der aktiven Schicht ersetzt werden.
+Eine ETB-Neuzuweisung, die den bestimmten ETB-/S2-Schreiber verdrängen würde,
+muss bereits in der aktiven Schicht scheitern. Zusätzlich weist der Test nach,
+dass eine in der Planung zugewiesene ETB-Funktion nach Aktivierung weder über
+den Anwendungsdienst noch per direktem Datenbank-UPDATE angenommen werden kann
+und dabei Besetzung, Bücher, Nummernköpfe und Audit unverändert bleiben.
+
+Nummerierte Nachrichteneingänge und erst tatsächlich beförderte Ausgänge
+müssen in derselben Transaktion einen strukturierten TBB-Nachweis mit
+einsatzgleichem Nachrichtenbezug und dem exakten Typ `nachricht` erzeugen.
+Ein manueller TBB-Write mit diesem reservierten Typ muss sowohl im
+Anwendungsdienst als auch im Datenbanktrigger scheitern; historische Zeilen
+bleiben lesbar. Die Fachfelder müssen auch ohne Öffnen einer Anlage in den
+Grundzügen verständlich sein.
+Eine LdF-Absenderübersetzung oder begründete Wegänderung muss einen neuen,
+direkt auf diesen Originaleintrag verweisenden TBB-Nachtrag des Typs
+`korrektur` anhängen. Generator, Nachrichtendetail und Export übernehmen
+trotzdem die erste lokale Nummer des Typs `nachricht`. `UPDATE` und `DELETE`
+beider Bücher werden zusätzlich direkt auf Datenbankebene negativ geprüft.
+
+Die fachliche Referenz ist
+`ETB_TBB_Fuehrung_in_THW_FueSt.pdf`, Handbuch ETB/TBB Version 1.0, Stand März
+2022, SHA-256
+`2457d1deccd01892655bbc329b08885a0b3c8b3ebfb6372c79997d3427d1ae59`.
+Alle automatisierten Ergebnisse belegen nur die technische Umsetzung. Sie
+ersetzen nicht die von der Unterlage vorausgesetzte formale Freigabe des
+elektronischen ETB/TBB durch die THW-Leitung.
 
 ### Kategorien-HTTP-Integration
 
@@ -1493,16 +1688,58 @@ Mindestens zu prüfen:
   PDF-Programm öffnen und stichprobenartig eine eingebettete Datei samt
   dokumentierter SHA-256 gegen das Original prüfen; dabei
   Führungsstellenname, Einsatzkennung und Einsatzname getrennt kontrollieren,
-- Einsatztagebuch einmal als S2 und einmal mit einer eigenständig zugewiesenen
-  ETB-Funktion, das technische Betriebsbuch mit A/W in der Rolle Fernmelder
-  beschreiben; bei einer ETB/Si-Mehrfachbesetzung ausdrücklich zwischen beiden
-  Hüten wechseln und den Si-Hut beim ETB-POST mit HTTP 403 abweisen;
-  anschließend beide Bücher mit der jeweils anderen ausgewählten
-  aktiven Dienstfunktion vollständig, aber ohne Schreibformular lesen, eine
-  bloß angemeldete Sitzung ohne ausgewählten Hut abweisen und
-  Cross-Rollen-Schreibversuche mit HTTP 403 abweisen; Kommunikationsplan und
-  alle lokal benötigten Zusatzmodule öffnen und je einen repräsentativen
-  Datensatz anlegen/lesen,
+- einen Einsatz mit vollständigem ETB-/TBB-Pflichtkopf anlegen, die erste
+  Schicht aktivieren und schon vor der Eröffnung genau die Köpfe `ETB:1` und
+  `TTB:1`, danach beide automatischen Eröffnungseinträge mit lokaler Nummer 1
+  sowie den ausdrücklich ausgeschriebenen Einsatzbeginn im ETB prüfen; mit
+  mehreren angenommenen ETB-/S2- und A/W-Besetzungen die
+  jeweils genau eine schreibende Besetzung und alle nur lesenden Hüte prüfen,
+- im ETB ohne/A/B/E/K/W sowie Nachricht, Anhang, eine Referenz auf eine
+  vorhandene lokale ETB-Nummer und eine Berichtigung als neue Zeile erfassen;
+  Freitext, führende Nullen und unbekannte Nummern abweisen, Referenzketten
+  vorwärts/rückwärts mit unterschiedlicher Tiefe anzeigen und die gesonderte
+  Druckansicht öffnen; im TBB jeden der fünf offiziellen
+  Inhaltsbereiche, einen Nachrichteneingang, einen tatsächlich beförderten
+  Ausgang sowie LdF-Absender-/Wegkorrektur als referenzierten Nachtrag prüfen;
+  Vordruck und Detail müssen weiterhin die ursprüngliche lokale
+  `nachricht`-Nummer zeigen; globale technische IDs dürfen weder Anzeige noch
+  PDF-Nummer ersetzen; ETB zunächst ohne Filter vollständig, danach über
+  Volltext, Art, lokale Nummer/Bezug, ETB-Anlagennummer und Ablage-/Dateiname
+  suchen; optional einen finalisierten unbenutzten Anhang zuordnen,
+  `ETB {einsatz_id}-{estab_book_lfd}-1` in UI/PDF/Anlagenverzeichnis und das
+  getrennte Kennzeichen wie `EL0001` prüfen sowie den Mehrfachlink abweisen,
+- eine aktive Schicht um S1 ergänzen und durch diese Person selbst annehmen
+  lassen; nur den ETB-Nachtrag prüfen. Danach eine weitere A/W-Person ergänzen
+  und je einen ETB-/TBB-Nachtrag prüfen; doppelte Personen-/A/W-Zuweisung und
+  den Austausch einer bereits besetzten Nicht-A/W-Funktion abweisen; eine
+  ETB-Ergänzung bei vorhandener ETB-/S2-Führung schon beim Zuweisen ablehnen
+  und eine noch in der Planung angelegte ETB-Zuweisung nach Aktivierung weder
+  über die Anwendung noch direkt in der Datenbank annehmen lassen,
+- eine Schichtübergabe mit einer persönlich angenommenen aktiven Besetzung
+  initiieren, mit einer persönlich angenommenen Nachfolgebesetzung bestätigen
+  und ETB/TBB-Einträge mit ausschließlich echten abgelösten/angenommenen
+  Statusbesetzungen und letzter Nummer kontrollieren; einen Einsatz ohne erste
+  Schicht/Eröffnungszeilen nicht formal schließen lassen; am Einsatzende die
+  automatischen Abschlusszeilen, Schreibsperre und zehnjährige
+  Mindestaufbewahrung prüfen,
+- das PDF-Dossier öffnen und Fb Fü 2 im A4-Hochformat sowie Fb Fü 44 im
+  A4-Querformat ausdrucken; Spalten, buchlokale Seitenzähler,
+  Fortsetzungszeilen, ETB-Erfassungszeit, TBB-Vorgangszeit und alle manuellen
+  Unterschriftslinien prüfen; bei strukturiertem TBB darf `tbb_aktion` nicht
+  doppelt erscheinen und `tbb_bemerk` muss genau einmal stehen; beim formal
+  geschlossenen Einsatz muss nur der
+  unbeschriebene Rest der jeweils letzten Buchseite diagonal gestrichen sein;
+  die organisatorische Zeichnung festlegen und die formale THW-Freigabe
+  separat dokumentieren; denselben Einsatz als Gesamtbuch und als einzelne
+  Dienstschicht exportieren, nur ETB/TBB gefiltert sowie Umfang auf Deckblatt
+  und im Audit nachweisen und alle übrigen Sektionen einsatzweit vergleichen,
+- bei einer ETB/Si-Mehrfachbesetzung ausdrücklich zwischen beiden Hüten
+  wechseln und den Si-Hut beim ETB-POST mit HTTP 403 abweisen; beide Bücher
+  mit einer jeweils anderen ausgewählten aktiven Dienstfunktion vollständig,
+  aber ohne Schreibformular lesen; eine bloß angemeldete Sitzung ohne
+  ausgewählten Hut und Cross-Rollen-Schreibversuche abweisen;
+  Kommunikationsplan und lokal benötigte Zusatzmodule je repräsentativ
+  anlegen/lesen,
 - administrative Exportübersicht am Desktop und bei 390 Pixel Breite öffnen,
   Export erzeugen, ZIP herunterladen, `manifest.json`-Hashes gegen die
   CSV-Dateien prüfen und die zweistufige Löschbestätigung ohne horizontales
@@ -1552,8 +1789,8 @@ sind:
   Schalter sowie eine gegebenenfalls aktivierte Proxy-Allowlist sind
   syntaktisch und in ihren erlaubten Wertebereichen gültig,
 - Datenbankverbindung und `SELECT 1` funktionieren,
-- alle Basistabellen sowie Einsatz-, Nachweis-, Dienstschicht-, S6- und
-  Meldertabellen in ihrer kanonischen Form vorhanden sind,
+- alle Basistabellen sowie Einsatz-, Nachweis-, Dienstschicht-, S6-, Melder-
+  und Logbuchkopftabellen in ihrer kanonischen Form vorhanden sind,
 - aktive und Standardmatrix jeweils genau 20 eindeutige 5x4-Positionen,
   genau S2/Stab als Rotkopie-/Dokumentationsziel und keinerlei aktive
   Autosichtung enthalten,
@@ -1564,11 +1801,17 @@ sind:
 - der Singleton des globalen Einsatzstatus, alle Einsatz-Fremdschlüssel und
   -Trigger, append-only Ereignisketten, formaler Abschluss/Aufbewahrung sowie
   die dauerhafte Kontosperr-Spalte kanonisch vorhanden sind,
+- pro Einsatz exakt zwei Buchkopfstände samt kanonischem Einsatz-Insert-
+  Trigger, lokale ETB-/TBB-Nummern, strukturierte TBB-Felder,
+  Nachrichten-/Korrekturbezüge, der eindeutige ETB-Anhangsindex, die übrigen
+  Unique-Indexe und Append-only-Trigger kanonisch sind, keine ungültige
+  TBB-Zeile existiert und jeder formal
+  geschlossene Einsatz mindestens zehn Jahre Aufbewahrung besitzt,
 - Benutzer-, IP-, Anhang- und alle sechs Nachrichten-Kürzelfelder die
   erforderlichen Breiten besitzen,
 - Anhang-, Vordruck- und Exportverzeichnis beschreibbar sind.
 
-`docker/db/verify.sql` löst den aggregierten Schemacheck in benannte
+`docker/db/verify.sql` löst den aggregierten Schemacheck in 38 benannte
 `*_ok`-Ergebnisfelder auf. Für einen gültigen Stand müssen alle den Wert `1`
 haben; die anschließende Abfrage nach abweichender Engine oder Collation darf
 keine Zeile liefern.

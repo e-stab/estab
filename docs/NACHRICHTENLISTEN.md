@@ -7,9 +7,11 @@ rollenabhängigen Leserechte bleiben dabei unverändert.
 
 ## Bedienung
 
-Die Suche ist immer sichtbar. Ein Suchbegriff kann eine vollständige
-Nachweisnummer beziehungsweise interne Datensatznummer oder Text aus Rufname,
-Von, An, Rufnummer, Betreff, Nachrichtentext und Verfasserfunktion sein.
+Die Suche ist immer sichtbar. Ein Suchbegriff kann eine vollständige lokale
+TBB-Nachweisnummer oder Text aus Rufname, Von, An, Rufnummer, Betreff,
+Nachrichtentext und Verfasserfunktion sein. Die historische technische
+Nachrichtennummer und der globale Datenbankschlüssel werden weder als
+Nachweisnummer angezeigt noch über die Nummernsuche ersatzweise gefunden.
 Mehrere normale Wörter werden gemeinsam gesucht; Wortanfänge genügen. Kurze
 Bestandteile wie `S1` werden dabei tokenweise als wörtlicher Teiltext mit den
 längeren, indexgestützten Wörtern kombiniert. Eingaben mit Sonderzeichen
@@ -67,13 +69,22 @@ nur die angeforderte Seite über ein stabiles `LIMIT`/`OFFSET`. Eine Seite wird
 bei zwischenzeitlich kleiner gewordener Treffermenge auf die letzte vorhandene
 Seite zurückgesetzt.
 
-Migration `99-message-list-search.sql` stellt dafür drei kanonische Indizes
-bereit:
+Jede Zeile zeigt die erste lokale Nummer des exakt verknüpften automatischen
+TBB-Typs `nachricht`. Fehlt dieser Nachweis – etwa vor der tatsächlichen
+Beförderung eines Ausgangs –, lautet der Wert „noch kein TBB-Nachweis“.
+Numerische Suche und Nummernsortierung verwenden genau denselben Wert.
+
+Migration `99-message-list-search.sql` stellt für Nachrichtentext und
+Grundfilter drei Indizes bereit:
 
 - `ft_nachrichten_suche` über den sieben Textfeldern,
 - `idx_nachrichten_einsatz_status_zeit` für Einsatz, Stand und Zeitpunkt,
 - `idx_nachrichten_einsatz_richtung_nummer` für Einsatz, Richtung und
-  Nachweisnummer.
+  historische technische Nachrichtennummer.
+
+Die kanonische TBB-Nummer wird dagegen über den eindeutigen
+`idx_tbb_message` auf Einsatz und internen Nachrichtenbezug ermittelt; ihre
+einsatzlokale Eindeutigkeit sichert `uq_tbb_einsatz_book_lfd`.
 
 Die Migration ist wiederholbar und bricht bei einer fremden, gleichnamigen
 Indexdefinition ab. Readiness und `docker/db/verify.sql` verlangen die exakte
@@ -100,8 +111,8 @@ MariaDB-Statements aus. Er prüft exakte Treffer für strukturierte
 Kombinationsfilter, Volltext, einen kurzen wörtlichen Suchbegriff und eine
 Nachweisnummer, Einsatztrennung, wiederholbar stabile Seiten sowie das
 Zurücksetzen auf die letzte vorhandene Seite. `EXPLAIN` muss dabei die
-kanonischen Volltext-, Einsatz/Status/Zeit- und
-Einsatz/Richtung/Nummer-Indizes tatsächlich verwenden.
+Volltext-, Einsatz/Status/Zeit-, Richtungs- und TBB-Verknüpfungsindizes
+tatsächlich verwenden.
 
 Die Zeitgrenzen sind absichtlich großzügige Regressionswächter und keine
 Produktions-SLA: maximal 180 Sekunden zum Schreiben der 10.257 Zeilen, maximal

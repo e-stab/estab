@@ -8,6 +8,11 @@ aktiven Einsatz. Der Zustand „kein Einsatz aktiv“ ist absichtlich gültig:
 Anmeldung, öffentliche Ansichten und Administration bleiben möglich,
 operative Lese- und Schreibpfade sind jedoch gesperrt.
 
+Die ETB-/TBB-Grenzen bilden die bereitgestellte Ausbildungsunterlage technisch
+ab. Sie stellen keine formale THW-Freigabe des elektronischen Verfahrens dar;
+deren Vorbehalt und die gebundene Quellfassung sind in
+[DV-1-101-UMSETZUNG.md](DV-1-101-UMSETZUNG.md) dokumentiert.
+
 Die zentrale PHP-API steht in `app/incident.php`. Die additive, wiederholbare
 Datenbankfolge steht in den Migrationen
 `45-global-incidents-prepare.sql`, `50-global-incidents.sql`,
@@ -15,7 +20,9 @@ Datenbankfolge steht in den Migrationen
 `94-dv-organisational-controls.sql`,
 `95-attachment-ingest-integrity.sql` und
 `96-etb-duty-function.sql` sowie
-`97-incident-command-post-name.sql`. Die technischen
+`97-incident-command-post-name.sql` und
+`110-etb-tbb-rules.sql` sowie
+`111-logbook-shift-assignment.sql`. Die technischen
 Administrationsoberflächen sind `4fadm/incidents.php` und
 `4fadm/fuehrungsstelle.php`.
 
@@ -25,7 +32,7 @@ Die verbindlichen Regeln sind:
    Export und Archiv.
 2. Jeder neue Einsatz besitzt einen eigenen Führungsstellennamen. Er ist die
    lokale Anschrift/Absendereinheit für Nachrichten und weder Einsatzname,
-   Trägerorganisation noch Einsatzleitung.
+   Bedarfsträger noch Einsatzleitung.
 3. Der Singleton `nv_einsatz_status` verweist auf höchstens einen aktiven
    Einsatz.
 4. Aktivieren und Deaktivieren sperren den Singleton mit `SELECT ... FOR
@@ -46,14 +53,24 @@ Die verbindlichen Regeln sind:
 9. Operative Eingaben benötigen zusätzlich eine aktive Dienstschicht und eine
    vom betreffenden Konto angenommene, fachlich passende Dienstfunktion.
 10. „Nicht aktiv“ und „formal abgeschlossen“ sind getrennte Zustände. Ein
-   formaler Abschluss ist nur nach einer vollständigen Preflight-Prüfung
-   möglich und sperrt sämtliche weiteren operativen Änderungen.
+    formaler Abschluss ist nur nach einer vollständigen Preflight-Prüfung
+    möglich und sperrt sämtliche weiteren operativen Änderungen.
+11. ETB und TBB bilden je Einsatz je einen lokalen, bei 1 beginnenden und nur
+    anhängbaren Nummernstrom. Die erste Dienstschicht eröffnet beide Bücher,
+    bestätigte Übergaben und der formale Einsatzabschluss schreiben ihre
+    Lebenszykluszeilen atomar mit dem jeweiligen Vorgang.
+12. Jeder Einsatz besitzt ab seiner Erzeugung exakt zwei leere,
+    fremdschlüsselgebundene Nummernköpfe `ETB:1` und `TTB:1`. Ein fehlender
+    Kopf wird beim Buchen nicht repariert, sondern sperrt den Schreibvorgang.
+13. Ein formal abgeschlossener Einsatz bleibt mindestens zehn Jahre ab
+    Abschluss erhalten; eine längere Frist oder ein Legal Hold wird nie
+    verkürzt.
 
 ## Datenmodell
 
 | Tabelle | Aufgabe |
 | --- | --- |
-| `nv_einsaetze` | Kennung, Einsatzname, Zeitraum, Ort, Organisation, eigener Führungsstellenname, Einsatzleitung, Beschreibung, formaler Abschluss, Mindestaufbewahrung, Legal Hold und erweiterbares JSON-Metadatenobjekt |
+| `nv_einsaetze` | Kennung, Einsatzname, Zeitraum, Ort, Bedarfsträger in `organisation`, eigener Führungsstellenname, Einsatzleitung, Auftrag/Ausgangslage in `beschreibung`, formaler Abschluss, Mindestaufbewahrung, Legal Hold und erweiterbares JSON-Metadatenobjekt |
 | `nv_einsatz_status` | Genau eine Singleton-Zeile mit aktiver Einsatz-ID, monotoner Revision, Zeitpunkt und Akteur |
 | `nv_einsatz_ereignisse` | Unveränderliches Audit für Anlegen, Führungsstellenänderungen, Aktivieren und Deaktivieren |
 | `nv_nachrichtenereignis_kopf`, `nv_nachrichtenereignisse` | Pro Nachricht verketteter, unveränderlicher Zustands- und Terminalnachweis |
@@ -61,8 +78,9 @@ Die verbindlichen Regeln sind:
 | `nv_fernmeldeplaene`, `nv_fernmeldeplan_eintraege` | Versionierte, nach Freigabe unveränderliche S6-Kommunikationsplanung |
 | `nv_melderauftraege` | Vollständige Melderkette vom LdF-Auftrag bis zur Rückmeldung |
 | `nv_betriebsereignis_kopf`, `nv_betriebsereignisse` | Einsatzbezogene Hashkette für Schicht-, Besetzungs-, Plan- und Melderereignisse |
+| `nv_logbuch_koepfe` | Exakt zwei vorab durch den Einsatz-Insert-Trigger angelegte, sperrbare nächste lokale Zähler je Einsatz (`ETB`, `TTB`); technische globale Primärschlüssel bleiben davon getrennt |
 
-### Einsatzname, Organisation und Führungsstelle
+### Einsatzname, Bedarfsträger und Führungsstelle
 
 Die Stammdaten beantworten unterschiedliche Fragen und dürfen nicht
 gegenseitig als Fallback verwendet werden:
@@ -70,9 +88,20 @@ gegenseitig als Fallback verwendet werden:
 | Feld | Bedeutung |
 | --- | --- |
 | Einsatzname | Bezeichnung des Ereignisses oder Auftrags |
-| Organisation | Trägerorganisation des Einsatzes |
+| Bedarfsträger | Organisation oder Stelle, in deren Auftrag der Einsatz geführt wird; technisch historische Spalte `organisation` |
 | Führungsstellenname | lokale Anschrift beziehungsweise Absendereinheit der digitalen Nachrichtenvordrucke |
 | Einsatzleitung | leitende Person oder organisatorische Leitungsangabe |
+| Beschreibung | Einsatzauftrag und Ausgangslage für den ETB-Eröffnungseintrag |
+
+Neue Einsätze verlangen Kennung, Einsatzname, Beginn, Bedarfsträger,
+Führungsstellenname, verantwortliche Einsatz-/Führungsleitung und
+Einsatzauftrag/Ausgangslage. Erst wenn alle sieben Angaben vorliegen, kann die
+erste Dienstschicht aktiviert werden. Ihre Aktivierung erzeugt in derselben
+Transaktion die Eröffnungseinträge Nummer 1 in ETB und TBB; der ETB-Text nennt
+den gespeicherten Einsatzbeginn ausdrücklich. Bedarfsträger, Leitungsangabe
+und Auftrag/Ausgangslage können bei einem vorbereiteten
+Bestands-Einsatz nachgetragen werden; ab erster Schichtaktivierung oder erster
+bereits vorhandener Buchzeile sind sie als Eröffnungsgrundlage unveränderlich.
 
 Neue Einsätze verlangen den Führungsstellennamen bereits beim Anlegen.
 Migration 97 lässt bestehende Werte bewusst `NULL`. Ein offener historischer
@@ -102,8 +131,8 @@ Folgende Tabellen erhalten eine indizierte, fremdschlüsselgesicherte
 | --- | --- | --- |
 | `nv_nachrichten` | Ein- und Ausgangsnachrichten sowie Gesprächsnotizen | strikt |
 | `nv_anhang` | Anhang-Metadaten; die Datei wird über diesen Datensatz zugeordnet | strikt |
-| `nv_etb` | Einsatztagebuch | strikt |
-| `nv_tbb` | Technisches Betriebsbuch | strikt |
+| `nv_etb` | Einsatztagebuch mit lokaler Buchnummer, Schicht-/Schreiberprovenienz, Ereignis-/Erfassungszeit, A/B/E/K/W-Art, Bezügen, optionaler Bearbeitungs- und eindeutiger Anhangszuordnung sowie direkter Korrekturbeziehung | strikt und append-only; ein `estab_attachment_id` darf höchstens einmal vorkommen |
+| `nv_tbb` | Technisches Betriebsbuch mit lokaler Buchnummer, Schicht-/Schreiberprovenienz, strukturierten Fb-Fü-44-Inhaltsfeldern, Nachrichten- und direkter Korrekturbeziehung | strikt und append-only |
 | `nv_ubb` | Übungsbetriebsbuch | strikt |
 | `nv_bhp50` | BHP-50-/Patientendaten | strikt |
 | `nv_komplan` | einsatzbezogener Kommunikationsplan | strikt |
@@ -237,14 +266,19 @@ estab_incident_set_legal_hold(
 Der Preflight blockiert unter anderem offene Nachrichten, Sperren,
 unvollständige Anhänge, fehlende oder vom SHA-256-/Größennachweis abweichende
 neue Anhangdateien, offene Dienstschichten/Besetzungen/Melderaufträge,
-Planentwürfe und ungültige Nachrichten- oder Betriebsereignisketten. Beim
+Planentwürfe und ungültige Nachrichten- oder Betriebsereignisketten. Er
+verlangt zusätzlich mindestens eine aktivierte Schicht sowie exakt je eine
+Eröffnungszeile Nummer 1 in ETB und TBB; ein vorbereiteter, aber nie eröffneter
+Einsatz kann deshalb nicht formal geschlossen werden. Beim
 Upgrade vorhandene, erreichbare Anhänge blockieren nicht allein aufgrund
 fehlender rückwirkender Beweiskraft; die Oberfläche zählt sie ausdrücklich als
 „Integrität beim Eingang nicht belegbar“.
-Beim Abschluss werden Zeitpunkt, Akteur, Vermerk und ein frühestes
-Aufbewahrungsende von einem Jahr gespeichert. Ein Legal Hold verlängert diese
-Grenze fachlich; er verkürzt sie nie. eStab führt keinen automatischen
-Fachdaten-Purge aus.
+Beim Abschluss werden zunächst die letzten ETB-/TBB-Zeilen mit tatsächlichem
+Einsatzende, Abschlussvermerk und letzter fachlicher Führung und anschließend
+Zeitpunkt, Akteur sowie Vermerk des Einsatzabschlusses in derselben
+Transaktion gespeichert. Das früheste Aufbewahrungsende liegt zehn Jahre nach
+dem formalen Abschluss. Ein Legal Hold verlängert diese Grenze fachlich; er
+verkürzt sie nie. eStab führt keinen automatischen Fachdaten-Purge aus.
 
 ## Umgesetzte Laufzeitgrenzen
 
@@ -269,16 +303,97 @@ Einsatz-API:
   Absendereinheit eines Ausgangs an den Führungsstellennamen; ein Formularwert
   oder eine Umgebungsvorgabe kann ihn nicht ersetzen.
 - ETB und TBB verwenden die globalen Einsatzstammdaten einschließlich
-  Führungsstellennamen als Kopf, schreiben unter dem gesperrten Singleton und
-  filtern ihre chronologischen Listen nach Einsatz. Die alten lokalen
-  Einsatz-anlegen-Formulare sind nicht mehr schreibend.
+  Bedarfsträger, Auftrag/Ausgangslage, Leitung und Führungsstellenname als
+  Eröffnungsgrundlage. Die erste Schichtaktivierung, eine bestätigte Übergabe
+  und der formale Abschluss schreiben ihre Buchzeilen innerhalb der jeweils
+  bereits gesperrten Fachtransaktion. Die alten lokalen Einsatz-anlegen-
+  Formulare sind nicht mehr schreibend.
+- Ein ETB-Eintrag kann optional genau einen finalisierten, einsatzgleichen und
+  noch unbenutzten Anhang binden. Die lokale Buchnummer wird erst im selben
+  Commit vergeben; daraus folgt deterministisch
+  `ETB {einsatz_id}-{estab_book_lfd}-1`. Der Upload gilt als eine gebündelte
+  digitale Einheit innerhalb des einzigen ETB des Einsatzes. Ein vorhandenes
+  Ablage-/FmZt-Kennzeichen wie `EL0001` bleibt davon getrennt. Anwendung und
+  `UNIQUE(estab_attachment_id)` blockieren einen Mehrfachlink; Webliste,
+  Fb-Fü-2-PDF und Anlagenverzeichnis zeigen beide Kennzeichnungen.
+- Die ETB-Liste ist ohne Filter die vollständige Liste des aktiven Einsatzes.
+  Volltext, Art, Nummer/Bezug und Zuordnung sind kombinierbar; durchsucht werden auch
+  Personen-/Kürzelangaben, lokale und historische Bestandsreferenzen, lokale Nummern, Nachrichten-,
+  Korrektur- und Anhangsbezüge, Ablage-/Originaldateiname sowie die
+  vollständige ETB-Anlagennummer. Die optionale Bearbeitungszuordnung stammt
+  ausschließlich aus einer angenommenen Besetzung der aktiven Schicht, wird
+  beim Speichern erneut gegen ein ungesperrtes Konto gesperrt und als
+  unveränderlicher lesbarer Snapshot abgelegt. Abmeldung und Präsenzstatus
+  ändern die fachliche Gültigkeit der angenommenen Besetzung nicht. Sie bleibt
+  aus dem amtlichen PDF ausgeschlossen.
+- Neue ETB-Referenzen bestehen ausschließlich aus der positiven lokalen
+  Buchnummer eines bereits vorhandenen Eintrags desselben Einsatzes. Freitext,
+  führende Nullen, globale Primärschlüssel und unbekannte Nummern scheitern.
+  Historischer Freitext bleibt les- und suchbar, erzeugt aber keine künstliche
+  Referenzkante. Berichtigungen speichern intern die direkte unveränderliche
+  Originalzeile und zeigen deren serverseitig ermittelte lokale Nummer. Eine
+  einsatzgebundene Auswertung verfolgt von einer lokalen Startnummer aus
+  vorwärts auch verzweigte Folgeeinträge oder rückwärts den Bezugspfad, jeweils
+  mit wählbarer Tiefe 1 bis 25 und eigener Druckansicht.
+- Die lokalen `estab_book_lfd`-Nummern werden je Einsatz und Buchart unter
+  einem bereits beim Einsatz-Insert angelegten `nv_logbuch_koepfe`-Lock
+  vergeben. Es bestehen immer exakt zwei Köpfe pro Einsatz; die ETB-/TBB-
+  Insert-Trigger erzeugen einen fehlenden Kopf nicht nach. Listen und PDFs
+  verwenden die lokale Nummer, nicht den globalen Alt-Primärschlüssel.
+  Rückdatierte Ereignisse ändern die einmal vergebene Reihenfolge nicht. Die
+  Zeilensperren funktionieren unter der unveränderten MariaDB-Standardisolation
+  `REPEATABLE READ`; für den Dossierexport bleiben konsistente Read-only-
+  Snapshots aktiviert.
+- Lesen dürfen alle ausgewählten aktiven Dienstfunktionen. Manuell schreibt
+  pro Schicht genau die zuerst zugewiesene angenommene ETB-Funktion,
+  ersatzweise S2, beziehungsweise die zuerst zugewiesene angenommene
+  A/W-Funktion für das TBB. Jede neue manuelle Zeile speichert die aktive
+  Schicht und diese Schreiberbesetzung; automatische Systemzeilen speichern
+  die Schicht mit `NULL` als menschlicher Schreiber-ID. Historische Zeilen
+  bleiben in diesen neuen Feldern ehrlich `NULL`. Beide Tabellen weisen
+  `UPDATE` und `DELETE` ab; Berichtigungen sind neue, direkt auf den
+  Originaleintrag verweisende Zeilen.
+- Der Kontozustand gehört nicht zur Wahl der designierten ersten ETB-,
+  ersatzweise S2- beziehungsweise ersten A/W-Besetzung. Wird deren Konto
+  deaktiviert oder gesperrt, scheitert der Schreibvorgang, ohne still zur
+  nächsten fachlich passenden Besetzung zu wechseln. Anwendung und
+  Insert-Trigger prüfen aktive einsatzgleiche Schicht, Annahmestatus,
+  Konto-/Kürzel-/Funktionsidentität sowie aktives, ungesperrtes Konto; ein
+  Wechsel braucht eine dokumentierte Ablösung.
+- Nummerierte Eingänge und tatsächlich beförderte Ausgänge schreiben
+  automatisch einsatzgleiche TBB-Zeilen des exakten Typs `nachricht`.
+  Generator, Detailansicht und Export übernehmen ausschließlich die erste
+  lokale Nummer dieses Typs. Eine nachfolgende LdF-Absenderübersetzung oder
+  begründete Wegkorrektur hängt einen neuen, direkt auf den unveränderten
+  Nachrichtennachweis verweisenden TBB-Korrektureintrag an und verändert die
+  ausgegebene Ursprungsnummer nicht.
+- Eine Übergabe initiiert nur eine persönlich angemeldete, ausgewählte und
+  angenommene Besetzung der aktiven Schicht; eine persönlich angenommene
+  Besetzung der Nachfolgeschicht bestätigt sie. ETB/TBB dokumentieren dabei
+  ausschließlich tatsächlich abgelöste alte und angenommene neue
+  Statusbesetzungen, keine bloßen Planungs- oder Rückzugszeilen.
+- Die Administration kann eine aktive Schicht um eine bislang unbesetzte
+  Funktion erweitern. Wirksam wird sie erst nach persönlicher Annahme durch
+  die zugewiesene Person. Jede angenommene Ergänzung schreibt atomar ETB; LdF
+  oder A/W zusätzlich TBB. A/W ist mehrfach
+  besetzbar. Eine ETB-Ergänzung ist nur zulässig, wenn sie keine angenommene
+  S2-/ETB-Buchführung verdrängt. Ist die Buchführung bereits besetzt, wird
+  sowohl eine neue ETB-Ergänzung als auch die nachträgliche Annahme einer
+  geplanten ETB-Besetzung gesperrt; der Wechsel ist ausschließlich über eine
+  bestätigte Schichtübergabe mit alter und neuer Besetzung zulässig. Jede
+  andere bereits vorhandene Funktion kann ebenfalls nicht ersetzt werden und
+  erfordert dafür eine Schichtübergabe.
 - Nachrichtenzähler-Reparatur und PDF-Vordruckreset benötigen einen aktiven
   Einsatz und ändern ausschließlich dessen Nachrichten. Login, Logout,
   Benutzer- und Konfigurationsverwaltung bleiben bewusst globale Vorgänge.
 - Der PDF-Dossierexport wählt ausdrücklich eine Einsatz-ID und darf deshalb
   auch einen nicht aktiven historischen Einsatz lesen. Die
   Datenbankabfragen laufen in einem konsistenten Read-only-Snapshot und sind
-  sämtlich auf diese ID vorbereitet.
+  sämtlich auf diese ID vorbereitet. ETB und TBB können als Gesamtbuch oder
+  für eine erneut gegen den Einsatz geprüfte Dienstschicht ausgegeben werden.
+  Die Schicht-ID filtert nur diese beiden Tabellen; alle anderen gewählten
+  Dossierbereiche bleiben einsatzweit. Deckblatt und `pdf_export`-Audit
+  speichern den aufgelösten Umfang samt Schichtmetadaten.
 
 Historische, nicht mehr geroutete Duplikate und Beispiel-Uploader sind keine
 Laufzeitendpunkte. Werden lokal zusätzliche operative Module reaktiviert,
@@ -329,7 +444,9 @@ durch Teildaten.
 Vordruckliste und Download scannen nicht vertrauensvoll das gemeinsame
 Verzeichnis. Sie leiten den erwarteten Namen aus einem abgeschlossenen,
 gedruckten Datenbankdatensatz des aktiven Einsatzes ab und prüfen ID,
-Nachweisnummer und Richtung erneut. Der in der Liste sichtbare aktuelle
+technische Archivnummer und Richtung erneut. Die Liste selbst zeigt davon
+getrennt die kanonische lokale TBB-Nachweisnummer oder ehrlich, dass noch kein
+TBB-Nachweis vorliegt. Der in der Liste sichtbare aktuelle
 PDF-Abzug liest danach den vollständigen Datensatz und die validierte
 Empfängermatrix innerhalb derselben Transaktion und rendert nur im Speicher.
 Damit erscheinen auch vor einem Vorlagenwechsel archivierte Vordrucke im
@@ -355,8 +472,8 @@ gespeicherten Kopiekennzeichen im Inhaltsbereich ausgeschrieben.
 
 ## Migrations- und Testnachweis
 
-Die checksum-gebundene Folge 45/50/55/80/94/95/96/97 ist additiv. Ein harter
-Abbruch bleibt bis zur kontrollierten Prüfung des Migrationsledgers
+Die checksum-gebundene Folge 45/50/55/80/94/95/96/97/110/111 ist additiv. Ein
+harter Abbruch bleibt bis zur kontrollierten Prüfung des Migrationsledgers
 fail-closed; anschließend werden ausschließlich exakt erkannte,
 migrationseigene Zwischenstände fortgesetzt. Die ersten drei Migrationen:
 
@@ -389,7 +506,25 @@ Migration 96 führt die getrennte ETB-Dienstfunktion und ihre eng begrenzte
 `EINSATZTAGEBUCH`-Fähigkeit ein. Migration 97 ergänzt den nullable
 Führungsstellennamen sowie dessen nicht-nullbaren dauerhaften Sperrmarker,
 ohne aus anderen Stammdaten oder einer Umgebungsvorgabe historische Werte zu
-erfinden.
+erfinden. Migration 110 ergänzt die lokalen ETB-/TBB-Nummern, den sperrbaren
+Kopf je Buchart und den Einsatz-Insert-Trigger für exakt zwei Köpfe, die
+strukturierten TBB-Felder, TBB-Nachrichten-/Korrekturbezüge,
+den eindeutigen ETB-Anhangsbezug, Append-only-Trigger für beide Bücher und die
+zehnjährige Mindestaufbewahrung. Bereits vorhandene mehrfache Verknüpfungen
+desselben Anhangs blockieren das Upgrade mit explizitem Fehler, statt eine
+Zuordnung zu verwerfen oder umzudeuten.
+Historische Buchzeilen werden innerhalb ihres Einsatzes nach Erfassungszeit
+und stabilem globalem Schlüssel nummeriert; TBB-Aktion und -Bemerkung bleiben
+als ausdrücklich importierter Bestand erhalten.
+Migration 111 ergänzt die unveränderliche Dienstschicht-, Schreiber- und
+optionale ETB-Bearbeitungszuordnung. Bei historischen Zeilen bleibt eine nicht
+belegbare Herkunft ausdrücklich `NULL`. Die Migration ersetzt außerdem den
+Triggervertrag für aktive Schichten: Eine neue oder nachträglich angenommene
+ETB-Besetzung darf eine bereits akzeptierte S2-/ETB-Buchführung nicht
+verdrängen; ein Schreiberwechsel ist nur über die bestätigte persönliche
+Schichtübergabe zulässig. Eigene unterbrochene DDL-Zwischenstände werden
+kontrolliert fortgesetzt, fremde Spalten-, Index-, Fremdschlüssel- oder
+Triggerdefinitionen blockieren das Upgrade.
 
 Migration 50 bleibt bytegenau auf der bereits im Ledger verwendeten
 Prüfsumme. Vor- oder Nachbedingungen werden ausschließlich in neuen
@@ -401,12 +536,15 @@ Der fokussierte Quell- und Validierungsvertrag ist
 führt den Domänenvertrag in einer eigens migrierten MariaDB aus und prüft
 Parallelaktivierung, No-active-INSERT, Update-/Delete-Sperre,
 Reassignment-Versuch und konkurrierende Statusänderung. Der
-Schema-Migratortest belegt Legacy-Backfill und Wiederholbarkeit.
+Schema-Migratortest belegt Legacy-Backfill, lokale Buchnummern,
+Wiederanlauffähigkeit und Wiederholbarkeit.
 `tests/integration/dv_evidence.php` beweist Abschluss-Preflight,
-Append-only-ETB, Hashketten, Terminalbindung, Mindestaufbewahrung und Legal
-Hold. `tests/integration/dv_operations.php` beweist Pflichtbesetzung,
-Mehrfachfunktion, Schichtübergabe, S6-Versionierung, Melderbindung und die
-Schreibsperre ohne aktive Schicht.
+Append-only-ETB/TBB, referenzierte Korrekturen, Hashketten, Terminalbindung,
+Mindestaufbewahrung und Legal Hold. `tests/integration/dv_operations.php`
+beweist Pflichtkopf, rollback-sichere Eröffnung, Pflichtbesetzung,
+Mehrfachfunktion, die beidseitig persönliche Schichtübergabe mit echten
+Statusbesetzungen, S6-Versionierung, Melderbindung und die Schreibsperre ohne
+aktive Schicht.
 `tests/integration/incident_export.php` erzeugt zusätzlich ETB, TBB,
 Nachricht und Anhang mit Eingangsnachweis in zwei Einsätzen, exportiert den inzwischen
 historischen ausgewählten Einsatz und extrahiert dessen PDF-`EmbeddedFile`

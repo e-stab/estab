@@ -167,10 +167,22 @@ Dienstschicht. Anmeldung und Administration bleiben erreichbar, operative
 Eingaben sind aber fail-closed gesperrt. Die erste fachliche Einrichtung
 erfolgt in dieser Reihenfolge:
 
-1. Unter `/4fadm/incidents.php` einen Einsatz mit einem **Namen der
-   Führungsstelle** anlegen und aktivieren. Diese lokale
-   Anschrift/Absendereinheit ist ein eigenes Pflichtfeld und darf nicht mit
-   Einsatzname, Trägerorganisation oder Einsatzleitung verwechselt werden.
+Der in eStab geprüfte und unterstützte Produktumfang ist eine Führungsstelle
+**mit eingerichteter Fernmeldebetriebsstelle**. Deshalb sind LdF und A/W
+Pflichtbesetzungen und je Einsatz wird genau ein TBB geführt. Eine
+Führungsstelle ohne eigene Fernmeldebetriebsstelle, insbesondere ein reiner
+ETB-Betrieb, gehört derzeit nicht zum unterstützten Produktumfang. Diese
+Produktgrenze ist keine formale THW-Freigabe; deren gesonderter Vorbehalt ist
+unten dokumentiert.
+
+1. Unter `/4fadm/incidents.php` einen Einsatz mit Kennung, genauer
+   Einsatzbezeichnung, Beginn, **Bedarfsträger**, **Namen der
+   Führungsstelle**, verantwortlicher Einsatz-/Führungsleitung sowie
+   Einsatzauftrag und Ausgangslage anlegen und aktivieren. Der
+   Führungsstellenname ist die lokale Anschrift/Absendereinheit und darf nicht
+   mit Einsatzname, Bedarfsträger oder Einsatzleitung verwechselt werden.
+   Die Datenbank legt dabei bereits genau zwei leere, bei 1 beginnende
+   Nummernköpfe an: einen für ETB und einen für TBB.
 2. Unter `/4fadm/users.php` persönliche Konten für mindestens S2, Si, S6,
    LdF und A/W anlegen. Eine Person darf mehrere Funktionen übernehmen;
    mehrere A/W-Besetzungen sind möglich.
@@ -181,13 +193,19 @@ erfolgt in dieser Reihenfolge:
 4. Jede Person meldet sich an und nimmt ihre Zuweisungen unter
    `/4fach/fuehrungsstelle.php` selbst an.
 5. Erst wenn S2, Si, S6, LdF und A/W angenommen sind, aktiviert die
-   Administration die Schicht.
+   Administration die Schicht. Die erste Aktivierung eröffnet ETB und TBB
+   atomar mit der lokalen Nummer 1 und übernimmt Pflichtkopf sowie angenommene
+   Besetzung; der Text des ersten ETB-Eintrags nennt den festgelegten
+   Einsatzbeginn ausdrücklich. Pro Buch kann danach nur die automatisch
+   bestimmte Besetzung schreiben: ETB zuerst eine angenommene ETB-Funktion,
+   ersatzweise S2; TBB die zuerst zugewiesene angenommene A/W-Funktion. Alle
+   anderen ausgewählten aktiven Funktionen lesen beide Bücher nur.
 6. S6 wählt den angenommenen Funktions-Hut, erstellt einen Fernmeldeplan mit
    den vorgesehenen Wegen und veröffentlicht ihn. Erst danach kann LdF einen
    Ausgang auf einen verbindlichen Weg disponieren.
 
 Migration 97 lässt Führungsstellennamen bereits vorhandener Einsätze bewusst
-`NULL`, statt einen Wert aus Einsatzname, Organisation, Einsatzleitung oder
+`NULL`, statt einen Wert aus Einsatzname, Bedarfsträger, Einsatzleitung oder
 Umgebung zu erfinden. Ein offener Alt-Einsatz muss vor Aktivierung oder
 weiteren operativen Eingaben einmalig unter `/4fadm/incidents.php` mit dem
 tatsächlichen Namen bestätigt werden. Diese Erstbestätigung ist auch bei
@@ -198,10 +216,29 @@ Erstschreib-Sperrmarker. Auch das spätere Löschen einzelner Fachdaten hebt
 diese Sperre nicht auf. Formal abgeschlossene Alt-Einsätze bleiben
 unverändert.
 
-Eine Schichtübergabe wird von der Administration nur angefordert. Erst ein
-persönlich angemeldetes Konto mit angenommener Funktion der Nachfolgeschicht
-bestätigt sie und löst den atomaren Schichtwechsel aus. Fehlanforderungen
-bleiben als begründet stornierter Nachweis erhalten.
+Eine laufende Schicht kann administrativ um eine noch nicht besetzte Funktion
+ergänzt werden. Die Zuweisung allein ist noch keine Besetzung: Erst die
+betroffene Person nimmt sie selbst an. Diese Annahme wird atomar im ETB
+nachgewiesen; bei LdF oder A/W zusätzlich im TBB. A/W ist ausdrücklich
+mehrfach besetzbar. Eine ETB-Ergänzung, die eine bereits bestimmte ETB- oder
+S2-Besetzung als Schreiber verdrängen würde, kann in der aktiven Schicht weder
+neu zugewiesen noch angenommen werden. Der Wechsel der ETB-Führung erfolgt
+ausschließlich über eine dokumentierte und bestätigte Schichtübergabe. Auch
+jede andere bereits vorhandene Funktion lässt sich in der aktiven Schicht
+nicht über die Erweiterung austauschen.
+
+Eine Schichtübergabe wird zweistufig persönlich initiiert und bestätigt: Eine
+angemeldete, ausgewählte und angenommene Besetzung der aktiven Schicht
+initiiert sie mit Zusammenfassung; erst ein persönlich angemeldetes Konto mit
+angenommener Funktion der Nachfolgeschicht bestätigt sie und löst den atomaren
+Schichtwechsel aus. Fehlanforderungen bleiben als begründet stornierter
+Nachweis erhalten. Die Bestätigung schreibt in derselben Transaktion ETB- und
+TBB-Übergabezeilen mit den tatsächlich abgelösten beziehungsweise
+angenommenen Besetzungen, der jeweils letzten lokalen Buchnummer sowie
+getrenntem Übergabe- und Übernahmezeitpunkt. Nur geplante oder zurückgezogene
+Zuweisungen erscheinen nicht als Personal im Logbuch. Die Unterschriftslinien
+im PDF bleiben der anschließenden manuellen Zeichnung vorbehalten; die
+Webbestätigung ist keine digitale Signatur.
 
 Führungsstellenname, Einsatz, aktive Arbeitsfunktion und gegebenenfalls
 fehlender Dienstbetrieb müssen danach in Statusleiste beziehungsweise
@@ -210,7 +247,18 @@ Führungsstellennamen oder aktive Schicht nimmt eStab keine operative Eingabe
 an. Funktionskonten lassen sich unter `/4fadm/users.php` sperren, entsperren
 und mit einem neuen Kennwort versehen. Ein vollständiges
 ETB-/TBB-/Nachrichten-/Nachweis-/Dienst-/S6-/Melder-/Anhang-Dossier für einen
-aktiven oder historischen Einsatz erzeugt `/4fadm/incident_export.php`.
+aktiven oder historischen Einsatz erzeugt `/4fadm/incident_export.php`. Die
+ETB-Seiten entsprechen der Struktur **Fb Fü 2** auf A4 hoch, die TBB-Seiten
+**Fb Fü 44** auf A4 quer; Formkopf, buchlokale Seitenzahlen und vorgesehene
+manuelle Unterschriftslinien werden auf jeder Seite wiederholt. Bei neuen
+strukturierten TBB-Zeilen wird nur die redundante Zusammenfassung aus
+`tbb_aktion` unterdrückt; die eigenständige Bemerkung aus `tbb_bemerk`
+erscheint genau einmal in der Betriebsspalte. Bei formal
+geschlossenen Büchern wird der unbeschriebene Rest der letzten Formularseite
+diagonal gestrichen; offene vorläufige Abzüge bleiben fortführbar. Der formale
+Einsatzabschluss erzeugt die letzten Buchzeilen und setzt eine
+Mindestaufbewahrung von zehn Jahren. Ein formaler Abschluss vor Aktivierung
+der ersten Schicht und den beiden Eröffnungszeilen ist gesperrt.
 Für operative Daten genügt eine Kontoanmeldung nicht: Zusätzlich müssen ein
 aktiver Einsatz und die exakte ID einer persönlich angenommenen, aktiven
 Dienstbesetzung in der Sitzung ausgewählt sein. Jeder operative Schreibpfad
@@ -224,7 +272,60 @@ Nachrichtenabschluss atomar gespeicherte Archivdatei wird dabei weder ersetzt
 noch verändert und bleibt Bestandteil von Backup und Restore.
 Der Anhangdialog unterstützt echte JPEG-Bilder mit `.jpg` und `.jpeg`,
 prüft den MIME-Typ serverseitig und nennt das standardmäßige Uploadlimit von
-20 MiB direkt am Dateifeld.
+20 MiB direkt am Dateifeld. Ein ETB-Eintrag kann optional genau einen bereits
+fertig hochgeladenen und noch keinem ETB-Eintrag zugeordneten Einsatzanhang
+als Anlage aufnehmen. Beim Speichern wird daraus automatisch die eindeutige
+ETB-Anlagennummer `ETB {einsatz_id}-{estab_book_lfd}-1` gebildet. eStab führt
+genau ein ETB je Einsatz und behandelt jeden ausgewählten Upload als eine
+zusammengehörige digitale Einheit; deshalb ist die letzte Komponente derzeit
+immer `1`. Das vorhandene Kennzeichen wie `EL0001` bleibt davon getrennt das
+Ablage-/FmZt-Kennzeichen. Anwendungssperre und eindeutiger Datenbankindex
+verhindern eine zweite ETB-Zuordnung desselben Anhangs.
+
+Die ETB-Seite besitzt eine kombinierbare Suche: Eine leere Suche zeigt alle
+Einträge; Volltext, Art, „Nummer oder Bezug“ sowie „Zuordnung“ lassen sich
+einzeln oder gemeinsam verwenden. Der Bezugsfilter findet lokale ETB- und
+Korrekturbezüge, Nachrichten-/Anhangs-IDs, kanonische lokale ETB-Nummern und
+historische Bestandsreferenzen,
+Ablagekennzeichen, gespeicherte Dateinamen und die vollständige
+ETB-Anlagennummer. Optional kann die schreibende Person eine angenommene
+Besetzung der aktiven Schicht als Bearbeitungs- und Suchhilfe auswählen. eStab
+prüft diese ID beim Speichern erneut gegen Annahmestatus, aktive Schicht sowie
+ein ungesperrtes Konto. Der reine Online-/Präsenzstatus ist dafür kein
+Gültigkeitsmerkmal. eStab friert die lesbare Angabe
+`Funktion (Rolle): Name [Kürzel]` im Eintrag ein. Sie erscheint in Webliste und
+Suche, aber bewusst nicht im amtlichen Fb-Fü-2-PDF.
+
+Neue ETB-Referenzen folgen Kapitel 2.3.2 der Ausbildungsunterlage: Eingetragen
+wird ausschließlich die positive lokale Nummer eines bereits vorhandenen
+Eintrags desselben Einsatzes. Freitext, führende Nullen, globale technische
+IDs und nicht vorhandene Nummern werden abgewiesen; historischer Freitext
+bleibt les- und suchbar, wird aber nicht als nachträglich erfundene Kante
+ausgewertet. Eine Korrektur referenziert intern direkt ihr unveränderliches
+Original und zeigt nach außen dessen lokale ETB-Nummer.
+
+Die Referenzauswertung verfolgt von einer Startnummer aus wahlweise vorwärts
+alle referenzierenden, auch verzweigten Folgeeinträge oder rückwärts den
+Bezugspfad. Die Tiefe ist auf 1 bis 25 begrenzt, ein abgeschnittener Pfad wird
+sichtbar gemeldet und eine eigene Druckansicht kann geöffnet werden.
+
+Jede neue manuelle ETB-/TBB-Zeile speichert serverseitig die aktive
+Dienstschicht und die schreibende Dienstbesetzung. Automatische Systemzeilen
+speichern die Schicht, beanspruchen aber keine menschliche Schreiberzuordnung.
+Migration 111 lässt diese Herkunftsfelder bei historischen Zeilen ehrlich
+`NULL`, statt eine nicht belegbare Schicht oder Person zu erfinden.
+Die designierte erste ETB-, ersatzweise S2- beziehungsweise erste A/W-
+Besetzung bleibt auch bei Kontosperrung oder Deaktivierung bestimmt: Der
+Writer blockiert dann, statt still zur nächsten passenden Besetzung zu
+wechseln. Anwendung und Insert-Trigger prüfen aktive Schicht, Annahmestatus,
+Konto-/Kürzel-/Funktionsidentität sowie aktives, ungesperrtes Konto; erst eine
+dokumentierte Ablösung ändert die Schreiberherkunft.
+
+Beim PDF-Einsatzdossier ist für ETB/TBB **Gesamtbuch** oder genau eine
+Dienstschicht auswählbar. Die Schichtwahl filtert ausschließlich ETB und TBB;
+alle weiteren ausgewählten Dossierbereiche bleiben einsatzweit vollständig.
+Deckblatt und einsatzgebundener `pdf_export`-Audit halten den gewählten Umfang
+samt Schichtmetadaten fest.
 
 ### Ohne lokalen Image-Build
 
@@ -283,12 +384,12 @@ entstehen. OCI-Tags – auch `latest` – gibt es absichtlich nicht.
 | `/4fach/nachwea.php` | Nachweisung der aufgenommenen und beförderten Nachrichten | ausschließlich ausgewählte aktive LdF- oder A/W-Funktion |
 | `/4fach/vordrucke.php` | abgeschlossene Vordrucke des aktiven Einsatzes im aktuellen, mit dem Einsatzdossier gemeinsamen PDF-Layout öffnen | ausgewählte aktive Dienstfunktion; zugrunde liegende Nachricht, Abschluss- und Druckstatus werden erneut geprüft, das persistierte Archiv bleibt unverändert |
 | `/4fach/anhang.php`, `/4fach/download.php`, `/4fach/showpic.php` | Anhänge auswählen, auflisten, herunterladen oder als Bildvorschau öffnen | ausgewählte aktive Dienstfunktion; verknüpfte Anhänge erben exakt die Leserechte mindestens einer verknüpften Nachricht, freie Anhänge sind nur für Uploader oder S2, Si und LdF sichtbar |
-| `/stabetb/etb.php`, `/fmtbb/tbb.php` | ETB und TBB des aktiven Einsatzes lesen und fachabhängig ergänzen | jede ausgewählte aktive Dienstfunktion darf lesen; ETB-Schreiben nur als S2 oder ETB mit `EINSATZTAGEBUCH`, TBB-Schreiben nur als A/W mit `BEFOERDERUNG` |
+| `/stabetb/etb.php`, `/fmtbb/tbb.php` | einsatzlokal fortlaufendes ETB und TBB lesen, berichtigen und fachabhängig ergänzen; ETB mit kombinierbarer Volltext-/Art-/Nummer-/Bezugs-/Anlagensuche und optionaler eindeutiger Anlagenzuordnung | jede ausgewählte aktive Dienstfunktion darf lesen; manuell schreibt genau eine angenommene Besetzung je Buch: ETB bevorzugt die erste ETB-, sonst die erste S2-Besetzung mit `EINSATZTAGEBUCH`, TBB die erste A/W-Besetzung mit `BEFOERDERUNG`; gespeicherte Zeilen sind append-only |
 | `/4fadm/admin.php` | Administration | separates HTTP Basic Auth |
 | `/4fadm/incidents.php` | Einsätze samt Führungsstellennamen anlegen, historische Fehlwerte einmalig bestätigen, aktivieren und deaktivieren | HTTP Basic Auth, Session-CSRF, revisionsgesicherter globaler Status; die erste operative Eintragung setzt atomar einen dauerhaften Sperrmarker für den bestätigten Führungsstellennamen |
-| `/4fadm/fuehrungsstelle.php` | Dienstschichten planen, Funktionen zuweisen, Schichten aktivieren/übergeben/schließen und Abschlussblocker prüfen | HTTP Basic Auth, Session-CSRF; Besetzungen und Übergaben werden einsatzgebunden und hashverkettet nachgewiesen |
+| `/4fadm/fuehrungsstelle.php` | Dienstschichten planen, Funktionen zuweisen, aktive Schichten ergänzen, Schichten aktivieren/übergeben/schließen und Abschlussblocker prüfen | HTTP Basic Auth, Session-CSRF; eine Ergänzung wird erst durch persönliche Annahme wirksam, Nicht-A/W-Funktionen können in der aktiven Schicht nicht ausgetauscht werden; Besetzungen und Übergaben werden einsatzgebunden und hashverkettet nachgewiesen |
 | `/4fadm/users.php` | Benutzer anlegen, Funktionen fest zuweisen, sperren/entsperren und Kennwörter zurücksetzen | HTTP Basic Auth, Session-CSRF; Rollen werden serverseitig abgeleitet und aktive Sitzungen atomar widerrufen |
-| `/4fadm/incident_export.php` | neun wählbare PDF-Abschnitte: ETB, TBB, Nachrichtenvordrucke, Anhänge, Nachrichtenereignisse, Dienstbetrieb, S6-Fernmeldepläne, Melderläufe und Betriebsereignisse | HTTP Basic Auth, Session-CSRF, einsatzgebundene Abfragen; neue Anhänge werden gegen ihren unveränderlichen SHA-256-/Größennachweis geprüft, Legacy wird als nicht belegbar ausgewiesen |
+| `/4fadm/incident_export.php` | neun wählbare PDF-Abschnitte: ETB, TBB, Nachrichtenvordrucke, Anhänge, Nachrichtenereignisse, Dienstbetrieb, S6-Fernmeldepläne, Melderläufe und Betriebsereignisse; ETB/TBB wahlweise als Gesamtbuch oder für eine Dienstschicht | HTTP Basic Auth, Session-CSRF, einsatzgebundene Abfragen; die Schichtwahl filtert nur ETB/TBB und wird auf Deckblatt und im Audit festgehalten; neue Anhänge werden gegen ihren unveränderlichen SHA-256-/Größennachweis geprüft, Legacy wird als nicht belegbar ausgewiesen |
 | `/4fadm/system_status.php` | ausführlicher Laufzeitstatus | HTTP Basic Auth |
 | `/4fadm/export.php` | Einsatzexporte auflisten, erstellen, als ZIP herunterladen und einzeln löschen | HTTP Basic Auth; POST-Erstellung/-Löschung mit Session-CSRF; Download nur über validierte Exportkennung |
 | `/4fadm/make_fkt.php` | aktive Empfängermatrix und einzelne Standardmatrix atomar bearbeiten | HTTP Basic Auth, Session-CSRF; Rollenabgleich und Sitzungswiderruf committen mit der aktiven Matrix |
@@ -304,11 +405,21 @@ Administrationsanmeldung ist unabhängig von den eStab-Funktionsbenutzern.
 Nur `admin-auth-init` erhält diese Klartextdatei; Apache liest im laufenden
 App-Container ausschließlich den daraus abgeleiteten bcrypt-Hash.
 
-Die für Kapitel 4.3 der THW-DV 1-101 umgesetzten fachlichen Invarianten,
-Quellfassung, Aussagegrenzen und Abnahmeschritte stehen in
-[docs/DV-1-101-UMSETZUNG.md](docs/DV-1-101-UMSETZUNG.md). Die formale Sichtung
-eines Ausgangs ist verbindlicher Bestandteil des Nachrichtenlaufs und kann
-weder per Compose-Umgebung noch per Legacy-Konfiguration abgeschaltet werden.
+Die für Kapitel 4.3 der THW-DV 1-101 und das Handbuch
+„ETB-/und TBB-Führung in THW-Führungsstellen“, Version 1.0, Stand März 2022,
+umgesetzten fachlichen Invarianten, Quellfassungen, SHA-256-Prüfsummen,
+Aussagegrenzen und Abnahmeschritte stehen in
+[docs/DV-1-101-UMSETZUNG.md](docs/DV-1-101-UMSETZUNG.md). Die geprüfte
+ETB-/TBB-Datei hat den SHA-256
+`2457d1deccd01892655bbc329b08885a0b3c8b3ebfb6372c79997d3427d1ae59`.
+Die technische Umsetzung und die automatisierten Nachweise sind
+**keine formale THW-Freigabe**. Die Referenz lässt ein elektronisches ETB/TBB
+nur nach Freigabe durch die THW-Leitung zu; diese Freigabe muss vor einem
+amtlichen urkundlichen Produktiveinsatz von der zuständigen Stelle schriftlich
+erteilt und zusammen mit der örtlichen Abnahme dokumentiert werden. Die
+formale Sichtung eines Ausgangs ist verbindlicher Bestandteil des
+Nachrichtenlaufs und kann weder per Compose-Umgebung noch per
+Legacy-Konfiguration abgeschaltet werden.
 
 ### Nachrichtenlauf und Nachweisung
 
@@ -337,6 +448,19 @@ Eingangsweg ausdrücklich bestätigen. Ändert LdF das Medium, ist eine
 Begründung Pflicht; Aufnahmezeit und A/W-Zeichen bleiben unveränderlich.
 Bestätigung, ursprüngliches und bestätigtes Medium, etwaige Begründung und
 LdF-Identität werden atomar in der Nachrichten-Ereigniskette nachgewiesen.
+Die nummerierte Aufnahme erzeugt außerdem genau einen TBB-Eintrag des Typs
+`nachricht`. Dieser Typ ist dem automatischen, mit der Nachricht verknüpften
+Workflow vorbehalten und steht bei manuellen TBB-Einträgen nicht zur Auswahl;
+historische Zeilen bleiben unverändert lesbar. Übersetzt LdF danach den Absender oder korrigiert begründet den
+Eingangsweg, bleibt dieser Originaleintrag unverändert; eStab hängt einen
+direkt darauf verweisenden TBB-Korrektureintrag mit eigener lokaler Nummer an.
+Generator, Detailansicht und Dossier übernehmen als Nachweisnummer
+ausschließlich die erste lokale Nummer des automatischen Typs `nachricht`,
+nicht die Nummer eines späteren Nachtrags. Meldungsübersicht, zweite Sichtung
+und Nachweislisten verwenden dieselbe kanonische TBB-Nummer für Anzeige,
+numerische Suche und Sortierung. Solange etwa ein Ausgang noch nicht tatsächlich
+befördert wurde, zeigen sie ehrlich „noch kein TBB-Nachweis“ statt der
+technischen Archiv- oder globalen Datenbanknummer.
 Beim Fokus auf „Rufname der Gegenstelle“ bietet das Formular A/W und LdF
 bisherige Rufnamen aus dem aktuell aktiven Einsatz in einer zugänglichen,
 per Tastatur bedienbaren Auswahlliste an.
@@ -359,7 +483,7 @@ geprüft; Werte anderer Einsätze werden nicht offengelegt. Der lokale Absender
 eines Ausgangs bleibt davon unberührt: Er wird serverseitig aus dem
 autoritativen Führungsstellennamen des in derselben Schreibtransaktion
 gesperrten Einsatzes gesetzt. Eingänge werden an dieselbe lokale
-Führungsstelle adressiert. Browserwerte, Einsatzname, Organisation,
+Führungsstelle adressiert. Browserwerte, Einsatzname, Bedarfsträger,
 Einsatzleitung und Umgebungsvariablen sind dafür keine Ersatzquelle.
 
 Vorrangsstufen werden überall mit denselben fachlichen Bezeichnungen
@@ -621,12 +745,13 @@ PDF-Export keinen Ersatz, sondern kennzeichnet ihn ausdrücklich als
 
 ## Dokumentation
 
-- [Abschluss-Audit vom 31. Juli 2026](docs/ABSCHLUSS-AUDIT.md)
+- [Abschluss-Audit vom 1. August 2026](docs/ABSCHLUSS-AUDIT.md)
 - [Betrieb und Konfiguration](docs/BETRIEB.md)
 - [Pull-only Registry- und Synology-Deployment](deploy/registry/README.md)
 - [Migration und Upgrade](docs/MIGRATION-UND-UPGRADE.md)
 - [Backup und Wiederherstellung](docs/BACKUP-UND-WIEDERHERSTELLUNG.md)
 - [Einsätze und Datenzuordnung](docs/EINSAETZE-UND-DATENZUORDNUNG.md)
+- [THW-DV-1-101- und ETB-/TBB-Umsetzung samt Freigabevorbehalt](docs/DV-1-101-UMSETZUNG.md)
 - [Amtlicher Nachrichtenvordruck und Ausfüllhilfen](docs/NACHRICHTENVORDRUCK.md)
 - [Nachrichtenlisten suchen und filtern](docs/NACHRICHTENLISTEN.md)
 - [PDF-Einsatzdossier](docs/PDF-EINSATZDOSSIER.md)
