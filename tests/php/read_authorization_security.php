@@ -167,6 +167,55 @@ $assert(
     'A/W gained another operator’s completed object'
 );
 
+$siVisibility = estab_read_message_visibility_sql($si, 'msg');
+$awVisibility = estab_read_message_visibility_sql($aw, 'msg');
+$ldfVisibility = estab_read_message_visibility_sql($ldf, 'msg');
+$staffVisibility = estab_read_message_visibility_sql($s1, 'msg');
+$assert(
+    str_contains($siVisibility['sql'], "msg.`x00_status` = 4")
+        && str_contains($siVisibility['sql'], "'0000-00-00 00:00:00'")
+        && $siVisibility['params'] === ['si0001', 'si0001'],
+    'pageable Si SQL does not preserve queue, personal mark and legacy date semantics'
+);
+$assert(
+    str_contains($awVisibility['sql'], "msg.`x00_status` = 2")
+        && str_contains($awVisibility['sql'], "msg.`06_befwegausw` <> ''")
+        && $awVisibility['params'] === ['aw0001', 'aw0001', 'aw0001'],
+    'pageable A/W SQL does not preserve queue, lock and personal mark semantics'
+);
+$assert(
+    str_contains($ldfVisibility['sql'], "msg.`x00_status` = 1")
+        && str_contains($ldfVisibility['sql'], "msg.`x01_abschluss` = 'f'")
+        && $ldfVisibility['params'] === ['ldf001', 'ldf001'],
+    'pageable LdF SQL does not preserve disposition and personal mark semantics'
+);
+$assert(
+    str_contains($staffVisibility['sql'], 'msg.`16_empf` REGEXP ?')
+        && count($staffVisibility['params']) === 2,
+    'pageable staff SQL bypasses the shared exact staff-access predicate'
+);
+foreach (['msg` OR 1=1 --', '', '1msg'] as $unsafeAlias) {
+    try {
+        estab_read_message_visibility_sql($si, $unsafeAlias);
+        $assert(false, 'unsafe pageable visibility alias accepted');
+    } catch (InvalidArgumentException) {
+        $assert(true, 'unsafe pageable visibility alias rejected');
+    }
+}
+foreach (
+    [
+        $identity('si0001', 'Si', 'Stab', false),
+        $identity('xx0001', 'S1', 'Fernmelder'),
+    ] as $forbiddenIdentity
+) {
+    try {
+        estab_read_message_visibility_sql($forbiddenIdentity);
+        $assert(false, 'forbidden identity received pageable message SQL');
+    } catch (EstabReadPermissionException) {
+        $assert(true, 'forbidden identity denied pageable message SQL');
+    }
+}
+
 $assert(
     estab_read_attachment_tokens(
         'EL0001.pdf; EL00010.pdf;EL0001.pdf;../secret.pdf;'

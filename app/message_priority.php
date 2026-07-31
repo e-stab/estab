@@ -142,7 +142,10 @@ function estab_message_priority_order_sql(string $column): string
 {
     if (!in_array(
         $column,
-        ['`09_vorrangstufe`', 'm.`09_vorrangstufe`'],
+        [
+            '`09_vorrangstufe`',
+            'm.`09_vorrangstufe`',
+        ],
         true
     )) {
         throw new InvalidArgumentException('Invalid priority column expression');

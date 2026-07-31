@@ -925,6 +925,138 @@ function estab_read_code_matches(mixed $storedCode, mixed $identityCode): bool
 }
 
 /**
+ * SQL equivalent of estab_read_message_allowed() for pageable message lists.
+ *
+ * The returned predicate is deliberately followed by the pure PHP decision
+ * for every selected row. Moving the same boundary before COUNT/LIMIT keeps
+ * result totals exact without weakening the object-level read gate.
+ *
+ * @return array{sql:string,params:list<mixed>}
+ */
+function estab_read_message_visibility_sql(
+    array $identity,
+    string $alias = 'm'
+): array {
+    if (preg_match('/\A[A-Za-z][A-Za-z0-9_]*\z/D', $alias) !== 1) {
+        throw new InvalidArgumentException('Invalid message-list alias');
+    }
+    if (
+        estab_read_duty_assignment_id(
+            $identity['duty_assignment_id'] ?? null
+        ) === null
+    ) {
+        throw new EstabReadPermissionException(
+            'Für die Nachrichtenliste ist eine aktive Dienstfunktion erforderlich.'
+        );
+    }
+    $function = (string) ($identity['funktion'] ?? '');
+    $role = (string) ($identity['rolle'] ?? '');
+    $code = (string) ($identity['kuerzel'] ?? '');
+    if (
+        preg_match('/\A[a-zA-Z0-9_]{1,6}\z/D', $code) !== 1
+        || preg_match('/\A[^\x00-\x1F\x7F]{1,128}\z/uD', $function) !== 1
+    ) {
+        throw new EstabReadPermissionException(
+            'Die Dienstidentität ist für die Nachrichtenliste ungültig.'
+        );
+    }
+    $column = static fn (string $name): string => $alias . '.`' . $name . '`';
+    $codeMatch = static fn (string $name): string =>
+        'LOWER(TRIM(' . $column($name) . ')) = LOWER(?)';
+    $dateUnset = static fn (string $name): string => '('
+        . $column($name) . ' IS NULL OR TRIM(CAST('
+        . $column($name) . " AS CHAR)) IN ('', '0000-00-00', "
+        . "'0000-00-00 00:00:00'))";
+    $dateSet = static fn (string $name): string =>
+        '(NOT ' . $dateUnset($name) . ')';
+    $ownsLock = '(' . $column('x02_sperre') . " = 't' AND "
+        . $codeMatch('x03_sperruser') . ')';
+
+    if ($function === 'Si' && $role === 'Stab') {
+        $pendingReview = '('
+            . $column('x00_status') . ' = 4'
+            . ' AND ' . $dateUnset('15_quitdatum')
+            . " AND " . $column('15_quitzeichen') . " = ''"
+            . ' AND (('
+            . $column('04_richtung') . " = 'E'"
+            . ' AND ' . $dateSet('02_zeit')
+            . " AND " . $column('02_zeichen') . " <> ''"
+            . ') OR ('
+            . $column('04_richtung') . " = 'A'"
+            . ' AND ' . $dateUnset('02_zeit')
+            . " AND " . $column('02_zeichen') . " = ''"
+            . ' AND ' . $dateUnset('03_datum')
+            . " AND " . $column('03_zeichen') . " = ''"
+            . ')))';
+        return [
+            'sql' => '(' . $pendingReview . ' OR ' . $ownsLock
+                . ' OR (' . $dateSet('15_quitdatum') . ' AND '
+                . $codeMatch('15_quitzeichen') . '))',
+            'params' => [$code, $code],
+        ];
+    }
+
+    if ($function === 'A/W' && $role === 'Fernmelder') {
+        $pendingTransport = '('
+            . $column('x00_status') . ' = 2'
+            . ' AND ' . $column('04_richtung') . " = 'A'"
+            . ' AND ' . $dateSet('02_zeit')
+            . " AND " . $column('02_zeichen') . " <> ''"
+            . " AND " . $column('06_befwegausw') . " <> ''"
+            . ' AND ' . $dateUnset('03_datum')
+            . " AND " . $column('03_zeichen') . " = ''"
+            . ' AND ' . $dateSet('15_quitdatum')
+            . " AND " . $column('15_quitzeichen') . " <> ''"
+            . " AND " . $column('x01_abschluss') . " = 'f')";
+        return [
+            'sql' => '(' . $pendingTransport . ' OR ' . $ownsLock
+                . ' OR ' . $codeMatch('01_zeichen')
+                . ' OR (' . $dateSet('03_datum') . ' AND '
+                . $codeMatch('03_zeichen') . '))',
+            'params' => [$code, $code, $code],
+        ];
+    }
+
+    if ($function === 'LdF' && $role === 'Fernmelder') {
+        $pendingLead = '('
+            . $column('x00_status') . ' = 1'
+            . ' AND ' . $dateUnset('02_zeit')
+            . " AND " . $column('02_zeichen') . " = ''"
+            . ' AND ' . $dateUnset('03_datum')
+            . " AND " . $column('03_zeichen') . " = ''"
+            . " AND " . $column('x01_abschluss') . " = 'f'"
+            . ' AND (('
+            . $column('04_richtung') . " = 'E'"
+            . ' AND ' . $dateUnset('15_quitdatum')
+            . " AND " . $column('15_quitzeichen') . " = ''"
+            . ') OR ('
+            . $column('04_richtung') . " = 'A'"
+            . ' AND ' . $dateSet('15_quitdatum')
+            . " AND " . $column('15_quitzeichen') . " <> ''"
+            . ')))';
+        return [
+            'sql' => '(' . $pendingLead . ' OR ' . $ownsLock
+                . ' OR (' . $dateSet('02_zeit') . ' AND '
+                . $codeMatch('02_zeichen') . '))',
+            'params' => [$code, $code],
+        ];
+    }
+
+    if ($function !== 'Si' && in_array($role, ['Stab', 'FB'], true)) {
+        return [
+            'sql' => estab_message_staff_access_sql($alias),
+            'params' => [
+                estab_message_recipient_pattern($function),
+                $function,
+            ],
+        ];
+    }
+    throw new EstabReadPermissionException(
+        'Diese Dienstfunktion darf keine Nachrichtenliste lesen.'
+    );
+}
+
+/**
  * Pure per-message visibility decision.
  *
  * Normal Stab/FB functions reuse the repository's exact staff predicate:

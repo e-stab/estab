@@ -20,8 +20,9 @@ require_once __DIR__ . "/../app/auth.php";
 require_once __DIR__ . "/../app/csrf.php";
 require_once __DIR__ . "/../app/file_access.php";
 require_once __DIR__ . "/../app/navigation.php";
+require_once __DIR__ . "/../app/session_ui.php";
 
-  function pre_html ($art, $titel, $cssstr){
+  function pre_html ($art, $titel, $cssstr, $sharedUi = false){
     include ("../4fcfg/para.inc.php");
     include ("../4fcfg/config.inc.php");
     echo "<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n";
@@ -83,6 +84,9 @@ require_once __DIR__ . "/../app/navigation.php";
      break;
    }//switch
    echo "<title>".$titel." ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"]."</title>\n";
+   if ($sharedUi === true) {
+     echo estab_session_ui_stylesheet ()."\n";
+   }
    echo "<style type=\"text/css\">";
    echo $cssstr."\n";
    echo "</style>";

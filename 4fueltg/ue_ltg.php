@@ -4,6 +4,8 @@ define ("debug", false);
 session_start ();
 require_once __DIR__ . "/../app/auth.php";
 require_once __DIR__ . "/../app/message_priority.php";
+require_once __DIR__ . "/../app/message_list.php";
+require_once __DIR__ . "/../app/message_list_ui.php";
 require_once __DIR__ . "/../app/navigation.php";
 require_once __DIR__ . "/../app/read_authorization.php";
 require_once __DIR__ . "/../app/session_ui.php";
@@ -18,6 +20,10 @@ include ("../4fach/db_operation.php");          // Datenbank operationen
 include ("../4fach/tools.php");                 // diverse Funktionen
 include ("../4fach/data_hndl.php");             // propritÃ¤re  Datenbankoperationen
 include ("../4fcfg/para.inc.php");              //
+// The request parser needs the authoritative recipient allowlist before the
+// list object is constructed. The detail/form code loads the same legacy
+// matrix in its own method scope where required.
+include ("../4fcfg/fkt_rolle.inc.php");
 
 $overviewReadIdentity = estab_read_session_identity ($_SESSION);
 if (
@@ -150,11 +156,13 @@ class Listen {
   var $listenart;
   var $benutzer;
   var $incidentId;
+  var $filters;
+  var $pageWindow;
 
   // Listengestaltung
 
-  function __construct ($welche, $user, $incidentId = null){
-    $this->listen ($welche, $user, $incidentId);
+  function __construct ($welche, $user, $incidentId = null, $filters = null){
+    $this->listen ($welche, $user, $incidentId, $filters);
   }
 
 /******************************************************************************\
@@ -180,6 +188,49 @@ class Listen {
 
 \******************************************************************************/
   function get_list (){
+    include ("../4fcfg/config.inc.php");
+    require __DIR__ . "/../4fcfg/dbcfg.inc.php";
+    $messageTable = estab_message_table ($conf_4f_tbl ["nachrichten"]);
+    $incidentId = $this->required_incident_id ();
+    $filter = estab_message_list_filter_sql ($this->filters, "m");
+    $where = "m.`einsatz_id` = ?".
+      ($filter ["sql"] === "" ? "" : " AND ".$filter ["sql"]);
+    $queryParameters = array_merge (array ($incidentId), $filter ["params"]);
+    $messageConnection = estab_message_connect ($conf_4f_db);
+    try {
+      $count = estab_message_query_int (
+        $messageConnection,
+        "SELECT COUNT(*) FROM ".$messageTable." AS m WHERE ".$where,
+        $queryParameters
+      );
+      $this->pageWindow = estab_message_list_page_window (
+        $count,
+        $this->filters
+      );
+      $this->filters ["page"] = $this->pageWindow ["page"];
+      $query = "SELECT m.`00_lfd`,m.`04_richtung`,m.`04_nummer`,".
+        "m.`05_gegenstelle`,m.`09_vorrangstufe`,m.`10_anschrift`,".
+        "m.`11_rufnummer`,m.`12_betreff`,m.`12_inhalt`,".
+        "m.`12_abfzeit`,m.`13_abseinheit`,m.`14_funktion`,".
+        "m.`16_empf`,m.`x00_status` FROM ".$messageTable." AS m".
+        " WHERE ".$where." ORDER BY ".
+        estab_message_list_order_sql ($this->filters, "m").
+        " LIMIT ? OFFSET ?";
+      return estab_message_query_rows (
+        $messageConnection,
+        $query,
+        array_merge ($queryParameters, array (
+          $this->pageWindow ["page_size"],
+          $this->pageWindow ["offset"],
+        ))
+      );
+    } finally {
+      estab_auth_close ($messageConnection);
+    }
+  }
+
+  /** Historical implementation retained only as migration reference. */
+  function legacy_get_list (){
     echo "\n\n\n<!-- ANFANG file:liste.php fkt:createlist -->";
     include ("../4fcfg/config.inc.php");
     include ("../4fcfg/para.inc.php");
@@ -385,12 +436,16 @@ echo "Ist es die letzte Seite  ="; if ($is_last_page){echo "Ja";} else {echo "Ne
 /******************************************************************************\
 
 \******************************************************************************/
-  function listen ($welche, $user, $incidentId = null){
+  function listen ($welche, $user, $incidentId = null, $filters = null){
     $this->listenart = $welche;
     $this->benutzer  = $user;
     $this->incidentId = $incidentId === null
       ? null
       : estab_message_positive_id ($incidentId);
+    $this->filters = is_array ($filters)
+      ? $filters
+      : estab_message_list_default_filters ();
+    $this->pageWindow = estab_message_list_page_window (0, $this->filters);
 //    echo "listenart =".$this->listenart."- benutzer = ".$this->benutzer."<br>";
   }
 
@@ -558,192 +613,90 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
     include ("../4fcfg/e_cfg.inc.php");
     include ("../4fcfg/fkt_rolle.inc.php");
 
+    $recipientFunctions = array ();
+    foreach ($conf_empf as $recipientDefinition) {
+      $recipientFunction = (string) ($recipientDefinition ["fkt"] ?? "");
+      if ($recipientFunction !== "" && !in_array (
+        $recipientFunction,
+        $recipientFunctions,
+        true
+      )) {
+        $recipientFunctions [] = $recipientFunction;
+      }
+    }
+    $result = $this->get_list ();
+    $_SESSION ["estab_message_overview_filters"] = $this->filters;
+
     echo "<!doctype html>\n";
-    echo "<html lang=\"de\">\n";
-    echo "<head>\n";
+    echo "<html lang=\"de\">\n<head>\n";
     echo "<meta charset=\"UTF-8\">\n";
     echo "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n";
     echo "<title>eStab Meldungsübersicht</title>\n";
     echo estab_session_ui_stylesheet ()."\n";
-    echo "</head>\n";
-    echo "<body class=\"estab-tool-page\">\n";
+    echo "</head>\n<body class=\"estab-tool-page\">\n";
     echo "<main class=\"estab-tool-main estab-tool-main-wide\" ";
-    echo "data-estab-message-overview>\n";
+    echo "data-estab-message-overview data-estab-message-list>\n";
     echo "<header class=\"estab-tool-hero\">\n";
     echo "<p class=\"estab-tool-eyebrow\">Übungsleitung · Nachrichten</p>\n";
     echo "<h1>Meldungsübersicht</h1>\n";
-    echo "<p>Sichtungsstatus und Verteilung aller Nachrichten des aktiven ";
-    echo "Einsatzes. Wählen Sie eine Zeile, um den vollständigen Vordruck ";
-    echo "anzusehen.</p>\n</header>\n";
+    echo "<p>Durchsuchen und filtern Sie alle Nachrichtenvordrucke des aktiven ";
+    echo "Einsatzes. Auch große Lagen bleiben durch serverseitige Seiten und ";
+    echo "stabile Sortierung schnell bedienbar.</p>\n</header>\n";
     echo "<section class=\"estab-tool-panel\" ";
     echo "aria-labelledby=\"message-overview-list-title\">\n";
     echo "<header class=\"estab-tool-panel-heading\">\n";
-    echo "<h2 id=\"message-overview-list-title\">Nachrichten</h2>\n";
-    echo "<p>Filter und Seitennavigation wirken nur auf diese Übersicht.</p>\n";
+    echo "<h2 id=\"message-overview-list-title\">Nachrichtenvordrucke</h2>\n";
+    echo "<p>Suche und Filter werden miteinander kombiniert. Ein Klick auf ";
+    echo "„Vordruck öffnen“ zeigt die vollständige, unveränderte Nachricht.</p>\n";
     echo "</header>\n";
-    echo "<div class=\"estab-tool-legacy-content\">\n";
-
-    $result = $this->get_list ();
-	if (debug)  {echo "this->get_list() = "; var_dump($result);echo "<br><br>";}
-    $this->darstellungs_art ( "Stab_lesen" );
-
-    $this->listen_navi ();
-
-    $overviewColumnCount = 7;
-    echo "<table style=\"text-align: center; background-color: rgb(250,250, 250); \" border=\"2\" cellpadding=\"2\" cellspacing=\"2\">\n";
-    echo "<thead>\n";
-    echo "<tr style=\"background-color: rgb(240,240,200); color: #0000ff; font-weight:bold;\">\n";
-    echo "<th scope=\"col\">Vorst</th>\n";
-    echo "<th scope=\"col\">E/A</th>\n";
-    echo "<th scope=\"col\">Nw-Nr.</th>\n";
-    echo "<th scope=\"col\">Von</th>";
-    echo "<th scope=\"col\">An</th>";
-    echo "<th scope=\"col\">Abfasszeit</th>\n";
-    // Funktionen und Farben
-    for ( $i=1; $i<= count ($conf_empf); $i++ ) {
-      if ( ( $conf_empf [$i]["fkt"] != "Si" ) and ( $conf_empf [$i]["fkt"] != "A/W" ) ) {
-        echo "<th scope=\"col\">";
-        echo estab_message_html ($conf_empf [$i]["fkt"]);
-        echo "</th>\n";
-        $overviewColumnCount++;
-      }
-    }
-    echo "<th scope=\"col\">Inhalt</th>\n";
-    echo "</tr>\n";
-    echo "</thead>\n";
-    echo "<tbody>\n";
-
-    if  ($result != ""){
-      foreach ($result as $row){
-         $priority = estab_message_priority_requires_attention (
-           $row["09_vorrangstufe"] ?? null
-         );
-         echo estab_overview_row_start ($priority);
-
-         // VORRANGSTUFE
-         echo "<td>";
-         estab_overview_detail_link (
-           $row["00_lfd"],
-           estab_message_priority_label ($row["09_vorrangstufe"] ?? null)
-         );
-         echo "</td>\n";
-
-         // RICHTUNG Eingang / Ausgang
-         echo "<td>";
-         if (($row["04_richtung"] != "")) {
-           estab_overview_detail_link ($row["00_lfd"], $row["04_richtung"]);
-         } else {
-           echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
-         }
-         echo "</td>\n";
-
-         // N a c h w e i s n u m m e r
-         echo "<td>";
-         if (($row["04_richtung"] != "")) {
-           estab_overview_detail_link ($row["00_lfd"], $row["04_nummer"]);
-         } else {
-           echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
-         }
-         echo "</td>\n";
-
-/*
-
-         if ($row["04_richtung"] == "A" ) {
-           echo "<td>";
-           if (($row["10_anschrift"] != "")) {
-	             estab_overview_detail_link ($row["00_lfd"], $row["10_anschrift"]);
-           } else {
-             echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
-           }
-           echo "</td>\n";
-         } else {
-           echo "<td>";
-
-           // Absender / Einheit / Stelle / ...
-           if (($row["13_abseinheit"] != "")) {
-             estab_overview_detail_link ($row["00_lfd"], $row["13_abseinheit"]);
-           } else {
-               echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
-           }
-           echo "</td>\n";
-         }
-*/
-//---------------------------
-           echo "<td>";
-
-           // Absender / Einheit / Stelle / ...
-           if (($row["13_abseinheit"] != "")) {
-	             estab_overview_detail_link ($row["00_lfd"], $row["13_abseinheit"]);
-           } else {
-               echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
-           }
-           echo "</td>\n";
-
-           echo "<td>";
-
-           // Anschrift
-           if (($row["10_anschrift"] != "")) {
-             estab_overview_detail_link ($row["00_lfd"], $row["10_anschrift"]);
-           } else {
-               echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
-           }
-           echo "</td>\n";
-//-------------------------------------------------
-
-
-         echo "<td>";
-         // Abfassungs Z E I T
-         if (($row["12_abfzeit"] != "")) {
-           $abfzeit = convdatetimeto ($row["12_abfzeit"]);
-           estab_overview_detail_link ($row["00_lfd"], $abfzeit["stak"]);
-         } else {
-           echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
-         }
-         echo "</td>\n";
-
-         // Funktionen und Farben
-         $empfcolor = extraiereempfaenger ( $row ["16_empf"] ) ;
-		 if (debug)  {echo "empfcolor = "; var_dump($empfcolor);echo "<br><br>";}
-         for ( $i=1; $i<= count ($conf_empf); $i++ ) {
-           if ( ( $conf_empf [$i]["fkt"] != "Si" ) and ( $conf_empf [$i]["fkt"] != "A/W" ) ) {
-             $recipientFunction = $conf_empf [$i]["fkt"];
-             echo estab_overview_recipient_cell (
-               $empfcolor [$recipientFunction] ?? "",
-               $cfg ["vbg"]
-             );
-           }
-         }
-
-         // I N H A L T !
-         echo "<td align=\"left\">";
-         if (($row["12_inhalt"] != "")) {
-           $overviewText = inhalt_limit
-             ? estab_message_excerpt ($row["12_inhalt"], (int) $conf_4f_liste ["inhalt"])." ..."
-             : estab_message_plain_text ($row["12_inhalt"]);
-           estab_overview_detail_link ($row["00_lfd"], $overviewText);
-         } else {
-           echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
-         }
-         echo "</td>\n";
-         echo "</tr>";
-      }
+    estab_message_list_render_controls (
+      $this->filters,
+      $recipientFunctions,
+      array (
+        "action" => estab_overview_url (),
+        "method" => "get",
+        "target" => "_self",
+        "dom_prefix" => "overview-message-list",
+      )
+    );
+    estab_message_list_render_resultbar (
+      $this->filters,
+      $this->pageWindow
+    );
+    if ($result === array ()) {
+      estab_message_list_render_empty ($this->filters);
     } else {
-      echo estab_overview_empty_row ($overviewColumnCount);
+      estab_message_list_render_table (
+        $result,
+        static function (array $row): void {
+          $recordId = estab_message_positive_id ($row ["00_lfd"] ?? null);
+          $label = "Vordruck ".
+            estab_message_list_direction_label ($row ["04_richtung"] ?? "").
+            " ".(string) ($row ["04_nummer"] ?? $recordId)." öffnen";
+          echo "<a class=\"estab-button estab-button-primary ".
+            "estab-message-list-open\" href=\"".
+            estab_message_html (estab_overview_url (array (
+              "ueb_fm" => "ueb",
+              "00_lfd" => $recordId,
+            )))."\">".estab_message_html ($label)."</a>";
+        }
+      );
     }
-    echo "</tbody>\n";
-    echo "</table>\n";
-
-    $this->listen_navi ();
-
-    echo "<!-- ENDE file:ue_ltg.php fkt:createlist -->\n";
-    echo "</div>\n</section>\n";
-    echo "<footer class=\"estab-tool-footer\">\n";
+    estab_message_list_render_pager (
+      $this->filters,
+      $this->pageWindow,
+      array (
+        "action" => estab_overview_url (),
+        "method" => "get",
+        "target" => "_self",
+        "hidden" => array (),
+      )
+    );
+    echo "</section>\n<footer class=\"estab-tool-footer\">\n";
     echo "<a href=\"".estab_auth_html (estab_application_root ())."\">";
     echo "Zur eStab-Übersicht</a>\n";
     echo "<span>Es werden ausschließlich Daten des aktiven Einsatzes angezeigt.</span>\n";
-    echo "</footer>\n</main>\n";
-    echo "</body>\n";
-    echo "</html>\n";
+    echo "</footer>\n</main>\n</body>\n</html>\n";
 
   }
 
@@ -2102,6 +2055,44 @@ if (count($_POST)>0) { $returnValue = $_POST; }  // POST Daten, wenn vorhanden s
     $_SESSION["ueb_flt_anzahl"] = $requestedPageSize;
   }
 
+  $overviewRecipientFunctions = array ();
+  foreach ($conf_empf as $recipientDefinition) {
+    $recipientFunction = (string) ($recipientDefinition ["fkt"] ?? "");
+    if ($recipientFunction !== "" && !in_array (
+      $recipientFunction,
+      $overviewRecipientFunctions,
+      true
+    )) {
+      $overviewRecipientFunctions [] = $recipientFunction;
+    }
+  }
+  $overviewAllowedListKeys = array_fill_keys (array (
+    "ml_q", "ml_direction", "ml_priority", "ml_status", "ml_from",
+    "ml_to", "ml_recipient", "ml_sort", "ml_page", "ml_page_size",
+    "ml_apply", "ml_reset", "ml_remove",
+  ), true);
+  foreach (array_keys ($returnValue) as $requestKey) {
+    if (
+      is_string ($requestKey)
+      && str_starts_with ($requestKey, "ml_")
+      && !isset ($overviewAllowedListKeys [$requestKey])
+    ) {
+      estab_overview_forbid ();
+    }
+  }
+  try {
+    $overviewFilters = estab_message_list_apply_request (
+      is_array ($_SESSION ["estab_message_overview_filters"] ?? null)
+        ? $_SESSION ["estab_message_overview_filters"]
+        : estab_message_list_default_filters (),
+      $returnValue,
+      $overviewRecipientFunctions
+    );
+  } catch (Throwable $exception) {
+    estab_overview_forbid ();
+  }
+  $_SESSION ["estab_message_overview_filters"] = $overviewFilters;
+
   if (isset($returnValue['ueb_flt_start_x'])) { $_SESSION['ueb_flt_navi'] = "start";}
   if (isset($returnValue['ueb_flt_back_x']))  { $_SESSION['ueb_flt_navi'] = "back";}
   if (isset($returnValue['ueb_flt_for_x']))   { $_SESSION['ueb_flt_navi'] = "for";}
@@ -2159,7 +2150,12 @@ if (count($_POST)>0) { $returnValue = $_POST; }  // POST Daten, wenn vorhanden s
     }
 
 
-    $list = new listen ("SIADMIN", "", $overviewIncidentId);
+    $list = new listen (
+      "SIADMIN",
+      "",
+      $overviewIncidentId,
+      $overviewFilters
+    );
     $list->createlist ();
   }
 

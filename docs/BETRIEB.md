@@ -232,8 +232,8 @@ ihn anschließend wieder her.
 podman compose run --rm migrate
 ```
 
-Ein bereits aktueller Bestand meldet alle dreizehn Migrationen einschließlich
-`98-official-message-form-fields.sql` als vorhanden und
+Ein bereits aktueller Bestand meldet alle vierzehn Migrationen einschließlich
+`99-message-list-search.sql` als vorhanden und
 führt trotzdem den vollständigen Read-only-Schematest aus. Die Ausgabe muss
 `Post-migration schema verification passed` und anschließend
 `All schema migrations are applied` enthalten. Erst danach sollte der Stack

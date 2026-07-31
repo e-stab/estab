@@ -113,6 +113,11 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   Meldungsübersichtsseiten einschließlich beschrifteter Felder,
   Tastaturfokus, responsiver Tabellenkarten und begrenzter Scrollflächen für
   unvermeidbar breite historische Fachformulare,
+- gemeinsame skalierbare Nachrichtenlisten für Meldungsübersicht und zweite
+  Sichtung: immer sichtbare Suche, kombinierbare Filter, einzeln entfernbare
+  Filterchips, stabile Sortierung und Paginierung, eine Detailaktion je Zeile,
+  Prepared Statements, SQL-seitige Sichtbarkeitsgrenze vor `COUNT`/`LIMIT`
+  sowie exakte Volltext- und Einsatzindizes,
 - rollenabhängige Zuordnung der drei Hinweistondateien, validierte
   gleich-originige WAV-URLs, die einmalige Initialisierung und Fortschreibung
   der `old_que_*`-Basiswerte, Auslösung ausschließlich bei einer späteren
@@ -280,7 +285,10 @@ Schreibgrenzen sowie die amtlichen Nachrichtenvordruckfelder aus Migration 98.
 Der Schema-Test startet Migration 98 zweimal, prüft die exakt markierten
 Spalten `11_rufnummer` und `12_betreff`, deren leere Bestandswerte und den
 unveränderten historischen Nachrichteninhalt. Readiness und `verify.sql`
-verlangen alle dreizehn Ledgerzeilen einschließlich Version 98.
+verlangen alle vierzehn Ledgerzeilen einschließlich Version 99 sowie die
+exakten drei Such-/Listenindizes. Migration 99 wird vollständig, nach einem
+simulierten phasenweisen Abbruch und nach einer fremden Indexkollision
+ausgeführt; erst der bereinigte Wiederanlauf darf den Ledgerstand schreiben.
 Anschließend migriert der Hauptlauf ein leeres Schema,
 führt PHP-, Datenbank-, Rollen-, HTTP- und Administrationsnachweise aus, prüft
 die Containerlogs und stellt Datenbank, Anhang-/Vordruckdaten sowie Exporte aus
@@ -604,6 +612,31 @@ Insbesondere der PDF-Test ist kein sicherer Einzelbefehl gegen einen
 Produktivbestand: Er verlangt den fest benannten aktiven CI-Einsatz und gehört
 ausschließlich in ein wegwerfbares Projekt `estab_ci` beziehungsweise
 `estab_ci_*`.
+
+### Datenbank-Integration der Nachrichtenlisten-Skalierung
+
+`tests/integration/message_list_scale.php` läuft ausschließlich in der vom
+Orchestrator angelegten Datenbank `estab_message_list_scale_ci_test`. Die
+Datenbank-Cleanup-Allowlist nennt diesen Namen einzeln; jede andere Datenbank
+wird vom Test und vom Orchestrator abgewiesen. Nach dem vollständigen
+Migrationslauf werden 10.000 Meldungen des Zieleinsatzes und 257
+verwechslungsfähige Meldungen eines zweiten Einsatzes über vorbereitete
+Statements geschrieben.
+
+Der Test baut `WHERE`, Parameter und stabile `ORDER BY`-Ausdrücke unmittelbar
+mit `app/message_list.php` auf und bindet auch `LIMIT` und `OFFSET` als
+Prepared-Statement-Parameter. Geprüft werden exakte Treffer und Reihenfolgen
+für kombinierte Fachfilter, Volltextpräfix, zweistellige wörtliche Suche,
+Nachweisnummer, erste/zweite/letzte Seite, Wiederholung derselben Seite und die
+harte Einsatzgrenze. Zusätzlich muss echtes MariaDB-`EXPLAIN` die drei
+kanonischen Suchindizes auswählen.
+
+Die Messgrenzen sind bewusst keine Antwortzeitgarantie für eine konkrete
+Installation. Als großzügiger CI-Regressionswächter gelten 180 Sekunden für
+die 10.257 Fixture-Zeilen, 5 Sekunden für ein einzelnes vorbereitetes
+Zähl-/Seitenpaar und 45 Sekunden für 15 wiederholte repräsentative Paare. Der
+Gesamtorchestrator begrenzt den isolierten PHP-Prozess weiterhin auf fünf
+Minuten und entfernt die Wegwerfdatenbank auch nach einem Fehler.
 
 ### Datenbank-Integration dynamischer Tabellen
 
@@ -1413,6 +1446,11 @@ Mindestens zu prüfen:
   Bedienleisten, Informationsdialoge, VS-NfD-Aufdruck und Wappen erstellen,
 - Weiterleitung, Sichtung, Quittierung, Statuswechsel und Listenfilter über
   zwei unterschiedliche Funktionssitzungen nachvollziehen,
+- in Meldungsübersicht und zweiter Sichtung Nummern-, Mehrwort- und
+  Kurztextsuchen sowie Richtung, Vorrang, Stand, Zeitraum, Empfänger,
+  Sortierung, Filterchips und erste/letzte Seite mit einem Bestand über mehrere
+  Ergebnisseiten prüfen; während einer Eingabe darf keine automatische
+  Aktualisierung den Suchtext verwerfen,
 - mit S2 die Meldungsübersicht und mit LdF/A/W die Nachweisung öffnen; S1, Si
   und S6 an den jeweils fremden Spezialzielen mit HTTP 403 abweisen,
 - für Fernmelder, Si und mindestens eine Stab-/FB-Sitzung den

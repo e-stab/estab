@@ -405,7 +405,8 @@ incident_test_database() {
         | estab_dv_operations_ci_test \
         | estab_attachment_reservation_ci_test \
         | estab_message_concurrency_ci_test \
-        | estab_message_suggestions_ci_test) ;;
+        | estab_message_suggestions_ci_test \
+        | estab_message_list_scale_ci_test) ;;
         *)
             echo "CI integration: invalid isolated incident database name" >&2
             return 1
@@ -711,6 +712,11 @@ run_isolated_operational_integration \
     "active-incident message suggestions" \
     estab_message_suggestions_ci_test \
     tests/integration/message_suggestions.php
+
+run_isolated_operational_integration \
+    "message-list search at 10,000-row scale" \
+    estab_message_list_scale_ci_test \
+    tests/integration/message_list_scale.php
 
 roundtrip_token=$(printf '%s' "$COMPOSE_PROJECT_NAME" |
     openssl dgst -sha256 -r | awk '{ print substr($1, 1, 16) }')

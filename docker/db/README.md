@@ -91,7 +91,7 @@ Tabellenraum ergänzen noch `nv_nachrichten.99_lstacc` oder
 `nv_bhp50.sich1_zeit` auf den Migrationszeitpunkt setzen. Eine Datenbank, die
 Migration 50 bereits angewendet hat, führt beim nächsten Upgrade nur die noch
 fehlenden Schritte 45 und 55 aus; 50 wird ausschließlich bei identischem
-SHA-256 übersprungen. Readiness und `verify.sql` verlangen alle elf
+SHA-256 übersprungen. Readiness und `verify.sql` verlangen alle vierzehn
 Ledgerdatensätze.
 
 `96-etb-duty-function.sql` löst die frühere globale Eindeutigkeit der
@@ -108,7 +108,7 @@ unterbrochenen Ledgerlaufs sind diese Zwischenstände idempotent
 wiederaufnehmbar; gemischte Daten, fremde Indizes und ein abweichender
 Primärschlüssel bleiben unverändert gesperrt. Die Schema-Verifikation verlangt
 abschließend das vollständige neue ENUM, genau sieben Katalogzeilen, keinen
-zusätzlichen Index und Version 96 unter insgesamt elf angewendeten
+zusätzlichen Index und Version 96 unter insgesamt vierzehn angewendeten
 Migrationen.
 
 Bei `Checksum mismatch for applied migration` werden zuerst Containerlog,
@@ -180,6 +180,17 @@ persistente ältere Containerdatenbanken an die Laufzeitanforderungen an:
 - Migration 98: getrennte, amtliche Felder für Rufnummer der Gegenstelle
   (`11_rufnummer`) und Betreff (`12_betreff`); vorhandene Nachrichtenwerte
   werden nicht umgeschrieben und beide neuen Felder starten leer,
+- Migration 99: der bisherige Volltextindex nur über `12_inhalt` wird durch
+  `ft_nachrichten_suche` über Gegenstelle, Anschrift, Rufnummer, Betreff,
+  Inhalt, Absendereinheit und Absenderfunktion ersetzt. Zwei
+  einsatzgebundene zusammengesetzte Indizes beschleunigen Status-/Zeit- sowie
+  Richtungs-/Nachweisnummernfilter. Jeder gleichnamige Fremdindex mit
+  abweichender Art, Spaltenfolge oder Präfixdefinition blockiert vor der
+  ersten Änderung; unterbrochene kanonische DDL-Phasen sind wiederaufnehmbar.
+  Die unveränderliche Fresh-Baseline behält ihren veröffentlichten
+  Einspaltenindex; Migration 99 ersetzt ihn auch bei einer Neuinstallation.
+  Die beiden Einsatzindizes entstehen ebenfalls erst dort, nachdem Migration
+  50 die Spalte `einsatz_id` bereitgestellt hat,
 - `nv_anhang`: Kürzel 6, Dateiendung 16 und Session-ID 128 Zeichen,
 - Migration 95: neue Anhangreservierungen sind
   `integrity_required=1`; der Übergang zum finalen Status verlangt

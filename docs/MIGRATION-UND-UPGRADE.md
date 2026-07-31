@@ -110,8 +110,8 @@ eigenen Zwischenstände. Gemischte Katalogdaten, ein abweichender
 Primärschlüssel oder fremde Indizes blockieren vor der nächsten Änderung und
 bleiben zur Untersuchung erhalten. `verify.sql` und die Laufzeit-Readiness
 verlangen danach exakt sieben Katalogzeilen, das vollständige neue ENUM,
-ausschließlich den zweispaltigen Primärschlüssel und alle dreizehn
-angewendeten Migrationen einschließlich Version 98.
+ausschließlich den zweispaltigen Primärschlüssel und alle vierzehn
+angewendeten Migrationen einschließlich Version 99.
 
 Migration 97 fügt `nv_einsaetze.fuehrungsstellenname` als
 `VARCHAR(128) NULL` unmittelbar hinter `organisation` und
@@ -151,6 +151,14 @@ gleichnamige fremde Definitionen blockieren den Start. Die Migration führt
 kein Daten-`UPDATE` aus. Dadurch bleiben sämtliche bestehenden
 Nachrichtenwerte unverändert und die neuen Felder sind bei historischen
 Nachrichten eindeutig leer.
+
+Migration 99 ersetzt den früheren reinen Inhalts-Volltextindex durch den
+siebenspaltigen Suchindex `ft_nachrichten_suche` und ergänzt zwei
+einsatzgebundene BTREE-Indizes für Stand/Zeit sowie Richtung/Nachweisnummer.
+Sie prüft vor der ersten DDL-Phase alle eigenen Indexnamen, legt zuerst den
+breiteren Volltextindex an und entfernt erst danach den alten Index. Bereits
+vollständig ausgeführte Phasen werden beim Wiederanlauf akzeptiert; fremde
+gleichnamige Definitionen blockieren unverändert.
 
 Das freigegebene Upgradeverfahren lautet:
 

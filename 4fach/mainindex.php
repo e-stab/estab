@@ -25,6 +25,7 @@ require_once __DIR__ . "/../app/csrf.php";
 require_once __DIR__ . "/../app/session_ui.php";
 require_once __DIR__ . "/../app/logout.php";
 require_once __DIR__ . "/../app/read_authorization.php";
+require_once __DIR__ . "/../app/message_list.php";
 estab_session_ui_start ($_SESSION);
 
 $returnValue = array (); // no request data is a valid, warning-free state
@@ -127,6 +128,10 @@ if (
     || in_array (($returnValue ["fm"] ?? ""), array (
       "meldung", "FM-Adminmeldung", "SI-Adminmeldung",
     ), true)
+    || array_filter (
+      array_keys ($returnValue),
+      static fn ($key) => is_string ($key) && str_starts_with ($key, "ml_")
+    ) !== array ()
   )
 ) {
   try {
@@ -194,6 +199,55 @@ function estab_workflow_render_read_gate (
   exit;
 }
 
+/** Return the configured recipient functions once, in their display order. */
+function estab_workflow_message_list_recipients (array $definitions): array {
+  $recipients = array ();
+  foreach ($definitions as $definition) {
+    $function = is_array ($definition)
+      ? (string) ($definition ["fkt"] ?? "")
+      : "";
+    if ($function !== "" && !in_array ($function, $recipients, true)) {
+      $recipients [] = $function;
+    }
+  }
+  return $recipients;
+}
+
+/** Apply the strict shared list request and retain it for this duty view. */
+function estab_workflow_message_list_filters (
+  string $sessionKey,
+  array $request,
+  array $recipients
+): array {
+  $allowedKeys = array_fill_keys (array (
+    "ml_q", "ml_direction", "ml_priority", "ml_status", "ml_from",
+    "ml_to", "ml_recipient", "ml_sort", "ml_page", "ml_page_size",
+    "ml_apply", "ml_reset", "ml_remove",
+  ), true);
+  foreach (array_keys ($request) as $key) {
+    if (
+      is_string ($key)
+      && str_starts_with ($key, "ml_")
+      && !isset ($allowedKeys [$key])
+    ) {
+      estab_workflow_forbid ();
+    }
+  }
+  try {
+    $filters = estab_message_list_apply_request (
+      is_array ($_SESSION [$sessionKey] ?? null)
+        ? $_SESSION [$sessionKey]
+        : estab_message_list_default_filters (),
+      $request,
+      $recipients
+    );
+  } catch (Throwable $exception) {
+    estab_workflow_forbid ();
+  }
+  $_SESSION [$sessionKey] = $filters;
+  return $filters;
+}
+
 $workflowSelectedIdentity = $workflowIdentity;
 $workflowIncidentId = null;
 $activeCommandPostName = "";
@@ -246,6 +300,23 @@ if ($workflowIdentity !== null) {
       estab_auth_close ($readGateConnection);
     }
   }
+}
+
+// A second-sighting mode is scoped to the currently selected hat. Normalise
+// sessions created before that rule existed and fail closed after duty changes.
+if (
+  !is_array ($workflowSelectedIdentity)
+  || ($workflowSelectedIdentity ["funktion"] ?? null) !== "A/W"
+  || ($workflowSelectedIdentity ["rolle"] ?? null) !== "Fernmelder"
+) {
+  $_SESSION ["fm_zweite_sichtung"] = 0;
+}
+if (
+  !is_array ($workflowSelectedIdentity)
+  || ($workflowSelectedIdentity ["funktion"] ?? null) !== "Si"
+  || ($workflowSelectedIdentity ["rolle"] ?? null) !== "Stab"
+) {
+  $_SESSION ["si_zweite_sichtung"] = 0;
 }
 
 /**
@@ -1608,47 +1679,88 @@ if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>  ### FM Aus
 
 \**********************************************************************/
 	
-  	if ( (isset ( $returnValue["fm_admin_x"] ) OR ( $_SESSION ["fm_zweite_sichtung"] == 1 ) )
-   	and ($returnValue ["fm"] != "SI-Adminmeldung" ) ) {
+  if ( (isset ( $returnValue["fm_admin_x"] ) OR ( $_SESSION ["fm_zweite_sichtung"] == 1 ) )
+    and is_array ($workflowSelectedIdentity)
+    and (($workflowSelectedIdentity ["funktion"] ?? null) === "A/W")
+    and (($workflowSelectedIdentity ["rolle"] ?? null) === "Fernmelder")
+    and ($returnValue ["fm"] != "FM-Adminmeldung" )
+    and ($returnValue ["fm"] != "SI-Adminmeldung" ) ) {
 
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>   ###  FM Admin <br>";  }
 		
 		$_SESSION ["fm_zweite_sichtung"] = 1 ;
-    	$css = "a:link { color:#000000; text-decoration:none; font-weight:bold; }\n".
-           "a:visited { color:#000000; text-decoration:none; font-weight:bold; }\n".
-           "a:hover { color:#EE0000; text-decoration:none; background-color:#FFFF99; font-weight:bold; }\n".
-           "a:active { color:#0000EE; background-color:#FFFF99; font-weight:bold; }\n".
-           "a:focus { color:#0000EE; background-color:#FFFF99; font-weight:bold; }";
         pre_html (
-          "si2liste",
-          "Stab lesen ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"],
-          $css
-        ); // Normaler Seitenaufbau mit Auffrischung
-    	echo "<body bgcolor=\"#DCDCFF\"\n><!-- 2. Sichtung -->\n";
-    	$list = new listen ("FMADMIN", "");
-    	$list->createlist ();
+          "N",
+          "Zweite Sichtung ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"],
+          "",
+          true
+        );
+        $secondSightingRecipients =
+          estab_workflow_message_list_recipients ($conf_empf);
+        $secondSightingFilters = estab_workflow_message_list_filters (
+          "estab_message_second_sighting_aw_filters",
+          $returnValue,
+          $secondSightingRecipients
+        );
+        echo "<body class=\"estab-tool-page\">\n<!-- 2. Sichtung -->\n";
+        echo "<main class=\"estab-tool-main estab-tool-main-wide\" ".
+             "data-estab-second-sighting=\"aw\">\n";
+        echo "<header class=\"estab-tool-hero\">";
+        echo "<p class=\"estab-tool-eyebrow\">A/W · Nachrichtenvordrucke</p>";
+        echo "<h1>Zweite Sichtung</h1>";
+        echo "<p>Durchsuchen und öffnen Sie die für Ihre aktuelle ".
+             "Dienstfunktion sichtbaren Nachrichten des aktiven Einsatzes.</p>";
+        echo "</header>";
+        $list = new listen (
+          "FMADMIN",
+          "",
+          $workflowIncidentId,
+          $secondSightingFilters
+        );
+        $list->createlist ();
+        echo "</main>\n";
   }
 
-  	if ( (isset ( $returnValue["si_admin_x"] ) OR ( $_SESSION ["si_zweite_sichtung"] == 1 ) )
-    	and ($returnValue ["fm"] != "SI-Adminmeldung" ) )  {
+  if ( (isset ( $returnValue["si_admin_x"] ) OR ( $_SESSION ["si_zweite_sichtung"] == 1 ) )
+      and is_array ($workflowSelectedIdentity)
+      and (($workflowSelectedIdentity ["funktion"] ?? null) === "Si")
+      and (($workflowSelectedIdentity ["rolle"] ?? null) === "Stab")
+      and ($returnValue ["fm"] != "SI-Adminmeldung" ) )  {
     	
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>   ###  Sichter Admin ";  echo "<br>\n";}
 
     	$_SESSION ["si_zweite_sichtung"] = 1 ;
-    	$css = "a:link { color:#000000; text-decoration:none; font-weight:bold; }\n".
-           "a:visited { color:#000000; text-decoration:none; font-weight:bold; }\n".
-           "a:hover { color:#EE0000; text-decoration:none; background-color:#FFFF99; font-weight:bold; }\n".
-           "a:active { color:#0000EE; background-color:#FFFF99; font-weight:bold; }\n".
-           "a:focus { color:#0000EE; background-color:#FFFF99; font-weight:bold; }";
         pre_html (
-          "si2liste",
-          "Stab lesen ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"],
-          $css
-        ); // Normaler Seitenaufbau mit Auffrischung
-    	echo "<body bgcolor=\"#DCDCFF\">";
-    	$list = new listen ("SIADMIN", "");
-    	$list->createlist ();
-   }
+          "N",
+          "Zweite Sichtung ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"],
+          "",
+          true
+        );
+        $secondSightingRecipients =
+          estab_workflow_message_list_recipients ($conf_empf);
+        $secondSightingFilters = estab_workflow_message_list_filters (
+          "estab_message_second_sighting_si_filters",
+          $returnValue,
+          $secondSightingRecipients
+        );
+        echo "<body class=\"estab-tool-page\">";
+        echo "<main class=\"estab-tool-main estab-tool-main-wide\" ".
+             "data-estab-second-sighting=\"si\">\n";
+        echo "<header class=\"estab-tool-hero\">";
+        echo "<p class=\"estab-tool-eyebrow\">Si · Nachrichtenvordrucke</p>";
+        echo "<h1>Zweite Sichtung</h1>";
+        echo "<p>Durchsuchen und öffnen Sie die für Ihre aktuelle ".
+             "Dienstfunktion sichtbaren Nachrichten des aktiven Einsatzes.</p>";
+        echo "</header>";
+        $list = new listen (
+          "SIADMIN",
+          "",
+          $workflowIncidentId,
+          $secondSightingFilters
+        );
+        $list->createlist ();
+        echo "</main>\n";
+	   }
 
 /**********************************************************************\
 Nachricht als Sichtung anzeigen

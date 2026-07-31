@@ -256,6 +256,11 @@ $assert(
     'messenger absence guard is not fail-closed'
 );
 $assert(
+    str_contains($dv, "\$session['fm_zweite_sichtung'] = 0;")
+        && str_contains($dv, "\$session['si_zweite_sichtung'] = 0;"),
+    'hat selection retains privileged second-sighting session modes'
+);
+$assert(
     str_contains(
         $operationalGuard,
         '$identity = estab_auth_session_identity($session);'

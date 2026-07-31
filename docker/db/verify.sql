@@ -189,6 +189,66 @@ SELECT
         '10_anschrift,11_rufnummer,11_gesprnotiz,12_betreff,12_anhang:4'))
        AS `official_message_fields_ok`,
   ((SELECT COUNT(*)
+      FROM information_schema.statistics
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_nachrichten'
+       AND index_name = 'ft_nachrichten_inhalt') = 0
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.statistics
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_nachrichten'
+       AND index_name = 'ft_nachrichten_suche'
+       AND index_type = 'FULLTEXT'
+       AND non_unique = 1
+       AND sub_part IS NULL) = 7
+   AND
+   (SELECT GROUP_CONCAT(
+             column_name ORDER BY seq_in_index SEPARATOR ','
+           )
+      FROM information_schema.statistics
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_nachrichten'
+       AND index_name = 'ft_nachrichten_suche') =
+     '05_gegenstelle,10_anschrift,11_rufnummer,12_betreff,12_inhalt,13_abseinheit,14_funktion'
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.statistics
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_nachrichten'
+       AND index_name = 'idx_nachrichten_einsatz_status_zeit'
+       AND index_type = 'BTREE'
+       AND non_unique = 1
+       AND sub_part IS NULL) = 4
+   AND
+   (SELECT GROUP_CONCAT(
+             column_name ORDER BY seq_in_index SEPARATOR ','
+           )
+      FROM information_schema.statistics
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_nachrichten'
+       AND index_name = 'idx_nachrichten_einsatz_status_zeit') =
+     'einsatz_id,x00_status,12_abfzeit,00_lfd'
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.statistics
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_nachrichten'
+       AND index_name = 'idx_nachrichten_einsatz_richtung_nummer'
+       AND index_type = 'BTREE'
+       AND non_unique = 1
+       AND sub_part IS NULL) = 4
+   AND
+   (SELECT GROUP_CONCAT(
+             column_name ORDER BY seq_in_index SEPARATOR ','
+           )
+      FROM information_schema.statistics
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_nachrichten'
+       AND index_name = 'idx_nachrichten_einsatz_richtung_nummer') =
+     'einsatz_id,04_richtung,04_nummer,00_lfd')
+       AS `message_list_indexes_ok`,
+  ((SELECT COUNT(*)
       FROM information_schema.columns
      WHERE table_schema = DATABASE()
        AND table_name = 'nv_benutzer'
@@ -773,7 +833,7 @@ SELECT
          OR `integrity_captured_at` IS NULL
        )) = 0)
        AS `attachment_integrity_schema_ok`,
-  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 13
+  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 14
    AND
    (SELECT COUNT(*)
       FROM `estab_schema_migrations`
@@ -790,10 +850,11 @@ SELECT
        '95-attachment-ingest-integrity.sql',
        '96-etb-duty-function.sql',
        '97-incident-command-post-name.sql',
-       '98-official-message-form-fields.sql'
+       '98-official-message-form-fields.sql',
+       '99-message-list-search.sql'
      )
        AND `state` = 'applied'
-       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 13)
+       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 14)
        AS `schema_migrations_ok`;
 
 SELECT `table_name`, `engine`, `table_collation`

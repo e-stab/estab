@@ -2723,6 +2723,11 @@ function estab_dv_select_session_hat(
     $session['vStab_rolle'] = (string) $row['rolle'];
     $session['ROLLE'] = (string) $row['rolle'];
     $session['estab_duty_assignment_id'] = $assignmentId;
+    // Second-sighting modes belong to one exact duty function. Carrying a
+    // mode across a hat change can suppress the new function's normal queue
+    // or route it into a foreign privileged list.
+    $session['fm_zweite_sichtung'] = 0;
+    $session['si_zweite_sichtung'] = 0;
     return [
         'benutzer' => (string) $baseIdentity['benutzer'],
         'kuerzel' => (string) $baseIdentity['kuerzel'],

@@ -430,6 +430,8 @@ try {
                 === $assignments['s2'],
         'base S2 hat could not be selected through the real session boundary'
     );
+    $_SESSION['fm_zweite_sichtung'] = 1;
+    $_SESSION['si_zweite_sichtung'] = 1;
     $selectedS3 = estab_dv_select_session_hat(
         $connection,
         $_SESSION,
@@ -443,9 +445,12 @@ try {
         $selectedS3['funktion'] === 'S3'
             && $selectedS3['rolle'] === 'Stab'
             && $_SESSION['vStab_funktion'] === 'S3'
+            && $_SESSION['fm_zweite_sichtung'] === 0
+            && $_SESSION['si_zweite_sichtung'] === 0
             && (int) $_SESSION['estab_duty_assignment_id']
                 === $assignments['s3'],
-        'one account did not switch from its S2 to its accepted S3 hat'
+        'one account did not switch from its S2 to its accepted S3 hat '
+            . 'or retained a foreign second-sighting mode'
     );
 
     $s3ReadTable = estab_message_state_table(

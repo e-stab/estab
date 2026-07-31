@@ -15,9 +15,12 @@ $assert = static function (bool $condition, string $message) use (&$assertions):
 $root = dirname(__DIR__, 2);
 $source = file_get_contents($root . '/4fueltg/ue_ltg.php');
 $toolsSource = file_get_contents($root . '/4fach/tools.php');
+$listUiSource = file_get_contents($root . '/app/message_list_ui.php');
 $assert(
-    is_string($source) && is_string($toolsSource),
-    'exercise leadership view or recipient helper source unreadable'
+    is_string($source)
+        && is_string($toolsSource)
+        && is_string($listUiSource),
+    'exercise leadership view, shared list UI or recipient helper source unreadable'
 );
 
 /**
@@ -83,6 +86,10 @@ $emptyRowSource = $extractFunction($source, 'estab_overview_empty_row');
 $navigationSource = $extractFunction($source, 'listen_navi');
 $displayControlsSource = $extractFunction($source, 'darstellungs_art');
 $listSource = $extractFunction($source, 'createlist');
+$tableSource = $extractFunction(
+    $listUiSource,
+    'estab_message_list_render_table'
+);
 $messageFormSource = $extractFunction($source, 'plot_form');
 $recipientMapSource = $extractFunction(
     $toolsSource,
@@ -129,32 +136,32 @@ $assert(
     'overview controls contain an unbalanced or nested form'
 );
 
-$headerStart = strpos($listSource, 'echo "<thead>');
-$headerEnd = strpos($listSource, 'echo "</thead>');
-$bodyStart = strpos($listSource, 'echo "<tbody>', $headerEnd === false ? 0 : $headerEnd);
-$bodyEnd = strpos($listSource, 'echo "</tbody>', $bodyStart === false ? 0 : $bodyStart);
+$headerStart = strpos($tableSource, "echo '<thead><tr>'");
+$headerEnd = strpos($tableSource, "echo '</tr></thead><tbody>'");
+$bodyEnd = strpos($tableSource, "echo '</tbody></table></div>'");
 $assert(
     $headerStart !== false
         && $headerEnd !== false
-        && $bodyStart !== false
         && $bodyEnd !== false
         && $headerStart < $headerEnd
-        && $headerEnd < $bodyStart
-        && $bodyStart < $bodyEnd,
+        && $headerEnd < $bodyEnd,
     'message table has no ordered thead/tbody structure'
 );
 $assert(
-    str_contains($listSource, '<th scope=\\"col\\">Vorst</th>')
-        && str_contains($listSource, '<th scope=\\"col\\">Inhalt</th>')
-        && str_contains($listSource, 'estab_overview_row_start ($priority)')
-        && str_contains($listSource, 'estab_overview_recipient_cell (')
-        && str_contains($listSource, 'estab_overview_empty_row ($overviewColumnCount)'),
-    'normal, priority, recipient or empty table branch bypasses structural helpers'
+    str_contains($tableSource, "'Nachweis'")
+        && str_contains($tableSource, "'Betreff und Inhalt'")
+        && str_contains(
+            $tableSource,
+            'estab_message_priority_requires_attention'
+        )
+        && str_contains($tableSource, 'estab_message_list_recipient_labels')
+        && str_contains($tableSource, '$openControl($row)'),
+    'shared table bypasses priority, recipient or authenticated detail controls'
 );
 $assert(
-    str_contains($listSource, 'echo "</tr>";')
-        && str_contains($listSource, 'echo "</table>')
-        && str_contains($listSource, 'echo "</html>'),
+    str_contains($tableSource, "echo '</td></tr>'")
+        && str_contains($tableSource, "echo '</tbody></table></div>'")
+        && str_contains($listSource, '</body>\\n</html>'),
     'message table or list document is not closed'
 );
 

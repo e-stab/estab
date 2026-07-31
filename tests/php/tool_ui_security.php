@@ -282,8 +282,10 @@ $assert(
         && str_contains($tracking, 'estab-tool-legacy-content')
         && str_contains($overview, 'data-estab-message-overview')
         && str_contains($overview, 'data-estab-message-detail')
-        && substr_count($overview, 'estab-tool-legacy-content') >= 2,
-    'legacy reporting surfaces are not contained by the shared page shell'
+        && str_contains($overview, 'data-estab-message-list')
+        && str_contains($overview, 'estab_message_list_render_controls')
+        && substr_count($overview, 'estab-tool-legacy-content') >= 1,
+    'reporting surfaces are not contained by the shared page shell'
 );
 
 foreach ([

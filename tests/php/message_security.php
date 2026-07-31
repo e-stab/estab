@@ -446,11 +446,15 @@ $assert(
     substr_count(
         $listSource,
         'estab_recipient_copy_cell_html ('
-    ) === 2
+    ) === 1
         && substr_count(
             $listSource,
             '$empfcolor [$recipientFunction] ?? ""'
-        ) === 2
+        ) === 1
+        && str_contains(
+            $listSource,
+            'estab_message_list_render_table ('
+        )
         && str_contains(
             $listSource,
             'estab_recipient_copy_background ('
@@ -470,10 +474,33 @@ $assert(
     substr_count($listSource, 'data-estab-list-filter') === 2
         && substr_count($listSource, '<form') === 4
         && substr_count($listSource, '</form>') === 4
-        && substr_count($listSource, 'echo "<tr".$priorityStyle') === 3
+        && substr_count($listSource, 'echo "<tr".$priorityStyle') === 2
+        && str_contains(
+            $listSource,
+            'estab_message_list_render_controls ('
+        )
         && substr_count($listSource, 'echo "<tr>\n";') >= 3
         && substr_count($listSource, 'echo "</th>\n";') >= 3,
     'message lists contain nested filters or structurally incomplete table rows'
+);
+$assert(
+    str_contains(
+        $listSource,
+        '$visibility = estab_read_message_visibility_sql ($identity, "m")'
+    )
+        && str_contains($listSource, '"SELECT COUNT(*) FROM ".$messageTable')
+        && str_contains($listSource, '" LIMIT ? OFFSET ?"')
+        && str_contains(
+            $listSource,
+            '$verified = estab_read_filter_messages ($result, $identity)'
+        )
+        && str_contains(
+            $listSource,
+            'SQL/PHP visibility drift in second-sighting message list'
+        )
+        && str_contains($listSource, 'estab_message_list_render_resultbar (')
+        && str_contains($listSource, 'estab_message_list_render_pager ('),
+    'second-sighting lists do not page inside their object-level read boundary'
 );
 
 $fmAdminAccess = [];

@@ -716,6 +716,37 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
     if (!estab_workflow_action_keys_allowed($request)) {
         return false;
     }
+    $messageListKeys = array_fill_keys([
+        'ml_q', 'ml_direction', 'ml_priority', 'ml_status', 'ml_from',
+        'ml_to', 'ml_recipient', 'ml_sort', 'ml_page', 'ml_page_size',
+        'ml_apply', 'ml_reset', 'ml_remove',
+    ], true);
+    foreach (array_keys($request) as $requestKey) {
+        if (
+            is_string($requestKey)
+            && str_starts_with($requestKey, 'ml_')
+            && !isset($messageListKeys[$requestKey])
+        ) {
+            return false;
+        }
+    }
+    $hasMessageListRequest = array_filter(
+        array_keys($request),
+        static fn (mixed $requestKey): bool =>
+            is_string($requestKey) && str_starts_with($requestKey, 'ml_')
+    ) !== [];
+    if (
+        $hasMessageListRequest
+        && (
+            $method !== 'POST'
+            || !(
+                ($isTelecommunications && isset($request['fm_admin_x']))
+                || ($isViewer && isset($request['si_admin_x']))
+            )
+        )
+    ) {
+        return false;
+    }
     // The historical parameter editor is not present in this tree and must
     // never be reachable merely by inventing its old image-button parameter.
     if (

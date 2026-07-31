@@ -55,6 +55,9 @@ $commandPostMigration = $read(
 $officialMessageFieldsMigration = $read(
     $root . '/docker/db/migrations/98-official-message-form-fields.sql'
 );
+$messageListSearchMigration = $read(
+    $root . '/docker/db/migrations/99-message-list-search.sql'
+);
 $baseline = $read($root . '/docker/db/init/10-schema.sql');
 $verify = $read($root . '/docker/db/verify.sql');
 $health = $read($root . '/health.php');
@@ -73,6 +76,8 @@ $normaliseSql = static function (string $sql): string {
 $etbDutySql = $normaliseSql($etbDutyMigration);
 $commandPostSql = $normaliseSql($commandPostMigration);
 $officialMessageFieldsSql = $normaliseSql($officialMessageFieldsMigration);
+$messageListSearchSql = $normaliseSql($messageListSearchMigration);
+$baselineSql = $normaliseSql($baseline);
 $verifySql = $normaliseSql($verify);
 $readinessSql = $normaliseSql(estab_readiness_schema_query());
 $oldCapabilityEnum = "enum('LAGE_DOKUMENTATION','SICHTUNG',"
@@ -282,6 +287,7 @@ foreach ([
 $assert(
     str_contains($verify, 'runtime_code_widths_ok')
     && str_contains($verify, 'official_message_fields_ok')
+    && str_contains($verify, 'message_list_indexes_ok')
     && str_contains($verify, 'runtime_attachment_indexes_ok')
     && str_contains($verify, 'standard_matrix_row_count_ok')
     && str_contains($verify, 'matrix_flag_targets_ok')
@@ -411,6 +417,93 @@ $assert(
     !str_contains($officialMessageFieldsSql, 'UPDATE `nv_nachrichten`'),
     'Migration 98 rewrites historical message data'
 );
+$messageListSearchColumns = [
+    '05_gegenstelle',
+    '10_anschrift',
+    '11_rufnummer',
+    '12_betreff',
+    '12_inhalt',
+    '13_abseinheit',
+    '14_funktion',
+];
+$messageListSearchOrder = implode(',', $messageListSearchColumns);
+$assert(
+    str_contains(
+        $baselineSql,
+        'FULLTEXT KEY `ft_nachrichten_inhalt` (`12_inhalt`)'
+    )
+        && !str_contains($baseline, 'ft_nachrichten_suche'),
+    'Immutable fresh baseline no longer exposes the released legacy search index'
+);
+$assert(
+    !str_contains($baseline, 'idx_nachrichten_einsatz_status_zeit')
+        && !str_contains(
+            $baseline,
+            'idx_nachrichten_einsatz_richtung_nummer'
+        ),
+    'Fresh baseline declares incident indexes before migration 50 adds einsatz_id'
+);
+$messageListMigrationFragments = [
+    'Message-list index migration blocked: foreign legacy full-text index collision'
+        => 'Migration 99 does not reject a foreign legacy full-text index',
+    'Message-list index migration blocked: foreign search full-text index collision'
+        => 'Migration 99 does not reject a foreign search full-text index',
+    'Message-list index migration blocked: foreign status-time index collision'
+        => 'Migration 99 does not reject a foreign status-time index',
+    'Message-list index migration blocked: foreign direction-number index collision'
+        => 'Migration 99 does not reject a foreign direction-number index',
+    'CREATE PROCEDURE estab_migrate_99_add_search()'
+        => 'Migration 99 has no resumable full-text phase',
+    'CREATE PROCEDURE estab_migrate_99_drop_legacy_search()'
+        => 'Migration 99 has no resumable legacy-index removal phase',
+    'CREATE PROCEDURE estab_migrate_99_add_status_time()'
+        => 'Migration 99 has no resumable status/time-index phase',
+    'CREATE PROCEDURE estab_migrate_99_add_direction_number()'
+        => 'Migration 99 has no resumable direction/number-index phase',
+    'CREATE PROCEDURE estab_migrate_99_validate()'
+        => 'Migration 99 has no final schema validator',
+    'DROP INDEX `ft_nachrichten_inhalt`'
+        => 'Migration 99 does not remove the released single-column index',
+    'ADD FULLTEXT INDEX `ft_nachrichten_suche`'
+        => 'Migration 99 does not create the canonical full-text index',
+    'ADD INDEX `idx_nachrichten_einsatz_status_zeit`'
+        => 'Migration 99 does not create the incident/status/time index',
+    'ADD INDEX `idx_nachrichten_einsatz_richtung_nummer`'
+        => 'Migration 99 does not create the incident/direction/number index',
+];
+foreach ($messageListMigrationFragments as $fragment => $message) {
+    $assert(str_contains($messageListSearchSql, $fragment), $message);
+}
+$assert(
+    strpos(
+        $messageListSearchMigration,
+        'ADD FULLTEXT INDEX `ft_nachrichten_suche`'
+    ) < strpos(
+        $messageListSearchMigration,
+        'DROP INDEX `ft_nachrichten_inhalt`'
+    ),
+    'Migration 99 drops the released full-text index before its replacement exists'
+);
+foreach ([
+    'verify.sql' => $verifySql,
+    'runtime readiness' => $readinessSql,
+] as $contractName => $runtimeSchemaContract) {
+    foreach ([
+        'ft_nachrichten_inhalt',
+        'ft_nachrichten_suche',
+        $messageListSearchOrder,
+        'idx_nachrichten_einsatz_status_zeit',
+        'einsatz_id,x00_status,12_abfzeit,00_lfd',
+        'idx_nachrichten_einsatz_richtung_nummer',
+        'einsatz_id,04_richtung,04_nummer,00_lfd',
+    ] as $fragment) {
+        $assert(
+            str_contains($runtimeSchemaContract, $fragment),
+            $contractName . ' does not enforce message-list index definition: '
+                . $fragment
+        );
+    }
+}
 $assert(
     str_contains($incidentMigration, 'CREATE TABLE IF NOT EXISTS `nv_einsaetze`')
         && str_contains($incidentMigration, 'CREATE TABLE IF NOT EXISTS `nv_einsatz_status`')
@@ -708,8 +801,12 @@ foreach ([
     'ETB duty primary-key drift',
     '97-incident-command-post-name.sql',
     '98-official-message-form-fields.sql',
+    '99-message-list-search.sql',
     'incident command-post name migration was not canonical or invented history',
-    'assert_equal "13"',
+    'message-list search indexes were not canonical after migration',
+    'partial message-list index migration did not resume canonically',
+    'blocked message-list search-index collision was changed or recorded',
+    'assert_equal "14"',
 ] as $marker) {
     $assert(
         str_contains($schemaIntegration, $marker),
@@ -757,7 +854,7 @@ $assert(
         && str_contains($verifySql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $verifySql,
-            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 13'
+            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 14'
         )
         && str_contains($verifySql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -768,7 +865,8 @@ $assert(
             $verifySql,
             "'98-official-message-form-fields.sql'"
         )
-        && str_contains($verifySql, ") = 13) AS `schema_migrations_ok`"),
+        && str_contains($verifySql, "'99-message-list-search.sql'")
+        && str_contains($verifySql, ") = 14) AS `schema_migrations_ok`"),
     'verify.sql does not require the exact final ETB catalogue and ledger'
 );
 $assert(
@@ -791,7 +889,7 @@ $assert(
         && str_contains($readinessSql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $readinessSql,
-            '(SELECT COUNT(*) FROM estab_schema_migrations) = 13'
+            '(SELECT COUNT(*) FROM estab_schema_migrations) = 14'
         )
         && str_contains($readinessSql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -802,9 +900,10 @@ $assert(
             $readinessSql,
             "'98-official-message-form-fields.sql'"
         )
+        && str_contains($readinessSql, "'99-message-list-search.sql'")
         && str_contains(
             $readinessSql,
-            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 13"
+            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 14"
         ),
     'Runtime readiness does not require the exact final ETB catalogue and ledger'
 );
@@ -913,6 +1012,10 @@ $assert(
             $readiness,
             "'98-official-message-form-fields.sql'"
         )
+        && str_contains(
+            $readiness,
+            "'99-message-list-search.sql'"
+        )
         && str_contains($verify, "'50-global-incidents.sql'")
         && str_contains($verify, "'45-global-incidents-prepare.sql'")
         && str_contains($verify, "'55-global-incidents-finish.sql'")
@@ -923,9 +1026,10 @@ $assert(
         && str_contains($verify, "'96-etb-duty-function.sql'")
         && str_contains($verify, "'97-incident-command-post-name.sql'")
         && str_contains($verify, "'98-official-message-form-fields.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 13')
-        && str_contains($readiness, 'estab_schema_migrations) = 13'),
-    'Migration ledger/readiness does not require all thirteen release migrations'
+        && str_contains($verify, "'99-message-list-search.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 14')
+        && str_contains($readiness, 'estab_schema_migrations) = 14'),
+    'Migration ledger/readiness does not require all fourteen release migrations'
 );
 $assert(
     str_contains($readiness, "require_once __DIR__ . '/bootstrap.php'")

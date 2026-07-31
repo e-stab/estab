@@ -1987,6 +1987,43 @@ assert_db_equals \
     'incoming review evidence before FM-Admin' \
     "SELECT CONCAT(DATE_FORMAT(\`15_quitdatum\`, '%Y-%m-%d %H:%i:%s'), '|', \`15_quitzeichen\`, '|', COALESCE(\`16_empf\`, ''), '|', COALESCE(\`17_vermerke\`, '')) FROM \`nv_nachrichten\` WHERE \`00_lfd\` = ${incoming_id};"
 
+# Exercise the real S2 overview request boundary, including the dynamically
+# loaded recipient allowlist, combined filters and an explicit pager request.
+assert_status 200 'filter S2 message overview' \
+    --cookie "$s2_cookies" --cookie-jar "$s2_cookies" \
+    --get \
+    --data-urlencode "ml_q=$incoming_marker" \
+    --data-urlencode 'ml_direction=E' \
+    --data-urlencode 'ml_recipient=S2' \
+    --data-urlencode 'ml_sort=number_asc' \
+    --data-urlencode 'ml_page_size=25' \
+    --data-urlencode 'ml_page=1' \
+    "$base_url/4fueltg/ue_ltg.php"
+assert_no_runtime_error 'filtered S2 message overview'
+assert_body 'data-estab-message-overview data-estab-message-list' \
+    'S2 shared message-list shell'
+assert_body 'name="ml_q"' 'S2 message search control'
+assert_body 'name="ml_recipient"' 'S2 recipient filter control'
+assert_body 'Aktive Filter' 'S2 active filter chips'
+assert_body 'Seite 1 von ' 'S2 server-side pager'
+assert_body "$incoming_marker" 'S2 filtered message overview result'
+
+assert_status 200 'empty S2 message overview search' \
+    --cookie "$s2_cookies" --cookie-jar "$s2_cookies" \
+    --get \
+    --data-urlencode "ml_q=NO_MATCH_${identity_seed}" \
+    "$base_url/4fueltg/ue_ltg.php"
+assert_no_runtime_error 'empty S2 message overview search'
+assert_body 'Keine passenden Nachrichten' 'S2 empty filtered state'
+assert_body_absent "$incoming_marker" 'S2 empty filtered result'
+
+assert_status 200 'reset S2 message overview filters' \
+    --cookie "$s2_cookies" --cookie-jar "$s2_cookies" \
+    --get --data-urlencode 'ml_reset=1' \
+    "$base_url/4fueltg/ue_ltg.php"
+assert_no_runtime_error 'reset S2 message overview filters'
+assert_body "$incoming_marker" 'reset S2 message overview result'
+
 load_sidebar "$aw_cookies" 'A/W navigation before second review'
 assert_body 'name="fm_admin_x"' 'rendered A/W second-review action'
 admin_csrf=$(csrf_from_body)
@@ -1997,9 +2034,51 @@ assert_status 200 'open A/W second-review list' \
     --data-urlencode 'fm_admin_x=1' \
     "$base_url/4fach/mainindex.php"
 assert_no_runtime_error 'A/W second-review list'
+assert_body 'estab-ui.css' 'styled A/W second-review frame'
+assert_body 'data-estab-second-sighting="aw"' 'A/W shared second-review shell'
 assert_body "$incoming_marker" 'A/W second-review list'
 assert_route_control \
     fm FM-Adminmeldung "$incoming_id" 'A/W FM-Admin detail control'
+
+admin_csrf=$(csrf_from_body)
+assert_status 200 'filter A/W second-review list' \
+    --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$admin_csrf" \
+    --data-urlencode 'fm_admin_x=1' \
+    --data-urlencode "ml_q=$incoming_marker" \
+    --data-urlencode 'ml_direction=E' \
+    --data-urlencode 'ml_sort=number_asc' \
+    --data-urlencode 'ml_page_size=25' \
+    --data-urlencode 'ml_page=1' \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'filtered A/W second-review list'
+assert_body 'Aktive Filter' 'A/W active filter chips'
+assert_body 'Seite 1 von ' 'A/W server-side pager'
+assert_body "$incoming_marker" 'A/W filtered second-review result'
+
+admin_csrf=$(csrf_from_body)
+assert_status 200 'empty A/W second-review search' \
+    --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$admin_csrf" \
+    --data-urlencode 'fm_admin_x=1' \
+    --data-urlencode "ml_q=NO_MATCH_${identity_seed}" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'empty A/W second-review search'
+assert_body 'Keine passenden Nachrichten' 'A/W empty filtered state'
+assert_body_absent "$incoming_marker" 'A/W empty filtered result'
+
+admin_csrf=$(csrf_from_body)
+assert_status 200 'reset A/W second-review filters' \
+    --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$admin_csrf" \
+    --data-urlencode 'fm_admin_x=1' \
+    --data-urlencode 'ml_reset=1' \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'reset A/W second-review filters'
+assert_body "$incoming_marker" 'reset A/W second-review result'
 
 admin_csrf=$(csrf_from_body)
 assert_status 200 'open completed incoming FM-Admin form' \
@@ -2079,9 +2158,50 @@ assert_status 200 'open Si second-review list' \
     --data-urlencode 'si_admin_x=1' \
     "$base_url/4fach/mainindex.php"
 assert_no_runtime_error 'Si second-review list'
+assert_body 'estab-ui.css' 'styled Si second-review frame'
+assert_body 'data-estab-second-sighting="si"' 'Si shared second-review shell'
 assert_body "$incoming_marker" 'Si second-review list'
 assert_route_control \
     fm SI-Adminmeldung "$incoming_id" 'SI-Admin detail control'
+
+si_admin_csrf=$(csrf_from_body)
+assert_status 200 'filter Si second-review list' \
+    --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$si_admin_csrf" \
+    --data-urlencode 'si_admin_x=1' \
+    --data-urlencode "ml_q=$incoming_marker" \
+    --data-urlencode 'ml_direction=E' \
+    --data-urlencode 'ml_page_size=25' \
+    --data-urlencode 'ml_page=1' \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'filtered Si second-review list'
+assert_body 'Aktive Filter' 'Si active filter chips'
+assert_body 'Seite 1 von ' 'Si server-side pager'
+assert_body "$incoming_marker" 'Si filtered second-review result'
+
+si_admin_csrf=$(csrf_from_body)
+assert_status 200 'empty Si second-review search' \
+    --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$si_admin_csrf" \
+    --data-urlencode 'si_admin_x=1' \
+    --data-urlencode "ml_q=NO_MATCH_${identity_seed}" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'empty Si second-review search'
+assert_body 'Keine passenden Nachrichten' 'Si empty filtered state'
+assert_body_absent "$incoming_marker" 'Si empty filtered result'
+
+si_admin_csrf=$(csrf_from_body)
+assert_status 200 'reset Si second-review filters' \
+    --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$si_admin_csrf" \
+    --data-urlencode 'si_admin_x=1' \
+    --data-urlencode 'ml_reset=1' \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'reset Si second-review filters'
+assert_body "$incoming_marker" 'reset Si second-review result'
 
 si_admin_csrf=$(csrf_from_body)
 assert_status 200 'open completed incoming SI-Admin form' \

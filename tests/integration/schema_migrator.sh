@@ -47,6 +47,7 @@ if [ ! -r "$fixture" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/96-etb-duty-function.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/97-incident-command-post-name.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/98-official-message-form-fields.sql" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/99-message-list-search.sql" ] \
     || [ ! -x "$ESTAB_MIGRATOR_BIN" ]; then
     echo "schema migrator test: fixture, baseline, or migrator is unavailable" >&2
     exit 1
@@ -106,6 +107,68 @@ database_query()
         --raw \
         --database="$database_name" \
         --execute="$sql"
+}
+
+message_index_snapshot()
+{
+    fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*)
+            FROM information_schema.statistics
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_nachrichten'
+             AND index_name = 'ft_nachrichten_inhalt'), '|',
+         COALESCE((
+           SELECT CONCAT(
+                    COUNT(*), ':', MIN(index_type), ':', MAX(non_unique),
+                    ':', SUM(sub_part IS NULL), ':',
+                    GROUP_CONCAT(
+                      column_name ORDER BY seq_in_index SEPARATOR ','
+                    )
+                  )
+             FROM information_schema.statistics
+            WHERE table_schema = DATABASE()
+              AND table_name = 'nv_nachrichten'
+              AND index_name = 'ft_nachrichten_suche'
+         ), ''), '|',
+         COALESCE((
+           SELECT CONCAT(
+                    COUNT(*), ':', MIN(index_type), ':', MAX(non_unique),
+                    ':', SUM(sub_part IS NULL), ':',
+                    GROUP_CONCAT(
+                      column_name ORDER BY seq_in_index SEPARATOR ','
+                    )
+                  )
+             FROM information_schema.statistics
+            WHERE table_schema = DATABASE()
+              AND table_name = 'nv_nachrichten'
+              AND index_name = 'idx_nachrichten_einsatz_status_zeit'
+         ), ''), '|',
+         COALESCE((
+           SELECT CONCAT(
+                    COUNT(*), ':', MIN(index_type), ':', MAX(non_unique),
+                    ':', SUM(sub_part IS NULL), ':',
+                    GROUP_CONCAT(
+                      column_name ORDER BY seq_in_index SEPARATOR ','
+                    )
+                  )
+             FROM information_schema.statistics
+            WHERE table_schema = DATABASE()
+              AND table_name = 'nv_nachrichten'
+              AND index_name = 'idx_nachrichten_einsatz_richtung_nummer'
+         ), ''), '|',
+         (SELECT COUNT(*)
+            FROM information_schema.routines
+           WHERE routine_schema = DATABASE()
+             AND routine_name IN (
+               'estab_migrate_99_preflight',
+               'estab_migrate_99_add_search',
+               'estab_migrate_99_drop_legacy_search',
+               'estab_migrate_99_add_status_time',
+               'estab_migrate_99_add_direction_number',
+               'estab_migrate_99_validate'
+             ))
+       )"
 }
 
 cleanup()
@@ -888,7 +951,7 @@ finish_checksum=$(
         awk '{print $1}'
 )
 assert_equal \
-    "13|13|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
+    "14|14|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
     "$(database_query "$predecessor_database" "
 SELECT CONCAT(
          COUNT(*), '|',
@@ -1029,7 +1092,7 @@ SELECT GROUP_CONCAT(
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
 
-assert_equal "13" "$(fixture_query "
+assert_equal "14" "$(fixture_query "
 SELECT COUNT(*) FROM estab_schema_migrations
  WHERE state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
@@ -1040,7 +1103,7 @@ SELECT COUNT(*) FROM estab_schema_migrations
    AND state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
     "standard matrix migration was not recorded"
-assert_equal "1|1|1|1|1|1|9" "$(fixture_query "
+assert_equal "1|1|1|1|1|1|1|9" "$(fixture_query "
 SELECT CONCAT(
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '80-dv-evidence-retention.sql'
@@ -1064,6 +1127,10 @@ SELECT CONCAT(
              AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '98-official-message-form-fields.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '99-message-list-search.sql'
              AND state = 'applied'
              AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
          (SELECT COUNT(*)
@@ -1150,6 +1217,67 @@ SELECT CONCAT(
              ))
        )")" \
     "official message fields migration was not canonical or left helpers"
+canonical_message_indexes="0|7:FULLTEXT:1:7:05_gegenstelle,10_anschrift,11_rufnummer,12_betreff,12_inhalt,13_abseinheit,14_funktion|4:BTREE:1:4:einsatz_id,x00_status,12_abfzeit,00_lfd|4:BTREE:1:4:einsatz_id,04_richtung,04_nummer,00_lfd|0"
+assert_equal "$canonical_message_indexes" "$(message_index_snapshot)" \
+    "message-list search indexes were not canonical after migration"
+
+# Reproduce interruption after some autocommitted migration-99 phases. The
+# canonical status/time index remains, the direction/number index is missing,
+# and the released one-column full-text index exists again. A rerun must first
+# create the wider search index, then remove the released index and finish the
+# missing phase without disturbing the already canonical index.
+fixture_query "
+DELETE FROM estab_schema_migrations
+ WHERE version = '99-message-list-search.sql';
+ALTER TABLE nv_nachrichten
+  DROP INDEX ft_nachrichten_suche,
+  DROP INDEX idx_nachrichten_einsatz_richtung_nummer,
+  ADD FULLTEXT INDEX ft_nachrichten_inhalt (\`12_inhalt\`)"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "$canonical_message_indexes" "$(message_index_snapshot)" \
+    "partial message-list index migration did not resume canonically"
+assert_equal "1" "$(fixture_query "
+SELECT COUNT(*) FROM estab_schema_migrations
+ WHERE version = '99-message-list-search.sql'
+   AND state = 'applied'
+   AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
+    "resumed message-list index migration was not recorded"
+
+# A foreign definition reusing an owned name must fail closed before changing
+# any index. This also proves that a failed phase never receives a ledger row.
+fixture_query "
+DELETE FROM estab_schema_migrations
+ WHERE version = '99-message-list-search.sql';
+ALTER TABLE nv_nachrichten
+  DROP INDEX ft_nachrichten_suche,
+  ADD FULLTEXT INDEX ft_nachrichten_suche (\`12_inhalt\`)"
+if ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: foreign message search index was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'Message-list index migration blocked: foreign search full-text index collision' "$failure_log"; then
+    echo "schema migrator test: message search collision failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "12_inhalt|0" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT GROUP_CONCAT(
+                   column_name ORDER BY seq_in_index SEPARATOR ','
+                 )
+            FROM information_schema.statistics
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_nachrichten'
+             AND index_name = 'ft_nachrichten_suche'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '99-message-list-search.sql')
+       )")" \
+    "blocked message-list search-index collision was changed or recorded"
+fixture_query "ALTER TABLE nv_nachrichten DROP INDEX ft_nachrichten_suche"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "$canonical_message_indexes" "$(message_index_snapshot)" \
+    "message-list indexes did not recover after removing the collision"
 assert_equal "1|1|1|2|4|0" "$(fixture_query "
 SELECT CONCAT(
          (SELECT COUNT(*)
@@ -1489,8 +1617,8 @@ UPDATE nv_einsatz_status
  WHERE singleton_id = 1;
 INSERT INTO nv_nachrichten
   (\`01_zeichen\`, \`02_zeichen\`, \`03_zeichen\`,
-   \`14_zeichen\`, \`15_quitzeichen\`, \`x03_sperruser\`)
-VALUES ('wid', 'wid', 'wid', 'wid', 'wid', 'wid');
+   \`12_inhalt\`, \`14_zeichen\`, \`15_quitzeichen\`, \`x03_sperruser\`)
+VALUES ('wid', 'wid', 'wid', 'Schema width fixture', 'wid', 'wid', 'wid');
 SET @estab_width_message_id = LAST_INSERT_ID();
 INSERT INTO nv_anhang (filename, org_filename, kuerzel, status)
 VALUES ('SCHEMA-WIDTH-TEST', 'schema-width-test.txt', 'wid', 4);

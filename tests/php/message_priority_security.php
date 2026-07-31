@@ -171,6 +171,12 @@ $sources = [
     'form' => (string) file_get_contents($root . '/4fach/4fachform.php'),
     'list' => (string) file_get_contents($root . '/4fach/liste.php'),
     'overview' => (string) file_get_contents($root . '/4fueltg/ue_ltg.php'),
+    'message-list-filter' => (string) file_get_contents(
+        $root . '/app/message_list.php'
+    ),
+    'message-list-ui' => (string) file_get_contents(
+        $root . '/app/message_list_ui.php'
+    ),
     'logoff' => (string) file_get_contents($root . '/4fach/logoff.php'),
     'pdf' => (string) file_get_contents($root . '/4fbak/backup_pdf.php'),
     'runtime' => (string) file_get_contents(
@@ -229,20 +235,33 @@ $assert(
             . "\n        estab_message_priority_order_sql "
             . '("m.`09_vorrangstufe`").'
             . "\n        \" DESC, m.`04_nummer` DESC\""
-    )
+        )
         && str_contains(
-            $sources['overview'],
-            'estab_message_priority_order_sql ("`09_vorrangstufe`").'
-                . "\n      \" DESC, `04_nummer` DESC \""
+            $sources['message-list-filter'],
+            'estab_message_priority_order_sql('
         ),
     'General message views do not sort priority before the unique message number'
 );
 $assert(
-    str_contains($sources['overview'], 'estab_message_priority_order_sql')
-        && str_contains($sources['overview'], 'estab_message_priority_options')
-        && str_contains($sources['overview'], 'estab_message_priority_label')
+    str_contains($sources['overview'], 'estab_message_list_order_sql')
         && str_contains(
             $sources['overview'],
+            'estab_message_list_render_table'
+        )
+        && str_contains(
+            $sources['message-list-filter'],
+            'estab_message_priority_order_sql'
+        )
+        && str_contains(
+            $sources['message-list-ui'],
+            'estab_message_priority_options'
+        )
+        && str_contains(
+            $sources['message-list-ui'],
+            'estab_message_priority_label'
+        )
+        && str_contains(
+            $sources['message-list-ui'],
             'estab_message_priority_requires_attention'
         ),
     'The leadership overview bypasses the central priority contract'

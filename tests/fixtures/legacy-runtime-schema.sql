@@ -6,6 +6,7 @@ CREATE TABLE `nv_nachrichten` (
   -- These dispatch/workflow fields were part of the historic paper-form
   -- replacement even on databases predating the container migrations.
   `04_richtung` SET('E','A') NOT NULL DEFAULT '',
+  `04_nummer` BIGINT NOT NULL DEFAULT 0,
   `06_befwegausw` SET('Fe','Fu','Me','FAX','FS','@') NOT NULL DEFAULT '',
   `01_datum` DATETIME NOT NULL DEFAULT '0000-00-00 00:00:00',
   `01_zeichen` VARCHAR(3) NOT NULL DEFAULT '',
@@ -16,11 +17,15 @@ CREATE TABLE `nv_nachrichten` (
   -- These content fields existed in the historical four-copy message form.
   -- Keep them in the supported legacy fixture so later migrations can add the
   -- two new official-form fields at their canonical physical positions.
+  `05_gegenstelle` VARCHAR(128) NOT NULL DEFAULT '',
   `10_anschrift` VARCHAR(255) NOT NULL DEFAULT '',
   `11_gesprnotiz` BINARY(1) NOT NULL DEFAULT 'f',
   `12_anhang` TEXT NULL,
+  `12_inhalt` LONGTEXT NOT NULL,
   `12_abfzeit` DATETIME NOT NULL DEFAULT '0000-00-00 00:00:00',
+  `13_abseinheit` VARCHAR(128) NOT NULL DEFAULT '',
   `14_zeichen` VARCHAR(3) NOT NULL DEFAULT '',
+  `14_funktion` VARCHAR(128) NOT NULL DEFAULT '',
   `15_quitdatum` DATETIME NOT NULL DEFAULT '0000-00-00 00:00:00',
   `15_quitzeichen` VARCHAR(3) NOT NULL DEFAULT '',
   `x00_status` SMALLINT NOT NULL DEFAULT 0,
@@ -29,7 +34,8 @@ CREATE TABLE `nv_nachrichten` (
   `x05_druck_d` DATETIME NOT NULL DEFAULT '0000-00-00 00:00:00',
   `99_lstacc` TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00'
     ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`00_lfd`)
+  PRIMARY KEY (`00_lfd`),
+  FULLTEXT KEY `ft_nachrichten_inhalt` (`12_inhalt`)
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 CREATE TABLE `nv_benutzer` (
@@ -153,16 +159,23 @@ CREATE TABLE `nv_legacy_read` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 INSERT INTO `nv_nachrichten`
-  (`01_zeichen`, `02_zeichen`, `03_zeichen`, `14_zeichen`,
-   `15_quitzeichen`, `x03_sperruser`)
-VALUES ('S1', 'S2', 'S3', 'EL', 'LS', 'S4');
+  (`01_zeichen`, `02_zeichen`, `03_zeichen`, `05_gegenstelle`,
+   `10_anschrift`, `12_inhalt`, `13_abseinheit`, `14_zeichen`,
+   `14_funktion`, `15_quitzeichen`, `x03_sperruser`)
+VALUES (
+  'S1', 'S2', 'S3', 'Florian Alpha', 'Führungsstelle Alpha',
+  'Legacy search marker Alpha', 'Ortsverband Alpha', 'EL', 'S1', 'LS', 'S4'
+);
 
 INSERT INTO `nv_nachrichten`
-  (`01_datum`, `01_zeichen`, `02_zeichen`, `03_zeichen`, `14_zeichen`,
-   `15_quitzeichen`, `x03_sperruser`, `99_lstacc`)
+  (`01_datum`, `01_zeichen`, `02_zeichen`, `03_zeichen`,
+   `05_gegenstelle`, `10_anschrift`, `12_inhalt`, `13_abseinheit`,
+   `14_zeichen`, `14_funktion`, `15_quitzeichen`, `x03_sperruser`,
+   `99_lstacc`)
 VALUES
-  ('2019-01-02 03:04:05', 'S1', 'S2', 'S3', 'EL', 'LS', 'S4',
-   '2019-02-03 04:05:06');
+  ('2019-01-02 03:04:05', 'S1', 'S2', 'S3', 'Florian Bravo',
+   'Führungsstelle Bravo', 'Historische Meldung Bravo', 'Ortsverband Bravo',
+   'EL', 'S1', 'LS', 'S4', '2019-02-03 04:05:06');
 
 INSERT INTO `nv_benutzer`
   (`benutzer`, `kuerzel`, `funktion`, `rolle`, `ip`, `fwdip`, `aktiv`, `password`)
