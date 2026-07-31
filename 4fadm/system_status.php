@@ -42,7 +42,8 @@ $environmentChecks = [
     'Hoheitszeichen' => estab_env('ESTAB_AUTHORITY_CODE') !== null,
     'Exportverzeichnis' => estab_env('ESTAB_EXPORT_DIR') !== null,
     'DB-Secret' => estab_env('ESTAB_DB_PASSWORD_FILE') !== null,
-    'Admin-Secret' => estab_env('ESTAB_ADMIN_PASSWORD_FILE') !== null,
+    'Admin-Anmeldedatei' => is_file('/run/estab-auth/admin.htpasswd')
+        && is_readable('/run/estab-auth/admin.htpasswd'),
 ];
 
 $runtimeReady = $checks['php'] && $checks['extensions'];

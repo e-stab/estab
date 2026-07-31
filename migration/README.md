@@ -1,8 +1,12 @@
 # Herkunft und Migration
 
 Dieses Verzeichnis macht die Überführung des historischen eStab-Projekts von
-Subversion nach Git nachvollziehbar. Die importierten SVN-Commits bleiben
-unverändert; alle Modernisierungen beginnen erst danach.
+Subversion nach Git nachvollziehbar. Die vollständige Anwendungshistorie und
+ihr Endbestand sind bis zum SVN-Repository-Ende r85 belegt. Die importierten
+Anwendungscommits bleiben unverändert; alle Modernisierungen beginnen erst
+danach. Die separat versionierte Dokumentation wird ausdrücklich als
+bytegenauer Endbestand von r85 übernommen, nicht als erfundene Git-
+Einzelcommithistorie.
 
 ## Quelle
 
@@ -41,16 +45,32 @@ git svn init \
 git svn fetch --authors-file=migration/svn-authors.txt --log-window-size=1000
 ```
 
-`git svn` folgte der Copy-Historie über die Umbenennung zurück zum früheren
-`/eStab`-Pfad. Die sechs SVN-Tags wurden als annotierte Git-Tags mit gleichem
-Namen gesichert. Die vier historischen Entwicklungszweige liegen unter
-`legacy/*`. Der Tag `svn-r85` markiert den letzten SVN-Repository-Stand; sein
-Trunk-Baum entspricht r84.
+`git svn` folgte der vollständigen Anwendungshistorie und der Copy-Historie
+über die Umbenennung zurück zum früheren `/eStab`-Pfad. Die sechs SVN-Tags
+wurden als annotierte Git-Tags mit gleichem Namen gesichert. Die vier
+historischen Entwicklungszweige liegen unter `legacy/*`. Der Tag `svn-r85`
+bezeichnet die belegte Zuordnung zum SVN-Repository-Ende; sein aufgelöster
+Anwendungsbaum ist der zuletzt in r84 geänderte Trunk, weil r85 ausschließlich
+die oben beschriebene Repository-Struktur änderte.
+
+Der eigenständige SVN-Pfad `/eStab_0.9/docu` war nie Teil des
+Anwendungstrunks und wurde daher nicht künstlich in dessen Commitfolge
+gemischt. Sein vollständiger Endbestand bei r85 liegt mit allen 95 Dateien
+unter `docs/legacy/svn-r85/`. Revisionen und letzter Änderungsstand bleiben in
+den Provenienzmetadaten sichtbar; zugesagt wird für diesen separaten Pfad der
+verifizierte Endbestand, keine nachträglich konstruierte
+Dokument-Einzelhistorie.
 
 ## Nachweise
 
 - `verify_svn_refs.py` vergleicht Trunk, alle vier Branches und alle sechs Tags
-  bytegenau mit der lokalen SVN-Working-Copy.
+  bytegenau mit der lokalen SVN-Working-Copy. Dieser Quellvergleich wurde für
+  die jetzt festgeschriebenen Refs bei r85 erneut erfolgreich ausgeführt.
+- `verify_provenance.py` prüft anschließend ohne SVN-Server und ohne lokale
+  SVN-Working-Copy insgesamt 13 Git-Ref-Snapshots – Trunk, vier
+  Entwicklungszweige, sechs SVN-Tags und die beiden späteren
+  SourceForge-Release-Tags – sowie den importierten Dokument-Endbestand gegen
+  die deterministischen Manifeste unter `provenance/`.
 - `capture_svn_metadata.py` erzeugt ein Manifest der SVN-Properties, leeren
   Verzeichnisse und die Revision-zu-Commit-Tabelle.
 - `svn-trunk-r84.sha256` enthält einen sortierten SHA-256-Hash für jede der
@@ -60,7 +80,29 @@ Trunk-Baum entspricht r84.
 - `svn-ref-verification.txt` ist das protokollierte Ergebnis des vollständigen
   Ref-Vergleichs beim Import.
 
-Prüfung wiederholen:
+Der CI-taugliche Nachweis verwendet ein vollständiges Git-Checkout mit allen
+historischen Branches und Tags:
+
+```console
+python3 migration/verify_provenance.py --self-test
+```
+
+Jedes JSONL-Manifest enthält Dateigröße, Modus und SHA-256. Pfade werden
+sowohl als strikt validiertes UTF-8 als auch als kanonisches Base64 ihrer
+rohen Bytes gespeichert und nach diesen Bytes sortiert. Dadurch bleiben
+Leerzeichen, Umlaute und andere Unicode-Zeichen eindeutig. `index.json`
+bindet Dateianzahl, Gesamtgröße, Git-Refobjekt, Commit, Tree und
+Manifestprüfsummen. Zusätzlich bindet er die protokollierten direkten
+SVN-Ref-/Dokumentvergleiche, die beiden ursprünglichen
+Trunk-/Dokumentmanifeste und `sourceforge-releases.tsv` per SHA-256;
+`index.sha256` versiegelt den Index. Der Selbsttest verändert jeweils einen
+Dateihash des SVN-Trunks und eines SourceForge-Release-Tags und versiegelt
+Manifest und Index bewusst neu. Die Prüfung muss beide Manipulationen dennoch
+am tatsächlichen Git-Ref erkennen. Die minimale PHP-Suite prüft zusätzlich
+Index, sämtliche Manifeste und den realen Dokumentbaum und belegt negative
+Manifest-, aufgezeichnete Releaseidentitäts- und Dokumentmanipulationen.
+
+Den ursprünglichen Quellvergleich mit der lokalen SVN-Kopie wiederholen:
 
 ```console
 python3 migration/verify_svn_refs.py \
@@ -72,17 +114,28 @@ python3 migration/capture_svn_metadata.py \
   migration
 ```
 
+`python3 migration/verify_provenance.py --write` ist keine normale
+Testaktion. Es regeneriert den festgeschriebenen Nachweis und darf nur nach
+einem erneut erfolgreichen SVN-Quellvergleich und bewusster Prüfung der
+geänderten Refidentitäten verwendet werden.
+
 ## Bewusste Abbildungen
 
 Git kann leere Verzeichnisse und SVN-Properties nicht direkt speichern. Beide
-werden deshalb in Manifesten festgehalten. Laufzeitverzeichnisse werden später
-vom Container-Entrypoint deterministisch angelegt. `svn:mime-type` und
-`bugtraq:number` sind dokumentarisch; `svn:ignore` wird in die moderne
-`.gitignore` übertragen. Die vier `svn:mergeinfo`-Werte bleiben im
-Property-Manifest erhalten.
+werden deshalb vollständig in Manifesten festgehalten. Laufzeitverzeichnisse
+werden später vom Container-Entrypoint deterministisch angelegt.
+`svn:mime-type`, `bugtraq:number` und sämtliche historischen `svn:ignore`-
+Werte sind dokumentarisch in `svn-properties.tsv` erhalten. `svn:ignore`
+wurde nicht als angeblich identische globale Regel übernommen: Nur heute
+zutreffende Laufzeit-, Secret-, Werkzeug- und Betriebssystemmuster wurden
+selektiv und an Git angepasst in `.gitignore` übertragen. So bleibt etwa das
+historisch ignorierte Handbuch als belegter Bestand versioniert, während
+generierte `4fdata`-Daten weiterhin ausgeschlossen sind. Die vier
+`svn:mergeinfo`-Werte bleiben ebenfalls im Property-Manifest erhalten.
 
 Die separate, rund 128 MB große Projektdokumentation lag nie im Trunk. Sie wird
-als eigener unveränderter Bestand unter `docs/legacy` übernommen und indexiert.
+als eigener unveränderter r85-Endbestand unter `docs/legacy/svn-r85`
+übernommen und indexiert.
 
 ## Spätere offizielle Releases
 
@@ -101,6 +154,21 @@ Der in 0.9.26b zerlegt (NFD) geschriebene Dateiname
 `ubltg/Übungsmodul eStab.pap` wird wie von Git auf macOS vorgesehen in die
 portable NFC-Form normalisiert; der Dateiinhalt bleibt identisch. 0.9.26c
 lieferte denselben Namen bereits in NFC.
+
+Beide Release-Tags sind eigene Subjects des Provenienzprüfers. Das jeweilige
+Manifest bindet den nach der dokumentierten Snapshot-Policy übernommenen
+`kats`-Inhalt; der Index bindet zusätzlich das vollständige Git-Refobjekt,
+Commit und Tree. Der Prüfer liest die aufgezeichnete
+Originalarchiv-SHA-256 aus `sourceforge-releases.tsv` und verlangt exakt
+denselben Wert im annotierten Tag sowie im Snapshot-Commit. Damit beweist die
+CI, dass weder der getaggte Inhalt noch seine gebundene, beim ursprünglichen
+Download verifizierte Archividentität gedriftet ist.
+
+Die CI lädt das externe SourceForge-Archiv bewusst nicht erneut herunter und
+behauptet deshalb keine neue Netzverifikation des heutigen Downloads. Eine
+erneute Prüfung der tatsächlichen Archivbytes erfordert ein separat
+bereitgestelltes, anhand der aufgezeichneten SHA-256 geprüftes Archiv und den
+folgenden Vergleich.
 
 Ein Snapshot lässt sich gegen ein entpacktes Archiv prüfen, zum Beispiel:
 

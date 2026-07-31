@@ -50,7 +50,28 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  admin-auth-init:
+    image: ${COMPOSE_PROJECT_NAME:-estab}-app:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    init: true
+    restart: "no"
+    entrypoint:
+      - estab-init-admin-auth
+    environment:
+      ESTAB_ADMIN_USER: ${ESTAB_ADMIN_USER:-estab-admin}
+      ESTAB_ADMIN_PASSWORD_FILE: /run/secrets/estab_admin_password
+    secrets:
+      - estab_admin_password
+    volumes:
+      - estab_auth:/var/lib/estab/auth
+    network_mode: none
+    security_opt:
+      - no-new-privileges:true
+
   app:
+    image: ${COMPOSE_PROJECT_NAME:-estab}-app:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -60,6 +81,8 @@ services:
       db:
         condition: service_healthy
       migrate:
+        condition: service_completed_successfully
+      admin-auth-init:
         condition: service_completed_successfully
     environment:
       ESTAB_DB_HOST: db
@@ -78,14 +101,13 @@ services:
       ESTAB_PDF_ATTACHMENT_MAX_BYTES: ${ESTAB_PDF_ATTACHMENT_MAX_BYTES:-52428800}
       ESTAB_EXPORT_DIR: /var/lib/estab/export
       ESTAB_ADMIN_USER: ${ESTAB_ADMIN_USER:-estab-admin}
-      ESTAB_ADMIN_PASSWORD_FILE: /run/secrets/estab_admin_password
       TZ: ${TZ:-Europe/Berlin}
     secrets:
       - estab_db_password
-      - estab_admin_password
     volumes:
       - estab_data:/var/www/html/4fdata
       - estab_export:/var/lib/estab/export
+      - estab_auth:/run/estab-auth:ro
     ports:
       - "${ESTAB_HTTP_BIND:-127.0.0.1}:${ESTAB_HTTP_PORT:-8080}:8080"
     networks:
@@ -112,6 +134,7 @@ volumes:
   estab_db:
   estab_data:
   estab_export:
+  estab_auth:
 
 networks:
   frontend:

@@ -47,19 +47,24 @@ Die Screenshots sind nach Fachbereich gegliedert:
 
 ## Integritätsnachweis
 
-Das sortierte SHA-256-Manifest liegt unter
+Das ursprüngliche sortierte SHA-256-Manifest liegt unter
 [`migration/svn-documentation-r85.sha256`](../../migration/svn-documentation-r85.sha256).
-Beim Import wurden alle 95 Quelldateien verglichen; es fehlte keine Datei und
-kein Inhalt wich ab. SVN-Verwaltungsdaten und lokale `.DS_Store`-Dateien sind
-nicht Teil des Dokumentbestands.
+Der CI-taugliche, Unicode-sichere Nachweis ist zusätzlich als
+[`migration/provenance/legacy-documentation-r85.jsonl`](../../migration/provenance/legacy-documentation-r85.jsonl)
+in den versiegelten Provenienzindex eingebunden. Beim Import wurden alle 95
+Quelldateien verglichen; es fehlte keine Datei und kein Inhalt wich ab.
+SVN-Verwaltungsdaten und lokale `.DS_Store`-Dateien sind nicht Teil des
+Dokumentbestands.
 
 Wiederholbare Prüfung:
 
 ```console
-python3 migration/verify_release_snapshot.py \
-  /Users/adrianboende/git/estab-svn/eStab_0.9/docu \
-  docs/legacy/svn-r85
+python3 migration/verify_provenance.py --self-test
 ```
+
+Diese Prüfung benötigt keine SVN-Working-Copy. Der erneute direkte
+Quellvergleich mit der lokalen SVN-Kopie ist unter
+[`migration/README.md`](../../migration/README.md) dokumentiert.
 
 ## Gültigkeit
 

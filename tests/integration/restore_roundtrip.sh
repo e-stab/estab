@@ -250,6 +250,7 @@ if [[ $storage_mode == named ]]; then
         "${COMPOSE_PROJECT_NAME}_estab_db"
         "${COMPOSE_PROJECT_NAME}_estab_data"
         "${COMPOSE_PROJECT_NAME}_estab_export"
+        "${COMPOSE_PROJECT_NAME}_estab_auth"
     )
     for volume in "${volumes[@]}"; do
         "$container_cli" volume inspect "$volume" >/dev/null

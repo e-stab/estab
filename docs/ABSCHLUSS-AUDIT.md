@@ -1,0 +1,113 @@
+# Abschluss-Audit vom 31. Juli 2026
+
+Dieses Audit beschreibt den lokalen Repository-Stand einschließlich des
+Commits, der diese Datei enthält. Es trennt automatisiert nachgewiesene
+Eigenschaften von noch ausstehenden externen Freigaben und manuellen
+Abnahmen.
+
+## Ergebnis
+
+Der lokale Quell-, Container-, Browser- und Wiederherstellungsstand ist
+technisch grün. Der abschließende unabhängige Review enthält keine offenen
+technischen Befunde der Stufen Critical, High oder Medium.
+
+Eine öffentliche OCI-Veröffentlichung ist trotzdem nicht freigegeben:
+`LICENSE`, `THIRD_PARTY_NOTICES.md` und die abgeschlossene Rechteinventur des
+historischen Bestands fehlen bewusst. Der Publish-Workflow verweigert deshalb
+fail-closed jede Veröffentlichung. Es existiert kein in diesem Repository
+dokumentiertes, freigegebenes App-/Migrator-Digestpaar.
+
+## Anforderung und Nachweis
+
+| Anforderung | Umsetzung | Nachweis |
+| --- | --- | --- |
+| Keine blockierende „Anmeldung erforderlich“-Textseite | Direkte geschützte GET-Aufrufe antworten mit HTTP 303 zum Bestandslogin. Nur symbolische Allowlist-Ziele werden als `next` übernommen. Abgelaufene POST-Inhalte werden nicht wiederholt. Der Login besitzt einen sichtbaren Abbruch zur öffentlichen Übersicht. Frame-lokale Abläufe verwenden ein Content-Login und erzeugen keinen verschachtelten Arbeitsbereich. | `tests/php/auth_security.php`, `tests/php/navigation_security.php`, `tests/integration/http_smoke.sh`, echter Chrome-Lauf mit allen zwölf Navigationsschritten |
+| Bedienbare, einheitliche Navigation | Gemeinsame Bereichsnavigation, Sitzungsanzeige, Logout, Sidebar, responsive Karten, BOS-Arbeitsbereich und Dirty-Guard | `tests/browser/headless_ui.py`, vollständiger Browserlauf mit Chrome 150 |
+| Dienstvorschriftsgebundener Betrieb | Aktiver Einsatz, Führungsstellenname, Dienstschichten, persönliche Funktionsbesetzung, verbindlicher Eingangs-/Ausgangslauf, Sichtung, LdF-Entscheidung, Transportnachweis, S6-Plan, Melderlauf und unveränderliche Ereignisketten | MariaDB-Integrationen: Einsatz 40 Assertions, DV-Nachweis 36 Assertions, DV-Betrieb 102 Assertions und 73 Ereignisse; vollständiger HTTP-Nachrichtenlauf |
+| Benutzer- und Rollenschutz | Administrativ provisionierte Konten, Sperren, Entsperren, Kennwortreset, Sitzungswiderruf, feste serverseitige Funktion/Rolle | Benutzerverwaltung 95 Assertions; Zuweisungsrichtlinie 59 Assertions |
+| Einsatzbezogene Daten und Exporte | ETB, TTB, Nachrichten, Anhänge, Vordrucke, Tabellenexport und PDF-Dossier bleiben einsatzgebunden | HTTP-, Export-, PDF- und Restore-Integrationen; PDF-Dossier 26 Assertions |
+| Reproduzierbare Herkunft | 13 Git-Ref-Snapshots und ein separater Dokument-r85-Baum sind selbsttragend gebunden | `migration/verify_provenance.py --self-test`: 14 Subjects sowie beide Manipulationsfälle grün |
+| Sicherer Containerstart | Gepinnte PHP-/MariaDB-Basen, 31 Schema-Prüfungen, checksumgebundene Migrationen, Health-Gates und getrennte Netze | vollständiger Podman-CI-Lauf und PHP-8.5-Suite |
+| Isoliertes Admin-Kennwort | Nur der netzlose One-shot `admin-auth-init` liest das Klartextsecret. Die App erhält ausschließlich eine bcrypt-Datei mit Kostenfaktor 12 schreibgeschützt. | 11 Secret-Isolationsassertionen sowie Container-Inspect und HTTP 401/200 |
+| NAS-/Registry-Betrieb | Pull-only Compose, digestgebundene Releaseidentität, bestehende und getrennte Speicherquellen, engine-weite Wartungssperre sowie fail-closed Backup/Restore | Registry-Vertrag 52 Assertions; Release-, Backup- und Restore-Operator-Tests; echter Named-Volume- und Bind-Mount-Lauf |
+| Wiederherstellbarkeit | Logischer MariaDB-Dump und beide Dateibereiche werden verifiziert und kontrolliert wiederhergestellt. Archivdaten werden über interaktive Standardeingabe in netzlose Hilfscontainer übertragen. | Format-2-Bind-Restore, anschließender vollständiger benannter Volume-Roundtrip, Marker-/SHA-256-, Login-, Export- und Schemanachweis |
+
+## Abschließende automatische Läufe
+
+Ausgeführt wurde:
+
+```console
+COMPOSE_PROJECT_NAME=estab_ci_release_20260731 \
+ESTAB_CONTAINER_CLI=podman \
+ESTAB_HTTP_PORT=18110 \
+ESTAB_REGISTRY_HTTP_PORT=18111 \
+ESTAB_BROWSER_TEST=required \
+ESTAB_CI_LOG_DIR=/private/tmp/estab-ci-release-evidence \
+bash tests/integration/ci.sh
+```
+
+Ergebnis: `CI integration: OK`.
+
+Der Lauf umfasste unter anderem:
+
+- frischen Image-Build und vollständige Migration auf MariaDB 11.8,
+- 31 Schema-Prüfungen,
+- Pull-only-Start mit benannten Volumes,
+- Pull-only-Start mit drei echten Bind-Mounts,
+- Format-2-Backup, kontrollierte Verfälschung und produktiven Restore,
+- echten Chrome-Lauf mit zwölf Anmelde-/Navigationsschritten,
+- HTTP-Fachläufe für Nachricht, Kategorie, ETB/TBB und Administration,
+- Rollen-, Parallelitäts-, Anhang-, Einsatz-, PDF- und Exportnachweise,
+- vollständige Löschung und Neuerstellung der CI-Volumes mit anschließendem
+  Login-, Datei-, PDF-, Export- und Datenbanknachweis.
+
+Die abschließende statische PHP-8.5-Suite lintete 233 aktive PHP-Dateien.
+Alle Sicherheitsverträge, 52 Registry-Assertions, die Operator-Shelltests,
+der Provenienznachweis und der PDF-Smoke-Test mit 14.055 Byte waren grün.
+Shell-Syntax und `git diff --check` waren ebenfalls fehlerfrei.
+
+## Git- und Remote-Stand
+
+Vor dem Abschlusscommit lag `main` acht lokale Commits vor
+`origin/main` (`aa32d1f`). Der Abschlusscommit erhöht diesen Abstand auf neun.
+Die fachlichen GitHub-Issues 1 bis 5 werden durch
+`97cf705 feat(messages): complete priority and LdF issue workflows` mit
+`Closes #1` bis `Closes #5` geschlossen, sobald dieser Commit tatsächlich auf
+GitHub ankommt.
+
+Lokal vorhanden, aber noch zu veröffentlichen, sind:
+
+- `svn-r85`,
+- die sechs historischen SVN-Tags `ver0.9.09`, `ver0.9.10`, `ver0.9.11`,
+  `ver0.9.12`, `ver0.9.20` und `ver0.9.20b`,
+- die beiden separat gebundenen SourceForge-Tags `ver0.9.26b` und
+  `ver0.9.26c`.
+
+Beim letzten Remote-Abruf waren keine dieser Tags auf `origin` vorhanden.
+Die öffentlich sichtbaren GitHub-Actions gehören noch zum älteren
+`origin/main` und waren rot; der hier dokumentierte aktuelle Stand ist lokal
+grün. Ohne GitHub-/SSH-Anmeldung wurden weder Commits noch Tags gepusht und
+keine Issues manuell geschlossen.
+
+## Noch ausstehende Freigaben
+
+Vor einer öffentlichen oder produktiven Freigabe bleiben zwingend:
+
+1. Historische Rechte inventarisieren und echte, geprüfte Dateien
+   `LICENSE` und `THIRD_PARTY_NOTICES.md` bereitstellen.
+2. GitHub-/SSH-Zugang herstellen, `main` und sämtliche historischen Tags
+   pushen und den dann laufenden Remote-CI-Stand beobachten.
+3. Erst nach der Rechtefreigabe ein Release aus vorhandenem Git-Tag über das
+   geschützte Environment veröffentlichen und beide finalen OCI-Digests
+   protokollieren.
+4. Auf dem tatsächlichen Zielgerät beziehungsweise Synology-NAS installieren,
+   Backup und Restore proben sowie Port-, TLS-, Benutzer- und
+   Dateiberechtigungen abnehmen.
+5. Physische Hörbarkeit der Warteschlangensignale prüfen.
+6. Repräsentative PDFs in den tatsächlich eingesetzten PDF-Viewern prüfen.
+7. Die historische Funktions-, Rollen-, Formular- und Empfängermatrix mit
+   fachkundigen Anwendern vollständig abnehmen.
+
+Bis diese Punkte erledigt sind, ist der lokale technische Stand belastbar
+getestet, aber weder als öffentliches Containerrelease noch als abschließend
+fachlich produktionsfreigegeben zu bezeichnen.

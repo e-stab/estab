@@ -5,6 +5,8 @@ set -eu
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 dockerfile=$repo_root/Dockerfile
 verifier=$repo_root/docker/app/verify-runtime-surface.sh
+admin_initializer=$repo_root/docker/app/init-admin-auth.sh
+app_entrypoint=$repo_root/docker/app/entrypoint.sh
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/estab-runtime-surface.XXXXXX")
 trap 'rm -rf -- "$fixture"' EXIT HUP INT TERM
 
@@ -29,6 +31,8 @@ assert_dockerfile_absent()
 }
 
 sh -n "$verifier"
+sh -n "$admin_initializer"
+sh -n "$app_entrypoint"
 assert_dockerfile_absent 'COPY 4fach/ ./4fach/'
 assert_dockerfile_absent 'COPY 4fadm/ ./4fadm/'
 assert_dockerfile_absent 'COPY 4fbak/ ./4fbak/'
@@ -49,6 +53,7 @@ assert_dockerfile_contains 'COPY app/*.php ./app/'
 assert_dockerfile_contains 'COPY 4fbak/fpdf/font/*.php ./4fbak/fpdf/font/'
 assert_dockerfile_contains 'COPY doku/Handbuch_eStab.pdf ./doku/'
 assert_dockerfile_contains 'COPY docker/app/verify-runtime-surface.sh /usr/local/bin/estab-verify-runtime-surface'
+assert_dockerfile_contains 'COPY docker/app/init-admin-auth.sh /usr/local/bin/estab-init-admin-auth'
 assert_dockerfile_contains 'estab-verify-runtime-surface /var/www/html'
 assert_dockerfile_contains '"fileinfo", "gd", "mbstring"'
 assert_dockerfile_contains 'gd_info()["JPEG Support"]'

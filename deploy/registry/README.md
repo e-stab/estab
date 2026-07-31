@@ -80,29 +80,41 @@ Anschließend im geprüften Paketverzeichnis:
 
 ```console
 cp .env.example .env
-install -d -m 0700 secrets
+mkdir -p secrets
+chmod 0700 secrets
 openssl rand -base64 36 > secrets/db_password.txt
 openssl rand -base64 36 > secrets/db_root_password.txt
 openssl rand -base64 36 > secrets/admin_password.txt
 chmod 0600 secrets/*.txt
 ```
 
-Die beiden Image-Werte in der Repository-Vorlage `.env.example` sind
-absichtlich leer: `compose config` muss scheitern, bis eine ausdrückliche
-Auswahl getroffen wurde. In `.env` werden `ESTAB_APP_IMAGE` und
-`ESTAB_MIGRATE_IMAGE` auf denselben vollständig veröffentlichten Release-Stand
-gesetzt. Bevorzugt werden die beiden von GHCR gemeldeten Manifest-Digests, zum
-Beispiel `ghcr.io/e-stab/estab@sha256:…`. Ein Tag allein reicht nur, wenn er
-laut Releaseprotokoll unveränderlich ist und beide zugehörigen Digests
-dokumentiert sind.
+Nur die Quellvorlage dieses Repositorys enthält leere Image-Werte, damit ein
+ungebundener Checkout geschlossen fehlschlägt. Das veröffentlichte
+Releasepaket bindet `.env.example` und `RELEASE` immer an genau dieses
+kanonische Paar:
 
-Bei einem durch den Publish-Workflow erzeugten GitHub-Releasepaket sind beide
-Werte in der enthaltenen `.env.example` bereits auf die nach Manifest-,
-Attestations-, SBOM-/Provenance- und CVE-Prüfung ermittelten Digests gebunden.
-Die daneben veröffentlichte SHA-256-Datei wird vor dem Entpacken geprüft.
-`RELEASE` im Paket hält Tag, Commit und beide vollständigen Imagereferenzen
-zusätzlich menschenlesbar fest. Eigenhändiges Heraussuchen oder Übertragen der
-Digests entfällt damit.
+- `ghcr.io/e-stab/estab@sha256:<64 Kleinhexzeichen>`
+- `ghcr.io/e-stab/estab-migrate@sha256:<64 Kleinhexzeichen>`
+
+Tags, `latest`, andere Registries und manuell übertragene Digests sind im
+Releasepaket unzulässig. Nach `cp .env.example .env` dürfen ausschließlich die
+Nicht-Image-Einstellungen wie Port, Speicherquellen oder Proxykonfiguration
+angepasst werden. Die Zeilen `ESTAB_APP_IMAGE` und `ESTAB_MIGRATE_IMAGE`
+bleiben bytegenau unverändert; `verify-release.sh` vergleicht sie mit der
+prüfsummengebundenen Vorlage und `RELEASE`. `deploy.sh` weist
+Prozessvariablen für sämtliche von Compose verwendeten Laufzeiteinstellungen
+sowie Umgehungen über `COMPOSE_FILE`,
+`COMPOSE_ENV_FILES`, `COMPOSE_DISABLE_ENV_FILE` oder
+`COMPOSE_PROJECT_NAME` zurück; die geprüfte `.env` ist die einzige
+Konfigurationsquelle für Image-, Projekt-, Speicher- und Laufzeitidentität.
+Automatisch geladene
+Dateien wie `compose.override.yaml` oder `docker-compose.yml` sind im
+Releaseordner ebenfalls verboten; der Helfer übergibt `.env` und
+`compose.yaml` ausdrücklich an Compose.
+
+`LICENSE` und `THIRD_PARTY_NOTICES.md` gehören ebenso zum gebundenen Paket.
+Fehlt eine dieser Dateien oder eine andere in `SHA256SUMS` genannte Datei,
+darf das Release nicht installiert werden.
 
 ### Nur bei privaten GHCR-Images: Anmeldung
 
@@ -139,100 +151,78 @@ gehört weder in `.env`, `compose.yaml`, Projektdateien, Logs noch
 Shell-History. `docker login` beziehungsweise `podman login` speichert
 Anmeldedaten im Credential Store oder in der Konfiguration des ausführenden
 Betriebssystemkontos; auch diese Datei ist wie ein Secret zu schützen. Nach
-einem einmaligen manuellen Pull kann die gespeicherte Anmeldung mit
+einem erfolgreichen `deploy.sh pull` kann die gespeicherte Anmeldung mit
 `docker logout ghcr.io` entfernt werden. Token bei Verlust sofort widerrufen
 und ansonsten regelmäßig rotieren.
 
 Danach:
 
 ```console
-engine=docker
-compose() { "$engine" compose "$@"; }
-
-compose config >/dev/null
-compose pull
-compose up -d
-
-estab_diagnostics()
-{
-    printf 'eStab ist nicht bereit: %s\n' "$1" >&2
-    compose ps --all >&2 || true
-    compose logs --tail 100 db migrate app >&2 || true
-}
-
-wait_for_estab()
-{
-    estab_deadline=$(( $(date +%s) + 300 ))
-    while :; do
-        if estab_health=$(curl --fail --silent --max-time 5 \
-            http://127.0.0.1:8080/health.php 2>/dev/null) &&
-            printf '%s\n' "$estab_health" |
-                grep -Fq '"status":"ready"'; then
-            printf '%s\n' "$estab_health"
-            return 0
-        fi
-
-        for estab_service in db app; do
-            estab_id=$(compose ps --all -q "$estab_service" 2>/dev/null ||
-                true)
-            [ -n "$estab_id" ] || continue
-            estab_state=$("$engine" inspect --format \
-                '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' \
-                "$estab_id" 2>/dev/null || true)
-            case "$estab_state" in
-                exited\ * | dead\ * | *\ unhealthy)
-                    estab_diagnostics \
-                        "Service $estab_service ist $estab_state"
-                    return 1
-                    ;;
-            esac
-        done
-
-        estab_id=$(compose ps --all -q migrate 2>/dev/null || true)
-        if [ -n "$estab_id" ]; then
-            estab_state=$("$engine" inspect --format \
-                '{{.State.Status}} {{.State.ExitCode}}' "$estab_id" \
-                2>/dev/null || true)
-            case "$estab_state" in
-                exited\ 0) ;;
-                exited\ * | dead\ *)
-                    estab_diagnostics \
-                        "Service migrate endete als $estab_state"
-                    return 1
-                    ;;
-            esac
-        fi
-
-        if [ "$(date +%s)" -ge "$estab_deadline" ]; then
-            estab_diagnostics 'Zeitlimit von 300 Sekunden erreicht'
-            return 1
-        fi
-        sleep 3
-    done
-}
-
-wait_for_estab
+ESTAB_CONTAINER_CLI=docker sh ./deploy.sh check
+ESTAB_CONTAINER_CLI=docker sh ./deploy.sh pull
+ESTAB_CONTAINER_CLI=docker sh ./deploy.sh up
 ```
 
-Die Schleife wartet höchstens fünf Minuten, beendet sich bei einem klar
-fehlgeschlagenen Datenbank-, Migrator- oder App-Service vorzeitig und zeigt
-Status sowie die letzten Logs. Sie benötigt kein providerabhängiges
-Compose-`--wait`. Mit Podman genügt `engine=podman`.
+Mit Podman wird in allen drei Zeilen ausschließlich `docker` durch `podman`
+ersetzt. `check` prüft `SHA256SUMS`, die vier Identitätszeilen in `RELEASE`,
+das kanonische Digestpaar, die unveränderten Imagewerte in `.env.example` und
+`.env`, die sichere Trennung der drei produktiven Speicherquellen sowie die
+effektive Compose-Konfiguration. `pull` wiederholt dieses Gate, zieht die
+beiden gebundenen Anwendungsimages und die digestgebundene MariaDB-Basis und
+verlangt danach für App und Migrator passende OCI-Labels für Git-Tag und
+Git-Commit. `up` führt dieselben Prüfungen aus, startet den Stack und wartet
+höchstens 300 Sekunden auf `healthy` für `db` und `app` sowie Exitcode 0 von
+`migrate` und `admin-auth-init`.
+`ESTAB_DEPLOY_HEALTH_TIMEOUT_SECONDS` kann diese Grenze auf 1 bis 3600
+Sekunden setzen.
+Erst die Ausgabe `eStab deployment: ready` bestätigt, dass beide One-shots
+Exitcode 0 und beide langlebigen Dienste den Status `healthy` erreicht haben.
 
-Standardmäßig sind `estab_db`, `estab_data` und `estab_export` benannte
-Volumes. `COMPOSE_PROJECT_NAME=estab` und der gleichlautende Compose-Standard
-sind absichtlich versionsunabhängig: Auch wenn ein neues Releasepaket in ein
+Nur zur Diagnose nach einem fehlgeschlagenen `deploy.sh up`, nicht als
+alternativer Startweg:
+
+```console
+container_cli=docker
+"$container_cli" compose ps --all
+"$container_cli" compose logs --tail 200 db migrate admin-auth-init app
+```
+
+Standardmäßig sind `estab_db`, `estab_data`, `estab_export` und das nur für
+den abgeleiteten Admin-Hash verwendete `estab_auth` benannte Volumes.
+`COMPOSE_PROJECT_NAME=estab` und der gleichlautende Compose-Standard sind
+absichtlich versionsunabhängig: Auch wenn ein neues Releasepaket in ein
 anderes Verzeichnis entpackt wird, bleiben dadurch die Volume-Namen
-`estab_estab_db`, `estab_estab_data` und `estab_estab_export` stabil. Diesen
-Wert nach der Erstinstallation nicht ändern. Vor jedem Upgrade mit
-`docker compose config` kontrollieren, dass dieselben Volume-Namen und
-Speicherquellen wie im laufenden Projekt erscheinen.
+`estab_estab_db`, `estab_estab_data`, `estab_estab_export` und
+`estab_estab_auth` stabil. Diesen Wert nach der Erstinstallation nicht ändern.
+`deploy.sh check` prüft die konfigurierte Projekt- und Speicheridentität,
+inspiziert aber keinen laufenden Datenmount. Vor einem Upgrade müssen die in
+`.env` konfigurierten Quellen zusätzlich mit Container-Inspect gegen die
+Live-Mounts geprüft werden; das anschließende Vollbackup bindet genau diese
+Quellen.
 
 Alternativ akzeptieren `ESTAB_DB_DATA_SOURCE`,
 `ESTAB_APP_DATA_SOURCE` und `ESTAB_EXPORT_DATA_SOURCE` absolute oder relative
-Hostverzeichnisse. Diese Daten sind produktiv. `compose down --volumes`,
-„Clean“ beziehungsweise das Löschen eines Container-Manager-Projekts darf nur
-nach einem geprüften Vollbackup erfolgen.
+Hostverzeichnisse. Sie müssen vor `deploy.sh check` als echte Verzeichnisse
+angelegt sein, dürfen keine symbolischen Links sein und müssen getrennt
+voneinander liegen. Der Helfer verweigert `/`, breite Verzeichnisse direkt
+unterhalb der Dateisystemwurzel, den Releaseordner und dessen Vorfahren sowie
+gleiche oder ineinander verschachtelte Quellen. Für benannte Volumes ist je
+Rolle ausschließlich `estab_db`, `estab_data` beziehungsweise `estab_export`
+zulässig; dadurch kann insbesondere das nur für den bcrypt-Hash bestimmte
+`estab_auth` nicht als beschreibbarer Datenspeicher wiederverwendet werden.
+Die Prüfung erfolgt vor `pull` und unter der engine-weiten Wartungssperre
+erneut vor `up`.
+
+Für das dokumentierte Bind-Mount-Layout:
+
+```console
+mkdir -p data data/db data/4fdata data/export
+chmod 0700 data data/db data/4fdata data/export
+```
+
+Diese Daten sind produktiv. `compose down --volumes`, „Clean“ beziehungsweise
+das Löschen eines Container-Manager-Projekts darf nur nach einem geprüften
+Vollbackup erfolgen.
 
 Die formale Ausgangssichtung ist auch im Pull-only-/Synology-Paket
 verbindlich: Verfasser → Si → LdF → A/W. Sie ist nicht konfigurierbar. Fehlt
@@ -267,8 +257,10 @@ Der Hostverzeichnis-Pfad ist Bestandteil des automatisierten Release-Gates:
 Ein zusätzliches Pull-only-Projekt startet mit drei echten temporären
 Bind-Mounts. Der Test prüft die effektiven Mount-Typen und -Quellen, erzeugt
 einen Datenbank- und zwei Dateimarker, erstellt ein prüfsummengebundenes
-Vollbackup, leert ausschließlich seinen per Projektkennung und Guard-Datei
-abgesicherten temporären Speicher und stellt ihn wieder her. Migrator,
+Vollbackup, verfälscht den Datenbankmarker logisch und ergänzt kontrollierte
+veraltete Testdaten in den beiden Dateibereichen. Der Restore stellt beides
+wieder her;
+der rohe MariaDB-Bind-Mount wird in diesem Test nicht geleert. Migrator,
 `/health.php`, Markerinhalt und Marker-SHA-256 müssen danach unverändert sein.
 Erst nach vollständiger Entfernung von Containern, Volumes, Netzwerken und
 temporärem Hostpfad wird der Lauf grün. Das belegt die technische
@@ -285,14 +277,15 @@ normalen CI- und im Publish-Workflow nativ auf beiden Zielarchitekturen. Der
 echte Browserlauf ist in GitHub Actions auf `amd64` verpflichtend; die
 Bedienabnahme auf dem tatsächlichen NAS-Endgerät bleibt zusätzlich nötig.
 
-1. Einen geschützten Projektordner wie
-   `/volume1/docker/estab` anlegen und `compose.yaml`, eine aus
-   `.env.example` erzeugte `.env` sowie die drei Secret-Dateien im Unterordner
-   `secrets` dort ablegen. Zusätzlich `data/db`, `data/4fdata`,
-   `data/export` und `backups` anlegen. In `.env` die drei
+1. Das äußerlich geprüfte Releasearchiv vollständig in einen geschützten
+   Projektordner wie `/volume1/docker/estab` entpacken. Keine Einzelauswahl
+   aus `compose.yaml` und Skripten treffen: `RELEASE`, `SHA256SUMS`,
+   `.env.example`, `deploy.sh`, `verify-release.sh`, die Backup-/Restore-
+   Helfer sowie Lizenz- und Hinweisdateien bilden gemeinsam die
+   Vertrauensgrenze. `.env.example` nach `.env` kopieren; die beiden
+   Imagezeilen nicht verändern. Zusätzlich `data/db`, `data/4fdata`,
+   `data/export`, `backups` und `secrets` anlegen. In `.env` nur die drei
    `ESTAB_*_DATA_SOURCE`-Werte auf diese relativen `./data/...`-Pfade setzen.
-   Dadurch liegen die Nutzdaten sichtbar im Projektordner und werden nicht
-   versehentlich als versteckte projektverwaltete Volumes behandelt.
    Secret-Dateien nur für den administrativen NAS-Benutzer lesbar machen.
 2. Für LAN-Zugriff `ESTAB_HTTP_BIND=0.0.0.0` setzen und den gewählten
    `ESTAB_HTTP_PORT` in DSM-Firewall und Reverse Proxy ausschließlich für die
@@ -305,9 +298,8 @@ Bedienabnahme auf dem tatsächlichen NAS-Endgerät bleibt zusätzlich nötig.
    [offizielle Registry-Hilfe](https://kb.synology.com/de-de/DSM/help/ContainerManager/docker_registry?version=7)
    das Hinzufügen einer Registry-URL, aber keinen GHCR-PAT-Ablauf dokumentiert,
    wird hier kein nicht belegtes GUI-Credential-Feld vorausgesetzt. Stattdessen
-   einmal per administrativer SSH-Sitzung am NAS anmelden, die oben beschriebene
-   verdeckte Token-Eingabe verwenden und die exakt im geprüften `RELEASE`
-   angegebenen Digest-Referenzen vorab ziehen:
+   einmal per administrativer SSH-Sitzung am NAS anmelden und die oben
+   beschriebene verdeckte Token-Eingabe verwenden:
 
    ```console
    GHCR_USER='github-benutzername'
@@ -321,47 +313,52 @@ Bedienabnahme auf dem tatsächlichen NAS-Endgerät bleibt zusätzlich nötig.
    sudo -v
    printf '%s' "$GHCR_TOKEN" |
        sudo docker login ghcr.io --username "$GHCR_USER" --password-stdin
-   sudo docker pull 'ghcr.io/e-stab/estab@sha256:APP-DIGEST-AUS-RELEASE'
-   sudo docker pull 'ghcr.io/e-stab/estab-migrate@sha256:MIGRATOR-DIGEST-AUS-RELEASE'
-   sudo docker logout ghcr.io
    unset GHCR_TOKEN
    ```
 
-   Die beiden Platzhalter müssen exakt durch die vollständigen Referenzen aus
-   `RELEASE` ersetzt werden. Bei jedem Upgrade zuerst die neuen Digests so
-   vorab ziehen. Den PAT niemals in den Projekteditor oder die `.env` kopieren.
-4. In Container Manager unter „Project/Projekt“ ein neues Projekt erstellen,
-   als unveränderten Projektnamen `estab` verwenden, den Projektordner als Pfad
-   wählen und die vorhandene `compose.yaml` als Quelle laden. Diese Felder und
-   der Upload beziehungsweise Editor für die Compose-Datei entsprechen
-   Synologys
-   [dokumentiertem Projektassistenten](https://kb.synology.com/de-de/DSM/help/ContainerManager/docker_project?version=7).
-   Es ist kein lokaler Image-Build nötig. Bei späteren Paketwechseln kein
-   zweites Projekt mit neuem Namen anlegen, sondern das bestehende Projekt nach
-   Vollbackup und Kontrolle der effektiven Speicherquellen aktualisieren.
-5. Nach dem Start in den Projektdetails kontrollieren, dass `db` und `app`
-   gesund sind und `migrate` erfolgreich mit Exitcode 0 beendet ist. Danach
-   `/health.php` und die Administration prüfen, den ersten Einsatz anlegen und
-   aktivieren, benötigte Funktionskonten in der Benutzerverwaltung anlegen und
-   deren feste Zuordnung kontrollieren. Anschließend eine Dienstschicht planen,
-   mindestens S2, Si, S6, LdF und A/W persönlichen Konten zuweisen, jede
-   Zuweisung durch die betreffende Person annehmen lassen und die Schicht erst
-   danach administrativ aktivieren. Vor der fachlichen Abnahme wählt jede
-   Person ihren angenommenen aktiven Funktions-Hut aus.
+   Den PAT niemals in den Projekteditor oder die `.env` kopieren.
+4. Im vollständig entpackten Projektordner ausschließlich den gebundenen
+   Deployment-Helfer mit Docker ausführen:
 
-Synology beschreibt denselben Projektassistenten als Kombination aus
-Projektname, Arbeitsverzeichnis und hochgeladener oder editierter
-`docker-compose.yml`. Der optionale Web-Station-Portalweg ersetzt nicht die
-TLS-, Proxy- und Firewall-Prüfung.
+   ```console
+   sudo env ESTAB_CONTAINER_CLI=docker sh ./deploy.sh check
+   sudo env ESTAB_CONTAINER_CLI=docker sh ./deploy.sh pull
+   sudo env ESTAB_CONTAINER_CLI=docker sh ./deploy.sh up
+   ```
+
+   Dadurch werden vor dem Pull und Start Paket, Digestpaar und
+   Compose-Konfiguration sowie nach dem Pull die OCI-Identität geprüft. Ein
+   lokaler Build findet nicht statt. Nach einem privaten Pull kann die
+   Registry-Anmeldung mit `sudo docker logout ghcr.io` entfernt werden.
+5. Container Manager dient anschließend für Status- und Logeinsicht. `db` und
+   `app` müssen gesund sein; `migrate` und `admin-auth-init` müssen mit
+   Exitcode 0 beendet sein. Danach `/health.php` und die Administration
+   prüfen, den ersten Einsatz anlegen und aktivieren, benötigte Funktionskonten
+   in der Benutzerverwaltung anlegen und deren feste Zuordnung kontrollieren.
+   Anschließend eine Dienstschicht planen, mindestens S2, Si, S6, LdF und A/W
+   persönlichen Konten zuweisen, jede Zuweisung durch die betreffende Person
+   annehmen lassen und die Schicht erst danach administrativ aktivieren. Vor
+   der fachlichen Abnahme wählt jede Person ihren angenommenen aktiven
+   Funktions-Hut aus.
+
+Synologys
+[Projektassistent](https://kb.synology.com/de-de/DSM/help/ContainerManager/docker_project?version=7)
+kann Compose-Dateien importieren, ersetzt aber weder
+`verify-release.sh` noch die Digest-/OCI-Prüfungen von `deploy.sh`. Der
+unterstützte Erststart und jedes Upgrade laufen deshalb über den Helfer; die
+GUI darf die gebundenen Paketdateien und Imagezeilen nicht umschreiben. Der
+optionale Web-Station-Portalweg ersetzt nicht die TLS-, Proxy- und
+Firewall-Prüfung.
 
 ## Backup und Wiederherstellung auf dem NAS
 
-Das Releasepaket enthält `backup.sh` und den rein lesenden
-`verify-backup.sh`. Im Projektordner wird ein Vollbackup mit einem neuen,
-ausdrücklich absoluten Ziel gestartet:
+Das Releasepaket enthält `backup.sh`, den rein lesenden `verify-backup.sh` und
+den destruktiv guardierten `restore.sh`. Im Projektordner wird ein Vollbackup
+mit einem neuen, ausdrücklich absoluten Ziel gestartet:
 
 ```console
-install -d -m 0700 "$(pwd -P)/backups"
+mkdir -p "$(pwd -P)/backups"
+chmod 0700 "$(pwd -P)/backups"
 backup_target="$(pwd -P)/backups/$(date +%Y%m%d-%H%M%S)"
 ESTAB_CONTAINER_CLI=docker sh ./backup.sh "$backup_target"
 ```
@@ -373,11 +370,16 @@ die App, erzeugt einen transaktionalen MariaDB-Dump sowie Archive von
 Laufzeit auf ihren echten `healthy`-Status. Auch der Fehlerpfad gibt einen
 Neustart erst nach dieser Health-Prüfung als erfolgreich frei.
 
-Ein exklusives, atomar per `mkdir` erworbenes
-`backups/.estab-backup.lock` schützt den gesamten Lauf und die Veröffentlichung
-gegen parallele Backup-Prozesse im selben Elternverzeichnis. Projekt,
-Datenbank, effektive Speicherquellen und alle drei Runtime-Image-Digests werden
-in `SHA256SUMS` gebunden. Der fertige Zielordner erscheint erst nach interner
+Der atomar erworbene engine-weite Containername
+`estab-maintenance-lock-<COMPOSE_PROJECT_NAME>` schließt Backup, Restore und
+`deploy.sh up` auch über verschiedene Releaseordner hinweg gegenseitig aus.
+Der Lock läuft netzlos mit dem verifizierten App-Image und ohne
+Restart-Policy; nach einem Host-/Engine-Absturz bleibt sein Name fail-closed
+als Diagnoseobjekt bestehen.
+`backups/.estab-backup.lock` schützt zusätzlich die Veröffentlichung gegen
+parallele Backup-Prozesse im selben Elternverzeichnis. Projekt, Datenbank,
+effektive Speicherquellen und alle drei Runtime-Image-Digests werden in
+`SHA256SUMS` gebunden. Der fertige Zielordner erscheint erst nach interner
 Verifikation durch die portable Umbenennung des privaten
 Geschwister-Stagings; dafür genügt das normale `mv SOURCE TARGET` von
 GNU-, BSD- und BusyBox-Systemen. Unter dem Lock wird unmittelbar vor dem
@@ -388,51 +390,83 @@ Docker-IDs mit `sha256:` und Podmans nackte 64-stellige Kleinhex-IDs werden
 dabei im Metadatensatz kanonisch als `sha256:<64 Kleinhexzeichen>` gespeichert;
 jedes andere Runtime-ID-Format beendet den Lauf vor dem App-Stopp.
 
-Bei einem Fehler oder Signal werden Staging und eigener Lock sauber entfernt.
-Bleibt etwa nach Hostabsturz ein Lock zurück, bricht der nächste Lauf
-absichtlich ab. `owner.txt` nennt PID, Ziel und Startzeit. Erst nachdem
-außerhalb des Skripts sicher bewiesen wurde, dass kein Backup-Prozess mehr
-läuft, darf der Administrator genau diesen verwaisten Lockordner manuell
-entfernen. `ESTAB_BACKUP_HEALTH_TIMEOUT_SECONDS` begrenzt Health-Waits auf
+Bei einem Fehler oder Signal werden Staging und nur ein über exakte ID,
+Labels, Image und Status als eigener Lock bewiesener Container entfernt.
+Ein fremder oder nach Hostabsturz gestoppter Lock bleibt bestehen; die
+Diagnose nennt ID, Projekt, Operation, Eigentümerkennung, Startzeit und
+Status. Erst nach dem Beweis, dass keine Wartungsoperation mehr läuft, darf
+exakt diese ID mit `docker container rm --force LOCK_ID` beziehungsweise dem
+Podman-Pendant entfernt werden. `ESTAB_BACKUP_HEALTH_TIMEOUT_SECONDS` begrenzt Health-Waits auf
 standardmäßig 240 Sekunden und akzeptiert Werte von 1 bis 3600.
 
 Der Zugriff über Containerpfade funktioniert unverändert mit den drei
 `./data/...`-Bind-Mounts und mit benannten Volumes. Das laufende
 MariaDB-Verzeichnis `data/db` darf nicht als Ersatz für den logischen Dump
 kopiert werden. Details, Format-2-Metadaten, Legacy-Verifikation und die
-bewusst manuelle Wiederherstellung stehen in
+kontrollierte Wiederherstellung stehen in
 [`docs/BACKUP-UND-WIEDERHERSTELLUNG.md`](../../docs/BACKUP-UND-WIEDERHERSTELLUNG.md).
 
-Für den Restore werden die in der Sicherung protokollierten beiden
-Image-Digests in `.env` eingetragen und mit `docker compose pull` geladen.
-Dieser Pull-only-Weg verwendet kein `docker compose build`. Vor jeder
-destruktiven Operation müssen Projektordner und die drei effektiven
-`ESTAB_*_DATA_SOURCE`-Werte sichtbar auf `./data/db`, `./data/4fdata` und
-`./data/export` zeigen. Anschließend werden Dump und Dateiarchive wie im
-Runbook über die Containergrenzen eingespielt, der Migrator separat mit
-Exitcode 0 abgeschlossen und erst danach die App freigegeben.
+Für den Restore wird das vollständig geprüfte Releasepaket verwendet, dessen
+gebundene Image-Referenzen exakt den Sicherungsmetadaten entsprechen. Die
+Imagezeilen in `.env` werden auch dafür nicht manuell geändert. Dieser
+Pull-only-Weg verwendet keinen lokalen Build. Der Restore akzeptiert nur das
+vollständig gebundene Format 2 und verlangt den exakten Compose-Projektnamen
+als zweite, ausdrückliche Bestätigung:
+
+```console
+restore_dir="$(pwd -P)/backups/20260723-120000"
+confirmed_project=estab
+ESTAB_CONTAINER_CLI=docker \
+  sh ./restore.sh \
+    --confirm-project "$confirmed_project" \
+    "$restore_dir"
+```
+
+Vor jedem Überschreiben vergleicht der Helfer Backup, Datenbank, Projekt,
+Mounts und die drei Runtime-Images. Zusätzliche Mountgrenzen unter oder über
+den produktiven Zielen sowie gleiche oder verschachtelte Host-/Volume-Quellen
+werden abgewiesen. Backupziel beziehungsweise Restore-Quellverzeichnis dürfen
+ebenfalls weder in einer produktiven Quelle liegen noch diese umschließen.
+Beide Dateimounts müssen ausdrücklich Read/Write sein. Nach dem App-Stopp
+beweist ein netzloser Hilfscontainer mit exakt dem geprüften App-Image durch
+privates Anlegen, Lesen und Entfernen je einer Probe ihre effektive
+Schreibbarkeit. Auch `admin-auth-init` muss schon vor dem Datenbankstart
+Exitcode 0 und das geprüfte App-Image besitzen. Erst danach importiert der Helfer die
+Datenbank, leert ausschließlich die zwei fest geprüften Container-Mounts,
+spielt beide Archive ein, verlangt einen erfolgreichen Migrator und startet
+die App erst nach bestandenem Health-Gate. `admin-auth-init` muss ebenfalls
+mit Exitcode 0 beendet sein und das geprüfte App-Image verwenden. Nach einem
+Fehler ab Beginn des Imports bleibt die App mit einer klaren Meldung
+`RECOVERY REQUIRED` gestoppt. Der globale Lock bleibt dann absichtlich
+bestehen. Nach Ursachenbehebung muss bewiesen werden, dass kein Restore mehr
+läuft, exakt die gemeldete Lock-ID entfernt und derselbe verifizierte Restore
+erneut ausgeführt werden.
+Es gibt kein rekursives Löschen eines aus einer Hostvariable übernommenen
+Pfads.
 
 ## Kontrolliertes Upgrade
 
 Vor jedem Imagewechsel wird ein Vollbackup nach
 [`docs/BACKUP-UND-WIEDERHERSTELLUNG.md`](../../docs/BACKUP-UND-WIEDERHERSTELLUNG.md)
-erstellt und testweise wiederhergestellt. Das neue Paket darf in einem neuen
-Versionsverzeichnis liegen, aber `COMPOSE_PROJECT_NAME` sowie die drei
-`ESTAB_*_DATA_SOURCE`-Werte müssen exakt beim bisherigen Stand bleiben.
-`docker compose config` muss vor dem Start dieselben effektiven Volume-Namen
-beziehungsweise Bind-Pfade ausgeben. Danach beide Image-Referenzen in `.env`
-auf denselben neuen Release-Stand setzen:
+erstellt und testweise wiederhergestellt. Das neue Archiv und seine äußere
+Prüfsumme werden unabhängig geprüft und vollständig in ein neues
+Versionsverzeichnis entpackt. Von der neuen, digestgebundenen `.env.example`
+wird eine neue `.env` erzeugt; ausschließlich die bisherigen
+Nicht-Image-Einstellungen werden übernommen. `COMPOSE_PROJECT_NAME`, Secrets
+und die drei `ESTAB_*_DATA_SOURCE`-Werte müssen exakt beim bisherigen Stand
+bleiben. Die beiden Imagezeilen stammen unverändert aus dem neuen Paket.
 
 ```console
-docker compose pull
-docker compose stop app
-docker compose up --force-recreate migrate
-docker compose up -d --force-recreate app
-docker compose ps
+ESTAB_CONTAINER_CLI=docker sh ./deploy.sh check
+ESTAB_CONTAINER_CLI=docker sh ./deploy.sh pull
+ESTAB_CONTAINER_CLI=docker sh ./deploy.sh up
 ```
 
-Der Migrator muss mit Exitcode 0 enden. Ein fehlgeschlagener Lauf wird nicht
-umgangen; zuerst bleiben Datenbank und Logs unverändert zu untersuchen.
+Das Vollbackup muss dieselben effektiven Live-Speicherquellen binden;
+`deploy.sh check` allein inspiziert sie nicht. `up` erwirbt denselben
+projektweiten Lock wie Backup und Restore. Migrator und
+`admin-auth-init` müssen mit Exitcode 0 enden. Ein fehlgeschlagener Lauf wird
+nicht umgangen; zuerst bleiben Datenbank und Logs unverändert zu untersuchen.
 
 ## Unvollständigen Publish-Lauf behandeln
 

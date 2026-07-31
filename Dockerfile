@@ -45,8 +45,8 @@ COPY index.php health.php config.inc.php dbcfg.inc.php e_cfg.inc.php favicon.ico
 
 # The repository preserves the complete upstream history, but the runtime
 # image contains only exercised application code and assets. In particular,
-# the historical 4fadm/00.htpasswd is never copied; entrypoint.sh generates
-# the effective bcrypt file from the runtime secret below /run instead.
+# the historical 4fadm/00.htpasswd is never copied; the separate, networkless
+# admin-auth initializer generates the effective bcrypt file at runtime.
 COPY 4fach/4fachform.php \
     4fach/anhang.php \
     4fach/button.php \
@@ -135,6 +135,7 @@ COPY docker/apache/estab.conf /etc/apache2/sites-available/estab.conf
 COPY docker/apache/ports.conf /etc/apache2/ports.conf
 COPY docker/php/estab.ini /usr/local/etc/php/conf.d/zz-estab.ini
 COPY docker/app/entrypoint.sh /usr/local/bin/estab-entrypoint
+COPY docker/app/init-admin-auth.sh /usr/local/bin/estab-init-admin-auth
 COPY docker/app/healthcheck.php /usr/local/bin/estab-healthcheck
 COPY docker/app/verify-runtime-surface.sh /usr/local/bin/estab-verify-runtime-surface
 
@@ -146,6 +147,7 @@ RUN set -eux; \
         /var/lib/php/sessions; \
     chmod 0755 \
         /usr/local/bin/estab-entrypoint \
+        /usr/local/bin/estab-init-admin-auth \
         /usr/local/bin/estab-healthcheck \
         /usr/local/bin/estab-verify-runtime-surface; \
     find /var/www/html -xdev -type d ! -path '/var/www/html/4fdata*' -exec chmod 0755 '{}' +; \

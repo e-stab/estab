@@ -1,11 +1,12 @@
 # eStab
 
-Dieses Repository bewahrt den vollständigen historischen eStab-Verlauf und
-stellt den letzten veröffentlichten Stand als überprüfbaren
-PHP-/MariaDB-Container bereit. Die fachlichen Module für Nachrichtenvordruck,
-Sichtung, Anhänge, Kategorien, Einsatztagebuch, technisches Betriebsbuch und
-PDF-Vordrucke bleiben erhalten; die Laufzeit wurde für PHP 8.5 und MariaDB 11.8
-kompatibel gemacht.
+Dieses Repository bewahrt den vollständigen historischen
+eStab-Anwendungsverlauf bis zum belegten SVN-Ende r85 und den separat
+versionierten Dokument-Endbestand von r85. Es stellt den letzten
+veröffentlichten Stand als überprüfbaren PHP-/MariaDB-Container bereit. Die
+fachlichen Module für Nachrichtenvordruck, Sichtung, Anhänge, Kategorien,
+Einsatztagebuch, technisches Betriebsbuch und PDF-Vordrucke bleiben erhalten;
+die Laufzeit wurde für PHP 8.5 und MariaDB 11.8 kompatibel gemacht.
 
 Der Container ist standardmäßig nur über `127.0.0.1:8080` erreichbar. Für einen
 Zugriff aus anderen Netzen gehört ein TLS-terminierender Reverse Proxy davor.
@@ -20,7 +21,8 @@ Compose-Provider sowie `openssl` und `curl`. Der Schnellstart setzt
 
 ```console
 cp .env.example .env
-install -d -m 0700 secrets
+mkdir -p secrets
+chmod 0700 secrets
 openssl rand -base64 36 > secrets/db_password.txt
 openssl rand -base64 36 > secrets/db_root_password.txt
 openssl rand -base64 36 > secrets/admin_password.txt
@@ -42,7 +44,7 @@ estab_diagnostics()
 {
     printf 'eStab ist nicht bereit: %s\n' "$1" >&2
     compose ps --all >&2 || true
-    compose logs --tail 100 db migrate app >&2 || true
+    compose logs --tail 100 db migrate admin-auth-init app >&2 || true
 }
 
 wait_for_estab()
@@ -73,20 +75,23 @@ wait_for_estab()
             esac
         done
 
-        estab_id=$(compose ps --all -q migrate 2>/dev/null || true)
-        if [ -n "$estab_id" ]; then
-            estab_state=$("$engine" inspect --format \
-                '{{.State.Status}} {{.State.ExitCode}}' "$estab_id" \
+        for estab_service in migrate admin-auth-init; do
+            estab_id=$(compose ps --all -q "$estab_service" \
                 2>/dev/null || true)
-            case "$estab_state" in
-                exited\ 0) ;;
-                exited\ * | dead\ *)
-                    estab_diagnostics \
-                        "Service migrate endete als $estab_state"
-                    return 1
-                    ;;
-            esac
-        fi
+            if [ -n "$estab_id" ]; then
+                estab_state=$("$engine" inspect --format \
+                    '{{.State.Status}} {{.State.ExitCode}}' "$estab_id" \
+                    2>/dev/null || true)
+                case "$estab_state" in
+                    exited\ 0) ;;
+                    exited\ * | dead\ *)
+                        estab_diagnostics \
+                            "Service $estab_service endete als $estab_state"
+                        return 1
+                        ;;
+                esac
+            fi
+        done
 
         if [ "$(date +%s)" -ge "$estab_deadline" ]; then
             estab_diagnostics 'Zeitlimit von 300 Sekunden erreicht'
@@ -101,13 +106,20 @@ wait_for_estab
 
 Nach der gesunden Datenbank läuft zuerst der einmalige Service `migrate`.
 Er prüft und protokolliert alle SQL-Migrationen per SHA-256 und führt den
-vollständigen Schematest aus. `app` darf erst starten, wenn dieser Container
-erfolgreich mit Exitcode 0 beendet wurde. Vor dem ersten Start einer neuen
-Version auf einem vorhandenen Volume ist deshalb immer ein Vollbackup Pflicht.
+vollständigen Schematest aus. Der netzlose One-shot-Service
+`admin-auth-init` liest getrennt davon das Admin-Klartextsecret und
+veröffentlicht ausschließlich eine bcrypt-`htpasswd` im privaten
+`estab_auth`-Volume. `app` mountet nur diese abgeleitete Datei
+schreibgeschützt; das Admin-Klartextsecret ist im Webcontainer weder
+eingehängt noch als Umgebungswert vorhanden. `app` darf erst starten, wenn
+beide Initialisierungen erfolgreich mit Exitcode 0 beendet wurden. Vor dem
+ersten Start einer neuen Version auf einem vorhandenen Datenvolume ist
+deshalb immer ein Vollbackup Pflicht.
 
 Die Schleife wartet höchstens fünf Minuten, bricht bei einem klar
-fehlgeschlagenen Datenbank-, Migrator- oder App-Service vorzeitig mit Status
-und den letzten Logs ab und benötigt kein providerabhängiges Compose-`--wait`.
+fehlgeschlagenen Datenbank-, Authentisierungs-, Migrator- oder App-Service
+vorzeitig mit Status und den letzten Logs ab und benötigt kein
+providerabhängiges Compose-`--wait`.
 Für Docker genügt `engine=docker`. Eine erfolgreiche Bereitschaftsprüfung
 liefert HTTP 200 und `"status":"ready"`. Zusätzlich sollte nach
 Erstinstallation, Upgrade und Wiederherstellung das vollständige Schema
@@ -205,7 +217,11 @@ Job ein verstecktes Draft-Release, lädt beide Paketdateien hoch und wieder
 herunter, prüft ihre Checksummen, promotet genau die getesteten Digests ohne
 Rebuild und macht das Draft-Release ganz zuletzt sichtbar. Der Ablauf bleibt
 zusätzlich durch Rechtebestätigung, zwei Repositoryvariablen und ein zwingend
-mit Required Reviewer geschütztes GitHub-Environment gesperrt.
+mit Required Reviewer geschütztes GitHub-Environment gesperrt. Selbst diese
+Freigaben genügen nicht: Der Workflow verlangt zusätzlich nicht leere,
+versionierte Dateien `LICENSE` und `THIRD_PARTY_NOTICES.md`. Solange die
+Rechteprüfung diese konkreten Auslieferungsartefakte nicht hervorgebracht hat,
+ist ein Publish technisch unmöglich.
 
 Candidate-Tags, ein verstecktes Draft-Release oder nur teilweise vorhandene
 Finaltags sind kein Release und dürfen nicht installiert werden. Verwendbar
@@ -248,6 +264,8 @@ Der Benutzername für den Administrationsbereich steht in
 `ESTAB_ADMIN_USER`, das Kennwort in der durch
 `ESTAB_ADMIN_PASSWORD_SECRET_FILE` referenzierten Datei. Diese
 Administrationsanmeldung ist unabhängig von den eStab-Funktionsbenutzern.
+Nur `admin-auth-init` erhält diese Klartextdatei; Apache liest im laufenden
+App-Container ausschließlich den daraus abgeleiteten bcrypt-Hash.
 
 Die für Kapitel 4.3 der THW-DV 1-101 umgesetzten fachlichen Invarianten,
 Quellfassung, Aussagegrenzen und Abnahmeschritte stehen in
@@ -544,6 +562,7 @@ PDF-Export keinen Ersatz, sondern kennzeichnet ihn ausdrücklich als
 
 ## Dokumentation
 
+- [Abschluss-Audit vom 31. Juli 2026](docs/ABSCHLUSS-AUDIT.md)
 - [Betrieb und Konfiguration](docs/BETRIEB.md)
 - [Pull-only Registry- und Synology-Deployment](deploy/registry/README.md)
 - [Migration und Upgrade](docs/MIGRATION-UND-UPGRADE.md)
@@ -578,13 +597,34 @@ Weiterverteilungsrechte mit den ursprünglichen Rechteinhabern geklärt,
 unklare nicht benötigte Assets ausgeschlossen beziehungsweise benötigte Assets
 ersetzt und die erforderlichen Lizenztexte/Notices ergänzt werden. Der
 vorbereitete GHCR-Workflow ist bis zu dieser Prüfung bewusst mehrstufig
-gesperrt; das ist eine technische Risikogrenze und keine Rechtsberatung.
+gesperrt und verlangt zusätzlich die daraus hervorgehenden Dateien `LICENSE`
+und `THIRD_PARTY_NOTICES.md`; das ist eine technische Risikogrenze und keine
+Rechtsberatung.
 
 ## Herkunft
 
-Der Git-Verlauf geht bytegenau auf das SourceForge-SVN bis r85 zurück. Vier
-historische Entwicklungszweige und sechs SVN-Tags wurden erhalten; die später
-veröffentlichten Archive 0.9.26b und 0.9.26c sind als geprüfte Snapshot-Commits
-und annotierte Git-Tags dokumentiert. Prüfsummen, Ref-Vergleiche und
-SVN-Properties liegen unter `migration/`. Die separat versionierten 95
-Originaldokumente liegen unverändert unter `docs/legacy/svn-r85/`.
+Die Anwendungshistorie geht bytegenau auf das SourceForge-SVN bis zum
+Repository-Ende r85 zurück; der letzte Trunk-Inhalt wurde in r84 geändert,
+während r85 nur die Repository-Struktur betraf. Vier historische
+Entwicklungszweige und sechs SVN-Tags wurden erhalten. Die später
+veröffentlichten Archive 0.9.26b und 0.9.26c sind als geprüfte
+Snapshot-Commits und annotierte Git-Tags dokumentiert.
+
+Die separat versionierten 95 Originaldokumente waren nie Teil des Trunks. Ihr
+vollständiger r85-Endbestand liegt unverändert unter
+`docs/legacy/svn-r85/`; eine nicht belegte Dokument-Einzelcommithistorie wird
+nicht erfunden. Prüfsummen, Ref-/Tree-Identitäten, deterministische
+Unicode-sichere Dateimanifeste und SVN-Properties liegen unter `migration/`.
+Historische `svn:ignore`-Werte bleiben dort dokumentarisch vollständig
+erhalten; nur heute passende Regeln wurden selektiv und Git-gerecht in
+`.gitignore` übernommen. Die netzlose CI-Prüfung
+`python3 migration/verify_provenance.py --self-test` vergleicht Trunk, vier
+Branches, sechs SVN-Tags, beide SourceForge-Release-Tags und den
+Dokument-Endbestand. Das sind 13 Git-Ref-Snapshots und ein Dokumentbaum. Die
+Prüfung beweist zusätzlich, dass neu versiegelte Inhaltsmanipulationen am
+SVN-Trunk und an einem späteren Release erkannt werden. Für 0.9.26b/c bindet
+sie die beim ursprünglichen Download aufgezeichnete Archiv-SHA-256 aus
+`sourceforge-releases.tsv` an annotierten Tag, Snapshot-Commit und Git-Inhalt.
+CI lädt die externen Archive nicht erneut herunter und weist daher die
+gebundene aufgezeichnete Archividentität, nicht die gegenwärtige
+SourceForge-Auslieferung nach.

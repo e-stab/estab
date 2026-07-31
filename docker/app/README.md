@@ -34,10 +34,29 @@ zusätzliche Designvarianten, FPDF-Beispiele und das eingebettete
 `fpdf181.zip`-Archiv. Diese Dateien bleiben für Provenienz und historische
 Nachvollziehbarkeit in Git erhalten.
 
-Auch `4fadm/00.htpasswd` wird niemals in das Image kopiert. Der Entrypoint
-erzeugt bei jedem Containerstart unter `/run/estab/admin.htpasswd` eine neue
-bcrypt-Datei aus dem separaten Admin-Secret. Damit liegt kein historischer
-Passwort-Hash in einer OCI-Schicht.
+Auch `4fadm/00.htpasswd` wird niemals in das Image kopiert. Vor dem App-Start
+erzeugt der netzlose One-shot-Dienst `admin-auth-init` aus dem separaten
+Admin-Secret atomar eine bcrypt-Datei in einem eigenen Compose-Volume. Der
+Webcontainer bindet ausschließlich diese abgeleitete Datei über
+`/run/estab-auth/admin.htpasswd` schreibgeschützt ein. Das Klartext-Secret und
+sein `/run/secrets`-Mount sind im laufenden Webcontainer weder vorhanden noch
+lesbar; zugleich liegt kein historischer Passwort-Hash in einer OCI-Schicht.
+Der Initialisierer akzeptiert genau eine Kennwortzeile mit 16 bis 72 Bytes und
+erzeugt den Hash mit bcrypt-Kostenfaktor 12. Dadurch werden schwache
+Kennwörter und die sonst stille bcrypt-Abschneidung nach 72 Bytes bereits vor
+dem Webstart abgewiesen.
+
+Eine Passwortrotation wird mit demselben One-shot-Pfad erzwungen:
+
+```sh
+podman compose up --detach --force-recreate admin-auth-init app
+```
+
+Der App-Entrypoint startet nur, wenn Benutzername, bcrypt-Format, Eigentümer
+und Modus `0640` der abgeleiteten Datei stimmen. `compose run --no-deps` mit
+überschriebenem Entrypoint (etwa für Backup und Restore) benötigt kein
+Klartext-Admin-Secret; normale App-Kommandos verwenden das zuvor
+initialisierte read-only Volume.
 
 ## Automatischer Nachweis
 

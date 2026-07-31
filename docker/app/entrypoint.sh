@@ -27,7 +27,6 @@ load_secret() {
 }
 
 load_secret ESTAB_DB_PASSWORD
-load_secret ESTAB_ADMIN_PASSWORD
 
 : "${ESTAB_DB_HOST:=db}"
 : "${ESTAB_DB_PORT:=3306}"
@@ -43,7 +42,18 @@ case "$ESTAB_DB_NAME" in
     ''|*[!A-Za-z0-9_]*) echo "ESTAB_DB_NAME contains invalid characters" >&2; exit 1 ;;
 esac
 case "$ESTAB_ADMIN_USER" in
-    ''|*[!A-Za-z0-9_.-]*) echo "ESTAB_ADMIN_USER contains invalid characters" >&2; exit 1 ;;
+    [A-Za-z0-9]*)
+        case "$ESTAB_ADMIN_USER" in
+            *[!A-Za-z0-9_.-]*)
+                echo "ESTAB_ADMIN_USER contains invalid characters" >&2
+                exit 1
+                ;;
+        esac
+        ;;
+    *)
+        echo "ESTAB_ADMIN_USER must start with an alphanumeric character" >&2
+        exit 1
+        ;;
 esac
 
 php -d display_errors=stderr -r \
@@ -56,13 +66,39 @@ install -d -o www-data -g www-data -m 0770 \
     "$data_root/vordruck" \
     "${ESTAB_EXPORT_DIR:-/var/lib/estab/export}" \
     /var/lib/php/sessions
-install -d -o root -g www-data -m 0750 /run/estab
 
-printf '%s\n' "$ESTAB_ADMIN_PASSWORD" \
-    | htpasswd -Bni "$ESTAB_ADMIN_USER" > /run/estab/admin.htpasswd
-chown root:www-data /run/estab/admin.htpasswd
-chmod 0640 /run/estab/admin.htpasswd
-unset ESTAB_ADMIN_PASSWORD
+admin_auth_file=/run/estab-auth/admin.htpasswd
+if [ -L "$admin_auth_file" ] ||
+    [ ! -f "$admin_auth_file" ] ||
+    [ ! -r "$admin_auth_file" ]; then
+    echo "Derived admin authentication file is not readable" >&2
+    exit 1
+fi
+if [ -z "$(find "$admin_auth_file" -prune -type f \
+    -user root -group www-data -perm 0640 -print)" ]; then
+    echo "Derived admin authentication file has unsafe ownership or permissions" >&2
+    exit 1
+fi
+if ! awk -F ':' -v expected_user="$ESTAB_ADMIN_USER" '
+    NR == 1 {
+        prefix = substr($2, 1, 4)
+        cost = substr($2, 5, 2)
+        payload = substr($2, 8)
+        if (NF != 2 || $1 != expected_user || length($2) != 60 ||
+            (prefix != "$2a$" && prefix != "$2b$" && prefix != "$2y$") ||
+            cost != "12" || substr($2, 7, 1) != "$" ||
+            length(payload) != 53 || payload ~ /[^.\/A-Za-z0-9]/) {
+            exit 1
+        }
+        valid = 1
+        next
+    }
+    { exit 1 }
+    END { if (!valid) exit 1 }
+' "$admin_auth_file"; then
+    echo "Derived admin authentication file is invalid or belongs to another user" >&2
+    exit 1
+fi
 
 export ESTAB_DB_HOST ESTAB_DB_PORT ESTAB_DB_USER ESTAB_DB_NAME ESTAB_ADMIN_USER ESTAB_BASE_PATH
 

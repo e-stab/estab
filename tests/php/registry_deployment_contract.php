@@ -30,6 +30,10 @@ $restoreRoundtrip = $read($root . '/tests/integration/restore_roundtrip.sh');
 $backupRunbook = $read($root . '/docs/BACKUP-UND-WIEDERHERSTELLUNG.md');
 $backupOperator = $read($root . '/deploy/registry/backup.sh');
 $backupVerifier = $read($root . '/deploy/registry/verify-backup.sh');
+$restoreOperator = $read($root . '/deploy/registry/restore.sh');
+$restoreStaticTest = $read($root . '/tests/static/restore_operator.sh');
+$releaseVerifier = $read($root . '/deploy/registry/verify-release.sh');
+$deploymentOperator = $read($root . '/deploy/registry/deploy.sh');
 $staticRunner = $read($root . '/tests/static/run.sh');
 $trivyIgnore = $read($root . '/.trivyignore.yaml');
 $ci = $read($root . '/tests/integration/ci.sh');
@@ -81,6 +85,7 @@ foreach ([
     '${ESTAB_DB_DATA_SOURCE:-estab_db}:/var/lib/mysql',
     '${ESTAB_APP_DATA_SOURCE:-estab_data}:/var/www/html/4fdata',
     '${ESTAB_EXPORT_DATA_SOURCE:-estab_export}:/var/lib/estab/export',
+    'estab_auth:/run/estab-auth:ro',
 ] as $volumeMapping) {
     $assert(
         str_contains($registryCompose, $volumeMapping),
@@ -185,8 +190,16 @@ $assert(
     && str_contains($workflow, 'ESTAB_CONTAINER_PUBLISH_ENABLED')
     && str_contains($workflow, 'ESTAB_CONTAINER_PUBLISH_REVIEWER_CONFIGURED')
     && str_contains($workflow, 'environment: container-publish')
-    && str_contains($workflow, 'Rights and license review has not been confirmed.'),
-    'Image publishing is not an explicit rights- and reviewer-gated manual action'
+    && str_contains($workflow, 'Rights and license review has not been confirmed.')
+    && str_contains(
+        $workflow,
+        'for redistribution_file in LICENSE THIRD_PARTY_NOTICES.md'
+    )
+    && str_contains(
+        $workflow,
+        'Required redistribution artifact is missing or empty'
+    ),
+    'Image publishing is not explicitly gated by rights, reviewer, and concrete license artifacts'
 );
 $assert(
     str_contains($workflow, 'group: publish-images')
@@ -346,7 +359,11 @@ $assert(
     && str_contains($workflow, '- verify_candidate')
     && str_contains($workflow, 'Build immutable installation bundle')
     && str_contains($workflow, 'deploy/registry/backup.sh')
+    && str_contains($workflow, 'deploy/registry/deploy.sh')
+    && str_contains($workflow, 'deploy/registry/restore.sh')
     && str_contains($workflow, 'deploy/registry/verify-backup.sh')
+    && str_contains($workflow, 'deploy/registry/verify-release.sh')
+    && str_contains($workflow, 'cp LICENSE THIRD_PARTY_NOTICES.md "$bundle_root/"')
     && str_contains(
         $workflow,
         's#../../docs/BACKUP-UND-WIEDERHERSTELLUNG.md#BACKUP-UND-WIEDERHERSTELLUNG.md#g'
@@ -354,6 +371,10 @@ $assert(
     && str_contains(
         $workflow,
         's#^backup_verifier=deploy/registry/verify-backup.sh$#backup_verifier=./verify-backup.sh#'
+    )
+    && str_contains(
+        $workflow,
+        's#sh deploy/registry/restore.sh#sh ./restore.sh#'
     )
     && str_contains(
         $workflow,
@@ -422,6 +443,7 @@ $assert(
     && str_contains($integration, 'project-name-release-one')
     && str_contains($integration, 'project-name-release-two')
     && str_contains($integration, 'estab_estab_db')
+    && str_contains($integration, 'estab_estab_auth')
     && str_contains($integration, '.estab-ci-bind-storage')
     && str_contains($integration, 'ESTAB_DB_DATA_SOURCE=$bind_db')
     && str_contains($integration, 'ESTAB_APP_DATA_SOURCE=$bind_data')
@@ -437,10 +459,13 @@ $assert(
     && substr_count(
         $integration,
         'sh "$backup_verifier" "$production_backup" "${ESTAB_DB_NAME:-estab}"'
-    ) >= 3
-    && str_contains($integration, 'database_restore_client <"$production_backup/database.sql"')
-    && str_contains($integration, '<"$production_backup/4fdata.tar.gz"')
-    && str_contains($integration, '<"$production_backup/export.tar.gz"')
+    ) >= 2
+    && str_contains($integration, 'restore_operator=$repo_root/deploy/registry/restore.sh')
+    && str_contains($integration, 'sh "$restore_operator"')
+    && str_contains($integration, '--confirm-project "${bind_project}_wrong"')
+    && str_contains($integration, '--confirm-project "$bind_project"')
+    && str_contains($integration, 'corrupting controlled restore fixtures')
+    && str_contains($integration, '.restore-stale')
     && str_contains($integration, 'ESTAB_REGISTRY_BIND_')
     && str_contains($integration, '.estab-bind-data-marker')
     && str_contains($integration, '.estab-bind-export-marker')
@@ -480,15 +505,78 @@ $assert(
     'Registry bind roundtrip lacks complete resource cleanup or CI wiring'
 );
 $assert(
+    is_executable($root . '/deploy/registry/deploy.sh')
+    && is_executable($root . '/deploy/registry/verify-release.sh')
+    && str_contains($deploymentOperator, 'Usage: %s check|pull|up')
+    && str_contains(
+        $deploymentOperator,
+        'ESTAB_CONTAINER_CLI=$container_cli "$verify_release" "$script_dir"'
+    )
+    && str_contains($deploymentOperator, 'compose pull')
+    && str_contains(
+        $deploymentOperator,
+        '"$verify_release" --inspect-images "$script_dir"'
+    )
+    && str_contains($deploymentOperator, 'compose up --detach')
+    && str_contains($deploymentOperator, '--env-file "$script_dir/.env"')
+    && str_contains($deploymentOperator, '-f "$script_dir/compose.yaml"')
+    && str_contains($deploymentOperator, 'compose.override.yaml')
+    && str_contains($deploymentOperator, 'running\ healthy')
+    && str_contains($deploymentOperator, 'migrate_state')
+    && str_contains($deploymentOperator, 'admin_auth_state')
+    && str_contains($deploymentOperator, 'admin-auth-init ($admin_auth_state)')
+    && str_contains($deploymentOperator, 'COMPOSE_ENV_FILES')
+    && str_contains(
+        $deploymentOperator,
+        'Compose runtime overrides must not be set in the process environment'
+    )
+    && str_contains($deploymentOperator, '${ESTAB_DB_DATA_SOURCE+x}')
+    && str_contains($deploymentOperator, 'estab-maintenance-lock-$maintenance_lock_project')
+    && str_contains($deploymentOperator, 'org.e-stab.maintenance-operation=deploy')
+    && str_contains($deploymentOperator, '"$container_cli" run --detach')
+    && str_contains($deploymentOperator, '--network none')
+    && str_contains($deploymentOperator, '--restart no')
+    && str_contains($deploymentOperator, '"$container_cli" container rm --force')
+    && str_contains($deploymentOperator, 'maintenance_lock_is_owned')
+    && str_contains($deploymentOperator, 'lost before Compose up')
+    && str_contains(
+        $releaseVerifier,
+        'validate_image app "$release_app_image" ghcr.io/e-stab/estab'
+    )
+    && str_contains(
+        $releaseVerifier,
+        'validate_image migrator "$release_migrate_image" ghcr.io/e-stab/estab-migrate'
+    )
+    && str_contains($releaseVerifier, 'ESTAB_APP_IMAGE differs from the verified release record')
+    && str_contains($releaseVerifier, 'bound .env.example differs from the verified app image')
+    && str_contains($releaseVerifier, 'protected image and Compose assignments must occur exactly once')
+    && str_contains($releaseVerifier, 'Compose-canonical lowercase')
+    && str_contains($releaseVerifier, 'org.opencontainers.image.version')
+    && str_contains($releaseVerifier, 'org.opencontainers.image.revision')
+    && str_contains($releaseVerifier, 'THIRD_PARTY_NOTICES.md')
+    && str_contains($releaseVerifier, 'restore.sh')
+    && str_contains($releaseVerifier, 'bound release entry is not a readable regular file')
+    && str_contains($registryReadme, 'sh ./deploy.sh check')
+    && str_contains($registryReadme, 'sh ./deploy.sh pull')
+    && str_contains($registryReadme, 'sh ./deploy.sh up')
+    && str_contains(
+        $registryReadme,
+        'Die Zeilen `ESTAB_APP_IMAGE` und `ESTAB_MIGRATE_IMAGE`'
+    )
+    && str_contains($staticRunner, 'tests/static/registry_release.sh'),
+    'Release deployment is not digest-bound, self-verifying, and admin-init-gated'
+);
+$assert(
     is_executable($root . '/deploy/registry/backup.sh')
     && str_contains($backupOperator, 'ABSOLUTE_BACKUP_DIRECTORY')
     && str_contains($backupOperator, 'backup target already exists')
     && str_contains($backupOperator, 'mktemp -d "${staging_prefix}XXXXXX"')
-    && str_contains($backupOperator, 'compose stop app')
-    && str_contains($backupOperator, 'compose start app')
+    && str_contains($backupOperator, '"$container_cli" stop "$app_container"')
+    && str_contains($backupOperator, '"$container_cli" start "$app_container"')
     && str_contains($backupOperator, 'mariadb-dump')
     && str_contains($backupOperator, '/var/www/html/4fdata')
     && str_contains($backupOperator, '/var/lib/estab/export')
+    && str_contains($backupOperator, '--volumes-from "$app_container"')
     && str_contains($backupOperator, 'backup-format.txt')
     && str_contains($backupOperator, 'storage-sources.txt')
     && str_contains($backupOperator, 'image-references.txt')
@@ -498,6 +586,20 @@ $assert(
     && str_contains($backupOperator, 'image_digest="sha256:$image_digest_hex"')
     && str_contains($backupOperator, 'sh "$backup_verifier" "$staging_dir" "$database_name"')
     && str_contains($backupOperator, 'publication_lock="${canonical_parent%/}/.estab-backup.lock"')
+    && str_contains($backupOperator, 'estab-maintenance-lock-$maintenance_lock_project')
+    && str_contains($backupOperator, 'org.e-stab.maintenance-operation=backup')
+    && str_contains($backupOperator, '"$container_cli" run --detach')
+    && str_contains($backupOperator, '--network none')
+    && str_contains($backupOperator, '--restart no')
+    && str_contains($backupOperator, '"$container_cli" container rm --force')
+    && str_contains($backupOperator, 'maintenance_lock_is_owned')
+    && str_contains($backupOperator, 'lost before the application stop')
+    && str_contains($backupOperator, 'lost before backup publication')
+    && str_contains($backupOperator, 'verify_storage_source_separation')
+    && str_contains($backupOperator, 'verify_operator_path_separation "$canonical_parent"')
+    && str_contains($backupOperator, 'backup parent overlaps a productive storage source')
+    && str_contains($backupOperator, 'productive storage sources are equal, nested, overlapping')
+    && str_contains($backupOperator, 'index($1, destination "/") == 1')
     && str_contains($backupOperator, 'if ! mkdir "$publication_lock"; then')
     && str_contains($backupOperator, 'wait_for_healthy app "$app_container"')
     && str_contains($backupOperator, 'wait_for_healthy db "$db_container"')
@@ -510,6 +612,78 @@ $assert(
     && str_contains($backupOperator, "trap 'cleanup 143' TERM")
     && str_contains($staticRunner, 'tests/static/backup_operator.sh'),
     'Operator backup does not fail closed, capture every data source, bind metadata, and publish atomically'
+);
+$assert(
+    is_executable($root . '/deploy/registry/restore.sh')
+    && str_contains(
+        $restoreOperator,
+        '--confirm-project COMPOSE_PROJECT ABSOLUTE_BACKUP_DIRECTORY'
+    )
+    && str_contains($restoreOperator, 'production restore requires the fully bound backup format 2')
+    && str_contains($restoreOperator, 'backup project $backup_project does not match --confirm-project')
+    && str_contains($restoreOperator, 'runtime storage mounts do not match')
+    && str_contains($restoreOperator, 'runtime image references or digests do not match')
+    && str_contains($restoreOperator, 'ESTAB_RESTORE_HEALTH_TIMEOUT_SECONDS')
+    && substr_count($restoreOperator, 'verify_backup ||') >= 5
+    && str_contains($restoreOperator, '"$container_cli" stop "$app_container"')
+    && str_contains($restoreOperator, 'destructive_started=1')
+    && str_contains(
+        $restoreOperator,
+        'find /var/www/html/4fdata -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +'
+    )
+    && str_contains(
+        $restoreOperator,
+        'find /var/lib/estab/export -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +'
+    )
+    && str_contains(
+        $restoreOperator,
+        '"$container_cli" start --attach "$migrate_container"'
+    )
+    && str_contains($restoreOperator, '--volumes-from "$app_container"')
+    && substr_count(
+        $restoreOperator,
+        '"$container_cli" run --rm --interactive --network none'
+    ) >= 2
+    && str_contains($restoreOperator, 'migrate_exit_code')
+    && str_contains(
+        $restoreOperator,
+        '"$container_cli" exec -i "$app_container" estab-healthcheck'
+    )
+    && str_contains($restoreOperator, 'RECOVERY REQUIRED for project')
+    && str_contains($restoreOperator, 'the application is intentionally stopped')
+    && str_contains($restoreOperator, 'estab-maintenance-lock-$confirmed_project')
+    && str_contains($restoreOperator, 'org.e-stab.maintenance-operation=restore')
+    && str_contains($restoreOperator, '"$container_cli" run --detach')
+    && str_contains($restoreOperator, '"$container_cli" container rm --force')
+    && str_contains($restoreOperator, 'preserve_maintenance_lock=1')
+    && str_contains($restoreOperator, 'retained fail-closed maintenance lock')
+    && str_contains($restoreOperator, 'lost before database import')
+    && str_contains($restoreOperator, 'lost before file restore')
+    && str_contains($restoreOperator, 'verify_storage_source_separation')
+    && str_contains($restoreOperator, 'verify_operator_path_separation "$backup_dir"')
+    && str_contains($restoreOperator, 'backup directory overlaps a productive storage source')
+    && str_contains($restoreOperator, '.Destination .RW')
+    && str_contains($restoreOperator, 'productive storage mount is not explicitly read/write')
+    && str_contains($restoreOperator, 'verify_file_mount_writes')
+    && str_contains($restoreOperator, '.estab-restore-write-probe.XXXXXX')
+    && str_contains($restoreOperator, '--rm --network none --read-only')
+    && str_contains($restoreOperator, 'failed the create/write/delete preflight')
+    && str_contains($restoreOperator, 'productive storage sources are equal, nested, overlapping')
+    && str_contains($restoreOperator, 'index($1, destination "/") == 1')
+    && str_contains($restoreOperator, 'verify_runtime_identity')
+    && str_contains($restoreOperator, '"$container_cli" start "$db_container"')
+    && !str_contains($restoreOperator, 'compose up -d db')
+    && str_contains($restoreOperator, 'configured database name is missing or unsafe')
+    && str_contains($restoreOperator, 'single_container admin-auth-init')
+    && str_contains($restoreOperator, 'admin_auth_exit_code')
+    && substr_count($restoreOperator, 'verify_admin_auth_state') >= 3
+    && str_contains($restoreOperator, 'admin authentication initializer does not use the verified app image')
+    && str_contains($restoreStaticTest, 'FAKE_READ_ONLY_MOUNT=4fdata')
+    && str_contains($restoreStaticTest, 'FAKE_UNWRITABLE_MOUNTS=1')
+    && str_contains($restoreStaticTest, 'FAKE_ADMIN_AUTH_EXIT_CODE=42')
+    && str_contains($restoreStaticTest, 'database_operation_count')
+    && str_contains($staticRunner, 'tests/static/restore_operator.sh'),
+    'Operator restore is not explicitly confirmed, metadata-bound, fail-closed, and health-gated'
 );
 $assert(
     str_contains($backupVerifier, 'sha256sum -c SHA256SUMS')
@@ -529,14 +703,16 @@ $assert(
     && str_contains($backupVerifier, 'image-references.txt')
     && str_contains($backupVerifier, 'format v2 contains an unbound or missing directory entry')
     && str_contains($backupRunbook, 'deploy/registry/backup.sh')
-    && str_contains($backupRunbook, 'backup_verifier=deploy/registry/verify-backup.sh')
-    && str_contains($backupRunbook, "'true healthy') break")
-    && str_contains($backupRunbook, 'Ein bloßer `running`-Status ist keine Importfreigabe')
-    && substr_count(
-        $backupRunbook,
-        'if ! sh "$backup_verifier" "$restore_dir" "$expected_database"; then'
-    ) === 2,
-    'Manual restore runbook lacks a mandatory read-only preflight at both destructive boundaries'
+    && str_contains($backupRunbook, 'deploy/registry/restore.sh')
+    && str_contains($backupRunbook, '--confirm-project "$confirmed_project"')
+    && str_contains($backupRunbook, 'Leeren der beiden Dateibereiche')
+    && str_contains($backupRunbook, 'vollständige Verifier')
+    && str_contains($backupRunbook, '`estab-maintenance-lock-<COMPOSE_PROJECT_NAME>`')
+    && str_contains($backupRunbook, 'gemeldete exakte Container-ID')
+    && str_contains($backupRunbook, 'globalen Lock absichtlich bei')
+    && str_contains($backupRunbook, '`admin-auth-init`')
+    && str_contains($backupRunbook, '`RECOVERY REQUIRED`'),
+    'Restore runbook lacks the guarded operator and repeated verification boundaries'
 );
 
 echo "registry deployment contract: OK ({$assertions} assertions)\n";

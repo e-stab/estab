@@ -13,6 +13,7 @@ migrate_image=${ESTAB_REGISTRY_MIGRATE_IMAGE:-}
 compose_file=$repo_root/deploy/registry/compose.yaml
 backup_operator=$repo_root/deploy/registry/backup.sh
 backup_verifier=$repo_root/deploy/registry/verify-backup.sh
+restore_operator=$repo_root/deploy/registry/restore.sh
 temporary_parent=${ESTAB_REGISTRY_TEMP_PARENT:-$repo_root}
 bind_root=
 bind_db=
@@ -63,8 +64,10 @@ do
         exit 1
     fi
 done
-if [ ! -r "$backup_operator" ] || [ ! -r "$backup_verifier" ]; then
-    echo "Registry compose integration: production backup tools are unreadable" >&2
+if [ ! -r "$backup_operator" ] ||
+    [ ! -r "$backup_verifier" ] ||
+    [ ! -r "$restore_operator" ]; then
+    echo "Registry compose integration: production backup/restore tools are unreadable" >&2
     exit 1
 fi
 if [ ! -d "$temporary_parent" ] || [ ! -w "$temporary_parent" ]; then
@@ -149,7 +152,12 @@ verify_default_project_stability()
             echo "Registry compose integration: release directory changed the default project name" >&2
             return 1
         fi
-        for volume_name in estab_estab_db estab_estab_data estab_estab_export; do
+        for volume_name in \
+            estab_estab_db \
+            estab_estab_data \
+            estab_estab_export \
+            estab_estab_auth
+        do
             if ! grep -Fq "name: $volume_name" \
                 "$release_directory/effective-compose.yaml"; then
                 echo "Registry compose integration: stable volume name is missing: $volume_name" >&2
@@ -242,7 +250,8 @@ project_resources_empty()
     for known_volume in \
         "${checked_project}_estab_db" \
         "${checked_project}_estab_data" \
-        "${checked_project}_estab_export"
+        "${checked_project}_estab_export" \
+        "${checked_project}_estab_auth"
     do
         if "$container_cli" volume inspect "$known_volume" >/dev/null 2>&1; then
             echo "Registry compose integration: known volume remains: $known_volume" >&2
@@ -380,6 +389,77 @@ wait_for_db()
     done
 }
 
+verify_admin_secret_isolation()
+{
+    isolation_app_id=$(compose ps -q app)
+    isolation_init_id=$(compose ps --all -q admin-auth-init)
+    if [ -z "$isolation_app_id" ] || [ -z "$isolation_init_id" ]; then
+        echo "Registry compose integration: admin authentication containers are missing" >&2
+        return 1
+    fi
+
+    isolation_init_status=$("$container_cli" inspect --format \
+        '{{.State.Status}} {{.State.ExitCode}}' "$isolation_init_id")
+    if [ "$isolation_init_status" != "exited 0" ]; then
+        echo "Registry compose integration: auth initializer ended as $isolation_init_status" >&2
+        return 1
+    fi
+    isolation_network_mode=$("$container_cli" inspect --format \
+        '{{.HostConfig.NetworkMode}}' "$isolation_init_id")
+    if [ "$isolation_network_mode" != none ]; then
+        echo "Registry compose integration: auth initializer has network access" >&2
+        return 1
+    fi
+
+    isolation_app_environment=$("$container_cli" inspect --format \
+        '{{range .Config.Env}}{{println .}}{{end}}' "$isolation_app_id")
+    if printf '%s\n' "$isolation_app_environment" |
+        grep -Eq '^ESTAB_ADMIN_PASSWORD(_FILE)?='; then
+        echo "Registry compose integration: web environment exposes the admin secret" >&2
+        return 1
+    fi
+    isolation_secret_mount=$("$container_cli" inspect --format \
+        '{{range .Mounts}}{{if eq .Destination "/run/secrets/estab_admin_password"}}present{{end}}{{end}}' \
+        "$isolation_app_id")
+    if [ -n "$isolation_secret_mount" ]; then
+        echo "Registry compose integration: web container mounts the admin secret" >&2
+        return 1
+    fi
+    isolation_auth_mode=$("$container_cli" inspect --format \
+        '{{range .Mounts}}{{if eq .Destination "/run/estab-auth"}}{{if .RW}}rw{{else}}ro{{end}}{{end}}{{end}}' \
+        "$isolation_app_id")
+    if [ "$isolation_auth_mode" != ro ]; then
+        echo "Registry compose integration: derived auth mount is not read-only" >&2
+        return 1
+    fi
+
+    compose exec -T app sh -ceu '
+        test ! -e /run/secrets/estab_admin_password
+        test -r /run/estab-auth/admin.htpasswd
+        admin_hash=$(cut -d: -f2 /run/estab-auth/admin.htpasswd)
+        case "$admin_hash" in
+          "\$2a\$12\$"*|"\$2b\$12\$"*|"\$2y\$12\$"*) ;;
+          *)
+            echo "Derived authentication hash does not use bcrypt cost 12" >&2
+            exit 1
+            ;;
+        esac
+        if touch /run/estab-auth/.write-probe 2>/dev/null; then
+            rm -f /run/estab-auth/.write-probe
+            echo "Derived authentication directory is writable" >&2
+            exit 1
+        fi
+    '
+    compose run --rm --no-deps -T app php -r '
+        if (getenv("ESTAB_ADMIN_PASSWORD") !== false
+            || getenv("ESTAB_ADMIN_PASSWORD_FILE") !== false
+            || !is_readable("/run/estab-auth/admin.htpasswd")) {
+            exit(1);
+        }
+        echo "registry no-deps admin isolation: OK\n";
+    '
+}
+
 verify_stack()
 {
     wait_for_app
@@ -395,17 +475,31 @@ verify_stack()
         echo "Registry compose integration: migrator ended as $migrate_status" >&2
         return 1
     fi
+    auth_init_id=$(compose ps --all -q admin-auth-init)
+    if [ -z "$auth_init_id" ]; then
+        echo "Registry compose integration: auth initializer is missing" >&2
+        return 1
+    fi
+    auth_init_status=$("$container_cli" inspect --format \
+        '{{.State.Status}} {{.State.ExitCode}}' "$auth_init_id")
+    if [ "$auth_init_status" != "exited 0" ]; then
+        echo "Registry compose integration: auth initializer ended as $auth_init_status" >&2
+        return 1
+    fi
 
     expected_app_image_id=$("$container_cli" image inspect --format '{{.Id}}' "$app_image")
     expected_migrate_image_id=$("$container_cli" image inspect --format '{{.Id}}' "$migrate_image")
     actual_app_image_id=$("$container_cli" inspect --format '{{.Image}}' "$app_id")
+    actual_auth_init_image_id=$("$container_cli" inspect --format '{{.Image}}' "$auth_init_id")
     actual_migrate_image_id=$("$container_cli" inspect --format '{{.Image}}' "$migrate_id")
     if [ "$actual_app_image_id" != "$expected_app_image_id" ] ||
+        [ "$actual_auth_init_image_id" != "$expected_app_image_id" ] ||
         [ "$actual_migrate_image_id" != "$expected_migrate_image_id" ]; then
         echo "Registry compose integration: stack did not use the requested images" >&2
         return 1
     fi
 
+    verify_admin_secret_isolation
     compose run --rm --no-deps -T migrate
     curl --fail --silent --show-error --max-time 20 \
         "http://127.0.0.1:$http_port/health.php" |
@@ -477,35 +571,6 @@ database_client()
             --skip-column-names \
             --raw \
             --database="$MARIADB_DATABASE"
-    '
-}
-
-database_restore_client()
-{
-    compose exec -T db sh -ceu '
-        umask 077
-        client_defaults=$(mktemp "${TMPDIR:-/tmp}/estab-registry-restore-client.XXXXXX")
-        cleanup_client_defaults()
-        {
-            rm -f -- "$client_defaults"
-        }
-        trap cleanup_client_defaults EXIT HUP INT TERM
-
-        root_password=$(tr -d "\r\n" </run/secrets/estab_db_root_password)
-        escaped_password=$(printf "%s" "$root_password" |
-            sed -e "s/\\\\/\\\\\\\\/g" -e "s/\"/\\\\\"/g")
-        unset root_password
-        {
-            printf "[client]\n"
-            printf "user=root\n"
-            printf "password=\"%s\"\n" "$escaped_password"
-            printf "protocol=socket\n"
-            printf "default-character-set=utf8mb4\n"
-        } >"$client_defaults"
-        unset escaped_password
-        chmod 0600 "$client_defaults"
-
-        mariadb --defaults-extra-file="$client_defaults"
     '
 }
 
@@ -598,41 +663,57 @@ echo "Registry compose integration: creating a production format-2 backup"
 grep -Fqx 'estab-full-backup-v2' "$production_backup/backup-format.txt"
 sh "$backup_verifier" "$production_backup" "${ESTAB_DB_NAME:-estab}"
 
-echo "Registry compose integration: clearing only guarded bind storage"
+echo "Registry compose integration: corrupting controlled restore fixtures"
 validate_bind_root
-compose down --volumes --remove-orphans --timeout 20
-sh "$backup_verifier" "$production_backup" "${ESTAB_DB_NAME:-estab}"
-compose run --rm --no-deps -T --entrypoint sh db -ceu '
-    find /var/lib/mysql -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
-    test -z "$(find /var/lib/mysql -mindepth 1 -print -quit)"
+printf "DELETE FROM nv_protokoll WHERE p_was = 'registry-bind';\n" |
+    database_client >/dev/null
+printf '%s\n' 'CORRUPTED' |
+    compose exec -T --user www-data app sh -ceu '
+        IFS= read -r corrupt_marker
+        data_root="/var/www/html/4fdata/$ESTAB_DB_NAME"
+        printf "%s\n" "$corrupt_marker" \
+            >"$data_root/anhang/.estab-bind-data-marker"
+        printf "%s\n" "$corrupt_marker" \
+            >/var/lib/estab/export/.estab-bind-export-marker
+        mkdir "$data_root/anhang/.restore-stale"
+        mkdir /var/lib/estab/export/.restore-stale
 '
-compose run --rm --no-deps -T --entrypoint sh app -ceu '
-    find /var/www/html/4fdata -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
-    find /var/lib/estab/export -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
-    test -z "$(find /var/www/html/4fdata -mindepth 1 -print -quit)"
-    test -z "$(find /var/lib/estab/export -mindepth 1 -print -quit)"
-'
-compose down --volumes --remove-orphans --timeout 20
-validate_bind_root
+if [ "$(database_marker_count)" != 0 ]; then
+    echo "Registry compose integration: database fixture was not corrupted" >&2
+    exit 1
+fi
+if [ "$(container_file_sha256 "$data_marker_path")" = "$data_marker_sha256" ] ||
+    [ "$(container_file_sha256 "$export_marker_path")" = "$export_marker_sha256" ]; then
+    echo "Registry compose integration: file fixtures were not corrupted" >&2
+    exit 1
+fi
 
 echo "Registry compose integration: restoring exactly the production format-2 backup"
-compose up --detach db
-wait_for_db
-sh "$backup_verifier" "$production_backup" "${ESTAB_DB_NAME:-estab}"
-database_restore_client <"$production_backup/database.sql"
-
-sh "$backup_verifier" "$production_backup" "${ESTAB_DB_NAME:-estab}"
-compose run --rm --no-deps -T --entrypoint sh app -ceu \
-    'tar -xzf - -C /var/www/html/4fdata' \
-    <"$production_backup/4fdata.tar.gz"
-compose run --rm --no-deps -T --entrypoint sh app -ceu \
-    'tar -xzf - -C /var/lib/estab/export' \
-    <"$production_backup/export.tar.gz"
-
-compose up --force-recreate migrate
-compose up --detach app
-wait_for_db
-wait_for_app
+if (
+    cd "$repo_root/deploy/registry"
+    COMPOSE_PROJECT_NAME=$bind_project \
+    ESTAB_CONTAINER_CLI=$container_cli \
+    ESTAB_RESTORE_HEALTH_TIMEOUT_SECONDS=240 \
+        sh "$restore_operator" \
+            --confirm-project "${bind_project}_wrong" \
+            "$production_backup"
+); then
+    echo "Registry compose integration: wrong restore confirmation was accepted" >&2
+    exit 1
+fi
+if [ "$(database_marker_count)" != 0 ]; then
+    echo "Registry compose integration: rejected restore changed the database" >&2
+    exit 1
+fi
+(
+    cd "$repo_root/deploy/registry"
+    COMPOSE_PROJECT_NAME=$bind_project \
+    ESTAB_CONTAINER_CLI=$container_cli \
+    ESTAB_RESTORE_HEALTH_TIMEOUT_SECONDS=240 \
+        sh "$restore_operator" \
+            --confirm-project "$bind_project" \
+            "$production_backup"
+)
 sh "$backup_verifier" "$production_backup" "${ESTAB_DB_NAME:-estab}"
 verify_bind_mounts
 compose run --rm --no-deps -T migrate
@@ -650,6 +731,11 @@ if [ "$(container_file_sha256 "$data_marker_path")" != "$data_marker_sha256" ] |
     echo "Registry compose integration: restored file marker checksum differs" >&2
     exit 1
 fi
+compose exec -T app sh -ceu '
+    data_root="/var/www/html/4fdata/$ESTAB_DB_NAME"
+    test ! -e "$data_root/anhang/.restore-stale"
+    test ! -e /var/lib/estab/export/.restore-stale
+'
 restored_data_marker=$(compose exec -T app sh -ceu \
     'cat "/var/www/html/4fdata/$ESTAB_DB_NAME/anhang/.estab-bind-data-marker"')
 restored_export_marker=$(compose exec -T app \

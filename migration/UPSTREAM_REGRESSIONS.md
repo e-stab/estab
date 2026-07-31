@@ -64,7 +64,7 @@ Ein HTTP-Test erzwingt beim gemeinsamen Speichern einen Insert-Fehler in der
 Standardtabelle und vergleicht danach beide Matrixtabellen und das Audit exakt
 mit ihrem Ausgangszustand. Historische GET-Schreibparameter bleiben inert.
 
-## 0.9.26b/c: wirkungslos überschriebene Ausgangssichtung
+## 0.9.26b/c: umgehbare beziehungsweise wirkungslos konfigurierte Ausgangssichtung
 
 Der Kommentar in `4fcfg/config.inc.php` beschreibt bereits beide vorgesehenen
 Modi von `si_in_out`: Bei `true` sollen Ein- und Ausgänge durch Si laufen, bei
@@ -74,17 +74,23 @@ setzt `si_in_out` anschließend bedingungslos auf `false`. Ein dort gesetzter
 lokaler Wert konnte den dokumentierten Ausgangssichtungszweig deshalb nicht
 aktivieren.
 
-Heute bleibt `false` der kompatible Standard: Ein Ausgang läuft nach der
-Erfassung durch S1 und dem Transport durch A/W direkt von Status 2 auf 8.
-`ESTAB_REVIEW_OUTGOING_MESSAGES=true` aktiviert den vollständigen Weg
-`2 → 4 → 8` über Si. Ist die Umgebungsvariable nicht gesetzt, wird ein
-boolescher Wert aus `m_cfg.inc.php` als Legacy-Fallback übernommen; andere
-Wertetypen und unbekannte boolesche Umgebungswerte brechen fehlersicher ab.
-Die vollständige HTTP-Integration registriert A/W, Si, S1, S2 und S3 und
-beweist beide Modi; zum Umschalten wird ausschließlich der App-Container
-kontrolliert neu erstellt und anschließend auf den Standardwert zurückgestellt.
+Der heutige Stand kennt bewusst keinen zweiten Modus mehr. Die formale
+Sichtung jedes Ausgangs ist verpflichtend und läuft vom Verfasser über Si,
+LdF und A/W bis zum Abschluss (`4 → 1 → 2 → 8`). Eine Rückgabe durch Si führt
+begründungspflichtig über `4 → 10 → 4` erneut in dieselbe Sichtung. Der
+historische Schlüssel `si_in_out` bleibt ausschließlich als immer wahrer
+Kompatibilitätswert vorhanden. Weder `m_cfg.inc.php` noch die frühere
+Umgebungsvariable `ESTAB_REVIEW_OUTGOING_MESSAGES` können den Prüfschritt
+abschalten; Autosichtung ist ebenfalls ausgeschlossen.
 
-## 0.9.26b/c: nicht speicherbare FM-Admin-Zweitprüfung
+Statische Negativtests versuchen den Kompatibilitätswert mit booleschen,
+falsch typisierten und unbekannten Umgebungs-/Legacy-Werten zu verändern.
+Der echte Nachrichtenrollenlauf manipuliert zusätzlich Formular und
+Empfängermatrix, um Si zu überspringen. Ohne besetzte Si bleibt die Nachricht
+unverändert in deren Warteschlange; nur der vollständige verbindliche Weg
+wird als Abschluss akzeptiert.
+
+## 0.9.26b/c: irreführend bearbeitbare FM-Admin-Zweitprüfung
 
 Der historische A/W-Menüpfad öffnet `FM-Admin` für eine zweite Prüfung. In
 beiden Releases markiert das Formular dabei alle Felder 1–17 als bearbeitbar,
@@ -94,17 +100,21 @@ Empfängerzuordnung und Vermerk in den Feldern 15–17 speichert. Zugleich fehlt
 angezeigte Bearbeitungsmaske hatte damit keine passende Abschlussaktion und
 versprach Änderungen, die der Handler nicht persistierte.
 
-Der heutige Formularvertrag führt `FM-Admin` durch denselben
-controllerkompatiblen Speichern-/Abbrechen-Zweig wie die Sichtung und schaltet
-ausschließlich Quittierungszeichen, Empfängerfarben und Vermerk frei. Der
-ursprüngliche Quittierungszeitpunkt bleibt sichtbar, aber schreibgeschützt.
-Rollen-, Objekt- und CSRF-Prüfungen schützen Öffnen und Speichern. Der echte
-Nachrichtenrollenlauf öffnet den Pfad aus der gerenderten
-A/W-Administrationsliste, ändert die drei vorgesehenen Prüfbereiche, sendet
-zusätzlich einen manipulierten Zeitwert und vergleicht einen
-SHA-256-Fingerabdruck der Felder 1–14 sowie den ursprünglichen Zeitpunkt,
-Status-, Sperr-, Abschluss- und Transportbelege vor und nach dem Speichern.
-Der zuvor erzeugte PDF-Vordruck muss dabei erhalten bleiben.
+Der heutige Stand behandelt eine abgeschlossene Nachricht als
+unveränderlichen fachlichen Nachweis. Die rollenbezogenen historischen
+`FM-Adminmeldung`-/`SI-Adminmeldung`-Aufrufe öffnen höchstens eine
+schreibgeschützte Belegansicht. Sie enthält keine Speichern-Aktion; der
+Controller dispatcht keine `FM-Admin`-/`SI-Admin`-Mutation und die alten
+Handler sind vom erreichbaren Schreibpfad getrennt. Manipulierte POST-Requests
+werden bereits an Workflow-, Rollen- und Objektgrenze abgewiesen.
+
+Der echte Nachrichtenrollenlauf versucht beide Zweitsichtungen gegen einen
+abgeschlossenen Datensatz. Er vergleicht danach den vollständigen
+Nachrichtenfingerabdruck einschließlich Quittierung, Empfängerfarben,
+Sichter-, LdF- und Transportnachweis sowie den bereits erzeugten
+PDF-Vordruck. Alles bleibt bytegenau unverändert. Davon getrennte persönliche
+Gelesen-/Erledigt-Markierungen dürfen weiterhin gesetzt werden, weil sie nicht
+den abgeschlossenen Nachrichtennachweis umschreiben.
 
 ## 0.9.26b/c: fehlende BOS-Infosammlung
 

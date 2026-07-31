@@ -37,7 +37,11 @@ Eine öffentliche Binärverteilung bleibt bis zur dokumentierten Rechteklärung
 des historischen Gesamtbestands gesperrt. Der manuelle Workflow verlangt zwei
 Repository-Freigabevariablen, eine ausdrückliche Bestätigung, einen bestehenden
 gleichnamigen Git-Tag und das Environment `container-publish`. Dieses
-Environment muss vor Aktivierung einen Required Reviewer besitzen.
+Environment muss vor Aktivierung einen Required Reviewer besitzen. Zusätzlich
+verweigert der Preflight jede Veröffentlichung, solange die aus der
+Rechteprüfung hervorgehenden, versionierten Dateien `LICENSE` und
+`THIRD_PARTY_NOTICES.md` fehlen oder leer sind; Repositoryvariablen und
+Checkbox allein können diese konkrete Grenze nicht übergehen.
 
 Der Workflow veröffentlicht zunächst nur laufbezogene Candidate-Tags. Die
 exakten Multi-Arch-Digests werden anschließend nativ auf `amd64` und `arm64`
@@ -55,7 +59,8 @@ solcher Zwischenstände beschreibt das
 
 ```console
 cp .env.example .env
-install -d -m 0700 secrets
+mkdir -p secrets
+chmod 0700 secrets
 openssl rand -base64 36 > secrets/db_password.txt
 openssl rand -base64 36 > secrets/db_root_password.txt
 openssl rand -base64 36 > secrets/admin_password.txt
@@ -188,12 +193,22 @@ deren kanonische Definition nach Migration 50 wieder her. Dadurch bleiben
 historische Zeitwerte erhalten, ohne die bereits angewendete und
 checksum-gebundene Migration 50 nachträglich zu verändern.
 
-Der App-Service hängt mit `service_completed_successfully` von diesem Lauf ab.
-Bei SQL-Fehler, doppeltem Anhangnamen, geänderter Prüfsumme oder fehlgeschlagener
-Schema-Verifikation bleibt die Anwendung aus. Erst danach legt der
-App-Entrypoint die beschreibbaren Verzeichnisse für Anhänge, Vordrucke,
-Exporte und Sitzungen an und erzeugt aus dem Admin-Secret eine
-bcrypt-geschützte `htpasswd`-Datei im flüchtigen Container-Dateisystem.
+Der App-Service hängt mit `service_completed_successfully` sowohl von diesem
+Lauf als auch vom netzlosen One-shot-Service `admin-auth-init` ab. Dieser
+liest als einziger App-Image-Prozess das Admin-Klartextsecret und ersetzt die
+abgeleitete bcrypt-`htpasswd` atomar im privaten `estab_auth`-Volume. Der
+Webcontainer mountet dieses Volume schreibgeschützt und erhält weder das
+Admin-Secret-Mount noch einen entsprechenden Umgebungswert. Bei SQL-Fehler,
+doppeltem Anhangnamen, geänderter Prüfsumme, fehlgeschlagener
+Schema-Verifikation oder ungültiger Authentisierungsdatei bleibt die
+Anwendung aus. Erst danach legt der App-Entrypoint die beschreibbaren
+Verzeichnisse für Anhänge, Vordrucke, Exporte und Sitzungen an.
+
+Das Admin-Secret muss aus genau einer Zeile mit 16 bis 72 Bytes bestehen.
+`admin-auth-init` verwendet einen expliziten bcrypt-Kostenfaktor von 12 und
+bricht vor dem Webstart ab, wenn das Kennwort zu kurz wäre oder von bcrypt
+stillschweigend abgeschnitten würde. Die oben gezeigte
+`openssl rand -base64 36`-Erzeugung erfüllt diese Grenze.
 
 MariaDB läuft explizit mit
 `STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO`
@@ -262,7 +277,7 @@ historische PDF-Ausgabe kennzeichnet den Wert als „historisch nicht erfasst“
 podman compose ps
 
 # laufende Logs einschließlich letztem Migrationslauf
-podman compose logs --follow --tail=100 migrate app db
+podman compose logs --follow --tail=100 migrate admin-auth-init app db
 
 # Dienste geordnet anhalten; unverändertes, erfolgreiches Gate wiederverwenden
 podman compose stop
@@ -273,7 +288,7 @@ podman compose stop app
 podman compose up --force-recreate migrate
 podman compose up -d app
 
-# Container nach einer Änderung an .env oder Secrets neu erzeugen
+# App nach einer Änderung an nicht geheimen Laufzeitwerten neu erzeugen
 podman compose up -d --force-recreate app
 
 # neue Version nur nach Vollbackup bauen und kontrolliert ausrollen
@@ -547,8 +562,16 @@ Das Admin-Kennwort kann ohne Datenbankänderung rotiert werden:
 1. neue starke Zeichenfolge atomar in die konfigurierte
    `admin_password.txt` schreiben,
 2. Dateirecht `0600` sicherstellen,
-3. `podman compose up -d --force-recreate app` ausführen,
-4. den alten und den neuen Zugang über TLS prüfen.
+3. `podman compose up -d --force-recreate admin-auth-init app` ausführen und
+   prüfen, dass `admin-auth-init` mit Exitcode 0 beendet wurde,
+4. den neuen Zugang über TLS prüfen und nach einem vollständig neuen
+   Browserkontext bestätigen, dass das alte Kennwort nicht mehr akzeptiert
+   wird.
+
+Eine alleinige Neuerstellung von `app` ändert den Hash absichtlich nicht:
+Der Webcontainer darf das Klartextsecret nicht lesen. `estab_auth` enthält
+nur die jederzeit aus Secret und Benutzername neu ableitbare
+Authentisierungsdatei und gehört daher nicht zum fachlichen Vollbackup.
 
 ### Empfängermatrix, Zählerreparatur und PDF-Vordruckreset
 

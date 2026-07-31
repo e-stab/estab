@@ -16,9 +16,14 @@ Reverse Proxy / Zugriffskontrolle
    | HTTP auf Loopback oder privatem Frontend-Netz
    v
 Apache 2.4 + PHP 8.5  ----  estab_data / estab_export
-   ^                            Start erst nach Exit 0
-   |                            des One-shot-Migrators
-   +--- migrate (MariaDB-Client, SHA-256, Schema-Verify)
+   ^       ^
+   |       +---- estab_auth (nur bcrypt, read-only)
+   |                         ^
+   |                         +-- admin-auth-init
+   |                             (netzlos, Klartextsecret nur hier)
+   |
+   +--- Start erst nach Exit 0 von migrate und admin-auth-init
+        migrate (MariaDB-Client, SHA-256, Schema-Verify)
                               |
                               | internes Netz "database"
                               v
@@ -27,8 +32,9 @@ MariaDB 11.8  ------------------------  estab_db
 
 Der App-Service ist mit dem `frontend`- und dem internen `database`-Netz
 verbunden. MariaDB und der kurzlebige Migrator hängen ausschließlich im
-internen Netz; der Datenbankport wird nicht veröffentlicht. Standardmäßig wird
-auch Apache nur an `127.0.0.1:8080` gebunden.
+internen Netz; `admin-auth-init` besitzt überhaupt kein Netzwerk. Der
+Datenbankport wird nicht veröffentlicht. Standardmäßig wird auch Apache nur
+an `127.0.0.1:8080` gebunden.
 
 ## Verzeichnisverantwortung
 
@@ -75,10 +81,13 @@ Es existieren zwei unabhängige Identitäten:
   Cookies sind `HttpOnly`, `SameSite=Lax` und bei erkanntem HTTPS zusätzlich
   `Secure`.
 - Der gesamte Pfad `/4fadm` sowie der historisch unter `/4fach/resetpic.php`
-  liegende PDF-Vordruckreset werden vom Apache mit einer zur Startzeit erzeugten
-  bcrypt-`htpasswd` geschützt. Das Admin-Kennwort stammt aus einem separaten
-  Compose-Secret. Schreibende Admin-Formulare verlangen zusätzlich einen an
-  die PHP-Sitzung gebundenen CSRF-Token.
+  liegende PDF-Vordruckreset werden vom Apache mit einer vor dem Webstart
+  atomar erzeugten bcrypt-`htpasswd` geschützt. Das Admin-Kennwort stammt aus
+  einem separaten Compose-Secret, das ausschließlich der netzlose
+  `admin-auth-init`-Service erhält. Der App-Service mountet die abgeleitete
+  Datei schreibgeschützt; PHP kann das Klartextsecret weder sehen noch öffnen.
+  Schreibende Admin-Formulare verlangen zusätzlich einen an die PHP-Sitzung
+  gebundenen CSRF-Token.
 
 Apache lehnt `PATH_INFO` hinter ausführbaren PHP-Dateien generell ab. Die
 zentrale operative Schreibgrenze leitet Ausnahmen ausschließlich aus dem
@@ -737,8 +746,9 @@ Konfigurationsverzeichnisse werden auf Webserver-Ebene gesperrt.
 - Die pull-only Distribution verlangt zwei explizite, gemeinsam freigegebene
   App-/Migrator-Referenzen. Der Publish-Workflow ist manuell, global
   serialisiert, an einen gleichnamigen Git-Tag, zwei Repositoryvariablen und
-  ein Required-Reviewer-Environment gebunden. Er baut beide Kandidaten vor dem
-  ersten Push, überschreibt keine vorhandenen OCI-Tags und führt das komplette
+  ein Required-Reviewer-Environment gebunden. Er baut und pusht beide
+  Kandidaten jeweils genau einmal unter nicht-finalen Candidate-Tags,
+  überschreibt keine vorhandenen OCI-Tags und führt das komplette
   Laufzeit-/Restore-Gate nativ auf amd64 und arm64 aus. Für beide
   Plattformmanifeste werden SPDX-SBOM und Build-Provenance angefordert und
   nach dem Push inhaltlich eingelesen; zusätzlich wird die separat

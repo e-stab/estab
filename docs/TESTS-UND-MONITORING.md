@@ -8,11 +8,11 @@ steht in der [Funktionsmatrix](FUNKTIONSNACHWEIS.md).
 
 | Ebene | Nachweis |
 | --- | --- |
-| Quellprüfung | PHP-8.5-Lint, Kompatibilitäts-, Sicherheits-, Einsatz-, Benutzerverwaltungs-, Upload-, Export- und PDF-Regressionen |
+| Quellprüfung | netzloser Herkunftsnachweis für 13 Git-Ref-Snapshots (Trunk, vier Branches, sechs SVN-Tags, zwei SourceForge-Release-Tags) und einen separaten Dokument-r85-Baum, PHP-8.5-Lint, Kompatibilitäts-, Sicherheits-, Einsatz-, Benutzerverwaltungs-, Upload-, Export- und PDF-Regressionen |
 | Image-Build | benötigte PHP-Erweiterungen und Apache-Konfiguration |
 | Datenbank | echtes MariaDB-Schema, Einsatz-Singleton/Trigger, Kontosperre, Indizes, aktive und persistente Standardmatrix, Engines, Collations und Zero-Date-Freiheit |
-| HTTP | Header, direkte Endpunktfläche, 403-/400-/405-Grenzen, Registrierung, sichtbare Sitzungsidentität, CSRF-Abmeldung, erneute Anmeldung, verbindlicher Eingangs- und Ausgangslauf samt Rückgabe/Korrektur und einsatzgebundener Feldvorschläge, Dienstbesetzung/Hutwechsel, S6-Plan, Melderlauf, Kategorien- und ETB-/TBB-Rollengrenzen, reale Vordruckerzeugung/-auslieferung sowie Admin-Export |
-| Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, neun stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, A/W-Rufnamen-Listbox mit echtem Fokus, Filterung und Tastaturauswahl, Matrixstandard-Bestätigungen, BOS-Disclosure, Logout sowie öffentliche und authentifizierte mobile Bedienung bei exakt 390 × 844 CSS-Pixeln |
+| HTTP | Header, direkte Endpunktfläche, 303-Weiterleitung anonymer geschützter Aufrufe zum allowlist-gebundenen Bestandslogin samt sichtbarem Rückweg, 403-/400-/405-Grenzen, Registrierung, sichtbare Sitzungsidentität, CSRF-Abmeldung, erneute Anmeldung, verbindlicher Eingangs- und Ausgangslauf samt Rückgabe/Korrektur und einsatzgebundener Feldvorschläge, Dienstbesetzung/Hutwechsel, S6-Plan, Melderlauf, Kategorien- und ETB-/TBB-Rollengrenzen, reale Vordruckerzeugung/-auslieferung sowie Admin-Export |
+| Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, direkte ETB-/Nachrichten-/Anhang-/Kategorie-Anmeldung ohne Sackgasse oder verschachtelten Arbeitsbereich, sicherer Login-Abbruch, neun stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, A/W-Rufnamen-Listbox mit echtem Fokus, Filterung und Tastaturauswahl, Matrixstandard-Bestätigungen, BOS-Disclosure, Logout sowie öffentliche und authentifizierte mobile Bedienung bei exakt 390 × 844 CSS-Pixeln |
 | Fachabnahme | kompletter Nachrichten-, Anhang-, PDF-, ETB-/TBB- und Restore-Ablauf |
 | Betrieb | kontinuierliche Readiness, Logs, Restarts, Kapazität und Backup-Alter |
 
@@ -38,6 +38,14 @@ podman run --rm \
 Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
 `tests/php/` aus. Dazu gehören unter anderem:
 
+- die versiegelten, deterministischen Provenienzmanifeste für 13
+  Git-Ref-Snapshots – Trunk, vier historische Branches, sechs SVN-Tags und
+  zwei SourceForge-Release-Tags – sowie alle 95 Dateien des einen separaten
+  Dokument-r85-Baums einschließlich UTF-8-/Rohpfad-, Größen-, Modus- und
+  SHA-256-Prüfung; bei 0.9.26b/c müssen aufgezeichnete Archividentität,
+  annotierter Tag und Snapshot-Commit übereinstimmen, während negative
+  Ref-, Manifest-, Releaseidentitäts- und Dokumentmanipulationen erkannt
+  werden,
 - PHP-8.5-Laufzeit- und Legacy-Konstruktor-Kompatibilität,
 - `NULL`-/Zero-Date-Behandlung,
 - Anmelde-, administrative Kontoanlage-, unveränderliche Funktionsbindungs-,
@@ -125,8 +133,11 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
 - Compose-Startgate, private MariaDB-Optionsdatei, Migration-Ledger,
   Prüfsummenbindung und Runtime-Schemavertrag,
 - selbsttragende Fresh-Schema-Initialisierung, pull-only Registry-Compose,
-  persistente Storage-/Secret-Grenzen, guardierte echte Host-Bind-Mounts samt
-  Backup-/Restore-Vertrag und vollständiger Cleanup-Postcondition, manuell
+  netzlose Ableitung des Admin-Hashes ohne Klartextsecret im Webcontainer,
+  persistente Storage-/Secret-Grenzen, vor Pull/Start geprüfte getrennte
+  Produktivquellen, guardierte echte Host-Bind-Mounts samt engine-weiter
+  Wartungssperre, Backup-/Restore-Vertrag und vollständiger
+  Cleanup-Postcondition, manuell
   durch Rechtefreigaben gesperrter GHCR-Workflow, native amd64-/arm64-Läufe,
   inhaltlich gelesene SPDX-SBOM/Build-Provenance, gegen Quellcommit und
   Digest verifizierte OCI-Attestation aus GHCR, fail-closed
@@ -173,9 +184,10 @@ startet danach ein weiteres Pull-only-
 Projekt mit drei echten temporären Host-Bind-Mounts für MariaDB, `4fdata` und
 Exporte. Container-Inspect bindet Typ, Quellpfad und Containerziel an den
 erwarteten Zufallspfad. Ein Datenbankmarker und zwei Dateimarker werden mit
-SHA-256 gesichert, ausschließlich nach erfolgreicher Prüfung von Projektname,
-temporärem Pfad und Guard-Datei vollständig geleert und aus dem Backup
-wiederhergestellt. Migrator, Readiness und alle drei Marker müssen danach
+SHA-256 gesichert. Danach wird der Datenbankmarker logisch verfälscht und in
+den beiden Dateibereichen werden veraltete Testdaten ergänzt; der rohe
+MariaDB-Bind-Mount wird nicht geleert. Der produktive Restore-Helfer muss den
+gebundenen Zustand wiederherstellen. Migrator, Readiness und alle drei Marker müssen danach
 exakt übereinstimmen. Vor dem grünen Ergebnis müssen beide Registry-Projekte,
 ihre Container, Volumes und Netzwerke sowie der temporäre Bind-Baum entfernt
 sein.

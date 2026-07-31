@@ -155,7 +155,7 @@ capture_diagnostics() {
         mkdir -p "$destination"
         compose ps --all --format json >"$destination/compose-ps.json" 2>&1 || true
         compose logs --no-color --timestamps >"$destination/compose.log" 2>&1 || true
-        for service in db migrate app; do
+        for service in db migrate admin-auth-init app; do
             local container_id
             container_id=$(compose ps --all -q "$service" 2>/dev/null || true)
             if [[ -n $container_id ]]; then
@@ -212,6 +212,85 @@ wait_for_healthy() {
     return 1
 }
 
+verify_admin_secret_isolation() {
+    local app_container init_container init_status app_environment
+    local admin_secret_mount auth_mount_mode init_network_mode
+
+    app_container=$(compose ps -q app)
+    init_container=$(compose ps --all -q admin-auth-init)
+    if [[ -z $app_container || -z $init_container ]]; then
+        echo "CI integration: admin authentication containers are missing" >&2
+        return 1
+    fi
+
+    init_status=$("$container_cli" inspect --format \
+        '{{.State.Status}} {{.State.ExitCode}}' "$init_container")
+    if [[ $init_status != "exited 0" ]]; then
+        echo "CI integration: admin authentication initializer ended as $init_status" >&2
+        return 1
+    fi
+    init_network_mode=$("$container_cli" inspect --format \
+        '{{.HostConfig.NetworkMode}}' "$init_container")
+    if [[ $init_network_mode != none ]]; then
+        echo "CI integration: admin authentication initializer has network access" >&2
+        return 1
+    fi
+
+    app_environment=$("$container_cli" inspect --format \
+        '{{range .Config.Env}}{{println .}}{{end}}' "$app_container")
+    if printf '%s\n' "$app_environment" |
+        grep -Eq '^ESTAB_ADMIN_PASSWORD(_FILE)?='; then
+        echo "CI integration: web container environment exposes the admin secret" >&2
+        return 1
+    fi
+    admin_secret_mount=$("$container_cli" inspect --format \
+        '{{range .Mounts}}{{if eq .Destination "/run/secrets/estab_admin_password"}}present{{end}}{{end}}' \
+        "$app_container")
+    if [[ -n $admin_secret_mount ]]; then
+        echo "CI integration: web container mounts the cleartext admin secret" >&2
+        return 1
+    fi
+    auth_mount_mode=$("$container_cli" inspect --format \
+        '{{range .Mounts}}{{if eq .Destination "/run/estab-auth"}}{{if .RW}}rw{{else}}ro{{end}}{{end}}{{end}}' \
+        "$app_container")
+    if [[ $auth_mount_mode != ro ]]; then
+        echo "CI integration: derived admin authentication mount is not read-only" >&2
+        return 1
+    fi
+
+    compose exec -T app sh -ceu '
+        test ! -e /run/secrets/estab_admin_password
+        test -r /run/estab-auth/admin.htpasswd
+        test "$(find /run/estab-auth/admin.htpasswd -prune \
+            -type f -user root -group www-data -perm 0640 -print)" \
+            = /run/estab-auth/admin.htpasswd
+        admin_hash=$(cut -d: -f2 /run/estab-auth/admin.htpasswd)
+        case "$admin_hash" in
+          "\$2a\$12\$"*|"\$2b\$12\$"*|"\$2y\$12\$"*) ;;
+          *)
+            echo "Derived authentication hash does not use bcrypt cost 12" >&2
+            exit 1
+            ;;
+        esac
+        if touch /run/estab-auth/.write-probe 2>/dev/null; then
+            rm -f /run/estab-auth/.write-probe
+            echo "Derived authentication directory is writable" >&2
+            exit 1
+        fi
+    '
+
+    run_timed 2m "$container_cli" compose run --rm --no-deps -T \
+        app php -r '
+            if (getenv("ESTAB_ADMIN_PASSWORD") !== false
+                || getenv("ESTAB_ADMIN_PASSWORD_FILE") !== false
+                || !is_readable("/run/estab-auth/admin.htpasswd")) {
+                exit(1);
+            }
+            echo "no-deps admin isolation: OK\n";
+        '
+    echo "CI integration: cleartext admin secret is isolated from the web container"
+}
+
 verify_prebuilt_runtime_images() {
     local phase=${1:-runtime}
     local service expected_image_id container_id actual_image_id
@@ -219,10 +298,10 @@ verify_prebuilt_runtime_images() {
         echo "CI integration: invalid exact-image verification phase" >&2
         return 1
     fi
-    for service in migrate app; do
+    for service in migrate admin-auth-init app; do
         case "$service" in
             migrate) expected_image_id=$expected_migrate_id ;;
-            app) expected_image_id=$expected_app_id ;;
+            admin-auth-init | app) expected_image_id=$expected_app_id ;;
         esac
         container_id=$(compose ps --all -q "$service")
         if [[ -z $container_id ]]; then
@@ -576,6 +655,7 @@ run_timed 8m "$container_cli" compose run --rm --no-deps -T \
 echo "CI integration: starting the migrated application stack"
 run_timed 5m "$container_cli" compose up --detach
 wait_for_healthy app 240
+verify_admin_secret_isolation
 if [[ -n $prebuilt_app_image ]]; then
     verify_prebuilt_runtime_images initial
 fi
