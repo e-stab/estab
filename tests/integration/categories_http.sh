@@ -80,6 +80,7 @@ esac
 
 work_dir=$(mktemp -d /tmp/estab-category-http.XXXXXX)
 body=$work_dir/body.html
+headers=$work_dir/headers.txt
 s1_cookies=$work_dir/s1-cookies.txt
 s2_cookies=$work_dir/s2-cookies.txt
 si_cookies=$work_dir/si-cookies.txt
@@ -222,7 +223,7 @@ trap 'exit 130' HUP INT TERM
 request_status()
 {
     curl --silent --show-error --max-time 20 --connect-timeout 5 \
-        --output "$body" --write-out '%{http_code}' "$@"
+        --dump-header "$headers" --output "$body" --write-out '%{http_code}' "$@"
 }
 
 assert_status()
@@ -566,7 +567,14 @@ SQL
 assert_numeric 'foreign message' "$foreign_message_id"
 
 # Session and scope gates.
-assert_status 403 "$base_url/4fach/katgoedt.php?dbtyp=fkt&msgno=$message_id"
+assert_status 303 "$base_url/4fach/katgoedt.php?dbtyp=fkt&msgno=$message_id"
+if ! grep -Eiq \
+    '^Location: .*/4fach/mainindex[.]php[?]login_flow=existing&next=messages[[:space:]]*$' \
+    "$headers"; then
+    printf 'Category HTTP: anonymous category login redirect is invalid\n' >&2
+    sed -n '1,30p' "$headers" >&2
+    exit 1
+fi
 
 si_users_before=$(db_sql <<'SQL'
 SELECT COUNT(*) FROM `nv_benutzer` WHERE `funktion` = 'Si';

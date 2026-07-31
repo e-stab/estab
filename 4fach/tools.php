@@ -625,7 +625,7 @@ bersichtlich dargestellt werden.
       $loginSelectable = $what == "verlinkt"
         && in_array (($_SESSION ["menue"] ?? ""), array ("WELCOME", "LOGIN"), true);
       if ($what == 'verlinkt'){
-         echo "\n\n<form action=\"".estab_auth_html ($conf_4f ["MainURL"])."\" method=\"POST\" target=\"mainframe\">\n";
+         echo "\n\n<form action=\"".estab_auth_html ($conf_4f ["MainURL"])."\" method=\"POST\" target=\"_self\">\n";
          echo estab_csrf_field ()."\n";
          echo estab_navigation_login_destination_field ($loginDestination)."\n";
          echo "<!-- Benutzerliste mit POST-Auswahl zur Anmeldung -->\n";

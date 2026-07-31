@@ -148,9 +148,37 @@ $assert(
             === 'https://example.invalid/gateway/dispatch/site/stabetb/etb.php'
         && estab_navigation_login_url()
             === 'https://example.invalid/gateway/dispatch/site/4fach/index.php'
+                . '?login_flow=existing'
         && estab_navigation_login_url('incident-log')
             === 'https://example.invalid/gateway/dispatch/site/4fach/index.php'
-                . '?next=incident-log',
+                . '?login_flow=existing&next=incident-log'
+        && estab_navigation_login_url('incident-log', true)
+            === 'https://example.invalid/gateway/dispatch/site/4fach/index.php'
+                . '?login_flow=existing&next=incident-log&interrupted=1'
+        && estab_navigation_login_content_url('messages', true)
+            === 'https://example.invalid/gateway/dispatch/site/4fach/'
+                . 'mainindex.php?login_flow=existing&next=messages'
+                . '&interrupted=1'
+        && estab_navigation_login_redirect_url(
+            'forms',
+            false,
+            ['HTTP_SEC_FETCH_DEST' => 'document']
+        ) === 'https://example.invalid/gateway/dispatch/site/4fach/'
+                . 'index.php?login_flow=existing&next=forms'
+        && estab_navigation_login_redirect_url(
+            'messages',
+            true,
+            ['HTTP_SEC_FETCH_DEST' => 'iframe']
+        ) === 'https://example.invalid/gateway/dispatch/site/4fach/'
+                . 'mainindex.php?login_flow=existing&next=messages'
+                . '&interrupted=1'
+        && estab_navigation_login_redirect_url(
+            'messages',
+            false,
+            [],
+            true
+        ) === 'https://example.invalid/gateway/dispatch/site/4fach/'
+                . 'mainindex.php?login_flow=existing&next=messages',
     'navigation URLs did not preserve public URL and deployment base path'
 );
 $assert(
@@ -365,7 +393,8 @@ foreach ([
     $assert(
         str_contains(
             $anonymous,
-            'href="/4fach/index.php?next=' . $destinationKey . '"'
+            'href="/4fach/index.php?login_flow=existing&amp;next='
+                . $destinationKey . '"'
         ),
         'anonymous navigation lost destination key ' . $destinationKey
     );
@@ -490,7 +519,7 @@ $assert(
         ) === 7
         && str_contains(
             $anonymousSidebar,
-            'href="/4fach/index.php?next=messages"'
+            'href="/4fach/index.php?login_flow=existing&amp;next=messages"'
         )
         && !str_contains($anonymousSidebar, '<details')
         && !str_contains($anonymousSidebar, '<summary'),

@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../app/file_access.php';
 require_once __DIR__ . '/../app/attachment.php';
 require_once __DIR__ . '/../app/generated_form.php';
+require_once __DIR__ . '/../app/navigation.php';
 require_once __DIR__ . '/../app/read_authorization.php';
 require __DIR__ . '/../4fcfg/config.inc.php';
 require __DIR__ . '/../4fcfg/dbcfg.inc.php';
@@ -26,7 +27,24 @@ $readIdentity = session_status() === PHP_SESSION_ACTIVE
     ? estab_read_session_identity($_SESSION)
     : null;
 if (!is_array($readIdentity)) {
-    estab_download_error(403, 'Anmeldung erforderlich.');
+    $loginDestination = (
+        isset($_GET['area'])
+        && is_string($_GET['area'])
+        && $_GET['area'] === 'vordruck'
+    ) ? 'forms' : 'messages';
+    estab_navigation_require_session(
+        $_SESSION,
+        $loginDestination,
+        $_SERVER
+    );
+}
+if (
+    !is_array($readIdentity)
+    || estab_read_duty_assignment_id(
+        $readIdentity['duty_assignment_id'] ?? null
+    ) === null
+) {
+    estab_navigation_select_duty($_SERVER);
 }
 
 $area = isset($_GET['area']) && is_string($_GET['area']) ? $_GET['area'] : '';

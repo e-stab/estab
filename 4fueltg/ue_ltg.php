@@ -4,9 +4,14 @@ define ("debug", false);
 session_start ();
 require_once __DIR__ . "/../app/auth.php";
 require_once __DIR__ . "/../app/message_priority.php";
+require_once __DIR__ . "/../app/navigation.php";
 require_once __DIR__ . "/../app/read_authorization.php";
 require_once __DIR__ . "/../app/session_ui.php";
-estab_auth_require_session ($_SESSION);
+estab_navigation_require_session (
+  $_SESSION,
+  "message-overview",
+  $_SERVER
+);
 
 include ("../4fcfg/config.inc.php");            // Konfigurationseinstellungen und Vorgaben
 include ("../4fach/db_operation.php");          // Datenbank operationen
@@ -15,12 +20,17 @@ include ("../4fach/data_hndl.php");             // propritÃ¤re  Datenbankopera
 include ("../4fcfg/para.inc.php");              //
 
 $overviewReadIdentity = estab_read_session_identity ($_SESSION);
+if (
+  !is_array ($overviewReadIdentity)
+  || estab_read_duty_assignment_id (
+    $overviewReadIdentity ["duty_assignment_id"] ?? null
+  ) === null
+) {
+  estab_navigation_select_duty ($_SERVER);
+}
 $overviewAccessConnection = null;
 $overviewIncidentId = null;
 try {
-  if (!is_array ($overviewReadIdentity)) {
-    throw new EstabReadPermissionException ("Anmeldung erforderlich.");
-  }
   $overviewAccessConnection = estab_auth_connect ($conf_4f_db);
   $overviewReadScope = estab_read_require_area (
     $overviewAccessConnection,

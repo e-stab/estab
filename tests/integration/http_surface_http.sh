@@ -55,6 +55,24 @@ assert_body_absent_fixed() {
     fi
 }
 
+assert_header_fixed() {
+    expected=$1
+    if ! grep -Fqi -- "$expected" "$headers"; then
+        printf 'HTTP surface: response headers do not contain %s\n' "$expected" >&2
+        sed -n '1,30p' "$headers" >&2
+        exit 1
+    fi
+}
+
+assert_header_absent_fixed() {
+    forbidden=$1
+    if grep -Fqi -- "$forbidden" "$headers"; then
+        printf 'HTTP surface: response headers unexpectedly contain %s\n' "$forbidden" >&2
+        sed -n '1,30p' "$headers" >&2
+        exit 1
+    fi
+}
+
 assert_no_insecure_resource() {
     if grep -Fiq 'http://' "$body"; then
         printf 'HTTP surface: stabinfo response still embeds an insecure remote resource\n' >&2
@@ -219,7 +237,7 @@ if grep -Fq 'data-estab-session-bar' "$body"; then
     exit 1
 fi
 assert_status 200 "$base_url/4fach/vorgaben.php?next=incident-log"
-assert_body_fixed "href=\"$expected_app_root/4fach/index.php?next=incident-log\""
+assert_body_fixed "href=\"$expected_app_root/4fach/index.php?login_flow=existing&amp;next=incident-log\""
 assert_body_fixed 'data-estab-navigation-mode="sidebar"'
 assert_body_absent_fixed '<summary'
 assert_status 400 "$base_url/4fach/vorgaben.php?next=administration"
@@ -246,6 +264,11 @@ fi
 assert_status 200 "$base_url/4fach/mainindex.php?login_flow=existing"
 assert_body_fixed 'Mit bestehendem Konto anmelden'
 assert_body_fixed 'autocomplete="current-password"'
+assert_body_fixed 'data-estab-auth-cancel'
+assert_body_fixed '>Anmeldung abbrechen · Zur Übersicht</a>'
+assert_body_fixed "href=\"$expected_app_root/\" target=\"_top\""
+assert_body_fixed 'target="_self"'
+assert_body_absent_fixed 'target="mainframe"'
 assert_status 200 "$base_url/4fach/mainindex.php?login_flow=new"
 assert_body_fixed '<h2>Neues Konto anlegen</h2>'
 assert_body_fixed 'Neue Konten können hier nicht erstellt werden'
@@ -254,10 +277,85 @@ assert_body_absent_fixed 'name="kennwort2"'
 assert_status 403 "$base_url/4fach/mainindex.php?login_flow=unknown"
 
 assert_status 405 "$base_url/4fach/logout.php"
-assert_status 403 --request POST \
+assert_status 303 --request POST \
     --data-urlencode 'csrf_token=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
     --data-urlencode 'logout_action=logout' \
     "$base_url/4fach/logout.php"
+assert_header_fixed "Location: $expected_app_root/"
+
+for protected_route in \
+    '4fach/fuehrungsstelle.php|command-post|index.php' \
+    '4fach/vordrucke.php|forms|index.php' \
+    '4fueltg/ue_ltg.php|message-overview|index.php' \
+    'stabetb/etb.php|incident-log|index.php' \
+    'fmtbb/tbb.php|technical-log|index.php' \
+    '4fach/nachwea.php?nwalle|tracking|index.php' \
+    '4fach/anhang.php|messages|mainindex.php' \
+    '4fach/katgoedt.php?dbtyp=fkt&msgno=1|messages|mainindex.php'
+do
+    route=${protected_route%%|*}
+    protected_target=${protected_route#*|}
+    destination=${protected_target%%|*}
+    login_document=${protected_target#*|}
+    assert_status 303 "$base_url/$route"
+    assert_header_fixed \
+        "Location: $expected_app_root/4fach/$login_document?login_flow=existing&next=$destination"
+    assert_body_absent_fixed 'Anmeldung erforderlich'
+done
+
+assert_status 303 --header 'Sec-Fetch-Dest: iframe' \
+    "$base_url/4fach/vordrucke.php"
+assert_header_fixed \
+    "Location: $expected_app_root/4fach/mainindex.php?login_flow=existing&next=forms"
+
+assert_status 303 \
+    "$base_url/4fach/download.php?area=vordruck&file=EL0001.pdf"
+assert_header_fixed \
+    "Location: $expected_app_root/4fach/index.php?login_flow=existing&next=forms"
+assert_body_absent_fixed 'Anmeldung erforderlich'
+
+assert_status 303 --request POST \
+    --data-urlencode 'ah_upload_x=1' \
+    --data-urlencode 'discarded_marker=HTTP_SURFACE_MUST_NOT_RUN' \
+    "$base_url/4fach/anhang.php"
+assert_header_fixed \
+    "Location: $expected_app_root/4fach/mainindex.php?login_flow=existing&next=messages&interrupted=1"
+assert_body_absent_fixed 'Anmeldung erforderlich'
+
+assert_status 303 \
+    "$base_url/4fach/mainindex.php?filter_anzahl_x=1&filter_anzahl=10"
+assert_header_fixed \
+    "Location: $expected_app_root/4fach/mainindex.php?login_flow=existing&next=messages"
+assert_header_absent_fixed 'filter_anzahl'
+assert_body_absent_fixed 'filter_anzahl'
+assert_body_absent_fixed 'Aktion nicht erlaubt'
+
+assert_status 403 \
+    "$base_url/4fach/mainindex.php?benutzer=Mustermann&kuerzel=mm&funktion=S1&anmelden=Anmelden"
+assert_body_fixed 'Aktion nicht erlaubt'
+assert_header_absent_fixed 'Location:'
+
+assert_status 303 --header 'Sec-Fetch-Site: same-origin' --request POST \
+    --data-urlencode 'task=Stab_schreiben' \
+    --data-urlencode '12_inhalt=HTTP_SURFACE_MUST_NOT_PERSIST' \
+    "$base_url/4fach/mainindex.php"
+assert_header_fixed \
+    "Location: $expected_app_root/4fach/mainindex.php?login_flow=existing&next=messages&interrupted=1"
+assert_body_absent_fixed 'Aktion nicht erlaubt'
+assert_status 200 \
+    "$base_url/4fach/mainindex.php?login_flow=existing&next=messages&interrupted=1"
+assert_body_fixed 'data-estab-submission-discarded'
+assert_body_fixed 'Die Eingabe wurde nicht gespeichert.'
+assert_body_fixed 'data-estab-auth-cancel'
+assert_status 200 \
+    "$base_url/4fach/index.php?login_flow=existing&next=messages&interrupted=1"
+assert_body_fixed \
+    'src="./mainindex.php?login_flow=existing&amp;next=messages&amp;interrupted=1"'
+assert_status 400 \
+    "$base_url/4fach/index.php?login_flow=existing&interrupted=0"
+assert_status 403 --header 'Sec-Fetch-Site: cross-site' --request POST \
+    --data-urlencode 'task=Stab_schreiben' \
+    "$base_url/4fach/mainindex.php"
 
 assert_status 200 --request POST --data-urlencode 'login_flow=existing' \
     "$base_url/4fach/mainindex.php"

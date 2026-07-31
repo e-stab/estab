@@ -83,7 +83,7 @@ assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "funktion=$test_function" \
     --data-urlencode "kennwort1@$password_file" \
     "$base_url/4fach/mainindex.php"
-assert_status 403 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
+assert_status 303 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
 
 # The narrowly scoped historical one-password request works only after the
 # stack has deliberately been recreated with the compatibility switch.
@@ -113,15 +113,6 @@ assert_body "data-estab-user-name=\"$test_name\""
 assert_body 'data-estab-dv-operations'
 assert_body 'Noch nicht ausgewählt'
 
-# Generated forms are privileged operational data. They remain fail-closed
-# until this freshly authenticated session explicitly selects one personally
-# accepted duty assignment through the normal CSRF-protected workflow.
-assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-    "$base_url/4fach/vordrucke.php"
-assert_body 'data-estab-session-bar'
-assert_body "data-estab-user-name=\"$test_name\""
-assert_body 'Wählen Sie zuerst eine persönlich angenommene Dienstfunktion.'
-
 logout_csrf=$(sed -n \
     's/.*name="csrf_token" value="\([a-f0-9][a-f0-9]*\)".*/\1/p' \
     "$body" | head -n 1)
@@ -129,11 +120,25 @@ if ! printf '%s' "$logout_csrf" | grep -Eq '^[a-f0-9]{64}$'; then
     printf 'Legacy login HTTP: logout CSRF token is missing\n' >&2
     exit 1
 fi
+
+# Generated forms are privileged operational data. They remain fail-closed
+# until this freshly authenticated session explicitly selects one personally
+# accepted duty assignment through the normal CSRF-protected workflow. The
+# page sends the browser to that selector instead of leaving a text dead end.
+assert_status 303 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/vordrucke.php"
+if ! grep -Eiq '^Location: .*/4fach/fuehrungsstelle[.]php[[:space:]]*$' \
+    "$headers"; then
+    printf 'Legacy login HTTP: missing selected-duty redirect\n' >&2
+    sed -n '1,30p' "$headers" >&2
+    exit 1
+fi
+
 assert_status 303 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$logout_csrf" \
     --data-urlencode 'logout_action=logout' \
     "$base_url/4fach/logout.php"
-assert_status 403 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
+assert_status 303 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
 
 printf 'Legacy login HTTP integration: OK\n'

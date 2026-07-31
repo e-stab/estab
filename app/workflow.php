@@ -25,7 +25,11 @@ function estab_workflow_public_login_request(array $server, array $get, array $p
         foreach (array_keys($get) as $key) {
             if (
                 !is_string($key)
-                || !in_array($key, ['login_flow', 'next'], true)
+                || !in_array(
+                    $key,
+                    ['login_flow', 'next', 'interrupted'],
+                    true
+                )
             ) {
                 return false;
             }
@@ -39,6 +43,12 @@ function estab_workflow_public_login_request(array $server, array $get, array $p
         if (
             array_key_exists('next', $get)
             && estab_navigation_login_destination_key($get['next']) === null
+        ) {
+            return false;
+        }
+        if (
+            array_key_exists('interrupted', $get)
+            && $get['interrupted'] !== '1'
         ) {
             return false;
         }
@@ -163,6 +173,92 @@ function estab_workflow_public_login_request(array $server, array $get, array $p
         return false;
     }
     return !isset($request['login'], $request['login_identity']);
+}
+
+/**
+ * Recognize a same-site operational form whose application session expired.
+ *
+ * Login attempts, cross-site requests and empty posts remain on the strict
+ * denial path. The caller may only answer a matching request with a 303, so
+ * none of the submitted operational values are replayed or processed.
+ */
+function estab_workflow_anonymous_operational_post(
+    array $server,
+    array $get,
+    array $post
+): bool {
+    if (
+        strtoupper((string) ($server['REQUEST_METHOD'] ?? 'GET')) !== 'POST'
+        || $get !== []
+        || $post === []
+        || !estab_workflow_login_metadata_same_site($server)
+    ) {
+        return false;
+    }
+    foreach ([
+        'login',
+        'login_x',
+        'login_y',
+        'login_identity',
+        'login_flow',
+        'benutzer',
+        'kuerzel',
+        'funktion',
+        'kennwort1',
+        'kennwort2',
+        '2teskennwort',
+    ] as $loginKey) {
+        if (array_key_exists($loginKey, $post)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Recognize an operational page link after the application session expired.
+ *
+ * Login metadata is deliberately excluded: malformed login destinations or
+ * interruption flags stay on the strict denial path. Operational query values
+ * are never copied to the login URL and therefore cannot become a redirect
+ * target or be processed without a valid session.
+ */
+function estab_workflow_anonymous_operational_get(
+    array $server,
+    array $get,
+    array $post
+): bool {
+    if (
+        strtoupper((string) ($server['REQUEST_METHOD'] ?? 'GET')) !== 'GET'
+        || $get === []
+        || $post !== []
+    ) {
+        return false;
+    }
+    foreach ([
+        'login',
+        'login_x',
+        'login_y',
+        'login_identity',
+        'login_flow',
+        'next',
+        'interrupted',
+        'benutzer',
+        'kuerzel',
+        'funktion',
+        'kennwort1',
+        'kennwort2',
+        '2teskennwort',
+        'absenden_x',
+        'absenden_y',
+        'anmelden',
+        'csrf_token',
+    ] as $loginKey) {
+        if (array_key_exists($loginKey, $get)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 /** Return whether this POST can authenticate or register an account. */

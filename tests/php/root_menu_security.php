@@ -26,7 +26,10 @@ $protected = [
 $locked = estab_root_menu_item_markup($protected, false);
 $assert(
     substr_count($locked, '<a ') === 1
-        && str_contains($locked, 'href="/4fach/index.php"')
+        && str_contains(
+            $locked,
+            'href="/4fach/index.php?login_flow=existing"'
+        )
         && !str_contains($locked, 'href="./protected.php"')
         && !str_contains($locked, 'target="_blank"')
         && str_contains($locked, 'Anmeldung erforderlich'),
@@ -60,7 +63,7 @@ $keyedLocked = estab_root_menu_item_markup($keyedProtected, false);
 $assert(
     str_contains(
         $keyedLocked,
-        'href="/4fach/index.php?next=incident-log"'
+        'href="/4fach/index.php?login_flow=existing&amp;next=incident-log"'
     )
         && str_contains(
             $keyedLocked,

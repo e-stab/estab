@@ -295,7 +295,14 @@ foreach (['ETB' => $etb, 'TBB' => $tbb] as $name => $source) {
             $source,
             'require_once __DIR__ . "/../app/read_authorization.php";'
         )
-            && str_contains($source, 'estab_auth_require_session ($_SESSION)')
+            && str_contains(
+                $source,
+                'estab_navigation_require_session ($_SESSION'
+            )
+            && str_contains(
+                $source,
+                'estab_navigation_select_duty ($_SERVER)'
+            )
             && str_contains(
                 $source,
                 'estab_read_session_identity ($_SESSION)'

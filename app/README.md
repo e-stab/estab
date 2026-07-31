@@ -150,7 +150,26 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   genau der aus dem Requestpfad abgeleitete Bereich erhält
   `aria-current="page"`. Öffentlich sichtbar bleiben Übersicht und BOS-Info;
   sieben geschützte Bereiche führen anonym mit ihrem symbolischen Ziel zum
-  Login. Administration und Handbuch sind getrennte Dienste.
+  expliziten Bestandslogin. Derselbe allowlist-gebundene Einstieg schützt
+  direkte GET-/HEAD-Aufrufe von Fachseiten und Download-Tabs sowie
+  Browserformular-POSTs mit abgelaufener Sitzung per HTTP 303; der POST-Inhalt
+  wird nicht erneut übertragen und der Login nennt den nötigen erneuten
+  Erfassungsschritt. `Sec-Fetch-Dest: frame` beziehungsweise `iframe` wählt für
+  eingebettete Aufrufe das Content-Login. Intrinsisch mainframe-lokale
+  Controller wie Anhänge und Kategorien fordern dieses Ziel zusätzlich als
+  sicheren Fallback an, sodass ältere Clients ohne Fetch-Metadaten keinen
+  Arbeitsbereich in dessen `mainframe` verschachteln. Der historische
+  Nachrichtencontroller verwirft nach Sitzungsablauf operative GET-Parameter
+  vollständig und leitet nur zum allowlist-gebundenen Ziel `messages`;
+  Login-Zugangsdaten und Login-Metadaten in GET bleiben auf der harten
+  Ablehnungsgrenze. Alle Loginformulare verwenden `target="_self"` und bleiben
+  damit im aktuellen Kontext, während der Abbruchlink mit Top-Level-Ziel
+  zuverlässig zur öffentlichen Übersicht führt;
+  eine angemeldete Sitzung ohne ausgewählte Dienstfunktion wird zum
+  Führungsstellenbetrieb geleitet. Rollen-, Objekt-, CSRF-, Polling- und
+  Bildgrenzen bleiben harte 403-Antworten. Die Anmeldekarte zeigt das
+  vorgemerkte Ziel und bietet immer einen Top-Level-Abbruch zur Übersicht.
+  Administration und Handbuch sind getrennte Dienste.
 - Nach der Anmeldung rendert `session_ui.php` Name, Kürzel, Funktion und
   serverseitig abgeleitete Rolle HTML-escaped. Vor der Anmeldung rendert
   dieselbe Schicht „Nicht angemeldet“, den Anmeldebutton und die gemeinsame

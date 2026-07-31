@@ -826,13 +826,24 @@ class BrowserAcceptance:
         "administration",
         "handbook",
     )
-    protected_paths = (
-        "4fach/fuehrungsstelle.php",
-        "4fach/vordrucke.php",
-        "4fueltg/ue_ltg.php",
-        "stabetb/etb.php",
-        "fmtbb/tbb.php",
-        "4fach/nachwea.php?nwalle",
+    protected_redirects = (
+        ("4fach/fuehrungsstelle.php", "command-post", "4fach/index.php"),
+        ("4fach/vordrucke.php", "forms", "4fach/index.php"),
+        ("4fueltg/ue_ltg.php", "message-overview", "4fach/index.php"),
+        ("stabetb/etb.php", "incident-log", "4fach/index.php"),
+        ("fmtbb/tbb.php", "technical-log", "4fach/index.php"),
+        ("4fach/nachwea.php?nwalle", "tracking", "4fach/index.php"),
+        ("4fach/anhang.php", "messages", "4fach/mainindex.php"),
+        (
+            "4fach/katgoedt.php?dbtyp=fkt&msgno=1",
+            "messages",
+            "4fach/mainindex.php",
+        ),
+        (
+            "4fach/download.php?area=vordruck&file=EL0001.pdf",
+            "forms",
+            "4fach/index.php",
+        ),
     )
     bos_documents = (
         ("Buchstabier.html", "Buchstabieralphabet"),
@@ -1242,18 +1253,19 @@ class BrowserAcceptance:
             "anonyme Anmeldung nach dem A/W-Vorschlagstest fehlt",
         )
 
-    def run(self) -> None:
+    def run(self, auth_recovery_only: bool = False) -> None:
         self.cdp.call("Page.enable")
         self.cdp.call("Runtime.enable")
         self.cdp.call("Network.enable")
         self.cdp.navigate(self.config.base_url + "/")
+        total_steps = 5 if auth_recovery_only else 12
 
-        print("[1/9] Anonyme Übersicht, Bestandslogin und gesperrte Module")
+        print(f"[1/{total_steps}] Anonyme Übersicht, Bestandslogin und gesperrte Module")
         self._assert_anonymous_overview()
         self._assert_protected_cards()
         self._assert_root_card_layout("anonyme Übersicht bei 1440 px")
 
-        print("[2/9] Bestehenden Konto-Flow über das Frameset öffnen")
+        print(f"[2/{total_steps}] Bestehenden Konto-Flow über das Frameset öffnen")
         self.cdp.click(None, "#estab-login", "Button für ein bestehendes Konto")
         self._wait_for_frame("mainframe")
         self.cdp.wait_for(
@@ -1273,7 +1285,260 @@ class BrowserAcceptance:
         )
 
         self.cdp.navigate(self.config.base_url + "/")
-        print("[3/9] Gesperrte ETB-Karte mit erhaltenem Anmeldeziel öffnen")
+        print(
+            f"[3/{total_steps}] Direkten ETB-Aufruf und sicheren "
+            "Login-Abbruch prüfen"
+        )
+        navigation = self.cdp.call(
+            "Page.navigate",
+            {"url": self.config.base_url + "/stabetb/etb.php"},
+        )
+        if navigation.get("errorText"):
+            raise TestFailure(
+                "Chrome konnte den direkten ETB-Aufruf nicht starten."
+            )
+        self.cdp.wait_for(
+            """
+            document.readyState === "complete" &&
+            location.pathname.endsWith("/4fach/index.php") &&
+            new URLSearchParams(location.search).get("login_flow") ===
+                "existing" &&
+            new URLSearchParams(location.search).get("next") === "incident-log"
+            """,
+            "direkter ETB-Aufruf wurde nicht zum Bestandslogin umgeleitet",
+        )
+        self._wait_for_frame("mainframe")
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                const query = new target.URLSearchParams(target.location.search);
+                return query.get("login_flow") === "existing" &&
+                    query.get("next") === "incident-log" &&
+                    Boolean(doc.querySelector("#estab-login-name")) &&
+                    Boolean(doc.querySelector("[data-estab-auth-cancel]")) &&
+                    Boolean(doc.querySelector(
+                        '[data-estab-login-destination] strong'
+                    ));
+                """,
+            ),
+            "direkter ETB-Aufruf zeigt keinen vollständigen, verlassbaren Login",
+        )
+        self.cdp.click(
+            "mainframe",
+            "[data-estab-auth-cancel]",
+            "Anmeldung abbrechen und zur Übersicht zurückkehren",
+        )
+        self._wait_for_top_level_path(
+            "/",
+            "Abbruch der Anmeldung führte nicht zur Übersicht",
+        )
+        self._assert_anonymous_overview()
+
+        print(
+            f"[4/{total_steps}] Abgelaufene Nachrichten-Navigation und "
+            "-Eingabe sicher auffangen"
+        )
+        operational_navigation = self.cdp.call(
+            "Page.navigate",
+            {
+                "url": self.config.base_url
+                + "/4fach/mainindex.php?filter_anzahl_x=1&filter_anzahl=10"
+            },
+        )
+        if operational_navigation.get("errorText"):
+            raise TestFailure(
+                "Chrome konnte die abgelaufene Nachrichten-Navigation "
+                "nicht starten."
+            )
+        self.cdp.wait_for(
+            """
+            document.readyState === "complete" &&
+            location.pathname.endsWith("/4fach/mainindex.php") &&
+            (() => {
+                const query = new URLSearchParams(location.search);
+                return query.size === 2 &&
+                    query.get("login_flow") === "existing" &&
+                    query.get("next") === "messages";
+            })() &&
+            document.forms.length > 0 &&
+            Array.from(document.forms).every(
+                form => form.target === "_self"
+            ) &&
+            !document.querySelector('form[target="mainframe"]') &&
+            Boolean(document.querySelector("[data-estab-auth-cancel]")) &&
+            !document.body.innerText.includes("Aktion nicht erlaubt")
+            """,
+            "abgelaufene Nachrichten-Navigation führte nicht zum "
+            "verlassbaren Login ohne alte Filterwerte",
+        )
+        self.cdp.click(
+            None,
+            "[data-estab-auth-cancel]",
+            "abgelaufene Nachrichten-Navigation abbrechen",
+        )
+        self._wait_for_top_level_path(
+            "/",
+            "abgebrochene Nachrichten-Navigation führte nicht zur Übersicht",
+        )
+        self._assert_anonymous_overview()
+
+        expired_action = json.dumps(
+            self.config.base_url + "/4fach/mainindex.php"
+        )
+        self._truth(
+            self.cdp.evaluate(
+                f"""
+                (() => {{
+                    const form = document.createElement("form");
+                    form.method = "post";
+                    form.action = {expired_action};
+                    const task = document.createElement("input");
+                    task.name = "task";
+                    task.value = "Stab_schreiben";
+                    form.append(task);
+                    const content = document.createElement("input");
+                    content.name = "12_inhalt";
+                    content.value = "BROWSER_EXPIRED_POST_MUST_NOT_RUN";
+                    form.append(content);
+                    document.body.append(form);
+                    setTimeout(() => form.submit(), 0);
+                    return true;
+                }})()
+                """
+            ),
+            "abgelaufenes Nachrichtenformular konnte nicht simuliert werden",
+        )
+        self.cdp.wait_for(
+            """
+            document.readyState === "complete" &&
+            location.pathname.endsWith("/4fach/mainindex.php") &&
+            new URLSearchParams(location.search).get("login_flow") ===
+                "existing" &&
+            new URLSearchParams(location.search).get("next") === "messages" &&
+            new URLSearchParams(location.search).get("interrupted") === "1" &&
+            Boolean(document.querySelector(
+                "[data-estab-submission-discarded]"
+            )) &&
+            Boolean(document.querySelector("[data-estab-auth-cancel]")) &&
+            document.forms.length > 0 &&
+            Array.from(document.forms).every(
+                form => form.target === "_self"
+            ) &&
+            !document.querySelector('form[target="mainframe"]')
+            """,
+            "abgelaufenes Nachrichtenformular führte nicht zum "
+            "verständlichen Login",
+        )
+        self.cdp.click(
+            None,
+            "[data-estab-auth-cancel]",
+            "unterbrochene Nachrichtenanmeldung abbrechen",
+        )
+        self._wait_for_top_level_path(
+            "/",
+            "unterbrochene Nachrichtenanmeldung verließ den Login nicht",
+        )
+        self._assert_anonymous_overview()
+
+        print(
+            f"[5/{total_steps}] Wiederanmeldung aus Anhang und Kategorie "
+            "ohne verschachtelten Arbeitsbereich"
+        )
+        for protected_path, description in (
+            ("4fach/anhang.php", "Anhang"),
+            (
+                "4fach/katgoedt.php?dbtyp=fkt&msgno=1",
+                "Kategorieverwaltung",
+            ),
+        ):
+            self.cdp.navigate(
+                self.config.base_url
+                + "/4fach/index.php?login_flow=existing"
+            )
+            self._wait_for_frame("mainframe")
+            protected_url = json.dumps(
+                self.config.base_url + "/" + protected_path
+            )
+            self._truth(
+                self.cdp.evaluate(
+                    f"""
+                    new Promise((resolve, reject) => {{
+                        const frame = document.querySelector(
+                            'iframe[name="mainframe"]'
+                        );
+                        if (!frame) {{
+                            reject(new Error("mainframe fehlt"));
+                            return;
+                        }}
+                        const timer = setTimeout(
+                            () => reject(new Error("Frame-Navigation Timeout")),
+                            15000
+                        );
+                        frame.addEventListener("load", () => {{
+                            clearTimeout(timer);
+                            resolve(true);
+                        }}, {{once: true}});
+                        frame.src = {protected_url};
+                    }})
+                    """
+                ),
+                f"{description}-Navigation im Inhaltsframe wurde nicht geladen",
+            )
+            self.cdp.wait_for(
+                """
+                document.readyState === "complete" &&
+                location.pathname.endsWith("/4fach/index.php") &&
+                document.querySelectorAll("iframe").length === 2 &&
+                Boolean(document.querySelector('iframe[name="vorgaben"]')) &&
+                Boolean(document.querySelector('iframe[name="mainframe"]'))
+                """,
+                f"{description}-Login veränderte den äußeren Arbeitsbereich",
+            )
+            self.cdp.wait_for(
+                _frame_expression(
+                    "mainframe",
+                    """
+                    const query = new target.URLSearchParams(
+                        target.location.search
+                    );
+                    const forms = Array.from(doc.forms);
+                    const cancel = doc.querySelector(
+                        "[data-estab-auth-cancel]"
+                    );
+                    return doc.readyState === "complete" &&
+                        target.location.pathname.endsWith(
+                            "/4fach/mainindex.php"
+                        ) &&
+                        query.size === 2 &&
+                        query.get("login_flow") === "existing" &&
+                        query.get("next") === "messages" &&
+                        doc.querySelectorAll("iframe").length === 0 &&
+                        forms.length > 0 &&
+                        forms.every(form => form.target === "_self") &&
+                        !doc.querySelector('form[target="mainframe"]') &&
+                        Boolean(cancel) &&
+                        cancel.target === "_top";
+                    """,
+                ),
+                f"{description} zeigte keinen frame-sicheren "
+                "Bestandslogin",
+            )
+            self.cdp.click(
+                "mainframe",
+                "[data-estab-auth-cancel]",
+                f"{description}-Wiederanmeldung abbrechen",
+            )
+            self._wait_for_top_level_path(
+                "/",
+                f"{description}-Anmeldeabbruch führte nicht zur Übersicht",
+            )
+            self._assert_anonymous_overview()
+
+        if auth_recovery_only:
+            return
+
+        print("[6/12] Gesperrte ETB-Karte mit erhaltenem Anmeldeziel öffnen")
         self.cdp.click(
             None,
             'a.estab-menu-link[data-estab-nav-key="incident-log"]',
@@ -1283,6 +1548,8 @@ class BrowserAcceptance:
             """
             document.readyState === "complete" &&
             location.pathname.endsWith("/4fach/index.php") &&
+            new URLSearchParams(location.search).get("login_flow") ===
+                "existing" &&
             new URLSearchParams(location.search).get("next") === "incident-log"
             """,
             "ETB-Karte hat das angeforderte Anmeldeziel nicht geöffnet",
@@ -1293,42 +1560,17 @@ class BrowserAcceptance:
                 "mainframe",
                 """
                 const query = new target.URLSearchParams(target.location.search);
-                const existing = doc.querySelector(
-                    'button[name="login_flow"][value="existing"]'
-                );
                 return target.location.pathname.endsWith("/4fach/mainindex.php") &&
+                    query.get("login_flow") === "existing" &&
                     query.get("next") === "incident-log" &&
-                    Boolean(existing) &&
+                    Boolean(doc.querySelector("#estab-login-name")) &&
                     !doc.querySelector('button[name="login_flow"][value="new"]');
-                """,
-            ),
-            "Anmeldeauswahl hat das angeforderte ETB-Ziel nicht übernommen",
-        )
-        self.cdp.click(
-            "mainframe",
-            'button[name="login_flow"][value="existing"]',
-            "Bestandskonto für das angeforderte ETB anmelden",
-        )
-        self.cdp.wait_for(
-            _frame_expression(
-                "mainframe",
-                """
-                const destination = doc.querySelector(
-                    'input[name="next"][value="incident-log"]'
-                );
-                return Array.from(doc.querySelectorAll("h1, h2")).some(
-                    heading => heading.innerText.includes(
-                        "Mit bestehendem Konto anmelden"
-                    )
-                ) && Boolean(destination) && new target.URLSearchParams(
-                    target.top.location.search
-                ).get("next") === "incident-log";
                 """,
             ),
             "Bestandskonto-Formular mit erhaltenem ETB-Ziel fehlt",
         )
 
-        print("[4/9] Provisioniertes Konto anmelden und Einsatztagebuch öffnen")
+        print("[7/12] Provisioniertes Konto anmelden und Einsatztagebuch öffnen")
         self.cdp.set_value(
             "mainframe", 'input[name="benutzer"]', self.config.login_name, "Benutzername"
         )
@@ -1395,7 +1637,7 @@ class BrowserAcceptance:
         )
         self._wait_for_authenticated_frames()
 
-        print("[5/9] Ungespeicherte fachliche Eingaben schützen den Bereichswechsel")
+        print("[8/12] Ungespeicherte fachliche Eingaben schützen den Bereichswechsel")
         self._equal(
             self.cdp.evaluate(
                 _visible_count_expression("mainframe", "aside[data-estab-session-bar]")
@@ -1462,7 +1704,7 @@ class BrowserAcceptance:
             "angemeldete Übersicht wurde nach bestätigtem Bereichswechsel nicht geöffnet"
         )
 
-        print("[6/9] Navigation über Übersicht, BOS und Einsatztagebuch")
+        print("[9/12] Navigation über Übersicht, BOS und Einsatztagebuch")
         self._click_root_card(
             "stabinfo/index.php",
             "Root-Karte für die Infosammlung BOS",
@@ -1610,7 +1852,7 @@ class BrowserAcceptance:
                 "ohne Admin-Testzugangsdaten"
             )
 
-        print("[7/9] Logout aus dem Einsatztagebuch und Rückkehr in den anonymen Zustand")
+        print("[10/12] Logout aus dem Einsatztagebuch und Rückkehr in den anonymen Zustand")
         self.cdp.click(
             None,
             "[data-estab-logout-form] button",
@@ -1638,7 +1880,7 @@ class BrowserAcceptance:
         self._assert_anonymous_overview()
         self._assert_protected_cards()
 
-        print("[8/9] Kartenraster in Desktop-, Zwischen- und Schmalansicht")
+        print("[11/12] Kartenraster in Desktop-, Zwischen- und Schmalansicht")
         for width in (1120, 800, 700, 672):
             self.cdp.call(
                 "Emulation.setDeviceMetricsOverride",
@@ -1670,7 +1912,7 @@ class BrowserAcceptance:
         self._assert_narrow_overview()
         self._assert_root_card_layout("anonyme Übersicht bei 390 px")
 
-        print("[9/9] Adminübersicht, Exportverwaltung und Matrix-Bestätigungen")
+        print("[12/12] Adminübersicht, Exportverwaltung und Matrix-Bestätigungen")
         if self.config.admin_user and self.config.admin_password:
             self._assert_export_management()
         else:
@@ -5469,7 +5711,7 @@ class BrowserAcceptance:
             if (
                 not card
                 or not str(card.get("href", "")).endswith(
-                    "/4fach/index.php?next=" + destination
+                    "/4fach/index.php?login_flow=existing&next=" + destination
                 )
                 or card.get("target") is not None
                 or card.get("badge") != "Anmeldung erforderlich"
@@ -5478,24 +5720,42 @@ class BrowserAcceptance:
                     "Mindestens eine anonyme Modulkarte besitzt keinen eindeutigen Anmeldeschutz."
                 )
 
-        paths_json = json.dumps(self.protected_paths)
+        redirects_json = json.dumps(
+            [
+                {
+                    "path": path,
+                    "destination": destination,
+                    "loginPath": login_path,
+                }
+                for path, destination, login_path in self.protected_redirects
+            ]
+        )
         results = self.cdp.evaluate(
             f"""
             (async () => {{
-                const paths = {paths_json};
-                return Promise.all(paths.map(async path => {{
-                    let status = 0;
+                const redirects = {redirects_json};
+                return Promise.all(redirects.map(async expected => {{
                     try {{
-                        const response = await fetch(new URL(path, location.href), {{
+                        const response = await fetch(
+                            new URL(expected.path, location.href),
+                            {{
                             credentials: "same-origin",
-                            redirect: "manual",
+                            redirect: "follow",
                             cache: "no-store"
-                        }});
-                        status = response.status;
+                            }}
+                        );
+                        const finalUrl = new URL(response.url);
+                        return {{
+                            ...expected,
+                            status: response.status,
+                            redirected: response.redirected,
+                            pathname: finalUrl.pathname,
+                            flow: finalUrl.searchParams.get("login_flow"),
+                            actualDestination: finalUrl.searchParams.get("next")
+                        }};
                     }} catch (_error) {{
-                        status = -1;
+                        return {{...expected, status: -1}};
                     }}
-                    return {{path, status}};
                 }}));
             }})()
             """
@@ -5505,11 +5765,21 @@ class BrowserAcceptance:
         failures = [
             result.get("path", "unbekannt")
             for result in results
-            if result.get("status") != 403
+            if (
+                result.get("status") != 200
+                or result.get("redirected") is not True
+                or not str(result.get("pathname", "")).endswith(
+                    "/" + str(result.get("loginPath", ""))
+                )
+                or result.get("flow") != "existing"
+                or result.get("actualDestination")
+                    != result.get("destination")
+            )
         ]
         if failures:
             raise TestFailure(
-                "Direkte anonyme Modulzugriffe sind nicht vollständig mit HTTP 403 gesperrt: "
+                "Direkte anonyme Modulzugriffe führen nicht vollständig zum "
+                "sicheren Bestandslogin: "
                 + ", ".join(failures)
             )
 
@@ -5907,6 +6177,14 @@ def parse_arguments() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--auth-recovery-only",
+        action="store_true",
+        help=(
+            "nur sichere Direktaufrufe, Login-Abbruch und die "
+            "Wiederanmeldung nach einem verworfenen Formular prüfen"
+        ),
+    )
+    parser.add_argument(
         "--export-only",
         action="store_true",
         help=(
@@ -5945,19 +6223,22 @@ def main() -> int:
         if sum(
             (
                 arguments.overview_only,
+                arguments.auth_recovery_only,
                 arguments.export_only,
                 arguments.bos_only,
                 arguments.message_suggestions,
             )
         ) > 1:
             raise TestFailure(
-                "--overview-only, --export-only, --bos-only und "
+                "--overview-only, --auth-recovery-only, --export-only, "
+                "--bos-only und "
                 "--message-suggestions "
                 "können nicht kombiniert werden."
             )
         config = TestConfig.from_environment(
             require_login_password=not (
                 arguments.overview_only
+                or arguments.auth_recovery_only
                 or arguments.export_only
                 or arguments.bos_only
             )
@@ -5971,6 +6252,8 @@ def main() -> int:
         acceptance = BrowserAcceptance(cdp, config)
         if arguments.overview_only:
             acceptance.run_overview()
+        elif arguments.auth_recovery_only:
+            acceptance.run(auth_recovery_only=True)
         elif arguments.bos_only:
             acceptance.run_bos()
         elif arguments.message_suggestions:

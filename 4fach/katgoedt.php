@@ -18,6 +18,7 @@ require_once __DIR__ . '/../app/csrf.php';
 require_once __DIR__ . '/../app/session_ui.php';
 require_once __DIR__ . '/../app/category.php';
 require_once __DIR__ . '/../app/message_repository.php';
+require_once __DIR__ . '/../app/navigation.php';
 require_once __DIR__ . '/../app/read_authorization.php';
 require_once __DIR__ . '/../4fcfg/config.inc.php';
 require_once __DIR__ . '/../4fcfg/dbcfg.inc.php';
@@ -28,7 +29,22 @@ header('X-Content-Type-Options: nosniff');
 
 $identity = estab_auth_session_identity($_SESSION);
 if ($identity === null) {
-    estab_workflow_forbid();
+    estab_navigation_require_session(
+        $_SESSION,
+        'messages',
+        $_SERVER,
+        true
+    );
+    throw new LogicException('Authenticated category identity missing');
+}
+$categoryReadIdentity = estab_read_session_identity($_SESSION);
+if (
+    !is_array($categoryReadIdentity)
+    || estab_read_duty_assignment_id(
+        $categoryReadIdentity['duty_assignment_id'] ?? null
+    ) === null
+) {
+    estab_navigation_select_duty($_SERVER);
 }
 estab_session_ui_start($_SESSION, false, true);
 

@@ -4,10 +4,15 @@ require_once __DIR__ . '/../app/navigation.php';
 
 $loginFlow = null;
 $loginDestination = null;
+$loginInterrupted = false;
 foreach (array_keys($_GET) as $requestKey) {
    if (
       !is_string($requestKey)
-      || !in_array($requestKey, ['login_flow', 'next'], true)
+      || !in_array(
+         $requestKey,
+         ['login_flow', 'next', 'interrupted'],
+         true
+      )
    ) {
       http_response_code(400);
       header('Content-Type: text/plain; charset=UTF-8');
@@ -39,6 +44,15 @@ if (array_key_exists('next', $_GET)) {
       exit;
    }
 }
+if (array_key_exists('interrupted', $_GET)) {
+   if (!is_string($_GET['interrupted']) || $_GET['interrupted'] !== '1') {
+      http_response_code(400);
+      header('Content-Type: text/plain; charset=UTF-8');
+      echo 'Ungültiger Anmeldehinweis.';
+      exit;
+   }
+   $loginInterrupted = true;
+}
 
 session_start();
 $mainFrameQuery = [];
@@ -47,6 +61,9 @@ if ($loginFlow !== null) {
 }
 if ($loginDestination !== null) {
    $mainFrameQuery['next'] = $loginDestination;
+}
+if ($loginInterrupted) {
+   $mainFrameQuery['interrupted'] = '1';
 }
 $mainFrameUrl = './mainindex.php'
    . ($mainFrameQuery === [] ? '' : '?' . http_build_query($mainFrameQuery));

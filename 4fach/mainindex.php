@@ -61,6 +61,41 @@ $_SESSION += array (
 $workflowIdentity = estab_auth_session_identity ($_SESSION);
 if ($workflowIdentity === null) {
   if (!estab_workflow_public_login_request ($_SERVER, $_GET, $_POST)) {
+    if (
+      estab_workflow_anonymous_operational_get (
+        $_SERVER,
+        $_GET,
+        $_POST
+      )
+    ) {
+      header ("Cache-Control: no-store");
+      header ("Vary: Cookie");
+      header (
+        "Location: ".estab_navigation_login_content_url ("messages"),
+        true,
+        303
+      );
+      exit;
+    }
+    if (
+      estab_workflow_anonymous_operational_post (
+        $_SERVER,
+        $_GET,
+        $_POST
+      )
+    ) {
+      header ("Cache-Control: no-store");
+      header ("Vary: Cookie, Sec-Fetch-Site");
+      header (
+        "Location: ".estab_navigation_login_content_url (
+          "messages",
+          true
+        ),
+        true,
+        303
+      );
+      exit;
+    }
     estab_workflow_forbid ();
   }
   if (
@@ -645,6 +680,9 @@ ANTWORT % WEITERLEITUNG
   $loginData = $requestMethod === "POST" ? $_POST : array ();
   $loginFlowRequest = $loginData;
   $loginDestination = null;
+  $loginInterrupted =
+    $requestMethod === "GET"
+    && ($_GET ["interrupted"] ?? null) === "1";
   if ($requestMethod === "GET") {
     $loginFlowRequest = array_key_exists ("login_flow", $_GET)
       ? array ("login_flow" => $_GET ["login_flow"])
@@ -1488,6 +1526,28 @@ Nachricht als Sichtung anzeigen
          estab_auth_html ($conf_4f ["Titelkurz"].$conf_4f ["SubTitel"]["env"]).
          "</strong><br>Version ".estab_auth_html ($conf_4f ["Version"]).
          " · ".estab_auth_html ($conf_4f ["Stelle"])."</p>\n";
+    echo "<p class=\"estab-auth-exit\"><a class=\"estab-button\" ".
+         "data-estab-auth-cancel href=\"".
+         estab_auth_html (estab_application_root ()).
+         "\" target=\"_top\">Anmeldung abbrechen · Zur Übersicht</a></p>\n";
+    if ($loginInterrupted) {
+      echo "<div class=\"estab-auth-error\" ".
+           "data-estab-submission-discarded role=\"status\">".
+           "<strong>Ihre Sitzung war nicht mehr gültig.</strong> ".
+           "Die Eingabe wurde nicht gespeichert. Melden Sie sich erneut an ".
+           "und erfassen Sie die Eingabe danach noch einmal.</div>\n";
+    }
+    if ($loginDestination !== null) {
+      $loginDestinationItem = estab_navigation_item_for_key (
+        $loginDestination
+      );
+      if (is_array ($loginDestinationItem)) {
+        echo "<p class=\"estab-auth-note\" data-estab-login-destination>".
+             "Nach erfolgreicher Anmeldung öffnen wir: <strong>".
+             estab_auth_html ($loginDestinationItem ["label"]).
+             "</strong>.</p>\n";
+      }
+    }
 
     if ($loginError !== "") {
       echo "<div class=\"estab-auth-error\" role=\"alert\" tabindex=\"-1\" autofocus>".
@@ -1498,13 +1558,13 @@ Nachricht als Sichtung anzeigen
       echo "<h2>Wie möchten Sie fortfahren?</h2>\n";
       echo "<p class=\"estab-auth-help\">Wählen Sie, ob Sie sich mit einem bestehenden Funktionskonto anmelden oder ein neues Funktionskonto erstellen.</p>\n";
       echo "<div class=\"estab-auth-actions\">\n";
-      echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"mainframe\">\n";
+      echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"_self\">\n";
       echo estab_csrf_field ()."\n";
       echo $loginDestinationField."\n";
       echo "<button class=\"estab-button estab-button-primary\" type=\"submit\" name=\"login_flow\" value=\"existing\">Mit bestehendem Konto anmelden</button>\n";
       echo "</form>\n";
       if ($registrationAllowed) {
-        echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"mainframe\">\n";
+        echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"_self\">\n";
         echo estab_csrf_field ()."\n";
         echo $loginDestinationField."\n";
         echo "<button class=\"estab-button\" type=\"submit\" name=\"login_flow\" value=\"new\">Neues Konto anlegen</button>\n";
@@ -1522,7 +1582,7 @@ Nachricht als Sichtung anzeigen
       if ($loginError === "") {
         echo "<p class=\"estab-auth-error\" role=\"alert\" tabindex=\"-1\" autofocus>Neue Konten können hier nicht erstellt werden. Die zuständige Stelle legt sie unter Administration → Benutzerverwaltung an.</p>\n";
       }
-      echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"mainframe\">\n";
+      echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"_self\">\n";
       echo estab_csrf_field ()."\n";
       echo $loginDestinationField."\n";
       echo "<button class=\"estab-button\" type=\"submit\" name=\"login\" value=\"Anmelden\">Zurück zur Auswahl</button>\n";
@@ -1546,7 +1606,7 @@ Nachricht als Sichtung anzeigen
 
       echo "<h2>".$formTitle."</h2>\n";
       echo "<p class=\"estab-auth-help\">".$formHelp."</p>\n";
-      echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"mainframe\">\n";
+      echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"_self\">\n";
       echo "<fieldset class=\"estab-auth-form\">\n";
       echo "<legend>Zugangsdaten</legend>\n";
       echo estab_csrf_field ()."\n";
@@ -1583,7 +1643,7 @@ Nachricht als Sichtung anzeigen
       echo "</div>\n";
       echo "</fieldset>\n";
       echo "</form>\n";
-      echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"mainframe\">\n";
+      echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"_self\">\n";
       echo estab_csrf_field ()."\n";
       echo $loginDestinationField."\n";
       echo "<button class=\"estab-button\" type=\"submit\" name=\"login\" value=\"Anmelden\">Andere Kontoaktion wählen</button>\n";

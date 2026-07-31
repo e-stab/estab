@@ -414,6 +414,30 @@ Kennzeichnung „Anmeldung erforderlich“ und führen zum Anmeldeeinstieg statt
 auf eine 403-Fehlerseite. Nach einer erfolgreichen Anmeldung wird der zuvor
 gewählte geschützte Bereich direkt geöffnet. Die Auswahl bleibt pro
 Browser-Tab erhalten; parallele Anmeldefenster überschreiben ihr Ziel nicht.
+Direkte GET-/HEAD-Aufrufe einer Fachseite, abgelaufene Download-Tabs und
+Browserformular-POSTs mit abgelaufener Sitzung antworten mit HTTP 303 und
+öffnen denselben Bestandslogin mit einem serverseitig erlaubten
+Zielschlüssel. In einem Frame erkennt die Anwendung den Kontext über
+`Sec-Fetch-Dest` und öffnet unmittelbar das Content-Login. Anhangs- und
+Kategorieansicht tun dies als intrinsische `mainframe`-Controller auch bei
+älteren Browsern ohne diesen Header; so erscheint im rechten Inhaltsbereich
+kein zweiter, verschachtelter Arbeitsbereich. Ein nicht verarbeitetes Formular
+wird dabei nicht erneut gesendet; die Anmeldekarte meldet ausdrücklich „Die
+Eingabe wurde nicht gespeichert“ und fordert zur erneuten Erfassung nach dem
+Login auf. Abgelaufene operative Filter-/Navigationsparameter des
+Nachrichtencontrollers werden ebenso verworfen und führen nur zum erlaubten
+Ziel `messages`. GET-Querys mit Zugangsdaten oder Login-Metadaten werden nicht
+als Wiederherstellung akzeptiert, sondern weiterhin hart abgewiesen.
+
+Alle Loginformulare bleiben mit `target="_self"` im gerade sichtbaren
+Browserkontext. Die Anmeldekarte zeigt das Ziel und hat mit „Anmeldung
+abbrechen · Zur Übersicht“ stets einen Top-Level-Ausgang; weder ein
+eingebettetes Login noch ein direkt geöffneter Tab erfordern eine manuelle
+Änderung der Browseradresse. Ist das Konto bereits angemeldet, aber noch keine
+persönliche Dienstfunktion ausgewählt, führt ein GET/HEAD per HTTP 303
+stattdessen zum Führungsstellenbetrieb; ein Schreibversuch bleibt HTTP 403.
+Rollen-, Objekt-, CSRF-, Polling- und Subresource-Anfragen werden nicht
+umgelenkt und behalten ihre 403-Grenzen.
 Übersicht und BOS-Info bleiben öffentlich; die Administration ist als
 separater technischer Zugang markiert.
 
@@ -423,7 +447,9 @@ ausgewählten eigenständigen HTML-Modulen die Sitzungsleiste. Sie nennt Name,
 Kürzel, Funktion und Rolle, damit vor jeder fachlichen Aktion sichtbar ist, in
 welchem Kontext gearbeitet wird. Der Button „Abmelden“ sendet einen
 CSRF-geschützten POST, beendet die gesamte eStab-Browsersitzung und führt mit
-HTTP 303 zum Anmeldeeinstieg zurück. Mehrere Tabs teilen sich dieselbe
+HTTP 303 zum Anmeldeeinstieg zurück. Ist die lokale Sitzung bereits
+abgelaufen, räumt derselbe Button den lokalen Sitzungsrest idempotent auf und
+führt zur öffentlichen Übersicht. Mehrere Tabs teilen sich dieselbe
 Browsersitzung und sind danach gemeinsam abgemeldet. Direkt geöffnete
 Fachseiten zeigen die Leiste selbst; im Nachrichtenarbeitsbereich befindet sich
 die einzige sichtbare Identität in der Sidebar. Die früheren eigenständigen

@@ -364,7 +364,29 @@ und führen zum Anmeldeeinstieg statt auf eine HTTP-403-Seite. Der dort
 ausgewählte Bereich wird als fester, serverseitig erlaubter Schlüssel
 in jedem Formular des jeweiligen Browser-Tabs beibehalten und nach
 erfolgreicher Anmeldung direkt geöffnet. Freie Rücksprung-URLs werden nicht
-akzeptiert. Die Administration ist als eigener technischer Zugang markiert.
+akzeptiert. Auch direkt aufgerufene oder als Lesezeichen gespeicherte
+Fachseiten sowie ein in einem neuen Tab geöffneter Download führen bei
+fehlender Sitzung mit HTTP 303 in genau diesen Bestandslogin. Die
+Weiterleitung berücksichtigt den Browserkontext: `Sec-Fetch-Dest` führt
+eingebettete Aufrufe direkt in das Content-Login; die ausschließlich für den
+rechten `mainframe` bestimmten Anhangs- und Kategoriecontroller verwenden
+diesen Einstieg auch ohne den Header. Dadurch kann sich der komplette
+Zwei-Frame-Arbeitsbereich nicht in seinem eigenen Inhaltsframe verschachteln.
+Die Anmeldeformulare bleiben mit `target="_self"` im aktuellen Kontext. Die
+Anmeldekarte nennt das vorgemerkte Ziel und bietet immer
+„Anmeldung abbrechen · Zur Übersicht“; dieser Link verlässt auch aus einem
+Frame heraus den Arbeitsbereich auf Top-Level. Eine angemeldete Sitzung ohne
+ausgewählte Dienstfunktion wird direkt zum Führungsstellenbetrieb geleitet.
+Auch ein Browserformular, dessen Sitzung inzwischen abgelaufen ist, führt per
+HTTP 303 zum Login; seine nicht verarbeiteten Eingaben werden dabei ausdrücklich
+nicht erneut gesendet. Der Login weist sichtbar darauf hin, dass die Eingabe
+nicht gespeichert wurde und erneut erfasst werden muss. Alte operative
+GET-Querys des Nachrichtencontrollers werden ebenfalls vollständig verworfen
+und führen ausschließlich zum erlaubten Ziel `messages`. Zugangsdaten oder
+Login-Metadaten in einer solchen GET-Query bleiben dagegen eine harte
+Ablehnung. Rollen-, Objekt-, CSRF-, Polling- und Bildendpunkte behalten ihre
+knappen 403-Sicherheitsgrenzen. Die Administration ist als eigener technischer
+Zugang markiert.
 
 Das gemeinsame Manifest enthält in stabiler Reihenfolge neun operative
 Bereiche: Übersicht, Nachrichtenvordruck, Führungsstellenbetrieb,

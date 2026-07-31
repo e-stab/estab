@@ -247,8 +247,8 @@ ensure_entry()
 # Authentication and an exact, personally accepted active function are
 # mandatory before logbook data is rendered. Only S2/ETB may write ETB and
 # only A/W may write TBB.
-assert_status 403 "$base_url/stabetb/etb.php"
-assert_status 403 "$base_url/fmtbb/tbb.php"
+assert_status 303 "$base_url/stabetb/etb.php"
+assert_status 303 "$base_url/fmtbb/tbb.php"
 
 sh "$repo_root/tests/integration/provision_user.sh" \
     "$s2_name" "$s2_code" S2 "$s2_password"

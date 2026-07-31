@@ -202,7 +202,7 @@ $destinationPublicMarkup = estab_session_ui_public_markup(
 $assert(
     str_contains(
         $destinationPublicMarkup,
-        'href="/4fach/index.php?next=incident-log"'
+        'href="/4fach/index.php?login_flow=existing&amp;next=incident-log"'
     )
         && str_contains(
             $destinationPublicMarkup,
@@ -226,7 +226,7 @@ $assert(
         )
         && str_contains(
             $publicSidebarMarkup,
-            'href="/4fach/index.php?next=incident-log"'
+            'href="/4fach/index.php?login_flow=existing&amp;next=incident-log"'
         )
         && substr_count(
             $publicSidebarMarkup,

@@ -698,6 +698,23 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
   gespeicherten Passwort-Hash,
 - formulargebundene Beibehaltung eines erlaubten geschützten Zielbereichs
   durch Auswahl, Validierungsfehler und erfolgreiche Anmeldung,
+- HTTP 303 für anonyme direkte GET-Aufrufe aller navigierbaren Fachseiten,
+  Download-Tabs und mindestens einen Browserformular-POST mit abgelaufener
+  Sitzung, jeweils mit explizitem Bestandslogin, exakt erwartetem
+  allowlist-gebundenem `next`-Schlüssel, leerem Fehlertext sowie einem
+  sichtbaren Rückweg zur Übersicht; ein POST-Inhalt wird nicht wiederholt,
+  `Sec-Fetch-Dest: iframe` wählt das Content-Login, die intrinsisch
+  mainframe-lokalen Anhangs- und Kategoriecontroller verwenden es auch ohne
+  den Header und erzeugen keinen verschachtelten Arbeitsbereich,
+  der frame-sichere Nachrichtenlogin zeigt den Verlust verständlich an und
+  ein eindeutiger Datenbankmarker bleibt nach einem abgelaufenen POST
+  unverändert,
+- vollständiges Verwerfen einer abgelaufenen operativen GET-Query am
+  Nachrichtencontroller und 303 ausschließlich zum erlaubten Ziel `messages`;
+  GET-Zugangsdaten und die Login-Metadaten `login_flow`, `next` und
+  `interrupted` bleiben harte Ablehnungen,
+- `target="_self"` auf allen Loginformularen sowie der Top-Level-Abbruch zur
+  öffentlichen Übersicht aus eigenständigem Dokument und `mainframe`,
 - exakt eine escaped Sitzungsleiste mit Name, Kürzel, Funktion, Rolle und
   Abmeldebutton auf Root-Einstieg, Hauptansicht, vollhoher Anwendungs-Sidebar,
   Meldungsübersicht, Nachweisung, Anhängen, Vordrucken, Kategorien sowie
@@ -705,9 +722,10 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
   persönlich angenommenen aktiven Dienstfunktion aufgerufen, der rechte
   `mainframe` vermeidet Duplikate und anonyme Fachseiten bleiben ohne
   vorgetäuschte eStab-Identität,
-- HTTP 403 für eine bloß angemeldete Sitzung ohne ausgewählten aktiven Hut
-  sowie für S1 auf Meldungsübersicht und Nachweisung; die positiven
-  Gegenproben verwenden S2 beziehungsweise LdF/A/W,
+- HTTP 303 zum Führungsstellenbetrieb für eine bloß angemeldete Sitzung ohne
+  ausgewählten aktiven Hut sowie weiterhin HTTP 403 für S1 auf
+  Meldungsübersicht und Nachweisung; die positiven Gegenproben verwenden S2
+  beziehungsweise LdF/A/W,
 - der eng begrenzte Pre-Hat-Führungsstellenpfad zeigt ausschließlich
   Einsatz-/Schichtgrunddaten und eigene Besetzungen und erlaubt nur
   persönliche Annahme, Übergabebestätigung und Auswahl einer eigenen aktiven,
@@ -877,8 +895,20 @@ im Zwei-`iframe`-Nachrichtenarbeitsbereich, füllt das Formular aus und prüft
 insbesondere:
 
 - Anonyme Nutzer sehen alle neun Bereiche in stabiler Reihenfolge, genau eine
-  aktive Markierung und sichere Anmeldeziele; direkte Zugriffe auf geschützte
-  Endpunkte bleiben mit HTTP 403 geschützt.
+  aktive Markierung und sichere Anmeldeziele; direkte Zugriffe auf
+  navigierbare Fachseiten und Download-Tabs landen per Redirect im
+  Bestandslogin mit exakt passendem, symbolischem Ziel. Der Test bricht diesen
+  Login über den sichtbaren Top-Level-Link ab und erreicht wieder die
+  öffentliche Übersicht. Zusätzlich sendet er ein operatives Formular ohne
+  gültige Sitzung ab, prüft den frame-sicheren Login samt Hinweis auf die
+  nicht gespeicherte Eingabe und verlässt ihn ebenfalls ohne manuelle
+  URL-Änderung. Eine abgelaufene operative GET-Query wird ohne Übernahme ihrer
+  Filterwerte zum erlaubten Ziel `messages` geleitet. Der echte Browser prüft
+  zudem intrinsische `mainframe`-Controller ohne verschachtelten
+  Zwei-Frame-Arbeitsbereich, `target="_self"` auf den Loginformularen und den
+  Top-Level-Abbruch aus dem Inhaltsframe. Zugangsdaten beziehungsweise
+  Login-Metadaten in GET sowie nichtinteraktive Schutzendpunkte bleiben HTTP
+  403.
 - Der Arbeitsbereich enthält in stabiler Reihenfolge ausschließlich die
   vollhohe `vorgaben`-Sidebar und den `mainframe`. Der gemeinsame Refresh
   verwendet die richtige Origin und keinen schema-relativen Doppel-Slash. In

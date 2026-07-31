@@ -21,6 +21,7 @@ include ("./upload_class.php");
 require_once __DIR__ . "/../app/attachment.php";
 require_once __DIR__ . "/../app/csrf.php";
 require_once __DIR__ . "/../app/file_access.php";
+require_once __DIR__ . "/../app/navigation.php";
 require_once __DIR__ . "/../app/read_authorization.php";
 require_once __DIR__ . "/../app/session_ui.php";
 require_once __DIR__ . "/../app/workflow.php";
@@ -458,13 +459,20 @@ class fileupload extends file_upload {
 if (session_status () === PHP_SESSION_NONE) {
   session_start ();
 }
+estab_navigation_require_session (
+  $_SESSION,
+  "messages",
+  $_SERVER,
+  true
+);
 $attachmentPageIdentity = estab_read_session_identity ($_SESSION);
-if (!is_array ($attachmentPageIdentity)) {
-  http_response_code (403);
-  header ("Content-Type: text/plain; charset=UTF-8");
-  header ("Cache-Control: no-store");
-  echo "Anmeldung erforderlich.";
-  exit;
+if (
+  !is_array ($attachmentPageIdentity)
+  || estab_read_duty_assignment_id (
+    $attachmentPageIdentity ["duty_assignment_id"] ?? null
+  ) === null
+) {
+  estab_navigation_select_duty ($_SERVER);
 }
 $attachmentPageConnection = null;
 try {

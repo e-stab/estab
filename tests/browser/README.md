@@ -11,7 +11,21 @@ Geprüft werden:
 - die anonyme Übersicht mit eindeutigem Bestandslogin, deaktivierter
   öffentlicher Kontoanlage und Verweis auf die Benutzerverwaltung;
 - die sichtbaren, anonym verständlich zum Login führenden Modulkarten sowie
-  HTTP 403 bei direkten Zugriffen auf geschützte Fachendpunkte;
+  die 303-Weiterleitung direkter Fachseiten und Download-Tabs zum
+  Bestandslogin mit exakt passendem, erlaubtem Zielschlüssel;
+- die Auswahl des Content-Logins über `Sec-Fetch-Dest` sowie dessen
+  headerunabhängige Verwendung durch intrinsisch mainframe-lokale Anhangs- und
+  Kategoriecontroller, ohne den Zwei-`iframe`-Arbeitsbereich in seinem rechten
+  Inhaltsframe zu verschachteln;
+- eine abgelaufene operative GET-Query, deren Werte vollständig verworfen
+  werden und die ausschließlich zum erlaubten Ziel `messages` führt, während
+  Zugangsdaten und Login-Metadaten in GET hart abgewiesen bleiben;
+- `target="_self"` auf allen Loginformularen;
+- den immer sichtbaren Abbruch der Anmeldung und die zuverlässige
+  Top-Level-Rückkehr zur öffentlichen Übersicht auch aus dem `mainframe`;
+- einen operativen Formular-POST ohne gültige Sitzung, den frame-sicheren
+  Bestandslogin, den sichtbaren Hinweis auf die nicht gespeicherte Eingabe
+  sowie dessen ebenfalls funktionierenden Abbruch zur Übersicht;
 - das Anmelden eines zuvor über die Benutzerverwaltungs-API provisionierten
   Funktionskontos, die anschließende Auswahl seiner persönlich angenommenen
   aktiven Dienstfunktion und erst danach den Einstieg in den
@@ -140,6 +154,22 @@ ESTAB_TEST_BASE_URL=http://127.0.0.1:8080 \
 python3 tests/browser/headless_ui.py --overview-only
 ```
 
+Die wiederherstellbaren Anmeldepfade lassen sich ebenfalls ohne Testkonto und
+ohne Änderung von Anwendungsdaten prüfen. Der Modus öffnet eine Fachseite
+direkt, bricht den Login zur Übersicht ab, verwirft eine alte operative
+Nachrichten-Query und sendet ein simuliertes Nachrichtenformular ohne gültige
+Sitzung ab. Danach öffnet er die intrinsisch mainframe-lokalen Anhangs- und
+Kategoriecontroller eingebettet. Erwartet werden das richtige Content-Login
+ohne verschachtelten Arbeitsbereich, ausschließlich das erlaubte Ziel
+`messages`, `target="_self"` auf allen Loginformularen, der Hinweis auf die
+nicht gespeicherte Eingabe und ein funktionierender Top-Level-Abbruch ohne
+manuelle Änderung der Browseradresse:
+
+```sh
+ESTAB_TEST_BASE_URL=http://127.0.0.1:8080 \
+python3 tests/browser/headless_ui.py --auth-recovery-only
+```
+
 Die öffentliche BOS-Infosammlung kann ebenfalls rein lesend geprüft werden.
 Dieser Lauf öffnet alle sieben Dokumente bei Desktop- und Mobilbreite und
 vergleicht jeweils den unveränderten Originaltext mit der einheitlich
@@ -186,7 +216,8 @@ python3 tests/browser/headless_ui.py
 
 Ohne eine der beiden Kennwortvariablen bricht der vollständige Lauf
 verständlich ab; ein zufälliges Kennwort könnte ein vorhandenes Konto nicht
-authentisieren. Die lesenden Modi `--overview-only` und `--bos-only` sowie der
+authentisieren. Die lesenden Modi `--overview-only`,
+`--auth-recovery-only` und `--bos-only` sowie der
 unabhängig authentisierte Modus `--export-only` benötigen kein
 Anwendungskennwort. `ESTAB_TEST_LOGIN_PASSWORD` hat Vorrang, falls beide
 Varianten gesetzt sind.

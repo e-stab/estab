@@ -286,6 +286,15 @@ assert_status() {
     fi
 }
 
+assert_header_fixed() {
+    expected=$1
+    if ! grep -Fqi -- "$expected" "$headers"; then
+        printf 'HTTP smoke: response headers do not contain %s\n' "$expected" >&2
+        sed -n '1,30p' "$headers" >&2
+        exit 1
+    fi
+}
+
 assert_body() {
     pattern=$1
     if ! grep -Fq -- "$pattern" "$body"; then
@@ -775,21 +784,39 @@ assert_status 200 "$base_url/doku/Handbuch_eStab.pdf"
 assert_status 403 "$base_url/app/bootstrap.php"
 assert_status 403 "$base_url/4fadm/make_conf.php?task=einsatz_ende"
 assert_status 403 "$base_url/4fdata/estab/evil.php"
-assert_status 403 "$base_url/4fach/anhang.php"
-assert_status 403 "$base_url/4fach/download.php?area=attachment&file=EL0001.txt"
 assert_status 403 "$base_url/4fach/showpic.php?file=EL0001.txt"
-assert_status 403 "$base_url/4fach/vordrucke.php"
 assert_status 403 "$base_url/4fach/counter.php"
 assert_status 403 "$base_url/4fach/status.php"
-assert_status 403 "$base_url/4fach/nachwea.php?nwalle=1"
-assert_status 403 "$base_url/4fueltg/ue_ltg.php"
-assert_status 403 "$base_url/stabetb/etb.php"
-assert_status 403 "$base_url/fmtbb/tbb.php"
+for protected_route in \
+    '4fach/fuehrungsstelle.php|command-post|index.php' \
+    '4fach/vordrucke.php|forms|index.php' \
+    '4fueltg/ue_ltg.php|message-overview|index.php' \
+    'stabetb/etb.php|incident-log|index.php' \
+    'fmtbb/tbb.php|technical-log|index.php' \
+    '4fach/nachwea.php?nwalle=1|tracking|index.php' \
+    '4fach/anhang.php|messages|mainindex.php' \
+    '4fach/katgoedt.php?dbtyp=fkt&msgno=1|messages|mainindex.php'
+do
+    route=${protected_route%%|*}
+    protected_target=${protected_route#*|}
+    destination=${protected_target%%|*}
+    login_document=${protected_target#*|}
+    assert_status 303 "$base_url/$route"
+    assert_header_fixed \
+        "Location: $expected_app_root/4fach/$login_document?login_flow=existing&next=$destination"
+    assert_body_absent 'Anmeldung erforderlich'
+done
+assert_status 303 \
+    "$base_url/4fach/download.php?area=attachment&file=EL0001.txt"
+assert_header_fixed \
+    "Location: $expected_app_root/4fach/index.php?login_flow=existing&next=messages"
+assert_body_absent 'Anmeldung erforderlich'
 assert_status 405 "$base_url/4fach/logout.php"
-assert_status 403 --request POST \
+assert_status 303 --request POST \
     --data-urlencode 'csrf_token=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
     --data-urlencode 'logout_action=logout' \
     "$base_url/4fach/logout.php"
+assert_header_fixed "Location: $expected_app_root/"
 assert_status 410 "$base_url/4fach/upload.php"
 assert_status 410 "$base_url/4fach/upload/upload.php"
 assert_status 401 "$base_url/4fadm/admin.php"
@@ -800,6 +827,8 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/mainindex.php?login_flow=existing"
 assert_body 'Mit bestehendem Konto anmelden'
 assert_body 'autocomplete="current-password"'
+assert_body 'data-estab-auth-cancel'
+assert_body '>Anmeldung abbrechen · Zur Übersicht</a>'
 
 # The legacy image button still enters the chooser for compatible clients.
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
@@ -831,7 +860,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode '2teskennwort=Yes' \
     "$base_url/4fach/mainindex.php"
 assert_body 'Neue Konten können hier nicht erstellt werden'
-assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 303 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/vordrucke.php"
 assert_account_count 0 "$disabled_registration_code"
 
@@ -990,7 +1019,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode '2teskennwort=No' \
     "$base_url/4fach/mainindex.php"
 assert_body 'stimmen nicht mit einem bestehenden Konto überein'
-assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 303 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/vordrucke.php"
 assert_account_count 0 "$unknown_existing_code"
 
@@ -1070,7 +1099,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode '2teskennwort=Yes' \
     "$base_url/4fach/mainindex.php"
 assert_body 'Neue Konten können hier nicht erstellt werden'
-assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+assert_status 303 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/vordrucke.php"
 assert_account_count 1 "$test_code"
 stored_password_after=$(account_password_hex "$test_code")
@@ -1091,7 +1120,7 @@ assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "funktion=$test_function" \
     --data-urlencode "kennwort1@$login_password_file" \
     "$base_url/4fach/mainindex.php"
-assert_status 403 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
+assert_status 303 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
 
 : > "$cookie_jar"
 assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
@@ -1102,7 +1131,7 @@ assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "funktion=$test_function" \
     --data-urlencode "kennwort1@$login_password_file" \
     "$base_url/4fach/mainindex.php"
-assert_status 403 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
+assert_status 303 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
 
 : > "$cookie_jar"
 assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
@@ -1115,7 +1144,7 @@ assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "kennwort2@$login_password_file" \
     --data-urlencode '2teskennwort=Yes' \
     "$base_url/4fach/mainindex.php"
-assert_status 403 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
+assert_status 303 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
 
 # A separately provisioned account keeps its administrative assignment across
 # logout; the login request can never repurpose the inactive row.
@@ -1351,6 +1380,7 @@ assert_status 423 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "event=$unselected_write_marker" \
     --data-urlencode 'comment=must not persist' \
     "$base_url/fmtbb/tbb.php"
+assert_body 'Wählen Sie vor dieser Eingabe eine persönlich angenommene Dienstfunktion aus.'
 unselected_write_after=$(
     printf "SELECT COUNT(*) FROM nv_tbb WHERE tbb_aktion = '%s';\n" \
         "$unselected_write_marker" |
@@ -1410,7 +1440,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode '2teskennwort=No' \
     "$base_url/4fach/mainindex.php"
 assert_body 'administrativ zugewiesene Funktion'
-assert_status 403 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
+assert_status 303 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
 legacy_assignment=$(account_assignment "$legacy_registration_code")
 if [ "$legacy_assignment" != "$(printf 'A/W\tFernmelder\t0')" ]; then
     printf 'HTTP smoke: inactive account changed its assignment on login: %s\n' \
@@ -1803,7 +1833,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode '2teskennwort=No' \
     "$base_url/4fach/mainindex.php"
 assert_body 'administrativ zugewiesene Funktion'
-assert_status 403 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
+assert_status 303 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
 assignment_after=$(account_assignment "$test_code")
 if [ "$assignment_after" != "$assignment_before" ]; then
     printf 'HTTP smoke: rejected function change modified stored assignment\n' >&2
@@ -1863,7 +1893,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode '2teskennwort=No' \
     "$base_url/4fach/mainindex.php"
 assert_body 'Name, Kürzel oder Kennwort stimmen nicht'
-assert_status 403 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
+assert_status 303 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
@@ -2545,7 +2575,7 @@ if ! grep -Eiq '^Location: .*4fach/index[.]php[[:space:]]*$' "$headers"; then
     sed -n '1,30p' "$headers" >&2
     exit 1
 fi
-assert_status 403 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
+assert_status 303 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
 assert_status 200 --cookie "$newer_cookie_jar" "$base_url/4fach/vordrucke.php"
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 if [ "$(account_assignment "$test_code")" != "$(printf '%s\t%s\t1' "$test_function" "$test_role")" ]; then
@@ -2563,8 +2593,10 @@ fi
 
 # A third browser now supersedes the still-active second browser. Unlike the
 # deliberately permitted stale logout above, its next protected data request
-# must validate the authoritative SID, fail with 403 and clear its local
-# workflow state. The third browser remains usable and can log out normally.
+# must validate the authoritative SID and clear its local workflow state. A
+# stale browser-form POST is discarded and sent to a frame-safe login instead
+# of leaving the user on a raw denial page. The third browser remains usable
+# and can log out normally.
 current_cookie_jar=$work_dir/current-cookies.txt
 assert_status 200 --cookie "$current_cookie_jar" --cookie-jar "$current_cookie_jar" \
     --request POST --data-urlencode 'login_flow=existing' \
@@ -2595,7 +2627,38 @@ if [ -z "$current_authenticated_session_id" ] ||
     exit 1
 fi
 
-assert_status 403 --cookie "$newer_cookie_jar" --cookie-jar "$newer_cookie_jar" \
+expired_message_marker="EXPIRED_MESSAGE_POST_MUST_NOT_PERSIST_$$"
+expired_message_before=$(
+    printf "SELECT COUNT(*) FROM nv_nachrichten WHERE \`12_inhalt\` = '%s';\n" \
+        "$expired_message_marker" | db_sql
+)
+assert_status 303 \
+    --cookie "$newer_cookie_jar" --cookie-jar "$newer_cookie_jar" \
+    --header 'Sec-Fetch-Site: same-origin' \
+    --request POST \
+    --data-urlencode 'task=Stab_schreiben' \
+    --data-urlencode "12_inhalt=$expired_message_marker" \
+    "$base_url/4fach/mainindex.php"
+assert_header_fixed \
+    "Location: $expected_app_root/4fach/mainindex.php?login_flow=existing&next=messages&interrupted=1"
+assert_body_absent 'Aktion nicht erlaubt'
+expired_message_after=$(
+    printf "SELECT COUNT(*) FROM nv_nachrichten WHERE \`12_inhalt\` = '%s';\n" \
+        "$expired_message_marker" | db_sql
+)
+if [ "$expired_message_after" != "$expired_message_before" ]; then
+    printf 'HTTP smoke: expired message POST mutated data: %s -> %s\n' \
+        "$expired_message_before" "$expired_message_after" >&2
+    exit 1
+fi
+assert_status 200 \
+    --cookie "$newer_cookie_jar" --cookie-jar "$newer_cookie_jar" \
+    "$base_url/4fach/mainindex.php?login_flow=existing&next=messages&interrupted=1"
+assert_body 'data-estab-submission-discarded'
+assert_body 'Die Eingabe wurde nicht gespeichert.'
+assert_body 'data-estab-auth-cancel'
+
+assert_status 303 --cookie "$newer_cookie_jar" --cookie-jar "$newer_cookie_jar" \
     "$base_url/4fach/vordrucke.php"
 assert_status 200 --cookie "$current_cookie_jar" --cookie-jar "$current_cookie_jar" \
     "$base_url/4fach/vordrucke.php"
@@ -2614,7 +2677,7 @@ assert_status 303 --cookie "$current_cookie_jar" --cookie-jar "$current_cookie_j
     --data-urlencode "csrf_token=$current_logout_csrf" \
     --data-urlencode 'logout_action=logout' \
     "$base_url/4fach/logout.php"
-assert_status 403 --cookie "$current_cookie_jar" "$base_url/4fach/vordrucke.php"
+assert_status 303 --cookie "$current_cookie_jar" "$base_url/4fach/vordrucke.php"
 if [ "$(account_assignment "$test_code")" != "$(printf '%s\t%s\t0' "$test_function" "$test_role")" ]; then
     printf 'HTTP smoke: current-session logout did not deactivate the account\n' >&2
     exit 1

@@ -31,10 +31,14 @@ $assert(
     )
         && estab_workflow_public_login_request(
             ['REQUEST_METHOD' => 'GET'],
-            ['login_flow' => 'existing', 'next' => 'tracking'],
+            [
+                'login_flow' => 'existing',
+                'next' => 'tracking',
+                'interrupted' => '1',
+            ],
             []
         ),
-    'validated post-login destination was rejected'
+    'validated post-login destination or interruption notice was rejected'
 );
 $assert(
     !estab_workflow_public_login_request(
@@ -51,8 +55,18 @@ $assert(
             ['REQUEST_METHOD' => 'GET'],
             ['next' => ['incident-log']],
             []
+        )
+        && !estab_workflow_public_login_request(
+            ['REQUEST_METHOD' => 'GET'],
+            ['interrupted' => '0'],
+            []
+        )
+        && !estab_workflow_public_login_request(
+            ['REQUEST_METHOD' => 'GET'],
+            ['interrupted' => ['1']],
+            []
         ),
-    'untrusted post-login destination was accepted'
+    'untrusted post-login destination or interruption notice was accepted'
 );
 $assert(
     estab_workflow_public_login_request(['REQUEST_METHOD' => 'POST'], [], ['login' => 'Anmelden']),
@@ -194,6 +208,89 @@ $assert(
     estab_workflow_login_credentials_present($credentials)
         && !estab_workflow_login_credentials_present(['login_flow' => 'existing']),
     'credential-bearing request detection is incorrect'
+);
+$assert(
+    estab_workflow_anonymous_operational_post(
+        [
+            'REQUEST_METHOD' => 'POST',
+            'HTTP_HOST' => 'estab.example',
+            'HTTP_SEC_FETCH_SITE' => 'same-origin',
+        ],
+        [],
+        ['task' => 'Stab_schreiben', '12_inhalt' => 'discarded']
+    )
+        && !estab_workflow_anonymous_operational_post(
+            [
+                'REQUEST_METHOD' => 'POST',
+                'HTTP_HOST' => 'estab.example',
+                'HTTP_SEC_FETCH_SITE' => 'cross-site',
+            ],
+            [],
+            ['task' => 'Stab_schreiben']
+        )
+        && !estab_workflow_anonymous_operational_post(
+            [
+                'REQUEST_METHOD' => 'POST',
+                'HTTP_HOST' => 'estab.example',
+                'HTTP_SEC_FETCH_SITE' => 'same-origin',
+            ],
+            [],
+            ['login_flow' => 'existing']
+        )
+        && !estab_workflow_anonymous_operational_post(
+            ['REQUEST_METHOD' => 'POST'],
+            ['task' => 'Stab_schreiben'],
+            ['task' => 'Stab_schreiben']
+        )
+        && !estab_workflow_anonymous_operational_post(
+            ['REQUEST_METHOD' => 'POST'],
+            [],
+            []
+        ),
+    'expired same-site operational form classification is unsafe'
+);
+$assert(
+    estab_workflow_anonymous_operational_get(
+        ['REQUEST_METHOD' => 'GET'],
+        ['filter_anzahl_x' => '1', 'filter_anzahl' => '10'],
+        []
+    )
+        && !estab_workflow_anonymous_operational_get(
+            ['REQUEST_METHOD' => 'GET'],
+            ['login_flow' => 'unknown'],
+            []
+        )
+        && !estab_workflow_anonymous_operational_get(
+            ['REQUEST_METHOD' => 'GET'],
+            ['next' => 'incident-log'],
+            []
+        )
+        && !estab_workflow_anonymous_operational_get(
+            ['REQUEST_METHOD' => 'GET'],
+            [
+                'benutzer' => 'Mustermann, Max',
+                'kuerzel' => 'mm',
+                'funktion' => 'S1',
+                'anmelden' => 'Anmelden',
+            ],
+            []
+        )
+        && !estab_workflow_anonymous_operational_get(
+            ['REQUEST_METHOD' => 'GET'],
+            ['csrf_token' => str_repeat('a', 64)],
+            []
+        )
+        && !estab_workflow_anonymous_operational_get(
+            ['REQUEST_METHOD' => 'GET'],
+            [],
+            []
+        )
+        && !estab_workflow_anonymous_operational_get(
+            ['REQUEST_METHOD' => 'POST'],
+            ['filter_anzahl_x' => '1'],
+            []
+        ),
+    'expired operational page-link classification is unsafe'
 );
 $legacyModeBefore = getenv('ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF');
 putenv('ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF=false');
@@ -633,11 +730,33 @@ $assert(
 );
 
 $mainController = file_get_contents(dirname(__DIR__, 2) . '/4fach/mainindex.php');
+$messageTools = file_get_contents(dirname(__DIR__, 2) . '/4fach/tools.php');
 $assert(is_string($mainController), 'main controller unreadable');
+$assert(is_string($messageTools), 'message tools unreadable');
 $assert(
     str_contains($mainController, 'estab_workflow_public_login_request')
         && str_contains($mainController, 'estab_workflow_route_allowed')
         && str_contains($mainController, 'estab_workflow_record_id')
+        && str_contains(
+            $mainController,
+            'estab_workflow_anonymous_operational_post'
+        )
+        && str_contains(
+            $mainController,
+            'estab_workflow_anonymous_operational_get'
+        )
+        && str_contains(
+            $mainController,
+            'estab_navigation_login_content_url'
+        )
+        && str_contains(
+            $mainController,
+            'data-estab-submission-discarded'
+        )
+        && substr_count($mainController, 'target=\\"_self\\"') >= 5
+        && !str_contains($mainController, 'target=\\"mainframe\\"')
+        && str_contains($messageTools, 'target=\\"_self\\"')
+        && !str_contains($messageTools, 'target=\\"mainframe\\"')
         && str_contains(
             $mainController,
             'estab_message_fetch_for_incident_by_id ('
@@ -734,13 +853,13 @@ $assert(
         )
         && str_contains(
             $legacyHttpSmoke,
-            'assert_status 403 --cookie "$cookie_jar" --cookie-jar '
+            'assert_status 303 --cookie "$cookie_jar" --cookie-jar '
                 . '"$cookie_jar" \\' . "\n"
                 . '    "$base_url/4fach/vordrucke.php"'
         )
         && str_contains(
             $legacyHttpSmoke,
-            'Wählen Sie zuerst eine persönlich angenommene Dienstfunktion.'
+            'missing selected-duty redirect'
         )
         && str_contains($legacyHttpSmoke, 'logout_action=logout'),
     'isolated legacy HTTP acceptance omits origin isolation, selected-hat '

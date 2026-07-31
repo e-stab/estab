@@ -175,17 +175,159 @@ function estab_navigation_url_for_key(string $key): string
  * A symbolic key is used instead of a caller-provided URL, preventing this
  * convenience route from becoming an open redirect.
  */
-function estab_navigation_login_url(?string $destinationKey = null): string
+function estab_navigation_login_query(
+    ?string $destinationKey = null,
+    bool $submissionDiscarded = false
+): string
 {
-    $url = estab_application_url('4fach/index.php');
-    if ($destinationKey === null) {
-        return $url;
+    $query = ['login_flow' => 'existing'];
+    if ($destinationKey !== null) {
+        $destinationKey = estab_navigation_login_destination_key(
+            $destinationKey
+        );
+        if ($destinationKey === null) {
+            throw new InvalidArgumentException('Invalid login destination');
+        }
+        $query['next'] = $destinationKey;
     }
+    if ($submissionDiscarded) {
+        $query['interrupted'] = '1';
+    }
+    return http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+}
+
+function estab_navigation_login_url(
+    ?string $destinationKey = null,
+    bool $submissionDiscarded = false
+): string {
+    return estab_application_url('4fach/index.php')
+        . '?'
+        . estab_navigation_login_query(
+            $destinationKey,
+            $submissionDiscarded
+        );
+}
+
+/** Return the frame-safe login document used by the message controller. */
+function estab_navigation_login_content_url(
+    string $destinationKey,
+    bool $submissionDiscarded = false
+): string {
+    return estab_application_url('4fach/mainindex.php')
+        . '?'
+        . estab_navigation_login_query(
+            $destinationKey,
+            $submissionDiscarded
+        );
+}
+
+/**
+ * Return the login document appropriate for the current browsing context.
+ *
+ * A protected controller rendered inside the historical mainframe must not
+ * redirect to the outer two-frame workspace, otherwise that workspace would
+ * be nested inside itself. Fetch Metadata identifies modern frame requests;
+ * controllers that are intrinsically mainframe-local can request the same
+ * safe fallback for clients that do not send this header.
+ */
+function estab_navigation_login_redirect_url(
+    string $destinationKey,
+    bool $submissionDiscarded,
+    array $server = [],
+    bool $preferContentDocument = false
+): string {
+    $effectiveServer = $server === [] ? $_SERVER : $server;
+    $fetchDestination = $effectiveServer['HTTP_SEC_FETCH_DEST'] ?? '';
+    $embedded = is_string($fetchDestination)
+        && in_array(
+            strtolower(trim($fetchDestination)),
+            ['frame', 'iframe'],
+            true
+        );
+    if ($preferContentDocument || $embedded) {
+        return estab_navigation_login_content_url(
+            $destinationKey,
+            $submissionDiscarded
+        );
+    }
+    return estab_navigation_login_url(
+        $destinationKey,
+        $submissionDiscarded
+    );
+}
+
+/**
+ * Require an application session for a user-facing page.
+ *
+ * Anonymous GET, HEAD and browser-form POST requests are sent to the explicit
+ * existing-account login. A 303 deliberately discards a submitted form body;
+ * it is never replayed against the login controller. Only a symbolic,
+ * allow-listed area key is retained, while arbitrary request paths and query
+ * parameters are deliberately discarded. Other methods keep the established
+ * hard authentication boundary.
+ */
+function estab_navigation_require_session(
+    array $session,
+    string $destinationKey,
+    array $server = [],
+    bool $preferContentDocument = false
+): void {
     $destinationKey = estab_navigation_login_destination_key($destinationKey);
     if ($destinationKey === null) {
-        throw new InvalidArgumentException('Invalid login destination');
+        throw new InvalidArgumentException('Invalid protected page destination');
     }
-    return $url . '?next=' . rawurlencode($destinationKey);
+
+    if (estab_auth_session_is_authenticated($session)) {
+        return;
+    }
+
+    $effectiveServer = $server === [] ? $_SERVER : $server;
+    $method = strtoupper((string) ($effectiveServer['REQUEST_METHOD'] ?? 'GET'));
+    if (in_array($method, ['GET', 'HEAD', 'POST'], true)) {
+        header('Cache-Control: no-store');
+        header('Vary: Cookie, Sec-Fetch-Dest');
+        header(
+            'Location: ' . estab_navigation_login_redirect_url(
+                $destinationKey,
+                $method === 'POST',
+                $effectiveServer,
+                $preferContentDocument
+            ),
+            true,
+            303
+        );
+        exit;
+    }
+
+    estab_auth_require_session($session);
+}
+
+/**
+ * Send an authenticated page request without a selected duty to its selector.
+ *
+ * Only safe page loads are redirected. A stale form submission remains a hard
+ * failure and is never replayed against the duty-selection workflow.
+ */
+function estab_navigation_select_duty(array $server = []): never
+{
+    $effectiveServer = $server === [] ? $_SERVER : $server;
+    $method = strtoupper((string) ($effectiveServer['REQUEST_METHOD'] ?? 'GET'));
+    if (in_array($method, ['GET', 'HEAD'], true)) {
+        header('Cache-Control: no-store');
+        header('Vary: Cookie');
+        header(
+            'Location: ' . estab_navigation_url_for_key('command-post'),
+            true,
+            303
+        );
+        exit;
+    }
+
+    http_response_code(403);
+    header('Content-Type: text/plain; charset=UTF-8');
+    header('Cache-Control: no-store');
+    echo 'Wählen Sie zuerst eine persönlich angenommene Dienstfunktion.';
+    exit;
 }
 
 /**

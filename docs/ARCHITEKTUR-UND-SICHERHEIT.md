@@ -199,6 +199,42 @@ administrative Rücksprungziele werden abgewiesen; der Komfortpfad ist daher
 kein Open Redirect. Icon und Text bilden gemeinsam genau einen Link und
 interne Karten bleiben im selben Browserkontext.
 
+`estab_navigation_require_session()` setzt dieselbe Grenze auch vor direkt
+aufrufbare Fachseiten und Downloads. Anonyme GET-/HEAD-Anfragen und
+Browserformular-POSTs mit abgelaufener Sitzung erhalten eine 303-Weiterleitung
+zum expliziten Bestandslogin; übernommen wird ausschließlich der feste, erneut
+validierte Bereichsschlüssel. Die ursprüngliche URL, beliebige Queryparameter
+und der Referer werden nie zum Rücksprungziel. Ein nicht verarbeiteter
+POST-Inhalt wird durch 303 ausdrücklich verworfen und nicht am Login
+wiederholt. Der feste Querywert `interrupted=1` enthält keine Nutzdaten,
+aktiviert aber den sichtbaren Hinweis, dass die Eingabe erneut erfasst werden
+muss.
+
+`estab_navigation_login_redirect_url()` wählt das Dokument passend zum
+Browserkontext. Meldet Fetch Metadata für `Sec-Fetch-Dest` einen `frame` oder
+`iframe`, verweist die 303-Antwort direkt auf das Content-Login in
+`4fach/mainindex.php`. Die intrinsisch mainframe-lokalen Controller für
+Anhänge und Kategorien setzen denselben Modus ausdrücklich als Fallback, auch
+wenn ein älterer Client keinen Fetch-Metadata-Header sendet. Ein Top-Level-
+Aufruf einer anderen Fachseite erhält dagegen den vollständigen
+Zwei-Frame-Arbeitsbereich aus `4fach/index.php`. So wird der Arbeitsbereich
+niemals in seinem eigenen rechten Inhaltsframe verschachtelt. `Vary: Cookie,
+Sec-Fetch-Dest` hält die kontextabhängigen Redirects auch an HTTP-Caches
+getrennt.
+
+Der historische Nachrichtencontroller erkennt außerdem ausschließlich
+anonyme, operative GETs mit nichtleerer Query als abgelaufene Seitennavigation.
+Er verarbeitet oder übernimmt keinen dieser Querywerte, sondern verwirft sie
+vollständig und leitet auf das Content-Login mit dem festen, allowlist-
+gebundenen Ziel `messages`. GET-Anfragen mit Zugangsdaten oder den
+Login-Metadaten `login_flow`, `next` beziehungsweise `interrupted` werden
+bewusst nicht als operative Wiederherstellung eingestuft und bleiben auf der
+harten Ablehnungsgrenze. Andere HTTP-Methoden bleiben 403. Ist zwar eine
+Kontositzung vorhanden, aber noch keine persönlich ausgewählte
+Dienstfunktion, führt ein separater 303 bei GET/HEAD ausschließlich zum
+Führungsstellenbetrieb; Schreibversuche bleiben 403. Rollen-, Objekt-, CSRF-,
+Polling- und Bildberechtigungen bleiben davon unberührt.
+
 Die ausgewählten HTML-Controller verwenden
 `app/session_ui.php` als gemeinsame Ausgabegrenze. Ohne Fachsitzung zeigt die
 Leiste „Nicht angemeldet“, einen Anmeldebutton und dieselbe Bereichsnavigation;
@@ -210,6 +246,14 @@ ihre vorgelagerte HTTP-Basic-Authentisierung bleibt unabhängig von der
 eStab-Fachsitzung. Der vom Webserver gesetzte `REMOTE_USER` wird auf
 Administrationsrouten ausschließlich escaped als technischer Kontext
 angezeigt und nie in eine Fachrolle übersetzt.
+
+Der Login nennt ein erlaubtes vorgemerktes Fachziel, hält es in jedem
+Loginformular tablokal und sendet alle Formulare mit `target="_self"` im
+aktuellen Browsing-Kontext ab. Unabhängig vom Zustand bietet er den
+Top-Level-Link „Anmeldung abbrechen · Zur Übersicht“. Damit verlassen Nutzer
+auch ein Content-Login im `mainframe` zuverlässig zur öffentlichen Übersicht,
+und bei einem direkt geöffneten Lesezeichen oder Download-Tab entsteht keine
+Navigationssackgasse.
 
 Die Leiste wird nicht aus dem globalen Bootstrap ausgegeben: Binärdownloads,
 PNG-Renderer, Readiness und Fehlerantworten bleiben dadurch unverändert. Im

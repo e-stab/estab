@@ -553,16 +553,22 @@ if (session_status () !== PHP_SESSION_ACTIVE) {
   session_start ();
 }
 require_once __DIR__ . "/../app/logbook.php";
+require_once __DIR__ . "/../app/navigation.php";
 require_once __DIR__ . "/../app/read_authorization.php";
 require_once __DIR__ . "/../app/session_ui.php";
-estab_auth_require_session ($_SESSION);
+estab_navigation_require_session ($_SESSION, "incident-log", $_SERVER);
 
 include ("../4fcfg/dbcfg.inc.php");
 include ("../4fcfg/e_cfg.inc.php");
 
 $identity = estab_read_session_identity ($_SESSION);
-if (!is_array ($identity)) {
-  estab_logbook_abort (403, "Anmeldung erforderlich.");
+if (
+  !is_array ($identity)
+  || estab_read_duty_assignment_id (
+    $identity ["duty_assignment_id"] ?? null
+  ) === null
+) {
+  estab_navigation_select_duty ($_SERVER);
 }
 estab_session_ui_start ($_SESSION);
 

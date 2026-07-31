@@ -2,9 +2,10 @@
 define("debug", false);
 session_start ();
 require_once __DIR__ . "/../app/auth.php";
+require_once __DIR__ . "/../app/navigation.php";
 require_once __DIR__ . "/../app/read_authorization.php";
 require_once __DIR__ . "/../app/session_ui.php";
-estab_auth_require_session ($_SESSION);
+estab_navigation_require_session ($_SESSION, "tracking", $_SERVER);
 include ("../4fcfg/config.inc.php");  // Konfigurationseinstellungen und Vorgaben
 include ("db_operation.php");        // Datenbank operationen
 include ("liste.php");          // erzeuge Ausgabelisten
@@ -12,11 +13,16 @@ include ("data_hndl.php");      // propritÃ¤re  Datenbankoperationen
 //include ("menue.php");          // erzeuge MenÃ¼s
 
 $trackingReadIdentity = estab_read_session_identity ($_SESSION);
+if (
+    !is_array ($trackingReadIdentity)
+    || estab_read_duty_assignment_id (
+        $trackingReadIdentity ["duty_assignment_id"] ?? null
+    ) === null
+) {
+    estab_navigation_select_duty ($_SERVER);
+}
 $trackingAccessConnection = null;
 try {
-    if (!is_array ($trackingReadIdentity)) {
-        throw new EstabReadPermissionException ("Anmeldung erforderlich.");
-    }
     $trackingAccessConnection = estab_auth_connect ($conf_4f_db);
     $trackingScope = estab_read_require_area (
         $trackingAccessConnection,

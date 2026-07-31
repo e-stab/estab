@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../app/generated_form.php';
+require_once __DIR__ . '/../app/navigation.php';
 require_once __DIR__ . '/../app/read_authorization.php';
 require_once __DIR__ . '/../app/session_ui.php';
 require __DIR__ . '/../4fcfg/config.inc.php';
@@ -10,15 +11,17 @@ require __DIR__ . '/../4fcfg/e_cfg.inc.php';
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
+estab_navigation_require_session($_SESSION, 'forms', $_SERVER);
 $readIdentity = session_status() === PHP_SESSION_ACTIVE
     ? estab_read_session_identity($_SESSION)
     : null;
-if (!is_array($readIdentity)) {
-    http_response_code(403);
-    header('Content-Type: text/plain; charset=UTF-8');
-    header('Cache-Control: no-store');
-    echo 'Anmeldung erforderlich.';
-    exit;
+if (
+    !is_array($readIdentity)
+    || estab_read_duty_assignment_id(
+        $readIdentity['duty_assignment_id'] ?? null
+    ) === null
+) {
+    estab_navigation_select_duty($_SERVER);
 }
 estab_session_ui_start($_SESSION);
 
