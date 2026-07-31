@@ -836,6 +836,23 @@ ESTAB_TEST_BASE_URL=http://127.0.0.1:8080 \
 python3 -B tests/browser/headless_ui.py --overview-only
 ```
 
+Auch die öffentliche BOS-Infosammlung besitzt einen rein lesenden
+Browserlauf. Er öffnet alle sieben historischen Dokumente bei Desktop- und
+Mobilbreite, prüft die gemeinsame Darstellung, Navigation, Tabellen, Bilder
+und Fokuszustände und vergleicht den sichtbaren Originalbereich mit dem
+unveränderten Quelldokument:
+
+```console
+ESTAB_TEST_BASE_URL=http://127.0.0.1:18080 \
+python3 -B tests/browser/headless_ui.py --bos-only
+```
+
+Zusätzlich schützt `tests/php/bos_info_ui_security.php` alle historischen
+BOS-HTML-Dateien und Bilder durch feste SHA-256-Prüfsummen. Eine fachliche
+Inhaltsänderung fällt dadurch bereits in der statischen Suite auf. Sobald der
+Browser-Gate aktiviert ist, führt `tests/integration/ci.sh` den vollständigen
+BOS-Lauf automatisch aus.
+
 Der vollständige Akzeptanzlauf verwendet anschließend das eigens
 provisionierte Testkonto:
 

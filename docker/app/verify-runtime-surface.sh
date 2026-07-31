@@ -126,7 +126,20 @@ doku/Handbuch_eStab.pdf
 fmtbb/tbb.php
 language/german/helptext.php
 language/german/hilfetext.php
+stabinfo/Buchstabier.html
+stabinfo/DRK Rufnamenschema.html
+stabinfo/ELStab.jpg
+stabinfo/FF-Rufnamenschema.html
+stabinfo/IuK-InfoPack.html
+stabinfo/Kartendatum.html
+stabinfo/Orgas.html
+stabinfo/THWFuRNR.html
+stabinfo/Warendorf L4112 Kartendatum ED50.png
+stabinfo/Warendorf L4112 Kartendatum WGS84.png
+stabinfo/documents.php
+stabinfo/f_info.php
 stabinfo/index.php
+stabinfo/l_index.php
 stabetb/etb.php
 '
 

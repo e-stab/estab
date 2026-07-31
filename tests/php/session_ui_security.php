@@ -678,6 +678,7 @@ $assert(
 );
 $bosWorkspaceSource = file_get_contents($root . '/stabinfo/index.php');
 $bosNavigationSource = file_get_contents($root . '/stabinfo/l_index.php');
+$bosDocumentsSource = file_get_contents($root . '/stabinfo/documents.php');
 $bosWelcomeSource = file_get_contents($root . '/stabinfo/f_info.php');
 $bosStylesheetSource = file_get_contents($root . '/estab-ui.css');
 $assert(
@@ -748,7 +749,7 @@ foreach ([
     'THWFuRNR.html',
 ] as $bosDocument) {
     $assert(
-        str_contains((string) $bosNavigationSource, $bosDocument),
+        str_contains((string) $bosDocumentsSource, $bosDocument),
         'BOS sidebar lost its historical document link: ' . $bosDocument
     );
 }

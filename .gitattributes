@@ -16,5 +16,8 @@
 *.xcf binary
 *.zip binary
 
+# Historical BOS reference pages are checksum-protected source material.
+stabinfo/*.html binary
+
 # Most imported PHP sources intentionally retain their historical CRLF endings.
 *.php whitespace=trailing-space,space-before-tab,cr-at-eol

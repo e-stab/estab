@@ -600,8 +600,19 @@ class CDP:
                 "userGesture": True,
             },
         )
-        if result.get("exceptionDetails"):
-            raise TestFailure("JavaScript-Auswertung im Browser ist fehlgeschlagen.")
+        exception_details = result.get("exceptionDetails")
+        if isinstance(exception_details, dict):
+            exception = exception_details.get("exception")
+            description = (
+                exception.get("description")
+                if isinstance(exception, dict)
+                else exception_details.get("text")
+            )
+            suffix = f": {description}" if description else "."
+            raise TestFailure(
+                "JavaScript-Auswertung im Browser ist fehlgeschlagen"
+                + suffix
+            )
         return result.get("result", {}).get("value")
 
     def wait_for(self, expression: str, description: str, timeout: float | None = None) -> Any:
@@ -823,6 +834,15 @@ class BrowserAcceptance:
         "fmtbb/tbb.php",
         "4fach/nachwea.php?nwalle",
     )
+    bos_documents = (
+        ("Buchstabier.html", "Buchstabieralphabet"),
+        ("Kartendatum.html", "Neues Kartendatum"),
+        ("IuK-InfoPack.html", "Stabzusammensetzung"),
+        ("Orgas.html", "Behörden und Organisationen"),
+        ("FF-Rufnamenschema.html", "F-Rufnamenregel"),
+        ("DRK%20Rufnamenschema.html", "DRK-Rufnamenregel"),
+        ("THWFuRNR.html", "THW-Rufnamenregel"),
+    )
 
     def __init__(self, cdp: CDP, config: TestConfig) -> None:
         self.cdp = cdp
@@ -905,6 +925,12 @@ class BrowserAcceptance:
         self._assert_bos_workspace_layout(
             "öffentliche BOS-Infosammlung bei 1440×1000 px"
         )
+        for href, title in self.bos_documents:
+            self._open_bos_document(
+                href,
+                title,
+                f"öffentliche Desktop-Ansicht „{title}“",
+            )
         self.cdp.call(
             "Emulation.setDeviceMetricsOverride",
             {
@@ -919,25 +945,10 @@ class BrowserAcceptance:
         self._assert_bos_workspace_layout(
             "öffentliche BOS-Infosammlung bei 390×844 px"
         )
-        self.cdp.click(
-            "status",
-            'a[href$="Buchstabier.html"][target="mainframe"]',
-            "öffentlicher BOS-Inhaltslink",
-        )
-        self.cdp.wait_for(
-            _frame_expression(
-                "mainframe",
-                """
-                return target.location.pathname.endsWith(
-                    "/stabinfo/Buchstabier.html"
-                ) && doc.readyState === "complete";
-                """,
-            ),
-            "öffentliches BOS-Dokument wurde nicht geladen",
-        )
-        self._assert_mobile_bos_navigation(
-            "öffentliche BOS-Infosammlung bei 390×844 px"
-        )
+        for href, title in self.bos_documents:
+            location = f"öffentliche Mobilansicht „{title}“"
+            self._open_bos_document(href, title, location)
+            self._assert_mobile_bos_navigation(location)
 
     def run_message_suggestions(self) -> None:
         marker = self.config.message_suggestion_marker
@@ -4225,7 +4236,7 @@ class BrowserAcceptance:
             _frame_expression(
                 "mainframe",
                 """
-                const root = doc.scrollingElement;
+                const root = doc.scrollingElement || doc.documentElement;
                 return {
                     enhanced: doc.documentElement.classList.contains(
                         "estab-bos-embedded-document"
@@ -4244,6 +4255,244 @@ class BrowserAcceptance:
             and int(content_state.get("scrollWidth", 0))
             <= int(content_state.get("clientWidth", 0)) + 1,
             f"BOS-Inhalt ist in {location} nicht responsiv: {content_state!r}",
+        )
+
+    def _open_bos_document(
+        self,
+        href: str,
+        expected_title: str,
+        location: str,
+    ) -> None:
+        selector = f'a[href="{href}"][target="mainframe"]'
+        expected_path = "/stabinfo/" + urllib.parse.unquote(href)
+        self.cdp.click(
+            "status",
+            selector,
+            f"BOS-Dokument „{expected_title}“",
+        )
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                f"""
+                return decodeURIComponent(target.location.pathname).endsWith(
+                    {json.dumps(expected_path)}
+                ) && doc.readyState === "complete" &&
+                    Boolean(doc.querySelector(
+                        '[data-estab-bos-document-shell]'
+                    )) &&
+                    doc.documentElement.hasAttribute(
+                        'data-estab-bos-layout-ready'
+                    );
+                """,
+            ),
+            f"BOS-Dokument „{expected_title}“ wurde nicht vollständig geladen",
+        )
+        self._assert_bos_document_presentation(expected_title, location)
+
+    def _assert_bos_document_presentation(
+        self,
+        expected_title: str,
+        location: str,
+    ) -> None:
+        state = self.cdp.evaluate(
+            f"""
+            (async () => {{
+                const frame = document.querySelector(
+                    'iframe[name="mainframe"]'
+                );
+                const sidebar = document.querySelector(
+                    'iframe[name="status"]'
+                );
+                if (
+                    !frame
+                    || !frame.contentDocument
+                    || !frame.contentWindow
+                    || !sidebar
+                    || !sidebar.contentDocument
+                ) {{
+                    return null;
+                }}
+                const doc = frame.contentDocument;
+                const shell = doc.querySelector(
+                    '[data-estab-bos-document-shell]'
+                );
+                const header = shell && shell.querySelector(
+                    '.estab-bos-document-header'
+                );
+                const heading = header && header.querySelector('h1');
+                const description = header && header.querySelector('p');
+                const content = shell && shell.querySelector(
+                    '[data-estab-bos-original-content]'
+                );
+                const selected = sidebar.contentDocument.querySelector(
+                    'a[data-estab-bos-document-link][aria-current="page"]'
+                );
+                if (
+                    !shell
+                    || !header
+                    || !heading
+                    || !description
+                    || !content
+                    || !selected
+                ) {{
+                    return null;
+                }}
+
+                const response = await fetch(
+                    frame.contentWindow.location.href,
+                    {{cache: 'no-store'}}
+                );
+                if (!response.ok) return null;
+                const source = await response.text();
+                const parsed = new DOMParser().parseFromString(
+                    source,
+                    'text/html'
+                );
+                const tables = Array.from(
+                    content.querySelectorAll('table')
+                );
+                const wrappers = Array.from(
+                    content.querySelectorAll(
+                        '[data-estab-bos-table-scroll]'
+                    )
+                );
+                const images = Array.from(
+                    content.querySelectorAll('img')
+                );
+                const root = doc.scrollingElement || doc.documentElement;
+                const contentStyle = frame.contentWindow.getComputedStyle(
+                    content
+                );
+                const headerStyle = frame.contentWindow.getComputedStyle(
+                    header
+                );
+                const selectedTitle = selected.querySelector('strong');
+                const selectedDescription = selected.querySelector('span');
+                const contrastRatio = (foreground, background) => {{
+                    const channels = colour => {{
+                        const values = colour.match(/[\\d.]+/g);
+                        if (!values || values.length < 3) return null;
+                        return values.slice(0, 3).map(value => {{
+                            const channel = Number(value) / 255;
+                            return channel <= 0.04045
+                                ? channel / 12.92
+                                : Math.pow(
+                                    (channel + 0.055) / 1.055,
+                                    2.4
+                                );
+                        }});
+                    }};
+                    const first = channels(foreground);
+                    const second = channels(background);
+                    if (!first || !second) return 0;
+                    const luminance = values =>
+                        0.2126 * values[0]
+                        + 0.7152 * values[1]
+                        + 0.0722 * values[2];
+                    const lighter = Math.max(
+                        luminance(first),
+                        luminance(second)
+                    );
+                    const darker = Math.min(
+                        luminance(first),
+                        luminance(second)
+                    );
+                    return (lighter + 0.05) / (darker + 0.05);
+                }};
+                const semanticColoursReadable = Array.from(
+                    content.querySelectorAll('font[color="#ffffff" i]')
+                ).every(label => {{
+                    const labelStyle =
+                        frame.contentWindow.getComputedStyle(label);
+                    const cell = label.closest('td');
+                    const ownBackground = labelStyle.backgroundColor;
+                    const background =
+                        ownBackground !== 'rgba(0, 0, 0, 0)'
+                            && ownBackground !== 'transparent'
+                        ? ownBackground
+                        : cell
+                            ? frame.contentWindow.getComputedStyle(
+                                cell
+                            ).backgroundColor
+                            : 'rgb(255, 255, 255)';
+                    return contrastRatio(
+                        labelStyle.color,
+                        background
+                    ) >= 4.5;
+                }});
+                const scrollRegionsReady = wrappers.every(wrapper => {{
+                    const scrollable =
+                        wrapper.scrollWidth > wrapper.clientWidth + 1;
+                    return scrollable
+                        ? wrapper.getAttribute('role') === 'region'
+                            && wrapper.tabIndex === 0
+                        : !wrapper.hasAttribute('role')
+                            && !wrapper.hasAttribute('tabindex');
+                }});
+                return {{
+                    shellCount: doc.querySelectorAll(
+                        '[data-estab-bos-document-shell]'
+                    ).length,
+                    title: heading.textContent.trim(),
+                    titleMatchesNavigation:
+                        Boolean(selectedTitle) &&
+                        heading.textContent.trim()
+                            === selectedTitle.textContent.trim(),
+                    descriptionMatchesNavigation:
+                        Boolean(selectedDescription) &&
+                        description.textContent.trim()
+                            === selectedDescription.textContent.trim(),
+                    originalTextPreserved:
+                        Boolean(parsed.body) &&
+                        content.textContent === parsed.body.textContent,
+                    tableCount: tables.length,
+                    wrapperCount: wrappers.length,
+                    tablesWrapped: tables.every(table =>
+                        Boolean(table.parentElement) &&
+                        table.parentElement.matches(
+                            '[data-estab-bos-table-scroll]'
+                        )
+                    ),
+                    imagesFit: images.every(image =>
+                        image.getBoundingClientRect().width
+                            <= content.getBoundingClientRect().width + 1
+                    ),
+                    rootFits:
+                        root.scrollWidth <= root.clientWidth + 1,
+                    contentBackground: contentStyle.backgroundColor,
+                    contentRadius: parseFloat(
+                        contentStyle.borderTopLeftRadius
+                    ),
+                    fontFamily: contentStyle.fontFamily,
+                    headerGradient:
+                        headerStyle.backgroundImage.includes(
+                            'linear-gradient'
+                        ),
+                    semanticColoursReadable,
+                    scrollRegionsReady
+                }};
+            }})()
+            """
+        )
+        self._truth(
+            isinstance(state, dict)
+            and state.get("shellCount") == 1
+            and state.get("title") == expected_title
+            and state.get("titleMatchesNavigation") is True
+            and state.get("descriptionMatchesNavigation") is True
+            and state.get("originalTextPreserved") is True
+            and int(state.get("tableCount", 0)) > 0
+            and state.get("wrapperCount") == state.get("tableCount")
+            and state.get("tablesWrapped") is True
+            and state.get("imagesFit") is True
+            and state.get("rootFits") is True
+            and state.get("contentBackground") == "rgb(255, 255, 255)"
+            and float(state.get("contentRadius", 0)) >= 8
+            and "Arial" in str(state.get("fontFamily", ""))
+            and state.get("headerGradient") is True
+            and state.get("semanticColoursReadable") is True
+            and state.get("scrollRegionsReady") is True,
+            f"BOS-Dokument ist in {location} nicht konsistent: {state!r}",
         )
 
     def _assert_mobile_bos_navigation(self, location: str) -> None:

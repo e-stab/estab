@@ -666,6 +666,14 @@ run_browser_acceptance() {
         if [[ -n ${ESTAB_CI_LOG_DIR:-} ]]; then
             export ESTAB_BROWSER_ARTIFACT_DIR="$ESTAB_CI_LOG_DIR/browser"
         fi
+        echo "CI integration: running public BOS document acceptance"
+        if [[ -n ${ESTAB_CI_LOG_DIR:-} ]]; then
+            export ESTAB_BROWSER_ARTIFACT_DIR="$ESTAB_CI_LOG_DIR/browser-bos"
+        fi
+        run_timed 3m python3 -B tests/browser/headless_ui.py --bos-only
+        if [[ -n ${ESTAB_CI_LOG_DIR:-} ]]; then
+            export ESTAB_BROWSER_ARTIFACT_DIR="$ESTAB_CI_LOG_DIR/browser"
+        fi
         run_timed 4m python3 -B tests/browser/headless_ui.py
 
         echo "CI integration: running real-browser message suggestion acceptance"

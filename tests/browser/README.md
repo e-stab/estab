@@ -60,8 +60,7 @@ Geprüft werden:
   Bereichswechsel;
 - interne Karten der angemeldeten Übersicht ohne neues Browser-Tab;
 - das Öffnen der Infosammlung BOS durch einen echten Klick auf ihre Root-Karte,
-  den separat beibehaltenen kompakten Disclosure-Modus beim Wechsel einer
-  statischen BOS-Inhaltsseite, das reale Öffnen seiner Bereichsauswahl und die
+  die gemeinsame Darstellungshülle der historischen Dokumente und die
   Rückkehr über `Übersicht`;
 - das Öffnen des geschützten Einsatztagebuchs durch einen echten Klick auf
   seine Root-Karte, den richtigen Pfad und den aktiven Navigationsbereich
@@ -139,6 +138,17 @@ Bezeichnung `Technisches Betriebsbuch (TBB)`, die Anmeldeziele und das
 ```sh
 ESTAB_TEST_BASE_URL=http://127.0.0.1:8080 \
 python3 tests/browser/headless_ui.py --overview-only
+```
+
+Die öffentliche BOS-Infosammlung kann ebenfalls rein lesend geprüft werden.
+Dieser Lauf öffnet alle sieben Dokumente bei Desktop- und Mobilbreite und
+vergleicht jeweils den unveränderten Originaltext mit der einheitlich
+dargestellten Dokumentfläche. Außerdem prüft er Dokumentkopf, Navigation,
+Tabellenwrapper, Bilder, Fokuszustände und horizontalen Überlauf:
+
+```sh
+ESTAB_TEST_BASE_URL=http://127.0.0.1:8080 \
+python3 tests/browser/headless_ui.py --bos-only
 ```
 
 Der vollständige zustandsverändernde Akzeptanzlauf benötigt dagegen ein

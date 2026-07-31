@@ -17,43 +17,7 @@ $sessionMarkup = estab_session_ui_current_markup(
     true
 );
 
-$documents = [
-    [
-        'href' => 'Buchstabier.html',
-        'title' => 'Buchstabieralphabet',
-        'description' => 'Deutsches und internationales Alphabet',
-    ],
-    [
-        'href' => 'Kartendatum.html',
-        'title' => 'Neues Kartendatum',
-        'description' => 'Hinweise zu ED50, WGS84 und UTMREF',
-    ],
-    [
-        'href' => 'IuK-InfoPack.html',
-        'title' => 'Stabzusammensetzung',
-        'description' => 'Aufbau und Aufgaben des Einsatzleitstabs',
-    ],
-    [
-        'href' => 'Orgas.html',
-        'title' => 'Behörden und Organisationen',
-        'description' => 'Abkürzungen und Sprechfunk-Rufnamen',
-    ],
-    [
-        'href' => 'FF-Rufnamenschema.html',
-        'title' => 'F-Rufnamenregel',
-        'description' => 'Rufnamenschema der Feuerwehr',
-    ],
-    [
-        'href' => 'DRK%20Rufnamenschema.html',
-        'title' => 'DRK-Rufnamenregel',
-        'description' => 'Rufnamenschema des Deutschen Roten Kreuzes',
-    ],
-    [
-        'href' => 'THWFuRNR.html',
-        'title' => 'THW-Rufnamenregel',
-        'description' => 'Rufnamenschema des Technischen Hilfswerks',
-    ],
-];
+$documents = require __DIR__ . '/documents.php';
 
 ?>
 <!doctype html>
@@ -68,7 +32,7 @@ $documents = [
   <div class="estab-message-sidebar estab-bos-sidebar" data-estab-bos-sidebar>
     <?= $sessionMarkup ?>
     <main
-      class="estab-bos-document-navigation"
+      class="estab-sidebar-workflow estab-bos-document-navigation"
       data-estab-bos-document-navigation
     >
       <header class="estab-sidebar-section-heading">
@@ -76,17 +40,21 @@ $documents = [
         <p>Dokument auswählen</p>
       </header>
       <nav aria-label="BOS-Dokumente">
-        <ul class="estab-bos-document-list">
+        <ul class="estab-sidebar-actions estab-bos-document-list">
           <?php foreach ($documents as $document): ?>
             <li>
               <a
-                class="estab-bos-document-link"
+                class="estab-sidebar-action estab-bos-document-link"
                 href="<?= estab_auth_html($document['href']) ?>"
                 target="mainframe"
                 data-estab-bos-document-link
               >
-                <strong><?= estab_auth_html($document['title']) ?></strong>
-                <span><?= estab_auth_html($document['description']) ?></span>
+                <strong class="estab-sidebar-action-title">
+                  <?= estab_auth_html($document['title']) ?>
+                </strong>
+                <span class="estab-sidebar-action-description">
+                  <?= estab_auth_html($document['description']) ?>
+                </span>
               </a>
             </li>
           <?php endforeach; ?>

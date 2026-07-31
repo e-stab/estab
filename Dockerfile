@@ -126,7 +126,9 @@ COPY fmtbb/tbb.php fmtbb/null.gif fmtbb/null.jpg ./fmtbb/
 COPY language/german/helptext.php \
     language/german/hilfetext.php \
     ./language/german/
-COPY stabinfo/ ./stabinfo/
+COPY stabinfo/*.php ./stabinfo/
+COPY stabinfo/*.html ./stabinfo/
+COPY stabinfo/*.jpg stabinfo/*.png ./stabinfo/
 COPY stabetb/etb.php stabetb/null.gif stabetb/null.jpg ./stabetb/
 
 COPY docker/apache/estab.conf /etc/apache2/sites-available/estab.conf
