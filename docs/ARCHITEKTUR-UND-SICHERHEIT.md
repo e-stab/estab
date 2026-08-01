@@ -40,11 +40,11 @@ an `127.0.0.1:8080` gebunden.
 
 | Bereich | Verantwortung |
 | --- | --- |
-| `4fach/` | Nachrichtenvordruck, Anmeldung, Sichtung, Kategorien, Anhänge und Fachoberfläche |
+| `4fach/` | Nachrichtenvordruck, Anmeldung, Sichtung, Kategorien, Anhänge, passive E-Mail-Ansicht und Fachoberfläche |
 | `4fadm/` | Basic-Auth-geschützte Administration, Systemstatus und Einsatzexport |
 | `4fbak/` | aktive dateisysteminterne PDF-Erzeugung, historische FPDF-Komponente und der bereits im letzten Upstream-Release deaktivierte Bildgenerator |
 | `stabetb/`, `fmtbb/`, `ubltg/`, `sammlung/` | Einsatztagebuch, technisches Betriebsbuch und Zusatzmodule |
-| `app/` | Bootstrap, PHP-/MySQL-Kompatibilität, Authentisierung, feste Kontofunktion, optionale Zugangsschichten, objektbezogene Leseberechtigung, Navigation, Sitzung, CSRF, Datum, Nachrichten-/Kategoriezugriff, Anhang, Export und transaktionale Admin-Operationen |
+| `app/` | Bootstrap, PHP-/MySQL-Kompatibilität, Authentisierung, feste Kontofunktion, optionale Zugangsschichten, objektbezogene Leseberechtigung, Navigation, Sitzung, CSRF, Datum, Nachrichten-/Kategoriezugriff, Anhang einschließlich begrenztem RFC-822-Parser, Export und transaktionale Admin-Operationen |
 | `4fcfg/` | historische Konfigurationsschnittstelle, heute aus validierten Umgebungswerten gespeist |
 | `docker/` | Apache-/PHP-Härtung, Entrypoint, Datenbankschema und Migrationen |
 | `tests/` | statische, sicherheitsbezogene, Datenbank- und HTTP-Nachweise |
@@ -621,6 +621,15 @@ PHP eine Datei bereits vor dem atomaren Store wegen seiner Größenbegrenzung
 abweist, gibt der Controller die sitzungs- und einsatzgebundene Reservierung
 gezielt frei.
 
+Für `.eml` verlangt der gemeinsame Uploaddienst zusätzlich den von Fileinfo
+erkannten Typ `message/rfc822` und eine erfolgreich begrenzt geparste
+RFC-822-/MIME-Struktur. Eine bloß umbenannte Datei oder Outlooks proprietäres
+`.msg`-Format wird nicht akzeptiert. Der Parser arbeitet unabhängig vom
+globalen Uploadlimit mit einer festen Eingabegrenze von 20 MiB, auch wenn
+`ESTAB_UPLOAD_MAX_BYTES` auf bis zu 50 MiB erhöht wurde. Damit bleibt der
+zusätzliche Speicher- und CPU-Aufwand verschachtelter MIME-Nachrichten auf
+kleineren NAS-Installationen begrenzt.
+
 Auch erst beim Abruf oder Lesen eines vorbereiteten Resultsets gemeldete
 MariaDB-Deadlocks und Lock-Timeouts werden als Datenbankfehler normalisiert,
 zurückgerollt und innerhalb der begrenzten Reservierungsversuche erneut
@@ -647,13 +656,34 @@ bleibt die Karte mit neutralem Platzhalter, Download und zulässiger separater
 Browseransicht verfügbar. Diese interaktive Grenze ist eigenständig und nicht
 die 12-Megapixel-/8.000-Pixel-Grenze des PDF-Dossier-Renderers.
 
+Die E-Mail-Anzeige ist kein rohes Inline-Streaming. Der eigene Controller
+`/4fach/email.php` akzeptiert ausschließlich GET und HEAD für eine kanonische
+`.eml`-Anlagenreferenz. Er gibt den Session-Lock vor der Dateiarbeit frei,
+autorisiert das Anlagenobjekt vor und nach dem stabilen Integritätssnapshot und
+liefert nur eine neu erzeugte, escaped UTF-8-Seite. HTML-Teile werden zu
+passivem Text: Skripte, Ereignisattribute, Formulare, Objekte, eingebettete
+Medien und Remote-Ressourcen der Mail werden weder in die Antwort übernommen
+noch nachgeladen. Enthaltene MIME-Anlagen erscheinen ausschließlich als
+Metadaten. `no-store`, `nosniff`, `SAMEORIGIN`, `no-referrer`, `noindex`, eine
+restriktive Content-Security-Policy und der Antwortmarker
+`X-eStab-Email-Rendering: passive-text` begrenzen die Ansicht zusätzlich.
+
+Mail-Kopfzeilen sind nicht vertrauenswürdiger Inhalt und werden nicht als
+Identitätsnachweis behandelt. Die Oberfläche nennt ausdrücklich, dass Absender
+und Authentizität nicht verifiziert werden und keine DKIM- oder S/MIME-Prüfung
+erfolgt. Der getrennte Originaldownload verwendet die normale zweifache
+Objektprüfung und den integritätsgebundenen Byte-Snapshot, bleibt aber eine
+Download-Disposition. Bytegleichheit macht die Originalmail nicht
+ungefährlich; sie kann aktive Inhalte oder riskante interne Anlagen enthalten.
+
 Die Dateiberechtigung wird getrennt von dieser Pfad- und Integritätsprüfung
 ermittelt. Ein verknüpfter Anhang erbt die Leseberechtigung mindestens einer
 exakt über ein vollständiges, semikolongetrenntes Dateinamens-Token
 referenzierten Nachricht. Ein freier Anhang ist ausschließlich für seinen
 Uploader oder ein angemeldetes Konto mit der festen Funktion S2, Si
 beziehungsweise LdF sichtbar. Direkter Upload, Liste, Download,
-Browseransicht, Bildvorschau, Archivauswahl im Nachrichtenvordruck und der
+Browseransicht, passive E-Mail-Ansicht, Bildvorschau, Archivauswahl im
+Nachrichtenvordruck und der
 abschließende Nachrichtenspeicherpfad prüfen diese Berechtigung jeweils
 erneut. Das Entfernen im bearbeitbaren Vordruck löst lediglich ein exaktes
 Referenztoken; es löscht weder Dateizeile noch Archivbytes. Eine
@@ -663,8 +693,9 @@ nicht.
 `app/attachment_integrity.php` liest reguläre Dateien inode- und
 größenstabil und vergleicht bei neuen Anhängen den Inhalt mit dem
 persistierten Eingangsnachweis. PDF-Dossier, administrativer Tabellenexport,
-produktiver Abschluss-Preflight, authentifizierter Direktdownload und
-Bildvorschau verwenden dieselbe Grenze. Download und Vorschau kopieren nach
+produktiver Abschluss-Preflight, authentifizierter Direktdownload,
+Bildvorschau und passive E-Mail-Ansicht verwenden dieselbe Grenze. Download
+und Vorschau kopieren nach
 der Identitätsprüfung die Sitzungsdaten und geben den PHP-Session-Lock frei.
 Sie autorisieren zunächst kurz gegen die Datenbank, schließen diese
 Transaktion vor Hashing und Kopieren der Datei und autorisieren unmittelbar
@@ -708,7 +739,13 @@ Der anschließend ausschließlich aus diesem geprüften Byte-Snapshot gebildete
 Anlagenabschnitt gibt JPEG, PNG, GIF und BMP sichtbar aus; mehrseitige PDFs
 werden mit festen Poppler-Binärdateien ohne Shell und ohne Ausblenden von
 Anmerkungen einzeln seitenweise gerastert. Text erscheint nur bei verlustfreier
-Windows-1252-Darstellbarkeit, sonst als eindeutige Hinweisseite. TIFF und andere
+Windows-1252-Darstellbarkeit, sonst als eindeutige Hinweisseite.
+Strukturell gültige RFC-822-E-Mails werden innerhalb der PDF-Text- und
+Zeichengrenzen auch hier nur passiv mit ausgewählten Kopfzeilen und Textkörper
+dargestellt; ihre internen MIME-Anlagen werden als Metadaten aufgelistet und
+nicht als eigenständige Dossierinhalte ausgeführt. Überschreitung oder nicht
+verlustfrei darstellbarer Text führt zu einer eindeutigen Hinweisseite.
+TIFF und andere
 nicht statisch darstellbare Formate erhalten ebenfalls eine Hinweisseite. In
 allen Fällen bleibt der geprüfte Byte-Snapshot zusätzlich als bytegleiches
 `EmbeddedFile` im PDF-Katalog erhalten.
@@ -1149,7 +1186,9 @@ Formularartefakte sind im unterstützten Containerbetrieb keine
 Laufzeitoberfläche: Das Dockerfile kopiert ausschließlich die positive
 Runtime-Allowlist, der Runtime-Surface-Vertrag weist verbotene Altpfade zurück,
 und notwendige interne Include-Dateien sind über Apache nicht direkt
-erreichbar.
+erreichbar. Die positive Allowlist enthält `/4fach/email.php` als
+authentifizierten Darstellungscontroller und `app/email_attachment.php` nur als
+per HTTP gesperrte Parserbibliothek.
 
 ## Verbleibende Risiken
 

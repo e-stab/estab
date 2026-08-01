@@ -333,6 +333,7 @@ foreach ($informationFiles as $informationFile) {
 foreach ([
     '/4fach/button.php',
     '/4fach/createbutton.php',
+    '/4fach/email.php',
     '/4fach/kategobutton.php',
     '/4fach/info.php',
     '/handbuch/index.php',

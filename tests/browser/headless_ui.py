@@ -5388,12 +5388,12 @@ class BrowserAcceptance:
             "mainframe",
             'input[name="flt_search"]',
             search_marker,
-            "Suchmarker der Nachricht mit Bild und PDF",
+            "Suchmarker der Nachricht mit Bild, PDF und E-Mail",
         )
         self.cdp.click(
             "mainframe",
             'input[name="filter_suche"]',
-            "Nachricht mit Bild und PDF suchen",
+            "Nachricht mit Bild, PDF und E-Mail suchen",
         )
         row_state = self.cdp.wait_for(
             _frame_expression(
@@ -5434,14 +5434,14 @@ class BrowserAcceptance:
         )
         self._truth(
             isinstance(row_state, dict)
-            and row_state.get("count") == "2"
-            and row_state.get("label") == "2 Anlagen",
+            and row_state.get("count") == "3"
+            and row_state.get("label") == "3 Anlagen",
             f"Anlagenhinweis der echten Nachricht ist falsch: {row_state!r}",
         )
         self.cdp.click(
             "mainframe",
             '[data-estab-browser-open-attachment-message]',
-            "Nachricht mit Bild und PDF öffnen",
+            "Nachricht mit Bild, PDF und E-Mail öffnen",
         )
         self.cdp.wait_for(
             _frame_expression(
@@ -5453,7 +5453,7 @@ class BrowserAcceptance:
                 if (
                     doc.readyState !== "complete" ||
                     !panel ||
-                    panel.getAttribute("data-estab-attachment-count") !== "2"
+                    panel.getAttribute("data-estab-attachment-count") !== "3"
                 ) return false;
                 panel.scrollIntoView({block: "start"});
                 return true;
@@ -5472,6 +5472,18 @@ class BrowserAcceptance:
                     '[data-estab-pdf-preview]'
                 );
                 const frame = details?.querySelector('iframe[data-src]');
+                const emailDetails = doc.querySelector(
+                    '[data-estab-email-preview]'
+                );
+                const emailFrame = emailDetails?.querySelector(
+                    'iframe[data-src]'
+                );
+                const emailCard = emailDetails?.closest(
+                    '[data-estab-email-attachment]'
+                );
+                const originalDownload = emailCard?.querySelector(
+                    '.estab-message-attachment-actions a[download]'
+                );
                 const browserLinks = Array.from(doc.querySelectorAll(
                     '.estab-message-attachment-actions a[target="_blank"]'
                 ));
@@ -5481,13 +5493,24 @@ class BrowserAcceptance:
                     !details || details.open || !frame ||
                     frame.hasAttribute("src") ||
                     !frame.getAttribute("data-src")?.includes("view=inline") ||
-                    browserLinks.length !== 2
+                    !emailDetails || emailDetails.open || !emailFrame ||
+                    emailFrame.hasAttribute("src") ||
+                    !emailFrame.getAttribute("data-src")?.includes(
+                        "email.php?file="
+                    ) ||
+                    !originalDownload ||
+                    !originalDownload.getAttribute("href")?.includes(
+                        "download.php"
+                    ) ||
+                    browserLinks.length !== 3
                 ) return false;
                 return {
                     imageWidth: image.naturalWidth,
                     imageHeight: image.naturalHeight,
                     imageSource: image.currentSrc,
                     pdfUrl: frame.getAttribute("data-src"),
+                    emailUrl: emailFrame.getAttribute("data-src"),
+                    originalName: originalDownload.getAttribute("download"),
                     accessibleLinks: browserLinks.every(link =>
                         link.rel.includes("noopener") &&
                         link.getAttribute("aria-label")?.includes(
@@ -5497,15 +5520,17 @@ class BrowserAcceptance:
                 };
                 """,
             ),
-            "echte Bildvorschau oder lazy PDF-Karte wurde nicht aufgebaut",
+            "echte Bild-, PDF- oder E-Mail-Vorschau wurde nicht aufgebaut",
         )
         self._truth(
             isinstance(preview_state, dict)
             and preview_state.get("imageWidth") == 640
             and preview_state.get("imageHeight") == 640
             and "showpic.php" in str(preview_state.get("imageSource", ""))
+            and "email.php?file=" in str(preview_state.get("emailUrl", ""))
+            and preview_state.get("originalName") == "Einsatzmail-Uebung.EML"
             and preview_state.get("accessibleLinks") is True,
-            "Bild-/PDF-Aktionen sind im echten Browser nicht sichtbar oder "
+            "Bild-/PDF-/E-Mail-Aktionen sind im echten Browser nicht sichtbar oder "
             f"zugänglich: {preview_state!r}",
         )
         pdf_url = str(preview_state.get("pdfUrl", ""))
@@ -5733,6 +5758,276 @@ class BrowserAcceptance:
             f"loading_failure={pdf_loading_failure!r}, "
             f"frame={frame_rect!r}, png_bytes={last_pdf_screenshot_bytes}, "
             f"pixels={last_pdf_render_summary!r}",
+        )
+
+        email_url = str(preview_state.get("emailUrl", ""))
+        email_request_url = urllib.parse.urljoin(
+            self.config.base_url + "/",
+            email_url,
+        )
+        self.cdp.evaluate(
+            _frame_expression(
+                "mainframe",
+                """
+                target.__estabEmailXss = "parent-clean";
+                target.top.__estabEmailXss = "top-clean";
+                return true;
+                """,
+            )
+        )
+        self.cdp.discard_events("Network.requestWillBeSent")
+        self.cdp.discard_events("Network.responseReceived")
+        self.cdp.discard_events("Network.loadingFinished")
+        self.cdp.discard_events("Network.loadingFailed")
+        self.cdp.click(
+            "mainframe",
+            '[data-estab-email-preview] > summary',
+            "eingebettete E-Mail-Anlage öffnen",
+        )
+        email_state = self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                f"""
+                const details = doc.querySelector(
+                    '[data-estab-email-preview]'
+                );
+                const frame = details?.querySelector("iframe");
+                if (
+                    !details?.open ||
+                    frame?.getAttribute("src") !== {json.dumps(email_url)} ||
+                    frame.hasAttribute("data-src") ||
+                    frame.getBoundingClientRect().height < 300
+                ) return false;
+                let emailDoc;
+                try {{
+                    emailDoc = frame.contentDocument;
+                }} catch (_error) {{
+                    return false;
+                }}
+                if (!emailDoc || emailDoc.readyState !== "complete") {{
+                    return false;
+                }}
+                const root = emailDoc.querySelector(
+                    '[data-estab-email-preview]'
+                );
+                const subject = emailDoc.querySelector(
+                    '[data-estab-email-subject]'
+                );
+                const headerText = emailDoc.querySelector(
+                    '[data-estab-email-headers]'
+                )?.innerText || "";
+                const body = emailDoc.querySelector(
+                    '[data-estab-email-body]'
+                );
+                const contained = Array.from(emailDoc.querySelectorAll(
+                    '[data-estab-email-contained-attachments] li'
+                ));
+                const forbiddenElements = emailDoc.querySelectorAll(
+                    'script, style, iframe, object, embed, form, img'
+                ).length;
+                const eventAttributes = Array.from(
+                    emailDoc.querySelectorAll("*")
+                ).flatMap(element => Array.from(element.attributes)).filter(
+                    attribute => /^on/i.test(attribute.name)
+                );
+                const dangerousUrls = Array.from(
+                    emailDoc.querySelectorAll("*")
+                ).flatMap(element => Array.from(element.attributes)).filter(
+                    attribute =>
+                        /^(?:href|src|action|formaction|srcdoc)$/i.test(
+                            attribute.name
+                        ) &&
+                        /^(?:javascript:|https?:\\/\\/)/i.test(
+                            attribute.value.trim()
+                        )
+                );
+                const text = emailDoc.body?.innerText || "";
+                if (
+                    !root ||
+                    root.getAttribute("data-estab-email-rendering") !==
+                        "passive-text" ||
+                    subject?.textContent.trim() !== "Lage <Übung> – Grüße" ||
+                    !headerText.includes("Erika Müller") ||
+                    !headerText.includes("Führungsstelle Göppingen") ||
+                    body?.getAttribute("data-estab-email-body-source") !==
+                        "html" ||
+                    !text.includes("E-Mail-Lagemeldung") ||
+                    !text.includes("Gefahr & Rückmeldung aus der Übung.") ||
+                    !text.includes("Rückfrage") ||
+                    !text.includes("Absenderangaben nicht verifiziert") ||
+                    contained.length !== 2 ||
+                    !contained.some(item =>
+                        item.innerText.includes("Lage-Übung.png")
+                    ) ||
+                    !contained.some(item =>
+                        item.innerText.includes("Notiz-Übung.txt")
+                    ) ||
+                    forbiddenElements !== 0 ||
+                    eventAttributes.length !== 0 ||
+                    dangerousUrls.length !== 0 ||
+                    emailDoc.documentElement.innerHTML.includes(
+                        "evil.invalid"
+                    ) ||
+                    emailDoc.documentElement.innerHTML.includes(
+                        "window.__estabEmailXss"
+                    )
+                ) return false;
+                return {{
+                    rendering: root.getAttribute(
+                        "data-estab-email-rendering"
+                    ),
+                    subject: subject.textContent.trim(),
+                    attachments: contained.length,
+                    forbiddenElements,
+                    eventAttributes: eventAttributes.length,
+                    dangerousUrls: dangerousUrls.length,
+                    frameHeight: frame.getBoundingClientRect().height,
+                    ownProbe: typeof frame.contentWindow.__estabEmailXss,
+                    parentProbe: target.__estabEmailXss,
+                    topProbe: target.top.__estabEmailXss
+                }};
+                """,
+            ),
+            "passive E-Mail-Anlage wurde nicht sicher im Browser dargestellt",
+        )
+        self._truth(
+            isinstance(email_state, dict)
+            and email_state.get("rendering") == "passive-text"
+            and email_state.get("subject") == "Lage <Übung> – Grüße"
+            and email_state.get("attachments") == 2
+            and email_state.get("forbiddenElements") == 0
+            and email_state.get("eventAttributes") == 0
+            and email_state.get("dangerousUrls") == 0
+            and email_state.get("frameHeight", 0) >= 300
+            and email_state.get("ownProbe") == "undefined"
+            and email_state.get("parentProbe") == "parent-clean"
+            and email_state.get("topProbe") == "top-clean",
+            "E-Mail-Anlage enthält aktive Inhalte oder ist nicht vollständig "
+            f"sichtbar: {email_state!r}",
+        )
+
+        email_response: dict[str, Any] | None = None
+        deadline = time.monotonic() + self.config.timeout
+        while time.monotonic() < deadline:
+            self.cdp.call("Runtime.evaluate", {"expression": "0"})
+            for event in self.cdp.events:
+                if event.get("method") != "Network.responseReceived":
+                    continue
+                response = event.get("params", {}).get("response", {})
+                if (
+                    isinstance(response, dict)
+                    and response.get("url") == email_request_url
+                    and response.get("status") == 200
+                    and response.get("mimeType") == "text/html"
+                ):
+                    email_response = response
+                    break
+            if email_response is not None:
+                break
+            time.sleep(0.1)
+        email_response_headers = {
+            str(name).lower(): str(value)
+            for name, value in (
+                email_response.get("headers", {}).items()
+                if isinstance(email_response, dict)
+                and isinstance(email_response.get("headers"), dict)
+                else []
+            )
+        }
+        email_content_type_options = [
+            value.strip().lower()
+            for value in email_response_headers.get(
+                "x-content-type-options", ""
+            ).splitlines()
+            if value.strip()
+        ]
+        email_frame_options = [
+            value.strip().upper()
+            for value in email_response_headers.get(
+                "x-frame-options", ""
+            ).splitlines()
+            if value.strip()
+        ]
+        email_policies = [
+            value.strip().lower()
+            for value in email_response_headers.get(
+                "content-security-policy", ""
+            ).splitlines()
+            if value.strip()
+        ]
+        email_rendering_headers = [
+            value.strip().lower()
+            for value in email_response_headers.get(
+                "x-estab-email-rendering", ""
+            ).splitlines()
+            if value.strip()
+        ]
+        email_integrity_headers = [
+            value.strip().lower()
+            for value in email_response_headers.get(
+                "x-estab-attachment-integrity", ""
+            ).splitlines()
+            if value.strip()
+        ]
+        email_sha_headers = [
+            value.strip().lower()
+            for value in email_response_headers.get(
+                "x-estab-attachment-sha256", ""
+            ).splitlines()
+            if value.strip()
+        ]
+        self._truth(
+            email_response is not None,
+            "passive E-Mail-Anlage erreichte Chrome nicht als text/html",
+        )
+        self._truth(
+            "no-store" in email_response_headers.get(
+                "cache-control", ""
+            ).lower()
+            and email_content_type_options
+            and all(
+                value == "nosniff" for value in email_content_type_options
+            )
+            and email_frame_options
+            and all(value == "SAMEORIGIN" for value in email_frame_options)
+            and any(
+                "default-src 'none'" in value
+                and "script-src 'none'" in value
+                and "img-src 'none'" in value
+                and "frame-ancestors 'self'" in value
+                for value in email_policies
+            )
+            and email_rendering_headers
+            and all(
+                value == "passive-text"
+                for value in email_rendering_headers
+            )
+            and email_integrity_headers
+            and all(
+                value == "verified" for value in email_integrity_headers
+            )
+            and email_sha_headers
+            and all(
+                re.fullmatch(r"[a-f0-9]{64}", value) is not None
+                for value in email_sha_headers
+            ),
+            "E-Mail-Anlage hat nicht die erwarteten geschützten Header: "
+            f"{email_response_headers!r}",
+        )
+        hostile_requests = []
+        for event in self.cdp.events:
+            if event.get("method") != "Network.requestWillBeSent":
+                continue
+            request = event.get("params", {}).get("request", {})
+            request_url = request.get("url", "") if isinstance(
+                request, dict
+            ) else ""
+            if "evil.invalid" in str(request_url):
+                hostile_requests.append(str(request_url))
+        self._truth(
+            hostile_requests == [],
+            "Passive E-Mail-Ansicht lud externe Inhalte: "
+            f"{hostile_requests!r}",
         )
 
     def _assert_dirty_navigation_guard(self) -> None:

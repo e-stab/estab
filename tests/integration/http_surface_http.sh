@@ -358,6 +358,7 @@ for protected_route in \
     'fmtbb/tbb.php|technical-log|index.php' \
     '4fach/nachwea.php?nwalle|tracking|index.php' \
     '4fach/anhang.php|messages|mainindex.php' \
+    '4fach/email.php?file=EL0001.eml|messages|index.php' \
     '4fach/katgoedt.php?dbtyp=fkt&msgno=1|messages|mainindex.php'
 do
     route=${protected_route%%|*}

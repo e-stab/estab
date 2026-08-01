@@ -391,7 +391,7 @@ $handbookUpdated = '1. August 2026';
 
         <article id="anhaenge" class="estab-handbook-chapter"
           data-estab-handbook-section
-          data-handbook-keywords="Datei Upload Anlage Anhang JPEG JPG PDF PNG GIF BMP TIFF ZIP DOC XLS ODT TXT XIA AVI 20 MiB 24 MiB MIME Vorschau Download Prüfsumme Badge Karte entfernen Archiv">
+          data-handbook-keywords="Datei Upload Anlage Anhang JPEG JPG PDF PNG GIF BMP TIFF ZIP DOC XLS ODT TXT XIA AVI EML RFC822 E-Mail Original 20 MiB 24 MiB MIME Vorschau Download Prüfsumme Badge Karte entfernen Archiv">
           <header><span>08</span><div><p>Dateien sicher mitführen</p><h2>Anhänge</h2></div></header>
           <p>Bleiben Sie beim Erfassen oder Bearbeiten im geöffneten
             Nachrichtenvordruck. Wählen Sie unter „Neue Anlage hinzufügen“
@@ -416,8 +416,11 @@ $handbookUpdated = '1. August 2026';
             <li><strong>Inhalt prüfen.</strong> JPEG-, PNG-, GIF- und
               BMP-Bilder erscheinen als Vorschau.
               PDF-Dateien lassen sich direkt in der Anlagenkarte aufklappen.
+              Standardisierte E-Mail-Dateien mit <code>.eml</code> lassen sich
+              dort als passive Textansicht aufklappen.
               Für diese Bildformate und PDF steht zusätzlich „Im Browser
-              ansehen“ bereit; jede zulässige Datei einschließlich TIFF kann
+              ansehen“ bereit; bei E-Mail heißt die Aktion „E-Mail ansehen“.
+              Jede zulässige Datei einschließlich TIFF und EML kann
               heruntergeladen werden.</li>
             <li><strong>Zuordnung korrigieren.</strong> „Vom Vordruck entfernen“
               löst nur die Zuordnung im noch bearbeitbaren Vordruck. Die
@@ -425,9 +428,26 @@ $handbookUpdated = '1. August 2026';
               kann später erneut ausgewählt werden.</li>
           </ol>
           <div class="estab-handbook-facts">
-            <div><strong>Erlaubte Endungen</strong><span>JPG, JPEG, TIF, TIFF, GIF, AVI, PNG, BMP, ZIP, PDF, DOC, XLS, ODT, TXT und XIA</span></div>
-            <div><strong>Größenlimit</strong><span>Wird direkt am Dateifeld angezeigt; Standard sind 20 MiB je Upload.</span></div>
+            <div><strong>Erlaubte Endungen</strong><span>JPG, JPEG, TIF, TIFF, GIF, AVI, PNG, BMP, ZIP, PDF, DOC, XLS, ODT, TXT, XIA und EML</span></div>
+            <div><strong>Größenlimit</strong><span>Wird direkt am Dateifeld angezeigt; Standard sind 20 MiB je Upload. Für EML gilt auch bei höherem globalem Limit fest 20 MiB.</span></div>
             <div><strong>Inhaltsprüfung</strong><span>Dateiendung und serverseitig erkannter MIME-Typ müssen zusammenpassen.</span></div>
+          </div>
+          <p>Für E-Mail-Anlagen wird nur das standardisierte RFC-822-Format
+            <code>.eml</code> unterstützt; Outlook-<code>.msg</code> kann eStab
+            nicht lesen. Bei EML müssen zusätzlich der erkannte Typ
+            <code>message/rfc822</code> und die interne MIME-Struktur gültig
+            sein. Die Webansicht übernimmt kein Mail-HTML: Skripte, Formulare,
+            eingebettete Objekte und entfernte Inhalte werden nicht ausgeführt
+            oder nachgeladen. Anlagen innerhalb der E-Mail erscheinen nur mit
+            Dateiname, Inhaltstyp und Größe.</p>
+          <div class="estab-handbook-callout">
+            <strong>E-Mail-Kopfzeilen sind kein Identitätsnachweis</strong>
+            <p>eStab verifiziert weder den angezeigten Absender noch die
+              Authentizität der Mail und führt keine DKIM- oder S/MIME-Prüfung
+              durch. Nach Anmeldung und Objektprüfung kann die Originaldatei
+              bytegetreu heruntergeladen werden, sie kann aber aktive oder
+              anderweitig riskante Inhalte und Anlagen enthalten. Öffnen Sie
+              das Original nur in einer geeigneten Prüfumgebung.</p>
           </div>
           <p>Die Schaltfläche „Bereits hochgeladene Anlage auswählen“
             öffnet den bisherigen Anlagenbereich als optionale Archivauswahl.
@@ -614,7 +634,7 @@ $handbookUpdated = '1. August 2026';
 
         <article id="export" class="estab-handbook-chapter"
           data-estab-handbook-section
-          data-handbook-keywords="PDF Einsatzdossier ETB TBB Vordruck Anlagen sichtbar eingebettet Original ZIP CSV Manifest Prüfsumme herunterladen löschen 50 MiB">
+          data-handbook-keywords="PDF Einsatzdossier ETB TBB Vordruck Anlagen sichtbar eingebettet Original EML E-Mail passiv ZIP CSV Manifest Prüfsumme herunterladen löschen 50 MiB">
           <header><span>15</span><div><p>Lesbar und maschinenlesbar sichern</p><h2>Export und PDF-Einsatzdossier</h2></div></header>
           <div class="estab-handbook-compare">
             <section><h3>PDF-Einsatzdossier</h3><p>Für Lesen, Übergabe und
@@ -639,7 +659,11 @@ $handbookUpdated = '1. August 2026';
           </div>
           <p>Im PDF erscheinen JPEG, PNG, GIF und BMP sichtbar, PDF-Anlagen
             seitenweise einschließlich Annotationen und geeigneter Text als
-            durchsuchbarer Inhalt. Andere Formate erhalten eine eindeutige
+            durchsuchbarer Inhalt. Standardisierte EML-E-Mails werden innerhalb
+            der PDF-Text-/Zeichengrenzen passiv mit ausgewählten Kopfzeilen und
+            Nachrichtentext dargestellt; enthaltene Mail-Anlagen erscheinen
+            nur als Metadaten. Ist das nicht verlustfrei möglich, folgt eine
+            Hinweisseite. Andere Formate erhalten ebenfalls eine eindeutige
             Hinweisseite. Unabhängig von der Vorschau bleibt jedes Original
             bytegleich eingebettet. Für alle Originalanlagen eines Dossiers
             gilt eine Gesamtgrenze von 50 MiB; je PDF-Anlage gelten höchstens
@@ -738,7 +762,7 @@ curl --fail http://127.0.0.1:8080/health.php</code></pre>
 
         <article id="probleme" class="estab-handbook-chapter"
           data-estab-handbook-section
-          data-handbook-keywords="Fehler Hilfe Unauthorized keine Anmeldung Passwort Konto gesperrt Einsatz inaktiv Zugangsschicht Upload Planweg PDF Grenze Logs">
+          data-handbook-keywords="Fehler Hilfe Unauthorized keine Anmeldung Passwort Konto gesperrt Einsatz inaktiv Zugangsschicht Upload EML E-Mail MSG RFC822 Planweg PDF Grenze Logs">
           <header><span>18</span><div><p>Ursache gezielt eingrenzen</p><h2>Probleme lösen</h2></div></header>
           <div class="estab-handbook-troubleshooting">
             <details><summary>Administration zeigt sofort „Unauthorized“</summary><p>Das ist die Browserabfrage für HTTP Basic Auth. Manche integrierten Browser zeigen sie nicht zuverlässig; verwenden Sie einen normalen Browser. Benutzername und Kennwort stammen aus dem technischen Admin-Secret, nicht aus einem Funktionskonto.</p></details>
@@ -747,6 +771,7 @@ curl --fail http://127.0.0.1:8080/health.php</code></pre>
             <details><summary>Es ist keine operative Eingabe möglich</summary><p>Prüfen Sie für die Fachfunktion: gültige Sitzung, aktiver Einsatz, bestätigter Führungsstellenname und feste Kontofunktion. Eine Dienst- oder Zugangsschicht und eine Hutauswahl sind keine Schreibvoraussetzung. Scheitert bereits Anmeldung oder Sitzung, prüfen Sie zusätzlich die manuelle Kontosperre und – nur bei einer Gruppenzuordnung – mindestens eine aktive Zugangsschicht.</p></details>
             <details><summary>Ein Ausgang erreicht A/W nicht</summary><p>Der Ausgang muss zuerst Si und danach LdF durchlaufen. LdF benötigt einen gültigen freigegebenen S6-Planweg. Eine Rückgabe enthält einen Pflichtgrund und muss in der zuständigen Stufe bearbeitet werden.</p></details>
             <details><summary>Eine Anlage lässt sich nicht hochladen</summary><p>Prüfen Sie die am Dateifeld angezeigte Grenze, erlaubte Endung und echten Inhaltstyp. Eine lediglich umbenannte Datei wird abgewiesen. Brechen Sie einen nicht mehr benötigten Anhangsvorgang sauber ab.</p></details>
+            <details><summary>Eine E-Mail-Anlage wird abgewiesen</summary><p>Speichern oder exportieren Sie die Mail als standardisierte <code>.eml</code>-Datei. Outlook-<code>.msg</code> wird nicht unterstützt. Endung, erkannter Typ <code>message/rfc822</code>, MIME-Struktur und die feste Grenze von 20 MiB müssen gemeinsam passen.</p></details>
             <details><summary>Der PDF-Export bricht bei Anlagen ab</summary><p>Beschädigte, verschlüsselte oder über den Sicherheitsgrenzen liegende PDF-/Bildanlagen werden fail-closed abgewiesen. Prüfen Sie Format, Einzeldatei und die 50-MiB-Gesamtsumme; der Systemstatus und die App-Logs liefern den technischen Kontext.</p></details>
           </div>
           <p>Bei technischen Fehlern zuerst den

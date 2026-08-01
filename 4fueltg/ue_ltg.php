@@ -1020,13 +1020,32 @@ var_dump ($this->formdata); echo "<br>";
     foreach ($anhaenge as $anhang){
       if ($anhang != "") {
         try {
+          $anhang = estab_file_validate_name ("attachment", $anhang);
           $downloadUrl = estab_file_download_url ($conf_4f ["download_uri"], "attachment", $anhang);
         } catch (InvalidArgumentException) {
           continue;
         }
-        echo "<a style=\"font-size:18px; font-weight:900;\" href=\"".
-             estab_auth_html ($downloadUrl)."\" target=\"_blank\" rel=\"noopener\">".
-             estab_auth_html ($anhang)."</a><br>";
+        if (strtolower (pathinfo ($anhang, PATHINFO_EXTENSION)) === "eml") {
+          $emailUrl = dirname ((string) $conf_4f ["download_uri"]).
+                      "/email.php?".
+                      http_build_query (
+                        array ("file" => $anhang),
+                        "",
+                        "&",
+                        PHP_QUERY_RFC3986
+                      );
+          echo "<span data-estab-email-attachment>".
+               "<a style=\"font-size:18px; font-weight:900;\" href=\"".
+               estab_auth_html ($emailUrl)."\" target=\"_blank\" rel=\"noopener\">".
+               estab_auth_html ($anhang)." · E-Mail ansehen</a> ".
+               "<a href=\"".estab_auth_html ($downloadUrl)."\" download=\"".
+               estab_auth_html ($anhang)."\">Originaldatei herunterladen</a>".
+               "</span><br>";
+        } else {
+          echo "<a style=\"font-size:18px; font-weight:900;\" href=\"".
+               estab_auth_html ($downloadUrl)."\" target=\"_blank\" rel=\"noopener\">".
+               estab_auth_html ($anhang)."</a><br>";
+        }
       }
     }
   } // list_anhang ()

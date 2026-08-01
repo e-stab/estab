@@ -464,7 +464,9 @@ class fileupload extends file_upload {
          "name=\"upload\" type=\"file\" size=\"60\" accept=\"".$accept."\" ".
          "aria-describedby=\"attachment-upload-help\" required>";
     echo "  <br><small id=\"attachment-upload-help\">Erlaubte Formate: ".$formatNames.
-         ". Maximale Dateigröße: ".$uploadLimit.".</small>";
+         ". Maximale Dateigröße: ".$uploadLimit.
+         ". Für E-Mail-Dateien im .eml-Format gilt zusätzlich ein festes ".
+         "Sicherheitslimit von 20 MiB.</small>";
     echo "  </td>\n";
     echo "</tr>\n";
     echo "<tr>\n" ;
@@ -1145,6 +1147,25 @@ require_once ("./db_operation.php");  // Datenbank operationen
           continue;
         }
         $safePublicUrl = estab_attachment_html ($publicUrl);
+        $isEmail = $storedExtension === "eml";
+        $emailUrl = dirname ((string) $conf_4f ["download_uri"]).
+                    "/email.php?".
+                    http_build_query (
+                      array ("file" => $attachmentValue),
+                      "",
+                      "&",
+                      PHP_QUERY_RFC3986
+                    );
+        $safeEmailUrl = estab_attachment_html ($emailUrl);
+        $safeDisplayUrl = $isEmail ? $safeEmailUrl : $safePublicUrl;
+        $originalName = basename (str_replace (
+          "\\",
+          "/",
+          trim ((string) ($file ["org_filename"] ?? $attachmentValue))
+        ));
+        if ($originalName === "") {
+          $originalName = $attachmentValue;
+        }
         echo "<tr>\n";
           // checkbox
         if ($hasMessageContext) {
@@ -1154,23 +1175,34 @@ require_once ("./db_operation.php");  // Datenbank operationen
         }
           // Preview, if posible
         echo "<td>\n";
-        echo "<a href=\"".$safePublicUrl."\" target=\"_blank\" rel=\"noopener\">\n";
-        $previewUrl = $conf_urlroot.$conf_web ["pre_path"]."4fach/showpic.php?".
-                      http_build_query (
-                        array ("file" => $attachmentValue, "width" => 250),
-                        "",
-                        "&",
-                        PHP_QUERY_RFC3986
-                      );
-        echo "<img border=\"0\" alt=\"Anhangdatei\" src=\"".estab_attachment_html ($previewUrl)."\"></a></td>\n";
+        if ($isEmail) {
+          echo "<div data-estab-email-attachment>".
+               "<a class=\"estab-button estab-button-primary\" href=\"".
+               $safeEmailUrl."\" target=\"_blank\" rel=\"noopener\">".
+               "E-Mail ansehen</a><br>".
+               "<a href=\"".$safePublicUrl."\" download=\"".
+               estab_attachment_html ($originalName)."\">".
+               "Originaldatei herunterladen</a></div>\n";
+        } else {
+          echo "<a href=\"".$safePublicUrl."\" target=\"_blank\" rel=\"noopener\">\n";
+          $previewUrl = $conf_urlroot.$conf_web ["pre_path"]."4fach/showpic.php?".
+                        http_build_query (
+                          array ("file" => $attachmentValue, "width" => 250),
+                          "",
+                          "&",
+                          PHP_QUERY_RFC3986
+                        );
+          echo "<img border=\"0\" alt=\"Anhangdatei\" src=\"".estab_attachment_html ($previewUrl)."\"></a>\n";
+        }
+        echo "</td>\n";
           // filename
-        echo "<td style=\"text-align:center;\"> <a href=\"".$safePublicUrl."\" target=\"_blank\" rel=\"noopener\">".estab_attachment_html ($storedFilename)."</a></td>\n";
+        echo "<td style=\"text-align:center;\"> <a href=\"".$safeDisplayUrl."\" target=\"_blank\" rel=\"noopener\">".estab_attachment_html ($storedFilename)."</a></td>\n";
           // commend belong to the attechmant
-        echo "<td> <a href=\"".$safePublicUrl."\" target=\"_blank\" rel=\"noopener\">".estab_attachment_html ($file ["comment"] ?? "")."</a></td>\n";
+        echo "<td> <a href=\"".$safeDisplayUrl."\" target=\"_blank\" rel=\"noopener\">".estab_attachment_html ($file ["comment"] ?? "")."</a></td>\n";
           // org Dateiname
-        echo "<td> <a href=\"".$safePublicUrl."\" target=\"_blank\" rel=\"noopener\">".estab_attachment_html ($file ["org_filename"] ?? "")."</a></td>\n";
+        echo "<td> <a href=\"".$safeDisplayUrl."\" target=\"_blank\" rel=\"noopener\">".estab_attachment_html ($file ["org_filename"] ?? "")."</a></td>\n";
           // time when the attetchment was edit
-        echo "<td> <a href=\"".$safePublicUrl."\" target=\"_blank\" rel=\"noopener\">".estab_attachment_html ($file ["date"] ?? "")."</a></td>\n";
+        echo "<td> <a href=\"".$safeDisplayUrl."\" target=\"_blank\" rel=\"noopener\">".estab_attachment_html ($file ["date"] ?? "")."</a></td>\n";
         echo "</tr>\n";
         $i++;
       }

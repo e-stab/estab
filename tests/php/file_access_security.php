@@ -66,6 +66,10 @@ $assert(
     'attachment extension is not canonical on a case-sensitive filesystem'
 );
 $assert(
+    estab_file_validate_name('attachment', 'EL0003.EML') === 'EL0003.eml',
+    'email attachment extension is not accepted and canonicalised'
+);
+$assert(
     estab_file_validate_name('vordruck', 'estab 42 A.pdf') === 'estab 42 A.pdf',
     'generated form name with legacy spaces rejected'
 );
@@ -184,6 +188,7 @@ $attachmentIntegrity = (string) file_get_contents(
     $root . '/app/attachment_integrity.php'
 );
 $preview = (string) file_get_contents($root . '/4fach/showpic.php');
+$emailPreview = (string) file_get_contents($root . '/4fach/email.php');
 $forms = (string) file_get_contents($root . '/4fach/vordrucke.php');
 $menu = (string) file_get_contents($root . '/menue.inc.php');
 $attachmentController = (string) file_get_contents($root . '/4fach/anhang.php');
@@ -193,7 +198,7 @@ $assert(
     preg_match('~<Directory /var/www/html/4fdata>.*?Require all denied.*?</Directory>~s', $apache) === 1,
     'Apache still exposes 4fdata directly'
 );
-foreach ([$download, $preview, $forms] as $endpoint) {
+foreach ([$download, $preview, $emailPreview, $forms] as $endpoint) {
     $assert(
         str_contains($endpoint, 'estab_read_session_identity'),
         'file endpoint lacks the authenticated-session boundary'
@@ -213,11 +218,14 @@ $assert(
 $assert(
     str_contains($preview, 'session_write_close ();')
         && str_contains($download, 'session_write_close();')
+        && str_contains($emailPreview, 'session_write_close();')
         && strpos($preview, 'session_write_close ();')
             < strpos($preview, 'estab_attachment_connection (')
         && strpos($download, 'session_write_close();')
-            < strpos($download, 'estab_auth_connect('),
-    'preview or download keeps the PHP session locked during heavy file work'
+            < strpos($download, 'estab_auth_connect(')
+        && strpos($emailPreview, 'session_write_close();')
+            < strpos($emailPreview, 'estab_attachment_connection('),
+    'preview, email rendering or download keeps the PHP session locked during heavy file work'
 );
 $assert(
     str_contains($download, 'estab_file_open')
@@ -382,6 +390,27 @@ $assert(
         && substr_count($preview, 'X-Content-Type-Options: nosniff') >= 2
         && !str_contains($preview, 'realpath ($requested)'),
     'preview endpoint lacks verified snapshot authorization or safe decoding'
+);
+$assert(
+    str_contains(
+        $emailPreview,
+        'estab_attachment_integrity_open_snapshot('
+    )
+        && str_contains($emailPreview, 'estab_email_attachment_parse_stream(')
+        && substr_count($emailPreview, 'estab_read_attachment(') === 2
+        && str_contains(
+            $emailPreview,
+            'estab_read_attachment_authorization_version('
+        )
+        && str_contains($emailPreview, "strtolower(pathinfo(\$requested, PATHINFO_EXTENSION)) !== 'eml'")
+        && str_contains($emailPreview, 'X-eStab-Email-Rendering: passive-text')
+        && str_contains($emailPreview, "script-src 'none'")
+        && str_contains($emailPreview, "img-src 'none'")
+        && str_contains($emailPreview, "frame-ancestors 'self'")
+        && str_contains($emailPreview, 'X-Frame-Options: SAMEORIGIN')
+        && str_contains($emailPreview, 'Originaldatei herunterladen')
+        && !str_contains($emailPreview, "\$parsed['body_html']"),
+    'email preview lacks verified object authorization, passive escaped rendering or original download'
 );
 $assert(
     str_contains($download, 'estab_read_attachment(')

@@ -84,12 +84,12 @@ $assert(
 );
 
 $fixture->formdata = [
-    '12_anhang' => 'EL0001.pdf;EL0002.jpg;EL0001.pdf;../secret.pdf;'
+    '12_anhang' => 'EL0001.pdf;EL0002.jpg;EL0004.eml;EL0001.pdf;../secret.pdf;'
         . 'EL0003.svg;<b>.pdf',
 ];
 $assert(
     $fixture->official_message_attachment_references()
-        === ['EL0001.pdf', 'EL0002.jpg'],
+        === ['EL0001.pdf', 'EL0002.jpg', 'EL0004.eml'],
     'Attachment references are not safely validated, ordered and deduplicated'
 );
 $fixture->task = 'Stab_schreiben';
@@ -690,6 +690,11 @@ $assert(
         )
         && !str_contains($view, '<iframe loading="lazy" sandbox')
         && str_contains($view, 'data-estab-pdf-preview')
+        && str_contains($view, 'data-estab-email-preview')
+        && str_contains($view, 'data-estab-email-attachment')
+        && str_contains($view, '/email.php')
+        && str_contains($view, '>E-Mail hier anzeigen</summary>')
+        && str_contains($view, 'Originaldatei herunterladen')
         && str_contains($view, 'data-src="')
         && str_contains($view, 'frame.setAttribute("src"')
         && str_contains($view, 'referrerpolicy="no-referrer"')
@@ -786,8 +791,9 @@ $assert(
     'Database timestamps are not normalized at the shared form-render boundary'
 );
 $assert(
-    str_contains($dockerfile, '4fach/official_message_form.php'),
-    'The runtime image omits the official renderer'
+    str_contains($dockerfile, '4fach/official_message_form.php')
+        && str_contains($dockerfile, '4fach/email.php'),
+    'The runtime image omits the official renderer or email view'
 );
 $assert(
     str_contains($css, '--estab-official-blue: #a2d9f7;')
@@ -822,6 +828,8 @@ $assert(
             '.estab-message-attachment-card[data-estab-attachment-unavailable]'
         )
         && str_contains($css, '.estab-message-attachment-pdf iframe')
+        && str_contains($css, '.estab-message-attachment-email iframe')
+        && str_contains($css, '.estab-email-preview-page')
         && !str_contains($css, '.estab-official-emblem-omission'),
     'The official colour, strict sheet geometry or non-reflowing mobile sheet regressed'
 );

@@ -95,6 +95,8 @@ trait EstabOfficialMessageFormView
         $uploadLimit = estab_attachment_upload_limit_label();
         $previewEndpoint = dirname((string) $conf_4f['download_uri'])
             . '/showpic.php';
+        $emailEndpoint = dirname((string) $conf_4f['download_uri'])
+            . '/email.php';
         $attachmentError = $this->formdata['estab_attachment_error'] ?? '';
         $attachmentNotice = $this->formdata['estab_attachment_notice'] ?? '';
         $hasAttachmentFeedback =
@@ -181,7 +183,9 @@ trait EstabOfficialMessageFormView
                 . '</div><small id="message-attachment-upload-help">'
                 . 'Erlaubte Formate: ' . estab_message_html($formatNames)
                 . '. Maximale Dateigröße: '
-                . estab_message_html($uploadLimit) . '.</small>'
+                . estab_message_html($uploadLimit) . '. Für E-Mail-Dateien '
+                . 'im .eml-Format gilt zusätzlich ein festes Sicherheitslimit '
+                . 'von 20 MiB.</small>'
                 . '<div class="estab-message-attachment-upload-actions">'
                 . '<button type="submit" '
                 . 'name="message_attachment_upload_x" value="1" '
@@ -205,6 +209,7 @@ trait EstabOfficialMessageFormView
         }
 
         $hasEmbeddedPdf = false;
+        $hasEmbeddedEmail = false;
         if ($references === []) {
             echo '<p class="estab-message-attachments-empty">'
                 . '<strong>Noch keine Anlage hinzugefügt.</strong> '
@@ -248,9 +253,17 @@ trait EstabOfficialMessageFormView
                     ['jpg', 'jpeg', 'png', 'gif', 'bmp'],
                     true
                 );
+                $isEmail = $extension === 'eml';
                 $previewUrl = $previewEndpoint . '?'
                     . http_build_query(
                         ['file' => $reference, 'width' => 640],
+                        '',
+                        '&',
+                        PHP_QUERY_RFC3986
+                    );
+                $emailUrl = $emailEndpoint . '?'
+                    . http_build_query(
+                        ['file' => $reference],
                         '',
                         '&',
                         PHP_QUERY_RFC3986
@@ -260,6 +273,7 @@ trait EstabOfficialMessageFormView
                     . (!$metadataAvailable
                         ? 'data-estab-attachment-unavailable '
                         : '')
+                    . ($isEmail ? 'data-estab-email-attachment ' : '')
                     . 'data-estab-message-attachment="'
                     . estab_message_html($reference) . '">';
                 if ($metadataAvailable && $isImage) {
@@ -275,7 +289,11 @@ trait EstabOfficialMessageFormView
                 } else {
                     echo '<div class="estab-message-attachment-filetype" '
                         . 'aria-hidden="true"><span>'
-                        . estab_message_html(strtoupper($extension ?: 'Datei'))
+                        . estab_message_html(
+                            $isEmail
+                                ? 'E-MAIL'
+                                : strtoupper($extension ?: 'Datei')
+                        )
                         . '</span></div>';
                 }
                 echo '<div class="estab-message-attachment-details">'
@@ -304,18 +322,31 @@ trait EstabOfficialMessageFormView
                 if ($metadataAvailable) {
                     echo '<a class="estab-button estab-button-secondary" href="'
                         . estab_message_html($downloadUrl)
+                        . ($isEmail
+                            ? '" download="' . estab_message_html($originalName)
+                            : '')
                         . '" aria-label="' . estab_message_html(
-                            $originalName . ' herunterladen'
-                        ) . '">Herunterladen</a>';
+                            $isEmail
+                                ? $originalName
+                                    . ' als unveränderte Originaldatei herunterladen'
+                                : $originalName . ' herunterladen'
+                        ) . '">' . ($isEmail
+                            ? 'Originaldatei herunterladen'
+                            : 'Herunterladen') . '</a>';
                 }
-                if ($metadataAvailable && ($isImage || $extension === 'pdf')) {
+                if (
+                    $metadataAvailable
+                    && ($isImage || $extension === 'pdf' || $isEmail)
+                ) {
+                    $browserUrl = $isEmail ? $emailUrl : $inlineUrl;
                     echo '<a class="estab-button estab-button-ghost" href="'
-                        . estab_message_html($inlineUrl)
+                        . estab_message_html($browserUrl)
                         . '" target="_blank" rel="noopener" aria-label="'
                         . estab_message_html(
                             $originalName . ' in neuem Browser-Tab ansehen'
                         ) . '">'
-                        . 'Im Browser ansehen</a>';
+                        . ($isEmail ? 'E-Mail ansehen' : 'Im Browser ansehen')
+                        . '</a>';
                 }
                 if ($editable) {
                     echo '<button type="submit" '
@@ -344,16 +375,32 @@ trait EstabOfficialMessageFormView
                         . estab_message_html($originalName) . '"></iframe>'
                         . '</details>';
                 }
+                if ($metadataAvailable && $isEmail) {
+                    $hasEmbeddedEmail = true;
+                    echo '<details class="estab-message-attachment-email" '
+                        . 'data-estab-email-preview>'
+                        . '<summary aria-label="' . estab_message_html(
+                            'E-Mail ' . $originalName . ' hier anzeigen'
+                        ) . '">E-Mail hier anzeigen</summary>'
+                        . '<iframe loading="lazy" '
+                        . 'referrerpolicy="no-referrer" data-src="'
+                        . estab_message_html($emailUrl)
+                        . '" title="E-Mail-Ansicht: '
+                        . estab_message_html($originalName) . '"></iframe>'
+                        . '</details>';
+                }
                 echo '</article>';
             }
             echo '</div>';
         }
-        if ($hasAttachmentFeedback || $hasEmbeddedPdf) {
+        if ($hasAttachmentFeedback || $hasEmbeddedPdf || $hasEmbeddedEmail) {
             echo <<<'HTML'
 <script data-estab-attachment-presentation>
 (function () {
   "use strict";
-  document.querySelectorAll("[data-estab-pdf-preview]").forEach(function (details) {
+  document.querySelectorAll(
+    "[data-estab-pdf-preview], [data-estab-email-preview]"
+  ).forEach(function (details) {
     var frame = details.querySelector("iframe[data-src]");
     if (!frame) return;
     details.addEventListener("toggle", function () {

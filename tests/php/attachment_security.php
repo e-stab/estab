@@ -1253,6 +1253,7 @@ $assert(
         && str_contains($expectedUploadAccept, '.jpg')
         && str_contains($expectedUploadAccept, '.jpeg')
         && str_contains($expectedUploadAccept, '.pdf')
+        && str_contains($expectedUploadAccept, '.eml')
         && !str_contains($expectedUploadAccept, '.php'),
     'browser accept hint differs from the server attachment allowlist'
 );

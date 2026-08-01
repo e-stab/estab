@@ -83,6 +83,67 @@ upload_assert(
     'unsupported image extension is rejected with a safe specific reason'
 );
 
+$realEmail = tempnam(sys_get_temp_dir(), 'estab-eml-');
+$fakeEmail = tempnam(sys_get_temp_dir(), 'estab-fake-eml-');
+$brokenEmail = tempnam(sys_get_temp_dir(), 'estab-broken-eml-');
+if ($realEmail === false || $fakeEmail === false || $brokenEmail === false) {
+    fwrite(STDERR, "upload security: FAIL: unable to create email fixtures\n");
+    exit(1);
+}
+try {
+    file_put_contents(
+        $realEmail,
+        "From: einsatz@example.invalid\r\n"
+            . "To: fuest@example.invalid\r\n"
+            . "Subject: Lageuebergabe\r\n"
+            . "MIME-Version: 1.0\r\n"
+            . "Content-Type: text/plain; charset=UTF-8\r\n\r\n"
+            . "Sicher darstellbarer Nachrichtentext.\r\n"
+    );
+    file_put_contents($fakeEmail, "Nur Text, aber keine RFC-822-E-Mail.\n");
+    file_put_contents(
+        $brokenEmail,
+        "From: einsatz@example.invalid\r\n"
+            . "Subject: Defekte MIME-Struktur\r\n"
+            . "MIME-Version: 1.0\r\n"
+            . "Content-Type: multipart/mixed\r\n\r\n"
+            . "Grenze fehlt.\r\n"
+    );
+    $emailUpload = new file_upload();
+    $emailUpload->extensions = array_map(
+        static fn (string $extension): string => '.' . $extension,
+        estab_attachment_allowed_extensions()
+    );
+    $emailUpload->the_temp_file = $realEmail;
+    $emailUpload->the_file = 'Lageuebergabe.EML';
+    upload_assert(
+        $emailUpload->validateExtension() === true,
+        'a structurally valid message/rfc822 EML file is rejected'
+    );
+    $emailUpload->the_temp_file = $fakeEmail;
+    $emailUpload->the_file = 'Nur-Text.eml';
+    upload_assert(
+        $emailUpload->validateExtension() === false
+            && $emailUpload->failure_code === 18,
+        'plain text renamed to EML bypasses MIME and RFC-822 validation'
+    );
+    $emailUpload->the_temp_file = $brokenEmail;
+    $emailUpload->the_file = 'Defekte-Struktur.eml';
+    upload_assert(
+        $emailUpload->validateExtension() === false
+            && $emailUpload->failure_code === 20
+            && str_contains(
+                $emailUpload->user_error_message(),
+                'E-Mail-Struktur konnte nicht sicher gelesen werden'
+            ),
+        'malformed message/rfc822 data lacks a specific safe upload error'
+    );
+} finally {
+    @unlink($realEmail);
+    @unlink($fakeEmail);
+    @unlink($brokenEmail);
+}
+
 putenv('ESTAB_UPLOAD_MAX_BYTES=1234');
 $configured = new file_upload();
 upload_assert($configured->max_file_size === 1234, 'deployment upload limit applied');

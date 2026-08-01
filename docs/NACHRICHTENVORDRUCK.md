@@ -258,9 +258,11 @@ Der Bedienablauf ist bewusst direkt:
 4. JPEG-, PNG-, GIF- und BMP-Bilder erhalten innerhalb der unten beschriebenen
    Grenzen eine Miniatur; andernfalls erscheint ein neutraler Platzhalter.
    PDF-Dateien lassen sich innerhalb der Karte aufklappen und laden dann erst
-   die Same-Origin-Browseransicht. Diese vier Bildformate und PDF können
-   außerdem in einem neuen Browser-Tab geöffnet werden. Alle zulässigen Formate
-   einschließlich TIFF bleiben herunterladbar.
+   die Same-Origin-Browseransicht. Standardisierte RFC-822-E-Mails lassen sich
+   als passive Textansicht innerhalb der Karte aufklappen oder getrennt
+   öffnen. Diese vier Bildformate und PDF können außerdem in einem neuen
+   Browser-Tab geöffnet werden. Alle zulässigen Formate einschließlich TIFF
+   und `.eml` bleiben herunterladbar.
 5. **Vom Vordruck entfernen** löst im bearbeitbaren Entwurf ausschließlich
    das exakte Referenztoken. Die bereits archivierte Datei wird nicht gelöscht
    und bleibt nach ihrer Objektregel für eine spätere Auswahl erhalten.
@@ -323,15 +325,49 @@ den servergebundenen Entwurf und wiederholt beim Zurückkehren die
 Einsatz-, Konto-, Objekt- und Matrixprüfung.
 
 Zulässig sind `jpg`, `jpeg`, `tif`, `tiff`, `gif`, `avi`, `png`, `bmp`,
-`zip`, `pdf`, `doc`, `xls`, `odt`, `txt` und `xia`; Groß-/Kleinschreibung der
-Endung wird normalisiert. Die Oberfläche zeigt die effektive Größengrenze,
+`zip`, `pdf`, `doc`, `xls`, `odt`, `txt`, `xia` und `eml`;
+Groß-/Kleinschreibung der Endung wird normalisiert. Die Oberfläche zeigt die
+effektive Größengrenze,
 standardmäßig 20 MiB. Der Anwendungswert `ESTAB_UPLOAD_MAX_BYTES` ist auf
 50 MiB hart begrenzt. Die Container-Dateigrenze entspricht diesem Maximum mit
 `upload_max_filesize = 50M`; `post_max_size = 56M` liegt für den gesamten
-Request darüber. Dadurch kann die
-Anwendung eine Datei oberhalb ihres fachlichen Limits mit erhaltenem Entwurf
+Request darüber. Dadurch kann die Anwendung eine Datei oberhalb ihres
+fachlichen Limits mit erhaltenem Entwurf
 ablehnen; nur ein insgesamt zu großer Multipart-Request endet früh mit HTTP
 413.
+
+Für `.eml` gelten zusätzliche feste Grenzen. Akzeptiert werden ausschließlich
+standardisierte RFC-822-Dateien, bei denen Endung, der von Fileinfo erkannte
+MIME-Typ `message/rfc822` und eine begrenzt geparste MIME-Struktur
+zusammenpassen. Outlooks proprietäres `.msg`-Format wird nicht unterstützt.
+Unabhängig von einem bis 50 MiB erhöhten globalen Uploadlimit liest der
+E-Mail-Parser höchstens 20 MiB. Eine falsch benannte, strukturell ungültige
+oder größere Datei wird mit erhaltenem Nachrichtentwurf abgewiesen.
+
+`/4fach/email.php` zeigt die Mail bewusst nicht als aktives HTML-Dokument,
+sondern ausschließlich als escaped/passiv erzeugten Text mit ausgewählten
+Kopfzeilen und Nachrichtentext. Skripte, Ereignisattribute, Formulare,
+eingebettete Objekte und Remote-Ressourcen aus der Mail werden weder ausgeführt
+noch nachgeladen. In der Mail enthaltene Anlagen werden nicht automatisch
+geöffnet oder in die Webseite eingebettet; die Ansicht nennt nur ihre
+Metadaten wie Dateiname, Inhaltstyp und Größe. Ein sichtbarer Sicherheitshinweis
+stellt klar, dass Kopfzeilen und Absenderangaben nicht verifiziert sind und
+eStab weder DKIM noch S/MIME prüft.
+
+Die Anlagenkarte bietet zusätzlich den authentifizierten Download der
+bytegetreuen `.eml`-Originaldatei. Dafür gelten dieselbe Objektberechtigung und
+Integritätsprüfung wie für jeden anderen Nachrichtenanhang. Die Originaldatei
+kann gleichwohl gefährliche Mail-Inhalte oder enthaltene Dateien
+transportieren; der Download ist kein Unbedenklichkeitsnachweis und sollte nur
+in einer dafür geeigneten Umgebung geöffnet werden.
+
+Wird der Anlagenabschnitt im PDF-Einsatzdossier gewählt, erscheint eine
+gültige EML innerhalb der PDF-Text-/Zeichengrenzen ebenfalls als passive
+Darstellung ausgewählter Kopfzeilen und des Textkörpers. Interne Mail-Anlagen
+bleiben Metadaten; die bytegetreue EML-Originaldatei wird wie jede andere
+Vordruckanlage getrennt in das Dossier eingebettet. Ist eine verlustfreie
+Darstellung nicht möglich, weist eine gekennzeichnete Informationsseite den
+Grund aus, statt Inhalte still auszulassen oder aktiv zu interpretieren.
 
 Die normale Downloadantwort bleibt eine Datei zum Herunterladen. Eine
 ausdrückliche Browseransicht wird nur für serverseitig als JPEG, PNG, GIF,
@@ -343,6 +379,9 @@ und wird erst beim Aufklappen geladen. Eine HTML-Sandbox wird dort bewusst
 nicht gesetzt, weil sie Chromiums eingebauten PDF-Viewer sperrt; andere
 Antworten bleiben für Einbettung gesperrt. Eine sichtbare PDF-Darstellung hängt
 zusätzlich davon ab, dass der verwendete Browser einen PDF-Viewer bereitstellt.
+Die davon getrennte E-Mail-Route liefert niemals rohe `message/rfc822`-Bytes
+inline, sondern ausschließlich die oben beschriebene passive HTML-Seite; das
+Original bleibt ein Download.
 Die automatische Miniatur wird ausschließlich für JPEG, PNG, GIF und BMP
 versucht. Es gelten 24 MiB maximale Eingabedatei, 16 Megapixel maximale
 Dekodierfläche und 1.600 Pixel je angeforderter Ausgabeachse; die Karte fordert
@@ -386,14 +425,20 @@ bleiben.
 
 Der statische Formularnachweis bindet außerdem den direkten
 `multipart/form-data`-Upload, die einzige kanonische Referenzliste,
-Anlagenzahl und -karten, HTML-escaped Metadaten, Bild-/PDF-Vorschau sowie das
+Anlagenzahl und -karten, HTML-escaped Metadaten, Bild-/PDF-/E-Mail-Vorschau sowie das
 reine Lösen einer Zuordnung. Der HTTP-Lauf lädt eine echte Datei direkt im
 Vordruck hoch, prüft Datenbank- und Dateiintegrität, erhält den Entwurf und
 weist nach, dass Entfernen die Archivdatei nicht löscht.
 Er deckt außerdem Upload plus reguläres Absenden, einen Validierungsfehler mit
 anschließendem Retry ohne erneut gesendete Datei, den sicheren Hinweis bei
 uneindeutigem Nachrichtenabschluss, den wiederholbaren Gesprächsnotizübergang
-ohne Doppelnachricht/-datei sowie Bild- und PDF-Karten mitsamt Browseransicht ab.
+ohne Doppelnachricht/-datei sowie Bild-, PDF- und E-Mail-Karten mitsamt
+Browseransicht ab. Die E-Mail-Fixture enthält codierte Unicode-Kopfzeilen,
+verschachtelte MIME-Teile, interne Anlagen und absichtlich aktive HTML-Inhalte.
+Parser-, HTTP- und Browsernachweise verlangen die decodierte passive
+Textdarstellung, reine Metadaten der internen Anlagen und die Abwesenheit von
+Skriptausführung oder Remote-Abrufen. Der Originaldownload wird bytegleich
+verglichen.
 Die normalen Fehler- und Replaypfade sind damit belegt; ein harter Prozess- oder
 Hostabbruch an den ausdrücklich dokumentierten Dateisystem-/Sessiongrenzen wird
 nicht als atomar gelöst behauptet.
@@ -414,7 +459,11 @@ erzeugten PDF-Bytes erneut in Chromes integriertem PDF-Renderer geöffnet.
 Der daraus erzeugte sichtbare Nachweis muss die amtliche blaue Formularfläche
 und das schwarze Raster enthalten. Damit prüft der Browserlauf nicht nur das
 DOM vor dem Druck, sondern den tatsächlich erzeugten PDF-Inhalt; ein formal
-gültiges, aber leeres PDF kann den Nachweis nicht erfüllen.
+gültiges, aber leeres PDF kann den Nachweis nicht erfüllen. Der gleiche reale
+Browser öffnet außerdem die E-Mail-Anlagenkarte erst auf Benutzeraktion,
+prüft die sichtbare passive Darstellung im Same-Origin-Frame und weist nach,
+dass die präparierten aktiven Mail-Bestandteile weder DOM noch Netzwerk
+erreichen.
 
 Der echte Nachrichten-HTTP-Lauf prüft Persistenz, Anhang-Roundtrip,
 Antwort-/Weiterleitungsableitung und manipulierte Browserwerte. PDF-Smoke und

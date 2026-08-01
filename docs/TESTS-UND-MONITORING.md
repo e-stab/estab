@@ -41,8 +41,8 @@ HTTP-Basic-Secret bleibt unabhängig.
 | Quellprüfung | netzloser Herkunftsnachweis für 13 Git-Ref-Snapshots (Trunk, vier Branches, sechs SVN-Tags, zwei SourceForge-Release-Tags) und einen separaten Dokument-r85-Baum, GitHub-Workflow-Prüfung mit festgelegtem Actionlint 1.7.12, PHP-8.5-Lint, Kompatibilitäts-, Sicherheits-, Einsatz-, Benutzerverwaltungs-, amtlicher Nachrichtenvordruck-, Upload-, Export- und PDF-Regressionen |
 | Image-Build | benötigte PHP-Erweiterungen und Apache-Konfiguration |
 | Datenbank | echtes MariaDB-Schema, Einsatz-Singleton/Trigger, Kontosperre, revisionsgesicherte Kennwortrichtlinien-Singletonzeile, Indizes, aktive und persistente Standardmatrix, Engines, Collations und Zero-Date-Freiheit |
-| HTTP | Header, direkte Endpunktfläche, 303-Weiterleitung anonymer geschützter Aufrufe zum allowlist-gebundenen Bestandslogin samt sichtbarem Rückweg, 403-/400-/405-Grenzen, Registrierung, sichtbare Sitzungsidentität, Präsenz/Leerlaufende, feste Funktions-/Rollenbindung, optionaler Gruppenzugang, Kennwortrichtlinien-Vorschau/-Bestätigung, verbindlicher Nachrichtenlauf, S6-Plan, Melderlauf, Kategorien- und ETB-/TBB-Rollengrenzen, Vordruckerzeugung sowie Admin-Export |
-| Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, direkte ETB-/Nachrichten-/Anhang-/Kategorie-Anmeldung ohne Sackgasse oder verschachtelten Arbeitsbereich, sicherer Login-Abbruch, neun stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, A/W-Rufnamen-Listbox mit echtem Fokus, Filterung und Tastaturauswahl, Matrixstandard- und Kennwortrichtlinien-Bestätigungen, BOS-Disclosure, Logout sowie öffentliche und authentifizierte mobile Bedienung bei exakt 390 × 844 CSS-Pixeln |
+| HTTP | Header, direkte Endpunktfläche, 303-Weiterleitung anonymer geschützter Aufrufe zum allowlist-gebundenen Bestandslogin samt sichtbarem Rückweg, 403-/400-/405-Grenzen, Registrierung, sichtbare Sitzungsidentität, Präsenz/Leerlaufende, feste Funktions-/Rollenbindung, optionaler Gruppenzugang, Kennwortrichtlinien-Vorschau/-Bestätigung, verbindlicher Nachrichtenlauf, E-Mail-Anhang mit passiver Ansicht und bytegleichem Originaldownload, S6-Plan, Melderlauf, Kategorien- und ETB-/TBB-Rollengrenzen, Vordruckerzeugung sowie Admin-Export |
+| Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, direkte ETB-/Nachrichten-/Anhang-/Kategorie-Anmeldung ohne Sackgasse oder verschachtelten Arbeitsbereich, sicherer Login-Abbruch, neun stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, passive E-Mail-Anlagenkarte ohne aktive Mail-DOM-/Remote-Inhalte, A/W-Rufnamen-Listbox mit echtem Fokus, Filterung und Tastaturauswahl, Matrixstandard- und Kennwortrichtlinien-Bestätigungen, BOS-Disclosure, Logout sowie öffentliche und authentifizierte mobile Bedienung bei exakt 390 × 844 CSS-Pixeln |
 | Fachabnahme | kompletter Nachrichten-, Anhang-, PDF-, ETB-/TBB- und Restore-Ablauf |
 | Betrieb | kontinuierliche Readiness, Logs, Restarts, Kapazität und Backup-Alter |
 
@@ -201,11 +201,17 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   globale Lockreihenfolge, optimistische Revision, zweistufige
   Adminbestätigung, prospektive Anwendung auf Anlage/Reset/Selbstregistrierung
   und ausdrücklich unveränderten Bestandslogin,
-- Upload- und Anhangpfadvalidierung,
+- Upload- und Anhangpfadvalidierung einschließlich strikt als
+  `message/rfc822` erkannter und strukturell gültiger `.eml`-Dateien, fester
+  20-MiB-Parsergrenze, Ablehnung umbenannter beziehungsweise fehlerhafter Mails
+  sowie weiterhin nicht unterstütztem Outlook-`.msg`,
 - festfunktions- und objektgebundene Dateiauslieferung samt vererbter
   Nachrichtenrechte, begrenzter Rechte für freie Anhänge, erneuter Prüfung bei
   Auswahl und finalem Nachrichtenspeichern sowie Traversal-, Symlink- und
-  Header-Injection-Schutz,
+  Header-Injection-Schutz; die passive E-Mail-Route ist zusätzlich an
+  GET/HEAD, zweifache Objektprüfung, Integritätssnapshot, restriktive
+  Sicherheitsheader, reine Metadaten interner Mail-Anlagen und einen
+  authentifizierten Originaldownload gebunden,
 - portabler Tabellenexport,
 - Compose-Startgate, private MariaDB-Optionsdatei, Migration-Ledger,
   Prüfsummenbindung und Runtime-Schemavertrag,
@@ -223,7 +229,8 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
 - Erzeugung lesbarer Nachrichtenvordrucke und eines durchsuchbaren
   PDF-Einsatzdossiers mit allen neun wählbaren Abschnitten, sichtbaren
   JPEG-/PNG-Anlagen, verlustfrei Windows-1252-darstellbarem Text und
-  seitenweise gerasterten PDF-Anlagen. Der Containervertrag prüft zusätzlich
+  seitenweise gerasterten PDF-Anlagen sowie passiv dargestellten
+  RFC-822-E-Mails. Der Containervertrag prüft zusätzlich
   die GD-Leseunterstützung für GIF und BMP. Alle Originaldateien bleiben sicher
   eingebettet und gegen ihren Eingangsnachweis geprüft; beide
   Nachrichtenausgabepfade werden ein- und mehrseitig mit Poppler pixelgleich
@@ -231,6 +238,18 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   Empfänger, fehlenden VS-NfD-Aufdruck, fehlendes Wappen sowie A4-Geometrie
   geprüft; ein eigener Maximalwert-Fall bindet beide gekürzten Kopfzeilen an
   ihre tatsächlichen Poppler-Bounding-Boxes.
+
+`tests/php/email_attachment_security.php` prüft den begrenzten RFC-822-/MIME-
+Parser unabhängig von Webserver und Datenbank. Die kanonische Fixture
+`tests/fixtures/email-multipart-xss-utf8.eml` kombiniert RFC-2047-/RFC-2231-
+Unicode, gefaltete Kopfzeilen, verschachteltes Multipart, HTML ohne
+Plaintext-Alternative, zwei interne Anlagen sowie präparierte Skript-,
+Ereignis-, JavaScript-URL- und Remote-Ressourcen. Akzeptiert werden nur die
+decodierten/escaped Kopfzeilen, der passive Text und Name, MIME-Typ und Größe
+der internen Anlagen. Aktive oder entfernte Inhalte dürfen nicht in die
+Darstellung gelangen. Upload- und Dateizugriffstests ergänzen MIME-/Endungs-
+und Strukturfehler, die feste 20-MiB-Grenze sowie die Beschränkung des
+Originals auf eine Downloadantwort.
 
 Ein Prozess-Exitcode ungleich null sperrt die Freigabe.
 
@@ -1132,6 +1151,18 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
   noch Nachricht duplizieren. Der statische Sicherheitsvertrag bindet darüber
   hinaus Session-Checkpoint, SHA-256-Aktionsnachweis im unveränderlichen
   Nachrichtenereignis und tokenbezogenen MariaDB-Advisory-Lock,
+- direkter Upload einer realen multipart/verschachtelten `.eml`-Fixture am
+  Vordruck, sichtbares E-Mail-Badge und lazy passive Ansicht. Der
+  authentifizierte GET muss decodierte Unicode-Kopfzeilen, den Textkörper und
+  ausschließlich Metadaten der internen Anlagen liefern; präparierte Skripte,
+  Ereignisattribute und Remote-URLs dürfen weder in der Antwort noch als
+  Browserabruf erscheinen. HEAD liefert dieselben Schutzheader ohne Body, POST
+  endet mit HTTP 405 und `Allow`, anonyme beziehungsweise objektfremde Abrufe
+  bleiben gesperrt. Der Originaldownload und sein erzwungener
+  Attachment-Disposition-Pfad werden bytegleich mit der Fixture verglichen;
+  `no-store`, `nosniff`, `SAMEORIGIN`, restriktive CSP,
+  `X-eStab-Email-Rendering: passive-text` und der Integritätsnachweis sind
+  Pflicht,
 - die harten Prozess-/Hostabbruchfenster zwischen Staging und Finalisierung,
   nach der atomaren Status-2-Beanspruchung einer Cleanup-Zeile sowie zwischen
   Anlagenfinalisierung und Session-Checkpoint sind ausdrücklich verbleibende
@@ -1812,6 +1843,13 @@ Mindestens zu prüfen:
   Datei ablehnen lassen; verknüpften und freien Anhang zusätzlich mit
   berechtigtem sowie fremdem Festfunktionskonto über Liste, Vorschau, Download, Auswahl und
   manipulierten finalen Nachrichtensave prüfen,
+- eine standardisierte `.eml` direkt am Nachrichtenvordruck hochladen, die
+  passive Ansicht im echten Browser auf decodierte Kopfzeilen, lesbaren
+  Nachrichtentext und reine Metadaten interner Anlagen prüfen und den
+  sichtbaren Hinweis auf nicht verifizierten Absender sowie fehlenden
+  DKIM-/S/MIME-Nachweis kontrollieren. Die Originaldatei herunterladen,
+  bytegleich vergleichen und ausschließlich in einer geeigneten Prüfumgebung
+  öffnen; `.msg`, umbenannte oder strukturell ungültige Mail-Dateien ablehnen,
 - Nachrichtenvordruck als PDF erzeugen und aus der geschützten
   Vordruckliste mit berechtigtem Konto abrufen und mit einem fremden Konto sowohl
   Liste als auch aktuellen und archivierten Download abweisen,
@@ -1819,8 +1857,10 @@ Mindestens zu prüfen:
   Abschnitten ETB, TBB, Nachrichtenvordrucke, Anhänge,
   Nachrichtenereignisse, Dienstbetrieb, S6-Fernmeldepläne, Melderläufe und
   Betriebsereignisse erzeugen; JPEG, PNG, GIF, BMP, verlustfrei darstellbaren
-  Text und eine mehrseitige PDF-Anlage mit sichtbarer Anmerkung im Seitenstrom
-  prüfen; TIFF sowie Text mit einem nicht Windows-1252-darstellbaren Zeichen
+  Text, eine passiv dargestellte RFC-822-E-Mail und eine mehrseitige PDF-Anlage
+  mit sichtbarer Anmerkung im Seitenstrom prüfen; die E-Mail darf keine aktiven
+  Inhalte oder Remote-Ressourcen ausführen und nennt interne Anlagen nur als
+  Metadaten. TIFF sowie Text mit einem nicht Windows-1252-darstellbaren Zeichen
   müssen eine Hinweisseite erhalten. Danach die Anlagenansicht im vorgesehenen
   PDF-Programm öffnen und jede eingebettete Datei samt dokumentierter SHA-256
   gegen das Original prüfen; dabei

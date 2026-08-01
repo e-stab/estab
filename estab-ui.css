@@ -4764,26 +4764,199 @@ body.estab-message-form-body {
     text-decoration: none;
 }
 
-.estab-message-attachment-pdf {
+.estab-message-attachment-pdf,
+.estab-message-attachment-email {
     border-top: 1px solid #cbd6df;
     grid-column: 1 / -1;
     padding-top: 0.7rem;
 }
 
-.estab-message-attachment-pdf summary {
+.estab-message-attachment-pdf summary,
+.estab-message-attachment-email summary {
     color: #173a5e;
     cursor: pointer;
     font-weight: 800;
     padding: 0.35rem 0;
 }
 
-.estab-message-attachment-pdf iframe {
+.estab-message-attachment-pdf iframe,
+.estab-message-attachment-email iframe {
     background: #ffffff;
     border: 1px solid #9eb0c1;
     border-radius: 6px;
     height: min(38rem, 70vh);
     margin-top: 0.55rem;
     width: 100%;
+}
+
+.estab-message-attachment-email iframe {
+    height: min(44rem, 75vh);
+}
+
+.estab-email-preview-page {
+    background: #edf2f6;
+    box-sizing: border-box;
+    color: #172033;
+    font-family: Arial, Helvetica, sans-serif;
+    margin: 0;
+    min-height: 100vh;
+    padding: clamp(0.75rem, 3vw, 1.5rem);
+}
+
+.estab-email-preview {
+    background: #ffffff;
+    border: 1px solid #b8c7d5;
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(23, 58, 94, 0.12);
+    margin: 0 auto;
+    max-width: 68rem;
+    overflow: hidden;
+}
+
+.estab-email-preview-header {
+    background: #173a5e;
+    border-bottom: 4px solid #e4b443;
+    color: #ffffff;
+    padding: clamp(1rem, 3vw, 1.5rem);
+}
+
+.estab-email-preview-header .estab-section-kicker {
+    color: #f5d882;
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.1em;
+    margin: 0 0 0.35rem;
+    text-transform: uppercase;
+}
+
+.estab-email-preview-header h1 {
+    color: #ffffff;
+    font-size: clamp(1.25rem, 4vw, 1.8rem);
+    line-height: 1.2;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.estab-email-preview-header > p:last-child {
+    color: #c9d8e6;
+    margin: 0.55rem 0 0;
+    overflow-wrap: anywhere;
+}
+
+.estab-email-preview-headers {
+    background: #f4f7fa;
+    border-bottom: 1px solid #d3dde6;
+    margin: 0;
+    padding: 0.75rem clamp(1rem, 3vw, 1.5rem);
+}
+
+.estab-email-preview-trust {
+    background: #fff7dd;
+    border-bottom: 1px solid #dbc075;
+    color: #5f4106;
+    line-height: 1.45;
+    padding: 0.75rem clamp(1rem, 3vw, 1.5rem);
+}
+
+.estab-email-preview-headers > div {
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: minmax(4.5rem, 7rem) minmax(0, 1fr);
+    padding: 0.35rem 0;
+}
+
+.estab-email-preview-headers dt {
+    color: #536476;
+    font-weight: 800;
+}
+
+.estab-email-preview-headers dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.estab-email-preview-body,
+.estab-email-preview-contained,
+.estab-email-preview-footer,
+.estab-email-preview--error {
+    padding: clamp(1rem, 3vw, 1.5rem);
+}
+
+.estab-email-preview-body h2,
+.estab-email-preview-contained h2 {
+    color: #173a5e;
+    font-size: 1.05rem;
+    margin: 0 0 0.75rem;
+}
+
+.estab-email-preview-text {
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.estab-email-preview-empty {
+    color: #536476;
+    font-style: italic;
+}
+
+.estab-email-preview-contained {
+    border-top: 1px solid #d3dde6;
+}
+
+.estab-email-preview-contained ul {
+    display: grid;
+    gap: 0.5rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.estab-email-preview-contained li {
+    background: #f4f7fa;
+    border-left: 4px solid #315f8b;
+    display: grid;
+    gap: 0.2rem;
+    padding: 0.65rem 0.75rem;
+}
+
+.estab-email-preview-contained li strong {
+    overflow-wrap: anywhere;
+}
+
+.estab-email-preview-contained li span,
+.estab-email-preview-contained > p {
+    color: #536476;
+    font-size: 0.86rem;
+}
+
+.estab-email-preview-warning {
+    background: #fff7dd;
+    border-left: 5px solid #b47a09;
+    color: #5f4106;
+    margin: 0 clamp(1rem, 3vw, 1.5rem) 1rem;
+    padding: 0.75rem 0.85rem;
+}
+
+.estab-email-preview-footer {
+    background: #eef5fb;
+    border-top: 1px solid #b5c8d9;
+}
+
+.estab-email-preview-footer p {
+    line-height: 1.45;
+    margin: 0 0 0.85rem;
+}
+
+.estab-email-preview--error h1 {
+    color: #741914;
+}
+
+@media (max-width: 36rem) {
+    .estab-email-preview-headers > div {
+        gap: 0.2rem;
+        grid-template-columns: 1fr;
+    }
 }
 
 .estab-message-distribution-extras {

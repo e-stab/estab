@@ -1,4 +1,6 @@
 <?php
+
+require_once __DIR__ . '/../app/email_attachment.php';
 /*
 Easy PHP Upload - version 2.29
 A easy to use class for your (multiple) file uploads
@@ -105,6 +107,10 @@ class file_upload {
                                 return "Der Dateiname ist ungültig oder zu lang.";
                         case 18:
                                 return "Dateiendung und erkannter Dateityp passen nicht zusammen.";
+                        case 19:
+                                return "E-Mail-Dateien dürfen für die sichere Darstellung höchstens 20 MiB groß sein.";
+                        case 20:
+                                return "Die E-Mail-Struktur konnte nicht sicher gelesen werden. Bitte exportieren Sie die Nachricht als standardisierte .eml-Datei.";
                         default:
                                 return "Die Datei konnte nicht sicher hochgeladen werden.";
                 }
@@ -210,6 +216,7 @@ class file_upload {
                         ".xls" => array("application/vnd.ms-excel", "application/x-ole-storage", "application/CDFV2"),
                         ".odt" => array("application/vnd.oasis.opendocument.text", "application/zip"),
                         ".txt" => array("text/plain"),
+                        ".eml" => array("message/rfc822"),
                         ".xia" => array("application/zip", "application/octet-stream")
                 );
                 $finfo = new finfo(FILEINFO_MIME_TYPE);
@@ -218,6 +225,36 @@ class file_upload {
                     !in_array($mime, $allowed_mime[$extension], true)) {
                         $this->failure_code = 18;
                         return false;
+                }
+                if ($extension === ".eml") {
+                        $email_size = @filesize($this->the_temp_file);
+                        $email_limit = min(
+                                (int) $this->max_file_size,
+                                ESTAB_EMAIL_ATTACHMENT_MAX_INPUT_BYTES
+                        );
+                        if ($email_size === false || $email_size > $email_limit) {
+                                $this->failure_code = 19;
+                                return false;
+                        }
+                        $stream = @fopen($this->the_temp_file, "rb");
+                        if ($stream === false) {
+                                $this->failure_code = 18;
+                                return false;
+                        }
+                        try {
+                                $email = estab_email_attachment_parse_stream(
+                                        $stream,
+                                        array(
+                                                "input_bytes" => max(1, $email_limit)
+                                        )
+                                );
+                        } finally {
+                                fclose($stream);
+                        }
+                        if (($email["ok"] ?? false) !== true) {
+                                $this->failure_code = 20;
+                                return false;
+                        }
                 }
                 $this->failure_code = null;
                 return true;
@@ -321,6 +358,8 @@ class file_upload {
                         $error[16] = "Die hochgeladene Datei ist umbenannt in <b>".$this->file_copy."</b>.";
                         $error[17] = "Die Datei überschreitet das erlaubte Upload-Limit.";
                         $error[18] = "Dateiendung und erkannter Dateityp passen nicht zusammen.";
+                        $error[19] = "Die E-Mail-Datei überschreitet das sichere 20-MiB-Limit.";
+                        $error[20] = "Die E-Mail-Struktur konnte nicht sicher gelesen werden.";
                         break;
                         //
                         // place here the translations (if you need) from the directory "add_translations"

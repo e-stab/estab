@@ -251,7 +251,10 @@ Die Anlagensektion zeigt JPEG, PNG, GIF und BMP direkt (bei animierten GIFs die
 erste Bildebene) und rastert mehrseitige PDFs einschließlich ihrer Anmerkungen
 seitenweise. Text erscheint nur, wenn
 er sich verlustfrei mit dem Windows-1252-Basiszeichensatz darstellen lässt;
-für TIFF, ZIP, Office, Video und andere nicht statisch darstellbare Inhalte
+standardisierte E-Mail-Dateien im RFC-822-Format (`.eml`) erscheinen innerhalb
+der PDF-Textgrenzen als passiv gerenderter Text ohne aktive HTML-Inhalte oder
+nachgeladene Fremdressourcen. Für nicht verlustfrei darstellbare E-Mails sowie
+TIFF, ZIP, Office, Video und andere nicht statisch darstellbare Inhalte
 erscheint eine eindeutige Hinweisseite. Unabhängig von dieser Vorschau bleibt
 jede Originaldatei bytegleich als PDF-Anlage eingebettet.
 Die ETB-Seiten entsprechen der Struktur **Fb Fü 2** auf A4 hoch, die
@@ -298,6 +301,20 @@ prüft Berechtigung, MIME-Typ und Integrität erneut. „Vom Vordruck entfernen�
 löst nur die Zuordnung im bearbeitbaren Entwurf und löscht die bereits
 archivierte Datei nicht.
 
+RFC-822-E-Mails mit der Endung `.eml` werden ebenfalls direkt am Vordruck
+hochgeladen. Endung, der serverseitig erkannte Typ `message/rfc822` und die
+MIME-Struktur müssen zusammenpassen; Outlook-`.msg` wird nicht unterstützt.
+Die Anlagenkarte öffnet `/4fach/email.php` als ausschließlich passive
+Textansicht: Mail-HTML, Skripte, Ereignisattribute, Formulare, eingebettete
+Objekte und Remote-Ressourcen werden nicht ausgeführt oder nachgeladen.
+Enthaltene Mail-Anlagen erscheinen dort nur mit Name, Typ und Größe. Die
+angezeigten Kopfzeilen belegen weder Absender noch Authentizität; eStab führt
+insbesondere keine DKIM- oder S/MIME-Verifikation durch. Die unveränderte
+Originaldatei kann mit gültiger Anmeldung sowie nach erneuter
+Objektberechtigungs- und Integritätsprüfung heruntergeladen werden. Sie kann weiterhin gefährliche
+Inhalte oder Anlagen enthalten und ist deshalb nur in einer dafür geeigneten
+Umgebung zu öffnen.
+
 Der Upload arbeitet zweiphasig. Zuerst werden ein interner Name und die
 Dateiendung als nicht lesbare, inhabergebundene Reservierung gespeichert;
 anschließend werden die Bytes ohne langen Einsatz-Lock verschoben und gehasht.
@@ -343,6 +360,9 @@ archiviert; bei einem verworfenen Entwurf bleibt sie deshalb als freie,
 berechtigungsgeschützte Archivdatei erhalten. Die Standardgrenze der Anwendung
 beträgt 20 MiB je Datei (`ESTAB_UPLOAD_MAX_BYTES`, maximal 50 MiB); der
 Container setzt dafür `upload_max_filesize = 50M` und `post_max_size = 56M`.
+Für `.eml` gilt unabhängig von einem höher gesetzten globalen Uploadlimit eine
+feste Parsergrenze von 20 MiB. Damit bleibt die MIME-Verarbeitung insbesondere
+auf kleineren NAS-Systemen begrenzt.
 Die sichtbare Anlagendarstellung im PDF-Dossier verwendet eine strengere
 12-Megapixel-/8.000-Pixel-Grenze. Die Anlagenzahl erscheint in
 Meldungsübersicht, zweiter Sichtung und allen operativen Warteschlangen.
@@ -353,9 +373,10 @@ Prüf-/Beförderungsschritte zeigen die Karten lesend. Je Nachricht sind maximal
 100 kanonische Anlagenreferenzen zulässig. Ein unvollständig übertragener
 Upload erfordert eine erneute Dateiauswahl.
 
-Der integrierte Upload unterstützt echte JPEG-Bilder mit `.jpg` und `.jpeg`,
-prüft den MIME-Typ serverseitig und nennt das standardmäßige Uploadlimit von
-20 MiB direkt am Dateifeld. Ein ETB-Eintrag kann optional genau einen bereits
+Der integrierte Upload unterstützt unter anderem echte JPEG-Bilder mit `.jpg`
+und `.jpeg` sowie strukturell geprüfte RFC-822-E-Mails mit `.eml`, prüft den
+MIME-Typ serverseitig und nennt das standardmäßige Uploadlimit von 20 MiB
+direkt am Dateifeld. Ein ETB-Eintrag kann optional genau einen bereits
 fertig hochgeladenen und noch keinem ETB-Eintrag zugeordneten Einsatzanhang
 als Anlage aufnehmen. Beim Speichern wird daraus automatisch die eindeutige
 ETB-Anlagennummer `ETB {einsatz_id}-{estab_book_lfd}-1` gebildet. eStab führt
@@ -464,6 +485,7 @@ entstehen. OCI-Tags – auch `latest` – gibt es absichtlich nicht.
 | `/4fach/nachwea.php` | Nachweisung der aufgenommenen und beförderten Nachrichten | ausschließlich festes Konto `LdF/Fernmelder` oder `A/W/Fernmelder` |
 | `/4fach/vordrucke.php` | abgeschlossene Vordrucke des aktiven Einsatzes im aktuellen, mit dem Einsatzdossier gemeinsamen PDF-Layout öffnen | feste Kontofunktion; zugrunde liegende Nachricht, Abschluss- und Druckstatus werden erneut geprüft, das persistierte Archiv bleibt unverändert |
 | `/4fach/anhang.php`, `/4fach/download.php`, `/4fach/showpic.php` | Anhänge auswählen, auflisten, herunterladen oder als Bildvorschau öffnen | feste Kontofunktion; verknüpfte Anhänge erben exakt die Leserechte mindestens einer verknüpften Nachricht, freie Anhänge sind nur für Uploader oder S2, Si und LdF sichtbar |
+| `/4fach/email.php` | strukturell geprüfte `.eml`-Anlage als passive Textansicht öffnen und auf die getrennte Originaldatei verweisen | dieselbe feste Kontofunktion und Objektberechtigung wie beim Download; erneute Integritätsprüfung, keine aktive Mail-HTML-/Remote-Darstellung und keine Behauptung einer DKIM-/S/MIME-verifizierten Absenderidentität |
 | `/stabetb/etb.php`, `/fmtbb/tbb.php` | einsatzlokal fortlaufendes ETB und TBB lesen, berichtigen und fachabhängig ergänzen; ETB mit kombinierbarer Volltext-/Art-/Nummer-/Bezugs-/Anlagensuche und optionaler eindeutiger Anlagenzuordnung | angemeldete Konten lesen nach Objektregel; ETB schreibt `ETB/Stab` oder `S2/Stab`, TTB schreibt `A/W/Fernmelder`; aktiver Einsatz erforderlich, keine aktive Schicht erforderlich, gespeicherte Zeilen append-only |
 | `/4fadm/admin.php` | Administration | separates HTTP Basic Auth |
 | `/4fadm/incidents.php` | Einsätze samt Führungsstellennamen anlegen, historische Fehlwerte einmalig bestätigen, aktivieren und deaktivieren | HTTP Basic Auth, Session-CSRF, revisionsgesicherter globaler Status; die erste operative Eintragung setzt atomar einen dauerhaften Sperrmarker für den bestätigten Führungsstellennamen |
@@ -825,7 +847,8 @@ Dateiname genügt nicht. Verknüpfte Anhänge übernehmen dieselbe Objektgrenze
 über vollständige, semikolongetrennte Dateinamens-Tokens. Freie Anhänge bleiben
 auf den Uploader sowie S2, Si und LdF begrenzt; direkter Upload,
 Archivauswahl, Lösen der Zuordnung und endgültiges Nachrichtenspeichern prüfen
-die Berechtigung erneut. Bild- und PDF-Browseransicht sowie der Download
+die Berechtigung erneut. Bild-, PDF- und passive E-Mail-Browseransicht sowie
+der Download
 arbeiten erst nach erneuter Objekt-, MIME- und Integritätsprüfung auf einem
 unveränderlichen Byte-Snapshot.
 Einzelvordruck und Nachrichtenseiten des PDF-Einsatzdossiers verwenden
@@ -836,7 +859,10 @@ erneut geprüft; beim Upgrade vorhandene Legacy-Dateien heißen ausdrücklich
 „Integrität beim Eingang nicht belegbar“. JPEG, PNG, GIF und BMP werden
 zusätzlich als sichtbare Anlagenseiten ausgegeben; mehrseitige PDFs erscheinen
 einschließlich ihrer Anmerkungen seitenweise gerastert. Verlustfrei
-Windows-1252-darstellbarer Text wird direkt ausgegeben. TIFF und andere nicht
+Windows-1252-darstellbarer Text wird direkt ausgegeben. Standardisierte
+`.eml`-Dateien werden innerhalb der PDF-Textgrenzen auch im Dossier nur passiv
+als Kopfzeilen und Textkörper dargestellt; enthaltene Mail-Anlagen werden als
+Metadaten nachgewiesen. Nicht verlustfrei darstellbare E-Mails, TIFF und andere nicht
 statisch darstellbare Formate erhalten eine klare Hinweisseite, ihr
 bytegleiches Original bleibt eingebettet. Ist eine historische
 Empfängerfunktion in der heutigen Matrix nicht mehr vorhanden, bleibt sie mit

@@ -65,6 +65,7 @@ COPY 4fach/4fachform.php \
     4fach/data_hndl.php \
     4fach/db_operation.php \
     4fach/download.php \
+    4fach/email.php \
     4fach/fuehrungsstelle.php \
     4fach/index.php \
     4fach/info.php \

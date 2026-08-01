@@ -2307,7 +2307,7 @@ submit_recovered_direct_staff_message() {
         --form '10_anschrift=HTTP-Wiederholungsziel' \
         --form "11_rufnummer=$workflow_phone" \
         --form '11_gesprnotiz=f' \
-        --form "12_anhang=$invalid_direct_reference" \
+        --form-string "12_anhang=$invalid_direct_reference" \
         --form '12_betreff=Korrigierter Direktentwurf' \
         --form "12_inhalt=$invalid_direct_staff_marker" \
         --form "12_abfzeit=$tactical_time" \
@@ -2402,6 +2402,79 @@ workflow_attachment_request_token=$(
     message_attachment_request_token_from_body
 )
 
+# Add a real multipart RFC-822 message to the same draft. Besides proving the
+# direct upload flow, this fixture contains UTF-8 headers, hostile HTML and two
+# embedded files so the passive browser view can be verified end to end.
+direct_staff_email_file=$repo_root/tests/fixtures/email-multipart-xss-utf8.eml
+direct_staff_email_comment="E-Mail ${workflow_marker}"
+direct_staff_email_md5=$(
+    openssl dgst -md5 -r "$direct_staff_email_file" | awk '{print $1}'
+)
+direct_staff_email_sha256=$(file_sha256 "$direct_staff_email_file")
+direct_staff_email_before=$(
+    printf "SELECT COUNT(*) FROM nv_anhang WHERE BINARY comment = BINARY '%s' AND BINARY kuerzel = BINARY '%s';\n" \
+        "$direct_staff_email_comment" "$test_code" | db_sql
+)
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --form "csrf_token=$workflow_csrf_token" \
+    --form "recipient_matrix_revision=$workflow_recipient_matrix_revision" \
+    --form "message_attachment_request_token=$workflow_attachment_request_token" \
+    --form 'message_attachment_upload_x=1' \
+    --form 'task=Stab_schreiben' \
+    --form '07_durchspruch=D' \
+    --form '10_anschrift=HTTP-Direktempfänger' \
+    --form "11_rufnummer=$workflow_phone" \
+    --form '11_gesprnotiz=f' \
+    --form-string "12_anhang=$direct_staff_pdf_reference" \
+    --form '12_betreff=Direkter E-Mail-Entwurf' \
+    --form "12_inhalt=${workflow_marker}_EMAIL_DRAFT" \
+    --form "12_abfzeit=$tactical_time" \
+    --form '13_abseinheit=HTTP-Direktintegration' \
+    --form "14_zeichen=$test_code" \
+    --form "14_funktion=$test_function" \
+    --form "message_attachment_comment=$direct_staff_email_comment" \
+    --form \
+        "message_attachment_upload=@$direct_staff_email_file;type=message/rfc822;filename=Einsatzmail-Uebung.EML" \
+    "$base_url/4fach/mainindex.php"
+assert_body 'Einsatzmail-Uebung.EML'
+assert_body 'data-estab-email-attachment'
+assert_body 'data-estab-email-preview'
+assert_body 'email.php?file='
+assert_body 'Originaldatei herunterladen'
+assert_body 'data-estab-attachment-count="2"'
+if grep -Eq 'Fatal error|Uncaught (Error|TypeError)|Warning:' "$body"; then
+    printf 'HTTP smoke: direct email upload leaked a PHP runtime error\n' >&2
+    exit 1
+fi
+direct_staff_email_reference=$(sed -n \
+    's/.*id="f_12_anhang" type="hidden" name="12_anhang" value="\([A-Za-z0-9_.;-][A-Za-z0-9_.;-]*\)".*/\1/p' \
+    "$body" | head -n 1)
+if ! printf '%s' "$direct_staff_email_reference" |
+    grep -Eq '^[A-Za-z]{2}[0-9]{4,}\.pdf;[A-Za-z]{2}[0-9]{4,}\.eml;$'; then
+    printf 'HTTP smoke: direct email reference missing from message form\n' >&2
+    exit 1
+fi
+direct_staff_email_tail=${direct_staff_email_reference#*;}
+direct_staff_email_attachment=${direct_staff_email_tail%;}
+direct_staff_email_after=$(
+    printf "SELECT COUNT(*) FROM nv_anhang WHERE BINARY comment = BINARY '%s' AND BINARY kuerzel = BINARY '%s';\n" \
+        "$direct_staff_email_comment" "$test_code" | db_sql
+)
+if [ "$direct_staff_email_after" != "$((direct_staff_email_before + 1))" ]; then
+    printf 'HTTP smoke: direct email upload did not create exactly one archive row\n' >&2
+    exit 1
+fi
+direct_staff_email_reservation=${direct_staff_email_attachment%.*}
+assert_uploaded_attachment \
+    "$direct_staff_email_reservation" "$test_code" eml \
+    "$direct_staff_email_md5"
+workflow_csrf_token=$(csrf_from_body)
+workflow_recipient_matrix_revision=$(recipient_matrix_revision_from_body)
+workflow_attachment_request_token=$(
+    message_attachment_request_token_from_body
+)
+
 # Selecting a file and pressing the ordinary "Absenden" button is the primary
 # staff workflow. The same multipart request must archive exactly one image and
 # persist its server-generated reference with exactly one message. Replaying
@@ -2438,7 +2511,7 @@ submit_direct_staff_message() {
         --form '10_anschrift=HTTP-Direktempfänger' \
         --form "11_rufnummer=$workflow_phone" \
         --form '11_gesprnotiz=f' \
-        --form "12_anhang=$direct_staff_pdf_reference" \
+        --form-string "12_anhang=$direct_staff_email_reference" \
         --form "12_betreff=$direct_staff_subject" \
         --form "12_inhalt=$direct_staff_marker" \
         --form "12_abfzeit=$tactical_time" \
@@ -2480,17 +2553,44 @@ direct_staff_record=$(
         "$direct_staff_marker" | db_sql
 )
 if ! printf '%s' "$direct_staff_record" |
-    grep -Eq '^[1-9][0-9]*\|[A-Za-z]{2}[0-9]{4,}\.pdf;[A-Za-z]{2}[0-9]{4,}\.jpeg;$'; then
-    printf 'HTTP smoke: direct staff message lacks its persisted attachment reference\n' >&2
+    grep -Eq '^[1-9][0-9]*\|[A-Za-z0-9_.;-]+;$'; then
+    printf 'HTTP smoke: direct staff message has an invalid attachment list: %s\n' \
+        "$direct_staff_record" >&2
     exit 1
 fi
 direct_staff_record_id=${direct_staff_record%%|*}
 direct_staff_reference=${direct_staff_record#*|}
-direct_staff_persisted_pdf=${direct_staff_reference%%;*}
-direct_staff_image_reference=${direct_staff_reference#*;}
-direct_staff_attachment=${direct_staff_image_reference%;}
-if [ "$direct_staff_persisted_pdf" != "$direct_staff_pdf_attachment" ]; then
-    printf 'HTTP smoke: final message replaced its already uploaded PDF reference\n' >&2
+direct_staff_persisted_pdf=0
+direct_staff_persisted_email=0
+direct_staff_attachment=
+direct_staff_reference_count=0
+for direct_staff_candidate in $(
+    printf '%s' "$direct_staff_reference" | tr ';' '\n'
+); do
+    direct_staff_reference_count=$((direct_staff_reference_count + 1))
+    if [ "$direct_staff_candidate" = "$direct_staff_pdf_attachment" ]; then
+        direct_staff_persisted_pdf=$((direct_staff_persisted_pdf + 1))
+    elif [ "$direct_staff_candidate" = "$direct_staff_email_attachment" ]; then
+        direct_staff_persisted_email=$((direct_staff_persisted_email + 1))
+    elif printf '%s' "$direct_staff_candidate" |
+        grep -Eq '^[A-Za-z]{2}[0-9]{4,}\.jpeg$'; then
+        if [ -n "$direct_staff_attachment" ]; then
+            printf 'HTTP smoke: direct staff message contains two JPEG uploads\n' >&2
+            exit 1
+        fi
+        direct_staff_attachment=$direct_staff_candidate
+    else
+        printf 'HTTP smoke: direct staff message contains an unexpected attachment: %s\n' \
+            "$direct_staff_candidate" >&2
+        exit 1
+    fi
+done
+if [ "$direct_staff_reference_count" -ne 3 ] \
+    || [ "$direct_staff_persisted_pdf" -ne 1 ] \
+    || [ "$direct_staff_persisted_email" -ne 1 ] \
+    || [ -z "$direct_staff_attachment" ]; then
+    printf 'HTTP smoke: final message did not preserve exactly PDF, EML and JPEG: %s\n' \
+        "$direct_staff_reference" >&2
     exit 1
 fi
 direct_staff_reservation=${direct_staff_attachment%.*}
@@ -2510,7 +2610,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
 assert_body "$direct_staff_marker"
 assert_body 'data-estab-message-attachment-badge'
 assert_body \
-    'data-estab-message-attachment-count="2" aria-label="2 Anlagen">2 Anlagen</span>'
+    'data-estab-message-attachment-count="3" aria-label="3 Anlagen">3 Anlagen</span>'
 direct_staff_detail_csrf=$(csrf_from_body)
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
@@ -2519,18 +2619,115 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "00_lfd=$direct_staff_record_id" \
     "$base_url/4fach/mainindex.php"
 assert_body 'data-estab-message-attachments'
-assert_body 'data-estab-attachment-count="2"'
+assert_body 'data-estab-attachment-count="3"'
 assert_body "data-estab-message-attachment=\"$direct_staff_attachment\""
 assert_body "data-estab-message-attachment=\"$direct_staff_pdf_attachment\""
+assert_body "data-estab-message-attachment=\"$direct_staff_email_attachment\""
 assert_body 'Staff-Direkt.JPEG'
 assert_body 'Staff-Direkt.PDF'
+assert_body 'Einsatzmail-Uebung.EML'
 assert_body "$direct_staff_comment"
 assert_body "$direct_staff_pdf_comment"
+assert_body "$direct_staff_email_comment"
 assert_body 'class="estab-message-attachment-preview"'
 assert_body "showpic.php?file=$direct_staff_attachment"
 assert_body 'Im Browser ansehen'
 assert_body 'data-estab-pdf-preview'
 assert_body "file=$direct_staff_pdf_attachment&amp;view=inline"
+assert_body 'data-estab-email-attachment'
+assert_body 'data-estab-email-preview'
+assert_body "email.php?file=$direct_staff_email_attachment"
+assert_body 'E-Mail ansehen'
+assert_body 'Originaldatei herunterladen'
+
+# The web representation is deliberately passive: mail HTML is reduced to
+# escaped text, remote resources never reach the DOM and unverified sender
+# data is labelled as such. The original RFC-822 bytes remain downloadable.
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --dump-header "$headers" \
+    --get \
+    --data-urlencode "file=$direct_staff_email_attachment" \
+    "$base_url/4fach/email.php"
+assert_header_fixed 'Content-Type: text/html; charset=UTF-8'
+assert_header_fixed 'Cache-Control: private, no-store, max-age=0'
+assert_header_fixed 'X-Content-Type-Options: nosniff'
+assert_header_fixed 'X-Frame-Options: SAMEORIGIN'
+assert_header_fixed 'Referrer-Policy: no-referrer'
+assert_header_fixed 'X-eStab-Email-Rendering: passive-text'
+assert_header_fixed 'X-eStab-Attachment-Integrity: verified'
+assert_header_fixed "X-eStab-Attachment-SHA256: $direct_staff_email_sha256"
+assert_header_regex \
+    "^Content-Security-Policy: .*default-src 'none'.*script-src 'none'.*frame-ancestors 'self'" \
+    'strict passive email content security policy'
+assert_body 'data-estab-email-preview'
+assert_body 'data-estab-email-rendering="passive-text"'
+assert_body 'Lage &lt;Übung&gt; – Grüße'
+assert_body 'Erika Müller &lt;erika.mueller@example.test&gt;'
+assert_body 'Führungsstelle Göppingen &lt;fuehrungsstelle@example.test&gt;'
+assert_body 'E-Mail-Lagemeldung'
+assert_body 'Gefahr &amp; Rückmeldung aus der Übung.'
+assert_body 'Rückfrage'
+assert_body 'data-estab-email-body-source="html"'
+assert_body 'In der E-Mail enthaltene Dateien (2)'
+assert_body 'Lage-Übung.png'
+assert_body 'Notiz-Übung.txt'
+assert_body 'Absenderangaben nicht verifiziert'
+assert_body 'Originaldatei herunterladen'
+for forbidden_email_markup in \
+    'window.__estabEmailXss' \
+    'evil.invalid' \
+    '<script' \
+    '<iframe' \
+    'javascript:' \
+    'onerror='
+do
+    assert_body_absent "$forbidden_email_markup"
+done
+
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request HEAD \
+    "$base_url/4fach/email.php?file=$direct_staff_email_attachment"
+if [ -s "$body" ]; then
+    printf 'HTTP smoke: email HEAD response unexpectedly contains a body\n' >&2
+    exit 1
+fi
+assert_header_fixed 'X-eStab-Email-Rendering: passive-text'
+assert_header_fixed "X-eStab-Attachment-SHA256: $direct_staff_email_sha256"
+assert_status 405 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "file=$direct_staff_email_attachment" \
+    "$base_url/4fach/email.php"
+assert_header_fixed 'Allow: GET, HEAD'
+assert_body 'Für die E-Mail-Ansicht sind nur GET und HEAD erlaubt.'
+
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --dump-header "$headers" \
+    --get \
+    --data-urlencode 'area=attachment' \
+    --data-urlencode "file=$direct_staff_email_attachment" \
+    "$base_url/4fach/download.php"
+if ! cmp -s "$direct_staff_email_file" "$body"; then
+    printf 'HTTP smoke: downloaded original email differs from uploaded bytes\n' >&2
+    exit 1
+fi
+assert_header_fixed 'Content-Type: message/rfc822'
+assert_header_regex '^Content-Disposition: attachment;' \
+    'email original download disposition'
+assert_header_fixed 'X-eStab-Attachment-Integrity: verified'
+assert_header_fixed "X-eStab-Attachment-SHA256: $direct_staff_email_sha256"
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --dump-header "$headers" \
+    --get \
+    --data-urlencode 'area=attachment' \
+    --data-urlencode "file=$direct_staff_email_attachment" \
+    --data-urlencode 'view=inline' \
+    "$base_url/4fach/download.php"
+if ! cmp -s "$direct_staff_email_file" "$body"; then
+    printf 'HTTP smoke: inline request changed original email bytes\n' >&2
+    exit 1
+fi
+assert_header_regex '^Content-Disposition: attachment;' \
+    'email must never render inline as raw RFC-822 content'
 
 # Reset the isolated list search and open a fresh form before continuing the
 # full legacy archive compatibility workflow below.

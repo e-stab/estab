@@ -35,7 +35,7 @@ function estab_file_validate_name(string $area, string $filename): string
             preg_match('/\A[A-Za-z0-9_-]{2,238}\.([A-Za-z0-9]{1,16})\z/D', $filename, $parts) !== 1
             || !in_array(strtolower($parts[1]), [
                 'jpg', 'jpeg', 'tif', 'tiff', 'gif', 'avi', 'png', 'bmp',
-                'zip', 'pdf', 'doc', 'xls', 'odt', 'txt', 'xia',
+                'zip', 'pdf', 'doc', 'xls', 'odt', 'txt', 'eml', 'xia',
             ], true)
         ) {
             throw new InvalidArgumentException('Invalid attachment filename');

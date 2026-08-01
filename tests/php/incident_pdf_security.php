@@ -43,6 +43,35 @@ function incident_pdf_security_method_source(string $method): string
     ));
 }
 
+/** @return list<string> */
+function incident_pdf_security_embedded_streams(string $pdf): array
+{
+    $matched = preg_match_all(
+        '/\/Type \/EmbeddedFile\b.*?\/Length ([0-9]+)\s+'
+            . '.*?stream\r?\n/s',
+        $pdf,
+        $matches,
+        PREG_SET_ORDER | PREG_OFFSET_CAPTURE
+    );
+    if (!is_int($matched) || $matched < 1) {
+        return [];
+    }
+    $streams = [];
+    foreach ($matches as $match) {
+        $length = (int) ($match[1][0] ?? -1);
+        $matchedText = (string) ($match[0][0] ?? '');
+        $offset = (int) ($match[0][1] ?? -1) + strlen($matchedText);
+        $stream = $length >= 0 && $offset >= 0
+            ? substr($pdf, $offset, $length)
+            : '';
+        if (strlen($stream) !== $length) {
+            throw new RuntimeException('Embedded PDF file stream is truncated');
+        }
+        $streams[] = $stream;
+    }
+    return $streams;
+}
+
 $temporaryRoot = sys_get_temp_dir()
     . '/estab-incident-pdf-' . bin2hex(random_bytes(6));
 if (!mkdir($temporaryRoot, 0700)) {
@@ -751,6 +780,120 @@ try {
         'embedded attachment SHA-256 differs'
     );
 
+    $emailPath = __DIR__
+        . '/../fixtures/email-multipart-xss-utf8.eml';
+    $emailPayload = file_get_contents($emailPath);
+    if (!is_string($emailPayload)) {
+        throw new RuntimeException('Could not read PDF email fixture');
+    }
+    $emailPdf = new EstabIncidentPdf($incident, 1024 * 1024);
+    $emailPdf->SetCompression(false);
+    $emailEmbedded = $emailPdf->embedAttachment(
+        $emailPath,
+        'Anlage-E-Mail.eml',
+        'message/rfc822',
+        'Originale Einsatz-E-Mail',
+        hash('sha256', $emailPayload),
+        strlen($emailPayload)
+    );
+    $emailIndex = [[
+        'display_name' => 'Einsatz-E-Mail.eml',
+        'stored_name' => $emailEmbedded['name'],
+        'archive_name' => 'EL0002.eml',
+        'size' => $emailEmbedded['size'],
+        'sha256' => $emailEmbedded['sha256'],
+        'mime' => $emailEmbedded['mime'],
+    ]];
+    $emailPdf->addAttachmentIndex($emailIndex);
+    $emailVisibility = $emailPdf->addAttachmentPages($emailIndex);
+    $emailDocument = $emailPdf->Output('', 'S');
+    $emailFixtureOutput = getenv(
+        'ESTAB_INCIDENT_PDF_EMAIL_FIXTURE_OUTPUT'
+    );
+    if (is_string($emailFixtureOutput) && $emailFixtureOutput !== '') {
+        if (
+            !str_starts_with($emailFixtureOutput, '/')
+            || !is_dir(dirname($emailFixtureOutput))
+            || file_put_contents($emailFixtureOutput, $emailDocument)
+                !== strlen($emailDocument)
+        ) {
+            throw new RuntimeException(
+                'Could not write requested PDF email fixture'
+            );
+        }
+    }
+    $assert(
+        $emailVisibility === [
+            'attachment_visible_count' => 1,
+            'attachment_visible_pages' => 1,
+            'attachment_rendered_count' => 1,
+            'attachment_rendered_pages' => 1,
+            'attachment_information_pages' => 0,
+        ]
+            && str_contains(
+                $emailDocument,
+                estab_incident_pdf_text('Passive E-Mail-Darstellung')
+            )
+            && str_contains($emailDocument, 'E-MAIL-KOPFDATEN')
+            && str_contains(
+                $emailDocument,
+                estab_incident_pdf_text(
+                    'Von: Erika Müller <erika.mueller@example.test>'
+                )
+            )
+            && str_contains(
+                $emailDocument,
+                estab_incident_pdf_text(
+                    'An: Führungsstelle Göppingen '
+                        . '<fuehrungsstelle@example.test>'
+                )
+            )
+            && str_contains($emailDocument, 'Cc: \(nicht angegeben\)')
+            && str_contains($emailDocument, 'Datum: Sat, 1 Aug 2026')
+            && str_contains(
+                $emailDocument,
+                estab_incident_pdf_text('Betreff: Lage <Übung> – Grüße')
+            )
+            && str_contains($emailDocument, 'NACHRICHTENTEXT')
+            && str_contains($emailDocument, 'E-Mail-Lagemeldung')
+            && str_contains(
+                $emailDocument,
+                estab_incident_pdf_text(
+                    'Gefahr & Rückmeldung aus der Übung.'
+                )
+            )
+            && str_contains($emailDocument, 'EINGEBETTETE MAIL-DATEIEN')
+            && str_contains(
+                $emailDocument,
+                estab_incident_pdf_text('Lage-Übung.png | image/png | 68 Byte')
+            )
+            && str_contains(
+                $emailDocument,
+                estab_incident_pdf_text(
+                    'Notiz-Übung.txt | text/plain | 18 Byte'
+                )
+            ),
+        'EML attachment lacks passive headers, body, or enclosed-file list'
+    );
+    $emailStreams = incident_pdf_security_embedded_streams($emailDocument);
+    $assert(
+        $emailStreams === [$emailPayload]
+            && str_contains($emailDocument, md5($emailPayload)),
+        'EML original is not a byte-identical verified EmbeddedFile'
+    );
+    $emailVisibleObjects = str_replace($emailPayload, '', $emailDocument);
+    $assert(
+        !str_contains($emailVisibleObjects, '<script')
+            && !str_contains($emailVisibleObjects, '<iframe')
+            && !str_contains($emailVisibleObjects, 'window.__estabEmailXss')
+            && !str_contains($emailVisibleObjects, 'evil.invalid')
+            && str_contains(
+                $emailVisibleObjects,
+                'Mail-HTML wurde niemals aktiv ausgef'
+            ),
+        'active mail HTML leaked outside the inert EmbeddedFile stream'
+    );
+
     $binaryAttachmentPath = $temporaryRoot . '/archive.zip';
     $binaryPayload = base64_decode(
         'UEsFBgAAAAAAAAAAAAAAAAAAAAAAAA==',
@@ -817,6 +960,24 @@ try {
             'mime' => $mismatchEmbedded['mime'],
         ]]),
         'renderable extension with mismatching detected MIME type was accepted'
+    );
+    $emailMismatchPdf = new EstabIncidentPdf($incident, 1024);
+    $emailMismatchEmbedded = $emailMismatchPdf->embedAttachment(
+        $attachmentPath,
+        'Anlage-Falsch.eml',
+        'text/plain',
+        'EML mismatch proof'
+    );
+    $assertThrows(
+        static fn (): array => $emailMismatchPdf->addAttachmentPages([[
+            'display_name' => 'Anlage-Falsch.eml',
+            'stored_name' => $emailMismatchEmbedded['name'],
+            'archive_name' => 'EL0004.eml',
+            'size' => $emailMismatchEmbedded['size'],
+            'sha256' => $emailMismatchEmbedded['sha256'],
+            'mime' => $emailMismatchEmbedded['mime'],
+        ]]),
+        'EML extension with mismatching detected MIME type was accepted'
     );
 
     $lineLimitPath = $temporaryRoot . '/too-many-lines.txt';

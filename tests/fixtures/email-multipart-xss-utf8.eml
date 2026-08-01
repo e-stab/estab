@@ -1,0 +1,43 @@
+From: =?UTF-8?Q?Erika_M=C3=BCller?= <erika.mueller@example.test>
+To: =?UTF-8?Q?F=C3=BChrungsstelle_G=C3=B6ppingen?= <fuehrungsstelle@example.test>
+Date: Sat, 1 Aug 2026 18:12:00 +0200
+Message-ID: <estab-email-fixture@example.test>
+Subject: =?UTF-8?Q?Lage_=3C=C3=9Cbung=3E?=
+ =?UTF-8?Q?_=E2=80=93_Gr=C3=BC=C3=9Fe?=
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="estab-mixed"
+
+--estab-mixed
+Content-Type: multipart/related; boundary="estab-related"; type="text/html"
+
+--estab-related
+Content-Type: text/html; charset=UTF-8
+Content-Transfer-Encoding: quoted-printable
+
+<!doctype html>
+<html><head>
+<style>@import url(https://evil.invalid/tracker.css);</style>
+</head><body>
+<h1>E-Mail-Lagemeldung</h1>
+<p>Gefahr &amp; R=C3=BCckmeldung aus der =C3=9Cbung.</p>
+<script>window.__estabEmailXss=3D1</script>
+<img src=3D"x" onerror=3D"window.__estabEmailXss=3D2">
+<a href=3D"javascript:window.__estabEmailXss=3D3">R=C3=BCckfrage</a>
+<iframe src=3D"https://evil.invalid/frame"></iframe>
+<img src=3D"cid:lagebild-1@example.test" alt=3D"Lagebild">
+</body></html>
+--estab-related
+Content-Type: image/png; name*=UTF-8''Lage-%C3%9Cbung.png
+Content-Transfer-Encoding: base64
+Content-ID: <lagebild-1@example.test>
+Content-Disposition: inline; filename*=UTF-8''Lage-%C3%9Cbung.png
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=
+--estab-related--
+--estab-mixed
+Content-Type: text/plain; charset=UTF-8; name*=UTF-8''Notiz-%C3%9Cbung.txt
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename*=UTF-8''Notiz-%C3%9Cbung.txt
+
+Tm90aXogZsO8ciDDnGJ1bmcK
+--estab-mixed--

@@ -118,9 +118,20 @@ ungespeicherten Nachrichtenvordruck vollständig wieder anzeigen. JavaScript
 warnt bereits vor dem Senden; überschreitet der gesamte Request dennoch die
 PHP-Grenze, antwortet der Controller ausdrücklich mit HTTP 413.
 
+Für RFC-822-E-Mail-Anlagen (`.eml`) gilt davon unabhängig ein nicht
+konfigurierbares Parserlimit von 20 MiB. Auch wenn
+`ESTAB_UPLOAD_MAX_BYTES` auf bis zu 50 MiB erhöht wird, werden größere
+E-Mail-Dateien vor der MIME-Verarbeitung abgewiesen. Diese feste Grenze
+verhindert, dass verschachtelte MIME-Strukturen auf ressourcenbegrenzten
+NAS-Systemen den PHP-Worker unverhältnismäßig belasten.
+
 Der direkt in den Nachrichtenvordruck integrierte Upload und die optionale
 Archivauswahl akzeptieren unter anderem `.jpg` und `.jpeg` sowie `.tif` und
-`.tiff` unabhängig von Groß-/Kleinschreibung. Dateiendung und serverseitig
+`.tiff` unabhängig von Groß-/Kleinschreibung. Standardisierte `.eml`-Dateien
+sind ebenfalls zulässig; Outlook-`.msg` ist nicht unterstützt. Bei `.eml`
+müssen zusätzlich zur Endung sowohl der serverseitig erkannte Typ
+`message/rfc822` als auch die begrenzt geprüfte MIME-Struktur passen.
+Dateiendung und serverseitig
 erkannter MIME-Typ müssen zusammenpassen; eine nur in `.jpeg` umbenannte
 Fremddatei bleibt deshalb gesperrt. Formular und Fehlermeldung zeigen die
 effektive Anwendungsgrenze verständlich an. Bestehende Installationen, deren
@@ -252,6 +263,29 @@ PDF-Viewer sperrt; alle übrigen Antworten bleiben für Einbettung gesperrt. Die
 PDF-Karte lädt den Viewer erst beim Aufklappen. Ob der Inhalt tatsächlich
 angezeigt wird, hängt zusätzlich von der PDF-Unterstützung des Browsers ab.
 
+E-Mail-Anlagen verwenden nicht diesen rohen Inline-Abruf. Der positive
+Runtime-Pfad `/4fach/email.php` liest ausschließlich `.eml` und erzeugt daraus
+eine passive UTF-8-Textansicht; das Containerimage und der Runtime-Surface-
+Vertrag führen diesen Endpunkt sowie den zentralen E-Mail-Parser ausdrücklich
+in ihrer Allowlist. Der Controller erlaubt nur GET und HEAD, löst eine fehlende
+Fachsitzung über den normalen Anmeldeweg und wiederholt Objektberechtigung und
+Integritätsprüfung unmittelbar vor der Darstellung. Erfolgreiche Antworten
+tragen unter anderem `no-store`, `nosniff`, `SAMEORIGIN`, `no-referrer`, eine
+restriktive Content-Security-Policy und einen Marker für passive Darstellung.
+Rohe Mail-HTML-Inhalte, Skripte, Ereignisattribute, Formulare, eingebettete
+Objekte und Remote-Ressourcen werden nicht ausgeführt oder nachgeladen.
+Interne Mail-Anlagen werden nur mit Metadaten aufgelistet.
+
+Die Ansicht weist sichtbar darauf hin, dass angezeigte From-/To-/Cc-/Datums-
+und Betreffzeilen keine verifizierte Identität belegen. eStab führt weder eine
+DKIM- noch eine S/MIME-Authentizitätsprüfung durch. Der getrennte Link zur
+Originaldatei läuft über den normalen authentifizierten Downloadpfad, liefert
+die integritätsgeprüften Bytes unverändert und erzwingt weiterhin eine
+Download-Disposition. Diese Bytegleichheit ist kein Malware-Nachweis: Die
+Originalmail kann aktive oder anderweitig riskante Inhalte und enthaltene
+Dateien transportieren und darf betrieblich nur in einer geeigneten
+Prüfumgebung geöffnet werden.
+
 Eine Bildkarte versucht nur bei JPEG, PNG, GIF und BMP bis 16 Megapixel und
 höchstens 24 MiB Dateigröße eine GD-Miniatur zu dekodieren. Der Endpunkt
 begrenzt jede angeforderte Ausgabeachse auf 1.600 Pixel; die Kartenansicht
@@ -276,7 +310,11 @@ Antwortbytes nicht rückwirkend zurückholen.
 Im PDF-Einsatzdossier werden JPEG, PNG, GIF und BMP sichtbar ausgegeben;
 mehrseitige PDFs werden mit Poppler einschließlich ihrer Anmerkungen
 seitenweise gerastert. Textdateien erscheinen nur, wenn ihr Inhalt verlustfrei
-mit Windows-1252 darstellbar ist. Andere zulässige Uploadformate wie TIFF,
+mit Windows-1252 darstellbar ist. Strukturell gültige `.eml`-Dateien erscheinen
+innerhalb derselben PDF-Text-/Zeichengrenzen als passive E-Mail-Darstellung mit
+ausgewählten Kopfzeilen und Textkörper; enthaltene Mail-Anlagen werden nur als
+Metadaten aufgeführt. Andernfalls folgt eine gekennzeichnete Hinweisseite.
+Andere zulässige Uploadformate wie TIFF,
 ZIP, Office oder Video sowie nicht darstellbarer Text erhalten eine klare
 Hinweisseite und bleiben als bytegleiches Original eingebettet.
 
@@ -684,7 +722,11 @@ Anhangsektion; dieser bricht sichtbar ab, statt Dateien auszulassen.
 Werte über 50 MiB sind auch auf speicherstarken Hosts nicht zulässig.
 Nach dem Anlagenverzeichnis folgen JPEG-, PNG-, GIF- und BMP-Bilder sowie jede
 Seite einer PDF-Anlage als sichtbare Dossierseiten. Verlustfrei
-Windows-1252-darstellbare Textdateien erscheinen durchsuchbar. TIFF und andere
+Windows-1252-darstellbare Textdateien erscheinen durchsuchbar. RFC-822-E-Mails
+erscheinen innerhalb der PDF-Text-/Zeichengrenzen ausschließlich als passive
+Kopfzeilen-/Textdarstellung; ihre internen Anlagen werden als Metadaten
+genannt. Ist das nicht verlustfrei möglich, erhalten auch sie eine
+Hinweisseite. TIFF und andere
 nicht statisch darstellbare Formate sowie nicht verlustfrei darstellbarer Text
 erhalten eine Hinweisseite; ihr bytegleiches Original bleibt wie bei allen
 Formaten über die Anlagenansicht des PDF-Lesers extrahierbar. Jede Anlage nennt

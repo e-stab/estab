@@ -16,6 +16,7 @@ menue.inc.php
 4fach/data_hndl.php
 4fach/db_operation.php
 4fach/download.php
+4fach/email.php
 4fach/fuehrungsstelle.php
 4fach/index.php
 4fach/info.php
@@ -101,6 +102,7 @@ app/csrf.php
 app/datetime.php
 app/dv_operations.php
 app/dynamic_schema.php
+app/email_attachment.php
 app/export.php
 app/file_access.php
 app/generated_form.php

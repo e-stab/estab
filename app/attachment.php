@@ -1387,7 +1387,7 @@ function estab_attachment_allowed_extensions(): array
 {
     return [
         'jpg', 'jpeg', 'tif', 'tiff', 'gif', 'avi', 'png', 'bmp', 'zip',
-        'pdf', 'doc', 'xls', 'odt', 'txt', 'xia',
+        'pdf', 'doc', 'xls', 'odt', 'txt', 'eml', 'xia',
     ];
 }
 

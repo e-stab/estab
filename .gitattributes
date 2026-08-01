@@ -15,6 +15,7 @@
 *.wav binary
 *.xcf binary
 *.zip binary
+tests/fixtures/*.eml binary
 
 # Historical BOS reference pages are checksum-protected source material.
 stabinfo/*.html binary

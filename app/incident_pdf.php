@@ -15,6 +15,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/legacy_php.php';
 require_once __DIR__ . '/incident.php';
+require_once __DIR__ . '/email_attachment.php';
 require_once __DIR__ . '/logbook_numbering.php';
 require_once __DIR__ . '/../4fbak/backup_pdf.php';
 
@@ -3695,13 +3696,112 @@ final class EstabIncidentPdf extends vordruckaspdf
         return $lines;
     }
 
+    /**
+     * Build a passive text representation from the bounded EML parser result.
+     *
+     * Only the parser's plain values are used. In particular, neither original
+     * mail HTML nor the parser's escaped browser-presentation fields are ever
+     * interpreted as PDF markup.
+     */
+    private static function attachmentEmailText(array $email): string
+    {
+        $headers = $email['headers'] ?? null;
+        $body = $email['body'] ?? null;
+        $bodySource = $email['body_source'] ?? null;
+        $files = $email['attachments'] ?? null;
+        $warnings = $email['warnings'] ?? null;
+        if (
+            ($email['ok'] ?? null) !== true
+            || !is_array($headers)
+            || !is_string($body)
+            || !is_string($bodySource)
+            || !in_array($bodySource, ['plain', 'html', 'none'], true)
+            || !is_array($files)
+            || !is_array($warnings)
+        ) {
+            throw new EstabIncidentPdfInputException(
+                'Die passive E-Mail-Darstellung ist unvollständig.'
+            );
+        }
+
+        $lines = ['E-MAIL-KOPFDATEN'];
+        foreach ([
+            'from' => 'Von',
+            'to' => 'An',
+            'cc' => 'Cc',
+            'date' => 'Datum',
+            'subject' => 'Betreff',
+        ] as $name => $label) {
+            $value = $headers[$name] ?? null;
+            if (!is_string($value)) {
+                throw new EstabIncidentPdfInputException(
+                    'Ein passiver E-Mail-Kopfwert ist ungültig.'
+                );
+            }
+            $lines[] = $label . ': '
+                . ($value !== '' ? $value : '(nicht angegeben)');
+        }
+
+        $lines[] = '';
+        $lines[] = 'NACHRICHTENTEXT';
+        if ($bodySource === 'html') {
+            $lines[] = '[Mail-HTML wurde niemals aktiv ausgeführt und '
+                . 'ausschließlich in passiven Klartext umgewandelt.]';
+        } elseif ($bodySource === 'plain') {
+            $lines[] = '[Klartextteil der E-Mail]';
+        } else {
+            $lines[] = '[Kein darstellbarer Textteil enthalten]';
+        }
+        $lines[] = $body !== '' ? $body : '(Kein Nachrichtentext)';
+
+        $lines[] = '';
+        $lines[] = 'EINGEBETTETE MAIL-DATEIEN';
+        if ($files === []) {
+            $lines[] = '(Keine eingebetteten Dateien)';
+        } else {
+            foreach ($files as $offset => $file) {
+                if (
+                    !is_array($file)
+                    || !is_string($file['filename'] ?? null)
+                    || !is_string($file['content_type'] ?? null)
+                    || !is_int($file['size'] ?? null)
+                    || $file['size'] < 0
+                ) {
+                    throw new EstabIncidentPdfInputException(
+                        'Eine eingebettete Mail-Datei besitzt ungültige Metadaten.'
+                    );
+                }
+                $lines[] = ($offset + 1) . '. ' . $file['filename']
+                    . ' | ' . $file['content_type']
+                    . ' | ' . number_format($file['size'], 0, ',', '.')
+                    . ' Byte';
+            }
+        }
+
+        if ($warnings !== []) {
+            $lines[] = '';
+            $lines[] = 'HINWEISE DER SICHEREN E-MAIL-AUSWERTUNG';
+            foreach ($warnings as $warning) {
+                if (!is_string($warning)) {
+                    throw new EstabIncidentPdfInputException(
+                        'Ein E-Mail-Auswertungshinweis ist ungültig.'
+                    );
+                }
+                $lines[] = '- ' . $warning;
+            }
+        }
+
+        return implode("\n", $lines);
+    }
+
     /** Render one bounded, losslessly representable text snapshot. */
     private function drawAttachmentText(
         array $attachment,
         string $encodedText,
         int $position,
         int $total,
-        int $remainingPages
+        int $remainingPages,
+        string $sourcePageLabel = 'Vollständige Textdarstellung'
     ): int {
         if (
             strlen($encodedText) > ESTAB_INCIDENT_PDF_MAX_TEXT_BYTES
@@ -3717,7 +3817,7 @@ final class EstabIncidentPdf extends vordruckaspdf
             $attachment,
             $position,
             $total,
-            'Vollständige Textdarstellung'
+            $sourcePageLabel
         );
         $this->Ln(2);
         $this->SetTextColor(23, 32, 51);
@@ -4021,6 +4121,62 @@ final class EstabIncidentPdf extends vordruckaspdf
                         $rasterBytes += $page['bytes'];
                         $renderedPages++;
                     }
+                } elseif (
+                    $mime === 'message/rfc822'
+                    && $extension === 'eml'
+                ) {
+                    $email = estab_email_attachment_parse($embedded['data']);
+                    if (($email['ok'] ?? null) !== true) {
+                        $this->drawAttachmentInformationPage(
+                            $attachment,
+                            $position,
+                            $total,
+                            'Die E-Mail konnte innerhalb der sicheren MIME-, '
+                                . 'Größen- und Verschachtelungsgrenzen nicht '
+                                . 'passiv ausgewertet werden.'
+                        );
+                        $stats['attachment_information_pages']++;
+                    } else {
+                        $emailText = self::attachmentEmailText($email);
+                        if (
+                            strlen($emailText)
+                                > ESTAB_INCIDENT_PDF_MAX_TEXT_BYTES
+                        ) {
+                            $this->drawAttachmentInformationPage(
+                                $attachment,
+                                $position,
+                                $total,
+                                'Die passive E-Mail-Darstellung überschreitet '
+                                    . 'das sichere PDF-Textlimit.'
+                            );
+                            $stats['attachment_information_pages']++;
+                        } else {
+                            $encodedEmail = self::attachmentCoreFontText(
+                                $emailText
+                            );
+                            if ($encodedEmail === null) {
+                                $this->drawAttachmentInformationPage(
+                                    $attachment,
+                                    $position,
+                                    $total,
+                                    'Die E-Mail enthält Zeichen, die der '
+                                        . 'verlustfreie PDF-Basiszeichensatz '
+                                        . 'nicht darstellen kann.'
+                                );
+                                $stats['attachment_information_pages']++;
+                            } else {
+                                $renderedPages = $this->drawAttachmentText(
+                                    $attachment,
+                                    $encodedEmail,
+                                    $position,
+                                    $total,
+                                    ESTAB_INCIDENT_PDF_MAX_VISIBLE_PAGES
+                                        - $stats['attachment_visible_pages'],
+                                    'Passive E-Mail-Darstellung'
+                                );
+                            }
+                        }
+                    }
                 } elseif ($mime === 'text/plain' && $extension === 'txt') {
                     if (
                         strlen($embedded['data'])
@@ -4057,7 +4213,16 @@ final class EstabIncidentPdf extends vordruckaspdf
                     if (
                         in_array(
                             $extension,
-                            ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'pdf', 'txt'],
+                            [
+                                'jpg',
+                                'jpeg',
+                                'png',
+                                'gif',
+                                'bmp',
+                                'pdf',
+                                'txt',
+                                'eml',
+                            ],
                             true
                         )
                         || in_array(
@@ -4070,6 +4235,7 @@ final class EstabIncidentPdf extends vordruckaspdf
                                 'image/x-ms-bmp',
                                 'application/pdf',
                                 'text/plain',
+                                'message/rfc822',
                             ],
                             true
                         )
@@ -4144,8 +4310,9 @@ final class EstabIncidentPdf extends vordruckaspdf
         $this->paragraph(
             'Jede nachfolgend aufgeführte Originaldatei ist in dieser PDF '
             . 'eingebettet. Im Anschluss an dieses Verzeichnis werden JPEG-, '
-            . 'PNG-, GIF-, BMP-, verlustfrei darstellbare Text- und '
-            . 'mehrseitige PDF-Anlagen als sichtbare Seiten dargestellt. '
+            . 'PNG-, GIF-, BMP-, verlustfrei darstellbare Text-, passive '
+            . 'E-Mail- und mehrseitige PDF-Anlagen als sichtbare Seiten '
+            . 'dargestellt. '
             . 'Für nicht statisch oder nicht verlustfrei darstellbare Formate '
             . 'folgt eine eindeutig gekennzeichnete Hinweisseite. PDF-Leser '
             . 'mit Anlagenansicht können das bytegleiche Original öffnen oder '
