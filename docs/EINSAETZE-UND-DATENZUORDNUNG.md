@@ -456,9 +456,8 @@ anderen Einsatzes abrufbar. Das
 historische Einsätze eine eigene zusammenhängende Darstellung. Seine
 Nachrichtenseiten verwenden denselben A4-Formularrenderer wie die
 Einzelvordrucke, jedoch ohne Links in den Downloadbereich des aktuell aktiven
-Einsatzes. Die gemeinsame Vorlage enthält weder VS-NfD-Aufdruck noch Wappen;
-JPEG, PNG, GIF und BMP erscheinen als sichtbare Anlagenseiten, PDF-Anlagen
-werden samt Anmerkungen geordnet seitenweise gerastert und verlustfrei
+Einsatzes. JPEG, PNG, GIF und BMP erscheinen als sichtbare Anlagenseiten,
+PDF-Anlagen werden samt Anmerkungen geordnet seitenweise gerastert und verlustfrei
 Windows-1252-darstellbarer Text erscheint durchsuchbar. TIFF, nicht
 darstellbarer Text und andere nicht statisch darstellbare Formate erhalten eine
 Hinweisseite. Unabhängig davon liegen alle Anhänge mit ihren geprüften,

@@ -73,7 +73,7 @@ Geprüft werden:
   Bereichswechsel;
 - den amtlichen Nachrichtenvordruck im echten Browser: drei unverändert
   geordnete Zonen, feste 896-Pixel-Blattbreite, schwarzes Raster, den
-  Blauton `#A2D9F7`, fehlenden VS-NfD-Aufdruck und fehlende Bilder sowie alle
+  Blauton `#A2D9F7`, die festgelegte Bildbelegung sowie alle
   20 eindeutig zugeordneten Ausfüllhilfen; Außenklick und `Escape` schließen
   mit korrektem Fokus, jeder Dialog erhält beim Öffnen selbst den Fokus,
   Dialoge bleiben im Viewport und bei `390x844` liegt

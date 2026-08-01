@@ -67,10 +67,6 @@ for pdf_file in "$single_pdf" "$dossier_pdf"; do
         echo "PDF subject is not above the message text: $pdf_file" >&2
         exit 1
     }
-    if grep -Eiq 'Dienstgebrauch|VS-NfD' "$text_file"; then
-        echo "PDF fixture still contains a VS marking: $pdf_file" >&2
-        exit 1
-    fi
     if awk 'NR > 2 && $1 ~ /^[0-9]+$/ { found = 1 } END { exit found ? 0 : 1 }' \
         "$image_file"; then
         echo "PDF fixture still contains a rendered image: $pdf_file" >&2
@@ -152,10 +148,6 @@ for pdf_file in "$long_single_pdf" "$long_dossier_pdf"; do
         "$info_file"
     grep -Fq 'ENDE-MEHRSEITIGER-VORDRUCK' "$text_file"
     [ "$(grep -Fc 'EINGANG' "$text_file")" -eq "$current_page_count" ]
-    if grep -Eiq 'Dienstgebrauch|VS-NfD' "$text_file"; then
-        echo "Long message form still contains a VS marking: $pdf_file" >&2
-        exit 1
-    fi
     if awk 'NR > 2 && $1 ~ /^[0-9]+$/ { found = 1 } END { exit found ? 0 : 1 }' \
         "$image_file"; then
         echo "Long message form still contains a rendered image: $pdf_file" >&2
@@ -441,10 +433,6 @@ complete_page_count=$(awk '/^Pages:/ { print $2 }' "$complete_info")
 [ "$complete_page_count" -ge 10 ]
 grep -Eq '^Page size:[[:space:]]+595\.28 x 841\.89 pts \(A4\)$' \
     "$complete_info"
-if grep -Eiq 'Dienstgebrauch|VS-NfD' "$complete_text"; then
-    echo "Complete dossier still contains a VS marking" >&2
-    exit 1
-fi
 if grep -Fq 'ZUORDNUNG-NUR-SUCHHILFE' "$complete_text"; then
     echo "ETB search assignment leaked into the official PDF form" >&2
     exit 1

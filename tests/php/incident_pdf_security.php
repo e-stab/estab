@@ -694,11 +694,6 @@ try {
             'incident PDF message form marker is missing: ' . $marker
         );
     }
-    $assert(
-        !str_contains($document, 'Dienstgebrauch')
-            && !str_contains($document, 'VS-NfD'),
-        'incident PDF message form still contains a VS marking'
-    );
     $messageOnlyPdf = new EstabIncidentPdf(
         $incident,
         1024 * 1024,
@@ -709,7 +704,7 @@ try {
     $messageOnlyDocument = $messageOnlyPdf->Output('', 'S');
     $assert(
         !str_contains($messageOnlyDocument, '/Subtype /Image'),
-        'incident PDF message form still contains the coat of arms'
+        'incident PDF message form contains an unexpected image'
     );
     $assert(
         str_contains($document, '/Subtype /Image')

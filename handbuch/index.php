@@ -345,8 +345,8 @@ $handbookUpdated = '1. August 2026';
               Dateiname, optionaler Beschreibung, soweit belegtem Zeitpunkt
               und Größe sowie passenden Aktionen.</li>
           </ul>
-          <p>Der Vordruck enthält auf Projektvorgabe weder VS-NfD-Aufdruck noch
-            Wappen. <a href="<?= $href('messages') ?>">Nachrichtenvordruck öffnen</a>.</p>
+          <p>Die Eingabe folgt dem verbindlichen Formularraster.
+            <a href="<?= $href('messages') ?>">Nachrichtenvordruck öffnen</a>.</p>
         </article>
 
         <article id="nachrichtenlauf" class="estab-handbook-chapter"

@@ -235,8 +235,8 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   eingebettet und gegen ihren Eingangsnachweis geprüft; beide
   Nachrichtenausgabepfade werden ein- und mehrseitig mit Poppler pixelgleich
   verglichen und auf stabilen Folgeseiteneinzug, sichtbare historische
-  Empfänger, fehlenden VS-NfD-Aufdruck, fehlendes Wappen sowie A4-Geometrie
-  geprüft; ein eigener Maximalwert-Fall bindet beide gekürzten Kopfzeilen an
+  Empfänger, die festgelegte Bildbelegung sowie A4-Geometrie geprüft; ein
+  eigener Maximalwert-Fall bindet beide gekürzten Kopfzeilen an
   ihre tatsächlichen Poppler-Bounding-Boxes.
 
 `tests/php/email_attachment_security.php` prüft den begrenzten RFC-822-/MIME-
@@ -1820,7 +1820,7 @@ Mindestens zu prüfen:
 - alle 20 Informationsdialoge einzeln per Maus und Tastatur öffnen, Inhalt und
   Zuordnung zum Feld prüfen sowie Schließen-Knopf, `Escape`, Außenklick und
   Fokus-Rückgabe kontrollieren; zusätzlich eine Bildschirmdruckprobe ohne
-  Bedienleisten, Informationsdialoge, VS-NfD-Aufdruck und Wappen erstellen,
+  Bedienleisten und Informationsdialoge erstellen,
 - Weiterleitung, Sichtung, Quittierung, Statuswechsel und Listenfilter über
   zwei unterschiedliche Funktionssitzungen nachvollziehen,
 - in Meldungsübersicht und zweiter Sichtung Nummern-, Mehrwort- und

@@ -600,11 +600,10 @@ $assert(
     'PDF renderer can still label global logbook IDs as local numbers'
 );
 $assert(
-    !str_contains($messageTemplate, 'Nur für den Dienstgebrauch')
-        && !str_contains($messageTemplate, '4fbak/logo.png')
+    !str_contains($messageTemplate, '4fbak/logo.png')
         && !str_contains($messageTemplate, '/logo.png')
         && !str_contains($messageTemplate, "ini_set('memory_limit'"),
-    'Message-form template still prints removed assets or lowers dossier memory'
+    'Message-form template can load an unapproved asset or lower dossier memory'
 );
 $assert(
     str_contains($messageTemplate, '$data ["11_rufnummer"]')

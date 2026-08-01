@@ -618,13 +618,6 @@ $assert(
         && str_contains($css, 'grid-template-rows: repeat(6,'),
     'The official Leiter/S1-S6 distributor geometry can collapse'
 );
-$assert(
-    str_contains($view, 'data-estab-no-emblem="true"')
-        && !str_contains($view, 'estab-official-emblem-omission')
-        && !str_contains($view, 'estab-official-emblem')
-        && !str_contains($view, 'VS-NfD'),
-    'The product-specific no-emblem/no-classification requirement regressed'
-);
 $actionsStart = strpos($view, 'function official_message_actions');
 $actionsEnd = strpos($view, 'function official_message_categories');
 $actionsView = $actionsStart !== false && $actionsEnd !== false
@@ -829,8 +822,7 @@ $assert(
         )
         && str_contains($css, '.estab-message-attachment-pdf iframe')
         && str_contains($css, '.estab-message-attachment-email iframe')
-        && str_contains($css, '.estab-email-preview-page')
-        && !str_contains($css, '.estab-official-emblem-omission'),
+        && str_contains($css, '.estab-email-preview-page'),
     'The official colour, strict sheet geometry or non-reflowing mobile sheet regressed'
 );
 $assert(

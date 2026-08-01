@@ -391,14 +391,11 @@ der separaten Browseransicht verfügbar. Diese UI-Grenzen sind unabhängig von
 der strengeren 12-Megapixel-/8.000-Pixel-Grenze für das sichtbare Rendern im
 PDF-Einsatzdossier.
 
-## Bewusste Abweichungen
+## Digitale Darstellung
 
-Auf vorherige Projektvorgabe enthält die digitale Vorlage weder
-VS-NfD-Aufdruck noch Wappen; auch ein unsichtbarer Wappen-Platzhalter wird
-nicht erzeugt. Die amtliche Vierfach-Durchschreibefärbung des
-Papierblocks wird nicht simuliert; die Bildschirmfassung verwendet den
-blauen Nachrichtenteil, während Kopien und Verteiler als Daten erhalten
-bleiben.
+Die Vierfach-Durchschreibefärbung des Papierblocks wird nicht simuliert; die
+Bildschirmfassung verwendet den blauen Nachrichtenteil, während Kopien und
+Verteiler als Daten erhalten bleiben.
 
 ## Automatisierter Nachweis
 
@@ -445,8 +442,8 @@ nicht als atomar gelöst behauptet.
 
 `tests/browser/headless_ui.py` prüft das tatsächlich berechnete Layout in
 Chrome zusätzlich: 896 Pixel feste Blattbreite, drei Zonen in amtlicher
-Reihenfolge, schwarzes Raster, `rgb(162, 217, 247)`, keine Bilder und keinen
-VS-NfD-Text. Er öffnet alle 20 Hilfen, prüft eindeutige Dialogbeziehungen,
+Reihenfolge, schwarzes Raster, `rgb(162, 217, 247)` und keine zusätzlichen
+Bilder. Er öffnet alle 20 Hilfen, prüft eindeutige Dialogbeziehungen,
 Viewportgrenzen, Außenklick, `Escape` samt Fokus und bei 390 × 844 Pixeln den
 ausschließlich blattinternen horizontalen Scrollbereich. Zusätzlich bindet er
 die berechneten Zell-, Steg-, Legenden-, Loch- und Adress-/Rufnummernmaße.
@@ -469,7 +466,7 @@ Der echte Nachrichten-HTTP-Lauf prüft Persistenz, Anhang-Roundtrip,
 Antwort-/Weiterleitungsableitung und manipulierte Browserwerte. PDF-Smoke und
 Poppler-Rendervergleich prüfen Rufnummer und Betreff in Einzelvordruck und
 Gesamtdossier, A4, Suchtext, Folgeseiten, identische Renderer sowie das Fehlen
-von VS-NfD und Wappen. Die fachliche Freigabe erfordert zusätzlich den
+unbeabsichtigter Zusatzinhalte. Die fachliche Freigabe erfordert zusätzlich den
 vollständigen Rollenlauf, die Bedienprüfung aller 20 Hilfen und einen
 visuellen Bildschirm-/Druckvergleich mit beiden Referenzunterlagen gemäß
 [Funktionsnachweis](FUNKTIONSNACHWEIS.md).

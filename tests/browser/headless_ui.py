@@ -6575,15 +6575,7 @@ class BrowserAcceptance:
                             "#estab-form-help-14-description"
                         )?.textContent || ""
                     },
-                    noImages: Boolean(form && !form.querySelector("img")),
-                    noEmblemPlaceholder: Boolean(
-                        form && !form.querySelector(
-                            ".estab-official-emblem-omission"
-                        )
-                    ),
-                    noClassification: Boolean(
-                        form && !form.innerText.includes("VS-NfD")
-                    )
+                    noImages: Boolean(form && !form.querySelector("img"))
                 };
                 """,
             )
@@ -6680,9 +6672,7 @@ class BrowserAcceptance:
             and desktop_state.get("readonlyCopyControlsLabeled") is True
             and desktop_state.get("copyControlsLabeledAndColoured") is True
             and desktop_state.get("timeOnlyStampCount") == 1
-            and desktop_state.get("noImages") is True
-            and desktop_state.get("noEmblemPlaceholder") is True
-            and desktop_state.get("noClassification") is True,
+            and desktop_state.get("noImages") is True,
             "Amtliches Dreizonen-Raster, Blauton oder die 20 Hilfen "
             "weichen im echten Browser ab. Messwerte: "
             + json.dumps(

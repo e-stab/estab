@@ -88,7 +88,7 @@ Wichtige Werte in `.env`:
 | `ESTAB_HTTP_PORT` | `8080` | veröffentlichter Hostport |
 | `ESTAB_PUBLIC_URL` | `/` | portable Browser-Basis; nur bei garantiert einer externen Adresse auf eine absolute HTTP(S)-URL setzen |
 | `ESTAB_BASE_PATH` | leer | historischer Installationspfad im Document Root; im gelieferten Root-Image leer lassen |
-| `ESTAB_AUTHORITY_CODE` | `EL` | Hoheits-/Organisationskürzel |
+| `ESTAB_AUTHORITY_CODE` | `EL` | Organisationskürzel |
 | `ESTAB_ALLOW_SELF_REGISTRATION` | `false` | optionale öffentliche Kompatibilitätsregistrierung; reguläre Konten werden administrativ angelegt |
 | `ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF` | `false` | erlaubt ausdrücklich benötigten direkten Legacy-Clients tokenlose Anmeldung; nicht für Browserbetrieb aktivieren |
 | `ESTAB_TRUST_PROXY_HEADERS` | `false` | erlaubt dem zusätzlich freigegebenen direkten Proxy validierte `X-Forwarded-*`-Ketten |

@@ -168,8 +168,7 @@ bestätigt am“ beschriftet; als fachliche Übergabezeit gilt `initiiert_am`.
 Jede Nachricht wird mit exakt demselben A4-Formularrenderer ausgegeben wie
 unter **Generierte Vordrucke**. Dadurch stimmen Raster, Feldpositionen,
 Empfängerkennzeichnung und mehrseitiger Inhaltsfluss in Einzel- und
-Gesamtexport überein. Die gemeinsame Nachrichtenvorlage druckt weder eine
-VS-NfD-Kennzeichnung noch das frühere Wappen.
+Gesamtexport überein.
 Die Nachweisnummer des Vordrucks stammt in Einzelgenerator, Detailansicht und
 Dossier ausschließlich aus dem ersten verknüpften TBB-Eintrag mit dem exakten
 Typ `nachricht`. Ein späterer append-only LdF-Nachtrag des Typs `korrektur`
@@ -452,9 +451,8 @@ Die automatisierten Tests prüfen unter anderem:
 - Rufnummer und Betreff in der amtlichen Reihenfolge vor dem Nachrichtentext,
 - dieselben Formularmarker in Einzel- und Gesamtexport,
 - aktuelle In-Memory-Ausgabe trotz unverändert erhaltener Archivdatei,
-- Abwesenheit von VS-NfD-Aufdruck, Wappen und Seitenbildern auf den
-  Nachrichtenvordruck-Seiten; außerhalb der ausdrücklich sichtbaren
-  Anlagenseiten ist ausschließlich das vorhandene
+- das festgelegte, bildfreie Layout der Nachrichtenvordruck-Seiten; außerhalb
+  der ausdrücklich sichtbaren Anlagenseiten ist ausschließlich das vorhandene
   400-x-396-Pixel-THW-Kopfzeichen der amtlichen ETB-/TBB-Formköpfe zulässig,
 - verlustfreie Anzeige nicht mehr in der Matrix vorhandener Empfänger,
 - pixelidentisches A4-Rendering der direkten und im Dossier enthaltenen
@@ -489,7 +487,7 @@ Folge Deckblatt, ETB, TBB, Nachricht, Nachrichtennachweis,
 Dienstorganisation, S6-Planung, Melderauftrag, Betriebsnachweis,
 Anlagenverzeichnis und sichtbare Text-/JPEG-Anlagenseiten.
 `tests/static/pdf_render.sh` prüft sie mit Poppler: A4 und Seitenzahl über
-`pdfinfo`, Text, historischen Empfänger-Fallback und verbotene Aufdrucke über
+`pdfinfo`, Formulartexte und historischen Empfänger-Fallback über
 `pdftotext`, vollständige Textanlagen und sichtbare Anlagenmetadaten, den
 konstanten linken Folgeseiteneinzug über dessen
 Bounding-Box-Ausgabe sowie einen eigenen Maximalwert-Fall mit 128 Zeichen
@@ -516,7 +514,7 @@ mit unerwartetem Inhalt, Modus, Eigentümer, Symlink beziehungsweise Hardlink
 versehene Kandidaten vollständig bewahrt.
 GitHub Actions lädt PDFs, Textauszüge, Prüfinformationen und Render-PNGs
 14 Tage als `pdf-render-evidence-*` hoch. Eine sichtbare Verschiebung der
-Vorlage oder ein erneut eingebundenes Wappen sperrt damit die CI.
+Vorlage oder ein unerwartetes Seitenbild sperrt damit die CI.
 
 Für die manuelle Abnahme sollte ein Dossier mit realistischen langen
 Einsatznamen, mehrseitigen Einträgen und allen in der Organisation verwendeten

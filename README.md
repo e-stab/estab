@@ -852,11 +852,10 @@ der Download
 arbeiten erst nach erneuter Objekt-, MIME- und Integritätsprüfung auf einem
 unveränderlichen Byte-Snapshot.
 Einzelvordruck und Nachrichtenseiten des PDF-Einsatzdossiers verwenden
-denselben A4-Formularrenderer. Die Vorlage enthält weder eine
-VS-NfD-Kennzeichnung noch das frühere Wappen. Neue Anhänge eines Dossiers
-werden beim Eingang an SHA-256 und Bytezahl gebunden und vor dem Einbetten
-erneut geprüft; beim Upgrade vorhandene Legacy-Dateien heißen ausdrücklich
-„Integrität beim Eingang nicht belegbar“. JPEG, PNG, GIF und BMP werden
+denselben A4-Formularrenderer. Neue Anhänge eines Dossiers werden beim Eingang
+an SHA-256 und Bytezahl gebunden und vor dem Einbetten erneut geprüft; beim
+Upgrade vorhandene Legacy-Dateien heißen ausdrücklich „Integrität beim Eingang
+nicht belegbar“. JPEG, PNG, GIF und BMP werden
 zusätzlich als sichtbare Anlagenseiten ausgegeben; mehrseitige PDFs erscheinen
 einschließlich ihrer Anmerkungen seitenweise gerastert. Verlustfrei
 Windows-1252-darstellbarer Text wird direkt ausgegeben. Standardisierte

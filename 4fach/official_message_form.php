@@ -1983,8 +1983,7 @@ HTML;
             . 'aria-label="Amtlichen Nachrichtenvordruck horizontal verschieben">';
         echo '<article id="nachrichtenvordruck" '
             . 'class="estab-official-message-form" '
-            . 'data-estab-official-message-form data-estab-form-zones="3" '
-            . 'data-estab-no-emblem="true">';
+            . 'data-estab-official-message-form data-estab-form-zones="3">';
 
         echo '<section class="estab-official-zone estab-official-zone--fmz" '
             . 'data-estab-form-zone="fm-zentrale">'

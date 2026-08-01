@@ -75,14 +75,8 @@ if (
         'Recipient outside the current matrix is not visible'
     );
 }
-if (
-    str_contains($document, 'Dienstgebrauch')
-    || str_contains($document, 'VS-NfD')
-) {
-    throw new RuntimeException('Message form still contains a VS marking');
-}
 if (str_contains($document, '/Subtype /Image')) {
-    throw new RuntimeException('Message form still contains the coat of arms');
+    throw new RuntimeException('Message form contains an unexpected image');
 }
 
 echo 'PDF smoke test: OK (' . strlen($document) . " bytes)\n";

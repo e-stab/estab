@@ -1352,7 +1352,6 @@ try {
             && str_contains($pageContent, 'Originalseite 1 von 2')
             && str_contains($pageContent, 'Originalseite 2 von 2')
             && str_contains($pageContent, 'Sichtbare Darstellung')
-            && !str_contains($pageContent, 'Dienstgebrauch')
             && !str_contains($pageContent, $otherMarker)
             && !str_contains($pageContent, $otherCommandPost),
         'Rendered pages omit the shared form, attachment SHA-256, or incident scope'

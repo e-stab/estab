@@ -698,7 +698,7 @@ stage_stale_vordruck_archive() {
         $pdf->SetTitle("eStab stale generated-form regression fixture");
         $pdf->AddPage();
         $pdf->SetFont("Arial", "B", 16);
-        $pdf->Text(20, 30, "ARCHIVE-ONLY-VS-NfD");
+        $pdf->Text(20, 30, "ARCHIVE-ONLY-SNAPSHOT");
         $document = $pdf->Output("", "S");
         $database = getenv("ESTAB_DB_NAME");
         if (!is_string($database) || $database === "") {
@@ -1038,7 +1038,7 @@ if [ "$restore_verify_only" = true ]; then
         --data-urlencode "file=$restore_vordruck" \
         "$base_url/4fach/download.php"
     assert_pdf_body
-    assert_body 'ARCHIVE-ONLY-VS-NfD'
+    assert_body 'ARCHIVE-ONLY-SNAPSHOT'
     if [ "$(file_sha256 "$body")" != "$restore_vordruck_sha256" ]; then
         printf 'HTTP smoke: restored generated-form checksum differs\n' >&2
         exit 1
@@ -1050,7 +1050,7 @@ if [ "$restore_verify_only" = true ]; then
         --data-urlencode 'layout=current' \
         "$base_url/4fach/download.php"
     assert_pdf_body
-    assert_body_absent 'ARCHIVE-ONLY-VS-NfD'
+    assert_body_absent 'ARCHIVE-ONLY-SNAPSHOT'
     if ! grep -Eiq '^X-eStab-PDF-Layout: current' "$headers"; then
         printf 'HTTP smoke: restored current-layout PDF marker missing\n' >&2
         exit 1
@@ -3584,7 +3584,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "file=$stored_vordruck" \
     "$base_url/4fach/download.php"
 assert_pdf_body
-assert_body 'ARCHIVE-ONLY-VS-NfD'
+assert_body 'ARCHIVE-ONLY-SNAPSHOT'
 stored_vordruck_sha256=$(file_sha256 "$body")
 if [ "$stored_vordruck_sha256" = "$generated_vordruck_sha256" ]; then
     printf 'HTTP smoke: stale generated-form fixture did not replace archive\n' >&2
@@ -3597,7 +3597,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode 'layout=current' \
     "$base_url/4fach/download.php"
 assert_pdf_body
-assert_body_absent 'ARCHIVE-ONLY-VS-NfD'
+assert_body_absent 'ARCHIVE-ONLY-SNAPSHOT'
 for header_pattern in \
     '^Content-Type: application/pdf' \
     '^Content-Disposition: inline;' \

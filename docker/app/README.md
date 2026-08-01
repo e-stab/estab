@@ -22,9 +22,7 @@ benötigte statische Assets und das aktuelle öffentliche Web-Handbuch.
 - für PDF-Vordrucke ausschließlich `4fbak/backup.php`,
   `4fbak/backup_pdf.php`, der verwendete FPDF-Kern, dessen eingebaute
   Schriftmetriken und `4fbak/thw.png` als einfarbiges THW-Kopfzeichen der
-  ETB-/TBB-Formblätter; das nicht mehr auf Nachrichtenvordrucken gedruckte
-  historische Wappen bleibt nur zur Provenienz in Git und wird nicht in das
-  Laufzeitimage kopiert;
+  ETB-/TBB-Formblätter;
 - `4fbak/fonts/georgiaz.ttf` als einzige TTF-Datei, weil die aktiven
   dynamischen Schaltflächen sie bei verfügbarer FreeType-Unterstützung
   verwenden.
