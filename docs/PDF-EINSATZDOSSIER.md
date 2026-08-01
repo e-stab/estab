@@ -214,15 +214,64 @@ Rasterposition gesetzt: Unter dem Nachrichteninhalt erscheint einmal
 **Empfänger außerhalb aktueller Matrix** mit Funktion und gespeichertem
 Kopiekennzeichen, zum Beispiel `ALT_1 [gn]`.
 
-Anhänge werden nicht verlustbehaftet in Bilder umgewandelt: Jede abgeschlossene
-Datei wird mit ihren aktuell gelesenen Bytes in den PDF-Katalog eingebettet.
-Ihr sicherer
-Dateiname steht zusätzlich im Nachrichtenvordruck. Bei einem historischen
-Einsatz wird dort bewusst kein Link auf den Downloadbereich des aktuell
-aktiven Einsatzes erzeugt. Das Anlagenverzeichnis nennt portablen Dateinamen,
-Medientyp, Größe, zugehörige Nachrichtendatensätze und den SHA-256 der
-eingebetteten Datei.
-Gängige PDF-Leser zeigen diese Dateien in ihrer Anlagenansicht an.
+## Sichtbare Anlagen und bytegleiches Original
+
+Jede abgeschlossene Datei erscheint nach dem Anlagenverzeichnis in einer
+eigenen, geordneten Anlagensektion. Die Darstellung hängt vom gegen die
+Dateiendung geprüften MIME-Typ ab:
+
+- JPEG, PNG, GIF und BMP werden proportional, zentriert und ohne Beschnitt auf
+  einer eigenen Seite dargestellt. Transparenz wird für den Seitenabzug auf
+  weißem Hintergrund normalisiert; das jeweilige Original bleibt davon
+  unberührt. Bei animierten GIFs dient die erste Bildebene als statische
+  Vorschau; das vollständige GIF bleibt bytegleich eingebettet.
+- Eine Textdatei (`text/plain`, `.txt`) wird nur dann vollständig als
+  durchsuchbarer Text ausgegeben, wenn ihr Inhalt verlustfrei mit dem
+  Windows-1252-Basiszeichensatz der PDF-Kernschrift darstellbar ist. Nicht
+  darstellbare Unicode- oder Steuerzeichen führen zu einer eindeutigen
+  Hinweisseite, nicht zu still ersetzten Zeichen.
+- Eine PDF-Anlage wird mit Poppler seitenweise gerastert. Jede Originalseite
+  erhält in derselben Reihenfolge eine eigene sichtbare Dossierseite mit der
+  Beschriftung **Originalseite n von N**. PDF-Anmerkungen werden nicht
+  ausgeblendet und gehören damit zum sichtbaren Abzug.
+- TIFF, ZIP-Archive, Office-Dokumente, Videos und andere nicht verlässlich
+  statisch darstellbare Formate erhalten eine eindeutige Hinweisseite. eStab
+  behauptet für diese Formate keine unvollständige oder verfälschte Vorschau.
+
+Jede Anlage wird am Beginn ihrer sichtbaren Darstellung mit Dateiname und
+Endung, erkanntem MIME-Typ, Bytezahl und SHA-256 ausgewiesen. Eine für die
+sichtbaren Formate reservierte Endung mit unpassendem MIME-Typ wird nicht als
+Anlage ausgegeben; der gesamte Export bricht stattdessen fail-closed ab. Der
+sichere Dateiname
+steht zusätzlich im Nachrichtenvordruck. Bei einem historischen Einsatz wird
+dort bewusst kein Link auf den Downloadbereich des aktuell aktiven Einsatzes
+erzeugt. Das Anlagenverzeichnis nennt außerdem den portablen Dateinamen,
+zugehörige Nachrichtendatensätze und gegebenenfalls ETB-Anlagennummer sowie
+Ablagekennzeichen.
+
+Die sichtbare Darstellung ist nur ein Leseabzug. Unabhängig davon wird jede
+Datei als **bytegleiches Original** in den PDF-1.7-Katalog eingebettet;
+gängige PDF-Leser zeigen sie in ihrer Anlagenansicht an. Bei Bild- und
+PDF-Anlagen darf der sichtbare Abzug deshalb technisch andere Bytes besitzen,
+ohne den Originalnachweis zu verändern.
+
+Für Darstellung und Einbettung verwendet der Renderer ausschließlich den
+einmal vollständig und stabil gelesenen Byte-Snapshot. Fileinfo bestimmt den
+MIME-Typ atomar aus exakt diesen später eingebetteten Bytes; er muss mit dem
+zuvor ermittelten Typ übereinstimmen. Der Quellpfad wird danach nicht erneut
+geöffnet. Temporäre Renderdateien liegen in einem privaten Verzeichnis mit
+Modus `0700`, werden mit Modus `0600` beziehungsweise für Poppler-Ausgaben
+`0640` geschrieben und nach Erfolg wie Fehler entfernt; Pfade daraus gelangen
+nicht in das Dossier.
+
+Wird der PHP-Prozess hart beendet, kann dieser `finally`-Abbau nicht mehr
+laufen. Deshalb bereinigt der Container beim nächsten Start ausschließlich
+mehr als 24 Stunden alte Arbeitsverzeichnisse unter `/tmp`, die vollständig
+dem strengen Renderer-Vertrag entsprechen: kanonischer Name, Eigentümer
+`www-data`, Verzeichnismodus `0700`, flacher Inhalt, erlaubte Dateinamen,
+reguläre Einzeldateien mit genau einem Link und Modus `0600` oder `0640`.
+Sobald ein unerwarteter Eintrag, Link, Eigentümer oder Modus vorkommt, bleibt
+das gesamte Verzeichnis als Beweismittel unangetastet.
 
 Für nach Migration 95 eingegangene Dateien berechnet eStab beim atomaren
 Finalisieren SHA-256 und Bytezahl und speichert beide zusammen mit der
@@ -300,10 +349,34 @@ wird kein scheinbar vollständiger Export ausgeliefert.
 
 Die Gesamtgröße eingebetteter Dateien ist standardmäßig auf
 `52428800` Byte (50 MiB) begrenzt. Sie kann in `.env` mit
-`ESTAB_PDF_ATTACHMENT_MAX_BYTES` zwischen 0 und 104857600 Byte eingestellt
-werden. Die Grenze schützt den 256-MiB-PHP-Prozess, weil die alte FPDF-Laufzeit
-das Dokument im Speicher aufbaut. Bei Überschreitung bricht die Erzeugung
-sichtbar ab; Dateien werden niemals stillschweigend weggelassen.
+`ESTAB_PDF_ATTACHMENT_MAX_BYTES` nur zwischen 0 und 52428800 Byte eingestellt
+werden; 50 MiB sind zugleich die unveränderliche harte Obergrenze. Die Grenze
+schützt den 256-MiB-PHP-Prozess, weil die alte FPDF-Laufzeit das Dokument im
+Speicher aufbaut. Bei Überschreitung bricht die Erzeugung sichtbar ab; Dateien
+werden niemals stillschweigend weggelassen.
+
+Zusätzlich gelten für die sichtbare Darstellung feste, nicht per Request
+aufweitbare Sicherheitsgrenzen:
+
+- höchstens 100 Originalseiten je PDF-Anlage und höchstens 200 sichtbare
+  Anlagenseiten im gesamten Dossier,
+- höchstens 24 MiB erzeugte Rasterdaten insgesamt und 8 MiB je
+  PDF-Seitenprozess beziehungsweise Rasterseite,
+- höchstens 12 Megapixel je Bild und 8.000 Pixel je Achse für direkt gelieferte
+  JPEG-/PNG-/GIF-/BMP-Bilder,
+- höchstens 512 KiB für die sichtbare Ausgabe einer Textdatei,
+- höchstens 60 Sekunden gemeinsames Laufzeitbudget für die gesamte sichtbare
+  Anlagensektion sowie höchstens 15 Sekunden für `pdfinfo` und jeden einzelnen
+  PDF-Seitenprozess.
+
+PDF-Seiten werden mit 150 dpi und höchstens 2.000 Pixeln an der langen Achse
+einzeln gerastert; Anmerkungen bleiben dabei sichtbar. Dadurch gilt das
+8-MiB-Dateilimit schon für jeden isolierten Poppler-Seitenprozess. Poppler
+läuft ohne Shell in einem festen privaten Arbeitsbereich und zusätzlich unter
+Betriebssystemgrenzen für CPU, Adressraum, Dateigröße, Prozesse, Core-Dumps und
+offene Dateien. Eine beschädigte, verschlüsselte, unvollständig lesbare oder
+ein Limit überschreitende darstellbare Anlage bricht den Dossierexport ab; sie
+wird weder still ausgelassen noch durch eine irreführende Hinweisseite ersetzt.
 
 Der Download ist ausschließlich über den separat mit HTTP Basic Auth
 geschützten Administrationsbereich und einen POST mit Session-CSRF möglich.
@@ -311,8 +384,12 @@ Die Antwort wird mit `no-store`, `nosniff` und einer Sandbox-CSP ausgeliefert.
 Nach erfolgreicher Erzeugung schreibt eStab einen `pdf_export`-Eintrag in das
 Einsatzprotokoll. Er enthält Abschnittsauswahl, den aufgelösten
 ETB-/TTB-Umfang samt Schichtmetadaten, Datensatzanzahlen, PDF-Größe,
-Anhangsgröße und SHA-256 der vollständigen PDF, aber weder Kennwörter noch
-interne Dateipfade.
+Anhangsgröße und SHA-256 der vollständigen PDF. Zusätzlich protokolliert er
+mit `attachment_visible_count`, `attachment_visible_pages`,
+`attachment_rendered_count`, `attachment_rendered_pages` und
+`attachment_information_pages`, wie viele Dateien und Seiten sichtbar
+ausgegeben, inhaltlich gerendert oder nur ehrlich erläutert wurden. Der Audit
+enthält weder Kennwörter noch interne Dateipfade.
 
 ## Funktionsnachweis
 
@@ -336,6 +413,17 @@ Die automatisierten Tests prüfen unter anderem:
 - Traversal-, Symlink-, MIME-, Größen- und Duplikatgrenzen,
 - eingebetteten PDF-1.7-Dateikatalog und SHA-256,
 - echte Extraktion des unveränderten, am Eingang gebundenen Beispielanhangs,
+- vollständige sichtbare JPEG-/PNG- und verlustfreie Textfixtures, eine
+  seitenweise geordnete Wiedergabe mehrseitiger PDF-Anlagen sowie den
+  Containervertrag für GD-Leseunterstützung von JPEG, PNG, GIF und BMP,
+- eindeutige Hinweisseiten für nicht statisch darstellbare Binärformate,
+  passende Sichtbarkeits-/Render-/Hinweiszähler und die Abweisung von
+  MIME-/Endungsabweichungen, beschädigten PDFs und überschrittenen Limits,
+- atomare MIME-Erkennung aus dem eingebetteten Byte-Snapshot,
+- private, auch nach einem Renderfehler vollständig entfernte
+  Temporärbereiche ohne Pfadleck in der Ausgabedatei,
+- den fail-closed Startup-Janitor für ausschließlich vollständig validierte,
+  mehr als 24 Stunden alte Render-Arbeitsverzeichnisse,
 - Ablehnung einer nach dem Laden oder vor dem Export gleich groß manipulierten
   Datei sowie ehrliche Legacy-Kennzeichnung ohne erfundenen Eingangshash,
 - durchsuchbaren Text für ETB, TBB und Nachrichten,
@@ -359,9 +447,9 @@ Die automatisierten Tests prüfen unter anderem:
 - dieselben Formularmarker in Einzel- und Gesamtexport,
 - aktuelle In-Memory-Ausgabe trotz unverändert erhaltener Archivdatei,
 - Abwesenheit von VS-NfD-Aufdruck, Wappen und Seitenbildern auf den
-  Nachrichtenvordruck-Seiten; als einziges Rasterbild des Gesamtdossiers ist
-  das vorhandene 400-x-396-Pixel-THW-Kopfzeichen der amtlichen ETB-/TBB-
-  Formköpfe zulässig,
+  Nachrichtenvordruck-Seiten; außerhalb der ausdrücklich sichtbaren
+  Anlagenseiten ist ausschließlich das vorhandene
+  400-x-396-Pixel-THW-Kopfzeichen der amtlichen ETB-/TBB-Formköpfe zulässig,
 - verlustfreie Anzeige nicht mehr in der Matrix vorhandener Empfänger,
 - pixelidentisches A4-Rendering der direkten und im Dossier enthaltenen
   ETB-, TBB- und Nachrichtenseiten einschließlich mehrseitigem Inhaltsfluss
@@ -392,30 +480,48 @@ Nachrichten- und Matrixdaten Einzelvordruck, direkte Dossier-Nachrichtenseite,
 beide mehrseitigen Varianten, eigenständige mehrseitige Fb-Fü-2-/Fb-Fü-44-
 Fixtures sowie ein repräsentatives vollständiges Dossier in der produktiven
 Folge Deckblatt, ETB, TBB, Nachricht, Nachrichtennachweis,
-Dienstorganisation, S6-Planung, Melderauftrag, Betriebsnachweis und
-Anlagenverzeichnis.
+Dienstorganisation, S6-Planung, Melderauftrag, Betriebsnachweis,
+Anlagenverzeichnis und sichtbare Text-/JPEG-Anlagenseiten.
 `tests/static/pdf_render.sh` prüft sie mit Poppler: A4 und Seitenzahl über
 `pdfinfo`, Text, historischen Empfänger-Fallback und verbotene Aufdrucke über
-`pdftotext`, den konstanten linken Folgeseiteneinzug über dessen
+`pdftotext`, vollständige Textanlagen und sichtbare Anlagenmetadaten, den
+konstanten linken Folgeseiteneinzug über dessen
 Bounding-Box-Ausgabe sowie einen eigenen Maximalwert-Fall mit 128 Zeichen
 Führungsstelle, 64 Zeichen Kennung und 255 Zeichen Einsatzname. Fehlende
-Rasterbilder werden über `pdfimages`, pixelgleiche PNGs über `pdftoppm` und
-der am Eingang gebundene Anhang über `pdfdetach` und `cmp` geprüft. Sämtliche
-Seiten der repräsentativen Fixture werden vollständig zu PNG gerendert. Die
+beziehungsweise unerlaubte Rasterbilder werden seitenbezogen über `pdfimages`,
+pixelgleiche PNGs über `pdftoppm` und beide am Eingang gebundenen Originale
+über `pdfdetach` und `cmp` geprüft. Sämtliche Seiten der repräsentativen
+Fixture werden vollständig zu PNG gerendert. Die
 direkten ETB-/TBB-Formularseiten müssen dabei seitenweise bytegleich mit den
 entsprechenden Seiten im Gesamtdossier sein. Auf der produktiven
 Nachrichtenseite wird ausschließlich das absichtlich globale Seitenzahlfeld
 vom Pixelvergleich ausgenommen.
+
+Der Container-Integrationstest
+`tests/integration/pdf_attachment_render.php` erzeugt zusätzlich eine
+zweiblättrige PDF-Anlage und ein transparentes PNG. Er verlangt drei sichtbare
+Rasterseiten in Quellreihenfolge, passende Audit-Zähler, zwei bytegleiche
+`EmbeddedFile`-Streams und einen nach Erfolg unveränderten temporären
+Verzeichnisbestand. Ein absichtlich beschädigtes, aber korrekt gehashtes PDF
+muss fail-closed scheitern und ebenfalls keinen Arbeitsbereich zurücklassen.
+`tests/static/pdf_temp_cleanup.sh` belegt zusätzlich, dass der Startup-Janitor
+nur alte, vollständig kanonische Arbeitsbereiche entfernt und aktuelle oder
+mit unerwartetem Inhalt, Modus, Eigentümer, Symlink beziehungsweise Hardlink
+versehene Kandidaten vollständig bewahrt.
 GitHub Actions lädt PDFs, Textauszüge, Prüfinformationen und Render-PNGs
 14 Tage als `pdf-render-evidence-*` hoch. Eine sichtbare Verschiebung der
 Vorlage oder ein erneut eingebundenes Wappen sperrt damit die CI.
 
 Für die manuelle Abnahme sollte ein Dossier mit realistischen langen
 Einsatznamen, mehrseitigen Einträgen und allen in der Organisation verwendeten
-Anhangstypen erstellt, in der vorgesehenen PDF-Anwendung geöffnet und die
-Anlagenansicht stichprobenartig gegen die Eingangsdateien sowie den angezeigten
-Integritätsstatus geprüft werden. Fb Fü 2 und Fb Fü 44 müssen zusätzlich auf
-dem tatsächlich eingesetzten Drucker geprüft und die manuelle Zeichnung aller
+Anhangstypen erstellt werden. In der vorgesehenen PDF-Anwendung sind sowohl
+die sichtbaren Seiten beziehungsweise Hinweisseiten als auch die
+Anlagenansicht stichprobenartig gegen Reihenfolge, Seitenzahl, Eingangsdateien
+und angezeigten Integritätsstatus zu prüfen. Der Fall muss JPEG, PNG, GIF und
+BMP, eine PDF-Anlage mit Anmerkung, verlustfrei Windows-1252-darstellbaren
+Text sowie TIFF und nicht darstellbaren Unicode-Text als Hinweisseiten
+umfassen. Fb Fü 2 und Fb Fü 44 müssen zusätzlich auf dem tatsächlich
+eingesetzten Drucker geprüft und die manuelle Zeichnung aller
 vorgesehenen Unterschriftslinien organisatorisch festgelegt werden. Diese
 Abnahme ersetzt die formale THW-Freigabe nicht. Zusätzlich ist derselbe
 Einsatz einmal als Gesamtbuch und einmal für eine einzelne Dienstschicht zu

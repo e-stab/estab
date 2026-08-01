@@ -520,6 +520,31 @@ function incident_export_integration_page_streams(string $pdf): array
     return $streams;
 }
 
+/** Build a deterministic two-page PDF used as a real visible attachment. */
+function incident_export_integration_pdf_attachment(string $marker): string
+{
+    $source = new FPDF('P', 'mm', 'A4');
+    $source->SetCompression(false);
+    foreach (
+        [
+            [220, 235, 250, 'PDF-QUELLSEITE-1'],
+            [250, 230, 210, 'PDF-QUELLSEITE-2'],
+        ] as [$red, $green, $blue, $pageMarker]
+    ) {
+        $source->AddPage();
+        $source->SetFillColor($red, $green, $blue);
+        $source->Rect(10, 10, 190, 277, 'F');
+        $source->SetTextColor(23, 47, 77);
+        $source->SetFont('helvetica', 'B', 24);
+        $source->SetXY(20, 120);
+        $source->Cell(170, 15, $pageMarker, 0, 1, 'C');
+        $source->SetFont('helvetica', '', 10);
+        $source->SetX(20);
+        $source->Cell(170, 8, $marker, 0, 1, 'C');
+    }
+    return $source->Output('', 'S');
+}
+
 $password = getenv('ESTAB_DB_PASSWORD');
 if (!is_string($password) || $password === '') {
     $passwordFile = getenv('ESTAB_DB_PASSWORD_FILE');
@@ -560,10 +585,11 @@ $selectedMarker = 'PDF-SELECTED-' . $token;
 $otherMarker = 'PDF-OTHER-' . $token;
 $selectedCommandPost = 'COMMAND-POST-SELECTED-' . $token;
 $otherCommandPost = 'COMMAND-POST-OTHER-' . $token;
-$selectedName = 'PX' . $token . 'S.txt';
+$selectedName = 'PX' . $token . 'S.pdf';
 $otherName = 'PX' . $token . 'O.txt';
-$selectedPayload = "Embedded selected incident {$token}\n"
-    . "SHA-256 integrity proof\n";
+$selectedPayload = incident_export_integration_pdf_attachment(
+    'Embedded selected incident ' . $token
+);
 $otherPayload = "Embedded other incident {$token}\n";
 
 $connection = estab_auth_connect($databaseConfig);
@@ -1101,8 +1127,13 @@ try {
     );
     $assert(
         $rendered['attachment_count'] === 1
-            && $rendered['attachment_bytes'] === strlen($selectedPayload),
-        'Rendered incident dossier reports wrong attachment totals'
+            && $rendered['attachment_bytes'] === strlen($selectedPayload)
+            && $rendered['attachment_visible_count'] === 1
+            && $rendered['attachment_visible_pages'] === 2
+            && $rendered['attachment_rendered_count'] === 1
+            && $rendered['attachment_rendered_pages'] === 2
+            && $rendered['attachment_information_pages'] === 0,
+        'Rendered incident dossier reports wrong attachment or visible-page totals'
     );
     $assert(
         $rendered['sha256'] === hash('sha256', $pdf),
@@ -1163,10 +1194,42 @@ try {
                 $pageContent,
                 hash('sha256', $selectedPayload)
             )
+            && str_contains($pageContent, 'Anlage 1 von 1')
+            && str_contains($pageContent, 'Originalseite 1 von 2')
+            && str_contains($pageContent, 'Originalseite 2 von 2')
+            && str_contains($pageContent, 'Sichtbare Darstellung')
             && !str_contains($pageContent, 'Dienstgebrauch')
             && !str_contains($pageContent, $otherMarker)
             && !str_contains($pageContent, $otherCommandPost),
         'Rendered pages omit the shared form, attachment SHA-256, or incident scope'
+    );
+    preg_match_all(
+        '/\/Subtype \/Image\s+\/Width ([0-9]+)\s+\/Height ([0-9]+)/',
+        $pdf,
+        $imageObjects,
+        PREG_SET_ORDER
+    );
+    $visibleAttachmentImages = array_values(array_filter(
+        $imageObjects,
+        static function (array $image): bool {
+            return (int) ($image[1] ?? 0) !== 400
+                || (int) ($image[2] ?? 0) !== 396;
+        }
+    ));
+    $assert(
+        count($visibleAttachmentImages) === 2
+            && array_reduce(
+                $visibleAttachmentImages,
+                static fn (bool $valid, array $image): bool => $valid
+                    && (int) ($image[1] ?? 0) >= 500
+                    && (int) ($image[1] ?? 0)
+                        <= ESTAB_INCIDENT_PDF_RENDER_AXIS
+                    && (int) ($image[2] ?? 0) >= 500
+                    && (int) ($image[2] ?? 0)
+                        <= ESTAB_INCIDENT_PDF_RENDER_AXIS,
+                true
+            ),
+        'Both source PDF pages were not embedded as bounded visible images'
     );
     $assert(
         str_contains($pdf, '/Subtype /Image')

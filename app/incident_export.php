@@ -1445,7 +1445,17 @@ function estab_incident_export_load(
 /**
  * Render a complete PDF from a previously loaded bundle.
  *
- * @return array{bytes:string,attachment_count:int,attachment_bytes:int,sha256:string}
+ * @return array{
+ *   bytes:string,
+ *   attachment_count:int,
+ *   attachment_bytes:int,
+ *   attachment_visible_count:int,
+ *   attachment_visible_pages:int,
+ *   attachment_rendered_count:int,
+ *   attachment_rendered_pages:int,
+ *   attachment_information_pages:int,
+ *   sha256:string
+ * }
  */
 function estab_incident_export_pdf(
     array $bundle,
@@ -1623,15 +1633,23 @@ function estab_incident_export_pdf(
                 : []
         );
     }
+    $attachmentVisibility = [
+        'attachment_visible_count' => 0,
+        'attachment_visible_pages' => 0,
+        'attachment_rendered_count' => 0,
+        'attachment_rendered_pages' => 0,
+        'attachment_information_pages' => 0,
+    ];
     if (in_array('attachments', $sections, true)) {
         $pdf->addAttachmentIndex($embeddedIndex);
+        $attachmentVisibility = $pdf->addAttachmentPages($embeddedIndex);
     }
 
     $bytes = $pdf->Output('', 'S');
-    return [
+    return array_merge([
         'bytes' => $bytes,
         'attachment_count' => $pdf->embeddedAttachmentCount(),
         'attachment_bytes' => $pdf->embeddedAttachmentBytes(),
         'sha256' => hash('sha256', $bytes),
-    ];
+    ], $attachmentVisibility);
 }

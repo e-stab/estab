@@ -3,6 +3,10 @@ set -eu
 
 umask 027
 
+# Keep PHP and the startup janitor on the same fixed, container-local root.
+TMPDIR=/tmp
+export TMPDIR
+
 load_secret() {
     variable_name="$1"
     file_variable_name="${variable_name}_FILE"
@@ -58,6 +62,10 @@ esac
 
 php -d display_errors=stderr -r \
     'require "/var/www/html/app/bootstrap.php"; estab_validate_runtime_configuration();'
+
+# A killed PDF export can leave its private raster workspace behind. The
+# janitor only accepts old, owner/mode/name-verified, flat workspaces.
+estab-cleanup-pdf-render-tmp /tmp 1440 www-data
 
 prepare_writable_directory() {
     writable_directory=$1

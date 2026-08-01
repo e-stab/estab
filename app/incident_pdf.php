@@ -6,9 +6,11 @@ declare(strict_types=1);
  * Self-contained PDF dossier for one eStab incident.
  *
  * The report renders ETB, TBB and message forms in a readable, searchable
- * document. Every completed attachment is additionally embedded as its
- * original byte stream. This preserves formats that cannot safely be rendered
- * by FPDF (for example PDF, ODT, ZIP or video) without silently omitting them.
+ * document. Every completed attachment is shown in a dedicated attachment
+ * section where the format can be rendered safely and is additionally
+ * embedded as its original byte stream. Formats without a faithful static
+ * representation (for example ZIP or video) receive an explicit information
+ * page instead of being silently omitted.
  */
 
 require_once __DIR__ . '/legacy_php.php';
@@ -17,7 +19,24 @@ require_once __DIR__ . '/logbook_numbering.php';
 require_once __DIR__ . '/../4fbak/backup_pdf.php';
 
 const ESTAB_INCIDENT_PDF_DEFAULT_ATTACHMENT_BYTES = 50 * 1024 * 1024;
+const ESTAB_INCIDENT_PDF_MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
 const ESTAB_INCIDENT_PDF_MAX_ATTACHMENTS = 1000;
+const ESTAB_INCIDENT_PDF_MAX_VISIBLE_PAGES = 200;
+const ESTAB_INCIDENT_PDF_MAX_PDF_PAGES = 100;
+const ESTAB_INCIDENT_PDF_MAX_RASTER_BYTES = 24 * 1024 * 1024;
+const ESTAB_INCIDENT_PDF_MAX_RASTER_PAGE_BYTES = 8 * 1024 * 1024;
+const ESTAB_INCIDENT_PDF_MAX_IMAGE_PIXELS = 12_000_000;
+const ESTAB_INCIDENT_PDF_MAX_IMAGE_AXIS = 8_000;
+const ESTAB_INCIDENT_PDF_RENDER_AXIS = 2000;
+const ESTAB_INCIDENT_PDF_MAX_TEXT_BYTES = 512 * 1024;
+const ESTAB_INCIDENT_PDF_PROCESS_OUTPUT_BYTES = 64 * 1024;
+const ESTAB_INCIDENT_PDF_PROCESS_SECONDS = 45;
+const ESTAB_INCIDENT_PDF_PROCESS_PAGE_SECONDS = 15;
+const ESTAB_INCIDENT_PDF_RENDER_TOTAL_SECONDS = 60;
+const ESTAB_INCIDENT_PDF_PDFINFO = '/usr/bin/pdfinfo';
+const ESTAB_INCIDENT_PDF_PDFTOPPM = '/usr/bin/pdftoppm';
+const ESTAB_INCIDENT_PDF_PRLIMIT = '/usr/bin/prlimit';
+const ESTAB_INCIDENT_PDF_SETPRIV = '/usr/bin/setpriv';
 
 final class EstabIncidentPdfInputException extends InvalidArgumentException
 {
@@ -172,6 +191,28 @@ function estab_incident_pdf_mime_name(mixed $value): string
         }
     }
     return $encoded;
+}
+
+/** Detect the MIME type from the exact immutable byte snapshot being used. */
+function estab_incident_pdf_snapshot_mime(string $data): string
+{
+    if (!class_exists('finfo')) {
+        throw new EstabIncidentPdfInputException(
+            'Die Inhaltstypprüfung für PDF-Anlagen ist nicht verfügbar.'
+        );
+    }
+    $detected = (new finfo(FILEINFO_MIME_TYPE))->buffer($data);
+    if (
+        !is_string($detected)
+        || preg_match(
+            '/\A[a-z0-9][a-z0-9!#$&^_.+-]*\/'
+                . '[a-z0-9][a-z0-9!#$&^_.+-]*\z/DiD',
+            $detected
+        ) !== 1
+    ) {
+        return 'application/octet-stream';
+    }
+    return strtolower($detected);
 }
 
 /**
@@ -339,6 +380,7 @@ final class EstabIncidentPdf extends vordruckaspdf
      * @var list<array{
      *     name:string,
      *     mime:string,
+     *     mime_name:string,
      *     description:string,
      *     data:string,
      *     size:int,
@@ -357,7 +399,10 @@ final class EstabIncidentPdf extends vordruckaspdf
         int $attachmentByteLimit = ESTAB_INCIDENT_PDF_DEFAULT_ATTACHMENT_BYTES,
         ?array $recipientMatrix = null
     ) {
-        if ($attachmentByteLimit < 0 || $attachmentByteLimit > 500 * 1024 * 1024) {
+        if (
+            $attachmentByteLimit < 0
+            || $attachmentByteLimit > ESTAB_INCIDENT_PDF_MAX_ATTACHMENT_BYTES
+        ) {
             throw new EstabIncidentPdfInputException(
                 'PDF attachment byte limit is invalid.'
             );
@@ -2701,6 +2746,931 @@ final class EstabIncidentPdf extends vordruckaspdf
     }
 
     /**
+     * Run one fixed renderer command without invoking a shell.
+     *
+     * @param list<string> $arguments
+     * @return array{exit_code:int,stdout:string,stderr:string,timed_out:bool}
+     */
+    private static function runAttachmentProcess(
+        array $arguments,
+        string $workingDirectory,
+        int $timeoutSeconds
+    ): array {
+        if (
+            $arguments === []
+            || $timeoutSeconds < 1
+            || $timeoutSeconds > ESTAB_INCIDENT_PDF_PROCESS_SECONDS
+            || !is_dir($workingDirectory)
+            || is_link($workingDirectory)
+        ) {
+            throw new EstabIncidentPdfInputException(
+                'Anlagen-Renderer wurde ungültig aufgerufen.'
+            );
+        }
+        foreach ($arguments as $argument) {
+            if (
+                !is_string($argument)
+                || $argument === ''
+                || str_contains($argument, "\0")
+            ) {
+                throw new EstabIncidentPdfInputException(
+                    'Anlagen-Renderer enthält ein ungültiges Argument.'
+                );
+            }
+        }
+        if (!function_exists('proc_open')) {
+            throw new EstabIncidentPdfInputException(
+                'Der PDF-Anlagen-Renderer ist in dieser Laufzeit nicht verfügbar.'
+            );
+        }
+
+        $descriptors = [
+            0 => ['file', '/dev/null', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ];
+        $environment = [
+            'LANG' => 'C',
+            'LC_ALL' => 'C',
+            'PATH' => '/usr/bin:/bin',
+            'TMPDIR' => $workingDirectory,
+        ];
+        $pipes = [];
+        $process = @proc_open(
+            $arguments,
+            $descriptors,
+            $pipes,
+            $workingDirectory,
+            $environment,
+            ['bypass_shell' => true, 'suppress_errors' => true]
+        );
+        if (!is_resource($process)) {
+            throw new EstabIncidentPdfInputException(
+                'Der PDF-Anlagen-Renderer konnte nicht gestartet werden.'
+            );
+        }
+
+        stream_set_blocking($pipes[1], false);
+        stream_set_blocking($pipes[2], false);
+        $stdout = '';
+        $stderr = '';
+        $timedOut = false;
+        $outputExceeded = false;
+        $deadline = microtime(true) + $timeoutSeconds;
+        $lastStatus = null;
+        while (true) {
+            $stdoutChunk = stream_get_contents($pipes[1]);
+            $stderrChunk = stream_get_contents($pipes[2]);
+            if (is_string($stdoutChunk)) {
+                $stdout .= $stdoutChunk;
+            }
+            if (is_string($stderrChunk)) {
+                $stderr .= $stderrChunk;
+            }
+            if (
+                strlen($stdout) > ESTAB_INCIDENT_PDF_PROCESS_OUTPUT_BYTES
+                || strlen($stderr) > ESTAB_INCIDENT_PDF_PROCESS_OUTPUT_BYTES
+            ) {
+                $outputExceeded = true;
+                @proc_terminate($process, 9);
+                break;
+            }
+
+            $lastStatus = proc_get_status($process);
+            if (!is_array($lastStatus) || !$lastStatus['running']) {
+                break;
+            }
+            if (microtime(true) >= $deadline) {
+                $timedOut = true;
+                @proc_terminate($process);
+                usleep(100000);
+                $lastStatus = proc_get_status($process);
+                if (is_array($lastStatus) && $lastStatus['running']) {
+                    @proc_terminate($process, 9);
+                }
+                break;
+            }
+            usleep(20000);
+        }
+
+        foreach ([1, 2] as $pipeNumber) {
+            $chunk = stream_get_contents($pipes[$pipeNumber]);
+            if (is_string($chunk)) {
+                if ($pipeNumber === 1) {
+                    $stdout .= $chunk;
+                } else {
+                    $stderr .= $chunk;
+                }
+            }
+            fclose($pipes[$pipeNumber]);
+        }
+        $closeCode = proc_close($process);
+        $statusCode = is_array($lastStatus)
+            ? (int) ($lastStatus['exitcode'] ?? -1)
+            : -1;
+        $exitCode = $statusCode >= 0 ? $statusCode : $closeCode;
+        if ($outputExceeded) {
+            $exitCode = -2;
+        }
+
+        return [
+            'exit_code' => $exitCode,
+            'stdout' => substr(
+                $stdout,
+                0,
+                ESTAB_INCIDENT_PDF_PROCESS_OUTPUT_BYTES
+            ),
+            'stderr' => substr(
+                $stderr,
+                0,
+                ESTAB_INCIDENT_PDF_PROCESS_OUTPUT_BYTES
+            ),
+            'timed_out' => $timedOut,
+        ];
+    }
+
+    /** Return a bounded per-process timeout from one export-wide deadline. */
+    private static function attachmentProcessTimeout(
+        float $deadline,
+        int $perProcessLimit
+    ): int {
+        $remaining = $deadline - microtime(true);
+        if ($remaining <= 0.0) {
+            throw new EstabIncidentPdfInputException(
+                'Die Anlagendarstellung hat ihr sicheres Gesamtlaufzeitlimit überschritten.'
+            );
+        }
+        return max(1, min($perProcessLimit, (int) ceil($remaining)));
+    }
+
+    /** Create one private, flat renderer workspace below the system temp dir. */
+    private static function createAttachmentWorkspace(): string
+    {
+        $temporaryRoot = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR);
+        if (
+            $temporaryRoot === ''
+            || !is_dir($temporaryRoot)
+            || !is_writable($temporaryRoot)
+            || is_link($temporaryRoot)
+        ) {
+            throw new EstabIncidentPdfInputException(
+                'Für die Anlagendarstellung ist kein sicherer Temporärbereich verfügbar.'
+            );
+        }
+        for ($attempt = 0; $attempt < 5; $attempt++) {
+            $workspace = $temporaryRoot . DIRECTORY_SEPARATOR
+                . 'estab-pdf-render-' . bin2hex(random_bytes(16));
+            if (@mkdir($workspace, 0700)) {
+                return $workspace;
+            }
+        }
+        throw new EstabIncidentPdfInputException(
+            'Der private Temporärbereich für Anlagen konnte nicht angelegt werden.'
+        );
+    }
+
+    /** Remove only regular files created in one exact private workspace. */
+    private static function removeAttachmentWorkspace(string $workspace): void
+    {
+        $entries = @scandir($workspace);
+        if (!is_array($entries)) {
+            error_log(
+                'eStab PDF renderer could not inspect its private workspace for cleanup'
+            );
+            return;
+        }
+        foreach ($entries as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            $path = $workspace . DIRECTORY_SEPARATOR . $entry;
+            $metadata = @lstat($path);
+            if (
+                is_array($metadata)
+                && (
+                    (((int) ($metadata['mode'] ?? 0)) & 0170000) === 0100000
+                    || is_link($path)
+                )
+            ) {
+                if (!@unlink($path)) {
+                    error_log(
+                        'eStab PDF renderer could not remove one private workspace file'
+                    );
+                }
+            }
+        }
+        if (!@rmdir($workspace)) {
+            error_log('eStab PDF renderer could not remove its private workspace');
+        }
+    }
+
+    /** Write one already verified byte snapshot into the private workspace. */
+    private static function writeAttachmentWorkspaceFile(
+        string $path,
+        string $data
+    ): void {
+        $handle = @fopen($path, 'xb');
+        if ($handle === false) {
+            throw new EstabIncidentPdfInputException(
+                'Eine temporäre Anlagendatei konnte nicht angelegt werden.'
+            );
+        }
+        try {
+            $written = 0;
+            $length = strlen($data);
+            while ($written < $length) {
+                $chunk = fwrite($handle, substr($data, $written, 1048576));
+                if ($chunk === false || $chunk === 0) {
+                    throw new EstabIncidentPdfInputException(
+                        'Eine temporäre Anlagendatei konnte nicht geschrieben werden.'
+                    );
+                }
+                $written += $chunk;
+            }
+            if (!fflush($handle)) {
+                throw new EstabIncidentPdfInputException(
+                    'Eine temporäre Anlagendatei konnte nicht abgeschlossen werden.'
+                );
+            }
+        } finally {
+            fclose($handle);
+        }
+        @chmod($path, 0600);
+    }
+
+    /**
+     * Validate one raster snapshot before allocating decoder memory.
+     *
+     * @return array{width:int,height:int,type:int}
+     */
+    private static function attachmentImageInfo(
+        string $data,
+        int $expectedType
+    ): array {
+        if (!function_exists('getimagesizefromstring')) {
+            throw new EstabIncidentPdfInputException(
+                'Die Bildprüfung ist in dieser Laufzeit nicht verfügbar.'
+            );
+        }
+        $info = @getimagesizefromstring($data);
+        $width = is_array($info) ? (int) ($info[0] ?? 0) : 0;
+        $height = is_array($info) ? (int) ($info[1] ?? 0) : 0;
+        $type = is_array($info) ? (int) ($info[2] ?? 0) : 0;
+        if (
+            $width < 1
+            || $height < 1
+            || $type !== $expectedType
+            || $width > ESTAB_INCIDENT_PDF_MAX_IMAGE_AXIS
+            || $height > ESTAB_INCIDENT_PDF_MAX_IMAGE_AXIS
+            || $width * $height > ESTAB_INCIDENT_PDF_MAX_IMAGE_PIXELS
+        ) {
+            throw new EstabIncidentPdfInputException(
+                'Eine Bildanlage ist beschädigt oder überschreitet das sichere Bildlimit.'
+            );
+        }
+        return ['width' => $width, 'height' => $height, 'type' => $type];
+    }
+
+    /** Normalize one decoded image and flatten transparency for old FPDF. */
+    private static function normalizeImageAttachment(
+        string $data,
+        string $path,
+        array $imageInfo,
+        bool $allowJpegFallback = false
+    ): array {
+        $requiredFunctions = [
+            'imagecreatefromstring',
+            'imagecreatetruecolor',
+            'imagecolorallocate',
+            'imagefilledrectangle',
+            'imagecopyresampled',
+            'imagejpeg',
+        ];
+        $missingFunctions = array_filter(
+            $requiredFunctions,
+            static fn (string $function): bool => !function_exists($function)
+        );
+        if ($missingFunctions !== []) {
+            if ($allowJpegFallback) {
+                self::writeAttachmentWorkspaceFile($path, $data);
+                return [
+                    'path' => $path,
+                    'width' => (int) $imageInfo['width'],
+                    'height' => (int) $imageInfo['height'],
+                    'type' => 'JPG',
+                ];
+            }
+            throw new EstabIncidentPdfInputException(
+                'Die PNG-Anlagendarstellung ist in dieser Laufzeit nicht verfügbar.'
+            );
+        }
+        try {
+            $source = @imagecreatefromstring($data);
+        } catch (Throwable $exception) {
+            throw new EstabIncidentPdfInputException(
+                'Eine Bildanlage konnte nicht vollständig dekodiert werden.',
+                0,
+                $exception
+            );
+        }
+        if ($source === false) {
+            throw new EstabIncidentPdfInputException(
+                'Eine Bildanlage konnte nicht vollständig dekodiert werden.'
+            );
+        }
+        $sourceWidth = (int) $imageInfo['width'];
+        $sourceHeight = (int) $imageInfo['height'];
+        $scale = min(
+            1.0,
+            ESTAB_INCIDENT_PDF_RENDER_AXIS
+                / max($sourceWidth, $sourceHeight)
+        );
+        $targetWidth = max(1, (int) round($sourceWidth * $scale));
+        $targetHeight = max(1, (int) round($sourceHeight * $scale));
+        $target = imagecreatetruecolor($targetWidth, $targetHeight);
+        if ($target === false) {
+            $source = null;
+            throw new EstabIncidentPdfInputException(
+                'Für eine Bildanlage konnte keine sichere Vorschau angelegt werden.'
+            );
+        }
+        $white = imagecolorallocate($target, 255, 255, 255);
+        if ($white === false) {
+            $source = null;
+            $target = null;
+            throw new EstabIncidentPdfInputException(
+                'Für eine Bildanlage konnte kein weißer Hintergrund angelegt werden.'
+            );
+        }
+        imagefilledrectangle(
+            $target,
+            0,
+            0,
+            $targetWidth - 1,
+            $targetHeight - 1,
+            $white
+        );
+        if (!imagecopyresampled(
+            $target,
+            $source,
+            0,
+            0,
+            0,
+            0,
+            $targetWidth,
+            $targetHeight,
+            $sourceWidth,
+            $sourceHeight
+        ) || !imagejpeg($target, $path, 88)) {
+            $source = null;
+            $target = null;
+            throw new EstabIncidentPdfInputException(
+                'Eine Bildanlage konnte nicht sicher in die PDF übernommen werden.'
+            );
+        }
+        $source = null;
+        $target = null;
+        @chmod($path, 0600);
+        return [
+            'path' => $path,
+            'width' => $targetWidth,
+            'height' => $targetHeight,
+            'type' => 'JPG',
+        ];
+    }
+
+    /**
+     * Rasterize every page of one verified PDF snapshot with fixed Poppler
+     * binaries and strict resource limits.
+     *
+     * @return list<array{path:string,width:int,height:int,type:string,bytes:int}>
+     */
+    private static function rasterizePdfAttachment(
+        string $data,
+        string $workspace,
+        int $attachmentPosition,
+        int $remainingPages,
+        int $remainingRasterBytes,
+        float $deadline
+    ): array {
+        if ($remainingRasterBytes < 1) {
+            throw new EstabIncidentPdfInputException(
+                'Die sichtbaren Anlagen überschreiten das sichere PDF-Rasterlimit.'
+            );
+        }
+        foreach (
+            [
+                ESTAB_INCIDENT_PDF_PRLIMIT,
+                ESTAB_INCIDENT_PDF_SETPRIV,
+                ESTAB_INCIDENT_PDF_PDFINFO,
+                ESTAB_INCIDENT_PDF_PDFTOPPM,
+            ] as $binary
+        ) {
+            if (!is_file($binary) || !is_executable($binary) || is_link($binary)) {
+                throw new EstabIncidentPdfInputException(
+                    'Die sichtbare Darstellung von PDF-Anlagen ist in dieser Laufzeit nicht verfügbar.'
+                );
+            }
+        }
+
+        $sourcePath = $workspace . DIRECTORY_SEPARATOR
+            . 'source-' . $attachmentPosition . '.pdf';
+        self::writeAttachmentWorkspaceFile($sourcePath, $data);
+        $limits = [
+            ESTAB_INCIDENT_PDF_PRLIMIT,
+            '--as=402653184',
+            '--cpu=30',
+            '--fsize=' . ESTAB_INCIDENT_PDF_MAX_RASTER_PAGE_BYTES,
+            '--nofile=64',
+            '--nproc=16',
+            '--core=0',
+            '--',
+            ESTAB_INCIDENT_PDF_SETPRIV,
+            '--no-new-privs',
+            '--',
+        ];
+        $infoResult = self::runAttachmentProcess(
+            array_merge($limits, [ESTAB_INCIDENT_PDF_PDFINFO, $sourcePath]),
+            $workspace,
+            self::attachmentProcessTimeout(
+                $deadline,
+                ESTAB_INCIDENT_PDF_PROCESS_PAGE_SECONDS
+            )
+        );
+        if (
+            $infoResult['timed_out']
+            || $infoResult['exit_code'] !== 0
+            || preg_match_all(
+                '/^Pages:[\t ]+([0-9]+)[\t ]*$/mD',
+                $infoResult['stdout'],
+                $pageMatches
+            ) !== 1
+        ) {
+            error_log(
+                'eStab PDF attachment preflight rejected one verified PDF snapshot'
+            );
+            throw new EstabIncidentPdfInputException(
+                'Eine PDF-Anlage ist beschädigt, verschlüsselt oder nicht vollständig lesbar.'
+            );
+        }
+        $pageCount = (int) $pageMatches[1][0];
+        if (
+            $pageCount < 1
+            || $pageCount > ESTAB_INCIDENT_PDF_MAX_PDF_PAGES
+            || $pageCount > $remainingPages
+        ) {
+            throw new EstabIncidentPdfInputException(
+                'Eine PDF-Anlage überschreitet das sichere Limit sichtbarer Anlagenseiten.'
+            );
+        }
+
+        $pages = [];
+        $totalBytes = 0;
+        for ($pageNumber = 1; $pageNumber <= $pageCount; $pageNumber++) {
+            $prefix = $workspace . DIRECTORY_SEPARATOR
+                . 'raster-' . $attachmentPosition . '-' . $pageNumber;
+            $path = $prefix . '.jpg';
+            $renderResult = self::runAttachmentProcess(
+                array_merge($limits, [
+                    ESTAB_INCIDENT_PDF_PDFTOPPM,
+                    '-f',
+                    (string) $pageNumber,
+                    '-l',
+                    (string) $pageNumber,
+                    '-singlefile',
+                    '-jpeg',
+                    '-r',
+                    '150',
+                    '-scale-to',
+                    (string) ESTAB_INCIDENT_PDF_RENDER_AXIS,
+                    '-jpegopt',
+                    'quality=82,progressive=n,optimize=y',
+                    $sourcePath,
+                    $prefix,
+                ]),
+                $workspace,
+                self::attachmentProcessTimeout(
+                    $deadline,
+                    ESTAB_INCIDENT_PDF_PROCESS_PAGE_SECONDS
+                )
+            );
+            if (
+                $renderResult['timed_out']
+                || $renderResult['exit_code'] !== 0
+            ) {
+                error_log(
+                    'eStab PDF attachment rasterization failed for one verified snapshot page'
+                );
+                throw new EstabIncidentPdfInputException(
+                    'Eine PDF-Anlage konnte nicht vollständig sichtbar dargestellt werden.'
+                );
+            }
+            clearstatcache(true, $path);
+            $metadata = @lstat($path);
+            $bytes = is_array($metadata) ? (int) ($metadata['size'] ?? 0) : 0;
+            if (
+                !is_array($metadata)
+                || (((int) ($metadata['mode'] ?? 0)) & 0170000) !== 0100000
+                || $bytes < 1
+                || $bytes > ESTAB_INCIDENT_PDF_MAX_RASTER_PAGE_BYTES
+                || $totalBytes + $bytes > $remainingRasterBytes
+            ) {
+                throw new EstabIncidentPdfInputException(
+                    'Der PDF-Anlagen-Renderer hat eine ungültige Ausgabedatei erzeugt.'
+                );
+            }
+            $rasterData = @file_get_contents($path);
+            if (!is_string($rasterData) || strlen($rasterData) !== $bytes) {
+                throw new EstabIncidentPdfInputException(
+                    'Eine gerenderte PDF-Anlagenseite konnte nicht vollständig geprüft werden.'
+                );
+            }
+            $image = self::attachmentImageInfo($rasterData, 2);
+            $pages[] = [
+                'path' => $path,
+                'width' => $image['width'],
+                'height' => $image['height'],
+                'type' => 'JPG',
+                'bytes' => $bytes,
+            ];
+            $totalBytes += $bytes;
+        }
+        if (!@unlink($sourcePath)) {
+            throw new EstabIncidentPdfInputException(
+                'Die temporäre PDF-Anlage konnte nicht sicher freigegeben werden.'
+            );
+        }
+        return $pages;
+    }
+
+    /** Validate one scalar attachment heading without exposing internal paths. */
+    private static function attachmentDisplayText(
+        mixed $value,
+        string $fallback
+    ): string {
+        if (
+            is_array($value)
+            || is_object($value)
+            || is_resource($value)
+        ) {
+            throw new EstabIncidentPdfInputException(
+                'Anlagenmetadaten müssen Textwerte sein.'
+            );
+        }
+        $text = trim((string) $value);
+        if ($text === '') {
+            $text = $fallback;
+        }
+        if (strlen($text) > 600 || preg_match('//u', $text) !== 1) {
+            throw new EstabIncidentPdfInputException(
+                'Ein sichtbarer Anlagenname ist ungültig.'
+            );
+        }
+        return $text;
+    }
+
+    /**
+     * Begin one A4 attachment page and return the available image rectangle.
+     *
+     * @return array{x:float,y:float,width:float,height:float}
+     */
+    private function beginAttachmentPage(
+        array $attachment,
+        int $position,
+        int $total,
+        string $sourcePageLabel
+    ): array {
+        $this->sectionTitle = 'Anlage ' . $position . ' von ' . $total;
+        $this->configureDossierLayout();
+        $this->AddPage();
+
+        $storedName = estab_incident_pdf_attachment_name(
+            $attachment['stored_name'] ?? null
+        );
+        $displayName = self::attachmentDisplayText(
+            $attachment['display_name'] ?? '',
+            $storedName
+        );
+        $this->recordHeading($displayName);
+        $this->SetTextColor(73, 89, 111);
+        $this->SetFont('helvetica', 'B', 8.5);
+        $this->MultiCell(
+            0,
+            4.2,
+            estab_incident_pdf_text(
+                $sourcePageLabel . ' · ' . (string) $attachment['mime']
+                    . ' · ' . number_format(
+                        (int) $attachment['size'],
+                        0,
+                        ',',
+                        '.'
+                    ) . ' Byte'
+            )
+        );
+        $this->SetFont('courier', '', 6.2);
+        $this->MultiCell(
+            0,
+            3.4,
+            estab_incident_pdf_text('SHA-256 ' . $attachment['sha256'])
+        );
+        $this->SetTextColor(23, 32, 51);
+        $this->SetFont('helvetica', '', 7.5);
+        $this->MultiCell(
+            0,
+            3.8,
+            estab_incident_pdf_text(
+                'Sichtbare Darstellung; das unveränderte Original ist '
+                    . 'zusätzlich als PDF-Anlage eingebettet.'
+            )
+        );
+        $this->Ln(1.5);
+
+        $x = 18.0;
+        $y = $this->GetY();
+        return [
+            'x' => $x,
+            'y' => $y,
+            'width' => $this->w - 2 * $x,
+            'height' => max(10.0, $this->h - 20.0 - $y),
+        ];
+    }
+
+    /** Render one raster proportionally, centered and without cropping. */
+    private function drawAttachmentRaster(
+        array $attachment,
+        array $raster,
+        int $position,
+        int $total,
+        string $sourcePageLabel
+    ): void {
+        $box = $this->beginAttachmentPage(
+            $attachment,
+            $position,
+            $total,
+            $sourcePageLabel
+        );
+        $pixelWidth = (int) ($raster['width'] ?? 0);
+        $pixelHeight = (int) ($raster['height'] ?? 0);
+        $path = (string) ($raster['path'] ?? '');
+        $type = (string) ($raster['type'] ?? '');
+        if (
+            $pixelWidth < 1
+            || $pixelHeight < 1
+            || $path === ''
+            || !in_array($type, ['JPG', 'PNG'], true)
+        ) {
+            throw new EstabIncidentPdfInputException(
+                'Eine sichtbare Anlagenseite ist unvollständig.'
+            );
+        }
+        $scale = min(
+            $box['width'] / $pixelWidth,
+            $box['height'] / $pixelHeight
+        );
+        $width = $pixelWidth * $scale;
+        $height = $pixelHeight * $scale;
+        $x = $box['x'] + ($box['width'] - $width) / 2.0;
+        $y = $box['y'] + ($box['height'] - $height) / 2.0;
+        $this->SetFillColor(255, 255, 255);
+        $this->SetDrawColor(141, 162, 189);
+        $this->Rect(
+            $box['x'],
+            $box['y'],
+            $box['width'],
+            $box['height'],
+            'F'
+        );
+        try {
+            $this->Image($path, $x, $y, $width, $height, $type);
+        } catch (RuntimeException $exception) {
+            throw new EstabIncidentPdfInputException(
+                'Eine Bildanlage konnte nicht vollständig in die PDF übernommen werden.',
+                0,
+                $exception
+            );
+        }
+        $this->Rect(
+            $box['x'],
+            $box['y'],
+            $box['width'],
+            $box['height'],
+            'D'
+        );
+    }
+
+    /** Explain faithfully why a binary attachment has no static page image. */
+    private function drawAttachmentInformationPage(
+        array $attachment,
+        int $position,
+        int $total,
+        string $reason
+    ): void {
+        $this->beginAttachmentPage(
+            $attachment,
+            $position,
+            $total,
+            'Hinweisseite'
+        );
+        $this->Ln(10);
+        $this->SetFillColor(244, 247, 251);
+        $this->SetDrawColor(141, 162, 189);
+        $this->SetTextColor(23, 47, 77);
+        $this->SetFont('helvetica', 'B', 14);
+        $this->MultiCell(
+            0,
+            9,
+            estab_incident_pdf_text(
+                'Für dieses Dateiformat ist keine vollständige statische '
+                    . 'Seitendarstellung möglich.'
+            ),
+            1,
+            'L',
+            true
+        );
+        $this->Ln(5);
+        $this->SetTextColor(23, 32, 51);
+        $this->SetFont('helvetica', '', 10);
+        $this->MultiCell(0, 6, estab_incident_pdf_text($reason));
+        $this->Ln(3);
+        $this->MultiCell(
+            0,
+            6,
+            estab_incident_pdf_text(
+                'Die Originaldatei ist vollständig und bytegleich in diesem '
+                    . 'Dossier enthalten und kann über die Anlagenansicht des '
+                    . 'PDF-Leseprogramms gespeichert werden.'
+            )
+        );
+    }
+
+    /**
+     * Convert literal UTF-8 (or a legacy Windows-1252 file) without silently
+     * changing entities or replacing characters the PDF core font cannot show.
+     */
+    private static function attachmentCoreFontText(string $data): ?string
+    {
+        $text = $data;
+        if (preg_match('//u', $text) !== 1) {
+            $text = mb_convert_encoding($text, 'UTF-8', 'Windows-1252');
+            if (
+                mb_convert_encoding($text, 'Windows-1252', 'UTF-8')
+                    !== $data
+            ) {
+                return null;
+            }
+        }
+        $text = str_replace(["\r\n", "\r", "\t"], ["\n", "\n", '    '], $text);
+        if (
+            preg_match(
+                '/[\x{0000}-\x{0008}\x{000B}\x{000C}\x{000E}-\x{001F}'
+                    . '\x{007F}-\x{009F}]/u',
+                $text
+            ) === 1
+        ) {
+            return null;
+        }
+        if ($text === '') {
+            $text = '(Leere Textdatei)';
+        }
+        $encoded = mb_convert_encoding($text, 'Windows-1252', 'UTF-8');
+        if (
+            mb_convert_encoding($encoded, 'UTF-8', 'Windows-1252')
+                !== $text
+        ) {
+            return null;
+        }
+        return $encoded;
+    }
+
+    /** Count exactly the rows FPDF MultiCell will emit for the current font. */
+    private function attachmentMultiCellLineCount(
+        float $width,
+        string $text
+    ): int {
+        $characterWidths = $this->CurrentFont['cw'] ?? null;
+        if (!is_array($characterWidths) || $this->FontSize <= 0.0) {
+            throw new EstabIncidentPdfInputException(
+                'Die Textanlage besitzt keine gültige PDF-Schriftkonfiguration.'
+            );
+        }
+        if ($width <= 0.0) {
+            $width = $this->w - $this->rMargin - $this->x;
+        }
+        $maximumWidth = ($width - 2 * $this->cMargin)
+            * 1000 / $this->FontSize;
+        if ($maximumWidth <= 0.0) {
+            throw new EstabIncidentPdfInputException(
+                'Die Textanlage besitzt keine gültige PDF-Satzbreite.'
+            );
+        }
+        $length = strlen($text);
+        if ($length > 0 && $text[$length - 1] === "\n") {
+            $length--;
+        }
+        $separator = -1;
+        $index = 0;
+        $lineStart = 0;
+        $lineWidth = 0;
+        $lines = 1;
+        while ($index < $length) {
+            $character = $text[$index];
+            if ($character === "\n") {
+                $index++;
+                $separator = -1;
+                $lineStart = $index;
+                $lineWidth = 0;
+                $lines++;
+                continue;
+            }
+            if ($character === ' ') {
+                $separator = $index;
+            }
+            $lineWidth += (int) ($characterWidths[$character] ?? 0);
+            if ($lineWidth > $maximumWidth) {
+                if ($separator === -1) {
+                    if ($index === $lineStart) {
+                        $index++;
+                    }
+                } else {
+                    $index = $separator + 1;
+                }
+                $separator = -1;
+                $lineStart = $index;
+                $lineWidth = 0;
+                $lines++;
+                continue;
+            }
+            $index++;
+        }
+        return $lines;
+    }
+
+    /** Render one bounded, losslessly representable text snapshot. */
+    private function drawAttachmentText(
+        array $attachment,
+        string $encodedText,
+        int $position,
+        int $total,
+        int $remainingPages
+    ): int {
+        if (
+            strlen($encodedText) > ESTAB_INCIDENT_PDF_MAX_TEXT_BYTES
+            || $remainingPages < 1
+        ) {
+            throw new EstabIncidentPdfInputException(
+                'Eine Textanlage überschreitet das sichere Limit für sichtbare Textseiten.'
+            );
+        }
+
+        $pageBefore = $this->PageNo();
+        $this->beginAttachmentPage(
+            $attachment,
+            $position,
+            $total,
+            'Vollständige Textdarstellung'
+        );
+        $this->Ln(2);
+        $this->SetTextColor(23, 32, 51);
+        $this->SetFont('courier', '', 8.2);
+        $lineHeight = 4.2;
+        $lineCount = $this->attachmentMultiCellLineCount(0.0, $encodedText);
+        $firstPageLines = max(
+            0,
+            (int) floor(
+                ($this->PageBreakTrigger - $this->GetY()) / $lineHeight
+                    + 0.000001
+            )
+        );
+        $continuationLines = max(
+            1,
+            (int) floor(
+                ($this->PageBreakTrigger - $this->tMargin) / $lineHeight
+                    + 0.000001
+            )
+        );
+        $requiredPages = 1;
+        if ($lineCount > $firstPageLines) {
+            $requiredPages += (int) ceil(
+                ($lineCount - $firstPageLines) / $continuationLines
+            );
+        }
+        if ($requiredPages > $remainingPages) {
+            throw new EstabIncidentPdfInputException(
+                'Eine Textanlage überschreitet das sichere Limit sichtbarer Anlagenseiten.'
+            );
+        }
+
+        $this->MultiCell(0, $lineHeight, $encodedText);
+        $addedPages = $this->PageNo() - $pageBefore;
+        if ($addedPages < 1 || $addedPages > $remainingPages) {
+            throw new EstabIncidentPdfInputException(
+                'Eine Textanlage hat das sichere Seitenlimit unerwartet überschritten.'
+            );
+        }
+        return $addedPages;
+    }
+
+    /**
      * Add an original file to the PDF catalog and return its immutable digest.
      *
      * @return array{name:string,size:int,sha256:string,mime:string}
@@ -2719,7 +3689,8 @@ final class EstabIncidentPdf extends vordruckaspdf
             );
         }
         $name = estab_incident_pdf_attachment_name($name);
-        $mimeName = estab_incident_pdf_mime_name($mime);
+        $declaredMime = strtolower($mime);
+        estab_incident_pdf_mime_name($declaredMime);
         foreach ($this->embeddedFiles as $file) {
             if ($file['name'] === $name) {
                 throw new EstabIncidentPdfInputException(
@@ -2734,6 +3705,13 @@ final class EstabIncidentPdf extends vordruckaspdf
             $expectedSha256,
             $expectedSize
         );
+        $snapshotMime = estab_incident_pdf_snapshot_mime($file['data']);
+        if (!hash_equals($declaredMime, $snapshotMime)) {
+            throw new EstabIncidentPdfInputException(
+                'Der Inhaltstyp einer Anlage hat sich vor dem PDF-Export geändert.'
+            );
+        }
+        $mimeName = estab_incident_pdf_mime_name($snapshotMime);
         $description = trim($description);
         if (
             strlen($description) > 1000
@@ -2747,7 +3725,8 @@ final class EstabIncidentPdf extends vordruckaspdf
         $this->attachmentBytes += $file['size'];
         $this->embeddedFiles[] = [
             'name' => $name,
-            'mime' => $mimeName,
+            'mime' => $snapshotMime,
+            'mime_name' => $mimeName,
             'description' => $description,
             'data' => $file['data'],
             'size' => $file['size'],
@@ -2758,8 +3737,294 @@ final class EstabIncidentPdf extends vordruckaspdf
             'name' => $name,
             'size' => $file['size'],
             'sha256' => $file['sha256'],
-            'mime' => $mime,
+            'mime' => $snapshotMime,
         ];
+    }
+
+    /**
+     * Add a visible, ordered attachment section from the immutable byte
+     * snapshots registered by embedAttachment(). No source path is reopened.
+     *
+     * @param list<array{
+     *     display_name:string,
+     *     stored_name:string,
+     *     size:int,
+     *     sha256:string,
+     *     mime:string,
+     *     archive_name?:string
+     * }> $attachments
+     * @return array{
+     *     attachment_visible_count:int,
+     *     attachment_visible_pages:int,
+     *     attachment_rendered_count:int,
+     *     attachment_rendered_pages:int,
+     *     attachment_information_pages:int
+     * }
+     */
+    public function addAttachmentPages(array $attachments): array
+    {
+        $stats = [
+            'attachment_visible_count' => 0,
+            'attachment_visible_pages' => 0,
+            'attachment_rendered_count' => 0,
+            'attachment_rendered_pages' => 0,
+            'attachment_information_pages' => 0,
+        ];
+        if (count($attachments) !== count($this->embeddedFiles)) {
+            throw new EstabIncidentPdfInputException(
+                'Nicht alle eingebetteten Originalanlagen besitzen eine sichtbare Anlagenseite.'
+            );
+        }
+        if ($attachments === []) {
+            return $stats;
+        }
+
+        $embeddedByName = [];
+        foreach ($this->embeddedFiles as $file) {
+            $embeddedByName[$file['name']] = $file;
+        }
+        $workspace = self::createAttachmentWorkspace();
+        $rasterBytes = 0;
+        $total = count($attachments);
+        $visibleNames = [];
+        $renderDeadline = microtime(true)
+            + ESTAB_INCIDENT_PDF_RENDER_TOTAL_SECONDS;
+        try {
+            foreach ($attachments as $offset => $attachment) {
+                if (
+                    microtime(true) >= $renderDeadline
+                    || $stats['attachment_visible_pages']
+                        >= ESTAB_INCIDENT_PDF_MAX_VISIBLE_PAGES
+                ) {
+                    throw new EstabIncidentPdfInputException(
+                        'Die Anlagendarstellung überschreitet ihr sicheres Gesamtlimit.'
+                    );
+                }
+                if (!is_array($attachment)) {
+                    throw new EstabIncidentPdfInputException(
+                        'Sichtbare Anlagenmetadaten müssen Datensätze sein.'
+                    );
+                }
+                $position = $offset + 1;
+                $storedName = estab_incident_pdf_attachment_name(
+                    $attachment['stored_name'] ?? null
+                );
+                $embedded = $embeddedByName[$storedName] ?? null;
+                if (!is_array($embedded) || isset($visibleNames[$storedName])) {
+                    throw new EstabIncidentPdfInputException(
+                        'Eine sichtbare Anlage besitzt kein eindeutiges verifiziert eingebettetes Original.'
+                    );
+                }
+                $visibleNames[$storedName] = true;
+                $mime = (string) ($attachment['mime'] ?? '');
+                $size = $attachment['size'] ?? null;
+                $sha256 = $attachment['sha256'] ?? null;
+                if (
+                    $mime !== $embedded['mime']
+                    || !is_int($size)
+                    || $size !== $embedded['size']
+                    || !is_string($sha256)
+                    || !hash_equals($embedded['sha256'], $sha256)
+                ) {
+                    throw new EstabIncidentPdfInputException(
+                        'Sichtbare Anlagenmetadaten stimmen nicht mit dem eingebetteten Original überein.'
+                    );
+                }
+                $archiveName = estab_incident_pdf_attachment_name(
+                    $attachment['archive_name'] ?? $storedName
+                );
+                $extension = strtolower(pathinfo(
+                    $archiveName,
+                    PATHINFO_EXTENSION
+                ));
+                $pageCountBefore = $this->PageNo();
+                $renderedPages = 0;
+                $imageFormat = match ($mime) {
+                    'image/jpeg' => [
+                        'extensions' => ['jpg', 'jpeg'],
+                        'type' => IMAGETYPE_JPEG,
+                        'jpeg_fallback' => true,
+                    ],
+                    'image/png' => [
+                        'extensions' => ['png'],
+                        'type' => IMAGETYPE_PNG,
+                        'jpeg_fallback' => false,
+                    ],
+                    'image/gif' => [
+                        'extensions' => ['gif'],
+                        'type' => IMAGETYPE_GIF,
+                        'jpeg_fallback' => false,
+                    ],
+                    'image/bmp', 'image/x-ms-bmp' => [
+                        'extensions' => ['bmp'],
+                        'type' => IMAGETYPE_BMP,
+                        'jpeg_fallback' => false,
+                    ],
+                    default => null,
+                };
+
+                if (is_array($imageFormat)) {
+                    if (!in_array(
+                        $extension,
+                        $imageFormat['extensions'],
+                        true
+                    )) {
+                        throw new EstabIncidentPdfInputException(
+                            'Dateiendung und erkannter Inhaltstyp einer Bildanlage stimmen nicht überein.'
+                        );
+                    }
+                    $image = self::attachmentImageInfo(
+                        $embedded['data'],
+                        (int) $imageFormat['type']
+                    );
+                    $path = $workspace . DIRECTORY_SEPARATOR
+                        . 'image-' . $position . '.jpg';
+                    $raster = self::normalizeImageAttachment(
+                        $embedded['data'],
+                        $path,
+                        $image,
+                        (bool) $imageFormat['jpeg_fallback']
+                    );
+                    clearstatcache(true, $path);
+                    $previewBytes = (int) (@filesize($path) ?: 0);
+                    if (
+                        $previewBytes < 1
+                        || $previewBytes
+                            > ESTAB_INCIDENT_PDF_MAX_RASTER_PAGE_BYTES
+                        || $rasterBytes + $previewBytes
+                            > ESTAB_INCIDENT_PDF_MAX_RASTER_BYTES
+                    ) {
+                        throw new EstabIncidentPdfInputException(
+                            'Eine Bildanlage überschreitet das sichere PDF-Rasterlimit.'
+                        );
+                    }
+                    $this->drawAttachmentRaster(
+                        $attachment,
+                        $raster,
+                        $position,
+                        $total,
+                        'Bild 1 von 1'
+                    );
+                    $rasterBytes += $previewBytes;
+                    $renderedPages = 1;
+                } elseif ($mime === 'application/pdf' && $extension === 'pdf') {
+                    $remainingPages = ESTAB_INCIDENT_PDF_MAX_VISIBLE_PAGES
+                        - $stats['attachment_visible_pages'];
+                    $pages = self::rasterizePdfAttachment(
+                        $embedded['data'],
+                        $workspace,
+                        $position,
+                        $remainingPages,
+                        ESTAB_INCIDENT_PDF_MAX_RASTER_BYTES - $rasterBytes,
+                        $renderDeadline
+                    );
+                    $sourcePageCount = count($pages);
+                    foreach ($pages as $sourceOffset => $page) {
+                        $this->drawAttachmentRaster(
+                            $attachment,
+                            $page,
+                            $position,
+                            $total,
+                            'Originalseite ' . ($sourceOffset + 1)
+                                . ' von ' . $sourcePageCount
+                        );
+                        $rasterBytes += $page['bytes'];
+                        $renderedPages++;
+                    }
+                } elseif ($mime === 'text/plain' && $extension === 'txt') {
+                    if (
+                        strlen($embedded['data'])
+                            > ESTAB_INCIDENT_PDF_MAX_TEXT_BYTES
+                    ) {
+                        throw new EstabIncidentPdfInputException(
+                            'Eine Textanlage überschreitet das sichere Limit für sichtbaren Text.'
+                        );
+                    }
+                    $encodedText = self::attachmentCoreFontText(
+                        $embedded['data']
+                    );
+                    if ($encodedText === null) {
+                        $this->drawAttachmentInformationPage(
+                            $attachment,
+                            $position,
+                            $total,
+                            'Die Textdatei enthält Steuer- oder Unicodezeichen, '
+                                . 'die der verlustfreie PDF-Basiszeichensatz '
+                                . 'nicht darstellen kann.'
+                        );
+                        $stats['attachment_information_pages']++;
+                    } else {
+                        $renderedPages = $this->drawAttachmentText(
+                            $attachment,
+                            $encodedText,
+                            $position,
+                            $total,
+                            ESTAB_INCIDENT_PDF_MAX_VISIBLE_PAGES
+                                - $stats['attachment_visible_pages']
+                        );
+                    }
+                } else {
+                    if (
+                        in_array(
+                            $extension,
+                            ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'pdf', 'txt'],
+                            true
+                        )
+                        || in_array(
+                            $mime,
+                            [
+                                'image/jpeg',
+                                'image/png',
+                                'image/gif',
+                                'image/bmp',
+                                'image/x-ms-bmp',
+                                'application/pdf',
+                                'text/plain',
+                            ],
+                            true
+                        )
+                    ) {
+                        throw new EstabIncidentPdfInputException(
+                            'Dateiendung und erkannter Inhaltstyp einer darstellbaren Anlage stimmen nicht überein.'
+                        );
+                    }
+                    $this->drawAttachmentInformationPage(
+                        $attachment,
+                        $position,
+                        $total,
+                        'Archive, Office-Dateien, Videos und andere binäre '
+                            . 'Formate lassen sich nicht vollständig und '
+                            . 'verlässlich auf statische PDF-Seiten abbilden.'
+                    );
+                    $stats['attachment_information_pages']++;
+                }
+
+                if (microtime(true) >= $renderDeadline) {
+                    throw new EstabIncidentPdfInputException(
+                        'Die Anlagendarstellung hat ihr sicheres Gesamtlaufzeitlimit überschritten.'
+                    );
+                }
+                $addedPages = $this->PageNo() - $pageCountBefore;
+                if (
+                    $addedPages < 1
+                    || $stats['attachment_visible_pages'] + $addedPages
+                        > ESTAB_INCIDENT_PDF_MAX_VISIBLE_PAGES
+                ) {
+                    throw new EstabIncidentPdfInputException(
+                        'Die Anlagen überschreiten das sichere Limit sichtbarer Seiten.'
+                    );
+                }
+                $stats['attachment_visible_count']++;
+                $stats['attachment_visible_pages'] += $addedPages;
+                if ($renderedPages > 0) {
+                    $stats['attachment_rendered_count']++;
+                    $stats['attachment_rendered_pages'] += $renderedPages;
+                }
+            }
+        } finally {
+            self::removeAttachmentWorkspace($workspace);
+        }
+        return $stats;
     }
 
     /**
@@ -2788,8 +4053,13 @@ final class EstabIncidentPdf extends vordruckaspdf
         }
         $this->paragraph(
             'Jede nachfolgend aufgeführte Originaldatei ist in dieser PDF '
-            . 'eingebettet. PDF-Leser mit Anlagenansicht können sie unter '
-            . 'ihrem portablen Dateinamen öffnen oder speichern.'
+            . 'eingebettet. Im Anschluss an dieses Verzeichnis werden JPEG-, '
+            . 'PNG-, GIF-, BMP-, verlustfrei darstellbare Text- und '
+            . 'mehrseitige PDF-Anlagen als sichtbare Seiten dargestellt. '
+            . 'Für nicht statisch oder nicht verlustfrei darstellbare Formate '
+            . 'folgt eine eindeutig gekennzeichnete Hinweisseite. PDF-Leser '
+            . 'mit Anlagenansicht können das bytegleiche Original öffnen oder '
+            . 'speichern.'
         );
         foreach ($attachments as $attachment) {
             if (!is_array($attachment)) {
@@ -2914,7 +4184,7 @@ final class EstabIncidentPdf extends vordruckaspdf
             $this->_newobj();
             $embeddedObject = $this->n;
             $this->_out(
-                '<</Type /EmbeddedFile /Subtype /' . $file['mime']
+                '<</Type /EmbeddedFile /Subtype /' . $file['mime_name']
             );
             $this->_out('/Length ' . $file['size']);
             $this->_out(

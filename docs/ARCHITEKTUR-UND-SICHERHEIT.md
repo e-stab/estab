@@ -570,6 +570,31 @@ Führungsstellenname, Einsatzkennung und Einsatzname werden getrennt in
 Auswahl, Deckblatt und Seitenkopf geführt. Ein historischer `NULL`-Wert heißt
 sichtbar „historisch nicht erfasst“.
 
+Der anschließend ausschließlich aus diesem geprüften Byte-Snapshot gebildete
+Anlagenabschnitt gibt JPEG, PNG, GIF und BMP sichtbar aus; mehrseitige PDFs
+werden mit festen Poppler-Binärdateien ohne Shell und ohne Ausblenden von
+Anmerkungen einzeln seitenweise gerastert. Text erscheint nur bei verlustfreier
+Windows-1252-Darstellbarkeit, sonst als eindeutige Hinweisseite. TIFF und andere
+nicht statisch darstellbare Formate erhalten ebenfalls eine Hinweisseite. In
+allen Fällen bleibt der geprüfte Byte-Snapshot zusätzlich als bytegleiches
+`EmbeddedFile` im PDF-Katalog erhalten.
+
+Fileinfo ermittelt den MIME-Typ atomar aus genau dem bereits stabil gelesenen
+und später eingebetteten Byte-Snapshot. Deklaration, Snapshot-MIME und bei
+darstellbaren Formaten die Dateiendung müssen zusammenpassen. Private
+Temporärverzeichnisse und feste Grenzen von 50 MiB Originalsumme, 24 MiB
+Rasterdaten, 8 MiB je isoliertem PDF-Seitenprozess, 12 Megapixel je Bild,
+8.000 Pixel je Achse, 60 Sekunden Gesamtzeit und höchstens 15 Sekunden je
+`pdfinfo`-Aufruf beziehungsweise PDF-Seitenprozess begrenzen Decoder und
+Kindprozesse.
+
+Der normale `finally`-Pfad entfernt den privaten Arbeitsbereich sofort. Ein
+Startup-Janitor behandelt ausschließlich den Absturzfall und löscht nur mehr
+als 24 Stunden alte, kanonisch benannte, `www-data` gehörende
+`0700`-Verzeichnisse, nachdem er jedes flache Kind auf erlaubten Namen,
+regulären Dateityp, Linkzahl eins sowie Modus `0600`/`0640` geprüft hat. Bei
+jedem unerwarteten Objekt bleibt der gesamte Kandidat unangetastet.
+
 Zusätzlich wählt die Administration den ETB-/TTB-Umfang als Gesamtbuch oder
 als eine zum Einsatz gehörende Dienstschicht. Die Auswahl wird innerhalb des
 Snapshots nochmals auf Einsatzzugehörigkeit geprüft und als vorbereiteter

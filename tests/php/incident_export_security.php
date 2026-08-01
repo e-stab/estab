@@ -523,6 +523,8 @@ foreach ([
     "'etb_attachment_numbers'",
     'estab_file_resolve(',
     'Ein Nachrichtenvordruck verweist auf einen nicht ',
+    '$pdf->addAttachmentPages($embeddedIndex)',
+    "'attachment_rendered_pages'",
     'hash(\'sha256\', $bytes)',
 ] as $requiredBoundary) {
     $assert(
@@ -632,6 +634,14 @@ $assert(
         )
         && str_contains($controller, 'name="logbook_scope"')
         && str_contains($controller, "'sha256' => \$rendered['sha256']")
+        && str_contains(
+            $controller,
+            "'attachment_visible_pages' =>"
+        )
+        && str_contains(
+            $controller,
+            "\$rendered['attachment_rendered_pages']"
+        )
         && str_contains($controller, "header('Content-Type: application/pdf')")
         && str_contains($controller, "Content-Security-Policy: sandbox"),
     'Incident PDF response or audit boundary is incomplete'
@@ -658,6 +668,9 @@ $assert(
 $assert(
     str_contains($dockerfile, '4fadm/incident_export.php')
         && str_contains($dockerfile, '4fadm/incidents.php')
+        && str_contains($dockerfile, 'poppler-utils')
+        && str_contains($dockerfile, 'command -v pdfinfo >/dev/null')
+        && str_contains($dockerfile, 'command -v pdftoppm >/dev/null')
         && !str_contains($dockerfile, '4fbak/logo.png')
         && str_contains($runtimeVerifier, '4fadm/incident_export.php')
         && str_contains($runtimeVerifier, '4fadm/incidents.php')

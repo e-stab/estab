@@ -307,7 +307,7 @@ function estab_validate_runtime_configuration(): void
         'ESTAB_PDF_ATTACHMENT_MAX_BYTES',
         52428800,
         0,
-        104857600
+        52428800
     );
     estab_public_root();
     estab_base_path();

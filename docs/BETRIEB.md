@@ -94,7 +94,7 @@ Wichtige Werte in `.env`:
 | `ESTAB_TRUST_PROXY_HEADERS` | `false` | erlaubt dem zusätzlich freigegebenen direkten Proxy validierte `X-Forwarded-*`-Ketten |
 | `ESTAB_TRUSTED_PROXIES` | leer | verpflichtende, kommaseparierte IP-/CIDR-Allowlist, sobald Proxy-Header aktiviert werden |
 | `ESTAB_UPLOAD_MAX_BYTES` | `20971520` | anwendungsseitige maximale Uploadgröße |
-| `ESTAB_PDF_ATTACHMENT_MAX_BYTES` | `52428800` | maximale Gesamtsumme eingebetteter Anhänge je PDF-Einsatzdossier; `0` deaktiviert Einbettungen |
+| `ESTAB_PDF_ATTACHMENT_MAX_BYTES` | `52428800` | maximale Gesamtsumme der Originaldateien, die je PDF-Einsatzdossier eingebettet und in der Anlagensektion verarbeitet werden; harte Obergrenze 50 MiB, `0` lässt einen Export mit gewählter Anhangsektion fail-closed abbrechen |
 | `TZ` | `Europe/Berlin` | Zeitzone von Anwendung und Datenbank |
 
 Der Name der Führungsstelle ist ausdrücklich **keine** Umgebungsvariable.
@@ -122,10 +122,17 @@ effektive Anwendungsgrenze verständlich an. Bestehende Installationen, deren
 das alte 5-MiB-Limit, bis der Wert bewusst auf `20971520` angehoben und der
 App-Container neu erzeugt wird.
 
+Im PDF-Einsatzdossier werden JPEG, PNG, GIF und BMP sichtbar ausgegeben;
+mehrseitige PDFs werden mit Poppler einschließlich ihrer Anmerkungen
+seitenweise gerastert. Textdateien erscheinen nur, wenn ihr Inhalt verlustfrei
+mit Windows-1252 darstellbar ist. Andere zulässige Uploadformate wie TIFF,
+ZIP, Office oder Video sowie nicht darstellbarer Text erhalten eine klare
+Hinweisseite und bleiben als bytegleiches Original eingebettet.
+
 Der App-Entrypoint validiert vor dem Apache-Start DB-Name und -Port,
 Uploadgrenzen, URL/Basispfad, alle booleschen Schalter sowie die
 Proxy-Allowlist. Ports außerhalb `1` bis `65535`, Uploadgrenzen außerhalb
-`1` Byte bis 50 MiB, PDF-Anhangsgrenzen außerhalb `0` bis 100 MiB und
+`1` Byte bis 50 MiB, PDF-Anhangsgrenzen außerhalb `0` bis 50 MiB und
 syntaktisch ungültige Werte beenden den Container mit einem klaren
 Konfigurationsfehler. `/health.php` und der administrative Systemstatus
 verwenden dieselbe Prüfung.
@@ -480,8 +487,55 @@ oder historischen Einsatz als PDF-Dossier ausgeben. ETB, TBB,
 Nachrichtenvordrucke und Anhänge sind einzeln wählbar; Anhänge
 erfordern die Nachrichten. Die Gesamtsumme eingebetteter Dateien
 begrenzt `ESTAB_PDF_ATTACHMENT_MAX_BYTES`. `0` deaktiviert nicht den
-PDF-Export, sondern nur das Einbetten von Dateien; ein Dossier mit
-gewählten Anhängen bricht dann sichtbar ab, statt Dateien auszulassen.
+PDF-Export ohne Anhänge, verhindert aber einen Export mit gewählter
+Anhangsektion; dieser bricht sichtbar ab, statt Dateien auszulassen.
+Werte über 50 MiB sind auch auf speicherstarken Hosts nicht zulässig.
+Nach dem Anlagenverzeichnis folgen JPEG-, PNG-, GIF- und BMP-Bilder sowie jede
+Seite einer PDF-Anlage als sichtbare Dossierseiten. Verlustfrei
+Windows-1252-darstellbare Textdateien erscheinen durchsuchbar. TIFF und andere
+nicht statisch darstellbare Formate sowie nicht verlustfrei darstellbarer Text
+erhalten eine Hinweisseite; ihr bytegleiches Original bleibt wie bei allen
+Formaten über die Anlagenansicht des PDF-Lesers extrahierbar. Jede Anlage nennt
+am Beginn ihrer Darstellung Dateiname/Endung, erkannten MIME-Typ, Größe und
+SHA-256. PDF-Anmerkungen werden nicht ausgeblendet.
+
+Die Darstellung arbeitet ausschließlich auf dem bereits gegen Eingangsgröße
+und -hash geprüften Byte-Snapshot und öffnet den Quellpfad nicht erneut.
+Fileinfo erkennt den MIME-Typ atomar aus exakt diesen eingebetteten Bytes; eine
+Abweichung vom zuvor ermittelten MIME-Typ oder von der für sichtbare Formate
+erlaubten Endung beendet den Export fail-closed.
+
+Die festen Rendergrenzen betragen 100 Seiten je PDF-Anlage, 200 sichtbare
+Anlagenseiten je Dossier, 24 MiB Rasterdaten insgesamt, 8 MiB je isoliertem
+PDF-Seitenprozess beziehungsweise Rasterseite, 12 Megapixel je Bild und 8.000
+Pixel je Achse für JPEG/PNG/GIF/BMP sowie 512 KiB für sichtbaren Text.
+Die gesamte Anlagendarstellung besitzt ein gemeinsames 60-Sekunden-Budget;
+`pdfinfo` und jeder einzelne PDF-Seitenprozess erhalten davon höchstens 15
+Sekunden. Beschädigte, verschlüsselte, falsch benannte oder zu große
+darstellbare Anlagen lassen den Export fail-closed abbrechen.
+
+Der App-Container liefert dazu GD mit
+JPEG-/PNG-/GIF-Lese-/BMP-Unterstützung sowie `pdfinfo`, `pdftoppm` und
+`prlimit`; diese Werkzeuge werden bereits beim Image-Build geprüft. Ein selbst
+gebautes alternatives Laufzeit-Image muss denselben Vertrag erfüllen.
+
+Jeder normale Lauf entfernt seinen privaten Render-Arbeitsbereich selbst. Für
+einen hart beendeten PHP-Prozess startet der App-Entrypoint zusätzlich den
+fail-closed Janitor `estab-cleanup-pdf-render-tmp /tmp 1440 www-data`. Er
+löscht nur mehr als 24 Stunden alte, kanonisch benannte, `www-data` gehörende
+Verzeichnisse mit Modus `0700`, flachem Inhalt und ausschließlich erwarteten
+regulären Dateien in Modus `0600` oder `0640` mit Linkzahl eins. Schon ein
+unerwarteter Name, Typ, Link, Eigentümer oder Modus bewahrt das ganze
+Verzeichnis unverändert; `/`, Symlink-Wurzeln und ungültige Parameter werden
+abgewiesen.
+
+Der erfolgreiche `pdf_export`-Audit nennt neben Originalanzahl und -bytes die
+Zähler `attachment_visible_count`, `attachment_visible_pages`,
+`attachment_rendered_count`, `attachment_rendered_pages` und
+`attachment_information_pages`. Damit lässt sich nachträglich unterscheiden,
+wie viele Anhänge sichtbar aufgenommen, inhaltlich dargestellt oder nur auf
+einer ehrlichen Hinweisseite nachgewiesen wurden.
+
 Führungsstellenname, Einsatzkennung und Einsatzname werden getrennt
 ausgewiesen. Ein historisch fehlender Führungsstellenname wird niemals aus
 einer Umgebungsvariable oder einem anderen Stammdatum ergänzt.

@@ -462,9 +462,15 @@ historische Einsätze eine eigene zusammenhängende Darstellung. Seine
 Nachrichtenseiten verwenden denselben A4-Formularrenderer wie die
 Einzelvordrucke, jedoch ohne Links in den Downloadbereich des aktuell aktiven
 Einsatzes. Die gemeinsame Vorlage enthält weder VS-NfD-Aufdruck noch Wappen;
-Anhänge liegen mit ihren gelesenen Bytes im eingebetteten Dateikatalog des
-Dossiers. Bei neuen Dateien belegt der beim Eingang gespeicherte SHA-256 samt
-Bytezahl die Übereinstimmung; beim Upgrade vorhandene Legacy-Dateien werden
+JPEG, PNG, GIF und BMP erscheinen als sichtbare Anlagenseiten, PDF-Anlagen
+werden samt Anmerkungen geordnet seitenweise gerastert und verlustfrei
+Windows-1252-darstellbarer Text erscheint durchsuchbar. TIFF, nicht
+darstellbarer Text und andere nicht statisch darstellbare Formate erhalten eine
+Hinweisseite. Unabhängig davon liegen alle Anhänge mit ihren geprüften,
+bytegleichen Bytes im eingebetteten Dateikatalog des Dossiers. Fileinfo bindet
+den MIME-Typ an genau diesen eingebetteten Byte-Snapshot. Bei neuen
+Dateien belegt der beim Eingang gespeicherte SHA-256 samt Bytezahl die
+Übereinstimmung; beim Upgrade vorhandene Legacy-Dateien werden
 als „Integrität beim Eingang nicht belegbar“ ausgewiesen.
 Da die Legacy-Datenbank keine Matrixhistorie pro Einsatz besitzt, werden
 Empfängerfunktionen, die in der aktuellen Matrix fehlen, zusätzlich mit ihrem

@@ -56,7 +56,7 @@ $attachmentByteLimit = estab_env_integer(
     'ESTAB_PDF_ATTACHMENT_MAX_BYTES',
     ESTAB_INCIDENT_PDF_DEFAULT_ATTACHMENT_BYTES,
     0,
-    100 * 1024 * 1024
+    ESTAB_INCIDENT_PDF_MAX_ATTACHMENT_BYTES
 );
 
 if ($requestMethod === 'POST') {
@@ -141,6 +141,16 @@ if ($requestMethod === 'POST') {
                         'pdf_bytes' => strlen($rendered['bytes']),
                         'attachment_bytes' =>
                             $rendered['attachment_bytes'],
+                        'attachment_visible_count' =>
+                            $rendered['attachment_visible_count'],
+                        'attachment_visible_pages' =>
+                            $rendered['attachment_visible_pages'],
+                        'attachment_rendered_count' =>
+                            $rendered['attachment_rendered_count'],
+                        'attachment_rendered_pages' =>
+                            $rendered['attachment_rendered_pages'],
+                        'attachment_information_pages' =>
+                            $rendered['attachment_information_pages'],
                         'sha256' => $rendered['sha256'],
                     ]
                 );
@@ -242,7 +252,10 @@ try {
       <p>Erstellen Sie für einen bestimmten Einsatz ein revisionsfähiges,
         durchsuchbares DV-1-101-Dossier. Der Standardumfang enthält alle
         Tagebücher, Nachrichtenvordrucke und Nachweisketten sowie
-        Dienstorganisation, S6-Planung, Melderaufträge und Originalanhänge.</p>
+        Dienstorganisation, S6-Planung, Melderaufträge und Anlagen. Bilder,
+        Textdateien und PDF-Seiten werden im Dossier direkt sichtbar
+        dargestellt; die bytegleichen Originaldateien bleiben zusätzlich
+        eingebettet.</p>
     </header>
 
     <?php if ($error !== null): ?>
@@ -373,8 +386,8 @@ try {
                     'Alle Ein- und Ausgangsnachrichten als durchsuchbare Seiten',
                 ],
                 'attachments' => [
-                    'Originalanhänge',
-                    'Nur zusammen mit Nachrichtenvordrucken; vollständig eingebettet',
+                    'Anlagen · sichtbar und im Original',
+                    'Bilder, Text und PDF-Seiten direkt im Dossier; andere Formate mit Hinweisseite; alle Originale bytegleich eingebettet',
                 ],
                 'message_evidence' => [
                     'Nachrichtenereignisse und Nachweisköpfe',
@@ -414,7 +427,7 @@ try {
           </fieldset>
 
           <p class="estab-incident-export-limit">
-            Sicherheitsgrenze für eingebettete Anhänge:
+            Sicherheitsgrenze für dargestellte und eingebettete Anlagen:
             <strong><?= number_format(
                 $attachmentByteLimit / 1024 / 1024,
                 0,

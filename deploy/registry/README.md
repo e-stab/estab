@@ -396,16 +396,33 @@ nicht automatisch oder durch A/W freigegeben.
 
 `ESTAB_PDF_ATTACHMENT_MAX_BYTES` begrenzt die Gesamtsumme der unverändert in
 ein PDF-Einsatzdossier eingebetteten Originalanhänge. Der Standard sind
-`52428800` Byte (50 MiB), erlaubt sind `0` bis `104857600` Byte. Der Wert
-wirkt pro erzeugter PDF und muss zur verfügbaren Speicherausstattung des NAS
-passen; bei Überschreitung bricht der Export sichtbar ab und lässt keine Datei
-stillschweigend weg. Nach einer Änderung ist der App-Container neu zu
+`52428800` Byte (50 MiB), erlaubt sind `0` bis `52428800` Byte; 50 MiB sind
+zugleich die harte, auch auf größeren NAS-Systemen nicht aufweitbare
+Obergrenze. Bei Überschreitung bricht der Export sichtbar ab und lässt keine
+Datei stillschweigend weg. Nach einer Änderung ist der App-Container neu zu
 erzeugen. Einzelne Uploads bleiben zusätzlich durch
 `ESTAB_UPLOAD_MAX_BYTES`, PHP `upload_max_filesize` und `post_max_size`
 begrenzt. Der Auslieferungsstandard für `ESTAB_UPLOAD_MAX_BYTES` beträgt
 `20971520` Byte (20 MiB). Der Anhangdialog unterstützt sowohl `.jpg` als auch
 `.jpeg` und zeigt das wirksame Limit an; nur Endung und serverseitig erkannter
 MIME-Typ gemeinsam autorisieren die Datei.
+
+Im Dossier erscheinen JPEG, PNG, GIF und BMP sichtbar; PDF-Anlagen werden
+einschließlich ihrer Anmerkungen seitenweise gerastert. Verlustfrei
+Windows-1252-darstellbarer Text wird durchsuchbar ausgegeben. TIFF, Archive,
+Office, Video und nicht verlustfrei darstellbarer Text erhalten eine ehrliche
+Hinweisseite. Das bytegleiche Original bleibt in jedem Fall eingebettet.
+Fileinfo verifiziert den MIME-Typ atomar aus genau diesem eingebetteten
+Byte-Snapshot; eine Abweichung beendet den Export fail-closed.
+Die sichtbare Wiedergabe ist fest auf 24 MiB Rasterdaten insgesamt, 8 MiB je
+isoliertem PDF-Seitenprozess beziehungsweise Rasterseite, 12 Megapixel je Bild
+und 8.000 Pixel je Achse begrenzt. Für alle Anlagen zusammen gelten 60
+Sekunden; `pdfinfo` und jeder einzelne PDF-Seitenprozess erhalten davon
+höchstens 15 Sekunden.
+Das ausgelieferte App-Image enthält dafür GD, Poppler und `prlimit`. Beim Start
+entfernt ein fail-closed Janitor ausschließlich streng validierte, mehr als 24
+Stunden alte Render-Arbeitsverzeichnisse aus `/tmp`; fremde oder unerwartete
+Einträge bleiben unangetastet.
 
 Eine frische Datenbank besitzt absichtlich keinen aktiven Einsatz. Nach dem
 ersten gesunden Start muss der technische Administrator unter

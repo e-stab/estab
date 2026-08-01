@@ -7,6 +7,7 @@ dockerfile=$repo_root/Dockerfile
 verifier=$repo_root/docker/app/verify-runtime-surface.sh
 admin_initializer=$repo_root/docker/app/init-admin-auth.sh
 app_entrypoint=$repo_root/docker/app/entrypoint.sh
+pdf_temp_cleanup=$repo_root/docker/app/cleanup-pdf-render-tmp.sh
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/estab-runtime-surface.XXXXXX")
 trap 'rm -rf -- "$fixture"' EXIT HUP INT TERM
 
@@ -33,6 +34,7 @@ assert_dockerfile_absent()
 sh -n "$verifier"
 sh -n "$admin_initializer"
 sh -n "$app_entrypoint"
+sh -n "$pdf_temp_cleanup"
 for writable_root_contract in \
     'prepare_writable_directory "$app_data_root"' \
     'prepare_writable_directory "$export_root"' \
@@ -81,12 +83,27 @@ assert_dockerfile_contains 'COPY 4fbak/fpdf/font/*.php ./4fbak/fpdf/font/'
 assert_dockerfile_contains 'COPY doku/Handbuch_eStab.pdf ./doku/'
 assert_dockerfile_contains 'COPY docker/app/verify-runtime-surface.sh /usr/local/bin/estab-verify-runtime-surface'
 assert_dockerfile_contains 'COPY docker/app/init-admin-auth.sh /usr/local/bin/estab-init-admin-auth'
+assert_dockerfile_contains 'COPY docker/app/cleanup-pdf-render-tmp.sh /usr/local/bin/estab-cleanup-pdf-render-tmp'
 assert_dockerfile_contains 'estab-verify-runtime-surface /var/www/html'
 assert_dockerfile_contains '"fileinfo", "gd", "mbstring"'
-assert_dockerfile_contains 'gd_info()["JPEG Support"]'
+assert_dockerfile_contains '"JPEG Support", "PNG Support", "GIF Read Support", "BMP Support"'
+assert_dockerfile_contains 'poppler-utils'
 assert_dockerfile_contains 'command -v setpriv >/dev/null'
+assert_dockerfile_contains 'command -v prlimit >/dev/null'
+assert_dockerfile_contains 'command -v pdfinfo >/dev/null'
+assert_dockerfile_contains 'command -v pdftoppm >/dev/null'
 assert_dockerfile_contains 'command -v getfacl >/dev/null'
 assert_dockerfile_contains 'command -v setfacl >/dev/null'
+for pdf_cleanup_contract in \
+    'TMPDIR=/tmp' \
+    'estab-cleanup-pdf-render-tmp /tmp 1440 www-data'
+do
+    if ! grep -Fq -- "$pdf_cleanup_contract" "$app_entrypoint"; then
+        printf 'Runtime surface contract: entrypoint is missing PDF cleanup contract %s\n' \
+            "$pdf_cleanup_contract" >&2
+        exit 1
+    fi
+done
 for required_runtime_path in \
     4fach/activity.php \
     4fach/fuehrungsstelle.php \

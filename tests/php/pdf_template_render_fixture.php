@@ -58,6 +58,16 @@ if (
 ) {
     throw new RuntimeException('Could not write render-proof attachment');
 }
+$imageAttachmentPath = $outputDirectory . '/original-attachment.jpg';
+$imageAttachmentPayload = file_get_contents($root . '/4fsym/br.jpg');
+if (
+    !is_string($imageAttachmentPayload)
+    || $imageAttachmentPayload === ''
+    || file_put_contents($imageAttachmentPath, $imageAttachmentPayload)
+        !== strlen($imageAttachmentPayload)
+) {
+    throw new RuntimeException('Could not write visible image attachment');
+}
 
 $dossier = new EstabIncidentPdf($incident, 1024 * 1024, $matrix);
 $dossier->SetCompression(false);
@@ -105,6 +115,14 @@ $completeAttachment = $completeDossier->embedAttachment(
     'Render-Nachweis des eingebetteten Anhangs',
     hash('sha256', $attachmentPayload),
     strlen($attachmentPayload)
+);
+$completeImageAttachment = $completeDossier->embedAttachment(
+    $imageAttachmentPath,
+    'Render-Foto.jpg',
+    'image/jpeg',
+    'Sichtbarer Render-Nachweis einer JPEG-Anlage',
+    hash('sha256', $imageAttachmentPayload),
+    strlen($imageAttachmentPayload)
 );
 $etbRows = [[
     'estab_book_lfd' => 1,
@@ -484,7 +502,7 @@ $completeDossier->addOperationsEvidence(
         'stored_head_sha256' => str_repeat('b', 64),
     ]
 );
-$completeDossier->addAttachmentIndex([[
+$completeAttachmentIndex = [[
     'display_name' => 'ETB 1-1-1 · Render-Anlage.txt',
     'stored_name' => $completeAttachment['name'],
     'archive_name' => 'EL0001.txt',
@@ -496,7 +514,21 @@ $completeDossier->addAttachmentIndex([[
         'SHA-256 und Größe entsprechen dem Eingangsnachweis',
     'etb_attachment_numbers' => ['ETB 1-1-1'],
     'message_ids' => [1],
-]]);
+], [
+    'display_name' => 'Render-Foto.jpg · sichtbare Bildanlage',
+    'stored_name' => $completeImageAttachment['name'],
+    'archive_name' => 'EL0002.jpg',
+    'size' => $completeImageAttachment['size'],
+    'sha256' => $completeImageAttachment['sha256'],
+    'mime' => $completeImageAttachment['mime'],
+    'integrity_state' => 'verified',
+    'integrity_statement' =>
+        'SHA-256 und Größe entsprechen dem Eingangsnachweis',
+    'etb_attachment_numbers' => [],
+    'message_ids' => [1],
+]];
+$completeDossier->addAttachmentIndex($completeAttachmentIndex);
+$completeDossier->addAttachmentPages($completeAttachmentIndex);
 $completeDossierBytes = $completeDossier->Output('', 'S');
 
 $etbForm = new EstabIncidentPdf($incident, 1024 * 1024, $matrix);

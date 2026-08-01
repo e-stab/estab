@@ -24,11 +24,15 @@ RUN set -eux; \
         libpng16-16t64 \
         libpng-dev \
         libzip5 \
-        libzip-dev; \
+        libzip-dev \
+        poppler-utils; \
     docker-php-ext-configure gd --with-freetype --with-jpeg; \
     docker-php-ext-install -j1 gd mysqli zip; \
-    php -r 'foreach (["fileinfo", "gd", "mbstring", "mysqli", "Zend OPcache", "zip"] as $extension) { if (!extension_loaded($extension)) { fwrite(STDERR, "Missing PHP extension: $extension\n"); exit(1); } } if (!(gd_info()["JPEG Support"] ?? false)) { fwrite(STDERR, "Missing GD JPEG support\n"); exit(1); }'; \
+    php -r 'foreach (["fileinfo", "gd", "mbstring", "mysqli", "Zend OPcache", "zip"] as $extension) { if (!extension_loaded($extension)) { fwrite(STDERR, "Missing PHP extension: $extension\n"); exit(1); } } $gd = gd_info(); foreach (["JPEG Support", "PNG Support", "GIF Read Support", "BMP Support"] as $feature) { if (!($gd[$feature] ?? false)) { fwrite(STDERR, "Missing GD feature: $feature\n"); exit(1); } }'; \
     command -v setpriv >/dev/null; \
+    command -v prlimit >/dev/null; \
+    command -v pdfinfo >/dev/null; \
+    command -v pdftoppm >/dev/null; \
     command -v getfacl >/dev/null; \
     command -v setfacl >/dev/null; \
     a2enmod auth_basic authn_file headers; \
@@ -142,6 +146,7 @@ COPY docker/apache/estab.conf /etc/apache2/sites-available/estab.conf
 COPY docker/apache/ports.conf /etc/apache2/ports.conf
 COPY docker/php/estab.ini /usr/local/etc/php/conf.d/zz-estab.ini
 COPY docker/app/entrypoint.sh /usr/local/bin/estab-entrypoint
+COPY docker/app/cleanup-pdf-render-tmp.sh /usr/local/bin/estab-cleanup-pdf-render-tmp
 COPY docker/app/init-admin-auth.sh /usr/local/bin/estab-init-admin-auth
 COPY docker/app/healthcheck.php /usr/local/bin/estab-healthcheck
 COPY docker/app/verify-runtime-surface.sh /usr/local/bin/estab-verify-runtime-surface
@@ -157,6 +162,7 @@ RUN set -eux; \
         /var/lib/php/sessions; \
     chmod 0755 \
         /usr/local/bin/estab-entrypoint \
+        /usr/local/bin/estab-cleanup-pdf-render-tmp \
         /usr/local/bin/estab-init-admin-auth \
         /usr/local/bin/estab-healthcheck \
         /usr/local/bin/estab-verify-runtime-surface; \

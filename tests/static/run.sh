@@ -88,6 +88,7 @@ sh "$repo_root/tests/static/registry_release.sh"
 sh "$repo_root/tests/static/offline_images.sh"
 sh "$repo_root/tests/static/release_policy.sh"
 sh "$repo_root/tests/static/runtime_image_surface.sh"
+sh "$repo_root/tests/static/pdf_temp_cleanup.sh"
 pdf_result=$($php_bin "$repo_root/tests/php/pdf_smoke.php" 2>&1)
 printf '%s\n' "$pdf_result"
 printf '%s\n' "$pdf_result" | grep -q '^PDF smoke test: OK ('

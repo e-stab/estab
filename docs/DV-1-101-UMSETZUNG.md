@@ -590,6 +590,15 @@ Fehlt der Führungsstellenname in einem historischen Einsatz, lautet die
 Kennzeichnung ausdrücklich „historisch nicht erfasst“; Bedarfsträger,
 Einsatzleitung und Umgebung werden nicht als Ersatz ausgegeben.
 
+Die Anlagensektion stellt JPEG, PNG, GIF und BMP direkt dar und rastert jede
+Seite einer PDF-Anlage samt Anmerkungen in Originalreihenfolge. Text wird nur
+bei verlustfreier Windows-1252-Darstellbarkeit ausgegeben. TIFF, ZIP, Office,
+Video, nicht darstellbarer Text und andere nicht verlässlich statisch
+darstellbare Formate erhalten eine eindeutige Hinweisseite. Das gegen
+Eingangs-SHA-256 und -größe sowie den MIME-Typ des exakten Byte-Snapshots
+geprüfte Original bleibt bei jedem Format bytegleich als `EmbeddedFile`
+erhalten; sichtbare Vorschauseiten ersetzen diesen Nachweis nicht.
+
 ETB-Seiten werden als **Fb Fü 2** auf A4 hoch mit den vier Spalten laufende
 Nummer, Datum/Uhrzeit, Darstellung der Ereignisse und Bemerkungen erzeugt.
 Einsatz, Kopfdatum und ein buchlokaler Seitenzähler werden auf jeder Seite

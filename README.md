@@ -247,10 +247,18 @@ Führungsstellennamen oder aktive Schicht nimmt eStab keine operative Eingabe
 an. Funktionskonten lassen sich unter `/4fadm/users.php` sperren, entsperren
 und mit einem neuen Kennwort versehen. Ein vollständiges
 ETB-/TBB-/Nachrichten-/Nachweis-/Dienst-/S6-/Melder-/Anhang-Dossier für einen
-aktiven oder historischen Einsatz erzeugt `/4fadm/incident_export.php`. Die
-ETB-Seiten entsprechen der Struktur **Fb Fü 2** auf A4 hoch, die TBB-Seiten
-**Fb Fü 44** auf A4 quer; Formkopf, buchlokale Seitenzahlen und vorgesehene
-manuelle Unterschriftslinien werden auf jeder Seite wiederholt. Bei neuen
+aktiven oder historischen Einsatz erzeugt `/4fadm/incident_export.php`.
+Die Anlagensektion zeigt JPEG, PNG, GIF und BMP direkt (bei animierten GIFs die
+erste Bildebene) und rastert mehrseitige PDFs einschließlich ihrer Anmerkungen
+seitenweise. Text erscheint nur, wenn
+er sich verlustfrei mit dem Windows-1252-Basiszeichensatz darstellen lässt;
+für TIFF, ZIP, Office, Video und andere nicht statisch darstellbare Inhalte
+erscheint eine eindeutige Hinweisseite. Unabhängig von dieser Vorschau bleibt
+jede Originaldatei bytegleich als PDF-Anlage eingebettet.
+Die ETB-Seiten entsprechen der Struktur **Fb Fü 2** auf A4 hoch, die
+TBB-Seiten **Fb Fü 44** auf A4 quer; Formkopf, buchlokale Seitenzahlen und
+vorgesehene manuelle Unterschriftslinien werden auf jeder Seite wiederholt.
+Bei neuen
 strukturierten TBB-Zeilen wird nur die redundante Zusammenfassung aus
 `tbb_aktion` unterdrückt; die eigenständige Bemerkung aus `tbb_bemerk`
 erscheint genau einmal in der Betriebsspalte. Bei formal
@@ -734,7 +742,12 @@ denselben A4-Formularrenderer. Die Vorlage enthält weder eine
 VS-NfD-Kennzeichnung noch das frühere Wappen. Neue Anhänge eines Dossiers
 werden beim Eingang an SHA-256 und Bytezahl gebunden und vor dem Einbetten
 erneut geprüft; beim Upgrade vorhandene Legacy-Dateien heißen ausdrücklich
-„Integrität beim Eingang nicht belegbar“. Ist eine historische
+„Integrität beim Eingang nicht belegbar“. JPEG, PNG, GIF und BMP werden
+zusätzlich als sichtbare Anlagenseiten ausgegeben; mehrseitige PDFs erscheinen
+einschließlich ihrer Anmerkungen seitenweise gerastert. Verlustfrei
+Windows-1252-darstellbarer Text wird direkt ausgegeben. TIFF und andere nicht
+statisch darstellbare Formate erhalten eine klare Hinweisseite, ihr
+bytegleiches Original bleibt eingebettet. Ist eine historische
 Empfängerfunktion in der heutigen Matrix nicht mehr vorhanden, bleibt sie mit
 ihrem gespeicherten Kopiekennzeichen ausdrücklich im Inhaltsbereich sichtbar.
 Führungsstellenname, Einsatzkennung und Einsatzname erscheinen getrennt in

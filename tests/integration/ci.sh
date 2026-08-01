@@ -685,6 +685,14 @@ run_timed 4m "$container_cli" compose run --rm --no-deps -T \
     --workdir /workspace \
     app php -d auto_prepend_file= tests/integration/incident_export.php
 
+echo "CI integration: proving visible PDF, PNG, and original attachment pages"
+run_timed 3m "$container_cli" compose run --rm --no-deps -T \
+    --env ESTAB_PDF_ATTACHMENT_RENDER_INTEGRATION=1 \
+    --volume "$repo_root:/workspace:ro" \
+    --workdir /workspace \
+    app php -d auto_prepend_file= \
+        tests/integration/pdf_attachment_render.php
+
 echo "CI integration: running dynamic-table migration"
 run_timed 5m "$container_cli" compose run --rm --no-deps -T \
     --volume "$repo_root:/workspace:ro" \

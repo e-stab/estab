@@ -28,6 +28,21 @@ $assertThrows = static function (
     $assert(false, $message);
 };
 
+/** Return the exact implementation text of one dossier method. */
+function incident_pdf_security_method_source(string $method): string
+{
+    $reflection = new ReflectionMethod(EstabIncidentPdf::class, $method);
+    $lines = file($reflection->getFileName());
+    if (!is_array($lines)) {
+        throw new RuntimeException('Could not read incident PDF implementation');
+    }
+    return implode('', array_slice(
+        $lines,
+        $reflection->getStartLine() - 1,
+        $reflection->getEndLine() - $reflection->getStartLine() + 1
+    ));
+}
+
 $temporaryRoot = sys_get_temp_dir()
     . '/estab-incident-pdf-' . bin2hex(random_bytes(6));
 if (!mkdir($temporaryRoot, 0700)) {
@@ -39,6 +54,64 @@ file_put_contents($attachmentPath, $attachmentPayload);
 chmod($attachmentPath, 0600);
 
 try {
+    $rasterSource = incident_pdf_security_method_source(
+        'rasterizePdfAttachment'
+    );
+    $attachmentPagesSource = incident_pdf_security_method_source(
+        'addAttachmentPages'
+    );
+    $imageInfoSource = incident_pdf_security_method_source(
+        'attachmentImageInfo'
+    );
+    $assert(
+        ESTAB_INCIDENT_PDF_RENDER_TOTAL_SECONDS === 60
+            && ESTAB_INCIDENT_PDF_PROCESS_PAGE_SECONDS === 15
+            && str_contains(
+                $attachmentPagesSource,
+                'ESTAB_INCIDENT_PDF_RENDER_TOTAL_SECONDS'
+            )
+            && substr_count(
+                $rasterSource,
+                'ESTAB_INCIDENT_PDF_PROCESS_PAGE_SECONDS'
+            ) === 2,
+        '60-second total and 15-second per-process renderer limits drifted'
+    );
+    $assert(
+        ESTAB_INCIDENT_PDF_MAX_RASTER_BYTES === 24 * 1024 * 1024
+            && ESTAB_INCIDENT_PDF_MAX_RASTER_PAGE_BYTES === 8 * 1024 * 1024
+            && str_contains(
+                $attachmentPagesSource,
+                'ESTAB_INCIDENT_PDF_MAX_RASTER_BYTES'
+            )
+            && str_contains(
+                $rasterSource,
+                'ESTAB_INCIDENT_PDF_MAX_RASTER_PAGE_BYTES'
+            )
+            && str_contains($rasterSource, '$totalBytes + $bytes')
+            && str_contains($rasterSource, '$remainingRasterBytes'),
+        '24-MiB total or 8-MiB per-page raster limits drifted or became unused'
+    );
+    $assert(
+        ESTAB_INCIDENT_PDF_MAX_IMAGE_PIXELS === 12_000_000
+            && ESTAB_INCIDENT_PDF_MAX_IMAGE_AXIS === 8_000
+            && str_contains(
+                $imageInfoSource,
+                'ESTAB_INCIDENT_PDF_MAX_IMAGE_PIXELS'
+            )
+            && substr_count(
+                $imageInfoSource,
+                'ESTAB_INCIDENT_PDF_MAX_IMAGE_AXIS'
+            ) === 2,
+        '12-megapixel or 8000-pixel image limits drifted or became unused'
+    );
+    $assert(
+        str_contains($rasterSource, 'for ($pageNumber = 1;')
+            && str_contains($rasterSource, "'-f'")
+            && str_contains($rasterSource, "'-l'")
+            && str_contains($rasterSource, "'-singlefile'")
+            && !str_contains($rasterSource, 'hide-annotations'),
+        'PDF pages are no longer rastered singly or annotations are suppressed'
+    );
     $assert(
         str_contains(
             estab_incident_pdf_logbook_scope_label([]),
@@ -450,7 +523,7 @@ try {
             'stored_head_sha256' => str_repeat('b', 64),
         ]
     );
-    $pdf->addAttachmentIndex([[
+    $attachmentIndex = [[
         'display_name' => 'EL0001.txt · lage.txt',
         'stored_name' => $embedded['name'],
         'archive_name' => 'EL0001.txt',
@@ -462,7 +535,9 @@ try {
             'SHA-256 und Größe entsprechen dem Eingangsnachweis',
         'etb_attachment_numbers' => ['ETB 12-1-1'],
         'message_ids' => [7],
-    ]]);
+    ]];
+    $pdf->addAttachmentIndex($attachmentIndex);
+    $attachmentVisibility = $pdf->addAttachmentPages($attachmentIndex);
     $document = $pdf->Output('', 'S');
     $fixtureOutput = getenv('ESTAB_INCIDENT_PDF_FIXTURE_OUTPUT');
     if (is_string($fixtureOutput) && $fixtureOutput !== '') {
@@ -626,6 +701,21 @@ try {
         'embedded attachment bytes, name, or checksum are missing'
     );
     $assert(
+        str_contains(
+            $document,
+            estab_incident_pdf_text('Vollständige Textdarstellung')
+        )
+            && str_contains($document, 'Sichtbare Darstellung')
+            && $attachmentVisibility === [
+                'attachment_visible_count' => 1,
+                'attachment_visible_pages' => 1,
+                'attachment_rendered_count' => 1,
+                'attachment_rendered_pages' => 1,
+                'attachment_information_pages' => 0,
+            ],
+        'plain-text attachment lacks its complete visible attachment page'
+    );
+    $assert(
         !str_contains($document, $temporaryRoot),
         'host attachment path leaked into the PDF'
     );
@@ -637,6 +727,107 @@ try {
     $assert(
         $embedded['sha256'] === hash('sha256', "Originalanlage\n"),
         'embedded attachment SHA-256 differs'
+    );
+
+    $binaryAttachmentPath = $temporaryRoot . '/archive.zip';
+    $binaryPayload = base64_decode(
+        'UEsFBgAAAAAAAAAAAAAAAAAAAAAAAA==',
+        true
+    );
+    if (
+        !is_string($binaryPayload)
+        || file_put_contents($binaryAttachmentPath, $binaryPayload)
+            !== strlen($binaryPayload)
+    ) {
+        throw new RuntimeException('Could not create binary PDF fixture');
+    }
+    $binaryPdf = new EstabIncidentPdf($incident, 1024);
+    $binaryPdf->SetCompression(false);
+    $binaryEmbedded = $binaryPdf->embedAttachment(
+        $binaryAttachmentPath,
+        'Anlage-Archiv.zip',
+        'application/zip',
+        'Nicht statisch darstellbares Testformat'
+    );
+    $binaryIndex = [[
+        'display_name' => 'Anlage-Archiv.zip',
+        'stored_name' => $binaryEmbedded['name'],
+        'archive_name' => 'EL0002.zip',
+        'size' => $binaryEmbedded['size'],
+        'sha256' => $binaryEmbedded['sha256'],
+        'mime' => $binaryEmbedded['mime'],
+    ]];
+    $binaryVisibility = $binaryPdf->addAttachmentPages($binaryIndex);
+    $binaryDocument = $binaryPdf->Output('', 'S');
+    $assert(
+        $binaryVisibility['attachment_information_pages'] === 1
+            && $binaryVisibility['attachment_rendered_pages'] === 0
+            && str_contains($binaryDocument, 'Hinweisseite')
+            && str_contains($binaryDocument, 'bytegleich in diesem Dossier'),
+        'unsupported binary attachment lacks its honest visible information page'
+    );
+
+    $snapshotMimePdf = new EstabIncidentPdf($incident, 1024);
+    $assertThrows(
+        static fn (): array => $snapshotMimePdf->embedAttachment(
+            $attachmentPath,
+            'Anlage-Falschdeklaration.zip',
+            'application/zip',
+            'Snapshot MIME proof'
+        ),
+        'declared MIME differing from the immutable byte snapshot was accepted'
+    );
+
+    $mismatchPdf = new EstabIncidentPdf($incident, 1024);
+    $mismatchEmbedded = $mismatchPdf->embedAttachment(
+        $attachmentPath,
+        'Anlage-Falsch.jpg',
+        'text/plain',
+        'MIME mismatch proof'
+    );
+    $assertThrows(
+        static fn (): array => $mismatchPdf->addAttachmentPages([[
+            'display_name' => 'Anlage-Falsch.jpg',
+            'stored_name' => $mismatchEmbedded['name'],
+            'archive_name' => 'EL0003.jpg',
+            'size' => $mismatchEmbedded['size'],
+            'sha256' => $mismatchEmbedded['sha256'],
+            'mime' => $mismatchEmbedded['mime'],
+        ]]),
+        'renderable extension with mismatching detected MIME type was accepted'
+    );
+
+    $lineLimitPath = $temporaryRoot . '/too-many-lines.txt';
+    $lineLimitPayload = str_repeat("x\n", 13000);
+    if (
+        file_put_contents($lineLimitPath, $lineLimitPayload)
+            !== strlen($lineLimitPayload)
+    ) {
+        throw new RuntimeException('Could not create text page-limit fixture');
+    }
+    $lineLimitPdf = new EstabIncidentPdf($incident, 1024 * 1024);
+    $lineLimitEmbedded = $lineLimitPdf->embedAttachment(
+        $lineLimitPath,
+        'Anlage-Zeilenlimit.txt',
+        'text/plain',
+        'Text page-limit proof'
+    );
+    $lineLimitStartedAt = microtime(true);
+    $assertThrows(
+        static fn (): array => $lineLimitPdf->addAttachmentPages([[
+            'display_name' => 'Anlage-Zeilenlimit.txt',
+            'stored_name' => $lineLimitEmbedded['name'],
+            'archive_name' => 'EL0004.txt',
+            'size' => $lineLimitEmbedded['size'],
+            'sha256' => $lineLimitEmbedded['sha256'],
+            'mime' => $lineLimitEmbedded['mime'],
+        ]]),
+        'plain-text attachment exceeded 200 pages before being rejected'
+    );
+    $assert(
+        $lineLimitPdf->PageNo() === 1
+            && microtime(true) - $lineLimitStartedAt < 2.0,
+        'plain-text page limit was not enforced before bulk page allocation'
     );
 
     $crossShiftPdf = new EstabIncidentPdf($incident, 1024);
@@ -823,6 +1014,18 @@ try {
             1
         ),
         'oversize attachment accepted'
+    );
+    $missingVisiblePdf = new EstabIncidentPdf($incident, 1024);
+    $assertThrows(
+        static fn (): array => $missingVisiblePdf->addAttachmentPages([[
+            'display_name' => 'Nicht eingebettet',
+            'stored_name' => 'Anlage-fehlt.txt',
+            'archive_name' => 'EL9999.txt',
+            'size' => 1,
+            'sha256' => str_repeat('0', 64),
+            'mime' => 'text/plain',
+        ]]),
+        'visible attachment without a verified embedded snapshot was accepted'
     );
     $linkPath = $temporaryRoot . '/link.txt';
     if (!symlink($attachmentPath, $linkPath)) {

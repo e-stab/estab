@@ -187,8 +187,11 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   High-/Critical-CVE-Gate und
   prüfsummengebundenes Digest-Installationspaket,
 - Erzeugung lesbarer Nachrichtenvordrucke und eines durchsuchbaren
-  PDF-Einsatzdossiers mit allen neun wählbaren Abschnitten und sicher
-  eingebetteten, gegen ihren Eingangsnachweis geprüften Dateien; beide
+  PDF-Einsatzdossiers mit allen neun wählbaren Abschnitten, sichtbaren
+  JPEG-/PNG-Anlagen, verlustfrei Windows-1252-darstellbarem Text und
+  seitenweise gerasterten PDF-Anlagen. Der Containervertrag prüft zusätzlich
+  die GD-Leseunterstützung für GIF und BMP. Alle Originaldateien bleiben sicher
+  eingebettet und gegen ihren Eingangsnachweis geprüft; beide
   Nachrichtenausgabepfade werden ein- und mehrseitig mit Poppler pixelgleich
   verglichen und auf stabilen Folgeseiteneinzug, sichtbare historische
   Empfänger, fehlenden VS-NfD-Aufdruck, fehlendes Wappen sowie A4-Geometrie
@@ -601,12 +604,16 @@ fail-closed Readiness eines ungültig aktiven Kontos. Danach aktiviert
 
 Direkt danach legt `tests/integration/incident_export.php` einen separaten
 Einsatz an, füllt in beiden Einsätzen je einen ETB-, TBB-, Nachrichten- und
-Anhangdatensatz und macht den Export-Einsatz wieder historisch. Der
+Anhangdatensatz und macht den Export-Einsatz wieder historisch. Die Anlage des
+ausgewählten Einsatzes ist ein zweiblättriges PDF. Der
 konsistente Read-only-Snapshot muss exakt dessen vier Datensätze liefern. Aus
 der erzeugten PDF wird der tatsächliche `/EmbeddedFile`-Stream anhand seiner
 deklarierten Länge extrahiert und bytegleich samt SHA-256 mit der beim Eingang
 gebundenen Fixture verglichen; Marker und Datei des anderen Einsatzes dürfen
-nicht vorkommen. Anschließend ersetzt der Test die Datei durch gleich viele
+nicht vorkommen. Beide Originalseiten müssen zusätzlich in gleicher
+Reihenfolge sichtbar sein und die Renderstatistik muss zwei sichtbare,
+inhaltlich gerenderte Seiten sowie keine Hinweisseite ausweisen. Anschließend
+ersetzt der Test die Datei durch gleich viele
 andere Bytes. Sowohl ein erneutes Laden als auch das Einbetten aus dem zuvor
 geladenen Bundle müssen wegen des unveränderlichen SHA-256-/Größennachweises
 scheitern. Derselbe Bytewechsel muss im produktiven Abschluss-Preflight als
@@ -645,7 +652,38 @@ eine direkte Dossier-Nachrichtenseite, beide Varianten mit mehrseitigem Inhalt,
 mehrseitige eigenständige ETB-/TBB-Formularfixtures und ein vollständiges
 Dossier mit den neun Abschnitten ETB, TBB, Nachrichtenvordrucke, Anhänge,
 Nachrichtenereignisse, Dienstbetrieb, S6-Fernmeldepläne, Melderläufe und
-Betriebsereignisse.
+Betriebsereignisse. Das vollständige Dossier enthält zusätzlich eine
+durchsuchbare Textanlage und eine sichtbare JPEG-Anlage; beide Originale
+bleiben separat eingebettet.
+
+`tests/integration/pdf_attachment_render.php` läuft im produktiven
+App-Container und bindet damit die tatsächlichen GD-, Poppler- und
+`prlimit`-Abhängigkeiten. Er erzeugt eine zweiblättrige PDF-Anlage und ein
+transparentes PNG, verlangt daraus genau drei geordnete Rasterseiten sowie
+passende Werte für `attachment_visible_count`, `attachment_visible_pages`,
+`attachment_rendered_count`, `attachment_rendered_pages` und
+`attachment_information_pages`. Beide Eingangsdateien werden aus dem
+`EmbeddedFile`-Katalog wieder bytegleich verglichen. Vor und nach dem Lauf
+muss die Menge privater `estab-pdf-render-*`-Arbeitsverzeichnisse identisch
+sein. Auch ein absichtlich beschädigtes, aber korrekt gehashtes PDF muss ohne
+Restdatei fail-closed abgewiesen werden.
+
+`tests/php/incident_pdf_security.php` ergänzt die Dateigrenze: Der aus den
+stabil gelesenen und später eingebetteten Bytes per Fileinfo erkannte MIME-Typ
+muss mit der Deklaration übereinstimmen. Der Test belegt eine sichtbare
+verlustfreie Textanlage und die ehrliche Hinweisseite eines Binärformats;
+MIME-/Endungsfehler, ein Text mit mehr als 200 erforderlichen Seiten und
+fehlende eindeutige EmbeddedFile-Zuordnungen scheitern vor unkontrollierter
+Seitenerzeugung. Der statische Runtime-Vertrag verlangt GD-Leseunterstützung
+für JPEG, PNG, GIF und BMP sowie Poppler und `prlimit` im App-Image.
+
+`tests/static/pdf_temp_cleanup.sh` beweist den Startup-Janitor getrennt. Nur
+vollständig kanonische, alte, flache und korrekt besessene Arbeitsverzeichnisse
+werden entfernt. Aktuelle Verzeichnisse sowie Kandidaten mit unerwarteter
+Datei, Unterverzeichnis, unsicherem Modus, Symlink, Hardlink, ungültigem Namen
+oder falscher Wurzel bleiben vollständig erhalten beziehungsweise werden
+abgewiesen. `tests/static/runtime_image_surface.sh` bindet `/tmp`, 1.440 Minuten
+und `www-data` zusätzlich an den produktiven Entrypoint.
 
 `tests/static/pdf_render.sh` verlangt für jede ETB-Seite A4 hoch, „Fb Fü 2“,
 vier feste Spalten, lokalen Seitenzähler sowie die Linien für Leiter/-in
@@ -667,17 +705,21 @@ müssen den diagonal gestrichenen, als „Nicht beschriebener Bereich“
 markierten Rest der letzten Formularseite enthalten; offene Fixtures dürfen
 diese Abschlussmarkierung nicht erhalten.
 
-Die Prüfung weist Nachrichtenvordruck-Seiten ohne Bilder nach; im
-Gesamtdossier ist ausschließlich das bestehende 400-x-396-Pixel-THW-
-Kopfzeichen der ETB-/TBB-Formblätter zulässig. Sie rendert alle Varianten mit
+Die Prüfung weist Nachrichtenvordruck-Seiten ohne Bilder nach. Außerhalb der
+ausdrücklich sichtbaren Anlagenseiten ist im Gesamtdossier ausschließlich das
+bestehende 400-x-396-Pixel-THW-Kopfzeichen der ETB-/TBB-Formblätter zulässig;
+eine Textanlage bleibt bildfrei und die JPEG-Seite muss exakt ein Bildobjekt
+mit den erwarteten Abmessungen enthalten. Sie rendert alle Varianten mit
 144 dpi. Jede eigenständige ETB-/TBB-Seite muss pixelgenau mit ihrer
 entsprechenden Seite im vollständigen Dossier übereinstimmen. Ein- und mehrseitige
 Nachrichtenvordruckvarianten werden ebenfalls vollständig bytegenau
 verglichen; bei der Nachrichtenseite im vollständigen Dossier bleibt nur der
 absichtlich dossierglobale dynamische Seitenzähler ausgespart. Anschließend
-extrahiert `pdfdetach` den eingebetteten, am Eingang gebundenen Anhang und
-`cmp` vergleicht ihn mit der Quelldatei. Anlagenverzeichnis und Deckblatt
-müssen zusätzlich den Integritätsstatus nennen; bei Legacy lautet er
+extrahiert `pdfdetach` die eingebetteten, am Eingang gebundenen Text- und
+JPEG-Originale und `cmp` vergleicht sie mit den Quelldateien. Die sichtbaren
+Anlagenseiten müssen Dateiname, MIME-Typ, Größe und SHA-256 nennen;
+Anlagenverzeichnis und Deckblatt zusätzlich den Integritätsstatus. Bei Legacy
+lautet er
 ausdrücklich „Integrität beim Eingang nicht belegbar“. Die CI bewahrt PDFs,
 PNGs, Text- und Werkzeuginformationen 14 Tage als Nachweisartefakt auf.
 Ein ETB-Anhang muss dabei im Fb Fü 2 und Anlagenverzeichnis die abgeleitete
@@ -690,9 +732,9 @@ in keinem amtlichen Fb-Fü-2-Text erscheinen. Der Gesamtbuch-/Schichtumfang muss
 hingegen auf dem Deckblatt sichtbar und in der Schichtvariante mit neu
 berechneten ETB-/TTB-Seitenzahlen konsistent sein.
 
-Der gezielte Stand dieser Verträge lautet
-`incident export security: OK (105 assertions)` und
-`incident PDF security: OK (56 assertions)`; Template-Fixtures und
+Der gezielte Stand dieser Verträge umfasst zusätzlich den Containerlauf
+`PDF attachment render integration: OK`. Die Sicherheits- und
+Template-Fixtures sowie der
 Poppler-Rendervergleich sind ebenfalls grün. Der Renderfall enthält eine
 schichtübergreifende Korrektur: Ein einsatzgebundener Self-Join muss deren
 globale Original-ID zur lokalen Buchnummer auflösen, ohne globale
@@ -1684,9 +1726,12 @@ Mindestens zu prüfen:
 - für einen inzwischen historischen Einsatz ein PDF-Dossier mit allen neun
   Abschnitten ETB, TBB, Nachrichtenvordrucke, Anhänge,
   Nachrichtenereignisse, Dienstbetrieb, S6-Fernmeldepläne, Melderläufe und
-  Betriebsereignisse erzeugen, die Anlagenansicht im vorgesehenen
-  PDF-Programm öffnen und stichprobenartig eine eingebettete Datei samt
-  dokumentierter SHA-256 gegen das Original prüfen; dabei
+  Betriebsereignisse erzeugen; JPEG, PNG, GIF, BMP, verlustfrei darstellbaren
+  Text und eine mehrseitige PDF-Anlage mit sichtbarer Anmerkung im Seitenstrom
+  prüfen; TIFF sowie Text mit einem nicht Windows-1252-darstellbaren Zeichen
+  müssen eine Hinweisseite erhalten. Danach die Anlagenansicht im vorgesehenen
+  PDF-Programm öffnen und jede eingebettete Datei samt dokumentierter SHA-256
+  gegen das Original prüfen; dabei
   Führungsstellenname, Einsatzkennung und Einsatzname getrennt kontrollieren,
 - einen Einsatz mit vollständigem ETB-/TBB-Pflichtkopf anlegen, die erste
   Schicht aktivieren und schon vor der Eröffnung genau die Köpfe `ETB:1` und

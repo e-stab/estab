@@ -235,7 +235,7 @@ try {
         ['ESTAB_UPLOAD_MAX_BYTES', '0'],
         ['ESTAB_UPLOAD_MAX_BYTES', '52428801'],
         ['ESTAB_PDF_ATTACHMENT_MAX_BYTES', '-1'],
-        ['ESTAB_PDF_ATTACHMENT_MAX_BYTES', '104857601'],
+        ['ESTAB_PDF_ATTACHMENT_MAX_BYTES', '52428801'],
         ['ESTAB_ALLOW_SELF_REGISTRATION', 'sometimes'],
         ['ESTAB_TRUSTED_PROXIES', '0.0.0.0/0'],
     ] as [$name, $value]) {

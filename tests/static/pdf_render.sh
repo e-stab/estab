@@ -449,9 +449,6 @@ if grep -Fq 'ZUORDNUNG-NUR-SUCHHILFE' "$complete_text"; then
     echo "ETB search assignment leaked into the official PDF form" >&2
     exit 1
 fi
-assert_pdf_has_only_thw_mark \
-    "$complete_images" \
-    "Complete dossier"
 
 for marker in \
     'VORLÄUFIG' \
@@ -493,12 +490,21 @@ for marker in \
     'ETB 1-1-1' \
     'Ablagekennzeichen' \
     'Integrität beim Eingang' \
-    'SHA-256 und Größe stimmen'
+    'SHA-256 und Größe stimmen' \
+    'Anlage 1 von 2' \
+    'Anlage 2 von 2' \
+    'Vollständige Textdarstellung' \
+    'Bild 1 von 1' \
+    'Render-Foto.jpg' \
+    'Sichtbare Darstellung' \
+    'bytegleiche Original'
 do
     grep -Fq "$marker" "$complete_text"
 done
 
 message_page=
+attachment_text_page=
+attachment_image_page=
 etb_dossier_pages=$complete_dossier_pdf.etb-pages.txt
 tbb_dossier_pages=$complete_dossier_pdf.tbb-pages.txt
 : >"$etb_dossier_pages"
@@ -524,9 +530,22 @@ while [ "$page_number" -le "$complete_page_count" ]; do
         "$complete_dossier_pdf.page-$page_number.layout.txt"; then
         printf '%s\n' "$page_number" >>"$tbb_dossier_pages"
     fi
+    if grep -Fq 'Anlage 1 von 2' \
+        "$complete_dossier_pdf.page-$page_number.layout.txt"; then
+        [ -z "$attachment_text_page" ]
+        attachment_text_page=$page_number
+    fi
+    if grep -Fq 'Anlage 2 von 2' \
+        "$complete_dossier_pdf.page-$page_number.layout.txt"; then
+        [ -z "$attachment_image_page" ]
+        attachment_image_page=$page_number
+    fi
     page_number=$((page_number + 1))
 done
 [ -n "$message_page" ]
+[ -n "$attachment_text_page" ]
+[ -n "$attachment_image_page" ]
+[ "$attachment_text_page" -lt "$attachment_image_page" ]
 [ "$(wc -l <"$etb_dossier_pages" | tr -d ' ')" -eq "$etb_page_count" ]
 [ "$(wc -l <"$tbb_dossier_pages" | tr -d ' ')" -eq "$tbb_page_count" ]
 complete_message_images=$complete_dossier_pdf.page-$message_page.images.txt
@@ -535,6 +554,28 @@ pdfimages -f "$message_page" -l "$message_page" -list \
 assert_pdf_has_no_images \
     "$complete_message_images" \
     "Complete dossier message-form page"
+complete_text_attachment_images=$complete_dossier_pdf.page-$attachment_text_page.images.txt
+pdfimages -f "$attachment_text_page" \
+    -l "$attachment_text_page" -list \
+    "$complete_dossier_pdf" >"$complete_text_attachment_images"
+assert_pdf_has_no_images \
+    "$complete_text_attachment_images" \
+    "Complete dossier visible text attachment page"
+complete_attachment_images=$complete_dossier_pdf.page-$attachment_image_page.images.txt
+pdfimages -f "$attachment_image_page" -l "$attachment_image_page" -list \
+    "$complete_dossier_pdf" >"$complete_attachment_images"
+awk '
+    NR > 2 && $1 ~ /^[0-9]+$/ {
+        count++
+        if (($4 + 0) == 100 && ($5 + 0) == 97) {
+            visible = 1
+        }
+    }
+    END { exit count == 1 && visible ? 0 : 1 }
+' "$complete_attachment_images" || {
+    echo "Visible JPEG attachment page lacks its exact content image" >&2
+    exit 1
+}
 for marker in EINGANG AUSGANG Nachweis-Nr. Fm-Betriebsstelle; do
     grep -Fq "$marker" \
         "$complete_dossier_pdf.page-$message_page.layout.txt"
@@ -646,5 +687,11 @@ pdfdetach -save 1 -o "$fixture_dir/extracted-complete-attachment.txt" \
 cmp \
     "$fixture_dir/original-attachment.txt" \
     "$fixture_dir/extracted-complete-attachment.txt"
+pdfdetach -save 2 -o "$fixture_dir/extracted-complete-attachment.jpg" \
+    "$complete_dossier_pdf"
+cmp \
+    "$fixture_dir/original-attachment.jpg" \
+    "$fixture_dir/extracted-complete-attachment.jpg"
+[ "$(pdfdetach -list "$complete_dossier_pdf" | awk '/^[[:space:]]*[0-9]+:/ { count++ } END { print count + 0 }')" -eq 2 ]
 
 echo "PDF render comparison: OK"

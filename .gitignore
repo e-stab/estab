@@ -14,6 +14,7 @@
 /tmp/
 
 # Tool caches
+/.cache/
 __pycache__/
 *.py[cod]
 /.phpunit.cache/
