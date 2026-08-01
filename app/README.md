@@ -116,20 +116,22 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   Umgebungswerte akzeptieren ausschließlich `1/0`, `true/false`, `yes/no` oder
   `on/off`; Tippfehler führen absichtlich zu einem Fehler statt zu implizitem
   Aktivieren.
-- Ein Eingang beginnt nach der Aufnahme durch A/W in Status 1 bei LdF. LdF
-  übersetzt den aufgenommenen Rufnamen in den Absender und bestätigt den von
-  A/W erfassten Eingangsweg; danach wertet Si den Inhalt aus und legt die
-  Empfänger fest. A/W besitzt kein schreibbares Absenderfeld, auch
+- Ein Eingang beginnt nach der Aufnahme durch den Fernmelder in Status 1 bei
+  LdF. LdF übersetzt den aufgenommenen Rufnamen in den Absender und bestätigt
+  den vom Fernmelder erfassten Eingangsweg; danach wertet Si den Inhalt aus und
+  legt die Empfänger fest. Der Fernmelder besitzt kein schreibbares
+  Absenderfeld, auch
   serverseitig werden Übertragungsversuche verworfen. Eine Änderung des
   Eingangsmediums durch LdF verlangt eine Begründung. Das Repository liest den
-  ursprünglichen A/W-Wert unter derselben Einsatz-, Status- und Sperrbedingung
+  ursprünglich vom Fernmelder erfassten Wert unter derselben Einsatz-, Status-
+  und Sperrbedingung
   `FOR UPDATE`, lässt Aufnahmezeit und Aufnahmezeichen unverändert und schreibt
   Bestätigung, Alt-/Neuwert, Begründung und LdF-Kürzel in das hashverkettete
   Übergabeereignis. Der feste Eingangslauf ist `1 → 4 → 8`.
 - `read_authorization.php` liefert die serverseitig gerenderten
   Vorschlagslisten für „Rufname der Gegenstelle“ und „Absender“. Die Abfrage
   validiert den aktiven Einsatz sowie feste Kontofunktion und Rolle erneut:
-  Rufnamen sind nur für A/W und LdF verfügbar,
+  Rufnamen sind nur für die Funktionen Fernmelder und LdF verfügbar,
   Absender nur für LdF bei Eingängen. Sie liest ausschließlich bisherige Werte
   desselben aktiven Einsatzes. Für das feste LdF-Konto
   korreliert `estab_read_ldf_mapping_suggestions()` außerdem den
@@ -150,11 +152,12 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
 - Ein Ausgang beginnt in Status 4 bei Si. Si kann die schreibgeschützten
   Inhaltsfelder formal freigeben oder mit Pflichtgrund an den ursprünglichen
   Verfasser in Status 10 zurückgeben. Nach jeder Korrektur folgt erneut
-  Status 4. Erst die Freigabe führt über LdF in Status 1 und A/W in Status 2
+  Status 4. Erst die Freigabe führt über LdF in Status 1 und den Fernmelder in
+  Status 2
   zum Abschluss in Status 8. Der feste Regellauf ist deshalb
   `4 → 1 → 2 → 8`; Autosichtung und ein konfigurierbarer Sichtungs-Bypass
   existieren nicht. Ist der disponierte Weg tatsächlich nicht verfügbar,
-  gibt A/W die Nachricht mit Pflichtgrund an LdF zurück; eine neue
+  gibt der Fernmelder die Nachricht mit Pflichtgrund an LdF zurück; eine neue
   Planwegentscheidung ist erforderlich und beide Dispositionen bleiben im
   Ereignisnachweis erhalten.
 - `message_transport.php` normalisiert die schreibbaren SET-Werte und übersetzt

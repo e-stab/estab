@@ -77,7 +77,7 @@ Derzeit sind folgende explizite Migrationen vorhanden:
 | `docker/db/migrations/98-official-message-form-fields.sql` | ergänzt die amtlichen, getrennt persistierten Nachrichtenvordruckfelder `11_rufnummer` und `12_betreff`; Bestandsnachrichten behalten alle vorhandenen Werte und erhalten für beide neuen Angaben ausschließlich den leeren Standardwert |
 | `docker/db/migrations/99-message-list-search.sql` | ersetzt den früheren Inhalts-Volltextindex durch den siebenfeldrigen Suchindex und ergänzt die beiden einsatzgebundenen BTREE-Indizes für skalierbare Meldungslisten |
 | `docker/db/migrations/100-session-presence.sql` | ergänzt den UTC-Zeitstempel der letzten echten Browserinteraktion und den Präsenzindex; bereits aktive Legacy-SIDs ohne belegbaren Zeitpunkt werden beim Upgrade einmalig widerrufen |
-| `docker/db/migrations/110-etb-tbb-rules.sql` | ergänzt einsatzlokale fortlaufende ETB-/TBB-Nummern samt exakt zwei vorab angelegten und gesperrten Buchköpfen je Einsatz, strukturierte TBB-Felder und Bezüge, den eindeutigen ETB-Anhangsbezug, Append-only-/Korrekturregeln, Erweiterungen aktiver Schichten mit A/W-Mehrfachbesetzung, die zehnjährige Aufbewahrungsuntergrenze und den deterministischen Legacy-Backfill |
+| `docker/db/migrations/110-etb-tbb-rules.sql` | ergänzt einsatzlokale fortlaufende ETB-/TBB-Nummern samt exakt zwei vorab angelegten und gesperrten Buchköpfen je Einsatz, strukturierte TBB-Felder und Bezüge, den eindeutigen ETB-Anhangsbezug, Append-only-/Korrekturregeln, Erweiterungen aktiver Schichten mit Mehrfachbesetzung der Fernmelderfunktion, die zehnjährige Aufbewahrungsuntergrenze und den deterministischen Legacy-Backfill |
 | `docker/db/migrations/111-logbook-shift-assignment.sql` | ergänzt nullable Schicht- und Schreiberprovenienz für ETB/TBB sowie die optionale ETB-Bearbeitungszuordnung mit unveränderlichem Snapshot; neue Zeilen werden durch Fremdschlüssel und Insert-Trigger geprüft, der Besetzungs-Update-Trigger verhindert eine verspätete ETB-Annahme mit Schreiberwechsel in der aktiven Schicht, historische Zeilen bleiben mangels belegbarer Herkunft `NULL` |
 | `docker/db/migrations/112-optional-access-shifts.sql` | ergänzt optionale einsatzgebundene Zugangsschichten und Kontenzuordnungen; ersetzt den abschließenden ETB-/TBB-Triggervertrag durch festen Funktions-/Rollenbezug und aktiven Einsatz ohne Pflicht zu Dienstschicht oder Besetzungs-ID; ältere formale Schichtdaten bleiben historische Evidenz |
 | `docker/db/migrations/113-password-policy.sql` | ergänzt genau eine revisionsgesicherte globale Kennwortrichtlinie für künftig gesetzte Funktionskonto-Kennwörter; Standard sind mindestens 12 Unicode-Codepoints ohne verpflichtende Zeichenklasse, die konfigurierbare Mindestlänge liegt zwischen 8 und 128 Unicode-Codepoints und optionale Unicode-Groß-/Titlecase-/Kleinbuchstaben, Ziffern und Sonderzeichen können verlangt werden; Unicode-Steuerzeichen sind verboten, Formatzeichen einschließlich ZWJ erlaubt; neue und geänderte Kennwörter werden mit Argon2id gespeichert, serverseitig gelten höchstens 1024 UTF-8-Bytes, im Browserfeld 1024 Eingabeeinheiten und eine exakte JavaScript-Codepointzählung bei verbindlicher Serverprüfung; Klartext und eindeutig verifizierbare Alt-Hashes werden nach erfolgreichem Login migriert, bcrypt nur bei einem eingegebenen Kennwort unter 72 UTF-8-Bytes, während ein ambivalenter längerer bcrypt-Alt-Hash bis zum administrativen Reset unverändert bleibt; stärkere oder gemischte Argon2id-Kosten werden nicht zurückgestuft, vorhandene Sitzungen bleiben unverändert |
@@ -223,7 +223,8 @@ Beim Daten-Backfill gilt:
   keinen vermeintlichen Gewinner. Der anschließende eindeutige Index
   `uq_etb_attachment_id` erzwingt dieselbe Regel für alle neuen Einträge.
 - Der Dienstbesetzungs-Trigger erlaubt bei einer aktiven Schicht eine bisher
-  nicht belegte Funktion und mehrere unterschiedliche A/W-Besetzungen. Für
+  nicht belegte Funktion und mehrere unterschiedliche Besetzungen der
+  Fernmelderfunktion. Für
   jede andere Funktion blockiert bereits eine frühere Zuweisung in derselben
   aktiven Schicht eine vermeintliche Ersetzung; dafür ist die
   Schichtübergabe vorgesehen.
@@ -270,7 +271,7 @@ durch Migration 112 ersetzten Zwischenstand: Neue manuelle Zeilen benötigen Sch
 Schicht. Der Insert-Trigger verlangt zusätzlich eine aktive Schicht, eine
 angenommene Schreiberbesetzung, übereinstimmende Benutzer-/Kürzel-/
 Funktionsidentität und ein aktives, ungesperrtes Konto; für ETB ist die
-Funktion ETB oder S2, für TBB A/W. Automatische Zeilen benötigen ebenfalls die
+Funktion ETB oder S2, für TBB die Funktion Fernmelder. Automatische Zeilen benötigen ebenfalls die
 Schicht, müssen die menschliche Schreiber-ID aber leer lassen. Eine optionale
 ETB-Zuordnung darf nur auf eine angenommene Besetzung derselben aktiven Schicht
 mit ungesperrtem Konto zeigen. Ihr Online-/Präsenzstatus ist kein fachliches
@@ -284,7 +285,7 @@ schreibende Person rückwirkend beweisbar sind.
 Migration 112 ersetzt diese abschließenden Insert-Trigger, ohne Migration 111
 zu verändern. Aktuell benötigen neue Zeilen einen aktiven Einsatz, ein
 aktives ungesperrtes Konto und die feste fachlich passende Funktion/Rolle:
-ETB durch `ETB/Stab` oder `S2/Stab`, TTB durch `A/W/Fernmelder`. Eine aktive
+ETB durch `ETB/Stab` oder `S2/Stab`, TTB durch die Funktion `Fernmelder`. Eine aktive
 Dienstschicht, angenommene Besetzung und Besetzungs-ID sind nicht erforderlich;
 die Legacy-Provenienzfelder dürfen `NULL` bleiben. Zugangsschichten werden
 nicht als Logbuchprovenienz verwendet.

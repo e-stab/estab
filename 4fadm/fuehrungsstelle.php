@@ -607,8 +607,12 @@ foreach ($shifts as $shift) {
                       ) ?></span>
                     </th>
                     <td data-label="Feste Funktion">
-                      <strong><?= estab_admin_html($member['funktion']) ?></strong>
-                      <span> · <?= estab_admin_html($member['rolle']) ?></span>
+                      <strong><?= estab_admin_html(
+                          estab_function_identity_display_name(
+                              (string) $member['funktion'],
+                              (string) $member['rolle']
+                          )
+                      ) ?></strong>
                     </td>
                     <td data-label="Kontostatus">
                       <span class="estab-tool-badge <?= $blocked
@@ -676,7 +680,11 @@ foreach ($shifts as $shift) {
                     <option value="<?= estab_admin_html($user['kuerzel']) ?>">
                       <?= estab_admin_html(
                           $user['benutzer'] . ' (' . $user['kuerzel'] . ') · '
-                          . $user['funktion'] . ' / ' . $user['rolle']
+                          . estab_function_identity_display_name(
+                              (string) $user['funktion'],
+                              (string) $user['rolle'],
+                              ' / '
+                          )
                           . ((int) $user['estab_gesperrt'] === 1
                               ? ' · individuell gesperrt'
                               : '')
@@ -769,8 +777,12 @@ foreach ($shifts as $shift) {
                   <span><?= estab_admin_html($code) ?></span>
                 </th>
                 <td data-label="Feste Funktion">
-                  <strong><?= estab_admin_html($user['funktion']) ?></strong>
-                  <span> · <?= estab_admin_html($user['rolle']) ?></span>
+                  <strong><?= estab_admin_html(
+                      estab_function_identity_display_name(
+                          (string) $user['funktion'],
+                          (string) $user['rolle']
+                      )
+                  ) ?></strong>
                 </td>
                 <td data-label="Schichten">
                   <?php if ($memberships === []): ?>

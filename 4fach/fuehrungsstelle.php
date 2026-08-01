@@ -317,7 +317,10 @@ foreach ($plans as $plan) {
     <div>
       <span>Zugewiesene Funktion</span>
       <strong><?= dv_operations_html(
-          $identity['funktion'] . ' · ' . $identity['rolle']
+          estab_function_identity_display_name(
+              (string) $identity['funktion'],
+              (string) $identity['rolle']
+          )
       ) ?></strong>
     </div>
   </section>
@@ -528,7 +531,7 @@ foreach ($plans as $plan) {
           <label>Melder
             <select name="melder_kuerzel" required>
               <?php if ($users === []): ?>
-                <option value="">Kein angemeldetes A/W verfügbar</option>
+                <option value="">Kein angemeldeter Fernmelder verfügbar</option>
               <?php endif; ?>
               <?php foreach ($users as $user): ?>
                 <option value="<?= dv_operations_html($user['kuerzel']) ?>">

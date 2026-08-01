@@ -346,8 +346,10 @@ $refreshScript = $selectedIdentity === null
         <div class="estab-sidebar-section-heading">
           <h2>Aktionen</h2>
           <p>
-            <?= estab_auth_html($selectedIdentity['funktion']) ?>
-            · <?= estab_auth_html($selectedIdentity['rolle']) ?>
+            <?= estab_auth_html(estab_function_identity_display_name(
+                (string) $selectedIdentity['funktion'],
+                (string) $selectedIdentity['rolle']
+            )) ?>
           </p>
         </div>
         <?php if ($actions !== []): ?>

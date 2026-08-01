@@ -276,7 +276,7 @@ $assert(
         )
         && str_contains($matrixPage, 'data-estab-confirm="replace-standard"')
         && str_contains($matrixPage, 'bisherigen Standard ersetzen')
-        && str_contains($matrixPage, '<code>LdF</code> sind reserviert'),
+        && str_contains($matrixPage, '<code>LdF</code> sind fest reserviert'),
     'matrix editor does not expose the three explicit database-backed preset actions'
 );
 $assert(

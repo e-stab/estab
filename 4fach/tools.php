@@ -483,9 +483,9 @@ bersichtlich dargestellt werden.
       echo "<td style=\"background-color: ".$userstatus ["FB"]["Pol"] ." font-weight:bold;\">Pol</td>\n";
 
       if ($fernm_aw > 0) {
-        echo "<td style=\"background-color: ".$userstatus ["Fernmelder"]["A/W"]." font-weight:bold;\">".$fernm_aw." A/W</td>\n";
+        echo "<td style=\"background-color: ".$userstatus ["Fernmelder"]["A/W"]." font-weight:bold;\">".$fernm_aw." Fernmelder</td>\n";
       } else {  // keiner aktiv ==> einer inaktiv
-         echo "<td style=\"background-color: ".$userstatus ["Fernmelder"]["A/W"]." font-weight:bold;\">A/W</td>\n";
+         echo "<td style=\"background-color: ".$userstatus ["Fernmelder"]["A/W"]." font-weight:bold;\">Fernmelder</td>\n";
       }
 
       echo "</tr>";
@@ -548,12 +548,14 @@ bersichtlich dargestellt werden.
           echo "<tr>\n";
           echo "<td style=\"background-color: ".
                     $userstatus [($conf_empf[$i]["rolle"])][($conf_empf[$i]["fkt"])]
-                    ."height:".$zellenhoehe."; font-size:9pt; font-weight:bold;\">".$conf_empf[$i]["fkt"] ;
+                    ."height:".$zellenhoehe."; font-size:9pt; font-weight:bold;\">".
+                    estab_function_display_name ((string) $conf_empf[$i]["fkt"]);
           echo "</td>\n";
 
           echo "<td style=\"background-color: ".
                     $userstatus [($conf_empf[$i+1]["rolle"])][($conf_empf[$i+1]["fkt"])]
-                    ."height:".$zellenhoehe."; font-size:9pt; font-weight:bold;\">".$conf_empf[$i+1]["fkt"];
+                    ."height:".$zellenhoehe."; font-size:9pt; font-weight:bold;\">".
+                    estab_function_display_name ((string) $conf_empf[$i+1]["fkt"]);
           echo "</td>\n";
           echo "</tr>\n";
           $i += 2;
@@ -565,7 +567,8 @@ bersichtlich dargestellt werden.
           echo "<tr>\n";
           echo "<td style=\"background-color: ".
                     $userstatus [($conf_empf[$i]["rolle"])][($conf_empf[$i]["fkt"])]
-                    ."height:".$zellenhoehe."; font-size:9pt; font-weight:bold;\">".$conf_empf[$i]["fkt"] ;
+                    ."height:".$zellenhoehe."; font-size:9pt; font-weight:bold;\">".
+                    estab_function_display_name ((string) $conf_empf[$i]["fkt"]);
           echo "</td>\n";
           echo "</tr>\n";
           $i ++;
@@ -585,12 +588,12 @@ bersichtlich dargestellt werden.
 
           if ($fernm_aw > 0) {
           echo "<tr>";
-          echo "<td style=\"background-color: ".$userstatus ["Fernmelder"]["A/W"]." height:".$zellenhoehe."; font-size:9pt; font-weight:bold;\">".$fernm_aw." A/W</td>\n";
+          echo "<td style=\"background-color: ".$userstatus ["Fernmelder"]["A/W"]." height:".$zellenhoehe."; font-size:9pt; font-weight:bold;\">".$fernm_aw." Fernmelder</td>\n";
           echo "</tr>";
           } else {  // keiner aktiv ==> einer inaktiv
             echo "<!-- 007 liste.php -->\n";
             echo "<tr>";
-            echo "<td style=\"background-color: ".$userstatus ["Fernmelder"]["A/W"]." height:".$zellenhoehe."; font-size:9pt; font-weight:bold;\">A/W</td>\n";
+            echo "<td style=\"background-color: ".$userstatus ["Fernmelder"]["A/W"]." height:".$zellenhoehe."; font-size:9pt; font-weight:bold;\">Fernmelder</td>\n";
             echo "</tr>";
           }
 
@@ -679,7 +682,11 @@ bersichtlich dargestellt werden.
         echo "<tr class=\"".$rowClass."\">";
         $identityToken = $loginSelectable ? estab_auth_identity_token ($user) : "";
         foreach (array ("benutzer", "kuerzel", "rolle", "funktion") as $column) {
-          $safeValue = estab_auth_html ($user [$column] ?? "");
+          $value = (string) ($user [$column] ?? "");
+          if ($column === "funktion") {
+            $value = estab_function_display_name ($value);
+          }
+          $safeValue = estab_auth_html ($value);
           echo "<td>".$safeValue."</td>";
         }
         echo "<td>".estab_auth_html ($statusText)."</td>";

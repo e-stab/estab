@@ -605,7 +605,10 @@ function estab_sidebar_account_function_markup(
         . ' data-estab-account-function>'
         . '<span>Angemeldete Funktion</span>'
         . '<strong>' . estab_auth_html(
-            (string) $identity['funktion'] . ' · ' . (string) $identity['rolle']
+            estab_function_identity_display_name(
+                (string) $identity['funktion'],
+                (string) $identity['rolle']
+            )
         ) . '</strong>'
         . '</aside>';
 }
@@ -735,15 +738,18 @@ function estab_sidebar_status_markup(
                 : ($inactiveCount > 0
                     ? 'seit mindestens 15 Minuten inaktiv'
                     : 'abgemeldet')));
+        $functionLabel = estab_function_display_name($function);
         $display = $function === 'A/W' && $sessionCount > 0
-            ? $sessionCount . ' A/W'
-            : $function;
+            ? $sessionCount . ' ' . $functionLabel
+            : $functionLabel;
         $visiblePresenceNote = $isCurrentInactive
             ? 'Sie: inaktiv'
             : ($isMixed
                 ? $onlineCount . ' aktiv · ' . $inactiveCount . ' inaktiv'
                 : '');
-        $accessible = $role . ', Funktion ' . $function . ': ' . $stateText;
+        $accessible = $function === 'A/W' && $role === 'Fernmelder'
+            ? $functionLabel . ': ' . $stateText
+            : $role . ', Funktion ' . $functionLabel . ': ' . $stateText;
         if ($sessionCount > 1 && $function !== 'A/W') {
             $accessible .= ', ' . $sessionCount . ' Personen';
         }

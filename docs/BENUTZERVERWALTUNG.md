@@ -82,7 +82,7 @@ Neue Installationen haben die öffentliche Selbstregistrierung
 - fester Funktion,
 - zweimal eingegebenem Startkennwort.
 
-Zuweisbar sind `A/W`, `LdF`, `Si` und die Stab-/FB-Funktionen der aktiven
+Zuweisbar sind `Fernmelder`, `LdF`, `Si` und die Stab-/FB-Funktionen der aktiven
 Empfängermatrix. Der Browser übermittelt nur die Funktion; die Rolle wird
 serverseitig aus dieser autoritativen Zuordnung abgeleitet. Ein neues Konto
 startet abgemeldet, ungesperrt und ohne SID oder IP-Metadaten.
@@ -135,8 +135,8 @@ Evidenz im Datenbestand, sind aber keine aktuelle Autorisierungsquelle.
 ## Empfängermatrix als Zuordnungsrichtlinie
 
 Die aktive Empfängermatrix ist die autoritative Quelle für alle
-Stab-/FB-Funktionen und deren Rolle; `Si → Stab` sowie
-`A/W → Fernmelder` und `LdF → Fernmelder` sind fest definiert. Login,
+Stab-/FB-Funktionen und deren Rolle; Si, Fernmelder und LdF sind als feste
+Funktionen außerhalb der Matrix definiert. Login,
 Kontoanlage, Neuzuweisung und
 aktives Matrixspeichern verwenden deshalb denselben globalen
 MariaDB-Advisory-Lock. Kontooperationen nehmen erst danach den

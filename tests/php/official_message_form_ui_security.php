@@ -83,6 +83,34 @@ $assert(
     'The official filling guide is not represented by exactly 20 ordered hints'
 );
 
+$fixture->formdata = ['14_funktion' => 'A/W'];
+ob_start();
+$fixture->official_message_text_input(
+    '14_funktion',
+    false,
+    128,
+    'Funktion des Verfassers'
+);
+$functionField = (string) ob_get_clean();
+$assert(
+    str_contains($functionField, 'value="A/W"')
+        && str_contains($functionField, '>Fernmelder</span>'),
+    'The message form does not separate the persisted function key from its label'
+);
+ob_start();
+$fixture->official_message_recipient_control([
+    'display' => 'A/W',
+    'function' => 'A/W',
+    'copies' => [],
+], true);
+$recipientField = (string) ob_get_clean();
+$assert(
+    str_contains($recipientField, '<span>Fernmelder</span>')
+        && !str_contains($recipientField, '<span>A/W</span>'),
+    'The recipient matrix does not use the Fernmelder display label'
+);
+$fixture->formdata = [];
+
 $fixture->formdata = [
     '12_anhang' => 'EL0001.pdf;EL0002.jpg;EL0004.eml;EL0001.pdf;../secret.pdf;'
         . 'EL0003.svg;<b>.pdf',
@@ -282,12 +310,13 @@ $fixture->empfarray = [
     3 => [
         1 => ['fkt' => 'S4', 'rolle' => '', 'checked' => false, 'cpycol' => ''],
         2 => ['fkt' => 'AB_C', 'rolle' => '', 'checked' => true, 'cpycol' => 'gn'],
+        3 => ['fkt' => 'A/W', 'rolle' => 'Fernmelder', 'checked' => false, 'cpycol' => ''],
     ],
 ];
 $fixture->task = 'FM-Admin';
 $fixture->formdata = [
     '04_richtung' => 'E',
-    '16_empf' => 'LS_bl,S1_bl,S2_rt,S5_ge,AB_C_bl,AB_C_gn,',
+    '16_empf' => 'LS_bl,S1_bl,S2_rt,S5_ge,AB_C_bl,AB_C_gn,A/W_bl,',
 ];
 $distributionModel = $fixture->official_message_distribution_model();
 $assert(
@@ -436,6 +465,14 @@ $assert(
             'name="16_gncopy" type="radio" value="16_32_gn" '
                 . 'data-estab-copy-color="green" checked'
         )
+        && str_contains(
+            $editableExtras,
+            'name="16_gncopy" type="radio" value="16_33_gn" '
+                . 'data-estab-copy-color="green" aria-label="Fernmelder '
+                . 'grüne Durchschrift"'
+        )
+        && str_contains($editableExtras, '> Fernmelder</label>')
+        && !str_contains($editableExtras, '> A/W</label>')
         && substr_count($editableExtras, 'name="16_gncopy"') > 2,
     'Official and dynamic recipients no longer preserve both copy coordinates'
 );

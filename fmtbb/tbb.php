@@ -527,7 +527,9 @@ var $task ;
         echo "</time><br><small>Erfasst ".estab_auth_html (
           $this->konv_datetime_taktime ($recordedAt)
         )."<br>".estab_auth_html ((string) ($line ["tbb_benutzer"] ?? "")).
-        " · ".estab_auth_html ((string) ($line ["tbb_funktion"] ?? "")).
+        " · ".estab_auth_html (estab_function_display_name (
+          (string) ($line ["tbb_funktion"] ?? "")
+        )).
         " · ".estab_auth_html ((string) ($line ["tbb_kuerzel"] ?? "")).
         "</small>";
         echo "</td>\n";
@@ -543,6 +545,7 @@ var $task ;
           if ($column === "estab_operations" && $value === "") {
             $value = (string) ($line ["tbb_aktion"] ?? "");
           }
+          $value = estab_function_display_text ($value);
           echo "<td data-label=\"".estab_auth_html ($label)."\">";
           echo $value !== ""
             ? nl2br (estab_auth_html ($value), false)
@@ -550,7 +553,7 @@ var $task ;
           if ($column === "estab_operations" &&
               (string) ($line ["tbb_bemerk"] ?? "") !== "") {
             echo "<br><small>Nachweis: ".nl2br (estab_auth_html (
-              (string) $line ["tbb_bemerk"]
+              estab_function_display_text ((string) $line ["tbb_bemerk"])
             ), false)."</small>";
           }
           echo "</td>\n";
@@ -655,7 +658,7 @@ if ($requestMethod === "POST") {
   if (!$berechtigt) {
     estab_logbook_abort (
       403,
-      "Nur ein Konto mit der Funktion A/W darf TBB-Einträge schreiben."
+      "Nur ein Fernmelder-Konto darf TBB-Einträge schreiben."
     );
   }
   estab_logbook_require_csrf ($_SERVER, $_POST);

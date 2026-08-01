@@ -150,7 +150,9 @@ function estab_message_list_filter_labels(array $filters): array
             . (new DateTimeImmutable((string) $filters['to']))->format('d.m.Y');
     }
     if (($filters['recipient'] ?? '') !== '') {
-        $labels['recipient'] = 'Empfänger: ' . (string) $filters['recipient'];
+        $labels['recipient'] = 'Empfänger: ' . estab_function_display_name(
+            (string) $filters['recipient']
+        );
     }
     return $labels;
 }
@@ -312,7 +314,7 @@ function estab_message_list_render_controls(
     echo '<label for="' . $domPrefix . '-recipient"><span>Empfängerfunktion</span>';
     $recipientOptions = ['' => 'Alle Empfängerfunktionen'];
     foreach ($recipients as $recipient) {
-        $recipientOptions[$recipient] = $recipient;
+        $recipientOptions[$recipient] = estab_function_display_name($recipient);
     }
     echo '<select id="' . $domPrefix . '-recipient" name="ml_recipient">'
         . estab_message_list_select_options(
@@ -454,7 +456,7 @@ function estab_message_list_recipient_labels(mixed $stored): array
         if ($copy === '') {
             continue;
         }
-        $labels[] = $function;
+        $labels[] = estab_function_display_name($function);
     }
     sort($labels, SORT_NATURAL | SORT_FLAG_CASE);
     return $labels;
@@ -485,7 +487,9 @@ function estab_message_list_render_table(array $rows, callable $openControl): vo
         $direction = (string) ($row['04_richtung'] ?? '');
         $from = (string) ($row['13_abseinheit'] ?? '');
         if ($from === '') {
-            $from = (string) ($row['14_funktion'] ?? '');
+            $from = estab_function_display_name(
+                (string) ($row['14_funktion'] ?? '')
+            );
         }
         if ($from === '') {
             $from = (string) ($row['05_gegenstelle'] ?? 'Unbekannt');

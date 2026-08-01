@@ -10,6 +10,42 @@ $assert = static function (bool $condition, string $message) use (&$assertions):
     }
 };
 
+$assert(
+    estab_function_display_name('A/W') === 'Fernmelder'
+        && estab_function_display_name('LdF') === 'LdF'
+        && estab_function_display_name('<script>') === '<script>',
+    'function display alias changes stable keys or unrelated labels'
+);
+$assert(
+    estab_function_identity_display_name('A/W', 'Fernmelder') === 'Fernmelder'
+        && estab_function_identity_display_name('LdF', 'Fernmelder')
+            === 'LdF · Fernmelder'
+        && estab_function_identity_display_name('S1', 'Stab', ' / ')
+            === 'S1 / Stab',
+    'function identity display duplicates or loses the fixed role'
+);
+$assert(
+    estab_function_display_text(
+        'Besetzung: A/W (Fernmelder): Beispiel [fm]'
+    ) === 'Besetzung: Fernmelder: Beispiel [fm]',
+    'generated evidence text exposes the persisted function key'
+);
+$displayJson = estab_function_display_json(json_encode([
+    'function' => 'A/W',
+    'nested' => ['target_function' => 'A/W'],
+    'note' => 'Freitext A/W bleibt unverändert',
+], JSON_THROW_ON_ERROR));
+$assert(
+    str_contains($displayJson, '"function":"Fernmelder"')
+        && str_contains($displayJson, '"target_function":"Fernmelder"')
+        && str_contains($displayJson, 'Freitext A/W bleibt unverändert'),
+    'function-valued JSON fields are not presentation-normalized safely'
+);
+$assert(
+    estab_function_display_json('{invalid') === '{invalid',
+    'invalid evidence JSON is mutated during display'
+);
+
 $confEmpf = [
     1 => ['fkt' => 'S1', 'rolle' => 'Stab'],
     2 => ['fkt' => 'Si', 'rolle' => 'Stab'],

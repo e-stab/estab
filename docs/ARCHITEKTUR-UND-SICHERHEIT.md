@@ -257,7 +257,8 @@ erscheinen alle elf Einstiege mit
 Anmeldehinweis. Nach der Anmeldung zeigt die Navigation anhand der festen
 Kontofunktion unmittelbar neun beziehungsweise zehn Links:
 Meldungsübersicht ist ausschließlich S2/`LAGE_DOKUMENTATION`, Nachweisung
-ausschließlich LdF/`FERNMELDEBETRIEB` oder A/W/`BEFOERDERUNG` zugeordnet.
+ausschließlich LdF/`FERNMELDEBETRIEB` oder Fernmelder/`BEFOERDERUNG`
+zugeordnet.
 
 Das Root-Menü klassifiziert jedes Ziel als öffentlich, Anwendung oder
 Administration und bindet passende Karten an dasselbe Navigationsmanifest.
@@ -827,7 +828,7 @@ Vor jedem Nachrichtenpfad werden aktiver Einsatz, feste Kontofunktion, Rolle
 und Objekt gemeinsam geprüft. Ein normales Stabs- oder Fachberaterkonto darf
 eine Nachricht lesen, wenn seine feste Funktion nach fachlichem Abschluss als vollständiger
 Empfänger-Token eingetragen ist oder sie die Nachricht selbst ausgehend
-erstellt hat. Si, LdF und A/W dürfen zusätzlich ihre aktuelle Warteschlange
+erstellt hat. Si, LdF und Fernmelder dürfen zusätzlich ihre aktuelle Warteschlange
 beziehungsweise Sperre sowie
 Nachrichten mit ihrer eigenen unveränderlichen Verarbeitungsmarke lesen.
 Vordruckliste, aktueller In-Memory-Abzug und Archivdownload erben exakt diese
@@ -836,9 +837,9 @@ Historische GET-Detail- und GET-Mutationsaufrufe werden abgewiesen.
 
 Die einsatzbezogene Meldungsübersicht ist ausschließlich für ein festes Konto
 `S2/Stab` mit `LAGE_DOKUMENTATION` bestimmt. Die Nachweisung ist ausschließlich
-für `LdF/Fernmelder` mit `FERNMELDEBETRIEB` oder `A/W/Fernmelder` mit
+für die Funktion `LdF` mit `FERNMELDEBETRIEB` oder `Fernmelder` mit
 `BEFOERDERUNG` bestimmt. ETB schreiben `ETB/Stab` oder `S2/Stab`, TTB schreibt
-`A/W/Fernmelder`. Anwendung und Insert-Trigger prüfen den aktiven Einsatz,
+`Fernmelder`. Anwendung und Insert-Trigger prüfen den aktiven Einsatz,
 passende feste Funktion/Rolle und ein ungesperrtes Konto. Eine aktive Schicht
 oder Besetzungs-ID wird nicht verlangt. Die getrennte
 `LAGE_DOKUMENTATION`-Fähigkeit und damit die Meldungsübersicht bleiben
@@ -953,7 +954,8 @@ Ansicht veralten lassen, aber niemals Daten des neuen Einsatzes unter der
 alten Berechtigung oder Überschrift anzeigen.
 
 Die fachlichen Zustandsübergänge prüfen ihre Vorbedingung nochmals im
-ändernden SQL-Statement. Insbesondere kann nur der aktuelle A/W-Sperrinhaber
+ändernden SQL-Statement. Insbesondere kann nur der aktuelle Sperrinhaber der
+Fernmelderstufe
 einen weiterhin offenen Ausgang speichern; Sichtung und Sperrreset verlieren
 bei einem konkurrierenden Übergang. Read-/Done-Zeilen werden pro
 Statustabelle und Meldungs-ID durch einen MariaDB-Advisory-Lock serialisiert.
@@ -993,7 +995,7 @@ alle Werte gebunden und jeder Vorgang verwendet InnoDB-Transaktionen:
 
 - Die Empfängermatrix wird serverseitig als genau fünf mal vier Positionen
   validiert. Funktionen sind leer oder höchstens sechs alphanumerische
-  Zeichen/Unterstriche lang, `Si`, `A/W` und `LdF` bleiben reserviert, Rollen
+  Zeichen/Unterstriche lang; `Si`, `Fernmelder` und `LdF` bleiben reserviert. Rollen
   sind leer, `Stab` oder `FB`. S2/Stab ist die feste Fähigkeit für Lage,
   Dokumentation und den roten Durchschlag. Autosichtung ist fachlich
   unzulässig; das historische Feld `mtx_auto` wird beim Speichern und bei der
@@ -1057,7 +1059,7 @@ laufen in InnoDB-Transaktionen. Vor einer Nachrichtenzuordnung prüft die
 Nachrichtenablage zusätzlich die vollständige aktuelle Nachrichten-Objektregel:
 terminale exakte Empfängerkopie oder eigener Ausgang für normale
 Stabs-/FB-Besetzungen, eigene Warteschlange/Sperre oder eigene unveränderliche
-Verarbeitungsmarke für Si, LdF und A/W. Eine fremde, lediglich positive
+Verarbeitungsmarke für Si, LdF und Fernmelder. Eine fremde, lediglich positive
 Meldungs-ID reicht deshalb nicht aus. Das Löschen einer Kategorie entfernt
 ihre Zuordnungen in derselben Transaktion.
 

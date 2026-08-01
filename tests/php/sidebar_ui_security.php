@@ -579,11 +579,12 @@ $assert(
 $assert(
     str_contains($markup, 'data-estab-online-count="3"')
         && str_contains($markup, '3 Personen aktiv')
-        && str_contains($markup, '>2 A/W</span>')
+        && str_contains($markup, '>2 Fernmelder</span>')
         && str_contains(
             $markup,
-            'aria-label="Fernmelder, Funktion A/W: 1 aktiv, 1 inaktiv"'
+            'aria-label="Fernmelder: 1 aktiv, 1 inaktiv"'
         )
+        && str_contains($markup, 'data-estab-presence-function="A/W"')
         && str_contains($markup, 'Aktiv</span>')
         && str_contains($markup, 'Inaktiv (15 Min.)</span>')
         && str_contains($markup, 'Ihre Funktion</span>')
@@ -1198,6 +1199,16 @@ $assert(
         && !str_contains($fixedFunctionMarkup, 'fuehrungsstelle.php')
         && !str_contains($fixedFunctionMarkup, 'wechseln'),
     'sidebar presents the fixed account function as a selectable shift role'
+);
+$radioFunctionMarkup = estab_sidebar_account_function_markup([], [
+    'rolle' => 'Fernmelder',
+    'funktion' => 'A/W',
+]);
+$assert(
+    str_contains($radioFunctionMarkup, '<strong>Fernmelder</strong>')
+        && !str_contains($radioFunctionMarkup, '>A/W<')
+        && !str_contains($radioFunctionMarkup, 'Fernmelder · Fernmelder'),
+    'sidebar account summary leaks the internal telecommunications key'
 );
 $assert(
     estab_sidebar_account_function_markup([], null) === '',

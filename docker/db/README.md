@@ -277,7 +277,7 @@ ein. Sie ersetzt außerdem die abschließenden ETB-/TBB-Trigger aus den
 Vorgängermigrationen, ohne deren checksumgebundene Dateien umzuschreiben. Neue
 manuelle Zeilen verlangen nun einen aktiven Einsatz, ein aktives ungesperrtes
 Konto und die feste fachlich zulässige Funktion/Rolle: ETB durch `ETB/Stab`
-oder `S2/Stab`, TTB durch `A/W/Fernmelder`. Eine aktive Dienstschicht,
+oder `S2/Stab`, TTB durch die feste Funktion `Fernmelder`. Eine aktive Dienstschicht,
 angenommene Besetzung oder Besetzungs-ID ist nicht erforderlich; die alten
 Provenienzfelder dürfen `NULL` bleiben. Zugangsschichten werden niemals als
 Logbuchprovenienz eingetragen.

@@ -12,6 +12,7 @@ require_once __DIR__ . '/legacy_mysql.php';
 require_once __DIR__ . '/legacy_php.php';
 require_once __DIR__ . '/datetime.php';
 require_once __DIR__ . '/message_priority.php';
+require_once __DIR__ . '/function_label.php';
 
 date_default_timezone_set(getenv('TZ') ?: 'Europe/Berlin');
 

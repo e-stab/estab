@@ -1299,7 +1299,12 @@ class Listen extends kategorien {
                 // Ausgang VON
                echo "<td>";
                if (($row["14_funktion"] != "")) {
-                 estab_list_detail_action ("stab", "meldung", $row["00_lfd"], $row["14_funktion"]);
+                 estab_list_detail_action (
+                   "stab",
+                   "meldung",
+                   $row["00_lfd"],
+                   estab_function_display_name ((string) $row["14_funktion"])
+                 );
                } else {
                  echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";}
                echo "</td>\n";

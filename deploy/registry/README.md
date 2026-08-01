@@ -390,10 +390,10 @@ das Löschen eines Container-Manager-Projekts darf nur nach einem geprüften
 Vollbackup erfolgen.
 
 Die formale Ausgangssichtung ist auch im Pull-only-/Synology-Paket
-verbindlich: Verfasser → Si → LdF → A/W. Sie ist nicht konfigurierbar.
+verbindlich: Verfasser → Si → LdF → Fernmelder. Sie ist nicht konfigurierbar.
 Fehlt ein zugelassenes, angemeldetes Konto mit der festen Funktion Si, bleibt
-der Ausgang in der Warteschlange und wird nicht automatisch oder durch A/W
-freigegeben.
+der Ausgang in der Warteschlange und wird nicht automatisch oder durch den
+Fernmelder freigegeben.
 
 `ESTAB_PDF_ATTACHMENT_MAX_BYTES` begrenzt die Gesamtsumme der unverändert in
 ein PDF-Einsatzdossier eingebetteten Originalanhänge. Der Standard sind

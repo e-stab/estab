@@ -180,7 +180,7 @@ $assert(
 $validTbb = estab_logbook_validate_entry([
     'entry_type' => 'kanal',
     'event_time' => '2026-07-31T12:34',
-    'personnel_duty' => 'A/W Beispiel im Dienst',
+    'personnel_duty' => 'Fernmelder-Beispiel im Dienst',
     'channel' => 'Rufgruppe THW 1',
     'message_route' => 'Leitstelle an Führungsstelle',
     'operations' => 'Nachricht aufgenommen',
@@ -246,13 +246,13 @@ $writerRoster = [[
 ], [
     'dienstbesetzung_id' => 4,
     'benutzer_kuerzel' => 'aw2',
-    'benutzer' => 'A/W Zwei',
+    'benutzer' => 'Fernmelder Zwei',
     'funktion' => 'A/W',
     'rolle' => 'Fernmelder',
 ], [
     'dienstbesetzung_id' => 3,
     'benutzer_kuerzel' => 'aw1',
-    'benutzer' => 'A/W Eins',
+    'benutzer' => 'Fernmelder Eins',
     'funktion' => 'A/W',
     'rolle' => 'Fernmelder',
 ]];
@@ -263,9 +263,22 @@ $assert(
     )
         && str_contains(
             estab_logbook_lifecycle_writer_text($writerRoster, 'tbb'),
-            'A/W Eins [aw1]'
+            'Fernmelder Eins [aw1]'
         ),
     'historical ETB/TBB roster summaries are not deterministic'
+);
+$rawRosterText = estab_logbook_lifecycle_roster_text($writerRoster);
+$assert(
+    str_contains($rawRosterText, 'A/W (Fernmelder): Fernmelder Eins [aw1]')
+        && str_contains(
+            estab_function_display_text($rawRosterText),
+            'Fernmelder: Fernmelder Eins [aw1]'
+        )
+        && !str_contains(
+            estab_function_display_text($rawRosterText),
+            'A/W (Fernmelder)'
+        ),
+    'canonical roster evidence is not separated from its display label'
 );
 $assert(
     estab_auth_html('<script>alert("x")</script>')
@@ -833,6 +846,15 @@ $assert(
         && !str_contains($etb, '$_POST ["estab_shift_id"]')
         && !str_contains($etb, '$_POST ["estab_writer_assignment_id"]'),
     'ETB assignment selector, browser display, or server-owned writer fields are unsafe'
+);
+$assert(
+    substr_count($etb, 'estab_function_display_text (') >= 5
+        && substr_count($tbb, 'estab_function_display_text (') >= 2
+        && str_contains(
+            $incidentPdf,
+            'estab_function_display_text(trim((string) $value))'
+        ),
+    'stored logbook evidence is not presentation-normalized consistently'
 );
 $assert(
     !str_contains($incidentPdf, 'estab_assignment'),

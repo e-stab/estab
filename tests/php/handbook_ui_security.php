@@ -239,9 +239,9 @@ $assert(
 
 /* Bind the handbook to the currently implemented operational invariants. */
 $requiredCurrentStatements = [
-    'Ausgang: Verfasser → Si → LdF → A/W → abgeschlossen',
-    'Eingang: A/W → LdF → Si → Empfänger',
-    'A/W darf den Absender nicht schreiben.',
+    'Ausgang: Verfasser → Si → LdF → Fernmelder → abgeschlossen',
+    'Eingang: Fernmelder → LdF → Si → Empfänger',
+    'Der Fernmelder darf den Absender nicht schreiben.',
     'Führungsstellenname ist kein Umgebungswert',
     'Es gibt keine Autosichtung.',
     'Nach 15 Minuten ohne echte Browserinteraktion erscheint ein Konto als inaktiv.',

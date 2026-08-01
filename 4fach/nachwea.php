@@ -42,7 +42,7 @@ try {
     http_response_code (403);
     header ("Content-Type: text/plain; charset=UTF-8");
     header ("Cache-Control: no-store");
-    echo "Die Nachweisung ist nur für eine aktive LdF- oder A/W-Funktion verfügbar.";
+    echo "Die Nachweisung ist nur für eine aktive LdF- oder Fernmelder-Funktion verfügbar.";
     exit;
 } catch (Throwable $exception) {
     error_log (

@@ -3744,8 +3744,8 @@ function estab_dv_assign_messenger(
                 )
             ) {
                 throw new EstabDvConflictException(
-                    'Der Melder muss mit der fest zugewiesenen Funktion A/W '
-                    . 'angemeldet, ungesperrt und für den Zugang aktiviert sein.'
+                    'Der Melder muss als Fernmelder angemeldet, ungesperrt '
+                    . 'und für den Zugang aktiviert sein.'
                 );
             }
             $insert = $connection->prepare(

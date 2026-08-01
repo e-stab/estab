@@ -120,7 +120,7 @@ $filters = array_replace(estab_message_list_default_filters(), [
     'page' => 2,
     'page_size' => 25,
 ]);
-$recipients = ['S1', 'S2', 'POL', 'THW <script>alert("recipient")</script>'];
+$recipients = ['S1', 'S2', 'A/W', 'POL', 'THW <script>alert("recipient")</script>'];
 
 $overviewControls = $render(static function () use ($filters, $recipients): void {
     estab_message_list_render_controls($filters, $recipients, [
@@ -149,6 +149,11 @@ foreach ([
     'Meldungsübersicht' => $overviewControls,
     'Zweite Sichtung' => $secondSightingControls,
 ] as $surface => $controls) {
+    $assert(
+        str_contains($controls, 'value="A/W">Fernmelder</option>')
+            && !str_contains($controls, '>A/W</option>'),
+        $surface . ' exposes the persisted recipient function key'
+    );
     $assert(
         substr_count($controls, 'data-estab-message-list-controls') === 1
             && substr_count($controls, 'class="estab-message-list-search-form"')
@@ -227,6 +232,11 @@ foreach ([
         $surface . ' controls execute data or retain image/refresh UI'
     );
 }
+$assert(
+    estab_message_list_filter_labels(['recipient' => 'A/W'])['recipient']
+        === 'Empfänger: Fernmelder',
+    'active recipient filter exposes the persisted function key'
+);
 
 $assert(
     str_contains($overviewControls, 'method="get"')
@@ -354,7 +364,7 @@ $rows = [
         '12_abfzeit' => '2026-07-31 12:34:00',
         '13_abseinheit' => 'Abschnitt <svg onload=alert("from")>',
         '14_funktion' => 'S1',
-        '16_empf' => 'S2_rt,S1_gn,',
+        '16_empf' => 'S2_rt,S1_gn,A/W_bl,',
         'x00_status' => 8,
     ],
     [
@@ -437,7 +447,9 @@ foreach ([
             && str_contains($table, 'data-status="8"')
             && str_contains($table, '>Abgeschlossen</span>')
             && str_contains($table, 'S1')
-            && str_contains($table, 'S2'),
+            && str_contains($table, 'S2')
+            && str_contains($table, '>Fernmelder</span>')
+            && !str_contains($table, '>A/W</span>'),
         $surface . ' relies on colour or lost recipient labels'
     );
     $assert(
@@ -542,6 +554,16 @@ $assert(
         && str_contains($overviewSource, 'estab_message_list_render_table (')
         && str_contains($overviewSource, 'estab_message_list_render_pager ('),
     'Meldungsübersicht bypasses the shared message-list renderers'
+);
+$assert(
+    substr_count($overviewSource, 'estab_function_display_name (') >= 5
+        && str_contains(
+            $overviewSource,
+            'name=\"14_funktion\" value=\"".$this->safe_message_value'
+        )
+        && str_contains($toolsSource, 'if ($column === "funktion")')
+        && str_contains($toolsSource, 'estab_function_display_name ($value)'),
+    'overview detail or account list exposes the persisted function key'
 );
 $recipientInclude = strpos(
     $overviewSource,

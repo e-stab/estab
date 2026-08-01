@@ -1704,7 +1704,9 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
     echo "<td style=\"width: 100px; background-color: ".$this->bg[14].";\">\n";
     if (!$this->feld [14]){
 //      echo "<div style=\"text-align: left; font-size:24px; font-weight:900;\">";
-      echo "<b><big>".$this->safe_message_value ("14_funktion")."</big></b><br>" ;
+      echo "<b><big>".estab_message_html (estab_function_display_name (
+        (string) ($this->formdata ["14_funktion"] ?? "")
+      ))."</big></b><br>" ;
       echo "<input type=\"hidden\" name=\"14_funktion\" value=\"".$this->safe_message_value ("14_funktion")."\">\n";
 //      echo "</div>\n";
     } else {
@@ -1818,12 +1820,16 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
                 echo "<a style=\"background-color:#0303FD;\">
                       <input name=\"16_".$m.$n."\" value=\"16_".$m.$n."_bl\" type=\"checkbox\" ".$param.$selcbbl.">\n</a>";
 
-	                echo estab_message_html ($this->empfarray [$m][$n]["fkt"] ?? "");
+	                echo estab_message_html (estab_function_display_name (
+	                  (string) ($this->empfarray [$m][$n]["fkt"] ?? "")
+	                ));
               break;
 
               case "t":
                 if ($this->empfarray [$m][$n]["fkt"] != ""){
-	                  echo estab_message_html ($this->empfarray [$m][$n]["fkt"] ?? "");
+	                  echo estab_message_html (estab_function_display_name (
+	                    (string) ($this->empfarray [$m][$n]["fkt"] ?? "")
+	                  ));
                 } else {
                   echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
                 }
@@ -1860,12 +1866,16 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
           case "cb":
             if ($this->empfarray [$m][$n]["checked"]) {$sel = "checked=\"checked\"";} else {$sel = "";}
             echo "<input name=\"16_".$m.$n."\" value=\"16_".$m.$n."\" type=\"checkbox\" ".$param.$sel.">\n";
-	            echo estab_message_html ($this->empfarray [$m][$n]["fkt"] ?? "");
+	            echo estab_message_html (estab_function_display_name (
+	              (string) ($this->empfarray [$m][$n]["fkt"] ?? "")
+	            ));
           break;
 
           case "t":
             if ($this->empfarray [$m][$n]["fkt"] != ""){
-	              echo estab_message_html ($this->empfarray [$m][$n]["fkt"] ?? "");
+	              echo estab_message_html (estab_function_display_name (
+	                (string) ($this->empfarray [$m][$n]["fkt"] ?? "")
+	              ));
             } else {
               echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
             }

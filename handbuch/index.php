@@ -112,7 +112,7 @@ $handbookUpdated = '1. August 2026';
         <h2 id="role-entry-title">Was möchten Sie gerade tun?</h2>
       </header>
       <div class="estab-handbook-role-grid">
-        <a href="#nachrichtenlauf"><strong>Nachricht bearbeiten</strong><span>A/W, Si, LdF oder Verfasser</span></a>
+        <a href="#nachrichtenlauf"><strong>Nachricht bearbeiten</strong><span>Fernmelder, Si, LdF oder Verfasser</span></a>
         <a href="#etb"><strong>ETB führen</strong><span>Ereignisse, Bezüge und Korrekturen</span></a>
         <a href="#ttb"><strong>TBB führen</strong><span>Fernmeldebetrieb dokumentieren</span></a>
         <a href="#vorbereitung"><strong>Einsatz vorbereiten</strong><span>Administration und optionale Zugangsgruppen</span></a>
@@ -168,8 +168,9 @@ $handbookUpdated = '1. August 2026';
           <div class="estab-handbook-callout estab-handbook-callout-important">
             <strong>Unterstützter Umfang</strong>
             <p>Die Anwendung ist für eine Führungsstelle <em>mit</em>
-              eingerichteter Fernmeldebetriebsstelle ausgelegt. S2, Si, S6,
-              LdF und A/W müssen deshalb für den Dienstbetrieb besetzt sein.</p>
+              eingerichteter Fernmeldebetriebsstelle ausgelegt. Die Funktionen
+              S2, Si, S6, LdF und Fernmelder müssen deshalb für den
+              Dienstbetrieb besetzt sein.</p>
           </div>
           <p>Die technische Umsetzung ersetzt weder Ausbildung noch örtliche
             Stabsordnung oder eine erforderliche formale THW-Freigabe. Die
@@ -246,7 +247,7 @@ $handbookUpdated = '1. August 2026';
 
         <article id="rollen" class="estab-handbook-chapter"
           data-estab-handbook-section
-          data-handbook-keywords="S1 S2 S3 S4 S5 S6 Fachberater Si Sichter LdF Leiter Fernmeldebetrieb A/W Aufnahme Weitergabe ETB Admin feste Funktion Rolle Rechte">
+          data-handbook-keywords="S1 S2 S3 S4 S5 S6 Fachberater Si Sichter LdF Leiter Fernmeldebetrieb Fernmelder Aufnahme Weitergabe ETB Admin feste Funktion Rolle Rechte">
           <header><span>04</span><div><p>Verantwortung statt bloßer Menüfreigabe</p><h2>Rollen und Rechte</h2></div></header>
           <p>Jedes Konto besitzt genau eine feste Funktion; die Rolle wird
             serverseitig daraus abgeleitet. Diese Werte sind die alleinige
@@ -262,7 +263,7 @@ $handbookUpdated = '1. August 2026';
                 <tr><td>Si</td><td>Formale Sichtung aller Ausgänge; Eingang bewerten und Verteiler festlegen; begründete Rückgabe und zweite Sichtung. Es gibt keine Autosichtung.</td></tr>
                 <tr><td>S6</td><td>Zusätzlich zu normalen Stabsaufgaben den versionierten Fernmeldeplan erstellen, Wege pflegen und freigeben.</td></tr>
                 <tr><td>LdF</td><td>Eingangsweg bestätigen, Rufnamen übersetzen, Ausgangsweg disponieren, Weg-Rückgaben und Melderaufträge führen sowie Nachweisung lesen.</td></tr>
-                <tr><td>A/W</td><td>Eingang aufnehmen, Ausgänge tatsächlich befördern, Anhänge bearbeiten, zweite Sichtung und Nachweisung; A/W führt das TBB.</td></tr>
+                <tr><td>Fernmelder</td><td>Eingang aufnehmen, Ausgänge tatsächlich befördern, Anhänge bearbeiten, zweite Sichtung und Nachweisung sowie das TBB führen.</td></tr>
                 <tr><td>Technische Administration</td><td>Einsätze, Konten, Matrix, optionale Zugangsschichten, Exporte und Systemstatus. Dieser Zugang ist vom Funktionskonto getrennt.</td></tr>
               </tbody>
             </table>
@@ -284,7 +285,8 @@ $handbookUpdated = '1. August 2026';
               Leitung, Auftrag und Ausgangslage erfassen und den Einsatz
               aktivieren.</li>
             <li>Unter <a href="<?= $href('users') ?>">Benutzer verwalten</a>
-              persönliche Konten für mindestens S2, Si, S6, LdF und A/W
+              persönliche Konten für mindestens die Funktionen S2, Si, S6,
+              LdF und Fernmelder
               anlegen beziehungsweise passend zuweisen.</li>
             <li>Optional unter <a href="<?= $href('admin_command_post') ?>">Zugangsschichten</a>
               Gruppen anlegen, Konten zuordnen und Zugänge gemeinsam
@@ -363,7 +365,7 @@ $handbookUpdated = '1. August 2026';
                 der Verfasser reicht die Korrektur erneut bei Si ein.</li>
               <li><strong>LdF:</strong> Gegenstellenrufname und vorgesehenen,
                 im freigegebenen S6-Plan gültigen Beförderungsweg festlegen.</li>
-              <li><strong>A/W:</strong> Nachricht tatsächlich übermitteln und
+              <li><strong>Fernmelder:</strong> Nachricht tatsächlich übermitteln und
                 wirklichen Weg, Beförderungszeit und Zeichen dokumentieren.
                 Ist der Weg nicht nutzbar, geht die Nachricht mit Grund zu LdF
                 zurück.</li>
@@ -372,9 +374,9 @@ $handbookUpdated = '1. August 2026';
           <section class="estab-handbook-workflow" aria-labelledby="incoming-title">
             <h3 id="incoming-title">Eingang</h3>
             <ol>
-              <li><strong>A/W:</strong> tatsächliches Medium, Aufnahmezeit,
+              <li><strong>Fernmelder:</strong> tatsächliches Medium, Aufnahmezeit,
                 Gegenstellenrufname, Betreff und Inhalt erfassen.
-                <strong>A/W darf den Absender nicht schreiben.</strong></li>
+                <strong>Der Fernmelder darf den Absender nicht schreiben.</strong></li>
               <li><strong>LdF:</strong> Gegenstellenrufname in den Absender
                 übersetzen und den erfassten Eingangsweg bestätigen. Eine
                 Änderung benötigt eine Begründung.</li>
@@ -384,8 +386,8 @@ $handbookUpdated = '1. August 2026';
             </ol>
           </section>
           <div class="estab-handbook-flow-summary" aria-label="Kurzform der Nachrichtenwege">
-            <span>Ausgang: Verfasser</span><b>→</b><span>Si</span><b>→</b><span>LdF</span><b>→</b><span>A/W</span><b>→</b><span>abgeschlossen</span>
-            <span>Eingang: A/W</span><b>→</b><span>LdF</span><b>→</b><span>Si</span><b>→</b><span>Empfänger</span>
+            <span>Ausgang: Verfasser</span><b>→</b><span>Si</span><b>→</b><span>LdF</span><b>→</b><span>Fernmelder</span><b>→</b><span>abgeschlossen</span>
+            <span>Eingang: Fernmelder</span><b>→</b><span>LdF</span><b>→</b><span>Si</span><b>→</b><span>Empfänger</span>
           </div>
         </article>
 
@@ -402,9 +404,9 @@ $handbookUpdated = '1. August 2026';
             Formularaktion ausführen; eStab speichert dann zuerst die Anlage
             und danach den Nachrichtenschritt.</p>
           <p>Der direkte Upload und das Entfernen aus dem Entwurf stehen beim
-            Erfassen eines Eingangs durch A/W sowie beim Schreiben,
+            Erfassen eines Eingangs durch den Fernmelder sowie beim Schreiben,
             Korrigieren und bei Gesprächsnotizen von Stab/FB bereit. In den
-            nachfolgenden LdF-, Si- und A/W-Arbeitsschritten bleiben die
+            nachfolgenden Arbeitsschritten von LdF, Si und Fernmelder bleiben die
             zugeordneten Karten sichtbar, sind dort aber nicht mehr
             veränderbar. Höchstens 100 Anlagen können einem Vordruck
             zugeordnet werden.</p>
@@ -504,7 +506,8 @@ $handbookUpdated = '1. August 2026';
             Gelesen und erledigt sind von der Transportstufe getrennte
             Arbeitsmarkierungen.</p>
           <p>S2 öffnet die <a href="<?= $href('message_overview') ?>">Meldungsübersicht</a>;
-            Si und A/W erreichen die zweite Sichtung im Nachrichtenmenü.
+            Die Funktionen Si und Fernmelder erreichen die zweite Sichtung im
+            Nachrichtenmenü.
             Abgeschlossene, lesbare Formulare stehen unter
             <a href="<?= $href('forms') ?>">Vordrucke</a>.</p>
           <h3>Vordrucke und BOS-Info</h3>
@@ -553,7 +556,7 @@ $handbookUpdated = '1. August 2026';
           data-handbook-keywords="Technisches Betriebsbuch Fb Fü 44 Fernmelder Betrieb Personal Dienstübergabe Kanal Rufgruppe Bedienung Nachricht Störung Quittung Empfänger Aushändigung Korrektur">
           <header><span>11</span><div><p>Chronologischer Fernmeldebetrieb</p><h2>Technisches Betriebsbuch (TBB)</h2></div></header>
           <p>Das TBB gehört zum aktiven Einsatz. Manuell schreibt ein Konto mit
-            der festen Funktion A/W und Rolle Fernmelder; eine aktive Schicht
+            der festen Funktion Fernmelder; eine aktive Schicht
             ist nicht erforderlich. Jeder Eintrag soll auch ohne Anlage in
             Grundzügen verständlich sein.</p>
           <div class="estab-handbook-facts">
@@ -579,17 +582,19 @@ $handbookUpdated = '1. August 2026';
             Änderungen erfolgen über eine neue Version.</p>
           <p>Alle aktiven Funktionen können den gültigen Plan lesen. LdF darf
             einen Ausgang nur auf einen zum Zeitpunkt der Disposition gültigen
-            Planweg legen. Die spätere A/W-Beförderung dokumentiert dennoch
+            Planweg legen. Die spätere tatsächliche Beförderung durch den
+            Fernmelder dokumentiert dennoch
             den tatsächlich verwendeten Weg. Plan, Disposition und realer
             Transport bleiben damit voneinander unterscheidbar.</p>
         </article>
 
         <article id="melder" class="estab-handbook-chapter"
           data-estab-handbook-section
-          data-handbook-keywords="Melder Auftrag A/W LdF Empfänger Zustellung Rücknachricht Rückweg Rückkehr">
+          data-handbook-keywords="Melder Auftrag Fernmelder LdF Empfänger Zustellung Rücknachricht Rückweg Rückkehr">
           <header><span>13</span><div><p>Persönlich nachvollziehbare Botengänge</p><h2>Melderaufträge</h2></div></header>
           <p>Ein Melder ist keine zusätzliche globale Rolle. LdF beauftragt ein
-            konkret angemeldetes, ungesperrtes A/W-Konto. Die
+            konkret angemeldetes, ungesperrtes Konto mit der Funktion
+            Fernmelder. Die
             beauftragte Person übernimmt den Lauf persönlich und dokumentiert
             tatsächlichen Empfänger, Zustellung, eine mögliche Rücknachricht,
             Rückweg und Rückkehr.</p>
@@ -769,7 +774,7 @@ curl --fail http://127.0.0.1:8080/health.php</code></pre>
             <details><summary>Die Kontoanmeldung funktioniert nicht</summary><p>Prüfen Sie Name, Kürzel, Funktion und Kennwort. Ein administrativ gesperrtes Konto oder eine widerrufene Sitzung muss in der Benutzerverwaltung geklärt werden. Legen Sie kein zweites Konto mit demselben Kürzel an.</p></details>
             <details><summary>Ein neues Kennwort wird abgewiesen</summary><p>Lesen Sie die aktuell angezeigte Kennwortrichtlinie vollständig: Mindestlänge und aktivierte Anforderungen für Großbuchstaben, Kleinbuchstaben, Ziffern oder Sonderzeichen müssen gemeinsam erfüllt sein. Beide Eingaben müssen exakt übereinstimmen. Eine spätere Verschärfung verhindert keinen Bestandslogin, gilt aber bei jedem neuen Reset.</p></details>
             <details><summary>Es ist keine operative Eingabe möglich</summary><p>Prüfen Sie für die Fachfunktion: gültige Sitzung, aktiver Einsatz, bestätigter Führungsstellenname und feste Kontofunktion. Eine Dienst- oder Zugangsschicht und eine Hutauswahl sind keine Schreibvoraussetzung. Scheitert bereits Anmeldung oder Sitzung, prüfen Sie zusätzlich die manuelle Kontosperre und – nur bei einer Gruppenzuordnung – mindestens eine aktive Zugangsschicht.</p></details>
-            <details><summary>Ein Ausgang erreicht A/W nicht</summary><p>Der Ausgang muss zuerst Si und danach LdF durchlaufen. LdF benötigt einen gültigen freigegebenen S6-Planweg. Eine Rückgabe enthält einen Pflichtgrund und muss in der zuständigen Stufe bearbeitet werden.</p></details>
+            <details><summary>Ein Ausgang erreicht den Fernmelder nicht</summary><p>Der Ausgang muss zuerst Si und danach LdF durchlaufen. LdF benötigt einen gültigen freigegebenen S6-Planweg. Eine Rückgabe enthält einen Pflichtgrund und muss in der zuständigen Stufe bearbeitet werden.</p></details>
             <details><summary>Eine Anlage lässt sich nicht hochladen</summary><p>Prüfen Sie die am Dateifeld angezeigte Grenze, erlaubte Endung und echten Inhaltstyp. Eine lediglich umbenannte Datei wird abgewiesen. Brechen Sie einen nicht mehr benötigten Anhangsvorgang sauber ab.</p></details>
             <details><summary>Eine E-Mail-Anlage wird abgewiesen</summary><p>Speichern oder exportieren Sie die Mail als standardisierte <code>.eml</code>-Datei. Outlook-<code>.msg</code> wird nicht unterstützt. Endung, erkannter Typ <code>message/rfc822</code>, MIME-Struktur und die feste Grenze von 20 MiB müssen gemeinsam passen.</p></details>
             <details><summary>Der PDF-Export bricht bei Anlagen ab</summary><p>Beschädigte, verschlüsselte oder über den Sicherheitsgrenzen liegende PDF-/Bildanlagen werden fail-closed abgewiesen. Prüfen Sie Format, Einzeldatei und die 50-MiB-Gesamtsumme; der Systemstatus und die App-Logs liefern den technischen Kontext.</p></details>
@@ -793,8 +798,8 @@ curl --fail http://127.0.0.1:8080/health.php</code></pre>
                 <tr><td><a href="<?= $href('messages') ?>">Nachrichtenvordruck</a></td><td>berechtigtes Festfunktionskonto</td><td>Rollenabhängiger Nachrichtenlauf</td></tr>
                 <tr><td><a href="<?= $href('command_post') ?>">Führungsstellenbetrieb</a></td><td>angemeldetes Konto</td><td>S6 und Melder gemäß fester Funktion</td></tr>
                 <tr><td><a href="<?= $href('message_overview') ?>">Meldungsübersicht</a></td><td>S2/Stab</td><td>Einsatzweite Suche und Lageübersicht</td></tr>
-                <tr><td><a href="<?= $href('tracking') ?>">Nachweisung</a></td><td>LdF oder A/W</td><td>Aufnahme und tatsächliche Beförderung</td></tr>
-                <tr><td><a href="<?= $href('etb') ?>">ETB</a> / <a href="<?= $href('ttb') ?>">TBB</a></td><td>ETB: ETB/S2; TTB: A/W</td><td>Append-only Einsatz- und Betriebsbücher</td></tr>
+                <tr><td><a href="<?= $href('tracking') ?>">Nachweisung</a></td><td>LdF oder Fernmelder</td><td>Aufnahme und tatsächliche Beförderung</td></tr>
+                <tr><td><a href="<?= $href('etb') ?>">ETB</a> / <a href="<?= $href('ttb') ?>">TBB</a></td><td>ETB: ETB/S2; TTB: Fernmelder</td><td>Append-only Einsatz- und Betriebsbücher</td></tr>
                 <tr><td><a href="<?= $href('bos_info') ?>">BOS-Info</a></td><td>öffentlich</td><td>Buchstabier-, Rufnamen- und Karteninformationen</td></tr>
                 <tr><td><a href="<?= $href('admin') ?>">Administration</a></td><td>technischer Basic-Auth-Zugang</td><td>Einsatz-, Konto-, Zugangsgruppen- und Datenverwaltung</td></tr>
               </tbody>
@@ -804,7 +809,7 @@ curl --fail http://127.0.0.1:8080/health.php</code></pre>
           <dl class="estab-handbook-glossary">
             <div><dt>Zugangsschicht</dt><dd>Optionale einsatzbezogene Kontengruppe zum gemeinsamen Aktivieren oder Deaktivieren von Zugängen; keine Fachrechtsquelle.</dd></div>
             <div><dt>LdF</dt><dd>Leitung der Fernmeldebetriebsstelle.</dd></div>
-            <div><dt>A/W</dt><dd>Aufnahme und Weitergabe in der Fernmeldebetriebsstelle.</dd></div>
+            <div><dt>Fernmelder</dt><dd>Aufnahme und Weitergabe in der Fernmeldebetriebsstelle.</dd></div>
             <div><dt>Si</dt><dd>Sichterfunktion für formale Prüfung und Verteilung.</dd></div>
             <div><dt>Nachweisung</dt><dd>Einsatzlokaler Nachweis von Aufnahme und tatsächlicher Beförderung; Nummern stammen aus dem TBB.</dd></div>
             <div><dt>Taktische Zeit</dt><dd>Je nach Feld Uhrzeit oder Datum/Uhrzeit in der vom Formular bezeichneten Form; Eingabehinweise direkt am Feld beachten.</dd></div>

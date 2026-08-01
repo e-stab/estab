@@ -59,6 +59,23 @@ $assert(
         && str_contains($markup, 'data-estab-user-role="Stab &amp; Team"'),
     'code, function, or role missing from session bar'
 );
+$radioMarkup = estab_session_ui_markup([
+    'vStab_benutzer' => 'Funk Beispiel',
+    'vStab_kuerzel' => 'fm0001',
+    'vStab_funktion' => 'A/W',
+    'vStab_rolle' => 'Fernmelder',
+], $token, false, [], false, false, false);
+$assert(
+    str_contains($radioMarkup, 'data-estab-user-function="A/W"')
+        && str_contains($radioMarkup, 'data-estab-user-role="Fernmelder"')
+        && str_contains(
+            $radioMarkup,
+            'Kürzel fm0001 · Funktion Fernmelder'
+        )
+        && !str_contains($radioMarkup, 'Funktion A/W')
+        && !str_contains($radioMarkup, 'Fernmelder · Rolle Fernmelder'),
+    'session UI leaks the internal telecommunications key or duplicates its role'
+);
 $assert(
     str_contains($markup, 'method="post"')
         && str_contains($markup, 'target="_top"')
@@ -658,6 +675,19 @@ $assert(
         && $mainBufferPosition < $mainRequestPosition,
     'main controller starts session UI buffering after request output can begin'
 );
+$assert(
+    is_string($mainSource)
+        && str_contains($mainSource, 'estab_function_display_name (')
+        && str_contains(
+            $mainSource,
+            'value=\"".$funktion."\"".$selected.">".$funktionsname'
+        )
+        && str_contains(
+            $mainSource,
+            'Fernmelder · Nachrichtenvordrucke'
+        ),
+    'login or second-sighting UI does not use the telecommunications display alias'
+);
 $framesetSource = file_get_contents($root . '/4fach/index.php');
 $assert(
     is_string($framesetSource)
@@ -790,6 +820,8 @@ $assert(
     is_string($toolsSource)
         && str_contains($toolsSource, '$entryCount = count ($conf_empf)')
         && str_contains($toolsSource, 'if ( ($i <= $entryCount) and')
+        && str_contains($toolsSource, 'estab_function_display_name (')
+        && str_contains($toolsSource, '." Fernmelder</td>')
         && !str_contains($toolsSource, '$statusalt'),
     'authenticated status rendering does not bound dynamic function entries'
 );

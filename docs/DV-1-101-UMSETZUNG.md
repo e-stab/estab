@@ -59,11 +59,11 @@ Einsatzkraft ersetzt, noch dass eine formale THW-Freigabe vorliegt.
 | S. 4-44/4-45 | S2 muss ständig in den Informationsfluss eingebunden sein und alle Ein- und Ausgänge als roten Durchschlag erhalten. | S2/Stab ist die einzige Fähigkeit `LAGE_DOKUMENTATION`; jede abgeschlossene Nachricht enthält die S2-Rotkopie, eine beliebige Umkonfiguration oder Autosichtung ist gesperrt. | `tests/php/admin_operations_security.php`, `tests/integration/message_workflow_http.sh`, Schema-Verifikation |
 | S. 4-45 sowie Handbuch ETB/TBB S. 6 und 26 | Die Einsatzdokumentation wird durch S2 sichergestellt; das ETB ist urkundlicher Nachweis. Die DV-Fassung nennt ein Jahr, die spätere ETB-/TBB-Unterlage zehn Jahre für ETB und TBB. | S2 bleibt alleinige Lage-/Rotkopiefunktion. Die Anwendung setzt die strengere Mindestaufbewahrung von zehn Jahren ab formalem Abschluss um. ETB und TBB sind nur anhängbar; eine Berichtigung ist ein neuer Eintrag mit Gegenreferenz. Ein Legal Hold kann die Frist verlängern, aber nicht verkürzen. | `tests/php/logbook_security.php`, `tests/php/schema_migration_contract.php`, `tests/integration/schema_migrator.sh`, `tests/integration/dv_evidence.php` |
 | S. 4-59/4-60 | S6 plant und führt den Telekommunikationseinsatz und stellt die Führbarkeit über geeignete Verbindungen sicher. | Nur ein Konto mit der festen Funktion `S6` darf versionierte Fernmeldepläne erstellen und veröffentlichen. LdF kann nur einen aktuell gültigen, veröffentlichten Planweg disponieren; veröffentlichte Fassungen bleiben unveränderlich. | `tests/integration/dv_operations.php`, `tests/integration/message_workflow_http.sh` |
-| S. 4-63 | Der Sichter analysiert Eingänge inhaltlich und leitet sie an zuständige Bearbeiter weiter. | Eingänge laufen zwingend `A/W → LdF → Si`; Si setzt Empfänger und Abschluss. A/W darf den Absender nicht schreiben, LdF übersetzt den aufgenommenen Rufnamen und bestätigt den von A/W erfassten Eingangsweg. Eine Änderung verlangt eine Begründung und wird mit Alt-/Neuwert und LdF-Identität nachgewiesen; A/W-Aufnahmezeit und -zeichen bleiben unverändert. | `tests/php/workflow_security.php`, `tests/php/ldf_validation_security.php`, `tests/php/ldf_ui_flow_security.php`, `tests/integration/message_workflow_http.sh` |
-| S. 4-63 | Bei Ausgängen prüft Si nur Anschrift, Unterschrift/Zeichen und Funktion, nicht den Inhalt. | Ausgänge laufen zwingend `Verfasser → Si → LdF → A/W`. Si kann formal freigeben oder mit Pflichtgrund zurückgeben, aber keine Inhaltsfelder verändern. Nach Korrektur folgt die Sichtung erneut. | `tests/php/message_security.php`, `tests/integration/message_concurrency.php`, `tests/integration/message_workflow_http.sh` |
+| S. 4-63 | Der Sichter analysiert Eingänge inhaltlich und leitet sie an zuständige Bearbeiter weiter. | Eingänge laufen zwingend `Fernmelder → LdF → Si`; Si setzt Empfänger und Abschluss. Der Fernmelder darf den Absender nicht schreiben, LdF übersetzt den aufgenommenen Rufnamen und bestätigt den vom Fernmelder erfassten Eingangsweg. Eine Änderung verlangt eine Begründung und wird mit Alt-/Neuwert und LdF-Identität nachgewiesen; Aufnahmezeit und -zeichen des Fernmelders bleiben unverändert. | `tests/php/workflow_security.php`, `tests/php/ldf_validation_security.php`, `tests/php/ldf_ui_flow_security.php`, `tests/integration/message_workflow_http.sh` |
+| S. 4-63 | Bei Ausgängen prüft Si nur Anschrift, Unterschrift/Zeichen und Funktion, nicht den Inhalt. | Ausgänge laufen zwingend `Verfasser → Si → LdF → Fernmelder`. Si kann formal freigeben oder mit Pflichtgrund zurückgeben, aber keine Inhaltsfelder verändern. Nach Korrektur folgt die Sichtung erneut. | `tests/php/message_security.php`, `tests/integration/message_concurrency.php`, `tests/integration/message_workflow_http.sh` |
 | S. 4-64 | Der Melder darf den Inhalt nicht ändern, muss schnell zustellen, Rücknachrichten feststellen, zurückkehren, sich zurückmelden und den tatsächlichen Empfänger nennen. | Das Medium `Me` verlangt einen LdF-Auftrag und die Zustandskette Beauftragung, persönliche Übernahme, Übergabe mit Empfänger, Rückweg mit explizitem Rücknachrichtenvermerk und Rückkehr. Danach bestätigt ausschließlich ein Konto mit der festen Funktion `LdF` die Rückmeldung an die FmZt. Der Nachrichtenabschluss wartet auf die vollständige Kette. | `tests/integration/dv_operations.php`, `tests/integration/message_workflow_http.sh` |
-| S. 4-64 | Bis zur Rückkehr darf der Melder keine anderen Aufträge annehmen; in einer FüSt mit Stab gehört er zur FmZt und wird durch LdF eingesetzt. | Nur ein aktives, ungesperrtes Konto `A/W/Fernmelder` ist als Melder wählbar, ausschließlich `LdF/Fernmelder` beauftragt. Während Übernahme, Übergabe und Rückweg sperrt eine zentrale Request-Grenze alle fremden operativen Schreibvorgänge dieses Kontos. | `tests/php/dv_operations_security.php`, `tests/integration/dv_operations.php` |
-| S. 4-64 | LdF verantwortet den Fernmeldebetrieb und unterweist, unterstützt und überwacht das Betriebspersonal. | LdF ist eine gesonderte feste Kontofunktion. Sie übersetzt Rufnamen, entscheidet den Planweg, beauftragt Melder und überwacht die sichtbaren Melderzustände; A/W kann diese Entscheidungen nicht vorwegnehmen. | `tests/integration/message_workflow_http.sh`, `tests/integration/dv_operations.php` |
+| S. 4-64 | Bis zur Rückkehr darf der Melder keine anderen Aufträge annehmen; in einer FüSt mit Stab gehört er zur FmZt und wird durch LdF eingesetzt. | Nur ein aktives, ungesperrtes Konto mit der Funktion `Fernmelder` ist als Melder wählbar; ausschließlich LdF darf es beauftragen. Während Übernahme, Übergabe und Rückweg sperrt eine zentrale Request-Grenze alle fremden operativen Schreibvorgänge dieses Kontos. | `tests/php/dv_operations_security.php`, `tests/integration/dv_operations.php` |
+| S. 4-64 | LdF verantwortet den Fernmeldebetrieb und unterweist, unterstützt und überwacht das Betriebspersonal. | LdF ist eine gesonderte feste Kontofunktion. Sie übersetzt Rufnamen, entscheidet den Planweg, beauftragt Melder und überwacht die sichtbaren Melderzustände; der Fernmelder kann diese Entscheidungen nicht vorwegnehmen. | `tests/integration/message_workflow_http.sh`, `tests/integration/dv_operations.php` |
 | S. 4-70 bis 4-73 | Die Führungsstelle besitzt benannte Funktionen; Kombinationen S1/S4, S2/S3 sowie ETB/Si sind organisatorisch möglich. | Fachrechte stammen aus genau einer festen Kontofunktion und der serverseitig abgeleiteten Rolle. Funktionskombinationen werden organisatorisch durch getrennte persönliche Konten abgebildet; eine Hutauswahl innerhalb der Sitzung gibt es nicht. Optionale Zugangsschichten gruppieren Zugänge, verändern aber keine Fachrechte. | Authentifizierungs-, Autorisierungs- und Schema-Verifikation |
 | S. 4-73 | Die Arbeitsfähigkeit hängt von zweckmäßiger Organisation und raschem Informationsfluss ab. | Führungsstellenname, aktiver Einsatz, feste Funktion, Warteschlangen und Zuständigkeit sind sichtbar. Der Führungsstellenname ist die einsatzbezogene lokale Nachrichtenanschrift/-absendereinheit und von Einsatzname, Bedarfsträger sowie Einsatzleitung getrennt. Ohne aktiven Einsatz oder bestätigten Führungsstellennamen wird serverseitig keine operative Eingabe angenommen; eine Schicht ist nicht erforderlich. | Schema-, Einsatzdomänen-, HTTP- und Browser-Abnahme sowie `tests/integration/message_workflow_http.sh` |
 
@@ -94,16 +94,16 @@ Darstellungsmerkmal:
 | `4` | Ausgang | Si | formale Freigabe an LdF oder begründete Rückgabe an den Verfasser |
 | `10` | Ausgang | Verfasser | korrigieren und erneut vollständig zur Sichtung einreichen |
 | `1` | Ausgang | LdF | Rufname der Gegenstelle übersetzen und vorgesehenen Beförderungsweg entscheiden |
-| `2` | Ausgang | A/W | Nachricht tatsächlich befördern und Zeit sowie realen Weg nachweisen |
-| `1` | Eingang | LdF | aufgenommenen Rufnamen übersetzen, Absender festlegen und den von A/W erfassten Eingangsweg bestätigen oder begründet korrigieren |
+| `2` | Ausgang | Fernmelder | Nachricht tatsächlich befördern und Zeit sowie realen Weg nachweisen |
+| `1` | Eingang | LdF | aufgenommenen Rufnamen übersetzen, Absender festlegen und den vom Fernmelder erfassten Eingangsweg bestätigen oder begründet korrigieren |
 | `4` | Eingang | Si | Inhalt auswerten, Empfänger festlegen und weitergeben |
 | `8` | beide | abgeschlossen | nur lesen, nachweisen und exportieren |
 
 Damit gelten zwei feste Abläufe:
 
 ```text
-Ausgang: Verfasser → Si → LdF → A/W → abgeschlossen
-Eingang: A/W → LdF → Si → Empfänger/abgeschlossen
+Ausgang: Verfasser → Si → LdF → Fernmelder → abgeschlossen
+Eingang: Fernmelder → LdF → Si → Empfänger/abgeschlossen
 ```
 
 Für Ausgänge prüft Si ausschließlich die formalen Merkmale, insbesondere
@@ -111,7 +111,7 @@ Anschrift, Verfasserzeichen und Verfasserfunktion. Inhaltliche Änderungen sind
 in dieser Rolle technisch gesperrt. Eine Rückgabe verlangt einen Grund und
 erzeugt keine Abkürzung: Nach der Korrektur beginnt die formale Prüfung erneut.
 Für Eingänge bleibt die inhaltliche Auswertung und Empfängerzuordnung Aufgabe
-des Sichters. A/W erfasst Medium, Aufnahmezeit und Aufnahmezeichen. LdF muss
+des Sichters. Der Fernmelder erfasst Medium, Aufnahmezeit und Aufnahmezeichen. LdF muss
 das Medium vor der Weitergabe ausdrücklich bestätigen. Eine Korrektur ohne
 Begründung bleibt mit HTTP 409 in Status 1; bei erfolgreicher Korrektur werden
 ursprüngliches und bestätigtes Medium, Begründung und authentifiziertes
@@ -131,27 +131,28 @@ eine gültige feste Kontofunktion mit serverseitig abgeleiteter Rolle. Ein frei
 -details, Kategorien, Vordrucke, Anhänge sowie ETB und TBB. Die beiden
 Gesamtansichten sind enger gebunden: Nur `S2/Stab` mit
 `LAGE_DOKUMENTATION` erhält die Meldungsübersicht; die Nachweisung bleibt
-`LdF/Fernmelder` beziehungsweise `A/W/Fernmelder` vorbehalten. Navigation und
+den Funktionen `LdF` beziehungsweise `Fernmelder` vorbehalten. Navigation und
 Controller prüfen diese Kontorechte unabhängig voneinander; eine Hutauswahl
 oder aktive Schicht gibt es als Autorisierungsbedingung nicht.
 
 Vordruckliste und -download leiten ihr Recht aus genau der zugrunde liegenden
 Nachricht ab. Normaler Stab/FB sieht eine terminale Empfängerkopie oder den
-eigenen Ausgang. Si, LdF und A/W sehen die eigene aktuelle Warteschlange oder
+eigenen Ausgang. Si, LdF und Fernmelder sehen die eigene aktuelle Warteschlange oder
 Sperre sowie Nachrichten mit ihrer eigenen unveränderlichen
 Bearbeitungsmarke. Ein verknüpfter Anhang erbt die Leserechte mindestens einer
 exakt über den vollständigen Dateinamen verknüpften Nachricht. Ein noch freier
 Anhang ist nur für seinen Uploader oder die festen Funktionen S2, Si und
 LdF sichtbar. Auswahl und endgültiges Speichern der Nachricht autorisieren
 jedem Anhang erneut. ETB schreiben feste Konten `ETB/Stab` oder `S2/Stab` mit
-`EINSATZTAGEBUCH`; TTB schreibt `A/W/Fernmelder` mit `BEFOERDERUNG`. Eine
+`EINSATZTAGEBUCH`; das TTB schreibt die Funktion `Fernmelder` mit
+`BEFOERDERUNG`. Eine
 aktive Schicht oder angenommene Besetzung ist nicht erforderlich. Der statische Vertrag liegt
 in `tests/php/read_authorization_security.php` und
 `tests/php/logbook_security.php`.
 
 Autosichtung und eine Konfiguration „nur Eingänge sichten“ gibt es nicht mehr.
 Ist die Funktion Si nicht besetzt, bleibt die Nachricht sichtbar in ihrer
-Warteschlange. A/W darf weder den Sichtervermerk noch eine Sichtung stellvertretend
+Warteschlange. Der Fernmelder darf weder den Sichtervermerk noch eine Sichtung stellvertretend
 erzeugen.
 
 Aufnahme-, Verfasser-, Sichter-, LdF- und Beförderungsvermerke werden aus der
@@ -161,8 +162,8 @@ fachlich vorgesehenen Formular bewusst korrigiert werden; der tatsächlich
 speichernde Zeitpunkt und die handelnde Identität bleiben zusätzlich im
 Ereignisnachweis erhalten.
 
-Ist ein von LdF disponierter Weg bei A/W tatsächlich nicht verfügbar, darf A/W
-keinen erfundenen Beförderungsnachweis eintragen. Die Nachricht geht mit
+Ist ein von LdF disponierter Weg beim Fernmelder tatsächlich nicht verfügbar,
+darf der Fernmelder keinen erfundenen Beförderungsnachweis eintragen. Die Nachricht geht mit
 Pflichtgrund an LdF zurück; LdF disponiert danach einen aktuell gültigen
 S6-Planweg neu. Alte und neue Entscheidung bleiben in der Ereigniskette
 sichtbar. Beim Medium Melder ist eine Neudisposition erst möglich, nachdem ein
@@ -206,8 +207,9 @@ Fernmeldebetriebsstelle in der Regel frei bleibt.
 
 Der derzeit geprüfte und von eStab unterstützte Produktumfang ist ausschließlich
 eine Führungsstelle mit eingerichteter Fernmeldebetriebsstelle. Deshalb sind
-Konten für LdF und A/W organisatorisch vorzusehen und je Einsatz wird genau
-ein TBB geführt. Führungsstellen ohne eigene Fernmeldebetriebsstelle, insbesondere ein
+Konten für die Funktionen LdF und Fernmelder organisatorisch vorzusehen und je
+Einsatz wird genau ein TBB geführt. Führungsstellen ohne eigene
+Fernmeldebetriebsstelle, insbesondere ein
 reiner ETB-Betrieb, gehören nicht zum unterstützten Produktumfang. Für diesen
 abweichenden Aufbau behauptet eStab keine Konformität. Der Begriff
 „unterstützter Produktumfang“ bezeichnet dabei ausschließlich die technische
@@ -237,7 +239,8 @@ Erfassungszeit und globalem Alt-Schlüssel; ihr Text wird dabei nicht
 umgedeutet. Die globalen Primärschlüssel bleiben nur technische Identitäten.
 
 Für manuelle Einträge prüft eStab die feste Kontofunktion: ETB schreiben
-`ETB/Stab` oder `S2/Stab`, TTB schreibt `A/W/Fernmelder`. Kontosperre, aktiver
+`ETB/Stab` oder `S2/Stab`, das TTB schreibt die Funktion `Fernmelder`.
+Kontosperre, aktiver
 Einsatz, feste Funktion, serverseitig abgeleitete Rolle und die fachliche
 Fähigkeit werden bei jedem Schreiben erneut geprüft. Eine aktive Dienst- oder
 Zugangsschicht und eine Besetzungsannahme sind nicht erforderlich.
@@ -347,14 +350,14 @@ kann nicht als freier manueller TBB-Eintrag angelegt werden. Historische
 unverknüpfte Bestandszeilen bleiben lesbar.
 Ein echter Nachrichteneingang erzeugt schon bei der nummerierten Aufnahme
 atomar genau einen TBB-Eintrag des Typs `nachricht`. Ein Ausgang erzeugt ihn
-erst beim tatsächlichen Übergang von A/W auf „befördert“. Weg, Gegenstellen,
+erst beim tatsächlichen Übergang durch den Fernmelder auf „befördert“. Weg, Gegenstellen,
 Betreff, Bearbeitungs- beziehungsweise Quittungsangaben und Nachrichtenbezug
 werden dabei aus dem gesperrten Nachrichtendatensatz übernommen. Generator,
 Nachrichtendetail und Dossier suchen ausdrücklich nur nach diesem
 automatischen Typ `nachricht`; die zuerst vergebene lokale TBB-Nummer erscheint
 anschließend auf dem Nachrichtenvordruck.
 
-Ändert LdF bei einem Eingang den von A/W erfassten Weg oder übersetzt den
+Ändert LdF bei einem Eingang den vom Fernmelder erfassten Weg oder übersetzt den
 aufgenommenen Rufnamen in einen abweichenden Absender, bleibt der ursprüngliche
 TBB-Nachrichtennachweis unverändert. Innerhalb derselben
 Nachrichtentransaktion entsteht ein neuer TBB-Eintrag des Typs `korrektur` mit
@@ -570,7 +573,7 @@ sein:
    Nachweisung, Kategorien sowie ETB/TBB.
 6. Pflichtkopf, exakt zwei vorab angelegte Köpfe `ETB:1`/`TTB:1` und die erste
    Buchnummer ohne Schichtvoraussetzung prüfen; ETB-Schreibrecht für
-   `ETB/Stab` und `S2/Stab`, TTB-Schreibrecht für `A/W/Fernmelder` positiv und
+   `ETB/Stab` und `S2/Stab`, TTB-Schreibrecht der Funktion `Fernmelder` positiv und
    für andere Funktionen negativ nachweisen.
 7. ETB-Kennzeichen, alle fünf TBB-Inhaltsbereiche, automatischen
    TBB-Typ `nachricht`, LdF-Nachtrag als direkte Korrektur und unveränderte
@@ -624,7 +627,7 @@ Software kann die fachliche Beurteilung und Führung nicht ersetzen. Vor Ort
 müssen weiterhin geregelt und geübt werden:
 
 - wer für den konkreten Einsatz Leiter der Führungsstelle, S1 bis S6,
-  Sichter, LdF, A/W, ETB und Melder ist,
+  Sichter, LdF, Fernmelder, ETB und Melder ist,
 - welche Funktionskombinationen lageabhängig zulässig sind,
 - wie bei System-, Strom- oder Netzwerkausfall auf Papier zurückgefallen und
   anschließend nacherfasst wird,

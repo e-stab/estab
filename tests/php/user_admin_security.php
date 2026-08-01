@@ -528,6 +528,11 @@ $assert(
             'estab_user_admin_validate_password('
         ) >= 2
         && str_contains($pageSource, 'estab_user_admin_function_roles(')
+        && substr_count(
+            $pageSource,
+            'estab_function_identity_display_name('
+        ) >= 2
+        && str_contains($pageSource, 'estab_function_display_name(')
         && str_contains($pageSource, 'estab_user_admin_create_account(')
         && str_contains($pageSource, 'estab_user_admin_reassign(')
         && str_contains($pageSource, 'data-estab-assignment-orphaned')

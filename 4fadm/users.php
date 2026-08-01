@@ -294,7 +294,8 @@ if (
         && is_string($flash['funktion'])
         && preg_match('/\A(?:A\/W|[A-Za-z0-9_]+)\z/D', $flash['funktion']) === 1
     ) {
-        $flashMessage .= ' Zugewiesene Funktion: ' . $flash['funktion'] . '.';
+        $flashMessage .= ' Zugewiesene Funktion: '
+            . estab_function_display_name($flash['funktion']) . '.';
     }
 }
 
@@ -394,7 +395,10 @@ if (
                 <option value="">Bitte wählen</option>
                 <?php foreach ($functionRoles as $function => $role): ?>
                   <option value="<?= estab_admin_html($function) ?>">
-                    <?= estab_admin_html($function . ' · ' . $role) ?>
+                    <?= estab_admin_html(estab_function_identity_display_name(
+                        $function,
+                        $role
+                    )) ?>
                   </option>
                 <?php endforeach; ?>
               </select>
@@ -497,7 +501,9 @@ if (
                 <span>Kürzel <?= estab_admin_html($code) ?></span>
               </td>
               <td data-label="Funktion">
-                <?= estab_admin_html($user['funktion'] ?? '') ?>
+                <?= estab_admin_html(estab_function_display_name(
+                    (string) ($user['funktion'] ?? '')
+                )) ?>
               </td>
               <td data-label="Rolle">
                 <?= estab_admin_html($user['rolle'] ?? '') ?>
@@ -581,7 +587,10 @@ if (
                                     $function
                                 ) ? 'selected' : '' ?>>
                                 <?= estab_admin_html(
-                                    $function . ' · ' . $role
+                                    estab_function_identity_display_name(
+                                        $function,
+                                        $role
+                                    )
                                 ) ?>
                               </option>
                             <?php endforeach; ?>

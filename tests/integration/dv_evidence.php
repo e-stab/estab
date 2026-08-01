@@ -799,7 +799,7 @@ try {
         $databaseConfig,
         'nv_etb',
         'etb',
-        ['assignment' => 'A/W (Fernmelder)']
+        ['assignment' => 'Fernmelder']
     );
     $assignedS2Rows = estab_logbook_entries(
         $databaseConfig,
@@ -946,7 +946,7 @@ try {
         [
             'entry_type' => 'kanal',
             'event_time' => date('Y-m-d H:i:s', time() - 30),
-            'personnel_duty' => 'A/W Evidence Integration im Dienst',
+            'personnel_duty' => 'Fernmelder Evidence Integration im Dienst',
             'channel' => 'Rufgruppe THW 1',
             'message_route' => 'Leitstelle an Führungsstelle Evidenz',
             'operations' => 'Abgeschlossene Nachricht nachgewiesen',

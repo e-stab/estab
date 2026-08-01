@@ -70,6 +70,8 @@ if (str_contains($document, 'bbb')) {
 if (
     !str_contains($document, 'ALT_1 [gn]')
     || !str_contains($document, 'ALT2 [rt]')
+    || !str_contains($document, 'Fernmelder [gn]')
+    || str_contains($document, 'A/W')
 ) {
     throw new RuntimeException(
         'Recipient outside the current matrix is not visible'

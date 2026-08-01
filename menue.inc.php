@@ -90,7 +90,7 @@ include ("./4fcfg/config.inc.php");
    $menue[5]["visible"] = true ;
 
    $menue[6]["text"] = "Technisches Betriebsbuch<BR>(TBB)";
-	$menue[6]["info"] = "Eintragungen sind für Fernmelder A/W möglich. Andere Funktionen können lesen.";
+	$menue[6]["info"] = "Eintragungen sind für Fernmelder möglich. Andere Funktionen können lesen.";
    $menue[6]["pic"]  = $conf_menue ["symbole"]."tbb_aktiv.png";
    $menue[6]["link"] = "./fmtbb/tbb.php";
    $menue[6]["navigation_key"] = "technical-log";

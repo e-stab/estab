@@ -789,7 +789,7 @@ function estab_read_require_area(
         }
         if (!is_array($selected)) {
             throw new EstabReadPermissionException(
-                'Die Nachweisung ist nur für LdF oder A/W verfügbar.'
+                'Die Nachweisung ist nur für LdF oder Fernmelder verfügbar.'
             );
         }
     } else {

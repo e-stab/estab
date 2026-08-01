@@ -476,9 +476,13 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
         echo "</td><td>".estab_auth_html ($this->konv_datetime_taktime (
           (string) ($row ["estab_event_time"] ?? $row ["etb_time"] ?? "")
         ))."</td><td>";
-        echo nl2br (estab_auth_html ((string) ($row ["etb_aktion"] ?? "")), false);
+        echo nl2br (estab_auth_html (estab_function_display_text (
+          (string) ($row ["etb_aktion"] ?? "")
+        )), false);
         echo "</td><td>";
-        echo nl2br (estab_auth_html ((string) ($row ["etb_bemerk"] ?? "")), false);
+        echo nl2br (estab_auth_html (estab_function_display_text (
+          (string) ($row ["etb_bemerk"] ?? "")
+        )), false);
         echo "</td></tr>\n";
       }
       echo "</tbody></table></div>\n";
@@ -562,9 +566,9 @@ var $task;
       );
       if ($assignmentId < 1) { continue; }
       echo "<option value=\"".$assignmentId."\">".
-           estab_auth_html ((string) (
+           estab_auth_html (estab_function_display_text ((string) (
              $assignmentOption ["estab_assignment"] ?? ""
-           ))."</option>\n";
+           )))."</option>\n";
     }
     echo "</select>\n";
     echo "<small>Ordnet den Eintrag optional einer historischen ";
@@ -737,12 +741,16 @@ var $task;
         echo "</td>\n";
         echo "<td data-label=\"Darstellung der Ereignisse\">";
         echo $line ["etb_aktion"] != ""
-          ? nl2br (estab_auth_html ($line ["etb_aktion"]), false)
+          ? nl2br (estab_auth_html (estab_function_display_text (
+              (string) $line ["etb_aktion"]
+            )), false)
           : "<span aria-label=\"keine Angabe\">—</span>";
         echo "</td>\n";
         echo "<td data-label=\"Bemerkung / Nachweise\">";
         echo $line ["etb_bemerk"] != ""
-          ? nl2br (estab_auth_html ($line ["etb_bemerk"]), false)
+          ? nl2br (estab_auth_html (estab_function_display_text (
+              (string) $line ["etb_bemerk"]
+            )), false)
           : "<span aria-label=\"keine Angabe\">—</span>";
         $references = array ();
         if (!empty ($line ["estab_message_id"])) {
@@ -780,7 +788,9 @@ var $task;
             : "Historischer Bestandsbezug: ".(string) $line ["estab_reference"];
         }
         if (!empty ($line ["estab_assignment"])) {
-          $references [] = "Zuordnung: ".(string) $line ["estab_assignment"];
+          $references [] = "Zuordnung: ".estab_function_display_text (
+            (string) $line ["estab_assignment"]
+          );
         }
         if ($references !== array ()) {
           echo "<br><small>".estab_auth_html (implode (" · ", $references)).
@@ -792,7 +802,9 @@ var $task;
           $this->konv_datetime_taktime ($recordedAt)
         )."</time><br>";
         echo "<small>".estab_auth_html ((string) ($line ["etb_benutzer"] ?? "")).
-             " · ".estab_auth_html ((string) ($line ["etb_funktion"] ?? "")).
+             " · ".estab_auth_html (estab_function_display_name (
+               (string) ($line ["etb_funktion"] ?? "")
+             )).
              " · ".estab_auth_html ((string) ($line ["etb_kuerzel"] ?? "")).
              "</small></td>\n";
         echo "<td data-label=\"Aktion\">";

@@ -240,7 +240,7 @@ $assert(
     str_contains($userPage, 'data-estab-assignment-orphaned')
         && str_contains($userPage, 'Zuordnung nicht mehr gültig')
         && str_contains($matrixPage, 'Betroffene Sitzungen')
-        && str_contains($matrixPage, '<code>LdF</code> sind reserviert')
+        && str_contains($matrixPage, '<code>LdF</code> sind fest reserviert')
         && str_contains($matrixPage, "\$conf_4f_tbl['benutzer']")
         && str_contains($runtimeVerifier, 'app/assignment.php')
         && str_contains(

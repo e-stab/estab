@@ -42,7 +42,7 @@ HTTP-Basic-Secret bleibt unabhängig.
 | Image-Build | benötigte PHP-Erweiterungen und Apache-Konfiguration |
 | Datenbank | echtes MariaDB-Schema, Einsatz-Singleton/Trigger, Kontosperre, revisionsgesicherte Kennwortrichtlinien-Singletonzeile, Indizes, aktive und persistente Standardmatrix, Engines, Collations und Zero-Date-Freiheit |
 | HTTP | Header, direkte Endpunktfläche, 303-Weiterleitung anonymer geschützter Aufrufe zum allowlist-gebundenen Bestandslogin samt sichtbarem Rückweg, 403-/400-/405-Grenzen, Registrierung, sichtbare Sitzungsidentität, Präsenz/Leerlaufende, feste Funktions-/Rollenbindung, optionaler Gruppenzugang, Kennwortrichtlinien-Vorschau/-Bestätigung, verbindlicher Nachrichtenlauf, E-Mail-Anhang mit passiver Ansicht und bytegleichem Originaldownload, S6-Plan, Melderlauf, Kategorien- und ETB-/TBB-Rollengrenzen, Vordruckerzeugung sowie Admin-Export |
-| Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, direkte ETB-/Nachrichten-/Anhang-/Kategorie-Anmeldung ohne Sackgasse oder verschachtelten Arbeitsbereich, sicherer Login-Abbruch, neun stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, passive E-Mail-Anlagenkarte ohne aktive Mail-DOM-/Remote-Inhalte, A/W-Rufnamen-Listbox mit echtem Fokus, Filterung und Tastaturauswahl, Matrixstandard- und Kennwortrichtlinien-Bestätigungen, BOS-Disclosure, Logout sowie öffentliche und authentifizierte mobile Bedienung bei exakt 390 × 844 CSS-Pixeln |
+| Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, direkte ETB-/Nachrichten-/Anhang-/Kategorie-Anmeldung ohne Sackgasse oder verschachtelten Arbeitsbereich, sicherer Login-Abbruch, neun stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, passive E-Mail-Anlagenkarte ohne aktive Mail-DOM-/Remote-Inhalte, Rufnamen-Auswahlliste des Fernmelders mit echtem Fokus, Filterung und Tastaturauswahl, Matrixstandard- und Kennwortrichtlinien-Bestätigungen, BOS-Disclosure, Logout sowie öffentliche und authentifizierte mobile Bedienung bei exakt 390 × 844 CSS-Pixeln |
 | Fachabnahme | kompletter Nachrichten-, Anhang-, PDF-, ETB-/TBB- und Restore-Ablauf |
 | Betrieb | kontinuierliche Readiness, Logs, Restarts, Kapazität und Backup-Alter |
 
@@ -160,9 +160,9 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   UTF-8-/Legacy-Entity-Ausgabe und die inerten Payloads Quotes, Ampersand,
   `<script>` sowie SQL-ähnlicher Text,
 - verpflichtende Rufnamen bei FM-Eingängen, nicht leere LdF-Übersetzungen,
-  explizite LdF-Bestätigung des von A/W aufgenommenen Eingangswegs,
-  begründungspflichtige atomare Korrektur bei unveränderlicher A/W-Zeit und
-  unveränderlichem A/W-Zeichen,
+  explizite LdF-Bestätigung des vom Fernmelder aufgenommenen Eingangswegs,
+  begründungspflichtige atomare Korrektur bei unveränderlicher Aufnahmezeit und
+  unveränderlichem Aufnahmezeichen des Fernmelders,
   rollen- und richtungsgebundene Fokus-Vorschläge für Rufname und Absender
   ausschließlich aus dem aktuell aktiven Einsatz, weiterhin mögliche freie
   Eingaben bei ausgeschalteter Browser-Autovervollständigung, exakte
@@ -378,8 +378,8 @@ simulierter eigener DDL-Zwischenstand muss konvergieren; eine gleichnamige
 fremde Spalte bleibt unverändert blockiert und darf keinen Ledgerabschluss
 erzeugen. Der Zweitlauf muss vollständig idempotent sein.
 Der gleiche MariaDB-Lauf prüft die Triggergrenze für aktive Schichten: eine
-neue Funktion und mehrere unterschiedliche A/W-Besetzungen sind zulässig,
-eine bereits vorhandene Nicht-A/W-Funktion bleibt dagegen bis zur geordneten
+neue Funktion und mehrere unterschiedliche Besetzungen der Fernmelderfunktion
+sind zulässig, eine bereits vorhandene andere Funktion bleibt dagegen bis zur geordneten
 Übergabe gesperrt.
 
 Migration 111 wird als historischer, durch Migration 112 abgelöster
@@ -406,7 +406,7 @@ Migration 112 wird anschließend als aktueller Vertrag geprüft. Sie legt die
 optionalen Zugangsschicht- und Mitgliedstabellen kollisionssicher an und
 ersetzt die letzten ETB-/TBB-Trigger. Positive Schreibfälle verlangen aktiven
 Einsatz und feste Kontofunktion `ETB/Stab` oder `S2/Stab` für ETB sowie
-`A/W/Fernmelder` für TTB, funktionieren aber ohne aktive Schicht und mit
+die Funktion `Fernmelder` für TTB. Sie funktionieren ohne aktive Schicht und mit
 `NULL` in den Legacy-Provenienzfeldern. Falsche Funktion/Rolle, gesperrtes
 Konto und fehlender aktiver Einsatz scheitern. Der Zugangsvertrag prüft
 unzugeordnetes Konto, Mehrfachzuordnung per OR, Aktivierung ohne Sitzung,
@@ -1003,7 +1003,7 @@ Der Test beweist für die implementierte Repository-Grenze:
   Betriebsereignis, keine unevidenzierte Status-0-Nachricht; der nächste echte
   Vordruck folgt unmittelbar auf den reparierten Papierwert und beide
   Nachweisketten bleiben gültig,
-- ein fremdes A/W-Kürzel kann weder Sperre noch Save übernehmen und beim
+- ein fremdes Fernmelderkürzel kann weder Sperre noch Save übernehmen und beim
   parallelen Save-/Reset-Rennen gewinnt genau eine konditionale Änderung,
 - zwei parallele Read-State-Inserts erzeugen trotz fehlendem Schema-Unique-Key
   nur eine Zeile; Empfänger-Substring und fremde Funktion werden abgewiesen,
@@ -1065,7 +1065,7 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
 - HTTP 410 für unsichere historische Direkt-Upload-Endpunkte,
 - HTTP 401 für den anonymen Administrationszugriff,
 - HTTP 403 für `PATH_INFO` hinter einem PHP-Endpunkt; ein gültiger
-  A/W-Bestandslogin mit CSRF darf über
+  Bestandslogin eines Fernmelderkontos mit CSRF darf über
   `mainindex.php/4fadm` weder eine administrative Ausnahme erhalten noch
   den vorbereiteten Nachrichtensperrbesitz verändern,
 - Image-Button-Login, nachweislich gesperrte öffentliche Registrierung,
@@ -1099,7 +1099,7 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
   vorgetäuschte eStab-Identität,
 - direkter Einstieg nach der Anmeldung ohne Hutauswahl sowie weiterhin HTTP
   403 für S1 auf Meldungsübersicht und Nachweisung; die positiven Gegenproben
-  verwenden feste Konten S2 beziehungsweise LdF/A/W,
+  verwenden feste Konten mit den Funktionen S2, LdF beziehungsweise Fernmelder,
 - jeder normale operative Schreibpfad revalidiert Konto, feste Funktion,
   serverseitig abgeleitete Rolle, Sperrstatus und aktiven Einsatz; dieselben
   positiven Schreibfälle funktionieren ohne aktive Schicht,
@@ -1124,8 +1124,9 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
 - Speichern und Suchen einer Nachricht mit Quotes, Ampersand, `<script>` und
   SQL-ähnlichem Text bei nachweislich inertem HTML sowie HTTP 403 für den
   historischen GET-Detailaufruf,
-- Durchlaufen des gemeinsamen Uploaddiensts sowohl im bisherigen A/W-Archivpfad
-  als auch direkt im ausgefüllten Nachrichtenvordruck mit einem echten JPEG
+- Durchlaufen des gemeinsamen Uploaddiensts sowohl im bisherigen Archivpfad
+  des Fernmelders als auch direkt im ausgefüllten Nachrichtenvordruck mit
+  einem echten JPEG
   über der früheren 5-MiB-Grenze, dessen Browsername auf `.JPEG` endet;
   Datenbank und Download müssen die normalisierte Endung `.jpeg`,
   Benutzerkürzel, MD5, SHA-256, Bytezahl, MIME-Typ und unveränderten
@@ -1347,7 +1348,7 @@ insbesondere:
 - Das Manifest enthält neun Bereiche und zwei Dienste. Nach der Anmeldung
   erscheinen nur die für die feste Kontofunktion zulässigen neun
   beziehungsweise zehn Links ohne
-  Disclosure dauerhaft; S2 erhält die Meldungsübersicht, LdF/A/W die
+  Disclosure dauerhaft; S2 erhält die Meldungsübersicht, LdF und Fernmelder die
   Nachweisung, andere Funktionen keines der beiden Spezialziele. Alle sichtbaren
   Links sind mindestens 44 Pixel groß und besitzen weder eine eigene
   horizontale noch vertikale Scrollfläche. Bei `1440 × 1000`, `1280 × 720` und
@@ -1413,8 +1414,8 @@ sind in
 
 ### ETB-/TBB-HTTP-Integration und Lebenszyklus
 
-Der getrennte, idempotente Logbuchtest registriert je eine S2- und
-A/W-Funktionssitzung und verwendet bei einem Wiederholungslauf dieselben
+Der getrennte, idempotente Logbuchtest registriert je eine Sitzung für S2 und
+Fernmelder und verwendet bei einem Wiederholungslauf dieselben
 Testkennungen:
 
 ```console
@@ -1427,8 +1428,9 @@ Schreibversuche ohne aktiven Einsatz gesperrt sind. Mit aktivem Einsatz
 funktionieren dieselben Schreibvorgänge ohne aktive Dienst- oder
 Zugangsschicht. Beide Bücher zeigen den globalen Einsatzkopf und besitzen kein
 lokales Titelformular mehr. ETB schreiben ausschließlich feste Konten
-`ETB/Stab` oder `S2/Stab` mit `EINSATZTAGEBUCH`, TTB ausschließlich
-`A/W/Fernmelder` mit `BEFOERDERUNG`. Cross-Rollen-POSTs, manipulierte Funktion
+`ETB/Stab` oder `S2/Stab` mit `EINSATZTAGEBUCH`; das TTB schreiben
+ausschließlich Konten mit der Funktion `Fernmelder` und `BEFOERDERUNG`.
+Cross-Rollen-POSTs, manipulierte Funktion
 oder Rolle und gesperrte Konten liefern HTTP 403. Eine Hutauswahl oder
 Besetzungs-ID kommt weder im positiven noch im negativen Vertrag vor.
 Zusätzlich prüft der Test lokale statt globaler Nummern, A/B/E/K/W-Arten,
@@ -1575,7 +1577,7 @@ tests/integration/message_workflow_http.sh
 
 Der Test belegt die beiden nicht konfigurierbaren Abläufe:
 
-- Eingang: A/W nimmt Rufname, Medium, Zeit und Aufnahmezeichen auf und
+- Eingang: Der Fernmelder nimmt Rufname, Medium, Zeit und Aufnahmezeichen auf und
   registriert die Nachricht in Status 1. LdF übersetzt den Rufnamen in den
   Absender, muss den Eingangsweg ausdrücklich bestätigen und darf ihn nur mit
   Begründung korrigieren; danach übergibt LdF mit Status 4 an Si. Si wertet
@@ -1583,8 +1585,8 @@ Der Test belegt die beiden nicht konfigurierbaren Abläufe:
 - Ausgang: Die Stabsfunktion reicht in Status 4 bei Si ein. Si prüft nur die
   formale Richtigkeit und gibt mit Status 1 an LdF frei. LdF bestimmt Rufname
   der Gegenstelle und vorgesehenen Beförderungsweg und übergibt mit Status 2
-  an A/W. A/W weist tatsächlichen Weg und Zeit nach und schließt mit Status 8
-  ab.
+  an den Fernmelder. Dieser weist tatsächlichen Weg und Zeit nach und schließt
+  mit Status 8 ab.
 - Rückgabe: Si gibt einen formal fehlerhaften Ausgang mit Pflichtgrund in
   Status 10 an den Verfasser zurück. Nur dieser korrigiert ihn und reicht
   erneut vollständig in Status 4 ein.
@@ -1604,27 +1606,29 @@ eines anderen Einsatzes nicht erscheinen. Er weist außerdem die Rangfolge
 S6-Fernmeldeplan vor allgemeiner Historie“ für Eingang und Ausgang nach und
 entzieht die Vorschläge unmittelbar nach einem Sperrverlust.
 `tests/integration/message_workflow_http.sh` prüft schließlich an den echten
-Formularen: A/W und LdF erhalten nur die zulässigen Rufnamenvorschläge, LdF bei
-Eingängen die Absendervorschläge; LdF sieht zum gesperrten aktuellen Vordruck
-die priorisierte, sichtbar gekennzeichnete Zuordnung; A/W-Eingang und Stab
-erhalten kein Absender-Eingabefeld. Keine Liste wählt einen Wert automatisch
+Formularen: Die Funktionen Fernmelder und LdF erhalten nur die zulässigen
+Rufnamenvorschläge, LdF bei Eingängen die Absendervorschläge; LdF sieht zum
+gesperrten aktuellen Vordruck die priorisierte, sichtbar gekennzeichnete
+Zuordnung. Bei der Eingangserfassung des Fernmelders und beim Schreiben durch
+den Stab gibt es kein Absender-Eingabefeld. Keine Liste wählt einen Wert automatisch
 aus und freie Eingaben bleiben möglich. Die lokale Eingangsanschrift und
 Ausgangs-Absendereinheit müssen dem per Join gelesenen Führungsstellennamen
 des aktiven Einsatzes entsprechen; ein absichtlich gesetzter
 `ESTAB_ORGANISATION`-Poisonwert darf weder in Datenbank noch Ausgabe
 erscheinen.
 `tests/browser/headless_ui.py --message-suggestions`
-meldet ein echtes A/W-Konto an und beweist mit einem kurzlebigen,
+meldet ein echtes Fernmelderkonto an und beweist mit einem kurzlebigen,
 einsatzgebundenen Marker Fokusöffnung, Filterung, Pfeiltaste/Eingabetaste,
 Übernahme, freie Eingabe und Logout im echten Chrome; das Fixture wird auch
 bei einem Testabbruch entfernt.
 
-Der Lauf registriert isolierte LdF-, A/W-, Si-, S1-, S2-, S3- und
+Der Lauf registriert isolierte LdF-, Fernmelder-, Si-, S1-, S2-, S3- und
 POL/FB-Konten über
 die öffentliche Kontooberfläche. Er prüft die gerenderten Listen und Aktionen,
 fehlende CSRF-Tokens mit HTTP 403, die erlaubten Stabsaktionen sowie verbotene
-LdF-/Fernmelde-/Si-Aktionen des echten FB-Profils, stufengebundenen
-LdF-/A/W-Sperrbesitz, Status und Abschluss direkt in MariaDB, den erzeugten
+Aktionen für LdF, Fernmelder und Si des echten FB-Profils, stufengebundenen
+Sperrbesitz von LdF und Fernmelder, Status und Abschluss direkt in MariaDB,
+den erzeugten
 Ein-/Ausgangsvordruck sowie die exakten Empfängerfarben `S2_rt`, `S1_gn` und
 `S3_bl`.
 
@@ -1641,8 +1645,8 @@ Nachricht bleibt unverändert in Status 1; ein
 abweichendes Medium ohne Begründung liefert HTTP 409 und schreibt weder
 Nachricht noch Ereignis; erst Bestätigung plus Begründung aktualisiert das
 Medium und hängt Altwert, Neuwert, Korrekturgrund und authentifiziertes
-LdF-Kürzel an die Hashkette. Aufnahmezeit und A/W-Zeichen werden vor und nach
-diesem Übergang bytegenau verglichen; übermittelte Ersatzwerte werden schon
+LdF-Kürzel an die Hashkette. Aufnahmezeit und Aufnahmezeichen des Fernmelders
+werden vor und nach diesem Übergang bytegenau verglichen; übermittelte Ersatzwerte werden schon
 vor dem Legacy-Validator verworfen. Ein zweiter, inzwischen veralteter
 Formularstand wird an der Objektberechtigung mit HTTP 403 abgewiesen und kann
 weder den abgeschlossenen Übergang ändern noch ein doppeltes LdF-Ereignis
@@ -1661,8 +1665,8 @@ erzwingen. Die Anwendung und die Datenbank müssen diese Abkürzung ablehnen;
 bei nicht besetztem Si bleibt die Nachricht unverändert in dessen
 Warteschlange.
 
-Ein weiterer Negativpfad sendet beim A/W-Eingang verborgene `16_*`-
-Empfängerfelder und simuliert zusätzlich einen bereits vorhandenen fremden
+Ein weiterer Negativpfad sendet bei der Eingangserfassung durch den
+Fernmelder verborgene `16_*`-Empfängerfelder und simuliert zusätzlich einen bereits vorhandenen fremden
 Empfängertoken. Vor dem terminalen Si-Abschluss müssen Liste, Detailaufruf und
 Gelesen-/Erledigt-Aktion jeweils HTTP 403 beziehungsweise keine sichtbare
 Zeile ergeben. Dieselbe Prüfung läuft für die S2-Rotkopie eines ausgehenden
@@ -1674,14 +1678,14 @@ Zugriffsregel in Listen-SQL, Objekt-Gate und atomarem State-SQL geprüft.
 `tests/php/read_authorization_security.php` und die HTTP-Gegenproben erweitern
 diese Grenze auf alle Ausgabepfade. Eine Kontositzung mit unpassender fester
 Funktion darf keine operative Nachricht lesen. Normaler Stab/FB erhält
-nur die terminale Empfängerkopie oder den eigenen Ausgang; Si, LdF und A/W nur
-ihre aktuelle Warteschlange/Sperre oder eine Nachricht mit eigener
+nur die terminale Empfängerkopie oder den eigenen Ausgang; Si, LdF und
+Fernmelder nur ihre aktuelle Warteschlange/Sperre oder eine Nachricht mit eigener
 unveränderlicher Verarbeitungsmarke. Vordruckliste und beide Downloadvarianten
 verwenden dieselbe Nachricht. Verknüpfte Anhänge erben die Objektregel über
 exakte vollständige Dateinamens-Tokens; freie Anhänge bleiben auf Uploader,
 S2, Si und LdF begrenzt. Liste, Vorschau, Download, Auswahl und finaler
 Nachrichtensave werden getrennt negativ geprüft. Die Meldungsübersicht ist nur
-für S2, die Nachweisung nur für LdF beziehungsweise A/W erreichbar.
+für S2, die Nachweisung nur für LdF beziehungsweise Fernmelder erreichbar.
 
 Danach versucht der Lauf die historischen
 `FM-Admin`-/`SI-Admin`-Zweitsichtungen gegen einen abgeschlossenen Datensatz.
@@ -1828,7 +1832,7 @@ Mindestens zu prüfen:
   Sortierung, Filterchips und erste/letzte Seite mit einem Bestand über mehrere
   Ergebnisseiten prüfen; während einer Eingabe darf keine automatische
   Aktualisierung den Suchtext verwerfen,
-- mit S2 die Meldungsübersicht und mit LdF/A/W die Nachweisung öffnen; S1, Si
+- mit S2 die Meldungsübersicht und mit LdF beziehungsweise Fernmelder die Nachweisung öffnen; S1, Si
   und S6 an den jeweils fremden Spezialzielen mit HTTP 403 abweisen,
 - für Fernmelder, Si und mindestens eine Stab-/FB-Sitzung den
   Hinweiston-Schalter im vorgesehenen Browser ausdrücklich aktivieren, den
@@ -1868,7 +1872,7 @@ Mindestens zu prüfen:
 - einen Einsatz mit vollständigem ETB-/TBB-Pflichtkopf anlegen und schon vor
   der ersten Zeile genau die Köpfe `ETB:1` und `TTB:1` prüfen; anschließend
   ohne aktive Schicht die lokale Nummer 1 schreiben. ETB mit `ETB/Stab` und
-  `S2/Stab`, TTB mit `A/W/Fernmelder` positiv, fremde Festfunktionen negativ
+  `S2/Stab`, TTB mit der Funktion `Fernmelder` positiv, fremde Festfunktionen negativ
   prüfen,
 - im ETB ohne/A/B/E/K/W sowie Nachricht, Anhang, eine Referenz auf eine
   vorhandene lokale ETB-Nummer und eine Berichtigung als neue Zeile erfassen;

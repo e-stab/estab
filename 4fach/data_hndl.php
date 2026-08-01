@@ -1581,7 +1581,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
             $data
           );
           if (!is_array ($rehydratedTransport)) {
-            estab_render_message_stage_conflict ("Die A/W-Sperre");
+            estab_render_message_stage_conflict ("Die Fernmelder-Sperre");
           }
           $form = new nachrichten4fach (
             $rehydratedTransport,
@@ -1591,7 +1591,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
           exit;
         }
         if (!$returnedToLdf) {
-          estab_render_message_stage_conflict ("Die A/W-Sperre");
+          estab_render_message_stage_conflict ("Die Fernmelder-Sperre");
         }
         protokolleintrag (
           "FM-Ausgang-Rückgabe",
@@ -1632,7 +1632,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
               $data
             );
             if (!is_array ($rehydratedTransport)) {
-              estab_render_message_stage_conflict ("Die A/W-Sperre");
+              estab_render_message_stage_conflict ("Die Fernmelder-Sperre");
             }
 				$form = new nachrichten4fach (
               $rehydratedTransport,
@@ -1692,7 +1692,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
            $data
          );
          if (!is_array ($rehydratedTransport)) {
-           estab_render_message_stage_conflict ("Die A/W-Sperre");
+           estab_render_message_stage_conflict ("Die Fernmelder-Sperre");
          }
          $form = new nachrichten4fach (
            $rehydratedTransport,
@@ -1702,7 +1702,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
          exit;
        }
        if (!$transportSaved) {
-         estab_render_message_stage_conflict ("Die A/W-Sperre");
+         estab_render_message_stage_conflict ("Die Fernmelder-Sperre");
        }
        protokolleintrag ("FM-Ausgang", "message_id=".estab_message_positive_id ($data ["00_lfd"]));
    break;

@@ -248,7 +248,7 @@ $assert(
         && substr_count($controller, 'estab_rehydrate_locked_operator_form (') >= 6
         && str_contains(
             $controller,
-            'estab_render_message_stage_conflict ("Die A/W-Sperre")'
+            'estab_render_message_stage_conflict ("Die Fernmelder-Sperre")'
         ),
     'validation/conflict branches do not all use authoritative rehydration'
 );

@@ -102,7 +102,8 @@ den zuvor deutlich kleineren Maßstab zu schrumpfen.
 
 Die Aktionsleiste steht ober- und unterhalb des langen Formulars zur
 Verfügung. Sie verwendet die bestehenden serverseitigen Aktionsschlüssel;
-Antwort, Weiterleitung, Sichtung, LdF-/A/W-Bearbeitung und Abbruch behalten
+Antwort, Weiterleitung, Sichtung, die Bearbeitung durch LdF und Fernmelder sowie
+Abbruch behalten
 damit ihre bisherigen Workflowgrenzen. Anlagen liegen als eigener digitaler
 Bereich direkt unterhalb des amtlichen Blatts; sie verändern dessen feste
 Geometrie und Druckdarstellung nicht.
@@ -175,7 +176,7 @@ Felder einen leeren Wert.
   serverseitig `WG:`. Verdeckte Browserfelder dürfen weder Ausgangsdaten noch
   Zitat oder Ableitung bestimmen.
 
-Die bisherigen Feldrechte gelten weiter. Insbesondere kann A/W bei einem
+Die bisherigen Feldrechte gelten weiter. Insbesondere kann der Fernmelder bei einem
 Eingang keinen Absender eintragen; LdF ergänzt ihn aus dem Rufnamen.
 Verfasser-, Aufnahme-, LdF-, Beförderungs- und Sichterzeichen stammen in den
 jeweiligen Schritten aus der geprüften Sitzungsidentität und sind dort nicht
@@ -313,8 +314,8 @@ sie gelten nie automatisch als gespeicherter Vordruck.
 
 Direktes Hochladen und Entfernen ist in den bearbeitbaren Vorgängen
 `FM-Eingang`, `FM-Eingang_Anhang`, `Stab_schreiben`, `Stab_korrigieren` und
-`Stab_gesprnoti` möglich. Nachfolgende LdF-, Si- und A/W-Arbeitsschritte zeigen
-die Anlagenkarten nur lesend. Ein Vordruck kann höchstens 100 kanonische
+`Stab_gesprnoti` möglich. Nachfolgende Arbeitsschritte von LdF, Si und
+Fernmelder zeigen die Anlagenkarten nur lesend. Ein Vordruck kann höchstens 100 kanonische
 Anlagenreferenzen tragen.
 
 **Bereits hochgeladene Anlage auswählen** führt weiterhin in den bisherigen

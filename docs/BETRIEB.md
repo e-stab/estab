@@ -105,7 +105,8 @@ Bedarfsträger oder die Einsatzleitung. Ein alter
 `ESTAB_ORGANISATION`-Eintrag in einer bestehenden `.env` ist obsolet und
 sollte entfernt werden; er wird nicht als Führungsstellenname übernommen.
 
-Die formale Sichtung jedes Ausgangs vor LdF und A/W ist eine feste
+Die formale Sichtung jedes Ausgangs vor den Bearbeitungsstufen LdF und
+Fernmelder ist eine feste
 fachliche Invariante. Sie besitzt bewusst keine Umgebungsvariable und kann in
 einer Installation nicht abgeschaltet werden.
 
@@ -247,8 +248,8 @@ aufgrund ihres Status löscht.
 
 Direktes Hochladen und Entfernen ist auf die bearbeitbaren Vorgänge
 `FM-Eingang`, `FM-Eingang_Anhang`, `Stab_schreiben`, `Stab_korrigieren` und
-`Stab_gesprnoti` begrenzt. Spätere LdF-, Si- und A/W-Schritte sehen die Karten
-nur lesend. Pro Nachricht sind höchstens 100 kanonische Anlagenreferenzen
+`Stab_gesprnoti` begrenzt. Spätere Arbeitsschritte von LdF, Si und Fernmelder
+sehen die Karten nur lesend. Pro Nachricht sind höchstens 100 kanonische Anlagenreferenzen
 zulässig.
 
 Der authentifizierte Inline-Abruf ist ausschließlich für serverseitig als
@@ -523,8 +524,8 @@ Ansicht.
 Neue ETB-/TTB-Zeilen dürfen die Legacy-Felder für aktive Dienstschicht und
 schreibende Dienstbesetzung `NULL` lassen. Sie werden nicht mit einer
 Zugangsschicht befüllt; historische belegte Provenienz bleibt unverändert.
-ETB schreiben Konten mit `ETB/Stab` oder `S2/Stab`, TTB Konten mit
-`A/W/Fernmelder`. Anwendung und Datenbank prüfen feste Funktion, Rolle,
+ETB schreiben Konten mit `ETB/Stab` oder `S2/Stab`; das TTB führen Konten mit
+der festen Funktion `Fernmelder`. Anwendung und Datenbank prüfen feste Funktion, Rolle,
 ungesperrtes Konto und aktiven Einsatz, aber keine aktive Schicht.
 Die Aktivierung eines neuen, noch leeren Einsatzes eröffnet ETB und TTB
 atomar mit je einer Systemzeile; beide Provenienzfelder bleiben dabei `NULL`.
@@ -815,7 +816,7 @@ Web-Handbuch liegt unter `/handbuch/`; das historische PDF von 2011 gehört
 nicht zum Laufzeitbestand. Nach der Anmeldung zeigt die Navigation je nach
 fester Kontofunktion neun oder zehn Bereichs- und Dienstlinks;
 Meldungsübersicht ist ausschließlich S2, Nachweisung ausschließlich LdF und
-A/W zugeordnet. Der aktuelle Bereich ist hervorgehoben; alle internen Ziele
+Fernmelder zugeordnet. Der aktuelle Bereich ist hervorgehoben; alle internen Ziele
 ersetzen die aktuelle Ansicht und erzeugen keine zusätzlichen Tabs. Der
 Rahmen des Nachrichtenarbeitsbereichs verwendet genau zwei moderne
 Anwendungs-`iframe`-Elemente: die vollhohe linke `vorgaben`-Sidebar und den
@@ -1052,8 +1053,9 @@ und schreiben nur nach POST plus Session-CSRF:
   Nachweisung werden getrennt behandelt; ein Absenken oder Teilupdate ist
   ausgeschlossen. Ein aktiver Einsatz ist Voraussetzung, eine aktive Schicht
   nicht. Die Maßnahme
-  erzeugt keine fingierte Fachnachricht und keine erfundenen A/W-, LdF- oder
-  Si-Zeichen. Stattdessen schreibt sie den Zielwert als dediziertes,
+  erzeugt keine fingierte Fachnachricht und keine erfundenen
+  Bearbeitungszeichen des Fernmelders, von LdF oder Si. Stattdessen schreibt sie
+  den Zielwert als dediziertes,
   unveränderliches `message_counter_repaired`-Ereignis mit Objekttyp `EINSATZ`
   in die verkettete einsatzbezogene Betriebsspur sowie in `nv_protokoll`.
   Zugangsschichtmutationen verwenden dort `ZUGANGSSCHICHT`. Die nächste echte

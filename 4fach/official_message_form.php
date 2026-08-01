@@ -634,6 +634,12 @@ HTML;
         bool $submitReadonly = true
     ): void {
         $value = $this->safe_message_value($field);
+        $displayValue = $value;
+        if (!$editable && $field === '14_funktion') {
+            $displayValue = estab_message_html(estab_function_display_name(
+                (string)($this->formdata[$field] ?? '')
+            ));
+        }
         $invalid = ($this->errorselect[$field] ?? true) === false;
         if ($editable) {
             echo '<input id="f_' . $field . '" class="estab-official-input" '
@@ -652,7 +658,7 @@ HTML;
         echo '<span id="f_' . $field . '" class="estab-official-readonly" '
             . 'data-estab-readonly="true" aria-label="'
             . estab_message_html($label . ' schreibgeschützt') . '">'
-            . ($value === '' ? '&nbsp;' : $value) . '</span>';
+            . ($displayValue === '' ? '&nbsp;' : $displayValue) . '</span>';
     }
 
     function official_message_textarea(
@@ -1144,7 +1150,9 @@ HTML;
         array $entry,
         bool $readonly
     ): void {
-        $display = (string)($entry['display'] ?? $entry['function']);
+        $display = estab_function_display_name(
+            (string)($entry['display'] ?? $entry['function'])
+        );
         $copies = is_array($entry['copies'] ?? null)
             ? $entry['copies']
             : [];
@@ -1286,6 +1294,7 @@ HTML;
                 $display = (string)(
                     $entry['display'] ?? $entry['function']
                 );
+                $display = estab_function_display_name($display);
                 echo '<label><input class="estab-official-copy-choice" '
                     . 'name="16_gncopy" type="radio" '
                     . 'value="16_' . $coordinate . '_gn" '
@@ -1494,7 +1503,7 @@ HTML;
             echo '<fieldset><legend>Eingangsweg durch LdF bestätigen</legend>'
                 . '<p data-estab-incoming-transport-original="'
                 . estab_message_html($original)
-                . '">Von A/W erfasst: <strong>'
+                . '">Vom Fernmelder erfasst: <strong>'
                 . estab_message_html(estab_message_medium_text($original))
                 . '</strong></p>';
             echo '<label><input type="checkbox" '

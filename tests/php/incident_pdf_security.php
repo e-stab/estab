@@ -278,7 +278,7 @@ try {
         'estab_reference' => 'Lagekarte A',
         'estab_assignment' => 'ZUORDNUNG-NICHT-IM-FORMBLATT',
         'estab_correction_of' => null,
-        'etb_aktion' => 'Einsatz eröffnet',
+        'etb_aktion' => 'Einsatz eröffnet · A/W (Fernmelder): Berta [BER001]',
         'etb_bemerk' => 'Führungsstelle besetzt',
         'etb_benutzer' => 'Ada Beispiel',
         'etb_kuerzel' => 'ADA001',
@@ -292,7 +292,8 @@ try {
         'estab_event_time' => '2026-07-29 10:31:30.000000',
         'estab_recorded_at' => '2026-07-29 10:32:00.000000',
         'estab_entry_type' => 'betrieb_personal',
-        'estab_personnel_duty' => 'TBB-DIENSTSPALTE',
+        'estab_personnel_duty' => 'TBB-DIENSTSPALTE · '
+            . 'A/W (Fernmelder): Berta [BER001]',
         'estab_channel' => 'TBB-KANALSPALTE',
         'estab_verbindungszustand' => 'betriebsbereit',
         'estab_message_route' => 'TBB-NACHRICHT-VON an TBB-NACHRICHT-AN',
@@ -356,7 +357,8 @@ try {
             'actor_function' => 'Si',
             'from_status' => 4,
             'to_status' => 8,
-            'field_snapshot' => '{"terminal_snapshot_sha256":"fixture"}',
+            'field_snapshot' => '{"14_funktion":"A/W",'
+                . '"terminal_snapshot_sha256":"fixture"}',
             'snapshot_sha256' => str_repeat('c', 64),
             'previous_event_sha256' => null,
             'event_sha256' => str_repeat('d', 64),
@@ -556,7 +558,8 @@ try {
             'akteur_kuerzel' => 'AW0001',
             'akteur_funktion' => 'A/W',
             'ereigniszeit' => '2026-07-29 10:56:00.000000',
-            'details_json' => '{"status":"GEMELDET"}',
+            'details_json' => '{"status":"GEMELDET",'
+                . '"target_function":"A/W"}',
             'vorheriger_hash' => str_repeat('0', 64),
             'ereignis_hash' => str_repeat('b', 64),
         ]],
@@ -694,6 +697,11 @@ try {
             'incident PDF message form marker is missing: ' . $marker
         );
     }
+    $assert(
+        str_contains($document, 'Fernmelder')
+            && !str_contains($document, 'A/W'),
+        'incident PDF does not consistently use the Fernmelder display label'
+    );
     $messageOnlyPdf = new EstabIncidentPdf(
         $incident,
         1024 * 1024,
@@ -702,6 +710,11 @@ try {
     $messageOnlyPdf->SetCompression(false);
     $messageOnlyPdf->addMessages([$message], [7 => ['EL0001.txt']]);
     $messageOnlyDocument = $messageOnlyPdf->Output('', 'S');
+    $assert(
+        str_contains($messageOnlyDocument, 'Fernmelder')
+            && !str_contains($messageOnlyDocument, 'A/W'),
+        'single message PDF exposes the persisted function key'
+    );
     $assert(
         !str_contains($messageOnlyDocument, '/Subtype /Image'),
         'incident PDF message form contains an unexpected image'

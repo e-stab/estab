@@ -169,7 +169,7 @@ Schreibvoraussetzung**. Die erste Einrichtung erfolgt in dieser Reihenfolge:
 
 Der in eStab geprüfte und unterstützte Produktumfang ist eine Führungsstelle
 **mit eingerichteter Fernmeldebetriebsstelle**. Deshalb müssen persönliche
-Konten mit den festen Funktionen LdF und A/W vorhanden sein; eine
+Konten mit den festen Funktionen LdF und Fernmelder vorhanden sein; eine
 Schichtannahme ist nicht erforderlich. Je Einsatz wird genau ein TBB geführt. Eine
 Führungsstelle ohne eigene Fernmeldebetriebsstelle, insbesondere ein reiner
 ETB-Betrieb, gehört derzeit nicht zum unterstützten Produktumfang. Diese
@@ -194,7 +194,8 @@ unten dokumentiert.
    deren Fachrechte. Unzugeordnete Konten bleiben zugelassen; bei mehreren
    Zuordnungen genügt für den Kontozugang eine aktive Gruppe.
 4. Die Personen melden sich mit ihren vorhandenen Konten an. ETB schreiben
-   Konten mit `ETB/Stab` oder `S2/Stab`, TTB Konten mit `A/W/Fernmelder`.
+   Konten mit `ETB/Stab` oder `S2/Stab`; das TTB führen Konten mit der festen
+   Funktion `Fernmelder`.
 5. S6 erstellt einen Fernmeldeplan mit den vorgesehenen Wegen und
    veröffentlicht ihn. Erst danach kann LdF einen Ausgang auf einen
    verbindlichen Weg disponieren.
@@ -416,8 +417,8 @@ Neue ETB-/TBB-Zeilen dürfen die Legacy-Felder für Dienstschicht und
 Dienstbesetzung `NULL` lassen. Die Felder werden nicht mit einer
 Zugangsschicht befüllt: Sie bewahren ausschließlich belegte historische
 Provenienz. ETB-Einträge dürfen Konten mit der festen Funktion `ETB` oder `S2`
-und Rolle `Stab` schreiben; TTB-Einträge Konten mit `A/W` und Rolle
-`Fernmelder`. Anwendung und Insert-Trigger prüfen diese Identität, das
+und Rolle `Stab` schreiben; TTB-Einträge dürfen Konten mit der festen Funktion
+`Fernmelder` schreiben. Anwendung und Insert-Trigger prüfen diese Identität, das
 ungesperrte Konto und den aktiven Einsatz unabhängig voneinander.
 
 Beim PDF-Einsatzdossier ist für ETB/TBB **Gesamtbuch** oder – für historischen
@@ -482,11 +483,11 @@ entstehen. OCI-Tags – auch `latest` – gibt es absichtlich nicht.
 | `/4fach/katgoedt.php` | globale, Funktions- und persönliche Kategorien | feste Kontofunktion und Rollenprüfung, bei Nachrichtenbezug zusätzlich Objektprüfung, CSRF für Änderungen |
 | `/4fach/fuehrungsstelle.php` | freigegebenen S6-Plan lesen sowie funktionsabhängige S6- und Melderabläufe bearbeiten | eStab-Sitzung, aktiver Einsatz und Fachzuständigkeit der festen Kontofunktion; keine Hutauswahl |
 | `/4fueltg/ue_ltg.php` | einsatzgebundene Meldungsübersicht | ausschließlich festes Konto `S2/Stab` mit `LAGE_DOKUMENTATION` |
-| `/4fach/nachwea.php` | Nachweisung der aufgenommenen und beförderten Nachrichten | ausschließlich festes Konto `LdF/Fernmelder` oder `A/W/Fernmelder` |
+| `/4fach/nachwea.php` | Nachweisung der aufgenommenen und beförderten Nachrichten | ausschließlich festes Konto mit Funktion `LdF` oder `Fernmelder` |
 | `/4fach/vordrucke.php` | abgeschlossene Vordrucke des aktiven Einsatzes im aktuellen, mit dem Einsatzdossier gemeinsamen PDF-Layout öffnen | feste Kontofunktion; zugrunde liegende Nachricht, Abschluss- und Druckstatus werden erneut geprüft, das persistierte Archiv bleibt unverändert |
 | `/4fach/anhang.php`, `/4fach/download.php`, `/4fach/showpic.php` | Anhänge auswählen, auflisten, herunterladen oder als Bildvorschau öffnen | feste Kontofunktion; verknüpfte Anhänge erben exakt die Leserechte mindestens einer verknüpften Nachricht, freie Anhänge sind nur für Uploader oder S2, Si und LdF sichtbar |
 | `/4fach/email.php` | strukturell geprüfte `.eml`-Anlage als passive Textansicht öffnen und auf die getrennte Originaldatei verweisen | dieselbe feste Kontofunktion und Objektberechtigung wie beim Download; erneute Integritätsprüfung, keine aktive Mail-HTML-/Remote-Darstellung und keine Behauptung einer DKIM-/S/MIME-verifizierten Absenderidentität |
-| `/stabetb/etb.php`, `/fmtbb/tbb.php` | einsatzlokal fortlaufendes ETB und TBB lesen, berichtigen und fachabhängig ergänzen; ETB mit kombinierbarer Volltext-/Art-/Nummer-/Bezugs-/Anlagensuche und optionaler eindeutiger Anlagenzuordnung | angemeldete Konten lesen nach Objektregel; ETB schreibt `ETB/Stab` oder `S2/Stab`, TTB schreibt `A/W/Fernmelder`; aktiver Einsatz erforderlich, keine aktive Schicht erforderlich, gespeicherte Zeilen append-only |
+| `/stabetb/etb.php`, `/fmtbb/tbb.php` | einsatzlokal fortlaufendes ETB und TBB lesen, berichtigen und fachabhängig ergänzen; ETB mit kombinierbarer Volltext-/Art-/Nummer-/Bezugs-/Anlagensuche und optionaler eindeutiger Anlagenzuordnung | angemeldete Konten lesen nach Objektregel; ETB schreibt `ETB/Stab` oder `S2/Stab`, TTB schreibt die Funktion `Fernmelder`; aktiver Einsatz erforderlich, keine aktive Schicht erforderlich, gespeicherte Zeilen append-only |
 | `/4fadm/admin.php` | Administration | separates HTTP Basic Auth |
 | `/4fadm/incidents.php` | Einsätze samt Führungsstellennamen anlegen, historische Fehlwerte einmalig bestätigen, aktivieren und deaktivieren | HTTP Basic Auth, Session-CSRF, revisionsgesicherter globaler Status; die erste operative Eintragung setzt atomar einen dauerhaften Sperrmarker für den bestätigten Führungsstellennamen |
 | `/4fadm/fuehrungsstelle.php` | optionale einsatzgebundene Zugangsschichten anlegen, Konten zuordnen und Gruppen gemeinsam aktivieren/deaktivieren | HTTP Basic Auth, Session-CSRF; unzugeordnete Konten bleiben erlaubt, Mehrfachzuordnungen gelten per OR, Deaktivierung kann Sitzungen widerrufen und verändert keine Fachrechte |
@@ -533,22 +534,23 @@ Die Statuswerte bezeichnen eindeutig die aktuell zuständige Arbeitsstufe:
 | `4` | Ausgang | Si | Anschrift, Verfasserzeichen und Verfasserfunktion formal prüfen; freigeben oder mit Pflichtgrund an den Verfasser zurückgeben |
 | `10` | Ausgang | Verfasser | zurückgegebenen Entwurf korrigieren und erneut zur formalen Sichtung einreichen |
 | `1` | Ausgang | LdF | Rufname der Gegenstelle und vorgesehenen Beförderungsweg festlegen |
-| `2` | Ausgang | A/W | den vorbereiteten Ausgang tatsächlich befördern |
-| `1` | Eingang | LdF | aufgenommenen Rufnamen in einen Absender übersetzen und den von A/W erfassten Eingangsweg bestätigen oder begründet korrigieren |
+| `2` | Ausgang | Fernmelder | den vorbereiteten Ausgang tatsächlich befördern |
+| `1` | Eingang | LdF | aufgenommenen Rufnamen in einen Absender übersetzen und den vom Fernmelder erfassten Eingangsweg bestätigen oder begründet korrigieren |
 | `4` | Eingang | Si | Inhalt auswerten und Empfänger festlegen |
 | `8` | beide | abgeschlossen | Nachricht ist fertig bearbeitet und der Vordruck kann erzeugt werden |
 
 Ein Eingang läuft immer über `1 → 4 → 8`. Ein Ausgang läuft über
 `4 → 1 → 2 → 8`; nach einer formalen Rückgabe entsteht
 `4 → 10 → 4 → 1 → 2 → 8`. Es gibt keine Autosichtung. Ist Si nicht besetzt,
-bleibt die Nachricht in dessen Warteschlange, ohne dass A/W einen
+bleibt die Nachricht in dessen Warteschlange, ohne dass der Fernmelder einen
 Sichtervermerk erzeugen kann.
-Beim Eingang erfasst A/W zwingend den empfangenen Rufnamen, kann das Feld
+Beim Eingang erfasst der Fernmelder zwingend den empfangenen Rufnamen, kann das Feld
 „Absender“ aber weder im Formular noch über einen manipulierten Request
-schreiben. A/W erfasst außerdem Medium, Aufnahmezeit und Aufnahmezeichen.
+schreiben. Er erfasst außerdem Medium, Aufnahmezeit und Aufnahmezeichen.
 Erst LdF muss daraus einen nicht leeren Absender festlegen und den
 Eingangsweg ausdrücklich bestätigen. Ändert LdF das Medium, ist eine
-Begründung Pflicht; Aufnahmezeit und A/W-Zeichen bleiben unveränderlich.
+Begründung Pflicht; Aufnahmezeit und Aufnahmezeichen des Fernmelders bleiben
+unveränderlich.
 Bestätigung, ursprüngliches und bestätigtes Medium, etwaige Begründung und
 LdF-Identität werden atomar in der Nachrichten-Ereigniskette nachgewiesen.
 Die nummerierte Aufnahme erzeugt außerdem genau einen TBB-Eintrag des Typs
@@ -564,7 +566,8 @@ und Nachweislisten verwenden dieselbe kanonische TBB-Nummer für Anzeige,
 numerische Suche und Sortierung. Solange etwa ein Ausgang noch nicht tatsächlich
 befördert wurde, zeigen sie ehrlich „noch kein TBB-Nachweis“ statt der
 technischen Archiv- oder globalen Datenbanknummer.
-Beim Fokus auf „Rufname der Gegenstelle“ bietet das Formular A/W und LdF
+Beim Fokus auf „Rufname der Gegenstelle“ bietet das Formular den Funktionen
+Fernmelder und LdF
 bisherige Rufnamen aus dem aktuell aktiven Einsatz in einer zugänglichen,
 per Tastatur bedienbaren Auswahlliste an.
 Für „Absender“ erhält ausschließlich LdF bei einem Eingang entsprechende
@@ -710,7 +713,7 @@ Administration und Handbuch als zwei Dienste. Anonym sind damit elf Links
 sichtbar. Nach der Anmeldung blendet die Navigation unzulässige Spezialziele
 direkt anhand der festen Kontofunktion aus: Gewöhnliche
 Stab-/FB-Funktionen, Si und S6 sehen einschließlich der beiden Dienste neun
-Links; S2 sowie LdF und A/W sehen jeweils den einen für sie freigegebenen
+Links; S2 sowie LdF und Fernmelder sehen jeweils den einen für sie freigegebenen
 Spezialbereich und damit zehn. Die Endpunkte prüfen die
 Berechtigung unabhängig von dieser Navigation erneut. Der aktive Bereich wird
 markiert, interne Ziele öffnen immer im selben Browserkontext. Der
@@ -782,7 +785,7 @@ dort aus. Auf Administrationsseiten wird der separate HTTP-Basic-Benutzer
 sichtbar und klar von einem gegebenenfalls zusätzlich angemeldeten
 eStab-Funktionskonto getrennt.
 
-Für Fernmelder-, Si- und Stab-/FB-Warteschlangen bleiben die
+Für die Warteschlangen von Fernmelder, Si und Stab/FB bleiben die
 rollenabhängigen Hinweise als mitgelieferte, gleich-originige PCM-WAV-Dateien
 erhalten. Die erste erfolgreiche Messung setzt nur einmalig den jeweiligen
 Sitzungsbasiswert `old_que_aw`, `old_que_si` oder `old_que_stab`; erst eine
@@ -814,7 +817,7 @@ Prepared Statements. Detail-, Status-, Sichtungs-, Transport-, Sperr- und
 Logout-Aktionen sind POST-/CSRF-gebunden und werden zusätzlich gegen feste
 Kontofunktion, serverseitig abgeleitete Rolle, Empfänger, Objektstatus und gegebenenfalls
 Sperrinhaber geprüft. Normale Stab-/FB-Funktionen lesen nur eine terminale
-Empfängerkopie oder ihren eigenen Ausgang. Si, LdF und A/W lesen nur ihre
+Empfängerkopie oder ihren eigenen Ausgang. Si, LdF und Fernmelder lesen nur ihre
 aktuelle Warteschlange beziehungsweise Sperre oder Nachrichten mit ihrer
 eigenen unveränderlichen Bearbeitungsmarke. Ein eigener MariaDB-Paralleltest
 deckt Nummernvergabe, Admin-/Writer-Zähler-Lock, konkurrierendes Save/Reset und

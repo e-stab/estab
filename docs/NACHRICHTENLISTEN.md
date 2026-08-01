@@ -46,7 +46,7 @@ beschrifteten Karte, sodass das Gesamtdokument nicht horizontal gescrollt
 werden muss.
 
 Dieselbe kanonische Zählung erscheint nicht nur in Meldungsübersicht und
-zweiter Sichtung, sondern auch in den operativen LdF-, Fernmelder-/A/W- und
+zweiter Sichtung, sondern auch in den operativen LdF-, Fernmelder- und
 Erstsichtungswarteschlangen. Eine Anlage ist damit vor dem Öffnen eines
 Vordrucks in jeder Arbeitsliste erkennbar; die Zahl ist jeweils ein Hinweis,
 keine zusätzliche Aktion und keine Berechtigungserweiterung.
@@ -61,7 +61,7 @@ erneutes Anwenden der Suche beziehungsweise der Filter kontrolliert geladen.
 | --- | --- | --- |
 | `/4fueltg/ue_ltg.php` | festes Konto `S2/Stab` mit `LAGE_DOKUMENTATION` | einsatzgebundener Lesevordruck |
 | „2. Sichtung“ als Si | festes Konto `Si/Stab` | geschützter `SI-Adminmeldung`-POST |
-| „2. Sichtung“ als A/W | festes Konto `A/W/Fernmelder` | geschützter `FM-Adminmeldung`-POST |
+| „2. Sichtung“ als Fernmelder | festes Konto mit Funktion `Fernmelder` | geschützter `FM-Adminmeldung`-POST |
 
 Alle Abfragen sind an die beim Berechtigungsgate erfasste ID des aktiven
 Einsatzes gebunden. In der zweiten Sichtung wird zusätzlich schon vor Zählung
@@ -140,7 +140,7 @@ ab.
 
 Für die fachliche Freigabe mit großen Beständen zusätzlich:
 
-1. als S2 und anschließend als Si beziehungsweise A/W mindestens mehrere
+1. als S2 und anschließend als Si beziehungsweise als Fernmelder mindestens mehrere
    Ergebnisseiten öffnen,
 2. eine Nummer, zwei gemeinsam vorkommende Wörter und einen kurzen Teiltext
    suchen,

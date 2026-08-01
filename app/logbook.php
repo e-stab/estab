@@ -381,8 +381,7 @@ function estab_logbook_manual_writer_context(
             $kind === 'etb'
                 ? 'ETB-Einträge dürfen nur Konten mit der festen Funktion '
                     . 'ETB oder S2 und der Rolle Stab speichern.'
-                : 'TBB-Einträge dürfen nur Konten mit der festen Funktion '
-                    . 'A/W und der Rolle Fernmelder speichern.'
+                : 'TBB-Einträge dürfen nur Fernmelder-Konten speichern.'
         );
     }
     return [

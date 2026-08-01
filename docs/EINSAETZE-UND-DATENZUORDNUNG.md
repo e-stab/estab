@@ -347,7 +347,7 @@ Einsatz-API:
   `REPEATABLE READ`; für den Dossierexport bleiben konsistente Read-only-
   Snapshots aktiviert.
 - Die Fachrechte folgen ausschließlich dem Konto: ETB schreiben `ETB/Stab`
-  oder `S2/Stab`, TTB schreibt `A/W/Fernmelder`. Anwendung und Insert-Trigger
+  oder `S2/Stab`; das TTB schreibt die Funktion `Fernmelder`. Anwendung und Insert-Trigger
   prüfen festen Konto-/Kürzel-/Funktions-/Rollenbezug, Sperrstatus und aktiven
   Einsatz. Eine aktive Schicht oder Besetzungsannahme wird nicht verlangt.
   Neue Zeilen dürfen die Legacy-Provenienzfelder für Dienstschicht und

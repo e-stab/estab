@@ -42,7 +42,7 @@ function estab_pdf_test_message_fixture(): array
         '13_abseinheit' => 'Einsatzleitung',
         '14_funktion' => 'S1',
         '14_zeichen' => 'e2e001',
-        '16_empf' => 'S2_rt,ALT_1_gn,ALT2_rt,',
+        '16_empf' => 'S2_rt,ALT_1_gn,ALT2_rt,A/W_gn,',
         '17_vermerke' => 'Vorlage und Raster vollständig',
         'x00_status' => 8,
         'x01_abschluss' => 't',

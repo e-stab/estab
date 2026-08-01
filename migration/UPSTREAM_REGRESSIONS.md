@@ -19,7 +19,7 @@ erhalten. Der nachfolgende Arbeitsstand übernimmt ausschließlich
 0.9.26c-Versionsmarker in `4fcfg/config.inc.php` bleibt bestehen.
 
 Diese Entscheidung ist durch einen echten HTTP-Integrationstest abgesichert:
-Ein authentifizierter A/W-Benutzer füllt den Nachrichtenvordruck mit markanten
+Ein authentifizierter Fernmelder füllt den Nachrichtenvordruck mit markanten
 Werten, Vermerk sowie blauer und grüner Empfängerzuordnung, lädt einen Anhang
 hoch und wählt ihn aus. Der Test prüft anschließend die zurückgelieferten
 Formularfelder und ausgewählten Matrix-Controls selbst; er speist die Werte
@@ -76,7 +76,7 @@ aktivieren.
 
 Der heutige Stand kennt bewusst keinen zweiten Modus mehr. Die formale
 Sichtung jedes Ausgangs ist verpflichtend und läuft vom Verfasser über Si,
-LdF und A/W bis zum Abschluss (`4 → 1 → 2 → 8`). Eine Rückgabe durch Si führt
+LdF und Fernmelder bis zum Abschluss (`4 → 1 → 2 → 8`). Eine Rückgabe durch Si führt
 begründungspflichtig über `4 → 10 → 4` erneut in dieselbe Sichtung. Der
 historische Schlüssel `si_in_out` bleibt ausschließlich als immer wahrer
 Kompatibilitätswert vorhanden. Weder `m_cfg.inc.php` noch die frühere
@@ -92,7 +92,8 @@ wird als Abschluss akzeptiert.
 
 ## 0.9.26b/c: irreführend bearbeitbare FM-Admin-Zweitprüfung
 
-Der historische A/W-Menüpfad öffnet `FM-Admin` für eine zweite Prüfung. In
+Der historische Menüpfad der Fernmelderfunktion öffnet `FM-Admin` für eine
+zweite Prüfung. In
 beiden Releases markiert das Formular dabei alle Felder 1–17 als bearbeitbar,
 obwohl der zugehörige Datenhandler ausschließlich Quittierung,
 Empfängerzuordnung und Vermerk in den Feldern 15–17 speichert. Zugleich fehlt

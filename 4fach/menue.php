@@ -62,7 +62,16 @@ function menue (){
              echo "</tr>\n<tr>\n";
              echo "<td>\nFunktion:</td>\n<td>\n<select style=\"font-size:20px; font-weight:900;\" name=\"funktion\">\n";
              for ($i=1; $i <= count ($conf_empf); $i++ ){
-               echo "<option>".$conf_empf[$i]["fkt"]."</option>\n";
+               $function = (string) $conf_empf[$i]["fkt"];
+               echo "<option value=\"".htmlspecialchars (
+                 $function,
+                 ENT_QUOTES | ENT_SUBSTITUTE,
+                 "UTF-8"
+               )."\">".htmlspecialchars (
+                 estab_function_display_name ($function),
+                 ENT_QUOTES | ENT_SUBSTITUTE,
+                 "UTF-8"
+               )."</option>\n";
              }
              echo "</select>\n";
              echo "</td>\n";

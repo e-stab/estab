@@ -65,7 +65,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         if (!$submitted['valid']) {
             http_response_code(422);
             $error = 'Die Matrix ist ungültig. Funktionen müssen eindeutig sein; '
-                . 'Si, A/W und LdF sind reserviert. S2/Stab muss als '
+                . 'die Fernmelderfunktion, Si und LdF sind fest reserviert. '
+                . 'S2/Stab muss als '
                 . 'Lage-/Dokumentationsfunktion und Rotkopieziel vorhanden sein.';
         } else {
             try {
@@ -170,9 +171,9 @@ $updated = is_string($updatedValue) ? $updatedValue : '';
       id="matrix-impact"
       aria-label="Auswirkung der Matrixänderung">
       <strong>Vor dem Speichern prüfen:</strong>
-      <p>Funktionsnamen bestehen aus höchstens sechs Buchstaben, Ziffern oder
-        Unterstrichen. <code>Si</code>, <code>A/W</code> und
-        <code>LdF</code> sind reserviert. <code>S2</code> mit Rolle
+      <p>Eigene Funktionsnamen bestehen aus höchstens sechs Buchstaben, Ziffern
+        oder Unterstrichen. Die Fernmelderfunktion sowie <code>Si</code> und
+        <code>LdF</code> sind fest reserviert. <code>S2</code> mit Rolle
         <code>Stab</code> ist als Lage-/Dokumentationsfunktion verpflichtend
         und muss das einzige Rotkopieziel sein. Autosichtung ist nicht
         zulässig; die Sichtung wird immer durch eine besetzte Funktion

@@ -102,6 +102,13 @@ function estab_session_ui_markup(
     $code = estab_auth_html($identity['kuerzel']);
     $function = estab_auth_html($identity['funktion']);
     $role = estab_auth_html($identity['rolle']);
+    $functionAndRole = estab_auth_html(
+        estab_function_identity_display_name(
+            $identity['funktion'],
+            $identity['rolle'],
+            ' · Rolle '
+        )
+    );
     $adminUser = estab_session_ui_admin_user(
         $server === [] ? $_SERVER : $server
     );
@@ -130,8 +137,7 @@ function estab_session_ui_markup(
         . ' data-estab-user-function="' . $function . '"'
         . ' data-estab-user-role="' . $role . '">'
         . 'Kürzel ' . $code
-        . ' · Funktion ' . $function
-        . ' · Rolle ' . $role
+        . ' · Funktion ' . $functionAndRole
         . '</span>'
         . $adminContext
         . '</div>'

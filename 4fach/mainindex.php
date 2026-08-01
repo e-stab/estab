@@ -2744,7 +2744,7 @@ if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>  ### FM Aus
         echo "<main class=\"estab-tool-main estab-tool-main-wide\" ".
              "data-estab-second-sighting=\"aw\">\n";
         echo "<header class=\"estab-tool-hero\">";
-        echo "<p class=\"estab-tool-eyebrow\">A/W · Nachrichtenvordrucke</p>";
+        echo "<p class=\"estab-tool-eyebrow\">Fernmelder · Nachrichtenvordrucke</p>";
         echo "<h1>Zweite Sichtung</h1>";
         echo "<p>Durchsuchen und öffnen Sie die für Ihre aktuelle ".
              "festen Kontofunktion sichtbaren Nachrichten des aktiven Einsatzes.</p>";
@@ -3011,7 +3011,10 @@ Nachricht als Sichtung anzeigen
       for ($i=1; $i <= count ($conf_empf); $i++) {
         $selected = $menuefunktion == $conf_empf[$i]["fkt"] ? " selected" : "";
         $funktion = estab_auth_html ($conf_empf[$i]["fkt"]);
-        echo "<option value=\"".$funktion."\"".$selected.">".$funktion."</option>\n";
+        $funktionsname = estab_auth_html (estab_function_display_name (
+          (string) $conf_empf[$i]["fkt"]
+        ));
+        echo "<option value=\"".$funktion."\"".$selected.">".$funktionsname."</option>\n";
       }
       echo "</select></td></tr>\n";
       echo "<tr><th><label for=\"estab-login-password\">Kennwort</label></th>\n";

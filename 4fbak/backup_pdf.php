@@ -321,7 +321,9 @@ class vordruckaspdf extends PDF_Ellipse {
       ? "" : estab_message_form_tactical_time ($data ["12_abfzeit"]);
     $this->db_dataset ["13_abseinheit"]   = $data ["13_abseinheit"] ;
     $this->db_dataset ["14_zeichen"]      = $data ["14_zeichen"] ;
-    $this->db_dataset ["14_funktion"]     = $data ["14_funktion"] ;
+    $this->db_dataset ["14_funktion"]     = estab_function_display_name (
+      (string) $data ["14_funktion"]
+    ) ;
 
     $this->db_dataset ["15_quitdatum"] = estab_datetime_is_unset ($data ["15_quitdatum"])
       ? "" : estab_message_form_tactical_time ($data ["15_quitdatum"]);
@@ -921,12 +923,13 @@ class vordruckaspdf extends PDF_Ellipse {
       if ($fkt == "") {
         continue;
       }
+      $displayFunction = estab_function_display_name ((string) $fkt);
       $empf_array [] = array (
         "fkt" => $fkt,
         "cpy" => $cpycol,
         "display" => $cpycol == ""
-          ? $empf_code
-          : $fkt . " [" . $cpycol . "]"
+          ? $displayFunction
+          : $displayFunction . " [" . $cpycol . "]"
       );
     }
     $matched_empf = array ();

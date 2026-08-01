@@ -1400,7 +1400,7 @@ final class EstabIncidentPdf extends vordruckaspdf
                 'Logbook field must be scalar: ' . $field
             );
         }
-        return trim((string) $value);
+        return estab_function_display_text(trim((string) $value));
     }
 
     /** Return the first populated scalar among compatible schema aliases. */
@@ -1471,6 +1471,9 @@ final class EstabIncidentPdf extends vordruckaspdf
                 $row,
                 $prefix . '_' . $suffix
             );
+            if ($suffix === 'funktion') {
+                $value = estab_function_display_name($value);
+            }
             if ($value !== '') {
                 $parts[] = $value;
             }
@@ -2226,7 +2229,13 @@ final class EstabIncidentPdf extends vordruckaspdf
                 'Vorgänger-Event-Hash' => 'previous_event_sha256',
                 'Event-SHA-256' => 'event_sha256',
             ] as $label => $field) {
-                $this->definition($label, $event[$field] ?? '');
+                $value = $event[$field] ?? '';
+                if ($field === 'actor_function') {
+                    $value = estab_function_display_name((string) $value);
+                } elseif ($field === 'field_snapshot') {
+                    $value = estab_function_display_json((string) $value);
+                }
+                $this->definition($label, $value);
             }
             $this->Ln(3);
         }
@@ -2386,7 +2395,9 @@ final class EstabIncidentPdf extends vordruckaspdf
                     . ' · Schicht '
                     . (string) ($assignment['dienstschicht_nummer'] ?? '')
                     . ' · '
-                    . (string) ($assignment['funktion'] ?? '')
+                    . estab_function_display_name(
+                        (string) ($assignment['funktion'] ?? '')
+                    )
             );
             foreach ([
                 'Dienstbesetzung-ID' => 'dienstbesetzung_id',
@@ -2402,7 +2413,11 @@ final class EstabIncidentPdf extends vordruckaspdf
                 'Abgelöst am' => 'abgeloest_am',
                 'Nachfolger-ID' => 'nachfolger_id',
             ] as $label => $field) {
-                $this->definition($label, $assignment[$field] ?? '');
+                $value = $assignment[$field] ?? '';
+                if ($field === 'funktion') {
+                    $value = estab_function_display_name((string) $value);
+                }
+                $this->definition($label, $value);
             }
             $this->Ln(3);
         }
@@ -2757,7 +2772,13 @@ final class EstabIncidentPdf extends vordruckaspdf
                 'Vorgänger-Hash' => 'vorheriger_hash',
                 'Ereignis-Hash' => 'ereignis_hash',
             ] as $label => $field) {
-                $this->definition($label, $event[$field] ?? '');
+                $value = $event[$field] ?? '';
+                if ($field === 'akteur_funktion') {
+                    $value = estab_function_display_name((string) $value);
+                } elseif ($field === 'details_json') {
+                    $value = estab_function_display_json((string) $value);
+                }
+                $this->definition($label, $value);
             }
             $this->Ln(3);
         }

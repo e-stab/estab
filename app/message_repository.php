@@ -1451,7 +1451,7 @@ function estab_message_update_locked_operator_stage(
                     !== true
                 ) {
                     throw new EstabDvInputException(
-                        'Bestätigen Sie den von A/W erfassten Eingangsweg.'
+                        'Bestätigen Sie den vom Fernmelder erfassten Eingangsweg.'
                     );
                 }
                 if (!array_key_exists('01_medium', $fields)) {
@@ -1523,7 +1523,7 @@ function estab_message_update_locked_operator_stage(
                     )
                 ) {
                     throw new EstabDvConflictException(
-                        'Der von A/W dokumentierte Eingangsweg ist unvollständig.'
+                        'Der vom Fernmelder dokumentierte Eingangsweg ist unvollständig.'
                     );
                 }
 
@@ -1827,7 +1827,7 @@ function estab_message_update_locked_operator_stage(
                     }
                 } else {
                     throw new EstabDvConflictException(
-                        'Ungültiger Übergang in der A/W-Beförderung.'
+                        'Ungültiger Übergang in der Fernmelder-Beförderung.'
                     );
                 }
             }

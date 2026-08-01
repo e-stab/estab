@@ -1347,10 +1347,10 @@ HTML;
       );
       echo "<p class=\"estab-message-transport-confirmation\">".
         "<strong>Eingangsweg durch LdF bestätigen</strong><br>".
-        "Prüfen Sie den von A/W aufgenommenen Weg. Bei einer Korrektur ".
+        "Prüfen Sie den vom Fernmelder aufgenommenen Weg. Bei einer Korrektur ".
         "ist eine Begründung erforderlich.<br>".
         "<span data-estab-incoming-transport-original=\"".
-        estab_message_html ($originalMedium)."\">Von A/W erfasst: <strong>".
+        estab_message_html ($originalMedium)."\">Vom Fernmelder erfasst: <strong>".
         estab_message_html (estab_message_medium_text ($originalMedium)).
         "</strong></span></p>\n";
       if (
@@ -1959,7 +1959,9 @@ HTML;
     \****************************************************************************/
     echo "<td style=\"width: 100px; background-color: ".$this->bg[14].";\">\n";
     if (!$this->feld [14]){
-      echo "<b><big>".$this->safe_message_value ("14_funktion")."</big></b><br>" ;
+      echo "<b><big>".estab_message_html (estab_function_display_name (
+        (string) ($this->formdata ["14_funktion"] ?? "")
+      ))."</big></b><br>" ;
       echo "<input id=\"f_14_funktion\" type=\"hidden\" name=\"14_funktion\" value=\"".$this->safe_message_value ("14_funktion")."\">\n";
     } else {
       echo "<input id=\"f_14_funktion\" maxlength=\"25\" size=\"10\" name=\"14_funktion\" value=\"".$this->safe_message_value ("14_funktion")."\"".$param."><br>\n";
@@ -2087,13 +2089,17 @@ HTML;
                 echo "<a style=\"background-color:#0303FD;\">
                       <input name=\"16_".$m.$n."\" value=\"16_".$m.$n."_bl\" type=\"checkbox\" ".$param.$selcbbl.$red_inactiv.">\n</a>";
 
-                echo $this->empfarray [$m][$n]["fkt"] ;
+                echo estab_message_html (estab_function_display_name (
+                  (string) $this->empfarray [$m][$n]["fkt"]
+                )) ;
 
               break;
 
               case "t":
                 if ($this->empfarray [$m][$n]["fkt"] != ""){
-                  echo $this->empfarray [$m][$n]["fkt"] ;
+                  echo estab_message_html (estab_function_display_name (
+                    (string) $this->empfarray [$m][$n]["fkt"]
+                  )) ;
                 } else {
                   echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
                 }
