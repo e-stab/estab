@@ -209,6 +209,30 @@ $browserSource = (string) file_get_contents(
 $browserFixtureSource = (string) file_get_contents(
     $root . '/tests/integration/message_suggestion_browser_fixture.php'
 );
+$mappingFunctionStart = strpos(
+    $readSource,
+    'function estab_read_ldf_mapping_suggestions('
+);
+$mappingFunctionEnd = $mappingFunctionStart === false
+    ? false
+    : strpos(
+        $readSource,
+        'function estab_read_message_suggestions(',
+        $mappingFunctionStart
+    );
+$mappingFunctionSource = is_int($mappingFunctionStart)
+    && is_int($mappingFunctionEnd)
+    && $mappingFunctionEnd > $mappingFunctionStart
+    ? substr(
+        $readSource,
+        $mappingFunctionStart,
+        $mappingFunctionEnd - $mappingFunctionStart
+    )
+    : '';
+$assert(
+    $mappingFunctionSource !== '',
+    'LdF mapping function source could not be isolated'
+);
 
 foreach (
     [
@@ -301,7 +325,7 @@ $assert(
             $readSource,
             "'matched_context' => \$matchedContext"
         )
-        && !str_contains($readSource, 'LOCATE('),
+        && !str_contains($mappingFunctionSource, 'LOCATE('),
     'mapping comparison is not binary/exact with explicit outgoing-only '
         . 'related-match evidence'
 );
