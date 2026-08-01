@@ -126,7 +126,9 @@ app/session_ui.php
 app/sidebar.php
 app/user_admin.php
 app/workflow.php
-doku/Handbuch_eStab.pdf
+handbuch/index.php
+handbuch/handbuch.css
+handbuch/handbuch.js
 fmtbb/tbb.php
 language/german/helptext.php
 language/german/hilfetext.php
@@ -211,6 +213,7 @@ br
 doku/Tests.odt
 doku/Tests.ott
 doku/suhosin.odt
+doku/Handbuch_eStab.pdf
 sammlung
 ubltg
 '

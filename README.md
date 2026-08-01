@@ -404,7 +404,7 @@ entstehen. OCI-Tags – auch `latest` – gibt es absichtlich nicht.
 | `/4fadm/set_number_after_crash.php` | Nachrichtenzähler nach Rückfallbetrieb erhöhen | HTTP Basic Auth und CSRF |
 | `/4fach/resetpic.php` | Markierungen zur erneuten PDF-Vordruckerzeugung zurücksetzen | HTTP Basic Auth und CSRF |
 | `/health.php` | knappe Readiness-Antwort für den Monitor | absichtlich ohne Anmeldung |
-| `/doku/Handbuch_eStab.pdf` | historisches Anwendungshandbuch | öffentlich |
+| `/handbuch/` | aktuelles, durchsuchbares Web-Handbuch für Bedienung, Rollen, Einsatzablauf, Administration und Betrieb | öffentlich |
 
 Der Benutzername für den Administrationsbereich steht in
 `ESTAB_ADMIN_USER`, das Kennwort in der durch
@@ -775,12 +775,16 @@ PDF-Export keinen Ersatz, sondern kennzeichnet ihn ausdrücklich als
 - [Architektur und Sicherheitsentscheidungen](docs/ARCHITEKTUR-UND-SICHERHEIT.md)
 - [Nachweis der SVN- und Release-Migration](migration/README.md)
 - [Index der unverändert übernommenen Originaldokumentation](docs/legacy/README.md)
-- [Anwendungshandbuch Version 1.1 von 2011](doku/Handbuch_eStab.pdf)
+- [Aktuelles Web-Handbuch](handbuch/)
+- [Historisches Anwendungshandbuch Version 1.1 von 2011](doku/Handbuch_eStab.pdf)
 
-Die historische Dokumentation erklärt die Fachbedienung, beschreibt jedoch
-veraltete XAMPP-, MySQL- und Web-Installer-Verfahren. Für Installation,
-Sicherheit, Backup und Upgrade gelten ausschließlich die heutigen Runbooks
-unter `docs/`.
+Das unter `/handbuch/` ausgelieferte Web-Handbuch ist die aktuelle
+Bedienreferenz und wird gemeinsam mit der Anwendung versioniert. Das PDF von
+2011 bleibt ausschließlich als historische Quelle im Git-Bestand erhalten;
+es beschreibt unter anderem veraltete XAMPP-, MySQL- und
+Web-Installer-Verfahren und wird nicht mehr in das Laufzeitimage übernommen.
+Für Installation, Sicherheit, Backup und Upgrade gelten das Web-Handbuch und
+die heutigen Runbooks unter `docs/`.
 
 ## Lizenzhinweis
 

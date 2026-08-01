@@ -172,7 +172,10 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   Führungsstellenbetrieb geleitet. Rollen-, Objekt-, CSRF-, Polling- und
   Bildgrenzen bleiben harte 403-Antworten. Die Anmeldekarte zeigt das
   vorgemerkte Ziel und bietet immer einen Top-Level-Abbruch zur Übersicht.
-  Administration und Handbuch sind getrennte Dienste.
+  Administration und das öffentliche Web-Handbuch unter `/handbuch/` sind
+  getrennte Dienste. Das Handbuch ist eine rein lesende GET-/HEAD-Oberfläche;
+  das historische PDF von 2011 gehört nicht zur aktiven Navigation oder zum
+  Laufzeitbestand.
 - Nach der Anmeldung rendert `session_ui.php` Name, Kürzel, Funktion und
   serverseitig abgeleitete Rolle HTML-escaped. Vor der Anmeldung rendert
   dieselbe Schicht „Nicht angemeldet“, den Anmeldebutton und die gemeinsame

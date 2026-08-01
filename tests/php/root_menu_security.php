@@ -87,6 +87,23 @@ $assert(
     'administration is not visibly separated from application login'
 );
 
+$handbook = estab_root_menu_item_markup([
+    'text' => 'Handbuch',
+    'info' => 'Aktuelles, durchsuchbares Web-Handbuch',
+    'pic' => './handbook.png',
+    'link' => './handbuch/',
+    'navigation_key' => 'handbook',
+    'visible' => true,
+    'access' => 'public',
+], false);
+$assert(
+    str_contains($handbook, 'href="./handbuch/"')
+        && str_contains($handbook, 'data-estab-nav-key="handbook"')
+        && !str_contains($handbook, 'Anmeldung erforderlich')
+        && !str_contains($handbook, 'target='),
+    'public web handbook card is not directly reachable in the same tab'
+);
+
 $escaped = estab_root_menu_item_markup([
     'text' => '<script>alert(1)</script>',
     'info' => '" onclick="alert(2)',
@@ -191,6 +208,26 @@ $assert(
     array_values($configuredOperationalCards) === $expectedOperationalCards,
     'root menu cards diverge from the canonical operational order'
 );
+$configuredServiceCards = [];
+if (preg_match_all(
+    '/\\$zusatz_menue\\[(\\d+)\\]\\["navigation_key"\\]\\s*=\\s*"([^"]+)"/',
+    $menuConfig,
+    $configuredServiceMatches,
+    PREG_SET_ORDER
+) !== false) {
+    foreach ($configuredServiceMatches as $configuredServiceMatch) {
+        $configuredServiceCards[(int) $configuredServiceMatch[1]]
+            = $configuredServiceMatch[2];
+    }
+}
+ksort($configuredServiceCards, SORT_NUMERIC);
+$assert(
+    array_values($configuredServiceCards) === [
+        'administration',
+        'handbook',
+    ],
+    'root menu services diverge from the canonical service order'
+);
 $assert(
     str_contains(
         $menuConfig,
@@ -205,6 +242,22 @@ $assert(
             '$menue[2]["visible"] = true ;'
         ),
     'root menu does not expose the protected command-post card'
+);
+$assert(
+    str_contains(
+        $menuConfig,
+        '$zusatz_menue[2]["link"] = "./handbuch/";'
+    )
+        && str_contains(
+            $menuConfig,
+            '$zusatz_menue[2]["access"] = "public";'
+        )
+        && str_contains(
+            $menuConfig,
+            'Aktuelles, durchsuchbares Web-Handbuch'
+        )
+        && !str_contains($menuConfig, './doku/Handbuch_eStab.pdf'),
+    'root menu does not expose the current public web handbook'
 );
 
 echo "root menu security: OK ({$assertions} assertions)\n";

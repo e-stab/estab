@@ -4,7 +4,7 @@ Das Git-Repository bewahrt den vollständigen historischen Quell- und
 Dokumentationsbestand. Das ausgelieferte App-Image ist dagegen bewusst eine
 kleinere, überprüfte Laufzeitsicht. Der `Dockerfile` kopiert deshalb keine
 kompletten historischen Verzeichnisse, sondern nur aktive PHP-Module,
-benötigte statische Assets und die öffentlich verlinkte Handbuch-PDF.
+benötigte statische Assets und das aktuelle öffentliche Web-Handbuch.
 
 ## Enthaltene Laufzeitgruppen
 
@@ -16,7 +16,9 @@ benötigte statische Assets und die öffentlich verlinkte Handbuch-PDF.
   das einzelne auf der Startseite verwendete Symbol aus
   `4fach/design/mr/folder_global.gif`;
 - Bildsymbole aus `4fsym/`, die BOS-Informationsseiten und
-  `doku/Handbuch_eStab.pdf`;
+  `handbuch/index.php`, `handbuch/handbuch.css` sowie
+  `handbuch/handbuch.js` für die öffentliche Bedienreferenz unter
+  `/handbuch/`;
 - für PDF-Vordrucke ausschließlich `4fbak/backup.php`,
   `4fbak/backup_pdf.php`, der verwendete FPDF-Kern, dessen eingebaute
   Schriftmetriken und `4fbak/thw.png` als einfarbiges THW-Kopfzeichen der
@@ -32,9 +34,10 @@ benötigte statische Assets und die öffentlich verlinkte Handbuch-PDF.
 Nicht zur Laufzeit gehören insbesondere alte Web-Installer,
 Konfigurationsschreiber, `phpinfo()`, Upload-/Druckbeispiele, nicht verlinkte
 Controllerkopien, bearbeitbare ODT-/OTT-/NSD-/Mindmap-/Designquellen,
-zusätzliche Designvarianten, FPDF-Beispiele und das eingebettete
-`fpdf181.zip`-Archiv. Diese Dateien bleiben für Provenienz und historische
-Nachvollziehbarkeit in Git erhalten.
+zusätzliche Designvarianten, FPDF-Beispiele, das eingebettete
+`fpdf181.zip`-Archiv und `doku/Handbuch_eStab.pdf`. Das PDF von 2011 bleibt
+ausschließlich als historische Quelle für Provenienz und Nachvollziehbarkeit
+in Git erhalten; es ist keine aktuelle Bedienreferenz.
 
 Auch `4fadm/00.htpasswd` wird niemals in das Image kopiert. Vor dem App-Start
 erzeugt der netzlose One-shot-Dienst `admin-auth-init` aus dem separaten

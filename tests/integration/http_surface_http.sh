@@ -64,6 +64,17 @@ assert_header_fixed() {
     fi
 }
 
+assert_header_regex() {
+    expected=$1
+    description=$2
+    if ! grep -Eiq -- "$expected" "$headers"; then
+        printf 'HTTP surface: response headers do not match %s\n' \
+            "$description" >&2
+        sed -n '1,30p' "$headers" >&2
+        exit 1
+    fi
+}
+
 assert_header_absent_fixed() {
     forbidden=$1
     if grep -Fqi -- "$forbidden" "$headers"; then
@@ -131,6 +142,7 @@ assert_body_fixed 'Anmeldung erforderlich'
 assert_body_fixed 'Separater Administrationszugang'
 assert_body_fixed 'data-estab-navigation'
 assert_body_fixed 'data-estab-nav-key="overview"'
+assert_body_fixed 'href="./handbuch/"'
 if grep -Fq 'href="./stabetb/etb.php"' "$body"; then
     printf 'HTTP surface: anonymous root menu exposes a protected module target\n' >&2
     exit 1
@@ -162,11 +174,62 @@ for asset in \
     /4fsym/null.gif \
     /4fach/audio/notify_aw.wav \
     /4fach/audio/notify_si.wav \
-    /4fach/audio/notify_stab.wav \
-    /doku/Handbuch_eStab.pdf
+    /4fach/audio/notify_stab.wav
 do
     assert_nonempty_200 "$base_url$asset"
 done
+
+assert_status 200 "$base_url/handbuch/"
+assert_header_fixed 'Content-Type: text/html; charset=UTF-8'
+assert_header_fixed 'Cache-Control: private, no-store, max-age=0'
+assert_header_fixed 'Vary: Cookie'
+assert_body_fixed '<title>eStab Web-Handbuch</title>'
+assert_body_fixed 'data-estab-handbook-version='
+assert_body_fixed 'data-estab-handbook-search'
+assert_body_fixed 'data-estab-handbook-status'
+assert_body_fixed 'data-estab-handbook-toc'
+assert_body_fixed 'href="./handbuch.css"'
+assert_body_fixed 'src="./handbuch.js"'
+assert_body_fixed 'data-estab-public-bar'
+assert_body_fixed 'data-estab-nav-key="handbook" aria-current="page"'
+assert_body_absent_fixed 'data-estab-session-bar'
+assert_body_absent_fixed 'data-estab-logout-form'
+handbook_chapter_count=$(
+    grep -o 'data-estab-handbook-section' "$body" | wc -l | tr -d ' '
+)
+if [ "$handbook_chapter_count" != 19 ]; then
+    printf 'HTTP surface: web handbook has %s chapters, expected 19\n' \
+        "$handbook_chapter_count" >&2
+    exit 1
+fi
+
+assert_status 405 --request POST "$base_url/handbuch/"
+assert_header_fixed 'Allow: GET, HEAD'
+assert_body_fixed 'Für das Web-Handbuch sind nur GET und HEAD erlaubt.'
+
+assert_nonempty_200 "$base_url/handbuch/handbuch.css"
+assert_header_regex \
+    '^Content-Type:[[:space:]]*text/css([;[:space:]]|$)' \
+    'the handbook CSS content type'
+assert_body_fixed '.estab-handbook-layout'
+assert_body_fixed '.estab-handbook-chapter[hidden]'
+assert_body_fixed '@media (max-width: 48rem)'
+assert_body_fixed '@media (prefers-reduced-motion: reduce)'
+
+assert_nonempty_200 "$base_url/handbuch/handbuch.js"
+assert_header_regex \
+    '^Content-Type:[[:space:]]*(text|application)/(javascript|x-javascript)([;[:space:]]|$)' \
+    'the handbook JavaScript content type'
+assert_body_fixed "'use strict'"
+assert_body_fixed "document.querySelector('[data-estab-handbook-search]')"
+assert_body_fixed ".normalize('NFD')"
+assert_body_fixed 'section.hidden = !matches'
+assert_body_fixed 'status.textContent ='
+assert_body_fixed 'window.history.replaceState'
+assert_body_absent_fixed 'innerHTML'
+assert_body_absent_fixed 'eval('
+
+assert_status 404 "$base_url/doku/Handbuch_eStab.pdf"
 
 assert_status 200 "$base_url/4fach/index.php"
 iframe_count=$(grep -o '<iframe' "$body" | wc -l | tr -d ' ')

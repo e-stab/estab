@@ -570,10 +570,12 @@ Das gemeinsame Manifest führt in stabiler Reihenfolge durch neun operative
 Bereiche: Übersicht, Nachrichtenvordruck, Führungsstellenbetrieb,
 Meldungsübersicht, Vordrucke, Einsatztagebuch, Technisches Betriebsbuch,
 Nachweisung und BOS-Info. Administration und Handbuch sind zwei getrennte
-Dienste. Vor Auswahl eines Funktions-Huts bleiben nach der Anmeldung nur die
-vier öffentlichen beziehungsweise separat geschützten Ziele und der
-Führungsstellen-Bootstrap sichtbar. Mit ausgewähltem aktivem Hut zeigt die
-Navigation je nach Funktion neun oder zehn Bereichs- und Dienstlinks;
+Dienste. Das aktuelle, öffentliche und ohne Funktionsanmeldung erreichbare
+Web-Handbuch liegt unter `/handbuch/`; das historische PDF von 2011 gehört
+nicht zum Laufzeitbestand. Vor Auswahl eines Funktions-Huts bleiben nach der
+Anmeldung nur die vier öffentlichen beziehungsweise separat geschützten Ziele
+und der Führungsstellen-Bootstrap sichtbar. Mit ausgewähltem aktivem Hut zeigt
+die Navigation je nach Funktion neun oder zehn Bereichs- und Dienstlinks;
 Meldungsübersicht ist ausschließlich S2, Nachweisung ausschließlich LdF und
 A/W zugeordnet. Der aktuelle Bereich ist hervorgehoben; alle internen Ziele
 ersetzen die aktuelle Ansicht und erzeugen keine zusätzlichen Tabs. Der

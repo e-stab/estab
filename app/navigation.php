@@ -125,9 +125,9 @@ function estab_navigation_services(): array
             'key' => 'handbook',
             'label' => 'Handbuch',
             'short_label' => 'Handbuch',
-            'path' => 'doku/Handbuch_eStab.pdf',
+            'path' => 'handbuch/',
             'access' => 'public',
-            'hint' => 'Dokumentation',
+            'hint' => 'Bedienung und Hilfe',
         ],
     ];
 }
@@ -584,7 +584,7 @@ function estab_navigation_key_for_path(string $relativePath): ?string
         'fmtbb' => 'technical-log',
         'stabinfo' => 'bos-info',
         '4fadm' => 'administration',
-        'doku' => 'handbook',
+        'handbuch' => 'handbook',
     ];
     foreach ($modules as $directory => $key) {
         if (

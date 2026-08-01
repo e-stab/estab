@@ -518,8 +518,11 @@ Die Originalquellen werden nicht dupliziert:
 
 - [SVN-/Git-Migrationsnachweis](../migration/README.md)
 - [Index der 95 unverändert erhaltenen Dokumente](legacy/README.md)
-- [historisches Anwendungshandbuch](../doku/Handbuch_eStab.pdf)
+- [historisches Anwendungshandbuch von 2011](../doku/Handbuch_eStab.pdf)
 
-Die dort beschriebenen Web-Installer, XAMPP-Konfigurationen und leeren
-MySQL-Root-Kennwörter sind nur historischer Kontext und kein zulässiger
-Containerbetrieb.
+Das PDF bleibt ausschließlich eine historische Quelle. Die dort beschriebenen
+Web-Installer, XAMPP-Konfigurationen und leeren MySQL-Root-Kennwörter sind nur
+historischer Kontext und kein zulässiger Containerbetrieb. Die aktuelle,
+gemeinsam mit der Anwendung ausgelieferte Bedienreferenz ist das öffentliche
+[Web-Handbuch](../handbuch/) unter `/handbuch/`; für Upgrade und Rollback
+bleiben die Vorgaben dieses Runbooks verbindlich.

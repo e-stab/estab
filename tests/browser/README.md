@@ -203,6 +203,16 @@ ESTAB_TEST_BASE_URL=http://127.0.0.1:8080 \
 python3 tests/browser/headless_ui.py --bos-only
 ```
 
+Das öffentliche Web-Handbuch besitzt einen eigenen rein lesenden Lauf. Er
+prüft alle 19 Kapitel, die Einbindung in die öffentliche Navigation, die
+lokale Mehrwortsuche samt zurücksetzbarer URL-Abfrage sowie das
+überlauffreie Desktop- und Mobil-Layout:
+
+```sh
+ESTAB_TEST_BASE_URL=http://127.0.0.1:8080 \
+python3 -B tests/browser/headless_ui.py --handbook-only
+```
+
 Der vollständige zustandsverändernde Akzeptanzlauf benötigt dagegen ein
 eigens dafür provisioniertes Testkonto:
 
@@ -239,7 +249,7 @@ python3 tests/browser/headless_ui.py
 Ohne eine der beiden Kennwortvariablen bricht der vollständige Lauf
 verständlich ab; ein zufälliges Kennwort könnte ein vorhandenes Konto nicht
 authentisieren. Die lesenden Modi `--overview-only`,
-`--auth-recovery-only` und `--bos-only` sowie der
+`--auth-recovery-only`, `--bos-only` und `--handbook-only` sowie der
 unabhängig authentisierte Modus `--export-only` benötigen kein
 Anwendungskennwort. `ESTAB_TEST_LOGIN_PASSWORD` hat Vorrang, falls beide
 Varianten gesetzt sind.

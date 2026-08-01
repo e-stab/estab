@@ -58,7 +58,7 @@ include ("./4fcfg/config.inc.php");
    $menue[2]["visible"] = true ;
 
 	$menue[3]["text"] = "Meldungsübersicht";
-	$menue[3]["info"] = "Für die Übungsleitung: Hier werden alle Meldungen mit ihrem Sichtungsstatus dargestellt.";
+	$menue[3]["info"] = "Für S2 als Lage- und Dokumentationsfunktion: Meldungen des aktiven Einsatzes sicher suchen, filtern und öffnen.";
    $menue[3]["pic"]  = $conf_menue ["symbole"]."all_msg.png";
    $menue[3]["link"] = "./4fueltg/ue_ltg.php";
    $menue[3]["navigation_key"] = "message-overview";
@@ -114,9 +114,9 @@ include ("./4fcfg/config.inc.php");
    $menue[8]["visible"] = true ;
 
    $zusatz_menue[2]["text"] = "Handbuch";
-	$zusatz_menue[2]["info"] = "Kurzbeschreibung von eStab als PDF-Dokument.";
+	$zusatz_menue[2]["info"] = "Aktuelles, durchsuchbares Web-Handbuch für Bedienung, Rollen, Einsatzablauf und Administration.";
    $zusatz_menue[2]["pic"]  = $conf_menue ["symbole"]."icon_handbuch.gif";
-   $zusatz_menue[2]["link"] = "./doku/Handbuch_eStab.pdf";
+   $zusatz_menue[2]["link"] = "./handbuch/";
    $zusatz_menue[2]["navigation_key"] = "handbook";
    $zusatz_menue[2]["access"] = "public";
    $zusatz_menue[2]["visible"] = true ;

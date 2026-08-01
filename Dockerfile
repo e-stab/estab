@@ -132,7 +132,10 @@ COPY 4fsym/*.bmp \
     ./4fsym/
 COPY 4fueltg/ue_ltg.php 4fueltg/null.gif ./4fueltg/
 COPY app/*.php ./app/
-COPY doku/Handbuch_eStab.pdf ./doku/
+COPY handbuch/index.php \
+    handbuch/handbuch.css \
+    handbuch/handbuch.js \
+    ./handbuch/
 COPY fmtbb/tbb.php fmtbb/null.gif fmtbb/null.jpg ./fmtbb/
 COPY language/german/helptext.php \
     language/german/hilfetext.php \

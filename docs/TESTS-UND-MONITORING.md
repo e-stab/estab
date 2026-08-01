@@ -953,7 +953,7 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
 `ESTAB_TEST_ADMIN_USER` denselben Wert erhalten. Der Test prüft unter anderem:
 
 - Readiness und Security Header,
-- Übersicht, BOS-Infos und historisches PDF-Handbuch,
+- Übersicht, BOS-Infos und das öffentliche Web-Handbuch unter `/handbuch/`,
 - HTTP 403 für interne beziehungsweise abgeschaltete Provisionierungspfade,
 - HTTP 410 für unsichere historische Direkt-Upload-Endpunkte,
 - HTTP 401 für den anonymen Administrationszugriff,
@@ -1145,6 +1145,19 @@ Inhaltsänderung fällt dadurch bereits in der statischen Suite auf. Sobald der
 Browser-Gate aktiviert ist, führt `tests/integration/ci.sh` den vollständigen
 BOS-Lauf automatisch aus.
 
+Das öffentliche Web-Handbuch wird ebenfalls ohne Testkonto und ohne
+Änderungen an Anwendungsdaten geprüft. Der Modus kontrolliert alle 19 Kapitel,
+die öffentliche Navigation, die lokale Mehrwortsuche einschließlich Löschen
+und URL-Abfrage sowie ein überlauffreies Desktop- und Mobil-Layout:
+
+```console
+ESTAB_TEST_BASE_URL=http://127.0.0.1:18080 \
+python3 -B tests/browser/headless_ui.py --handbook-only
+```
+
+Bei aktiviertem Browser-Gate führt `tests/integration/ci.sh` auch diesen Lauf
+mit einem eigenen Zeitlimit von drei Minuten automatisch aus.
+
 Der vollständige Akzeptanzlauf verwendet anschließend das eigens
 provisionierte Testkonto:
 
@@ -1197,8 +1210,9 @@ insbesondere:
   eine dauerhaft sichtbare Warnstufe.
 - Das Manifest enthält neun Bereiche und zwei Dienste. Nach der Anmeldung sind
   vor Hutauswahl nur Übersicht, Führungsstellenbetrieb, BOS-Info,
-  Administration und Handbuch sichtbar. Nach der Auswahl erscheinen nur die
-  für den ausgewählten Hut zulässigen neun beziehungsweise zehn Links ohne
+  Administration und das öffentliche Web-Handbuch sichtbar. Nach der Auswahl
+  erscheinen nur die für den ausgewählten Hut zulässigen neun beziehungsweise
+  zehn Links ohne
   Disclosure dauerhaft; S2 erhält die Meldungsübersicht, LdF/A/W die
   Nachweisung, andere Hüte keines der beiden Spezialziele. Alle sichtbaren
   Links sind mindestens 44 Pixel groß und besitzen weder eine eigene
@@ -1655,9 +1669,11 @@ im Kommando stehen.
 Der automatisierte Browser-Akzeptanztest belegt die technische Bedienmechanik
 von Menü, Zwei-`iframe`-Arbeitsbereich, Sidebar, Sitzung und Logout. Er ersetzt
 nicht die nachfolgende fachliche Abnahme mit der organisationsspezifischen
-Empfängermatrix. Als fachliche Referenz dient das
-[historische Anwendungshandbuch](../doku/Handbuch_eStab.pdf); seine alten
-Installations- und Sicherheitskapitel gelten nicht.
+Empfängermatrix. Als aktuelle Bedienreferenz dient das gemeinsam mit der
+Anwendung ausgelieferte [Web-Handbuch](../handbuch/) unter `/handbuch/`.
+Das [Anwendungshandbuch von 2011](../doku/Handbuch_eStab.pdf) bleibt nur eine
+historische Quelle; seine Bedienbilder sowie Installations- und
+Sicherheitskapitel sind kein Sollzustand der heutigen Laufzeit.
 
 Insbesondere beweist die Automation keine physische Hörbarkeit. Sie bindet
 alle drei Dateien per SHA-256, parst RIFF/WAVE und PCM-16, prüft Kanäle,

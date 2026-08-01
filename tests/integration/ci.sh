@@ -765,6 +765,12 @@ run_browser_acceptance() {
             export ESTAB_BROWSER_ARTIFACT_DIR="$ESTAB_CI_LOG_DIR/browser-bos"
         fi
         run_timed 3m python3 -B tests/browser/headless_ui.py --bos-only
+        echo "CI integration: running public handbook acceptance"
+        if [[ -n ${ESTAB_CI_LOG_DIR:-} ]]; then
+            export \
+                ESTAB_BROWSER_ARTIFACT_DIR="$ESTAB_CI_LOG_DIR/browser-handbook"
+        fi
+        run_timed 3m python3 -B tests/browser/headless_ui.py --handbook-only
         if [[ -n ${ESTAB_CI_LOG_DIR:-} ]]; then
             export ESTAB_BROWSER_ARTIFACT_DIR="$ESTAB_CI_LOG_DIR/browser"
         fi

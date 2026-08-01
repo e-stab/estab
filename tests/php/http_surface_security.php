@@ -261,12 +261,24 @@ foreach ([
     './stabetb/etb.php' => '/stabetb/etb.php',
     './fmtbb/tbb.php' => '/fmtbb/tbb.php',
     './4fach/nachwea.php?nwalle' => '/4fach/nachwea.php',
-    './doku/Handbuch_eStab.pdf' => '/doku/Handbuch_eStab.pdf',
+    './handbuch/' => '/handbuch/',
 ] as $menuLink => $testNeedle) {
     $assert(str_contains($rootMenu, $menuLink), 'expected visible root-menu link is absent: ' . $menuLink);
     $assert(
         str_contains($integrationCoverage, $testNeedle),
         'visible root-menu target lacks HTTP coverage: ' . $menuLink
+    );
+}
+foreach ([
+    '/handbuch/',
+    '/handbuch/handbuch.css',
+    '/handbuch/handbuch.js',
+] as $handbookResource) {
+    $assert(
+        str_contains($httpSurface, $handbookResource)
+            && str_contains($httpSmoke, $handbookResource),
+        'web handbook resource lacks both HTTP contracts: '
+            . $handbookResource
     );
 }
 foreach ([
@@ -323,6 +335,9 @@ foreach ([
     '/4fach/createbutton.php',
     '/4fach/kategobutton.php',
     '/4fach/info.php',
+    '/handbuch/index.php',
+    '/handbuch/handbuch.css',
+    '/handbuch/handbuch.js',
     '/language/german/helptext.php',
 ] as $publicPath) {
     $assert(

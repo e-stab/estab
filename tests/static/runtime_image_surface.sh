@@ -67,6 +67,7 @@ assert_dockerfile_absent 'COPY 4fcfg/ ./4fcfg/'
 assert_dockerfile_absent 'COPY 4fsym/ ./4fsym/'
 assert_dockerfile_absent 'COPY app/ ./app/'
 assert_dockerfile_absent 'COPY doku/ ./doku/'
+assert_dockerfile_absent 'COPY handbuch/ ./handbuch/'
 assert_dockerfile_absent 'COPY language/ ./language/'
 assert_dockerfile_absent 'COPY ubltg/ ./ubltg/'
 assert_dockerfile_contains 'COPY 4fadm/admin.php'
@@ -80,7 +81,11 @@ assert_dockerfile_contains 'COPY 4fbak/backup.php'
 assert_dockerfile_contains '4fbak/thw.png'
 assert_dockerfile_contains 'COPY app/*.php ./app/'
 assert_dockerfile_contains 'COPY 4fbak/fpdf/font/*.php ./4fbak/fpdf/font/'
-assert_dockerfile_contains 'COPY doku/Handbuch_eStab.pdf ./doku/'
+assert_dockerfile_contains 'COPY handbuch/index.php'
+assert_dockerfile_contains 'handbuch/handbuch.css'
+assert_dockerfile_contains 'handbuch/handbuch.js'
+assert_dockerfile_contains './handbuch/'
+assert_dockerfile_absent 'COPY doku/Handbuch_eStab.pdf ./doku/'
 assert_dockerfile_contains 'COPY docker/app/verify-runtime-surface.sh /usr/local/bin/estab-verify-runtime-surface'
 assert_dockerfile_contains 'COPY docker/app/init-admin-auth.sh /usr/local/bin/estab-init-admin-auth'
 assert_dockerfile_contains 'COPY docker/app/cleanup-pdf-render-tmp.sh /usr/local/bin/estab-cleanup-pdf-render-tmp'
@@ -118,7 +123,10 @@ for required_runtime_path in \
     app/message_priority.php \
     app/message_transport.php \
     app/operational_guard.php \
-    app/read_authorization.php
+    app/read_authorization.php \
+    handbuch/index.php \
+    handbuch/handbuch.css \
+    handbuch/handbuch.js
 do
     if ! sh "$verifier" --list-required |
         grep -Fxq -- "$required_runtime_path"; then
@@ -127,6 +135,13 @@ do
         exit 1
     fi
 done
+
+if ! sh "$verifier" --list-forbidden |
+    grep -Fxq -- 'doku/Handbuch_eStab.pdf'; then
+    printf '%s\n' \
+        'Runtime surface contract: historical handbook PDF is not forbidden' >&2
+    exit 1
+fi
 
 sh "$verifier" --list-required | while IFS= read -r relative_path; do
     mkdir -p "$fixture/$(dirname -- "$relative_path")"
@@ -142,6 +157,14 @@ if sh "$verifier" "$fixture" >/dev/null 2>&1; then
     exit 1
 fi
 rm -f "$fixture/4fadm/00.htpasswd"
+
+mkdir -p "$fixture/doku"
+printf 'historical handbook pdf\n' >"$fixture/doku/Handbuch_eStab.pdf"
+if sh "$verifier" "$fixture" >/dev/null 2>&1; then
+    printf 'Runtime surface contract: historical handbook PDF was not rejected\n' >&2
+    exit 1
+fi
+rm -f "$fixture/doku/Handbuch_eStab.pdf"
 
 mkdir -p "$fixture/4fach/design/source"
 printf 'editable design source\n' >"$fixture/4fach/design/source/layout.odt"

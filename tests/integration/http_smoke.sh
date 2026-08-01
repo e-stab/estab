@@ -322,6 +322,17 @@ assert_header_fixed() {
     fi
 }
 
+assert_header_regex() {
+    expected=$1
+    description=$2
+    if ! grep -Eiq -- "$expected" "$headers"; then
+        printf 'HTTP smoke: response headers do not match %s\n' \
+            "$description" >&2
+        sed -n '1,30p' "$headers" >&2
+        exit 1
+    fi
+}
+
 assert_body() {
     pattern=$1
     if ! grep -Fq -- "$pattern" "$body"; then
@@ -850,6 +861,7 @@ assert_body "href=\"$expected_app_root/4fach/index.php?login_flow=existing\""
 assert_body '>Mit bestehendem Konto anmelden</a>'
 assert_body 'Anmeldung erforderlich'
 assert_body 'Separater Administrationszugang'
+assert_body 'href="./handbuch/"'
 assert_body_absent 'id="estab-register"'
 assert_body 'Neue Konten können auf dieser Installation nicht selbst angelegt werden'
 assert_body 'Administration → Benutzerverwaltung'
@@ -857,7 +869,34 @@ assert_body_absent 'href="./stabetb/etb.php"'
 assert_body_absent 'data-estab-session-bar'
 assert_body_absent 'data-estab-logout-form'
 assert_status 200 "$base_url/stabinfo/index.php"
-assert_status 200 "$base_url/doku/Handbuch_eStab.pdf"
+assert_status 200 "$base_url/handbuch/"
+assert_header_fixed 'Content-Type: text/html; charset=UTF-8'
+assert_header_fixed 'Cache-Control: private, no-store, max-age=0'
+assert_body '<title>eStab Web-Handbuch</title>'
+assert_body 'data-estab-handbook-search'
+assert_body 'data-estab-handbook-toc'
+assert_body 'href="./handbuch.css"'
+assert_body 'src="./handbuch.js"'
+assert_body 'data-estab-public-bar'
+assert_body 'data-estab-nav-key="handbook" aria-current="page"'
+assert_body_absent 'data-estab-session-bar'
+assert_body_absent 'data-estab-logout-form'
+assert_status 200 "$base_url/handbuch/handbuch.css"
+assert_header_regex \
+    '^Content-Type:[[:space:]]*text/css([;[:space:]]|$)' \
+    'the handbook CSS content type'
+assert_body '.estab-handbook-layout'
+assert_body '@media (max-width: 48rem)'
+assert_status 200 "$base_url/handbuch/handbuch.js"
+assert_header_regex \
+    '^Content-Type:[[:space:]]*(text|application)/(javascript|x-javascript)([;[:space:]]|$)' \
+    'the handbook JavaScript content type'
+assert_body "document.querySelector('[data-estab-handbook-search]')"
+assert_body 'section.hidden = !matches'
+assert_body 'status.textContent ='
+assert_body_absent 'innerHTML'
+assert_body_absent 'eval('
+assert_status 404 "$base_url/doku/Handbuch_eStab.pdf"
 
 assert_status 403 "$base_url/app/bootstrap.php"
 assert_status 403 "$base_url/4fadm/make_conf.php?task=einsatz_ende"
@@ -2013,6 +2052,13 @@ select_session_hat \
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/mainindex.php"
 assert_body 'Meldung/Seite:'
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/handbuch/"
+assert_body '<title>eStab Web-Handbuch</title>'
+assert_body 'data-estab-handbook-search'
+assert_body 'data-estab-nav-key="handbook" aria-current="page"'
+assert_body_absent 'data-estab-public-bar'
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 authenticated_session_id=$(session_cookie_from_jar "$cookie_jar")
 authenticated_csrf_token=$(csrf_from_body)

@@ -1,0 +1,910 @@
+:root {
+    --handbook-ink: #172033;
+    --handbook-muted: #52647a;
+    --handbook-navy: #102641;
+    --handbook-blue: #1d4f7d;
+    --handbook-line: #c7d3df;
+    --handbook-panel: #ffffff;
+    --handbook-canvas: #edf2f7;
+    --handbook-yellow: #e5b247;
+    --handbook-danger: #a92722;
+    --handbook-success: #246b4a;
+}
+
+.estab-handbook-page {
+    background: var(--handbook-canvas);
+    color: var(--handbook-ink);
+    font-family: Arial, Helvetica, sans-serif;
+    margin: 0;
+    min-width: 0;
+}
+
+.estab-handbook-page *,
+.estab-handbook-page *::before,
+.estab-handbook-page *::after {
+    box-sizing: border-box;
+}
+
+.estab-handbook-page a {
+    color: #145b96;
+    text-decoration-thickness: 0.09em;
+    text-underline-offset: 0.16em;
+}
+
+.estab-handbook-page a:hover {
+    color: #0b3c66;
+}
+
+.estab-handbook-page a:focus-visible,
+.estab-handbook-page button:focus-visible,
+.estab-handbook-page input:focus-visible,
+.estab-handbook-page summary:focus-visible,
+.estab-handbook-page [tabindex="0"]:focus-visible {
+    outline: 3px solid #1672c4;
+    outline-offset: 3px;
+}
+
+.estab-handbook-skip {
+    background: #ffffff;
+    border: 3px solid #1672c4;
+    border-radius: 0 0 0.45rem 0;
+    color: var(--handbook-navy);
+    font-weight: 800;
+    left: 0;
+    padding: 0.8rem 1rem;
+    position: fixed;
+    top: 0;
+    transform: translateY(-130%);
+    transition: transform 120ms ease;
+    z-index: 4000;
+}
+
+.estab-handbook-skip:focus {
+    transform: translateY(0);
+}
+
+.estab-handbook-hero {
+    background:
+        radial-gradient(circle at 82% 12%, rgba(229, 178, 71, 0.18), transparent 22rem),
+        linear-gradient(135deg, #102641 0%, #173e66 70%, #1d4f7d 100%);
+    border-bottom: 5px solid var(--handbook-yellow);
+    color: #ffffff;
+    overflow: hidden;
+}
+
+.estab-handbook-hero-inner {
+    margin: 0 auto;
+    max-width: 92rem;
+    padding: clamp(2.5rem, 7vw, 5.5rem) clamp(1rem, 4vw, 3rem);
+    position: relative;
+}
+
+.estab-handbook-hero-inner::after {
+    border: 2px solid rgba(255, 255, 255, 0.18);
+    border-radius: 50%;
+    content: "";
+    height: 20rem;
+    position: absolute;
+    right: -5rem;
+    top: -8rem;
+    width: 20rem;
+}
+
+.estab-handbook-eyebrow {
+    color: inherit;
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.11em;
+    margin: 0 0 0.55rem;
+    text-transform: uppercase;
+}
+
+.estab-handbook-hero h1 {
+    font-size: clamp(2.3rem, 6vw, 4.8rem);
+    line-height: 0.98;
+    margin: 0;
+    max-width: 20ch;
+}
+
+.estab-handbook-hero h1 span {
+    white-space: nowrap;
+}
+
+.estab-handbook-lead {
+    color: #dce8f4;
+    font-size: clamp(1.05rem, 2vw, 1.35rem);
+    line-height: 1.55;
+    margin: 1.4rem 0 0;
+    max-width: 47rem;
+}
+
+.estab-handbook-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    margin-top: 1.6rem;
+}
+
+.estab-handbook-meta span {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.32);
+    border-radius: 999px;
+    color: #ffffff;
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 0.4rem 0.72rem;
+}
+
+.estab-handbook-hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    margin-top: 1.6rem;
+}
+
+.estab-handbook-hero-actions a {
+    align-items: center;
+    border: 2px solid #ffffff;
+    border-radius: 0.45rem;
+    display: inline-flex;
+    font-weight: 800;
+    justify-content: center;
+    min-height: 2.8rem;
+    padding: 0.65rem 1rem;
+    text-decoration: none;
+}
+
+.estab-handbook-primary-action {
+    background: var(--handbook-yellow);
+    border-color: var(--handbook-yellow) !important;
+    color: var(--handbook-navy) !important;
+}
+
+.estab-handbook-secondary-action {
+    background: transparent;
+    color: #ffffff !important;
+}
+
+.estab-handbook-hero-actions a:hover,
+.estab-handbook-hero-actions a:focus-visible {
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.25);
+}
+
+.estab-handbook-main {
+    margin: 0 auto;
+    max-width: 92rem;
+    padding: 2rem clamp(1rem, 3vw, 2rem) 4rem;
+}
+
+.estab-handbook-search,
+.estab-handbook-role-entry {
+    background: var(--handbook-panel);
+    border: 1px solid var(--handbook-line);
+    border-radius: 0.8rem;
+    box-shadow: 0 0.45rem 1.5rem rgba(16, 38, 65, 0.08);
+    margin-bottom: 1.25rem;
+    padding: clamp(1.1rem, 3vw, 1.7rem);
+}
+
+.estab-handbook-search {
+    align-items: end;
+    display: grid;
+    gap: 1.4rem;
+    grid-template-columns: minmax(0, 0.8fr) minmax(18rem, 1.2fr);
+}
+
+.estab-handbook-search h2,
+.estab-handbook-role-entry h2 {
+    color: var(--handbook-navy);
+    font-size: clamp(1.35rem, 3vw, 1.8rem);
+    margin: 0;
+}
+
+.estab-handbook-search p,
+.estab-handbook-role-entry p {
+    color: var(--handbook-muted);
+    line-height: 1.5;
+    margin: 0.5rem 0 0;
+}
+
+.estab-handbook-search-control label {
+    display: block;
+    font-size: 0.88rem;
+    font-weight: 800;
+    margin-bottom: 0.35rem;
+}
+
+.estab-handbook-search-row {
+    display: grid;
+    gap: 0.55rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.estab-handbook-search-row input,
+.estab-handbook-search-row button {
+    border: 2px solid #6c8299;
+    border-radius: 0.42rem;
+    font: inherit;
+    min-height: 3rem;
+}
+
+.estab-handbook-search-row input {
+    background: #ffffff;
+    color: var(--handbook-ink);
+    padding: 0.65rem 0.8rem;
+    width: 100%;
+}
+
+.estab-handbook-search-row input::placeholder {
+    color: #617184;
+}
+
+.estab-handbook-search-row button {
+    background: #e7edf4;
+    color: var(--handbook-navy);
+    cursor: pointer;
+    font-weight: 800;
+    padding: 0.55rem 0.85rem;
+}
+
+.estab-handbook-search-status {
+    font-size: 0.84rem;
+    min-height: 1.25rem;
+}
+
+.estab-handbook-role-entry header {
+    margin-bottom: 1rem;
+}
+
+.estab-handbook-role-grid {
+    display: grid;
+    gap: 0.7rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.estab-handbook-role-grid a {
+    background: #f4f7fa;
+    border: 1px solid var(--handbook-line);
+    border-left: 5px solid var(--handbook-blue);
+    border-radius: 0.45rem;
+    color: var(--handbook-ink);
+    display: grid;
+    gap: 0.25rem;
+    min-height: 5.3rem;
+    padding: 0.85rem;
+    text-decoration: none;
+}
+
+.estab-handbook-role-grid a:hover,
+.estab-handbook-role-grid a:focus-visible {
+    background: #eaf3fb;
+    border-left-color: var(--handbook-yellow);
+}
+
+.estab-handbook-role-grid span {
+    color: var(--handbook-muted);
+    font-size: 0.86rem;
+    line-height: 1.35;
+}
+
+.estab-handbook-layout {
+    align-items: start;
+    display: grid;
+    gap: 1.4rem;
+    grid-template-columns: minmax(14rem, 17rem) minmax(0, 1fr);
+    margin-top: 1.6rem;
+}
+
+.estab-handbook-toc {
+    align-self: start;
+    position: sticky;
+    top: 7.2rem;
+}
+
+.estab-handbook-toc details {
+    background: var(--handbook-navy);
+    border: 1px solid #315270;
+    border-radius: 0.7rem;
+    color: #ffffff;
+    overflow: hidden;
+}
+
+.estab-handbook-toc summary {
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 800;
+    min-height: 2.9rem;
+    padding: 0.8rem 0.9rem;
+}
+
+.estab-handbook-toc nav {
+    border-top: 1px solid #45627f;
+    padding: 0.35rem;
+}
+
+.estab-handbook-toc ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.estab-handbook-toc li[hidden] {
+    display: none;
+}
+
+.estab-handbook-toc a {
+    border-left: 4px solid transparent;
+    border-radius: 0.25rem;
+    color: #e7eef6;
+    display: block;
+    font-size: 0.86rem;
+    font-weight: 700;
+    line-height: 1.25;
+    min-height: 2.25rem;
+    padding: 0.52rem 0.55rem;
+    text-decoration: none;
+}
+
+.estab-handbook-toc a:hover,
+.estab-handbook-toc a:focus-visible {
+    background: #294b70;
+    border-left-color: var(--handbook-yellow);
+    color: #ffffff;
+}
+
+.estab-handbook-chapters {
+    display: grid;
+    gap: 1.15rem;
+    min-width: 0;
+}
+
+.estab-handbook-no-results {
+    background: #fff8e7;
+    border: 2px solid #c28b19;
+    border-radius: 0.6rem;
+    color: #4a350c;
+    font-weight: 700;
+    margin: 0;
+    padding: 1rem;
+}
+
+.estab-handbook-chapter {
+    background: var(--handbook-panel);
+    border: 1px solid var(--handbook-line);
+    border-radius: 0.75rem;
+    box-shadow: 0 0.35rem 1.2rem rgba(16, 38, 65, 0.06);
+    line-height: 1.6;
+    min-width: 0;
+    padding: clamp(1.15rem, 3vw, 2rem);
+    scroll-margin-top: 7.5rem;
+}
+
+.estab-handbook-chapter[hidden] {
+    display: none;
+}
+
+.estab-handbook-chapter > header {
+    align-items: start;
+    border-bottom: 1px solid #d5dee7;
+    display: grid;
+    gap: 0.9rem;
+    grid-template-columns: auto 1fr;
+    margin-bottom: 1rem;
+    padding-bottom: 0.9rem;
+}
+
+.estab-handbook-chapter > header > span {
+    align-items: center;
+    background: var(--handbook-yellow);
+    border-radius: 0.35rem;
+    color: var(--handbook-navy);
+    display: inline-flex;
+    font-size: 0.9rem;
+    font-weight: 900;
+    height: 2.5rem;
+    justify-content: center;
+    width: 2.8rem;
+}
+
+.estab-handbook-chapter > header p {
+    color: var(--handbook-muted);
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    margin: 0 0 0.2rem;
+    text-transform: uppercase;
+}
+
+.estab-handbook-chapter h2 {
+    color: var(--handbook-navy);
+    font-size: clamp(1.45rem, 3vw, 2rem);
+    line-height: 1.15;
+    margin: 0;
+}
+
+.estab-handbook-chapter h3 {
+    color: #173e66;
+    font-size: 1.18rem;
+    margin: 1.4rem 0 0.55rem;
+}
+
+.estab-handbook-chapter p {
+    margin: 0.75rem 0;
+}
+
+.estab-handbook-chapter ul,
+.estab-handbook-chapter ol {
+    padding-left: 1.35rem;
+}
+
+.estab-handbook-chapter li {
+    margin: 0.45rem 0;
+}
+
+.estab-handbook-callout {
+    background: #eef6fd;
+    border-left: 5px solid #2875ae;
+    border-radius: 0.35rem;
+    margin: 1rem 0;
+    padding: 0.85rem 1rem;
+}
+
+.estab-handbook-callout strong {
+    color: var(--handbook-navy);
+    display: block;
+    font-size: 1rem;
+}
+
+.estab-handbook-callout p {
+    margin: 0.3rem 0 0;
+}
+
+.estab-handbook-callout-important {
+    background: #fff8e7;
+    border-left-color: #c28b19;
+}
+
+.estab-handbook-callout-danger {
+    background: #fff0ef;
+    border-left-color: var(--handbook-danger);
+}
+
+.estab-handbook-steps {
+    counter-reset: handbook-step;
+    list-style: none;
+    margin: 1rem 0;
+    padding: 0 !important;
+}
+
+.estab-handbook-steps li {
+    border-left: 3px solid #adc2d5;
+    margin: 0 0 0.6rem;
+    min-height: 3rem;
+    padding: 0.35rem 0 0.65rem 3.25rem;
+    position: relative;
+}
+
+.estab-handbook-steps li::before {
+    align-items: center;
+    background: var(--handbook-blue);
+    border-radius: 50%;
+    color: #ffffff;
+    content: counter(handbook-step);
+    counter-increment: handbook-step;
+    display: flex;
+    font-weight: 900;
+    height: 2.2rem;
+    justify-content: center;
+    left: 0.45rem;
+    position: absolute;
+    top: 0.1rem;
+    width: 2.2rem;
+}
+
+.estab-handbook-table-wrap {
+    border: 1px solid var(--handbook-line);
+    border-radius: 0.45rem;
+    margin: 1rem 0;
+    max-width: 100%;
+}
+
+.estab-handbook-table-wrap table {
+    border-collapse: collapse;
+    table-layout: fixed;
+    width: 100%;
+}
+
+.estab-handbook-table-wrap th,
+.estab-handbook-table-wrap td {
+    border-bottom: 1px solid #d5dee7;
+    overflow-wrap: anywhere;
+    padding: 0.7rem;
+    text-align: left;
+    vertical-align: top;
+}
+
+.estab-handbook-table-wrap th {
+    background: #dce7f1;
+    color: var(--handbook-navy);
+}
+
+.estab-handbook-table-wrap tr:last-child td {
+    border-bottom: 0;
+}
+
+.estab-handbook-table-wrap th:first-child,
+.estab-handbook-table-wrap td:first-child {
+    width: 29%;
+}
+
+.estab-handbook-workflow {
+    background: #f6f8fb;
+    border: 1px solid #cfdae5;
+    border-radius: 0.55rem;
+    margin: 1rem 0;
+    padding: 0 1rem 0.7rem;
+}
+
+.estab-handbook-workflow ol {
+    margin-bottom: 0.4rem;
+}
+
+.estab-handbook-flow-summary {
+    align-items: center;
+    background: var(--handbook-navy);
+    border-radius: 0.5rem;
+    color: #ffffff;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin-top: 1rem;
+    padding: 0.85rem;
+}
+
+.estab-handbook-flow-summary span {
+    background: #294b70;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 0.35rem 0.6rem;
+}
+
+.estab-handbook-flow-summary b {
+    color: var(--handbook-yellow);
+}
+
+.estab-handbook-facts {
+    display: grid;
+    gap: 0.7rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 1rem 0;
+}
+
+.estab-handbook-facts > div {
+    background: #f5f8fb;
+    border: 1px solid #d2dde7;
+    border-radius: 0.4rem;
+    display: grid;
+    gap: 0.25rem;
+    padding: 0.8rem;
+}
+
+.estab-handbook-facts strong {
+    color: var(--handbook-navy);
+}
+
+.estab-handbook-facts span {
+    color: var(--handbook-muted);
+    font-size: 0.9rem;
+}
+
+.estab-handbook-compare {
+    display: grid;
+    gap: 0.85rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 1rem 0;
+}
+
+.estab-handbook-compare section {
+    background: #f4f8fc;
+    border: 1px solid #cbd9e6;
+    border-radius: 0.55rem;
+    display: flex;
+    flex-direction: column;
+    padding: 1rem;
+}
+
+.estab-handbook-compare h3 {
+    margin-top: 0;
+}
+
+.estab-handbook-compare a {
+    align-self: flex-start;
+    font-weight: 800;
+    margin-top: auto;
+}
+
+.estab-handbook-admin-grid {
+    display: grid;
+    gap: 0.65rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin: 1rem 0;
+}
+
+.estab-handbook-admin-grid a {
+    background: #f6f8fb;
+    border: 1px solid #cbd7e2;
+    border-radius: 0.42rem;
+    color: var(--handbook-ink);
+    display: grid;
+    gap: 0.25rem;
+    min-height: 6.5rem;
+    padding: 0.8rem;
+    text-decoration: none;
+}
+
+.estab-handbook-admin-grid a:hover,
+.estab-handbook-admin-grid a:focus-visible {
+    background: #eaf3fb;
+    border-color: #4d789e;
+}
+
+.estab-handbook-admin-grid span {
+    color: var(--handbook-muted);
+    font-size: 0.84rem;
+}
+
+.estab-handbook-chapter pre {
+    background: #0d1d30;
+    border-radius: 0.45rem;
+    color: #f2f7fb;
+    font-size: 0.86rem;
+    line-height: 1.55;
+    margin: 1rem 0;
+    overflow-wrap: anywhere;
+    padding: 1rem;
+    white-space: pre-wrap;
+}
+
+.estab-handbook-chapter :not(pre) > code {
+    background: #e9eef4;
+    border-radius: 0.2rem;
+    color: #172f4d;
+    overflow-wrap: anywhere;
+    padding: 0.1rem 0.24rem;
+}
+
+.estab-handbook-troubleshooting {
+    display: grid;
+    gap: 0.55rem;
+    margin: 1rem 0;
+}
+
+.estab-handbook-troubleshooting details {
+    background: #f7f9fb;
+    border: 1px solid #cbd7e2;
+    border-radius: 0.45rem;
+}
+
+.estab-handbook-troubleshooting summary {
+    color: var(--handbook-navy);
+    cursor: pointer;
+    font-weight: 800;
+    min-height: 3rem;
+    padding: 0.75rem 0.9rem;
+}
+
+.estab-handbook-troubleshooting details[open] summary {
+    border-bottom: 1px solid #d5dee7;
+}
+
+.estab-handbook-troubleshooting p {
+    margin: 0;
+    padding: 0.85rem 0.9rem;
+}
+
+.estab-handbook-glossary {
+    display: grid;
+    gap: 0;
+    margin: 1rem 0;
+}
+
+.estab-handbook-glossary > div {
+    border-bottom: 1px solid #d6e0e9;
+    display: grid;
+    gap: 0.8rem;
+    grid-template-columns: minmax(7rem, 10rem) minmax(0, 1fr);
+    padding: 0.7rem 0;
+}
+
+.estab-handbook-glossary dt {
+    color: var(--handbook-navy);
+    font-weight: 800;
+}
+
+.estab-handbook-glossary dd {
+    margin: 0;
+}
+
+.estab-handbook-footer {
+    background: var(--handbook-navy);
+    border-top: 4px solid var(--handbook-yellow);
+    color: #dce8f4;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.8rem 2rem;
+    justify-content: space-between;
+    padding: 1.25rem max(1rem, calc((100vw - 88rem) / 2));
+}
+
+.estab-handbook-footer p {
+    margin: 0;
+}
+
+.estab-handbook-footer a {
+    color: #ffffff;
+}
+
+@media (max-width: 64rem) {
+    .estab-handbook-role-grid,
+    .estab-handbook-admin-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .estab-handbook-layout {
+        grid-template-columns: minmax(12.5rem, 14rem) minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 48rem) {
+    .estab-handbook-search,
+    .estab-handbook-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .estab-handbook-toc {
+        position: static;
+    }
+
+    .estab-handbook-toc nav {
+        padding: 0.45rem;
+    }
+
+    .estab-handbook-toc ol {
+        display: grid;
+        gap: 0.15rem;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .estab-handbook-role-grid,
+    .estab-handbook-admin-grid,
+    .estab-handbook-facts,
+    .estab-handbook-compare {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .estab-handbook-admin-grid a {
+        min-height: 0;
+    }
+}
+
+@media (max-width: 32rem) {
+    .estab-handbook-main {
+        padding-left: 0.7rem;
+        padding-right: 0.7rem;
+    }
+
+    .estab-handbook-search-row,
+    .estab-handbook-toc ol,
+    .estab-handbook-glossary > div {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .estab-handbook-search-row button {
+        width: 100%;
+    }
+
+    .estab-handbook-chapter {
+        border-radius: 0.55rem;
+        padding: 1rem;
+    }
+
+    .estab-handbook-chapter > header {
+        gap: 0.65rem;
+    }
+
+    .estab-handbook-table-wrap table,
+    .estab-handbook-table-wrap thead,
+    .estab-handbook-table-wrap tbody,
+    .estab-handbook-table-wrap tr,
+    .estab-handbook-table-wrap th,
+    .estab-handbook-table-wrap td {
+        display: block;
+        width: 100% !important;
+    }
+
+    .estab-handbook-table-wrap thead {
+        position: static;
+    }
+
+    .estab-handbook-table-wrap th,
+    .estab-handbook-table-wrap td {
+        border-bottom: 1px solid #d5dee7;
+    }
+
+    .estab-handbook-table-wrap th:not(:first-child) {
+        border-top: 1px solid #bdcbd8;
+    }
+
+    .estab-handbook-table-wrap tr + tr td:first-child {
+        background: #eef3f7;
+        font-weight: 800;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .estab-handbook-skip {
+        transition: none;
+    }
+}
+
+@media print {
+    .estab-session-bar,
+    .estab-handbook-skip,
+    .estab-handbook-search,
+    .estab-handbook-role-entry,
+    .estab-handbook-toc,
+    .estab-handbook-hero-actions,
+    .estab-handbook-footer {
+        display: none !important;
+    }
+
+    .estab-handbook-page,
+    .estab-handbook-main {
+        background: #ffffff;
+        color: #000000;
+    }
+
+    .estab-handbook-hero {
+        background: #ffffff;
+        border-bottom: 2px solid #000000;
+        color: #000000;
+    }
+
+    .estab-handbook-hero-inner {
+        padding: 0 0 1rem;
+    }
+
+    .estab-handbook-lead,
+    .estab-handbook-meta span {
+        color: #000000;
+    }
+
+    .estab-handbook-meta span {
+        border-color: #666666;
+    }
+
+    .estab-handbook-main {
+        max-width: none;
+        padding: 1rem 0;
+    }
+
+    .estab-handbook-layout {
+        display: block;
+    }
+
+    .estab-handbook-chapter {
+        border: 0;
+        box-shadow: none;
+        break-inside: avoid;
+        padding: 1rem 0;
+    }
+
+    .estab-handbook-troubleshooting details {
+        break-inside: avoid;
+    }
+
+    .estab-handbook-troubleshooting details > * {
+        display: block;
+    }
+}

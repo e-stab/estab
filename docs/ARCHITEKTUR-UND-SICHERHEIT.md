@@ -227,7 +227,11 @@ löst den aktiven Bereich aus dem konfigurationsbereinigten Requestpfad auf.
 Alle Ziele passieren `estab_application_url()`, interne Links verwenden
 `target="_top"` und kein operativer Link öffnet einen neuen Tab.
 Administration und Handbuch bleiben als zwei Dienste getrennt von den neun
-operativen Bereichen. Anonym erscheinen alle elf Einstiege mit
+operativen Bereichen. Das Handbuchziel ist die öffentliche, rein lesende
+Weboberfläche `/handbuch/`, die über dieselben URL- und Ausgabebegrenzungen
+wie die übrige Anwendung ausgeliefert wird. Das historische PDF von 2011 ist
+nur eine im Git-Bestand bewahrte Quelle und kein Laufzeitdienst. Anonym
+erscheinen alle elf Einstiege mit
 Anmeldehinweis. Nach der Anmeldung, aber vor Hutauswahl, zeigt sie nur die vier
 öffentlichen beziehungsweise separat geschützten Ziele und den
 Führungsstellen-Bootstrap. Mit ausgewähltem aktivem Funktions-Hut zeigt die

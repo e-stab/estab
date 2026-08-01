@@ -106,7 +106,7 @@ $assert(
     array_column($services, 'key') === ['administration', 'handbook']
         && array_column($services, 'path') === [
             '4fadm/admin.php',
-            'doku/Handbuch_eStab.pdf',
+            'handbuch/',
         ]
         && array_column($services, 'short_label') === [
             'Administration',
@@ -119,7 +119,8 @@ $assert(
     estab_navigation_item_url($areas[0]) === '/'
         && estab_navigation_item_url($areas[1]) === '/4fach/index.php'
         && estab_navigation_item_url($areas[7])
-            === '/4fach/nachwea.php?nwalle',
+            === '/4fach/nachwea.php?nwalle'
+        && estab_navigation_item_url($services[1]) === '/handbuch/',
     'root navigation URLs are not canonical'
 );
 $assert(
@@ -178,7 +179,9 @@ $assert(
             [],
             true
         ) === 'https://example.invalid/gateway/dispatch/site/4fach/'
-                . 'mainindex.php?login_flow=existing&next=messages',
+                . 'mainindex.php?login_flow=existing&next=messages'
+        && estab_navigation_item_url($services[1])
+            === 'https://example.invalid/gateway/dispatch/site/handbuch/',
     'navigation URLs did not preserve public URL and deployment base path'
 );
 $assert(
@@ -193,7 +196,10 @@ $assert(
         ]) === 'tracking'
         && estab_navigation_active_key([
             'SCRIPT_NAME' => '/gateway/dispatch/site/index.php',
-        ]) === 'overview',
+        ]) === 'overview'
+        && estab_navigation_active_key([
+            'SCRIPT_NAME' => '/gateway/dispatch/site/handbuch/index.php',
+        ]) === 'handbook',
     'base-path request resolution failed'
 );
 putenv('ESTAB_PUBLIC_URL=/');
@@ -213,7 +219,8 @@ $pathMappings = [
     '/fmtbb/tbb.php' => 'technical-log',
     '/stabinfo/index.php' => 'bos-info',
     '/4fadm/admin.php' => 'administration',
-    '/doku/Handbuch_eStab.pdf' => 'handbook',
+    '/handbuch/' => 'handbook',
+    '/handbuch/index.php' => 'handbook',
 ];
 foreach ($pathMappings as $path => $expectedKey) {
     $assert(
@@ -239,6 +246,7 @@ foreach ([
     '/4fachish/index.php',
     '/stabetb-old/etb.php',
     '/other/index.php',
+    '/doku/Handbuch_eStab.pdf',
     '//example.invalid/4fach/index.php',
     'https://example.invalid/4fach/index.php',
 ] as $unrecognizedPath) {
@@ -301,7 +309,7 @@ $assert(
         && str_contains($authenticated, 'href="/4fadm/admin.php"')
         && str_contains(
             $authenticated,
-            'href="/doku/Handbuch_eStab.pdf"'
+            'href="/handbuch/"'
         ),
     'authenticated navigation omitted canonical real targets'
 );
@@ -402,7 +410,7 @@ foreach ([
 $assert(
     str_contains($anonymous, 'href="/"')
         && str_contains($anonymous, 'href="/4fadm/admin.php"')
-        && str_contains($anonymous, 'href="/doku/Handbuch_eStab.pdf"')
+        && str_contains($anonymous, 'href="/handbuch/"')
         && str_contains($anonymous, 'href="/stabinfo/index.php"'),
     'anonymous navigation hid or redirected a public target'
 );

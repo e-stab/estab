@@ -1016,6 +1016,221 @@ class BrowserAcceptance:
         self._assert_protected_cards()
         self._assert_root_card_layout("anonyme Übersicht bei 1440 px")
 
+    def run_handbook(self) -> None:
+        """Check the public handbook, local search and responsive layout."""
+        self.cdp.call("Page.enable")
+        self.cdp.call("Runtime.enable")
+        self.cdp.call("Network.enable")
+        self.cdp.call(
+            "Emulation.setDeviceMetricsOverride",
+            {
+                "width": 1440,
+                "height": 1000,
+                "deviceScaleFactor": 1,
+                "mobile": False,
+                "screenWidth": 1440,
+                "screenHeight": 1000,
+            },
+        )
+        self.cdp.navigate(self.config.base_url + "/handbuch/")
+        self.cdp.wait_for(
+            """
+            document.readyState === "complete" &&
+            Boolean(document.querySelector("[data-estab-handbook]")) &&
+            document.querySelectorAll("[data-estab-handbook-section]").length === 19
+            """,
+            "öffentliches Web-Handbuch wurde nicht vollständig geladen",
+        )
+
+        desktop = self.cdp.evaluate(
+            """
+            (() => {
+                const visible = element => {
+                    const style = getComputedStyle(element);
+                    const rect = element.getBoundingClientRect();
+                    return style.display !== "none" &&
+                        style.visibility !== "hidden" &&
+                        rect.width > 0 && rect.height > 0;
+                };
+                const navigation = document.querySelector(
+                    "aside[data-estab-public-bar] [data-estab-navigation]"
+                );
+                const toc = document.querySelector(".estab-handbook-toc");
+                const search = document.querySelector("[data-estab-handbook-search]");
+                const ids = Array.from(document.querySelectorAll(
+                    "[data-estab-handbook-section]"
+                )).map(section => section.id);
+                return {
+                    title: document.title,
+                    h1: document.querySelectorAll("h1").length,
+                    publicBars: document.querySelectorAll(
+                        "aside[data-estab-public-bar]"
+                    ).length,
+                    sessionBars: document.querySelectorAll(
+                        "aside[data-estab-session-bar]"
+                    ).length,
+                    active: navigation
+                        ? Array.from(navigation.querySelectorAll(
+                            '[aria-current="page"]'
+                        )).map(link => link.getAttribute("data-estab-nav-key"))
+                        : [],
+                    sections: ids.length,
+                    uniqueIds: new Set(ids).size,
+                    tocLinks: document.querySelectorAll(
+                        "[data-estab-handbook-toc] a[href^='#']"
+                    ).length,
+                    tocVisible: Boolean(toc && visible(toc)),
+                    tocOverflow: toc ? getComputedStyle(toc).overflowY : null,
+                    searchVisible: Boolean(search && visible(search)),
+                    searchLabelled: Boolean(search && search.labels.length === 1),
+                    statusLive: document.querySelector(
+                        '[data-estab-handbook-status][role="status"]' +
+                        '[aria-live="polite"][aria-atomic="true"]'
+                    ) !== null,
+                    pageFits: document.documentElement.scrollWidth <=
+                        document.documentElement.clientWidth + 1
+                };
+            })()
+            """
+        )
+        self._truth(
+            isinstance(desktop, dict)
+            and desktop.get("title") == "eStab Web-Handbuch"
+            and desktop.get("h1") == 1
+            and desktop.get("publicBars") == 1
+            and desktop.get("sessionBars") == 0
+            and desktop.get("active") == ["handbook"]
+            and desktop.get("sections") == 19
+            and desktop.get("uniqueIds") == 19
+            and desktop.get("tocLinks") == 19
+            and desktop.get("tocVisible") is True
+            and desktop.get("tocOverflow") not in ("auto", "scroll")
+            and desktop.get("searchVisible") is True
+            and desktop.get("searchLabelled") is True
+            and desktop.get("statusLive") is True
+            and desktop.get("pageFits") is True,
+            f"Desktop-Handbuch ist unvollständig oder nicht responsiv: {desktop!r}",
+        )
+
+        self.cdp.set_value(
+            None,
+            "[data-estab-handbook-search]",
+            "Beförderungsweg Absender",
+            "Handbuchsuche",
+        )
+        search_state = self.cdp.wait_for(
+            """
+            (() => {
+                const sections = Array.from(document.querySelectorAll(
+                    "[data-estab-handbook-section]"
+                ));
+                const visible = sections.filter(section => !section.hidden);
+                const status = document.querySelector(
+                    "[data-estab-handbook-status]"
+                );
+                const clear = document.querySelector(
+                    "[data-estab-handbook-clear]"
+                );
+                return visible.length > 0 && visible.length < sections.length &&
+                    visible.some(section => section.id === "nachrichtenlauf") &&
+                    status && status.textContent.includes("passende") &&
+                    clear && !clear.hidden ? {
+                        visible: visible.map(section => section.id),
+                        status: status.textContent.trim(),
+                        query: new URL(location.href).searchParams.get("q")
+                    } : null;
+            })()
+            """,
+            "lokale AND-Suche des Web-Handbuchs filtert nicht nachvollziehbar",
+        )
+        self._equal(
+            search_state.get("query"),
+            "Beförderungsweg Absender",
+            "Suchbegriff in der Handbuch-URL",
+        )
+        self.cdp.click(
+            None,
+            "[data-estab-handbook-clear]",
+            "Handbuchsuche löschen",
+        )
+        self.cdp.wait_for(
+            """
+            document.querySelectorAll(
+                "[data-estab-handbook-section]:not([hidden])"
+            ).length === 19 &&
+            !new URL(location.href).searchParams.has("q")
+            """,
+            "gelöschte Handbuchsuche stellt nicht alle Kapitel wieder her",
+        )
+
+        self.cdp.call(
+            "Emulation.setDeviceMetricsOverride",
+            {
+                "width": 390,
+                "height": 844,
+                "deviceScaleFactor": 1,
+                "mobile": False,
+                "screenWidth": 390,
+                "screenHeight": 844,
+            },
+        )
+        mobile = self.cdp.evaluate(
+            """
+            (() => {
+                const bounds = element => {
+                    const rect = element.getBoundingClientRect();
+                    return {
+                        left: rect.left,
+                        right: rect.right,
+                        width: rect.width,
+                        height: rect.height
+                    };
+                };
+                const main = document.querySelector(".estab-handbook-main");
+                const search = document.querySelector(".estab-handbook-search");
+                const toc = document.querySelector(".estab-handbook-toc");
+                const firstCard = document.querySelector(
+                    ".estab-handbook-role-grid a"
+                );
+                const mainRect = bounds(main);
+                const searchRect = bounds(search);
+                const tocRect = bounds(toc);
+                const cardRect = bounds(firstCard);
+                return {
+                    innerWidth,
+                    pageFits: document.documentElement.scrollWidth <=
+                        document.documentElement.clientWidth + 1,
+                    mainFits: mainRect.left >= -0.5 &&
+                        mainRect.right <= innerWidth + 0.5,
+                    searchFits: searchRect.left >= -0.5 &&
+                        searchRect.right <= innerWidth + 0.5,
+                    tocFits: tocRect.left >= -0.5 &&
+                        tocRect.right <= innerWidth + 0.5,
+                    tocStatic: getComputedStyle(toc).position === "static",
+                    tocScrollFree: toc.scrollWidth <= toc.clientWidth + 1 &&
+                        toc.scrollHeight <= toc.clientHeight + 1,
+                    cardTouchTarget: cardRect.height >= 44,
+                    roleColumns: getComputedStyle(
+                        document.querySelector(".estab-handbook-role-grid")
+                    ).gridTemplateColumns.split(" ").length
+                };
+            })()
+            """
+        )
+        self._truth(
+            isinstance(mobile, dict)
+            and mobile.get("innerWidth") == 390
+            and mobile.get("pageFits") is True
+            and mobile.get("mainFits") is True
+            and mobile.get("searchFits") is True
+            and mobile.get("tocFits") is True
+            and mobile.get("tocStatic") is True
+            and mobile.get("tocScrollFree") is True
+            and mobile.get("cardTouchTarget") is True
+            and mobile.get("roleColumns") == 1,
+            f"Mobiles Handbuch ist nicht vollständig bedienbar: {mobile!r}",
+        )
+
     def run_bos(self) -> None:
         self.cdp.call("Page.enable")
         self.cdp.call("Runtime.enable")
@@ -7419,6 +7634,11 @@ def parse_arguments() -> argparse.Namespace:
         help="nur den öffentlichen responsiven BOS-Arbeitsbereich testen",
     )
     parser.add_argument(
+        "--handbook-only",
+        action="store_true",
+        help="nur Web-Handbuch, Suche und responsives Layout testen",
+    )
+    parser.add_argument(
         "--message-suggestions",
         action="store_true",
         help=(
@@ -7447,12 +7667,13 @@ def main() -> int:
                 arguments.auth_recovery_only,
                 arguments.export_only,
                 arguments.bos_only,
+                arguments.handbook_only,
                 arguments.message_suggestions,
             )
         ) > 1:
             raise TestFailure(
                 "--overview-only, --auth-recovery-only, --export-only, "
-                "--bos-only und "
+                "--bos-only, --handbook-only und "
                 "--message-suggestions "
                 "können nicht kombiniert werden."
             )
@@ -7462,6 +7683,7 @@ def main() -> int:
                 or arguments.auth_recovery_only
                 or arguments.export_only
                 or arguments.bos_only
+                or arguments.handbook_only
             )
         )
         chrome = ChromeProcess(binary, config.startup_timeout)
@@ -7477,6 +7699,8 @@ def main() -> int:
             acceptance.run(auth_recovery_only=True)
         elif arguments.bos_only:
             acceptance.run_bos()
+        elif arguments.handbook_only:
+            acceptance.run_handbook()
         elif arguments.message_suggestions:
             acceptance.run_message_suggestions()
         elif arguments.export_only:

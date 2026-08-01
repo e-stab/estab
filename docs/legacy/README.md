@@ -12,7 +12,8 @@ und ist **keine Betriebsanleitung für den heutigen Container**.
   Bedien-Screenshots, Symbolausschnitte, Fotos und Programmierungsnotizen.
 - [`Handbuch_eStab.pdf`](../../doku/Handbuch_eStab.pdf) ist das 31-seitige
   Anwendungshandbuch Version 1.1 vom 23. Juli 2011, das auch den offiziellen
-  0.9.26c-Release begleitete.
+  0.9.26c-Release begleitete. Es bleibt im Git-Archiv, wird aber nicht mehr in
+  das App-Image kopiert oder als Bedienreferenz verlinkt.
 - [`Tests.odt`](../../doku/Tests.odt) und
   [`Tests.ott`](../../doku/Tests.ott) sind die historische Testbeschreibung
   beziehungsweise Dokumentvorlage aus dem Programmstand.
@@ -68,8 +69,10 @@ Quellvergleich mit der lokalen SVN-Kopie ist unter
 
 ## Gültigkeit
 
-Die moderne, getestete Dokumentation liegt eine Ebene höher unter `docs/` und
-im Haupt-`README.md`. Aussagen des Alt-Handbuchs zu XAMPP, PHP-Konfiguration,
+Die aktuelle Bedienreferenz ist das gemeinsam mit eStab ausgelieferte
+[Web-Handbuch](../../handbuch/) unter `/handbuch/`. Die modernen, getesteten
+Betriebsunterlagen liegen eine Ebene höher unter `docs/` und im
+Haupt-`README.md`. Aussagen des Alt-Handbuchs zu XAMPP, PHP-Konfiguration,
 leeren MySQL-Root-Passwörtern, Web-basiertem Setup und Dateirechten sind nur
 historischer Kontext und dürfen nicht für einen neuen Betrieb übernommen
 werden.
