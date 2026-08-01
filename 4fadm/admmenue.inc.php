@@ -40,6 +40,12 @@
 
     array ("acl"   => "",
                 "vis" => true,
+                "link"  => "./self_registration.php",
+                "menue" => "Selbstregistrierung",
+                "descr" => "&Ouml;ffentliche Kontoanlage deaktivieren, dauerhaft oder zeitlich befristet aktivieren."),
+
+    array ("acl"   => "",
+                "vis" => true,
                 "link"  => "./password_policy.php",
                 "menue" => "Kennwortrichtlinie",
                 "descr" => "Mindestl&auml;nge und optionale Zeichenanforderungen f&uuml;r neu gesetzte Kennw&ouml;rter zentral festlegen."),

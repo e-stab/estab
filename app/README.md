@@ -46,8 +46,9 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   registriert; der Neuanlage-Flow meldet kein vorhandenes Konto an.
   Historische Ein-Kennwort-POSTs bleiben reine Bestandsanmeldungen. Der alte
   Zwei-Kennwort-Request mit `2teskennwort=Yes` behält für direkte Legacy-Clients
-  sein bisheriges „anmelden oder anlegen“-Verhalten; auch dabei gilt
-  `ESTAB_ALLOW_SELF_REGISTRATION`. Tokenlose Legacy-Anmeldungen sind
+  sein bisheriges „anmelden oder anlegen“-Verhalten; auch dabei gilt die
+  persistente Selbstregistrierungsrichtlinie mit ihrem gegebenenfalls noch
+  vorhandenen `ENVIRONMENT`-Upgradezustand. Tokenlose Legacy-Anmeldungen sind
   standardmäßig gesperrt und müssen bei tatsächlichem Bedarf ausdrücklich mit
   `ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF=true` freigeschaltet werden; als
   browserseitig `cross-site` erkennbare Requests bleiben trotzdem gesperrt.
@@ -106,10 +107,13 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   Deploymentwerte zentral. Der Container ruft sie vor Apache auf; Readiness
   verwendet exakt dieselbe Grenze und meldet ungültige Ports, Identifikatoren,
   Größen, URLs, Bool-Werte oder Proxy-Netze als nicht betriebsbereit.
-- Selbstregistrierung ist standardmäßig ausgeschaltet. Nur die bewusst gesetzte
-  Kompatibilitätsoption `ESTAB_ALLOW_SELF_REGISTRATION=true` erlaubt die
-  öffentliche Kontoanlage; regulär legt die Basic-Auth-geschützte
-  Benutzerverwaltung Konten und deren feste Funktion an. Beide Wege verwenden
+- Selbstregistrierung ist bei Neuinstallationen standardmäßig ausgeschaltet.
+  Die Basic-Auth-/CSRF-geschützte Administration kann sie persistent
+  deaktivieren, dauerhaft oder ab jetzt für 15 Minuten bis 24 Stunden
+  aktivieren. `ESTAB_ALLOW_SELF_REGISTRATION` dient ausschließlich als
+  Kompatibilitätswert für Upgrades, deren Richtlinienzeile noch im Modus
+  `ENVIRONMENT` steht. Regulär legt die Benutzerverwaltung Konten und deren
+  feste Funktion an. Beide Wege verwenden
   beim Setzen eines neuen Kennworts dieselbe datenbankgespeicherte Richtlinie;
   kann sie nicht eindeutig geladen werden, schlägt die Kontoanlage geschlossen
   fehl. Boolesche
@@ -337,9 +341,10 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   Bestätigung und unveränderter Revision. Jede echte Änderung erhöht die
   Revision und schreibt Vorher-/Nachher-Konfiguration, Basic-Auth-Akteur und
   validierte IP gemeinsam in ein kennwortfreies Audit. Kontoanlage hält die
-  Reihenfolge Zuordnungsrichtlinie → Kennwortrichtlinie → Konto → Transaktion;
-  Reset und Selbstregistrierung nehmen denselben Kennwortrichtlinien-Lock vor
-  dem Kontolock. Eine Änderung widerruft weder bestehende Sitzungen noch
+  Reihenfolge Zuordnungsrichtlinie → Kennwortrichtlinie → Konto → Transaktion.
+  Die Selbstregistrierung nimmt zusätzlich zwischen Zuordnungs- und
+  Kennwortrichtlinie ihren globalen Freigabe-Lock; ein administrativer Reset
+  beginnt bei Kennwortrichtlinie → Konto. Eine Änderung widerruft weder bestehende Sitzungen noch
   Kennwörter und verändert auch nicht das separate Apache-Basic-Auth-Secret.
 - Die Matrixadministration verwendet keine generierte oder eingebundene
   PHP-Konfiguration mehr. Aktive Matrix und die einzige gespeicherte

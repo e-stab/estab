@@ -77,6 +77,7 @@ assert_dockerfile_contains '4fach/fuehrungsstelle.php'
 assert_dockerfile_contains '4fadm/fuehrungsstelle.php'
 assert_dockerfile_contains '4fadm/incident_export.php'
 assert_dockerfile_contains '4fadm/incidents.php'
+assert_dockerfile_contains '4fadm/self_registration.php'
 assert_dockerfile_contains '4fadm/users.php'
 assert_dockerfile_contains 'COPY 4fbak/backup.php'
 assert_dockerfile_contains '4fbak/thw.png'
@@ -119,6 +120,7 @@ for required_runtime_path in \
     4fach/activity.php \
     4fach/fuehrungsstelle.php \
     4fadm/fuehrungsstelle.php \
+    4fadm/self_registration.php \
     4fbak/thw.png \
     app/attachment_integrity.php \
     app/dv_operations.php \
@@ -130,6 +132,7 @@ for required_runtime_path in \
     app/message_transport.php \
     app/operational_guard.php \
     app/read_authorization.php \
+    app/self_registration.php \
     handbuch/index.php \
     handbuch/handbuch.css \
     handbuch/handbuch.js

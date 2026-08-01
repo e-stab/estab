@@ -42,6 +42,26 @@ einem bloßen Neustart mit unverändertem Image verwendet Compose den bereits
 erfolgreich beendeten One-shot-Container; für eine erneute Prüfung wird er
 explizit mit `--force-recreate` gestartet.
 
+Während einer erstmaligen oder aus `applying` wiederaufgenommenen Baseline
+entsteht zusätzlich der Datensatz
+`114-self-registration-fresh-default` in `estab_schema_baselines`. Sein
+Checksum ist exakt die SHA-256 der unveränderten Migration 114. Der Marker
+bleibt bis hinter allen zwanzig Migrationen auf `applying`. Dann setzt ein
+einziges atomisches InnoDB-Multi-Table-Update ausschließlich die noch pristine
+Richtlinienzeile `ENVIRONMENT/NULL/0/migration-114` auf
+`DISABLED/NULL/1/fresh-install` und gleichzeitig den Marker auf `applied`.
+Schema-Verifikation und App-Start liegen danach. Ein Prozessabbruch davor ist
+idempotent wiederaufnehmbar; eine abweichende Marker-Prüfsumme, ein Marker ohne
+zugehörige angewendete Baseline oder eine nicht pristine Zeile bei
+`applying` blockieren fail-closed.
+
+Die Abwesenheit dieses Markers wird absichtlich nicht nachträglich
+„repariert“: Ein echtes Legacy-Upgrade und eine frühere Neuinstallation ohne
+Marker behalten den Upgrade-Kompatibilitätsmodus `ENVIRONMENT`. So ändert das
+neue Sicherheitsverhalten keine bestehende Installation und
+`ESTAB_ALLOW_SELF_REGISTRATION` kann nur dort noch den dokumentierten
+Upgrade-Startwert liefern.
+
 ## Upgrade einer bestehenden Containerinstallation
 
 Vor jedem Upgrade:
@@ -81,6 +101,7 @@ Derzeit sind folgende explizite Migrationen vorhanden:
 | `docker/db/migrations/111-logbook-shift-assignment.sql` | ergänzt nullable Schicht- und Schreiberprovenienz für ETB/TBB sowie die optionale ETB-Bearbeitungszuordnung mit unveränderlichem Snapshot; neue Zeilen werden durch Fremdschlüssel und Insert-Trigger geprüft, der Besetzungs-Update-Trigger verhindert eine verspätete ETB-Annahme mit Schreiberwechsel in der aktiven Schicht, historische Zeilen bleiben mangels belegbarer Herkunft `NULL` |
 | `docker/db/migrations/112-optional-access-shifts.sql` | ergänzt optionale einsatzgebundene Zugangsschichten und Kontenzuordnungen; ersetzt den abschließenden ETB-/TBB-Triggervertrag durch festen Funktions-/Rollenbezug und aktiven Einsatz ohne Pflicht zu Dienstschicht oder Besetzungs-ID; ältere formale Schichtdaten bleiben historische Evidenz |
 | `docker/db/migrations/113-password-policy.sql` | ergänzt genau eine revisionsgesicherte globale Kennwortrichtlinie für künftig gesetzte Funktionskonto-Kennwörter; Standard sind mindestens 12 Unicode-Codepoints ohne verpflichtende Zeichenklasse, die konfigurierbare Mindestlänge liegt zwischen 8 und 128 Unicode-Codepoints und optionale Unicode-Groß-/Titlecase-/Kleinbuchstaben, Ziffern und Sonderzeichen können verlangt werden; Unicode-Steuerzeichen sind verboten, Formatzeichen einschließlich ZWJ erlaubt; neue und geänderte Kennwörter werden mit Argon2id gespeichert, serverseitig gelten höchstens 1024 UTF-8-Bytes, im Browserfeld 1024 Eingabeeinheiten und eine exakte JavaScript-Codepointzählung bei verbindlicher Serverprüfung; Klartext und eindeutig verifizierbare Alt-Hashes werden nach erfolgreichem Login migriert, bcrypt nur bei einem eingegebenen Kennwort unter 72 UTF-8-Bytes, während ein ambivalenter längerer bcrypt-Alt-Hash bis zum administrativen Reset unverändert bleibt; stärkere oder gemischte Argon2id-Kosten werden nicht zurückgestuft, vorhandene Sitzungen bleiben unverändert |
+| `docker/db/migrations/114-self-registration-policy.sql` | ergänzt die revisionsgesicherte Singleton-Freigabe für öffentliche Kontoanlage mit `DISABLED`, `PERMANENT` und DB-UTC-befristetem `UNTIL`; die unveränderte SQL-Datei setzt aus Upgrade-Kompatibilität zunächst `ENVIRONMENT`; nur ein im selben neuen Baseline-Lauf checksumgebunden angelegter Fresh-Marker autorisiert anschließend die atomare Umstellung der pristine Zeile auf `DISABLED/NULL/1/fresh-install`; echte Upgrades und frühere markerlose Neuinstallationen behalten `ENVIRONMENT`, bis die erste administrative Auswahl die Datenbank autoritativ macht; bestehende Konten, Kennwörter und Sitzungen bleiben unverändert |
 
 Migration 95 klassifiziert vorhandene Zeilen bereits beim Hinzufügen der
 Spalte mit dem einmaligen Anfangswert `integrity_required=0` und stellt danach
@@ -116,8 +137,8 @@ eigenen Zwischenstände. Gemischte Katalogdaten, ein abweichender
 Primärschlüssel oder fremde Indizes blockieren vor der nächsten Änderung und
 bleiben zur Untersuchung erhalten. `verify.sql` und die Laufzeit-Readiness
 verlangen danach exakt sieben Katalogzeilen, das vollständige neue ENUM,
-ausschließlich den zweispaltigen Primärschlüssel und alle neunzehn
-angewendeten Migrationen einschließlich Version 113.
+ausschließlich den zweispaltigen Primärschlüssel und alle zwanzig
+angewendeten Migrationen einschließlich Version 114.
 
 Migration 97 fügt `nv_einsaetze.fuehrungsstellenname` als
 `VARCHAR(128) NULL` unmittelbar hinter `organisation` und
@@ -320,7 +341,23 @@ Standardwerte zurückgestuft; nur vollständig schwächere Profile werden
 hochgestuft.
 Sitzungsstatus und separates HTTP-Basic-Secret bleiben unverändert.
 `verify.sql` und die Laufzeit-Readiness prüfen Tabelle,
-Singleton-Zeile, Grenzen und alle neunzehn Ledgerzeilen gemeinsam.
+Singleton-Zeile und Grenzen.
+
+Migration 114 ergänzt entsprechend die eigene, kollisionsgeprüfte Tabelle
+`nv_selbstregistrierung`. Ihr Startmodus `ENVIRONMENT` wahrt eine bisher
+ausdrücklich geöffnete Installation beim Upgrade. Nach der ersten Adminaktion
+sind nur `DISABLED`, `PERMANENT` oder `UNTIL` samt UTC-Endzeit, Revision und
+Audit-Akteur maßgeblich. `verify.sql` und die Laufzeit-Readiness prüfen beide
+Singleton-Tabellen und alle zwanzig Ledgerzeilen gemeinsam.
+
+Bei einer vom aktuellen Runner selbst begonnenen Neuinstallation ist dagegen
+der checksumgebundene Baseline-Marker maßgeblich: Solange Migration 114 noch
+pristine ist, werden Marker und Richtlinie nach der letzten Migration in
+derselben Datenbankanweisung auf `applied` beziehungsweise `DISABLED`
+gestellt. Ein Zweitlauf akzeptiert den angewendeten Marker nur zusammen mit
+einem nicht mehr auf `ENVIRONMENT` stehenden, revisionsfortgeschrittenen
+Richtlinienzustand. Die SQL-Datei und ihre zwanzigste Ledger-Prüfsumme werden
+dabei nicht verändert.
 
 Der erneuerte ETB-Insert-Trigger akzeptiert neue Referenzen nur als
 kanonische, positive, bereits vorhandene lokale ETB-Nummer desselben Einsatzes.

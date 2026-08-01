@@ -69,6 +69,7 @@ $expectedControllers = [
     '4fadm/incidents.php',
     '4fadm/make_fkt.php',
     '4fadm/password_policy.php',
+    '4fadm/self_registration.php',
     '4fadm/set_number_after_crash.php',
     '4fadm/users.php',
 ];
@@ -154,6 +155,40 @@ csrf_assert(
             'http_response_code(403)'
         ),
     'password-policy CSRF rejection is not mapped to 403 before generic errors'
+);
+
+$selfRegistrationController = file_get_contents(
+    $root . '/4fadm/self_registration.php'
+);
+$selfRegistrationGuard = is_string($selfRegistrationController)
+    ? strpos($selfRegistrationController, 'estab_csrf_require_post')
+    : false;
+$selfRegistrationHandler = is_string($selfRegistrationController)
+    ? strpos($selfRegistrationController, 'catch (EstabCsrfException)')
+    : false;
+$selfRegistrationGenericHandler = is_string($selfRegistrationController)
+    ? strpos(
+        $selfRegistrationController,
+        'catch (Throwable',
+        $selfRegistrationHandler ?: 0
+    )
+    : false;
+csrf_assert(
+    is_string($selfRegistrationController)
+        && $selfRegistrationGuard !== false
+        && $selfRegistrationHandler !== false
+        && $selfRegistrationGenericHandler !== false
+        && $selfRegistrationGuard < $selfRegistrationHandler
+        && $selfRegistrationHandler < $selfRegistrationGenericHandler
+        && str_contains(
+            substr(
+                $selfRegistrationController,
+                $selfRegistrationHandler,
+                $selfRegistrationGenericHandler - $selfRegistrationHandler
+            ),
+            'http_response_code(403)'
+        ),
+    'self-registration CSRF rejection is not mapped to 403 before generic errors'
 );
 
 session_destroy();

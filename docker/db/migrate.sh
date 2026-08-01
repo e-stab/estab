@@ -110,6 +110,9 @@ case "$baseline_checksum" in
         exit 1
         ;;
 esac
+fresh_default_version=114-self-registration-fresh-default
+fresh_default_source="$ESTAB_MIGRATIONS_DIR/114-self-registration-policy.sql"
+fresh_default_checksum=
 
 create_baseline_ledger()
 {
@@ -181,6 +184,7 @@ INSERT INTO estab_schema_baselines
   (version, checksum, state, started_at, applied_at)
 VALUES
   ('10-schema.sql', '$baseline_checksum', 'applying', NOW(6), NULL)"
+    baseline_record="$baseline_checksum|applying"
     echo "Applying fresh schema baseline: $baseline_checksum"
     baseline_action=apply
 elif [ "$core_table_present" = "0" ]; then
@@ -188,6 +192,80 @@ elif [ "$core_table_present" = "0" ]; then
     exit 1
 else
     echo "Existing eStab schema detected; fresh baseline was not reapplied."
+fi
+
+# This marker is created only while the embedded baseline is first applied or
+# resumed from its durable applying state. Its checksum is the immutable
+# migration-114 checksum, so later upgrades can distinguish this new-install
+# obligation from legacy schemas and older fresh installations without ever
+# reclassifying either one.
+fresh_default_record=
+fresh_default_action=skip
+if [ "$baseline_action" = "apply" ] || [ "$baseline_ledger_present" = "1" ]; then
+    fresh_default_record=$(database_query "
+SELECT CONCAT(checksum, '|', state)
+  FROM estab_schema_baselines
+ WHERE version = '$fresh_default_version'")
+fi
+if [ "$baseline_action" = "apply" ] || [ -n "$fresh_default_record" ]; then
+    if [ ! -r "$fresh_default_source" ]; then
+        echo "Fresh-install self-registration source is not readable: $fresh_default_source" >&2
+        exit 1
+    fi
+    fresh_default_checksum=$(
+        sha256sum "$fresh_default_source" | awk '{print $1}'
+    )
+    case "$fresh_default_checksum" in
+        *[!0-9a-f]*|'')
+            echo "Could not calculate fresh-install default checksum" >&2
+            exit 1
+            ;;
+    esac
+fi
+if [ "$baseline_action" = "apply" ]; then
+    if [ -z "$fresh_default_record" ]; then
+        database_query "
+INSERT INTO estab_schema_baselines
+  (version, checksum, state, started_at, applied_at)
+VALUES
+  ('$fresh_default_version', '$fresh_default_checksum',
+   'applying', NOW(6), NULL)"
+        fresh_default_record="$fresh_default_checksum|applying"
+    fi
+    if [ "$fresh_default_record" != "$fresh_default_checksum|applying" ]; then
+        stored_fresh_default_checksum=${fresh_default_record%%|*}
+        if [ "$stored_fresh_default_checksum" != "$fresh_default_checksum" ]; then
+            echo "Checksum mismatch for fresh-install default marker: $fresh_default_version" >&2
+        else
+            echo "Invalid fresh-install default marker state during baseline application" >&2
+        fi
+        exit 1
+    fi
+    fresh_default_action=apply
+elif [ -n "$fresh_default_record" ]; then
+    if [ "$baseline_record" != "$baseline_checksum|applied" ]; then
+        echo "Fresh-install default marker has no applied baseline" >&2
+        exit 1
+    fi
+    stored_fresh_default_checksum=${fresh_default_record%%|*}
+    stored_fresh_default_state=${fresh_default_record#*|}
+    if [ "$stored_fresh_default_checksum" != "$fresh_default_checksum" ]; then
+        echo "Checksum mismatch for fresh-install default marker: $fresh_default_version" >&2
+        exit 1
+    fi
+    case "$stored_fresh_default_state" in
+        applying)
+            echo "Retrying interrupted fresh-install self-registration default"
+            fresh_default_action=apply
+            ;;
+        applied)
+            fresh_default_action=verify
+            ;;
+        *)
+            echo "Invalid fresh-install default marker state: $stored_fresh_default_state" >&2
+            exit 1
+            ;;
+    esac
 fi
 
 if [ "$baseline_action" = "apply" ]; then
@@ -315,6 +393,70 @@ SELECT ROW_COUNT();")
         exit 1
     fi
 done < "$migration_list"
+
+if [ "$fresh_default_action" = "apply" ]; then
+    # One multi-table InnoDB UPDATE is the transaction boundary: the marker
+    # cannot become applied unless the still-pristine migration-114 singleton
+    # is changed to the secure fresh-install default in the same statement.
+    database_query "
+UPDATE nv_selbstregistrierung AS policy
+JOIN estab_schema_baselines AS marker
+  ON marker.version = '$fresh_default_version'
+ AND marker.checksum = '$fresh_default_checksum'
+ AND marker.state = 'applying'
+JOIN estab_schema_migrations AS migration_record
+  ON migration_record.version = '114-self-registration-policy.sql'
+ AND migration_record.checksum = '$fresh_default_checksum'
+ AND migration_record.state = 'applied'
+SET policy.mode = 'DISABLED',
+    policy.enabled_until_utc = NULL,
+    policy.revision = policy.revision + 1,
+    policy.updated_at = UTC_TIMESTAMP(6),
+    policy.updated_by = 'fresh-install',
+    marker.state = 'applied',
+    marker.applied_at = UTC_TIMESTAMP(6)
+WHERE policy.singleton_id = 1
+  AND policy.mode = 'ENVIRONMENT'
+  AND policy.enabled_until_utc IS NULL
+  AND policy.revision = 0
+  AND BINARY policy.updated_by = BINARY 'migration-114'"
+    fresh_default_result=$(database_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM estab_schema_baselines
+           WHERE version = '$fresh_default_version'
+             AND checksum = '$fresh_default_checksum'
+             AND state = 'applied'
+             AND applied_at IS NOT NULL), '|',
+         (SELECT COUNT(*) FROM nv_selbstregistrierung
+           WHERE singleton_id = 1
+             AND mode = 'DISABLED'
+             AND enabled_until_utc IS NULL
+             AND revision = 1
+             AND BINARY updated_by = BINARY 'fresh-install')
+       )")
+    if [ "$fresh_default_result" != "1|1" ]; then
+        echo "Fresh-install self-registration default could not be applied atomically" >&2
+        exit 1
+    fi
+    echo "Fresh-install self-registration default applied: DISABLED"
+elif [ "$fresh_default_action" = "verify" ]; then
+    fresh_default_result=$(database_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM estab_schema_baselines
+           WHERE version = '$fresh_default_version'
+             AND checksum = '$fresh_default_checksum'
+             AND state = 'applied'
+             AND applied_at IS NOT NULL), '|',
+         (SELECT COUNT(*) FROM nv_selbstregistrierung
+           WHERE singleton_id = 1
+             AND mode <> 'ENVIRONMENT'
+             AND revision >= 1)
+       )")
+    if [ "$fresh_default_result" != "1|1" ]; then
+        echo "Applied fresh-install default marker is inconsistent" >&2
+        exit 1
+    fi
+fi
 
 if [ -n "$ESTAB_SCHEMA_VERIFY_FILE" ]; then
     if [ ! -r "$ESTAB_SCHEMA_VERIFY_FILE" ]; then

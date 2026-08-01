@@ -13,6 +13,23 @@ Legacy-Schema mit Kerntabelle wird nicht durch die Fresh-Baseline ergänzt. Der
 offizielle MariaDB-Container muss die Zieldatenbank vorher über
 `MARIADB_DATABASE` angelegt haben.
 
+Nur während dieses ersten oder eines nach `applying` wiederaufgenommenen
+Baseline-Laufs legt der Runner zusätzlich
+`114-self-registration-fresh-default` in `estab_schema_baselines` an. Dessen
+Prüfsumme ist exakt die unveränderte SHA-256 von
+`114-self-registration-policy.sql`. Nach allen Migrationen setzt ein einzelnes
+atomisches InnoDB-Multi-Table-Update die noch unveränderte
+`ENVIRONMENT/NULL/0/migration-114`-Zeile auf
+`DISABLED/NULL/1/fresh-install` und denselben Marker auf `applied`. Erst danach
+folgen Schema-Verifikation und App-Start. Ein Abbruch lässt den Marker auf
+`applying` und ist idempotent wiederaufnehmbar. Ein abweichender Checksum oder
+ein unmöglicher Marker-/Richtlinienzustand blockiert fail-closed.
+
+Ein vorhandenes Legacy-Schema sowie eine frühere Neuinstallation ohne diesen
+Marker werden niemals nachträglich als neuer Fresh-Lauf eingestuft. Dort bleibt
+der von Migration 114 bewusst gesetzte Kompatibilitätsmodus `ENVIRONMENT`
+erhalten, bis die Administration ihn ersetzt.
+
 Die Datei kann für isolierte Schemaarbeit weiterhin direkt gegen eine bereits
 ausgewählte leere Datenbank ausgeführt werden. Compose bindet sie aber nicht
 mehr nach `/docker-entrypoint-initdb.d`; damit enthält das veröffentlichbare
@@ -51,14 +68,19 @@ Der Runner:
 3. prüft den `nv_*`-Namensraum, speichert bei einer leeren Installation
    Baseline-Dateiname, SHA-256 und Zustand vor dem ersten DDL und setzt einen
    unterbrochenen Lauf ausschließlich mit derselben Prüfsumme fort,
-4. verarbeitet unveränderliche SQL-Dateien in sortierter
+4. bindet nur für diesen Fresh-Lauf den sicheren Selbstregistrierungsdefault
+   mit der unveränderten Migration-114-Prüfsumme an einen zweiten
+   Baseline-Marker,
+5. verarbeitet unveränderliche SQL-Dateien in sortierter
    Dateinamenreihenfolge,
-5. speichert Dateiname, SHA-256, Zustand, Lauf-ID sowie Zeitpunkte in
+6. speichert Dateiname, SHA-256, Zustand, Lauf-ID sowie Zeitpunkte in
    `estab_schema_migrations`,
-6. überspringt nur exakt dieselbe bereits angewendete Prüfsumme,
-7. blockiert bei Prüfsummenabweichung oder einem fremden/unterbrochenen
+7. überspringt nur exakt dieselbe bereits angewendete Prüfsumme,
+8. blockiert bei Prüfsummenabweichung oder einem fremden/unterbrochenen
    `applying`-Zustand,
-8. führt abschließend `verify.sql` aus und akzeptiert ausschließlich eine
+9. schließt unmittelbar vor der Verifikation die pristine
+   Selbstregistrierungszeile und den Fresh-Marker atomar ab,
+10. führt abschließend `verify.sql` aus und akzeptiert ausschließlich eine
    Ergebniszeile voller `1` ohne nachfolgende Abweichungszeile.
 
 Ein regulär fehlgeschlagenes, idempotentes Upgrade-Skript entfernt nur seinen
@@ -245,8 +267,8 @@ Prüfsumme unverändert. Migration 55 stellt die kanonischen Attribute wieder
 her. `migrations/70-user-account-blocking.sql` ergänzt anschließend die
 dauerhafte, kollisionsgeprüfte Kontosperre.
 
-Der aktuelle Ledger umfasst neunzehn checksumgebundene Migrationen bis
-`migrations/113-password-policy.sql`. Migration 110 führt die
+Der aktuelle Ledger umfasst zwanzig checksumgebundene Migrationen bis
+`migrations/114-self-registration-policy.sql`. Migration 110 führt die
 einsatzlokalen ETB-/TTB-Nummern, Buchköpfe, strukturierten TBB-Inhalt,
 Append-only-Regeln und zehnjährige Aufbewahrungsuntergrenze ein. Migration 111
 ergänzt nullable Schicht-/Schreiberfremdschlüssel für beide Bücher und die
@@ -306,7 +328,18 @@ bleibt der ambivalente Hash bis zu einem administrativen Reset unverändert.
 Argon2id-Profile werden nur vollständig monoton hochgestuft; stärkere oder
 gemischte Kostenprofile werden nie auf Standardwerte zurückgesetzt.
 
-`verify.sql` und die Laufzeit-Readiness verlangen alle neunzehn Ledgerzeilen,
+Migration 114 ergänzt `nv_selbstregistrierung` als revisionsgesicherte
+Singleton-Tabelle. `ENVIRONMENT` übernimmt ausschließlich beim Upgrade den
+bisherigen Containerwert. Jede administrative Auswahl ersetzt diesen Zustand
+durch `DISABLED`, `PERMANENT` oder `UNTIL`; befristete Endzeiten werden in UTC
+gespeichert und direkt mit `UTC_TIMESTAMP(6)` geprüft. Der Fristablauf benötigt
+keinen Hintergrunddienst und verändert keine bestehenden Konten oder Sitzungen.
+Die SQL-Datei bleibt für echte Upgrades unverändert. Ausschließlich der oben
+beschriebene checksumgebundene Fresh-Marker autorisiert den Runner, ihre noch
+pristine Startzeile atomar auf den sicheren Neuinstallationsdefault
+`DISABLED` zu setzen.
+
+`verify.sql` und die Laufzeit-Readiness verlangen alle zwanzig Ledgerzeilen,
 die sechs neuen Spalten, ihre kanonischen Indexe und Fremdschlüssel sowie die
 erweiterten ETB-/TTB-Insert-Trigger. Ein aktueller Migratorlauf endet erst nach
 `Post-migration schema verification passed` und

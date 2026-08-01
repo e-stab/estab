@@ -72,9 +72,9 @@ davon nicht abgemeldet und ist nicht Teil dieser Präsenzanzeige.
 
 ## Konten anlegen und Funktionen zuweisen
 
-Neue Installationen haben die öffentliche Selbstregistrierung
-`ESTAB_ALLOW_SELF_REGISTRATION=false`. Die zuständige Stelle legt Konten unter
-`/4fadm/users.php` mit folgenden Angaben an:
+Neue Installationen haben die öffentliche Selbstregistrierung deaktiviert.
+Die zuständige Stelle legt Konten unter `/4fadm/users.php` mit folgenden
+Angaben an:
 
 - Name,
 - eindeutigem, kleingeschriebenem Kürzel aus höchstens sechs Buchstaben,
@@ -250,7 +250,7 @@ Die Richtlinie wirkt ausschließlich prospektiv auf
 
 - administrativ angelegte Startkennwörter,
 - administrative Kennwortresets,
-- und die nur bei `ESTAB_ALLOW_SELF_REGISTRATION=true` sichtbare
+- und die in der Administration ausdrücklich freigegebene
   Selbstregistrierung.
 
 Ein Bestandslogin und die transparente Umwandlung eines eindeutig
@@ -270,10 +270,49 @@ Das separate HTTP-Basic-Kennwort für
 Inhalt noch Ziel dieser Tabelle.
 
 Kontoanlage und Selbstregistrierung lesen die aktuelle Richtlinie unter dem
-globalen Richtlinien-Lock vor dem kontospezifischen Login-Lock. Ein
+globalen Richtlinien-Lock vor dem kontospezifischen Login-Lock. Die
+Selbstregistrierung besitzt davor einen eigenen globalen Freigabe-Lock. Ein
 Kennwortreset verwendet dieselbe Reihenfolge ab der Kennwortrichtlinie. So kann
 weder eine parallele Verschärfung mit einem alten Prüfstand überholt noch ein
 halb gespeicherter Kontozustand sichtbar werden.
+
+## Selbstregistrierung steuern
+
+Migration `114-self-registration-policy.sql` ergänzt dafür die kanonische
+Singleton-Tabelle `nv_selbstregistrierung`. Beim Upgrade übernimmt
+`ENVIRONMENT` zunächst den bisherigen Containerwert. Bereits die erste der
+folgenden Adminaktionen ersetzt ihn durch einen autoritativen, persistenten
+Datenbankzustand; ein Neustart setzt diese Auswahl nicht zurück.
+
+Unter `/4fadm/self_registration.php` stehen drei eindeutige Aktionen bereit:
+
+- **Jetzt deaktivieren** beendet eine dauerhafte oder laufende befristete
+  Freigabe sofort.
+- **Dauerhaft aktivieren** öffnet die öffentliche Kontoanlage bis zur nächsten
+  ausdrücklichen Deaktivierung.
+- **Jetzt befristet aktivieren** öffnet sie ab dem Klick für 15 oder 30
+  Minuten beziehungsweise 1, 2, 4, 8, 12 oder 24 Stunden.
+
+Beide Aktivierungen verlangen eine ausdrückliche Sicherheitsbestätigung.
+Während der Freigabe kann jede Person mit Zugriff auf die Anmeldeseite ein
+Konto für jede dort angebotene aktive Funktion anlegen, auch für Funktionen
+mit weitreichenden Fachrechten. Die Freigabe darf deshalb nur in einem
+kontrollierten Netz und unter Aufsicht verwendet werden. Für öffentlich
+erreichbare Installationen bleibt die administrative Kontoanlage der sichere
+Standard.
+
+Die Statuskarte zeigt den wirksamen Zustand, die lokale Endzeit, die ungefähre
+Restdauer, Revision und letzten technischen Administrator. Intern werden
+Endzeit und Entscheidung ausschließlich mit Datenbank-UTC gebildet. Bei
+Erreichen der Endzeit ist die Freigabe ohne Cronjob automatisch geschlossen;
+auch eine bereits offene Administrationsseite lädt dann den aktuellen Zustand
+neu. Angehaltene Hintergrund-Tabs werden spätestens beim erneuten Öffnen oder
+Fokussieren aktualisiert.
+Ein bereits geöffnetes Neuanlageformular besitzt keine Reservierung: Der
+Server prüft den Zustand unter demselben Lock und ein zweites Mal unmittelbar
+im Konto-INSERT. Läuft die Zeit vorher ab oder deaktiviert ein Administrator
+die Freigabe, entstehen weder Konto noch Anmelde-Audit. Bestehende Konten,
+Kennwörter und Sitzungen sind von jeder dieser Aktionen unabhängig.
 
 ## Kennwort zurücksetzen
 
@@ -330,6 +369,12 @@ er enthält weder ein Kennwort noch einen Hash oder eine Session-ID. Eine
 unveränderte Bestätigung erhöht die Revision nicht und erzeugt keinen
 Schein-Auditeintrag.
 
+Änderungen der Selbstregistrierung verwenden `p_was = Selbstregistrierung`.
+Ihr Vorher-/Nachher-Datensatz enthält Modus, UTC-Endzeit, Revision und den
+damals tatsächlich wirksamen Freigabestatus. Dadurch bleibt auch beim ersten
+Wechsel aus dem Upgrade-Modus `ENVIRONMENT` nachvollziehbar, ob der frühere
+Containerwert die Kontoanlage zu diesem Zeitpunkt geöffnet hatte.
+
 ## Nachweis
 
 Der fokussierte Vertragstest
@@ -346,7 +391,7 @@ mit gleichem 72-Byte-Präfix, getrennte
 Bestätigungsfehler, Vorschau/Bestätigung, CSRF/PRG, optimistische Revision,
 kennwortfreies Audit, Containeroberfläche und dass Bestandslogins nicht
 rückwirkend an die Richtlinie gebunden werden. Der Authentisierungsvertrag
-ergänzt 106 Assertions einschließlich der eindeutigen bcrypt-Migration unter
+ergänzt 111 Assertions einschließlich der eindeutigen bcrypt-Migration unter
 72 UTF-8-Bytes, des bewusst unveränderten ambivalenten Alt-Hashes ab 72 Bytes
 und monotoner Argon2id-Kosten. `tests/integration/password_policy.php` belegt mit 63
 Assertions gegen MariaDB Singleton-Schema, Revision, Lockkonkurrenz und

@@ -6,13 +6,40 @@ define('showmenue', true);
 
 require_once __DIR__ . '/app/session_ui.php';
 require_once __DIR__ . '/app/root_menu.php';
+require_once __DIR__ . '/app/self_registration.php';
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
 }
 estab_session_ui_start($_SESSION);
 $rootIdentity = estab_auth_session_identity($_SESSION);
 $authenticated = $rootIdentity !== null;
-$registrationAllowed = estab_auth_self_registration_allowed();
+$registrationAvailable = false;
+$registrationAllowed = false;
+$registrationConnection = null;
+if (!$authenticated) {
+    try {
+        $registrationStore = estab_auth_runtime_session_store();
+        $registrationConnection = estab_auth_connect(
+            $registrationStore['database']
+        );
+        $registrationPolicy = estab_self_registration_load(
+            $registrationConnection
+        );
+        $registrationAllowed = estab_self_registration_is_allowed(
+            $registrationPolicy
+        );
+        $registrationAvailable = true;
+    } catch (Throwable $exception) {
+        error_log(
+            'eStab public self-registration status unavailable: '
+            . $exception->getMessage()
+        );
+    } finally {
+        if ($registrationConnection instanceof mysqli) {
+            estab_auth_close($registrationConnection);
+        }
+    }
+}
 
 include __DIR__ . '/menue.inc.php';
 
@@ -76,8 +103,16 @@ $applicationUrl = estab_auth_html(estab_application_url('4fach/index.php'));
       </div>
 <?php if ($registrationAllowed): ?>
       <p class="estab-auth-note">„Neues Konto anlegen“ verwenden Sie nur, wenn für Ihr Kürzel noch kein Konto existiert und die zuständige Stelle die Registrierung freigegeben hat.</p>
+<?php elseif (!$registrationAvailable): ?>
+      <p class="estab-auth-note">Der Status der Kontoanlage konnte momentan
+        nicht sicher geprüft werden. Neue Konten können deshalb vorübergehend
+        nicht selbst angelegt werden.</p>
 <?php else: ?>
-      <p class="estab-auth-note">Neue Konten können auf dieser Installation nicht selbst angelegt werden. Die zuständige Stelle legt sie unter Administration → Benutzerverwaltung an.</p>
+      <p class="estab-auth-note">Die Selbstregistrierung ist derzeit
+        geschlossen. Neue Konten können momentan nicht selbst angelegt
+        werden; bestehende Konten können sich weiterhin anmelden. Die
+        zuständige Stelle legt neue Konten in der Benutzerverwaltung an oder
+        gibt die Selbstregistrierung in der Administration zeitlich frei.</p>
 <?php endif; ?>
 <?php else: ?>
       <h1 id="estab-login-title">Bereich auswählen</h1>

@@ -18,8 +18,8 @@ SELECT
          'nv_dienstbesetzungen', 'nv_dienstuebergabe_anfragen',
          'nv_dienstuebergaben',
          'nv_fernmeldeplaene', 'nv_fernmeldeplan_eintraege',
-         'nv_melderauftraege'
-       )) = 31) AS `base_tables_ok`,
+         'nv_melderauftraege', 'nv_selbstregistrierung'
+       )) = 32) AS `base_tables_ok`,
   ((SELECT COUNT(*)
       FROM information_schema.tables
      WHERE table_schema = DATABASE()
@@ -1561,7 +1561,135 @@ SELECT
        AND `require_symbol` IN (0, 1)
        AND CHAR_LENGTH(`updated_by`) BETWEEN 1 AND 128) = 1)
        AS `password_policy_ok`,
-  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 19
+  ((SELECT COUNT(*)
+      FROM information_schema.tables
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_selbstregistrierung'
+       AND table_type = 'BASE TABLE'
+       AND engine = 'InnoDB'
+       AND table_collation = 'utf8mb4_unicode_ci'
+       AND table_comment =
+         'estab:migration:114:self-registration-policy:v1') = 1
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.columns
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_selbstregistrierung') = 6
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.columns
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_selbstregistrierung'
+       AND extra = ''
+       AND (
+         (`column_name` = 'singleton_id'
+          AND ordinal_position = 1
+          AND is_nullable = 'NO'
+          AND data_type = 'tinyint'
+          AND column_type LIKE 'tinyint%unsigned'
+          AND column_default IS NULL
+          AND column_comment = 'estab:migration:114:singleton:v1')
+         OR (`column_name` = 'mode'
+          AND ordinal_position = 2
+          AND is_nullable = 'NO'
+          AND data_type = 'enum'
+          AND column_type =
+            'enum(''ENVIRONMENT'',''DISABLED'',''PERMANENT'',''UNTIL'')'
+          AND character_set_name = 'ascii'
+          AND collation_name = 'ascii_bin'
+          AND column_default = '''ENVIRONMENT'''
+          AND column_comment = 'estab:migration:114:mode:v1')
+         OR (`column_name` = 'enabled_until_utc'
+          AND ordinal_position = 3
+          AND is_nullable = 'YES'
+          AND data_type = 'datetime'
+          AND datetime_precision = 6
+          AND column_default = 'NULL'
+          AND column_comment =
+            'estab:migration:114:enabled-until-utc:v1')
+         OR (`column_name` = 'revision'
+          AND ordinal_position = 4
+          AND is_nullable = 'NO'
+          AND data_type = 'bigint'
+          AND column_type LIKE 'bigint%unsigned'
+          AND column_default = '0'
+          AND column_comment = 'estab:migration:114:revision:v1')
+         OR (`column_name` = 'updated_at'
+          AND ordinal_position = 5
+          AND is_nullable = 'NO'
+          AND data_type = 'datetime'
+          AND datetime_precision = 6
+          AND LOWER(column_default) = 'current_timestamp(6)'
+          AND column_comment = 'estab:migration:114:updated-at:v1')
+         OR (`column_name` = 'updated_by'
+          AND ordinal_position = 6
+          AND is_nullable = 'NO'
+          AND data_type = 'varchar'
+          AND column_type = 'varchar(128)'
+          AND character_set_name = 'utf8mb4'
+          AND collation_name = 'utf8mb4_unicode_ci'
+          AND column_default = '''migration-114'''
+          AND column_comment = 'estab:migration:114:updated-by:v1')
+       )) = 6
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.table_constraints
+     WHERE constraint_schema = DATABASE()
+       AND table_name = 'nv_selbstregistrierung') = 3
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.statistics
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_selbstregistrierung'
+       AND index_name = 'PRIMARY') = 1
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.statistics
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_selbstregistrierung'
+       AND index_name = 'PRIMARY'
+       AND non_unique = 0
+       AND seq_in_index = 1
+       AND column_name = 'singleton_id') = 1
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.table_constraints AS table_constraint
+      JOIN information_schema.check_constraints AS check_constraint
+        ON check_constraint.constraint_schema =
+             table_constraint.constraint_schema
+       AND check_constraint.constraint_name =
+             table_constraint.constraint_name
+     WHERE table_constraint.constraint_schema = DATABASE()
+       AND table_constraint.table_name = 'nv_selbstregistrierung'
+       AND table_constraint.constraint_type = 'CHECK'
+       AND CONCAT(
+             table_constraint.constraint_name,
+             ':',
+             SHA2(
+               REPLACE(
+                 REPLACE(LOWER(check_constraint.check_clause), '`', ''),
+                 ' ',
+                 ''
+               ),
+               256
+             )
+           ) IN (
+         'chk_selbstregistrierung_singleton:88d8e657608a68a0d7a33ff0ac962b4fab9455b1757c39014a936c02860da7b0',
+         'chk_selbstregistrierung_deadline:fffe6017aa7f7ac8e796ce0cf73e1d20ab0f7499bf021107c9a824c00907eba4'
+       )) = 2
+   AND
+   (SELECT COUNT(*) FROM `nv_selbstregistrierung`) = 1
+   AND
+   (SELECT COUNT(*) FROM `nv_selbstregistrierung`
+     WHERE `singleton_id` = 1
+       AND `mode` IN ('ENVIRONMENT','DISABLED','PERMANENT','UNTIL')
+       AND ((`mode` = 'UNTIL' AND `enabled_until_utc` IS NOT NULL)
+         OR (`mode` <> 'UNTIL' AND `enabled_until_utc` IS NULL))
+       AND `revision` <= 9223372036854775807
+       AND CHAR_LENGTH(`updated_by`) BETWEEN 1 AND 128
+       AND `updated_by` NOT REGEXP _utf8mb4'(*UCP)\\p{C}') = 1)
+       AS `self_registration_policy_ok`,
+  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 20
    AND
    (SELECT COUNT(*)
       FROM `estab_schema_migrations`
@@ -1584,10 +1712,11 @@ SELECT
        '110-etb-tbb-rules.sql',
        '111-logbook-shift-assignment.sql',
        '112-optional-access-shifts.sql',
-       '113-password-policy.sql'
+       '113-password-policy.sql',
+       '114-self-registration-policy.sql'
      )
        AND `state` = 'applied'
-       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 19)
+       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 20)
        AS `schema_migrations_ok`;
 
 SELECT `table_name`, `engine`, `table_collation`

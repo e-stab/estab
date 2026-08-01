@@ -121,15 +121,131 @@ function password_policy_test_restore_policy(
     }
 }
 
-function password_policy_test_restore_environment(
-    string $name,
-    string|false $original
-): void {
-    if ($original === false) {
-        putenv($name);
-        return;
+/**
+ * @return array{singleton_id:int,mode:string,enabled_until_utc:?string,revision:int,updated_at:string,updated_by:string}
+ */
+function password_policy_test_capture_self_registration_policy(
+    mysqli $connection
+): array {
+    $statement = $connection->prepare(
+        'SELECT `singleton_id`, `mode`, `enabled_until_utc`, `revision`,'
+        . ' `updated_at`, `updated_by` FROM `nv_selbstregistrierung`'
+    );
+    if (!$statement instanceof mysqli_stmt) {
+        throw new RuntimeException(
+            'Could not prepare self-registration policy snapshot'
+        );
     }
-    putenv($name . '=' . $original);
+    try {
+        if (!$statement->execute()) {
+            throw new RuntimeException(
+                'Could not capture self-registration policy'
+            );
+        }
+        $result = $statement->get_result();
+        $row = $result->fetch_assoc();
+        $secondRow = $result->fetch_assoc();
+        $result->free();
+        if (!is_array($row) || $secondRow !== null) {
+            throw new RuntimeException(
+                'Self-registration policy fixture is not a singleton'
+            );
+        }
+        return [
+            'singleton_id' => (int) ($row['singleton_id'] ?? 0),
+            'mode' => (string) ($row['mode'] ?? ''),
+            'enabled_until_utc' => is_string(
+                $row['enabled_until_utc'] ?? null
+            ) ? $row['enabled_until_utc'] : null,
+            'revision' => (int) ($row['revision'] ?? -1),
+            'updated_at' => (string) ($row['updated_at'] ?? ''),
+            'updated_by' => (string) ($row['updated_by'] ?? ''),
+        ];
+    } finally {
+        $statement->close();
+    }
+}
+
+function password_policy_test_enable_persistent_self_registration(
+    mysqli $connection,
+    string $actor
+): void {
+    $statement = $connection->prepare(
+        "UPDATE `nv_selbstregistrierung` SET `mode` = 'PERMANENT',"
+        . ' `enabled_until_utc` = NULL, `revision` = `revision` + 1,'
+        . ' `updated_at` = UTC_TIMESTAMP(6), `updated_by` = ?'
+        . ' WHERE `singleton_id` = 1'
+    );
+    if (!$statement instanceof mysqli_stmt) {
+        throw new RuntimeException(
+            'Could not prepare persistent self-registration fixture'
+        );
+    }
+    try {
+        $statement->bind_param('s', $actor);
+        if (!$statement->execute() || $statement->affected_rows !== 1) {
+            throw new RuntimeException(
+                'Could not enable persistent self-registration fixture'
+            );
+        }
+    } finally {
+        $statement->close();
+    }
+}
+
+function password_policy_test_restore_self_registration_policy(
+    mysqli $connection,
+    array $policy
+): void {
+    $singletonId = (int) $policy['singleton_id'];
+    $mode = (string) $policy['mode'];
+    $deadline = is_string($policy['enabled_until_utc'] ?? null)
+        ? $policy['enabled_until_utc']
+        : null;
+    $revision = (int) $policy['revision'];
+    $updatedAt = (string) $policy['updated_at'];
+    $updatedBy = (string) $policy['updated_by'];
+    $statement = $connection->prepare(
+        'INSERT INTO `nv_selbstregistrierung`'
+        . ' (`singleton_id`, `mode`, `enabled_until_utc`, `revision`,'
+        . ' `updated_at`, `updated_by`) VALUES (?, ?, ?, ?, ?, ?)'
+        . ' ON DUPLICATE KEY UPDATE `mode` = VALUES(`mode`),'
+        . ' `enabled_until_utc` = VALUES(`enabled_until_utc`),'
+        . ' `revision` = VALUES(`revision`),'
+        . ' `updated_at` = VALUES(`updated_at`),'
+        . ' `updated_by` = VALUES(`updated_by`)'
+    );
+    if (!$statement instanceof mysqli_stmt) {
+        throw new RuntimeException(
+            'Could not prepare self-registration policy restore'
+        );
+    }
+    try {
+        $statement->bind_param(
+            'ississ',
+            $singletonId,
+            $mode,
+            $deadline,
+            $revision,
+            $updatedAt,
+            $updatedBy
+        );
+        if (!$statement->execute()) {
+            throw new RuntimeException(
+                'Could not restore self-registration policy'
+            );
+        }
+    } finally {
+        $statement->close();
+    }
+    if (
+        password_policy_test_capture_self_registration_policy($connection)
+            !== $policy
+    ) {
+        throw new RuntimeException(
+            'Self-registration policy restore was incomplete'
+        );
+    }
 }
 
 $host = getenv('ESTAB_TEST_DB_HOST')
@@ -171,12 +287,12 @@ $createPassword = $longPasswordPrefix . 'create';
 $createPasswordCollision = $longPasswordPrefix . 'collision';
 $resetPassword = $longPasswordPrefix . 'reset';
 $registrationPassword = $longPasswordPrefix . 'registration';
-$selfRegistrationSetting = getenv('ESTAB_ALLOW_SELF_REGISTRATION');
 $originalDirectory = getcwd();
 $controllerDirectoryChanged = false;
 $connection = estab_auth_connect($config);
 $secondConnection = estab_auth_connect($config);
 $originalPolicy = null;
+$originalSelfRegistrationPolicy = null;
 $auditFloor = 0;
 
 try {
@@ -190,6 +306,18 @@ try {
         ) === '1',
         'Password-policy migration is not applied'
     );
+    password_policy_test_assert(
+        password_policy_test_scalar(
+            $connection,
+            "SELECT COUNT(*) FROM information_schema.tables"
+            . " WHERE table_schema = DATABASE()"
+            . " AND table_name = 'nv_selbstregistrierung'"
+            . " AND table_type = 'BASE TABLE' AND engine = 'InnoDB'"
+        ) === '1',
+        'Persistent self-registration migration is not applied'
+    );
+    $originalSelfRegistrationPolicy =
+        password_policy_test_capture_self_registration_policy($connection);
     $originalPolicy = estab_password_policy_load($connection);
     $auditFloor = (int) (
         password_policy_test_scalar(
@@ -650,7 +778,10 @@ try {
         'Could not deactivate existing-login fixture'
     );
 
-    putenv('ESTAB_ALLOW_SELF_REGISTRATION=true');
+    password_policy_test_enable_persistent_self_registration(
+        $connection,
+        $marker
+    );
     $_SESSION = ['menue' => 'LOGIN'];
     $loginError = '';
     $weakRegistration = [
@@ -739,14 +870,16 @@ try {
         'Policy, account or login audit leaked cleartext/hash material'
     );
 } finally {
-    password_policy_test_restore_environment(
-        'ESTAB_ALLOW_SELF_REGISTRATION',
-        $selfRegistrationSetting
-    );
     if ($controllerDirectoryChanged && is_string($originalDirectory)) {
         chdir($originalDirectory);
     }
     try {
+        if (is_array($originalSelfRegistrationPolicy)) {
+            password_policy_test_restore_self_registration_policy(
+                $connection,
+                $originalSelfRegistrationPolicy
+            );
+        }
         if (is_array($originalPolicy)) {
             password_policy_test_restore_policy($connection, $originalPolicy);
         }

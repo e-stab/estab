@@ -115,7 +115,7 @@ Geprüft werden:
   Modulkarten innerhalb der Breite bleiben, die Bereichsnavigation erreichbar
   ist und zentrale Login-Schaltflächen mindestens 44 Pixel hoch sind;
 - mit separaten ephemeren Admin-Testdaten die Basic-Auth-geschützte
-  Adminübersicht mit zehn klar getrennten Maßnahmen bei `1280x800` und
+  Adminübersicht mit elf klar getrennten Maßnahmen bei `1280x800` und
   `390x844` CSS-Pixeln: Navigation, Adminidentität und Karten bleiben sichtbar,
   die Karten überlappen sich nicht, erzeugen kein horizontales
   Dokument-Scrolling, sind vollständig klickbar und bilden mobil eine
@@ -128,6 +128,12 @@ Geprüft werden:
   Benutzerverwaltung zählt der echte Browser die Mindestlänge außerdem in
   Unicode-Codepoints statt UTF-16-Eingabeeinheiten, weist eine zu kurze
   Emoji-Passphrase ab und akzeptiert dieselbe Anzahl vollständiger Codepoints;
+- die Selbstregistrierungsseite bei `1280x800` und `390x844` CSS-Pixeln mit
+  den acht freigegebenen Zeitfenstern, getrennten Aktionen für befristete,
+  dauerhafte und sofortige Deaktivierung, erforderlicher Sicherheitsbestätigung
+  nur beim Öffnen sowie drei revisionsgebundenen Formularen; der Browserlauf
+  verändert die gespeicherte Freigabe dabei nicht und bestätigt im
+  deaktivierten Zustand, dass kein Ablauf-Timer aktiv ist;
 - die Exportübersicht bei `1280x800` und `390x844` CSS-Pixeln, die echte
   Exporterstellung, das offene Manifest, genau einen Downloadlink sowie die
   zunächst geschlossene und bewusst zweistufig geöffnete Löschbestätigung,
@@ -235,9 +241,10 @@ python3 tests/browser/headless_ui.py
 
 Die Administrationsoberflächen, Exportverwaltung und die beiden destruktiven
 Matrix-Bestätigungen lassen sich auf einem isolierten Test-Deployment gezielt
-prüfen. Der Lauf kontrolliert unter anderem die zehnte Admin-Karte sowie die
-Kennwortrichtlinien-Seite auf Desktop und Mobil, ohne die Richtlinie zu
-ändern. Er erzeugt einen eigenen Export und löscht genau diesen anschließend
+prüfen. Der Lauf kontrolliert unter anderem alle elf Admin-Karten sowie die
+Kennwortrichtlinien- und Selbstregistrierungsseite auf Desktop und Mobil, ohne
+eine der beiden Richtlinien zu ändern. Er erzeugt einen eigenen Export und
+löscht genau diesen anschließend
 wieder. Im Matrixeditor lehnt er beide Bestätigungsdialoge ab und verändert
 daher weder aktive noch gespeicherte Standardmatrix:
 
@@ -327,10 +334,10 @@ verschachtelte Scrollflächen, die mobilen Vollviewport-Zeilen samt
 Rollenaktionswechsel und „Menü“-Rückweg, überlappungsfreie Karten samt Hover
 und Bediengrößen auf schmalen Displays.
 
-Die Kennwortrichtlinien-Seite wird dabei visuell und responsiv, aber ohne
-Zustandsänderung geprüft. Vorschau, ausdrückliche Bestätigung, Revision,
-CSRF-Schutz und Audit der Richtlinienänderung weist der getrennte
-Admin-HTTP-Integrationstest nach.
+Die Kennwortrichtlinien- und Selbstregistrierungsseite werden dabei visuell
+und responsiv, aber ohne Zustandsänderung geprüft. Vorschau beziehungsweise
+Zeitfenster, ausdrückliche Bestätigung, Revision, CSRF-Schutz und Audit der
+jeweiligen Änderung weisen die getrennten Admin-HTTP-Integrationstests nach.
 
 Für den Audiotest ersetzt der Lauf `HTMLMediaElement.play()` kontrolliert
 zunächst durch eine abgewiesene Promise und danach durch einen Aufrufzähler.

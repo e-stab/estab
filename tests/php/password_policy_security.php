@@ -435,7 +435,15 @@ $assert(
         && str_contains($loginBody, 'estab_password_policy_load ($connection)')
         && str_contains(
             $loginBody,
-            'EstabPasswordPolicyInputException|EstabPasswordPolicyBusyException'
+            'EstabPasswordPolicyInputException'
+        )
+        && str_contains(
+            $loginBody,
+            'EstabPasswordPolicyBusyException'
+        )
+        && str_contains(
+            $loginBody,
+            'EstabSelfRegistrationBusyException'
         )
         && str_contains($loginBody, 'estab_password_policy_release_lock ('),
     'self-registration bypasses policy or existing logins are policy-gated'

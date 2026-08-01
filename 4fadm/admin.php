@@ -45,8 +45,18 @@ $sections = [
                 'href' => 'users.php',
             ],
             [
-                'key' => 'password-policy',
+                'key' => 'self-registration',
                 'number' => '03',
+                'title' => 'Selbstregistrierung',
+                'description' => 'Die öffentliche Kontoanlage sofort '
+                    . 'deaktivieren, dauerhaft freigeben oder für einen '
+                    . 'festen Zeitraum automatisch öffnen.',
+                'badge' => 'Kontoanlage',
+                'href' => 'self_registration.php',
+            ],
+            [
+                'key' => 'password-policy',
+                'number' => '04',
                 'title' => 'Kennwortrichtlinie',
                 'description' => 'Mindestlänge und optionale Anforderungen '
                     . 'für neu gesetzte Kennwörter zentral festlegen.',
@@ -55,7 +65,7 @@ $sections = [
             ],
             [
                 'key' => 'command-post',
-                'number' => '04',
+                'number' => '05',
                 'title' => 'Optionale Schichten',
                 'description' => 'Konten optional zu Schichten gruppieren '
                     . 'und deren Zugang gemeinsam aktivieren oder '
@@ -72,7 +82,7 @@ $sections = [
         'items' => [
             [
                 'key' => 'matrix',
-                'number' => '05',
+                'number' => '06',
                 'title' => 'Empfängermatrix',
                 'description' => 'Funktionen und Rollen bearbeiten; S2 bleibt '
                     . 'verbindliche Lage-/Dokumentationsfunktion und '
@@ -82,7 +92,7 @@ $sections = [
             ],
             [
                 'key' => 'counter',
-                'number' => '06',
+                'number' => '07',
                 'title' => 'Nachrichtenzähler',
                 'description' => 'Nach einem dokumentierten Systemausfall die '
                     . 'zuletzt auf Papier verwendete Nummer sicher erhöhen.',
@@ -91,7 +101,7 @@ $sections = [
             ],
             [
                 'key' => 'print-reset',
-                'number' => '07',
+                'number' => '08',
                 'title' => 'Vordruckmarkierungen zurücksetzen',
                 'description' => 'Abgeschlossene Nachrichten beim nächsten Lauf '
                     . 'erneut als PDF-Vordruck erzeugen lassen.',
@@ -107,7 +117,7 @@ $sections = [
         'items' => [
             [
                 'key' => 'incident-pdf',
-                'number' => '08',
+                'number' => '09',
                 'title' => 'PDF-Einsatzdossier',
                 'description' => 'ETB, TBB, Nachrichtenvordrucke und '
                     . 'Originalanhänge eines gewählten Einsatzes als '
@@ -117,7 +127,7 @@ $sections = [
             ],
             [
                 'key' => 'export',
-                'number' => '09',
+                'number' => '10',
                 'title' => 'Einsatzexporte',
                 'description' => 'Exporte erstellen, Manifest und Prüfsummen '
                     . 'ansehen, ZIP-Dateien herunterladen oder einzeln löschen.',
@@ -126,7 +136,7 @@ $sections = [
             ],
             [
                 'key' => 'system-status',
-                'number' => '10',
+                'number' => '11',
                 'title' => 'Systemstatus',
                 'description' => 'PHP, Datenbank, persistente Speicher und die '
                     . 'wirksame Containerkonfiguration kontrollieren.',

@@ -51,6 +51,128 @@ function user_admin_test_scalar(
     }
 }
 
+/**
+ * @return array{singleton_id:int,mode:string,enabled_until_utc:?string,revision:int,updated_at:string,updated_by:string}
+ */
+function user_admin_test_capture_self_registration_policy(
+    mysqli $connection
+): array {
+    $statement = $connection->prepare(
+        'SELECT `singleton_id`, `mode`, `enabled_until_utc`, `revision`,'
+        . ' `updated_at`, `updated_by` FROM `nv_selbstregistrierung`'
+    );
+    if (!$statement instanceof mysqli_stmt) {
+        throw new RuntimeException(
+            'Could not prepare self-registration policy snapshot'
+        );
+    }
+    try {
+        if (!$statement->execute()) {
+            throw new RuntimeException(
+                'Could not capture self-registration policy'
+            );
+        }
+        $result = $statement->get_result();
+        $row = $result->fetch_assoc();
+        $secondRow = $result->fetch_assoc();
+        $result->free();
+        if (!is_array($row) || $secondRow !== null) {
+            throw new RuntimeException(
+                'Self-registration policy fixture is not a singleton'
+            );
+        }
+        return [
+            'singleton_id' => (int) ($row['singleton_id'] ?? 0),
+            'mode' => (string) ($row['mode'] ?? ''),
+            'enabled_until_utc' => is_string(
+                $row['enabled_until_utc'] ?? null
+            ) ? $row['enabled_until_utc'] : null,
+            'revision' => (int) ($row['revision'] ?? -1),
+            'updated_at' => (string) ($row['updated_at'] ?? ''),
+            'updated_by' => (string) ($row['updated_by'] ?? ''),
+        ];
+    } finally {
+        $statement->close();
+    }
+}
+
+function user_admin_test_enable_persistent_self_registration(
+    mysqli $connection
+): void {
+    $statement = $connection->prepare(
+        "UPDATE `nv_selbstregistrierung` SET `mode` = 'PERMANENT',"
+        . ' `enabled_until_utc` = NULL, `revision` = `revision` + 1,'
+        . " `updated_at` = UTC_TIMESTAMP(6), `updated_by` = 'user-admin-it'"
+        . ' WHERE `singleton_id` = 1'
+    );
+    if (!$statement instanceof mysqli_stmt) {
+        throw new RuntimeException(
+            'Could not prepare persistent self-registration fixture'
+        );
+    }
+    try {
+        if (!$statement->execute() || $statement->affected_rows !== 1) {
+            throw new RuntimeException(
+                'Could not enable persistent self-registration fixture'
+            );
+        }
+    } finally {
+        $statement->close();
+    }
+}
+
+function user_admin_test_restore_self_registration_policy(
+    mysqli $connection,
+    array $policy
+): void {
+    $singletonId = (int) $policy['singleton_id'];
+    $mode = (string) $policy['mode'];
+    $deadline = is_string($policy['enabled_until_utc'] ?? null)
+        ? $policy['enabled_until_utc']
+        : null;
+    $revision = (int) $policy['revision'];
+    $updatedAt = (string) $policy['updated_at'];
+    $updatedBy = (string) $policy['updated_by'];
+    $statement = $connection->prepare(
+        'INSERT INTO `nv_selbstregistrierung`'
+        . ' (`singleton_id`, `mode`, `enabled_until_utc`, `revision`,'
+        . ' `updated_at`, `updated_by`) VALUES (?, ?, ?, ?, ?, ?)'
+        . ' ON DUPLICATE KEY UPDATE `mode` = VALUES(`mode`),'
+        . ' `enabled_until_utc` = VALUES(`enabled_until_utc`),'
+        . ' `revision` = VALUES(`revision`),'
+        . ' `updated_at` = VALUES(`updated_at`),'
+        . ' `updated_by` = VALUES(`updated_by`)'
+    );
+    if (!$statement instanceof mysqli_stmt) {
+        throw new RuntimeException(
+            'Could not prepare self-registration policy restore'
+        );
+    }
+    try {
+        $statement->bind_param(
+            'ississ',
+            $singletonId,
+            $mode,
+            $deadline,
+            $revision,
+            $updatedAt,
+            $updatedBy
+        );
+        if (!$statement->execute()) {
+            throw new RuntimeException(
+                'Could not restore self-registration policy'
+            );
+        }
+    } finally {
+        $statement->close();
+    }
+    if (user_admin_test_capture_self_registration_policy($connection) !== $policy) {
+        throw new RuntimeException(
+            'Self-registration policy restore was incomplete'
+        );
+    }
+}
+
 function user_admin_test_cleanup(
     array $config,
     string $code
@@ -145,6 +267,7 @@ register_shutdown_function(
 
 $connection = user_admin_test_connect($config);
 $secondConnection = user_admin_test_connect($config);
+$originalSelfRegistrationPolicy = null;
 try {
     user_admin_test_assert(
         user_admin_test_scalar(
@@ -158,6 +281,18 @@ try {
         ) === '1',
         'User-blocking migration is not applied'
     );
+    user_admin_test_assert(
+        user_admin_test_scalar(
+            $connection,
+            "SELECT COUNT(*) FROM information_schema.tables"
+            . " WHERE table_schema = DATABASE()"
+            . " AND table_name = 'nv_selbstregistrierung'"
+            . " AND table_type = 'BASE TABLE' AND engine = 'InnoDB'"
+        ) === '1',
+        'Persistent self-registration migration is not applied'
+    );
+    $originalSelfRegistrationPolicy =
+        user_admin_test_capture_self_registration_policy($connection);
 
     $functionRoles = estab_user_admin_function_roles(
         $connection,
@@ -763,35 +898,24 @@ try {
             . $loginError
     );
 
-    // Exercise the explicit compatibility-only self-registration branch. It
-    // must write the same credential-free JSON shape as an existing login.
-    $selfRegistrationSetting = getenv('ESTAB_ALLOW_SELF_REGISTRATION');
-    try {
-        putenv('ESTAB_ALLOW_SELF_REGISTRATION=true');
-        $_SESSION = ['menue' => 'LOGIN'];
-        $loginError = '';
-        $selfRegistrationRequest = [
-            'login_flow' => 'new',
-            'benutzer' => $selfRegistrationName,
-            'kuerzel' => $selfRegistrationCode,
-            'funktion' => 'A/W',
-            'kennwort1' => $selfRegistrationPassword,
-            'kennwort2' => $selfRegistrationPassword,
-            '2teskennwort' => 'Yes',
-        ];
-        user_admin_test_assert(
-            check_save_user($selfRegistrationRequest, $loginError) === false,
-            'Explicit self-registration path failed: ' . $loginError
-        );
-    } finally {
-        if ($selfRegistrationSetting === false) {
-            putenv('ESTAB_ALLOW_SELF_REGISTRATION');
-        } else {
-            putenv(
-                'ESTAB_ALLOW_SELF_REGISTRATION=' . $selfRegistrationSetting
-            );
-        }
-    }
+    // Exercise a real registration against the authoritative persistent
+    // policy. The environment compatibility fallback is not involved here.
+    user_admin_test_enable_persistent_self_registration($connection);
+    $_SESSION = ['menue' => 'LOGIN'];
+    $loginError = '';
+    $selfRegistrationRequest = [
+        'login_flow' => 'new',
+        'benutzer' => $selfRegistrationName,
+        'kuerzel' => $selfRegistrationCode,
+        'funktion' => 'A/W',
+        'kennwort1' => $selfRegistrationPassword,
+        'kennwort2' => $selfRegistrationPassword,
+        '2teskennwort' => 'Yes',
+    ];
+    user_admin_test_assert(
+        check_save_user($selfRegistrationRequest, $loginError) === false,
+        'Explicit self-registration path failed: ' . $loginError
+    );
     $selfRegistrationSessionId = session_id();
     $selfRegistrationAuditJson = user_admin_test_scalar(
         $connection,
@@ -992,11 +1116,20 @@ try {
         'Could not restore integration working directory'
     );
 } finally {
-    estab_auth_close($secondConnection);
-    estab_auth_close($connection);
-    user_admin_test_cleanup($config, $code);
-    user_admin_test_cleanup($config, $createdCode);
-    user_admin_test_cleanup($config, $selfRegistrationCode);
+    try {
+        if (is_array($originalSelfRegistrationPolicy)) {
+            user_admin_test_restore_self_registration_policy(
+                $connection,
+                $originalSelfRegistrationPolicy
+            );
+        }
+    } finally {
+        estab_auth_close($secondConnection);
+        estab_auth_close($connection);
+        user_admin_test_cleanup($config, $code);
+        user_admin_test_cleanup($config, $createdCode);
+        user_admin_test_cleanup($config, $selfRegistrationCode);
+    }
 }
 
 printf(

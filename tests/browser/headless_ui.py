@@ -2267,7 +2267,7 @@ class BrowserAcceptance:
                 """
                 document.readyState === "complete" &&
                 Boolean(document.querySelector("[data-estab-admin-dashboard]")) &&
-                document.querySelectorAll("[data-estab-admin-card]").length === 10 &&
+                document.querySelectorAll("[data-estab-admin-card]").length === 11 &&
                 Boolean(document.querySelector(
                     '[data-estab-public-bar] [data-estab-admin-user]'
                 ))
@@ -2752,6 +2752,11 @@ class BrowserAcceptance:
                 "Kennwortrichtlinie",
             ),
             (
+                "/4fadm/self_registration.php",
+                "[data-estab-self-registration-admin]",
+                "Selbstregistrierung",
+            ),
+            (
                 "/4fadm/fuehrungsstelle.php",
                 "[data-estab-shift-admin]",
                 "Optionale Zugangsschichten",
@@ -2871,6 +2876,13 @@ class BrowserAcceptance:
                 True,
             ),
             (
+                "/4fadm/self_registration.php",
+                "[data-estab-self-registration-admin]",
+                "Selbstregistrierung",
+                False,
+                True,
+            ),
+            (
                 "/4fadm/fuehrungsstelle.php",
                 "[data-estab-shift-admin]",
                 "Optionale Zugangsschichten",
@@ -2950,6 +2962,74 @@ class BrowserAcceptance:
                     require_responsive_table=responsive_table,
                     require_target=require_target,
                 )
+                if path == "/4fadm/self_registration.php" and width == 1280:
+                    self_registration_state = self.cdp.evaluate(
+                        """
+                        (() => {
+                            const form = action => document.querySelector(
+                                `form:has(input[name="admin_action"]` +
+                                `[value="${action}"])`
+                            );
+                            const temporary = form("enable_temporary");
+                            const permanent = form("enable_permanent");
+                            const disable = form("disable");
+                            const durations = Array.from(
+                                temporary?.querySelectorAll(
+                                    'select[name="duration_minutes"] option'
+                                ) || []
+                            ).map(option => option.value);
+                            return {
+                                durations,
+                                temporaryConfirmation:
+                                    temporary?.querySelector(
+                                        'input[name="confirm_activation"]'
+                                    )?.required === true,
+                                permanentConfirmation:
+                                    permanent?.querySelector(
+                                        'input[name="confirm_activation"]'
+                                    )?.required === true,
+                                disableWithoutConfirmation:
+                                    disable !== null && !disable.querySelector(
+                                        'input[name="confirm_activation"]'
+                                    ),
+                                revisionCount: document.querySelectorAll(
+                                    'input[name="expected_revision"]'
+                                ).length,
+                                warningVisible: document.body.innerText.includes(
+                                    "kontrollierten Netz und unter Aufsicht"
+                                ),
+                                expiryRefreshAbsent: !document.querySelector(
+                                    '[data-estab-self-registration-refresh-ms], ' +
+                                    '[data-estab-self-registration-expiry-refresh]'
+                                )
+                            };
+                        })()
+                        """
+                    )
+                    self._truth(
+                        isinstance(self_registration_state, dict)
+                        and self_registration_state.get("durations") == [
+                            "15", "30", "60", "120", "240", "480",
+                            "720", "1440",
+                        ]
+                        and self_registration_state.get(
+                            "temporaryConfirmation"
+                        ) is True
+                        and self_registration_state.get(
+                            "permanentConfirmation"
+                        ) is True
+                        and self_registration_state.get(
+                            "disableWithoutConfirmation"
+                        ) is True
+                        and self_registration_state.get("revisionCount") == 3
+                        and self_registration_state.get("warningVisible") is True
+                        and self_registration_state.get(
+                            "expiryRefreshAbsent"
+                        ) is True,
+                        "Selbstregistrierung trennt Zeitfenster, sofortiges "
+                        "Schließen und Sicherheitsbestätigung nicht eindeutig: "
+                        f"{self_registration_state!r}",
+                    )
                 if path == "/4fadm/users.php" and width == 1280:
                     password_length_state = self.cdp.evaluate(
                         """
@@ -3214,6 +3294,7 @@ class BrowserAcceptance:
             [
                 "incidents",
                 "users",
+                "self-registration",
                 "password-policy",
                 "command-post",
                 "matrix",

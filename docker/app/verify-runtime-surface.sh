@@ -59,6 +59,7 @@ menue.inc.php
 4fadm/incidents.php
 4fadm/make_fkt.php
 4fadm/password_policy.php
+4fadm/self_registration.php
 4fadm/set_number_after_crash.php
 4fadm/system_status.php
 4fadm/users.php
@@ -124,6 +125,7 @@ app/message_transport.php
 app/navigation.php
 app/operational_guard.php
 app/password_policy.php
+app/self_registration.php
 app/readiness.php
 app/read_authorization.php
 app/root_menu.php

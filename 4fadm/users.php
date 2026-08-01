@@ -365,6 +365,16 @@ if (
       <?php endif; ?>
     </section>
 
+    <section class="estab-tool-panel" aria-labelledby="self-registration-title">
+      <h2 id="self-registration-title">Selbstregistrierung</h2>
+      <p>Die öffentliche Kontoanlage wird getrennt von bestehenden Konten
+        gesteuert. Sie kann sofort geschlossen, dauerhaft geöffnet oder für
+        einen ausgewählten Zeitraum freigegeben werden.</p>
+      <a class="estab-button" href="self_registration.php">
+        Selbstregistrierung steuern
+      </a>
+    </section>
+
     <section class="estab-tool-panel" aria-labelledby="estab-create-user-title">
       <h2 id="estab-create-user-title">Benutzerkonto anlegen</h2>
       <p>Vergeben Sie Identität, Startkennwort und die einzige Funktion, mit der

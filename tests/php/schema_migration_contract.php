@@ -73,6 +73,9 @@ $optionalAccessShiftMigration = $read(
 $passwordPolicyMigration = $read(
     $root . '/docker/db/migrations/113-password-policy.sql'
 );
+$selfRegistrationMigration = $read(
+    $root . '/docker/db/migrations/114-self-registration-policy.sql'
+);
 $baseline = $read($root . '/docker/db/init/10-schema.sql');
 $verify = $read($root . '/docker/db/verify.sql');
 $health = $read($root . '/health.php');
@@ -97,6 +100,7 @@ $logbookRulesSql = $normaliseSql($logbookRulesMigration);
 $logbookShiftSql = $normaliseSql($logbookShiftMigration);
 $optionalAccessShiftSql = $normaliseSql($optionalAccessShiftMigration);
 $passwordPolicySql = $normaliseSql($passwordPolicyMigration);
+$selfRegistrationSql = $normaliseSql($selfRegistrationMigration);
 $baselineSql = $normaliseSql($baseline);
 $verifySql = $normaliseSql($verify);
 $readinessSql = $normaliseSql(estab_readiness_schema_query());
@@ -205,6 +209,91 @@ $assert(
     && str_contains($schemaIntegration, 'untracked partial namespace was accepted')
     && str_contains($schemaIntegration, 'partial namespace guard modified the blocked database'),
     'Integration tests do not prove baseline retry and the untracked-partial guard'
+);
+$freshDefaultRunnerFragments = [
+    'fresh_default_version=114-self-registration-fresh-default',
+    'fresh_default_source="$ESTAB_MIGRATIONS_DIR/114-self-registration-policy.sql"',
+    'sha256sum "$fresh_default_source"',
+    "WHERE version = '\$fresh_default_version'",
+    'fresh_default_record="$fresh_default_checksum|applying"',
+    'Checksum mismatch for fresh-install default marker',
+    'Fresh-install default marker has no applied baseline',
+    'Retrying interrupted fresh-install self-registration default',
+    'UPDATE nv_selbstregistrierung AS policy',
+    'JOIN estab_schema_baselines AS marker',
+    'JOIN estab_schema_migrations AS migration_record',
+    "migration_record.version = '114-self-registration-policy.sql'",
+    'migration_record.checksum = \'$fresh_default_checksum\'',
+    "SET policy.mode = 'DISABLED'",
+    'policy.revision = policy.revision + 1',
+    "policy.updated_by = 'fresh-install'",
+    "marker.state = 'applied'",
+    "policy.mode = 'ENVIRONMENT'",
+    'policy.revision = 0',
+    "BINARY policy.updated_by = BINARY 'migration-114'",
+    'Fresh-install self-registration default could not be applied atomically',
+    'Applied fresh-install default marker is inconsistent',
+];
+foreach ($freshDefaultRunnerFragments as $fragment) {
+    $assert(
+        str_contains($runner, $fragment),
+        'Fresh-install self-registration marker omits contract: ' . $fragment
+    );
+}
+$freshDefaultMarkerPosition = strpos(
+    $runner,
+    "('\$fresh_default_version', '\$fresh_default_checksum',"
+);
+$migrationLoopEndPosition = strpos($runner, 'done < "$migration_list"');
+$freshDefaultUpdatePosition = strpos(
+    $runner,
+    'UPDATE nv_selbstregistrierung AS policy'
+);
+$schemaVerificationPosition = strpos(
+    $runner,
+    'if [ -n "$ESTAB_SCHEMA_VERIFY_FILE" ]'
+);
+$assert(
+    is_int($freshDefaultMarkerPosition)
+        && is_int($migrationLoopEndPosition)
+        && is_int($freshDefaultUpdatePosition)
+        && is_int($schemaVerificationPosition)
+        && $freshDefaultMarkerPosition < $migrationLoopEndPosition
+        && $migrationLoopEndPosition < $freshDefaultUpdatePosition
+        && $freshDefaultUpdatePosition < $schemaVerificationPosition
+        && !str_contains($runner, 'ESTAB_ALLOW_SELF_REGISTRATION'),
+    'Fresh-install default is not durably marked before migrations and atomically closed before verification'
+);
+$assert(
+    str_contains(
+        $schemaIntegration,
+        'fresh installation with environment opt-in did not start disabled'
+    )
+        && str_contains(
+            $schemaIntegration,
+            'interrupted fresh-install default was not completed safely'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'manipulated fresh-default checksum was accepted'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'blocked fresh-default checksum manipulation changed marker or policy'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'inconsistent applied fresh-default marker was accepted'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'blocked fresh-default marker inconsistency changed marker or policy'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'legacy upgrade did not preserve the environment-compatible self-registration default'
+        ),
+    'Schema integration does not prove the fail-closed fresh-vs-upgrade boundary'
 );
 $assert(
     str_contains($runner, '--defaults-extra-file="$client_defaults"'),
@@ -1222,6 +1311,122 @@ $assert(
     'Migration 113 seeds before validating ownership or skips final validation'
 );
 
+$selfRegistrationMigrationFragments = [
+    'Self-registration migration blocked: foreign table collision'
+        => 'Migration 114 does not reject a foreign table collision',
+    'CREATE TABLE IF NOT EXISTS `nv_selbstregistrierung`'
+        => 'Migration 114 does not create the self-registration singleton',
+    "`mode` ENUM('ENVIRONMENT','DISABLED','PERMANENT','UNTIL')"
+        => 'Migration 114 does not constrain the supported policy modes',
+    "CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'ENVIRONMENT'"
+        => 'Migration 114 does not preserve the environment fallback default',
+    '`enabled_until_utc` DATETIME(6) NULL DEFAULT NULL'
+        => 'Migration 114 does not provide a nullable UTC deadline',
+    '`revision` BIGINT UNSIGNED NOT NULL DEFAULT 0'
+        => 'Migration 114 does not provide a monotonic policy revision',
+    '`updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)'
+        => 'Migration 114 does not retain microsecond update time',
+    "`updated_by` VARCHAR(128) NOT NULL DEFAULT 'migration-114'"
+        => 'Migration 114 does not retain the policy actor',
+    "column_default = '''ENVIRONMENT'''"
+        => 'Migration 114 does not recognise MariaDB ENUM defaults canonically',
+    "column_default = 'NULL'"
+        => 'Migration 114 does not recognise MariaDB nullable defaults canonically',
+    'CHECK (`singleton_id` = 1)'
+        => 'Migration 114 does not enforce singleton storage',
+    "(`mode` = 'UNTIL' AND `enabled_until_utc` IS NOT NULL)"
+        => 'Migration 114 does not require a deadline for timed enablement',
+    "(`mode` <> 'UNTIL' AND `enabled_until_utc` IS NULL)"
+        => 'Migration 114 permits deadlines for non-timed modes',
+    'information_schema.check_constraints'
+        => 'Migration 114 trusts owned CHECK names without their definitions',
+    'total_columns <> 6'
+        => 'Migration 114 does not reject additional or missing columns',
+    'total_constraints <> 3'
+        => 'Migration 114 does not reject additional foreign constraints',
+    'canonical_checks <> 2'
+        => 'Migration 114 does not require both canonical CHECK definitions',
+    'CREATE PROCEDURE estab_migrate_114_validate(IN require_row TINYINT UNSIGNED)'
+        => 'Migration 114 has no resumable schema/row validator',
+    'CALL estab_migrate_114_validate(0);'
+        => 'Migration 114 does not validate an owned partial table before seeding',
+    "(1, 'ENVIRONMENT', NULL, 0, UTC_TIMESTAMP(6), 'migration-114')"
+        => 'Migration 114 does not seed the upgrade-compatible policy',
+    'ON DUPLICATE KEY UPDATE `singleton_id` = VALUES(`singleton_id`)'
+        => 'Migration 114 cannot preserve configured values on ledger retry',
+    'CALL estab_migrate_114_validate(1);'
+        => 'Migration 114 does not validate the final singleton row',
+    "`mode` IN ('ENVIRONMENT','DISABLED','PERMANENT','UNTIL')"
+        => 'Migration 114 does not validate the persisted policy mode',
+    'CHAR_LENGTH(`updated_by`) BETWEEN 1 AND 128'
+        => 'Migration 114 does not validate the persisted policy actor',
+    'estab:migration:114:self-registration-policy:v1'
+        => 'Migration 114 has no durable table ownership marker',
+    'estab:migration:114:singleton:v1'
+        => 'Migration 114 has no singleton-column ownership marker',
+    'estab:migration:114:mode:v1'
+        => 'Migration 114 has no mode-column ownership marker',
+    'estab:migration:114:enabled-until-utc:v1'
+        => 'Migration 114 has no deadline-column ownership marker',
+    'estab:migration:114:revision:v1'
+        => 'Migration 114 has no revision-column ownership marker',
+    'estab:migration:114:updated-at:v1'
+        => 'Migration 114 has no update-time ownership marker',
+    'estab:migration:114:updated-by:v1'
+        => 'Migration 114 has no actor-column ownership marker',
+];
+foreach ($selfRegistrationMigrationFragments as $fragment => $message) {
+    $assert(str_contains($selfRegistrationSql, $fragment), $message);
+}
+foreach ([
+    '88d8e657608a68a0d7a33ff0ac962b4fab9455b1757c39014a936c02860da7b0',
+    'fffe6017aa7f7ac8e796ce0cf73e1d20ab0f7499bf021107c9a824c00907eba4',
+] as $checkHash) {
+    $assert(
+        str_contains($selfRegistrationSql, $checkHash),
+        'Migration 114 omits canonical CHECK-clause hash ' . $checkHash
+    );
+}
+$selfRegistrationSchemaValidation = strpos(
+    $selfRegistrationSql,
+    'CALL estab_migrate_114_validate(0);'
+);
+$selfRegistrationSeed = strpos(
+    $selfRegistrationSql,
+    'INSERT INTO `nv_selbstregistrierung`'
+);
+$selfRegistrationRowValidation = strpos(
+    $selfRegistrationSql,
+    'CALL estab_migrate_114_validate(1);'
+);
+$assert(
+    is_int($selfRegistrationSchemaValidation)
+        && is_int($selfRegistrationSeed)
+        && is_int($selfRegistrationRowValidation)
+        && $selfRegistrationSchemaValidation < $selfRegistrationSeed
+        && $selfRegistrationSeed < $selfRegistrationRowValidation,
+    'Migration 114 seeds before validating ownership or skips final validation'
+);
+$assert(
+    str_contains(
+        $schemaIntegration,
+        'manipulated self-registration deadline CHECK was accepted'
+    )
+        && str_contains(
+            $schemaIntegration,
+            'blocked self-registration CHECK collision was changed or recorded'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'foreign self-registration table was accepted'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'blocked self-registration table collision was changed or recorded'
+        ),
+    'Schema integration does not prove self-registration collisions fail closed'
+);
+
 $passwordPolicyColumnContractFragments = [
     "column_default IS NULL",
     "column_type LIKE 'tinyint%unsigned'",
@@ -1329,6 +1534,142 @@ foreach ([
     );
 }
 
+$selfRegistrationColumnContractFragments = [
+    "column_type = 'enum(''ENVIRONMENT'',''DISABLED'',''PERMANENT'',''UNTIL'')'",
+    "character_set_name = 'ascii'",
+    "collation_name = 'ascii_bin'",
+    "column_default = '''ENVIRONMENT'''",
+    "is_nullable = 'YES'",
+    "data_type = 'datetime'",
+    'datetime_precision = 6',
+    "column_default = 'NULL'",
+    "column_type LIKE 'bigint%unsigned'",
+    "LOWER(column_default) = 'current_timestamp(6)'",
+    "column_type = 'varchar(128)'",
+    "column_default = '''migration-114'''",
+    'estab:migration:114:singleton:v1',
+    'estab:migration:114:mode:v1',
+    'estab:migration:114:enabled-until-utc:v1',
+    'estab:migration:114:revision:v1',
+    'estab:migration:114:updated-at:v1',
+    'estab:migration:114:updated-by:v1',
+];
+$selfRegistrationCheckContracts = [
+    'chk_selbstregistrierung_singleton:'
+        . '88d8e657608a68a0d7a33ff0ac962b4fab9455b1757c39014a936c02860da7b0',
+    'chk_selbstregistrierung_deadline:'
+        . 'fffe6017aa7f7ac8e796ce0cf73e1d20ab0f7499bf021107c9a824c00907eba4',
+];
+foreach ([
+    'verify.sql' => $verifySql,
+    'runtime readiness' => $readinessSql,
+] as $contractName => $runtimeSchemaContract) {
+    $selfRegistrationRuntimeContract = str_replace(
+        '`',
+        '',
+        $runtimeSchemaContract
+    );
+    foreach ($selfRegistrationColumnContractFragments as $fragment) {
+        $assert(
+            str_contains($selfRegistrationRuntimeContract, $fragment),
+            $contractName . ' omits self-registration column contract: '
+                . $fragment
+        );
+    }
+    foreach (range(1, 6) as $position) {
+        $assert(
+            str_contains(
+                $selfRegistrationRuntimeContract,
+                'ordinal_position = ' . $position
+            ),
+            $contractName . ' omits self-registration column position '
+                . $position
+        );
+    }
+    foreach ($selfRegistrationCheckContracts as $checkContract) {
+        $assert(
+            str_contains($selfRegistrationRuntimeContract, $checkContract),
+            $contractName . ' omits self-registration CHECK contract: '
+                . $checkContract
+        );
+    }
+    $assert(
+        str_contains(
+            $selfRegistrationRuntimeContract,
+            'estab:migration:114:self-registration-policy:v1'
+        )
+            && preg_match(
+                "/table_name = 'nv_selbstregistrierung'.*?"
+                    . "estab:migration:114:updated-by:v1'.*?\)\) = 6/s",
+                $selfRegistrationRuntimeContract
+            ) === 1,
+        $contractName
+            . ' does not require all six canonical self-registration columns'
+    );
+    $assert(
+        preg_match(
+            "/FROM information_schema\.table_constraints "
+                . "WHERE constraint_schema = DATABASE\(\) "
+                . "AND table_name = 'nv_selbstregistrierung'\) = 3/",
+            $selfRegistrationRuntimeContract
+        ) === 1,
+        $contractName
+            . ' does not require exactly three self-registration constraints'
+    );
+    $assert(
+        preg_match(
+            "/table_constraint\.table_name = 'nv_selbstregistrierung'.*?"
+                . "table_constraint\.constraint_type = 'CHECK'.*?\)\) = 2/s",
+            $selfRegistrationRuntimeContract
+        ) === 1,
+        $contractName
+            . ' does not require both canonical self-registration CHECK clauses'
+    );
+    $assert(
+        preg_match(
+            "/table_name = 'nv_selbstregistrierung' "
+                . "AND index_name = 'PRIMARY'\) = 1.*?"
+                . "index_name = 'PRIMARY' AND non_unique = 0 "
+                . "AND seq_in_index = 1 AND column_name = 'singleton_id'\) = 1/s",
+            $selfRegistrationRuntimeContract
+        ) === 1,
+        $contractName
+            . ' does not require the exact self-registration primary key'
+    );
+    $assert(
+        str_contains(
+            $selfRegistrationRuntimeContract,
+            "mode IN ('ENVIRONMENT','DISABLED','PERMANENT','UNTIL')"
+        )
+            && str_contains(
+                $selfRegistrationRuntimeContract,
+                "mode = 'UNTIL' AND enabled_until_utc IS NOT NULL"
+            )
+            && str_contains(
+                $selfRegistrationRuntimeContract,
+                "mode <> 'UNTIL' AND enabled_until_utc IS NULL"
+            )
+            && str_contains(
+                $selfRegistrationRuntimeContract,
+                'CHAR_LENGTH(updated_by) BETWEEN 1 AND 128'
+            )
+            && str_contains(
+                $selfRegistrationRuntimeContract,
+                'revision <= 9223372036854775807'
+            )
+            && str_contains(
+                $selfRegistrationRuntimeContract,
+                "updated_by NOT REGEXP _utf8mb4'(*UCP)\\\\p{C}'"
+            )
+            && preg_match(
+                "/SELECT COUNT\(\*\) FROM nv_selbstregistrierung\) = 1/",
+                $selfRegistrationRuntimeContract
+            ) === 1,
+        $contractName
+            . ' does not require one canonical self-registration policy row'
+    );
+}
+
 foreach ([
     'verify.sql' => $verifySql,
     'runtime readiness' => $readinessSql,
@@ -1383,6 +1724,9 @@ foreach ([
         'nv_kennwortrichtlinie',
         'estab:migration:113:password-policy:v1',
         '113-password-policy.sql',
+        'nv_selbstregistrierung',
+        'estab:migration:114:self-registration-policy:v1',
+        '114-self-registration-policy.sql',
     ] as $fragment) {
         $assert(
             str_contains($runtimeSchemaContract, $fragment),
@@ -1918,6 +2262,7 @@ foreach ([
     '111-logbook-shift-assignment.sql',
     '112-optional-access-shifts.sql',
     '113-password-policy.sql',
+    '114-self-registration-policy.sql',
     'historical logbook rows did not retain unknown shift provenance',
     'partial logbook and optional access-shift migrations did not resume canonically',
     'blocked logbook shift collision was changed or recorded',
@@ -1937,6 +2282,19 @@ foreach ([
     'foreign password-policy table was accepted',
     'blocked password-policy collision was changed or recorded',
     'password-policy migration did not recover after removing the collision',
+    'legacy upgrade did not preserve the environment-compatible self-registration default',
+    'second self-registration policy row was accepted',
+    'timed self-registration policy without a deadline was accepted',
+    'non-timed self-registration policy with a deadline was accepted',
+    'canonical self-registration table without singleton was not safely resumed',
+    'self-registration migration retry overwrote configured values',
+    'manipulated self-registration deadline CHECK was accepted',
+    'blocked self-registration CHECK collision was changed or recorded',
+    'self-registration migration did not recover after CHECK repair',
+    'foreign self-registration table was accepted',
+    'blocked self-registration table collision was changed or recorded',
+    'self-registration migration did not recover after removing the collision',
+    'migration 114 rewrote one of the existing nineteen ledger rows',
     'Manual ETB/TBB entries without a duty shift were accepted by account function',
     'Two access groups can be active and membership re-addition preserves its history',
     'withdrawn ETB assignee rejection was not explicit',
@@ -1954,7 +2312,7 @@ foreach ([
     'missing ETB head was not rejected explicitly',
     'missing TTB head was not rejected explicitly',
     'MariaDB default snapshot isolation is not enabled for concurrency tests',
-    'assert_equal "19"',
+    'assert_equal "20"',
 ] as $marker) {
     $assert(
         str_contains($schemaIntegration, $marker),
@@ -2021,7 +2379,7 @@ $assert(
         && str_contains($verifySql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $verifySql,
-            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 19'
+            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 20'
         )
         && str_contains($verifySql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -2041,7 +2399,11 @@ $assert(
         )
         && str_contains($verifySql, "'112-optional-access-shifts.sql'")
         && str_contains($verifySql, "'113-password-policy.sql'")
-        && str_contains($verifySql, ") = 19) AS `schema_migrations_ok`"),
+        && str_contains(
+            $verifySql,
+            "'114-self-registration-policy.sql'"
+        )
+        && str_contains($verifySql, ") = 20) AS `schema_migrations_ok`"),
     'verify.sql does not require the exact final ETB catalogue and ledger'
 );
 $assert(
@@ -2064,7 +2426,7 @@ $assert(
         && str_contains($readinessSql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $readinessSql,
-            '(SELECT COUNT(*) FROM estab_schema_migrations) = 19'
+            '(SELECT COUNT(*) FROM estab_schema_migrations) = 20'
         )
         && str_contains($readinessSql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -2092,10 +2454,57 @@ $assert(
         )
         && str_contains(
             $readinessSql,
-            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 19"
+            "'114-self-registration-policy.sql'"
+        )
+        && str_contains(
+            $readinessSql,
+            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 20"
         ),
     'Runtime readiness does not require the exact final ETB catalogue and ledger'
 );
+$releaseMigrationFiles = [
+    '20-nullable-dates.sql',
+    '30-runtime-schema.sql',
+    '40-recipient-matrix-standard.sql',
+    '45-global-incidents-prepare.sql',
+    '50-global-incidents.sql',
+    '55-global-incidents-finish.sql',
+    '70-user-account-blocking.sql',
+    '80-dv-evidence-retention.sql',
+    '94-dv-organisational-controls.sql',
+    '95-attachment-ingest-integrity.sql',
+    '96-etb-duty-function.sql',
+    '97-incident-command-post-name.sql',
+    '98-official-message-form-fields.sql',
+    '99-message-list-search.sql',
+    '100-session-presence.sql',
+    '110-etb-tbb-rules.sql',
+    '111-logbook-shift-assignment.sql',
+    '112-optional-access-shifts.sql',
+    '113-password-policy.sql',
+    '114-self-registration-policy.sql',
+];
+foreach ([
+    'verify.sql' => $verifySql,
+    'runtime readiness' => $readinessSql,
+] as $contractName => $runtimeSchemaContract) {
+    $migrationOffset = 0;
+    foreach ($releaseMigrationFiles as $migrationFile) {
+        $migrationPosition = strpos(
+            $runtimeSchemaContract,
+            "'" . $migrationFile . "'",
+            $migrationOffset
+        );
+        $assert(
+            is_int($migrationPosition),
+            $contractName . ' omits or misorders checksum-pinned migration '
+                . $migrationFile
+        );
+        if (is_int($migrationPosition)) {
+            $migrationOffset = $migrationPosition + strlen($migrationFile) + 2;
+        }
+    }
+}
 $assert(
     str_contains(
         $attachmentIntegrityMigration,
@@ -2225,6 +2634,10 @@ $assert(
             $readiness,
             "'113-password-policy.sql'"
         )
+        && str_contains(
+            $readiness,
+            "'114-self-registration-policy.sql'"
+        )
         && str_contains($verify, "'50-global-incidents.sql'")
         && str_contains($verify, "'45-global-incidents-prepare.sql'")
         && str_contains($verify, "'55-global-incidents-finish.sql'")
@@ -2241,9 +2654,10 @@ $assert(
         && str_contains($verify, "'111-logbook-shift-assignment.sql'")
         && str_contains($verify, "'112-optional-access-shifts.sql'")
         && str_contains($verify, "'113-password-policy.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 19')
-        && str_contains($readiness, 'estab_schema_migrations) = 19'),
-    'Migration ledger/readiness does not require all nineteen release migrations'
+        && str_contains($verify, "'114-self-registration-policy.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 20')
+        && str_contains($readiness, 'estab_schema_migrations) = 20'),
+    'Migration ledger/readiness does not require all twenty release migrations'
 );
 $assert(
     str_contains($readiness, "require_once __DIR__ . '/bootstrap.php'")

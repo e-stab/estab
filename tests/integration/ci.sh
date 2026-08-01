@@ -407,7 +407,8 @@ incident_test_database() {
         | estab_attachment_reservation_ci_test \
         | estab_message_concurrency_ci_test \
         | estab_message_suggestions_ci_test \
-        | estab_message_list_scale_ci_test) ;;
+        | estab_message_list_scale_ci_test \
+        | estab_self_registration_handler_ci_test) ;;
         *)
             echo "CI integration: invalid isolated incident database name" >&2
             return 1
@@ -674,6 +675,13 @@ run_php_integration "nullable-date migration" tests/integration/date_compatibili
 run_php_integration "user administration" tests/integration/user_admin.php
 run_php_integration "configurable password policy" tests/integration/password_policy.php
 run_php_integration \
+    "persistent self-registration policy" \
+    tests/integration/self_registration.php
+run_isolated_operational_integration \
+    "persistent self-registration handler boundary" \
+    estab_self_registration_handler_ci_test \
+    tests/integration/self_registration_handler.php
+run_php_integration \
     "assignment-policy concurrency and revocation" \
     tests/integration/assignment_policy.php
 
@@ -743,6 +751,12 @@ export ESTAB_TEST_WORKFLOW_MARKER="$workflow_marker"
 
 echo "CI integration: checking the direct HTTP surface"
 run_timed 3m sh tests/integration/http_surface_http.sh
+
+echo "CI integration: proving administrative self-registration timing and gates"
+export ESTAB_SELF_REGISTRATION_HTTP_TEST_ALLOW_MUTATION=true
+run_timed 3m sh tests/integration/self_registration_http.sh
+unset ESTAB_SELF_REGISTRATION_HTTP_TEST_ALLOW_MUTATION
+assert_clean_app_logs
 
 run_browser_acceptance() {
     if [[ $browser_test_enabled != true ]]; then

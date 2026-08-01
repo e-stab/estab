@@ -27,6 +27,7 @@ require_once __DIR__ . "/../app/logout.php";
 require_once __DIR__ . "/../app/read_authorization.php";
 require_once __DIR__ . "/../app/message_list.php";
 require_once __DIR__ . "/../app/attachment_upload.php";
+require_once __DIR__ . "/../app/self_registration.php";
 estab_session_ui_start ($_SESSION);
 
 if (estab_attachment_upload_post_body_exceeded (
@@ -2850,24 +2851,41 @@ Nachricht als Sichtung anzeigen
 
   \**********************************************************************/
   if ($_SESSION ["menue"] == "LOGIN" or $_SESSION ["menue"] == "WELCOME" ) {
-    $registrationAllowed = estab_auth_self_registration_allowed ();
+    $registrationAvailable = false;
+    $registrationAllowed = false;
+    $registrationPolicy = null;
     $registrationPasswordPolicy = null;
-    if ($loginFlow === "new" && $registrationAllowed) {
-      $policyConnection = null;
-      try {
-        $policyConnection = estab_auth_connect ($conf_4f_db);
-        $registrationPasswordPolicy = estab_password_policy_load (
-          $policyConnection
-        );
-      } catch (Throwable $exception) {
-        error_log (
-          "eStab registration password-policy load failed: ".
-          $exception->getMessage ()
-        );
-      } finally {
-        if ($policyConnection instanceof mysqli) {
-          estab_auth_close ($policyConnection);
+    $policyConnection = null;
+    try {
+      $policyConnection = estab_auth_connect ($conf_4f_db);
+      $registrationPolicy = estab_self_registration_load ($policyConnection);
+      $registrationAllowed = estab_self_registration_is_allowed (
+        $registrationPolicy
+      );
+      $registrationAvailable = true;
+      if ($loginFlow === "new" && $registrationAllowed) {
+        try {
+          $registrationPasswordPolicy = estab_password_policy_load (
+            $policyConnection
+          );
+        } catch (Throwable $exception) {
+          error_log (
+            "eStab registration password-policy load failed: ".
+            $exception->getMessage ()
+          );
         }
+      }
+    } catch (Throwable $exception) {
+      error_log (
+        "eStab registration policy load failed: ".
+        $exception->getMessage ()
+      );
+      $registrationAvailable = false;
+      $registrationAllowed = false;
+      $registrationPasswordPolicy = null;
+    } finally {
+      if ($policyConnection instanceof mysqli) {
+        estab_auth_close ($policyConnection);
       }
     }
     $loginAction = estab_auth_html ($conf_4f ["MainURL"]);
@@ -2938,14 +2956,23 @@ Nachricht als Sichtung anzeigen
         echo "<button class=\"estab-button\" type=\"button\" disabled>Neues Konto anlegen</button>\n";
       }
       echo "</div>\n";
-      if (!$registrationAllowed) {
-        echo "<p class=\"estab-auth-note\">Neue Konten können hier nicht erstellt werden. Die zuständige Stelle legt sie unter Administration → Benutzerverwaltung an.</p>\n";
+      if (!$registrationAvailable) {
+        echo "<p class=\"estab-auth-note\">Der Status der Kontoanlage konnte nicht sicher geprüft werden. Neue Konten können deshalb momentan nicht selbst angelegt werden.</p>\n";
+      } elseif (!$registrationAllowed) {
+        echo "<p class=\"estab-auth-note\">Die Selbstregistrierung ist derzeit geschlossen. Bestehende Konten können sich weiterhin anmelden. Die zuständige Stelle legt neue Konten in der Benutzerverwaltung an oder gibt die Kontoanlage in der Administration zeitlich frei.</p>\n";
       }
       echo "<p class=\"estab-auth-note\">Ein Funktionskonto gewährt keinen Zugang zur separaten Administration.</p>\n";
-    } elseif ($loginFlow === "new" && !$registrationAllowed) {
+    } elseif (
+      $loginFlow === "new"
+      && (!$registrationAvailable || !$registrationAllowed)
+    ) {
       echo "<h2>Neues Konto anlegen</h2>\n";
       if ($loginError === "") {
-        echo "<p class=\"estab-auth-error\" role=\"alert\" tabindex=\"-1\" autofocus>Neue Konten können hier nicht erstellt werden. Die zuständige Stelle legt sie unter Administration → Benutzerverwaltung an.</p>\n";
+        echo "<p class=\"estab-auth-error\" role=\"alert\" tabindex=\"-1\" autofocus>".
+             ($registrationAvailable
+               ? "Die Selbstregistrierung ist geschlossen. Die Freigabe ist deaktiviert oder der freigegebene Zeitraum ist abgelaufen. Kehren Sie zur Anmeldung mit einem bestehenden Konto zurück oder wenden Sie sich an die zuständige Stelle."
+               : "Der Status der Kontoanlage konnte nicht sicher geprüft werden. Neue Konten können deshalb momentan nicht selbst angelegt werden.").
+             "</p>\n";
       }
       echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"_self\">\n";
       echo estab_csrf_field ()."\n";

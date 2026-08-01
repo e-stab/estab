@@ -89,7 +89,7 @@ Wichtige Werte in `.env`:
 | `ESTAB_PUBLIC_URL` | `/` | portable Browser-Basis; nur bei garantiert einer externen Adresse auf eine absolute HTTP(S)-URL setzen |
 | `ESTAB_BASE_PATH` | leer | historischer Installationspfad im Document Root; im gelieferten Root-Image leer lassen |
 | `ESTAB_AUTHORITY_CODE` | `EL` | Organisationskürzel |
-| `ESTAB_ALLOW_SELF_REGISTRATION` | `false` | optionale öffentliche Kompatibilitätsregistrierung; reguläre Konten werden administrativ angelegt |
+| `ESTAB_ALLOW_SELF_REGISTRATION` | `false` | Upgrade-Startwert für Installationen vor Migration 114; nach der ersten Auswahl unter Administration → Selbstregistrierung ist ausschließlich der Datenbankzustand maßgeblich |
 | `ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF` | `false` | erlaubt ausdrücklich benötigten direkten Legacy-Clients tokenlose Anmeldung; nicht für Browserbetrieb aktivieren |
 | `ESTAB_TRUST_PROXY_HEADERS` | `false` | erlaubt dem zusätzlich freigegebenen direkten Proxy validierte `X-Forwarded-*`-Ketten |
 | `ESTAB_TRUSTED_PROXIES` | leer | verpflichtende, kommaseparierte IP-/CIDR-Allowlist, sobald Proxy-Header aktiviert werden |
@@ -376,6 +376,23 @@ nicht protokollierte Datei unter `docker/db/migrations/` in
 Dateinamenreihenfolge, speichert Version, SHA-256, Status und Zeitpunkt in
 `estab_schema_migrations` und führt `docker/db/verify.sql` aus.
 
+Nur wenn der Runner diese Fresh-Baseline gerade neu anwendet oder ihren
+Zustand `applying` wiederaufnimmt, legt er außerdem den Marker
+`114-self-registration-fresh-default` in `estab_schema_baselines` an. Der
+Marker trägt exakt die SHA-256 der unveränderten Migration 114 und bleibt bis
+nach allen Migrationen `applying`. Ein atomisches InnoDB-Multi-Table-Update
+setzt danach die noch pristine Zeile
+`ENVIRONMENT/NULL/0/migration-114` auf
+`DISABLED/NULL/1/fresh-install` und gleichzeitig den Marker auf `applied`.
+Erst anschließend dürfen Schema-Verifikation und App-Start erfolgreich sein.
+Abbruch, Marker-Checksumabweichung oder ein widersprüchlicher Zustand bleiben
+fail-closed.
+
+Legacy-Upgrades und frühere Neuinstallationen ohne diesen Marker werden nicht
+nachträglich umklassifiziert. Bei ihnen bleibt `ENVIRONMENT` als
+Upgrade-Kompatibilität erhalten, bis eine administrative Auswahl die
+Datenbankrichtlinie ersetzt.
+
 Migration 40 erkennt ihre eigene Standardmatrixtabelle an einer eindeutigen
 Tabellenmarkierung. Nach einem Abbruch zwischen `CREATE TABLE`, Seed und
 Ledgerabschluss wird nur eine leere oder exakt kanonisch gesetzte eigene
@@ -429,8 +446,8 @@ ihn anschließend wieder her.
 podman compose run --rm migrate
 ```
 
-Ein bereits aktueller Bestand meldet alle neunzehn Migrationen einschließlich
-`113-password-policy.sql` als vorhanden und
+Ein bereits aktueller Bestand meldet alle zwanzig Migrationen einschließlich
+`114-self-registration-policy.sql` als vorhanden und
 führt trotzdem den vollständigen Read-only-Schematest aus. Die Ausgabe muss
 `Post-migration schema verification passed` und anschließend
 `All schema migrations are applied` enthalten. Erst danach sollte der Stack
@@ -659,8 +676,8 @@ geänderter Revisionsstand ergibt HTTP 409, statt eine neuere Einstellung zu
 Audit lässt den alten Stand wirksam.
 
 Die Richtlinie gilt für administrative Kontoanlage, Kennwortreset und die
-gegebenenfalls mit `ESTAB_ALLOW_SELF_REGISTRATION=true` freigegebene
-Selbstregistrierung. Sie wird serverseitig unter einem globalen Lock gelesen,
+in der Administration freigegebene Selbstregistrierung. Sie wird serverseitig
+unter einem globalen Lock gelesen,
 bevor ein neuer Hash und Kontozustand geschrieben werden. Eine Änderung prüft
 oder sperrt vorhandene Kennwörter nicht nachträglich und widerruft keine
 Sitzung. Auch das getrennte technische HTTP-Basic-Kennwort bleibt unberührt;
@@ -685,6 +702,11 @@ Systemstatus und `docker/db/verify.sql` erwarten genau eine kanonische
 Richtlinienzeile. Ist sie nicht eindeutig oder ungültig, werden neue
 Kennwörter fail-closed nicht gesetzt und der Schema-/Readiness-Nachweis
 schlägt fehl.
+
+Migration `114-self-registration-policy.sql` verlangt ebenso genau eine
+kanonische Freigabezeile. Fehlt sie oder ist sie ungültig, bleibt die
+öffentliche Kontoanlage geschlossen und Readiness schlägt fehl; Bestandslogin
+und Benutzerverwaltung bleiben davon unabhängig.
 
 ### Präsenz und Leerlaufabmeldung
 
@@ -785,13 +807,15 @@ Layout. Die Spalten **Archivgröße** und **Archivdatei geändert** beziehen sic
 ausdrücklich auf die unveränderte Datei im `estab_data`-Volume.
 
 Die Selbstregistrierung ist standardmäßig deaktiviert. Neue Konten legt die
-zuständige Stelle unter Administration → Benutzerverwaltung an.
+zuständige Stelle unter Administration → Benutzerverwaltung an. Soll die
+öffentliche Kontoanlage kontrolliert geöffnet werden, geschieht dies unter
+Administration → Selbstregistrierung entweder dauerhaft oder für 15 Minuten
+bis 24 Stunden.
 „Mit bestehendem Konto anmelden“ erzeugt auch bei einem unbekannten Kürzel
 niemals einen neuen Datensatz. „Neues Konto anlegen“ verlangt das Kennwort
 zweimal, zeigt die aktuelle Kennwortrichtlinie und weist bereits vergebene
 Kürzel ab, erscheint aber nur nach der
-bewussten Kompatibilitätsfreigabe
-`ESTAB_ALLOW_SELF_REGISTRATION=true`. Name, eindeutiges Kürzel mit
+bewussten administrativen Freigabe. Name, eindeutiges Kürzel mit
 höchstens sechs Buchstaben, Ziffern oder `_` sowie die organisatorisch
 zugeteilte Funktion sind Pflichtangaben; die Rolle ist nicht frei wählbar.
 Die öffentliche Kontenliste übernimmt bei Auswahl nur Name, Kürzel und
@@ -995,13 +1019,24 @@ erkannte Cross-Site-Browserrequests gesperrt, ist aber schwächer als der
 normale Tokenfluss und darf nur in einem kontrollierten Netz sowie für die
 Dauer der Migration solcher Clients aktiviert werden.
 
-`ESTAB_ALLOW_SELF_REGISTRATION=false` ist der sichere Auslieferungsstandard.
-Soll die historische öffentliche Kontoanlage ausnahmsweise vorübergehend
-verwendet werden, muss sie ausdrücklich mit `true` aktiviert und nach der
-kontrollierten Anlage wieder deaktiviert werden. Die Benutzerverwaltung bleibt
-von dieser Option unabhängig erreichbar. Falls die Ausnahme aktiviert ist,
-verwendet auch sie ausnahmslos die in der Administration gespeicherte
-Kennwortrichtlinie; eine nicht lesbare Richtlinie verhindert die Neuanlage.
+`ESTAB_ALLOW_SELF_REGISTRATION=false` ist nur noch der sichere
+Upgrade-Startwert, solange Migration 114 bei einer bereits bestehenden,
+markerlosen Installation im Zustand `ENVIRONMENT` steht. Eine mit dem
+aktuellen Runner neu angelegte Datenbank startet unabhängig von einem
+abweichenden ENV-Wert persistent als `DISABLED`; dies belegt der oben
+beschriebene Fresh-Marker. Die erste Auswahl unter Administration →
+Selbstregistrierung ersetzt einen verbliebenen Upgrade-Zustand durch
+`DISABLED`, `PERMANENT` oder `UNTIL`; spätere Container-Neustarts ändern ihn
+nicht. Für den Regelbetrieb wird die befristete Freigabe empfohlen. Sie endet
+ohne Cronjob nach Datenbank-UTC und kann jederzeit vorzeitig deaktiviert
+werden. Die
+Aktivierung verlangt eine ausdrückliche Bestätigung, dass die Anmeldeseite nur
+in einem kontrollierten Netz und unter Aufsicht erreichbar ist: Solange sie
+offen ist, kann jede erreichende Person jede dort angebotene aktive Funktion
+für ein neues Konto auswählen. Die Benutzerverwaltung bleibt unabhängig
+erreichbar. Jede Freigabe verwendet die
+gespeicherte Kennwortrichtlinie; eine nicht lesbare Freigabe oder Richtlinie
+verhindert die Neuanlage.
 
 Das Admin-Kennwort kann ohne Datenbankänderung rotiert werden:
 

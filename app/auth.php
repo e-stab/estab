@@ -287,10 +287,11 @@ function estab_auth_verify_password(string $provided, string $stored): array
 }
 
 /**
- * Public account creation is an explicit compatibility exception.
+ * Legacy deployment default for the migration-114 ENVIRONMENT mode.
  *
- * Fresh installations use the Basic-Auth protected user administration so an
- * anonymous request can never choose its own privileged function.
+ * Runtime consumers must use app/self_registration.php. This helper remains
+ * intentionally pure so an upgraded installation keeps its former setting
+ * until an administrator stores an authoritative database mode.
  */
 function estab_auth_self_registration_allowed(): bool
 {

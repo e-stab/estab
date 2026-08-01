@@ -20,6 +20,7 @@ require_once __DIR__ . "/../app/auth.php";
 require_once __DIR__ . "/../app/csrf.php";
 require_once __DIR__ . "/../app/file_access.php";
 require_once __DIR__ . "/../app/navigation.php";
+require_once __DIR__ . "/../app/self_registration.php";
 require_once __DIR__ . "/../app/session_ui.php";
 
   function pre_html ($art, $titel, $cssstr, $sharedUi = false){
@@ -623,10 +624,24 @@ bersichtlich dargestellt werden.
     include ("../4fcfg/e_cfg.inc.php");
 
     $benutzer = array ();
+    $registrationAvailable = false;
+    $registrationAllowed = false;
     $statusConnection = null;
     try {
       $statusConnection = estab_auth_connect ($conf_4f_db);
       $benutzer = estab_auth_fetch_users ($statusConnection, $conf_4f_tbl ["benutzer"]);
+      try {
+        $registrationPolicy = estab_self_registration_load ($statusConnection);
+        $registrationAllowed = estab_self_registration_is_allowed (
+          $registrationPolicy
+        );
+        $registrationAvailable = true;
+      } catch (Throwable $exception) {
+        error_log (
+          "eStab self-registration status lookup failed: ".
+          $exception->getMessage ()
+        );
+      }
     } catch (Throwable $exception) {
       error_log ("eStab user status lookup failed: ".$exception->getMessage ());
     } finally {
@@ -707,10 +722,12 @@ bersichtlich dargestellt werden.
     } else {
       echo "<section class=\"estab-auth-shell\"><div class=\"estab-auth-card\">\n";
       echo "<h2>Noch keine Konten vorhanden</h2>\n";
-      if (estab_auth_self_registration_allowed ()) {
+      if ($registrationAvailable && $registrationAllowed) {
         echo "<p>Legen Sie das erste Funktionskonto über „Neues Konto anlegen“ an.</p>\n";
+      } elseif (!$registrationAvailable) {
+        echo "<p>Der Status der Kontoanlage konnte nicht sicher geprüft werden. Neue Konten können deshalb momentan nicht selbst angelegt werden.</p>\n";
       } else {
-        echo "<p>Die Kontoerstellung ist deaktiviert. Wenden Sie sich an die zuständige Stelle.</p>\n";
+        echo "<p>Die Selbstregistrierung ist geschlossen. Die zuständige Stelle kann ein Konto in der Benutzerverwaltung anlegen oder die Kontoanlage zeitlich freigeben.</p>\n";
       }
       echo "</div></section>\n";
     }

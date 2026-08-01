@@ -208,9 +208,17 @@ eine Verschärfung widerruft daher keine vorhandenen Kennwörter oder Sitzungen.
 
 Selbstregistrierung ist standardmäßig ausgeschaltet. Konten werden über den
 unabhängig per HTTP Basic Auth geschützten Administrationsbereich mit einer
-festen Funktion angelegt. `ESTAB_ALLOW_SELF_REGISTRATION=true` ist nur eine
-bewusste Kompatibilitätsausnahme und kein Ersatz für Netzsegmentierung oder
-organisatorische Benutzerfreigabe. Ist sie aktiviert, verwendet sie dieselbe
+festen Funktion angelegt. Migration 114 übernimmt den bisherigen ENV-Schalter
+nur als Upgrade-Startzustand. Bei einem neuen Baseline-Lauf bindet der Migrator
+dagegen einen zweiten, mit der SHA-256 von Migration 114 gesicherten Marker und
+setzt nach allen Migrationen die pristine Richtlinienzeile und diesen Marker
+in einer atomaren InnoDB-Anweisung auf `DISABLED` beziehungsweise `applied`.
+Markerlose Bestandsinstallationen werden nicht rückwirkend umklassifiziert.
+Sobald die Administration unter
+`/4fadm/self_registration.php` deaktiviert, dauerhaft oder befristet aktiviert,
+ist die revisionsgesicherte Singleton-Zeile die einzige Wahrheit. Eine
+Freigabe ist kein Ersatz für Netzsegmentierung oder organisatorische
+Benutzerfreigabe. Ist sie aktiviert, verwendet sie dieselbe
 gespeicherte Kennwortrichtlinie wie die Basic-Auth-geschützte
 Benutzerverwaltung und schlägt bei fehlendem oder ungültigem Richtlinienstand
 geschlossen fehl. Das getrennte Apache-Basic-Auth-Secret ist keine
@@ -461,7 +469,11 @@ ausdrückliche Bestätigung. Eine monotone Revision verhindert verlorene
 Änderungen aus einem veralteten Browserformular; ein globaler Advisory-Lock
 serialisiert Richtlinienänderung, Kontoanlage, Reset und positive
 Selbstregistrierung. Die feste Reihenfolge ist bei der Kontoanlage
-Zuordnungsrichtlinie → Kennwortrichtlinie → Konto → Transaktion. Die
+Zuordnungsrichtlinie → Selbstregistrierungsfreigabe → Kennwortrichtlinie →
+Konto → Transaktion. Administration und Registrierung teilen den globalen
+Freigabe-Lock. Ein befristetes Konto-INSERT enthält zusätzlich die
+DB-UTC-Bedingung im selben SQL-Statement, sodass auch eine exakt während des
+Absendevorgangs ablaufende Frist kein Konto mehr erzeugt. Die
 Richtlinienzeile und das kennwortfreie Audit `password_policy_updated` mit
 Vorher-/Nachher-Konfiguration, Basic-Auth-Akteur und validierter IP committen
 gemeinsam. Ein Auditfehler oder Revisionskonflikt lässt den vorherigen Stand
@@ -1094,6 +1106,12 @@ Konfigurationsverzeichnisse werden auf Webserver-Ebene gesperrt.
   idempotenten Fresh-Lauf fortsetzen. Ein unprotokollierter Teilbestand ohne
   Kerntabelle blockiert eine vermeintliche Neuinitialisierung; das Deployment
   benötigt keinen Host-Schema-Mount.
+- Derselbe Fresh-Lauf legt einmalig den checksumgebundenen Marker
+  `114-self-registration-fresh-default` an. Nach Migration 114 schließen ein
+  gemeinsames Multi-Table-Update die pristine Selbstregistrierungszeile und den
+  Marker; Prüfsummenabweichung oder ein unmöglicher Zwischenzustand verhindern
+  Verifikation und App-Start. Ein echtes Upgrade ohne Marker behält den
+  kompatiblen Modus `ENVIRONMENT`.
 - Jede SQL-Migration ist versioniert und per SHA-256 in
   `estab_schema_migrations` gebunden. Abweichung, SQL-Fehler oder negativer
   Post-Migrations-Schematest verhindern den App-Start.

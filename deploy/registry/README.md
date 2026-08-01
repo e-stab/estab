@@ -432,9 +432,11 @@ alle operativen Eingaben gesperrt. Unter `/4fadm/users.php` legt er
 Funktionskonten mit fester Funktion an, weist Funktionen neu zu, sperrt oder
 entsperrt Konten und setzt deren Kennwort zurück. Diese Konten sind unabhängig
 vom Basic-Auth-Konto aus `ESTAB_ADMIN_USER` und `admin_password.txt`.
-Selbstregistrierung ist standardmäßig deaktiviert; die öffentliche
-Kompatibilitätsregistrierung darf nur bewusst mit
-`ESTAB_ALLOW_SELF_REGISTRATION=true` aktiviert werden.
+Selbstregistrierung ist standardmäßig deaktiviert. Der technische
+Administrator kann sie unter `/4fadm/self_registration.php` dauerhaft oder
+für 15 Minuten bis 24 Stunden freigeben und jederzeit vorzeitig beenden. Der
+ENV-Wert ist nach Migration 114 nur der Upgrade-Startwert, bis dort erstmals
+eine administrative Auswahl gespeichert wurde.
 
 Der Hostverzeichnis-Pfad ist Bestandteil des automatisierten Release-Gates:
 Ein zusätzliches Pull-only-Projekt startet mit drei echten temporären

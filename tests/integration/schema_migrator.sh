@@ -13,6 +13,7 @@ script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 fixture="$script_dir/../fixtures/legacy-runtime-schema.sql"
 standard_matrix_fixture="$script_dir/../fixtures/recipient-matrix-standard.txt"
 test_database="estab_migration_test_$$"
+fresh_database="estab_fresh_default_test_$$"
 retry_database="estab_baseline_retry_test_$$"
 guard_database="estab_baseline_guard_test_$$"
 collision_database="estab_standard_collision_test_$$"
@@ -23,7 +24,8 @@ incident_predecessor_checksum="6732e9c87f0532fce41ee9a58658bf4888fdf7c2ced1ed6ba
 command_post_predecessor_checksum="68a32692bf90d6987539e36076f0ecfea32f46ca870c06efc55ebaef4d75a1c4"
 
 for database_name in \
-    "$test_database" "$retry_database" "$guard_database" "$collision_database" \
+    "$test_database" "$fresh_database" "$retry_database" "$guard_database" \
+    "$collision_database" \
     "$incident_guard_database" "$predecessor_database" \
     "$logbook_upgrade_database"
 do
@@ -56,6 +58,7 @@ if [ ! -r "$fixture" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/111-logbook-shift-assignment.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/112-optional-access-shifts.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/113-password-policy.sql" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/114-self-registration-policy.sql" ] \
     || [ ! -x "$ESTAB_MIGRATOR_BIN" ]; then
     echo "schema migrator test: fixture, baseline, or migrator is unavailable" >&2
     exit 1
@@ -73,7 +76,7 @@ pre_110_migrations=$(mktemp -d "${TMPDIR:-/tmp}/estab-pre-110-migrations.XXXXXX"
 
 for migration_path in "$ESTAB_MIGRATIONS_DIR"/*.sql; do
     case "$(basename "$migration_path")" in
-        110-etb-tbb-rules.sql|111-logbook-shift-assignment.sql|112-optional-access-shifts.sql|113-password-policy.sql)
+        110-etb-tbb-rules.sql|111-logbook-shift-assignment.sql|112-optional-access-shifts.sql|113-password-policy.sql|114-self-registration-policy.sql)
             continue
             ;;
     esac
@@ -196,6 +199,7 @@ cleanup()
     trap - EXIT HUP INT TERM
     admin_query "
 DROP DATABASE IF EXISTS \`$test_database\`;
+DROP DATABASE IF EXISTS \`$fresh_database\`;
 DROP DATABASE IF EXISTS \`$retry_database\`;
 DROP DATABASE IF EXISTS \`$guard_database\`;
 DROP DATABASE IF EXISTS \`$collision_database\`;
@@ -239,6 +243,10 @@ admin_query "
 DROP DATABASE IF EXISTS \`$logbook_upgrade_database\`;
 CREATE DATABASE \`$logbook_upgrade_database\`
   CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+mariadb \
+    --defaults-extra-file="$client_defaults" \
+    --database="$logbook_upgrade_database" \
+    < "$ESTAB_SCHEMA_BASELINE_FILE"
 ESTAB_DB_NAME="$logbook_upgrade_database" \
 ESTAB_MIGRATIONS_DIR="$pre_110_migrations" "$ESTAB_MIGRATOR_BIN"
 assert_equal "15|15|$command_post_predecessor_checksum|3" "$(
@@ -340,11 +348,12 @@ SELECT GROUP_CONCAT(CONCAT(version, ':', checksum, ':', state)
  FROM estab_schema_migrations
  WHERE version NOT IN (
    '110-etb-tbb-rules.sql', '111-logbook-shift-assignment.sql',
-   '112-optional-access-shifts.sql', '113-password-policy.sql'
+   '112-optional-access-shifts.sql', '113-password-policy.sql',
+   '114-self-registration-policy.sql'
  )"
 )" \
     "migration 110 upgrade rewrote a released migration ledger row"
-assert_equal "1|1|1|1|1|3|1|2|1" "$(database_query "$logbook_upgrade_database" "
+assert_equal "1|1|1|1|1|1|3|1|2|1" "$(database_query "$logbook_upgrade_database" "
 SELECT CONCAT(
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '110-etb-tbb-rules.sql' AND state = 'applied'), '|',
@@ -356,6 +365,9 @@ SELECT CONCAT(
              AND state = 'applied'), '|',
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '113-password-policy.sql'
+             AND state = 'applied'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '114-self-registration-policy.sql'
              AND state = 'applied'), '|',
          (SELECT COUNT(*) FROM information_schema.statistics
            WHERE table_schema = DATABASE() AND table_name = 'nv_etb'
@@ -514,11 +526,167 @@ SELECT CONCAT(
        )")" \
     "rejected duplicate attachment changed ETB evidence or its local counter"
 
+baseline_checksum=$(sha256sum "$ESTAB_SCHEMA_BASELINE_FILE" | awk '{print $1}')
+self_registration_checksum=$(
+    sha256sum "$ESTAB_MIGRATIONS_DIR/114-self-registration-policy.sql" |
+        awk '{print $1}'
+)
+
+# A genuinely empty installation is identified durably while its embedded
+# baseline is being applied. Even an explicitly true legacy compatibility
+# environment must not open account creation on that new installation.
+admin_query "
+DROP DATABASE IF EXISTS \`$fresh_database\`;
+CREATE DATABASE \`$fresh_database\`
+  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+ESTAB_ALLOW_SELF_REGISTRATION=true \
+ESTAB_DB_NAME="$fresh_database" "$ESTAB_MIGRATOR_BIN"
+ESTAB_ALLOW_SELF_REGISTRATION=true \
+ESTAB_DB_NAME="$fresh_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "2|1|1|1|DISABLED|1|1|fresh-install" "$(
+    database_query "$fresh_database" "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM estab_schema_baselines), '|',
+         (SELECT COUNT(*) FROM estab_schema_baselines
+           WHERE version = '10-schema.sql'
+             AND checksum = '$baseline_checksum'
+             AND state = 'applied'
+             AND applied_at IS NOT NULL), '|',
+         (SELECT COUNT(*) FROM estab_schema_baselines
+           WHERE version = '114-self-registration-fresh-default'
+             AND checksum = '$self_registration_checksum'
+             AND state = 'applied'
+             AND applied_at IS NOT NULL), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '114-self-registration-policy.sql'
+             AND checksum = '$self_registration_checksum'
+             AND state = 'applied'), '|',
+         (SELECT mode FROM nv_selbstregistrierung
+           WHERE singleton_id = 1), '|',
+         (SELECT enabled_until_utc IS NULL FROM nv_selbstregistrierung
+           WHERE singleton_id = 1), '|',
+         (SELECT revision FROM nv_selbstregistrierung
+           WHERE singleton_id = 1), '|',
+         (SELECT updated_by FROM nv_selbstregistrierung
+           WHERE singleton_id = 1)
+       )"
+)" \
+    "fresh installation with environment opt-in did not start disabled"
+
+# Reproduce process loss after migration 114 but before the final multi-table
+# UPDATE. The retained applying marker and pristine singleton must converge in
+# one retry and remain idempotent on the next run.
+database_query "$fresh_database" "
+UPDATE estab_schema_baselines
+   SET state = 'applying', applied_at = NULL
+ WHERE version = '114-self-registration-fresh-default';
+UPDATE nv_selbstregistrierung
+   SET mode = 'ENVIRONMENT',
+       enabled_until_utc = NULL,
+       revision = 0,
+       updated_at = UTC_TIMESTAMP(6),
+       updated_by = 'migration-114'
+ WHERE singleton_id = 1"
+ESTAB_ALLOW_SELF_REGISTRATION=true \
+ESTAB_DB_NAME="$fresh_database" "$ESTAB_MIGRATOR_BIN"
+ESTAB_ALLOW_SELF_REGISTRATION=true \
+ESTAB_DB_NAME="$fresh_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "1|DISABLED|1|1|fresh-install" "$(
+    database_query "$fresh_database" "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM estab_schema_baselines
+           WHERE version = '114-self-registration-fresh-default'
+             AND checksum = '$self_registration_checksum'
+             AND state = 'applied'
+             AND applied_at IS NOT NULL), '|',
+         mode, '|', enabled_until_utc IS NULL, '|', revision, '|', updated_by
+       )
+  FROM nv_selbstregistrierung
+ WHERE singleton_id = 1"
+)" \
+    "interrupted fresh-install default was not completed safely"
+
+# A same-name marker with any other checksum is foreign state. It must remain
+# untouched and block startup before the already secure policy is rewritten.
+database_query "$fresh_database" "
+UPDATE estab_schema_baselines
+   SET checksum = REPEAT('0', 64)
+ WHERE version = '114-self-registration-fresh-default'"
+if ESTAB_ALLOW_SELF_REGISTRATION=true ESTAB_DB_NAME="$fresh_database" \
+    "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: manipulated fresh-default checksum was accepted" >&2
+    exit 1
+fi
+if ! grep -q \
+    'Checksum mismatch for fresh-install default marker' \
+    "$failure_log"; then
+    echo "schema migrator test: fresh-default checksum failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "$(printf '%064d' 0)|applied|DISABLED|1|fresh-install" "$(
+    database_query "$fresh_database" "
+SELECT CONCAT(
+         (SELECT CONCAT(checksum, '|', state)
+            FROM estab_schema_baselines
+           WHERE version = '114-self-registration-fresh-default'), '|',
+         mode, '|', revision, '|', updated_by
+       )
+  FROM nv_selbstregistrierung
+ WHERE singleton_id = 1"
+)" \
+    "blocked fresh-default checksum manipulation changed marker or policy"
+database_query "$fresh_database" "
+UPDATE estab_schema_baselines
+   SET checksum = '$self_registration_checksum'
+ WHERE version = '114-self-registration-fresh-default'"
+
+# An applied marker cannot coexist with the pristine upgrade-compatible row.
+# Treat that impossible combination as manipulation instead of silently
+# replaying or trusting it.
+database_query "$fresh_database" "
+UPDATE nv_selbstregistrierung
+   SET mode = 'ENVIRONMENT',
+       revision = 0,
+       updated_at = UTC_TIMESTAMP(6),
+       updated_by = 'migration-114'
+ WHERE singleton_id = 1"
+if ESTAB_ALLOW_SELF_REGISTRATION=true ESTAB_DB_NAME="$fresh_database" \
+    "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: inconsistent applied fresh-default marker was accepted" >&2
+    exit 1
+fi
+if ! grep -q \
+    'Applied fresh-install default marker is inconsistent' \
+    "$failure_log"; then
+    echo "schema migrator test: inconsistent fresh-default marker failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "applied|ENVIRONMENT|0|migration-114" "$(
+    database_query "$fresh_database" "
+SELECT CONCAT(
+         (SELECT state FROM estab_schema_baselines
+           WHERE version = '114-self-registration-fresh-default'), '|',
+         mode, '|', revision, '|', updated_by
+       )
+  FROM nv_selbstregistrierung
+ WHERE singleton_id = 1"
+)" \
+    "blocked fresh-default marker inconsistency changed marker or policy"
+database_query "$fresh_database" "
+UPDATE nv_selbstregistrierung
+   SET mode = 'DISABLED',
+       revision = 1,
+       updated_at = UTC_TIMESTAMP(6),
+       updated_by = 'fresh-install'
+ WHERE singleton_id = 1"
+ESTAB_DB_NAME="$fresh_database" "$ESTAB_MIGRATOR_BIN"
+
 admin_query "
 DROP DATABASE IF EXISTS \`$retry_database\`;
 CREATE DATABASE \`$retry_database\`
   CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
-baseline_checksum=$(sha256sum "$ESTAB_SCHEMA_BASELINE_FILE" | awk '{print $1}')
 database_query "$retry_database" "
 CREATE TABLE estab_schema_baselines (
   version VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
@@ -541,15 +709,29 @@ awk '
         --defaults-extra-file="$client_defaults" \
         --database="$retry_database"
 
+ESTAB_ALLOW_SELF_REGISTRATION=true \
 ESTAB_DB_NAME="$retry_database" "$ESTAB_MIGRATOR_BIN"
+ESTAB_ALLOW_SELF_REGISTRATION=true \
 ESTAB_DB_NAME="$retry_database" "$ESTAB_MIGRATOR_BIN"
-assert_equal "1" "$(database_query "$retry_database" "
-SELECT COUNT(*)
-  FROM estab_schema_baselines
- WHERE version = '10-schema.sql'
-   AND checksum = '$baseline_checksum'
-   AND state = 'applied'
-   AND applied_at IS NOT NULL")" \
+assert_equal "1|1|DISABLED|1|fresh-install" "$(database_query "$retry_database" "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM estab_schema_baselines
+           WHERE version = '10-schema.sql'
+             AND checksum = '$baseline_checksum'
+             AND state = 'applied'
+             AND applied_at IS NOT NULL), '|',
+         (SELECT COUNT(*) FROM estab_schema_baselines
+           WHERE version = '114-self-registration-fresh-default'
+             AND checksum = '$self_registration_checksum'
+             AND state = 'applied'
+             AND applied_at IS NOT NULL), '|',
+         (SELECT mode FROM nv_selbstregistrierung
+           WHERE singleton_id = 1), '|',
+         (SELECT revision FROM nv_selbstregistrierung
+           WHERE singleton_id = 1), '|',
+         (SELECT updated_by FROM nv_selbstregistrierung
+           WHERE singleton_id = 1)
+       )")" \
     "interrupted baseline was not retried and recorded"
 assert_equal "nv_anhang,nv_benutzer,nv_bhp50,nv_einsaetze,nv_einsatz_ereignisse,nv_einsatz_status,nv_empfmtx,nv_empfmtx_standard,nv_etb,nv_etbtitel,nv_komplan,nv_masterkatego,nv_masterkategolink,nv_nachrichten,nv_protokoll,nv_tbb,nv_tbbtitel,nv_ubb" "$(database_query "$retry_database" "
 SELECT GROUP_CONCAT(table_name ORDER BY BINARY table_name SEPARATOR ',')
@@ -1266,7 +1448,7 @@ finish_checksum=$(
         awk '{print $1}'
 )
 assert_equal \
-    "19|19|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
+    "20|20|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
     "$(database_query "$predecessor_database" "
 SELECT CONCAT(
          COUNT(*), '|',
@@ -1436,7 +1618,7 @@ SELECT GROUP_CONCAT(
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
 
-assert_equal "19" "$(fixture_query "
+assert_equal "20" "$(fixture_query "
 SELECT COUNT(*) FROM estab_schema_migrations
  WHERE state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
@@ -1447,7 +1629,7 @@ SELECT COUNT(*) FROM estab_schema_migrations
    AND state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
     "standard matrix migration was not recorded"
-assert_equal "1|1|1|1|1|1|1|1|1|1|1|1|1|11" "$(fixture_query "
+assert_equal "1|1|1|1|1|1|1|1|1|1|1|1|1|1|11" "$(fixture_query "
 SELECT CONCAT(
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '80-dv-evidence-retention.sql'
@@ -1495,6 +1677,10 @@ SELECT CONCAT(
              AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '113-password-policy.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '114-self-registration-policy.sql'
              AND state = 'applied'
              AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
          (SELECT COUNT(*) FROM information_schema.columns
@@ -1556,6 +1742,36 @@ SELECT CONCAT(
            WHERE singleton_id = 1)
        )")" \
     "password-policy migration did not create its canonical defaults"
+assert_equal "0|1|6|3|1|ENVIRONMENT|1|0|migration-114" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM information_schema.tables
+           WHERE table_schema = DATABASE()
+             AND table_name = 'estab_schema_baselines'), '|',
+         (SELECT COUNT(*) FROM information_schema.tables
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_selbstregistrierung'
+             AND table_type = 'BASE TABLE'
+             AND engine = 'InnoDB'
+             AND table_collation = 'utf8mb4_unicode_ci'
+             AND table_comment =
+               'estab:migration:114:self-registration-policy:v1'), '|',
+         (SELECT COUNT(*) FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_selbstregistrierung'), '|',
+         (SELECT COUNT(*) FROM information_schema.table_constraints
+           WHERE constraint_schema = DATABASE()
+             AND table_name = 'nv_selbstregistrierung'), '|',
+         (SELECT COUNT(*) FROM nv_selbstregistrierung), '|',
+         (SELECT mode FROM nv_selbstregistrierung
+           WHERE singleton_id = 1), '|',
+         (SELECT enabled_until_utc IS NULL FROM nv_selbstregistrierung
+           WHERE singleton_id = 1), '|',
+         (SELECT revision FROM nv_selbstregistrierung
+           WHERE singleton_id = 1), '|',
+         (SELECT updated_by FROM nv_selbstregistrierung
+           WHERE singleton_id = 1)
+       )")" \
+    "legacy upgrade did not preserve the environment-compatible self-registration default"
 assert_equal "1|3|aktiv,estab_gesperrt,estab_letzte_aktivitaet|0||NULL|0" "$(fixture_query "
 SELECT CONCAT(
          (SELECT COUNT(*)
@@ -2171,6 +2387,287 @@ SELECT CONCAT(
   FROM nv_kennwortrichtlinie
  WHERE singleton_id = 1")" \
     "password-policy migration did not recover after removing the collision"
+
+# Migration 114 must only ever replace its own missing ledger acknowledgement.
+# Snapshot every field of the existing nineteen records so retries and rejected
+# collisions prove that the released history remains byte-for-byte unchanged.
+pre_114_ledger_snapshot="$(fixture_query "
+SELECT GROUP_CONCAT(
+         CONCAT(
+           version, ':', checksum, ':', state, ':',
+           COALESCE(run_id, 'NULL'), ':',
+           DATE_FORMAT(started_at, '%Y-%m-%d %H:%i:%s.%f'), ':',
+           COALESCE(
+             DATE_FORMAT(applied_at, '%Y-%m-%d %H:%i:%s.%f'),
+             'NULL'
+           )
+         )
+         ORDER BY version SEPARATOR ','
+       )
+  FROM estab_schema_migrations
+ WHERE version <> '114-self-registration-policy.sql'")"
+assert_equal "19|19" "$(fixture_query "
+SELECT CONCAT(
+         COUNT(*), '|',
+         SUM(state = 'applied' AND checksum REGEXP BINARY '^[0-9a-f]{64}$')
+       )
+  FROM estab_schema_migrations
+ WHERE version <> '114-self-registration-policy.sql'")" \
+    "migration 114 predecessor ledger fixture is incomplete"
+
+# Both the singleton and mode/deadline invariants are database constraints so
+# direct writers cannot bypass the administrative policy model.
+if fixture_query "
+INSERT INTO nv_selbstregistrierung (singleton_id)
+VALUES (2)" >"$failure_log" 2>&1; then
+    echo "schema migrator test: second self-registration policy row was accepted" >&2
+    exit 1
+fi
+if fixture_query "
+UPDATE nv_selbstregistrierung
+   SET mode = 'UNTIL'
+ WHERE singleton_id = 1" >"$failure_log" 2>&1; then
+    echo "schema migrator test: timed self-registration policy without a deadline was accepted" >&2
+    exit 1
+fi
+if fixture_query "
+UPDATE nv_selbstregistrierung
+   SET enabled_until_utc = '2026-12-31 23:59:59.123456'
+ WHERE singleton_id = 1" >"$failure_log" 2>&1; then
+    echo "schema migrator test: non-timed self-registration policy with a deadline was accepted" >&2
+    exit 1
+fi
+assert_equal "ENVIRONMENT|1|0|migration-114|1" "$(fixture_query "
+SELECT CONCAT(
+         mode, '|', enabled_until_utc IS NULL, '|', revision, '|', updated_by,
+         '|', (SELECT COUNT(*) FROM nv_selbstregistrierung)
+       )
+  FROM nv_selbstregistrierung
+ WHERE singleton_id = 1")" \
+    "self-registration constraints changed the canonical singleton after rejection"
+
+# A crash may leave the owned table without its seed row. Reapplying migration
+# 114 twice must seed exactly once and produce one checksum-valid ledger row.
+fixture_query "
+DELETE FROM nv_selbstregistrierung;
+DELETE FROM estab_schema_migrations
+ WHERE version = '114-self-registration-policy.sql'"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "1|1|ENVIRONMENT|1|0|migration-114" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '114-self-registration-policy.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
+         (SELECT COUNT(*) FROM nv_selbstregistrierung), '|',
+         mode, '|', enabled_until_utc IS NULL, '|', revision, '|', updated_by
+       )
+  FROM nv_selbstregistrierung
+ WHERE singleton_id = 1")" \
+    "canonical self-registration table without singleton was not safely resumed"
+
+# A ledger retry must adopt a configured canonical row without resetting its
+# timed policy, deadline, audit metadata, or revision.
+fixture_query "
+UPDATE nv_selbstregistrierung
+   SET mode = 'UNTIL',
+       enabled_until_utc = '2026-12-31 23:59:59.123456',
+       revision = 7,
+       updated_at = '2026-01-02 03:04:05.123456',
+       updated_by = 'schema-retry'
+ WHERE singleton_id = 1;
+DELETE FROM estab_schema_migrations
+ WHERE version = '114-self-registration-policy.sql'"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "1|UNTIL|2026-12-31 23:59:59.123456|7|2026-01-02 03:04:05.123456|schema-retry" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '114-self-registration-policy.sql'
+             AND state = 'applied'), '|',
+         mode, '|',
+         DATE_FORMAT(enabled_until_utc, '%Y-%m-%d %H:%i:%s.%f'), '|',
+         revision, '|', DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s.%f'),
+         '|', updated_by
+       )
+  FROM nv_selbstregistrierung
+ WHERE singleton_id = 1")" \
+    "self-registration migration retry overwrote configured values"
+
+# A familiar constraint name is not ownership evidence. Replace the deadline
+# rule by a weak same-named CHECK; migration 114 must fail before it mutates the
+# configured row or acknowledges the migration.
+fixture_query "
+ALTER TABLE nv_selbstregistrierung
+  DROP CONSTRAINT chk_selbstregistrierung_deadline,
+  ADD CONSTRAINT chk_selbstregistrierung_deadline CHECK (1 = 1);
+DELETE FROM estab_schema_migrations
+ WHERE version = '114-self-registration-policy.sql'"
+if ESTAB_DB_NAME="$test_database" \
+    "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: manipulated self-registration deadline CHECK was accepted" >&2
+    exit 1
+fi
+if ! grep -q \
+    'Self-registration migration blocked: foreign table collision' \
+    "$failure_log"; then
+    echo "schema migrator test: manipulated self-registration CHECK failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "1|0|0|UNTIL|2026-12-31 23:59:59.123456|7|schema-retry" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM information_schema.table_constraints
+           WHERE constraint_schema = DATABASE()
+             AND table_name = 'nv_selbstregistrierung'
+             AND constraint_name = 'chk_selbstregistrierung_deadline'
+             AND constraint_type = 'CHECK'), '|',
+         (SELECT COUNT(*)
+            FROM information_schema.table_constraints AS table_constraint
+            JOIN information_schema.check_constraints AS check_constraint
+              ON check_constraint.constraint_schema =
+                   table_constraint.constraint_schema
+             AND check_constraint.constraint_name =
+                   table_constraint.constraint_name
+           WHERE table_constraint.constraint_schema = DATABASE()
+             AND table_constraint.table_name = 'nv_selbstregistrierung'
+             AND table_constraint.constraint_name =
+                   'chk_selbstregistrierung_deadline'
+             AND check_constraint.check_clause LIKE
+                   '%enabled_until_utc%'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '114-self-registration-policy.sql'), '|',
+         mode, '|',
+         DATE_FORMAT(enabled_until_utc, '%Y-%m-%d %H:%i:%s.%f'), '|',
+         revision, '|', updated_by
+       )
+  FROM nv_selbstregistrierung
+ WHERE singleton_id = 1")" \
+    "blocked self-registration CHECK collision was changed or recorded"
+assert_equal "$pre_114_ledger_snapshot" "$(fixture_query "
+SELECT GROUP_CONCAT(
+         CONCAT(
+           version, ':', checksum, ':', state, ':',
+           COALESCE(run_id, 'NULL'), ':',
+           DATE_FORMAT(started_at, '%Y-%m-%d %H:%i:%s.%f'), ':',
+           COALESCE(
+             DATE_FORMAT(applied_at, '%Y-%m-%d %H:%i:%s.%f'),
+             'NULL'
+           )
+         )
+         ORDER BY version SEPARATOR ','
+       )
+  FROM estab_schema_migrations
+ WHERE version <> '114-self-registration-policy.sql'")" \
+    "migration 114 rewrote one of the existing nineteen ledger rows"
+
+fixture_query "
+ALTER TABLE nv_selbstregistrierung
+  DROP CONSTRAINT chk_selbstregistrierung_deadline,
+  ADD CONSTRAINT chk_selbstregistrierung_deadline
+    CHECK (
+      (mode = 'UNTIL' AND enabled_until_utc IS NOT NULL)
+      OR (mode <> 'UNTIL' AND enabled_until_utc IS NULL)
+    )"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "1|1|UNTIL|2026-12-31 23:59:59.123456|7|schema-retry" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '114-self-registration-policy.sql'
+             AND state = 'applied'), '|',
+         (SELECT COUNT(*)
+            FROM information_schema.table_constraints AS table_constraint
+            JOIN information_schema.check_constraints AS check_constraint
+              ON check_constraint.constraint_schema =
+                   table_constraint.constraint_schema
+             AND check_constraint.constraint_name =
+                   table_constraint.constraint_name
+           WHERE table_constraint.constraint_schema = DATABASE()
+             AND table_constraint.table_name = 'nv_selbstregistrierung'
+             AND table_constraint.constraint_name =
+                   'chk_selbstregistrierung_deadline'
+             AND check_constraint.check_clause LIKE
+                   '%enabled_until_utc%'), '|',
+         mode, '|',
+         DATE_FORMAT(enabled_until_utc, '%Y-%m-%d %H:%i:%s.%f'), '|',
+         revision, '|', updated_by
+       )
+  FROM nv_selbstregistrierung
+ WHERE singleton_id = 1")" \
+    "self-registration migration did not recover after CHECK repair"
+
+# The durable table marker is also part of the ownership contract. A foreign
+# table with the same name must remain untouched and absent from the ledger.
+fixture_query "
+UPDATE nv_selbstregistrierung
+   SET mode = 'ENVIRONMENT',
+       enabled_until_utc = NULL,
+       revision = 0,
+       updated_at = '2026-01-02 03:04:05.123456',
+       updated_by = 'migration-114'
+ WHERE singleton_id = 1;
+DELETE FROM estab_schema_migrations
+ WHERE version = '114-self-registration-policy.sql';
+ALTER TABLE nv_selbstregistrierung
+  COMMENT = 'foreign-self-registration-owner'"
+if ESTAB_DB_NAME="$test_database" \
+    "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: foreign self-registration table was accepted" >&2
+    exit 1
+fi
+if ! grep -q \
+    'Self-registration migration blocked: foreign table collision' \
+    "$failure_log"; then
+    echo "schema migrator test: self-registration table collision failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "foreign-self-registration-owner|ENVIRONMENT|1|0|migration-114|0" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT table_comment FROM information_schema.tables
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_selbstregistrierung'), '|',
+         mode, '|', enabled_until_utc IS NULL, '|', revision, '|', updated_by,
+         '|', (SELECT COUNT(*) FROM estab_schema_migrations
+                WHERE version = '114-self-registration-policy.sql')
+       )
+  FROM nv_selbstregistrierung
+ WHERE singleton_id = 1")" \
+    "blocked self-registration table collision was changed or recorded"
+fixture_query "
+ALTER TABLE nv_selbstregistrierung
+  COMMENT = 'estab:migration:114:self-registration-policy:v1'"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "1|ENVIRONMENT|1|0|migration-114" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '114-self-registration-policy.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
+         mode, '|', enabled_until_utc IS NULL, '|', revision, '|', updated_by
+       )
+  FROM nv_selbstregistrierung
+ WHERE singleton_id = 1")" \
+    "self-registration migration did not recover after removing the collision"
+assert_equal "$pre_114_ledger_snapshot" "$(fixture_query "
+SELECT GROUP_CONCAT(
+         CONCAT(
+           version, ':', checksum, ':', state, ':',
+           COALESCE(run_id, 'NULL'), ':',
+           DATE_FORMAT(started_at, '%Y-%m-%d %H:%i:%s.%f'), ':',
+           COALESCE(
+             DATE_FORMAT(applied_at, '%Y-%m-%d %H:%i:%s.%f'),
+             'NULL'
+           )
+         )
+         ORDER BY version SEPARATOR ','
+       )
+  FROM estab_schema_migrations
+ WHERE version <> '114-self-registration-policy.sql'")" \
+    "migration 114 rewrote one of the existing nineteen ledger rows"
 
 # Reproduce interruption after some autocommitted migration-99 phases. The
 # canonical status/time index remains, the direction/number index is missing,

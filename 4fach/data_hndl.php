@@ -27,6 +27,7 @@ require_once __DIR__ . "/../app/message_repository.php";
 require_once __DIR__ . "/../app/message_transport.php";
 require_once __DIR__ . "/../app/password_policy.php";
 require_once __DIR__ . "/../app/read_authorization.php";
+require_once __DIR__ . "/../app/self_registration.php";
 require_once __DIR__ . "/../app/workflow.php";
 
 if (validate){
@@ -160,15 +161,11 @@ function check_save_user (array $loginData, string &$loginError) {
     $loginError = "Bitte prüfen Sie Name, Kürzel, Funktion und Kennwort.";
     return true;
   }
-  if ($loginFlow === "new" && $explicitLoginFlow && !estab_auth_self_registration_allowed ()) {
-    $_SESSION ["menue"] = "LOGIN";
-    $loginError = "Neue Konten können hier nicht erstellt werden. Wenden Sie sich an die zuständige Stelle.";
-    return true;
-  }
-
   $connection = null;
   $policyLockName = null;
   $policyLockAcquired = false;
+  $selfRegistrationLockName = null;
+  $selfRegistrationLockAcquired = false;
   $accountLockName = null;
   $accountLockAcquired = false;
   $passwordPolicyLockName = null;
@@ -201,10 +198,24 @@ function check_save_user (array $loginData, string &$loginError) {
       $login ["kuerzel"]
     );
     // Existing logins deliberately remain independent of later policy
-    // changes. The explicit registration flow takes the global policy lock
-    // before the per-account lock, then decides under that account lock
-    // whether the requested code already exists.
+    // changes. Registration takes the assignment, self-registration and
+    // password-policy locks in this fixed order before the per-account lock.
     if ($loginFlow === "new") {
+      $selfRegistrationLockName = estab_self_registration_acquire_lock (
+        $connection,
+        (string) $conf_4f_db ["datenbank"]
+      );
+      $selfRegistrationLockAcquired = true;
+      $selfRegistrationPolicy = estab_self_registration_load ($connection);
+      if (!estab_self_registration_is_allowed ($selfRegistrationPolicy)) {
+        $_SESSION ["menue"] = "LOGIN";
+        $loginError =
+          ($selfRegistrationPolicy ["mode"] ?? null)
+            === ESTAB_SELF_REGISTRATION_MODE_UNTIL
+          ? "Der freigegebene Zeitraum für die Kontoanlage ist abgelaufen. Lassen Sie die Selbstregistrierung in der Administration erneut freigeben."
+          : "Neue Konten können hier derzeit nicht selbst angelegt werden. Lassen Sie die Selbstregistrierung in der Administration freigeben.";
+        return true;
+      }
       $passwordPolicyLockName = estab_password_policy_acquire_lock (
         $connection,
         (string) $conf_4f_db ["datenbank"]
@@ -330,10 +341,6 @@ function check_save_user (array $loginData, string &$loginError) {
       $loginError = "Name, Kürzel oder Kennwort stimmen nicht mit einem bestehenden Konto überein.";
       return true;
     }
-    if (!estab_auth_self_registration_allowed ()) {
-      $loginError = "Neue Konten können hier nicht erstellt werden. Wenden Sie sich an die zuständige Stelle.";
-      return true;
-    }
     if (!$passwordPolicyLockAcquired) {
       throw new RuntimeException (
         "Kennwortrichtlinie der Selbstregistrierung wurde nicht gesperrt"
@@ -344,15 +351,6 @@ function check_save_user (array $loginData, string &$loginError) {
       $loginData ["kennwort2"] ?? null,
       estab_password_policy_load ($connection)
     );
-
-    if (estab_dynamic_schema_hat_requires_tables (
-      $login ["funktion"],
-      $login ["rolle"]
-    )) {
-      $usertablename = $conf_4f_tbl ["usrtblprefix"].strtolower ($login ["funktion"])."_".$login ["kuerzel"];
-      $fkttblname = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($login ["funktion"]);
-      $dbaccess->create_user_table ($usertablename, $fkttblname);
-    }
 
     if (session_status () !== PHP_SESSION_ACTIVE || !session_regenerate_id (true)) {
       throw new RuntimeException ("Die Sitzung konnte nicht erneuert werden");
@@ -367,16 +365,38 @@ function check_save_user (array $loginData, string &$loginError) {
     if (!is_string ($passwordHash)) {
       throw new RuntimeException ("Kennwort konnte nicht sicher gespeichert werden");
     }
-    estab_auth_insert_user ($connection, $conf_4f_tbl ["benutzer"], array (
-      "benutzer" => $login ["benutzer"],
-      "kuerzel" => $login ["kuerzel"],
-      "funktion" => $login ["funktion"],
-      "rolle" => $login ["rolle"],
-      "sid" => session_id (),
-      "ip" => $ip,
-      "fwdip" => $forwardedIp,
-      "password" => $passwordHash,
-    ));
+    $registrationInserted = estab_self_registration_insert_user_if_allowed (
+      $connection,
+      $conf_4f_tbl ["benutzer"],
+      array (
+        "benutzer" => $login ["benutzer"],
+        "kuerzel" => $login ["kuerzel"],
+        "funktion" => $login ["funktion"],
+        "rolle" => $login ["rolle"],
+        "sid" => session_id (),
+        "ip" => $ip,
+        "fwdip" => $forwardedIp,
+        "password" => $passwordHash,
+      )
+    );
+    if (!$registrationInserted) {
+      unset ($passwordHash);
+      $loginError = "Der freigegebene Zeitraum für die Kontoanlage ist inzwischen abgelaufen oder wurde beendet. Es wurde kein Konto angelegt.";
+      return true;
+    }
+
+    // The guarded INSERT remains uncommitted on the transactional connection.
+    // Only after that atomic policy decision may the isolated connection create
+    // dynamic tables. This prevents an expired registration window from
+    // leaving tables behind for an account that was never admitted.
+    if (estab_dynamic_schema_hat_requires_tables (
+      $login ["funktion"],
+      $login ["rolle"]
+    )) {
+      $usertablename = $conf_4f_tbl ["usrtblprefix"].strtolower ($login ["funktion"])."_".$login ["kuerzel"];
+      $fkttblname = $conf_4f_tbl ["usrtblprefix"]."_fkt_".strtolower ($login ["funktion"]);
+      $dbaccess->create_user_table ($usertablename, $fkttblname);
+    }
 
     estab_login_write_audit (
       $connection,
@@ -404,7 +424,9 @@ function check_save_user (array $loginData, string &$loginError) {
 
     return false;
   } catch (
-    EstabPasswordPolicyInputException|EstabPasswordPolicyBusyException $exception
+    EstabPasswordPolicyInputException
+    |EstabPasswordPolicyBusyException
+    |EstabSelfRegistrationBusyException $exception
   ) {
     if ($transactionActive && $connection instanceof mysqli) {
       $connection->rollback ();
@@ -454,6 +476,24 @@ function check_save_user (array $loginData, string &$loginError) {
       } catch (Throwable $exception) {
         error_log (
           "eStab password policy lock cleanup failed: ".
+          $exception->getMessage ()
+        );
+      }
+    }
+    if (
+      $connection instanceof mysqli
+      && $selfRegistrationLockAcquired
+      && is_string ($selfRegistrationLockName)
+      && $selfRegistrationLockName !== ""
+    ) {
+      try {
+        estab_self_registration_release_lock (
+          $connection,
+          $selfRegistrationLockName
+        );
+      } catch (Throwable $exception) {
+        error_log (
+          "eStab self-registration lock cleanup failed: ".
           $exception->getMessage ()
         );
       }

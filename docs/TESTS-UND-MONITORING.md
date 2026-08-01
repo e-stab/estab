@@ -36,13 +36,22 @@ mehr Bytes bleibt er bis zum administrativen Reset unverändert. Stärkere oder
 gemischte Argon2id-Kosten werden nicht zurückgestuft. Das separate
 HTTP-Basic-Secret bleibt unabhängig.
 
+Die Selbstregistrierungsfreigabe besitzt einen eigenen Sicherheitsvertrag:
+`DISABLED`, `PERMANENT` und `UNTIL`, feste Zeiträume von 15 Minuten bis 24
+Stunden, halb-offene UTC-Grenzen, optimistische Revision, gemeinsamer
+Advisory-Lock von Administration und Kontoanlage sowie ein atomischer
+`INSERT ... SELECT`-Zeitguard. 107 statische Assertions, 31 MariaDB-Assertions,
+28 echte Handler-Assertions und der Admin-HTTP-Test beweisen, dass ein
+abgelaufenes oder vorzeitig geschlossenes Fenster kein Konto und kein
+Anmelde-Audit erzeugt, während Bestandslogin und Sitzungen unberührt bleiben.
+
 | Ebene | Nachweis |
 | --- | --- |
 | Quellprüfung | netzloser Herkunftsnachweis für 13 Git-Ref-Snapshots (Trunk, vier Branches, sechs SVN-Tags, zwei SourceForge-Release-Tags) und einen separaten Dokument-r85-Baum, GitHub-Workflow-Prüfung mit festgelegtem Actionlint 1.7.12, PHP-8.5-Lint, Kompatibilitäts-, Sicherheits-, Einsatz-, Benutzerverwaltungs-, amtlicher Nachrichtenvordruck-, Upload-, Export- und PDF-Regressionen |
 | Image-Build | benötigte PHP-Erweiterungen und Apache-Konfiguration |
-| Datenbank | echtes MariaDB-Schema, Einsatz-Singleton/Trigger, Kontosperre, revisionsgesicherte Kennwortrichtlinien-Singletonzeile, Indizes, aktive und persistente Standardmatrix, Engines, Collations und Zero-Date-Freiheit |
-| HTTP | Header, direkte Endpunktfläche, 303-Weiterleitung anonymer geschützter Aufrufe zum allowlist-gebundenen Bestandslogin samt sichtbarem Rückweg, 403-/400-/405-Grenzen, Registrierung, sichtbare Sitzungsidentität, Präsenz/Leerlaufende, feste Funktions-/Rollenbindung, optionaler Gruppenzugang, Kennwortrichtlinien-Vorschau/-Bestätigung, verbindlicher Nachrichtenlauf, E-Mail-Anhang mit passiver Ansicht und bytegleichem Originaldownload, S6-Plan, Melderlauf, Kategorien- und ETB-/TBB-Rollengrenzen, Vordruckerzeugung sowie Admin-Export |
-| Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, direkte ETB-/Nachrichten-/Anhang-/Kategorie-Anmeldung ohne Sackgasse oder verschachtelten Arbeitsbereich, sicherer Login-Abbruch, neun stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, passive E-Mail-Anlagenkarte ohne aktive Mail-DOM-/Remote-Inhalte, Rufnamen-Auswahlliste des Fernmelders mit echtem Fokus, Filterung und Tastaturauswahl, Matrixstandard- und Kennwortrichtlinien-Bestätigungen, BOS-Disclosure, Logout sowie öffentliche und authentifizierte mobile Bedienung bei exakt 390 × 844 CSS-Pixeln |
+| Datenbank | echtes MariaDB-Schema, Einsatz-Singleton/Trigger, Kontosperre, revisionsgesicherte Kennwort- und Selbstregistrierungs-Singletonzeilen, Indizes, aktive und persistente Standardmatrix, Engines, Collations und Zero-Date-Freiheit |
+| HTTP | Header, direkte Endpunktfläche, 303-Weiterleitung anonymer geschützter Aufrufe zum allowlist-gebundenen Bestandslogin samt sichtbarem Rückweg, 403-/400-/405-Grenzen, dauerhafte und befristete Selbstregistrierungssteuerung, sichtbare Sitzungsidentität, Präsenz/Leerlaufende, feste Funktions-/Rollenbindung, optionaler Gruppenzugang, Kennwortrichtlinien-Vorschau/-Bestätigung, verbindlicher Nachrichtenlauf, E-Mail-Anhang mit passiver Ansicht und bytegleichem Originaldownload, S6-Plan, Melderlauf, Kategorien- und ETB-/TBB-Rollengrenzen, Vordruckerzeugung sowie Admin-Export |
+| Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, direkte ETB-/Nachrichten-/Anhang-/Kategorie-Anmeldung ohne Sackgasse oder verschachtelten Arbeitsbereich, sicherer Login-Abbruch, neun stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, passive E-Mail-Anlagenkarte ohne aktive Mail-DOM-/Remote-Inhalte, Rufnamen-Auswahlliste des Fernmelders mit echtem Fokus, Filterung und Tastaturauswahl, Matrixstandard- und Kennwortrichtlinien-Bestätigungen, responsive Adminübersicht mit elf Karten und acht Selbstregistrierungszeitfenstern, BOS-Disclosure, Logout sowie öffentliche und authentifizierte mobile Bedienung bei exakt 390 × 844 CSS-Pixeln |
 | Fachabnahme | kompletter Nachrichten-, Anhang-, PDF-, ETB-/TBB- und Restore-Ablauf |
 | Betrieb | kontinuierliche Readiness, Logs, Restarts, Kapazität und Backup-Alter |
 
@@ -95,7 +104,7 @@ administrativen Synology-/Docker-Aufruf vorgesehene Rootpfad
 `/var/lib/estab-deploy` bleibt zusätzlich im statischen Vertrag gebunden; die
 Tests schreiben dafür nicht in das `/var/lib` des Testcontainers.
 
-Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
+Die Suite lintet alle 265 aktiven PHP-Dateien und führt die Prüfungen unter
 `tests/php/` aus. Dazu gehören unter anderem:
 
 - die versiegelten, deterministischen Provenienzmanifeste für 13
@@ -201,6 +210,9 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   globale Lockreihenfolge, optimistische Revision, zweistufige
   Adminbestätigung, prospektive Anwendung auf Anlage/Reset/Selbstregistrierung
   und ausdrücklich unveränderten Bestandslogin,
+- Selbstregistrierungsmodi, feste Zeitfenster, exakte DB-UTC-Ablaufgrenze,
+  Revision, kennwortfreies Audit, CSRF-/Basic-Auth-Adminsteuerung, gemeinsame
+  Lockreihenfolge und den atomischen Konto-INSERT-Guard,
 - Upload- und Anhangpfadvalidierung einschließlich strikt als
   `message/rfc822` erkannter und strukturell gültiger `.eml`-Dateien, fester
   20-MiB-Parsergrenze, Ablehnung umbenannter beziehungsweise fehlerhafter Mails
@@ -269,26 +281,30 @@ tests/integration/ci.sh
 ```
 
 Der am 1. August 2026 tatsächlich vollständig beendete Abschlusslauf verwendete
-das isolierte Compose-Projekt `estab_ci_etb_tbb_final9`, Port `18090` für die
-App und den daraus abgeleiteten Port `18091` für das Pull-only-Registry-Projekt:
+das isolierte Compose-Projekt `estab_ci_selfreg_final3_20260801`, Port `18094`
+für die App und den daraus abgeleiteten Port `18095` für das
+Pull-only-Registry-Projekt:
 
 ```console
-COMPOSE_PROJECT_NAME=estab_ci_etb_tbb_final9 \
+COMPOSE_PROJECT_NAME=estab_ci_selfreg_final3_20260801 \
 ESTAB_CONTAINER_CLI=podman \
-ESTAB_HTTP_PORT=18090 \
+ESTAB_HTTP_PORT=18094 \
 ESTAB_BROWSER_TEST=required \
 bash tests/integration/ci.sh
 ```
 
 Er führte damit das Pflicht-Browser-Gate aus und endete erst nach dem
 vollständigen destruktiven Backup-/Restore-Roundtrip mit
-`CI integration: OK`. Er verifizierte 40 Schema-Checks, 63 statische
-Kennwortrichtlinien-, 106 Authentisierungs- und 63 MariaDB-
-Kennwortrichtlinien-Assertions, außerdem 57 Assertions des
+`CI integration: OK`. Er verifizierte 41 Schema-Checks, 63 statische
+Kennwortrichtlinien-, 107 statische Selbstregistrierungs-, 111
+Authentisierungs-, 63 MariaDB-Kennwortrichtlinien-, 31
+MariaDB-Selbstregistrierungs- und 28 Handler-Assertions, außerdem 57
+Assertions des
 Registry-Deployment-Vertrags, 130 Assertions des ETB-/TBB-DV-Betriebs,
-33 Assertions des Incident-Exports und 145 Assertions der Nachrichtenlisten-
-Skalierung mit 10.257 Zeilen; die statische Suite lintete alle aktiven
-PHP-Dateien. Dieser lokale Podman-Lauf fand nicht auf einem
+35 Assertions des Incident-Exports und 145 Assertions der Nachrichtenlisten-
+Skalierung mit 10.257 Zeilen; die statische Suite lintete alle 265 aktiven
+PHP-Dateien und erzeugte den PDF-Smoke-Nachweis mit 14.352 Byte. Dieser lokale
+Podman-Lauf fand nicht auf einem
 nachgewiesenen SELinux-Enforcing-System statt und gilt daher ausdrücklich nicht
 als SELinux-Relabel-Nachweis.
 
@@ -350,7 +366,7 @@ Schreibgrenzen sowie die amtlichen Nachrichtenvordruckfelder aus Migration 98.
 Der Schema-Test startet Migration 98 zweimal, prüft die exakt markierten
 Spalten `11_rufnummer` und `12_betreff`, deren leere Bestandswerte und den
 unveränderten historischen Nachrichteninhalt. Readiness und `verify.sql`
-verlangen alle neunzehn Ledgerzeilen einschließlich Version 113 sowie die
+verlangen alle zwanzig Ledgerzeilen einschließlich Version 114 sowie die
 exakten drei Such-/Listenindizes. Migration 99 wird vollständig, nach einem
 simulierten phasenweisen Abbruch und nach einer fremden Indexkollision
 ausgeführt; erst der bereinigte Wiederanlauf darf den Ledgerstand schreiben.
@@ -425,6 +441,25 @@ neunzehnte Ledgerzeile schreiben; Zweitlauf, `verify.sql` und Laufzeit-
 Readiness müssen denselben Zustand bestätigen. Bestehende Kontohashes,
 Sitzungen und die bisherigen achtzehn Ledgerzeilen bleiben byte- und
 wertgleich.
+
+Migration 114 ergänzt anschließend den Selbstregistrierungsvertrag. Der
+Schema-Test verlangt die exakt markierte InnoDB-Singleton-Tabelle, sechs
+kanonische Spalten, beide exakten CHECK-Klauseln und die Upgrade-Startzeile
+`ENVIRONMENT/NULL/0`. Fremde gleichnamige Tabellen oder manipulierte
+Constraints blockieren ohne Ledgerabschluss. Nur der kanonische Wiederanlauf
+darf die zwanzigste Ledgerzeile schreiben; Zweitlauf, `verify.sql` und
+Readiness bestätigen denselben Zustand. Die bisherigen neunzehn Ledgerzeilen
+und vorhandenen Konten bleiben unverändert.
+
+Der Migratortest trennt diesen SQL-Vertrag ausdrücklich vom
+Neuinstallationsabschluss des Runners: Eine vollständig leere Datenbank startet
+selbst mit `ESTAB_ALLOW_SELF_REGISTRATION=true` als
+`DISABLED/NULL/1/fresh-install`. Ein nach Migration 114 stehen gebliebener
+checksumgebundener Marker auf `applying` wird gemeinsam mit der pristine Zeile
+idempotent abgeschlossen. Manipulierte Marker-Prüfsummen und die unmögliche
+Kombination aus `applied`-Marker und pristine `ENVIRONMENT`-Zeile blockieren
+unverändert. Das aus dem Legacy-Fixture migrierte Schema besitzt keinen
+Fresh-Marker und behält dagegen nachweislich `ENVIRONMENT/NULL/0/migration-114`.
 
 Anschließend migriert der Hauptlauf ein leeres Schema,
 führt PHP-, Datenbank-, Rollen-, HTTP- und Administrationsnachweise aus, prüft
@@ -700,6 +735,16 @@ werden hochgestuft. Ein
 konkurrierender Richtlinienwriter darf Kontoanlage oder Reset nicht mit einem
 überholten Stand überholt werden. Die Testbereinigung stellt die kanonische
 Auslieferungsrichtlinie wieder her.
+
+`tests/integration/self_registration.php` prüft mit 31 Assertions die drei
+persistenten Modi, exakte Datenbank-UTC-Grenzen, Revision, Advisory-Lock und
+atomaren Audit. `tests/integration/self_registration_handler.php` führt den
+produktiven Konto-Handler mit 28 Assertions aus. Dazu gehören ein während der
+Verarbeitung ablaufendes und ein parallel deaktiviertes Zeitfenster; in beiden
+Fällen bleiben Konto, Kennworthash, Sitzung, Audit und dynamische Tabellen aus.
+`tests/integration/self_registration_http.sh` ergänzt Basic Auth, Session-CSRF,
+Bestätigung, feste Zeitfenster, Revision und den sichtbaren Verwaltungszustand.
+
 `tests/integration/assignment_policy.php` verwendet mehrere Verbindungen für
 den globalen Matrix-/Login-/Benutzerverwaltungs-Lock, gleicht geänderte Rollen
 und entfernte Funktionen ab, erlaubt einem inaktiven Waisenkonto den
@@ -845,7 +890,7 @@ Poppler-Rendervergleich sind ebenfalls grün. Der Renderfall enthält eine
 schichtübergreifende Korrektur: Ein einsatzgebundener Self-Join muss deren
 globale Original-ID zur lokalen Buchnummer auflösen, ohne globale
 Primärschlüssel als laufende oder Korrekturbezugnummer zu drucken. Die
-zugehörigen PHP-Dateien linten. Der MariaDB-Integrationstest ist mit 33
+zugehörigen PHP-Dateien linten. Der MariaDB-Integrationstest ist mit 35
 Assertions im frischen Gesamt-Compose-Lauf grün; die statischen und visuellen
 Teilläufe ersetzen diesen Lauf nicht.
 
@@ -1384,6 +1429,11 @@ insbesondere:
   und „Aktive Matrix speichern und bisherigen Standard ersetzen“ jeweils
   einen eigenen nativen Bestätigungsdialog aus. Der Browser lehnt beide
   Dialoge ab und weist nach, dass Testwert und Matrixseite erhalten bleiben.
+- Mit separaten ephemeren Admin-Testdaten bleiben alle elf Admin-Karten bei
+  `1280 × 800` und `390 × 844` CSS-Pixeln sichtbar, überlappungsfrei und
+  bedienbar. Die Selbstregistrierungsseite zeigt alle acht festen Zeitfenster,
+  getrennte Aktionen und drei revisionsgebundene Formulare, ohne die
+  gespeicherte Freigabe zu ändern.
 - Reale Klicks auf die BOS-Karte und eine statische BOS-Unterseite behalten
   den separaten kompakten Disclosure-Modus; das reale Öffnen seiner
   Bereichsauswahl und der Rückweg zur Übersicht funktionieren.

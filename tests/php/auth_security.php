@@ -640,6 +640,10 @@ $passwordPolicyLockPosition = strpos(
     $loginFunction,
     'estab_password_policy_acquire_lock ('
 );
+$selfRegistrationLockPosition = strpos(
+    $loginFunction,
+    'estab_self_registration_acquire_lock ('
+);
 $freshMapPosition = strpos(
     $loginFunction,
     'estab_assignment_function_roles'
@@ -649,12 +653,14 @@ $accountLookupPosition = strpos($loginFunction, 'estab_auth_fetch_user');
 $assert(
     $policyLockPosition !== false
         && $freshMapPosition !== false
+        && $selfRegistrationLockPosition !== false
         && $passwordPolicyLockPosition !== false
         && $accountLockPosition !== false
         && $transactionPosition !== false
         && $accountLookupPosition !== false
         && $policyLockPosition < $freshMapPosition
-        && $freshMapPosition < $passwordPolicyLockPosition
+        && $freshMapPosition < $selfRegistrationLockPosition
+        && $selfRegistrationLockPosition < $passwordPolicyLockPosition
         && $passwordPolicyLockPosition < $accountLockPosition
         && $accountLockPosition < $transactionPosition
         && $transactionPosition < $accountLookupPosition
@@ -680,6 +686,10 @@ $assert(
         && str_contains(
             $loginFunction,
             'estab_password_policy_release_lock ('
+        )
+        && str_contains(
+            $loginFunction,
+            'estab_self_registration_release_lock ('
         )
         && str_contains($loginFunction, 'estab_login_release_account_lock')
         && substr_count($loginFunction, '$connection->rollback ()') >= 2,
@@ -709,7 +719,10 @@ $firstSessionPosition = strpos($loginFunction, '$_SESSION ["vStab_benutzer"] =')
 $secondSchemaPosition = $firstSchemaPosition === false
     ? false
     : strpos($loginFunction, '$dbaccess->create_user_table', $firstSchemaPosition + 1);
-$secondAccountWritePosition = strpos($loginFunction, 'estab_auth_insert_user');
+$secondAccountWritePosition = strpos(
+    $loginFunction,
+    'estab_self_registration_insert_user_if_allowed ('
+);
 $secondCommitPosition = $firstCommitPosition === false
     ? false
     : strpos($loginFunction, '$connection->commit ()', $firstCommitPosition + 1);
@@ -728,10 +741,11 @@ $assert(
         && $secondAccountWritePosition !== false
         && $secondCommitPosition !== false
         && $secondSessionPosition !== false
-        && $secondSchemaPosition < $secondAccountWritePosition
-        && $secondAccountWritePosition < $secondCommitPosition
-        && $secondCommitPosition < $secondSessionPosition,
-    'an account or session can become active before dynamic schema readiness and commit'
+        && $secondAccountWritePosition < $secondSchemaPosition
+        && $secondSchemaPosition < $secondCommitPosition
+        && $secondCommitPosition < $secondSessionPosition
+        && !str_contains($loginFunction, 'estab_auth_insert_user ('),
+    'login paths violate guarded registration, dynamic schema, commit or session ordering'
 );
 $assert(
     str_contains($loginFunction, 'estab_login_clear_session_identity ();')

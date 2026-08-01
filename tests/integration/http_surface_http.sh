@@ -136,8 +136,8 @@ assert_body_fixed "href=\"$expected_app_root/4fach/index.php?login_flow=existing
 assert_body_fixed '>Mit bestehendem Konto anmelden</a>'
 assert_body_absent_fixed 'id="estab-register"'
 assert_body_absent_fixed "href=\"$expected_app_root/4fach/index.php?login_flow=new\""
-assert_body_fixed 'Neue Konten können auf dieser Installation nicht selbst angelegt werden'
-assert_body_fixed 'Administration → Benutzerverwaltung'
+assert_body_fixed 'Die Selbstregistrierung ist derzeit'
+assert_body_fixed 'Benutzerverwaltung'
 assert_body_fixed 'Anmeldung erforderlich'
 assert_body_fixed 'Separater Administrationszugang'
 assert_body_fixed 'data-estab-navigation'
@@ -317,7 +317,8 @@ assert_body_fixed 'Wie möchten Sie fortfahren?'
 assert_body_fixed 'name="login_flow" value="existing"'
 assert_body_absent_fixed 'name="login_flow" value="new"'
 assert_body_fixed '<button class="estab-button" type="button" disabled>Neues Konto anlegen</button>'
-assert_body_fixed 'Administration → Benutzerverwaltung'
+assert_body_fixed 'Die Selbstregistrierung ist derzeit geschlossen.'
+assert_body_fixed 'Benutzerverwaltung'
 assert_body_fixed 'name="csrf_token"'
 if grep -Fq 'data-estab-session-bar' "$body"; then
     printf 'HTTP surface: anonymous login page contains authenticated session UI\n' >&2
@@ -334,8 +335,8 @@ assert_body_fixed 'target="_self"'
 assert_body_absent_fixed 'target="mainframe"'
 assert_status 200 "$base_url/4fach/mainindex.php?login_flow=new"
 assert_body_fixed '<h2>Neues Konto anlegen</h2>'
-assert_body_fixed 'Neue Konten können hier nicht erstellt werden'
-assert_body_fixed 'Administration → Benutzerverwaltung'
+assert_body_fixed 'Die Selbstregistrierung ist geschlossen.'
+assert_body_fixed 'bestehenden Konto'
 assert_body_absent_fixed 'name="kennwort2"'
 assert_status 403 "$base_url/4fach/mainindex.php?login_flow=unknown"
 
@@ -440,8 +441,8 @@ fi
 assert_status 200 --request POST --data-urlencode 'login_flow=new' \
     "$base_url/4fach/mainindex.php"
 assert_body_fixed '<h2>Neues Konto anlegen</h2>'
-assert_body_fixed 'Neue Konten können hier nicht erstellt werden'
-assert_body_fixed 'Administration → Benutzerverwaltung'
+assert_body_fixed 'Die Selbstregistrierung ist geschlossen.'
+assert_body_fixed 'bestehenden Konto'
 assert_body_absent_fixed 'name="login_flow" value="new"'
 assert_body_absent_fixed 'name="kennwort2"'
 assert_body_fixed 'name="csrf_token"'

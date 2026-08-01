@@ -230,6 +230,14 @@ beziehungsweise Führungsstellenansicht eindeutig erkennbar sein. Ohne
 gültigen Führungsstellennamen oder aktiven Einsatz nimmt eStab keine operative
 Eingabe an. Funktionskonten lassen sich unter `/4fadm/users.php` sperren, entsperren
 und mit einem neuen Kennwort versehen. Unter
+`/4fadm/self_registration.php` kann die öffentliche Kontoanlage sofort
+deaktiviert, dauerhaft aktiviert oder ab jetzt für 15 Minuten bis 24 Stunden
+freigegeben werden. Eine befristete Freigabe endet anhand der Datenbankzeit
+automatisch; auch ein vorher geöffnetes Formular wird beim Absenden erneut
+geprüft. Aktivierungen verlangen die Bestätigung, dass die Anmeldeseite nur
+in einem kontrollierten Netz und unter Aufsicht erreichbar ist, denn
+erreichbare Personen können jede angebotene aktive Funktion auswählen.
+Bestehende Konten und Sitzungen bleiben dabei unverändert. Unter
 `/4fadm/password_policy.php` legt die Administration zentral fest, welche
 Anforderungen für künftig gesetzte Kennwörter gelten: eine Mindestlänge von 8
 bis 128 Unicode-Codepoints (Standard 12) sowie optional je mindestens ein
@@ -492,6 +500,7 @@ entstehen. OCI-Tags – auch `latest` – gibt es absichtlich nicht.
 | `/4fadm/incidents.php` | Einsätze samt Führungsstellennamen anlegen, historische Fehlwerte einmalig bestätigen, aktivieren und deaktivieren | HTTP Basic Auth, Session-CSRF, revisionsgesicherter globaler Status; die erste operative Eintragung setzt atomar einen dauerhaften Sperrmarker für den bestätigten Führungsstellennamen |
 | `/4fadm/fuehrungsstelle.php` | optionale einsatzgebundene Zugangsschichten anlegen, Konten zuordnen und Gruppen gemeinsam aktivieren/deaktivieren | HTTP Basic Auth, Session-CSRF; unzugeordnete Konten bleiben erlaubt, Mehrfachzuordnungen gelten per OR, Deaktivierung kann Sitzungen widerrufen und verändert keine Fachrechte |
 | `/4fadm/users.php` | Benutzer anlegen, Funktionen fest zuweisen, sperren/entsperren und Kennwörter zurücksetzen | HTTP Basic Auth, Session-CSRF; Rollen werden serverseitig abgeleitet und aktive Sitzungen atomar widerrufen |
+| `/4fadm/self_registration.php` | öffentliche Kontoanlage sofort deaktivieren, dauerhaft oder für 15 Minuten bis 24 Stunden aktivieren | HTTP Basic Auth, Session-CSRF, ausdrückliche Sicherheitsbestätigung, optimistische Revision, globaler Advisory-Lock und transaktionales Audit; befristete Freigaben enden automatisch nach Datenbank-UTC und werden direkt im Konto-INSERT nochmals geprüft |
 | `/4fadm/password_policy.php` | globale Kennwortrichtlinie prüfen, als revisionsgebundene Änderung voranzeigen und anschließend ausdrücklich bestätigen | HTTP Basic Auth, Session-CSRF; konfigurierbare Mindestlänge 8–128 Unicode-Codepoints (Standard 12), höchstens 1024 UTF-8-Bytes, 1024 Browser-Eingabeeinheiten, optionale Unicode-Zeichenklassen, Argon2id und transaktionales Audit; nur künftig gesetzte Funktionskonto-Kennwörter werden gegen die Richtlinie geprüft |
 | `/4fadm/incident_export.php` | neun wählbare PDF-Abschnitte: ETB, TBB, Nachrichtenvordrucke, Anhänge, Nachrichtenereignisse, Dienstorganisation, S6-Fernmeldepläne, Melderläufe und Betriebsereignisse; ETB/TBB als Gesamtbuch oder per Legacy-Dienstschicht | HTTP Basic Auth, Session-CSRF, einsatzgebundene Abfragen; Dienstorganisation enthält optionale Zugangsschichten samt aktuellen/entfernten Zuordnungen und getrennt gekennzeichnete historische `nv_dienst*`-Evidenz; der historische Schichtfilter betrifft nur ETB/TBB |
 | `/4fadm/system_status.php` | ausführlicher Laufzeitstatus | HTTP Basic Auth |
@@ -627,9 +636,13 @@ an. Neue Installationen verwenden stattdessen die Benutzerverwaltung unter
 `/4fadm/users.php`: Dort legt der technische Administrator Konten mit einer
 festen Funktion und einem Startkennwort an. Die Rolle wird ausschließlich
 serverseitig aus Funktion und Empfängermatrix abgeleitet. Die öffentliche
-„Neues Konto anlegen“-Kompatibilitätsfunktion ist standardmäßig ausgeschaltet;
-wird sie bewusst aktiviert, verlangt sie eine Kennwortbestätigung und meldet
-niemals still ein vorhandenes Konto an. Für Kontoanlage, administrativen
+„Neues Konto anlegen“-Funktion ist standardmäßig ausgeschaltet. Die
+Administration steuert sie unter `/4fadm/self_registration.php` dauerhaft oder
+für einen festen Zeitraum. Vor dem Aktivieren muss bestätigt werden, dass die
+Anmeldeseite nur in einem kontrollierten Netz und unter Aufsicht erreichbar
+ist; während der Freigabe kann jede erreichende Person jede angebotene aktive
+Funktion auswählen. Eine Freigabe verlangt weiterhin eine Kennwortbestätigung
+und meldet niemals still ein vorhandenes Konto an. Für Kontoanlage, administrativen
 Kennwortreset und Selbstregistrierung gilt dieselbe gespeicherte
 Kennwortrichtlinie. Deren Mindestlänge ist zwischen 8 und 128 Unicode-Codepoints
 konfigurierbar und beträgt nach Installation 12 Unicode-Codepoints;
@@ -672,7 +685,9 @@ zugewiesen werden.
 Auf der Übersicht führen zwei getrennte Schaltflächen unmittelbar zum
 passenden Bestands- beziehungsweise Neuanlageformular. Ist
 Selbstregistrierung deaktiviert, verschwindet die Neuanlage-Schaltfläche und
-ein Hinweis verweist auf Administration → Benutzerverwaltung. Ohne
+ein Hinweis verweist auf die Administration. Ist die Einstellung oder
+Datenbank nicht sicher lesbar, bleibt die Kontoanlage ebenfalls geschlossen.
+Ohne
 eStab-Sitzung sind
 geschützte Modulkarten sichtbar als „Anmeldung erforderlich“ gekennzeichnet
 und führen zum Anmeldeeinstieg statt auf eine HTTP-403-Seite. Der dort

@@ -36,6 +36,9 @@ $routes = [
     'admin' => estab_application_url('4fadm/admin.php'),
     'incidents' => estab_application_url('4fadm/incidents.php'),
     'users' => estab_application_url('4fadm/users.php'),
+    'self_registration' => estab_application_url(
+        '4fadm/self_registration.php'
+    ),
     'password_policy' => estab_application_url('4fadm/password_policy.php'),
     'admin_command_post' => estab_application_url('4fadm/fuehrungsstelle.php'),
     'matrix' => estab_application_url('4fadm/make_fkt.php'),
@@ -210,6 +213,13 @@ $handbookUpdated = '1. August 2026';
             Konto anmelden“: Ein unbekanntes Kürzel erzeugt dabei bewusst kein
             neues Konto. „Neues Konto anlegen“ erscheint nur, wenn die
             öffentliche Selbstregistrierung ausdrücklich freigeschaltet wurde.
+            Die zuständige Stelle kann diese Freigabe in der Administration
+            dauerhaft oder für einen festen Zeitraum erteilen und jederzeit
+            vorzeitig beenden. Nach Ablauf wird auch ein bereits geöffnetes
+            Formular beim Absenden sicher abgewiesen. Vor dem Aktivieren muss
+            sie bestätigen, dass die Anmeldeseite nur in einem kontrollierten
+            Netz und unter Aufsicht erreichbar ist. Während der Freigabe kann
+            jede erreichende Person jede angebotene aktive Funktion auswählen.
             Sie verlangt Name, ein eindeutiges Kürzel, die zugeteilte Funktion
             und zweimal dasselbe Kennwort. Die dabei angezeigte zentrale
             Kennwortrichtlinie gilt ebenso für administrativ angelegte Konten
@@ -691,6 +701,7 @@ $handbookUpdated = '1. August 2026';
           <div class="estab-handbook-admin-grid">
             <a href="<?= $href('incidents') ?>"><strong>Einsätze</strong><span>Anlegen, aktivieren, deaktivieren und formal abschließen</span></a>
             <a href="<?= $href('users') ?>"><strong>Benutzer</strong><span>Anlegen, zuweisen, sperren, entsperren und Kennwort zurücksetzen</span></a>
+            <a href="<?= $href('self_registration') ?>"><strong>Selbstregistrierung</strong><span>Sofort schließen, dauerhaft oder für 15 Minuten bis 24 Stunden öffnen</span></a>
             <a href="<?= $href('password_policy') ?>"><strong>Kennwortrichtlinie</strong><span>Mindestlänge und optionale Zeichenanforderungen für neue Kennwörter festlegen</span></a>
             <a href="<?= $href('admin_command_post') ?>"><strong>Zugangsschichten</strong><span>Optionale Kontengruppen anlegen und gemeinsam aktivieren/deaktivieren</span></a>
             <a href="<?= $href('matrix') ?>"><strong>Empfängermatrix</strong><span>Exakt 5 × 4 Positionen; S2 bleibt Rotkopieziel, Autosichtung bleibt aus</span></a>
@@ -703,6 +714,19 @@ $handbookUpdated = '1. August 2026';
           <p>Sperren, Funktionsneuzuweisung und Kennwortreset widerrufen aktive
             eStab-Sitzungen sofort. Ein neues Kennwort wird zweimal eingegeben;
             Entsperren meldet das Konto nicht automatisch an.</p>
+          <h3>Selbstregistrierung kontrolliert freigeben</h3>
+          <p>Unter <a href="<?= $href('self_registration') ?>">Selbstregistrierung</a>
+            schließen Sie die öffentliche Kontoanlage sofort, öffnen sie
+            dauerhaft oder geben sie ab jetzt für 15 Minuten bis 24 Stunden
+            frei. Ein Zeitfenster endet automatisch anhand der Datenbankzeit.
+            Auch ein vorher geöffnetes Formular wird beim Absenden erneut
+            geprüft.</p>
+          <div class="estab-handbook-callout"><strong>Nur beaufsichtigt öffnen</strong>
+            <p>Während einer Freigabe kann jede Person, die die Anmeldeseite
+              erreicht, eine der dort angebotenen aktiven Funktionen wählen.
+              Aktivieren Sie die Selbstregistrierung deshalb nur in einem
+              kontrollierten Netz und unter Aufsicht; bestehende Konten können
+              sich auch bei geschlossener Selbstregistrierung anmelden.</p></div>
           <h3>Kennwortrichtlinie verständlich anwenden</h3>
           <p>Unter <a href="<?= $href('password_policy') ?>">Kennwortrichtlinie</a>
             legen Sie eine Mindestlänge zwischen 8 und 128 Zeichen fest.

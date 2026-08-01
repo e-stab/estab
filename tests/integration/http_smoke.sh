@@ -542,6 +542,12 @@ assert_session_bar() {
     expected_code=$2
     expected_function=$3
     expected_role=$4
+    expected_function_label=$expected_function
+    expected_role_visible=true
+    if [ "$expected_function" = 'A/W' ] && [ "$expected_role" = 'Fernmelder' ]; then
+        expected_function_label=Fernmelder
+        expected_role_visible=false
+    fi
     bar_count=$(grep -o 'data-estab-session-bar' "$body" | wc -l | tr -d ' ')
     logout_count=$(grep -o 'data-estab-logout-form' "$body" | wc -l | tr -d ' ')
     if [ "$bar_count" != 1 ] || [ "$logout_count" != 1 ]; then
@@ -553,8 +559,6 @@ assert_session_bar() {
     for marker in \
         'Angemeldet als' \
         "Kürzel $expected_code" \
-        "Funktion $expected_function" \
-        "Rolle $expected_role" \
         "data-estab-user-name=\"$expected_name\"" \
         "data-estab-user-code=\"$expected_code\"" \
         "data-estab-user-function=\"$expected_function\"" \
@@ -571,6 +575,10 @@ assert_session_bar() {
     do
         assert_body "$marker"
     done
+    assert_body "Funktion $expected_function_label"
+    if [ "$expected_role_visible" = true ]; then
+        assert_body "Rolle $expected_role"
+    fi
     csrf_from_body >/dev/null
 }
 
@@ -862,8 +870,8 @@ assert_body 'Anmeldung erforderlich'
 assert_body 'Separater Administrationszugang'
 assert_body 'href="./handbuch/"'
 assert_body_absent 'id="estab-register"'
-assert_body 'Neue Konten können auf dieser Installation nicht selbst angelegt werden'
-assert_body 'Administration → Benutzerverwaltung'
+assert_body 'Die Selbstregistrierung ist derzeit'
+assert_body 'Benutzerverwaltung'
 assert_body_absent 'href="./stabetb/etb.php"'
 assert_body_absent 'data-estab-session-bar'
 assert_body_absent 'data-estab-logout-form'
@@ -965,8 +973,8 @@ preauth_csrf_token=$(csrf_from_body)
 # complete, CSRF-valid compatibility request must remain anonymous and leave
 # the database untouched.
 assert_body_absent 'name="login_flow" value="new"'
-assert_body 'Neue Konten können hier nicht erstellt werden'
-assert_body 'Administration → Benutzerverwaltung'
+assert_body 'Die Selbstregistrierung ist derzeit geschlossen.'
+assert_body 'Benutzerverwaltung'
 disabled_registration_code=rno001
 assert_account_count 0 "$disabled_registration_code"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
@@ -980,7 +988,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "kennwort2@$login_password_file" \
     --data-urlencode '2teskennwort=Yes' \
     "$base_url/4fach/mainindex.php"
-assert_body 'Neue Konten können hier nicht erstellt werden'
+assert_body 'Neue Konten können hier derzeit nicht selbst angelegt werden'
 assert_status 303 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/vordrucke.php"
 assert_account_count 0 "$disabled_registration_code"
@@ -1206,7 +1214,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "kennwort2@$collision_password_file" \
     --data-urlencode '2teskennwort=Yes' \
     "$base_url/4fach/mainindex.php"
-assert_body 'Neue Konten können hier nicht erstellt werden'
+assert_body 'Neue Konten können hier derzeit nicht selbst angelegt werden'
 assert_status 303 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/vordrucke.php"
 assert_account_count 1 "$test_code"
