@@ -434,6 +434,27 @@ function estab_message_followup_contact_fields(
 }
 
 /**
+ * Retire the obsolete transport-hint inputs at every new-record boundary.
+ *
+ * Existing rows retain these two fields because they are part of historical
+ * message evidence.  A new record, including a draft derived from an older
+ * message, must never inherit or accept either value from browser data.
+ */
+function estab_message_new_record_fields(array $fields): array
+{
+    $fields['08_befhinweis'] = '';
+    $fields['08_befhinwausw'] = '';
+    return $fields;
+}
+
+/** Remove retired hint columns from an update so stored evidence is preserved. */
+function estab_message_existing_record_fields(array $fields): array
+{
+    unset($fields['08_befhinweis'], $fields['08_befhinwausw']);
+    return $fields;
+}
+
+/**
  * Turn a derived reply/forward draft into a genuinely new message record.
  *
  * The source row id is useful while deriving the quoted content, but must not
@@ -442,6 +463,7 @@ function estab_message_followup_contact_fields(
  */
 function estab_message_followup_new_record(array $draft): array
 {
+    $draft = estab_message_new_record_fields($draft);
     $draft['00_lfd'] = '';
     // A reply/forward is not linked to a TBB row until its own transport is
     // documented. Never carry the source message's visible evidence number.
@@ -737,6 +759,7 @@ function estab_message_insert(
     string $table,
     array $fields
 ): int {
+    $fields = estab_message_new_record_fields($fields);
     return estab_incident_with_active_write(
         $connection,
         static function (array $incident) use (
@@ -943,6 +966,7 @@ function estab_message_insert_numbered(
     if (!in_array($direction, ['E', 'A'], true)) {
         throw new InvalidArgumentException('Invalid message direction');
     }
+    $fields = estab_message_new_record_fields($fields);
     estab_message_table($table);
     $lockName = estab_message_counter_lock_name($databaseName, $table);
     $lockStatement = estab_message_execute(
@@ -2148,7 +2172,9 @@ function estab_message_resubmit_returned_outgoing(
     ) {
         throw new InvalidArgumentException('Invalid returned-message author');
     }
-    $fields = estab_message_fields($fields);
+    $fields = estab_message_fields(
+        estab_message_existing_record_fields($fields)
+    );
     if (
         !hash_equals($authorCode, (string) ($fields['14_zeichen'] ?? ''))
         || !hash_equals(

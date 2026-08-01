@@ -320,7 +320,7 @@ Der Nachrichten-Nachweis wird nicht aus dem gespeicherten Kopfstatus
 übernommen. Innerhalb desselben konsistenten Snapshots berechnet eStab für
 jede Ereigniszeile erneut:
 
-- SHA-256 des unveränderten Feldsnapshots,
+- SHA-256 des unveränderten gespeicherten Feldsnapshots,
 - Vorgängerbeziehung innerhalb der jeweiligen Nachrichtenkette,
 - kanonischen Ereignis-Hash,
 - Ereignisanzahl und letzten Hash jedes Nachrichtennachweiskopfs,
@@ -335,12 +335,23 @@ den Nachweis ungültig. Ein vor Einführung dieses Vertrags erzeugter
 wird aber getrennt als **historischer Import – keine Live-Bindung belegbar**
 gezählt; das Dossier behauptet dann nicht „vollständig gültig“.
 
+Der menschenlesbare PDF-Teil zeigt den Feldsnapshot als **gefilterten
+Leseabzug**: nicht mehr verwendete reine Darstellungsfelder werden
+ausgelassen und Funktionsbezeichnungen lesbar normalisiert. Der unmittelbar
+daneben ausgewiesene Snapshot-SHA-256 bezieht sich dagegen bewusst auf das
+unveränderte gespeicherte Original. Dieses Original bleibt im
+maschinenlesbaren Einsatzexport enthalten und ermöglicht dadurch die
+vollständige Hashprüfung; der Leseabzug wird nicht als hashidentisches
+Original ausgegeben.
+
 Auch die einsatzweite Betriebsereigniskette wird aus Sequenz, Objekttyp,
 Objekt-ID, Aktion, Akteur, Ereigniszeit, vollständigem JSON-Detail und
 Vorgänger-Hash neu berechnet. Der berechnete Endhash wird mit Sequenz und Hash
 des persistierten Betriebsnachweiskopfs verglichen. Das Deckblatt zeigt
 Nachrichten-Head-Summenhash und Betriebs-Head-Hash; die Detailsektionen weisen
-sämtliche Einzelköpfe, Hashes, Snapshots und Prüfergebnisse aus.
+sämtliche Einzelköpfe, Hashes, gefilterte Snapshot-Leseabzüge und
+Prüfergebnisse aus. Die unveränderten Originalsnapshots stehen im
+maschinenlesbaren Einsatzexport bereit.
 Zugangsschichtmutationen erscheinen mit Objekttyp `ZUGANGSSCHICHT`.
 Nachrichtenzähler-Reparaturen erscheinen ohne Schichtpflicht mit Objekttyp
 `EINSATZ`; beide bleiben dadurch einsatzgebunden hashverkettet nachweisbar.

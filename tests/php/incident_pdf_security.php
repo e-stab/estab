@@ -28,6 +28,26 @@ $assertThrows = static function (
     $assert(false, $message);
 };
 
+$snapshotDisplay = estab_incident_pdf_message_snapshot_display(
+    '{"14_funktion":"A/W","08_befhinweis":"NICHT-DRUCKEN",'
+        . '"nested":{"08_befhinwausw":"Fu","keep":"sichtbar"}}'
+);
+$assert(
+    str_contains($snapshotDisplay, 'Fernmelder')
+        && str_contains($snapshotDisplay, 'sichtbar')
+        && !str_contains($snapshotDisplay, '08_befhinweis')
+        && !str_contains($snapshotDisplay, '08_befhinwausw')
+        && !str_contains($snapshotDisplay, 'NICHT-DRUCKEN'),
+    'human-readable message evidence exposes retired presentation fields'
+);
+$assert(
+    str_contains(
+        estab_incident_pdf_message_snapshot_display('{invalid'),
+        'SHA-256-Nachweis bleibt erhalten'
+    ),
+    'invalid evidence JSON is emitted raw instead of failing closed'
+);
+
 /** Return the exact implementation text of one dossier method. */
 function incident_pdf_security_method_source(string $method): string
 {
@@ -359,6 +379,8 @@ try {
             'from_status' => 4,
             'to_status' => 8,
             'field_snapshot' => '{"14_funktion":"A/W",'
+                . '"08_befhinweis":"PDF-ALT-HINWEIS-NICHT-DRUCKEN",'
+                . '"08_befhinwausw":"Fu",'
                 . '"terminal_snapshot_sha256":"fixture"}',
             'snapshot_sha256' => str_repeat('c', 64),
             'previous_event_sha256' => null,
@@ -674,11 +696,19 @@ try {
     );
     $assert(str_ends_with($document, "%%EOF\n"), 'PDF trailer missing');
     $assert(strlen($document) > 5000, 'incident PDF is unexpectedly small');
+    $assert(
+        !str_contains($document, '08_befhinweis')
+            && !str_contains($document, '08_befhinwausw')
+            && !str_contains($document, 'PDF-ALT-HINWEIS-NICHT-DRUCKEN'),
+        'incident dossier prints retired message snapshot fields'
+    );
     foreach ([
         'VORL',
         'Nachrichten-Head-Summenhash',
         'Ereigniszeit',
         'Nachrichtenereignis',
+        'gefilterter Leseabzug',
+        'maschinenlesbaren Einsatzexport enthalten',
         'Dienstschicht',
         'S6-Fernmeldeplan Version',
         'Melderauftrag',

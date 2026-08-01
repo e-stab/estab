@@ -657,13 +657,16 @@ Einsatzleitung und Umgebungsvariablen sind dafür keine Ersatzquelle.
 
 Vorrangsstufen werden überall mit denselben fachlichen Bezeichnungen
 angezeigt und verarbeitet: **keine**, **Sofort**, **Blitz** und
-**Staatsnot**. Warteschlangen sortieren ausdrücklich in dieser Reihenfolge
-von Staatsnot nach keine; sie verlassen sich nicht auf die interne
-MariaDB-`SET`-Reihenfolge. Staatsnot darf nur auf ausdrückliche Weisung einer
-hierzu berechtigten Stelle verwendet werden. eStab kann diese externe
-Berechtigung nicht selbst feststellen und weist deshalb im Formular darauf
-hin. Das historische interne Kürzel `eee` bleibt lesbar und bedeutet wie ein
-leerer Wert „keine“, wird bei neuen Vordrucken aber nicht mehr angeboten.
+**Staatsnot**. Sofort, Blitz und Staatsnot werden direkt im Vorrangfeld des
+Nachrichtenvordrucks ausgewählt und dort markiert; eine parallele Auswahl
+außerhalb des Blatts gibt es nicht. Warteschlangen sortieren ausdrücklich in
+dieser Reihenfolge von Staatsnot nach keine; sie verlassen sich nicht auf die
+interne MariaDB-`SET`-Reihenfolge. Staatsnot darf nur auf ausdrückliche
+Weisung einer hierzu berechtigten Stelle verwendet werden. eStab kann diese
+externe Berechtigung nicht selbst feststellen und weist deshalb im Formular
+darauf hin. Das historische interne Kürzel `eee` bleibt lesbar und bedeutet
+wie ein leerer Wert „keine“, wird bei neuen Vordrucken aber nicht mehr
+angeboten.
 Die internen Kürzel bleiben für bestehende Ereignishashes und rohe
 Tabellen-/CSV-Exporte unverändert; Bedienoberfläche und PDF drucken
 ausschließlich die verständlichen Bezeichnungen, bei „keine“ bleibt das

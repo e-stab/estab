@@ -846,7 +846,7 @@ function estab_attachment_origin_draft_fields(): array
         $fields = array_fill_keys([
             '01_medium', '01_datum', '01_zeichen', '05_gegenstelle',
             '06_befweg', '06_befwegausw', '07_durchspruch',
-            '08_befhinweis', '08_befhinwausw', '09_vorrangstufe',
+            '09_vorrangstufe',
             '10_anschrift', '11_rufnummer', '11_gesprnotiz',
             '12_anhang', '12_betreff', '12_inhalt', '12_abfzeit',
             '13_abseinheit', '14_zeichen', '14_funktion',
@@ -880,7 +880,7 @@ function estab_attachment_origin_draft_from_request(
     foreach ([
         '01_medium', '01_datum', '01_zeichen', '05_gegenstelle',
         '06_befweg', '06_befwegausw', '07_durchspruch',
-        '08_befhinweis', '08_befhinwausw', '09_vorrangstufe',
+        '09_vorrangstufe',
         '10_anschrift', '11_rufnummer', '11_gesprnotiz',
         '12_anhang', '12_betreff', '12_inhalt', '12_abfzeit',
         '14_zeichen', '14_funktion', '15_quitdatum',
@@ -1003,8 +1003,8 @@ function estab_attachment_origin_draft_form_data(
             );
         }
         $editable = [
-            '07_durchspruch', '08_befhinweis', '08_befhinwausw',
-            '09_vorrangstufe', '10_anschrift', '11_rufnummer',
+            '07_durchspruch', '09_vorrangstufe', '10_anschrift',
+            '11_rufnummer',
             '11_gesprnotiz', '12_anhang', '12_betreff',
             '12_inhalt', '12_abfzeit',
         ];

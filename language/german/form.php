@@ -21,7 +21,7 @@
      16   =>  "Beförderungsweg:",
      17   =>  "Durchsage",
      18   =>  "Spruch",
-     19   =>  "Beförderungshinweis: Tel.",
+     19   =>  "Nachrichtenform und Vorrang",
      20   =>  "Vorrangstufe",
      21   =>  "Anschrift",
      22   =>  "Gesprächsnotiz",

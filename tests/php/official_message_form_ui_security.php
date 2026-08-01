@@ -31,13 +31,16 @@ final class OfficialMessageFormHelpFixture
     public array $errorselect = [];
 
     /** @var array<int,bool> */
-    public array $feld = [16 => true];
+    public array $feld = [9 => true, 16 => true];
 
     /** @var array<int,array<int,array<string,mixed>>> */
     public array $empfarray = [];
 
     /** @var array<string,array<string,mixed>> */
     public array $attachmentPreviews = [];
+
+    /** @var list<array<string,mixed>> */
+    public array $activeTelecomRoutes = [];
 
     public string $task = 'Stab_schreiben';
 
@@ -152,7 +155,7 @@ $requiredGuideContent = [
     6 => ['Funkrufnamen', 'Gegenstelle'],
     7 => ['Hinweis', 'TK-Mittel'],
     8 => ['DURCHSAGE', 'Spruch (Ausnahme)'],
-    9 => ['Vorrangstufe', 'Sofort', 'Blitz'],
+    9 => ['Vorrangstufe', 'Sofort', 'Blitz', 'Staatsnot'],
     10 => ['Immer ausfüllen', 'Dienststellen-', 'Eigennamen'],
     11 => ['Rufnummer', 'Gesprächsnotizen'],
     12 => ['eigenständig', 'übermittelt', 'aufgenommen', 'notiert'],
@@ -221,6 +224,121 @@ $assert(
     ),
     'A corrected LdF transport medium is not visibly retained'
 );
+
+$fixture->feld[9] = true;
+$fixture->formdata = ['09_vorrangstufe' => 'aaa'];
+ob_start();
+echo '<div class="estab-official-priority">';
+$fixture->official_message_priority();
+echo '</div>';
+$priorityMarkup = (string) ob_get_clean();
+$assert(
+    str_contains(
+        $priorityMarkup,
+        'class="estab-official-priority"'
+    )
+        && str_contains(
+            $priorityMarkup,
+            'id="f_09_vorrangstufe_sofort"'
+        )
+        && str_contains(
+            $priorityMarkup,
+            'id="f_09_vorrangstufe_blitz"'
+        )
+        && str_contains(
+            $priorityMarkup,
+            'id="f_09_vorrangstufe_staatsnot"'
+        )
+        && substr_count(
+            $priorityMarkup,
+            'id="f_09_vorrangstufe_staatsnot"'
+        ) === 1
+        && str_contains(
+            $priorityMarkup,
+            'aria-describedby="estab-form-help-9-description"'
+        )
+        && preg_match(
+            '/id="f_09_vorrangstufe_staatsnot"[^>]*'
+                . 'name="09_vorrangstufe"[^>]*value="aaa"[^>]*checked/',
+            $priorityMarkup
+        ) === 1
+        && str_contains($priorityMarkup, 'Staatsnot')
+        && str_contains($priorityMarkup, 'ausdrückliche Weisung'),
+    'Staatsnot is not selected and explained inside the official priority field'
+);
+$assert(
+    !str_contains($priorityMarkup, 'estab-message-priority-extension')
+        && !str_contains($priorityMarkup, 'estab-message-legacy-transport'),
+    'The official priority field includes an external workflow control'
+);
+
+$fixture->formdata = ['09_vorrangstufe' => 'eee'];
+ob_start();
+$fixture->official_message_priority();
+$historicNoPriorityMarkup = (string) ob_get_clean();
+$assert(
+    preg_match(
+        '/class="estab-official-priority-clear"[^>]*'
+            . 'for="f_09_vorrangstufe_keine".*?'
+            . 'id="f_09_vorrangstufe_keine"[^>]*'
+            . 'name="09_vorrangstufe"[^>]*value="eee"[^>]*checked/s',
+        $historicNoPriorityMarkup
+    ) === 1
+        && str_contains(
+            $historicNoPriorityMarkup,
+            'id="f_09_vorrangstufe_staatsnot"'
+        ),
+    'The compact reset option cannot retain the historic no-priority value'
+);
+
+$fixture->feld[9] = false;
+$fixture->formdata = ['09_vorrangstufe' => 'aaa'];
+ob_start();
+$fixture->official_message_priority();
+$readonlyPriorityMarkup = (string) ob_get_clean();
+$assert(
+    substr_count(
+        $readonlyPriorityMarkup,
+        'name="09_vorrangstufe"'
+    ) === 1
+        && str_contains(
+            $readonlyPriorityMarkup,
+            'name="09_vorrangstufe" value="aaa"'
+        )
+        && preg_match(
+            '/id="f_09_vorrangstufe_staatsnot"[^>]*'
+                . 'value="aaa"[^>]*disabled[^>]*checked/',
+            $readonlyPriorityMarkup
+        ) === 1,
+    'A stored Staatsnot mark is not retained in the read-only official field'
+);
+
+$fixture->feld[9] = true;
+$fixture->feld[6] = false;
+$fixture->formdata = [
+    '06_befweg' => '',
+    '06_befwegausw' => '',
+    '08_befhinweis' => 'Historischer nicht sichtbarer Wert',
+    '08_befhinwausw' => 'Fu',
+    '09_vorrangstufe' => 'aaa',
+];
+$fixture->task = 'Stab_schreiben';
+ob_start();
+$fixture->official_message_workflow_controls();
+$workflowMarkup = (string) ob_get_clean();
+$assert(
+    !str_contains($workflowMarkup, 'estab-message-priority-extension')
+        && !str_contains($workflowMarkup, 'estab-message-legacy-transport')
+        && !str_contains($workflowMarkup, 'Zusätzlicher Beförderungshinweis')
+        && !str_contains($workflowMarkup, 'Vorrangstufe ergänzen')
+        && !str_contains($workflowMarkup, 'Historischer nicht sichtbarer Wert')
+        && !str_contains($workflowMarkup, 'id="f_08_befhinweis"')
+        && !str_contains($workflowMarkup, 'id="f_08_befhinwausw_')
+        && !str_contains($workflowMarkup, 'name="09_vorrangstufe"'),
+    'Workflow additions still duplicate priority or expose a transport hint'
+);
+$fixture->formdata = [];
+$fixture->task = 'Stab_schreiben';
 
 $fixture->formdata = [
     '01_datum' => '311845Jul2026',
@@ -602,11 +720,42 @@ $assert(
         && str_contains($view, "official_message_textarea(\n            '12_inhalt'"),
     'Phone number, subject and message text are not separate official fields'
 );
+$workflowControlsStart = strpos(
+    $view,
+    'function official_message_workflow_controls()'
+);
+$workflowControlsEnd = strpos(
+    $view,
+    'function official_message_help_script()',
+    is_int($workflowControlsStart) ? $workflowControlsStart : 0
+);
+$workflowControlsView = (
+    is_int($workflowControlsStart)
+    && is_int($workflowControlsEnd)
+    && $workflowControlsEnd > $workflowControlsStart
+) ? substr(
+    $view,
+    $workflowControlsStart,
+    $workflowControlsEnd - $workflowControlsStart
+) : '';
 $assert(
-    str_contains($view, 'Zusätzlicher Beförderungshinweis')
-        && str_contains($view, "official_message_text_input(\n                    '08_befhinweis'")
-        && str_contains($view, 'name="08_befhinwausw"'),
-    'The legacy transport-hint feature was lost outside the official grid'
+    $workflowControlsView !== ''
+        && !str_contains(
+            $workflowControlsView,
+            'estab-message-priority-extension'
+        )
+        && !str_contains(
+            $workflowControlsView,
+            'estab-message-legacy-transport'
+        )
+        && !str_contains(
+            $workflowControlsView,
+            'Zusätzlicher Beförderungshinweis'
+        )
+        && !str_contains($workflowControlsView, 'id="f_08_befhinweis"')
+        && !str_contains($workflowControlsView, 'id="f_08_befhinwausw_')
+        && !str_contains($workflowControlsView, 'name="09_vorrangstufe"'),
+    'Workflow additions duplicate the official priority or expose a transport hint'
 );
 $assert(
     str_contains(

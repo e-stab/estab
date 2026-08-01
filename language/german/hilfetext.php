@@ -44,7 +44,7 @@
                                                                Bei einem Nachrichteneingang ist hier die Führungsstelle gemeint.
                                                                Insbesondere kann hier auch eine Sachbearbeiter eingetragen werden.<br><br>
                                                                Bei einem Nachrichtenausgang muss hier möglichst präzise das Ziel der Meldung angegeben werden.
-                                                               Im Feld "Beförderungshinweis" können spezifische Informationen über die Erreichbarkeit eingetragen werden.'),
+                                                               Eine vorhandene Rufnummer wird im dafür vorgesehenen Feld "Ruf Nr." eingetragen.'),
 
       '12_inhalt'      =>  array ('Inhalt',                   '<big><big><b>Meldungstext!</b></big></big><br>
                                                               Text der zu übermittelnden Nachricht ...

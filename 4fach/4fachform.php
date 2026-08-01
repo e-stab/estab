@@ -858,6 +858,10 @@ HTML;
           $this->feld [$i] = false;
         }
     } // switch $rolle
+    // Historical transport-hint values remain evidence, but the retired
+    // fields are never writable in a current message workflow.
+    $this->bg [8] = $this->feldbg [8]["i"];
+    $this->feld [8] = false;
   }
 
   var $empfarray ;

@@ -50,8 +50,19 @@ for pdf_file in "$single_pdf" "$dossier_pdf"; do
     for marker in EINGANG AUSGANG Nachweis-Nr. Fm-Betriebsstelle; do
         grep -Fq "$marker" "$text_file"
     done
-    grep -Fq 'Blitz' "$text_file"
-    if grep -Fq 'bbb' "$text_file"; then
+    for marker in Vorrang Sofort Blitz Staatsnot; do
+        grep -Fq "$marker" "$text_file"
+    done
+    if grep -Fq 'Beförderungshinweis' "$text_file" || \
+        grep -Fq 'Sofort weiterleiten' "$text_file"; then
+        echo "PDF fixture still exposes the obsolete transport hint: $pdf_file" >&2
+        exit 1
+    fi
+    [ "$(grep -Fc 'DFÜ' "$text_file")" -eq 2 ] || {
+        echo "PDF fixture contains an extra transport-medium row: $pdf_file" >&2
+        exit 1
+    }
+    if grep -Eq '(^|[[:space:]])(sss|bbb|aaa)($|[[:space:]])' "$text_file"; then
         echo "PDF fixture exposes a raw priority code: $pdf_file" >&2
         exit 1
     fi
@@ -73,6 +84,154 @@ for pdf_file in "$single_pdf" "$dossier_pdf"; do
         exit 1
     fi
 done
+
+for priority_name in none sofort blitz staatsnot; do
+    priority_pdf=$fixture_dir/message-form-priority-$priority_name.pdf
+    priority_text=$priority_pdf.layout.txt
+    priority_image=$fixture_dir/message-form-priority-$priority_name
+    [ -f "$priority_pdf" ] || {
+        echo "Missing priority PDF render fixture: $priority_pdf" >&2
+        exit 1
+    }
+    pdftotext -layout "$priority_pdf" "$priority_text"
+    for marker in Vorrang Sofort Blitz Staatsnot; do
+        grep -Fq "$marker" "$priority_text"
+    done
+    if grep -Fq 'Beförderungshinweis' "$priority_text" || \
+        grep -Fq 'Sofort weiterleiten' "$priority_text"; then
+        echo "Priority fixture still exposes the obsolete transport hint: $priority_pdf" >&2
+        exit 1
+    fi
+    [ "$(grep -Fc 'DFÜ' "$priority_text")" -eq 2 ] || {
+        echo "Priority fixture contains an extra transport-medium row: $priority_pdf" >&2
+        exit 1
+    }
+    pdftoppm -png -r 144 -f 1 -l 1 -singlefile \
+        -x 300 -y 280 -W 850 -H 150 \
+        "$priority_pdf" "$priority_image"
+done
+
+assert_priority_marks_differ() {
+    first_name=$1
+    second_name=$2
+    first_image=$fixture_dir/message-form-priority-$first_name.png
+    second_image=$fixture_dir/message-form-priority-$second_name.png
+    if cmp -s "$first_image" "$second_image"; then
+        echo "Priority marks are indistinguishable: $first_name/$second_name" >&2
+        exit 1
+    fi
+}
+
+assert_priority_marks_differ none sofort
+assert_priority_marks_differ none blitz
+assert_priority_marks_differ none staatsnot
+assert_priority_marks_differ sofort blitz
+assert_priority_marks_differ sofort staatsnot
+assert_priority_marks_differ blitz staatsnot
+
+priority_box_crop() {
+    priority_name=$1
+    box_name=$2
+    box_x=$3
+    pdftoppm -png -r 144 -f 1 -l 1 -singlefile \
+        -x "$box_x" -y 347 -W 20 -H 20 \
+        "$fixture_dir/message-form-priority-$priority_name.pdf" \
+        "$fixture_dir/priority-box-$priority_name-$box_name"
+}
+
+for priority_name in none sofort blitz staatsnot; do
+    priority_box_crop "$priority_name" sofort 733
+    priority_box_crop "$priority_name" blitz 840
+    priority_box_crop "$priority_name" staatsnot 931
+done
+
+assert_only_expected_priority_mark() {
+    selected_name=$1
+    for box_name in sofort blitz staatsnot; do
+        blank_box=$fixture_dir/priority-box-none-$box_name.png
+        selected_box=$fixture_dir/priority-box-$selected_name-$box_name.png
+        if [ "$box_name" = "$selected_name" ]; then
+            if cmp -s "$blank_box" "$selected_box"; then
+                echo "Expected priority box is not marked: $selected_name" >&2
+                exit 1
+            fi
+        elif ! cmp -s "$blank_box" "$selected_box"; then
+            echo "Unexpected additional priority mark: $selected_name/$box_name" >&2
+            exit 1
+        fi
+    done
+}
+
+assert_only_expected_priority_mark sofort
+assert_only_expected_priority_mark blitz
+assert_only_expected_priority_mark staatsnot
+
+# A selected X may change pixels inside its square, but never in the 3-pixel
+# halo around it. This catches marks that visibly protrude beyond the frame.
+priority_box_halo_crop() {
+    priority_name=$1
+    halo_name=$2
+    crop_x=$3
+    crop_y=$4
+    crop_width=$5
+    crop_height=$6
+    pdftoppm -png -r 144 -f 1 -l 1 -singlefile \
+        -x "$crop_x" -y "$crop_y" -W "$crop_width" -H "$crop_height" \
+        "$fixture_dir/message-form-priority-$priority_name.pdf" \
+        "$fixture_dir/priority-halo-$priority_name-$halo_name"
+}
+
+for halo_name in top bottom left right; do
+    case "$halo_name" in
+        top)    set -- 928 344 26 3 ;;
+        bottom) set -- 928 367 26 3 ;;
+        left)   set -- 928 347 3 20 ;;
+        right)  set -- 951 347 3 20 ;;
+    esac
+    priority_box_halo_crop none "$halo_name" "$1" "$2" "$3" "$4"
+    priority_box_halo_crop staatsnot "$halo_name" "$1" "$2" "$3" "$4"
+    if ! cmp -s \
+        "$fixture_dir/priority-halo-none-$halo_name.png" \
+        "$fixture_dir/priority-halo-staatsnot-$halo_name.png"; then
+        echo "Priority mark protrudes beyond its checkbox: $halo_name" >&2
+        exit 1
+    fi
+done
+
+# The 61/39 divider must cross the complete Nachrichtenform/Vorrang row. A
+# neighbouring strip is intentionally blank at the same y-range; without the
+# divider both crops become byte-identical.
+pdftoppm -png -r 144 -f 1 -l 1 -singlefile \
+    -x 713 -y 318 -W 3 -H 70 \
+    "$fixture_dir/message-form-priority-none.pdf" \
+    "$fixture_dir/priority-divider"
+pdftoppm -png -r 144 -f 1 -l 1 -singlefile \
+    -x 704 -y 318 -W 3 -H 70 \
+    "$fixture_dir/message-form-priority-none.pdf" \
+    "$fixture_dir/priority-divider-reference"
+if cmp -s \
+    "$fixture_dir/priority-divider.png" \
+    "$fixture_dir/priority-divider-reference.png"; then
+    echo "Priority field 61/39 divider is missing" >&2
+    exit 1
+fi
+
+# A former divider at x=55 mm split Nachrichtenform into an empty extra cell.
+# Its old position and a neighbouring blank strip must now render identically.
+pdftoppm -png -r 144 -f 1 -l 1 -singlefile \
+    -x 367 -y 318 -W 4 -H 70 \
+    "$fixture_dir/message-form-priority-none.pdf" \
+    "$fixture_dir/priority-legacy-divider"
+pdftoppm -png -r 144 -f 1 -l 1 -singlefile \
+    -x 356 -y 318 -W 4 -H 70 \
+    "$fixture_dir/message-form-priority-none.pdf" \
+    "$fixture_dir/priority-legacy-divider-reference"
+if ! cmp -s \
+    "$fixture_dir/priority-legacy-divider.png" \
+    "$fixture_dir/priority-legacy-divider-reference.png"; then
+    echo "Legacy divider still splits Nachrichtenform" >&2
+    exit 1
+fi
 
 [ -f "$maximum_header_pdf" ] || {
     echo "Missing maximum-value PDF header fixture: $maximum_header_pdf" >&2
@@ -428,6 +587,12 @@ complete_text=$complete_dossier_pdf.layout.txt
 complete_images=$complete_dossier_pdf.images.txt
 pdfinfo "$complete_dossier_pdf" >"$complete_info"
 pdftotext -layout "$complete_dossier_pdf" "$complete_text"
+if grep -Fq '08_befhinweis' "$complete_text" || \
+    grep -Fq '08_befhinwausw' "$complete_text" || \
+    grep -Fq 'DOSSIER-ALT-HINWEIS-NICHT-DRUCKEN' "$complete_text"; then
+    echo "Complete dossier exposes retired message snapshot fields" >&2
+    exit 1
+fi
 pdfimages -list "$complete_dossier_pdf" >"$complete_images"
 complete_page_count=$(awk '/^Pages:/ { print $2 }' "$complete_info")
 [ "$complete_page_count" -ge 10 ]
@@ -458,7 +623,9 @@ for marker in \
     '2026-07-30 06:00:00' \
     'Nachrichten-Nachweis' \
     'Terminalbindungen' \
-    'Dienstschichten, Besetzungen und Übergaben' \
+    'Dienstorganisation' \
+    'Optionale Zugangsschichten' \
+    'Historischer Dienstbetrieb (Legacy-Nachweis)' \
     'Übergabeanforderungen' \
     'INITIIERT' \
     'STORNIERT' \
@@ -568,9 +735,23 @@ for marker in EINGANG AUSGANG Nachweis-Nr. Fm-Betriebsstelle; do
     grep -Fq "$marker" \
         "$complete_dossier_pdf.page-$message_page.layout.txt"
 done
-grep -Fq 'Blitz' \
-    "$complete_dossier_pdf.page-$message_page.layout.txt"
-if grep -Fq 'bbb' \
+for marker in Vorrang Sofort Blitz Staatsnot; do
+    grep -Fq "$marker" \
+        "$complete_dossier_pdf.page-$message_page.layout.txt"
+done
+if grep -Fq 'Beförderungshinweis' \
+    "$complete_dossier_pdf.page-$message_page.layout.txt" || \
+    grep -Fq 'Sofort weiterleiten' \
+        "$complete_dossier_pdf.page-$message_page.layout.txt"; then
+    echo "Complete dossier still exposes the obsolete transport hint" >&2
+    exit 1
+fi
+[ "$(grep -Fc 'DFÜ' \
+    "$complete_dossier_pdf.page-$message_page.layout.txt")" -eq 2 ] || {
+    echo "Complete dossier contains an extra transport-medium row" >&2
+    exit 1
+}
+if grep -Eq '(^|[[:space:]])(sss|bbb|aaa)($|[[:space:]])' \
     "$complete_dossier_pdf.page-$message_page.layout.txt"; then
     echo "Complete dossier exposes a raw priority code" >&2
     exit 1

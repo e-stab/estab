@@ -137,6 +137,52 @@ $assert(
         && $correction['14_funktion'] === 'S2',
     'staff correction lost editable input or server-owned author identity'
 );
+$assert(
+    $correction['08_befhinweis'] === $authoritative['08_befhinweis']
+        && $correction['08_befhinwausw']
+            === $authoritative['08_befhinwausw'],
+    'staff correction replaced historical transport-hint evidence'
+);
+
+$newRecordFields = estab_message_new_record_fields([
+    '07_durchspruch' => 'D',
+    '08_befhinweis' => 'Manipulierter neuer Hinweis',
+    '08_befhinwausw' => 'Fe',
+]);
+$assert(
+    $newRecordFields['07_durchspruch'] === 'D'
+        && $newRecordFields['08_befhinweis'] === ''
+        && $newRecordFields['08_befhinwausw'] === '',
+    'new-record boundary accepted retired transport-hint browser fields'
+);
+
+$existingRecordFields = estab_message_existing_record_fields([
+    '07_durchspruch' => 'S',
+    '08_befhinweis' => '',
+    '08_befhinwausw' => 'Me',
+]);
+$assert(
+    $existingRecordFields === ['07_durchspruch' => 'S'],
+    'existing-record update could clear or replace transport-hint evidence'
+);
+
+$followup = estab_message_followup_new_record([
+    '00_lfd' => '71',
+    'estab_ttb_lfd' => '19',
+    'msglfd' => '71',
+    '08_befhinweis' => 'Historischer Hinweis',
+    '08_befhinwausw' => 'Fu',
+    '12_inhalt' => 'Übernommener Inhalt',
+]);
+$assert(
+    $followup['00_lfd'] === ''
+        && !array_key_exists('estab_ttb_lfd', $followup)
+        && !array_key_exists('msglfd', $followup)
+        && $followup['08_befhinweis'] === ''
+        && $followup['08_befhinwausw'] === ''
+        && $followup['12_inhalt'] === 'Übernommener Inhalt',
+    'reply or forward draft inherited retired transport-hint values'
+);
 
 $leadOutgoing = estab_rehydrate_authoritative_message_form(
     array_replace($authoritative, ['x00_status' => '1']),
@@ -240,8 +286,14 @@ try {
 }
 
 $controller = file_get_contents($root . '/4fach/data_hndl.php');
-if (!is_string($controller)) {
-    throw new RuntimeException('Could not read message controller');
+$formController = file_get_contents($root . '/4fach/4fachform.php');
+$repository = file_get_contents($root . '/app/message_repository.php');
+if (
+    !is_string($controller)
+    || !is_string($formController)
+    || !is_string($repository)
+) {
+    throw new RuntimeException('Could not read message workflow sources');
 }
 $assert(
     substr_count($controller, 'estab_rehydrate_staff_correction_form (') >= 4
@@ -251,6 +303,37 @@ $assert(
             'estab_render_message_stage_conflict ("Die Fernmelder-Sperre")'
         ),
     'validation/conflict branches do not all use authoritative rehydration'
+);
+$assert(
+    substr_count(
+        $controller,
+        'estab_message_new_record_fields (array ('
+    ) === 3
+        && str_contains(
+            $repository,
+            '$draft = estab_message_new_record_fields($draft);'
+        )
+        && str_contains(
+            $repository,
+            '$fields = estab_message_new_record_fields($fields);'
+        )
+        && substr_count(
+            $repository,
+            '$fields = estab_message_new_record_fields($fields);'
+        ) === 2
+        && str_contains(
+            $repository,
+            'estab_message_existing_record_fields($fields)'
+        ),
+    'not every current new-message path retires legacy transport hints'
+);
+$assert(
+    str_contains(
+        $formController,
+        '$this->bg [8] = $this->feldbg [8]["i"];'
+    )
+        && str_contains($formController, '$this->feld [8] = false;'),
+    'a current message task can still mark legacy transport hints editable'
 );
 $conversationStart = strrpos($controller, 'case "Stab_gesprnoti":');
 $conversationValidation = $conversationStart === false

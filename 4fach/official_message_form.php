@@ -565,7 +565,7 @@ HTML;
             ],
             9 => [
                 'title' => 'Vorrangstufe',
-                'text' => 'Tragen Sie die gewünschte oder bei Eingang erhaltene Vorrangstufe ein: Sofort oder Blitz. Ohne besondere Vorrangstufe bleibt dieses Feld frei.',
+                'text' => 'Tragen Sie die gewünschte oder bei Eingang erhaltene Vorrangstufe ein: Sofort, Blitz oder Staatsnot. Staatsnot darf nur auf ausdrückliche Weisung einer hierzu berechtigten Stelle verwendet werden. Ohne besondere Vorrangstufe bleibt dieses Feld frei.',
             ],
             10 => [
                 'title' => 'Anschrift',
@@ -961,18 +961,55 @@ HTML;
         }
         echo '<span class="estab-official-choice-group '
             . 'estab-official-priority-choices" role="radiogroup" '
-            . 'aria-label="Vorrangstufe">';
-        foreach ([
-            ['value' => 'sss', 'label' => 'Sofort', 'id' => 'sofort'],
-            ['value' => 'bbb', 'label' => 'Blitz', 'id' => 'blitz'],
-        ] as $option) {
-            echo '<label for="f_09_vorrangstufe_' . $option['id'] . '">'
+            . 'aria-label="Vorrangstufe" '
+            . 'aria-describedby="estab-form-help-9-description">';
+        $options = [
+            [
+                'value' => $current === 'eee' ? 'eee' : '',
+                'label' => 'keine',
+                'id' => 'keine',
+                'warning' => '',
+                'clear' => true,
+            ],
+        ];
+        foreach (estab_message_priority_options() as $option) {
+            if ($option['value'] === '') {
+                continue;
+            }
+            $options[] = [
+                'value' => $option['value'],
+                'label' => $option['label'],
+                'id' => match ($option['value']) {
+                    'sss' => 'sofort',
+                    'bbb' => 'blitz',
+                    'aaa' => 'staatsnot',
+                    default => $option['value'],
+                },
+                'warning' => $option['warning'],
+                'clear' => false,
+            ];
+        }
+        foreach ($options as $option) {
+            $isNone = in_array($current, ['', 'eee'], true)
+                && $option['clear'];
+            $isSelected = $isNone
+                || (!$option['clear'] && $current === $option['value']);
+            echo '<label'
+                . ($option['clear']
+                    ? ' class="estab-official-priority-clear"'
+                    : '')
+                . ' for="f_09_vorrangstufe_' . $option['id'] . '">'
                 . '<input id="f_09_vorrangstufe_' . $option['id'] . '" '
                 . 'class="estab-official-box-choice" type="radio" '
                 . ($editable ? 'name="09_vorrangstufe" ' : '')
                 . 'value="' . $option['value'] . '"'
                 . ($editable ? '' : ' disabled')
-                . ($current === $option['value'] ? ' checked' : '')
+                . ($isSelected ? ' checked' : '')
+                . ($option['warning'] !== ''
+                    ? ' aria-describedby="estab-form-help-9-description"'
+                        . ' title="'
+                        . estab_message_html($option['warning']) . '"'
+                    : '')
                 . '><span>' . $option['label'] . '</span></label>';
         }
         echo '</span>';
@@ -1507,14 +1544,14 @@ HTML;
 
     function official_message_workflow_controls(): void
     {
-        $hasLegacyTransportHint = (bool)$this->feld[8]
-            || (string)$this->formdata['08_befhinweis'] !== ''
-            || (string)$this->formdata['08_befhinwausw'] !== '';
         $hasTransport = in_array(
             $this->task,
             ['LdF-Eingang', 'LdF-Ausgang', 'FM-Ausgang'],
             true
-        ) || (bool)$this->feld[6] || $hasLegacyTransportHint;
+        ) || (bool)($this->feld[6] ?? false);
+        if (!$hasTransport) {
+            return;
+        }
         echo '<section class="estab-message-workflow-panel" '
             . 'aria-labelledby="estab-message-workflow-title">';
         echo '<div><span class="estab-section-kicker">Digitale Bearbeitung</span>'
@@ -1581,7 +1618,7 @@ HTML;
                     . 'freigegebener S6-Fernmeldeplan verfügbar.</p>';
             }
             echo '</fieldset>';
-        } elseif ((bool)$this->feld[6]) {
+        } elseif ((bool)($this->feld[6] ?? false)) {
             echo '<fieldset><legend>Beförderungsweg</legend>';
             $this->official_message_text_input(
                 '06_befweg',
@@ -1613,85 +1650,6 @@ HTML;
                 . 'name="transport_rueckgabegrund" maxlength="2000" rows="3">'
                 . $this->safe_message_value('transport_rueckgabegrund')
                 . '</textarea></fieldset>';
-        }
-        if ($hasLegacyTransportHint) {
-            $hintMedium = (string)$this->formdata['08_befhinwausw'];
-            $hintMedia = [
-                'Fe' => 'Telefon',
-                'Fu' => 'Funk',
-                'Me' => 'Kurier/Melder',
-                'Fax' => 'Telefax',
-                '@' => 'DFÜ',
-            ];
-            echo '<fieldset class="estab-message-legacy-transport">'
-                . '<legend>Zusätzlicher Beförderungshinweis</legend>'
-                . '<small>Bestandsfunktion für ergänzende Angaben. Das '
-                . 'gewünschte TK-Mittel im amtlichen Vordruck bleibt davon '
-                . 'getrennt.</small>';
-            if ((bool)$this->feld[8]) {
-                echo '<label for="f_08_befhinweis">Hinweis, zum Beispiel '
-                    . 'Rufnummer oder Erreichbarkeit</label>';
-                $this->official_message_text_input(
-                    '08_befhinweis',
-                    true,
-                    40,
-                    'Zusätzlicher Beförderungshinweis'
-                );
-                echo '<div class="estab-message-workflow-choice-row" '
-                    . 'role="radiogroup" '
-                    . 'aria-label="TK-Mittel des zusätzlichen Hinweises">';
-                foreach ($hintMedia as $value => $label) {
-                    $id = $value === '@'
-                        ? 'dfue'
-                        : strtolower($value);
-                    echo '<label for="f_08_befhinwausw_' . $id . '">'
-                        . '<input id="f_08_befhinwausw_' . $id . '" '
-                        . 'name="08_befhinwausw" value="'
-                        . estab_message_html($value) . '" type="radio"'
-                        . ($hintMedium === $value
-                            ? ' checked="checked"'
-                            : '')
-                        . '> ' . estab_message_html($label) . '</label>';
-                }
-                echo '</div>';
-            } else {
-                echo '<input type="hidden" name="08_befhinweis" value="'
-                    . $this->safe_message_value('08_befhinweis') . '">'
-                    . '<input type="hidden" name="08_befhinwausw" value="'
-                    . $this->safe_message_value('08_befhinwausw') . '">';
-                $parts = array_values(array_filter([
-                    $hintMedia[$hintMedium] ?? $hintMedium,
-                    (string)$this->formdata['08_befhinweis'],
-                ], static fn(string $part): bool => trim($part) !== ''));
-                echo '<p class="estab-message-workflow-readonly">'
-                    . estab_message_html(implode(' · ', $parts)) . '</p>';
-            }
-            echo '</fieldset>';
-        } else {
-            echo '<input type="hidden" name="08_befhinweis" value="">'
-                . '<input type="hidden" name="08_befhinwausw" value="">';
-        }
-        if ((bool)$this->feld[9]) {
-            $priority = (string)$this->formdata['09_vorrangstufe'];
-            $noneValue = $priority === 'eee' ? 'eee' : '';
-            echo '<fieldset class="estab-message-priority-extension">'
-                . '<legend>Vorrangstufe ergänzen oder zurücksetzen</legend>'
-                . '<label><input type="radio" name="09_vorrangstufe" value="'
-                . $noneValue . '"'
-                . (in_array($priority, ['', 'eee'], true) ? ' checked' : '')
-                . '> keine besondere Vorrangstufe</label>'
-                . '<label><input type="radio" name="09_vorrangstufe" '
-                . 'value="aaa"'
-                . ($priority === 'aaa' ? ' checked' : '')
-                . '> Staatsnot</label>'
-                . '<small>' . estab_message_html(
-                    estab_message_priority_warning('aaa')
-                ) . '</small></fieldset>';
-        }
-        if (!$hasTransport && !(bool)$this->feld[9]) {
-            echo '<p class="estab-message-workflow-readonly">'
-                . 'Für diesen Bearbeitungsschritt sind keine zusätzlichen '
-                . 'Ablaufangaben erforderlich.</p>';
         }
         echo '</div></section>';
     }

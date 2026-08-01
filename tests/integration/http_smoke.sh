@@ -1582,7 +1582,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --form '07_durchspruch=S' \
     --form "08_befhinweis=$aw_transport_marker" \
     --form '08_befhinwausw=Fax' \
-    --form '09_vorrangstufe=sss' \
+    --form '09_vorrangstufe=aaa' \
     --form "10_anschrift=$aw_address_marker" \
     --form "11_rufnummer=$aw_phone_marker" \
     --form '11_gesprnotiz=' \
@@ -1605,6 +1605,11 @@ assert_body 'Direkt &amp; &lt;img src=x onerror=alert(1)&gt;'
 assert_body_absent '<img src=x onerror=alert(1)>'
 assert_body "$aw_content_marker"
 assert_body "$aw_note_marker"
+assert_body_absent "$aw_transport_marker"
+assert_body_absent 'name="08_befhinweis"'
+assert_body_absent 'name="08_befhinwausw"'
+assert_body_regex 'id="f_09_vorrangstufe_staatsnot"[^>]*name="09_vorrangstufe"[^>]*value="aaa"[^>]*checked' \
+    'Staatsnot inside official priority field after direct attachment upload'
 assert_body 'showpic.php?file='
 assert_body 'Im Browser ansehen'
 assert_body_absent 'Liste der verfügbaren Dateien'
@@ -1646,7 +1651,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode '07_durchspruch=S' \
     --data-urlencode "08_befhinweis=$aw_transport_marker" \
     --data-urlencode '08_befhinwausw=Fax' \
-    --data-urlencode '09_vorrangstufe=sss' \
+    --data-urlencode '09_vorrangstufe=aaa' \
     --data-urlencode "10_anschrift=$aw_address_marker" \
     --data-urlencode "11_rufnummer=$aw_phone_marker" \
     --data-urlencode '11_gesprnotiz=' \
@@ -1691,7 +1696,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode '07_durchspruch=S' \
     --data-urlencode "08_befhinweis=$aw_transport_marker" \
     --data-urlencode '08_befhinwausw=Fax' \
-    --data-urlencode '09_vorrangstufe=sss' \
+    --data-urlencode '09_vorrangstufe=aaa' \
     --data-urlencode "10_anschrift=$aw_address_marker" \
     --data-urlencode "11_rufnummer=$aw_phone_marker" \
     --data-urlencode '11_gesprnotiz=' \
@@ -1730,7 +1735,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode '07_durchspruch=S' \
     --data-urlencode "08_befhinweis=$aw_transport_marker" \
     --data-urlencode '08_befhinwausw=Fax' \
-    --data-urlencode '09_vorrangstufe=sss' \
+    --data-urlencode '09_vorrangstufe=aaa' \
     --data-urlencode "10_anschrift=$aw_address_marker" \
     --data-urlencode "11_rufnummer=$aw_phone_marker" \
     --data-urlencode '11_gesprnotiz=' \
@@ -2019,10 +2024,12 @@ assert_body ">$legacy_registration_code</strong>"
 assert_body "name=\"05_gegenstelle\" value=\"$aw_counterpart_marker\""
 assert_body_regex 'name="07_durchspruch" value="S" type="radio"[^>]*checked="checked"' \
     'preserved A/W message type'
-assert_body "name=\"08_befhinweis\" value=\"$aw_transport_marker\""
-assert_body_regex 'name="08_befhinwausw" value="Fax" type="radio"[^>]*checked="checked"' \
-    'preserved A/W transport selection'
-assert_body 'name="09_vorrangstufe" value="sss"'
+assert_body_absent "$aw_transport_marker"
+assert_body_absent 'name="08_befhinweis"'
+assert_body_absent 'name="08_befhinwausw"'
+assert_body_absent 'estab-message-priority-extension'
+assert_body_regex 'id="f_09_vorrangstufe_staatsnot"[^>]*name="09_vorrangstufe"[^>]*value="aaa"[^>]*checked' \
+    'preserved in-form A/W Staatsnot priority'
 assert_body_regex "name=\"10_anschrift\">$aw_address_marker</textarea>" \
     'preserved A/W address'
 assert_body "name=\"11_rufnummer\" value=\"$aw_phone_marker\""

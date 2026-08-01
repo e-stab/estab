@@ -81,4 +81,52 @@ if (str_contains($document, '/Subtype /Image')) {
     throw new RuntimeException('Message form contains an unexpected image');
 }
 
+// The Nachrichtenform/Vorrang band has exactly the official 61/39 divider.
+// Keep this vector-level proof in addition to the rendered pixel comparison:
+// it catches a visually easy-to-miss legacy divider inside Nachrichtenform.
+if (!str_contains($document, '357.17 683.15 m 357.17 646.30 l S')) {
+    throw new RuntimeException('Official 61/39 priority divider is missing');
+}
+if (str_contains($document, '184.25 683.15 m 184.25 646.30 l S')) {
+    throw new RuntimeException('Legacy divider still splits Nachrichtenform');
+}
+
+// Prove that the selected Staatsnot X is fully contained in its square. The
+// line half-width is included so a visually protruding stroke fails as well.
+$checkboxMatched = preg_match(
+    '/\(Staatsnot\) Tj ET Q\s+'
+        . '(?:[0-9.]+ w\s+[0-9.]+ G\s+)'
+        . '([0-9.]+) ([0-9.]+) ([0-9.]+) -([0-9.]+) re S\s+'
+        . '([0-9.]+) w\s+[0-9.]+ [0-9.]+ [0-9.]+ RG\s+'
+        . '([0-9.]+) ([0-9.]+) m ([0-9.]+) ([0-9.]+) l S\s+'
+        . '([0-9.]+) w\s+[0-9.]+ [0-9.]+ [0-9.]+ RG\s+'
+        . '([0-9.]+) ([0-9.]+) m ([0-9.]+) ([0-9.]+) l S/',
+    $document,
+    $checkbox
+);
+if ($checkboxMatched !== 1) {
+    throw new RuntimeException('Selected Staatsnot checkbox geometry missing');
+}
+$left = (float) $checkbox[1];
+$top = (float) $checkbox[2];
+$right = $left + (float) $checkbox[3];
+$bottom = $top - (float) $checkbox[4];
+$halfStroke = max((float) $checkbox[5], (float) $checkbox[10]) / 2;
+$coordinates = [
+    [(float) $checkbox[6], (float) $checkbox[7]],
+    [(float) $checkbox[8], (float) $checkbox[9]],
+    [(float) $checkbox[11], (float) $checkbox[12]],
+    [(float) $checkbox[13], (float) $checkbox[14]],
+];
+foreach ($coordinates as [$x, $y]) {
+    if (
+        $x - $halfStroke < $left
+        || $x + $halfStroke > $right
+        || $y - $halfStroke < $bottom
+        || $y + $halfStroke > $top
+    ) {
+        throw new RuntimeException('Staatsnot X protrudes from its checkbox');
+    }
+}
+
 echo 'PDF smoke test: OK (' . strlen($document) . " bytes)\n";

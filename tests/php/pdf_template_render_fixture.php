@@ -29,6 +29,23 @@ $single->SetCompression(false);
 $single->SetTitle('eStab message-form render fixture');
 $singleBytes = $single->render_message_form_document();
 
+$priorityDocuments = [];
+foreach ([
+    'none' => '',
+    'sofort' => 'sss',
+    'blitz' => 'bbb',
+    'staatsnot' => 'aaa',
+] as $priorityName => $priorityValue) {
+    $priorityPdf = new vordruckaspdf(
+        array_replace($message, ['09_vorrangstufe' => $priorityValue]),
+        $matrix
+    );
+    $priorityPdf->SetCompression(false);
+    $priorityDocuments[
+        'message-form-priority-' . $priorityName . '.pdf'
+    ] = $priorityPdf->render_message_form_document();
+}
+
 $incident = [
     'einsatz_id' => 1,
     'kennung' => 'RENDER-001',
@@ -40,6 +57,7 @@ $incident = [
     'fuehrungsstellenname' => 'Führungsstelle Musterstadt',
     'einsatzleitung' => 'Leitung Rendernachweis',
     'beschreibung' => 'Repräsentatives DV-1-101-Einsatzdossier',
+    'estab_permission_mode' => 'STRICT',
     'estab_status' => 'open',
     'estab_closed_at' => null,
     'estab_closed_by' => null,
@@ -304,7 +322,10 @@ $completeDossier->addMessageEvidence(
         'from_status' => 4,
         'to_status' => 8,
         'field_snapshot' =>
-            '{"direction":"E","terminal_snapshot_sha256":"fixture"}',
+            '{"direction":"E",'
+                . '"08_befhinweis":"DOSSIER-ALT-HINWEIS-NICHT-DRUCKEN",'
+                . '"08_befhinwausw":"Fu",'
+                . '"terminal_snapshot_sha256":"fixture"}',
         'snapshot_sha256' => str_repeat('c', 64),
         'previous_event_sha256' => null,
         'event_sha256' => str_repeat('d', 64),
@@ -627,7 +648,7 @@ $maximumHeaderDossier->addCover(
 );
 $maximumHeaderDossierBytes = $maximumHeaderDossier->Output('', 'S');
 
-foreach ([
+foreach (array_merge([
     'message-form.pdf' => $singleBytes,
     'dossier-message-form.pdf' => $dossierBytes,
     'long-message-form.pdf' => $longSingleBytes,
@@ -639,7 +660,7 @@ foreach ([
     'tbb-form-closed.pdf' => $closedTbbFormBytes,
     'dossier-all.pdf' => $completeDossierBytes,
     'dossier-maximum-header.pdf' => $maximumHeaderDossierBytes,
-] as $filename => $bytes) {
+], $priorityDocuments) as $filename => $bytes) {
     if (
         !str_starts_with($bytes, '%PDF-')
         || !str_ends_with($bytes, "%%EOF\n")

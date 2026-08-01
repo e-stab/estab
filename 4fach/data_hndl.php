@@ -534,8 +534,6 @@ function estab_rehydrate_authoritative_message_form (
   $editableFields = match ($task) {
     "Stab_korrigieren" => array (
       "07_durchspruch",
-      "08_befhinweis",
-      "08_befhinwausw",
       "09_vorrangstufe",
       "10_anschrift",
       "11_rufnummer",
@@ -989,14 +987,12 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
         $conf_4f_tbl ["nachrichten"],
         "E",
         Nachweisung === "getrennt",
-        array (
+        estab_message_new_record_fields (array (
           "01_medium" => $data ["01_medium"],
           "01_datum" => konv_taktime_datetime ($data ["01_datum"]),
           "01_zeichen" => $data ["01_zeichen"],
           "05_gegenstelle" => $data ["05_gegenstelle"],
           "07_durchspruch" => $data ["07_durchspruch"],
-          "08_befhinweis" => $data ["08_befhinweis"],
-          "08_befhinwausw" => $data ["08_befhinwausw"],
           "09_vorrangstufe" => $data ["09_vorrangstufe"],
           "10_anschrift" => $data ["10_anschrift"],
           "11_rufnummer" => $data ["11_rufnummer"],
@@ -1013,7 +1009,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
           "16_empf" => $data ["16_empf"],
           "x00_status" => 1,
           "x01_abschluss" => "f",
-        ),
+        )),
         $conf_4f_tbl ["anhang"],
         array (
           "event_type" => "created",
@@ -1081,13 +1077,11 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
          $conf_4f_tbl ["nachrichten"],
          "A",
          Nachweisung === "getrennt",
-         array (
+         estab_message_new_record_fields (array (
            // The acceptance mark belongs to LdF, not to the author.
            "02_zeit" => null,
            "02_zeichen" => "",
            "07_durchspruch" => $data ["07_durchspruch"],
-           "08_befhinweis" => $data ["08_befhinweis"],
-           "08_befhinwausw" => $data ["08_befhinwausw"],
            "09_vorrangstufe" => $data ["09_vorrangstufe"],
            "10_anschrift" => $data ["10_anschrift"],
            "11_rufnummer" => $data ["11_rufnummer"],
@@ -1104,7 +1098,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
            // before it can enter the LdF/FmZt disposition chain.
            "x00_status" => 4,
            "x01_abschluss" => "f",
-         ),
+         )),
          $conf_4f_tbl ["anhang"],
          array (
            "event_type" => "created",
@@ -1174,8 +1168,6 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
           $sessionFunction,
           array (
           "07_durchspruch" => $data ["07_durchspruch"],
-          "08_befhinweis" => $data ["08_befhinweis"],
-          "08_befhinwausw" => $data ["08_befhinwausw"],
           "09_vorrangstufe" => $data ["09_vorrangstufe"],
           "10_anschrift" => $data ["10_anschrift"],
           "11_rufnummer" => $data ["11_rufnummer"],
@@ -1369,13 +1361,11 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
          $conf_4f_tbl ["nachrichten"],
          "E",
          Nachweisung === "getrennt",
-         array (
+         estab_message_new_record_fields (array (
            "01_medium" => $data ["01_medium"],
            "01_datum" => konv_taktime_datetime ($data ["01_datum"]),
            "01_zeichen" => $data ["01_zeichen"],
            "07_durchspruch" => $data ["07_durchspruch"],
-           "08_befhinweis" => $data ["08_befhinweis"],
-           "08_befhinwausw" => $data ["08_befhinwausw"],
            "09_vorrangstufe" => $data ["09_vorrangstufe"],
            "10_anschrift" => $data ["10_anschrift"],
            "11_rufnummer" => $data ["11_rufnummer"],
@@ -1393,7 +1383,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
            "x01_abschluss" => "t",
            "x02_sperre" => "f",
            "x03_sperruser" => "",
-         ),
+         )),
          $conf_4f_tbl ["anhang"],
          array (
            "event_type" => "conversation_note_created",

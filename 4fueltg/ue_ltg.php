@@ -1437,57 +1437,42 @@ var_dump ($this->formdata); echo "<br>";
     else {
       $param = "";}
 
-    echo "<td style=\"width: 126px; background-color: ".$this->bg[7].";\">\n";
+    echo "<td style=\"width: 501px; background-color: ".$this->bg[7].";\">\n";
     if ($this->formdata["07_durchspruch"]=="D") {$sel = "checked=\"checked\"";} else {$sel = "";}
-    echo "<input name=\"07_durchspruch\" value=\"D\" type=\"radio\" ".$param.$sel.">DURCHSAGE<br>\n";
+    echo "<input class=\"estab-official-box-choice\" name=\"07_durchspruch\" value=\"D\" type=\"radio\" ".$param.$sel.">DURCHSAGE<br>\n";
     if ($this->formdata["07_durchspruch"]=="S") {$sel = "checked=\"checked\"";} else {$sel = "";}
-    echo "<input name=\"07_durchspruch\" value=\"S\" type=\"radio\" ".$param.$sel.">Spruch</td>\n";
+    echo "<input class=\"estab-official-box-choice\" name=\"07_durchspruch\" value=\"S\" type=\"radio\" ".$param.$sel.">Spruch</td>\n";
 
-    /****************************************************************************\
-    // Zeile, Spalte 5,2   128    8   BefÃ¶rderungshinweis
-    \****************************************************************************/
-
-    echo "<td style=\"text-align: left; width: 140px; background-color: ".$this->bg[8].";\">Bef&ouml;rderungshinweis:<br>Tel.</td>\n";
-
-    /****************************************************************************\
-    // Zeile, Spalte 5,3   128    8   BefÃ¶rderungshinweis
-    08_befhinweis
-    \****************************************************************************/
-    echo "<td style=\"width: 294px; background-color: ".$this->bg[8].";\">\n";
-    if  (!$this->feld[8]) {
-      echo "<div style=\"text-align: left;\"><b>";
-      echo $this->safe_message_value ("08_befhinweis");
-      echo "</b></div>";
-    } else {
-      echo "<input maxlength=\"40\" size=\"40\" name=\"08_befhinweis\" value=\"".$this->safe_message_value ("08_befhinweis")."\">";
+    echo "<td style=\"width: 320px; background-color: ".$this->bg[9].";\">";
+    echo "Vorrangstufe<br>\n";
+    echo "<span role=\"radiogroup\" aria-label=\"Vorrangstufe, schreibgeschützt\">";
+    foreach (array (
+      "sss" => "Sofort",
+      "bbb" => "Blitz",
+      "aaa" => "Staatsnot",
+    ) as $priorityValue => $priorityLabel) {
+      $sel = $this->formdata["09_vorrangstufe"] === $priorityValue
+        ? " checked=\"checked\""
+        : "";
+      $accessibleLabel = $priorityLabel === "Staatsnot"
+        ? $priorityLabel.", nur auf ausdrückliche Weisung einer berechtigten Stelle"
+        : $priorityLabel;
+      echo "<label><input class=\"estab-official-box-choice\" " .
+        "type=\"radio\" name=\"09_vorrangstufe\" value=\"".
+        estab_message_html ($priorityValue)."\" disabled aria-label=\"".
+        estab_message_html ($accessibleLabel)."\"".$sel.">".
+        estab_message_html ($priorityLabel)."</label>\n";
     }
-    echo "</td>\n";
-    /****************************************************************************\
-    // Zeile, Spalte 5,4   128    8   BefÃ¶rderungshinweis
-    08_befhinwausw
-    \****************************************************************************/
-
-
-    if  (!$this->feld[8]) {
-      $param = " disabled ";
-      // Radio Button die deaktiviert sind liefern keinen Wert zurck !!!
-      echo "<input type=\"hidden\" name=\"08_befhinwausw\" value=\"".$this->safe_message_value ("08_befhinwausw")."\">\n";
+    echo "</span>";
+    if (
+      !in_array (
+        $this->formdata["09_vorrangstufe"],
+        array ("", "eee", "sss", "bbb", "aaa"),
+        true
+      )
+    ) {
+      echo "<strong role=\"status\">Vorrangstufe nicht darstellbar.</strong>";
     }
-    else {
-      $param = "";
-    }
-    echo "<td style=\"width: 225px; background-color: ".$this->bg[8].";\">\n";
-
-    if ($this->formdata["08_befhinwausw"]=="Fe") {$sel = "checked=\"checked\"";} else {$sel = "";}
-    echo "<input name=\"08_befhinwausw\" value=\"Fe\" type=\"radio\" ".$param.$sel.">Fe";
-    if ($this->formdata["08_befhinwausw"]=="Fu") {$sel = "checked=\"checked\"";} else {$sel = "";}
-    echo "<input name=\"08_befhinwausw\" value=\"Fu\" type=\"radio\" ".$param.$sel.">Fu";
-    if ($this->formdata["08_befhinwausw"]=="Me") {$sel = "checked=\"checked\"";} else {$sel = "";}
-    echo "<input name=\"08_befhinwausw\" value=\"Me\" type=\"radio\" ".$param.$sel.">Me";
-    if ($this->formdata["08_befhinwausw"]=="Fax") {$sel = "checked=\"checked\"";} else {$sel = "";}
-    echo "<input name=\"08_befhinwausw\" value=\"Fax\" type=\"radio\" ".$param.$sel.">Fax";
-    if ($this->formdata["08_befhinwausw"]=="FS") {$sel = "checked=\"checked\"";} else {$sel = "";}
-    echo "<input name=\"08_befhinwausw\" value=\"FS\" type=\"radio\" ".$param.$sel.">FS";
     echo "</td>\n";
 
     echo "</tr>\n";
@@ -1496,8 +1481,6 @@ var_dump ($this->formdata); echo "<br>";
     echo "</td>\n";
     echo "</tr>\n";
 
-echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*********************************************-->";
-
     echo "<tr>\n";
     echo "<td style=\"text-align: left; background-color: ".$this->rbl_bg_color."\" align=\"left\" valign=\"top\">\n";
     echo "<table style=\"text-align: left; background-color: ".$this->rbl_bg_color."; width: 819px; height: 100px;\" border=\"1\" cellpadding=\"1\" cellspacing=\"0\">\n";
@@ -1505,38 +1488,10 @@ echo "<!-- BIS HIER BIN ICH GEKOMMEN !!! *************+++++++++++++*************
     echo "<tr>\n";
 
     /****************************************************************************\
-    // Zeile, Spalte 6,1   Vorrangstufe     256   9   VORRANGSTUFE !!!
-    09_vorrangstufe;
-    \****************************************************************************/
-    echo "<td style=\"width: 90px; background-color: ".$this->bg[9].";\">Vorrangstufe<br>\n";
-
-    if (((($this->formdata["09_vorrangstufe"]) != "" )) or (!$this->feld[9])) {
-      echo "<div style=\"text-align: center; font-size:24px; font-weight:900;\"><big><big><b>";
-      echo estab_message_html (
-        estab_message_priority_label ($this->formdata["09_vorrangstufe"])
-      );
-      echo "</big></big></b></div>";
-    } else {
-      echo "<select ".$param." name=\"09_vorrangstufe\" aria-describedby=\"estab-priority-warning\">\n";
-      foreach (estab_message_priority_options () as $priorityOption) {
-        $selected = $this->formdata["09_vorrangstufe"] === $priorityOption["value"]
-          ? " selected"
-          : "";
-        echo "<option value=\"".estab_message_html ($priorityOption["value"])."\"".$selected.">".
-             estab_message_html ($priorityOption["label"])."</option>\n";
-      }
-      echo "</select>\n";
-      echo "<small id=\"estab-priority-warning\">".
-           estab_message_html (estab_message_priority_warning ("aaa")).
-           "</small>\n";
-    }
-    echo "</td>\n";
-
-    /****************************************************************************\
     // Zeile, Spalte 6,2   Anschrift      512 10  Anschrift
     10_anschrift
     \****************************************************************************/
-    echo "<td style=\"width: 600px; background-color: ".$this->bg[10].";\">Anschrift<br>\n";
+    echo "<td style=\"width: 710px; background-color: ".$this->bg[10].";\">Anschrift<br>\n";
 
     if (!$this->feld[10]) {
       echo "<div style=\"text-align: center; font-size:24px; font-weight:900;\">";

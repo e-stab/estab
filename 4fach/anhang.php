@@ -1299,7 +1299,7 @@ require_once ("./db_operation.php");  // Datenbank operationen
       "01_medium", "01_datum", "01_zeichen", "02_zeichen",
       "03_zeichen", "04_richtung", "04_nummer", "05_gegenstelle",
       "06_befweg", "06_befwegausw", "07_durchspruch",
-      "08_befhinweis", "08_befhinwausw", "09_vorrangstufe",
+      "09_vorrangstufe",
       "10_anschrift", "11_rufnummer", "11_gesprnotiz", "12_anhang",
       "12_betreff", "12_inhalt", "12_abfzeit", "13_abseinheit",
       "14_zeichen", "14_funktion", "15_quitdatum", "15_quitzeichen",
@@ -1376,8 +1376,6 @@ require_once ("./db_operation.php");  // Datenbank operationen
       // return reason are rehydrated from the freshly authorised row.
       $editableCorrectionFields = array (
         "07_durchspruch",
-        "08_befhinweis",
-        "08_befhinwausw",
         "09_vorrangstufe",
         "10_anschrift",
         "11_rufnummer",

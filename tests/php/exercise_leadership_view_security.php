@@ -145,6 +145,29 @@ $assert(
     'message detail view still presents the technical message number as TBB evidence'
 );
 $assert(
+    str_contains(
+        $messageFormSource,
+        'role=\"radiogroup\" aria-label=\"Vorrangstufe, schreibgeschützt\"'
+    )
+        && substr_count(
+            $messageFormSource,
+            'class=\"estab-official-box-choice\"'
+        ) >= 3
+        && str_contains(
+            $messageFormSource,
+            'name=\"09_vorrangstufe\" value=\"'
+        )
+        && str_contains(
+            $messageFormSource,
+            'nur auf ausdrückliche Weisung einer berechtigten Stelle'
+        )
+        && str_contains(
+            $messageFormSource,
+            'Vorrangstufe nicht darstellbar.'
+        ),
+    'message detail priority is not a square, labelled, read-only group'
+);
+$assert(
     substr_count($navigationSource, '<form action=') === 1
         && substr_count($navigationSource, '</form>') === 1
         && substr_count($displayControlsSource, '<form action=') === 1

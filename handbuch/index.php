@@ -383,8 +383,12 @@ $handbookUpdated = '1. August 2026';
             <li><strong>Pflichtangaben:</strong> Betreff und Nachrichtentext,
               Anschrift, Absender/Abfassungsangaben sowie Zeichen und Funktion
               werden abhängig vom Arbeitsschritt geprüft.</li>
-            <li><strong>Vorrang:</strong> ohne Vorrang, Sofort, Blitz und die
-              betriebliche Ergänzung Staatsnot werden eindeutig angezeigt.</li>
+            <li><strong>Vorrang:</strong> Sofort, Blitz und Staatsnot werden
+              direkt im Vorrangfeld des Nachrichtenvordrucks ausgewählt und
+              dort eindeutig markiert. „Keine“ setzt das Feld zurück und
+              bedeutet, dass kein besonderer Vorrang gilt. Staatsnot darf nur
+              auf ausdrückliche Weisung einer hierzu berechtigten Stelle
+              verwendet werden.</li>
             <li><strong>Zeitangaben:</strong> Fachlich editierbare Zeiten können
               leer bleiben, wenn der aktuelle Zeitpunkt gelten soll. Die
               Sichterzeit entsteht ausschließlich beim erfolgreichen

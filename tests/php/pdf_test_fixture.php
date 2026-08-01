@@ -31,7 +31,7 @@ function estab_pdf_test_message_fixture(): array
         '07_durchspruch' => 'D',
         '08_befhinweis' => 'Sofort weiterleiten',
         '08_befhinwausw' => 'sofort',
-        '09_vorrangstufe' => 'bbb',
+        '09_vorrangstufe' => 'aaa',
         '10_anschrift' => 'Integrationsempfänger',
         '11_rufnummer' => '0711 123456',
         '11_gesprnotiz' => 't',

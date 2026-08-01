@@ -1041,6 +1041,43 @@ $assert(
         && $correctionContext['record_id'] === 73,
     'correction attachment origin does not use the authorised server record'
 );
+$correctionDraft = estab_attachment_origin_draft_from_request(
+    [
+        '07_durchspruch' => 'D',
+        '08_befhinweis' => 'Manipulierter Entwurfshinweis',
+        '08_befhinwausw' => 'Fe',
+        'recipient_matrix_revision' => $recipientMatrixRevision,
+    ],
+    $staffIdentity,
+    $correctionContext
+);
+$allowedDraftFields = estab_attachment_origin_draft_fields();
+$assert(
+    !array_key_exists('08_befhinweis', $correctionDraft)
+        && !array_key_exists('08_befhinwausw', $correctionDraft)
+        && !isset($allowedDraftFields['08_befhinweis'])
+        && !isset($allowedDraftFields['08_befhinwausw']),
+    'attachment draft retained retired transport-hint browser values'
+);
+$correctionFormData = estab_attachment_origin_draft_form_data(
+    $correctionDraft,
+    $correctionContext,
+    array_replace($correctionMessage, [
+        '07_durchspruch' => 'S',
+        '08_befhinweis' => 'Historischer Datenbankhinweis',
+        '08_befhinwausw' => 'Fu',
+    ]),
+    $recipientMatrix,
+    true,
+    'LdF'
+);
+$assert(
+    $correctionFormData['07_durchspruch'] === 'D'
+        && $correctionFormData['08_befhinweis']
+            === 'Historischer Datenbankhinweis'
+        && $correctionFormData['08_befhinwausw'] === 'Fu',
+    'attachment correction return replaced freshly authorised historical hint evidence'
+);
 foreach (['FM-Eingang', 'FM-Eingang_Anhang'] as $incomingTask) {
     $incomingContext = estab_attachment_origin_context_create(
         $telecommunicationsIdentity,
@@ -2868,6 +2905,13 @@ $assert(
         $legacyRestoreSource
     ) === 1,
     'legacy attachment return does not stop stale matrix drafts with an explicit 409 response'
+);
+$assert(
+    !str_contains($draftFormDataSource, "'08_befhinweis'")
+        && !str_contains($draftFormDataSource, "'08_befhinwausw'")
+        && !str_contains($legacyRestoreSource, '"08_befhinweis"')
+        && !str_contains($legacyRestoreSource, '"08_befhinwausw"'),
+    'central or legacy attachment return still treats retired hints as draft-editable'
 );
 $assert(
     str_contains($controllerSource, '($formdata ["10_anschrift"] ?? "") === ""')

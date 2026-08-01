@@ -63,6 +63,51 @@ function estab_incident_pdf_command_post_label(array $incident): string
     }
 }
 
+/**
+ * Render the immutable message snapshot without retired presentation fields.
+ *
+ * The stored JSON and its hashes remain byte-for-byte unchanged. This filter
+ * applies only to the human-readable dossier view.
+ */
+function estab_incident_pdf_message_snapshot_display(string $json): string
+{
+    if ($json === '') {
+        return '';
+    }
+    try {
+        $snapshot = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+        $filter = static function (mixed $value) use (&$filter): mixed {
+            if (!is_array($value)) {
+                return $value;
+            }
+            $filtered = [];
+            foreach ($value as $key => $child) {
+                if (
+                    is_string($key)
+                    && in_array(
+                        $key,
+                        ['08_befhinweis', '08_befhinwausw'],
+                        true
+                    )
+                ) {
+                    continue;
+                }
+                $filtered[$key] = $filter($child);
+            }
+            return $filtered;
+        };
+        $displayJson = json_encode(
+            $filter($snapshot),
+            JSON_THROW_ON_ERROR
+                | JSON_UNESCAPED_SLASHES
+                | JSON_UNESCAPED_UNICODE
+        );
+    } catch (JsonException) {
+        return 'Feldsnapshot nicht darstellbar; SHA-256-Nachweis bleibt erhalten.';
+    }
+    return estab_function_display_json($displayJson);
+}
+
 /** Build the auditable ETB/TBB selection printed on the dossier cover. */
 function estab_incident_pdf_logbook_scope_label(array $scope): string
 {
@@ -2198,6 +2243,14 @@ final class EstabIncidentPdf extends vordruckaspdf
         }
 
         $this->heading('Unveränderliche Nachrichtenereignisse', 2);
+        $this->paragraph(
+            'Die JSON-Anzeige ist ein gefilterter Leseabzug: nicht mehr '
+                . 'verwendete Darstellungsfelder werden ausgelassen und '
+                . 'Funktionsbezeichnungen lesbar normalisiert. Der '
+                . 'Snapshot-SHA-256 bindet weiterhin das unveränderte '
+                . 'gespeicherte Original; dieses ist im maschinenlesbaren '
+                . 'Einsatzexport enthalten.'
+        );
         if ($events === []) {
             $this->paragraph(
                 'Für diesen Einsatz sind keine Nachrichtenereignisse vorhanden.'
@@ -2227,7 +2280,7 @@ final class EstabIncidentPdf extends vordruckaspdf
                 'Akteursfunktion' => 'actor_function',
                 'Status vorher' => 'from_status',
                 'Status nachher' => 'to_status',
-                'Feldsnapshot (JSON)' => 'field_snapshot',
+                'Feldsnapshot (gefilterter Leseabzug, JSON)' => 'field_snapshot',
                 'Snapshot-SHA-256' => 'snapshot_sha256',
                 'Vorgänger-Event-Hash' => 'previous_event_sha256',
                 'Event-SHA-256' => 'event_sha256',
@@ -2236,7 +2289,9 @@ final class EstabIncidentPdf extends vordruckaspdf
                 if ($field === 'actor_function') {
                     $value = estab_function_display_name((string) $value);
                 } elseif ($field === 'field_snapshot') {
-                    $value = estab_function_display_json((string) $value);
+                    $value = estab_incident_pdf_message_snapshot_display(
+                        (string) $value
+                    );
                 }
                 $this->definition($label, $value);
             }

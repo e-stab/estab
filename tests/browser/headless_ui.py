@@ -1745,6 +1745,11 @@ class BrowserAcceptance:
                     content.name = "12_inhalt";
                     content.value = "BROWSER_EXPIRED_POST_MUST_NOT_RUN";
                     form.append(content);
+                    const csrf = document.createElement("input");
+                    csrf.name = "csrf_token";
+                    csrf.value = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                        + "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+                    form.append(csrf);
                     document.body.append(form);
                     setTimeout(() => form.submit(), 0);
                     return true;
@@ -6114,7 +6119,7 @@ class BrowserAcceptance:
     def _assert_dirty_navigation_guard(self) -> None:
         field_selector = (
             'form[name="4fach"][data-estab-dirty-guard] '
-            'input#f_08_befhinweis'
+            'input#f_12_betreff'
         )
         dirty_value = "Browser-Dirty-Guard-Test"
         self.cdp.click(
@@ -6143,7 +6148,7 @@ class BrowserAcceptance:
             "mainframe",
             field_selector,
             dirty_value,
-            "ungespeicherter Beförderungshinweis",
+            "ungespeicherter Betreff",
         )
         self.cdp.wait_for(
             _frame_expression(
@@ -6264,6 +6269,36 @@ class BrowserAcceptance:
                 const compositionValue = doc.querySelector(
                     ".estab-official-composition-value"
                 );
+                const typePriority = doc.querySelector(
+                    ".estab-official-type-priority"
+                );
+                const typeField = doc.querySelector(
+                    ".estab-official-type"
+                );
+                const priorityField = doc.querySelector(
+                    ".estab-official-priority"
+                );
+                const priorityGroup = priorityField?.querySelector(
+                    ".estab-official-priority-choices"
+                );
+                const priorityDefinitions = [
+                    ["sofort", "sss", "Sofort"],
+                    ["blitz", "bbb", "Blitz"],
+                    ["staatsnot", "aaa", "Staatsnot"]
+                ];
+                const priorityControls = priorityDefinitions.map(
+                    ([id]) => doc.querySelector(
+                        "#f_09_vorrangstufe_" + id
+                    )
+                );
+                const priorityLabels = priorityControls.map(control =>
+                    control?.closest("label") || null
+                );
+                const priorityClear = doc.querySelector(
+                    "#f_09_vorrangstufe_keine"
+                );
+                const priorityClearLabel = priorityClear?.closest("label")
+                    || null;
                 const extraDistribution = doc.querySelector(
                     ".estab-message-distribution-extras"
                 );
@@ -6325,6 +6360,55 @@ class BrowserAcceptance:
                 const compositionRect = composition?.getBoundingClientRect();
                 const compositionValueRect =
                     compositionValue?.getBoundingClientRect();
+                const priorityRect = priorityField?.getBoundingClientRect();
+                const priorityHelpRect = priorityField?.querySelector(
+                    ".estab-official-help-anchor"
+                )?.getBoundingClientRect();
+                const visiblePriorityLabels = [
+                    priorityClearLabel,
+                    ...priorityLabels
+                ].filter(Boolean);
+                const priorityLabelRects = visiblePriorityLabels.map(
+                    label => label.getBoundingClientRect()
+                );
+                const priorityBoxesSquare = [
+                    priorityClear,
+                    ...priorityControls
+                ].every(control => {
+                    if (!control) return false;
+                    const style = target.getComputedStyle(control);
+                    const rect = control.getBoundingClientRect();
+                    return control.type === "radio"
+                        && style.appearance === "none"
+                        && style.borderRadius === "0px"
+                        && Math.abs(rect.width - rect.height) <= 0.5
+                        && rect.width >= 17
+                        && rect.width <= 18.5;
+                });
+                const staatsnotDescriptionId = priorityControls[2]
+                    ?.getAttribute("aria-describedby") || "";
+                const staatsnotDescription = staatsnotDescriptionId
+                    ? doc.getElementById(staatsnotDescriptionId)
+                    : null;
+                const priorityGeometry = Boolean(
+                    priorityRect
+                    && priorityLabelRects.length === 4
+                    && priorityLabelRects.every(rect =>
+                        rect.left >= priorityRect.left - 1
+                        && rect.right <= priorityRect.right + 1
+                        && rect.top >= priorityRect.top - 1
+                        && rect.bottom <= priorityRect.bottom + 1
+                        && (
+                            !priorityHelpRect
+                            || rect.right <= priorityHelpRect.left - 1
+                        )
+                    )
+                    && priorityLabelRects.every(
+                        (rect, index) => index === 0
+                            || rect.left
+                                >= priorityLabelRects[index - 1].right - 1
+                    )
+                );
                 const stampGeometry = stamps.length === 3
                     && stamps.every(stamp => {
                         const dateCell = stamp.querySelector(
@@ -6507,8 +6591,60 @@ class BrowserAcceptance:
                                     compositionRect.right
                                     - compositionValueRect.right
                                 ) / compositionRect.width
-                                : 0
+                                : 0,
+                        type: ratio(typeField, typePriority),
+                        priority: ratio(priorityField, typePriority)
                     },
+                    priorityLabels: priorityLabels.map(label =>
+                        label?.textContent.replace(/\\s+/g, " ").trim() || ""
+                    ),
+                    priorityValues: priorityControls.map(
+                        control => control?.value || ""
+                    ),
+                    priorityInsideOfficialField: Boolean(
+                        form
+                        && priorityField
+                        && priorityGroup
+                        && form.contains(priorityField)
+                        && priorityControls.every(control =>
+                            Boolean(
+                                control
+                                && priorityField.contains(control)
+                                && control.name === "09_vorrangstufe"
+                            )
+                        )
+                        && priorityClear
+                        && priorityField.contains(priorityClear)
+                        && priorityClear.name === "09_vorrangstufe"
+                        && priorityClear.checked
+                        && Array.from(
+                            doc.querySelectorAll(
+                                '[name="09_vorrangstufe"]'
+                            )
+                        ).every(control => priorityField.contains(control))
+                    ),
+                    staatsnotWarning: priorityControls[2]?.getAttribute(
+                        "title"
+                    ) || "",
+                    staatsnotDescription:
+                        staatsnotDescription?.textContent || "",
+                    priorityBoxesSquare,
+                    priorityGeometry,
+                    noExternalPriority: !doc.querySelector(
+                        ".estab-message-priority-extension"
+                    ),
+                    noVisibleTransportHint: Boolean(
+                        !doc.querySelector(
+                            ".estab-message-legacy-transport, "
+                            + "#f_08_befhinweis, "
+                            + '[id^="f_08_befhinwausw_"]'
+                        )
+                        && !Array.from(
+                            doc.querySelectorAll("label, legend")
+                        ).some(element => element.textContent.includes(
+                            "Zusätzlicher Beförderungshinweis"
+                        ))
+                    ),
                     addressPhoneNonOverlap: Boolean(
                         addressRect && phoneRect
                         && Math.abs(addressRect.left - phoneRect.left) <= 1
@@ -6703,6 +6839,23 @@ class BrowserAcceptance:
             and abs(
                 reference_proportions.get("compositionBlank", 0) - 0.393
             ) <= 0.005
+            and abs(reference_proportions.get("type", 0) - 0.61) <= 0.005
+            and abs(
+                reference_proportions.get("priority", 0) - 0.39
+            ) <= 0.005
+            and desktop_state.get("priorityLabels")
+                == ["Sofort", "Blitz", "Staatsnot"]
+            and desktop_state.get("priorityValues")
+                == ["sss", "bbb", "aaa"]
+            and desktop_state.get("priorityInsideOfficialField") is True
+            and "ausdrückliche Weisung"
+                in desktop_state.get("staatsnotWarning", "")
+            and "ausdrückliche Weisung"
+                in desktop_state.get("staatsnotDescription", "")
+            and desktop_state.get("priorityBoxesSquare") is True
+            and desktop_state.get("priorityGeometry") is True
+            and desktop_state.get("noExternalPriority") is True
+            and desktop_state.get("noVisibleTransportHint") is True
             and desktop_state.get("addressPhoneNonOverlap") is True
             and desktop_state.get("alignedGridEdges") is True
             and desktop_state.get("stampGeometry") is True
@@ -6765,6 +6918,62 @@ class BrowserAcceptance:
 
         self.cdp.click(
             "mainframe",
+            "#f_09_vorrangstufe_staatsnot",
+            "Staatsnot im amtlichen Vorrangfeld",
+        )
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                const field = doc.querySelector(
+                    ".estab-official-priority"
+                );
+                const staatsnot = doc.querySelector(
+                    "#f_09_vorrangstufe_staatsnot"
+                );
+                return Boolean(
+                    field
+                    && staatsnot
+                    && field.contains(staatsnot)
+                    && staatsnot.checked
+                    && staatsnot.value === "aaa"
+                    && doc.querySelectorAll(
+                        '.estab-official-priority '
+                        + 'input[name="09_vorrangstufe"]:checked'
+                    ).length === 1
+                );
+                """,
+            ),
+            "Staatsnot wurde nicht im amtlichen Vorrangfeld angekreuzt",
+        )
+        self.cdp.click(
+            "mainframe",
+            "#f_09_vorrangstufe_keine",
+            "Vorrang im amtlichen Feld zurücksetzen",
+        )
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                const clear = doc.querySelector(
+                    "#f_09_vorrangstufe_keine"
+                );
+                return Boolean(
+                    clear
+                    && clear.checked
+                    && clear.value === ""
+                    && doc.querySelectorAll(
+                        '.estab-official-priority '
+                        + 'input[name="09_vorrangstufe"]:checked'
+                    ).length === 1
+                );
+                """,
+            ),
+            "Vorrang ließ sich nicht im amtlichen Feld zurücksetzen",
+        )
+
+        self.cdp.click(
+            "mainframe",
             '[data-estab-form-help="1"]',
             "erste Ausfüllhilfe des Nachrichtenvordrucks",
         )
@@ -6804,8 +7013,8 @@ class BrowserAcceptance:
         )
         self.cdp.click(
             "mainframe",
-            "#f_12_betreff",
-            "Betrefffeld außerhalb der geöffneten Ausfüllhilfe",
+            "#f_07_durchspruch_durchsage",
+            "Nachrichtenform außerhalb der geöffneten Ausfüllhilfe",
         )
         self._truth(
             self.cdp.evaluate(
@@ -6825,7 +7034,7 @@ class BrowserAcceptance:
                         && dialog.hidden
                         && button.getAttribute("aria-expanded") === "false"
                         && doc.activeElement === doc.querySelector(
-                            "#f_12_betreff"
+                            "#f_07_durchspruch_durchsage"
                         )
                     );
                     """,
@@ -6963,10 +7172,32 @@ class BrowserAcceptance:
                 "screenHeight": 1000,
             },
         )
+        self.cdp.click(
+            "mainframe",
+            "#f_09_vorrangstufe_staatsnot",
+            "Staatsnot für den echten Drucknachweis",
+        )
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                const staatsnot = doc.querySelector(
+                    "#f_09_vorrangstufe_staatsnot"
+                );
+                return Boolean(staatsnot && staatsnot.checked);
+                """,
+            ),
+            "Staatsnot ist vor dem Drucknachweis nicht markiert",
+        )
         print_document = self.cdp.evaluate(
             _frame_expression(
                 "mainframe",
                 """
+                doc.querySelectorAll(
+                    '.estab-official-priority input[type="radio"]'
+                ).forEach(control => {
+                    control.toggleAttribute("checked", control.checked);
+                });
                 return "<!doctype html>" + doc.documentElement.outerHTML;
                 """,
             )
@@ -7031,6 +7262,12 @@ class BrowserAcceptance:
                 const sheetRect = sheet.getBoundingClientRect();
                 const pseudo = getComputedStyle(scroll, "::before");
                 const contentBlue = getComputedStyle(content).backgroundColor;
+                const priorityClear = document.querySelector(
+                    ".estab-official-priority-clear"
+                );
+                const staatsnot = document.querySelector(
+                    "#f_09_vorrangstufe_staatsnot"
+                );
                 if (
                     sheetStyle.zoom !== "0.78"
                     || contentBlue !== "rgb(162, 217, 247)"
@@ -7046,6 +7283,10 @@ class BrowserAcceptance:
                     breakInside: sheetStyle.breakInside,
                     pseudoContent: pseudo.content,
                     pseudoDisplay: pseudo.display,
+                    priorityClearDisplay: priorityClear
+                        ? getComputedStyle(priorityClear).display
+                        : "missing",
+                    staatsnotChecked: Boolean(staatsnot?.checked),
                     blue: contentBlue,
                     zones: document.querySelectorAll(
                         "[data-estab-form-zone]"
@@ -7062,6 +7303,8 @@ class BrowserAcceptance:
             and print_state.get("breakInside") in {"avoid", "avoid-page"}
             and print_state.get("pseudoContent") in {"none", "normal"}
             and print_state.get("pseudoDisplay") == "none"
+            and print_state.get("priorityClearDisplay") == "none"
+            and print_state.get("staatsnotChecked") is True
             and 695 <= print_state.get("width", 0) <= 705
             and 0 < print_state.get("height", 9999) <= 1069.7,
             "Das echte Drucklayout passt nicht fragmentierungsfrei in den "

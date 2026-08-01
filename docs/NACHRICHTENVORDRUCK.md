@@ -36,9 +36,9 @@ Der Vordruck besteht auch am Bildschirm aus den drei amtlichen Bereichen:
 
 1. **Fm-Zentrale** mit tatsächlichem TK-Mittel, Aufnahme-, Annahme- und
    Beförderungsvermerk, TTB-Nummer sowie Gegenstellenrufname,
-2. **Nachricht** mit gewünschtem TK-Mittel, Nachrichtenform, Vorrang,
-   Anschrift, Rufnummer, Gesprächsnotiz, Betreff, Nachrichtentext, Absender,
-   Abfassungszeit und Verfasserangaben,
+2. **Nachricht** mit gewünschtem TK-Mittel, Nachrichtenform, dem Vorrangfeld
+   für Sofort, Blitz und Staatsnot, Anschrift, Rufnummer, Gesprächsnotiz,
+   Betreff, Nachrichtentext, Absender, Abfassungszeit und Verfasserangaben,
 3. **Sichter** mit Quittung, Verteiler und Vermerken.
 
 Alle drei Hauptgitter beginnen an derselben amtlichen Stegkante. Aufnahme-,
@@ -123,7 +123,7 @@ zugehörigen Feld eine mit **i** gekennzeichnete Hilfe:
 | 6 | Rufname der Gegenstelle / Spruchkopf |
 | 7 | gewünschtes TK-Mittel |
 | 8 | DURCHSAGE / Spruch |
-| 9 | Sofort / Blitz |
+| 9 | Sofort / Blitz / Staatsnot |
 | 10 | Anschrift |
 | 11 | Rufnummer |
 | 12 | Gesprächsnotiz |
@@ -212,12 +212,15 @@ Konto unmittelbar vor der Ausgabe erneut. Die im Link enthaltene
 Nachrichten-ID ist nur ein Selektor und keine Berechtigung; fremde oder
 unverknüpfte Archivdateien werden dadurch auch in **Locker** nicht sichtbar.
 
-Der ältere zusätzliche Beförderungshinweis bleibt als Bestandsfunktion
-erhalten. Da er nicht zum amtlichen Raster von 2022 gehört, erscheint er
-klar getrennt unter **Betriebliche Ergänzungen**. Dort liegen auch die
-S6-Wegauswahl, Beförderungsbestätigung, ein möglicher Rückgabegrund und die
-systemseitig unterstützte Vorrangstufe Staatsnot. Diese Angaben verändern das
-amtliche Blatt nicht.
+Die Vorrangstufe wird ausschließlich im dafür vorgesehenen Feld des
+Nachrichtenvordrucks ausgewählt. **Staatsnot** steht dort unmittelbar neben
+**Sofort** und **Blitz** und wird bei gespeicherten Nachrichten in genau
+diesem Feld markiert. Der zugehörige Warnhinweis macht deutlich, dass
+Staatsnot nur auf ausdrückliche Weisung einer hierzu berechtigten Stelle
+verwendet werden darf. Eine zweite Vorrangauswahl außerhalb des Blatts gibt
+es nicht. Betriebliche Ablaufangaben wie S6-Wegauswahl,
+Beförderungsbestätigung und ein möglicher Rückgabegrund bleiben davon
+getrennt und verändern das amtliche Blatt nicht.
 
 Die optionale Archivauswahl für bereits hochgeladene Anlagen hält
 ungespeicherte Formulardaten pro Browser-Tab in einem servergebundenen
@@ -433,7 +436,8 @@ Verteiler als Daten erhalten bleiben.
 - eindeutige und zugängliche Dialogbeziehungen,
 - Beschriftungsreihenfolge und Dreiteilung des amtlichen Rasters,
 - getrennte Rufnummer-, Betreff- und Textfelder,
-- den erhaltenen zusätzlichen Beförderungshinweis,
+- die drei Vorrangstufen Sofort, Blitz und Staatsnot im einzigen amtlichen
+  Vorrangfeld sowie das Fehlen paralleler Vorrang- oder Erreichbarkeitsfelder,
 - servergebundene Sichteridentität,
 - exakten Blauton, feste Rasterbreite, den durchgängigen linken Steg,
   getrennte Stempelwerte, den amtlichen Verteiler mit Leiter und S1–S6,

@@ -381,6 +381,8 @@ class vordruckaspdf extends PDF_Ellipse {
     $this->point [30] = array (  25,  59);
     $this->point [31] = array (  34,  59);
     $this->point [57] = array (  55,  59);
+    $this->point [58] = array ( 116,  46);
+    $this->point [59] = array ( 116,  59);
     $this->point [32] = array ( 135,  59);
     $this->point [33] = array ( 190,  59);
 
@@ -551,6 +553,37 @@ class vordruckaspdf extends PDF_Ellipse {
     if ( $select ){ $this->draw_rb_select ($x, $y, $this->color_bl); }
   }
 
+  function draw_checkbox ( $x, $y, $select, $size, $text ){
+    $this->draw_text ($x+2.4, $y, 0, $this->color_sw, $size, "n", "o", "l", $text);
+    $center_x = $x + $this->border ['left'];
+    $center_y = $y + $this->border ['top'];
+    $this->SetLineWidth (0.5);
+    $this->SetDrawColor ($this->color_sw['r'],$this->color_sw['g'],$this->color_sw['b']);
+    $this->Rect ($center_x-1.5, $center_y-1.5, 3, 3);
+    if ( $select ){
+      // Das Kreuz bleibt einschliesslich seiner Strichstaerke innerhalb des
+      // 3-mm-Kaestchens. draw_rb_select() ist fuer die groesseren runden
+      // Auswahlmarken gedacht und wuerde hier ueber den Rahmen hinausragen.
+      $mark_radius = 1.1;
+      $this->draw_line (
+        $center_x-$mark_radius,
+        $center_y+$mark_radius,
+        $center_x+$mark_radius,
+        $center_y-$mark_radius,
+        0.5,
+        $this->color_bl
+      );
+      $this->draw_line (
+        $center_x+$mark_radius,
+        $center_y+$mark_radius,
+        $center_x-$mark_radius,
+        $center_y-$mark_radius,
+        0.5,
+        $this->color_bl
+      );
+    }
+  }
+
   function draw_mediumselect ($x, $y, $selectvalue){
     $aa1 = array ("Fu","Fe","Me","Fax","DFÜ");
     for ($o=0; $o<= 4; $o++){
@@ -716,12 +749,14 @@ class vordruckaspdf extends PDF_Ellipse {
     $this->draw_linebypoint (  13, 17, $this->fline00, $this->color_sw);
     $this->draw_linebypoint (  18, 21, $this->fline00, $this->color_sw);
     $this->draw_linebypoint (  24, 25, $this->fline00, $this->color_sw);
-    $this->draw_linebypoint (  20, 36, $this->fline00, $this->color_sw);
-    $this->draw_linebypoint (  23, 30, $this->fline00, $this->color_sw);
-    $this->draw_linebypoint (  31, 35, $this->fline00, $this->color_sw);
+    $this->draw_linebypoint (  20, 27, $this->fline00, $this->color_sw);
+    $this->draw_linebypoint (  32, 36, $this->fline00, $this->color_sw);
+    // Nachrichtenform und Vorrang teilen sich wie im Bildschirmvordruck eine
+    // Zeile im amtlichen 61/39-Schnitt. Die frueheren Zusatzfelder werden
+    // nicht mehr gezeichnet.
+    $this->draw_linebypoint (  58, 59, $this->fline00, $this->color_sw);
     $this->draw_linebypoint (  29, 33, $this->fline00, $this->color_sw);
     $this->draw_linebypoint (  34, 37, $this->fline00, $this->color_sw);
-    $this->draw_linebypoint (  26, 57, $this->fline00, $this->color_sw);
 
     // Der Betreff belegt die amtliche Inhalts-Kopfzeile. Der eigentliche
     // Nachrichtentext beginnt darunter und bleibt über Folgeseiten identisch
@@ -777,11 +812,9 @@ class vordruckaspdf extends PDF_Ellipse {
 
     $this->draw_text ( 2,  40,  0, $this->color_sw, $this->fontsize00, "n", "o", "l", "Beförderungsweg" );
 
-    $this->draw_text (  26,  52,  0, $this->color_sw, $this->fontsize00, "n", "m", "l", "Beförderungshinweis" );
-
-    $this->draw_text (   2,  61,  0, $this->color_sw, $this->fontsize00, "n", "o", "l", "Vorrang" );
-    $this->draw_text (  35,  61,  0, $this->color_sw, $this->fontsize00, "n", "o", "l", "Anschrift" );
-    $this->draw_text (  35,  69,  0, $this->color_sw, $this->fontsize00, "n", "o", "l", "Ruf Nr." );
+    $this->draw_text ( 118,  48,  0, $this->color_sw, $this->fontsize00, "n", "o", "l", "Vorrang" );
+    $this->draw_text (   2,  61,  0, $this->color_sw, $this->fontsize00, "n", "o", "l", "Anschrift" );
+    $this->draw_text (   2,  69,  0, $this->color_sw, $this->fontsize00, "n", "o", "l", "Ruf Nr." );
     $this->draw_text ( 137,  61,  0, $this->color_sw, $this->fontsize00, "n", "o", "l", "Gesprächsnotiz" );
 
     $this->draw_text ( $this->point [34][0]+2,
@@ -964,14 +997,30 @@ class vordruckaspdf extends PDF_Ellipse {
     $this->draw_mediumselect (  3,  11, $this->db_dataset ["01_medium"]);
       // Beförderungsweg
     $this->draw_mediumselect (138,  42, $this->db_dataset ["06_befwegausw"]);
-     // Beförderungshinweis
-    $this->draw_mediumselect (138,  52, $this->db_dataset ["08_befhinwausw"]);
 
     if ( $this->db_dataset ["07_durchspruch"] == "D"){ $select_D = true;}else{$select_D = false;}
-    $this->draw_radiobutton  (  3,  49, $select_D, $this->fontsize00, "DURCHSAGE" );
+    $this->draw_checkbox  (  3,  49, $select_D, $this->fontsize00, "DURCHSAGE" );
 
     if ( $this->db_dataset ["07_durchspruch"] == "S"){ $select_S = true;}else{$select_S = false;}
-    $this->draw_radiobutton  (  3,  53, $select_S, $this->fontsize00, "SPRUCH" );
+    $this->draw_checkbox  (  3,  53, $select_S, $this->fontsize00, "SPRUCH" );
+
+    // Alle Vorrangstufen stehen direkt im Nachrichtenvordruck. Der gespeicherte
+    // Datenbankcode wurde in set_message_form_data() bereits in die sichtbare
+    // Langform uebersetzt; genau die gewaehlte Option wird angekreuzt.
+    $priorities = array (
+      array ("x" => 121, "label" => "Sofort"),
+      array ("x" => 140, "label" => "Blitz"),
+      array ("x" => 156, "label" => "Staatsnot")
+    );
+    foreach ($priorities as $priority) {
+      $this->draw_checkbox (
+        $priority ["x"],
+        53,
+        $this->db_dataset ["09_vorrangstufe"] == $priority ["label"],
+        $this->fontsize00,
+        $priority ["label"]
+      );
+    }
 
     if ( $this->db_dataset ["11_gesprnotiz"] == "t"){ $select = true;}else{$select = false;}
     $this->draw_radiobutton  ( 164, 66, $select, $this->fontsize00, "" );
@@ -1019,31 +1068,19 @@ class vordruckaspdf extends PDF_Ellipse {
                        $this->color_bl,
                        $this->fontsize01, "b", "o", "l",
                        $this->db_dataset ["06_befweg"] );
-      // Beförderungshinweis
-    $this->draw_text ( $this->point[26][0]+2,
-                       $this->point[26][1]+4,  0,
-                       $this->color_bl,
-                       $this->fontsize01, "b", "o", "l",
-                       $this->db_dataset ["08_befhinweis"] );
-      // Vorrandstufe
-    $this->draw_text ( $this->point[29][0]+16,
-                       $this->point[29][1]+10,  0,
-                       $this->color_bl,
-                       $this->fontsize35, "b", "o", "z",
-                       $this->db_dataset ["09_vorrangstufe"] );
       // Anschrift und Rufnummer stehen wie im amtlichen Vordruck gemeinsam
       // neben dem Gesprächsnotiz-Feld.
     $this->draw_fitted_textfield (
-      $this->point[31][0]+23,
-      $this->point[31][1]+1,
+      $this->point[29][0]+23,
+      $this->point[29][1]+1,
       $this->point[36][0],
       $this->color_bl,
       $this->fontsize01,
       $this->db_dataset ["10_anschrift"]
     );
     $this->draw_fitted_textfield (
-      $this->point[31][0]+23,
-      $this->point[31][1]+9,
+      $this->point[29][0]+23,
+      $this->point[29][1]+9,
       $this->point[36][0],
       $this->color_bl,
       $this->fontsize01,
