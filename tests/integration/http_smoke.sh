@@ -928,6 +928,7 @@ assert_status 401 --request POST \
 assert_status 410 "$base_url/4fach/upload.php"
 assert_status 410 "$base_url/4fach/upload/upload.php"
 assert_status 401 "$base_url/4fadm/admin.php"
+assert_status 401 "$base_url/4fadm/password_policy.php"
 
 # Credentials must come from POST. The root menu may safely preselect the
 # display-only account flow with GET so both user journeys are direct.
@@ -3198,6 +3199,7 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
     assert_body 'data-estab-admin-dashboard'
     assert_body 'data-estab-admin-card="incidents"'
     assert_body 'data-estab-admin-card="users"'
+    assert_body 'data-estab-admin-card="password-policy"'
     assert_body 'data-estab-admin-card="command-post"'
     assert_body 'data-estab-admin-card="matrix"'
     assert_body 'data-estab-admin-card="counter"'
@@ -3221,6 +3223,8 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
         "$base_url/4fadm/incidents.php"
     assert_status 401 \
         "$base_url/4fadm/users.php"
+    assert_status 401 \
+        "$base_url/4fadm/password_policy.php"
     assert_status 401 \
         "$base_url/4fadm/fuehrungsstelle.php"
     assert_status 401 \
@@ -3258,6 +3262,22 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
         "$base_url/4fadm/users.php"
     assert_body 'data-estab-user-admin'
     assert_body 'Benutzerverwaltung'
+    assert_body 'Kennwortrichtlinie konfigurieren'
+    assert_body 'estab-password-policy-requirements'
+
+    assert_status 200 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        "$base_url/4fadm/password_policy.php"
+    assert_body 'data-estab-password-policy'
+    assert_body 'Aktuell wirksame Richtlinie'
+    assert_body 'Die Änderung gilt nur für künftig gesetzte Kennwörter.'
+    assert_body 'name="minimum_length"'
+    assert_body 'name="require_uppercase"'
+    assert_body 'name="require_lowercase"'
+    assert_body 'name="require_digit"'
+    assert_body 'name="require_symbol"'
+    assert_body 'separate technische Administrationskennwort'
+    csrf_from_body >/dev/null
 
     # Optional access shifts are incident-scoped admission groups, not duty
     # functions. First prove an unassigned fixed-function account may log in.

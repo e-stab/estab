@@ -115,11 +115,19 @@ Geprüft werden:
   Modulkarten innerhalb der Breite bleiben, die Bereichsnavigation erreichbar
   ist und zentrale Login-Schaltflächen mindestens 44 Pixel hoch sind;
 - mit separaten ephemeren Admin-Testdaten die Basic-Auth-geschützte
-  Adminübersicht mit neun klar getrennten Maßnahmen bei `1280x800` und
+  Adminübersicht mit zehn klar getrennten Maßnahmen bei `1280x800` und
   `390x844` CSS-Pixeln: Navigation, Adminidentität und Karten bleiben sichtbar,
   die Karten überlappen sich nicht, erzeugen kein horizontales
   Dokument-Scrolling, sind vollständig klickbar und bilden mobil eine
   einheitliche Spalte;
+- die Kennwortrichtlinien-Seite bei `1280x800` und `390x844` CSS-Pixeln als
+  vollständig geladene Werkzeugseite mit genau einer gemeinsamen Leiste,
+  sichtbarer Navigation, Kopf- und Fußbereich sowie einer mindestens
+  44 × 44 Pixel großen Aktion; Inhalt und Bedienelemente bleiben innerhalb
+  des Viewports und erzeugen kein horizontales Dokument-Scrolling; in der
+  Benutzerverwaltung zählt der echte Browser die Mindestlänge außerdem in
+  Unicode-Codepoints statt UTF-16-Eingabeeinheiten, weist eine zu kurze
+  Emoji-Passphrase ab und akzeptiert dieselbe Anzahl vollständiger Codepoints;
 - die Exportübersicht bei `1280x800` und `390x844` CSS-Pixeln, die echte
   Exporterstellung, das offene Manifest, genau einen Downloadlink sowie die
   zunächst geschlossene und bewusst zweistufig geöffnete Löschbestätigung,
@@ -225,11 +233,13 @@ ESTAB_TEST_LOGIN_PASSWORD_FILE=secrets/test_login_password.txt \
 python3 tests/browser/headless_ui.py
 ```
 
-Die Exportverwaltung und die beiden destruktiven Matrix-Bestätigungen lassen
-sich auf einem isolierten Test-Deployment gezielt prüfen. Der Lauf erzeugt
-einen eigenen Export und löscht genau diesen anschließend wieder. Im
-Matrixeditor lehnt er beide Bestätigungsdialoge ab und verändert daher weder
-aktive noch gespeicherte Standardmatrix:
+Die Administrationsoberflächen, Exportverwaltung und die beiden destruktiven
+Matrix-Bestätigungen lassen sich auf einem isolierten Test-Deployment gezielt
+prüfen. Der Lauf kontrolliert unter anderem die zehnte Admin-Karte sowie die
+Kennwortrichtlinien-Seite auf Desktop und Mobil, ohne die Richtlinie zu
+ändern. Er erzeugt einen eigenen Export und löscht genau diesen anschließend
+wieder. Im Matrixeditor lehnt er beide Bestätigungsdialoge ab und verändert
+daher weder aktive noch gespeicherte Standardmatrix:
 
 ```sh
 ESTAB_TEST_BASE_URL=http://127.0.0.1:8080 \
@@ -254,9 +264,10 @@ unabhängig authentisierte Modus `--export-only` benötigen kein
 Anwendungskennwort. `ESTAB_TEST_LOGIN_PASSWORD` hat Vorrang, falls beide
 Varianten gesetzt sind.
 Produktive Kennwörter dürfen dafür nicht verwendet werden. Der optionale
-Export-Browsertest liest entsprechend nur den ephemeren Admin-Benutzer und
-das Admin-Kennwort des isolierten Test-Stacks. Der Test gibt keines der
-Kennwörter im Erfolgsfall, in Fehlermeldungen oder Diagnosedateien aus.
+Administrations-Browsertest liest entsprechend nur den ephemeren
+Admin-Benutzer und das Admin-Kennwort des isolierten Test-Stacks. Der Test
+gibt keines der Kennwörter im Erfolgsfall, in Fehlermeldungen oder
+Diagnosedateien aus.
 
 Weitere Einstellungen:
 
@@ -268,7 +279,7 @@ Weitere Einstellungen:
 | `ESTAB_TEST_LOGIN_FUNCTION` | `S1` | Im Formular vorhandene Funktion |
 | `ESTAB_TEST_LOGIN_PASSWORD` | nicht gesetzt | Kennwort des Testkontos; für den vollständigen Lauf erforderlich, sofern keine Datei gesetzt ist |
 | `ESTAB_TEST_LOGIN_PASSWORD_FILE` | nicht gesetzt | Bevorzugte Datei mit dem Kennwort des Testkontos |
-| `ESTAB_TEST_ADMIN_USER` | nicht gesetzt | Optionaler Admin-Benutzer des isolierten Test-Stacks; aktiviert zusammen mit einem Kennwort den Export-Browsertest |
+| `ESTAB_TEST_ADMIN_USER` | nicht gesetzt | Optionaler Admin-Benutzer des isolierten Test-Stacks; aktiviert zusammen mit einem Kennwort den Administrations-Browsertest |
 | `ESTAB_TEST_ADMIN_PASSWORD` | nicht gesetzt | Optionales ephemeres Admin-Testkennwort |
 | `ESTAB_TEST_ADMIN_PASSWORD_FILE` | nicht gesetzt | Bevorzugte Secret-Datei mit dem ephemeren Admin-Testkennwort |
 | `ESTAB_BROWSER_BINARY` | automatische Suche | Chrome-/Chromium-Programm |
@@ -315,6 +326,11 @@ belegt Navigation, Anmeldeeinstieg, den Zwei-`iframe`-Arbeitsbereich ohne
 verschachtelte Scrollflächen, die mobilen Vollviewport-Zeilen samt
 Rollenaktionswechsel und „Menü“-Rückweg, überlappungsfreie Karten samt Hover
 und Bediengrößen auf schmalen Displays.
+
+Die Kennwortrichtlinien-Seite wird dabei visuell und responsiv, aber ohne
+Zustandsänderung geprüft. Vorschau, ausdrückliche Bestätigung, Revision,
+CSRF-Schutz und Audit der Richtlinienänderung weist der getrennte
+Admin-HTTP-Integrationstest nach.
 
 Für den Audiotest ersetzt der Lauf `HTMLMediaElement.play()` kontrolliert
 zunächst durch eine abgewiesene Promise und danach durch einen Aufrufzähler.

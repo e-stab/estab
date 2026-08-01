@@ -68,6 +68,7 @@ $expectedControllers = [
     '4fadm/incident_export.php',
     '4fadm/incidents.php',
     '4fadm/make_fkt.php',
+    '4fadm/password_policy.php',
     '4fadm/set_number_after_crash.php',
     '4fadm/users.php',
 ];
@@ -124,6 +125,36 @@ foreach ($expectedControllers as $relativePath) {
         $offset = $guard + strlen('estab_csrf_require_post');
     }
 }
+
+$passwordPolicyController = file_get_contents(
+    $root . '/4fadm/password_policy.php'
+);
+$passwordPolicyGuard = is_string($passwordPolicyController)
+    ? strpos($passwordPolicyController, 'estab_csrf_require_post')
+    : false;
+$passwordPolicyHandler = is_string($passwordPolicyController)
+    ? strpos($passwordPolicyController, 'catch (EstabCsrfException)')
+    : false;
+$passwordPolicyGenericHandler = is_string($passwordPolicyController)
+    ? strpos($passwordPolicyController, 'catch (Throwable', $passwordPolicyHandler ?: 0)
+    : false;
+csrf_assert(
+    is_string($passwordPolicyController)
+        && $passwordPolicyGuard !== false
+        && $passwordPolicyHandler !== false
+        && $passwordPolicyGenericHandler !== false
+        && $passwordPolicyGuard < $passwordPolicyHandler
+        && $passwordPolicyHandler < $passwordPolicyGenericHandler
+        && str_contains(
+            substr(
+                $passwordPolicyController,
+                $passwordPolicyHandler,
+                $passwordPolicyGenericHandler - $passwordPolicyHandler
+            ),
+            'http_response_code(403)'
+        ),
+    'password-policy CSRF rejection is not mapped to 403 before generic errors'
+);
 
 session_destroy();
 printf("CSRF security: OK (%d assertions)\n", $assertions);

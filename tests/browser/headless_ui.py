@@ -2250,7 +2250,7 @@ class BrowserAcceptance:
                 """
                 document.readyState === "complete" &&
                 Boolean(document.querySelector("[data-estab-admin-dashboard]")) &&
-                document.querySelectorAll("[data-estab-admin-card]").length === 9 &&
+                document.querySelectorAll("[data-estab-admin-card]").length === 10 &&
                 Boolean(document.querySelector(
                     '[data-estab-public-bar] [data-estab-admin-user]'
                 ))
@@ -2730,6 +2730,11 @@ class BrowserAcceptance:
                 "Benutzerverwaltung",
             ),
             (
+                "/4fadm/password_policy.php",
+                "[data-estab-password-policy]",
+                "Kennwortrichtlinie",
+            ),
+            (
                 "/4fadm/fuehrungsstelle.php",
                 "[data-estab-shift-admin]",
                 "Optionale Zugangsschichten",
@@ -2842,6 +2847,13 @@ class BrowserAcceptance:
                 False,
             ),
             (
+                "/4fadm/password_policy.php",
+                "[data-estab-password-policy]",
+                "Kennwortrichtlinie",
+                False,
+                True,
+            ),
+            (
                 "/4fadm/fuehrungsstelle.php",
                 "[data-estab-shift-admin]",
                 "Optionale Zugangsschichten",
@@ -2921,6 +2933,57 @@ class BrowserAcceptance:
                     require_responsive_table=responsive_table,
                     require_target=require_target,
                 )
+                if path == "/4fadm/users.php" and width == 1280:
+                    password_length_state = self.cdp.evaluate(
+                        """
+                        (() => {
+                            const input = document.querySelector(
+                                'input[name="new_password"]' +
+                                '[data-estab-password-minimum-codepoints]'
+                            );
+                            if (!input) return null;
+                            const minimum = Number.parseInt(
+                                input.getAttribute(
+                                    'data-estab-password-minimum-codepoints'
+                                ),
+                                10
+                            );
+                            input.value = '🧭'.repeat(
+                                Math.max(1, Math.ceil(minimum / 2))
+                            );
+                            input.dispatchEvent(new Event(
+                                'input', {bubbles: true}
+                            ));
+                            const shortRejected = !input.checkValidity();
+                            input.value = '🧭'.repeat(minimum);
+                            input.dispatchEvent(new Event(
+                                'input', {bubbles: true}
+                            ));
+                            return {
+                                minimum,
+                                nativeMinimum: input.getAttribute('minlength'),
+                                shortRejected,
+                                validAccepted: input.checkValidity(),
+                                scriptLoaded: Array.from(document.scripts).some(
+                                    script => script.src.endsWith(
+                                        '/estab-password-policy.js'
+                                    )
+                                )
+                            };
+                        })()
+                        """
+                    )
+                    self._truth(
+                        isinstance(password_length_state, dict)
+                        and int(password_length_state.get("minimum", 0)) >= 8
+                        and password_length_state.get("nativeMinimum") is None
+                        and password_length_state.get("shortRejected") is True
+                        and password_length_state.get("validAccepted") is True
+                        and password_length_state.get("scriptLoaded") is True,
+                        "Benutzerverwaltung zählt die Kennwort-Mindestlänge "
+                        "nicht exakt in Unicode-Codepoints: "
+                        f"{password_length_state!r}",
+                    )
 
     def _assert_tool_page_layout(
         self,
@@ -3134,6 +3197,7 @@ class BrowserAcceptance:
             [
                 "incidents",
                 "users",
+                "password-policy",
                 "command-post",
                 "matrix",
                 "counter",

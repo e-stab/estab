@@ -71,6 +71,7 @@ assert_dockerfile_absent 'COPY handbuch/ ./handbuch/'
 assert_dockerfile_absent 'COPY language/ ./language/'
 assert_dockerfile_absent 'COPY ubltg/ ./ubltg/'
 assert_dockerfile_contains 'COPY 4fadm/admin.php'
+assert_dockerfile_contains 'estab-password-policy.js'
 assert_dockerfile_contains '4fach/activity.php'
 assert_dockerfile_contains '4fach/fuehrungsstelle.php'
 assert_dockerfile_contains '4fadm/fuehrungsstelle.php'
@@ -92,6 +93,10 @@ assert_dockerfile_contains 'COPY docker/app/cleanup-pdf-render-tmp.sh /usr/local
 assert_dockerfile_contains 'estab-verify-runtime-surface /var/www/html'
 assert_dockerfile_contains '"fileinfo", "gd", "mbstring"'
 assert_dockerfile_contains '"JPEG Support", "PNG Support", "GIF Read Support", "BMP Support"'
+assert_dockerfile_contains 'PASSWORD_ARGON2ID'
+assert_dockerfile_contains 'Argon2id password verification is unsafe'
+assert_dockerfile_contains '!password_verify($prefix . "x", $hash)'
+assert_dockerfile_contains '($info["options"] ?? null) !== $options'
 assert_dockerfile_contains 'poppler-utils'
 assert_dockerfile_contains 'command -v setpriv >/dev/null'
 assert_dockerfile_contains 'command -v prlimit >/dev/null'
@@ -110,6 +115,7 @@ do
     fi
 done
 for required_runtime_path in \
+    estab-password-policy.js \
     4fach/activity.php \
     4fach/fuehrungsstelle.php \
     4fadm/fuehrungsstelle.php \

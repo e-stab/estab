@@ -105,6 +105,7 @@ $expectedRoutes = [
     'admin' => '4fadm/admin.php',
     'incidents' => '4fadm/incidents.php',
     'users' => '4fadm/users.php',
+    'password_policy' => '4fadm/password_policy.php',
     'admin_command_post' => '4fadm/fuehrungsstelle.php',
     'matrix' => '4fadm/make_fkt.php',
     'incident_pdf' => '4fadm/incident_export.php',

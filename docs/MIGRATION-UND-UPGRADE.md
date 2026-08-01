@@ -80,6 +80,7 @@ Derzeit sind folgende explizite Migrationen vorhanden:
 | `docker/db/migrations/110-etb-tbb-rules.sql` | ergänzt einsatzlokale fortlaufende ETB-/TBB-Nummern samt exakt zwei vorab angelegten und gesperrten Buchköpfen je Einsatz, strukturierte TBB-Felder und Bezüge, den eindeutigen ETB-Anhangsbezug, Append-only-/Korrekturregeln, Erweiterungen aktiver Schichten mit A/W-Mehrfachbesetzung, die zehnjährige Aufbewahrungsuntergrenze und den deterministischen Legacy-Backfill |
 | `docker/db/migrations/111-logbook-shift-assignment.sql` | ergänzt nullable Schicht- und Schreiberprovenienz für ETB/TBB sowie die optionale ETB-Bearbeitungszuordnung mit unveränderlichem Snapshot; neue Zeilen werden durch Fremdschlüssel und Insert-Trigger geprüft, der Besetzungs-Update-Trigger verhindert eine verspätete ETB-Annahme mit Schreiberwechsel in der aktiven Schicht, historische Zeilen bleiben mangels belegbarer Herkunft `NULL` |
 | `docker/db/migrations/112-optional-access-shifts.sql` | ergänzt optionale einsatzgebundene Zugangsschichten und Kontenzuordnungen; ersetzt den abschließenden ETB-/TBB-Triggervertrag durch festen Funktions-/Rollenbezug und aktiven Einsatz ohne Pflicht zu Dienstschicht oder Besetzungs-ID; ältere formale Schichtdaten bleiben historische Evidenz |
+| `docker/db/migrations/113-password-policy.sql` | ergänzt genau eine revisionsgesicherte globale Kennwortrichtlinie für künftig gesetzte Funktionskonto-Kennwörter; Standard sind mindestens 12 Unicode-Codepoints ohne verpflichtende Zeichenklasse, die konfigurierbare Mindestlänge liegt zwischen 8 und 128 Unicode-Codepoints und optionale Unicode-Groß-/Titlecase-/Kleinbuchstaben, Ziffern und Sonderzeichen können verlangt werden; Unicode-Steuerzeichen sind verboten, Formatzeichen einschließlich ZWJ erlaubt; neue und geänderte Kennwörter werden mit Argon2id gespeichert, serverseitig gelten höchstens 1024 UTF-8-Bytes, im Browserfeld 1024 Eingabeeinheiten und eine exakte JavaScript-Codepointzählung bei verbindlicher Serverprüfung; Klartext und eindeutig verifizierbare Alt-Hashes werden nach erfolgreichem Login migriert, bcrypt nur bei einem eingegebenen Kennwort unter 72 UTF-8-Bytes, während ein ambivalenter längerer bcrypt-Alt-Hash bis zum administrativen Reset unverändert bleibt; stärkere oder gemischte Argon2id-Kosten werden nicht zurückgestuft, vorhandene Sitzungen bleiben unverändert |
 
 Migration 95 klassifiziert vorhandene Zeilen bereits beim Hinzufügen der
 Spalte mit dem einmaligen Anfangswert `integrity_required=0` und stellt danach
@@ -115,8 +116,8 @@ eigenen Zwischenstände. Gemischte Katalogdaten, ein abweichender
 Primärschlüssel oder fremde Indizes blockieren vor der nächsten Änderung und
 bleiben zur Untersuchung erhalten. `verify.sql` und die Laufzeit-Readiness
 verlangen danach exakt sieben Katalogzeilen, das vollständige neue ENUM,
-ausschließlich den zweispaltigen Primärschlüssel und alle achtzehn
-angewendeten Migrationen einschließlich Version 112.
+ausschließlich den zweispaltigen Primärschlüssel und alle neunzehn
+angewendeten Migrationen einschließlich Version 113.
 
 Migration 97 fügt `nv_einsaetze.fuehrungsstellenname` als
 `VARCHAR(128) NULL` unmittelbar hinter `organisation` und
@@ -294,6 +295,32 @@ keine Sitzung, Deaktivieren kann Sitzungen widerrufen. Die manuelle
 Kontosperre bleibt unabhängig und vorrangig. Historische Tabellen für formale
 Dienstschichten, Besetzungen und Übergaben bleiben unverändert exportierbar.
 
+Migration 113 legt `nv_kennwortrichtlinie` nur an, wenn kein fremdes Objekt
+diesen Namen belegt. Die eigene InnoDB-/`utf8mb4_unicode_ci`-Tabelle besitzt
+genau eine Zeile mit `singleton_id = 1`, einer Mindestlänge zwischen 8 und 128,
+vier booleschen Zeichenklassen, monotoner Revision, UTC-Änderungszeit und
+Basic-Auth-Akteur. Der kanonische Anfangswert `12/0/0/0/0` übernimmt den
+bisherigen Kontoanlage- und Resetvertrag ohne eine künstliche Verschärfung.
+Ein idempotenter Wiederanlauf akzeptiert ausschließlich die vollständig
+markierte eigene Tabelle und Zeile; abweichende Spalten, Constraints,
+Tabellenkommentare oder Werte blockieren.
+
+Die Migration schreibt und prüft keine bestehenden Kennwörter. Ihre
+Richtlinie wirkt erst, wenn ein Administrator danach ein Konto anlegt oder ein
+Kennwort zurücksetzt beziehungsweise wenn die ausdrücklich aktivierte
+Selbstregistrierung einen neuen Hash erzeugt. Ein Bestandslogin prüft die neue
+Richtlinie nicht rückwirkend. Ein Klartextwert oder anderer eindeutig
+verifizierbarer Alt-Hash wird erst nach erfolgreicher Anmeldung auf Argon2id
+umgestellt. bcrypt wird nur bei einem eingegebenen Kennwort unter 72 UTF-8-Bytes
+automatisch migriert; bei 72 oder mehr Bytes bleibt er wegen der
+Suffixambiguität unverändert und benötigt für Argon2id einen administrativen
+Reset. Bereits stärkere oder gemischte Argon2id-Kosten werden nicht auf
+Standardwerte zurückgestuft; nur vollständig schwächere Profile werden
+hochgestuft.
+Sitzungsstatus und separates HTTP-Basic-Secret bleiben unverändert.
+`verify.sql` und die Laufzeit-Readiness prüfen Tabelle,
+Singleton-Zeile, Grenzen und alle neunzehn Ledgerzeilen gemeinsam.
+
 Der erneuerte ETB-Insert-Trigger akzeptiert neue Referenzen nur als
 kanonische, positive, bereits vorhandene lokale ETB-Nummer desselben Einsatzes.
 Für Korrekturen muss diese öffentliche Nummer exakt zur intern gebundenen
@@ -443,6 +470,8 @@ anzupassen:
 - sind sämtliche eStab-Tabellen InnoDB und `utf8mb4`,
 - wurden Zero Dates mit `20-nullable-dates.sql` zu `NULL` konvertiert,
 - ist `nv_benutzer.password` breit genug für `password_hash()`-Werte,
+- ist die durch Migration 113 erzeugte `nv_kennwortrichtlinie` eine kanonische
+  Singleton-Tabelle und enthält sie ausschließlich gültige Grenzwerte,
 - gibt es doppelte oder leere `nv_anhang.filename`-Werte, bevor der eindeutige
   Anhangindex angelegt wird,
 - sind sechsstellige Benutzer-/Anhangkürzel verlustfrei möglich,

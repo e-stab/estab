@@ -29,6 +29,7 @@ RUN set -eux; \
     docker-php-ext-configure gd --with-freetype --with-jpeg; \
     docker-php-ext-install -j1 gd mysqli zip; \
     php -r 'foreach (["fileinfo", "gd", "mbstring", "mysqli", "Zend OPcache", "zip"] as $extension) { if (!extension_loaded($extension)) { fwrite(STDERR, "Missing PHP extension: $extension\n"); exit(1); } } $gd = gd_info(); foreach (["JPEG Support", "PNG Support", "GIF Read Support", "BMP Support"] as $feature) { if (!($gd[$feature] ?? false)) { fwrite(STDERR, "Missing GD feature: $feature\n"); exit(1); } }'; \
+    php -r 'if (!defined("PASSWORD_ARGON2ID")) { fwrite(STDERR, "Missing Argon2id password support\n"); exit(1); } $options = ["memory_cost" => PASSWORD_ARGON2_DEFAULT_MEMORY_COST, "time_cost" => PASSWORD_ARGON2_DEFAULT_TIME_COST, "threads" => PASSWORD_ARGON2_DEFAULT_THREADS]; $prefix = str_repeat("a", 72); $hash = password_hash($prefix . "x", PASSWORD_ARGON2ID, $options); $info = is_string($hash) ? password_get_info($hash) : []; if (!is_string($hash) || strlen($hash) > 255 || ($info["algoName"] ?? "") !== "argon2id" || ($info["options"] ?? null) !== $options || !password_verify($prefix . "x", $hash) || password_verify($prefix . "y", $hash)) { fwrite(STDERR, "Argon2id password verification is unsafe\n"); exit(1); }'; \
     command -v setpriv >/dev/null; \
     command -v prlimit >/dev/null; \
     command -v pdfinfo >/dev/null; \
@@ -49,7 +50,7 @@ RUN set -eux; \
 
 WORKDIR /var/www/html
 
-COPY index.php health.php config.inc.php dbcfg.inc.php e_cfg.inc.php favicon.ico menue.inc.php estab-ui.css ./
+COPY index.php health.php config.inc.php dbcfg.inc.php e_cfg.inc.php favicon.ico menue.inc.php estab-ui.css estab-password-policy.js ./
 
 # The repository preserves the complete upstream history, but the runtime
 # image contains only exercised application code and assets. In particular,
@@ -101,6 +102,7 @@ COPY 4fadm/admin.php \
     4fadm/incident_export.php \
     4fadm/incidents.php \
     4fadm/make_fkt.php \
+    4fadm/password_policy.php \
     4fadm/set_number_after_crash.php \
     4fadm/system_status.php \
     4fadm/users.php \

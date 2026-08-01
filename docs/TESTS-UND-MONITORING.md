@@ -20,13 +20,29 @@ aktueller und entfernter Zuordnungen sowie getrennt gekennzeichnete historische
 `ZUGANGSSCHICHT` für Gruppenmutationen und `EINSATZ` für die schichtfreie
 Nachrichtenzähler-Reparatur.
 
+Die Kennwortrichtlinie wird als eigener globaler Sicherheitsvertrag geprüft:
+konfigurierbare Mindestlänge 8–128 Unicode-Codepoints, Default 12, höchstens
+1024 UTF-8-Bytes, 1024 Browser-Eingabeeinheiten, exakte browserseitige
+Codepointzählung bei verbindlicher Serverprüfung, optionale
+Unicode-Groß-/Titlecase-/Kleinbuchstaben, Unicode-Ziffern und Sonderzeichen,
+verbotene Unicode-Steuerzeichen bei erlaubten Formatzeichen einschließlich ZWJ,
+revisionsgebundene Vorschau/Bestätigung und atomarer Audit. Kontoanlage, Reset
+und aktivierte Selbstregistrierung müssen denselben Stand verwenden und
+Argon2id speichern. Bestandslogin und vorhandene Sitzungen bleiben unberührt;
+Klartextwerte und eindeutig verifizierbare Alt-Hashes werden erst nach
+erfolgreicher Anmeldung auf Argon2id umgestellt. bcrypt wird nur bei einem
+eingegebenen Kennwort unter 72 UTF-8-Bytes automatisch migriert; bei 72 oder
+mehr Bytes bleibt er bis zum administrativen Reset unverändert. Stärkere oder
+gemischte Argon2id-Kosten werden nicht zurückgestuft. Das separate
+HTTP-Basic-Secret bleibt unabhängig.
+
 | Ebene | Nachweis |
 | --- | --- |
 | Quellprüfung | netzloser Herkunftsnachweis für 13 Git-Ref-Snapshots (Trunk, vier Branches, sechs SVN-Tags, zwei SourceForge-Release-Tags) und einen separaten Dokument-r85-Baum, GitHub-Workflow-Prüfung mit festgelegtem Actionlint 1.7.12, PHP-8.5-Lint, Kompatibilitäts-, Sicherheits-, Einsatz-, Benutzerverwaltungs-, amtlicher Nachrichtenvordruck-, Upload-, Export- und PDF-Regressionen |
 | Image-Build | benötigte PHP-Erweiterungen und Apache-Konfiguration |
-| Datenbank | echtes MariaDB-Schema, Einsatz-Singleton/Trigger, Kontosperre, Indizes, aktive und persistente Standardmatrix, Engines, Collations und Zero-Date-Freiheit |
-| HTTP | Header, direkte Endpunktfläche, 303-Weiterleitung anonymer geschützter Aufrufe zum allowlist-gebundenen Bestandslogin samt sichtbarem Rückweg, 403-/400-/405-Grenzen, Registrierung, sichtbare Sitzungsidentität, Präsenz/Leerlaufende, feste Funktions-/Rollenbindung, optionaler Gruppenzugang, verbindlicher Nachrichtenlauf, S6-Plan, Melderlauf, Kategorien- und ETB-/TBB-Rollengrenzen, Vordruckerzeugung sowie Admin-Export |
-| Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, direkte ETB-/Nachrichten-/Anhang-/Kategorie-Anmeldung ohne Sackgasse oder verschachtelten Arbeitsbereich, sicherer Login-Abbruch, neun stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, A/W-Rufnamen-Listbox mit echtem Fokus, Filterung und Tastaturauswahl, Matrixstandard-Bestätigungen, BOS-Disclosure, Logout sowie öffentliche und authentifizierte mobile Bedienung bei exakt 390 × 844 CSS-Pixeln |
+| Datenbank | echtes MariaDB-Schema, Einsatz-Singleton/Trigger, Kontosperre, revisionsgesicherte Kennwortrichtlinien-Singletonzeile, Indizes, aktive und persistente Standardmatrix, Engines, Collations und Zero-Date-Freiheit |
+| HTTP | Header, direkte Endpunktfläche, 303-Weiterleitung anonymer geschützter Aufrufe zum allowlist-gebundenen Bestandslogin samt sichtbarem Rückweg, 403-/400-/405-Grenzen, Registrierung, sichtbare Sitzungsidentität, Präsenz/Leerlaufende, feste Funktions-/Rollenbindung, optionaler Gruppenzugang, Kennwortrichtlinien-Vorschau/-Bestätigung, verbindlicher Nachrichtenlauf, S6-Plan, Melderlauf, Kategorien- und ETB-/TBB-Rollengrenzen, Vordruckerzeugung sowie Admin-Export |
+| Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, direkte ETB-/Nachrichten-/Anhang-/Kategorie-Anmeldung ohne Sackgasse oder verschachtelten Arbeitsbereich, sicherer Login-Abbruch, neun stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, A/W-Rufnamen-Listbox mit echtem Fokus, Filterung und Tastaturauswahl, Matrixstandard- und Kennwortrichtlinien-Bestätigungen, BOS-Disclosure, Logout sowie öffentliche und authentifizierte mobile Bedienung bei exakt 390 × 844 CSS-Pixeln |
 | Fachabnahme | kompletter Nachrichten-, Anhang-, PDF-, ETB-/TBB- und Restore-Ablauf |
 | Betrieb | kontinuierliche Readiness, Logs, Restarts, Kapazität und Backup-Alter |
 
@@ -178,6 +194,13 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   einheitliche Statusbanner,
 - Kontosperre und Kennwortreset mit gemeinsamem Login-Lock,
   Sitzungswiderruf, auditgebundenem Rollback und ohne Klartextweitergabe,
+- Default, Grenzwerte und Unicode-Zeichenklassen der Kennwortrichtlinie,
+  Argon2id für alle neuen und geänderten Kennwörter, die Grenze von 1024
+  UTF-8-Bytes sowie zwei Werte mit gleichem 72-Byte-Präfix und unterschiedlichen
+  Suffixen, die nur bei vollständiger Hashauswertung verschieden bleiben,
+  globale Lockreihenfolge, optimistische Revision, zweistufige
+  Adminbestätigung, prospektive Anwendung auf Anlage/Reset/Selbstregistrierung
+  und ausdrücklich unveränderten Bestandslogin,
 - Upload- und Anhangpfadvalidierung,
 - festfunktions- und objektgebundene Dateiauslieferung samt vererbter
   Nachrichtenrechte, begrenzter Rechte für freie Anhänge, erneuter Prüfung bei
@@ -240,10 +263,12 @@ bash tests/integration/ci.sh
 
 Er führte damit das Pflicht-Browser-Gate aus und endete erst nach dem
 vollständigen destruktiven Backup-/Restore-Roundtrip mit
-`CI integration: OK`. Er verifizierte 38 Schema-Checks, 57 Assertions des
+`CI integration: OK`. Er verifizierte 40 Schema-Checks, 63 statische
+Kennwortrichtlinien-, 106 Authentisierungs- und 63 MariaDB-
+Kennwortrichtlinien-Assertions, außerdem 57 Assertions des
 Registry-Deployment-Vertrags, 130 Assertions des ETB-/TBB-DV-Betriebs,
 33 Assertions des Incident-Exports und 145 Assertions der Nachrichtenlisten-
-Skalierung mit 10.257 Zeilen; die statische Suite lintete 246 aktive
+Skalierung mit 10.257 Zeilen; die statische Suite lintete alle aktiven
 PHP-Dateien. Dieser lokale Podman-Lauf fand nicht auf einem
 nachgewiesenen SELinux-Enforcing-System statt und gilt daher ausdrücklich nicht
 als SELinux-Relabel-Nachweis.
@@ -306,7 +331,7 @@ Schreibgrenzen sowie die amtlichen Nachrichtenvordruckfelder aus Migration 98.
 Der Schema-Test startet Migration 98 zweimal, prüft die exakt markierten
 Spalten `11_rufnummer` und `12_betreff`, deren leere Bestandswerte und den
 unveränderten historischen Nachrichteninhalt. Readiness und `verify.sql`
-verlangen alle achtzehn Ledgerzeilen einschließlich Version 112 sowie die
+verlangen alle neunzehn Ledgerzeilen einschließlich Version 113 sowie die
 exakten drei Such-/Listenindizes. Migration 99 wird vollständig, nach einem
 simulierten phasenweisen Abbruch und nach einer fremden Indexkollision
 ausgeführt; erst der bereinigte Wiederanlauf darf den Ledgerstand schreiben.
@@ -371,6 +396,17 @@ kanonische Wiederanlauf darf die achtzehnte Ledgerzeile schreiben. Zweitlauf,
 `verify.sql`-Prüfung und vollständiger Schema-Migrator-Integrationstest sind
 grün.
 
+Migration 113 ergänzt danach den aktuellen Kennwortrichtlinien-Vertrag. Der
+Schema-Test verlangt die exakt markierte InnoDB-/`utf8mb4_unicode_ci`-
+Singleton-Tabelle, neun kanonische Spalten, alle CHECK-Constraints, genau die
+eine Defaultzeile `12/0/0/0/0` und eine monotone Revision. Fremde
+gleichnamige Tabellen, abweichende Spalten oder Werte blockieren, ohne einen
+Ledgerabschluss zu erzeugen. Nur der kanonische Wiederanlauf darf die
+neunzehnte Ledgerzeile schreiben; Zweitlauf, `verify.sql` und Laufzeit-
+Readiness müssen denselben Zustand bestätigen. Bestehende Kontohashes,
+Sitzungen und die bisherigen achtzehn Ledgerzeilen bleiben byte- und
+wertgleich.
+
 Anschließend migriert der Hauptlauf ein leeres Schema,
 führt PHP-, Datenbank-, Rollen-, HTTP- und Administrationsnachweise aus, prüft
 die Containerlogs und stellt Datenbank, Anhang-/Vordruckdaten sowie Exporte aus
@@ -402,7 +438,11 @@ blockierten Neuanlageversuchen, unveränderliche Funktionsbindung auch nach
 Logout, die sichere Wiederaufnahme eines zuvor gewählten geschützten Bereichs,
 die gemeinsame Sitzungsanzeige und CSRF-geschützte Abmeldung. Die Fachtests
 provisionieren ihre Konten über dieselbe transaktionale
-Benutzerverwaltungs-API. Zusätzlich steuert der Browser-Akzeptanztest einen
+Benutzerverwaltungs-API. Sie prüft außerdem die Basic-Auth-geschützte
+Kennwortrichtlinien-Seite, CSRF, Vorher-/Nachher-Vorschau, ausdrückliche
+Bestätigung, Konflikt bei veralteter Revision und dass ein abgewiesenes
+Kennwort weder Konto, Hash, Sitzung noch Audit verändert. Zusätzlich steuert
+der Browser-Akzeptanztest einen
 echten Chrome-/Chromium-Prozess.
 Der Hauptstack läuft dabei durchgehend mit
 `ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF=false` und weist auch für angeblich
@@ -582,7 +622,7 @@ podman compose -p estab-acceptance run --rm --no-deps -T \
   app tests/integration/date_compatibility.php
 ```
 
-### Einsatzdomäne, Benutzerverwaltung und PDF-Dossier
+### Einsatzdomäne, Benutzerverwaltung, Kennwortrichtlinie und PDF-Dossier
 
 `tests/integration/incident_domain.php` läuft gegen eine eigens angelegte und
 vollständig migrierte Datenbank. Er startet nur mit
@@ -616,6 +656,31 @@ auch die ausdrücklich aktivierte Self-Registration aus und beweist für beide
 Auditzeilen die exakte `sha256:`-Referenz der rotierten Sitzung sowie die
 Abwesenheit von Klartext-SID und Kennwort. Das funktioniert bewusst auch ohne
 aktiven Einsatz.
+`tests/integration/password_policy.php` verwendet mehrere echte
+MariaDB-Verbindungen. Der Test liest den Default 12 ohne Zeichenklassen,
+ändert die Richtlinie revisions- und auditgebunden, weist ungültige sowie
+veraltete Änderungen ab und erzwingt Rollback bei Auditfehler. Unter einer
+verschärften Richtlinie müssen schwache Kontoanlage, Reset und aktivierte
+Selbstregistrierung ohne Konto-, Hash-, Sitzungs- oder Auditänderung scheitern;
+gültige Werte werden ausschließlich mit Argon2id gespeichert. Zwei Kennwörter
+mit gleichem 72-Byte-Präfix und unterschiedlichen Suffixen bleiben getrennt und
+belegen damit, dass der vollständige Wert statt einer bcrypt-Kürzung in den
+Hash eingeht. Serverseitig werden die Grenze von 1024 UTF-8-Bytes und eine
+konfigurierbare Mindestlänge von 8 bis 128 Unicode-Codepoints geprüft; das
+Browserfeld erlaubt 1024 Eingabeeinheiten und zählt die Mindestlänge exakt in
+Unicode-Codepoints; die Serverprüfung bleibt verbindlich. Titlecase erfüllt
+die Großbuchstabenpflicht, Unicode-Steuerzeichen werden abgewiesen und
+Formatzeichen einschließlich ZWJ bleiben zulässig. Ein bereits vorher
+vorhandenes kürzeres Kennwort bleibt beim Bestandslogin gültig. Klartext und
+eindeutig verifizierbare Alt-Hashes werden nach erfolgreicher Anmeldung auf
+Argon2id umgestellt. bcrypt wird nur bei einem eingegebenen Kennwort unter 72
+UTF-8-Bytes automatisch migriert; ab 72 Bytes bleibt der ambivalente Hash bis
+zu einem administrativen Reset unverändert. Stärkere und gemischte
+Argon2id-Kosten werden nicht zurückgestuft, vollständig schwächere Profile
+werden hochgestuft. Ein
+konkurrierender Richtlinienwriter darf Kontoanlage oder Reset nicht mit einem
+überholten Stand überholt werden. Die Testbereinigung stellt die kanonische
+Auslieferungsrichtlinie wieder her.
 `tests/integration/assignment_policy.php` verwendet mehrere Verbindungen für
 den globalen Matrix-/Login-/Benutzerverwaltungs-Lock, gleicht geänderte Rollen
 und entfernte Funktionen ab, erlaubt einem inaktiven Waisenkonto den
@@ -1683,6 +1748,11 @@ Mindestens zu prüfen:
 - ein Funktionskonto in der Administration sperren, die alte Sitzung und
   Neuanmeldung abweisen, anschließend entsperren und ein Kennwort
   zurücksetzen; altes Kennwort ablehnen und neues akzeptieren,
+- die Kennwortrichtlinie mit Mindestlänge und mehreren Unicode-Zeichenklassen
+  voranzeigen und bestätigen, eine Abschwächungswarnung prüfen, schwache
+  Kontoanlage und schwachen Reset abweisen und danach belegen, dass ein vor der
+  Verschärfung vorhandenes Konto sowie der getrennte Basic-Auth-Zugang weiter
+  funktionieren,
 - Berechtigungs-/Rollenzuordnung aus der Empfängermatrix kontrollieren,
 - jede verwendete Person mit dem vorgesehenen festen Funktionskonto anmelden;
   abweichende Funktion/Rolle und fehlenden aktiven Einsatz abweisen, die
@@ -1846,9 +1916,11 @@ sind:
   geschlossene Einsatz mindestens zehn Jahre Aufbewahrung besitzt,
 - Benutzer-, IP-, Anhang- und alle sechs Nachrichten-Kürzelfelder die
   erforderlichen Breiten besitzen,
+- genau eine kanonische Kennwortrichtlinienzeile mit Mindestlänge 8–128,
+  booleschen Zeichenklassen und gültiger Revision vorhanden ist,
 - Anhang-, Vordruck- und Exportverzeichnis beschreibbar sind.
 
-`docker/db/verify.sql` löst den aggregierten Schemacheck in 38 benannte
+`docker/db/verify.sql` löst den aggregierten Schemacheck in 40 benannte
 `*_ok`-Ergebnisfelder auf. Für einen gültigen Stand müssen alle den Wert `1`
 haben; die anschließende Abfrage nach abweichender Engine oder Collation darf
 keine Zeile liefern.

@@ -25,6 +25,7 @@ require_once __DIR__ . "/../app/assignment.php";
 require_once __DIR__ . "/../app/dynamic_schema.php";
 require_once __DIR__ . "/../app/message_repository.php";
 require_once __DIR__ . "/../app/message_transport.php";
+require_once __DIR__ . "/../app/password_policy.php";
 require_once __DIR__ . "/../app/read_authorization.php";
 require_once __DIR__ . "/../app/workflow.php";
 
@@ -170,6 +171,8 @@ function check_save_user (array $loginData, string &$loginError) {
   $policyLockAcquired = false;
   $accountLockName = null;
   $accountLockAcquired = false;
+  $passwordPolicyLockName = null;
+  $passwordPolicyLockAcquired = false;
   $transactionActive = false;
   try {
     $connection = estab_auth_connect ($conf_4f_db);
@@ -197,6 +200,17 @@ function check_save_user (array $loginData, string &$loginError) {
       $conf_4f_tbl ["benutzer"],
       $login ["kuerzel"]
     );
+    // Existing logins deliberately remain independent of later policy
+    // changes. The explicit registration flow takes the global policy lock
+    // before the per-account lock, then decides under that account lock
+    // whether the requested code already exists.
+    if ($loginFlow === "new") {
+      $passwordPolicyLockName = estab_password_policy_acquire_lock (
+        $connection,
+        (string) $conf_4f_db ["datenbank"]
+      );
+      $passwordPolicyLockAcquired = true;
+    }
     estab_login_acquire_account_lock ($connection, $accountLockName);
     $accountLockAcquired = true;
     if (!$connection->begin_transaction ()) {
@@ -320,6 +334,16 @@ function check_save_user (array $loginData, string &$loginError) {
       $loginError = "Neue Konten können hier nicht erstellt werden. Wenden Sie sich an die zuständige Stelle.";
       return true;
     }
+    if (!$passwordPolicyLockAcquired) {
+      throw new RuntimeException (
+        "Kennwortrichtlinie der Selbstregistrierung wurde nicht gesperrt"
+      );
+    }
+    $registrationPassword = estab_password_policy_validate_password (
+      $login ["password"],
+      $loginData ["kennwort2"] ?? null,
+      estab_password_policy_load ($connection)
+    );
 
     if (estab_dynamic_schema_hat_requires_tables (
       $login ["funktion"],
@@ -338,7 +362,8 @@ function check_save_user (array $loginData, string &$loginError) {
       throw new RuntimeException ("Die erneuerte Sitzungskennung ist ungültig");
     }
 
-    $passwordHash = password_hash ($login ["password"], PASSWORD_DEFAULT);
+    $passwordHash = estab_auth_hash_password ($registrationPassword);
+    unset ($registrationPassword);
     if (!is_string ($passwordHash)) {
       throw new RuntimeException ("Kennwort konnte nicht sicher gespeichert werden");
     }
@@ -378,6 +403,17 @@ function check_save_user (array $loginData, string &$loginError) {
     $_SESSION ["ROLLE"] = $login ["rolle"];
 
     return false;
+  } catch (
+    EstabPasswordPolicyInputException|EstabPasswordPolicyBusyException $exception
+  ) {
+    if ($transactionActive && $connection instanceof mysqli) {
+      $connection->rollback ();
+      $transactionActive = false;
+    }
+    unset ($registrationPassword, $passwordHash);
+    estab_login_clear_session_identity ();
+    $loginError = $exception->getMessage ();
+    return true;
   } catch (Throwable $exception) {
     if ($transactionActive && $connection instanceof mysqli) {
       $connection->rollback ();
@@ -402,6 +438,24 @@ function check_save_user (array $loginData, string &$loginError) {
       } catch (Throwable $exception) {
         // Closing the owning connection below is the fail-safe release.
         error_log ("eStab account lock cleanup failed: ".$exception->getMessage ());
+      }
+    }
+    if (
+      $connection instanceof mysqli
+      && $passwordPolicyLockAcquired
+      && is_string ($passwordPolicyLockName)
+      && $passwordPolicyLockName !== ""
+    ) {
+      try {
+        estab_password_policy_release_lock (
+          $connection,
+          $passwordPolicyLockName
+        );
+      } catch (Throwable $exception) {
+        error_log (
+          "eStab password policy lock cleanup failed: ".
+          $exception->getMessage ()
+        );
       }
     }
     if (

@@ -70,6 +70,7 @@ esac
 backup_table="estab_admin_matrix_${test_number}"
 standard_backup_table="estab_admin_standard_${test_number}"
 print_backup_table="estab_admin_print_${test_number}"
+password_policy_backup_table="estab_admin_password_policy_${test_number}"
 marker="ESTAB_ADMIN_RESET_${test_number}_$$"
 rollback_trigger="estab_admin_standard_fail_${test_number}_$$"
 
@@ -148,11 +149,15 @@ UPDATE \`nv_nachrichten\` AS current_message
  WHERE current_message.\`einsatz_id\` = ${active_incident_id};
 DELETE FROM \`nv_protokoll\`
  WHERE \`p_lfd\` > ${audit_floor}
-   AND \`p_was\` IN ('Empfängermatrix', 'Nachrichtennummer Sync', 'Grafikstatus Reset');
+   AND \`p_was\` IN ('Empfängermatrix', 'Nachrichtennummer Sync', 'Grafikstatus Reset', 'Kennwortrichtlinie');
+DELETE FROM \`nv_kennwortrichtlinie\`;
+INSERT INTO \`nv_kennwortrichtlinie\`
+SELECT * FROM \`${password_policy_backup_table}\`;
 COMMIT;
 DROP TABLE IF EXISTS \`${backup_table}\`;
 DROP TABLE IF EXISTS \`${standard_backup_table}\`;
 DROP TABLE IF EXISTS \`${print_backup_table}\`;
+DROP TABLE IF EXISTS \`${password_policy_backup_table}\`;
 ALTER TABLE \`nv_empfmtx\` AUTO_INCREMENT = ${matrix_auto_increment};
 ALTER TABLE \`nv_empfmtx_standard\` AUTO_INCREMENT = ${standard_matrix_auto_increment};
 ALTER TABLE \`nv_nachrichten\` AUTO_INCREMENT = ${message_auto_increment};
@@ -215,6 +220,44 @@ csrf_from_body()
         exit 1
     fi
     printf '%s' "$token"
+}
+
+revision_from_body()
+{
+    revision=$(sed -n \
+        '/name="expected_revision"/{n;s/.*value="\([0-9][0-9]*\)".*/\1/p;q;}' \
+        "$body" | head -n 1)
+    case "$revision" in
+        '' | *[!0-9]*)
+            echo 'Admin HTTP: password-policy revision missing' >&2
+            sed -n '1,100p' "$body" >&2
+            exit 1
+            ;;
+    esac
+    printf '%s' "$revision"
+}
+
+write_password_policy_payload()
+{
+    destination=$1
+    csrf_token=$2
+    action=$3
+    revision=$4
+    minimum_length=$5
+    require_uppercase=$6
+    require_lowercase=$7
+    require_digit=$8
+    require_symbol=$9
+    confirm_policy=${10:-0}
+
+    printf 'csrf_token=%s&admin_action=%s&expected_revision=%s&minimum_length=%s' \
+        "$csrf_token" "$action" "$revision" "$minimum_length" >"$destination"
+    printf '&require_uppercase=%s&require_lowercase=%s&require_digit=%s&require_symbol=%s' \
+        "$require_uppercase" "$require_lowercase" \
+        "$require_digit" "$require_symbol" >>"$destination"
+    if [ "$confirm_policy" = 1 ]; then
+        printf '&confirm_policy=1' >>"$destination"
+    fi
 }
 
 normalized_matrix()
@@ -323,6 +366,7 @@ write_matrix_payload()
 assert_status 401 "$base_url/4fadm/make_fkt.php"
 assert_status 401 "$base_url/4fadm/set_number_after_crash.php"
 assert_status 401 "$base_url/4fadm/users.php"
+assert_status 401 "$base_url/4fadm/password_policy.php"
 assert_status 401 "$base_url/4fach/resetpic.php"
 assert_status 403 "$base_url/4fach/all_msg.php"
 assert_status 403 "$base_url/4fach/upload/foto_upload.php"
@@ -401,6 +445,9 @@ CREATE TABLE \`${print_backup_table}\` (
 INSERT INTO \`${print_backup_table}\` (\`00_lfd\`, \`x04_druck\`)
 SELECT \`00_lfd\`, \`x04_druck\` FROM \`nv_nachrichten\`
  WHERE \`einsatz_id\` = ${active_incident_id};
+DROP TABLE IF EXISTS \`${password_policy_backup_table}\`;
+CREATE TABLE \`${password_policy_backup_table}\` ENGINE=InnoDB
+AS SELECT * FROM \`nv_kennwortrichtlinie\`;
 INSERT INTO \`nv_nachrichten\`
   (\`einsatz_id\`, \`04_richtung\`, \`04_nummer\`, \`12_inhalt\`, \`x04_druck\`)
 VALUES (${active_incident_id}, 'E', 0, '${marker}', 't');
@@ -523,6 +570,12 @@ assert_status 403 --config "$admin_curl_config" \
     --data-urlencode 'target_code=e2e001' \
     "$base_url/4fadm/users.php"
 assert_status 403 --config "$admin_curl_config" \
+    --request POST \
+    --data-urlencode 'admin_action=preview' \
+    --data-urlencode 'expected_revision=0' \
+    --data-urlencode 'minimum_length=12' \
+    "$base_url/4fadm/password_policy.php"
+assert_status 403 --config "$admin_curl_config" \
     --request POST --data-urlencode 'admin_action=reset_print_flags' \
     "$base_url/4fach/resetpic.php"
 
@@ -559,6 +612,211 @@ assert_status 404 --config "$admin_curl_config" \
     --data-urlencode "target_code=$missing_user_code" \
     "$base_url/4fadm/users.php"
 assert_body 'Das ausgewählte Konto wurde nicht gefunden.'
+
+# The central password policy is protected by Basic Auth and per-session CSRF,
+# previews without mutation, applies atomically with optimistic locking and
+# records no credential material in its audit payload. Restore it through the
+# same HTTP workflow so later tests continue with the original requirements.
+assert_status 200 --config "$admin_curl_config" \
+    --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+    "$base_url/4fadm/password_policy.php"
+assert_body 'data-estab-password-policy'
+assert_body 'Aktuell wirksame Richtlinie'
+password_policy_csrf=$(csrf_from_body)
+password_policy_revision=$(revision_from_body)
+password_policy_snapshot=$(db_sql <<'SQL'
+SELECT CONCAT_WS('|', `minimum_length`, `require_uppercase`,
+                 `require_lowercase`, `require_digit`, `require_symbol`,
+                 `revision`)
+  FROM `nv_kennwortrichtlinie`
+ WHERE `singleton_id` = 1;
+SQL
+)
+IFS='|' read -r policy_minimum policy_uppercase policy_lowercase \
+    policy_digit policy_symbol policy_revision <<EOF
+$password_policy_snapshot
+EOF
+for value in "$policy_minimum" "$policy_uppercase" "$policy_lowercase" \
+    "$policy_digit" "$policy_symbol" "$policy_revision"; do
+    case "$value" in
+        '' | *[!0-9]*)
+            echo 'Admin HTTP: invalid stored password-policy fixture' >&2
+            exit 1
+            ;;
+    esac
+done
+if [ "$password_policy_revision" != "$policy_revision" ]; then
+    echo 'Admin HTTP: rendered password-policy revision is stale' >&2
+    exit 1
+fi
+if [ "$policy_minimum" -lt 128 ]; then
+    proposed_minimum=$((policy_minimum + 1))
+else
+    proposed_minimum=$((policy_minimum - 1))
+fi
+if [ "$policy_digit" = 1 ]; then
+    proposed_digit=0
+else
+    proposed_digit=1
+fi
+
+# Query parameters that resemble a write must remain inert on GET.
+assert_status 200 --config "$admin_curl_config" \
+    --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+    "$base_url/4fadm/password_policy.php?admin_action=apply&minimum_length=8&confirm_policy=1"
+current_password_policy=$(db_sql <<'SQL'
+SELECT CONCAT_WS('|', `minimum_length`, `require_uppercase`,
+                 `require_lowercase`, `require_digit`, `require_symbol`,
+                 `revision`)
+  FROM `nv_kennwortrichtlinie`
+ WHERE `singleton_id` = 1;
+SQL
+)
+if [ "$current_password_policy" != "$password_policy_snapshot" ]; then
+    echo 'Admin HTTP: password policy changed through GET' >&2
+    exit 1
+fi
+
+policy_preview_payload=$work_dir/password-policy-preview.txt
+write_password_policy_payload \
+    "$policy_preview_payload" "$password_policy_csrf" preview \
+    "$policy_revision" "$proposed_minimum" "$policy_uppercase" \
+    "$policy_lowercase" "$proposed_digit" "$policy_symbol"
+assert_status 200 --config "$admin_curl_config" \
+    --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+    --request POST --header 'Content-Type: application/x-www-form-urlencoded' \
+    --data-binary "@$policy_preview_payload" \
+    "$base_url/4fadm/password_policy.php"
+assert_body 'Änderung bestätigen'
+assert_body 'Künftig'
+current_password_policy=$(db_sql <<'SQL'
+SELECT CONCAT_WS('|', `minimum_length`, `require_uppercase`,
+                 `require_lowercase`, `require_digit`, `require_symbol`,
+                 `revision`)
+  FROM `nv_kennwortrichtlinie`
+ WHERE `singleton_id` = 1;
+SQL
+)
+if [ "$current_password_policy" != "$password_policy_snapshot" ]; then
+    echo 'Admin HTTP: password-policy preview mutated the database' >&2
+    exit 1
+fi
+
+policy_unconfirmed_payload=$work_dir/password-policy-unconfirmed.txt
+write_password_policy_payload \
+    "$policy_unconfirmed_payload" "$password_policy_csrf" apply \
+    "$policy_revision" "$proposed_minimum" "$policy_uppercase" \
+    "$policy_lowercase" "$proposed_digit" "$policy_symbol"
+assert_status 422 --config "$admin_curl_config" \
+    --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+    --request POST --header 'Content-Type: application/x-www-form-urlencoded' \
+    --data-binary "@$policy_unconfirmed_payload" \
+    "$base_url/4fadm/password_policy.php"
+assert_body 'Bestätigen Sie die angezeigte Kennwortrichtlinie.'
+
+policy_apply_payload=$work_dir/password-policy-apply.txt
+write_password_policy_payload \
+    "$policy_apply_payload" "$password_policy_csrf" apply \
+    "$policy_revision" "$proposed_minimum" "$policy_uppercase" \
+    "$policy_lowercase" "$proposed_digit" "$policy_symbol" 1
+assert_status 303 --config "$admin_curl_config" \
+    --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+    --request POST --header 'Content-Type: application/x-www-form-urlencoded' \
+    --data-binary "@$policy_apply_payload" \
+    "$base_url/4fadm/password_policy.php"
+applied_revision=$((policy_revision + 1))
+expected_applied_policy="${proposed_minimum}|${policy_uppercase}|${policy_lowercase}|${proposed_digit}|${policy_symbol}|${applied_revision}"
+applied_password_policy=$(db_sql <<'SQL'
+SELECT CONCAT_WS('|', `minimum_length`, `require_uppercase`,
+                 `require_lowercase`, `require_digit`, `require_symbol`,
+                 `revision`)
+  FROM `nv_kennwortrichtlinie`
+ WHERE `singleton_id` = 1;
+SQL
+)
+if [ "$applied_password_policy" != "$expected_applied_policy" ]; then
+    printf 'Admin HTTP: applied password policy was %s, expected %s\n' \
+        "$applied_password_policy" "$expected_applied_policy" >&2
+    exit 1
+fi
+policy_audit_state=$(db_sql <<SQL
+SELECT CONCAT(
+         COUNT(*), '|',
+         COALESCE(MAX(JSON_UNQUOTE(JSON_EXTRACT(
+           \`p_ereignis\`, '$.action'
+         ))), ''), '|',
+         COALESCE(MAX(CAST(JSON_UNQUOTE(JSON_EXTRACT(
+           \`p_ereignis\`, '$.before_revision'
+         )) AS UNSIGNED)), 0), '|',
+         COALESCE(MAX(CAST(JSON_UNQUOTE(JSON_EXTRACT(
+           \`p_ereignis\`, '$.after_revision'
+         )) AS UNSIGNED)), 0)
+       )
+  FROM \`nv_protokoll\`
+ WHERE \`p_lfd\` > ${audit_floor}
+   AND \`p_was\` = 'Kennwortrichtlinie';
+SQL
+)
+if [ "$policy_audit_state" != "1|password_policy_updated|${policy_revision}|${applied_revision}" ]; then
+    printf 'Admin HTTP: password-policy audit state is incomplete: %s\n' \
+        "$policy_audit_state" >&2
+    exit 1
+fi
+if db_sql <<SQL | grep -Eqi 'new_password|kennwort1|kennwort2|password_hash|cleartext'; then
+SELECT \`p_ereignis\`
+  FROM \`nv_protokoll\`
+ WHERE \`p_lfd\` > ${audit_floor}
+   AND \`p_was\` = 'Kennwortrichtlinie';
+SQL
+    echo 'Admin HTTP: password-policy audit contains credential material' >&2
+    exit 1
+fi
+
+# A second submission of the old preview is rejected and cannot overwrite the
+# newer policy revision.
+assert_status 409 --config "$admin_curl_config" \
+    --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+    --request POST --header 'Content-Type: application/x-www-form-urlencoded' \
+    --data-binary "@$policy_apply_payload" \
+    "$base_url/4fadm/password_policy.php"
+assert_body 'zwischenzeitlich geändert'
+
+assert_status 200 --config "$admin_curl_config" \
+    --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+    "$base_url/4fadm/password_policy.php"
+password_policy_csrf=$(csrf_from_body)
+current_policy_revision=$(revision_from_body)
+policy_restore_preview=$work_dir/password-policy-restore-preview.txt
+write_password_policy_payload \
+    "$policy_restore_preview" "$password_policy_csrf" preview \
+    "$current_policy_revision" "$policy_minimum" "$policy_uppercase" \
+    "$policy_lowercase" "$policy_digit" "$policy_symbol"
+assert_status 200 --config "$admin_curl_config" \
+    --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+    --request POST --header 'Content-Type: application/x-www-form-urlencoded' \
+    --data-binary "@$policy_restore_preview" \
+    "$base_url/4fadm/password_policy.php"
+policy_restore_apply=$work_dir/password-policy-restore-apply.txt
+write_password_policy_payload \
+    "$policy_restore_apply" "$password_policy_csrf" apply \
+    "$current_policy_revision" "$policy_minimum" "$policy_uppercase" \
+    "$policy_lowercase" "$policy_digit" "$policy_symbol" 1
+assert_status 303 --config "$admin_curl_config" \
+    --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+    --request POST --header 'Content-Type: application/x-www-form-urlencoded' \
+    --data-binary "@$policy_restore_apply" \
+    "$base_url/4fadm/password_policy.php"
+restored_password_policy=$(db_sql <<'SQL'
+SELECT CONCAT_WS('|', `minimum_length`, `require_uppercase`,
+                 `require_lowercase`, `require_digit`, `require_symbol`)
+  FROM `nv_kennwortrichtlinie`
+ WHERE `singleton_id` = 1;
+SQL
+)
+if [ "$restored_password_policy" != "${policy_minimum}|${policy_uppercase}|${policy_lowercase}|${policy_digit}|${policy_symbol}" ]; then
+    echo 'Admin HTTP: password policy was not restored through its HTTP workflow' >&2
+    exit 1
+fi
 
 # Change one unused recipient cell, verify it, then restore the complete
 # original matrix through the same HTTP transaction.

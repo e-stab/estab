@@ -10,6 +10,20 @@
 
 require_once __DIR__ . '/bootstrap.php';
 
+if (!defined('ESTAB_AUTH_PASSWORD_MAXIMUM_BYTES')) {
+    define('ESTAB_AUTH_PASSWORD_MAXIMUM_BYTES', 1024);
+}
+if (!defined('ESTAB_AUTH_PASSWORD_INPUT_MAXIMUM_LENGTH')) {
+    // HTML counts UTF-16 code units while PHP validates Unicode code points.
+    // A valid UTF-8 string never needs more UTF-16 code units than UTF-8
+    // bytes. Matching the server byte envelope therefore keeps every
+    // server-valid credential enterable, including astral symbols.
+    define(
+        'ESTAB_AUTH_PASSWORD_INPUT_MAXIMUM_LENGTH',
+        ESTAB_AUTH_PASSWORD_MAXIMUM_BYTES
+    );
+}
+
 /** Return the number of Unicode code points, with no mbstring dependency. */
 function estab_auth_text_length(string $value): int
 {
@@ -19,6 +33,110 @@ function estab_auth_text_length(string $value): int
 
     $count = preg_match_all('/./us', $value, $matches);
     return $count === false ? -1 : $count;
+}
+
+/** Return the non-truncating algorithm required for all newly written hashes. */
+function estab_auth_password_algorithm(): string|int
+{
+    if (!defined('PASSWORD_ARGON2ID')) {
+        throw new RuntimeException(
+            'Argon2id-Unterstützung ist in dieser PHP-Laufzeit nicht verfügbar.'
+        );
+    }
+    $algorithm = constant('PASSWORD_ARGON2ID');
+    if (!is_string($algorithm) && !is_int($algorithm)) {
+        throw new RuntimeException('Die Argon2id-Konfiguration ist ungültig.');
+    }
+    return $algorithm;
+}
+
+/** Return explicit, reproducible Argon2id costs from the pinned PHP runtime. */
+function estab_auth_password_options(): array
+{
+    $options = [
+        'memory_cost' => defined('PASSWORD_ARGON2_DEFAULT_MEMORY_COST')
+            ? constant('PASSWORD_ARGON2_DEFAULT_MEMORY_COST')
+            : null,
+        'time_cost' => defined('PASSWORD_ARGON2_DEFAULT_TIME_COST')
+            ? constant('PASSWORD_ARGON2_DEFAULT_TIME_COST')
+            : null,
+        'threads' => defined('PASSWORD_ARGON2_DEFAULT_THREADS')
+            ? constant('PASSWORD_ARGON2_DEFAULT_THREADS')
+            : null,
+    ];
+    foreach ($options as $value) {
+        if (!is_int($value) || $value < 1) {
+            throw new RuntimeException(
+                'Die Argon2id-Kostenparameter sind ungültig.'
+            );
+        }
+    }
+    return $options;
+}
+
+/** Hash a validated credential without bcrypt's 72-byte truncation. */
+function estab_auth_hash_password(string $password): string
+{
+    if (
+        $password === ''
+        || strlen($password) > ESTAB_AUTH_PASSWORD_MAXIMUM_BYTES
+        || str_contains($password, "\0")
+    ) {
+        throw new RuntimeException('Das Kennwort liegt außerhalb der sicheren Eingabegrenzen.');
+    }
+    $hash = password_hash(
+        $password,
+        estab_auth_password_algorithm(),
+        estab_auth_password_options()
+    );
+    if (!is_string($hash) || $hash === '' || strlen($hash) > 255) {
+        throw new RuntimeException('Das Kennwort konnte nicht sicher gehasht werden.');
+    }
+    return $hash;
+}
+
+/**
+ * Decide whether one successfully verified hash can be upgraded safely.
+ *
+ * bcrypt cannot distinguish suffixes once the submitted value reaches 72
+ * bytes. A historical bcrypt hash may therefore only be rebound to the exact
+ * submitted value when that value is shorter than the truncation boundary.
+ * Existing Argon2id parameters are upgraded only when every cost is at most
+ * the target and at least one is lower; a stronger or mixed profile is never
+ * silently downgraded.
+ */
+function estab_auth_password_hash_needs_upgrade(
+    string $stored,
+    string $provided
+): bool {
+    $info = password_get_info($stored);
+    $algorithmName = $info['algoName'] ?? 'unknown';
+    if ($algorithmName === 'bcrypt') {
+        return strlen($provided) < 72;
+    }
+    if ($algorithmName !== 'argon2id') {
+        return $algorithmName !== 'unknown';
+    }
+
+    $currentOptions = $info['options'] ?? null;
+    if (!is_array($currentOptions)) {
+        return false;
+    }
+    $targetOptions = estab_auth_password_options();
+    $weaker = false;
+    foreach ($targetOptions as $name => $target) {
+        $current = $currentOptions[$name] ?? null;
+        if (!is_int($current) || $current < 1) {
+            return false;
+        }
+        if ($current > $target) {
+            return false;
+        }
+        if ($current < $target) {
+            $weaker = true;
+        }
+    }
+    return $weaker;
 }
 
 /** Build the authoritative function-to-role map from $conf_empf. */
@@ -111,7 +229,11 @@ function estab_auth_validate_login_with_roles(array $input, array $roles): array
         $errors[] = 'funktion';
     }
 
-    if ($password === '' || strlen($password) > 255 || str_contains($password, "\0")) {
+    if (
+        $password === ''
+        || strlen($password) > ESTAB_AUTH_PASSWORD_MAXIMUM_BYTES
+        || str_contains($password, "\0")
+    ) {
         $errors[] = 'kennwort1';
     }
 
@@ -132,7 +254,9 @@ function estab_auth_validate_login_with_roles(array $input, array $roles): array
  * Verify a modern hash or a legacy plaintext value.
  *
  * A successful plaintext check always returns a replacement hash. Existing
- * hashes are also upgraded when PHP's current PASSWORD_DEFAULT changes.
+ * unambiguous hashes are upgraded without lowering stronger Argon2id costs.
+ * bcrypt credentials presented with 72 or more bytes remain unchanged until
+ * an explicit password reset because bcrypt cannot authenticate their suffix.
  */
 function estab_auth_verify_password(string $provided, string $stored): array
 {
@@ -141,8 +265,11 @@ function estab_auth_verify_password(string $provided, string $stored): array
 
     if ($isHash) {
         $valid = password_verify($provided, $stored);
-        $replacement = $valid && password_needs_rehash($stored, PASSWORD_DEFAULT)
-            ? password_hash($provided, PASSWORD_DEFAULT)
+        $replacement = $valid && estab_auth_password_hash_needs_upgrade(
+            $stored,
+            $provided
+        )
+            ? estab_auth_hash_password($provided)
             : null;
         return [
             'valid' => $valid,
@@ -155,7 +282,7 @@ function estab_auth_verify_password(string $provided, string $stored): array
     return [
         'valid' => $valid,
         'migrated' => $valid,
-        'replacement' => $valid ? password_hash($provided, PASSWORD_DEFAULT) : null,
+        'replacement' => $valid ? estab_auth_hash_password($provided) : null,
     ];
 }
 

@@ -13,10 +13,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/assignment.php';
+require_once __DIR__ . '/password_policy.php';
 
-if (!defined('ESTAB_USER_ADMIN_PASSWORD_MIN_LENGTH')) {
-    define('ESTAB_USER_ADMIN_PASSWORD_MIN_LENGTH', 12);
-}
 if (!defined('ESTAB_USER_ADMIN_ACCOUNT_LOCK_TIMEOUT')) {
     define('ESTAB_USER_ADMIN_ACCOUNT_LOCK_TIMEOUT', 10);
 }
@@ -57,26 +55,14 @@ function estab_user_admin_validate_code(mixed $value): string
  */
 function estab_user_admin_validate_password(
     mixed $passwordValue,
-    mixed $confirmationValue
+    mixed $confirmationValue,
+    ?array $policy = null
 ): string {
-    if (!is_string($passwordValue) || !is_string($confirmationValue)) {
-        throw new InvalidArgumentException('Das neue Kennwort ist ungültig.');
-    }
-    if (
-        !hash_equals($passwordValue, $confirmationValue)
-        || strlen($passwordValue) > 255
-        || str_contains($passwordValue, "\0")
-        || preg_match('//u', $passwordValue) !== 1
-        || estab_auth_text_length($passwordValue)
-            < ESTAB_USER_ADMIN_PASSWORD_MIN_LENGTH
-        || preg_match('/[\p{C}]/u', $passwordValue) === 1
-    ) {
-        throw new InvalidArgumentException(
-            'Das neue Kennwort muss übereinstimmen und mindestens 12 Zeichen '
-            . 'lang sein; Steuerzeichen sind nicht erlaubt.'
-        );
-    }
-    return $passwordValue;
+    return estab_password_policy_validate_password(
+        $passwordValue,
+        $confirmationValue,
+        $policy ?? estab_password_policy_defaults()
+    );
 }
 
 /** Validate an account display name with the same boundary as public login. */
@@ -417,15 +403,6 @@ function estab_user_admin_create_account(
 ): array {
     $name = estab_user_admin_validate_name($nameValue);
     $code = estab_user_admin_validate_code($codeValue);
-    $password = estab_user_admin_validate_password(
-        $passwordValue,
-        $confirmationValue
-    );
-    $passwordHash = password_hash($password, PASSWORD_DEFAULT);
-    unset($password);
-    if (!is_string($passwordHash) || $passwordHash === '') {
-        throw new RuntimeException('Das Kennwort konnte nicht sicher gehasht werden.');
-    }
 
     $lockName = estab_user_admin_account_lock_name(
         $database,
@@ -435,7 +412,10 @@ function estab_user_admin_create_account(
     $lockAcquired = false;
     $policyLockName = null;
     $policyLockAcquired = false;
+    $passwordPolicyLockName = null;
+    $passwordPolicyLockAcquired = false;
     $transactionActive = false;
+    $passwordHash = null;
     try {
         $policyLockName = estab_assignment_acquire_policy_lock(
             $connection,
@@ -447,6 +427,23 @@ function estab_user_admin_create_account(
             $functionValue,
             estab_assignment_function_roles($connection, $matrixTable)
         );
+        $passwordPolicyLockName = estab_password_policy_acquire_lock(
+            $connection,
+            $database
+        );
+        $passwordPolicyLockAcquired = true;
+        $password = estab_user_admin_validate_password(
+            $passwordValue,
+            $confirmationValue,
+            estab_password_policy_load($connection)
+        );
+        $passwordHash = estab_auth_hash_password($password);
+        unset($password);
+        if (!is_string($passwordHash) || $passwordHash === '') {
+            throw new RuntimeException(
+                'Das Kennwort konnte nicht sicher gehasht werden.'
+            );
+        }
         estab_user_admin_acquire_account_lock($connection, $lockName);
         $lockAcquired = true;
         if (!$connection->begin_transaction()) {
@@ -547,6 +544,23 @@ function estab_user_admin_create_account(
             } catch (Throwable $exception) {
                 error_log(
                     'eStab account-creation lock cleanup failed: '
+                    . $exception->getMessage()
+                );
+            }
+        }
+        if (
+            $passwordPolicyLockAcquired
+            && is_string($passwordPolicyLockName)
+            && $passwordPolicyLockName !== ''
+        ) {
+            try {
+                estab_password_policy_release_lock(
+                    $connection,
+                    $passwordPolicyLockName
+                );
+            } catch (Throwable $exception) {
+                error_log(
+                    'eStab account-creation password-policy lock cleanup failed: '
                     . $exception->getMessage()
                 );
             }
@@ -880,17 +894,6 @@ function estab_user_admin_reset_password(
     string $remoteAddress
 ): array {
     $code = estab_user_admin_validate_code($targetCode);
-    // Revalidate the single value at the hashing boundary. The page validates
-    // confirmation separately and never persists either POST field.
-    $password = estab_user_admin_validate_password(
-        $newPassword,
-        $newPassword
-    );
-    $passwordHash = password_hash($password, PASSWORD_DEFAULT);
-    unset($password);
-    if (!is_string($passwordHash) || $passwordHash === '') {
-        throw new RuntimeException('Das neue Kennwort konnte nicht sicher gehasht werden.');
-    }
 
     $lockName = estab_user_admin_account_lock_name(
         $database,
@@ -898,8 +901,30 @@ function estab_user_admin_reset_password(
         $code
     );
     $lockAcquired = false;
+    $passwordPolicyLockName = null;
+    $passwordPolicyLockAcquired = false;
     $transactionActive = false;
+    $passwordHash = null;
     try {
+        $passwordPolicyLockName = estab_password_policy_acquire_lock(
+            $connection,
+            $database
+        );
+        $passwordPolicyLockAcquired = true;
+        // Revalidate the single value at the hashing boundary. The HTTP page
+        // validates confirmation separately and never persists either field.
+        $password = estab_user_admin_validate_password(
+            $newPassword,
+            $newPassword,
+            estab_password_policy_load($connection)
+        );
+        $passwordHash = estab_auth_hash_password($password);
+        unset($password);
+        if (!is_string($passwordHash) || $passwordHash === '') {
+            throw new RuntimeException(
+                'Das neue Kennwort konnte nicht sicher gehasht werden.'
+            );
+        }
         estab_user_admin_acquire_account_lock($connection, $lockName);
         $lockAcquired = true;
         if (!$connection->begin_transaction()) {
@@ -971,6 +996,23 @@ function estab_user_admin_reset_password(
                 // Closing the owning connection remains the fail-safe release.
                 error_log(
                     'eStab user-administration lock cleanup failed: '
+                    . $exception->getMessage()
+                );
+            }
+        }
+        if (
+            $passwordPolicyLockAcquired
+            && is_string($passwordPolicyLockName)
+            && $passwordPolicyLockName !== ''
+        ) {
+            try {
+                estab_password_policy_release_lock(
+                    $connection,
+                    $passwordPolicyLockName
+                );
+            } catch (Throwable $exception) {
+                error_log(
+                    'eStab password-reset policy-lock cleanup failed: '
                     . $exception->getMessage()
                 );
             }

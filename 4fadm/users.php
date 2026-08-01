@@ -32,6 +32,7 @@ $flash = $_SESSION['estab_user_admin_flash'] ?? null;
 unset($_SESSION['estab_user_admin_flash']);
 $error = null;
 $functionRoles = [];
+$passwordPolicy = null;
 
 if ($requestMethod === 'POST') {
     try {
@@ -76,9 +77,11 @@ if ($requestMethod === 'POST') {
             $actor = estab_user_admin_actor($_SERVER);
             $remoteAddress = estab_auth_remote_ip($_SERVER);
             if ($action === 'create') {
+                $requestPasswordPolicy = estab_password_policy_load($connection);
                 $newPassword = estab_user_admin_validate_password(
                     $_POST['new_password'] ?? null,
-                    $_POST['new_password_confirmation'] ?? null
+                    $_POST['new_password_confirmation'] ?? null,
+                    $requestPasswordPolicy
                 );
                 unset(
                     $_POST['new_password'],
@@ -116,9 +119,11 @@ if ($requestMethod === 'POST') {
                     ? 'assignment_unchanged'
                     : 'reassigned';
             } elseif ($action === 'reset_password') {
+                $requestPasswordPolicy = estab_password_policy_load($connection);
                 $newPassword = estab_user_admin_validate_password(
                     $_POST['new_password'] ?? null,
-                    $_POST['new_password_confirmation'] ?? null
+                    $_POST['new_password_confirmation'] ?? null,
+                    $requestPasswordPolicy
                 );
                 unset(
                     $_POST['new_password'],
@@ -178,6 +183,9 @@ if ($requestMethod === 'POST') {
         } catch (EstabAssignmentBusyException $exception) {
             http_response_code(409);
             $error = $exception->getMessage();
+        } catch (EstabPasswordPolicyBusyException $exception) {
+            http_response_code(409);
+            $error = $exception->getMessage();
         } catch (Throwable $exception) {
             error_log(
                 'eStab user administration failed: '
@@ -203,6 +211,19 @@ $users = [];
 try {
     $connection = estab_auth_connect($conf_4f_db);
     try {
+        try {
+            $passwordPolicy = estab_password_policy_load($connection);
+        } catch (Throwable $exception) {
+            error_log(
+                'eStab user-administration password-policy load failed: '
+                . $exception->getMessage()
+            );
+            if ($error === null) {
+                http_response_code(503);
+                $error = 'Die Kennwortrichtlinie konnte nicht geladen werden. '
+                    . 'Kontoanlage und Kennwortreset sind vorübergehend gesperrt.';
+            }
+        }
         $displayPolicyLockName = estab_assignment_acquire_policy_lock(
             $connection,
             (string) $conf_4f_db['datenbank'],
@@ -284,6 +305,7 @@ if (
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>eStab Benutzerverwaltung</title>
   <?= estab_session_ui_stylesheet() ?>
+  <script src="../estab-password-policy.js" defer></script>
 </head>
 <body class="estab-tool-page">
   <main class="estab-tool-main estab-tool-main-wide" data-estab-user-admin>
@@ -291,8 +313,9 @@ if (
       <p class="estab-tool-eyebrow">Technischer Administrationszugang</p>
       <h1>Benutzerverwaltung</h1>
       <p>Konten mit einer festen Funktion anlegen, administrativ neu zuweisen,
-        sperren oder wieder freigeben und Kennwörter sicher zurücksetzen. Alle
-        Änderungen werden gemeinsam mit einem Audit-Eintrag gespeichert.</p>
+        sperren oder wieder freigeben und Kennwörter nach der zentralen
+        Richtlinie sicher zurücksetzen. Alle Änderungen werden gemeinsam mit
+        einem Audit-Eintrag gespeichert.</p>
     </header>
 
     <aside
@@ -321,14 +344,34 @@ if (
       </p>
     <?php endif; ?>
 
+    <section class="estab-tool-panel" aria-labelledby="password-policy-title">
+      <h2 id="password-policy-title">Kennwortrichtlinie</h2>
+      <?php if (is_array($passwordPolicy)): ?>
+        <p id="estab-password-policy-requirements">
+          <?= estab_admin_html(
+              estab_password_policy_requirements_text($passwordPolicy)
+          ) ?>
+        </p>
+        <p>Die Richtlinie gilt für neue Konten, Kennwortresets und eine
+          gegebenenfalls aktivierte Selbstregistrierung. Bestehende Kennwörter
+          bleiben gültig.</p>
+        <a class="estab-button" href="password_policy.php">
+          Kennwortrichtlinie konfigurieren
+        </a>
+      <?php else: ?>
+        <p class="estab-tool-empty">Die Richtlinie ist nicht verfügbar.
+          Kennwörter können deshalb derzeit nicht sicher gesetzt werden.</p>
+      <?php endif; ?>
+    </section>
+
     <section class="estab-tool-panel" aria-labelledby="estab-create-user-title">
       <h2 id="estab-create-user-title">Benutzerkonto anlegen</h2>
       <p>Vergeben Sie Identität, Startkennwort und die einzige Funktion, mit der
         sich das neue Konto anmelden darf. Eine spätere Änderung ist nur hier
         in der Administration möglich.</p>
-      <?php if ($functionRoles === []): ?>
+      <?php if ($functionRoles === [] || !is_array($passwordPolicy)): ?>
         <p class="estab-tool-empty">Die verfügbaren Funktionen konnten nicht
-          geladen werden.</p>
+          geladen werden oder die Kennwortrichtlinie ist nicht verfügbar.</p>
       <?php else: ?>
         <form method="post" action="users.php" autocomplete="off"
           data-estab-dirty-guard class="estab-tool-form">
@@ -359,14 +402,20 @@ if (
             <label>
               Startkennwort
               <input type="password" name="new_password"
-                minlength="<?= ESTAB_USER_ADMIN_PASSWORD_MIN_LENGTH ?>"
-                maxlength="255" autocomplete="new-password" required>
+                data-estab-password-minimum-codepoints="<?=
+                    (int) $passwordPolicy['minimum_length'] ?>"
+                maxlength="<?= ESTAB_AUTH_PASSWORD_INPUT_MAXIMUM_LENGTH ?>"
+                autocomplete="new-password"
+                aria-describedby="estab-password-policy-requirements" required>
             </label>
             <label>
               Startkennwort wiederholen
               <input type="password" name="new_password_confirmation"
-                minlength="<?= ESTAB_USER_ADMIN_PASSWORD_MIN_LENGTH ?>"
-                maxlength="255" autocomplete="new-password" required>
+                data-estab-password-minimum-codepoints="<?=
+                    (int) $passwordPolicy['minimum_length'] ?>"
+                maxlength="<?= ESTAB_AUTH_PASSWORD_INPUT_MAXIMUM_LENGTH ?>"
+                autocomplete="new-password"
+                aria-describedby="estab-password-policy-requirements" required>
             </label>
           </div>
           <button class="estab-button estab-button-primary" type="submit">
@@ -546,16 +595,20 @@ if (
                     </details>
                   <?php endif; ?>
 
-                  <?php if ($manageable): ?>
+                  <?php if ($manageable && is_array($passwordPolicy)): ?>
                     <details>
                       <summary>Kennwort zurücksetzen</summary>
                       <?php if ($orphaned): ?>
                         <p>Der Reset ist möglich, die Anmeldung bleibt aber
                           bis zur Zuweisung einer gültigen Funktion gesperrt.</p>
                       <?php endif; ?>
-                      <p>Mindestens 12 Zeichen. Das bisherige Kennwort und eine
-                        aktive Sitzung werden unmittelbar ungültig. Der
-                        Sperrstatus des Kontos bleibt unverändert.</p>
+                      <p><?= estab_admin_html(
+                          estab_password_policy_requirements_text(
+                              $passwordPolicy
+                          )
+                      ) ?> Das bisherige Kennwort und eine aktive Sitzung
+                        werden unmittelbar ungültig. Der Sperrstatus des Kontos
+                        bleibt unverändert.</p>
                       <form method="post" action="users.php"
                         autocomplete="off" data-estab-dirty-guard>
                         <?= estab_csrf_field() ?>
@@ -566,14 +619,22 @@ if (
                         <label>
                           Neues Kennwort
                           <input type="password" name="new_password"
-                            minlength="<?= ESTAB_USER_ADMIN_PASSWORD_MIN_LENGTH ?>"
-                            maxlength="255" autocomplete="new-password" required>
+                            data-estab-password-minimum-codepoints="<?=
+                                (int) $passwordPolicy['minimum_length'] ?>"
+                            maxlength="<?= ESTAB_AUTH_PASSWORD_INPUT_MAXIMUM_LENGTH ?>"
+                            autocomplete="new-password"
+                            aria-describedby="estab-password-policy-requirements"
+                            required>
                         </label>
                         <label>
                           Neues Kennwort wiederholen
                           <input type="password" name="new_password_confirmation"
-                            minlength="<?= ESTAB_USER_ADMIN_PASSWORD_MIN_LENGTH ?>"
-                            maxlength="255" autocomplete="new-password" required>
+                            data-estab-password-minimum-codepoints="<?=
+                                (int) $passwordPolicy['minimum_length'] ?>"
+                            maxlength="<?= ESTAB_AUTH_PASSWORD_INPUT_MAXIMUM_LENGTH ?>"
+                            autocomplete="new-password"
+                            aria-describedby="estab-password-policy-requirements"
+                            required>
                         </label>
                         <button class="estab-button estab-button-danger" type="submit">
                           Kennwort ersetzen und abmelden

@@ -70,6 +70,9 @@ $logbookShiftMigration = $read(
 $optionalAccessShiftMigration = $read(
     $root . '/docker/db/migrations/112-optional-access-shifts.sql'
 );
+$passwordPolicyMigration = $read(
+    $root . '/docker/db/migrations/113-password-policy.sql'
+);
 $baseline = $read($root . '/docker/db/init/10-schema.sql');
 $verify = $read($root . '/docker/db/verify.sql');
 $health = $read($root . '/health.php');
@@ -93,6 +96,7 @@ $sessionPresenceSql = $normaliseSql($sessionPresenceMigration);
 $logbookRulesSql = $normaliseSql($logbookRulesMigration);
 $logbookShiftSql = $normaliseSql($logbookShiftMigration);
 $optionalAccessShiftSql = $normaliseSql($optionalAccessShiftMigration);
+$passwordPolicySql = $normaliseSql($passwordPolicyMigration);
 $baselineSql = $normaliseSql($baseline);
 $verifySql = $normaliseSql($verify);
 $readinessSql = $normaliseSql(estab_readiness_schema_query());
@@ -1110,6 +1114,221 @@ foreach ([
     );
 }
 
+$passwordPolicyMigrationFragments = [
+    'Password-policy migration blocked: foreign table collision'
+        => 'Migration 113 does not reject a foreign table collision',
+    'CREATE TABLE IF NOT EXISTS `nv_kennwortrichtlinie`'
+        => 'Migration 113 does not create the password-policy singleton',
+    '`minimum_length` SMALLINT UNSIGNED NOT NULL DEFAULT 12'
+        => 'Migration 113 does not preserve the released minimum-length default',
+    '`require_uppercase` TINYINT UNSIGNED NOT NULL DEFAULT 0'
+        => 'Migration 113 changes the released uppercase default',
+    '`require_lowercase` TINYINT UNSIGNED NOT NULL DEFAULT 0'
+        => 'Migration 113 changes the released lowercase default',
+    '`require_digit` TINYINT UNSIGNED NOT NULL DEFAULT 0'
+        => 'Migration 113 changes the released digit default',
+    '`require_symbol` TINYINT UNSIGNED NOT NULL DEFAULT 0'
+        => 'Migration 113 changes the released symbol default',
+    "column_default = '''migration-113'''"
+        => 'Migration 113 does not recognise MariaDB string defaults canonically',
+    "`column_name` = 'singleton_id' AND ordinal_position = 1 "
+        . "AND data_type = 'tinyint' "
+        . "AND column_type LIKE 'tinyint%unsigned' "
+        . "AND column_default IS NULL"
+        => 'Migration 113 accepts a singleton column with a foreign default',
+    "`column_name` = 'require_uppercase' AND ordinal_position = 3"
+        => 'Migration 113 does not require uppercase at canonical position 3',
+    "`column_name` = 'require_lowercase' AND ordinal_position = 4"
+        => 'Migration 113 does not require lowercase at canonical position 4',
+    "`column_name` = 'require_digit' AND ordinal_position = 5"
+        => 'Migration 113 does not require digit at canonical position 5',
+    "`column_name` = 'require_symbol' AND ordinal_position = 6"
+        => 'Migration 113 does not require symbol at canonical position 6',
+    'CHECK (`singleton_id` = 1)'
+        => 'Migration 113 does not enforce singleton storage',
+    'CHECK (`minimum_length` BETWEEN 8 AND 128)'
+        => 'Migration 113 does not enforce the supported length bounds',
+    'information_schema.check_constraints'
+        => 'Migration 113 trusts owned CHECK names without their definitions',
+    'total_constraints <> 8'
+        => 'Migration 113 does not reject additional foreign constraints',
+    'canonical_checks <> 7'
+        => 'Migration 113 does not require all canonical CHECK definitions',
+    'CREATE PROCEDURE estab_migrate_113_validate(IN require_row TINYINT UNSIGNED)'
+        => 'Migration 113 has no resumable schema/row validator',
+    'CALL estab_migrate_113_validate(0);'
+        => 'Migration 113 does not validate an owned partial table before seeding',
+    'ON DUPLICATE KEY UPDATE `singleton_id` = VALUES(`singleton_id`)'
+        => 'Migration 113 cannot preserve configured values on ledger retry',
+    'CALL estab_migrate_113_validate(1);'
+        => 'Migration 113 does not validate the final singleton row',
+    'estab:migration:113:password-policy:v1'
+        => 'Migration 113 has no durable table ownership marker',
+];
+foreach ($passwordPolicyMigrationFragments as $fragment => $message) {
+    $assert(str_contains($passwordPolicySql, $fragment), $message);
+}
+$assert(
+    !str_contains($passwordPolicySql, 'ordinal_position BETWEEN 3 AND 6'),
+    'Migration 113 permits password requirement columns in arbitrary order'
+);
+$assert(
+    str_contains(
+        $schemaIntegration,
+        'MODIFY COLUMN require_symbol TINYINT UNSIGNED NOT NULL DEFAULT 1'
+    )
+        && str_contains(
+            $schemaIntegration,
+            "COMMENT 'estab:migration:113:require-symbol:v1'"
+        )
+        && str_contains(
+            $schemaIntegration,
+            'marked password-policy drift was changed or recorded'
+        ),
+    'Schema integration does not prove marked password-policy default drift'
+);
+foreach ([
+    '88d8e657608a68a0d7a33ff0ac962b4fab9455b1757c39014a936c02860da7b0',
+    'd891c2a2c3207579bdd7250dbe1be18004071d459d407e8c25fa548ef218737b',
+    'e59fa8c23e29f1518377e8f0af1efda61c2b18eab331c022ad564af71c851918',
+    '7e3867c98f272ca14b63ed3b662cf871d1ea87d523647150708f1328d50d9ffd',
+    'df346c79167b8ec0ea4a56b4bb3881917bc40498456e298e2719fa747da100b2',
+    '53b28b592d7ff74397ccec21df0b48202d16872dd4f5fcfa5e00cbdef4023f95',
+    'ae6394da3dd78dde0b7007b20b1a305efe47cee502be7c57ebd44812f3214338',
+] as $checkHash) {
+    $assert(
+        str_contains($passwordPolicySql, $checkHash),
+        'Migration 113 omits canonical CHECK-clause hash ' . $checkHash
+    );
+}
+$passwordPolicySchemaValidation = strpos(
+    $passwordPolicySql,
+    'CALL estab_migrate_113_validate(0);'
+);
+$passwordPolicySeed = strpos(
+    $passwordPolicySql,
+    'INSERT INTO `nv_kennwortrichtlinie`'
+);
+$passwordPolicyRowValidation = strpos(
+    $passwordPolicySql,
+    'CALL estab_migrate_113_validate(1);'
+);
+$assert(
+    is_int($passwordPolicySchemaValidation)
+        && is_int($passwordPolicySeed)
+        && is_int($passwordPolicyRowValidation)
+        && $passwordPolicySchemaValidation < $passwordPolicySeed
+        && $passwordPolicySeed < $passwordPolicyRowValidation,
+    'Migration 113 seeds before validating ownership or skips final validation'
+);
+
+$passwordPolicyColumnContractFragments = [
+    "column_default IS NULL",
+    "column_type LIKE 'tinyint%unsigned'",
+    "column_type LIKE 'smallint%unsigned'",
+    "column_type LIKE 'bigint%unsigned'",
+    "LOWER(column_default) = 'current_timestamp(6)'",
+    "column_type = 'varchar(128)'",
+    "character_set_name = 'utf8mb4'",
+    "collation_name = 'utf8mb4_unicode_ci'",
+    "column_default = '''migration-113'''",
+    'estab:migration:113:singleton:v1',
+    'estab:migration:113:minimum-length:v1',
+    'estab:migration:113:require-uppercase:v1',
+    'estab:migration:113:require-lowercase:v1',
+    'estab:migration:113:require-digit:v1',
+    'estab:migration:113:require-symbol:v1',
+    'estab:migration:113:revision:v1',
+    'estab:migration:113:updated-at:v1',
+    'estab:migration:113:updated-by:v1',
+];
+$passwordPolicyCheckContracts = [
+    'chk_kennwortrichtlinie_singleton:'
+        . '88d8e657608a68a0d7a33ff0ac962b4fab9455b1757c39014a936c02860da7b0',
+    'chk_kennwortrichtlinie_minimum:'
+        . 'd891c2a2c3207579bdd7250dbe1be18004071d459d407e8c25fa548ef218737b',
+    'chk_kennwortrichtlinie_uppercase:'
+        . 'e59fa8c23e29f1518377e8f0af1efda61c2b18eab331c022ad564af71c851918',
+    'chk_kennwortrichtlinie_lowercase:'
+        . '7e3867c98f272ca14b63ed3b662cf871d1ea87d523647150708f1328d50d9ffd',
+    'chk_kennwortrichtlinie_digit:'
+        . 'df346c79167b8ec0ea4a56b4bb3881917bc40498456e298e2719fa747da100b2',
+    'chk_kennwortrichtlinie_symbol:'
+        . '53b28b592d7ff74397ccec21df0b48202d16872dd4f5fcfa5e00cbdef4023f95',
+    'chk_kennwortrichtlinie_actor:'
+        . 'ae6394da3dd78dde0b7007b20b1a305efe47cee502be7c57ebd44812f3214338',
+];
+foreach ([
+    'verify.sql' => $verifySql,
+    'runtime readiness' => $readinessSql,
+] as $contractName => $runtimeSchemaContract) {
+    foreach ($passwordPolicyColumnContractFragments as $fragment) {
+        $assert(
+            str_contains($runtimeSchemaContract, $fragment),
+            $contractName . ' omits password-policy column contract: '
+                . $fragment
+        );
+    }
+    foreach (range(1, 9) as $position) {
+        $assert(
+            str_contains(
+                $runtimeSchemaContract,
+                'ordinal_position = ' . $position
+            ),
+            $contractName . ' omits password-policy column position '
+                . $position
+        );
+    }
+    foreach ($passwordPolicyCheckContracts as $checkContract) {
+        $assert(
+            str_contains($runtimeSchemaContract, $checkContract),
+            $contractName . ' omits password-policy CHECK contract: '
+                . $checkContract
+        );
+    }
+    $assert(
+        preg_match(
+            "/table_name = 'nv_kennwortrichtlinie' "
+                . "AND is_nullable = 'NO'.*?"
+                . "estab:migration:113:updated-by:v1'"
+                . "\)\s*\)\s*\) = 9/s",
+            $runtimeSchemaContract
+        ) === 1,
+        $contractName . ' does not require all nine canonical policy columns'
+    );
+    $assert(
+        preg_match(
+            "/FROM information_schema\.table_constraints "
+                . "WHERE constraint_schema = DATABASE\(\) "
+                . "AND table_name = 'nv_kennwortrichtlinie'\) = 8/",
+            $runtimeSchemaContract
+        ) === 1,
+        $contractName . ' does not require exactly eight policy constraints'
+    );
+    $assert(
+        str_contains(
+            $runtimeSchemaContract,
+            'information_schema.check_constraints AS check_constraint'
+        )
+            && preg_match(
+                "/table_constraint\.constraint_type = 'CHECK'.*?\)\) = 7/s",
+                $runtimeSchemaContract
+            ) === 1,
+        $contractName . ' does not require all seven canonical CHECK clauses'
+    );
+    $assert(
+        preg_match(
+            "/table_name = 'nv_kennwortrichtlinie' "
+                . "AND index_name = 'PRIMARY'\) = 1.*?"
+                . "index_name = 'PRIMARY' AND non_unique = 0 "
+                . "AND seq_in_index = 1 "
+                . "AND column_name = 'singleton_id'\) = 1/s",
+            $runtimeSchemaContract
+        ) === 1,
+        $contractName . ' does not require the exact singleton primary key'
+    );
+}
+
 foreach ([
     'verify.sql' => $verifySql,
     'runtime readiness' => $readinessSql,
@@ -1161,6 +1380,9 @@ foreach ([
         'SET NEW.`estab_assignment` = assignment_snapshot',
         '111-logbook-shift-assignment.sql',
         '112-optional-access-shifts.sql',
+        'nv_kennwortrichtlinie',
+        'estab:migration:113:password-policy:v1',
+        '113-password-policy.sql',
     ] as $fragment) {
         $assert(
             str_contains($runtimeSchemaContract, $fragment),
@@ -1695,6 +1917,7 @@ foreach ([
     'blocked logbook column collision was changed or recorded',
     '111-logbook-shift-assignment.sql',
     '112-optional-access-shifts.sql',
+    '113-password-policy.sql',
     'historical logbook rows did not retain unknown shift provenance',
     'partial logbook and optional access-shift migrations did not resume canonically',
     'blocked logbook shift collision was changed or recorded',
@@ -1702,6 +1925,18 @@ foreach ([
     'foreign optional access-shift trigger was accepted',
     'blocked optional access-shift trigger collision was changed or recorded',
     'optional access-shift trigger did not recover after removing the collision',
+    'password-policy migration did not create its canonical defaults',
+    'password minimum below eight was accepted',
+    'non-boolean password requirement was accepted',
+    'second password-policy row was accepted',
+    'canonical password-policy table without singleton was not safely resumed',
+    'password-policy migration retry overwrote configured values',
+    'marked password-policy flag default drift was accepted',
+    'marked password-policy drift was changed or recorded',
+    'password-policy migration did not recover after marked schema repair',
+    'foreign password-policy table was accepted',
+    'blocked password-policy collision was changed or recorded',
+    'password-policy migration did not recover after removing the collision',
     'Manual ETB/TBB entries without a duty shift were accepted by account function',
     'Two access groups can be active and membership re-addition preserves its history',
     'withdrawn ETB assignee rejection was not explicit',
@@ -1719,7 +1954,7 @@ foreach ([
     'missing ETB head was not rejected explicitly',
     'missing TTB head was not rejected explicitly',
     'MariaDB default snapshot isolation is not enabled for concurrency tests',
-    'assert_equal "18"',
+    'assert_equal "19"',
 ] as $marker) {
     $assert(
         str_contains($schemaIntegration, $marker),
@@ -1786,7 +2021,7 @@ $assert(
         && str_contains($verifySql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $verifySql,
-            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 18'
+            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 19'
         )
         && str_contains($verifySql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -1805,7 +2040,8 @@ $assert(
             "'111-logbook-shift-assignment.sql'"
         )
         && str_contains($verifySql, "'112-optional-access-shifts.sql'")
-        && str_contains($verifySql, ") = 18) AS `schema_migrations_ok`"),
+        && str_contains($verifySql, "'113-password-policy.sql'")
+        && str_contains($verifySql, ") = 19) AS `schema_migrations_ok`"),
     'verify.sql does not require the exact final ETB catalogue and ledger'
 );
 $assert(
@@ -1828,7 +2064,7 @@ $assert(
         && str_contains($readinessSql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $readinessSql,
-            '(SELECT COUNT(*) FROM estab_schema_migrations) = 18'
+            '(SELECT COUNT(*) FROM estab_schema_migrations) = 19'
         )
         && str_contains($readinessSql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -1852,7 +2088,11 @@ $assert(
         )
         && str_contains(
             $readinessSql,
-            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 18"
+            "'113-password-policy.sql'"
+        )
+        && str_contains(
+            $readinessSql,
+            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 19"
         ),
     'Runtime readiness does not require the exact final ETB catalogue and ledger'
 );
@@ -1981,6 +2221,10 @@ $assert(
             $readiness,
             "'112-optional-access-shifts.sql'"
         )
+        && str_contains(
+            $readiness,
+            "'113-password-policy.sql'"
+        )
         && str_contains($verify, "'50-global-incidents.sql'")
         && str_contains($verify, "'45-global-incidents-prepare.sql'")
         && str_contains($verify, "'55-global-incidents-finish.sql'")
@@ -1996,9 +2240,10 @@ $assert(
         && str_contains($verify, "'110-etb-tbb-rules.sql'")
         && str_contains($verify, "'111-logbook-shift-assignment.sql'")
         && str_contains($verify, "'112-optional-access-shifts.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 18')
-        && str_contains($readiness, 'estab_schema_migrations) = 18'),
-    'Migration ledger/readiness does not require all eighteen release migrations'
+        && str_contains($verify, "'113-password-policy.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 19')
+        && str_contains($readiness, 'estab_schema_migrations) = 19'),
+    'Migration ledger/readiness does not require all nineteen release migrations'
 );
 $assert(
     str_contains($readiness, "require_once __DIR__ . '/bootstrap.php'")

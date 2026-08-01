@@ -39,6 +39,12 @@
                 "descr" => "Konten optional gruppieren und deren Zugang gemeinsam aktivieren oder deaktivieren; feste Funktionen bleiben unver&auml;ndert."),
 
     array ("acl"   => "",
+                "vis" => true,
+                "link"  => "./password_policy.php",
+                "menue" => "Kennwortrichtlinie",
+                "descr" => "Mindestl&auml;nge und optionale Zeichenanforderungen f&uuml;r neu gesetzte Kennw&ouml;rter zentral festlegen."),
+
+    array ("acl"   => "",
                 "vis" => false,
                 "link"  => "",
                 "menue" => "Ersatzsichter",

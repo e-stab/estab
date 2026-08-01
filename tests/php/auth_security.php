@@ -27,6 +27,27 @@ $assert($valid['valid'] === true, 'valid identity accepted');
 $assert($valid['data']['benutzer'] === 'Müller, Ada', 'name trimmed');
 $assert($valid['data']['kuerzel'] === 'ada', 'code normalised');
 $assert($valid['data']['rolle'] === 'Stab', 'role derived from configuration');
+$maximumPassword = estab_auth_validate_login([
+    'benutzer' => 'Ada Müller',
+    'kuerzel' => 'ada',
+    'funktion' => 'S1',
+    'kennwort1' => str_repeat('a', ESTAB_AUTH_PASSWORD_MAXIMUM_BYTES),
+], $confEmpf);
+$oversizedPassword = estab_auth_validate_login([
+    'benutzer' => 'Ada Müller',
+    'kuerzel' => 'ada',
+    'funktion' => 'S1',
+    'kennwort1' => str_repeat(
+        'a',
+        ESTAB_AUTH_PASSWORD_MAXIMUM_BYTES + 1
+    ),
+], $confEmpf);
+$assert(
+    $maximumPassword['valid'] === true
+        && $oversizedPassword['valid'] === false
+        && in_array('kennwort1', $oversizedPassword['errors'], true),
+    'shared password byte envelope is inconsistent'
+);
 $freshRoleValidation = estab_auth_validate_login_with_roles([
     'benutzer' => 'Müller, Ada',
     'kuerzel' => 'ada',
@@ -91,16 +112,135 @@ $assert($legacy['migrated'] === true, 'legacy plaintext requests migration');
 $assert(is_string($legacy['replacement']), 'migration produces a hash');
 $assert(password_verify('old-secret', $legacy['replacement']), 'migration hash verifies');
 $assert($legacy['replacement'] !== 'old-secret', 'plaintext is not retained');
+$assert(
+    (password_get_info($legacy['replacement'])['algoName'] ?? '') === 'argon2id',
+    'legacy plaintext was not migrated to Argon2id'
+);
 
 $legacyWrong = estab_auth_verify_password('wrong', 'old-secret');
 $assert($legacyWrong['valid'] === false, 'wrong legacy password rejected');
 $assert($legacyWrong['replacement'] === null, 'failed password has no migration hash');
 
-$modernHash = password_hash('modern-secret', PASSWORD_DEFAULT);
+$bcryptHash = password_hash('modern-secret', PASSWORD_BCRYPT);
+$bcrypt = estab_auth_verify_password('modern-secret', $bcryptHash);
+$assert(
+    $bcrypt['valid'] === true
+        && $bcrypt['migrated'] === true
+        && is_string($bcrypt['replacement'])
+        && (password_get_info($bcrypt['replacement'])['algoName'] ?? '')
+            === 'argon2id'
+        && password_verify('modern-secret', $bcrypt['replacement']),
+    'successful bcrypt login was not upgraded to Argon2id'
+);
+$ambiguousBcryptPrefix = str_repeat('b', 72);
+$ambiguousBcryptHash = password_hash(
+    $ambiguousBcryptPrefix . 'original-suffix',
+    PASSWORD_BCRYPT
+);
+$ambiguousBcrypt = estab_auth_verify_password(
+    $ambiguousBcryptPrefix . 'different-suffix',
+    $ambiguousBcryptHash
+);
+$assert(
+    $ambiguousBcrypt['valid'] === true
+        && $ambiguousBcrypt['migrated'] === false
+        && $ambiguousBcrypt['replacement'] === null,
+    'ambiguous bcrypt suffix was rebound to an attacker-selected Argon2id hash'
+);
+$exactBoundaryBcrypt = estab_auth_verify_password(
+    $ambiguousBcryptPrefix,
+    $ambiguousBcryptHash
+);
+$assert(
+    $exactBoundaryBcrypt['valid'] === true
+        && $exactBoundaryBcrypt['migrated'] === false
+        && $exactBoundaryBcrypt['replacement'] === null,
+    'exactly 72 bcrypt bytes were incorrectly treated as unambiguous'
+);
+$unambiguousBcryptPassword = str_repeat('c', 71);
+$unambiguousBcrypt = estab_auth_verify_password(
+    $unambiguousBcryptPassword,
+    password_hash($unambiguousBcryptPassword, PASSWORD_BCRYPT)
+);
+$assert(
+    $unambiguousBcrypt['valid'] === true
+        && $unambiguousBcrypt['migrated'] === true
+        && is_string($unambiguousBcrypt['replacement'])
+        && password_verify(
+            $unambiguousBcryptPassword,
+            $unambiguousBcrypt['replacement']
+        ),
+    '71-byte bcrypt credential was not safely upgraded'
+);
+
+$modernHash = estab_auth_hash_password('modern-secret');
 $modern = estab_auth_verify_password('modern-secret', $modernHash);
 $assert($modern['valid'] === true, 'modern hash verifies');
 $assert($modern['replacement'] === null, 'current modern hash is retained');
 $assert(estab_auth_verify_password('wrong', $modernHash)['valid'] === false, 'wrong modern password rejected');
+$longPrefix = str_repeat('a', 72);
+$longHash = estab_auth_hash_password($longPrefix . 'first-suffix');
+$assert(
+    (password_get_info($longHash)['algoName'] ?? '') === 'argon2id'
+        && password_verify($longPrefix . 'first-suffix', $longHash)
+        && !password_verify($longPrefix . 'other-suffix', $longHash)
+        && strlen($longHash) <= 255,
+    'password hashing truncates or cannot store content beyond 72 bytes'
+);
+$hashEnvelopeRejected = false;
+try {
+    estab_auth_hash_password(
+        str_repeat('a', ESTAB_AUTH_PASSWORD_MAXIMUM_BYTES + 1)
+    );
+} catch (RuntimeException) {
+    $hashEnvelopeRejected = true;
+}
+$assert($hashEnvelopeRejected, 'central hash boundary accepted oversized input');
+$targetOptions = estab_auth_password_options();
+$weakerOptions = $targetOptions;
+if ($weakerOptions['time_cost'] > 1) {
+    $weakerOptions['time_cost']--;
+} else {
+    $weakerOptions['memory_cost'] = max(
+        8,
+        intdiv($weakerOptions['memory_cost'], 2)
+    );
+}
+$weakerArgon = password_hash(
+    'weaker-argon-secret',
+    PASSWORD_ARGON2ID,
+    $weakerOptions
+);
+$weakerArgonResult = estab_auth_verify_password(
+    'weaker-argon-secret',
+    $weakerArgon
+);
+$assert(
+    $weakerArgonResult['valid'] === true
+        && $weakerArgonResult['migrated'] === true
+        && is_string($weakerArgonResult['replacement'])
+        && password_get_info(
+            $weakerArgonResult['replacement']
+        )['options'] === $targetOptions,
+    'weaker Argon2id profile was not upgraded to the target costs'
+);
+$strongerOptions = $targetOptions;
+$strongerOptions['time_cost']++;
+$strongerArgon = password_hash(
+    'stronger-argon-secret',
+    PASSWORD_ARGON2ID,
+    $strongerOptions
+);
+$strongerArgonResult = estab_auth_verify_password(
+    'stronger-argon-secret',
+    $strongerArgon
+);
+$assert(
+    $strongerArgonResult['valid'] === true
+        && $strongerArgonResult['migrated'] === false
+        && $strongerArgonResult['replacement'] === null,
+    'stronger Argon2id profile was silently downgraded'
+);
 
 $assert(estab_parse_bool('YES', false) === true, 'safe true boolean parsed');
 $assert(estab_parse_bool('off', true) === false, 'safe false boolean parsed');
@@ -460,6 +600,10 @@ $policyLockPosition = strpos(
     $loginFunction,
     'estab_assignment_acquire_policy_lock'
 );
+$passwordPolicyLockPosition = strpos(
+    $loginFunction,
+    'estab_password_policy_acquire_lock ('
+);
 $freshMapPosition = strpos(
     $loginFunction,
     'estab_assignment_function_roles'
@@ -469,20 +613,41 @@ $accountLookupPosition = strpos($loginFunction, 'estab_auth_fetch_user');
 $assert(
     $policyLockPosition !== false
         && $freshMapPosition !== false
+        && $passwordPolicyLockPosition !== false
         && $accountLockPosition !== false
         && $transactionPosition !== false
         && $accountLookupPosition !== false
         && $policyLockPosition < $freshMapPosition
-        && $freshMapPosition < $accountLockPosition
+        && $freshMapPosition < $passwordPolicyLockPosition
+        && $passwordPolicyLockPosition < $accountLockPosition
         && $accountLockPosition < $transactionPosition
         && $transactionPosition < $accountLookupPosition
         && str_contains(
             $loginFunction,
+            'if ($loginFlow === "new")'
+        )
+        && str_contains(
+            $loginFunction,
+            'if (is_array ($dbUser))'
+        )
+        && strpos(
+            $loginFunction,
+            'estab_auth_verify_password'
+        ) < strpos(
+            $loginFunction,
+            'estab_password_policy_validate_password ('
+        )
+        && str_contains(
+            $loginFunction,
             'estab_assignment_release_policy_lock'
+        )
+        && str_contains(
+            $loginFunction,
+            'estab_password_policy_release_lock ('
         )
         && str_contains($loginFunction, 'estab_login_release_account_lock')
         && substr_count($loginFunction, '$connection->rollback ()') >= 2,
-    'login does not hold fresh matrix policy before account/transaction locks'
+    'login/registration lock hierarchy or prospective policy boundary is unsafe'
 );
 $assert(
     substr_count($loginFunction, '$dbaccess->create_user_table') === 2

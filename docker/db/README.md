@@ -245,8 +245,8 @@ Prüfsumme unverändert. Migration 55 stellt die kanonischen Attribute wieder
 her. `migrations/70-user-account-blocking.sql` ergänzt anschließend die
 dauerhafte, kollisionsgeprüfte Kontosperre.
 
-Der aktuelle Ledger umfasst achtzehn checksumgebundene Migrationen bis
-`migrations/112-optional-access-shifts.sql`. Migration 110 führt die
+Der aktuelle Ledger umfasst neunzehn checksumgebundene Migrationen bis
+`migrations/113-password-policy.sql`. Migration 110 führt die
 einsatzlokalen ETB-/TTB-Nummern, Buchköpfe, strukturierten TBB-Inhalt,
 Append-only-Regeln und zehnjährige Aufbewahrungsuntergrenze ein. Migration 111
 ergänzt nullable Schicht-/Schreiberfremdschlüssel für beide Bücher und die
@@ -289,7 +289,24 @@ vorrangig. Die Tabellen `nv_dienstschichten`, `nv_dienstbesetzungen` und
 `nv_dienstuebergaben` bleiben als historische Export- und Evidenzdaten
 erhalten.
 
-`verify.sql` und die Laufzeit-Readiness verlangen alle achtzehn Ledgerzeilen,
+Migration 113 ergänzt die revisionsgesicherte Singleton-Tabelle
+`nv_kennwortrichtlinie` mit dem unveränderten Standard von mindestens 12
+Unicode-Codepoints und optionalen Anforderungen an Großbuchstaben,
+Kleinbuchstaben, Ziffern und Sonderzeichen. Die konfigurierbare Mindestlänge
+liegt zwischen 8 und 128 Unicode-Codepoints. Die Anwendung speichert neue und
+geänderte Funktionskonto-Kennwörter mit Argon2id; die serverseitige Grenze liegt
+bei 1024 UTF-8-Bytes. Das Browserfeld erlaubt 1024 Eingabeeinheiten und zählt
+die konfigurierbare Mindestlänge per JavaScript exakt in Unicode-Codepoints;
+verbindlich bleibt die Serverprüfung. Unicode-Steuerzeichen sind verboten,
+Formatzeichen wie ZWJ erlaubt, und Titlecase zählt als Großbuchstabe.
+Klartextwerte und andere eindeutig verifizierbare Alt-Hashes werden erst nach
+erfolgreicher Anmeldung auf Argon2id umgestellt. bcrypt wird nur bei einem
+eingegebenen Kennwort unter 72 UTF-8-Bytes automatisch migriert. Ab 72 Bytes
+bleibt der ambivalente Hash bis zu einem administrativen Reset unverändert.
+Argon2id-Profile werden nur vollständig monoton hochgestuft; stärkere oder
+gemischte Kostenprofile werden nie auf Standardwerte zurückgesetzt.
+
+`verify.sql` und die Laufzeit-Readiness verlangen alle neunzehn Ledgerzeilen,
 die sechs neuen Spalten, ihre kanonischen Indexe und Fremdschlüssel sowie die
 erweiterten ETB-/TTB-Insert-Trigger. Ein aktueller Migratorlauf endet erst nach
 `Post-migration schema verification passed` und
@@ -315,7 +332,7 @@ mehr vorhanden sind.
 | Anhang-Dateiname nur nicht-eindeutig indiziert | `UNIQUE uq_anhang_filename` | Atomare Reservierung und Retry verhindern, dass parallele Uploads denselben Namen wie `EL0001` erhalten |
 | `fileext VARCHAR(3)`, `id VARCHAR(32)` | 16 bzw. 128 Zeichen | Mehrteilige Dateiendungen und heutige Session-IDs dürfen nicht still abgeschnitten werden |
 | IPv4-Felder mit 15 Zeichen | 45 Zeichen | Rückwärtskompatibel und ausreichend für IPv6-Textdarstellung |
-| `password VARCHAR(32)` mit Klartextwerten | `VARCHAR(255)` mit `password_hash()` | Ausreichend für aktuelle und künftige PHP-Standardhashes; Klartext wird bei erfolgreichem Login transparent migriert |
+| `password VARCHAR(32)` mit Klartextwerten | `VARCHAR(255)` mit explizitem Argon2id-Hash | Ausreichend für das verifizierte Argon2id-Format; Klartext wird bei erfolgreichem Login migriert, bcrypt wegen seiner 72-Byte-Grenze nur bei eindeutigem Kennwort unter 72 UTF-8-Bytes |
 | ETB-/TBB-Titeltabellen erst bei Benutzung | Bereits initialisiert | Verhindert, dass der Legacy-Code nachträglich MyISAM-Tabellen ohne expliziten Zeichensatz erzeugt |
 
 Die Namen und fachlichen Wertebereiche (`SET`, Statusfelder, Richtungen,

@@ -124,7 +124,10 @@ foreach ([
     ['lange-passphrase-a', 'lange-passphrase-b'],
     ["lange-pass\0phrase", "lange-pass\0phrase"],
     ["lange-pass\nphrase", "lange-pass\nphrase"],
-    [str_repeat('a', 256), str_repeat('a', 256)],
+    [
+        str_repeat('a', ESTAB_AUTH_PASSWORD_MAXIMUM_BYTES + 1),
+        str_repeat('a', ESTAB_AUTH_PASSWORD_MAXIMUM_BYTES + 1),
+    ],
     ["ungueltig-\xFF-passphrase", "ungueltig-\xFF-passphrase"],
 ] as [$password, $confirmation]) {
     $assert(
@@ -440,7 +443,8 @@ $assert(
 );
 $assert(
     $resetSource !== ''
-        && str_contains($resetSource, 'password_hash(')
+        && str_contains($resetSource, 'estab_auth_hash_password(')
+        && !str_contains($resetSource, 'PASSWORD_DEFAULT')
         && str_contains($resetSource, 'estab_user_admin_acquire_account_lock')
         && str_contains($resetSource, '$connection->begin_transaction()')
         && str_contains($resetSource, '`password` = ?')
@@ -471,7 +475,8 @@ $assert(
 $assert(
     $createSource !== ''
         && str_contains($createSource, 'estab_user_admin_validate_assignment')
-        && str_contains($createSource, 'password_hash(')
+        && str_contains($createSource, 'estab_auth_hash_password(')
+        && !str_contains($createSource, 'PASSWORD_DEFAULT')
         && str_contains($createSource, 'estab_assignment_acquire_policy_lock')
         && str_contains($createSource, 'estab_assignment_function_roles')
         && str_contains($createSource, 'estab_user_admin_acquire_account_lock')
@@ -510,7 +515,18 @@ $assert(
             'estab_csrf_require_post($_SERVER, $_POST)'
         )
         && substr_count($pageSource, 'method="post" action="users.php"') >= 5
-        && str_contains($pageSource, "['create', 'reassign', 'block', 'unblock', 'reset_password']")
+        && preg_match(
+            "/\\['create',\\s*'reassign',\\s*'block',\\s*'unblock',\\s*'reset_password'\\]/",
+            $pageSource
+        ) === 1
+        && substr_count(
+            $pageSource,
+            'estab_password_policy_load($connection)'
+        ) >= 3
+        && substr_count(
+            $pageSource,
+            'estab_user_admin_validate_password('
+        ) >= 2
         && str_contains($pageSource, 'estab_user_admin_function_roles(')
         && str_contains($pageSource, 'estab_user_admin_create_account(')
         && str_contains($pageSource, 'estab_user_admin_reassign(')
@@ -524,10 +540,12 @@ $assert(
             $pageSource,
             'bis zur Zuweisung einer gültigen Funktion gesperrt'
         )
-        && substr_count(
+        && str_contains($pageSource, '<?php if (!$manageable): ?>')
+        && substr_count($pageSource, '<?php if ($manageable &&') >= 2
+        && str_contains(
             $pageSource,
-            '<?php if ($manageable): ?>'
-        ) >= 1
+            '$manageable && is_array($passwordPolicy)'
+        )
         && !preg_match(
             '/method="get"[^>]*admin_action|admin_action[^>]*method="get"/i',
             $pageSource

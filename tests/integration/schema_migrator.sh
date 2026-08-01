@@ -55,6 +55,7 @@ if [ ! -r "$fixture" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/110-etb-tbb-rules.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/111-logbook-shift-assignment.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/112-optional-access-shifts.sql" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/113-password-policy.sql" ] \
     || [ ! -x "$ESTAB_MIGRATOR_BIN" ]; then
     echo "schema migrator test: fixture, baseline, or migrator is unavailable" >&2
     exit 1
@@ -72,7 +73,7 @@ pre_110_migrations=$(mktemp -d "${TMPDIR:-/tmp}/estab-pre-110-migrations.XXXXXX"
 
 for migration_path in "$ESTAB_MIGRATIONS_DIR"/*.sql; do
     case "$(basename "$migration_path")" in
-        110-etb-tbb-rules.sql|111-logbook-shift-assignment.sql|112-optional-access-shifts.sql)
+        110-etb-tbb-rules.sql|111-logbook-shift-assignment.sql|112-optional-access-shifts.sql|113-password-policy.sql)
             continue
             ;;
     esac
@@ -339,11 +340,11 @@ SELECT GROUP_CONCAT(CONCAT(version, ':', checksum, ':', state)
  FROM estab_schema_migrations
  WHERE version NOT IN (
    '110-etb-tbb-rules.sql', '111-logbook-shift-assignment.sql',
-   '112-optional-access-shifts.sql'
+   '112-optional-access-shifts.sql', '113-password-policy.sql'
  )"
 )" \
     "migration 110 upgrade rewrote a released migration ledger row"
-assert_equal "1|1|1|1|3|1|2|1" "$(database_query "$logbook_upgrade_database" "
+assert_equal "1|1|1|1|1|3|1|2|1" "$(database_query "$logbook_upgrade_database" "
 SELECT CONCAT(
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '110-etb-tbb-rules.sql' AND state = 'applied'), '|',
@@ -352,6 +353,9 @@ SELECT CONCAT(
              AND state = 'applied'), '|',
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '112-optional-access-shifts.sql'
+             AND state = 'applied'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '113-password-policy.sql'
              AND state = 'applied'), '|',
          (SELECT COUNT(*) FROM information_schema.statistics
            WHERE table_schema = DATABASE() AND table_name = 'nv_etb'
@@ -1262,7 +1266,7 @@ finish_checksum=$(
         awk '{print $1}'
 )
 assert_equal \
-    "18|18|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
+    "19|19|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
     "$(database_query "$predecessor_database" "
 SELECT CONCAT(
          COUNT(*), '|',
@@ -1432,7 +1436,7 @@ SELECT GROUP_CONCAT(
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
 
-assert_equal "18" "$(fixture_query "
+assert_equal "19" "$(fixture_query "
 SELECT COUNT(*) FROM estab_schema_migrations
  WHERE state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
@@ -1443,7 +1447,7 @@ SELECT COUNT(*) FROM estab_schema_migrations
    AND state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
     "standard matrix migration was not recorded"
-assert_equal "1|1|1|1|1|1|1|1|1|1|1|1|11" "$(fixture_query "
+assert_equal "1|1|1|1|1|1|1|1|1|1|1|1|1|11" "$(fixture_query "
 SELECT CONCAT(
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '80-dv-evidence-retention.sql'
@@ -1489,6 +1493,10 @@ SELECT CONCAT(
            WHERE version = '112-optional-access-shifts.sql'
              AND state = 'applied'
              AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '113-password-policy.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
          (SELECT COUNT(*) FROM information_schema.columns
            WHERE table_schema = DATABASE()
              AND table_name = 'nv_betriebsereignisse'
@@ -1515,6 +1523,39 @@ SELECT CONCAT(
              ))
        )")" \
     "DV evidence or organisational migration was not applied completely"
+assert_equal "1|9|8|1|12|0|0|0|0|0|migration-113" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM information_schema.tables
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_kennwortrichtlinie'
+             AND table_type = 'BASE TABLE'
+             AND engine = 'InnoDB'
+             AND table_collation = 'utf8mb4_unicode_ci'
+             AND table_comment =
+               'estab:migration:113:password-policy:v1'), '|',
+         (SELECT COUNT(*) FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_kennwortrichtlinie'), '|',
+         (SELECT COUNT(*) FROM information_schema.table_constraints
+           WHERE constraint_schema = DATABASE()
+             AND table_name = 'nv_kennwortrichtlinie'), '|',
+         (SELECT COUNT(*) FROM nv_kennwortrichtlinie), '|',
+         (SELECT minimum_length FROM nv_kennwortrichtlinie
+           WHERE singleton_id = 1), '|',
+         (SELECT require_uppercase FROM nv_kennwortrichtlinie
+           WHERE singleton_id = 1), '|',
+         (SELECT require_lowercase FROM nv_kennwortrichtlinie
+           WHERE singleton_id = 1), '|',
+         (SELECT require_digit FROM nv_kennwortrichtlinie
+           WHERE singleton_id = 1), '|',
+         (SELECT require_symbol FROM nv_kennwortrichtlinie
+           WHERE singleton_id = 1), '|',
+         (SELECT revision FROM nv_kennwortrichtlinie
+           WHERE singleton_id = 1), '|',
+         (SELECT updated_by FROM nv_kennwortrichtlinie
+           WHERE singleton_id = 1)
+       )")" \
+    "password-policy migration did not create its canonical defaults"
 assert_equal "1|3|aktiv,estab_gesperrt,estab_letzte_aktivitaet|0||NULL|0" "$(fixture_query "
 SELECT CONCAT(
          (SELECT COUNT(*)
@@ -1930,6 +1971,206 @@ SELECT CONCAT(
                    '%Messenger assignment account functions are invalid%')
        )")" \
     "optional access-shift trigger did not recover after removing the collision"
+
+# Password policy constraints must protect the documented bounds independently
+# of the application. An interrupted run with an owned empty table must seed the
+# canonical defaults, while a ledger retry must never overwrite a configured
+# policy. A foreign same-name table remains untouched and unacknowledged.
+if fixture_query "
+UPDATE nv_kennwortrichtlinie
+   SET minimum_length = 7
+ WHERE singleton_id = 1" >"$failure_log" 2>&1; then
+    echo "schema migrator test: password minimum below eight was accepted" >&2
+    exit 1
+fi
+if fixture_query "
+UPDATE nv_kennwortrichtlinie
+   SET require_symbol = 2
+ WHERE singleton_id = 1" >"$failure_log" 2>&1; then
+    echo "schema migrator test: non-boolean password requirement was accepted" >&2
+    exit 1
+fi
+if fixture_query "
+INSERT INTO nv_kennwortrichtlinie (singleton_id)
+VALUES (2)" >"$failure_log" 2>&1; then
+    echo "schema migrator test: second password-policy row was accepted" >&2
+    exit 1
+fi
+assert_equal "12|0|1" "$(fixture_query "
+SELECT CONCAT(
+         minimum_length, '|', require_symbol, '|',
+         (SELECT COUNT(*) FROM nv_kennwortrichtlinie)
+       )
+  FROM nv_kennwortrichtlinie
+ WHERE singleton_id = 1")" \
+    "password-policy constraints changed the canonical singleton after rejection"
+
+fixture_query "
+DELETE FROM nv_kennwortrichtlinie;
+DELETE FROM estab_schema_migrations
+ WHERE version = '113-password-policy.sql'"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "1|12|0|0|0|0|0|migration-113" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '113-password-policy.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
+         minimum_length, '|', require_uppercase, '|', require_lowercase, '|',
+         require_digit, '|', require_symbol, '|', revision, '|', updated_by
+       )
+  FROM nv_kennwortrichtlinie
+ WHERE singleton_id = 1")" \
+    "canonical password-policy table without singleton was not safely resumed"
+
+fixture_query "
+UPDATE nv_kennwortrichtlinie
+   SET minimum_length = 24,
+       require_uppercase = 1,
+       require_lowercase = 1,
+       require_digit = 1,
+       require_symbol = 1,
+       revision = 7,
+       updated_at = '2026-01-02 03:04:05.123456',
+       updated_by = 'schema-retry'
+ WHERE singleton_id = 1;
+DELETE FROM estab_schema_migrations
+ WHERE version = '113-password-policy.sql'"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "1|24|1|1|1|1|7|2026-01-02 03:04:05.123456|schema-retry" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '113-password-policy.sql'
+             AND state = 'applied'), '|',
+         minimum_length, '|', require_uppercase, '|', require_lowercase, '|',
+         require_digit, '|', require_symbol, '|', revision, '|',
+         DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s.%f'), '|', updated_by
+       )
+  FROM nv_kennwortrichtlinie
+ WHERE singleton_id = 1")" \
+    "password-policy migration retry overwrote configured values"
+
+# A table marker is not sufficient ownership evidence. Keep the canonical
+# table/column comments but change one flag default; migration 113 must reject
+# this marked partial schema before seeding or acknowledging it.
+fixture_query "
+ALTER TABLE nv_kennwortrichtlinie
+  MODIFY COLUMN require_symbol TINYINT UNSIGNED NOT NULL DEFAULT 1
+  COMMENT 'estab:migration:113:require-symbol:v1'
+  AFTER require_digit;
+DELETE FROM estab_schema_migrations
+ WHERE version = '113-password-policy.sql'"
+if ESTAB_DB_NAME="$test_database" \
+    "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: marked password-policy flag default drift was accepted" >&2
+    exit 1
+fi
+if ! grep -q \
+    'Password-policy migration blocked: foreign table collision' \
+    "$failure_log"; then
+    echo "schema migrator test: marked password-policy drift failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "1|6|estab:migration:113:require-symbol:v1|estab:migration:113:password-policy:v1|0" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT column_default FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_kennwortrichtlinie'
+             AND column_name = 'require_symbol'), '|',
+         (SELECT ordinal_position FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_kennwortrichtlinie'
+             AND column_name = 'require_symbol'), '|',
+         (SELECT column_comment FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_kennwortrichtlinie'
+             AND column_name = 'require_symbol'), '|',
+         (SELECT table_comment FROM information_schema.tables
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_kennwortrichtlinie'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '113-password-policy.sql')
+       )")" \
+    "marked password-policy drift was changed or recorded"
+fixture_query "
+ALTER TABLE nv_kennwortrichtlinie
+  MODIFY COLUMN require_symbol TINYINT UNSIGNED NOT NULL DEFAULT 0
+  COMMENT 'estab:migration:113:require-symbol:v1'
+  AFTER require_digit"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "1|0|24|1|7|schema-retry" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '113-password-policy.sql'
+             AND state = 'applied'), '|',
+         (SELECT column_default FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_kennwortrichtlinie'
+             AND column_name = 'require_symbol'), '|',
+         minimum_length, '|', require_symbol, '|', revision, '|', updated_by
+       )
+  FROM nv_kennwortrichtlinie
+ WHERE singleton_id = 1")" \
+    "password-policy migration did not recover after marked schema repair"
+
+fixture_query "
+UPDATE nv_kennwortrichtlinie
+   SET minimum_length = 12,
+       require_uppercase = 0,
+       require_lowercase = 0,
+       require_digit = 0,
+       require_symbol = 0,
+       revision = 0,
+       updated_by = 'migration-113'
+ WHERE singleton_id = 1;
+DELETE FROM estab_schema_migrations
+ WHERE version = '113-password-policy.sql';
+ALTER TABLE nv_kennwortrichtlinie
+  COMMENT = 'foreign-password-policy-owner'"
+if ESTAB_DB_NAME="$test_database" \
+    "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
+    echo "schema migrator test: foreign password-policy table was accepted" >&2
+    exit 1
+fi
+if ! grep -q \
+    'Password-policy migration blocked: foreign table collision' \
+    "$failure_log"; then
+    echo "schema migrator test: password-policy collision failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "foreign-password-policy-owner|12|0|0" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT table_comment FROM information_schema.tables
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_kennwortrichtlinie'), '|',
+         minimum_length, '|', require_symbol, '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '113-password-policy.sql')
+       )
+  FROM nv_kennwortrichtlinie
+ WHERE singleton_id = 1")" \
+    "blocked password-policy collision was changed or recorded"
+fixture_query "
+ALTER TABLE nv_kennwortrichtlinie
+  COMMENT = 'estab:migration:113:password-policy:v1'"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "1|12|0|0|0|0|0|migration-113" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '113-password-policy.sql'
+             AND state = 'applied'), '|',
+         minimum_length, '|', require_uppercase, '|', require_lowercase, '|',
+         require_digit, '|', require_symbol, '|', revision, '|', updated_by
+       )
+  FROM nv_kennwortrichtlinie
+ WHERE singleton_id = 1")" \
+    "password-policy migration did not recover after removing the collision"
 
 # Reproduce interruption after some autocommitted migration-99 phases. The
 # canonical status/time index remains, the direction/number index is missing,

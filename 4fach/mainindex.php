@@ -1814,6 +1814,25 @@ Nachricht als Sichtung anzeigen
   \**********************************************************************/
   if ($_SESSION ["menue"] == "LOGIN" or $_SESSION ["menue"] == "WELCOME" ) {
     $registrationAllowed = estab_auth_self_registration_allowed ();
+    $registrationPasswordPolicy = null;
+    if ($loginFlow === "new" && $registrationAllowed) {
+      $policyConnection = null;
+      try {
+        $policyConnection = estab_auth_connect ($conf_4f_db);
+        $registrationPasswordPolicy = estab_password_policy_load (
+          $policyConnection
+        );
+      } catch (Throwable $exception) {
+        error_log (
+          "eStab registration password-policy load failed: ".
+          $exception->getMessage ()
+        );
+      } finally {
+        if ($policyConnection instanceof mysqli) {
+          estab_auth_close ($policyConnection);
+        }
+      }
+    }
     $loginAction = estab_auth_html ($conf_4f ["MainURL"]);
     $loginDestinationField = estab_navigation_login_destination_field (
       $loginDestination
@@ -1824,6 +1843,7 @@ Nachricht als Sichtung anzeigen
     echo "<meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\" />\n";
     echo "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n";
     echo "<link rel=\"stylesheet\" href=\"../estab-ui.css\">\n";
+    echo "<script src=\"../estab-password-policy.js\" defer></script>\n";
     echo "<title>eStab – Anmeldung</title>\n";
     echo "</head>\n";
     echo "<body bgcolor=\"#DCDCFF\">\n";
@@ -1895,6 +1915,19 @@ Nachricht als Sichtung anzeigen
       echo $loginDestinationField."\n";
       echo "<button class=\"estab-button\" type=\"submit\" name=\"login\" value=\"Anmelden\">Zurück zur Auswahl</button>\n";
       echo "</form>\n";
+    } elseif (
+      $loginFlow === "new"
+      && !is_array ($registrationPasswordPolicy)
+    ) {
+      echo "<h2>Neues Konto anlegen</h2>\n";
+      echo "<p class=\"estab-auth-error\" role=\"alert\">Die aktuelle ".
+           "Kennwortrichtlinie konnte nicht geladen werden. Ein neues Konto ".
+           "kann deshalb momentan nicht sicher angelegt werden.</p>\n";
+      echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"_self\">\n";
+      echo estab_csrf_field ()."\n";
+      echo $loginDestinationField."\n";
+      echo "<button class=\"estab-button\" type=\"submit\" name=\"login\" value=\"Anmelden\">Zurück zur Auswahl</button>\n";
+      echo "</form>\n";
     } else {
       $isRegistration = $loginFlow === "new";
       $formTitle = $isRegistration
@@ -1917,6 +1950,12 @@ Nachricht als Sichtung anzeigen
       echo "<form action=\"".$loginAction."\" method=\"POST\" target=\"_self\">\n";
       echo "<fieldset class=\"estab-auth-form\">\n";
       echo "<legend>Zugangsdaten</legend>\n";
+      if ($isRegistration) {
+        echo "<p id=\"estab-registration-password-policy\" class=\"estab-auth-note\">".
+             estab_auth_html (estab_password_policy_requirements_text (
+               $registrationPasswordPolicy
+             ))."</p>\n";
+      }
       echo estab_csrf_field ()."\n";
       echo $loginDestinationField."\n";
       echo "<input type=\"hidden\" name=\"login_flow\" value=\"".$loginFlow."\">\n";
@@ -1939,11 +1978,20 @@ Nachricht als Sichtung anzeigen
       }
       echo "</select></td></tr>\n";
       echo "<tr><th><label for=\"estab-login-password\">Kennwort</label></th>\n";
-      echo "<td><input id=\"estab-login-password\" name=\"kennwort1\" type=\"password\" maxlength=\"255\" autocomplete=\"".
-           $passwordAutocomplete."\" required".$passwordAutofocus."></td></tr>\n";
+      echo "<td><input id=\"estab-login-password\" name=\"kennwort1\" type=\"password\" maxlength=\"".
+           ESTAB_AUTH_PASSWORD_INPUT_MAXIMUM_LENGTH."\" autocomplete=\"".
+           $passwordAutocomplete."\"".
+           ($isRegistration
+             ? " data-estab-password-minimum-codepoints=\"".
+               (int) $registrationPasswordPolicy ["minimum_length"].
+               "\" aria-describedby=\"estab-registration-password-policy\""
+             : "")." required".$passwordAutofocus."></td></tr>\n";
       if ($isRegistration) {
         echo "<tr><th><label for=\"estab-login-password-confirm\">Kennwort wiederholen</label></th>\n";
-        echo "<td><input id=\"estab-login-password-confirm\" name=\"kennwort2\" type=\"password\" maxlength=\"255\" autocomplete=\"new-password\" required></td></tr>\n";
+        echo "<td><input id=\"estab-login-password-confirm\" name=\"kennwort2\" type=\"password\" data-estab-password-minimum-codepoints=\"".
+             (int) $registrationPasswordPolicy ["minimum_length"].
+             "\" maxlength=\"".ESTAB_AUTH_PASSWORD_INPUT_MAXIMUM_LENGTH.
+             "\" autocomplete=\"new-password\" aria-describedby=\"estab-registration-password-policy\" required></td></tr>\n";
       }
       echo "</tbody></table>\n";
       echo "<div class=\"estab-auth-actions\">\n";

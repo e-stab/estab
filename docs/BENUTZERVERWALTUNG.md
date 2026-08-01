@@ -4,7 +4,8 @@ Die technische Benutzerverwaltung ist unter
 `/4fadm/users.php` erreichbar und wird – wie alle Seiten unter `/4fadm` –
 durch den unabhängigen HTTP-Basic-Administrationszugang geschützt. Außerhalb
 eines isolierten Testsystems darf dieser Zugang nur über TLS bereitgestellt
-werden.
+werden. Die für alle Funktionskonten geltende Kennwortrichtlinie wird getrennt
+unter `/4fadm/password_policy.php` konfiguriert.
 
 ## Kontostatus
 
@@ -142,7 +143,7 @@ MariaDB-Advisory-Lock. Kontooperationen nehmen erst danach den
 kontospezifischen Login-Lock. Diese feste Reihenfolge
 
 ```text
-Zuordnungsrichtlinie → Konto → Transaktion/Zeilensperren
+Zuordnungsrichtlinie → Kennwortrichtlinie → Konto → Transaktion/Zeilensperren
 ```
 
 verhindert, dass eine Anmeldung oder administrative Zuordnung noch mit einem
@@ -206,12 +207,85 @@ Die Verwaltungsaktionen und der Legacy-Login verwenden denselben
 kontospezifischen MariaDB-Advisory-Lock. Ein paralleler Login kann daher weder
 eine gerade gesetzte Sperre noch einen Kennwortwechsel überholen.
 
+## Kennwortrichtlinie
+
+Migration `113-password-policy.sql` ergänzt die InnoDB-Singleton-Tabelle
+`nv_kennwortrichtlinie`. Sie enthält die Mindestlänge, vier optionale
+Zeichenklassen, eine monotone Revision sowie UTC-Änderungszeit und den
+Basic-Auth-Akteur. Kollidiert der Tabellenname mit einer nicht vollständig
+kanonischen Fremdtabelle, fehlt die einzige Zeile oder liegt ein Wert außerhalb
+seiner CHECK-Grenze, blockieren Migration und Readiness den Betrieb, statt eine
+Richtlinie zu erraten.
+
+Die Installation beginnt mit der bisherigen sicheren Voreinstellung:
+
+- mindestens 12 Zeichen,
+- kein verpflichtender Großbuchstabe,
+- kein verpflichtender Kleinbuchstabe,
+- keine verpflichtende Ziffer,
+- kein verpflichtendes Sonderzeichen.
+
+Die Administration kann die Mindestlänge unter
+`/4fadm/password_policy.php` auf einen ganzzahligen Wert zwischen 8 und 128
+Unicode-Codepoints setzen und jede Zusatzanforderung unabhängig aktivieren.
+Groß- und Titlecase-Buchstaben sowie Kleinbuchstaben und Ziffern werden als
+Unicode-Klassen geprüft;
+Interpunktions- und Symbolzeichen zählen als Sonderzeichen. Leerzeichen sind
+für Passphrasen erlaubt, erfüllen die Sonderzeichenpflicht aber nicht.
+Unicode-Steuerzeichen (`\p{Cc}`) bleiben unabhängig von der Konfiguration
+verboten. Formatzeichen (`\p{Cf}`), insbesondere ZWJ in Emoji-Sequenzen, sind
+zulässig. Das Kennwort wird weder getrimmt noch normalisiert.
+
+Eine Änderung wird zunächst als Vorher-/Nachher-Vorschau angezeigt. Schwächt
+sie mindestens eine Anforderung ab, weist die Oberfläche ausdrücklich darauf
+hin. Erst eine zweite, bestätigte POST-Aktion darf die Richtlinie speichern.
+Beide Schritte verlangen HTTP Basic Auth und Session-CSRF. Die im Formular
+mitgeführte Revision und ein globaler MariaDB-Advisory-Lock verhindern, dass
+ein alter Browserstand eine zwischenzeitliche Änderung überschreibt. Eine
+echte Änderung, die neue Revision und das kennwortfreie Audit committen in
+derselben Transaktion; bei einem Auditfehler bleibt die alte Richtlinie
+vollständig erhalten.
+
+Die Richtlinie wirkt ausschließlich prospektiv auf
+
+- administrativ angelegte Startkennwörter,
+- administrative Kennwortresets,
+- und die nur bei `ESTAB_ALLOW_SELF_REGISTRATION=true` sichtbare
+  Selbstregistrierung.
+
+Ein Bestandslogin und die transparente Umwandlung eines eindeutig
+verifizierbaren Altwerts wenden die neue Richtlinie bewusst nicht rückwirkend
+an. Klartextwerte und andere eindeutige Alt-Hashes werden nach erfolgreicher
+Anmeldung auf Argon2id umgestellt. bcrypt wird nur bei einem eingegebenen
+Kennwort unter 72 UTF-8-Bytes automatisch migriert. Bei 72 oder mehr Bytes
+bleibt der ambivalente Alt-Hash unverändert und benötigt für Argon2id einen
+administrativen Reset; so wird kein erstmals präsentierter Suffix neu an das
+Konto gebunden. Argon2id-Profile werden nur hochgestuft, wenn alle
+Kostenparameter höchstens dem Ziel entsprechen und mindestens einer niedriger
+ist. Bereits stärkere oder gemischte Profile werden nie auf die Standardkosten
+zurückgestuft. Eine Verschärfung
+widerruft daher weder die Anmeldbarkeit des Kennworts noch laufende Sitzungen.
+Das separate HTTP-Basic-Kennwort für
+`/4fadm` stammt weiterhin ausschließlich aus dem Admin-Secret und ist weder
+Inhalt noch Ziel dieser Tabelle.
+
+Kontoanlage und Selbstregistrierung lesen die aktuelle Richtlinie unter dem
+globalen Richtlinien-Lock vor dem kontospezifischen Login-Lock. Ein
+Kennwortreset verwendet dieselbe Reihenfolge ab der Kennwortrichtlinie. So kann
+weder eine parallele Verschärfung mit einem alten Prüfstand überholt noch ein
+halb gespeicherter Kontozustand sichtbar werden.
+
 ## Kennwort zurücksetzen
 
 Das neue Kennwort wird ausschließlich in einem CSRF-geschützten POST-Formular
-zweimal eingegeben. Es muss 12 bis 255 Zeichen lang und gültiges UTF-8 ohne
-Steuerzeichen sein. Es wird unverändert mit `password_hash()` und dem
-aktuellen `PASSWORD_DEFAULT` gehasht.
+zweimal eingegeben. Die Benutzerverwaltung zeigt die aktuell wirksame
+Mindestlänge und alle aktivierten Zeichenklassen direkt über den Feldern an.
+Die serverseitige Prüfung ist verbindlich: Zulässig sind höchstens 1024
+UTF-8-Bytes und das Kennwort muss gültiges UTF-8 ohne Unicode-Steuerzeichen
+sein; Formatzeichen wie ZWJ bleiben zulässig. Das Browserfeld erlaubt 1024
+Eingabeeinheiten. Sein JavaScript zählt die konfigurierbare Mindestlänge exakt
+in Unicode-Codepoints, die Serverprüfung bleibt jedoch verbindlich. Nach
+erfolgreicher Prüfung wird das Kennwort unverändert mit Argon2id gehasht.
 
 Der Klartext erscheint weder
 
@@ -223,7 +297,9 @@ Der Klartext erscheint weder
 Kennworthash, Sitzungswiderruf und Audit werden gemeinsam transaktional
 gespeichert. Ein Reset lässt eine bestehende Kontosperre unverändert; bei
 einem freigegebenen Konto ist anschließend eine neue Anmeldung mit dem neuen
-Kennwort erforderlich.
+Kennwort erforderlich. Verfehlt das neue Kennwort die Richtlinie oder ändert
+sich diese parallel, bleiben Hash, Konto- und Sitzungszustand sowie Audit
+unverändert; beide Kennwortfelder werden nicht erneut ausgegeben.
 
 ## Audit
 
@@ -247,6 +323,13 @@ Sitzungen.
 Kennwort, Kennworthash und Session-ID werden nicht protokolliert. Scheitert
 der Audit-Schreibvorgang, wird auch die Kontoänderung zurückgerollt.
 
+Richtlinienänderungen verwenden getrennt `p_was = Kennwortrichtlinie` und die
+Aktion `password_policy_updated`. Der JSON-Datensatz enthält ausschließlich
+Vorher-/Nachher-Konfiguration, validierte Basic-Auth-Identität und direkte IP;
+er enthält weder ein Kennwort noch einen Hash oder eine Session-ID. Eine
+unveränderte Bestätigung erhöht die Revision nicht und erzeugt keinen
+Schein-Auditeintrag.
+
 ## Nachweis
 
 Der fokussierte Vertragstest
@@ -255,6 +338,22 @@ Funktions-/Rollenableitung, Kontoanlage und Neuzuweisung, Auditdaten,
 gemeinsamen Login-Lock, sofortige Session-Ungültigkeit, POST/CSRF/PRG,
 Nichtweitergabe des Klartextkennworts, die kollisionsbewusste Migration und
 die Aufnahme beider neuen PHP-Dateien in die Container-Laufzeit.
+
+`tests/php/password_policy_security.php` prüft mit 63 Assertions Default und
+Eingabegrenzen, exakte browserseitige Codepointzählung, Titlecase und ZWJ,
+Unicode-Zeichenklassen, Argon2id samt vollständiger Unterscheidung von Werten
+mit gleichem 72-Byte-Präfix, getrennte
+Bestätigungsfehler, Vorschau/Bestätigung, CSRF/PRG, optimistische Revision,
+kennwortfreies Audit, Containeroberfläche und dass Bestandslogins nicht
+rückwirkend an die Richtlinie gebunden werden. Der Authentisierungsvertrag
+ergänzt 106 Assertions einschließlich der eindeutigen bcrypt-Migration unter
+72 UTF-8-Bytes, des bewusst unveränderten ambivalenten Alt-Hashes ab 72 Bytes
+und monotoner Argon2id-Kosten. `tests/integration/password_policy.php` belegt mit 63
+Assertions gegen MariaDB Singleton-Schema, Revision, Lockkonkurrenz und
+Rollback sowie schwache und gültige Kontoanlagen, Resets und
+Selbstregistrierungen. Die Admin-HTTP- und
+Browserprüfungen kontrollieren zusätzlich die verständliche Anzeige auf
+Desktop und Mobilansicht und stellen am Ende die Standardrichtlinie wieder her.
 
 `tests/php/assignment_policy_security.php` prüft zusätzlich globale
 Lockreihenfolge, Matrix-/Kontotransaktion, generische Waisenanzeige,
@@ -294,7 +393,9 @@ MariaDB-Verbindungen und beweist ergänzend:
    geschlossen fehlschlagen.
 
 Für die fachliche Freigabe bleibt zusätzlich die Bedienprobe über
-`/4fadm/users.php` erforderlich: Konto anlegen, zugewiesene Funktion anmelden,
+`/4fadm/password_policy.php` und `/4fadm/users.php` erforderlich: Richtlinie
+voranzeigen und bestätigen, Konto anlegen, zugewiesene Funktion anmelden,
 abweichende Funktion abweisen, neu zuweisen, Sperren, Entsperren und
-Kennwortreset im vorgesehenen Browser ausführen und die verständlichen
-Rückmeldungen sowie die erneute Anmeldung kontrollieren.
+Kennwortreset im vorgesehenen Browser ausführen. Dabei sind verständliche
+Rückmeldungen, die erneute Anmeldung und die weiterhin mögliche Anmeldung mit
+einem vor der Verschärfung gültigen Bestandskennwort zu kontrollieren.

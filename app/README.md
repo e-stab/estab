@@ -23,7 +23,9 @@ liefert deren vollständigen Nachrichtendatensatz und validiert die gemeinsame
 5×4-Empfängermatrix für den aktuellen PDF-Abzug.
 `incident_export.php` und `incident_pdf.php` erzeugen das PDF-Dossier eines
 ausdrücklich ausgewählten Einsatzes; `user_admin.php` kapselt dauerhafte
-Kontosperre und Kennwortreset. `message_evidence.php` speichert und prüft die
+Kontosperre und Kennwortreset. `password_policy.php` lädt, validiert und
+ändert die revisionsgesicherte globale Kennwortrichtlinie für
+Funktionskonten. `message_evidence.php` speichert und prüft die
 append-only Nachrichtenereigniskette einschließlich Terminalbindung.
 `shift_access.php` bildet optionale einsatzgebundene Zugangsschichten und
 Kontenzuordnungen ab. `dv_operations.php` bildet S6-Planung, Melderlauf sowie
@@ -60,10 +62,27 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
 - Alle `SELECT`-, `INSERT`- und `UPDATE`-Operationen des Anmeldepfads sind
   `mysqli`-Prepared-Statements. Der konfigurierbare Tabellenname wird separat
   als SQL-Identifier validiert.
-- Neue Kennwörter werden mit `password_hash(PASSWORD_DEFAULT)` gespeichert.
-  Ein vorhandenes Klartextkennwort wird nur noch für eine erfolgreiche
-  Anmeldung akzeptiert und in demselben Update transparent durch einen Hash
-  ersetzt. Moderne Hashes werden bei Bedarf ebenfalls neu gehasht.
+- Neue Kennwörter werden erst gegen die in `nv_kennwortrichtlinie`
+  gespeicherte Richtlinie geprüft und danach mit Argon2id gespeichert. Die
+  Mindestlänge ist auf 8 bis 128 Unicode-Codepoints begrenzt und beträgt nach
+  Migration 113 zunächst 12. Serverseitig gelten höchstens 1024 UTF-8-Bytes;
+  das Browserfeld erlaubt 1024 Eingabeeinheiten, und das Browser-JavaScript
+  zählt die Mindestlänge exakt in Unicode-Codepoints. Die Serverprüfung bleibt
+  verbindlich. Groß- oder Titlecase-Buchstaben (`\p{Lu}`/`\p{Lt}`),
+  Kleinbuchstaben (`\p{Ll}`), Ziffern (`\p{Nd}`)
+  sowie Unicode-Interpunktions- oder Symbolzeichen (`\p{P}`/`\p{S}`) können
+  unabhängig verpflichtend sein. Unicode-Steuerzeichen (`\p{Cc}`) bleiben
+  immer unzulässig; Formatzeichen (`\p{Cf}`), insbesondere ZWJ in
+  Emoji-Sequenzen, sind erlaubt. Klartextkennwörter und andere eindeutig
+  verifizierbare Alt-Hashes werden nur nach erfolgreicher Anmeldung in
+  demselben Update durch Argon2id ersetzt. bcrypt wird nur bei einem
+  eingegebenen Kennwort unter 72 UTF-8-Bytes automatisch migriert. Bei 72 oder
+  mehr Bytes bleibt der Hash wegen der Suffixambiguität unverändert und
+  benötigt für Argon2id einen administrativen Reset. Argon2id wird nur
+  hochgestuft, wenn alle Kostenparameter höchstens den Zielwert haben und
+  mindestens einer niedriger ist; stärkere oder gemischte Profile werden nie
+  zurückgestuft. Anmeldung und Rehash eines bestehenden Kontos prüfen die
+  aktuelle Richtlinie bewusst nicht rückwirkend.
 - Die Session-ID wird nach erfolgreicher Prüfung und vor dem Speichern der SID
   mit `session_regenerate_id(true)` erneuert; ein Voranmelde-CSRF-Token wird
   dabei verworfen und für die authentifizierte Sitzung neu erzeugt. Beim
@@ -90,7 +109,10 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
 - Selbstregistrierung ist standardmäßig ausgeschaltet. Nur die bewusst gesetzte
   Kompatibilitätsoption `ESTAB_ALLOW_SELF_REGISTRATION=true` erlaubt die
   öffentliche Kontoanlage; regulär legt die Basic-Auth-geschützte
-  Benutzerverwaltung Konten und deren feste Funktion an. Boolesche
+  Benutzerverwaltung Konten und deren feste Funktion an. Beide Wege verwenden
+  beim Setzen eines neuen Kennworts dieselbe datenbankgespeicherte Richtlinie;
+  kann sie nicht eindeutig geladen werden, schlägt die Kontoanlage geschlossen
+  fehl. Boolesche
   Umgebungswerte akzeptieren ausschließlich `1/0`, `true/false`, `yes/no` oder
   `on/off`; Tippfehler führen absichtlich zu einem Fehler statt zu implizitem
   Aktivieren.
@@ -147,7 +169,10 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   eindeutige Kennwortfelder und Inline-Fehler. Die beiden Konto-Flows bleiben
   getrennte Formulare, sodass ein Moduswechsel keine Zugangsdaten mitsendet.
   Jede Anmeldung und Neuanlage aus der Browseroberfläche erfordert bereits vor
-  der Authentisierung ein sitzungsgebundenes CSRF-Token.
+  der Authentisierung ein sitzungsgebundenes CSRF-Token. Nur das
+  Neuanlageformular zeigt die aktuell wirksamen Kennwortanforderungen und ein
+  passendes `minlength`; der Bestandslogin bleibt von späteren
+  Richtlinienänderungen unberührt.
 - `navigation.php` liefert genau neun operative Bereiche in stabiler
   Reihenfolge. Alle URLs laufen durch den zentralen Anwendungs-URL-Builder,
   interne Links verwenden den Top-Level-Browserkontext statt neue Tabs und
@@ -303,6 +328,16 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   Sitzungsdaten. Rollen stammen aus der serverseitigen Funktionsmatrix;
   `nv_benutzer.aktiv` bleibt reiner Onlinezustand und `estab_gesperrt` die
   dauerhafte administrative Sperre.
+- `password_policy.php` verwaltet genau eine Richtlinienzeile unter einem
+  globalen MariaDB-Advisory-Lock. Die Administration zeigt Änderungen zuerst
+  als Vorher-/Nachher-Vorschau und speichert sie nur mit expliziter
+  Bestätigung und unveränderter Revision. Jede echte Änderung erhöht die
+  Revision und schreibt Vorher-/Nachher-Konfiguration, Basic-Auth-Akteur und
+  validierte IP gemeinsam in ein kennwortfreies Audit. Kontoanlage hält die
+  Reihenfolge Zuordnungsrichtlinie → Kennwortrichtlinie → Konto → Transaktion;
+  Reset und Selbstregistrierung nehmen denselben Kennwortrichtlinien-Lock vor
+  dem Kontolock. Eine Änderung widerruft weder bestehende Sitzungen noch
+  Kennwörter und verändert auch nicht das separate Apache-Basic-Auth-Secret.
 - Die Matrixadministration verwendet keine generierte oder eingebundene
   PHP-Konfiguration mehr. Aktive Matrix und die einzige gespeicherte
   Standardmatrix liegen in getrennten InnoDB-Tabellen und müssen jeweils

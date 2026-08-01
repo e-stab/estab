@@ -672,6 +672,7 @@ run_isolated_operational_integration \
     tests/integration/shift_access.php
 run_php_integration "nullable-date migration" tests/integration/date_compatibility.php
 run_php_integration "user administration" tests/integration/user_admin.php
+run_php_integration "configurable password policy" tests/integration/password_policy.php
 run_php_integration \
     "assignment-policy concurrency and revocation" \
     tests/integration/assignment_policy.php

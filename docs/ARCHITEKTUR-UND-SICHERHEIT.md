@@ -178,16 +178,44 @@ schlägt geschlossen fehl. PDF- und Tabellenexporte bleiben für historische
 Nachweise lesbar, kennzeichnen den Fehlwert aber ausdrücklich, statt einen
 Fallback zu erfinden.
 
-Neue Anwendungspasswörter werden über PHPs `PASSWORD_DEFAULT` gehasht.
-Historische Klartextwerte werden nur bei einer erfolgreichen Anmeldung
-akzeptiert und dabei transparent durch einen Hash ersetzt. Die Datenbankspalte
-ist dafür auf 255 Zeichen erweitert.
+Neue Anwendungspasswörter werden zuerst gegen die von Migration 113 in der
+Singleton-Tabelle `nv_kennwortrichtlinie` gespeicherte Richtlinie geprüft und
+danach mit Argon2id gehasht. Die Mindestlänge darf 8 bis 128
+Unicode-Codepoints betragen und ist initial 12. Serverseitig sind höchstens
+1024 UTF-8-Bytes zulässig; das Browserfeld erlaubt 1024 Eingabeeinheiten.
+Das Browser-JavaScript zählt die konfigurierbare Mindestlänge exakt in
+Unicode-Codepoints; verbindlich bleibt die Serverprüfung. Unicode-Groß- und
+Titlecase-Buchstaben,
+Unicode-Kleinbuchstaben, Unicode-Ziffern sowie Interpunktions-/Symbolzeichen
+können unabhängig verpflichtend sein. Unicode-Steuerzeichen (`\p{Cc}`)
+bleiben immer unzulässig; Formatzeichen (`\p{Cf}`), insbesondere ZWJ in
+Emoji-Sequenzen, sind erlaubt. Die Datenbankspalte für den resultierenden Hash ist auf 255
+Zeichen erweitert.
+
+Die Richtlinie gilt ausschließlich beim Erzeugen eines neuen Hashes durch
+administrative Kontoanlage, Reset oder aktivierte Selbstregistrierung.
+Historische Klartextwerte und andere eindeutig verifizierbare Alt-Hashes werden
+erst nach einer erfolgreichen Anmeldung durch Argon2id ersetzt. Ein
+bcrypt-Hash wird nur bei einem eingegebenen Kennwort unter 72 UTF-8-Bytes
+automatisch migriert. Bei 72 oder mehr Bytes bleibt er wegen der
+Suffixambiguität unverändert; für Argon2id ist ein administrativer Reset nötig,
+damit kein erstmals präsentierter Suffix neu gebunden wird. Ein Argon2id-Profil
+wird nur hochgestuft, wenn alle Kostenparameter höchstens dem Ziel entsprechen
+und mindestens einer niedriger ist. Stärkere oder gemischte Profile werden nie
+auf Standardkosten zurückgestuft. Ein Bestandslogin und dieser Rehash prüfen
+die aktuelle Richtlinie bewusst nicht rückwirkend;
+eine Verschärfung widerruft daher keine vorhandenen Kennwörter oder Sitzungen.
 
 Selbstregistrierung ist standardmäßig ausgeschaltet. Konten werden über den
 unabhängig per HTTP Basic Auth geschützten Administrationsbereich mit einer
 festen Funktion angelegt. `ESTAB_ALLOW_SELF_REGISTRATION=true` ist nur eine
 bewusste Kompatibilitätsausnahme und kein Ersatz für Netzsegmentierung oder
-organisatorische Benutzerfreigabe.
+organisatorische Benutzerfreigabe. Ist sie aktiviert, verwendet sie dieselbe
+gespeicherte Kennwortrichtlinie wie die Basic-Auth-geschützte
+Benutzerverwaltung und schlägt bei fehlendem oder ungültigem Richtlinienstand
+geschlossen fehl. Das getrennte Apache-Basic-Auth-Secret ist keine
+Funktionskonto-Anmeldeinformation und wird von dieser Richtlinie nicht
+gelesen oder verändert.
 
 Der anonyme Einstieg bindet die fachliche Absicht an streng validierte
 Auswahlwerte: Ein exakter, zustandsfreier `GET` darf von der Übersicht
@@ -425,6 +453,19 @@ validierte direkte IP und `sha256:<64 Hexzeichen>` als korrelierbare
 Sitzungsreferenz. Die rohe Session-ID und das Kennwort werden nicht in den
 Audit-Builder übernommen. Kontoaktivierung und Audit committen in derselben
 Transaktion.
+
+Änderungen der Kennwortrichtlinie durchlaufen unter
+`/4fadm/password_policy.php` zwei CSRF-geschützte Schritte: Vorschau und
+ausdrückliche Bestätigung. Eine monotone Revision verhindert verlorene
+Änderungen aus einem veralteten Browserformular; ein globaler Advisory-Lock
+serialisiert Richtlinienänderung, Kontoanlage, Reset und positive
+Selbstregistrierung. Die feste Reihenfolge ist bei der Kontoanlage
+Zuordnungsrichtlinie → Kennwortrichtlinie → Konto → Transaktion. Die
+Richtlinienzeile und das kennwortfreie Audit `password_policy_updated` mit
+Vorher-/Nachher-Konfiguration, Basic-Auth-Akteur und validierter IP committen
+gemeinsam. Ein Auditfehler oder Revisionskonflikt lässt den vorherigen Stand
+vollständig wirksam. Eine unveränderte Bestätigung erzeugt weder Revision noch
+Schein-Audit.
 
 `4fach/logout.php` akzeptiert nur einen angemeldeten POST mit gültigem
 Session-CSRF und leitet nach Erfolg mit HTTP 303 zum Anmeldeeinstieg weiter.
@@ -703,6 +744,14 @@ den damaligen Schicht-Triggervertrag: Neue manuelle und automatische
 ETB-/TTB-Zeilen dürfen Schicht und Schreiberbesetzung `NULL` lassen. Eine
 Zugangsschicht wird dort nie eingetragen. Belegte formale Altprovenienz bleibt
 unverändert und exportierbar.
+
+Migration 113 ergänzt davon unabhängig die globale Kennwortrichtlinie. Sie
+akzeptiert nur die eigene InnoDB-/`utf8mb4`-Tabelle mit genau einer
+Singleton-Zeile, neun kanonischen Spalten und begrenzten Boolean-/Längenwerten.
+Die Auslieferungsvorgabe 12 ohne verpflichtende Zeichenklasse bewahrt das
+bisherige Verhalten; die Migration verändert keinen vorhandenen Hash und
+meldet keinen Benutzer ab. Readiness und der externe SQL-Verifier prüfen
+denselben kanonischen Zustand.
 
 Eine optionale ETB-Bearbeitungszuordnung ist nur Such- und Anzeigehilfe. Sie
 erweitert keine Rechte. Webliste, Volltext- und Zuordnungsfilter verwenden den
@@ -1049,6 +1098,8 @@ Das aktuelle Basisschema verwendet:
   `NO_ZERO_DATE`, `NO_ZERO_IN_DATE` und `NO_ENGINE_SUBSTITUTION`,
 - einen eindeutigen Anhang-Dateinamen für race-freie Reservierung,
 - längere Session-, Passwort-, IPv6- und Dateiendungsfelder,
+- eine revisionsgesicherte Singleton-Tabelle für die prospektive
+  Funktionskonto-Kennwortrichtlinie,
 - idempotente InnoDB-/`utf8mb4`-Migration der dynamischen Benutzer- und
   Funktionstabellen bei ihrer Aktivierung,
 - Foreign Keys für die unmittelbar einsatzgebundenen operativen Tabellen;

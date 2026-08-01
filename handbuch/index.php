@@ -36,6 +36,7 @@ $routes = [
     'admin' => estab_application_url('4fadm/admin.php'),
     'incidents' => estab_application_url('4fadm/incidents.php'),
     'users' => estab_application_url('4fadm/users.php'),
+    'password_policy' => estab_application_url('4fadm/password_policy.php'),
     'admin_command_post' => estab_application_url('4fadm/fuehrungsstelle.php'),
     'matrix' => estab_application_url('4fadm/make_fkt.php'),
     'incident_pdf' => estab_application_url('4fadm/incident_export.php'),
@@ -209,8 +210,10 @@ $handbookUpdated = '1. August 2026';
             neues Konto. „Neues Konto anlegen“ erscheint nur, wenn die
             öffentliche Selbstregistrierung ausdrücklich freigeschaltet wurde.
             Sie verlangt Name, ein eindeutiges Kürzel, die zugeteilte Funktion
-            und zweimal dasselbe Kennwort. Fachrechte folgen ausschließlich
-            aus dieser festen Kontofunktion und der abgeleiteten Rolle.</p>
+            und zweimal dasselbe Kennwort. Die dabei angezeigte zentrale
+            Kennwortrichtlinie gilt ebenso für administrativ angelegte Konten
+            und Kennwortresets. Fachrechte folgen ausschließlich aus dieser
+            festen Kontofunktion und der abgeleiteten Rolle.</p>
         </article>
 
         <article id="navigation" class="estab-handbook-chapter"
@@ -596,7 +599,7 @@ $handbookUpdated = '1. August 2026';
 
         <article id="administration" class="estab-handbook-chapter"
           data-estab-handbook-section
-          data-handbook-keywords="Basic Auth Admin Benutzer sperren Passwort zurücksetzen Matrix Zähler PDF Markierung Systemstatus">
+          data-handbook-keywords="Basic Auth Admin Benutzer sperren Passwort Kennwort Richtlinie Mindestlänge Großbuchstabe Kleinbuchstabe Ziffer Sonderzeichen zurücksetzen Matrix Zähler PDF Markierung Systemstatus">
           <header><span>16</span><div><p>Technische Maßnahmen mit eigenem Zugang</p><h2>Administration</h2></div></header>
           <p>Die Administration verwendet HTTP Basic Auth und ein eigenes
             technisches Kennwort. Diese Anmeldung ist kein eStab-Funktionskonto
@@ -605,6 +608,7 @@ $handbookUpdated = '1. August 2026';
           <div class="estab-handbook-admin-grid">
             <a href="<?= $href('incidents') ?>"><strong>Einsätze</strong><span>Anlegen, aktivieren, deaktivieren und formal abschließen</span></a>
             <a href="<?= $href('users') ?>"><strong>Benutzer</strong><span>Anlegen, zuweisen, sperren, entsperren und Kennwort zurücksetzen</span></a>
+            <a href="<?= $href('password_policy') ?>"><strong>Kennwortrichtlinie</strong><span>Mindestlänge und optionale Zeichenanforderungen für neue Kennwörter festlegen</span></a>
             <a href="<?= $href('admin_command_post') ?>"><strong>Zugangsschichten</strong><span>Optionale Kontengruppen anlegen und gemeinsam aktivieren/deaktivieren</span></a>
             <a href="<?= $href('matrix') ?>"><strong>Empfängermatrix</strong><span>Exakt 5 × 4 Positionen; S2 bleibt Rotkopieziel, Autosichtung bleibt aus</span></a>
             <a href="<?= $href('counter') ?>"><strong>Nachrichtenzähler</strong><span>Nach dokumentiertem Rückfallbetrieb sicher erhöhen</span></a>
@@ -616,6 +620,25 @@ $handbookUpdated = '1. August 2026';
           <p>Sperren, Funktionsneuzuweisung und Kennwortreset widerrufen aktive
             eStab-Sitzungen sofort. Ein neues Kennwort wird zweimal eingegeben;
             Entsperren meldet das Konto nicht automatisch an.</p>
+          <h3>Kennwortrichtlinie verständlich anwenden</h3>
+          <p>Unter <a href="<?= $href('password_policy') ?>">Kennwortrichtlinie</a>
+            legen Sie eine Mindestlänge zwischen 8 und 128 Zeichen fest.
+            Voreingestellt sind 12 Zeichen. Zusätzlich können Sie unabhängig
+            mindestens einen Unicode-Großbuchstaben, Unicode-Kleinbuchstaben,
+            eine Unicode-Ziffer und ein Sonderzeichen verlangen. Leerzeichen
+            dürfen Teil einer Passphrase sein, zählen aber nicht als
+            Sonderzeichen.</p>
+          <p>Prüfen Sie zuerst die angezeigte Vorher-/Nachher-Ansicht und
+            bestätigen Sie die Änderung anschließend ausdrücklich. Eine
+            Abschwächung wird hervorgehoben; hat in der Zwischenzeit jemand
+            anderes gespeichert, fordert eStab statt eines Überschreibens zum
+            erneuten Prüfen auf.</p>
+          <div class="estab-handbook-callout"><strong>Nur für neue Kennwörter</strong>
+            <p>Die Richtlinie gilt für neue Konten, Kennwortresets und eine
+              gegebenenfalls freigeschaltete Selbstregistrierung. Vorhandene
+              Kennwörter und Sitzungen bleiben gültig. Auch das separate
+              technische Kennwort der HTTP-Basic-Administration wird hier
+              nicht geändert.</p></div>
           <p><a href="<?= $href('admin') ?>">Administrationsübersicht öffnen</a>.</p>
         </article>
 
@@ -666,6 +689,7 @@ curl --fail http://127.0.0.1:8080/health.php</code></pre>
           <div class="estab-handbook-troubleshooting">
             <details><summary>Administration zeigt sofort „Unauthorized“</summary><p>Das ist die Browserabfrage für HTTP Basic Auth. Manche integrierten Browser zeigen sie nicht zuverlässig; verwenden Sie einen normalen Browser. Benutzername und Kennwort stammen aus dem technischen Admin-Secret, nicht aus einem Funktionskonto.</p></details>
             <details><summary>Die Kontoanmeldung funktioniert nicht</summary><p>Prüfen Sie Name, Kürzel, Funktion und Kennwort. Ein administrativ gesperrtes Konto oder eine widerrufene Sitzung muss in der Benutzerverwaltung geklärt werden. Legen Sie kein zweites Konto mit demselben Kürzel an.</p></details>
+            <details><summary>Ein neues Kennwort wird abgewiesen</summary><p>Lesen Sie die aktuell angezeigte Kennwortrichtlinie vollständig: Mindestlänge und aktivierte Anforderungen für Großbuchstaben, Kleinbuchstaben, Ziffern oder Sonderzeichen müssen gemeinsam erfüllt sein. Beide Eingaben müssen exakt übereinstimmen. Eine spätere Verschärfung verhindert keinen Bestandslogin, gilt aber bei jedem neuen Reset.</p></details>
             <details><summary>Es ist keine operative Eingabe möglich</summary><p>Prüfen Sie für die Fachfunktion: gültige Sitzung, aktiver Einsatz, bestätigter Führungsstellenname und feste Kontofunktion. Eine Dienst- oder Zugangsschicht und eine Hutauswahl sind keine Schreibvoraussetzung. Scheitert bereits Anmeldung oder Sitzung, prüfen Sie zusätzlich die manuelle Kontosperre und – nur bei einer Gruppenzuordnung – mindestens eine aktive Zugangsschicht.</p></details>
             <details><summary>Ein Ausgang erreicht A/W nicht</summary><p>Der Ausgang muss zuerst Si und danach LdF durchlaufen. LdF benötigt einen gültigen freigegebenen S6-Planweg. Eine Rückgabe enthält einen Pflichtgrund und muss in der zuständigen Stufe bearbeitet werden.</p></details>
             <details><summary>Eine Anlage lässt sich nicht hochladen</summary><p>Prüfen Sie die am Dateifeld angezeigte Grenze, erlaubte Endung und echten Inhaltstyp. Eine lediglich umbenannte Datei wird abgewiesen. Brechen Sie einen nicht mehr benötigten Anhangsvorgang sauber ab.</p></details>

@@ -239,8 +239,8 @@ ihn anschließend wieder her.
 podman compose run --rm migrate
 ```
 
-Ein bereits aktueller Bestand meldet alle achtzehn Migrationen einschließlich
-`112-optional-access-shifts.sql` als vorhanden und
+Ein bereits aktueller Bestand meldet alle neunzehn Migrationen einschließlich
+`113-password-policy.sql` als vorhanden und
 führt trotzdem den vollständigen Read-only-Schematest aus. Die Ausgabe muss
 `Post-migration schema verification passed` und anschließend
 `All schema migrations are applied` enthalten. Erst danach sollte der Stack
@@ -281,11 +281,13 @@ Nachricht, dem ersten Anhang oder einem ETB-/TBB-Eintrag:
    Einsatz-/Führungsleitung sowie Einsatzauftrag/Ausgangslage anlegen und den
    Einsatz aktivieren; beim Anlegen müssen genau die beiden noch leeren
    Nummernköpfe `ETB:1` und `TTB:1` entstehen,
-3. unter **Benutzerverwaltung** persönliche Konten mit der jeweils festen
+3. unter **Kennwortrichtlinie** die Auslieferungsvorgabe prüfen und bei Bedarf
+   nach einer Vorher-/Nachher-Vorschau revisionsgesichert anpassen,
+4. unter **Benutzerverwaltung** persönliche Konten mit der jeweils festen
    Funktion anlegen; die Rolle wird serverseitig abgeleitet,
-4. optional unter **Führungsstellenbetrieb** Zugangsschichten anlegen, Konten
+5. optional unter **Führungsstellenbetrieb** Zugangsschichten anlegen, Konten
    zuordnen und gewünschte Gruppen aktivieren,
-5. jede Person regulär anmelden und Einsatz sowie feste Funktion in der
+6. jede Person regulär anmelden und Einsatz sowie feste Funktion in der
    Oberfläche prüfen.
 
 Eine Dienst- oder Zugangsschicht ist keine fachliche Voraussetzung für
@@ -421,9 +423,12 @@ Die Anwendung hat zwei getrennte Anmeldebereiche:
 1. Funktionsbenutzer wählen auf `/` unmittelbar „Mit bestehendem Konto
    anmelden“ oder – sofern freigeschaltet – „Neues Konto anlegen“. Das
    Nachrichtenvordruck-Modul öffnet das passende Formular direkt in seinem
-   rechten `iframe` namens `mainframe`. Neue Kennwörter werden mit
-   `password_hash()` gespeichert; ein beim Altimport vorhandenes
-   Klartextkennwort wird beim ersten erfolgreichen Login transparent ersetzt.
+   rechten `iframe` namens `mainframe`. Neue und geänderte Kennwörter werden
+   mit Argon2id gespeichert. Ein beim Altimport vorhandenes Klartextkennwort
+   oder ein anderer eindeutig verifizierbarer Alt-Hash wird erst nach
+   erfolgreichem Login auf Argon2id umgestellt. bcrypt wird nur bei einem
+   eingegebenen Kennwort unter 72 UTF-8-Bytes automatisch migriert; ab 72 Bytes
+   ist wegen der Suffixambiguität ein administrativer Kennwortreset nötig.
 2. `/4fadm` verwendet den in `.env` konfigurierten Admin-Benutzer und das
    separate Admin-Secret als HTTP Basic Auth. Der im historischen Pfad
    verbliebene Vordruckreset `/4fach/resetpic.php` liegt hinter demselben Schutz.
@@ -441,6 +446,55 @@ Basic-Auth-Zugang selbst wird
 weiterhin ausschließlich über `ESTAB_ADMIN_USER` und die
 `admin_password.txt`-Secret-Datei geändert. Details und Auditvertrag stehen in
 [Benutzerverwaltung](BENUTZERVERWALTUNG.md).
+
+### Kennwortrichtlinie für Funktionskonten
+
+Unter `/4fadm/password_policy.php` legt der technische Administrator die
+Richtlinie für **künftig gesetzte** Funktionskonto-Kennwörter fest. Die
+konfigurierbare Mindestlänge kann zwischen 8 und 128 Unicode-Codepoints liegen;
+nach Installation beträgt sie 12 Unicode-Codepoints. Zusätzlich lassen sich je
+mindestens ein
+Unicode-Groß- oder Titlecase-Buchstabe, Unicode-Kleinbuchstabe, eine
+Unicode-Ziffer und ein Interpunktions- oder Symbolzeichen unabhängig
+verpflichtend machen.
+Leerzeichen bleiben in Passphrasen zulässig, gelten aber nicht als
+Sonderzeichen. Unicode-Steuerzeichen sind immer unzulässig; Formatzeichen wie
+der ZWJ in Emoji-Sequenzen sind erlaubt.
+
+Die Oberfläche zeigt zunächst den aktuellen Revisionsstand und anschließend
+eine Vorher-/Nachher-Vorschau. Erst eine ausdrückliche Bestätigung speichert
+die Änderung. Eine Abschwächung wird sichtbar markiert. Ein zwischenzeitlich
+geänderter Revisionsstand ergibt HTTP 409, statt eine neuere Einstellung zu
+überschreiben. Richtlinie und Audit committen gemeinsam; ein fehlgeschlagenes
+Audit lässt den alten Stand wirksam.
+
+Die Richtlinie gilt für administrative Kontoanlage, Kennwortreset und die
+gegebenenfalls mit `ESTAB_ALLOW_SELF_REGISTRATION=true` freigegebene
+Selbstregistrierung. Sie wird serverseitig unter einem globalen Lock gelesen,
+bevor ein neuer Hash und Kontozustand geschrieben werden. Eine Änderung prüft
+oder sperrt vorhandene Kennwörter nicht nachträglich und widerruft keine
+Sitzung. Auch das getrennte technische HTTP-Basic-Kennwort bleibt unberührt;
+es wird weiterhin nur über die Secret-Datei und `admin-auth-init` rotiert.
+
+Neue und geänderte Funktionskonto-Kennwörter werden mit Argon2id gespeichert.
+Die konfigurierbare Mindestlänge beträgt 8 bis 128 Unicode-Codepoints;
+zusätzlich gilt eine serverseitige Grenze von 1024 UTF-8-Bytes. Das
+Browserfeld erlaubt 1024 Eingabeeinheiten; sein JavaScript zählt die
+konfigurierbare Mindestlänge exakt in Unicode-Codepoints, die Serverprüfung
+bleibt verbindlich. Importierte Klartextwerte und andere eindeutig
+verifizierbare Alt-Hashes bleiben anmeldbar und werden erst nach erfolgreicher
+Anmeldung auf Argon2id umgestellt. bcrypt wird nur bei einem eingegebenen
+Kennwort unter 72 UTF-8-Bytes automatisch migriert. Bei 72 oder mehr Bytes
+bleibt der ambivalente Alt-Hash unverändert; ein administrativer Reset ist für
+Argon2id erforderlich. Bereits stärkere oder gemischte Argon2id-Kosten werden
+nicht auf die Standardkosten zurückgestuft; nur vollständig schwächere Profile
+werden hochgestuft.
+
+Migration `113-password-policy.sql`, `/health.php`, der administrative
+Systemstatus und `docker/db/verify.sql` erwarten genau eine kanonische
+Richtlinienzeile. Ist sie nicht eindeutig oder ungültig, werden neue
+Kennwörter fail-closed nicht gesetzt und der Schema-/Readiness-Nachweis
+schlägt fehl.
 
 ### Präsenz und Leerlaufabmeldung
 
@@ -540,13 +594,19 @@ Die Selbstregistrierung ist standardmäßig deaktiviert. Neue Konten legt die
 zuständige Stelle unter Administration → Benutzerverwaltung an.
 „Mit bestehendem Konto anmelden“ erzeugt auch bei einem unbekannten Kürzel
 niemals einen neuen Datensatz. „Neues Konto anlegen“ verlangt das Kennwort
-zweimal und weist bereits vergebene Kürzel ab, erscheint aber nur nach der
+zweimal, zeigt die aktuelle Kennwortrichtlinie und weist bereits vergebene
+Kürzel ab, erscheint aber nur nach der
 bewussten Kompatibilitätsfreigabe
 `ESTAB_ALLOW_SELF_REGISTRATION=true`. Name, eindeutiges Kürzel mit
 höchstens sechs Buchstaben, Ziffern oder `_` sowie die organisatorisch
 zugeteilte Funktion sind Pflichtangaben; die Rolle ist nicht frei wählbar.
 Die öffentliche Kontenliste übernimmt bei Auswahl nur Name, Kürzel und
 Funktion, niemals das Kennwort.
+Die Richtlinie gilt ausschließlich für den Neuanlagepfad. Ein vorhandenes
+Konto darf sich auch nach einer späteren Verschärfung weiterhin mit seinem
+gespeicherten Kennwort anmelden; beim Bestandslogin wird deshalb weder eine
+neue Mindestlänge noch eine Zeichenklasse browser- oder serverseitig
+erzwungen.
 Ein Konto kann unabhängig von seinem Sitzungs- oder Präsenzzustand nicht durch
 eine abweichende Funktionsauswahl die Rolle wechseln. Einen vorgesehenen
 Funktionswechsel führt der technische Administrator in der
@@ -743,7 +803,9 @@ Dauer der Migration solcher Clients aktiviert werden.
 Soll die historische öffentliche Kontoanlage ausnahmsweise vorübergehend
 verwendet werden, muss sie ausdrücklich mit `true` aktiviert und nach der
 kontrollierten Anlage wieder deaktiviert werden. Die Benutzerverwaltung bleibt
-von dieser Option unabhängig erreichbar.
+von dieser Option unabhängig erreichbar. Falls die Ausnahme aktiviert ist,
+verwendet auch sie ausnahmslos die in der Administration gespeicherte
+Kennwortrichtlinie; eine nicht lesbare Richtlinie verhindert die Neuanlage.
 
 Das Admin-Kennwort kann ohne Datenbankänderung rotiert werden:
 

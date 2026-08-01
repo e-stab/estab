@@ -1,8 +1,10 @@
 # Abschluss-Audit vom 1. August 2026
 
 > Aktueller Nachweisstand: Dieser Audit protokolliert den vollständigen Lauf
-> einschließlich Migration 111 und der ETB-/TBB-Regeln. Der geprüfte Stand
-> umfasst achtzehn Ledgerzeilen und den erweiterten Schema-Prüfvertrag.
+> einschließlich Migration 113, der optionalen Zugangsschichten, der
+> ETB-/TBB-Regeln und der konfigurierbaren Kennwortrichtlinie. Der geprüfte
+> Stand umfasst neunzehn Ledgerzeilen und den erweiterten
+> Schema-Prüfvertrag.
 
 Dieses Audit beschreibt den lokalen Repository-Stand einschließlich des
 Commits, der diese Datei enthält. Es trennt automatisiert nachgewiesene
@@ -34,11 +36,11 @@ Kontofunktion; eine persönliche Schichtannahme ist keine Betriebsbedingung.
 | Bedienbare, einheitliche Navigation | Gemeinsame Bereichsnavigation, Sitzungsanzeige, Logout, Sidebar, responsive Karten, BOS-Arbeitsbereich und Dirty-Guard | `tests/browser/headless_ui.py`, vollständiger Browserlauf mit Chrome 150 |
 | Skalierbare Nachrichtensuche | Meldungsübersicht und beide Varianten der zweiten Sichtung teilen immer sichtbare Suche, kombinierbare Filter, Filterchips, eindeutige Treffer-/Seitenangaben, stabile Sortierung und responsive Ergebnisdarstellung. Zählung und Seite werden serverseitig nach Einsatz- und Rechtegrenze bestimmt. | 99 Parser-/SQL-Assertions, 108 UI-Assertions, authentifizierter S2-/A/W-/Si-HTTP-Lauf sowie 145 MariaDB-Assertions mit 10.000 Ziel- und 257 Fremdeinsatzmeldungen |
 | Dienstvorschriftsgebundener Betrieb | Aktiver Einsatz, Führungsstellenname, feste persönliche Kontofunktionen, optionale Zugangsschichten, getrennte historische Dienstschichtevidenz, verbindlicher Eingangs-/Ausgangslauf, Sichtung, LdF-Entscheidung, Transportnachweis, S6-Plan, Melderlauf und unveränderliche Ereignisketten | MariaDB-Integrationen: Einsatz 40 Assertions, DV-Nachweis 51 Assertions, ETB-/TBB-DV-Betrieb 122 Assertions sowie Zugangsschichten 25 Assertions einschließlich veralteter Bestätigung und ABA-Schutz; vollständiger HTTP-Nachrichtenlauf |
-| Benutzer- und Rollenschutz | Administrativ provisionierte Konten, Sperren, Entsperren, Kennwortreset, Sitzungswiderruf, feste serverseitige Funktion/Rolle | Benutzerverwaltung 95 Assertions; Zuweisungsrichtlinie 59 Assertions |
+| Benutzer-, Rollen- und Kennwortschutz | Administrativ provisionierte Konten, Sperren, Entsperren, Kennwortreset, Sitzungswiderruf, feste serverseitige Funktion/Rolle sowie eine revisionsgesicherte prospektive Kennwortrichtlinie. Die konfigurierbare Mindestlänge liegt bei 8–128 Unicode-Codepoints (Standard 12); höchstens 1024 UTF-8-Bytes und optionale Unicode-Zeichenklassen gelten für Anlage, Reset und aktivierte Selbstregistrierung. Browserfelder erlauben 1024 Eingabeeinheiten und zählen die Mindestlänge exakt in Codepoints; die Serverprüfung bleibt verbindlich. Titlecase erfüllt die Großbuchstabenpflicht, Unicode-Steuerzeichen sind verboten, Formatzeichen einschließlich ZWJ erlaubt. Neue und geänderte Kennwörter werden mit Argon2id gespeichert; Klartext und eindeutige Alt-Hashes werden nach erfolgreichem Login migriert. bcrypt wird nur bei einem eingegebenen Kennwort unter 72 UTF-8-Bytes automatisch migriert, ein längerer ambivalenter Alt-Hash benötigt einen administrativen Reset. Stärkere oder gemischte Argon2id-Kosten werden nicht zurückgestuft. Sitzungen und das getrennte Basic-Auth-Secret bleiben unberührt. | 63 statische Kennwortrichtlinien-Assertions, 106 Authentisierungs-Assertions und 63 echte MariaDB-Assertions einschließlich Unicode-Grenzen, vollständiger Unterscheidung von Kennwörtern mit gleichem 72-Byte-Präfix und verschiedenen Suffixen, bcrypt-72-Byte-Grenze, monotone Argon2id-Kosten, Lockkonkurrenz, Revision, Auditrollback, Bestandslogin und Selbstregistrierung |
 | Belastbare Präsenzanzeige | Echte Browserinteraktion hält die Fachsitzung aktiv; nach 15 Minuten erscheint sie inaktiv, nach 12 Stunden wird sie serverseitig widerrufen. Statuspolls und automatische Refreshes zählen nicht. Der Aktivitätsendpunkt verlangt POST, gültige SID und Session-CSRF; PHP-GC ist auf 43.200 Sekunden angeglichen. HTTP Basic Auth bleibt separat. | Grenzwertmatrix in `tests/php/auth_security.php`; Monitorvertrag in `tests/php/session_ui_security.php`; Aktiv-/Inaktivdarstellung in `tests/php/sidebar_ui_security.php`; Endpoint- und Sitzungsablauf in `tests/integration/http_surface_http.sh` und `tests/integration/http_smoke.sh` |
 | Einsatzbezogene Daten und Exporte | ETB, TTB, Nachrichten, Anhänge, Vordrucke, Tabellenexport und PDF-Dossier bleiben einsatzgebunden | HTTP-, Export-, PDF- und Restore-Integrationen; Incident-Export 33 Assertions |
 | Reproduzierbare Herkunft | 13 Git-Ref-Snapshots und ein separater Dokument-r85-Baum sind selbsttragend gebunden | `migration/verify_provenance.py --self-test`: 14 Subjects sowie beide Manipulationsfälle grün |
-| Sicherer Containerstart | Gepinnte PHP-/MariaDB-Basen, erweiterte Schema-Prüfungen, achtzehn checksumgebundene Migrationen, Health-Gates und getrennte Netze | vollständiger Podman-CI-Lauf und PHP-8.5-Suite |
+| Sicherer Containerstart | Gepinnte PHP-/MariaDB-Basen, erweiterte Schema-Prüfungen, neunzehn checksumgebundene Migrationen, Health-Gates und getrennte Netze | vollständiger Podman-CI-Lauf und PHP-8.5-Suite |
 | Isoliertes Admin-Kennwort | Nur der netzlose One-shot `admin-auth-init` liest das Klartextsecret. Die App erhält ausschließlich eine bcrypt-Datei mit Kostenfaktor 12 schreibgeschützt. | 11 Secret-Isolationsassertionen sowie Container-Inspect und HTTP 401/200 |
 | NAS-/Registry-Betrieb | Pull-only Compose, digestgebundene Releaseidentität, private Konfigurations-/Secret-Snapshots, bestehende und getrennte Speicherquellen, engine-weite Wartungssperre sowie fail-closed Backup/Restore | Registry-Deployment-Vertrag 57 Assertions; Release-, Backup- und Restore-Operator-Tests; echter Named-Volume- und Bind-Mount-Lauf |
 | Wiederherstellbarkeit | Logischer MariaDB-Dump und beide Dateibereiche werden im aktuellen Format 3 verifiziert und kontrolliert wiederhergestellt. Archivdaten werden über interaktive Standardeingabe in netzlose Hilfscontainer übertragen; Format 2 bleibt nur für den exakten Same-Host-Kompatibilitätsfall lesbar. | Format-3-Bind-Restore, anschließender vollständiger benannter Volume-Roundtrip, Marker-/SHA-256-, Login-, Export- und Schemanachweis |
@@ -64,7 +66,7 @@ destruktiven Backup-/Restore-Roundtrip mit `CI integration: OK`.
 Der Lauf umfasste unter anderem:
 
 - frischen Image-Build und vollständige Migration auf MariaDB 11.8,
-- 38 Schema-Prüfungen,
+- 40 Schema-Prüfungen einschließlich der kanonischen Kennwortrichtlinie,
 - Pull-only-Start mit benannten Volumes,
 - Pull-only-Start mit drei echten Bind-Mounts,
 - Format-3-Backup, kontrollierte Verfälschung und produktiven Restore,
@@ -77,6 +79,9 @@ Der Lauf umfasste unter anderem:
 - 10.000 einsatzgebundene und 257 verwechslungsfähige Fremdeinsatzmeldungen
   mit exakten Treffern, Prepared Pagination und nachgewiesener Indexnutzung,
 - Rollen-, Parallelitäts-, Anhang-, Einsatz-, PDF- und Exportnachweise,
+- Basic-Auth-/CSRF-geschützte Richtlinienvorschau und -bestätigung,
+  Revision, atomaren Vorher-/Nachher-Audit sowie positive und negative
+  Kontoanlage-, Reset-, Selbstregistrierungs- und Bestandsloginfälle,
 - vollständige Löschung und Neuerstellung der CI-Volumes mit anschließendem
   Login-, Datei-, PDF-, Export- und Datenbanknachweis.
 
@@ -85,8 +90,9 @@ SELinux-Enforcing-System ausgeführt. Er ist deshalb kein Nachweis für das
 tatsächliche Relabeling unter SELinux; die dafür im Testhandbuch beschriebene
 Abnahme bleibt offen.
 
-Die abschließende statische PHP-8.5-Suite lintete 246 aktive PHP-Dateien.
-Alle Sicherheitsverträge, 57 Registry-Assertions, 72 Assertions zur
+Die abschließende statische PHP-8.5-Suite lintete alle aktiven PHP-Dateien.
+Alle Sicherheitsverträge einschließlich 63 Kennwortrichtlinien- und 106
+Authentisierungs-Assertions, außerdem 57 Registry-Assertions, 72 Assertions zur
 WAV-/Signalintegrität, die Operator-Shelltests, der Provenienznachweis und der
 PDF-Smoke-Test mit 14.335 Byte waren grün. Zusätzlich bestanden beide
 GitHub-Actions-Workflows die vollständige Prüfung mit dem festgelegten

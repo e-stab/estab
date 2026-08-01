@@ -228,7 +228,23 @@ Führungsstellenname, Einsatz und feste Kontofunktion müssen in Statusleiste
 beziehungsweise Führungsstellenansicht eindeutig erkennbar sein. Ohne
 gültigen Führungsstellennamen oder aktiven Einsatz nimmt eStab keine operative
 Eingabe an. Funktionskonten lassen sich unter `/4fadm/users.php` sperren, entsperren
-und mit einem neuen Kennwort versehen. Ein vollständiges
+und mit einem neuen Kennwort versehen. Unter
+`/4fadm/password_policy.php` legt die Administration zentral fest, welche
+Anforderungen für künftig gesetzte Kennwörter gelten: eine Mindestlänge von 8
+bis 128 Unicode-Codepoints (Standard 12) sowie optional je mindestens ein
+Unicode-Groß- oder Titlecase-Buchstabe, Unicode-Kleinbuchstabe, eine
+Unicode-Ziffer und ein Sonderzeichen. Unicode-Steuerzeichen sind verboten;
+Formatzeichen wie der ZWJ in Emoji-Sequenzen bleiben zulässig. Die Änderung betrifft Kontoanlage, Kennwortreset und eine
+gegebenenfalls aktivierte Selbstregistrierung. Bestehende Kennwörter bleiben
+anmeldbar. Klartextwerte und andere eindeutig verifizierbare Alt-Hashes werden
+nach erfolgreichem Login auf Argon2id umgestellt. Ein bcrypt-Hash wird nur bei
+einem eingegebenen Kennwort unter 72 UTF-8-Bytes automatisch migriert. Ab 72
+Bytes bleibt er wegen der bcrypt-Suffixambiguität unverändert; für Argon2id ist
+dann ein administrativer Kennwortreset erforderlich. Bereits stärkere oder
+gemischte Argon2id-Kosten werden nie auf die Standardkosten zurückgestuft; nur
+in allen Kostenparametern höchstens gleich starke und insgesamt schwächere
+Profile werden hochgestuft. Sitzungen und das getrennte
+HTTP-Basic-Administrationskennwort bleiben unverändert. Ein vollständiges
 ETB-/TBB-/Nachrichten-/Nachweis-/Dienst-/S6-/Melder-/Anhang-Dossier für einen
 aktiven oder historischen Einsatz erzeugt `/4fadm/incident_export.php`.
 Die Anlagensektion zeigt JPEG, PNG, GIF und BMP direkt (bei animierten GIFs die
@@ -382,6 +398,7 @@ entstehen. OCI-Tags – auch `latest` – gibt es absichtlich nicht.
 | `/4fadm/incidents.php` | Einsätze samt Führungsstellennamen anlegen, historische Fehlwerte einmalig bestätigen, aktivieren und deaktivieren | HTTP Basic Auth, Session-CSRF, revisionsgesicherter globaler Status; die erste operative Eintragung setzt atomar einen dauerhaften Sperrmarker für den bestätigten Führungsstellennamen |
 | `/4fadm/fuehrungsstelle.php` | optionale einsatzgebundene Zugangsschichten anlegen, Konten zuordnen und Gruppen gemeinsam aktivieren/deaktivieren | HTTP Basic Auth, Session-CSRF; unzugeordnete Konten bleiben erlaubt, Mehrfachzuordnungen gelten per OR, Deaktivierung kann Sitzungen widerrufen und verändert keine Fachrechte |
 | `/4fadm/users.php` | Benutzer anlegen, Funktionen fest zuweisen, sperren/entsperren und Kennwörter zurücksetzen | HTTP Basic Auth, Session-CSRF; Rollen werden serverseitig abgeleitet und aktive Sitzungen atomar widerrufen |
+| `/4fadm/password_policy.php` | globale Kennwortrichtlinie prüfen, als revisionsgebundene Änderung voranzeigen und anschließend ausdrücklich bestätigen | HTTP Basic Auth, Session-CSRF; konfigurierbare Mindestlänge 8–128 Unicode-Codepoints (Standard 12), höchstens 1024 UTF-8-Bytes, 1024 Browser-Eingabeeinheiten, optionale Unicode-Zeichenklassen, Argon2id und transaktionales Audit; nur künftig gesetzte Funktionskonto-Kennwörter werden gegen die Richtlinie geprüft |
 | `/4fadm/incident_export.php` | neun wählbare PDF-Abschnitte: ETB, TBB, Nachrichtenvordrucke, Anhänge, Nachrichtenereignisse, Dienstorganisation, S6-Fernmeldepläne, Melderläufe und Betriebsereignisse; ETB/TBB als Gesamtbuch oder per Legacy-Dienstschicht | HTTP Basic Auth, Session-CSRF, einsatzgebundene Abfragen; Dienstorganisation enthält optionale Zugangsschichten samt aktuellen/entfernten Zuordnungen und getrennt gekennzeichnete historische `nv_dienst*`-Evidenz; der historische Schichtfilter betrifft nur ETB/TBB |
 | `/4fadm/system_status.php` | ausführlicher Laufzeitstatus | HTTP Basic Auth |
 | `/4fadm/export.php` | Einsatzexporte auflisten, erstellen, als ZIP herunterladen und einzeln löschen | HTTP Basic Auth; POST-Erstellung/-Löschung mit Session-CSRF; Download nur über validierte Exportkennung |
@@ -516,8 +533,27 @@ festen Funktion und einem Startkennwort an. Die Rolle wird ausschließlich
 serverseitig aus Funktion und Empfängermatrix abgeleitet. Die öffentliche
 „Neues Konto anlegen“-Kompatibilitätsfunktion ist standardmäßig ausgeschaltet;
 wird sie bewusst aktiviert, verlangt sie eine Kennwortbestätigung und meldet
-niemals still ein vorhandenes Konto an. Beide Browserabläufe sind bereits vor
-der Anmeldung an ein Session-CSRF-Token gebunden.
+niemals still ein vorhandenes Konto an. Für Kontoanlage, administrativen
+Kennwortreset und Selbstregistrierung gilt dieselbe gespeicherte
+Kennwortrichtlinie. Deren Mindestlänge ist zwischen 8 und 128 Unicode-Codepoints
+konfigurierbar und beträgt nach Installation 12 Unicode-Codepoints;
+Unicode-Groß- oder Titlecase-Buchstaben, Unicode-Kleinbuchstaben,
+Unicode-Ziffern sowie Sonderzeichen können unabhängig als Pflicht aktiviert
+werden. Unicode-Steuerzeichen sind ausgeschlossen, Formatzeichen einschließlich
+ZWJ bleiben zulässig. Ein
+Bestandslogin wird nicht nachträglich gegen eine
+verschärfte Richtlinie geprüft. Neue und administrativ geänderte Kennwörter
+werden mit Argon2id gespeichert; serverseitig sind höchstens 1024 UTF-8-Bytes
+zulässig. Das Browser-JavaScript zählt die konfigurierbare Mindestlänge exakt
+in Unicode-Codepoints und begrenzt die Eingabe auf 1024 Eingabeeinheiten; die
+Serverprüfung bleibt verbindlich. Importierte Klartextwerte und andere
+eindeutig verifizierbare Alt-Hashes werden nach erfolgreicher Anmeldung auf
+Argon2id umgestellt. bcrypt wird nur bei einem eingegebenen Kennwort unter 72
+UTF-8-Bytes automatisch migriert; ab 72 Bytes bleibt der ambivalente Alt-Hash
+bis zu einem administrativen Reset bestehen. Bereits stärkere oder gemischte
+Argon2id-Kosten werden nicht auf Standardwerte zurückgestuft. Beide
+Browserabläufe sind bereits
+vor der Anmeldung an ein Session-CSRF-Token gebunden.
 
 Eine bestehende Anmeldung und die sichtbare Präsenz sind getrennte Zustände.
 Nach 15 Minuten ohne echte Browserinteraktion zeigt die Aktivitätsübersicht
@@ -613,7 +649,8 @@ Hinweisflächen, beschriftete Formularfelder, mindestens 44 Pixel große
 Aktionen sowie eine eindeutige Rücknavigation. Dazu gehören insbesondere
 Meldungsübersicht, Nachweisung, ETB, TBB, Vordrucke, Kategorienverwaltung,
 Empfängermatrix, Einsatzverwaltung, Benutzerverwaltung, Exporte und
-Systemstatus. Breite Fach- und Prüftabellen bleiben auf kleinen Bildschirmen
+Kennwortrichtlinie sowie Systemstatus. Breite Fach- und Prüftabellen bleiben
+auf kleinen Bildschirmen
 als Karten lesbar oder werden in einem ausdrücklich begrenzten Tabellenbereich
 gescrollt; sie erzeugen kein horizontales Scrollen des gesamten Dokuments.
 Historische interne Generatoren und Installer besitzen keine direkte
