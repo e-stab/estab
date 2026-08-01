@@ -1762,18 +1762,10 @@ var_dump ($this->formdata); echo "<br>";
 
               case "cb":
                 if ( ( $this->empfarray [$m][$n]["checked"]) and
-                     ( $this->empfarray [$m][$n]["cpycol"] == "gn" ) ) {
-                  $selcbgn = "checked=\"checked\"";} else {$selcbgn = "";}
-
-                if ( ( $this->empfarray [$m][$n]["checked"]) and
                      ( $this->empfarray [$m][$n]["cpycol"] == "bl" ) ) {
                   $selcbbl = "checked=\"checked\"";} else {$selcbbl = "";}
 
-                echo "<a style=\"background-color:#00B000;\">
-                      <input name=\"16_gncopy\" type=\"radio\" ".$selcbgn." value=\"16_".$m.$n."_gn\">\n";
-
-                echo "<a style=\"background-color:#0303FD;\">
-                      <input name=\"16_".$m.$n."\" value=\"16_".$m.$n."_bl\" type=\"checkbox\" ".$param.$selcbbl.">\n</a>";
+                echo "<input name=\"16_".$m.$n."\" value=\"16_".$m.$n."_bl\" type=\"checkbox\" ".$param.$selcbbl.">\n";
 
 	                echo estab_message_html (estab_function_display_name (
 	                  (string) ($this->empfarray [$m][$n]["fkt"] ?? "")

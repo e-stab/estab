@@ -481,9 +481,28 @@ $assert(
     $conversationDraft['recipient_matrix_revision']
         === $recipientMatrixRevision
         && $conversationDraft['16_12'] === '16_12_bl'
-        && $conversationDraft['16_gncopy'] === '',
+        && !array_key_exists('16_gncopy', $conversationDraft),
     'attachment draft drops the matrix revision or its coordinate selections'
 );
+foreach (['', '16_11_gn'] as $retiredGreenValue) {
+    $retiredGreenRejected = false;
+    try {
+        estab_attachment_origin_draft_from_request(
+            [
+                '16_gncopy' => $retiredGreenValue,
+                'recipient_matrix_revision' => $recipientMatrixRevision,
+            ],
+            $staffIdentity,
+            $conversationContext
+        );
+    } catch (EstabAttachmentDraftException $exception) {
+        $retiredGreenRejected = $exception->draft() === [];
+    }
+    $assert(
+        $retiredGreenRejected,
+        'attachment draft accepted the retired green-copy field'
+    );
+}
 $conversationFormData = estab_attachment_origin_draft_form_data(
     $conversationDraft,
     $conversationContext,
@@ -498,6 +517,24 @@ $assert(
         && $conversationFormData['recipient_matrix_revision']
             === $recipientMatrixRevision,
     'central conversation attachment return loses the exact blue coordinate or server-required red/author-green copies'
+);
+$retiredStoredDraftRejected = false;
+try {
+    estab_attachment_origin_draft_form_data(
+        $conversationDraft + ['16_gncopy' => ''],
+        $conversationContext,
+        null,
+        $recipientMatrix,
+        true,
+        'LdF',
+        ['LdF_rt', 'S1_gn']
+    );
+} catch (EstabAttachmentContextException) {
+    $retiredStoredDraftRejected = true;
+}
+$assert(
+    $retiredStoredDraftRejected,
+    'attachment reconstruction accepted a stored retired green-copy field'
 );
 $changedRecipientMatrix = $recipientMatrix;
 $changedRecipientMatrix[1][1]['fkt'] = 'S2';
@@ -2734,10 +2771,7 @@ $assert(
             $controllerSource,
             '$distributionRequest ["recipient_matrix_revision"] ='
         )
-        && str_contains(
-            $controllerSource,
-            '$distributionRequest ["16_gncopy"] = $draft ["16_gncopy"];'
-        )
+        && !str_contains($controllerSource, '$draft ["16_gncopy"]')
         && str_contains(
             $controllerSource,
             '$distributionRequest [$recipientKey] = $draft [$recipientKey];'
@@ -2757,11 +2791,15 @@ $assert(
             $controllerSource,
             '$data ["16_empf"] .= $recipientFunction'
         ),
-    'attachment recipient restore is constrained to real matrix positions and copy colours'
+    'attachment recipient restore is not constrained to in-form matrix positions'
 );
 $draftFieldsStart = strpos(
     $attachmentSource,
     'function estab_attachment_origin_draft_fields()'
+);
+$draftFromRequestStart = strpos(
+    $attachmentSource,
+    'function estab_attachment_origin_draft_from_request('
 );
 $draftFormDataStart = strpos(
     $attachmentSource,
@@ -2791,18 +2829,39 @@ $centralDistributionBuild = strpos(
 );
 $assert(
     is_int($draftFieldsStart)
+        && is_int($draftFromRequestStart)
         && is_int($draftFormDataStart)
         && str_contains(
             substr(
                 $attachmentSource,
                 $draftFieldsStart,
-                $draftFormDataStart - $draftFieldsStart
+                $draftFromRequestStart - $draftFieldsStart
             ),
             "'recipient_matrix_revision'"
+        )
+        && !str_contains(
+            substr(
+                $attachmentSource,
+                $draftFieldsStart,
+                $draftFromRequestStart - $draftFieldsStart
+            ),
+            "'16_gncopy'"
+        )
+        && str_contains(
+            substr(
+                $attachmentSource,
+                $draftFromRequestStart,
+                $draftFormDataStart - $draftFromRequestStart
+            ),
+            "array_key_exists('16_gncopy', \$request)"
         )
         && str_contains(
             $draftFormDataSource,
             "\$field === 'recipient_matrix_revision'"
+        )
+        && !str_contains(
+            $draftFormDataSource,
+            "\$field === '16_gncopy'"
         )
         && is_int($centralRevisionCheck)
         && is_int($centralDistributionBuild)

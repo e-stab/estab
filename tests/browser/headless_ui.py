@@ -6331,8 +6331,11 @@ class BrowserAcceptance:
                         )
                     )
                     : [];
-                const copyControls = Array.from(
-                    doc.querySelectorAll("[data-estab-copy-color]")
+                const externalGreenControls = Array.from(
+                    doc.querySelectorAll(
+                        'input[name="16_gncopy"], '
+                        + '.estab-message-green-copy'
+                    )
                 );
                 const readonlyCopyControls = Array.from(
                     doc.querySelectorAll(
@@ -6735,13 +6738,11 @@ class BrowserAcceptance:
                         !extraDistribution
                         || (
                             extraDistribution.querySelector(
-                                ".estab-official-box-choice, "
-                                + ".estab-official-copy-choice"
+                                ".estab-official-box-choice"
                             )
                             && Array.from(
                                 extraDistribution.querySelectorAll(
-                                    ".estab-official-box-choice, "
-                                    + ".estab-official-copy-choice"
+                                    ".estab-official-box-choice"
                                 )
                             ).every(control =>
                                 Boolean(
@@ -6751,8 +6752,8 @@ class BrowserAcceptance:
                             )
                         )
                     ),
-                    editableCopyControlsAbsent:
-                        copyControls.length === 0,
+                    noExternalGreenChoice:
+                        externalGreenControls.length === 0,
                     readonlyCopyControlsLabeled:
                         activeOfficialRecipients.length > 0
                         && activeOfficialRecipients.every(recipient =>
@@ -6768,13 +6769,6 @@ class BrowserAcceptance:
                             && control.getAttribute("aria-label").includes(
                                 "schreibgeschützt"
                             )
-                        ),
-                    copyControlsLabeledAndColoured:
-                        copyControls.every(control =>
-                            ["blue", "green", "red", "yellow"].includes(
-                                control.getAttribute("data-estab-copy-color")
-                            )
-                            && Boolean(control.getAttribute("aria-label"))
                         ),
                     timeOnlyStampCount: stamps.filter(stamp =>
                         stamp.querySelector(
@@ -6902,9 +6896,8 @@ class BrowserAcceptance:
             and desktop_state.get("fixedDistributorGeometry") is True
             and desktop_state.get("extrasOutsideOfficialSheet") is True
             and desktop_state.get("extraControlsPersisted") is True
-            and desktop_state.get("editableCopyControlsAbsent") is True
+            and desktop_state.get("noExternalGreenChoice") is True
             and desktop_state.get("readonlyCopyControlsLabeled") is True
-            and desktop_state.get("copyControlsLabeledAndColoured") is True
             and desktop_state.get("timeOnlyStampCount") == 1
             and desktop_state.get("noImages") is True,
             "Amtliches Dreizonen-Raster, Blauton oder die 20 Hilfen "

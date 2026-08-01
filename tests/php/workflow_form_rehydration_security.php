@@ -430,13 +430,29 @@ $assert(
         ),
     'conversation-note validation failure cannot re-render the selected recipients plus mandatory copies'
 );
+$retiredGreenGuard = strpos(
+    $controller,
+    'if (array_key_exists ("16_gncopy", $browserData)) {'
+);
+$saveDefaults = strpos(
+    $controller,
+    '$data = array_replace (array_fill_keys (array ('
+);
 $assert(
-    str_contains(
-        $conversationBlock,
-        'trim ((string) ($browserData ["16_gncopy"] ?? "")) !== ""'
-    )
-        && str_contains($conversationBlock, 'estab_workflow_forbid ();'),
-    'conversation-note browser input can add a second green copy beside the author copy'
+    is_int($retiredGreenGuard)
+        && is_int($saveDefaults)
+        && $retiredGreenGuard < $saveDefaults
+        && str_contains(
+            substr(
+                $controller,
+                $retiredGreenGuard,
+                $saveDefaults - $retiredGreenGuard
+            ),
+            'estab_workflow_forbid ();'
+        )
+        && substr_count($controller, '"16_gncopy"') === 1
+        && !str_contains($conversationBlock, '16_gncopy'),
+    'the save boundary accepts or reconstructs the retired green-copy field'
 );
 
 printf(

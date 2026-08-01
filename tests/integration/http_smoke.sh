@@ -1528,8 +1528,8 @@ assert_body_absent 'name="16_gncopy"'
 # Reproduce the 0.9.26c attachment regression through the real authenticated
 # A/W form. Missing inactive controls such as 06_befweg and an initially empty
 # 12_anhang are deliberately not invented here: this request mirrors what a
-# browser submits. The blue and green recipient selections, every active
-# writable message value and the sighter note must survive upload and selection
+# browser submits. Every selected recipient, active writable message value and
+# the sighter note must survive upload and selection
 # in the returned form itself. The incoming sender deliberately has no request
 # field: only LdF translates the received callsign into that value.
 aw_workflow_csrf_token=$(csrf_from_body)
@@ -2831,7 +2831,6 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "14_funktion=$test_function" \
     --data-urlencode '15_quitdatum=' \
     --data-urlencode '15_quitzeichen=' \
-    --data-urlencode '16_gncopy=' \
     --data-urlencode '17_vermerke=' \
     "$base_url/4fach/mainindex.php"
 assert_body 'Liste der verfügbaren Dateien'
@@ -3247,7 +3246,6 @@ submit_conversation_attachment_stage() {
         --form "14_funktion=$test_function" \
         --form '15_quitdatum=30122000' \
         --form '15_quitzeichen=si0001' \
-        --form '16_gncopy=' \
         --form '16_empf=' \
         --form '17_vermerke=Backup-Restore-Nachweis' \
         --form "message_attachment_comment=$conversation_attachment_comment" \

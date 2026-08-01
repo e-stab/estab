@@ -1271,8 +1271,9 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
   Chrome-Test muss den vorbereiteten Archivdialog auch ohne ausgewählte Datei
   abbrechen und die Reservierung freigeben können. Die direkte Rückgabe nach
   Upload oder Archivauswahl muss Anschrift, sämtliche markanten Eingaben,
-  Vermerk sowie blaue und grüne Empfängerzuordnung als weiterhin absendbare
-  Formularwerte enthalten,
+  Vermerk sowie alle über Kästchen gewählten Empfänger als weiterhin
+  absendbare Formularwerte enthalten; eine zusätzliche
+  Durchschriftenauswahl darf weder gespeichert noch wiederhergestellt werden,
 - direkter Upload über **Datei hochladen** und Upload mit der regulären
   **Absenden**-Aktion; dabei müssen Formularkopf, Aktionsleiste und Listen die
   kanonische Anlagenzahl anzeigen, Karten Bildminiatur beziehungsweise lazy
@@ -1767,8 +1768,9 @@ fehlende CSRF-Tokens mit HTTP 403, die erlaubten Stabsaktionen sowie verbotene
 Aktionen für LdF, Fernmelder und Si des echten FB-Profils, stufengebundenen
 Sperrbesitz von LdF und Fernmelder, Status und Abschluss direkt in MariaDB,
 den erzeugten
-Ein-/Ausgangsvordruck sowie die exakten Empfängerfarben `S2_rt`, `S1_gn` und
-`S3_bl`.
+Ein-/Ausgangsvordruck sowie die serverseitige Lagezuordnung `S2_rt` und die
+über das Verteilerkästchen gewählte Zuordnung `S3_bl`. Automatisch aus der
+angemeldeten Identität abgeleitete Autorenzuordnungen bleiben davon getrennt.
 
 Die Nachweisung wird mit demselben Lauf fachlich geprüft: Eingänge müssen ihr
 aufgenommenes Medium in übersetzter Langform anzeigen. Bei Ausgängen bleibt der
@@ -1829,7 +1831,7 @@ Danach versucht der Lauf die historischen
 `FM-Admin`-/`SI-Admin`-Zweitsichtungen gegen einen abgeschlossenen Datensatz.
 Weder Navigation noch Controller dürfen einen solchen Bearbeitungspfad
 bereitstellen. Manipulierte Requests müssen abgewiesen werden; fachliche
-Felder, Quittierung, Empfängerfarben, Sichter- und Transportvermerk sowie der
+Felder, Quittierung, Empfängerzuordnung, Sichter- und Transportvermerk sowie der
 bereits erzeugte PDF-Vordruck bleiben unverändert. Persönliche
 Gelesen-/Erledigt-Markierungen werden davon getrennt geprüft.
 

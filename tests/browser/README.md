@@ -85,9 +85,10 @@ Geprüft werden:
   durchgehend blau und Legende sowie beide weißen Lochmarken liegen sichtbar
   im Blatt; der feste Verteiler enthält Leiter sowie S1–S6 einschließlich S5
   und jeweils genau sechs Zeilen für Fachberater und Verbindungsstellen;
-  dynamische Empfänger und die gemeinsame Auswahl für keinen oder genau einen
-  Empfänger der einen grünen Durchschrift liegen als digitale Ergänzung
-  außerhalb des amtlichen Blatts; nach dem echten Rendern wird das Formular
+  jeder Empfänger wird ausschließlich über sein eigenes Kästchen gewählt;
+  dynamische Empfänger liegen mit derselben Bedienung als digitale Ergänzung
+  außerhalb des amtlichen Blatts, eine zusätzliche Durchschriftenauswahl
+  existiert nicht; nach dem echten Rendern wird das Formular
   mit rund 184,9 mm Blattbreite druckisoliert und per Chrome-`Page.printToPDF`
   auf genau ein A4-Seitenobjekt geprüft, ohne mobilen Wischhinweis oder
   Fragmentierung; anschließend öffnet der Test genau die von Chrome erzeugten

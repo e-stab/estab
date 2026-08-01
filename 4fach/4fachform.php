@@ -2089,18 +2089,10 @@ HTML;
                 }
 
                 if ( ( $this->empfarray [$m][$n]["checked"]) and
-                     ( $this->empfarray [$m][$n]["cpycol"] == "gn" ) ) {
-                  $selcbgn = "checked=\"checked\"";} else {$selcbgn = "";}
-
-                if ( ( $this->empfarray [$m][$n]["checked"]) and
                      ( $this->empfarray [$m][$n]["cpycol"] == "bl" ) ) {
                   $selcbbl = "checked=\"checked\"";} else {$selcbbl = "";}
 
-                echo "<a style=\"background-color:#00B000;\">
-                      <input name=\"16_gncopy\" type=\"radio\" ".$selcbgn.$red_inactiv." value=\"16_".$m.$n."_gn\">\n";
-
-                echo "<a style=\"background-color:#0303FD;\">
-                      <input name=\"16_".$m.$n."\" value=\"16_".$m.$n."_bl\" type=\"checkbox\" ".$param.$selcbbl.$red_inactiv.">\n</a>";
+                echo "<input name=\"16_".$m.$n."\" value=\"16_".$m.$n."_bl\" type=\"checkbox\" ".$param.$selcbbl.$red_inactiv.">\n";
 
                 echo estab_message_html (estab_function_display_name (
                   (string) $this->empfarray [$m][$n]["fkt"]

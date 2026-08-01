@@ -1260,10 +1260,10 @@ HTML;
             echo '<input class="estab-official-box-choice" '
                 . 'name="16_' . $coordinate . '" '
                 . 'value="16_' . $coordinate . '_bl"'
-                . ' type="checkbox" data-estab-copy-color="blue"'
+                . ' type="checkbox"'
                 . ($blueChecked ? ' checked' : '')
                 . ' aria-label="' . estab_message_html(
-                    $display . ' blaue Durchschrift'
+                    $display . ' als Empfänger auswählen'
                 ) . '">';
         }
         echo '<span>' . estab_message_html($display) . '</span></span>';
@@ -1317,7 +1317,7 @@ HTML;
     {
         $model = $this->official_message_distribution_model();
         $readonly = $this->official_message_distribution_readonly();
-        if ($model['extras'] === [] && $readonly) {
+        if ($model['extras'] === []) {
             return;
         }
         echo '<section class="estab-message-distribution-extras" '
@@ -1325,53 +1325,16 @@ HTML;
             . '<span class="estab-section-kicker">Digitale Ergänzung</span>'
             . '<h2 id="estab-message-distribution-extras-title">'
             . 'Digitale Verteilung</h2>';
-        if ($model['extras'] !== []) {
-            echo '<h3>Weitere betriebliche Empfänger</h3>'
-                . '<p>Diese dynamischen Funktionen gehören nicht zum festen '
-                . 'amtlichen Verteilerfeld, bleiben aber vollständig im '
-                . 'Nachrichtenlauf erhalten. Die Kästchen wählen die blaue '
-                . 'Durchschrift.</p>'
-                . '<div class="estab-message-distribution-extra-grid">';
-            foreach ($model['extras'] as $entry) {
-                $this->official_message_recipient_control($entry, $readonly);
-            }
-            echo '</div>';
+        echo '<h3>Weitere betriebliche Empfänger</h3>'
+            . '<p>Diese dynamischen Funktionen gehören nicht zum festen '
+            . 'amtlichen Verteilerfeld, bleiben aber vollständig im '
+            . 'Nachrichtenlauf erhalten. Auch hier wählt jedes Kästchen '
+            . 'direkt einen Empfänger.</p>'
+            . '<div class="estab-message-distribution-extra-grid">';
+        foreach ($model['extras'] as $entry) {
+            $this->official_message_recipient_control($entry, $readonly);
         }
-        if (!$readonly && $this->task !== 'Stab_gesprnoti') {
-            $greenSelected = false;
-            foreach ($model['all'] as $entry) {
-                if (in_array('gn', $entry['copies'], true)) {
-                    $greenSelected = true;
-                    break;
-                }
-            }
-            echo '<fieldset class="estab-message-green-copy">'
-                . '<legend>Grüne Durchschrift</legend>'
-                . '<p>Optional genau eine Funktion für die grüne '
-                . 'Durchschrift auswählen.</p>'
-                . '<label><input type="radio" name="16_gncopy" value=""'
-                . ($greenSelected ? '' : ' checked')
-                . '> Keine grüne Durchschrift</label>';
-            foreach ($model['all'] as $entry) {
-                $coordinate = $entry['row'] . $entry['column'];
-                $display = (string)(
-                    $entry['display'] ?? $entry['function']
-                );
-                $display = estab_function_display_name($display);
-                echo '<label><input class="estab-official-copy-choice" '
-                    . 'name="16_gncopy" type="radio" '
-                    . 'value="16_' . $coordinate . '_gn" '
-                    . 'data-estab-copy-color="green"'
-                    . (in_array('gn', $entry['copies'], true)
-                        ? ' checked'
-                        : '')
-                    . ' aria-label="' . estab_message_html(
-                        $display . ' grüne Durchschrift'
-                    ) . '"> ' . estab_message_html($display) . '</label>';
-            }
-            echo '</fieldset>';
-        }
-        echo '</section>';
+        echo '</div></section>';
     }
 
     function official_message_actions(string $position): void

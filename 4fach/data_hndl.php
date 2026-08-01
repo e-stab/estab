@@ -728,6 +728,12 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
   $expectedIncidentId = estab_incident_positive_id ($expectedIncidentId);
 
   $browserData = is_array ($data) ? $data : array ();
+  if (array_key_exists ("16_gncopy", $browserData)) {
+    // Recipient boxes inside the official form are the only browser-owned
+    // distribution controls. The former separate field fails closed even
+    // when an old client submits an empty value.
+    estab_workflow_forbid ();
+  }
   $data = array_replace (array_fill_keys (array (
     "00_lfd", "01_medium", "01_datum", "01_zeichen",
     "02_zeit", "02_zeichen", "03_datum", "03_zeichen",
@@ -742,7 +748,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
     "11_gesprnotiz", "12_anhang", "12_betreff", "12_inhalt",
     "12_abfzeit", "13_abseinheit",
     "14_zeichen", "14_funktion", "15_quitdatum",
-    "15_quitzeichen", "16_empf", "16_gncopy",
+    "15_quitzeichen", "16_empf",
     "recipient_matrix_revision", "17_vermerke",
     "task"
   ), ""), $browserData);
@@ -972,7 +978,6 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
 				// Re-assert after legacy validation as a defense-in-depth
 				// boundary against hidden 16_* fields and attachment state.
 				$data ["16_empf"] = $redcopy2."_rt,";
-				$data ["16_gncopy"] = "";
 
           if (!$result) {
           		$form = new nachrichten4fach ($data, $data["task"], $vali->validate);
@@ -1282,13 +1287,6 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
       } catch (InvalidArgumentException $exception) {
         estab_render_message_stage_conflict ("Die Empfängermatrix");
       }
-      if (trim ((string) ($browserData ["16_gncopy"] ?? "")) !== "") {
-        // The sole green conversation-note copy belongs to the author and is
-        // derived below from the authenticated function, never from a radio
-        // choice that could create a second green copy.
-        estab_workflow_forbid ();
-      }
-
       /*
        * Preserve the browser's validated coordinate selections before the
        * legacy validator can re-render the form. Recipient function names

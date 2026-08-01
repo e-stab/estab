@@ -1046,17 +1046,18 @@ $assert(
         [
             '16_21' => '16_21_bl',
             '16_32' => '16_32_bl',
-            '16_gncopy' => '16_21_gn',
         ],
         $distributionMatrix,
-        ['S2_rt', 'S1_bl']
-    ) === 'S2_rt,S1_bl,S1_gn,POL_bl,',
-    'recipient distribution is not matrix-derived, ordered and deduplicated'
+        ['S2_rt', 'S1_gn']
+    ) === 'S2_rt,S1_gn,S1_bl,POL_bl,',
+    'recipient distribution is not matrix-derived while preserving server-required copies'
 );
 foreach ([
     ['16_21' => '16_21_bl,alle'],
     ['16_21' => '16_21'],
     ['16_25' => '16_25_bl'],
+    ['16_gncopy' => ''],
+    ['16_gncopy' => '16_21_gn'],
     ['16_gncopy' => '16_21_gn,alle'],
     ['16_empf' => 'alle,'],
     ['16_empf_sonst_21' => 'alle'],
@@ -1083,7 +1084,6 @@ $assert(
         [
             'task' => 'Stab_gesprnoti',
             '16_21' => '16_21_bl',
-            '16_gncopy' => '',
             '16_empf' => '',
             '16_empf_sonst_21' => '',
         ]
@@ -1094,22 +1094,51 @@ $assert(
             [
                 'task' => 'Stab_sichten',
                 '16_21' => '16_21_bl',
-                '16_gncopy' => '16_32_gn',
             ]
         ),
-    'exact matrix distribution controls were rejected'
+    'in-form matrix recipient controls were rejected'
 );
-$assert(
-    !estab_workflow_route_allowed(
-        $staff,
-        'POST',
-        [
-            'task' => 'Stab_gesprnoti',
-            '16_gncopy' => '16_32_gn',
-        ]
-    ),
-    'conversation note accepted a second browser-selected green copy'
-);
+foreach (['', '16_32_gn'] as $retiredGreenValue) {
+    $assert(
+        !estab_workflow_route_allowed(
+            $staff,
+            'POST',
+            ['16_gncopy' => $retiredGreenValue]
+        ),
+        'neutral route accepted the retired green-copy field'
+    );
+    foreach ([
+        [$staff, 'Stab_schreiben'],
+        [$staff, 'Stab_gesprnoti'],
+        [$viewer, 'Stab_sichten'],
+    ] as [$distributionIdentity, $distributionTask]) {
+        $assert(
+            !estab_workflow_route_allowed(
+                $distributionIdentity,
+                'POST',
+                [
+                    'task' => $distributionTask,
+                    '16_gncopy' => $retiredGreenValue,
+                ]
+            ),
+            $distributionTask . ' accepted the retired green-copy field'
+        );
+    }
+}
+foreach ([
+    ['16_gncopy' => ''],
+    ['16_gncopy' => '16_21_gn'],
+] as $retiredDistributionField) {
+    try {
+        estab_workflow_distribution_tokens(
+            $retiredDistributionField,
+            $distributionMatrix
+        );
+        $assert(false, 'distribution parser accepted a retired presentation field');
+    } catch (InvalidArgumentException) {
+        $assert(true, 'distribution parser rejected a retired presentation field');
+    }
+}
 $assert(estab_workflow_route_allowed($telecommunications, 'POST', ['fm' => 'meldung', '00_lfd' => '1']), 'A/W route denied');
 $assert(estab_workflow_route_allowed($telecommunications, 'POST', ['reset_record' => '1']), 'A/W reset denied');
 

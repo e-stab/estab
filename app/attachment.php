@@ -850,7 +850,7 @@ function estab_attachment_origin_draft_fields(): array
             '10_anschrift', '11_rufnummer', '11_gesprnotiz',
             '12_anhang', '12_betreff', '12_inhalt', '12_abfzeit',
             '13_abseinheit', '14_zeichen', '14_funktion',
-            '15_quitdatum', '15_quitzeichen', '16_gncopy',
+            '15_quitdatum', '15_quitzeichen',
             'recipient_matrix_revision',
             '17_vermerke',
         ], true);
@@ -875,6 +875,13 @@ function estab_attachment_origin_draft_from_request(
     array $identity,
     array $context
 ): array {
+    if (array_key_exists('16_gncopy', $request)) {
+        throw new EstabAttachmentDraftException(
+            'Der Nachrichtenentwurf enthält ungültige Formularwerte. '
+            . 'Prüfen Sie die markierten Eingaben und versuchen Sie es erneut.',
+            []
+        );
+    }
     $draft = [];
     $invalid = false;
     foreach ([
@@ -884,7 +891,7 @@ function estab_attachment_origin_draft_from_request(
         '10_anschrift', '11_rufnummer', '11_gesprnotiz',
         '12_anhang', '12_betreff', '12_inhalt', '12_abfzeit',
         '14_zeichen', '14_funktion', '15_quitdatum',
-        '15_quitzeichen', '16_gncopy', 'recipient_matrix_revision',
+        '15_quitzeichen', 'recipient_matrix_revision',
         '17_vermerke',
     ] as $field) {
         $value = $request[$field] ?? '';
@@ -965,8 +972,7 @@ function estab_attachment_origin_draft_form_data(
     $distributionRequest = [];
     foreach ($draft as $field => $value) {
         if (
-            $field === '16_gncopy'
-            || $field === 'recipient_matrix_revision'
+            $field === 'recipient_matrix_revision'
             || preg_match('/\A16_[1-5][1-4]\z/D', $field)
         ) {
             $distributionRequest[$field] = $value;

@@ -70,22 +70,19 @@ einen nicht vorhandenen Empfänger vorzutäuschen.
 
 Lokal angelegte oder darüber hinausgehende Matrixempfänger werden weder
 verworfen noch in das amtliche Raster gedrängt. Sie erscheinen in der
-digitalen Ergänzung außerhalb des amtlichen Blatts und verwenden weiterhin
-ihre vorhandenen Auswahl- und Speichernamen. Dort wird auch die eine grüne
-Durchschrift zugeordnet: Eine gemeinsame Auswahl erlaubt keinen oder genau
-einen Empfänger, niemals mehrere grüne Durchschriften. Die blauen
-Verteilerwahlen bleiben davon unabhängig. In schreibgeschützten Schritten
-werden vorhandene Verteilerdaten mit eindeutigen zugänglichen Namen
-angezeigt. Wurde eine früher verwendete Funktion inzwischen aus der Matrix
-entfernt, bleibt sie im historischen Nachweis mit allen belegten
-Durchschriften sichtbar, ohne wieder auswählbar zu werden.
+digitalen Ergänzung außerhalb des amtlichen Blatts. Dort gilt dieselbe
+eindeutige Bedienung wie im festen Verteiler: Ein Kästchen wählt genau diese
+Funktion als Empfänger. Eine zweite Auswahl nach Durchschriften gibt es nicht.
+In schreibgeschützten Schritten werden vorhandene Verteilerdaten mit
+eindeutigen zugänglichen Namen angezeigt. Wurde eine früher verwendete
+Funktion inzwischen aus der Matrix entfernt, bleibt sie im historischen
+Nachweis sichtbar, ohne wieder auswählbar zu werden.
 
 Für Gesprächsnotizen gilt die fachliche Ausnahme aus dem Nachrichtenlauf:
-Die einzige grüne Durchschrift gehört immer der angemeldeten
-Verfasserfunktion. Deshalb zeigt dieses Formular keine frei wählbare grüne
-Kopie; der Server ergänzt die Autorenkopie zusammen mit der vorgeschriebenen
-roten Lage-/Dokumentationskopie. Ein Browserwert kann weder den Verfasser
-ersetzen noch eine zweite grüne Kopie erzeugen.
+Der Server ergänzt die erforderliche Autoren- und
+Lage-/Dokumentationszuordnung aus der angemeldeten Identität. Dafür erscheint
+keine zusätzliche Empfängerauswahl; ein Browserwert kann weder den Verfasser
+ersetzen noch eine weitere Zuordnung erzeugen.
 
 Das Blatt wird auf kleinen Bildschirmen nicht umsortiert. Stattdessen bleibt
 das amtliche Raster unverändert und kann innerhalb eines ausdrücklich
@@ -442,9 +439,9 @@ Verteiler als Daten erhalten bleiben.
 - exakten Blauton, feste Rasterbreite, den durchgängigen linken Steg,
   getrennte Stempelwerte, den amtlichen Verteiler mit Leiter und S1–S6,
   jeweils sechs Fachberater- und Verbindungsstellenzeilen, erhaltene
-  dynamische sowie historische Empfänger, mehrfarbige Bestandskopien, die
-  einzelne grüne Durchschrift und deren Gesprächsnotiz-Ausnahme, Legende und
-  Lochmarken,
+  dynamische sowie historische Empfänger, Bestandsnachweise, die einzige
+  Empfängerauswahl über Kästchen innerhalb des Verteilers, das Fehlen einer
+  zusätzlichen Durchschriftenauswahl, Legende und Lochmarken,
 - die Bindung jeder editierbaren Empfängerkoordinate an die versteckte
   Matrixrevision sowie die konfliktbehaftete Ablehnung veralteter Formulare,
 - mobilen Scrollhinweis, dessen sichere Druckunterdrückung,

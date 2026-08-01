@@ -1258,8 +1258,14 @@ open_viewer_message()
     assert_body ">$si_code</strong>" "Si signed review mark for $marker"
     assert_body_absent 'name="15_quitdatum"' \
         "Si completion time is server-generated for $marker"
-    assert_body 'name="16_gncopy" type="radio"' "Si green-copy control"
-    assert_body 'name="16_41" value="16_41_bl" type="checkbox"' "Si blue-copy control"
+    assert_body_absent 'name="16_gncopy"' \
+        "Si form has no external copy selector for $marker"
+    assert_body_absent 'estab-message-green-copy' \
+        "Si form has no external copy fieldset for $marker"
+    assert_body 'name="16_41" value="16_41_bl" type="checkbox"' \
+        "Si recipient control for $marker"
+    assert_body 'aria-label="S3 als Empfänger auswählen"' \
+        "Si recipient label for $marker"
     viewer_matrix_revision=$(recipient_matrix_revision_from_body)
 }
 
@@ -1281,7 +1287,7 @@ finish_viewer_message()
         --data-urlencode 'task=Stab_sichten' \
         --data-urlencode "00_lfd=$record_id" \
         --data-urlencode '15_quitdatum=0101' \
-        --data-urlencode '16_gncopy=16_21_gn' \
+        --data-urlencode '16_21=16_21_bl' \
         --data-urlencode '16_32=16_32_bl' \
         --data-urlencode '16_41=16_41_bl' \
         --data-urlencode "17_vermerke=$note" \
@@ -1295,7 +1301,7 @@ finish_viewer_message()
         --data-urlencode 'absenden_x=1' \
         --data-urlencode 'task=Stab_sichten' \
         --data-urlencode "00_lfd=$record_id" \
-        --data-urlencode '16_gncopy=16_21_gn' \
+        --data-urlencode '16_21=16_21_bl' \
         --data-urlencode '16_32=16_32_bl' \
         --data-urlencode '16_41=16_41_bl' \
         --data-urlencode "17_vermerke=$note" \
@@ -2009,9 +2015,27 @@ assert_db_equals \
     'rejected Si recipient suffix changed no message evidence' \
     "SELECT CONCAT(n.\`x00_status\`, '|', n.\`x01_abschluss\`, '|', n.\`16_empf\`, '|', (SELECT COUNT(*) FROM \`nv_nachrichten_ereignisse\` AS e WHERE e.\`message_id\`=n.\`00_lfd\`)) FROM \`nv_nachrichten\` AS n WHERE n.\`00_lfd\`=${incoming_id};"
 
+assert_status 403 'reject removed external green-copy input' \
+    --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$viewer_csrf" \
+    --data-urlencode \
+        "recipient_matrix_revision=$viewer_matrix_revision" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=Stab_sichten' \
+    --data-urlencode "00_lfd=$incoming_id" \
+    --data-urlencode '16_gncopy=16_21_gn' \
+    --data-urlencode '16_21=16_21_bl' \
+    --data-urlencode '17_vermerke=forged removed copy control' \
+    "$base_url/4fach/mainindex.php"
+assert_db_equals \
+    "4|f|S2_rt,|${incoming_events_before_forgery}" \
+    'removed external copy input changed no message evidence' \
+    "SELECT CONCAT(n.\`x00_status\`, '|', n.\`x01_abschluss\`, '|', n.\`16_empf\`, '|', (SELECT COUNT(*) FROM \`nv_nachrichten_ereignisse\` AS e WHERE e.\`message_id\`=n.\`00_lfd\`)) FROM \`nv_nachrichten\` AS n WHERE n.\`00_lfd\`=${incoming_id};"
+
 finish_viewer_message "$incoming_marker" "$incoming_id" 'E2E incoming reviewed'
 assert_message_state "$incoming_marker" \
-    "E|8|t|set|${si_code}|S2_rt,S1_gn,POL_bl,S3_bl,|f||t" \
+    "E|8|t|set|${si_code}|S2_rt,S1_bl,POL_bl,S3_bl,|f||t" \
     'Si-completed incoming status 8'
 if ! generated_form_check present E "$incoming_number"; then
     echo 'Message workflow HTTP: incoming completion generated no form' >&2
@@ -2057,7 +2081,7 @@ if ! printf '%s' "$incoming_quit_timestamp_before" |
     exit 1
 fi
 assert_db_equals \
-    "${incoming_quit_timestamp_before}|${si_code}|S2_rt,S1_gn,POL_bl,S3_bl,|E2E incoming reviewed" \
+    "${incoming_quit_timestamp_before}|${si_code}|S2_rt,S1_bl,POL_bl,S3_bl,|E2E incoming reviewed" \
     'incoming review evidence before FM-Admin' \
     "SELECT CONCAT(DATE_FORMAT(\`15_quitdatum\`, '%Y-%m-%d %H:%i:%s'), '|', \`15_quitzeichen\`, '|', COALESCE(\`16_empf\`, ''), '|', COALESCE(\`17_vermerke\`, '')) FROM \`nv_nachrichten\` WHERE \`00_lfd\` = ${incoming_id};"
 
@@ -2198,10 +2222,10 @@ if [ "$incoming_admin_immutable_after" != \
     exit 1
 fi
 assert_message_state "$incoming_marker" \
-    "E|8|t|set|${si_code}|S2_rt,S1_gn,POL_bl,S3_bl,|f||t" \
+    "E|8|t|set|${si_code}|S2_rt,S1_bl,POL_bl,S3_bl,|f||t" \
     'FM-Admin preserved completed incoming state'
 assert_db_equals \
-    "${incoming_quit_timestamp_before}|${si_code}|S2_rt,S1_gn,POL_bl,S3_bl,|E2E incoming reviewed" \
+    "${incoming_quit_timestamp_before}|${si_code}|S2_rt,S1_bl,POL_bl,S3_bl,|E2E incoming reviewed" \
     'FM-Admin rejected all completed-message changes' \
     "SELECT CONCAT(DATE_FORMAT(\`15_quitdatum\`, '%Y-%m-%d %H:%i:%s'), '|', \`15_quitzeichen\`, '|', COALESCE(\`16_empf\`, ''), '|', COALESCE(\`17_vermerke\`, '')) FROM \`nv_nachrichten\` WHERE \`00_lfd\` = ${incoming_id};"
 assert_db_equals "$incoming_event_count_before" \
@@ -2315,10 +2339,10 @@ if [ "$si_admin_immutable_after" != "$si_admin_immutable_before" ]; then
     exit 1
 fi
 assert_message_state "$incoming_marker" \
-    "E|8|t|set|${si_code}|S2_rt,S1_gn,POL_bl,S3_bl,|f||t" \
+    "E|8|t|set|${si_code}|S2_rt,S1_bl,POL_bl,S3_bl,|f||t" \
     'SI-Admin preserved completed incoming state'
 assert_db_equals \
-    "${incoming_quit_timestamp_before}|${si_code}|S2_rt,S1_gn,POL_bl,S3_bl,|E2E incoming reviewed" \
+    "${incoming_quit_timestamp_before}|${si_code}|S2_rt,S1_bl,POL_bl,S3_bl,|E2E incoming reviewed" \
     'SI-Admin rejected all completed-message changes' \
     "SELECT CONCAT(DATE_FORMAT(\`15_quitdatum\`, '%Y-%m-%d %H:%i:%s'), '|', \`15_quitzeichen\`, '|', COALESCE(\`16_empf\`, ''), '|', COALESCE(\`17_vermerke\`, '')) FROM \`nv_nachrichten\` WHERE \`00_lfd\` = ${incoming_id};"
 assert_db_equals "$incoming_event_count_before" \
@@ -2449,7 +2473,6 @@ assert_status 200 'save POL/FB answer' \
     --data-urlencode '13_abseinheit=E2E-Einsatzleitung' \
     --data-urlencode "14_zeichen=$pol_code" \
     --data-urlencode '14_funktion=POL' \
-    --data-urlencode '16_gncopy=' \
     --data-urlencode '17_vermerke=' \
     "$base_url/4fach/mainindex.php"
 assert_no_runtime_error 'saved POL/FB answer'
@@ -2555,7 +2578,6 @@ assert_status 200 'save POL/FB forwarding' \
     --data-urlencode '13_abseinheit=E2E-Einsatzleitung' \
     --data-urlencode "14_zeichen=$pol_code" \
     --data-urlencode '14_funktion=POL' \
-    --data-urlencode '16_gncopy=' \
     --data-urlencode '17_vermerke=' \
     "$base_url/4fach/mainindex.php"
 assert_no_runtime_error 'saved POL/FB forwarding'
@@ -2650,7 +2672,6 @@ assert_status 200 'save S1 outgoing message' \
     --data-urlencode '13_abseinheit=E2E-Einsatzleitung' \
     --data-urlencode "14_zeichen=$s1_code" \
     --data-urlencode '14_funktion=S1' \
-    --data-urlencode '16_gncopy=' \
     --data-urlencode '17_vermerke=' \
     "$base_url/4fach/mainindex.php"
 assert_no_runtime_error 'saved S1 outgoing message'

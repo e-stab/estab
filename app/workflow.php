@@ -1065,12 +1065,11 @@ function estab_workflow_require_recipient_matrix_revision(
  * suffixes. The save boundary resolves every accepted coordinate against the
  * current server-side matrix.
  *
- * @return array{blue:list<array{0:int,1:int}>,green:?array{0:int,1:int}}
+ * @return array{blue:list<array{0:int,1:int}>}
  */
 function estab_workflow_distribution_selection(array $request): array
 {
     $blue = [];
-    $green = null;
 
     foreach ($request as $field => $value) {
         if (!is_string($field) || !str_starts_with($field, '16_')) {
@@ -1078,19 +1077,12 @@ function estab_workflow_distribution_selection(array $request): array
         }
 
         if ($field === '16_gncopy') {
-            if ($value === '') {
-                continue;
-            }
-            if (
-                !is_string($value)
-                || preg_match('/\A16_([1-5])([1-4])_gn\z/D', $value, $parts) !== 1
-            ) {
-                throw new InvalidArgumentException(
-                    'Ungültige grüne Empfängerkopie'
-                );
-            }
-            $green = [(int) $parts[1], (int) $parts[2]];
-            continue;
+            // The official recipient boxes are the sole browser-controlled
+            // distribution input. A former separate green-copy field carries
+            // no authority, even when an old client submits it empty.
+            throw new InvalidArgumentException(
+                'Ungültige Empfängerverteilung'
+            );
         }
 
         if (
@@ -1121,7 +1113,7 @@ function estab_workflow_distribution_selection(array $request): array
         $blue[] = [(int) $parts[1], (int) $parts[2]];
     }
 
-    return ['blue' => $blue, 'green' => $green];
+    return ['blue' => $blue];
 }
 
 /**
@@ -1174,12 +1166,6 @@ function estab_workflow_distribution_tokens(
             $coordinate = [$row, $column];
             if (isset($blueCoordinates[$row . ':' . $column])) {
                 $append($coordinate, 'bl');
-            }
-            if (
-                is_array($selection['green'])
-                && $selection['green'] === $coordinate
-            ) {
-                $append($coordinate, 'gn');
             }
         }
     }
@@ -1269,6 +1255,12 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
     $mayWriteStaff = estab_workflow_is_staff_writer($identity, true);
 
     if (!estab_workflow_action_keys_allowed($request)) {
+        return false;
+    }
+    if (array_key_exists('16_gncopy', $request)) {
+        // The current form has no separate green-copy input. Reject the
+        // retired field by presence so an empty legacy value cannot be
+        // mistaken for an authorised presentation field.
         return false;
     }
     try {
@@ -1394,15 +1386,6 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
             try {
                 estab_workflow_distribution_selection($request);
             } catch (InvalidArgumentException) {
-                return false;
-            }
-            if (
-                $task === 'Stab_gesprnoti'
-                && array_key_exists('16_gncopy', $request)
-                && $request['16_gncopy'] !== ''
-            ) {
-                // The single green conversation-note copy is bound to the
-                // authenticated author's function by the save handler.
                 return false;
             }
         }

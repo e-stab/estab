@@ -579,20 +579,26 @@ $assert(
         && str_contains($editableDistribution, 'name="16_13" value="16_13_bl"')
         && str_contains($editableExtras, 'name="16_32" value="16_32_bl"')
         && str_contains(
-            $editableExtras,
-            'name="16_gncopy" type="radio" value="16_32_gn" '
-                . 'data-estab-copy-color="green" checked'
+            $editableDistribution,
+            'aria-label="S5 als Empfänger auswählen"'
         )
         && str_contains(
             $editableExtras,
-            'name="16_gncopy" type="radio" value="16_33_gn" '
-                . 'data-estab-copy-color="green" aria-label="Fernmelder '
-                . 'grüne Durchschrift"'
+            'aria-label="AB_C als Empfänger auswählen"'
         )
-        && str_contains($editableExtras, '> Fernmelder</label>')
-        && !str_contains($editableExtras, '> A/W</label>')
-        && substr_count($editableExtras, 'name="16_gncopy"') > 2,
-    'Official and dynamic recipients no longer preserve both copy coordinates'
+        && !str_contains(
+            $editableDistribution . $editableExtras,
+            'name="16_gncopy"'
+        )
+        && !str_contains(
+            $editableDistribution . $editableExtras,
+            'estab-message-green-copy'
+        )
+        && !str_contains(
+            $editableDistribution . $editableExtras,
+            'Grüne Durchschrift'
+        ),
+    'Editable distribution still exposes a second copy decision outside the recipient checkboxes'
 );
 
 $fixture->feld[16] = false;
@@ -628,7 +634,7 @@ $assert(
             $conversationDistribution,
             'class="estab-message-green-copy"'
         ),
-    'A conversation note still offers a free green-copy selection'
+    'A conversation note still offers a second recipient-copy selection'
 );
 
 $view = file_get_contents($root . '/4fach/official_message_form.php');
@@ -684,6 +690,12 @@ $renderView = substr($view, (int) $renderStart);
 $assert(
     !str_contains($renderView, 'Dokumentiert:'),
     'The official form source still renders a raw recipient-token line'
+);
+$assert(
+    !str_contains($view, 'name="16_gncopy"')
+        && !str_contains($view, 'estab-message-green-copy')
+        && !str_contains($controller, 'name=\"16_gncopy\"'),
+    'The live or retained form renderer still contains an external green-copy control'
 );
 $previousOffset = -1;
 foreach ($officialLabels as $label) {
@@ -997,8 +1009,8 @@ $assert(
             ".estab-official-address-value {\n"
                 . "    grid-column: 2;\n    grid-row: 1;"
         )
-        && str_contains($css, '[data-estab-copy-color="red"]')
         && str_contains($css, '.estab-message-distribution-extras')
+        && !str_contains($css, '.estab-message-green-copy')
         && str_contains($css, '.estab-message-attachments')
         && str_contains($css, '.estab-message-attachment-upload-grid')
         && str_contains($css, '.estab-message-attachment-card')

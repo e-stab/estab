@@ -1331,9 +1331,6 @@ require_once ("./db_operation.php");  // Datenbank operationen
       $distributionRequest ["recipient_matrix_revision"] =
         $draft ["recipient_matrix_revision"];
     }
-    if (is_string ($draft ["16_gncopy"] ?? null)) {
-      $distributionRequest ["16_gncopy"] = $draft ["16_gncopy"];
-    }
     for ($m=1; $m<=5; $m++){
       for ($n=1; $n<=4; $n++){
         $recipientKey = "16_".$m.$n;
