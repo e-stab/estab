@@ -404,7 +404,9 @@ assert_status 403 \
 assert_body_fixed 'Aktion nicht erlaubt'
 assert_header_absent_fixed 'Location:'
 
+stale_form_csrf='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 assert_status 303 --header 'Sec-Fetch-Site: same-origin' --request POST \
+    --data-urlencode "csrf_token=$stale_form_csrf" \
     --data-urlencode 'task=Stab_schreiben' \
     --data-urlencode '12_inhalt=HTTP_SURFACE_MUST_NOT_PERSIST' \
     "$base_url/4fach/mainindex.php"
@@ -423,6 +425,7 @@ assert_body_fixed \
 assert_status 400 \
     "$base_url/4fach/index.php?login_flow=existing&interrupted=0"
 assert_status 403 --header 'Sec-Fetch-Site: cross-site' --request POST \
+    --data-urlencode "csrf_token=$stale_form_csrf" \
     --data-urlencode 'task=Stab_schreiben' \
     "$base_url/4fach/mainindex.php"
 

@@ -187,6 +187,31 @@ serverseitig erzeugt. Der bei einer Rückgabe festgeschriebene
 Korrekturvermerk kann beim erneuten Einreichen nicht über ein verborgenes
 Browserfeld ersetzt werden.
 
+Der einsatzbezogene Berechtigungsmodus unterscheidet dabei Zuständigkeit und
+Formularsemantik. In **Streng** darf nur die jeweils vorgesehene feste
+Funktion/Rolle einen Schreibschritt ausführen. In **Locker** darf ein anderes
+konkret angemeldetes, aktives und ungesperrtes Konto einen bekannten
+Schreibschritt übernehmen; dessen echte Identität wird gespeichert. Die
+Feldregeln werden dadurch nicht gelockert: Wer den Fernmelder-Eingangsschritt
+ausführt, kann weiterhin keinen Absender einschleusen, Si kann weiterhin
+keinen Ausgangsinhalt umschreiben und LdF-/Transport-/Rückgabezustände bleiben
+in ihrer Reihenfolge. Auch Einsatzgrenze, Objektbezug, Sperrinhaber, CSRF,
+Validierung, Anlagenintegrität und Ereignisnachweis bleiben unverändert.
+Allgemeine Leserechte, Nachweisung, Zweitsichtungsarchive, Kategorien- und
+Administrationsrechte werden durch **Locker** nicht erweitert. Nur die für
+eine ausdrücklich gewählte Schreibstufe nötige Workflow-Objektsicht wird
+zugelassen. Bei einer zurückgewiesenen Ausgangsmeldung darf in **Locker** eine
+andere Funktion die Korrektur übernehmen; der Ereignisnachweis bewahrt dabei
+ursprüngliche und neue verantwortliche Funktion getrennt.
+
+Bereits mit genau dieser zurückgewiesenen Nachricht verknüpfte Anlagen
+bleiben während der Korrektur sichtbar und wiederverwendbar. Diese Ausnahme
+ist an Einsatz-ID, Nachrichten-ID, aktuellen Status und das konkrete Konto
+gebunden. Vorschau, E-Mail-Ansicht und Download lesen Nachricht, Modus und
+Konto unmittelbar vor der Ausgabe erneut. Die im Link enthaltene
+Nachrichten-ID ist nur ein Selektor und keine Berechtigung; fremde oder
+unverknüpfte Archivdateien werden dadurch auch in **Locker** nicht sichtbar.
+
 Der ältere zusätzliche Beförderungshinweis bleibt als Bestandsfunktion
 erhalten. Da er nicht zum amtlichen Raster von 2022 gehört, erscheint er
 klar getrennt unter **Betriebliche Ergänzungen**. Dort liegen auch die
@@ -202,8 +227,9 @@ Unbekannte Felder, verschachtelte Werte, ungültiges UTF-8 und Überschreitungen
 werden vor jeder Sessionänderung abgewiesen; bestehende gültige Entwürfe
 bleiben dabei unverändert. Eine SHA-256-Revision bindet die übertragenen
 5×4-Koordinaten zusätzlich an exakt die Empfängermatrix, die beim Öffnen des
-Formulars angezeigt wurde. Diese Revision ist kein Berechtigungstoken:
-Funktion und Rolle bleiben vollständig serverseitig. Ändert sich die Matrix
+Formulars angezeigt wurde. Diese Revision ist kein Berechtigungstoken: Konto,
+Funktion, Rolle und Berechtigungsmodus bleiben vollständig serverseitig.
+Ändert sich die Matrix
 während eines offenen Formulars oder Anhangvorgangs, wird der veraltete
 Vorgang mit einem ausdrücklichen Konflikt beendet und muss neu geöffnet
 werden; eine Koordinate wird niemals still auf eine andere Funktion

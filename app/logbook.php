@@ -475,6 +475,23 @@ function estab_logbook_is_designated_writer(
     } catch (EstabIncidentInputException) {
         return false;
     }
+    try {
+        $incident = estab_incident_status($connection);
+        if ((int) ($incident['active_einsatz_id'] ?? 0) !== $incidentId) {
+            return false;
+        }
+        if (!estab_incident_role_permissions_enforced($incident)) {
+            estab_dv_require_operational_account(
+                $connection,
+                $incidentId,
+                $identity,
+                false
+            );
+            return true;
+        }
+    } catch (Throwable) {
+        return false;
+    }
     $function = trim((string) ($identity['funktion'] ?? ''));
     $role = trim((string) ($identity['rolle'] ?? ''));
     return $kind === 'etb'

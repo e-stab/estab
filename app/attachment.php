@@ -74,7 +74,7 @@ function estab_attachment_origin_identity(array $identity): array
 function estab_attachment_origin_role_allowed(array $identity, string $task): bool
 {
     if (in_array($task, ['FM-Eingang', 'FM-Eingang_Anhang'], true)) {
-        return estab_workflow_is_telecommunications($identity);
+        return estab_workflow_is_telecommunications($identity, true);
     }
     if (
         in_array(
@@ -83,7 +83,7 @@ function estab_attachment_origin_role_allowed(array $identity, string $task): bo
             true
         )
     ) {
-        return estab_workflow_is_staff_writer($identity);
+        return estab_workflow_is_staff_writer($identity, true);
     }
     return false;
 }
@@ -900,8 +900,7 @@ function estab_attachment_origin_draft_from_request(
         : '';
     $sender = $request['13_abseinheit'] ?? '';
     if (
-        estab_workflow_is_telecommunications($identity)
-        && str_starts_with($task, 'FM-Eingang')
+        str_starts_with($task, 'FM-Eingang')
     ) {
         $draft['13_abseinheit'] = '';
     } elseif (!is_string($sender) || preg_match('//u', $sender) !== 1) {
@@ -1778,6 +1777,12 @@ function estab_attachment_reserve(
         }
         try {
             $incident = estab_incident_require_active($connection, true);
+            if (!estab_permission_context_matches_incident($incident)) {
+                throw new EstabIncidentConflictException(
+                    'Der aktive Einsatz oder sein Berechtigungsmodus wurde '
+                    . 'vor dem Upload geändert.'
+                );
+            }
             estab_incident_lock_command_post_for_write($connection, $incident);
             $incidentId = (int) $incident['active_einsatz_id'];
             if (
@@ -2565,6 +2570,12 @@ function estab_attachment_store_upload(
     $transactionActive = true;
     try {
         $incident = estab_incident_require_active($connection, true);
+        if (!estab_permission_context_matches_incident($incident)) {
+            throw new EstabIncidentConflictException(
+                'Der aktive Einsatz oder sein Berechtigungsmodus wurde '
+                . 'während des Uploads geändert.'
+            );
+        }
         estab_incident_lock_command_post_for_write($connection, $incident);
         $incidentId = (int) $incident['active_einsatz_id'];
         if (

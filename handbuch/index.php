@@ -184,7 +184,7 @@ $handbookUpdated = '1. August 2026';
 
         <article id="schnellstart" class="estab-handbook-chapter"
           data-estab-handbook-section
-          data-handbook-keywords="erste Schritte Login anmelden feste Funktion Einsatz optionale Zugangsschicht">
+          data-handbook-keywords="erste Schritte Login anmelden feste Funktion Einsatz Berechtigungsmodus Streng Locker Strict Loose optionale Zugangsschicht">
           <header><span>02</span><div><p>Der sichere Einstieg</p><h2>In 5 Minuten startklar</h2></div></header>
           <ol class="estab-handbook-steps">
             <li><strong>Mit bestehendem Konto anmelden.</strong> Öffnen Sie die
@@ -192,10 +192,11 @@ $handbookUpdated = '1. August 2026';
               Sie Name, Kürzel, Funktion und Kennwort Ihres Funktionskontos.</li>
             <li><strong>Feste Funktion prüfen.</strong> Die Kontofunktion und die
               daraus serverseitig abgeleitete Rolle stehen nach der Anmeldung
-              fest. Eine zusätzliche Hutauswahl gibt es nicht.</li>
+              fest und werden bei jeder Handlung nachgewiesen. Eine zusätzliche
+              Hutauswahl gibt es nicht.</li>
             <li><strong>Status prüfen.</strong> Oben müssen Ihr Name, feste
-              Funktion, Rolle, Führungsstellenname und aktiver Einsatz
-              erscheinen.</li>
+              Funktion, Rolle, Führungsstellenname, aktiver Einsatz und dessen
+              Berechtigungsmodus erscheinen.</li>
             <li><strong>Arbeitsbereich öffnen.</strong> Wechseln Sie über die
               obere Navigation zum Nachrichtenvordruck, ETB, TBB oder in den
               für Ihre Kontofunktion freigegebenen Spezialbereich.</li>
@@ -223,17 +224,20 @@ $handbookUpdated = '1. August 2026';
             Sie verlangt Name, ein eindeutiges Kürzel, die zugeteilte Funktion
             und zweimal dasselbe Kennwort. Die dabei angezeigte zentrale
             Kennwortrichtlinie gilt ebenso für administrativ angelegte Konten
-            und Kennwortresets. Fachrechte folgen ausschließlich aus dieser
-            festen Kontofunktion und der abgeleiteten Rolle.</p>
+            und Kennwortresets. Die feste Kontofunktion bleibt in beiden
+            Berechtigungsmodi die Identität und Nachweisgrundlage des Kontos;
+            nur im ausdrücklich gewählten Modus „Locker“ können die dafür
+            vorgesehenen Schreibzuständigkeiten in Nachrichtenworkflow,
+            ETB/TBB, S6-Planung und Melderlauf einsatzweit erweitert sein.</p>
         </article>
 
         <article id="navigation" class="estab-handbook-chapter"
           data-estab-handbook-section
-          data-handbook-keywords="Menü obere Leiste Sidebar Status Benutzer online inaktiv logout abmelden 15 Minuten 12 Stunden ungespeichert">
+          data-handbook-keywords="Menü obere Leiste Sidebar Status Berechtigungsmodus Streng Locker Benutzer online inaktiv logout abmelden 15 Minuten 12 Stunden ungespeichert">
           <header><span>03</span><div><p>Überall dieselbe Orientierung</p><h2>Navigation, Status und Sitzung</h2></div></header>
           <p>Die obere Leiste zeigt immer, als wer Sie angemeldet sind. Sie
-            enthält Kürzel, feste Funktion und Rolle sowie den aktiven Einsatz
-            und die Führungsstelle. Der sichtbare
+            enthält Kürzel, feste Funktion und Rolle sowie den aktiven Einsatz,
+            seinen Berechtigungsmodus und die Führungsstelle. Der sichtbare
             Menüpunkt ist markiert; nicht berechtigte Spezialbereiche werden
             nicht angeboten.</p>
           <ul>
@@ -257,12 +261,43 @@ $handbookUpdated = '1. August 2026';
 
         <article id="rollen" class="estab-handbook-chapter"
           data-estab-handbook-section
-          data-handbook-keywords="S1 S2 S3 S4 S5 S6 Fachberater Si Sichter LdF Leiter Fernmeldebetrieb Fernmelder Aufnahme Weitergabe ETB Admin feste Funktion Rolle Rechte">
+          data-handbook-keywords="S1 S2 S3 S4 S5 S6 Fachberater Si Sichter LdF Leiter Fernmeldebetrieb Fernmelder Aufnahme Weitergabe ETB Admin feste Funktion Rolle Rechte Berechtigungsmodus Streng Locker Strict Loose">
           <header><span>04</span><div><p>Verantwortung statt bloßer Menüfreigabe</p><h2>Rollen und Rechte</h2></div></header>
           <p>Jedes Konto besitzt genau eine feste Funktion; die Rolle wird
-            serverseitig daraus abgeleitet. Diese Werte sind die alleinige
-            Quelle der Fachrechte. Für operative Arbeit muss ein Einsatz aktiv
-            sein, eine Dienst- oder Zugangsschicht dagegen nicht.</p>
+            serverseitig daraus abgeleitet. Beide Werte bleiben unveränderliche
+            Identitäts- und Nachweismerkmale. Ob sie zusätzlich die dafür
+            vorgesehenen operativen Schreibzuständigkeiten in
+            Nachrichtenworkflow, ETB/TBB, S6-Planung und Melderlauf begrenzen,
+            wird pro Einsatz festgelegt. Für
+            operative Arbeit muss der Einsatz aktiv und offen sein. Eine
+            Dienstschicht ist nicht erforderlich; eine optionale
+            Zugangsschicht kann zugeordnete Konten jedoch gemeinsam sperren.</p>
+          <div class="estab-handbook-facts">
+            <div><strong>Streng (STRICT)</strong><span>Empfohlener Standard für
+              bestehende und neue Einsätze. Nur die jeweils fest zugewiesene
+              Funktion und Rolle darf den dazugehörigen operativen
+              Arbeitsschritt schreiben.</span></div>
+            <div><strong>Locker (LOOSE)</strong><span>Ein gültig angemeldetes,
+              aktives und ungesperrtes Funktionskonto darf dafür vorgesehene
+              Schreibzuständigkeiten im Nachrichtenlauf, in ETB/TBB sowie in
+              S6-Planung und Melderlauf übernehmen. Die tatsächliche feste
+              Kontofunktion wird weiterhin gespeichert.</span></div>
+          </div>
+          <div class="estab-handbook-callout estab-handbook-callout-important">
+            <strong>Locker bedeutet nicht rechtefrei</strong>
+            <p>Nur die feste Funktions-/Rollenzuordnung der ausdrücklich
+              angebotenen Schreibschritte wird gelockert. Reine Übersichten,
+              Nachweisung, Archive der zweiten Sichtung, Kategorien und die
+              technische Administration bleiben rollenstreng. Ein Konto erhält
+              höchstens die Objektansicht, die für einen ausgewählten
+              Schreibschritt erforderlich ist; allgemeine Leserechte werden
+              nicht erweitert.</p>
+          </div>
+          <p>In beiden Modi bleiben Anmeldung, aktives und ungesperrtes Konto,
+            gegebenenfalls aktiver Gruppenzugang, Einsatzgrenze, CSRF-Schutz,
+            Pflichtfelder, Richtung und Bearbeitungsstand, Objektsperren,
+            Unveränderlichkeit, Nachweise, Auditkette und Aufbewahrung
+            verbindlich.</p>
           <div class="estab-handbook-table-wrap" role="region" aria-label="Rollenübersicht" tabindex="0">
             <table>
               <thead><tr><th>Rolle/Funktion</th><th>Hauptaufgaben in eStab</th></tr></thead>
@@ -278,6 +313,10 @@ $handbookUpdated = '1. August 2026';
               </tbody>
             </table>
           </div>
+          <p>Die Tabelle beschreibt die fachliche Regelzuständigkeit. Im Modus
+            „Locker“ kann ein anderes Funktionskonto einen dafür freigegebenen
+            operativen Schreibschritt übernehmen; eStab protokolliert dabei das
+            tatsächlich handelnde Konto und dessen feste Funktion.</p>
           <p>Eine Funktionsänderung ist ausschließlich in der
             Benutzerverwaltung möglich und beendet eine bestehende Sitzung.
             Organisatorische Funktionskombinationen werden mit getrennten
@@ -286,14 +325,15 @@ $handbookUpdated = '1. August 2026';
 
         <article id="vorbereitung" class="estab-handbook-chapter"
           data-estab-handbook-section
-          data-handbook-keywords="Einsatz anlegen aktivieren Führungsstellenname Bedarfsträger Leitung Ausgangslage Benutzer optionale Zugangsschicht Gruppe aktivieren deaktivieren">
+          data-handbook-keywords="Einsatz anlegen aktivieren Berechtigungsmodus Streng Locker Strict Loose Führungsstellenname Bedarfsträger Leitung Ausgangslage Benutzer optionale Zugangsschicht Gruppe aktivieren deaktivieren">
           <header><span>05</span><div><p>Vor der ersten Nachricht</p><h2>Einsatz und Zugänge vorbereiten</h2></div></header>
           <ol class="estab-handbook-steps">
             <li>Unter <a href="<?= $href('incidents') ?>">Einsätze verwalten</a>
               Kennung, Einsatzbezeichnung, Beginn, Bedarfsträger,
               <strong>Namen der Führungsstelle</strong>, verantwortliche
-              Leitung, Auftrag und Ausgangslage erfassen und den Einsatz
-              aktivieren.</li>
+              Leitung, Auftrag und Ausgangslage erfassen, den
+              Berechtigungsmodus wählen und den Einsatz aktivieren. Ohne
+              bewusste Abweichung gilt „Streng“.</li>
             <li>Unter <a href="<?= $href('users') ?>">Benutzer verwalten</a>
               persönliche Konten für mindestens die Funktionen S2, Si, S6,
               LdF und Fernmelder
@@ -313,6 +353,14 @@ $handbookUpdated = '1. August 2026';
               wenn gar keine Schicht angelegt wurde. Aktivieren meldet niemanden
               an; Deaktivieren kann Gruppensitzungen widerrufen. Eine manuelle
               Kontosperre bleibt unabhängig und hat Vorrang.</p>
+          </div>
+          <div class="estab-handbook-callout">
+            <strong>Berechtigungsmodus gehört zum Einsatz</strong>
+            <p>Er wird weder über eine Umgebungsvariable noch über Konto oder
+              Zugangsschicht festgelegt. Die Administration darf ihn für einen
+              offenen Einsatz ändern. Der Wechsel gilt sofort, wird
+              revisionsgeschützt protokolliert und erfordert beim Wechsel auf
+              „Locker“ eine ausdrückliche Bestätigung.</p>
           </div>
           <div class="estab-handbook-callout">
             <strong>Führungsstellenname ist kein Umgebungswert</strong>
@@ -363,7 +411,7 @@ $handbookUpdated = '1. August 2026';
 
         <article id="nachrichtenlauf" class="estab-handbook-chapter"
           data-estab-handbook-section
-          data-handbook-keywords="Eingang Ausgang Workflow Verfasser Sichter Rückgabe Freigabe LdF disponieren Fernmelder befördern Absender Weg korrigieren">
+          data-handbook-keywords="Eingang Ausgang Workflow Verfasser Sichter Rückgabe Freigabe LdF disponieren Fernmelder befördern Absender Weg korrigieren Berechtigungsmodus Streng Locker Übernahme">
           <header><span>07</span><div><p>Die zuständige Stelle ist immer eindeutig</p><h2>Nachrichtenlauf nach Rolle</h2></div></header>
           <section class="estab-handbook-workflow" aria-labelledby="outgoing-title">
             <h3 id="outgoing-title">Ausgang</h3>
@@ -386,7 +434,9 @@ $handbookUpdated = '1. August 2026';
             <ol>
               <li><strong>Fernmelder:</strong> tatsächliches Medium, Aufnahmezeit,
                 Gegenstellenrufname, Betreff und Inhalt erfassen.
-                <strong>Der Fernmelder darf den Absender nicht schreiben.</strong></li>
+                <strong>Der Fernmelder darf den Absender nicht schreiben.</strong>
+                Dieselbe Feldsperre gilt für jedes andere Konto, das im Modus
+                „Locker“ diese Aufnahmestufe übernimmt.</li>
               <li><strong>LdF:</strong> Gegenstellenrufname in den Absender
                 übersetzen und den erfassten Eingangsweg bestätigen. Eine
                 Änderung benötigt eine Begründung.</li>
@@ -398,6 +448,16 @@ $handbookUpdated = '1. August 2026';
           <div class="estab-handbook-flow-summary" aria-label="Kurzform der Nachrichtenwege">
             <span>Ausgang: Verfasser</span><b>→</b><span>Si</span><b>→</b><span>LdF</span><b>→</b><span>Fernmelder</span><b>→</b><span>abgeschlossen</span>
             <span>Eingang: Fernmelder</span><b>→</b><span>LdF</span><b>→</b><span>Si</span><b>→</b><span>Empfänger</span>
+          </div>
+          <div class="estab-handbook-callout">
+            <strong>Der Ablauf bleibt in beiden Modi gleich</strong>
+            <p>„Streng“ bindet jeden Schreibschritt an die oben genannte feste
+              Funktion. „Locker“ erlaubt einem anderen Funktionskonto, eine
+              angebotene Schreibstufe zu übernehmen, überspringt aber weder
+              Status, Richtung noch Objektsperre. Auch ein zurückgegebener
+              Ausgang darf dann von einer anderen Funktion korrigiert und
+              erneut eingereicht werden; der Nachweis hält ursprüngliche und
+              neu verantwortliche Funktion auseinander.</p>
           </div>
         </article>
 
@@ -471,6 +531,13 @@ $handbookUpdated = '1. August 2026';
             oder ausgewähltes S2, Si beziehungsweise LdF. Download und
             Browseransicht prüfen Berechtigung, tatsächlichen Dateityp sowie
             den unveränderlichen SHA-256-/Größennachweis erneut.</p>
+          <p>Übernimmt im Modus „Locker“ ein anderes Funktionskonto eine
+            zurückgegebene Nachricht, bleiben ausschließlich deren bereits
+            verknüpfte Anlagen im Korrekturformular verfügbar. Die angezeigte
+            Nachrichten-ID ist keine Freigabe: eStab prüft Konto, Einsatz,
+            Modus, Nachrichtenstatus und exakte Anlagenzuordnung vor jeder
+            Vorschau und jedem Download erneut. Das übrige Anlagenarchiv wird
+            dadurch nicht geöffnet.</p>
           <p>Ist die Anlage serverseitig bereits vollständig gespeichert und
             geht erst die Antwort verloren oder schlägt danach die
             Nachrichtenvalidierung fehl, können Sie den geöffneten Vordruck
@@ -514,7 +581,8 @@ $handbookUpdated = '1. August 2026';
             Rotkopiefunktion oder Si verwalten. Funktionskategorien gelten für
             die feste Kontofunktion, persönliche Kategorien nur für das Konto.
             Gelesen und erledigt sind von der Transportstufe getrennte
-            Arbeitsmarkierungen.</p>
+            Arbeitsmarkierungen. Daran ändert auch der Berechtigungsmodus
+            „Locker“ nichts.</p>
           <p>S2 öffnet die <a href="<?= $href('message_overview') ?>">Meldungsübersicht</a>;
             Die Funktionen Si und Fernmelder erreichen die zweite Sichtung im
             Nachrichtenmenü.
@@ -539,10 +607,12 @@ $handbookUpdated = '1. August 2026';
           data-estab-handbook-section
           data-handbook-keywords="Einsatztagebuch Fb Fü 2 Aufgabe Befehl Erledigung Kräfteanforderung wichtig Ereigniszeit Erfassungszeit Bezug Referenz Korrektur Anlage append-only">
           <header><span>10</span><div><p>Chronologische Einsatzdokumentation</p><h2>Einsatztagebuch (ETB)</h2></div></header>
-          <p>Das ETB gehört zum aktiven Einsatz. Manuell schreiben Konten mit
-            der festen Funktion ETB oder S2 und Rolle Stab. Eine aktive Schicht
-            ist nicht erforderlich. Einträge werden niemals überschrieben oder
-            gelöscht.</p>
+          <p>Das ETB gehört zum aktiven Einsatz. Im Modus „Streng“ schreiben
+            Konten mit der festen Funktion ETB oder S2 und Rolle Stab. Im Modus
+            „Locker“ darf ein anderes gültiges Funktionskonto diese operative
+            Schreibzuständigkeit übernehmen; seine tatsächliche Identität wird
+            nachgewiesen. Eine Dienstschicht ist nicht erforderlich. Einträge
+            werden niemals überschrieben oder gelöscht.</p>
           <ul>
             <li>Fachliche Ereigniszeit und serverseitige Erfassungszeit bleiben getrennt.</li>
             <li>Arten: ohne Kennzeichnung, A Aufgabe, B Befehl/Auftrag,
@@ -565,10 +635,12 @@ $handbookUpdated = '1. August 2026';
           data-estab-handbook-section
           data-handbook-keywords="Technisches Betriebsbuch Fb Fü 44 Fernmelder Betrieb Personal Dienstübergabe Kanal Rufgruppe Bedienung Nachricht Störung Quittung Empfänger Aushändigung Korrektur">
           <header><span>11</span><div><p>Chronologischer Fernmeldebetrieb</p><h2>Technisches Betriebsbuch (TBB)</h2></div></header>
-          <p>Das TBB gehört zum aktiven Einsatz. Manuell schreibt ein Konto mit
-            der festen Funktion Fernmelder; eine aktive Schicht
-            ist nicht erforderlich. Jeder Eintrag soll auch ohne Anlage in
-            Grundzügen verständlich sein.</p>
+          <p>Das TBB gehört zum aktiven Einsatz. Im Modus „Streng“ schreibt
+            manuell ein Konto mit der festen Funktion Fernmelder. Im Modus
+            „Locker“ darf ein anderes gültiges Funktionskonto diese operative
+            Schreibzuständigkeit übernehmen; seine tatsächliche Identität wird
+            nachgewiesen. Eine Dienstschicht ist nicht erforderlich. Jeder
+            Eintrag soll auch ohne Anlage in Grundzügen verständlich sein.</p>
           <div class="estab-handbook-facts">
             <div><strong>Betrieb, Personal, Übergabe</strong><span>Aufnahme, Ende, Bereitschaft, Besetzung, Ablösung und Dienstübergabe.</span></div>
             <div><strong>Kanal, Rufgruppe, Bedienung</strong><span>Betriebsart und Wechsel mit bisherigem sowie neuem Wert.</span></div>
@@ -586,9 +658,12 @@ $handbookUpdated = '1. August 2026';
           data-estab-handbook-section
           data-handbook-keywords="S6 Fernmeldeplan Version Entwurf Weg freigeben disponieren Kanal Funk Telefon E-Mail gültig">
           <header><span>12</span><div><p>Verbindliche Wege statt Freitext</p><h2>S6-Fernmeldeplan</h2></div></header>
-          <p>S6 erstellt im <a href="<?= $href('command_post') ?>">Führungsstellenbetrieb</a>
+          <p>Im Modus „Streng“ erstellt S6 im
+            <a href="<?= $href('command_post') ?>">Führungsstellenbetrieb</a>
             eine Planversion, beschreibt die vorgesehenen Wege und gibt den
-            Plan bewusst frei. Freigegebene Versionen sind unveränderlich;
+            Plan bewusst frei. Im Modus „Locker“ darf ein anderes gültiges
+            Funktionskonto diese operativen Schreibschritte übernehmen.
+            Freigegebene Versionen bleiben in beiden Fällen unveränderlich;
             Änderungen erfolgen über eine neue Version.</p>
           <p>Alle aktiven Funktionen können den gültigen Plan lesen. LdF darf
             einen Ausgang nur auf einen zum Zeitpunkt der Disposition gültigen
@@ -602,15 +677,21 @@ $handbookUpdated = '1. August 2026';
           data-estab-handbook-section
           data-handbook-keywords="Melder Auftrag Fernmelder LdF Empfänger Zustellung Rücknachricht Rückweg Rückkehr">
           <header><span>13</span><div><p>Persönlich nachvollziehbare Botengänge</p><h2>Melderaufträge</h2></div></header>
-          <p>Ein Melder ist keine zusätzliche globale Rolle. LdF beauftragt ein
-            konkret angemeldetes, ungesperrtes Konto mit der Funktion
-            Fernmelder. Die
+          <p>Ein Melder ist keine zusätzliche globale Rolle. Im Modus „Streng“
+            beauftragt LdF ein konkret angemeldetes, ungesperrtes Konto mit der
+            Funktion Fernmelder; im Modus „Locker“ darf ein anderes gültiges
+            Funktionskonto den Auftrag disponieren. Die ausgewählte
+            Melderperson bleibt ein Fernmelderkonto. Die
             beauftragte Person übernimmt den Lauf persönlich und dokumentiert
             tatsächlichen Empfänger, Zustellung, eine mögliche Rücknachricht,
             Rückweg und Rückkehr.</p>
           <p>Während eines offenen Auftrags bleibt die Verantwortung an diese
-            Person gebunden. Erst LdF quittiert den vollständigen Abschluss.
-            Auftrag, Übergaben und Statuswechsel erscheinen im
+            Person gebunden. Im Modus „Streng“ quittiert erst LdF den
+            vollständigen Abschluss; im Modus „Locker“ darf ein anderes
+            gültiges Funktionskonto diesen vorgesehenen Bestätigungsschritt
+            übernehmen. Der Auftragszustand und die Bindung an die
+            Melderperson bleiben unverändert. Auftrag, Übergaben und
+            Statuswechsel erscheinen im
             einsatzgebundenen Nachweis und im PDF-Einsatzdossier.</p>
         </article>
 
@@ -692,14 +773,14 @@ $handbookUpdated = '1. August 2026';
 
         <article id="administration" class="estab-handbook-chapter"
           data-estab-handbook-section
-          data-handbook-keywords="Basic Auth Admin Benutzer sperren Passwort Kennwort Richtlinie Mindestlänge Großbuchstabe Kleinbuchstabe Ziffer Sonderzeichen zurücksetzen Matrix Zähler PDF Markierung Systemstatus">
+          data-handbook-keywords="Basic Auth Admin Benutzer sperren Passwort Kennwort Richtlinie Mindestlänge Großbuchstabe Kleinbuchstabe Ziffer Sonderzeichen zurücksetzen Matrix Zähler PDF Markierung Systemstatus Berechtigungsmodus Streng Locker Strict Loose Einsatz">
           <header><span>16</span><div><p>Technische Maßnahmen mit eigenem Zugang</p><h2>Administration</h2></div></header>
           <p>Die Administration verwendet HTTP Basic Auth und ein eigenes
             technisches Kennwort. Diese Anmeldung ist kein eStab-Funktionskonto
             und verleiht keine operativen Fachrechte. Außerhalb eines isolierten
             Testhosts darf sie ausschließlich über TLS erreichbar sein.</p>
           <div class="estab-handbook-admin-grid">
-            <a href="<?= $href('incidents') ?>"><strong>Einsätze</strong><span>Anlegen, aktivieren, deaktivieren und formal abschließen</span></a>
+            <a href="<?= $href('incidents') ?>"><strong>Einsätze</strong><span>Anlegen, Berechtigungsmodus festlegen, aktivieren, deaktivieren und formal abschließen</span></a>
             <a href="<?= $href('users') ?>"><strong>Benutzer</strong><span>Anlegen, zuweisen, sperren, entsperren und Kennwort zurücksetzen</span></a>
             <a href="<?= $href('self_registration') ?>"><strong>Selbstregistrierung</strong><span>Sofort schließen, dauerhaft oder für 15 Minuten bis 24 Stunden öffnen</span></a>
             <a href="<?= $href('password_policy') ?>"><strong>Kennwortrichtlinie</strong><span>Mindestlänge und optionale Zeichenanforderungen für neue Kennwörter festlegen</span></a>
@@ -714,6 +795,17 @@ $handbookUpdated = '1. August 2026';
           <p>Sperren, Funktionsneuzuweisung und Kennwortreset widerrufen aktive
             eStab-Sitzungen sofort. Ein neues Kennwort wird zweimal eingegeben;
             Entsperren meldet das Konto nicht automatisch an.</p>
+          <h3>Berechtigungsmodus eines Einsatzes festlegen</h3>
+          <p>Beim Anlegen und in der Verwaltung eines noch offenen Einsatzes
+            wählen Sie „Streng“ oder „Locker“. Bestehende und neue Einsätze
+            verwenden standardmäßig „Streng“. Ein Wechsel wird sofort
+            einsatzweit wirksam und im Einsatzprotokoll festgehalten. Die
+            Administration schützt vor einem veralteten Formularstand; für
+            „Locker“ muss die Erweiterung der dafür vorgesehenen
+            Schreibzuständigkeiten in Nachrichtenworkflow, ETB/TBB,
+            S6-Planung und Melderlauf zusätzlich ausdrücklich bestätigt
+            werden. Geschlossene Einsätze werden nicht nachträglich
+            umgestellt.</p>
           <h3>Selbstregistrierung kontrolliert freigeben</h3>
           <p>Unter <a href="<?= $href('self_registration') ?>">Selbstregistrierung</a>
             schließen Sie die öffentliche Kontoanlage sofort, öffnen sie
@@ -797,8 +889,8 @@ curl --fail http://127.0.0.1:8080/health.php</code></pre>
             <details><summary>Administration zeigt sofort „Unauthorized“</summary><p>Das ist die Browserabfrage für HTTP Basic Auth. Manche integrierten Browser zeigen sie nicht zuverlässig; verwenden Sie einen normalen Browser. Benutzername und Kennwort stammen aus dem technischen Admin-Secret, nicht aus einem Funktionskonto.</p></details>
             <details><summary>Die Kontoanmeldung funktioniert nicht</summary><p>Prüfen Sie Name, Kürzel, Funktion und Kennwort. Ein administrativ gesperrtes Konto oder eine widerrufene Sitzung muss in der Benutzerverwaltung geklärt werden. Legen Sie kein zweites Konto mit demselben Kürzel an.</p></details>
             <details><summary>Ein neues Kennwort wird abgewiesen</summary><p>Lesen Sie die aktuell angezeigte Kennwortrichtlinie vollständig: Mindestlänge und aktivierte Anforderungen für Großbuchstaben, Kleinbuchstaben, Ziffern oder Sonderzeichen müssen gemeinsam erfüllt sein. Beide Eingaben müssen exakt übereinstimmen. Eine spätere Verschärfung verhindert keinen Bestandslogin, gilt aber bei jedem neuen Reset.</p></details>
-            <details><summary>Es ist keine operative Eingabe möglich</summary><p>Prüfen Sie für die Fachfunktion: gültige Sitzung, aktiver Einsatz, bestätigter Führungsstellenname und feste Kontofunktion. Eine Dienst- oder Zugangsschicht und eine Hutauswahl sind keine Schreibvoraussetzung. Scheitert bereits Anmeldung oder Sitzung, prüfen Sie zusätzlich die manuelle Kontosperre und – nur bei einer Gruppenzuordnung – mindestens eine aktive Zugangsschicht.</p></details>
-            <details><summary>Ein Ausgang erreicht den Fernmelder nicht</summary><p>Der Ausgang muss zuerst Si und danach LdF durchlaufen. LdF benötigt einen gültigen freigegebenen S6-Planweg. Eine Rückgabe enthält einen Pflichtgrund und muss in der zuständigen Stufe bearbeitet werden.</p></details>
+            <details><summary>Es ist keine operative Eingabe möglich</summary><p>Prüfen Sie gültige Sitzung, aktiven und offenen Einsatz, bestätigten Führungsstellennamen sowie ein aktives, ungesperrtes Konto. Im Modus „Streng“ muss dessen feste Funktion für den Schreibschritt zuständig sein; „Locker“ erweitert nur diese operative Zuständigkeit und umgeht weder Bearbeitungsstand, Richtung, Sperre noch Pflichtfelder. Eine Dienstschicht und eine Hutauswahl sind keine Schreibvoraussetzung. Prüfen Sie bei einer Gruppenzuordnung zusätzlich, ob mindestens eine zugeordnete Zugangsschicht aktiv ist.</p></details>
+            <details><summary>Ein Ausgang erreicht den Fernmelder nicht</summary><p>Der Ausgang muss zuerst die Si- und danach die LdF-Stufe durchlaufen. Die LdF-Stufe benötigt einen gültigen freigegebenen S6-Planweg. Im Modus „Locker“ darf ein anderes gültiges Konto eine angebotene Stufe übernehmen, aber keine Stufe oder Planprüfung überspringen. Eine Rückgabe enthält einen Pflichtgrund und muss in der zuständigen Stufe bearbeitet werden.</p></details>
             <details><summary>Eine Anlage lässt sich nicht hochladen</summary><p>Prüfen Sie die am Dateifeld angezeigte Grenze, erlaubte Endung und echten Inhaltstyp. Eine lediglich umbenannte Datei wird abgewiesen. Brechen Sie einen nicht mehr benötigten Anhangsvorgang sauber ab.</p></details>
             <details><summary>Eine E-Mail-Anlage wird abgewiesen</summary><p>Speichern oder exportieren Sie die Mail als standardisierte <code>.eml</code>-Datei. Outlook-<code>.msg</code> wird nicht unterstützt. Endung, erkannter Typ <code>message/rfc822</code>, MIME-Struktur und die feste Grenze von 20 MiB müssen gemeinsam passen.</p></details>
             <details><summary>Der PDF-Export bricht bei Anlagen ab</summary><p>Beschädigte, verschlüsselte oder über den Sicherheitsgrenzen liegende PDF-/Bildanlagen werden fail-closed abgewiesen. Prüfen Sie Format, Einzeldatei und die 50-MiB-Gesamtsumme; der Systemstatus und die App-Logs liefern den technischen Kontext.</p></details>
@@ -829,8 +921,15 @@ curl --fail http://127.0.0.1:8080/health.php</code></pre>
               </tbody>
             </table>
           </div>
+          <p>Die Spalte „Wer nutzt ihn?“ nennt die Regelzuständigkeit im Modus
+            „Streng“. „Locker“ erweitert ausschließlich ausdrücklich
+            angebotene operative Schreibschritte; Übersichten, Nachweisung,
+            Archive der zweiten Sichtung, Kategorien und Administration bleiben
+            unverändert rollenstreng.</p>
           <h3>Begriffe</h3>
           <dl class="estab-handbook-glossary">
+            <div><dt>Streng (STRICT)</dt><dd>Einsatzbezogener Standardmodus, in dem operative Schreibschritte an die feste Funktion und Rolle gebunden sind.</dd></div>
+            <div><dt>Locker (LOOSE)</dt><dd>Einsatzbezogener Modus, der nur feste Funktions-/Rollengrenzen ausdrücklich angebotener Schreibschritte in Nachrichtenworkflow, ETB/TBB, S6-Planung und Melderlauf erweitert; sonstige Zugriffs- und Integritätsregeln bleiben bestehen.</dd></div>
             <div><dt>Zugangsschicht</dt><dd>Optionale einsatzbezogene Kontengruppe zum gemeinsamen Aktivieren oder Deaktivieren von Zugängen; keine Fachrechtsquelle.</dd></div>
             <div><dt>LdF</dt><dd>Leitung der Fernmeldebetriebsstelle.</dd></div>
             <div><dt>Fernmelder</dt><dd>Aufnahme und Weitergabe in der Fernmeldebetriebsstelle.</dd></div>

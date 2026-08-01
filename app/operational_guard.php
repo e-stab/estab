@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/dv_operations.php';
+require_once __DIR__ . '/workflow.php';
 
 const ESTAB_OPERATIONAL_WRITE_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
 const ESTAB_OPERATIONAL_CONTROL_EXCEPTIONS = [
@@ -192,6 +193,46 @@ function estab_operational_write_abort(int $status, string $message): never
 }
 
 /**
+ * Discard a stale message-controller POST and return to the explicit login.
+ *
+ * The common guard runs while dbcfg.inc.php is loaded, before mainindex.php
+ * can apply its ordinary anonymous-request redirect. Keep this exception
+ * exact to that controller and to the same-site form shape already accepted
+ * by the controller. No submitted value is copied or replayed.
+ */
+function estab_operational_redirect_stale_message_post(
+    array $server,
+    array $get,
+    array $post
+): bool {
+    if (
+        estab_operational_request_has_path_info($server)
+        || !estab_operational_path_ends_with(
+            estab_operational_request_path($server),
+            '/4fach/mainindex.php'
+        )
+        || !estab_workflow_anonymous_operational_post(
+            $server,
+            $get,
+            $post
+        )
+    ) {
+        return false;
+    }
+    header('Cache-Control: no-store');
+    header('Vary: Cookie, Sec-Fetch-Site');
+    header(
+        'Location: ' . estab_navigation_login_content_url(
+            'messages',
+            true
+        ),
+        true,
+        303
+    );
+    exit;
+}
+
+/**
  * Enforce the request guard at the common database-configuration boundary.
  *
  * Anonymous login requests and independently authenticated administration
@@ -201,7 +242,8 @@ function estab_operational_write_enforce(
     array $databaseConfig,
     array $session,
     array $server,
-    array $post
+    array $post,
+    array $get = []
 ): void {
     static $evaluated = false;
 
@@ -227,6 +269,11 @@ function estab_operational_write_enforce(
     // session must not reach a fachlicher Schreibpfad.
     $identity = estab_auth_session_identity($session);
     if ($identity === null) {
+        estab_operational_redirect_stale_message_post(
+            $server,
+            $get,
+            $post
+        );
         estab_operational_write_abort(
             423,
             'Die Anmeldung oder der Benutzerzugang ist nicht mehr gültig. '

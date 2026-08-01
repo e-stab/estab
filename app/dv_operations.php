@@ -2814,6 +2814,31 @@ function estab_dv_require_active_capability_for_operational_write(
     array $identity,
     string $capability
 ): void {
+    estab_dv_require_write_capability(
+        $connection,
+        $incidentId,
+        $identity,
+        $capability,
+        true
+    );
+}
+
+/**
+ * Require a write capability in STRICT and only a valid account in LOOSE.
+ *
+ * Read callers deliberately continue to use
+ * estab_dv_require_account_capability(), so the relaxed incident mode never
+ * broadens operational object visibility by accident.
+ *
+ * @return array{benutzer:string,kuerzel:string,funktion:string,rolle:string}
+ */
+function estab_dv_require_write_capability(
+    mysqli $connection,
+    int $incidentId,
+    array $identity,
+    string $capability,
+    bool $requireMessengerAvailable = true
+): array {
     $incidentId = estab_incident_positive_id($incidentId);
     if (preg_match('/\A[A-Z][A-Z0-9_]{2,63}\z/D', $capability) !== 1) {
         throw new InvalidArgumentException('Ungültige Funktionsfähigkeit.');
@@ -2822,8 +2847,20 @@ function estab_dv_require_active_capability_for_operational_write(
         $connection,
         $incidentId,
         $identity,
-        true
+        $requireMessengerAvailable
     );
+    $incident = estab_incident_status($connection);
+    if (
+        (int) ($incident['active_einsatz_id'] ?? 0) !== $incidentId
+        || ($incident['estab_status'] ?? null) !== 'open'
+    ) {
+        throw new EstabDvPermissionException(
+            'Der Einsatz ist nicht mehr als aktiver Einsatz verfügbar.'
+        );
+    }
+    if (!estab_incident_role_permissions_enforced($incident)) {
+        return $shape;
+    }
     $statement = $connection->prepare(
         'SELECT 1 FROM `nv_funktionsfaehigkeiten`'
         . ' WHERE BINARY `funktion` = BINARY ?'
@@ -2852,6 +2889,28 @@ function estab_dv_require_active_capability_for_operational_write(
             'Ihre fest zugewiesene Funktion besitzt nicht die erforderliche '
             . 'Fachzuständigkeit ' . $capability . '.'
         );
+    }
+    return $shape;
+}
+
+function estab_dv_has_write_capability(
+    mysqli $connection,
+    int $incidentId,
+    array $identity,
+    string $capability,
+    bool $requireMessengerAvailable = true
+): bool {
+    try {
+        estab_dv_require_write_capability(
+            $connection,
+            $incidentId,
+            $identity,
+            $capability,
+            $requireMessengerAvailable
+        );
+        return true;
+    } catch (EstabDvPermissionException) {
+        return false;
     }
 }
 
@@ -2981,7 +3040,7 @@ function estab_dv_create_telecom_plan(
             if ((int) $incident['active_einsatz_id'] !== $incidentId) {
                 throw new EstabDvConflictException('Der Einsatz ist nicht mehr aktiv.');
             }
-            $selected = estab_dv_require_account_capability(
+            $selected = estab_dv_require_write_capability(
                 $connection,
                 $incidentId,
                 $identity,
@@ -3093,7 +3152,7 @@ function estab_dv_add_telecom_entry(
             $notes,
             $protocolTable
         ): int {
-            $selected = estab_dv_require_account_capability(
+            $selected = estab_dv_require_write_capability(
                 $connection,
                 $incidentId,
                 $identity,
@@ -3206,7 +3265,7 @@ function estab_dv_activate_telecom_plan(
             $identity,
             $protocolTable
         ): void {
-            $selected = estab_dv_require_account_capability(
+            $selected = estab_dv_require_write_capability(
                 $connection,
                 $incidentId,
                 $identity,
@@ -3670,7 +3729,7 @@ function estab_dv_assign_messenger(
                     'Der Einsatz ist nicht mehr aktiv.'
                 );
             }
-            $selected = estab_dv_require_account_capability(
+            $selected = estab_dv_require_write_capability(
                 $connection,
                 $incidentId,
                 $identity,
@@ -3937,7 +3996,7 @@ function estab_dv_transition_messenger(
             )
                 ? 'FERNMELDEBETRIEB'
                 : 'BEFOERDERUNG';
-            $selected = estab_dv_require_account_capability(
+            $selected = estab_dv_require_write_capability(
                 $connection,
                 $incidentId,
                 $identity,

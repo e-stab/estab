@@ -163,6 +163,7 @@ $logbookLifecycle = $read('app/logbook_lifecycle.php');
 $operationsUi = $read('4fach/fuehrungsstelle.php');
 $adminUi = $read('4fadm/fuehrungsstelle.php');
 $messageController = $read('4fach/data_hndl.php');
+$messageRepository = $read('app/message_repository.php');
 $etb = $read('stabetb/etb.php');
 $tbb = $read('fmtbb/tbb.php');
 
@@ -181,6 +182,29 @@ $assert(
             'estab_incident_command_post_name($incident);'
         ),
     'common write boundary does not require an active, configured incident'
+);
+$assert(
+    str_contains(
+        $operationalGuard,
+        'function estab_operational_redirect_stale_message_post('
+    )
+        && str_contains(
+            $operationalGuard,
+            'estab_workflow_anonymous_operational_post('
+        )
+        && str_contains(
+            $operationalGuard,
+            "'/4fach/mainindex.php'"
+        )
+        && str_contains(
+            $operationalGuard,
+            "estab_navigation_login_content_url(\n"
+                . "            'messages',\n"
+                . '            true'
+        )
+        && str_contains($operationalGuard, 'true,' . "\n" . '        303')
+        && str_contains($databaseConfig, "    \$_POST,\n    \$_GET\n"),
+    'stale same-site message POST does not discard data into the login flow'
 );
 $assert(
     str_contains(
@@ -220,6 +244,96 @@ $assert(
         && !str_contains($accountGuard, 'nv_dienstbesetzungen')
         && !str_contains($accountGuard, 'nv_dienstschichten'),
     'account guard still requires a formal duty shift or ignores group access'
+);
+$messageStageActor = $slice(
+    $messageRepository,
+    'function estab_message_require_operator_stage_actor(',
+    'function estab_message_acquire_operator_stage_lock('
+);
+$messageAcquireLock = $slice(
+    $messageRepository,
+    'function estab_message_acquire_operator_stage_lock(',
+    'function estab_message_fetch_locked_operator_stage('
+);
+$messageUpdateLock = $slice(
+    $messageRepository,
+    'function estab_message_update_locked_operator_stage(',
+    'function estab_message_release_operator_stage_lock('
+);
+$messageReleaseLock = $slice(
+    $messageRepository,
+    'function estab_message_release_operator_stage_lock(',
+    'function estab_message_update_pending_review('
+);
+$messageStateSet = $slice(
+    $messageRepository,
+    'function estab_message_state_set_for_recipient(',
+    'function estab_message_state_unset_for_recipient('
+);
+$messageStateUnset = $slice(
+    $messageRepository,
+    'function estab_message_state_unset_for_recipient(',
+    'function estab_message_state_ids('
+);
+$assert(
+    str_contains($messageStageActor, 'array $actor')
+        && preg_match(
+            '/\$incidentId\s*=.*?;\s*'
+                . '\$operationalActor\s*=\s*'
+                . 'estab_dv_require_operational_account\(\s*'
+                . '\$connection,\s*\$incidentId,\s*\$actor\s*\)/s',
+            $messageStageActor
+        ) === 1
+        && str_contains(
+            $messageStageActor,
+            'estab_incident_role_permissions_enforced($incident)'
+        )
+        && str_contains($messageStageActor, "\$requiredFunction = \$status === 1 ? 'LdF' : 'A/W'")
+        && str_contains($messageStageActor, "'Fernmelder'"),
+    'shared operator-stage guard does not revalidate account and current mode'
+);
+foreach (
+    [
+        'operator lock acquisition' => $messageAcquireLock,
+        'operator stage update' => $messageUpdateLock,
+        'operator lock release' => $messageReleaseLock,
+    ] as $boundary => $source
+) {
+    $assert(
+        str_contains($source, 'array $actor')
+            && str_contains(
+                $source,
+                'estab_message_require_operator_stage_actor('
+            ),
+        $boundary . ' bypasses the transactional operator-stage actor guard'
+    );
+}
+foreach (
+    [
+        'recipient state set' => $messageStateSet,
+        'recipient state unset' => $messageStateUnset,
+    ] as $boundary => $source
+) {
+    $assert(
+        str_contains($source, 'array $actor')
+            && preg_match(
+                '/\$incidentId\s*=.*?;\s*'
+                    . '\$operationalActor\s*=\s*'
+                    . 'estab_dv_require_operational_account\(\s*'
+                    . '\$connection,\s*\$incidentId,\s*\$actor\s*\)/s',
+                $source
+            ) === 1,
+        $boundary . ' does not revalidate the exact account inside its write'
+    );
+}
+$assert(
+    str_contains($messageAcquireLock, '$operationalActor' . "['kuerzel']")
+        && str_contains($messageUpdateLock, '$operationalActor' . "['kuerzel']")
+        && str_contains($messageReleaseLock, '$operationalActor' . "['kuerzel']")
+        && str_contains($messageReleaseLock, 'bool $force = false')
+        && str_contains($messageStateSet, '$operationalActor' . "['funktion']")
+        && str_contains($messageStateUnset, '$operationalActor' . "['funktion']"),
+    'message lock/state authority is still derived from stale scalar input'
 );
 $capabilityGuard = $slice(
     $dv,
@@ -448,7 +562,7 @@ $assert(
 /* Operational UIs and ETB/TBB do not depend on a formal duty assignment. */
 $assert(
     str_contains($operationsUi, 'estab_read_require_operational_scope(')
-        && str_contains($operationsUi, 'estab_dv_has_account_capability(')
+        && str_contains($operationsUi, 'estab_dv_has_write_capability(')
         && !str_contains($operationsUi, 'duty_assignment_id')
         && !str_contains($operationsUi, "'accept_hat'")
         && !str_contains($operationsUi, "'select_hat'")
@@ -493,12 +607,19 @@ $assert(
         "\$shape = estab_dv_require_operational_account("
     )
         && preg_match(
-            '/estab_dv_require_operational_account\(\s*'
-                . '\$connection,\s*\$incidentId,\s*\$identity,\s*true\s*\)/s',
+            '/estab_dv_require_write_capability\(\s*'
+                . '\$connection,\s*\$incidentId,\s*\$identity,\s*'
+                . '\$capability,\s*true\s*\)/s',
             $generalWriteGuard
         ) === 1
         && preg_match(
-            '/estab_dv_require_account_capability\(\s*'
+            '/estab_dv_require_operational_account\(\s*'
+                . '\$connection,\s*\$incidentId,\s*\$identity,\s*'
+                . '\$requireMessengerAvailable\s*\)/s',
+            $generalWriteGuard
+        ) === 1
+        && preg_match(
+            '/estab_dv_require_write_capability\(\s*'
                 . '\$connection,\s*\$incidentId,\s*\$identity,\s*'
                 . '\$requiredCapability,\s*false\s*\)/s',
             $messengerTransition
@@ -546,7 +667,7 @@ foreach (['ETB' => $etb, 'TBB' => $tbb] as $name => $source) {
         is_int($scope)
             && is_int($constructor)
             && $scope < $constructor
-            && str_contains($source, 'estab_dv_has_account_capability (')
+            && str_contains($source, 'estab_dv_has_write_capability (')
             && !str_contains($source, 'duty_assignment_id'),
         $name . ' does not enforce fixed account/capability before data access'
     );

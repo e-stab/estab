@@ -54,17 +54,29 @@ implementiert und mit dem angegebenen automatisierten Nachweis prüfbar. Es
 bedeutet weder, dass eStab die fachliche Entscheidung einer ausgebildeten
 Einsatzkraft ersetzt, noch dass eine formale THW-Freigabe vorliegt.
 
+Die funktionsbezogenen Aussagen dieser Matrix setzen den einsatzbezogenen
+Berechtigungsmodus **Streng** (`STRICT`) voraus. Der optionale Modus **Locker**
+(`LOOSE`) hebt ausschließlich die technische Durchsetzung von Funktion/Rolle
+bei den dafür vorgesehenen operativen Workflow-, ETB-/TTB-, S6-Plan- und
+Melder-Schreibschritten auf. Damit kann er die in der Matrix nachgewiesene
+Funktionstrennung nicht technisch belegen und darf nur aufgrund einer
+dokumentierten örtlichen Einsatzentscheidung verwendet werden. Auch dann
+bleiben persönliche Authentisierung, aktives ungesperrtes Konto, aktiver
+offener Einsatz, Workflowzustände, Sperren, Integrität, Audit und Aufbewahrung
+verbindlich; die organisatorisch zuständige Funktion ändert sich durch die
+Softwareeinstellung nicht.
+
 | Fundstelle | Anforderung | Technische Umsetzung | Nachweis |
 | --- | --- | --- | --- |
 | S. 4-44/4-45 | S2 muss ständig in den Informationsfluss eingebunden sein und alle Ein- und Ausgänge als roten Durchschlag erhalten. | S2/Stab ist die einzige Fähigkeit `LAGE_DOKUMENTATION`; jede abgeschlossene Nachricht enthält die S2-Rotkopie, eine beliebige Umkonfiguration oder Autosichtung ist gesperrt. | `tests/php/admin_operations_security.php`, `tests/integration/message_workflow_http.sh`, Schema-Verifikation |
 | S. 4-45 sowie Handbuch ETB/TBB S. 6 und 26 | Die Einsatzdokumentation wird durch S2 sichergestellt; das ETB ist urkundlicher Nachweis. Die DV-Fassung nennt ein Jahr, die spätere ETB-/TBB-Unterlage zehn Jahre für ETB und TBB. | S2 bleibt alleinige Lage-/Rotkopiefunktion. Die Anwendung setzt die strengere Mindestaufbewahrung von zehn Jahren ab formalem Abschluss um. ETB und TBB sind nur anhängbar; eine Berichtigung ist ein neuer Eintrag mit Gegenreferenz. Ein Legal Hold kann die Frist verlängern, aber nicht verkürzen. | `tests/php/logbook_security.php`, `tests/php/schema_migration_contract.php`, `tests/integration/schema_migrator.sh`, `tests/integration/dv_evidence.php` |
-| S. 4-59/4-60 | S6 plant und führt den Telekommunikationseinsatz und stellt die Führbarkeit über geeignete Verbindungen sicher. | Nur ein Konto mit der festen Funktion `S6` darf versionierte Fernmeldepläne erstellen und veröffentlichen. LdF kann nur einen aktuell gültigen, veröffentlichten Planweg disponieren; veröffentlichte Fassungen bleiben unveränderlich. | `tests/integration/dv_operations.php`, `tests/integration/message_workflow_http.sh` |
+| S. 4-59/4-60 | S6 plant und führt den Telekommunikationseinsatz und stellt die Führbarkeit über geeignete Verbindungen sicher. | Im strengen Modus darf nur ein Konto mit der festen Funktion `S6` versionierte Fernmeldepläne erstellen und veröffentlichen. LdF kann nur einen aktuell gültigen, veröffentlichten Planweg disponieren; veröffentlichte Fassungen bleiben in beiden Modi unveränderlich. | `tests/integration/dv_operations.php`, `tests/integration/message_workflow_http.sh` |
 | S. 4-63 | Der Sichter analysiert Eingänge inhaltlich und leitet sie an zuständige Bearbeiter weiter. | Eingänge laufen zwingend `Fernmelder → LdF → Si`; Si setzt Empfänger und Abschluss. Der Fernmelder darf den Absender nicht schreiben, LdF übersetzt den aufgenommenen Rufnamen und bestätigt den vom Fernmelder erfassten Eingangsweg. Eine Änderung verlangt eine Begründung und wird mit Alt-/Neuwert und LdF-Identität nachgewiesen; Aufnahmezeit und -zeichen des Fernmelders bleiben unverändert. | `tests/php/workflow_security.php`, `tests/php/ldf_validation_security.php`, `tests/php/ldf_ui_flow_security.php`, `tests/integration/message_workflow_http.sh` |
 | S. 4-63 | Bei Ausgängen prüft Si nur Anschrift, Unterschrift/Zeichen und Funktion, nicht den Inhalt. | Ausgänge laufen zwingend `Verfasser → Si → LdF → Fernmelder`. Si kann formal freigeben oder mit Pflichtgrund zurückgeben, aber keine Inhaltsfelder verändern. Nach Korrektur folgt die Sichtung erneut. | `tests/php/message_security.php`, `tests/integration/message_concurrency.php`, `tests/integration/message_workflow_http.sh` |
-| S. 4-64 | Der Melder darf den Inhalt nicht ändern, muss schnell zustellen, Rücknachrichten feststellen, zurückkehren, sich zurückmelden und den tatsächlichen Empfänger nennen. | Das Medium `Me` verlangt einen LdF-Auftrag und die Zustandskette Beauftragung, persönliche Übernahme, Übergabe mit Empfänger, Rückweg mit explizitem Rücknachrichtenvermerk und Rückkehr. Danach bestätigt ausschließlich ein Konto mit der festen Funktion `LdF` die Rückmeldung an die FmZt. Der Nachrichtenabschluss wartet auf die vollständige Kette. | `tests/integration/dv_operations.php`, `tests/integration/message_workflow_http.sh` |
-| S. 4-64 | Bis zur Rückkehr darf der Melder keine anderen Aufträge annehmen; in einer FüSt mit Stab gehört er zur FmZt und wird durch LdF eingesetzt. | Nur ein aktives, ungesperrtes Konto mit der Funktion `Fernmelder` ist als Melder wählbar; ausschließlich LdF darf es beauftragen. Während Übernahme, Übergabe und Rückweg sperrt eine zentrale Request-Grenze alle fremden operativen Schreibvorgänge dieses Kontos. | `tests/php/dv_operations_security.php`, `tests/integration/dv_operations.php` |
-| S. 4-64 | LdF verantwortet den Fernmeldebetrieb und unterweist, unterstützt und überwacht das Betriebspersonal. | LdF ist eine gesonderte feste Kontofunktion. Sie übersetzt Rufnamen, entscheidet den Planweg, beauftragt Melder und überwacht die sichtbaren Melderzustände; der Fernmelder kann diese Entscheidungen nicht vorwegnehmen. | `tests/integration/message_workflow_http.sh`, `tests/integration/dv_operations.php` |
-| S. 4-70 bis 4-73 | Die Führungsstelle besitzt benannte Funktionen; Kombinationen S1/S4, S2/S3 sowie ETB/Si sind organisatorisch möglich. | Fachrechte stammen aus genau einer festen Kontofunktion und der serverseitig abgeleiteten Rolle. Funktionskombinationen werden organisatorisch durch getrennte persönliche Konten abgebildet; eine Hutauswahl innerhalb der Sitzung gibt es nicht. Optionale Zugangsschichten gruppieren Zugänge, verändern aber keine Fachrechte. | Authentifizierungs-, Autorisierungs- und Schema-Verifikation |
+| S. 4-64 | Der Melder darf den Inhalt nicht ändern, muss schnell zustellen, Rücknachrichten feststellen, zurückkehren, sich zurückmelden und den tatsächlichen Empfänger nennen. | Das Medium `Me` verlangt einen LdF-Auftrag und die Zustandskette Beauftragung, persönliche Übernahme, Übergabe mit Empfänger, Rückweg mit explizitem Rücknachrichtenvermerk und Rückkehr. Danach bestätigt in `STRICT` ausschließlich ein Konto mit der festen Funktion `LdF` die Rückmeldung an die FmZt; in `LOOSE` bleibt dieser Zustandsschritt zwingend und nur die Funktion des bestätigenden Kontos wird nicht erzwungen. Der Nachrichtenabschluss wartet auf die vollständige Kette. | `tests/integration/dv_operations.php`, `tests/integration/message_workflow_http.sh` |
+| S. 4-64 | Bis zur Rückkehr darf der Melder keine anderen Aufträge annehmen; in einer FüSt mit Stab gehört er zur FmZt und wird durch LdF eingesetzt. | Nur ein aktives, ungesperrtes Konto mit der Funktion `Fernmelder` ist als Melder wählbar. Im strengen Modus darf ausschließlich LdF es beauftragen; im lockeren Modus bleibt die Melder-Eignung bestehen, nur die Funktionsprüfung des disponierenden Kontos entfällt. Während Übernahme, Übergabe und Rückweg sperrt eine zentrale Request-Grenze alle fremden operativen Schreibvorgänge dieses Kontos. | `tests/php/dv_operations_security.php`, `tests/integration/dv_operations.php` |
+| S. 4-64 | LdF verantwortet den Fernmeldebetrieb und unterweist, unterstützt und überwacht das Betriebspersonal. | LdF ist eine gesonderte feste Kontofunktion. Im strengen Modus ist sie technisch exklusiv für Rufnamenübersetzung, Planwegentscheidung, Melderbeauftragung und Bestätigung der Rückkehr gebunden. Im lockeren Modus bleibt diese organisatorische Zuständigkeit bestehen, wird bei Schreibschritten aber nicht durch die Kontofunktion erzwungen. | `tests/integration/message_workflow_http.sh`, `tests/integration/dv_operations.php` |
+| S. 4-70 bis 4-73 | Die Führungsstelle besitzt benannte Funktionen; Kombinationen S1/S4, S2/S3 sowie ETB/Si sind organisatorisch möglich. | Im strengen Modus stammen Schreibrechte aus genau einer festen Kontofunktion und der serverseitig abgeleiteten Rolle. Funktionskombinationen werden organisatorisch durch getrennte persönliche Konten abgebildet; eine Hutauswahl innerhalb der Sitzung gibt es nicht. Optionale Zugangsschichten gruppieren Zugänge, verändern aber keine Fachrechte. Der lockere Modus ist eine sichtbare, auditierte Ausnahmeentscheidung und kein Nachweis der Funktionstrennung. | Authentifizierungs-, Autorisierungs-, Berechtigungsmodus- und Schema-Verifikation |
 | S. 4-73 | Die Arbeitsfähigkeit hängt von zweckmäßiger Organisation und raschem Informationsfluss ab. | Führungsstellenname, aktiver Einsatz, feste Funktion, Warteschlangen und Zuständigkeit sind sichtbar. Der Führungsstellenname ist die einsatzbezogene lokale Nachrichtenanschrift/-absendereinheit und von Einsatzname, Bedarfsträger sowie Einsatzleitung getrennt. Ohne aktiven Einsatz oder bestätigten Führungsstellennamen wird serverseitig keine operative Eingabe angenommen; eine Schicht ist nicht erforderlich. | Schema-, Einsatzdomänen-, HTTP- und Browser-Abnahme sowie `tests/integration/message_workflow_http.sh` |
 
 Die Führungsstellenidentität wird nicht aus einer Installationseinstellung
@@ -238,11 +250,13 @@ Upgrade eine deterministische lokale Nummer nach unveränderlicher
 Erfassungszeit und globalem Alt-Schlüssel; ihr Text wird dabei nicht
 umgedeutet. Die globalen Primärschlüssel bleiben nur technische Identitäten.
 
-Für manuelle Einträge prüft eStab die feste Kontofunktion: ETB schreiben
-`ETB/Stab` oder `S2/Stab`, das TTB schreibt die Funktion `Fernmelder`.
-Kontosperre, aktiver
-Einsatz, feste Funktion, serverseitig abgeleitete Rolle und die fachliche
-Fähigkeit werden bei jedem Schreiben erneut geprüft. Eine aktive Dienst- oder
+Für manuelle Einträge prüft eStab im strengen Modus die feste Kontofunktion:
+ETB schreiben `ETB/Stab` oder `S2/Stab`, das TTB schreibt die Funktion
+`Fernmelder`. Im lockeren Modus entfällt ausschließlich diese
+Funktions-/Rollenbedingung. Kontosperre, konkretes aktives Konto und aktiver
+Einsatz werden bei jedem Schreiben erneut geprüft; feste Funktion,
+serverseitig abgeleitete Rolle und fachliche Fähigkeit zusätzlich in
+`STRICT`. Eine aktive Dienst- oder
 Zugangsschicht und eine Besetzungsannahme sind nicht erforderlich.
 
 Die Felder `estab_shift_id` und `estab_writer_assignment_id` sind
@@ -420,20 +434,42 @@ längere bestehende Frist zu verkürzen. Eine rechtliche beziehungsweise
 fachliche Aufbewahrungssperre kann das Löschen darüber hinaus unterbinden.
 eStab löscht Einsatzfachdaten nicht automatisch beim Erreichen dieses Datums.
 
-## Feste Kontofunktion und optionale Zugangsschichten
+## Feste Kontofunktion, Berechtigungsmodus und optionale Zugangsschichten
 
 Das persönliche Benutzerkonto trägt genau eine feste Funktion. Die Rolle wird
-serverseitig aus dieser Funktion und der Empfängermatrix abgeleitet. Diese
-beiden Werte sind die alleinige Quelle der Fachrechte; eine Sitzung kann nicht
-zwischen Funktions-Hüten wechseln. Organisatorische Funktionskombinationen
+serverseitig aus dieser Funktion und der Empfängermatrix abgeleitet. Im
+strengen Modus sind diese beiden Werte die Quelle der funktionsbezogenen
+Schreibrechte; eine Sitzung kann nicht zwischen Funktions-Hüten wechseln. Im
+lockeren Modus bleiben Funktion und Rolle unveränderte Identitäts- und
+Provenienzmerkmale, sperren den Schreibschritt aber nicht. Organisatorische Funktionskombinationen
 nach Kapitel 4.3 werden bei Bedarf durch getrennte persönliche Konten
 abgebildet. Gemeinsame oder geteilte Kennwörter bleiben unzulässig.
 
 Operative Lese- und Schreibvorgänge verlangen eine gültige Kontositzung, ein
-ungesperrtes Konto, eine fachlich passende feste Funktion/Rolle und einen
-aktiven Einsatz. Eine aktive Dienst- oder Zugangsschicht wird nicht verlangt.
+ungesperrtes Konto und einen aktiven Einsatz. Allgemeine Leserechte bleiben
+funktions- und objektbezogen. Die vom Modus erfassten Workflow-, ETB-/TTB-,
+S6-Plan- und Melder-Schreibvorgänge verlangen in `STRICT` zusätzlich die
+fachlich passende feste Funktion/Rolle; in `LOOSE` entfällt nur diese
+Bedingung. Rollenstrenge Übersichten, Kategorien- und Administrationsrechte
+bleiben ausgenommen. Eine aktive Dienst- oder Zugangsschicht wird nicht verlangt.
 Unbekannte neue Schreibendpunkte fallen standardmäßig ebenfalls unter diese
-Einsatz- und Kontogrenze.
+Einsatz- und Kontogrenze und bei fehlendem eindeutigen Modus fail-closed unter
+`STRICT`.
+
+Neue und beim Upgrade vorhandene Einsätze stehen standardmäßig auf `STRICT`.
+Nur die revisionsgesicherte Administration kann einen offenen Einsatz
+umstellen. `LOOSE` verlangt eine ausdrückliche Warnungsbestätigung; jeder echte
+Wechsel wird mit Alt-/Neumodus auditiert und in der Statusleiste angezeigt.
+CSRF, Eingabevalidierung, Einsatzscoping, Workflowzustände, Sperrinhaber,
+Integrität, Ereignisketten, Append-only- und Aufbewahrungsregeln bleiben in
+beiden Modi identisch. Rollenstrenge Übersichten, Nachweisung,
+Zweitsichtungsarchive, Kategorien- und Administrationsrechte bleiben
+ebenfalls unverändert. Eine ausdrücklich gewählte Schreibstufe darf nur die
+dazu notwendige Workflow-Objektsicht erhalten; bei einem zurückgewiesenen
+Ausgang bewahrt die Evidenz ursprüngliche und neue verantwortliche Funktion.
+Für den hier beschriebenen DV-Nachweis ist `STRICT`
+verbindlich; ein örtlich freigegebener lockerer Betrieb benötigt eine eigene
+organisatorische Zuständigkeits- und Abnahmeregel.
 
 Die Administration kann optional einsatzbezogene Zugangsschichten anlegen und
 Konten zuordnen. Ein unzugeordnetes Konto bleibt zugelassen. Bei mehreren
@@ -567,14 +603,14 @@ sein:
    Korrektur und erneuter Freigabe.
 3. Vollständiger Eingang mit Rufnamenübersetzung und Empfängerzuordnung.
 4. Manipulationsversuche gegen Identitätsvermerke, Statusfolge,
-   Rollenrechte und Einsatzgrenze.
+   Rollenrechte, Berechtigungsmodus und Einsatzgrenze.
 5. Positive und negative Lesetests mit getrennten festen Funktionskonten für
    Nachricht, Vordruck, verknüpften und freien Anhang, Meldungsübersicht,
    Nachweisung, Kategorien sowie ETB/TBB.
 6. Pflichtkopf, exakt zwei vorab angelegte Köpfe `ETB:1`/`TTB:1` und die erste
    Buchnummer ohne Schichtvoraussetzung prüfen; ETB-Schreibrecht für
    `ETB/Stab` und `S2/Stab`, TTB-Schreibrecht der Funktion `Fernmelder` positiv und
-   für andere Funktionen negativ nachweisen.
+   für andere Funktionen im strengen Modus negativ nachweisen.
 7. ETB-Kennzeichen, alle fünf TBB-Inhaltsbereiche, automatischen
    TBB-Typ `nachricht`, LdF-Nachtrag als direkte Korrektur und unveränderte
    ursprüngliche lokale TBB-Nummer auf dem Vordruck prüfen; zusätzlich leere
@@ -600,8 +636,9 @@ sein:
    übrigen Dossiersektionen müssen einsatzweit im Gesamtbuch bleiben.
 12. Browserabnahme aller eingesetzten Rollen in der vorgesehenen
     Zielumgebung.
-13. Abweisung sämtlicher operativer Schreibpfade ohne aktiven Einsatz oder mit
-    fachlich unpassender fester Kontofunktion; dieselben Vorgänge ohne aktive
+13. Abweisung sämtlicher operativer Schreibpfade ohne aktiven Einsatz sowie im
+    strengen Modus mit fachlich unpassender fester Kontofunktion; dieselben
+    Vorgänge ohne aktive
     Schicht müssen zulässig sein. Während eines übernommenen Melderlaufs
     zusätzlich alle fremden operativen Schreibpfade abweisen.
 14. Nicht verfügbarer Beförderungsweg mit begründeter Rückgabe an LdF,
@@ -614,7 +651,16 @@ sein:
     Einsatzleitung anlegen; historischen Fehlwert einmalig bestätigen,
     weitere Eingaben vorher und Änderungen nach dem ersten operativen
     Datensatz abweisen sowie Anzeige, Nachrichtenvordruck und Dossier prüfen.
-17. Die erforderliche formale THW-Freigabe, örtliche Organisationsfreigabe
+17. Beide Berechtigungsmodi getrennt abnehmen: Bestand und Neuanlage müssen
+    standardmäßig streng bleiben; eine unbestätigte oder direkte
+    Lockerung muss scheitern. Im lockeren Modus müssen
+    funktionsübergreifende Schreibschritte mit konkretem aktivem und
+    ungesperrtem Konto möglich sein, während Sitzung, Einsatz, CSRF,
+    Workflowzustand, Sperrinhaber, Integrität, Audit und Retention weiterhin
+    negative Manipulationstests bestehen. Moduswechsel, Statusanzeige und
+    Vorher-/Nachher-Audit kontrollieren und anschließend wieder `STRICT`
+    setzen.
+18. Die erforderliche formale THW-Freigabe, örtliche Organisationsfreigabe
     und den Umgang mit den nur manuell zu zeichnenden PDF-Unterschriftslinien
     schriftlich dokumentieren.
 
@@ -628,6 +674,9 @@ müssen weiterhin geregelt und geübt werden:
 
 - wer für den konkreten Einsatz Leiter der Führungsstelle, S1 bis S6,
   Sichter, LdF, Fernmelder, ETB und Melder ist,
+- dass `STRICT` für den Regelbetrieb gilt und wer eine zeitweilige
+  `LOOSE`-Entscheidung fachlich freigeben, dokumentieren, überwachen und wieder
+  zurücknehmen darf,
 - welche Funktionskombinationen lageabhängig zulässig sind,
 - wie bei System-, Strom- oder Netzwerkausfall auf Papier zurückgefallen und
   anschließend nacherfasst wird,

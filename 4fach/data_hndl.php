@@ -675,7 +675,8 @@ function estab_rehydrate_staff_correction_form (
     || !estab_message_object_allowed (
       $actor,
       "staff-correction",
-      $message
+      $message,
+      true
     )
     || (string) ($message ["x02_sperre"] ?? "") !== "f"
     || (string) ($message ["x03_sperruser"] ?? "") !== ""
@@ -789,18 +790,31 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
   $attachmentAuthorizer = static function (
     mysqli $connection,
     int $incidentId,
-    mixed $attachmentList
+    mixed $attachmentList,
+    ?array $writeMessage = null
   ) use (
     $conf_4f_tbl,
-    $attachmentReadIdentity
+    $attachmentReadIdentity,
+    $messageActionTask
   ): void {
+    $attachmentWriteScope = (
+      $messageActionTask === "Stab_korrigieren"
+      && is_array ($writeMessage)
+    )
+      ? estab_read_attachment_write_scope (
+          $attachmentReadIdentity,
+          "staff-correction",
+          $writeMessage
+        )
+      : null;
     estab_read_require_attachment_use_scope (
       $connection,
       (string) $conf_4f_tbl ["anhang"],
       (string) $conf_4f_tbl ["nachrichten"],
       $incidentId,
       $attachmentList,
-      $attachmentReadIdentity
+      $attachmentReadIdentity,
+      $attachmentWriteScope
     );
   };
 
@@ -1114,7 +1128,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
          $expectedIncidentId
        );
        protokolleintrag ("Stab-schreiben", "message_id=".$storedMessage ["id"]);
-       set_msg_read ($storedMessage ["id"]) ;
+       set_msg_read ($storedMessage ["id"], $messageActor) ;
     break;
 
     case "Stab_korrigieren":
@@ -1252,7 +1266,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
         "Stab-korrigiert",
         "message_id=".estab_message_positive_id ($data ["00_lfd"])
       );
-      set_msg_read ($data ["00_lfd"]);
+      set_msg_read ($data ["00_lfd"], $messageActor);
     break;
 
     /****************************************************************************\
@@ -1404,7 +1418,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
          $expectedIncidentId
        );
        protokolleintrag ("Stab-gesprnoti", "message_id=".$storedMessage ["id"]);
-       set_msg_read ($storedMessage ["id"]) ;
+       set_msg_read ($storedMessage ["id"], $messageActor) ;
 
 		break;
 
@@ -1490,7 +1504,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
           $messageConnection,
           $conf_4f_tbl ["nachrichten"],
           $data ["00_lfd"],
-          (string) $_SESSION ["vStab_kuerzel"],
+          $messageActor,
           $ldfDirection,
           1,
           $ldfFields,
@@ -1582,7 +1596,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
             $messageConnection,
             $conf_4f_tbl ["nachrichten"],
             $data ["00_lfd"],
-            (string) $_SESSION ["vStab_kuerzel"],
+            $messageActor,
             "A",
             2,
             array (
@@ -1687,7 +1701,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
            $messageConnection,
            $conf_4f_tbl ["nachrichten"],
            $data ["00_lfd"],
-           (string) $_SESSION ["vStab_kuerzel"],
+           $messageActor,
            "A",
            2,
            array (
@@ -1952,15 +1966,15 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
   set_msg_read ($lfd)
 
 \*****************************************************************************/
-	function set_msg_read ($lfd) {
+	function set_msg_read ($lfd, array $actor) {
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>set_msg_read</big><br>\n";}
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
     $recordId = estab_message_positive_id ($lfd);
     $stateTable = estab_message_state_table (
       $conf_4f_tbl ["usrtblprefix"],
-      (string) $_SESSION ["vStab_funktion"],
-      (string) $_SESSION ["vStab_kuerzel"],
+      (string) ($actor ["funktion"] ?? ""),
+      (string) ($actor ["kuerzel"] ?? ""),
       "read"
     );
     $connection = estab_message_connect ($conf_4f_db);
@@ -1970,7 +1984,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
         $conf_4f_tbl ["nachrichten"],
         $stateTable,
         $recordId,
-        (string) $_SESSION ["vStab_funktion"],
+        $actor,
         "read",
         convtodatetime (date ("dmY"), date ("Hi"))
       )) {
@@ -1988,7 +2002,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
 
   DELETE FROM `usr_ls_ls_read` WHERE `usr_ls_ls_read`.`lfd` = 3 LIMIT 1
 \*****************************************************************************/
-	function unset_msg_read ($lfd) {
+	function unset_msg_read ($lfd, array $actor) {
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>unset_msg_read</big><br>\n";}
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
@@ -1996,8 +2010,8 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
     $recordId = estab_message_positive_id ($lfd);
     $stateTable = estab_message_state_table (
       $conf_4f_tbl ["usrtblprefix"],
-      (string) $_SESSION ["vStab_funktion"],
-      (string) $_SESSION ["vStab_kuerzel"],
+      (string) ($actor ["funktion"] ?? ""),
+      (string) ($actor ["kuerzel"] ?? ""),
       "read"
     );
     $connection = estab_message_connect ($conf_4f_db);
@@ -2007,7 +2021,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
         $conf_4f_tbl ["nachrichten"],
         $stateTable,
         $recordId,
-        (string) $_SESSION ["vStab_funktion"]
+        $actor
       )) {
         throw new RuntimeException ("Message read state is no longer authorised");
       }
@@ -2024,7 +2038,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
    set_msg_done ($lfd)
 
  *****************************************************************************/
-	function set_msg_done ($lfd) {
+	function set_msg_done ($lfd, array $actor) {
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>set_msg_done</big><br>\n";}
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
@@ -2032,8 +2046,8 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
     $recordId = estab_message_positive_id ($lfd);
     $stateTable = estab_message_state_table (
       $conf_4f_tbl ["usrtblprefix"],
-      (string) $_SESSION ["vStab_funktion"],
-      (string) $_SESSION ["vStab_kuerzel"],
+      (string) ($actor ["funktion"] ?? ""),
+      (string) ($actor ["kuerzel"] ?? ""),
       "done"
     );
     $connection = estab_message_connect ($conf_4f_db);
@@ -2043,7 +2057,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
         $conf_4f_tbl ["nachrichten"],
         $stateTable,
         $recordId,
-        (string) $_SESSION ["vStab_funktion"],
+        $actor,
         "done",
         convtodatetime (date ("dmY"), date ("Hi"))
       )) {
@@ -2062,7 +2076,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
    unset_msg_done ($lfd)
 
  *****************************************************************************/
-	function unset_msg_done ($lfd) {
+	function unset_msg_done ($lfd, array $actor) {
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>unset_msg_done</big><br>\n";}
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
@@ -2070,8 +2084,8 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
     $recordId = estab_message_positive_id ($lfd);
     $stateTable = estab_message_state_table (
       $conf_4f_tbl ["usrtblprefix"],
-      (string) $_SESSION ["vStab_funktion"],
-      (string) $_SESSION ["vStab_kuerzel"],
+      (string) ($actor ["funktion"] ?? ""),
+      (string) ($actor ["kuerzel"] ?? ""),
       "done"
     );
     $connection = estab_message_connect ($conf_4f_db);
@@ -2081,7 +2095,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
         $conf_4f_tbl ["nachrichten"],
         $stateTable,
         $recordId,
-        (string) $_SESSION ["vStab_funktion"]
+        $actor
       )) {
         throw new RuntimeException ("Message done state is no longer authorised");
       }
@@ -2261,7 +2275,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
   /**************************************************************************\
 
   \**************************************************************************/
-  function reset_record_lock ( $lfd ){
+  function reset_record_lock ( $lfd, array $actor ){
 
     include ("../4fcfg/dbcfg.inc.php");
     include ("../4fcfg/e_cfg.inc.php");
@@ -2295,7 +2309,9 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
         $conf_4f_tbl ["nachrichten"],
         $recordId,
         $stageDirection,
-        $stageStatus
+        $stageStatus,
+        $actor,
+        true
       )) {
         throw new RuntimeException ("Message lock reset lost its target");
       }

@@ -46,6 +46,12 @@ $telecommunicationsIdentity = [
     'funktion' => 'A/W',
     'rolle' => 'Fernmelder',
 ];
+$viewerIdentity = [
+    'benutzer' => 'Sina Sichtung',
+    'kuerzel' => 'si',
+    'funktion' => 'Si',
+    'rolle' => 'Stab',
+];
 
 $directActionSession = [];
 $directActionToken = estab_attachment_direct_action_issue(
@@ -1065,6 +1071,61 @@ $assertContextRejected(
 );
 $assertContextRejected(
     static fn () => estab_attachment_origin_context_create(
+        $viewerIdentity,
+        9,
+        ['task' => 'FM-Eingang', '00_lfd' => '']
+    ),
+    'viewer identity can forge a telecommunications attachment origin in STRICT mode'
+);
+$assertContextRejected(
+    static fn () => estab_attachment_origin_context_create(
+        $viewerIdentity,
+        9,
+        ['task' => 'Stab_schreiben', '00_lfd' => '']
+    ),
+    'viewer identity can forge a staff attachment origin in STRICT mode'
+);
+
+$permissionContextKey = ESTAB_PERMISSION_CONTEXT_KEY;
+estab_permission_context_set_from_incident([
+    'active_einsatz_id' => 9,
+    'estab_permission_mode' => 'LOOSE',
+    'revision' => 7,
+]);
+$looseCrossRoleOrigins = [
+    estab_attachment_origin_context_create(
+        $staffIdentity,
+        9,
+        ['task' => 'FM-Eingang', '00_lfd' => '']
+    ),
+    estab_attachment_origin_context_create(
+        $telecommunicationsIdentity,
+        9,
+        ['task' => 'Stab_schreiben', '00_lfd' => '']
+    ),
+    estab_attachment_origin_context_create(
+        $viewerIdentity,
+        9,
+        ['task' => 'FM-Eingang_Anhang', '00_lfd' => '']
+    ),
+    estab_attachment_origin_context_create(
+        $viewerIdentity,
+        9,
+        ['task' => 'Stab_gesprnoti', '00_lfd' => '']
+    ),
+];
+$assert(
+    array_column($looseCrossRoleOrigins, 'task') === [
+        'FM-Eingang',
+        'Stab_schreiben',
+        'FM-Eingang_Anhang',
+        'Stab_gesprnoti',
+    ],
+    'LOOSE mode does not admit every signed cross-role attachment write flow'
+);
+unset($GLOBALS[$permissionContextKey]);
+$assertContextRejected(
+    static fn () => estab_attachment_origin_context_create(
         $staffIdentity,
         9,
         ['task' => 'Stab_schreiben', '00_lfd' => '73']
@@ -1851,6 +1912,24 @@ $storeUploadSource = (
     $storeUploadStart,
     $storeUploadEnd - $storeUploadStart
 ) : '';
+$reserveStart = strpos(
+    $attachmentSource,
+    'function estab_attachment_reserve('
+);
+$reserveEnd = strpos(
+    $attachmentSource,
+    'function estab_attachment_owned_reservation_incident_id(',
+    $reserveStart === false ? 0 : $reserveStart
+);
+$reserveSource = (
+    $reserveStart !== false
+    && $reserveEnd !== false
+    && $reserveEnd > $reserveStart
+) ? substr(
+    $attachmentSource,
+    $reserveStart,
+    $reserveEnd - $reserveStart
+) : '';
 $cleanupStateStart = strpos(
     $attachmentSource,
     'function estab_attachment_reservation_cleanup_state('
@@ -1919,6 +1998,47 @@ $assert(
             '$expectedIncidentId !== $incidentId'
         ),
     'browser upload does not stage file I/O before its short finalisation transaction'
+);
+$assert(
+    $reserveSource !== ''
+        && $storeUploadSource !== ''
+        && str_contains(
+            $reserveSource,
+            'estab_permission_context_matches_incident($incident)'
+        )
+        && str_contains(
+            $storeUploadSource,
+            'estab_permission_context_matches_incident($incident)'
+        )
+        && strpos(
+            $reserveSource,
+            'estab_incident_require_active($connection, true)'
+        ) < strpos(
+            $reserveSource,
+            'estab_permission_context_matches_incident($incident)'
+        )
+        && strpos(
+            $reserveSource,
+            'estab_permission_context_matches_incident($incident)'
+        ) < strpos(
+            $reserveSource,
+            'estab_attachment_require_operational_identity('
+        )
+        && strpos(
+            $storeUploadSource,
+            'estab_incident_require_active($connection, true)'
+        ) < strpos(
+            $storeUploadSource,
+            'estab_permission_context_matches_incident($incident)'
+        )
+        && strpos(
+            $storeUploadSource,
+            'estab_permission_context_matches_incident($incident)'
+        ) < strpos(
+            $storeUploadSource,
+            'estab_attachment_require_operational_identity('
+        ),
+    'attachment reserve/store transactions can survive a LOOSE-to-STRICT or incident revision race'
 );
 $assert(
     $cleanupStateSource !== ''
@@ -2286,7 +2406,7 @@ $draftCatchBody = (
 $assert(
     str_contains(
         $draftCatchBody,
-        'array ("Stab_schreiben", "Stab_gesprnoti")'
+        'array ("Stab_schreiben", "Stab_korrigieren", "Stab_gesprnoti")'
     )
         && str_contains(
             $draftCatchBody,
@@ -2374,13 +2494,14 @@ $assert(
     'correction attachment continuation does not reauthorise its exact record'
 );
 $assert(
-    preg_match_all(
-        '/\$attachmentOriginTask\s*=\s*\(string\)/',
-        $controllerSource
-    ) === 2
-        && substr_count(
-            $controllerSource,
-            '$attachmentOriginTask,'
+    substr_count(
+        $controllerSource,
+        '$attachmentOriginTask = $attachmentMessageContext'
+    ) === 1
+        && preg_match_all(
+            '/new nachrichten4fach\s*\(\s*\$formdata,\s*'
+                . '\$attachmentOriginTask,\s*""\s*\)/s',
+            $controllerSource
         ) === 2
         && !str_contains(
             $controllerSource,
@@ -2395,11 +2516,31 @@ $assert(
 $assert(
     str_contains(
         $controllerSource,
-        'estab_workflow_is_staff_writer ($attachmentPageIdentity)'
+        '$attachmentStaffOrigin = in_array ('
     )
         && str_contains(
             $controllerSource,
-            'estab_workflow_is_telecommunications ($attachmentPageIdentity)'
+            'array ("Stab_schreiben", "Stab_korrigieren", "Stab_gesprnoti")'
+        )
+        && str_contains(
+            $controllerSource,
+            '$attachmentTelecommunicationsOrigin = in_array ('
+        )
+        && str_contains(
+            $controllerSource,
+            'array ("FM-Eingang", "FM-Eingang_Anhang")'
+        )
+        && str_contains(
+            $controllerSource,
+            '$attachmentMessageContext &&'
+        )
+        && str_contains(
+            $controllerSource,
+            '$attachmentStaffOrigin and'
+        )
+        && str_contains(
+            $controllerSource,
+            '$attachmentTelecommunicationsOrigin and'
         )
         && str_contains(
             $controllerSource,
@@ -2413,7 +2554,7 @@ $assert(
             $controllerSource,
             'estab_attachment_merge_message_references ('
         ) === 2,
-    'attachment return loses FB access, correction evidence, or existing attachments'
+    'attachment return dispatches by account role instead of its signed origin task, or loses correction data'
 );
 $assert(
     str_contains($controllerSource, 'Die Anhangübersicht wurde direkt geöffnet.')
@@ -2507,13 +2648,33 @@ $assert(
 $assert(
     str_contains(
         $controllerSource,
-        '!estab_workflow_is_staff_writer ($attachmentPageIdentity)'
+        '$attachmentArchiveRoleAllowed ='
     )
         && str_contains(
             $controllerSource,
-            '!estab_workflow_is_telecommunications ($attachmentPageIdentity)'
+            'estab_workflow_is_staff_writer ($attachmentPageIdentity)'
+        )
+        && str_contains(
+            $controllerSource,
+            'estab_workflow_is_telecommunications ($attachmentPageIdentity)'
+        )
+        && str_contains(
+            $controllerSource,
+            '$attachmentLooseMessageFlowAllowed ='
+        )
+        && str_contains(
+            $controllerSource,
+            '$attachmentRequestFlowToken !== null'
+        )
+        && str_contains(
+            $controllerSource,
+            '&& !estab_permission_role_checks_enforced ();'
+        )
+        && str_contains(
+            $controllerSource,
+            'if (!$attachmentArchiveRoleAllowed && !$attachmentLooseMessageFlowAllowed)'
         ),
-    'direct attachment endpoint admits a duty role without upload authority'
+    'LOOSE mode exposes the attachment archive without a signed message flow or blocks cross-role roundtrips'
 );
 $assert(
     str_contains(
@@ -2769,10 +2930,6 @@ $assert(
     )
         && str_contains(
             $attachmentSource,
-            'estab_workflow_is_telecommunications($identity)'
-        )
-        && str_contains(
-            $attachmentSource,
             "str_starts_with(\$task, 'FM-Eingang')"
         )
         && str_contains(
@@ -2786,14 +2943,19 @@ $assert(
     'attachment storage trusts the browser task or does not discard an A/W incoming sender'
 );
 $assert(
-    preg_match(
-        '/\$restoreIdentity\s*=\s*estab_auth_session_identity\s*\(\$_SESSION\);\s*'
-            . 'if\s*\(\s*is_array\s*\(\$restoreIdentity\)\s*&&\s*'
-            . 'estab_workflow_is_telecommunications\s*\(\$restoreIdentity\)\s*'
-            . '\)\s*\{\s*\$data\s*\["13_abseinheit"\]\s*=\s*"";\s*\}/s',
-        $controllerSource
-    ) === 1,
-    'attachment restore can return a sender to an A/W form'
+    str_contains(
+        $legacyRestoreSource,
+        'in_array ($originTask, array ("FM-Eingang", "FM-Eingang_Anhang"), true)'
+    )
+        && str_contains(
+            $legacyRestoreSource,
+            '$data ["13_abseinheit"] = "";'
+        )
+        && !str_contains(
+            $legacyRestoreSource,
+            'estab_workflow_is_telecommunications ($restoreIdentity)'
+        ),
+    'attachment restore derives sender-unit protection from the current account role instead of the signed incoming task'
 );
 $assert(
     preg_match('/estab_attachment_html\s*\(\s*\$file\s*\[\s*"comment"/', $controllerSource) === 1,

@@ -213,7 +213,11 @@ $assert(
         && str_contains($download, 'render_message_form_document')
         && str_contains($download, '$currentLayout')
         && str_contains($download, 'X-eStab-PDF-Layout: current')
-        && str_contains($download, "            true\n        );")
+        && preg_match(
+            '/estab_generated_form_fetch_active\s*\(.*?'
+                . '\$filename,\s*true\s*\);/s',
+            $download
+        ) === 1
         && str_contains(
             $helper,
             'estab_incident_require_active($connection, $forUpdate)'

@@ -179,7 +179,7 @@ Das vollständige CI-Gate automatisiert zwei destruktiv guardierte Roundtrips:
    leer neu an und spielt die Sicherung zurück. Danach müssen Schema,
    bestehendes Konto, Nachricht, exakter Anhanginhalt, SHA-256 des
    persistierten PDF-Vordrucks, den globalen Einsatzkopf einschließlich
-   einsatzbezogenem Führungsstellennamen, vorhandene
+   einsatzbezogenem Führungsstellennamen und Berechtigungsmodus, vorhandene
    ETB-/TBB-Einträge sowie
    Kennung und SHA-256 des zuvor per Manifest/CSV geprüften Export-ZIP
    unverändert nachweisbar sein. Die ETB-/TBB-Prüfung ist dabei absichtlich
@@ -446,7 +446,10 @@ den ursprünglichen Anhanginhalt, den gespeicherten PDF-SHA-256 und den
 gespeicherten SHA-256 des genau bezeichneten Export-ZIP. Für einen nach
 Migration 97 angelegten Einsatz muss außerdem derselbe Führungsstellenname
 erhalten bleiben; ein historischer `NULL`-Wert darf beim Restore nicht aus
-Organisation, Einsatzname oder Umgebung ergänzt werden.
+Organisation, Einsatzname oder Umgebung ergänzt werden. Der nach Migration
+115 gespeicherte Berechtigungsmodus muss ebenfalls bytegleich erhalten
+bleiben: Ein `STRICT`-Einsatz darf durch Restore nicht gelockert und ein
+bewusst auditiertes `LOOSE` nicht still als streng ausgegeben werden.
 
 Der Vordruck-SHA-256 bezieht sich ausdrücklich auf die beim Abschluss
 persistierte Archivdatei. Die Benutzeroberfläche rendert unter
@@ -466,8 +469,9 @@ ZIP herunterladen. Pro Tabelle entstehen:
 - Datensatzanzahl und SHA-256-Prüfsumme im `manifest.json`,
 - bei verfügbarer PHP-ZIP-Erweiterung zusätzlich ein ZIP-Archiv.
 
-Die `nv_einsaetze`-CSV führt `fuehrungsstellenname` und dessen dauerhaften
-Sperrmarker getrennt von `name`, `organisation` und `einsatzleitung`. Ein
+Die `nv_einsaetze`-CSV führt `fuehrungsstellenname`, dessen dauerhaften
+Sperrmarker und `estab_permission_mode` getrennt von `name`, `organisation`
+und `einsatzleitung`. Ein
 historisch nicht erfasster Wert bleibt dabei der eindeutige rohe
 SQL-NULL-Marker `\N`; nur die historische PDF-Ausgabe beschriftet ihn
 zusätzlich als „historisch nicht erfasst“.

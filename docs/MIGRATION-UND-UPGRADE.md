@@ -46,7 +46,7 @@ Während einer erstmaligen oder aus `applying` wiederaufgenommenen Baseline
 entsteht zusätzlich der Datensatz
 `114-self-registration-fresh-default` in `estab_schema_baselines`. Sein
 Checksum ist exakt die SHA-256 der unveränderten Migration 114. Der Marker
-bleibt bis hinter allen zwanzig Migrationen auf `applying`. Dann setzt ein
+bleibt bis hinter allen einundzwanzig Migrationen auf `applying`. Dann setzt ein
 einziges atomisches InnoDB-Multi-Table-Update ausschließlich die noch pristine
 Richtlinienzeile `ENVIRONMENT/NULL/0/migration-114` auf
 `DISABLED/NULL/1/fresh-install` und gleichzeitig den Marker auf `applied`.
@@ -102,6 +102,7 @@ Derzeit sind folgende explizite Migrationen vorhanden:
 | `docker/db/migrations/112-optional-access-shifts.sql` | ergänzt optionale einsatzgebundene Zugangsschichten und Kontenzuordnungen; ersetzt den abschließenden ETB-/TBB-Triggervertrag durch festen Funktions-/Rollenbezug und aktiven Einsatz ohne Pflicht zu Dienstschicht oder Besetzungs-ID; ältere formale Schichtdaten bleiben historische Evidenz |
 | `docker/db/migrations/113-password-policy.sql` | ergänzt genau eine revisionsgesicherte globale Kennwortrichtlinie für künftig gesetzte Funktionskonto-Kennwörter; Standard sind mindestens 12 Unicode-Codepoints ohne verpflichtende Zeichenklasse, die konfigurierbare Mindestlänge liegt zwischen 8 und 128 Unicode-Codepoints und optionale Unicode-Groß-/Titlecase-/Kleinbuchstaben, Ziffern und Sonderzeichen können verlangt werden; Unicode-Steuerzeichen sind verboten, Formatzeichen einschließlich ZWJ erlaubt; neue und geänderte Kennwörter werden mit Argon2id gespeichert, serverseitig gelten höchstens 1024 UTF-8-Bytes, im Browserfeld 1024 Eingabeeinheiten und eine exakte JavaScript-Codepointzählung bei verbindlicher Serverprüfung; Klartext und eindeutig verifizierbare Alt-Hashes werden nach erfolgreichem Login migriert, bcrypt nur bei einem eingegebenen Kennwort unter 72 UTF-8-Bytes, während ein ambivalenter längerer bcrypt-Alt-Hash bis zum administrativen Reset unverändert bleibt; stärkere oder gemischte Argon2id-Kosten werden nicht zurückgestuft, vorhandene Sitzungen bleiben unverändert |
 | `docker/db/migrations/114-self-registration-policy.sql` | ergänzt die revisionsgesicherte Singleton-Freigabe für öffentliche Kontoanlage mit `DISABLED`, `PERMANENT` und DB-UTC-befristetem `UNTIL`; die unveränderte SQL-Datei setzt aus Upgrade-Kompatibilität zunächst `ENVIRONMENT`; nur ein im selben neuen Baseline-Lauf checksumgebunden angelegter Fresh-Marker autorisiert anschließend die atomare Umstellung der pristine Zeile auf `DISABLED/NULL/1/fresh-install`; echte Upgrades und frühere markerlose Neuinstallationen behalten `ENVIRONMENT`, bis die erste administrative Auswahl die Datenbank autoritativ macht; bestehende Konten, Kennwörter und Sitzungen bleiben unverändert |
+| `docker/db/migrations/115-incident-permission-mode.sql` | ergänzt den pro Einsatz gespeicherten Modus `STRICT`/`LOOSE` mit `STRICT` als Default für Bestand und Neuanlage; Guard-Trigger erkennen unmarkierte Legacy-DML und kombinierte Einsatzänderungen, während der bestätigte Anwendungsweg Revision und Audit bindet; sechs modebewusste Fachtrigger bewahren in `STRICT` die bisherigen Funktions-/Rollengrenzen und lockern in `LOOSE` ausschließlich diese Schreibprüfungen, während konkrete aktive und ungesperrte Kontenidentität, aktiver offener Einsatz, Zustands-, Beziehungs-, Integritäts- und Append-only-Regeln bestehen bleiben |
 
 Migration 95 klassifiziert vorhandene Zeilen bereits beim Hinzufügen der
 Spalte mit dem einmaligen Anfangswert `integrity_required=0` und stellt danach
@@ -137,8 +138,8 @@ eigenen Zwischenstände. Gemischte Katalogdaten, ein abweichender
 Primärschlüssel oder fremde Indizes blockieren vor der nächsten Änderung und
 bleiben zur Untersuchung erhalten. `verify.sql` und die Laufzeit-Readiness
 verlangen danach exakt sieben Katalogzeilen, das vollständige neue ENUM,
-ausschließlich den zweispaltigen Primärschlüssel und alle zwanzig
-angewendeten Migrationen einschließlich Version 114.
+ausschließlich den zweispaltigen Primärschlüssel und alle einundzwanzig
+angewendeten Migrationen einschließlich Version 115.
 
 Migration 97 fügt `nv_einsaetze.fuehrungsstellenname` als
 `VARCHAR(128) NULL` unmittelbar hinter `organisation` und
@@ -348,7 +349,7 @@ Migration 114 ergänzt entsprechend die eigene, kollisionsgeprüfte Tabelle
 ausdrücklich geöffnete Installation beim Upgrade. Nach der ersten Adminaktion
 sind nur `DISABLED`, `PERMANENT` oder `UNTIL` samt UTC-Endzeit, Revision und
 Audit-Akteur maßgeblich. `verify.sql` und die Laufzeit-Readiness prüfen beide
-Singleton-Tabellen und alle zwanzig Ledgerzeilen gemeinsam.
+Singleton-Tabellen und alle einundzwanzig Ledgerzeilen gemeinsam.
 
 Bei einer vom aktuellen Runner selbst begonnenen Neuinstallation ist dagegen
 der checksumgebundene Baseline-Marker maßgeblich: Solange Migration 114 noch
@@ -358,6 +359,42 @@ gestellt. Ein Zweitlauf akzeptiert den angewendeten Marker nur zusammen mit
 einem nicht mehr auf `ENVIRONMENT` stehenden, revisionsfortgeschrittenen
 Richtlinienzustand. Die SQL-Datei und ihre zwanzigste Ledger-Prüfsumme werden
 dabei nicht verändert.
+
+Migration 115 ergänzt danach die Einsatzzeile um
+`estab_permission_mode ENUM('STRICT','LOOSE') CHARACTER SET ascii COLLATE
+ascii_bin NOT NULL DEFAULT 'STRICT'`. Weil der Default beim `ADD COLUMN`
+materialisiert wird, bleiben alle historischen Einsätze sowie neue Einsätze
+ohne ausdrückliche Auswahl streng. Die Migration schreibt keine bestehenden
+Fachdaten um. Gleichnamige fremde Spalten, Guard-Trigger oder nicht eindeutig
+erkannte Vorgängertrigger blockieren vor einer Übernahme; migrationseigene
+DDL-Zwischenstände bleiben wiederanlauffähig.
+
+Zwei Guard-Trigger weisen unmarkierte Legacy-DML und eine mit anderen
+Einsatzfeldern kombinierte Modusänderung ab: `LOOSE` darf bei der
+Einsatzanlage nur innerhalb des eng markierten Anwendungswegs gesetzt werden,
+und ein bestehender Modus darf dort nur für die gesperrte konkrete Einsatz-ID
+geändert werden. Die Anwendung verlangt dafür
+Basic Auth, Session-CSRF, erwarteten Altmodus, unveränderte globale Revision
+und bei `LOOSE` eine ausdrückliche Bestätigung; die Änderung und ihr
+Vorher-/Nachher-Audit committen gemeinsam.
+
+Die connection-lokalen SQL-Marker sind ein Datenkonsistenzvertrag zwischen
+Anwendung und Triggern, keine Authentisierungsgrenze für einen Principal mit
+beliebigen SQL-Rechten: Ein solcher Principal kann Sessionvariablen selbst
+setzen und gilt deshalb als Teil der vertrauenswürdigen Betriebsumgebung.
+Datenbank-Zugangsdaten dürfen nicht an Bedienkonten oder Drittprozesse
+weitergegeben werden. Fachliche Modusänderungen erfolgen ausschließlich über
+die Administration; wer absichtlich mit privilegierten SQL-Rechten eingreift,
+verlässt den nachgewiesenen Betriebs- und Auditpfad.
+
+Sechs Fachtrigger werden modebewusst ersetzt: ETB- und TBB-Insert,
+Fernmeldeplan-Insert/-Freigabe sowie Melderauftrag-Insert/-Update. `STRICT`
+erhält die bis dahin geltenden Funktions-/Rollenbedingungen byteinhaltlich
+weiter. `LOOSE` lässt nur diese Prädikate aus und verlangt weiterhin die
+konkrete aktive und ungesperrte Kontenidentität, den aktiven offenen Einsatz,
+einsatzgleiche Beziehungen, zulässige Workflowzustände, Melder-Eignung,
+Nummerierung, Referenzen, Provenienz und Unveränderlichkeit. Ein Upgrade ist
+deshalb kein implizites Öffnen bestehender Schreibrechte.
 
 Der erneuerte ETB-Insert-Trigger akzeptiert neue Referenzen nur als
 kanonische, positive, bereits vorhandene lokale ETB-Nummer desselben Einsatzes.
@@ -586,6 +623,9 @@ Für jede Abnahme werden festgehalten:
 - ausgeführte Migrationsdateien,
 - vollständige Ausgabe von `docker/db/verify.sql`,
 - Ergebnisse der statischen, HTTP-, Datenbank- und fachlichen Tests,
+- Nachweis, dass alle übernommenen Einsätze nach Migration 115 weiterhin
+  `STRICT` sind; jede später bewusst auf `LOOSE` gesetzte Einsatz-ID samt
+  Warnungsbestätigung und Auditentscheidung wird getrennt dokumentiert,
 - Name der freigebenden Person.
 
 Ein Rückrollen nur des App-Images ist ausschließlich zulässig, wenn die

@@ -41,6 +41,8 @@ $assert(
 
 $active = estab_incident_ui_state_from_status([
     'active_einsatz_id' => 7,
+    'estab_permission_mode' => 'STRICT',
+    'revision' => 3,
     'kennung' => 'EL-2026-007',
     'name' => 'Sturm & Hochwasser',
     'fuehrungsstellenname' =>
@@ -53,6 +55,11 @@ $assert(
     str_contains($activeMarkup, 'data-estab-incident-state="active"')
         && str_contains($activeMarkup, 'data-estab-incident-id="7"')
         && str_contains($activeMarkup, 'EL-2026-007')
+        && str_contains(
+            $activeMarkup,
+            'data-estab-incident-permission-mode="STRICT"'
+        )
+        && str_contains($activeMarkup, 'Schreibrechte: <strong>Streng</strong>')
         && str_contains($activeMarkup, '29.07.2026 12:34')
         && str_contains($activeMarkup, '&lt;Leitstelle&gt;')
         && str_contains(
@@ -70,6 +77,32 @@ $assert(
         && !str_contains($activeMarkup, 'incident-input-guard'),
     'Active incident banner is incomplete or unsafe'
 );
+$looseStatus = [
+    'active_einsatz_id' => 9,
+    'estab_permission_mode' => 'LOOSE',
+    'revision' => 5,
+    'kennung' => 'EL-2026-009',
+    'name' => 'Locker-Test',
+    'fuehrungsstellenname' => 'FüSt Locker',
+    'beginn' => '2026-07-30 08:00:00',
+    'ort' => 'Testort',
+];
+$looseMarkup = estab_incident_ui_markup(
+    estab_incident_ui_state_from_status($looseStatus)
+);
+$assert(
+    str_contains($looseMarkup, 'estab-incident-indicator-permission-loose')
+        && str_contains(
+            $looseMarkup,
+            'data-estab-incident-permission-mode="LOOSE"'
+        )
+        && str_contains($looseMarkup, 'Schreibrechte: <strong>Locker</strong>')
+        && str_contains(
+            $looseMarkup,
+            'Funktions- und Rollenrechte werden bei fachlichen Schreibaktionen nicht erzwungen.'
+        ),
+    'LOOSE mode is not visibly and unambiguously identified'
+);
 $assert(
     str_contains($activeMarkup, 'estab-incident-indicator-compact')
         && str_contains($activeMarkup, 'estab-incident-indicator-sidebar'),
@@ -78,6 +111,8 @@ $assert(
 
 $incomplete = estab_incident_ui_state_from_status([
     'active_einsatz_id' => 8,
+    'estab_permission_mode' => 'STRICT',
+    'revision' => 4,
     'kennung' => 'LEGACY-IMPORT',
     'name' => 'Historischer Einsatz',
     'fuehrungsstellenname' => null,

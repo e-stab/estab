@@ -209,45 +209,237 @@ $assert(
         && !estab_workflow_login_credentials_present(['login_flow' => 'existing']),
     'credential-bearing request detection is incorrect'
 );
+$operationalCsrf = str_repeat('a', 64);
+$sameOriginPost = [
+    'REQUEST_METHOD' => 'POST',
+    'HTTP_HOST' => 'estab.example',
+    'HTTP_SEC_FETCH_SITE' => 'same-origin',
+];
+$realOperationalPosts = [
+    'new message form' => [
+        'csrf_token' => $operationalCsrf,
+        'task' => 'Stab_schreiben',
+        '12_inhalt' => 'discarded',
+    ],
+    'existing message form' => [
+        'csrf_token' => $operationalCsrf,
+        'task' => 'Stab_sichten',
+        '00_lfd' => '7',
+        'absenden_x' => '1',
+    ],
+    'sidebar action' => [
+        'csrf_token' => $operationalCsrf,
+        'fm_eingang_x' => '1',
+        'next' => 'messages',
+    ],
+    'detail action' => [
+        'csrf_token' => $operationalCsrf,
+        'fm' => 'meldung',
+        '00_lfd' => '9',
+    ],
+    'staff state action' => [
+        'csrf_token' => $operationalCsrf,
+        'action' => 'gelesen',
+        'todo' => 'set',
+        '00_lfd' => '11',
+    ],
+    'operator reset' => [
+        'csrf_token' => $operationalCsrf,
+        'reset_record' => '13',
+    ],
+    'second-sighting search' => [
+        'csrf_token' => $operationalCsrf,
+        'fm_admin_x' => '1',
+        'ml_q' => 'search',
+        'ml_apply' => '1',
+    ],
+    'legacy image filter' => [
+        'filter_unerledigt_ein_x' => '4',
+        'filter_unerledigt_ein_y' => '8',
+    ],
+    'legacy text filter' => [
+        'flt_search' => 'search',
+        'filter_suche' => 'suchen',
+    ],
+];
+foreach ($realOperationalPosts as $form => $post) {
+    $assert(
+        estab_workflow_anonymous_operational_post(
+            $sameOriginPost,
+            [],
+            $post
+        ),
+        'expired same-site ' . $form . ' was not recognized'
+    );
+}
 $assert(
     estab_workflow_anonymous_operational_post(
         [
             'REQUEST_METHOD' => 'POST',
             'HTTP_HOST' => 'estab.example',
-            'HTTP_SEC_FETCH_SITE' => 'same-origin',
+            'HTTP_ORIGIN' => 'https://estab.example',
         ],
         [],
-        ['task' => 'Stab_schreiben', '12_inhalt' => 'discarded']
+        $realOperationalPosts['new message form']
+    )
+        && estab_workflow_anonymous_operational_post(
+            [
+                'REQUEST_METHOD' => 'POST',
+                'HTTP_HOST' => 'estab.example',
+                'HTTP_REFERER' => 'https://estab.example/4fach/mainindex.php',
+            ],
+            [],
+            $realOperationalPosts['sidebar action']
+        ),
+    'equal-authority Origin or Referer was not positive same-site evidence'
+);
+
+$unsafeOperationalPosts = [
+    'unknown field only' => [
+        'csrf_token' => $operationalCsrf,
+        'totally_unknown' => '1',
+    ],
+    'CSRF only' => ['csrf_token' => $operationalCsrf],
+    'unknown task' => [
+        'csrf_token' => $operationalCsrf,
+        'task' => 'Unknown',
+    ],
+    'missing CSRF' => [
+        'task' => 'Stab_schreiben',
+        '12_inhalt' => 'discarded',
+    ],
+    'two primary actions' => [
+        'csrf_token' => $operationalCsrf,
+        'stab_schreiben_x' => '1',
+        'fm_eingang_x' => '1',
+    ],
+    'task and detail route' => [
+        'csrf_token' => $operationalCsrf,
+        'task' => 'Stab_schreiben',
+        'fm' => 'meldung',
+        '00_lfd' => '1',
+    ],
+    'two message submit actions' => [
+        'csrf_token' => $operationalCsrf,
+        'task' => 'Stab_schreiben',
+        'absenden_x' => '1',
+        'abbrechen_x' => '1',
+    ],
+    'unknown coordinate action' => [
+        'csrf_token' => $operationalCsrf,
+        'task' => 'Stab_schreiben',
+        'unknown_x' => '1',
+    ],
+    'foreign legacy coordinate action' => [
+        'csrf_token' => $operationalCsrf,
+        'task' => 'Stab_schreiben',
+        'ah_upload_x' => '1',
+    ],
+    'incomplete image action' => [
+        'filter_erledigt_ein_y' => '1',
+    ],
+    'foreign form action' => [
+        'csrf_token' => $operationalCsrf,
+        'task' => 'Stab_lesen',
+        '00_lfd' => '2',
+        'category_action' => 'assign',
+    ],
+    'bare message-list action' => [
+        'csrf_token' => $operationalCsrf,
+        'ml_apply' => '1',
+    ],
+    'unknown message-list action' => [
+        'csrf_token' => $operationalCsrf,
+        'fm_admin_x' => '1',
+        'ml_unknown' => '1',
+    ],
+    'combined message-list actions' => [
+        'csrf_token' => $operationalCsrf,
+        'fm_admin_x' => '1',
+        'ml_apply' => '1',
+        'ml_reset' => '1',
+    ],
+    'foreign sidebar destination' => [
+        'csrf_token' => $operationalCsrf,
+        'fm_eingang_x' => '1',
+        'next' => 'incident-log',
+    ],
+];
+foreach ($unsafeOperationalPosts as $form => $post) {
+    $assert(
+        !estab_workflow_anonymous_operational_post(
+            $sameOriginPost,
+            [],
+            $post
+        ),
+        'unsafe expired operational POST accepted: ' . $form
+    );
+}
+
+$knownMessagePost = $realOperationalPosts['new message form'];
+$unsafeOperationalMetadata = [
+    'missing evidence' => [
+        'REQUEST_METHOD' => 'POST',
+        'HTTP_HOST' => 'estab.example',
+    ],
+    'cross-site fetch metadata' => [
+        'REQUEST_METHOD' => 'POST',
+        'HTTP_HOST' => 'estab.example',
+        'HTTP_SEC_FETCH_SITE' => 'cross-site',
+    ],
+    'foreign Origin' => [
+        'REQUEST_METHOD' => 'POST',
+        'HTTP_HOST' => 'estab.example',
+        'HTTP_ORIGIN' => 'https://evil.example',
+    ],
+    'different authority port' => [
+        'REQUEST_METHOD' => 'POST',
+        'HTTP_HOST' => 'estab.example:8443',
+        'HTTP_ORIGIN' => 'https://estab.example:9443',
+    ],
+    'Origin userinfo without password' => [
+        'REQUEST_METHOD' => 'POST',
+        'HTTP_HOST' => 'estab.example',
+        'HTTP_ORIGIN' => 'https://operator@estab.example',
+    ],
+    'Origin userinfo with password' => [
+        'REQUEST_METHOD' => 'POST',
+        'HTTP_HOST' => 'estab.example',
+        'HTTP_ORIGIN' => 'https://operator:secret@estab.example',
+    ],
+];
+foreach ($unsafeOperationalMetadata as $case => $server) {
+    $assert(
+        !estab_workflow_anonymous_operational_post(
+            $server,
+            [],
+            $knownMessagePost
+        ),
+        'unsafe operational request metadata accepted: ' . $case
+    );
+}
+$assert(
+    !estab_workflow_anonymous_operational_post(
+        array_replace($sameOriginPost, ['REQUEST_METHOD' => 'GET']),
+        [],
+        $knownMessagePost
     )
         && !estab_workflow_anonymous_operational_post(
-            [
-                'REQUEST_METHOD' => 'POST',
-                'HTTP_HOST' => 'estab.example',
-                'HTTP_SEC_FETCH_SITE' => 'cross-site',
-            ],
-            [],
-            ['task' => 'Stab_schreiben']
-        )
-        && !estab_workflow_anonymous_operational_post(
-            [
-                'REQUEST_METHOD' => 'POST',
-                'HTTP_HOST' => 'estab.example',
-                'HTTP_SEC_FETCH_SITE' => 'same-origin',
-            ],
-            [],
-            ['login_flow' => 'existing']
-        )
-        && !estab_workflow_anonymous_operational_post(
-            ['REQUEST_METHOD' => 'POST'],
+            $sameOriginPost,
             ['task' => 'Stab_schreiben'],
-            ['task' => 'Stab_schreiben']
+            $knownMessagePost
         )
         && !estab_workflow_anonymous_operational_post(
-            ['REQUEST_METHOD' => 'POST'],
+            $sameOriginPost,
+            [],
+            array_replace($knownMessagePost, ['login_flow' => 'existing'])
+        )
+        && !estab_workflow_anonymous_operational_post(
+            $sameOriginPost,
             [],
             []
         ),
-    'expired same-site operational form classification is unsafe'
+    'non-POST, query, login hybrid, or empty stale request was accepted'
 );
 $assert(
     estab_workflow_anonymous_operational_get(

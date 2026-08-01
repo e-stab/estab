@@ -301,6 +301,15 @@ Das Deckblatt kennzeichnet den Rechtsstand unübersehbar:
 - Ein formal geschlossener Einsatz trägt den grünen Banner
   **FORMAL ABGESCHLOSSEN**.
 
+Daneben nennt es den für den Einsatz gespeicherten Berechtigungsmodus
+**Streng** oder **Locker**. Das ist für die Interpretation der Schreiber-
+Provenienz wesentlich: Im strengen Modus wurden funktions-/rollenbezogene
+Schreibrechte technisch erzwungen; im lockeren Modus blieb die konkrete
+Kontenidentität nachgewiesen, die feste Funktion/Rolle sperrte den
+Schreibschritt jedoch nicht. Modusänderungen stehen mit Vorher-/Nachherwert in
+den einsatzbezogenen Betriebs-/Auditdaten; der PDF-Hinweis allein ersetzt
+diesen maschinenlesbaren Nachweis nicht.
+
 Zusätzlich nennt das Deckblatt Abschlusszeit, abschließende Identität,
 Abschlussvermerk, die mindestens zehn Jahre ab formalem Abschluss reichende
 Aufbewahrung, Legal-Hold-Status, Hold-Grund, Hold-Zeit und verantwortliche

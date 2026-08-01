@@ -14,12 +14,16 @@ Die Laufzeitoberfläche besteht aus:
 - `handbuch.js` für die lokale Suche ohne externe Abhängigkeiten.
 
 Bei fachlichen oder sichtbaren Änderungen müssen die betroffenen Kapitel im
-selben Commit angepasst werden. Besonders zu prüfen sind Rollen und
-Nachrichtenlauf, Einsatz- und Dienstschichtgrenzen, Anhänge, ETB/TBB,
-Korrekturen, Abschluss, Exporte, Präsenz/Logout sowie die getrennte
-HTTP-Basic-Administration. Interne Links müssen über die zentrale
-Anwendungs-URL-API entstehen und auch bei einem konfigurierten Base-Path
-funktionieren.
+selben Commit angepasst werden. Besonders zu prüfen sind feste Rollen, der pro
+Einsatz gewählte Berechtigungsmodus und Nachrichtenlauf,
+Einsatz-/Zugangsschichtgrenzen, Anhänge, ETB/TBB, Korrekturen, Abschluss,
+Exporte, Präsenz/Logout sowie die getrennte HTTP-Basic-Administration. Bei
+„Locker“ dürfen nur ausdrücklich angebotene Funktions-/Rollengrenzen in den
+operativen Schreibwegen von Nachrichtenworkflow, ETB/TBB, S6-Planung und
+Melderlauf erweitert beschrieben werden; Übersichten, Nachweisung, Archive der
+zweiten Sichtung, Kategorien und Administration bleiben rollenstreng. Interne
+Links müssen über die zentrale Anwendungs-URL-API entstehen und auch bei einem
+konfigurierten Base-Path funktionieren.
 
 Änderungen am Handbuch gehören in den statischen PHP-Nachweis, den
 HTTP-Oberflächentest, den echten Browser-Akzeptanztest und die Prüfung des

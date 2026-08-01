@@ -586,7 +586,7 @@ $assert(
         )
         && str_contains(
             $sources['command-post'],
-            'estab_dv_has_account_capability('
+            'estab_dv_has_write_capability('
         )
         && !str_contains($sources['command-post'], 'duty_assignment_id')
         && !str_contains($sources['command-post'], "'select_hat'")

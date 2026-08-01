@@ -307,6 +307,10 @@ try {
                               $incident['fuehrungsstellenname']
                                   ?? 'historisch nicht erfasst'
                           )
+                          . ' · Schreibrechte: '
+                          . estab_permission_mode_label(
+                              $incident['estab_permission_mode'] ?? null
+                          )
                           . (($incident['ist_aktiv'] ?? false)
                               ? ' (aktiv)'
                               : '')

@@ -945,6 +945,41 @@ $assert(
     'sidebar refresh does not preserve the page or enforce same-origin live updates'
 );
 $assert(
+    str_contains(
+        $refresh,
+        'function reloadWorkspace(){try{if(window.parent'
+            . '&&window.parent!==window'
+            . '&&window.parent.location.origin===window.location.origin){'
+            . 'window.parent.location.reload();return;}}catch(ignore){}'
+            . 'window.location.reload();}'
+    )
+        && str_contains(
+            $refresh,
+            'if(response.status===403||response.status===409){'
+                . 'reloadWorkspace();return false;}'
+        )
+        && str_contains($refresh, 'function incidentSignature(status)')
+        && str_contains(
+            $refresh,
+            'incident.getAttribute("data-estab-incident-state")'
+        )
+        && str_contains(
+            $refresh,
+            'incident.getAttribute("data-estab-incident-id")'
+        )
+        && str_contains(
+            $refresh,
+            '"[data-estab-incident-permission-mode]"'
+        )
+        && str_contains(
+            $refresh,
+            'if(incidentSignature(current)!==incidentSignature(fresh)){'
+                . 'reloadWorkspace();return false;}'
+        )
+        && substr_count($refresh, 'reloadWorkspace();return false;') === 2,
+    'sidebar keeps a stale write surface after incident/mode changes or rejected refreshes'
+);
+$assert(
     str_contains($refresh, 'var storageKey="estab.sidebar.sounds"')
         && str_contains(
             $refresh,
@@ -1180,6 +1215,66 @@ $assert(
     ],
     'sidebar requires an optional shift before exposing account actions'
 );
+
+$permissionContextKey = ESTAB_PERMISSION_CONTEXT_KEY;
+estab_permission_context_set_from_incident([
+    'active_einsatz_id' => 42,
+    'estab_permission_mode' => 'LOOSE',
+    'revision' => 8,
+]);
+$looseWriteKeys = [
+    'stab_schreiben',
+    'stab_korrekturen',
+    'stab_sichten',
+    'ldf_nachrichten',
+    'fm_eingang',
+    'fm_ausgang',
+];
+$looseStaffKeys = $workflowKeys(estab_sidebar_workflow_actions([
+    'rolle' => 'Stab',
+    'funktion' => 'S1',
+], 'ROLLE'));
+$looseRadioKeys = $workflowKeys(estab_sidebar_workflow_actions([
+    'rolle' => 'Fernmelder',
+    'funktion' => 'A/W',
+], 'ROLLE'));
+$looseViewerKeys = $workflowKeys(estab_sidebar_workflow_actions([
+    'rolle' => 'Stab',
+    'funktion' => 'Si',
+], 'ROLLE'));
+$looseAdminKeys = $workflowKeys(estab_sidebar_workflow_actions([
+    'rolle' => 'Administrator',
+    'funktion' => 'Admin',
+], 'ROLLE'));
+foreach (
+    [
+        'staff' => $looseStaffKeys,
+        'radio' => $looseRadioKeys,
+        'viewer' => $looseViewerKeys,
+        'admin' => $looseAdminKeys,
+    ] as $looseIdentityName => $looseKeys
+) {
+    $assert(
+        array_diff($looseWriteKeys, $looseKeys) === [],
+        'LOOSE sidebar omits a write operation for ' . $looseIdentityName
+    );
+}
+$assert(
+    in_array('stab_lesen', $looseStaffKeys, true)
+        && !in_array('fm_admin', $looseStaffKeys, true)
+        && !in_array('si_admin', $looseStaffKeys, true)
+        && in_array('fm_admin', $looseRadioKeys, true)
+        && !in_array('stab_lesen', $looseRadioKeys, true)
+        && !in_array('si_admin', $looseRadioKeys, true)
+        && in_array('si_admin', $looseViewerKeys, true)
+        && !in_array('stab_lesen', $looseViewerKeys, true)
+        && !in_array('fm_admin', $looseViewerKeys, true)
+        && !in_array('stab_lesen', $looseAdminKeys, true)
+        && !in_array('fm_admin', $looseAdminKeys, true)
+        && !in_array('si_admin', $looseAdminKeys, true),
+    'LOOSE sidebar widened read or second-sighting actions beyond the fixed account role'
+);
+unset($GLOBALS[$permissionContextKey]);
 $assertThrows(
     static fn (): array => estab_sidebar_workflow_actions([
         'rolle' => ['invalid'],

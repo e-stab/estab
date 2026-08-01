@@ -1362,6 +1362,95 @@ class Listen extends kategorien {
         $this->listen_navi () ;  //Navigationsbutton
       break;
 
+      case "KORREKTUR":
+        $incidentId = $this->required_incident_id ();
+        $messageConnection = estab_message_connect ($conf_4f_db);
+        try {
+          $identity = estab_read_session_identity ($_SESSION);
+          if ($identity === null) {
+            throw new EstabReadPermissionException ("Anmeldung erforderlich.");
+          }
+          $scope = estab_read_require_operational_scope (
+            $messageConnection,
+            $identity
+          );
+          $identity = $scope ["identity"];
+          estab_permission_context_set_from_incident ($scope ["incident"]);
+          if (
+            (int) $scope ["incident"] ["active_einsatz_id"] !== $incidentId
+            || estab_permission_role_checks_enforced ()
+          ) {
+            throw new EstabReadPermissionException (
+              "Die funktionsübergreifende Korrekturwarteschlange ist nur im lockeren Berechtigungsmodus verfügbar."
+            );
+          }
+          $result = estab_message_query_rows (
+            $messageConnection,
+            "SELECT m.*,".
+              estab_message_list_tbb_number_select_sql ("m").
+              " FROM ".estab_message_table ($conf_4f_tbl ["nachrichten"])." AS m".
+              " WHERE m.`einsatz_id` = ?".
+              " AND m.`x00_status` = 10".
+              " AND m.`04_richtung` = 'A'".
+              " AND m.`14_zeichen` <> ''".
+              " AND m.`14_funktion` <> ''".
+              " AND m.`02_zeit` IS NULL AND m.`02_zeichen` = ''".
+              " AND m.`03_datum` IS NULL AND m.`03_zeichen` = ''".
+              " AND m.`15_quitdatum` IS NOT NULL".
+              " AND m.`15_quitzeichen` <> ''".
+              " AND m.`x01_abschluss` = 'f'".
+              " ORDER BY ".
+              estab_message_priority_order_sql ("m.`09_vorrangstufe`").
+              " DESC, m.`12_abfzeit` ASC, m.`00_lfd` ASC",
+            array ($incidentId)
+          );
+          foreach ($result as $row) {
+            if (!estab_message_object_allowed (
+              $identity,
+              "staff-correction",
+              $row,
+              true
+            )) {
+              throw new LogicException (
+                "SQL/PHP visibility drift in correction queue"
+              );
+            }
+          }
+        } finally {
+          estab_auth_close ($messageConnection);
+        }
+
+        echo "<section class=\"estab-tool-panel\" data-estab-correction-queue ".
+             "aria-labelledby=\"estab-correction-queue-title\">";
+        echo "<header class=\"estab-tool-panel-heading\">";
+        echo "<h2 id=\"estab-correction-queue-title\">Zurückgewiesene Meldungen</h2>";
+        echo "<p>Diese Meldungen warten auf Überarbeitung. Im lockeren Modus ".
+             "kann jede angemeldete operative Funktion die Bearbeitung übernehmen.</p>";
+        echo "</header>";
+        if ($result === array ()) {
+          echo "<div class=\"estab-message-list-empty\">".
+               "<h3>Keine Korrekturen offen</h3>".
+               "<p>Aktuell wurde keine Ausgangsmeldung zur Überarbeitung zurückgegeben.</p>".
+               "</div>";
+        } else {
+          estab_message_list_render_table (
+            $result,
+            static function (array $row): void {
+              $recordId = estab_message_positive_id ($row ["00_lfd"] ?? null);
+              estab_list_detail_action (
+                "stab",
+                "korrektur",
+                $recordId,
+                "Korrektur übernehmen",
+                false,
+                true
+              );
+            }
+          );
+        }
+        echo "</section>";
+      break;
+
       case "Stab_sichten":   /*********** S t a b   s i c h t e n ************/
 			if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>fkt:createlist - switch(listenart) -- case (Stab_sichten) </b><br>";}
 			$incidentId = $this->required_incident_id ();

@@ -504,6 +504,8 @@ $assert(
         $listSource,
         '$visibility = estab_read_message_visibility_sql ($identity, "m")'
     )
+        && str_contains($listSource, '$expectedFunction')
+        && str_contains($listSource, '$expectedRole')
         && str_contains($listSource, '"SELECT COUNT(*) FROM ".$messageTable')
         && str_contains($listSource, '" LIMIT ? OFFSET ?"')
         && str_contains(
@@ -576,8 +578,10 @@ $assert(
 $assert(
     str_contains(
         $repositorySource,
-        'SELECT `14_zeichen`, `14_funktion`, `17_vermerke` FROM '
+        "'SELECT * FROM '"
     )
+        && str_contains($repositorySource, '$originalMessage = $originalStatement')
+        && str_contains($repositorySource, "' AND `x03_sperruser` = ? FOR UPDATE'")
         && str_contains(
             $repositorySource,
             "\$event['snapshot']['correction_note'] ="
@@ -728,6 +732,21 @@ $assert(
             'estab_message_staff_access_sql ("m")'
         ),
     'message writer still entity-encodes, concatenates writes or bypasses state ownership'
+);
+$assert(
+    str_contains($dataSource, 'function set_msg_read ($lfd, array $actor)')
+        && str_contains($dataSource, 'function unset_msg_read ($lfd, array $actor)')
+        && str_contains($dataSource, 'function set_msg_done ($lfd, array $actor)')
+        && str_contains($dataSource, 'function unset_msg_done ($lfd, array $actor)')
+        && str_contains($dataSource, 'function reset_record_lock ( $lfd, array $actor )')
+        && preg_match(
+            '/estab_message_release_operator_stage_lock\s*\(.*?'
+                . '\$stageStatus,\s*\$actor,\s*true\s*\)/s',
+            $dataSource
+        ) === 1
+        && substr_count($mainSource, '$workflowSelectedIdentity') >= 10
+        && substr_count($dataSource, '$messageActor') >= 10,
+    'controller wrappers do not carry the complete selected actor or force reset explicitly'
 );
 $assert(
     !str_contains($mainSource, 'SET x02_sperre =')

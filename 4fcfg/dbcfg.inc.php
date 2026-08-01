@@ -27,7 +27,8 @@ estab_operational_write_enforce(
     $conf_4f_db,
     isset($_SESSION) && is_array($_SESSION) ? $_SESSION : [],
     $_SERVER,
-    $_POST
+    $_POST,
+    $_GET
 );
 
 ?>

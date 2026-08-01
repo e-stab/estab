@@ -1272,6 +1272,53 @@ function estab_message_operator_stage_parameters(
 }
 
 /**
+ * Revalidate the account and the current incident's stage policy atomically.
+ *
+ * STRICT binds status 1 to LdF and outgoing status 2 to Fernmelder. LOOSE
+ * deliberately omits only that fixed function/role predicate; account,
+ * incident, optional access-shift and messenger-availability checks remain.
+ *
+ * @return array{benutzer:string,kuerzel:string,funktion:string,rolle:string}
+ */
+function estab_message_require_operator_stage_actor(
+    mysqli $connection,
+    array $incident,
+    array $actor,
+    string $direction,
+    int $status
+): array {
+    // Validate the closed direction/status vocabulary even in LOOSE.
+    estab_message_operator_stage_predicate($direction, $status);
+    $incidentId = (int) ($incident['active_einsatz_id'] ?? 0);
+    $operationalActor = estab_dv_require_operational_account(
+        $connection,
+        $incidentId,
+        $actor
+    );
+    if (!estab_incident_role_permissions_enforced($incident)) {
+        return $operationalActor;
+    }
+
+    $requiredFunction = $status === 1 ? 'LdF' : 'A/W';
+    if (
+        !hash_equals(
+            $requiredFunction,
+            (string) $operationalActor['funktion']
+        )
+        || !hash_equals(
+            'Fernmelder',
+            (string) $operationalActor['rolle']
+        )
+    ) {
+        throw new EstabDvPermissionException(
+            'Diese Nachrichtenstufe ist im strengen Berechtigungsmodus '
+                . 'der festgelegten Fernmeldefunktion vorbehalten.'
+        );
+    }
+    return $operationalActor;
+}
+
+/**
  * Acquire one exact LdF/A-W stage without allowing stale queue identifiers to
  * cross a workflow transition.
  */
@@ -1279,14 +1326,11 @@ function estab_message_acquire_operator_stage_lock(
     mysqli $connection,
     string $table,
     mixed $recordId,
-    string $operatorCode,
+    array $actor,
     string $direction,
     int $status
 ): bool {
     $recordId = estab_message_positive_id($recordId);
-    if (preg_match('/\A[a-z0-9_]{1,6}\z/D', $operatorCode) !== 1) {
-        throw new InvalidArgumentException('Invalid message lock owner');
-    }
     $stageSql = estab_message_operator_stage_predicate($direction, $status);
     $stageParameters = estab_message_operator_stage_parameters(
         $direction,
@@ -1299,11 +1343,21 @@ function estab_message_acquire_operator_stage_lock(
             $connection,
             $table,
             $recordId,
-            $operatorCode,
+            $actor,
+            $direction,
+            $status,
             $stageSql,
             $stageParameters
         ): bool {
             $incidentId = (int) $incident['active_einsatz_id'];
+            $operationalActor = estab_message_require_operator_stage_actor(
+                $connection,
+                $incident,
+                $actor,
+                $direction,
+                $status
+            );
+            $operatorCode = (string) $operationalActor['kuerzel'];
             $statement = estab_message_execute(
                 $connection,
                 'UPDATE ' . estab_message_table($table)
@@ -1407,7 +1461,7 @@ function estab_message_update_locked_operator_stage(
     mysqli $connection,
     string $table,
     mixed $recordId,
-    string $operatorCode,
+    array $actor,
     string $direction,
     int $status,
     array $fields,
@@ -1415,9 +1469,6 @@ function estab_message_update_locked_operator_stage(
     mixed $expectedIncidentId = null
 ): bool {
     $recordId = estab_message_positive_id($recordId);
-    if (preg_match('/\A[a-z0-9_]{1,6}\z/D', $operatorCode) !== 1) {
-        throw new InvalidArgumentException('Invalid message lock owner');
-    }
     $fields = estab_message_fields($fields);
     $stageSql = estab_message_operator_stage_predicate($direction, $status);
     $stageParameters = estab_message_operator_stage_parameters(
@@ -1431,7 +1482,7 @@ function estab_message_update_locked_operator_stage(
             $connection,
             $table,
             $recordId,
-            $operatorCode,
+            $actor,
             $direction,
             $status,
             $fields,
@@ -1444,6 +1495,16 @@ function estab_message_update_locked_operator_stage(
                 $incident,
                 $expectedIncidentId
             );
+            $operationalActor = estab_message_require_operator_stage_actor(
+                $connection,
+                $incident,
+                $actor,
+                $direction,
+                $status
+            );
+            $operatorCode = (string) $operationalActor['kuerzel'];
+            // Evidence and lock ownership are one authenticated identity.
+            $event['actor'] = $operationalActor;
             $incomingTbbCorrection = null;
             if ($direction === 'E' && $status === 1) {
                 if (
@@ -1902,22 +1963,17 @@ function estab_message_update_locked_operator_stage(
     );
 }
 
-/** Release one exact LdF/A-W stage; null owner is reserved for reset. */
+/** Release one exact LdF/A-W stage; force is reserved for an explicit reset. */
 function estab_message_release_operator_stage_lock(
     mysqli $connection,
     string $table,
     mixed $recordId,
     string $direction,
     int $status,
-    ?string $operatorCode = null
+    array $actor,
+    bool $force = false
 ): bool {
     $recordId = estab_message_positive_id($recordId);
-    if (
-        $operatorCode !== null
-        && preg_match('/\A[a-z0-9_]{1,6}\z/D', $operatorCode) !== 1
-    ) {
-        throw new InvalidArgumentException('Invalid message lock owner');
-    }
     $stageSql = estab_message_operator_stage_predicate($direction, $status);
     $stageParameters = estab_message_operator_stage_parameters(
         $direction,
@@ -1930,19 +1986,31 @@ function estab_message_release_operator_stage_lock(
             $connection,
             $table,
             $recordId,
-            $operatorCode,
+            $actor,
+            $direction,
+            $status,
+            $force,
             $stageSql,
             $stageParameters
         ): bool {
+            $incidentId = (int) $incident['active_einsatz_id'];
+            $operationalActor = estab_message_require_operator_stage_actor(
+                $connection,
+                $incident,
+                $actor,
+                $direction,
+                $status
+            );
+            $operatorCode = (string) $operationalActor['kuerzel'];
             $sql = 'UPDATE ' . estab_message_table($table)
                 . " SET `x02_sperre` = 'f', `x03_sperruser` = ''"
                 . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
                 . $stageSql;
             $parameters = array_merge(
-                [$recordId, (int) $incident['active_einsatz_id']],
+                [$recordId, $incidentId],
                 $stageParameters
             );
-            if ($operatorCode !== null) {
+            if (!$force) {
                 $sql .= " AND (`x02_sperre` = 'f' OR `x03_sperruser` = ?)";
                 $parameters[] = $operatorCode;
             }
@@ -1966,7 +2034,7 @@ function estab_message_release_operator_stage_lock(
                     . $stageSql
                     . " AND `x02_sperre` = 'f' AND `x03_sperruser` = ?",
                 array_merge(
-                    [$recordId, (int) $incident['active_einsatz_id']],
+                    [$recordId, $incidentId],
                     $stageParameters,
                     ['']
                 )
@@ -2055,9 +2123,9 @@ function estab_message_update_pending_review(
 /**
  * Resubmit one formally returned outgoing message under its staff function.
  *
- * Another account with the same fixed staff function may continue the task; a
- * different function may not. Old and new responsibility remain explicit in
- * the transition snapshot.
+ * STRICT permits another account only within the original staff function.
+ * LOOSE permits another operational function to take over the correction.
+ * Old and new responsibility remain explicit in the transition snapshot.
  */
 function estab_message_resubmit_returned_outgoing(
     mysqli $connection,
@@ -2092,6 +2160,22 @@ function estab_message_resubmit_returned_outgoing(
             'Returned-message responsibility does not match the actor'
         );
     }
+    $eventActor = $event['actor'] ?? null;
+    if (
+        !is_array($eventActor)
+        || !hash_equals(
+            $authorCode,
+            (string) ($eventActor['kuerzel'] ?? '')
+        )
+        || !hash_equals(
+            $authorFunction,
+            (string) ($eventActor['funktion'] ?? '')
+        )
+    ) {
+        throw new InvalidArgumentException(
+            'Returned-message evidence does not match the actor'
+        );
+    }
     return estab_incident_with_active_write(
         $connection,
         static function (array $incident) use (
@@ -2110,6 +2194,8 @@ function estab_message_resubmit_returned_outgoing(
                 $incident,
                 $expectedIncidentId
             );
+            $rolePermissionsEnforced =
+                estab_incident_role_permissions_enforced($incident);
             $fields = estab_message_bind_command_post(
                 $fields,
                 $incident,
@@ -2117,7 +2203,7 @@ function estab_message_resubmit_returned_outgoing(
             );
             $originalStatement = estab_message_execute(
                 $connection,
-                'SELECT `14_zeichen`, `14_funktion`, `17_vermerke` FROM '
+                'SELECT * FROM '
                     . estab_message_table($table)
                     . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
                     . " AND `04_richtung` = 'A' AND `x00_status` = 10"
@@ -2146,9 +2232,12 @@ function estab_message_resubmit_returned_outgoing(
             }
             if (
                 !is_array($originalMessage)
-                || !hash_equals(
-                    (string) ($originalMessage['14_funktion'] ?? ''),
-                    $authorFunction
+                || (
+                    $rolePermissionsEnforced
+                    && !hash_equals(
+                        (string) ($originalMessage['14_funktion'] ?? ''),
+                        $authorFunction
+                    )
                 )
             ) {
                 return false;
@@ -2180,7 +2269,8 @@ function estab_message_resubmit_returned_outgoing(
                     $attachmentAuthorizer(
                         $connection,
                         $incidentId,
-                        $fields['12_anhang']
+                        $fields['12_anhang'],
+                        $originalMessage
                     );
                 }
             }
@@ -2189,13 +2279,29 @@ function estab_message_resubmit_returned_outgoing(
             foreach (array_keys($fields) as $column) {
                 $assignments[] = '`' . $column . '` = ?';
             }
+            $updateParameters = array_merge(
+                array_values($fields),
+                [
+                    $recordId,
+                    (int) $incident['active_einsatz_id'],
+                ]
+            );
+            $authorPredicate = '';
+            if ($rolePermissionsEnforced) {
+                $authorPredicate = ' AND `14_funktion` = ?';
+                $updateParameters[] = $authorFunction;
+            }
+            $updateParameters = array_merge(
+                $updateParameters,
+                ['', '', '', '']
+            );
             $statement = estab_message_execute(
                 $connection,
                 'UPDATE ' . estab_message_table($table)
                     . ' SET ' . implode(', ', $assignments)
                     . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
                     . " AND `04_richtung` = 'A' AND `x00_status` = 10"
-                    . ' AND `14_funktion` = ?'
+                    . $authorPredicate
                     . ' AND `02_zeit` IS NULL AND `02_zeichen` = ?'
                     . ' AND `03_datum` IS NULL AND `03_zeichen` = ?'
                     . ' AND `15_quitdatum` IS NOT NULL'
@@ -2203,18 +2309,7 @@ function estab_message_resubmit_returned_outgoing(
                     . " AND `x01_abschluss` = 'f'"
                     . " AND `x02_sperre` = 'f'"
                     . ' AND `x03_sperruser` = ?',
-                array_merge(
-                    array_values($fields),
-                    [
-                        $recordId,
-                        (int) $incident['active_einsatz_id'],
-                        $authorFunction,
-                        '',
-                        '',
-                        '',
-                        '',
-                    ]
-                )
+                $updateParameters
             );
             try {
                 if ($statement->affected_rows !== 1) {
@@ -2689,7 +2784,7 @@ function estab_message_state_set_for_recipient(
     string $messageTable,
     string $stateTable,
     mixed $recordId,
-    string $function,
+    array $actor,
     string $state,
     string $timestamp
 ): bool {
@@ -2699,7 +2794,6 @@ function estab_message_state_set_for_recipient(
         'done' => 'erledigt',
         default => throw new InvalidArgumentException('Invalid message state'),
     };
-    $recipientPattern = estab_message_recipient_pattern($function);
     return estab_incident_with_active_write(
         $connection,
         static function (array $incident) use (
@@ -2709,10 +2803,16 @@ function estab_message_state_set_for_recipient(
             $recordId,
             $dateColumn,
             $timestamp,
-            $recipientPattern,
-            $function
+            $actor
         ): bool {
             $incidentId = (int) $incident['active_einsatz_id'];
+            $operationalActor = estab_dv_require_operational_account(
+                $connection,
+                $incidentId,
+                $actor
+            );
+            $function = (string) $operationalActor['funktion'];
+            $recipientPattern = estab_message_recipient_pattern($function);
             $lockName = estab_message_acquire_state_lock(
                 $connection,
                 $stateTable,
@@ -2781,10 +2881,9 @@ function estab_message_state_unset_for_recipient(
     string $messageTable,
     string $stateTable,
     mixed $recordId,
-    string $function
+    array $actor
 ): bool {
     $recordId = estab_message_positive_id($recordId);
-    $recipientPattern = estab_message_recipient_pattern($function);
     return estab_incident_with_active_write(
         $connection,
         static function (array $incident) use (
@@ -2792,10 +2891,16 @@ function estab_message_state_unset_for_recipient(
             $messageTable,
             $stateTable,
             $recordId,
-            $recipientPattern,
-            $function
+            $actor
         ): bool {
             $incidentId = (int) $incident['active_einsatz_id'];
+            $operationalActor = estab_dv_require_operational_account(
+                $connection,
+                $incidentId,
+                $actor
+            );
+            $function = (string) $operationalActor['funktion'];
+            $recipientPattern = estab_message_recipient_pattern($function);
             $lockName = estab_message_acquire_state_lock(
                 $connection,
                 $stateTable,
@@ -2890,20 +2995,49 @@ function estab_message_is_recipient(array $message, string $function): bool
     return false;
 }
 
+/** Return whether LOOSE may replace only this operation's fixed role gate. */
+function estab_message_operation_relaxes_write_role(string $operation): bool
+{
+    return in_array($operation, [
+        'staff-state',
+        'staff-correction',
+        'telecommunications-lead-edit',
+        'telecommunications-lead-incoming-save',
+        'telecommunications-lead-outgoing-save',
+        'telecommunications-edit',
+        'telecommunications-save',
+        'viewer-review',
+        'telecommunications-reset',
+        'message-operator-reset',
+    ], true);
+}
+
 /** Pure object-level route decision used after the role gate. */
 function estab_message_object_allowed(
     array $identity,
     string $operation,
-    array $message
+    array $message,
+    bool $allowLooseWriteMode = false
 ): bool {
-    $isTelecommunications = ($identity['funktion'] ?? '') === 'A/W'
-        && ($identity['rolle'] ?? '') === 'Fernmelder';
-    $isTelecommunicationsLead = ($identity['funktion'] ?? '') === 'LdF'
-        && ($identity['rolle'] ?? '') === 'Fernmelder';
-    $isViewer = ($identity['funktion'] ?? '') === 'Si'
-        && ($identity['rolle'] ?? '') === 'Stab';
-    $isStaff = ($identity['funktion'] ?? '') !== 'Si'
-        && in_array(($identity['rolle'] ?? ''), ['Stab', 'FB'], true);
+    $rolesRelaxed = $allowLooseWriteMode
+        && estab_message_operation_relaxes_write_role($operation)
+        && !estab_permission_role_checks_enforced();
+    $isTelecommunications = $rolesRelaxed || (
+        ($identity['funktion'] ?? '') === 'A/W'
+        && ($identity['rolle'] ?? '') === 'Fernmelder'
+    );
+    $isTelecommunicationsLead = $rolesRelaxed || (
+        ($identity['funktion'] ?? '') === 'LdF'
+        && ($identity['rolle'] ?? '') === 'Fernmelder'
+    );
+    $isViewer = $rolesRelaxed || (
+        ($identity['funktion'] ?? '') === 'Si'
+        && ($identity['rolle'] ?? '') === 'Stab'
+    );
+    $isStaff = $rolesRelaxed || (
+        ($identity['funktion'] ?? '') !== 'Si'
+        && in_array(($identity['rolle'] ?? ''), ['Stab', 'FB'], true)
+    );
     $status = filter_var(
         $message['x00_status'] ?? null,
         FILTER_VALIDATE_INT
@@ -2959,9 +3093,12 @@ function estab_message_object_allowed(
         && $direction === 'A'
         && (string) ($message['14_zeichen'] ?? '') !== ''
         && (string) ($message['14_funktion'] ?? '') !== ''
-        && hash_equals(
-            (string) ($message['14_funktion'] ?? ''),
-            (string) ($identity['funktion'] ?? '')
+        && (
+            $rolesRelaxed
+            || hash_equals(
+                (string) ($message['14_funktion'] ?? ''),
+                (string) ($identity['funktion'] ?? '')
+            )
         )
         && estab_datetime_is_unset($message['02_zeit'] ?? null)
         && (string) ($message['02_zeichen'] ?? '') === ''

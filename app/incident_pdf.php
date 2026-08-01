@@ -1257,6 +1257,9 @@ final class EstabIncidentPdf extends vordruckaspdf
             'Ort' => $incident['ort'] ?? '',
             'Organisation' => $incident['organisation'] ?? '',
             'Führungsstelle' => estab_incident_pdf_command_post_label($incident),
+            'Berechtigungsmodus' => estab_permission_mode_label(
+                $incident['estab_permission_mode'] ?? null
+            ),
             'Einsatzleitung' => $incident['einsatzleitung'] ?? '',
             'Beschreibung' => $incident['beschreibung'] ?? '',
         ] as $label => $value) {

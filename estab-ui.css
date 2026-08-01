@@ -1863,6 +1863,11 @@ audio[data-estab-sidebar-audio] {
     justify-self: end;
 }
 
+.estab-incident-indicator [data-estab-incident-permission-mode] {
+    grid-column: 1 / -1;
+    justify-self: start;
+}
+
 .estab-incident-indicator-active {
     background: #163c2a;
     border-color: #4fbd7a;
@@ -1871,6 +1876,16 @@ audio[data-estab-sidebar-audio] {
 
 .estab-incident-indicator-active .estab-incident-indicator-label {
     color: #9ee0b7;
+}
+
+.estab-incident-indicator-permission-loose {
+    background: #5a3a0d;
+    border-color: #f0b429;
+    color: #fff9e8;
+}
+
+.estab-incident-indicator-permission-loose .estab-incident-indicator-label {
+    color: #ffe19a;
 }
 
 .estab-incident-indicator-alert {

@@ -1689,7 +1689,56 @@ SELECT
        AND CHAR_LENGTH(`updated_by`) BETWEEN 1 AND 128
        AND `updated_by` NOT REGEXP _utf8mb4'(*UCP)\\p{C}') = 1)
        AS `self_registration_policy_ok`,
-  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 20
+  ((SELECT COUNT(*)
+      FROM information_schema.columns
+     WHERE table_schema = DATABASE()
+       AND table_name = 'nv_einsaetze'
+       AND column_name = 'estab_permission_mode'
+       AND data_type = 'enum'
+       AND column_type = 'enum(''STRICT'',''LOOSE'')'
+       AND character_set_name = 'ascii'
+       AND collation_name = 'ascii_bin'
+       AND is_nullable = 'NO'
+       AND column_default = '''STRICT'''
+       AND extra = ''
+       AND column_comment =
+         'estab:migration:115:incident-permission-mode:v1') = 1
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.triggers
+     WHERE trigger_schema = DATABASE()
+       AND (
+         (trigger_name = 'estab_permission_mode_incident_insert'
+          AND event_object_table = 'nv_einsaetze'
+          AND action_timing = 'BEFORE'
+          AND event_manipulation = 'INSERT'
+          AND action_statement LIKE
+            '%Loose incident creation requires the audited application path%')
+         OR
+         (trigger_name = 'estab_permission_mode_incident_update'
+          AND event_object_table = 'nv_einsaetze'
+          AND action_timing = 'BEFORE'
+          AND event_manipulation = 'UPDATE'
+          AND action_statement LIKE
+            '%Direct incident permission-mode manipulation is blocked%')
+         OR
+         (trigger_name IN (
+            'estab_etb_bi_einsatz',
+            'estab_tbb_bi_einsatz',
+            'estab_dv94_fernmeldeplan_insert',
+            'estab_dv94_fernmeldeplan_immutable',
+            'estab_dv94_messenger_insert',
+            'estab_dv94_messenger_update'
+          )
+          AND action_statement LIKE '%estab_permission_mode%')
+       )) = 8
+   AND
+   (SELECT COUNT(*) FROM `nv_einsaetze`
+     WHERE BINARY `estab_permission_mode` NOT IN (
+       BINARY 'STRICT', BINARY 'LOOSE'
+     )) = 0)
+       AS `incident_permission_mode_ok`,
+  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 21
    AND
    (SELECT COUNT(*)
       FROM `estab_schema_migrations`
@@ -1713,10 +1762,11 @@ SELECT
        '111-logbook-shift-assignment.sql',
        '112-optional-access-shifts.sql',
        '113-password-policy.sql',
-       '114-self-registration-policy.sql'
+       '114-self-registration-policy.sql',
+       '115-incident-permission-mode.sql'
      )
        AND `state` = 'applied'
-       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 20)
+       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 21)
        AS `schema_migrations_ok`;
 
 SELECT `table_name`, `engine`, `table_collation`

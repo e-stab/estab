@@ -56,6 +56,7 @@ if ($requestMethod === 'POST') {
         }
         $connection = estab_auth_connect($conf_4f_db);
         $incident = estab_incident_require_active($connection);
+        estab_permission_context_set_from_incident($incident);
         $incidentId = (int) $incident['active_einsatz_id'];
         if ($action === 'create_plan') {
             estab_dv_create_telecom_plan(
@@ -174,6 +175,7 @@ try {
     $connection = estab_auth_connect($conf_4f_db);
     $status = estab_incident_status($connection);
     if ($status['active_einsatz_id'] !== null) {
+        estab_permission_context_set_from_incident($status);
         $incidentId = (int) $status['active_einsatz_id'];
         $code = (string) $identity['kuerzel'];
         $readScope = estab_read_require_operational_scope(
@@ -182,21 +184,21 @@ try {
         );
         $selectedIdentity = $readScope['identity'];
         $operationIdentity = $selectedIdentity;
-        $isS6 = estab_dv_has_account_capability(
+        $isS6 = estab_dv_has_write_capability(
             $connection,
             $incidentId,
             $selectedIdentity,
             'FERNMELDEPLANUNG',
             false
         );
-        $isLdf = estab_dv_has_account_capability(
+        $isLdf = estab_dv_has_write_capability(
             $connection,
             $incidentId,
             $selectedIdentity,
             'FERNMELDEBETRIEB',
             false
         );
-        $isAw = estab_dv_has_account_capability(
+        $isAw = estab_dv_has_write_capability(
             $connection,
             $incidentId,
             $selectedIdentity,
@@ -290,8 +292,9 @@ foreach ($plans as $plan) {
     <p class="estab-tool-eyebrow">Einsatzführung · DV 1-101</p>
     <h1>Führungsstellenbetrieb</h1>
     <p>Den Fernmeldeplan als S6 führen und Melderaufträge lückenlos
-      nachweisen. Die angezeigten Rechte folgen Ihrer fest zugewiesenen
-      Kontofunktion.</p>
+      nachweisen. Fachliche Schreibaktionen folgen dem am Einsatz
+      festgelegten Berechtigungsmodus; Anmeldung, Einsatzbezug,
+      Melder-Eignung und Nachweise bleiben verbindlich.</p>
   </header>
 
   <section class="estab-tool-status estab-tool-status-active

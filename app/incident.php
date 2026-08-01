@@ -16,6 +16,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/attachment_integrity.php';
 require_once __DIR__ . '/logbook_lifecycle.php';
+require_once __DIR__ . '/permission_mode.php';
 
 const ESTAB_INCIDENT_IDENTIFIER_MAX_LENGTH = 64;
 const ESTAB_INCIDENT_NAME_MAX_LENGTH = 255;
@@ -25,6 +26,36 @@ const ESTAB_INCIDENT_DESCRIPTION_MAX_LENGTH = 10000;
 const ESTAB_INCIDENT_METADATA_MAX_BYTES = 65535;
 const ESTAB_INCIDENT_CLOSE_NOTE_MAX_LENGTH = 10000;
 const ESTAB_INCIDENT_LEGAL_HOLD_REASON_MAX_LENGTH = 1000;
+
+/** Parse the per-incident write-permission mode for a form/domain boundary. */
+function estab_incident_permission_mode(
+    mixed $value,
+    bool $defaultStrict = false
+): string {
+    try {
+        return estab_permission_mode($value, $defaultStrict);
+    } catch (InvalidArgumentException $exception) {
+        throw new EstabIncidentInputException(
+            'Der Berechtigungsmodus ist ungültig.',
+            previous: $exception
+        );
+    }
+}
+
+/** Return whether fixed function/role write permissions remain enforced. */
+function estab_incident_role_permissions_enforced(array $incident): bool
+{
+    try {
+        return estab_permission_mode(
+            $incident['estab_permission_mode'] ?? null
+        ) === ESTAB_PERMISSION_MODE_STRICT;
+    } catch (InvalidArgumentException $exception) {
+        throw new EstabIncidentConfigurationException(
+            'Der Berechtigungsmodus des Einsatzes ist ungültig.',
+            previous: $exception
+        );
+    }
+}
 
 final class EstabIncidentInputException extends InvalidArgumentException
 {
@@ -339,6 +370,10 @@ function estab_incident_validate_create(array $input): array
 
     return [
         'kennung' => estab_incident_identifier($input['kennung'] ?? null),
+        'estab_permission_mode' => estab_incident_permission_mode(
+            $input['estab_permission_mode'] ?? null,
+            true
+        ),
         'name' => estab_incident_text(
             $input['name'] ?? null,
             'Einsatzname',
@@ -434,6 +469,7 @@ function estab_incident_status(mysqli $connection, bool $forUpdate = false): arr
 {
     $sql = 'SELECT s.`active_einsatz_id`, s.`revision`, s.`geaendert_am`,'
         . ' s.`geaendert_von`, e.`kennung`, e.`name`, e.`beginn`, e.`ende`,'
+        . ' e.`estab_permission_mode`,'
         . ' e.`ort`, e.`organisation`, e.`fuehrungsstellenname`,'
         . ' e.`fuehrungsstellenname_gesperrt`,'
         . ' e.`einsatzleitung`, e.`beschreibung`,'
@@ -477,6 +513,16 @@ function estab_incident_status(mysqli $connection, bool $forUpdate = false): arr
         );
         $row['fuehrungsstellenname_gesperrt'] =
             (int) ($row['fuehrungsstellenname_gesperrt'] ?? -1);
+        try {
+            $row['estab_permission_mode'] = estab_permission_mode(
+                $row['estab_permission_mode'] ?? null
+            );
+        } catch (InvalidArgumentException $exception) {
+            throw new EstabIncidentConfigurationException(
+                'Der Berechtigungsmodus des aktiven Einsatzes ist ungültig.',
+                previous: $exception
+            );
+        }
     }
     return $row;
 }
@@ -516,6 +562,12 @@ function estab_incident_with_active_write(
     }
     try {
         $incident = estab_incident_require_active($connection, true);
+        if (!estab_permission_context_matches_incident($incident)) {
+            throw new EstabIncidentConflictException(
+                'Der aktive Einsatz oder sein Berechtigungsmodus wurde '
+                . 'zwischenzeitlich geändert.'
+            );
+        }
         estab_incident_lock_command_post_for_write($connection, $incident);
         $result = $operation($incident);
         if (!$connection->commit()) {
@@ -533,6 +585,7 @@ function estab_incident_list(mysqli $connection): array
 {
     $result = $connection->query(
         'SELECT e.`einsatz_id`, e.`kennung`, e.`name`, e.`beginn`, e.`ende`,'
+        . ' e.`estab_permission_mode`,'
         . ' e.`ort`, e.`organisation`, e.`fuehrungsstellenname`,'
         . ' e.`fuehrungsstellenname_gesperrt`,'
         . ' e.`einsatzleitung`, e.`beschreibung`,'
@@ -570,6 +623,16 @@ function estab_incident_list(mysqli $connection): array
         $row['logbuchkopf_gesperrt'] =
             (int) ($row['logbuchkopf_gesperrt'] ?? 1) === 1;
         $row['estab_legal_hold'] = (int) ($row['estab_legal_hold'] ?? 0) === 1;
+        try {
+            $row['estab_permission_mode'] = estab_permission_mode(
+                $row['estab_permission_mode'] ?? null
+            );
+        } catch (InvalidArgumentException $exception) {
+            throw new EstabIncidentConfigurationException(
+                'Ein Einsatz besitzt einen ungültigen Berechtigungsmodus.',
+                previous: $exception
+            );
+        }
     }
     unset($row);
     return $rows;
@@ -581,6 +644,7 @@ function estab_incident_find(mysqli $connection, int $incidentId): ?array
     $incidentId = estab_incident_positive_id($incidentId);
     $statement = $connection->prepare(
         'SELECT e.`einsatz_id`, e.`kennung`, e.`name`, e.`beginn`, e.`ende`,'
+        . ' e.`estab_permission_mode`,'
         . ' e.`ort`, e.`organisation`, e.`fuehrungsstellenname`,'
         . ' e.`fuehrungsstellenname_gesperrt`,'
         . ' e.`einsatzleitung`, e.`beschreibung`,'
@@ -617,6 +681,16 @@ function estab_incident_find(mysqli $connection, int $incidentId): ?array
     $row['fuehrungsstellenname_gesperrt'] =
         (int) ($row['fuehrungsstellenname_gesperrt'] ?? -1);
     $row['estab_legal_hold'] = (int) ($row['estab_legal_hold'] ?? 0) === 1;
+    try {
+        $row['estab_permission_mode'] = estab_permission_mode(
+            $row['estab_permission_mode'] ?? null
+        );
+    } catch (InvalidArgumentException $exception) {
+        throw new EstabIncidentConfigurationException(
+            'Der Einsatz besitzt einen ungültigen Berechtigungsmodus.',
+            previous: $exception
+        );
+    }
     return $row;
 }
 
@@ -625,6 +699,7 @@ function estab_incident_fetch_for_update(mysqli $connection, int $incidentId): a
 {
     $statement = $connection->prepare(
         'SELECT `einsatz_id`, `kennung`, `name`, `beginn`, `ende`, `ort`,'
+        . ' `estab_permission_mode`,'
         . ' `organisation`, `fuehrungsstellenname`,'
         . ' `fuehrungsstellenname_gesperrt`, `einsatzleitung`, `beschreibung`,'
         . ' `estab_status`, `estab_closed_at`, `estab_closed_by`,'
@@ -652,6 +727,16 @@ function estab_incident_fetch_for_update(mysqli $connection, int $incidentId): a
     }
     $row['fuehrungsstellenname_gesperrt'] =
         (int) ($row['fuehrungsstellenname_gesperrt'] ?? -1);
+    try {
+        $row['estab_permission_mode'] = estab_permission_mode(
+            $row['estab_permission_mode'] ?? null
+        );
+    } catch (InvalidArgumentException $exception) {
+        throw new EstabIncidentConfigurationException(
+            'Der Einsatz besitzt einen ungültigen Berechtigungsmodus.',
+            previous: $exception
+        );
+    }
     return $row;
 }
 
@@ -1044,6 +1129,174 @@ function estab_incident_update_logbook_header(
 }
 
 /**
+ * Change one open incident's write-permission mode with global serialization.
+ *
+ * The singleton status lock uses the same lock order as activation and every
+ * operational write. Its revision also provides stale-form and ABA protection
+ * for inactive incidents without introducing a second revision authority.
+ */
+function estab_incident_update_permission_mode(
+    mysqli $connection,
+    int $incidentId,
+    mixed $value,
+    mixed $expectedValue,
+    int $expectedRevision,
+    string $actor,
+    bool $confirmedLoose = false
+): array {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $mode = estab_incident_permission_mode($value);
+    $expectedMode = estab_incident_permission_mode($expectedValue);
+    $expectedRevision = estab_incident_revision($expectedRevision);
+    $actor = estab_incident_actor($actor);
+    if (!$connection->begin_transaction()) {
+        throw new RuntimeException(
+            'Berechtigungsmodus konnte nicht geändert werden.'
+        );
+    }
+    try {
+        $status = estab_incident_status($connection, true);
+        if ((int) $status['revision'] !== $expectedRevision) {
+            throw new EstabIncidentConflictException(
+                'Der Einsatzstatus wurde zwischenzeitlich geändert.'
+            );
+        }
+        $incident = estab_incident_fetch_for_update($connection, $incidentId);
+        if (($incident['estab_status'] ?? null) !== 'open') {
+            throw new EstabIncidentConflictException(
+                'Ein formal abgeschlossener Einsatz kann nicht geändert werden.'
+            );
+        }
+        $currentMode = estab_permission_mode(
+            $incident['estab_permission_mode'] ?? null
+        );
+        if (!hash_equals($currentMode, $expectedMode)) {
+            throw new EstabIncidentConflictException(
+                'Der Berechtigungsmodus wurde zwischenzeitlich geändert.'
+            );
+        }
+        if (hash_equals($currentMode, $mode)) {
+            if (!$connection->commit()) {
+                throw new RuntimeException(
+                    'Berechtigungsmodus konnte nicht bestätigt werden.'
+                );
+            }
+            $incident['revision'] = $expectedRevision;
+            return $incident;
+        }
+        if (
+            $mode === ESTAB_PERMISSION_MODE_LOOSE
+            && !$confirmedLoose
+        ) {
+            throw new EstabIncidentInputException(
+                'Bestätigen Sie ausdrücklich die einsatzweite Erweiterung '
+                . 'der Schreibrechte.'
+            );
+        }
+        if ($expectedRevision >= PHP_INT_MAX) {
+            throw new EstabIncidentConfigurationException(
+                'Die globale Einsatzrevision ist ausgeschöpft.'
+            );
+        }
+        $nextRevision = $expectedRevision + 1;
+        if (!$connection->query(
+            'SET @estab_permission_mode_admin_write_id = ' . $incidentId
+        )) {
+            throw new RuntimeException(
+                'Berechtigungsmodus konnte nicht autorisiert werden.'
+            );
+        }
+        $statement = $connection->prepare(
+            'UPDATE `nv_einsaetze` SET `estab_permission_mode` = ?'
+            . ' WHERE `einsatz_id` = ? AND `estab_status` = ?'
+            . ' AND BINARY `estab_permission_mode` = BINARY ?'
+        );
+        if (!$statement) {
+            $connection->query(
+                'SET @estab_permission_mode_admin_write_id = NULL'
+            );
+            throw new RuntimeException(
+                'Berechtigungsmodus konnte nicht vorbereitet werden.'
+            );
+        }
+        $open = 'open';
+        try {
+            $statement->bind_param(
+                'siss',
+                $mode,
+                $incidentId,
+                $open,
+                $expectedMode
+            );
+            if (
+                !$statement->execute()
+                || $statement->affected_rows !== 1
+            ) {
+                throw new EstabIncidentConflictException(
+                    'Der Berechtigungsmodus wurde zwischenzeitlich geändert.'
+                );
+            }
+        } finally {
+            $statement->close();
+            $connection->query(
+                'SET @estab_permission_mode_admin_write_id = NULL'
+            );
+        }
+        $statusStatement = $connection->prepare(
+            'UPDATE `nv_einsatz_status`'
+            . ' SET `revision` = ?, `geaendert_am` = NOW(6),'
+            . ' `geaendert_von` = ?'
+            . ' WHERE `singleton_id` = 1 AND `revision` = ?'
+        );
+        if (!$statusStatement) {
+            throw new RuntimeException(
+                'Einsatzrevision konnte nicht vorbereitet werden.'
+            );
+        }
+        try {
+            $statusStatement->bind_param(
+                'isi',
+                $nextRevision,
+                $actor,
+                $expectedRevision
+            );
+            if (
+                !$statusStatement->execute()
+                || $statusStatement->affected_rows !== 1
+            ) {
+                throw new EstabIncidentConflictException(
+                    'Der Einsatzstatus wurde zwischenzeitlich geändert.'
+                );
+            }
+        } finally {
+            $statusStatement->close();
+        }
+        estab_incident_audit(
+            $connection,
+            $incidentId,
+            'berechtigung_geaendert',
+            $actor,
+            $nextRevision,
+            ['vorher' => $currentMode, 'nachher' => $mode]
+        );
+        if (!$connection->commit()) {
+            throw new RuntimeException(
+                'Berechtigungsmodus konnte nicht gespeichert werden.'
+            );
+        }
+        $incident['estab_permission_mode'] = $mode;
+        $incident['revision'] = $nextRevision;
+        return $incident;
+    } catch (Throwable $exception) {
+        $connection->query(
+            'SET @estab_permission_mode_admin_write_id = NULL'
+        );
+        $connection->rollback();
+        throw $exception;
+    }
+}
+
+/**
  * Activate an incident after the status row has already been locked.
  *
  * The submitted revision prevents a stale browser tab from replacing a newer
@@ -1054,7 +1307,8 @@ function estab_incident_activate_locked(
     array $status,
     int $incidentId,
     int $expectedRevision,
-    string $actor
+    string $actor,
+    bool $confirmedLoose = false
 ): array {
     if ((int) $status['revision'] !== $expectedRevision) {
         throw new EstabIncidentConflictException(
@@ -1065,6 +1319,15 @@ function estab_incident_activate_locked(
     if (($target['estab_status'] ?? null) !== 'open') {
         throw new EstabIncidentConflictException(
             'Ein formal abgeschlossener Einsatz kann nicht aktiviert werden.'
+        );
+    }
+    if (
+        !estab_incident_role_permissions_enforced($target)
+        && !$confirmedLoose
+    ) {
+        throw new EstabIncidentInputException(
+            'Bestätigen Sie vor der Aktivierung ausdrücklich den lockeren '
+            . 'Berechtigungsmodus.'
         );
     }
     estab_incident_command_post_name($target);
@@ -1108,7 +1371,10 @@ function estab_incident_activate_locked(
         'aktiviert',
         $actor,
         $nextRevision,
-        ['vorheriger_einsatz_id' => $status['active_einsatz_id']]
+        [
+            'vorheriger_einsatz_id' => $status['active_einsatz_id'],
+            'berechtigungsmodus' => $target['estab_permission_mode'],
+        ]
     );
     $activated = estab_incident_status($connection);
     estab_logbook_lifecycle_open_books_if_empty($connection, $activated);
@@ -1121,9 +1387,19 @@ function estab_incident_create(
     array $input,
     string $actor,
     bool $activate,
-    ?int $expectedRevision = null
+    ?int $expectedRevision = null,
+    bool $confirmedLoose = false
 ): array {
     $data = estab_incident_validate_create($input);
+    if (
+        $data['estab_permission_mode'] === ESTAB_PERMISSION_MODE_LOOSE
+        && !$confirmedLoose
+    ) {
+        throw new EstabIncidentInputException(
+            'Bestätigen Sie ausdrücklich die einsatzweite Erweiterung der '
+            . 'Schreibrechte.'
+        );
+    }
     $actor = estab_incident_actor($actor);
     if ($activate && $expectedRevision === null) {
         throw new EstabIncidentInputException(
@@ -1148,20 +1424,35 @@ function estab_incident_create(
 
         $statement = $connection->prepare(
             'INSERT INTO `nv_einsaetze`'
-            . ' (`kennung`, `name`, `beginn`, `ende`, `ort`, `organisation`,'
+            . ' (`kennung`, `name`, `estab_permission_mode`, `beginn`, `ende`,'
+            . ' `ort`, `organisation`,'
             . ' `fuehrungsstellenname`, `einsatzleitung`, `beschreibung`,'
             . ' `metadaten`,'
             . ' `erstellt_am`, `erstellt_von`)'
-            . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(6), ?)'
+            . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(6), ?)'
         );
         if (!$statement) {
             throw new RuntimeException('Einsatz konnte nicht vorbereitet werden.');
         }
+        $permissionCreateMarkerSet = false;
         try {
+            if (
+                $data['estab_permission_mode'] === ESTAB_PERMISSION_MODE_LOOSE
+                && !$connection->query(
+                    'SET @estab_permission_mode_create_write = 1'
+                )
+            ) {
+                throw new RuntimeException(
+                    'Berechtigungsmodus konnte nicht autorisiert werden.'
+                );
+            }
+            $permissionCreateMarkerSet =
+                $data['estab_permission_mode'] === ESTAB_PERMISSION_MODE_LOOSE;
             $statement->bind_param(
-                'sssssssssss',
+                'ssssssssssss',
                 $data['kennung'],
                 $data['name'],
+                $data['estab_permission_mode'],
                 $data['beginn'],
                 $data['ende'],
                 $data['ort'],
@@ -1182,6 +1473,11 @@ function estab_incident_create(
             }
             $incidentId = (int) $connection->insert_id;
         } finally {
+            if ($permissionCreateMarkerSet) {
+                $connection->query(
+                    'SET @estab_permission_mode_create_write = NULL'
+                );
+            }
             $statement->close();
         }
         if ($incidentId < 1) {
@@ -1197,6 +1493,7 @@ function estab_incident_create(
             [
                 'kennung' => $data['kennung'],
                 'fuehrungsstellenname' => $data['fuehrungsstellenname'],
+                'berechtigungsmodus' => $data['estab_permission_mode'],
             ]
         );
         if ($activate) {
@@ -1205,7 +1502,8 @@ function estab_incident_create(
                 $status,
                 $incidentId,
                 (int) $expectedRevision,
-                $actor
+                $actor,
+                $confirmedLoose
             );
         }
         if (!$connection->commit()) {
@@ -1217,6 +1515,7 @@ function estab_incident_create(
             'name' => $data['name'],
             'fuehrungsstellenname' => $data['fuehrungsstellenname'],
             'fuehrungsstellenname_gesperrt' => 0,
+            'estab_permission_mode' => $data['estab_permission_mode'],
             'aktiv' => $activate,
             'status_revision' => $activate ? $status['revision'] : null,
         ];
@@ -1241,7 +1540,8 @@ function estab_incident_activate(
     mysqli $connection,
     int $incidentId,
     int $expectedRevision,
-    string $actor
+    string $actor,
+    bool $confirmedLoose = false
 ): array {
     $incidentId = estab_incident_positive_id($incidentId);
     $expectedRevision = estab_incident_revision($expectedRevision);
@@ -1256,7 +1556,8 @@ function estab_incident_activate(
             $status,
             $incidentId,
             $expectedRevision,
-            $actor
+            $actor,
+            $confirmedLoose
         );
         if (!$connection->commit()) {
             throw new RuntimeException('Aktivierung konnte nicht gespeichert werden.');

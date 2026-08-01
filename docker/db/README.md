@@ -267,8 +267,8 @@ Prüfsumme unverändert. Migration 55 stellt die kanonischen Attribute wieder
 her. `migrations/70-user-account-blocking.sql` ergänzt anschließend die
 dauerhafte, kollisionsgeprüfte Kontosperre.
 
-Der aktuelle Ledger umfasst zwanzig checksumgebundene Migrationen bis
-`migrations/114-self-registration-policy.sql`. Migration 110 führt die
+Der aktuelle Ledger umfasst einundzwanzig checksumgebundene Migrationen bis
+`migrations/115-incident-permission-mode.sql`. Migration 110 führt die
 einsatzlokalen ETB-/TTB-Nummern, Buchköpfe, strukturierten TBB-Inhalt,
 Append-only-Regeln und zehnjährige Aufbewahrungsuntergrenze ein. Migration 111
 ergänzt nullable Schicht-/Schreiberfremdschlüssel für beide Bücher und die
@@ -339,9 +339,27 @@ beschriebene checksumgebundene Fresh-Marker autorisiert den Runner, ihre noch
 pristine Startzeile atomar auf den sicheren Neuinstallationsdefault
 `DISABLED` zu setzen.
 
-`verify.sql` und die Laufzeit-Readiness verlangen alle zwanzig Ledgerzeilen,
-die sechs neuen Spalten, ihre kanonischen Indexe und Fremdschlüssel sowie die
-erweiterten ETB-/TTB-Insert-Trigger. Ein aktueller Migratorlauf endet erst nach
+Migration 115 ergänzt `nv_einsaetze.estab_permission_mode` als nicht-nullbares
+`ENUM('STRICT','LOOSE')` in `ascii_bin`. Der Standard `STRICT` gilt damit für
+alle Bestandszeilen und neue Einsätze, solange die revisionsgesicherte
+Administration nichts anderes entscheidet. Eigene Guard-Trigger erlauben ein
+`LOOSE`-Insert beziehungsweise eine Modusänderung nur über den eng markierten,
+bestätigten und auditierten Anwendungsweg; fremde Spalten- oder
+Triggerkollisionen blockieren die Migration.
+
+Die Migration ersetzt außerdem die sechs abschließenden Rollen-Trigger für
+ETB, TTB, S6-Fernmeldepläne und Melderaufträge. In `STRICT` bleibt der Vertrag
+von Migration 112 unverändert. In `LOOSE` entfällt nur die Prüfung der
+fachlichen Funktion/Rolle des schreibenden Kontos. Aktiver offener Einsatz,
+konkrete aktive und ungesperrte Kontenidentität, Melder-Eignung,
+Zustandsfolgen, Einsatzbeziehungen, Nummernköpfe, optionale Provenienz,
+Referenzen, Integrität und Append-only-Regeln bleiben in den Triggern
+erhalten. Die veröffentlichte Migration 112 wird nicht umgeschrieben.
+
+`verify.sql` und die Laufzeit-Readiness verlangen alle einundzwanzig
+Ledgerzeilen einschließlich Migration 115, die kanonische Modusspalte, beide
+Modus-Guard-Trigger und die sechs modebewussten Fachtrigger sowie die übrigen
+Spalten, Indexe und Fremdschlüssel. Ein aktueller Migratorlauf endet erst nach
 `Post-migration schema verification passed` und
 `All schema migrations are applied` erfolgreich.
 

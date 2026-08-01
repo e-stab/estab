@@ -135,8 +135,14 @@ Basic-Auth-Grenze noch eine administrative Schreibausnahme vortäuschen.
 
 Die Anwendungssitzung weist das Konto mit dessen fester Funktion und
 serverseitig abgeleiteter Rolle nach. Für jeden operativen Schreibzugriff muss
-zusätzlich ein Einsatz aktiv sein. Jeder normale Schreibpfad revalidiert Konto,
-Funktion, Rolle, Sperrstatus und aktiven Einsatz. Eine aktive Dienst- oder
+zusätzlich ein Einsatz aktiv sein. Jeder normale Schreibpfad revalidiert
+konkretes Konto, Sperrstatus, Zugangsschichtwirkung, aktiven Einsatz und dessen
+Berechtigungsmodus. In den vom Modus erfassten operativen Workflow-,
+ETB-/TTB-, S6-Plan- und Melderpfaden werden Funktion und Rolle in `STRICT`
+ebenfalls als Schreibgrenze geprüft; in `LOOSE` entfällt ausschließlich diese
+Prüfung. Rollenstrenge Übersichten, Kategorien- und Administrationsrechte sind
+davon ausgenommen.
+Eine aktive Dienst- oder
 Zugangsschicht, persönliche Besetzungsannahme oder Hutauswahl ist keine
 Bedingung. Die fachlichen Controller prüfen diese Grenze serverseitig erneut;
 ausgeblendete Links oder bereits geladene Seiten gelten nicht als
@@ -147,6 +153,59 @@ Kontengruppen. Unzugeordnete Konten bleiben zugelassen, Mehrfachzuordnungen
 gelten per OR. Aktivierung erzeugt keine Sitzung; Deaktivierung widerruft eine
 Sitzung, sofern kein anderer aktiver Gruppenzugang verbleibt. Die dauerhafte
 manuelle Kontosperre bleibt davon unabhängig und vorrangig.
+
+### Einsatzbezogener Berechtigungsmodus
+
+`nv_einsaetze.estab_permission_mode` speichert genau einen Modus je Einsatz:
+
+- `STRICT` ist der Standard für neue und beim Upgrade bereits vorhandene
+  Einsätze. Er bewahrt die bisherigen funktions- und rollenbezogenen
+  Schreibrechte einschließlich ihrer Datenbank-Trigger.
+- `LOOSE` erlaubt einem konkret angemeldeten, aktiven und ungesperrten Konto
+  die dafür vorgesehenen operativen Workflow-, ETB-/TTB-, S6-Plan- und
+  Melder-Schreibschritte unabhängig von seiner gespeicherten Funktion/Rolle.
+  Das Konto wird dabei nicht umbenannt oder umklassifiziert;
+  seine echte Identität, Funktion und Rolle bleiben in Datensatzprovenienz und
+  Audit sichtbar.
+
+`LOOSE` ist kein globaler Kompatibilitäts- oder Debugschalter. Der Modus kommt
+ausschließlich aus der unter Transaktionssperre gelesenen Einsatzzeile und wird
+in der gemeinsamen Statusanzeige sichtbar gemacht. Ein während eines offenen
+Requests geänderter Einsatz-, Modus- oder Revisionsstand lässt den Writer
+konfliktbehaftet scheitern, statt unter einer veralteten Berechtigung zu
+committen. Fehlt ein eindeutiger Moduskontext, gilt fail-closed `STRICT`.
+
+Die Lockerung betrifft nur funktions-/rollenbezogene **Schreib**prüfungen.
+Authentisierung, exakte SID und Kontenidentität, Kontosperre,
+Zugangsschichtentzug, aktiver offener Einsatz und Einsatzscoping, CSRF,
+Eingabevalidierung, Einsatz-/Nachrichtenbezug, Workflow- und Transportzustände,
+Sperrinhaberschaft, Nummerierung, Append-only-Regeln, Anhangintegrität,
+Ereignisketten, Audit und Aufbewahrung gelten unverändert. Allgemeine
+Leserechte werden durch den Modus nicht erweitert. Bei einem Melderauftrag
+bleiben insbesondere Eignung des beauftragten Kontos, Auftragszustand und
+Rückkehrbindung erhalten; nur die funktionsbezogene Zuständigkeit des
+disponierenden oder bestätigenden Kontos kann im lockeren Modus entfallen.
+Rollenstrenge Übersichten, Nachweisung, Zweitsichtungsarchive,
+Kategorienverwaltung und administrative Rechte sind ausdrücklich nicht Teil
+der Lockerung. Die begrenzte Objektsicht, die zum Bearbeiten einer explizit
+gewählten Workflowstufe nötig ist, gilt nur in diesem Schreibkontext.
+Bei einer funktionsübergreifenden Korrektur umfasst sie ausschließlich
+Anlagen, die mit genau der autorisierten Status-10-Nachricht verknüpft sind.
+Karten, Vorschau, passiv gerenderte E-Mail und Download bauen den Scope aus
+der aktuellen Datenbankzeile neu auf und widerrufen ihn bei Einsatz-, Modus-
+oder Statuswechsel. Ein originloser Archivanhang oder eine andere Nachrichten-
+ID erfüllt diese Grenze nicht.
+
+Anlegen oder Umstellen auf `LOOSE` erfordert im Basic-Auth-/CSRF-geschützten
+Administrationspfad eine ausdrückliche Warnungsbestätigung. Moduswechsel sind
+nur bei offenen Einsätzen möglich, binden erwartete globale Revision und
+erwarteten Altmodus und schreiben Vorher-/Nachherwert in das unveränderliche
+Einsatz-Audit. Datenbanktrigger blockieren unmarkierte beziehungsweise
+versehentliche direkte Legacy-Updates sowie eine unbestätigte Neuanlage mit
+`LOOSE`. Der dafür verwendete Sessionmarker ist ein Kohärenzvertrag für den
+vertrauenswürdigen Anwendungs-Principal, keine Privileggrenze gegen einen
+SQL-Principal mit beliebigen Schreibrechten. Für Regelbetrieb und formale
+Funktionstrennung bleibt `STRICT` die empfohlene Einstellung.
 
 ### Einsatzgebundene Führungsstellenidentität
 
@@ -836,8 +895,12 @@ einem Formatmerkmal voraus.
 Der zentrale Controller akzeptiert Detailansichten, Statusänderungen,
 Sichtungs-/Transport-Saves, Sperränderungen und Logout nur über POST mit
 Session-CSRF. Record- und Kategorie-IDs sind kanonische positive Ganzzahlen.
-Vor jedem Nachrichtenpfad werden aktiver Einsatz, feste Kontofunktion, Rolle
-und Objekt gemeinsam geprüft. Ein normales Stabs- oder Fachberaterkonto darf
+Vor jedem Nachrichtenpfad werden aktiver Einsatz, konkrete Kontoidentität samt
+gespeicherter Funktion/Rolle und Objekt gemeinsam revalidiert. Bei
+Schreibwegen entscheidet der einsatzbezogene Modus ausschließlich darüber, ob
+die feste Funktion/Rolle zusätzlich als Zuständigkeitsgate wirkt; die
+nachfolgenden Leseregeln bleiben in beiden Modi unverändert. Ein normales
+Stabs- oder Fachberaterkonto darf
 eine Nachricht lesen, wenn seine feste Funktion nach fachlichem Abschluss als vollständiger
 Empfänger-Token eingetragen ist oder sie die Nachricht selbst ausgehend
 erstellt hat. Si, LdF und Fernmelder dürfen zusätzlich ihre aktuelle Warteschlange
@@ -845,17 +908,27 @@ beziehungsweise Sperre sowie
 Nachrichten mit ihrer eigenen unveränderlichen Verarbeitungsmarke lesen.
 Vordruckliste, aktueller In-Memory-Abzug und Archivdownload erben exakt diese
 Objektregel. Ein Sperrinhaber wird über sein validiertes Kürzel gebunden.
-Historische GET-Detail- und GET-Mutationsaufrufe werden abgewiesen.
+Historische GET-Detail- und GET-Mutationsaufrufe werden abgewiesen. Im
+lockeren Modus dürfen bekannte Schreibaufgaben von einer anderen festen
+Kontofunktion übernommen werden. Die ausdrücklich gewählte Schreibstufe darf
+dazu genau die erforderliche Workflow-Objektsicht erhalten; Richtung, Status
+und Sperrinhaber bleiben dennoch verbindlich. Bei einer zurückgewiesenen
+Ausgangsmeldung entfällt in `LOOSE` auch die Bindung an die ursprüngliche
+Verfasserfunktion. Der Ereignisnachweis bewahrt ursprüngliche und neu
+verantwortliche Funktion, statt den Wechsel als identische Zuständigkeit
+auszugeben. Rein lesende Aufrufe behalten ihre normale Objektregel.
 
-Die einsatzbezogene Meldungsübersicht ist ausschließlich für ein festes Konto
-`S2/Stab` mit `LAGE_DOKUMENTATION` bestimmt. Die Nachweisung ist ausschließlich
-für die Funktion `LdF` mit `FERNMELDEBETRIEB` oder `Fernmelder` mit
-`BEFOERDERUNG` bestimmt. ETB schreiben `ETB/Stab` oder `S2/Stab`, TTB schreibt
-`Fernmelder`. Anwendung und Insert-Trigger prüfen den aktiven Einsatz,
-passende feste Funktion/Rolle und ein ungesperrtes Konto. Eine aktive Schicht
-oder Besetzungs-ID wird nicht verlangt. Die getrennte
+Die einsatzbezogene Meldungsübersicht ist in beiden Modi ausschließlich für
+ein festes Konto `S2/Stab` mit `LAGE_DOKUMENTATION` bestimmt. Die Nachweisung
+bleibt ausschließlich für die Funktion `LdF` mit `FERNMELDEBETRIEB` oder
+`Fernmelder` mit `BEFOERDERUNG` bestimmt. Im strengen Modus schreiben ETB
+`ETB/Stab` oder `S2/Stab`, TTB schreibt `Fernmelder`. Im lockeren Modus sperren diese
+Funktion-/Rollenmerkmale die entsprechenden Schreibaktionen nicht; die
+konkrete Kontenidentität wird weiterhin gespeichert. Anwendung und
+Insert-Trigger prüfen in beiden Modi den aktiven Einsatz und ein ungesperrtes
+Konto. Eine aktive Schicht oder Besetzungs-ID wird nicht verlangt. Die getrennte
 `LAGE_DOKUMENTATION`-Fähigkeit und damit die Meldungsübersicht bleiben
-ausschließlich S2 vorbehalten.
+als normales Leserecht ausschließlich S2 vorbehalten.
 
 Die manuelle Kontosperre und ein gegebenenfalls deaktivierter Gruppenzugang
 blockieren das betroffene Konto. Sie führen weder zu einem Funktionswechsel
@@ -892,6 +965,18 @@ den damaligen Schicht-Triggervertrag: Neue manuelle und automatische
 ETB-/TTB-Zeilen dürfen Schicht und Schreiberbesetzung `NULL` lassen. Eine
 Zugangsschicht wird dort nie eingetragen. Belegte formale Altprovenienz bleibt
 unverändert und exportierbar.
+
+Migration 115 ersetzt die sechs zuletzt rollenprüfenden ETB-/TTB-, S6-Plan-
+und Melder-Trigger durch modebewusste Fassungen. `STRICT` ist semantisch
+identisch zum Stand nach Migration 112. `LOOSE` verlangt weiterhin einen
+aktiven offenen Einsatz, ein konkretes aktives und ungesperrtes Konto sowie
+alle Zustands-, Identitäts-, Beziehungs- und Unveränderlichkeitsregeln; nur die
+Funktions-/Rollenprädikate der schreibenden Konten werden ausgelassen. Die
+neue Einsatzspalte selbst ist durch eigene Insert-/Update-Guard-Trigger gegen
+unmarkierte oder versehentliche Legacy-DML geschützt. Ein SQL-Principal mit
+beliebigen Schreibrechten gilt dagegen als vertrauenswürdig und kann den
+Sessionmarker selbst setzen; die Trigger ersetzen deshalb keine getrennten
+Datenbankprivilegien.
 
 Migration 113 ergänzt davon unabhängig die globale Kennwortrichtlinie. Sie
 akzeptiert nur die eigene InnoDB-/`utf8mb4`-Tabelle mit genau einer
@@ -1051,7 +1136,8 @@ Konflikt- oder Datenbankfehler führen nicht zu Teiländerungen.
 aktive Verwaltung `4fach/katgoedt.php`, die Auswahllisten in
 `4fach/katego.php` und das Kategorienband der Meldungsliste. Der Endpunkt
 verlangt immer eine gültige eStab-Sitzung, einen aktiven Einsatz und eine
-passende feste Kontofunktion mit serverseitig abgeleiteter Rolle.
+passende feste Kontofunktion mit serverseitig abgeleiteter Rolle. Diese
+Kategorien-/Administrationsgrenze bleibt in beiden Einsatzmodi rollenstreng.
 `dbtyp` akzeptiert ausschließlich `master`, `fkt` oder `user`:
 
 - Master-Kategorien liegen in den fest konfigurierten Tabellen und dürfen nur
@@ -1082,8 +1168,8 @@ Listenabfrage bindet diese ID. Damit bleiben Kategorienamen mit Quotes reine
 Daten und können nicht in den SQL-Filter gelangen.
 
 `katgoedt.php` bleibt ein aktiver, vom Apache erreichbarer Fachendpunkt; die
-Session-, Einsatz-, Festfunktions-, Rollen-, CSRF- und
-Objektgrenzen liegen in PHP. Nur interne Implementierungs- und
+Session-, Einsatz-, Festfunktions-, Rollen-, CSRF- und Objektgrenzen liegen in
+PHP und werden durch `LOOSE` nicht gelockert. Nur interne Implementierungs- und
 Konfigurationsverzeichnisse werden auf Webserver-Ebene gesperrt.
 
 ## Container- und Datengrenzen
@@ -1255,6 +1341,8 @@ Das aktuelle Basisschema verwendet:
   `NO_ZERO_DATE`, `NO_ZERO_IN_DATE` und `NO_ENGINE_SUBSTITUTION`,
 - einen eindeutigen Anhang-Dateinamen für race-freie Reservierung,
 - längere Session-, Passwort-, IPv6- und Dateiendungsfelder,
+- einen fail-closed auf `STRICT` voreingestellten, einsatzgebundenen
+  Berechtigungsmodus mit Guard- und modebewussten Fachtriggern,
 - eine revisionsgesicherte Singleton-Tabelle für die prospektive
   Funktionskonto-Kennwortrichtlinie,
 - idempotente InnoDB-/`utf8mb4`-Migration der dynamischen Benutzer- und

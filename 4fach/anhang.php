@@ -604,6 +604,7 @@ try {
   $attachmentPageIncident = estab_incident_require_active (
     $attachmentPageConnection
   );
+  estab_permission_context_set_from_incident ($attachmentPageIncident);
   // Vordrucke rebuilt after the optional archive picker issue their next
   // one-time direct-action token during rendering. Expose the incident that
   // was just authorised exactly as the main message controller does.
@@ -615,12 +616,15 @@ try {
     $workflowIncidentId,
     $attachmentPageIdentity
   );
-  if (
-    !estab_workflow_is_staff_writer ($attachmentPageIdentity)
-    && !estab_workflow_is_telecommunications ($attachmentPageIdentity)
-  ) {
+  $attachmentArchiveRoleAllowed =
+    estab_workflow_is_staff_writer ($attachmentPageIdentity)
+    || estab_workflow_is_telecommunications ($attachmentPageIdentity);
+  $attachmentLooseMessageFlowAllowed =
+    $attachmentRequestFlowToken !== null
+    && !estab_permission_role_checks_enforced ();
+  if (!$attachmentArchiveRoleAllowed && !$attachmentLooseMessageFlowAllowed) {
     throw new EstabReadPermissionException (
-      "Ihre angemeldete Funktion darf die Anhangverwaltung nicht öffnen."
+      "Ihre angemeldete Funktion darf das Anhangarchiv nicht öffnen."
     );
   }
   $attachmentCommandPostName = estab_incident_command_post_name (
@@ -662,11 +666,20 @@ try {
         || !estab_message_object_allowed (
           $attachmentPageIdentity,
           "staff-correction",
-          $attachmentOriginMessage
+          $attachmentOriginMessage,
+          true
         )
-        || !estab_read_message_allowed (
-          $attachmentPageIdentity,
-          $attachmentOriginMessage
+        || (
+          (
+            !estab_message_operation_relaxes_write_role (
+              "staff-correction"
+            )
+            || estab_permission_role_checks_enforced ()
+          )
+          && !estab_read_message_allowed (
+            $attachmentPageIdentity,
+            $attachmentOriginMessage
+          )
         )
       ) {
         throw new EstabAttachmentContextException (
@@ -739,6 +752,19 @@ estab_session_ui_start ($_SESSION);
 if (!defined ("debug")) { define ("debug", false); }
 
 $attachmentMessageContext = is_array ($attachmentOriginContext);
+$attachmentOriginTask = $attachmentMessageContext
+  ? (string) ($attachmentOriginContext ["task"] ?? "")
+  : "";
+$attachmentStaffOrigin = in_array (
+  $attachmentOriginTask,
+  array ("Stab_schreiben", "Stab_korrigieren", "Stab_gesprnoti"),
+  true
+);
+$attachmentTelecommunicationsOrigin = in_array (
+  $attachmentOriginTask,
+  array ("FM-Eingang", "FM-Eingang_Anhang"),
+  true
+);
 $attachmentContextNotice = "";
 $attachmentSelectionRequested =
   isset ($_POST ["ah_auswahl_x"]) || isset ($_POST ["ah_abbrechen_x"]);
@@ -795,7 +821,7 @@ if ( debug == true ){
   Anhang ausgewaehlt und kann in Vordruck uebernommen werde
 \**********************************************************************/
   if ( $attachmentMessageContext &&
-       estab_workflow_is_staff_writer ($attachmentPageIdentity) and
+       $attachmentStaffOrigin and
        ( (isset ($_POST["ah_auswahl_x"])) OR
          (isset ($_POST["ah_abbrechen_x"]))
        )
@@ -834,8 +860,6 @@ if ( debug == true ){
       $attachmentOriginContext,
       $attachmentOriginMessage
     );
-    $attachmentOriginTask =
-      (string) ($attachmentOriginContext ["task"] ?? "");
     $formdata ["13_abseinheit"] = $attachmentCommandPostName;
     $formdata ["14_zeichen"] = $_SESSION ["vStab_kuerzel"];
     $formdata ["14_funktion"] = $_SESSION ["vStab_funktion"];
@@ -874,7 +898,7 @@ if ( debug == true ){
 \**********************************************************************/
     // Anhang ausgewaelt und kann in Vordruck uebernommen werden
   if ( $attachmentMessageContext &&
-       estab_workflow_is_telecommunications ($attachmentPageIdentity) and
+       $attachmentTelecommunicationsOrigin and
        ( (isset ($_POST["ah_auswahl_x"])) OR
          (isset ($_POST["ah_abbrechen_x"]))
        )
@@ -926,8 +950,6 @@ if ( debug == true ){
         $formdata ["10_anschrift"] = $attachmentCommandPostName;
       }
     }
-    $attachmentOriginTask =
-      (string) ($attachmentOriginContext ["task"] ?? "");
     estab_attachment_release_message_flow_reservation (
       $attachmentOriginContext
     );
@@ -1289,17 +1311,14 @@ require_once ("./db_operation.php");  // Datenbank operationen
         $data [$draftField] = $draft [$draftField];
       }
     }
-    $restoreIdentity = estab_auth_session_identity ($_SESSION);
-    if (
-      is_array ($restoreIdentity)
-      && estab_workflow_is_telecommunications ($restoreIdentity)
-    ) {
-      $data ["13_abseinheit"] = "";
-    }
     $originTask = is_array ($originContext)
       && is_string ($originContext ["task"] ?? null)
       ? $originContext ["task"]
       : "";
+    $restoreIdentity = estab_auth_session_identity ($_SESSION);
+    if (in_array ($originTask, array ("FM-Eingang", "FM-Eingang_Anhang"), true)) {
+      $data ["13_abseinheit"] = "";
+    }
     $requiredDistributionTokens = array ();
     if ($originTask === "Stab_gesprnoti") {
       $requiredDistributionTokens = array (

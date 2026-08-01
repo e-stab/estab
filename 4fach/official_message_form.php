@@ -99,6 +99,16 @@ trait EstabOfficialMessageFormView
             . '/email.php';
         $attachmentError = $this->formdata['estab_attachment_error'] ?? '';
         $attachmentNotice = $this->formdata['estab_attachment_notice'] ?? '';
+        $messageWriteRecord = null;
+        if ($this->task === 'Stab_korrigieren') {
+            try {
+                $messageWriteRecord = estab_message_positive_id(
+                    $this->formdata['00_lfd'] ?? null
+                );
+            } catch (InvalidArgumentException) {
+                $messageWriteRecord = null;
+            }
+        }
         $hasAttachmentFeedback =
             (is_string($attachmentError) && $attachmentError !== '')
             || (is_string($attachmentNotice) && $attachmentNotice !== '');
@@ -244,6 +254,14 @@ trait EstabOfficialMessageFormView
                 } catch (InvalidArgumentException) {
                     continue;
                 }
+                if (is_int($messageWriteRecord)) {
+                    $downloadUrl .= '&' . http_build_query(
+                        ['message_write_record' => $messageWriteRecord],
+                        '',
+                        '&',
+                        PHP_QUERY_RFC3986
+                    );
+                }
                 $inlineUrl = $downloadUrl . '&view=inline';
                 $extension = strtolower(
                     pathinfo($reference, PATHINFO_EXTENSION)
@@ -254,16 +272,24 @@ trait EstabOfficialMessageFormView
                     true
                 );
                 $isEmail = $extension === 'eml';
+                $previewParameters = ['file' => $reference, 'width' => 640];
+                $emailParameters = ['file' => $reference];
+                if (is_int($messageWriteRecord)) {
+                    $previewParameters['message_write_record'] =
+                        $messageWriteRecord;
+                    $emailParameters['message_write_record'] =
+                        $messageWriteRecord;
+                }
                 $previewUrl = $previewEndpoint . '?'
                     . http_build_query(
-                        ['file' => $reference, 'width' => 640],
+                        $previewParameters,
                         '',
                         '&',
                         PHP_QUERY_RFC3986
                     );
                 $emailUrl = $emailEndpoint . '?'
                     . http_build_query(
-                        ['file' => $reference],
+                        $emailParameters,
                         '',
                         '&',
                         PHP_QUERY_RFC3986

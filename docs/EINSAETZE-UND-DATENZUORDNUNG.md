@@ -22,7 +22,8 @@ Datenbankfolge steht in den Migrationen
 `96-etb-duty-function.sql` sowie
 `97-incident-command-post-name.sql` und
 `110-etb-tbb-rules.sql`, `111-logbook-shift-assignment.sql` sowie
-`112-optional-access-shifts.sql`. Die technischen
+`112-optional-access-shifts.sql` und
+`115-incident-permission-mode.sql`. Die technischen
 Administrationsoberflächen sind `4fadm/incidents.php` und
 `4fadm/fuehrungsstelle.php`.
 
@@ -50,9 +51,13 @@ Die verbindlichen Regeln sind:
    nie still dem ersten später aktivierten Realeinsatz zugeschlagen.
 8. Einsätze werden nicht gelöscht. Damit bleiben Referenzen, Exporte und
    Auditnachweise dauerhaft eindeutig.
-9. Operative Eingaben benötigen einen aktiven Einsatz sowie eine fachlich
-   passende feste Kontofunktion und serverseitig abgeleitete Rolle. Eine
-   aktive Dienst- oder Zugangsschicht ist nicht erforderlich.
+9. Operative Eingaben benötigen immer einen aktiven offenen Einsatz und ein
+   konkret authentifiziertes, aktives, ungesperrtes Konto mit wirksamem
+   Zugang. Im Berechtigungsmodus `STRICT` müssen zusätzlich feste
+   Kontofunktion und serverseitig abgeleitete Rolle fachlich passen. Im Modus
+   `LOOSE` entfallen ausschließlich diese funktions-/rollenbezogenen
+   Schreibprüfungen. Eine aktive Dienst- oder Zugangsschicht ist nicht
+   erforderlich.
 10. „Nicht aktiv“ und „formal abgeschlossen“ sind getrennte Zustände. Ein
     formaler Abschluss ist nur nach einer vollständigen Preflight-Prüfung
     möglich und sperrt sämtliche weiteren operativen Änderungen.
@@ -67,14 +72,23 @@ Die verbindlichen Regeln sind:
 13. Ein formal abgeschlossener Einsatz bleibt mindestens zehn Jahre ab
     Abschluss erhalten; eine längere Frist oder ein Legal Hold wird nie
     verkürzt.
+14. Jeder Einsatz besitzt genau einen Berechtigungsmodus. Neuinstallation,
+    neue Einsätze und alle beim Upgrade vorhandenen Einsätze beginnen
+    fail-closed mit `STRICT`. Nur die revisions- und auditgebundene
+    Administration darf einen offenen Einsatz umstellen; `LOOSE` verlangt
+    eine ausdrückliche Warnungsbestätigung. Der Modus ändert keine
+    allgemeinen Lese-, Richtungs-, Status-, Sperr-, Integritäts- oder
+    Aufbewahrungsregeln. Nur die für eine ausdrücklich gewählte Schreibstufe
+    notwendige Workflow-Objektsicht und funktionsbezogene Zuständigkeit werden
+    gelockert.
 
 ## Datenmodell
 
 | Tabelle | Aufgabe |
 | --- | --- |
-| `nv_einsaetze` | Kennung, Einsatzname, Zeitraum, Ort, Bedarfsträger in `organisation`, eigener Führungsstellenname, Einsatzleitung, Auftrag/Ausgangslage in `beschreibung`, formaler Abschluss, Mindestaufbewahrung, Legal Hold und erweiterbares JSON-Metadatenobjekt |
+| `nv_einsaetze` | Kennung, Einsatzname, Berechtigungsmodus `STRICT`/`LOOSE`, Zeitraum, Ort, Bedarfsträger in `organisation`, eigener Führungsstellenname, Einsatzleitung, Auftrag/Ausgangslage in `beschreibung`, formaler Abschluss, Mindestaufbewahrung, Legal Hold und erweiterbares JSON-Metadatenobjekt |
 | `nv_einsatz_status` | Genau eine Singleton-Zeile mit aktiver Einsatz-ID, monotoner Revision, Zeitpunkt und Akteur |
-| `nv_einsatz_ereignisse` | Unveränderliches Audit für Anlegen, Führungsstellenänderungen, Aktivieren und Deaktivieren |
+| `nv_einsatz_ereignisse` | Unveränderliches Audit für Anlegen, Berechtigungsmodusänderungen, Führungsstellenänderungen, Aktivieren und Deaktivieren |
 | `nv_nachrichtenereignis_kopf`, `nv_nachrichtenereignisse` | Pro Nachricht verketteter, unveränderlicher Zustands- und Terminalnachweis |
 | `nv_zugangsschichten`, `nv_zugangsschicht_mitglieder` | Optionale einsatzbezogene Gruppen zum gemeinsamen Aktivieren und Deaktivieren von Zugängen; keine Fachrechtsquelle |
 | `nv_dienstschichten`, `nv_dienstbesetzungen`, `nv_dienstuebergaben` | Historische formale Dienstbetriebs-, Besetzungs- und Übergabeevidenz; nicht mehr Autorisierungsquelle |
@@ -184,7 +198,7 @@ estab_incident_list(mysqli $db): array;
 ```
 
 Ein Status-/Active-Array enthält mindestens `active_einsatz_id`, `revision`,
-`kennung`, `name`, `beginn`, `ende`, `ort`, `organisation`,
+`kennung`, `name`, `estab_permission_mode`, `beginn`, `ende`, `ort`, `organisation`,
 `fuehrungsstellenname`, `fuehrungsstellenname_gesperrt`, `einsatzleitung`,
 `beschreibung` und `metadaten`.
 
@@ -198,18 +212,24 @@ estab_incident_with_active_write(
 ```
 
 Der Callback erhält den autoritativen Status inklusive
-`active_einsatz_id` und verwendet dieselbe Datenbankverbindung. Die API öffnet
-die Transaktion, sperrt den Singleton, führt den Callback aus und committet
-oder rollt vollständig zurück. Ohne aktiven Einsatz wird
+`active_einsatz_id`, Berechtigungsmodus und globaler Revision und verwendet
+dieselbe Datenbankverbindung. Die API öffnet die Transaktion, sperrt den
+Singleton, verwirft einen inzwischen gewechselten Einsatz-, Modus- oder
+Revisionsstand, führt den Callback aus und committet oder rollt vollständig
+zurück. Ohne aktiven Einsatz wird
 `EstabNoActiveIncidentException` ausgelöst.
 
 Der gemeinsame Request-Guard ergänzt diese Einsatzgrenze um den
-Führungsstellenbetrieb: Auch bei aktivem Einsatz scheitert eine normale
-operative Eingabe, wenn die feste Funktion/Rolle des angemeldeten Kontos den
-Vorgang nicht erlaubt, das Konto gesperrt ist, eine ausschließlich deaktivierte
-Zugangsschicht den Zugriff entzogen hat oder ein als Melder übernommener Auftrag
-die Person bis zur Rückkehr bindet. Eine aktive Schicht oder eine persönliche
-Schichtannahme wird nicht verlangt. Ausgenommen sind nur die eng begrenzten
+Führungsstellenbetrieb: In beiden Modi scheitert eine normale operative
+Eingabe, wenn das konkrete Konto nicht aktiv beziehungsweise gesperrt ist,
+eine ausschließlich deaktivierte Zugangsschicht den Zugriff entzogen hat oder
+ein als Melder übernommener Auftrag die Person bis zur Rückkehr bindet. Nur im
+strengen Modus scheitern die modeabhängigen Workflow-, ETB-/TTB-, S6-Plan-
+und Melder-Schreibpfade außerdem an einer fachlich unpassenden festen
+Funktion/Rolle. Rollenstrenge Übersichten, Kategorien- und
+Administrationsrechte bleiben in beiden Modi unverändert. Eine aktive Schicht
+oder eine persönliche Schichtannahme wird
+nicht verlangt. Ausgenommen sind nur die eng begrenzten
 Kontrollschritte Anmeldung/Abmeldung, Melder-Rückkehrkette, Administration und
 Wiederherstellung.
 
@@ -221,7 +241,8 @@ estab_incident_create(
     array $input,
     string $actor,
     bool $activate,
-    ?int $expectedRevision = null
+    ?int $expectedRevision = null,
+    bool $confirmedLoose = false
 ): array;
 
 estab_incident_update_command_post_name(
@@ -236,7 +257,8 @@ estab_incident_activate(
     mysqli $db,
     int $id,
     int $expectedRevision,
-    string $actor
+    string $actor,
+    bool $confirmedLoose = false
 ): array;
 
 estab_incident_deactivate(
@@ -245,7 +267,24 @@ estab_incident_deactivate(
     int $expectedRevision,
     string $actor
 ): array;
+
+estab_incident_update_permission_mode(
+    mysqli $db,
+    int $id,
+    mixed $mode,
+    mixed $expectedMode,
+    int $expectedRevision,
+    string $actor,
+    bool $confirmedLoose = false
+): array;
 ```
+
+Die Modusänderung sperrt zuerst denselben globalen Einsatzstatus wie Aktivieren
+und operative Writer. Sie ist nur für offene Einsätze zulässig und bindet
+Einsatz-ID, erwarteten alten Modus und globale Revision. `LOOSE` wird ohne
+separate Bestätigung abgewiesen. Ein echter Wechsel erhöht die Revision und
+schreibt das Ereignis `berechtigung_geaendert` samt Vorher-/Nachherwert; ein
+unveränderter Wert erzeugt keinen Scheinwechsel.
 
 Formaler Abschluss und Aufbewahrung:
 
@@ -290,14 +329,20 @@ Das Schema ist die letzte, aber nicht die einzige Schutzschicht. Die
 produktiven Leser und Schreiber verwenden zusätzlich die zentrale
 Einsatz-API:
 
-- Die gemeinsame Status-/Sitzungsleiste zeigt Führungsstellenname, Kennung und
-  Name des aktiven Einsatzes. Ohne aktiven Einsatz oder bei einem historischen
+- Die gemeinsame Status-/Sitzungsleiste zeigt Führungsstellenname, Kennung,
+  Name und Berechtigungsmodus des aktiven Einsatzes. `LOOSE` wird als
+  sichtbare Warnung dargestellt. Ohne aktiven Einsatz oder bei einem historischen
   Einsatz ohne bestätigten Führungsstellennamen erscheint ein roter Hinweis.
   Markierte operative Formulare werden im Browser deaktiviert; jeder
   POST-Controller prüft den Zustand zusätzlich serverseitig.
-- Die Führungsstellenansicht zeigt die feste Kontofunktion und – sofern
-  verwendet – die optionalen Zugangsschichten. Fachrechte stammen nur aus
-  Funktion und Rolle des Kontos. Ohne aktive Schicht bleibt die Arbeit
+- Die Führungsstellenansicht zeigt die feste Kontofunktion, den
+  Berechtigungsmodus und – sofern verwendet – die optionalen
+  Zugangsschichten. Im strengen Modus stammen Schreibrechte aus Funktion und
+  Rolle des Kontos; bei den vom lockeren Modus erfassten operativen
+  Schreibstufen bleiben beide Angaben Identitäts- und Auditprovenienz, sperren
+  den Vorgang aber nicht. Rollenstrenge Übersichten, Nachweisung,
+  Zweitsichtungsarchive, Kategorien- und Administrationsrechte bleiben
+  unverändert. Ohne aktive Schicht bleibt die Arbeit
   möglich; ohne aktiven Einsatz bleibt jeder operative POST serverseitig
   gesperrt.
 - Nachrichten, Sperren, Sichtung, Transport, Gelesen-/Erledigt-Zustände und
@@ -327,7 +372,9 @@ Einsatz-API:
   vollständige ETB-Anlagennummer. Eine optionale Bearbeitungszuordnung ist nur
   Such- und Anzeigehilfe und erweitert keine Rechte. Beim Speichern werden
   feste Kontofunktion, Rolle und Sperrstatus erneut geprüft; der lesbare
-  Snapshot bleibt aus dem amtlichen PDF ausgeschlossen.
+  Snapshot bleibt aus dem amtlichen PDF ausgeschlossen. Im lockeren Modus
+  entfällt ausschließlich die funktions-/rollenbezogene Schreibprüfung;
+  Konto-, Einsatz-, Objekt-, Validierungs- und Append-only-Grenzen bleiben.
 - Neue ETB-Referenzen bestehen ausschließlich aus der positiven lokalen
   Buchnummer eines bereits vorhandenen Eintrags desselben Einsatzes. Freitext,
   führende Nullen, globale Primärschlüssel und unbekannte Nummern scheitern.
@@ -346,10 +393,19 @@ Einsatz-API:
   Zeilensperren funktionieren unter der unveränderten MariaDB-Standardisolation
   `REPEATABLE READ`; für den Dossierexport bleiben konsistente Read-only-
   Snapshots aktiviert.
-- Die Fachrechte folgen ausschließlich dem Konto: ETB schreiben `ETB/Stab`
-  oder `S2/Stab`; das TTB schreibt die Funktion `Fernmelder`. Anwendung und Insert-Trigger
-  prüfen festen Konto-/Kürzel-/Funktions-/Rollenbezug, Sperrstatus und aktiven
-  Einsatz. Eine aktive Schicht oder Besetzungsannahme wird nicht verlangt.
+- Im Nachrichtenworkflow kann `LOOSE` nur für eine ausdrücklich gewählte
+  Schreibstufe die dafür nötige Objektsicht eröffnen. Richtung, Status und
+  Sperrinhaber bleiben bindend. Eine zurückgewiesene Ausgangsmeldung darf eine
+  andere Funktion übernehmen; die unveränderliche Evidenz bewahrt dabei
+  ursprüngliche und neue Verantwortlichkeit. Reine Übersichten und
+  Archivansichten erhalten dadurch keine zusätzliche Leseberechtigung.
+- Im strengen Modus folgen die fachlichen Schreibrechte ausschließlich dem
+  Konto: ETB schreiben `ETB/Stab` oder `S2/Stab`; das TTB schreibt die Funktion
+  `Fernmelder`. Im lockeren Modus dürfen andere konkrete aktive und
+  ungesperrte Konten schreiben. Anwendung und Insert-Trigger prüfen in beiden
+  Modi Konto-/Kürzelidentität, Sperrstatus und aktiven Einsatz; Funktion und
+  Rolle werden nur in `STRICT` als Schreibgrenze ausgewertet. Eine aktive
+  Schicht oder Besetzungsannahme wird nicht verlangt.
   Neue Zeilen dürfen die Legacy-Provenienzfelder für Dienstschicht und
   Schreiberbesetzung `NULL` lassen; sie werden nicht mit einer Zugangsschicht
   befüllt. Historische belegte Werte bleiben unverändert. Beide Tabellen
@@ -472,7 +528,7 @@ gespeicherten Kopiekennzeichen im Inhaltsbereich ausgeschrieben.
 
 ## Migrations- und Testnachweis
 
-Die checksum-gebundene Folge 45/50/55/80/94/95/96/97/110/111/112 ist additiv. Ein
+Die checksum-gebundene Folge 45/50/55/80/94/95/96/97/110/111/112/115 ist additiv. Ein
 harter Abbruch bleibt bis zur kontrollierten Prüfung des Migrationsledgers
 fail-closed; anschließend werden ausschließlich exakt erkannte,
 migrationseigene Zwischenstände fortgesetzt. Die ersten drei Migrationen:
@@ -533,6 +589,22 @@ ETB-/TBB-Zeilen benötigen einen aktiven Einsatz und die feste fachlich
 zulässige Kontofunktion, aber keine aktive Dienstschicht oder Besetzungs-ID.
 Nicht belegbare Legacy-Schicht- und Schreiberfelder bleiben `NULL`.
 
+Migration 115 ergänzt `nv_einsaetze.estab_permission_mode` mit dem
+kanonischen Standard `STRICT`; dadurch bleiben Bestands- und neue Einsätze
+ohne administrative Entscheidung unverändert streng. Kollisionsgeprüfte
+Guard-Trigger blockieren unmarkierte Legacy-DML, kombinierte Änderungen
+weiterer Einsatzfelder und eine unbestätigte Neuanlage mit `LOOSE` im
+Anwendungsweg. Die connection-lokalen Marker sind dabei ein
+Konsistenzvertrag, keine Privileggrenze gegen einen Principal mit beliebigen
+SQL-Rechten; Datenbank-Zugangsdaten gehören zur vertrauenswürdigen
+Betriebsumgebung. Die Migration ersetzt nur die aktuell
+rollenprüfenden ETB-/TTB-, S6-Plan- und Melder-Trigger durch modebewusste
+Fassungen: `STRICT` bewahrt den Vertrag von Migration 112, `LOOSE` verlangt
+weiterhin das konkrete aktive und ungesperrte Konto sowie sämtliche Einsatz-,
+Zustands-, Beziehungs-, Nummern-, Provenienz- und Append-only-Regeln, verzichtet
+aber auf die dortige Funktions-/Rollenprüfung. Veröffentlichte
+Vorgängerdateien und historische Daten werden nicht umgeschrieben.
+
 Migration 50 bleibt bytegenau auf der bereits im Ledger verwendeten
 Prüfsumme. Vor- oder Nachbedingungen werden ausschließlich in neuen
 Versionsdateien ergänzt; weder der Ledger noch eine veröffentlichte SQL-Datei
@@ -548,9 +620,12 @@ Wiederanlauffähigkeit und Wiederholbarkeit.
 `tests/integration/dv_evidence.php` beweist Abschluss-Preflight,
 Append-only-ETB/TBB, referenzierte Korrekturen, Hashketten, Terminalbindung,
 Mindestaufbewahrung und Legal Hold. `tests/integration/dv_operations.php`
-beweist Pflichtkopf, feste funktionsabhängige Rechte, S6-Versionierung,
-Melderbindung sowie die Schreibsperre ohne aktiven Einsatz und die erlaubte
-Arbeit ohne aktive Schicht.
+beweist Pflichtkopf, die im strengen Modus festen funktionsabhängigen Rechte,
+S6-Versionierung, Melderbindung sowie die Schreibsperre ohne aktiven Einsatz
+und die erlaubte Arbeit ohne aktive Schicht. Ergänzende statische und
+integrative Berechtigungsmodustests müssen belegen, dass `LOOSE` nur
+Rollen-/Funktions-Schreibprüfungen lockert und alle übrigen Grenzen in beiden
+Modi identisch bleiben.
 `tests/integration/incident_export.php` erzeugt zusätzlich ETB, TBB,
 Nachricht und Anhang mit Eingangsnachweis in zwei Einsätzen, exportiert den inzwischen
 historischen ausgewählten Einsatz und extrahiert dessen PDF-`EmbeddedFile`

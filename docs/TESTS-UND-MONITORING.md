@@ -7,10 +7,16 @@ Die Zuordnung jeder Funktion zu ihrem automatisierten und fachlichen Gate
 steht in der [Funktionsmatrix](FUNKTIONSNACHWEIS.md).
 
 Der aktuelle Autorisierungsvertrag ist in allen Ebenen gleich: Operative
-Eingaben benötigen einen aktiven Einsatz und eine fachlich passende feste
-Kontofunktion mit serverseitig abgeleiteter Rolle. Eine aktive Dienst- oder
-Zugangsschicht, persönliche Besetzungsannahme oder Hutauswahl ist nicht
-erforderlich. Optionale Zugangsschichten werden getrennt mit unzugeordnetem
+Eingaben benötigen in beiden Berechtigungsmodi einen aktiven offenen Einsatz
+und ein konkretes aktives, ungesperrtes Konto. Im Modus `STRICT` ist zusätzlich
+die fachlich passende feste Kontofunktion mit serverseitig abgeleiteter Rolle
+Pflicht. Im Modus `LOOSE` entfällt diese Funktion-/Rollenbedingung ausschließlich
+für die dafür vorgesehenen Schreibwege im Nachrichtenworkflow, in ETB/TBB, der
+S6-Planung und im Melderlauf. Authentisierung, Einsatz- und Objektgrenzen,
+rollenstrenge Lese-, Kategorie- und Administrationsrechte, CSRF, Validierung,
+Integrität, Audit, Append-only und Aufbewahrung bleiben unverändert. Eine aktive
+Dienst- oder Zugangsschicht, persönliche Besetzungsannahme oder Hutauswahl ist
+nicht erforderlich. Optionale Zugangsschichten werden getrennt mit unzugeordnetem
 Konto, OR-Semantik bei Mehrfachzuordnung, Aktivierung ohne Anmeldung,
 Deaktivierung mit Sitzungswiderruf und Vorrang der manuellen Kontosperre
 geprüft. Historische formale Schichtdaten bleiben Export-/Evidenzdaten.
@@ -104,7 +110,7 @@ administrativen Synology-/Docker-Aufruf vorgesehene Rootpfad
 `/var/lib/estab-deploy` bleibt zusätzlich im statischen Vertrag gebunden; die
 Tests schreiben dafür nicht in das `/var/lib` des Testcontainers.
 
-Die Suite lintet alle 265 aktiven PHP-Dateien und führt die Prüfungen unter
+Die Suite lintet alle 269 aktiven PHP-Dateien und führt die Prüfungen unter
 `tests/php/` aus. Dazu gehören unter anderem:
 
 - die versiegelten, deterministischen Provenienzmanifeste für 13
@@ -280,31 +286,40 @@ ESTAB_BROWSER_TEST=required \
 tests/integration/ci.sh
 ```
 
-Der am 1. August 2026 tatsächlich vollständig beendete Abschlusslauf verwendete
-das isolierte Compose-Projekt `estab_ci_selfreg_final3_20260801`, Port `18094`
-für die App und den daraus abgeleiteten Port `18095` für das
-Pull-only-Registry-Projekt:
+Der am 1. August 2026 tatsächlich vollständig beendete Abschlusslauf führte
+`bash tests/integration/ci.sh` einschließlich Migration 115 aus und endete nach
+dem vollständigen Backup-/Restore-Roundtrip mit Exitcode 0 und
+`CI integration: OK`. Sein protokollierter Kernstand lautet:
 
-```console
-COMPOSE_PROJECT_NAME=estab_ci_selfreg_final3_20260801 \
-ESTAB_CONTAINER_CLI=podman \
-ESTAB_HTTP_PORT=18094 \
-ESTAB_BROWSER_TEST=required \
-bash tests/integration/ci.sh
-```
+| Teilnachweis | Ergebnis |
+| --- | --- |
+| Schema | 42 Prüfungen |
+| Einsatzdomäne | 55 Assertions |
+| DV-Evidenz | 51 Assertions |
+| DV-Operations einschließlich `STRICT`/`LOOSE` | 145 Assertions, 80 Ereignisse |
+| Optionale Zugangsschichten | 25 Assertions |
+| Benutzerverwaltung | 98 Assertions |
+| Kennwortrichtlinie gegen MariaDB | 66 Assertions |
+| Selbstregistrierung | 31 Datenbank- und 28 Handler-Assertions |
+| Zuordnungs-/Empfängermatrix | 59 Assertions |
+| PDF-Einsatzdossier | 35 Assertions |
+| Sichtbare Anhangdarstellung | 11 Assertions |
+| Einsatzbezogene Nachrichtenvorschläge | 29 Assertions |
+| Nachrichtensuche mit 10.000 Zielzeilen | 145 Assertions |
 
-Er führte damit das Pflicht-Browser-Gate aus und endete erst nach dem
-vollständigen destruktiven Backup-/Restore-Roundtrip mit
-`CI integration: OK`. Er verifizierte 41 Schema-Checks, 63 statische
-Kennwortrichtlinien-, 107 statische Selbstregistrierungs-, 111
-Authentisierungs-, 63 MariaDB-Kennwortrichtlinien-, 31
-MariaDB-Selbstregistrierungs- und 28 Handler-Assertions, außerdem 57
-Assertions des
-Registry-Deployment-Vertrags, 130 Assertions des ETB-/TBB-DV-Betriebs,
-35 Assertions des Incident-Exports und 145 Assertions der Nachrichtenlisten-
-Skalierung mit 10.257 Zeilen; die statische Suite lintete alle 265 aktiven
-PHP-Dateien und erzeugte den PDF-Smoke-Nachweis mit 14.352 Byte. Dieser lokale
-Podman-Lauf fand nicht auf einem
+HTTP-Surface, Selbstregistrierung, Auth-Smoke, Logbücher, Kategorien,
+Nachrichtenworkflow, Administrationsworkflow sowie Backup und Restore endeten
+ebenfalls erfolgreich. Ein Browser-Steuerwerkzeug war in diesem Lauf nicht
+verfügbar. Deshalb wurde weder ein Pflicht-Browser-Gate ausgeführt noch die
+Bedienung der `STRICT`/`LOOSE`-Umschaltung, ihre Warnanzeige oder ein
+Cross-Rollen-Schreibweg im echten Browser als bestanden gewertet. Diese
+Modusabnahme bleibt manuell offen.
+
+Die unmittelbar danach ausgeführte vollständige statische Suite endete mit
+Exitcode 0, lintete alle 269 aktiven PHP-Dateien und bestätigte insbesondere
+80 Assertions zum Berechtigungsmodus, 29 Assertions zum exakten
+LOOSE-Anhang-Scope und 222 Assertions zum Single-Dispatch-Vertrag. Dieser
+lokale Podman-Lauf fand nicht auf einem
 nachgewiesenen SELinux-Enforcing-System statt und gilt daher ausdrücklich nicht
 als SELinux-Relabel-Nachweis.
 
@@ -366,8 +381,9 @@ Schreibgrenzen sowie die amtlichen Nachrichtenvordruckfelder aus Migration 98.
 Der Schema-Test startet Migration 98 zweimal, prüft die exakt markierten
 Spalten `11_rufnummer` und `12_betreff`, deren leere Bestandswerte und den
 unveränderten historischen Nachrichteninhalt. Readiness und `verify.sql`
-verlangen alle zwanzig Ledgerzeilen einschließlich Version 114 sowie die
-exakten drei Such-/Listenindizes. Migration 99 wird vollständig, nach einem
+verlangen alle einundzwanzig Ledgerzeilen einschließlich Version 115, die
+kanonische Berechtigungsmodusspalte samt Guard-/Fachtriggern sowie die exakten
+drei Such-/Listenindizes. Migration 99 wird vollständig, nach einem
 simulierten phasenweisen Abbruch und nach einer fremden Indexkollision
 ausgeführt; erst der bereinigte Wiederanlauf darf den Ledgerstand schreiben.
 Migration 100 wird gegen einen zuvor aktiv markierten Legacy-Benutzer
@@ -418,7 +434,7 @@ DDL-Zwischenstände und fremde Kollisionen für Spalten, Indexe,
 Fremdschlüssel und Trigger; nur der kanonische Wiederanlauf darf ihre
 Ledgerzeile schreiben.
 
-Migration 112 wird anschließend als aktueller Vertrag geprüft. Sie legt die
+Migration 112 wird anschließend als strenger Vorgängervertrag geprüft. Sie legt die
 optionalen Zugangsschicht- und Mitgliedstabellen kollisionssicher an und
 ersetzt die letzten ETB-/TBB-Trigger. Positive Schreibfälle verlangen aktiven
 Einsatz und feste Kontofunktion `ETB/Stab` oder `S2/Stab` für ETB sowie
@@ -460,6 +476,18 @@ idempotent abgeschlossen. Manipulierte Marker-Prüfsummen und die unmögliche
 Kombination aus `applied`-Marker und pristine `ENVIRONMENT`-Zeile blockieren
 unverändert. Das aus dem Legacy-Fixture migrierte Schema besitzt keinen
 Fresh-Marker und behält dagegen nachweislich `ENVIRONMENT/NULL/0/migration-114`.
+
+Migration 115 ergänzt als einundzwanzigste Ledgerzeile den
+Berechtigungsmodus. Der Schematest verlangt die exakt markierte
+`ascii_bin`-Spalte mit `STRICT`-Default, ausschließlich gültige Werte, beide
+Guard-Trigger und die sechs modebewussten Fachtrigger. Alle vorhandenen
+Einsätze müssen nach Upgrade `STRICT` sein. Eigene DDL-Zwischenstände dürfen
+konvergieren; eine fremde Spalte, ein fremder Guard-Trigger oder ein nicht
+eindeutig erkannter Vorgängertrigger muss ohne Ledgerabschluss blockieren.
+Der Integrationsteil prüft den unveränderten strengen Vertrag und anschließend
+den lockeren Positivfall bei weiterhin aktivem, ungesperrtem Konto sowie die
+in beiden Modi negativen Einsatz-, Zustands-, Identitäts-, Referenz- und
+Append-only-Grenzen. Ein Zweitlauf darf weder Modus noch Fachbestand ändern.
 
 Anschließend migriert der Hauptlauf ein leeres Schema,
 führt PHP-, Datenbank-, Rollen-, HTTP- und Administrationsnachweise aus, prüft
@@ -700,6 +728,63 @@ einsatzbezogenen Wert geprüft. Bei historischem `NULL` melden Statusleiste und
 Administration den fehlenden beziehungsweise unvollständigen Zustand; das
 historische PDF sagt „historisch nicht erfasst“ und der CSV-Export bewahrt
 `NULL`.
+
+Die Berechtigungsmodustests erweitern diesen Vertrag für
+`nv_einsaetze.estab_permission_mode`. Sie müssen mindestens nachweisen:
+
+- Neuinstallation, Legacy-Upgrade und normale Einsatzanlage ergeben ohne
+  ausdrückliche Auswahl `STRICT`.
+- Unmarkierte direkte SQL-Änderungen und kombinierte Änderungen anderer
+  Einsatzfelder werden von den Guard-Triggern abgewiesen; der Anwendungsweg
+  kann `LOOSE` nicht ohne Warnungsbestätigung anlegen oder setzen. Ein fremder
+  Spalten-/Triggerzustand blockiert Migration 115 ohne stilles Umschreiben.
+  Ein Principal mit beliebigen SQL-Rechten und der Fähigkeit, Sessionvariablen
+  selbst zu setzen, liegt ausdrücklich außerhalb dieser Triggergrenze und muss
+  als vertrauenswürdiger Betreiberzugang geschützt werden.
+- Die Basic-Auth-/CSRF-geschützte Administration bindet Einsatz-ID,
+  erwarteten Altmodus und globale Revision. Ein veraltetes Formular, ein
+  Parallelwechsel oder ein zwischenzeitlicher Einsatzwechsel liefert einen
+  Konflikt. Nur ein echter Wechsel erhöht die Revision und schreibt den
+  Vorher-/Nachher-Auditdatensatz.
+- Im strengen Modus bleiben alle bisherigen positiven und negativen
+  Funktions-/Rollenfälle unverändert. Im lockeren Modus funktionieren dieselben
+  dafür freigegebenen Workflow-, ETB-/TTB-, S6-Plan- und
+  Melder-Schreibaktionen funktionsübergreifend mit einem konkreten aktiven und
+  ungesperrten Konto; die gespeicherte Identität darf nicht durch eine
+  behauptete Browserrolle ersetzt werden. Rollenstrenge Übersichten,
+  Nachweisung, Zweitsichtungsarchive, Kategorien- und Administrationsrechte
+  müssen dagegen in beiden Modi unverändert bleiben.
+- In beiden Modi bleiben fehlende/abgelaufene Sitzung, manuelle Kontosperre,
+  allein deaktivierter Gruppenzugang, kein aktiver oder geschlossener Einsatz,
+  fremde Einsatz-ID, falsches CSRF, ungültige Eingabe, falscher
+  Workflowzustand, fremder Sperrinhaber, ungültige Beziehungen,
+  Anhangintegrität, Append-only- und Aufbewahrungsgrenzen negative Fälle.
+- Reine Leseaufrufe behalten ihre Funktions-/Objektregeln. Nur die für eine
+  ausdrücklich gewählte Schreibstufe notwendige Workflow-Objektsicht ist im
+  lockeren Modus zulässig. Ein zurückgewiesener Ausgang muss durch eine andere
+  Funktion übernommen werden können; Ereignisnachweis und Datensatz müssen
+  ursprüngliche und neue Verantwortlichkeit unterscheidbar bewahren. Statusleiste,
+  Führungsstellenansicht, Administration und PDF-Dossier zeigen den
+  gespeicherten Modus; `LOOSE` ist dabei als Warnzustand erkennbar.
+- Vorhandene Anlagen einer funktionsübergreifend übernommenen Korrektur müssen
+  über die exakte Einsatz-/Nachrichtenbindung sichtbar, vorschau- und
+  herunterladbar bleiben. Fremde Nachrichten, originlose Archivdateien, ein
+  anderes Konto sowie ein anschließender Wechsel auf `STRICT` müssen denselben
+  Scope an Formular-, Final-Write- und Streaming-Grenze verwerfen.
+
+Ein Modustest darf nicht nur einen ausgeblendeten Link prüfen. Er muss den
+Controller beziehungsweise Domänendienst und die modebewussten
+Datenbanktrigger jeweils positiv und negativ erreichen. Vor jedem weiteren
+rollenbezogenen Integrationstest wird der Einsatz explizit auf `STRICT`
+zurückgesetzt, damit eine lockere Fixture keine erwartete Ablehnung verdeckt.
+
+Im finalen Lauf mit Migration 115 stand kein Browser-Steuerwerkzeug zur
+Verfügung. Deshalb gibt es aus diesem Lauf keinen Browsernachweis für die
+Umschaltung zwischen `STRICT` und `LOOSE`, die sichtbare Moduswarnung oder
+einen Cross-Rollen-Schreibfall. Die statischen Verträge, die echte MariaDB und
+authentifizierte HTTP-Anforderungen waren erfolgreich; die Browserbedienung
+gehört bis zu einem eigenen automatisierten Szenario in die manuelle
+Fachabnahme.
 
 Im Haupt-CI-Bestand prüft `tests/integration/user_admin.php` zunächst
 Kontoanlage, serverseitig abgeleitete feste Funktionszuordnung,
@@ -1477,11 +1562,14 @@ Er weist nach, dass anonyme Lesezugriffe HTTP 403 erhalten und operative
 Schreibversuche ohne aktiven Einsatz gesperrt sind. Mit aktivem Einsatz
 funktionieren dieselben Schreibvorgänge ohne aktive Dienst- oder
 Zugangsschicht. Beide Bücher zeigen den globalen Einsatzkopf und besitzen kein
-lokales Titelformular mehr. ETB schreiben ausschließlich feste Konten
-`ETB/Stab` oder `S2/Stab` mit `EINSATZTAGEBUCH`; das TTB schreiben
+lokales Titelformular mehr. Im strengen Modus schreiben ETB ausschließlich
+feste Konten `ETB/Stab` oder `S2/Stab` mit `EINSATZTAGEBUCH`; das TTB
 ausschließlich Konten mit der Funktion `Fernmelder` und `BEFOERDERUNG`.
-Cross-Rollen-POSTs, manipulierte Funktion
-oder Rolle und gesperrte Konten liefern HTTP 403. Eine Hutauswahl oder
+Cross-Rollen-POSTs und manipulierte Funktion oder Rolle liefern dann HTTP 403.
+Ein getrennter lockerer Lauf muss dieselben Schreibaktionen mit anderer
+Festfunktion zulassen, aber konkrete aktive und ungesperrte Kontenidentität,
+Einsatzbezug, Nummerierung, Referenzen und Append-only-Trigger unverändert
+erzwingen. Gesperrte Konten liefern in beiden Modi HTTP 403. Eine Hutauswahl oder
 Besetzungs-ID kommt weder im positiven noch im negativen Vertrag vor.
 Zusätzlich prüft der Test lokale statt globaler Nummern, A/B/E/K/W-Arten,
 strukturierte TBB-Inhaltsfelder, direkte Korrekturbezüge, serverseitige
@@ -1841,7 +1929,8 @@ müssen manuell abgenommen werden.
 Mindestens zu prüfen:
 
 - zwei Testeinsätze nacheinander aktivieren, die globale Statusanzeige auf
-  allen Modulen auf Führungsstellenname, Kennung und Einsatzname kontrollieren
+  allen Modulen auf Führungsstellenname, Kennung, Einsatzname und
+  Berechtigungsmodus kontrollieren
   und nach Deaktivierung die rote No-active-Warnung sowie gesperrte operative
   Formulare prüfen,
 - einen offenen migrierten Testeinsatz ohne Führungsstellennamen in
@@ -1850,6 +1939,20 @@ Mindestens zu prüfen:
   „historisch nicht erfasst“ prüfen, den tatsächlichen Namen einmalig
   administrativ bestätigen und nach der ersten operativen Eintragung jede
   weitere Änderung abweisen,
+- einen Einsatz im Standardmodus **Streng** anlegen und die bisherigen
+  Cross-Rollen-Schreibversuche abweisen; danach denselben offenen Einsatz nur
+  mit Warnungsbestätigung revisionsgesichert auf **Locker** stellen, die
+  sichtbare Warnung und das Vorher-/Nachher-Audit prüfen und genau diese
+  Schreibschritte mit einem fremden, aber aktiven und ungesperrten Konto
+  wiederholen. Anonyme/abgelaufene Sitzung, Kontosperre, deaktivierten alleinigen
+  Gruppenzugang, fehlenden aktiven Einsatz, falsches CSRF, fremden
+  Sperrinhaber, falschen Workflowzustand und einsatzfremdes Objekt weiterhin
+  abweisen; allgemeine Leserechte, Nachweisung, Zweitsichtungsarchive,
+  Kategorien- und Administrationsrechte dürfen sich nicht erweitern. Eine
+  zurückgewiesene Ausgangsmeldung dagegen mit einer anderen Funktion
+  übernehmen und beide Verantwortlichkeiten im Nachweis unterscheiden.
+  Anschließend
+  wieder **Streng** setzen und die negativen Rollenfälle erneut prüfen,
 - neuen Benutzer für jede tatsächlich verwendete Funktion in der
   Benutzerverwaltung anlegen, abmelden und mit demselben Kennwort erneut
   anmelden; eine abweichende Funktion vor und nach dem Logout abweisen,
@@ -1918,8 +2021,9 @@ Mindestens zu prüfen:
   müssen eine Hinweisseite erhalten. Danach die Anlagenansicht im vorgesehenen
   PDF-Programm öffnen und jede eingebettete Datei samt dokumentierter SHA-256
   gegen das Original prüfen; dabei
-  Führungsstellenname, Einsatzkennung und Einsatzname getrennt kontrollieren,
-- einen Einsatz mit vollständigem ETB-/TBB-Pflichtkopf anlegen und schon vor
+  Führungsstellenname, Einsatzkennung, Einsatzname und Berechtigungsmodus
+  getrennt kontrollieren,
+- einen strengen Einsatz mit vollständigem ETB-/TTB-Pflichtkopf anlegen und schon vor
   der ersten Zeile genau die Köpfe `ETB:1` und `TTB:1` prüfen; anschließend
   ohne aktive Schicht die lokale Nummer 1 schreiben. ETB mit `ETB/Stab` und
   `S2/Stab`, TTB mit der Funktion `Fernmelder` positiv, fremde Festfunktionen negativ
@@ -1960,8 +2064,10 @@ Mindestens zu prüfen:
   historischer Provenienz als frühere formale Dienstschicht exportieren, nur
   ETB/TBB gefiltert sowie Umfang auf Deckblatt und im Audit nachweisen und alle
   übrigen Sektionen einsatzweit vergleichen,
-- bei getrennten ETB- und Si-Konten den Si-ETB-POST mit HTTP 403 abweisen;
-  feste Funktions-/Rollengrenzen und Cross-Rollen-Schreibversuche prüfen;
+- bei getrennten ETB- und Si-Konten den Si-ETB-POST in **Streng** mit HTTP 403
+  abweisen und in **Locker** bei unveränderten Konto-/Einsatz-/Append-only-
+  Grenzen zulassen; feste Funktions-/Rollengrenzen und
+  Cross-Rollen-Schreibversuche in beiden Modi prüfen;
   Kommunikationsplan und lokal benötigte Zusatzmodule je repräsentativ
   anlegen/lesen,
 - administrative Exportübersicht am Desktop und bei 390 Pixel Breite öffnen,
@@ -2023,8 +2129,10 @@ sind:
 - alle ausgelieferten versionierten Migrationen mit gültigem SHA-256 als
   angewendet protokolliert sind,
 - der Singleton des globalen Einsatzstatus, alle Einsatz-Fremdschlüssel und
-  -Trigger, append-only Ereignisketten, formaler Abschluss/Aufbewahrung sowie
-  die dauerhafte Kontosperr-Spalte kanonisch vorhanden sind,
+  -Trigger, die `STRICT`/`LOOSE`-Modusspalte, beide Modus-Guard-Trigger und
+  sechs modebewussten Fachtrigger, append-only Ereignisketten, formaler
+  Abschluss/Aufbewahrung sowie die dauerhafte Kontosperr-Spalte kanonisch
+  vorhanden sind,
 - pro Einsatz exakt zwei Buchkopfstände samt kanonischem Einsatz-Insert-
   Trigger, lokale ETB-/TBB-Nummern, strukturierte TBB-Felder,
   Nachrichten-/Korrekturbezüge, der eindeutige ETB-Anhangsindex, die übrigen
@@ -2037,7 +2145,7 @@ sind:
   booleschen Zeichenklassen und gültiger Revision vorhanden ist,
 - Anhang-, Vordruck- und Exportverzeichnis beschreibbar sind.
 
-`docker/db/verify.sql` löst den aggregierten Schemacheck in 40 benannte
+`docker/db/verify.sql` löst den aggregierten Schemacheck in benannte
 `*_ok`-Ergebnisfelder auf. Für einen gültigen Stand müssen alle den Wert `1`
 haben; die anschließende Abfrage nach abweichender Engine oder Collation darf
 keine Zeile liefern.

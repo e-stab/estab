@@ -112,6 +112,7 @@ function estab_read_require_operational_scope(
     array $identity
 ): array {
     $incident = estab_incident_require_active($connection);
+    estab_permission_context_set_from_incident($incident);
     $selected = estab_read_require_identity_scope(
         $connection,
         (int) $incident['active_einsatz_id'],
@@ -1133,6 +1134,15 @@ function estab_read_attachment_tokens(mixed $value): array
     return array_keys($tokens);
 }
 
+/** Parse the optional correction object carried by attachment view links. */
+function estab_read_attachment_write_record(array $query): ?int
+{
+    if (!array_key_exists('message_write_record', $query)) {
+        return null;
+    }
+    return estab_message_positive_id($query['message_write_record']);
+}
+
 /** Columns needed to decide inherited attachment access. */
 function estab_read_attachment_authorization_columns(): string
 {
@@ -1142,12 +1152,180 @@ function estab_read_attachment_authorization_columns(): string
     // page can legitimately start several lazy preview requests and active
     // incidents may contain thousands of long messages.
     return implode(', ', [
-        '`12_anhang`', '`04_richtung`', '`06_befwegausw`', '`16_empf`',
+        '`00_lfd`', '`einsatz_id`', '`12_anhang`', '`04_richtung`',
+        '`06_befwegausw`', '`16_empf`',
         '`x00_status`', '`x01_abschluss`', '`x02_sperre`',
         '`x03_sperruser`', '`01_zeichen`', '`02_zeit`', '`02_zeichen`',
         '`03_datum`', '`03_zeichen`', '`14_zeichen`', '`14_funktion`',
         '`15_quitdatum`', '`15_quitzeichen`',
     ]);
+}
+
+/**
+ * Bind exceptional attachment access to one already authorised write object.
+ *
+ * The returned value is server-side policy data, never a browser capability.
+ * It can broaden only an explicit LOOSE write stage and is re-evaluated
+ * against the current linked message on every attachment read/use.
+ *
+ * @return array{
+ *   incident_id:int,message_id:int,operation:string,
+ *   benutzer:string,kuerzel:string,funktion:string,rolle:string
+ * }|null
+ */
+function estab_read_attachment_write_scope(
+    array $identity,
+    string $operation,
+    array $message
+): ?array {
+    if (
+        estab_permission_role_checks_enforced()
+        || !estab_message_operation_relaxes_write_role($operation)
+        || !estab_message_object_allowed($identity, $operation, $message, true)
+    ) {
+        return null;
+    }
+    $shape = estab_auth_session_identity_shape([
+        'vStab_benutzer' => $identity['benutzer'] ?? null,
+        'vStab_kuerzel' => $identity['kuerzel'] ?? null,
+        'vStab_funktion' => $identity['funktion'] ?? null,
+        'vStab_rolle' => $identity['rolle'] ?? null,
+    ]);
+    if ($shape === null) {
+        return null;
+    }
+    try {
+        $incidentId = estab_incident_positive_id(
+            $message['einsatz_id'] ?? null
+        );
+        $messageId = estab_message_positive_id($message['00_lfd'] ?? null);
+    } catch (InvalidArgumentException) {
+        return null;
+    }
+    return [
+        'incident_id' => $incidentId,
+        'message_id' => $messageId,
+        'operation' => $operation,
+        'benutzer' => $shape['benutzer'],
+        'kuerzel' => $shape['kuerzel'],
+        'funktion' => $shape['funktion'],
+        'rolle' => $shape['rolle'],
+    ];
+}
+
+/**
+ * Rebuild one attachment write scope from the current database object.
+ *
+ * A record id supplied by a browser is only a selector. It becomes useful
+ * after the active incident, permission mode, exact account and current
+ * workflow object have all been read again from the database. Callers repeat
+ * this function immediately before streaming bytes so a mode, incident or
+ * workflow transition revokes the exceptional access.
+ */
+function estab_read_attachment_write_scope_for_record(
+    mysqli $connection,
+    string $messageTable,
+    array $identity,
+    mixed $recordId,
+    ?array $expectedPermissionContext = null,
+    bool $forUpdate = false
+): ?array {
+    $recordId = estab_message_positive_id($recordId);
+    $incident = estab_incident_require_active($connection, $forUpdate);
+    $incidentId = (int) $incident['active_einsatz_id'];
+    if (
+        $expectedPermissionContext !== null
+        && !estab_permission_context_snapshot_matches_incident(
+            $expectedPermissionContext,
+            $incident
+        )
+    ) {
+        throw new EstabIncidentConflictException(
+            'Der aktive Einsatz oder sein Berechtigungsmodus hat sich geändert.'
+        );
+    }
+    estab_permission_context_set_from_incident($incident);
+    $selected = estab_read_require_identity_scope(
+        $connection,
+        $incidentId,
+        $identity
+    );
+    $message = estab_message_fetch_for_incident_by_id(
+        $connection,
+        $messageTable,
+        $recordId,
+        $incidentId
+    );
+    return is_array($message)
+        ? estab_read_attachment_write_scope(
+            $selected,
+            'staff-correction',
+            $message
+        )
+        : null;
+}
+
+/** Check one write scope against the freshly selected linked message. */
+function estab_read_attachment_write_scope_allows(
+    mixed $scope,
+    array $identity,
+    array $linkedMessages,
+    int $incidentId
+): bool {
+    if (!is_array($scope) || estab_permission_role_checks_enforced()) {
+        return false;
+    }
+    $shape = estab_auth_session_identity_shape([
+        'vStab_benutzer' => $identity['benutzer'] ?? null,
+        'vStab_kuerzel' => $identity['kuerzel'] ?? null,
+        'vStab_funktion' => $identity['funktion'] ?? null,
+        'vStab_rolle' => $identity['rolle'] ?? null,
+    ]);
+    if ($shape === null) {
+        return false;
+    }
+    try {
+        $scopeIncidentId = estab_incident_positive_id(
+            $scope['incident_id'] ?? null
+        );
+        $scopeMessageId = estab_message_positive_id(
+            $scope['message_id'] ?? null
+        );
+    } catch (InvalidArgumentException) {
+        return false;
+    }
+    $operation = $scope['operation'] ?? null;
+    if (
+        $scopeIncidentId !== $incidentId
+        || !is_string($operation)
+        || !estab_message_operation_relaxes_write_role($operation)
+    ) {
+        return false;
+    }
+    foreach (['benutzer', 'kuerzel', 'funktion', 'rolle'] as $field) {
+        if (
+            !is_string($scope[$field] ?? null)
+            || !hash_equals($shape[$field], $scope[$field])
+        ) {
+            return false;
+        }
+    }
+    foreach ($linkedMessages as $message) {
+        if (
+            is_array($message)
+            && (int) ($message['einsatz_id'] ?? 0) === $incidentId
+            && (int) ($message['00_lfd'] ?? 0) === $scopeMessageId
+            && estab_message_object_allowed(
+                $shape,
+                $operation,
+                $message,
+                true
+            )
+        ) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /** Build an exact filename-to-message map for active-incident attachments. */
@@ -1445,13 +1623,22 @@ function estab_read_attachment(
     string $messageTable,
     string $requestedFilename,
     array $identity,
-    bool $forUpdate = false
+    bool $forUpdate = false,
+    ?array $writeScope = null
 ): ?array {
     $requestedFilename = estab_file_validate_name(
         'attachment',
         $requestedFilename
     );
     $incident = estab_incident_require_active($connection, $forUpdate);
+    if (
+        $writeScope !== null
+        && !estab_permission_context_matches_incident($incident)
+    ) {
+        throw new EstabIncidentConflictException(
+            'Der aktive Einsatz oder sein Berechtigungsmodus hat sich geändert.'
+        );
+    }
     $incidentId = (int) $incident['active_einsatz_id'];
     $selected = estab_read_require_identity_scope(
         $connection,
@@ -1489,10 +1676,19 @@ function estab_read_attachment(
         $incidentId,
         [$requestedFilename]
     );
-    return estab_read_attachment_allowed(
-        $selected,
-        $attachment,
-        $messageMap[$requestedFilename] ?? []
+    $linkedMessages = $messageMap[$requestedFilename] ?? [];
+    return (
+        estab_read_attachment_allowed(
+            $selected,
+            $attachment,
+            $linkedMessages
+        )
+        || estab_read_attachment_write_scope_allows(
+            $writeScope,
+            $selected,
+            $linkedMessages,
+            $incidentId
+        )
     ) ? $attachment : null;
 }
 
@@ -1512,7 +1708,8 @@ function estab_read_attachments(
     array $requestedFilenames,
     array $identity,
     mixed $expectedIncidentId = null,
-    bool $forUpdate = false
+    bool $forUpdate = false,
+    ?array $writeScope = null
 ): array {
     if (count($requestedFilenames) > 100) {
         throw new InvalidArgumentException('Zu viele Anhangreferenzen.');
@@ -1536,6 +1733,14 @@ function estab_read_attachments(
     }
 
     $incident = estab_incident_require_active($connection, $forUpdate);
+    if (
+        $writeScope !== null
+        && !estab_permission_context_matches_incident($incident)
+    ) {
+        throw new EstabIncidentConflictException(
+            'Der aktive Einsatz oder sein Berechtigungsmodus hat sich geändert.'
+        );
+    }
     $incidentId = (int) $incident['active_einsatz_id'];
     if (
         $expectedIncidentId !== null
@@ -1569,16 +1774,25 @@ function estab_read_attachments(
             $incidentId,
             $forUpdate
         );
+        $linkedMessages = $messageMap[$requestedFilename] ?? [];
         if (
             !is_array($attachment)
             || !hash_equals(
                 strtolower((string) ($attachment['fileext'] ?? '')),
                 $extension
             )
-            || !estab_read_attachment_allowed(
-                $selected,
-                $attachment,
-                $messageMap[$requestedFilename] ?? []
+            || (
+                !estab_read_attachment_allowed(
+                    $selected,
+                    $attachment,
+                    $linkedMessages
+                )
+                && !estab_read_attachment_write_scope_allows(
+                    $writeScope,
+                    $selected,
+                    $linkedMessages,
+                    $incidentId
+                )
             )
         ) {
             continue;
@@ -1601,7 +1815,8 @@ function estab_read_require_attachment_use_scope(
     string $messageTable,
     int $incidentId,
     mixed $attachmentList,
-    array $identity
+    array $identity,
+    ?array $writeScope = null
 ): void {
     if ($attachmentList === null || $attachmentList === '') {
         return;
@@ -1621,6 +1836,14 @@ function estab_read_require_attachment_use_scope(
     if ((int) $active['active_einsatz_id'] !== $incidentId) {
         throw new EstabIncidentConflictException(
             'Der aktive Einsatz hat sich geändert.'
+        );
+    }
+    if (
+        $writeScope !== null
+        && !estab_permission_context_matches_incident($active)
+    ) {
+        throw new EstabIncidentConflictException(
+            'Der aktive Einsatz oder sein Berechtigungsmodus hat sich geändert.'
         );
     }
     $validated = [];
@@ -1645,7 +1868,8 @@ function estab_read_require_attachment_use_scope(
         array_keys($validated),
         $identity,
         $incidentId,
-        true
+        true,
+        $writeScope
     );
     if (count($allowed) !== count($validated)) {
         throw new EstabReadPermissionException(

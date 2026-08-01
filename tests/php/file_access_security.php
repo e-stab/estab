@@ -284,15 +284,17 @@ $assert(
 $assert(
     preg_match(
         '/\$currentAttachment\s*=\s*estab_read_attachment\s*\('
-            . '.*?\$readIdentity,\s*true\s*\);/s',
+            . '.*?\$readIdentity,\s*true,\s*'
+            . '\$currentAttachmentWriteScope\s*\);/s',
         $download
     ) === 1
         && preg_match(
             '/\$currentAttachment\s*=\s*estab_read_attachment\s*\('
-                . '.*?\$readIdentity,\s*true\s*\);/s',
+                . '.*?\$readIdentity,\s*true,\s*'
+                . '\$currentAttachmentWriteScope\s*\);/s',
             $preview
         ) === 1,
-    'final attachment authorization does not use current locking reads'
+    'final attachment authorization lacks locked reads or exact write scope'
 );
 $inlineMimeMatch = [];
 $inlineMimeFound = preg_match(

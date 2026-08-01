@@ -507,6 +507,48 @@ function estab_sidebar_workflow_actions(
         throw new InvalidArgumentException('Invalid sidebar workflow identity');
     }
 
+    $looseWriteActions = [];
+    if (!estab_permission_role_checks_enforced()) {
+        $looseWriteActions = [
+            [
+                'key' => 'stab_schreiben',
+                'name' => 'stab_schreiben_x',
+                'label' => 'Schreiben',
+                'description' => 'Neue Ausgangsmeldung verfassen',
+            ],
+            [
+                'key' => 'stab_korrekturen',
+                'name' => 'stab_korrekturen_x',
+                'label' => 'Korrekturen',
+                'description' => 'Zurückgewiesene Meldungen überarbeiten',
+            ],
+            [
+                'key' => 'stab_sichten',
+                'name' => 'stab_sichten_x',
+                'label' => 'Sichten',
+                'description' => 'Meldungen fachlich sichten',
+            ],
+            [
+                'key' => 'ldf_nachrichten',
+                'name' => 'ldf_nachrichten_x',
+                'label' => 'Disposition',
+                'description' => 'Rufnamen und Beförderungswege festlegen',
+            ],
+            [
+                'key' => 'fm_eingang',
+                'name' => 'fm_eingang_x',
+                'label' => 'Eingang',
+                'description' => 'Eingehende Meldung erfassen',
+            ],
+            [
+                'key' => 'fm_ausgang',
+                'name' => 'fm_ausgang_x',
+                'label' => 'Ausgang',
+                'description' => 'Ausgehende Meldungen befördern',
+            ],
+        ];
+    }
+
     $actions = [];
     if ($role === 'Stab') {
         if ($function === 'Si') {
@@ -581,6 +623,17 @@ function estab_sidebar_workflow_actions(
             'label' => 'Lesen',
             'description' => 'Meldungseingang anzeigen',
         ];
+    }
+
+    $existingKeys = array_fill_keys(
+        array_column($actions, 'key'),
+        true
+    );
+    foreach ($looseWriteActions as $action) {
+        if (!isset($existingKeys[$action['key']])) {
+            $actions[] = $action;
+            $existingKeys[$action['key']] = true;
+        }
     }
 
     $actions[] = [
@@ -1018,6 +1071,12 @@ function estab_sidebar_status_refresh_script(
         . 'if(text){text.textContent="Status nicht aktuell · letzter Abruf "'
         . '+staleTimestamp();}'
         . '}'
+        . 'function reloadWorkspace(){'
+        . 'try{if(window.parent&&window.parent!==window'
+        . '&&window.parent.location.origin===window.location.origin){'
+        . 'window.parent.location.reload();return;}}catch(ignore){}'
+        . 'window.location.reload();'
+        . '}'
         . 'function preserveRefreshState(current,fresh){'
         . 'var currentSound=current.querySelector('
         . '".estab-sidebar-sound-control");'
@@ -1066,12 +1125,26 @@ function estab_sidebar_status_refresh_script(
         . 'signal:controller.signal});'
         . 'if(response.status===401){try{window.top.location.assign(loginUrl);}'
         . 'catch(ignore){window.location.assign(loginUrl);}return false;}'
+        . 'if(response.status===403||response.status===409){'
+        . 'reloadWorkspace();return false;}'
         . 'if(!response.ok){markStatusStale();return false;}'
         . 'var html=await response.text();'
         . 'var parsed=new DOMParser().parseFromString(html,"text/html");'
         . 'var fresh=parsed.querySelector("[data-estab-sidebar-status]");'
         . 'var current=document.querySelector("[data-estab-sidebar-status]");'
         . 'if(!fresh||!current){markStatusStale();return false;}'
+        . 'function incidentSignature(status){'
+        . 'var incident=status.querySelector("[data-estab-incident-state]");'
+        . 'if(!incident){return "missing";}'
+        . 'var mode=incident.querySelector('
+        . '"[data-estab-incident-permission-mode]");'
+        . 'return (incident.getAttribute("data-estab-incident-state")||"")'
+        . '+"|"+(incident.getAttribute("data-estab-incident-id")||"")'
+        . '+"|"+(mode?mode.getAttribute('
+        . '"data-estab-incident-permission-mode")||"":"");'
+        . '}'
+        . 'if(incidentSignature(current)!==incidentSignature(fresh)){'
+        . 'reloadWorkspace();return false;}'
         . 'var notify=fresh.getAttribute("data-estab-notify")==="1";'
         . 'var restoreSoundFocus='
         . 'document.activeElement==='

@@ -59,6 +59,7 @@ if [ ! -r "$fixture" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/112-optional-access-shifts.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/113-password-policy.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/114-self-registration-policy.sql" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/115-incident-permission-mode.sql" ] \
     || [ ! -x "$ESTAB_MIGRATOR_BIN" ]; then
     echo "schema migrator test: fixture, baseline, or migrator is unavailable" >&2
     exit 1
@@ -76,7 +77,7 @@ pre_110_migrations=$(mktemp -d "${TMPDIR:-/tmp}/estab-pre-110-migrations.XXXXXX"
 
 for migration_path in "$ESTAB_MIGRATIONS_DIR"/*.sql; do
     case "$(basename "$migration_path")" in
-        110-etb-tbb-rules.sql|111-logbook-shift-assignment.sql|112-optional-access-shifts.sql|113-password-policy.sql|114-self-registration-policy.sql)
+        110-etb-tbb-rules.sql|111-logbook-shift-assignment.sql|112-optional-access-shifts.sql|113-password-policy.sql|114-self-registration-policy.sql|115-incident-permission-mode.sql)
             continue
             ;;
     esac
@@ -349,11 +350,11 @@ SELECT GROUP_CONCAT(CONCAT(version, ':', checksum, ':', state)
  WHERE version NOT IN (
    '110-etb-tbb-rules.sql', '111-logbook-shift-assignment.sql',
    '112-optional-access-shifts.sql', '113-password-policy.sql',
-   '114-self-registration-policy.sql'
+   '114-self-registration-policy.sql', '115-incident-permission-mode.sql'
  )"
 )" \
     "migration 110 upgrade rewrote a released migration ledger row"
-assert_equal "1|1|1|1|1|1|3|1|2|1" "$(database_query "$logbook_upgrade_database" "
+assert_equal "1|1|1|1|1|1|1|3|1|2|1" "$(database_query "$logbook_upgrade_database" "
 SELECT CONCAT(
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '110-etb-tbb-rules.sql' AND state = 'applied'), '|',
@@ -368,6 +369,9 @@ SELECT CONCAT(
              AND state = 'applied'), '|',
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '114-self-registration-policy.sql'
+             AND state = 'applied'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '115-incident-permission-mode.sql'
              AND state = 'applied'), '|',
          (SELECT COUNT(*) FROM information_schema.statistics
            WHERE table_schema = DATABASE() AND table_name = 'nv_etb'
@@ -1448,7 +1452,7 @@ finish_checksum=$(
         awk '{print $1}'
 )
 assert_equal \
-    "20|20|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
+    "21|21|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
     "$(database_query "$predecessor_database" "
 SELECT CONCAT(
          COUNT(*), '|',
@@ -1618,7 +1622,7 @@ SELECT GROUP_CONCAT(
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
 
-assert_equal "20" "$(fixture_query "
+assert_equal "21" "$(fixture_query "
 SELECT COUNT(*) FROM estab_schema_migrations
  WHERE state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
@@ -1629,7 +1633,7 @@ SELECT COUNT(*) FROM estab_schema_migrations
    AND state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
     "standard matrix migration was not recorded"
-assert_equal "1|1|1|1|1|1|1|1|1|1|1|1|1|1|11" "$(fixture_query "
+assert_equal "1|1|1|1|1|1|1|1|1|1|1|1|1|1|1|11" "$(fixture_query "
 SELECT CONCAT(
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '80-dv-evidence-retention.sql'
@@ -1681,6 +1685,10 @@ SELECT CONCAT(
              AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '114-self-registration-policy.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '115-incident-permission-mode.sql'
              AND state = 'applied'
              AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
          (SELECT COUNT(*) FROM information_schema.columns
@@ -1772,6 +1780,48 @@ SELECT CONCAT(
            WHERE singleton_id = 1)
        )")" \
     "legacy upgrade did not preserve the environment-compatible self-registration default"
+assert_equal "1|1|0|8|0" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT COUNT(*) FROM information_schema.columns
+           WHERE table_schema = DATABASE()
+             AND table_name = 'nv_einsaetze'
+             AND column_name = 'estab_permission_mode'
+             AND ordinal_position = (
+               SELECT ordinal_position + 1 FROM information_schema.columns
+                WHERE table_schema = DATABASE()
+                  AND table_name = 'nv_einsaetze'
+                  AND column_name = 'erstellt_von'
+             )
+             AND data_type = 'enum'
+             AND column_type = 'enum(''STRICT'',''LOOSE'')'
+             AND character_set_name = 'ascii'
+             AND collation_name = 'ascii_bin'
+             AND is_nullable = 'NO'
+             AND column_default = '''STRICT'''
+             AND column_comment =
+               'estab:migration:115:incident-permission-mode:v1'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '115-incident-permission-mode.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
+         (SELECT COUNT(*) FROM nv_einsaetze
+           WHERE estab_permission_mode <> 'STRICT'), '|',
+         (SELECT COUNT(*) FROM information_schema.triggers
+           WHERE trigger_schema = DATABASE()
+             AND trigger_name IN (
+               'estab_permission_mode_incident_insert',
+               'estab_permission_mode_incident_update',
+               'estab_etb_bi_einsatz', 'estab_tbb_bi_einsatz',
+               'estab_dv94_fernmeldeplan_insert',
+               'estab_dv94_fernmeldeplan_immutable',
+               'estab_dv94_messenger_insert',
+               'estab_dv94_messenger_update'
+             )), '|',
+         (SELECT COUNT(*) FROM information_schema.routines
+           WHERE routine_schema = DATABASE()
+             AND routine_name LIKE 'estab_migrate_115_%')
+       )")" \
+    "incident permission mode was not migrated fail-closed and canonically"
 assert_equal "1|3|aktiv,estab_gesperrt,estab_letzte_aktivitaet|0||NULL|0" "$(fixture_query "
 SELECT CONCAT(
          (SELECT COUNT(*)
@@ -2389,7 +2439,7 @@ SELECT CONCAT(
     "password-policy migration did not recover after removing the collision"
 
 # Migration 114 must only ever replace its own missing ledger acknowledgement.
-# Snapshot every field of the existing nineteen records so retries and rejected
+# Snapshot every field of the existing twenty records so retries and rejected
 # collisions prove that the released history remains byte-for-byte unchanged.
 pre_114_ledger_snapshot="$(fixture_query "
 SELECT GROUP_CONCAT(
@@ -2406,7 +2456,7 @@ SELECT GROUP_CONCAT(
        )
   FROM estab_schema_migrations
  WHERE version <> '114-self-registration-policy.sql'")"
-assert_equal "19|19" "$(fixture_query "
+assert_equal "20|20" "$(fixture_query "
 SELECT CONCAT(
          COUNT(*), '|',
          SUM(state = 'applied' AND checksum REGEXP BINARY '^[0-9a-f]{64}$')
@@ -2560,7 +2610,7 @@ SELECT GROUP_CONCAT(
        )
   FROM estab_schema_migrations
  WHERE version <> '114-self-registration-policy.sql'")" \
-    "migration 114 rewrote one of the existing nineteen ledger rows"
+    "migration 114 rewrote one of the existing twenty ledger rows"
 
 fixture_query "
 ALTER TABLE nv_selbstregistrierung
@@ -2667,7 +2717,7 @@ SELECT GROUP_CONCAT(
        )
   FROM estab_schema_migrations
  WHERE version <> '114-self-registration-policy.sql'")" \
-    "migration 114 rewrote one of the existing nineteen ledger rows"
+    "migration 114 rewrote one of the existing twenty ledger rows"
 
 # Reproduce interruption after some autocommitted migration-99 phases. The
 # canonical status/time index remains, the direction/number index is missing,

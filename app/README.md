@@ -12,8 +12,9 @@ Nachrichtenarbeitsbereichs. `image_button.php` validiert und rendert die
 weiterhin öffentlich benötigten Legacy-Bildbuttons. `admin_operations.php`
 bildet die vorbereitete, transaktionale Persistenzgrenze für aktive
 Empfängermatrix, Standardmatrix, Nachrichtenzähler und Grafikreset.
-`incident.php` und `incident_ui.php` bilden den globalen Einsatzstatus,
-Eingabegate und Statusbanner. `logbook_lifecycle.php` kapselt Eröffnung,
+`incident.php`, `permission_mode.php` und `incident_ui.php` bilden den globalen
+Einsatzstatus, den pro Einsatz gespeicherten Berechtigungsmodus, Eingabegate
+und Statusbanner. `logbook_lifecycle.php` kapselt Eröffnung,
 Übergabe, Abschluss und Aufbewahrungszustand der beiden Einsatzbücher;
 `logbook_numbering.php` vergibt deren einsatzlokale laufende Nummern atomar.
 `attachment.php` hält Reservierung, Dateiablage,
@@ -229,7 +230,10 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   Die Sidebar bündelt Arbeitszähler, Serverzeit,
   Onlinebelegung, Identität, Logout, die nach fester Kontofunktion
   gefilterten neun beziehungsweise zehn dauerhaft sichtbaren Bereichs- und
-  Dienstlinks ohne Disclosure sowie rollenabhängige Fachaktionen. Der
+  Dienstlinks ohne Disclosure sowie rollenabhängige Fachaktionen. Bei einem
+  lockeren Einsatz zeigt sie die bekannten schreibenden Fachaktionen
+  funktionsübergreifend an; allgemeine Lesebereiche, Nachweisung und
+  Zweitsichtungsarchive bleiben weiterhin nach ihrer Leseregel begrenzt. Der
   Hauptframe entfernt seine Standalone-Leiste vor der ersten Darstellung. Das
   regelmäßig ausgetauschte Statusfragment lässt Navigation, wiederhergestellten
   Fokus, Scrollposition und das langlebige PCM-WAV-Audioelement bestehen.
@@ -240,9 +244,11 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   Tab eine erfolgreiche Browserfreigabe; die browserweite Ein-/Aus-Absicht
   wird über `localStorage` synchronisiert und verspätete `play()`-Ergebnisse
   werden generationsgebunden verworfen.
-- `auth.php` und `dv_operations.php` verwenden Funktion und Rolle aus
-  `nv_benutzer` als alleinige Fachrechtsquelle. Operative Schreibpfade
-  verlangen einen aktiven Einsatz, aber keine aktive Dienst- oder
+- `auth.php` bindet immer die konkrete Funktion und Rolle aus `nv_benutzer` an
+  die Sitzung. `permission_mode.php` normalisiert den ausschließlich aus der
+  Einsatzzeile geladenen Modus; ohne eindeutigen Kontext gilt `STRICT`.
+  Operative Schreibpfade verlangen in beiden Modi ein konkretes aktives und
+  ungesperrtes Konto sowie einen aktiven offenen Einsatz, aber keine aktive Dienst- oder
   Zugangsschicht und keine Besetzungs-ID. `shift_access.php` erlaubt optionale
   einsatzbezogene Kontengruppen: unzugeordnete Konten bleiben zugelassen,
   Mehrfachzuordnungen gelten per OR, Aktivierung erzeugt keine Sitzung und
@@ -252,6 +258,17 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   sichtbaren Schichtstatus, aktuellen Mitgliedsintervalle sowie relevanten
   Sperr- und Sitzungszustände; Entfernen verlangt zusätzlich exakt die
   angezeigte Mitgliedsintervall-ID und verhindert damit einen ABA-Fehler.
+  In `STRICT` prüfen Writer außerdem die bisherige fachlich passende feste
+  Kontofunktion/Rolle. In `LOOSE` entfällt nur diese Schreibprüfung;
+  Authentisierung, Zugangsentzug, Einsatzscoping, CSRF, Validierung,
+  Richtung, Workflowzustand, Sperrinhaber, Integrität, Audit und Retention
+  bleiben bestehen. Die normale Leseautorisierung wird nicht global
+  gelockert; Nachweisung, rollenbezogene Übersichten/Zweitsichtungsarchive,
+  Kategorien- und Administrationsrechte bleiben streng. Nur eine ausdrücklich
+  gewählte Schreibstufe erhält die nötige Workflow-Objektsicht. Bei einem
+  zurückgewiesenen Ausgang darf `LOOSE` die Bindung an die ursprüngliche
+  Verfasserfunktion lösen; Ereignis- und Datensatzprovenienz erhalten beide
+  Verantwortlichkeiten.
 - `dynamic_schema.php` reconciliert die sechs historischen
   Nachrichten-/Status-/Kategorietabellen für feste Stabs- und FB-Kontofunktionen
   unter einem datenbank-/funktionsgebundenen Advisory Lock. Der Login-Wrapper
@@ -278,10 +295,23 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   Pfade werden nicht verfolgt.
 - Der Singleton in `incident.php` erlaubt systemweit höchstens einen aktiven
   Einsatz. Operative Writer halten ihn mit `SELECT ... FOR UPDATE` bis zum
-  Commit; ohne aktiven Einsatz scheitern sie. Der PDF-Dossierreader ist die
+  Commit; ohne aktiven Einsatz scheitern sie. Der unter demselben Lock gelesene
+  Berechtigungsmodus und die globale Revision müssen dem zu Beginn aufgebauten
+  Requestkontext entsprechen, damit ein paralleler Modus- oder Einsatzwechsel
+  keinen veralteten Writer autorisiert. Der PDF-Dossierreader ist die
   bewusste Ausnahme auf der Leseseite: Er verwendet einen konsistenten
   Read-only-Snapshot der explizit gewählten aktiven oder historischen
   Einsatz-ID.
+- Neue und migrierte Einsätze erhalten `STRICT`. Anlegen, Aktivieren oder
+  Umstellen eines lockeren Einsatzes verlangt eine ausdrückliche
+  Warnungsbestätigung. Die Modusänderung ist nur bei offenen Einsätzen möglich,
+  bindet erwarteten Altmodus und globale Revision, erhöht letztere bei einer
+  echten Änderung und auditiert Vorher/Nachher. Eng gesetzte Sessionmarker und
+  Datenbank-Guard-Trigger weisen unbeabsichtigte oder alte, unmarkierte
+  `LOOSE`-Inserts/-Updates ab und verhindern kombinierte Änderungen weiterer
+  Einsatzfelder. Sie sind keine Privileggrenze gegen Personen oder Prozesse
+  mit den vollständigen Datenbank-Zugangsdaten; diese bleiben ein geschütztes,
+  vertrauenswürdiges Betriebsgeheimnis.
 - `attachment.php::estab_attachment_store_upload()` beansprucht die
   reservierte Kennung, verschiebt und prüft die Datei, finalisiert Metadaten
   und schreibt das Audit unter demselben Einsatz-Lock. Fehler rollen zum

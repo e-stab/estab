@@ -200,7 +200,7 @@ $assert(
             'estab_message_release_operator_stage_lock ('
         )
         && str_contains($cancelBranch, '$cancelIsLead ? 1 : 2')
-        && str_contains($cancelBranch, '$workflowIdentity ["kuerzel"]'),
+        && str_contains($cancelBranch, '$workflowSelectedIdentity'),
     'LdF cancellation does not release the identity-bound stage-one lock'
 );
 $assert(

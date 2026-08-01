@@ -28,6 +28,9 @@ require_once __DIR__ . "/../app/read_authorization.php";
 require_once __DIR__ . "/../app/message_list.php";
 require_once __DIR__ . "/../app/attachment_upload.php";
 require_once __DIR__ . "/../app/self_registration.php";
+require_once __DIR__ . "/../4fcfg/config.inc.php";
+require_once __DIR__ . "/../4fcfg/dbcfg.inc.php";
+require_once __DIR__ . "/../4fcfg/fkt_rolle.inc.php";
 estab_session_ui_start ($_SESSION);
 
 if (estab_attachment_upload_post_body_exceeded (
@@ -80,6 +83,24 @@ $_SESSION += array (
 // message route. Admit only an exact login request before authentication and
 // enforce the established function/role boundary before any database action.
 $workflowIdentity = estab_auth_session_identity ($_SESSION);
+if ($workflowIdentity !== null) {
+  $permissionModeConnection = null;
+  try {
+    $permissionModeConnection = estab_auth_connect ($conf_4f_db);
+    $permissionModeIncident = estab_incident_active ($permissionModeConnection);
+    if (is_array ($permissionModeIncident)) {
+      estab_permission_context_set_from_incident ($permissionModeIncident);
+    }
+  } catch (Throwable $exception) {
+    // Missing/unavailable policy remains STRICT here. The complete read gate
+    // below reports the authoritative database error before rendering data.
+    error_log ("eStab permission mode unavailable: ".$exception->getMessage ());
+  } finally {
+    if ($permissionModeConnection instanceof mysqli) {
+      estab_auth_close ($permissionModeConnection);
+    }
+  }
+}
 if ($workflowIdentity === null) {
   if (!estab_workflow_public_login_request ($_SERVER, $_GET, $_POST)) {
     if (
@@ -142,7 +163,10 @@ if (
     || isset ($returnValue ["action"])
     || isset ($returnValue ["reset_record"])
     || isset ($returnValue ["m2_abmelden_x"])
-    || ($returnValue ["stab"] ?? "") === "meldung"
+    || isset ($returnValue ["stab_korrekturen_x"])
+    || in_array (($returnValue ["stab"] ?? ""), array (
+      "meldung", "korrektur",
+    ), true)
     || ($returnValue ["sichter"] ?? "") === "meldung"
     || ($returnValue ["ldf"] ?? "") === "meldung"
     || in_array (($returnValue ["fm"] ?? ""), array (
@@ -185,9 +209,9 @@ if ( debug){
 // exit;
 error_reporting(E_ALL);
 
-include ("../4fcfg/config.inc.php");    // Konfigurationseinstellungen und Vorgaben
-include ("../4fcfg/dbcfg.inc.php");     // Datenbankparameter
-include ("../4fcfg/fkt_rolle.inc.php"); // Mitspieler
+require_once ("../4fcfg/config.inc.php");    // Konfigurationseinstellungen und Vorgaben
+require_once ("../4fcfg/dbcfg.inc.php");     // Datenbankparameter
+require_once ("../4fcfg/fkt_rolle.inc.php"); // Mitspieler
 include ("protokoll.php");              // Protokolllierung in der Datenbank
 include ("db_operation.php");           // Datenbank operationen
 include ("4fachform.php");              // Formular Behandlung 4fach Vordruck
@@ -284,6 +308,17 @@ if ($workflowIdentity !== null) {
     $workflowIncidentId = (int) (
       $readScope ["incident"]["active_einsatz_id"]
     );
+    estab_permission_context_set_from_incident ($readScope ["incident"]);
+    // Re-evaluate the route against the same authoritative snapshot that is
+    // carried into the write transaction. A concurrent LOOSE -> STRICT
+    // change must never leave an already admitted foreign-role action alive.
+    if (!estab_workflow_route_allowed (
+      $workflowSelectedIdentity,
+      (string) ($_SERVER ["REQUEST_METHOD"] ?? "GET"),
+      $returnValue
+    )) {
+      estab_workflow_forbid ();
+    }
     $activeCommandPostName = estab_incident_command_post_name (
       $readScope ["incident"]
     );
@@ -375,7 +410,9 @@ function estab_workflow_require_active_incident_for_post (
     || isset ($request ["action"])
     || isset ($request ["reset_record"])
     || isset ($request ["stab_anhang_x"])
+    || isset ($request ["stab_korrekturen_x"])
     || isset ($request ["fm_anhang_x"])
+    || (string) ($request ["stab"] ?? "") === "korrektur"
     || (string) ($request ["fm"] ?? "") === "meldung"
     || (string) ($request ["ldf"] ?? "") === "meldung";
   if (!$operational) {
@@ -540,11 +577,18 @@ if ($messageOperation !== null) {
       && estab_message_object_allowed (
         $workflowSelectedIdentity,
         $messageOperation,
-        $objectMessage
+        $objectMessage,
+        true
       )
-      && estab_read_message_allowed (
-        $workflowSelectedIdentity,
-        $objectMessage
+      && (
+        (
+          estab_message_operation_relaxes_write_role ($messageOperation)
+          && !estab_permission_role_checks_enforced ()
+        )
+        || estab_read_message_allowed (
+          $workflowSelectedIdentity,
+          $objectMessage
+        )
       );
     if (!$objectAllowed) {
       if (
@@ -577,6 +621,17 @@ if ($messageOperation !== null) {
     }
   }
 }
+$messageAttachmentWriteScope = (
+  $messageOperation === "staff-correction"
+  && is_array ($objectMessage)
+  && is_array ($workflowSelectedIdentity)
+)
+  ? estab_read_attachment_write_scope (
+      $workflowSelectedIdentity,
+      "staff-correction",
+      $objectMessage
+    )
+  : null;
 
 /** Rehydrate one attachment round-trip without trusting route authority. */
 function estab_message_attachment_form_data (
@@ -871,7 +926,8 @@ if ($messageAttachmentAction) {
           $conf_4f_tbl ["nachrichten"],
           $workflowIncidentId,
           $attachmentDraft ["12_anhang"],
-          $workflowSelectedIdentity
+          $workflowSelectedIdentity,
+          $messageAttachmentWriteScope
         );
       } finally {
         estab_auth_close ($attachmentScopeConnection);
@@ -925,7 +981,8 @@ if ($messageAttachmentAction) {
           $conf_4f_tbl ["nachrichten"],
           $workflowIncidentId,
           $attachmentDraft ["12_anhang"],
-          $workflowSelectedIdentity
+          $workflowSelectedIdentity,
+          $messageAttachmentWriteScope
         );
       } finally {
         estab_auth_close ($remainingScopeConnection);
@@ -967,7 +1024,8 @@ if ($messageAttachmentAction) {
           $conf_4f_tbl ["nachrichten"],
           $workflowIncidentId,
           $attachmentDraft ["12_anhang"],
-          $workflowSelectedIdentity
+          $workflowSelectedIdentity,
+          $messageAttachmentWriteScope
         );
       } finally {
         estab_auth_close ($replayScopeConnection);
@@ -1095,7 +1153,8 @@ if ($messageAttachmentAction) {
           $conf_4f_tbl ["nachrichten"],
           $workflowIncidentId,
           $attachmentDraft ["12_anhang"],
-          $workflowSelectedIdentity
+          $workflowSelectedIdentity,
+          $messageAttachmentWriteScope
         );
       } finally {
         estab_auth_close ($replayScopeConnection);
@@ -1493,7 +1552,8 @@ if (
     } catch (Throwable $exception) {
       estab_workflow_forbid ();
     }
-    reset_record_lock ($returnValue ["reset_record"]);
+    reset_record_lock ($returnValue ["reset_record"], $workflowSelectedIdentity);
+    unset ($returnValue ["reset_record"]);
     if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big><big>eset Recordlock</big></big><br>";  }
   }
 
@@ -1675,7 +1735,7 @@ ANTWORT % WEITERLEITUNG
         );
         if (in_array (
           $recoveryTask,
-          array ("Stab_schreiben", "Stab_gesprnoti"),
+          array ("Stab_schreiben", "Stab_korrigieren", "Stab_gesprnoti"),
           true
         )) {
           $formdata ["13_abseinheit"] = $activeCommandPostName;
@@ -1851,17 +1911,18 @@ ANTWORT % WEITERLEITUNG
     // gelesen
     if ($returnValue  ["action"] == "gelesen")
       if ($returnValue ["todo"] == "set"){
-        set_msg_read ( $returnValue["00_lfd"] );
+        set_msg_read ( $returnValue["00_lfd"], $workflowSelectedIdentity );
       } else {
-        unset_msg_read ( $returnValue["00_lfd"] );
+        unset_msg_read ( $returnValue["00_lfd"], $workflowSelectedIdentity );
       }
     // erledigt
     if ($returnValue ["action"] == "erledigt")
       if ($returnValue ["todo"] == "set"){
-         set_msg_done ( $returnValue["00_lfd"] );
+         set_msg_done ( $returnValue["00_lfd"], $workflowSelectedIdentity );
       } else {
-        unset_msg_done ( $returnValue["00_lfd"] );
+        unset_msg_done ( $returnValue["00_lfd"], $workflowSelectedIdentity );
       }
+    unset ($returnValue ["action"], $returnValue ["todo"]);
   }
 
 
@@ -2141,21 +2202,30 @@ FM-Ausgang (Sichter) abgebrochen
            $returnValue ["00_lfd"],
            $cancelDirection,
            $cancelIsLead ? 1 : 2,
-           $workflowIdentity ["kuerzel"]
+           $workflowSelectedIdentity
          )) {
            throw new RuntimeException ("Message lock release lost its target");
          }
          } finally {
            estab_auth_close ($lockConnection);
          }
-         if ($cancelIsLead) {
-         // Return to the LdF disposition queue after releasing the exact
-         // stage lock. Keeping the submitted task would suppress the queue
+         // Return to the relevant queue after releasing either exact stage
+         // lock. Keeping the submitted task would suppress the single default
          // renderer and leave the main frame empty.
          $returnValue ["task"] = "";
-         $returnValue ["ldf"] = "";
+         if ($cancelIsLead) {
+           $returnValue ["ldf"] = "";
          }
        }
+  } elseif (estab_workflow_cancelled_new_form ($returnValue)) {
+    // These forms own no persisted record lock. Their cancel action is a
+    // navigation back to the fixed account's ordinary view, so it must become
+    // a neutral request before the single-dispatch decision below.
+    $returnValue ["task"] = "";
+  } elseif (estab_workflow_acknowledged_read_form ($returnValue)) {
+    // Opening the record already persisted the read marker. The form's
+    // Gelesen/OK button is therefore a terminal return to the staff queue.
+    $returnValue ["task"] = "";
   }
 
 /**********************************************************************\
@@ -2298,6 +2368,62 @@ if  ((isset ($_SESSION ["vStab_benutzer"])) AND
 }
 
 $formdata = array (); // setze die Formulardaten zurueck
+try {
+  $workflowPrimaryView = estab_workflow_primary_view_selector ($returnValue);
+} catch (InvalidArgumentException $exception) {
+  estab_workflow_forbid ();
+}
+
+if (estab_workflow_should_render_primary_view (
+  $workflowPrimaryView,
+  "staff-corrections",
+  false
+)) {
+  $queueBufferLevel = ob_get_level ();
+  ob_start ();
+  try {
+    $list = new listen ("KORREKTUR", "", $workflowIncidentId);
+    $list->createlist ();
+    $queueHtml = (string) ob_get_clean ();
+  } catch (
+    EstabReadPermissionException|
+    EstabNoActiveIncidentException|
+    EstabIncidentConflictException $exception
+  ) {
+    while (ob_get_level () > $queueBufferLevel) {
+      ob_end_clean ();
+    }
+    estab_workflow_render_read_gate (
+      409,
+      "Berechtigungsstand geändert",
+      "Der aktive Einsatz oder sein Berechtigungsmodus wurde geändert. ".
+      "Laden Sie den Nachrichtenbereich neu."
+    );
+  }
+  pre_html (
+    "N",
+    "Offene Korrekturen ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"],
+    "",
+    true
+  );
+  echo "<body class=\"estab-tool-page\"><main class=\"estab-tool-shell\">";
+  echo $queueHtml;
+  echo "</main></body></html>";
+  exit;
+}
+
+if ($returnValue ["stab"] === "korrektur") {
+  if (!is_array ($objectMessage)) {
+    estab_workflow_forbid ();
+  }
+  $formdata = $objectMessage;
+  $formdata ["13_abseinheit"] = $activeCommandPostName;
+  $formdata ["14_zeichen"] = (string) $workflowSelectedIdentity ["kuerzel"];
+  $formdata ["14_funktion"] = (string) $workflowSelectedIdentity ["funktion"];
+  $form = new nachrichten4fach ($formdata, "Stab_korrigieren", "");
+  echo "</body></html>";
+  exit;
+}
 
 /**********************************************************************\
   --- S T A B  s c h r e i b e n ---
@@ -2306,7 +2432,11 @@ $formdata = array (); // setze die Formulardaten zurueck
   der Stabsfunktion im Formular voreingestellt.
 \**********************************************************************/
 
-  if ( (isset ( $returnValue["stab_schreiben_x"] )) and !$gesprnotizsichter ) {
+  if (estab_workflow_should_render_primary_view (
+        $workflowPrimaryView,
+        "staff-write",
+        false
+      ) and !$gesprnotizsichter ) {
 
     if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br>  _GET[stab_schreiben_x] )) and !gesprnotizsichter ";  echo "<br>\n";}
     $formdata ["13_abseinheit"] = $activeCommandPostName;
@@ -2323,11 +2453,16 @@ $formdata = array (); // setze die Formulardaten zurueck
 
   Menue und Liste
 \**********************************************************************/
-   if ( ( ($_SESSION ["vStab_rolle"] == "Stab" ) or
-          ($_SESSION ["ROLLE"] == "Stab" ) or
-          ($_SESSION ["vStab_rolle"] == "FB" ) or
-          ($_SESSION ["ROLLE"] == "FB" )
-         ) and
+   if (estab_workflow_should_render_primary_view (
+         $workflowPrimaryView,
+         "staff-list",
+         (
+           ($_SESSION ["vStab_rolle"] == "Stab" ) or
+           ($_SESSION ["ROLLE"] == "Stab" ) or
+           ($_SESSION ["vStab_rolle"] == "FB" ) or
+           ($_SESSION ["ROLLE"] == "FB" )
+         )
+       ) and
         (
           ( $_SESSION ["vStab_funktion"] != "Si"
            ) and
@@ -2430,13 +2565,14 @@ ul#topmenu li.active {
 
     if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> Stab Meldung lesen - Darstellung der Meldung über die laufende Nummer ";  echo "<br>\n";}
 
-    set_msg_read ($returnValue["00_lfd"]);
+    set_msg_read ($returnValue["00_lfd"], $workflowSelectedIdentity);
     $formdata = get_msg_by_lfd ($returnValue["00_lfd"]);
     $staffCanCorrect = is_array ($workflowIdentity)
       && estab_message_object_allowed (
         $workflowIdentity,
         "staff-correction",
-        $formdata
+        $formdata,
+        true
       );
     $form = new nachrichten4fach (
       $formdata,
@@ -2482,9 +2618,15 @@ ul#topmenu li.active {
 
   Menue und Liste
 \**********************************************************************/
-   if ( ( ($_SESSION ["vStab_rolle"] == "Stab") or
-          ($_SESSION ["ROLLE"] == "Stab") ) and
-        ( $_SESSION ["vStab_funktion"] == "Si" ) and
+   if (estab_workflow_should_render_primary_view (
+         $workflowPrimaryView,
+         "viewer-list",
+         (
+           (($_SESSION ["vStab_rolle"] == "Stab") or
+            ($_SESSION ["ROLLE"] == "Stab")) and
+           ($_SESSION ["vStab_funktion"] == "Si")
+         )
+       ) and
         ( !($returnValue["sichter"] == "meldung") ) and
         ( !(isset($returnValue["si_admin_x"])) ) and
         ( !(isset ($returnValue ["m2_abmelden_x"]) ) and 
@@ -2520,7 +2662,13 @@ ul#topmenu li.active {
 \**********************************************************************/
   if (
     is_array ($workflowIdentity)
-    && estab_workflow_is_telecommunications_lead ($workflowIdentity)
+    && estab_workflow_is_telecommunications_lead ($workflowIdentity, true)
+    && estab_workflow_should_render_primary_view (
+      $workflowPrimaryView,
+      "telecommunications-lead-list",
+      ($workflowIdentity ["funktion"] ?? "") === "LdF"
+        && ($workflowIdentity ["rolle"] ?? "") === "Fernmelder"
+    )
     && $returnValue ["ldf"] !== "meldung"
     && $returnValue ["task"] === ""
     && !isset ($returnValue ["m2_abmelden_x"])
@@ -2557,7 +2705,7 @@ ul#topmenu li.active {
         $lockConnection,
         $conf_4f_tbl ["nachrichten"],
         $returnValue ["00_lfd"],
-        $workflowIdentity ["kuerzel"],
+        $workflowSelectedIdentity,
         $leadDirection,
         1
       );
@@ -2597,7 +2745,11 @@ ul#topmenu li.active {
   --- F e r n m e l d e r   E i n g a n g  ---
       Es wurde der "Eingang"-Button beim Fernmelder betÃ¤tigt.
 \**********************************************************************/
-  if (isset ($returnValue["fm_eingang_x"])){
+  if (estab_workflow_should_render_primary_view (
+        $workflowPrimaryView,
+        "telecommunications-incoming-form",
+        false
+      )){
     if ($_SESSION["fm_zweite_sichtung"] == 1){$_SESSION["fm_zweite_sichtung"] = 0;}
     if ( debug == true ){ echo "### 730 Fernmelder Eingang ";  echo "<br>\n";}
 
@@ -2615,11 +2767,15 @@ ul#topmenu li.active {
 
   Menue und Liste
 \**********************************************************************/
- if ( ( ($_SESSION ["vStab_rolle"] == "Fernmelder") or
-          ($_SESSION ["ROLLE"] == "Fernmelder")
-        ) and
-        ( $_SESSION ["vStab_funktion"] == "A/W"
-        ) and
+ if (estab_workflow_should_render_primary_view (
+       $workflowPrimaryView,
+       "telecommunications-outgoing-list",
+       (
+         (($_SESSION ["vStab_rolle"] == "Fernmelder") or
+          ($_SESSION ["ROLLE"] == "Fernmelder")) and
+         ($_SESSION ["vStab_funktion"] == "A/W")
+       )
+     ) and
         !( ( isset ($returnValue ["fm_anhang_x"])  ) OR
            ( isset ($returnValue ["ah_upload_x"])  ) OR
            ( isset ($returnValue ["ah_auswahl_x"]) ) OR
@@ -2667,7 +2823,7 @@ if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>  ### FM Aus
         $lockConnection,
         $conf_4f_tbl ["nachrichten"],
         $returnValue ["00_lfd"],
-        $workflowIdentity ["kuerzel"],
+        $workflowSelectedIdentity,
         "A",
         2
       );
@@ -2718,7 +2874,11 @@ if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>  ### FM Aus
 
 \**********************************************************************/
 	
-  if ( (isset ( $returnValue["fm_admin_x"] ) OR ( $_SESSION ["fm_zweite_sichtung"] == 1 ) )
+  if (estab_workflow_should_render_primary_view (
+        $workflowPrimaryView,
+        "telecommunications-second-sighting",
+        $_SESSION ["fm_zweite_sichtung"] == 1
+      )
     and is_array ($workflowSelectedIdentity)
     and (($workflowSelectedIdentity ["funktion"] ?? null) === "A/W")
     and (($workflowSelectedIdentity ["rolle"] ?? null) === "Fernmelder")
@@ -2760,7 +2920,11 @@ if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>  ### FM Aus
         echo "</main>\n";
   }
 
-  if ( (isset ( $returnValue["si_admin_x"] ) OR ( $_SESSION ["si_zweite_sichtung"] == 1 ) )
+  if (estab_workflow_should_render_primary_view (
+        $workflowPrimaryView,
+        "viewer-second-sighting",
+        $_SESSION ["si_zweite_sichtung"] == 1
+      )
       and is_array ($workflowSelectedIdentity)
       and (($workflowSelectedIdentity ["funktion"] ?? null) === "Si")
       and (($workflowSelectedIdentity ["rolle"] ?? null) === "Stab")
@@ -2768,7 +2932,7 @@ if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>  ### FM Aus
     	
 		if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>   ###  Sichter Admin ";  echo "<br>\n";}
 
-    	$_SESSION ["si_zweite_sichtung"] = 1 ;
+		$_SESSION ["si_zweite_sichtung"] = 1 ;
         pre_html (
           "N",
           "Zweite Sichtung ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"],
@@ -2828,7 +2992,11 @@ Nachricht als Sichtung anzeigen
 /**********************************************************************\
    A B M E L D E N
 \**********************************************************************/
-  if (isset ($returnValue["m2_abmelden_x"])) {
+  if (estab_workflow_should_render_primary_view (
+    $workflowPrimaryView,
+    "logout",
+    false
+  )) {
     if ( debug == true ){ echo "### 907 m2_abmelden_x ";  echo "<br>\n";}
 
      // Compatibility for the historical image button. New UI controls use
@@ -3080,7 +3248,11 @@ Nachricht als Sichtung anzeigen
 /**********************************************************************\
 
 \**********************************************************************/
-if ( ( isset ($returnValue["m2_benutzer_x"])) OR
+if (estab_workflow_should_render_primary_view (
+       $workflowPrimaryView,
+       "account-list",
+       false
+     ) OR
      ( ( $_SESSION ["menue"] == "WELCOME" OR $_SESSION ["menue"] == "LOGIN" )
        AND $loginFlow !== "new" ) )
   {

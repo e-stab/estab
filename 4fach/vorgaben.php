@@ -93,6 +93,7 @@ if ($identity !== null) {
             estab_read_session_identity($_SESSION) ?? []
         );
         $selectedIdentity = $scope['identity'];
+        estab_permission_context_set_from_incident($scope['incident']);
     } catch (EstabNoActiveIncidentException $exception) {
         $readGateStatus = 409;
         $readGateMessage = 'Kein Einsatz ist aktiv.';
@@ -177,6 +178,7 @@ function estab_vorgaben_status_markup(
                 $identity
             );
             $identity = $scope['identity'];
+            estab_permission_context_set_from_incident($scope['incident']);
             try {
                 $positions = estab_sidebar_fetch_configured_positions(
                     $connection,
@@ -222,9 +224,11 @@ function estab_vorgaben_status_markup(
             }
 
             try {
-                $incidentState = estab_incident_ui_state_from_status(
-                    estab_incident_status($connection)
-                );
+                $status = estab_incident_status($connection);
+                if ($status['active_einsatz_id'] !== null) {
+                    estab_permission_context_set_from_incident($status);
+                }
+                $incidentState = estab_incident_ui_state_from_status($status);
             } catch (Throwable $exception) {
                 error_log(
                     'eStab sidebar incident lookup failed: '

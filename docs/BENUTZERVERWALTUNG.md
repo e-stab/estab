@@ -87,8 +87,9 @@ Empfängermatrix. Der Browser übermittelt nur die Funktion; die Rolle wird
 serverseitig aus dieser autoritativen Zuordnung abgeleitet. Ein neues Konto
 startet abgemeldet, ungesperrt und ohne SID oder IP-Metadaten.
 
-Die Funktion ist eine administrative Berechtigungszuordnung und nicht Teil des
-Sitzungs- oder Präsenzzustands. Deshalb kann ein Konto sie weder während einer
+Die Funktion ist eine administrative Zuordnung und im strengen Einsatzmodus
+zugleich die Quelle der funktionsbezogenen Schreibrechte; sie ist nicht Teil
+des Sitzungs- oder Präsenzzustands. Deshalb kann ein Konto sie weder während einer
 aktiven Sitzung noch nach dem Abmelden durch eine andere Auswahl im
 Loginformular ändern. Eine
 Neuzuweisung ist ausschließlich in der Benutzerverwaltung möglich. Sie setzt
@@ -101,9 +102,13 @@ kontrolliert im Audit festgehalten.
 
 ### Festes Funktionskonto und optionale Zugangsschichten
 
-Die Kontofunktion ist nicht nur eine Grundzuordnung, sondern die alleinige
-Quelle der Fachrechte. Die daraus serverseitig abgeleitete Rolle gehört fest
-zum Konto. Nach der Anmeldung gibt es keine Auswahl eines Funktions-Huts und
+Die Kontofunktion ist eine dauerhafte Grundzuordnung. Im Berechtigungsmodus
+`STRICT` ist sie zusammen mit der serverseitig abgeleiteten Rolle die Quelle
+der funktionsbezogenen Schreibrechte. Im Modus `LOOSE` blockieren Funktion und
+Rolle die dafür vorgesehenen Workflow-, ETB-/TTB-, S6-Plan- und
+Melder-Schreibschritte nicht; sie bleiben festes Merkmal der
+Identität und werden weiterhin in Provenienz und Audit verwendet. Nach der
+Anmeldung gibt es in keinem Modus eine Auswahl eines Funktions-Huts und
 keine Schichtbesetzung, welche Funktion oder Rolle überschreiben könnte. Für
 operative Eingaben muss ein Einsatz aktiv sein; eine aktive Dienst- oder
 Zugangsschicht ist nicht erforderlich.
@@ -131,6 +136,26 @@ Die dauerhafte manuelle Sperre `estab_gesperrt` ist von Zugangsschichten
 unabhängig und hat Vorrang. Historische formale Dienstschichten,
 Dienstbesetzungen und Übergaben bleiben als revisionsfähige und exportierbare
 Evidenz im Datenbestand, sind aber keine aktuelle Autorisierungsquelle.
+
+Der Modus wird nicht in der Benutzerverwaltung, sondern je Einsatz unter
+`/4fadm/incidents.php` festgelegt. Neue und beim Upgrade vorhandene Einsätze
+stehen standardmäßig auf `STRICT`. `LOOSE` verlangt eine ausdrückliche
+Warnungsbestätigung; jede Änderung bindet erwarteten Altmodus und globale
+Einsatzrevision und wird mit Vorher-/Nachherwert auditiert. Der Modus ändert
+weder die gespeicherte Kontofunktion noch Kennwort, Sperre, SID oder
+Zugangsschichtzuordnung.
+
+Unabhängig vom Modus bleiben Anmeldung mit dem konkreten Konto, exakte
+Sitzungsbindung, aktiver und ungesperrter Kontostatus, gegebenenfalls wirksamer
+Gruppenzugang, aktiver offener Einsatz, CSRF, Validierung, Workflow- und
+Objektzustände, Sperrinhaber, Integrität, Audit und Aufbewahrung verbindlich.
+Allgemeine Leserechte, rollenstrenge Übersichten, Nachweisung,
+Zweitsichtungsarchive, Kategorien- und Administrationsrechte werden nicht
+durch `LOOSE` erweitert. Nur eine ausdrücklich gewählte operative
+Schreibstufe darf die dafür notwendige Workflow-Objektsicht erhalten.
+Deshalb ist der
+lockere Modus weder Ersatz für persönliche Konten noch für Kontosperre oder
+geregelten Zugriffsentzug.
 
 ## Empfängermatrix als Zuordnungsrichtlinie
 

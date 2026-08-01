@@ -864,7 +864,8 @@ try {
     $identity
   );
   $identity = $readScope ["identity"];
-  $hasEtbCapability = estab_dv_has_account_capability (
+  estab_permission_context_set_from_incident ($readScope ["incident"]);
+  $hasEtbCapability = estab_dv_has_write_capability (
     $readConnection,
     (int) $readScope ["incident"]["active_einsatz_id"],
     $identity,
@@ -923,7 +924,8 @@ if ($requestMethod === "POST") {
   if (!$berechtigt) {
     estab_logbook_abort (
       403,
-      "Nur ein Konto mit der Funktion S2 oder ETB darf ETB-Einträge schreiben."
+      "Dieses Konto darf im aktuellen Einsatz keine ETB-Einträge schreiben. " .
+      "Prüfen Sie Kontostatus und Berechtigungsmodus."
     );
   }
   estab_logbook_require_csrf ($_SERVER, $_POST);

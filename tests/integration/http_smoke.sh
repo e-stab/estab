@@ -3920,6 +3920,7 @@ assert_status 200 \
     --cookie "$newer_cookie_jar" --cookie-jar "$newer_cookie_jar" \
     "$base_url/4fach/vordrucke.php"
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+newer_operational_csrf=$(csrf_from_body)
 newer_authenticated_session_id=$(session_cookie_from_jar "$newer_cookie_jar")
 if [ -z "$newer_authenticated_session_id" ]; then
     printf 'HTTP smoke: newer authenticated session cookie missing\n' >&2
@@ -3986,15 +3987,105 @@ if [ -z "$current_authenticated_session_id" ] ||
     exit 1
 fi
 
+missing_metadata_cookie_jar=$current_cookie_jar
+missing_metadata_operational_csrf=$current_logout_csrf
+
+login_parallel_test_browser() {
+    parallel_cookie_jar=$1
+    assert_status 200 \
+        --cookie "$parallel_cookie_jar" --cookie-jar "$parallel_cookie_jar" \
+        --request POST --data-urlencode 'login_flow=existing' \
+        "$base_url/4fach/mainindex.php"
+    parallel_preauth_csrf=$(csrf_from_body)
+    assert_status 200 \
+        --cookie "$parallel_cookie_jar" --cookie-jar "$parallel_cookie_jar" \
+        --request POST \
+        --data-urlencode "csrf_token=$parallel_preauth_csrf" \
+        --data-urlencode 'login_flow=existing' \
+        --data-urlencode "benutzer=$test_name" \
+        --data-urlencode "kuerzel=$test_code" \
+        --data-urlencode "funktion=$test_function" \
+        --data-urlencode "kennwort1@$login_password_file" \
+        --data-urlencode '2teskennwort=No' \
+        --data-urlencode 'absenden_x=1' \
+        "$base_url/4fach/mainindex.php"
+    assert_status 200 \
+        --cookie "$parallel_cookie_jar" --cookie-jar "$parallel_cookie_jar" \
+        "$base_url/4fach/vordrucke.php"
+    assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+}
+
+# Keep three independently stale PHP sessions so each denial path is exercised
+# before its local workflow state is invalidated by the authoritative SID check.
+redirect_cookie_jar=$work_dir/redirect-cookies.txt
+login_parallel_test_browser "$redirect_cookie_jar"
+redirect_operational_csrf=$(csrf_from_body)
+redirect_session_id=$(session_cookie_from_jar "$redirect_cookie_jar")
+
+final_current_cookie_jar=$work_dir/final-current-cookies.txt
+login_parallel_test_browser "$final_current_cookie_jar"
+final_current_logout_csrf=$(csrf_from_body)
+final_current_session_id=$(session_cookie_from_jar "$final_current_cookie_jar")
+if [ -z "$redirect_session_id" ] || [ -z "$final_current_session_id" ] ||
+    [ "$redirect_session_id" = "$final_current_session_id" ]; then
+    printf 'HTTP smoke: stale-POST browser sessions were not distinct\n' >&2
+    exit 1
+fi
+current_cookie_jar=$final_current_cookie_jar
+current_logout_csrf=$final_current_logout_csrf
+current_authenticated_session_id=$final_current_session_id
+
+expired_unknown_marker="EXPIRED_UNKNOWN_POST_MUST_NOT_PERSIST_$$"
+expired_metadata_marker="EXPIRED_METADATA_POST_MUST_NOT_PERSIST_$$"
 expired_message_marker="EXPIRED_MESSAGE_POST_MUST_NOT_PERSIST_$$"
 expired_message_before=$(
-    printf "SELECT COUNT(*) FROM nv_nachrichten WHERE \`12_inhalt\` = '%s';\n" \
+    printf "SELECT COUNT(*) FROM nv_nachrichten WHERE \`12_inhalt\` IN ('%s','%s','%s');\n" \
+        "$expired_unknown_marker" \
+        "$expired_metadata_marker" \
         "$expired_message_marker" | db_sql
 )
-assert_status 303 \
+
+# An unknown same-origin POST is not an operational form and must remain on the
+# strict 423 path. Its values are neither replayed nor copied into a Location.
+assert_status 423 \
     --cookie "$newer_cookie_jar" --cookie-jar "$newer_cookie_jar" \
     --header 'Sec-Fetch-Site: same-origin' \
     --request POST \
+    --data-urlencode "csrf_token=$newer_operational_csrf" \
+    --data-urlencode 'totally_unknown=1' \
+    --data-urlencode "12_inhalt=$expired_unknown_marker" \
+    "$base_url/4fach/mainindex.php"
+assert_body 'Die Anmeldung oder der Benutzerzugang ist nicht mehr gültig.'
+if grep -Eiq '^Location:' "$headers"; then
+    printf 'HTTP smoke: unknown stale POST unexpectedly redirected\n' >&2
+    sed -n '1,30p' "$headers" >&2
+    exit 1
+fi
+
+# A real form shape without positive Fetch/Origin/Referer evidence is likewise
+# denied with 423, even though its stale CSRF field remains syntactically valid.
+assert_status 423 \
+    --cookie "$missing_metadata_cookie_jar" \
+    --cookie-jar "$missing_metadata_cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$missing_metadata_operational_csrf" \
+    --data-urlencode 'task=Stab_schreiben' \
+    --data-urlencode "12_inhalt=$expired_metadata_marker" \
+    "$base_url/4fach/mainindex.php"
+assert_body 'Die Anmeldung oder der Benutzerzugang ist nicht mehr gültig.'
+if grep -Eiq '^Location:' "$headers"; then
+    printf 'HTTP smoke: stale POST without same-site evidence redirected\n' >&2
+    sed -n '1,30p' "$headers" >&2
+    exit 1
+fi
+
+# The exact existing form, including its stale CSRF field and positive browser
+# same-origin evidence, is discarded and sent to the frame-safe login.
+assert_status 303 \
+    --cookie "$redirect_cookie_jar" --cookie-jar "$redirect_cookie_jar" \
+    --header 'Sec-Fetch-Site: same-origin' \
+    --request POST \
+    --data-urlencode "csrf_token=$redirect_operational_csrf" \
     --data-urlencode 'task=Stab_schreiben' \
     --data-urlencode "12_inhalt=$expired_message_marker" \
     "$base_url/4fach/mainindex.php"
@@ -4002,7 +4093,9 @@ assert_header_fixed \
     "Location: $expected_app_root/4fach/mainindex.php?login_flow=existing&next=messages&interrupted=1"
 assert_body_absent 'Aktion nicht erlaubt'
 expired_message_after=$(
-    printf "SELECT COUNT(*) FROM nv_nachrichten WHERE \`12_inhalt\` = '%s';\n" \
+    printf "SELECT COUNT(*) FROM nv_nachrichten WHERE \`12_inhalt\` IN ('%s','%s','%s');\n" \
+        "$expired_unknown_marker" \
+        "$expired_metadata_marker" \
         "$expired_message_marker" | db_sql
 )
 if [ "$expired_message_after" != "$expired_message_before" ]; then
@@ -4011,7 +4104,7 @@ if [ "$expired_message_after" != "$expired_message_before" ]; then
     exit 1
 fi
 assert_status 200 \
-    --cookie "$newer_cookie_jar" --cookie-jar "$newer_cookie_jar" \
+    --cookie "$redirect_cookie_jar" --cookie-jar "$redirect_cookie_jar" \
     "$base_url/4fach/mainindex.php?login_flow=existing&next=messages&interrupted=1"
 assert_body 'data-estab-submission-discarded'
 assert_body 'Die Eingabe wurde nicht gespeichert.'

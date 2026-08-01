@@ -44,6 +44,9 @@ function estab_incident_ui_state_from_status(array $status): array
                 $status['fuehrungsstellenname'] ?? null,
             'beginn' => $status['beginn'] ?? null,
             'ort' => $status['ort'] ?? '',
+            'estab_permission_mode' => estab_permission_mode(
+                $status['estab_permission_mode'] ?? null
+            ),
         ],
     ];
 }
@@ -68,9 +71,11 @@ function estab_incident_ui_current_state(): array
     try {
         $store = estab_auth_runtime_session_store();
         $connection = estab_auth_connect($store['database']);
-        $state = estab_incident_ui_state_from_status(
-            estab_incident_status($connection)
-        );
+        $status = estab_incident_status($connection);
+        if ($status['active_einsatz_id'] !== null) {
+            estab_permission_context_set_from_incident($status);
+        }
+        $state = estab_incident_ui_state_from_status($status);
     } catch (Throwable $exception) {
         error_log(
             'eStab incident status unavailable: ' . $exception->getMessage()
@@ -204,9 +209,14 @@ function estab_incident_ui_markup(
         estab_incident_ui_datetime($incident['beginn'] ?? null),
         trim((string) ($incident['ort'] ?? '')),
     ], static fn (string $part): bool => $part !== ''));
+    $permissionMode = estab_permission_mode(
+        $incident['estab_permission_mode'] ?? null
+    );
+    $loose = $permissionMode === ESTAB_PERMISSION_MODE_LOOSE;
 
     return '<section class="' . $class
-        . ' estab-incident-indicator-active"'
+        . ' estab-incident-indicator-active'
+        . ($loose ? ' estab-incident-indicator-permission-loose' : '') . '"'
         . ' data-estab-incident-state="active"'
         . ' data-estab-incident-id="' . $id . '"'
         . ' data-estab-incident-code="' . estab_auth_html($code) . '"'
@@ -221,5 +231,14 @@ function estab_incident_ui_markup(
         . ($details === []
             ? ''
             : '<span>' . estab_auth_html(implode(' · ', $details)) . '</span>')
+        . '<span data-estab-incident-permission-mode="'
+        . estab_auth_html($permissionMode) . '">Schreibrechte: <strong>'
+        . estab_auth_html(estab_permission_mode_label($permissionMode))
+        . '</strong>'
+        . ($loose
+            ? ' · Funktions- und Rollenrechte werden bei fachlichen '
+                . 'Schreibaktionen nicht erzwungen.'
+            : '')
+        . '</span>'
         . '</section>';
 }

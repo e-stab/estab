@@ -599,7 +599,8 @@ try {
     $identity
   );
   $identity = $readScope ["identity"];
-  $hasTbbCapability = estab_dv_has_account_capability (
+  estab_permission_context_set_from_incident ($readScope ["incident"]);
+  $hasTbbCapability = estab_dv_has_write_capability (
     $readConnection,
     (int) $readScope ["incident"]["active_einsatz_id"],
     $identity,
@@ -658,7 +659,8 @@ if ($requestMethod === "POST") {
   if (!$berechtigt) {
     estab_logbook_abort (
       403,
-      "Nur ein Fernmelder-Konto darf TBB-Einträge schreiben."
+      "Dieses Konto darf im aktuellen Einsatz keine TTB-Einträge schreiben. " .
+      "Prüfen Sie Kontostatus und Berechtigungsmodus."
     );
   }
   estab_logbook_require_csrf ($_SERVER, $_POST);

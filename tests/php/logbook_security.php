@@ -690,7 +690,7 @@ foreach (['ETB' => $etb, 'TBB' => $tbb] as $name => $source) {
             )
             && str_contains(
                 $source,
-                'estab_dv_has_account_capability ('
+                'estab_dv_has_write_capability ('
             )
             && str_contains(
                 $source,
@@ -788,14 +788,14 @@ foreach (['ETB' => $etb, 'TBB' => $tbb] as $name => $source) {
 }
 
 $assert(
-    str_contains($etb, 'estab_dv_has_account_capability (')
+    str_contains($etb, 'estab_dv_has_write_capability (')
         && str_contains($etb, '"EINSATZTAGEBUCH"')
         && !str_contains($etb, '$readauth')
         && !str_contains($etb, 'Keine Berechtigung für das Einsatztagebuch'),
     'ETB readers must remain writable only by fixed ETB capability'
 );
 $assert(
-    str_contains($tbb, 'estab_dv_has_account_capability (')
+    str_contains($tbb, 'estab_dv_has_write_capability (')
         && str_contains($tbb, '"BEFOERDERUNG"')
         && !str_contains($tbb, '$readonly')
         && !str_contains($tbb, 'Keine Berechtigung für das technische Betriebsbuch'),

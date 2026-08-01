@@ -77,7 +77,8 @@ if ($requestMethod === 'POST') {
                     $_POST,
                     estab_incident_actor($actor),
                     $activate,
-                    $revision
+                    $revision,
+                    ($_POST['confirm_loose_permissions'] ?? null) === '1'
                 );
                 $_SESSION['estab_incident_flash'] = [
                     'type' => $activate ? 'created_active' : 'created',
@@ -109,12 +110,28 @@ if ($requestMethod === 'POST') {
                     'kennung' => (string) ($updated['kennung'] ?? ''),
                 ];
                 $redirectResult = 'logbook_header_updated';
+            } elseif ($action === 'update_permission_mode') {
+                $updated = estab_incident_update_permission_mode(
+                    $connection,
+                    estab_incident_positive_id($_POST['einsatz_id'] ?? null),
+                    $_POST['estab_permission_mode'] ?? null,
+                    $_POST['expected_permission_mode'] ?? null,
+                    estab_incident_revision($_POST['status_revision'] ?? null),
+                    estab_incident_actor($actor),
+                    ($_POST['confirm_loose_permissions'] ?? null) === '1'
+                );
+                $_SESSION['estab_incident_flash'] = [
+                    'type' => 'permission_mode_updated',
+                    'kennung' => (string) ($updated['kennung'] ?? ''),
+                ];
+                $redirectResult = 'permission_mode_updated';
             } elseif ($action === 'activate') {
                 $activated = estab_incident_activate(
                     $connection,
                     estab_incident_positive_id($_POST['einsatz_id'] ?? null),
                     estab_incident_revision($_POST['status_revision'] ?? null),
-                    estab_incident_actor($actor)
+                    estab_incident_actor($actor),
+                    ($_POST['confirm_loose_permissions'] ?? null) === '1'
                 );
                 $_SESSION['estab_incident_flash'] = [
                     'type' => 'activated',
@@ -278,6 +295,8 @@ if (
             . $flash['kennung'] . ' wurde gespeichert.',
         'logbook_header_updated' => 'Die Pflichtangaben für ETB und TBB des '
             . 'Einsatzes ' . $flash['kennung'] . ' wurden gespeichert.',
+        'permission_mode_updated' => 'Der Berechtigungsmodus für Einsatz '
+            . $flash['kennung'] . ' wurde revisionsgesichert geändert.',
         'deactivated' => 'Der Einsatz wurde deaktiviert. Eingaben sind jetzt gesperrt.',
         'closed' => 'Einsatz ' . $flash['kennung']
             . ' wurde formal und unwiderruflich abgeschlossen.',
@@ -347,6 +366,18 @@ $activeMissingHeader = is_array($status) && $activeId !== null
           <?php endif; ?>
           <span><?= incident_admin_html(incident_admin_datetime($status['beginn'])) ?>
             bis <?= incident_admin_html(incident_admin_datetime($status['ende'])) ?></span>
+          <span data-estab-active-permission-mode>
+            Schreibrechte: <strong><?= incident_admin_html(
+                estab_permission_mode_label($status['estab_permission_mode'])
+            ) ?></strong>
+            <?php if (
+                ($status['estab_permission_mode'] ?? null)
+                    === ESTAB_PERMISSION_MODE_LOOSE
+            ): ?>
+              · Funktions- und Rollenrechte werden für Schreibaktionen nicht
+              erzwungen.
+            <?php endif; ?>
+          </span>
           <?php if ($activeMissingHeader !== []): ?>
             <span><strong>Logbuchbetrieb noch gesperrt.</strong> Es fehlen:
               <?= incident_admin_html(implode(', ', $activeMissingHeader)) ?>.
@@ -488,6 +519,44 @@ $activeMissingHeader = is_array($status) && $activeId !== null
                 value="<?= incident_admin_html($old['name'] ?? '') ?>">
             </div>
             <div class="estab-tool-field">
+              <label for="incident-permission-mode">Berechtigungsmodus *</label>
+              <select
+                id="incident-permission-mode"
+                name="estab_permission_mode"
+                required>
+                <option value="STRICT" <?=
+                    ($old['estab_permission_mode'] ?? 'STRICT') === 'STRICT'
+                        ? 'selected' : ''
+                ?>>Streng (empfohlen)</option>
+                <option value="LOOSE" <?=
+                    ($old['estab_permission_mode'] ?? '') === 'LOOSE'
+                        ? 'selected' : ''
+                ?>>Locker</option>
+              </select>
+              <small><strong>Streng:</strong> Schreibaktionen richten sich nach
+                der fest zugewiesenen Funktion und Rolle. <strong>Locker:</strong>
+                jedes angemeldete, aktive und ungesperrte Funktionskonto darf
+                fachliche Schreibaktionen in Nachrichten-, Logbuch- und
+                Führungsstellenabläufen ausführen. Reine Lesebereiche,
+                Kategorien und Administration bleiben rollenstreng.
+                Einsatzgrenzen,
+                optionaler Schichtzugang, Objektzustände, Sperren, CSRF,
+                Pflichtfelder und Nachweise bleiben in beiden Modi
+                verbindlich.</small>
+            </div>
+            <div class="estab-tool-field estab-tool-field-wide">
+              <label class="estab-tool-check">
+                <input
+                  type="checkbox"
+                  name="confirm_loose_permissions"
+                  value="1"
+                  <?= ($old['confirm_loose_permissions'] ?? null) === '1'
+                      ? 'checked' : '' ?>>
+                Ich bestätige die einsatzweite Erweiterung der Schreibrechte,
+                falls ich „Locker“ auswähle.
+              </label>
+            </div>
+            <div class="estab-tool-field">
               <label for="incident-command-post-name">
                 Name der Führungsstelle *
               </label>
@@ -620,6 +689,13 @@ $activeMissingHeader = is_array($status) && $activeId !== null
                     <?php if ($incident['ort'] !== ''): ?>
                       <span>Ort: <?= incident_admin_html($incident['ort']) ?></span>
                     <?php endif; ?>
+                    <span data-estab-permission-mode>
+                      Schreibrechte: <strong><?= incident_admin_html(
+                          estab_permission_mode_label(
+                              $incident['estab_permission_mode']
+                          )
+                      ) ?></strong>
+                    </span>
                     <?php if ($incident['organisation'] !== ''): ?>
                       <span>Bedarfsträger:
                         <?= incident_admin_html($incident['organisation']) ?></span>
@@ -664,6 +740,46 @@ $activeMissingHeader = is_array($status) && $activeId !== null
                   <?php endif; ?>
                 </div>
                 <div class="estab-tool-card-actions">
+                  <?php if (!$ended): ?>
+                    <form class="estab-tool-form" method="post"
+                      data-estab-dirty-guard data-estab-permission-mode-form>
+                      <?= estab_csrf_field() ?>
+                      <input type="hidden" name="admin_action"
+                        value="update_permission_mode">
+                      <input type="hidden" name="einsatz_id"
+                        value="<?= (int) $incident['einsatz_id'] ?>">
+                      <input type="hidden" name="status_revision"
+                        value="<?= $currentRevision ?>">
+                      <input type="hidden" name="expected_permission_mode"
+                        value="<?= incident_admin_html(
+                            $incident['estab_permission_mode']
+                        ) ?>">
+                      <label>
+                        Berechtigungsmodus
+                        <select name="estab_permission_mode" required>
+                          <option value="STRICT" <?=
+                              $incident['estab_permission_mode'] === 'STRICT'
+                                  ? 'selected' : ''
+                          ?>>Streng (empfohlen)</option>
+                          <option value="LOOSE" <?=
+                              $incident['estab_permission_mode'] === 'LOOSE'
+                                  ? 'selected' : ''
+                          ?>>Locker</option>
+                        </select>
+                      </label>
+                      <label class="estab-tool-check">
+                        <input type="checkbox"
+                          name="confirm_loose_permissions" value="1">
+                        Erweiterte Schreibrechte bei Wechsel auf „Locker“
+                        ausdrücklich bestätigen.
+                      </label>
+                      <small>Der Wechsel wird sofort wirksam, global
+                        serialisiert und im Einsatzprotokoll festgehalten.</small>
+                      <button class="estab-button" type="submit">
+                        Modus speichern
+                      </button>
+                    </form>
+                  <?php endif; ?>
                   <?php if (
                       !$ended
                       && !($incident['logbuchkopf_gesperrt'] ?? true)
@@ -810,6 +926,16 @@ $activeMissingHeader = is_array($status) && $activeId !== null
                         type="hidden"
                         name="status_revision"
                         value="<?= $currentRevision ?>">
+                      <?php if (
+                          $incident['estab_permission_mode']
+                              === ESTAB_PERMISSION_MODE_LOOSE
+                      ): ?>
+                        <label class="estab-tool-check">
+                          <input type="checkbox"
+                            name="confirm_loose_permissions" value="1" required>
+                          Einsatz mit erweiterten Schreibrechten aktivieren
+                        </label>
+                      <?php endif; ?>
                       <button class="estab-button estab-button-primary"
                         type="submit"
                         <?= estab_logbook_lifecycle_missing_header($incident) !== []

@@ -160,6 +160,7 @@ s2_function_tables_before=0
 s3_function_tables_before=0
 si_function_tables_before=0
 pol_function_tables_before=0
+permission_mode_restore_required=false
 
 db_sql()
 {
@@ -193,6 +194,33 @@ db_sql()
             --raw \
             --database="$MARIADB_DATABASE"
     '
+}
+
+set_test_permission_mode()
+{
+    requested_mode=$1
+    case "$requested_mode" in
+        STRICT | LOOSE) ;;
+        *)
+            echo 'Message workflow HTTP: invalid fixture permission mode' >&2
+            return 1
+            ;;
+    esac
+    db_sql >/dev/null <<SQL
+SET @estab_permission_mode_test_id = (
+  SELECT \`active_einsatz_id\`
+    FROM \`nv_einsatz_status\`
+   WHERE \`singleton_id\` = 1
+);
+SET @estab_permission_mode_admin_write_id =
+  @estab_permission_mode_test_id;
+UPDATE \`nv_einsaetze\`
+   SET \`estab_permission_mode\` = '${requested_mode}'
+ WHERE \`einsatz_id\` = @estab_permission_mode_test_id
+   AND \`estab_status\` = 'open';
+SET @estab_permission_mode_admin_write_id = NULL;
+SET @estab_permission_mode_test_id = NULL;
+SQL
 }
 
 generated_form_check()
@@ -294,6 +322,11 @@ cleanup()
     set +e
     cleanup_status=0
 
+    if [ "$permission_mode_restore_required" = true ]; then
+        set_test_permission_mode STRICT >/dev/null 2>&1 || cleanup_status=1
+        permission_mode_restore_required=false
+    fi
+
     # Workflow messages and their hash-linked evidence are deliberately
     # append-only. This test runs in ci.sh's disposable data volume and uses a
     # collision-resistant marker, so cleanup must never delete or rewrite the
@@ -368,6 +401,78 @@ assert_no_runtime_error()
         sed -n '1,120p' "$body" >&2
         exit 1
     fi
+}
+
+assert_single_html_document()
+{
+    label=${1:-response}
+    doctype_count=$(grep -Eio '<!doctype[[:space:]]+html' "$body" |
+        wc -l | tr -d ' ')
+    html_count=$(grep -Eio '<html([[:space:]>])' "$body" |
+        wc -l | tr -d ' ')
+    if [ "$doctype_count" != 1 ] || [ "$html_count" != 1 ]; then
+        printf 'Message workflow HTTP: %s rendered %s doctypes and %s html roots\n' \
+            "$label" "$doctype_count" "$html_count" >&2
+        sed -n '1,160p' "$body" >&2
+        exit 1
+    fi
+}
+
+assert_loose_single_dispatch()
+{
+    cookie_jar=$1
+    csrf_token=$2
+    identity_label=$3
+    action_name=$4
+    expected_marker=$5
+    label="LOOSE ${identity_label} -> ${action_name}"
+
+    assert_status 200 "$label" \
+        --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        --request POST \
+        --data-urlencode "csrf_token=$csrf_token" \
+        --data-urlencode "${action_name}=1" \
+        "$base_url/4fach/mainindex.php"
+    assert_no_runtime_error "$label"
+    assert_single_html_document "$label"
+    assert_body "$expected_marker" "$label target renderer"
+}
+
+prove_loose_dispatch_for_identity()
+{
+    cookie_jar=$1
+    identity_label=$2
+
+    load_dashboard "$cookie_jar" "LOOSE dashboard for $identity_label"
+    assert_single_html_document "LOOSE dashboard for $identity_label"
+    dispatch_csrf=$(csrf_from_body)
+
+    assert_loose_single_dispatch \
+        "$cookie_jar" "$dispatch_csrf" "$identity_label" \
+        stab_schreiben_x 'name="task" value="Stab_schreiben"'
+    assert_loose_single_dispatch \
+        "$cookie_jar" "$dispatch_csrf" "$identity_label" \
+        stab_korrekturen_x 'Offene Korrekturen'
+    assert_loose_single_dispatch \
+        "$cookie_jar" "$dispatch_csrf" "$identity_label" \
+        stab_sichten_x 'Sichterliste'
+    assert_loose_single_dispatch \
+        "$cookie_jar" "$dispatch_csrf" "$identity_label" \
+        ldf_nachrichten_x 'LdF-Disposition'
+    assert_loose_single_dispatch \
+        "$cookie_jar" "$dispatch_csrf" "$identity_label" \
+        fm_eingang_x 'name="task" value="FM-Eingang"'
+    assert_loose_single_dispatch \
+        "$cookie_jar" "$dispatch_csrf" "$identity_label" \
+        fm_ausgang_x 'FMD Ausgang'
+
+    assert_status 403 "LOOSE multiple primary selectors for $identity_label" \
+        --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        --request POST \
+        --data-urlencode "csrf_token=$dispatch_csrf" \
+        --data-urlencode 'stab_schreiben_x=1' \
+        --data-urlencode 'fm_eingang_x=1' \
+        "$base_url/4fach/mainindex.php"
 }
 
 csrf_from_body()
@@ -1426,6 +1531,46 @@ assert_db_equals 0 'workflow accounts have no legacy duty assignments' \
     "SELECT COUNT(*) FROM \`nv_dienstbesetzungen\` WHERE \`benutzer_kuerzel\` IN (${workflow_account_codes});"
 assert_db_equals 0 'workflow accounts have no optional access-shift memberships' \
     "SELECT COUNT(*) FROM \`nv_zugangsschicht_mitglieder\` WHERE \`benutzer_kuerzel\` IN (${workflow_account_codes}) AND \`entfernt_am\` IS NULL;"
+
+# Exercise the production controller with every LOOSE write-navigation action
+# from each representative fixed account function. The response must contain
+# one document root: an explicit foreign-function view must suppress the
+# account's historical default view. This fixture-only mode change uses the
+# migration's narrow DML marker; the application requests themselves remain
+# real authenticated, CSRF-protected HTTP requests.
+assert_db_equals STRICT 'permission-mode dispatch fixture starts strict' \
+    "SELECT \`estab_permission_mode\` FROM \`nv_einsaetze\` WHERE \`einsatz_id\`=${active_incident_id};"
+permission_mode_restore_required=true
+set_test_permission_mode LOOSE
+assert_db_equals LOOSE 'permission-mode dispatch fixture entered loose mode' \
+    "SELECT \`estab_permission_mode\` FROM \`nv_einsaetze\` WHERE \`einsatz_id\`=${active_incident_id};"
+
+prove_loose_dispatch_for_identity "$s1_cookies" 'S1/Stab'
+prove_loose_dispatch_for_identity "$si_cookies" 'Si/Stab'
+prove_loose_dispatch_for_identity "$aw_cookies" 'A-W/Fernmelder'
+prove_loose_dispatch_for_identity "$ldf_cookies" 'LdF/Fernmelder'
+prove_loose_dispatch_for_identity "$pol_cookies" 'POL/FB'
+
+set_test_permission_mode STRICT
+permission_mode_restore_required=false
+assert_db_equals STRICT 'permission-mode dispatch fixture restored strict mode' \
+    "SELECT \`estab_permission_mode\` FROM \`nv_einsaetze\` WHERE \`einsatz_id\`=${active_incident_id};"
+load_dashboard "$s1_cookies" 'STRICT dashboard after dispatch matrix'
+strict_dispatch_csrf=$(csrf_from_body)
+assert_status 403 'STRICT rejects S1 telecommunications view after restore' \
+    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$strict_dispatch_csrf" \
+    --data-urlencode 'fm_eingang_x=1' \
+    "$base_url/4fach/mainindex.php"
+load_dashboard "$aw_cookies" 'STRICT A-W dashboard after dispatch matrix'
+strict_dispatch_csrf=$(csrf_from_body)
+assert_status 403 'STRICT rejects A-W staff view after restore' \
+    --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$strict_dispatch_csrf" \
+    --data-urlencode 'stab_schreiben_x=1' \
+    "$base_url/4fach/mainindex.php"
 
 # Cross the real authenticated Führungsstellen controller before the remaining
 # workflow. CSRF and the fixed S6 capability are enforced at the HTTP boundary
@@ -2769,6 +2914,7 @@ assert_status 200 'cancel LdF outgoing disposition' \
     --data-urlencode "00_lfd=$outgoing_id" \
     "$base_url/4fach/mainindex.php"
 assert_no_runtime_error 'LdF outgoing queue after cancel'
+assert_single_html_document 'LdF outgoing queue after cancel'
 assert_body "$outgoing_marker" 'LdF queue after outgoing cancel'
 assert_route_control \
     ldf meldung "$outgoing_id" 'LdF outgoing control after cancel'
@@ -2886,6 +3032,42 @@ assert_current_editable_tactical_time_input \
 assert_message_state "$outgoing_marker" \
     "A|2|f|set|${si_code}|S2_rt,S1_gn|t|${aw_code}|f" \
     'A/W-owned outgoing lock'
+
+# A successful A/W cancel must release the stage-two lock and render exactly
+# the outgoing queue. Re-lock the same record afterwards so the remaining
+# negative/positive transport-save checks retain their original fixture.
+outgoing_cancel_csrf=$(csrf_from_body)
+assert_status 200 'cancel A/W outgoing transport' \
+    --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$outgoing_cancel_csrf" \
+    --data-urlencode 'abbrechen_x=1' \
+    --data-urlencode 'task=FM-Ausgang' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'A/W outgoing queue after cancel'
+assert_single_html_document 'A/W outgoing queue after cancel'
+assert_body "$outgoing_marker" 'A/W outgoing queue after cancel'
+assert_route_control fm meldung "$outgoing_id" \
+    'A/W outgoing control after cancel'
+assert_message_state "$outgoing_marker" \
+    "A|2|f|set|${si_code}|S2_rt,S1_gn|f||f" \
+    'A/W cancel released the outgoing stage-two lock'
+
+outgoing_csrf=$(csrf_from_body)
+assert_status 200 're-lock outgoing transport after cancel' \
+    --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$outgoing_csrf" \
+    --data-urlencode 'fm=meldung' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 're-locked outgoing transport after cancel'
+assert_body 'name="task" value="FM-Ausgang"' \
+    're-locked outgoing transport form after cancel'
+assert_message_state "$outgoing_marker" \
+    "A|2|f|set|${si_code}|S2_rt,S1_gn|t|${aw_code}|f" \
+    'A/W re-acquired outgoing stage-two lock after cancel'
 
 assert_status 403 'reject tokenless outgoing transport save' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \

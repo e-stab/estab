@@ -446,8 +446,8 @@ ihn anschließend wieder her.
 podman compose run --rm migrate
 ```
 
-Ein bereits aktueller Bestand meldet alle zwanzig Migrationen einschließlich
-`114-self-registration-policy.sql` als vorhanden und
+Ein bereits aktueller Bestand meldet alle einundzwanzig Migrationen
+einschließlich `115-incident-permission-mode.sql` als vorhanden und
 führt trotzdem den vollständigen Read-only-Schematest aus. Die Ausgabe muss
 `Post-migration schema verification passed` und anschließend
 `All schema migrations are applied` enthalten. Erst danach sollte der Stack
@@ -475,6 +475,13 @@ Der grüne technische Stand ersetzt nicht die von der ETB-/TBB-Unterlage
 verlangte formale THW-Freigabe. Quelle, Hash und Abnahmevorbehalt stehen in
 [DV-1-101-UMSETZUNG.md](DV-1-101-UMSETZUNG.md).
 
+Migration 115 ergänzt den einsatzbezogenen Berechtigungsmodus. Alle
+vorhandenen Einsätze erhalten `STRICT`; es gibt keinen automatischen lockeren
+Upgradezustand. Der Migrator prüft die Modusspalte, zwei
+Manipulations-Guard-Trigger und sechs modebewusste Fachtrigger. Ein
+abweichender oder unvollständiger Zustand hält App und Readiness geschlossen,
+bis die Migration kontrolliert abgeschlossen ist.
+
 ### 5. Ersten Einsatz aktivieren und Zugänge optional gruppieren
 
 Eine Neuinstallation startet absichtlich ohne aktiven Einsatz. Anmeldung,
@@ -485,8 +492,9 @@ Nachricht, dem ersten Anhang oder einem ETB-/TBB-Eintrag:
 1. `/4fadm/admin.php` mit dem separaten Basic-Auth-Zugang öffnen,
 2. unter **Einsätze** Kennung, genaue Einsatzbezeichnung, Beginn,
    Bedarfsträger, Name der Führungsstelle, verantwortliche
-   Einsatz-/Führungsleitung sowie Einsatzauftrag/Ausgangslage anlegen und den
-   Einsatz aktivieren; beim Anlegen müssen genau die beiden noch leeren
+   Einsatz-/Führungsleitung sowie Einsatzauftrag/Ausgangslage anlegen, den
+   Berechtigungsmodus prüfen und den Einsatz aktivieren; beim Anlegen müssen
+   genau die beiden noch leeren
    Nummernköpfe `ETB:1` und `TTB:1` entstehen,
 3. unter **Kennwortrichtlinie** die Auslieferungsvorgabe prüfen und bei Bedarf
    nach einer Vorher-/Nachher-Vorschau revisionsgesichert anpassen,
@@ -495,7 +503,31 @@ Nachricht, dem ersten Anhang oder einem ETB-/TBB-Eintrag:
 5. optional unter **Führungsstellenbetrieb** Zugangsschichten anlegen, Konten
    zuordnen und gewünschte Gruppen aktivieren,
 6. jede Person regulär anmelden und Einsatz sowie feste Funktion in der
-   Oberfläche prüfen.
+   Oberfläche prüfen; die Statusanzeige muss zusätzlich den erwarteten
+   Berechtigungsmodus nennen.
+
+Für Neuinstallation und Regelbetrieb bleibt **Streng** ausgewählt. In diesem
+Modus erzwingt eStab die bisherigen funktions- und rollenbezogenen
+Schreibrechte. **Locker** darf nur als bewusste Einsatzentscheidung gewählt
+werden: Die Administration zeigt eine Warnung und verlangt eine separate
+Bestätigung. Der Modus gehört zur Einsatzzeile, nicht zu `.env`, Konto oder
+Schicht. Ein Wechsel ist nur bei einem offenen Einsatz möglich, gegen globale
+Revision und erwarteten Altmodus abgesichert und mit Vorher-/Nachherwert
+auditiert. Beim Upgrade bleiben alle bestehenden Einsätze automatisch streng.
+
+Locker bedeutet nicht „ohne Berechtigung“: Authentifizierung, konkrete aktive
+und ungesperrte Kontenidentität, ein durch Zugangsschichten gegebenenfalls
+entzogener Zugang, aktiver offener Einsatz und Einsatzzuordnung, CSRF,
+Validierung, Objekt- und Workflowzustände, Sperrinhaber, Anhangintegrität,
+Append-only-/Nachweisregeln, Audit und Aufbewahrung bleiben verbindlich. Nur
+die feste Funktion/Rolle blockiert einen **Schreib**schritt dann nicht. Die
+gespeicherte Identität und Funktion bleiben in Fachdatensatz und Audit
+sichtbar; allgemeine Leserechte, Nachweisung, rollenbezogene Übersichten und
+Zweitsichtungsarchive sowie Kategorien- und Administrationsrechte werden
+nicht erweitert. Nur eine ausdrücklich gewählte operative Schreibstufe erhält
+die dafür nötige Workflow-Objektsicht. Eine zurückgewiesene Ausgangsmeldung
+kann funktionsübergreifend übernommen werden; der Nachweis muss ursprüngliche
+und neue Verantwortlichkeit getrennt bewahren.
 
 Eine Dienst- oder Zugangsschicht ist keine fachliche Voraussetzung für
 operative Eingaben. Ist ein Konto keiner Gruppe zugeordnet, bleibt sein Zugang
@@ -541,9 +573,11 @@ Ansicht.
 Neue ETB-/TTB-Zeilen dürfen die Legacy-Felder für aktive Dienstschicht und
 schreibende Dienstbesetzung `NULL` lassen. Sie werden nicht mit einer
 Zugangsschicht befüllt; historische belegte Provenienz bleibt unverändert.
-ETB schreiben Konten mit `ETB/Stab` oder `S2/Stab`; das TTB führen Konten mit
-der festen Funktion `Fernmelder`. Anwendung und Datenbank prüfen feste Funktion, Rolle,
-ungesperrtes Konto und aktiven Einsatz, aber keine aktive Schicht.
+Im strengen Modus schreiben ETB nur Konten mit `ETB/Stab` oder `S2/Stab` und
+TTB nur Konten mit der festen Funktion `Fernmelder`. Im lockeren Modus entfällt
+ausschließlich diese Funktions-/Rollenbedingung. Anwendung und Datenbank prüfen
+in beiden Modi das konkrete aktive und ungesperrte Konto sowie den aktiven
+Einsatz, aber keine aktive Schicht.
 Die Aktivierung eines neuen, noch leeren Einsatzes eröffnet ETB und TTB
 atomar mit je einer Systemzeile; beide Provenienzfelder bleiben dabei `NULL`.
 Enthält ein übernommener Alt-Einsatz bereits Buchzeilen, wird seine belegte
@@ -653,6 +687,16 @@ Basic-Auth-Zugang selbst wird
 weiterhin ausschließlich über `ESTAB_ADMIN_USER` und die
 `admin_password.txt`-Secret-Datei geändert. Details und Auditvertrag stehen in
 [Benutzerverwaltung](BENUTZERVERWALTUNG.md).
+
+Den einsatzbezogenen Berechtigungsmodus verwaltet ausschließlich
+`/4fadm/incidents.php`. Vor einer Umstellung auf **Locker** müssen
+Einsatzleitung und örtlich Verantwortliche festlegen, wer die dadurch
+funktionsübergreifend möglichen Schreibschritte übernehmen darf. Die
+Warnungsbestätigung ist keine fachliche Freigabe: Einsatz-ID, Anlass, Beginn
+und Ende der Lockerung sowie die verantwortliche Entscheidung gehören in das
+örtliche Betriebsprotokoll. Nach Wegfall des Anlasses wird derselbe offene
+Einsatz wieder auf **Streng** gesetzt und die sichtbare Statusanzeige geprüft.
+Ein abgeschlossenes Einsatzarchiv lässt sich nicht nachträglich umstellen.
 
 ### Kennwortrichtlinie für Funktionskonten
 

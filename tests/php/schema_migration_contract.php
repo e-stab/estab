@@ -1727,6 +1727,9 @@ foreach ([
         'nv_selbstregistrierung',
         'estab:migration:114:self-registration-policy:v1',
         '114-self-registration-policy.sql',
+        'estab_permission_mode',
+        'estab:migration:115:incident-permission-mode:v1',
+        '115-incident-permission-mode.sql',
     ] as $fragment) {
         $assert(
             str_contains($runtimeSchemaContract, $fragment),
@@ -2263,6 +2266,7 @@ foreach ([
     '112-optional-access-shifts.sql',
     '113-password-policy.sql',
     '114-self-registration-policy.sql',
+    '115-incident-permission-mode.sql',
     'historical logbook rows did not retain unknown shift provenance',
     'partial logbook and optional access-shift migrations did not resume canonically',
     'blocked logbook shift collision was changed or recorded',
@@ -2294,7 +2298,8 @@ foreach ([
     'foreign self-registration table was accepted',
     'blocked self-registration table collision was changed or recorded',
     'self-registration migration did not recover after removing the collision',
-    'migration 114 rewrote one of the existing nineteen ledger rows',
+    'incident permission mode was not migrated fail-closed and canonically',
+    'migration 114 rewrote one of the existing twenty ledger rows',
     'Manual ETB/TBB entries without a duty shift were accepted by account function',
     'Two access groups can be active and membership re-addition preserves its history',
     'withdrawn ETB assignee rejection was not explicit',
@@ -2312,7 +2317,7 @@ foreach ([
     'missing ETB head was not rejected explicitly',
     'missing TTB head was not rejected explicitly',
     'MariaDB default snapshot isolation is not enabled for concurrency tests',
-    'assert_equal "20"',
+    'assert_equal "21"',
 ] as $marker) {
     $assert(
         str_contains($schemaIntegration, $marker),
@@ -2379,7 +2384,7 @@ $assert(
         && str_contains($verifySql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $verifySql,
-            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 20'
+            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 21'
         )
         && str_contains($verifySql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -2403,7 +2408,11 @@ $assert(
             $verifySql,
             "'114-self-registration-policy.sql'"
         )
-        && str_contains($verifySql, ") = 20) AS `schema_migrations_ok`"),
+        && str_contains(
+            $verifySql,
+            "'115-incident-permission-mode.sql'"
+        )
+        && str_contains($verifySql, ") = 21) AS `schema_migrations_ok`"),
     'verify.sql does not require the exact final ETB catalogue and ledger'
 );
 $assert(
@@ -2426,7 +2435,7 @@ $assert(
         && str_contains($readinessSql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $readinessSql,
-            '(SELECT COUNT(*) FROM estab_schema_migrations) = 20'
+            '(SELECT COUNT(*) FROM estab_schema_migrations) = 21'
         )
         && str_contains($readinessSql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -2458,7 +2467,11 @@ $assert(
         )
         && str_contains(
             $readinessSql,
-            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 20"
+            "'115-incident-permission-mode.sql'"
+        )
+        && str_contains(
+            $readinessSql,
+            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 21"
         ),
     'Runtime readiness does not require the exact final ETB catalogue and ledger'
 );
@@ -2483,6 +2496,7 @@ $releaseMigrationFiles = [
     '112-optional-access-shifts.sql',
     '113-password-policy.sql',
     '114-self-registration-policy.sql',
+    '115-incident-permission-mode.sql',
 ];
 foreach ([
     'verify.sql' => $verifySql,
@@ -2638,6 +2652,10 @@ $assert(
             $readiness,
             "'114-self-registration-policy.sql'"
         )
+        && str_contains(
+            $readiness,
+            "'115-incident-permission-mode.sql'"
+        )
         && str_contains($verify, "'50-global-incidents.sql'")
         && str_contains($verify, "'45-global-incidents-prepare.sql'")
         && str_contains($verify, "'55-global-incidents-finish.sql'")
@@ -2655,9 +2673,10 @@ $assert(
         && str_contains($verify, "'112-optional-access-shifts.sql'")
         && str_contains($verify, "'113-password-policy.sql'")
         && str_contains($verify, "'114-self-registration-policy.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 20')
-        && str_contains($readiness, 'estab_schema_migrations) = 20'),
-    'Migration ledger/readiness does not require all twenty release migrations'
+        && str_contains($verify, "'115-incident-permission-mode.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 21')
+        && str_contains($readiness, 'estab_schema_migrations) = 21'),
+    'Migration ledger/readiness does not require all twenty-one release migrations'
 );
 $assert(
     str_contains($readiness, "require_once __DIR__ . '/bootstrap.php'")

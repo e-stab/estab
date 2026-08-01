@@ -184,6 +184,7 @@ try {
         'fuehrungsstellenname' => 'FueSt-Sued-42',
         'einsatzleitung' => 'Max Beispiel',
         'beschreibung' => 'Vollständiger Funktionsnachweis',
+        'estab_permission_mode' => 'STRICT',
         'estab_status' => 'open',
         'estab_closed_at' => null,
         'estab_closed_by' => null,
@@ -605,6 +606,14 @@ try {
     }
 
     $assert(str_starts_with($document, '%PDF-1.7'), 'PDF version/header missing');
+    $assert(
+        str_contains(
+            $document,
+            estab_incident_pdf_text('Berechtigungsmodus')
+        )
+            && str_contains($document, 'Streng'),
+        'PDF cover omits the incident permission mode'
+    );
     $assert(
         str_contains($document, 'Nur Dienstschicht 2')
             && str_contains($document, 'UEBERGEBEN'),

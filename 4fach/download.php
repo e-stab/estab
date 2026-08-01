@@ -54,6 +54,7 @@ $viewProvided = array_key_exists('view', $_GET);
 $view = $viewProvided && is_string($_GET['view'])
     ? $_GET['view']
     : '';
+$messageWriteRecord = null;
 
 try {
     if ($layoutProvided && !is_string($_GET['layout'])) {
@@ -64,6 +65,10 @@ try {
     }
     $area = estab_file_area($area);
     $filename = estab_file_validate_name($area, $filename);
+    $messageWriteRecord = estab_read_attachment_write_record($_GET);
+    if ($messageWriteRecord !== null && $area !== 'attachment') {
+        throw new InvalidArgumentException('Invalid attachment write scope');
+    }
     if (
         $layoutProvided
         && ($area !== 'vordruck' || $layout !== 'current')
@@ -103,6 +108,7 @@ $contentType = 'application/octet-stream';
 $attachment = null;
 $attachmentIntegrity = null;
 $attachmentAuthorizationVersion = null;
+$attachmentWritePermissionContext = null;
 $failure = null;
 try {
     $connection = estab_auth_connect($conf_4f_db);
@@ -111,13 +117,30 @@ try {
     }
     $transactionActive = true;
     if ($area === 'attachment') {
+        $attachmentWriteScope = is_int($messageWriteRecord)
+            ? estab_read_attachment_write_scope_for_record(
+                $connection,
+                $conf_4f_tbl['nachrichten'],
+                $readIdentity,
+                $messageWriteRecord
+            )
+            : null;
+        if (is_int($messageWriteRecord)) {
+            $attachmentWritePermissionContext = estab_permission_context();
+            if (!is_array($attachmentWritePermissionContext)) {
+                throw new RuntimeException(
+                    'Attachment write policy snapshot is unavailable'
+                );
+            }
+        }
         $attachment = estab_read_attachment(
             $connection,
             $conf_4f_tbl['anhang'],
             $conf_4f_tbl['nachrichten'],
             $filename,
             $readIdentity,
-            false
+            false,
+            $attachmentWriteScope
         );
         if (!is_array($attachment)) {
             throw new EstabIncidentNotFoundException(
@@ -239,13 +262,24 @@ try {
             );
         }
         $transactionActive = true;
+        $currentAttachmentWriteScope = is_int($messageWriteRecord)
+            ? estab_read_attachment_write_scope_for_record(
+                $connection,
+                $conf_4f_tbl['nachrichten'],
+                $readIdentity,
+                $messageWriteRecord,
+                $attachmentWritePermissionContext,
+                true
+            )
+            : null;
         $currentAttachment = estab_read_attachment(
             $connection,
             $conf_4f_tbl['anhang'],
             $conf_4f_tbl['nachrichten'],
             $filename,
             $readIdentity,
-            true
+            true,
+            $currentAttachmentWriteScope
         );
         if (
             !is_array($currentAttachment)
@@ -266,7 +300,7 @@ try {
         throw new RuntimeException('Could not commit file authorization transaction');
     }
     $transactionActive = false;
-} catch (EstabNoActiveIncidentException) {
+} catch (EstabNoActiveIncidentException|EstabIncidentConflictException) {
     $failure = [409, 'Kein Einsatz aktiv.'];
 } catch (EstabIncidentNotFoundException) {
     $failure = [404, 'Datei nicht gefunden.'];

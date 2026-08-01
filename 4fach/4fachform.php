@@ -176,13 +176,22 @@ class nachrichten4fach {
       $connection = null;
       try {
         $connection = estab_message_connect ($conf_4f_db);
+        $attachmentWriteScope = $this->task === "Stab_korrigieren"
+          ? estab_read_attachment_write_scope (
+              $identity,
+              "staff-correction",
+              $this->formdata
+            )
+          : null;
         $this->attachmentPreviews = estab_read_attachments (
           $connection,
           (string) $conf_4f_tbl ["anhang"],
           (string) $conf_4f_tbl ["nachrichten"],
           $references,
           $identity,
-          $GLOBALS ["workflowIncidentId"] ?? null
+          $GLOBALS ["workflowIncidentId"] ?? null,
+          false,
+          $attachmentWriteScope
         );
       } catch (Throwable $exception) {
         error_log ("eStab attachment previews are temporarily unavailable");

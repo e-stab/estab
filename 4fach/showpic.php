@@ -65,8 +65,10 @@ $requested =
   isset ($_GET["file"]) && is_string ($_GET["file"])
     ? $_GET["file"]
     : "";
+$messageWriteRecord = null;
 try {
   $requested = estab_file_validate_name ("attachment", $requested);
+  $messageWriteRecord = estab_read_attachment_write_record ($_GET);
 } catch (InvalidArgumentException) {
   estab_preview_error (400, "Ungültiger Anhangname.");
 }
@@ -89,6 +91,7 @@ $transactionActive = false;
 $stream = null;
 $attachmentIntegrity = null;
 $attachmentAuthorizationVersion = null;
+$attachmentWritePermissionContext = null;
 $failure = null;
 try {
   $connection = estab_attachment_connection ($conf_4f_db);
@@ -96,13 +99,30 @@ try {
     throw new RuntimeException ("Could not start attachment preview transaction");
   }
   $transactionActive = true;
+  $attachmentWriteScope = is_int ($messageWriteRecord)
+    ? estab_read_attachment_write_scope_for_record (
+        $connection,
+        $conf_4f_tbl ["nachrichten"],
+        $readIdentity,
+        $messageWriteRecord
+      )
+    : null;
+  if (is_int ($messageWriteRecord)) {
+    $attachmentWritePermissionContext = estab_permission_context ();
+    if (!is_array ($attachmentWritePermissionContext)) {
+      throw new RuntimeException (
+        "Attachment write policy snapshot is unavailable"
+      );
+    }
+  }
   $attachment = estab_read_attachment (
     $connection,
     $conf_4f_tbl ["anhang"],
     $conf_4f_tbl ["nachrichten"],
     $requested,
     $readIdentity,
-    false
+    false,
+    $attachmentWriteScope
   );
   if (!is_array ($attachment)) {
     throw new EstabIncidentNotFoundException (
@@ -142,13 +162,24 @@ try {
     );
   }
   $transactionActive = true;
+  $currentAttachmentWriteScope = is_int ($messageWriteRecord)
+    ? estab_read_attachment_write_scope_for_record (
+        $connection,
+        $conf_4f_tbl ["nachrichten"],
+        $readIdentity,
+        $messageWriteRecord,
+        $attachmentWritePermissionContext,
+        true
+      )
+    : null;
   $currentAttachment = estab_read_attachment (
     $connection,
     $conf_4f_tbl ["anhang"],
     $conf_4f_tbl ["nachrichten"],
     $requested,
     $readIdentity,
-    true
+    true,
+    $currentAttachmentWriteScope
   );
   if (
     !is_array ($currentAttachment)
@@ -168,7 +199,7 @@ try {
     );
   }
   $transactionActive = false;
-} catch (EstabNoActiveIncidentException) {
+} catch (EstabNoActiveIncidentException|EstabIncidentConflictException) {
   $failure = array (409, "Kein Einsatz aktiv.");
 } catch (EstabIncidentNotFoundException) {
   $failure = array (404, "Anhang nicht gefunden.");

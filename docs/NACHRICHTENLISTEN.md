@@ -63,6 +63,14 @@ erneutes Anwenden der Suche beziehungsweise der Filter kontrolliert geladen.
 | „2. Sichtung“ als Si | festes Konto `Si/Stab` | geschützter `SI-Adminmeldung`-POST |
 | „2. Sichtung“ als Fernmelder | festes Konto mit Funktion `Fernmelder` | geschützter `FM-Adminmeldung`-POST |
 
+Die Funktionsangaben in der Tabelle gelten in beiden Berechtigungsmodi.
+**Locker** erweitert weder die Meldungsübersicht noch die
+Zweitsichtungsarchive oder deren Detailaktionen. Einsatz-ID, feste
+Kontofunktion, persönliche Objektregel, Status, Sperrinhaber, POST und CSRF
+bleiben hier unverändert verbindlich. Die Lockerung betrifft ausschließlich
+fest definierte operative Schreibstufen im laufenden Workflow, nicht diese
+rollenbezogenen Übersichten.
+
 Alle Abfragen sind an die beim Berechtigungsgate erfasste ID des aktiven
 Einsatzes gebunden. In der zweiten Sichtung wird zusätzlich schon vor Zählung
 und Paginierung dieselbe persönliche Objektregel angewandt wie beim Öffnen:

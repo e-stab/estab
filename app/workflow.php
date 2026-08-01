@@ -10,6 +10,7 @@
 
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/navigation.php';
+require_once __DIR__ . '/permission_mode.php';
 
 /** Return true only for the exact anonymous requests used by the login UI. */
 function estab_workflow_public_login_request(array $server, array $get, array $post): bool
@@ -182,6 +183,357 @@ function estab_workflow_public_login_request(array $server, array $get, array $p
  * denial path. The caller may only answer a matching request with a 303, so
  * none of the submitted operational values are replayed or processed.
  */
+function estab_workflow_request_metadata_same_authority(
+    array $server,
+    mixed $metadata
+): bool {
+    $requestAuthority = $server['HTTP_HOST'] ?? null;
+    if (
+        !is_string($requestAuthority)
+        || trim($requestAuthority) === ''
+        || !is_string($metadata)
+        || trim($metadata) === ''
+    ) {
+        return false;
+    }
+
+    $requestUrl = parse_url('http://' . trim($requestAuthority));
+    $metadataUrl = parse_url(trim($metadata));
+    if (
+        !is_array($requestUrl)
+        || !isset($requestUrl['host'])
+        || isset($requestUrl['user'])
+        || isset($requestUrl['pass'])
+        || isset($requestUrl['query'])
+        || isset($requestUrl['fragment'])
+        || (isset($requestUrl['path']) && $requestUrl['path'] !== '')
+        || !is_array($metadataUrl)
+        || !isset($metadataUrl['scheme'], $metadataUrl['host'])
+        || !in_array(strtolower((string) $metadataUrl['scheme']), [
+            'http',
+            'https',
+        ], true)
+        || isset($metadataUrl['user'])
+        || isset($metadataUrl['pass'])
+    ) {
+        return false;
+    }
+
+    $requestHost = strtolower((string) $requestUrl['host']);
+    $metadataHost = strtolower((string) $metadataUrl['host']);
+    $requestPort = isset($requestUrl['port'])
+        ? (int) $requestUrl['port']
+        : null;
+    $metadataPort = isset($metadataUrl['port'])
+        ? (int) $metadataUrl['port']
+        : null;
+    return $requestHost !== ''
+        && hash_equals($requestHost, $metadataHost)
+        && $requestPort === $metadataPort;
+}
+
+/** Require positive and non-contradictory browser same-site evidence. */
+function estab_workflow_operational_post_same_site(array $server): bool
+{
+    $positive = false;
+    if (array_key_exists('HTTP_SEC_FETCH_SITE', $server)) {
+        $fetchSite = $server['HTTP_SEC_FETCH_SITE'];
+        if (!is_string($fetchSite)) {
+            return false;
+        }
+        $fetchSite = strtolower(trim($fetchSite));
+        if (!in_array($fetchSite, ['same-origin', 'same-site'], true)) {
+            return false;
+        }
+        $positive = true;
+    }
+
+    foreach (['HTTP_ORIGIN', 'HTTP_REFERER'] as $metadataKey) {
+        if (!array_key_exists($metadataKey, $server)) {
+            continue;
+        }
+        if (!estab_workflow_request_metadata_same_authority(
+            $server,
+            $server[$metadataKey]
+        )) {
+            return false;
+        }
+        $positive = true;
+    }
+    return $positive;
+}
+
+/**
+ * Return one submitted image/button action, rejecting incomplete combinations.
+ *
+ * @param list<string> $names
+ * @return string|false|null false means malformed/combined, null means absent
+ */
+function estab_workflow_single_submitted_action(
+    array $request,
+    array $names
+): string|false|null {
+    $selected = [];
+    foreach ($names as $name) {
+        $hasX = array_key_exists($name . '_x', $request);
+        $hasY = array_key_exists($name . '_y', $request);
+        if ($hasY && !$hasX) {
+            return false;
+        }
+        if ($hasX) {
+            $selected[] = $name;
+        }
+    }
+    return count($selected) > 1 ? false : ($selected[0] ?? null);
+}
+
+/** Recognize exactly one form/action that the current controller renders. */
+function estab_workflow_existing_operational_post(array $post): bool
+{
+    if (!estab_workflow_action_keys_allowed($post)) {
+        return false;
+    }
+    $renderedCoordinateActions = array_fill_keys([
+        'absenden',
+        'abbrechen',
+        'antwort',
+        'weiterleiten',
+        'zurueckweisen',
+        'transport_nicht_moeglich',
+        'gelesen',
+        'anhang_plus',
+        'message_attachment_upload',
+        'message_attachment_remove',
+        'stab_schreiben',
+        'stab_lesen',
+        'stab_korrekturen',
+        'stab_sichten',
+        'ldf_nachrichten',
+        'fm_eingang',
+        'fm_ausgang',
+        'fm_admin',
+        'si_admin',
+        'fm_anhang',
+        'm2_benutzer',
+        'filter_unerledigt_ein',
+        'filter_unerledigt_aus',
+        'filter_erledigt_ein',
+        'filter_erledigt_aus',
+        'flt_find_mask_ein',
+        'flt_find_mask_aus',
+    ], true);
+    $messageListKeys = array_fill_keys([
+        'ml_q',
+        'ml_direction',
+        'ml_priority',
+        'ml_status',
+        'ml_from',
+        'ml_to',
+        'ml_recipient',
+        'ml_sort',
+        'ml_page',
+        'ml_page_size',
+        'ml_apply',
+        'ml_reset',
+        'ml_remove',
+    ], true);
+    foreach (array_keys($post) as $key) {
+        if (!is_string($key)) {
+            return false;
+        }
+        if (str_ends_with($key, '_x') || str_ends_with($key, '_y')) {
+            $base = substr($key, 0, -2);
+            if (!isset($renderedCoordinateActions[$base])) {
+                return false;
+            }
+        }
+        if (str_starts_with($key, 'ml_') && !isset($messageListKeys[$key])) {
+            return false;
+        }
+    }
+    try {
+        $primary = estab_workflow_primary_view_selector($post);
+    } catch (InvalidArgumentException) {
+        return false;
+    }
+
+    $legacyFilter = estab_workflow_single_submitted_action($post, [
+        'filter_unerledigt_ein',
+        'filter_unerledigt_aus',
+        'filter_erledigt_ein',
+        'filter_erledigt_aus',
+        'flt_find_mask_ein',
+        'flt_find_mask_aus',
+    ]);
+    if ($legacyFilter === false) {
+        return false;
+    }
+    if (array_key_exists('filter_suche', $post)) {
+        if (
+            $legacyFilter !== null
+            || !is_string($post['filter_suche'])
+            || $post['filter_suche'] !== 'suchen'
+            || !is_string($post['flt_search'] ?? null)
+        ) {
+            return false;
+        }
+        $legacyFilter = 'filter_suche';
+    }
+    if ($legacyFilter !== null) {
+        return $primary === null;
+    }
+    if ($primary === null) {
+        return false;
+    }
+    if (
+        !is_string($post['csrf_token'] ?? null)
+        || preg_match('/\A[a-f0-9]{64}\z/D', $post['csrf_token']) !== 1
+    ) {
+        return false;
+    }
+
+    $messageAction = estab_workflow_single_submitted_action($post, [
+        'absenden',
+        'abbrechen',
+        'antwort',
+        'weiterleiten',
+        'zurueckweisen',
+        'transport_nicht_moeglich',
+        'gelesen',
+        'anhang_plus',
+        'message_attachment_upload',
+        'message_attachment_remove',
+    ]);
+    if ($messageAction === false) {
+        return false;
+    }
+    if (array_key_exists('category_action', $post)) {
+        // The only rendered category submit uses formaction=katgoedt.php and
+        // is therefore never a mainindex.php action.
+        return false;
+    }
+
+    $messageListActions = [];
+    foreach (['ml_apply', 'ml_reset', 'ml_remove'] as $listAction) {
+        if (array_key_exists($listAction, $post)) {
+            if (!is_string($post[$listAction])) {
+                return false;
+            }
+            $messageListActions[] = $listAction;
+        }
+    }
+    if (count($messageListActions) > 1) {
+        return false;
+    }
+
+    if (str_starts_with($primary, 'task:')) {
+        if ($messageListActions !== []) {
+            return false;
+        }
+        $task = substr($primary, strlen('task:'));
+        $taskActions = [
+            'Stab_schreiben' => [
+                'absenden', 'abbrechen', 'anhang_plus',
+                'message_attachment_upload', 'message_attachment_remove',
+            ],
+            'Stab_korrigieren' => [
+                'absenden', 'abbrechen', 'anhang_plus',
+                'message_attachment_upload', 'message_attachment_remove',
+            ],
+            'Stab_gesprnoti' => [
+                'absenden', 'abbrechen', 'anhang_plus',
+                'message_attachment_upload', 'message_attachment_remove',
+            ],
+            'Stab_lesen' => [
+                'gelesen', 'antwort', 'weiterleiten',
+            ],
+            'Stab_sichten' => [
+                'absenden', 'zurueckweisen', 'abbrechen',
+            ],
+            'LdF-Eingang' => ['absenden', 'abbrechen'],
+            'LdF-Ausgang' => ['absenden', 'abbrechen'],
+            'FM-Ausgang' => [
+                'absenden', 'abbrechen', 'transport_nicht_moeglich', 'antwort',
+            ],
+            'FM-Eingang' => [
+                'absenden', 'abbrechen', 'anhang_plus',
+                'message_attachment_upload', 'message_attachment_remove',
+            ],
+            'FM-Eingang_Anhang' => [
+                'absenden', 'abbrechen', 'anhang_plus',
+                'message_attachment_upload', 'message_attachment_remove',
+            ],
+        ];
+        if (!isset($taskActions[$task])) {
+            return false;
+        }
+        if (
+            in_array($task, [
+                'Stab_korrigieren',
+                'Stab_lesen',
+                'Stab_sichten',
+                'LdF-Eingang',
+                'LdF-Ausgang',
+                'FM-Ausgang',
+            ], true)
+            && estab_workflow_record_id($post['00_lfd'] ?? null) === null
+        ) {
+            return false;
+        }
+        return $messageAction === null
+            || in_array($messageAction, $taskActions[$task], true);
+    }
+    if ($messageAction !== null) {
+        return false;
+    }
+
+    if ($primary === 'staff-state-action') {
+        return is_string($post['action'] ?? null)
+            && in_array($post['action'], ['gelesen', 'erledigt'], true)
+            && is_string($post['todo'] ?? null)
+            && in_array($post['todo'], ['set', 'unset'], true)
+            && estab_workflow_record_id($post['00_lfd'] ?? null) !== null
+            && $messageListActions === [];
+    }
+    if ($primary === 'message-operator-reset-action') {
+        return estab_workflow_record_id($post['reset_record'] ?? null) !== null
+            && $messageListActions === [];
+    }
+
+    $recordViews = [
+        'staff-message',
+        'staff-correction-form',
+        'viewer-message',
+        'telecommunications-lead-message',
+        'telecommunications-message',
+        'telecommunications-second-sighting-message',
+        'viewer-second-sighting-message',
+    ];
+    if (in_array($primary, $recordViews, true)) {
+        return estab_workflow_record_id($post['00_lfd'] ?? null) !== null
+            && $messageListActions === [];
+    }
+
+    $listViews = [
+        'staff-write',
+        'staff-list',
+        'staff-corrections',
+        'viewer-list',
+        'telecommunications-lead-list',
+        'telecommunications-incoming-form',
+        'telecommunications-outgoing-list',
+        'telecommunications-attachments',
+        'account-list',
+    ];
+    if (in_array($primary, $listViews, true)) {
+        return $messageListActions === [];
+    }
+    return in_array($primary, [
+        'telecommunications-second-sighting',
+        'viewer-second-sighting',
+    ], true);
+}
+
 function estab_workflow_anonymous_operational_post(
     array $server,
     array $get,
@@ -191,7 +543,16 @@ function estab_workflow_anonymous_operational_post(
         strtoupper((string) ($server['REQUEST_METHOD'] ?? 'GET')) !== 'POST'
         || $get !== []
         || $post === []
-        || !estab_workflow_login_metadata_same_site($server)
+        || !estab_workflow_operational_post_same_site($server)
+    ) {
+        return false;
+    }
+    if (
+        array_key_exists('next', $post)
+        && (
+            !is_string($post['next'])
+            || $post['next'] !== 'messages'
+        )
     ) {
         return false;
     }
@@ -207,12 +568,13 @@ function estab_workflow_anonymous_operational_post(
         'kennwort1',
         'kennwort2',
         '2teskennwort',
+        'interrupted',
     ] as $loginKey) {
         if (array_key_exists($loginKey, $post)) {
             return false;
         }
     }
-    return true;
+    return estab_workflow_existing_operational_post($post);
 }
 
 /**
@@ -375,29 +737,53 @@ function estab_workflow_category_filter(mixed $value): int|string|null
     return estab_workflow_record_id($value);
 }
 
-function estab_workflow_is_telecommunications(array $identity): bool
+function estab_workflow_is_telecommunications(
+    array $identity,
+    bool $allowLooseWriteMode = false
+): bool
 {
-    return ($identity['funktion'] ?? '') === 'A/W'
-        && ($identity['rolle'] ?? '') === 'Fernmelder';
+    return ($allowLooseWriteMode && !estab_permission_role_checks_enforced())
+        || (
+            ($identity['funktion'] ?? '') === 'A/W'
+            && ($identity['rolle'] ?? '') === 'Fernmelder'
+        );
 }
 
 /** Leiter der Fernmeldebetriebsstelle: Rufnamen und Transportwege disponieren. */
-function estab_workflow_is_telecommunications_lead(array $identity): bool
+function estab_workflow_is_telecommunications_lead(
+    array $identity,
+    bool $allowLooseWriteMode = false
+): bool
 {
-    return ($identity['funktion'] ?? '') === 'LdF'
-        && ($identity['rolle'] ?? '') === 'Fernmelder';
+    return ($allowLooseWriteMode && !estab_permission_role_checks_enforced())
+        || (
+            ($identity['funktion'] ?? '') === 'LdF'
+            && ($identity['rolle'] ?? '') === 'Fernmelder'
+        );
 }
 
-function estab_workflow_is_viewer(array $identity): bool
+function estab_workflow_is_viewer(
+    array $identity,
+    bool $allowLooseWriteMode = false
+): bool
 {
-    return ($identity['funktion'] ?? '') === 'Si'
-        && ($identity['rolle'] ?? '') === 'Stab';
+    return ($allowLooseWriteMode && !estab_permission_role_checks_enforced())
+        || (
+            ($identity['funktion'] ?? '') === 'Si'
+            && ($identity['rolle'] ?? '') === 'Stab'
+        );
 }
 
-function estab_workflow_is_staff_writer(array $identity): bool
+function estab_workflow_is_staff_writer(
+    array $identity,
+    bool $allowLooseWriteMode = false
+): bool
 {
-    return ($identity['funktion'] ?? '') !== 'Si'
-        && in_array(($identity['rolle'] ?? ''), ['Stab', 'FB'], true);
+    return ($allowLooseWriteMode && !estab_permission_role_checks_enforced())
+        || (
+            ($identity['funktion'] ?? '') !== 'Si'
+            && in_array(($identity['rolle'] ?? ''), ['Stab', 'FB'], true)
+        );
 }
 
 /** Editable message stages that may add or detach message attachments. */
@@ -436,6 +822,7 @@ function estab_workflow_action_keys_allowed(array $request): bool
         'ah_upload_x', 'ah_upload_y',
         'stab_schreiben_x', 'stab_schreiben_y',
         'stab_lesen_x', 'stab_lesen_y',
+        'stab_korrekturen_x', 'stab_korrekturen_y',
         'stab_sichten_x', 'stab_sichten_y',
         'fm_eingang_x', 'fm_eingang_y',
         'fm_ausgang_x', 'fm_ausgang_y',
@@ -472,6 +859,146 @@ function estab_workflow_action_keys_allowed(array $request): bool
         }
     }
     return true;
+}
+
+/**
+ * Resolve the single primary page/form selected by an operational request.
+ *
+ * The historical controller contains independent render branches. In LOOSE
+ * mode a user may deliberately select a branch outside the account's fixed
+ * function, so the account's ordinary default branch must not render as a
+ * second page. Treat an image button's x/y coordinates as one selector, but
+ * fail closed when a request combines multiple primary selectors.
+ *
+ * @throws InvalidArgumentException for an unknown or ambiguous selector
+ */
+function estab_workflow_primary_view_selector(array $request): ?string
+{
+    $selectors = [];
+    $buttonSelectors = [
+        'stab_schreiben' => 'staff-write',
+        'stab_lesen' => 'staff-list',
+        'stab_korrekturen' => 'staff-corrections',
+        'stab_sichten' => 'viewer-list',
+        'ldf_nachrichten' => 'telecommunications-lead-list',
+        'fm_eingang' => 'telecommunications-incoming-form',
+        'fm_ausgang' => 'telecommunications-outgoing-list',
+        'fm_admin' => 'telecommunications-second-sighting',
+        'si_admin' => 'viewer-second-sighting',
+        'stab_anhang' => 'staff-attachments',
+        'fm_anhang' => 'telecommunications-attachments',
+        'm2_benutzer' => 'account-list',
+        'm2_abmelden' => 'logout',
+    ];
+    foreach ($buttonSelectors as $button => $selector) {
+        $hasX = array_key_exists($button . '_x', $request);
+        $hasY = array_key_exists($button . '_y', $request);
+        if ($hasY && !$hasX) {
+            throw new InvalidArgumentException(
+                'Unvollständiger primärer Aktionsselektor'
+            );
+        }
+        if ($hasX) {
+            $selectors[] = $selector;
+        }
+    }
+
+    if (array_key_exists('reset_record', $request)) {
+        $selectors[] = 'message-operator-reset-action';
+    }
+    if (array_key_exists('action', $request)) {
+        $selectors[] = 'staff-state-action';
+    }
+
+    $task = $request['task'] ?? '';
+    if (!is_string($task)) {
+        throw new InvalidArgumentException('Ungültiger Aufgaben-Selektor');
+    }
+    if ($task !== '') {
+        $selectors[] = 'task:' . $task;
+    }
+
+    $valueSelectors = [
+        'stab' => [
+            'meldung' => 'staff-message',
+            'korrektur' => 'staff-correction-form',
+        ],
+        'sichter' => [
+            'meldung' => 'viewer-message',
+        ],
+        'ldf' => [
+            'meldung' => 'telecommunications-lead-message',
+        ],
+        'fm' => [
+            'meldung' => 'telecommunications-message',
+            'FM-Adminmeldung' => 'telecommunications-second-sighting-message',
+            'SI-Adminmeldung' => 'viewer-second-sighting-message',
+        ],
+    ];
+    foreach ($valueSelectors as $field => $allowedValues) {
+        $value = $request[$field] ?? '';
+        if (!is_string($value)) {
+            throw new InvalidArgumentException(
+                'Ungültiger primärer Ansichtsselektor'
+            );
+        }
+        if ($value === '') {
+            continue;
+        }
+        if (!isset($allowedValues[$value])) {
+            throw new InvalidArgumentException(
+                'Unbekannter primärer Ansichtsselektor'
+            );
+        }
+        $selectors[] = $allowedValues[$value];
+    }
+
+    if (count($selectors) > 1) {
+        throw new InvalidArgumentException(
+            'Mehrere primäre Ansichten wurden gleichzeitig angefordert'
+        );
+    }
+    return $selectors[0] ?? null;
+}
+
+/**
+ * Select an explicit view, or the account view only for a neutral request.
+ */
+function estab_workflow_should_render_primary_view(
+    ?string $requestedView,
+    string $candidateView,
+    bool $accountDefault
+): bool {
+    return $requestedView === $candidateView
+        || ($requestedView === null && $accountDefault);
+}
+
+/** Return whether cancelling a new, lock-free form should restore the default. */
+function estab_workflow_cancelled_new_form(array $request): bool
+{
+    if (
+        !array_key_exists('abbrechen_x', $request)
+        && !array_key_exists('abbrechen_y', $request)
+    ) {
+        return false;
+    }
+    $task = $request['task'] ?? '';
+    return is_string($task) && in_array($task, [
+        'Stab_schreiben',
+        'Stab_gesprnoti',
+        'FM-Eingang',
+        'FM-Eingang_Anhang',
+    ], true);
+}
+
+/** Return whether acknowledging an already-read message restores its queue. */
+function estab_workflow_acknowledged_read_form(array $request): bool
+{
+    return ($request['task'] ?? null) === 'Stab_lesen'
+        && (
+            array_key_exists('gelesen_x', $request)
+            || array_key_exists('gelesen_y', $request)
+        );
 }
 
 /**
@@ -663,6 +1190,11 @@ function estab_workflow_distribution_tokens(
 /** Return the object-level permission required by this request, if any. */
 function estab_workflow_message_operation(array $request): ?string
 {
+    try {
+        estab_workflow_primary_view_selector($request);
+    } catch (InvalidArgumentException) {
+        return null;
+    }
     if (array_key_exists('reset_record', $request)) {
         return 'message-operator-reset';
     }
@@ -685,6 +1217,9 @@ function estab_workflow_message_operation(array $request): ?string
         };
     }
 
+    if (($request['stab'] ?? '') === 'korrektur') {
+        return 'staff-correction';
+    }
     if (($request['stab'] ?? '') === 'meldung') {
         return 'staff-read';
     }
@@ -726,8 +1261,19 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
         estab_workflow_is_telecommunications_lead($identity);
     $isViewer = estab_workflow_is_viewer($identity);
     $isStaffWriter = estab_workflow_is_staff_writer($identity);
+    $mayWriteTelecommunications =
+        estab_workflow_is_telecommunications($identity, true);
+    $mayWriteTelecommunicationsLead =
+        estab_workflow_is_telecommunications_lead($identity, true);
+    $mayWriteViewer = estab_workflow_is_viewer($identity, true);
+    $mayWriteStaff = estab_workflow_is_staff_writer($identity, true);
 
     if (!estab_workflow_action_keys_allowed($request)) {
+        return false;
+    }
+    try {
+        estab_workflow_primary_view_selector($request);
+    } catch (InvalidArgumentException) {
         return false;
     }
     $messageListKeys = array_fill_keys([
@@ -773,7 +1319,7 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
     if (array_key_exists('reset_record', $request)) {
         if (
             $method !== 'POST'
-            || (!$isTelecommunications && !$isTelecommunicationsLead)
+            || (!$mayWriteTelecommunications && !$mayWriteTelecommunicationsLead)
             || estab_workflow_record_id($request['reset_record']) === null
         ) {
             return false;
@@ -804,11 +1350,12 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
         $task = $request['task'];
         $allowed = match ($task) {
             'Stab_schreiben', 'Stab_korrigieren',
-            'Stab_gesprnoti', 'Stab_lesen' => $isStaffWriter,
-            'Stab_sichten' => $isViewer,
-            'LdF-Eingang', 'LdF-Ausgang' => $isTelecommunicationsLead,
+            'Stab_gesprnoti' => $mayWriteStaff,
+            'Stab_lesen' => $isStaffWriter,
+            'Stab_sichten' => $mayWriteViewer,
+            'LdF-Eingang', 'LdF-Ausgang' => $mayWriteTelecommunicationsLead,
             'FM-Ausgang',
-            'FM-Eingang', 'FM-Eingang_Anhang' => $isTelecommunications,
+            'FM-Eingang', 'FM-Eingang_Anhang' => $mayWriteTelecommunications,
             default => false,
         };
         if (!$allowed) {
@@ -979,7 +1526,15 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
         }
     }
 
-    if (($request['stab'] ?? '') === 'meldung') {
+    if (($request['stab'] ?? '') === 'korrektur') {
+        if (
+            $method !== 'POST'
+            || !$mayWriteStaff
+            || estab_workflow_record_id($request['00_lfd'] ?? null) === null
+        ) {
+            return false;
+        }
+    } elseif (($request['stab'] ?? '') === 'meldung') {
         if (
             $method !== 'POST'
             || !$isStaffWriter
@@ -991,7 +1546,7 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
     if (($request['sichter'] ?? '') === 'meldung') {
         if (
             $method !== 'POST'
-            || !$isViewer
+            || !$mayWriteViewer
             || estab_workflow_record_id($request['00_lfd'] ?? null) === null
         ) {
             return false;
@@ -1001,7 +1556,7 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
         if (
             !is_string($request['ldf'])
             || $request['ldf'] !== 'meldung'
-            || !$isTelecommunicationsLead
+            || !$mayWriteTelecommunicationsLead
             || $method !== 'POST'
             || estab_workflow_record_id($request['00_lfd'] ?? null) === null
         ) {
@@ -1013,7 +1568,8 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
             return false;
         }
         $fmAllowed = match ($request['fm']) {
-            'meldung', 'FM-Adminmeldung' => $isTelecommunications,
+            'meldung' => $mayWriteTelecommunications,
+            'FM-Adminmeldung' => $isTelecommunications,
             'SI-Adminmeldung' => $isViewer,
             default => false,
         };
@@ -1027,15 +1583,17 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
     }
 
     $roleButtons = [
-        'stab_schreiben_x' => $isStaffWriter,
+        'stab_schreiben_x' => $mayWriteStaff,
         'stab_lesen_x' => $isStaffWriter,
+        'stab_korrekturen_x' =>
+            !estab_permission_role_checks_enforced() && $mayWriteStaff,
         'stab_anhang_x' => $isStaffWriter,
-        'fm_eingang_x' => $isTelecommunications,
-        'fm_ausgang_x' => $isTelecommunications,
+        'fm_eingang_x' => $mayWriteTelecommunications,
+        'fm_ausgang_x' => $mayWriteTelecommunications,
         'fm_admin_x' => $isTelecommunications,
         'fm_anhang_x' => $isTelecommunications,
-        'ldf_nachrichten_x' => $isTelecommunicationsLead,
-        'stab_sichten_x' => $isViewer,
+        'ldf_nachrichten_x' => $mayWriteTelecommunicationsLead,
+        'stab_sichten_x' => $mayWriteViewer,
         'si_admin_x' => $isViewer,
     ];
     foreach ($roleButtons as $key => $allowed) {
@@ -1047,7 +1605,7 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
     if (isset($request['action'])) {
         if (
             $method !== 'POST'
-            || !$isStaffWriter
+            || !$mayWriteStaff
             || !is_string($request['action'])
             || !in_array($request['action'], ['gelesen', 'erledigt'], true)
             || !isset($request['todo'])

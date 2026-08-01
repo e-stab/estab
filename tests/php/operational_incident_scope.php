@@ -126,12 +126,14 @@ $assert(
         )
         && preg_match(
             '/\$currentAttachment\s*=\s*estab_read_attachment\s*\('
-                . '.*?\$readIdentity,\s*true\s*\);/s',
+                . '.*?\$readIdentity,\s*true,\s*'
+                . '\$currentAttachmentWriteScope\s*\);/s',
             $download
         ) === 1
         && preg_match(
             '/\$currentAttachment\s*=\s*estab_read_attachment\s*\('
-                . '.*?\$readIdentity,\s*true\s*\);/s',
+                . '.*?\$readIdentity,\s*true,\s*'
+                . '\$currentAttachmentWriteScope\s*\);/s',
             $preview
         ) === 1,
     'file snapshots are not reauthorized against active-incident switching'

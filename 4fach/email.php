@@ -120,8 +120,10 @@ if (session_status() === PHP_SESSION_ACTIVE) {
 $requested = isset($_GET['file']) && is_string($_GET['file'])
     ? $_GET['file']
     : '';
+$messageWriteRecord = null;
 try {
     $requested = estab_file_validate_name('attachment', $requested);
+    $messageWriteRecord = estab_read_attachment_write_record($_GET);
     if (strtolower(pathinfo($requested, PATHINFO_EXTENSION)) !== 'eml') {
         throw new InvalidArgumentException('Only RFC-822 email files are supported');
     }
@@ -135,6 +137,7 @@ $stream = null;
 $attachment = null;
 $attachmentIntegrity = null;
 $attachmentAuthorizationVersion = null;
+$attachmentWritePermissionContext = null;
 $parsed = null;
 $failure = null;
 try {
@@ -143,13 +146,30 @@ try {
         throw new RuntimeException('Could not start email attachment authorization');
     }
     $transactionActive = true;
+    $attachmentWriteScope = is_int($messageWriteRecord)
+        ? estab_read_attachment_write_scope_for_record(
+            $connection,
+            $conf_4f_tbl['nachrichten'],
+            $readIdentity,
+            $messageWriteRecord
+        )
+        : null;
+    if (is_int($messageWriteRecord)) {
+        $attachmentWritePermissionContext = estab_permission_context();
+        if (!is_array($attachmentWritePermissionContext)) {
+            throw new RuntimeException(
+                'Attachment write policy snapshot is unavailable'
+            );
+        }
+    }
     $attachment = estab_read_attachment(
         $connection,
         $conf_4f_tbl['anhang'],
         $conf_4f_tbl['nachrichten'],
         $requested,
         $readIdentity,
-        false
+        false,
+        $attachmentWriteScope
     );
     if (!is_array($attachment)) {
         throw new EstabIncidentNotFoundException(
@@ -191,13 +211,24 @@ try {
         );
     }
     $transactionActive = true;
+    $currentAttachmentWriteScope = is_int($messageWriteRecord)
+        ? estab_read_attachment_write_scope_for_record(
+            $connection,
+            $conf_4f_tbl['nachrichten'],
+            $readIdentity,
+            $messageWriteRecord,
+            $attachmentWritePermissionContext,
+            true
+        )
+        : null;
     $currentAttachment = estab_read_attachment(
         $connection,
         $conf_4f_tbl['anhang'],
         $conf_4f_tbl['nachrichten'],
         $requested,
         $readIdentity,
-        true
+        true,
+        $currentAttachmentWriteScope
     );
     if (
         !is_array($currentAttachment)
@@ -217,7 +248,7 @@ try {
         );
     }
     $transactionActive = false;
-} catch (EstabNoActiveIncidentException) {
+} catch (EstabNoActiveIncidentException|EstabIncidentConflictException) {
     $failure = [409, 'Kein Einsatz aktiv.'];
 } catch (EstabIncidentNotFoundException) {
     $failure = [404, 'E-Mail-Anlage nicht gefunden.'];
@@ -259,6 +290,14 @@ $downloadUrl = estab_file_download_url(
     'attachment',
     $requested
 );
+if (is_int($messageWriteRecord)) {
+    $downloadUrl .= '&' . http_build_query(
+        ['message_write_record' => $messageWriteRecord],
+        '',
+        '&',
+        PHP_QUERY_RFC3986
+    );
+}
 $originalName = estab_email_view_original_name($attachment, $requested);
 $parseOk = ($parsed['ok'] ?? false) === true;
 $headers = is_array($parsed['headers'] ?? null) ? $parsed['headers'] : [];

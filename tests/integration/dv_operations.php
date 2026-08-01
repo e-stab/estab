@@ -924,7 +924,7 @@ try {
             'nv_nachrichten',
             $s3ReadTable,
             $conversationMessageId,
-            'S3',
+            $s3Identity,
             'read',
             $stateTimestamp
         ),
@@ -936,7 +936,7 @@ try {
             'nv_nachrichten',
             $s3DoneTable,
             $conversationMessageId,
-            'S3',
+            $s3Identity,
             'done',
             $stateTimestamp
         ),
@@ -1354,6 +1354,525 @@ try {
         throw $exception;
     }
 
+    // Migration 115 must relax only the incident's fixed write-function
+    // predicates. Exercise the real application APIs and their database
+    // triggers for ETB, TTB and messenger assignment under one serialized
+    // STRICT -> LOOSE -> STRICT roundtrip.
+    $permissionModeStatus = estab_incident_status($connection);
+    $assert(
+        (int) ($permissionModeStatus['active_einsatz_id'] ?? 0) === $incidentId
+            && ($permissionModeStatus['estab_permission_mode'] ?? null)
+                === 'STRICT',
+        'DV permission-mode matrix did not start in STRICT'
+    );
+    estab_permission_context_set_from_incident($permissionModeStatus);
+    $permissionModeEtbBefore = (int) $scalar(
+        $connection,
+        'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = ?',
+        'i',
+        $incidentId
+    );
+    $permissionModeTtbBefore = (int) $scalar(
+        $connection,
+        'SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = ?',
+        'i',
+        $incidentId
+    );
+    $permissionModeJobsBefore = (int) $scalar(
+        $connection,
+        'SELECT COUNT(*) FROM `nv_melderauftraege` WHERE `einsatz_id` = ?',
+        'i',
+        $incidentId
+    );
+    $permissionModeAuditBefore = (int) $scalar(
+        $connection,
+        'SELECT COUNT(*) FROM `nv_einsatz_ereignisse`'
+            . ' WHERE `einsatz_id` = ?'
+            . " AND `aktion` = 'berechtigung_geaendert'",
+        'i',
+        $incidentId
+    );
+    $permissionEtbEntry = static fn (string $probe, array $extra = []): array =>
+        $extra + [
+            'event' => 'Berechtigungsmodus ETB ' . $probe,
+            'comment' => 'MariaDB-Matrix Migration 115',
+            'event_time' => date('Y-m-d H:i:s'),
+            'event_type' => 'information',
+        ];
+    $permissionTtbEntry = static fn (string $probe, array $extra = []): array =>
+        $extra + [
+            'entry_type' => 'betriebsereignis',
+            'operations' => 'Berechtigungsmodus TTB ' . $probe,
+            'comment' => 'MariaDB-Matrix Migration 115',
+        ];
+
+    $expect(
+        EstabDvPermissionException::class,
+        static fn (): int => estab_logbook_insert_entry(
+            $databaseConfig,
+            'nv_etb',
+            'etb',
+            $permissionEtbEntry('strict-before'),
+            $s3Identity
+        ),
+        'STRICT admitted an S3 account into ETB'
+    );
+    $expect(
+        EstabDvPermissionException::class,
+        static fn (): int => estab_logbook_insert_entry(
+            $databaseConfig,
+            'nv_tbb',
+            'tbb',
+            $permissionTtbEntry('strict-before'),
+            $s3Identity
+        ),
+        'STRICT admitted an S3 account into TTB'
+    );
+    $expect(
+        EstabDvPermissionException::class,
+        static fn (): int => estab_dv_assign_messenger(
+            $connection,
+            $incidentId,
+            $messageId,
+            $codes['messenger'],
+            'Gegenstelle Integration',
+            $s3Identity
+        ),
+        'STRICT admitted an S3 account as messenger supervisor'
+    );
+    $assert(
+        (int) $scalar(
+            $connection,
+            'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = ?',
+            'i',
+            $incidentId
+        ) === $permissionModeEtbBefore
+            && (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = ?',
+                'i',
+                $incidentId
+            ) === $permissionModeTtbBefore
+            && (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_melderauftraege`'
+                    . ' WHERE `einsatz_id` = ?',
+                'i',
+                $incidentId
+            ) === $permissionModeJobsBefore,
+        'STRICT cross-role probes left partial ETB, TTB or messenger data'
+    );
+
+    $loosePermissionIncident = estab_incident_update_permission_mode(
+        $connection,
+        $incidentId,
+        'LOOSE',
+        'STRICT',
+        (int) $permissionModeStatus['revision'],
+        'dv-permission-mode-matrix',
+        true
+    );
+    estab_permission_context_set_from_incident($loosePermissionIncident);
+    $strictPermissionIncident = null;
+    $looseModeJobId = 0;
+    try {
+        $looseEtbId = estab_logbook_insert_entry(
+            $databaseConfig,
+            'nv_etb',
+            'etb',
+            $permissionEtbEntry('loose-success'),
+            $s3Identity
+        );
+        $looseTtbId = estab_logbook_insert_entry(
+            $databaseConfig,
+            'nv_tbb',
+            'tbb',
+            $permissionTtbEntry('loose-success'),
+            $s3Identity
+        );
+        $looseModeJobId = estab_dv_assign_messenger(
+            $connection,
+            $incidentId,
+            $messageId,
+            $codes['messenger'],
+            'Gegenstelle Integration',
+            $s3Identity
+        );
+        $assert(
+            $looseEtbId > 0
+                && $looseTtbId > 0
+                && $looseModeJobId > 0
+                && (string) $scalar(
+                    $connection,
+                    'SELECT CONCAT(`etb_benutzer`, ?, `etb_kuerzel`, ?, '
+                        . '`etb_funktion`) FROM `nv_etb`'
+                        . ' WHERE `etb_lfd-nr` = ?',
+                    'ssi',
+                    '|',
+                    '|',
+                    $looseEtbId
+                ) === $s3Identity['benutzer'] . '|'
+                    . $s3Identity['kuerzel'] . '|'
+                    . $s3Identity['funktion']
+                && (string) $scalar(
+                    $connection,
+                    'SELECT CONCAT(`tbb_benutzer`, ?, `tbb_kuerzel`, ?, '
+                        . '`tbb_funktion`) FROM `nv_tbb`'
+                        . ' WHERE `tbb_lfd-nr` = ?',
+                    'ssi',
+                    '|',
+                    '|',
+                    $looseTtbId
+                ) === $s3Identity['benutzer'] . '|'
+                    . $s3Identity['kuerzel'] . '|'
+                    . $s3Identity['funktion']
+                && (string) $scalar(
+                    $connection,
+                    'SELECT CONCAT(job.`beauftragt_von`, ?, supervisor.`benutzer`,'
+                        . ' ?, supervisor.`funktion`, ?, supervisor.`rolle`, ?,'
+                        . ' job.`melder_kuerzel`, ?, job.`status`)'
+                        . ' FROM `nv_melderauftraege` AS job'
+                        . ' JOIN `nv_benutzer` AS supervisor'
+                        . ' ON BINARY supervisor.`kuerzel` ='
+                        . ' BINARY job.`beauftragt_von`'
+                        . ' WHERE job.`melderauftrag_id` = ?',
+                    'sssssi',
+                    '|',
+                    '|',
+                    '|',
+                    '|',
+                    '|',
+                    $looseModeJobId
+                ) === $s3Identity['kuerzel'] . '|'
+                    . $s3Identity['benutzer'] . '|'
+                    . $s3Identity['funktion'] . '|'
+                    . $s3Identity['rolle'] . '|'
+                    . $codes['messenger'] . '|BEAUFTRAGT',
+            'LOOSE did not persist exact S3 identity in ETB, TTB and messenger data'
+        );
+        $assert(
+            estab_dv_transition_messenger(
+                $connection,
+                $incidentId,
+                $looseModeJobId,
+                'cancel',
+                $s3Identity,
+                ['abbruchgrund' => 'LOOSE-Matrix abgeschlossen']
+            ) === 'ABGEBROCHEN',
+            'LOOSE cross-role supervisor could not close its test assignment'
+        );
+
+        $expect(
+            EstabIncidentConflictException::class,
+            static fn (): int => estab_logbook_insert_entry(
+                $databaseConfig,
+                'nv_etb',
+                'etb',
+                $permissionEtbEntry(
+                    'missing-reference',
+                    ['reference' => '999999999']
+                ),
+                $s3Identity
+            ),
+            'LOOSE bypassed the incident-local ETB reference boundary'
+        );
+        $expect(
+            InvalidArgumentException::class,
+            static fn (): int => estab_logbook_insert_entry(
+                $databaseConfig,
+                'nv_tbb',
+                'tbb',
+                $permissionTtbEntry(
+                    'manual-message-reference',
+                    ['message_id' => $messageId]
+                ),
+                $s3Identity
+            ),
+            'LOOSE admitted a manually forged TTB message reference'
+        );
+        $expect(
+            EstabDvConflictException::class,
+            static fn (): int => estab_dv_assign_messenger(
+                $connection,
+                $incidentId,
+                $conversationMessageId,
+                $codes['messenger'],
+                'Gegenstelle Integration',
+                $s3Identity
+            ),
+            'LOOSE bypassed messenger direction, medium or status requirements'
+        );
+        $expect(
+            EstabDvConflictException::class,
+            static fn (): int => estab_dv_assign_messenger(
+                $connection,
+                $incidentId + 1000000,
+                $messageId,
+                $codes['messenger'],
+                'Gegenstelle Integration',
+                $s3Identity
+            ),
+            'LOOSE admitted a messenger write for another incident'
+        );
+
+        mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+        $directEtbInsert = static function (
+            int $targetIncidentId,
+            ?string $reference
+        ) use ($connection, $s3Identity): void {
+            $statement = $connection->prepare(
+                'INSERT INTO `nv_etb` (`einsatz_id`, `etb_time`,'
+                    . ' `etb_aktion`, `etb_bemerk`, `etb_benutzer`,'
+                    . ' `etb_kuerzel`, `etb_funktion`, `estab_event_time`,'
+                    . ' `estab_event_type`, `estab_reference`)'
+                    . " VALUES (?, NOW(6), ?, ?, ?, ?, ?, NOW(6), 'ohne', ?)"
+            );
+            try {
+                $event = 'Direkter ETB-Grenztest';
+                $comment = 'Migration 115';
+                $statement->bind_param(
+                    'issssss',
+                    $targetIncidentId,
+                    $event,
+                    $comment,
+                    $s3Identity['benutzer'],
+                    $s3Identity['kuerzel'],
+                    $s3Identity['funktion'],
+                    $reference
+                );
+                $statement->execute();
+            } finally {
+                $statement->close();
+            }
+        };
+        $directTtbInsert = static function (
+            int $targetIncidentId,
+            int $targetMessageId
+        ) use ($connection, $s3Identity): void {
+            $statement = $connection->prepare(
+                'INSERT INTO `nv_tbb` (`einsatz_id`, `tbb_time`,'
+                    . ' `tbb_aktion`, `tbb_bemerk`, `tbb_benutzer`,'
+                    . ' `tbb_kuerzel`, `tbb_funktion`, `estab_event_time`,'
+                    . ' `estab_entry_type`, `estab_message_id`,'
+                    . ' `estab_operations`)'
+                    . " VALUES (?, NOW(6), ?, ?, ?, ?, ?, NOW(6),"
+                    . " 'nachricht', ?, ?)"
+            );
+            try {
+                $event = 'Direkter TTB-Grenztest';
+                $comment = 'Migration 115';
+                $operations = 'Unzulässiger manueller Nachrichtenbezug';
+                $statement->bind_param(
+                    'isssssis',
+                    $targetIncidentId,
+                    $event,
+                    $comment,
+                    $s3Identity['benutzer'],
+                    $s3Identity['kuerzel'],
+                    $s3Identity['funktion'],
+                    $targetMessageId,
+                    $operations
+                );
+                $statement->execute();
+            } finally {
+                $statement->close();
+            }
+        };
+        $expect(
+            mysqli_sql_exception::class,
+            static fn (): null => ($directEtbInsert(
+                $incidentId,
+                '999999999'
+            ) ?? null),
+            'LOOSE ETB trigger accepted a nonexistent local reference'
+        );
+        $expect(
+            mysqli_sql_exception::class,
+            static fn (): null => ($directEtbInsert(
+                $incidentId + 1000000,
+                null
+            ) ?? null),
+            'LOOSE ETB trigger accepted another incident'
+        );
+        $expect(
+            mysqli_sql_exception::class,
+            static fn (): null => ($directTtbInsert(
+                $incidentId,
+                $messageId
+            ) ?? null),
+            'LOOSE TTB trigger accepted a human-authored message reference'
+        );
+        $expect(
+            mysqli_sql_exception::class,
+            static fn (): null => ($directTtbInsert(
+                $incidentId + 1000000,
+                $messageId
+            ) ?? null),
+            'LOOSE TTB trigger accepted another incident'
+        );
+
+        $setPermissionActorBlocked = static function (
+            bool $blocked
+        ) use ($connection, $codes): void {
+            $statement = $connection->prepare(
+                'UPDATE `nv_benutzer` SET `estab_gesperrt` = ?'
+                    . ' WHERE BINARY `kuerzel` = BINARY ?'
+            );
+            try {
+                $blockedValue = $blocked ? 1 : 0;
+                $statement->bind_param(
+                    'is',
+                    $blockedValue,
+                    $codes['s3']
+                );
+                $statement->execute();
+            } finally {
+                $statement->close();
+            }
+        };
+        $setPermissionActorBlocked(true);
+        try {
+            $expect(
+                EstabDvPermissionException::class,
+                static fn (): int => estab_logbook_insert_entry(
+                    $databaseConfig,
+                    'nv_etb',
+                    'etb',
+                    $permissionEtbEntry('blocked-account'),
+                    $s3Identity
+                ),
+                'LOOSE admitted a blocked account into ETB'
+            );
+            $expect(
+                EstabDvPermissionException::class,
+                static fn (): int => estab_logbook_insert_entry(
+                    $databaseConfig,
+                    'nv_tbb',
+                    'tbb',
+                    $permissionTtbEntry('blocked-account'),
+                    $s3Identity
+                ),
+                'LOOSE admitted a blocked account into TTB'
+            );
+            $expect(
+                EstabDvPermissionException::class,
+                static fn (): int => estab_dv_assign_messenger(
+                    $connection,
+                    $incidentId,
+                    $messageId,
+                    $codes['messenger'],
+                    'Gegenstelle Integration',
+                    $s3Identity
+                ),
+                'LOOSE admitted a blocked messenger supervisor'
+            );
+        } finally {
+            $setPermissionActorBlocked(false);
+        }
+        $assert(
+            (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = ?',
+                'i',
+                $incidentId
+            ) === $permissionModeEtbBefore + 1
+                && (int) $scalar(
+                    $connection,
+                    'SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = ?',
+                    'i',
+                    $incidentId
+                ) === $permissionModeTtbBefore + 1
+                && (int) $scalar(
+                    $connection,
+                    'SELECT COUNT(*) FROM `nv_melderauftraege`'
+                        . ' WHERE `einsatz_id` = ?',
+                    'i',
+                    $incidentId
+                ) === $permissionModeJobsBefore + 1,
+            'LOOSE negative probes left partial ETB, TTB or messenger rows'
+        );
+    } finally {
+        $modeBeforeStrictRestore = estab_incident_status($connection);
+        if (
+            ($modeBeforeStrictRestore['estab_permission_mode'] ?? null)
+                === 'LOOSE'
+        ) {
+            $strictPermissionIncident = estab_incident_update_permission_mode(
+                $connection,
+                $incidentId,
+                'STRICT',
+                'LOOSE',
+                (int) $modeBeforeStrictRestore['revision'],
+                'dv-permission-mode-matrix'
+            );
+        } else {
+            $strictPermissionIncident = $modeBeforeStrictRestore;
+        }
+        estab_permission_context_set_from_incident($strictPermissionIncident);
+    }
+
+    $expect(
+        EstabDvPermissionException::class,
+        static fn (): int => estab_logbook_insert_entry(
+            $databaseConfig,
+            'nv_etb',
+            'etb',
+            $permissionEtbEntry('strict-restored'),
+            $s3Identity
+        ),
+        'restored STRICT did not close S3 ETB access'
+    );
+    $expect(
+        EstabDvPermissionException::class,
+        static fn (): int => estab_logbook_insert_entry(
+            $databaseConfig,
+            'nv_tbb',
+            'tbb',
+            $permissionTtbEntry('strict-restored'),
+            $s3Identity
+        ),
+        'restored STRICT did not close S3 TTB access'
+    );
+    $expect(
+        EstabDvPermissionException::class,
+        static fn (): int => estab_dv_assign_messenger(
+            $connection,
+            $incidentId,
+            $messageId,
+            $codes['messenger'],
+            'Gegenstelle Integration',
+            $s3Identity
+        ),
+        'restored STRICT did not close S3 messenger supervision'
+    );
+    $assert(
+        ($strictPermissionIncident['estab_permission_mode'] ?? null)
+            === 'STRICT'
+            && (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_einsatz_ereignisse`'
+                    . ' WHERE `einsatz_id` = ?'
+                    . " AND `aktion` = 'berechtigung_geaendert'",
+                'i',
+                $incidentId
+            ) === $permissionModeAuditBefore + 2
+            && (int) $scalar(
+                $connection,
+                'SELECT `estab_gesperrt` FROM `nv_benutzer`'
+                    . ' WHERE BINARY `kuerzel` = BINARY ?',
+                's',
+                $codes['s3']
+            ) === 0
+            && (string) $scalar(
+                $connection,
+                'SELECT `status` FROM `nv_melderauftraege`'
+                    . ' WHERE `melderauftrag_id` = ?',
+                'i',
+                $looseModeJobId
+            ) === 'ABGEBROCHEN',
+        'permission-mode matrix did not restore STRICT and terminal fixture state'
+    );
+
     $messengerCandidates = estab_dv_messenger_candidates(
         $connection,
         $incidentId
@@ -1414,8 +1933,13 @@ try {
         $messageId
     );
     $assert(
-        count($redispatchHistory) === 1
-            && $redispatchHistory[0]['status'] === 'ABGEBROCHEN',
+        count($redispatchHistory) === 2
+            && (int) $redispatchHistory[0]['melderauftrag_id']
+                === $looseModeJobId
+            && $redispatchHistory[0]['status'] === 'ABGEBROCHEN'
+            && (int) $redispatchHistory[1]['melderauftrag_id']
+                === $cancelledJobId
+            && $redispatchHistory[1]['status'] === 'ABGEBROCHEN',
         'an aborted pre-acceptance run did not release the message for '
             . 'traceable redispatch'
     );
@@ -2018,7 +2542,7 @@ try {
     );
     $assert(
         $messengerSnapshots['valid'] === true
-            && (int) $messengerSnapshots['jobs'] === 2,
+            && (int) $messengerSnapshots['jobs'] === 3,
         'terminal messenger rows do not match their canonical event snapshots'
     );
 
