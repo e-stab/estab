@@ -34,17 +34,14 @@ $services = estab_navigation_services();
 $s1NavigationIdentity = [
     'funktion' => 'S1',
     'rolle' => 'Stab',
-    'duty_assignment_id' => 101,
 ];
 $s2NavigationIdentity = [
     'funktion' => 'S2',
     'rolle' => 'Stab',
-    'duty_assignment_id' => 102,
 ];
 $ldfNavigationIdentity = [
     'funktion' => 'LdF',
     'rolle' => 'Fernmelder',
-    'duty_assignment_id' => 103,
 ];
 $assert(
     array_column($areas, 'key') === [
@@ -357,9 +354,9 @@ $assert(
             $ldfNavigation,
             'href="/4fueltg/ue_ltg.php"'
         ),
-    'duty-specific navigation exposes a foreign privileged area'
+    'account-function navigation exposes a foreign privileged area'
 );
-$preHatNavigation = estab_navigation_markup(
+$accountNavigation = estab_navigation_markup(
     true,
     ['SCRIPT_NAME' => '/4fach/fuehrungsstelle.php'],
     false,
@@ -368,19 +365,24 @@ $preHatNavigation = estab_navigation_markup(
 );
 $assert(
     substr_count(
-        $preHatNavigation,
+        $accountNavigation,
         'data-estab-navigation-item'
-    ) === 5
+    ) === 9
         && str_contains(
-            $preHatNavigation,
+            $accountNavigation,
             'href="/4fach/fuehrungsstelle.php"'
         )
-        && str_contains($preHatNavigation, 'href="/stabinfo/index.php"')
-        && str_contains($preHatNavigation, 'href="/4fadm/admin.php"')
-        && !str_contains($preHatNavigation, 'href="/4fach/index.php"')
-        && !str_contains($preHatNavigation, 'href="/stabetb/etb.php"')
-        && !str_contains($preHatNavigation, 'href="/fmtbb/tbb.php"'),
-    'authenticated pre-hat navigation exposes an operational area'
+        && str_contains($accountNavigation, 'href="/stabinfo/index.php"')
+        && str_contains($accountNavigation, 'href="/4fadm/admin.php"')
+        && str_contains($accountNavigation, 'href="/4fach/index.php"')
+        && str_contains($accountNavigation, 'href="/stabetb/etb.php"')
+        && str_contains($accountNavigation, 'href="/fmtbb/tbb.php"')
+        && !str_contains($accountNavigation, 'href="/4fueltg/ue_ltg.php"')
+        && !str_contains(
+            $accountNavigation,
+            'href="/4fach/nachwea.php?nwalle"'
+        ),
+    'fixed account identity does not expose its operational navigation'
 );
 
 $anonymous = estab_navigation_markup(false, ['SCRIPT_NAME' => '/index.php']);

@@ -50,7 +50,7 @@ include ("./4fcfg/config.inc.php");
 	$menue[1]["visible"] = true ;  
 
 	$menue[2]["text"] = "Führungsstellenbetrieb";
-	$menue[2]["info"] = "Dienstbesetzungen, Übergaben, S6-Fernmeldepläne und Melderläufe für den aktiven Einsatz.";
+		$menue[2]["info"] = "S6-Fernmeldepläne und Melderläufe für den aktiven Einsatz; Rechte folgen der festen Kontofunktion.";
    $menue[2]["pic"]  = $conf_menue ["symbole"]."iuk_hs80.png";
    $menue[2]["link"] = "./4fach/fuehrungsstelle.php";
    $menue[2]["navigation_key"] = "command-post";
@@ -82,7 +82,7 @@ include ("./4fcfg/config.inc.php");
    $zusatz_menue[1]["visible"] = true ;
 
    $menue[5]["text"] = "Einsatztagebuch<BR>(ETB)";
-		$menue[5]["info"] = "ETB-Einträge dürfen S2 oder die ausgewählte Funktion ETB schreiben. Andere Funktionen können lesen.";
+		$menue[5]["info"] = "ETB-Einträge dürfen Konten mit der festen Funktion S2 oder ETB schreiben. Andere Funktionen können lesen.";
    $menue[5]["pic"]  = $conf_menue ["symbole"]."etb_aktiv.png";
    $menue[5]["link"] = "./stabetb/etb.php";
    $menue[5]["navigation_key"] = "incident-log";

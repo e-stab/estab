@@ -44,7 +44,7 @@ an `127.0.0.1:8080` gebunden.
 | `4fadm/` | Basic-Auth-geschützte Administration, Systemstatus und Einsatzexport |
 | `4fbak/` | aktive dateisysteminterne PDF-Erzeugung, historische FPDF-Komponente und der bereits im letzten Upstream-Release deaktivierte Bildgenerator |
 | `stabetb/`, `fmtbb/`, `ubltg/`, `sammlung/` | Einsatztagebuch, technisches Betriebsbuch und Zusatzmodule |
-| `app/` | Bootstrap, PHP-/MySQL-Kompatibilität, Authentisierung, ausgewählte Dienstbesetzung, objektbezogene Leseberechtigung, gemeinsame Bereichsnavigation, Sitzungsanzeige und Abmeldung, CSRF, Datum, Nachrichten-/Kategoriezugriff, begrenzte PNG-Renderer, Anhang, Export und transaktionale Admin-Operationen |
+| `app/` | Bootstrap, PHP-/MySQL-Kompatibilität, Authentisierung, feste Kontofunktion, optionale Zugangsschichten, objektbezogene Leseberechtigung, Navigation, Sitzung, CSRF, Datum, Nachrichten-/Kategoriezugriff, Anhang, Export und transaktionale Admin-Operationen |
 | `4fcfg/` | historische Konfigurationsschnittstelle, heute aus validierten Umgebungswerten gespeist |
 | `docker/` | Apache-/PHP-Härtung, Entrypoint, Datenbankschema und Migrationen |
 | `tests/` | statische, sicherheitsbezogene, Datenbank- und HTTP-Nachweise |
@@ -133,26 +133,20 @@ tatsächlich ausgeführten `SCRIPT_NAME` ab, nie aus der frei wählbaren
 Request-URI. Ein Suffix wie `mainindex.php/4fadm` kann dadurch weder die
 Basic-Auth-Grenze noch eine administrative Schreibausnahme vortäuschen.
 
-Die Anwendungssitzung weist nur das Konto nach. Für jeden operativen Lese- und
-Schreibzugriff müssen zusätzlich ein aktiver Einsatz und genau eine in der
-Sitzung ausgewählte, vom Benutzer persönlich angenommene aktive
-Dienstbesetzung bestehen. `select_hat` akzeptiert nur die positive ID einer
-eigenen, aktiven und angenommenen Besetzung und speichert exakt diese
-serverseitig in der PHP-Sitzung. Jeder normale operative Schreibpfad
-revalidiert diese ID gegen Konto, Funktion, Rolle, aktiven Einsatz und aktive
-Schicht; eine fremde, abgelaufene oder nur funktionsgleiche Besetzung genügt
-nicht. Eine Anmeldung ohne diesen ausgewählten Funktions-Hut bleibt für
-operative Daten wirkungslos. Die fachlichen Controller prüfen diese Grenze
-serverseitig erneut; ausgeblendete Links oder bereits geladene Seiten gelten
-nicht als Berechtigungsnachweis.
+Die Anwendungssitzung weist das Konto mit dessen fester Funktion und
+serverseitig abgeleiteter Rolle nach. Für jeden operativen Schreibzugriff muss
+zusätzlich ein Einsatz aktiv sein. Jeder normale Schreibpfad revalidiert Konto,
+Funktion, Rolle, Sperrstatus und aktiven Einsatz. Eine aktive Dienst- oder
+Zugangsschicht, persönliche Besetzungsannahme oder Hutauswahl ist keine
+Bedingung. Die fachlichen Controller prüfen diese Grenze serverseitig erneut;
+ausgeblendete Links oder bereits geladene Seiten gelten nicht als
+Berechtigungsnachweis.
 
-Die einzige operative Pre-Hat-Ausnahme ist der Führungsstellen-Bootstrap. Er
-zeigt nur Einsatz-/Schichtgrunddaten sowie eigene Besetzungen und erlaubt
-persönliche Annahme, persönliche Übergabebestätigung und Auswahl der eigenen
-aktiven, angenommenen Besetzung. ETB, TBB, Nachrichten, Anhänge,
-Telekommunikationspläne und Melderaufträge bleiben bis zur Auswahl gesperrt.
-Öffentliche und unabhängig administrativ geschützte Bereiche folgen weiterhin
-ihren eigenen Grenzen.
+Optionale Zugangsschichten bilden ausschließlich einsatzbezogene
+Kontengruppen. Unzugeordnete Konten bleiben zugelassen, Mehrfachzuordnungen
+gelten per OR. Aktivierung erzeugt keine Sitzung; Deaktivierung widerruft eine
+Sitzung, sofern kein anderer aktiver Gruppenzugang verbleibt. Die dauerhafte
+manuelle Kontosperre bleibt davon unabhängig und vorrangig.
 
 ### Einsatzgebundene Führungsstellenidentität
 
@@ -232,10 +226,8 @@ Weboberfläche `/handbuch/`, die über dieselben URL- und Ausgabebegrenzungen
 wie die übrige Anwendung ausgeliefert wird. Das historische PDF von 2011 ist
 nur eine im Git-Bestand bewahrte Quelle und kein Laufzeitdienst. Anonym
 erscheinen alle elf Einstiege mit
-Anmeldehinweis. Nach der Anmeldung, aber vor Hutauswahl, zeigt sie nur die vier
-öffentlichen beziehungsweise separat geschützten Ziele und den
-Führungsstellen-Bootstrap. Mit ausgewähltem aktivem Funktions-Hut zeigt die
-Navigation neun beziehungsweise zehn Links:
+Anmeldehinweis. Nach der Anmeldung zeigt die Navigation anhand der festen
+Kontofunktion unmittelbar neun beziehungsweise zehn Links:
 Meldungsübersicht ist ausschließlich S2/`LAGE_DOKUMENTATION`, Nachweisung
 ausschließlich LdF/`FERNMELDEBETRIEB` oder A/W/`BEFOERDERUNG` zugeordnet.
 
@@ -282,11 +274,10 @@ vollständig und leitet auf das Content-Login mit dem festen, allowlist-
 gebundenen Ziel `messages`. GET-Anfragen mit Zugangsdaten oder den
 Login-Metadaten `login_flow`, `next` beziehungsweise `interrupted` werden
 bewusst nicht als operative Wiederherstellung eingestuft und bleiben auf der
-harten Ablehnungsgrenze. Andere HTTP-Methoden bleiben 403. Ist zwar eine
-Kontositzung vorhanden, aber noch keine persönlich ausgewählte
-Dienstfunktion, führt ein separater 303 bei GET/HEAD ausschließlich zum
-Führungsstellenbetrieb; Schreibversuche bleiben 403. Rollen-, Objekt-, CSRF-
-und Bildberechtigungen bleiben davon unberührt. Das authentifizierte
+harten Ablehnungsgrenze. Andere HTTP-Methoden bleiben 403. Eine gültige
+Kontositzung verwendet unmittelbar ihre feste Funktion; eine zusätzliche
+Auswahlweiterleitung gibt es nicht. Rollen-, Objekt-, CSRF- und
+Bildberechtigungen bleiben davon unberührt. Das authentifizierte
 Statusfragment verwendet HTTP 401 für eine fehlende oder abgelaufene
 Fachsitzung, damit ausschließlich der Sidebar-Poller zum Login wechseln kann.
 
@@ -325,7 +316,7 @@ erreichbaren Laufzeitoberfläche.
 Die Sidebar besitzt bewusst einen eigenen Navigationsmodus. Sie rendert zuerst
 eine Statuskarte mit rollenabhängigem Arbeitszähler, Serverzeit und
 Aktivitätsübersicht, danach Identität und CSRF-geschützten Logout, anschließend die
-rollenabhängigen Fachaktionen und zuletzt die nach ausgewähltem Funktions-Hut
+rollenabhängigen Fachaktionen und zuletzt die nach fester Kontofunktion
 gefilterten neun beziehungsweise zehn Bereichs- und Dienstlinks. Diese Links
 stehen ohne `<details>` oder
 „Bereich wechseln“-Disclosure dauerhaft bereit. Die Bereichsnavigation und
@@ -348,8 +339,8 @@ Fokus auf ihren Frame.
 `app/sidebar.php` erzeugt die semantische Statuskarte und den begrenzten
 Aktualisierungscode. Der GET
 `/4fach/vorgaben.php?fragment=status` liefert ausschließlich bei gültiger
-Anmeldung, aktivem Einsatz und ausgewählter, persönlich angenommener aktiver
-Dienstbesetzung das neue Statusfragment. Die Sidebar ersetzt nur diesen Knoten
+Anmeldung, aktivem Einsatz und zulässiger fester Kontofunktion das neue
+Statusfragment. Die Sidebar ersetzt nur diesen Knoten
 und lädt weder Identität, Navigation noch Aktionsformular neu.
 Der Renderer klassifiziert angemeldete Konten zentral als innerhalb von
 15 Minuten aktiv oder danach inaktiv; nach 12 Stunden erscheinen sie nicht
@@ -466,7 +457,7 @@ Die Apache-Konfiguration:
   funktionieren weiterhin,
 - verweigert jeden direkten HTTP-Zugriff auf den persistenten `4fdata`-Baum;
   Anhänge und Vordrucke werden ausschließlich nach gültiger
-  Anwendungssitzung, aktivem Einsatz, ausgewählter aktiver Dienstbesetzung und
+  Anwendungssitzung, aktivem Einsatz, passender fester Kontofunktion und
   erneuter Objektberechtigung durch die geprüften Download-Endpunkte
   ausgeliefert,
 - trennt beim Vordruckdownload den unveränderten Archivstream vom ausdrücklich
@@ -535,8 +526,8 @@ Die Dateiberechtigung wird getrennt von dieser Pfad- und Integritätsprüfung
 ermittelt. Ein verknüpfter Anhang erbt die Leseberechtigung mindestens einer
 exakt über ein vollständiges, semikolongetrenntes Dateinamens-Token
 referenzierten Nachricht. Ein freier Anhang ist ausschließlich für seinen
-Uploader oder eine ausgewählte aktive S2-, Si- beziehungsweise LdF-Besetzung
-sichtbar. Liste, Download, Bildvorschau, Auswahl im Nachrichtenvordruck und
+Uploader oder ein angemeldetes Konto mit der festen Funktion S2, Si
+beziehungsweise LdF sichtbar. Liste, Download, Bildvorschau, Auswahl im Nachrichtenvordruck und
 der abschließende Nachrichtenspeicherpfad prüfen diese Berechtigung jeweils
 erneut. Eine Teilzeichenfolgensuche oder ein lediglich zuvor angezeigter
 Dateiname genügt nicht.
@@ -556,10 +547,10 @@ Upgrade-Altbeständen
 wird nur die Verfügbarkeit geprüft und ausdrücklich
 „Integrität beim Eingang nicht belegbar“ ausgegeben; ein Hash der heutigen
 Bytes wird nicht als rückwirkender Eingangsbeweis umgedeutet. Auch der
-administrative POST zum Schließen der letzten aktiven Dienstschicht reicht den
-konfigurierten Ablageroot zwingend an denselben Preflight weiter. Ein formal
-gültiger Datenbanknachweis bei fehlenden oder gleichlang manipulierten Bytes
-führt deshalb zu HTTP 409, bevor Schicht oder Besetzungen beendet werden.
+administrative POST zum formalen Einsatzabschluss reicht den konfigurierten
+Ablageroot zwingend an denselben Preflight weiter. Ein formal gültiger
+Datenbanknachweis bei fehlenden oder gleichlang manipulierten Bytes führt
+deshalb zu HTTP 409, bevor der Einsatz abgeschlossen wird.
 
 Das einsatzbezogene PDF-Dossier besitzt neun unabhängig wählbare Abschnitte:
 ETB, TBB, Nachrichtenvordrucke, Anhänge, Nachrichtenereignisse,
@@ -656,10 +647,9 @@ einem Formatmerkmal voraus.
 Der zentrale Controller akzeptiert Detailansichten, Statusänderungen,
 Sichtungs-/Transport-Saves, Sperränderungen und Logout nur über POST mit
 Session-CSRF. Record- und Kategorie-IDs sind kanonische positive Ganzzahlen.
-Vor jedem Nachrichtenpfad werden aktiver Einsatz, ausgewählte persönlich
-angenommene aktive Dienstbesetzung und Objekt gemeinsam geprüft. Eine normale
-Stabs- oder Fachberaterbesetzung darf eine Nachricht lesen, wenn ihre
-ausgewählte Funktion nach fachlichem Abschluss als vollständiger
+Vor jedem Nachrichtenpfad werden aktiver Einsatz, feste Kontofunktion, Rolle
+und Objekt gemeinsam geprüft. Ein normales Stabs- oder Fachberaterkonto darf
+eine Nachricht lesen, wenn seine feste Funktion nach fachlichem Abschluss als vollständiger
 Empfänger-Token eingetragen ist oder sie die Nachricht selbst ausgehend
 erstellt hat. Si, LdF und A/W dürfen zusätzlich ihre aktuelle Warteschlange
 beziehungsweise Sperre sowie
@@ -668,37 +658,28 @@ Vordruckliste, aktueller In-Memory-Abzug und Archivdownload erben exakt diese
 Objektregel. Ein Sperrinhaber wird über sein validiertes Kürzel gebunden.
 Historische GET-Detail- und GET-Mutationsaufrufe werden abgewiesen.
 
-Die einsatzbezogene Meldungsübersicht ist ausschließlich für eine ausgewählte
-aktive S2-Besetzung mit `LAGE_DOKUMENTATION` bestimmt. Die Nachweisung ist
-ausschließlich für eine ausgewählte aktive LdF-Besetzung mit
-`FERNMELDEBETRIEB` oder A/W-Besetzung mit `BEFOERDERUNG` bestimmt. ETB und TBB
-dürfen alle ausgewählten aktiven Funktions-Hüte lesen; ETB-Schreiben verlangt
-zusätzlich genau die als Schreiber bestimmte Besetzung. Die zuerst
-zugewiesene angenommene ETB-Besetzung hat Vorrang, ersatzweise die erste
-angenommene S2-Besetzung mit `EINSATZTAGEBUCH`; beim TBB ist es die erste
-angenommene A/W-Besetzung mit `BEFOERDERUNG`. Weitere fachlich fähige
-Besetzungen bleiben lesend. Die getrennte
+Die einsatzbezogene Meldungsübersicht ist ausschließlich für ein festes Konto
+`S2/Stab` mit `LAGE_DOKUMENTATION` bestimmt. Die Nachweisung ist ausschließlich
+für `LdF/Fernmelder` mit `FERNMELDEBETRIEB` oder `A/W/Fernmelder` mit
+`BEFOERDERUNG` bestimmt. ETB schreiben `ETB/Stab` oder `S2/Stab`, TTB schreibt
+`A/W/Fernmelder`. Anwendung und Insert-Trigger prüfen den aktiven Einsatz,
+passende feste Funktion/Rolle und ein ungesperrtes Konto. Eine aktive Schicht
+oder Besetzungs-ID wird nicht verlangt. Die getrennte
 `LAGE_DOKUMENTATION`-Fähigkeit und damit die Meldungsübersicht bleiben
 ausschließlich S2 vorbehalten.
 
-Der Kontozustand beeinflusst die Designation bewusst nicht: Eine Sperrung oder
-Deaktivierung der bestimmten Person blockiert den Writer, statt still die
-nächste geeignete Besetzung vorzuziehen. Die Anwendung sperrt und prüft die
-konkrete Designation und die Sitzungsidentität erneut. Der Insert-Trigger
-bildet die unabhängige Persistenzgrenze und verlangt angenommene Besetzung,
-aktive einsatzgleiche Schicht, passende Benutzer-/Kürzel-/Funktionsidentität
-sowie ein aktives, ungesperrtes Konto. Erst eine fachlich dokumentierte
-Ablösung darf die Schreiberherkunft ändern.
+Die manuelle Kontosperre und ein gegebenenfalls deaktivierter Gruppenzugang
+blockieren das betroffene Konto. Sie führen weder zu einem Funktionswechsel
+noch zu einer stillen Rechteübertragung auf ein anderes Konto.
 
 Lokale ETB-/TBB-Nummern werden durch genau zwei je Einsatz vorab angelegte
 Datenbankköpfe vergeben. Der Einsatz-Insert-Trigger erzeugt atomar `ETB:1` und
 `TTB:1`; jeder Buch-Insert sperrt und erhöht nur seinen vorhandenen Kopf. Ein
 fehlender Kopf wird nicht im konkurrierenden Buchtrigger repariert, sondern
 fail-closed abgewiesen. Globale Legacy-Primärschlüssel sind keine fachlichen
-Nummern. Eröffnung bei erster Schichtaktivierung, bestätigte Übergabe und
-formaler Abschluss hängen ihre Buchzeilen innerhalb der jeweiligen
-Fachtransaktion an. Ein Abschluss vor mindestens einer aktivierten Schicht und
-exakt je einer Eröffnungszeile Nummer 1 ist gesperrt. `UPDATE` und `DELETE`
+Nummern. Der formale Abschluss hängt seine Buchzeilen innerhalb der
+Fachtransaktion an. Eine frühere Schichtaktivierung und schichtbezogene
+Eröffnungszeilen sind keine Abschlussbedingung. `UPDATE` und `DELETE`
 beider Bücher sind durch Trigger gesperrt; eine Korrektur ist eine neue,
 direkt auf das Original verweisende Zeile. Die zehnjährige
 Mindestaufbewahrung wird ebenfalls in der Datenbank geprüft. Diese technischen
@@ -717,19 +698,16 @@ Trigger bilden die zweite Grenze. Die Oberfläche bietet nur finalisierte,
 unbenutzte Kandidaten an und durchsucht Volltext, Art, lokale Nummern, Bezüge,
 ETB-Anlagennummer sowie Ablage-/Originaldateinamen stets einsatzgebunden.
 
-Migration 111 bindet jede neue manuelle ETB-/TTB-Zeile an die gesperrte aktive
-Dienstschicht und an die serverseitig ermittelte schreibende
-Dienstbesetzungs-ID. Automatische Systemzeilen tragen dieselbe
-Schichtprovenienz, müssen ihre menschliche Schreiberzuordnung aber `NULL`
-lassen. Bestandszeilen werden nicht rückwirkend einer vermuteten Schicht oder
-Person zugeordnet und behalten dort `NULL`.
+Migration 111 ergänzte nullable Legacy-Provenienzfelder. Migration 112 ersetzt
+den damaligen Schicht-Triggervertrag: Neue manuelle und automatische
+ETB-/TTB-Zeilen dürfen Schicht und Schreiberbesetzung `NULL` lassen. Eine
+Zugangsschicht wird dort nie eingetragen. Belegte formale Altprovenienz bleibt
+unverändert und exportierbar.
 
-Ein ETB-Eintrag darf zusätzlich optional eine angenommene Besetzung derselben
-aktiven Schicht als Bearbeitungs- und Suchhilfe referenzieren. Die Auswahl-ID
-wird unter `FOR UPDATE` erneut geprüft; der Insert-Trigger erzeugt daraus den
-unveränderlichen Snapshot `Funktion (Rolle): Name [Kürzel]`. Freier
-Browsertext kann ihn nicht ersetzen. Webliste, Volltext- und Zuordnungsfilter
-verwenden den Snapshot, der amtliche PDF-Renderer dagegen ausdrücklich nicht.
+Eine optionale ETB-Bearbeitungszuordnung ist nur Such- und Anzeigehilfe. Sie
+erweitert keine Rechte. Webliste, Volltext- und Zuordnungsfilter verwenden den
+unveränderlichen Snapshot, der amtliche PDF-Renderer dagegen ausdrücklich
+nicht.
 
 Die öffentliche ETB-Referenz ist die einsatzlokale Buchnummer, nicht der
 globale Primärschlüssel. Neue Werte werden als kanonische positive
@@ -743,32 +721,19 @@ merkt bereits besuchte Zeilen und begrenzt die gewünschte Vorwärts- oder
 Rückwärtstiefe auf 1 bis 25. Vorwärts bleiben Verzweigungen erhalten;
 rückwärts folgt sie der gespeicherten direkten Referenz.
 
-Eine aktive Schicht kann administrativ nur um eine noch nicht belegte Funktion
-ergänzt werden; A/W ist die bewusst mehrfach besetzbare Ausnahme. Erst die
-persönliche Annahme durch das zugewiesene Konto macht die Erweiterung wirksam
-und hängt atomar eine ETB-Zeile sowie für LdF/A/W zusätzlich eine
-TBB-Zeile an. Der Austausch einer anderen bereits belegten Funktion bleibt
-dem Übergabeverfahren vorbehalten.
-Eine ETB-Ergänzung, die eine angenommene ETB- oder S2-Besetzung als bestimmten
-Schreiber verdrängen würde, ist in der aktiven Schicht schon bei der
-Zuweisung gesperrt. Der Annahmepfad und der Datenbank-Trigger prüfen dies
-erneut, damit auch eine noch während der Planung zugewiesene ETB-Funktion nach
-Aktivierung nicht still übernehmen kann. Ein Schreiberwechsel erfolgt nur über
-die dokumentierte und bestätigte Schichtübergabe.
-
-Die zweistufige Schichtübergabe bindet authentifizierten Initiator und
-bestätigende Nachfolgebesetzung: Nur eine persönlich angemeldete, ausgewählte
-und angenommene Besetzung der aktiven Schicht initiiert; nur eine persönlich
-angenommene Besetzung der Nachfolgeschicht bestätigt. Initiierungs- und
-Bestätigungszeit stammen getrennt aus der Datenbankuhr und erscheinen als
-Übergabe- beziehungsweise Übernahmezeit in beiden Büchern. Zwei zusätzliche
-Datenbanktrigger erzwingen, dass Übernahmebestätigung, abgeschlossener
-Übergabenachweis sowie Ende und Beginn der beiden Schichten denselben
-Bestätigungszeitpunkt tragen und nicht vor der Initiierung liegen. In die ETB-/TBB-
-Zeilen gelangen nach dem Statuswechsel ausschließlich `ABGELOEST`-Besetzungen
-der alten und `ANGENOMMEN`-Besetzungen der neuen Schicht, keine bloßen
-Planungszeilen. Nur die PDF-Linien sind für eine anschließende manuelle
-Unterschrift vorgesehen; die Webaktionen sind keine digitale Signatur.
+Die optionalen Zugangsschichten erlauben der Administration, Konten eines
+Einsatzes in Gruppen zu aktivieren und zu deaktivieren. Die Gruppe verändert
+keine Funktion und schreibt keine ETB-/TBB-Personalzeile. Historische formale
+Dienstschichten, Besetzungen und Übergaben bleiben davon unberührt als
+Legacy-Evidenz erhalten. Nur die PDF-Linien sind für eine anschließende
+manuelle Unterschrift vorgesehen; Webaktionen sind keine digitale Signatur.
+Schichtmutationen teilen einen globalen Advisory Lock mit der Anmeldung und
+zusätzliche kontobezogene Locks mit der Benutzerverwaltung. Deaktivieren und
+Entfernen prüfen unter diesen Sperren den Hash genau der bestätigten
+Richtlinienwirkung erneut; Entfernen adressiert zusätzlich die konkrete
+append-only Mitgliedsintervall-ID. Damit kann weder eine Änderung einer
+anderen Gruppe die Vorschau überholen noch ein alter Browserdialog eine
+zwischenzeitlich neu angelegte Zuordnung treffen.
 
 Automatische Nachrichtenbeförderung schreibt den exakten TBB-Typ
 `nachricht`. Generator, Nachrichtendetail und Dossier ermitteln nur aus diesem
@@ -819,7 +784,8 @@ Lock-Namensbildung verwendet die administrative Zählerreparatur. Damit kann
 eine Reparatur nicht parallel an einem regulären Writer vorbeilaufen. Der
 Wiederanlaufwert liegt nicht als unvollständige System-„Nachricht“ in
 `nv_nachrichten`, sondern als hashverkettetes
-`message_counter_repaired`-Betriebsereignis der aktiven Dienstschicht vor.
+`message_counter_repaired`-Betriebsereignis mit Objekttyp `EINSATZ` vor; eine
+aktive Schicht ist dafür nicht erforderlich.
 Normale Nummernvergabe verwendet das Maximum aus echten Nachrichten und diesem
 unveränderlichen Nachweis. Dadurch erzeugt die Reparatur weder einen
 Status-0-Datensatz noch einen dauerhaften Einsatzabschluss-Blocker.
@@ -873,6 +839,10 @@ alle Werte gebunden und jeder Vorgang verwendet InnoDB-Transaktionen:
 - Der PDF-Vordruckreset setzt ausschließlich nach einem CSRF-geprüften POST die
   validierte Spalte `x04_druck` zurück und auditiert die Zahl betroffener
   Nachrichten.
+- `app/shift_access.php` schreibt optionale Zugangsschichtmutationen als
+  hashverkettete Betriebsereignisse mit Objekttyp `ZUGANGSSCHICHT`. Die
+  Gruppenmutation, der gegebenenfalls nötige Sitzungswiderruf und das Audit
+  committen gemeinsam; Funktion, Rolle und manuelle Sperre bleiben unverändert.
 
 Erfolg wird per HTTP 303 auf eine GET-Ansicht umgeleitet. Validierungs-,
 Konflikt- oder Datenbankfehler führen nicht zu Teiländerungen.
@@ -883,7 +853,7 @@ Konflikt- oder Datenbankfehler führen nicht zu Teiländerungen.
 aktive Verwaltung `4fach/katgoedt.php`, die Auswahllisten in
 `4fach/katego.php` und das Kategorienband der Meldungsliste. Der Endpunkt
 verlangt immer eine gültige eStab-Sitzung, einen aktiven Einsatz und eine
-ausgewählte, persönlich angenommene aktive Dienstbesetzung.
+passende feste Kontofunktion mit serverseitig abgeleiteter Rolle.
 `dbtyp` akzeptiert ausschließlich `master`, `fkt` oder `user`:
 
 - Master-Kategorien liegen in den fest konfigurierten Tabellen und dürfen nur
@@ -914,7 +884,7 @@ Listenabfrage bindet diese ID. Damit bleiben Kategorienamen mit Quotes reine
 Daten und können nicht in den SQL-Filter gelangen.
 
 `katgoedt.php` bleibt ein aktiver, vom Apache erreichbarer Fachendpunkt; die
-Session-, Einsatz-, ausgewählte-Dienstbesetzungs-, Rollen-, CSRF- und
+Session-, Einsatz-, Festfunktions-, Rollen-, CSRF- und
 Objektgrenzen liegen in PHP. Nur interne Implementierungs- und
 Konfigurationsverzeichnisse werden auf Webserver-Ebene gesperrt.
 
@@ -1048,9 +1018,9 @@ entwickelte Anwendung. Für die Freigabe sind insbesondere zu berücksichtigen:
   überwachen; fehlt diese Betriebsgrenze, bleibt das Risiko automatisierter
   Kennwortversuche bestehen,
 - die Read-/Done-Statushelper werden nur hinter dem übergeordneten exakten
-  Request-Guard aufgerufen und serialisieren ihre Statusänderung, revalidieren
-  die ausgewählte Dienstbesetzungs-ID aber nicht nochmals innerhalb derselben
-  Helper-Transaktion. Diese Defense-in-Depth-Annahme muss bei jeder Änderung
+  Request-Guard aufgerufen und serialisieren ihre Statusänderung. Die feste
+  Kontofunktion wird im übergeordneten Guard geprüft. Diese
+  Defense-in-Depth-Annahme muss bei jeder Änderung
   des Aufrufgraphen durch die Guard- und Integrationstests erhalten bleiben,
 - es gibt keine Mehrfaktor-Authentisierung; die zentrale Verwaltung kann
   Funktionskonten sperren, entsperren und Kennwörter zurücksetzen, bietet aber

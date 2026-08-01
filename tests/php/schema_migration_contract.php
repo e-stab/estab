@@ -67,6 +67,9 @@ $logbookRulesMigration = $read(
 $logbookShiftMigration = $read(
     $root . '/docker/db/migrations/111-logbook-shift-assignment.sql'
 );
+$optionalAccessShiftMigration = $read(
+    $root . '/docker/db/migrations/112-optional-access-shifts.sql'
+);
 $baseline = $read($root . '/docker/db/init/10-schema.sql');
 $verify = $read($root . '/docker/db/verify.sql');
 $health = $read($root . '/health.php');
@@ -89,6 +92,7 @@ $messageListSearchSql = $normaliseSql($messageListSearchMigration);
 $sessionPresenceSql = $normaliseSql($sessionPresenceMigration);
 $logbookRulesSql = $normaliseSql($logbookRulesMigration);
 $logbookShiftSql = $normaliseSql($logbookShiftMigration);
+$optionalAccessShiftSql = $normaliseSql($optionalAccessShiftMigration);
 $baselineSql = $normaliseSql($baseline);
 $verifySql = $normaliseSql($verify);
 $readinessSql = $normaliseSql(estab_readiness_schema_query());
@@ -847,6 +851,265 @@ $assert(
         && str_contains($logbookShiftSql, 'referenced_column_name'),
     'Migration 111 does not compare foreign-key column mappings canonically'
 );
+
+$optionalTriggerSql = static function (
+    string $migrationSql,
+    string $triggerName
+): string {
+    $match = [];
+    if (preg_match(
+        '/CREATE TRIGGER `' . preg_quote($triggerName, '/')
+            . '` .*? END\/\//s',
+        $migrationSql,
+        $match
+    ) !== 1) {
+        return '';
+    }
+    return $match[0] ?? '';
+};
+$optionalEtbTriggerSql = $optionalTriggerSql(
+    $optionalAccessShiftSql,
+    'estab_etb_bi_einsatz'
+);
+$optionalTbbTriggerSql = $optionalTriggerSql(
+    $optionalAccessShiftSql,
+    'estab_tbb_bi_einsatz'
+);
+$optionalAssigneeStart = strpos(
+    $optionalEtbTriggerSql,
+    'IF NEW.`estab_assignee_assignment_id` IS NULL'
+);
+$optionalAssigneeEnd = strpos(
+    $optionalEtbTriggerSql,
+    'IF NEW.`estab_message_id` IS NOT NULL',
+    is_int($optionalAssigneeStart) ? $optionalAssigneeStart : 0
+);
+$optionalAssigneeSql = is_int($optionalAssigneeStart)
+    && is_int($optionalAssigneeEnd)
+    ? substr(
+        $optionalEtbTriggerSql,
+        $optionalAssigneeStart,
+        $optionalAssigneeEnd - $optionalAssigneeStart
+    )
+    : '';
+$optionalPlanCreateTriggerSql = $optionalTriggerSql(
+    $optionalAccessShiftSql,
+    'estab_dv94_fernmeldeplan_insert'
+);
+$optionalPlanReleaseTriggerSql = $optionalTriggerSql(
+    $optionalAccessShiftSql,
+    'estab_dv94_fernmeldeplan_immutable'
+);
+$optionalMessengerCreateTriggerSql = $optionalTriggerSql(
+    $optionalAccessShiftSql,
+    'estab_dv94_messenger_insert'
+);
+$optionalMessengerReportTriggerSql = $optionalTriggerSql(
+    $optionalAccessShiftSql,
+    'estab_dv94_messenger_update'
+);
+
+foreach ([
+    'CREATE PROCEDURE estab_migrate_112_event_object_types()'
+        => 'Migration 112 has no resumable event-object enum phase',
+    "'MELDERAUFTRAG', 'EINSATZ', 'ZUGANGSSCHICHT'"
+        => 'Migration 112 does not append incident and access-shift event types',
+    'estab:migration:112:event-object-types:v1'
+        => 'Migration 112 does not own the expanded event-object enum',
+    'Optional access-shift migration blocked: foreign event object type'
+        => 'Migration 112 accepts a foreign event-object enum',
+    'DECLARE canonical_phase_tables INTEGER DEFAULT 0'
+        => 'Migration 112 has no durable trigger-phase ownership marker',
+    'DECLARE named_trigger_sources INTEGER DEFAULT 0'
+        => 'Migration 112 does not distinguish present from owned triggers',
+    'DECLARE canonical_predecessor_triggers INTEGER DEFAULT 0'
+        => 'Migration 112 does not identify its complete predecessor boundary',
+    'IF named_trigger_sources <> canonical_trigger_sources THEN'
+        => 'Migration 112 tolerates a foreign same-name trigger during repair',
+    'IF canonical_phase_tables <> 2 AND canonical_predecessor_triggers <> 6 THEN'
+        => 'Migration 112 permits missing predecessor triggers before its owned phase',
+    'Optional access-shift migration blocked: predecessor trigger is missing'
+        => 'Migration 112 does not fail explicitly on an incomplete first-run boundary',
+    'CREATE TABLE IF NOT EXISTS `nv_zugangsschichten`'
+        => 'Migration 112 does not create optional access shifts',
+    '`bezeichnung` VARCHAR(100) NOT NULL'
+        => 'Migration 112 does not use the agreed shift label',
+    '`beginn` DATETIME(6) NULL'
+        => 'Migration 112 does not keep shift start optional',
+    '`ende` DATETIME(6) NULL'
+        => 'Migration 112 does not keep shift end optional',
+    '`zugang_aktiv` TINYINT UNSIGNED NOT NULL DEFAULT 0'
+        => 'Migration 112 does not store group access independently',
+    '`erstellt_am` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)'
+        => 'Migration 112 lacks creation-time audit evidence',
+    '`geaendert_am` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)'
+        => 'Migration 112 lacks change-time audit evidence',
+    'CREATE TABLE IF NOT EXISTS `nv_zugangsschicht_mitglieder`'
+        => 'Migration 112 does not create shift membership',
+    '`zugeordnet_am` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)'
+        => 'Migration 112 lacks membership assignment time',
+    '`zugeordnet_von` VARCHAR(128) NOT NULL'
+        => 'Migration 112 lacks membership assignment actor',
+    '`entfernt_am` DATETIME(6) NULL'
+        => 'Migration 112 lacks membership removal time',
+    '`entfernt_von` VARCHAR(128) NULL'
+        => 'Migration 112 lacks membership removal actor',
+    '`aktives_benutzer_kuerzel` VARCHAR(6) GENERATED ALWAYS AS'
+        => 'Migration 112 lacks a nullable active-membership key',
+    'WHEN `entfernt_am` IS NULL THEN `benutzer_kuerzel`'
+        => 'Migration 112 does not derive active membership from the open interval',
+    'UNIQUE KEY `uq_zugangsschicht_aktives_mitglied` (`zugangsschicht_id`, `aktives_benutzer_kuerzel`)'
+        => 'Migration 112 permits two current memberships per shift and account',
+    'Optional access-shift migration blocked: incompatible indexes'
+        => 'Migration 112 postflight does not verify active-membership uniqueness',
+    'KEY `idx_zugangsschicht_aktiv` (`einsatz_id`, `zugang_aktiv`, `zugangsschicht_id`)'
+        => 'Migration 112 cannot efficiently list independently active groups',
+    'REFERENCES `nv_benutzer` (`kuerzel`) ON UPDATE RESTRICT ON DELETE RESTRICT'
+        => 'Migration 112 does not bind memberships to canonical accounts',
+    'Optional access-shift migration blocked: final trigger mismatch'
+        => 'Migration 112 does not validate its replaced trigger boundary',
+] as $fragment => $message) {
+    $assert(str_contains($optionalAccessShiftSql, $fragment), $message);
+}
+foreach ([
+    '`name`',
+    '`beginnt_am`',
+    '`endet_am`',
+    '`mitglied_aktiv`',
+    '`hinzugefuegt_am`',
+    '`hinzugefuegt_von`',
+] as $rejectedColumn) {
+    $assert(
+        !str_contains($optionalAccessShiftSql, $rejectedColumn),
+        'Migration 112 contains rejected schema field ' . $rejectedColumn
+    );
+}
+$assert(
+    !str_contains(
+        $optionalAccessShiftSql,
+        'UNIQUE KEY `uq_zugangsschicht_mitglied` (`zugangsschicht_id`, `benutzer_kuerzel`)'
+    ),
+    'Migration 112 collapses all membership intervals into one reusable row'
+);
+$assert(
+    !str_contains(
+        $optionalAccessShiftSql,
+        'UNIQUE KEY `idx_zugangsschicht_aktiv`'
+    )
+        && !str_contains(
+            $optionalAccessShiftSql,
+            'UNIQUE KEY `uq_zugangsschicht_aktiv`'
+        ),
+    'Migration 112 incorrectly permits only one active access group'
+);
+$assert(
+    preg_match('/UPDATE `nv_benutzer`/i', $optionalAccessShiftSql) !== 1,
+    'Migration 112 aliases group state onto account presence or blocking'
+);
+$assert(
+    str_contains(
+        $optionalAccessShiftSql,
+        '(`entfernt_am` IS NULL AND `entfernt_von` IS NULL)'
+    ),
+    'Migration 112 does not define active membership by an absent removal'
+);
+$assert(
+    str_contains(
+        $optionalAccessShiftSql,
+        '`entfernt_am` >= `zugeordnet_am`'
+    ),
+    'Migration 112 permits a negative membership interval'
+);
+
+foreach ([
+    'ETB optional duty provenance must be complete',
+    'ETB writer account function or status is invalid',
+    'ETB writer duty provenance is invalid',
+    "account.`funktion` = BINARY 'ETB'",
+    "account.`funktion` = BINARY 'S2'",
+    'account.`aktiv` = 1',
+    'account.`estab_gesperrt` = 0',
+] as $fragment) {
+    $assert(
+        str_contains($optionalEtbTriggerSql, $fragment),
+        'Migration 112 ETB trigger omits direct authorization: ' . $fragment
+    );
+}
+$assert(
+    !str_contains($optionalEtbTriggerSql, 'duty_shift.`status`')
+        && !str_contains(
+            $optionalEtbTriggerSql,
+            "assignment.`status` = BINARY 'ANGENOMMEN'"
+        )
+        && !str_contains(
+            $optionalEtbTriggerSql,
+            'ETB entry requires a duty shift'
+        ),
+    'Migration 112 still enforces a shift state for ETB entry'
+);
+$assert(
+    str_contains(
+        $optionalAssigneeSql,
+        "assignment.`status` <> BINARY 'ZURUECKGEZOGEN'"
+    )
+        && !str_contains(
+            $optionalAssigneeSql,
+            'ETB assignee requires duty-shift provenance'
+        )
+        && !str_contains(
+            $optionalAssigneeSql,
+            'assignment.`dienstschicht_id` = NEW.`estab_shift_id`'
+        ),
+    'Migration 112 does not keep ETB assignee selection independent of writer provenance'
+);
+foreach ([
+    'TTB optional duty provenance must be complete',
+    'TTB writer account function or status is invalid',
+    'TTB writer duty provenance is invalid',
+    "account.`funktion` = BINARY 'A/W'",
+    "account.`rolle` = BINARY 'Fernmelder'",
+    'account.`aktiv` = 1',
+    'account.`estab_gesperrt` = 0',
+] as $fragment) {
+    $assert(
+        str_contains($optionalTbbTriggerSql, $fragment),
+        'Migration 112 TTB trigger omits direct authorization: ' . $fragment
+    );
+}
+$assert(
+    !str_contains($optionalTbbTriggerSql, 'duty_shift.`status`')
+        && !str_contains($optionalTbbTriggerSql, 'assignment.`status`')
+        && !str_contains(
+            $optionalTbbTriggerSql,
+            'TTB entry requires a duty shift'
+        ),
+    'Migration 112 still enforces a shift state for TTB entry'
+);
+foreach ([
+    [$optionalPlanCreateTriggerSql,
+        'Telecommunications plan creator account is invalid',
+        "creator_account.`funktion` = BINARY 'S6'"],
+    [$optionalPlanReleaseTriggerSql,
+        'Telecommunications plan release account is invalid',
+        "release_account.`funktion` = BINARY 'S6'"],
+    [$optionalMessengerCreateTriggerSql,
+        'Messenger assignment account functions are invalid',
+        "messenger_account.`funktion` = BINARY 'A/W'"],
+    [$optionalMessengerReportTriggerSql,
+        'Messenger report account function is invalid',
+        "report_account.`funktion` = BINARY 'LdF'"],
+] as [$triggerSql, $marker, $functionPredicate]) {
+    $assert(
+        $triggerSql !== ''
+            && str_contains($triggerSql, $marker)
+            && str_contains($triggerSql, $functionPredicate)
+            && !str_contains($triggerSql, 'nv_dienstschichten')
+            && !str_contains($triggerSql, 'nv_dienstbesetzungen'),
+        'Migration 112 does not authorize the operational action directly: '
+            . $marker
+    );
+}
+
 foreach ([
     'verify.sql' => $verifySql,
     'runtime readiness' => $readinessSql,
@@ -880,10 +1143,13 @@ foreach ([
         'fk_etb_assignee_assignment',
         'fk_tbb_shift',
         'fk_tbb_writer_assignment',
-        'ETB entry requires a duty shift',
-        'TTB entry requires a duty shift',
-        'ETB writer identity or status is invalid',
-        'TTB writer identity or status is invalid',
+        'ETB optional duty provenance must be complete',
+        'TTB optional duty provenance must be complete',
+        'ETB writer account function or status is invalid',
+        'TTB writer account function or status is invalid',
+        'ETB writer duty provenance is invalid',
+        'TTB writer duty provenance is invalid',
+        'ETB assignee duty provenance is invalid',
         'TTB message entry requires canonical message link',
         'estab_log111_handover_insert_time',
         'Duty handover completion times are inconsistent',
@@ -894,6 +1160,7 @@ foreach ([
         'ETB correction requires canonical local reference',
         'SET NEW.`estab_assignment` = assignment_snapshot',
         '111-logbook-shift-assignment.sql',
+        '112-optional-access-shifts.sql',
     ] as $fragment) {
         $assert(
             str_contains($runtimeSchemaContract, $fragment),
@@ -917,6 +1184,32 @@ foreach ([
             ),
         $contractName . ' does not require the active-shift extension boundary'
     );
+    foreach ([
+        'nv_zugangsschichten',
+        'nv_zugangsschicht_mitglieder',
+        'EINSATZ',
+        'ZUGANGSSCHICHT',
+        'estab:migration:112:event-object-types:v1',
+        'estab:migration:112:optional-access-shifts:v1',
+        'uq_zugangsschicht_bezeichnung',
+        'idx_zugangsschicht_aktiv',
+        'aktives_benutzer_kuerzel',
+        'uq_zugangsschicht_aktives_mitglied',
+        'idx_zugangsschicht_mitglied_benutzer',
+        'fk_zugangsschicht_einsatz',
+        'fk_zugangsschicht_mitglied_schicht',
+        'fk_zugangsschicht_mitglied_benutzer',
+        'Telecommunications plan creator account is invalid',
+        'Telecommunications plan release account is invalid',
+        'Messenger assignment account functions are invalid',
+        'Messenger report account function is invalid',
+    ] as $fragment) {
+        $assert(
+            str_contains($runtimeSchemaContract, $fragment),
+            $contractName . ' omits optional access-shift contract: '
+                . $fragment
+        );
+    }
 }
 $assert(
     preg_match(
@@ -1401,11 +1694,17 @@ foreach ([
     'partial logbook migration did not restore empty pre-existing book heads canonically',
     'blocked logbook column collision was changed or recorded',
     '111-logbook-shift-assignment.sql',
+    '112-optional-access-shifts.sql',
     'historical logbook rows did not retain unknown shift provenance',
-    'partial logbook shift migration did not resume canonically',
+    'partial logbook and optional access-shift migrations did not resume canonically',
     'blocked logbook shift collision was changed or recorded',
-    'ETB entry without a duty shift was not rejected explicitly',
-    'TTB entry without a duty shift was not rejected explicitly',
+    'partial optional access-shift trigger phase did not resume canonically',
+    'foreign optional access-shift trigger was accepted',
+    'blocked optional access-shift trigger collision was changed or recorded',
+    'optional access-shift trigger did not recover after removing the collision',
+    'Manual ETB/TBB entries without a duty shift were accepted by account function',
+    'Two access groups can be active and membership re-addition preserves its history',
+    'withdrawn ETB assignee rejection was not explicit',
     'ETB duty shift from another incident was not rejected explicitly',
     'TTB duty shift from another incident was not rejected explicitly',
     'ETB writer from another duty shift was not rejected explicitly',
@@ -1413,14 +1712,14 @@ foreach ([
     'ETB assignee from another duty shift was not rejected explicitly',
     'canonical ETB assignment snapshot was not generated by the database',
     'browser ETB assignment text was accepted without an assignment',
-    'valid same-shift system and manual logbook entries were not accepted',
+    'optional system and valid manual logbook provenance was not accepted',
     'concurrent ETB/TBB inserts did not allocate complete unique local numbers',
     'new incident did not receive both empty book heads before first entry',
     'first concurrent ETB/TBB entries did not use pre-created book heads',
     'missing ETB head was not rejected explicitly',
     'missing TTB head was not rejected explicitly',
     'MariaDB default snapshot isolation is not enabled for concurrency tests',
-    'assert_equal "17"',
+    'assert_equal "18"',
 ] as $marker) {
     $assert(
         str_contains($schemaIntegration, $marker),
@@ -1487,7 +1786,7 @@ $assert(
         && str_contains($verifySql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $verifySql,
-            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 17'
+            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 18'
         )
         && str_contains($verifySql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -1505,7 +1804,8 @@ $assert(
             $verifySql,
             "'111-logbook-shift-assignment.sql'"
         )
-        && str_contains($verifySql, ") = 17) AS `schema_migrations_ok`"),
+        && str_contains($verifySql, "'112-optional-access-shifts.sql'")
+        && str_contains($verifySql, ") = 18) AS `schema_migrations_ok`"),
     'verify.sql does not require the exact final ETB catalogue and ledger'
 );
 $assert(
@@ -1528,7 +1828,7 @@ $assert(
         && str_contains($readinessSql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $readinessSql,
-            '(SELECT COUNT(*) FROM estab_schema_migrations) = 17'
+            '(SELECT COUNT(*) FROM estab_schema_migrations) = 18'
         )
         && str_contains($readinessSql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -1548,7 +1848,11 @@ $assert(
         )
         && str_contains(
             $readinessSql,
-            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 17"
+            "'112-optional-access-shifts.sql'"
+        )
+        && str_contains(
+            $readinessSql,
+            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 18"
         ),
     'Runtime readiness does not require the exact final ETB catalogue and ledger'
 );
@@ -1673,6 +1977,10 @@ $assert(
             $readiness,
             "'111-logbook-shift-assignment.sql'"
         )
+        && str_contains(
+            $readiness,
+            "'112-optional-access-shifts.sql'"
+        )
         && str_contains($verify, "'50-global-incidents.sql'")
         && str_contains($verify, "'45-global-incidents-prepare.sql'")
         && str_contains($verify, "'55-global-incidents-finish.sql'")
@@ -1687,9 +1995,10 @@ $assert(
         && str_contains($verify, "'100-session-presence.sql'")
         && str_contains($verify, "'110-etb-tbb-rules.sql'")
         && str_contains($verify, "'111-logbook-shift-assignment.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 17')
-        && str_contains($readiness, 'estab_schema_migrations) = 17'),
-    'Migration ledger/readiness does not require all seventeen release migrations'
+        && str_contains($verify, "'112-optional-access-shifts.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 18')
+        && str_contains($readiness, 'estab_schema_migrations) = 18'),
+    'Migration ledger/readiness does not require all eighteen release migrations'
 );
 $assert(
     str_contains($readiness, "require_once __DIR__ . '/bootstrap.php'")

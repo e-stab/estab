@@ -36,9 +36,9 @@ Aufruf sind alle neun Bereiche ausgewählt:
 - alle Nachrichtenvordrucke des Einsatzes,
 - Anhänge zu den Nachrichtenvordrucken samt Integritätsstatus,
 - Nachrichtenereignisse und Nachrichtennachweisköpfe,
-- Dienstschichten, Dienstbesetzungen, sämtliche Übergabeanforderungen
-  (`INITIIERT`, `STORNIERT`, `BESTAETIGT`) und abgeschlossene
-  Dienstübergaben,
+- Dienstorganisation: optionale Zugangsschichten mit allen aktuellen und
+  entfernten Kontenzuordnungen sowie davon getrennt die historischen formalen
+  Dienstschichten, Dienstbesetzungen und Übergaben,
 - S6-Fernmeldeplanversionen mit sämtlichen Planeinträgen,
 - Melderaufträge,
 - Betriebsereignisse und Betriebsnachweiskopf.
@@ -48,7 +48,9 @@ werden. Der Server verwirft unbekannte, mehrfachdeutige oder nicht kanonische
 Auswahlwerte; eine leere Auswahl wird nicht als scheinbar vollständiges
 Dossier akzeptiert.
 
-Dienstorganisation, S6-Planung und Melderbeförderung enthalten jeweils alle
+Die Dienstorganisation kennzeichnet optionale Zugangsschichten als aktuellen
+Zugangsmechanismus und `nv_dienst*`-Daten ausdrücklich als historischen
+Legacy-Nachweis. S6-Planung und Melderbeförderung enthalten jeweils alle
 persistierten Status-, Zeit-, Gültigkeits-, Freigabe-, Empfänger-, Rückweg-
 und Abschlussfelder. Keine ausgewählte leere Sektion verschwindet still: Das
 Dossier sagt ausdrücklich, dass für den Einsatz keine entsprechenden
@@ -140,13 +142,14 @@ Bereich“ gekennzeichnet. Bei einem noch offenen, ausdrücklich vorläufigen
 Abzug bleibt der Bereich für die Fortführung dagegen ungestrichen.
 
 Der PDF-Dialog bietet für die beiden Buchabschnitte zwei ausdrückliche
-Umfänge: **Gesamtbuch (alle Dienstschichten)** oder **Nur Dienstschicht** mit
-Nummer, Bezeichnung und Status. Die ausgewählte Schicht wird innerhalb des
+Umfänge: **Gesamtbuch** oder einen Legacy-Filter **Historische Dienstschicht**
+mit Nummer, Bezeichnung und Status. Die ausgewählte formale Altschicht wird innerhalb des
 konsistenten Exportsnapshots erneut gegen den gewählten Einsatz geprüft. Eine
 Schichtausgabe enthält nur ETB-/TTB-Zeilen mit genau dieser gespeicherten
-`estab_shift_id`; Gesamtbuch umfasst auch historischen Bestand ohne belegbare
-Schichtzuordnung. Nachrichtenvordrucke, Anhänge, Nachrichtenereignisse,
-Dienstbetrieb, S6-Pläne, Melderläufe und Betriebsereignisse bleiben unabhängig
+`estab_shift_id`; Gesamtbuch umfasst auch neue und historische Zeilen ohne
+belegbare Schichtzuordnung. Zugangsschichten sind keine Logbuchprovenienz.
+Nachrichtenvordrucke, Anhänge, Nachrichtenereignisse, Dienstorganisation,
+S6-Pläne, Melderläufe und Betriebsereignisse bleiben unabhängig
 davon einsatzweit. Die Auswahl beginnt also kein neues Buch und verändert
 weder lokale Nummern noch den Datenbestand.
 
@@ -156,7 +159,7 @@ Aktivierungs- und Endzeiten wiedergegeben; beim Gesamtbuch wird kenntlich
 gemacht, dass auch historische Zeilen ohne nachweisbare Schicht enthalten sein
 können.
 
-Im Dienstbetriebsabschnitt stehen Initiierungs- und Bestätigungszeit der
+Im historischen Legacy-Unterabschnitt stehen Initiierungs- und Bestätigungszeit der
 Übergabeanforderung getrennt. Das historisch benannte Datenbankfeld
 `nv_dienstuebergaben.uebergeben_am` bezeichnet den Abschlusszeitpunkt der
 zweistufigen Übergabe und wird deshalb im Dossier eindeutig als „Übernahme
@@ -330,6 +333,9 @@ Vorgänger-Hash neu berechnet. Der berechnete Endhash wird mit Sequenz und Hash
 des persistierten Betriebsnachweiskopfs verglichen. Das Deckblatt zeigt
 Nachrichten-Head-Summenhash und Betriebs-Head-Hash; die Detailsektionen weisen
 sämtliche Einzelköpfe, Hashes, Snapshots und Prüfergebnisse aus.
+Zugangsschichtmutationen erscheinen mit Objekttyp `ZUGANGSSCHICHT`.
+Nachrichtenzähler-Reparaturen erscheinen ohne Schichtpflicht mit Objekttyp
+`EINSATZ`; beide bleiben dadurch einsatzgebunden hashverkettet nachweisbar.
 
 ## Vollständigkeits- und Sicherheitsgrenzen
 

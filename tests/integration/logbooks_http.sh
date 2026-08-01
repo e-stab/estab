@@ -102,66 +102,6 @@ csrf_from_body()
     printf '%s' "$token"
 }
 
-active_hat_id_from_body()
-{
-    awk '
-        /name="operation_action"/ {
-            saw_action_name = 1
-        }
-        saw_action_name && /value="select_hat"/ {
-            in_select_form = 1
-            saw_action_name = 0
-        }
-        in_select_form && /name="dienstbesetzung_id"/ {
-            saw_assignment_name = 1
-        }
-        saw_assignment_name && match($0, /value="[0-9]+"/) {
-            value = substr($0, RSTART, RLENGTH)
-            gsub(/[^0-9]/, "", value)
-            print value
-            exit
-        }
-        in_select_form && /<\/form>/ {
-            in_select_form = 0
-            saw_assignment_name = 0
-        }
-    ' "$body"
-}
-
-load_active_hat_context()
-{
-    select_hat_cookie_jar=$1
-
-    assert_status 200 \
-        --cookie "$select_hat_cookie_jar" \
-        --cookie-jar "$select_hat_cookie_jar" \
-        "$base_url/4fach/fuehrungsstelle.php"
-    select_hat_assignment_id=$(active_hat_id_from_body)
-    case "$select_hat_assignment_id" in
-        '' | 0 | *[!0-9]*)
-            echo 'Logbook HTTP: no personal accepted active hat is selectable' >&2
-            sed -n '1,160p' "$body" >&2
-            exit 1
-            ;;
-    esac
-    select_hat_csrf=$(csrf_from_body)
-}
-
-select_active_hat()
-{
-    select_hat_cookie_jar=$1
-
-    load_active_hat_context "$select_hat_cookie_jar"
-    assert_status 303 \
-        --cookie "$select_hat_cookie_jar" \
-        --cookie-jar "$select_hat_cookie_jar" \
-        --request POST \
-        --data-urlencode "csrf_token=$select_hat_csrf" \
-        --data-urlencode 'operation_action=select_hat' \
-        --data-urlencode "dienstbesetzung_id=$select_hat_assignment_id" \
-        "$base_url/4fach/fuehrungsstelle.php"
-}
-
 login_user()
 {
     cookie_jar=$1
@@ -244,9 +184,10 @@ ensure_entry()
     assert_no_runtime_error
 }
 
-# Authentication and an exact, personally accepted active function are
-# mandatory before logbook data is rendered. Only S2/ETB may write ETB and
-# only A/W may write TBB.
+# Authentication with the fixed account function and an active incident are
+# mandatory before logbook data is rendered. Optional access shifts never
+# provide fachliche permissions and no legacy duty shift must be active. Only
+# S2/ETB may write ETB and only A/W may write TBB.
 assert_status 303 "$base_url/stabetb/etb.php"
 assert_status 303 "$base_url/fmtbb/tbb.php"
 
@@ -255,62 +196,11 @@ sh "$repo_root/tests/integration/provision_user.sh" \
 sh "$repo_root/tests/integration/provision_user.sh" \
     "$aw_name" "$aw_code" A/W "$aw_password"
 login_user "$s2_cookies" "$s2_name" "$s2_code" S2 "$s2_password"
-load_active_hat_context "$s2_cookies"
-s2_assignment_id=$select_hat_assignment_id
-s2_unselected_csrf=$select_hat_csrf
-s2_unselected_marker="LOGBOOK_ETB_UNSELECTED_$$"
-assert_status 423 \
-    --cookie "$s2_cookies" --cookie-jar "$s2_cookies" \
-    --request POST \
-    --data-urlencode "csrf_token=$s2_unselected_csrf" \
-    --data-urlencode 'logbook_action=save_entry' \
-    --data-urlencode "event=$s2_unselected_marker" \
-    "$base_url/stabetb/etb.php"
-assert_body 'Wählen Sie vor dieser Eingabe eine persönlich angenommene Dienstfunktion aus.'
-select_active_hat "$s2_cookies"
-if [ "$select_hat_assignment_id" != "$s2_assignment_id" ]; then
-    echo 'Logbook HTTP: S2 selected a different assignment than its validated hat' >&2
-    exit 1
-fi
 assert_status 200 --cookie "$s2_cookies" "$base_url/stabetb/etb.php"
-assert_body_absent "$s2_unselected_marker"
 assert_no_runtime_error
 
 login_user "$aw_cookies" "$aw_name" "$aw_code" A/W "$aw_password"
-load_active_hat_context "$aw_cookies"
-aw_assignment_id=$select_hat_assignment_id
-aw_unselected_csrf=$select_hat_csrf
-if [ "$aw_assignment_id" = "$s2_assignment_id" ]; then
-    echo 'Logbook HTTP: S2 and A/W duty assignments unexpectedly collide' >&2
-    exit 1
-fi
-
-# A browser cannot borrow another account's accepted assignment. The failed
-# selection must leave this session without an operational hat, so the
-# following TTB write remains closed before the endpoint can persist data.
-assert_status 403 \
-    --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
-    --request POST \
-    --data-urlencode "csrf_token=$aw_unselected_csrf" \
-    --data-urlencode 'operation_action=select_hat' \
-    --data-urlencode "dienstbesetzung_id=$s2_assignment_id" \
-    "$base_url/4fach/fuehrungsstelle.php"
-aw_unselected_marker="LOGBOOK_TBB_FOREIGN_HAT_$$"
-assert_status 423 \
-    --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
-    --request POST \
-    --data-urlencode "csrf_token=$aw_unselected_csrf" \
-    --data-urlencode 'logbook_action=save_entry' \
-    --data-urlencode "event=$aw_unselected_marker" \
-    "$base_url/fmtbb/tbb.php"
-assert_body 'Wählen Sie vor dieser Eingabe eine persönlich angenommene Dienstfunktion aus.'
-select_active_hat "$aw_cookies"
-if [ "$select_hat_assignment_id" != "$aw_assignment_id" ]; then
-    echo 'Logbook HTTP: A/W selected a different assignment than its validated hat' >&2
-    exit 1
-fi
 assert_status 200 --cookie "$aw_cookies" "$base_url/fmtbb/tbb.php"
-assert_body_absent "$aw_unselected_marker"
 assert_no_runtime_error
 
 assert_status 200 --cookie "$aw_cookies" "$base_url/stabetb/etb.php"

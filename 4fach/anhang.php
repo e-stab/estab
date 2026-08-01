@@ -530,14 +530,6 @@ estab_navigation_require_session (
   true
 );
 $attachmentPageIdentity = estab_read_session_identity ($_SESSION);
-if (
-  !is_array ($attachmentPageIdentity)
-  || estab_read_duty_assignment_id (
-    $attachmentPageIdentity ["duty_assignment_id"] ?? null
-  ) === null
-) {
-  estab_navigation_select_duty ($_SERVER);
-}
 $attachmentRequestMethod = strtoupper (
   (string) ($_SERVER ["REQUEST_METHOD"] ?? "GET")
 );
@@ -619,7 +611,7 @@ try {
     && !estab_workflow_is_telecommunications ($attachmentPageIdentity)
   ) {
     throw new EstabReadPermissionException (
-      "Diese Dienstfunktion darf die Anhangverwaltung nicht öffnen."
+      "Ihre angemeldete Funktion darf die Anhangverwaltung nicht öffnen."
     );
   }
   $attachmentCommandPostName = estab_incident_command_post_name (
@@ -710,7 +702,7 @@ try {
   http_response_code (403);
   header ("Content-Type: text/plain; charset=UTF-8");
   header ("Cache-Control: no-store");
-  echo "Die ausgewählte Dienstfunktion darf die Anhangverwaltung nicht ".
+  echo "Ihre angemeldete Funktion darf die Anhangverwaltung nicht ".
        "öffnen oder ist nicht mehr aktiv.";
   exit;
 } catch (EstabIncidentConfigurationException) {

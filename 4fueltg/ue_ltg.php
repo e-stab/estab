@@ -26,14 +26,6 @@ include ("../4fcfg/para.inc.php");              //
 include ("../4fcfg/fkt_rolle.inc.php");
 
 $overviewReadIdentity = estab_read_session_identity ($_SESSION);
-if (
-  !is_array ($overviewReadIdentity)
-  || estab_read_duty_assignment_id (
-    $overviewReadIdentity ["duty_assignment_id"] ?? null
-  ) === null
-) {
-  estab_navigation_select_duty ($_SERVER);
-}
 $overviewAccessConnection = null;
 $overviewIncidentId = null;
 try {

@@ -213,6 +213,8 @@ $codes = [
     's2_successor' => 'i' . $suffix,
     's1_extension' => 'j' . $suffix,
     'aw_extension' => 'k' . $suffix,
+    's3' => 'l' . $suffix,
+    'etb' => 'm' . $suffix,
 ];
 $actor = 'dv-operations-integration';
 $assignments = [];
@@ -272,43 +274,6 @@ try {
         'funktion' => 'A/W',
         'rolle' => 'Fernmelder',
     ];
-    $expect(
-        EstabDvPermissionException::class,
-        static fn (): null => (
-            estab_dv_require_active_hat_for_operational_write(
-                $connection,
-                $incidentId,
-                $preShiftS2Identity
-            ) ?? null
-        ),
-        'normal operational write was open before the first active shift'
-    );
-    $expect(
-        EstabDvPermissionException::class,
-        static fn (): string => estab_attachment_reserve(
-            $connection,
-            'nv_anhang',
-            'BOOT',
-            'dv_boot_' . $suffix,
-            $preShiftAwIdentity
-        ),
-        'attachment reservation was open before the first active shift'
-    );
-    $expect(
-        EstabDvPermissionException::class,
-        static fn (): int => estab_logbook_insert_entry(
-            $databaseConfig,
-            'nv_tbb',
-            'tbb',
-            [
-                'event' => 'Unzulässiger TBB-Bootstrap',
-                'comment' => 'Keine aktive Dienstschicht.',
-            ],
-            $preShiftAwIdentity
-        ),
-        'TBB write was open before the first active shift'
-    );
-
     $insertUser = $connection->prepare(
         'INSERT INTO `nv_benutzer`'
         . ' (`benutzer`, `kuerzel`, `funktion`, `rolle`, `sid`, `aktiv`,'
@@ -346,6 +311,8 @@ try {
                 'Fernmelder',
                 'Zusätzliche Aufnahme/Weitergabe',
             ],
+            [$codes['s3'], 'S3', 'Stab', 'Sachgebiet 3'],
+            [$codes['etb'], 'ETB', 'Stab', 'Einsatztagebuchführung'],
         ];
         foreach ($users as [$code, $function, $role, $name]) {
             $sessionId = hash_equals($code, $codes['s2'])
@@ -372,6 +339,20 @@ try {
     } finally {
         $insertUser->close();
     }
+
+    $assert(
+        estab_dv_require_operational_account(
+            $connection,
+            $incidentId,
+            $preShiftS2Identity
+        )['funktion'] === 'S2'
+            && estab_dv_require_operational_account(
+                $connection,
+                $incidentId,
+                $preShiftAwIdentity
+            )['funktion'] === 'A/W',
+        'fixed accounts required an active legacy duty shift'
+    );
 
     $shift = estab_dv_create_shift(
         $connection,
@@ -404,7 +385,7 @@ try {
         $connection,
         $incidentId,
         $shiftId,
-        $codes['s2'],
+        $codes['s3'],
         'S3',
         $actor
     );
@@ -413,7 +394,7 @@ try {
         $connection,
         $incidentId,
         $shiftId,
-        $codes['si'],
+        $codes['etb'],
         'ETB',
         $actor
     );
@@ -473,13 +454,13 @@ try {
         $connection,
         $incidentId,
         $assignments['s3'],
-        $codes['s2']
+        $codes['s3']
     );
     estab_dv_accept_hat(
         $connection,
         $incidentId,
         $assignments['etb'],
-        $codes['si']
+        $codes['etb']
     );
     $assert(
         estab_dv_shift_required_hats($connection, $shiftId) === ['S6'],
@@ -506,85 +487,9 @@ try {
         'accepted initial shift still reports missing mandatory functions'
     );
 
-    // A complete roster must not compensate for an incomplete factual
-    // logbook header. Simulate a legacy/incomplete record, then prove the
-    // rejected activation leaves the shift, both books, their heads and all
-    // audit chains byte-for-byte at the same logical state.
-    $clearHeader = $connection->prepare(
-        'UPDATE `nv_einsaetze` SET `organisation` = ? WHERE `einsatz_id` = ?'
-    );
-    if (!$clearHeader) {
-        throw new RuntimeException('Could not prepare incomplete-header fixture');
-    }
-    try {
-        $missingOrganisation = '';
-        $clearHeader->bind_param('si', $missingOrganisation, $incidentId);
-        $clearHeader->execute();
-    } finally {
-        $clearHeader->close();
-    }
-    $incompleteHeaderEvidence = $logbookEvidenceSnapshot(
-        $connection,
-        $incidentId
-    );
-    $incompleteHeaderShift = (string) $scalar(
-        $connection,
-        "SELECT CONCAT(`status`, '|', COALESCE(CAST(`aktiviert_am` AS CHAR), ''))"
-            . ' FROM `nv_dienstschichten` WHERE `dienstschicht_id` = ?',
-        'i',
-        $shiftId
-    );
-    $expect(
-        EstabDvConflictException::class,
-        static fn (): null => (
-            estab_dv_activate_initial_shift(
-                $connection,
-                $incidentId,
-                $shiftId,
-                $actor
-            ) ?? null
-        ),
-        'an incomplete mandatory logbook header activated the initial shift'
-    );
-    $assert(
-        $logbookEvidenceSnapshot($connection, $incidentId)
-            === $incompleteHeaderEvidence
-            && (string) $scalar(
-                $connection,
-                "SELECT CONCAT(`status`, '|',"
-                    . " COALESCE(CAST(`aktiviert_am` AS CHAR), ''))"
-                    . ' FROM `nv_dienstschichten`'
-                    . ' WHERE `dienstschicht_id` = ?',
-                'i',
-                $shiftId
-            ) === $incompleteHeaderShift
-            && $incompleteHeaderShift === 'GEPLANT|',
-        'rejected incomplete-header activation left partial shift, logbook, '
-            . 'head or audit mutations'
-    );
-    estab_incident_update_logbook_header(
-        $connection,
-        $incidentId,
-        [
-            'organisation' => 'THW',
-            'einsatzleitung' => 'Leitung Integration',
-            'beschreibung' => 'Isolierter Nachweis der DV-Abläufe.',
-            'expected_organisation' => '',
-            'expected_einsatzleitung' => 'Leitung Integration',
-            'expected_beschreibung' => 'Isolierter Nachweis der DV-Abläufe.',
-        ],
-        $actor
-    );
-    $assert(
-        estab_logbook_lifecycle_missing_header(
-            estab_incident_status($connection)
-        ) === [],
-        'completed mandatory logbook header remained incomplete'
-    );
-
-    // Force the final audit write to fail after shift activation and both
-    // opening rows have executed. The surrounding incident transaction must
-    // restore every mutation, including the local-number head rows.
+    // Force the final audit write to fail after historical shift activation.
+    // The incident activation already opened both books independently of any
+    // shift, so the surrounding transaction must leave their evidence intact.
     $openingRollbackEvidence = $logbookEvidenceSnapshot(
         $connection,
         $incidentId
@@ -622,7 +527,8 @@ try {
                 $shiftId
             ) === $openingRollbackShift
             && $openingRollbackShift === 'GEPLANT|',
-        'failed initial opening retained a partial shift, ETB/TBB row, head '
+        'failed historical shift activation retained a partial shift or '
+            . 'changed an ETB/TBB row, head '
             . 'or audit event'
     );
     estab_dv_activate_initial_shift(
@@ -652,7 +558,7 @@ try {
                 'i',
                 $incidentId
             ) === 1,
-        'initial shift activation did not atomically open ETB and TBB at local number 1'
+        'incident activation did not open ETB and TBB at local number 1'
     );
     $activeAssignmentCount = (int) $scalar(
         $connection,
@@ -859,65 +765,51 @@ try {
         $connection->rollback();
     }
 
-    $_SESSION = [
-        'vStab_benutzer' => 'Lage/Dokumentation',
-        'vStab_kuerzel' => $codes['s2'],
-        'vStab_funktion' => 'S2',
-        'vStab_rolle' => 'Stab',
-        'ROLLE' => 'Stab',
-        'menue' => 'LOGIN',
-    ];
-    $selectedS2 = estab_dv_select_session_hat(
-        $connection,
-        $_SESSION,
-        $incidentId,
-        $assignments['s2']
-    );
-    $assert(
-        $selectedS2['funktion'] === 'S2'
-            && (int) $_SESSION['estab_duty_assignment_id']
-                === $assignments['s2'],
-        'base S2 hat could not be selected through the real session boundary'
-    );
-    $_SESSION['fm_zweite_sichtung'] = 1;
-    $_SESSION['si_zweite_sichtung'] = 1;
-    $selectedS3 = estab_dv_select_session_hat(
-        $connection,
-        $_SESSION,
-        $incidentId,
-        $assignments['s3']
-    );
-    $s3Identity = $selectedS3 + [
-        'duty_assignment_id' => $assignments['s3'],
+    $s3Identity = [
+        'benutzer' => 'Sachgebiet 3',
+        'kuerzel' => $codes['s3'],
+        'funktion' => 'S3',
+        'rolle' => 'Stab',
     ];
     $assert(
-        $selectedS3['funktion'] === 'S3'
-            && $selectedS3['rolle'] === 'Stab'
-            && $_SESSION['vStab_funktion'] === 'S3'
-            && $_SESSION['fm_zweite_sichtung'] === 0
-            && $_SESSION['si_zweite_sichtung'] === 0
-            && (int) $_SESSION['estab_duty_assignment_id']
-                === $assignments['s3'],
-        'one account did not switch from its S2 to its accepted S3 hat '
-            . 'or retained a foreign second-sighting mode'
+        estab_dv_require_operational_account(
+            $connection,
+            $incidentId,
+            $s3Identity
+        )['funktion'] === 'S3',
+        'fixed S3 account was not accepted at the operational boundary'
+    );
+    $expect(
+        EstabDvPermissionException::class,
+        static fn (): array => estab_dv_require_operational_account(
+            $connection,
+            $incidentId,
+            [
+                'benutzer' => 'Lage/Dokumentation',
+                'kuerzel' => $codes['s2'],
+                'funktion' => 'S3',
+                'rolle' => 'Stab',
+            ]
+        ),
+        'an S2 account changed function through historical S3 staffing'
     );
 
     $s3ReadTable = estab_message_state_table(
         'usr_',
         'S3',
-        $codes['s2'],
+        $codes['s3'],
         'read'
     );
     $s3DoneTable = estab_message_state_table(
         'usr_',
         'S3',
-        $codes['s2'],
+        $codes['s3'],
         'done'
     );
     $s3FunctionCategory = 'usr__fkt_s3_katego';
     $s3FunctionLink = 'usr__fkt_s3_kategolink';
-    $s3UserCategory = 'usr_s3_' . $codes['s2'] . '_katego';
-    $s3UserLink = 'usr_s3_' . $codes['s2'] . '_kategolink';
+    $s3UserCategory = 'usr_s3_' . $codes['s3'] . '_katego';
+    $s3UserLink = 'usr_s3_' . $codes['s3'] . '_kategolink';
     $expectedS3Tables = [
         $s3ReadTable,
         $s3DoneTable,
@@ -965,12 +857,12 @@ try {
         [
             '01_medium' => '',
             '01_datum' => date('Y-m-d H:i:s'),
-            '01_zeichen' => $codes['s2'],
+            '01_zeichen' => $codes['s3'],
             '10_anschrift' => 'Führungsstelle Integration',
             '11_gesprnotiz' => 't',
-            '12_inhalt' => 'S3-Gesprächsnotiz aus kombiniertem S2/S3-Konto',
+            '12_inhalt' => 'S3-Gesprächsnotiz aus festem S3-Konto',
             '12_abfzeit' => date('Y-m-d H:i:s'),
-            '14_zeichen' => $codes['s2'],
+            '14_zeichen' => $codes['s3'],
             '14_funktion' => 'S3',
             '16_empf' => 'S2_rt,S3_gn',
             'x00_status' => 8,
@@ -988,7 +880,7 @@ try {
                 'direction' => 'E',
                 'object_type' => 'conversation_note',
                 'conversation_note' => true,
-                'author_code' => $codes['s2'],
+                'author_code' => $codes['s3'],
                 'author_function' => 'S3',
                 'review_required' => false,
             ],
@@ -1036,7 +928,7 @@ try {
             'read',
             $stateTimestamp
         ),
-        'selected S3 hat could not write its personal read state'
+        'fixed S3 account could not write its personal read state'
     );
     $assert(
         estab_message_state_set_for_recipient(
@@ -1048,7 +940,7 @@ try {
             'done',
             $stateTimestamp
         ),
-        'selected S3 hat could not write its function done state'
+        'fixed S3 account could not write its function done state'
     );
 
     $categoryConfig = [
@@ -1129,58 +1021,35 @@ try {
                 $conversationMessageId,
                 $userCategoryId
             ) === 1,
-        'selected S3 hat could not persist function and user categories'
+        'fixed S3 account could not persist function and user categories'
     );
-
-    $bindSiSession = $connection->prepare(
-        'UPDATE `nv_benutzer` SET `sid` = ?'
-        . ' WHERE BINARY `kuerzel` = BINARY ?'
-    );
-    if (!$bindSiSession) {
-        throw new RuntimeException('Could not bind real Si/ETB test session');
-    }
-    try {
-        $bindSiSession->bind_param('ss', $phpSessionId, $codes['si']);
-        $bindSiSession->execute();
-    } finally {
-        $bindSiSession->close();
-    }
-    $_SESSION = [
-        'vStab_benutzer' => 'Sichter',
-        'vStab_kuerzel' => $codes['si'],
-        'vStab_funktion' => 'Si',
-        'vStab_rolle' => 'Stab',
-        'ROLLE' => 'Stab',
-        'menue' => 'ROLLE',
-    ];
-    $selectedSi = estab_dv_select_session_hat(
-        $connection,
-        $_SESSION,
-        $incidentId,
-        $assignments['si']
-    );
-    $assert(
-        $selectedSi['funktion'] === 'Si'
-            && (int) $_SESSION['estab_duty_assignment_id']
-                === $assignments['si'],
-        'combined Si/ETB account could not select its Si hat'
-    );
-    $selectedEtb = estab_dv_select_session_hat(
-        $connection,
-        $_SESSION,
-        $incidentId,
-        $assignments['etb']
-    );
-    $etbIdentity = $selectedEtb + [
-        'duty_assignment_id' => $assignments['etb'],
+    $etbIdentity = [
+        'benutzer' => 'Einsatztagebuchführung',
+        'kuerzel' => $codes['etb'],
+        'funktion' => 'ETB',
+        'rolle' => 'Stab',
     ];
     $assert(
-        $selectedEtb['funktion'] === 'ETB'
-            && $selectedEtb['rolle'] === 'Stab'
-            && $_SESSION['vStab_funktion'] === 'ETB'
-            && (int) $_SESSION['estab_duty_assignment_id']
-                === $assignments['etb'],
-        'one account did not switch from its Si to its accepted ETB hat'
+        estab_dv_require_operational_account(
+            $connection,
+            $incidentId,
+            $etbIdentity
+        )['funktion'] === 'ETB',
+        'fixed ETB account was not accepted at the operational boundary'
+    );
+    $expect(
+        EstabDvPermissionException::class,
+        static fn (): array => estab_dv_require_operational_account(
+            $connection,
+            $incidentId,
+            [
+                'benutzer' => 'Sichter',
+                'kuerzel' => $codes['si'],
+                'funktion' => 'ETB',
+                'rolle' => 'Stab',
+            ]
+        ),
+        'a Si account changed function through historical ETB staffing'
     );
     $assert(
         (int) $scalar(
@@ -1189,14 +1058,14 @@ try {
                 . ' WHERE table_schema = DATABASE()'
                 . ' AND table_name IN (?, ?, ?, ?, ?, ?)',
             'ssssss',
-            'usr_etb_' . $codes['si'] . '_read',
+            'usr_etb_' . $codes['etb'] . '_read',
             'usr__fkt_etb_erl',
             'usr__fkt_etb_katego',
             'usr__fkt_etb_kategolink',
-            'usr_etb_' . $codes['si'] . '_katego',
-            'usr_etb_' . $codes['si'] . '_kategolink'
+            'usr_etb_' . $codes['etb'] . '_katego',
+            'usr_etb_' . $codes['etb'] . '_kategolink'
         ) === 0,
-        'ETB-only hat received unrelated message/category tables'
+        'fixed ETB account received unrelated message/category tables'
     );
 
     $awIdentity = [
@@ -1204,94 +1073,44 @@ try {
         'kuerzel' => $codes['aw'],
         'funktion' => 'A/W',
         'rolle' => 'Fernmelder',
-        'duty_assignment_id' => $assignments['aw'],
     ];
     $messengerIdentity = [
         'benutzer' => 'Melder',
         'kuerzel' => $codes['messenger'],
         'funktion' => 'A/W',
         'rolle' => 'Fernmelder',
-        'duty_assignment_id' => $assignments['messenger'],
     ];
     $s2Identity = [
         'benutzer' => 'Lage/Dokumentation',
         'kuerzel' => $codes['s2'],
         'funktion' => 'S2',
         'rolle' => 'Stab',
-        'duty_assignment_id' => $assignments['s2'],
     ];
     $siIdentity = [
         'benutzer' => 'Sichter',
         'kuerzel' => $codes['si'],
         'funktion' => 'Si',
         'rolle' => 'Stab',
-        'duty_assignment_id' => $assignments['si'],
     ];
     $s6Identity = [
         'benutzer' => 'Fernmeldeplanung',
         'kuerzel' => $codes['s6'],
         'funktion' => 'S6',
         'rolle' => 'Stab',
-        'duty_assignment_id' => $assignments['s6'],
     ];
     $ldfIdentity = [
         'benutzer' => 'Leiter FmZt',
         'kuerzel' => $codes['ldf'],
         'funktion' => 'LdF',
         'rolle' => 'Fernmelder',
-        'duty_assignment_id' => $assignments['ldf'],
     ];
-    estab_dv_require_active_hat_for_operational_write(
-        $connection,
-        $incidentId,
-        $awIdentity
-    );
-    $expect(
-        EstabDvPermissionException::class,
-        static fn (): null => (
-            estab_dv_require_active_hat_for_operational_write(
-                $connection,
-                $incidentId,
-                [
-                    'benutzer' => $awIdentity['benutzer'],
-                    'kuerzel' => $awIdentity['kuerzel'],
-                    'funktion' => $awIdentity['funktion'],
-                    'rolle' => $awIdentity['rolle'],
-                ]
-            ) ?? null
-        ),
-        'matching accepted primary function wrote without a selected hat'
-    );
-    $expect(
-        EstabDvPermissionException::class,
-        static fn (): null => (
-            estab_dv_require_active_hat_for_operational_write(
-                $connection,
-                $incidentId,
-                array_replace($awIdentity, [
-                    'duty_assignment_id' => $assignments['s2'],
-                ])
-            ) ?? null
-        ),
-        'foreign selected assignment authorized another account/function'
-    );
-    $staleAwIdentity = $awIdentity;
-    $staleAwIdentity['duty_assignment_id'] = PHP_INT_MAX;
-    $expect(
-        EstabDvPermissionException::class,
-        static fn (): null => (
-            estab_dv_require_active_hat_for_operational_write(
-                $connection,
-                $incidentId,
-                $staleAwIdentity
-            ) ?? null
-        ),
-        'stale selected assignment authorized an operational write'
-    );
-    $expect(
-        EstabDvPermissionException::class,
-        static fn (): null => (
-            estab_dv_require_active_hat_for_operational_write(
+    $assert(
+        estab_dv_require_operational_account(
+            $connection,
+            $incidentId,
+            $awIdentity
+        )['funktion'] === 'A/W'
+            && estab_dv_require_operational_account(
                 $connection,
                 $incidentId,
                 [
@@ -1300,9 +1119,17 @@ try {
                     'funktion' => 'Si',
                     'rolle' => 'Stab',
                 ]
-            ) ?? null
+            )['funktion'] === 'Si',
+        'a fixed account without historical staffing was denied'
+    );
+    $expect(
+        EstabDvPermissionException::class,
+        static fn (): array => estab_dv_require_operational_account(
+            $connection,
+            $incidentId,
+            array_replace($awIdentity, ['funktion' => 'S2', 'rolle' => 'Stab'])
         ),
-        'an unassigned account passed the active-hat write boundary'
+        'a forged function/role tuple authorized another capability'
     );
     $listedShifts = estab_dv_shift_list($connection, $incidentId);
     $assert(
@@ -1325,7 +1152,7 @@ try {
             ],
             $siIdentity
         ),
-        'an active Si hat wrote directly into the ETB domain'
+        'a fixed Si account wrote directly into the ETB domain'
     );
     $etbEntryId = estab_logbook_insert_entry(
         $databaseConfig,
@@ -1341,23 +1168,17 @@ try {
     );
     $assert(
         $etbEntryId > 0,
-        'active ETB hat could not write through EINSATZTAGEBUCH capability'
+        'fixed ETB account could not write through EINSATZTAGEBUCH capability'
     );
-    $expect(
-        EstabDvPermissionException::class,
-        static fn (): int => estab_logbook_insert_entry(
-            $databaseConfig,
-            'nv_etb',
-            'etb',
-            [
-                'event' => 'Unzulässiger paralleler ETB-Eintrag',
-                'comment' => 'Eine eigene ETB-Funktion ist bestimmt.',
-                'event_time' => date('Y-m-d H:i:s'),
-                'event_type' => 'ohne',
-            ],
-            $s2Identity
+    $assert(
+        estab_logbook_is_designated_writer(
+            $connection,
+            $incidentId,
+            $s2Identity,
+            'etb'
         ),
-        'S2 wrote in parallel although an accepted ETB writer was designated'
+        'fixed S2 account lost its ETB writing permission because an ETB '
+            . 'account exists'
     );
 
     $expect(
@@ -1370,7 +1191,6 @@ try {
                 'kuerzel' => $codes['s6'],
                 'funktion' => 'S2',
                 'rolle' => 'Stab',
-                'duty_assignment_id' => $assignments['s2'],
             ],
             [
                 'herkunft' => 'Unzulässiger S2-Kontext',
@@ -1380,7 +1200,7 @@ try {
                 'bemerkungen' => '',
             ]
         ),
-        'S6 privilege ignored the currently selected S2 duty assignment'
+        'S6 privilege ignored the account’s fixed function'
     );
     $plan = estab_dv_create_telecom_plan(
         $connection,
@@ -1549,7 +1369,7 @@ try {
     $assert(
         $candidateCodes === $expectedCandidateCodes
             && !in_array($codes['s2'], $candidateCodes, true),
-        'messenger UI offered an account without accepted active A/W'
+        'messenger UI did not derive candidates from fixed active A/W accounts'
     );
     $expect(
         EstabDvPermissionException::class,
@@ -1564,10 +1384,9 @@ try {
                 'kuerzel' => $codes['ldf'],
                 'funktion' => 'S2',
                 'rolle' => 'Stab',
-                'duty_assignment_id' => $assignments['s2'],
             ]
         ),
-        'LdF privilege ignored the currently selected S2 duty assignment'
+        'LdF privilege ignored the account’s fixed function'
     );
 
     $cancelledJobId = estab_dv_assign_messenger(
@@ -1905,7 +1724,7 @@ try {
     $expect(
         EstabDvPermissionException::class,
         static fn (): null => (
-            estab_dv_require_active_hat_for_operational_write(
+            estab_dv_require_operational_account(
                 $connection,
                 $incidentId,
                 $messengerIdentity
@@ -1981,7 +1800,7 @@ try {
     $expect(
         EstabDvPermissionException::class,
         static fn (): null => (
-            estab_dv_require_active_hat_for_operational_write(
+            estab_dv_require_operational_account(
                 $connection,
                 $incidentId,
                 $messengerIdentity
@@ -2018,7 +1837,7 @@ try {
     $expect(
         EstabDvPermissionException::class,
         static fn (): null => (
-            estab_dv_require_active_hat_for_operational_write(
+            estab_dv_require_operational_account(
                 $connection,
                 $incidentId,
                 $messengerIdentity
@@ -2143,25 +1962,19 @@ try {
             && $uploadCallbackCalls === 1,
         'reported messenger did not regain JPEG attachment write access'
     );
-    estab_dv_require_active_hat_for_operational_write(
+    estab_dv_require_operational_account(
         $connection,
         $incidentId,
         $messengerIdentity
     );
-    $expect(
-        EstabDvPermissionException::class,
-        static fn (): int => estab_logbook_insert_entry(
-            $databaseConfig,
-            'nv_tbb',
-            'tbb',
-            [
-                'entry_type' => 'betrieb_personal',
-                'personnel_duty' => 'Melder zurück in der Führungsstelle',
-                'comment' => 'Rückkehr und Abschlussmeldung sind nachgewiesen.',
-            ],
-            $messengerIdentity
+    $assert(
+        estab_logbook_is_designated_writer(
+            $connection,
+            $incidentId,
+            $messengerIdentity,
+            'tbb'
         ),
-        'second A/W wrote in parallel although another TBB writer was designated'
+        'a fixed A/W account lost TTB permission because another A/W exists'
     );
     $tbbEntryId = estab_logbook_insert_entry(
         $databaseConfig,
@@ -2170,13 +1983,13 @@ try {
         [
             'entry_type' => 'betrieb_personal',
             'personnel_duty' => 'Melder zurück in der Führungsstelle',
-            'comment' => 'TBB-Nachtrag durch die bestimmte A/W-Funktion.',
+            'comment' => 'TBB-Nachtrag durch ein festes A/W-Konto.',
         ],
         $awIdentity
     );
     $assert(
         $tbbEntryId > 0,
-        'designated A/W could not record the returned messenger in the TBB'
+        'fixed A/W account could not record the returned messenger in the TBB'
     );
     $expect(
         EstabDvConflictException::class,
@@ -2296,15 +2109,19 @@ try {
         'the disposed message route was mutable'
     );
 
+    $storedS2 = estab_auth_fetch_session_user(
+        $connection,
+        'nv_benutzer',
+        $codes['s2']
+    );
     $assert(
-        estab_auth_duty_assignment_matches_session(
-            $connection,
-            $assignments['s2'],
-            $codes['s2'],
-            'S2',
-            'Stab'
-        ),
-        'accepted old-shift session hat was not valid before handover'
+        is_array($storedS2)
+            && estab_auth_account_matches_session(
+                $storedS2,
+                $s2Identity,
+                $phpSessionId
+            ),
+        'fixed S2 account session was invalid before historical handover'
     );
     $cancelledHandoverRequestId = estab_dv_initiate_handover_shift(
         $connection,
@@ -2866,22 +2683,36 @@ try {
             ) === 1,
         'handover and takeover persons or their separate times are missing'
     );
+    $storedOldS2 = estab_auth_fetch_session_user(
+        $connection,
+        'nv_benutzer',
+        $codes['s2']
+    );
+    $storedSuccessorS2 = estab_auth_fetch_session_user(
+        $connection,
+        'nv_benutzer',
+        $codes['s2_successor']
+    );
+    $successorS2Identity = [
+        'benutzer' => 'Nachfolgende Lage/Dokumentation',
+        'kuerzel' => $codes['s2_successor'],
+        'funktion' => 'S2',
+        'rolle' => 'Stab',
+    ];
     $assert(
-        !estab_auth_duty_assignment_matches_session(
-            $connection,
-            $assignments['s2'],
-            $codes['s2'],
-            'S2',
-            'Stab'
-        )
-            && estab_auth_duty_assignment_matches_session(
-                $connection,
-                $secondAssignments['s2'],
-                $codes['s2_successor'],
-                'S2',
-                'Stab'
+        is_array($storedOldS2)
+            && is_array($storedSuccessorS2)
+            && estab_auth_account_matches_session(
+                $storedOldS2,
+                $s2Identity,
+                $phpSessionId
+            )
+            && estab_auth_account_matches_session(
+                $storedSuccessorS2,
+                $successorS2Identity,
+                'dv-session-' . $suffix . '-' . $codes['s2_successor']
             ),
-        'handover did not revoke the old hat and activate the successor hat'
+        'historical handover changed or revoked fixed account identities'
     );
     $assert(
         (int) $scalar(
@@ -3161,27 +2992,13 @@ try {
         $restartShiftId,
         $actor
     );
-    $expect(
-        EstabDvPermissionException::class,
-        static fn (): null => (
-            estab_dv_require_active_hat_for_operational_write(
-                $connection,
-                $incidentId,
-                $awIdentity
-            ) ?? null
-        ),
-        'normal operational write reopened after the active shift closed'
-    );
-    $expect(
-        EstabDvPermissionException::class,
-        static fn (): string => estab_attachment_reserve(
+    $assert(
+        estab_dv_require_operational_account(
             $connection,
-            'nv_anhang',
-            'DV',
-            'dv_closed_' . $suffix,
+            $incidentId,
             $awIdentity
-        ),
-        'attachment write reopened after the active shift closed'
+        )['funktion'] === 'A/W',
+        'closing the historical duty shift blocked fixed-account writes'
     );
     $blockers = estab_dv_incident_closure_blockers(
         $connection,

@@ -689,8 +689,6 @@ function estab_auth_account_matches_session(
     array $storedUser,
     array $identity,
     string $sessionId,
-    ?mysqli $connection = null,
-    ?int $dutyAssignmentId = null,
     ?DateTimeInterface $now = null
 ): bool {
     $storedSessionId = $storedUser['sid'] ?? null;
@@ -716,88 +714,77 @@ function estab_auth_account_matches_session(
         return false;
     }
 
-    if ($dutyAssignmentId === null) {
-        return hash_equals(
-            (string) ($storedUser['funktion'] ?? ''),
-            (string) ($identity['funktion'] ?? '')
-        ) && hash_equals(
-            (string) ($storedUser['rolle'] ?? ''),
-            (string) ($identity['rolle'] ?? '')
-        );
-    }
-
-    return $connection instanceof mysqli
-        && estab_auth_duty_assignment_matches_session(
-            $connection,
-            $dutyAssignmentId,
-            (string) ($identity['kuerzel'] ?? ''),
-            (string) ($identity['funktion'] ?? ''),
-            (string) ($identity['rolle'] ?? '')
-        );
+    // Function and role always come from the authoritative account. Optional
+    // access-shift memberships may switch the account's access as a group,
+    // but they never replace this fachliche identity or grant another role.
+    return hash_equals(
+        (string) ($storedUser['funktion'] ?? ''),
+        (string) ($identity['funktion'] ?? '')
+    ) && hash_equals(
+        (string) ($storedUser['rolle'] ?? ''),
+        (string) ($identity['rolle'] ?? '')
+    );
 }
 
 /**
- * Resolve an alternative session function only through an accepted hat in the
- * singleton active incident's active shift.
+ * Resolve the optional access-shift gate for one account.
  *
- * A duty assignment id is server-side PHP-session state, never a submitted
- * function/role choice. Once a handover relieves that assignment, the next
- * protected request fails closed.
+ * Accounts without a current membership remain deliberately unmanaged and
+ * may sign in normally. Once an account is assigned to at least one access
+ * shift of the active incident, at least one of those shifts must be enabled.
+ * This gate never derives the account's function or role.
+ *
+ * @return array{managed:bool,allowed:bool,memberships:int,active_memberships:int}
  */
-function estab_auth_duty_assignment_matches_session(
+function estab_auth_shift_access_state(
     mysqli $connection,
-    int $assignmentId,
-    string $userCode,
-    string $function,
-    string $role
-): bool {
-    if (
-        $assignmentId < 1
-        || preg_match('/\A[a-z0-9_]{1,6}\z/D', $userCode) !== 1
-        || preg_match('/\A(?:A\/W|[A-Za-z0-9_]{1,6})\z/D', $function) !== 1
-        || !in_array($role, ['Stab', 'FB', 'Fernmelder'], true)
-    ) {
-        return false;
+    string $userCode
+): array {
+    $userCode = strtolower(trim($userCode));
+    if (preg_match('/\A[a-z0-9_]{1,6}\z/D', $userCode) !== 1) {
+        throw new InvalidArgumentException('Invalid access-shift account code');
     }
     $statement = $connection->prepare(
-        'SELECT 1 FROM `nv_dienstbesetzungen` AS duty_assignment'
-        . ' JOIN `nv_dienstschichten` AS duty_shift'
-        . ' ON duty_shift.`dienstschicht_id`'
-        . ' = duty_assignment.`dienstschicht_id`'
-        . ' JOIN `nv_einsatz_status` AS active_incident'
-        . ' ON active_incident.`singleton_id` = 1'
-        . ' AND active_incident.`active_einsatz_id` = duty_shift.`einsatz_id`'
-        . ' JOIN `nv_einsaetze` AS incident'
-        . ' ON incident.`einsatz_id` = duty_shift.`einsatz_id`'
-        . ' WHERE duty_assignment.`dienstbesetzung_id` = ?'
-        . " AND duty_assignment.`status` = 'ANGENOMMEN'"
-        . " AND duty_shift.`status` = 'AKTIV'"
-        . " AND incident.`estab_status` = 'open'"
-        . ' AND BINARY duty_assignment.`benutzer_kuerzel` = BINARY ?'
-        . ' AND BINARY duty_assignment.`funktion` = BINARY ?'
-        . ' AND BINARY duty_assignment.`rolle` = BINARY ? LIMIT 1'
+        'SELECT COUNT(*) AS `memberships`,'
+        . ' COALESCE(SUM(CASE WHEN access_shift.`zugang_aktiv` = 1'
+        . ' THEN 1 ELSE 0 END), 0) AS `active_memberships`'
+        . ' FROM `nv_einsatz_status` AS active_incident'
+        . ' JOIN `nv_zugangsschichten` AS access_shift'
+        . ' ON access_shift.`einsatz_id` = active_incident.`active_einsatz_id`'
+        . ' JOIN `nv_zugangsschicht_mitglieder` AS membership'
+        . ' ON membership.`zugangsschicht_id` ='
+        . ' access_shift.`zugangsschicht_id`'
+        . ' AND membership.`entfernt_am` IS NULL'
+        . ' WHERE active_incident.`singleton_id` = 1'
+        . ' AND BINARY membership.`benutzer_kuerzel` = BINARY ?'
     );
     if (!$statement) {
-        throw new RuntimeException('Could not prepare duty-session validation');
+        throw new RuntimeException('Could not prepare access-shift check');
     }
     try {
-        $statement->bind_param(
-            'isss',
-            $assignmentId,
-            $userCode,
-            $function,
-            $role
-        );
+        $statement->bind_param('s', $userCode);
         if (!$statement->execute()) {
-            throw new RuntimeException('Could not validate duty-session assignment');
+            throw new RuntimeException('Could not execute access-shift check');
         }
-        $result = $statement->get_result();
-        $valid = $result->fetch_row() !== null;
-        $result->free();
-        return $valid;
+        $row = $statement->get_result()->fetch_assoc();
     } finally {
         $statement->close();
     }
+    $memberships = (int) ($row['memberships'] ?? 0);
+    $activeMemberships = (int) ($row['active_memberships'] ?? 0);
+    return [
+        'managed' => $memberships > 0,
+        'allowed' => $memberships === 0 || $activeMemberships > 0,
+        'memberships' => $memberships,
+        'active_memberships' => $activeMemberships,
+    ];
+}
+
+function estab_auth_shift_access_allowed(
+    mysqli $connection,
+    string $userCode
+): bool {
+    return estab_auth_shift_access_state($connection, $userCode)['allowed'];
 }
 
 /** Resolve the same session store used by 4fcfg/dbcfg.inc.php. */
@@ -869,45 +856,9 @@ function estab_auth_current_session_identity(
         }
         estab_auth_table($userTable);
 
-        $dutyAssignmentValue = $session['estab_duty_assignment_id'] ?? null;
-        $dutyAssignmentId = null;
-        if (
-            is_int($dutyAssignmentValue)
-            && $dutyAssignmentValue > 0
-        ) {
-            $dutyAssignmentId = $dutyAssignmentValue;
-        } elseif (
-            is_string($dutyAssignmentValue)
-            && preg_match(
-                '/\A[1-9][0-9]{0,18}\z/D',
-                $dutyAssignmentValue
-            ) === 1
-        ) {
-            $parsedDutyAssignment = filter_var(
-                $dutyAssignmentValue,
-                FILTER_VALIDATE_INT
-            );
-            if (!is_int($parsedDutyAssignment) || $parsedDutyAssignment < 1) {
-                throw new RuntimeException(
-                    'Authentication duty assignment is invalid'
-                );
-            }
-            $dutyAssignmentId = $parsedDutyAssignment;
-        } elseif ($dutyAssignmentValue !== null) {
-            throw new RuntimeException(
-                'Authentication duty assignment is invalid'
-            );
-        }
-        $authenticatedIdentity = $identity;
-        if ($dutyAssignmentId !== null) {
-            // The database check below binds this exact assignment to the
-            // current SID, account, function, role, active shift and incident.
-            // Returning it with the identity prevents downstream domain
-            // guards from silently falling back to the four-field account
-            // shape after authentication already proved the selected hat.
-            $authenticatedIdentity['duty_assignment_id'] =
-                $dutyAssignmentId;
-        }
+        // Old sessions may still carry a selected duty assignment from a
+        // previous release. It is no longer an authorization source.
+        unset($session['estab_duty_assignment_id']);
 
         $cacheKey = hash('sha256', json_encode([
             'server' => (string) ($databaseConfig['server'] ?? ''),
@@ -920,13 +871,12 @@ function estab_auth_current_session_identity(
             'table' => $userTable,
             'sid' => $sessionId,
             'identity' => $identity,
-            'duty_assignment_id' => $dutyAssignmentId,
         ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
 
         if ($useRequestCache && array_key_exists($cacheKey, $requestCache)) {
             if ($requestCache[$cacheKey] === true) {
                 $session['ROLLE'] = $identity['rolle'];
-                return $authenticatedIdentity;
+                return $identity;
             }
             estab_auth_invalidate_local_session($session);
             return null;
@@ -947,9 +897,11 @@ function estab_auth_current_session_identity(
                     $storedUser,
                     $identity,
                     $sessionId,
-                    $connection,
-                    $dutyAssignmentId,
                     $now
+                )
+                && estab_auth_shift_access_allowed(
+                    $connection,
+                    (string) $identity['kuerzel']
                 );
             if (!$valid && is_array($storedUser)) {
                 // The exact SID condition prevents an expired or superseded
@@ -976,7 +928,7 @@ function estab_auth_current_session_identity(
 
         // Legacy routes still consult this duplicate role field.
         $session['ROLLE'] = $identity['rolle'];
-        return $authenticatedIdentity;
+        return $identity;
     } catch (Throwable $exception) {
         error_log(
             'eStab session validation failed: ' . $exception->getMessage()

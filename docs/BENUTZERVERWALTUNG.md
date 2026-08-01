@@ -98,22 +98,38 @@ Importierte Legacy-Zeilen mit leerer Funktion oder Rolle bleiben reparierbar.
 Die alte leere Zuordnung und die neue gültige Zuordnung werden dabei
 kontrolliert im Audit festgehalten.
 
-### Konto und konkrete Dienstfunktion
+### Festes Funktionskonto und optionale Zugangsschichten
 
-Die Kontofunktion ist die administrative Grundzuordnung. Für einen operativen
-Einsatz reicht sie allein nicht: Unter
-`/4fadm/fuehrungsstelle.php` weist die Administration dasselbe persönliche
-Konto einer geplanten Schicht und einer oder mehreren konkreten Funktionen zu.
-Die Person nimmt jede Zuweisung anschließend selbst unter
-`/4fach/fuehrungsstelle.php` an. Erst eine aktive Schicht mit passender
-angenommener Besetzung erlaubt operative Eingaben.
+Die Kontofunktion ist nicht nur eine Grundzuordnung, sondern die alleinige
+Quelle der Fachrechte. Die daraus serverseitig abgeleitete Rolle gehört fest
+zum Konto. Nach der Anmeldung gibt es keine Auswahl eines Funktions-Huts und
+keine Schichtbesetzung, welche Funktion oder Rolle überschreiben könnte. Für
+operative Eingaben muss ein Einsatz aktiv sein; eine aktive Dienst- oder
+Zugangsschicht ist nicht erforderlich.
 
-Eine Person kann damit beispielsweise S2/S3 oder ETB/Si wahrnehmen, ohne
-mehrere Konten oder geteilte Kennwörter zu benötigen. Der Funktionswechsel
-speichert die genaue angenommene Besetzungs-ID in der serverseitigen Sitzung
-und wird bei jeder geschützten Anfrage erneut gegen aktive Schicht, Konto,
-Funktion und Rolle geprüft. Eine abgelöste oder geschlossene Besetzung
-verliert dadurch unmittelbar ihre Schreibberechtigung.
+Unter `/4fadm/fuehrungsstelle.php` kann die Administration optional
+einsatzgebundene Zugangsschichten anlegen und Konten zuordnen. Sie dienen nur
+dazu, Zugänge einer Gruppe gemeinsam zu aktivieren oder zu deaktivieren:
+
+- Ein Konto ohne Zuordnung bleibt zugelassen.
+- Bei Zuordnung zu mehreren Gruppen genügt mindestens eine aktive Gruppe
+  (OR-Semantik).
+- Das Aktivieren einer Gruppe erzeugt keine Sitzung und meldet niemanden an.
+- Das Deaktivieren widerruft Sitzungen der betroffenen Konten, sofern keine
+  andere zugeordnete Gruppe aktiv bleibt.
+- Eine Zugangsschicht verleiht niemals zusätzliche Fachrechte und sperrt
+  keine Eingabe allein deshalb, weil keine Schicht angelegt ist.
+- Deaktivieren und Entfernen verwenden eine wirkungsbezogene Bestätigung. Eine
+  zwischenzeitliche Änderung an Schichtstatus, Zuordnungen oder betroffenen
+  Konten führt zu einem Konflikt statt zu einer nicht mehr angezeigten
+  Abmeldung. Entfernte und später neu angelegte Zuordnungen bleiben getrennte,
+  unveränderliche Intervalle; ein alter Dialog kann das neue Intervall nicht
+  entfernen.
+
+Die dauerhafte manuelle Sperre `estab_gesperrt` ist von Zugangsschichten
+unabhängig und hat Vorrang. Historische formale Dienstschichten,
+Dienstbesetzungen und Übergaben bleiben als revisionsfähige und exportierbare
+Evidenz im Datenbestand, sind aber keine aktuelle Autorisierungsquelle.
 
 ## Empfängermatrix als Zuordnungsrichtlinie
 
@@ -179,6 +195,12 @@ sich auch mit korrekten Anmeldedaten nicht erneut anmelden.
 „Konto entsperren“ entfernt nur die dauerhafte Sperre. Es erzeugt keine
 Sitzung und setzt kein Konto künstlich auf „angemeldet“. Der Benutzer muss
 sich danach regulär authentifizieren.
+
+Das Entsperren überstimmt keine deaktivierte Zugangsschicht. Umgekehrt hebt
+das Aktivieren einer Zugangsschicht keine manuelle Sperre auf. Die beiden
+Mechanismen bleiben absichtlich getrennt; bei einer Mehrfachzuordnung erlaubt
+eine andere aktive Zugangsschicht den Zugang nur, wenn das Konto nicht manuell
+gesperrt ist.
 
 Die Verwaltungsaktionen und der Legacy-Login verwenden denselben
 kontospezifischen MariaDB-Advisory-Lock. Ein paralleler Login kann daher weder

@@ -147,8 +147,8 @@ $assert(
 );
 
 $assert(
-    substr_count($helper, '$connection->prepare(') >= 10
-        && substr_count($helper, '->bind_param(') >= 9
+    substr_count($helper, '$connection->prepare(') >= 9
+        && substr_count($helper, '->bind_param(') >= 8
         && str_contains($helper, 'estab_auth_table($table)'),
     'administrative database values are not consistently parameterized'
 );
@@ -183,6 +183,11 @@ $assert(
         && str_contains(
             $helper,
             "'message_counter_repaired'"
+        )
+        && str_contains($helper, "'EINSATZ'")
+        && !str_contains(
+            $helper,
+            'Could not prepare active shift for counter repair'
         )
         && str_contains(
             $helper,

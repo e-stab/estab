@@ -6,7 +6,7 @@
  * The current sidebar/status component exposes incident-scoped workflow
  * information. This unreferenced legacy controller queried global queues
  * directly and could therefore disclose operational state without an
- * authenticated, active duty assignment. The runtime image does not ship it;
+ * current authenticated account scope. The runtime image does not ship it;
  * source deployments fail closed before starting a session or querying data.
  */
 http_response_code(410);

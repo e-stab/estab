@@ -240,8 +240,20 @@ try {
         $status['active_einsatz_id'] === $idA
             && $status['revision'] === 1
             && $status['fuehrungsstellenname'] === $commandPostA
-            && $status['fuehrungsstellenname_gesperrt'] === 0,
-        'first incident activation did not advance the singleton revision'
+            && $status['fuehrungsstellenname_gesperrt'] === 1
+            && (int) $queryValue(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = ' . $idA
+                    . ' AND `estab_book_lfd` = 1'
+                    . ' AND `estab_shift_id` IS NULL'
+            ) === 1
+            && (int) $queryValue(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = ' . $idA
+                    . ' AND `estab_book_lfd` = 1'
+                    . ' AND `estab_shift_id` IS NULL'
+            ) === 1,
+        'incident activation did not open both books without a duty shift'
     );
     $assert(
         $fails(
@@ -499,8 +511,8 @@ try {
         $status['active_einsatz_id'] === $idB
             && $status['revision'] === 3
             && $status['fuehrungsstellenname'] === $commandPostB
-            && $status['fuehrungsstellenname_gesperrt'] === 0,
-        'second incident activation failed'
+            && $status['fuehrungsstellenname_gesperrt'] === 1,
+        'second incident activation failed to open its shift-free books'
     );
     $historicalMessageA = estab_message_fetch_for_incident_by_id(
         $connection,

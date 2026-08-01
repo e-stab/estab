@@ -295,59 +295,6 @@ csrf_from_body()
     printf '%s' "$token"
 }
 
-active_hat_id_from_body()
-{
-    awk '
-        /name="operation_action"/ {
-            saw_action_name = 1
-        }
-        saw_action_name && /value="select_hat"/ {
-            in_select_form = 1
-            saw_action_name = 0
-        }
-        in_select_form && /name="dienstbesetzung_id"/ {
-            saw_assignment_name = 1
-        }
-        saw_assignment_name && match($0, /value="[0-9]+"/) {
-            value = substr($0, RSTART, RLENGTH)
-            gsub(/[^0-9]/, "", value)
-            print value
-            exit
-        }
-        in_select_form && /<\/form>/ {
-            in_select_form = 0
-            saw_assignment_name = 0
-        }
-    ' "$body"
-}
-
-select_active_hat()
-{
-    select_hat_cookie_jar=$1
-
-    assert_status 200 \
-        --cookie "$select_hat_cookie_jar" \
-        --cookie-jar "$select_hat_cookie_jar" \
-        "$base_url/4fach/fuehrungsstelle.php"
-    select_hat_assignment_id=$(active_hat_id_from_body)
-    case "$select_hat_assignment_id" in
-        '' | 0 | *[!0-9]*)
-            echo 'Category HTTP: no personal accepted active hat is selectable' >&2
-            sed -n '1,160p' "$body" >&2
-            exit 1
-            ;;
-    esac
-    select_hat_csrf=$(csrf_from_body)
-    assert_status 303 \
-        --cookie "$select_hat_cookie_jar" \
-        --cookie-jar "$select_hat_cookie_jar" \
-        --request POST \
-        --data-urlencode "csrf_token=$select_hat_csrf" \
-        --data-urlencode 'operation_action=select_hat' \
-        --data-urlencode "dienstbesetzung_id=$select_hat_assignment_id" \
-        "$base_url/4fach/fuehrungsstelle.php"
-}
-
 assert_numeric()
 {
     label=$1
@@ -592,9 +539,10 @@ sh tests/integration/provision_user.sh \
 login_existing "$s1_cookies" "$s1_name" "$s1_code" "$s1_function" "$s1_password"
 login_existing "$s2_cookies" "$s2_name" "$s2_code" S2 "$s2_password"
 login_existing "$si_cookies" "$si_name" "$si_code" Si "$si_password"
-select_active_hat "$s1_cookies"
-select_active_hat "$s2_cookies"
-select_active_hat "$si_cookies"
+
+# Categories and message-state controls derive their permissions exclusively
+# from the fixed account function. The active incident remains mandatory; an
+# optional access shift or historical duty assignment is not an input gate.
 
 master_auto_increment=$(db_sql <<'SQL'
 SELECT COALESCE(`AUTO_INCREMENT`, 1)

@@ -993,7 +993,7 @@ class BrowserAcceptance:
         self.config = config
 
     def _authenticated_navigation_keys(self) -> list[str]:
-        """Return only areas available to the exact selected duty function."""
+        """Return only areas available to the account's fixed function."""
         keys = list(self.navigation_keys)
         if self.config.login_function != "S2":
             keys.remove("message-overview")
@@ -1003,7 +1003,7 @@ class BrowserAcceptance:
 
     def _authenticated_navigation_link_count(self) -> int:
         # The two public service links (administration and handbook) remain
-        # available alongside the duty-filtered operational areas.
+        # available alongside the function-filtered operational areas.
         return len(self._authenticated_navigation_keys()) + 2
 
     def run_overview(self) -> None:
@@ -1382,28 +1382,8 @@ class BrowserAcceptance:
             'button.estab-button-primary[type="submit"]',
             "A/W-Bestandskonto absenden",
         )
-        self._wait_for_top_level_path(
-            "/4fach/fuehrungsstelle.php",
-            "Führungsstellenbetrieb für den Vorschlagstest fehlt",
-        )
-        self.cdp.wait_for(
-            """
-            document.readyState === "complete" &&
-            Boolean(document.querySelector(
-                'form input[name="operation_action"][value="select_hat"]'
-            )) &&
-            Boolean(document.querySelector(
-                'form input[name="dienstbesetzung_id"]'
-            ))
-            """,
-            "persönlich angenommene A/W-Dienstfunktion fehlt",
-        )
-        self.cdp.click(
-            None,
-            'form:has(input[name="operation_action"][value="select_hat"]) '
-            'button[type="submit"]',
-            "persönlich angenommene A/W-Dienstfunktion auswählen",
-        )
+        # The fixed A/W account function and active incident are sufficient;
+        # no formal duty assignment or selection screen lies in between.
         self._wait_for_authenticated_frames()
         self.cdp.click(
             "vorgaben",
@@ -1944,32 +1924,8 @@ class BrowserAcceptance:
             "Bestandskonto anmelden",
         )
         self._wait_for_top_level_path(
-            "/4fach/fuehrungsstelle.php",
-            "Führungsstellenbetrieb wurde nach der Anmeldung nicht geöffnet",
-        )
-        self.cdp.wait_for(
-            """
-            document.readyState === "complete" &&
-            Boolean(document.querySelector(
-                'form input[name="operation_action"][value="select_hat"]'
-            )) &&
-            Boolean(document.querySelector(
-                'form input[name="dienstbesetzung_id"]'
-            ))
-            """,
-            "Persönlich angenommene aktive "
-            f"{self.config.login_function}-Dienstfunktion fehlt",
-        )
-        self.cdp.click(
-            None,
-            'form:has(input[name="operation_action"][value="select_hat"]) '
-            "button[type=\"submit\"]",
-            "persönlich angenommene "
-            f"{self.config.login_function}-Dienstfunktion auswählen",
-        )
-        self._wait_for_top_level_path(
             "/stabetb/etb.php",
-            "Einsatztagebuch wurde nach Auswahl der Dienstfunktion nicht "
+            "Einsatztagebuch wurde mit der festen Kontofunktion nicht direkt "
             "als angefordertes Ziel geöffnet",
         )
         self._assert_session_bar(
@@ -2774,6 +2730,11 @@ class BrowserAcceptance:
                 "Benutzerverwaltung",
             ),
             (
+                "/4fadm/fuehrungsstelle.php",
+                "[data-estab-shift-admin]",
+                "Optionale Zugangsschichten",
+            ),
+            (
                 "/4fadm/make_fkt.php",
                 "[data-estab-matrix-tool]",
                 "Empfängermatrix",
@@ -2879,6 +2840,13 @@ class BrowserAcceptance:
                 "Benutzerverwaltung",
                 True,
                 False,
+            ),
+            (
+                "/4fadm/fuehrungsstelle.php",
+                "[data-estab-shift-admin]",
+                "Optionale Zugangsschichten",
+                True,
+                True,
             ),
             (
                 "/4fadm/set_number_after_crash.php",

@@ -883,6 +883,8 @@ function estab_incident_export_operations_evidence_status(
  *   message_events:list<array<string,mixed>>,
  *   message_evidence_heads:list<array<string,mixed>>,
  *   message_evidence_status:array<string,mixed>,
+ *   access_shifts:list<array<string,mixed>>,
+ *   access_shift_memberships:list<array<string,mixed>>,
  *   duty_shifts:list<array<string,mixed>>,
  *   duty_assignments:list<array<string,mixed>>,
  *   duty_handovers:list<array<string,mixed>>,
@@ -1248,11 +1250,44 @@ function estab_incident_export_load(
         }
     }
 
+    $accessShifts = [];
+    $accessShiftMemberships = [];
     $dutyShifts = [];
     $dutyAssignments = [];
     $dutyHandovers = [];
     $dutyHandoverRequests = [];
     if (in_array('duty', $sections, true)) {
+        $accessShifts = estab_incident_export_rows(
+            $connection,
+            'SELECT `zugangsschicht_id`, `einsatz_id`, `bezeichnung`,'
+                . ' `beginn`, `ende`, `zugang_aktiv`, `erstellt_am`,'
+                . ' `erstellt_von`, `geaendert_am`, `geaendert_von`'
+                . ' FROM `nv_zugangsschichten` WHERE `einsatz_id` = ?'
+                . ' ORDER BY COALESCE(`beginn`, `erstellt_am`),'
+                . ' `zugangsschicht_id`',
+            $incidentId,
+            'Die optionalen Zugangsschichten konnten nicht gelesen werden.'
+        );
+        $accessShiftMemberships = estab_incident_export_rows(
+            $connection,
+            'SELECT membership.`zugangsschicht_mitglied_id`,'
+                . ' membership.`zugangsschicht_id`,'
+                . ' shift_row.`bezeichnung` AS `schichtbezeichnung`,'
+                . ' membership.`benutzer_kuerzel`,'
+                . ' membership.`zugeordnet_am`,'
+                . ' membership.`zugeordnet_von`,'
+                . ' membership.`entfernt_am`, membership.`entfernt_von`'
+                . ' FROM `nv_zugangsschicht_mitglieder` AS membership'
+                . ' JOIN `nv_zugangsschichten` AS shift_row'
+                . ' ON shift_row.`zugangsschicht_id` ='
+                . ' membership.`zugangsschicht_id`'
+                . ' WHERE shift_row.`einsatz_id` = ?'
+                . ' ORDER BY shift_row.`zugangsschicht_id`,'
+                . ' membership.`zugangsschicht_mitglied_id`',
+            $incidentId,
+            'Die Zuordnungen der optionalen Zugangsschichten konnten nicht '
+                . 'gelesen werden.'
+        );
         $dutyShifts = estab_incident_export_rows(
             $connection,
             'SELECT `dienstschicht_id`, `einsatz_id`, `nummer`,'
@@ -1395,6 +1430,8 @@ function estab_incident_export_load(
         'message_events' => $messageEvents,
         'message_evidence_heads' => $messageEvidenceHeads,
         'message_evidence_status' => $messageEvidenceStatus,
+        'access_shifts' => $accessShifts,
+        'access_shift_memberships' => $accessShiftMemberships,
         'duty_shifts' => $dutyShifts,
         'duty_assignments' => $dutyAssignments,
         'duty_handovers' => $dutyHandovers,
@@ -1426,7 +1463,9 @@ function estab_incident_export_load(
             )),
             'message_evidence' => count($messageEvents),
             'message_evidence_heads' => count($messageEvidenceHeads),
-            'duty' => count($dutyShifts)
+            'duty' => count($accessShifts)
+                + count($accessShiftMemberships)
+                + count($dutyShifts)
                 + count($dutyAssignments)
                 + count($dutyHandovers)
                 + count($dutyHandoverRequests),
@@ -1434,6 +1473,8 @@ function estab_incident_export_load(
             'duty_assignments' => count($dutyAssignments),
             'duty_handovers' => count($dutyHandovers),
             'duty_handover_requests' => count($dutyHandoverRequests),
+            'access_shifts' => count($accessShifts),
+            'access_shift_memberships' => count($accessShiftMemberships),
             's6_plans' => count($s6Plans),
             's6_plan_entries' => count($s6PlanEntries),
             'courier' => count($courierOrders),
@@ -1600,6 +1641,12 @@ function estab_incident_export_pdf(
                 : [],
             is_array($bundle['duty_handover_requests'] ?? null)
                 ? $bundle['duty_handover_requests']
+                : [],
+            is_array($bundle['access_shifts'] ?? null)
+                ? $bundle['access_shifts']
+                : [],
+            is_array($bundle['access_shift_memberships'] ?? null)
+                ? $bundle['access_shift_memberships']
                 : []
         );
     }

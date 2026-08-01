@@ -137,6 +137,62 @@ function incident_export_integration_insert_logbook_pair(
     return ['etb_id' => $etbId, 'ttb_id' => $ttbId];
 }
 
+function incident_export_integration_etb_book_lfd(
+    mysqli $connection,
+    int $incidentId,
+    int $etbId
+): int {
+    $statement = $connection->prepare(
+        'SELECT `estab_book_lfd` FROM `nv_etb`'
+            . ' WHERE `einsatz_id` = ? AND `etb_lfd-nr` = ?'
+            . ' LIMIT 1'
+    );
+    try {
+        $statement->bind_param('ii', $incidentId, $etbId);
+        $statement->execute();
+        $row = $statement->get_result()->fetch_assoc();
+    } finally {
+        $statement->close();
+    }
+
+    $bookLfd = is_array($row) ? (int) ($row['estab_book_lfd'] ?? 0) : 0;
+    if ($bookLfd < 1) {
+        throw new RuntimeException(
+            'Could not resolve the incident-local ETB reference'
+        );
+    }
+
+    return $bookLfd;
+}
+
+function incident_export_integration_ttb_book_lfd(
+    mysqli $connection,
+    int $incidentId,
+    int $ttbId
+): int {
+    $statement = $connection->prepare(
+        'SELECT `estab_book_lfd` FROM `nv_tbb`'
+            . ' WHERE `einsatz_id` = ? AND `tbb_lfd-nr` = ?'
+            . ' LIMIT 1'
+    );
+    try {
+        $statement->bind_param('ii', $incidentId, $ttbId);
+        $statement->execute();
+        $row = $statement->get_result()->fetch_assoc();
+    } finally {
+        $statement->close();
+    }
+
+    $bookLfd = is_array($row) ? (int) ($row['estab_book_lfd'] ?? 0) : 0;
+    if ($bookLfd < 1) {
+        throw new RuntimeException(
+            'Could not resolve the incident-local TTB reference'
+        );
+    }
+
+    return $bookLfd;
+}
+
 /** @return array{etb_id:int,ttb_id:int} */
 function incident_export_integration_insert_logbook_corrections(
     mysqli $connection,
@@ -713,13 +769,28 @@ try {
         920001
     );
     $secondShiftMarker = $selectedMarker . '-SHIFT-2';
+    $selectedEtbBookLfd = incident_export_integration_etb_book_lfd(
+        $connection,
+        $selectedIncidentId,
+        (int) $selectedFixture['etb_id']
+    );
+    $selectedTtbBookLfd = incident_export_integration_ttb_book_lfd(
+        $connection,
+        $selectedIncidentId,
+        (int) $selectedFixture['ttb_id']
+    );
+    $assert(
+        (int) $selectedFixture['etb_id'] !== $selectedEtbBookLfd
+            && (int) $selectedFixture['ttb_id'] !== $selectedTtbBookLfd,
+        'Export fixture does not distinguish global IDs from local book numbers'
+    );
     incident_export_integration_insert_logbook_corrections(
         $connection,
         $selectedIncidentId,
         $selectedSecondShiftId,
         $secondShiftMarker,
         (int) $selectedFixture['etb_id'],
-        1,
+        $selectedEtbBookLfd,
         (int) $selectedFixture['ttb_id']
     );
 
@@ -812,8 +883,8 @@ try {
     );
     $assert(
         $bundle['counts'] === [
-            'etb' => 2,
-            'ttb' => 2,
+            'etb' => 3,
+            'ttb' => 3,
             'messages' => 1,
             'attachments' => 1,
             'attachments_verified' => 1,
@@ -825,60 +896,103 @@ try {
             'duty_assignments' => 0,
             'duty_handovers' => 0,
             'duty_handover_requests' => 0,
+            'access_shifts' => 0,
+            'access_shift_memberships' => 0,
             's6_plans' => 0,
             's6_plan_entries' => 0,
             'courier' => 0,
             'operations_evidence' => 0,
         ],
-        'Dossier source did not return exactly the selected incident rows'
+        'Dossier source did not return exactly the selected incident rows: '
+            . json_encode($bundle['counts'], JSON_THROW_ON_ERROR)
     );
 
     $selectedMessageId = (int) $selectedFixture['message_id'];
+    $etbById = [];
+    foreach ($bundle['etb'] as $etbRow) {
+        $etbById[(int) ($etbRow['etb_lfd-nr'] ?? 0)] = $etbRow;
+    }
+    $ttbById = [];
+    foreach ($bundle['ttb'] as $ttbRow) {
+        $ttbById[(int) ($ttbRow['tbb_lfd-nr'] ?? 0)] = $ttbRow;
+    }
+    $openingEtb = $bundle['etb'][0] ?? [];
+    $fixtureEtb = $etbById[(int) $selectedFixture['etb_id']] ?? [];
+    $matchingEtbCorrections = array_values(array_filter(
+        $bundle['etb'],
+        static fn (array $row): bool => (int) (
+            $row['estab_correction_of'] ?? 0
+        ) === (int) $selectedFixture['etb_id']
+    ));
+    $correctionEtb = $matchingEtbCorrections[0] ?? [];
+    $openingTtb = $bundle['ttb'][0] ?? [];
+    $fixtureTtb = $ttbById[(int) $selectedFixture['ttb_id']] ?? [];
+    $matchingTtbCorrections = array_values(array_filter(
+        $bundle['ttb'],
+        static fn (array $row): bool => (int) (
+            $row['estab_correction_of'] ?? 0
+        ) === (int) $selectedFixture['ttb_id']
+    ));
+    $correctionTtb = $matchingTtbCorrections[0] ?? [];
     $assert(
-        ($bundle['etb'][0]['etb_aktion'] ?? null)
-            === $selectedMarker . '-ETB'
-            && (int) ($bundle['etb'][0]['estab_shift_id'] ?? 0)
+        (int) ($openingEtb['etb_lfd-nr'] ?? 0) > 0
+            && (int) ($openingEtb['estab_book_lfd'] ?? 0) === 1
+            && ($openingEtb['estab_shift_id'] ?? null) === null
+            && str_contains(
+                (string) ($openingEtb['etb_aktion'] ?? ''),
+                'Einsatztagebuch eröffnet.'
+            )
+            && ($fixtureEtb['etb_aktion'] ?? null)
+                === $selectedMarker . '-ETB'
+            && (int) ($fixtureEtb['estab_shift_id'] ?? 0)
                 === $selectedShiftId
-            && ($bundle['etb'][0]['estab_assignment'] ?? null) === null
-            && ($bundle['etb'][1]['etb_aktion'] ?? null)
+            && ($fixtureEtb['estab_assignment'] ?? null) === null
+            && ($correctionEtb['etb_aktion'] ?? null)
                 === $secondShiftMarker . '-ETB'
-            && (int) ($bundle['etb'][1]['estab_shift_id'] ?? 0)
+            && (int) ($correctionEtb['estab_shift_id'] ?? 0)
                 === $selectedSecondShiftId
             && (int) (
-                $bundle['etb'][1]['estab_correction_of'] ?? 0
+                $correctionEtb['estab_correction_of'] ?? 0
             ) === (int) $selectedFixture['etb_id']
             && (int) (
-                $bundle['etb'][1]['estab_correction_book_lfd'] ?? 0
-            ) === 1
-            && ($bundle['etb'][0]['estab_event_time'] ?? null) !== null
-            && ($bundle['etb'][0]['estab_recorded_at'] ?? null) !== null
-            && ($bundle['etb'][0]['estab_event_type'] ?? null) === 'ohne'
+                $correctionEtb['estab_correction_book_lfd'] ?? 0
+            ) === $selectedEtbBookLfd
+            && ($fixtureEtb['estab_event_time'] ?? null) !== null
+            && ($fixtureEtb['estab_recorded_at'] ?? null) !== null
+            && ($fixtureEtb['estab_event_type'] ?? null) === 'ohne'
             && !str_contains(
                 json_encode($bundle['etb'], JSON_THROW_ON_ERROR),
                 $otherMarker
             ),
-        'ETB export crossed the selected incident boundary'
+        'ETB export omitted the canonical opening or crossed its scope'
     );
     $assert(
-        ($bundle['ttb'][0]['tbb_aktion'] ?? null)
-            === $selectedMarker . '-TBB'
-            && (int) ($bundle['ttb'][0]['estab_shift_id'] ?? 0)
+        (int) ($openingTtb['tbb_lfd-nr'] ?? 0) > 0
+            && (int) ($openingTtb['estab_book_lfd'] ?? 0) === 1
+            && ($openingTtb['estab_shift_id'] ?? null) === null
+            && str_contains(
+                (string) ($openingTtb['tbb_aktion'] ?? ''),
+                'Betriebsaufnahme der Fernmeldebetriebsstelle'
+            )
+            && ($fixtureTtb['tbb_aktion'] ?? null)
+                === $selectedMarker . '-TBB'
+            && (int) ($fixtureTtb['estab_shift_id'] ?? 0)
                 === $selectedShiftId
-            && ($bundle['ttb'][1]['tbb_aktion'] ?? null)
+            && ($correctionTtb['tbb_aktion'] ?? null)
                 === $secondShiftMarker . '-TBB'
-            && (int) ($bundle['ttb'][1]['estab_shift_id'] ?? 0)
+            && (int) ($correctionTtb['estab_shift_id'] ?? 0)
                 === $selectedSecondShiftId
             && (int) (
-                $bundle['ttb'][1]['estab_correction_of'] ?? 0
+                $correctionTtb['estab_correction_of'] ?? 0
             ) === (int) $selectedFixture['ttb_id']
             && (int) (
-                $bundle['ttb'][1]['estab_correction_book_lfd'] ?? 0
-            ) === 1
+                $correctionTtb['estab_correction_book_lfd'] ?? 0
+            ) === $selectedTtbBookLfd
             && !str_contains(
                 json_encode($bundle['ttb'], JSON_THROW_ON_ERROR),
                 $otherMarker
             ),
-        'TBB export crossed the selected incident boundary'
+        'TBB export omitted the canonical opening or crossed its scope'
     );
 
     $filteredBundle = estab_incident_export_load(
@@ -912,6 +1026,14 @@ try {
             ),
         'Selected shift metadata is incomplete or belongs to the wrong shift'
     );
+    $filteredEtbIds = array_map(
+        static fn (array $row): int => (int) ($row['etb_lfd-nr'] ?? 0),
+        $filteredBundle['etb']
+    );
+    $filteredTtbIds = array_map(
+        static fn (array $row): int => (int) ($row['tbb_lfd-nr'] ?? 0),
+        $filteredBundle['ttb']
+    );
     $assert(
         ($filteredBundle['counts']['etb'] ?? -1) === 1
             && ($filteredBundle['counts']['ttb'] ?? -1) === 1
@@ -922,6 +1044,30 @@ try {
                 === $selectedMarker . '-ETB'
             && ($filteredBundle['ttb'][0]['tbb_aktion'] ?? null)
                 === $selectedMarker . '-TBB'
+            && array_reduce(
+                $filteredBundle['etb'],
+                static fn (bool $valid, array $row): bool => $valid
+                    && (int) ($row['estab_shift_id'] ?? 0)
+                        === $selectedShiftId,
+                true
+            )
+            && array_reduce(
+                $filteredBundle['ttb'],
+                static fn (bool $valid, array $row): bool => $valid
+                    && (int) ($row['estab_shift_id'] ?? 0)
+                        === $selectedShiftId,
+                true
+            )
+            && !in_array(
+                (int) ($openingEtb['etb_lfd-nr'] ?? 0),
+                $filteredEtbIds,
+                true
+            )
+            && !in_array(
+                (int) ($openingTtb['tbb_lfd-nr'] ?? 0),
+                $filteredTtbIds,
+                true
+            )
             && !str_contains(
                 json_encode([
                     $filteredBundle['etb'],
@@ -966,11 +1112,11 @@ try {
             && (int) (
                 $correctionBundle['etb'][0]
                     ['estab_correction_book_lfd'] ?? 0
-            ) === 1
+            ) === $selectedEtbBookLfd
             && (int) (
                 $correctionBundle['ttb'][0]
                     ['estab_correction_book_lfd'] ?? 0
-            ) === 1
+            ) === $selectedTtbBookLfd
             && (int) (
                 $correctionBundle['etb'][0]['estab_correction_of'] ?? 0
             ) === (int) $selectedFixture['etb_id']
@@ -992,8 +1138,14 @@ try {
         )
     );
     $assert(
-        str_contains($correctionPageText, 'Korrektur zu ETB-Nr.: 1')
-            && str_contains($correctionPageText, 'Korrektur zu TBB-Nr.: 1')
+        str_contains(
+            $correctionPageText,
+            'Korrektur zu ETB-Nr.: ' . $selectedEtbBookLfd
+        )
+            && str_contains(
+                $correctionPageText,
+                'Korrektur zu TBB-Nr.: ' . $selectedTtbBookLfd
+            )
             && !str_contains(
                 $correctionPageText,
                 'Korrektur zu ETB-Nr.: '
@@ -1067,6 +1219,8 @@ try {
     );
     $assert(
         count($bundle['duty_shifts']) === 2
+            && $bundle['access_shifts'] === []
+            && $bundle['access_shift_memberships'] === []
             && (int) (
                 $bundle['duty_shifts'][0]['dienstschicht_id'] ?? 0
             ) === $selectedShiftId

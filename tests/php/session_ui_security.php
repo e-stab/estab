@@ -111,7 +111,7 @@ $assert(
         )
         && str_contains($sidebarMarkup, '<h2>Bereiche</h2>')
         && str_contains($sidebarMarkup, '>Führungsstelle</span>')
-        && !str_contains($sidebarMarkup, '>Nachrichten</span>')
+        && str_contains($sidebarMarkup, '>Nachrichten</span>')
         && str_contains($sidebarMarkup, 'data-estab-user-code="ada001"')
         && str_contains($sidebarMarkup, 'data-estab-logout-form')
         && !str_contains($sidebarMarkup, '<details')

@@ -48,7 +48,6 @@ $identity = static fn (
     'kuerzel' => $code,
     'funktion' => $function,
     'rolle' => $role,
-    'duty_assignment_id' => 17,
 ];
 
 $aw = $identity('aw0001', 'A/W', 'Fernmelder');
@@ -222,11 +221,16 @@ foreach (
         'function estab_read_message_suggestions(',
         'estab_read_require_operational_scope(',
         'estab_message_table($messageTable)',
-        'JOIN `nv_dienstbesetzungen` AS assignment',
+        'JOIN `nv_benutzer` AS account',
         'JOIN `nv_funktionsfaehigkeiten` AS capability',
         'JOIN `nv_einsatz_status` AS active',
-        'active.`active_einsatz_id` = duty_shift.`einsatz_id`',
-        'candidate.`einsatz_id` = duty_shift.`einsatz_id`',
+        'active.`active_einsatz_id` = ?',
+        'BINARY account.`benutzer` = BINARY ?',
+        'BINARY account.`funktion` = BINARY ?',
+        'BINARY account.`rolle` = BINARY ?',
+        'account.`aktiv` = 1',
+        'account.`estab_gesperrt` = 0',
+        'candidate.`einsatz_id` = active.`active_einsatz_id`',
         'candidate.`einsatz_id` = ?',
         'candidate.`04_richtung` = ?',
         'GROUP BY BINARY TRIM(candidate.',

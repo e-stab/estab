@@ -485,6 +485,10 @@ foreach ([
     'FROM `nv_nachrichten` WHERE `einsatz_id` = ?',
     'FROM `nv_nachrichten_ereignisse`',
     'FROM `nv_nachrichten_nachweiskopf`',
+    'FROM `nv_zugangsschichten` WHERE `einsatz_id` = ?',
+    'FROM `nv_zugangsschicht_mitglieder` AS membership',
+    "'access_shifts' => \$accessShifts",
+    "'access_shift_memberships' => \$accessShiftMemberships",
     'FROM `nv_dienstschichten` WHERE `einsatz_id` = ?',
     'FROM `nv_dienstbesetzungen` AS b',
     'WHERE s.`einsatz_id` = ?',
@@ -568,6 +572,12 @@ $assert(
         && str_contains($pdfRenderer, 'parent::Footer()')
         && !str_contains($pdfRenderer, "'Datensatz' => \$recordId"),
     'Incident dossier does not reuse the generated message-form renderer'
+);
+$assert(
+    str_contains($pdfRenderer, 'Optionale Zugangsschichten')
+        && str_contains($pdfRenderer, 'Historischer Dienstbetrieb (Legacy-Nachweis)')
+        && str_contains($pdfRenderer, 'Access-shift memberships must be arrays.'),
+    'Incident dossier omits current access shifts or fails to distinguish legacy duty records'
 );
 $assert(
     str_contains($pdfRenderer, "'estab_correction_book_lfd'")

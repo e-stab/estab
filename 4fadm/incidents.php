@@ -211,21 +211,15 @@ if ($requestMethod === 'POST') {
             )
             . '; Nachweisfehler: '
             . (int) ($exception->preflight['evidence_errors'] ?? 0)
-            . '. Offen in der Führungsorganisation: '
-            . (int) ($exception->preflight['offene_schichten'] ?? 0)
-            . ' Schichten, '
-            . (int) ($exception->preflight['offene_besetzungen'] ?? 0)
-            . ' Besetzungen, '
+            . '. Fachlich offen: '
             . (int) ($exception->preflight['offene_melderauftraege'] ?? 0)
             . ' Melderaufträge und '
             . (int) (
                 $exception->preflight['offene_fernmeldeplanentwuerfe'] ?? 0
             )
-            . ' Fernmeldeplanentwürfe und '
-            . (int) (
-                $exception->preflight['offene_uebergabeanforderungen'] ?? 0
-            )
-            . ' Übergabeanforderungen.';
+            . ' Fernmeldeplanentwürfe. Historische formale Schichtdaten '
+            . 'werden nur noch informativ ausgewiesen und blockieren den '
+            . 'Einsatzabschluss nicht.';
     } catch (EstabIncidentConflictException $exception) {
         http_response_code(409);
         $error = $exception->getMessage()
@@ -390,19 +384,20 @@ $activeMissingHeader = is_array($status) && $activeId !== null
             Anhang-Integritätsfehler,
             <?= (int) $activePreflight['legacy_attachments_unverifiable'] ?>
             Legacy-Anhänge (Integrität beim Eingang nicht belegbar),
-            <?= (int) $activePreflight['offene_schichten'] ?> offene Schichten,
-            <?= (int) $activePreflight['offene_besetzungen'] ?> offene Besetzungen,
             <?= (int) $activePreflight['offene_melderauftraege'] ?>
             offene Melderaufträge,
             <?= (int) $activePreflight['offene_fernmeldeplanentwuerfe'] ?>
             Fernmeldeplanentwürfe,
-            <?= (int) $activePreflight['offene_uebergabeanforderungen'] ?>
-            offene Übergabeanforderungen und
             <?= (int) $activePreflight['evidence_errors'] ?> Nachweisfehler.
             ETB und TBB sind
             <?= $activePreflight['logbuecher_eroeffnet']
                 ? 'ordnungsgemäß eröffnet.'
-                : 'noch nicht durch die erste Dienstschicht eröffnet.' ?>
+                : 'noch ohne Eröffnungszeile; das blockiert den Abschluss nicht.' ?>
+            Historische formale Dienstplanung (nicht blockierend):
+            <?= (int) $activePreflight['offene_schichten'] ?> Schichten,
+            <?= (int) $activePreflight['offene_besetzungen'] ?> Besetzungen,
+            <?= (int) $activePreflight['offene_uebergabeanforderungen'] ?>
+            Übergabeanforderungen.
           </p>
         <?php endif; ?>
         <form class="estab-tool-form" method="post" data-estab-dirty-guard>
@@ -683,7 +678,7 @@ $activeMissingHeader = is_array($status) && $activeId !== null
                       <summary>Pflichtangaben für ETB und TBB</summary>
                       <?php if ($headerMissing !== []): ?>
                         <p class="estab-tool-feedback estab-tool-feedback-error">
-                          Vor Aktivierung der ersten Dienstschicht fehlen:
+                          Vor Aktivierung des Einsatzes fehlen:
                           <?= incident_admin_html(implode(', ', $headerMissing)) ?>.
                         </p>
                       <?php endif; ?>
@@ -725,7 +720,7 @@ $activeMissingHeader = is_array($status) && $activeId !== null
                                 $incident['beschreibung'] ?? ''
                             ) ?></textarea>
                         </label>
-                        <small>Nach Aktivierung der ersten Dienstschicht sind
+                        <small>Nach Aktivierung des Einsatzes sind
                           diese Angaben Bestandteil der Eröffnungseinträge und
                           nicht mehr veränderbar.</small>
                         <button class="estab-button" type="submit">

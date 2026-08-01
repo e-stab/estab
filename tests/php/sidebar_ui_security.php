@@ -1104,7 +1104,6 @@ $workflowNames = static fn (array $actions): array =>
 $staffActions = estab_sidebar_workflow_actions([
     'rolle' => 'Stab',
     'funktion' => 'S1',
-    'duty_assignment_id' => 101,
 ], 'ROLLE');
 $assert(
     $workflowKeys($staffActions) === [
@@ -1123,7 +1122,6 @@ $assert(
     $workflowKeys(estab_sidebar_workflow_actions([
         'rolle' => 'Stab',
         'funktion' => 'Si',
-        'duty_assignment_id' => 102,
     ], 'ROLLE')) === [
         'stab_sichten',
         'si_admin',
@@ -1135,7 +1133,6 @@ $assert(
     $workflowKeys(estab_sidebar_workflow_actions([
         'rolle' => 'Fernmelder',
         'funktion' => 'A/W',
-        'duty_assignment_id' => 103,
     ], 'ROLLE')) === [
         'fm_eingang',
         'fm_ausgang',
@@ -1149,7 +1146,6 @@ $assert(
     $workflowKeys(estab_sidebar_workflow_actions([
         'rolle' => 'FB',
         'funktion' => 'THW',
-        'duty_assignment_id' => 104,
     ], 'ROLLE')) === [
         'stab_schreiben',
         'stab_lesen',
@@ -1161,7 +1157,6 @@ $assert(
     $workflowKeys(estab_sidebar_workflow_actions([
         'rolle' => 'Administrator',
         'funktion' => 'Admin',
-        'duty_assignment_id' => 105,
     ], 'ROLLE')) === ['m2_benutzer'],
     'administrator sidebar lost the legacy user action'
 );
@@ -1170,24 +1165,43 @@ $assert(
         && estab_sidebar_workflow_actions([
             'rolle' => 'Stab',
             'funktion' => 'S1',
-            'duty_assignment_id' => 101,
         ], 'LOGIN') === [],
     'sidebar exposes role actions outside the authenticated role menu'
 );
 $assert(
-    estab_sidebar_workflow_actions([
+    $workflowKeys(estab_sidebar_workflow_actions([
         'rolle' => 'Stab',
         'funktion' => 'S1',
-    ], 'ROLLE') === [],
-    'sidebar exposes operational actions before selecting an active duty hat'
+    ], 'ROLLE')) === [
+        'stab_schreiben',
+        'stab_lesen',
+        'm2_benutzer',
+    ],
+    'sidebar requires an optional shift before exposing account actions'
 );
 $assertThrows(
     static fn (): array => estab_sidebar_workflow_actions([
         'rolle' => ['invalid'],
         'funktion' => 'S1',
-        'duty_assignment_id' => 106,
     ], 'ROLLE'),
     'invalid sidebar workflow identity accepted'
+);
+$fixedFunctionMarkup = estab_sidebar_account_function_markup([], [
+    'rolle' => 'Stab',
+    'funktion' => 'S1',
+]);
+$assert(
+    str_contains($fixedFunctionMarkup, 'data-estab-account-function')
+        && str_contains($fixedFunctionMarkup, 'Angemeldete Funktion')
+        && str_contains($fixedFunctionMarkup, 'S1 · Stab')
+        && !str_contains($fixedFunctionMarkup, 'duty-assignment')
+        && !str_contains($fixedFunctionMarkup, 'fuehrungsstelle.php')
+        && !str_contains($fixedFunctionMarkup, 'wechseln'),
+    'sidebar presents the fixed account function as a selectable shift role'
+);
+$assert(
+    estab_sidebar_account_function_markup([], null) === '',
+    'sidebar renders an account function without an authenticated identity'
 );
 
 $wavMetadata = static function (string $path): array {
@@ -1270,6 +1284,11 @@ $assert(
             '.estab-sidebar-freshness[data-estab-status-freshness="stale"]'
         ),
     'stale sidebar status has no persistent visible warning style'
+);
+$assert(
+    str_contains($stylesheet, '.estab-sidebar-account-function')
+        && str_contains($stylesheet, '.estab-sidebar-account-function span'),
+    'fixed account function has no consistent sidebar card styling'
 );
 
 echo "sidebar UI security: OK ({$assertions} assertions)\n";

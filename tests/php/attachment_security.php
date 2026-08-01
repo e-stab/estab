@@ -38,14 +38,12 @@ $staffIdentity = [
     'kuerzel' => 'ee',
     'funktion' => 'S1',
     'rolle' => 'Stab',
-    'duty_assignment_id' => 41,
 ];
 $telecommunicationsIdentity = [
     'benutzer' => 'Anton Funk',
     'kuerzel' => 'af',
     'funktion' => 'A/W',
     'rolle' => 'Fernmelder',
-    'duty_assignment_id' => 42,
 ];
 $staffWriteContext = estab_attachment_origin_context_create(
     $staffIdentity,
@@ -54,9 +52,10 @@ $staffWriteContext = estab_attachment_origin_context_create(
 );
 $assert(
     $staffWriteContext['task'] === 'Stab_schreiben'
+        && $staffWriteContext['version'] === 2
         && $staffWriteContext['record_id'] === null
         && $staffWriteContext['incident_id'] === 9
-        && $staffWriteContext['duty_assignment_id'] === 41
+        && !array_key_exists('duty_assignment_id', $staffWriteContext)
         && preg_match(
             '/\A[a-f0-9]{32}\z/D',
             $staffWriteContext['flow_token']
@@ -732,15 +731,26 @@ $assertContextRejected(
     ),
     'attachment origin survives an active-incident switch'
 );
-$otherDutyIdentity = $staffIdentity;
-$otherDutyIdentity['duty_assignment_id'] = 99;
+$otherFunctionIdentity = $staffIdentity;
+$otherFunctionIdentity['funktion'] = 'S2';
 $assertContextRejected(
     static fn () => estab_attachment_origin_context_validate(
         $staffWriteContext,
-        $otherDutyIdentity,
+        $otherFunctionIdentity,
         9
     ),
-    'attachment origin survives a selected-duty switch'
+    'attachment origin survives a fixed account-function change'
+);
+$legacyDutyContext = $staffWriteContext;
+$legacyDutyContext['version'] = 1;
+$legacyDutyContext['duty_assignment_id'] = 41;
+$assertContextRejected(
+    static fn () => estab_attachment_origin_context_validate(
+        $legacyDutyContext,
+        $staffIdentity,
+        9
+    ),
+    'legacy duty-bound attachment context was not invalidated fail-closed'
 );
 $assertContextRejected(
     static fn () => estab_attachment_origin_context_validate(

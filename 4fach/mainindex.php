@@ -174,7 +174,7 @@ include ("4fachform.php");              // Formular Behandlung 4fach Vordruck
 include ("liste.php");                  // erzeuge Ausgabelisten
 include ("data_hndl.php");              // Schnittstelle zur Datenbank
 
-/** Stop before any legacy list/query when no selected active duty exists. */
+/** Stop before legacy list/query code when operational access is unavailable. */
 function estab_workflow_render_read_gate (
   int $status,
   string $title,
@@ -189,7 +189,7 @@ function estab_workflow_render_read_gate (
   echo estab_session_ui_stylesheet ();
   echo "<title>".estab_auth_html ($title)."</title></head>";
   echo "<body><main class=\"estab-auth-shell\">";
-  echo "<section class=\"estab-auth-card\" data-estab-duty-selection-required>";
+  echo "<section class=\"estab-auth-card\">";
   echo "<h1>".estab_auth_html ($title)."</h1>";
   echo "<p>".estab_auth_html ($message)."</p>";
   echo "<p><a class=\"estab-button estab-button-primary\" href=\"".
@@ -213,7 +213,7 @@ function estab_workflow_message_list_recipients (array $definitions): array {
   return $recipients;
 }
 
-/** Apply the strict shared list request and retain it for this duty view. */
+/** Apply the strict shared list request and retain it for this function view. */
 function estab_workflow_message_list_filters (
   string $sessionKey,
   array $request,
@@ -277,9 +277,9 @@ if ($workflowIdentity !== null) {
   } catch (EstabReadPermissionException $exception) {
     estab_workflow_render_read_gate (
       403,
-      "Dienstfunktion auswählen",
-      "Nehmen Sie zuerst Ihre persönliche Dienstfunktion an und wählen ".
-      "Sie sie für diese Sitzung aus."
+      "Operativer Zugang nicht verfügbar",
+      "Prüfen Sie die feste Kontofunktion und ob Ihr Zugang in der ".
+      "optionalen Schichtplanung aktiviert ist."
     );
   } catch (EstabIncidentConfigurationException $exception) {
     estab_workflow_render_read_gate (
@@ -292,8 +292,8 @@ if ($workflowIdentity !== null) {
     error_log ("eStab main read gate failed: ".$exception->getMessage ());
     estab_workflow_render_read_gate (
       503,
-      "Dienststatus nicht verfügbar",
-      "Die aktive Dienstfunktion kann derzeit nicht geprüft werden."
+      "Berechtigungsstatus nicht verfügbar",
+      "Die feste Kontofunktion kann derzeit nicht geprüft werden."
     );
   } finally {
     if ($readGateConnection instanceof mysqli) {
@@ -302,8 +302,8 @@ if ($workflowIdentity !== null) {
   }
 }
 
-// A second-sighting mode is scoped to the currently selected hat. Normalise
-// sessions created before that rule existed and fail closed after duty changes.
+// A second-sighting mode is scoped to the fixed account function. Normalise
+// stale sessions after an administrative function change.
 if (
   !is_array ($workflowSelectedIdentity)
   || ($workflowSelectedIdentity ["funktion"] ?? null) !== "A/W"
@@ -975,9 +975,10 @@ ANTWORT % WEITERLEITUNG
       $error = check_save_user ($loginData, $loginError);
       if (!$error) {
         $_SESSION ["menue"] = "ROLLE";
-        $_SESSION ["estab_pending_navigation_key"] =
-          $loginDestination ?? "messages";
-        estab_navigation_open_after_login ("command-post");
+        unset ($_SESSION ["estab_pending_navigation_key"]);
+        estab_navigation_open_after_login (
+          $loginDestination ?? "messages"
+        );
       }
     }
   }
@@ -1709,7 +1710,7 @@ if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>  ### FM Aus
         echo "<p class=\"estab-tool-eyebrow\">A/W · Nachrichtenvordrucke</p>";
         echo "<h1>Zweite Sichtung</h1>";
         echo "<p>Durchsuchen und öffnen Sie die für Ihre aktuelle ".
-             "Dienstfunktion sichtbaren Nachrichten des aktiven Einsatzes.</p>";
+             "festen Kontofunktion sichtbaren Nachrichten des aktiven Einsatzes.</p>";
         echo "</header>";
         $list = new listen (
           "FMADMIN",
@@ -1750,7 +1751,7 @@ if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b>  ### FM Aus
         echo "<p class=\"estab-tool-eyebrow\">Si · Nachrichtenvordrucke</p>";
         echo "<h1>Zweite Sichtung</h1>";
         echo "<p>Durchsuchen und öffnen Sie die für Ihre aktuelle ".
-             "Dienstfunktion sichtbaren Nachrichten des aktiven Einsatzes.</p>";
+             "festen Kontofunktion sichtbaren Nachrichten des aktiven Einsatzes.</p>";
         echo "</header>";
         $list = new listen (
           "SIADMIN",

@@ -634,6 +634,10 @@ $assert(
         )
         && str_contains(
             $repositorySource,
+            "`objekttyp` IN ('EINSATZ', 'DIENSTSCHICHT')"
+        )
+        && str_contains(
+            $repositorySource,
             'max($messageMaximum, $repairMaximum) + 1'
         ),
     'normal allocation ignores the immutable administrative counter watermark'

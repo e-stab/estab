@@ -438,6 +438,28 @@ try {
             'storniert_am' => null,
             'storniert_von' => null,
             'stornierungsgrund' => null,
+        ]],
+        [[
+            'zugangsschicht_id' => 51,
+            'einsatz_id' => 12,
+            'bezeichnung' => 'Nachtschicht',
+            'beginn' => '2026-07-29 20:00:00.000000',
+            'ende' => '2026-07-30 08:00:00.000000',
+            'zugang_aktiv' => 1,
+            'erstellt_am' => '2026-07-29 18:00:00.000000',
+            'erstellt_von' => 'admin',
+            'geaendert_am' => '2026-07-29 20:00:00.000000',
+            'geaendert_von' => 'admin',
+        ]],
+        [[
+            'zugangsschicht_mitglied_id' => 61,
+            'zugangsschicht_id' => 51,
+            'schichtbezeichnung' => 'Nachtschicht',
+            'benutzer_kuerzel' => 'SICHT1',
+            'zugeordnet_am' => '2026-07-29 18:05:00.000000',
+            'zugeordnet_von' => 'admin',
+            'entfernt_am' => null,
+            'entfernt_von' => null,
         ]]
     );
     $pdf->addS6Plans(

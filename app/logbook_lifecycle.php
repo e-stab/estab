@@ -6,8 +6,9 @@ declare(strict_types=1);
  * System-generated ETB/TBB lifecycle records.
  *
  * Every function in this file participates in the caller's existing
- * transaction. It deliberately performs no commit or rollback: shift start,
- * handover, book entry and incident close must either all succeed or all fail.
+ * transaction. It deliberately performs no commit or rollback: optional
+ * historical shift events, book entries and incident close must either all
+ * succeed or all fail.
  */
 
 /** @return array<string,string> field => operator-facing label */
@@ -181,29 +182,37 @@ function estab_logbook_lifecycle_assert_empty_books(
     }
     if ((int) ($row['entries'] ?? 0) !== 0) {
         throw new RuntimeException(
-            'Die erstmalige Schicht kann nicht aktiviert werden, weil ETB oder '
-            . 'TBB bereits Einträge enthalten.'
+            'ETB und TBB können nicht erneut eröffnet werden, weil bereits '
+                . 'Einträge vorhanden sind.'
         );
     }
 }
 
-/** Resolve and lock the one active duty shift used by an automatic row. */
-function estab_logbook_lifecycle_active_shift_id(
+/**
+ * Open both books exactly once when an incident has no historical entries.
+ *
+ * Existing deployments can already contain one or both legacy books without
+ * a canonical opening row.  Such evidence must not be reordered or rewritten;
+ * in that case the caller leaves the history untouched.  Fresh incidents are
+ * opened atomically without requiring a duty shift.
+ */
+function estab_logbook_lifecycle_open_books_if_empty(
     mysqli $connection,
-    int $incidentId
-): int {
+    array $incident
+): bool {
+    $incidentId = (int) ($incident['active_einsatz_id'] ?? 0);
+    if ($incidentId < 1) {
+        throw new RuntimeException('Logbucheröffnung hat keinen aktiven Einsatz.');
+    }
     $statement = $connection->prepare(
-        'SELECT `dienstschicht_id` FROM `nv_dienstschichten`'
-        . ' WHERE `einsatz_id` = ? AND `status` = \'AKTIV\''
-        . ' LIMIT 1 FOR UPDATE'
+        'SELECT (SELECT COUNT(*) FROM `nv_etb` WHERE `einsatz_id` = ?)'
+        . ' + (SELECT COUNT(*) FROM `nv_tbb` WHERE `einsatz_id` = ?) AS `entries`'
     );
     if (!$statement) {
-        throw new RuntimeException(
-            'Aktive Dienstschicht konnte nicht vorbereitet werden.'
-        );
+        throw new RuntimeException('Logbuchbestand konnte nicht geprüft werden.');
     }
     try {
-        $statement->bind_param('i', $incidentId);
+        $statement->bind_param('ii', $incidentId, $incidentId);
         $statement->execute();
         $result = $statement->get_result();
         $row = $result->fetch_assoc();
@@ -211,14 +220,11 @@ function estab_logbook_lifecycle_active_shift_id(
     } finally {
         $statement->close();
     }
-    $shiftId = (int) ($row['dienstschicht_id'] ?? 0);
-    if ($shiftId < 1) {
-        throw new RuntimeException(
-            'Ein automatischer Logbucheintrag benötigt eine aktive '
-                . 'Dienstschicht.'
-        );
+    if ((int) ($row['entries'] ?? 0) !== 0) {
+        return false;
     }
-    return $shiftId;
+    estab_logbook_lifecycle_open_books($connection, $incident);
+    return true;
 }
 
 function estab_logbook_lifecycle_insert_etb(
@@ -230,10 +236,6 @@ function estab_logbook_lifecycle_insert_etb(
     string $type = 'ohne',
     ?int $shiftId = null
 ): int {
-    $shiftId ??= estab_logbook_lifecycle_active_shift_id(
-        $connection,
-        $incidentId
-    );
     $statement = $connection->prepare(
         'INSERT INTO `nv_etb`'
         . ' (`einsatz_id`, `estab_shift_id`, `etb_time`, `etb_aktion`,'
@@ -280,10 +282,6 @@ function estab_logbook_lifecycle_insert_ttb_record(
     ?int $correctionOf = null,
     ?int $shiftId = null
 ): int {
-    $shiftId ??= estab_logbook_lifecycle_active_shift_id(
-        $connection,
-        $incidentId
-    );
     $labels = [
         'personnel_duty' => 'Betrieb / Personal / Dienst',
         'channel' => 'Kanal / Rufgruppe / Bedienung',
@@ -556,11 +554,11 @@ function estab_logbook_lifecycle_message_transport(
     );
 }
 
-/** Create the mandatory first rows while the initial shift activation is locked. */
+/** Create the first book rows, optionally linked to a legacy duty shift. */
 function estab_logbook_lifecycle_open_books(
     mysqli $connection,
     array $incident,
-    int $shiftId
+    ?int $shiftId = null
 ): void {
     $incidentId = (int) ($incident['active_einsatz_id'] ?? 0);
     if ($incidentId < 1) {
@@ -574,11 +572,13 @@ function estab_logbook_lifecycle_open_books(
         );
     }
     estab_logbook_lifecycle_assert_empty_books($connection, $incidentId);
-    $roster = estab_logbook_lifecycle_roster(
-        $connection,
-        $shiftId,
-        'ANGENOMMEN'
-    );
+    $roster = $shiftId === null
+        ? []
+        : estab_logbook_lifecycle_roster(
+            $connection,
+            $shiftId,
+            'ANGENOMMEN'
+        );
     $rosterText = estab_logbook_lifecycle_roster_text($roster);
     $etbWriter = estab_logbook_lifecycle_writer_text($roster, 'etb');
     $ldf = estab_logbook_lifecycle_function_text($roster, ['LdF']);
@@ -601,7 +601,7 @@ function estab_logbook_lifecycle_open_books(
             . (string) $incident['einsatzleitung'] . ".\n"
             . 'Führungsstellenbesetzung: ' . $rosterText . ".\n"
             . 'ETB-Führung: ' . $etbWriter . '.',
-        'Automatisch und atomar mit der Aktivierung der ersten Dienstschicht erzeugt.',
+        'Automatisch und atomar mit der Logbucheröffnung erzeugt.',
         'ohne',
         $shiftId
     );
@@ -615,7 +615,7 @@ function estab_logbook_lifecycle_open_books(
             . '. TBB-Führung: ' . $tbbWriter . '.',
         'Fernmeldebetriebsstelle für Einsatz ' . $operation
             . ' einsatz-/betriebsbereit.',
-        'Automatisch und atomar mit der Aktivierung der ersten Dienstschicht erzeugt.',
+        'Automatisch und atomar mit der Logbucheröffnung erzeugt.',
         'betrieb_personal',
         $shiftId
     );
@@ -865,16 +865,11 @@ function estab_logbook_lifecycle_close_books(
     $lastShiftId = is_array($shift)
         ? (int) ($shift['dienstschicht_id'] ?? 0)
         : 0;
-    if ($lastShiftId < 1) {
-        throw new RuntimeException(
-            'Der Logbuchabschluss benötigt eine dokumentierte Dienstschicht.'
-        );
-    }
-    $roster = is_array($shift)
+    $lastShiftId = $lastShiftId > 0 ? $lastShiftId : null;
+    $roster = $lastShiftId !== null
         ? estab_logbook_lifecycle_roster(
             $connection,
-            $lastShiftId,
-            'ABGELOEST'
+            $lastShiftId
         )
         : [];
     $etbWriter = estab_logbook_lifecycle_writer_text($roster, 'etb');

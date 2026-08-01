@@ -232,7 +232,7 @@ $assert(
         )
         && str_contains(
             $helper,
-            'estab_dv_require_active_hat_for_operational_write('
+            'estab_dv_require_operational_account('
         )
         && str_contains(
             $helper,

@@ -13,7 +13,7 @@ technisches Betriebsbuch
   Szenario "Globaler Einsatz aktiv."
 
     + Anzeige des globalen Einsatzkopfs
-    + Lesender Zugriff nur mit ausgewaehlter, aktiver Dienstfunktion
+    + Lesender Zugriff mit fester Kontofunktion
     + Eintragsfunktion fuer A/W in der Rolle Fernmelder
 
   Szenario "Schaltflaeche TBB-Eintrag wird betaetigt"
@@ -39,7 +39,6 @@ class tbb_liste {
   var $tbb_benutzer ;
   var $tbb_rolle ;
   var $tbb_authorized ;
-  public int $tbb_duty_assignment_id = 0;
 
 /*****************************************************************************\
 
@@ -320,7 +319,6 @@ if (debug == true){ echo "tbb_tableexist==>"; var_dump($this->tbb_titel_tbl); ec
         "kuerzel" => (string) $this->tbb_kuerzel,
         "benutzer" => (string) $this->tbb_benutzer,
         "rolle" => (string) $this->tbb_rolle,
-        "duty_assignment_id" => $this->tbb_duty_assignment_id,
       )
     );
   }
@@ -586,20 +584,11 @@ include ("../4fcfg/dbcfg.inc.php");
 include ("../4fcfg/e_cfg.inc.php");
 
 $identity = estab_read_session_identity ($_SESSION);
-if (
-  !is_array ($identity)
-  || estab_read_duty_assignment_id (
-    $identity ["duty_assignment_id"] ?? null
-  ) === null
-) {
-  estab_navigation_select_duty ($_SERVER);
-}
 estab_session_ui_start ($_SESSION);
 
 $berechtigt = false;
-$hatTbbCapability = false;
+$hasTbbCapability = false;
 $istTbbFuehrung = false;
-$dutyAssignmentId = null;
 try {
   $readConnection = estab_auth_connect ($conf_4f_db);
   $readScope = estab_read_require_operational_scope (
@@ -607,15 +596,7 @@ try {
     $identity
   );
   $identity = $readScope ["identity"];
-  $dutyAssignmentId = estab_read_duty_assignment_id (
-    $identity ["duty_assignment_id"] ?? null
-  );
-  if ($dutyAssignmentId === null) {
-    throw new EstabReadPermissionException (
-      "Wählen Sie zuerst eine persönlich angenommene Dienstfunktion."
-    );
-  }
-  $hatTbbCapability = estab_dv_has_selected_capability (
+  $hasTbbCapability = estab_dv_has_account_capability (
     $readConnection,
     (int) $readScope ["incident"]["active_einsatz_id"],
     $identity,
@@ -627,7 +608,7 @@ try {
     $identity,
     "tbb"
   );
-  $berechtigt = $hatTbbCapability && $istTbbFuehrung;
+  $berechtigt = $hasTbbCapability && $istTbbFuehrung;
 } catch (EstabNoActiveIncidentException $exception) {
   estab_logbook_abort (
     409,
@@ -669,13 +650,12 @@ $tbbobj->tbb_funktion = $identity ["funktion"];
 $tbbobj->tbb_kuerzel = $identity ["kuerzel"];
 $tbbobj->tbb_benutzer = $identity ["benutzer"];
 $tbbobj->tbb_rolle = $identity ["rolle"];
-$tbbobj->tbb_duty_assignment_id = $dutyAssignmentId;
 
 if ($requestMethod === "POST") {
   if (!$berechtigt) {
     estab_logbook_abort (
       403,
-      "Nur eine aktive A/W-Funktion darf TBB-Einträge schreiben."
+      "Nur ein Konto mit der Funktion A/W darf TBB-Einträge schreiben."
     );
   }
   estab_logbook_require_csrf ($_SERVER, $_POST);
@@ -779,12 +759,8 @@ if (!$tbbobj->tbb_titel_gesetzt) {
   } else {
     echo "<aside class=\"estab-tool-notice estab-tool-notice-warning\">\n";
     echo "<strong>TBB schreibgeschützt.</strong>\n<p>";
-    echo $hatTbbCapability && !$istTbbFuehrung
-      ? "Eine andere angenommene A/W-Besetzung führt das Technische ".
-        "Betriebsbuch in dieser Schicht. Sie können alle Einträge lesen, ".
-        "aber keine parallelen Einträge anlegen."
-      : "Die ausgewählte Dienstfunktion darf das Technische Betriebsbuch ".
-        "lesen, aber nicht führen.";
+    echo "Ihre feste Kontofunktion darf das Technische Betriebsbuch lesen, ".
+      "besitzt aber nicht die Fachzuständigkeit für Einträge.";
     echo "</p>\n</aside>\n";
   }
   $tbbobj->printlist ($tbbobj->tbb_getdate ());

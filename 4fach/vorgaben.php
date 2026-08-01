@@ -99,8 +99,8 @@ if ($identity !== null) {
     } catch (EstabReadPermissionException $exception) {
         $readGateStatus = 403;
         $readGateMessage =
-            'Wählen Sie zuerst eine aktive, persönlich angenommene '
-            . 'Dienstfunktion.';
+            'Die feste Kontofunktion oder der optionale Schichtzugang ist '
+            . 'nicht mehr gültig.';
     } catch (Throwable $exception) {
         error_log(
             'eStab sidebar read gate failed: ' . $exception->getMessage()
@@ -122,7 +122,7 @@ if ($statusFragment && $selectedIdentity === null) {
     if ($method !== 'HEAD') {
         echo $readGateMessage !== ''
             ? $readGateMessage
-            : 'Aktive Dienstfunktion erforderlich.';
+            : 'Operativer Zugang nicht verfügbar.';
     }
     exit;
 }
@@ -320,17 +320,17 @@ $refreshScript = $selectedIdentity === null
         false,
         false
     ) ?>
-    <?= estab_sidebar_active_hat_markup($_SESSION, $selectedIdentity) ?>
+    <?= estab_sidebar_account_function_markup($_SESSION, $selectedIdentity) ?>
     <?php if ($identity !== null && $selectedIdentity === null): ?>
       <aside
         class="estab-sidebar-duty-required"
-        data-estab-duty-selection-required
         role="alert"
       >
-        <strong>Dienstfunktion auswählen</strong>
+        <strong>Operativer Zugriff nicht verfügbar</strong>
         <p>
-          Operative Daten und Aktionen werden erst nach persönlicher Annahme
-          und Auswahl einer aktiven Dienstfunktion angezeigt.
+          <?= estab_auth_html($readGateMessage !== ''
+              ? $readGateMessage
+              : 'Aktivieren Sie zuerst einen Einsatz.') ?>
         </p>
         <a
           class="estab-button estab-button-primary"
@@ -338,7 +338,7 @@ $refreshScript = $selectedIdentity === null
               estab_navigation_url_for_key('command-post')
           ) ?>"
           target="_top"
-        >Führungsstellenbetrieb öffnen</a>
+        >Status und Hinweise öffnen</a>
       </aside>
     <?php endif; ?>
     <?php if ($selectedIdentity !== null): ?>

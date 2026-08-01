@@ -53,11 +53,10 @@ function estab_attachment_origin_tasks(): array
 }
 
 /**
- * Return the authoritative identity fields used to bind an attachment flow.
+ * Return the authoritative account identity used to bind an attachment flow.
  *
- * A selected duty assignment is mandatory: the account alone is not an
- * operational identity and must not be able to resume another duty hat's
- * unfinished message form.
+ * Optional shift membership is deliberately absent from this context. A flow
+ * remains bound to the complete fixed account identity and active incident.
  */
 function estab_attachment_origin_identity(array $identity): array
 {
@@ -67,23 +66,12 @@ function estab_attachment_origin_identity(array $identity): array
         'vStab_funktion' => $identity['funktion'] ?? null,
         'vStab_rolle' => $identity['rolle'] ?? null,
     ]);
-    try {
-        $assignmentId = estab_incident_positive_id(
-            $identity['duty_assignment_id'] ?? null,
-            'Dienstbesetzungs-ID'
-        );
-    } catch (InvalidArgumentException $exception) {
-        throw new EstabAttachmentContextException(
-            'Der Anhangvorgang besitzt keine gültige Dienstbesetzung.',
-            previous: $exception
-        );
-    }
     if ($shape === null) {
         throw new EstabAttachmentContextException(
             'Der Anhangvorgang besitzt keine gültige Benutzeridentität.'
         );
     }
-    return $shape + ['duty_assignment_id' => $assignmentId];
+    return $shape;
 }
 
 function estab_attachment_origin_role_allowed(array $identity, string $task): bool
@@ -114,7 +102,6 @@ function estab_attachment_origin_role_allowed(array $identity, string $task): bo
  *   version:int,
  *   flow_token:string,
  *   incident_id:int,
- *   duty_assignment_id:int,
  *   benutzer:string,
  *   kuerzel:string,
  *   funktion:string,
@@ -207,10 +194,9 @@ function estab_attachment_origin_context_create(
     }
 
     return [
-        'version' => 1,
+        'version' => 2,
         'flow_token' => $flowToken,
         'incident_id' => $incidentId,
-        'duty_assignment_id' => $identity['duty_assignment_id'],
         'benutzer' => $identity['benutzer'],
         'kuerzel' => $identity['kuerzel'],
         'funktion' => $identity['funktion'],
@@ -234,7 +220,7 @@ function estab_attachment_origin_context_validate(
     array $request = [],
     bool $requireFlowToken = false
 ): array {
-    if (!is_array($stored) || ($stored['version'] ?? null) !== 1) {
+    if (!is_array($stored) || ($stored['version'] ?? null) !== 2) {
         throw new EstabAttachmentContextException(
             'Der gespeicherte Anhangvorgang ist ungültig oder abgelaufen.'
         );
@@ -244,10 +230,6 @@ function estab_attachment_origin_context_validate(
         $incidentId = estab_incident_positive_id($incidentId);
         $storedIncidentId = estab_incident_positive_id(
             $stored['incident_id'] ?? null
-        );
-        $storedAssignmentId = estab_incident_positive_id(
-            $stored['duty_assignment_id'] ?? null,
-            'Dienstbesetzungs-ID'
         );
     } catch (InvalidArgumentException $exception) {
         throw new EstabAttachmentContextException(
@@ -264,11 +246,10 @@ function estab_attachment_origin_context_validate(
         || !is_string($flowToken)
         || preg_match('/\A[a-f0-9]{32}\z/D', $flowToken) !== 1
         || $storedIncidentId !== $incidentId
-        || $storedAssignmentId !== $identity['duty_assignment_id']
     ) {
         throw new EstabAttachmentContextException(
             'Der gespeicherte Anhangvorgang gehört nicht zur aktuellen '
-            . 'Dienstfunktion oder zum aktiven Einsatz.'
+            . 'Kontofunktion oder zum aktiven Einsatz.'
         );
     }
     foreach (['benutzer', 'kuerzel', 'funktion', 'rolle'] as $field) {
@@ -1273,7 +1254,7 @@ function estab_attachment_require_operational_identity(
     array $identity,
     ?string $expectedCode = null
 ): void {
-    estab_dv_require_active_hat_for_operational_write(
+    estab_dv_require_operational_account(
         $connection,
         $incidentId,
         $identity

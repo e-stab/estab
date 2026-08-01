@@ -46,7 +46,7 @@ function estab_navigation_areas(): array
             'short_label' => 'Führungsstelle',
             'path' => '4fach/fuehrungsstelle.php',
             'access' => 'protected',
-            'hint' => 'Dienst · S6 · Melder',
+            'hint' => 'S6 · Fernmeldeplan · Melder',
         ],
         [
             'key' => 'message-overview',
@@ -303,34 +303,6 @@ function estab_navigation_require_session(
 }
 
 /**
- * Send an authenticated page request without a selected duty to its selector.
- *
- * Only safe page loads are redirected. A stale form submission remains a hard
- * failure and is never replayed against the duty-selection workflow.
- */
-function estab_navigation_select_duty(array $server = []): never
-{
-    $effectiveServer = $server === [] ? $_SERVER : $server;
-    $method = strtoupper((string) ($effectiveServer['REQUEST_METHOD'] ?? 'GET'));
-    if (in_array($method, ['GET', 'HEAD'], true)) {
-        header('Cache-Control: no-store');
-        header('Vary: Cookie');
-        header(
-            'Location: ' . estab_navigation_url_for_key('command-post'),
-            true,
-            303
-        );
-        exit;
-    }
-
-    http_response_code(403);
-    header('Content-Type: text/plain; charset=UTF-8');
-    header('Cache-Control: no-store');
-    echo 'Wählen Sie zuerst eine persönlich angenommene Dienstfunktion.';
-    exit;
-}
-
-/**
  * Render the validated destination as a form field for one login tab.
  *
  * Carrying the symbolic key in each form keeps parallel tabs independent.
@@ -444,11 +416,11 @@ function estab_navigation_validated_item(array $item): array
 }
 
 /**
- * Pure navigation hint for a server-validated selected duty identity.
+ * Pure navigation hint for the authenticated account identity.
  *
- * The endpoints repeat the authoritative DB capability check. Navigation only
- * suppresses misleading links: a present duty assignment id has already been
- * bound to the active accepted hat by app/auth.php.
+ * The endpoints repeat the authoritative capability check. Navigation only
+ * suppresses links that do not match the account's fixed function and role.
+ * Optional shift membership never changes operational permissions.
  */
 function estab_navigation_duty_access_allowed(
     array $item,
@@ -458,19 +430,8 @@ function estab_navigation_duty_access_allowed(
     if ($item['access'] === 'public') {
         return true;
     }
-    $assignment = is_array($identity)
-        ? ($identity['duty_assignment_id'] ?? null)
-        : null;
-    $hasSelectedHat = (is_int($assignment) && $assignment > 0)
-        || (
-            is_string($assignment)
-            && preg_match('/\A[1-9][0-9]{0,18}\z/D', $assignment) === 1
-        );
-    if (!$hasSelectedHat) {
-        // This is the only protected bootstrap area able to accept/select a
-        // personal duty assignment. No other operational link is useful or
-        // safe before that server-validated selection exists.
-        return $item['key'] === 'command-post';
+    if ($identity === null) {
+        return false;
     }
     if ($item['duty_access'] === '') {
         return true;

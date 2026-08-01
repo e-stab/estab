@@ -537,6 +537,7 @@
 
 .estab-sidebar-status,
 .estab-session-bar-sidebar,
+.estab-sidebar-account-function,
 .estab-sidebar-duty-hat,
 .estab-sidebar-workflow {
     background: #172f4d;
@@ -552,6 +553,7 @@
     padding: 0.75rem;
 }
 
+.estab-sidebar-account-function,
 .estab-sidebar-duty-hat {
     border-left: 4px solid #e5b247;
     display: grid;
@@ -559,6 +561,7 @@
     padding: 0.7rem 0.75rem;
 }
 
+.estab-sidebar-account-function span,
 .estab-sidebar-duty-hat span {
     color: #c5d6e8;
     font-size: 0.75rem;
@@ -566,6 +569,7 @@
     text-transform: uppercase;
 }
 
+.estab-sidebar-account-function a,
 .estab-sidebar-duty-hat a {
     color: #f3cf77;
     font-size: 0.78rem;
@@ -2410,6 +2414,10 @@ form[data-estab-incident-disabled="true"]::before {
     grid-template-columns: minmax(0, 1fr) auto;
 }
 
+.estab-tool-status-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .estab-tool-status-active {
     background: #e7f6eb;
     border-color: #2b7a42;
@@ -2435,6 +2443,15 @@ form[data-estab-incident-disabled="true"]::before {
     margin: 0;
 }
 
+.estab-shift-confirmation {
+    max-width: min(38rem, 100%);
+    min-width: 0;
+}
+
+.estab-shift-confirmation p {
+    overflow-wrap: anywhere;
+}
+
 .estab-tool-form {
     display: grid;
     gap: 1rem;
@@ -2454,7 +2471,8 @@ form[data-estab-incident-disabled="true"]::before {
     padding: 0;
 }
 
-.estab-tool-field {
+.estab-tool-field,
+.estab-tool-form > label {
     display: grid;
     gap: 0.35rem;
     min-width: 0;
@@ -2466,7 +2484,9 @@ form[data-estab-incident-disabled="true"]::before {
 
 .estab-tool-field > label,
 .estab-tool-field > span:first-child,
-.estab-tool-field legend {
+.estab-tool-field legend,
+.estab-tool-form > label,
+.estab-tool-form > fieldset > legend {
     color: #183454;
     font-weight: 800;
 }
@@ -2474,6 +2494,9 @@ form[data-estab-incident-disabled="true"]::before {
 .estab-tool-field input:not([type="checkbox"]):not([type="radio"]),
 .estab-tool-field textarea,
 .estab-tool-field select,
+.estab-tool-form > label > input:not([type="checkbox"]):not([type="radio"]),
+.estab-tool-form > label > textarea,
+.estab-tool-form > label > select,
 .estab-tool-action-stack input[type="password"] {
     background: #ffffff;
     border: 1px solid #7d91a7;
@@ -2490,9 +2513,35 @@ form[data-estab-incident-disabled="true"]::before {
     resize: vertical;
 }
 
+.estab-tool-form > label > textarea {
+    min-height: 7rem;
+    resize: vertical;
+}
+
+.estab-tool-form > fieldset {
+    border: 1px solid #c5d1dd;
+    border-radius: 9px;
+    display: grid;
+    gap: 0.65rem;
+    margin: 0;
+    min-width: 0;
+    padding: 0.8rem;
+}
+
+.estab-tool-form > fieldset > label {
+    align-items: flex-start;
+    color: #183454;
+    display: flex;
+    font-weight: 700;
+    gap: 0.55rem;
+}
+
 .estab-tool-field input:focus-visible,
 .estab-tool-field textarea:focus-visible,
 .estab-tool-field select:focus-visible,
+.estab-tool-form > label > input:focus-visible,
+.estab-tool-form > label > textarea:focus-visible,
+.estab-tool-form > label > select:focus-visible,
 .estab-tool-action-stack input:focus-visible {
     outline: 3px solid #e5b247;
     outline-offset: 2px;
@@ -2604,8 +2653,10 @@ form[data-estab-incident-disabled="true"]::before {
     display: inline-flex;
     font-size: 0.85rem;
     font-weight: 800;
+    max-width: 100%;
+    overflow-wrap: anywhere;
     padding: 0.3rem 0.65rem;
-    white-space: nowrap;
+    white-space: normal;
 }
 
 .estab-tool-badge-success {
@@ -3076,16 +3127,18 @@ form[data-estab-incident-disabled="true"]::before {
         overflow: hidden;
     }
 
+    .estab-tool-table-responsive .estab-tool-table tbody th,
     .estab-tool-table-responsive .estab-tool-table td {
         border-bottom: 1px solid #cbd5e1;
         padding: 0.75rem 1rem;
         text-align: left !important;
     }
 
-    .estab-tool-table-responsive .estab-tool-table td:last-child {
+    .estab-tool-table-responsive .estab-tool-table tr > *:last-child {
         border-bottom: 0;
     }
 
+    .estab-tool-table-responsive .estab-tool-table tbody th::before,
     .estab-tool-table-responsive .estab-tool-table td::before {
         color: #52657a;
         content: attr(data-label);

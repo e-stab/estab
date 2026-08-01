@@ -101,17 +101,23 @@ assert_body "data-estab-user-name=\"$test_name\""
 assert_body "data-estab-user-code=\"$test_code\""
 assert_body "data-estab-user-function=\"$test_function\""
 assert_body 'Der gewählte eStab-Bereich wird geöffnet'
-assert_body '4fach/fuehrungsstelle.php'
+assert_body '4fach/index.php'
 
 # The compatibility switch changes only the pre-authentication CSRF boundary.
-# A successful historical login must still enter the regular command-post
-# bootstrap and may not inherit or fabricate a selected duty assignment.
+# A successful historical login receives exactly the fixed function and role
+# stored on the account. Optional access shifts do not assign fachliche rights,
+# and no legacy duty assignment is selected or fabricated in the session.
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/fuehrungsstelle.php"
 assert_body 'data-estab-session-bar'
 assert_body "data-estab-user-name=\"$test_name\""
 assert_body 'data-estab-dv-operations'
-assert_body 'Noch nicht ausgewählt'
+assert_body 'Zugewiesene Funktion'
+if grep -Eq 'operation_action[^>]*select_hat|name="dienstbesetzung_id"' \
+    "$body"; then
+    printf 'Legacy login HTTP: obsolete duty-selection UI is visible\n' >&2
+    exit 1
+fi
 
 logout_csrf=$(sed -n \
     's/.*name="csrf_token" value="\([a-f0-9][a-f0-9]*\)".*/\1/p' \
@@ -121,18 +127,12 @@ if ! printf '%s' "$logout_csrf" | grep -Eq '^[a-f0-9]{64}$'; then
     exit 1
 fi
 
-# Generated forms are privileged operational data. They remain fail-closed
-# until this freshly authenticated session explicitly selects one personally
-# accepted duty assignment through the normal CSRF-protected workflow. The
-# page sends the browser to that selector instead of leaving a text dead end.
-assert_status 303 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+# Generated forms are available immediately to the authenticated fixed account
+# while the incident is active; a formal duty shift is not a prerequisite.
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/vordrucke.php"
-if ! grep -Eiq '^Location: .*/4fach/fuehrungsstelle[.]php[[:space:]]*$' \
-    "$headers"; then
-    printf 'Legacy login HTTP: missing selected-duty redirect\n' >&2
-    sed -n '1,30p' "$headers" >&2
-    exit 1
-fi
+assert_body 'Generierte Vordrucke'
+assert_body 'data-estab-session-bar'
 
 assert_status 303 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \

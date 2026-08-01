@@ -24,24 +24,24 @@ base_url=${ESTAB_TEST_BASE_URL:-http://127.0.0.1:8080}
 base_url=${base_url%/}
 workflow_marker=${ESTAB_TEST_WORKFLOW_MARKER:-}
 compose_engine=${ESTAB_TEST_COMPOSE_ENGINE:-docker}
-active_duty_state_file=${ESTAB_TEST_ACTIVE_DUTY_STATE_FILE:-}
+account_restore_state_file=${ESTAB_TEST_ACCOUNT_RESTORE_STATE_FILE:-${ESTAB_TEST_ACTIVE_DUTY_STATE_FILE:-}}
 
 if ! printf '%s' "$workflow_marker" | grep -Eq '^[A-Za-z0-9_:-]{1,120}$'; then
     echo 'Message workflow HTTP: workflow marker is missing or unsafe' >&2
     exit 1
 fi
-if [ -n "$active_duty_state_file" ]; then
-    case "$active_duty_state_file" in
+if [ -n "$account_restore_state_file" ]; then
+    case "$account_restore_state_file" in
         /*) ;;
         *)
-            echo 'Message workflow HTTP: active-duty state path must be absolute' >&2
+            echo 'Message workflow HTTP: account-restore state path must be absolute' >&2
             exit 1
             ;;
     esac
-    active_duty_state_dir=$(dirname -- "$active_duty_state_file")
-    if [ ! -d "$active_duty_state_dir" ] \
-        || [ ! -w "$active_duty_state_dir" ]; then
-        echo 'Message workflow HTTP: active-duty state directory is not writable' >&2
+    account_restore_state_dir=$(dirname -- "$account_restore_state_file")
+    if [ ! -d "$account_restore_state_dir" ] \
+        || [ ! -w "$account_restore_state_dir" ]; then
+        echo 'Message workflow HTTP: account-restore state directory is not writable' >&2
         exit 1
     fi
 fi
@@ -749,56 +749,18 @@ provision_and_login_user()
         "$base_url/4fach/mainindex.php"
     assert_no_runtime_error "login response for $function_name"
 
-    # A valid account login deliberately grants no operational access by
-    # itself. Before the test creates, personally accepts and activates the
-    # successor shift, only the narrow command-post bootstrap may be opened.
-    assert_status 200 "command-post bootstrap for $function_name" \
+    # The fixed account function is the fachliche permission source. Opening
+    # the command-post controller requires only this authenticated identity
+    # and the active incident, never a selected legacy duty assignment.
+    assert_status 200 "command-post page for $function_name" \
         --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         "$base_url/4fach/fuehrungsstelle.php"
-    assert_no_runtime_error "command-post bootstrap for $function_name"
+    assert_no_runtime_error "command-post page for $function_name"
     assert_session_identity "$name" "$code" "$function_name" "$role"
     assert_body 'data-estab-dv-operations' \
-        "command-post bootstrap marker for $function_name"
-    assert_body 'Noch nicht ausgewählt' \
-        "unselected duty function for $function_name"
-}
-
-select_personal_active_hat()
-{
-    hat_cookie_jar=$1
-    hat_user_code=$2
-    hat_function=$3
-    hat_label=$4
-
-    hat_assignment_id=$(db_sql <<SQL
-SELECT b.\`dienstbesetzung_id\`
-  FROM \`nv_dienstbesetzungen\` AS b
-  JOIN \`nv_dienstschichten\` AS s
-    ON s.\`dienstschicht_id\` = b.\`dienstschicht_id\`
- WHERE s.\`einsatz_id\` = ${active_incident_id}
-   AND s.\`status\` = 'AKTIV'
-   AND b.\`status\` = 'ANGENOMMEN'
-   AND BINARY b.\`benutzer_kuerzel\` = BINARY '${hat_user_code}'
-   AND BINARY b.\`funktion\` = BINARY '${hat_function}'
- ORDER BY b.\`dienstbesetzung_id\` DESC
- LIMIT 1;
-SQL
-)
-    assert_numeric "accepted active ${hat_label} assignment" \
-        "$hat_assignment_id"
-    assert_status 200 "load Führungsstellen page as ${hat_label}" \
-        --cookie "$hat_cookie_jar" --cookie-jar "$hat_cookie_jar" \
-        "$base_url/4fach/fuehrungsstelle.php"
-    assert_no_runtime_error \
-        "Führungsstellen page before ${hat_label} hat selection"
-    hat_csrf=$(csrf_from_body)
-    assert_status 303 "select personal active ${hat_label} hat" \
-        --cookie "$hat_cookie_jar" --cookie-jar "$hat_cookie_jar" \
-        --request POST \
-        --data-urlencode "csrf_token=$hat_csrf" \
-        --data-urlencode 'operation_action=select_hat' \
-        --data-urlencode "dienstbesetzung_id=$hat_assignment_id" \
-        "$base_url/4fach/fuehrungsstelle.php"
+        "command-post marker for $function_name"
+    assert_body 'Zugewiesene Funktion' \
+        "fixed account function for $function_name"
 }
 
 finish_ldf_incoming()
@@ -1434,37 +1396,10 @@ provision_and_login_user "$s6_cookies" "$s6_name" "$s6_code" S6 Stab
 provision_and_login_user "$pol_cookies" "$pol_name" "$pol_code" POL FB
 provision_and_login_user "$si_cookies" "$si_name" "$si_code" Si Stab
 
-# Establish the production write prerequisite through the complete duty-domain
-# lifecycle. Each account personally accepts its assigned hat before the shift
-# can be activated; the workflow test never disables the operational guard.
-ESTAB_TEST_SHIFT_AW_CODE=$aw_code \
-ESTAB_TEST_SHIFT_LDF_CODE=$ldf_code \
-ESTAB_TEST_SHIFT_SI_CODE=$si_code \
-ESTAB_TEST_SHIFT_S1_CODE=$s1_code \
-ESTAB_TEST_SHIFT_S2_CODE=$s2_code \
-ESTAB_TEST_SHIFT_S3_CODE=$s3_code \
-ESTAB_TEST_SHIFT_S6_CODE=$s6_code \
-ESTAB_TEST_SHIFT_POL_CODE=$pol_code \
-"$compose_engine" compose run --rm --no-deps -T \
-    --env "COMPOSE_PROJECT_NAME=$project_name" \
-    --env ESTAB_TEST_SHIFT_ALLOW_MUTATION=true \
-    --env ESTAB_TEST_SHIFT_AW_CODE \
-    --env ESTAB_TEST_SHIFT_LDF_CODE \
-    --env ESTAB_TEST_SHIFT_SI_CODE \
-    --env ESTAB_TEST_SHIFT_S1_CODE \
-    --env ESTAB_TEST_SHIFT_S2_CODE \
-    --env ESTAB_TEST_SHIFT_S3_CODE \
-    --env ESTAB_TEST_SHIFT_S6_CODE \
-    --env ESTAB_TEST_SHIFT_POL_CODE \
-    --volume "$repo_root:/workspace:ro" \
-    --workdir /workspace \
-    app php -d auto_prepend_file= tests/integration/activate_http_shift.php
-
-# Cross the real authenticated Führungsstellen controller before the remaining
-# message workflow uses its S6 route fixture. This proves that CSRF, personal
-# hat ownership, PRG redirects, the selected-hat session binding and the
-# immutable S6 plan audit all hold at the HTTP boundary rather than only in
-# direct domain calls.
+# The workflow accounts deliberately have neither historical duty assignments
+# nor optional access-shift memberships. This proves the default case: an
+# unassigned account may work, its fixed function supplies the fachliche
+# permissions, and only the active incident is a mandatory operational gate.
 active_incident_id=$(db_sql <<'SQL'
 SELECT `active_einsatz_id`
   FROM `nv_einsatz_status`
@@ -1473,78 +1408,56 @@ SQL
 )
 assert_numeric 'active incident for Führungsstellen HTTP workflow' \
     "$active_incident_id"
-s6_assignment_id=$(db_sql <<SQL
-SELECT b.\`dienstbesetzung_id\`
-  FROM \`nv_dienstbesetzungen\` AS b
-  JOIN \`nv_dienstschichten\` AS s
-    ON s.\`dienstschicht_id\` = b.\`dienstschicht_id\`
- WHERE s.\`einsatz_id\` = ${active_incident_id}
-   AND s.\`status\` = 'AKTIV'
-   AND b.\`status\` = 'ANGENOMMEN'
-   AND BINARY b.\`benutzer_kuerzel\` = BINARY '${s6_code}'
-   AND b.\`funktion\` = 'S6'
- ORDER BY b.\`dienstbesetzung_id\` DESC
- LIMIT 1;
-SQL
-)
-assert_numeric 'accepted active S6 assignment' "$s6_assignment_id"
+workflow_account_codes="'${aw_code}','${ldf_code}','${si_code}','${s1_code}','${s2_code}','${s3_code}','${s6_code}','${pol_code}'"
+assert_db_equals 0 'workflow accounts have no legacy duty assignments' \
+    "SELECT COUNT(*) FROM \`nv_dienstbesetzungen\` WHERE \`benutzer_kuerzel\` IN (${workflow_account_codes});"
+assert_db_equals 0 'workflow accounts have no optional access-shift memberships' \
+    "SELECT COUNT(*) FROM \`nv_zugangsschicht_mitglieder\` WHERE \`benutzer_kuerzel\` IN (${workflow_account_codes}) AND \`entfernt_am\` IS NULL;"
 
-assert_db_equals 0 'unselected S6 assignment audit baseline' \
-    "SELECT COUNT(*) FROM \`nv_betriebsereignisse\` WHERE \`einsatz_id\`=${active_incident_id} AND \`objekttyp\`='DIENSTBESETZUNG' AND \`objekt_id\`=${s6_assignment_id} AND \`aktion\`='active_hat_selected';"
-assert_status 403 'reject Führungsstellen POST without CSRF' \
+# Cross the real authenticated Führungsstellen controller before the remaining
+# workflow. CSRF and the fixed S6 capability are enforced at the HTTP boundary
+# even though no duty assignment or access-shift membership is selected.
+csrf_probe_plan_origin="CI_HTTP_CSRF_${identity_seed}"
+assert_status 403 'reject S6 plan POST without CSRF' \
     --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
     --request POST \
-    --data-urlencode 'operation_action=select_hat' \
-    --data-urlencode "dienstbesetzung_id=$s6_assignment_id" \
+    --data-urlencode 'operation_action=create_plan' \
+    --data-urlencode "herkunft=$csrf_probe_plan_origin" \
+    --data-urlencode 'gueltig_ab=2026-01-01T00:00' \
+    --data-urlencode 'gueltig_bis=2099-12-31T23:59' \
+    --data-urlencode 'betriebsleitung=CSRF muss sperren' \
     "$base_url/4fach/fuehrungsstelle.php"
-assert_db_equals 0 'CSRF-rejected S6 selection has no audit effect' \
-    "SELECT COUNT(*) FROM \`nv_betriebsereignisse\` WHERE \`einsatz_id\`=${active_incident_id} AND \`objekttyp\`='DIENSTBESETZUNG' AND \`objekt_id\`=${s6_assignment_id} AND \`aktion\`='active_hat_selected';"
+assert_db_equals 0 'CSRF-rejected S6 plan was not persisted' \
+    "SELECT COUNT(*) FROM \`nv_fernmeldeplaene\` WHERE \`einsatz_id\`=${active_incident_id} AND BINARY \`herkunft\`=BINARY '${csrf_probe_plan_origin}';"
 
 assert_status 200 'load Führungsstellen page as S1' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
     "$base_url/4fach/fuehrungsstelle.php"
 assert_no_runtime_error 'S1 Führungsstellen page'
 s1_operations_csrf=$(csrf_from_body)
-assert_status 403 'reject selecting another account S6 hat' \
+s1_probe_plan_origin="CI_HTTP_S1_${identity_seed}"
+assert_status 403 'reject S6 plan creation by fixed S1 account' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
     --request POST \
     --data-urlencode "csrf_token=$s1_operations_csrf" \
-    --data-urlencode 'operation_action=select_hat' \
-    --data-urlencode "dienstbesetzung_id=$s6_assignment_id" \
+    --data-urlencode 'operation_action=create_plan' \
+    --data-urlencode "herkunft=$s1_probe_plan_origin" \
+    --data-urlencode 'gueltig_ab=2026-01-01T00:00' \
+    --data-urlencode 'gueltig_bis=2099-12-31T23:59' \
+    --data-urlencode 'betriebsleitung=Nur S6 darf speichern' \
     "$base_url/4fach/fuehrungsstelle.php"
-assert_db_equals 0 'foreign S6 hat selection has no audit effect' \
-    "SELECT COUNT(*) FROM \`nv_betriebsereignisse\` WHERE \`einsatz_id\`=${active_incident_id} AND \`objekttyp\`='DIENSTBESETZUNG' AND \`objekt_id\`=${s6_assignment_id} AND \`aktion\`='active_hat_selected';"
+assert_db_equals 0 'S1 account created no S6 plan' \
+    "SELECT COUNT(*) FROM \`nv_fernmeldeplaene\` WHERE \`einsatz_id\`=${active_incident_id} AND BINARY \`herkunft\`=BINARY '${s1_probe_plan_origin}';"
 
 assert_status 200 'load Führungsstellen page as S6' \
     --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
     "$base_url/4fach/fuehrungsstelle.php"
-assert_no_runtime_error 'S6 Führungsstellen page before hat selection'
-s6_operations_csrf=$(csrf_from_body)
-assert_status 303 'select personal active S6 hat' \
-    --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
-    --request POST \
-    --data-urlencode "csrf_token=$s6_operations_csrf" \
-    --data-urlencode 'operation_action=select_hat' \
-    --data-urlencode "dienstbesetzung_id=$s6_assignment_id" \
-    "$base_url/4fach/fuehrungsstelle.php"
-assert_db_equals "${s6_code}|S6|${s6_assignment_id}" \
-    'selected S6 hat immutable audit event' \
-    "SELECT CONCAT(\`akteur_kuerzel\`, '|', \`akteur_funktion\`, '|', JSON_UNQUOTE(JSON_EXTRACT(\`details\`, '$.assignment_id'))) FROM \`nv_betriebsereignisse\` WHERE \`einsatz_id\`=${active_incident_id} AND \`objekttyp\`='DIENSTBESETZUNG' AND \`objekt_id\`=${s6_assignment_id} AND \`aktion\`='active_hat_selected' ORDER BY \`sequenz\` DESC LIMIT 1;"
-
-# Every following Fachschreibweg runs with the exact, personally selected
-# assignment in its own PHP session. An accepted primary function alone is
-# deliberately insufficient for either reads or operational mutations.
-select_personal_active_hat "$aw_cookies" "$aw_code" A/W A/W
-select_personal_active_hat "$ldf_cookies" "$ldf_code" LdF LdF
-select_personal_active_hat "$s1_cookies" "$s1_code" S1 S1
-select_personal_active_hat "$s2_cookies" "$s2_code" S2 S2
-select_personal_active_hat "$s3_cookies" "$s3_code" S3 S3
-select_personal_active_hat "$pol_cookies" "$pol_code" POL POL
-select_personal_active_hat "$si_cookies" "$si_code" Si Si
+assert_no_runtime_error 'S6 Führungsstellen page with fixed account function'
+assert_body 'S6 · Stab' 'fixed S6 account function'
 
 # The attachment controller is a direct endpoint as well as an included
-# message workflow. A selected hat alone must not grant upload authority to
-# LdF or Si when their menu route deliberately offers no attachment action.
+# message workflow. The fixed LdF and Si account functions must not grant
+# upload authority when their menu route offers no attachment action.
 assert_status 403 'reject direct attachment administration as LdF' \
     --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
     "$base_url/4fach/anhang.php"
@@ -1693,8 +1606,6 @@ assert_body_absent 'name="fm_ausgang_x"' 'LdF must not receive A/W output action
 assert_body_absent 'name="stab_schreiben_x"' 'LdF must not receive staff action'
 assert_db_equals 1 'online Si fixture' \
     "SELECT COUNT(*) FROM \`nv_benutzer\` WHERE \`kuerzel\`='${si_code}' AND \`funktion\`='Si' AND \`aktiv\`=1;"
-assert_db_equals 1 'active-duty online Si fixture' \
-    "SELECT COUNT(*) FROM \`nv_benutzer\` AS account JOIN \`nv_dienstbesetzungen\` AS assignment ON BINARY assignment.\`benutzer_kuerzel\`=BINARY account.\`kuerzel\` JOIN \`nv_dienstschichten\` AS duty_shift ON duty_shift.\`dienstschicht_id\`=assignment.\`dienstschicht_id\` WHERE duty_shift.\`einsatz_id\`=${active_incident_id} AND duty_shift.\`status\`='AKTIV' AND assignment.\`status\`='ANGENOMMEN' AND BINARY assignment.\`funktion\`=BINARY 'Si' AND account.\`aktiv\`=1 AND account.\`estab_gesperrt\`=0;"
 
 # Prove the real FB profile before using POL as an automatic recipient. A
 # Fachberater gets the staff writer/reader controls, but neither the Si nor the
@@ -3157,11 +3068,11 @@ assert_body 'Übermittlungsweg' 'tracking transport-path column'
 assert_body "Funk · ${telecom_route_b_text}" \
     'tracking actual outgoing transport path'
 
-if [ -n "$active_duty_state_file" ]; then
+if [ -n "$account_restore_state_file" ]; then
     umask 077
     printf '%s\n%s\n%s\n' "$s1_name" "$s1_code" S1 \
-        >"$active_duty_state_file"
-    chmod 0600 "$active_duty_state_file"
+        >"$account_restore_state_file"
+    chmod 0600 "$account_restore_state_file"
 fi
 
 printf '%s\n' \

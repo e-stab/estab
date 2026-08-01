@@ -2236,15 +2236,105 @@ final class EstabIncidentPdf extends vordruckaspdf
      * @param list<array<string,mixed>> $assignments
      * @param list<array<string,mixed>> $handovers
      * @param list<array<string,mixed>> $handoverRequests
+     * @param list<array<string,mixed>> $accessShifts
+     * @param list<array<string,mixed>> $accessShiftMemberships
      */
     public function addDutyRecords(
         array $shifts,
         array $assignments,
         array $handovers,
-        array $handoverRequests = []
+        array $handoverRequests = [],
+        array $accessShifts = [],
+        array $accessShiftMemberships = []
     ): void {
         $this->beginSection('Dienstorganisation');
-        $this->heading('Dienstschichten, Besetzungen und Übergaben', 1);
+        $this->heading('Optionale Zugangsschichten und historische Dienstnachweise', 1);
+        $this->paragraph(
+            'Zugangsschichten schalten ausschließlich die Anmeldung '
+            . 'zugeordneter Konten gemeinsam frei oder aus. Fachrechte '
+            . 'stammen aus der festen Kontofunktion; operative Eingaben '
+            . 'benötigen keine aktive Schicht.'
+        );
+
+        $this->heading('Optionale Zugangsschichten', 2);
+        if ($accessShifts === []) {
+            $this->paragraph(
+                'Für diesen Einsatz sind keine optionalen Zugangsschichten '
+                . 'vorhanden.'
+            );
+        }
+        foreach ($accessShifts as $shift) {
+            if (!is_array($shift)) {
+                throw new EstabIncidentPdfInputException(
+                    'Access shifts must be arrays.'
+                );
+            }
+            $this->recordHeading(
+                'Zugangsschicht '
+                    . (string) ($shift['zugangsschicht_id'] ?? '')
+                    . ' · '
+                    . (string) ($shift['bezeichnung'] ?? '')
+            );
+            foreach ([
+                'Zugangsschicht-ID' => 'zugangsschicht_id',
+                'Einsatz-ID' => 'einsatz_id',
+                'Bezeichnung' => 'bezeichnung',
+                'Planbeginn' => 'beginn',
+                'Planende' => 'ende',
+                'Gemeinsamer Zugang' => 'zugang_aktiv',
+                'Erstellt am' => 'erstellt_am',
+                'Erstellt von' => 'erstellt_von',
+                'Geändert am' => 'geaendert_am',
+                'Geändert von' => 'geaendert_von',
+            ] as $label => $field) {
+                $value = $shift[$field] ?? '';
+                if ($field === 'zugang_aktiv') {
+                    $value = (int) $value === 1 ? 'Aktiv' : 'Deaktiviert';
+                }
+                $this->definition($label, $value);
+            }
+            $this->Ln(3);
+        }
+
+        $this->heading('Zuordnungen zu Zugangsschichten', 2);
+        if ($accessShiftMemberships === []) {
+            $this->paragraph('Es sind keine Schichtzuordnungen vorhanden.');
+        }
+        foreach ($accessShiftMemberships as $membership) {
+            if (!is_array($membership)) {
+                throw new EstabIncidentPdfInputException(
+                    'Access-shift memberships must be arrays.'
+                );
+            }
+            $this->recordHeading(
+                'Zuordnung '
+                    . (string) (
+                        $membership['zugangsschicht_mitglied_id'] ?? ''
+                    )
+                    . ' · '
+                    . (string) ($membership['benutzer_kuerzel'] ?? '')
+            );
+            foreach ([
+                'Zuordnungs-ID' => 'zugangsschicht_mitglied_id',
+                'Zugangsschicht-ID' => 'zugangsschicht_id',
+                'Schichtbezeichnung' => 'schichtbezeichnung',
+                'Benutzerkürzel' => 'benutzer_kuerzel',
+                'Zugeordnet am' => 'zugeordnet_am',
+                'Zugeordnet von' => 'zugeordnet_von',
+                'Entfernt am' => 'entfernt_am',
+                'Entfernt von' => 'entfernt_von',
+            ] as $label => $field) {
+                $this->definition($label, $membership[$field] ?? '');
+            }
+            $this->Ln(3);
+        }
+
+        $this->heading('Historischer Dienstbetrieb (Legacy-Nachweis)', 2);
+        $this->paragraph(
+            'Die folgenden früheren Dienstschichten, Funktionsbesetzungen '
+            . 'und Übergaben bleiben unverändert als historischer Nachweis '
+            . 'erhalten. Sie steuern keine aktuelle Berechtigung.'
+        );
 
         $this->heading('Dienstschichten', 2);
         if ($shifts === []) {

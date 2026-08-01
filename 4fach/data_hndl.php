@@ -244,6 +244,10 @@ function check_save_user (array $loginData, string &$loginError) {
         $loginError = "Dieses Konto ist einer anderen Funktion zugeordnet. Wählen Sie die administrativ zugewiesene Funktion.";
         return true;
       }
+      if (!estab_auth_shift_access_allowed ($connection, $login ["kuerzel"])) {
+        $loginError = "Der Zugang dieses Kontos ist über die optionale Schichtplanung derzeit deaktiviert. Wenden Sie sich an die zuständige Stelle.";
+        return true;
+      }
 
       // DDL commits implicitly in MariaDB. It therefore runs on its own
       // connection, under a function-scoped advisory lock, before the account
@@ -672,8 +676,6 @@ function check_and_save ($data, $activeCommandPostName){
     "kuerzel" => $sessionCode,
     "funktion" => $sessionFunction,
     "rolle" => $sessionRole,
-    "duty_assignment_id" =>
-      $attachmentReadIdentity ["duty_assignment_id"] ?? null,
   );
   $attachmentAuthorizer = static function (
     mysqli $connection,
@@ -693,7 +695,7 @@ function check_and_save ($data, $activeCommandPostName){
     );
   };
 
-  // Local marks and the local sender identity are signed session attributes.
+  // Local marks and the local sender identity are signed account attributes.
   // The browser may display them, but it can neither choose nor forge them.
   switch ($data ["task"]) {
     case "FM-Eingang":
@@ -711,7 +713,7 @@ function check_and_save ($data, $activeCommandPostName){
     case "Stab_gesprnoti":
       // A conversation note is completed by its author without pretending
       // that Si or LdF reviewed it. All persisted local identity fields are
-      // derived from the accepted function hat, never from the browser.
+      // derived from the fixed account function, never from the browser.
       $data ["01_zeichen"] = $sessionCode;
       $data ["13_abseinheit"] = $activeCommandPostName;
       $data ["14_zeichen"] = $sessionCode;

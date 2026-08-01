@@ -114,9 +114,9 @@ $handbookUpdated = '1. August 2026';
         <a href="#nachrichtenlauf"><strong>Nachricht bearbeiten</strong><span>A/W, Si, LdF oder Verfasser</span></a>
         <a href="#etb"><strong>ETB führen</strong><span>Ereignisse, Bezüge und Korrekturen</span></a>
         <a href="#ttb"><strong>TBB führen</strong><span>Fernmeldebetrieb dokumentieren</span></a>
-        <a href="#vorbereitung"><strong>Einsatz vorbereiten</strong><span>Administration und Dienstschicht</span></a>
+        <a href="#vorbereitung"><strong>Einsatz vorbereiten</strong><span>Administration und optionale Zugangsgruppen</span></a>
         <a href="#export"><strong>Dokumentation ausgeben</strong><span>PDF-Dossier oder ZIP-Export</span></a>
-        <a href="#probleme"><strong>Problem lösen</strong><span>Login, Einsatz, Hut oder Upload</span></a>
+        <a href="#probleme"><strong>Problem lösen</strong><span>Login, Einsatz, Zugang oder Upload</span></a>
       </div>
     </section>
 
@@ -179,33 +179,28 @@ $handbookUpdated = '1. August 2026';
 
         <article id="schnellstart" class="estab-handbook-chapter"
           data-estab-handbook-section
-          data-handbook-keywords="erste Schritte Login anmelden Zuweisung annehmen Hut auswählen Einsatz Schicht">
+          data-handbook-keywords="erste Schritte Login anmelden feste Funktion Einsatz optionale Zugangsschicht">
           <header><span>02</span><div><p>Der sichere Einstieg</p><h2>In 5 Minuten startklar</h2></div></header>
           <ol class="estab-handbook-steps">
             <li><strong>Mit bestehendem Konto anmelden.</strong> Öffnen Sie die
               <a href="<?= $href('login') ?>">Anmeldeseite</a> und verwenden
               Sie Name, Kürzel, Funktion und Kennwort Ihres Funktionskontos.</li>
-            <li><strong>Dienstzuweisung annehmen.</strong> Öffnen Sie den
-              <a href="<?= $href('command_post') ?>">Führungsstellenbetrieb</a>.
-              Eine administrative Zuweisung wird erst durch Ihre persönliche
-              Annahme zu einer wirksamen Besetzung.</li>
-            <li><strong>Aktiven Funktions-Hut wählen.</strong> Wenn Sie mehrere
-              Funktionen übernehmen, wählen Sie genau die Funktion, in deren
-              Verantwortung Sie jetzt arbeiten.</li>
-            <li><strong>Status prüfen.</strong> Oben müssen Ihr Name, Funktion,
-              Rolle, Führungsstellenname, aktiver Einsatz und aktive
-              Dienstschicht erscheinen.</li>
+            <li><strong>Feste Funktion prüfen.</strong> Die Kontofunktion und die
+              daraus serverseitig abgeleitete Rolle stehen nach der Anmeldung
+              fest. Eine zusätzliche Hutauswahl gibt es nicht.</li>
+            <li><strong>Status prüfen.</strong> Oben müssen Ihr Name, feste
+              Funktion, Rolle, Führungsstellenname und aktiver Einsatz
+              erscheinen.</li>
             <li><strong>Arbeitsbereich öffnen.</strong> Wechseln Sie über die
               obere Navigation zum Nachrichtenvordruck, ETB, TBB oder in den
-              für Ihren Hut freigegebenen Spezialbereich.</li>
+              für Ihre Kontofunktion freigegebenen Spezialbereich.</li>
           </ol>
           <div class="estab-handbook-callout estab-handbook-callout-danger">
             <strong>Roter Warnhinweis</strong>
-            <p>Ohne aktiven Einsatz, bestätigten Führungsstellennamen, aktive
-              Schicht oder gewählten angenommenen Hut sind operative Eingaben
-              absichtlich gesperrt. Wenden Sie sich dann an die Einsatz- oder
-              Systemadministration; versuchen Sie nicht, die Sperre über eine
-              andere URL zu umgehen.</p>
+            <p>Ohne aktiven Einsatz oder bestätigten Führungsstellennamen sind
+              operative Eingaben absichtlich gesperrt. Eine aktive Schicht ist
+              nicht erforderlich. Wenden Sie sich bei einem deaktivierten
+              Gruppenzugang oder gesperrten Konto an die Administration.</p>
           </div>
           <h3>Bestehendes oder neues Konto?</h3>
           <p>Im Regelbetrieb legt die zuständige Stelle Konten in der
@@ -214,18 +209,17 @@ $handbookUpdated = '1. August 2026';
             neues Konto. „Neues Konto anlegen“ erscheint nur, wenn die
             öffentliche Selbstregistrierung ausdrücklich freigeschaltet wurde.
             Sie verlangt Name, ein eindeutiges Kürzel, die zugeteilte Funktion
-            und zweimal dasselbe Kennwort. Auch ein so angelegtes Konto erhält
-            erst durch eine persönlich angenommene Dienstzuweisung operative
-            Rechte.</p>
+            und zweimal dasselbe Kennwort. Fachrechte folgen ausschließlich
+            aus dieser festen Kontofunktion und der abgeleiteten Rolle.</p>
         </article>
 
         <article id="navigation" class="estab-handbook-chapter"
           data-estab-handbook-section
           data-handbook-keywords="Menü obere Leiste Sidebar Status Benutzer online inaktiv logout abmelden 15 Minuten 12 Stunden ungespeichert">
           <header><span>03</span><div><p>Überall dieselbe Orientierung</p><h2>Navigation, Status und Sitzung</h2></div></header>
-          <p>Die obere Leiste zeigt immer, als wer Sie angemeldet sind. Nach der
-            Hutauswahl enthält sie Kürzel, Funktion und Rolle sowie den aktiven
-            Einsatz, die Führungsstelle und den Dienststatus. Der sichtbare
+          <p>Die obere Leiste zeigt immer, als wer Sie angemeldet sind. Sie
+            enthält Kürzel, feste Funktion und Rolle sowie den aktiven Einsatz
+            und die Führungsstelle. Der sichtbare
             Menüpunkt ist markiert; nicht berechtigte Spezialbereiche werden
             nicht angeboten.</p>
           <ul>
@@ -249,36 +243,37 @@ $handbookUpdated = '1. August 2026';
 
         <article id="rollen" class="estab-handbook-chapter"
           data-estab-handbook-section
-          data-handbook-keywords="S1 S2 S3 S4 S5 S6 Fachberater Si Sichter LdF Leiter Fernmeldebetrieb A/W Aufnahme Weitergabe ETB Admin Rollen Rechte Mehrfachhut">
+          data-handbook-keywords="S1 S2 S3 S4 S5 S6 Fachberater Si Sichter LdF Leiter Fernmeldebetrieb A/W Aufnahme Weitergabe ETB Admin feste Funktion Rolle Rechte">
           <header><span>04</span><div><p>Verantwortung statt bloßer Menüfreigabe</p><h2>Rollen und Rechte</h2></div></header>
-          <p>Ein Konto, eine Dienstbesetzung und der aktuell ausgewählte Hut
-            sind drei verschiedene Dinge. Rechte entstehen erst aus der
-            servergeprüften Kombination aus Konto, aktivem Einsatz, aktiver
-            Schicht und persönlich angenommener Besetzung.</p>
+          <p>Jedes Konto besitzt genau eine feste Funktion; die Rolle wird
+            serverseitig daraus abgeleitet. Diese Werte sind die alleinige
+            Quelle der Fachrechte. Für operative Arbeit muss ein Einsatz aktiv
+            sein, eine Dienst- oder Zugangsschicht dagegen nicht.</p>
           <div class="estab-handbook-table-wrap" role="region" aria-label="Rollenübersicht" tabindex="0">
             <table>
               <thead><tr><th>Rolle/Funktion</th><th>Hauptaufgaben in eStab</th></tr></thead>
               <tbody>
                 <tr><td>S1-S6, Fachberatung, Verbindung</td><td>Nachrichten lesen, eigene Ausgänge verfassen, antworten, weiterleiten, Gesprächsnotizen sowie gelesen/erledigt und Kategorien pflegen.</td></tr>
-                <tr><td>S2</td><td>Verbindliche Lage-/Dokumentationsfunktion und einziges Rotkopieziel; Meldungsübersicht. Schreibt ETB nur, wenn kein vorrangiger ETB-Hut bestimmt ist.</td></tr>
+                <tr><td>S2</td><td>Verbindliche Lage-/Dokumentationsfunktion und einziges Rotkopieziel; Meldungsübersicht und ETB-Schreibrecht.</td></tr>
                 <tr><td>ETB</td><td>Eigenständige Buchführungsfunktion. Daraus folgen weder S2-Rotkopien noch allgemeine Lageberechtigungen.</td></tr>
                 <tr><td>Si</td><td>Formale Sichtung aller Ausgänge; Eingang bewerten und Verteiler festlegen; begründete Rückgabe und zweite Sichtung. Es gibt keine Autosichtung.</td></tr>
                 <tr><td>S6</td><td>Zusätzlich zu normalen Stabsaufgaben den versionierten Fernmeldeplan erstellen, Wege pflegen und freigeben.</td></tr>
                 <tr><td>LdF</td><td>Eingangsweg bestätigen, Rufnamen übersetzen, Ausgangsweg disponieren, Weg-Rückgaben und Melderaufträge führen sowie Nachweisung lesen.</td></tr>
-                <tr><td>A/W</td><td>Eingang aufnehmen, Ausgänge tatsächlich befördern, Anhänge bearbeiten, zweite Sichtung und Nachweisung; die designierte erste A/W-Besetzung führt das TBB.</td></tr>
-                <tr><td>Technische Administration</td><td>Einsätze, Konten, Matrix, Schichten, Exporte und Systemstatus. Dieser Zugang ist vom Funktionskonto getrennt.</td></tr>
+                <tr><td>A/W</td><td>Eingang aufnehmen, Ausgänge tatsächlich befördern, Anhänge bearbeiten, zweite Sichtung und Nachweisung; A/W führt das TBB.</td></tr>
+                <tr><td>Technische Administration</td><td>Einsätze, Konten, Matrix, optionale Zugangsschichten, Exporte und Systemstatus. Dieser Zugang ist vom Funktionskonto getrennt.</td></tr>
               </tbody>
             </table>
           </div>
-          <p>Eine Person darf mehrere Hüte besitzen. Jeder Wechsel ist bewusst
-            vorzunehmen; eine Aktion wird stets dem ausgewählten Hut und der
-            konkreten Dienstbesetzung zugeordnet.</p>
+          <p>Eine Funktionsänderung ist ausschließlich in der
+            Benutzerverwaltung möglich und beendet eine bestehende Sitzung.
+            Organisatorische Funktionskombinationen werden mit getrennten
+            persönlichen Konten abgebildet, nicht durch einen Sitzungswechsel.</p>
         </article>
 
         <article id="vorbereitung" class="estab-handbook-chapter"
           data-estab-handbook-section
-          data-handbook-keywords="Einsatz anlegen aktivieren Führungsstellenname Bedarfsträger Leitung Ausgangslage Benutzer Dienstschicht planen besetzen annehmen eröffnen">
-          <header><span>05</span><div><p>Vor der ersten Nachricht</p><h2>Einsatz und Dienstbetrieb vorbereiten</h2></div></header>
+          data-handbook-keywords="Einsatz anlegen aktivieren Führungsstellenname Bedarfsträger Leitung Ausgangslage Benutzer optionale Zugangsschicht Gruppe aktivieren deaktivieren">
+          <header><span>05</span><div><p>Vor der ersten Nachricht</p><h2>Einsatz und Zugänge vorbereiten</h2></div></header>
           <ol class="estab-handbook-steps">
             <li>Unter <a href="<?= $href('incidents') ?>">Einsätze verwalten</a>
               Kennung, Einsatzbezeichnung, Beginn, Bedarfsträger,
@@ -288,18 +283,22 @@ $handbookUpdated = '1. August 2026';
             <li>Unter <a href="<?= $href('users') ?>">Benutzer verwalten</a>
               persönliche Konten für mindestens S2, Si, S6, LdF und A/W
               anlegen beziehungsweise passend zuweisen.</li>
-            <li>Unter <a href="<?= $href('admin_command_post') ?>">Dienstschichten</a>
-              eine geplante Schicht anlegen und tatsächliche Personen den
-              Funktionen zuweisen.</li>
-            <li>Jede Person meldet sich selbst an und nimmt ihre Zuweisung im
-              <a href="<?= $href('command_post') ?>">Führungsstellenbetrieb</a>
-              an.</li>
-            <li>Wenn alle Pflichtfunktionen angenommen sind, aktiviert die
-              Administration die Schicht. Dabei werden ETB und TBB einmalig
-              mit der lokalen Nummer 1 eröffnet.</li>
+            <li>Optional unter <a href="<?= $href('admin_command_post') ?>">Zugangsschichten</a>
+              Gruppen anlegen, Konten zuordnen und Zugänge gemeinsam
+              aktivieren. Unzugeordnete Konten bleiben zugelassen.</li>
+            <li>Jede Person meldet sich selbst an. Bei mehreren
+              Gruppenzuordnungen genügt für den Kontozugang eine aktive
+              Zugangsschicht; daraus entsteht kein Fach- oder Schreibrecht.</li>
             <li>S6 erstellt und veröffentlicht den ersten Fernmeldeplan, bevor
               LdF einen Ausgang auf einen verbindlichen Weg disponiert.</li>
           </ol>
+          <div class="estab-handbook-callout">
+            <strong>Zugangsschicht ist keine Berechtigungsschicht</strong>
+            <p>Sie verändert weder Funktion noch Rolle und sperrt keine Eingabe,
+              wenn gar keine Schicht angelegt wurde. Aktivieren meldet niemanden
+              an; Deaktivieren kann Gruppensitzungen widerrufen. Eine manuelle
+              Kontosperre bleibt unabhängig und hat Vorrang.</p>
+          </div>
           <div class="estab-handbook-callout">
             <strong>Führungsstellenname ist kein Umgebungswert</strong>
             <p>Er gehört zum Einsatz und wird als lokale Anschrift und
@@ -402,7 +401,7 @@ $handbookUpdated = '1. August 2026';
             Bildvorschau prüfen die Berechtigung sowie den unveränderlichen
             SHA-256-/Größennachweis erneut.</p>
           <p><a href="<?= $href('attachments') ?>">Anlagenbereich öffnen</a>
-            (eine aktive Dienstfunktion ist erforderlich).</p>
+            (aktiver Einsatz und passende feste Kontofunktion erforderlich).</p>
         </article>
 
         <article id="finden" class="estab-handbook-chapter"
@@ -424,7 +423,7 @@ $handbookUpdated = '1. August 2026';
           </ul>
           <p><strong>Kategorien:</strong> Globale Kategorien kann nur die feste
             Rotkopiefunktion oder Si verwalten. Funktionskategorien gelten für
-            den ausgewählten Hut, persönliche Kategorien nur für das Konto.
+            die feste Kontofunktion, persönliche Kategorien nur für das Konto.
             Gelesen und erledigt sind von der Transportstufe getrennte
             Arbeitsmarkierungen.</p>
           <p>S2 öffnet die <a href="<?= $href('message_overview') ?>">Meldungsübersicht</a>;
@@ -450,10 +449,10 @@ $handbookUpdated = '1. August 2026';
           data-estab-handbook-section
           data-handbook-keywords="Einsatztagebuch Fb Fü 2 Aufgabe Befehl Erledigung Kräfteanforderung wichtig Ereigniszeit Erfassungszeit Bezug Referenz Korrektur Anlage append-only">
           <header><span>10</span><div><p>Chronologische Einsatzdokumentation</p><h2>Einsatztagebuch (ETB)</h2></div></header>
-          <p>Alle ausgewählten aktiven Funktionen dürfen das ETB lesen. Manuell
-            schreibt ausschließlich die zuerst bestimmte angenommene
-            ETB-Besetzung, ersatzweise die bestimmte S2-Besetzung. Einträge
-            werden niemals überschrieben oder gelöscht.</p>
+          <p>Das ETB gehört zum aktiven Einsatz. Manuell schreiben Konten mit
+            der festen Funktion ETB oder S2 und Rolle Stab. Eine aktive Schicht
+            ist nicht erforderlich. Einträge werden niemals überschrieben oder
+            gelöscht.</p>
           <ul>
             <li>Fachliche Ereigniszeit und serverseitige Erfassungszeit bleiben getrennt.</li>
             <li>Arten: ohne Kennzeichnung, A Aufgabe, B Befehl/Auftrag,
@@ -476,9 +475,10 @@ $handbookUpdated = '1. August 2026';
           data-estab-handbook-section
           data-handbook-keywords="Technisches Betriebsbuch Fb Fü 44 Fernmelder Betrieb Personal Dienstübergabe Kanal Rufgruppe Bedienung Nachricht Störung Quittung Empfänger Aushändigung Korrektur">
           <header><span>11</span><div><p>Chronologischer Fernmeldebetrieb</p><h2>Technisches Betriebsbuch (TBB)</h2></div></header>
-          <p>Alle ausgewählten aktiven Funktionen dürfen das TBB lesen. Die
-            zuerst bestimmte angenommene A/W-Besetzung führt es manuell. Jeder
-            Eintrag soll auch ohne Anlage in Grundzügen verständlich sein.</p>
+          <p>Das TBB gehört zum aktiven Einsatz. Manuell schreibt ein Konto mit
+            der festen Funktion A/W und Rolle Fernmelder; eine aktive Schicht
+            ist nicht erforderlich. Jeder Eintrag soll auch ohne Anlage in
+            Grundzügen verständlich sein.</p>
           <div class="estab-handbook-facts">
             <div><strong>Betrieb, Personal, Übergabe</strong><span>Aufnahme, Ende, Bereitschaft, Besetzung, Ablösung und Dienstübergabe.</span></div>
             <div><strong>Kanal, Rufgruppe, Bedienung</strong><span>Betriebsart und Wechsel mit bisherigem sowie neuem Wert.</span></div>
@@ -512,7 +512,7 @@ $handbookUpdated = '1. August 2026';
           data-handbook-keywords="Melder Auftrag A/W LdF Empfänger Zustellung Rücknachricht Rückweg Rückkehr">
           <header><span>13</span><div><p>Persönlich nachvollziehbare Botengänge</p><h2>Melderaufträge</h2></div></header>
           <p>Ein Melder ist keine zusätzliche globale Rolle. LdF beauftragt ein
-            konkret angemeldetes A/W-Konto mit angenommener Besetzung. Die
+            konkret angemeldetes, ungesperrtes A/W-Konto. Die
             beauftragte Person übernimmt den Lauf persönlich und dokumentiert
             tatsächlichen Empfänger, Zustellung, eine mögliche Rücknachricht,
             Rückweg und Rückkehr.</p>
@@ -524,24 +524,28 @@ $handbookUpdated = '1. August 2026';
 
         <article id="uebergabe" class="estab-handbook-chapter"
           data-estab-handbook-section
-          data-handbook-keywords="Dienstschicht Übergabe Nachfolge bestätigen stornieren Ablösung Abschluss Einsatz beenden Legal Hold Aufbewahrung zehn Jahre">
-          <header><span>14</span><div><p>Verantwortung lückenlos weitergeben</p><h2>Dienstübergabe und Einsatzabschluss</h2></div></header>
-          <p>Eine laufende Schicht kann um eine noch unbesetzte Funktion ergänzt
-            werden; wirksam wird die Ergänzung erst nach persönlicher Annahme.
-            Bereits besetzte Nicht-A/W-Funktionen werden nicht still ersetzt.</p>
+          data-handbook-keywords="Zugangsschicht Gruppe Konten aktivieren deaktivieren Sitzung Abschluss Einsatz beenden Legal Hold Aufbewahrung zehn Jahre">
+          <header><span>14</span><div><p>Gruppenzugänge und formaler Abschluss</p><h2>Zugangsschichten und Einsatzabschluss</h2></div></header>
+          <p>Zugangsschichten sind optionale einsatzbezogene Gruppen. Sie
+            vereinfachen den gemeinsamen Zugangsentzug, ohne Funktionen oder
+            Fachrechte zu verändern.</p>
+          <p>Beim Aktivieren eines neuen Einsatzes eröffnet eStab ETB und TTB
+            automatisch mit je einer Systemzeile. Dafür muss keine Schicht
+            angelegt oder aktiviert werden.</p>
           <ol class="estab-handbook-steps">
-            <li>Eine angenommene Besetzung der aktiven Schicht initiiert die
-              Übergabe mit einer Zusammenfassung.</li>
-            <li>Eine persönlich angemeldete angenommene Besetzung der
-              Nachfolgeschicht bestätigt die Übernahme.</li>
-            <li>eStab wechselt die Schicht atomar und schreibt Übergabe und
-              Übernahme in ETB und TBB. Fehlanforderungen bleiben begründet
-              storniert nachvollziehbar.</li>
+            <li>Die Administration legt eine Gruppe für den aktiven Einsatz an
+              und ordnet bei Bedarf Konten zu.</li>
+            <li>Aktivieren gibt zugeordnete Zugänge frei, erzeugt aber keine
+              Anmeldung.</li>
+            <li>Deaktivieren widerruft zugeordnete Sitzungen, sofern kein Zugang
+              über eine andere aktive Gruppe verbleibt.</li>
           </ol>
           <p>Vor dem formalen Einsatzabschluss müssen unter anderem offene
-            Nachrichten, Planentwürfe, Melderläufe und Übergaben geklärt sowie
-            die letzte Schicht geschlossen sein. Der Abschluss erzeugt letzte
-            Buchzeilen und setzt eine Mindestaufbewahrung von zehn Jahren.
+            Nachrichten, Planentwürfe und Melderläufe geklärt sein. Historische
+            formale Dienstschichten, offene Altbesetzungen oder fehlende
+            schichtbezogene Eröffnungszeilen blockieren den Abschluss nicht.
+            Der Abschluss erzeugt letzte Buchzeilen und setzt eine
+            Mindestaufbewahrung von zehn Jahren.
             Eine gesetzte Aufbewahrungs- oder Legal-Hold-Sperre darf nicht
             durch das Löschen eines Exportes umgangen werden.</p>
           <div class="estab-handbook-callout"><strong>Deaktivieren ist nicht abschließen</strong>
@@ -560,9 +564,14 @@ $handbookUpdated = '1. August 2026';
               Ausdruck eines ausgewählten aktiven oder historischen Einsatzes.
               Neun Bereiche sind wählbar: ETB, TBB,
               Nachrichtenvordrucke, Anlagen, Nachrichtenereignisse,
-              Dienstbetrieb, S6-Pläne, Melderläufe und Betriebsereignisse.
-              ETB/TBB können einsatzweit oder für genau eine Schicht ausgegeben
-              werden; der Schichtfilter verändert nur diese beiden Bücher.
+              Dienstorganisation, S6-Pläne, Melderläufe und Betriebsereignisse.
+              Die Dienstorganisation enthält Zugangsschichten samt aktuellen
+              und entfernten Zuordnungen; formale Altschichten erscheinen
+              getrennt als historischer Legacy-Nachweis.
+              ETB/TBB können einsatzweit oder bei belegter historischer
+              Provenienz für genau eine frühere formale Dienstschicht
+              ausgegeben werden; dieser Legacy-Filter verändert nur diese
+              beiden Bücher und umfasst keine Zugangsschicht.
               Ein offener Einsatz wird als vorläufig gekennzeichnet.</p><a href="<?= $href('incident_pdf') ?>">PDF-Dossier erstellen</a></section>
             <section><h3>ZIP-Einsatzexport</h3><p>Für maschinelle Auswertung und
               Archivkontrolle des vollständigen aktuellen Tabellenstandes.
@@ -591,12 +600,12 @@ $handbookUpdated = '1. August 2026';
           <header><span>16</span><div><p>Technische Maßnahmen mit eigenem Zugang</p><h2>Administration</h2></div></header>
           <p>Die Administration verwendet HTTP Basic Auth und ein eigenes
             technisches Kennwort. Diese Anmeldung ist kein eStab-Funktionskonto
-            und verleiht keinen operativen Hut. Außerhalb eines isolierten
+            und verleiht keine operativen Fachrechte. Außerhalb eines isolierten
             Testhosts darf sie ausschließlich über TLS erreichbar sein.</p>
           <div class="estab-handbook-admin-grid">
             <a href="<?= $href('incidents') ?>"><strong>Einsätze</strong><span>Anlegen, aktivieren, deaktivieren und formal abschließen</span></a>
             <a href="<?= $href('users') ?>"><strong>Benutzer</strong><span>Anlegen, zuweisen, sperren, entsperren und Kennwort zurücksetzen</span></a>
-            <a href="<?= $href('admin_command_post') ?>"><strong>Führungsstelle</strong><span>Schichten, Besetzungen, Übergaben und Abschlussblocker</span></a>
+            <a href="<?= $href('admin_command_post') ?>"><strong>Zugangsschichten</strong><span>Optionale Kontengruppen anlegen und gemeinsam aktivieren/deaktivieren</span></a>
             <a href="<?= $href('matrix') ?>"><strong>Empfängermatrix</strong><span>Exakt 5 × 4 Positionen; S2 bleibt Rotkopieziel, Autosichtung bleibt aus</span></a>
             <a href="<?= $href('counter') ?>"><strong>Nachrichtenzähler</strong><span>Nach dokumentiertem Rückfallbetrieb sicher erhöhen</span></a>
             <a href="<?= $href('form_reset') ?>"><strong>Vordruckmarkierung</strong><span>Abgeschlossene Formulare erneut erzeugen lassen</span></a>
@@ -652,12 +661,12 @@ curl --fail http://127.0.0.1:8080/health.php</code></pre>
 
         <article id="probleme" class="estab-handbook-chapter"
           data-estab-handbook-section
-          data-handbook-keywords="Fehler Hilfe Unauthorized keine Anmeldung Passwort Konto gesperrt Einsatz inaktiv Schicht Hut Upload Planweg PDF Grenze Logs">
+          data-handbook-keywords="Fehler Hilfe Unauthorized keine Anmeldung Passwort Konto gesperrt Einsatz inaktiv Zugangsschicht Upload Planweg PDF Grenze Logs">
           <header><span>18</span><div><p>Ursache gezielt eingrenzen</p><h2>Probleme lösen</h2></div></header>
           <div class="estab-handbook-troubleshooting">
             <details><summary>Administration zeigt sofort „Unauthorized“</summary><p>Das ist die Browserabfrage für HTTP Basic Auth. Manche integrierten Browser zeigen sie nicht zuverlässig; verwenden Sie einen normalen Browser. Benutzername und Kennwort stammen aus dem technischen Admin-Secret, nicht aus einem Funktionskonto.</p></details>
             <details><summary>Die Kontoanmeldung funktioniert nicht</summary><p>Prüfen Sie Name, Kürzel, Funktion und Kennwort. Ein administrativ gesperrtes Konto oder eine widerrufene Sitzung muss in der Benutzerverwaltung geklärt werden. Legen Sie kein zweites Konto mit demselben Kürzel an.</p></details>
-            <details><summary>Es ist keine operative Eingabe möglich</summary><p>Prüfen Sie nacheinander: aktiver Einsatz, bestätigter Führungsstellenname, aktive Dienstschicht, persönlich angenommene Zuweisung und ausgewählter Hut. Die Führungsstellenansicht zeigt den fehlenden Schritt.</p></details>
+            <details><summary>Es ist keine operative Eingabe möglich</summary><p>Prüfen Sie für die Fachfunktion: gültige Sitzung, aktiver Einsatz, bestätigter Führungsstellenname und feste Kontofunktion. Eine Dienst- oder Zugangsschicht und eine Hutauswahl sind keine Schreibvoraussetzung. Scheitert bereits Anmeldung oder Sitzung, prüfen Sie zusätzlich die manuelle Kontosperre und – nur bei einer Gruppenzuordnung – mindestens eine aktive Zugangsschicht.</p></details>
             <details><summary>Ein Ausgang erreicht A/W nicht</summary><p>Der Ausgang muss zuerst Si und danach LdF durchlaufen. LdF benötigt einen gültigen freigegebenen S6-Planweg. Eine Rückgabe enthält einen Pflichtgrund und muss in der zuständigen Stufe bearbeitet werden.</p></details>
             <details><summary>Eine Anlage lässt sich nicht hochladen</summary><p>Prüfen Sie die am Dateifeld angezeigte Grenze, erlaubte Endung und echten Inhaltstyp. Eine lediglich umbenannte Datei wird abgewiesen. Brechen Sie einen nicht mehr benötigten Anhangsvorgang sauber ab.</p></details>
             <details><summary>Der PDF-Export bricht bei Anlagen ab</summary><p>Beschädigte, verschlüsselte oder über den Sicherheitsgrenzen liegende PDF-/Bildanlagen werden fail-closed abgewiesen. Prüfen Sie Format, Einzeldatei und die 50-MiB-Gesamtsumme; der Systemstatus und die App-Logs liefern den technischen Kontext.</p></details>
@@ -678,19 +687,19 @@ curl --fail http://127.0.0.1:8080/health.php</code></pre>
             <table>
               <thead><tr><th>Bereich</th><th>Wer nutzt ihn?</th><th>Zweck</th></tr></thead>
               <tbody>
-                <tr><td><a href="<?= $href('messages') ?>">Nachrichtenvordruck</a></td><td>ausgewählter aktiver Hut</td><td>Rollenabhängiger Nachrichtenlauf</td></tr>
-                <tr><td><a href="<?= $href('command_post') ?>">Führungsstellenbetrieb</a></td><td>angemeldetes Konto</td><td>Hut annehmen/wählen, S6 und Melder</td></tr>
+                <tr><td><a href="<?= $href('messages') ?>">Nachrichtenvordruck</a></td><td>berechtigtes Festfunktionskonto</td><td>Rollenabhängiger Nachrichtenlauf</td></tr>
+                <tr><td><a href="<?= $href('command_post') ?>">Führungsstellenbetrieb</a></td><td>angemeldetes Konto</td><td>S6 und Melder gemäß fester Funktion</td></tr>
                 <tr><td><a href="<?= $href('message_overview') ?>">Meldungsübersicht</a></td><td>S2/Stab</td><td>Einsatzweite Suche und Lageübersicht</td></tr>
                 <tr><td><a href="<?= $href('tracking') ?>">Nachweisung</a></td><td>LdF oder A/W</td><td>Aufnahme und tatsächliche Beförderung</td></tr>
-                <tr><td><a href="<?= $href('etb') ?>">ETB</a> / <a href="<?= $href('ttb') ?>">TBB</a></td><td>alle lesen; designierte Besetzung schreibt</td><td>Append-only Einsatz- und Betriebsbücher</td></tr>
+                <tr><td><a href="<?= $href('etb') ?>">ETB</a> / <a href="<?= $href('ttb') ?>">TBB</a></td><td>ETB: ETB/S2; TTB: A/W</td><td>Append-only Einsatz- und Betriebsbücher</td></tr>
                 <tr><td><a href="<?= $href('bos_info') ?>">BOS-Info</a></td><td>öffentlich</td><td>Buchstabier-, Rufnamen- und Karteninformationen</td></tr>
-                <tr><td><a href="<?= $href('admin') ?>">Administration</a></td><td>technischer Basic-Auth-Zugang</td><td>Einsatz-, Konto-, Schicht- und Datenverwaltung</td></tr>
+                <tr><td><a href="<?= $href('admin') ?>">Administration</a></td><td>technischer Basic-Auth-Zugang</td><td>Einsatz-, Konto-, Zugangsgruppen- und Datenverwaltung</td></tr>
               </tbody>
             </table>
           </div>
           <h3>Begriffe</h3>
           <dl class="estab-handbook-glossary">
-            <div><dt>Hut</dt><dd>Aktuell ausgewählte, persönlich angenommene Dienstbesetzung.</dd></div>
+            <div><dt>Zugangsschicht</dt><dd>Optionale einsatzbezogene Kontengruppe zum gemeinsamen Aktivieren oder Deaktivieren von Zugängen; keine Fachrechtsquelle.</dd></div>
             <div><dt>LdF</dt><dd>Leitung der Fernmeldebetriebsstelle.</dd></div>
             <div><dt>A/W</dt><dd>Aufnahme und Weitergabe in der Fernmeldebetriebsstelle.</dd></div>
             <div><dt>Si</dt><dd>Sichterfunktion für formale Prüfung und Verteilung.</dd></div>

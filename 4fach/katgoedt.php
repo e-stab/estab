@@ -38,14 +38,6 @@ if ($identity === null) {
     throw new LogicException('Authenticated category identity missing');
 }
 $categoryReadIdentity = estab_read_session_identity($_SESSION);
-if (
-    !is_array($categoryReadIdentity)
-    || estab_read_duty_assignment_id(
-        $categoryReadIdentity['duty_assignment_id'] ?? null
-    ) === null
-) {
-    estab_navigation_select_duty($_SERVER);
-}
 estab_session_ui_start($_SESSION, false, true);
 
 /** @var array<string,string> $conf_4f_db */
@@ -249,7 +241,7 @@ try {
                 . 'geändert werden.'
             );
         }
-        estab_dv_require_active_hat_for_operational_write(
+        estab_dv_require_operational_account(
             $connection,
             (int) $activeIncident['active_einsatz_id'],
             $identity

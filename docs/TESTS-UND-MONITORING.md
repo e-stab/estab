@@ -6,12 +6,26 @@ Health-Antwort beweist die vollständige Fachfunktion.
 Die Zuordnung jeder Funktion zu ihrem automatisierten und fachlichen Gate
 steht in der [Funktionsmatrix](FUNKTIONSNACHWEIS.md).
 
+Der aktuelle Autorisierungsvertrag ist in allen Ebenen gleich: Operative
+Eingaben benötigen einen aktiven Einsatz und eine fachlich passende feste
+Kontofunktion mit serverseitig abgeleiteter Rolle. Eine aktive Dienst- oder
+Zugangsschicht, persönliche Besetzungsannahme oder Hutauswahl ist nicht
+erforderlich. Optionale Zugangsschichten werden getrennt mit unzugeordnetem
+Konto, OR-Semantik bei Mehrfachzuordnung, Aktivierung ohne Anmeldung,
+Deaktivierung mit Sitzungswiderruf und Vorrang der manuellen Kontosperre
+geprüft. Historische formale Schichtdaten bleiben Export-/Evidenzdaten.
+Der PDF-Abschnitt Dienstorganisation muss Zugangsschichten einschließlich
+aktueller und entfernter Zuordnungen sowie getrennt gekennzeichnete historische
+`nv_dienst*`-Daten enthalten. Hashkettentests erwarten Objekttyp
+`ZUGANGSSCHICHT` für Gruppenmutationen und `EINSATZ` für die schichtfreie
+Nachrichtenzähler-Reparatur.
+
 | Ebene | Nachweis |
 | --- | --- |
 | Quellprüfung | netzloser Herkunftsnachweis für 13 Git-Ref-Snapshots (Trunk, vier Branches, sechs SVN-Tags, zwei SourceForge-Release-Tags) und einen separaten Dokument-r85-Baum, GitHub-Workflow-Prüfung mit festgelegtem Actionlint 1.7.12, PHP-8.5-Lint, Kompatibilitäts-, Sicherheits-, Einsatz-, Benutzerverwaltungs-, amtlicher Nachrichtenvordruck-, Upload-, Export- und PDF-Regressionen |
 | Image-Build | benötigte PHP-Erweiterungen und Apache-Konfiguration |
 | Datenbank | echtes MariaDB-Schema, Einsatz-Singleton/Trigger, Kontosperre, Indizes, aktive und persistente Standardmatrix, Engines, Collations und Zero-Date-Freiheit |
-| HTTP | Header, direkte Endpunktfläche, 303-Weiterleitung anonymer geschützter Aufrufe zum allowlist-gebundenen Bestandslogin samt sichtbarem Rückweg, 403-/400-/405-Grenzen, Registrierung, sichtbare Sitzungsidentität, CSRF-gebundene Aktivitätsmeldung und Abmeldung, 15-Minuten-Präsenz sowie 12-Stunden-Leerlaufende, erneute Anmeldung, verbindlicher Eingangs- und Ausgangslauf samt Rückgabe/Korrektur und einsatzgebundener Feldvorschläge, Dienstbesetzung/Hutwechsel, S6-Plan, Melderlauf, Kategorien- und ETB-/TBB-Rollengrenzen, reale Vordruckerzeugung/-auslieferung sowie Admin-Export |
+| HTTP | Header, direkte Endpunktfläche, 303-Weiterleitung anonymer geschützter Aufrufe zum allowlist-gebundenen Bestandslogin samt sichtbarem Rückweg, 403-/400-/405-Grenzen, Registrierung, sichtbare Sitzungsidentität, Präsenz/Leerlaufende, feste Funktions-/Rollenbindung, optionaler Gruppenzugang, verbindlicher Nachrichtenlauf, S6-Plan, Melderlauf, Kategorien- und ETB-/TBB-Rollengrenzen, Vordruckerzeugung sowie Admin-Export |
 | Echter Browser | öffentliche Übersicht, getrennte Konto-Flows, direkte ETB-/Nachrichten-/Anhang-/Kategorie-Anmeldung ohne Sackgasse oder verschachtelten Arbeitsbereich, sicherer Login-Abbruch, neun stabile Navigationsbereiche, aktive Markierung, reale Karten- und Bereichswechsel im selben Tab, überlappungsfreie Karten-Klickflächen und echter Hover bei sechs Breiten, genau zwei Anwendungs-`iframe`-Elemente, vollhohe Sidebar ohne verschachtelte Scrollflächen bei 1440 × 1000, 1280 × 720 und 700 × 760 CSS-Pixeln, fokuserhaltender Statusfragment-Refresh samt sichtbarem Fehler- und Erholungspfad, dauerhafte Warnstufe bei offenen Meldungen, gleich-originiges PCM-WAV, ausdrücklicher Hinweiston-Schalter samt Blockade-/Reload-/Synchronisations-/Race-Pfad und automatischem Signal, langlebiges Audioelement, A/W-Rufnamen-Listbox mit echtem Fokus, Filterung und Tastaturauswahl, Matrixstandard-Bestätigungen, BOS-Disclosure, Logout sowie öffentliche und authentifizierte mobile Bedienung bei exakt 390 × 844 CSS-Pixeln |
 | Fachabnahme | kompletter Nachrichten-, Anhang-, PDF-, ETB-/TBB- und Restore-Ablauf |
 | Betrieb | kontinuierliche Readiness, Logs, Restarts, Kapazität und Backup-Alter |
@@ -87,11 +101,8 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   Umgehung der verpflichtenden Ausgangssichtung,
 - kanonische Reihenfolge, sichere URL-Auflösung, aktive Route, ausschließlich
   erlaubte symbolische Anmeldeziele und das rollenabhängige Ausblenden der
-  spezialisierten Meldungsübersicht beziehungsweise Nachweisung; von neun
-  Bereichen und zwei Diensten bleiben vor Hutauswahl nur die vier
-  öffentlichen beziehungsweise separat geschützten Ziele und der
-  Führungsstellen-Bootstrap, danach je nach ausgewähltem Hut neun oder zehn
-  Links sichtbar,
+  spezialisierten Meldungsübersicht beziehungsweise Nachweisung; nach der
+  Anmeldung sind je nach fester Kontofunktion neun oder zehn Links sichtbar,
 - zustandsabhängige Root-Menükarten mit genau einem Tastaturziel, sicherem
   Escaping, gleichem Browserkontext, sicherer Zielbeibehaltung und
   verständlicher Trennung von Anwendung, Administration und öffentlichen
@@ -127,7 +138,7 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   der `old_que_*`-Basiswerte, Auslösung ausschließlich bei einer späteren
   Erhöhung, ausdrückliche Browserfreigabe, langlebiges Audioelement und
   sichtbare Status-/Fehlerrückmeldung,
-- Nachrichten-IDs, ausgewählte aktive Dienstbesetzung, Rollen-/Objektregeln,
+- Nachrichten-IDs, feste Kontofunktion, Rollen-/Objektregeln,
   Empfänger-Tokens, eigene Verfasser- und Verarbeitungsmarken, erlaubte
   Workflow-Aktionen, POST-/CSRF-Verträge, Prepared Statements, sichere
   UTF-8-/Legacy-Entity-Ausgabe und die inerten Payloads Quotes, Ampersand,
@@ -158,7 +169,7 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
   PHP-Konfiguration; außerdem Nachrichtenzähler- und
   PDF-Vordruckreset-Validierung samt Prepared-Statement-, Transaktions-,
   Auth-/CSRF- und PRG-Vertrag,
-- Kategorien-Typen, positive IDs, ausgewählte aktive Dienstbesetzung,
+- Kategorien-Typen, positive IDs, feste Kontofunktion,
   sessionabgeleitete Tabellenräume, Master-Rechte, doppelte Auswahllisten,
   HTML-Ausgabe sowie den Prepared-Statement-, Transaktions-,
   Nachrichten-Objektberechtigungs- und PRG-Vertrag,
@@ -168,7 +179,7 @@ Die Suite lintet alle aktiven PHP-Dateien und führt die Prüfungen unter
 - Kontosperre und Kennwortreset mit gemeinsamem Login-Lock,
   Sitzungswiderruf, auditgebundenem Rollback und ohne Klartextweitergabe,
 - Upload- und Anhangpfadvalidierung,
-- selected-hat- und objektgebundene Dateiauslieferung samt vererbter
+- festfunktions- und objektgebundene Dateiauslieferung samt vererbter
   Nachrichtenrechte, begrenzter Rechte für freie Anhänge, erneuter Prüfung bei
   Auswahl und finalem Nachrichtenspeichern sowie Traversal-, Symlink- und
   Header-Injection-Schutz,
@@ -295,7 +306,7 @@ Schreibgrenzen sowie die amtlichen Nachrichtenvordruckfelder aus Migration 98.
 Der Schema-Test startet Migration 98 zweimal, prüft die exakt markierten
 Spalten `11_rufnummer` und `12_betreff`, deren leere Bestandswerte und den
 unveränderten historischen Nachrichteninhalt. Readiness und `verify.sql`
-verlangen alle siebzehn Ledgerzeilen einschließlich Version 111 sowie die
+verlangen alle achtzehn Ledgerzeilen einschließlich Version 112 sowie die
 exakten drei Such-/Listenindizes. Migration 99 wird vollständig, nach einem
 simulierten phasenweisen Abbruch und nach einer fremden Indexkollision
 ausgeführt; erst der bereinigte Wiederanlauf darf den Ledgerstand schreiben.
@@ -327,7 +338,8 @@ neue Funktion und mehrere unterschiedliche A/W-Besetzungen sind zulässig,
 eine bereits vorhandene Nicht-A/W-Funktion bleibt dagegen bis zur geordneten
 Übergabe gesperrt.
 
-Migration 111 wird mit vorhandenem Legacy-Bestand, neuen manuellen und
+Migration 111 wird als historischer, durch Migration 112 abgelöster
+Zwischenstand mit vorhandenem Legacy-Bestand, neuen manuellen und
 automatischen ETB-/TTB-Zeilen sowie einer optionalen ETB-Zuordnung geprüft.
 Historische Herkunft muss in allen neuen Feldern `NULL` bleiben. Neue manuelle
 Zeilen müssen Schicht und Schreiberbesetzung derselben aktiven Schicht tragen;
@@ -343,9 +355,21 @@ ETB-Referenzen müssen als kanonische lokale Nummer auf einen vorhandenen
 einsatzgleichen Eintrag zeigen; bei Korrekturen müssen öffentliche Nummer und
 internes Original übereinstimmen. Der Test simuliert eigene
 DDL-Zwischenstände und fremde Kollisionen für Spalten, Indexe,
-Fremdschlüssel und Trigger; nur der kanonische Wiederanlauf darf die
-siebzehnte Ledgerzeile schreiben. Zweitlauf, 38-feldrige `verify.sql`-Prüfung
-und vollständiger Schema-Migrator-Integrationstest sind grün.
+Fremdschlüssel und Trigger; nur der kanonische Wiederanlauf darf ihre
+Ledgerzeile schreiben.
+
+Migration 112 wird anschließend als aktueller Vertrag geprüft. Sie legt die
+optionalen Zugangsschicht- und Mitgliedstabellen kollisionssicher an und
+ersetzt die letzten ETB-/TBB-Trigger. Positive Schreibfälle verlangen aktiven
+Einsatz und feste Kontofunktion `ETB/Stab` oder `S2/Stab` für ETB sowie
+`A/W/Fernmelder` für TTB, funktionieren aber ohne aktive Schicht und mit
+`NULL` in den Legacy-Provenienzfeldern. Falsche Funktion/Rolle, gesperrtes
+Konto und fehlender aktiver Einsatz scheitern. Der Zugangsvertrag prüft
+unzugeordnetes Konto, Mehrfachzuordnung per OR, Aktivierung ohne Sitzung,
+Deaktivierung mit Sitzungswiderruf sowie Vorrang der manuellen Sperre. Nur der
+kanonische Wiederanlauf darf die achtzehnte Ledgerzeile schreiben. Zweitlauf,
+`verify.sql`-Prüfung und vollständiger Schema-Migrator-Integrationstest sind
+grün.
 
 Anschließend migriert der Hauptlauf ein leeres Schema,
 führt PHP-, Datenbank-, Rollen-, HTTP- und Administrationsnachweise aus, prüft
@@ -386,9 +410,8 @@ gleich-originige tokenlose Zugangsdaten HTTP 403 nach. Erst danach wird nur
 der App-Container kurz mit dem expliziten Wert `true` neu erstellt:
 `tests/integration/legacy_login_http.sh` belegt genau einen historischen
 Ein-Kennwort-Login, die weiterhin geschlossene Cross-Site-Grenze und den
-erreichbaren Führungsstellen-Bootstrap. Der Login wählt ausdrücklich keine
-Dienstfunktion: Ein Zugriff auf die privilegierte Vordruckliste bleibt bis zur
-persönlichen Hutauswahl mit HTTP 403 geschlossen. Der Lauf endet über den
+erreichbaren Führungsstellenbereich. Der Login übernimmt ausschließlich die
+feste Kontofunktion; eine Hutauswahl findet nicht statt. Der Lauf endet über den
 normalen CSRF-geschützten Logout. Anschließend stellt die CI den sicheren
 Standard `false` wieder her, bevor Fachtests weiterlaufen.
 Das Gate verwendet standardmäßig die auch für Laptop, LAN und Reverse Proxy
@@ -640,10 +663,9 @@ zu ändern. Download und Bildvorschau müssen vor `Content-Disposition`,
 Fixture-Sicherung wird auch bei vorzeitigem Testabbruch restauriert; erst der
 danach wieder bytegleiche Download darf erneut HTTP 200 liefern. Später
 verändert derselbe Lauf den Pflichtanhang nochmals unmittelbar vor dem echten
-Admin-POST zum Schließen der letzten aktiven Dienstschicht. Die Antwort muss
-HTTP 409 und genau den Anhang-Integritätsblocker enthalten; ein exakter
-Vorher-/Nachher-Snapshot aus Schichtstatus, Schichtendzeit sowie ID, Status und
-Ablösezeit jeder Funktionsbesetzung muss bytegleich bleiben.
+Admin-POST zum formalen Einsatzabschluss. Die Antwort muss HTTP 409 und genau
+den Anhang-Integritätsblocker enthalten; Einsatzstatus und alle fachlichen
+Nachweisdaten müssen dabei unverändert bleiben.
 
 Der davon unabhängige Rendervertrag erzeugt mit
 `tests/php/pdf_template_render_fixture.php` aus exakt demselben
@@ -797,9 +819,10 @@ Duplikate und ruft den gemeinsamen, advisory-lock-geschützten
 Schema-Reconciler zweimal auf. Anschließend prüft sie InnoDB, `utf8mb4`,
 nullable Datumswerte, Indizes, Strict Mode, Identifier-Angriffe und die
 vollständige Fixture-Bereinigung. Der ergänzende
-`tests/integration/dv_operations.php` beweist darüber hinaus, dass eine real
-ausgewählte zusätzliche S3-Funktion dieselben sechs Tabellen vor dem
-Sitzungswechsel erhält und dass der tabellenlose ETB-Hut keine davon erhält:
+`tests/integration/dv_operations.php` beweist darüber hinaus, dass ein festes
+S3-Konto dieselben sechs Tabellen erhält, ein S2-Konto seine Funktion nicht
+durch historische Besetzungsdaten wechseln kann und ein ETB-Konto keine
+fachfremden Tabellen erhält:
 
 ```console
 ESTAB_TEST_DB_PASSWORD="$(tr -d '\r\n' < secrets/db_password.txt)" \
@@ -986,22 +1009,16 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
 - exakt eine escaped Sitzungsleiste mit Name, Kürzel, Funktion, Rolle und
   Abmeldebutton auf Root-Einstieg, Hauptansicht, vollhoher Anwendungs-Sidebar,
   Meldungsübersicht, Nachweisung, Anhängen, Vordrucken, Kategorien sowie
-  ETB/TBB; jede operative Seite wird dabei mit der passenden ausgewählten,
-  persönlich angenommenen aktiven Dienstfunktion aufgerufen, der rechte
+  ETB/TBB; jede operative Seite wird dabei mit dem passenden festen
+  Funktionskonto aufgerufen, der rechte
   `mainframe` vermeidet Duplikate und anonyme Fachseiten bleiben ohne
   vorgetäuschte eStab-Identität,
-- HTTP 303 zum Führungsstellenbetrieb für eine bloß angemeldete Sitzung ohne
-  ausgewählten aktiven Hut sowie weiterhin HTTP 403 für S1 auf
-  Meldungsübersicht und Nachweisung; die positiven Gegenproben verwenden S2
-  beziehungsweise LdF/A/W,
-- der eng begrenzte Pre-Hat-Führungsstellenpfad zeigt ausschließlich
-  Einsatz-/Schichtgrunddaten und eigene Besetzungen und erlaubt nur
-  persönliche Annahme, Übergabebestätigung und Auswahl einer eigenen aktiven,
-  angenommenen Besetzungs-ID; Plan-, Melder-, Nachrichten-, Anhangs- und
-  Logbuchzugriffe bleiben gesperrt,
-- jeder normale operative Schreibpfad revalidiert die exakt ausgewählte
-  Besetzungs-ID gegen Konto, Funktion, Rolle, aktiven Einsatz und aktive
-  Schicht; eine fremde, abgelaufene oder nur funktionsgleiche ID scheitert,
+- direkter Einstieg nach der Anmeldung ohne Hutauswahl sowie weiterhin HTTP
+  403 für S1 auf Meldungsübersicht und Nachweisung; die positiven Gegenproben
+  verwenden feste Konten S2 beziehungsweise LdF/A/W,
+- jeder normale operative Schreibpfad revalidiert Konto, feste Funktion,
+  serverseitig abgeleitete Rolle, Sperrstatus und aktiven Einsatz; dieselben
+  positiven Schreibfälle funktionieren ohne aktive Schicht,
 - HTTP 405 für Logout per GET, HTTP 403 bei fehlendem oder falschem CSRF,
   Cookie-/Sitzungsende und 303-Rückleitung bei Erfolg sowie die
   SID-Grenze, durch die eine alte Sitzung eine neuere Anmeldung desselben
@@ -1052,10 +1069,10 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
   unbekannte, nichtskalare oder für Anhänge gesetzte Layoutparameter werden
   abgewiesen,
 - Basic-Auth-Adminseite mit escaped technischem Benutzernamen, ausdrücklicher
-  Trennung vom eStab-Funktionskonto; der Schließ-POST der letzten aktiven
-  Dienstschicht prüft einen unmittelbar zuvor gleichlang manipulierten
-  Pflichtanhang und liefert HTTP 409 mit unveränderter Schicht und
-  unveränderten Funktionsbesetzungen; außerdem Exportverwaltung: zwei vollständige
+  Trennung vom eStab-Funktionskonto; der Einsatzabschluss prüft einen
+  unmittelbar zuvor gleichlang manipulierten Pflichtanhang und liefert HTTP
+  409; historische Schichten sind keine Abschlussblocker. Außerdem
+  Exportverwaltung: zwei vollständige
   Exporte erzeugen, PRG-Rückleitungen und CSRF-Grenzen prüfen, Manifest und
   jede CSV-Prüfsumme in beiden heruntergeladenen ZIPs verifizieren, den
   Workflowmarker per CSV-Parser exakt in `nv_nachrichten.csv` nachweisen,
@@ -1064,7 +1081,7 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
 - Restore-Prüfmodus ohne Neuanlage: Das Nachrichtenworkflow-Gate übergibt die
   Identität seines tatsächlich aktiven S1-Nachfolgers über eine private
   CI-Zustandsdatei. Genau dieses vorhandene Konto wird nach dem Restore erneut
-  angemeldet und seine wiederhergestellte aktive Dienstbesetzung ausgewählt;
+  mit seiner festen Funktion angemeldet;
   anschließend exakten Anhanginhalt und PDF-SHA vergleichen, globalen Einsatzkopf sowie
   ETB-/TBB-Einträge nur lesen und Kennung, Manifest, Nachrichten-CSV und
   ZIP-SHA des überlebenden Exportlaufs im wiederhergestellten Volume prüfen.
@@ -1208,13 +1225,11 @@ insbesondere:
   rollenabhängigen Fachaktionen sind echte,
   mindestens 44 Pixel große Textbuttons. Ein positiver Arbeitszähler besitzt
   eine dauerhaft sichtbare Warnstufe.
-- Das Manifest enthält neun Bereiche und zwei Dienste. Nach der Anmeldung sind
-  vor Hutauswahl nur Übersicht, Führungsstellenbetrieb, BOS-Info,
-  Administration und das öffentliche Web-Handbuch sichtbar. Nach der Auswahl
-  erscheinen nur die für den ausgewählten Hut zulässigen neun beziehungsweise
-  zehn Links ohne
+- Das Manifest enthält neun Bereiche und zwei Dienste. Nach der Anmeldung
+  erscheinen nur die für die feste Kontofunktion zulässigen neun
+  beziehungsweise zehn Links ohne
   Disclosure dauerhaft; S2 erhält die Meldungsübersicht, LdF/A/W die
-  Nachweisung, andere Hüte keines der beiden Spezialziele. Alle sichtbaren
+  Nachweisung, andere Funktionen keines der beiden Spezialziele. Alle sichtbaren
   Links sind mindestens 44 Pixel groß und besitzen weder eine eigene
   horizontale noch vertikale Scrollfläche. Bei `1440 × 1000`, `1280 × 720` und
   `700 × 760` CSS-Pixeln ist das Sidebar-Dokument die einzige vertikale
@@ -1288,28 +1303,15 @@ ESTAB_TEST_BASE_URL=http://127.0.0.1:18080 \
 tests/integration/logbooks_http.sh
 ```
 
-Er weist nach, dass anonyme Lesezugriffe und eine bloß angemeldete Sitzung
-ohne ausgewählten aktiven Hut HTTP 403 erhalten. Ein operativer
-Schreibversuch einer angemeldeten Sitzung ohne persönlich ausgewählten Hut
-wird dagegen ausdrücklich durch die zentrale Betriebssperre mit HTTP 423
-abgewiesen. Jede ausgewählte, persönlich angenommene aktive Dienstfunktion
-darf ETB und TBB des aktiven Einsatzes lesen. Beide Bücher zeigen den globalen
-Einsatzkopf und besitzen kein lokales Titelformular mehr. Die jeweils
-fachfremde ausgewählte Sitzung erhält HTTP 200 samt gespeichertem Inhalt,
-aber kein Eintragsformular. Cross-Rollen-POSTs liefern HTTP 403. Nur S2 oder
-ETB mit `EINSATZTAGEBUCH` kommt für die ETB-Führung und nur A/W mit
-`BEFOERDERUNG` für die TBB-Führung infrage. Innerhalb dieser Menge bestimmt
-die Datenbankabfrage genau eine schreibende Besetzungs-ID: ETB bevorzugt die
-erste angenommene ETB-, sonst die erste angenommene S2-Besetzung; TBB die
-erste angenommene A/W-Besetzung. Weitere fachlich fähige Hüte erhalten kein
-Formular und werden beim manipulierten POST mit HTTP 403 abgewiesen.
-Die Designation wird ohne Kontostatusfilter bestimmt: Wird ihr Konto
-deaktiviert oder gesperrt, muss der Writer geschlossen bleiben und darf nicht
-still zur nächsten geeigneten Besetzung wechseln. App- und Datenbanktests
-prüfen daneben Annahmestatus, aktive einsatzgleiche Schicht, identische
-Benutzer-/Kürzel-/Funktionsdaten und ein aktives, ungesperrtes Konto.
-Der Datenbanktest der Führungsstelle ergänzt die reale Si→ETB-Hutwahl und
-weist nach, dass Si dabei kein ETB-Schreibrecht erbt.
+Er weist nach, dass anonyme Lesezugriffe HTTP 403 erhalten und operative
+Schreibversuche ohne aktiven Einsatz gesperrt sind. Mit aktivem Einsatz
+funktionieren dieselben Schreibvorgänge ohne aktive Dienst- oder
+Zugangsschicht. Beide Bücher zeigen den globalen Einsatzkopf und besitzen kein
+lokales Titelformular mehr. ETB schreiben ausschließlich feste Konten
+`ETB/Stab` oder `S2/Stab` mit `EINSATZTAGEBUCH`, TTB ausschließlich
+`A/W/Fernmelder` mit `BEFOERDERUNG`. Cross-Rollen-POSTs, manipulierte Funktion
+oder Rolle und gesperrte Konten liefern HTTP 403. Eine Hutauswahl oder
+Besetzungs-ID kommt weder im positiven noch im negativen Vertrag vor.
 Zusätzlich prüft der Test lokale statt globaler Nummern, A/B/E/K/W-Arten,
 strukturierte TBB-Inhaltsfelder, direkte Korrekturbezüge, serverseitige
 Längengrenzen, inerte historische GET-Schreibparameter und HTML-Escaping.
@@ -1334,49 +1336,33 @@ einer Korrektur darf der Request keine öffentliche Referenz erfinden: Der
 Server bindet direkt das unveränderliche Original und leitet dessen lokale
 Nummer kanonisch ab.
 
-Die Tests füllen zusätzlich die optionale ETB-Bearbeitungszuordnung aus einer
-angenommenen Besetzung der aktiven Schicht. Auswahl, Schreibtransaktion und
-Insert-Trigger müssen fremde Schicht-/Einsatz-IDs sowie frei behauptete
-Snapshots abweisen; gespeichert wird exakt
-`Funktion (Rolle): Name [Kürzel]`. Volltext- und separater Zuordnungsfilter
-müssen den Snapshot finden, die Webliste muss ihn HTML-neutral anzeigen und
-der amtliche PDF-Renderer darf ihn nicht enthalten. Jeder manuelle ETB-/TBB-
-Insert muss Schicht und tatsächliche Schreiberbesetzung serverseitig ableiten,
-selbst wenn der Request gefälschte Provenienzfelder mitsendet. Automatische
-Zeilen müssen die Schicht ohne menschliche Schreiber-ID speichern.
+Eine optionale ETB-Bearbeitungszuordnung bleibt reine Such- und Anzeigehilfe;
+sie darf keine Rechte erweitern. Volltext- und separater Zuordnungsfilter
+müssen ihren Snapshot finden, die Webliste muss ihn HTML-neutral anzeigen und
+der amtliche PDF-Renderer darf ihn nicht enthalten. Neue manuelle und
+automatische ETB-/TTB-Zeilen dürfen die Legacy-Schicht- und
+Schreiberprovenienz `NULL` lassen. Belegte historische Werte bleiben
+unverändert exportierbar; eine Zugangsschicht darf niemals in diese Felder
+geschrieben werden.
 
-Der Dienstschicht-/Einsatztest deckt den Lebenszyklus ab. Ein unvollständiger
-Pflichtkopf blockiert die erste Schichtaktivierung ohne Teiländerung. Die
-erfolgreiche Aktivierung muss ETB und TBB atomar mit lokaler Nummer 1 eröffnen
-und Einsatz einschließlich ausdrücklich ausgeschriebenem Einsatzbeginn,
-Bedarfsträger, Auftrag/Ausgangslage, Leitung, Besetzung, LdF und
-A/W/TBB-Führung enthalten. Der Test injiziert nach Schichtänderung und beiden
-Eröffnungszeilen einen fehlschlagenden Audit-Write; Schicht, ETB, TBB,
-Buchköpfe und Ereignisnachweis müssen danach exakt dem Vorherzustand
-entsprechen. Eine Übergabe muss persönlich durch eine ausgewählte angenommene
-Besetzung der aktiven Schicht initiiert und persönlich durch eine angenommene
-Besetzung der Nachfolgeschicht bestätigt werden. Beide Bücher führen nur die
-tatsächlich abgelösten alten und angenommenen neuen Statusbesetzungen samt
-jeweils letzter Nummer fort. Zusätzlich müssen Initiierungs- und
-Bestätigungszeit getrennt als Übergabe- und Übernahmezeit in beiden
-Logbuchzeilen stehen; Schichtwechsel, Übergabeobjekt und Bestätigungsanfrage
-verwenden denselben atomar gelesenen Bestätigungszeitpunkt. Der formale
-Einsatzabschluss muss vor der ersten Schicht/Eröffnung blockieren; nach
-sauberem Preflight muss er je eine letzte Zeile mit tatsächlichem Ende erzeugen
-und die zehnjährige Mindestaufbewahrung setzen.
+Der Einsatz-Lebenszyklustest verlangt einen vollständigen Pflichtkopf und
+prüft, dass die Einsatzaktivierung ETB und TTB ohne Schichtvoraussetzung mit
+lokaler Nummer 1 und `NULL`-Schichtprovenienz eröffnet. Der formale
+Einsatzabschluss muss auch ohne frühere Schicht oder
+schichtbezogene Eröffnungszeilen möglich sein, nach sauberem Preflight je eine
+letzte Zeile mit tatsächlichem Ende erzeugen und die zehnjährige
+Mindestaufbewahrung setzen. Historische offene Dienstschichten oder
+Besetzungen sind keine Abschlussblocker.
 
-Für die aktive Schichterweiterung weist derselbe Datenbanktest nach, dass die
-Administration zunächst nur zuweist und erst die persönlich betroffene Person
-die Besetzung annimmt. Eine S1-Ergänzung erzeugt genau eine ETB- und keine
-TBB-Zeile; eine zusätzliche A/W-Besetzung erzeugt atomar je eine ETB- und
-TBB-Zeile. Derselben Person kann A/W nicht doppelt zugewiesen werden, mehrere
-unterschiedliche A/W sind zulässig und eine bereits vorhandene andere
-Funktion kann nicht innerhalb der aktiven Schicht ersetzt werden.
-Eine ETB-Neuzuweisung, die den bestimmten ETB-/S2-Schreiber verdrängen würde,
-muss bereits in der aktiven Schicht scheitern. Zusätzlich weist der Test nach,
-dass eine in der Planung zugewiesene ETB-Funktion nach Aktivierung weder über
-den Anwendungsdienst noch per direktem Datenbank-UPDATE angenommen werden kann
-und dabei Besetzung, Bücher, Nummernköpfe und Audit unverändert bleiben.
+Der Zugangsschichttest legt optionale Gruppen an und prüft unzugeordnete
+Konten, Mehrfachzuordnung per OR, Aktivierung ohne automatische Anmeldung,
+Deaktivierung mit Widerruf der betroffenen Sitzungen sowie eine andere aktive
+Gruppe als verbleibenden Zugang. Funktion und Rolle müssen unverändert bleiben;
+eine manuelle Kontosperre hat immer Vorrang. Zusätzlich simuliert der Test eine
+zwischenzeitliche Änderung einer anderen Schicht sowie
+Entfernen→Neuzuordnen→Absenden des alten Dialogs. Der serverseitige
+Bestätigungs-Hash beziehungsweise die konkrete Intervall-ID müssen beide
+veralteten Aktionen konfliktfrei abweisen.
 
 Nummerierte Nachrichteneingänge und erst tatsächlich beförderte Ausgänge
 müssen in derselben Transaktion einen strukturierten TBB-Nachweis mit
@@ -1416,9 +1402,9 @@ ESTAB_CATEGORY_HTTP_TEST_ALLOW_MUTATION=true \
 tests/integration/categories_http.sh
 ```
 
-Nachgewiesen werden HTTP 403 ohne Sitzung oder ohne ausgewählten aktiven Hut,
-positive IDs, inerte GET-Schreibparameter, Session-CSRF und HTTP-303-PRG. S1
-darf mit seiner ausgewählten aktiven Dienstfunktion Funktions- und
+Nachgewiesen werden HTTP 403 ohne Sitzung oder mit unpassender fester
+Kontofunktion, positive IDs, inerte GET-Schreibparameter, Session-CSRF und
+HTTP-303-PRG. S1 darf mit seiner festen Kontofunktion Funktions- und
 Benutzerkategorien seines eigenen Tabellenraums verwalten, aber weder
 Master-Kategorien ändern noch eine Master-Zuordnung einschleusen. S2/Rotkopie
 und `Si` erreichen die Masterverwaltung. CRUD, Zuordnung und Linkbereinigung
@@ -1442,8 +1428,7 @@ zurückgesetzt.
 
 Ein Trap entfernt sämtliche Testkategorien, Links und die fremde Nachricht.
 Ein ausschließlich für den Einzellauf erzeugtes Si-Konto samt persönlicher
-Tabellen wird ebenfalls entfernt; eine bereits dienstlich zugewiesene
-CI-Besetzung bleibt bestehen. Die CI führt diesen Test
+Tabellen wird ebenfalls entfernt. Die CI führt diesen Test
 nach HTTP-Smoke und ETB/TBB, aber vor Admin-Workflow und Backup-/Restore aus.
 
 ### Nachrichtenrollen-HTTP-Integration
@@ -1453,11 +1438,9 @@ dynamische Statustabellen und Vordrucke. Der Test startet deshalb nur mit
 `ESTAB_MESSAGE_WORKFLOW_HTTP_TEST_ALLOW_MUTATION=true` und einem Compose-Projekt
 namens `estab_ci` oder `estab_ci_*`. Das Projekt muss wegwerfbar,
 mit deaktivierter Selbstregistrierung und mit der historischen Standardmatrix
-initialisiert sein. Der vorangehende HTTP-Smoke aktiviert einen vollständigen
-Erstdienst. Der Nachrichtenrollentest plant seine eigene Nachfolgeschicht,
-lässt alle Konten persönlich annehmen und führt anschließend die zweistufige,
-durch das eingehende S1-Konto bestätigte Übergabe über die Produktions-Domain
-aus; er deaktiviert den zentralen Schreibguard zu keinem Zeitpunkt.
+initialisiert sein. Der vorangehende HTTP-Smoke aktiviert einen Einsatz. Der
+Nachrichtenrollentest verwendet feste Funktionskonten ohne Hutauswahl und ohne
+aktive Schicht; er deaktiviert den zentralen Schreibguard zu keinem Zeitpunkt.
 
 Ein einzelner Lauf kann beispielsweise so gestartet werden:
 
@@ -1493,9 +1476,9 @@ Fail-closed-Vertrag, die zugängliche Combobox/Listbox samt nativer
 No-Script-Rückfalloption, ausgeschaltetes Browser-Autocomplete und HTML-sichere
 Ausgabe. Dazu gehören die festen LdF-Kontextfelder je Richtung, getrennte
 Wert-/Herkunftsattribute sowie die erneute Prüfung von Status, Sperrbesitz und
-ausgewählter Besetzung im selben Statement. Der isolierte MariaDB-Test
+fester Kontofunktion. Der isolierte MariaDB-Test
 `tests/integration/message_suggestions.php` belegt die erneute Prüfung von
-aktivem Einsatz und ausgewählter Dienstbesetzung im selben Abfrage-Statement,
+aktivem Einsatz sowie fester Kontofunktion und Rolle,
 die Rollen- und Richtungsgrenzen, akzentverschiedene Werte sowie, dass Werte
 eines anderen Einsatzes nicht erscheinen. Er weist außerdem die Rangfolge
 „häufige abgeschlossene Nachrichtenpaare vor aktuell gültigem
@@ -1570,8 +1553,8 @@ Status-8-Abschluss. Damit wird nicht nur der Formularhandler, sondern dieselbe
 Zugriffsregel in Listen-SQL, Objekt-Gate und atomarem State-SQL geprüft.
 
 `tests/php/read_authorization_security.php` und die HTTP-Gegenproben erweitern
-diese Grenze auf alle Ausgabepfade. Eine Kontositzung ohne ausgewählte aktive
-Dienstbesetzung darf keine operative Nachricht lesen. Normaler Stab/FB erhält
+diese Grenze auf alle Ausgabepfade. Eine Kontositzung mit unpassender fester
+Funktion darf keine operative Nachricht lesen. Normaler Stab/FB erhält
 nur die terminale Empfängerkopie oder den eigenen Ausgang; Si, LdF und A/W nur
 ihre aktuelle Warteschlange/Sperre oder eine Nachricht mit eigener
 unveränderlicher Verarbeitungsmarke. Vordruckliste und beide Downloadvarianten
@@ -1701,9 +1684,9 @@ Mindestens zu prüfen:
   Neuanmeldung abweisen, anschließend entsperren und ein Kennwort
   zurücksetzen; altes Kennwort ablehnen und neues akzeptieren,
 - Berechtigungs-/Rollenzuordnung aus der Empfängermatrix kontrollieren,
-- jede verwendete Person ihre angenommene aktive Dienstfunktion auswählen
-  lassen; dieselben operativen Lesepfade mit bloßer Kontoanmeldung ohne
-  ausgewählten Hut abweisen,
+- jede verwendete Person mit dem vorgesehenen festen Funktionskonto anmelden;
+  abweichende Funktion/Rolle und fehlenden aktiven Einsatz abweisen, die
+  positiven Vorgänge ohne aktive Schicht zulassen,
 - eingehende und ausgehende Nachricht mit Richtung, Gegenstelle,
   Prioritätsstufe, Empfängern und Inhalt erfassen,
 - den Bildschirmvordruck bei Desktopbreite und bei 390 Pixeln direkt mit den
@@ -1730,14 +1713,14 @@ Mindestens zu prüfen:
   Hinweis genau einmal physisch hören; mit ausgeschaltetem oder browserseitig
   blockiertem Ton zusätzlich die sichtbare Rückmeldung kontrollieren,
 - globale, funktionsbezogene und persönliche Kategorie anlegen, zuweisen,
-  suchen und entfernen; dieselben Seiten ohne ausgewählten aktiven Hut und
-  einen fremden Nachrichtenbezug abweisen,
+  suchen und entfernen; dieselben Seiten mit unpassender fester Kontofunktion
+  und einem fremden Nachrichtenbezug abweisen,
 - zulässigen Anhang hochladen, Vorschau/Download prüfen und eine unzulässige
   Datei ablehnen lassen; verknüpften und freien Anhang zusätzlich mit
-  berechtigtem sowie fremdem Hut über Liste, Vorschau, Download, Auswahl und
+  berechtigtem sowie fremdem Festfunktionskonto über Liste, Vorschau, Download, Auswahl und
   manipulierten finalen Nachrichtensave prüfen,
 - Nachrichtenvordruck als PDF erzeugen und aus der geschützten
-  Vordruckliste mit berechtigtem Hut abrufen und mit einem fremden Hut sowohl
+  Vordruckliste mit berechtigtem Konto abrufen und mit einem fremden Konto sowohl
   Liste als auch aktuellen und archivierten Download abweisen,
 - für einen inzwischen historischen Einsatz ein PDF-Dossier mit allen neun
   Abschnitten ETB, TBB, Nachrichtenvordrucke, Anhänge,
@@ -1749,12 +1732,11 @@ Mindestens zu prüfen:
   PDF-Programm öffnen und jede eingebettete Datei samt dokumentierter SHA-256
   gegen das Original prüfen; dabei
   Führungsstellenname, Einsatzkennung und Einsatzname getrennt kontrollieren,
-- einen Einsatz mit vollständigem ETB-/TBB-Pflichtkopf anlegen, die erste
-  Schicht aktivieren und schon vor der Eröffnung genau die Köpfe `ETB:1` und
-  `TTB:1`, danach beide automatischen Eröffnungseinträge mit lokaler Nummer 1
-  sowie den ausdrücklich ausgeschriebenen Einsatzbeginn im ETB prüfen; mit
-  mehreren angenommenen ETB-/S2- und A/W-Besetzungen die
-  jeweils genau eine schreibende Besetzung und alle nur lesenden Hüte prüfen,
+- einen Einsatz mit vollständigem ETB-/TBB-Pflichtkopf anlegen und schon vor
+  der ersten Zeile genau die Köpfe `ETB:1` und `TTB:1` prüfen; anschließend
+  ohne aktive Schicht die lokale Nummer 1 schreiben. ETB mit `ETB/Stab` und
+  `S2/Stab`, TTB mit `A/W/Fernmelder` positiv, fremde Festfunktionen negativ
+  prüfen,
 - im ETB ohne/A/B/E/K/W sowie Nachricht, Anhang, eine Referenz auf eine
   vorhandene lokale ETB-Nummer und eine Berichtigung als neue Zeile erfassen;
   Freitext, führende Nullen und unbekannte Nummern abweisen, Referenzketten
@@ -1769,19 +1751,15 @@ Mindestens zu prüfen:
   suchen; optional einen finalisierten unbenutzten Anhang zuordnen,
   `ETB {einsatz_id}-{estab_book_lfd}-1` in UI/PDF/Anlagenverzeichnis und das
   getrennte Kennzeichen wie `EL0001` prüfen sowie den Mehrfachlink abweisen,
-- eine aktive Schicht um S1 ergänzen und durch diese Person selbst annehmen
-  lassen; nur den ETB-Nachtrag prüfen. Danach eine weitere A/W-Person ergänzen
-  und je einen ETB-/TBB-Nachtrag prüfen; doppelte Personen-/A/W-Zuweisung und
-  den Austausch einer bereits besetzten Nicht-A/W-Funktion abweisen; eine
-  ETB-Ergänzung bei vorhandener ETB-/S2-Führung schon beim Zuweisen ablehnen
-  und eine noch in der Planung angelegte ETB-Zuweisung nach Aktivierung weder
-  über die Anwendung noch direkt in der Datenbank annehmen lassen,
-- eine Schichtübergabe mit einer persönlich angenommenen aktiven Besetzung
-  initiieren, mit einer persönlich angenommenen Nachfolgebesetzung bestätigen
-  und ETB/TBB-Einträge mit ausschließlich echten abgelösten/angenommenen
-  Statusbesetzungen und letzter Nummer kontrollieren; einen Einsatz ohne erste
-  Schicht/Eröffnungszeilen nicht formal schließen lassen; am Einsatzende die
-  automatischen Abschlusszeilen, Schreibsperre und zehnjährige
+- optionale Zugangsschichten anlegen, ein unzugeordnetes Konto weiter zulassen,
+  ein Konto mehreren Gruppen zuordnen und OR-Semantik prüfen; Aktivierung darf
+  niemanden anmelden, Deaktivierung muss Sitzungen ohne anderen aktiven Zugang
+  widerrufen und Funktion/Rolle unverändert lassen; manuelle Sperre muss
+  Vorrang behalten,
+- neue ETB-/TTB-Zeilen mit `NULL` in der Legacy-Schicht-/Schreiberprovenienz
+  prüfen und belegte historische Werte weiter exportieren; einen Einsatz ohne
+  frühere Schicht und ohne schichtbezogene Eröffnungszeilen formal schließen;
+  automatische Abschlusszeilen, Schreibsperre und zehnjährige
   Mindestaufbewahrung prüfen,
 - das PDF-Dossier öffnen und Fb Fü 2 im A4-Hochformat sowie Fb Fü 44 im
   A4-Querformat ausdrucken; Spalten, buchlokale Seitenzähler,
@@ -1791,14 +1769,12 @@ Mindestens zu prüfen:
   geschlossenen Einsatz muss nur der
   unbeschriebene Rest der jeweils letzten Buchseite diagonal gestrichen sein;
   die organisatorische Zeichnung festlegen und die formale THW-Freigabe
-  separat dokumentieren; denselben Einsatz als Gesamtbuch und als einzelne
-  Dienstschicht exportieren, nur ETB/TBB gefiltert sowie Umfang auf Deckblatt
-  und im Audit nachweisen und alle übrigen Sektionen einsatzweit vergleichen,
-- bei einer ETB/Si-Mehrfachbesetzung ausdrücklich zwischen beiden Hüten
-  wechseln und den Si-Hut beim ETB-POST mit HTTP 403 abweisen; beide Bücher
-  mit einer jeweils anderen ausgewählten aktiven Dienstfunktion vollständig,
-  aber ohne Schreibformular lesen; eine bloß angemeldete Sitzung ohne
-  ausgewählten Hut und Cross-Rollen-Schreibversuche abweisen;
+  separat dokumentieren; denselben Einsatz als Gesamtbuch und bei belegter
+  historischer Provenienz als frühere formale Dienstschicht exportieren, nur
+  ETB/TBB gefiltert sowie Umfang auf Deckblatt und im Audit nachweisen und alle
+  übrigen Sektionen einsatzweit vergleichen,
+- bei getrennten ETB- und Si-Konten den Si-ETB-POST mit HTTP 403 abweisen;
+  feste Funktions-/Rollengrenzen und Cross-Rollen-Schreibversuche prüfen;
   Kommunikationsplan und lokal benötigte Zusatzmodule je repräsentativ
   anlegen/lesen,
 - administrative Exportübersicht am Desktop und bei 390 Pixel Breite öffnen,

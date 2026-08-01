@@ -15,14 +15,6 @@ estab_navigation_require_session($_SESSION, 'forms', $_SERVER);
 $readIdentity = session_status() === PHP_SESSION_ACTIVE
     ? estab_read_session_identity($_SESSION)
     : null;
-if (
-    !is_array($readIdentity)
-    || estab_read_duty_assignment_id(
-        $readIdentity['duty_assignment_id'] ?? null
-    ) === null
-) {
-    estab_navigation_select_duty($_SERVER);
-}
 estab_session_ui_start($_SESSION);
 
 $files = [];
@@ -55,8 +47,7 @@ try {
     $noActiveIncident = true;
 } catch (EstabReadPermissionException) {
     http_response_code(403);
-    $listError = 'Wählen Sie zuerst eine persönlich angenommene '
-        . 'Dienstfunktion.';
+    $listError = 'Ihre angemeldete Funktion darf die Vordruckliste nicht öffnen.';
 } catch (Throwable $exception) {
     error_log('eStab generated-form list failed: ' . $exception->getMessage());
     http_response_code(503);

@@ -239,8 +239,8 @@ ihn anschließend wieder her.
 podman compose run --rm migrate
 ```
 
-Ein bereits aktueller Bestand meldet alle siebzehn Migrationen einschließlich
-`111-logbook-shift-assignment.sql` als vorhanden und
+Ein bereits aktueller Bestand meldet alle achtzehn Migrationen einschließlich
+`112-optional-access-shifts.sql` als vorhanden und
 führt trotzdem den vollständigen Read-only-Schematest aus. Die Ausgabe muss
 `Post-migration schema verification passed` und anschließend
 `All schema migrations are applied` enthalten. Erst danach sollte der Stack
@@ -268,11 +268,11 @@ Der grüne technische Stand ersetzt nicht die von der ETB-/TBB-Unterlage
 verlangte formale THW-Freigabe. Quelle, Hash und Abnahmevorbehalt stehen in
 [DV-1-101-UMSETZUNG.md](DV-1-101-UMSETZUNG.md).
 
-### 5. Ersten Einsatz und Dienstbetrieb aktivieren
+### 5. Ersten Einsatz aktivieren und Zugänge optional gruppieren
 
-Eine Neuinstallation startet absichtlich ohne aktiven Einsatz und ohne aktive
-Dienstschicht. Anmeldung, öffentliche Ansichten und Administration bleiben
-erreichbar; operative Lese- und Schreibpfade sind geschlossen. Vor der ersten
+Eine Neuinstallation startet absichtlich ohne aktiven Einsatz. Anmeldung,
+öffentliche Ansichten und Administration bleiben erreichbar; operative Lese-
+und Schreibpfade sind geschlossen. Vor der ersten
 Nachricht, dem ersten Anhang oder einem ETB-/TBB-Eintrag:
 
 1. `/4fadm/admin.php` mit dem separaten Basic-Auth-Zugang öffnen,
@@ -281,37 +281,26 @@ Nachricht, dem ersten Anhang oder einem ETB-/TBB-Eintrag:
    Einsatz-/Führungsleitung sowie Einsatzauftrag/Ausgangslage anlegen und den
    Einsatz aktivieren; beim Anlegen müssen genau die beiden noch leeren
    Nummernköpfe `ETB:1` und `TTB:1` entstehen,
-3. unter **Benutzerverwaltung** persönliche Konten für mindestens S2, Si, S6,
-   LdF und A/W anlegen,
-4. unter **Führungsstellenbetrieb** eine Dienstschicht planen und die
-   Funktionen ungesperrten persönlichen Konten zuweisen,
-5. jede Person ihre Zuweisungen unter `/4fach/fuehrungsstelle.php` selbst
-   annehmen lassen,
-6. die Schicht erst nach Annahme aller Pflichtfunktionen administrativ
-   aktivieren; die erste Aktivierung eröffnet ETB und TBB atomar mit lokaler
-   Nummer 1 und nennt den Einsatzbeginn ausdrücklich im ersten ETB-Text,
-7. vor operativer Arbeit die eigene angenommene aktive Dienstfunktion
-   auswählen und Einsatz, Schicht und Funktions-Hut in der Oberfläche prüfen.
+3. unter **Benutzerverwaltung** persönliche Konten mit der jeweils festen
+   Funktion anlegen; die Rolle wird serverseitig abgeleitet,
+4. optional unter **Führungsstellenbetrieb** Zugangsschichten anlegen, Konten
+   zuordnen und gewünschte Gruppen aktivieren,
+5. jede Person regulär anmelden und Einsatz sowie feste Funktion in der
+   Oberfläche prüfen.
 
-Eine Schichtübergabe wird nicht allein durch den technischen Administrator
-gezeichnet. Eine persönlich angemeldete, ausgewählte und angenommene
-Besetzung der aktiven Schicht initiiert sie mit der Zusammenfassung; eine
-persönlich angenommene Besetzung der Nachfolgeschicht bestätigt sie. Erst die
-Bestätigung wechselt die Schichten und schreibt beide Logbuchzeilen. Darin
-erscheinen nur tatsächlich abgelöste alte beziehungsweise angenommene neue
-Statusbesetzungen.
+Eine Dienst- oder Zugangsschicht ist keine fachliche Voraussetzung für
+operative Eingaben. Ist ein Konto keiner Gruppe zugeordnet, bleibt sein Zugang
+erlaubt. Bei mehreren Zuordnungen genügt für den Kontozugang eine aktive
+Gruppe. Das Aktivieren meldet niemanden an; das Deaktivieren widerruft
+Sitzungen der betroffenen Konten, sofern keine andere aktive Gruppe verbleibt.
+Eine Zugangsschicht ändert niemals Funktion, Rolle oder Schreibrecht. Die
+manuelle Kontosperre bleibt ein unabhängiger, vorrangiger Mechanismus.
 
-Während einer laufenden Schicht darf die Administration eine bislang
-unbesetzte Funktion ergänzen. Die Zuweisung ist erst wirksam, nachdem die
-betroffene Person sie unter `/4fach/fuehrungsstelle.php` selbst angenommen
-hat. Danach muss eine neue ETB-Zeile vorhanden sein; für LdF oder A/W
-zusätzlich eine TBB-Zeile. Mehrere unterschiedliche A/W-Besetzungen sind als
-Aufstockung zulässig. Eine ETB-Ergänzung, die eine angenommene ETB- oder
-S2-Besetzung als bestimmten Schreiber verdrängen würde, wird in der aktiven
-Schicht bereits bei der Zuweisung und nochmals bei der Annahme abgewiesen.
-Auch eine noch in der Planung zugewiesene ETB-Funktion darf nach Aktivierung
-nicht nachträglich übernehmen. Für jeden Wechsel der ETB-Führung ist eine
-Nachfolgeschicht vorzubereiten und dokumentiert sowie bestätigt zu übergeben.
+Historische formale Dienstschichten, Besetzungen und Übergaben werden nicht
+gelöscht. Im Abschnitt **Dienstorganisation** des Exports erscheinen sie
+getrennt als historischer Legacy-Nachweis. Derselbe Abschnitt enthält die
+optionalen Zugangsschichten samt aktuellen und entfernten Kontenzuordnungen.
+Die Altwerte steuern weder heutige Berechtigungen noch den Einsatzabschluss.
 
 Eine ETB-Anlage wird optional beim Erfassen des ETB-Eintrags aus den
 finalisierten, noch unbenutzten Anhängen des aktiven Einsatzes ausgewählt.
@@ -320,10 +309,9 @@ Nach dem Speichern zeigt eStab
 bleibt getrennt. Dieselbe Datei darf nicht erneut als ETB-Anlage angeboten
 oder verknüpft werden. Über die ETB-Suche lassen sich leere Gesamtliste,
 Volltext, Art, lokale Nummer/Bezug, ETB-Anlagennummer, Ablage-/Dateiname und
-Bearbeitungszuordnung kombinieren. Die optionale Zuordnung wird aus den
-angenommenen Besetzungen der aktiven Schicht ausgewählt, beim Speichern erneut
-geprüft und als unveränderlicher Snapshot abgelegt. Sie bleibt eine Suchhilfe
-der Webansicht und erscheint nicht im amtlichen Fb-Fü-2-PDF.
+Bearbeitungszuordnung kombinieren. Eine optionale Zuordnung bleibt reine
+Suchhilfe, erweitert keine Rechte und wird als unveränderlicher Snapshot
+abgelegt. Sie erscheint nicht im amtlichen Fb-Fü-2-PDF.
 
 Das Feld **Referenz auf ETB-Nr.** nimmt bei neuen Einträgen ausschließlich die
 positive lokale Nummer eines bereits vorhandenen ETB-Eintrags desselben
@@ -341,31 +329,30 @@ Einträge oder rückwärts der Bezugspfad anzeigen. Die Auswertungstiefe ist auf
 **Druckansicht öffnen** erzeugt eine auf diesen Referenznachweis beschränkte
 Ansicht.
 
-Jede neue manuelle ETB-/TTB-Zeile speichert aktive Schicht und schreibende
-Dienstbesetzung. Automatische Systemzeilen speichern die Schicht ohne
-menschliche Schreiberzuordnung; historische Zeilen behalten nach Migration
-111 mangels belegbarer Herkunft `NULL`.
-
-Die designierte Buchführung wird unabhängig vom aktuellen Kontozustand als
-erste angenommene ETB-, ersatzweise S2-Besetzung beziehungsweise als erste
-angenommene A/W-Besetzung bestimmt. Wird genau dieses Konto deaktiviert oder
-gesperrt, bleibt das Schreiben geschlossen; eStab befördert nicht unbemerkt
-die nächste fachlich passende Person. Vor der Fortsetzung ist eine
-dokumentierte Ablösung beziehungsweise Übergabe erforderlich. Beim manuellen
-Insert prüft auch die Datenbank angenommene Besetzung, aktive Schicht,
-übereinstimmende Konto-/Kürzel-/Funktionsidentität sowie ein aktives,
-ungesperrtes Konto.
+Neue ETB-/TTB-Zeilen dürfen die Legacy-Felder für aktive Dienstschicht und
+schreibende Dienstbesetzung `NULL` lassen. Sie werden nicht mit einer
+Zugangsschicht befüllt; historische belegte Provenienz bleibt unverändert.
+ETB schreiben Konten mit `ETB/Stab` oder `S2/Stab`, TTB Konten mit
+`A/W/Fernmelder`. Anwendung und Datenbank prüfen feste Funktion, Rolle,
+ungesperrtes Konto und aktiven Einsatz, aber keine aktive Schicht.
+Die Aktivierung eines neuen, noch leeren Einsatzes eröffnet ETB und TTB
+atomar mit je einer Systemzeile; beide Provenienzfelder bleiben dabei `NULL`.
+Enthält ein übernommener Alt-Einsatz bereits Buchzeilen, wird seine belegte
+Reihenfolge nicht durch eine nachträgliche Eröffnungszeile verändert.
 
 Der Dossierexport weist ETB-Anlagennummer und Ablagekennzeichen im
 Fb-Fü-2-Abzug beziehungsweise Anlagenverzeichnis aus. Für ETB/TBB wählt die
-Administration das Gesamtbuch oder eine Dienstschicht. Die Schichtwahl filtert
-nur diese beiden Buchabschnitte; Nachrichtenvordrucke, Anhänge und alle
+Administration das Gesamtbuch oder bei historischem Bestand eine frühere
+formale Dienstschicht. Dieser Legacy-Filter umfasst keine Zugangsschicht und
+keine neue Zeile mit `NULL`-Provenienz. Er filtert nur diese beiden
+Buchabschnitte; Nachrichtenvordrucke, Anhänge und alle
 weiteren ausgewählten Abschnitte bleiben einsatzweit. Deckblatt und
 `pdf_export`-Audit dokumentieren den aufgelösten Umfang.
 
-Ein formaler Einsatzabschluss ist vor diesem Eröffnungsablauf nicht möglich:
-Der Preflight verlangt mindestens eine aktivierte Schicht sowie exakt je eine
-ETB- und TBB-Eröffnungszeile mit lokaler Nummer 1.
+Ein formaler Einsatzabschluss verlangt weder eine frühere Schichtaktivierung
+noch schichtbezogene Eröffnungszeilen. Offene historische formale Schichten
+blockieren ihn ebenfalls nicht; fachlich offene Nachrichten, Melderaufträge
+und andere echte Abschlussblocker bleiben wirksam.
 
 Ein Einsatzwechsel gilt systemweit für alle angemeldeten Browser. Er darf nur
 koordiniert erfolgen, wenn keine ungespeicherten Fachvorgänge offen sind.
@@ -461,7 +448,7 @@ Die Aktivitätsübersicht wertet ausschließlich echte Browserinteraktion aus.
 Ohne Zeiger-, Tastatur-, Formular-, Rad- oder Touchinteraktion beziehungsweise
 bewusste Rückkehr in das sichtbare Fenster wechselt ein angemeldeter Benutzer
 nach 15 Minuten zu „Inaktiv“. Das ist zunächst nur ein Präsenzzustand: Die
-Fachsitzung und eine persönlich angenommene Dienstbesetzung bleiben gültig.
+Fachsitzung und die feste Kontofunktion bleiben gültig.
 
 Nach 12 Stunden ohne echte Interaktion widerruft die Anwendung die
 Fachsitzung serverseitig. Der nächste geschützte Seitenaufruf führt zum
@@ -572,10 +559,8 @@ Meldungsübersicht, Vordrucke, Einsatztagebuch, Technisches Betriebsbuch,
 Nachweisung und BOS-Info. Administration und Handbuch sind zwei getrennte
 Dienste. Das aktuelle, öffentliche und ohne Funktionsanmeldung erreichbare
 Web-Handbuch liegt unter `/handbuch/`; das historische PDF von 2011 gehört
-nicht zum Laufzeitbestand. Vor Auswahl eines Funktions-Huts bleiben nach der
-Anmeldung nur die vier öffentlichen beziehungsweise separat geschützten Ziele
-und der Führungsstellen-Bootstrap sichtbar. Mit ausgewähltem aktivem Hut zeigt
-die Navigation je nach Funktion neun oder zehn Bereichs- und Dienstlinks;
+nicht zum Laufzeitbestand. Nach der Anmeldung zeigt die Navigation je nach
+fester Kontofunktion neun oder zehn Bereichs- und Dienstlinks;
 Meldungsübersicht ist ausschließlich S2, Nachweisung ausschließlich LdF und
 A/W zugeordnet. Der aktuelle Bereich ist hervorgehoben; alle internen Ziele
 ersetzen die aktuelle Ansicht und erzeugen keine zusätzlichen Tabs. Der
@@ -583,7 +568,7 @@ Nachrichtenvordruck verwendet genau zwei moderne
 `iframe`-Elemente: die vollhohe linke `vorgaben`-Sidebar und den rechten
 `mainframe`. In der Sidebar folgen auf die Statuskarte die Sitzungsidentität
 mit Logout, die zur angemeldeten Rolle passenden Textbuttons für Fachaktionen
-und danach die für den ausgewählten Hut sichtbaren Bereichs- und Dienstlinks.
+und danach die für die feste Kontofunktion sichtbaren Bereichs- und Dienstlinks.
 Die frühere aufklappbare Auswahl „Bereich wechseln“ und ihre kleine eigene
 Scrollfläche entfallen. Bei geringer Höhe scrollt ausschließlich das gesamte
 Sidebar-Dokument, sodass Status, Navigation und Aktionen in einer durchgehenden
@@ -640,9 +625,9 @@ Alle Loginformulare bleiben mit `target="_self"` im gerade sichtbaren
 Browserkontext. Die Anmeldekarte zeigt das Ziel und hat mit „Anmeldung
 abbrechen · Zur Übersicht“ stets einen Top-Level-Ausgang; weder ein
 eingebettetes Login noch ein direkt geöffneter Tab erfordern eine manuelle
-Änderung der Browseradresse. Ist das Konto bereits angemeldet, aber noch keine
-persönliche Dienstfunktion ausgewählt, führt ein GET/HEAD per HTTP 303
-stattdessen zum Führungsstellenbetrieb; ein Schreibversuch bleibt HTTP 403.
+Änderung der Browseradresse. Nach erfolgreicher Anmeldung wird das vorgemerkte
+und für die feste Kontofunktion zulässige Ziel direkt geöffnet; eine
+zusätzliche Hutauswahl entfällt.
 Rollen-, Objekt-, CSRF- und Subresource-Anfragen werden nicht umgelenkt und
 behalten ihre 403-Grenzen. Das Statusfragment liefert bei fehlender oder
 abgelaufener Fachsitzung stattdessen HTTP 401, damit die Sidebar den
@@ -808,11 +793,13 @@ und schreiben nur nach POST plus Session-CSRF:
   letzte tatsächlich auf Papier verwendete Nummer eintragen. Der Zielwert muss
   strikt größer als der angezeigte Höchstwert sein. Gemeinsame und getrennte
   Nachweisung werden getrennt behandelt; ein Absenken oder Teilupdate ist
-  ausgeschlossen. Eine aktive Dienstschicht ist Voraussetzung. Die Maßnahme
+  ausgeschlossen. Ein aktiver Einsatz ist Voraussetzung, eine aktive Schicht
+  nicht. Die Maßnahme
   erzeugt keine fingierte Fachnachricht und keine erfundenen A/W-, LdF- oder
   Si-Zeichen. Stattdessen schreibt sie den Zielwert als dediziertes,
-  unveränderliches `message_counter_repaired`-Ereignis in die verkettete
-  Betriebsspur der aktiven Schicht sowie in `nv_protokoll`. Die nächste echte
+  unveränderliches `message_counter_repaired`-Ereignis mit Objekttyp `EINSATZ`
+  in die verkettete einsatzbezogene Betriebsspur sowie in `nv_protokoll`.
+  Zugangsschichtmutationen verwenden dort `ZUGANGSSCHICHT`. Die nächste echte
   Nachricht erhält die Nummer nach dem größeren Wert aus Fachbestand und
   diesem Wiederanlaufnachweis.
 - **PDF-Vordruckreset:** Die GET-Seite zeigt nur die Auswirkung für den

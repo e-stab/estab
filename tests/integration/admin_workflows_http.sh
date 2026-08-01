@@ -456,7 +456,7 @@ SELECT GREATEST(
                       )) AS UNSIGNED))
              FROM `nv_betriebsereignisse` AS e
             WHERE e.`einsatz_id` = s.`active_einsatz_id`
-              AND e.`objekttyp` = 'DIENSTSCHICHT'
+              AND e.`objekttyp` = 'EINSATZ'
               AND e.`aktion` = 'message_counter_repaired'
          ), 0)
        )
@@ -479,7 +479,7 @@ SELECT GREATEST(
                       )) AS UNSIGNED))
              FROM `nv_betriebsereignisse` AS e
             WHERE e.`einsatz_id` = s.`active_einsatz_id`
-              AND e.`objekttyp` = 'DIENSTSCHICHT'
+              AND e.`objekttyp` = 'EINSATZ'
               AND e.`aktion` = 'message_counter_repaired'
          ), 0)
        )
@@ -916,7 +916,7 @@ SELECT CONCAT(
        )
   FROM \`nv_betriebsereignisse\`
  WHERE \`einsatz_id\` = ${active_incident_id}
-   AND \`objekttyp\` = 'DIENSTSCHICHT'
+   AND \`objekttyp\` = 'EINSATZ'
    AND \`aktion\` = 'message_counter_repaired'
    AND CAST(JSON_UNQUOTE(JSON_EXTRACT(
          \`details\`, '$.after.ea_nummer'

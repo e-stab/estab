@@ -609,7 +609,7 @@ $assert(
             $secondShell,
             '($workflowSelectedIdentity ["rolle"] ?? null) === "Stab"'
         ),
-    'Second-sighting branches are not bound to the selected duty hat'
+    'Second-sighting branches are not bound to the fixed account function'
 );
 
 $cssClasses = [

@@ -6,10 +6,10 @@ declare(strict_types=1);
  * Object-level read boundary for messages, generated forms and attachments.
  *
  * Authentication alone deliberately grants no operational object access.
- * Every read is bound to the active incident and to the exact, personally
- * accepted duty assignment selected in the PHP session. Message visibility is
- * then derived from the same workflow fields that carry the signed processing
- * marks; attachment names are compared as complete canonical tokens.
+ * Every read is bound to the active incident and the fixed function/role of
+ * the authenticated account. Optional access shifts can disable an account as
+ * a group but do not alter fachliche rights. Message visibility is then
+ * derived from the same workflow fields that carry signed processing marks.
  */
 
 require_once __DIR__ . '/attachment.php';
@@ -20,116 +20,32 @@ final class EstabReadPermissionException extends RuntimeException
 {
 }
 
-/** Return a positive selected duty-assignment id, or null when none exists. */
-function estab_read_duty_assignment_id(mixed $value): ?int
-{
-    if (is_int($value) && $value > 0) {
-        return $value;
-    }
-    if (
-        !is_string($value)
-        || preg_match('/\A[1-9][0-9]{0,18}\z/D', $value) !== 1
-    ) {
-        return null;
-    }
-    $parsed = filter_var($value, FILTER_VALIDATE_INT);
-    return is_int($parsed) && $parsed > 0 ? $parsed : null;
-}
-
-/**
- * Return the authenticated identity plus its server-side selected duty hat.
- *
- * estab_auth_session_identity() has already checked that a present assignment
- * belongs to this account and is still accepted in the active shift.
- */
+/** Return the authenticated account identity without a shift-derived role. */
 function estab_read_session_identity(array $session): ?array
 {
-    $identity = estab_auth_session_identity($session);
-    if (!is_array($identity)) {
-        return null;
-    }
-    $assignmentId = estab_read_duty_assignment_id(
-        $session['estab_duty_assignment_id'] ?? null
-    );
-    if ($assignmentId !== null) {
-        $identity['duty_assignment_id'] = $assignmentId;
-    }
-    return $identity;
+    return estab_auth_session_identity($session);
 }
 
-/** Validate the exact accepted hat again inside the object-read transaction. */
-function estab_read_require_selected_hat(
+/** Validate the fixed account and active incident inside the read request. */
+function estab_read_require_account_identity(
     mysqli $connection,
     int $incidentId,
     array $identity
 ): array {
-    $incidentId = estab_incident_positive_id($incidentId);
-    $assignmentId = estab_read_duty_assignment_id(
-        $identity['duty_assignment_id'] ?? null
-    );
-    $shape = estab_auth_session_identity_shape([
-        'vStab_benutzer' => $identity['benutzer'] ?? null,
-        'vStab_kuerzel' => $identity['kuerzel'] ?? null,
-        'vStab_funktion' => $identity['funktion'] ?? null,
-        'vStab_rolle' => $identity['rolle'] ?? null,
-    ]);
-    if ($assignmentId === null || $shape === null) {
-        throw new EstabReadPermissionException(
-            'Wählen Sie zuerst eine persönlich angenommene Dienstfunktion.'
-        );
-    }
-
-    $statement = $connection->prepare(
-        'SELECT 1 FROM `nv_dienstbesetzungen` AS assignment'
-        . ' JOIN `nv_dienstschichten` AS duty_shift'
-        . ' ON duty_shift.`dienstschicht_id`'
-        . ' = assignment.`dienstschicht_id`'
-        . ' JOIN `nv_einsaetze` AS incident'
-        . ' ON incident.`einsatz_id` = duty_shift.`einsatz_id`'
-        . ' JOIN `nv_benutzer` AS account'
-        . ' ON BINARY account.`kuerzel`'
-        . ' = BINARY assignment.`benutzer_kuerzel`'
-        . ' WHERE assignment.`dienstbesetzung_id` = ?'
-        . ' AND duty_shift.`einsatz_id` = ?'
-        . " AND duty_shift.`status` = 'AKTIV'"
-        . " AND assignment.`status` = 'ANGENOMMEN'"
-        . " AND incident.`estab_status` = 'open'"
-        . ' AND BINARY assignment.`benutzer_kuerzel` = BINARY ?'
-        . ' AND BINARY assignment.`funktion` = BINARY ?'
-        . ' AND BINARY assignment.`rolle` = BINARY ?'
-        . ' AND account.`aktiv` = 1 AND account.`estab_gesperrt` = 0'
-        . ' LIMIT 1'
-    );
-    if (!$statement) {
-        throw new RuntimeException(
-            'Die ausgewählte Dienstfunktion konnte nicht geprüft werden.'
-        );
-    }
     try {
-        $statement->bind_param(
-            'iisss',
-            $assignmentId,
-            $incidentId,
-            $shape['kuerzel'],
-            $shape['funktion'],
-            $shape['rolle']
+        return estab_dv_require_operational_account(
+            $connection,
+            estab_incident_positive_id($incidentId),
+            $identity,
+            false
         );
-        if (!$statement->execute()) {
-            throw new RuntimeException(
-                'Die ausgewählte Dienstfunktion konnte nicht geprüft werden.'
-            );
-        }
-        $allowed = $statement->get_result()->fetch_row() !== null;
-    } finally {
-        $statement->close();
-    }
-    if (!$allowed) {
+    } catch (EstabDvPermissionException $exception) {
         throw new EstabReadPermissionException(
-            'Die ausgewählte Dienstfunktion ist nicht mehr aktiv angenommen.'
+            'Für diesen Bereich werden ein aktiver Einsatz und ein aktiver '
+            . 'Benutzerzugang benötigt.',
+            previous: $exception
         );
     }
-
-    return $shape + ['duty_assignment_id' => $assignmentId];
 }
 
 /** Capability expected for one of the fixed DV 1-101 duty functions. */
@@ -149,17 +65,14 @@ function estab_read_identity_capability(array $identity): ?string
 }
 
 /**
- * Require the selected hat and, for fixed DV functions, its DB capability.
- *
- * Ordinary Stab/FB functions have no row in nv_funktionsfaehigkeiten and are
- * admitted only through their exact accepted assignment.
+ * Require the fixed account and, for DV functions, its DB capability.
  */
 function estab_read_require_identity_scope(
     mysqli $connection,
     int $incidentId,
     array $identity
 ): array {
-    $selected = estab_read_require_selected_hat(
+    $selected = estab_read_require_account_identity(
         $connection,
         $incidentId,
         $identity
@@ -167,15 +80,16 @@ function estab_read_require_identity_scope(
     $capability = estab_read_identity_capability($selected);
     if ($capability !== null) {
         try {
-            estab_dv_require_selected_capability(
+            estab_dv_require_account_capability(
                 $connection,
                 $incidentId,
                 $selected,
-                $capability
+                $capability,
+                false
             );
         } catch (EstabDvPermissionException $exception) {
             throw new EstabReadPermissionException(
-                'Die ausgewählte Dienstfunktion besitzt nicht die '
+                'Die zugewiesene Funktion besitzt nicht die '
                 . 'erforderliche Leseberechtigung.',
                 previous: $exception
             );
@@ -264,7 +178,7 @@ function estab_read_ldf_mapping_policy(
         || ($identity['rolle'] ?? null) !== 'Fernmelder'
     ) {
         throw new EstabReadPermissionException(
-            'Nur die ausgewählte LdF-Funktion darf Zuordnungen lesen.'
+            'Nur ein Konto mit der festen Funktion LdF darf Zuordnungen lesen.'
         );
     }
     return match ($direction) {
@@ -420,10 +334,9 @@ function estab_read_mapping_normalized_sql(string $expression): string
  *
  * Completed message pairs from the active incident are deliberately ranked
  * before matching entries of the currently valid S6 telecommunications plan.
- * The exact selected hat, account, capability, active shift/incident and
- * current message lock are rejoined in both branches of the same UNION query.
- * A concurrent revocation, incident switch or lock loss therefore yields no
- * operational mapping instead of leaking stale incident data.
+ * The fixed account, capability, active incident and current message lock are
+ * rejoined in both branches of the same UNION query. A concurrent account
+ * block, incident switch or lock loss therefore yields no stale data.
  *
  * @return list<array{
  *   value:string,
@@ -454,11 +367,10 @@ function estab_read_ldf_mapping_suggestions(
     );
     $selected = $scope['identity'];
     $incidentId = (int) $scope['incident']['active_einsatz_id'];
-    $assignmentId = (int) $selected['duty_assignment_id'];
     $capability = estab_read_identity_capability($selected);
     if ($capability !== 'FERNMELDEBETRIEB') {
         throw new EstabReadPermissionException(
-            'Die ausgewählte Funktion besitzt keine LdF-Zuordnungsberechtigung.'
+            'Die feste Kontofunktion besitzt keine LdF-Zuordnungsberechtigung.'
         );
     }
 
@@ -468,52 +380,41 @@ function estab_read_ldf_mapping_suggestions(
     $planContext = $policy['plan_context'];
     $planTarget = $policy['plan_target'];
 
-    $scopeSql = 'SELECT duty_shift.`einsatz_id` AS `incident_id`,'
+    $scopeSql = 'SELECT active.`active_einsatz_id` AS `incident_id`,'
         . ' current_message.' . $messageContext . ' AS `context_value`'
-        . ' FROM `nv_dienstbesetzungen` AS assignment'
-        . ' JOIN `nv_dienstschichten` AS duty_shift'
-        . ' ON duty_shift.`dienstschicht_id`'
-        . ' = assignment.`dienstschicht_id`'
-        . ' JOIN `nv_einsatz_status` AS active'
-        . ' ON active.`singleton_id` = 1'
-        . ' AND active.`active_einsatz_id` = duty_shift.`einsatz_id`'
+        . ' FROM `nv_einsatz_status` AS active'
         . ' JOIN `nv_einsaetze` AS incident'
-        . ' ON incident.`einsatz_id` = duty_shift.`einsatz_id`'
+        . ' ON incident.`einsatz_id` = active.`active_einsatz_id`'
         . ' JOIN `nv_benutzer` AS account'
-        . ' ON BINARY account.`kuerzel`'
-        . ' = BINARY assignment.`benutzer_kuerzel`'
+        . ' ON BINARY account.`kuerzel` = BINARY ?'
         . ' JOIN `nv_funktionsfaehigkeiten` AS capability'
         . ' ON BINARY capability.`funktion`'
-        . ' = BINARY assignment.`funktion`'
-        . ' AND BINARY capability.`rolle` = BINARY assignment.`rolle`'
+        . ' = BINARY account.`funktion`'
+        . ' AND BINARY capability.`rolle` = BINARY account.`rolle`'
         . ' JOIN ' . $table . ' AS current_message'
         . ' ON current_message.`00_lfd` = ?'
-        . ' AND current_message.`einsatz_id` = duty_shift.`einsatz_id`'
+        . ' AND current_message.`einsatz_id` = active.`active_einsatz_id`'
         . ' AND current_message.`04_richtung` = ?'
         . ' AND current_message.`x00_status` = 1'
         . " AND current_message.`x01_abschluss` IN ('f', '0')"
         . " AND current_message.`x02_sperre` IN ('t', '1')"
         . ' AND BINARY current_message.`x03_sperruser`'
-        . ' = BINARY assignment.`benutzer_kuerzel`'
-        . ' WHERE assignment.`dienstbesetzung_id` = ?'
-        . ' AND duty_shift.`einsatz_id` = ?'
-        . " AND duty_shift.`status` = 'AKTIV'"
-        . " AND assignment.`status` = 'ANGENOMMEN'"
+        . ' = BINARY account.`kuerzel`'
+        . ' WHERE active.`singleton_id` = 1'
+        . ' AND active.`active_einsatz_id` = ?'
         . " AND incident.`estab_status` = 'open'"
         . ' AND BINARY account.`benutzer` = BINARY ?'
-        . ' AND BINARY assignment.`benutzer_kuerzel` = BINARY ?'
-        . ' AND BINARY assignment.`funktion` = BINARY ?'
-        . ' AND BINARY assignment.`rolle` = BINARY ?'
+        . ' AND BINARY account.`funktion` = BINARY ?'
+        . ' AND BINARY account.`rolle` = BINARY ?'
         . ' AND BINARY capability.`faehigkeit` = BINARY ?'
         . ' AND account.`aktiv` = 1'
         . ' AND account.`estab_gesperrt` = 0';
     $scopeParameters = [
+        $selected['kuerzel'],
         $messageId,
         $direction,
-        $assignmentId,
         $incidentId,
         $selected['benutzer'],
-        $selected['kuerzel'],
         $selected['funktion'],
         $selected['rolle'],
         $capability,
@@ -708,10 +609,9 @@ function estab_read_ldf_mapping_suggestions(
 /**
  * Load recent, unique values from the active incident for one fixed field.
  *
- * The exact selected hat is revalidated before the query and joined into the
- * same SELECT snapshot together with account, capability, shift and incident
- * state. A concurrent revocation or incident switch therefore degrades to an
- * empty result instead of returning operational history.
+ * The fixed account is revalidated before the query and joined into the same
+ * snapshot with capability and incident state. A concurrent block or incident
+ * switch therefore degrades to an empty result.
  *
  * @return list<string>
  */
@@ -734,7 +634,6 @@ function estab_read_message_suggestions(
     );
     $incidentId = (int) $scope['incident']['active_einsatz_id'];
     $selected = $scope['identity'];
-    $assignmentId = (int) $selected['duty_assignment_id'];
     $capability = estab_read_identity_capability($selected);
     if ($capability === null) {
         throw new EstabReadPermissionException(
@@ -754,43 +653,34 @@ function estab_read_message_suggestions(
         . ' FROM ' . $table . ' AS message'
         . ' JOIN (SELECT MAX(candidate.`00_lfd`) AS `last_id`'
         . ' FROM ' . $table . ' AS candidate'
-        . ' JOIN `nv_dienstbesetzungen` AS assignment'
-        . ' ON assignment.`dienstbesetzung_id` = ?'
-        . ' JOIN `nv_dienstschichten` AS duty_shift'
-        . ' ON duty_shift.`dienstschicht_id`'
-        . ' = assignment.`dienstschicht_id`'
         . ' JOIN `nv_einsatz_status` AS active'
         . ' ON active.`singleton_id` = 1'
-        . ' AND active.`active_einsatz_id` = duty_shift.`einsatz_id`'
+        . ' AND active.`active_einsatz_id` = ?'
         . ' JOIN `nv_einsaetze` AS incident'
-        . ' ON incident.`einsatz_id` = duty_shift.`einsatz_id`'
+        . ' ON incident.`einsatz_id` = active.`active_einsatz_id`'
         . ' JOIN `nv_benutzer` AS account'
-        . ' ON BINARY account.`kuerzel`'
-        . ' = BINARY assignment.`benutzer_kuerzel`'
+        . ' ON BINARY account.`kuerzel` = BINARY ?'
         . ' JOIN `nv_funktionsfaehigkeiten` AS capability'
         . ' ON BINARY capability.`funktion`'
-        . ' = BINARY assignment.`funktion`'
-        . ' AND BINARY capability.`rolle` = BINARY assignment.`rolle`'
-        . ' WHERE duty_shift.`einsatz_id` = ?'
-        . " AND duty_shift.`status` = 'AKTIV'"
-        . " AND assignment.`status` = 'ANGENOMMEN'"
+        . ' = BINARY account.`funktion`'
+        . ' AND BINARY capability.`rolle` = BINARY account.`rolle`'
+        . ' WHERE active.`active_einsatz_id` = ?'
         . " AND incident.`estab_status` = 'open'"
         . ' AND BINARY account.`benutzer` = BINARY ?'
-        . ' AND BINARY assignment.`benutzer_kuerzel` = BINARY ?'
-        . ' AND BINARY assignment.`funktion` = BINARY ?'
-        . ' AND BINARY assignment.`rolle` = BINARY ?'
+        . ' AND BINARY account.`funktion` = BINARY ?'
+        . ' AND BINARY account.`rolle` = BINARY ?'
         . ' AND BINARY capability.`faehigkeit` = BINARY ?'
         . ' AND account.`aktiv` = 1'
         . ' AND account.`estab_gesperrt` = 0'
-        . ' AND candidate.`einsatz_id` = duty_shift.`einsatz_id`'
+        . ' AND candidate.`einsatz_id` = active.`active_einsatz_id`'
         . ' AND candidate.`einsatz_id` = ?'
         . ' AND candidate.' . $column . ' IS NOT NULL'
         . ' AND CHAR_LENGTH(TRIM(candidate.' . $column . ')) > 0';
     $parameters = [
-        $assignmentId,
+        $incidentId,
+        $selected['kuerzel'],
         $incidentId,
         $selected['benutzer'],
-        $selected['kuerzel'],
         $selected['funktion'],
         $selected['rolle'],
         $capability,
@@ -847,15 +737,16 @@ function estab_read_require_capability(
     string $capability
 ): array {
     try {
-        return estab_dv_require_selected_capability(
+        return estab_dv_require_account_capability(
             $connection,
             $incidentId,
             $identity,
-            $capability
+            $capability,
+            false
         );
     } catch (EstabDvPermissionException $exception) {
         throw new EstabReadPermissionException(
-            'Die ausgewählte Dienstfunktion besitzt nicht die '
+            'Die zugewiesene Funktion besitzt nicht die '
             . 'erforderliche Leseberechtigung.',
             previous: $exception
         );
@@ -939,15 +830,6 @@ function estab_read_message_visibility_sql(
 ): array {
     if (preg_match('/\A[A-Za-z][A-Za-z0-9_]*\z/D', $alias) !== 1) {
         throw new InvalidArgumentException('Invalid message-list alias');
-    }
-    if (
-        estab_read_duty_assignment_id(
-            $identity['duty_assignment_id'] ?? null
-        ) === null
-    ) {
-        throw new EstabReadPermissionException(
-            'Für die Nachrichtenliste ist eine aktive Dienstfunktion erforderlich.'
-        );
     }
     $function = (string) ($identity['funktion'] ?? '');
     $role = (string) ($identity['rolle'] ?? '');
@@ -1066,13 +948,6 @@ function estab_read_message_visibility_sql(
  */
 function estab_read_message_allowed(array $identity, array $message): bool
 {
-    if (
-        estab_read_duty_assignment_id(
-            $identity['duty_assignment_id'] ?? null
-        ) === null
-    ) {
-        return false;
-    }
     $function = (string) ($identity['funktion'] ?? '');
     $role = (string) ($identity['rolle'] ?? '');
     $code = (string) ($identity['kuerzel'] ?? '');
@@ -1542,7 +1417,7 @@ function estab_read_require_attachment_use_scope(
             ) === null
         ) {
             throw new EstabReadPermissionException(
-                'Ein ausgewählter Anhang ist für diese Dienstfunktion '
+                'Ein ausgewählter Anhang ist für diese Kontofunktion '
                 . 'nicht freigegeben.'
             );
         }

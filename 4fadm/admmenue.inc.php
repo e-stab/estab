@@ -35,8 +35,8 @@
     array ("acl"   => "",
                 "vis" => true,
                 "link"  => "./fuehrungsstelle.php",
-                "menue" => "F&uuml;hrungsstelle und Dienstschichten",
-                "descr" => "Dienstschichten, Mehrfachfunktionen und best&auml;tigte &Uuml;bergaben gem&auml;&szlig; DV 1-101 verwalten."),
+                "menue" => "Optionale Schichten",
+                "descr" => "Konten optional gruppieren und deren Zugang gemeinsam aktivieren oder deaktivieren; feste Funktionen bleiben unver&auml;ndert."),
 
     array ("acl"   => "",
                 "vis" => false,

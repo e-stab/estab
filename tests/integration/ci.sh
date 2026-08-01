@@ -403,6 +403,7 @@ incident_test_database() {
         estab_incident_ci_test \
         | estab_dv_evidence_ci_test \
         | estab_dv_operations_ci_test \
+        | estab_shift_access_ci_test \
         | estab_attachment_reservation_ci_test \
         | estab_message_concurrency_ci_test \
         | estab_message_suggestions_ci_test \
@@ -665,6 +666,10 @@ verify_schema
 run_incident_domain_integration
 run_dv_evidence_integration
 run_dv_operations_integration
+run_isolated_operational_integration \
+    "optional access-shift policy" \
+    estab_shift_access_ci_test \
+    tests/integration/shift_access.php
 run_php_integration "nullable-date migration" tests/integration/date_compatibility.php
 run_php_integration "user administration" tests/integration/user_admin.php
 run_php_integration \
@@ -744,9 +749,9 @@ run_browser_acceptance() {
     fi
     echo "CI integration: running real-browser menu and session acceptance"
     (
-        # Reuse the S1 account accepted in the central HTTP duty shift. A
-        # browser-only account would correctly be denied by the operational
-        # guard and would no longer represent a deployable production flow.
+        # Reuse the centrally provisioned fixed S1 account. The active
+        # incident, account state and function now form the write boundary;
+        # no legacy duty-shift selection is required.
         export ESTAB_TEST_LOGIN_NAME=${ESTAB_TEST_LOGIN_NAME:-Container Integration}
         export ESTAB_TEST_LOGIN_CODE=${ESTAB_TEST_LOGIN_CODE:-e2e001}
         export ESTAB_TEST_LOGIN_FUNCTION=${ESTAB_TEST_LOGIN_FUNCTION:-S1}
@@ -867,9 +872,8 @@ if [[ ! $restore_export_sha256 =~ ^[a-f0-9]{64}$ ]]; then
     exit 1
 fi
 
-# The authenticated smoke has now created and activated the complete initial
-# duty shift. Run the mutating browser acceptance only after that prerequisite
-# exists; its S1 account is one of the personally accepted hats.
+# The authenticated smoke has provisioned the fixed S1 account and active
+# incident used by the mutating browser acceptance.
 run_browser_acceptance
 
 echo "CI integration: proving the isolated tokenless legacy-login opt-in"
@@ -885,9 +889,9 @@ wait_for_healthy app 240
 assert_clean_app_logs
 
 echo "CI integration: running ETB/TBB HTTP integration"
-# The initial service uses the A/W account first created by http_smoke.sh.
-# Re-provisioning it here changes only account credentials/presence; its
-# accepted function-hat assignment remains the authoritative write boundary.
+# The initial service uses the fixed A/W account first created by
+# http_smoke.sh. Re-provisioning changes only credentials and presence; the
+# account function remains the authoritative write boundary.
 export ESTAB_TEST_TBB_CODE=${ESTAB_TEST_TBB_CODE:-e2l001}
 export ESTAB_TEST_TBB_NAME=${ESTAB_TEST_TBB_NAME:-Logbook Integration A-W}
 run_timed 5m sh tests/integration/logbooks_http.sh

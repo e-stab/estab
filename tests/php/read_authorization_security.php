@@ -19,14 +19,13 @@ $assert = static function (
 $identity = static fn (
     string $code,
     string $function,
-    string $role,
-    bool $selected = true
+    string $role
 ): array => [
     'benutzer' => $function . ' Test',
     'kuerzel' => $code,
     'funktion' => $function,
     'rolle' => $role,
-] + ($selected ? ['duty_assignment_id' => 17] : []);
+];
 
 $terminal = [
     '04_richtung' => 'E',
@@ -52,7 +51,7 @@ $s10 = $identity('s10010', 'S10', 'Stab');
 $etb = $identity('etb001', 'ETB', 'Stab');
 $assert(
     estab_read_identity_capability($etb) === 'EINSATZTAGEBUCH',
-    'ETB hat is not bound to its narrow database capability'
+    'fixed ETB account function is not bound to its narrow database capability'
 );
 $assert(
     estab_read_message_allowed($s1, $terminal),
@@ -63,11 +62,11 @@ $assert(
     'substring recipient gained read access'
 );
 $assert(
-    !estab_read_message_allowed(
-        $identity('s10001', 'S1', 'Stab', false),
+    estab_read_message_allowed(
+        $identity('s10001', 'S1', 'Stab'),
         $terminal
     ),
-    'an unselected primary account gained object access'
+    'a fixed account function unexpectedly requires a duty assignment'
 );
 
 $draft = $terminal;
@@ -204,8 +203,8 @@ foreach (['msg` OR 1=1 --', '', '1msg'] as $unsafeAlias) {
 }
 foreach (
     [
-        $identity('si0001', 'Si', 'Stab', false),
         $identity('xx0001', 'S1', 'Fernmelder'),
+        $identity('', 'S1', 'Stab'),
     ] as $forbiddenIdentity
 ) {
     try {
@@ -288,14 +287,14 @@ $assert(
             $overview,
             $identity('s20001', 'S2', 'Stab')
         ),
-    'overview navigation is not limited to selected S2/LAGE_DOKUMENTATION'
+    'overview navigation is not limited to fixed S2/LAGE_DOKUMENTATION'
 );
 $assert(
     is_array($tracking)
         && !estab_navigation_duty_access_allowed($tracking, $s1)
         && estab_navigation_duty_access_allowed($tracking, $ldf)
         && estab_navigation_duty_access_allowed($tracking, $aw),
-    'tracking navigation is not limited to selected LdF/A-W'
+    'tracking navigation is not limited to fixed LdF/A-W functions'
 );
 
 $root = dirname(__DIR__, 2);
@@ -434,29 +433,20 @@ $assert(
     )
         && str_contains(
             $sources['read-boundary'],
-            'WHERE assignment.`dienstbesetzung_id` = ?'
+            'estab_dv_require_operational_account('
         )
         && str_contains(
             $sources['read-boundary'],
-            "AND duty_shift.`status` = 'AKTIV'"
+            'estab_incident_require_active($connection)'
         )
         && str_contains(
             $sources['read-boundary'],
-            "AND assignment.`status` = 'ANGENOMMEN'"
+            'estab_dv_require_account_capability('
         )
-        && str_contains(
-            $sources['read-boundary'],
-            'AND BINARY assignment.`benutzer_kuerzel` = BINARY ?'
-        )
-        && str_contains(
-            $sources['read-boundary'],
-            'AND BINARY assignment.`funktion` = BINARY ?'
-        )
-        && str_contains(
-            $sources['read-boundary'],
-            'AND BINARY assignment.`rolle` = BINARY ?'
-        ),
-    'central reads are not bound to the exact selected active assignment'
+        && !str_contains($sources['read-boundary'], 'duty_assignment_id')
+        && !str_contains($sources['read-boundary'], 'nv_dienstbesetzungen')
+        && !str_contains($sources['read-boundary'], 'nv_dienstschichten'),
+    'central reads do not enforce active incident, fixed account and capability without a formal shift'
 );
 $assert(
     str_contains(
@@ -475,26 +465,20 @@ $assert(
             $sources['message-list'],
             'estab_message_staff_access_sql'
         ),
-    'message controller/list can expose an object outside the selected scope'
+    'message controller/list can expose an object outside the fixed account scope'
 );
 $assert(
     str_contains(
         $sources['sidebar'],
         'estab_message_staff_access_sql'
     )
-        && str_contains(
-            $sources['sidebar'],
-            "\$assignment = \$identity['duty_assignment_id'] ?? null;"
-        )
-        && str_contains(
-            $sources['sidebar'],
-            "preg_match('/\\A[1-9][0-9]{0,18}\\z/D', \$assignment)"
-        ),
-    'sidebar queues/actions are not exact-recipient and selected-hat scoped'
+        && !str_contains($sources['sidebar'], 'duty_assignment_id')
+        && str_contains($sources['sidebar'], 'data-estab-account-function'),
+    'sidebar queues/actions are not exact-recipient and fixed-account scoped'
 );
 $commandPostScope = strpos(
     $sources['command-post'],
-    'if (is_array($selectedIdentity)) {'
+    '$readScope = estab_read_require_operational_scope('
 );
 $telecomRead = strpos(
     $sources['command-post'],
@@ -506,31 +490,22 @@ $messengerRead = strpos(
 );
 $assert(
     str_contains(
-        $sources['command-post'],
-        'estab_dv_user_handover_requests('
-    )
-        && str_contains(
-            $sources['command-post'],
-            'estab_dv_active_shift_summary('
-        )
-        && !str_contains(
-            $sources['command-post'],
-            'estab_dv_shift_list('
-        )
-        && str_contains(
             $sources['command-post'],
             'estab_read_require_operational_scope('
         )
         && str_contains(
             $sources['command-post'],
-            'data-estab-duty-selection-required'
+            'estab_dv_has_account_capability('
         )
+        && !str_contains($sources['command-post'], 'duty_assignment_id')
+        && !str_contains($sources['command-post'], "'select_hat'")
+        && !str_contains($sources['command-post'], "'accept_hat'")
         && is_int($commandPostScope)
         && is_int($telecomRead)
         && is_int($messengerRead)
         && $commandPostScope < $telecomRead
         && $commandPostScope < $messengerRead,
-    'command-post bootstrap exposes unrelated operational data before hat selection'
+    'command-post bootstrap exposes unrelated data or still requires a formal duty assignment'
 );
 foreach (['ETB' => $sources['etb'], 'TBB' => $sources['tbb']] as $name => $source) {
     $gate = strpos($source, 'estab_read_require_operational_scope (');
@@ -547,7 +522,7 @@ foreach (['ETB' => $sources['etb'], 'TBB' => $sources['tbb']] as $name => $sourc
             && is_int($gate)
             && is_int($constructor)
             && $gate < $constructor,
-        "{$name} reads entries before validating the selected active hat"
+        "{$name} reads entries before validating active incident and fixed account"
     );
 }
 $assert(
@@ -566,11 +541,8 @@ $assert(
         $sources['status-fragment'],
         'estab_read_require_operational_scope('
     )
-        && str_contains(
-            $sources['status-fragment'],
-            'data-estab-duty-selection-required'
-        ),
-    'live sidebar status is exposed before selecting a duty assignment'
+        && !str_contains($sources['status-fragment'], 'duty_assignment_id'),
+    'live sidebar status is exposed without fixed-account scope or still requires a formal shift'
 );
 $assert(
     str_contains($sources['retired-overview'], 'http_response_code(410)')

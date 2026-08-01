@@ -501,18 +501,6 @@ function estab_sidebar_workflow_actions(
     if ($identity === null || $menuState !== 'ROLLE') {
         return [];
     }
-    $assignment = $identity['duty_assignment_id'] ?? null;
-    if (
-        !(
-            (is_int($assignment) && $assignment > 0)
-            || (
-                is_string($assignment)
-                && preg_match('/\A[1-9][0-9]{0,18}\z/D', $assignment) === 1
-            )
-        )
-    ) {
-        return [];
-    }
     $role = $identity['rolle'] ?? null;
     $function = $identity['funktion'] ?? null;
     if (!is_string($role) || !is_string($function)) {
@@ -605,34 +593,20 @@ function estab_sidebar_workflow_actions(
     return $actions;
 }
 
-/** Render the server-selected duty hat without trusting request parameters. */
-function estab_sidebar_active_hat_markup(
+/** Render the account's fixed function and role. */
+function estab_sidebar_account_function_markup(
     array $session,
     ?array $identity
 ): string {
     if ($identity === null) {
         return '';
     }
-    $assignment = $session['estab_duty_assignment_id'] ?? null;
-    if (
-        (!is_int($assignment) || $assignment < 1)
-        && (
-            !is_string($assignment)
-            || preg_match('/\A[1-9][0-9]{0,18}\z/D', $assignment) !== 1
-        )
-    ) {
-        return '';
-    }
-    return '<aside class="estab-sidebar-duty-hat"'
-        . ' data-estab-active-duty-hat'
-        . ' data-estab-duty-assignment="' . estab_auth_html((string) $assignment) . '">'
-        . '<span>Aktiver Funktions-Hut</span>'
+    return '<aside class="estab-sidebar-account-function"'
+        . ' data-estab-account-function>'
+        . '<span>Angemeldete Funktion</span>'
         . '<strong>' . estab_auth_html(
             (string) $identity['funktion'] . ' · ' . (string) $identity['rolle']
         ) . '</strong>'
-        . '<a href="' . estab_auth_html(
-            estab_application_url('4fach/fuehrungsstelle.php')
-        ) . '" target="_top">Dienstfunktion wechseln</a>'
         . '</aside>';
 }
 

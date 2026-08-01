@@ -586,7 +586,7 @@ function estab_category_assign(
             $matrixTable
         ): void {
             $incidentId = (int) $incident['active_einsatz_id'];
-            estab_dv_require_active_hat_for_operational_write(
+            estab_dv_require_operational_account(
                 $connection,
                 $incidentId,
                 $identity

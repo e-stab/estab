@@ -13,14 +13,6 @@ include ("data_hndl.php");      // propritÃ¤re  Datenbankoperationen
 //include ("menue.php");          // erzeuge MenÃ¼s
 
 $trackingReadIdentity = estab_read_session_identity ($_SESSION);
-if (
-    !is_array ($trackingReadIdentity)
-    || estab_read_duty_assignment_id (
-        $trackingReadIdentity ["duty_assignment_id"] ?? null
-    ) === null
-) {
-    estab_navigation_select_duty ($_SERVER);
-}
 $trackingAccessConnection = null;
 try {
     $trackingAccessConnection = estab_auth_connect ($conf_4f_db);

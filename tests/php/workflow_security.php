@@ -896,6 +896,44 @@ $assert(
 $ciIntegration = file_get_contents(dirname(__DIR__) . '/integration/ci.sh');
 $defaultHttpSmoke = file_get_contents(dirname(__DIR__) . '/integration/http_smoke.sh');
 $legacyHttpSmoke = file_get_contents(dirname(__DIR__) . '/integration/legacy_login_http.sh');
+$logbookHttp = file_get_contents(dirname(__DIR__) . '/integration/logbooks_http.sh');
+$categoryHttp = file_get_contents(dirname(__DIR__) . '/integration/categories_http.sh');
+$messageWorkflowHttp = file_get_contents(
+    dirname(__DIR__) . '/integration/message_workflow_http.sh'
+);
+$assert(
+    is_string($logbookHttp)
+        && is_string($categoryHttp)
+        && is_string($messageWorkflowHttp),
+    'fachliche HTTP integration contracts are unreadable'
+);
+$assert(
+    !str_contains($logbookHttp, 'operation_action=select_hat')
+        && !str_contains($logbookHttp, 'dienstbesetzung_id=')
+        && str_contains($logbookHttp, 'fixed account function')
+        && str_contains($logbookHttp, "'logbook_action=save_entry'")
+        && !str_contains($categoryHttp, 'operation_action=select_hat')
+        && !str_contains($categoryHttp, 'dienstbesetzung_id=')
+        && str_contains($categoryHttp, 'fixed account function')
+        && str_contains($categoryHttp, "'category_action=create'")
+        && !str_contains($messageWorkflowHttp, 'operation_action=select_hat')
+        && !str_contains($messageWorkflowHttp, 'activate_http_shift.php')
+        && str_contains($messageWorkflowHttp, 'fixed account function')
+        && str_contains(
+            $messageWorkflowHttp,
+            'workflow accounts have no legacy duty assignments'
+        )
+        && str_contains(
+            $messageWorkflowHttp,
+            "'operation_action=create_plan'"
+        )
+        && str_contains(
+            $messageWorkflowHttp,
+            'active incident for Führungsstellen HTTP workflow'
+        ),
+    'fachliche HTTP integration still depends on a selected legacy duty '
+        . 'assignment or lost its fixed-account and active-incident evidence'
+);
 $assert(
     is_string($ciIntegration)
         && str_contains(
@@ -932,17 +970,21 @@ $assert(
         )
         && str_contains(
             $legacyHttpSmoke,
-            'assert_status 303 --cookie "$cookie_jar" --cookie-jar '
+            'assert_status 200 --cookie "$cookie_jar" --cookie-jar '
                 . '"$cookie_jar" \\' . "\n"
                 . '    "$base_url/4fach/vordrucke.php"'
         )
+        && str_contains($legacyHttpSmoke, 'Zugewiesene Funktion')
         && str_contains(
             $legacyHttpSmoke,
-            'missing selected-duty redirect'
+            'operation_action[^>]*select_hat'
         )
+        && str_contains($legacyHttpSmoke, 'name="dienstbesetzung_id"')
+        && str_contains($legacyHttpSmoke, 'Generierte Vordrucke')
+        && !str_contains($legacyHttpSmoke, 'missing selected-duty redirect')
         && str_contains($legacyHttpSmoke, 'logout_action=logout'),
-    'isolated legacy HTTP acceptance omits origin isolation, selected-hat '
-        . 'fail-closed behavior or session cleanup'
+    'isolated legacy HTTP acceptance omits origin isolation, fixed-account '
+        . 'access without a selected duty assignment or session cleanup'
 );
 
 printf("Workflow security tests: OK (%d assertions)\n", $assertions);

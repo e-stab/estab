@@ -23,49 +23,12 @@ function message_db_event(
     ?int $toStatus,
     array $snapshot = []
 ): array {
-    $assignmentMapValue = getenv('ESTAB_TEST_MESSAGE_DUTY_ASSIGNMENTS');
-    $assignmentMap = [];
-    if (is_string($assignmentMapValue) && $assignmentMapValue !== '') {
-        try {
-            $decoded = json_decode(
-                $assignmentMapValue,
-                true,
-                32,
-                JSON_THROW_ON_ERROR
-            );
-        } catch (JsonException $exception) {
-            throw new RuntimeException(
-                'Message duty assignment map is invalid',
-                0,
-                $exception
-            );
-        }
-        if (!is_array($decoded)) {
-            throw new RuntimeException(
-                'Message duty assignment map is not an object'
-            );
-        }
-        $assignmentMap = $decoded;
-    }
-    $assignmentKey = $code . '|' . $function;
-    $assignmentId = $assignmentMap[$assignmentKey] ?? null;
-    if (
-        $assignmentId !== null
-        && (!is_int($assignmentId) || $assignmentId < 1)
-    ) {
-        throw new RuntimeException(
-            "Message duty assignment {$assignmentKey} is invalid"
-        );
-    }
     $actor = [
         'benutzer' => $user,
         'kuerzel' => $code,
         'funktion' => $function,
         'rolle' => $role,
     ];
-    if (is_int($assignmentId)) {
-        $actor['duty_assignment_id'] = $assignmentId;
-    }
 
     return [
         'event_type' => $eventType,
@@ -74,32 +37,6 @@ function message_db_event(
         'to_status' => $toStatus,
         'snapshot' => $snapshot,
     ];
-}
-
-function message_db_publish_duty_assignments(array $assignments): void
-{
-    foreach ($assignments as $key => $assignmentId) {
-        if (
-            !is_string($key)
-            || preg_match('/\A[^|]{1,6}\|[^|]{1,20}\z/D', $key) !== 1
-            || !is_int($assignmentId)
-            || $assignmentId < 1
-        ) {
-            throw new RuntimeException(
-                'Message duty assignment fixture is invalid'
-            );
-        }
-    }
-    message_db_assert(
-        putenv(
-            'ESTAB_TEST_MESSAGE_DUTY_ASSIGNMENTS='
-            . json_encode(
-                $assignments,
-                JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES
-            )
-        ),
-        'Could not publish message duty assignments to workers'
-    );
 }
 
 function message_db_password(): string
@@ -518,7 +455,7 @@ try {
         'message-concurrency'
     );
     $initialShiftId = (int) $initialShift['dienstschicht_id'];
-    $initialDutyAssignments = [];
+    $historicalAssignments = [];
     foreach (array_slice($fixtureUsers, 0, 6) as [$code, $function]) {
         $hat = estab_dv_assign_hat(
             $connection,
@@ -534,7 +471,7 @@ try {
             (int) $hat['dienstbesetzung_id'],
             $code
         );
-        $initialDutyAssignments[$code . '|' . $function] =
+        $historicalAssignments[$code . '|' . $function] =
             (int) $hat['dienstbesetzung_id'];
     }
     estab_dv_activate_initial_shift(
@@ -543,7 +480,6 @@ try {
         $initialShiftId,
         'message-concurrency'
     );
-    message_db_publish_duty_assignments($initialDutyAssignments);
     $fixtureActor = 's60001';
     $planInsert = estab_message_execute(
         $connection,
@@ -1004,7 +940,6 @@ try {
     );
     $successorShiftId = (int) $successorShift['dienstschicht_id'];
     $successorConfirmingAssignmentId = 0;
-    $successorDutyAssignments = [];
     foreach ([
         ['state1', 'S2'],
         ['si0001', 'Si'],
@@ -1024,8 +959,6 @@ try {
         if ($code === 'next01') {
             $successorConfirmingAssignmentId = (int) $hat['dienstbesetzung_id'];
         }
-        $successorDutyAssignments[$code . '|' . $function] =
-            (int) $hat['dienstbesetzung_id'];
         estab_dv_accept_hat(
             $connection,
             $testIncidentId,
@@ -1043,7 +976,7 @@ try {
         $initialShiftId,
         $successorShiftId,
         'Nachrichtenlage und offener Korrekturauftrag vollständig übergeben.',
-        $initialDutyAssignments['state1|S2'],
+        $historicalAssignments['state1|S2'],
         [
             'benutzer' => 'Concurrency S2',
             'kuerzel' => 'state1',
@@ -1068,7 +1001,6 @@ try {
             'rolle' => 'Stab',
         ]
     );
-    message_db_publish_duty_assignments($successorDutyAssignments);
     message_db_assert(
         estab_message_resubmit_returned_outgoing(
             $connection,
@@ -1100,7 +1032,7 @@ try {
                 ['correction' => 'address']
             )
         ),
-        'Same-function shift successor could not resubmit the returned task'
+        'Fixed-function successor account could not resubmit the returned task'
     );
     $resubmittedRow = estab_message_fetch_by_id(
         $connection,

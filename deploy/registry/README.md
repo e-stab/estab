@@ -390,9 +390,10 @@ das Löschen eines Container-Manager-Projekts darf nur nach einem geprüften
 Vollbackup erfolgen.
 
 Die formale Ausgangssichtung ist auch im Pull-only-/Synology-Paket
-verbindlich: Verfasser → Si → LdF → A/W. Sie ist nicht konfigurierbar. Fehlt
-eine aktive Sichterbesetzung, bleibt der Ausgang in der Warteschlange und wird
-nicht automatisch oder durch A/W freigegeben.
+verbindlich: Verfasser → Si → LdF → A/W. Sie ist nicht konfigurierbar.
+Fehlt ein zugelassenes, angemeldetes Konto mit der festen Funktion Si, bleibt
+der Ausgang in der Warteschlange und wird nicht automatisch oder durch A/W
+freigegeben.
 
 `ESTAB_PDF_ATTACHMENT_MAX_BYTES` begrenzt die Gesamtsumme der unverändert in
 ein PDF-Einsatzdossier eingebetteten Originalanhänge. Der Standard sind
@@ -527,11 +528,11 @@ Bedienabnahme auf dem tatsächlichen NAS-Endgerät bleibt zusätzlich nötig.
    Exitcode 0 beendet sein. Danach `/health.php` und die Administration
    prüfen, den ersten Einsatz anlegen und aktivieren, benötigte Funktionskonten
    in der Benutzerverwaltung anlegen und deren feste Zuordnung kontrollieren.
-   Anschließend eine Dienstschicht planen, mindestens S2, Si, S6, LdF und A/W
-   persönlichen Konten zuweisen, jede Zuweisung durch die betreffende Person
-   annehmen lassen und die Schicht erst danach administrativ aktivieren. Vor
-   der fachlichen Abnahme wählt jede Person ihren angenommenen aktiven
-   Funktions-Hut aus.
+   Die fachliche Abnahme kann danach unmittelbar mit den festen Funktionen der
+   Konten beginnen; eine Dienstschicht oder Funktions-Hut-Auswahl ist nicht
+   erforderlich. Optional können Konten unter **Optionale Schichten** zu
+   Zugangsgruppen zusammengefasst und gemeinsam freigegeben oder abgemeldet
+   werden. Diese Gruppen verändern keine Fachberechtigung.
 
 Synologys
 [Projektassistent](https://kb.synology.com/de-de/DSM/help/ContainerManager/docker_project?version=7)

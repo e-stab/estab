@@ -223,7 +223,7 @@ $insertMessages = static function (
     int $incidentId,
     int $rowCount,
     bool $foreign
-): array {
+) use ($preparedRows): array {
     $statement = $database->prepare(
         'INSERT INTO `nv_nachrichten`'
             . ' (`einsatz_id`, `04_richtung`, `04_nummer`,'
@@ -354,7 +354,6 @@ $insertMessages = static function (
                 $records[] = [
                     'id' => $messageId,
                     'archive_number' => $number,
-                    'tbb_number' => $index,
                     'direction' => $direction,
                     'priority' => $priority,
                     'status' => $status,
@@ -376,7 +375,85 @@ $insertMessages = static function (
         $shiftStatement->close();
         $evidenceStatement->close();
     }
+
+    if (!$foreign && $records !== []) {
+        $evidenceRows = $preparedRows(
+            $database,
+            'SELECT `estab_message_id`, `estab_book_lfd` FROM `nv_tbb`'
+                . ' WHERE `einsatz_id` = ?'
+                . " AND `estab_entry_type` = 'nachricht'"
+                . ' AND `estab_message_id` IS NOT NULL',
+            [$incidentId]
+        );
+        $numbersByMessageId = [];
+        foreach ($evidenceRows as $evidenceRow) {
+            $messageId = (int) ($evidenceRow['estab_message_id'] ?? 0);
+            $bookNumber = (int) ($evidenceRow['estab_book_lfd'] ?? 0);
+            if (
+                $messageId < 1
+                || $bookNumber < 1
+                || array_key_exists($messageId, $numbersByMessageId)
+            ) {
+                throw new RuntimeException(
+                    'TTB scale fixture returned an invalid evidence-number map'
+                );
+            }
+            $numbersByMessageId[$messageId] = $bookNumber;
+        }
+        if (count($numbersByMessageId) !== count($records)) {
+            throw new RuntimeException(
+                'TTB scale fixture did not map every target message exactly once'
+            );
+        }
+        foreach ($records as &$record) {
+            $messageId = (int) $record['id'];
+            if (!array_key_exists($messageId, $numbersByMessageId)) {
+                throw new RuntimeException(
+                    'TTB scale fixture is missing a target message number'
+                );
+            }
+            $record['tbb_number'] = $numbersByMessageId[$messageId];
+        }
+        unset($record);
+    }
+
     return $records;
+};
+
+$tbbNumberAscending = static function (array $left, array $right): int {
+    $numberOrder = (int) $left['tbb_number'] <=> (int) $right['tbb_number'];
+    return $numberOrder !== 0
+        ? $numberOrder
+        : (int) $left['id'] <=> (int) $right['id'];
+};
+
+$newestFirst = static function (array $left, array $right): int {
+    $timeOrder = strcmp((string) $right['time'], (string) $left['time']);
+    return $timeOrder !== 0
+        ? $timeOrder
+        : (int) $right['id'] <=> (int) $left['id'];
+};
+
+/** @return list<int> */
+$actualTbbNumbers = static fn (array $rows): array => array_map(
+    static fn (array $row): int => (int) $row['estab_tbb_book_lfd'],
+    $rows
+);
+
+/** @return list<int> */
+$expectedPageTbbNumbers = static function (
+    array $orderedRecords,
+    array $result
+): array {
+    $pageRecords = array_slice(
+        $orderedRecords,
+        (int) $result['window']['offset'],
+        count($result['rows'])
+    );
+    return array_map(
+        static fn (array $record): int => (int) $record['tbb_number'],
+        $pageRecords
+    );
 };
 
 $indexColumns = static function (
@@ -494,6 +571,8 @@ try {
         ESTAB_MESSAGE_LIST_SCALE_TARGET_ROWS,
         false
     );
+    // Keep the one-read TTB-number hydration performed by insertMessages()
+    // inside the seed guard: it is part of constructing a truthful fixture.
     $seedDuration = (hrtime(true) - $seedStarted) / 1_000_000_000;
     $assert(
         count($records) === ESTAB_MESSAGE_LIST_SCALE_TARGET_ROWS,
@@ -507,6 +586,11 @@ try {
             $seedDuration
         )
     );
+
+    $recordsNewestFirst = $records;
+    usort($recordsNewestFirst, $newestFirst);
+    $recordsByTbbNumber = $records;
+    usort($recordsByTbbNumber, $tbbNumberAscending);
 
     $analyse = $connection->query('ANALYZE TABLE `nv_nachrichten`');
     if ($analyse instanceof mysqli_result) {
@@ -524,10 +608,8 @@ try {
         'unfiltered count crossed the incident boundary'
     );
     $assert(
-        array_map(
-            static fn (array $row): int => (int) $row['estab_tbb_book_lfd'],
-            $unfiltered['rows']
-        ) === range(10000, 9976),
+        $actualTbbNumbers($unfiltered['rows'])
+            === $expectedPageTbbNumbers($recordsNewestFirst, $unfiltered),
         'newest page lost its canonical TTB evidence numbers'
     );
 
@@ -550,10 +632,8 @@ try {
         'stable adjacent pages overlap'
     );
     $assert(
-        array_map(
-            static fn (array $row): int => (int) $row['estab_tbb_book_lfd'],
-            $pageTwo['rows']
-        ) === range(9975, 9951),
+        $actualTbbNumbers($pageTwo['rows'])
+            === $expectedPageTbbNumbers($recordsNewestFirst, $pageTwo),
         'second stable page returned the wrong TTB evidence numbers'
     );
 
@@ -580,12 +660,7 @@ try {
                 || str_contains($record['recipient'], 'alle,')
             )
     ));
-    usort(
-        $combinedExpected,
-        static fn (array $left, array $right): int =>
-            $left['tbb_number'] <=> $right['tbb_number']
-                ?: $left['id'] <=> $right['id']
-    );
+    usort($combinedExpected, $tbbNumberAscending);
     $combined = $runList($connection, $targetIncidentId, $combinedFilters);
     $maximumQueryDuration = max($maximumQueryDuration, $combined['duration']);
     $assert(
@@ -594,10 +669,8 @@ try {
         'combined structured filters returned an incorrect count'
     );
     $assert(
-        array_map(
-            static fn (array $row): int => (int) $row['estab_tbb_book_lfd'],
-            $combined['rows']
-        ) === array_slice(array_column($combinedExpected, 'tbb_number'), 0, 100),
+        $actualTbbNumbers($combined['rows'])
+            === $expectedPageTbbNumbers($combinedExpected, $combined),
         'combined structured filters returned incorrect or unstable rows'
     );
 
@@ -605,6 +678,7 @@ try {
         $records,
         static fn (array $record): bool => $record['fulltext']
     ));
+    usort($fulltextExpected, $tbbNumberAscending);
     $fulltext = $runList(
         $connection,
         $targetIncidentId,
@@ -617,14 +691,12 @@ try {
     $maximumQueryDuration = max($maximumQueryDuration, $fulltext['duration']);
     $assert(
         $fulltext['count'] === count($fulltextExpected)
-            && $fulltext['count'] === intdiv(10000, 137),
+            && $fulltext['count'] === intdiv(count($records), 137),
         'full-text prefix search returned wrong target-incident count'
     );
     $assert(
-        array_map(
-            static fn (array $row): int => (int) $row['estab_tbb_book_lfd'],
-            $fulltext['rows']
-        ) === array_column($fulltextExpected, 'tbb_number'),
+        $actualTbbNumbers($fulltext['rows'])
+            === $expectedPageTbbNumbers($fulltextExpected, $fulltext),
         'full-text prefix search returned wrong rows'
     );
 
@@ -632,6 +704,7 @@ try {
         $records,
         static fn (array $record): bool => $record['short']
     ));
+    usort($shortExpected, $tbbNumberAscending);
     $short = $runList(
         $connection,
         $targetIncidentId,
@@ -640,27 +713,26 @@ try {
     $maximumQueryDuration = max($maximumQueryDuration, $short['duration']);
     $assert(
         $short['count'] === count($shortExpected)
-            && array_map(
-                static fn (array $row): int => (int) $row['estab_tbb_book_lfd'],
-                $short['rows']
-            ) === array_column($shortExpected, 'tbb_number'),
+            && $actualTbbNumbers($short['rows'])
+                === $expectedPageTbbNumbers($shortExpected, $short),
         'short-token literal search returned wrong rows'
     );
 
+    $numberProbe = (int) $records[intdiv(count($records), 2)]['tbb_number'];
     $numberExpected = array_values(array_filter(
         $records,
-        static fn (array $record): bool => $record['tbb_number'] === 4242
+        static fn (array $record): bool =>
+            (int) $record['tbb_number'] === $numberProbe
     ));
-    usort(
-        $numberExpected,
-        static fn (array $left, array $right): int =>
-            $left['tbb_number'] <=> $right['tbb_number']
-                ?: $left['id'] <=> $right['id']
-    );
+    usort($numberExpected, $tbbNumberAscending);
     $number = $runList(
         $connection,
         $targetIncidentId,
-        ['q' => '4242', 'sort' => 'number_asc', 'page_size' => 25]
+        [
+            'q' => (string) $numberProbe,
+            'sort' => 'number_asc',
+            'page_size' => 25,
+        ]
     );
     $maximumQueryDuration = max($maximumQueryDuration, $number['duration']);
     $assert(
@@ -669,10 +741,8 @@ try {
         'exact TTB evidence number search returned wrong count'
     );
     $assert(
-        array_map(
-            static fn (array $row): int => (int) $row['estab_tbb_book_lfd'],
-            $number['rows']
-        ) === array_column($numberExpected, 'tbb_number'),
+        $actualTbbNumbers($number['rows'])
+            === $expectedPageTbbNumbers($numberExpected, $number),
         'exact TTB evidence number search returned wrong rows'
     );
     $numberKeys = $explainKeys(
@@ -723,17 +793,32 @@ try {
         'global message ID was exposed as a TTB evidence number'
     );
 
+    $lastPageSize = 100;
+    $expectedLastPage = (int) ceil(count($records) / $lastPageSize);
+    $expectedLastOffset = ($expectedLastPage - 1) * $lastPageSize;
+    $expectedLastRows = array_slice(
+        $recordsByTbbNumber,
+        $expectedLastOffset,
+        $lastPageSize
+    );
     $lastPage = $runList(
         $connection,
         $targetIncidentId,
-        ['sort' => 'number_asc', 'page_size' => 100, 'page' => 9999]
+        [
+            'sort' => 'number_asc',
+            'page_size' => $lastPageSize,
+            'page' => 9999,
+        ]
     );
     $maximumQueryDuration = max($maximumQueryDuration, $lastPage['duration']);
     $assert(
-        $lastPage['window']['page'] === 100
-            && $lastPage['window']['first'] === 9901
-            && $lastPage['window']['last'] === 10000
-            && count($lastPage['rows']) === 100,
+        $lastPage['window']['page'] === $expectedLastPage
+            && $lastPage['window']['first'] === $expectedLastOffset + 1
+            && $lastPage['window']['last']
+                === $expectedLastOffset + count($expectedLastRows)
+            && count($lastPage['rows']) === count($expectedLastRows)
+            && $actualTbbNumbers($lastPage['rows'])
+                === $expectedPageTbbNumbers($recordsByTbbNumber, $lastPage),
         'out-of-range pagination was not clamped to the exact last page'
     );
 

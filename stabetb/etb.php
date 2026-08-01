@@ -13,7 +13,7 @@ Einsatz Tage Buch
   Szenario "Globaler Einsatz aktiv."
 
     + Anzeige des globalen Einsatzkopfs
-    + Lesender Zugriff nur mit ausgewaehlter, aktiver Dienstfunktion
+    + Lesender Zugriff mit fester Kontofunktion
     + Eintragsfunktion nur mit der Faehigkeit EINSATZTAGEBUCH
 
   Szenario "Schaltflaeche ETB-Eintrag wird betaetigt"
@@ -40,7 +40,6 @@ class etb_liste {
   var $etb_benutzer ;
   var $etb_rolle ;
   var $etb_authorized ;
-  public int $etb_duty_assignment_id = 0;
 
 /*****************************************************************************\
 
@@ -324,7 +323,6 @@ if (debug == true){ echo "etb_tableexist==>"; var_dump($this->etb_titel_tbl); ec
         "kuerzel" => (string) $this->etb_kuerzel,
         "benutzer" => (string) $this->etb_benutzer,
         "rolle" => (string) $this->etb_rolle,
-        "duty_assignment_id" => $this->etb_duty_assignment_id,
       )
     );
   }
@@ -569,8 +567,8 @@ var $task;
            ))."</option>\n";
     }
     echo "</select>\n";
-    echo "<small>Ordnet den Eintrag einer angenommenen Besetzung der ";
-    echo "aktiven Schicht als Bearbeitungs- und Suchhilfe zu. Die Zuordnung ";
+    echo "<small>Ordnet den Eintrag optional einer historischen ";
+    echo "Dienstbesetzung dieses Einsatzes als Bearbeitungs- und Suchhilfe zu. ";
     echo "wird nicht in das amtliche PDF-Formblatt übernommen.</small>\n";
     echo "</div>\n";
     echo "</div>\n";
@@ -842,20 +840,11 @@ include ("../4fcfg/dbcfg.inc.php");
 include ("../4fcfg/e_cfg.inc.php");
 
 $identity = estab_read_session_identity ($_SESSION);
-if (
-  !is_array ($identity)
-  || estab_read_duty_assignment_id (
-    $identity ["duty_assignment_id"] ?? null
-  ) === null
-) {
-  estab_navigation_select_duty ($_SERVER);
-}
 estab_session_ui_start ($_SESSION);
 
 $berechtigt = false;
-$hatEtbCapability = false;
+$hasEtbCapability = false;
 $istEtbFuehrung = false;
-$dutyAssignmentId = null;
 try {
   $readConnection = estab_auth_connect ($conf_4f_db);
   $readScope = estab_read_require_operational_scope (
@@ -863,15 +852,7 @@ try {
     $identity
   );
   $identity = $readScope ["identity"];
-  $dutyAssignmentId = estab_read_duty_assignment_id (
-    $identity ["duty_assignment_id"] ?? null
-  );
-  if ($dutyAssignmentId === null) {
-    throw new EstabReadPermissionException (
-      "Wählen Sie zuerst eine persönlich angenommene Dienstfunktion."
-    );
-  }
-  $hatEtbCapability = estab_dv_has_selected_capability (
+  $hasEtbCapability = estab_dv_has_account_capability (
     $readConnection,
     (int) $readScope ["incident"]["active_einsatz_id"],
     $identity,
@@ -883,7 +864,7 @@ try {
     $identity,
     "etb"
   );
-  $berechtigt = $hatEtbCapability && $istEtbFuehrung;
+  $berechtigt = $hasEtbCapability && $istEtbFuehrung;
 } catch (EstabNoActiveIncidentException $exception) {
   estab_logbook_abort (
     409,
@@ -925,13 +906,12 @@ $etbobj->etb_funktion = $identity ["funktion"];
 $etbobj->etb_kuerzel = $identity ["kuerzel"];
 $etbobj->etb_benutzer = $identity ["benutzer"];
 $etbobj->etb_rolle = $identity ["rolle"];
-$etbobj->etb_duty_assignment_id = $dutyAssignmentId;
 
 if ($requestMethod === "POST") {
   if (!$berechtigt) {
     estab_logbook_abort (
       403,
-      "Nur eine aktive S2- oder ETB-Funktion darf ETB-Einträge schreiben."
+      "Nur ein Konto mit der Funktion S2 oder ETB darf ETB-Einträge schreiben."
     );
   }
   estab_logbook_require_csrf ($_SERVER, $_POST);
@@ -1063,12 +1043,8 @@ if (!$etbobj->etb_titel_gesetzt) {
     } else {
       echo "<aside class=\"estab-tool-notice estab-tool-notice-warning\">\n";
       echo "<strong>ETB schreibgeschützt.</strong>\n<p>";
-      echo $hatEtbCapability && !$istEtbFuehrung
-        ? "Eine andere angenommene ETB-/S2-Besetzung führt das ".
-          "Einsatztagebuch in dieser Schicht. Sie können alle Einträge lesen, ".
-          "aber keine parallelen Einträge anlegen."
-        : "Die ausgewählte Dienstfunktion darf das Einsatztagebuch lesen, ".
-          "aber nicht führen.";
+      echo "Ihre feste Kontofunktion darf das Einsatztagebuch lesen, ".
+        "besitzt aber nicht die Fachzuständigkeit für Einträge.";
       echo "</p>\n</aside>\n";
     }
   }

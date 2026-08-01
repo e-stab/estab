@@ -265,40 +265,6 @@ try {
         $insertUser->close();
     }
 
-    $shift = estab_dv_create_shift(
-        $connection,
-        $incidentCId,
-        'Vorschlagsschicht',
-        null,
-        'message-suggestion-integration'
-    );
-    $shiftId = (int) $shift['dienstschicht_id'];
-    $assignments = [];
-    foreach ($accounts as $key => [$code, $function]) {
-        $assigned = estab_dv_assign_hat(
-            $connection,
-            $incidentCId,
-            $shiftId,
-            $code,
-            $function,
-            'message-suggestion-integration'
-        );
-        $assignmentId = (int) $assigned['dienstbesetzung_id'];
-        estab_dv_accept_hat(
-            $connection,
-            $incidentCId,
-            $assignmentId,
-            $code
-        );
-        $assignments[$key] = $assignmentId;
-    }
-    estab_dv_activate_initial_shift(
-        $connection,
-        $incidentCId,
-        $shiftId,
-        'message-suggestion-integration'
-    );
-
     $identities = [];
     foreach ($accounts as $key => [$code, $function, $role]) {
         $identities[$key] = [
@@ -306,7 +272,6 @@ try {
             'kuerzel' => $code,
             'funktion' => $function,
             'rolle' => $role,
-            'duty_assignment_id' => $assignments[$key],
         ];
     }
 
@@ -419,20 +384,8 @@ try {
         ),
         'S2 gained telecommunications callsign history'
     );
-    $expectReadDenial(
-        static fn (): array => estab_read_message_suggestions(
-            $connection,
-            'nv_nachrichten',
-            array_diff_key(
-                $identities['ldf'],
-                ['duty_assignment_id' => true]
-            ),
-            '05_gegenstelle'
-        ),
-        'an unselected LdF account gained incident history'
-    );
     $forgedLdf = $identities['ldf'];
-    $forgedLdf['duty_assignment_id'] = $assignments['aw'];
+    $forgedLdf['funktion'] = 'A/W';
     $expectReadDenial(
         static fn (): array => estab_read_message_suggestions(
             $connection,
@@ -440,12 +393,12 @@ try {
             $forgedLdf,
             '05_gegenstelle'
         ),
-        'LdF gained history through another account’s active assignment'
+        'LdF gained history through a forged fixed account function'
     );
 
     // Pair-aware LdF mappings use completed messages first and the currently
     // valid active S6 plan second. The pending current message is locked by the
-    // exact LdF assignment and supplies its context from the database.
+    // fixed LdF account and supplies its context from the database.
     $plan = estab_dv_create_telecom_plan(
         $connection,
         $incidentCId,

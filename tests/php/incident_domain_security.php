@@ -286,6 +286,21 @@ $assert(
     'incident database values are not consistently parameterized'
 );
 $assert(
+    str_contains(
+        $library,
+        'estab_logbook_lifecycle_open_books_if_empty($connection, $activated)'
+    )
+        && !str_contains(
+            $library,
+            "Die Logbuch-Stammdaten sind seit Aktivierung der ersten"
+        )
+        && !str_contains(
+            $library,
+            "EXISTS(SELECT 1 FROM `nv_dienstschichten` AS shift_row"
+        ),
+    'incident activation or logbook headers still depend on a duty shift'
+);
+$assert(
     !str_contains($library, 'DELETE FROM `nv_einsaetze`')
         && !str_contains($page, 'admin_action" value="delete'),
     'incident deletion would orphan or erase operational history'

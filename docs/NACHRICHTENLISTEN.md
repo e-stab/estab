@@ -47,9 +47,9 @@ erneutes Anwenden der Suche beziehungsweise der Filter kontrolliert geladen.
 
 | Ansicht | Zugriff | Detailaktion |
 | --- | --- | --- |
-| `/4fueltg/ue_ltg.php` | ausgewählte aktive S2-Dienstfunktion mit `LAGE_DOKUMENTATION` | einsatzgebundener Lesevordruck |
-| „2. Sichtung“ als Si | ausgewählte aktive Si-Dienstfunktion | geschützter `SI-Adminmeldung`-POST |
-| „2. Sichtung“ als A/W | ausgewählte aktive A/W-Dienstfunktion | geschützter `FM-Adminmeldung`-POST |
+| `/4fueltg/ue_ltg.php` | festes Konto `S2/Stab` mit `LAGE_DOKUMENTATION` | einsatzgebundener Lesevordruck |
+| „2. Sichtung“ als Si | festes Konto `Si/Stab` | geschützter `SI-Adminmeldung`-POST |
+| „2. Sichtung“ als A/W | festes Konto `A/W/Fernmelder` | geschützter `FM-Adminmeldung`-POST |
 
 Alle Abfragen sind an die beim Berechtigungsgate erfasste ID des aktiven
 Einsatzes gebunden. In der zweiten Sichtung wird zusätzlich schon vor Zählung

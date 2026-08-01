@@ -286,9 +286,11 @@ function estab_logbook_assignment_snapshot(array $assignment): string
 }
 
 /**
- * Return accepted assignments of the active shift for the optional ETB
- * workflow assignment. The browser receives display values only; the chosen
- * primary key is revalidated and locked in the write transaction.
+ * Return historical duty assignments for the optional ETB workflow metadata.
+ *
+ * Duty shifts no longer grant ETB rights and therefore do not have to be
+ * active.  The browser receives display values only; the chosen primary key
+ * is revalidated and locked in the write transaction.
  *
  * @return list<array<string,mixed>>
  */
@@ -315,10 +317,9 @@ function estab_logbook_active_assignment_options(
                 . ' ON BINARY account.`kuerzel` ='
                 . ' BINARY assignment.`benutzer_kuerzel`'
                 . ' WHERE duty_shift.`einsatz_id` = ?'
-                . " AND duty_shift.`status` = 'AKTIV'"
-                . " AND assignment.`status` = 'ANGENOMMEN'"
-                . ' AND account.`estab_gesperrt` = 0'
-                . ' ORDER BY assignment.`funktion`, account.`benutzer`,'
+                . " AND assignment.`status` <> 'ZURUECKGEZOGEN'"
+                . ' ORDER BY duty_shift.`nummer` DESC,'
+                . ' assignment.`funktion`, account.`benutzer`,'
                 . ' assignment.`dienstbesetzung_id`'
         );
         if (!$statement) {
@@ -352,64 +353,13 @@ function estab_logbook_active_assignment_options(
 }
 
 /**
- * Return the fixed first accepted assignment that currently leads the book.
+ * Validate the fixed account function used for a manual logbook entry.
  *
- * Account state is deliberately not part of this election. Blocking or
- * deactivating the designated account must stop writes until a documented
- * handover; it must never silently promote the next matching assignment.
- */
-function estab_logbook_designated_writer_assignment(
-    mysqli $connection,
-    int $incidentId,
-    string $kind,
-    bool $forUpdate = false
-): ?int {
-    if (!in_array($kind, ['etb', 'tbb'], true)) {
-        throw new InvalidArgumentException('Invalid logbook kind');
-    }
-    $incidentId = estab_incident_positive_id($incidentId);
-    $functionClause = $kind === 'etb'
-        ? "assignment.`funktion` IN ('ETB','S2')"
-        : "assignment.`funktion` = 'A/W'";
-    $order = $kind === 'etb'
-        ? "CASE assignment.`funktion` WHEN 'ETB' THEN 0 ELSE 1 END, "
-        : '';
-    $statement = $connection->prepare(
-        'SELECT assignment.`dienstbesetzung_id`'
-        . ' FROM `nv_dienstbesetzungen` AS assignment'
-        . ' JOIN `nv_dienstschichten` AS shift_row'
-        . ' ON shift_row.`dienstschicht_id` = assignment.`dienstschicht_id`'
-        . ' WHERE shift_row.`einsatz_id` = ?'
-        . " AND shift_row.`status` = 'AKTIV'"
-        . " AND assignment.`status` = 'ANGENOMMEN'"
-        . ' AND '
-        . $functionClause
-        . ' ORDER BY ' . $order . 'assignment.`dienstbesetzung_id` LIMIT 1'
-        . ($forUpdate ? ' FOR UPDATE' : '')
-    );
-    if (!$statement) {
-        throw new RuntimeException('Logbuchführung konnte nicht ermittelt werden.');
-    }
-    try {
-        $statement->bind_param('i', $incidentId);
-        if (!$statement->execute()) {
-            throw new RuntimeException('Logbuchführung konnte nicht geprüft werden.');
-        }
-        $result = $statement->get_result();
-        $row = $result->fetch_assoc();
-        $result->free();
-    } finally {
-        $statement->close();
-    }
-    $assignmentId = (int) ($row['dienstbesetzung_id'] ?? 0);
-    return $assignmentId > 0 ? $assignmentId : null;
-}
-
-/**
- * Derive the exact manual logbook writer and active shift from locked
- * database rows. No writer or shift identifier is accepted from form data.
+ * The caller has already proved the active incident and the required
+ * capability.  New entries deliberately carry no legacy duty-shift
+ * provenance because duty shifts are optional and never grant write rights.
  *
- * @return array{shift_id:int,writer_assignment_id:int}
+ * @return array{shift_id:?int,writer_assignment_id:?int}
  */
 function estab_logbook_manual_writer_context(
     mysqli $connection,
@@ -420,105 +370,40 @@ function estab_logbook_manual_writer_context(
     if (!in_array($kind, ['etb', 'tbb'], true)) {
         throw new InvalidArgumentException('Invalid logbook kind');
     }
-    $candidate = $identity['duty_assignment_id'] ?? null;
-    try {
-        $candidateId = estab_incident_positive_id(
-            $candidate,
-            'Dienstbesetzung'
-        );
-    } catch (EstabIncidentInputException) {
-        throw new EstabDvPermissionException(
-            'Wählen Sie zuerst eine persönlich angenommene Dienstfunktion.'
-        );
-    }
-    $designated = estab_logbook_designated_writer_assignment(
+    estab_incident_positive_id($incidentId);
+    if (!estab_logbook_is_designated_writer(
         $connection,
         $incidentId,
-        $kind,
-        true
-    );
-    if ($designated === null || $designated !== $candidateId) {
+        $identity,
+        $kind
+    )) {
         throw new EstabDvPermissionException(
-            'Nur die für diese Schicht bestimmte Logbuchführung darf '
-                . 'Einträge speichern.'
-        );
-    }
-    $statement = $connection->prepare(
-        'SELECT assignment.`dienstbesetzung_id`,'
-            . ' assignment.`dienstschicht_id`'
-            . ' FROM `nv_dienstbesetzungen` AS assignment'
-            . ' JOIN `nv_dienstschichten` AS duty_shift'
-            . ' ON duty_shift.`dienstschicht_id` ='
-            . ' assignment.`dienstschicht_id`'
-            . ' JOIN `nv_benutzer` AS account'
-            . ' ON BINARY account.`kuerzel` ='
-            . ' BINARY assignment.`benutzer_kuerzel`'
-            . ' WHERE assignment.`dienstbesetzung_id` = ?'
-            . ' AND duty_shift.`einsatz_id` = ?'
-            . " AND duty_shift.`status` = 'AKTIV'"
-            . " AND assignment.`status` = 'ANGENOMMEN'"
-            . ' AND BINARY account.`benutzer` = BINARY ?'
-            . ' AND BINARY assignment.`benutzer_kuerzel` = BINARY ?'
-            . ' AND BINARY assignment.`funktion` = BINARY ?'
-            . ' AND BINARY assignment.`rolle` = BINARY ?'
-            . ' AND account.`aktiv` = 1'
-            . ' AND account.`estab_gesperrt` = 0'
-            . ' LIMIT 1 FOR UPDATE'
-    );
-    if (!$statement) {
-        throw new RuntimeException(
-            'Logbuchführung konnte nicht gesperrt werden.'
-        );
-    }
-    try {
-        $user = (string) ($identity['benutzer'] ?? '');
-        $code = (string) ($identity['kuerzel'] ?? '');
-        $function = (string) ($identity['funktion'] ?? '');
-        $role = (string) ($identity['rolle'] ?? '');
-        $statement->bind_param(
-            'iissss',
-            $candidateId,
-            $incidentId,
-            $user,
-            $code,
-            $function,
-            $role
-        );
-        $statement->execute();
-        $row = $statement->get_result()->fetch_assoc();
-    } finally {
-        $statement->close();
-    }
-    if (!is_array($row)) {
-        throw new EstabDvPermissionException(
-            'Die ausgewählte Logbuchführung ist nicht mehr aktiv.'
-        );
-    }
-    $shiftId = (int) ($row['dienstschicht_id'] ?? 0);
-    $writerAssignmentId = (int) (
-        $row['dienstbesetzung_id'] ?? 0
-    );
-    if ($shiftId < 1 || $writerAssignmentId !== $candidateId) {
-        throw new EstabDvPermissionException(
-            'Die ausgewählte Logbuchführung besitzt keine aktive Schicht.'
+            $kind === 'etb'
+                ? 'ETB-Einträge dürfen nur Konten mit der festen Funktion '
+                    . 'ETB oder S2 und der Rolle Stab speichern.'
+                : 'TBB-Einträge dürfen nur Konten mit der festen Funktion '
+                    . 'A/W und der Rolle Fernmelder speichern.'
         );
     }
     return [
-        'shift_id' => $shiftId,
-        'writer_assignment_id' => $writerAssignmentId,
+        'shift_id' => null,
+        'writer_assignment_id' => null,
     ];
 }
 
 /**
- * Lock and validate one optional ETB target assignment in the writer's active
- * shift, returning the immutable display snapshot stored with the entry.
+ * Lock and validate one optional legacy ETB target assignment.
+ *
+ * The assignment only describes who an entry concerns.  It may come from any
+ * non-withdrawn historical duty shift of the incident and never affects the
+ * writer's authorization.
  *
  * @return array{assignment_id:int,snapshot:string}|null
  */
 function estab_logbook_etb_assignee_context(
     mysqli $connection,
     int $incidentId,
-    int $shiftId,
+    ?int $shiftId,
     ?int $assignmentId
 ): ?array {
     if ($assignmentId === null) {
@@ -540,11 +425,8 @@ function estab_logbook_etb_assignee_context(
             . ' ON BINARY account.`kuerzel` ='
             . ' BINARY assignment.`benutzer_kuerzel`'
             . ' WHERE assignment.`dienstbesetzung_id` = ?'
-            . ' AND assignment.`dienstschicht_id` = ?'
             . ' AND duty_shift.`einsatz_id` = ?'
-            . " AND duty_shift.`status` = 'AKTIV'"
-            . " AND assignment.`status` = 'ANGENOMMEN'"
-            . ' AND account.`estab_gesperrt` = 0'
+            . " AND assignment.`status` <> 'ZURUECKGEZOGEN'"
             . ' LIMIT 1 FOR UPDATE'
     );
     if (!$statement) {
@@ -553,12 +435,7 @@ function estab_logbook_etb_assignee_context(
         );
     }
     try {
-        $statement->bind_param(
-            'iii',
-            $assignmentId,
-            $shiftId,
-            $incidentId
-        );
+        $statement->bind_param('ii', $assignmentId, $incidentId);
         $statement->execute();
         $row = $statement->get_result()->fetch_assoc();
     } finally {
@@ -566,8 +443,8 @@ function estab_logbook_etb_assignee_context(
     }
     if (!is_array($row)) {
         throw new EstabIncidentConflictException(
-            'Die ausgewählte Zuordnung ist in der aktiven Schicht nicht '
-                . 'mehr angenommen.'
+            'Die ausgewählte Zuordnung gehört nicht mehr als verwendbare '
+                . 'Dienstbesetzung zu diesem Einsatz.'
         );
     }
     $lockedAssignmentId = (int) (
@@ -584,28 +461,26 @@ function estab_logbook_etb_assignee_context(
     ];
 }
 
-/** Prove that the selected hat is the single designated book writer. */
+/** Check the fixed account function/role that grants logbook authorship. */
 function estab_logbook_is_designated_writer(
     mysqli $connection,
     int $incidentId,
     array $identity,
     string $kind
 ): bool {
-    $candidate = $identity['duty_assignment_id'] ?? null;
-    if (!is_int($candidate) && !is_string($candidate)) {
+    if (!in_array($kind, ['etb', 'tbb'], true)) {
         return false;
     }
     try {
-        $candidateId = estab_incident_positive_id($candidate);
+        estab_incident_positive_id($incidentId);
     } catch (EstabIncidentInputException) {
         return false;
     }
-    $designated = estab_logbook_designated_writer_assignment(
-        $connection,
-        $incidentId,
-        $kind
-    );
-    return $designated !== null && $designated === $candidateId;
+    $function = trim((string) ($identity['funktion'] ?? ''));
+    $role = trim((string) ($identity['rolle'] ?? ''));
+    return $kind === 'etb'
+        ? $role === 'Stab' && in_array($function, ['ETB', 'S2'], true)
+        : $role === 'Fernmelder' && $function === 'A/W';
 }
 
 /**

@@ -21,8 +21,8 @@ Datenbankfolge steht in den Migrationen
 `95-attachment-ingest-integrity.sql` und
 `96-etb-duty-function.sql` sowie
 `97-incident-command-post-name.sql` und
-`110-etb-tbb-rules.sql` sowie
-`111-logbook-shift-assignment.sql`. Die technischen
+`110-etb-tbb-rules.sql`, `111-logbook-shift-assignment.sql` sowie
+`112-optional-access-shifts.sql`. Die technischen
 Administrationsoberflächen sind `4fadm/incidents.php` und
 `4fadm/fuehrungsstelle.php`.
 
@@ -50,15 +50,17 @@ Die verbindlichen Regeln sind:
    nie still dem ersten später aktivierten Realeinsatz zugeschlagen.
 8. Einsätze werden nicht gelöscht. Damit bleiben Referenzen, Exporte und
    Auditnachweise dauerhaft eindeutig.
-9. Operative Eingaben benötigen zusätzlich eine aktive Dienstschicht und eine
-   vom betreffenden Konto angenommene, fachlich passende Dienstfunktion.
+9. Operative Eingaben benötigen einen aktiven Einsatz sowie eine fachlich
+   passende feste Kontofunktion und serverseitig abgeleitete Rolle. Eine
+   aktive Dienst- oder Zugangsschicht ist nicht erforderlich.
 10. „Nicht aktiv“ und „formal abgeschlossen“ sind getrennte Zustände. Ein
     formaler Abschluss ist nur nach einer vollständigen Preflight-Prüfung
     möglich und sperrt sämtliche weiteren operativen Änderungen.
 11. ETB und TBB bilden je Einsatz je einen lokalen, bei 1 beginnenden und nur
-    anhängbaren Nummernstrom. Die erste Dienstschicht eröffnet beide Bücher,
-    bestätigte Übergaben und der formale Einsatzabschluss schreiben ihre
-    Lebenszykluszeilen atomar mit dem jeweiligen Vorgang.
+    anhängbaren Nummernstrom. Bei einem neuen, leeren Einsatz schreibt bereits
+    die Aktivierung je eine schichtfreie Eröffnungszeile. Der formale
+    Einsatzabschluss schreibt die Abschlusszeilen atomar mit dem Vorgang; eine
+    frühere Schicht ist weder für Eröffnung noch Abschluss Voraussetzung.
 12. Jeder Einsatz besitzt ab seiner Erzeugung exakt zwei leere,
     fremdschlüsselgebundene Nummernköpfe `ETB:1` und `TTB:1`. Ein fehlender
     Kopf wird beim Buchen nicht repariert, sondern sperrt den Schreibvorgang.
@@ -74,7 +76,8 @@ Die verbindlichen Regeln sind:
 | `nv_einsatz_status` | Genau eine Singleton-Zeile mit aktiver Einsatz-ID, monotoner Revision, Zeitpunkt und Akteur |
 | `nv_einsatz_ereignisse` | Unveränderliches Audit für Anlegen, Führungsstellenänderungen, Aktivieren und Deaktivieren |
 | `nv_nachrichtenereignis_kopf`, `nv_nachrichtenereignisse` | Pro Nachricht verketteter, unveränderlicher Zustands- und Terminalnachweis |
-| `nv_dienstschichten`, `nv_dienstbesetzungen`, `nv_dienstuebergaben` | Einsatzbezogener Dienstbetrieb mit persönlicher Annahme, Mehrfachfunktion und Ablösung |
+| `nv_zugangsschichten`, `nv_zugangsschicht_mitglieder` | Optionale einsatzbezogene Gruppen zum gemeinsamen Aktivieren und Deaktivieren von Zugängen; keine Fachrechtsquelle |
+| `nv_dienstschichten`, `nv_dienstbesetzungen`, `nv_dienstuebergaben` | Historische formale Dienstbetriebs-, Besetzungs- und Übergabeevidenz; nicht mehr Autorisierungsquelle |
 | `nv_fernmeldeplaene`, `nv_fernmeldeplan_eintraege` | Versionierte, nach Freigabe unveränderliche S6-Kommunikationsplanung |
 | `nv_melderauftraege` | Vollständige Melderkette vom LdF-Auftrag bis zur Rückmeldung |
 | `nv_betriebsereignis_kopf`, `nv_betriebsereignisse` | Einsatzbezogene Hashkette für Schicht-, Besetzungs-, Plan- und Melderereignisse |
@@ -95,13 +98,12 @@ gegenseitig als Fallback verwendet werden:
 
 Neue Einsätze verlangen Kennung, Einsatzname, Beginn, Bedarfsträger,
 Führungsstellenname, verantwortliche Einsatz-/Führungsleitung und
-Einsatzauftrag/Ausgangslage. Erst wenn alle sieben Angaben vorliegen, kann die
-erste Dienstschicht aktiviert werden. Ihre Aktivierung erzeugt in derselben
-Transaktion die Eröffnungseinträge Nummer 1 in ETB und TBB; der ETB-Text nennt
-den gespeicherten Einsatzbeginn ausdrücklich. Bedarfsträger, Leitungsangabe
-und Auftrag/Ausgangslage können bei einem vorbereiteten
-Bestands-Einsatz nachgetragen werden; ab erster Schichtaktivierung oder erster
-bereits vorhandener Buchzeile sind sie als Eröffnungsgrundlage unveränderlich.
+Einsatzauftrag/Ausgangslage. Sobald alle sieben Angaben vorliegen, kann der
+Einsatz aktiviert und operativ verwendet werden. Bedarfsträger,
+Leitungsangabe und Auftrag/Ausgangslage können bei einem vorbereiteten
+Bestands-Einsatz nachgetragen werden; ab der ersten bereits vorhandenen
+Buchzeile sind sie als Buchgrundlage unveränderlich. Eine Schichtaktivierung
+ist dafür nicht erforderlich.
 
 Neue Einsätze verlangen den Führungsstellennamen bereits beim Anlegen.
 Migration 97 lässt bestehende Werte bewusst `NULL`. Ein offener historischer
@@ -203,11 +205,13 @@ oder rollt vollständig zurück. Ohne aktiven Einsatz wird
 
 Der gemeinsame Request-Guard ergänzt diese Einsatzgrenze um den
 Führungsstellenbetrieb: Auch bei aktivem Einsatz scheitert eine normale
-operative Eingabe, wenn keine Schicht aktiv ist, die angemeldete Person ihre
-Funktion nicht angenommen hat oder ein als Melder übernommener Auftrag sie bis
-zur Rückkehr bindet. Ausgenommen sind nur die eng begrenzten Kontrollschritte
-Anmeldung/Abmeldung, persönliche Dienstannahme und -auswahl,
-Melder-Rückkehrkette, Administration und Wiederherstellung.
+operative Eingabe, wenn die feste Funktion/Rolle des angemeldeten Kontos den
+Vorgang nicht erlaubt, das Konto gesperrt ist, eine ausschließlich deaktivierte
+Zugangsschicht den Zugriff entzogen hat oder ein als Melder übernommener Auftrag
+die Person bis zur Rückkehr bindet. Eine aktive Schicht oder eine persönliche
+Schichtannahme wird nicht verlangt. Ausgenommen sind nur die eng begrenzten
+Kontrollschritte Anmeldung/Abmeldung, Melder-Rückkehrkette, Administration und
+Wiederherstellung.
 
 Administration:
 
@@ -265,11 +269,11 @@ estab_incident_set_legal_hold(
 
 Der Preflight blockiert unter anderem offene Nachrichten, Sperren,
 unvollständige Anhänge, fehlende oder vom SHA-256-/Größennachweis abweichende
-neue Anhangdateien, offene Dienstschichten/Besetzungen/Melderaufträge,
-Planentwürfe und ungültige Nachrichten- oder Betriebsereignisketten. Er
-verlangt zusätzlich mindestens eine aktivierte Schicht sowie exakt je eine
-Eröffnungszeile Nummer 1 in ETB und TBB; ein vorbereiteter, aber nie eröffneter
-Einsatz kann deshalb nicht formal geschlossen werden. Beim
+neue Anhangdateien, offene Melderaufträge, Planentwürfe und ungültige
+Nachrichten- oder Betriebsereignisketten. Historische formale Dienstschichten
+und Besetzungen sowie fehlende schichtbezogene Bucheröffnungen blockieren den
+Abschluss nicht; ein Einsatz kann auch ohne jemals angelegte Schicht formal
+geschlossen werden. Beim
 Upgrade vorhandene, erreichbare Anhänge blockieren nicht allein aufgrund
 fehlender rückwirkender Beweiskraft; die Oberfläche zählt sie ausdrücklich als
 „Integrität beim Eingang nicht belegbar“.
@@ -291,10 +295,11 @@ Einsatz-API:
   Einsatz ohne bestätigten Führungsstellennamen erscheint ein roter Hinweis.
   Markierte operative Formulare werden im Browser deaktiviert; jeder
   POST-Controller prüft den Zustand zusätzlich serverseitig.
-- Die Führungsstellenansicht zeigt geplante beziehungsweise aktive Schicht,
-  persönliche Funktionszuweisungen und die aktuell gewählte Arbeitsfunktion.
-  Ohne aktive Schicht oder passende angenommene Besetzung bleibt jeder
-  normale operative POST serverseitig gesperrt.
+- Die Führungsstellenansicht zeigt die feste Kontofunktion und – sofern
+  verwendet – die optionalen Zugangsschichten. Fachrechte stammen nur aus
+  Funktion und Rolle des Kontos. Ohne aktive Schicht bleibt die Arbeit
+  möglich; ohne aktiven Einsatz bleibt jeder operative POST serverseitig
+  gesperrt.
 - Nachrichten, Sperren, Sichtung, Transport, Gelesen-/Erledigt-Zustände und
   Kategoriezuordnungen prüfen die aktive Nachricht innerhalb einer
   `estab_incident_with_active_write()`-Transaktion. Listen und Zähler lesen nur
@@ -303,11 +308,10 @@ Einsatz-API:
   Absendereinheit eines Ausgangs an den Führungsstellennamen; ein Formularwert
   oder eine Umgebungsvorgabe kann ihn nicht ersetzen.
 - ETB und TBB verwenden die globalen Einsatzstammdaten einschließlich
-  Bedarfsträger, Auftrag/Ausgangslage, Leitung und Führungsstellenname als
-  Eröffnungsgrundlage. Die erste Schichtaktivierung, eine bestätigte Übergabe
-  und der formale Abschluss schreiben ihre Buchzeilen innerhalb der jeweils
-  bereits gesperrten Fachtransaktion. Die alten lokalen Einsatz-anlegen-
-  Formulare sind nicht mehr schreibend.
+  Bedarfsträger, Auftrag/Ausgangslage, Leitung und Führungsstellenname. Der
+  formale Abschluss schreibt seine Buchzeilen innerhalb der bereits
+  gesperrten Fachtransaktion. Die alten lokalen Einsatz-anlegen-Formulare sind
+  nicht mehr schreibend.
 - Ein ETB-Eintrag kann optional genau einen finalisierten, einsatzgleichen und
   noch unbenutzten Anhang binden. Die lokale Buchnummer wird erst im selben
   Commit vergeben; daraus folgt deterministisch
@@ -320,12 +324,10 @@ Einsatz-API:
   Volltext, Art, Nummer/Bezug und Zuordnung sind kombinierbar; durchsucht werden auch
   Personen-/Kürzelangaben, lokale und historische Bestandsreferenzen, lokale Nummern, Nachrichten-,
   Korrektur- und Anhangsbezüge, Ablage-/Originaldateiname sowie die
-  vollständige ETB-Anlagennummer. Die optionale Bearbeitungszuordnung stammt
-  ausschließlich aus einer angenommenen Besetzung der aktiven Schicht, wird
-  beim Speichern erneut gegen ein ungesperrtes Konto gesperrt und als
-  unveränderlicher lesbarer Snapshot abgelegt. Abmeldung und Präsenzstatus
-  ändern die fachliche Gültigkeit der angenommenen Besetzung nicht. Sie bleibt
-  aus dem amtlichen PDF ausgeschlossen.
+  vollständige ETB-Anlagennummer. Eine optionale Bearbeitungszuordnung ist nur
+  Such- und Anzeigehilfe und erweitert keine Rechte. Beim Speichern werden
+  feste Kontofunktion, Rolle und Sperrstatus erneut geprüft; der lesbare
+  Snapshot bleibt aus dem amtlichen PDF ausgeschlossen.
 - Neue ETB-Referenzen bestehen ausschließlich aus der positiven lokalen
   Buchnummer eines bereits vorhandenen Eintrags desselben Einsatzes. Freitext,
   führende Nullen, globale Primärschlüssel und unbekannte Nummern scheitern.
@@ -344,22 +346,15 @@ Einsatz-API:
   Zeilensperren funktionieren unter der unveränderten MariaDB-Standardisolation
   `REPEATABLE READ`; für den Dossierexport bleiben konsistente Read-only-
   Snapshots aktiviert.
-- Lesen dürfen alle ausgewählten aktiven Dienstfunktionen. Manuell schreibt
-  pro Schicht genau die zuerst zugewiesene angenommene ETB-Funktion,
-  ersatzweise S2, beziehungsweise die zuerst zugewiesene angenommene
-  A/W-Funktion für das TBB. Jede neue manuelle Zeile speichert die aktive
-  Schicht und diese Schreiberbesetzung; automatische Systemzeilen speichern
-  die Schicht mit `NULL` als menschlicher Schreiber-ID. Historische Zeilen
-  bleiben in diesen neuen Feldern ehrlich `NULL`. Beide Tabellen weisen
-  `UPDATE` und `DELETE` ab; Berichtigungen sind neue, direkt auf den
+- Die Fachrechte folgen ausschließlich dem Konto: ETB schreiben `ETB/Stab`
+  oder `S2/Stab`, TTB schreibt `A/W/Fernmelder`. Anwendung und Insert-Trigger
+  prüfen festen Konto-/Kürzel-/Funktions-/Rollenbezug, Sperrstatus und aktiven
+  Einsatz. Eine aktive Schicht oder Besetzungsannahme wird nicht verlangt.
+  Neue Zeilen dürfen die Legacy-Provenienzfelder für Dienstschicht und
+  Schreiberbesetzung `NULL` lassen; sie werden nicht mit einer Zugangsschicht
+  befüllt. Historische belegte Werte bleiben unverändert. Beide Tabellen
+  weisen `UPDATE` und `DELETE` ab; Berichtigungen sind neue, direkt auf den
   Originaleintrag verweisende Zeilen.
-- Der Kontozustand gehört nicht zur Wahl der designierten ersten ETB-,
-  ersatzweise S2- beziehungsweise ersten A/W-Besetzung. Wird deren Konto
-  deaktiviert oder gesperrt, scheitert der Schreibvorgang, ohne still zur
-  nächsten fachlich passenden Besetzung zu wechseln. Anwendung und
-  Insert-Trigger prüfen aktive einsatzgleiche Schicht, Annahmestatus,
-  Konto-/Kürzel-/Funktionsidentität sowie aktives, ungesperrtes Konto; ein
-  Wechsel braucht eine dokumentierte Ablösung.
 - Nummerierte Eingänge und tatsächlich beförderte Ausgänge schreiben
   automatisch einsatzgleiche TBB-Zeilen des exakten Typs `nachricht`.
   Generator, Detailansicht und Export übernehmen ausschließlich die erste
@@ -367,22 +362,20 @@ Einsatz-API:
   begründete Wegkorrektur hängt einen neuen, direkt auf den unveränderten
   Nachrichtennachweis verweisenden TBB-Korrektureintrag an und verändert die
   ausgegebene Ursprungsnummer nicht.
-- Eine Übergabe initiiert nur eine persönlich angemeldete, ausgewählte und
-  angenommene Besetzung der aktiven Schicht; eine persönlich angenommene
-  Besetzung der Nachfolgeschicht bestätigt sie. ETB/TBB dokumentieren dabei
-  ausschließlich tatsächlich abgelöste alte und angenommene neue
-  Statusbesetzungen, keine bloßen Planungs- oder Rückzugszeilen.
-- Die Administration kann eine aktive Schicht um eine bislang unbesetzte
-  Funktion erweitern. Wirksam wird sie erst nach persönlicher Annahme durch
-  die zugewiesene Person. Jede angenommene Ergänzung schreibt atomar ETB; LdF
-  oder A/W zusätzlich TBB. A/W ist mehrfach
-  besetzbar. Eine ETB-Ergänzung ist nur zulässig, wenn sie keine angenommene
-  S2-/ETB-Buchführung verdrängt. Ist die Buchführung bereits besetzt, wird
-  sowohl eine neue ETB-Ergänzung als auch die nachträgliche Annahme einer
-  geplanten ETB-Besetzung gesperrt; der Wechsel ist ausschließlich über eine
-  bestätigte Schichtübergabe mit alter und neuer Besetzung zulässig. Jede
-  andere bereits vorhandene Funktion kann ebenfalls nicht ersetzt werden und
-  erfordert dafür eine Schichtübergabe.
+- Zugangsschichten sind optionale Gruppen und keine Dienstbesetzungen. Ein
+  unzugeordnetes Konto bleibt zugelassen; bei mehreren Zuordnungen genügt eine
+  aktive Gruppe. Aktivieren erzeugt keine Anmeldung. Deaktivieren widerruft
+  betroffene Sitzungen, wenn keine andere aktive Zuordnung verbleibt. Die
+  dauerhafte Kontosperre bleibt unabhängig und vorrangig.
+- Mutationen dieser Gruppen werden als `ZUGANGSSCHICHT` in der
+  Betriebsereigniskette nachgewiesen. Die schichtfreie Nachrichtenzähler-
+  Reparatur verwendet den Objekttyp `EINSATZ`.
+- Historische Dienstschichten, Besetzungen und Übergaben bleiben unverändert
+  als Betriebs- und Exportnachweis verfügbar. Der Dossierabschnitt
+  Dienstorganisation stellt sie getrennt als Legacy-Nachweis dar und enthält
+  zusätzlich alle aktuellen und entfernten Zugangsschichtzuordnungen. Die
+  Altdaten bestimmen weder aktuelle Fachrechte noch den Einsatzabschluss und
+  sperren keine Eingabe.
 - Nachrichtenzähler-Reparatur und PDF-Vordruckreset benötigen einen aktiven
   Einsatz und ändern ausschließlich dessen Nachrichten. Login, Logout,
   Benutzer- und Konfigurationsverwaltung bleiben bewusst globale Vorgänge.
@@ -390,10 +383,12 @@ Einsatz-API:
   auch einen nicht aktiven historischen Einsatz lesen. Die
   Datenbankabfragen laufen in einem konsistenten Read-only-Snapshot und sind
   sämtlich auf diese ID vorbereitet. ETB und TBB können als Gesamtbuch oder
-  für eine erneut gegen den Einsatz geprüfte Dienstschicht ausgegeben werden.
-  Die Schicht-ID filtert nur diese beiden Tabellen; alle anderen gewählten
-  Dossierbereiche bleiben einsatzweit. Deckblatt und `pdf_export`-Audit
-  speichern den aufgelösten Umfang samt Schichtmetadaten.
+  bei historisch belegter Provenienz für eine frühere formale Dienstschicht
+  ausgegeben werden. Dieser Legacy-Filter erfasst keine neuen Zeilen mit
+  `NULL`-Provenienz und keine Zugangsschicht. Er filtert nur diese beiden
+  Tabellen; alle anderen gewählten Dossierbereiche bleiben einsatzweit.
+  Deckblatt und `pdf_export`-Audit speichern den aufgelösten Umfang samt
+  historischen Schichtmetadaten.
 
 Historische, nicht mehr geroutete Duplikate und Beispiel-Uploader sind keine
 Laufzeitendpunkte. Werden lokal zusätzliche operative Module reaktiviert,
@@ -478,7 +473,7 @@ gespeicherten Kopiekennzeichen im Inhaltsbereich ausgeschrieben.
 
 ## Migrations- und Testnachweis
 
-Die checksum-gebundene Folge 45/50/55/80/94/95/96/97/110/111 ist additiv. Ein
+Die checksum-gebundene Folge 45/50/55/80/94/95/96/97/110/111/112 ist additiv. Ein
 harter Abbruch bleibt bis zur kontrollierten Prüfung des Migrationsledgers
 fail-closed; anschließend werden ausschließlich exakt erkannte,
 migrationseigene Zwischenstände fortgesetzt. Die ersten drei Migrationen:
@@ -532,6 +527,13 @@ Schichtübergabe zulässig. Eigene unterbrochene DDL-Zwischenstände werden
 kontrolliert fortgesetzt, fremde Spalten-, Index-, Fremdschlüssel- oder
 Triggerdefinitionen blockieren das Upgrade.
 
+Migration 112 führt die optionalen Zugangsschichten und ihre
+Kontenzuordnungen ein. Sie ersetzt den abschließenden Triggervertrag, ohne die
+checksum-gebundenen Migrationen 94, 110 oder 111 umzuschreiben: Neue
+ETB-/TBB-Zeilen benötigen einen aktiven Einsatz und die feste fachlich
+zulässige Kontofunktion, aber keine aktive Dienstschicht oder Besetzungs-ID.
+Nicht belegbare Legacy-Schicht- und Schreiberfelder bleiben `NULL`.
+
 Migration 50 bleibt bytegenau auf der bereits im Ledger verwendeten
 Prüfsumme. Vor- oder Nachbedingungen werden ausschließlich in neuen
 Versionsdateien ergänzt; weder der Ledger noch eine veröffentlichte SQL-Datei
@@ -547,10 +549,9 @@ Wiederanlauffähigkeit und Wiederholbarkeit.
 `tests/integration/dv_evidence.php` beweist Abschluss-Preflight,
 Append-only-ETB/TBB, referenzierte Korrekturen, Hashketten, Terminalbindung,
 Mindestaufbewahrung und Legal Hold. `tests/integration/dv_operations.php`
-beweist Pflichtkopf, rollback-sichere Eröffnung, Pflichtbesetzung,
-Mehrfachfunktion, die beidseitig persönliche Schichtübergabe mit echten
-Statusbesetzungen, S6-Versionierung, Melderbindung und die Schreibsperre ohne
-aktive Schicht.
+beweist Pflichtkopf, feste funktionsabhängige Rechte, S6-Versionierung,
+Melderbindung sowie die Schreibsperre ohne aktiven Einsatz und die erlaubte
+Arbeit ohne aktive Schicht.
 `tests/integration/incident_export.php` erzeugt zusätzlich ETB, TBB,
 Nachricht und Anhang mit Eingangsnachweis in zwei Einsätzen, exportiert den inzwischen
 historischen ausgewählten Einsatz und extrahiert dessen PDF-`EmbeddedFile`

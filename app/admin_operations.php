@@ -671,44 +671,15 @@ function estab_admin_raise_message_counter(
                 }
             }
 
-            $shiftStatement = $connection->prepare(
-                'SELECT `dienstschicht_id` FROM `nv_dienstschichten`'
-                . " WHERE `einsatz_id` = ? AND `status` = 'AKTIV'"
-                . ' ORDER BY `dienstschicht_id` DESC LIMIT 1 FOR UPDATE'
-            );
-            if (!$shiftStatement) {
-                throw new RuntimeException(
-                    'Could not prepare active shift for counter repair'
-                );
-            }
-            try {
-                $shiftStatement->bind_param('i', $incidentId);
-                $shiftStatement->execute();
-                $shiftRow = $shiftStatement->get_result()->fetch_assoc();
-            } finally {
-                $shiftStatement->close();
-            }
-            if (!is_array($shiftRow)) {
-                throw new EstabAdminConflictException(
-                    'Der Nachrichtenzähler kann erst mit einer aktiven '
-                    . 'Dienstschicht erhöht werden.'
-                );
-            }
-            $shiftId = (int) ($shiftRow['dienstschicht_id'] ?? 0);
-            if ($shiftId < 1) {
-                throw new RuntimeException(
-                    'Active shift for counter repair has no identifier'
-                );
-            }
-
             // This is a recovery watermark in the immutable operational
             // chain. It must never masquerade as a received/sent message with
-            // invented A/W, LdF or Si marks.
+            // invented A/W, LdF or Si marks. The active incident is the
+            // evidence object; optional access shifts are not a prerequisite.
             estab_dv_event_append(
                 $connection,
                 $incidentId,
-                'DIENSTSCHICHT',
-                $shiftId,
+                'EINSATZ',
+                $incidentId,
                 'message_counter_repaired',
                 $actor,
                 null,

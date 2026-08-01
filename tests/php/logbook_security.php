@@ -265,7 +265,7 @@ $assert(
             estab_logbook_lifecycle_writer_text($writerRoster, 'tbb'),
             'A/W Eins [aw1]'
         ),
-    'designated ETB/TBB writers are not selected deterministically'
+    'historical ETB/TBB roster summaries are not deterministic'
 );
 $assert(
     estab_auth_html('<script>alert("x")</script>')
@@ -377,7 +377,7 @@ $assert(
 $assert(
     $fixtureDefault(
         $httpSmoke,
-        'shift_s2_name',
+        'account_s2_name',
         'ESTAB_TEST_ETB_NAME'
     ) === $fixtureDefault(
         $logbooksHttp,
@@ -386,7 +386,7 @@ $assert(
     )
         && $fixtureDefault(
             $httpSmoke,
-            'shift_s2_code',
+            'account_s2_code',
             'ESTAB_TEST_ETB_CODE'
         ) === $fixtureDefault(
             $logbooksHttp,
@@ -417,7 +417,7 @@ $assert(
 $assert(
     $fixtureDefault(
         $httpSmoke,
-        'shift_si_name',
+        'account_si_name',
         'ESTAB_TEST_CATEGORY_SI_NAME'
     ) === $fixtureDefault(
         $categoriesHttp,
@@ -426,7 +426,7 @@ $assert(
     )
         && $fixtureDefault(
             $httpSmoke,
-            'shift_si_code',
+            'account_si_code',
             'ESTAB_TEST_CATEGORY_SI_CODE'
         ) === $fixtureDefault(
             $categoriesHttp,
@@ -499,13 +499,17 @@ $assert(
     'ETB attachments are not finalized, unique, selectable, or searchable'
 );
 $assert(
-    str_contains($helper, 'function estab_logbook_designated_writer_assignment(')
+    str_contains($helper, 'function estab_logbook_manual_writer_context(')
         && str_contains($helper, 'function estab_logbook_is_designated_writer(')
+        && str_contains($helper, "'shift_id' => null")
+        && str_contains($helper, "'writer_assignment_id' => null")
+        && str_contains($helper, "in_array(\$function, ['ETB', 'S2'], true)")
+        && str_contains($helper, "\$function === 'A/W'")
         && str_contains($helper, "\$orderSql = '`estab_book_lfd` DESC';")
         && str_contains($helper, '`estab_personnel_duty`')
         && str_contains($helper, '`estab_message_route`')
         && str_contains($helper, '`estab_receipt`'),
-    'single-writer rule, incident-local ordering, or official TTB fields are missing'
+    'fixed-account writer rule, incident-local ordering, or official TTB fields are missing'
 );
 $assert(
     str_contains($helper, 'function estab_logbook_ttb_manual_entry_types(): array')
@@ -521,40 +525,31 @@ $assert(
         && str_contains($helper, 'function estab_logbook_etb_assignee_context(')
         && str_contains($helper, 'function estab_logbook_active_assignment_options(')
         && str_contains($helper, 'estab_logbook_assignment_snapshot($row)')
-        && str_contains($helper, "assignment.`status` = 'ANGENOMMEN'")
-        && str_contains($helper, "duty_shift.`status` = 'AKTIV'")
+        && str_contains($helper, "assignment.`status` <> 'ZURUECKGEZOGEN'")
+        && !str_contains($helper, "duty_shift.`status` = 'AKTIV'")
         && str_contains($helper, 'LIMIT 1 FOR UPDATE')
         && str_contains($helper, '`estab_shift_id`')
         && str_contains($helper, '`estab_writer_assignment_id`')
         && str_contains($helper, '`estab_assignee_assignment_id`')
         && str_contains($helper, '`estab_assignment`'),
-    'manual logbook rows are not bound to a locked shift, writer, or assignee'
+    'manual logbook rows require a shift or do not lock optional assignee metadata'
 );
-$designatedStart = strpos(
-    $helper,
-    'function estab_logbook_designated_writer_assignment('
-);
-$designatedEnd = strpos(
-    $helper,
-    'function estab_logbook_manual_writer_context(',
-    is_int($designatedStart) ? $designatedStart : 0
-);
-$designatedSource = is_int($designatedStart) && is_int($designatedEnd)
-    ? substr($helper, $designatedStart, $designatedEnd - $designatedStart)
-    : '';
 $assignmentOptionsStart = strpos(
     $helper,
     'function estab_logbook_active_assignment_options('
 );
+$manualWriterStart = strpos(
+    $helper,
+    'function estab_logbook_manual_writer_context('
+);
 $assignmentOptionsSource = is_int($assignmentOptionsStart)
-    && is_int($designatedStart)
+    && is_int($manualWriterStart)
     ? substr(
         $helper,
         $assignmentOptionsStart,
-        $designatedStart - $assignmentOptionsStart
+        $manualWriterStart - $assignmentOptionsStart
     )
     : '';
-$manualWriterStart = $designatedEnd;
 $manualWriterEnd = strpos(
     $helper,
     'function estab_logbook_etb_assignee_context(',
@@ -573,25 +568,45 @@ $assigneeSource = is_int($assigneeStart) && is_int($assigneeEnd)
     ? substr($helper, $assigneeStart, $assigneeEnd - $assigneeStart)
     : '';
 $assert(
-    !str_contains($designatedSource, '`nv_benutzer`')
-        && !str_contains($designatedSource, '`estab_gesperrt`')
-        && str_contains($manualWriterSource, 'account.`aktiv` = 1')
-        && str_contains($manualWriterSource, 'account.`estab_gesperrt` = 0')
+    str_contains(
+        $manualWriterSource,
+        'estab_logbook_is_designated_writer('
+    )
+        && str_contains($manualWriterSource, "'shift_id' => null")
+        && str_contains(
+            $manualWriterSource,
+            "'writer_assignment_id' => null"
+        )
+        && !str_contains($manualWriterSource, 'nv_dienstbesetzungen')
+        && !str_contains($manualWriterSource, 'duty_assignment_id')
         && !str_contains($assignmentOptionsSource, 'account.`aktiv` = 1')
+        && !str_contains($assignmentOptionsSource, "duty_shift.`status` = 'AKTIV'")
         && str_contains(
             $assignmentOptionsSource,
-            'account.`estab_gesperrt` = 0'
+            "assignment.`status` <> 'ZURUECKGEZOGEN'"
         )
         && !str_contains($assigneeSource, 'account.`aktiv` = 1')
-        && str_contains($assigneeSource, 'account.`estab_gesperrt` = 0'),
-    'writer presence or offline ETB assignee account policy is unsafe'
+        && !str_contains($assigneeSource, "duty_shift.`status` = 'AKTIV'")
+        && str_contains($assigneeSource, 'duty_shift.`einsatz_id` = ?'),
+    'fixed writer rights or optional historical assignee policy is unsafe'
 );
 $assert(
     str_contains($lifecycle, 'function estab_logbook_lifecycle_open_books(')
+        && str_contains(
+            $lifecycle,
+            'function estab_logbook_lifecycle_open_books_if_empty('
+        )
         && str_contains($lifecycle, 'function estab_logbook_lifecycle_handover(')
         && str_contains($lifecycle, 'function estab_logbook_lifecycle_close_books(')
         && str_contains($lifecycle, 'function estab_logbook_lifecycle_message_transport(')
-        && str_contains($operationsDomain, 'estab_logbook_lifecycle_open_books(')
+        && str_contains(
+            $operationsDomain,
+            'estab_logbook_lifecycle_open_books_if_empty('
+        )
+        && str_contains(
+            $incidentDomain,
+            'estab_logbook_lifecycle_open_books_if_empty('
+        )
         && str_contains($operationsDomain, 'estab_logbook_lifecycle_handover(')
         && str_contains($incidentDomain, 'estab_logbook_lifecycle_close_books(')
         && str_contains($lifecycle, ". 'Einsatzbeginn: ' . \$begin")
@@ -654,24 +669,30 @@ foreach (['ETB' => $etb, 'TBB' => $tbb] as $name => $source) {
             )
             && str_contains(
                 $source,
-                'estab_navigation_select_duty ($_SERVER)'
-            )
-            && str_contains(
-                $source,
                 'estab_read_session_identity ($_SESSION)'
             )
             && str_contains(
                 $source,
                 'estab_read_require_operational_scope ('
             )
+            && str_contains(
+                $source,
+                'estab_dv_has_account_capability ('
+            )
+            && str_contains(
+                $source,
+                'estab_logbook_is_designated_writer ('
+            )
             && str_contains($source, 'if ($requestMethod === "POST")')
-            && str_contains($source, 'if (!$berechtigt)'),
-        "{$name} selected active-hat read/write boundary is missing"
+            && str_contains($source, 'if (!$berechtigt)')
+            && !str_contains($source, 'estab_navigation_select_duty')
+            && !str_contains($source, 'duty_assignment_id'),
+        "{$name} fixed-account read/write boundary is missing or still shift-bound"
     );
     $assert(
         strpos($source, 'estab_read_require_operational_scope (')
             < strpos($source, 'new ' . strtolower($name) . '_liste'),
-        "{$name} reads logbook data before checking the selected active hat"
+        "{$name} reads logbook data before checking active incident and account"
     );
     $assert(
         str_contains(
@@ -732,21 +753,8 @@ foreach (['ETB' => $etb, 'TBB' => $tbb] as $name => $source) {
         str_contains($source, 'var $' . $prefix . '_rolle ;')
             && str_contains(
                 $source,
-                'public int $' . $prefix . '_duty_assignment_id = 0;'
-            )
-            && str_contains(
-                $source,
                 '$' . $prefix . 'obj->' . $prefix
                     . '_rolle = $identity ["rolle"];'
-            )
-            && str_contains(
-                $source,
-                '$dutyAssignmentId = estab_read_duty_assignment_id ('
-            )
-            && str_contains(
-                $source,
-                '$' . $prefix . 'obj->' . $prefix
-                    . '_duty_assignment_id = $dutyAssignmentId;'
             )
             && str_contains(
                 $source,
@@ -754,11 +762,10 @@ foreach (['ETB' => $etb, 'TBB' => $tbb] as $name => $source) {
             )
             && str_contains(
                 $source,
-                '"duty_assignment_id" => $this->' . $prefix
-                    . '_duty_assignment_id'
-            ),
-        "{$name} drops the authenticated role or selected assignment "
-            . 'before the capability guard'
+                '"funktion" => (string) $this->' . $prefix . '_funktion'
+            )
+            && !str_contains($source, '_duty_assignment_id'),
+        "{$name} drops the fixed authenticated function/role before the guard"
     );
     $assert(
         !str_contains($source, '$_POST ["duty_assignment_id"]')
@@ -768,18 +775,18 @@ foreach (['ETB' => $etb, 'TBB' => $tbb] as $name => $source) {
 }
 
 $assert(
-    str_contains($etb, 'estab_dv_has_selected_capability (')
+    str_contains($etb, 'estab_dv_has_account_capability (')
         && str_contains($etb, '"EINSATZTAGEBUCH"')
         && !str_contains($etb, '$readauth')
         && !str_contains($etb, 'Keine Berechtigung für das Einsatztagebuch'),
-    'ETB selected-hat readers must remain writable only by ETB capability'
+    'ETB readers must remain writable only by fixed ETB capability'
 );
 $assert(
-    str_contains($tbb, 'estab_dv_has_selected_capability (')
+    str_contains($tbb, 'estab_dv_has_account_capability (')
         && str_contains($tbb, '"BEFOERDERUNG"')
         && !str_contains($tbb, '$readonly')
         && !str_contains($tbb, 'Keine Berechtigung für das technische Betriebsbuch'),
-    'TBB selected-hat readers must remain writable only by Beförderung'
+    'TBB readers must remain writable only by fixed Beförderung capability'
 );
 $assert(
     str_contains($etb, 'ETB durchsuchen und filtern')

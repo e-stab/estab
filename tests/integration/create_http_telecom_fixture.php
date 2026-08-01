@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 /**
  * Publish disposable HTTP-test telecommunications plans through production
- * domain functions. Direct SQL would bypass the selected S6 capability and
+ * domain functions. Direct SQL would bypass the fixed S6 capability and
  * the exact immutable draft/release transitions proved by migration 94.
  */
 
@@ -76,49 +76,37 @@ try {
             'HTTP telecommunications fixture requires an active incident'
         );
     }
-    $assignmentStatement = $connection->prepare(
-        'SELECT assignment.`dienstbesetzung_id`, account.`benutzer`'
-        . ' FROM `nv_dienstbesetzungen` AS assignment'
-        . ' JOIN `nv_dienstschichten` AS shift_row'
-        . ' ON shift_row.`dienstschicht_id` ='
-        . ' assignment.`dienstschicht_id`'
-        . ' JOIN `nv_benutzer` AS account'
-        . ' ON BINARY account.`kuerzel` ='
-        . ' BINARY assignment.`benutzer_kuerzel`'
-        . ' WHERE shift_row.`einsatz_id` = ?'
-        . " AND shift_row.`status` = 'AKTIV'"
-        . " AND assignment.`status` = 'ANGENOMMEN'"
-        . " AND BINARY assignment.`funktion` = BINARY 'S6'"
-        . " AND BINARY assignment.`rolle` = BINARY 'Stab'"
-        . ' AND BINARY assignment.`benutzer_kuerzel` = BINARY ?'
+    $accountStatement = $connection->prepare(
+        'SELECT account.`benutzer` FROM `nv_benutzer` AS account'
+        . ' WHERE BINARY account.`kuerzel` = BINARY ?'
+        . " AND BINARY account.`funktion` = BINARY 'S6'"
+        . " AND BINARY account.`rolle` = BINARY 'Stab'"
         . ' AND account.`aktiv` = 1'
         . ' AND account.`estab_gesperrt` = 0'
         . ' LIMIT 1'
     );
-    if (!$assignmentStatement) {
+    if (!$accountStatement) {
         throw new RuntimeException(
-            'HTTP telecommunications S6 assignment could not be prepared'
+            'HTTP telecommunications S6 account could not be prepared'
         );
     }
     try {
-        $assignmentStatement->bind_param('is', $incidentId, $s6Code);
-        $assignmentStatement->execute();
-        $assignment = $assignmentStatement->get_result()->fetch_assoc();
+        $accountStatement->bind_param('s', $s6Code);
+        $accountStatement->execute();
+        $account = $accountStatement->get_result()->fetch_assoc();
     } finally {
-        $assignmentStatement->close();
+        $accountStatement->close();
     }
-    if (!is_array($assignment)) {
+    if (!is_array($account)) {
         throw new RuntimeException(
-            'HTTP telecommunications fixture requires an active accepted S6'
+            'HTTP telecommunications fixture requires an active S6 account'
         );
     }
     $identity = [
-        'benutzer' => (string) $assignment['benutzer'],
+        'benutzer' => (string) $account['benutzer'],
         'kuerzel' => $s6Code,
         'funktion' => 'S6',
         'rolle' => 'Stab',
-        'duty_assignment_id' =>
-            (int) $assignment['dienstbesetzung_id'],
     ];
     $validFrom = date('Y-m-d H:i:s', time() - 86400);
     $validUntil = date('Y-m-d H:i:s', time() + 86400);

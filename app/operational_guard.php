@@ -22,9 +22,6 @@ const ESTAB_OPERATIONAL_CONTROL_EXCEPTIONS = [
     'session-activity',
     'legacy-logout',
     'account-image-recovery',
-    'duty-accept',
-    'duty-select',
-    'handover-confirm',
     'messenger-lifecycle',
     'attachment-cleanup',
 ];
@@ -153,15 +150,6 @@ function estab_operational_control_exception(
         '/4fach/fuehrungsstelle.php'
     )) {
         $action = $post['operation_action'] ?? null;
-        if ($action === 'accept_hat') {
-            return 'duty-accept';
-        }
-        if ($action === 'select_hat') {
-            return 'duty-select';
-        }
-        if ($action === 'confirm_handover') {
-            return 'handover-confirm';
-        }
         if (
             $action === 'messenger_transition'
             && is_string($post['transition'] ?? null)
@@ -234,15 +222,15 @@ function estab_operational_write_enforce(
     if (estab_operational_control_exception($server, $post) !== null) {
         return;
     }
-    // Unlike the pure shape helper, this validates the current SID and
-    // returns the exact server-side selected assignment id. A stale session
-    // or a request without a selected hat must not reach any Fachschreibpfad.
+    // Unlike the pure shape helper, this validates the current SID, fixed
+    // account function and optional access-shift gate. A stale or disabled
+    // session must not reach a fachlicher Schreibpfad.
     $identity = estab_auth_session_identity($session);
     if ($identity === null) {
         estab_operational_write_abort(
             423,
-            'Die angemeldete Dienstfunktion ist nicht mehr gültig. '
-            . 'Melden Sie sich erneut an und wählen Sie Ihre Funktion.'
+            'Die Anmeldung oder der Benutzerzugang ist nicht mehr gültig. '
+            . 'Melden Sie sich erneut an.'
         );
     }
 
@@ -258,7 +246,7 @@ function estab_operational_write_enforce(
             );
         }
         estab_incident_command_post_name($incident);
-        estab_dv_require_active_hat_for_operational_write(
+        estab_dv_require_operational_account(
             $connection,
             (int) $incident['active_einsatz_id'],
             $identity

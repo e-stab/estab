@@ -38,15 +38,6 @@ if (!is_array($readIdentity)) {
         $_SERVER
     );
 }
-if (
-    !is_array($readIdentity)
-    || estab_read_duty_assignment_id(
-        $readIdentity['duty_assignment_id'] ?? null
-    ) === null
-) {
-    estab_navigation_select_duty($_SERVER);
-}
-
 $area = isset($_GET['area']) && is_string($_GET['area']) ? $_GET['area'] : '';
 $filename = isset($_GET['file']) && is_string($_GET['file']) ? $_GET['file'] : '';
 $layoutProvided = array_key_exists('layout', $_GET);

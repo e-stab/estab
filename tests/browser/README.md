@@ -27,9 +27,8 @@ Geprüft werden:
   Bestandslogin, den sichtbaren Hinweis auf die nicht gespeicherte Eingabe
   sowie dessen ebenfalls funktionierenden Abbruch zur Übersicht;
 - das Anmelden eines zuvor über die Benutzerverwaltungs-API provisionierten
-  Funktionskontos, die anschließende Auswahl seiner persönlich angenommenen
-  aktiven Dienstfunktion und erst danach den Einstieg in den
-  Zwei-`iframe`-Nachrichtenarbeitsbereich;
+  Funktionskontos und den direkten Einstieg in den
+  Zwei-`iframe`-Nachrichtenarbeitsbereich ohne Schicht- oder Hutauswahl;
 - genau eine sichtbare, dauerhaft verfügbare Session-Bar im gesamten
   Nachrichtenarbeitsbereich sowie Name, Kürzel, Funktion, abgeleitete Rolle,
   gemeinsame Navigation und Abmeldebutton in der vollhohen
@@ -38,7 +37,7 @@ Geprüft werden:
   `mainframe`, eine Statuskarte mit rollenabhängigem Zähler, Serverzeit und
   Onlinebelegung sowie echte rollenabhängige Textbuttons;
 - die kanonischen neun Kernbereiche in stabiler Reihenfolge, nach der
-  Funktionsauswahl jedoch nur die für die aktive Dienstfunktion freigegebenen
+  Anmeldung jedoch nur die für die feste Kontofunktion freigegebenen
   Bereiche, sowie genau ein zum geöffneten Bereich passendes
   `aria-current="page"` und Top-Level-Ziele für alle sichtbaren Kernlinks;
 - alle funktionsabhängig sichtbaren Bereichs- und Dienstlinks dauerhaft und
@@ -155,11 +154,12 @@ gestalterischen CSS-Klassen oder übersetzten Modulbeschreibungen abhängt.
 ## Voraussetzungen
 
 Die Anwendung muss laufen. Für den vollständigen Lauf muss ein ausschließlich
-dafür bestimmtes Bestandskonto bereits über die Benutzerverwaltung angelegt,
-der Funktion `S1` zugewiesen und in der aktiven Dienstschicht persönlich
-angenommen sein. Öffentliche Selbstregistrierung bleibt ausgeschaltet. Der
-Test verändert dieses Konto nicht und verwendet keine produktiven
-Zugangsdaten.
+dafür bestimmtes Bestandskonto bereits über die Benutzerverwaltung angelegt
+und fest der Funktion `S1` zugewiesen sein. Eine Dienstschicht oder persönliche
+Schichtannahme ist nicht erforderlich. Das Konto darf keiner ausschließlich
+deaktivierten Zugangsschicht angehören. Öffentliche Selbstregistrierung bleibt
+ausgeschaltet. Der Test verändert dieses Konto nicht und verwendet keine
+produktiven Zugangsdaten.
 
 Chrome wird über `ESTAB_BROWSER_BINARY` oder automatisch an den üblichen
 macOS- und Linux-Pfaden gesucht.
@@ -302,12 +302,10 @@ außerdem sein temporäres Chrome-Profil.
 
 Der bestehende Konto-Flow wird durch einen echten Klick bis zum korrekten
 Bestandsloginformular und durch die erfolgreiche Anmeldung des zuvor
-provisionierten Wegwerf-Testkontos geprüft. Anschließend wählt der Benutzer
-seine bereits persönlich angenommene aktive Dienstbesetzung im
-Führungsstellenbetrieb aus; erst diese serverseitige Sitzungsbindung öffnet das
-vor der Anmeldung angeforderte Einsatztagebuch. Der Lauf legt weder Konten noch
-Dienstfunktionen an; diese administrativen Vorbedingungen und die persönliche
-Annahme weist die HTTP-Integration separat nach.
+provisionierten Wegwerf-Testkontos geprüft. Die feste Kontofunktion öffnet das
+vor der Anmeldung angeforderte Einsatztagebuch direkt; eine Schicht- oder
+Hutauswahl findet nicht statt. Der Lauf legt weder Konten noch Funktionen an;
+diese administrative Vorbedingung weist die HTTP-Integration separat nach.
 
 Der Browserlauf prüft die vollständigen Klickpfade im Desktop-Viewport, die
 Sidebar zusätzlich bei `1440x1000`, `1280x720`, `700x760` und authentifiziert

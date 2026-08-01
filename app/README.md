@@ -25,8 +25,9 @@ liefert deren vollständigen Nachrichtendatensatz und validiert die gemeinsame
 ausdrücklich ausgewählten Einsatzes; `user_admin.php` kapselt dauerhafte
 Kontosperre und Kennwortreset. `message_evidence.php` speichert und prüft die
 append-only Nachrichtenereigniskette einschließlich Terminalbindung.
-`dv_operations.php` bildet Dienstschichten, Funktions-Hüte, S6-Planung,
-Melderlauf und Betriebsereigniskette ab. `operational_guard.php` ist die
+`shift_access.php` bildet optionale einsatzgebundene Zugangsschichten und
+Kontenzuordnungen ab. `dv_operations.php` bildet S6-Planung, Melderlauf sowie
+historische Dienstbetriebs- und Betriebsereignisdaten ab. `operational_guard.php` ist die
 gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
 
 ## Sicherheits- und Kompatibilitätsentscheidungen
@@ -105,17 +106,17 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   Übergabeereignis. Der feste Eingangslauf ist `1 → 4 → 8`.
 - `read_authorization.php` liefert die serverseitig gerenderten
   Vorschlagslisten für „Rufname der Gegenstelle“ und „Absender“. Die Abfrage
-  validiert den aktiven Einsatz und die exakt ausgewählte aktive
-  Dienstbesetzung erneut: Rufnamen sind nur für A/W und LdF verfügbar,
+  validiert den aktiven Einsatz sowie feste Kontofunktion und Rolle erneut:
+  Rufnamen sind nur für A/W und LdF verfügbar,
   Absender nur für LdF bei Eingängen. Sie liest ausschließlich bisherige Werte
-  desselben aktiven Einsatzes. Für die exakt ausgewählte LdF-Besetzung
+  desselben aktiven Einsatzes. Für das feste LdF-Konto
   korreliert `estab_read_ldf_mapping_suggestions()` außerdem den
   Gegenstellenrufnamen eines gesperrten Eingangs mit früheren Absendern
   beziehungsweise die Anschrift eines gesperrten Ausgangs mit früheren
   Gegenstellenrufnamen. Abgeschlossene Nachrichtenpaare stehen nach Häufigkeit
   und Aktualität vor einem passenden aktuell gültigen S6-Fernmeldeplan; erst
   danach folgt die allgemeine Einsatzhistorie. Dieselbe UNION-Abfrage bindet
-  Einsatz, Schicht, Besetzung, Konto, Funktionsfähigkeit, Richtung,
+  Einsatz, Konto, feste Funktionsfähigkeit, Richtung,
   Nachrichtenstatus und Sperrinhaber erneut, sodass ein zwischenzeitlicher
   Zuständigkeits- oder Sperrwechsel keine Daten freigibt. Der lokale Absender
   eines Ausgangs wird weiterhin serverseitig bestimmt. Die Felder verwenden
@@ -167,9 +168,9 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   Login-Zugangsdaten und Login-Metadaten in GET bleiben auf der harten
   Ablehnungsgrenze. Alle Loginformulare verwenden `target="_self"` und bleiben
   damit im aktuellen Kontext, während der Abbruchlink mit Top-Level-Ziel
-  zuverlässig zur öffentlichen Übersicht führt;
-  eine angemeldete Sitzung ohne ausgewählte Dienstfunktion wird zum
-  Führungsstellenbetrieb geleitet. Rollen-, Objekt-, CSRF-, Polling- und
+  zuverlässig zur öffentlichen Übersicht führt. Nach der Anmeldung öffnet die
+  Navigation das vorgemerkte, für die feste Kontofunktion zulässige Ziel
+  unmittelbar; eine Hutauswahl entfällt. Rollen-, Objekt-, CSRF-, Polling- und
   Bildgrenzen bleiben harte 403-Antworten. Die Anmeldekarte zeigt das
   vorgemerkte Ziel und bietet immer einen Top-Level-Abbruch zur Übersicht.
   Administration und das öffentliche Web-Handbuch unter `/handbuch/` sind
@@ -194,7 +195,7 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   HTML-Marker der Leiste nicht unterdrücken. Der Nachrichtenarbeitsbereich
   besteht aus der durchgehenden `vorgaben`-Sidebar und dem rechten `mainframe`.
   Die Sidebar bündelt Arbeitszähler, Serverzeit,
-  Onlinebelegung, Identität, Logout, die nach ausgewähltem Funktions-Hut
+  Onlinebelegung, Identität, Logout, die nach fester Kontofunktion
   gefilterten neun beziehungsweise zehn dauerhaft sichtbaren Bereichs- und
   Dienstlinks ohne Disclosure sowie rollenabhängige Fachaktionen. Der
   Hauptframe entfernt seine Standalone-Leiste vor der ersten Darstellung. Das
@@ -207,39 +208,33 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   Tab eine erfolgreiche Browserfreigabe; die browserweite Ein-/Aus-Absicht
   wird über `localStorage` synchronisiert und verspätete `play()`-Ergebnisse
   werden generationsgebunden verworfen.
-- `dv_operations.php` trennt Personenkonto und einsatz-/schichtbezogene
-  Dienstfunktion. S2, Si, S6, LdF und A/W müssen vor Aktivierung mindestens
-  einmal persönlich angenommen sein; mehrere A/W sind erlaubt, andere
-  Funktionen nur einmal je laufender Schicht. Ungesperrte Offline-Konten
-  dürfen vorausgeplant werden; eine in der Websitzung persönlich gespeicherte
-  Annahme zählt auch nach Logout, weil `aktiv` ausschließlich den momentanen
-  Onlinezustand bezeichnet. Eine Übergabe initiiert ausschließlich die
-  persönlich angemeldete, ausgewählte und angenommene Besetzung der aktiven
-  Schicht. Eine persönlich angenommene Besetzung der Nachfolgeschicht bestätigt
-  sie. Nur die Administration kann eine noch offene Fehlanforderung mit
-  Pflichtgrund stornieren. Initiierungs- und Bestätigungszeit werden getrennt
-  aus der Datenbankuhr in den ETB-/TBB-Übergabezeilen nachgewiesen. Ein
-  Konto darf mehrere ausdrücklich zugewiesene Hüte wählen. Die Session
-  speichert dabei die konkrete Besetzungs-ID, die bei jeder geschützten
-  Anfrage erneut geprüft wird. Ohne aktive Schicht bleibt jeder normale
-  operative Schreibpfad geschlossen.
+- `auth.php` und `dv_operations.php` verwenden Funktion und Rolle aus
+  `nv_benutzer` als alleinige Fachrechtsquelle. Operative Schreibpfade
+  verlangen einen aktiven Einsatz, aber keine aktive Dienst- oder
+  Zugangsschicht und keine Besetzungs-ID. `shift_access.php` erlaubt optionale
+  einsatzbezogene Kontengruppen: unzugeordnete Konten bleiben zugelassen,
+  Mehrfachzuordnungen gelten per OR, Aktivierung erzeugt keine Sitzung und
+  Deaktivierung widerruft betroffene Sitzungen ohne andere aktive Zuordnung.
+  Die manuelle Sperre `estab_gesperrt` bleibt unabhängig und vorrangig. Ein
+  kanonischer Bestätigungs-Hash bindet Deaktivieren und Entfernen an alle
+  sichtbaren Schichtstatus, aktuellen Mitgliedsintervalle sowie relevanten
+  Sperr- und Sitzungszustände; Entfernen verlangt zusätzlich exakt die
+  angezeigte Mitgliedsintervall-ID und verhindert damit einen ABA-Fehler.
 - `dynamic_schema.php` reconciliert die sechs historischen
-  Nachrichten-/Status-/Kategorietabellen für zusätzlich gewählte Stabs- und
-  FB-Funktionen unter einem datenbank-/funktionsgebundenen Advisory Lock.
-  Hutauswahl und -annahme führen das Reconcile strikt vor ihrer
-  Domänentransaktion aus; der Login-Wrapper verwendet dafür eine getrennte
-  DDL-Verbindung. Die eigenständige ETB-Funktion benötigt diese Tabellen nicht:
+  Nachrichten-/Status-/Kategorietabellen für feste Stabs- und FB-Kontofunktionen
+  unter einem datenbank-/funktionsgebundenen Advisory Lock. Der Login-Wrapper
+  verwendet dafür eine getrennte DDL-Verbindung. Die eigenständige ETB-Funktion benötigt diese Tabellen nicht:
   `EINSATZTAGEBUCH` ist eng auf S2 und ETB begrenzt, während
   `LAGE_DOKUMENTATION`, Rotkopie und Meldungsübersicht ausschließlich S2
   vorbehalten bleiben.
 - `operational_guard.php` sitzt am gemeinsamen Datenbank-
   Konfigurationsübergang und behandelt unbekannte authentifizierte
   `POST`-/`PUT`-/`PATCH`-/`DELETE`-Requests als operative Eingaben. Es gibt nur
-  enge Kontrollausnahmen für Administration, Wiederherstellung, Logout,
-  Dienstannahme/-wahl und die eigene Melder-Rückkehrkette. Ein übernommener
+  enge Kontrollausnahmen für Administration, Wiederherstellung, Logout und die
+  eigene Melder-Rückkehrkette. Ein übernommener
   Melderauftrag blockiert bis zur Rückkehr insbesondere Nachrichten,
-  Kategorien, Gelesen-/Erledigt-Zustände, ETB/TBB und Anhänge. Auch ohne
-  aktiven Einsatz oder aktive Dienstschicht bleibt die Grenze fail-closed.
+  Kategorien, Gelesen-/Erledigt-Zustände, ETB/TBB und Anhänge. Ohne aktiven
+  Einsatz bleibt die Grenze fail-closed; das Fehlen einer Schicht sperrt nicht.
 - `export.php` veröffentlicht jeden Datenbankexport atomar als streng benannten
   Lauf und ZIP außerhalb des DocumentRoot. Die Administrationsseite listet nur
   reguläre, nicht verlinkte Archive unmittelbar im konfigurierten Exportroot.
@@ -278,10 +273,10 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   Migration 95
   verhindert neue Legacy-Markierungen sowie jede spätere Änderung oder
   Herabstufung des Nachweises. Exporte vergleichen die reale Datei erneut und
-  brechen bei Abweichung ab. Der Admin-Controller übergibt beim Schließen der
-  letzten aktiven Dienstschicht zwingend den konfigurierten Ablageroot, sodass
-  der Abschluss-Preflight ebenfalls die realen Bytes prüft und Schicht samt
-  Besetzungen bei Abweichung unverändert lässt. Beim Upgrade vorhandene Dateien bleiben ehrlich
+  brechen bei Abweichung ab. Der Admin-Controller übergibt beim formalen
+  Einsatzabschluss zwingend den konfigurierten Ablageroot, sodass der
+  Abschluss-Preflight ebenfalls die realen Bytes prüft. Historische formale
+  Dienstschichten sind keine Abschlussblocker. Beim Upgrade vorhandene Dateien bleiben ehrlich
   als „Integrität beim Eingang nicht belegbar“ gekennzeichnet, weil ein heute
   berechneter Hash ihre ursprünglichen Eingangsbytes nicht beweisen könnte.
 - Einzelne Nachrichtenvordrucke werden als

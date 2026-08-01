@@ -598,6 +598,18 @@ recipient_matrix_revision_from_body() {
     printf '%s' "$revision"
 }
 
+shift_confirmation_version_from_body() {
+    version=$(sed -n \
+        's/.*name="expected_confirmation_version"[[:space:]]*value="\([a-f0-9][a-f0-9]*\)".*/\1/p' \
+        "$body" | head -n 1)
+    if ! printf '%s' "$version" | grep -Eq '^[a-f0-9]{64}$'; then
+        printf 'HTTP smoke: shift confirmation version missing\n' >&2
+        sed -n '1,120p' "$body" >&2
+        exit 1
+    fi
+    printf '%s' "$version"
+}
+
 attachment_flow_from_body() {
     flow_token=$(sed -n \
         's/.*name="attachment_flow" value="\([a-f0-9][a-f0-9]*\)".*/\1/p' \
@@ -646,31 +658,6 @@ db_sql() {
             --raw \
             --database="$MARIADB_DATABASE"
     '
-}
-
-select_session_hat() {
-    hat_cookie_jar=$1
-    hat_assignment_id=$2
-    hat_label=$3
-    case "$hat_assignment_id" in
-        '' | 0 | *[!0-9]*)
-            printf 'HTTP smoke: invalid %s duty assignment: %s\n' \
-                "$hat_label" "$hat_assignment_id" >&2
-            exit 1
-            ;;
-    esac
-
-    assert_status 200 \
-        --cookie "$hat_cookie_jar" --cookie-jar "$hat_cookie_jar" \
-        "$base_url/4fach/fuehrungsstelle.php"
-    hat_csrf_token=$(csrf_from_body)
-    assert_status 303 \
-        --cookie "$hat_cookie_jar" --cookie-jar "$hat_cookie_jar" \
-        --request POST \
-        --data-urlencode "csrf_token=$hat_csrf_token" \
-        --data-urlencode 'operation_action=select_hat' \
-        --data-urlencode "dienstbesetzung_id=$hat_assignment_id" \
-        "$base_url/4fach/fuehrungsstelle.php"
 }
 
 vordruck_name_for_marker() {
@@ -1005,27 +992,6 @@ if [ "$restore_verify_only" = true ]; then
         --data-urlencode '2teskennwort=No' \
         --data-urlencode 'absenden_x=1' \
         "$base_url/4fach/mainindex.php"
-    restore_duty_assignment_id=$(
-        printf '%s\n' \
-            "SELECT assignment.dienstbesetzung_id
-               FROM nv_dienstbesetzungen AS assignment
-               JOIN nv_dienstschichten AS duty_shift
-                 ON duty_shift.dienstschicht_id =
-                    assignment.dienstschicht_id
-              WHERE duty_shift.einsatz_id = (
-                      SELECT active_einsatz_id
-                        FROM nv_einsatz_status
-                       WHERE singleton_id = 1
-                    )
-                AND duty_shift.status = 'AKTIV'
-                AND assignment.status = 'ANGENOMMEN'
-                AND BINARY assignment.benutzer_kuerzel =
-                    BINARY '${test_code}'
-              LIMIT 1;" |
-            db_sql
-    )
-    select_session_hat \
-        "$cookie_jar" "$restore_duty_assignment_id" 'restored primary'
     assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         "$base_url/4fach/mainindex.php"
     assert_body 'Meldung/Seite:'
@@ -1033,8 +999,9 @@ if [ "$restore_verify_only" = true ]; then
     assert_session_bar "$test_name" "$test_code" "$test_function" "$restore_role"
 
     assert_body "$workflow_marker"
-    # The restored S1 hat may read its own workflow object but does not acquire
-    # S2 Lage-/Dokumentationsrechte merely because the export was restored.
+    # The restored fixed S1 account may read its own workflow object but does
+    # not acquire S2 Lage-/Dokumentationsrechte merely because the export was
+    # restored. No legacy duty assignment is required after the restore.
     assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         "$base_url/4fueltg/ue_ltg.php"
     assert_body_absent "$workflow_marker"
@@ -1178,9 +1145,9 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode 'next=incident-log' \
     "$base_url/4fach/mainindex.php"
 assert_body 'Der gewählte eStab-Bereich wird geöffnet'
-assert_body "href=\"$expected_app_root/4fach/fuehrungsstelle.php\" target=\"_top\""
+assert_body "href=\"$expected_app_root/stabetb/etb.php\" target=\"_top\""
 assert_body \
-    "window.top.location.replace(\"$expected_app_root/4fach/fuehrungsstelle.php\")"
+    "window.top.location.replace(\"$expected_app_root/stabetb/etb.php\")"
 assert_body_absent '//4fach/'
 if grep -Eq 'Fatal error|Uncaught (Error|TypeError)|Warning:' "$body"; then
     printf 'HTTP smoke: PHP runtime error leaked into authenticated response\n' >&2
@@ -1193,8 +1160,15 @@ if [ -z "$test_role" ]; then
     exit 1
 fi
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/stabetb/etb.php"
+assert_body 'data-estab-incident-code="CI-INTEGRATION"'
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/fuehrungsstelle.php"
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
+assert_body 'Zugewiesene Funktion'
+assert_body_absent 'name="dienstbesetzung_id"'
+assert_body_absent 'value="select_hat"'
 
 # Disabled public registration must neither log in an existing code nor
 # replace its password hash.
@@ -1278,8 +1252,8 @@ sh tests/integration/provision_user.sh \
 
 # A path appended after an executable PHP filename is never an authorization
 # boundary. Prove this with the exact historical lock-reset action while the
-# valid A/W session has no accepted duty hat: Apache must reject the request
-# and the locked message must remain byte-for-byte in its operator stage.
+# valid A/W account lacks the administrative capability: Apache must reject
+# the request and the locked message must remain byte-for-byte in its stage.
 guard_cookie_jar=$work_dir/path-info-guard-cookies.txt
 assert_status 200 --cookie "$guard_cookie_jar" \
     --cookie-jar "$guard_cookie_jar" \
@@ -1331,51 +1305,46 @@ printf "DELETE FROM nv_nachrichten WHERE \`00_lfd\` = %s AND \`12_inhalt\` = '%s
     "$path_info_record_id" "$path_info_marker" |
     db_sql >/dev/null
 
-# Establish the central DV write prerequisite before the first Fachschreibweg.
-# The primary S1 and the A/W regression account already exist at this point;
-# the remaining mandatory functions are provisioned offline, personally
-# accepted through the production duty domain and activated as one complete
-# initial service. Later HTTP suites reuse these exact hats until the message
-# workflow performs a real, personally confirmed successor handover.
-shift_s2_name=${ESTAB_TEST_ETB_NAME:-Logbook Integration S2}
-shift_s2_code=${ESTAB_TEST_ETB_CODE:-e2s200}
-shift_si_name=${ESTAB_TEST_CATEGORY_SI_NAME:-Category Integration Si}
-shift_si_code=${ESTAB_TEST_CATEGORY_SI_CODE:-e2si00}
-shift_s6_code=${ESTAB_TEST_HTTP_S6_CODE:-e2s600}
-shift_ldf_code=${ESTAB_TEST_HTTP_LDF_CODE:-e2ldf0}
+# Provision the fixed account functions used by this and the following HTTP
+# suites. An active incident is the only operational lifecycle prerequisite;
+# neither login nor fachliche writes require a formal legacy duty shift.
+account_s2_name=${ESTAB_TEST_ETB_NAME:-Logbook Integration S2}
+account_s2_code=${ESTAB_TEST_ETB_CODE:-e2s200}
+account_si_name=${ESTAB_TEST_CATEGORY_SI_NAME:-Category Integration Si}
+account_si_code=${ESTAB_TEST_CATEGORY_SI_CODE:-e2si00}
+account_s6_code=${ESTAB_TEST_HTTP_S6_CODE:-e2s600}
+account_ldf_code=${ESTAB_TEST_HTTP_LDF_CODE:-e2ldf0}
 sh tests/integration/provision_user.sh \
-    "$shift_s2_name" \
-    "$shift_s2_code" S2 \
+    "$account_s2_name" \
+    "$account_s2_code" S2 \
     "${ESTAB_TEST_ETB_PASSWORD:-Logbook-Test-S2-20260723}"
 sh tests/integration/provision_user.sh \
-    "$shift_si_name" \
-    "$shift_si_code" Si \
+    "$account_si_name" \
+    "$account_si_code" Si \
     "${ESTAB_TEST_CATEGORY_SI_PASSWORD:-Category-Test-Si-20260723}"
 sh tests/integration/provision_user.sh \
-    'HTTP Integration S6' "$shift_s6_code" S6 \
-    'HTTP-Shift-S6-Only-20260730'
+    'HTTP Integration S6' "$account_s6_code" S6 \
+    'HTTP-Account-S6-Only-20260730'
 sh tests/integration/provision_user.sh \
-    'HTTP Integration LdF' "$shift_ldf_code" LdF \
-    'HTTP-Shift-LdF-Only-20260730'
+    'HTTP Integration LdF' "$account_ldf_code" LdF \
+    'HTTP-Account-LdF-Only-20260730'
 
-ESTAB_TEST_SHIFT_AW_CODE=$legacy_registration_code \
-ESTAB_TEST_SHIFT_LDF_CODE=$shift_ldf_code \
-ESTAB_TEST_SHIFT_SI_CODE=$shift_si_code \
-ESTAB_TEST_SHIFT_S1_CODE=$test_code \
-ESTAB_TEST_SHIFT_S2_CODE=$shift_s2_code \
-ESTAB_TEST_SHIFT_S6_CODE=$shift_s6_code \
-"$compose_engine" compose run --rm --no-deps -T \
-    --env "COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-estab}" \
-    --env ESTAB_TEST_SHIFT_ALLOW_MUTATION=true \
-    --env ESTAB_TEST_SHIFT_AW_CODE \
-    --env ESTAB_TEST_SHIFT_LDF_CODE \
-    --env ESTAB_TEST_SHIFT_SI_CODE \
-    --env ESTAB_TEST_SHIFT_S1_CODE \
-    --env ESTAB_TEST_SHIFT_S2_CODE \
-    --env ESTAB_TEST_SHIFT_S6_CODE \
-    --volume "$repo_root:/workspace:ro" \
-    --workdir /workspace \
-    app php -d auto_prepend_file= tests/integration/activate_http_shift.php
+formal_shift_count=$(printf '%s\n' \
+    "SELECT COUNT(*) FROM nv_dienstschichten WHERE einsatz_id = (SELECT active_einsatz_id FROM nv_einsatz_status WHERE singleton_id = 1);" |
+    db_sql | tr -d '\r\n')
+if [ "$formal_shift_count" != 0 ]; then
+    printf 'HTTP smoke: fresh operational flow unexpectedly has %s formal duty shifts\n' \
+        "$formal_shift_count" >&2
+    exit 1
+fi
+aw_access_membership_count=$(printf '%s\n' \
+    "SELECT COUNT(*) FROM nv_zugangsschicht_mitglieder WHERE BINARY benutzer_kuerzel = BINARY '${legacy_registration_code}' AND entfernt_am IS NULL;" |
+    db_sql | tr -d '\r\n')
+if [ "$aw_access_membership_count" != 0 ]; then
+    printf 'HTTP smoke: unassigned A/W access fixture has %s memberships\n' \
+        "$aw_access_membership_count" >&2
+    exit 1
+fi
 
 : > "$cookie_jar"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
@@ -1394,7 +1363,6 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/mainindex.php"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/fuehrungsstelle.php"
-unselected_write_csrf_token=$(csrf_from_body)
 assert_account_count 1 "$legacy_registration_code"
 legacy_assignment=$(account_assignment "$legacy_registration_code")
 if [ "$legacy_assignment" != "$(printf 'A/W\tFernmelder\t1')" ]; then
@@ -1402,126 +1370,40 @@ if [ "$legacy_assignment" != "$(printf 'A/W\tFernmelder\t1')" ]; then
         "$legacy_assignment" >&2
     exit 1
 fi
+assert_body 'Zugewiesene Funktion'
+assert_body_absent 'name="dienstbesetzung_id"'
+assert_body_absent 'value="select_hat"'
 
-# A matching accepted primary function is not an implicit working hat. The
-# browser must select the exact personal assignment before any operational
-# write. First prove that another account's selected ID cannot be borrowed,
-# then prove that the still-unselected A/W POST is rejected before mutation.
-legacy_duty_assignment_id=$(
-    printf '%s\n' \
-        "SELECT assignment.dienstbesetzung_id
-           FROM nv_dienstbesetzungen AS assignment
-           JOIN nv_dienstschichten AS duty_shift
-             ON duty_shift.dienstschicht_id = assignment.dienstschicht_id
-          WHERE duty_shift.einsatz_id = (
-                  SELECT active_einsatz_id
-                    FROM nv_einsatz_status
-                   WHERE singleton_id = 1
-                )
-            AND duty_shift.status = 'AKTIV'
-            AND assignment.status = 'ANGENOMMEN'
-            AND BINARY assignment.benutzer_kuerzel =
-                BINARY '${legacy_registration_code}'
-            AND BINARY assignment.funktion = BINARY 'A/W'
-            AND BINARY assignment.rolle = BINARY 'Fernmelder'
-          LIMIT 1;" |
+# The fixed A/W account can write in the active incident while it is completely
+# unassigned to both optional access shifts and historical duty shifts.
+fixed_account_write_marker="FIXED-ACCOUNT-WRITE-$$"
+fixed_account_write_before=$(
+    printf "SELECT COUNT(*) FROM nv_tbb WHERE estab_operations = '%s' AND estab_shift_id IS NULL AND estab_writer_assignment_id IS NULL;\n" \
+        "$fixed_account_write_marker" |
         db_sql
 )
-foreign_duty_assignment_id=$(
-    printf '%s\n' \
-        "SELECT assignment.dienstbesetzung_id
-           FROM nv_dienstbesetzungen AS assignment
-           JOIN nv_dienstschichten AS duty_shift
-             ON duty_shift.dienstschicht_id = assignment.dienstschicht_id
-          WHERE duty_shift.einsatz_id = (
-                  SELECT active_einsatz_id
-                    FROM nv_einsatz_status
-                   WHERE singleton_id = 1
-                )
-            AND duty_shift.status = 'AKTIV'
-            AND assignment.status = 'ANGENOMMEN'
-            AND BINARY assignment.benutzer_kuerzel =
-                BINARY '${shift_s2_code}'
-            AND BINARY assignment.funktion = BINARY 'S2'
-            AND BINARY assignment.rolle = BINARY 'Stab'
-          LIMIT 1;" |
-        db_sql
-)
-primary_duty_assignment_id=$(
-    printf '%s\n' \
-        "SELECT assignment.dienstbesetzung_id
-           FROM nv_dienstbesetzungen AS assignment
-           JOIN nv_dienstschichten AS duty_shift
-             ON duty_shift.dienstschicht_id = assignment.dienstschicht_id
-          WHERE duty_shift.einsatz_id = (
-                  SELECT active_einsatz_id
-                    FROM nv_einsatz_status
-                   WHERE singleton_id = 1
-                )
-            AND duty_shift.status = 'AKTIV'
-            AND assignment.status = 'ANGENOMMEN'
-            AND BINARY assignment.benutzer_kuerzel =
-                BINARY '${test_code}'
-          LIMIT 1;" |
-        db_sql
-)
-case "$legacy_duty_assignment_id:$foreign_duty_assignment_id:$primary_duty_assignment_id" in
-    *[!0-9:]* | :* | *: | *::*)
-        printf 'HTTP smoke: selected-hat fixtures are missing: %s/%s/%s\n' \
-            "$legacy_duty_assignment_id" "$foreign_duty_assignment_id" \
-            "$primary_duty_assignment_id" >&2
-        exit 1
-        ;;
-esac
-if [ "$legacy_duty_assignment_id" = "$foreign_duty_assignment_id" ] \
-    || [ "$legacy_duty_assignment_id" = "$primary_duty_assignment_id" ] \
-    || [ "$foreign_duty_assignment_id" = "$primary_duty_assignment_id" ]; then
-    printf 'HTTP smoke: selected-hat fixtures collide\n' >&2
-    exit 1
-fi
-
-assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-    --request POST \
-    --data-urlencode "csrf_token=$unselected_write_csrf_token" \
-    --data-urlencode 'operation_action=select_hat' \
-    --data-urlencode \
-        "dienstbesetzung_id=$foreign_duty_assignment_id" \
-    "$base_url/4fach/fuehrungsstelle.php"
-
-unselected_write_marker="UNSELECTED-WRITE-GUARD-$$"
-unselected_write_before=$(
-    printf "SELECT COUNT(*) FROM nv_tbb WHERE tbb_aktion = '%s';\n" \
-        "$unselected_write_marker" |
-        db_sql
-)
-assert_status 423 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-    --request POST \
-    --data-urlencode "csrf_token=$unselected_write_csrf_token" \
-    --data-urlencode 'logbook_action=save_entry' \
-    --data-urlencode "event=$unselected_write_marker" \
-    --data-urlencode 'comment=must not persist' \
-    "$base_url/fmtbb/tbb.php"
-assert_body 'Wählen Sie vor dieser Eingabe eine persönlich angenommene Dienstfunktion aus.'
-unselected_write_after=$(
-    printf "SELECT COUNT(*) FROM nv_tbb WHERE tbb_aktion = '%s';\n" \
-        "$unselected_write_marker" |
-        db_sql
-)
-if [ "$unselected_write_before" != "$unselected_write_after" ]; then
-    printf 'HTTP smoke: no-selected-hat request mutated TBB: %s -> %s\n' \
-        "$unselected_write_before" "$unselected_write_after" >&2
-    exit 1
-fi
-
-# The same browser may continue only after choosing its own accepted active
-# assignment through the production controller.
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/fmtbb/tbb.php?tbb_eintrag_x=1"
+fixed_account_write_csrf=$(csrf_from_body)
+assert_body 'value="save_entry"'
 assert_status 303 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
-    --data-urlencode "csrf_token=$unselected_write_csrf_token" \
-    --data-urlencode 'operation_action=select_hat' \
-    --data-urlencode \
-        "dienstbesetzung_id=$legacy_duty_assignment_id" \
-    "$base_url/4fach/fuehrungsstelle.php"
+    --data-urlencode "csrf_token=$fixed_account_write_csrf" \
+    --data-urlencode 'logbook_action=save_entry' \
+    --data-urlencode 'entry_type=betriebsereignis' \
+    --data-urlencode "operations=$fixed_account_write_marker" \
+    --data-urlencode 'comment=Feste Kontofunktion ohne Schichtauswahl' \
+    "$base_url/fmtbb/tbb.php"
+fixed_account_write_after=$(
+    printf "SELECT COUNT(*) FROM nv_tbb WHERE estab_operations = '%s' AND estab_shift_id IS NULL AND estab_writer_assignment_id IS NULL;\n" \
+        "$fixed_account_write_marker" |
+        db_sql
+)
+if [ "$fixed_account_write_after" -ne "$((fixed_account_write_before + 1))" ]; then
+    printf 'HTTP smoke: fixed A/W account did not write TBB without a shift: %s -> %s\n' \
+        "$fixed_account_write_before" "$fixed_account_write_after" >&2
+    exit 1
+fi
 assert_status 200 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
@@ -1584,8 +1466,6 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "kennwort1@$collision_password_file" \
     --data-urlencode '2teskennwort=No' \
     "$base_url/4fach/mainindex.php"
-select_session_hat \
-    "$cookie_jar" "$legacy_duty_assignment_id" 're-authenticated A/W'
 assert_status 200 --cookie "$cookie_jar" "$base_url/4fach/vordrucke.php"
 legacy_assignment=$(account_assignment "$legacy_registration_code")
 if [ "$legacy_assignment" != "$(printf 'A/W\tFernmelder\t1')" ]; then
@@ -2047,8 +1927,6 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode '2teskennwort=No' \
     --data-urlencode 'absenden_x=1' \
     "$base_url/4fach/mainindex.php"
-select_session_hat \
-    "$cookie_jar" "$primary_duty_assignment_id" 'primary workflow'
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/mainindex.php"
 assert_body 'Meldung/Seite:'
@@ -2914,8 +2792,8 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
 assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/mainindex.php?stab=meldung&00_lfd=1"
 
-# The selected S1 hat may work with its own messages and read both books, but
-# neither inherits the LdF/A-W transport overview nor the S2 Lageübersicht.
+# The fixed S1 account may work with its own messages and read both books, but
+# it does not inherit LdF/A-W transport rights or the S2 Lageübersicht.
 assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/nachwea.php?nwalle=1"
 assert_body_absent 'Nachweisung Eingang / Ausgang'
@@ -3110,8 +2988,6 @@ assert_status 200 --cookie "$newer_cookie_jar" --cookie-jar "$newer_cookie_jar" 
     --data-urlencode '2teskennwort=No' \
     --data-urlencode 'absenden_x=1' \
     "$base_url/4fach/mainindex.php"
-select_session_hat \
-    "$newer_cookie_jar" "$primary_duty_assignment_id" 'newer browser'
 assert_status 200 \
     --cookie "$newer_cookie_jar" --cookie-jar "$newer_cookie_jar" \
     "$base_url/4fach/vordrucke.php"
@@ -3170,8 +3046,6 @@ assert_status 200 --cookie "$current_cookie_jar" --cookie-jar "$current_cookie_j
     --data-urlencode '2teskennwort=No' \
     --data-urlencode 'absenden_x=1' \
     "$base_url/4fach/mainindex.php"
-select_session_hat \
-    "$current_cookie_jar" "$primary_duty_assignment_id" 'current browser'
 assert_status 200 \
     --cookie "$current_cookie_jar" --cookie-jar "$current_cookie_jar" \
     "$base_url/4fach/vordrucke.php"
@@ -3324,6 +3198,7 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
     assert_body 'data-estab-admin-dashboard'
     assert_body 'data-estab-admin-card="incidents"'
     assert_body 'data-estab-admin-card="users"'
+    assert_body 'data-estab-admin-card="command-post"'
     assert_body 'data-estab-admin-card="matrix"'
     assert_body 'data-estab-admin-card="counter"'
     assert_body 'data-estab-admin-card="print-reset"'
@@ -3346,6 +3221,8 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
         "$base_url/4fadm/incidents.php"
     assert_status 401 \
         "$base_url/4fadm/users.php"
+    assert_status 401 \
+        "$base_url/4fadm/fuehrungsstelle.php"
     assert_status 401 \
         "$base_url/4fadm/incident_export.php"
     assert_status 200 --config "$admin_curl_config" \
@@ -3382,113 +3259,203 @@ if [ -n "${ESTAB_TEST_ADMIN_USER:-}" ] && [ -n "$admin_password" ]; then
     assert_body 'data-estab-user-admin'
     assert_body 'Benutzerverwaltung'
 
-    # The final active duty shift must verify the real attachment bytes, not
-    # merely the well-formed database evidence. Tamper the required fixture
-    # after rendering the CSRF-protected close form and immediately before its
-    # POST. The rejected transaction must leave both the shift and every hat
-    # byte-for-byte in their prior lifecycle state.
+    # Optional access shifts are incident-scoped admission groups, not duty
+    # functions. First prove an unassigned fixed-function account may log in.
+    access_shift_cookie=$work_dir/access-shift-cookies.txt
+    : > "$access_shift_cookie"
+    assert_status 200 \
+        --cookie "$access_shift_cookie" --cookie-jar "$access_shift_cookie" \
+        "$base_url/4fach/mainindex.php?login_flow=existing"
+    access_login_csrf=$(csrf_from_body)
+    assert_status 200 \
+        --cookie "$access_shift_cookie" --cookie-jar "$access_shift_cookie" \
+        --request POST \
+        --data-urlencode "csrf_token=$access_login_csrf" \
+        --data-urlencode 'login_flow=existing' \
+        --data-urlencode "benutzer=$idle_account_name" \
+        --data-urlencode "kuerzel=$idle_account_code" \
+        --data-urlencode 'funktion=S3' \
+        --data-urlencode "kennwort1@$login_password_file" \
+        --data-urlencode '2teskennwort=No' \
+        --data-urlencode 'absenden_x=1' \
+        "$base_url/4fach/mainindex.php"
+    assert_status 200 \
+        --cookie "$access_shift_cookie" --cookie-jar "$access_shift_cookie" \
+        "$base_url/4fach/vordrucke.php"
+    assert_session_bar "$idle_account_name" "$idle_account_code" S3 Stab
+    access_memberships_before=$(printf '%s\n' \
+        "SELECT COUNT(*) FROM nv_zugangsschicht_mitglieder WHERE BINARY benutzer_kuerzel = BINARY '${idle_account_code}' AND entfernt_am IS NULL;" |
+        db_sql | tr -d '\r\n')
+    if [ "$access_memberships_before" != 0 ]; then
+        printf 'HTTP smoke: access-shift account was not initially unassigned\n' >&2
+        exit 1
+    fi
+
+    # A newly created group starts disabled. Assigning the live account to its
+    # only disabled group must revoke that session immediately.
     assert_status 200 --config "$admin_curl_config" \
         --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
         "$base_url/4fadm/fuehrungsstelle.php"
-    assert_body 'data-estab-dv-admin'
-    close_shift_csrf=$(csrf_from_body)
-    close_shift_id=$(printf '%s\n' \
-        "SELECT dienstschicht_id FROM nv_dienstschichten WHERE einsatz_id = (SELECT active_einsatz_id FROM nv_einsatz_status WHERE singleton_id = 1) AND status = 'AKTIV' ORDER BY dienstschicht_id DESC LIMIT 1;" |
-        db_sql | tr -d '\r\n')
-    if ! printf '%s' "$close_shift_id" | grep -Eq '^[1-9][0-9]*$'; then
-        printf 'HTTP smoke: final-shift integrity test has no active shift\n' >&2
-        exit 1
-    fi
-    close_state_before=$(db_sql <<SQL
-SELECT CONCAT(
-         shift_row.status, '|',
-         COALESCE(
-           DATE_FORMAT(shift_row.beendet_am, '%Y-%m-%d %H:%i:%s.%f'),
-           'NULL'
-         ), '|',
-         COALESCE(
-           GROUP_CONCAT(
-             CONCAT(
-               hat.dienstbesetzung_id, ':', hat.status, ':',
-               COALESCE(
-                 DATE_FORMAT(hat.abgeloest_am, '%Y-%m-%d %H:%i:%s.%f'),
-                 'NULL'
-               )
-             )
-             ORDER BY hat.dienstbesetzung_id SEPARATOR ','
-           ),
-           ''
-         )
-       )
-  FROM nv_dienstschichten AS shift_row
-  LEFT JOIN nv_dienstbesetzungen AS hat
-    ON hat.dienstschicht_id = shift_row.dienstschicht_id
- WHERE shift_row.dienstschicht_id = ${close_shift_id}
- GROUP BY shift_row.dienstschicht_id, shift_row.status, shift_row.beendet_am;
-SQL
-)
-    case "$close_state_before" in
-        AKTIV\|NULL\|*:ANGENOMMEN:NULL*) ;;
-        *)
-            printf 'HTTP smoke: final-shift fixture is not actively staffed: %s\n' \
-                "$close_state_before" >&2
-            exit 1
-            ;;
-    esac
-
-    tampered_attachment=$stored_attachment
-    attachment_fixture_bytes tamper "$tampered_attachment"
-    assert_status 409 --config "$admin_curl_config" \
+    assert_body 'data-estab-shift-admin'
+    assert_body 'Optionale Schichten'
+    assert_body 'Schicht ist dafür niemals erforderlich.'
+    access_shift_csrf=$(csrf_from_body)
+    access_shift_label="HTTP Zugang $$"
+    assert_status 303 --config "$admin_curl_config" \
         --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
         --request POST \
-        --data-urlencode "csrf_token=$close_shift_csrf" \
-        --data-urlencode 'admin_action=close_shift' \
-        --data-urlencode "dienstschicht_id=$close_shift_id" \
+        --data-urlencode "csrf_token=$access_shift_csrf" \
+        --data-urlencode 'admin_action=create_shift' \
+        --data-urlencode "bezeichnung=$access_shift_label" \
         "$base_url/4fadm/fuehrungsstelle.php"
-    assert_body 'Anhang-Integritätsfehler: 1'
-    close_state_after=$(db_sql <<SQL
-SELECT CONCAT(
-         shift_row.status, '|',
-         COALESCE(
-           DATE_FORMAT(shift_row.beendet_am, '%Y-%m-%d %H:%i:%s.%f'),
-           'NULL'
-         ), '|',
-         COALESCE(
-           GROUP_CONCAT(
-             CONCAT(
-               hat.dienstbesetzung_id, ':', hat.status, ':',
-               COALESCE(
-                 DATE_FORMAT(hat.abgeloest_am, '%Y-%m-%d %H:%i:%s.%f'),
-                 'NULL'
-               )
-             )
-             ORDER BY hat.dienstbesetzung_id SEPARATOR ','
-           ),
-           ''
-         )
-       )
-  FROM nv_dienstschichten AS shift_row
-  LEFT JOIN nv_dienstbesetzungen AS hat
-    ON hat.dienstschicht_id = shift_row.dienstschicht_id
- WHERE shift_row.dienstschicht_id = ${close_shift_id}
- GROUP BY shift_row.dienstschicht_id, shift_row.status, shift_row.beendet_am;
-SQL
-)
-    if [ "$close_state_after" != "$close_state_before" ]; then
-        printf '%s\n' \
-            'HTTP smoke: rejected final-shift close changed shift or hats' >&2
-        printf 'before: %s\nafter:  %s\n' \
-            "$close_state_before" "$close_state_after" >&2
+    assert_header_fixed \
+        'Location: fuehrungsstelle.php?result=shift_created'
+    access_shift_id=$(printf '%s\n' \
+        "SELECT zugangsschicht_id FROM nv_zugangsschichten WHERE einsatz_id = (SELECT active_einsatz_id FROM nv_einsatz_status WHERE singleton_id = 1) AND bezeichnung = '${access_shift_label}' ORDER BY zugangsschicht_id DESC LIMIT 1;" |
+        db_sql | tr -d '\r\n')
+    if ! printf '%s' "$access_shift_id" | grep -Eq '^[1-9][0-9]*$'; then
+        printf 'HTTP smoke: optional access shift was not created\n' >&2
         exit 1
     fi
-    attachment_fixture_bytes restore "$tampered_attachment"
-    tampered_attachment=
+    access_shift_state=$(printf '%s\n' \
+        "SELECT zugang_aktiv FROM nv_zugangsschichten WHERE zugangsschicht_id = ${access_shift_id};" |
+        db_sql | tr -d '\r\n')
+    if [ "$access_shift_state" != 0 ]; then
+        printf 'HTTP smoke: optional access shift did not start disabled\n' >&2
+        exit 1
+    fi
+
+    assert_status 200 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        "$base_url/4fadm/fuehrungsstelle.php"
+    assert_body "$access_shift_label"
+    access_shift_csrf=$(csrf_from_body)
+    assert_status 303 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        --request POST \
+        --data-urlencode "csrf_token=$access_shift_csrf" \
+        --data-urlencode 'admin_action=add_member' \
+        --data-urlencode "zugangsschicht_id=$access_shift_id" \
+        --data-urlencode "benutzer_kuerzel=$idle_account_code" \
+        --data-urlencode 'confirm_assignment=1' \
+        "$base_url/4fadm/fuehrungsstelle.php"
+    assert_header_fixed \
+        'Location: fuehrungsstelle.php?result=member_added_revoked'
+    if [ "$(account_session_storage "$idle_account_code")" != '0|empty' ]; then
+        printf 'HTTP smoke: disabled group assignment did not revoke the session\n' >&2
+        exit 1
+    fi
+    assert_status 303 \
+        --cookie "$access_shift_cookie" --cookie-jar "$access_shift_cookie" \
+        "$base_url/4fach/vordrucke.php"
+
+    # The only membership is disabled, therefore fresh credentials are denied
+    # with a helpful explanation and the account remains inactive.
+    : > "$access_shift_cookie"
+    assert_status 200 \
+        --cookie "$access_shift_cookie" --cookie-jar "$access_shift_cookie" \
+        "$base_url/4fach/mainindex.php?login_flow=existing"
+    access_login_csrf=$(csrf_from_body)
+    assert_status 200 \
+        --cookie "$access_shift_cookie" --cookie-jar "$access_shift_cookie" \
+        --request POST \
+        --data-urlencode "csrf_token=$access_login_csrf" \
+        --data-urlencode 'login_flow=existing' \
+        --data-urlencode "benutzer=$idle_account_name" \
+        --data-urlencode "kuerzel=$idle_account_code" \
+        --data-urlencode 'funktion=S3' \
+        --data-urlencode "kennwort1@$login_password_file" \
+        --data-urlencode '2teskennwort=No' \
+        "$base_url/4fach/mainindex.php"
+    assert_body 'über die optionale Schichtplanung derzeit deaktiviert'
+    if [ "$(account_session_storage "$idle_account_code")" != '0|empty' ]; then
+        printf 'HTTP smoke: denied group login activated the account\n' >&2
+        exit 1
+    fi
+
+    # Enabling the group only permits the next login. It must not synthesize a
+    # login or alter the account's fixed S3/Stab fachliche assignment.
+    assert_status 200 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        "$base_url/4fadm/fuehrungsstelle.php"
+    access_shift_csrf=$(csrf_from_body)
+    access_shift_version=$(shift_confirmation_version_from_body)
+    assert_status 303 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        --request POST \
+        --data-urlencode "csrf_token=$access_shift_csrf" \
+        --data-urlencode 'admin_action=set_enabled' \
+        --data-urlencode "zugangsschicht_id=$access_shift_id" \
+        --data-urlencode 'expected_enabled=0' \
+        --data-urlencode "expected_confirmation_version=$access_shift_version" \
+        --data-urlencode 'zugang_aktiv=1' \
+        "$base_url/4fadm/fuehrungsstelle.php"
+    assert_header_fixed \
+        'Location: fuehrungsstelle.php?result=shift_enabled'
+    if [ "$(account_session_storage "$idle_account_code")" != '0|empty' ]; then
+        printf 'HTTP smoke: enabling access group logged the account in\n' >&2
+        exit 1
+    fi
+    if [ "$(account_assignment "$idle_account_code")" != \
+        "$(printf 'S3\tStab\t0')" ]; then
+        printf 'HTTP smoke: access group changed the fixed account function\n' >&2
+        exit 1
+    fi
+
+    : > "$access_shift_cookie"
+    assert_status 200 \
+        --cookie "$access_shift_cookie" --cookie-jar "$access_shift_cookie" \
+        "$base_url/4fach/mainindex.php?login_flow=existing"
+    access_login_csrf=$(csrf_from_body)
+    assert_status 200 \
+        --cookie "$access_shift_cookie" --cookie-jar "$access_shift_cookie" \
+        --request POST \
+        --data-urlencode "csrf_token=$access_login_csrf" \
+        --data-urlencode 'login_flow=existing' \
+        --data-urlencode "benutzer=$idle_account_name" \
+        --data-urlencode "kuerzel=$idle_account_code" \
+        --data-urlencode 'funktion=S3' \
+        --data-urlencode "kennwort1@$login_password_file" \
+        --data-urlencode '2teskennwort=No' \
+        "$base_url/4fach/mainindex.php"
+    assert_status 200 \
+        --cookie "$access_shift_cookie" --cookie-jar "$access_shift_cookie" \
+        "$base_url/4fach/vordrucke.php"
+    assert_session_bar "$idle_account_name" "$idle_account_code" S3 Stab
+
+    # Disabling the account's only active group revokes the running session.
+    # Operational records are untouched; the group is solely an access gate.
+    assert_status 200 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        "$base_url/4fadm/fuehrungsstelle.php"
+    access_shift_csrf=$(csrf_from_body)
+    access_shift_version=$(shift_confirmation_version_from_body)
+    assert_status 303 --config "$admin_curl_config" \
+        --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
+        --request POST \
+        --data-urlencode "csrf_token=$access_shift_csrf" \
+        --data-urlencode 'admin_action=set_enabled' \
+        --data-urlencode "zugangsschicht_id=$access_shift_id" \
+        --data-urlencode 'expected_enabled=1' \
+        --data-urlencode "expected_confirmation_version=$access_shift_version" \
+        --data-urlencode 'zugang_aktiv=0' \
+        "$base_url/4fadm/fuehrungsstelle.php"
+    assert_header_fixed \
+        'Location: fuehrungsstelle.php?result=shift_disabled_revoked'
+    if [ "$(account_session_storage "$idle_account_code")" != '0|empty' ]; then
+        printf 'HTTP smoke: disabling the only active group retained the session\n' >&2
+        exit 1
+    fi
+    assert_status 303 \
+        --cookie "$access_shift_cookie" --cookie-jar "$access_shift_cookie" \
+        "$base_url/4fach/vordrucke.php"
 
     assert_status 200 --config "$admin_curl_config" \
         --cookie "$admin_cookie" --cookie-jar "$admin_cookie" \
         "$base_url/4fadm/incident_export.php"
     assert_body 'data-estab-incident-export'
     assert_body 'PDF-Einsatzdossier'
+    assert_body 'Optionale Zugangsschichten samt Zuordnungen'
     incident_pdf_csrf=$(csrf_from_body)
     incident_pdf_id=$(printf '%s\n' \
         'SELECT `active_einsatz_id` FROM `nv_einsatz_status` WHERE `singleton_id` = 1;' |

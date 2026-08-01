@@ -162,14 +162,15 @@ Der Runner gibt `Post-migration schema verification passed` aus. Er verwendet
 das Root-Secret ausschließlich über eine private temporäre MariaDB-Optionsdatei;
 das Kennwort erscheint weder in Argumentliste noch Log.
 
-Eine Neuinstallation beginnt absichtlich ohne aktiven Einsatz und ohne aktive
-Dienstschicht. Anmeldung und Administration bleiben erreichbar, operative
-Eingaben sind aber fail-closed gesperrt. Die erste fachliche Einrichtung
-erfolgt in dieser Reihenfolge:
+Eine Neuinstallation beginnt absichtlich ohne aktiven Einsatz. Anmeldung und
+Administration bleiben erreichbar, operative Eingaben sind aber fail-closed
+gesperrt. Eine Dienst- oder Zugangsschicht ist dagegen **keine fachliche
+Schreibvoraussetzung**. Die erste Einrichtung erfolgt in dieser Reihenfolge:
 
 Der in eStab geprüfte und unterstützte Produktumfang ist eine Führungsstelle
-**mit eingerichteter Fernmeldebetriebsstelle**. Deshalb sind LdF und A/W
-Pflichtbesetzungen und je Einsatz wird genau ein TBB geführt. Eine
+**mit eingerichteter Fernmeldebetriebsstelle**. Deshalb müssen persönliche
+Konten mit den festen Funktionen LdF und A/W vorhanden sein; eine
+Schichtannahme ist nicht erforderlich. Je Einsatz wird genau ein TBB geführt. Eine
 Führungsstelle ohne eigene Fernmeldebetriebsstelle, insbesondere ein reiner
 ETB-Betrieb, gehört derzeit nicht zum unterstützten Produktumfang. Diese
 Produktgrenze ist keine formale THW-Freigabe; deren gesonderter Vorbehalt ist
@@ -183,26 +184,20 @@ unten dokumentiert.
    mit Einsatzname, Bedarfsträger oder Einsatzleitung verwechselt werden.
    Die Datenbank legt dabei bereits genau zwei leere, bei 1 beginnende
    Nummernköpfe an: einen für ETB und einen für TBB.
-2. Unter `/4fadm/users.php` persönliche Konten für mindestens S2, Si, S6,
-   LdF und A/W anlegen. Eine Person darf mehrere Funktionen übernehmen;
-   mehrere A/W-Besetzungen sind möglich.
-3. Unter `/4fadm/fuehrungsstelle.php` eine geplante Dienstschicht anlegen und
-   die Funktionen den tatsächlichen, ungesperrten Konten zuweisen. Konten
-   dürfen dabei aktiv, inaktiv oder abgemeldet sein; der Präsenzstatus ist im
-   Auswahlfeld kenntlich gemacht.
-4. Jede Person meldet sich an und nimmt ihre Zuweisungen unter
-   `/4fach/fuehrungsstelle.php` selbst an.
-5. Erst wenn S2, Si, S6, LdF und A/W angenommen sind, aktiviert die
-   Administration die Schicht. Die erste Aktivierung eröffnet ETB und TBB
-   atomar mit der lokalen Nummer 1 und übernimmt Pflichtkopf sowie angenommene
-   Besetzung; der Text des ersten ETB-Eintrags nennt den festgelegten
-   Einsatzbeginn ausdrücklich. Pro Buch kann danach nur die automatisch
-   bestimmte Besetzung schreiben: ETB zuerst eine angenommene ETB-Funktion,
-   ersatzweise S2; TBB die zuerst zugewiesene angenommene A/W-Funktion. Alle
-   anderen ausgewählten aktiven Funktionen lesen beide Bücher nur.
-6. S6 wählt den angenommenen Funktions-Hut, erstellt einen Fernmeldeplan mit
-   den vorgesehenen Wegen und veröffentlicht ihn. Erst danach kann LdF einen
-   Ausgang auf einen verbindlichen Weg disponieren.
+2. Unter `/4fadm/users.php` persönliche Konten mit genau einer festen Funktion
+   anlegen. Diese Kontofunktion und die daraus serverseitig abgeleitete Rolle
+   sind die alleinige Quelle der Fachrechte; eine Funktions- oder Hutauswahl
+   nach der Anmeldung gibt es nicht.
+3. Optional unter `/4fadm/fuehrungsstelle.php` einsatzgebundene
+   **Zugangsschichten** anlegen und Konten zuordnen. Damit lassen sich allein
+   Kontozugang und laufende Sitzungen einer Gruppe gemeinsam steuern, nicht
+   deren Fachrechte. Unzugeordnete Konten bleiben zugelassen; bei mehreren
+   Zuordnungen genügt für den Kontozugang eine aktive Gruppe.
+4. Die Personen melden sich mit ihren vorhandenen Konten an. ETB schreiben
+   Konten mit `ETB/Stab` oder `S2/Stab`, TTB Konten mit `A/W/Fernmelder`.
+5. S6 erstellt einen Fernmeldeplan mit den vorgesehenen Wegen und
+   veröffentlicht ihn. Erst danach kann LdF einen Ausgang auf einen
+   verbindlichen Weg disponieren.
 
 Migration 97 lässt Führungsstellennamen bereits vorhandener Einsätze bewusst
 `NULL`, statt einen Wert aus Einsatzname, Bedarfsträger, Einsatzleitung oder
@@ -216,35 +211,23 @@ Erstschreib-Sperrmarker. Auch das spätere Löschen einzelner Fachdaten hebt
 diese Sperre nicht auf. Formal abgeschlossene Alt-Einsätze bleiben
 unverändert.
 
-Eine laufende Schicht kann administrativ um eine noch nicht besetzte Funktion
-ergänzt werden. Die Zuweisung allein ist noch keine Besetzung: Erst die
-betroffene Person nimmt sie selbst an. Diese Annahme wird atomar im ETB
-nachgewiesen; bei LdF oder A/W zusätzlich im TBB. A/W ist ausdrücklich
-mehrfach besetzbar. Eine ETB-Ergänzung, die eine bereits bestimmte ETB- oder
-S2-Besetzung als Schreiber verdrängen würde, kann in der aktiven Schicht weder
-neu zugewiesen noch angenommen werden. Der Wechsel der ETB-Führung erfolgt
-ausschließlich über eine dokumentierte und bestätigte Schichtübergabe. Auch
-jede andere bereits vorhandene Funktion lässt sich in der aktiven Schicht
-nicht über die Erweiterung austauschen.
+Zugangsschichten verändern keine Funktion und keine Rolle. Das Aktivieren
+einer Gruppe meldet niemanden an; das Deaktivieren widerruft die Sitzungen der
+zugeordneten Konten, sofern sie nicht zugleich einer anderen aktiven Gruppe
+angehören. Die dauerhafte manuelle Kontosperre ist davon unabhängig und hat
+immer Vorrang. Vor einer Deaktivierung zeigt die Administration die nach dem
+aktuellen Stand betroffenen Zugänge und Sitzungen. Ändert sich bis zum
+Bestätigen irgendein Schichtstatus, eine aktuelle Zuordnung oder der relevante
+Konto-/Sitzungszustand, wird die alte Bestätigung verworfen. Auch das Entfernen
+einer Zuordnung ist an genau ihr unveränderliches Zuordnungsintervall gebunden.
+Historische formale Dienstschichten, Besetzungen und Übergaben
+bleiben als exportierbare Evidenz erhalten, steuern aber weder Anmeldung noch
+Fachrechte und sperren keine Eingabe.
 
-Eine Schichtübergabe wird zweistufig persönlich initiiert und bestätigt: Eine
-angemeldete, ausgewählte und angenommene Besetzung der aktiven Schicht
-initiiert sie mit Zusammenfassung; erst ein persönlich angemeldetes Konto mit
-angenommener Funktion der Nachfolgeschicht bestätigt sie und löst den atomaren
-Schichtwechsel aus. Fehlanforderungen bleiben als begründet stornierter
-Nachweis erhalten. Die Bestätigung schreibt in derselben Transaktion ETB- und
-TBB-Übergabezeilen mit den tatsächlich abgelösten beziehungsweise
-angenommenen Besetzungen, der jeweils letzten lokalen Buchnummer sowie
-getrenntem Übergabe- und Übernahmezeitpunkt. Nur geplante oder zurückgezogene
-Zuweisungen erscheinen nicht als Personal im Logbuch. Die Unterschriftslinien
-im PDF bleiben der anschließenden manuellen Zeichnung vorbehalten; die
-Webbestätigung ist keine digitale Signatur.
-
-Führungsstellenname, Einsatz, aktive Arbeitsfunktion und gegebenenfalls
-fehlender Dienstbetrieb müssen danach in Statusleiste beziehungsweise
-Führungsstellenansicht eindeutig erkennbar sein. Ohne gültigen
-Führungsstellennamen oder aktive Schicht nimmt eStab keine operative Eingabe
-an. Funktionskonten lassen sich unter `/4fadm/users.php` sperren, entsperren
+Führungsstellenname, Einsatz und feste Kontofunktion müssen in Statusleiste
+beziehungsweise Führungsstellenansicht eindeutig erkennbar sein. Ohne
+gültigen Führungsstellennamen oder aktiven Einsatz nimmt eStab keine operative
+Eingabe an. Funktionskonten lassen sich unter `/4fadm/users.php` sperren, entsperren
 und mit einem neuen Kennwort versehen. Ein vollständiges
 ETB-/TBB-/Nachrichten-/Nachweis-/Dienst-/S6-/Melder-/Anhang-Dossier für einen
 aktiven oder historischen Einsatz erzeugt `/4fadm/incident_export.php`.
@@ -265,16 +248,21 @@ erscheint genau einmal in der Betriebsspalte. Bei formal
 geschlossenen Büchern wird der unbeschriebene Rest der letzten Formularseite
 diagonal gestrichen; offene vorläufige Abzüge bleiben fortführbar. Der formale
 Einsatzabschluss erzeugt die letzten Buchzeilen und setzt eine
-Mindestaufbewahrung von zehn Jahren. Ein formaler Abschluss vor Aktivierung
-der ersten Schicht und den beiden Eröffnungszeilen ist gesperrt.
-Für operative Daten genügt eine Kontoanmeldung nicht: Zusätzlich müssen ein
-aktiver Einsatz und die exakte ID einer persönlich angenommenen, aktiven
-Dienstbesetzung in der Sitzung ausgewählt sein. Jeder operative Schreibpfad
-gleicht diese ID erneut mit Konto, Funktion, Rolle, aktivem Einsatz und aktiver
-Schicht in der Datenbank ab. Diese Grenze gilt auch für ETB, TBB, Kategorien,
-Nachrichten, Vordrucke und Anhänge. Unter `/4fach/vordrucke.php` erscheinen
-nur abgeschlossene Nachrichten des aktiven Einsatzes, die der ausgewählte
-Funktions-Hut nach der Nachrichten-Objektregel lesen darf. Der aktuelle Abzug
+Mindestaufbewahrung von zehn Jahren. Fehlende oder noch offene historische
+Dienstschichten und fehlende schichtbezogene Eröffnungszeilen blockieren den
+formalen Einsatzabschluss nicht.
+Bei einem neuen Einsatz erzeugt bereits dessen Aktivierung die ersten ETB- und
+TTB-Zeilen atomar und ohne Schichtbezug. Vorhandene Legacy-Bücher werden beim
+Upgrade oder erneuten Aktivieren nicht umsortiert und nicht rückwirkend ergänzt.
+Für operative Daten genügt eine Kontoanmeldung nicht: Zusätzlich muss ein
+aktiver Einsatz bestehen. Jeder operative Schreibpfad gleicht feste
+Kontofunktion, serverseitig abgeleitete Rolle, Kontosperre und aktiven Einsatz
+erneut in der Datenbank ab. Eine optionale Zugangsschicht kann einen
+zugeordneten Zugang gemeinsam entziehen, ist aber keine Eingabevoraussetzung.
+Diese Grenze gilt auch für ETB, TBB, Kategorien, Nachrichten, Vordrucke und
+Anhänge. Unter `/4fach/vordrucke.php` erscheinen nur abgeschlossene
+Nachrichten des aktiven Einsatzes, die das angemeldete Konto nach der
+Nachrichten-Objektregel lesen darf. Der aktuelle Abzug
 verwendet das mit dem Dossier gemeinsame PDF-Layout. Die beim
 Nachrichtenabschluss atomar gespeicherte Archivdatei wird dabei weder ersetzt
 noch verändert und bleibt Bestandteil von Backup und Restore.
@@ -296,11 +284,10 @@ einzeln oder gemeinsam verwenden. Der Bezugsfilter findet lokale ETB- und
 Korrekturbezüge, Nachrichten-/Anhangs-IDs, kanonische lokale ETB-Nummern und
 historische Bestandsreferenzen,
 Ablagekennzeichen, gespeicherte Dateinamen und die vollständige
-ETB-Anlagennummer. Optional kann die schreibende Person eine angenommene
-Besetzung der aktiven Schicht als Bearbeitungs- und Suchhilfe auswählen. eStab
-prüft diese ID beim Speichern erneut gegen Annahmestatus, aktive Schicht sowie
-ein ungesperrtes Konto. Der reine Online-/Präsenzstatus ist dafür kein
-Gültigkeitsmerkmal. eStab friert die lesbare Angabe
+ETB-Anlagennummer. Optional kann eine Bearbeitungszuordnung als Suchhilfe
+gespeichert werden; sie erweitert keine Rechte. eStab prüft beim Speichern die
+feste Kontofunktion und ein ungesperrtes Konto. Der reine Online-/Präsenzstatus
+und eine Schichtzuordnung sind dafür keine Gültigkeitsmerkmale. eStab friert die lesbare Angabe
 `Funktion (Rolle): Name [Kürzel]` im Eintrag ein. Sie erscheint in Webliste und
 Suche, aber bewusst nicht im amtlichen Fb-Fü-2-PDF.
 
@@ -317,23 +304,21 @@ alle referenzierenden, auch verzweigten Folgeeinträge oder rückwärts den
 Bezugspfad. Die Tiefe ist auf 1 bis 25 begrenzt, ein abgeschnittener Pfad wird
 sichtbar gemeldet und eine eigene Druckansicht kann geöffnet werden.
 
-Jede neue manuelle ETB-/TBB-Zeile speichert serverseitig die aktive
-Dienstschicht und die schreibende Dienstbesetzung. Automatische Systemzeilen
-speichern die Schicht, beanspruchen aber keine menschliche Schreiberzuordnung.
-Migration 111 lässt diese Herkunftsfelder bei historischen Zeilen ehrlich
-`NULL`, statt eine nicht belegbare Schicht oder Person zu erfinden.
-Die designierte erste ETB-, ersatzweise S2- beziehungsweise erste A/W-
-Besetzung bleibt auch bei Kontosperrung oder Deaktivierung bestimmt: Der
-Writer blockiert dann, statt still zur nächsten passenden Besetzung zu
-wechseln. Anwendung und Insert-Trigger prüfen aktive Schicht, Annahmestatus,
-Konto-/Kürzel-/Funktionsidentität sowie aktives, ungesperrtes Konto; erst eine
-dokumentierte Ablösung ändert die Schreiberherkunft.
+Neue ETB-/TBB-Zeilen dürfen die Legacy-Felder für Dienstschicht und
+Dienstbesetzung `NULL` lassen. Die Felder werden nicht mit einer
+Zugangsschicht befüllt: Sie bewahren ausschließlich belegte historische
+Provenienz. ETB-Einträge dürfen Konten mit der festen Funktion `ETB` oder `S2`
+und Rolle `Stab` schreiben; TTB-Einträge Konten mit `A/W` und Rolle
+`Fernmelder`. Anwendung und Insert-Trigger prüfen diese Identität, das
+ungesperrte Konto und den aktiven Einsatz unabhängig voneinander.
 
-Beim PDF-Einsatzdossier ist für ETB/TBB **Gesamtbuch** oder genau eine
-Dienstschicht auswählbar. Die Schichtwahl filtert ausschließlich ETB und TBB;
-alle weiteren ausgewählten Dossierbereiche bleiben einsatzweit vollständig.
-Deckblatt und einsatzgebundener `pdf_export`-Audit halten den gewählten Umfang
-samt Schichtmetadaten fest.
+Beim PDF-Einsatzdossier ist für ETB/TBB **Gesamtbuch** oder – für historischen
+Bestand mit belegter Provenienz – genau eine frühere formale Dienstschicht
+auswählbar. Dieser Legacy-Filter filtert ausschließlich ETB und TBB; Zeilen
+ohne belegte Schichtzuordnung erscheinen nur im Gesamtbuch. Alle weiteren
+ausgewählten Dossierbereiche bleiben einsatzweit vollständig. Deckblatt und
+einsatzgebundener `pdf_export`-Audit halten den gewählten Umfang samt
+historischen Schichtmetadaten fest.
 
 ### Ohne lokalen Image-Build
 
@@ -383,21 +368,21 @@ entstehen. OCI-Tags – auch `latest` – gibt es absichtlich nicht.
 | Pfad | Zweck | Schutz |
 | --- | --- | --- |
 | `/` | Einstieg, direkter Anmeldebutton und Modulübersicht | öffentlich bis zur Modulanmeldung |
-| `/4fach/index.php` | öffentlicher Einstieg in die vollständige Anwendung mit Kontoauswahl und Benutzeranmeldung | operative Daten erst mit eStab-Sitzung, aktivem Einsatz und ausgewählter, persönlich angenommener aktiver Dienstfunktion |
+| `/4fach/index.php` | öffentlicher Einstieg in die vollständige Anwendung mit Kontoauswahl und Benutzeranmeldung | operative Daten erst mit eStab-Sitzung und aktivem Einsatz; Fachrechte stammen aus der festen Kontofunktion |
 | `/4fach/activity.php` | meldet echte Interaktion einer angemeldeten Browseroberfläche | ausschließlich POST mit eStab-Sitzung, exakter SID und Session-CSRF; Statuspolling ruft den Endpunkt nicht auf |
 | `/4fach/logout.php` | zentrale Abmeldung aus Sitzungsleiste und Nachrichtenarbeitsbereich | eStab-Sitzung, ausschließlich POST mit Session-CSRF |
-| `/4fach/katgoedt.php` | globale, Funktions- und persönliche Kategorien | ausgewählte aktive Dienstfunktion; Rollenprüfung, bei Nachrichtenbezug zusätzlich Objektprüfung, CSRF für Änderungen |
-| `/4fach/fuehrungsstelle.php` | persönliche Dienstfunktionen annehmen/auswählen, freigegebenen S6-Plan lesen sowie S6- und Melderabläufe bearbeiten | eStab-Sitzung und aktiver Einsatz; vor Hutauswahl nur eigene Besetzungen, Annahme, Übergabebestätigung und Auswahl, danach exakte aktive Besetzungs-ID und Fachzuständigkeit |
-| `/4fueltg/ue_ltg.php` | einsatzgebundene Meldungsübersicht | ausschließlich ausgewählte aktive S2-Funktion mit `LAGE_DOKUMENTATION` |
-| `/4fach/nachwea.php` | Nachweisung der aufgenommenen und beförderten Nachrichten | ausschließlich ausgewählte aktive LdF- oder A/W-Funktion |
-| `/4fach/vordrucke.php` | abgeschlossene Vordrucke des aktiven Einsatzes im aktuellen, mit dem Einsatzdossier gemeinsamen PDF-Layout öffnen | ausgewählte aktive Dienstfunktion; zugrunde liegende Nachricht, Abschluss- und Druckstatus werden erneut geprüft, das persistierte Archiv bleibt unverändert |
-| `/4fach/anhang.php`, `/4fach/download.php`, `/4fach/showpic.php` | Anhänge auswählen, auflisten, herunterladen oder als Bildvorschau öffnen | ausgewählte aktive Dienstfunktion; verknüpfte Anhänge erben exakt die Leserechte mindestens einer verknüpften Nachricht, freie Anhänge sind nur für Uploader oder S2, Si und LdF sichtbar |
-| `/stabetb/etb.php`, `/fmtbb/tbb.php` | einsatzlokal fortlaufendes ETB und TBB lesen, berichtigen und fachabhängig ergänzen; ETB mit kombinierbarer Volltext-/Art-/Nummer-/Bezugs-/Anlagensuche und optionaler eindeutiger Anlagenzuordnung | jede ausgewählte aktive Dienstfunktion darf lesen; manuell schreibt genau eine angenommene Besetzung je Buch: ETB bevorzugt die erste ETB-, sonst die erste S2-Besetzung mit `EINSATZTAGEBUCH`, TBB die erste A/W-Besetzung mit `BEFOERDERUNG`; gespeicherte Zeilen sind append-only |
+| `/4fach/katgoedt.php` | globale, Funktions- und persönliche Kategorien | feste Kontofunktion und Rollenprüfung, bei Nachrichtenbezug zusätzlich Objektprüfung, CSRF für Änderungen |
+| `/4fach/fuehrungsstelle.php` | freigegebenen S6-Plan lesen sowie funktionsabhängige S6- und Melderabläufe bearbeiten | eStab-Sitzung, aktiver Einsatz und Fachzuständigkeit der festen Kontofunktion; keine Hutauswahl |
+| `/4fueltg/ue_ltg.php` | einsatzgebundene Meldungsübersicht | ausschließlich festes Konto `S2/Stab` mit `LAGE_DOKUMENTATION` |
+| `/4fach/nachwea.php` | Nachweisung der aufgenommenen und beförderten Nachrichten | ausschließlich festes Konto `LdF/Fernmelder` oder `A/W/Fernmelder` |
+| `/4fach/vordrucke.php` | abgeschlossene Vordrucke des aktiven Einsatzes im aktuellen, mit dem Einsatzdossier gemeinsamen PDF-Layout öffnen | feste Kontofunktion; zugrunde liegende Nachricht, Abschluss- und Druckstatus werden erneut geprüft, das persistierte Archiv bleibt unverändert |
+| `/4fach/anhang.php`, `/4fach/download.php`, `/4fach/showpic.php` | Anhänge auswählen, auflisten, herunterladen oder als Bildvorschau öffnen | feste Kontofunktion; verknüpfte Anhänge erben exakt die Leserechte mindestens einer verknüpften Nachricht, freie Anhänge sind nur für Uploader oder S2, Si und LdF sichtbar |
+| `/stabetb/etb.php`, `/fmtbb/tbb.php` | einsatzlokal fortlaufendes ETB und TBB lesen, berichtigen und fachabhängig ergänzen; ETB mit kombinierbarer Volltext-/Art-/Nummer-/Bezugs-/Anlagensuche und optionaler eindeutiger Anlagenzuordnung | angemeldete Konten lesen nach Objektregel; ETB schreibt `ETB/Stab` oder `S2/Stab`, TTB schreibt `A/W/Fernmelder`; aktiver Einsatz erforderlich, keine aktive Schicht erforderlich, gespeicherte Zeilen append-only |
 | `/4fadm/admin.php` | Administration | separates HTTP Basic Auth |
 | `/4fadm/incidents.php` | Einsätze samt Führungsstellennamen anlegen, historische Fehlwerte einmalig bestätigen, aktivieren und deaktivieren | HTTP Basic Auth, Session-CSRF, revisionsgesicherter globaler Status; die erste operative Eintragung setzt atomar einen dauerhaften Sperrmarker für den bestätigten Führungsstellennamen |
-| `/4fadm/fuehrungsstelle.php` | Dienstschichten planen, Funktionen zuweisen, aktive Schichten ergänzen, Schichten aktivieren/übergeben/schließen und Abschlussblocker prüfen | HTTP Basic Auth, Session-CSRF; eine Ergänzung wird erst durch persönliche Annahme wirksam, Nicht-A/W-Funktionen können in der aktiven Schicht nicht ausgetauscht werden; Besetzungen und Übergaben werden einsatzgebunden und hashverkettet nachgewiesen |
+| `/4fadm/fuehrungsstelle.php` | optionale einsatzgebundene Zugangsschichten anlegen, Konten zuordnen und Gruppen gemeinsam aktivieren/deaktivieren | HTTP Basic Auth, Session-CSRF; unzugeordnete Konten bleiben erlaubt, Mehrfachzuordnungen gelten per OR, Deaktivierung kann Sitzungen widerrufen und verändert keine Fachrechte |
 | `/4fadm/users.php` | Benutzer anlegen, Funktionen fest zuweisen, sperren/entsperren und Kennwörter zurücksetzen | HTTP Basic Auth, Session-CSRF; Rollen werden serverseitig abgeleitet und aktive Sitzungen atomar widerrufen |
-| `/4fadm/incident_export.php` | neun wählbare PDF-Abschnitte: ETB, TBB, Nachrichtenvordrucke, Anhänge, Nachrichtenereignisse, Dienstbetrieb, S6-Fernmeldepläne, Melderläufe und Betriebsereignisse; ETB/TBB wahlweise als Gesamtbuch oder für eine Dienstschicht | HTTP Basic Auth, Session-CSRF, einsatzgebundene Abfragen; die Schichtwahl filtert nur ETB/TBB und wird auf Deckblatt und im Audit festgehalten; neue Anhänge werden gegen ihren unveränderlichen SHA-256-/Größennachweis geprüft, Legacy wird als nicht belegbar ausgewiesen |
+| `/4fadm/incident_export.php` | neun wählbare PDF-Abschnitte: ETB, TBB, Nachrichtenvordrucke, Anhänge, Nachrichtenereignisse, Dienstorganisation, S6-Fernmeldepläne, Melderläufe und Betriebsereignisse; ETB/TBB als Gesamtbuch oder per Legacy-Dienstschicht | HTTP Basic Auth, Session-CSRF, einsatzgebundene Abfragen; Dienstorganisation enthält optionale Zugangsschichten samt aktuellen/entfernten Zuordnungen und getrennt gekennzeichnete historische `nv_dienst*`-Evidenz; der historische Schichtfilter betrifft nur ETB/TBB |
 | `/4fadm/system_status.php` | ausführlicher Laufzeitstatus | HTTP Basic Auth |
 | `/4fadm/export.php` | Einsatzexporte auflisten, erstellen, als ZIP herunterladen und einzeln löschen | HTTP Basic Auth; POST-Erstellung/-Löschung mit Session-CSRF; Download nur über validierte Exportkennung |
 | `/4fadm/make_fkt.php` | aktive Empfängermatrix und einzelne Standardmatrix atomar bearbeiten | HTTP Basic Auth, Session-CSRF; Rollenabgleich und Sitzungswiderruf committen mit der aktiven Matrix |
@@ -485,7 +470,7 @@ ist im Formular sichtbar.
 Die Liste übernimmt nichts automatisch: Eine freie Eingabe bleibt jederzeit
 möglich, die Browser-Autovervollständigung ist für diese Felder ausgeschaltet
 und ohne JavaScript bleibt die native Browserliste als Rückfalloption
-erhalten. Aktiver Einsatz, Dienstbesetzung, Funktion, Rolle, Richtung und
+erhalten. Aktiver Einsatz, feste Kontofunktion, serverseitig abgeleitete Rolle, Richtung und
 Sperrbesitz werden im selben Datenbank-Statement wie die Zuordnungen erneut
 geprüft; Werte anderer Einsätze werden nicht offengelegt. Der lokale Absender
 eines Ausgangs bleibt davon unberührt: Er wird serverseitig aus dem
@@ -573,8 +558,9 @@ Zwei-Frame-Arbeitsbereich nicht in seinem eigenen Inhaltsframe verschachteln.
 Die Anmeldeformulare bleiben mit `target="_self"` im aktuellen Kontext. Die
 Anmeldekarte nennt das vorgemerkte Ziel und bietet immer
 „Anmeldung abbrechen · Zur Übersicht“; dieser Link verlässt auch aus einem
-Frame heraus den Arbeitsbereich auf Top-Level. Eine angemeldete Sitzung ohne
-ausgewählte Dienstfunktion wird direkt zum Führungsstellenbetrieb geleitet.
+Frame heraus den Arbeitsbereich auf Top-Level. Nach erfolgreicher Anmeldung
+wird das vorgemerkte, für die feste Kontofunktion zulässige Ziel direkt
+geöffnet; eine zusätzliche Hutauswahl ist nicht erforderlich.
 Auch ein Browserformular, dessen Sitzung inzwischen abgelaufen ist, führt per
 HTTP 303 zum Login; seine nicht verarbeiteten Eingaben werden dabei ausdrücklich
 nicht erneut gesendet. Der Login weist sichtbar darauf hin, dass die Eingabe
@@ -592,14 +578,8 @@ Das gemeinsame Manifest enthält in stabiler Reihenfolge neun operative
 Bereiche: Übersicht, Nachrichtenvordruck, Führungsstellenbetrieb,
 Meldungsübersicht, Vordrucke, ETB, TBB, Nachweisung und BOS-Info; hinzu kommen
 Administration und Handbuch als zwei Dienste. Anonym sind damit elf Links
-sichtbar. Nach der Anmeldung, aber vor Auswahl eines Funktions-Huts, bleiben
-nur Übersicht, Führungsstellenbetrieb, BOS-Info, Administration und Handbuch
-sichtbar. Der Führungsstellenbetrieb ist dabei der einzige operative
-Bootstrap: Er zeigt nur Einsatz-/Schichtgrunddaten und eigene Besetzungen und
-erlaubt persönliche Annahme, Übergabebestätigung sowie Auswahl einer eigenen
-aktiven, angenommenen Besetzungs-ID. ETB, TBB, Nachrichten, Anhänge,
-Fernmeldepläne und Melderaufträge bleiben bis dahin gesperrt. Nach der Auswahl
-blendet die Navigation unzulässige Spezialziele aus: Gewöhnliche
+sichtbar. Nach der Anmeldung blendet die Navigation unzulässige Spezialziele
+direkt anhand der festen Kontofunktion aus: Gewöhnliche
 Stab-/FB-Funktionen, Si und S6 sehen einschließlich der beiden Dienste neun
 Links; S2 sowie LdF und A/W sehen jeweils den einen für sie freigegebenen
 Spezialbereich und damit zehn. Die Endpunkte prüfen die
@@ -701,8 +681,8 @@ und [Tests, Funktionsnachweis und Monitoring](docs/TESTS-UND-MONITORING.md).
 
 Die aktive Nachrichtenablage speichert freie Texte als rohes UTF-8 und nutzt
 Prepared Statements. Detail-, Status-, Sichtungs-, Transport-, Sperr- und
-Logout-Aktionen sind POST-/CSRF-gebunden und werden zusätzlich gegen Rolle,
-ausgewählte aktive Dienstbesetzung, Empfänger, Objektstatus und gegebenenfalls
+Logout-Aktionen sind POST-/CSRF-gebunden und werden zusätzlich gegen feste
+Kontofunktion, serverseitig abgeleitete Rolle, Empfänger, Objektstatus und gegebenenfalls
 Sperrinhaber geprüft. Normale Stab-/FB-Funktionen lesen nur eine terminale
 Empfängerkopie oder ihren eigenen Ausgang. Si, LdF und A/W lesen nur ihre
 aktuelle Warteschlange beziehungsweise Sperre oder Nachrichten mit ihrer
@@ -730,8 +710,8 @@ reproduzierbar und gehört nicht zum fachlichen Vollbackup.
 
 Generierte einzelne Nachrichtenvordrucke liegen kollisionsfrei als
 `<datenbank> Einsatz-<einsatz_id> <nummer> <E|A>.pdf` in `estab_data`.
-Liste und Download verlangen eine ausgewählte aktive Dienstfunktion und
-autorisieren den Vordruck über deren Leserecht am gedruckten
+Liste und Download verlangen eine gültige Kontositzung und einen aktiven
+Einsatz und autorisieren den Vordruck über das Leserecht der festen Funktion am gedruckten
 Nachrichtendatensatz des aktiven Einsatzes; ein bloß im Volume vorhandener
 Dateiname genügt nicht. Verknüpfte Anhänge übernehmen dieselbe Objektgrenze
 über vollständige, semikolongetrennte Dateinamens-Tokens. Freie Anhänge bleiben

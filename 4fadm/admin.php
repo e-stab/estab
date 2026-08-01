@@ -47,11 +47,11 @@ $sections = [
             [
                 'key' => 'command-post',
                 'number' => '03',
-                'title' => 'Führungsstelle und Dienstschichten',
-                'description' => 'Schichten vorbereiten, mehrere '
-                    . 'Funktions-Hüte je Konto zuweisen und bestätigte '
-                    . 'Übergaben revisionssicher durchführen.',
-                'badge' => 'DV 1-101',
+                'title' => 'Optionale Schichten',
+                'description' => 'Konten optional zu Schichten gruppieren '
+                    . 'und deren Zugang gemeinsam aktivieren oder '
+                    . 'deaktivieren. Feste Funktionen bleiben unverändert.',
+                'badge' => 'Zugangsplanung',
                 'href' => 'fuehrungsstelle.php',
             ],
         ],

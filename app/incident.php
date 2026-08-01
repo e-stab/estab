@@ -544,10 +544,7 @@ function estab_incident_list(mysqli $connection): array
         . ' CASE WHEN s.`active_einsatz_id` = e.`einsatz_id` THEN 1 ELSE 0 END'
         . ' AS `ist_aktiv`,'
         . ' CASE WHEN'
-        . ' EXISTS(SELECT 1 FROM `nv_dienstschichten` AS shift_row'
-        . '   WHERE shift_row.`einsatz_id` = e.`einsatz_id`'
-        . '     AND shift_row.`aktiviert_am` IS NOT NULL)'
-        . ' OR EXISTS(SELECT 1 FROM `nv_etb` AS etb_row'
+        . ' EXISTS(SELECT 1 FROM `nv_etb` AS etb_row'
         . '   WHERE etb_row.`einsatz_id` = e.`einsatz_id`)'
         . ' OR EXISTS(SELECT 1 FROM `nv_tbb` AS tbb_row'
         . '   WHERE tbb_row.`einsatz_id` = e.`einsatz_id`)'
@@ -908,10 +905,10 @@ function estab_incident_update_command_post_name(
 }
 
 /**
- * Complete the mandatory ETB/TBB opening header before the first shift starts.
+ * Complete the mandatory ETB/TBB opening header before either book is opened.
  *
- * Planned staffing does not lock these fields. Once a shift was activated or
- * either book contains a row, the factual opening header is immutable.
+ * Optional access shifts and historical duty shifts do not lock these fields.
+ * Once either book contains a row, the factual opening header is immutable.
  */
 function estab_incident_update_logbook_header(
     mysqli $connection,
@@ -968,27 +965,6 @@ function estab_incident_update_logbook_header(
                     'Die Logbuch-Stammdaten wurden zwischenzeitlich geändert.'
                 );
             }
-        }
-        $lockStatement = $connection->prepare(
-            'SELECT `dienstschicht_id` FROM `nv_dienstschichten`'
-            . ' WHERE `einsatz_id` = ? AND `aktiviert_am` IS NOT NULL'
-            . ' ORDER BY `dienstschicht_id` LIMIT 1 FOR UPDATE'
-        );
-        if (!$lockStatement) {
-            throw new RuntimeException('Logbuch-Stammdaten konnten nicht geprüft werden.');
-        }
-        try {
-            $lockStatement->bind_param('i', $incidentId);
-            $lockStatement->execute();
-            $started = $lockStatement->get_result()->fetch_row() !== null;
-        } finally {
-            $lockStatement->close();
-        }
-        if ($started) {
-            throw new EstabIncidentConflictException(
-                'Die Logbuch-Stammdaten sind seit Aktivierung der ersten '
-                . 'Dienstschicht unveränderlich.'
-            );
         }
         $bookStatement = $connection->prepare(
             'SELECT `etb_lfd-nr` AS `id` FROM `nv_etb` WHERE `einsatz_id` = ?'
@@ -1093,7 +1069,8 @@ function estab_incident_activate_locked(
     }
     estab_incident_command_post_name($target);
     if ((int) ($status['active_einsatz_id'] ?? 0) === $incidentId) {
-        return $status;
+        estab_logbook_lifecycle_open_books_if_empty($connection, $status);
+        return estab_incident_status($connection);
     }
 
     $nextRevision = $expectedRevision + 1;
@@ -1133,6 +1110,8 @@ function estab_incident_activate_locked(
         $nextRevision,
         ['vorheriger_einsatz_id' => $status['active_einsatz_id']]
     );
+    $activated = estab_incident_status($connection);
+    estab_logbook_lifecycle_open_books_if_empty($connection, $activated);
     return estab_incident_status($connection);
 }
 
@@ -1411,9 +1390,6 @@ function estab_incident_close_preflight(
         . ' (SELECT COUNT(*) FROM `nv_anhang`'
         . '   WHERE `einsatz_id` = ? AND `status` IN (2, 8))'
         . ' AS `incomplete_attachments`,'
-        . ' (SELECT COUNT(*) FROM `nv_dienstschichten`'
-        . '   WHERE `einsatz_id` = ? AND `aktiviert_am` IS NOT NULL)'
-        . ' AS `started_shifts`,'
         . ' (SELECT COUNT(*) FROM `nv_etb`'
         . '   WHERE `einsatz_id` = ? AND `estab_book_lfd` = 1)'
         . ' AS `etb_opening_rows`,'
@@ -1426,8 +1402,7 @@ function estab_incident_close_preflight(
     }
     try {
         $statement->bind_param(
-            'iiiiii',
-            $incidentId,
+            'iiiii',
             $incidentId,
             $incidentId,
             $incidentId,
@@ -1451,8 +1426,7 @@ function estab_incident_close_preflight(
         'locked_messages' => (int) ($row['locked_messages'] ?? 0),
         'incomplete_attachments' => (int) ($row['incomplete_attachments'] ?? 0),
         'logbuecher_eroeffnet' =>
-            (int) ($row['started_shifts'] ?? 0) > 0
-            && (int) ($row['etb_opening_rows'] ?? 0) === 1
+            (int) ($row['etb_opening_rows'] ?? 0) === 1
             && (int) ($row['tbb_opening_rows'] ?? 0) === 1,
     ];
     if ($attachmentRoot !== null) {
@@ -1549,16 +1523,16 @@ function estab_incident_close_preflight(
         (int) ($operations['betriebsereignisse'] ?? 0);
     $preflight['evidence_errors'] = $messageEvidenceErrors
         + ($preflight['betriebsereigniskette_gueltig'] ? 0 : 1);
-    $preflight['closable'] = $preflight['logbuecher_eroeffnet']
-        && $preflight['open_messages'] === 0
+    // Legacy duty shifts, their assignments and their handover requests are
+    // retained as historical evidence, but the optional shift concept must
+    // never prevent the incident itself from being closed.  Likewise, empty
+    // books can receive their first (closing) row during the close transaction.
+    $preflight['closable'] = $preflight['open_messages'] === 0
         && $preflight['locked_messages'] === 0
         && $preflight['incomplete_attachments'] === 0
         && $preflight['attachment_integrity_errors'] === 0
-        && $preflight['offene_schichten'] === 0
-        && $preflight['offene_besetzungen'] === 0
         && $preflight['offene_melderauftraege'] === 0
         && $preflight['offene_fernmeldeplanentwuerfe'] === 0
-        && $preflight['offene_uebergabeanforderungen'] === 0
         && $preflight['evidence_errors'] === 0;
     return $preflight;
 }
@@ -1648,13 +1622,9 @@ function estab_incident_close(
             $attachmentRoot
         );
         if (!$preflight['closable']) {
-            $openingBlocker = !$preflight['logbuecher_eroeffnet']
-                ? ' ETB und TBB müssen zuvor mit der ersten Dienstschicht '
-                    . 'ordnungsgemäß eröffnet werden.'
-                : '';
             throw new EstabIncidentCloseBlockedException(
                 'Der Einsatz kann erst nach Abschluss aller offenen Vorgänge '
-                . 'formal geschlossen werden.' . $openingBlocker,
+                . 'formal geschlossen werden.',
                 $preflight
             );
         }

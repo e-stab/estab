@@ -414,7 +414,7 @@ function estab_message_append_transition_evidence(
     // message mutation. If a duty shift is active, a forged/stale basic
     // account context therefore rolls the domain update back together with
     // its evidence instead of racing an incident or hat change.
-    estab_dv_require_active_hat_for_operational_write(
+    estab_dv_require_operational_account(
         $connection,
         $incidentId,
         $event['actor']
@@ -650,7 +650,9 @@ function estab_message_counter_repair_max(
         . ')), 0)'
         . ' FROM `nv_betriebsereignisse`'
         . ' WHERE `einsatz_id` = ?'
-        . " AND `objekttyp` = 'DIENSTSCHICHT'"
+        // Current repairs belong to the incident itself. Keep the historical
+        // object type readable so a pre-migration watermark is never reused.
+        . " AND `objekttyp` IN ('EINSATZ', 'DIENSTSCHICHT')"
         . " AND `aktion` = 'message_counter_repaired'"
     );
     if (!$statement) {
@@ -1798,10 +1800,9 @@ function estab_message_update_pending_review(
 /**
  * Resubmit one formally returned outgoing message under its staff function.
  *
- * A shift successor who has accepted the same functional hat may continue the
- * task; a different staff function may not. The evidence guard verifies the
- * active accepted hat when a duty shift exists. Old and new responsibility
- * remain explicit in the transition snapshot.
+ * Another account with the same fixed staff function may continue the task; a
+ * different function may not. Old and new responsibility remain explicit in
+ * the transition snapshot.
  */
 function estab_message_resubmit_returned_outgoing(
     mysqli $connection,

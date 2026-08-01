@@ -6,7 +6,7 @@ declare(strict_types=1);
  * Retired standalone presence view.
  *
  * The maintained sidebar obtains incident-scoped status through vorgaben.php
- * after validating the selected active duty assignment. This unreferenced
+ * after validating the fixed account function. This unreferenced
  * controller exposed global function occupancy from a bare account session.
  * It is excluded from the runtime image; source deployments fail closed here.
  */

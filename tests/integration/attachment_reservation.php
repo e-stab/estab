@@ -48,7 +48,6 @@ function attachment_db_identity(): array
     $name = getenv('ESTAB_TEST_ATTACHMENT_USER');
     $code = getenv('ESTAB_TEST_ATTACHMENT_CODE');
     $role = getenv('ESTAB_TEST_ATTACHMENT_ROLE');
-    $assignmentId = getenv('ESTAB_TEST_ATTACHMENT_ASSIGNMENT_ID');
     if (
         !is_string($name)
         || $name === ''
@@ -56,11 +55,9 @@ function attachment_db_identity(): array
         || preg_match('/\A[a-z0-9]{1,6}\z/D', $code) !== 1
         || !is_string($role)
         || $role === ''
-        || !is_string($assignmentId)
-        || preg_match('/\A[1-9][0-9]*\z/D', $assignmentId) !== 1
     ) {
         throw new RuntimeException(
-            'Attachment integration duty identity is incomplete'
+            'Attachment integration account identity is incomplete'
         );
     }
 
@@ -69,7 +66,6 @@ function attachment_db_identity(): array
         'kuerzel' => $code,
         'funktion' => 'A/W',
         'rolle' => $role,
-        'duty_assignment_id' => (int) $assignmentId,
     ];
 }
 
@@ -667,114 +663,66 @@ try {
         'Attachment integration requires no pre-existing active duty shift'
     );
 
-    $fixtureShift = estab_dv_create_shift(
-        $connectionA,
-        $fixtureIncidentId,
-        'Parallele Anhangreservierung ' . $token,
-        null,
-        'attachment-integration'
+    $fixtureUser = 'Attachment A/W ' . $token;
+    $fixtureCode = 'aw' . substr($token, 0, 4);
+    $fixtureRole = 'Fernmelder';
+    $fixturePassword = password_hash(
+        'Attachment integration ' . $fixtureCode,
+        PASSWORD_DEFAULT
     );
-    $fixtureShiftId = (int) ($fixtureShift['dienstschicht_id'] ?? 0);
     attachment_db_assert(
-        $fixtureShiftId > 0,
-        'Could not create attachment duty shift'
+        is_string($fixturePassword),
+        'Could not hash attachment account password'
     );
-    $fixtureAssignmentId = 0;
-    $functionRoles = estab_dv_function_roles($connectionA);
-    foreach (
-        array_values(ESTAB_DV_REQUIRED_HATS)
-        as $functionIndex => $function
-    ) {
-        $assignment = estab_dv_role_for_function($functionRoles, $function);
-        $fixtureFunctionCode = 'a'
-            . base_convert((string) ($functionIndex + 1), 10, 36)
-            . substr($token, 0, 4);
-        $fixtureFunctionUser = 'Attachment '
-            . $assignment['funktion'] . ' ' . $token;
-        $fixturePassword = password_hash(
-            'Attachment integration ' . $fixtureFunctionCode,
-            PASSWORD_DEFAULT
-        );
-        $fixtureSid = 'attachment-' . $fixtureFunctionCode . '-' . $token;
-        $fixtureAccount = $connectionA->prepare(
-            'INSERT INTO `nv_benutzer`'
-            . ' (`benutzer`, `kuerzel`, `funktion`, `rolle`, `sid`,'
-            . ' `aktiv`, `estab_letzte_aktivitaet`, `estab_gesperrt`,'
-            . ' `password`)'
-            . ' VALUES (?, ?, ?, ?, ?, 1, UTC_TIMESTAMP(6), 0, ?)'
+    $fixtureSid = 'attachment-' . $fixtureCode . '-' . $token;
+    $fixtureAccount = $connectionA->prepare(
+        'INSERT INTO `nv_benutzer`'
+        . ' (`benutzer`, `kuerzel`, `funktion`, `rolle`, `sid`,'
+        . ' `aktiv`, `estab_letzte_aktivitaet`, `estab_gesperrt`,'
+        . ' `password`)'
+        . " VALUES (?, ?, 'A/W', ?, ?, 1, UTC_TIMESTAMP(6), 0, ?)"
+    );
+    attachment_db_assert(
+        $fixtureAccount instanceof mysqli_stmt,
+        'Could not prepare attachment account'
+    );
+    try {
+        $fixtureAccount->bind_param(
+            'sssss',
+            $fixtureUser,
+            $fixtureCode,
+            $fixtureRole,
+            $fixtureSid,
+            $fixturePassword
         );
         attachment_db_assert(
-            $fixtureAccount instanceof mysqli_stmt,
-            'Could not prepare attachment duty account'
+            $fixtureAccount->execute(),
+            'Could not create attachment A/W account'
         );
-        try {
-            $fixtureAccount->bind_param(
-                'ssssss',
-                $fixtureFunctionUser,
-                $fixtureFunctionCode,
-                $assignment['funktion'],
-                $assignment['rolle'],
-                $fixtureSid,
-                $fixturePassword
-            );
-            attachment_db_assert(
-                $fixtureAccount->execute(),
-                "Could not create attachment {$function} duty account"
-            );
-        } finally {
-            $fixtureAccount->close();
-        }
-
-        $assignment = estab_dv_assign_hat(
-            $connectionA,
-            $fixtureIncidentId,
-            $fixtureShiftId,
-            $fixtureFunctionCode,
-            $function,
-            'attachment-integration'
-        );
-        $assignmentId = (int) (
-            $assignment['dienstbesetzung_id'] ?? 0
-        );
-        attachment_db_assert(
-            $assignmentId > 0,
-            "Could not assign attachment duty hat {$function}"
-        );
-        estab_dv_accept_hat(
-            $connectionA,
-            $fixtureIncidentId,
-            $assignmentId,
-            $fixtureFunctionCode
-        );
-        if ($function === 'A/W') {
-            $fixtureAssignmentId = $assignmentId;
-            $fixtureUser = $fixtureFunctionUser;
-            $fixtureCode = $fixtureFunctionCode;
-            $fixtureRole = (string) $assignment['rolle'];
-        }
+    } finally {
+        $fixtureAccount->close();
     }
     attachment_db_assert(
-        $fixtureAssignmentId > 0
-            && $fixtureUser !== ''
+        $fixtureUser !== ''
             && $fixtureCode !== ''
             && $fixtureRole !== '',
-        'Attachment fixture did not create its selected A/W assignment'
+        'Attachment fixture did not create its fixed A/W account'
     );
-    estab_dv_activate_initial_shift(
+    estab_dv_require_operational_account(
         $connectionA,
         $fixtureIncidentId,
-        $fixtureShiftId,
-        'attachment-integration'
+        [
+            'benutzer' => $fixtureUser,
+            'kuerzel' => $fixtureCode,
+            'funktion' => 'A/W',
+            'rolle' => $fixtureRole,
+        ]
     );
     attachment_db_assert(
         putenv('ESTAB_TEST_ATTACHMENT_USER=' . $fixtureUser)
             && putenv('ESTAB_TEST_ATTACHMENT_CODE=' . $fixtureCode)
-            && putenv('ESTAB_TEST_ATTACHMENT_ROLE=' . $fixtureRole)
-            && putenv(
-                'ESTAB_TEST_ATTACHMENT_ASSIGNMENT_ID='
-                . $fixtureAssignmentId
-            ),
-        'Could not publish attachment duty identity to workers'
+            && putenv('ESTAB_TEST_ATTACHMENT_ROLE=' . $fixtureRole),
+        'Could not publish attachment account identity to workers'
     );
 
     $fixtureSql = 'CREATE TABLE ' . estab_attachment_table($table) . ' ('
@@ -1461,7 +1409,6 @@ try {
     putenv('ESTAB_TEST_ATTACHMENT_USER');
     putenv('ESTAB_TEST_ATTACHMENT_CODE');
     putenv('ESTAB_TEST_ATTACHMENT_ROLE');
-    putenv('ESTAB_TEST_ATTACHMENT_ASSIGNMENT_ID');
 }
 
 $verification = estab_attachment_connection($config);

@@ -395,7 +395,7 @@ try {
                 ],
                 'duty' => [
                     'Dienstorganisation',
-                    'Alle Dienstschichten, Besetzungen und Übergaben',
+                    'Optionale Zugangsschichten samt Zuordnungen sowie alle historischen Dienstschichten, Besetzungen und Übergaben',
                 ],
                 's6_plans' => [
                     'S6-Fernmeldeplanung',

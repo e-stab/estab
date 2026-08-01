@@ -58,14 +58,14 @@ Einsatzkraft ersetzt, noch dass eine formale THW-Freigabe vorliegt.
 | --- | --- | --- | --- |
 | S. 4-44/4-45 | S2 muss ständig in den Informationsfluss eingebunden sein und alle Ein- und Ausgänge als roten Durchschlag erhalten. | S2/Stab ist die einzige Fähigkeit `LAGE_DOKUMENTATION`; jede abgeschlossene Nachricht enthält die S2-Rotkopie, eine beliebige Umkonfiguration oder Autosichtung ist gesperrt. | `tests/php/admin_operations_security.php`, `tests/integration/message_workflow_http.sh`, Schema-Verifikation |
 | S. 4-45 sowie Handbuch ETB/TBB S. 6 und 26 | Die Einsatzdokumentation wird durch S2 sichergestellt; das ETB ist urkundlicher Nachweis. Die DV-Fassung nennt ein Jahr, die spätere ETB-/TBB-Unterlage zehn Jahre für ETB und TBB. | S2 bleibt alleinige Lage-/Rotkopiefunktion. Die Anwendung setzt die strengere Mindestaufbewahrung von zehn Jahren ab formalem Abschluss um. ETB und TBB sind nur anhängbar; eine Berichtigung ist ein neuer Eintrag mit Gegenreferenz. Ein Legal Hold kann die Frist verlängern, aber nicht verkürzen. | `tests/php/logbook_security.php`, `tests/php/schema_migration_contract.php`, `tests/integration/schema_migrator.sh`, `tests/integration/dv_evidence.php` |
-| S. 4-59/4-60 | S6 plant und führt den Telekommunikationseinsatz und stellt die Führbarkeit über geeignete Verbindungen sicher. | Nur die angenommene aktive S6-Funktion darf versionierte Fernmeldepläne erstellen und veröffentlichen. LdF kann nur einen aktuell gültigen, veröffentlichten Planweg disponieren; veröffentlichte Fassungen bleiben unveränderlich. | `tests/integration/dv_operations.php`, `tests/integration/message_workflow_http.sh` |
+| S. 4-59/4-60 | S6 plant und führt den Telekommunikationseinsatz und stellt die Führbarkeit über geeignete Verbindungen sicher. | Nur ein Konto mit der festen Funktion `S6` darf versionierte Fernmeldepläne erstellen und veröffentlichen. LdF kann nur einen aktuell gültigen, veröffentlichten Planweg disponieren; veröffentlichte Fassungen bleiben unveränderlich. | `tests/integration/dv_operations.php`, `tests/integration/message_workflow_http.sh` |
 | S. 4-63 | Der Sichter analysiert Eingänge inhaltlich und leitet sie an zuständige Bearbeiter weiter. | Eingänge laufen zwingend `A/W → LdF → Si`; Si setzt Empfänger und Abschluss. A/W darf den Absender nicht schreiben, LdF übersetzt den aufgenommenen Rufnamen und bestätigt den von A/W erfassten Eingangsweg. Eine Änderung verlangt eine Begründung und wird mit Alt-/Neuwert und LdF-Identität nachgewiesen; A/W-Aufnahmezeit und -zeichen bleiben unverändert. | `tests/php/workflow_security.php`, `tests/php/ldf_validation_security.php`, `tests/php/ldf_ui_flow_security.php`, `tests/integration/message_workflow_http.sh` |
 | S. 4-63 | Bei Ausgängen prüft Si nur Anschrift, Unterschrift/Zeichen und Funktion, nicht den Inhalt. | Ausgänge laufen zwingend `Verfasser → Si → LdF → A/W`. Si kann formal freigeben oder mit Pflichtgrund zurückgeben, aber keine Inhaltsfelder verändern. Nach Korrektur folgt die Sichtung erneut. | `tests/php/message_security.php`, `tests/integration/message_concurrency.php`, `tests/integration/message_workflow_http.sh` |
-| S. 4-64 | Der Melder darf den Inhalt nicht ändern, muss schnell zustellen, Rücknachrichten feststellen, zurückkehren, sich zurückmelden und den tatsächlichen Empfänger nennen. | Das Medium `Me` verlangt einen LdF-Auftrag und die Zustandskette Beauftragung, persönliche Übernahme, Übergabe mit Empfänger, Rückweg mit explizitem Rücknachrichtenvermerk und Rückkehr. Danach bestätigt ausschließlich die ausgewählte aktive LdF-Besetzung die Rückmeldung an die FmZt. Der Nachrichtenabschluss wartet auf die vollständige Kette. | `tests/integration/dv_operations.php`, `tests/integration/message_workflow_http.sh` |
-| S. 4-64 | Bis zur Rückkehr darf der Melder keine anderen Aufträge annehmen; in einer FüSt mit Stab gehört er zur FmZt und wird durch LdF eingesetzt. | Nur eine angenommene aktive A/W-Besetzung ist als Melder wählbar, ausschließlich LdF beauftragt. Während Übernahme, Übergabe und Rückweg sperrt eine zentrale Request-Grenze alle fremden operativen Schreibvorgänge dieses Kontos. | `tests/php/dv_operations_security.php`, `tests/integration/dv_operations.php` |
-| S. 4-64 | LdF verantwortet den Fernmeldebetrieb und unterweist, unterstützt und überwacht das Betriebspersonal. | LdF ist eine gesonderte, schichtgebundene Funktion. Sie übersetzt Rufnamen, entscheidet den Planweg, beauftragt Melder und überwacht die sichtbaren Melderzustände; A/W kann diese Entscheidungen nicht vorwegnehmen. | `tests/integration/message_workflow_http.sh`, `tests/integration/dv_operations.php` |
-| S. 4-70 bis 4-73 | Die Führungsstelle besitzt benannte Funktionen; Kombinationen S1/S4, S2/S3 sowie ETB/Si sind möglich. | Persönliche Konten und einsatz-/schichtbezogene Funktions-Hüte sind getrennt. Mehrfachzuweisung ist möglich, jede Zuweisung wird persönlich angenommen; S2, Si, S6, LdF und A/W sind vor Schichtaktivierung Pflicht. Pro Nicht-A/W-Funktion gibt es nur eine aktive Besetzung. Der Datenbanktest wechselt real S2→S3 sowie Si→ETB und prüft Funktionstabellen, Gesprächsvermerk, Gelesen-/Erledigt-Zustand, Kategorien und getrennte Rechte. | `tests/integration/dv_operations.php`, `tests/php/dv_operations_security.php`, Authentifizierungs- und Schema-Verifikation |
-| S. 4-73 | Die Arbeitsfähigkeit hängt von zweckmäßiger Organisation und raschem Informationsfluss ab. | Führungsstellenname, Einsatz, aktive Schicht, gewählte Funktion, Warteschlangen und aktuelle Zuständigkeit sind sichtbar. Der Führungsstellenname ist die einsatzbezogene lokale Nachrichtenanschrift/-absendereinheit und von Einsatzname, Bedarfsträger sowie Einsatzleitung getrennt. Ohne aktiven Einsatz, bestätigten Führungsstellennamen oder aktive Schicht wird serverseitig keine operative Eingabe angenommen. | Schema-, Einsatzdomänen-, HTTP- und Browser-Abnahme sowie `tests/integration/message_workflow_http.sh` |
+| S. 4-64 | Der Melder darf den Inhalt nicht ändern, muss schnell zustellen, Rücknachrichten feststellen, zurückkehren, sich zurückmelden und den tatsächlichen Empfänger nennen. | Das Medium `Me` verlangt einen LdF-Auftrag und die Zustandskette Beauftragung, persönliche Übernahme, Übergabe mit Empfänger, Rückweg mit explizitem Rücknachrichtenvermerk und Rückkehr. Danach bestätigt ausschließlich ein Konto mit der festen Funktion `LdF` die Rückmeldung an die FmZt. Der Nachrichtenabschluss wartet auf die vollständige Kette. | `tests/integration/dv_operations.php`, `tests/integration/message_workflow_http.sh` |
+| S. 4-64 | Bis zur Rückkehr darf der Melder keine anderen Aufträge annehmen; in einer FüSt mit Stab gehört er zur FmZt und wird durch LdF eingesetzt. | Nur ein aktives, ungesperrtes Konto `A/W/Fernmelder` ist als Melder wählbar, ausschließlich `LdF/Fernmelder` beauftragt. Während Übernahme, Übergabe und Rückweg sperrt eine zentrale Request-Grenze alle fremden operativen Schreibvorgänge dieses Kontos. | `tests/php/dv_operations_security.php`, `tests/integration/dv_operations.php` |
+| S. 4-64 | LdF verantwortet den Fernmeldebetrieb und unterweist, unterstützt und überwacht das Betriebspersonal. | LdF ist eine gesonderte feste Kontofunktion. Sie übersetzt Rufnamen, entscheidet den Planweg, beauftragt Melder und überwacht die sichtbaren Melderzustände; A/W kann diese Entscheidungen nicht vorwegnehmen. | `tests/integration/message_workflow_http.sh`, `tests/integration/dv_operations.php` |
+| S. 4-70 bis 4-73 | Die Führungsstelle besitzt benannte Funktionen; Kombinationen S1/S4, S2/S3 sowie ETB/Si sind organisatorisch möglich. | Fachrechte stammen aus genau einer festen Kontofunktion und der serverseitig abgeleiteten Rolle. Funktionskombinationen werden organisatorisch durch getrennte persönliche Konten abgebildet; eine Hutauswahl innerhalb der Sitzung gibt es nicht. Optionale Zugangsschichten gruppieren Zugänge, verändern aber keine Fachrechte. | Authentifizierungs-, Autorisierungs- und Schema-Verifikation |
+| S. 4-73 | Die Arbeitsfähigkeit hängt von zweckmäßiger Organisation und raschem Informationsfluss ab. | Führungsstellenname, aktiver Einsatz, feste Funktion, Warteschlangen und Zuständigkeit sind sichtbar. Der Führungsstellenname ist die einsatzbezogene lokale Nachrichtenanschrift/-absendereinheit und von Einsatzname, Bedarfsträger sowie Einsatzleitung getrennt. Ohne aktiven Einsatz oder bestätigten Führungsstellennamen wird serverseitig keine operative Eingabe angenommen; eine Schicht ist nicht erforderlich. | Schema-, Einsatzdomänen-, HTTP- und Browser-Abnahme sowie `tests/integration/message_workflow_http.sh` |
 
 Die Führungsstellenidentität wird nicht aus einer Installationseinstellung
 abgeleitet. Neue Einsätze verlangen sie in der Administration. Bei
@@ -125,20 +125,15 @@ und den laufenden Beförderungsstatus weiterhin verfolgen und eine begründet
 zurückgegebene Nachricht korrigieren. Diese Grenze gilt gleichermaßen für
 Liste, Detailansicht sowie persönliche Gelesen-/Erledigt-Markierungen.
 
-Jede operative Lesesicht verlangt darüber hinaus einen aktiven Einsatz und eine
-persönlich angenommene, aktive Dienstbesetzung, die in der Sitzung ausgewählt
-ist. Eine bloße Kontoanmeldung oder ein frei übermittelter Funktionswert
-genügen nicht. Das gilt für Nachrichtenlisten und -details, Kategorien,
-Vordrucke, Anhänge sowie ETB und TBB. Die beiden Gesamtansichten sind enger
-gebunden: Nur die ausgewählte S2-Funktion mit `LAGE_DOKUMENTATION` erhält die
-Meldungsübersicht; die Nachweisung bleibt ausgewähltem LdF beziehungsweise A/W
-vorbehalten. Die Navigation blendet unzulässige Spezialziele aus, die
-Controller wiederholen die Datenbankprüfung jedoch unabhängig davon.
-Das Manifest enthält neun operative Bereiche und zwei Dienste: Vor
-Hutauswahl bleiben nur die vier öffentlichen beziehungsweise separat
-geschützten Ziele plus Führungsstellen-Bootstrap sichtbar; mit ausgewähltem
-Hut sehen normale Stabs-/FB-Funktionen, Si und S6 neun Links, S2 sowie LdF/A/W
-jeweils zehn.
+Jede operative Lesesicht verlangt darüber hinaus einen aktiven Einsatz und
+eine gültige feste Kontofunktion mit serverseitig abgeleiteter Rolle. Ein frei
+übermittelter Funktionswert genügt nicht. Das gilt für Nachrichtenlisten und
+-details, Kategorien, Vordrucke, Anhänge sowie ETB und TBB. Die beiden
+Gesamtansichten sind enger gebunden: Nur `S2/Stab` mit
+`LAGE_DOKUMENTATION` erhält die Meldungsübersicht; die Nachweisung bleibt
+`LdF/Fernmelder` beziehungsweise `A/W/Fernmelder` vorbehalten. Navigation und
+Controller prüfen diese Kontorechte unabhängig voneinander; eine Hutauswahl
+oder aktive Schicht gibt es als Autorisierungsbedingung nicht.
 
 Vordruckliste und -download leiten ihr Recht aus genau der zugrunde liegenden
 Nachricht ab. Normaler Stab/FB sieht eine terminale Empfängerkopie oder den
@@ -146,15 +141,11 @@ eigenen Ausgang. Si, LdF und A/W sehen die eigene aktuelle Warteschlange oder
 Sperre sowie Nachrichten mit ihrer eigenen unveränderlichen
 Bearbeitungsmarke. Ein verknüpfter Anhang erbt die Leserechte mindestens einer
 exakt über den vollständigen Dateinamen verknüpften Nachricht. Ein noch freier
-Anhang ist nur für seinen Uploader oder die ausgewählten Funktionen S2, Si und
+Anhang ist nur für seinen Uploader oder die festen Funktionen S2, Si und
 LdF sichtbar. Auswahl und endgültiges Speichern der Nachricht autorisieren
-jeden Anhang erneut. ETB und TBB dürfen alle ausgewählten aktiven
-Dienstfunktionen lesen. Pro aktiver Schicht ist jedoch nur genau eine
-angenommene Besetzung als Schreiber bestimmt: für das ETB die zuerst
-zugewiesene ETB-Besetzung, ersatzweise die zuerst zugewiesene S2-Besetzung;
-für das TBB die zuerst zugewiesene A/W-Besetzung. Zusätzlich bleiben
-`EINSATZTAGEBUCH` beziehungsweise `BEFOERDERUNG` Pflicht. Weitere fachlich
-fähige Besetzungen erhalten die Bücher nur lesend. Der statische Vertrag liegt
+jedem Anhang erneut. ETB schreiben feste Konten `ETB/Stab` oder `S2/Stab` mit
+`EINSATZTAGEBUCH`; TTB schreibt `A/W/Fernmelder` mit `BEFOERDERUNG`. Eine
+aktive Schicht oder angenommene Besetzung ist nicht erforderlich. Der statische Vertrag liegt
 in `tests/php/read_authorization_security.php` und
 `tests/php/logbook_security.php`.
 
@@ -187,16 +178,16 @@ Funktion verschieben.
 
 Die Tagebuchführung ist davon technisch getrennt. `EINSATZTAGEBUCH` gehört
 ausschließlich S2/Stab und der eigenen Funktion ETB/Stab. Damit kann S2 seine
-Dokumentationsverantwortung selbst wahrnehmen oder eine ausdrücklich besetzte
-ETB-Funktion das Buch führen. Eine nach Kapitel 4.3 kombinierte Person wählt
-zwischen getrennten ETB- und Si-Hüten. Der Si-Hut erhält dadurch kein
-ETB-Schreibrecht; der ETB-Hut erhält weder `LAGE_DOKUMENTATION` noch
+Dokumentationsverantwortung selbst wahrnehmen oder ein separates persönliches
+ETB-Konto das Buch führen. Für eine organisatorische Kombination ETB/Si werden
+zwei getrennte Konten verwendet. Das Si-Konto erhält dadurch kein
+ETB-Schreibrecht; das ETB-Konto erhält weder `LAGE_DOKUMENTATION` noch
 Meldungsübersicht, Rotkopien oder normale Nachrichten-/Kategorietabellen.
 
-### Gemeinsamer Pflichtkopf und Eröffnung
+### Gemeinsamer Pflichtkopf
 
-Ein neuer Einsatz kann nur angelegt und die erste Schicht nur aktiviert
-werden, wenn folgende Angaben vorhanden sind:
+Ein neuer Einsatz kann nur aktiviert werden, wenn folgende Angaben vorhanden
+sind:
 
 - Einsatzkennung und genaue Einsatzbezeichnung,
 - Einsatzbeginn mit Datum und Uhrzeit,
@@ -206,21 +197,17 @@ werden, wenn folgende Angaben vorhanden sind:
 - verantwortliche Einsatz-/Führungsleitung,
 - Einsatzauftrag und Ausgangslage.
 
-Die erste Schichtaktivierung schreibt in derselben Datenbanktransaktion die
-laufende Nummer 1 beider Bücher. Der ETB-Eröffnungseintrag enthält
-Einsatzbezeichnung, den Einsatzbeginn ausdrücklich als Datum/Uhrzeit,
-Auftrag/Ausgangslage, Bedarfsträger, Führungspersonal, vollständige angenommene
-Führungsstellenbesetzung und ETB-Führung. Der erste TBB-Eintrag dokumentiert
-Fernmeldebetriebsstelle, Einsatz-/Betriebsbereitschaft, LdF sowie
-A/W-Betriebspersonal und TBB-Führung. Der im Formblatt vorgesehene
+Der Einsatz-Insert legt bereits die leeren Nummernköpfe `ETB:1` und `TTB:1`
+an. Die erste tatsächliche Buchzeile erhält dadurch lokal die Nummer 1, ohne
+dass zuvor eine Schicht aktiviert werden muss. Der im Formblatt vorgesehene
 Arbeitsplatz wird nicht erfunden: Das Einsatzdatenmodell besitzt dafür kein
 eigenes Feld und die Ausbildungsunterlage sieht vor, dass es bei einem TBB je
 Fernmeldebetriebsstelle in der Regel frei bleibt.
 
 Der derzeit geprüfte und von eStab unterstützte Produktumfang ist ausschließlich
 eine Führungsstelle mit eingerichteter Fernmeldebetriebsstelle. Deshalb sind
-LdF und A/W Pflichtbesetzungen und je Einsatz wird genau ein TBB eröffnet und
-geführt. Führungsstellen ohne eigene Fernmeldebetriebsstelle, insbesondere ein
+Konten für LdF und A/W organisatorisch vorzusehen und je Einsatz wird genau
+ein TBB geführt. Führungsstellen ohne eigene Fernmeldebetriebsstelle, insbesondere ein
 reiner ETB-Betrieb, gehören nicht zum unterstützten Produktumfang. Für diesen
 abweichenden Aufbau behauptet eStab keine Konformität. Der Begriff
 „unterstützter Produktumfang“ bezeichnet dabei ausschließlich die technische
@@ -228,12 +215,11 @@ eStab-Produktgrenze und ausdrücklich keine formale THW-Freigabe.
 
 Für vorbereitete Bestands-Einsätze können Bedarfsträger,
 Einsatz-/Führungsleitung sowie Auftrag/Ausgangslage in der Administration
-ergänzt werden. Sobald eine Schicht erstmals aktiviert wurde oder bereits eine
-ETB-/TBB-Zeile existiert, sind diese Kopfangaben als Tatsachengrundlage der
+ergänzt werden. Sobald eine ETB-/TBB-Zeile existiert, sind diese Kopfangaben als Tatsachengrundlage der
 Eröffnung gesperrt. Ein bereits geführtes Bestandsbuch erhält beim Upgrade
 keinen nachträglich erfundenen Eröffnungseintrag.
 
-### Lokale Nummern und eine schreibende Besetzung
+### Lokale Nummern und schreibberechtigte Kontofunktionen
 
 ETB und TBB bilden je Einsatz jeweils genau einen fortlaufenden Buchstrom.
 Neue Nummern werden nicht aus der globalen technischen Primärschlüsselnummer
@@ -250,37 +236,23 @@ Upgrade eine deterministische lokale Nummer nach unveränderlicher
 Erfassungszeit und globalem Alt-Schlüssel; ihr Text wird dabei nicht
 umgedeutet. Die globalen Primärschlüssel bleiben nur technische Identitäten.
 
-Alle ausgewählten aktiven Dienstfunktionen dürfen beide Bücher lesen. Für
-manuelle Einträge bestimmt eStab pro Schicht genau eine schreibende Besetzung:
-Beim ETB hat die zuerst zugewiesene angenommene ETB-Funktion Vorrang, sonst die
-zuerst zugewiesene angenommene S2-Funktion; beim TBB schreibt die zuerst
-zugewiesene angenommene A/W-Funktion. Kontosperre, aktiver Einsatz, aktive
-Schicht, persönlich angenommener und ausgewählter Hut sowie die fachliche
-Fähigkeit werden bei jedem Schreiben erneut geprüft.
+Für manuelle Einträge prüft eStab die feste Kontofunktion: ETB schreiben
+`ETB/Stab` oder `S2/Stab`, TTB schreibt `A/W/Fernmelder`. Kontosperre, aktiver
+Einsatz, feste Funktion, serverseitig abgeleitete Rolle und die fachliche
+Fähigkeit werden bei jedem Schreiben erneut geprüft. Eine aktive Dienst- oder
+Zugangsschicht und eine Besetzungsannahme sind nicht erforderlich.
 
-Der Kontozustand gehört bewusst nicht zur Wahl dieser designierten ersten
-Besetzung. Wird ihr Konto gesperrt oder deaktiviert, blockiert das Schreiben,
-statt unbemerkt auf die nächste geeignete Person zu fallen. Erst eine
-dokumentierte Ablösung beziehungsweise Übergabe ändert die Buchführung. Der
-Insert-Trigger prüft unabhängig von der Oberfläche aktive einsatzgleiche
-Schicht, Status `ANGENOMMEN`, Benutzer-/Kürzel-/Funktionsidentität und ein
-aktives, ungesperrtes Konto.
-
-Jede neue manuelle ETB-/TBB-Zeile speichert nicht nur die sichtbare
-Bedieneridentität, sondern auch die serverseitig gesperrte aktive
-Dienstschicht (`estab_shift_id`) und die tatsächlich schreibende
-Dienstbesetzung (`estab_writer_assignment_id`). Automatische Eröffnungs-,
-Übergabe-, Nachrichten- und Abschlusszeilen speichern ebenfalls ihre Schicht,
-lassen die menschliche Schreiberzuordnung aber `NULL`; das System darf keine
-Person für eine automatisch erzeugte Zeile beanspruchen. Migration 111 erfindet
-diese Provenienz nicht rückwirkend: Historische Zeilen behalten in den neuen
-Feldern `NULL`.
+Die Felder `estab_shift_id` und `estab_writer_assignment_id` sind
+Legacy-Provenienz. Neue manuelle oder automatische ETB-/TBB-Zeilen dürfen sie
+`NULL` lassen; eine Zugangsschicht wird dort ausdrücklich nicht eingetragen.
+Historische Zeilen mit belegter formaler Dienstschicht beziehungsweise
+Dienstbesetzung behalten ihre Werte unverändert und bleiben exportierbar.
 
 ### ETB-Inhalt und Kennzeichen
 
 Das ETB speichert fachliche Ereigniszeit und unveränderliche serverseitige
 Erfassungszeit getrennt, dazu Darstellung, Bemerkung, handelnde Person,
-Kürzel und ausgewählte Funktion. Optional sind einsatzsichere Verweise auf
+Kürzel und feste Kontofunktion. Optional sind einsatzsichere Verweise auf
 eine Nachricht, einen Anhang, eine lokale ETB-Nummer oder den direkt
 berichtigten Originaleintrag möglich.
 
@@ -324,13 +296,10 @@ ETB-Nummer, Korrektur-, Nachrichten- und Anhangsbezug, kanonische lokale und
 historische Bestandsreferenz sowie die vollständige ETB-Anlagennummer. Alle
 Filter bleiben auf den aktiven Einsatz beschränkt.
 
-Zusätzlich gibt es den kombinierbaren Filter „Zuordnung“. Die schreibende
-Person kann optional eine bereits angenommene Besetzung der aktiven Schicht
-als Bearbeitungs- und Suchhilfe auswählen; ein Freitextfeld gibt es dafür
-nicht. Die Anwendung sperrt und prüft die ausgewählte ID im selben
-Schreibvorgang erneut gegen Einsatz, aktive Schicht, Status `ANGENOMMEN` und
-ein ungesperrtes Konto. Abmeldung und Präsenzstatus machen eine angenommene
-Besetzung nicht fachlich ungültig. Anschließend bleibt der Snapshot
+Zusätzlich gibt es den kombinierbaren Filter „Zuordnung“. Eine optionale
+Bearbeitungszuordnung ist ausschließlich Such- und Anzeigehilfe; sie verleiht
+keine Rechte. Die Anwendung prüft den Schreibvorgang gegen aktiven Einsatz,
+feste Kontofunktion, Rolle und Sperrstatus. Anschließend bleibt der Snapshot
 `Funktion (Rolle): Name [Kürzel]`
 unveränderlich am ETB-Eintrag. Volltext- und Zuordnungsfilter durchsuchen ihn,
 die Webliste zeigt ihn; im amtlichen Fb-Fü-2-PDF erscheint er bewusst nicht.
@@ -394,24 +363,19 @@ auf dessen lokale Nummer. Er enthält vorher/nachher, LdF-Identität und eine
 gegebenenfalls erforderliche Begründung; die auf dem Vordruck ausgegebene
 ursprüngliche lokale TBB-Nachrichtennummer ändert sich dadurch nicht.
 
-### Übergabe, Abschluss und Berichtigung
+### Abschluss und Berichtigung
 
-Bei bestätigter Schichtübergabe entstehen atomar neue ETB- und TBB-Zeilen mit
-abgebender und übernehmender Besetzung, beiden persönlich handelnden Personen,
-getrennt nachgewiesenem Übergabe-/Übernahmezeitpunkt, Zusammenfassung und
-jeweils letzter lokaler Nummer vor der Übergabe. Als Personal werden
-ausschließlich nach dem Statuswechsel tatsächlich abgelöste Besetzungen der
-alten und angenommene Besetzungen der neuen Schicht aufgenommen; bloß
-zugewiesene oder zurückgezogene Planungszeilen werden nicht als eingesetztes
-Personal dargestellt. Das Buch selbst verbleibt damit einsatz- und
-führungsstellenbezogen und wird nicht je Schicht neu begonnen.
+Das Buch bleibt einsatz- und führungsstellenbezogen und wird nicht je Schicht
+neu begonnen. Historische formale Schichtübergaben und ihre belegten ETB-/TBB-
+Zeilen bleiben als Evidenz erhalten; neue Zugangsschichten erzeugen keine
+fachlichen Übergabezeilen und bestimmen keine Buchführung.
 
 Der formale Einsatzabschluss schreibt vor der Deaktivierung je einen letzten
 ETB- und TBB-Eintrag mit tatsächlichem Ende, Abschlussvermerk und letzter
 fachlicher Führung. Erst damit werden beide Bücher gemeinsam mit dem
-Gesamteinsatz geschlossen. Frühere Schichtenden schließen kein Buch. Ein
-Einsatz ohne mindestens eine aktivierte Schicht und ohne exakt je eine
-Eröffnungszeile Nummer 1 in ETB und TBB kann nicht formal geschlossen werden.
+Gesamteinsatz geschlossen. Frühere Schichtenden schließen kein Buch. Eine
+fehlende oder offene historische Dienstschicht und fehlende schichtbezogene
+Eröffnungszeilen blockieren den formalen Abschluss nicht.
 
 Bereits gespeicherte ETB- und TBB-Zeilen können weder über die Anwendung noch
 per normalem SQL `UPDATE` oder `DELETE` verändert werden. Eine Berichtigung
@@ -431,29 +395,20 @@ Ereigniskette ist nur anhängbar; UPDATE und DELETE werden von der Datenbank
 abgewiesen.
 
 „Nicht mehr aktiv“ und „formal abgeschlossen“ sind getrennte Zustände. Vor
-einem formalen Abschluss prüft eStab offene Nachrichten, offene
-Dienstbesetzungen, offene Melderläufe, noch nicht freigegebene
+einem formalen Abschluss prüft eStab offene Nachrichten, offene Melderläufe, noch nicht freigegebene
 Kommunikationspläne sowie Verfügbarkeit und Eingangsintegrität neuer Anhänge.
 Vor dem Upgrade vorhandene Anhänge werden dabei sichtbar als nicht
 rückwirkend belegbarer Legacy-Bestand gezählt. Der Abschluss erfolgt nur nach ausdrücklicher Bestätigung
 und wird selbst unveränderbar nachgewiesen. Danach sind operative Änderungen
 für diesen Einsatz gesperrt.
 
-Auch die letzte aktive Dienstschicht darf nicht vorzeitig geschlossen werden.
-Für diesen Schritt läuft dieselbe fachliche Abschlussprüfung, wobei nur die
-gerade zu schließende Schicht und ihre eigenen Besetzungen ausgenommen werden.
-Offene oder gesperrte Nachrichten, unfertige beziehungsweise fehlerhaft
-nachgewiesene Anhänge, Planentwürfe, Melderläufe, weitere Schichten,
-Übergabeanforderungen oder eine ungültige Ereigniskette halten die Schicht
-offen. Damit kann kein Einsatz mit Restarbeit irreversibel ohne aktive Schicht
-zurückbleiben. Der produktive Schließ-POST übergibt dabei ausdrücklich den
-konfigurierten Anhang-Ablageroot an den Preflight; er prüft also die realen
-Dateibytes und nicht nur die formal vollständigen Datenbankfelder. Der
-HTTP-Integrationstest verändert unmittelbar vor diesem POST ein Byte eines
-Pflichtanhangs bei gleicher Dateigröße. Erwartet werden HTTP 409 und der
-Blocker „Anhang-Integritätsfehler“; Status und Endzeit der Schicht sowie
-Status und Ablösezeit aller Funktionsbesetzungen müssen exakt unverändert
-bleiben.
+Historische formale Dienstschichten oder Besetzungen werden beim
+Einsatzabschluss nicht als Blocker behandelt. Der produktive Schließ-POST
+übergibt weiterhin ausdrücklich den konfigurierten Anhang-Ablageroot an den
+Preflight; er prüft also die realen Dateibytes und nicht nur die formal
+vollständigen Datenbankfelder. Der HTTP-Integrationstest verändert unmittelbar
+vor diesem POST ein Byte eines Pflichtanhangs bei gleicher Dateigröße.
+Erwartet werden HTTP 409 und der Blocker „Anhang-Integritätsfehler“.
 
 Für jeden Einsatz wird ein frühestes Aufbewahrungsende von mindestens zehn
 Jahren ab formalem Abschluss gespeichert. Migration 110 verlängert auch
@@ -462,87 +417,43 @@ längere bestehende Frist zu verkürzen. Eine rechtliche beziehungsweise
 fachliche Aufbewahrungssperre kann das Löschen darüber hinaus unterbinden.
 eStab löscht Einsatzfachdaten nicht automatisch beim Erreichen dieses Datums.
 
-## Dienstbesetzung und Funktionskombination
+## Feste Kontofunktion und optionale Zugangsschichten
 
-Das Benutzerkonto bezeichnet die Person; die einsatz- und schichtbezogene
-Dienstbesetzung bezeichnet die ausgeübte Funktion. Beginn, persönliche
-Annahme, Ende, personeller Nachfolger und Bemerkung werden nachvollziehbar
-gespeichert. Ein ungesperrtes Konto darf bereits offline für eine geplante
-Schicht eingeteilt werden. In der Weboberfläche verlangt die persönliche
-Annahme eine gültige Anmeldung und ein ungesperrtes Konto. Die gespeicherte
-Annahme bleibt nach einer Abmeldung fachlich gültig; weder der widerrufbare
-Sitzungsmarker `nv_benutzer.aktiv` noch der 15-Minuten-Präsenzzustand sind
-fachliche Gültigkeitsmerkmale. Ein gesperrtes Konto
-erfüllt dagegen keine Pflichtbesetzung für Aktivierung oder Übergabe.
+Das persönliche Benutzerkonto trägt genau eine feste Funktion. Die Rolle wird
+serverseitig aus dieser Funktion und der Empfängermatrix abgeleitet. Diese
+beiden Werte sind die alleinige Quelle der Fachrechte; eine Sitzung kann nicht
+zwischen Funktions-Hüten wechseln. Organisatorische Funktionskombinationen
+nach Kapitel 4.3 werden bei Bedarf durch getrennte persönliche Konten
+abgebildet. Gemeinsame oder geteilte Kennwörter bleiben unzulässig.
 
-Die Administration darf eine bereits aktive Schicht um eine bisher nicht
-besetzte Funktion erweitern. Diese Zuweisung ist zunächst nur ein Angebot und
-wird erst wirksam, wenn die betroffene Person sie unter ihrem eigenen Konto
-annimmt. Die persönliche Annahme wird atomar als neue ETB-Zeile protokolliert;
-für LdF oder A/W entsteht zusätzlich eine TBB-Personalzeile. A/W darf zur
-personellen Aufstockung mehrfach besetzt sein.
-Eine ETB-Ergänzung, die eine angenommene ETB- oder S2-Besetzung als bestimmten
-Schreiber verdrängen würde, ist in der aktiven Schicht unzulässig. Die
-Anwendung sperrt bereits die neue Zuweisung. Die spätere Annahme einer noch aus
-der Planung stammenden ETB-Zuweisung sperren Anwendung und Datenbank-Trigger
-unabhängig voneinander. Die ETB-Führung darf nur über eine dokumentierte und
-bestätigte Schichtübergabe wechseln.
-Jede andere Funktion darf innerhalb derselben aktiven Schicht nur einmal
-vorkommen und nicht über die Erweiterung ausgetauscht werden; ein
-Personenwechsel erfolgt über die geordnete Schichtübergabe.
+Operative Lese- und Schreibvorgänge verlangen eine gültige Kontositzung, ein
+ungesperrtes Konto, eine fachlich passende feste Funktion/Rolle und einen
+aktiven Einsatz. Eine aktive Dienst- oder Zugangsschicht wird nicht verlangt.
+Unbekannte neue Schreibendpunkte fallen standardmäßig ebenfalls unter diese
+Einsatz- und Kontogrenze.
 
-Eine Übergabe ist bewusst zweistufig und auf beiden Seiten persönlich. Eine
-angemeldete Person muss dafür exakt eine eigene angenommene Besetzung der
-aktiven Schicht ausgewählt haben und initiiert die Übergabe mit einer
-Zusammenfassung. Dadurch wird noch keine Schicht umgeschaltet. Erst ein
-persönlich angemeldetes Konto mit angenommener Funktion in der
-Nachfolgeschicht bestätigt die Übernahme. Dann werden die Schichten atomar
-gewechselt und jede tatsächlich abgelöste Besetzung mit einer angenommenen
-Besetzung derselben Funktion und Rolle in der Nachfolgeschicht verknüpft, auch
-wenn eine andere Person übernimmt. Eine fehlerhafte offene Anforderung kann
-nur mit Pflichtgrund storniert werden; Initiierung, Stornierung oder
-Bestätigung bleiben mit Besetzungsbezug, Akteur und Zeitpunkt erhalten.
+Die Administration kann optional einsatzbezogene Zugangsschichten anlegen und
+Konten zuordnen. Ein unzugeordnetes Konto bleibt zugelassen. Bei mehreren
+Zuordnungen genügt eine aktive Gruppe (OR-Semantik). Das Aktivieren einer
+Gruppe erzeugt keine Sitzung; das Deaktivieren widerruft die Sitzungen der
+betroffenen Konten, sofern keine weitere aktive Zuordnung verbleibt.
+Zugangsschichten verändern weder Funktion noch Rolle und können keine
+Fachrechte verleihen. Die dauerhafte manuelle Kontosperre ist unabhängig und
+hat stets Vorrang.
 
-Eine Person kann mehrere ausdrücklich zugewiesene Funktionen wahrnehmen und
-in der Oberfläche zwischen diesen „Hüten“ wechseln. Privilegierte S6- und
-LdF-Aktionen sowie alle operativen Lese- und Schreibvorgänge prüfen nicht nur
-das Konto, sondern die aktuell ausgewählte, persönlich angenommene
-Besetzungs-ID. Jeder Schreibpfad bindet Konto, Funktion und Rolle an exakt
-diese ID und validiert sie gegen aktiven Einsatz und aktive Schicht erneut;
-eine fremde, abgelaufene oder nur funktionsgleiche Besetzung genügt nicht.
-Eine freie Auswahl nicht zugewiesener Rollen ist ausgeschlossen. Ohne aktive
-Schicht oder ohne zum Konto passende angenommene Funktion sind operative
-Lese- und Schreibvorgänge gesperrt. Dasselbe gilt bereits ohne aktiven Einsatz;
-unbekannte neue Schreibendpunkte fallen standardmäßig ebenfalls unter diese
-Sperre.
-
-Vor der Auswahl ist nur der eng begrenzte Führungsstellen-Bootstrap zulässig:
-Er zeigt Einsatz-/Schichtgrunddaten und ausschließlich eigene Besetzungen und
-ermöglicht deren persönliche Annahme, eine persönliche Übergabebestätigung
-sowie die Auswahl einer eigenen aktiven, angenommenen Besetzungs-ID. Er
-gewährt noch keinen Zugriff auf ETB, TBB, Nachrichten, Anhänge,
-Telekommunikationspläne oder Melderaufträge. Öffentliche und separat
-administrativ geschützte Bereiche behalten ihre eigenen Zugriffsgrenzen.
-
-Die in Kapitel 4.3 vorgesehenen Kombinationen werden semantisch unterstützt:
-S1/S4, S2/S3 sowie ETB/Sichter. Der Integrationsnachweis wechselt mit realen
-PHP-Sitzungen ein Konto von S2 nach S3 und ein zweites von Si nach ETB.
-Für den zusätzlichen S3-Hut werden die sechs benötigten
-Nachrichten-/Status-/Kategorietabellen vor dem Sitzungswechsel idempotent und
-unter Advisory Lock bereitgestellt; anschließend werden Gesprächsvermerk,
-Gelesen-/Erledigt-Zustände und Kategorien tatsächlich geschrieben. Der
-ETB-Hut benötigt diese Legacy-Tabellen nicht und erhält sie deshalb nicht.
-Eine Kombination hebt keine Einzelpflicht auf. Insbesondere bleiben
-S2-Rotkopie, ETB-Verantwortung, Sichtergrenze und serverseitige
-Identitätsbindung getrennt erhalten.
+Die vorhandenen Tabellen für formale Dienstschichten, Dienstbesetzungen und
+Übergaben bleiben als historische, exportierbare Evidenz bestehen. Sie werden
+nicht als aktuelle Autorisierungsquelle verwendet und blockieren weder
+operative Eingaben noch den formalen Einsatzabschluss.
 
 ## S6-Kommunikationsplanung
 
 Kommunikationspläne sind einsatzgebunden und versioniert. Plan-ID, Einsatz,
 Version, Erstellungszeit und Ersteller sind ab Anlage unveränderlich. Nur der
 Inhalt eines Entwurfs darf bearbeitet werden; Freigabefelder bleiben bis zur
-Veröffentlichung leer. Die Veröffentlichung verlangt die aktuell ausgewählte,
-aktive und ungesperrte S6-Besetzung sowie mindestens einen Planweg. Eine
+Veröffentlichung leer. Die Veröffentlichung verlangt ein aktives,
+ungesperrtes Konto mit der festen Funktion `S6` sowie mindestens einen
+Planweg. Eine
 veröffentlichte Version bleibt vollständig unverändert; Änderungen erzeugen
 einen Entwurf beziehungsweise eine Folgeversion. Der Plan weist mindestens
 aus:
@@ -556,7 +467,7 @@ aus:
 - Bemerkung und Betriebsleitung,
 - erstellende, freigebende und veröffentlichende Identität.
 
-Nur die dafür berechtigte S6-Besetzung darf Planinhalte pflegen. Andere
+Nur ein dafür berechtigtes S6-Konto darf Planinhalte pflegen. Andere
 Funktionen erhalten die freigegebene Fassung lesend.
 
 ## Melderlauf
@@ -571,7 +482,7 @@ nachvollziehbar neu disponieren. Nach der Übernahme ist kein stiller Abbruch
 mehr zulässig: Zustellung, ausdrückliche Entscheidung über eine
 Rücknachricht und Rückkehr werden vom konkret beauftragten Melder persönlich
 bestätigt. Den abschließenden Eingang der Rückmeldung bei der FmZt bestätigt
-ausschließlich die ausgewählte aktive LdF-Besetzung. Ziel und jeder bereits
+ausschließlich ein aktives, ungesperrtes Konto `LdF/Fernmelder`. Ziel und jeder bereits
 gesetzte Zeit-, Empfänger- oder Rücknachrichtenbeleg sind bei allen späteren
 Statusübergängen unveränderlich. Ein bereits vollständig gemeldeter Lauf
 bleibt endgültig und kann nicht erneut disponiert werden.
@@ -581,8 +492,10 @@ bleibt endgültig und kann nicht erneut disponiert werden.
 Der PDF-Einsatzexport verwendet für jede Nachricht denselben
 Vierfach-Vordruckrenderer wie „Generierte Vordrucke“. Seine neun wählbaren
 Abschnitte sind ETB, TBB, Nachrichtenvordrucke, Anhänge,
-Nachrichtenereignisse, Dienstbetrieb, S6-Fernmeldepläne, Melderläufe und
-Betriebsereignisse. Sie werden einsatzgebunden aus einem konsistenten
+Nachrichtenereignisse, Dienstorganisation, S6-Fernmeldepläne, Melderläufe und
+Betriebsereignisse. Die Dienstorganisation enthält optionale
+Zugangsschichten mit aktuellen/entfernten Zuordnungen und davon getrennt den
+historischen formalen `nv_dienst*`-Legacy-Nachweis. Sie werden einsatzgebunden aus einem konsistenten
 Datenbanksnapshot ausgegeben. Offene beziehungsweise noch nicht formal
 abgeschlossene Einsätze werden im Dossier deutlich als vorläufig bezeichnet.
 Führungsstellenname, Einsatzkennung und Einsatzname erscheinen getrennt.
@@ -624,12 +537,14 @@ Bemerkung in `tbb_bemerk` bleibt fachlicher Inhalt und erscheint genau einmal
 in der Betriebsspalte. ETB-Anlagen werden im Fb Fü 2 mit ihrer automatisch
 gebildeten Nummer und im Anlagenverzeichnis zusätzlich mit dem getrennten
 Ablagekennzeichen ausgewiesen. Der Export bietet für ETB/TBB entweder das
-Gesamtbuch oder genau eine Dienstschicht des ausgewählten Einsatzes an. Die
-Schichtwahl wird im konsistenten Datenbanksnapshot nochmals gegen den Einsatz
-geprüft und filtert ausschließlich ETB und TBB über deren gespeicherte
-Schicht-ID. Alle anderen ausgewählten Dossierabschnitte bleiben einsatzweit.
+Gesamtbuch oder für historischen Bestand genau eine frühere formale
+Dienstschicht des ausgewählten Einsatzes an. Dieser Legacy-Filter wird im
+konsistenten Datenbanksnapshot nochmals gegen den Einsatz geprüft und filtert
+ausschließlich ETB und TBB über deren gespeicherte alte Schicht-ID. Neue Zeilen
+mit `NULL`-Provenienz und optionale Zugangsschichten gehören nicht zu diesem
+Filter. Alle anderen ausgewählten Dossierabschnitte bleiben einsatzweit.
 Deckblatt und einsatzgebundener `pdf_export`-Audit nennen den gewählten Umfang
-samt Schichtmetadaten. Das Gesamtbuch enthält auch historischen Bestand,
+samt historischen Schichtmetadaten. Das Gesamtbuch enthält auch Bestand,
 dessen Schichtprovenienz mangels Beleg `NULL` geblieben ist.
 
 Die maschinenlesbaren Exporte und Backups bleiben zusätzlich erforderlich:
@@ -650,49 +565,48 @@ sein:
 3. Vollständiger Eingang mit Rufnamenübersetzung und Empfängerzuordnung.
 4. Manipulationsversuche gegen Identitätsvermerke, Statusfolge,
    Rollenrechte und Einsatzgrenze.
-5. Positive und negative Lesetests mit mehreren ausgewählten Funktions-Hüten
-   für Nachricht, Vordruck, verknüpften und freien Anhang, Meldungsübersicht,
+5. Positive und negative Lesetests mit getrennten festen Funktionskonten für
+   Nachricht, Vordruck, verknüpften und freien Anhang, Meldungsübersicht,
    Nachweisung, Kategorien sowie ETB/TBB.
-6. Pflichtkopf, exakt zwei vorab angelegte Köpfe `ETB:1`/`TTB:1` und atomare
-   ETB-/TBB-Eröffnung bei der ersten Schicht einschließlich des ausdrücklich
-   ausgeschriebenen Einsatzbeginns im ersten ETB-Text sowie genau eine
-   schreibende Besetzung je Buch prüfen.
+6. Pflichtkopf, exakt zwei vorab angelegte Köpfe `ETB:1`/`TTB:1` und die erste
+   Buchnummer ohne Schichtvoraussetzung prüfen; ETB-Schreibrecht für
+   `ETB/Stab` und `S2/Stab`, TTB-Schreibrecht für `A/W/Fernmelder` positiv und
+   für andere Funktionen negativ nachweisen.
 7. ETB-Kennzeichen, alle fünf TBB-Inhaltsbereiche, automatischen
    TBB-Typ `nachricht`, LdF-Nachtrag als direkte Korrektur und unveränderte
    ursprüngliche lokale TBB-Nummer auf dem Vordruck prüfen; zusätzlich leere
    und kombinierte ETB-Suche sowie optionale Anlage mit automatisch
    abgeleiteter Nummer, getrenntem Ablagekennzeichen und gesperrter
    Mehrfachzuordnung nachweisen.
-8. Unveränderbarkeit beider Bücher, direkte Korrekturbeziehung und atomare
-   beidseitig persönliche Schichtübergabe mit echten Statusbesetzungen und
-   letzter lokaler Nummer prüfen; in einer aktiven Schicht eine neue Funktion
-   persönlich annehmen, ihren ETB-/gegebenenfalls TBB-Nachweis prüfen, A/W
-   aufstocken und den Austausch einer anderen bereits besetzten Funktion
-   abweisen.
+8. Unveränderbarkeit beider Bücher, direkte Korrekturbeziehung und nullable
+   Legacy-Schicht-/Schreiberprovenienz prüfen; alte belegte Schichtwerte müssen
+   unverändert exportierbar bleiben.
 9. Veröffentlichung einer S6-Planfolge und vollständiger Melderlauf.
-10. Abschluss-Preflight, automatische ETB-/TBB-Abschlusszeilen,
-   Abweisung eines Abschlusses vor erster Schicht/Bucheröffnung,
-   Schreibsperre, zehnjährige Mindestfrist und Aufbewahrungssperre prüfen.
+10. Abschluss-Preflight, automatische ETB-/TBB-Abschlusszeilen, erfolgreichen
+    Abschluss ohne frühere Schicht/Bucheröffnung, Schreibsperre, zehnjährige
+    Mindestfrist und Aufbewahrungssperre prüfen.
 11. PDF-Dossier mit allen neun Abschnitten samt Fb Fü 2/Fb Fü 44,
    ETB-Erfassungs-/TBB-Vorgangszeit, buchlokalen Seitenzählern,
    Fortsetzungsseiten, Unterschriftslinien, gestrichenem Restbereich nur beim
    formalen Abschluss, ETB-Anlagennummer im Formblatt/Anlagenverzeichnis,
    genau einmal ausgegebener `tbb_bemerk` und verifizierten beziehungsweise
    klar als Legacy gekennzeichneten Anhängen sowie Backup-/Restore-Roundtrip.
-   Gesamtbuch und eine einzelne Dienstschicht getrennt erzeugen, die
-   ausschließliche ETB-/TTB-Filterung sowie Umfang auf Deckblatt und im Audit
-   prüfen; die übrigen Dossiersektionen müssen einsatzweit bleiben.
+   Gesamtbuch und bei belegter Legacy-Provenienz eine frühere formale
+   Dienstschicht getrennt erzeugen, die ausschließliche ETB-/TTB-Filterung
+   sowie Umfang auf Deckblatt und im Audit prüfen; neue `NULL`-Zeilen und die
+   übrigen Dossiersektionen müssen einsatzweit im Gesamtbuch bleiben.
 12. Browserabnahme aller eingesetzten Rollen in der vorgesehenen
     Zielumgebung.
-13. Abweisung sämtlicher operativer Lese- und Schreibpfade ohne ausgewählte
-    aktive Dienstfunktion; während eines übernommenen Melderlaufs zusätzlich
-    Abweisung aller fremden operativen Schreibpfade.
+13. Abweisung sämtlicher operativer Schreibpfade ohne aktiven Einsatz oder mit
+    fachlich unpassender fester Kontofunktion; dieselben Vorgänge ohne aktive
+    Schicht müssen zulässig sein. Während eines übernommenen Melderlaufs
+    zusätzlich alle fremden operativen Schreibpfade abweisen.
 14. Nicht verfügbarer Beförderungsweg mit begründeter Rückgabe an LdF,
     Neudisposition und unverändertem historischen Nachweis.
-15. Pre-Hat-Prüfung: ausschließlich Führungsstellen-Grunddaten, eigene
-    Annahme/Übergabebestätigung und Auswahl einer eigenen Besetzungs-ID sind
-    möglich; fremde oder abgelaufene IDs sowie Plan-, Melder-, Nachrichten-,
-    Anhangs- und Logbuchzugriffe bleiben gesperrt.
+15. Optionale Zugangsschichten prüfen: unzugeordnetes Konto zulassen,
+    Mehrfachzuordnung per OR auswerten, Deaktivierung mit Sitzungswiderruf und
+    Aktivierung ohne automatische Anmeldung nachweisen; Funktion und Rolle
+    dürfen sich dabei nie ändern, eine manuelle Sperre muss Vorrang behalten.
 16. Führungsstellennamen getrennt von Einsatzname, Bedarfsträger und
     Einsatzleitung anlegen; historischen Fehlwert einmalig bestätigen,
     weitere Eingaben vorher und Änderungen nach dem ersten operativen
