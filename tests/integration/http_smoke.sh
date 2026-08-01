@@ -598,6 +598,18 @@ recipient_matrix_revision_from_body() {
     printf '%s' "$revision"
 }
 
+message_attachment_request_token_from_body() {
+    request_token=$(sed -n \
+        's/.*name="message_attachment_request_token" value="\([a-f0-9][a-f0-9]*\)".*/\1/p' \
+        "$body" | head -n 1)
+    if ! printf '%s' "$request_token" | grep -Eq '^[a-f0-9]{64}$'; then
+        printf 'HTTP smoke: direct attachment request token missing\n' >&2
+        sed -n '1,100p' "$body" >&2
+        exit 1
+    fi
+    printf '%s' "$request_token"
+}
+
 shift_confirmation_version_from_body() {
     version=$(sed -n \
         's/.*name="expected_confirmation_version"[[:space:]]*value="\([a-f0-9][a-f0-9]*\)".*/\1/p' \
@@ -1514,6 +1526,9 @@ assert_body_absent 'name="16_gncopy"'
 # field: only LdF translates the received callsign into that value.
 aw_workflow_csrf_token=$(csrf_from_body)
 aw_recipient_matrix_revision=$(recipient_matrix_revision_from_body)
+aw_attachment_request_token=$(
+    message_attachment_request_token_from_body
+)
 aw_content_marker="AW_ATTACHMENT_FORM_STATE_$$"
 aw_note_marker="AW_ATTACHMENT_NOTE_STATE_$$"
 aw_counterpart_marker='AW-GEGENSTELLE-STATE'
@@ -1535,6 +1550,164 @@ if [ "$aw_upload_size" -le 5242880 ] || [ "$aw_upload_size" -ge 20971520 ]; then
 fi
 aw_upload_md5=$(openssl dgst -md5 -r "$aw_upload_file" | awk '{print $1}')
 
+# The primary workflow now uploads directly inside the Nachrichtenvordruck.
+# It must retain every unsaved field, automatically bind the server-generated
+# reference and show authorized metadata without visiting anhang.php.
+direct_aw_upload_file=$repo_root/4fach/design/HS/null.jpg
+direct_aw_upload_md5=$(openssl dgst -md5 -r "$direct_aw_upload_file" |
+    awk '{print $1}')
+direct_aw_comment='Direkt & <img src=x onerror=alert(1)>'
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --form "csrf_token=$aw_workflow_csrf_token" \
+    --form \
+        "recipient_matrix_revision=$aw_recipient_matrix_revision" \
+    --form \
+        "message_attachment_request_token=$aw_attachment_request_token" \
+    --form 'message_attachment_upload_x=1' \
+    --form "message_attachment_comment=$direct_aw_comment" \
+    --form 'task=FM-Eingang' \
+    --form '01_medium=Fu' \
+    --form "01_datum=$aw_received_at" \
+    --form "05_gegenstelle=$aw_counterpart_marker" \
+    --form '06_befwegausw=' \
+    --form '07_durchspruch=S' \
+    --form "08_befhinweis=$aw_transport_marker" \
+    --form '08_befhinwausw=Fax' \
+    --form '09_vorrangstufe=sss' \
+    --form "10_anschrift=$aw_address_marker" \
+    --form "11_rufnummer=$aw_phone_marker" \
+    --form '11_gesprnotiz=' \
+    --form '12_anhang=' \
+    --form "12_betreff=$aw_subject_marker" \
+    --form "12_inhalt=$aw_content_marker" \
+    --form "12_abfzeit=$aw_written_at" \
+    --form "14_zeichen=$aw_author_marker" \
+    --form '14_funktion=A/W' \
+    --form "17_vermerke=$aw_note_marker" \
+    --form \
+        "message_attachment_upload=@$direct_aw_upload_file;type=image/jpeg;filename=Direktes-Lagebild.JPEG" \
+    "$base_url/4fach/mainindex.php"
+assert_body 'name="task" value="FM-Eingang"'
+assert_body 'data-estab-message-attachments'
+assert_body 'data-estab-attachment-count="1"'
+assert_body '>1 Anlage</a>'
+assert_body 'Direktes-Lagebild.JPEG'
+assert_body 'Direkt &amp; &lt;img src=x onerror=alert(1)&gt;'
+assert_body_absent '<img src=x onerror=alert(1)>'
+assert_body "$aw_content_marker"
+assert_body "$aw_note_marker"
+assert_body 'showpic.php?file='
+assert_body 'Im Browser ansehen'
+assert_body_absent 'Liste der verfügbaren Dateien'
+direct_aw_reference=$(sed -n \
+    's/.*id="f_12_anhang" type="hidden" name="12_anhang" value="\([A-Za-z0-9_.;-][A-Za-z0-9_.;-]*\)".*/\1/p' \
+    "$body" | head -n 1)
+if ! printf '%s' "$direct_aw_reference" |
+    grep -Eq '^[A-Za-z]{2}[0-9]{4,}\.jpeg;$'; then
+    printf 'HTTP smoke: direct message attachment reference missing\n' >&2
+    exit 1
+fi
+direct_aw_attachment=${direct_aw_reference%;}
+direct_aw_reservation=${direct_aw_attachment%.*}
+assert_uploaded_attachment \
+    "$direct_aw_reservation" "$legacy_registration_code" jpeg \
+    "$direct_aw_upload_md5"
+
+# Detaching changes only this unsaved message reference. The evidence file
+# remains available in the incident archive and no message text is mutated.
+aw_workflow_csrf_token=$(csrf_from_body)
+aw_recipient_matrix_revision=$(recipient_matrix_revision_from_body)
+aw_attachment_request_token=$(
+    message_attachment_request_token_from_body
+)
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$aw_workflow_csrf_token" \
+    --data-urlencode \
+        "recipient_matrix_revision=$aw_recipient_matrix_revision" \
+    --data-urlencode \
+        "message_attachment_request_token=$aw_attachment_request_token" \
+    --data-urlencode \
+        "message_attachment_remove_x=$direct_aw_attachment" \
+    --data-urlencode 'task=FM-Eingang' \
+    --data-urlencode '01_medium=Fu' \
+    --data-urlencode "01_datum=$aw_received_at" \
+    --data-urlencode "05_gegenstelle=$aw_counterpart_marker" \
+    --data-urlencode '06_befwegausw=' \
+    --data-urlencode '07_durchspruch=S' \
+    --data-urlencode "08_befhinweis=$aw_transport_marker" \
+    --data-urlencode '08_befhinwausw=Fax' \
+    --data-urlencode '09_vorrangstufe=sss' \
+    --data-urlencode "10_anschrift=$aw_address_marker" \
+    --data-urlencode "11_rufnummer=$aw_phone_marker" \
+    --data-urlencode '11_gesprnotiz=' \
+    --data-urlencode "12_anhang=$direct_aw_reference" \
+    --data-urlencode "12_betreff=$aw_subject_marker" \
+    --data-urlencode "12_inhalt=$aw_content_marker" \
+    --data-urlencode "12_abfzeit=$aw_written_at" \
+    --data-urlencode "14_zeichen=$aw_author_marker" \
+    --data-urlencode '14_funktion=A/W' \
+    --data-urlencode "17_vermerke=$aw_note_marker" \
+    "$base_url/4fach/mainindex.php"
+assert_body 'data-estab-attachment-count="0"'
+assert_body 'Noch keine Anlage hinzugefügt.'
+assert_body 'Die archivierte Datei wurde nicht gelöscht.'
+assert_body 'id="f_12_anhang" type="hidden" name="12_anhang" value=""'
+assert_body "$aw_content_marker"
+aw_workflow_csrf_token=$(csrf_from_body)
+aw_recipient_matrix_revision=$(recipient_matrix_revision_from_body)
+
+# A stale legacy reference whose archive row is missing must not trap an
+# otherwise authorised correction forever. Removing it validates the complete
+# resulting list, which is empty here, without pretending the missing file was
+# readable.
+aw_attachment_request_token=$(
+    message_attachment_request_token_from_body
+)
+orphaned_aw_attachment='ZZ999999.pdf'
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$aw_workflow_csrf_token" \
+    --data-urlencode \
+        "recipient_matrix_revision=$aw_recipient_matrix_revision" \
+    --data-urlencode \
+        "message_attachment_request_token=$aw_attachment_request_token" \
+    --data-urlencode \
+        "message_attachment_remove_x=$orphaned_aw_attachment" \
+    --data-urlencode 'task=FM-Eingang' \
+    --data-urlencode '01_medium=Fu' \
+    --data-urlencode "01_datum=$aw_received_at" \
+    --data-urlencode "05_gegenstelle=$aw_counterpart_marker" \
+    --data-urlencode '06_befwegausw=' \
+    --data-urlencode '07_durchspruch=S' \
+    --data-urlencode "08_befhinweis=$aw_transport_marker" \
+    --data-urlencode '08_befhinwausw=Fax' \
+    --data-urlencode '09_vorrangstufe=sss' \
+    --data-urlencode "10_anschrift=$aw_address_marker" \
+    --data-urlencode "11_rufnummer=$aw_phone_marker" \
+    --data-urlencode '11_gesprnotiz=' \
+    --data-urlencode "12_anhang=$orphaned_aw_attachment;" \
+    --data-urlencode "12_betreff=$aw_subject_marker" \
+    --data-urlencode "12_inhalt=$aw_content_marker" \
+    --data-urlencode "12_abfzeit=$aw_written_at" \
+    --data-urlencode "14_zeichen=$aw_author_marker" \
+    --data-urlencode '14_funktion=A/W' \
+    --data-urlencode "17_vermerke=$aw_note_marker" \
+    "$base_url/4fach/mainindex.php"
+assert_body 'data-estab-attachment-count="0"'
+assert_body 'Die archivierte Datei wurde nicht gelöscht.'
+assert_body_absent "$orphaned_aw_attachment"
+aw_workflow_csrf_token=$(csrf_from_body)
+aw_recipient_matrix_revision=$(recipient_matrix_revision_from_body)
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    "$base_url/4fach/download.php?area=attachment&file=$direct_aw_attachment"
+if ! cmp -s "$direct_aw_upload_file" "$body"; then
+    printf 'HTTP smoke: detached direct attachment was deleted or changed\n' >&2
+    exit 1
+fi
+
+# Continue to prove the backward-compatible archive selection flow as well.
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$aw_workflow_csrf_token" \
@@ -1643,6 +1816,41 @@ if ! grep -Eiq '^Content-Type: image/jpeg' "$headers"; then
     printf 'HTTP smoke: A/W JPEG download MIME differs\n' >&2
     exit 1
 fi
+if ! grep -Eiq '^Content-Disposition: attachment;' "$headers"; then
+    printf 'HTTP smoke: normal JPEG download unexpectedly became inline\n' >&2
+    exit 1
+fi
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --dump-header "$headers" \
+    --get \
+    --data-urlencode 'area=attachment' \
+    --data-urlencode "file=$aw_stored_attachment" \
+    --data-urlencode 'view=inline' \
+    "$base_url/4fach/download.php"
+if ! cmp -s "$aw_upload_file" "$body"; then
+    printf 'HTTP smoke: inline JPEG attachment content differs\n' >&2
+    exit 1
+fi
+for header_pattern in \
+    '^Content-Type: image/jpeg' \
+    '^Content-Disposition: inline;' \
+    '^Cache-Control: private, no-store' \
+    '^X-Content-Type-Options: nosniff' \
+    '^Content-Security-Policy: sandbox'
+do
+    if ! grep -Eiq "$header_pattern" "$headers"; then
+        printf 'HTTP smoke: inline JPEG header missing: %s\n' \
+            "$header_pattern" >&2
+        exit 1
+    fi
+done
+assert_status 400 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --get \
+    --data-urlencode 'area=attachment' \
+    --data-urlencode "file=$aw_stored_attachment" \
+    --data-urlencode 'view=preview' \
+    "$base_url/4fach/download.php"
+assert_body 'Ungültige Dateianforderung'
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --dump-header "$headers" \
     "$base_url/4fach/showpic.php?file=$aw_stored_attachment&width=160&height=80"
@@ -1656,9 +1864,9 @@ if [ "$aw_preview_dimensions" != '0000005000000050' ]; then
     exit 1
 fi
 
-# PHP rejects files above upload_max_filesize before application MIME
-# validation. The user receives the configured limit and the reservation still
-# has to be released.
+# The 20-MiB application boundary rejects an otherwise fully transported file
+# before MIME persistence. The user receives the configured limit and the
+# reservation still has to be released.
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$aw_attachment_menu_csrf_token" \
@@ -1691,7 +1899,7 @@ dd if=/dev/zero bs=1048576 count=21 >>"$oversized_jpeg_file" 2>/dev/null
 oversized_jpeg_size=$(wc -c <"$oversized_jpeg_file" | tr -d '[:space:]')
 if [ "$oversized_jpeg_size" -le 20971520 ] ||
     [ "$oversized_jpeg_size" -ge 25165824 ]; then
-    printf 'HTTP smoke: generated oversized JPEG is outside the PHP test window\n' >&2
+    printf 'HTTP smoke: generated oversized JPEG is outside the application-limit test window\n' >&2
     exit 1
 fi
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
@@ -1972,6 +2180,9 @@ if ! printf '%s' "$workflow_csrf_token" | grep -Eq '^[a-f0-9]{64}$'; then
     exit 1
 fi
 workflow_recipient_matrix_revision=$(recipient_matrix_revision_from_body)
+workflow_attachment_request_token=$(
+    message_attachment_request_token_from_body
+)
 
 if [ -z "$workflow_marker" ]; then
     workflow_marker="ESTAB_HTTP_WORKFLOW_$(date +%s)_$$"
@@ -1981,6 +2192,360 @@ workflow_subject="HTTP-Anhang ${workflow_marker}"
 upload_file=$work_dir/workflow.txt
 printf '%s\n' "$workflow_marker" > "$upload_file"
 tactical_time=$(date '+%H%M')
+
+# If ordinary message validation rejects a submit after the bytes were safely
+# archived, replaying the same browser POST must recover that exact reference
+# at the form. It may neither upload a duplicate nor silently persist a
+# message with invalid fields.
+invalid_direct_staff_marker="${workflow_marker}_INVALID_ATTACHMENT_SUBMIT"
+invalid_direct_staff_comment="Ungültiger Direktentwurf ${workflow_marker}"
+invalid_direct_original_token=$workflow_attachment_request_token
+invalid_direct_staff_before=$(
+    printf "SELECT COUNT(*) FROM nv_anhang WHERE BINARY comment = BINARY '%s' AND BINARY kuerzel = BINARY '%s';\n" \
+        "$invalid_direct_staff_comment" "$test_code" | db_sql
+)
+submit_invalid_direct_staff_message() {
+    include_file=${1:-yes}
+    set -- \
+        --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        --request POST \
+        --form "csrf_token=$workflow_csrf_token" \
+        --form \
+            "recipient_matrix_revision=$workflow_recipient_matrix_revision" \
+        --form \
+            "message_attachment_request_token=$workflow_attachment_request_token" \
+        --form 'absenden_x=1' \
+        --form 'task=Stab_schreiben' \
+        --form '02_zeit=' \
+        --form '07_durchspruch=D' \
+        --form '08_befhinweis=' \
+        --form '08_befhinwausw=' \
+        --form '09_vorrangstufe=' \
+        --form '10_anschrift=' \
+        --form "11_rufnummer=$workflow_phone" \
+        --form '11_gesprnotiz=f' \
+        --form '12_anhang=' \
+        --form '12_betreff=Ungültiger Direktentwurf' \
+        --form "12_inhalt=$invalid_direct_staff_marker" \
+        --form "12_abfzeit=$tactical_time" \
+        --form '13_abseinheit=HTTP-Direktintegration' \
+        --form "14_zeichen=$test_code" \
+        --form "14_funktion=$test_function" \
+        --form '17_vermerke=' \
+        --form "message_attachment_comment=$invalid_direct_staff_comment"
+    if [ "$include_file" = yes ]; then
+        set -- "$@" --form \
+            "message_attachment_upload=@$direct_staff_upload_file;type=image/jpeg;filename=Unfertiger-Entwurf.JPEG"
+    fi
+    assert_status 200 "$@" "$base_url/4fach/mainindex.php"
+}
+
+# This fixture is also used by the successful primary-flow proof below.
+direct_staff_upload_file=$repo_root/4fach/design/HS/null.jpg
+submit_invalid_direct_staff_message yes
+assert_body "$invalid_direct_staff_marker"
+assert_body 'data-estab-attachment-count="1"'
+assert_body 'Unfertiger-Entwurf.JPEG'
+invalid_direct_reference=$(sed -n \
+    's/.*id="f_12_anhang" type="hidden" name="12_anhang" value="\([A-Za-z0-9_.;-][A-Za-z0-9_.;-]*\)".*/\1/p' \
+    "$body" | head -n 1)
+if ! printf '%s' "$invalid_direct_reference" |
+    grep -Eq '^[A-Za-z]{2}[0-9]{4,}\.jpeg;$'; then
+    printf 'HTTP smoke: rejected direct submit lost its attachment reference\n' >&2
+    exit 1
+fi
+invalid_direct_attachment=${invalid_direct_reference%;}
+
+submit_invalid_direct_staff_message no
+assert_body "$invalid_direct_staff_marker"
+assert_body 'Die Anlage wurde bereits sicher gespeichert'
+assert_body 'Prüfen Sie die Meldungsliste'
+assert_body "data-estab-message-attachment=\"$invalid_direct_attachment\""
+assert_body "value=\"$invalid_direct_reference\""
+invalid_direct_staff_after=$(
+    printf "SELECT COUNT(*) FROM nv_anhang WHERE BINARY comment = BINARY '%s' AND BINARY kuerzel = BINARY '%s';\n" \
+        "$invalid_direct_staff_comment" "$test_code" | db_sql
+)
+invalid_direct_message_count=$(
+    printf "SELECT COUNT(*) FROM nv_nachrichten WHERE BINARY \`12_inhalt\` = BINARY '%s';\n" \
+        "$invalid_direct_staff_marker" | db_sql
+)
+if [ "$invalid_direct_staff_after" != \
+        "$((invalid_direct_staff_before + 1))" ] ||
+    [ "$invalid_direct_message_count" != 0 ]; then
+    printf 'HTTP smoke: rejected direct-submit replay duplicated or persisted data\n' >&2
+    exit 1
+fi
+
+# Correct the rejected draft without resending the file. Repeating that exact
+# no-file POST with its completed token must remain an idempotent redirect.
+# Replaying the original, still ambiguous upload token afterwards must only
+# recover the draft with a warning; an attachment reused by another message is
+# never treated as proof that this POST committed.
+workflow_csrf_token=$(csrf_from_body)
+workflow_recipient_matrix_revision=$(recipient_matrix_revision_from_body)
+workflow_attachment_request_token=$(
+    message_attachment_request_token_from_body
+)
+submit_recovered_direct_staff_message() {
+    expected_status=$1
+    request_token=$2
+    assert_status "$expected_status" \
+        --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        --request POST \
+        --form "csrf_token=$workflow_csrf_token" \
+        --form \
+            "recipient_matrix_revision=$workflow_recipient_matrix_revision" \
+        --form "message_attachment_request_token=$request_token" \
+        --form 'absenden_x=1' \
+        --form 'task=Stab_schreiben' \
+        --form '02_zeit=' \
+        --form '07_durchspruch=D' \
+        --form '08_befhinweis=' \
+        --form '08_befhinwausw=' \
+        --form '09_vorrangstufe=' \
+        --form '10_anschrift=HTTP-Wiederholungsziel' \
+        --form "11_rufnummer=$workflow_phone" \
+        --form '11_gesprnotiz=f' \
+        --form "12_anhang=$invalid_direct_reference" \
+        --form '12_betreff=Korrigierter Direktentwurf' \
+        --form "12_inhalt=$invalid_direct_staff_marker" \
+        --form "12_abfzeit=$tactical_time" \
+        --form '13_abseinheit=HTTP-Direktintegration' \
+        --form "14_zeichen=$test_code" \
+        --form "14_funktion=$test_function" \
+        --form '17_vermerke=' \
+        "$base_url/4fach/mainindex.php"
+}
+submit_recovered_direct_staff_message 200 \
+    "$workflow_attachment_request_token"
+submit_recovered_direct_staff_message 303 \
+    "$workflow_attachment_request_token"
+submit_recovered_direct_staff_message 200 \
+    "$invalid_direct_original_token"
+assert_body 'Prüfen Sie die Meldungsliste'
+invalid_direct_message_count=$(
+    printf "SELECT COUNT(*) FROM nv_nachrichten WHERE BINARY \`12_inhalt\` = BINARY '%s';\n" \
+        "$invalid_direct_staff_marker" | db_sql
+)
+if [ "$invalid_direct_message_count" != 1 ]; then
+    printf 'HTTP smoke: ambiguous pending-submit replay duplicated the corrected message\n' >&2
+    exit 1
+fi
+
+# Start a separate clean draft for the primary image/PDF workflow below.
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST --data-urlencode 'stab_schreiben_x=1' \
+    "$base_url/4fach/mainindex.php"
+assert_body 'name="task" value="Stab_schreiben"'
+workflow_csrf_token=$(csrf_from_body)
+workflow_recipient_matrix_revision=$(recipient_matrix_revision_from_body)
+workflow_attachment_request_token=$(
+    message_attachment_request_token_from_body
+)
+
+# Add a PDF in the same Nachrichtenvordruck before the final image-and-submit
+# action. The saved message will therefore prove both embedded browser
+# representations and a multi-attachment badge without using the old archive
+# upload page.
+direct_staff_pdf_file=$repo_root/4fbak/fpdf/ex.pdf
+direct_staff_pdf_comment="PDF ${workflow_marker}"
+direct_staff_pdf_before=$(
+    printf "SELECT COUNT(*) FROM nv_anhang WHERE BINARY comment = BINARY '%s' AND BINARY kuerzel = BINARY '%s';\n" \
+        "$direct_staff_pdf_comment" "$test_code" | db_sql
+)
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --form "csrf_token=$workflow_csrf_token" \
+    --form "recipient_matrix_revision=$workflow_recipient_matrix_revision" \
+    --form "message_attachment_request_token=$workflow_attachment_request_token" \
+    --form 'message_attachment_upload_x=1' \
+    --form 'task=Stab_schreiben' \
+    --form '07_durchspruch=D' \
+    --form '10_anschrift=HTTP-Direktempfänger' \
+    --form "11_rufnummer=$workflow_phone" \
+    --form '11_gesprnotiz=f' \
+    --form '12_anhang=' \
+    --form '12_betreff=Direkter PDF-Entwurf' \
+    --form "12_inhalt=${workflow_marker}_PDF_DRAFT" \
+    --form "12_abfzeit=$tactical_time" \
+    --form '13_abseinheit=HTTP-Direktintegration' \
+    --form "14_zeichen=$test_code" \
+    --form "14_funktion=$test_function" \
+    --form "message_attachment_comment=$direct_staff_pdf_comment" \
+    --form \
+        "message_attachment_upload=@$direct_staff_pdf_file;type=application/pdf;filename=Staff-Direkt.PDF" \
+    "$base_url/4fach/mainindex.php"
+assert_body 'Staff-Direkt.PDF'
+assert_body 'data-estab-pdf-preview'
+assert_body 'data-src="'
+direct_staff_pdf_reference=$(sed -n \
+    's/.*id="f_12_anhang" type="hidden" name="12_anhang" value="\([A-Za-z0-9_.;-][A-Za-z0-9_.;-]*\)".*/\1/p' \
+    "$body" | head -n 1)
+if ! printf '%s' "$direct_staff_pdf_reference" |
+    grep -Eq '^[A-Za-z]{2}[0-9]{4,}\.pdf;$'; then
+    printf 'HTTP smoke: direct PDF reference missing from message form\n' >&2
+    exit 1
+fi
+direct_staff_pdf_attachment=${direct_staff_pdf_reference%;}
+direct_staff_pdf_after=$(
+    printf "SELECT COUNT(*) FROM nv_anhang WHERE BINARY comment = BINARY '%s' AND BINARY kuerzel = BINARY '%s';\n" \
+        "$direct_staff_pdf_comment" "$test_code" | db_sql
+)
+if [ "$direct_staff_pdf_after" != "$((direct_staff_pdf_before + 1))" ]; then
+    printf 'HTTP smoke: direct PDF upload did not create exactly one archive row\n' >&2
+    exit 1
+fi
+workflow_csrf_token=$(csrf_from_body)
+workflow_recipient_matrix_revision=$(recipient_matrix_revision_from_body)
+workflow_attachment_request_token=$(
+    message_attachment_request_token_from_body
+)
+
+# Selecting a file and pressing the ordinary "Absenden" button is the primary
+# staff workflow. The same multipart request must archive exactly one image and
+# persist its server-generated reference with exactly one message. Replaying
+# the browser request without the non-repeatable file part models browser
+# recovery and must not duplicate either row.
+direct_staff_marker="${workflow_marker}_DIRECT_ATTACHMENT_SUBMIT"
+direct_staff_subject="Direktversand ${workflow_marker}"
+direct_staff_comment="Direkt ${workflow_marker}"
+direct_staff_upload_md5=$(
+    openssl dgst -md5 -r "$direct_staff_upload_file" | awk '{print $1}'
+)
+direct_staff_attachment_before=$(
+    printf "SELECT COUNT(*) FROM nv_anhang WHERE BINARY comment = BINARY '%s' AND BINARY kuerzel = BINARY '%s';\n" \
+        "$direct_staff_comment" "$test_code" | db_sql
+)
+submit_direct_staff_message() {
+    expected_direct_status=$1
+    include_file=${2:-yes}
+    set -- \
+        --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        --request POST \
+        --form "csrf_token=$workflow_csrf_token" \
+        --form \
+            "recipient_matrix_revision=$workflow_recipient_matrix_revision" \
+        --form \
+            "message_attachment_request_token=$workflow_attachment_request_token" \
+        --form 'absenden_x=1' \
+        --form 'task=Stab_schreiben' \
+        --form '02_zeit=' \
+        --form '07_durchspruch=D' \
+        --form '08_befhinweis=' \
+        --form '08_befhinwausw=' \
+        --form '09_vorrangstufe=' \
+        --form '10_anschrift=HTTP-Direktempfänger' \
+        --form "11_rufnummer=$workflow_phone" \
+        --form '11_gesprnotiz=f' \
+        --form "12_anhang=$direct_staff_pdf_reference" \
+        --form "12_betreff=$direct_staff_subject" \
+        --form "12_inhalt=$direct_staff_marker" \
+        --form "12_abfzeit=$tactical_time" \
+        --form '13_abseinheit=HTTP-Direktintegration' \
+        --form "14_zeichen=$test_code" \
+        --form "14_funktion=$test_function" \
+        --form '17_vermerke=' \
+        --form "message_attachment_comment=$direct_staff_comment"
+    if [ "$include_file" = yes ]; then
+        set -- "$@" --form \
+            "message_attachment_upload=@$direct_staff_upload_file;type=image/jpeg;filename=Staff-Direkt.JPEG"
+    fi
+    assert_status "$expected_direct_status" "$@" \
+        "$base_url/4fach/mainindex.php"
+}
+submit_direct_staff_message 200 yes
+if grep -Eq 'Fatal error|Uncaught (Error|TypeError)|Warning:' "$body"; then
+    printf 'HTTP smoke: direct attachment submit leaked a PHP runtime error\n' >&2
+    exit 1
+fi
+submit_direct_staff_message 303 no
+
+direct_staff_message_count=$(
+    printf "SELECT COUNT(*) FROM nv_nachrichten AS n JOIN nv_einsatz_status AS s ON s.singleton_id = 1 AND s.active_einsatz_id = n.einsatz_id WHERE BINARY n.\`12_inhalt\` = BINARY '%s';\n" \
+        "$direct_staff_marker" | db_sql
+)
+direct_staff_attachment_after=$(
+    printf "SELECT COUNT(*) FROM nv_anhang WHERE BINARY comment = BINARY '%s' AND BINARY kuerzel = BINARY '%s';\n" \
+        "$direct_staff_comment" "$test_code" | db_sql
+)
+if [ "$direct_staff_message_count" != 1 ] ||
+    [ "$direct_staff_attachment_after" != \
+        "$((direct_staff_attachment_before + 1))" ]; then
+    printf 'HTTP smoke: direct attachment replay duplicated message or file rows\n' >&2
+    exit 1
+fi
+direct_staff_record=$(
+    printf "SELECT CONCAT(n.\`00_lfd\`, '|', COALESCE(n.\`12_anhang\`, '')) FROM nv_nachrichten AS n JOIN nv_einsatz_status AS s ON s.singleton_id = 1 AND s.active_einsatz_id = n.einsatz_id WHERE BINARY n.\`12_inhalt\` = BINARY '%s' ORDER BY n.\`00_lfd\` DESC LIMIT 1;\n" \
+        "$direct_staff_marker" | db_sql
+)
+if ! printf '%s' "$direct_staff_record" |
+    grep -Eq '^[1-9][0-9]*\|[A-Za-z]{2}[0-9]{4,}\.pdf;[A-Za-z]{2}[0-9]{4,}\.jpeg;$'; then
+    printf 'HTTP smoke: direct staff message lacks its persisted attachment reference\n' >&2
+    exit 1
+fi
+direct_staff_record_id=${direct_staff_record%%|*}
+direct_staff_reference=${direct_staff_record#*|}
+direct_staff_persisted_pdf=${direct_staff_reference%%;*}
+direct_staff_image_reference=${direct_staff_reference#*;}
+direct_staff_attachment=${direct_staff_image_reference%;}
+if [ "$direct_staff_persisted_pdf" != "$direct_staff_pdf_attachment" ]; then
+    printf 'HTTP smoke: final message replaced its already uploaded PDF reference\n' >&2
+    exit 1
+fi
+direct_staff_reservation=${direct_staff_attachment%.*}
+assert_uploaded_attachment \
+    "$direct_staff_reservation" "$test_code" jpeg \
+    "$direct_staff_upload_md5"
+
+# Search isolates the saved row so the badge cannot accidentally belong to a
+# different message. Opening that exact row must expose its image card and the
+# authorized browser-preview link without visiting the attachment archive.
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST --data-urlencode 'flt_find_mask_ein_x=1' \
+    "$base_url/4fach/mainindex.php"
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST --data-urlencode "flt_search=$direct_staff_marker" \
+    "$base_url/4fach/mainindex.php"
+assert_body "$direct_staff_marker"
+assert_body 'data-estab-message-attachment-badge'
+assert_body \
+    'data-estab-message-attachment-count="2" aria-label="2 Anlagen">2 Anlagen</span>'
+direct_staff_detail_csrf=$(csrf_from_body)
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$direct_staff_detail_csrf" \
+    --data-urlencode 'stab=meldung' \
+    --data-urlencode "00_lfd=$direct_staff_record_id" \
+    "$base_url/4fach/mainindex.php"
+assert_body 'data-estab-message-attachments'
+assert_body 'data-estab-attachment-count="2"'
+assert_body "data-estab-message-attachment=\"$direct_staff_attachment\""
+assert_body "data-estab-message-attachment=\"$direct_staff_pdf_attachment\""
+assert_body 'Staff-Direkt.JPEG'
+assert_body 'Staff-Direkt.PDF'
+assert_body "$direct_staff_comment"
+assert_body "$direct_staff_pdf_comment"
+assert_body 'class="estab-message-attachment-preview"'
+assert_body "showpic.php?file=$direct_staff_attachment"
+assert_body 'Im Browser ansehen'
+assert_body 'data-estab-pdf-preview'
+assert_body "file=$direct_staff_pdf_attachment&amp;view=inline"
+
+# Reset the isolated list search and open a fresh form before continuing the
+# full legacy archive compatibility workflow below.
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST --data-urlencode 'filter_suche_reset=1' \
+    "$base_url/4fach/mainindex.php"
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST --data-urlencode 'stab_schreiben_x=1' \
+    "$base_url/4fach/mainindex.php"
+assert_body 'name="task" value="Stab_schreiben"'
+workflow_csrf_token=$(csrf_from_body)
+workflow_recipient_matrix_revision=$(recipient_matrix_revision_from_body)
+workflow_attachment_request_token=$(
+    message_attachment_request_token_from_body
+)
 
 # A rejected draft must return the user to this exact message form with a
 # useful error instead of creating a half-initialised attachment flow. Keep
@@ -2191,10 +2756,30 @@ do
         exit 1
     fi
 done
+if ! grep -Eiq '^Content-Disposition: attachment;' "$headers"; then
+    printf 'HTTP smoke: normal text attachment is not a download\n' >&2
+    exit 1
+fi
 if ! grep -Eiq '^X-eStab-Attachment-Integrity: verified' "$headers" \
     || ! grep -Eiq \
         "^X-eStab-Attachment-SHA256: $upload_sha256" "$headers"; then
     printf 'HTTP smoke: attachment response has invalid integrity evidence\n' >&2
+    exit 1
+fi
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --dump-header "$headers" \
+    --get \
+    --data-urlencode 'area=attachment' \
+    --data-urlencode "file=$stored_attachment" \
+    --data-urlencode 'view=inline' \
+    "$base_url/4fach/download.php"
+if ! cmp -s "$upload_file" "$body"; then
+    printf 'HTTP smoke: text attachment content differs after inline request\n' >&2
+    exit 1
+fi
+if ! grep -Eiq '^Content-Type: text/plain' "$headers" \
+    || ! grep -Eiq '^Content-Disposition: attachment;' "$headers"; then
+    printf 'HTTP smoke: unsupported text MIME was rendered inline\n' >&2
     exit 1
 fi
 
@@ -2271,6 +2856,9 @@ assert_body 'name="task" value="Stab_schreiben"'
 assert_body "name=\"11_rufnummer\" value=\"$workflow_phone\""
 assert_body "name=\"12_betreff\" value=\"$workflow_subject\""
 workflow_recipient_matrix_revision=$(recipient_matrix_revision_from_body)
+workflow_attachment_request_token=$(
+    message_attachment_request_token_from_body
+)
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
@@ -2278,6 +2866,8 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "csrf_token=$workflow_csrf_token" \
     --data-urlencode \
         "recipient_matrix_revision=$workflow_recipient_matrix_revision" \
+    --data-urlencode \
+        "message_attachment_request_token=$workflow_attachment_request_token" \
     --data-urlencode 'absenden_x=1' \
     --data-urlencode 'task=Stab_schreiben' \
     --data-urlencode '02_zeit=' \
@@ -2377,12 +2967,17 @@ assert_body_absent 'name="16_54" value="16_54_bl" type="checkbox"'
 assert_body '>AB_C</span>'
 workflow_csrf_token=$(csrf_from_body)
 conversation_matrix_revision=$(recipient_matrix_revision_from_body)
+conversation_attachment_request_token=$(
+    message_attachment_request_token_from_body
+)
 
 assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
     --data-urlencode "csrf_token=$workflow_csrf_token" \
     --data-urlencode \
         "recipient_matrix_revision=$conversation_matrix_revision" \
+    --data-urlencode \
+        "message_attachment_request_token=$conversation_attachment_request_token" \
     --data-urlencode 'absenden_x=1' \
     --data-urlencode 'task=Stab_gesprnoti' \
     --data-urlencode '01_medium=Fu' \
@@ -2406,35 +3001,49 @@ if [ "$forged_vordruck_count" != 0 ]; then
     exit 1
 fi
 
-# Exercise the real two-step UI transition. Browser-supplied author,
-# organisation and fictitious review marks from the originating staff form
-# must be replaced before the conversation-note confirmation is rendered.
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-    --request POST \
-    --data-urlencode "csrf_token=$workflow_csrf_token" \
-    --data-urlencode \
-        "recipient_matrix_revision=$conversation_matrix_revision" \
-    --data-urlencode 'absenden_x=1' \
-    --data-urlencode 'task=Stab_schreiben' \
-    --data-urlencode '01_medium=Fu' \
-    --data-urlencode '01_datum=' \
-    --data-urlencode '01_zeichen=forged' \
-    --data-urlencode '10_anschrift=HTTP-Vordruckempfänger' \
-    --data-urlencode '11_rufnummer=' \
-    --data-urlencode '11_gesprnotiz=on' \
-    --data-urlencode '12_anhang=' \
-    --data-urlencode "12_betreff=$vordruck_subject" \
-    --data-urlencode "12_inhalt=$vordruck_marker" \
-    --data-urlencode "12_abfzeit=$tactical_time" \
-    --data-urlencode '13_abseinheit=Browserseitig gefälschte Einheit' \
-    --data-urlencode "14_zeichen=$test_code" \
-    --data-urlencode "14_funktion=$test_function" \
-    --data-urlencode '15_quitdatum=30122000' \
-    --data-urlencode '15_quitzeichen=si0001' \
-    --data-urlencode '16_gncopy=' \
-    --data-urlencode '16_empf=' \
-    --data-urlencode '17_vermerke=Backup-Restore-Nachweis' \
-    "$base_url/4fach/mainindex.php"
+# Exercise the real two-step UI transition with a direct attachment.
+# Browser-supplied author, organisation and fictitious review marks from the
+# originating staff form must be replaced. Repeating that exact multipart POST
+# must rebuild Stab_gesprnoti and never downgrade it to an ordinary message.
+conversation_attachment_comment="Gesprächsnotiz ${workflow_marker}"
+conversation_attachment_before=$(
+    printf "SELECT COUNT(*) FROM nv_anhang WHERE BINARY comment = BINARY '%s' AND BINARY kuerzel = BINARY '%s';\n" \
+        "$conversation_attachment_comment" "$test_code" | db_sql
+)
+submit_conversation_attachment_stage() {
+    assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        --request POST \
+        --form "csrf_token=$workflow_csrf_token" \
+        --form \
+            "recipient_matrix_revision=$conversation_matrix_revision" \
+        --form \
+            "message_attachment_request_token=$conversation_attachment_request_token" \
+        --form 'absenden_x=1' \
+        --form 'task=Stab_schreiben' \
+        --form '01_medium=Fu' \
+        --form '01_datum=' \
+        --form '01_zeichen=forged' \
+        --form '10_anschrift=HTTP-Vordruckempfänger' \
+        --form '11_rufnummer=' \
+        --form '11_gesprnotiz=on' \
+        --form '12_anhang=' \
+        --form "12_betreff=$vordruck_subject" \
+        --form "12_inhalt=$vordruck_marker" \
+        --form "12_abfzeit=$tactical_time" \
+        --form '13_abseinheit=Browserseitig gefälschte Einheit' \
+        --form "14_zeichen=$test_code" \
+        --form "14_funktion=$test_function" \
+        --form '15_quitdatum=30122000' \
+        --form '15_quitzeichen=si0001' \
+        --form '16_gncopy=' \
+        --form '16_empf=' \
+        --form '17_vermerke=Backup-Restore-Nachweis' \
+        --form "message_attachment_comment=$conversation_attachment_comment" \
+        --form \
+            "message_attachment_upload=@$direct_staff_upload_file;type=image/jpeg;filename=Gesprächsnotiz.JPEG" \
+        "$base_url/4fach/mainindex.php"
+}
+submit_conversation_attachment_stage
 assert_body 'name="task" value="Stab_gesprnoti"'
 assert_body 'id="f_01_zeichen" data-estab-readonly="true"'
 assert_body_absent 'Browserseitig gefälschte Einheit'
@@ -2442,12 +3051,79 @@ assert_body_absent 'name="15_quitdatum"'
 assert_body_absent 'name="15_quitzeichen"'
 assert_body_absent 'name="16_gncopy"'
 assert_body 'name="16_54" value="16_54_bl" type="checkbox"'
+conversation_attachment_reference=$(sed -n \
+    's/.*id="f_12_anhang" type="hidden" name="12_anhang" value="\([A-Za-z0-9_.;-][A-Za-z0-9_.;-]*\)".*/\1/p' \
+    "$body" | head -n 1)
+if ! printf '%s' "$conversation_attachment_reference" |
+    grep -Eq '^[A-Za-z]{2}[0-9]{4,}\.jpeg;$'; then
+    printf 'HTTP smoke: conversation-note transition lost its attachment\n' >&2
+    exit 1
+fi
+submit_conversation_attachment_stage
+assert_body 'name="task" value="Stab_gesprnoti"'
+assert_body 'Übergang zur Gesprächsnotiz wurde bereits vorbereitet'
+assert_body "value=\"$conversation_attachment_reference\""
+conversation_attachment_after=$(
+    printf "SELECT COUNT(*) FROM nv_anhang WHERE BINARY comment = BINARY '%s' AND BINARY kuerzel = BINARY '%s';\n" \
+        "$conversation_attachment_comment" "$test_code" | db_sql
+)
+if [ "$conversation_attachment_after" != \
+        "$((conversation_attachment_before + 1))" ]; then
+    printf 'HTTP smoke: conversation-note transition replay duplicated its attachment\n' >&2
+    exit 1
+fi
 staged_note_csrf_token=$(csrf_from_body)
 staged_note_matrix_revision=$(recipient_matrix_revision_from_body)
+staged_note_attachment_request_token=$(
+    message_attachment_request_token_from_body
+)
 if [ "$staged_note_matrix_revision" = \
     "$workflow_recipient_matrix_revision" ]; then
     printf '%s\n' \
         'HTTP smoke: recipient-matrix revision did not change for AB_C fixture' >&2
+    exit 1
+fi
+
+# A conversation-note stage belongs to its form token, not to the shared PHP
+# session. Keep the first stage open while a second browser tab starts the
+# same workflow. The second tab must also reach Stab_gesprnoti and must not
+# accidentally save its draft as an ordinary staff message.
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST --data-urlencode 'stab_schreiben_x=1' \
+    "$base_url/4fach/mainindex.php"
+parallel_note_csrf_token=$(csrf_from_body)
+parallel_note_matrix_revision=$(recipient_matrix_revision_from_body)
+parallel_note_request_token=$(message_attachment_request_token_from_body)
+parallel_note_marker="Parallel-Tab ${workflow_marker}"
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$parallel_note_csrf_token" \
+    --data-urlencode \
+        "recipient_matrix_revision=$parallel_note_matrix_revision" \
+    --data-urlencode \
+        "message_attachment_request_token=$parallel_note_request_token" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=Stab_schreiben' \
+    --data-urlencode '01_medium=Fu' \
+    --data-urlencode '01_datum=' \
+    --data-urlencode '10_anschrift=HTTP-Parallel-Tab' \
+    --data-urlencode '11_rufnummer=' \
+    --data-urlencode '11_gesprnotiz=on' \
+    --data-urlencode '12_anhang=' \
+    --data-urlencode "12_betreff=$parallel_note_marker" \
+    --data-urlencode "12_inhalt=$parallel_note_marker" \
+    --data-urlencode "12_abfzeit=$tactical_time" \
+    --data-urlencode '16_empf=' \
+    "$base_url/4fach/mainindex.php"
+assert_body 'name="task" value="Stab_gesprnoti"'
+assert_body "$parallel_note_marker"
+parallel_note_count=$(
+    printf "SELECT COUNT(*) FROM nv_nachrichten WHERE \`12_inhalt\` = '%s';\n" \
+        "$parallel_note_marker" | db_sql
+)
+if [ "$parallel_note_count" != 0 ]; then
+    printf '%s\n' \
+        'HTTP smoke: parallel conversation-note tab persisted prematurely' >&2
     exit 1
 fi
 
@@ -2456,6 +3132,8 @@ assert_status 409 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode "csrf_token=$workflow_csrf_token" \
     --data-urlencode \
         "recipient_matrix_revision=$workflow_recipient_matrix_revision" \
+    --data-urlencode \
+        "message_attachment_request_token=$staged_note_attachment_request_token" \
     --data-urlencode 'absenden_x=1' \
     --data-urlencode 'task=Stab_gesprnoti' \
     --data-urlencode '01_medium=Fu' \
@@ -2467,7 +3145,7 @@ assert_status 409 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode '10_anschrift=HTTP-Vordruckempfänger' \
     --data-urlencode '11_rufnummer=' \
     --data-urlencode '11_gesprnotiz=f' \
-    --data-urlencode '12_anhang=' \
+    --data-urlencode "12_anhang=$conversation_attachment_reference" \
     --data-urlencode "12_betreff=$vordruck_subject" \
     --data-urlencode "12_inhalt=$vordruck_marker" \
     --data-urlencode "12_abfzeit=$tactical_time" \
@@ -2505,7 +3183,7 @@ assert_status 422 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode '10_anschrift=HTTP-Vordruckempfänger' \
     --data-urlencode '11_rufnummer=' \
     --data-urlencode '11_gesprnotiz=f' \
-    --data-urlencode '12_anhang=' \
+    --data-urlencode "12_anhang=$conversation_attachment_reference" \
     --data-urlencode "12_betreff=$vordruck_subject" \
     --data-urlencode "12_inhalt=$vordruck_marker" \
     --data-urlencode "12_abfzeit=$tactical_time" \
@@ -2536,6 +3214,9 @@ if [ "$rejected_vordruck_count" != 0 ]; then
 fi
 staged_note_csrf_token=$(csrf_from_body)
 staged_note_matrix_revision=$(recipient_matrix_revision_from_body)
+staged_note_attachment_request_token=$(
+    message_attachment_request_token_from_body
+)
 
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
@@ -2551,7 +3232,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode '10_anschrift=HTTP-Vordruckempfänger' \
     --data-urlencode '11_rufnummer=' \
     --data-urlencode '11_gesprnotiz=f' \
-    --data-urlencode '12_anhang=' \
+    --data-urlencode "12_anhang=$conversation_attachment_reference" \
     --data-urlencode "12_betreff=$vordruck_subject" \
     --data-urlencode "12_inhalt=$vordruck_marker" \
     --data-urlencode "12_abfzeit=$tactical_time" \
@@ -2582,42 +3263,53 @@ assert_body_absent 'name="16_gncopy"'
 assert_body_absent 'name="task" value="Stab_schreiben"'
 staged_note_return_csrf=$(csrf_from_body)
 staged_note_matrix_revision=$(recipient_matrix_revision_from_body)
+staged_note_return_attachment_request_token=$(
+    message_attachment_request_token_from_body
+)
 
-assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-    --request POST \
-    --data-urlencode "csrf_token=$staged_note_return_csrf" \
-    --data-urlencode \
-        "recipient_matrix_revision=$staged_note_matrix_revision" \
-    --data-urlencode 'absenden_x=1' \
-    --data-urlencode 'task=Stab_gesprnoti' \
-    --data-urlencode '01_medium=Fu' \
-    --data-urlencode '01_datum=' \
-    --data-urlencode "01_zeichen=$test_code" \
-    --data-urlencode '02_zeit=' \
-    --data-urlencode '07_durchspruch=D' \
-    --data-urlencode '08_befhinweis=' \
-    --data-urlencode '08_befhinwausw=' \
-    --data-urlencode '09_vorrangstufe=' \
-    --data-urlencode '10_anschrift=HTTP-Vordruckempfänger' \
-    --data-urlencode '11_rufnummer=' \
-    --data-urlencode '11_gesprnotiz=f' \
-    --data-urlencode '12_anhang=' \
-    --data-urlencode "12_betreff=$vordruck_subject" \
-    --data-urlencode "12_inhalt=$vordruck_marker" \
-    --data-urlencode "12_abfzeit=$tactical_time" \
-    --data-urlencode '13_abseinheit=HTTP-Vordrucktest' \
-    --data-urlencode "14_zeichen=$test_code" \
-    --data-urlencode "14_funktion=$test_function" \
-    --data-urlencode '15_quitdatum=' \
-    --data-urlencode '15_quitzeichen=' \
-    --data-urlencode '16_54=16_54_bl' \
-    --data-urlencode '16_empf=' \
-    --data-urlencode '17_vermerke=Backup-Restore-Nachweis' \
-    "$base_url/4fach/mainindex.php"
+submit_completed_conversation_note() {
+    expected_status=$1
+    assert_status "$expected_status" \
+        --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+        --request POST \
+        --data-urlencode "csrf_token=$staged_note_return_csrf" \
+        --data-urlencode \
+            "recipient_matrix_revision=$staged_note_matrix_revision" \
+        --data-urlencode \
+            "message_attachment_request_token=$staged_note_return_attachment_request_token" \
+        --data-urlencode 'absenden_x=1' \
+        --data-urlencode 'task=Stab_gesprnoti' \
+        --data-urlencode '01_medium=Fu' \
+        --data-urlencode '01_datum=' \
+        --data-urlencode "01_zeichen=$test_code" \
+        --data-urlencode '02_zeit=' \
+        --data-urlencode '07_durchspruch=D' \
+        --data-urlencode '08_befhinweis=' \
+        --data-urlencode '08_befhinwausw=' \
+        --data-urlencode '09_vorrangstufe=' \
+        --data-urlencode '10_anschrift=HTTP-Vordruckempfänger' \
+        --data-urlencode '11_rufnummer=' \
+        --data-urlencode '11_gesprnotiz=f' \
+        --data-urlencode "12_anhang=$conversation_attachment_reference" \
+        --data-urlencode "12_betreff=$vordruck_subject" \
+        --data-urlencode "12_inhalt=$vordruck_marker" \
+        --data-urlencode "12_abfzeit=$tactical_time" \
+        --data-urlencode '13_abseinheit=HTTP-Vordrucktest' \
+        --data-urlencode "14_zeichen=$test_code" \
+        --data-urlencode "14_funktion=$test_function" \
+        --data-urlencode '15_quitdatum=' \
+        --data-urlencode '15_quitzeichen=' \
+        --data-urlencode '16_54=16_54_bl' \
+        --data-urlencode '16_empf=' \
+        --data-urlencode '17_vermerke=Backup-Restore-Nachweis' \
+        "$base_url/4fach/mainindex.php"
+}
+submit_completed_conversation_note 200
 if grep -Eq 'Fatal error|Uncaught (Error|TypeError)|Warning:' "$body"; then
     printf 'HTTP smoke: PHP runtime error leaked while generating a form\n' >&2
     exit 1
 fi
+submit_completed_conversation_note 303
 conversation_evidence_count=$(
     printf "SELECT COUNT(*) FROM nv_nachrichten n JOIN nv_nachrichten_ereignisse e ON e.message_id = n.\`00_lfd\` AND e.einsatz_id = n.einsatz_id WHERE n.\`12_inhalt\` = '%s' AND n.\`01_zeichen\` = '%s' AND n.\`14_zeichen\` = '%s' AND n.\`14_funktion\` = '%s' AND COALESCE(n.\`15_quitzeichen\`, '') = '' AND COALESCE(n.\`15_quitdatum\`, '') = '' AND e.event_type = 'conversation_note_created' AND e.actor_code = '%s' AND e.actor_function = '%s' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.object_type')) = 'conversation_note' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.author_code')) = '%s' AND JSON_EXTRACT(e.field_snapshot, '$.review_required') = FALSE;\n" \
         "$vordruck_marker" "$test_code" "$test_code" "$test_function" \
@@ -2637,6 +3329,16 @@ if [ "$conversation_distribution" != \
     printf '%s\n' \
         'HTTP smoke: conversation-note red/author-green/underscore-blue distribution differs' >&2
     printf 'actual: %s\n' "$conversation_distribution" >&2
+    exit 1
+fi
+conversation_attachment_stored=$(
+    printf "SELECT \`12_anhang\` FROM nv_nachrichten WHERE \`12_inhalt\` = '%s';\n" \
+        "$vordruck_marker" |
+        db_sql
+)
+if [ "$conversation_attachment_stored" != \
+        "$conversation_attachment_reference" ]; then
+    printf 'HTTP smoke: replay-safe conversation note lost its attachment\n' >&2
     exit 1
 fi
 
@@ -2714,6 +3416,13 @@ assert_status 400 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --get \
     --data-urlencode 'area=vordruck' \
     --data-urlencode "file=$stored_vordruck" \
+    --data-urlencode 'view=inline' \
+    "$base_url/4fach/download.php"
+assert_body 'Ungültige Dateianforderung'
+assert_status 400 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --get \
+    --data-urlencode 'area=vordruck' \
+    --data-urlencode "file=$stored_vordruck" \
     --data-urlencode 'layout=archive' \
     "$base_url/4fach/download.php"
 assert_body 'Ungültige Dateianforderung'
@@ -2750,8 +3459,21 @@ assert_body 'Datei nicht gefunden'
 security_payload="MSGSEC 'quoted' \"double\" & <script>alert(\"x\")</script> ' OR 1=1 --"
 security_subject='Sicherer UTF-8-Betreff äöü'
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST --data-urlencode 'stab_schreiben_x=1' \
+    "$base_url/4fach/mainindex.php"
+assert_body 'name="task" value="Stab_schreiben"'
+security_message_csrf_token=$(csrf_from_body)
+security_message_matrix_revision=$(recipient_matrix_revision_from_body)
+security_message_attachment_request_token=$(
+    message_attachment_request_token_from_body
+)
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --request POST \
-    --data-urlencode "csrf_token=$workflow_csrf_token" \
+    --data-urlencode "csrf_token=$security_message_csrf_token" \
+    --data-urlencode \
+        "recipient_matrix_revision=$security_message_matrix_revision" \
+    --data-urlencode \
+        "message_attachment_request_token=$security_message_attachment_request_token" \
     --data-urlencode 'absenden_x=1' \
     --data-urlencode 'task=Stab_schreiben' \
     --data-urlencode '02_zeit=' \

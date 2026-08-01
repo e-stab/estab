@@ -40,7 +40,12 @@ function estab_file_validate_name(string $area, string $filename): string
         ) {
             throw new InvalidArgumentException('Invalid attachment filename');
         }
-        return $filename;
+        // Stored upload names always use a lower-case extension. Returning
+        // that one canonical spelling prevents references such as .PDF from
+        // being authorized successfully but missing on a case-sensitive
+        // container filesystem.
+        return pathinfo($filename, PATHINFO_FILENAME)
+            . '.' . strtolower($parts[1]);
     }
 
     if (

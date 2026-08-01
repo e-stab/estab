@@ -17,8 +17,9 @@
 20160510 - store_formdata von $_GET auf $_POST umgestellt. 
 ******************************************************************************/
 
-include ("./upload_class.php");
+require_once __DIR__ . "/upload_class.php";
 require_once __DIR__ . "/../app/attachment.php";
+require_once __DIR__ . "/../app/attachment_upload.php";
 require_once __DIR__ . "/../app/csrf.php";
 require_once __DIR__ . "/../app/file_access.php";
 require_once __DIR__ . "/../app/navigation.php";
@@ -601,9 +602,15 @@ try {
   $attachmentPageIncident = estab_incident_require_active (
     $attachmentPageConnection
   );
+  // Vordrucke rebuilt after the optional archive picker issue their next
+  // one-time direct-action token during rendering. Expose the incident that
+  // was just authorised exactly as the main message controller does.
+  $workflowIncidentId = estab_incident_positive_id (
+    $attachmentPageIncident ["active_einsatz_id"] ?? null
+  );
   $attachmentPageIdentity = estab_read_require_identity_scope (
     $attachmentPageConnection,
-    (int) $attachmentPageIncident ["active_einsatz_id"],
+    $workflowIncidentId,
     $attachmentPageIdentity
   );
   if (
@@ -633,7 +640,7 @@ try {
       estab_attachment_origin_context_validate (
         $storedAttachmentOrigin,
         $attachmentPageIdentity,
-        (int) $attachmentPageIncident ["active_einsatz_id"],
+        $workflowIncidentId,
         $_POST,
         !$attachmentInternalRequest
       );
@@ -646,7 +653,7 @@ try {
           $attachmentPageConnection,
           $conf_4f_tbl ["nachrichten"],
           $attachmentOriginContext ["record_id"] ?? null,
-          (int) $attachmentPageIncident ["active_einsatz_id"]
+          $workflowIncidentId
         );
       if (
         !is_array ($attachmentOriginMessage)
@@ -803,7 +810,6 @@ if ( debug == true ){
     }
 
     $anhang = "";
-    $inhalt = "\n\r";
     foreach ($ahkey as $anh){
       $selectedValue = $_POST [$anh] ?? null;
       if (!is_string ($selectedValue)) { continue; }
@@ -821,9 +827,6 @@ if ( debug == true ){
       }
       $selectedName = $selectedBase.".".$selectedExtension;
       $anhang .= $selectedName.";";
-      $anhang_date = konv_datetime_taktime ($db_data[1]["date"]);
-      $inhalt .= $selectedName." - ".(string) $db_data[1]["comment"].
-                 " - ".$anhang_date."\n";
     }
     $formdata = restore_formdata (
       $attachmentOriginContext,
@@ -844,7 +847,6 @@ if ( debug == true ){
           $formdata ["12_anhang"] ?? "",
           $anhang
         );
-      $formdata ["12_inhalt"]  .= $inhalt;
     }
     estab_attachment_release_message_flow_reservation (
       $attachmentOriginContext
@@ -886,7 +888,6 @@ if ( debug == true ){
       }
     }
     $anhang = "";
-    $inhalt = "\n\r";
     foreach ($ahkey as $anh){
       $selectedValue = $_POST [$anh] ?? null;
       if (!is_string ($selectedValue)) { continue; }
@@ -904,9 +905,6 @@ if ( debug == true ){
       }
       $selectedName = $selectedBase.".".$selectedExtension;
       $anhang .= $selectedName.";";
-      $anhang_date = konv_datetime_taktime ($db_data[1]["date"]);
-      $inhalt .= $selectedName." - ".(string) $db_data[1]["comment"].
-                 " - ".$anhang_date."\n";
     }
     $formdata = restore_formdata ($attachmentOriginContext);
     $formdata ["01_zeichen"] = $_SESSION ["vStab_kuerzel"];
@@ -922,7 +920,6 @@ if ( debug == true ){
           $formdata ["12_anhang"] ?? "",
           $anhang
         );
-      $formdata ["12_inhalt"]  .= $inhalt;
       if (($formdata ["10_anschrift"] ?? "") === "") {
         $formdata ["10_anschrift"] = $attachmentCommandPostName;
       }
@@ -1223,6 +1220,18 @@ require_once ("./db_operation.php");  // Datenbank operationen
     $instanz->reset_reservation ();
   }
 
+  /** Cleanup must never replace the original upload result with a second 500. */
+  function file_unselect_safely ($messageContext = null): void {
+    try {
+      file_unselect ($messageContext);
+    } catch (Throwable $exception) {
+      error_log (
+        "eStab attachment best-effort cleanup failed: ".
+        $exception->getMessage ()
+      );
+    }
+  }
+
   /***************************************************************************\
 
   \***************************************************************************/
@@ -1356,162 +1365,64 @@ require_once ("./db_operation.php");  // Datenbank operationen
       exit;
     }
     if (!isset($_POST["abbrechen_x"]) && isset($_POST["absenden_x"])) {
-      $my_upload = new fileupload;
-      $my_upload->message_context = $messageContext;
-      $reservationOwner = $my_upload->reservation_owner_id ();
-      $my_upload->upload_dir = rtrim ($conf_4f ["ablage_dir"], "/\\")."/";
-      $my_upload->extensions = array_map (
-        static fn ($extension) => ".".$extension,
-        estab_attachment_allowed_extensions ()
-      );
-      $my_upload->max_length_filename = 100;
-      $my_upload->rename_file = true;
-      $my_upload->replace = false;
-      $my_upload->do_filename_check = false;
-
-      $finalized = false;
-      $full_path = null;
-      $new_name = "";
-      $uploadFailureMessage = "";
       try {
-        $new_name = estab_attachment_validate_reservation_name (
+        $reservedName = estab_attachment_validate_reservation_name (
           is_string ($_POST ["fs_nextfilename"] ?? null) ? $_POST ["fs_nextfilename"] : "",
           $conf_4f ["hoheit"]
         );
-        $upload = $_FILES ["upload"] ?? null;
-        if (!is_array ($upload)) {
-          $my_upload->failure_code = UPLOAD_ERR_NO_FILE;
-          $uploadFailureMessage = $my_upload->user_error_message ();
-          throw new RuntimeException ($uploadFailureMessage);
+        $capturedAt = estab_attachment_parse_tactical_time (
+          is_string ($_POST ["fs_timestamp"] ?? null)
+            ? $_POST ["fs_timestamp"]
+            : ""
+        );
+        if ($capturedAt === null) {
+          throw new EstabAttachmentUploadUserException (
+            "Der Zeitstempel ist ungültig."
+          );
         }
-        if (!isset ($upload ["tmp_name"], $upload ["name"], $upload ["error"])
-            || !is_string ($upload ["tmp_name"])
-            || !is_string ($upload ["name"])
-            || !is_int ($upload ["error"])) {
-          throw new InvalidArgumentException ("Ungültige Upload-Metadaten.");
-        }
-        $my_upload->the_temp_file = $upload ["tmp_name"];
-        $my_upload->the_file = $upload ["name"];
-        $my_upload->http_error = $upload ["error"];
-        if ($my_upload->http_error !== UPLOAD_ERR_OK) {
-          $my_upload->failure_code = $my_upload->http_error;
-          $uploadFailureMessage = $my_upload->user_error_message ();
-          throw new RuntimeException ($uploadFailureMessage);
-        }
-        $connection = estab_attachment_connection ($conf_4f_db);
+        $scopeConnection = estab_attachment_connection ($conf_4f_db);
         try {
-          $stored = estab_attachment_store_upload (
-            $connection,
-            $conf_4f_tbl ["anhang"],
-            $conf_4f_tbl ["protokoll"],
-            $new_name,
-            $reservationOwner,
-            (string) ($_SESSION ["vStab_kuerzel"] ?? ""),
-            estab_attachment_current_identity (),
-            "Anhangdaten speichern",
-            function () use (
-              $my_upload,
-              $new_name,
-              $upload,
-              &$uploadFailureMessage,
-              &$full_path
-            ): array {
-              if (!$my_upload->upload ($new_name)) {
-                $uploadFailureMessage = $my_upload->user_error_message ();
-                throw new RuntimeException ($uploadFailureMessage);
-              }
-              $full_path = $my_upload->upload_dir.$my_upload->file_copy;
-              $timestamp = estab_attachment_parse_tactical_time (
-                is_string ($_POST ["fs_timestamp"] ?? null)
-                  ? $_POST ["fs_timestamp"]
-                  : ""
-              );
-              if ($timestamp === null) {
-                throw new InvalidArgumentException (
-                  "Der Zeitstempel ist ungültig."
-                );
-              }
-              $digest = md5_file ($full_path);
-              if (!is_string ($digest)) {
-                throw new RuntimeException (
-                  "Die Dateiprüfsumme konnte nicht erstellt werden."
-                );
-              }
-              $integrity = estab_attachment_integrity_measure_file (
-                $full_path
-              );
-              return array (
-                "filename" => basename ($full_path),
-                "org_filename" => $upload ["name"],
-                "comment" => is_string ($_POST ["fs_comment"] ?? null)
-                  ? $_POST ["fs_comment"]
-                  : "",
-                "time" => $timestamp,
-                "md5hash" => $digest,
-                "sha256" => $integrity ["sha256"],
-                "size" => $integrity ["size"],
-              );
-            },
-            static function (array $metadata): string {
-              return (string) ($_SESSION ["vStab_benutzer"] ?? "").";".
-                     (string) ($_SESSION ["vStab_kuerzel"] ?? "").";".
-                     (string) ($_SESSION ["vStab_funktion"] ?? "").";".
-                     (string) ($_SESSION ["vStab_rolle"] ?? "").";".
-                     session_id ().";".
-                     estab_auth_remote_ip ($_SERVER).";".
-                     $metadata ["filename"].".".$metadata ["fileext"].";".
-                     $metadata ["org_filename"].";".
-                     $metadata ["date"].";sha256=".$metadata ["sha256"].";".
-                     "bytes=".(string) $metadata ["size"];
-            }
-          );
+          $activeIncident = estab_incident_require_active ($scopeConnection);
+          $expectedIncidentId = (int) $activeIncident ["active_einsatz_id"];
         } finally {
-          estab_attachment_close ($connection);
+          estab_attachment_close ($scopeConnection);
         }
-        if (!is_array ($stored)) {
-          throw new RuntimeException (
-            "Die Reservierung gehört nicht zu dieser Sitzung."
-          );
-        }
-        $finalized = true;
+        $upload = $_FILES ["upload"] ?? array (
+          "tmp_name" => "",
+          "name" => "",
+          "error" => UPLOAD_ERR_NO_FILE,
+        );
+        estab_attachment_upload_browser_file (
+          is_array ($upload) ? $upload : array (),
+          $_POST ["fs_comment"] ?? "",
+          estab_attachment_current_identity (),
+          $expectedIncidentId,
+          $conf_4f_db,
+          $conf_4f_tbl ["anhang"],
+          $conf_4f_tbl ["protokoll"],
+          (string) $conf_4f ["hoheit"],
+          (string) $conf_4f ["ablage_dir"],
+          session_id (),
+          is_array ($messageContext) ? $messageContext : null,
+          $_SERVER,
+          $reservedName,
+          $capturedAt
+        );
+      } catch (EstabAttachmentUploadUserException $exception) {
+        error_log ("eStab attachment upload rejected: ".$exception->getMessage ());
+        file_unselect_safely ($messageContext);
+        echo "<p role=\"alert\"><b>".
+             estab_attachment_html ($exception->getMessage ()).
+             "</b></p>";
       } catch (Throwable $exception) {
         error_log ("eStab attachment upload failed: ".$exception->getMessage ());
-        $visibleUploadFailure = $uploadFailureMessage !== ""
-          ? $uploadFailureMessage
-          : "Der Anhang konnte nicht sicher gespeichert werden.";
+        file_unselect_safely ($messageContext);
         echo "<p role=\"alert\"><b>".
-             estab_attachment_html ($visibleUploadFailure).
+             "Der Anhang konnte nicht sicher gespeichert werden.".
              "</b></p>";
-      } finally {
-        if (!$finalized && is_string ($full_path) && is_file ($full_path)) {
-          $uploadRoot = rtrim ($my_upload->upload_dir, "/\\").DIRECTORY_SEPARATOR;
-          if (str_starts_with ($full_path, $uploadRoot) && basename ($full_path) === $my_upload->file_copy) {
-            @unlink ($full_path);
-          }
-        }
-        if (!$finalized && $new_name !== "") {
-          try {
-            $releaseConnection = estab_attachment_connection ($conf_4f_db);
-            try {
-              estab_attachment_release (
-                $releaseConnection,
-                $conf_4f_tbl ["anhang"],
-                $reservationOwner,
-                $new_name
-              );
-            } finally {
-              estab_attachment_close ($releaseConnection);
-            }
-          } catch (Throwable $cleanupException) {
-            error_log (
-              "eStab attachment reservation cleanup failed: ".
-              $cleanupException->getMessage ()
-            );
-          }
-        }
       }
     } else {
-      file_unselect ($messageContext);
+      file_unselect_safely ($messageContext);
     }
     unset ($_SESSION ["UPLOAD"]);
     anhang_menue ("", $messageContext);

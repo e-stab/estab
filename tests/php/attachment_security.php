@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../../app/attachment.php';
+require_once __DIR__ . '/../../app/attachment_upload.php';
 
 $assertions = 0;
 $assert = static function (bool $condition, string $message) use (&$assertions): void {
@@ -45,6 +46,370 @@ $telecommunicationsIdentity = [
     'funktion' => 'A/W',
     'rolle' => 'Fernmelder',
 ];
+
+$directActionSession = [];
+$directActionToken = estab_attachment_direct_action_issue(
+    $directActionSession,
+    $staffIdentity,
+    9,
+    'Stab_schreiben',
+    null,
+    1000
+);
+$assert(
+    preg_match('/\A[a-f0-9]{64}\z/D', $directActionToken) === 1
+        && ($directActionSession['anhang_direct_actions'][$directActionToken]['state'] ?? null)
+            === 'issued'
+        && estab_attachment_direct_action_replay_result(
+            $directActionSession,
+            $directActionToken,
+            $staffIdentity,
+            9,
+            'Stab_schreiben',
+            null,
+            1001
+        ) === null
+        && ($directActionSession['anhang_direct_actions'][$directActionToken]['state'] ?? null)
+            === 'issued'
+        && estab_attachment_direct_action_claim(
+            $directActionSession,
+            $directActionToken,
+            $staffIdentity,
+            9,
+            'Stab_schreiben',
+            null,
+            1001
+        ) === null,
+    'direct attachment action is not issued and claimed exactly once'
+);
+$assertContextRejected(
+    static fn () => estab_attachment_direct_action_claim(
+        $directActionSession,
+        $directActionToken,
+        $staffIdentity,
+        9,
+        'Stab_schreiben',
+        null,
+        1002
+    ),
+    'a concurrently processing direct attachment action can be claimed twice'
+);
+estab_attachment_direct_action_complete(
+    $directActionSession,
+    $directActionToken,
+    'EL0099.PDF',
+    'upload',
+    1003
+);
+$assert(
+    estab_attachment_direct_action_claim(
+        $directActionSession,
+        $directActionToken,
+        $staffIdentity,
+        9,
+        'Stab_schreiben',
+        null,
+        1004
+    ) === ['reference' => 'EL0099.pdf', 'mode' => 'upload'],
+    'completed direct upload replay does not recover the one canonical reference'
+);
+$assertContextRejected(
+    static fn () => estab_attachment_direct_action_claim(
+        $directActionSession,
+        $directActionToken,
+        $staffIdentity,
+        10,
+        'Stab_schreiben',
+        null,
+        1004
+    ),
+    'direct attachment replay crosses the incident boundary'
+);
+$pendingSubmitToken = estab_attachment_direct_action_issue(
+    $directActionSession,
+    $staffIdentity,
+    9,
+    'Stab_schreiben',
+    null,
+    1005
+);
+estab_attachment_direct_action_claim(
+    $directActionSession,
+    $pendingSubmitToken,
+    $staffIdentity,
+    9,
+    'Stab_schreiben',
+    null,
+    1006
+);
+estab_attachment_direct_action_note_pending_submit(
+    $directActionSession,
+    $pendingSubmitToken,
+    'EL0100.PNG',
+    1007
+);
+$assert(
+    estab_attachment_direct_action_replay_result(
+        $directActionSession,
+        $pendingSubmitToken,
+        $staffIdentity,
+        9,
+        'Stab_schreiben',
+        null,
+        1008
+    ) === ['reference' => 'EL0100.png', 'mode' => 'pending-submit'],
+    'pending message validation cannot recover its already stored upload'
+);
+estab_attachment_direct_action_complete(
+    $directActionSession,
+    $pendingSubmitToken,
+    'EL0100.png',
+    'submit',
+    1009
+);
+$assert(
+    estab_attachment_direct_action_replay_result(
+        $directActionSession,
+        $pendingSubmitToken,
+        $staffIdentity,
+        9,
+        'Stab_schreiben',
+        null,
+        1010
+    ) === ['reference' => 'EL0100.png', 'mode' => 'submit'],
+    'successfully saved upload-and-message action is replayable as a new write'
+);
+$noFileSubmitToken = estab_attachment_direct_action_issue(
+    $directActionSession,
+    $staffIdentity,
+    9,
+    'Stab_schreiben',
+    null,
+    1010
+);
+estab_attachment_direct_action_claim(
+    $directActionSession,
+    $noFileSubmitToken,
+    $staffIdentity,
+    9,
+    'Stab_schreiben',
+    null,
+    1011
+);
+estab_attachment_direct_action_note_pending_submit(
+    $directActionSession,
+    $noFileSubmitToken,
+    null,
+    1012
+);
+$assert(
+    estab_attachment_direct_action_replay_result(
+        $directActionSession,
+        $noFileSubmitToken,
+        $staffIdentity,
+        9,
+        'Stab_schreiben',
+        null,
+        1013
+    ) === ['reference' => null, 'mode' => 'pending-submit'],
+    'a message submit without a new file has no replay checkpoint'
+);
+estab_attachment_direct_action_complete(
+    $directActionSession,
+    $noFileSubmitToken,
+    null,
+    'submit',
+    1014
+);
+$assert(
+    estab_attachment_direct_action_replay_result(
+        $directActionSession,
+        $noFileSubmitToken,
+        $staffIdentity,
+        9,
+        'Stab_schreiben',
+        null,
+        1015
+    ) === ['reference' => null, 'mode' => 'submit'],
+    'a completed no-file message submit can be repeated as a second write'
+);
+$conversationStageToken = estab_attachment_direct_action_issue(
+    $directActionSession,
+    $staffIdentity,
+    9,
+    'Stab_schreiben',
+    null,
+    1010
+);
+estab_attachment_direct_action_claim(
+    $directActionSession,
+    $conversationStageToken,
+    $staffIdentity,
+    9,
+    'Stab_schreiben',
+    null,
+    1011
+);
+estab_attachment_direct_action_complete(
+    $directActionSession,
+    $conversationStageToken,
+    'EL0101.pdf',
+    'conversation-stage',
+    1012
+);
+$assert(
+    estab_attachment_direct_action_replay_result(
+        $directActionSession,
+        $conversationStageToken,
+        $staffIdentity,
+        9,
+        'Stab_schreiben',
+        null,
+        1013
+    ) === ['reference' => 'EL0101.pdf', 'mode' => 'conversation-stage'],
+    'conversation-note transition replay can fall back to an ordinary message'
+);
+$conversationNoFileToken = estab_attachment_direct_action_issue(
+    $directActionSession,
+    $staffIdentity,
+    9,
+    'Stab_schreiben',
+    null,
+    1014
+);
+estab_attachment_direct_action_claim(
+    $directActionSession,
+    $conversationNoFileToken,
+    $staffIdentity,
+    9,
+    'Stab_schreiben',
+    null,
+    1015
+);
+estab_attachment_direct_action_complete(
+    $directActionSession,
+    $conversationNoFileToken,
+    null,
+    'conversation-stage',
+    1016
+);
+$assert(
+    estab_attachment_direct_action_replay_result(
+        $directActionSession,
+        $conversationNoFileToken,
+        $staffIdentity,
+        9,
+        'Stab_schreiben',
+        null,
+        1017
+    ) === ['reference' => null, 'mode' => 'conversation-stage'],
+    'a no-file conversation transition is not replayable'
+);
+$forgottenToken = estab_attachment_direct_action_issue(
+    $directActionSession,
+    $staffIdentity,
+    9,
+    'Stab_schreiben',
+    null,
+    1010
+);
+estab_attachment_direct_action_claim(
+    $directActionSession,
+    $forgottenToken,
+    $staffIdentity,
+    9,
+    'Stab_schreiben',
+    null,
+    1011
+);
+estab_attachment_direct_action_forget(
+    $directActionSession,
+    $forgottenToken,
+    1012
+);
+$assertContextRejected(
+    static fn () => estab_attachment_direct_action_claim(
+        $directActionSession,
+        $forgottenToken,
+        $staffIdentity,
+        9,
+        'Stab_schreiben',
+        null,
+        1013
+    ),
+    'explicitly forgotten direct attachment token remains replayable'
+);
+$abandonedToken = estab_attachment_direct_action_issue(
+    $directActionSession,
+    $staffIdentity,
+    9,
+    'Stab_schreiben',
+    null,
+    1010
+);
+estab_attachment_direct_action_claim(
+    $directActionSession,
+    $abandonedToken,
+    $staffIdentity,
+    9,
+    'Stab_schreiben',
+    null,
+    1011
+);
+estab_attachment_direct_action_abandon(
+    $directActionSession,
+    $abandonedToken,
+    1012
+);
+$assertContextRejected(
+    static fn () => estab_attachment_direct_action_claim(
+        $directActionSession,
+        $abandonedToken,
+        $staffIdentity,
+        9,
+        'Stab_schreiben',
+        null,
+        1013
+    ),
+    'abandoned failed-upload token remains reusable'
+);
+$expiredToken = estab_attachment_direct_action_issue(
+    $directActionSession,
+    $staffIdentity,
+    9,
+    'Stab_schreiben',
+    null,
+    2000
+);
+$assertContextRejected(
+    static fn () => estab_attachment_direct_action_claim(
+        $directActionSession,
+        $expiredToken,
+        $staffIdentity,
+        9,
+        'Stab_schreiben',
+        null,
+        2000 + ESTAB_ATTACHMENT_DIRECT_ACTION_TTL_SECONDS + 1
+    ),
+    'expired direct attachment action remains reusable'
+);
+$boundedDirectActionSession = [];
+for ($tokenNumber = 0; $tokenNumber < 70; $tokenNumber++) {
+    estab_attachment_direct_action_issue(
+        $boundedDirectActionSession,
+        $staffIdentity,
+        9,
+        'Stab_schreiben',
+        null,
+        3000 + $tokenNumber
+    );
+}
+$assert(
+    count($boundedDirectActionSession['anhang_direct_actions'] ?? [])
+        === ESTAB_ATTACHMENT_DIRECT_ACTION_MAX_TOKENS,
+    'direct attachment tokens grow the PHP session without a hard bound'
+);
+
 $staffWriteContext = estab_attachment_origin_context_create(
     $staffIdentity,
     9,
@@ -797,6 +1162,217 @@ $assert(
     ) === 'EL0001.pdf;EL0002.jpg;EL0003.jpeg;',
     'attachment selection does not preserve existing valid references safely'
 );
+$assert(
+    estab_attachment_canonical_message_references(null) === ''
+        && estab_attachment_canonical_message_references('') === ''
+        && estab_attachment_canonical_message_references(' ; ; ') === ''
+        && estab_attachment_canonical_message_references(
+            ' EL0001.PDF ;EL0002.jpeg;; '
+        ) === 'EL0001.pdf;EL0002.jpeg;',
+    'strict attachment-list canonicalisation changes valid object references'
+);
+$oneHundredAttachmentReferences = [];
+for ($referenceNumber = 1; $referenceNumber <= 100; $referenceNumber++) {
+    $oneHundredAttachmentReferences[] = sprintf(
+        'EL%04d.pdf',
+        $referenceNumber
+    );
+}
+$assert(
+    estab_attachment_canonical_message_references(
+        implode(';', $oneHundredAttachmentReferences) . ';'
+    ) === implode(';', $oneHundredAttachmentReferences) . ';',
+    'strict attachment-list canonicalisation rejects its documented 100-object limit'
+);
+foreach ([
+    ['EL0001.pdf;EL0001.pdf;', 'duplicate attachment reference accepted'],
+    ['EL0001.PDF;EL0001.pdf;', 'case-variant duplicate attachment reference accepted'],
+    ['../EL0001.pdf;', 'attachment path traversal accepted'],
+    ['EL0001.php;', 'unsupported attachment extension accepted'],
+    ['EL0001;', 'extensionless attachment reference accepted'],
+    ["EL0001\0.pdf;", 'control character in attachment reference accepted'],
+    [str_repeat('A', 65536), 'oversized attachment list accepted'],
+    [array('EL0001.pdf'), 'nested attachment list accepted'],
+    [42, 'non-string attachment list accepted'],
+    [implode(';', array_merge(
+        $oneHundredAttachmentReferences,
+        ['EL0101.pdf']
+    )), 'more than 100 attachment references accepted'],
+] as [$unsafeReferenceList, $unsafeReferenceMessage]) {
+    $assertRejected(
+        static fn () => estab_attachment_canonical_message_references(
+            $unsafeReferenceList
+        ),
+        $unsafeReferenceMessage
+    );
+}
+
+$previousUploadLimit = getenv('ESTAB_UPLOAD_MAX_BYTES');
+try {
+    putenv('ESTAB_UPLOAD_MAX_BYTES');
+    $assert(
+        estab_attachment_upload_max_bytes() === 20971520,
+        'shared upload service default is not 20 MiB'
+    );
+    putenv('ESTAB_UPLOAD_MAX_BYTES=1048576');
+    $assert(
+        estab_attachment_upload_max_bytes() === 1048576
+            && estab_attachment_upload_limit_label() === '1 MiB',
+        'configured upload limit and its label disagree'
+    );
+    putenv('ESTAB_UPLOAD_MAX_BYTES=999999999');
+    $assert(
+        estab_attachment_upload_max_bytes() === 52428800
+            && estab_attachment_upload_limit_label() === '50 MiB',
+        'shared upload service exceeds its audited 50 MiB ceiling'
+    );
+    putenv('ESTAB_UPLOAD_MAX_BYTES=invalid');
+    $assert(
+        estab_attachment_upload_max_bytes() === 20971520,
+        'malformed upload-limit configuration changes the safe default'
+    );
+    $assert(
+        estab_attachment_upload_limit_label(512) === '512 Byte'
+            && estab_attachment_upload_limit_label(1536) === '1,5 KiB'
+            && estab_attachment_upload_limit_label(1572864) === '1,5 MiB',
+        'shared upload-limit labels are not human-readable binary sizes'
+    );
+} finally {
+    putenv(
+        $previousUploadLimit === false
+            ? 'ESTAB_UPLOAD_MAX_BYTES'
+            : 'ESTAB_UPLOAD_MAX_BYTES=' . $previousUploadLimit
+    );
+}
+$expectedUploadAccept = implode(',', array_map(
+    static fn (string $extension): string => '.' . $extension,
+    estab_attachment_allowed_extensions()
+));
+$assert(
+    estab_attachment_upload_accept() === $expectedUploadAccept
+        && str_contains($expectedUploadAccept, '.jpg')
+        && str_contains($expectedUploadAccept, '.jpeg')
+        && str_contains($expectedUploadAccept, '.pdf')
+        && !str_contains($expectedUploadAccept, '.php'),
+    'browser accept hint differs from the server attachment allowlist'
+);
+$assert(
+    estab_attachment_upload_ini_bytes('56M') === 58720256
+        && estab_attachment_upload_ini_bytes('50m') === 52428800
+        && estab_attachment_upload_ini_bytes('1024K') === 1048576
+        && estab_attachment_upload_ini_bytes('0') === null
+        && estab_attachment_upload_ini_bytes('broken') === null,
+    'PHP multipart transport limits are parsed unsafely'
+);
+$discardedMultipartServer = [
+    'REQUEST_METHOD' => 'POST',
+    'CONTENT_TYPE' => 'multipart/form-data; boundary=estab',
+    'CONTENT_LENGTH' => '58720257',
+];
+$assert(
+    estab_attachment_upload_post_body_exceeded(
+        $discardedMultipartServer,
+        [],
+        [],
+        '56M'
+    )
+        && !estab_attachment_upload_post_body_exceeded(
+            $discardedMultipartServer,
+            ['task' => 'Stab_schreiben'],
+            [],
+            '56M'
+        )
+        && !estab_attachment_upload_post_body_exceeded(
+            array_merge($discardedMultipartServer, [
+                'CONTENT_LENGTH' => '58720256',
+            ]),
+            [],
+            [],
+            '56M'
+        )
+        && !estab_attachment_upload_post_body_exceeded(
+            array_merge($discardedMultipartServer, [
+                'CONTENT_TYPE' => 'application/x-www-form-urlencoded',
+            ]),
+            [],
+            [],
+            '56M'
+        ),
+    'discarded over-post_max_size multipart body is not detected exactly'
+);
+$uploadFailure = new file_upload();
+$uploadFailure->max_file_size = 1048576;
+$uploadFailure->failure_code = UPLOAD_ERR_FORM_SIZE;
+$safeUploadException = estab_attachment_upload_user_failure(
+    $uploadFailure
+);
+$assert(
+    $safeUploadException instanceof EstabAttachmentUploadUserException
+        && $safeUploadException->getMessage()
+            === 'Die Datei ist größer als die erlaubten 1 MiB.',
+    'shared upload service exposes no stable, size-aware user failure'
+);
+$uploadFailure->failure_code = null;
+$fallbackUploadException = estab_attachment_upload_user_failure(
+    $uploadFailure,
+    'Sichere Ersatzmeldung.'
+);
+$assert(
+    $fallbackUploadException->getMessage() === 'Sichere Ersatzmeldung.',
+    'shared upload service drops its safe fallback failure message'
+);
+$invalidBrowserUploads = [
+    [
+        ['tmp_name' => '/tmp/not-an-upload', 'name' => 'lage.pdf', 'error' => UPLOAD_ERR_OK],
+        ['nested comment'],
+        'nested attachment comment accepted',
+    ],
+    [
+        ['tmp_name' => '/tmp/not-an-upload', 'name' => 'lage.pdf', 'error' => UPLOAD_ERR_OK],
+        str_repeat('B', 256),
+        'oversized attachment comment accepted',
+    ],
+    [
+        ['name' => 'lage.pdf', 'error' => UPLOAD_ERR_OK],
+        'Lagebild',
+        'incomplete PHP upload structure accepted',
+    ],
+    [
+        ['tmp_name' => '', 'name' => '', 'error' => UPLOAD_ERR_NO_FILE],
+        'Lagebild',
+        'missing browser file accepted',
+    ],
+    [
+        ['tmp_name' => '/tmp/not-an-upload', 'name' => "lage\0.pdf", 'error' => UPLOAD_ERR_OK],
+        'Lagebild',
+        'control character in original upload name accepted',
+    ],
+];
+foreach ($invalidBrowserUploads as [
+    $invalidBrowserUpload,
+    $invalidBrowserComment,
+    $invalidBrowserMessage,
+]) {
+    $uploadRejectedBeforeDatabase = false;
+    try {
+        estab_attachment_upload_browser_file(
+            $invalidBrowserUpload,
+            $invalidBrowserComment,
+            $staffIdentity,
+            9,
+            [],
+            'tbl_anhang',
+            'tbl_protokoll',
+            'EL',
+            '/tmp',
+            'unit-session',
+            null
+        );
+    } catch (EstabAttachmentUploadUserException) {
+        $uploadRejectedBeforeDatabase = true;
+    }
+    $assert($uploadRejectedBeforeDatabase, $invalidBrowserMessage);
+}
 
 $assert(estab_attachment_validate_prefix(' el ') === 'EL', 'authority prefix is normalised');
 $assertRejected(
@@ -1101,6 +1677,9 @@ try {
 }
 
 $attachmentSource = file_get_contents(__DIR__ . '/../../app/attachment.php');
+$uploadServiceSource = file_get_contents(
+    __DIR__ . '/../../app/attachment_upload.php'
+);
 $integritySource = file_get_contents(
     __DIR__ . '/../../app/attachment_integrity.php'
 );
@@ -1108,6 +1687,12 @@ $downloadSource = file_get_contents(__DIR__ . '/../../4fach/download.php');
 $controllerSource = file_get_contents(__DIR__ . '/../../4fach/anhang.php');
 $mainControllerSource = file_get_contents(
     __DIR__ . '/../../4fach/mainindex.php'
+);
+$messageRepositorySource = file_get_contents(
+    __DIR__ . '/../../app/message_repository.php'
+);
+$messageHandlerSource = file_get_contents(
+    __DIR__ . '/../../4fach/data_hndl.php'
 );
 $messageFormSource = file_get_contents(__DIR__ . '/../../4fach/4fachform.php');
 $schemaSource = file_get_contents(__DIR__ . '/../../docker/db/init/10-schema.sql');
@@ -1117,12 +1702,26 @@ $integrityMigration = file_get_contents(
 );
 $assert(
     is_string($attachmentSource)
+        && is_string($uploadServiceSource)
         && is_string($integritySource)
         && is_string($downloadSource)
         && is_string($controllerSource)
         && is_string($mainControllerSource)
         && is_string($messageFormSource),
     'attachment and message-form sources readable'
+);
+$assert(
+    substr_count(
+        $controllerSource,
+        'require_once __DIR__ . "/upload_class.php";'
+    ) === 1
+        && substr_count($controllerSource, 'upload_class.php') === 1
+        && preg_match(
+            '/\b(?:include|include_once|require)\s*'
+                . '(?:\(\s*)?["\'][^"\']*upload_class\.php/s',
+            $controllerSource
+        ) !== 1,
+    'attachment controller can load the shared upload class twice or relative to the process working directory'
 );
 $assert(
     preg_match(
@@ -1233,28 +1832,238 @@ $assert(
     str_contains($attachmentSource, 'WHERE `filename` = ? AND `status` = 2 AND `id` = ?'),
     'finalisation requires exact claimed filename and owner'
 );
+$storeUploadStart = strpos(
+    $attachmentSource,
+    'function estab_attachment_store_upload('
+);
+$storeUploadEnd = strpos(
+    $attachmentSource,
+    'function estab_attachment_list_for_incident(',
+    $storeUploadStart === false ? 0 : $storeUploadStart
+);
+$storeUploadSource = (
+    $storeUploadStart !== false
+    && $storeUploadEnd !== false
+    && $storeUploadEnd > $storeUploadStart
+) ? substr(
+    $attachmentSource,
+    $storeUploadStart,
+    $storeUploadEnd - $storeUploadStart
+) : '';
+$cleanupStateStart = strpos(
+    $attachmentSource,
+    'function estab_attachment_reservation_cleanup_state('
+);
+$cleanupStateEnd = strpos(
+    $attachmentSource,
+    'function estab_attachment_claim(',
+    $cleanupStateStart === false ? 0 : $cleanupStateStart
+);
+$cleanupStateSource = (
+    $cleanupStateStart !== false
+    && $cleanupStateEnd !== false
+    && $cleanupStateEnd > $cleanupStateStart
+) ? substr(
+    $attachmentSource,
+    $cleanupStateStart,
+    $cleanupStateEnd - $cleanupStateStart
+) : '';
 $assert(
-    str_contains($attachmentSource, 'function estab_attachment_store_upload(')
-        && str_contains(
-            $attachmentSource,
+    $storeUploadSource !== ''
+        && !str_contains(
+            $storeUploadSource,
             'SAVEPOINT estab_attachment_before_claim'
         )
         && str_contains(
-            $attachmentSource,
-            'ROLLBACK TO SAVEPOINT estab_attachment_before_claim'
-        )
-        && str_contains(
-            $attachmentSource,
+            $storeUploadSource,
             'Could not commit atomic upload'
         )
         && str_contains(
+            $uploadServiceSource,
+            'estab_attachment_store_upload('
+        )
+        && str_contains(
             $controllerSource,
-            'estab_attachment_store_upload ('
+            'estab_attachment_upload_browser_file ('
+        )
+        && str_contains(
+            $mainControllerSource,
+            'estab_attachment_upload_browser_file ('
+        )
+        && strpos(
+            $uploadServiceSource,
+            'estab_attachment_integrity_measure_file($fullPath)'
+        ) < strpos(
+            $uploadServiceSource,
+            'estab_attachment_store_upload('
+        )
+        && str_contains(
+            $attachmentSource,
+            'function estab_attachment_owned_reservation_incident_id('
+        )
+        && str_contains(
+            $uploadServiceSource,
+            'estab_attachment_owned_reservation_incident_id('
+        )
+        && str_contains(
+            $uploadServiceSource,
+            'estab_attachment_prepare_staged_extension('
+        )
+        && str_contains(
+            $attachmentSource,
+            'function estab_attachment_reservation_cleanup_state('
+        )
+        && str_contains(
+            $attachmentSource,
+            '$expectedIncidentId !== $incidentId'
         ),
-    'browser upload does not hold the active incident across file and DB finalisation'
+    'browser upload does not stage file I/O before its short finalisation transaction'
 );
 $assert(
-    str_contains($controllerSource, 'estab_attachment_integrity_measure_file (')
+    $cleanupStateSource !== ''
+        && str_contains($cleanupStateSource, '$connection->begin_transaction()')
+        && str_contains($cleanupStateSource, 'LIMIT 1 FOR UPDATE')
+        && str_contains(
+            $cleanupStateSource,
+            'SET `status` = 2 WHERE `filename` = ? AND `id` = ?'
+        )
+        && strpos(
+            $cleanupStateSource,
+            'SET `status` = 2 WHERE `filename` = ? AND `id` = ?'
+        ) < strpos($cleanupStateSource, '$connection->commit()'),
+    'staged-file cleanup does not claim its path before allowing reuse'
+);
+$assert(
+    str_contains(
+        $attachmentSource,
+        'function estab_attachment_direct_action_replay_result('
+    )
+        && str_contains(
+            $mainControllerSource,
+            '$messageAttachmentReplayWithoutFile ='
+        )
+        && str_contains(
+            $mainControllerSource,
+            'estab_attachment_direct_action_replay_result ('
+        )
+        && str_contains(
+            $mainControllerSource,
+            '|| is_array ($messageAttachmentReplayWithoutFile);'
+        )
+        && str_contains(
+            $mainControllerSource,
+            '$messageAttachmentReplayWithoutFile ["mode"] ?? ""'
+        )
+        && str_contains(
+            $mainControllerSource,
+            'function estab_message_attachment_checkpoint_pending_action ('
+        )
+        && str_contains($mainControllerSource, 'session_write_close ()')
+        && str_contains($mainControllerSource, 'session_start ()')
+        && strrpos(
+            $mainControllerSource,
+            'estab_message_attachment_checkpoint_pending_action ('
+        ) > strpos(
+            $mainControllerSource,
+            'estab_attachment_direct_action_note_pending_submit ('
+        )
+        && str_contains(
+            $mainControllerSource,
+            'eStab conversation-note attachment token completion failed: '
+        )
+        && str_contains(
+            $mainControllerSource,
+            'function estab_message_attachment_render_conversation_stage ('
+        )
+        && substr_count(
+            $mainControllerSource,
+            'estab_message_attachment_render_conversation_stage ('
+        ) === 3
+        && str_contains($mainControllerSource, '"conversation-stage"')
+        && str_contains(
+            $mainControllerSource,
+            'Prüfen Sie die Meldungsliste und senden Sie diesen '
+        ),
+    'a multipart replay without its file can bypass attachment idempotency'
+);
+$assert(
+    str_contains(
+        $mainControllerSource,
+        'if (!$messageAttachmentRemoveRequested) {'
+    )
+        && str_contains(
+            $mainControllerSource,
+            '$remainingScopeConnection = estab_message_connect ($conf_4f_db);'
+        )
+        && str_contains(
+            $mainControllerSource,
+            '$attachmentDraft ["12_anhang"],'
+        )
+        && str_contains(
+            $mainControllerSource,
+            'resulting list instead of requiring the broken token itself'
+        ),
+    'an unavailable attachment reference cannot be removed from an authorised draft'
+);
+$assert(
+    str_contains(
+        $mainControllerSource,
+        '$messageAttachmentFinalSubmitRequested'
+    )
+        && str_contains(
+            $mainControllerSource,
+            'estab_message_committed_action_id ('
+        )
+        && str_contains(
+            $messageRepositorySource,
+            'function estab_message_action_lock('
+        )
+        && str_contains(
+            $messageRepositorySource,
+            'function estab_message_committed_action_id('
+        )
+        && str_contains(
+            $messageRepositorySource,
+            "'$.request_action.token_sha256'"
+        )
+        && substr_count(
+            $messageHandlerSource,
+            'estab_message_action_evidence_snapshot ('
+        ) === 4
+        && str_contains(
+            $messageHandlerSource,
+            'estab_message_action_lock ('
+        ),
+    'ordinary no-file message submits lack durable exactly-once evidence'
+);
+$assert(
+    str_contains($uploadServiceSource, '$releaseReservation = false;')
+        && str_contains(
+            $uploadServiceSource,
+            '@unlink($cleanupPath);'
+        )
+        && str_contains(
+            $uploadServiceSource,
+            '$releaseReservation = !is_file($cleanupPath);'
+        )
+        && str_contains(
+            $uploadServiceSource,
+            'reservation retained: '
+        )
+        && strpos(
+            $uploadServiceSource,
+            '&& $releaseReservation'
+        ) < strpos(
+            $uploadServiceSource,
+            'estab_attachment_release_for_incident('
+        ),
+    'failed staged-file cleanup can release and later reuse an unsafe NAS path'
+);
+$assert(
+    str_contains(
+        $uploadServiceSource,
+        'estab_attachment_integrity_measure_file($fullPath)'
+    )
         && str_contains($attachmentSource, '`ingest_sha256` = ?')
         && str_contains($attachmentSource, '`ingest_size` = ?')
         && str_contains(
@@ -1268,28 +2077,39 @@ $assert(
     'upload finalisation lacks immutable SHA-256/size ingest evidence'
 );
 $assert(
-    str_contains(
-        $attachmentSource,
-        "SET `status` = 4, `id` = ''"
-    )
+    !str_contains($attachmentSource, 'Could not release failed upload')
         && str_contains(
             $attachmentSource,
-            'Could not release failed upload'
+            'caller removes staged bytes first'
         )
         && !str_contains(
-            $controllerSource,
-            '$my_upload->claim_reservation ($new_name)'
+            $uploadServiceSource,
+            '$uploader->claim_reservation'
         ),
     'failed upload can leave a claimed reservation across an incident switch'
 );
 $assert(
-    str_contains($controllerSource, 'if (!$finalized && $new_name !== "")')
-        && str_contains($controllerSource, 'estab_attachment_release (')
+    str_contains(
+        $uploadServiceSource,
+        '&& $releaseReservation'
+    )
         && str_contains(
-            $controllerSource,
+            $uploadServiceSource,
+            'estab_attachment_release_for_incident('
+        )
+        && str_contains(
+            $attachmentSource,
+            'function estab_attachment_release_for_incident('
+        )
+        && str_contains(
+            $uploadServiceSource,
             'eStab attachment reservation cleanup failed: '
+        )
+        && str_contains(
+            $uploadServiceSource,
+            '$cleanupIncidentId'
         ),
-    'controller releases uploads rejected before the atomic store'
+    'shared upload service releases uploads rejected before finalisation'
 );
 $assert(
     str_contains($schemaSource, 'UNIQUE KEY `uq_anhang_filename` (`filename`)'),
@@ -1422,11 +2242,11 @@ $assert(
         ),
     'attachment selection is not bound to a server-owned, per-browser message origin'
 );
-$draftCatchStart = strpos(
+$draftCatchStart = strrpos(
     $mainControllerSource,
     '} catch (EstabAttachmentDraftException $exception) {'
 );
-$contextCatchStart = strpos(
+$contextCatchStart = strrpos(
     $mainControllerSource,
     '} catch (EstabAttachmentContextException $exception) {'
 );
@@ -1605,6 +2425,20 @@ $assert(
             'Hier können Sie vorhandene Anhänge ansehen oder neue Dateien hochladen.'
         ),
     'direct attachment entry renders a user-oriented standalone overview'
+);
+$archiveIncidentPosition = strpos(
+    $controllerSource,
+    '$workflowIncidentId = estab_incident_positive_id ('
+);
+$archiveReturnFormPosition = strpos(
+    $controllerSource,
+    '$form = new nachrichten4fach ('
+);
+$assert(
+    is_int($archiveIncidentPosition)
+        && is_int($archiveReturnFormPosition)
+        && $archiveIncidentPosition < $archiveReturnFormPosition,
+    'archive selection return cannot issue an incident-bound direct action token'
 );
 $assert(
     !str_contains($controllerSource, 'case 999:')
@@ -1979,8 +2813,11 @@ $assert(
         && str_contains($controllerSource, 'Erlaubte Formate:')
         && str_contains($controllerSource, 'Maximale Dateigröße:')
         && str_contains($controllerSource, 'formnovalidate')
-        && str_contains($controllerSource, 'user_error_message ()')
-        && str_contains($controllerSource, 'estab_attachment_html ($visibleUploadFailure)'),
+        && str_contains($uploadServiceSource, 'user_error_message()')
+        && str_contains(
+            $controllerSource,
+            'estab_attachment_html ($exception->getMessage ())'
+        ),
     'upload form does not advertise JPEG support, limit, or safe rejection reason'
 );
 $assert(

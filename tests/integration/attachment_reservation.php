@@ -1292,8 +1292,103 @@ try {
         'Claim cleanup did not release the fixture'
     );
 
-    // The browser path keeps the active-incident row locked while the upload
-    // callback, final metadata update and audit insert complete.
+    // Model the exact gap between cleanup-state inspection and unlinking staged
+    // NAS bytes. The cleanup helper must first commit an owner-bound status-2
+    // claim; a competing reservation is then forbidden from reusing that path.
+    $cleanupSession = 'it_cleanup_' . $token;
+    $cleanupName = estab_attachment_reserve(
+        $connectionA,
+        $table,
+        $prefix,
+        $cleanupSession,
+        attachment_db_identity()
+    );
+    attachment_db_assert(
+        $cleanupName === $filenameB,
+        'Cleanup-race fixture did not reuse the expected released filename'
+    );
+    attachment_db_assert(
+        estab_attachment_prepare_staged_extension(
+            $connectionA,
+            $table,
+            $cleanupSession,
+            $cleanupName,
+            $fixtureIncidentId,
+            'jpeg',
+            attachment_db_identity()
+        ) === 'jpeg',
+        'Cleanup-race fixture did not persist its staged extension'
+    );
+    $cleanupState = estab_attachment_reservation_cleanup_state(
+        $connectionA,
+        $table,
+        $cleanupSession,
+        $cleanupName,
+        $fixtureIncidentId
+    );
+    $cleanupClaim = attachment_db_row($connectionB, $table, $cleanupName);
+    attachment_db_assert(
+        ($cleanupState['state'] ?? null) === 'owned-unfinished'
+            && ($cleanupState['extension'] ?? null) === 'jpeg'
+            && (int) ($cleanupClaim['status'] ?? -1) === 2
+            && ($cleanupClaim['id'] ?? null) === $cleanupSession,
+        'Cleanup authority was not committed as an owner-bound claim'
+    );
+
+    $cleanupCompetitorSession = 'it_cleanup_competitor_' . $token;
+    $cleanupCompetitorName = estab_attachment_reserve(
+        $connectionB,
+        $table,
+        $prefix,
+        $cleanupCompetitorSession,
+        attachment_db_identity()
+    );
+    attachment_db_assert(
+        $cleanupCompetitorName !== $cleanupName
+            && (int) (
+                attachment_db_row($connectionA, $table, $cleanupName)['status']
+                    ?? -1
+            ) === 2,
+        'Competing reservation reused a path while cleanup still owned it'
+    );
+
+    // Once unlinking would have completed, releasing the cleanup claim makes
+    // the original path reusable again and preserves the ordinary allocation
+    // order.
+    estab_attachment_release(
+        $connectionA,
+        $table,
+        $cleanupSession,
+        $cleanupName
+    );
+    estab_attachment_release(
+        $connectionB,
+        $table,
+        $cleanupCompetitorSession,
+        $cleanupCompetitorName
+    );
+    $postCleanupSession = 'it_post_cleanup_' . $token;
+    $postCleanupName = estab_attachment_reserve(
+        $connectionA,
+        $table,
+        $prefix,
+        $postCleanupSession,
+        attachment_db_identity()
+    );
+    attachment_db_assert(
+        $postCleanupName === $cleanupName,
+        'Cleanup path did not become reusable after the claim was released'
+    );
+    estab_attachment_release(
+        $connectionA,
+        $table,
+        $postCleanupSession,
+        $postCleanupName
+    );
+
+    // The low-level store helper uses its own short transaction. A callback
+    // failure must roll the claim back to the caller-owned reservation so the
+    // higher-level upload service can decide whether cleanup is still safe.
     $uploadSession = 'it_upload_' . $token;
     $uploadName = estab_attachment_reserve(
         $connectionA,
@@ -1365,9 +1460,10 @@ try {
     }
     $failedRow = attachment_db_row($connectionB, $table, $failedName);
     attachment_db_assert(
-        (int) ($failedRow['status'] ?? -1) === 4
-            && ($failedRow['id'] ?? null) === '',
-        'Failing browser upload left a claimed reservation behind'
+        (int) ($failedRow['status'] ?? -1) === 8
+            && ($failedRow['id'] ?? null) === $failedSession
+            && ($failedRow['fileext'] ?? null) === '',
+        'Failing low-level upload did not restore its owned reservation'
     );
 } finally {
     foreach ($workers as $worker) {

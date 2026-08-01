@@ -26,7 +26,27 @@ require_once __DIR__ . "/../app/session_ui.php";
 require_once __DIR__ . "/../app/logout.php";
 require_once __DIR__ . "/../app/read_authorization.php";
 require_once __DIR__ . "/../app/message_list.php";
+require_once __DIR__ . "/../app/attachment_upload.php";
 estab_session_ui_start ($_SESSION);
+
+if (estab_attachment_upload_post_body_exceeded (
+  $_SERVER,
+  $_POST,
+  $_FILES
+)) {
+  http_response_code (413);
+  header ("Content-Type: text/html; charset=UTF-8");
+  header ("Cache-Control: private, no-store, max-age=0");
+  echo "<!doctype html><html lang=\"de\"><meta charset=\"UTF-8\">";
+  echo "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">";
+  echo "<title>Upload zu groß</title><body><main>";
+  echo "<h1>Die ausgewählte Datei ist zu groß</h1>";
+  echo "<p>PHP hat den gesamten Upload vor der Verarbeitung abgewiesen. ";
+  echo "Öffnen Sie den Nachrichtenvordruck erneut und wählen Sie eine kleinere Datei.</p>";
+  echo "<p><a href=\"".estab_auth_html ((string) ($_SERVER ["PHP_SELF"] ?? "mainindex.php"))."\">";
+  echo "Zum Nachrichtenbereich</a></p></main></body></html>";
+  exit;
+}
 
 $returnValue = array (); // no request data is a valid, warning-free state
 if (count($_GET)>0)  { $returnValue = $_GET; }   // GET Daten, wenn vorhanden speichern
@@ -48,7 +68,6 @@ $_SESSION += array (
   "ROLLE" => "",
   "UPLOAD" => "",
   "fm_zweite_sichtung" => 0,
-  "gesprnoti" => false,
   "si_zweite_sichtung" => 0,
   "vStab_benutzer" => "",
   "vStab_funktion" => "",
@@ -346,6 +365,10 @@ function estab_workflow_require_active_incident_for_post (
       || isset ($request ["antwort_x"])
       || isset ($request ["weiterleiten_x"])
       || isset ($request ["abbrechen_x"])
+      || isset ($request ["message_attachment_upload_x"])
+      || isset ($request ["message_attachment_upload_y"])
+      || isset ($request ["message_attachment_remove_x"])
+      || isset ($request ["message_attachment_remove_y"])
     );
   $operational = $submittedTask
     || isset ($request ["action"])
@@ -393,6 +416,102 @@ estab_workflow_require_active_incident_for_post (
   $conf_4f_db
 );
 
+$messageAttachmentRequestToken =
+  $returnValue ["message_attachment_request_token"] ?? null;
+$messageAttachmentFinalSubmitRequested =
+  isset ($returnValue ["absenden_x"])
+  && in_array (
+    (string) ($returnValue ["task"] ?? ""),
+    estab_workflow_attachment_edit_tasks (),
+    true
+  );
+$messageAttachmentPreGateReplay = null;
+
+// A correction changes its status as part of the successful commit. Resolve
+// an already completed action before the status-dependent object gate, but
+// only after the token has been bound to this account, incident, task and
+// record. A pending token is accepted as success only when the immutable
+// event written in the same database commit proves this exact action.
+if ($messageAttachmentFinalSubmitRequested) {
+  if (
+    !is_array ($workflowSelectedIdentity)
+    || !is_int ($workflowIncidentId)
+    || !is_string ($messageAttachmentRequestToken)
+    || $messageAttachmentRequestToken === ""
+  ) {
+    estab_workflow_forbid ();
+  }
+  $submittedAttachmentTask = (string) $returnValue ["task"];
+  $submittedAttachmentRecord = $submittedAttachmentTask === "Stab_korrigieren"
+    ? ($returnValue ["00_lfd"] ?? null)
+    : null;
+  try {
+    $messageAttachmentPreGateReplay =
+      estab_attachment_direct_action_replay_result (
+        $_SESSION,
+        $messageAttachmentRequestToken,
+        $workflowSelectedIdentity,
+        $workflowIncidentId,
+        $submittedAttachmentTask,
+        $submittedAttachmentRecord
+      );
+    $preGateMode = is_array ($messageAttachmentPreGateReplay)
+      ? (string) ($messageAttachmentPreGateReplay ["mode"] ?? "")
+      : "";
+    if ($preGateMode === "submit") {
+      header ("Cache-Control: private, no-store, max-age=0");
+      header ("Location: ".(string) $conf_4f ["MainURL"], true, 303);
+      exit;
+    }
+    if ($preGateMode === "pending-submit") {
+      $actionEvidenceConnection = estab_message_connect ($conf_4f_db);
+      try {
+        $committedActionId = estab_message_committed_action_id (
+          $actionEvidenceConnection,
+          $workflowIncidentId,
+          $messageAttachmentRequestToken,
+          $submittedAttachmentTask,
+          $workflowSelectedIdentity,
+          $submittedAttachmentRecord
+        );
+      } finally {
+        estab_auth_close ($actionEvidenceConnection);
+      }
+      if (is_int ($committedActionId)) {
+        try {
+          estab_attachment_direct_action_complete (
+            $_SESSION,
+            $messageAttachmentRequestToken,
+            is_string ($messageAttachmentPreGateReplay ["reference"] ?? null)
+              ? $messageAttachmentPreGateReplay ["reference"]
+              : null,
+            "submit"
+          );
+        } catch (Throwable $exception) {
+          // The immutable event is the authoritative outcome. A session
+          // bookkeeping error must not turn its proven commit into a retry.
+          error_log (
+            "eStab durable message action replay completion failed: ".
+            $exception->getMessage ()
+          );
+        }
+        header ("Cache-Control: private, no-store, max-age=0");
+        header ("Location: ".(string) $conf_4f ["MainURL"], true, 303);
+        exit;
+      }
+    }
+  } catch (EstabAttachmentContextException $exception) {
+    error_log ("eStab direct attachment pre-gate replay rejected");
+    estab_workflow_forbid ();
+  } catch (Throwable $exception) {
+    error_log (
+      "eStab durable message action lookup failed: ".
+      $exception->getMessage ()
+    );
+    estab_workflow_forbid ();
+  }
+}
+
 // Role checks alone are insufficient for record identifiers supplied by a
 // browser. Bind every data-bearing route to the addressed message before any
 // read, state transition, lock change or form save can run.
@@ -416,18 +535,36 @@ if ($messageOperation !== null) {
       $messageRecordId,
       $workflowIncidentId
     );
-    if (
-      !is_array ($objectMessage)
-      || !estab_message_object_allowed (
+    $objectAllowed = is_array ($objectMessage)
+      && estab_message_object_allowed (
         $workflowSelectedIdentity,
         $messageOperation,
         $objectMessage
       )
-      || !estab_read_message_allowed (
+      && estab_read_message_allowed (
         $workflowSelectedIdentity,
         $objectMessage
-      )
-    ) {
+      );
+    if (!$objectAllowed) {
+      if (
+        $messageOperation === "staff-correction"
+        && is_array ($messageAttachmentPreGateReplay)
+        && ($messageAttachmentPreGateReplay ["mode"] ?? null)
+          === "pending-submit"
+        && is_array ($objectMessage)
+        && estab_read_message_allowed (
+          $workflowSelectedIdentity,
+          $objectMessage
+        )
+      ) {
+        estab_workflow_render_read_gate (
+          409,
+          "Korrekturstand prüfen",
+          "Die ursprüngliche Korrekturanfrage ist nicht mehr eindeutig ".
+          "fortsetzbar. Prüfen Sie die Nachricht in der Meldungsliste; ".
+          "eStab speichert sie nicht erneut."
+        );
+      }
       estab_workflow_forbid ();
     }
   } catch (Throwable $exception) {
@@ -437,6 +574,855 @@ if ($messageOperation !== null) {
     if ($objectConnection instanceof mysqli) {
       estab_auth_close ($objectConnection);
     }
+  }
+}
+
+/** Rehydrate one attachment round-trip without trusting route authority. */
+function estab_message_attachment_form_data (
+  array $draft,
+  array $context,
+  ?array $originMessage,
+  array $recipientMatrix,
+  string $redCopyFunction,
+  array $identity,
+  string $commandPostName,
+  bool $strictDistribution = true
+): array {
+  $task = (string) ($context ["task"] ?? "");
+  $requiredRecipients = $task === "Stab_gesprnoti"
+    ? array (
+        $redCopyFunction."_rt",
+        (string) ($identity ["funktion"] ?? "")."_gn",
+      )
+    : array ();
+  $formdata = estab_attachment_origin_draft_form_data (
+    $draft,
+    $context,
+    $originMessage,
+    $recipientMatrix,
+    $strictDistribution,
+    $redCopyFunction,
+    $requiredRecipients
+  );
+  if (in_array (
+    $task,
+    array ("Stab_schreiben", "Stab_korrigieren", "Stab_gesprnoti"),
+    true
+  )) {
+    $formdata ["13_abseinheit"] = $commandPostName;
+    $formdata ["14_zeichen"] = (string) ($identity ["kuerzel"] ?? "");
+    $formdata ["14_funktion"] = (string) ($identity ["funktion"] ?? "");
+    if ($task === "Stab_gesprnoti") {
+      $formdata ["01_zeichen"] = (string) ($identity ["kuerzel"] ?? "");
+      $formdata ["15_quitdatum"] = "";
+      $formdata ["15_quitzeichen"] = "";
+    }
+  } elseif (in_array (
+    $task,
+    array ("FM-Eingang", "FM-Eingang_Anhang"),
+    true
+  )) {
+    $formdata ["01_zeichen"] = (string) ($identity ["kuerzel"] ?? "");
+    $formdata ["13_abseinheit"] = "";
+    $formdata ["15_quitdatum"] = "";
+    $formdata ["15_quitzeichen"] = "";
+    if ((string) ($formdata ["10_anschrift"] ?? "") === "") {
+      $formdata ["10_anschrift"] = $commandPostName;
+    }
+  }
+  return $formdata;
+}
+
+/** Render the same official form after a direct attachment action. */
+function estab_message_attachment_render_form (
+  array $formdata,
+  string $task,
+  string $notice = "",
+  string $error = "",
+  int $status = 200
+): never {
+  $formdata ["estab_attachment_notice"] = $notice;
+  $formdata ["estab_attachment_error"] = $error;
+  $formdata ["estab_attachment_comment"] = $error === ""
+    ? ""
+    : (is_string ($_POST ["message_attachment_comment"] ?? null)
+      ? $_POST ["message_attachment_comment"]
+      : "");
+  http_response_code ($status);
+  header ("Cache-Control: private, no-store, max-age=0");
+  $form = new nachrichten4fach ($formdata, $task, array ());
+  exit;
+}
+
+/** Rebuild the second conversation-note stage for an idempotent replay. */
+function estab_message_attachment_render_conversation_stage (
+  array $draft,
+  array $context,
+  ?array $originMessage,
+  array $recipientMatrix,
+  string $redCopyFunction,
+  array $identity,
+  string $commandPostName
+): never {
+  $context ["task"] = "Stab_gesprnoti";
+  $context ["record_id"] = null;
+  $draft ["11_gesprnotiz"] = "t";
+  $formdata = estab_message_attachment_form_data (
+    $draft,
+    $context,
+    $originMessage,
+    $recipientMatrix,
+    $redCopyFunction,
+    $identity,
+    $commandPostName
+  );
+  $formdata ["task"] = "Stab_gesprnoti";
+  estab_message_attachment_render_form (
+    $formdata,
+    "Stab_gesprnoti",
+    "Der Übergang zur Gesprächsnotiz wurde bereits vorbereitet. Die Anlage ".
+    "wurde nur einmal gespeichert."
+  );
+}
+
+/** Best-effort release of an unfinished direct-upload replay token. */
+function estab_message_attachment_abandon_direct_action (mixed $token): void {
+  if (!isset ($_SESSION) || !is_array ($_SESSION)) {
+    return;
+  }
+  try {
+    estab_attachment_direct_action_abandon ($_SESSION, $token);
+  } catch (Throwable $exception) {
+    error_log (
+      "eStab direct attachment token cleanup failed: ".
+      $exception->getMessage ()
+    );
+  }
+}
+
+/**
+ * Durably checkpoint one replay state before continuing the workflow.
+ *
+ * PHP normally writes its session only at request shutdown. Without this
+ * checkpoint a worker loss immediately after the message commit could leave
+ * the durable message in MariaDB while the session still knew only the old
+ * issued token. Closing and immediately reopening the same session persists
+ * the server-generated attachment reference while retaining the normal
+ * per-session request lock for the following save.
+ */
+function estab_message_attachment_checkpoint_pending_action (
+  mixed $token,
+  array $identity,
+  int $incidentId,
+  string $task,
+  mixed $recordId = null,
+  string $expectedMode = "pending-submit"
+): void {
+  if (session_status () !== PHP_SESSION_ACTIVE) {
+    throw new EstabAttachmentContextException (
+      "Der vorgemerkte Anhangvorgang besitzt keine aktive Sitzung."
+    );
+  }
+  $expectedSessionId = session_id ();
+  if (
+    !is_string ($expectedSessionId)
+    || $expectedSessionId === ""
+    || !session_write_close ()
+    || !session_start ()
+    || !hash_equals ($expectedSessionId, session_id ())
+  ) {
+    throw new EstabAttachmentContextException (
+      "Der vorgemerkte Anhangvorgang konnte nicht dauerhaft gesichert werden."
+    );
+  }
+  $checkpoint = estab_attachment_direct_action_replay_result (
+    $_SESSION,
+    $token,
+    $identity,
+    $incidentId,
+    $task,
+    $recordId
+  );
+  if (
+    !is_array ($checkpoint)
+    || ($checkpoint ["mode"] ?? null) !== $expectedMode
+  ) {
+    throw new EstabAttachmentContextException (
+      "Der vorgemerkte Anhangvorgang ging beim Sichern verloren."
+    );
+  }
+}
+
+$messageAttachmentUploadRequested =
+  isset ($returnValue ["message_attachment_upload_x"])
+  || isset ($returnValue ["message_attachment_upload_y"]);
+$messageAttachmentRemoveRequested =
+  isset ($returnValue ["message_attachment_remove_x"])
+  || isset ($returnValue ["message_attachment_remove_y"]);
+$messageAttachmentFile = $_FILES ["message_attachment_upload"] ?? null;
+$messageAttachmentFilePending = is_array ($messageAttachmentFile)
+  && (($messageAttachmentFile ["error"] ?? UPLOAD_ERR_NO_FILE)
+      !== UPLOAD_ERR_NO_FILE);
+$messageAttachmentSubmitWithFile =
+  isset ($returnValue ["absenden_x"])
+  && $messageAttachmentFilePending;
+// The second stage is identified by the submitted task and the one-time form
+// token. A session-wide flag would let one open browser tab alter another.
+$messageAttachmentConversationStageRequested =
+  $messageAttachmentFinalSubmitRequested
+  && (string) ($returnValue ["task"] ?? "") === "Stab_schreiben"
+  && (string) ($returnValue ["11_gesprnotiz"] ?? "") === "on";
+$messageAttachmentPendingSubmitCompletion = null;
+$messageAttachmentReplayWithoutFile =
+  !$messageAttachmentFilePending
+    ? $messageAttachmentPreGateReplay
+    : null;
+
+// Browsers may retry a completed multipart submit without resending its file
+// bytes. Inspect the unchanged form token before the ordinary save path so the
+// same message cannot be inserted a second time without its attachment. A
+// fresh issued token deliberately returns null and remains a normal no-file
+// message submission.
+if (
+  isset ($returnValue ["absenden_x"])
+  && !$messageAttachmentFilePending
+  && is_string ($messageAttachmentRequestToken)
+  && $messageAttachmentRequestToken !== ""
+  && is_array ($workflowSelectedIdentity)
+  && is_int ($workflowIncidentId)
+  && in_array (
+    (string) ($returnValue ["task"] ?? ""),
+    estab_workflow_attachment_edit_tasks (),
+    true
+  )
+) {
+  // The pre-gate lookup already validated and inspected every final submit.
+  // Keep a defensive fallback for non-final attachment actions only.
+  if (!$messageAttachmentFinalSubmitRequested) {
+    try {
+      $messageAttachmentReplayWithoutFile =
+        estab_attachment_direct_action_replay_result (
+          $_SESSION,
+          $messageAttachmentRequestToken,
+          $workflowSelectedIdentity,
+          $workflowIncidentId,
+          (string) $returnValue ["task"],
+          (string) $returnValue ["task"] === "Stab_korrigieren"
+            ? ($returnValue ["00_lfd"] ?? null)
+            : null
+        );
+    } catch (EstabAttachmentContextException $exception) {
+      error_log ("eStab direct attachment replay rejected");
+      estab_workflow_forbid ();
+    }
+  }
+}
+
+$messageAttachmentAction =
+  $messageAttachmentUploadRequested
+  || $messageAttachmentRemoveRequested
+  || $messageAttachmentSubmitWithFile
+  || is_array ($messageAttachmentReplayWithoutFile);
+
+if (
+  $messageAttachmentFilePending
+  && !in_array (
+    (string) ($returnValue ["task"] ?? ""),
+    estab_workflow_attachment_edit_tasks (),
+    true
+  )
+) {
+  estab_workflow_forbid ();
+}
+
+if ($messageAttachmentAction) {
+  if (
+    !is_array ($workflowSelectedIdentity)
+    || !is_int ($workflowIncidentId)
+  ) {
+    estab_workflow_forbid ();
+  }
+  $attachmentContext = null;
+  $attachmentDraft = null;
+  try {
+    $attachmentContext = estab_attachment_origin_context_create (
+      $workflowSelectedIdentity,
+      $workflowIncidentId,
+      $returnValue,
+      is_array ($objectMessage) ? $objectMessage : null
+    );
+    $attachmentDraft = estab_attachment_origin_draft_from_request (
+      $returnValue,
+      $workflowSelectedIdentity,
+      $attachmentContext
+    );
+    $attachmentDraft ["12_anhang"] =
+      estab_attachment_canonical_message_references (
+        $attachmentDraft ["12_anhang"] ?? ""
+      );
+
+    if (!$messageAttachmentRemoveRequested) {
+      $attachmentScopeConnection = estab_message_connect ($conf_4f_db);
+      try {
+        estab_read_require_attachment_use_scope (
+          $attachmentScopeConnection,
+          $conf_4f_tbl ["anhang"],
+          $conf_4f_tbl ["nachrichten"],
+          $workflowIncidentId,
+          $attachmentDraft ["12_anhang"],
+          $workflowSelectedIdentity
+        );
+      } finally {
+        estab_auth_close ($attachmentScopeConnection);
+      }
+    }
+
+    // Validate the recipient-matrix revision before bytes are persisted.
+    estab_message_attachment_form_data (
+      $attachmentDraft,
+      $attachmentContext,
+      is_array ($objectMessage) ? $objectMessage : null,
+      $empf_matrix,
+      (string) $redcopy2,
+      $workflowSelectedIdentity,
+      $activeCommandPostName
+    );
+
+    if ($messageAttachmentRemoveRequested) {
+      $removeReference = $returnValue ["message_attachment_remove_x"]
+        ?? $returnValue ["message_attachment_remove_y"]
+        ?? null;
+      if (!is_string ($removeReference)) {
+        estab_workflow_forbid ();
+      }
+      $removeReference = estab_file_validate_name (
+        "attachment",
+        $removeReference
+      );
+      $currentReferences = estab_read_attachment_tokens (
+        $attachmentDraft ["12_anhang"]
+      );
+      if (!in_array ($removeReference, $currentReferences, true)) {
+        estab_workflow_forbid ();
+      }
+      $attachmentDraft ["12_anhang"] =
+        estab_attachment_canonical_message_references (
+          implode (";", array_values (array_filter (
+            $currentReferences,
+            static fn (string $reference): bool =>
+              !hash_equals ($removeReference, $reference)
+          )))
+        );
+      // A missing or no-longer-readable legacy reference must still be
+      // removable from an authorised editable form. Reauthorise the complete
+      // resulting list instead of requiring the broken token itself to pass.
+      $remainingScopeConnection = estab_message_connect ($conf_4f_db);
+      try {
+        estab_read_require_attachment_use_scope (
+          $remainingScopeConnection,
+          $conf_4f_tbl ["anhang"],
+          $conf_4f_tbl ["nachrichten"],
+          $workflowIncidentId,
+          $attachmentDraft ["12_anhang"],
+          $workflowSelectedIdentity
+        );
+      } finally {
+        estab_auth_close ($remainingScopeConnection);
+      }
+      $formdata = estab_message_attachment_form_data (
+        $attachmentDraft,
+        $attachmentContext,
+        is_array ($objectMessage) ? $objectMessage : null,
+        $empf_matrix,
+        (string) $redcopy2,
+        $workflowSelectedIdentity,
+        $activeCommandPostName
+      );
+      estab_message_attachment_render_form (
+        $formdata,
+        (string) $attachmentContext ["task"],
+        "Der Anhang wurde aus diesem Nachrichtenvordruck entfernt. " .
+        "Die archivierte Datei wurde nicht gelöscht."
+      );
+    }
+
+    if (is_array ($messageAttachmentReplayWithoutFile)) {
+      $replayReference =
+        $messageAttachmentReplayWithoutFile ["reference"] ?? null;
+      if (is_string ($replayReference) && $replayReference !== "") {
+        $attachmentDraft ["12_anhang"] =
+          estab_attachment_canonical_message_references (
+            estab_attachment_merge_message_references (
+              $attachmentDraft ["12_anhang"],
+              $replayReference
+            )
+          );
+      }
+      $replayScopeConnection = estab_message_connect ($conf_4f_db);
+      try {
+        estab_read_require_attachment_use_scope (
+          $replayScopeConnection,
+          $conf_4f_tbl ["anhang"],
+          $conf_4f_tbl ["nachrichten"],
+          $workflowIncidentId,
+          $attachmentDraft ["12_anhang"],
+          $workflowSelectedIdentity
+        );
+      } finally {
+        estab_auth_close ($replayScopeConnection);
+      }
+      if (($messageAttachmentReplayWithoutFile ["mode"] ?? "") === "submit") {
+        header ("Cache-Control: private, no-store, max-age=0");
+        header ("Location: ".(string) $conf_4f ["MainURL"], true, 303);
+        exit;
+      }
+      if (
+        ($messageAttachmentReplayWithoutFile ["mode"] ?? "") ===
+          "conversation-stage"
+      ) {
+        estab_message_attachment_render_conversation_stage (
+          $attachmentDraft,
+          $attachmentContext,
+          is_array ($objectMessage) ? $objectMessage : null,
+          $empf_matrix,
+          (string) $redcopy2,
+          $workflowSelectedIdentity,
+          $activeCommandPostName
+        );
+      }
+      if (
+        ($messageAttachmentReplayWithoutFile ["mode"] ?? "") ===
+          "pending-submit"
+      ) {
+        // A reference linked anywhere in the incident is not proof that this
+        // exact message POST committed: attachments may intentionally be
+        // reused. Recover the complete draft and require an explicit fresh
+        // submit instead of discarding text or silently inserting a duplicate
+        // after an interrupted response.
+        $formdata = estab_message_attachment_form_data (
+          $attachmentDraft,
+          $attachmentContext,
+          is_array ($objectMessage) ? $objectMessage : null,
+          $empf_matrix,
+          (string) $redcopy2,
+          $workflowSelectedIdentity,
+          $activeCommandPostName
+        );
+        estab_message_attachment_render_form (
+          $formdata,
+          (string) $attachmentContext ["task"],
+          "Die Anlage wurde bereits sicher gespeichert. Der Abschluss des ".
+          "Nachrichtenschritts ist nach der unterbrochenen Antwort nicht ".
+          "eindeutig. Prüfen Sie die Meldungsliste und senden Sie diesen ".
+          "wiederhergestellten Entwurf nur dann erneut, wenn er dort fehlt."
+        );
+      } else {
+        $formdata = estab_message_attachment_form_data (
+          $attachmentDraft,
+          $attachmentContext,
+          is_array ($objectMessage) ? $objectMessage : null,
+          $empf_matrix,
+          (string) $redcopy2,
+          $workflowSelectedIdentity,
+          $activeCommandPostName
+        );
+        estab_message_attachment_render_form (
+          $formdata,
+          (string) $attachmentContext ["task"],
+          "Diese Upload-Anfrage wurde bereits verarbeitet. Die Anlage ".
+          "wurde nur einmal gespeichert und sicher wiederhergestellt."
+        );
+      }
+    }
+
+    if (
+      count (estab_read_attachment_tokens (
+        $attachmentDraft ["12_anhang"]
+      )) >= 100
+    ) {
+      throw new EstabAttachmentUploadUserException (
+        "Einem Nachrichtenvordruck können höchstens 100 Anhänge ".
+        "zugeordnet werden. Entfernen Sie zuerst eine vorhandene Anlage."
+      );
+    }
+
+    try {
+      $replayedAttachment = estab_attachment_direct_action_claim (
+        $_SESSION,
+        $messageAttachmentRequestToken,
+        $workflowSelectedIdentity,
+        $workflowIncidentId,
+        (string) $attachmentContext ["task"],
+        $attachmentContext ["record_id"] ?? null
+      );
+    } catch (EstabAttachmentContextException $exception) {
+      $formdata = estab_message_attachment_form_data (
+        $attachmentDraft,
+        $attachmentContext,
+        is_array ($objectMessage) ? $objectMessage : null,
+        $empf_matrix,
+        (string) $redcopy2,
+        $workflowSelectedIdentity,
+        $activeCommandPostName
+      );
+      estab_message_attachment_render_form (
+        $formdata,
+        (string) $attachmentContext ["task"],
+        "",
+        $exception->getMessage ().
+        " Laden Sie den Nachrichtenvordruck neu und versuchen Sie es erneut.",
+        409
+      );
+    }
+
+    if (is_array ($replayedAttachment)) {
+      $replayedReference = $replayedAttachment ["reference"] ?? null;
+      if (is_string ($replayedReference) && $replayedReference !== "") {
+        $attachmentDraft ["12_anhang"] =
+          estab_attachment_canonical_message_references (
+            estab_attachment_merge_message_references (
+              $attachmentDraft ["12_anhang"],
+              $replayedReference
+            )
+          );
+      }
+      $replayScopeConnection = estab_message_connect ($conf_4f_db);
+      try {
+        estab_read_require_attachment_use_scope (
+          $replayScopeConnection,
+          $conf_4f_tbl ["anhang"],
+          $conf_4f_tbl ["nachrichten"],
+          $workflowIncidentId,
+          $attachmentDraft ["12_anhang"],
+          $workflowSelectedIdentity
+        );
+      } finally {
+        estab_auth_close ($replayScopeConnection);
+      }
+      if (($replayedAttachment ["mode"] ?? "") === "submit") {
+        header ("Cache-Control: private, no-store, max-age=0");
+        header ("Location: ".(string) $conf_4f ["MainURL"], true, 303);
+        exit;
+      }
+      if (($replayedAttachment ["mode"] ?? "") === "conversation-stage") {
+        estab_message_attachment_render_conversation_stage (
+          $attachmentDraft,
+          $attachmentContext,
+          is_array ($objectMessage) ? $objectMessage : null,
+          $empf_matrix,
+          (string) $redcopy2,
+          $workflowSelectedIdentity,
+          $activeCommandPostName
+        );
+      }
+      $formdata = estab_message_attachment_form_data (
+        $attachmentDraft,
+        $attachmentContext,
+        is_array ($objectMessage) ? $objectMessage : null,
+        $empf_matrix,
+        (string) $redcopy2,
+        $workflowSelectedIdentity,
+        $activeCommandPostName
+      );
+      estab_message_attachment_render_form (
+        $formdata,
+        (string) $attachmentContext ["task"],
+        ($replayedAttachment ["mode"] ?? "") === "pending-submit"
+          ? "Die Anlage wurde bereits einmal sicher gespeichert, der ".
+            "Nachrichtenschritt aber noch nicht bestätigt. Prüfen Sie die ".
+            "Felder und senden Sie ohne erneute Dateiauswahl weiter."
+          : "Diese Upload-Anfrage wurde bereits verarbeitet. Die Anlage ".
+            "wurde nur einmal gespeichert und sicher wiederhergestellt."
+      );
+    }
+
+    $upload = is_array ($messageAttachmentFile)
+      ? $messageAttachmentFile
+      : array (
+          "tmp_name" => "",
+          "name" => "",
+          "error" => UPLOAD_ERR_NO_FILE,
+        );
+    $storedAttachment = estab_attachment_upload_browser_file (
+      $upload,
+      $returnValue ["message_attachment_comment"] ?? "",
+      $workflowSelectedIdentity,
+      $workflowIncidentId,
+      $conf_4f_db,
+      $conf_4f_tbl ["anhang"],
+      $conf_4f_tbl ["protokoll"],
+      (string) $conf_4f ["hoheit"],
+      (string) $conf_4f ["ablage_dir"],
+      session_id (),
+      $attachmentContext,
+      $_SERVER
+    );
+    if (
+      $messageAttachmentSubmitWithFile
+      && !$messageAttachmentConversationStageRequested
+    ) {
+      // The token remains processing until the ordinary message transaction
+      // has returned successfully. Validation/stage failures must never look
+      // like a completed message merely because its file was archived.
+      $messageAttachmentPendingSubmitCompletion = array (
+        "token" => (string) $messageAttachmentRequestToken,
+        "reference" => (string) $storedAttachment ["reference"],
+      );
+      estab_attachment_direct_action_note_pending_submit (
+        $_SESSION,
+        (string) $messageAttachmentRequestToken,
+        (string) $storedAttachment ["reference"]
+      );
+      estab_message_attachment_checkpoint_pending_action (
+        $messageAttachmentRequestToken,
+        $workflowSelectedIdentity,
+        $workflowIncidentId,
+        (string) $attachmentContext ["task"],
+        $attachmentContext ["record_id"] ?? null
+      );
+    } elseif ($messageAttachmentSubmitWithFile) {
+      // This first button only opens the second conversation-note form; it
+      // does not commit a message. Persist that deterministic outcome now so
+      // a worker loss cannot mislabel it as an ambiguous message save.
+      estab_attachment_direct_action_complete (
+        $_SESSION,
+        (string) $messageAttachmentRequestToken,
+        (string) $storedAttachment ["reference"],
+        "conversation-stage"
+      );
+      estab_message_attachment_checkpoint_pending_action (
+        $messageAttachmentRequestToken,
+        $workflowSelectedIdentity,
+        $workflowIncidentId,
+        (string) $attachmentContext ["task"],
+        $attachmentContext ["record_id"] ?? null,
+        "conversation-stage"
+      );
+    } else {
+      estab_attachment_direct_action_complete (
+        $_SESSION,
+        (string) $messageAttachmentRequestToken,
+        (string) $storedAttachment ["reference"],
+        "upload"
+      );
+    }
+    $attachmentDraft ["12_anhang"] =
+      estab_attachment_merge_message_references (
+        $attachmentDraft ["12_anhang"],
+        (string) $storedAttachment ["reference"]
+      );
+    $attachmentDraft ["12_anhang"] =
+      estab_attachment_canonical_message_references (
+        $attachmentDraft ["12_anhang"]
+      );
+
+    if ($messageAttachmentSubmitWithFile) {
+      // Continue through the ordinary final message transaction. That
+      // transaction reauthorises the new object reference once more.
+      $returnValue ["12_anhang"] = $attachmentDraft ["12_anhang"];
+      $_POST ["12_anhang"] = $attachmentDraft ["12_anhang"];
+      unset ($_FILES ["message_attachment_upload"]);
+    } else {
+      $formdata = estab_message_attachment_form_data (
+        $attachmentDraft,
+        $attachmentContext,
+        is_array ($objectMessage) ? $objectMessage : null,
+        $empf_matrix,
+        (string) $redcopy2,
+        $workflowSelectedIdentity,
+        $activeCommandPostName
+      );
+      estab_message_attachment_render_form (
+        $formdata,
+        (string) $attachmentContext ["task"],
+        "Der Anhang „".
+        (string) $storedAttachment ["org_filename"].
+        "“ wurde hochgeladen und dieser Nachricht zugeordnet."
+      );
+    }
+  } catch (EstabAttachmentUploadUserException $exception) {
+    estab_message_attachment_abandon_direct_action (
+      $messageAttachmentRequestToken
+    );
+    $safeDraft = is_array ($attachmentDraft) ? $attachmentDraft : array ();
+    try {
+      $formdata = estab_message_attachment_form_data (
+        $safeDraft,
+        is_array ($attachmentContext)
+          ? $attachmentContext
+          : array ("task" => (string) ($returnValue ["task"] ?? "")),
+        is_array ($objectMessage) ? $objectMessage : null,
+        $empf_matrix,
+        (string) $redcopy2,
+        $workflowSelectedIdentity,
+        $activeCommandPostName,
+        false
+      );
+      estab_message_attachment_render_form (
+        $formdata,
+        (string) ($attachmentContext ["task"]
+          ?? ($returnValue ["task"] ?? "")),
+        "",
+        $exception->getMessage (),
+        422
+      );
+    } catch (Throwable $renderException) {
+      error_log (
+        "eStab direct attachment error form failed: ".
+        $renderException->getMessage ()
+      );
+      estab_workflow_forbid ();
+    }
+  } catch (EstabAttachmentDraftException $exception) {
+    estab_message_attachment_abandon_direct_action (
+      $messageAttachmentRequestToken
+    );
+    $safeDraft = $exception->draft ();
+    try {
+      $formdata = estab_message_attachment_form_data (
+        $safeDraft,
+        is_array ($attachmentContext)
+          ? $attachmentContext
+          : array ("task" => (string) ($returnValue ["task"] ?? "")),
+        is_array ($objectMessage) ? $objectMessage : null,
+        $empf_matrix,
+        (string) $redcopy2,
+        $workflowSelectedIdentity,
+        $activeCommandPostName,
+        false
+      );
+      estab_message_attachment_render_form (
+        $formdata,
+        (string) ($attachmentContext ["task"]
+          ?? ($returnValue ["task"] ?? "")),
+        "",
+        $exception->getMessage (),
+        422
+      );
+    } catch (Throwable $renderException) {
+      estab_workflow_forbid ();
+    }
+  } catch (
+    EstabAttachmentContextException
+    | InvalidArgumentException
+    | EstabReadPermissionException $exception
+  ) {
+    estab_message_attachment_abandon_direct_action (
+      $messageAttachmentRequestToken
+    );
+    error_log ("eStab direct attachment request rejected");
+    estab_workflow_forbid ();
+  } catch (EstabIncidentConflictException | EstabNoActiveIncidentException $exception) {
+    estab_message_attachment_abandon_direct_action (
+      $messageAttachmentRequestToken
+    );
+    error_log ("eStab direct attachment incident changed: ".$exception->getMessage ());
+    http_response_code (409);
+    header ("Content-Type: text/plain; charset=UTF-8");
+    header ("Cache-Control: no-store");
+    echo "Der aktive Einsatz hat sich geändert. Öffnen Sie den Nachrichtenvordruck erneut.";
+    exit;
+  } catch (Throwable $exception) {
+    estab_message_attachment_abandon_direct_action (
+      $messageAttachmentRequestToken
+    );
+    error_log ("eStab direct attachment upload failed: ".$exception->getMessage ());
+    if (is_array ($attachmentDraft) && is_array ($attachmentContext)) {
+      try {
+        $formdata = estab_message_attachment_form_data (
+          $attachmentDraft,
+          $attachmentContext,
+          is_array ($objectMessage) ? $objectMessage : null,
+          $empf_matrix,
+          (string) $redcopy2,
+          $workflowSelectedIdentity,
+          $activeCommandPostName,
+          false
+        );
+        estab_message_attachment_render_form (
+          $formdata,
+          (string) $attachmentContext ["task"],
+          "",
+          "Der Anhang kann derzeit nicht sicher gespeichert werden. " .
+          "Ihre Formulareingaben sind erhalten geblieben.",
+          503
+        );
+      } catch (Throwable $renderException) {
+        // Fall through to the minimal fail-closed response.
+      }
+    }
+    http_response_code (503);
+    header ("Content-Type: text/plain; charset=UTF-8");
+    header ("Cache-Control: no-store");
+    echo "Der Anhang kann derzeit nicht sicher gespeichert werden.";
+    exit;
+  }
+}
+
+// Every editable final form action uses the same one-time state machine,
+// including submissions that do not carry a new multipart file. The pending
+// state is flushed before check_and_save() can commit. A retry therefore
+// either resolves its immutable event or remains fail-closed without a second
+// INSERT/UPDATE.
+if (
+  $messageAttachmentFinalSubmitRequested
+  && !$messageAttachmentFilePending
+  && $messageAttachmentPreGateReplay === null
+) {
+  try {
+    $claimedSubmit = estab_attachment_direct_action_claim (
+      $_SESSION,
+      $messageAttachmentRequestToken,
+      $workflowSelectedIdentity,
+      $workflowIncidentId,
+      (string) $returnValue ["task"],
+      (string) $returnValue ["task"] === "Stab_korrigieren"
+        ? ($returnValue ["00_lfd"] ?? null)
+        : null
+    );
+    if (is_array ($claimedSubmit)) {
+      throw new EstabAttachmentContextException (
+        "Der Nachrichtenvorgang wurde bereits verarbeitet."
+      );
+    }
+    if ($messageAttachmentConversationStageRequested) {
+      estab_attachment_direct_action_complete (
+        $_SESSION,
+        (string) $messageAttachmentRequestToken,
+        null,
+        "conversation-stage"
+      );
+      estab_message_attachment_checkpoint_pending_action (
+        $messageAttachmentRequestToken,
+        $workflowSelectedIdentity,
+        $workflowIncidentId,
+        (string) $returnValue ["task"],
+        null,
+        "conversation-stage"
+      );
+    } else {
+      estab_attachment_direct_action_note_pending_submit (
+        $_SESSION,
+        (string) $messageAttachmentRequestToken,
+        null
+      );
+      estab_message_attachment_checkpoint_pending_action (
+        $messageAttachmentRequestToken,
+        $workflowSelectedIdentity,
+        $workflowIncidentId,
+        (string) $returnValue ["task"],
+        (string) $returnValue ["task"] === "Stab_korrigieren"
+          ? ($returnValue ["00_lfd"] ?? null)
+          : null
+      );
+      $messageAttachmentPendingSubmitCompletion = array (
+        "token" => (string) $messageAttachmentRequestToken,
+        "reference" => null,
+      );
+    }
+  } catch (EstabAttachmentContextException $exception) {
+    error_log ("eStab message submit action rejected");
+    estab_workflow_forbid ();
   }
 }
 
@@ -991,11 +1977,6 @@ ANTWORT % WEITERLEITUNG
   checkandsave befindet sich in data_hndl.php
 ***********************************************************************/
 
-  // Abbruch der Gesprächsnotiz beim Sichten
-  if ( !empty ($returnValue["abbrechen_x"]) and !empty ($_SESSION ["gesprnoti"]) ){
-    unset ( $_SESSION ['gesprnoti'] );
-  }
-
 
   $workflowTaskSubmitted = isset ($returnValue ["absenden_x"])
     || isset ($returnValue ["zurueckweisen_x"])
@@ -1018,7 +1999,6 @@ ANTWORT % WEITERLEITUNG
     if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br> Daten kommen vom Formular und können gespeichert werden";  echo "<br>\n";}
 
     if ( ( ($returnValue ["11_gesprnotiz"] ?? "") == "on" ) and
-         ( !$_SESSION ["gesprnoti"] ) and
          ( $returnValue ["task"] == "Stab_schreiben" ) ){
         // Bei GesprÃ¤chsnotiz 2. Vorlage beim Verfasser fÃ¼r Sichtung
 
@@ -1034,23 +2014,80 @@ ANTWORT % WEITERLEITUNG
         $formdata ["15_quitdatum"]    = "";
         $formdata ["15_quitzeichen"]  = "";
         $formdata ["task"]            = "Stab_gesprnoti";
+        if (is_array ($messageAttachmentPendingSubmitCompletion)) {
+          try {
+            // This first step only changes into the dedicated conversation-
+            // note form; no message commit is expected yet. The archived
+            // attachment is nevertheless complete and the old submit token
+            // must not remain replayable as a pending message save.
+            estab_attachment_direct_action_complete (
+              $_SESSION,
+              (string) $messageAttachmentPendingSubmitCompletion ["token"],
+              is_string (
+                $messageAttachmentPendingSubmitCompletion ["reference"]
+                  ?? null
+              )
+                ? $messageAttachmentPendingSubmitCompletion ["reference"]
+                : null,
+              "conversation-stage"
+            );
+          } catch (Throwable $exception) {
+            estab_attachment_direct_action_forget (
+              $_SESSION,
+              $messageAttachmentPendingSubmitCompletion ["token"] ?? null
+            );
+            error_log (
+              "eStab conversation-note attachment token completion failed: ".
+              $exception->getMessage ()
+            );
+          }
+          $messageAttachmentPendingSubmitCompletion = null;
+        }
         $form = new nachrichten4fach ($formdata, "Stab_gesprnoti", "");
-        $_SESSION ["gesprnoti"] = true;
         $gesprnotizsichter = true ;
     } else {
 
       if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### 369 check and save";  echo "<br>\n";}
 
       try {
-        check_and_save ($returndata, $activeCommandPostName);
+        check_and_save (
+          $returndata,
+          $activeCommandPostName,
+          $workflowIncidentId
+        );
+      } catch (EstabIncidentConflictException $exception) {
+        estab_workflow_render_read_gate (
+          409,
+          "Einsatz wurde gewechselt",
+          $exception->getMessage ()
+        );
       } catch (EstabReadPermissionException $exception) {
         // Attachment filenames are object identifiers. A forged selection is
         // indistinguishable from any other forbidden operational object.
         estab_workflow_forbid ();
       }
-
-      // verhindert das erneute Speichern bei Betätigung von F5
-      if (isset ($_SESSION ['gesprnoti'])) { unset ( $_SESSION ['gesprnoti'] ); }
+      if (is_array ($messageAttachmentPendingSubmitCompletion)) {
+        try {
+          estab_attachment_direct_action_complete (
+            $_SESSION,
+            (string) $messageAttachmentPendingSubmitCompletion ["token"],
+            is_string (
+              $messageAttachmentPendingSubmitCompletion ["reference"] ?? null
+            )
+              ? $messageAttachmentPendingSubmitCompletion ["reference"]
+              : null,
+            "submit"
+          );
+        } catch (Throwable $exception) {
+          // Keep the checkpointed pending token. Its immutable action event
+          // proves the already committed message on the next request even if
+          // this final session bookkeeping step fails.
+          error_log (
+            "eStab direct attachment submit token completion failed: ".
+            $exception->getMessage ()
+          );
+        }
+      }
       if (create_vordrucke){
       if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><br> ";}
         include ("../4fbak/backup.php");

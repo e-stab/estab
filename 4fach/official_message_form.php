@@ -9,6 +9,424 @@
  */
 trait EstabOfficialMessageFormView
 {
+    /** @return list<string> */
+    function official_message_attachment_references(): array
+    {
+        $stored = $this->formdata['12_anhang'] ?? '';
+        if (!is_string($stored) || $stored === '') {
+            return [];
+        }
+        $references = [];
+        foreach (explode(';', $stored) as $candidate) {
+            $candidate = trim($candidate);
+            if ($candidate === '' || isset($references[$candidate])) {
+                continue;
+            }
+            try {
+                $reference = estab_file_validate_name(
+                    'attachment',
+                    $candidate
+                );
+            } catch (InvalidArgumentException) {
+                continue;
+            }
+            $references[$reference] = $reference;
+        }
+        return array_values($references);
+    }
+
+    function official_message_attachments_editable(): bool
+    {
+        return in_array(
+            (string) $this->task,
+            estab_attachment_origin_tasks(),
+            true
+        );
+    }
+
+    function official_message_attachment_size(mixed $bytes): string
+    {
+        if (!is_int($bytes) && !(is_string($bytes) && ctype_digit($bytes))) {
+            return '';
+        }
+        $size = (int) $bytes;
+        if ($size < 0) {
+            return '';
+        }
+        if ($size < 1024) {
+            return number_format($size, 0, ',', '.') . ' Byte';
+        }
+        if ($size < 1048576) {
+            return number_format($size / 1024, 1, ',', '.') . ' KiB';
+        }
+        return number_format($size / 1048576, 1, ',', '.') . ' MiB';
+    }
+
+    function official_message_attachment_date(mixed $value): string
+    {
+        if (!is_string($value) || $value === '') {
+            return '';
+        }
+        $date = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $value);
+        return $date instanceof DateTimeImmutable
+            && $date->format('Y-m-d H:i:s') === $value
+            ? $date->format('d.m.Y H:i') . ' Uhr'
+            : '';
+    }
+
+    /**
+     * Render application controls outside the immutable official paper grid.
+     * Attachment metadata has already crossed the object-level read boundary
+     * in the controller; unresolvable rows deliberately fall back to the
+     * internal reference without disclosing database values.
+     */
+    function official_message_attachments(): void
+    {
+        include __DIR__ . '/../4fcfg/config.inc.php';
+        $references = $this->official_message_attachment_references();
+        $editable = $this->official_message_attachments_editable();
+        if (!$editable && $references === []) {
+            return;
+        }
+        $count = count($references);
+        $allowedExtensions = estab_attachment_allowed_extensions();
+        $accept = estab_attachment_upload_accept();
+        $formatNames = strtoupper(implode(', ', $allowedExtensions));
+        $uploadLimit = estab_attachment_upload_limit_label();
+        $previewEndpoint = dirname((string) $conf_4f['download_uri'])
+            . '/showpic.php';
+        $attachmentError = $this->formdata['estab_attachment_error'] ?? '';
+        $attachmentNotice = $this->formdata['estab_attachment_notice'] ?? '';
+        $hasAttachmentFeedback =
+            (is_string($attachmentError) && $attachmentError !== '')
+            || (is_string($attachmentNotice) && $attachmentNotice !== '');
+        $directActionToken = null;
+        if ($editable) {
+            try {
+                if (!isset($_SESSION) || !is_array($_SESSION)) {
+                    throw new EstabAttachmentContextException(
+                        'Der direkte Upload besitzt keine gültige Sitzung.'
+                    );
+                }
+                $identity = estab_auth_session_identity($_SESSION);
+                $incidentId = $GLOBALS['workflowIncidentId'] ?? null;
+                if (!is_array($identity)) {
+                    throw new EstabAttachmentContextException(
+                        'Der direkte Upload besitzt keine gültige Sitzung.'
+                    );
+                }
+                $directActionToken = estab_attachment_direct_action_issue(
+                    $_SESSION,
+                    $identity,
+                    $incidentId,
+                    (string) $this->task,
+                    $this->formdata['00_lfd'] ?? null
+                );
+            } catch (Throwable $exception) {
+                error_log(
+                    'eStab direct attachment action token unavailable: '
+                        . $exception->getMessage()
+                );
+            }
+        }
+
+        echo '<section id="nachrichtenanlagen" '
+            . 'class="estab-message-attachments" '
+            . 'aria-labelledby="nachrichtenanlagen-title" '
+            . ($hasAttachmentFeedback
+                ? 'tabindex="-1" data-estab-attachment-feedback '
+                : '')
+            . 'data-estab-message-attachments data-estab-attachment-count="'
+            . $count . '">'
+            . '<header class="estab-message-attachments-header"><div>'
+            . '<span class="estab-section-kicker">Nachrichtenzubehör</span>'
+            . '<h2 id="nachrichtenanlagen-title">Anlagen (' . $count . ')</h2>'
+            . '<p>Anlagen gehören unmittelbar zu diesem Nachrichtenvordruck. '
+            . 'Sie können sie hier prüfen, herunterladen und – soweit möglich – '
+            . 'direkt im Browser ansehen.</p></div></header>';
+
+        if (is_string($attachmentError) && $attachmentError !== '') {
+            echo '<div class="estab-alert estab-alert--danger" role="alert">'
+                . estab_message_html($attachmentError) . '</div>';
+        }
+        if (is_string($attachmentNotice) && $attachmentNotice !== '') {
+            echo '<div class="estab-alert estab-alert--success" role="status">'
+                . estab_message_html($attachmentNotice) . '</div>';
+        }
+
+        if ($editable && is_string($directActionToken)) {
+            $comment = $this->formdata['estab_attachment_comment'] ?? '';
+            echo '<fieldset class="estab-message-attachment-upload">'
+                . '<legend>Neue Anlage hinzufügen</legend>'
+                . '<input type="hidden" '
+                . 'name="message_attachment_request_token" value="'
+                . estab_message_html($directActionToken) . '">'
+                . '<div class="estab-message-attachment-upload-grid">'
+                . '<label class="estab-message-attachment-file" '
+                . 'for="message-attachment-upload">'
+                . '<strong>Datei auswählen</strong>'
+                . '<input id="message-attachment-upload" type="file" '
+                . 'name="message_attachment_upload" accept="'
+                . estab_message_html($accept) . '" '
+                . 'data-estab-max-bytes="'
+                . estab_message_html((string) estab_attachment_upload_max_bytes())
+                . '" aria-describedby="message-attachment-upload-help '
+                . 'message-attachment-upload-error"></label>'
+                . '<label for="message-attachment-comment">'
+                . '<strong>Beschreibung <span>(optional)</span></strong>'
+                . '<input id="message-attachment-comment" type="text" '
+                . 'name="message_attachment_comment" maxlength="255" value="'
+                . estab_message_html(is_string($comment) ? $comment : '')
+                . '" placeholder="z. B. Lagekarte, Stand 20:15 Uhr"></label>'
+                . '</div><small id="message-attachment-upload-help">'
+                . 'Erlaubte Formate: ' . estab_message_html($formatNames)
+                . '. Maximale Dateigröße: '
+                . estab_message_html($uploadLimit) . '.</small>'
+                . '<div class="estab-message-attachment-upload-actions">'
+                . '<button type="submit" '
+                . 'name="message_attachment_upload_x" value="1" '
+                . 'class="estab-button estab-button-primary" formnovalidate>'
+                . 'Datei hochladen</button>'
+                . '<button type="submit" name="anhang_plus_x" value="1" '
+                . 'class="estab-button estab-button-secondary" formnovalidate>'
+                . 'Bereits hochgeladene Anlage auswählen</button></div>'
+                . '<p id="message-attachment-upload-error" '
+                . 'class="estab-attachment-client-error" role="alert" '
+                . 'hidden></p>'
+                . '</fieldset>';
+        } elseif ($editable) {
+            echo '<div class="estab-alert estab-alert--danger" role="alert">'
+                . 'Der direkte Upload kann derzeit nicht sicher vorbereitet '
+                . 'werden. Laden Sie den Nachrichtenvordruck neu oder wählen '
+                . 'Sie eine bereits archivierte Anlage aus.</div>'
+                . '<p><button type="submit" name="anhang_plus_x" value="1" '
+                . 'class="estab-button estab-button-secondary" formnovalidate>'
+                . 'Bereits hochgeladene Anlage auswählen</button></p>';
+        }
+
+        $hasEmbeddedPdf = false;
+        if ($references === []) {
+            echo '<p class="estab-message-attachments-empty">'
+                . '<strong>Noch keine Anlage hinzugefügt.</strong> '
+                . 'Nach dem Hochladen erscheint die Datei sofort hier am '
+                . 'Nachrichtenvordruck.</p>';
+        } else {
+            echo '<div class="estab-message-attachment-cards">';
+            foreach ($references as $reference) {
+                $metadata = is_array($this->attachmentPreviews[$reference] ?? null)
+                    ? $this->attachmentPreviews[$reference]
+                    : [];
+                $metadataAvailable = $metadata !== [];
+                $originalName = is_string($metadata['org_filename'] ?? null)
+                    && trim($metadata['org_filename']) !== ''
+                    ? trim($metadata['org_filename'])
+                    : $reference;
+                $comment = is_string($metadata['comment'] ?? null)
+                    ? trim($metadata['comment'])
+                    : '';
+                $size = $this->official_message_attachment_size(
+                    $metadata['ingest_size'] ?? null
+                );
+                $date = $this->official_message_attachment_date(
+                    $metadata['date'] ?? null
+                );
+                try {
+                    $downloadUrl = estab_file_download_url(
+                        (string) $conf_4f['download_uri'],
+                        'attachment',
+                        $reference
+                    );
+                } catch (InvalidArgumentException) {
+                    continue;
+                }
+                $inlineUrl = $downloadUrl . '&view=inline';
+                $extension = strtolower(
+                    pathinfo($reference, PATHINFO_EXTENSION)
+                );
+                $isImage = in_array(
+                    $extension,
+                    ['jpg', 'jpeg', 'png', 'gif', 'bmp'],
+                    true
+                );
+                $previewUrl = $previewEndpoint . '?'
+                    . http_build_query(
+                        ['file' => $reference, 'width' => 640],
+                        '',
+                        '&',
+                        PHP_QUERY_RFC3986
+                    );
+
+                echo '<article class="estab-message-attachment-card" '
+                    . (!$metadataAvailable
+                        ? 'data-estab-attachment-unavailable '
+                        : '')
+                    . 'data-estab-message-attachment="'
+                    . estab_message_html($reference) . '">';
+                if ($metadataAvailable && $isImage) {
+                    echo '<a class="estab-message-attachment-preview" href="'
+                        . estab_message_html($inlineUrl)
+                        . '" target="_blank" rel="noopener" '
+                        . 'aria-label="' . estab_message_html(
+                            $originalName . ' in neuem Browser-Tab ansehen'
+                        ) . '"><img loading="lazy" decoding="async" '
+                        . 'fetchpriority="low" src="'
+                        . estab_message_html($previewUrl) . '" alt="Vorschau: '
+                        . estab_message_html($originalName) . '"></a>';
+                } else {
+                    echo '<div class="estab-message-attachment-filetype" '
+                        . 'aria-hidden="true"><span>'
+                        . estab_message_html(strtoupper($extension ?: 'Datei'))
+                        . '</span></div>';
+                }
+                echo '<div class="estab-message-attachment-details">'
+                    . '<h3>' . estab_message_html($originalName) . '</h3>';
+                if (!$metadataAvailable) {
+                    echo '<p class="estab-message-attachment-unavailable" '
+                        . 'role="status"><strong>Anlage derzeit nicht '
+                        . 'verfügbar.</strong> Berechtigung und Integrität '
+                        . 'konnten für diese Ansicht nicht bestätigt werden. '
+                        . 'Laden Sie den Vordruck neu.</p>';
+                }
+                if ($comment !== '') {
+                    echo '<p>' . estab_message_html($comment) . '</p>';
+                }
+                $facts = array_values(array_filter([$date, $size]));
+                if ($facts !== []) {
+                    echo '<p class="estab-message-attachment-meta">'
+                        . estab_message_html(implode(' · ', $facts)) . '</p>';
+                }
+                echo '<p class="estab-message-attachment-reference">'
+                    . 'Interne Anlagen-ID: '
+                    . estab_message_html($reference) . '</p>';
+                if ($metadataAvailable || $editable) {
+                    echo '<div class="estab-message-attachment-actions">';
+                }
+                if ($metadataAvailable) {
+                    echo '<a class="estab-button estab-button-secondary" href="'
+                        . estab_message_html($downloadUrl)
+                        . '" aria-label="' . estab_message_html(
+                            $originalName . ' herunterladen'
+                        ) . '">Herunterladen</a>';
+                }
+                if ($metadataAvailable && ($isImage || $extension === 'pdf')) {
+                    echo '<a class="estab-button estab-button-ghost" href="'
+                        . estab_message_html($inlineUrl)
+                        . '" target="_blank" rel="noopener" aria-label="'
+                        . estab_message_html(
+                            $originalName . ' in neuem Browser-Tab ansehen'
+                        ) . '">'
+                        . 'Im Browser ansehen</a>';
+                }
+                if ($editable) {
+                    echo '<button type="submit" '
+                        . 'name="message_attachment_remove_x" value="'
+                        . estab_message_html($reference) . '" '
+                        . 'class="estab-button estab-button-danger" '
+                        . 'aria-label="' . estab_message_html(
+                            $originalName . ' vom Vordruck entfernen'
+                        ) . '" formnovalidate>Vom Vordruck entfernen</button>';
+                }
+                if ($metadataAvailable || $editable) {
+                    echo '</div>';
+                }
+                echo '</div>';
+                if ($metadataAvailable && $extension === 'pdf') {
+                    $hasEmbeddedPdf = true;
+                    echo '<details class="estab-message-attachment-pdf" '
+                        . 'data-estab-pdf-preview>'
+                        . '<summary aria-label="' . estab_message_html(
+                            'PDF ' . $originalName . ' hier anzeigen'
+                        ) . '">PDF hier anzeigen</summary>'
+                        . '<iframe loading="lazy" '
+                        . 'referrerpolicy="no-referrer" data-src="'
+                        . estab_message_html($inlineUrl)
+                        . '" title="PDF-Vorschau: '
+                        . estab_message_html($originalName) . '"></iframe>'
+                        . '</details>';
+                }
+                echo '</article>';
+            }
+            echo '</div>';
+        }
+        if ($hasAttachmentFeedback || $hasEmbeddedPdf) {
+            echo <<<'HTML'
+<script data-estab-attachment-presentation>
+(function () {
+  "use strict";
+  document.querySelectorAll("[data-estab-pdf-preview]").forEach(function (details) {
+    var frame = details.querySelector("iframe[data-src]");
+    if (!frame) return;
+    details.addEventListener("toggle", function () {
+      if (!details.open || frame.hasAttribute("src")) return;
+      frame.setAttribute("src", frame.getAttribute("data-src"));
+      frame.removeAttribute("data-src");
+    });
+  });
+  var feedback = document.querySelector("[data-estab-attachment-feedback]");
+  if (!feedback) return;
+  window.requestAnimationFrame(function () {
+    feedback.focus({ preventScroll: true });
+    feedback.scrollIntoView({ block: "start" });
+  });
+})();
+</script>
+HTML;
+        }
+        if ($editable && is_string($directActionToken)) {
+            echo <<<'HTML'
+<script data-estab-attachment-upload-limit>
+(function () {
+  "use strict";
+  var input = document.getElementById("message-attachment-upload");
+  var error = document.getElementById("message-attachment-upload-error");
+  if (!input || !error || !input.form) return;
+  var maximum = Number(input.getAttribute("data-estab-max-bytes"));
+  if (!Number.isSafeInteger(maximum) || maximum < 1) return;
+  function selectedFileIsTooLarge() {
+    return input.files && input.files.length > 0
+      && Number.isFinite(input.files[0].size)
+      && input.files[0].size > maximum;
+  }
+  function formatMebibytes(bytes) {
+    return new Intl.NumberFormat("de-DE", { maximumFractionDigits: 1 })
+      .format(bytes / 1048576) + " MiB";
+  }
+  function validateSelection(moveFocus) {
+    var invalid = selectedFileIsTooLarge();
+    error.hidden = !invalid;
+    error.textContent = invalid
+      ? "Die Datei ist größer als die erlaubten "
+        + formatMebibytes(maximum)
+        + ". Ihre Eingaben bleiben erhalten; wählen Sie eine kleinere Datei."
+      : "";
+    input.setAttribute("aria-invalid", invalid ? "true" : "false");
+    if (invalid && moveFocus) {
+      input.focus({ preventScroll: true });
+      input.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    return !invalid;
+  }
+  input.addEventListener("change", function () {
+    validateSelection(false);
+  });
+  input.form.addEventListener("submit", function (event) {
+    var submitterName = event.submitter && event.submitter.name
+      ? event.submitter.name
+      : "";
+    if (
+      submitterName !== ""
+      && submitterName !== "message_attachment_upload_x"
+      && submitterName !== "absenden_x"
+    ) return;
+    if (!validateSelection(true)) event.preventDefault();
+  });
+})();
+</script>
+HTML;
+        }
+        echo '</section>';
+    }
+
     /**
      * Render only the incident-local TBB evidence number linked to this
      * message. The historic 04_nummer remains a technical workflow/archive
@@ -869,8 +1287,17 @@ trait EstabOfficialMessageFormView
             case 'Stab_korrigieren':
             case 'FM-Eingang_Anhang':
             case 'Stab_gesprnoti':
-                echo '<button type="submit" name="anhang_plus_x" value="1" '
-                    . 'class="estab-button estab-button-secondary">Anhang hinzufügen</button>';
+                $attachmentCount = count(
+                    $this->official_message_attachment_references()
+                );
+                echo '<a href="#nachrichtenanlagen" '
+                    . 'class="estab-button estab-button-secondary '
+                    . 'estab-message-attachment-jump">'
+                    . ($attachmentCount > 0
+                        ? $attachmentCount . ' '
+                            . ($attachmentCount === 1 ? 'Anlage' : 'Anlagen')
+                        : 'Anlage hinzufügen')
+                    . '</a>';
                 echo '<button type="submit" name="absenden_x" value="1" '
                     . 'class="estab-button estab-button-primary">Absenden</button>';
                 echo '<button type="submit" name="abbrechen_x" value="1" '
@@ -1445,13 +1872,31 @@ HTML;
         );
         echo '<body class="estab-message-form-body">';
         echo '<main class="estab-message-form-page">';
+        $attachmentCount = count(
+            $this->official_message_attachment_references()
+        );
         echo '<header class="estab-message-page-header">'
             . '<div><span class="estab-section-kicker">Nachrichtenwesen</span>'
             . '<h1>Nachrichtenvordruck</h1>'
             . '<p>Amtliches Raster mit feldbezogenen Ausfüllhinweisen. '
             . 'Das Symbol <strong>i</strong> öffnet die jeweilige Anleitung.</p>'
-            . '</div><span class="estab-message-task-badge">'
-            . estab_message_html($this->task) . '</span></header>';
+            . '</div><div class="estab-message-header-badges">'
+            . '<span class="estab-message-task-badge">'
+            . estab_message_html($this->task) . '</span>';
+        if ($attachmentCount > 0 || $this->official_message_attachments_editable()) {
+            echo '<a class="estab-message-attachment-badge'
+                . ($attachmentCount === 0
+                    ? ' estab-message-attachment-badge--empty'
+                    : '')
+                . '" '
+                . 'href="#nachrichtenanlagen">'
+                . ($attachmentCount > 0
+                    ? $attachmentCount . ' '
+                        . ($attachmentCount === 1 ? 'Anlage' : 'Anlagen')
+                    : 'Anlage hinzufügen')
+                . '</a>';
+        }
+        echo '</div></header>';
         if ((string)$this->formdata['estab_route_error'] !== '') {
             echo '<div class="estab-alert estab-alert--danger" role="alert">'
                 . estab_message_html($this->formdata['estab_route_error'])
@@ -1461,7 +1906,7 @@ HTML;
         $dirtyInitial = $this->hasUnsavedValidationData
             ? ' data-estab-dirty-initial'
             : '';
-        echo '<form method="post" action="'
+        echo '<form method="post" enctype="multipart/form-data" action="'
             . estab_message_html($conf_4f['MainURL'])
             . '" name="4fach" data-estab-dirty-guard '
             . 'data-estab-requires-incident' . $dirtyInitial . '>';
@@ -1478,6 +1923,8 @@ HTML;
             . $this->safe_message_value('00_lfd') . '">'
             . '<input type="hidden" name="00_lfd" value="'
             . $this->safe_message_value('00_lfd') . '">';
+        echo '<input id="f_12_anhang" type="hidden" name="12_anhang" '
+            . 'value="' . $this->safe_message_value('12_anhang') . '">';
         if (!in_array($this->task, ['FM-Admin', 'SI-Admin'], true)) {
             echo '<input type="hidden" name="task" value="'
                 . estab_message_html($this->task) . '">';
@@ -1851,14 +2298,7 @@ HTML;
         echo '</div></section></article></div>';
         $this->official_message_extra_distribution();
 
-        if ((string)$this->formdata['12_anhang'] !== '') {
-            echo '<section class="estab-message-attachment-list">'
-                . '<h2>Anhänge zur Nachricht</h2>';
-            echo '<input id="f_12_anhang" type="hidden" name="12_anhang" '
-                . 'value="' . $this->safe_message_value('12_anhang') . '">';
-            $this->list_anhang();
-            echo '</section>';
-        }
+        $this->official_message_attachments();
         $this->official_message_actions('bottom');
         echo '</form></main>';
         $this->show_message_suggestion_script();

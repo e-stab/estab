@@ -38,16 +38,29 @@ if (!is_array($readIdentity)) {
         $_SERVER
     );
 }
+// Streaming and current-layout PDF rendering may take noticeable time on a
+// NAS. The copied identity is all later authorization needs, so release the
+// session lock before database, hashing and file work starts.
+if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+}
 $area = isset($_GET['area']) && is_string($_GET['area']) ? $_GET['area'] : '';
 $filename = isset($_GET['file']) && is_string($_GET['file']) ? $_GET['file'] : '';
 $layoutProvided = array_key_exists('layout', $_GET);
 $layout = $layoutProvided && is_string($_GET['layout'])
     ? $_GET['layout']
     : '';
+$viewProvided = array_key_exists('view', $_GET);
+$view = $viewProvided && is_string($_GET['view'])
+    ? $_GET['view']
+    : '';
 
 try {
     if ($layoutProvided && !is_string($_GET['layout'])) {
         throw new InvalidArgumentException('Invalid generated-form layout type');
+    }
+    if ($viewProvided && !is_string($_GET['view'])) {
+        throw new InvalidArgumentException('Invalid attachment view type');
     }
     $area = estab_file_area($area);
     $filename = estab_file_validate_name($area, $filename);
@@ -57,11 +70,26 @@ try {
     ) {
         throw new InvalidArgumentException('Invalid generated-form layout');
     }
+    if (
+        $viewProvided
+        && ($area !== 'attachment' || $view !== 'inline')
+    ) {
+        throw new InvalidArgumentException('Invalid attachment view');
+    }
 } catch (InvalidArgumentException) {
     estab_download_error(400, 'Ungültige Dateianforderung.');
 }
 
 $currentLayout = $area === 'vordruck' && $layout === 'current';
+$attachmentInlineRequested = $area === 'attachment' && $view === 'inline';
+$attachmentInlineMimeTypes = [
+    'application/pdf',
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/bmp',
+    'image/x-ms-bmp',
+];
 $inline = $area === 'vordruck'
     && preg_match('/\.(?:pdf|png|jpe?g)\z/Di', $filename) === 1;
 $connection = null;
@@ -74,6 +102,7 @@ $size = 0;
 $contentType = 'application/octet-stream';
 $attachment = null;
 $attachmentIntegrity = null;
+$attachmentAuthorizationVersion = null;
 $failure = null;
 try {
     $connection = estab_auth_connect($conf_4f_db);
@@ -88,14 +117,22 @@ try {
             $conf_4f_tbl['nachrichten'],
             $filename,
             $readIdentity,
-            true
+            false
         );
         if (!is_array($attachment)) {
             throw new EstabIncidentNotFoundException(
                 'Attachment is missing or not readable'
             );
         }
+        $attachmentAuthorizationVersion =
+            estab_read_attachment_authorization_version($attachment);
         $root = (string) $conf_4f['ablage_dir'];
+        if (!$connection->commit()) {
+            throw new RuntimeException(
+                'Could not commit initial attachment authorization'
+            );
+        }
+        $transactionActive = false;
     } else {
         try {
             $activeForm = estab_generated_form_fetch_active(
@@ -182,6 +219,48 @@ try {
             ? (int) $attachmentIntegrity['content_size']
             : (int) $stat['size'];
         $contentType = estab_file_stream_content_type($stream);
+        if (
+            $attachmentInlineRequested
+            && in_array($contentType, $attachmentInlineMimeTypes, true)
+        ) {
+            // Browser display is an explicit opt-in and depends on the MIME
+            // type detected from the already authorised, integrity-verified
+            // byte snapshot. Every other attachment remains a download.
+            $inline = true;
+        }
+    }
+    if ($area === 'attachment') {
+        // Hash/copy the potentially large file without holding operational
+        // database locks, then bind that private byte snapshot to a fresh
+        // authorization immediately before delivery.
+        if (!$connection->begin_transaction()) {
+            throw new RuntimeException(
+                'Could not start final attachment authorization'
+            );
+        }
+        $transactionActive = true;
+        $currentAttachment = estab_read_attachment(
+            $connection,
+            $conf_4f_tbl['anhang'],
+            $conf_4f_tbl['nachrichten'],
+            $filename,
+            $readIdentity,
+            true
+        );
+        if (
+            !is_array($currentAttachment)
+            || !is_string($attachmentAuthorizationVersion)
+            || !hash_equals(
+                $attachmentAuthorizationVersion,
+                estab_read_attachment_authorization_version(
+                    $currentAttachment
+                )
+            )
+        ) {
+            throw new EstabIncidentNotFoundException(
+                'Attachment authorization changed during file snapshot'
+            );
+        }
     }
     if (!$connection->commit()) {
         throw new RuntimeException('Could not commit file authorization transaction');
@@ -253,7 +332,18 @@ header('Content-Length: ' . (string) $size);
 header('Cache-Control: private, no-store, max-age=0');
 header('Pragma: no-cache');
 header('X-Content-Type-Options: nosniff');
-header('Content-Security-Policy: sandbox; default-src \'none\'');
+if ($inline && $contentType === 'application/pdf') {
+    // Chromium's built-in PDF viewer cannot render inside a CSP/iframe
+    // sandbox because that disables its document viewer. The bytes reaching
+    // this branch already passed object authorization, immutable integrity
+    // verification and an exact application/pdf Fileinfo check. Limit
+    // embedding to this application's own origin instead.
+    header("Content-Security-Policy: frame-ancestors 'self'");
+    header('X-Frame-Options: SAMEORIGIN');
+} else {
+    header("Content-Security-Policy: sandbox; default-src 'none'; frame-ancestors 'none'");
+    header('X-Frame-Options: DENY');
+}
 if ($currentLayout) {
     header('X-eStab-PDF-Layout: current');
 }

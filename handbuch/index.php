@@ -312,7 +312,7 @@ $handbookUpdated = '1. August 2026';
 
         <article id="vordruck" class="estab-handbook-chapter"
           data-estab-handbook-section
-          data-handbook-keywords="Formular Ausfüllhilfe Infoblase amtlich Betreff Rufnummer Zeit Zeichen Vorrang Sofort Blitz Staatsnot Antwort Weiterleitung Gesprächsnotiz Druck">
+          data-handbook-keywords="Formular Ausfüllhilfe Infoblase amtlich Betreff Rufnummer Zeit Zeichen Vorrang Sofort Blitz Staatsnot Antwort Weiterleitung Gesprächsnotiz Druck Anlage Anhang Badge">
           <header><span>06</span><div><p>Das digitale amtliche Blatt</p><h2>Nachrichtenvordruck bedienen</h2></div></header>
           <p>Der Bildschirmvordruck folgt dem aktuellen dreiteiligen Raster:
             Fm-Zentrale, Nachricht und Sichter. Zwanzig mit „i“ markierte
@@ -339,6 +339,11 @@ $handbookUpdated = '1. August 2026';
             <li><strong>Folgenachrichten:</strong> „Antwort“ übernimmt die
               Rufnummer und setzt einen Betreff mit „AW:“; „Weiterleitung“
               beginnt ohne Rufnummer und mit „WG:“.</li>
+            <li><strong>Anlagen:</strong> Dateien werden unmittelbar unter dem
+              offenen Vordruck hinzugefügt. Die Anzahl ist bereits im
+              Formularkopf sichtbar; jede Anlage erscheint darunter mit
+              Dateiname, optionaler Beschreibung, soweit belegtem Zeitpunkt
+              und Größe sowie passenden Aktionen.</li>
           </ul>
           <p>Der Vordruck enthält auf Projektvorgabe weder VS-NfD-Aufdruck noch
             Wappen. <a href="<?= $href('messages') ?>">Nachrichtenvordruck öffnen</a>.</p>
@@ -386,24 +391,71 @@ $handbookUpdated = '1. August 2026';
 
         <article id="anhaenge" class="estab-handbook-chapter"
           data-estab-handbook-section
-          data-handbook-keywords="Datei Upload Anlage Anhang JPEG JPG PDF PNG GIF BMP TIFF ZIP DOC XLS ODT TXT XIA AVI 20 MiB MIME Vorschau Download Prüfsumme">
+          data-handbook-keywords="Datei Upload Anlage Anhang JPEG JPG PDF PNG GIF BMP TIFF ZIP DOC XLS ODT TXT XIA AVI 20 MiB 24 MiB MIME Vorschau Download Prüfsumme Badge Karte entfernen Archiv">
           <header><span>08</span><div><p>Dateien sicher mitführen</p><h2>Anhänge</h2></div></header>
-          <p>Öffnen Sie im Nachrichtenvorgang „Anhänge“, wählen Sie eine Datei,
-            ergänzen Sie Beschreibung und Kürzel und laden Sie sie hoch. Danach
-            wird die fertige Datei ausgewählt und beim Zurückkehren mit dem
-            noch offenen Entwurf verbunden. Abbrechen gibt eine nicht
-            verwendete Reservierung wieder frei.</p>
+          <p>Bleiben Sie beim Erfassen oder Bearbeiten im geöffneten
+            Nachrichtenvordruck. Wählen Sie unter „Neue Anlage hinzufügen“
+            eine Datei, ergänzen Sie bei Bedarf eine Beschreibung und wählen
+            Sie „Datei hochladen“. Der offene Entwurf bleibt erhalten und die
+            Datei erscheint sofort als Anlagenkarte am Vordruck. Alternativ
+            können Sie mit ausgewählter Datei direkt die reguläre
+            Formularaktion ausführen; eStab speichert dann zuerst die Anlage
+            und danach den Nachrichtenschritt.</p>
+          <p>Der direkte Upload und das Entfernen aus dem Entwurf stehen beim
+            Erfassen eines Eingangs durch A/W sowie beim Schreiben,
+            Korrigieren und bei Gesprächsnotizen von Stab/FB bereit. In den
+            nachfolgenden LdF-, Si- und A/W-Arbeitsschritten bleiben die
+            zugeordneten Karten sichtbar, sind dort aber nicht mehr
+            veränderbar. Höchstens 100 Anlagen können einem Vordruck
+            zugeordnet werden.</p>
+          <ol class="estab-handbook-steps">
+            <li><strong>Anlage erkennen.</strong> Der Formularkopf sowie die
+              Meldungsübersicht und zweite Sichtung zeigen „1 Anlage“ oder die
+              entsprechende Anzahl. Damit ist eine Nachricht mit Anlagen auch
+              in langen Trefferlisten sofort erkennbar.</li>
+            <li><strong>Inhalt prüfen.</strong> JPEG-, PNG-, GIF- und
+              BMP-Bilder erscheinen als Vorschau.
+              PDF-Dateien lassen sich direkt in der Anlagenkarte aufklappen.
+              Für diese Bildformate und PDF steht zusätzlich „Im Browser
+              ansehen“ bereit; jede zulässige Datei einschließlich TIFF kann
+              heruntergeladen werden.</li>
+            <li><strong>Zuordnung korrigieren.</strong> „Vom Vordruck entfernen“
+              löst nur die Zuordnung im noch bearbeitbaren Vordruck. Die
+              bereits sicher archivierte Datei wird dabei nicht gelöscht und
+              kann später erneut ausgewählt werden.</li>
+          </ol>
           <div class="estab-handbook-facts">
             <div><strong>Erlaubte Endungen</strong><span>JPG, JPEG, TIF, TIFF, GIF, AVI, PNG, BMP, ZIP, PDF, DOC, XLS, ODT, TXT und XIA</span></div>
             <div><strong>Größenlimit</strong><span>Wird direkt am Dateifeld angezeigt; Standard sind 20 MiB je Upload.</span></div>
             <div><strong>Inhaltsprüfung</strong><span>Dateiendung und serverseitig erkannter MIME-Typ müssen zusammenpassen.</span></div>
           </div>
+          <p>Die Schaltfläche „Bereits hochgeladene Anlage auswählen“
+            öffnet den bisherigen Anlagenbereich als optionale Archivauswahl.
+            Sie ist für Dateien gedacht, die schon zum aktiven Einsatz
+            hochgeladen wurden; für eine neue Datei ist dieser Umweg nicht
+            mehr erforderlich.</p>
           <p>Eine verknüpfte Anlage übernimmt die Leserechte mindestens einer
             verknüpften Nachricht. Eine noch freie Anlage sehen nur Uploader
             oder ausgewähltes S2, Si beziehungsweise LdF. Download und
-            Bildvorschau prüfen die Berechtigung sowie den unveränderlichen
-            SHA-256-/Größennachweis erneut.</p>
-          <p><a href="<?= $href('attachments') ?>">Anlagenbereich öffnen</a>
+            Browseransicht prüfen Berechtigung, tatsächlichen Dateityp sowie
+            den unveränderlichen SHA-256-/Größennachweis erneut.</p>
+          <p>Ist die Anlage serverseitig bereits vollständig gespeichert und
+            geht erst die Antwort verloren oder schlägt danach die
+            Nachrichtenvalidierung fehl, können Sie den geöffneten Vordruck
+            ohne erneute Dateiauswahl absenden: eStab stellt die Referenz wieder
+            her und erzeugt weder eine zweite Datei noch eine zweite Nachricht.
+            Ein abgebrochener oder nur teilweise übertragener Datei-Upload muss
+            dagegen erneut ausgewählt werden. Wird ein Entwurf bewusst nicht
+            weiterverfolgt, bleibt
+            die hochgeladene Datei als freie Archivdatei erhalten und kann
+            später – sofern berechtigt – erneut ausgewählt werden.</p>
+          <p>Für unterstützte Vorschaubilder über 16 Megapixel oder 24 MiB
+            Dateigröße erscheint statt einer Miniatur ein Platzhalter; Download
+            und „Im Browser ansehen“ bleiben verfügbar. Das schützt kleine Geräte vor
+            aufwendigem Dekodieren und betrifft nicht die getrennten Grenzen
+            des PDF-Einsatzdossiers.</p>
+          <p><a href="<?= $href('messages') ?>">Nachrichtenvordruck mit direktem Upload öffnen</a>
+            oder den <a href="<?= $href('attachments') ?>">Anlagenbereich als Archiv öffnen</a>
             (aktiver Einsatz und passende feste Kontofunktion erforderlich).</p>
         </article>
 
@@ -417,6 +469,8 @@ $handbookUpdated = '1. August 2026';
             Nachrichtentext und Verfasserfunktion.</p>
           <ul>
             <li>Richtung, Vorrang und Bearbeitungsstand sind sofort sichtbar.</li>
+            <li>Ein Anlagenhinweis nennt direkt am Treffer die Zahl der
+              verknüpften Dateien.</li>
             <li>Zeitraum, Empfänger, Sortierung und 25/50/100 Treffer je Seite
               stehen unter den weiteren Filtern.</li>
             <li>Aktive Filter erscheinen als einzeln entfernbare Chips.</li>

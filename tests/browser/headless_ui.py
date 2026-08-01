@@ -84,6 +84,7 @@ def _png_rgb_content_summary(payload: bytes) -> dict[str, int]:
     blue_pixels = 0
     dark_pixels = 0
     non_white_pixels = 0
+    white_pixels = 0
     blue_min_x = width
     blue_max_x = -1
     blue_min_y = height
@@ -135,6 +136,8 @@ def _png_rgb_content_summary(payload: bytes) -> dict[str, int]:
                 dark_pixels += 1
             if red < 245 or green < 245 or blue < 245:
                 non_white_pixels += 1
+            if red >= 248 and green >= 248 and blue >= 248:
+                white_pixels += 1
         decoded_rows.append(bytes(current))
         previous = current
 
@@ -159,6 +162,7 @@ def _png_rgb_content_summary(payload: bytes) -> dict[str, int]:
         "dark_pixels_in_blue_bounds": dark_pixels_in_blue_bounds,
         "dark_pixels": dark_pixels,
         "non_white_pixels": non_white_pixels,
+        "white_pixels": white_pixels,
     }
 
 
@@ -169,6 +173,7 @@ class TestConfig:
     login_code: str
     login_function: str
     login_password: str = dataclasses.field(repr=False)
+    workflow_marker: str | None = None
     message_suggestion_marker: str | None = None
     admin_user: str | None = None
     admin_password: str | None = dataclasses.field(default=None, repr=False)
@@ -224,6 +229,16 @@ class TestConfig:
             )
         if not re.fullmatch(r"[A-Za-z0-9_/-]{1,20}", login_function):
             raise TestFailure("ESTAB_TEST_LOGIN_FUNCTION enthält nicht unterstützte Zeichen.")
+        workflow_marker = os.environ.get("ESTAB_TEST_WORKFLOW_MARKER")
+        if (
+            workflow_marker is not None
+            and re.fullmatch(
+                r"ESTAB_BACKUP_ROUNDTRIP_[a-f0-9]{16}",
+                workflow_marker,
+            )
+            is None
+        ):
+            raise TestFailure("ESTAB_TEST_WORKFLOW_MARKER ist ungültig.")
         message_suggestion_marker = os.environ.get(
             "ESTAB_TEST_MESSAGE_SUGGESTION_MARKER"
         )
@@ -266,6 +281,7 @@ class TestConfig:
             login_code=login_code,
             login_function=login_function,
             login_password=password,
+            workflow_marker=workflow_marker,
             message_suggestion_marker=message_suggestion_marker,
             admin_user=admin_user,
             admin_password=admin_password,
@@ -2003,6 +2019,7 @@ class BrowserAcceptance:
             },
         )
 
+        self._assert_existing_message_attachment_previews()
         self._assert_dirty_navigation_guard()
         self._wait_for_authenticated_overview(
             "angemeldete Übersicht wurde nach bestätigtem Bereichswechsel nicht geöffnet"
@@ -5335,6 +5352,387 @@ class BrowserAcceptance:
             })()
             """,
             f"Rückkehrbutton bringt in {location} nicht zur Sidebar zurück",
+        )
+
+    def _assert_existing_message_attachment_previews(self) -> None:
+        marker = self.config.workflow_marker
+        if marker is None:
+            print(
+                "      übersprungen: echte Anlagenvorschau ohne "
+                "ESTAB_TEST_WORKFLOW_MARKER"
+            )
+            return
+        message_marker = marker + "_DIRECT_ATTACHMENT_SUBMIT"
+        # The legacy search field really has maxlength=30. Keep this input
+        # short enough for the actual UI while the full unique marker below
+        # still identifies the exact result row.
+        search_marker = "DIRECT_ATTACHMENT_SUBMIT"
+
+        self.cdp.click(
+            "mainframe",
+            'input[name="flt_find_mask_ein"]',
+            "Nachrichtensuche für die echte Anlagenvorschau",
+        )
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                return doc.readyState === "complete" &&
+                    Boolean(doc.querySelector('input[name="flt_search"]')) &&
+                    Boolean(doc.querySelector('input[name="filter_suche"]'));
+                """,
+            ),
+            "Nachrichtensuche für die Anlagenvorschau wurde nicht geöffnet",
+        )
+        self.cdp.set_value(
+            "mainframe",
+            'input[name="flt_search"]',
+            search_marker,
+            "Suchmarker der Nachricht mit Bild und PDF",
+        )
+        self.cdp.click(
+            "mainframe",
+            'input[name="filter_suche"]',
+            "Nachricht mit Bild und PDF suchen",
+        )
+        row_state = self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                f"""
+                if (doc.readyState !== "complete") return false;
+                const row = Array.from(doc.querySelectorAll("tr")).find(
+                    item => item.innerText.includes({json.dumps(message_marker)})
+                );
+                if (!row) return false;
+                const badge = row.querySelector(
+                    '[data-estab-message-attachment-badge]'
+                );
+                const openForm = Array.from(
+                    row.querySelectorAll("form")
+                ).find(form =>
+                    form.querySelector('input[name="stab"][value="meldung"]') &&
+                    form.querySelector('input[name="00_lfd"]')
+                );
+                const open = openForm?.querySelector(
+                    'button[type="submit"], input[type="submit"], '
+                        + 'input[type="image"]'
+                );
+                if (!badge || !open) return false;
+                open.setAttribute(
+                    "data-estab-browser-open-attachment-message",
+                    "true"
+                );
+                return {{
+                    count: badge.getAttribute(
+                        "data-estab-message-attachment-count"
+                    ),
+                    label: badge.innerText.trim()
+                }};
+                """,
+            ),
+            "gespeicherte Nachricht mit Anlagen wurde nicht gefunden",
+        )
+        self._truth(
+            isinstance(row_state, dict)
+            and row_state.get("count") == "2"
+            and row_state.get("label") == "2 Anlagen",
+            f"Anlagenhinweis der echten Nachricht ist falsch: {row_state!r}",
+        )
+        self.cdp.click(
+            "mainframe",
+            '[data-estab-browser-open-attachment-message]',
+            "Nachricht mit Bild und PDF öffnen",
+        )
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                const panel = doc.querySelector(
+                    '[data-estab-message-attachments]'
+                );
+                if (
+                    doc.readyState !== "complete" ||
+                    !panel ||
+                    panel.getAttribute("data-estab-attachment-count") !== "2"
+                ) return false;
+                panel.scrollIntoView({block: "start"});
+                return true;
+                """,
+            ),
+            "Anlagenbereich der gespeicherten Nachricht wurde nicht geladen",
+        )
+        preview_state = self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                const image = doc.querySelector(
+                    '.estab-message-attachment-preview img'
+                );
+                const details = doc.querySelector(
+                    '[data-estab-pdf-preview]'
+                );
+                const frame = details?.querySelector('iframe[data-src]');
+                const browserLinks = Array.from(doc.querySelectorAll(
+                    '.estab-message-attachment-actions a[target="_blank"]'
+                ));
+                if (
+                    !image || !image.complete ||
+                    image.naturalWidth !== 640 || image.naturalHeight !== 640 ||
+                    !details || details.open || !frame ||
+                    frame.hasAttribute("src") ||
+                    !frame.getAttribute("data-src")?.includes("view=inline") ||
+                    browserLinks.length !== 2
+                ) return false;
+                return {
+                    imageWidth: image.naturalWidth,
+                    imageHeight: image.naturalHeight,
+                    imageSource: image.currentSrc,
+                    pdfUrl: frame.getAttribute("data-src"),
+                    accessibleLinks: browserLinks.every(link =>
+                        link.rel.includes("noopener") &&
+                        link.getAttribute("aria-label")?.includes(
+                            "neuem Browser-Tab"
+                        )
+                    )
+                };
+                """,
+            ),
+            "echte Bildvorschau oder lazy PDF-Karte wurde nicht aufgebaut",
+        )
+        self._truth(
+            isinstance(preview_state, dict)
+            and preview_state.get("imageWidth") == 640
+            and preview_state.get("imageHeight") == 640
+            and "showpic.php" in str(preview_state.get("imageSource", ""))
+            and preview_state.get("accessibleLinks") is True,
+            "Bild-/PDF-Aktionen sind im echten Browser nicht sichtbar oder "
+            f"zugänglich: {preview_state!r}",
+        )
+        pdf_url = str(preview_state.get("pdfUrl", ""))
+        pdf_request_url = urllib.parse.urljoin(
+            self.config.base_url + "/",
+            pdf_url,
+        )
+        self.cdp.discard_events("Network.responseReceived")
+        self.cdp.discard_events("Network.loadingFinished")
+        self.cdp.discard_events("Network.loadingFailed")
+        self.cdp.click(
+            "mainframe",
+            '[data-estab-pdf-preview] > summary',
+            "eingebettete PDF-Anlage öffnen",
+        )
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                f"""
+                const details = doc.querySelector(
+                    '[data-estab-pdf-preview]'
+                );
+                const frame = details?.querySelector("iframe");
+                return Boolean(
+                    details?.open &&
+                    frame?.getAttribute("src") === {json.dumps(pdf_url)} &&
+                    !frame.hasAttribute("data-src") &&
+                    frame.getBoundingClientRect().height >= 300
+                );
+                """,
+            ),
+            "lazy PDF-Anlage wurde beim Aufklappen nicht geladen",
+        )
+
+        pdf_response: dict[str, Any] | None = None
+        pdf_request_id: str | None = None
+        pdf_loading_finished = False
+        pdf_loading_failure: dict[str, Any] | None = None
+        pdf_response_seen_at: float | None = None
+        deadline = time.monotonic() + self.config.timeout
+        while time.monotonic() < deadline:
+            self.cdp.call("Runtime.evaluate", {"expression": "0"})
+            for event in self.cdp.events:
+                method = event.get("method")
+                params = event.get("params", {})
+                if method == "Network.responseReceived":
+                    response = params.get("response", {})
+                    if (
+                        isinstance(response, dict)
+                        and response.get("url") == pdf_request_url
+                        and response.get("status") == 200
+                        and response.get("mimeType") == "application/pdf"
+                    ):
+                        pdf_response = response
+                        request_id = params.get("requestId")
+                        pdf_request_id = (
+                            request_id if isinstance(request_id, str) else None
+                        )
+                        if pdf_response_seen_at is None:
+                            pdf_response_seen_at = time.monotonic()
+                elif (
+                    pdf_request_id is not None
+                    and params.get("requestId") == pdf_request_id
+                ):
+                    if method == "Network.loadingFinished":
+                        pdf_loading_finished = True
+                    elif method == "Network.loadingFailed":
+                        pdf_loading_failure = params
+            # Chrome can hand a successful PDF response to PDFium with no
+            # classic loadingFinished event (or with a benign ERR_ABORTED).
+            # Give the terminal event a short opportunity to arrive, then let
+            # the visible rendered page be the authoritative completion proof.
+            if pdf_response is not None and (
+                pdf_loading_finished
+                or pdf_loading_failure is not None
+                or (
+                    pdf_response_seen_at is not None
+                    and time.monotonic() - pdf_response_seen_at >= 1.5
+                )
+            ):
+                break
+            time.sleep(0.1)
+        response_headers = {
+            str(name).lower(): str(value)
+            for name, value in (
+                pdf_response.get("headers", {}).items()
+                if isinstance(pdf_response, dict)
+                and isinstance(pdf_response.get("headers"), dict)
+                else []
+            )
+        }
+        # CDP joins repeated response fields with newlines. Apache adds the
+        # application-wide protection headers and the download boundary adds
+        # the matching object-specific policy, so identical directives may be
+        # reported more than once even though every effective policy is the
+        # intended one. Validate each effective value instead of treating
+        # CDP's transport representation as one literal field value.
+        content_type_options = [
+            value.strip().lower()
+            for value in response_headers.get(
+                "x-content-type-options", ""
+            ).splitlines()
+            if value.strip()
+        ]
+        frame_options = [
+            value.strip().upper()
+            for value in response_headers.get(
+                "x-frame-options", ""
+            ).splitlines()
+            if value.strip()
+        ]
+        content_security_policies = [
+            value.strip().lower()
+            for value in response_headers.get(
+                "content-security-policy", ""
+            ).splitlines()
+            if value.strip()
+        ]
+        self._truth(
+            pdf_response is not None,
+            "eingebettete PDF-Anlage erreichte Chrome nicht als application/pdf",
+        )
+        self._truth(
+            response_headers.get("content-disposition", "").lower().startswith(
+                "inline"
+            )
+            and "no-store" in response_headers.get("cache-control", "").lower()
+            and content_type_options
+            and all(value == "nosniff" for value in content_type_options)
+            and frame_options
+            and all(value == "SAMEORIGIN" for value in frame_options)
+            and content_security_policies
+            and all(
+                "frame-ancestors 'self'" in value
+                and "sandbox" not in value
+                for value in content_security_policies
+            ),
+            "eingebettete PDF-Anlage hat nicht die erwarteten geschützten "
+            f"Inline-Header: {response_headers!r}",
+        )
+
+        frame_rect = self.cdp.evaluate(
+            _frame_expression(
+                "mainframe",
+                """
+                const frame = doc.querySelector(
+                    '[data-estab-pdf-preview] iframe'
+                );
+                if (!frame) return null;
+                const rect = frame.getBoundingClientRect();
+                let x = rect.left;
+                let y = rect.top;
+                let current = target;
+                while (current !== current.top) {
+                    const parentFrame = current.frameElement;
+                    if (!parentFrame) return null;
+                    const parentRect = parentFrame.getBoundingClientRect();
+                    x += parentRect.left;
+                    y += parentRect.top;
+                    current = current.parent;
+                }
+                return {
+                    x: Math.max(0, x),
+                    y: Math.max(0, y),
+                    width: Math.min(rect.width, 900),
+                    height: Math.min(rect.height, 600)
+                };
+                """,
+            )
+        )
+        self._truth(
+            isinstance(frame_rect, dict)
+            and frame_rect.get("width", 0) >= 300
+            and frame_rect.get("height", 0) >= 300,
+            "eingebettete PDF-Fläche ist im Browser nicht messbar",
+        )
+        rendered_pdf = False
+        last_pdf_render_summary: dict[str, int] = {}
+        last_pdf_screenshot_bytes = 0
+        deadline = time.monotonic() + self.config.timeout
+        while time.monotonic() < deadline and not rendered_pdf:
+            screenshot = self.cdp.call(
+                "Page.captureScreenshot",
+                {
+                    "format": "png",
+                    "fromSurface": True,
+                    "captureBeyondViewport": True,
+                    "clip": {
+                        "x": float(frame_rect["x"]),
+                        "y": float(frame_rect["y"]),
+                        "width": float(frame_rect["width"]),
+                        "height": float(frame_rect["height"]),
+                        "scale": 1,
+                    },
+                },
+            )
+            image_bytes = b""
+            try:
+                image_bytes = base64.b64decode(
+                    screenshot.get("data"),
+                    validate=True,
+                )
+                summary = _png_rgb_content_summary(image_bytes)
+            except (TypeError, ValueError):
+                summary = {}
+            last_pdf_render_summary = summary
+            last_pdf_screenshot_bytes = len(image_bytes)
+            pixels = summary.get("width", 0) * summary.get("height", 0)
+            rendered_pdf = (
+                len(image_bytes) > 5000
+                and pixels > 0
+                # A real PDF page supplies a large white paper surface. The
+                # gray Chromium broken-document screen does not.
+                and summary.get("white_pixels", 0) >= pixels * 0.15
+                and summary.get("dark_pixels", 0) >= pixels * 0.0005
+            )
+            if not rendered_pdf:
+                time.sleep(0.1)
+        self._truth(
+            rendered_pdf,
+            "Chrome zeigt in der aufgeklappten PDF-Anlage keine sichtbare "
+            "Seite: "
+            f"request_id={pdf_request_id!r}, "
+            f"loading_finished={pdf_loading_finished!r}, "
+            f"loading_failure={pdf_loading_failure!r}, "
+            f"frame={frame_rect!r}, png_bytes={last_pdf_screenshot_bytes}, "
+            f"pixels={last_pdf_render_summary!r}",
         )
 
     def _assert_dirty_navigation_guard(self) -> None:

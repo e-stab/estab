@@ -158,6 +158,22 @@ $assert(
         && $boundOutgoing['13_abseinheit'] === 'FüSt Einsatz 7',
     'repository did not authoritatively bind the outgoing sender'
 );
+$assert(
+    estab_message_transaction_incident_id(
+        ['active_einsatz_id' => 7],
+        7
+    ) === 7,
+    'matching form incident was rejected inside the write transaction'
+);
+try {
+    estab_message_transaction_incident_id(
+        ['active_einsatz_id' => 8],
+        7
+    );
+    $assert(false, 'stale form incident crossed the write transaction');
+} catch (EstabIncidentConflictException) {
+    $assert(true, 'stale form incident was rejected inside the write transaction');
+}
 putenv('ESTAB_ORGANISATION');
 try {
     estab_message_bind_command_post(
@@ -591,13 +607,32 @@ $assert(
         )
         && str_contains(
             $dataSource,
-            'function check_and_save ($data, $activeCommandPostName)'
+            'function check_and_save ($data, $activeCommandPostName, '
+                . '$expectedIncidentId)'
         )
         && str_contains(
             $dataSource,
             'estab_incident_command_post_name ($messageIncident);'
         ),
     'incident command-post identity is not authoritative at repository writes'
+);
+$assert(
+    substr_count(
+        $repositorySource,
+        'estab_message_transaction_incident_id('
+    ) >= 5
+        && str_contains(
+            $dataSource,
+            '$expectedIncidentId = estab_incident_positive_id '
+                . '($expectedIncidentId);'
+        )
+        && str_contains(
+            $mainSource,
+            "check_and_save (\n          \$returndata,\n"
+                . "          \$activeCommandPostName,\n"
+                . "          \$workflowIncidentId\n        );"
+        ),
+    'message writes do not reject an incident switch inside their transaction'
 );
 $assert(
     !str_contains(

@@ -62,6 +62,10 @@ $assert(
     'stored attachment name rejected'
 );
 $assert(
+    estab_file_validate_name('attachment', 'EL0002.PDF') === 'EL0002.pdf',
+    'attachment extension is not canonical on a case-sensitive filesystem'
+);
+$assert(
     estab_file_validate_name('vordruck', 'estab 42 A.pdf') === 'estab 42 A.pdf',
     'generated form name with legacy spaces rejected'
 );
@@ -196,6 +200,26 @@ foreach ([$download, $preview, $forms] as $endpoint) {
     );
 }
 $assert(
+    str_contains($preview, '<= 16000000')
+        && !str_contains($preview, '<= 40000000')
+        && str_contains(
+            $preview,
+            '$previewByteLimit = 24 * 1024 * 1024;'
+        )
+        && strpos($preview, '$snapshotSize <= $previewByteLimit')
+            < strpos($preview, 'stream_get_contents ($stream)'),
+    'automatic image preview can exhaust small NAS workers with 40-megapixel decodes'
+);
+$assert(
+    str_contains($preview, 'session_write_close ();')
+        && str_contains($download, 'session_write_close();')
+        && strpos($preview, 'session_write_close ();')
+            < strpos($preview, 'estab_attachment_connection (')
+        && strpos($download, 'session_write_close();')
+            < strpos($download, 'estab_auth_connect('),
+    'preview or download keeps the PHP session locked during heavy file work'
+);
+$assert(
     str_contains($download, 'estab_file_open')
         && str_contains(
             $download,
@@ -203,10 +227,20 @@ $assert(
         )
         && str_contains($download, 'begin_transaction()')
         && str_contains($download, 'estab_file_stream_content_type($stream)')
+        && substr_count($download, 'estab_read_attachment(') === 2
+        && str_contains(
+            $download,
+            'estab_read_attachment_authorization_version('
+        )
         && strpos(
             $download,
-            'estab_attachment_integrity_open_snapshot('
-        ) < strpos($download, '$connection->commit()')
+            'Could not commit initial attachment authorization'
+        ) < strpos($download, 'estab_attachment_integrity_open_snapshot(')
+        && strpos($download, 'estab_attachment_integrity_open_snapshot(')
+            < strpos(
+                $download,
+                '$currentAttachment = estab_read_attachment('
+            )
         && str_contains(
             $attachmentIntegrity,
             'estab_attachment_integrity_measure_stream($snapshot)'
@@ -218,20 +252,134 @@ $assert(
     'download endpoint lacks an exact verified snapshot or safe response headers'
 );
 $assert(
+    substr_count($preview, 'estab_read_attachment (') === 2
+        && str_contains(
+            $preview,
+            'estab_read_attachment_authorization_version ('
+        )
+        && strpos(
+            $preview,
+            'Could not commit initial attachment preview authorization'
+        ) < strpos(
+            $preview,
+            'estab_attachment_integrity_open_snapshot ('
+        )
+        && strpos(
+            $preview,
+            'estab_attachment_integrity_open_snapshot ('
+        ) < strpos(
+            $preview,
+            '$currentAttachment = estab_read_attachment ('
+        ),
+    'image preview holds operational database locks while hashing file bytes'
+);
+$assert(
+    preg_match(
+        '/\$currentAttachment\s*=\s*estab_read_attachment\s*\('
+            . '.*?\$readIdentity,\s*true\s*\);/s',
+        $download
+    ) === 1
+        && preg_match(
+            '/\$currentAttachment\s*=\s*estab_read_attachment\s*\('
+                . '.*?\$readIdentity,\s*true\s*\);/s',
+            $preview
+        ) === 1,
+    'final attachment authorization does not use current locking reads'
+);
+$inlineMimeMatch = [];
+$inlineMimeFound = preg_match(
+    '/\$attachmentInlineMimeTypes\s*=\s*\[(?<values>.*?)\];/s',
+    $download,
+    $inlineMimeMatch
+) === 1;
+$inlineMimeTypes = [];
+if ($inlineMimeFound) {
+    $mimeValues = [];
+    preg_match_all(
+        "/'([^']+)'/",
+        (string) ($inlineMimeMatch['values'] ?? ''),
+        $mimeValues
+    );
+    $inlineMimeTypes = $mimeValues[1] ?? [];
+}
+$mimeDetectionPosition = strpos(
+    $download,
+    '$contentType = estab_file_stream_content_type($stream);'
+);
+$inlineDecisionPosition = strpos(
+    $download,
+    'in_array($contentType, $attachmentInlineMimeTypes, true)'
+);
+$inlineDispositionPosition = strpos(
+    $download,
+    "header('Content-Disposition: '"
+);
+$assert(
+    str_contains($download, "array_key_exists('view', \$_GET)")
+        && str_contains(
+            $download,
+            "\$view !== 'inline'"
+        )
+        && str_contains(
+            $download,
+            "\$area !== 'attachment'"
+        )
+        && str_contains(
+            $download,
+            "\$attachmentInlineRequested = \$area === 'attachment' "
+                . "&& \$view === 'inline';"
+        )
+        && $inlineMimeFound
+        && $inlineMimeTypes === [
+            'application/pdf',
+            'image/jpeg',
+            'image/png',
+            'image/gif',
+            'image/bmp',
+            'image/x-ms-bmp',
+        ]
+        && is_int($mimeDetectionPosition)
+        && is_int($inlineDecisionPosition)
+        && is_int($inlineDispositionPosition)
+        && $mimeDetectionPosition < $inlineDecisionPosition
+        && $inlineDecisionPosition < $inlineDispositionPosition
+        && substr_count($download, '$inline = true;') === 1
+        && strpos($download, '$inline = true;') > $mimeDetectionPosition
+        && str_contains(
+            $download,
+            "\$inline = \$area === 'vordruck'"
+        )
+        && str_contains($download, "Cache-Control: private, no-store")
+        && str_contains(
+            $download,
+            "Content-Security-Policy: frame-ancestors 'self'"
+        )
+        && str_contains($download, 'X-Frame-Options: SAMEORIGIN')
+        && str_contains(
+            $download,
+            "Content-Security-Policy: sandbox; default-src 'none'; "
+                . "frame-ancestors 'none'"
+        )
+        && str_contains($download, 'X-Frame-Options: DENY')
+        && str_contains($download, 'X-Content-Type-Options: nosniff'),
+    'attachment inline mode is not an exact opt-in after verified MIME '
+        . 'detection or weakens normal download headers'
+);
+$assert(
     str_contains(
         $preview,
         'estab_attachment_integrity_open_snapshot ('
     )
         && str_contains($preview, 'begin_transaction ()')
-        && str_contains($preview, 'estab_read_attachment (')
+        && substr_count($preview, 'estab_read_attachment (') === 2
         && str_contains($preview, '$requested,')
-        && str_contains($preview, 'true')
-        && strpos(
+        && str_contains(
             $preview,
-            'estab_attachment_integrity_open_snapshot ('
-        ) < strpos($preview, '$connection->commit ()')
+            'estab_read_attachment_authorization_version ('
+        )
         && str_contains($preview, 'getimagesizefromstring ($imageBytes)')
         && str_contains($preview, 'X-eStab-Attachment-Integrity: ')
+        && substr_count($preview, 'X-Content-Type-Options: nosniff') >= 2
         && !str_contains($preview, 'realpath ($requested)'),
     'preview endpoint lacks verified snapshot authorization or safe decoding'
 );

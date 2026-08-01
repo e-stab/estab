@@ -8,6 +8,7 @@ require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/incident.php';
 require_once __DIR__ . '/dv_operations.php';
 require_once __DIR__ . '/attachment_integrity.php';
+require_once __DIR__ . '/file_access.php';
 require_once __DIR__ . '/workflow.php';
 
 final class EstabAttachmentDatabaseException extends RuntimeException
@@ -39,17 +40,13 @@ const ESTAB_ATTACHMENT_ORIGIN_MAX_FLOWS = 16;
 const ESTAB_ATTACHMENT_ORIGIN_DRAFT_MAX_BYTES = 1048576;
 const ESTAB_ATTACHMENT_ORIGIN_DRAFTS_MAX_BYTES = 8388608;
 const ESTAB_ATTACHMENT_ORIGIN_ATTACHMENT_LIST_MAX_BYTES = 65535;
+const ESTAB_ATTACHMENT_DIRECT_ACTION_MAX_TOKENS = 64;
+const ESTAB_ATTACHMENT_DIRECT_ACTION_TTL_SECONDS = 43200;
 
 /** Tasks whose editable message form may enter the attachment picker. */
 function estab_attachment_origin_tasks(): array
 {
-    return [
-        'FM-Eingang',
-        'FM-Eingang_Anhang',
-        'Stab_schreiben',
-        'Stab_korrigieren',
-        'Stab_gesprnoti',
-    ];
+    return estab_workflow_attachment_edit_tasks();
 }
 
 /**
@@ -89,6 +86,406 @@ function estab_attachment_origin_role_allowed(array $identity, string $task): bo
         return estab_workflow_is_staff_writer($identity);
     }
     return false;
+}
+
+/** Bind one direct upload button to its account, incident and form object. */
+function estab_attachment_direct_action_fingerprint(
+    array $identity,
+    mixed $incidentId,
+    mixed $task,
+    mixed $recordId = null
+): string {
+    $identity = estab_attachment_origin_identity($identity);
+    $incidentId = estab_incident_positive_id($incidentId);
+    if (
+        !is_string($task)
+        || !in_array($task, estab_attachment_origin_tasks(), true)
+        || !estab_attachment_origin_role_allowed($identity, $task)
+    ) {
+        throw new EstabAttachmentContextException(
+            'Der direkte Anhangvorgang gehört zu keinem bearbeitbaren Formular.'
+        );
+    }
+    if ($task === 'Stab_korrigieren') {
+        $recordId = estab_incident_positive_id($recordId, 'Nachrichten-ID');
+    } elseif ($recordId === null || $recordId === '') {
+        $recordId = null;
+    } else {
+        throw new EstabAttachmentContextException(
+            'Ein neuer Nachrichtenvordruck darf keine Datensatz-ID enthalten.'
+        );
+    }
+    try {
+        $encoded = json_encode(
+            [
+                'incident_id' => $incidentId,
+                'task' => $task,
+                'record_id' => $recordId,
+                'benutzer' => $identity['benutzer'],
+                'kuerzel' => $identity['kuerzel'],
+                'funktion' => $identity['funktion'],
+                'rolle' => $identity['rolle'],
+            ],
+            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
+        );
+    } catch (JsonException $exception) {
+        throw new EstabAttachmentContextException(
+            'Der direkte Anhangvorgang konnte nicht gebunden werden.',
+            previous: $exception
+        );
+    }
+    return hash('sha256', $encoded);
+}
+
+/** Keep only bounded, recent and structurally valid direct-action tokens. */
+function estab_attachment_direct_actions_prune(
+    mixed $actions,
+    int $now
+): array {
+    if ($actions === null) {
+        return [];
+    }
+    if (!is_array($actions)) {
+        throw new EstabAttachmentContextException(
+            'Die gespeicherten direkten Anhangvorgänge sind ungültig.'
+        );
+    }
+    $valid = [];
+    foreach ($actions as $token => $entry) {
+        if (
+            !is_string($token)
+            || preg_match('/\A[a-f0-9]{64}\z/D', $token) !== 1
+            || !is_array($entry)
+            || !is_int($entry['updated_at'] ?? null)
+            || $entry['updated_at'] < $now - ESTAB_ATTACHMENT_DIRECT_ACTION_TTL_SECONDS
+            || $entry['updated_at'] > $now + 300
+            || !is_string($entry['fingerprint'] ?? null)
+            || preg_match('/\A[a-f0-9]{64}\z/D', $entry['fingerprint']) !== 1
+            || !in_array(
+                $entry['state'] ?? null,
+                ['issued', 'processing', 'completed'],
+                true
+            )
+        ) {
+            continue;
+        }
+        if (($entry['state'] ?? null) === 'completed') {
+            $mode = $entry['mode'] ?? null;
+            if (!in_array(
+                $mode,
+                ['upload', 'submit', 'conversation-stage'],
+                true
+            )) {
+                continue;
+            }
+            if (array_key_exists('reference', $entry)) {
+                try {
+                    $entry['reference'] = estab_file_validate_name(
+                        'attachment',
+                        (string) $entry['reference']
+                    );
+                } catch (InvalidArgumentException) {
+                    continue;
+                }
+            } elseif ($mode === 'upload') {
+                // A standalone upload always has exactly one durable result.
+                continue;
+            }
+        } elseif (
+            ($entry['state'] ?? null) === 'processing'
+            && array_key_exists('mode', $entry)
+        ) {
+            if (($entry['mode'] ?? null) !== 'pending-submit') {
+                continue;
+            }
+            if (array_key_exists('reference', $entry)) {
+                try {
+                    $entry['reference'] = estab_file_validate_name(
+                        'attachment',
+                        (string) $entry['reference']
+                    );
+                } catch (InvalidArgumentException) {
+                    continue;
+                }
+            }
+        }
+        $valid[$token] = $entry;
+    }
+    while (count($valid) > ESTAB_ATTACHMENT_DIRECT_ACTION_MAX_TOKENS) {
+        array_shift($valid);
+    }
+    return $valid;
+}
+
+/** Issue a one-time action token without coupling parallel browser tabs. */
+function estab_attachment_direct_action_issue(
+    array &$session,
+    array $identity,
+    mixed $incidentId,
+    mixed $task,
+    mixed $recordId = null,
+    ?int $now = null
+): string {
+    $now = $now ?? time();
+    $fingerprint = estab_attachment_direct_action_fingerprint(
+        $identity,
+        $incidentId,
+        $task,
+        $recordId
+    );
+    $actions = estab_attachment_direct_actions_prune(
+        $session['anhang_direct_actions'] ?? null,
+        $now
+    );
+    while (count($actions) >= ESTAB_ATTACHMENT_DIRECT_ACTION_MAX_TOKENS) {
+        array_shift($actions);
+    }
+    try {
+        do {
+            $token = bin2hex(random_bytes(32));
+        } while (isset($actions[$token]));
+    } catch (Throwable $exception) {
+        throw new EstabAttachmentContextException(
+            'Der direkte Anhangvorgang konnte nicht sicher vorbereitet werden.',
+            previous: $exception
+        );
+    }
+    $actions[$token] = [
+        'fingerprint' => $fingerprint,
+        'state' => 'issued',
+        'updated_at' => $now,
+    ];
+    $session['anhang_direct_actions'] = $actions;
+    return $token;
+}
+
+/**
+ * Inspect an action token without claiming a fresh, issued upload.
+ *
+ * Ordinary message submission also carries the form token when no file was
+ * selected. This lookup lets a retry without a multipart file recover a
+ * prior pending result or recognise a completed submit, while a genuinely
+ * fresh no-file submission remains an ordinary message action.
+ *
+ * @return null|array{reference:?string,mode:string}
+ */
+function estab_attachment_direct_action_replay_result(
+    array &$session,
+    mixed $token,
+    array $identity,
+    mixed $incidentId,
+    mixed $task,
+    mixed $recordId = null,
+    ?int $now = null
+): ?array {
+    $now = $now ?? time();
+    if (!is_string($token) || preg_match('/\A[a-f0-9]{64}\z/D', $token) !== 1) {
+        throw new EstabAttachmentContextException(
+            'Der direkte Anhangvorgang ist ungültig oder abgelaufen.'
+        );
+    }
+    $actions = estab_attachment_direct_actions_prune(
+        $session['anhang_direct_actions'] ?? null,
+        $now
+    );
+    $entry = $actions[$token] ?? null;
+    $fingerprint = estab_attachment_direct_action_fingerprint(
+        $identity,
+        $incidentId,
+        $task,
+        $recordId
+    );
+    if (
+        !is_array($entry)
+        || !hash_equals((string) $entry['fingerprint'], $fingerprint)
+    ) {
+        $session['anhang_direct_actions'] = $actions;
+        throw new EstabAttachmentContextException(
+            'Der direkte Anhangvorgang ist ungültig oder abgelaufen.'
+        );
+    }
+    if ($entry['state'] === 'completed') {
+        $session['anhang_direct_actions'] = $actions;
+        return [
+            'reference' => isset($entry['reference'])
+                ? (string) $entry['reference']
+                : null,
+            'mode' => (string) $entry['mode'],
+        ];
+    }
+    if (
+        $entry['state'] === 'processing'
+        && ($entry['mode'] ?? null) === 'pending-submit'
+    ) {
+        $session['anhang_direct_actions'] = $actions;
+        return [
+            'reference' => isset($entry['reference'])
+                ? (string) $entry['reference']
+                : null,
+            'mode' => 'pending-submit',
+        ];
+    }
+    if ($entry['state'] === 'issued') {
+        $session['anhang_direct_actions'] = $actions;
+        return null;
+    }
+    $session['anhang_direct_actions'] = $actions;
+    throw new EstabAttachmentContextException(
+        'Der direkte Anhangvorgang wird bereits verarbeitet.'
+    );
+}
+
+/**
+ * Claim a token once. A completed upload is returned for idempotent replay.
+ *
+ * @return null|array{reference:?string,mode:string}
+ */
+function estab_attachment_direct_action_claim(
+    array &$session,
+    mixed $token,
+    array $identity,
+    mixed $incidentId,
+    mixed $task,
+    mixed $recordId = null,
+    ?int $now = null
+): ?array {
+    $now = $now ?? time();
+    $replay = estab_attachment_direct_action_replay_result(
+        $session,
+        $token,
+        $identity,
+        $incidentId,
+        $task,
+        $recordId,
+        $now
+    );
+    if (is_array($replay)) {
+        return $replay;
+    }
+    $actions = estab_attachment_direct_actions_prune(
+        $session['anhang_direct_actions'] ?? null,
+        $now
+    );
+    $actions[$token]['state'] = 'processing';
+    $actions[$token]['updated_at'] = $now;
+    $session['anhang_direct_actions'] = $actions;
+    return null;
+}
+
+/** Retain an uploaded file while the ordinary message validation is pending. */
+function estab_attachment_direct_action_note_pending_submit(
+    array &$session,
+    string $token,
+    ?string $reference = null,
+    ?int $now = null
+): void {
+    $now = $now ?? time();
+    if ($reference !== null) {
+        $reference = estab_file_validate_name('attachment', $reference);
+    }
+    $actions = estab_attachment_direct_actions_prune(
+        $session['anhang_direct_actions'] ?? null,
+        $now
+    );
+    if (($actions[$token]['state'] ?? null) !== 'processing') {
+        throw new EstabAttachmentContextException(
+            'Der direkte Anhangvorgang kann nicht vorgemerkt werden.'
+        );
+    }
+    if ($reference === null) {
+        unset($actions[$token]['reference']);
+    } else {
+        $actions[$token]['reference'] = $reference;
+    }
+    $actions[$token]['mode'] = 'pending-submit';
+    $actions[$token]['updated_at'] = $now;
+    $session['anhang_direct_actions'] = $actions;
+}
+
+/** Publish the one server-generated reference as this token's replay result. */
+function estab_attachment_direct_action_complete(
+    array &$session,
+    string $token,
+    ?string $reference,
+    string $mode,
+    ?int $now = null
+): void {
+    $now = $now ?? time();
+    if (!in_array($mode, ['upload', 'submit', 'conversation-stage'], true)) {
+        throw new InvalidArgumentException('Invalid direct attachment action mode');
+    }
+    if ($reference !== null) {
+        $reference = estab_file_validate_name('attachment', $reference);
+    } elseif ($mode === 'upload') {
+        throw new InvalidArgumentException(
+            'A completed direct upload requires its attachment reference'
+        );
+    }
+    $actions = estab_attachment_direct_actions_prune(
+        $session['anhang_direct_actions'] ?? null,
+        $now
+    );
+    if (($actions[$token]['state'] ?? null) !== 'processing') {
+        throw new EstabAttachmentContextException(
+            'Der direkte Anhangvorgang kann nicht abgeschlossen werden.'
+        );
+    }
+    $actions[$token]['state'] = 'completed';
+    if ($reference === null) {
+        unset($actions[$token]['reference']);
+    } else {
+        $actions[$token]['reference'] = $reference;
+    }
+    $actions[$token]['mode'] = $mode;
+    $actions[$token]['updated_at'] = $now;
+    $session['anhang_direct_actions'] = $actions;
+}
+
+/** Release only an unfinished token after a visible, recoverable failure. */
+function estab_attachment_direct_action_abandon(
+    array &$session,
+    mixed $token,
+    ?int $now = null
+): void {
+    if (!is_string($token) || preg_match('/\A[a-f0-9]{64}\z/D', $token) !== 1) {
+        return;
+    }
+    $actions = estab_attachment_direct_actions_prune(
+        $session['anhang_direct_actions'] ?? null,
+        $now ?? time()
+    );
+    if (
+        ($actions[$token]['state'] ?? null) === 'processing'
+        && !isset($actions[$token]['reference'])
+    ) {
+        unset($actions[$token]);
+    }
+    if ($actions === []) {
+        unset($session['anhang_direct_actions']);
+    } else {
+        $session['anhang_direct_actions'] = $actions;
+    }
+}
+
+/** Remove one known action token after its durable outcome is already safe. */
+function estab_attachment_direct_action_forget(
+    array &$session,
+    mixed $token,
+    ?int $now = null
+): void {
+    if (!is_string($token) || preg_match('/\A[a-f0-9]{64}\z/D', $token) !== 1) {
+        return;
+    }
+    $actions = estab_attachment_direct_actions_prune(
+        $session['anhang_direct_actions'] ?? null,
+        $now ?? time()
+    );
+    unset($actions[$token]);
+    if ($actions === []) {
+        unset($session['anhang_direct_actions']);
+    } else {
+        $session['anhang_direct_actions'] = $actions;
+    }
 }
 
 /**
@@ -1042,6 +1439,44 @@ function estab_attachment_merge_message_references(
         : implode(';', array_keys($references)) . ';';
 }
 
+/**
+ * Strictly canonicalise a browser-submitted message attachment list.
+ *
+ * Unlike the compatibility merge helper this rejects, rather than silently
+ * dropping, malformed or duplicate object identifiers.
+ */
+function estab_attachment_canonical_message_references(mixed $value): string
+{
+    if ($value === null || $value === '') {
+        return '';
+    }
+    if (!is_string($value) || strlen($value) > 65535) {
+        throw new InvalidArgumentException('Ungültige Anhangliste.');
+    }
+    $references = [];
+    foreach (explode(';', $value) as $reference) {
+        $reference = trim($reference);
+        if ($reference === '') {
+            continue;
+        }
+        $reference = estab_file_validate_name('attachment', $reference);
+        if (isset($references[$reference])) {
+            throw new InvalidArgumentException(
+                'Ein Anhang darf nur einmal zugeordnet werden.'
+            );
+        }
+        $references[$reference] = true;
+        if (count($references) > 100) {
+            throw new InvalidArgumentException(
+                'Einer Nachricht können höchstens 100 Anhänge zugeordnet werden.'
+            );
+        }
+    }
+    return $references === []
+        ? ''
+        : implode(';', array_keys($references)) . ';';
+}
+
 function estab_attachment_database_error_is_retryable(int $code): bool
 {
     return in_array($code, [1062, 1205, 1213], true);
@@ -1208,36 +1643,6 @@ function estab_attachment_statement_row(
     }
 }
 
-/** Execute one fixed transaction-control statement through mysqli prepare. */
-function estab_attachment_transaction_control(
-    mysqli $connection,
-    string $statementSql
-): void {
-    if (!in_array($statementSql, [
-        'SAVEPOINT estab_attachment_before_claim',
-        'ROLLBACK TO SAVEPOINT estab_attachment_before_claim',
-    ], true)) {
-        throw new LogicException('Invalid attachment transaction control');
-    }
-    $statement = $connection->prepare($statementSql);
-    if (!$statement) {
-        throw new EstabAttachmentDatabaseException(
-            'Could not prepare upload transaction control',
-            $connection->errno
-        );
-    }
-    try {
-        if (!$statement->execute()) {
-            estab_attachment_statement_error(
-                $statement,
-                'Could not execute upload transaction control'
-            );
-        }
-    } finally {
-        $statement->close();
-    }
-}
-
 function estab_attachment_connection(array $databaseConfig): mysqli
 {
     return estab_auth_connect($databaseConfig);
@@ -1349,7 +1754,8 @@ function estab_attachment_reserve(
     array $identity,
     int $width = 4,
     int $maxAttempts = 8,
-    ?callable $retryObserver = null
+    ?callable $retryObserver = null,
+    mixed $expectedIncidentId = null
 ): string {
     $quotedTable = estab_attachment_table($table);
     $prefix = estab_attachment_validate_prefix($prefix);
@@ -1360,6 +1766,9 @@ function estab_attachment_reserve(
     if ($maxAttempts < 1 || $maxAttempts > 50) {
         throw new InvalidArgumentException('Invalid reservation retry count');
     }
+    $expectedIncidentId = $expectedIncidentId === null
+        ? null
+        : estab_incident_positive_id($expectedIncidentId);
     $pattern = '^' . $prefix . '[0-9]{' . $width . ',}$';
     $substringOffset = strlen($prefix) + 1;
 
@@ -1371,17 +1780,69 @@ function estab_attachment_reserve(
             $incident = estab_incident_require_active($connection, true);
             estab_incident_lock_command_post_for_write($connection, $incident);
             $incidentId = (int) $incident['active_einsatz_id'];
+            if (
+                $expectedIncidentId !== null
+                && $expectedIncidentId !== $incidentId
+            ) {
+                throw new EstabIncidentConflictException(
+                    'Der aktive Einsatz hat sich vor dem Upload geändert.'
+                );
+            }
             estab_attachment_require_operational_identity(
                 $connection,
                 $incidentId,
                 $identity
             );
-            estab_attachment_release_unclaimed_for_incident(
-                $connection,
-                $table,
-                $sessionId,
-                $incidentId
-            );
+            // A prior failed NAS cleanup deliberately keeps its reservation
+            // at status 8. Reuse that exact owner-bound name instead of
+            // exposing it as free while stale bytes may still exist.
+            $ownedSql = 'SELECT `filename` FROM ' . $quotedTable
+                . ' WHERE `status` = 8 AND `id` = ? AND `einsatz_id` = ?'
+                . ' AND `filename` REGEXP BINARY ?'
+                . ' ORDER BY CAST(SUBSTRING(`filename`, ?) AS UNSIGNED),'
+                . ' `filename` LIMIT 1 FOR UPDATE';
+            $owned = $connection->prepare($ownedSql);
+            if (!$owned) {
+                throw new EstabAttachmentDatabaseException(
+                    'Could not prepare owned reservation lookup',
+                    $connection->errno
+                );
+            }
+            try {
+                $owned->bind_param(
+                    'sisi',
+                    $sessionId,
+                    $incidentId,
+                    $pattern,
+                    $substringOffset
+                );
+                if (!$owned->execute()) {
+                    estab_attachment_statement_error(
+                        $owned,
+                        'Could not find owned reservation'
+                    );
+                }
+                $ownedRow = estab_attachment_statement_row(
+                    $owned,
+                    $connection,
+                    'Could not read owned reservation result'
+                );
+            } finally {
+                $owned->close();
+            }
+            if (is_array($ownedRow ?? null)) {
+                $candidate = estab_attachment_validate_reservation_name(
+                    (string) $ownedRow['filename'],
+                    $prefix
+                );
+                if (!$connection->commit()) {
+                    throw new EstabAttachmentDatabaseException(
+                        'Could not commit owned reservation reuse',
+                        $connection->errno
+                    );
+                }
+                return $candidate;
+            }
 
             $reuseSql = 'SELECT `filename` FROM ' . $quotedTable
                 . ' WHERE `status` = 4 AND `einsatz_id` = ?'
@@ -1408,7 +1869,9 @@ function estab_attachment_reserve(
             if (is_array($row ?? null)) {
                 $candidate = estab_attachment_validate_reservation_name((string) $row['filename'], $prefix);
                 $updateSql = 'UPDATE ' . $quotedTable
-                    . ' SET `status` = 8, `id` = ?'
+                    . " SET `status` = 8, `id` = ?, `fileext` = '',"
+                    . " `org_filename` = '', `comment` = '', `md5hash` = '',"
+                    . ' `date` = NULL, `kuerzel` = NULL'
                     . ' WHERE `filename` = ? AND `status` = 4'
                     . ' AND `einsatz_id` = ?';
                 $update = $connection->prepare($updateSql);
@@ -1497,6 +1960,292 @@ function estab_attachment_reserve(
         }
     }
     throw new EstabAttachmentDatabaseException('Attachment reservation attempts exhausted');
+}
+
+/** Resolve the incident of one exact unfinished, server-owned reservation. */
+function estab_attachment_owned_reservation_incident_id(
+    mysqli $connection,
+    string $table,
+    string $sessionId,
+    string $filename
+): ?int {
+    $sessionId = estab_attachment_validate_session_id($sessionId);
+    $filename = estab_attachment_validate_reservation_name($filename);
+    $statement = $connection->prepare(
+        'SELECT `einsatz_id` FROM ' . estab_attachment_table($table)
+        . ' WHERE `filename` = ? AND `id` = ?'
+        . ' AND `status` IN (2, 8) LIMIT 1'
+    );
+    if (!$statement) {
+        throw new EstabAttachmentDatabaseException(
+            'Could not prepare owned reservation lookup',
+            $connection->errno
+        );
+    }
+    try {
+        $statement->bind_param('ss', $filename, $sessionId);
+        if (!$statement->execute()) {
+            estab_attachment_statement_error(
+                $statement,
+                'Could not resolve owned reservation incident'
+            );
+        }
+        $row = estab_attachment_statement_row(
+            $statement,
+            $connection,
+            'Could not read owned reservation incident'
+        );
+        return is_array($row)
+            ? estab_incident_positive_id($row['einsatz_id'] ?? null)
+            : null;
+    } finally {
+        $statement->close();
+    }
+}
+
+/**
+ * Persist the staged suffix before any bytes are moved to shared storage.
+ *
+ * A retained reservation may originate from an interrupted cleanup. Its
+ * existing suffix is authoritative so the caller can remove those exact
+ * stale bytes before allowing another upload to reuse the internal name.
+ */
+function estab_attachment_prepare_staged_extension(
+    mysqli $connection,
+    string $table,
+    string $sessionId,
+    string $filename,
+    mixed $incidentId,
+    string $extension,
+    array $identity
+): string {
+    $sessionId = estab_attachment_validate_session_id($sessionId);
+    $filename = estab_attachment_validate_reservation_name($filename);
+    $incidentId = estab_incident_positive_id($incidentId);
+    $extension = strtolower($extension);
+    if (!estab_attachment_extension_is_allowed($extension)) {
+        throw new InvalidArgumentException('Invalid staged attachment extension');
+    }
+    return estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
+            $connection,
+            $table,
+            $sessionId,
+            $filename,
+            $incidentId,
+            $extension,
+            $identity
+        ): string {
+            if ((int) $incident['active_einsatz_id'] !== $incidentId) {
+                throw new EstabIncidentConflictException(
+                    'Der aktive Einsatz hat sich vor dem Upload geändert.'
+                );
+            }
+            estab_attachment_require_operational_identity(
+                $connection,
+                $incidentId,
+                $identity
+            );
+            $statement = $connection->prepare(
+                'SELECT `fileext` FROM ' . estab_attachment_table($table)
+                . ' WHERE `filename` = ? AND `id` = ? AND `status` = 8'
+                . ' AND `einsatz_id` = ? FOR UPDATE'
+            );
+            if (!$statement) {
+                throw new EstabAttachmentDatabaseException(
+                    'Could not prepare staged extension lookup',
+                    $connection->errno
+                );
+            }
+            try {
+                $statement->bind_param(
+                    'ssi',
+                    $filename,
+                    $sessionId,
+                    $incidentId
+                );
+                if (!$statement->execute()) {
+                    estab_attachment_statement_error(
+                        $statement,
+                        'Could not read staged attachment extension'
+                    );
+                }
+                $row = estab_attachment_statement_row(
+                    $statement,
+                    $connection,
+                    'Could not fetch staged attachment extension'
+                );
+            } finally {
+                $statement->close();
+            }
+            if (!is_array($row)) {
+                throw new EstabAttachmentContextException(
+                    'Die Upload-Reservierung ist nicht mehr verfügbar.'
+                );
+            }
+            $stored = strtolower((string) ($row['fileext'] ?? ''));
+            if ($stored !== '') {
+                if (!estab_attachment_extension_is_allowed($stored)) {
+                    throw new EstabAttachmentDatabaseException(
+                        'Owned reservation carries an invalid staged extension'
+                    );
+                }
+                return $stored;
+            }
+            $update = $connection->prepare(
+                'UPDATE ' . estab_attachment_table($table)
+                . ' SET `fileext` = ? WHERE `filename` = ? AND `id` = ?'
+                . ' AND `status` = 8 AND `einsatz_id` = ?'
+            );
+            if (!$update) {
+                throw new EstabAttachmentDatabaseException(
+                    'Could not prepare staged extension update',
+                    $connection->errno
+                );
+            }
+            try {
+                $update->bind_param(
+                    'sssi',
+                    $extension,
+                    $filename,
+                    $sessionId,
+                    $incidentId
+                );
+                if (!$update->execute() || $update->affected_rows !== 1) {
+                    throw new EstabAttachmentDatabaseException(
+                        'Could not persist staged attachment extension',
+                        $update->errno
+                    );
+                }
+            } finally {
+                $update->close();
+            }
+            return $extension;
+        }
+    );
+}
+
+/**
+ * Atomically claim cleanup authority without treating a completed file as stale.
+ *
+ * Reusing an owner-bound status-8 row and removing its staged bytes must not
+ * race. Move the exact unfinished row to status 2 while holding its row lock;
+ * new reservations only reuse status 8, so no later uploader can publish the
+ * same path between this decision and the caller's unlink operation.
+ */
+function estab_attachment_reservation_cleanup_state(
+    mysqli $connection,
+    string $table,
+    string $sessionId,
+    string $filename,
+    mixed $incidentId
+): array {
+    $sessionId = estab_attachment_validate_session_id($sessionId);
+    $filename = estab_attachment_validate_reservation_name($filename);
+    $incidentId = estab_incident_positive_id($incidentId);
+    if (!$connection->begin_transaction()) {
+        throw new EstabAttachmentDatabaseException(
+            'Could not start reservation cleanup claim',
+            $connection->errno
+        );
+    }
+    $transactionActive = true;
+    try {
+        $statement = $connection->prepare(
+            'SELECT `status`, `id`, `fileext` FROM '
+            . estab_attachment_table($table)
+            . ' WHERE `filename` = ? AND `einsatz_id` = ? LIMIT 1 FOR UPDATE'
+        );
+        if (!$statement) {
+            throw new EstabAttachmentDatabaseException(
+                'Could not prepare reservation cleanup lookup',
+                $connection->errno
+            );
+        }
+        try {
+            $statement->bind_param('si', $filename, $incidentId);
+            if (!$statement->execute()) {
+                estab_attachment_statement_error(
+                    $statement,
+                    'Could not resolve reservation cleanup state'
+                );
+            }
+            $row = estab_attachment_statement_row(
+                $statement,
+                $connection,
+                'Could not read reservation cleanup state'
+            );
+        } finally {
+            $statement->close();
+        }
+        $state = ['state' => 'unsafe', 'extension' => null];
+        if (!is_array($row)) {
+            $state['state'] = 'missing';
+        } elseif ((int) ($row['status'] ?? 0) === 1) {
+            $state['state'] = 'finalized';
+        } elseif (
+            (int) ($row['status'] ?? 0) === 8
+            && is_string($row['id'] ?? null)
+            && hash_equals($sessionId, (string) $row['id'])
+        ) {
+            $extension = strtolower((string) ($row['fileext'] ?? ''));
+            if (
+                $extension === ''
+                || estab_attachment_extension_is_allowed($extension)
+            ) {
+                $claim = $connection->prepare(
+                    'UPDATE ' . estab_attachment_table($table)
+                    . ' SET `status` = 2 WHERE `filename` = ? AND `id` = ?'
+                    . ' AND `status` = 8 AND `einsatz_id` = ?'
+                );
+                if (!$claim) {
+                    throw new EstabAttachmentDatabaseException(
+                        'Could not prepare reservation cleanup claim',
+                        $connection->errno
+                    );
+                }
+                try {
+                    $claim->bind_param(
+                        'ssi',
+                        $filename,
+                        $sessionId,
+                        $incidentId
+                    );
+                    if (!$claim->execute() || $claim->affected_rows !== 1) {
+                        throw new EstabAttachmentDatabaseException(
+                            'Could not claim reservation cleanup',
+                            $claim->errno
+                        );
+                    }
+                } finally {
+                    $claim->close();
+                }
+                $state = [
+                    'state' => 'owned-unfinished',
+                    'extension' => $extension === '' ? null : $extension,
+                ];
+            }
+        }
+        if (!$connection->commit()) {
+            throw new EstabAttachmentDatabaseException(
+                'Could not commit reservation cleanup claim',
+                $connection->errno
+            );
+        }
+        $transactionActive = false;
+        return $state;
+    } catch (Throwable $exception) {
+        if ($transactionActive) {
+            $connection->rollback();
+            $transactionActive = false;
+        }
+        throw $exception;
+    } finally {
+        if ($transactionActive) {
+            $connection->rollback();
+        }
+    }
 }
 
 /** Atomically claim an owned active reservation before moving upload bytes. */
@@ -1633,6 +2382,55 @@ function estab_attachment_release(
     );
 }
 
+/**
+ * Release one unfinished reservation in its captured incident.
+ *
+ * Browser uploads remember the incident that owned the reservation. If the
+ * global active incident changes before finalisation, cleanup must target
+ * that captured row instead of whichever incident happens to be active now.
+ * The unguessable owner id, exact filename and unfinished state remain
+ * mandatory; completed attachment metadata can never be changed here.
+ */
+function estab_attachment_release_for_incident(
+    mysqli $connection,
+    string $table,
+    string $sessionId,
+    string $filename,
+    mixed $incidentId
+): void {
+    $sessionId = estab_attachment_validate_session_id($sessionId);
+    $filename = estab_attachment_validate_reservation_name($filename);
+    $incidentId = estab_incident_positive_id($incidentId);
+    $statement = $connection->prepare(
+        'UPDATE ' . estab_attachment_table($table)
+        . " SET `status` = 4, `id` = ''"
+        . ' WHERE `filename` = ? AND `id` = ?'
+        . ' AND `status` IN (2, 8) AND `einsatz_id` = ?'
+    );
+    if (!$statement) {
+        throw new EstabAttachmentDatabaseException(
+            'Could not prepare incident-bound reservation release',
+            $connection->errno
+        );
+    }
+    try {
+        $statement->bind_param(
+            'ssi',
+            $filename,
+            $sessionId,
+            $incidentId
+        );
+        if (!$statement->execute()) {
+            estab_attachment_statement_error(
+                $statement,
+                'Could not release incident-bound reservation'
+            );
+        }
+    } finally {
+        $statement->close();
+    }
+}
+
 /** Finalise only the current session's claimed reservation. */
 function estab_attachment_finalize(
     mysqli $connection,
@@ -1729,11 +2527,12 @@ function estab_attachment_finalize(
 /**
  * Store one browser upload while the global incident cannot change.
  *
- * The callback moves the already validated PHP upload into the persistent
- * directory and returns its metadata. Claim, metadata row, audit row and the
- * active incident are one transaction. On every failure the reservation is
- * released before the incident lock is given up; the caller removes any
- * already moved file in its finally block.
+ * The callback supplies already prepared metadata. The browser-upload service
+ * stages and hashes bytes before calling this function so large NAS files do
+ * not hold operational database locks. Claim, metadata row, audit row and the
+ * active incident are one short transaction. On failure the complete
+ * transaction rolls back to the still-owned, unreadable reservation. The
+ * caller removes staged bytes first and only then releases that reservation.
  *
  * @param callable():array<string,mixed> $storeAndDescribe
  * @param callable(array<string,string>):string $auditDetails
@@ -1749,7 +2548,8 @@ function estab_attachment_store_upload(
     array $identity,
     string $event,
     callable $storeAndDescribe,
-    callable $auditDetails
+    callable $auditDetails,
+    mixed $expectedIncidentId = null
 ): ?array {
     $reservation = estab_attachment_validate_reservation_name($reservation);
     $sessionId = estab_attachment_validate_session_id($sessionId);
@@ -1767,17 +2567,20 @@ function estab_attachment_store_upload(
         $incident = estab_incident_require_active($connection, true);
         estab_incident_lock_command_post_for_write($connection, $incident);
         $incidentId = (int) $incident['active_einsatz_id'];
+        if (
+            $expectedIncidentId !== null
+            && estab_incident_positive_id($expectedIncidentId) !== $incidentId
+        ) {
+            throw new EstabIncidentConflictException(
+                'Der aktive Einsatz hat sich während des Uploads geändert.'
+            );
+        }
         estab_attachment_require_operational_identity(
             $connection,
             $incidentId,
             $identity,
             $sessionCode
         );
-        estab_attachment_transaction_control(
-            $connection,
-            'SAVEPOINT estab_attachment_before_claim'
-        );
-
         $claim = $connection->prepare(
             'UPDATE ' . estab_attachment_table($attachmentTable)
             . ' SET `status` = 2'
@@ -1813,8 +2616,7 @@ function estab_attachment_store_upload(
             return null;
         }
 
-        try {
-            $rawMetadata = $storeAndDescribe();
+        $rawMetadata = $storeAndDescribe();
             if (!is_array($rawMetadata)) {
                 throw new RuntimeException('Upload callback returned no metadata');
             }
@@ -1909,59 +2711,6 @@ function estab_attachment_store_upload(
             }
             $transactionActive = false;
             return $metadata;
-        } catch (Throwable $exception) {
-            if ($transactionActive) {
-                try {
-                    estab_attachment_transaction_control(
-                        $connection,
-                        'ROLLBACK TO SAVEPOINT estab_attachment_before_claim'
-                    );
-                    $release = $connection->prepare(
-                        'UPDATE ' . estab_attachment_table($attachmentTable)
-                        . " SET `status` = 4, `id` = ''"
-                        . ' WHERE `filename` = ? AND `status` = 8'
-                        . ' AND `id` = ? AND `einsatz_id` = ?'
-                    );
-                    if (!$release) {
-                        throw new EstabAttachmentDatabaseException(
-                            'Could not prepare failed upload release',
-                            $connection->errno
-                        );
-                    }
-                    try {
-                        $release->bind_param(
-                            'ssi',
-                            $reservation,
-                            $sessionId,
-                            $incidentId
-                        );
-                        if (!$release->execute()) {
-                            estab_attachment_statement_error(
-                                $release,
-                                'Could not release failed upload'
-                            );
-                        }
-                    } finally {
-                        $release->close();
-                    }
-                    if (!$connection->commit()) {
-                        throw new EstabAttachmentDatabaseException(
-                            'Could not commit failed upload release',
-                            $connection->errno
-                        );
-                    }
-                    $transactionActive = false;
-                } catch (Throwable $cleanupException) {
-                    $connection->rollback();
-                    $transactionActive = false;
-                    error_log(
-                        'eStab atomic upload cleanup failed: '
-                        . $cleanupException->getMessage()
-                    );
-                }
-            }
-            throw $exception;
-        }
     } catch (Throwable $exception) {
         if ($transactionActive) {
             $connection->rollback();

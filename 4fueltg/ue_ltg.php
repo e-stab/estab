@@ -203,7 +203,7 @@ class Listen {
       $query = "SELECT m.`00_lfd`,m.`04_richtung`,".
         estab_message_list_tbb_number_select_sql ("m").",".
         "m.`05_gegenstelle`,m.`09_vorrangstufe`,m.`10_anschrift`,".
-        "m.`11_rufnummer`,m.`12_betreff`,m.`12_inhalt`,".
+        "m.`11_rufnummer`,m.`12_anhang`,m.`12_betreff`,m.`12_inhalt`,".
         "m.`12_abfzeit`,m.`13_abseinheit`,m.`14_funktion`,".
         "m.`16_empf`,m.`x00_status` FROM ".$messageTable." AS m".
         " WHERE ".$where." ORDER BY ".

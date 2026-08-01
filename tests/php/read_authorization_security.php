@@ -276,6 +276,39 @@ $assert(
     estab_read_attachment_filename($freeAttachment) === 'EL0001.pdf',
     'attachment row did not produce its complete canonical filename'
 );
+$attachmentVersionRow = [
+    'einsatz_id' => 7,
+    'filename' => 'EL0001',
+    'fileext' => 'pdf',
+    'status' => 1,
+    'kuerzel' => 's10001',
+    'integrity_required' => 1,
+    'ingest_sha256' => str_repeat('a', 64),
+    'ingest_size' => 42,
+    'integrity_captured_at' => '2026-08-01 12:00:00.000000',
+    'comment' => 'does not authorize bytes',
+];
+$attachmentVersion = estab_read_attachment_authorization_version(
+    $attachmentVersionRow
+);
+$assert(
+    preg_match('/\A[a-f0-9]{64}\z/D', $attachmentVersion) === 1
+        && hash_equals(
+            $attachmentVersion,
+            estab_read_attachment_authorization_version(array_replace(
+                $attachmentVersionRow,
+                ['comment' => 'changed presentation metadata']
+            ))
+        )
+        && !hash_equals(
+            $attachmentVersion,
+            estab_read_attachment_authorization_version(array_replace(
+                $attachmentVersionRow,
+                ['einsatz_id' => 8]
+            ))
+        ),
+    'private attachment snapshot is not bound to its authorization row'
+);
 
 $overview = estab_navigation_item_for_key('message-overview');
 $tracking = estab_navigation_item_for_key('tracking');
@@ -417,6 +450,39 @@ $assert(
 );
 $assert(
     str_contains(
+        $sources['read-boundary'],
+        'function estab_read_attachment_authorization_columns(): string'
+    )
+        && str_contains($sources['read-boundary'], 'return implode(')
+        && str_contains($sources['read-boundary'], "'`12_anhang`'")
+        && str_contains($sources['read-boundary'], "'`16_empf`'")
+        && !str_contains(
+            $sources['read-boundary'],
+            "'SELECT * FROM ' . estab_auth_table(\$messageTable)"
+        ),
+    'attachment previews transfer complete message bodies for authorization'
+);
+$assert(
+    str_contains(
+        $sources['read-boundary'],
+        'function estab_read_attachment_message_map_for_filenames('
+    )
+        && str_contains(
+            $sources['read-boundary'],
+            "'LOCATE(?, `12_anhang`) > 0'"
+        )
+        && str_contains(
+            $sources['read-boundary'],
+            '$messageMap = estab_read_attachment_message_map_for_filenames('
+        )
+        && str_contains(
+            $sources['read-boundary'],
+            '[$requestedFilename]'
+        ),
+    'single attachment previews still transfer and lock every linked message'
+);
+$assert(
+    str_contains(
         $sources['messages'],
         'Message attachment authorizer is required'
     )
@@ -425,6 +491,31 @@ $assert(
             'estab_read_require_attachment_use_scope'
         ),
     'final message mutation can bypass attachment-use authorization'
+);
+$assert(
+    preg_match(
+        '/function estab_read_require_attachment_use_scope\(.*?\n\}/s',
+        $sources['read-boundary'],
+        $attachmentUseScopeMatch
+    ) === 1
+        && str_contains(
+            (string) ($attachmentUseScopeMatch[0] ?? ''),
+            'estab_read_attachments('
+        )
+        && !str_contains(
+            (string) ($attachmentUseScopeMatch[0] ?? ''),
+            'estab_read_attachment('
+        )
+        && str_contains(
+            $sources['read-boundary'],
+            '$messageMap = estab_read_attachment_message_map('
+        )
+        && str_contains(
+            $sources['read-boundary'],
+            '$incidentId,' . "\n" . '        $forUpdate'
+        ),
+    'final attachment-use validation rescans and relocks every incident '
+        . 'message once per attachment'
 );
 $assert(
     str_contains(

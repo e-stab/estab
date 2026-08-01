@@ -102,8 +102,10 @@ den zuvor deutlich kleineren Maßstab zu schrumpfen.
 
 Die Aktionsleiste steht ober- und unterhalb des langen Formulars zur
 Verfügung. Sie verwendet die bestehenden serverseitigen Aktionsschlüssel;
-Antwort, Weiterleitung, Sichtung, LdF-/A/W-Bearbeitung, Anhänge und Abbruch
-behalten damit ihre bisherigen Workflowgrenzen.
+Antwort, Weiterleitung, Sichtung, LdF-/A/W-Bearbeitung und Abbruch behalten
+damit ihre bisherigen Workflowgrenzen. Anlagen liegen als eigener digitaler
+Bereich direkt unterhalb des amtlichen Blatts; sie verändern dessen feste
+Geometrie und Druckdarstellung nicht.
 
 ## Ausfüllhilfen
 
@@ -191,8 +193,9 @@ S6-Wegauswahl, Beförderungsbestätigung, ein möglicher Rückgabegrund und die
 systemseitig unterstützte Vorrangstufe Staatsnot. Diese Angaben verändern das
 amtliche Blatt nicht.
 
-Die Anhangsauswahl hält ungespeicherte Formulardaten pro Browser-Tab in einem
-servergebundenen Entwurf. Zulässig sind höchstens 16 parallele Vorgänge,
+Die optionale Archivauswahl für bereits hochgeladene Anlagen hält
+ungespeicherte Formulardaten pro Browser-Tab in einem servergebundenen
+Entwurf. Zulässig sind höchstens 16 parallele Vorgänge,
 1 MiB tatsächlicher Session-Speicher pro Entwurf und 8 MiB insgesamt.
 Unbekannte Felder, verschachtelte Werte, ungültiges UTF-8 und Überschreitungen
 werden vor jeder Sessionänderung abgewiesen; bestehende gültige Entwürfe
@@ -204,6 +207,150 @@ während eines offenen Formulars oder Anhangvorgangs, wird der veraltete
 Vorgang mit einem ausdrücklichen Konflikt beendet und muss neu geöffnet
 werden; eine Koordinate wird niemals still auf eine andere Funktion
 umgedeutet.
+
+## Anlagen am Nachrichtenvordruck
+
+Neue Dateien werden ohne Seitenwechsel direkt im noch bearbeitbaren
+Nachrichtenvordruck hochgeladen. Das Formular verwendet dafür
+`multipart/form-data`; Dateiname, Browser-MIME, Browser-Größe, Kürzel,
+Zeitstempel und Zielname gelten nicht als Autoritätswerte. Der gemeinsame
+Uploaddienst prüft Endung und den mit Fileinfo erkannten MIME-Typ und speichert
+zweiphasig:
+
+1. Eine erste Transaktion reserviert den internen Namen mit Status 8. Die
+   Reservierung ist an Inhaber und Einsatz gebunden und noch nicht lesbar. Eine
+   weitere kurze Staging-Transaktion persistiert die erwartete Endung, bevor
+   ein Zielpfad an den Uploader übergeben wird. Danach werden die Bytes ohne
+   langen Einsatz-Lock verschoben sowie SHA-256 und Bytezahl ermittelt.
+2. Die kurze Finalisierungstransaktion beansprucht die Reservierung mit
+   Status 2, prüft aktiven Einsatz, Inhaber und Kontofunktion erneut und
+   finalisiert Metadaten, Integritätsnachweis, Serverzeit, sichtbaren Status 1
+   sowie Audit atomar. Bei einem Rollback bleibt die Status-8-Reservierung
+   unsichtbar.
+
+Bei einem regulär behandelten Fehler ermittelt eine neue Datenbankverbindung
+zuerst den autoritativen Zustand. Eine bereits finalisierte Status-1-Datei wird
+nie entfernt. Nur eine eigene unfertige Status-8-Reservierung darf nach Prüfung
+von Einsatz, Inhaber und Endung bereinigt werden. Der Dienst beansprucht sie
+unter Zeilensperre atomar als Status 2, bevor er den validierten Zielpfad
+löscht. Erst nach bestätigtem Fehlen der Bytes wird der interne Name als
+Status 4 freigegeben. Dadurch kann kein Upload die Zeile zwischen Prüfung und
+Löschen wiederverwenden oder finalisieren. Ein vor der Beanspruchung unklarer
+Zustand bleibt unverändert fail-closed; bei hartem Abbruch danach oder
+fehlgeschlagenem Löschen bleibt die unsichtbare Status-2-Cleanup-Zeile
+gesperrt. Wechselt der aktive Einsatz zwischen Formularanzeige und
+Finalisierung, betrifft die Bereinigung ausschließlich die Reservierung des
+ursprünglich erfassten Einsatzes; der Vorgang endet mit einem Konflikt.
+
+Der Bedienablauf ist bewusst direkt:
+
+1. Datei auswählen und optional eine Beschreibung bis 255 Zeichen angeben.
+2. Mit **Datei hochladen** den offenen Entwurf samt Empfängermatrix erhalten
+   und die Anlage sofort am Vordruck anzeigen lassen. Wird stattdessen mit
+   ausgewählter Datei direkt die reguläre Formularaktion ausgelöst, wird die
+   Anlage vor dem Nachrichtenschritt sicher gespeichert und zugeordnet.
+3. Die Anlagenzahl erscheint im Formularkopf und in der Aktionsleiste als
+   sichtbares Badge. Jede Karte zeigt Originaldateiname, optionale
+   Beschreibung, soweit belegten Zeitpunkt und Größe sowie die interne
+   Anlagen-ID.
+   Meldungsübersicht, zweite Sichtung und operative Warteschlangen zeigen
+   dieselbe kanonische Anzahl als Hinweis-Badge.
+4. JPEG-, PNG-, GIF- und BMP-Bilder erhalten innerhalb der unten beschriebenen
+   Grenzen eine Miniatur; andernfalls erscheint ein neutraler Platzhalter.
+   PDF-Dateien lassen sich innerhalb der Karte aufklappen und laden dann erst
+   die Same-Origin-Browseransicht. Diese vier Bildformate und PDF können
+   außerdem in einem neuen Browser-Tab geöffnet werden. Alle zulässigen Formate
+   einschließlich TIFF bleiben herunterladbar.
+5. **Vom Vordruck entfernen** löst im bearbeitbaren Entwurf ausschließlich
+   das exakte Referenztoken. Die bereits archivierte Datei wird nicht gelöscht
+   und bleibt nach ihrer Objektregel für eine spätere Auswahl erhalten.
+
+Eine direkte Formularaktion trägt ein einmaliges, an Konto, Einsatz,
+Bearbeitungsart und bei Korrekturen an den Datensatz gebundenes Token. Die
+Sitzung merkt die serverseitig erzeugte Referenz und den Zwischenstand „zur
+Nachrichtensendung vorgemerkt“. Vor dem Nachrichtenspeichern wird dieser Stand
+durch Schließen und erneutes Öffnen der Sitzung dauerhaft geschrieben. Im
+selben Commit wie der Nachrichten-INSERT beziehungsweise die Korrektur landet
+nur der SHA-256-Hash des Tokens im unveränderlichen Workflowereignis. Ein
+tokenbezogener MariaDB-Advisory-Lock serialisiert Aktionsnachweis und
+Nachrichtenspeicherung auch über parallele Requests hinweg.
+
+Nach einem Antwortverlust kann ein Retry den exakten Einsatz, Akteur, Vorgang
+und gegebenenfalls Korrekturdatensatz aus diesem Ereignis erkennen. Ein so
+belegter Commit wird weitergeleitet und nicht als zweite Nachricht ausgeführt.
+Nach einem fachlichen Validierungsfehler wird eine bereits archivierte Anlage
+auch ohne erneut übertragenen Dateiteil wieder an den Entwurf gehängt. Bleibt
+der Nachrichtenabschluss dagegen unbelegt, zeigt eStab den vollständigen
+Entwurf samt Anlage wieder an und fordert zur Prüfung der Meldungsliste auf.
+Eine bloß irgendwo verwendete Anlagenreferenz gilt absichtlich nicht als
+Beweis für diesen Nachrichtentext, weil Anlagen mehrfach verknüpft werden
+dürfen. Die Datei wird vor der fachlichen Nachrichtenvalidierung archiviert.
+Scheitert diese Validierung, bleibt die Zuordnung im erneut angezeigten Entwurf
+erhalten. Wird der Entwurf danach bewusst verlassen oder die Anlage entfernt,
+bleibt nur die freie, nach ihren eigenen Rechten sichtbare Archivdatei zurück;
+es erfolgt keine unbemerkte Dateilöschung. Ein abgebrochener oder nur teilweise
+übertragener Datei-Upload ist noch nicht finalisiert und muss deshalb erneut
+ausgewählt werden.
+
+Die Replay-Sicherung ist keine gemeinsame Transaktion von MariaDB,
+Anlagenvolume und PHP-Sitzung. Ein harter Prozess- oder Hostabbruch kann nach
+dem Verschieben, aber vor Finalisierung und `finally`, eine unsichtbare
+Status-8-Reservierung samt Staging-Datei hinterlassen. Bricht die reguläre
+Bereinigung nach ihrer atomaren Beanspruchung Status 8 → Status 2 ab oder sind
+die Bytes nicht löschbar, kann stattdessen eine verborgene
+Status-2-Cleanup-Zeile mit oder ohne Staging-Datei verbleiben. Im noch engeren
+Fenster nach erfolgreicher Anlagenfinalisierung und vor dem Session-Checkpoint
+kann eine freie Archivdatei ohne dauerhafte Token-Zuordnung verbleiben; ein
+Retry kann dann eine zweite Archivdatei anlegen. Enthält der
+Nachrichten-Commit bereits den unveränderlichen Aktionsnachweis, verhindern
+dieser und der Advisory-Lock eine stille Doppelnachricht auch dann, wenn der
+Worker vor der abschließenden Sessionaktualisierung ausfällt. Verbliebene
+Status-8-, Status-2- oder freie Status-1-Reste sind betrieblich zu prüfen und
+nach der in der Betriebsdokumentation beschriebenen Reihenfolge zu bereinigen;
+sie gelten nie automatisch als gespeicherter Vordruck.
+
+Direktes Hochladen und Entfernen ist in den bearbeitbaren Vorgängen
+`FM-Eingang`, `FM-Eingang_Anhang`, `Stab_schreiben`, `Stab_korrigieren` und
+`Stab_gesprnoti` möglich. Nachfolgende LdF-, Si- und A/W-Arbeitsschritte zeigen
+die Anlagenkarten nur lesend. Ein Vordruck kann höchstens 100 kanonische
+Anlagenreferenzen tragen.
+
+**Bereits hochgeladene Anlage auswählen** führt weiterhin in den bisherigen
+Anlagenbereich. Dieser Kompatibilitätspfad dient der Wiederverwendung einer
+bereits zum aktiven Einsatz gespeicherten Datei; für neue Anlagen ist kein
+zweiter Upload an anderer Stelle mehr erforderlich. Auch dieser Pfad erhält
+den servergebundenen Entwurf und wiederholt beim Zurückkehren die
+Einsatz-, Konto-, Objekt- und Matrixprüfung.
+
+Zulässig sind `jpg`, `jpeg`, `tif`, `tiff`, `gif`, `avi`, `png`, `bmp`,
+`zip`, `pdf`, `doc`, `xls`, `odt`, `txt` und `xia`; Groß-/Kleinschreibung der
+Endung wird normalisiert. Die Oberfläche zeigt die effektive Größengrenze,
+standardmäßig 20 MiB. Der Anwendungswert `ESTAB_UPLOAD_MAX_BYTES` ist auf
+50 MiB hart begrenzt. Die Container-Dateigrenze entspricht diesem Maximum mit
+`upload_max_filesize = 50M`; `post_max_size = 56M` liegt für den gesamten
+Request darüber. Dadurch kann die
+Anwendung eine Datei oberhalb ihres fachlichen Limits mit erhaltenem Entwurf
+ablehnen; nur ein insgesamt zu großer Multipart-Request endet früh mit HTTP
+413.
+
+Die normale Downloadantwort bleibt eine Datei zum Herunterladen. Eine
+ausdrückliche Browseransicht wird nur für serverseitig als JPEG, PNG, GIF,
+BMP oder PDF erkannte Inhalte freigegeben; TIFF und andere Formate bleiben auch
+bei einem manipulierten Vorschauwunsch Downloads. Bildvorschau,
+Browseransicht und Download wiederholen jeweils Objektberechtigung und
+Eingangsintegritätsprüfung. Die PDF-Einbettung ist auf dieselbe Origin begrenzt
+und wird erst beim Aufklappen geladen. Eine HTML-Sandbox wird dort bewusst
+nicht gesetzt, weil sie Chromiums eingebauten PDF-Viewer sperrt; andere
+Antworten bleiben für Einbettung gesperrt. Eine sichtbare PDF-Darstellung hängt
+zusätzlich davon ab, dass der verwendete Browser einen PDF-Viewer bereitstellt.
+Die automatische Miniatur wird ausschließlich für JPEG, PNG, GIF und BMP
+versucht. Es gelten 24 MiB maximale Eingabedatei, 16 Megapixel maximale
+Dekodierfläche und 1.600 Pixel je angeforderter Ausgabeachse; die Karte fordert
+640 Pixel Breite an. Größere oder nicht sicher dekodierbare Bilder zeigen einen
+neutralen Platzhalter, bleiben aber herunterladbar und – soweit zulässig – in
+der separaten Browseransicht verfügbar. Diese UI-Grenzen sind unabhängig von
+der strengeren 12-Megapixel-/8.000-Pixel-Grenze für das sichtbare Rendern im
+PDF-Einsatzdossier.
 
 ## Bewusste Abweichungen
 
@@ -236,6 +383,20 @@ bleiben.
 - mobilen Scrollhinweis, dessen sichere Druckunterdrückung,
   Fokusdarstellung und Einseiten-Druckregeln,
 - Einbindung des Renderers in Controller und Containerimage.
+
+Der statische Formularnachweis bindet außerdem den direkten
+`multipart/form-data`-Upload, die einzige kanonische Referenzliste,
+Anlagenzahl und -karten, HTML-escaped Metadaten, Bild-/PDF-Vorschau sowie das
+reine Lösen einer Zuordnung. Der HTTP-Lauf lädt eine echte Datei direkt im
+Vordruck hoch, prüft Datenbank- und Dateiintegrität, erhält den Entwurf und
+weist nach, dass Entfernen die Archivdatei nicht löscht.
+Er deckt außerdem Upload plus reguläres Absenden, einen Validierungsfehler mit
+anschließendem Retry ohne erneut gesendete Datei, den sicheren Hinweis bei
+uneindeutigem Nachrichtenabschluss, den wiederholbaren Gesprächsnotizübergang
+ohne Doppelnachricht/-datei sowie Bild- und PDF-Karten mitsamt Browseransicht ab.
+Die normalen Fehler- und Replaypfade sind damit belegt; ein harter Prozess- oder
+Hostabbruch an den ausdrücklich dokumentierten Dateisystem-/Sessiongrenzen wird
+nicht als atomar gelöst behauptet.
 
 `tests/browser/headless_ui.py` prüft das tatsächlich berechnete Layout in
 Chrome zusätzlich: 896 Pixel feste Blattbreite, drei Zonen in amtlicher

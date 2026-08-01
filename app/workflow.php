@@ -400,6 +400,18 @@ function estab_workflow_is_staff_writer(array $identity): bool
         && in_array(($identity['rolle'] ?? ''), ['Stab', 'FB'], true);
 }
 
+/** Editable message stages that may add or detach message attachments. */
+function estab_workflow_attachment_edit_tasks(): array
+{
+    return [
+        'FM-Eingang',
+        'FM-Eingang_Anhang',
+        'Stab_schreiben',
+        'Stab_korrigieren',
+        'Stab_gesprnoti',
+    ];
+}
+
 /**
  * Reject unknown image-button coordinates before the legacy controller can
  * accidentally grow a new action branch outside this central policy.
@@ -416,6 +428,8 @@ function estab_workflow_action_keys_allowed(array $request): bool
         'transport_nicht_moeglich_x', 'transport_nicht_moeglich_y',
         'gelesen_x', 'gelesen_y',
         'anhang_plus_x', 'anhang_plus_y',
+        'message_attachment_upload_x', 'message_attachment_upload_y',
+        'message_attachment_remove_x', 'message_attachment_remove_y',
         'stab_anhang_x', 'stab_anhang_y',
         'fm_anhang_x', 'fm_anhang_y',
         'ah_auswahl_x', 'ah_auswahl_y',
@@ -766,6 +780,23 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
         }
     }
 
+    $attachmentUploadRequested =
+        isset($request['message_attachment_upload_x'])
+        || isset($request['message_attachment_upload_y']);
+    $attachmentRemoveRequested =
+        isset($request['message_attachment_remove_x'])
+        || isset($request['message_attachment_remove_y']);
+    if (
+        ($attachmentUploadRequested || $attachmentRemoveRequested)
+        && (
+            !isset($request['task'])
+            || !is_string($request['task'])
+            || $request['task'] === ''
+        )
+    ) {
+        return false;
+    }
+
     if (isset($request['task']) && (string) $request['task'] !== '') {
         if ($method !== 'POST' || !is_string($request['task'])) {
             return false;
@@ -782,6 +813,35 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
         };
         if (!$allowed) {
             return false;
+        }
+        if (
+            ($attachmentUploadRequested || $attachmentRemoveRequested)
+            && (
+                $method !== 'POST'
+                || !in_array(
+                    $task,
+                    estab_workflow_attachment_edit_tasks(),
+                    true
+                )
+                || ($attachmentUploadRequested && $attachmentRemoveRequested)
+            )
+        ) {
+            return false;
+        }
+        if ($attachmentRemoveRequested) {
+            $removeReference = $request['message_attachment_remove_x']
+                ?? $request['message_attachment_remove_y']
+                ?? null;
+            if (
+                !is_string($removeReference)
+                || strlen($removeReference) > 255
+                || preg_match(
+                    '/\A[A-Za-z0-9_-]{2,238}\.[A-Za-z0-9]{1,16}\z/D',
+                    $removeReference
+                ) !== 1
+            ) {
+                return false;
+            }
         }
         if (in_array($task, ['Stab_sichten', 'Stab_gesprnoti'], true)) {
             try {

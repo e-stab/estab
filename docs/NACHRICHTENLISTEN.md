@@ -35,9 +35,21 @@ Gesamtanzahl, Sortierung und aktuelle Ergebnisseite sind immer ausgeschrieben
 und werden nicht nur über Farbe vermittelt.
 
 Jede Ergebniszeile enthält genau eine eindeutige Aktion zum Öffnen des
-Vordrucks. Auf breiten Bildschirmen bleibt der Tabellenkopf beim Scrollen
-sichtbar. Auf schmalen Bildschirmen wird jede Nachricht zu einer beschrifteten
-Karte, sodass das Gesamtdokument nicht horizontal gescrollt werden muss.
+Vordrucks. Sind kanonische Anlagenreferenzen vorhanden, steht direkt bei
+Betreff und Inhalt ein Hinweis „1 Anlage“ beziehungsweise die entsprechende
+Anzahl. Der Hinweis ist keine zweite Detailaktion; nach dem Öffnen zeigt der
+Vordruck die autorisierten Anlagenkarten mit Vorschau- und Downloadaktionen.
+Ungültige oder doppelte Legacy-Fragmente werden weder mitgezählt noch als
+HTML ausgegeben. Auf breiten Bildschirmen bleibt der Tabellenkopf beim
+Scrollen sichtbar. Auf schmalen Bildschirmen wird jede Nachricht zu einer
+beschrifteten Karte, sodass das Gesamtdokument nicht horizontal gescrollt
+werden muss.
+
+Dieselbe kanonische Zählung erscheint nicht nur in Meldungsübersicht und
+zweiter Sichtung, sondern auch in den operativen LdF-, Fernmelder-/A/W- und
+Erstsichtungswarteschlangen. Eine Anlage ist damit vor dem Öffnen eines
+Vordrucks in jeder Arbeitsliste erkennbar; die Zahl ist jeweils ein Hinweis,
+keine zusätzliche Aktion und keine Berechtigungserweiterung.
 
 Die frühere automatische Aktualisierung der zweiten Sichtung ist abgeschaltet:
 Sie konnte eine gerade eingegebene Suche verwerfen. Neue Daten werden durch
@@ -97,7 +109,8 @@ kann ein Image mit unvollständigem Schema nicht als bereit gemeldet werden.
 Prepared-Statement-Parameter, wörtliche LIKE-Suche, Volltextpräfixe,
 Sortierungen und Seitengrenzen. `tests/php/message_list_ui_security.php` prüft
 die gemeinsame semantische Oberfläche, HTML-Inertheit, genau eine Öffnen-Aktion
-und die responsiven Bedienverträge. Die Autorisierungs- und Workflowtests
+je Zeile, die kanonisch ermittelte Anlagenzahl und die responsiven
+Bedienverträge. Die Autorisierungs- und Workflowtests
 decken rollenfremde, unselektierte und CSRF-freie Zugriffe ab. Schema-Vertrag,
 Migrator-Integration und Readiness prüfen die Indizes auf einer echten
 MariaDB-Instanz.
@@ -135,8 +148,10 @@ Für die fachliche Freigabe mit großen Beständen zusätzlich:
    kombiniert prüfen,
 4. einen Filter-Chip entfernen und danach alle Filter zurücksetzen,
 5. erste, mittlere und letzte Ergebnisseite prüfen,
-6. dieselbe Liste bei Desktopbreite und 390 CSS-Pixeln bedienen und dabei
+6. Nachrichten ohne, mit einer und mit mehreren Anlagen in beiden Ansichten
+   auf korrekte Anzahl prüfen und den Vordruck mit seinen Anlagenkarten öffnen,
+7. dieselbe Liste bei Desktopbreite und 390 CSS-Pixeln bedienen und dabei
    Tastaturfokus, Kartenbeschriftungen und fehlendes Dokument-Überlaufen
    kontrollieren,
-7. im Systemstatus beziehungsweise mit dem Migrationsservice den vollständigen
+8. im Systemstatus beziehungsweise mit dem Migrationsservice den vollständigen
    Schemanachweis bestätigen.

@@ -322,6 +322,22 @@ $assert(
     'Last-page state does not disable forward navigation or retain CSRF'
 );
 
+$attachmentTokens = estab_message_list_attachment_tokens(
+    ' EL0001.pdf;EL0001.pdf;EL0002.JPG;../secret.pdf;'
+        . '<iframe src=javascript:alert(1)>.pdf;EL0003.php;'
+);
+$assert(
+    $attachmentTokens === ['EL0001.pdf', 'EL0002.jpg']
+        && estab_message_list_attachment_tokens(null) === []
+        && estab_message_list_attachment_tokens(['EL0001.pdf']) === [],
+    'Attachment badge parser accepts unsafe fragments, duplicates, or non-text values'
+);
+$assert(
+    estab_message_list_attachment_label(1) === '1 Anlage'
+        && estab_message_list_attachment_label(2) === '2 Anlagen',
+    'Attachment badge does not use an understandable singular/plural label'
+);
+
 $rows = [
     [
         '00_lfd' => 41,
@@ -331,6 +347,8 @@ $rows = [
         '05_gegenstelle' => 'Florian <script>alert("station")</script>',
         '09_vorrangstufe' => 'bbb',
         '10_anschrift' => 'S2 & Lage',
+        '12_anhang' => 'EL0001.pdf; EL0001.pdf;../secret.pdf;'
+            . '<iframe src=javascript:alert(1)>.pdf;EL0003.php;',
         '12_betreff' => 'Gefahr </strong><script>alert("subject")</script>',
         '12_inhalt' => 'Text <img src=x onerror=alert("body")> & Ende',
         '12_abfzeit' => '2026-07-31 12:34:00',
@@ -347,6 +365,7 @@ $rows = [
         '05_gegenstelle' => 'Florian West',
         '09_vorrangstufe' => '',
         '10_anschrift' => 'Einsatzabschnitt West',
+        '12_anhang' => 'EL0002.JPG;EL0003.txt;EL0002.JPG;',
         '12_betreff' => '',
         '12_inhalt' => 'Regulärer Inhalt',
         '12_abfzeit' => null,
@@ -354,6 +373,23 @@ $rows = [
         '14_funktion' => 'S3',
         '16_empf' => '',
         'x00_status' => 4,
+    ],
+    [
+        '00_lfd' => 43,
+        '04_richtung' => 'E',
+        '04_nummer' => 9144,
+        'estab_tbb_book_lfd' => 144,
+        '05_gegenstelle' => 'Florian Süd',
+        '09_vorrangstufe' => 'eee',
+        '10_anschrift' => 'Einsatzabschnitt Süd',
+        '12_anhang' => '',
+        '12_betreff' => 'Ohne Anlage',
+        '12_inhalt' => 'Regulärer Inhalt ohne Anlage',
+        '12_abfzeit' => '2026-07-31 12:36:00',
+        '13_abseinheit' => 'Abschnitt Süd',
+        '14_funktion' => 'S4',
+        '16_empf' => 'S2_rt,',
+        'x00_status' => 1,
     ],
 ];
 
@@ -383,17 +419,18 @@ foreach ([
     $assert(
         substr_count($table, '<caption class="estab-visually-hidden">') === 1
             && substr_count($table, '<th scope="col">') === 7
-            && substr_count($table, 'data-label=') === 14,
+            && substr_count($table, 'data-label=') === 21,
         $surface . ' result table lacks semantic or responsive labels'
     );
     $assert(
         str_contains($table, 'TBB-Nachweis 142')
             && str_contains($table, 'noch kein TBB-Nachweis')
             && !str_contains($table, '9142')
-            && !str_contains($table, '9143'),
+            && !str_contains($table, '9143')
+            && !str_contains($table, '9144'),
         $surface . ' substitutes an internal message number for TBB evidence'
     );
-    $assertOneOpenPerRow($table, 2, $surface);
+    $assertOneOpenPerRow($table, 3, $surface);
     $assert(
         str_contains($table, 'data-priority="bbb"')
             && str_contains($table, '>Blitz</span>')
@@ -407,7 +444,7 @@ foreach ([
         substr_count(
             $table,
             'class="estab-message-list-correspondents"'
-        ) === 2
+        ) === 3
             && str_contains($table, '<strong>Von:</strong>')
             && str_contains($table, '<strong>An:</strong>'),
         $surface . ' joins sender and recipient without structure'
@@ -422,6 +459,23 @@ foreach ([
         $surface . ' result data became executable HTML'
     );
     $assert(
+        substr_count($table, 'data-estab-message-attachment-badge') === 2
+            && substr_count(
+                $table,
+                'data-estab-message-attachment-count="1" aria-label="1 Anlage">1 Anlage</span>'
+            ) === 1
+            && substr_count(
+                $table,
+                'data-estab-message-attachment-count="2" aria-label="2 Anlagen">2 Anlagen</span>'
+            ) === 1
+            && preg_match(
+                '/data-message-id="43"[^>]*>.*?data-estab-message-attachment-badge/s',
+                $table
+            ) !== 1
+            && !str_contains($table, '<iframe'),
+        $surface . ' attachment badge is inaccurate, inaccessible, or unsafe'
+    );
+    $assert(
         !str_contains($table, 'estab-tool-table-responsive'),
         $surface . ' reactivates conflicting legacy mobile-table CSS'
     );
@@ -429,14 +483,14 @@ foreach ([
 $assert(
     substr_count($overviewTable, '<form') === 0
         && substr_count($overviewTable, '<a class="estab-button '
-            . 'estab-message-list-open"') === 2,
+            . 'estab-message-list-open"') === 3,
     'Overview rows do not expose exactly one inert detail link each'
 );
 $assert(
-    substr_count($secondSightingTable, '<form') === 2
-        && substr_count($secondSightingTable, 'name="csrf_token"') === 2
-        && substr_count($secondSightingTable, 'name="00_lfd"') === 2
-        && substr_count($secondSightingTable, 'name="fm"') === 2,
+    substr_count($secondSightingTable, '<form') === 3
+        && substr_count($secondSightingTable, 'name="csrf_token"') === 3
+        && substr_count($secondSightingTable, 'name="00_lfd"') === 3
+        && substr_count($secondSightingTable, 'name="fm"') === 3,
     'Second-sighting rows do not expose one CSRF-protected POST action each'
 );
 
@@ -532,11 +586,157 @@ $assert(
         && str_contains(
             $overviewGetList,
             'estab_message_list_tbb_number_select_sql ("m")'
-        ),
+        )
+        && str_contains($overviewGetList, 'm.`12_anhang`'),
     'Overview list method uses table configuration outside its method scope'
 );
 
+$adminListStart = strpos($listSource, 'function get_admin_message_list (');
+$adminListEnd = $adminListStart === false
+    ? false
+    : strpos($listSource, 'function get_list (', $adminListStart);
+$adminListSource = (
+    is_int($adminListStart)
+    && is_int($adminListEnd)
+    && $adminListEnd > $adminListStart
+) ? substr($listSource, $adminListStart, $adminListEnd - $adminListStart) : '';
+$assert(
+    $adminListSource !== ''
+        && str_contains($adminListSource, 'm.`12_anhang`'),
+    'Second-sighting query does not supply attachment data to the shared renderer'
+);
+
+$assert(
+    str_contains(
+        $listSource,
+        'function estab_list_attachment_badge ($storedReferences)'
+    )
+        && str_contains(
+            $listSource,
+            'estab_message_list_attachment_tokens ($storedReferences)'
+        )
+        && str_contains(
+            $listSource,
+            'estab_message_list_attachment_label ('
+        )
+        && str_contains(
+            $listSource,
+            'data-estab-message-attachment-badge '
+        )
+        && str_contains(
+            $listSource,
+            'estab_auth_html ($attachmentLabel)'
+        ),
+    'Legacy staff attachment badge bypasses canonical parsing, safe labels, or escaping'
+);
+
 $listExecutableSource = $withoutPhpComments($listSource);
+$staffCaseStart = strrpos($listExecutableSource, 'case "Stab_lesen"');
+$staffCaseEnd = $staffCaseStart === false
+    ? false
+    : strpos($listExecutableSource, 'case "Stab_sichten"', $staffCaseStart);
+$staffCase = (
+    is_int($staffCaseStart)
+    && is_int($staffCaseEnd)
+    && $staffCaseEnd > $staffCaseStart
+) ? substr(
+    $listExecutableSource,
+    $staffCaseStart,
+    $staffCaseEnd - $staffCaseStart
+) : '';
+$assert(
+    $staffCase !== ''
+        && str_contains(
+            $staffCase,
+            'estab_list_attachment_badge ($row ["12_anhang"] ?? null);'
+        )
+        && substr_count(
+            $staffCase,
+            'estab_list_attachment_badge ('
+        ) === 1,
+    'Staff message rows do not show exactly one attachment badge'
+);
+$assert(
+    substr_count(
+        $listExecutableSource,
+        'estab_list_attachment_badge ($row ["12_anhang"] ?? null);'
+    ) === 7
+        && substr_count($listExecutableSource, '`12_anhang`') >= 7,
+    'An operational message list omits the attachment indicator'
+);
+
+$incomingTrackingStart = strrpos($listExecutableSource, 'case "FmNwE"');
+$outgoingTrackingStart = strrpos($listExecutableSource, 'case "FmNwA"');
+$combinedTrackingCaseStart = strrpos($listExecutableSource, 'case "FmNw"');
+$incomingTrackingCase = (
+    is_int($incomingTrackingStart)
+    && is_int($outgoingTrackingStart)
+    && $outgoingTrackingStart > $incomingTrackingStart
+) ? substr(
+    $listExecutableSource,
+    $incomingTrackingStart,
+    $outgoingTrackingStart - $incomingTrackingStart
+) : '';
+$outgoingTrackingCase = (
+    is_int($outgoingTrackingStart)
+    && is_int($combinedTrackingCaseStart)
+    && $combinedTrackingCaseStart > $outgoingTrackingStart
+) ? substr(
+    $listExecutableSource,
+    $outgoingTrackingStart,
+    $combinedTrackingCaseStart - $outgoingTrackingStart
+) : '';
+$combinedTrackingCase = is_int($combinedTrackingCaseStart)
+    ? substr($listExecutableSource, $combinedTrackingCaseStart)
+    : '';
+$combinedTrackingRowsStart = strpos(
+    $listExecutableSource,
+    'function estab_list_combined_tracking_rows ('
+);
+$combinedTrackingRowsEnd = $combinedTrackingRowsStart === false
+    ? false
+    : strpos(
+        $listExecutableSource,
+        'function estab_list_combined_tracking_data (',
+        $combinedTrackingRowsStart
+    );
+$combinedTrackingRowsSource = (
+    is_int($combinedTrackingRowsStart)
+    && is_int($combinedTrackingRowsEnd)
+    && $combinedTrackingRowsEnd > $combinedTrackingRowsStart
+) ? substr(
+    $listExecutableSource,
+    $combinedTrackingRowsStart,
+    $combinedTrackingRowsEnd - $combinedTrackingRowsStart
+) : '';
+$assert(
+    $incomingTrackingCase !== ''
+        && str_contains($incomingTrackingCase, 'm.`12_anhang`')
+        && substr_count(
+            $incomingTrackingCase,
+            'estab_list_attachment_badge ($row ["12_anhang"] ?? null);'
+        ) === 1,
+    'Incoming transmission log omits attachment data or its canonical badge'
+);
+$assert(
+    $outgoingTrackingCase !== ''
+        && str_contains($outgoingTrackingCase, 'm.`12_anhang`')
+        && substr_count(
+            $outgoingTrackingCase,
+            'estab_list_attachment_badge ($row ["12_anhang"] ?? null);'
+        ) === 1,
+    'Outgoing transmission log omits attachment data or its canonical badge'
+);
+$assert(
+    $combinedTrackingCase !== ''
+        && $combinedTrackingRowsSource !== ''
+        && str_contains($combinedTrackingRowsSource, 'm.`12_anhang`')
+        && substr_count(
+            $combinedTrackingCase,
+            'estab_list_attachment_badge ($row ["12_anhang"] ?? null);'
+        ) === 1,
+    'Combined transmission log omits attachment data or its canonical badge'
+);
 $secondCaseStart = strrpos($listExecutableSource, 'case "SIADMIN"');
 $secondCaseEnd = $secondCaseStart === false
     ? false

@@ -22,6 +22,7 @@ function estab_preview_error (int $status, string $message): never {
   http_response_code ($status);
   header ("Content-Type: text/plain; charset=UTF-8");
   header ("Cache-Control: no-store");
+  header ("X-Content-Type-Options: nosniff");
   echo $message;
   exit;
 }
@@ -53,6 +54,12 @@ $readIdentity = session_status() === PHP_SESSION_ACTIVE
 if (!is_array ($readIdentity)) {
   estab_preview_error (403, "Anmeldung erforderlich.");
 }
+// Thumbnails can require database scans and GD decoding. Release the PHP
+// session lock after taking the immutable identity snapshot so parallel lazy
+// previews and normal form actions from the same browser do not serialize.
+if (session_status () === PHP_SESSION_ACTIVE) {
+  session_write_close ();
+}
 
 $requested =
   isset ($_GET["file"]) && is_string ($_GET["file"])
@@ -81,6 +88,7 @@ $connection = null;
 $transactionActive = false;
 $stream = null;
 $attachmentIntegrity = null;
+$attachmentAuthorizationVersion = null;
 $failure = null;
 try {
   $connection = estab_attachment_connection ($conf_4f_db);
@@ -94,13 +102,24 @@ try {
     $conf_4f_tbl ["nachrichten"],
     $requested,
     $readIdentity,
-    true
+    false
   );
   if (!is_array ($attachment)) {
     throw new EstabIncidentNotFoundException (
       "Attachment is missing or not readable"
     );
   }
+  $attachmentAuthorizationVersion =
+    estab_read_attachment_authorization_version ($attachment);
+  if (!$connection->commit ()) {
+    throw new RuntimeException (
+      "Could not commit initial attachment preview authorization"
+    );
+  }
+  $transactionActive = false;
+
+  // Copy and hash the file while no database row is locked. The private
+  // stream is re-bound to a fresh object authorization below before output.
   try {
     $attachmentIntegrity = estab_attachment_integrity_open_snapshot (
       $attachment,
@@ -116,8 +135,37 @@ try {
       previous: $exception
     );
   }
+
+  if (!$connection->begin_transaction ()) {
+    throw new RuntimeException (
+      "Could not start final attachment preview authorization"
+    );
+  }
+  $transactionActive = true;
+  $currentAttachment = estab_read_attachment (
+    $connection,
+    $conf_4f_tbl ["anhang"],
+    $conf_4f_tbl ["nachrichten"],
+    $requested,
+    $readIdentity,
+    true
+  );
+  if (
+    !is_array ($currentAttachment)
+    || !is_string ($attachmentAuthorizationVersion)
+    || !hash_equals (
+      $attachmentAuthorizationVersion,
+      estab_read_attachment_authorization_version ($currentAttachment)
+    )
+  ) {
+    throw new EstabIncidentNotFoundException (
+      "Attachment authorization changed during preview snapshot"
+    );
+  }
   if (!$connection->commit ()) {
-    throw new RuntimeException ("Could not commit attachment preview transaction");
+    throw new RuntimeException (
+      "Could not commit final attachment preview authorization"
+    );
   }
   $transactionActive = false;
 } catch (EstabNoActiveIncidentException) {
@@ -155,22 +203,33 @@ if (is_array ($failure)) {
 if (!is_resource ($stream)) {
   estab_preview_error (503, "Der Anhang konnte nicht geöffnet werden.");
 }
-$imageBytes = stream_get_contents ($stream);
+$previewByteLimit = 24 * 1024 * 1024;
+$snapshotSize = is_array ($attachmentIntegrity)
+  ? (int) ($attachmentIntegrity ["content_size"] ?? -1)
+  : -1;
+$imageBytes = $snapshotSize >= 0 && $snapshotSize <= $previewByteLimit
+  ? stream_get_contents ($stream)
+  : null;
 fclose ($stream);
-if (!is_string ($imageBytes)) {
+if ($snapshotSize <= $previewByteLimit && !is_string ($imageBytes)) {
   estab_preview_error (503, "Der Anhang konnte nicht gelesen werden.");
 }
 
-$imageInfo = @getimagesizefromstring ($imageBytes);
+$imageInfo = is_string ($imageBytes)
+  ? @getimagesizefromstring ($imageBytes)
+  : false;
 $source = false;
 if ($imageInfo !== false && $imageInfo[0] > 0 && $imageInfo[1] > 0
-    && ($imageInfo[0] * $imageInfo[1]) <= 40000000
+    // Keep worst-case GD memory bounded on small NAS deployments. Large
+    // originals remain downloadable; only their automatic thumbnail falls
+    // back to the lightweight placeholder.
+    && ($imageInfo[0] * $imageInfo[1]) <= 16000000
     && in_array (
       $imageInfo[2],
       array (IMAGETYPE_GIF, IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_BMP),
       true
     )) {
-  $source = @imagecreatefromstring ($imageBytes);
+  $source = @imagecreatefromstring ((string) $imageBytes);
 }
 unset ($imageBytes);
 

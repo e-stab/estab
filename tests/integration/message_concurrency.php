@@ -587,6 +587,50 @@ try {
         'Incoming repository writes trusted forged local destinations'
     );
 
+    $staleIncidentRejected = false;
+    try {
+        estab_message_insert_numbered(
+            $connection,
+            $config['datenbank'],
+            $messageTable,
+            'E',
+            false,
+            [
+                '12_inhalt' => 'stale-incident-probe',
+                '16_empf' => 'S1_rt',
+                'x00_status' => 1,
+                'x01_abschluss' => 'f',
+                'x02_sperre' => 'f',
+                'x03_sperruser' => '',
+            ],
+            null,
+            message_db_event(
+                'created',
+                'Concurrency A/W',
+                'aw0001',
+                'A/W',
+                'Fernmelder',
+                null,
+                1,
+                ['fixture' => 'stale-incident']
+            ),
+            null,
+            $testIncidentId + 1000000
+        );
+    } catch (EstabIncidentConflictException) {
+        $staleIncidentRejected = true;
+    }
+    message_db_assert(
+        $staleIncidentRejected
+            && estab_message_query_int(
+                $connection,
+                'SELECT COUNT(*) FROM ' . estab_message_table($messageTable)
+                    . ' WHERE `12_inhalt` = ?',
+                ['stale-incident-probe']
+            ) === 0,
+        'Stale message form was reassigned to the newly active incident'
+    );
+
     // Even without a schema UNIQUE key, concurrent state writers produce one
     // logical row, and list reads defend against old duplicate rows.
     $stateStored = estab_message_insert_numbered(

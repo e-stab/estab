@@ -112,11 +112,29 @@ $assert(
 $assert(
     str_contains($download, 'begin_transaction()')
         && str_contains($download, '$readIdentity,')
-        && str_contains($download, "            true\n        );")
+        && substr_count($download, 'estab_read_attachment(') === 2
+        && str_contains(
+            $download,
+            'estab_read_attachment_authorization_version('
+        )
         && str_contains($preview, 'begin_transaction ()')
         && str_contains($preview, '$readIdentity,')
-        && str_contains($preview, "    true\n  );"),
-    'file authorization is not serialized with active-incident switching'
+        && substr_count($preview, 'estab_read_attachment (') === 2
+        && str_contains(
+            $preview,
+            'estab_read_attachment_authorization_version ('
+        )
+        && preg_match(
+            '/\$currentAttachment\s*=\s*estab_read_attachment\s*\('
+                . '.*?\$readIdentity,\s*true\s*\);/s',
+            $download
+        ) === 1
+        && preg_match(
+            '/\$currentAttachment\s*=\s*estab_read_attachment\s*\('
+                . '.*?\$readIdentity,\s*true\s*\);/s',
+            $preview
+        ) === 1,
+    'file snapshots are not reauthorized against active-incident switching'
 );
 
 $assert(

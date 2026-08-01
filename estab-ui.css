@@ -3295,6 +3295,44 @@ body.estab-message-form-body {
     padding: 0.45rem 0.7rem;
 }
 
+.estab-message-header-badges {
+    align-items: center;
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: flex-end;
+}
+
+.estab-message-attachment-badge {
+    background: #e4b443;
+    border: 1px solid #f3d68e;
+    border-radius: 999px;
+    color: #172033;
+    font-size: 0.78rem;
+    font-weight: 900;
+    padding: 0.45rem 0.7rem;
+    text-decoration: none;
+}
+
+.estab-message-attachment-badge:hover,
+.estab-message-attachment-badge:focus-visible {
+    background: #f1ca69;
+    outline: 3px solid #ffffff;
+    outline-offset: 2px;
+}
+
+.estab-message-attachment-badge--empty {
+    background: #e8f1f8;
+    border-color: #9eb6ca;
+    color: #173a5e;
+}
+
+.estab-message-attachment-badge--empty:hover,
+.estab-message-attachment-badge--empty:focus-visible {
+    background: #d5e7f4;
+}
+
 .estab-message-actionbar {
     align-items: center;
     background: rgba(255, 255, 255, 0.97);
@@ -4448,6 +4486,306 @@ body.estab-message-form-body {
     padding: 0.85rem 1rem;
 }
 
+.estab-message-attachments {
+    background: #ffffff;
+    border: 1px solid #aebfce;
+    border-left: 6px solid #315f8b;
+    border-radius: 10px;
+    box-shadow: 0 7px 22px rgba(31, 58, 86, 0.1);
+    color: #172033;
+    margin-top: 1rem;
+    padding: clamp(0.85rem, 2.5vw, 1.25rem);
+    scroll-margin-top: 5rem;
+}
+
+.estab-message-attachments:focus {
+    outline: 4px solid #e4b443;
+    outline-offset: 3px;
+}
+
+.estab-message-attachments-header {
+    border-bottom: 1px solid #d3dde6;
+    margin-bottom: 1rem;
+    padding-bottom: 0.8rem;
+}
+
+.estab-message-attachments-header .estab-section-kicker {
+    color: #9a6c00;
+    font-size: 0.7rem;
+    font-weight: 900;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.estab-message-attachments-header h2 {
+    color: #173a5e;
+    font-size: 1.3rem;
+    margin: 0.2rem 0 0.3rem;
+}
+
+.estab-message-attachments-header p {
+    color: #536476;
+    line-height: 1.45;
+    margin: 0;
+    max-width: 55rem;
+}
+
+.estab-message-attachments > .estab-alert {
+    border: 1px solid;
+    border-radius: 7px;
+    font-weight: 700;
+    line-height: 1.4;
+    margin: 0 0 0.85rem;
+    padding: 0.75rem 0.85rem;
+}
+
+.estab-message-attachments > .estab-alert--danger {
+    background: #fff0ef;
+    border-color: #b6433e;
+    color: #741914;
+}
+
+.estab-message-attachments > .estab-alert--success {
+    background: #eaf7ee;
+    border-color: #438459;
+    color: #245c37;
+}
+
+.estab-message-attachment-upload {
+    background: #eef5fb;
+    border: 1px solid #b5c8d9;
+    border-radius: 8px;
+    margin: 0 0 1rem;
+    min-width: 0;
+    padding: 0.85rem;
+}
+
+.estab-message-attachment-upload legend {
+    color: #173a5e;
+    font-weight: 900;
+    padding: 0 0.35rem;
+}
+
+.estab-message-attachment-upload-grid {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.estab-message-attachment-upload-grid label {
+    color: #253b52;
+    display: grid;
+    gap: 0.35rem;
+    min-width: 0;
+}
+
+.estab-message-attachment-upload-grid label strong {
+    font-size: 0.9rem;
+}
+
+.estab-message-attachment-upload-grid label strong span {
+    color: #607286;
+    font-weight: 500;
+}
+
+.estab-message-attachment-upload-grid input {
+    background: #ffffff;
+    border: 1px solid #7f94a8;
+    border-radius: 6px;
+    color: #172033;
+    font: inherit;
+    min-height: 2.75rem;
+    min-width: 0;
+    padding: 0.5rem 0.6rem;
+    width: 100%;
+}
+
+.estab-message-attachment-upload-grid input[type="file"] {
+    cursor: pointer;
+    padding: 0.35rem;
+}
+
+.estab-message-attachment-upload-grid input[type="file"]::file-selector-button {
+    background: #173a5e;
+    border: 0;
+    border-radius: 5px;
+    color: #ffffff;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 800;
+    margin-right: 0.7rem;
+    padding: 0.55rem 0.7rem;
+}
+
+.estab-message-attachment-upload-grid input:focus-visible {
+    outline: 3px solid #e4b443;
+    outline-offset: 2px;
+}
+
+.estab-message-attachment-upload > small {
+    color: #536476;
+    display: block;
+    line-height: 1.4;
+    margin-top: 0.65rem;
+}
+
+.estab-attachment-client-error {
+    background: #fff0ef;
+    border: 1px solid #b6433e;
+    border-radius: 7px;
+    color: #741914;
+    font-weight: 700;
+    margin: 0.75rem 0 0;
+    padding: 0.7rem 0.8rem;
+}
+
+.estab-message-attachment-upload-actions,
+.estab-message-attachment-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+}
+
+.estab-message-attachment-upload-actions {
+    margin-top: 0.75rem;
+}
+
+.estab-message-attachments-empty {
+    background: #f5f8fb;
+    border: 1px dashed #9eb0c1;
+    border-radius: 7px;
+    color: #536476;
+    margin: 0;
+    padding: 0.85rem;
+}
+
+.estab-message-attachment-cards {
+    display: grid;
+    gap: 0.85rem;
+}
+
+.estab-message-attachment-card {
+    background: #f8fafc;
+    border: 1px solid #c3cfda;
+    border-radius: 9px;
+    display: grid;
+    gap: 0.9rem;
+    grid-template-columns: minmax(9rem, 14rem) minmax(0, 1fr);
+    overflow: hidden;
+    padding: 0.85rem;
+}
+
+.estab-message-attachment-card[data-estab-attachment-unavailable] {
+    background: #fff8ed;
+    border-color: #bb7925;
+}
+
+.estab-message-attachment-unavailable {
+    background: #fff0d9;
+    border-left: 4px solid #a96213;
+    color: #613a0c;
+    padding: 0.65rem 0.75rem;
+}
+
+.estab-message-attachment-preview,
+.estab-message-attachment-filetype {
+    align-items: center;
+    background: #dfeaf3;
+    border: 1px solid #b4c5d4;
+    border-radius: 7px;
+    display: flex;
+    justify-content: center;
+    min-height: 8rem;
+    overflow: hidden;
+}
+
+.estab-message-attachment-preview:focus-visible {
+    outline: 3px solid #e4b443;
+    outline-offset: 2px;
+}
+
+.estab-message-attachment-preview img {
+    display: block;
+    height: 100%;
+    max-height: 14rem;
+    object-fit: contain;
+    width: 100%;
+}
+
+.estab-message-attachment-filetype span {
+    background: #173a5e;
+    border-radius: 6px;
+    color: #ffffff;
+    font-size: 1.05rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    padding: 0.6rem 0.75rem;
+}
+
+.estab-message-attachment-details {
+    align-content: start;
+    display: grid;
+    gap: 0.45rem;
+    min-width: 0;
+}
+
+.estab-message-attachment-details h3 {
+    color: #173a5e;
+    font-size: 1.08rem;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.estab-message-attachment-details p {
+    line-height: 1.4;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.estab-message-attachment-meta,
+.estab-message-attachment-reference {
+    color: #5b6d80;
+    font-size: 0.82rem;
+}
+
+.estab-message-attachment-reference {
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.estab-message-attachment-actions {
+    margin-top: 0.35rem;
+}
+
+.estab-message-attachment-actions .estab-button {
+    align-items: center;
+    display: inline-flex;
+    min-height: 2.45rem;
+    padding: 0.5rem 0.7rem;
+    text-decoration: none;
+}
+
+.estab-message-attachment-pdf {
+    border-top: 1px solid #cbd6df;
+    grid-column: 1 / -1;
+    padding-top: 0.7rem;
+}
+
+.estab-message-attachment-pdf summary {
+    color: #173a5e;
+    cursor: pointer;
+    font-weight: 800;
+    padding: 0.35rem 0;
+}
+
+.estab-message-attachment-pdf iframe {
+    background: #ffffff;
+    border: 1px solid #9eb0c1;
+    border-radius: 6px;
+    height: min(38rem, 70vh);
+    margin-top: 0.55rem;
+    width: 100%;
+}
+
 .estab-message-distribution-extras {
     background: #ffffff;
     border: 1px solid #b8c7d5;
@@ -4557,6 +4895,14 @@ body.estab-message-form-body {
         flex-direction: column;
     }
 
+    .estab-message-header-badges {
+        justify-content: flex-start;
+    }
+
+    .estab-message-attachment-upload-grid {
+        grid-template-columns: 1fr;
+    }
+
     .estab-message-actionbar[data-estab-message-actions="top"] {
         position: relative;
         top: auto;
@@ -4586,6 +4932,22 @@ body.estab-message-form-body {
     .estab-message-actionbar .estab-button {
         width: 100%;
     }
+
+    .estab-message-attachment-card {
+        grid-template-columns: 1fr;
+    }
+
+    .estab-message-attachment-upload-actions,
+    .estab-message-attachment-actions {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .estab-message-attachment-upload-actions .estab-button,
+    .estab-message-attachment-actions .estab-button {
+        justify-content: center;
+        width: 100%;
+    }
 }
 
 @media print {
@@ -4606,6 +4968,7 @@ body.estab-message-form-body {
     .estab-message-workflow-panel,
     .estab-message-distribution-extras,
     .estab-message-attachment-list,
+    .estab-message-attachments,
     .estab-official-help-anchor {
         display: none !important;
     }

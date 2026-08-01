@@ -10,7 +10,7 @@ if (defined ("debug") && debug) { echo "<b>!File:". __FILE__ ."  Line:". __LINE_
    Funktionen:
 
      check_save_user ()
-     check_and_save ($data)
+     check_and_save ($data, $activeCommandPostName, $expectedIncidentId)
      legere_nuntium ($krzl, $fktn, $lfd);
          ==> Zeit wann die Nachricht gelesen wurde,
          oder auch nicht!
@@ -676,7 +676,7 @@ function estab_render_ldf_stage_conflict (): never {
 /*****************************************************************************\
 
 \*****************************************************************************/
-function check_and_save ($data, $activeCommandPostName){
+function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
   if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>check_and_save</big><br>\n";}
   include ("../4fcfg/config.inc.php");
   include ("../4fcfg/dbcfg.inc.php");
@@ -686,6 +686,7 @@ function check_and_save ($data, $activeCommandPostName){
   $activeCommandPostName = estab_incident_command_post_name (array (
     "fuehrungsstellenname" => $activeCommandPostName,
   ));
+  $expectedIncidentId = estab_incident_positive_id ($expectedIncidentId);
 
   $browserData = is_array ($data) ? $data : array ();
   $data = array_replace (array_fill_keys (array (
@@ -731,6 +732,20 @@ function check_and_save ($data, $activeCommandPostName){
     "funktion" => $sessionFunction,
     "rolle" => $sessionRole,
   );
+  $messageActionTask = (string) ($data ["task"] ?? "");
+  $messageActionToken = null;
+  if (
+    in_array ($messageActionTask, estab_message_action_tasks (), true)
+    && array_key_exists ("message_attachment_request_token", $browserData)
+  ) {
+    // The raw high-entropy token remains session/browser state. Persist only
+    // the server-computed hash in the immutable workflow event.
+    estab_message_action_token_hash (
+      $browserData ["message_attachment_request_token"]
+    );
+    $messageActionToken =
+      (string) $browserData ["message_attachment_request_token"];
+  }
   $attachmentAuthorizer = static function (
     mysqli $connection,
     int $incidentId,
@@ -804,10 +819,19 @@ function check_and_save ($data, $activeCommandPostName){
   }
 
   $messageConnection = estab_message_connect ($conf_4f_db);
+  $messageActionLockName = null;
   try {
     try {
       $messageIncident = estab_incident_require_active ($messageConnection);
       estab_incident_command_post_name ($messageIncident);
+      if (
+        (int) $messageIncident ["active_einsatz_id"] !== $expectedIncidentId
+      ) {
+        throw new EstabIncidentConflictException (
+          "Der aktive Einsatz hat sich seit dem Öffnen des " .
+          "Nachrichtenvordrucks geändert. Die Eingabe wurde nicht gespeichert."
+        );
+      }
     } catch (
       EstabNoActiveIncidentException
       | EstabIncidentConfigurationException $exception
@@ -830,6 +854,29 @@ function check_and_save ($data, $activeCommandPostName){
           "einen Einsatz an oder aktivieren Sie einen vorhandenen Einsatz.</p>";
       echo "</body></html>";
       exit;
+    }
+
+    if ($messageActionToken !== null) {
+      $messageActionLockName = estab_message_action_lock (
+        $messageConnection,
+        $messageActionToken
+      );
+      $committedActionId = estab_message_committed_action_id (
+        $messageConnection,
+        $expectedIncidentId,
+        $messageActionToken,
+        $messageActionTask,
+        $attachmentReadIdentity,
+        $messageActionTask === "Stab_korrigieren"
+          ? ($data ["00_lfd"] ?? null)
+          : null
+      );
+      if (is_int ($committedActionId)) {
+        // The prior request committed its message and event atomically. The
+        // advisory lock makes this lookup plus the following mutation one
+        // serial action even when a session backend does not lock requests.
+        return;
+      }
     }
 	switch ($data["task"]){
 		case "FM-Eingang":
@@ -919,16 +966,21 @@ function check_and_save ($data, $activeCommandPostName){
           "actor" => $messageActor,
           "from_status" => null,
           "to_status" => 1,
-          "snapshot" => array (
-            "direction" => "E",
-            "medium" => $data ["01_medium"],
-            "recorded_by" => $sessionCode,
-            "remote_callsign" => $data ["05_gegenstelle"],
-            "recipients" => $data ["16_empf"],
-            "content_sha256" => hash ("sha256", $data ["12_inhalt"]),
+          "snapshot" => estab_message_action_evidence_snapshot (
+            array (
+              "direction" => "E",
+              "medium" => $data ["01_medium"],
+              "recorded_by" => $sessionCode,
+              "remote_callsign" => $data ["05_gegenstelle"],
+              "recipients" => $data ["16_empf"],
+              "content_sha256" => hash ("sha256", $data ["12_inhalt"]),
+            ),
+            $messageActionToken,
+            $messageActionTask
           ),
         ),
-        $attachmentAuthorizer
+        $attachmentAuthorizer,
+        $expectedIncidentId
       );
       protokolleintrag ("FM-Eingang", "message_id=".$storedMessage ["id"]);
     break;
@@ -1005,16 +1057,21 @@ function check_and_save ($data, $activeCommandPostName){
            "actor" => $messageActor,
            "from_status" => null,
            "to_status" => 4,
-           "snapshot" => array (
-             "direction" => "A",
-             "address" => $data ["10_anschrift"],
-             "author_code" => $sessionCode,
-             "author_function" => $sessionFunction,
-             "recipients" => $data ["16_empf"],
-             "content_sha256" => hash ("sha256", $data ["12_inhalt"]),
+           "snapshot" => estab_message_action_evidence_snapshot (
+             array (
+               "direction" => "A",
+               "address" => $data ["10_anschrift"],
+               "author_code" => $sessionCode,
+               "author_function" => $sessionFunction,
+               "recipients" => $data ["16_empf"],
+               "content_sha256" => hash ("sha256", $data ["12_inhalt"]),
+             ),
+             $messageActionToken,
+             $messageActionTask
            ),
          ),
-         $attachmentAuthorizer
+         $attachmentAuthorizer,
+         $expectedIncidentId
        );
        protokolleintrag ("Stab-schreiben", "message_id=".$storedMessage ["id"]);
        set_msg_read ($storedMessage ["id"]) ;
@@ -1088,15 +1145,20 @@ function check_and_save ($data, $activeCommandPostName){
           "actor" => $messageActor,
           "from_status" => 10,
           "to_status" => 4,
-          "snapshot" => array (
-            "address" => $data ["10_anschrift"],
-            "author_code" => $sessionCode,
-            "author_function" => $sessionFunction,
-            "content_sha256" => hash ("sha256", $data ["12_inhalt"]),
+          "snapshot" => estab_message_action_evidence_snapshot (
+            array (
+              "address" => $data ["10_anschrift"],
+              "author_code" => $sessionCode,
+              "author_function" => $sessionFunction,
+              "content_sha256" => hash ("sha256", $data ["12_inhalt"]),
+            ),
+            $messageActionToken,
+            $messageActionTask
           ),
           ),
           $conf_4f_tbl ["anhang"],
-          $attachmentAuthorizer
+          $attachmentAuthorizer,
+          $expectedIncidentId
         );
       } catch (EstabIncidentConflictException $exception) {
         http_response_code (409);
@@ -1284,17 +1346,22 @@ function check_and_save ($data, $activeCommandPostName){
            "actor" => $messageActor,
            "from_status" => null,
            "to_status" => 8,
-           "snapshot" => array (
-             "direction" => "E",
-             "object_type" => "conversation_note",
-             "conversation_note" => true,
-             "author_code" => $sessionCode,
-             "author_function" => $sessionFunction,
-             "review_required" => false,
-             "content_sha256" => hash ("sha256", $data ["12_inhalt"]),
+           "snapshot" => estab_message_action_evidence_snapshot (
+             array (
+               "direction" => "E",
+               "object_type" => "conversation_note",
+               "conversation_note" => true,
+               "author_code" => $sessionCode,
+               "author_function" => $sessionFunction,
+               "review_required" => false,
+               "content_sha256" => hash ("sha256", $data ["12_inhalt"]),
+             ),
+             $messageActionToken,
+             $messageActionTask
            ),
          ),
-         $attachmentAuthorizer
+         $attachmentAuthorizer,
+         $expectedIncidentId
        );
        protokolleintrag ("Stab-gesprnoti", "message_id=".$storedMessage ["id"]);
        set_msg_read ($storedMessage ["id"]) ;
@@ -1416,7 +1483,8 @@ function check_and_save ($data, $activeCommandPostName){
                 "accepted_by" => $sessionCode,
               ),
             "occurred_at" => $ldfFields ["02_zeit"],
-          )
+          ),
+          $expectedIncidentId
         );
       } catch (EstabDvInputException|EstabDvConflictException $exception) {
         http_response_code (409);
@@ -1497,7 +1565,8 @@ function check_and_save ($data, $activeCommandPostName){
                 "returned_by" => $sessionCode,
                 "transport_return_reason" => $returnReason,
               ),
-            )
+            ),
+            $expectedIncidentId
           );
         } catch (EstabDvInputException|EstabDvConflictException $exception) {
           http_response_code (
@@ -1609,7 +1678,8 @@ function check_and_save ($data, $activeCommandPostName){
                  ),
              ),
              "occurred_at" => konv_taktime_datetime ($data ["03_datum"]),
-           )
+           ),
+           $expectedIncidentId
          );
        } catch (EstabDvInputException|EstabDvConflictException $exception) {
          http_response_code (409);
@@ -1764,7 +1834,8 @@ function check_and_save ($data, $activeCommandPostName){
                  : "",
              ),
            "occurred_at" => $reviewFields ["15_quitdatum"],
-         )
+         ),
+         $expectedIncidentId
        );
        if (!$reviewSaved) {
          throw new RuntimeException ("Message review status changed");
@@ -1789,7 +1860,18 @@ function check_and_save ($data, $activeCommandPostName){
    break;
 
 	  }
-  } finally {
+	  } finally {
+    try {
+      estab_message_action_unlock (
+        $messageConnection,
+        $messageActionLockName
+      );
+    } catch (Throwable $exception) {
+      error_log (
+        "eStab message action lock release failed: ".
+        $exception->getMessage ()
+      );
+    }
     estab_auth_close ($messageConnection);
   }
 }

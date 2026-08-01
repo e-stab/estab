@@ -391,6 +391,170 @@ $viewer = ['benutzer' => 'Viewer', 'kuerzel' => 'si0001', 'funktion' => 'Si', 'r
 $telecommunications = ['benutzer' => 'Radio', 'kuerzel' => 'aw0001', 'funktion' => 'A/W', 'rolle' => 'Fernmelder'];
 $telecommunicationsLead = ['benutzer' => 'Lead', 'kuerzel' => 'ldf001', 'funktion' => 'LdF', 'rolle' => 'Fernmelder'];
 
+$attachmentEditRoutes = [
+    [$telecommunications, 'FM-Eingang'],
+    [$telecommunications, 'FM-Eingang_Anhang'],
+    [$staff, 'Stab_schreiben'],
+    [$staff, 'Stab_korrigieren'],
+    [$staff, 'Stab_gesprnoti'],
+];
+$assert(
+    estab_workflow_attachment_edit_tasks() === array_column(
+        $attachmentEditRoutes,
+        1
+    ),
+    'attachment edit-task policy differs from the tested workflow stages'
+);
+$assert(
+    estab_workflow_action_keys_allowed([
+        'message_attachment_upload_x' => '12',
+        'message_attachment_upload_y' => '4',
+        'message_attachment_remove_x' => 'EL0001.pdf',
+        'message_attachment_remove_y' => 'EL0002.jpeg',
+    ]),
+    'integrated attachment action coordinates are absent from the central allowlist'
+);
+foreach ($attachmentEditRoutes as [$attachmentIdentity, $attachmentTask]) {
+    $assert(
+        estab_workflow_route_allowed(
+            $attachmentIdentity,
+            'POST',
+            [
+                'task' => $attachmentTask,
+                'message_attachment_upload_x' => '12',
+            ]
+        )
+            && estab_workflow_route_allowed(
+                $attachmentIdentity,
+                'POST',
+                [
+                    'task' => $attachmentTask,
+                    'message_attachment_upload_y' => '4',
+                ]
+            )
+            && estab_workflow_route_allowed(
+                $attachmentIdentity,
+                'POST',
+                [
+                    'task' => $attachmentTask,
+                    'message_attachment_remove_x' => 'EL0001.pdf',
+                ]
+            )
+            && estab_workflow_route_allowed(
+                $attachmentIdentity,
+                'POST',
+                [
+                    'task' => $attachmentTask,
+                    'message_attachment_remove_y' => 'EL0002.jpeg',
+                ]
+            ),
+        $attachmentTask . ' rejects its integrated attachment actions'
+    );
+    $wrongAttachmentIdentity = $attachmentIdentity === $staff
+        ? $telecommunications
+        : $staff;
+    $assert(
+        !estab_workflow_route_allowed(
+            $wrongAttachmentIdentity,
+            'POST',
+            [
+                'task' => $attachmentTask,
+                'message_attachment_upload_x' => '1',
+            ]
+        )
+            && !estab_workflow_route_allowed(
+                $wrongAttachmentIdentity,
+                'POST',
+                [
+                    'task' => $attachmentTask,
+                    'message_attachment_remove_x' => 'EL0001.pdf',
+                ]
+            ),
+        $attachmentTask . ' attachment actions are reachable through another role'
+    );
+}
+foreach ([
+    [$telecommunications, 'FM-Ausgang'],
+    [$staff, 'Stab_lesen'],
+    [$viewer, 'Stab_sichten'],
+    [$telecommunicationsLead, 'LdF-Eingang'],
+    [$telecommunicationsLead, 'LdF-Ausgang'],
+] as [$readOnlyIdentity, $readOnlyTask]) {
+    $assert(
+        !estab_workflow_route_allowed(
+            $readOnlyIdentity,
+            'POST',
+            [
+                'task' => $readOnlyTask,
+                'message_attachment_upload_x' => '1',
+            ]
+        )
+            && !estab_workflow_route_allowed(
+                $readOnlyIdentity,
+                'POST',
+                [
+                    'task' => $readOnlyTask,
+                    'message_attachment_remove_x' => 'EL0001.pdf',
+                ]
+            ),
+        $readOnlyTask . ' unexpectedly permits attachment changes'
+    );
+}
+$assert(
+    !estab_workflow_route_allowed(
+        $staff,
+        'POST',
+        ['message_attachment_upload_x' => '1']
+    )
+        && !estab_workflow_route_allowed(
+            $staff,
+            'POST',
+            ['message_attachment_remove_x' => 'EL0001.pdf']
+        ),
+    'attachment action without an editable workflow task was accepted'
+);
+$assert(
+    !estab_workflow_route_allowed(
+        $staff,
+        'GET',
+        [
+            'task' => 'Stab_schreiben',
+            'message_attachment_upload_x' => '1',
+        ]
+    )
+        && !estab_workflow_route_allowed(
+            $staff,
+            'POST',
+            [
+                'task' => 'Stab_schreiben',
+                'message_attachment_upload_x' => '1',
+                'message_attachment_remove_x' => 'EL0001.pdf',
+            ]
+        ),
+    'attachment actions permit a GET or conflicting upload/remove transition'
+);
+foreach ([
+    '',
+    'A.pdf',
+    'EL0001',
+    'EL0001.pdf/../EL0002.pdf',
+    "EL0001.pdf\n",
+    str_repeat('A', 239) . '.pdf',
+    ['EL0001.pdf'],
+] as $unsafeAttachmentReference) {
+    $assert(
+        !estab_workflow_route_allowed(
+            $staff,
+            'POST',
+            [
+                'task' => 'Stab_schreiben',
+                'message_attachment_remove_x' => $unsafeAttachmentReference,
+            ]
+        ),
+        'malformed attachment removal reference passed the workflow gate'
+    );
+}
+
 $assert(
     estab_workflow_is_telecommunications($telecommunications)
         && !estab_workflow_is_telecommunications($telecommunicationsLead)
@@ -871,7 +1035,15 @@ $assert(
         && $commandPostLoadPosition < $conversationCommandPostPosition
         && str_contains(
             $mainController,
-            'check_and_save ($returndata, $activeCommandPostName);'
+            'check_and_save ('
+        )
+        && str_contains(
+            $mainController,
+            '$workflowIncidentId'
+        )
+        && !str_contains(
+            $mainController,
+            '$_SESSION ["gesprnoti"]'
         )
         && str_contains(
             $mainController,

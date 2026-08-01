@@ -71,6 +71,218 @@ function estab_message_positive_id(mixed $value): int
     return $parsed;
 }
 
+/** Validate and hash one high-entropy browser action token for evidence. */
+function estab_message_action_token_hash(mixed $token): string
+{
+    if (
+        !is_string($token)
+        || preg_match('/\A[a-f0-9]{64}\z/D', $token) !== 1
+    ) {
+        throw new InvalidArgumentException('Invalid message action token');
+    }
+    return hash('sha256', $token);
+}
+
+/** Return the workflow tasks that persist a user-created message action. */
+function estab_message_action_tasks(): array
+{
+    return [
+        'FM-Eingang',
+        'FM-Eingang_Anhang',
+        'Stab_schreiben',
+        'Stab_korrigieren',
+        'Stab_gesprnoti',
+    ];
+}
+
+/** Derive a bounded MariaDB advisory-lock name from one action token. */
+function estab_message_action_lock_name(mixed $token): string
+{
+    return 'estab:message-action:'
+        . substr(estab_message_action_token_hash($token), 0, 40);
+}
+
+/** Serialize the evidence lookup and message commit for one action token. */
+function estab_message_action_lock(
+    mysqli $connection,
+    mixed $token,
+    int $timeoutSeconds = 10
+): string {
+    if ($timeoutSeconds < 0 || $timeoutSeconds > 30) {
+        throw new InvalidArgumentException('Invalid message action lock timeout');
+    }
+    $lockName = estab_message_action_lock_name($token);
+    $statement = $connection->prepare('SELECT GET_LOCK(?, ?)');
+    if (!$statement) {
+        throw new RuntimeException('Message action lock could not be prepared');
+    }
+    try {
+        $statement->bind_param('si', $lockName, $timeoutSeconds);
+        if (!$statement->execute()) {
+            throw new RuntimeException('Message action lock could not be acquired');
+        }
+        $row = $statement->get_result()->fetch_row();
+    } finally {
+        $statement->close();
+    }
+    if ((string) ($row[0] ?? '') !== '1') {
+        throw new RuntimeException('Message action is already being processed');
+    }
+    return $lockName;
+}
+
+/** Release one advisory action lock and reject a silently lost lock. */
+function estab_message_action_unlock(
+    mysqli $connection,
+    ?string $lockName
+): void {
+    if ($lockName === null) {
+        return;
+    }
+    $statement = $connection->prepare('SELECT RELEASE_LOCK(?)');
+    if (!$statement) {
+        throw new RuntimeException('Message action unlock could not be prepared');
+    }
+    try {
+        $statement->bind_param('s', $lockName);
+        if (!$statement->execute()) {
+            throw new RuntimeException('Message action lock could not be released');
+        }
+        $row = $statement->get_result()->fetch_row();
+    } finally {
+        $statement->close();
+    }
+    if ((string) ($row[0] ?? '') !== '1') {
+        throw new RuntimeException('Message action lock was lost');
+    }
+}
+
+/**
+ * Bind a browser action to the immutable event written in the same commit.
+ *
+ * Only a one-way hash is persisted. An absent token remains supported for
+ * legacy/internal callers, while every current browser form supplies one.
+ */
+function estab_message_action_evidence_snapshot(
+    array $snapshot,
+    mixed $token,
+    string $task
+): array {
+    if ($token === null || $token === '') {
+        return $snapshot;
+    }
+    if (!in_array($task, estab_message_action_tasks(), true)) {
+        throw new InvalidArgumentException('Invalid message action task');
+    }
+    $snapshot['request_action'] = [
+        'task' => $task,
+        'token_sha256' => estab_message_action_token_hash($token),
+    ];
+    return $snapshot;
+}
+
+/**
+ * Resolve exact durable proof that this browser action already committed.
+ *
+ * The immutable event is appended inside the same transaction as the message
+ * INSERT/UPDATE. It is therefore a reliable replay result after a worker dies
+ * between the database commit and the final session-token update.
+ */
+function estab_message_committed_action_id(
+    mysqli $connection,
+    mixed $incidentId,
+    mixed $token,
+    string $task,
+    array $identity,
+    mixed $recordId = null
+): ?int {
+    $incidentId = estab_incident_positive_id($incidentId);
+    if (!in_array($task, estab_message_action_tasks(), true)) {
+        throw new InvalidArgumentException('Invalid message action task');
+    }
+    $shape = estab_auth_session_identity_shape([
+        'vStab_benutzer' => $identity['benutzer'] ?? null,
+        'vStab_kuerzel' => $identity['kuerzel'] ?? null,
+        'vStab_funktion' => $identity['funktion'] ?? null,
+        'vStab_rolle' => $identity['rolle'] ?? null,
+    ]);
+    if ($shape === null) {
+        throw new InvalidArgumentException('Invalid message action identity');
+    }
+    $expectedRecordId = $task === 'Stab_korrigieren'
+        ? estab_message_positive_id($recordId)
+        : null;
+    if ($task !== 'Stab_korrigieren' && $recordId !== null && $recordId !== '') {
+        throw new InvalidArgumentException('Unexpected message action record');
+    }
+    $eventType = match ($task) {
+        'Stab_korrigieren' => 'author_resubmitted',
+        'Stab_gesprnoti' => 'conversation_note_created',
+        default => 'created',
+    };
+    $tokenHash = estab_message_action_token_hash($token);
+    $statement = $connection->prepare(
+        'SELECT `message_id` FROM `nv_nachrichten_ereignisse`'
+        . ' WHERE `einsatz_id` = ? AND `event_type` = ?'
+        . ' AND BINARY `actor_user` = BINARY ?'
+        . ' AND BINARY `actor_code` = BINARY ?'
+        . ' AND BINARY `actor_function` = BINARY ?'
+        . " AND JSON_UNQUOTE(JSON_EXTRACT(`field_snapshot`, "
+        . "'$.request_action.task')) = ?"
+        . " AND JSON_UNQUOTE(JSON_EXTRACT(`field_snapshot`, "
+        . "'$.request_action.token_sha256')) = ?"
+        . ' ORDER BY `event_id` ASC LIMIT 2'
+    );
+    if (!$statement) {
+        throw new RuntimeException(
+            'Committed message action lookup could not be prepared'
+        );
+    }
+    $actorUser = (string) $shape['benutzer'];
+    $actorCode = (string) $shape['kuerzel'];
+    $actorFunction = (string) $shape['funktion'];
+    try {
+        $statement->bind_param(
+            'issssss',
+            $incidentId,
+            $eventType,
+            $actorUser,
+            $actorCode,
+            $actorFunction,
+            $task,
+            $tokenHash
+        );
+        if (!$statement->execute()) {
+            throw new RuntimeException(
+                'Committed message action lookup could not be executed'
+            );
+        }
+        $result = $statement->get_result();
+        $rows = [];
+        while (is_array($row = $result->fetch_assoc())) {
+            $rows[] = $row;
+        }
+        $result->free();
+    } finally {
+        $statement->close();
+    }
+    if (count($rows) > 1) {
+        throw new LogicException(
+            'A message action token has more than one durable outcome'
+        );
+    }
+    if ($rows === []) {
+        return null;
+    }
+    $messageId = estab_message_positive_id($rows[0]['message_id'] ?? null);
+    if ($expectedRecordId !== null && $messageId !== $expectedRecordId) {
+        throw new LogicException(
+            'A correction action token resolved to another message'
+        );
+    }
+    return $messageId;
+}
+
 /**
  * Decode storage-time entities from older releases exactly once.
  *
@@ -492,6 +704,33 @@ function estab_message_bind_command_post(
     return $fields;
 }
 
+/**
+ * Resolve the incident held by an operational write and reject stale forms.
+ *
+ * The controller captures the active incident before it renders or accepts a
+ * form. The status row is locked only inside the repository transaction, so
+ * that captured identifier must be compared here rather than in an earlier
+ * read gate where an administrator could still switch the active incident.
+ */
+function estab_message_transaction_incident_id(
+    array $incident,
+    mixed $expectedIncidentId = null
+): int {
+    $incidentId = estab_incident_positive_id(
+        $incident['active_einsatz_id'] ?? null
+    );
+    if (
+        $expectedIncidentId !== null
+        && $incidentId !== estab_incident_positive_id($expectedIncidentId)
+    ) {
+        throw new EstabIncidentConflictException(
+            'Der aktive Einsatz hat sich seit dem Öffnen des Nachrichtenvordrucks '
+                . 'geändert. Die Eingabe wurde nicht gespeichert.'
+        );
+    }
+    return $incidentId;
+}
+
 /** Insert one message atomically into the globally active incident. */
 function estab_message_insert(
     mysqli $connection,
@@ -698,7 +937,8 @@ function estab_message_insert_numbered(
     array $fields,
     ?string $attachmentTable,
     array $event,
-    ?callable $attachmentAuthorizer = null
+    ?callable $attachmentAuthorizer = null,
+    mixed $expectedIncidentId = null
 ): array {
     if (!in_array($direction, ['E', 'A'], true)) {
         throw new InvalidArgumentException('Invalid message direction');
@@ -730,9 +970,13 @@ function estab_message_insert_numbered(
                 $fields,
                 $attachmentTable,
                 $event,
-                $attachmentAuthorizer
+                $attachmentAuthorizer,
+                $expectedIncidentId
             ): array {
-                $incidentId = (int) $incident['active_einsatz_id'];
+                $incidentId = estab_message_transaction_incident_id(
+                    $incident,
+                    $expectedIncidentId
+                );
                 if ($separateNumbering) {
                     $numberStatement = estab_message_execute(
                         $connection,
@@ -1167,7 +1411,8 @@ function estab_message_update_locked_operator_stage(
     string $direction,
     int $status,
     array $fields,
-    array $event
+    array $event,
+    mixed $expectedIncidentId = null
 ): bool {
     $recordId = estab_message_positive_id($recordId);
     if (preg_match('/\A[a-z0-9_]{1,6}\z/D', $operatorCode) !== 1) {
@@ -1192,9 +1437,13 @@ function estab_message_update_locked_operator_stage(
             $fields,
             $stageSql,
             $stageParameters,
-            $event
+            $event,
+            $expectedIncidentId
         ): bool {
-            $incidentId = (int) $incident['active_einsatz_id'];
+            $incidentId = estab_message_transaction_incident_id(
+                $incident,
+                $expectedIncidentId
+            );
             $incomingTbbCorrection = null;
             if ($direction === 'E' && $status === 1) {
                 if (
@@ -1745,7 +1994,8 @@ function estab_message_update_pending_review(
     string $table,
     mixed $recordId,
     array $fields,
-    array $event
+    array $event,
+    mixed $expectedIncidentId = null
 ): bool {
     $recordId = estab_message_positive_id($recordId);
     $fields = estab_message_fields($fields);
@@ -1756,15 +2006,20 @@ function estab_message_update_pending_review(
             $table,
             $recordId,
             $fields,
-            $event
+            $event,
+            $expectedIncidentId
         ): bool {
+            $incidentId = estab_message_transaction_incident_id(
+                $incident,
+                $expectedIncidentId
+            );
             $assignments = [];
             foreach (array_keys($fields) as $column) {
                 $assignments[] = '`' . $column . '` = ?';
             }
             $parameters = array_values($fields);
             $parameters[] = $recordId;
-            $parameters[] = (int) $incident['active_einsatz_id'];
+            $parameters[] = $incidentId;
             $parameters[] = '';
             $parameters[] = '';
             $sql = 'UPDATE ' . estab_message_table($table)
@@ -1785,7 +2040,7 @@ function estab_message_update_pending_review(
                 }
                 estab_message_append_transition_evidence(
                     $connection,
-                    (int) $incident['active_einsatz_id'],
+                    $incidentId,
                     $recordId,
                     $event
                 );
@@ -1813,7 +2068,8 @@ function estab_message_resubmit_returned_outgoing(
     array $fields,
     array $event,
     ?string $attachmentTable = null,
-    ?callable $attachmentAuthorizer = null
+    ?callable $attachmentAuthorizer = null,
+    mixed $expectedIncidentId = null
 ): bool {
     $recordId = estab_message_positive_id($recordId);
     if (
@@ -1847,8 +2103,13 @@ function estab_message_resubmit_returned_outgoing(
             $fields,
             $event,
             $attachmentTable,
-            $attachmentAuthorizer
+            $attachmentAuthorizer,
+            $expectedIncidentId
         ): bool {
+            $incidentId = estab_message_transaction_incident_id(
+                $incident,
+                $expectedIncidentId
+            );
             $fields = estab_message_bind_command_post(
                 $fields,
                 $incident,
@@ -1869,7 +2130,7 @@ function estab_message_resubmit_returned_outgoing(
                     . ' AND `x03_sperruser` = ? FOR UPDATE',
                 [
                     $recordId,
-                    (int) $incident['active_einsatz_id'],
+                    $incidentId,
                     '',
                     '',
                     '',
@@ -1901,7 +2162,7 @@ function estab_message_resubmit_returned_outgoing(
                 estab_message_require_attachment_scope(
                     $connection,
                     $attachmentTable,
-                    (int) $incident['active_einsatz_id'],
+                    $incidentId,
                     $fields['12_anhang']
                 );
                 if (
@@ -1918,7 +2179,7 @@ function estab_message_resubmit_returned_outgoing(
                 ) {
                     $attachmentAuthorizer(
                         $connection,
-                        (int) $incident['active_einsatz_id'],
+                        $incidentId,
                         $fields['12_anhang']
                     );
                 }
@@ -1970,7 +2231,7 @@ function estab_message_resubmit_returned_outgoing(
                     (string) ($originalMessage['17_vermerke'] ?? '');
                 estab_message_append_transition_evidence(
                     $connection,
-                    (int) $incident['active_einsatz_id'],
+                    $incidentId,
                     $recordId,
                     $event
                 );

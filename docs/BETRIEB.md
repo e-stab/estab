@@ -109,11 +109,17 @@ Die formale Sichtung jedes Ausgangs vor LdF und A/W ist eine feste
 fachliche Invariante. Sie besitzt bewusst keine Umgebungsvariable und kann in
 einer Installation nicht abgeschaltet werden.
 
-Die effektive Uploadgrenze ist der kleinste Wert aus
-`ESTAB_UPLOAD_MAX_BYTES`, PHPs `upload_max_filesize` von 20 MiB und
-`post_max_size` von 24 MiB.
+Die fachliche Uploadgrenze ist `ESTAB_UPLOAD_MAX_BYTES` (Standard 20 MiB,
+hartes Maximum 50 MiB). PHPs Dateitransportgrenze entspricht diesem Maximum
+mit `upload_max_filesize = 50M`; die Grenze für den gesamten Request liegt mit
+`post_max_size = 56M` darüber. Dadurch kann
+die Anwendung einen zu großen Anhang ablehnen und trotzdem den übrigen,
+ungespeicherten Nachrichtenvordruck vollständig wieder anzeigen. JavaScript
+warnt bereits vor dem Senden; überschreitet der gesamte Request dennoch die
+PHP-Grenze, antwortet der Controller ausdrücklich mit HTTP 413.
 
-Der Anhangdialog akzeptiert unter anderem `.jpg` und `.jpeg` sowie `.tif` und
+Der direkt in den Nachrichtenvordruck integrierte Upload und die optionale
+Archivauswahl akzeptieren unter anderem `.jpg` und `.jpeg` sowie `.tif` und
 `.tiff` unabhängig von Groß-/Kleinschreibung. Dateiendung und serverseitig
 erkannter MIME-Typ müssen zusammenpassen; eine nur in `.jpeg` umbenannte
 Fremddatei bleibt deshalb gesperrt. Formular und Fehlermeldung zeigen die
@@ -121,6 +127,151 @@ effektive Anwendungsgrenze verständlich an. Bestehende Installationen, deren
 `.env` noch ausdrücklich `ESTAB_UPLOAD_MAX_BYTES=5242880` enthält, behalten
 das alte 5-MiB-Limit, bis der Wert bewusst auf `20971520` angehoben und der
 App-Container neu erzeugt wird.
+
+Der gemeinsame Uploaddienst verarbeitet eine neue Datei zweiphasig im selben
+Request. Zuerst reserviert eine Transaktion den internen Namen mit Status 8;
+diese inhaber- und einsatzgebundene Zeile ist nicht lesbar. Eine weitere kurze
+Staging-Transaktion speichert anschließend die erwartete Dateiendung, noch
+bevor ein Zielpfad an den Uploader übergeben wird. Danach werden die Bytes
+verschoben und ohne langen Einsatz-Lock gehasht, damit eine langsame NAS-Ablage
+keine operativen Datenbankzeilen hält. Die Finalisierungstransaktion
+beansprucht die Zeile mit Status 2, prüft erwarteten aktiven Einsatz und
+Kontofunktion erneut und schreibt Metadaten, SHA-256, Bytezahl, Serverzeit,
+sichtbaren Status 1 sowie Audit atomar. Ein Fehler in dieser Transaktion rollt
+vollständig auf die unsichtbare Status-8-Reservierung zurück.
+
+Die normale Fehlerbereinigung prüft den Zustand anschließend über eine neue
+Datenbankverbindung. Das schützt auch vor einem aus Clientsicht uneindeutigen
+Commit: Eine inzwischen als Status 1 bestätigte Datei wird niemals gelöscht.
+Nur eine unfertige Status-8-Zeile mit exakt passendem Inhaber und Einsatz darf
+bereinigt werden. Der Dienst validiert unter einer Zeilensperre Besitzer und
+gespeicherte Endung und beansprucht diese Zeile atomar als Status 2. Erst nach
+diesem Commit validiert er den Zielpfad, löscht die Staging-Datei, bestätigt
+deren Fehlen und gibt den internen Namen als Status 4 frei. Neue Uploads
+verwenden nur Status-8-Reservierungen; deshalb kann niemand die Zeile zwischen
+Prüfung und Löschen wiederverwenden oder finalisieren. Schlägt das Entfernen
+auf einer NAS-Ablage fehl oder wird die Bereinigung hart unterbrochen, bleibt
+die Status-2-Cleanup-Zeile absichtlich unsichtbar gesperrt und der Fehler wird
+protokolliert; derselbe interne Name kann dann nicht über verwaiste Bytes
+gelegt werden. Bei einem schon vor der Beanspruchung unklaren Zustand bleibt
+die vorhandene Zeile unverändert gesperrt. Der
+historische Archiv-Upload verwendet denselben Dienst mit seinem bereits
+reservierten internen Namen; die optionale Archivauswahl verknüpft dagegen nur
+eine bestehende Datei. „Vom Vordruck entfernen“ löscht keine Datei aus
+`estab_data`,
+sondern entfernt nur die exakte Referenz aus dem noch bearbeitbaren Entwurf;
+die dadurch freie Datei bleibt nach den strengeren Freianlagenrechten
+verfügbar. Eine tatsächliche Archivlöschung ist damit nicht verbunden.
+
+Jede direkte Formularaktion erhält zudem ein einmaliges, an Konto, Einsatz,
+Bearbeitungsart und bei Korrekturen an den Datensatz gebundenes Aktionstoken.
+Nach einem Upload merkt die Sitzung die Referenz vor; unmittelbar vor der
+Nachrichtentransaktion wird dieser Zwischenstand durch
+`session_write_close()`/`session_start()` dauerhaft geschrieben. Der
+Nachrichten-INSERT beziehungsweise die Korrektur nimmt nur den SHA-256-Hash des
+Tokens in das unveränderliche Nachrichtenereignis desselben Commits auf. Ein
+tokenbezogener MariaDB-Advisory-Lock serialisiert die Suche nach diesem
+Aktionsnachweis und den Nachrichtenspeicherpfad. Ein Retry nach einem
+Antwortverlust kann deshalb Einsatz, Akteur, Vorgang und gegebenenfalls
+Korrekturdatensatz exakt wiedererkennen und erzeugt nach einem belegten Commit
+keine zweite Nachricht. Ein Retry nach einem Validierungsfehler kann die
+bereits archivierte Anlage auch ohne erneut gesendeten Dateiteil an den offenen
+Entwurf hängen.
+
+Ist ein Nachrichtenabschluss nicht durch das unveränderliche Ereignis belegt,
+wird der Entwurf mit Anlage und einer Aufforderung zur Prüfung der
+Meldungsliste angezeigt. Die Anwendung wertet eine anderweitig verknüpfte
+Anlage nie automatisch als Beweis für das Speichern dieses Entwurfs. Die
+Anlage wird vor der fachlichen Nachrichtenvalidierung archiviert; bleibt ein
+danach fehlerhafter Entwurf liegen oder wird bewusst verlassen, bleibt die
+Datei als freie, berechtigungsgeschützte Archivdatei erhalten und wird nicht
+automatisch gelöscht.
+
+#### Verbleibende Crashgrenze bei direkten Anlagen
+
+MariaDB, Anlagenvolume und PHP-Sitzung besitzen keine gemeinsame verteilte
+Transaktion. Bei regulären Exceptions läuft die oben beschriebene sichere
+Bereinigung; ein harter Worker-, Container- oder Hostabbruch kann `finally`
+jedoch überspringen. Erfolgt er nach dem Verschieben, aber vor der
+Finalisierung, können eine unsichtbare Status-8-Reservierung und die zugehörige
+Staging-Datei liegen bleiben. Wird die reguläre Bereinigung nach ihrer atomaren
+Beanspruchung Status 8 → Status 2 hart beendet, kann stattdessen eine verborgene
+Status-2-Cleanup-Zeile mit noch vorhandener oder bereits entfernter Datei
+liegen bleiben. Nicht löschbare Bytes führen absichtlich ebenfalls zu diesem
+Status-2-Zustand. Erfolgt der Abbruch nach der erfolgreichen
+Anlagenfinalisierung, aber vor dem persistierten Session-Checkpoint, kann eine
+freie Archivdatei ohne dauerhafte Aktionstoken-Zuordnung verbleiben; ein
+erneuter Upload kann dann eine zusätzliche Archivdatei erzeugen. Enthält der
+Nachrichten-Commit bereits den unveränderlichen Aktionsnachweis, verhindern
+dieser und der Advisory-Lock auch bei einem Abbruch vor der letzten
+Sessionaktualisierung eine stille Doppelnachricht.
+
+Solche Reste sind eine Betriebsstörung und werden nicht automatisch als
+erfolgreicher Vordruck interpretiert. Zuerst müssen Datenbankstatus, Einsatz,
+Inhaber, gespeicherte Endung und tatsächlicher Dateipfad zusammen geprüft
+werden. Für eine manuelle Bereinigung gilt zwingend dieselbe Reihenfolge wie im
+Dienst: finalisierte Status-1-Dateien nicht entfernen; während einer
+kontrollierten Wartung ohne parallele Uploads eine eindeutig zuordenbare
+Status-8-Reservierung zuerst mit derselben bedingten Zeilenprüfung atomar auf
+Status 2 beanspruchen, danach ausschließlich den validierten Pfad löschen und
+das Fehlen der Datei bestätigen und erst dann Status 2 auf 4 freigeben. Eine
+zurückgebliebene Status-2-Zeile darf erst nach derselben Zuordnungs- und
+Pfadprüfung fortgesetzt werden; bei nicht entfernten Bytes bleibt sie
+gesperrt. Vor manuellen Eingriffen sind Datenbank und `estab_data` gemeinsam zu
+sichern. Eine zusätzliche freie Status-1-Datei wird ausschließlich nach den
+normalen Archiv- und Freianlagenrechten behandelt und darf nicht wegen eines
+vermuteten Retries ungeprüft gelöscht werden.
+
+Für das Monitoring sind insbesondere die Logmarker
+`eStab attachment cleanup state is unavailable`,
+`eStab staged attachment cleanup failed; reservation retained`,
+`eStab staged attachment cleanup rejected an unexpected path`,
+`eStab attachment cleanup retained an unsafe reservation state` und
+`eStab attachment reservation cleanup failed` relevant. Status 2 ist während
+Finalisierung und Cleanup kurzzeitig normal; Status-8- oder Status-2-Zeilen,
+die in einem kontrollierten Zeitraum ohne laufende Uploads bestehen bleiben,
+müssen dagegen zusammen mit dem Anlagenvolume geprüft werden. Es gibt bewusst
+keinen blinden Janitor, der solche Zeilen oder freie Status-1-Dateien allein
+aufgrund ihres Status löscht.
+
+Direktes Hochladen und Entfernen ist auf die bearbeitbaren Vorgänge
+`FM-Eingang`, `FM-Eingang_Anhang`, `Stab_schreiben`, `Stab_korrigieren` und
+`Stab_gesprnoti` begrenzt. Spätere LdF-, Si- und A/W-Schritte sehen die Karten
+nur lesend. Pro Nachricht sind höchstens 100 kanonische Anlagenreferenzen
+zulässig.
+
+Der authentifizierte Inline-Abruf ist ausschließlich für serverseitig als
+JPEG, PNG, GIF, BMP oder PDF erkannte Anhänge zulässig. TIFF und andere Formate
+behalten auch bei angeforderter Browseransicht eine Download-Disposition.
+Download und Inline-Abruf verwenden denselben autorisierten,
+integritätsgeprüften Byte-Snapshot und liefern `no-store`, `nosniff` sowie
+eine restriktive Content-Security-Policy. Verifizierte PDF-Inlineantworten
+dürfen ausschließlich von derselben Origin eingebettet werden. Eine
+HTML-Sandbox wird dort bewusst nicht gesetzt, weil sie Chromiums eingebauten
+PDF-Viewer sperrt; alle übrigen Antworten bleiben für Einbettung gesperrt. Die
+PDF-Karte lädt den Viewer erst beim Aufklappen. Ob der Inhalt tatsächlich
+angezeigt wird, hängt zusätzlich von der PDF-Unterstützung des Browsers ab.
+
+Eine Bildkarte versucht nur bei JPEG, PNG, GIF und BMP bis 16 Megapixel und
+höchstens 24 MiB Dateigröße eine GD-Miniatur zu dekodieren. Der Endpunkt
+begrenzt jede angeforderte Ausgabeachse auf 1.600 Pixel; die Kartenansicht
+fordert 640 Pixel Breite an. Größere oder nicht sicher dekodierbare Originale
+erhalten einen neutralen Platzhalter; Download und zulässige separate
+Browseransicht bleiben möglich. Diese Schutzgrenzen für die interaktive
+Vorschau sind unabhängig von der 12-Megapixel-/8.000-Pixel-Grenze des
+PDF-Dossier-Renderers und dürfen nicht mit ihr gleichgesetzt werden.
+
+Download und Bildvorschau übernehmen nach der Identitätsprüfung die
+Sitzungsdaten und geben den PHP-Session-Lock sofort frei. Sie autorisieren
+zunächst kurz gegen die Datenbank, beenden diese Transaktion vor dem
+zeitaufwändigen Hashen/Kopieren und autorisieren das unveränderte
+Anlagenobjekt unmittelbar vor dem Start der Ausgabe mit aktuellen, sperrenden
+Lesezugriffen erneut. Damit blockiert ein großer Download auf einem NAS weder
+andere Requests noch hält er während der Dateiarbeit Datenbankzeilen fest;
+eine bis zu dieser Abschlussprüfung wirksame Rechte- oder Objektänderung
+unterbindet die Ausgabe. Wie bei jeder bereits begonnenen HTTP-Antwort kann
+eine erst nach dem Abschluss-Commit eintretende Sperrung bereits freigegebene
+Antwortbytes nicht rückwirkend zurückholen.
 
 Im PDF-Einsatzdossier werden JPEG, PNG, GIF und BMP sichtbar ausgegeben;
 mehrseitige PDFs werden mit Poppler einschließlich ihrer Anmerkungen
@@ -624,9 +775,11 @@ fester Kontofunktion neun oder zehn Bereichs- und Dienstlinks;
 Meldungsübersicht ist ausschließlich S2, Nachweisung ausschließlich LdF und
 A/W zugeordnet. Der aktuelle Bereich ist hervorgehoben; alle internen Ziele
 ersetzen die aktuelle Ansicht und erzeugen keine zusätzlichen Tabs. Der
-Nachrichtenvordruck verwendet genau zwei moderne
-`iframe`-Elemente: die vollhohe linke `vorgaben`-Sidebar und den rechten
-`mainframe`. In der Sidebar folgen auf die Statuskarte die Sitzungsidentität
+Rahmen des Nachrichtenarbeitsbereichs verwendet genau zwei moderne
+Anwendungs-`iframe`-Elemente: die vollhohe linke `vorgaben`-Sidebar und den
+rechten `mainframe`. Eine vom Benutzer bewusst aufgeklappte PDF-Anlage kann
+innerhalb des Inhaltsdokuments zusätzlich in einer isolierten
+Vorschau-Einbettung erscheinen. In der Sidebar folgen auf die Statuskarte die Sitzungsidentität
 mit Logout, die zur angemeldeten Rolle passenden Textbuttons für Fachaktionen
 und danach die für die feste Kontofunktion sichtbaren Bereichs- und Dienstlinks.
 Die frühere aufklappbare Auswahl „Bereich wechseln“ und ihre kleine eigene

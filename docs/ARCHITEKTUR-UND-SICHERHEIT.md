@@ -537,14 +537,81 @@ ausschließlich über das geschützte Sidebar-Fragment von `vorgaben.php`
 ausgegeben.
 
 Alte direkte Upload-Endpunkte sind mit HTTP 410 deaktiviert. Der aktive
-Anhangpfad validiert Dateiname, MIME-Typ, Größe und Metadaten, reserviert Namen
-transaktional und verwendet für schreibende Formulare ein Session-CSRF-Token.
-Beim Finalisieren werden SHA-256, Bytezahl und Serverzeit zusammen mit dem
-Statuswechsel atomar persistiert. Migration 95 markiert nur die zu diesem
-Zeitpunkt bereits vorhandenen Zeilen als Legacy; Datenbank-Trigger verbieten
+Anhangpfad liegt direkt im schreibenden Nachrichtenvordruck; der bisherige
+Anlagenbereich bleibt als optionale Auswahl bereits hochgeladener Dateien
+erreichbar. Beide Controller verwenden denselben Uploaddienst. Er validiert
+Dateiname, MIME-Typ, Größe und Metadaten, reserviert Namen transaktional und
+verwendet für schreibende Formulare ein Session-CSRF-Token. Der Store ist
+bewusst zweiphasig: Phase 1 reserviert den internen Namen in einer ersten
+Transaktion als inhabergebundene, nicht lesbare Status-8-Zeile. Eine weitere
+kurze Staging-Transaktion hält vor jeder Dateibewegung die erwartete Endung in
+dieser Zeile fest. Danach werden die Bytes verschoben sowie SHA-256 und
+Bytezahl ohne operativen Einsatz-Lock ermittelt, sodass langsame NAS-I/O keine
+Einsatztransaktion hält. Phase 2
+beansprucht die Reservierung innerhalb einer kurzen Transaktion vorübergehend
+mit Status 2, prüft erwarteten aktiven Einsatz, Reservierungsinhaber und
+Kontofunktion erneut und persistiert SHA-256, Bytezahl, Serverzeit, Status 1
+und Audit atomar. Ein Rollback dieser zweiten Phase fällt auf die weiterhin
+eigene und unsichtbare Status-8-Reservierung zurück.
+
+Die Fehlerbereinigung schließt die ursprüngliche Verbindung und ermittelt den
+autoritativen Zustand über eine neue Verbindung; damit wird auch ein aus Sicht
+des Clients uneindeutiger `COMMIT` sicher behandelt. Status 1 gilt als
+finalisiert und seine Bytes werden nie entfernt. Nur Status 8 mit passendem
+Inhaber und Einsatz darf bereinigt werden. Unter `SELECT ... FOR UPDATE` prüft
+der Dienst Besitzer und gespeicherte Endung und beansprucht die Zeile atomar
+als Status 2, bevor die Transaktion freigegeben und ein Zielpfad gelöscht wird.
+Neue Reservierungen verwenden ausschließlich Status 8; deshalb kann kein
+Uploader die geprüfte Zeile zwischen Entscheidung und `unlink` wiederverwenden
+oder finalisieren. Nach validiertem Pfad werden die Bytes gelöscht und deren
+Fehlen bestätigt; erst anschließend setzt eine neue Verbindung die
+Cleanup-Zeile auf den freien Status 4. Bei unbekanntem Zustand, unerwartetem
+Pfad, hartem Abbruch nach der Beanspruchung oder fehlgeschlagenem `unlink`
+wird fail-closed nicht freigegeben: Ein vor der Beanspruchung unbekannter
+Zustand bleibt unverändert, nach der Beanspruchung bleibt die
+Status-2-Cleanup-Zeile unsichtbar gesperrt. Migration 95 markiert
+nur die zu diesem Zeitpunkt bereits vorhandenen Zeilen als Legacy;
+Datenbank-Trigger verbieten
 für spätere Datensätze diesen Marker, einen finalen Status ohne vollständigen
 Nachweis, eine Herabstufung und jede Änderung des einmal gesicherten
 Nachweises.
+
+Ein an Konto, aktiven Einsatz, Bearbeitungsart und bei Korrekturen an den
+Datensatz gebundenes Einmal-Token schützt die normale Direktupload- und
+Nachrichtenfolge vor Replays. Es bewahrt in der Sitzung den vom Server erzeugten
+Referenzwert und kennt zusätzlich den Zwischenstand „zur Nachrichtensendung
+vorgemerkt“. Dieser Zwischenstand wird durch Schließen und erneutes Öffnen der
+Sitzung vor der Nachrichtentransaktion explizit persistiert. Der
+Nachrichten-INSERT beziehungsweise die Korrektur speichert im selben Commit
+den SHA-256-Hash des Tokens im unveränderlichen Workflowereignis. Ein aus dem
+Token abgeleiteter MariaDB-Advisory-Lock serialisiert Nachweissuche und Commit
+auch über parallele Worker hinweg. Ein Retry löst das Ereignis nur für exakt
+denselben Einsatz, Akteur, Vorgang und gegebenenfalls Korrekturdatensatz auf;
+nach erfolgreichem Save folgt eine Weiterleitung statt einer zweiten
+Nachricht. Bleibt der Abschluss unbelegt, rendert der Controller den gebundenen
+Entwurf mit Prüfanweisung, statt aus einer irgendwo im Einsatz verknüpften
+Anlagenreferenz fälschlich einen erfolgreichen Save abzuleiten. Weil die Anlage
+vor der fachlichen Nachrichtenvalidierung dauerhaft archiviert wird, bleibt
+sie bei einem Validierungsfehler am erneut gerenderten Entwurf. Ein danach
+aufgegebener oder gelöster Entwurf entfernt nur dessen Referenz und nicht die
+Archivdatei.
+
+Diese Sicherung ist keine verteilte Transaktion über MariaDB, Dateisystem und
+PHP-Sitzung. Ein harter Prozess- oder Hostabbruch nach dem Verschieben der
+Staging-Bytes, aber vor Finalisierung beziehungsweise `finally`, kann eine
+unsichtbare Status-8-Reservierung samt Datei zurücklassen. Wird die reguläre
+Bereinigung zwar begonnen, aber nach ihrem atomaren Wechsel von Status 8 auf
+Status 2 hart beendet, kann eine verborgene Status-2-Cleanup-Zeile mit noch
+vorhandenen oder bereits entfernten Bytes bestehen bleiben; nicht löschbare
+Bytes führen absichtlich zum selben gesperrten Zustand. Noch enger ist das
+Fenster nach erfolgreicher Anlagenfinalisierung und vor dem persistierten
+Session-Checkpoint: Dann kann eine freie Archivdatei ohne dauerhafte
+Token-Zuordnung bestehen und ein Retry eine weitere Datei archivieren. Sobald
+der Nachrichten-Commit den unveränderlichen Aktionsnachweis enthält, schützt
+dieses Ereignis in Verbindung mit dem Advisory-Lock den
+Nachrichtenspeicherpfad auch bei einem Workerabbruch zwischen Datenbank-Commit
+und abschließender Sessionaktualisierung vor einer Doppelnachricht.
+
 Die Upload- und Auslieferungsgrenzen behandeln `jpg`/`jpeg` sowie `tif`/`tiff`
 konsistent; Groß-/Kleinschreibung wird normalisiert, der Dateiinhalt aber mit
 Fileinfo erneut geprüft. Die Image-Erstellung verlangt außerdem ausdrücklich
@@ -553,6 +620,7 @@ Typ oder Größe erscheinen als feste, HTML-escaped Benutzerhinweise. Auch wenn
 PHP eine Datei bereits vor dem atomaren Store wegen seiner Größenbegrenzung
 abweist, gibt der Controller die sitzungs- und einsatzgebundene Reservierung
 gezielt frei.
+
 Auch erst beim Abruf oder Lesen eines vorbereiteten Resultsets gemeldete
 MariaDB-Deadlocks und Lock-Timeouts werden als Datenbankfehler normalisiert,
 zurückgerollt und innerhalb der begrenzten Reservierungsversuche erneut
@@ -561,24 +629,54 @@ Folgenummer erzeugen.
 Die Dateiauslieferung akzeptiert nur freigegebene Bereiche, Basenames und
 Dateitypen, löst Pfade unterhalb des erwarteten Wurzelverzeichnisses auf und
 verwirft ausbrechende Symlinks. Direkter Zugriff auf hochgeladene Bytes bleibt
-auf Apache-Ebene eine zweite Schutzlinie.
+auf Apache-Ebene eine zweite Schutzlinie. Die ausdrückliche Inline-Ausgabe ist
+nach Fileinfo-Prüfung auf PDF, JPEG, PNG, GIF und BMP begrenzt; TIFF und alle
+anderen zulässigen Formate bleiben Downloads. Normale und Inline-Ausgabe
+verwenden denselben autorisierten, integritätsgeprüften Snapshot sowie
+`no-store`, `nosniff` und eine restriktive Content-Security-Policy. Die
+PDF-Karte bettet eine verifizierte PDF-Antwort ausschließlich Same-Origin und
+erst nach ausdrücklichem Aufklappen ein; ob sie sichtbar dargestellt werden
+kann, hängt zusätzlich vom PDF-Viewer des Browsers ab. Eine CSP- oder
+Iframe-Sandbox wäre hier kein zusätzlicher Schutz, sondern würde Chromiums
+eingebauten PDF-Viewer technisch sperren; alle Nicht-PDF-Antworten bleiben für
+Einbettung gesperrt. Die automatische Bildminiatur wird nur für JPEG, PNG, GIF
+und BMP versucht. Sie liest höchstens 24 MiB, dekodiert höchstens 16
+Megapixel und erzeugt maximal 1.600 Pixel je Ausgabeachse; die Karte fordert
+konkret 640 Pixel Breite an. Bei größeren oder nicht dekodierbaren Bildern
+bleibt die Karte mit neutralem Platzhalter, Download und zulässiger separater
+Browseransicht verfügbar. Diese interaktive Grenze ist eigenständig und nicht
+die 12-Megapixel-/8.000-Pixel-Grenze des PDF-Dossier-Renderers.
 
 Die Dateiberechtigung wird getrennt von dieser Pfad- und Integritätsprüfung
 ermittelt. Ein verknüpfter Anhang erbt die Leseberechtigung mindestens einer
 exakt über ein vollständiges, semikolongetrenntes Dateinamens-Token
 referenzierten Nachricht. Ein freier Anhang ist ausschließlich für seinen
 Uploader oder ein angemeldetes Konto mit der festen Funktion S2, Si
-beziehungsweise LdF sichtbar. Liste, Download, Bildvorschau, Auswahl im Nachrichtenvordruck und
-der abschließende Nachrichtenspeicherpfad prüfen diese Berechtigung jeweils
-erneut. Eine Teilzeichenfolgensuche oder ein lediglich zuvor angezeigter
-Dateiname genügt nicht.
+beziehungsweise LdF sichtbar. Direkter Upload, Liste, Download,
+Browseransicht, Bildvorschau, Archivauswahl im Nachrichtenvordruck und der
+abschließende Nachrichtenspeicherpfad prüfen diese Berechtigung jeweils
+erneut. Das Entfernen im bearbeitbaren Vordruck löst lediglich ein exaktes
+Referenztoken; es löscht weder Dateizeile noch Archivbytes. Eine
+Teilzeichenfolgensuche oder ein lediglich zuvor angezeigter Dateiname genügt
+nicht.
 
 `app/attachment_integrity.php` liest reguläre Dateien inode- und
 größenstabil und vergleicht bei neuen Anhängen den Inhalt mit dem
 persistierten Eingangsnachweis. PDF-Dossier, administrativer Tabellenexport,
 produktiver Abschluss-Preflight, authentifizierter Direktdownload und
-Bildvorschau verwenden dieselbe Grenze. Für Download und Vorschau wird die
-autorisierte Quelldatei nur einmal geöffnet, unter gemeinsamer Dateisperre in
+Bildvorschau verwenden dieselbe Grenze. Download und Vorschau kopieren nach
+der Identitätsprüfung die Sitzungsdaten und geben den PHP-Session-Lock frei.
+Sie autorisieren zunächst kurz gegen die Datenbank, schließen diese
+Transaktion vor Hashing und Kopieren der Datei und autorisieren unmittelbar
+vor dem Start der Ausgabe das unveränderte Anlagenobjekt samt
+Berechtigungsversion mit aktuellen, sperrenden Lesezugriffen erneut.
+Dadurch blockiert ein großer NAS-Abruf weder die Sitzung noch Datenbankzeilen;
+eine bis zu dieser Abschlussprüfung wirksame Änderung von Objekt oder Rechten
+verhindert die Auslieferung. Nach dem Abschluss-Commit gilt die übliche Grenze
+einer bereits freigegebenen HTTP-Antwort: Eine spätere Sperrung kann schon
+begonnene Antwortbytes nicht rückwirkend zurücknehmen. Für Download und
+Vorschau wird die autorisierte Quelldatei nur einmal geöffnet, unter
+gemeinsamer Dateisperre in
 einen privaten temporären Stream kopiert und genau dieser Stream geprüft,
 zurückgespult und ausgeliefert beziehungsweise dekodiert. Eine
 Pfadsubstitution oder spätere Änderung der Quelldatei kann deshalb nicht die

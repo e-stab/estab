@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/datetime.php';
+require_once __DIR__ . '/file_access.php';
 require_once __DIR__ . '/message_priority.php';
 require_once __DIR__ . '/message_repository.php';
 
@@ -70,6 +71,45 @@ function estab_message_list_datetime_label(mixed $value): string
     } catch (Throwable) {
         return 'Ungültige Abfassungszeit';
     }
+}
+
+/**
+ * Return the exact, canonical attachment names stored on one message.
+ *
+ * Legacy rows may contain duplicate or malformed semicolon-delimited
+ * fragments.  A visual attachment count must never turn such fragments into
+ * HTML or claim that an unsafe/non-existent filename is a real attachment.
+ *
+ * @return list<string>
+ */
+function estab_message_list_attachment_tokens(mixed $value): array
+{
+    if (!is_string($value) || $value === '') {
+        return [];
+    }
+
+    $tokens = [];
+    foreach (explode(';', $value) as $token) {
+        $token = trim($token);
+        if ($token === '') {
+            continue;
+        }
+        try {
+            $token = estab_file_validate_name('attachment', $token);
+        } catch (InvalidArgumentException) {
+            continue;
+        }
+        $tokens[$token] = true;
+    }
+    return array_keys($tokens);
+}
+
+function estab_message_list_attachment_label(int $count): string
+{
+    if ($count < 1) {
+        throw new InvalidArgumentException('Attachment count must be positive');
+    }
+    return $count === 1 ? '1 Anlage' : $count . ' Anlagen';
 }
 
 /** @return array<string,string> */
@@ -463,6 +503,9 @@ function estab_message_list_render_table(array $rows, callable $openControl): vo
         );
         $statusLabel = estab_message_list_status_label($row['x00_status'] ?? null);
         $recipients = estab_message_list_recipient_labels($row['16_empf'] ?? '');
+        $attachmentCount = count(estab_message_list_attachment_tokens(
+            $row['12_anhang'] ?? null
+        ));
 
         echo '<tr class="estab-message-list-row'
             . ($urgent ? ' estab-message-list-row--priority' : '')
@@ -490,7 +533,19 @@ function estab_message_list_render_table(array $rows, callable $openControl): vo
         echo '<td data-label="Betreff und Inhalt"><strong '
             . 'class="estab-message-list-subject">' . estab_message_html($subject)
             . '</strong><span class="estab-message-list-excerpt">'
-            . estab_message_html($content) . '</span></td>';
+            . estab_message_html($content) . '</span>';
+        if ($attachmentCount > 0) {
+            $attachmentLabel = estab_message_list_attachment_label(
+                $attachmentCount
+            );
+            echo '<span class="estab-tool-badge estab-tool-badge-warning '
+                . 'estab-message-list-attachments" '
+                . 'data-estab-message-attachment-badge '
+                . 'data-estab-message-attachment-count="' . $attachmentCount
+                . '" aria-label="' . estab_auth_html($attachmentLabel) . '">'
+                . estab_auth_html($attachmentLabel) . '</span>';
+        }
+        echo '</td>';
         echo '<td data-label="Bearbeitungsstand"><span '
             . 'class="estab-message-list-status '
             . estab_message_list_status_class($row['x00_status'] ?? null)

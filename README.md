@@ -282,7 +282,78 @@ Nachrichten-Objektregel lesen darf. Der aktuelle Abzug
 verwendet das mit dem Dossier gemeinsame PDF-Layout. Die beim
 Nachrichtenabschluss atomar gespeicherte Archivdatei wird dabei weder ersetzt
 noch verändert und bleibt Bestandteil von Backup und Restore.
-Der Anhangdialog unterstützt echte JPEG-Bilder mit `.jpg` und `.jpeg`,
+Neue Anlagen werden direkt im offenen Nachrichtenvordruck ausgewählt,
+beschrieben, hochgeladen und diesem zugeordnet; der separate Anlagenbereich
+ist nur noch als optionale Auswahl bereits hochgeladener Einsatzdateien
+erforderlich. Formularkopf, Anlagenkarten sowie Meldungsübersicht und zweite
+Sichtung machen Anzahl und Zuordnung unmittelbar durch Zähler-Badges sichtbar.
+Die Anlagenkarten liegen unterhalb des amtlichen Blatts. Echte JPEG-, PNG-,
+GIF- und BMP-Bilder erhalten bis 16 Megapixel und 24 MiB eine automatisch
+erzeugte Miniatur; darüber beziehungsweise bei fehlgeschlagener Dekodierung
+erscheint ein Platzhalter. PDF-Dateien werden erst beim ausdrücklichen
+Aufklappen in einer Same-Origin-Browseransicht geladen. Nur serverseitig als
+JPEG, PNG, GIF, BMP oder PDF erkannte Dateien dürfen inline geöffnet werden;
+TIFF und alle übrigen zulässigen Formate bleiben reine Downloads. Jeder Abruf
+prüft Berechtigung, MIME-Typ und Integrität erneut. „Vom Vordruck entfernen“
+löst nur die Zuordnung im bearbeitbaren Entwurf und löscht die bereits
+archivierte Datei nicht.
+
+Der Upload arbeitet zweiphasig. Zuerst werden ein interner Name und die
+Dateiendung als nicht lesbare, inhabergebundene Reservierung gespeichert;
+anschließend werden die Bytes ohne langen Einsatz-Lock verschoben und gehasht.
+Erst eine zweite kurze Einsatztransaktion beansprucht die Reservierung und
+schaltet Datei, Metadaten, SHA-256, Bytezahl und Audit gemeinsam sichtbar. Bei
+einem regulär behandelten Fehler wird der Datenbankstatus über eine neue
+Verbindung erneut gelesen. Eine bereits finalisierte Datei wird nie gelöscht;
+nur eine eigene unfertige Status-8-Reservierung darf bereinigt werden. Der
+Dienst beansprucht sie unter Zeilensperre atomar als Status 2, bevor ein
+validierter Zielpfad gelöscht werden kann. Erst nach bestätigtem Fehlen der
+Bytes wird der interne Name als Status 4 freigegeben. Damit kann kein anderer
+Upload die Zeile zwischen Prüfung und `unlink` wiederverwenden oder
+finalisieren. Ein vor dieser Beanspruchung unklarer Zustand bleibt unverändert
+fail-closed. Ein harter Abbruch danach oder fehlgeschlagenes Löschen lässt die
+unsichtbare Status-2-Cleanup-Zeile gesperrt.
+
+Jede Formularaktion trägt ein einmaliges, an Konto, Einsatz,
+Bearbeitungsart und bei Korrekturen an den Datensatz gebundenes Token. Vor dem
+Nachrichtenspeichern wird der Zwischenstand der Sitzung dauerhaft geschrieben.
+Der Server speichert zusätzlich nur den SHA-256-Hash des Tokens im
+unveränderlichen Nachrichtenereignis desselben Datenbank-Commits. Ein
+tokenbezogener MariaDB-Advisory-Lock serialisiert Nachweisprüfung und
+Nachrichtenspeicherung; ein Retry nach einem verlorenen Antwortpaket kann damit
+den exakten Commit erkennen und erzeugt keine zweite Nachricht. Bei einem noch
+nicht belegten Abschluss wird der Entwurf mit Anlage und Prüfanweisung wieder
+angezeigt; eine Anlage an einer anderen Nachricht gilt nicht als
+Speichernachweis für diesen Text.
+
+Dateisystem, Datenbank und PHP-Sitzung besitzen jedoch keine gemeinsame
+Transaktion. Bei einem harten Worker- oder Hostabbruch kann nach dem Verschieben
+der Bytes eine unsichtbare Status-8-Reservierung samt Staging-Datei
+zurückbleiben, weil die normale Fehlerbereinigung nicht mehr läuft. Ein Abbruch
+nach deren atomarer Cleanup-Beanspruchung oder nicht löschbare Bytes können
+stattdessen eine verborgene Status-2-Cleanup-Zeile mit oder ohne Staging-Datei
+hinterlassen. Im noch engeren Zeitraum nach erfolgreicher
+Anlagenfinalisierung, aber vor dem Session-Checkpoint, kann eine bereits
+archivierte freie Datei ohne dauerhafte Token-Zuordnung verbleiben; ein Retry
+kann dann eine zweite Archivdatei anlegen. Liegt der Nachrichten-Commit samt
+unveränderlichem Aktionsnachweis vor, verhindern Advisory-Lock und dieser
+persistente Nachweis auch nach einem Workerabbruch eine stille
+Doppelnachricht. Die Anlage wird vor der Nachrichtenvalidierung
+archiviert; bei einem verworfenen Entwurf bleibt sie deshalb als freie,
+berechtigungsgeschützte Archivdatei erhalten. Die Standardgrenze der Anwendung
+beträgt 20 MiB je Datei (`ESTAB_UPLOAD_MAX_BYTES`, maximal 50 MiB); der
+Container setzt dafür `upload_max_filesize = 50M` und `post_max_size = 56M`.
+Die sichtbare Anlagendarstellung im PDF-Dossier verwendet eine strengere
+12-Megapixel-/8.000-Pixel-Grenze. Die Anlagenzahl erscheint in
+Meldungsübersicht, zweiter Sichtung und allen operativen Warteschlangen.
+
+Direkter Upload und Entfernen stehen in den bearbeitbaren Eingangs-,
+Stabsschreib-, Korrektur- und Gesprächsnotizvorgängen bereit; spätere
+Prüf-/Beförderungsschritte zeigen die Karten lesend. Je Nachricht sind maximal
+100 kanonische Anlagenreferenzen zulässig. Ein unvollständig übertragener
+Upload erfordert eine erneute Dateiauswahl.
+
+Der integrierte Upload unterstützt echte JPEG-Bilder mit `.jpg` und `.jpeg`,
 prüft den MIME-Typ serverseitig und nennt das standardmäßige Uploadlimit von
 20 MiB direkt am Dateifeld. Ein ETB-Eintrag kann optional genau einen bereits
 fertig hochgeladenen und noch keinem ETB-Eintrag zugeordneten Einsatzanhang
@@ -752,8 +823,11 @@ Einsatz und autorisieren den Vordruck über das Leserecht der festen Funktion am
 Nachrichtendatensatz des aktiven Einsatzes; ein bloß im Volume vorhandener
 Dateiname genügt nicht. Verknüpfte Anhänge übernehmen dieselbe Objektgrenze
 über vollständige, semikolongetrennte Dateinamens-Tokens. Freie Anhänge bleiben
-auf den Uploader sowie S2, Si und LdF begrenzt; Auswahl und endgültiges
-Nachrichtenspeichern prüfen die Berechtigung erneut.
+auf den Uploader sowie S2, Si und LdF begrenzt; direkter Upload,
+Archivauswahl, Lösen der Zuordnung und endgültiges Nachrichtenspeichern prüfen
+die Berechtigung erneut. Bild- und PDF-Browseransicht sowie der Download
+arbeiten erst nach erneuter Objekt-, MIME- und Integritätsprüfung auf einem
+unveränderlichen Byte-Snapshot.
 Einzelvordruck und Nachrichtenseiten des PDF-Einsatzdossiers verwenden
 denselben A4-Formularrenderer. Die Vorlage enthält weder eine
 VS-NfD-Kennzeichnung noch das frühere Wappen. Neue Anhänge eines Dossiers

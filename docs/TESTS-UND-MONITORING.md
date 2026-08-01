@@ -1105,19 +1105,42 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
 - Speichern und Suchen einer Nachricht mit Quotes, Ampersand, `<script>` und
   SQL-ähnlichem Text bei nachweislich inertem HTML sowie HTTP 403 für den
   historischen GET-Detailaufruf,
-- Durchlaufen des echten A/W-Anhang-Uploads mit zuvor ausgefülltem
-  Nachrichtenvordruck und einem echten JPEG über der früheren 5-MiB-Grenze,
-  dessen Browsername auf `.JPEG` endet; Datenbank und Download müssen die
-  normalisierte Endung `.jpeg`, Benutzerkürzel, MD5, MIME-Typ und unveränderten
+- Durchlaufen des gemeinsamen Uploaddiensts sowohl im bisherigen A/W-Archivpfad
+  als auch direkt im ausgefüllten Nachrichtenvordruck mit einem echten JPEG
+  über der früheren 5-MiB-Grenze, dessen Browsername auf `.JPEG` endet;
+  Datenbank und Download müssen die normalisierte Endung `.jpeg`,
+  Benutzerkürzel, MD5, SHA-256, Bytezahl, MIME-Typ und unveränderten
   Dateiinhalt nachweisen. Die Vorschau muss die Bildbytes tatsächlich
   dekodieren und auf 80 × 80 Pixel skalieren. Ein über 20 MiB großes JPEG und
   eine nur in `.JPEG` umbenannte Textdatei müssen mit ihrem konkreten Grund
-  abgewiesen werden, ohne Datei, finale Metadaten oder aktive Reservierung zu
-  hinterlassen. Der Chrome-Test muss den vorbereiteten Dialog auch ohne
-  ausgewählte Datei abbrechen und die Reservierung freigeben können. Die
-  direkte Rückgabe nach der Anhangsauswahl muss Anschrift,
-  sämtliche markanten Eingaben, Vermerk sowie blaue und grüne
-  Empfängerzuordnung als weiterhin absendbare Formularwerte enthalten,
+  abgewiesen werden. Die zweiphasige Fehlerbereinigung muss finalisierte Zeilen
+  erhalten, eine eigene Status-8-Zeile vor dem Löschen atomar als Status 2
+  beanspruchen, unfertige Bytes vor Freigabe des internen Namens entfernen und
+  bei fehlgeschlagenem Löschen die unsichtbare Status-2-Cleanup-Zeile
+  zurückbehalten. Der
+  Chrome-Test muss den vorbereiteten Archivdialog auch ohne ausgewählte Datei
+  abbrechen und die Reservierung freigeben können. Die direkte Rückgabe nach
+  Upload oder Archivauswahl muss Anschrift, sämtliche markanten Eingaben,
+  Vermerk sowie blaue und grüne Empfängerzuordnung als weiterhin absendbare
+  Formularwerte enthalten,
+- direkter Upload über **Datei hochladen** und Upload mit der regulären
+  **Absenden**-Aktion; dabei müssen Formularkopf, Aktionsleiste und Listen die
+  kanonische Anlagenzahl anzeigen, Karten Bildminiatur beziehungsweise lazy
+  Same-Origin-PDF-Vorschau anbieten und das Entfernen nur die Entwurfsreferenz
+  lösen. Retry ohne erneuten Dateiteil, fachlicher Validierungsfehler und der
+  zweistufige Gesprächsnotizpfad dürfen im normalen Requestablauf weder Datei
+  noch Nachricht duplizieren. Der statische Sicherheitsvertrag bindet darüber
+  hinaus Session-Checkpoint, SHA-256-Aktionsnachweis im unveränderlichen
+  Nachrichtenereignis und tokenbezogenen MariaDB-Advisory-Lock,
+- die harten Prozess-/Hostabbruchfenster zwischen Staging und Finalisierung,
+  nach der atomaren Status-2-Beanspruchung einer Cleanup-Zeile sowie zwischen
+  Anlagenfinalisierung und Session-Checkpoint sind ausdrücklich verbleibende
+  Betriebsgrenzen. Möglich bleiben Status-8-Staging- und
+  Status-2-Cleanup-Reste sowie eine zusätzliche freie Status-1-Archivdatei.
+  Die Tests belegen die regulären Exception-, Cleanup- und Replaypfade,
+  behaupten aber keine gemeinsame Transaktion über MariaDB, Volume und
+  Sitzung. Nach einem Nachrichten-Commit mit unveränderlichem
+  Aktionsnachweis darf dagegen keine stille Doppelnachricht entstehen,
 - verknüpfte Anhänge übernehmen die Rechte ihrer exakt referenzierten
   Nachricht, freie Anhänge bleiben auf Uploader, S2, Si und LdF begrenzt;
   fremde Liste, Vorschau, Download, Auswahl und ein manipuliertes finales

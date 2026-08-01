@@ -59,6 +59,23 @@ function estab_list_detail_action (
   echo "</button></form>";
 }
 
+/** Show a safe attachment count beside one legacy operational-list message. */
+function estab_list_attachment_badge ($storedReferences) {
+  $attachmentCount = count (
+    estab_message_list_attachment_tokens ($storedReferences)
+  );
+  if ($attachmentCount < 1) { return; }
+  $attachmentLabel = estab_message_list_attachment_label (
+    $attachmentCount
+  );
+  echo "<span class=\"estab-tool-badge estab-tool-badge-warning ".
+       "estab-message-list-attachments\" ".
+       "data-estab-message-attachment-badge ".
+       "data-estab-message-attachment-count=\"".$attachmentCount."\" ".
+       "aria-label=\"".estab_auth_html ($attachmentLabel)."\">".
+       estab_auth_html ($attachmentLabel)."</span>";
+}
+
 /** Build and escape a category navigation URL without mixing data into HTML. */
 function estab_list_category_url ($baseUrl, array $parameters) {
   $separator = strpos ((string) $baseUrl, "?") === false ? "?" : "&";
@@ -139,7 +156,7 @@ function estab_list_combined_tracking_rows (
       ."m.`02_zeit`,m.`03_datum`,m.`06_befweg`,m.`06_befwegausw`,"
       ."m.`09_vorrangstufe`,m.`04_richtung`,"
       .estab_message_list_tbb_number_select_sql ("m").","
-      ."m.`10_anschrift`,m.`12_inhalt`,m.`13_abseinheit`,"
+      ."m.`10_anschrift`,m.`12_inhalt`,m.`12_anhang`,m.`13_abseinheit`,"
       ."m.`14_zeichen`,m.`x01_abschluss`"
       ." FROM ".$messageTable." AS m"
       ." WHERE m.`einsatz_id` = ?"
@@ -828,7 +845,7 @@ class Listen extends kategorien {
       estab_message_list_tbb_number_select_sql ("m").",".
       "m.`05_gegenstelle`,m.`06_befwegausw`,".
       "m.`09_vorrangstufe`,m.`10_anschrift`,m.`11_rufnummer`,".
-      "m.`12_betreff`,m.`12_inhalt`,m.`12_abfzeit`,".
+      "m.`12_anhang`,m.`12_betreff`,m.`12_inhalt`,m.`12_abfzeit`,".
       "m.`13_abseinheit`,m.`14_funktion`,m.`15_quitdatum`,".
       "m.`15_quitzeichen`,m.`16_empf`,m.`x00_status`,".
       "m.`x01_abschluss`,m.`x02_sperre`,m.`x03_sperruser`".
@@ -1006,7 +1023,7 @@ class Listen extends kategorien {
         $incidentId = $this->required_incident_id ();
         $query = "SELECT `00_lfd`,`04_richtung`,`05_gegenstelle`,
                          `09_vorrangstufe`,`10_anschrift`,`12_abfzeit`,
-                         `12_inhalt`,`13_abseinheit`
+                         `12_anhang`,`12_inhalt`,`13_abseinheit`
                     FROM `".$conf_4f_tbl ["nachrichten"]."`
                    WHERE `einsatz_id` = ?
                      AND `x00_status` = 1
@@ -1067,6 +1084,7 @@ class Listen extends kategorien {
             estab_list_detail_action ("ldf", "meldung", $row ["00_lfd"], $address);
             echo "</td><td style=\"text-align:left\">";
             estab_list_detail_action ("ldf", "meldung", $row ["00_lfd"], $row ["12_inhalt"]);
+            estab_list_attachment_badge ($row ["12_anhang"] ?? null);
             echo "</td></tr>";
           }
           echo "</tbody></table>";
@@ -1078,7 +1096,7 @@ class Listen extends kategorien {
       case "FMA":           /***** F M A ****/
         if ( debug ){ echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b> ### - fkt:createlist - switch(listenart) -- case (FMA)<br>";}
         $incidentId = $this->required_incident_id ();
-        $query = "SELECT `00_lfd`,`07_durchspruch`, `08_befhinweis`, `08_befhinwausw`,`09_vorrangstufe`, `10_anschrift`, `12_abfzeit`, `12_inhalt` FROM `".$conf_4f_tbl ["nachrichten"]."`
+        $query = "SELECT `00_lfd`,`07_durchspruch`, `08_befhinweis`, `08_befhinwausw`,`09_vorrangstufe`, `10_anschrift`, `12_abfzeit`, `12_anhang`, `12_inhalt` FROM `".$conf_4f_tbl ["nachrichten"]."`
                   WHERE `einsatz_id` = ?
                   AND `x00_status` = 2
                   AND `02_zeit` IS NOT NULL AND `02_zeichen` != \"\"
@@ -1125,7 +1143,7 @@ class Listen extends kategorien {
             );
             echo "</td>\n";
             echo "<td>"; if (($row["10_anschrift"] != "")) { estab_list_detail_action ("fm", "meldung", $row["00_lfd"], $row["10_anschrift"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
-            echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { estab_list_detail_action ("fm", "meldung", $row["00_lfd"], $row["12_inhalt"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";           echo "</tr>";
+            echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { estab_list_detail_action ("fm", "meldung", $row["00_lfd"], $row["12_inhalt"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} estab_list_attachment_badge ($row ["12_anhang"] ?? null); echo "</td>\n";           echo "</tr>";
           }
           echo "</tbody></table>";
         } else {// if $result != ""
@@ -1330,6 +1348,7 @@ class Listen extends kategorien {
              } else {
                echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";
              }
+             estab_list_attachment_badge ($row ["12_anhang"] ?? null);
              echo "</td>\n";
              echo "</tr>";
           }  // foreach $result
@@ -1359,6 +1378,7 @@ class Listen extends kategorien {
                          `09_vorrangstufe`,
                          `10_anschrift`,
                          `12_abfzeit`,
+                         `12_anhang`,
                          `12_inhalt` FROM `".$conf_4f_tbl ["nachrichten"]."` ".$WHERE_inout."
                        order by ".
                        estab_message_priority_order_sql ("`09_vorrangstufe`").
@@ -1401,7 +1421,7 @@ class Listen extends kategorien {
            );
            echo "</td>\n";
            echo "<td>"; if (($row["10_anschrift"] != "")) { estab_list_detail_action ("sichter", "meldung", $row["00_lfd"], $row["10_anschrift"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
-           echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { estab_list_detail_action ("sichter", "meldung", $row["00_lfd"], $row["12_inhalt"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+           echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { estab_list_detail_action ("sichter", "meldung", $row["00_lfd"], $row["12_inhalt"]); } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} estab_list_attachment_badge ($row ["12_anhang"] ?? null); echo "</td>\n";
            echo "</tr>";
           } // foreach result row
           echo "</tbody></table>";
@@ -1624,6 +1644,7 @@ class Listen extends kategorien {
                   "m.`04_richtung`,".
                   estab_message_list_tbb_number_select_sql ("m").",".
                   "m.`10_anschrift`,m.`12_abfzeit`,m.`12_inhalt`,".
+                  "m.`12_anhang`,".
                   "m.`13_abseinheit`,m.`x01_abschluss`".
                   " FROM `".$conf_4f_tbl ["nachrichten"]."` AS m".
                   " WHERE m.`einsatz_id` = ?".
@@ -1694,7 +1715,7 @@ class Listen extends kategorien {
                  echo "Nicht dokumentiert";
                }
                echo "</td>\n";
-               echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { echo "<a>".estab_message_html ($row["12_inhalt"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+               echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { echo "<a>".estab_message_html ($row["12_inhalt"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} estab_list_attachment_badge ($row ["12_anhang"] ?? null); echo "</td>\n";
                echo "</tr>";
             }  // foreach $result
           } // if 2. result == ""
@@ -1712,6 +1733,7 @@ class Listen extends kategorien {
                   "m.`04_richtung`,".
                   estab_message_list_tbb_number_select_sql ("m").",".
                   "m.`10_anschrift`,m.`12_abfzeit`,m.`12_inhalt`,".
+                  "m.`12_anhang`,".
                   "m.`13_abseinheit`,m.`x01_abschluss`".
                   " FROM `".$conf_4f_tbl ["nachrichten"]."` AS m".
                   " WHERE m.`einsatz_id` = ?".
@@ -1787,7 +1809,7 @@ class Listen extends kategorien {
                    : "Nicht dokumentiert";
                }
                echo "</td>\n";
-               echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { echo "<a>".estab_message_html ($row["12_inhalt"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+               echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { echo "<a>".estab_message_html ($row["12_inhalt"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} estab_list_attachment_badge ($row ["12_anhang"] ?? null); echo "</td>\n";
                echo "</tr>";
             }  // foreach $result
           }
@@ -1932,7 +1954,7 @@ class Listen extends kategorien {
                }
                echo "</td>\n";
 */
-               echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { echo "<a>".estab_message_html ($row["12_inhalt"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} echo "</td>\n";
+               echo "<td align=\"left\">"; if (($row["12_inhalt"] != "")) { echo "<a>".estab_message_html ($row["12_inhalt"])."</a>\n";  } else { echo "<p><img src=\"null.gif\" alt=\"leer\"></p>";} estab_list_attachment_badge ($row ["12_anhang"] ?? null); echo "</td>\n";
                echo "</tr>";
             }  // foreach $result
           }

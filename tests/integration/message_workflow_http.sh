@@ -409,6 +409,19 @@ attachment_flow_from_body()
     printf '%s' "$flow_token"
 }
 
+message_attachment_request_token_from_body()
+{
+    request_token=$(sed -n \
+        's/.*name="message_attachment_request_token" value="\([a-f0-9][a-f0-9]*\)".*/\1/p' \
+        "$body" | head -n 1)
+    if ! printf '%s' "$request_token" | grep -Eq '^[a-f0-9]{64}$'; then
+        echo 'Message workflow HTTP: direct attachment request token missing' >&2
+        sed -n '1,120p' "$body" >&2
+        exit 1
+    fi
+    printf '%s' "$request_token"
+}
+
 roundtrip_staff_followup_attachment()
 {
     label=$1
@@ -1679,6 +1692,9 @@ assert_body_absent \
 assert_body_absent \
     'data-estab-incident-suggestions="sender"' \
     'A/W incoming sender suggestions'
+incoming_attachment_request_token=$(
+    message_attachment_request_token_from_body
+)
 assert_current_editable_tactical_time_input \
     f_01_datum "$incoming_clock_before" "$incoming_clock_after" \
     'A/W receipt time'
@@ -1714,6 +1730,8 @@ assert_status 200 'save A/W incoming message' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
     --request POST \
     --data-urlencode "csrf_token=$incoming_csrf" \
+    --data-urlencode \
+        "message_attachment_request_token=$incoming_attachment_request_token" \
     --data-urlencode 'absenden_x=1' \
     --data-urlencode 'task=FM-Eingang' \
     --data-urlencode '01_medium=Fu' \
@@ -2260,10 +2278,15 @@ roundtrip_staff_followup_attachment \
     "AW: $incoming_subject" \
     "$reply_content"
 pol_csrf=$(csrf_from_body)
+reply_attachment_request_token=$(
+    message_attachment_request_token_from_body
+)
 assert_status 200 'save POL/FB answer' \
     --cookie "$pol_cookies" --cookie-jar "$pol_cookies" \
     --request POST \
     --data-urlencode "csrf_token=$pol_csrf" \
+    --data-urlencode \
+        "message_attachment_request_token=$reply_attachment_request_token" \
     --data-urlencode 'absenden_x=1' \
     --data-urlencode 'task=Stab_schreiben' \
     --data-urlencode '02_zeit=' \
@@ -2361,10 +2384,15 @@ roundtrip_staff_followup_attachment \
     "WG: $incoming_subject" \
     "$forward_content"
 pol_csrf=$(csrf_from_body)
+forward_attachment_request_token=$(
+    message_attachment_request_token_from_body
+)
 assert_status 200 'save POL/FB forwarding' \
     --cookie "$pol_cookies" --cookie-jar "$pol_cookies" \
     --request POST \
     --data-urlencode "csrf_token=$pol_csrf" \
+    --data-urlencode \
+        "message_attachment_request_token=$forward_attachment_request_token" \
     --data-urlencode 'absenden_x=1' \
     --data-urlencode 'task=Stab_schreiben' \
     --data-urlencode '02_zeit=' \
@@ -2450,11 +2478,16 @@ assert_body_absent \
     'data-estab-incident-suggestions=' \
     'staff outgoing form incident suggestions'
 outgoing_csrf=$(csrf_from_body)
+outgoing_attachment_request_token=$(
+    message_attachment_request_token_from_body
+)
 tactical_time=$(date '+%H%M')
 assert_status 200 'save S1 outgoing message' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
     --request POST \
     --data-urlencode "csrf_token=$outgoing_csrf" \
+    --data-urlencode \
+        "message_attachment_request_token=$outgoing_attachment_request_token" \
     --data-urlencode 'absenden_x=1' \
     --data-urlencode 'task=Stab_schreiben' \
     --data-urlencode '02_zeit=' \
@@ -2595,6 +2628,9 @@ assert_body \
     'id="f_11_gesprnotiz" class="estab-official-box-choice" type="checkbox" disabled' \
     'returned outgoing conversation-note indicator is read-only'
 s1_csrf=$(csrf_from_body)
+correction_attachment_request_token=$(
+    message_attachment_request_token_from_body
+)
 assert_status 403 'reject forged author correction note' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
     --request POST \
@@ -2621,6 +2657,8 @@ assert_status 409 'reject forged attachment during correction resubmission' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
     --request POST \
     --data-urlencode "csrf_token=$s1_csrf" \
+    --data-urlencode \
+        "message_attachment_request_token=$correction_attachment_request_token" \
     --data-urlencode 'absenden_x=1' \
     --data-urlencode 'task=Stab_korrigieren' \
     --data-urlencode "00_lfd=$outgoing_id" \
@@ -2647,10 +2685,15 @@ assert_message_state "$outgoing_marker" \
 assert_db_equals '' 'forged correction attachment did not mutate message' \
     "SELECT \`12_anhang\` FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
 s1_csrf=$(csrf_from_body)
+correction_attachment_request_token=$(
+    message_attachment_request_token_from_body
+)
 assert_status 200 'resubmit corrected outgoing as original author' \
     --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
     --request POST \
     --data-urlencode "csrf_token=$s1_csrf" \
+    --data-urlencode \
+        "message_attachment_request_token=$correction_attachment_request_token" \
     --data-urlencode 'absenden_x=1' \
     --data-urlencode 'task=Stab_korrigieren' \
     --data-urlencode "00_lfd=$outgoing_id" \

@@ -1133,6 +1133,23 @@ function estab_read_attachment_tokens(mixed $value): array
     return array_keys($tokens);
 }
 
+/** Columns needed to decide inherited attachment access. */
+function estab_read_attachment_authorization_columns(): string
+{
+    // Attachment authorization needs workflow state, marks, sender/recipient
+    // functions and the attachment token list only. In particular, never
+    // transfer message subjects or bodies for thumbnail/download checks: one
+    // page can legitimately start several lazy preview requests and active
+    // incidents may contain thousands of long messages.
+    return implode(', ', [
+        '`12_anhang`', '`04_richtung`', '`06_befwegausw`', '`16_empf`',
+        '`x00_status`', '`x01_abschluss`', '`x02_sperre`',
+        '`x03_sperruser`', '`01_zeichen`', '`02_zeit`', '`02_zeichen`',
+        '`03_datum`', '`03_zeichen`', '`14_zeichen`', '`14_funktion`',
+        '`15_quitdatum`', '`15_quitzeichen`',
+    ]);
+}
+
 /** Build an exact filename-to-message map for active-incident attachments. */
 function estab_read_attachment_message_map(
     mysqli $connection,
@@ -1141,8 +1158,10 @@ function estab_read_attachment_message_map(
     bool $forUpdate = false
 ): array {
     $incidentId = estab_incident_positive_id($incidentId);
+    $authorizationColumns = estab_read_attachment_authorization_columns();
     $statement = $connection->prepare(
-        'SELECT * FROM ' . estab_auth_table($messageTable)
+        'SELECT ' . $authorizationColumns . ' FROM '
+        . estab_auth_table($messageTable)
         . ' WHERE `einsatz_id` = ? AND `12_anhang` <> ?'
         . ($forUpdate ? ' FOR UPDATE' : '')
     );
@@ -1168,6 +1187,74 @@ function estab_read_attachment_message_map(
                 ) as $filename
             ) {
                 $map[$filename][] = $message;
+            }
+        }
+        $result->free();
+        return $map;
+    } finally {
+        $statement->close();
+    }
+}
+
+/**
+ * Resolve only messages that can contain one of the requested exact tokens.
+ *
+ * The legacy schema stores a semicolon-delimited list instead of a normalized
+ * relation. MariaDB must therefore inspect that compact column, but it no
+ * longer transfers and parses every attachment-bearing message for each lazy
+ * thumbnail. The PHP token parser remains the authority after the SQL
+ * prefilter, so neither substrings nor malformed legacy fragments grant read
+ * access.
+ *
+ * @param list<string> $requestedFilenames
+ */
+function estab_read_attachment_message_map_for_filenames(
+    mysqli $connection,
+    string $messageTable,
+    int $incidentId,
+    array $requestedFilenames
+): array {
+    $incidentId = estab_incident_positive_id($incidentId);
+    if ($requestedFilenames === [] || count($requestedFilenames) > 100) {
+        throw new InvalidArgumentException('Ungültige Anzahl Anhangreferenzen.');
+    }
+    $requested = [];
+    foreach ($requestedFilenames as $filename) {
+        if (!is_string($filename)) {
+            throw new InvalidArgumentException('Ungültige Anhangreferenz.');
+        }
+        $filename = estab_file_validate_name('attachment', $filename);
+        if (isset($requested[$filename])) {
+            throw new InvalidArgumentException('Doppelte Anhangreferenz.');
+        }
+        $requested[$filename] = true;
+    }
+
+    $conditions = array_fill(
+        0,
+        count($requested),
+        'LOCATE(?, `12_anhang`) > 0'
+    );
+    $statement = estab_message_execute(
+        $connection,
+        'SELECT ' . estab_read_attachment_authorization_columns()
+            . ' FROM ' . estab_auth_table($messageTable)
+            . ' WHERE `einsatz_id` = ? AND ('
+            . implode(' OR ', $conditions) . ')',
+        array_merge([$incidentId], array_keys($requested))
+    );
+    try {
+        $result = $statement->get_result();
+        $map = [];
+        while (($message = $result->fetch_assoc()) !== null) {
+            foreach (
+                estab_read_attachment_tokens(
+                    $message['12_anhang'] ?? null
+                ) as $filename
+            ) {
+                if (isset($requested[$filename])) {
+                    $map[$filename][] = $message;
+                }
             }
         }
         $result->free();
@@ -1250,6 +1337,48 @@ function estab_read_attachment_filename(array $attachment): ?string
         );
     } catch (InvalidArgumentException) {
         return null;
+    }
+}
+
+/**
+ * Bind a private file snapshot to the exact attachment row that authorized it.
+ *
+ * Endpoints can commit the initial database read before hashing a large file,
+ * then reauthorize and compare this opaque version afterwards. This keeps
+ * operational incident/message rows unlocked during NAS I/O without opening
+ * a time-of-check/time-of-use gap across an incident or uploader change.
+ */
+function estab_read_attachment_authorization_version(array $attachment): string
+{
+    $fields = [];
+    foreach (
+        [
+            'einsatz_id', 'filename', 'fileext', 'status', 'kuerzel',
+            'integrity_required', 'ingest_sha256', 'ingest_size',
+            'integrity_captured_at',
+        ] as $field
+    ) {
+        $value = $attachment[$field] ?? null;
+        if (!is_int($value) && !is_string($value) && $value !== null) {
+            throw new InvalidArgumentException(
+                'Ungültiger Autorisierungsstand des Anhangs.'
+            );
+        }
+        $fields[$field] = $value;
+    }
+    try {
+        return hash(
+            'sha256',
+            json_encode(
+                $fields,
+                JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR
+            )
+        );
+    } catch (JsonException $exception) {
+        throw new InvalidArgumentException(
+            'Ungültiger Autorisierungsstand des Anhangs.',
+            previous: $exception
+        );
     }
 }
 
@@ -1349,17 +1478,114 @@ function estab_read_attachment(
     ) {
         return null;
     }
-    $messageMap = estab_read_attachment_message_map(
+    // When $forUpdate is true, the locked active-incident singleton already
+    // serializes every supported message write. Do not additionally issue an
+    // unindexed FOR UPDATE scan over the complete message table: lazy image
+    // requests would otherwise lock and serialize thousands of unrelated
+    // messages. The exact-token query returns only possible linked rows.
+    $messageMap = estab_read_attachment_message_map_for_filenames(
         $connection,
         $messageTable,
         $incidentId,
-        $forUpdate
+        [$requestedFilename]
     );
     return estab_read_attachment_allowed(
         $selected,
         $attachment,
         $messageMap[$requestedFilename] ?? []
     ) ? $attachment : null;
+}
+
+/**
+ * Resolve several attachment cards with one active scope and one message map.
+ *
+ * This preserves the exact same object rule as estab_read_attachment() while
+ * avoiding a complete active-incident message scan for every card rendered on
+ * one Nachrichtenvordruck.
+ *
+ * @return array<string,array<string,mixed>> keyed by canonical filename
+ */
+function estab_read_attachments(
+    mysqli $connection,
+    string $attachmentTable,
+    string $messageTable,
+    array $requestedFilenames,
+    array $identity,
+    mixed $expectedIncidentId = null,
+    bool $forUpdate = false
+): array {
+    if (count($requestedFilenames) > 100) {
+        throw new InvalidArgumentException('Zu viele Anhangreferenzen.');
+    }
+    $requested = [];
+    foreach ($requestedFilenames as $requestedFilename) {
+        if (!is_string($requestedFilename)) {
+            throw new InvalidArgumentException('Ungültige Anhangreferenz.');
+        }
+        $requestedFilename = estab_file_validate_name(
+            'attachment',
+            $requestedFilename
+        );
+        if (isset($requested[$requestedFilename])) {
+            throw new InvalidArgumentException('Doppelte Anhangreferenz.');
+        }
+        $requested[$requestedFilename] = true;
+    }
+    if ($requested === []) {
+        return [];
+    }
+
+    $incident = estab_incident_require_active($connection, $forUpdate);
+    $incidentId = (int) $incident['active_einsatz_id'];
+    if (
+        $expectedIncidentId !== null
+        && estab_incident_positive_id($expectedIncidentId) !== $incidentId
+    ) {
+        throw new EstabIncidentConflictException(
+            'Der aktive Einsatz hat sich geändert.'
+        );
+    }
+    $selected = estab_read_require_identity_scope(
+        $connection,
+        $incidentId,
+        $identity
+    );
+    $messageMap = estab_read_attachment_message_map(
+        $connection,
+        $messageTable,
+        $incidentId,
+        $forUpdate
+    );
+    $visible = [];
+    foreach (array_keys($requested) as $requestedFilename) {
+        $base = pathinfo($requestedFilename, PATHINFO_FILENAME);
+        $extension = strtolower(
+            pathinfo($requestedFilename, PATHINFO_EXTENSION)
+        );
+        $attachment = estab_attachment_find_for_incident(
+            $connection,
+            $attachmentTable,
+            $base,
+            $incidentId,
+            $forUpdate
+        );
+        if (
+            !is_array($attachment)
+            || !hash_equals(
+                strtolower((string) ($attachment['fileext'] ?? '')),
+                $extension
+            )
+            || !estab_read_attachment_allowed(
+                $selected,
+                $attachment,
+                $messageMap[$requestedFilename] ?? []
+            )
+        ) {
+            continue;
+        }
+        $visible[$requestedFilename] = $attachment;
+    }
+    return $visible;
 }
 
 /**
@@ -1397,6 +1623,7 @@ function estab_read_require_attachment_use_scope(
             'Der aktive Einsatz hat sich geändert.'
         );
     }
+    $validated = [];
     foreach ($submitted as $filename) {
         try {
             $filename = estab_file_validate_name('attachment', $filename);
@@ -1406,20 +1633,24 @@ function estab_read_require_attachment_use_scope(
                 previous: $exception
             );
         }
-        if (
-            estab_read_attachment(
-                $connection,
-                $attachmentTable,
-                $messageTable,
-                $filename,
-                $identity,
-                true
-            ) === null
-        ) {
-            throw new EstabReadPermissionException(
-                'Ein ausgewählter Anhang ist für diese Kontofunktion '
-                . 'nicht freigegeben.'
-            );
+        if (isset($validated[$filename])) {
+            throw new InvalidArgumentException('Ungültige Anhangliste.');
         }
+        $validated[$filename] = true;
+    }
+    $allowed = estab_read_attachments(
+        $connection,
+        $attachmentTable,
+        $messageTable,
+        array_keys($validated),
+        $identity,
+        $incidentId,
+        true
+    );
+    if (count($allowed) !== count($validated)) {
+        throw new EstabReadPermissionException(
+            'Ein ausgewählter Anhang ist für diese Kontofunktion '
+            . 'nicht freigegeben.'
+        );
     }
 }

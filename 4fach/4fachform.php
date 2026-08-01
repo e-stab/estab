@@ -3,6 +3,7 @@ require_once __DIR__ . "/../app/csrf.php";
 require_once __DIR__ . "/../app/message_repository.php";
 require_once __DIR__ . "/../app/message_transport.php";
 require_once __DIR__ . "/../app/read_authorization.php";
+require_once __DIR__ . "/../app/attachment_upload.php";
 require_once __DIR__ . "/official_message_form.php";
 if (defined ("debug") && debug) { echo "<b>!File:". __FILE__ ."  Line:". __LINE__ ."</b><big>4Fach Form</big><br>";  }
 /*****************************************************************************\
@@ -67,7 +68,8 @@ class nachrichten4fach {
         "12_betreff", "12_abfzeit", "12_anhang",
         "12_inhalt", "13_abseinheit", "14_funktion", "14_zeichen",
         "15_quitdatum", "15_quitzeichen", "16_empf", "17_vermerke",
-        "estab_route_error"
+        "estab_route_error", "estab_attachment_error",
+        "estab_attachment_notice", "estab_attachment_comment"
       ), "");
       $this->formdata = array_replace (
         $formDefaults,
@@ -145,6 +147,7 @@ class nachrichten4fach {
         $this->activeTelecomRoutes = $this->load_active_telecom_routes ();
       }
       $this->load_message_suggestions ();
+      $this->load_attachment_previews ();
       $this->plot_form () ;
     }
 
@@ -158,6 +161,38 @@ class nachrichten4fach {
     var $messageSuggestions = array ();
     var $messageSuggestionMetadata = array ();
     var $messageMappingContext = "";
+    var $attachmentPreviews = array ();
+
+    function load_attachment_previews () {
+      global $conf_4f_db, $conf_4f_tbl;
+      $references = $this->official_message_attachment_references ();
+      if ($references === array ()) {
+        return;
+      }
+      $identity = estab_read_session_identity ($_SESSION);
+      if (!is_array ($identity)) {
+        return;
+      }
+      $connection = null;
+      try {
+        $connection = estab_message_connect ($conf_4f_db);
+        $this->attachmentPreviews = estab_read_attachments (
+          $connection,
+          (string) $conf_4f_tbl ["anhang"],
+          (string) $conf_4f_tbl ["nachrichten"],
+          $references,
+          $identity,
+          $GLOBALS ["workflowIncidentId"] ?? null
+        );
+      } catch (Throwable $exception) {
+        error_log ("eStab attachment previews are temporarily unavailable");
+        $this->attachmentPreviews = array ();
+      } finally {
+        if ($connection instanceof mysqli) {
+          estab_auth_close ($connection);
+        }
+      }
+    }
 
     function load_active_telecom_routes () {
       global $conf_4f_db;

@@ -16,6 +16,9 @@ if (!function_exists('estab_message_html')) {
 }
 
 require_once $root . '/4fach/official_message_form.php';
+require_once $root . '/app/file_access.php';
+require_once $root . '/app/attachment.php';
+require_once $root . '/app/attachment_upload.php';
 
 final class OfficialMessageFormHelpFixture
 {
@@ -32,6 +35,9 @@ final class OfficialMessageFormHelpFixture
 
     /** @var array<int,array<int,array<string,mixed>>> */
     public array $empfarray = [];
+
+    /** @var array<string,array<string,mixed>> */
+    public array $attachmentPreviews = [];
 
     public string $task = 'Stab_schreiben';
 
@@ -75,6 +81,38 @@ $definitions = $fixture->official_message_help_definitions();
 $assert(
     array_keys($definitions) === range(1, 20),
     'The official filling guide is not represented by exactly 20 ordered hints'
+);
+
+$fixture->formdata = [
+    '12_anhang' => 'EL0001.pdf;EL0002.jpg;EL0001.pdf;../secret.pdf;'
+        . 'EL0003.svg;<b>.pdf',
+];
+$assert(
+    $fixture->official_message_attachment_references()
+        === ['EL0001.pdf', 'EL0002.jpg'],
+    'Attachment references are not safely validated, ordered and deduplicated'
+);
+$fixture->task = 'Stab_schreiben';
+$assert(
+    $fixture->official_message_attachments_editable(),
+    'An attachment-origin message task lost its integrated upload controls'
+);
+$fixture->task = 'Stab_lesen';
+$assert(
+    !$fixture->official_message_attachments_editable(),
+    'A read-only message task can mutate attachments'
+);
+$assert(
+    $fixture->official_message_attachment_size(1536) === '1,5 KiB'
+        && $fixture->official_message_attachment_size('1048576') === '1,0 MiB'
+        && $fixture->official_message_attachment_size(-1) === '',
+    'Attachment sizes are not formatted safely for the card metadata'
+);
+$assert(
+    $fixture->official_message_attachment_date('2026-08-01 20:15:00')
+        === '01.08.2026 20:15 Uhr'
+        && $fixture->official_message_attachment_date('not-a-date') === '',
+    'Attachment timestamps are not rendered as validated German dates'
 );
 
 $requiredGuideContent = [
@@ -583,9 +621,114 @@ $assert(
 $assert(
     str_contains($view, 'data-estab-no-emblem="true"')
         && !str_contains($view, 'estab-official-emblem-omission')
-        && !str_contains($view, '<img')
+        && !str_contains($view, 'estab-official-emblem')
         && !str_contains($view, 'VS-NfD'),
     'The product-specific no-emblem/no-classification requirement regressed'
+);
+$actionsStart = strpos($view, 'function official_message_actions');
+$actionsEnd = strpos($view, 'function official_message_categories');
+$actionsView = $actionsStart !== false && $actionsEnd !== false
+    ? substr($view, $actionsStart, $actionsEnd - $actionsStart)
+    : '';
+$assert(
+    $actionsView !== ''
+        && !str_contains($actionsView, 'name="anhang_plus_x"'),
+    'The separate attachment action still competes with the integrated panel'
+);
+$assert(
+    str_contains($view, 'enctype="multipart/form-data"')
+        && str_contains(
+            $view,
+            '<input id="f_12_anhang" type="hidden" name="12_anhang"'
+        )
+        && substr_count($renderView, 'id="f_12_anhang"') === 1,
+    'The message form cannot safely submit direct uploads or loses its attachment list'
+);
+$assert(
+    str_contains($view, 'id="nachrichtenanlagen"')
+        && str_contains($view, '<h2 id="nachrichtenanlagen-title">Anlagen (')
+        && str_contains($view, 'class="estab-message-attachment-badge')
+        && str_contains($view, "'Anlage hinzufügen'")
+        && str_contains($view, 'estab-message-attachment-jump')
+        && str_contains($view, 'data-estab-attachment-count="'),
+    'The form does not make attached files immediately visible at the message'
+);
+$assert(
+    str_contains($view, 'name="message_attachment_upload"')
+        && str_contains($view, 'name="message_attachment_request_token"')
+        && str_contains($view, 'data-estab-max-bytes="')
+        && str_contains($view, 'name="message_attachment_comment"')
+        && str_contains(
+            $view,
+            'name="message_attachment_upload_x" value="1"'
+        )
+        && str_contains(
+            $view,
+            'name="anhang_plus_x" value="1"'
+        )
+        && str_contains($view, 'estab_attachment_allowed_extensions()')
+        && str_contains($view, 'estab_attachment_upload_accept()')
+        && str_contains($view, 'estab_attachment_upload_limit_label()'),
+    'Integrated upload controls, format guidance or existing-file selection are incomplete'
+);
+$assert(
+    str_contains($view, 'data-estab-attachment-upload-limit')
+        && str_contains($view, 'input.files[0].size > maximum')
+        && str_contains($view, 'event.submitter')
+        && str_contains($view, 'event.preventDefault()')
+        && str_contains($view, 'Ihre Eingaben bleiben erhalten'),
+    'oversized direct upload can discard the unsaved browser form'
+);
+$assert(
+    str_contains($view, 'name="message_attachment_remove_x" value="')
+        && str_contains($view, '>Vom Vordruck entfernen</button>')
+        && str_contains($view, "'&view=inline'")
+        && str_contains($view, 'showpic.php')
+        && str_contains(
+            $view,
+            '<iframe loading="lazy" '
+        )
+        && !str_contains($view, '<iframe loading="lazy" sandbox')
+        && str_contains($view, 'data-estab-pdf-preview')
+        && str_contains($view, 'data-src="')
+        && str_contains($view, 'frame.setAttribute("src"')
+        && str_contains($view, 'referrerpolicy="no-referrer"')
+        && str_contains($view, '<img loading="lazy"'),
+    'Attachment removal, download or safe in-browser previews are incomplete'
+);
+$assert(
+    str_contains($view, 'decoding="async"')
+        && str_contains($view, 'fetchpriority="low"'),
+    'automatic image cards do not defer expensive NAS preview work'
+);
+$assert(
+    str_contains($view, 'data-estab-attachment-feedback')
+        && str_contains($view, 'data-estab-attachment-presentation')
+        && str_contains($view, 'feedback.focus({ preventScroll: true })')
+        && str_contains($view, 'feedback.scrollIntoView({ block: "start" })')
+        && str_contains($view, 'data-estab-attachment-unavailable')
+        && str_contains($view, 'Anlage derzeit nicht ')
+        && str_contains($view, 'in neuem Browser-Tab ansehen')
+        && str_contains($view, 'vom Vordruck entfernen'),
+    'Attachment feedback, unavailable state, or accessible file actions are missing'
+);
+$assert(
+    str_contains($view, "\$metadata['org_filename']")
+        && str_contains($view, "\$metadata['comment']")
+        && str_contains($view, "\$metadata['ingest_size']")
+        && str_contains($view, "\$metadata['date']")
+        && str_contains($view, 'estab_message_html($originalName)')
+        && str_contains($view, 'estab_message_html($comment)')
+        && str_contains($view, 'estab_message_html($reference)'),
+    'Authorized attachment metadata is missing or crosses the HTML boundary unescaped'
+);
+$assert(
+    str_contains($view, "\$this->formdata['estab_attachment_error']")
+        && str_contains($view, "\$this->formdata['estab_attachment_notice']")
+        && str_contains($view, "\$this->formdata['estab_attachment_comment']")
+        && str_contains($view, 'role="alert"')
+        && str_contains($view, 'role="status"'),
+    'Integrated upload feedback or safe comment rehydration is missing'
 );
 $assert(
     str_contains($view, 'event.key !== "Escape"')
@@ -621,6 +764,15 @@ $assert(
     str_contains($controller, 'use EstabOfficialMessageFormView;')
         && str_contains($controller, '$this->plot_official_message_form ();'),
     'The operational controller does not use the official renderer'
+);
+$assert(
+    str_contains($controller, '$this->load_attachment_previews ();')
+        && str_contains($controller, 'function load_attachment_previews ()')
+        && str_contains($controller, 'estab_read_attachments (')
+        && str_contains($controller, '"estab_attachment_error"')
+        && str_contains($controller, '"estab_attachment_notice"')
+        && str_contains($controller, '"estab_attachment_comment"'),
+    'Attachment cards bypass object-level authorization or lose upload feedback'
 );
 $assert(
     str_contains(
@@ -662,6 +814,14 @@ $assert(
         )
         && str_contains($css, '[data-estab-copy-color="red"]')
         && str_contains($css, '.estab-message-distribution-extras')
+        && str_contains($css, '.estab-message-attachments')
+        && str_contains($css, '.estab-message-attachment-upload-grid')
+        && str_contains($css, '.estab-message-attachment-card')
+        && str_contains(
+            $css,
+            '.estab-message-attachment-card[data-estab-attachment-unavailable]'
+        )
+        && str_contains($css, '.estab-message-attachment-pdf iframe')
         && !str_contains($css, '.estab-official-emblem-omission'),
     'The official colour, strict sheet geometry or non-reflowing mobile sheet regressed'
 );
@@ -717,6 +877,20 @@ $assert(
         && str_contains($css, '.estab-official-input:focus')
         && str_contains($css, '.estab-official-help-dialog[hidden]'),
     'Interactive official-form controls lack visible focus or hidden-state styling'
+);
+$assert(
+    str_contains(
+        $css,
+        ".estab-message-attachment-list,\n"
+            . "    .estab-message-attachments,"
+    )
+        && str_contains($css, '@media (max-width: 34rem)')
+        && str_contains(
+            $css,
+            ".estab-message-attachment-card {\n"
+                . "        grid-template-columns: 1fr;"
+        ),
+    'The integrated attachment panel is not print-safe or responsive'
 );
 
 echo 'Official message form UI security: OK (' . $assertions
