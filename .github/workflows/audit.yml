@@ -414,7 +414,7 @@ jobs:
         if: steps.python.outputs.present == 'true'
         uses: actions/setup-python@v6
         with:
-            python-version: "3.13"
+          python-version: "3.13"
 
       - name: Install audit tools
         if: steps.python.outputs.present == 'true'
@@ -507,28 +507,28 @@ jobs:
           fi
 
 
-workflow-lint:
-  name: GitHub Actions lint
-  runs-on: ubuntu-latest
-  timeout-minutes: 10
+  workflow-lint:
+    name: GitHub Actions lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
 
-  permissions:
-    contents: read
+    permissions:
+      contents: read
 
-  steps:
-    - name: Checkout repository
-      uses: actions/checkout@v6
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
 
-    - name: Install and run actionlint
-      shell: bash
-      env:
-        ACTIONLINT_VERSION: "1.7.12"
-      run: |
-        set -euo pipefail
+      - name: Install and run actionlint
+        shell: bash
+        env:
+          ACTIONLINT_VERSION: "1.7.12"
+        run: |
+          set -euo pipefail
 
-        bash <(
-          curl -fsSL \
-            https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash
-        ) "${ACTIONLINT_VERSION}"
+          bash <(
+            curl -fsSL \
+              https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash
+          ) "${ACTIONLINT_VERSION}"
 
-        ./actionlint -color
+          ./actionlint -color
