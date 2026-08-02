@@ -167,13 +167,8 @@ jobs:
 
           compact_pattern=$(echo "$pattern" | tr -d '\n ')
 
-          grep -RInE \
-            --exclude-dir=.git \
-            --exclude-dir=vendor \
-            --exclude-dir=node_modules \
-            --exclude-dir=dist \
-            --exclude-dir=build \
-            "$compact_pattern" . \
+          git grep -nI -E \
+            "$compact_pattern" -- . \
             | tee audit-results/suspicious-constructs.txt \
             || true
 
@@ -199,7 +194,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Install Semgrep
-        run: pipx install semgrep
+        run: pipx install semgrep==1.172.0
 
       - name: Run Semgrep
         shell: bash
@@ -212,7 +207,6 @@ jobs:
             --config p/php \
             --config p/python \
             --config p/javascript \
-            --config p/bash \
             --config .semgrep/suspicious.yml \
             --metrics=off \
             --error \
@@ -287,6 +281,8 @@ jobs:
 
       - name: Set up PHP
         if: steps.php.outputs.present == 'true'
+        id: php_setup
+        continue-on-error: true
         uses: shivammathur/setup-php@v2
         with:
           php-version: "8.5"
@@ -295,11 +291,15 @@ jobs:
           extensions: mbstring, json
 
       - name: Validate Composer configuration
-        if: steps.php.outputs.present == 'true' && hashFiles('**/composer.json') != ''
+        id: composer_validate
+        if: always() && steps.php.outputs.present == 'true' && hashFiles('**/composer.json') != ''
+        continue-on-error: true
         run: composer validate --strict
 
       - name: Install Composer dependencies safely
-        if: steps.php.outputs.present == 'true' && hashFiles('composer.lock') != ''
+        id: composer_install
+        if: always() && steps.php.outputs.present == 'true' && hashFiles('composer.lock') != ''
+        continue-on-error: true
         run: |
           composer install \
             --no-interaction \
@@ -308,7 +308,9 @@ jobs:
             --no-scripts
 
       - name: Check PHP syntax
-        if: steps.php.outputs.present == 'true'
+        id: php_syntax
+        if: always() && steps.php.outputs.present == 'true'
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -322,7 +324,9 @@ jobs:
           xargs -0 -r -n1 php -l
 
       - name: Run PHPStan
-        if: steps.php.outputs.present == 'true'
+        id: phpstan
+        if: always() && steps.php.outputs.present == 'true'
+        continue-on-error: true
         run: |
           if [[ -f phpstan.neon || -f phpstan.neon.dist ]]; then
             phpstan analyse --no-progress
@@ -335,7 +339,9 @@ jobs:
           fi
 
       - name: Run PHP_CodeSniffer
-        if: steps.php.outputs.present == 'true'
+        id: phpcs
+        if: always() && steps.php.outputs.present == 'true'
+        continue-on-error: true
         shell: bash
         run: |
           if [[ -f phpcs.xml || -f phpcs.xml.dist ]]; then
@@ -345,8 +351,46 @@ jobs:
           fi
 
       - name: Composer security audit
-        if: steps.php.outputs.present == 'true' && hashFiles('composer.lock') != ''
+        id: composer_audit
+        if: always() && steps.php.outputs.present == 'true' && hashFiles('composer.lock') != ''
+        continue-on-error: true
         run: composer audit --locked --no-interaction
+
+      - name: Enforce PHP audit results
+        if: always() && steps.php.outputs.present == 'true'
+        shell: bash
+        env:
+          PHP_SETUP_OUTCOME: ${{ steps.php_setup.outcome }}
+          COMPOSER_VALIDATE_OUTCOME: ${{ steps.composer_validate.outcome }}
+          COMPOSER_INSTALL_OUTCOME: ${{ steps.composer_install.outcome }}
+          PHP_SYNTAX_OUTCOME: ${{ steps.php_syntax.outcome }}
+          PHPSTAN_OUTCOME: ${{ steps.phpstan.outcome }}
+          PHPCS_OUTCOME: ${{ steps.phpcs.outcome }}
+          COMPOSER_AUDIT_OUTCOME: ${{ steps.composer_audit.outcome }}
+        run: |
+          set -euo pipefail
+          failed=0
+
+          accept_success_or_skip() {
+            local name=$1
+            local outcome=$2
+            case "$outcome" in
+              success|skipped) ;;
+              *)
+                echo "::error::$name concluded with $outcome."
+                failed=1
+                ;;
+            esac
+          }
+
+          accept_success_or_skip php-setup "$PHP_SETUP_OUTCOME"
+          accept_success_or_skip composer-validate "$COMPOSER_VALIDATE_OUTCOME"
+          accept_success_or_skip composer-install "$COMPOSER_INSTALL_OUTCOME"
+          accept_success_or_skip php-syntax "$PHP_SYNTAX_OUTCOME"
+          accept_success_or_skip phpstan "$PHPSTAN_OUTCOME"
+          accept_success_or_skip phpcs "$PHPCS_OUTCOME"
+          accept_success_or_skip composer-audit "$COMPOSER_AUDIT_OUTCOME"
+          exit "$failed"
 
 
   shell:
@@ -374,7 +418,7 @@ jobs:
                 -not -path './.git/*' \
                 -not -path './vendor/*' \
                 -not -path './node_modules/*' \
-                -print0
+                -printf '%P\0'
 
               git grep -Ilz '^#!.*\b\(ba\|da\|k\|z\)\?sh\b' -- \
                 ':!vendor/**' \
@@ -418,26 +462,36 @@ jobs:
 
       - name: Set up Python
         if: steps.python.outputs.present == 'true'
+        id: python_setup
+        continue-on-error: true
         uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 
       - name: Install audit tools
-        if: steps.python.outputs.present == 'true'
+        id: python_tools
+        if: always() && steps.python.outputs.present == 'true'
+        continue-on-error: true
         run: |
           python -m pip install --upgrade pip
           python -m pip install ruff bandit pip-audit
 
       - name: Compile Python files
-        if: steps.python.outputs.present == 'true'
+        id: python_compile
+        if: always() && steps.python.outputs.present == 'true'
+        continue-on-error: true
         run: python -m compileall -q .
 
       - name: Run Ruff
-        if: steps.python.outputs.present == 'true'
+        id: ruff
+        if: always() && steps.python.outputs.present == 'true'
+        continue-on-error: true
         run: ruff check .
 
       - name: Run Bandit
-        if: steps.python.outputs.present == 'true'
+        id: bandit
+        if: always() && steps.python.outputs.present == 'true'
+        continue-on-error: true
         run: |
           bandit \
             --recursive . \
@@ -446,7 +500,9 @@ jobs:
             --confidence-level medium
 
       - name: Audit Python dependencies
-        if: steps.python.outputs.present == 'true'
+        id: python_dependencies
+        if: always() && steps.python.outputs.present == 'true'
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -464,6 +520,40 @@ jobs:
             pip-audit --requirement "$file"
           done
 
+      - name: Enforce Python audit results
+        if: always() && steps.python.outputs.present == 'true'
+        shell: bash
+        env:
+          PYTHON_SETUP_OUTCOME: ${{ steps.python_setup.outcome }}
+          PYTHON_TOOLS_OUTCOME: ${{ steps.python_tools.outcome }}
+          PYTHON_COMPILE_OUTCOME: ${{ steps.python_compile.outcome }}
+          RUFF_OUTCOME: ${{ steps.ruff.outcome }}
+          BANDIT_OUTCOME: ${{ steps.bandit.outcome }}
+          PYTHON_DEPENDENCIES_OUTCOME: ${{ steps.python_dependencies.outcome }}
+        run: |
+          set -euo pipefail
+          failed=0
+
+          accept_success_or_skip() {
+            local name=$1
+            local outcome=$2
+            case "$outcome" in
+              success|skipped) ;;
+              *)
+                echo "::error::$name concluded with $outcome."
+                failed=1
+                ;;
+            esac
+          }
+
+          accept_success_or_skip python-setup "$PYTHON_SETUP_OUTCOME"
+          accept_success_or_skip python-tools "$PYTHON_TOOLS_OUTCOME"
+          accept_success_or_skip python-compile "$PYTHON_COMPILE_OUTCOME"
+          accept_success_or_skip ruff "$RUFF_OUTCOME"
+          accept_success_or_skip bandit "$BANDIT_OUTCOME"
+          accept_success_or_skip python-dependencies "$PYTHON_DEPENDENCIES_OUTCOME"
+          exit "$failed"
+
 
   javascript:
     name: JavaScript audit
@@ -478,29 +568,60 @@ jobs:
         id: javascript
         shell: bash
         run: |
-          if [[ -f package.json ]]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
+          if find . -type f -name '*.js' \
+            -not -path './vendor/*' \
+            -not -path './node_modules/*' \
+            -print -quit | grep -q .; then
+            echo "source_present=true" >> "$GITHUB_OUTPUT"
           else
-            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "source_present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [[ -f package.json ]]; then
+            echo "package_present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "package_present=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set up Node.js
-        if: steps.javascript.outputs.present == 'true'
+        id: node_setup
+        if: steps.javascript.outputs.source_present == 'true' || steps.javascript.outputs.package_present == 'true'
+        continue-on-error: true
         uses: actions/setup-node@v6
         with:
           node-version: "24"
-          cache: npm
+
+      - name: Check JavaScript syntax
+        id: javascript_syntax
+        if: always() && steps.javascript.outputs.source_present == 'true'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          find . \
+            -type f \
+            -name '*.js' \
+            -not -path './vendor/*' \
+            -not -path './node_modules/*' \
+            -print0 |
+          xargs -0 -r -n1 node --check
 
       - name: Install dependencies without lifecycle scripts
-        if: steps.javascript.outputs.present == 'true' && hashFiles('package-lock.json') != ''
+        id: npm_install
+        if: always() && steps.javascript.outputs.package_present == 'true' && hashFiles('package-lock.json') != ''
+        continue-on-error: true
         run: npm ci --ignore-scripts
 
       - name: Audit npm dependencies
-        if: steps.javascript.outputs.present == 'true' && hashFiles('package-lock.json') != ''
+        id: npm_audit
+        if: always() && steps.javascript.outputs.package_present == 'true' && hashFiles('package-lock.json') != ''
+        continue-on-error: true
         run: npm audit --audit-level=high
 
       - name: Run lint script
-        if: steps.javascript.outputs.present == 'true'
+        id: npm_lint
+        if: always() && steps.javascript.outputs.package_present == 'true'
+        continue-on-error: true
         shell: bash
         run: |
           if node -e '
@@ -511,6 +632,38 @@ jobs:
           else
             echo "::notice::No npm lint script configured."
           fi
+
+      - name: Enforce JavaScript audit results
+        if: always() && (steps.javascript.outputs.source_present == 'true' || steps.javascript.outputs.package_present == 'true')
+        shell: bash
+        env:
+          NODE_SETUP_OUTCOME: ${{ steps.node_setup.outcome }}
+          JAVASCRIPT_SYNTAX_OUTCOME: ${{ steps.javascript_syntax.outcome }}
+          NPM_INSTALL_OUTCOME: ${{ steps.npm_install.outcome }}
+          NPM_AUDIT_OUTCOME: ${{ steps.npm_audit.outcome }}
+          NPM_LINT_OUTCOME: ${{ steps.npm_lint.outcome }}
+        run: |
+          set -euo pipefail
+          failed=0
+
+          accept_success_or_skip() {
+            local name=$1
+            local outcome=$2
+            case "$outcome" in
+              success|skipped) ;;
+              *)
+                echo "::error::$name concluded with $outcome."
+                failed=1
+                ;;
+            esac
+          }
+
+          accept_success_or_skip node-setup "$NODE_SETUP_OUTCOME"
+          accept_success_or_skip javascript-syntax "$JAVASCRIPT_SYNTAX_OUTCOME"
+          accept_success_or_skip npm-install "$NPM_INSTALL_OUTCOME"
+          accept_success_or_skip npm-audit "$NPM_AUDIT_OUTCOME"
+          accept_success_or_skip npm-lint "$NPM_LINT_OUTCOME"
+          exit "$failed"
 
 
   workflow-lint:

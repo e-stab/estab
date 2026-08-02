@@ -28,6 +28,8 @@ jobs:
           persist-credentials: false
 
       - name: Validate GitHub Actions workflows
+        id: actionlint
+        continue-on-error: true
         run: >-
           docker run --rm --pull=always
           --volume "$GITHUB_WORKSPACE:/repo:ro"
@@ -35,9 +37,14 @@ jobs:
           docker.io/rhysd/actionlint@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
 
       - name: Verify complete historical source provenance
+        id: provenance
+        continue-on-error: true
         run: python3 migration/verify_provenance.py --self-test
 
       - name: Run PHP 8.5 suite
+        id: php_static
+        if: always()
+        continue-on-error: true
         run: >-
           docker run --rm --pull=always
           --user 65534:65534
@@ -47,11 +54,17 @@ jobs:
           tests/static/run.sh
 
       - name: Install PDF render verification tools
+        id: pdf_tools
+        if: always()
+        continue-on-error: true
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends poppler-utils
 
       - name: Render and compare both message-form PDF paths
+        id: pdf_render
+        if: always()
+        continue-on-error: true
         env:
           ESTAB_PDF_EVIDENCE_DIR: ${{ runner.temp }}/estab-pdf-evidence
         run: |
@@ -73,9 +86,39 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+      - name: Enforce static and provenance results
+        if: always()
+        shell: bash
+        env:
+          ACTIONLINT_OUTCOME: ${{ steps.actionlint.outcome }}
+          PROVENANCE_OUTCOME: ${{ steps.provenance.outcome }}
+          PHP_STATIC_OUTCOME: ${{ steps.php_static.outcome }}
+          PDF_TOOLS_OUTCOME: ${{ steps.pdf_tools.outcome }}
+          PDF_RENDER_OUTCOME: ${{ steps.pdf_render.outcome }}
+        run: |
+          set -euo pipefail
+          failed=0
+
+          require_success() {
+            local name=$1
+            local outcome=$2
+            if [[ "$outcome" != "success" ]]; then
+              echo "::error::$name concluded with $outcome."
+              failed=1
+            fi
+          }
+
+          require_success actionlint "$ACTIONLINT_OUTCOME"
+          require_success provenance "$PROVENANCE_OUTCOME"
+          require_success php-static "$PHP_STATIC_OUTCOME"
+          require_success pdf-tools "$PDF_TOOLS_OUTCOME"
+          require_success pdf-render "$PDF_RENDER_OUTCOME"
+          exit "$failed"
+
   compose-integration:
     name: Fresh Docker Compose integration (${{ matrix.arch }})
     needs: php-static
+    if: ${{ !cancelled() }}
     strategy:
       fail-fast: false
       matrix:
