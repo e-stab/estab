@@ -1039,7 +1039,7 @@ if [ "$restore_verify_only" = true ]; then
         "$base_url/4fach/vordrucke.php"
     assert_body "$restore_vordruck"
     assert_body 'layout=current'
-    assert_body 'PDF im aktuellen Layout öffnen'
+    assert_body 'Meldung als PDF öffnen'
     assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         --get \
         --data-urlencode 'area=vordruck' \
@@ -3734,7 +3734,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/vordrucke.php"
 assert_body "$stored_vordruck"
 assert_body 'layout=current'
-assert_body 'PDF im aktuellen Layout öffnen'
+assert_body 'Meldung als PDF öffnen'
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --get --data-urlencode 'area=vordruck' \
     --data-urlencode "file=$stored_vordruck" --data-urlencode 'layout=current' \

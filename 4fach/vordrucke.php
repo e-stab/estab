@@ -135,7 +135,7 @@ try {
                   href="<?= estab_auth_html($url) ?>"
                   target="_blank"
                   rel="noopener">
-                  PDF im aktuellen Layout öffnen
+                  Meldung als PDF öffnen
                   <span class="estab-visually-hidden">
                     (öffnet in neuem Tab)
                   </span>

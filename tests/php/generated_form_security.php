@@ -205,7 +205,8 @@ $assert(
         )
         && substr_count($list, '$incidentId') >= 3
         && str_contains($list, ") . '&layout=current';")
-        && str_contains($list, 'PDF im aktuellen Layout öffnen')
+        && str_contains($list, 'Meldung als PDF öffnen')
+        && !str_contains($list, 'PDF im aktuellen Layout öffnen')
         && str_contains($download, 'estab_generated_form_fetch_active')
         && str_contains($download, 'estab_read_require_identity_scope')
         && str_contains($download, 'estab_read_message_allowed')

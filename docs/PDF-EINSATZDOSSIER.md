@@ -210,8 +210,8 @@ Hashketten und rohe Tabellen-/CSV-Exporte reproduzierbar.
 
 Die Seite **Generierte Vordrucke** unterscheidet dabei bewusst Quelle und
 Darstellung: Beim Nachrichtenabschluss bleibt ein vollständiges PDF atomar im
-persistenten Einsatzspeicher archiviert. Der sichtbare Button **PDF im
-aktuellen Layout öffnen** prüft erneut aktiven Einsatz, Abschluss- und
+persistenten Einsatzspeicher archiviert. Der sichtbare Button **Meldung als
+PDF öffnen** prüft erneut aktiven Einsatz, Abschluss- und
 Druckstatus und rendert anschließend aus dem aktuell gespeicherten
 Nachrichtendatensatz und der aktuellen Matrix einen nur lesenden PDF-Abzug im
 Speicher. Alte Archivdateien müssen nach einem Vorlagen-Upgrade deshalb weder
