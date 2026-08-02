@@ -725,7 +725,11 @@ HTML;
         array $options,
         bool $editable,
         string $label,
-        bool $submitReadonly = true
+        bool $submitReadonly = true,
+        bool $controlsEnabled = true,
+        bool $required = false,
+        string $groupId = '',
+        string $describedBy = ''
     ): void {
         $current = (string)($this->formdata[$field] ?? '');
         if (!$editable && $submitReadonly) {
@@ -733,8 +737,19 @@ HTML;
                 . 'name="' . $field . '" value="'
                 . estab_message_html($current) . '">';
         }
+        $disabled = !$editable || !$controlsEnabled;
         echo '<span class="estab-official-choice-group" role="radiogroup" '
-            . 'aria-label="' . estab_message_html($label) . '">';
+            . ($groupId !== ''
+                ? 'id="' . estab_message_html($groupId) . '" '
+                : '')
+            . 'aria-label="' . estab_message_html($label) . '"'
+            . ($describedBy !== ''
+                ? ' aria-describedby="'
+                    . estab_message_html($describedBy) . '"'
+                : '')
+            . ($disabled ? ' aria-disabled="true"' : '')
+            . ($editable && $required ? ' aria-required="true"' : '')
+            . '>';
         foreach ($options as $option) {
             $checked = hash_equals($current, $option['value'])
                 ? ' checked="checked"'
@@ -746,7 +761,8 @@ HTML;
                 . 'type="radio"'
                 . $checked
                 . ' class="estab-official-box-choice"'
-                . ($editable ? '' : ' disabled')
+                . ($disabled ? ' disabled' : '')
+                . ($editable && !$disabled && $required ? ' required' : '')
                 . '>'
                 . '<span>' . estab_message_html($option['label']) . '</span>'
                 . '</label>';
@@ -1769,6 +1785,113 @@ HTML;
     }
   );
 
+  var conversationCheckbox = document.getElementById("f_11_gesprnotiz");
+  var conversationMedium = document.querySelector(
+    "[data-estab-conversation-medium]"
+  );
+  if (conversationMedium) {
+    var conversationMediumGroup = conversationMedium.querySelector(
+      ".estab-official-choice-group"
+    );
+    var conversationMediumInputs = Array.prototype.slice.call(
+      conversationMedium.querySelectorAll(
+        'input[type="radio"][name="01_medium"]'
+      )
+    );
+    var conversationMediumStatus = document.querySelector(
+      "[data-estab-conversation-medium-status]"
+    );
+    var conversationMediumControlled = conversationMedium.getAttribute(
+      "data-estab-conversation-medium-controlled"
+    ) === "true";
+
+    function selectedConversationMediumLabel() {
+      for (var selectedIndex = 0;
+        selectedIndex < conversationMediumInputs.length;
+        selectedIndex++) {
+        if (!conversationMediumInputs[selectedIndex].checked) {
+          continue;
+        }
+        var selectedLabel = conversationMediumInputs[selectedIndex].closest(
+          "label"
+        );
+        var selectedText = selectedLabel
+          ? selectedLabel.querySelector("span")
+          : null;
+        return selectedText ? selectedText.textContent.trim() : "";
+      }
+      return "";
+    }
+
+    function updateConversationMediumStatus(active) {
+      if (!conversationMediumStatus) {
+        return;
+      }
+      var selectedLabel = selectedConversationMediumLabel();
+      if (active && selectedLabel) {
+        conversationMediumStatus.textContent = "Ausgewählt: "
+          + selectedLabel + ".";
+      } else if (active) {
+        conversationMediumStatus.textContent =
+          "Jetzt oben die Übermittlungsart auswählen.";
+      } else {
+        conversationMediumStatus.textContent =
+          "Ankreuzen aktiviert oben Telefon, Funk, Telefax, DFÜ oder "
+          + "Kurier/Melder.";
+      }
+    }
+
+    function updateConversationMedium() {
+      var active = !conversationMediumControlled
+        || Boolean(conversationCheckbox && conversationCheckbox.checked);
+      conversationMedium.setAttribute(
+        "data-estab-conversation-medium-active",
+        active ? "true" : "false"
+      );
+      if (conversationMediumGroup) {
+        conversationMediumGroup.setAttribute(
+          "aria-disabled",
+          active ? "false" : "true"
+        );
+        conversationMediumGroup.setAttribute(
+          "aria-required",
+          active ? "true" : "false"
+        );
+      }
+      for (var mediumIndex = 0;
+        mediumIndex < conversationMediumInputs.length;
+        mediumIndex++) {
+        conversationMediumInputs[mediumIndex].disabled = !active;
+        conversationMediumInputs[mediumIndex].required = active;
+      }
+      updateConversationMediumStatus(active);
+    }
+
+    for (var conversationMediumIndex = 0;
+      conversationMediumIndex < conversationMediumInputs.length;
+      conversationMediumIndex++) {
+      conversationMediumInputs[conversationMediumIndex].addEventListener(
+        "change",
+        function () {
+          updateConversationMediumStatus(true);
+        }
+      );
+    }
+    if (conversationMediumControlled && conversationCheckbox) {
+      conversationCheckbox.setAttribute(
+        "aria-controls",
+        "estab-conversation-medium-options"
+      );
+      conversationCheckbox.addEventListener(
+        "change",
+        updateConversationMedium
+      );
+      updateConversationMedium();
+    } else if (conversationMediumStatus) {
+      updateConversationMediumStatus(true);
+    }
+  }
+
   for (var index = 0; index < buttons.length; index++) {
     (function (button) {
       button.addEventListener("click", function () {
@@ -1946,13 +2069,51 @@ HTML;
             . '<h2 class="estab-official-vertical-title">Fm-Zentrale</h2>'
             . '<div class="estab-official-fmz-grid">';
 
-        echo '<div class="estab-official-actual-medium">';
+        $conversationDraft = $this->task === 'Stab_schreiben';
+        $conversationSelected =
+            ($this->formdata['11_gesprnotiz'] ?? false) === true;
+        $actualMediumEditable = (bool)$this->feld[1]
+            || $this->task === 'LdF-Eingang'
+            || $conversationDraft;
+        $actualMediumEnabled = !$conversationDraft || $conversationSelected;
+        $actualMediumRequired = $this->task === 'Stab_gesprnoti'
+            || ($conversationDraft && $conversationSelected);
+        $conversationMediumContext = $conversationDraft
+            || $this->task === 'Stab_gesprnoti';
+        $actualMediumOptions = $this->official_message_medium_options(
+            '01_medium'
+        );
+        $selectedMediumLabel = '';
+        foreach ($actualMediumOptions as $mediumOption) {
+            if (hash_equals(
+                (string)($this->formdata['01_medium'] ?? ''),
+                $mediumOption['value']
+            )) {
+                $selectedMediumLabel = $mediumOption['label'];
+                break;
+            }
+        }
+        echo '<div class="estab-official-actual-medium" '
+            . 'data-estab-conversation-medium '
+            . 'data-estab-conversation-medium-controlled="'
+            . ($conversationDraft ? 'true' : 'false') . '" '
+            . 'data-estab-conversation-medium-active="'
+            . ($actualMediumEnabled ? 'true' : 'false') . '">';
         $this->official_message_help(1);
         $this->official_message_radio_group(
             '01_medium',
-            $this->official_message_medium_options('01_medium'),
-            (bool)$this->feld[1] || $this->task === 'LdF-Eingang',
-            'Tatsächlich verwendetes Übermittlungsmittel'
+            $actualMediumOptions,
+            $actualMediumEditable,
+            'Tatsächlich verwendetes Übermittlungsmittel',
+            true,
+            $actualMediumEnabled,
+            $actualMediumRequired,
+            $conversationMediumContext
+                ? 'estab-conversation-medium-options'
+                : '',
+            $conversationMediumContext
+                ? 'estab-conversation-medium-status'
+                : ''
         );
         echo '</div>';
 
@@ -2117,14 +2278,28 @@ HTML;
         echo '</div><div class="estab-official-conversation">'
             . '<div class="estab-official-cell-heading">GESPRÄCHS-<br>NOTIZ';
         $this->official_message_help(12);
-        echo '</div>';
+        echo '</div><div class="estab-official-conversation-control">';
         $this->official_message_checkbox(
             '11_gesprnotiz',
-            (bool)$this->feld[11],
+            (bool)$this->feld[11] && $this->task !== 'Stab_gesprnoti',
             'Gesprächsnotiz',
             $this->task !== 'Stab_korrigieren'
         );
-        echo '<span class="estab-official-print-number">10</span></div></section>';
+        if ($conversationMediumContext) {
+            echo '<span id="estab-conversation-medium-status" '
+                . 'class="estab-official-conversation-medium-status" '
+                . 'data-estab-conversation-medium-status aria-live="polite">'
+                . ($actualMediumEnabled && $selectedMediumLabel !== ''
+                    ? 'Ausgewählt: '
+                        . estab_message_html($selectedMediumLabel) . '.'
+                    : ($conversationSelected
+                        ? 'Übermittlungsart oben auswählen.'
+                        : 'Ankreuzen aktiviert oben Telefon, Funk, Telefax, '
+                            . 'DFÜ oder Kurier/Melder.'))
+                . '</span>';
+        }
+        echo '</div><span class="estab-official-print-number">10</span>'
+            . '</div></section>';
 
         echo '<section class="estab-official-subject">'
             . '<div class="estab-official-cell-heading">Inhalt';

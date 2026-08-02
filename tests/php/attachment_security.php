@@ -469,6 +469,7 @@ $recipientMatrixRevision = estab_workflow_recipient_matrix_revision(
 );
 $conversationDraft = estab_attachment_origin_draft_from_request(
     [
+        '01_medium' => 'FAX',
         '12_betreff' => 'Lageänderung',
         '12_inhalt' => 'Entwurf mit Anhang',
         '16_12' => '16_12_bl',
@@ -478,7 +479,8 @@ $conversationDraft = estab_attachment_origin_draft_from_request(
     $conversationContext
 );
 $assert(
-    $conversationDraft['recipient_matrix_revision']
+    $conversationDraft['01_medium'] === 'FAX'
+        && $conversationDraft['recipient_matrix_revision']
         === $recipientMatrixRevision
         && $conversationDraft['16_12'] === '16_12_bl'
         && !array_key_exists('16_gncopy', $conversationDraft),
@@ -513,10 +515,11 @@ $conversationFormData = estab_attachment_origin_draft_form_data(
     ['LdF_rt', 'S1_gn']
 );
 $assert(
-    $conversationFormData['16_empf'] === 'LdF_rt,S1_gn,AB_C_bl,'
+    $conversationFormData['01_medium'] === 'FAX'
+        && $conversationFormData['16_empf'] === 'LdF_rt,S1_gn,AB_C_bl,'
         && $conversationFormData['recipient_matrix_revision']
             === $recipientMatrixRevision,
-    'central conversation attachment return loses the exact blue coordinate or server-required red/author-green copies'
+    'central conversation attachment return loses the medium, exact blue coordinate or server-required red/author-green copies'
 );
 $retiredStoredDraftRejected = false;
 try {

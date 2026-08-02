@@ -3212,11 +3212,57 @@ if [ "$forged_vordruck_count" != 0 ]; then
     exit 1
 fi
 
+# Prove the server-only fallback: with JavaScript unavailable, selecting the
+# conversation-note checkbox must open the dedicated step where all five
+# media are enabled and required. The note checkbox is authoritative there
+# and therefore no longer presents an ineffective user choice.
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST \
+    --data-urlencode "csrf_token=$workflow_csrf_token" \
+    --data-urlencode \
+        "recipient_matrix_revision=$conversation_matrix_revision" \
+    --data-urlencode \
+        "message_attachment_request_token=$conversation_attachment_request_token" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=Stab_schreiben' \
+    --data-urlencode '11_gesprnotiz=on' \
+    --data-urlencode '12_betreff=No-JS-Gesprächsnotiz' \
+    --data-urlencode '12_inhalt=Serverseitiger Gesprächsnotiz-Rückfall' \
+    "$base_url/4fach/mainindex.php"
+assert_body 'name="task" value="Stab_gesprnoti"'
+assert_body \
+    'id="estab-conversation-medium-options" aria-label="Tatsächlich verwendetes Übermittlungsmittel" aria-describedby="estab-conversation-medium-status" aria-required="true"'
+assert_body_regex \
+    'id="f_11_gesprnotiz"[^>]*type="checkbox"[^>]*disabled[^>]*checked' \
+    'dedicated conversation-note checkbox is immutable'
+if grep -Eq 'name="01_medium"[^>]*(disabled|checked="checked")' "$body"; then
+    printf '%s\n' \
+        'HTTP smoke: no-JS conversation stage has disabled or preselected media' >&2
+    exit 1
+fi
+assert_body_regex \
+    'name="01_medium"[^>]*required' \
+    'no-JS conversation stage requires a communication medium'
+
+# Start a fresh form for the independent direct-attachment scenario below.
+# Entering the no-JS stage has intentionally consumed the one-time action
+# token from the preceding form.
+assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
+    --request POST --data-urlencode 'stab_schreiben_x=1' \
+    "$base_url/4fach/mainindex.php"
+assert_body 'name="task" value="Stab_schreiben"'
+workflow_csrf_token=$(csrf_from_body)
+conversation_matrix_revision=$(recipient_matrix_revision_from_body)
+conversation_attachment_request_token=$(
+    message_attachment_request_token_from_body
+)
+
 # Exercise the real two-step UI transition with a direct attachment.
 # Browser-supplied author, organisation and fictitious review marks from the
 # originating staff form must be replaced. Repeating that exact multipart POST
 # must rebuild Stab_gesprnoti and never downgrade it to an ordinary message.
 conversation_attachment_comment="Gesprächsnotiz ${workflow_marker}"
+conversation_medium=Me
 conversation_attachment_before=$(
     printf "SELECT COUNT(*) FROM nv_anhang WHERE BINARY comment = BINARY '%s' AND BINARY kuerzel = BINARY '%s';\n" \
         "$conversation_attachment_comment" "$test_code" | db_sql
@@ -3231,7 +3277,7 @@ submit_conversation_attachment_stage() {
             "message_attachment_request_token=$conversation_attachment_request_token" \
         --form 'absenden_x=1' \
         --form 'task=Stab_schreiben' \
-        --form '01_medium=Fu' \
+        --form "01_medium=$conversation_medium" \
         --form '01_datum=' \
         --form '01_zeichen=forged' \
         --form '10_anschrift=HTTP-Vordruckempfänger' \
@@ -3255,6 +3301,30 @@ submit_conversation_attachment_stage() {
 }
 submit_conversation_attachment_stage
 assert_body 'name="task" value="Stab_gesprnoti"'
+assert_body 'data-estab-conversation-medium'
+assert_body 'data-estab-conversation-medium-status'
+for conversation_medium_control in \
+    'f_01_medium_fu|Fu|Funk' \
+    'f_01_medium_fe|Fe|Telefon' \
+    'f_01_medium_fax|FAX|Telefax' \
+    'f_01_medium_at|@|DFÜ' \
+    'f_01_medium_me|Me|Kurier/Melder'; do
+    conversation_medium_id=${conversation_medium_control%%|*}
+    conversation_medium_value=${conversation_medium_control#*|}
+    conversation_medium_value=${conversation_medium_value%%|*}
+    conversation_medium_label=${conversation_medium_control##*|}
+    assert_body \
+        "id=\"$conversation_medium_id\" name=\"01_medium\" value=\"$conversation_medium_value\" type=\"radio\""
+    assert_body ">$conversation_medium_label</span>"
+done
+if grep -Eq 'name="01_medium"[^>]*disabled' "$body"; then
+    printf '%s\n' \
+        'HTTP smoke: dedicated conversation-note medium remains disabled' >&2
+    exit 1
+fi
+assert_body_regex \
+    'id="f_01_medium_me"[^>]*name="01_medium"[^>]*value="Me"[^>]*checked="checked"' \
+    'conversation-note transition preserves the selected messenger medium'
 assert_body 'id="f_01_zeichen" data-estab-readonly="true"'
 assert_body_absent 'Browserseitig gefälschte Einheit'
 assert_body_absent 'name="15_quitdatum"'
@@ -3314,7 +3384,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         "message_attachment_request_token=$parallel_note_request_token" \
     --data-urlencode 'absenden_x=1' \
     --data-urlencode 'task=Stab_schreiben' \
-    --data-urlencode '01_medium=Fu' \
+    --data-urlencode "01_medium=$conversation_medium" \
     --data-urlencode '01_datum=' \
     --data-urlencode '10_anschrift=HTTP-Parallel-Tab' \
     --data-urlencode '11_rufnummer=' \
@@ -3346,7 +3416,7 @@ assert_status 409 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
         "message_attachment_request_token=$staged_note_attachment_request_token" \
     --data-urlencode 'absenden_x=1' \
     --data-urlencode 'task=Stab_gesprnoti' \
-    --data-urlencode '01_medium=Fu' \
+    --data-urlencode "01_medium=$conversation_medium" \
     --data-urlencode '01_datum=' \
     --data-urlencode "01_zeichen=$test_code" \
     --data-urlencode '02_zeit=' \
@@ -3387,7 +3457,7 @@ assert_status 422 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode 'anhang_plus_x=1' \
     --data-urlencode 'task=Stab_gesprnoti' \
     --data-urlencode '00_lfd=' \
-    --data-urlencode '01_medium=Fu' \
+    --data-urlencode "01_medium=$conversation_medium" \
     --data-urlencode '01_datum=' \
     --data-urlencode '07_durchspruch=D' \
     --data-urlencode '10_anschrift=HTTP-Vordruckempfänger' \
@@ -3405,6 +3475,9 @@ assert_status 422 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
 assert_body 'name="task" value="Stab_gesprnoti"'
 assert_body 'Die Anhangverwaltung wurde nicht geöffnet:'
 assert_body "$vordruck_marker"
+assert_body_regex \
+    'id="f_01_medium_me"[^>]*name="01_medium"[^>]*value="Me"[^>]*checked="checked"' \
+    '422 conversation-note draft preserves the selected medium'
 assert_body_regex \
     'name="16_54" value="16_54_bl" type="checkbox"[^>]*checked' \
     '422 conversation-note underscore recipient'
@@ -3436,7 +3509,7 @@ assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --data-urlencode 'anhang_plus_x=1' \
     --data-urlencode 'task=Stab_gesprnoti' \
     --data-urlencode '00_lfd=' \
-    --data-urlencode '01_medium=Fu' \
+    --data-urlencode "01_medium=$conversation_medium" \
     --data-urlencode '01_datum=' \
     --data-urlencode '07_durchspruch=D' \
     --data-urlencode '10_anschrift=HTTP-Vordruckempfänger' \
@@ -3467,6 +3540,9 @@ assert_body 'name="task" value="Stab_gesprnoti"'
 assert_body "$vordruck_marker"
 assert_body ">$test_code</strong>"
 assert_body_regex \
+    'id="f_01_medium_me"[^>]*name="01_medium"[^>]*value="Me"[^>]*checked="checked"' \
+    'attachment-returned conversation note preserves the selected medium'
+assert_body_regex \
     'name="16_54" value="16_54_bl" type="checkbox"[^>]*checked' \
     'attachment-returned conversation-note underscore recipient'
 assert_body_absent 'name="16_gncopy"'
@@ -3489,7 +3565,7 @@ submit_completed_conversation_note() {
             "message_attachment_request_token=$staged_note_return_attachment_request_token" \
         --data-urlencode 'absenden_x=1' \
         --data-urlencode 'task=Stab_gesprnoti' \
-        --data-urlencode '01_medium=Fu' \
+        --data-urlencode "01_medium=$conversation_medium" \
         --data-urlencode '01_datum=' \
         --data-urlencode "01_zeichen=$test_code" \
         --data-urlencode '02_zeit=' \
@@ -3527,6 +3603,17 @@ conversation_evidence_count=$(
 )
 if [ "$conversation_evidence_count" != 1 ]; then
     printf 'HTTP smoke: conversation-note actor/mark evidence is inconsistent\n' >&2
+    exit 1
+fi
+conversation_medium_stored=$(
+    printf "SELECT \`01_medium\` FROM nv_nachrichten WHERE \`12_inhalt\` = '%s';\n" \
+        "$vordruck_marker" |
+        db_sql
+)
+if [ "$conversation_medium_stored" != "$conversation_medium" ]; then
+    printf '%s\n' \
+        'HTTP smoke: conversation note lost its selected communication medium' >&2
+    printf 'actual: %s\n' "$conversation_medium_stored" >&2
     exit 1
 fi
 conversation_distribution=$(

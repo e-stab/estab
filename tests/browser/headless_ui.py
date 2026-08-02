@@ -6116,6 +6116,171 @@ class BrowserAcceptance:
             f"{hostile_requests!r}",
         )
 
+    def _assert_conversation_medium_toggle(self) -> None:
+        expected_values = ["Fu", "Fe", "FAX", "@", "Me"]
+        expected_labels = [
+            "Funk",
+            "Telefon",
+            "Telefax",
+            "DFÜ",
+            "Kurier/Melder",
+        ]
+
+        def medium_state_expression() -> str:
+            return _frame_expression(
+                "mainframe",
+                """
+                const container = doc.querySelector(
+                    "[data-estab-conversation-medium]"
+                );
+                const status = doc.querySelector(
+                    "[data-estab-conversation-medium-status]"
+                );
+                const checkbox = doc.querySelector("#f_11_gesprnotiz");
+                const controls = Array.from(doc.querySelectorAll(
+                    'input[type="radio"][name="01_medium"]'
+                ));
+                return {
+                    containerCount: doc.querySelectorAll(
+                        "[data-estab-conversation-medium]"
+                    ).length,
+                    statusCount: doc.querySelectorAll(
+                        "[data-estab-conversation-medium-status]"
+                    ).length,
+                    statusText: status?.textContent.trim() || "",
+                    checkboxExists: Boolean(checkbox),
+                    checkboxChecked: checkbox?.checked ?? null,
+                    values: controls.map(control => control.value),
+                    ids: controls.map(control => control.id),
+                    labels: controls.map(control =>
+                        control.closest("label")?.textContent
+                            .replace(/\\s+/g, " ").trim() || ""
+                    ),
+                    names: controls.map(control => control.name),
+                    disabled: controls.map(control => control.disabled),
+                    required: controls.map(control => control.required),
+                    checked: controls
+                        .filter(control => control.checked)
+                        .map(control => control.value),
+                    insideContainer: Boolean(
+                        container
+                        && controls.length === 5
+                        && controls.every(control =>
+                            container.contains(control)
+                        )
+                    )
+                };
+                """,
+            )
+
+        initial = self.cdp.wait_for(
+            medium_state_expression(),
+            "Gesprächsnotiz-Übermittlungswege fehlen im Stabformular",
+        )
+        self._truth(
+            isinstance(initial, dict)
+            and initial.get("containerCount") == 1
+            and initial.get("statusCount") == 1
+            and bool(initial.get("statusText"))
+            and initial.get("checkboxExists") is True
+            and initial.get("checkboxChecked") is False
+            and initial.get("values") == expected_values
+            and initial.get("ids") == [
+                "f_01_medium_fu",
+                "f_01_medium_fe",
+                "f_01_medium_fax",
+                "f_01_medium_at",
+                "f_01_medium_me",
+            ]
+            and initial.get("labels") == expected_labels
+            and initial.get("names") == ["01_medium"] * 5
+            and initial.get("disabled") == [True] * 5
+            and initial.get("required") == [False] * 5
+            and initial.get("checked") == []
+            and initial.get("insideContainer") is True,
+            "Initialer Gesprächsnotiz-Medienblock ist nicht eindeutig, "
+            f"vollständig oder sicher deaktiviert: {initial!r}",
+        )
+
+        self.cdp.click(
+            "mainframe",
+            "#f_11_gesprnotiz",
+            "Gesprächsnotiz aktivieren",
+        )
+        enabled = self.cdp.wait_for(
+            medium_state_expression(),
+            "Gesprächsnotiz aktiviert ihre Übermittlungswege nicht",
+        )
+        self._truth(
+            isinstance(enabled, dict)
+            and enabled.get("checkboxChecked") is True
+            and enabled.get("disabled") == [False] * 5
+            and enabled.get("required") == [True] * 5
+            and enabled.get("checked") == [],
+            "Aktivierte Gesprächsnotiz macht die Medienauswahl nicht "
+            f"vollständig verpflichtend: {enabled!r}",
+        )
+
+        self.cdp.click(
+            "mainframe",
+            "#f_01_medium_me",
+            "Melder als Gesprächsweg auswählen",
+        )
+        selected = self.cdp.wait_for(
+            medium_state_expression(),
+            "Melder konnte nicht als Gesprächsweg ausgewählt werden",
+        )
+        self._equal(
+            selected.get("checked") if isinstance(selected, dict) else None,
+            ["Me"],
+            "ausgewähltes Gesprächsmedium",
+        )
+        self._equal(
+            selected.get("statusText") if isinstance(selected, dict) else None,
+            "Ausgewählt: Kurier/Melder.",
+            "Status des ausgewählten Gesprächsmediums",
+        )
+
+        self.cdp.click(
+            "mainframe",
+            "#f_11_gesprnotiz",
+            "Gesprächsnotiz vorübergehend deaktivieren",
+        )
+        disabled = self.cdp.wait_for(
+            medium_state_expression(),
+            "Deaktivierte Gesprächsnotiz sperrt ihre Medien nicht",
+        )
+        self._truth(
+            isinstance(disabled, dict)
+            and disabled.get("checkboxChecked") is False
+            and disabled.get("disabled") == [True] * 5
+            and disabled.get("required") == [False] * 5
+            and disabled.get("checked") == ["Me"],
+            "Deaktivieren der Gesprächsnotiz verliert die Auswahl oder "
+            f"lässt Medien aktiv: {disabled!r}",
+        )
+
+        self.cdp.click(
+            "mainframe",
+            "#f_11_gesprnotiz",
+            "Gesprächsnotiz erneut aktivieren",
+        )
+        restored = self.cdp.wait_for(
+            medium_state_expression(),
+            "Erneut aktivierte Gesprächsnotiz stellt die Auswahl nicht her",
+        )
+        self._truth(
+            isinstance(restored, dict)
+            and restored.get("checkboxChecked") is True
+            and restored.get("disabled") == [False] * 5
+            and restored.get("required") == [True] * 5
+            and restored.get("checked") == ["Me"]
+            and restored.get("statusText")
+                == "Ausgewählt: Kurier/Melder.",
+            "Erneutes Aktivieren bewahrt das Gesprächsmedium nicht: "
+            f"{restored!r}",
+        )
+
     def _assert_dirty_navigation_guard(self) -> None:
         field_selector = (
             'form[name="4fach"][data-estab-dirty-guard] '
@@ -6144,6 +6309,7 @@ class BrowserAcceptance:
             "fachliches Nachrichtenformular wurde nicht im Inhaltsframe geöffnet",
         )
         official_form_document = self._assert_official_message_form()
+        self._assert_conversation_medium_toggle()
         self.cdp.set_value(
             "mainframe",
             field_selector,

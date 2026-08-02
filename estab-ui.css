@@ -3619,6 +3619,13 @@ body.estab-message-form-body {
     white-space: nowrap;
 }
 
+.estab-official-actual-medium[
+    data-estab-conversation-medium-controlled="true"
+][data-estab-conversation-medium-active="false"]
+    .estab-official-choice-group {
+    opacity: 0.46;
+}
+
 .estab-official-direction-headings {
     border-bottom: 1.5px solid var(--estab-official-line);
     border-right: 1.5px solid var(--estab-official-line);
@@ -4040,6 +4047,26 @@ body.estab-message-form-body {
     border-bottom: 1.5px solid var(--estab-official-line);
     font-size: 1rem;
     padding-right: 1.8rem;
+}
+
+.estab-official-conversation-control {
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    gap: 0.18rem;
+    justify-content: center;
+    min-height: 0;
+    padding: 0.15rem 0.25rem;
+}
+
+.estab-official-conversation-medium-status {
+    color: #24384a;
+    display: block;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 0.62rem;
+    font-weight: 650;
+    line-height: 1.12;
+    max-width: 12rem;
 }
 
 .estab-official-standalone-check {
@@ -5168,6 +5195,17 @@ body.estab-message-form-body {
 
     .estab-official-conversation {
         grid-template-rows: 2.7rem 1fr;
+    }
+
+    .estab-official-conversation-medium-status {
+        display: none;
+    }
+
+    .estab-official-actual-medium[
+        data-estab-conversation-medium-controlled="true"
+    ][data-estab-conversation-medium-active="false"]
+        .estab-official-choice-group {
+        opacity: 1;
     }
 
     .estab-official-message-text {

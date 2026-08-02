@@ -213,17 +213,66 @@ $fixture->official_message_radio_group(
     '01_medium',
     $fixture->official_message_medium_options('01_medium'),
     true,
-    'Tatsächlich verwendetes Übermittlungsmittel'
+    'Tatsächlich verwendetes Übermittlungsmittel',
+    true,
+    false,
+    false
+);
+$inactiveMediumMarkup = (string) ob_get_clean();
+$assert(
+    substr_count($inactiveMediumMarkup, 'name="01_medium"') === 5
+        && substr_count($inactiveMediumMarkup, ' disabled') === 5
+        && str_contains($inactiveMediumMarkup, 'aria-disabled="true"')
+        && !str_contains($inactiveMediumMarkup, ' required')
+        && str_contains(
+            $inactiveMediumMarkup,
+            'id="f_01_medium_me" name="01_medium" value="Me" '
+                . 'type="radio" checked="checked"'
+        ),
+    'The initial unselected conversation-note form does not retain one disabled five-option medium group'
+);
+ob_start();
+$fixture->official_message_radio_group(
+    '01_medium',
+    $fixture->official_message_medium_options('01_medium'),
+    true,
+    'Tatsächlich verwendetes Übermittlungsmittel',
+    true,
+    true,
+    true
 );
 $mediumMarkup = (string) ob_get_clean();
+$expectedMediumControls = [
+    'fu' => ['Fu', 'Funk'],
+    'fe' => ['Fe', 'Telefon'],
+    'fax' => ['FAX', 'Telefax'],
+    'at' => ['@', 'DFÜ'],
+    'me' => ['Me', 'Kurier/Melder'],
+];
 $assert(
-    str_contains(
-        $mediumMarkup,
-        'id="f_01_medium_me" name="01_medium" value="Me" '
-            . 'type="radio" checked="checked"'
-    ),
-    'A corrected LdF transport medium is not visibly retained'
+    substr_count($mediumMarkup, 'name="01_medium"') === 5
+        && !str_contains($mediumMarkup, ' disabled')
+        && substr_count($mediumMarkup, ' required') === 5
+        && str_contains($mediumMarkup, 'aria-required="true"'),
+    'The active conversation-note transport field is not one enabled and required five-option group'
 );
+foreach ($expectedMediumControls as $id => [$value, $label]) {
+    $expectedControl = 'id="f_01_medium_' . $id
+        . '" name="01_medium" value="' . $value . '" type="radio"';
+    $assert(
+        str_contains($mediumMarkup, $expectedControl)
+            && preg_match(
+                '/' . preg_quote($expectedControl, '/') . '[^>]*>'
+                    . '<span>' . preg_quote($label, '/') . '<\/span>/',
+                $mediumMarkup,
+            ) === 1
+            && ($value !== 'Me' || preg_match(
+                '/id="f_01_medium_me"[^>]*checked="checked"/',
+                $mediumMarkup
+            ) === 1),
+        'The official transport choice is missing or mislabeled: ' . $label
+    );
+}
 
 $fixture->feld[9] = true;
 $fixture->formdata = ['09_vorrangstufe' => 'aaa'];
@@ -647,6 +696,41 @@ $assert(
         && is_string($css)
         && is_string($dockerfile),
     'Official form implementation files are not readable'
+);
+$assert(
+    str_contains($view, 'data-estab-conversation-medium')
+        && str_contains($view, 'data-estab-conversation-medium-status')
+        && str_contains(
+            $view,
+            'document.getElementById("f_11_gesprnotiz")'
+        ),
+    'The initial staff form lacks the stable conversation-medium toggle contract'
+);
+$conversationAccessStart = strpos(
+    $controller,
+    'case "Stab_gesprnoti":'
+);
+$conversationAccessEnd = strpos(
+    $controller,
+    'case "FM-Admin"',
+    $conversationAccessStart === false ? 0 : $conversationAccessStart
+);
+$conversationAccess = (
+    is_int($conversationAccessStart)
+    && is_int($conversationAccessEnd)
+    && $conversationAccessEnd > $conversationAccessStart
+) ? substr(
+    $controller,
+    $conversationAccessStart,
+    $conversationAccessEnd - $conversationAccessStart
+) : '';
+$assert(
+    $conversationAccess !== ''
+        && preg_match(
+            '/\$this->feld\s*\[1\]\s*=\s*true\s*;/',
+            $conversationAccess
+        ) === 1,
+    'The dedicated conversation-note task does not enable transport field 1 server-side'
 );
 $assert(
     str_contains($view, 'official_message_ttb_evidence_text()')

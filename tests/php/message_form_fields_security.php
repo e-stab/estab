@@ -16,8 +16,12 @@ $assert = static function (bool $condition, string $message) use (&$assertions):
 
 $columns = estab_message_columns();
 $assert(
-    isset($columns['11_rufnummer'], $columns['12_betreff']),
-    'Official phone-number or subject column is not persistable'
+    isset(
+        $columns['01_medium'],
+        $columns['11_rufnummer'],
+        $columns['12_betreff']
+    ),
+    'Official transport, phone-number or subject column is not persistable'
 );
 
 $normalized = estab_message_fields([
@@ -149,6 +153,27 @@ foreach (
         'Form validator did not enforce the required safe subject'
     );
 }
+foreach ([
+    'Fu' => 'Fu',
+    'Fe' => 'Fe',
+    'FAX' => 'FAX',
+    '@' => '@',
+    'Me' => 'Me',
+] as $submittedMedium => $storedMedium) {
+    [$valid, $stored] = $fieldIsValid('01_medium', $submittedMedium);
+    $assert(
+        $valid && $stored === $storedMedium,
+        'Form validator rejected or changed a conversation medium: '
+            . $submittedMedium
+    );
+}
+foreach (['', 'Sat', ['Fu'], null] as $invalidMedium) {
+    [$valid] = $fieldIsValid('01_medium', $invalidMedium);
+    $assert(
+        !$valid,
+        'Form validator accepted an empty or unknown conversation medium'
+    );
+}
 
 $validatorSource = file_get_contents($root . '/4fach/vali_data.php');
 if (!is_string($validatorSource)) {
@@ -183,6 +208,15 @@ foreach ([
         $case . ' does not enforce the optional-field syntax and subject'
     );
 }
+$conversationSection = $caseSection(
+    $validatorSource,
+    'Stab_gesprnoti',
+    'FM-Ausgang'
+);
+$assert(
+    str_contains($conversationSection, '$this->validate["01_medium"]'),
+    'Conversation notes can pass validation without a selected medium'
+);
 
 $controllerSource = file_get_contents($root . '/4fach/mainindex.php');
 if (!is_string($controllerSource)) {

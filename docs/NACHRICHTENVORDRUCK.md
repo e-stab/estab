@@ -84,6 +84,14 @@ Lage-/Dokumentationszuordnung aus der angemeldeten Identität. Dafür erscheint
 keine zusätzliche Empfängerauswahl; ein Browserwert kann weder den Verfasser
 ersetzen noch eine weitere Zuordnung erzeugen.
 
+Aktiviert ein Mitglied des Stabs im Vordruck **Gesprächsnotiz**, wird dort
+unmittelbar auch das tatsächlich verwendete Übermittlungsmittel freigeschaltet.
+Zur Auswahl stehen **Telefon**, **Funk**, **Telefax**, **DFÜ** und
+**Kurier/Melder**. Für den Abschluss der Gesprächsnotiz ist genau eine dieser
+Angaben erforderlich. Solange **Gesprächsnotiz** nicht aktiviert ist, bleibt
+die Auswahl gesperrt und kann nicht als Angabe einer gewöhnlichen
+Ausgangsnachricht übermittelt werden.
+
 Das Blatt wird auf kleinen Bildschirmen nicht umsortiert. Stattdessen bleibt
 das amtliche Raster unverändert und kann innerhalb eines ausdrücklich
 beschrifteten Bereichs horizontal verschoben werden. Der restliche

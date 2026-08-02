@@ -1274,6 +1274,11 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
   Vermerk sowie alle über Kästchen gewählten Empfänger als weiterhin
   absendbare Formularwerte enthalten; eine zusätzliche
   Durchschriftenauswahl darf weder gespeichert noch wiederhergestellt werden,
+- bedingte Übermittlungsart im Stab: Ohne aktivierte **Gesprächsnotiz** müssen
+  Telefon, Funk, Telefax, DFÜ und Kurier/Melder gesperrt bleiben. Nach dem
+  Aktivieren sind sie direkt im Vordruck auswählbar; genau eine Auswahl ist
+  für den Abschluss Pflicht und bleibt über Gesprächsnotiz- sowie
+  Anlagenrückwege erhalten,
 - direkter Upload über **Datei hochladen** und Upload mit der regulären
   **Absenden**-Aktion; dabei müssen Formularkopf, Aktionsleiste und Listen die
   kanonische Anlagenzahl anzeigen, Karten Bildminiatur beziehungsweise lazy
