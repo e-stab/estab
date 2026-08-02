@@ -16,4 +16,3 @@ parameters:
     tmpDir: var/phpstan
 
     reportUnmatchedIgnoredErrors: true
-    checkMissingIterableValueType: false
