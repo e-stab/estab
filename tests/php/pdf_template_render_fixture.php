@@ -46,6 +46,29 @@ foreach ([
     ] = $priorityPdf->render_message_form_document();
 }
 
+$mediumDocuments = [];
+foreach ([
+    'none' => '',
+    'fu' => 'Fu',
+    'fe' => 'Fe',
+    'me' => 'Me',
+    'fax' => 'FAX',
+    'fs' => 'FS',
+    'at' => '@',
+] as $mediumName => $mediumValue) {
+    $mediumPdf = new vordruckaspdf(
+        array_replace($message, [
+            '01_medium' => $mediumValue,
+            '06_befwegausw' => $mediumValue,
+        ]),
+        $matrix
+    );
+    $mediumPdf->SetCompression(false);
+    $mediumDocuments[
+        'message-form-medium-' . $mediumName . '.pdf'
+    ] = $mediumPdf->render_message_form_document();
+}
+
 $incident = [
     'einsatz_id' => 1,
     'kennung' => 'RENDER-001',
@@ -660,7 +683,7 @@ foreach (array_merge([
     'tbb-form-closed.pdf' => $closedTbbFormBytes,
     'dossier-all.pdf' => $completeDossierBytes,
     'dossier-maximum-header.pdf' => $maximumHeaderDossierBytes,
-], $priorityDocuments) as $filename => $bytes) {
+], $priorityDocuments, $mediumDocuments) as $filename => $bytes) {
     if (
         !str_starts_with($bytes, '%PDF-')
         || !str_ends_with($bytes, "%%EOF\n")

@@ -915,6 +915,15 @@ Betriebsereignisse. Das vollständige Dossier enthält zusätzlich eine
 durchsuchbare Textanlage und eine sichtbare JPEG-Anlage; beide Originale
 bleiben separat eingebettet.
 
+Sieben zusätzliche Nachrichtenvordrucke bilden eine leere Medienauswahl sowie
+`Fu`, `Fe`, `FAX`, `FS`, `@` und `Me` ab. `tests/static/pdf_render.sh` rendert
+für den tatsächlichen Weg im Aufnahmevermerk und den vorgesehenen
+Beförderungsweg jedes der fünf sichtbaren Felder einzeln. Gegen die leere
+Referenz darf nur das zugehörige Feld abweichen; `FS` und `@` müssen beide im
+DFÜ-Feld erscheinen. Schmale Poppler-Halos auf allen vier Seiten beweisen
+zusätzlich, dass das Kreuz einschließlich Strichstärke vollständig innerhalb
+des quadratischen Rahmens bleibt.
+
 `tests/integration/pdf_attachment_render.php` läuft im produktiven
 App-Container und bindet damit die tatsächlichen GD-, Poppler- und
 `prlimit`-Abhängigkeiten. Er erzeugt eine zweiblättrige PDF-Anlage und ein

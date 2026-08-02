@@ -20,7 +20,7 @@ function estab_pdf_test_message_fixture(): array
     return array_replace(array_fill_keys($fields, ''), [
         '00_lfd' => 1,
         'einsatz_id' => 1,
-        '01_medium' => 'Funk',
+        '01_medium' => 'Fu',
         '01_datum' => '2026-07-29 08:10:00',
         '01_zeichen' => 'e2e001',
         '04_nummer' => 7,

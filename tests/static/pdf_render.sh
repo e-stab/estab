@@ -85,6 +85,137 @@ for pdf_file in "$single_pdf" "$dossier_pdf"; do
     fi
 done
 
+for medium_name in none fu fe fax fs at me; do
+    medium_pdf=$fixture_dir/message-form-medium-$medium_name.pdf
+    [ -f "$medium_pdf" ] || {
+        echo "Missing transport-medium PDF fixture: $medium_pdf" >&2
+        exit 1
+    }
+done
+
+medium_box_crop() {
+    medium_fixture_name=$1
+    medium_row_name=$2
+    medium_box_name=$3
+    medium_box_x=$4
+    medium_box_y=$5
+    pdftoppm -png -r 144 -f 1 -l 1 -singlefile \
+        -x "$medium_box_x" -y "$medium_box_y" -W 21 -H 21 \
+        "$fixture_dir/message-form-medium-$medium_fixture_name.pdf" \
+        "$fixture_dir/medium-box-$medium_fixture_name-$medium_row_name-$medium_box_name"
+}
+
+# Both official medium rows use the same order: Funk, Telefon, Telefax, DFÜ,
+# Kurier/Melder. Every canonical database value must alter exactly its own
+# square compared with the otherwise byte-identical blank form. Historic FS
+# deliberately shares the DFÜ square with the current @ value.
+for medium_fixture_name in none fu fe fax fs at me; do
+    for medium_row_name in incoming transport; do
+        case "$medium_row_name" in
+            incoming) medium_box_y=109 ;;
+            transport) medium_box_y=285 ;;
+        esac
+        for medium_box_name in fu fe fax dfue me; do
+            case "$medium_box_name" in
+                fu)
+                    [ "$medium_row_name" = incoming ] \
+                        && medium_box_x=64 || medium_box_x=829
+                    ;;
+                fe)
+                    [ "$medium_row_name" = incoming ] \
+                        && medium_box_x=126 || medium_box_x=891
+                    ;;
+                fax)
+                    [ "$medium_row_name" = incoming ] \
+                        && medium_box_x=188 || medium_box_x=953
+                    ;;
+                dfue)
+                    [ "$medium_row_name" = incoming ] \
+                        && medium_box_x=250 || medium_box_x=1016
+                    ;;
+                me)
+                    [ "$medium_row_name" = incoming ] \
+                        && medium_box_x=313 || medium_box_x=1078
+                    ;;
+            esac
+            medium_box_crop \
+                "$medium_fixture_name" "$medium_row_name" \
+                "$medium_box_name" "$medium_box_x" "$medium_box_y"
+        done
+    done
+done
+
+assert_only_expected_medium_mark() {
+    selected_medium_name=$1
+    expected_medium_box=$2
+    for medium_row_name in incoming transport; do
+        for medium_box_name in fu fe fax dfue me; do
+            blank_medium_box=$fixture_dir/medium-box-none-$medium_row_name-$medium_box_name.png
+            selected_medium_box=$fixture_dir/medium-box-$selected_medium_name-$medium_row_name-$medium_box_name.png
+            if [ "$medium_box_name" = "$expected_medium_box" ]; then
+                if cmp -s "$blank_medium_box" "$selected_medium_box"; then
+                    echo "Expected transport-medium box is not marked: $selected_medium_name/$medium_row_name" >&2
+                    exit 1
+                fi
+            elif ! cmp -s "$blank_medium_box" "$selected_medium_box"; then
+                echo "Unexpected transport-medium box is marked: $selected_medium_name/$medium_row_name/$medium_box_name" >&2
+                exit 1
+            fi
+        done
+    done
+}
+
+assert_only_expected_medium_mark fu fu
+assert_only_expected_medium_mark fe fe
+assert_only_expected_medium_mark fax fax
+assert_only_expected_medium_mark fs dfue
+assert_only_expected_medium_mark at dfue
+assert_only_expected_medium_mark me me
+
+# The selected X must remain entirely inside the 3-mm square. Compare a
+# 4-pixel halo around the selected Fu frame with the blank form in both rows.
+medium_halo_crop() {
+    medium_fixture_name=$1
+    medium_row_name=$2
+    medium_halo_name=$3
+    medium_halo_x=$4
+    medium_halo_y=$5
+    medium_halo_width=$6
+    medium_halo_height=$7
+    pdftoppm -png -r 144 -f 1 -l 1 -singlefile \
+        -x "$medium_halo_x" -y "$medium_halo_y" \
+        -W "$medium_halo_width" -H "$medium_halo_height" \
+        "$fixture_dir/message-form-medium-$medium_fixture_name.pdf" \
+        "$fixture_dir/medium-halo-$medium_fixture_name-$medium_row_name-$medium_halo_name"
+}
+
+for medium_row_name in incoming transport; do
+    for medium_halo_name in top bottom left right; do
+        case "$medium_row_name/$medium_halo_name" in
+            incoming/top) set -- 62 106 25 4 ;;
+            incoming/bottom) set -- 62 128 25 4 ;;
+            incoming/left) set -- 60 106 5 26 ;;
+            incoming/right) set -- 83 106 4 26 ;;
+            transport/top) set -- 827 282 25 4 ;;
+            transport/bottom) set -- 827 304 25 4 ;;
+            transport/left) set -- 825 282 5 26 ;;
+            transport/right) set -- 848 282 4 26 ;;
+        esac
+        medium_halo_crop \
+            none "$medium_row_name" "$medium_halo_name" \
+            "$1" "$2" "$3" "$4"
+        medium_halo_crop \
+            fu "$medium_row_name" "$medium_halo_name" \
+            "$1" "$2" "$3" "$4"
+        if ! cmp -s \
+            "$fixture_dir/medium-halo-none-$medium_row_name-$medium_halo_name.png" \
+            "$fixture_dir/medium-halo-fu-$medium_row_name-$medium_halo_name.png"; then
+            echo "Transport-medium mark protrudes beyond its box: $medium_row_name/$medium_halo_name" >&2
+            exit 1
+        fi
+    done
+done
+
 for priority_name in none sofort blitz staatsnot; do
     priority_pdf=$fixture_dir/message-form-priority-$priority_name.pdf
     priority_text=$priority_pdf.layout.txt

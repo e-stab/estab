@@ -19,6 +19,7 @@ if (!defined('FPDF_FONTPATH')) {
 
 require_once __DIR__ . "/fpdf.php";
 require_once __DIR__ . "/../app/message_repository.php";
+require_once __DIR__ . "/../app/message_transport.php";
 require_once __DIR__ . "/../app/generated_form.php";
 require_once __DIR__ . "/../app/message_priority.php";
 // require_once ("./fpdf/ellipse/ellipse.php");
@@ -585,10 +586,28 @@ class vordruckaspdf extends PDF_Ellipse {
   }
 
   function draw_mediumselect ($x, $y, $selectvalue){
-    $aa1 = array ("Fu","Fe","Me","Fax","DFÜ");
-    for ($o=0; $o<= 4; $o++){
-      if ( $aa1[$o] == $selectvalue ){ $select = true; }else{ $select=false; }
-      $this->draw_radiobutton ( $x+$o*10, $y, $select, $this->fontsize00, $aa1[$o] );
+    // Database values and visible labels are deliberately separate. In
+    // particular FAX is uppercase in the schema, while both the current @
+    // value and the historic FS value share the visible DFÜ option.
+    $selected_medium = estab_message_medium_storage_value ($selectvalue);
+    $medium_spacing = 11;
+    $media = array (
+      array ("values" => array ("Fu"), "label" => "Fu"),
+      array ("values" => array ("Fe"), "label" => "Fe"),
+      array ("values" => array ("FAX"), "label" => "Fax"),
+      array ("values" => array ("FS", "@"), "label" => "DFÜ"),
+      array ("values" => array ("Me"), "label" => "Me")
+    );
+    foreach ($media as $o => $medium){
+      $select = $selected_medium !== null
+        && in_array ($selected_medium, $medium ["values"], true);
+      $this->draw_checkbox (
+        $x+$o*$medium_spacing,
+        $y,
+        $select,
+        $this->fontsize00,
+        $medium ["label"]
+      );
     }
   }
 

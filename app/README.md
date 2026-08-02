@@ -358,7 +358,12 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   `vordruckaspdf::render_message_form_document()` neu im Speicher. So entspricht
   auch ein vor einem Layout-Upgrade archivierter Vordruck dem aktuellen
   Dossierlayout, ohne dass der lesende Request die persistierte Archivdatei
-  verändert. Der parameterlose interne Downloadpfad streamt diese
+  verändert. Der gemeinsame Renderer ordnet die kanonischen Übertragungswege
+  `Fu`, `Fe`, `FAX`, `@` und `Me` sowie den historischen Wert `FS` den
+  amtlichen Auswahlfeldern in der Reihenfolge Funk, Telefon, Telefax, DFÜ und
+  Kurier/Melder zu. Das Kreuz bleibt vollständig innerhalb des jeweiligen
+  quadratischen Feldes; `@` und `FS` teilen sich das sichtbare DFÜ-Feld. Der
+  parameterlose interne Downloadpfad streamt diese
   Archivdatei weiterhin bytegleich für Backup-/Restore-Nachweise.
 - `assignment.php` bildet die gemeinsame, datenbankbasierte
   Zuordnungsrichtlinie. Matrixspeichern, Login, Kontoanlage und Neuzuweisung
