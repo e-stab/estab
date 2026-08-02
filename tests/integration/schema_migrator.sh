@@ -60,6 +60,7 @@ if [ ! -r "$fixture" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/113-password-policy.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/114-self-registration-policy.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/115-incident-permission-mode.sql" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/116-standard-categories.sql" ] \
     || [ ! -x "$ESTAB_MIGRATOR_BIN" ]; then
     echo "schema migrator test: fixture, baseline, or migrator is unavailable" >&2
     exit 1
@@ -77,7 +78,7 @@ pre_110_migrations=$(mktemp -d "${TMPDIR:-/tmp}/estab-pre-110-migrations.XXXXXX"
 
 for migration_path in "$ESTAB_MIGRATIONS_DIR"/*.sql; do
     case "$(basename "$migration_path")" in
-        110-etb-tbb-rules.sql|111-logbook-shift-assignment.sql|112-optional-access-shifts.sql|113-password-policy.sql|114-self-registration-policy.sql|115-incident-permission-mode.sql)
+        110-etb-tbb-rules.sql|111-logbook-shift-assignment.sql|112-optional-access-shifts.sql|113-password-policy.sql|114-self-registration-policy.sql|115-incident-permission-mode.sql|116-standard-categories.sql)
             continue
             ;;
     esac
@@ -350,11 +351,12 @@ SELECT GROUP_CONCAT(CONCAT(version, ':', checksum, ':', state)
  WHERE version NOT IN (
    '110-etb-tbb-rules.sql', '111-logbook-shift-assignment.sql',
    '112-optional-access-shifts.sql', '113-password-policy.sql',
-   '114-self-registration-policy.sql', '115-incident-permission-mode.sql'
+   '114-self-registration-policy.sql', '115-incident-permission-mode.sql',
+   '116-standard-categories.sql'
  )"
 )" \
     "migration 110 upgrade rewrote a released migration ledger row"
-assert_equal "1|1|1|1|1|1|1|3|1|2|1" "$(database_query "$logbook_upgrade_database" "
+assert_equal "1|1|1|1|1|1|1|1|3|1|2|1" "$(database_query "$logbook_upgrade_database" "
 SELECT CONCAT(
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '110-etb-tbb-rules.sql' AND state = 'applied'), '|',
@@ -372,6 +374,9 @@ SELECT CONCAT(
              AND state = 'applied'), '|',
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '115-incident-permission-mode.sql'
+             AND state = 'applied'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '116-standard-categories.sql'
              AND state = 'applied'), '|',
          (SELECT COUNT(*) FROM information_schema.statistics
            WHERE table_schema = DATABASE() AND table_name = 'nv_etb'
@@ -545,8 +550,42 @@ CREATE DATABASE \`$fresh_database\`
   CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
 ESTAB_ALLOW_SELF_REGISTRATION=true \
 ESTAB_DB_NAME="$fresh_database" "$ESTAB_MIGRATOR_BIN"
+fresh_standard_category_snapshot=$(database_query "$fresh_database" "
+SELECT GROUP_CONCAT(
+         CONCAT(lfd, ':', HEX(kategorie))
+         ORDER BY lfd SEPARATOR ','
+       )
+  FROM nv_masterkatego")
+assert_equal "Allgemein,EA1,EA2,EA3,EA4,EA5,EA6" "$(
+    database_query "$fresh_database" "
+SELECT GROUP_CONCAT(kategorie ORDER BY BINARY kategorie SEPARATOR ',')
+  FROM nv_masterkatego"
+)" \
+    "fresh installation did not receive exact standard categories"
+assert_equal "7|7|1|22" "$(database_query "$fresh_database" "
+SELECT CONCAT(
+         COUNT(*), '|', COUNT(DISTINCT BINARY kategorie), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '116-standard-categories.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$')
+       )
+  FROM nv_masterkatego")" \
+    "fresh standard categories or their migration ledger are incomplete"
 ESTAB_ALLOW_SELF_REGISTRATION=true \
 ESTAB_DB_NAME="$fresh_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "$fresh_standard_category_snapshot" "$(
+    database_query "$fresh_database" "
+SELECT GROUP_CONCAT(
+         CONCAT(lfd, ':', HEX(kategorie))
+         ORDER BY lfd SEPARATOR ','
+       )
+  FROM nv_masterkatego"
+)" \
+    "second fresh migration run duplicated or changed standard categories"
 assert_equal "2|1|1|1|DISABLED|1|1|fresh-install" "$(
     database_query "$fresh_database" "
 SELECT CONCAT(
@@ -1354,6 +1393,17 @@ mariadb \
     < "$fixture"
 database_query "$predecessor_database" "
 DELETE FROM nv_anhang WHERE \`lfd-nr\` = 2;
+CREATE TABLE nv_masterkatego (
+  lfd BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  kategorie VARCHAR(10) NOT NULL,
+  beschreibung VARCHAR(254) NULL,
+  PRIMARY KEY (lfd)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+CREATE TABLE nv_masterkategolink (
+  msg BIGINT NOT NULL,
+  katego BIGINT NOT NULL,
+  PRIMARY KEY (msg)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 CREATE TABLE estab_schema_migrations (
   version VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   checksum CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
@@ -1441,7 +1491,30 @@ SELECT CONCAT(
 # produce the same value as the snapshot and escape this regression.
 sleep 2
 ESTAB_DB_NAME="$predecessor_database" "$ESTAB_MIGRATOR_BIN"
+predecessor_standard_category_snapshot=$(
+    database_query "$predecessor_database" "
+SELECT GROUP_CONCAT(
+         CONCAT(lfd, ':', HEX(kategorie))
+         ORDER BY lfd SEPARATOR ','
+       )
+  FROM nv_masterkatego"
+)
+assert_equal "Allgemein,EA1,EA2,EA3,EA4,EA5,EA6" "$(
+    database_query "$predecessor_database" "
+SELECT GROUP_CONCAT(kategorie ORDER BY BINARY kategorie SEPARATOR ',')
+  FROM nv_masterkatego"
+)" \
+    "empty legacy category table did not receive exact standard categories"
 ESTAB_DB_NAME="$predecessor_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "$predecessor_standard_category_snapshot" "$(
+    database_query "$predecessor_database" "
+SELECT GROUP_CONCAT(
+         CONCAT(lfd, ':', HEX(kategorie))
+         ORDER BY lfd SEPARATOR ','
+       )
+  FROM nv_masterkatego"
+)" \
+    "second legacy-upgrade run duplicated or changed standard categories"
 
 prepare_checksum=$(
     sha256sum "$ESTAB_MIGRATIONS_DIR/45-global-incidents-prepare.sql" |
@@ -1452,7 +1525,7 @@ finish_checksum=$(
         awk '{print $1}'
 )
 assert_equal \
-    "21|21|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
+    "22|22|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
     "$(database_query "$predecessor_database" "
 SELECT CONCAT(
          COUNT(*), '|',
@@ -1540,6 +1613,38 @@ mariadb \
     --database="$test_database" \
     < "$fixture"
 
+# A legitimate legacy installation may already have a customised global
+# category catalogue. Migration 116 must treat any existing row as an
+# operator-owned catalogue and leave the complete table and its links alone;
+# it must never fill only the names which happen to be missing.
+fixture_query "
+CREATE TABLE nv_masterkatego (
+  lfd BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  kategorie VARCHAR(10) NOT NULL,
+  beschreibung VARCHAR(254) NULL,
+  PRIMARY KEY (lfd)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+CREATE TABLE nv_masterkategolink (
+  msg BIGINT NOT NULL,
+  katego BIGINT NOT NULL,
+  PRIMARY KEY (msg)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+INSERT INTO nv_masterkatego (lfd, kategorie, beschreibung) VALUES
+  (41, 'Allgemein', 'Individuell beibehalten'),
+  (77, 'EIGEN', 'Eigene Kategorie');
+INSERT INTO nv_masterkategolink (msg, katego) VALUES (900001, 77)"
+legacy_category_snapshot="$(fixture_query "
+SELECT CONCAT(
+         (SELECT GROUP_CONCAT(
+                   CONCAT(lfd, ':', HEX(kategorie), ':',
+                          HEX(COALESCE(beschreibung, '')))
+                   ORDER BY lfd SEPARATOR ',')
+            FROM nv_masterkatego), '|',
+         (SELECT GROUP_CONCAT(CONCAT(msg, ':', katego)
+                   ORDER BY msg SEPARATOR ',')
+            FROM nv_masterkategolink)
+       )")"
+
 if ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN" >"$failure_log" 2>&1; then
     echo "schema migrator test: duplicate attachment names did not block migration" >&2
     exit 1
@@ -1620,9 +1725,47 @@ SELECT GROUP_CONCAT(
        )
   FROM nv_nachrichten")"
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "$legacy_category_snapshot" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT GROUP_CONCAT(
+                   CONCAT(lfd, ':', HEX(kategorie), ':',
+                          HEX(COALESCE(beschreibung, '')))
+                   ORDER BY lfd SEPARATOR ',')
+            FROM nv_masterkatego), '|',
+         (SELECT GROUP_CONCAT(CONCAT(msg, ':', katego)
+                   ORDER BY msg SEPARATOR ',')
+            FROM nv_masterkategolink)
+       )")" \
+    "upgrade changed a nonempty global category catalogue or its links"
+assert_equal "2|0|1" "$(fixture_query "
+SELECT CONCAT(
+         COUNT(*), '|',
+         SUM(BINARY kategorie IN (
+           BINARY 'EA1', BINARY 'EA2', BINARY 'EA3',
+           BINARY 'EA4', BINARY 'EA5', BINARY 'EA6'
+         )), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '116-standard-categories.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$')
+       )
+  FROM nv_masterkatego")" \
+    "upgrade partially filled a nonempty global category catalogue"
 ESTAB_DB_NAME="$test_database" "$ESTAB_MIGRATOR_BIN"
+assert_equal "$legacy_category_snapshot" "$(fixture_query "
+SELECT CONCAT(
+         (SELECT GROUP_CONCAT(
+                   CONCAT(lfd, ':', HEX(kategorie), ':',
+                          HEX(COALESCE(beschreibung, '')))
+                   ORDER BY lfd SEPARATOR ',')
+            FROM nv_masterkatego), '|',
+         (SELECT GROUP_CONCAT(CONCAT(msg, ':', katego)
+                   ORDER BY msg SEPARATOR ',')
+            FROM nv_masterkategolink)
+       )")" \
+    "second upgrade run changed existing global categories or links"
 
-assert_equal "21" "$(fixture_query "
+assert_equal "22" "$(fixture_query "
 SELECT COUNT(*) FROM estab_schema_migrations
  WHERE state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
@@ -1633,6 +1776,12 @@ SELECT COUNT(*) FROM estab_schema_migrations
    AND state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
     "standard matrix migration was not recorded"
+assert_equal "1" "$(fixture_query "
+SELECT COUNT(*) FROM estab_schema_migrations
+ WHERE version = '116-standard-categories.sql'
+   AND state = 'applied'
+   AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
+    "standard category migration was not recorded"
 assert_equal "1|1|1|1|1|1|1|1|1|1|1|1|1|1|1|11" "$(fixture_query "
 SELECT CONCAT(
          (SELECT COUNT(*) FROM estab_schema_migrations
@@ -2439,7 +2588,7 @@ SELECT CONCAT(
     "password-policy migration did not recover after removing the collision"
 
 # Migration 114 must only ever replace its own missing ledger acknowledgement.
-# Snapshot every field of the existing twenty records so retries and rejected
+# Snapshot every field of the existing twenty-one records so retries and rejected
 # collisions prove that the released history remains byte-for-byte unchanged.
 pre_114_ledger_snapshot="$(fixture_query "
 SELECT GROUP_CONCAT(
@@ -2456,7 +2605,7 @@ SELECT GROUP_CONCAT(
        )
   FROM estab_schema_migrations
  WHERE version <> '114-self-registration-policy.sql'")"
-assert_equal "20|20" "$(fixture_query "
+assert_equal "21|21" "$(fixture_query "
 SELECT CONCAT(
          COUNT(*), '|',
          SUM(state = 'applied' AND checksum REGEXP BINARY '^[0-9a-f]{64}$')
@@ -2610,7 +2759,7 @@ SELECT GROUP_CONCAT(
        )
   FROM estab_schema_migrations
  WHERE version <> '114-self-registration-policy.sql'")" \
-    "migration 114 rewrote one of the existing twenty ledger rows"
+    "migration 114 rewrote one of the existing twenty-one ledger rows"
 
 fixture_query "
 ALTER TABLE nv_selbstregistrierung
@@ -2717,7 +2866,7 @@ SELECT GROUP_CONCAT(
        )
   FROM estab_schema_migrations
  WHERE version <> '114-self-registration-policy.sql'")" \
-    "migration 114 rewrote one of the existing twenty ledger rows"
+    "migration 114 rewrote one of the existing twenty-one ledger rows"
 
 # Reproduce interruption after some autocommitted migration-99 phases. The
 # canonical status/time index remains, the direction/number index is missing,

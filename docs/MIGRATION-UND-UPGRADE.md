@@ -46,7 +46,7 @@ Während einer erstmaligen oder aus `applying` wiederaufgenommenen Baseline
 entsteht zusätzlich der Datensatz
 `114-self-registration-fresh-default` in `estab_schema_baselines`. Sein
 Checksum ist exakt die SHA-256 der unveränderten Migration 114. Der Marker
-bleibt bis hinter allen einundzwanzig Migrationen auf `applying`. Dann setzt ein
+bleibt bis hinter allen zweiundzwanzig Migrationen auf `applying`. Dann setzt ein
 einziges atomisches InnoDB-Multi-Table-Update ausschließlich die noch pristine
 Richtlinienzeile `ENVIRONMENT/NULL/0/migration-114` auf
 `DISABLED/NULL/1/fresh-install` und gleichzeitig den Marker auf `applied`.
@@ -103,6 +103,7 @@ Derzeit sind folgende explizite Migrationen vorhanden:
 | `docker/db/migrations/113-password-policy.sql` | ergänzt genau eine revisionsgesicherte globale Kennwortrichtlinie für künftig gesetzte Funktionskonto-Kennwörter; Standard sind mindestens 12 Unicode-Codepoints ohne verpflichtende Zeichenklasse, die konfigurierbare Mindestlänge liegt zwischen 8 und 128 Unicode-Codepoints und optionale Unicode-Groß-/Titlecase-/Kleinbuchstaben, Ziffern und Sonderzeichen können verlangt werden; Unicode-Steuerzeichen sind verboten, Formatzeichen einschließlich ZWJ erlaubt; neue und geänderte Kennwörter werden mit Argon2id gespeichert, serverseitig gelten höchstens 1024 UTF-8-Bytes, im Browserfeld 1024 Eingabeeinheiten und eine exakte JavaScript-Codepointzählung bei verbindlicher Serverprüfung; Klartext und eindeutig verifizierbare Alt-Hashes werden nach erfolgreichem Login migriert, bcrypt nur bei einem eingegebenen Kennwort unter 72 UTF-8-Bytes, während ein ambivalenter längerer bcrypt-Alt-Hash bis zum administrativen Reset unverändert bleibt; stärkere oder gemischte Argon2id-Kosten werden nicht zurückgestuft, vorhandene Sitzungen bleiben unverändert |
 | `docker/db/migrations/114-self-registration-policy.sql` | ergänzt die revisionsgesicherte Singleton-Freigabe für öffentliche Kontoanlage mit `DISABLED`, `PERMANENT` und DB-UTC-befristetem `UNTIL`; die unveränderte SQL-Datei setzt aus Upgrade-Kompatibilität zunächst `ENVIRONMENT`; nur ein im selben neuen Baseline-Lauf checksumgebunden angelegter Fresh-Marker autorisiert anschließend die atomare Umstellung der pristine Zeile auf `DISABLED/NULL/1/fresh-install`; echte Upgrades und frühere markerlose Neuinstallationen behalten `ENVIRONMENT`, bis die erste administrative Auswahl die Datenbank autoritativ macht; bestehende Konten, Kennwörter und Sitzungen bleiben unverändert |
 | `docker/db/migrations/115-incident-permission-mode.sql` | ergänzt den pro Einsatz gespeicherten Modus `STRICT`/`LOOSE` mit `STRICT` als Default für Bestand und Neuanlage; Guard-Trigger erkennen unmarkierte Legacy-DML und kombinierte Einsatzänderungen, während der bestätigte Anwendungsweg Revision und Audit bindet; sechs modebewusste Fachtrigger bewahren in `STRICT` die bisherigen Funktions-/Rollengrenzen und lockern in `LOOSE` ausschließlich diese Schreibprüfungen, während konkrete aktive und ungesperrte Kontenidentität, aktiver offener Einsatz, Zustands-, Beziehungs-, Integritäts- und Append-only-Regeln bestehen bleiben |
+| `docker/db/migrations/116-standard-categories.sql` | ergänzt ausschließlich bei einer vollständig leeren globalen Kategorienliste die editier- und löschbaren Vorgaben `Allgemein` sowie `EA1` bis `EA6`; ein bereits vorhandener Betreiberkatalog bleibt vollständig unverändert |
 
 Migration 95 klassifiziert vorhandene Zeilen bereits beim Hinzufügen der
 Spalte mit dem einmaligen Anfangswert `integrity_required=0` und stellt danach
@@ -138,8 +139,8 @@ eigenen Zwischenstände. Gemischte Katalogdaten, ein abweichender
 Primärschlüssel oder fremde Indizes blockieren vor der nächsten Änderung und
 bleiben zur Untersuchung erhalten. `verify.sql` und die Laufzeit-Readiness
 verlangen danach exakt sieben Katalogzeilen, das vollständige neue ENUM,
-ausschließlich den zweispaltigen Primärschlüssel und alle einundzwanzig
-angewendeten Migrationen einschließlich Version 115.
+ausschließlich den zweispaltigen Primärschlüssel und alle zweiundzwanzig
+angewendeten Migrationen einschließlich Version 116.
 
 Migration 97 fügt `nv_einsaetze.fuehrungsstellenname` als
 `VARCHAR(128) NULL` unmittelbar hinter `organisation` und
@@ -349,7 +350,7 @@ Migration 114 ergänzt entsprechend die eigene, kollisionsgeprüfte Tabelle
 ausdrücklich geöffnete Installation beim Upgrade. Nach der ersten Adminaktion
 sind nur `DISABLED`, `PERMANENT` oder `UNTIL` samt UTC-Endzeit, Revision und
 Audit-Akteur maßgeblich. `verify.sql` und die Laufzeit-Readiness prüfen beide
-Singleton-Tabellen und alle einundzwanzig Ledgerzeilen gemeinsam.
+Singleton-Tabellen und alle zweiundzwanzig Ledgerzeilen gemeinsam.
 
 Bei einer vom aktuellen Runner selbst begonnenen Neuinstallation ist dagegen
 der checksumgebundene Baseline-Marker maßgeblich: Solange Migration 114 noch
@@ -386,6 +387,20 @@ Datenbank-Zugangsdaten dürfen nicht an Bedienkonten oder Drittprozesse
 weitergegeben werden. Fachliche Modusänderungen erfolgen ausschließlich über
 die Administration; wer absichtlich mit privilegierten SQL-Rechten eingreift,
 verlässt den nachgewiesenen Betriebs- und Auditpfad.
+
+Migration 116 prüft vor der ersten Datenänderung fail-closed, dass
+`nv_masterkatego` als erwartete InnoDB-/`utf8mb4_unicode_ci`-Basistabelle mit
+genau den drei kanonischen Spalten vorliegt. Nur wenn die Tabelle vollständig
+leer ist, schreibt eine Transaktion `Allgemein` sowie `EA1` bis `EA6`; die
+Beschreibungen erläutern `EA` als Einsatzabschnitt und verlangen die Anpassung
+an die konkrete Einsatzorganisation. `Allgemein` ist für Meldungen ohne
+Zuordnung zu einem Einsatzabschnitt vorgesehen. Schon eine vorhandene
+Kategorie macht den gesamten Katalog betreibergeführt, sodass weder Zeilen
+ergänzt noch Beschreibungen überschrieben werden. Die Vorgaben bleiben
+normale globale Kategorien und können von den dafür berechtigten Funktionen
+geändert oder gelöscht werden. Da die Saat nur in der checksumgebundenen
+Einmalmigration liegt, werden gelöschte Vorgaben weder bei einer
+Einsatzanlage noch bei Anmeldung oder Seitenaufruf erneut erzeugt.
 
 Sechs Fachtrigger werden modebewusst ersetzt: ETB- und TBB-Insert,
 Fernmeldeplan-Insert/-Freigabe sowie Melderauftrag-Insert/-Update. `STRICT`

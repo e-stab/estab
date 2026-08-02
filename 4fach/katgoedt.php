@@ -105,7 +105,9 @@ function estab_category_render_manager(
         'user' => 'Persönliche Kategorien',
     };
     $scopeDescription = match ($type) {
-        'master' => 'Diese Kategorien stehen allen berechtigten Funktionen zur Verfügung.',
+        'master' => 'Diese Kategorien stehen allen berechtigten Funktionen zur '
+            . 'Verfügung. Eine leere Erstkonfiguration beginnt mit Allgemein '
+            . 'und EA1 bis EA6 als anpassbarer Grundstruktur.',
         'fkt' => 'Diese Kategorien gelten für die aktuell angemeldete Funktion.',
         'user' => 'Diese Kategorien gehören ausschließlich zum angemeldeten Konto.',
     };

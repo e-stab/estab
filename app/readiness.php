@@ -1260,7 +1260,7 @@ function estab_readiness_schema_query(): string
         . "WHERE estab_status = 'closed' AND (estab_closed_at IS NULL "
         . "OR estab_retain_until IS NULL OR estab_retain_until "
         . "< DATE_ADD(estab_closed_at, INTERVAL 10 YEAR))) = 0) "
-        . "AND ((SELECT COUNT(*) FROM estab_schema_migrations) = 21) "
+        . "AND ((SELECT COUNT(*) FROM estab_schema_migrations) = 22) "
         . "AND ((SELECT COUNT(*) FROM estab_schema_migrations "
         . "WHERE version IN ('20-nullable-dates.sql','30-runtime-schema.sql',"
         . "'40-recipient-matrix-standard.sql','45-global-incidents-prepare.sql',"
@@ -1275,7 +1275,8 @@ function estab_readiness_schema_query(): string
         . "'110-etb-tbb-rules.sql','111-logbook-shift-assignment.sql',"
         . "'112-optional-access-shifts.sql','113-password-policy.sql',"
         . "'114-self-registration-policy.sql',"
-        . "'115-incident-permission-mode.sql') "
+        . "'115-incident-permission-mode.sql',"
+        . "'116-standard-categories.sql') "
         . "AND state = 'applied' "
-        . "AND checksum REGEXP BINARY '^[0-9a-f]{64}$') = 21)";
+        . "AND checksum REGEXP BINARY '^[0-9a-f]{64}$') = 22)";
 }

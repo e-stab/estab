@@ -1179,6 +1179,12 @@ Kategorien-/Administrationsgrenze bleibt in beiden Einsatzmodi rollenstreng.
   HTML-Escaping geschieht erst beim Ausgeben von Text, Attributen und
   Auswahloptionen.
 
+Migration 116 befüllt ausschließlich eine bis dahin vollständig leere globale
+Kategorienliste einmalig mit `Allgemein` und `EA1` bis `EA6`. Eine bereits
+gepflegte Liste bleibt vollständig unverändert. Die Vorgaben sind normale,
+editier- und löschbare Kategorien; weder Einsatzanlage noch Anmeldung oder
+Seitenaufruf erzeugen entfernte Einträge erneut.
+
 GET listet Kategorien oder öffnet ein Bearbeitungsformular, verändert aber
 keine Daten. Anlegen, Ändern, Löschen und Zuordnen verlangen POST plus
 Session-CSRF und enden mit HTTP 303. Alle Werte sind gebundene Parameter,

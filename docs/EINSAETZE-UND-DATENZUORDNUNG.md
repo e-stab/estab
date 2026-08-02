@@ -185,6 +185,16 @@ Nicht jede Tabelle benötigt eine redundante Einsatz-ID:
 Diese Grenze verhindert widersprüchliche doppelte Einsatz-IDs in Linktabellen,
 ohne operative Datensätze aus ihrem Einsatzkontext zu lösen.
 
+Die globale Kategorienliste erhält deshalb keine neuen Zeilen je Einsatz.
+Migration 116 belegt sie nur dann einmalig mit `Allgemein` sowie `EA1` bis
+`EA6` vor, wenn sie zu diesem Zeitpunkt vollständig leer ist. Die
+EA-Beschreibungen sind eine anpassbare Grundstruktur für Einsatzabschnitte und
+werden an die konkrete Einsatzorganisation angepasst. Bereits eine vorhandene
+globale Kategorie kennzeichnet den gesamten Katalog als betreibergeführt; dann
+ergänzt oder überschreibt die Migration nichts. Spätere Änderungen und
+Löschungen bleiben ebenfalls erhalten und werden weder bei einer neuen
+Einsatzanlage noch bei Anmeldung oder Containerneustart zurückgesetzt.
+
 ## Öffentliche PHP-API
 
 Reader und Statusanzeige:
@@ -604,6 +614,14 @@ weiterhin das konkrete aktive und ungesperrte Konto sowie sämtliche Einsatz-,
 Zustands-, Beziehungs-, Nummern-, Provenienz- und Append-only-Regeln, verzichtet
 aber auf die dortige Funktions-/Rollenprüfung. Veröffentlichte
 Vorgängerdateien und historische Daten werden nicht umgeschrieben.
+
+Migration 116 ergänzt ausschließlich eine vollständig leere globale
+Kategorienliste um die editier- und löschbaren Vorgaben `Allgemein` sowie
+`EA1` bis `EA6`. Sie verändert keine Nachricht und keine
+Kategoriezuordnung. Ein vorhandener Betreiberkatalog bleibt vollständig
+unverändert; weil die Saat nur in dieser checksumgebundenen Einmalmigration
+liegt, werden auch später geänderte oder gelöschte Vorgaben nicht erneut
+angelegt.
 
 Migration 50 bleibt bytegenau auf der bereits im Ledger verwendeten
 Prüfsumme. Vor- oder Nachbedingungen werden ausschließlich in neuen

@@ -51,7 +51,7 @@ $routes = [
 ];
 $href = static fn (string $key): string => estab_auth_html($routes[$key]);
 $handbookVersion = '2026.08';
-$handbookUpdated = '1. August 2026';
+$handbookUpdated = '2. August 2026';
 
 ?><!doctype html>
 <html lang="de">
@@ -584,6 +584,10 @@ $handbookUpdated = '1. August 2026';
           <p><strong>Kategorien:</strong> Globale Kategorien kann nur die feste
             Rotkopiefunktion oder Si verwalten. Funktionskategorien gelten für
             die feste Kontofunktion, persönliche Kategorien nur für das Konto.
+            Bei einer noch leeren globalen Liste stehen <em>Allgemein</em> und
+            <em>EA1</em> bis <em>EA6</em> als anpassbare Grundstruktur bereit;
+            die Beschreibungen der Einsatzabschnitte werden an die konkrete
+            Einsatzorganisation angepasst.
             Gelesen und erledigt sind von der Transportstufe getrennte
             Arbeitsmarkierungen. Daran ändert auch der Berechtigungsmodus
             „Locker“ nichts.</p>

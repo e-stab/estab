@@ -1738,7 +1738,7 @@ SELECT
        BINARY 'STRICT', BINARY 'LOOSE'
      )) = 0)
        AS `incident_permission_mode_ok`,
-  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 21
+  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 22
    AND
    (SELECT COUNT(*)
       FROM `estab_schema_migrations`
@@ -1763,10 +1763,11 @@ SELECT
        '112-optional-access-shifts.sql',
        '113-password-policy.sql',
        '114-self-registration-policy.sql',
-       '115-incident-permission-mode.sql'
+       '115-incident-permission-mode.sql',
+       '116-standard-categories.sql'
      )
        AND `state` = 'applied'
-       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 21)
+       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 22)
        AS `schema_migrations_ok`;
 
 SELECT `table_name`, `engine`, `table_collation`

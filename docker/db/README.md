@@ -267,8 +267,8 @@ Prüfsumme unverändert. Migration 55 stellt die kanonischen Attribute wieder
 her. `migrations/70-user-account-blocking.sql` ergänzt anschließend die
 dauerhafte, kollisionsgeprüfte Kontosperre.
 
-Der aktuelle Ledger umfasst einundzwanzig checksumgebundene Migrationen bis
-`migrations/115-incident-permission-mode.sql`. Migration 110 führt die
+Der aktuelle Ledger umfasst zweiundzwanzig checksumgebundene Migrationen bis
+`migrations/116-standard-categories.sql`. Migration 110 führt die
 einsatzlokalen ETB-/TTB-Nummern, Buchköpfe, strukturierten TBB-Inhalt,
 Append-only-Regeln und zehnjährige Aufbewahrungsuntergrenze ein. Migration 111
 ergänzt nullable Schicht-/Schreiberfremdschlüssel für beide Bücher und die
@@ -356,8 +356,23 @@ Zustandsfolgen, Einsatzbeziehungen, Nummernköpfe, optionale Provenienz,
 Referenzen, Integrität und Append-only-Regeln bleiben in den Triggern
 erhalten. Die veröffentlichte Migration 112 wird nicht umgeschrieben.
 
-`verify.sql` und die Laufzeit-Readiness verlangen alle einundzwanzig
-Ledgerzeilen einschließlich Migration 115, die kanonische Modusspalte, beide
+Migration 116 ergänzt bei einer vollständig leeren globalen Kategorienliste
+die bewährte Grundausstattung `Allgemein` sowie `EA1` bis `EA6`. `EA` steht
+für Einsatzabschnitt; die Beschreibungen fordern ausdrücklich dazu auf, die
+Bezeichnung an die konkrete Einsatzorganisation anzupassen. `Allgemein`
+nimmt Meldungen ohne Zuordnung zu einem Einsatzabschnitt auf. Sobald bereits
+mindestens eine globale Kategorie vorhanden ist, bleibt der gesamte
+Betreiberkatalog unverändert und es werden keine Vorgaben hineingemischt.
+Kategorien sind wiederverwendbare Konfiguration und werden deshalb bewusst
+nicht je Einsatz oder Anmeldung neu angelegt. Eine strenge Vorprüfung
+akzeptiert ausschließlich die erwartete InnoDB-/UTF-8-Struktur von
+`nv_masterkatego`. Der Seed ist als eine Transaktion wiederholbar und die
+berechtigten Funktionen können alle Vorgaben anschließend wie andere globale
+Kategorien bearbeiten oder löschen. Eine bewusste Löschung wird von keinem
+Laufzeitpfad rückgängig gemacht.
+
+`verify.sql` und die Laufzeit-Readiness verlangen alle zweiundzwanzig
+Ledgerzeilen einschließlich Migration 116, die kanonische Modusspalte, beide
 Modus-Guard-Trigger und die sechs modebewussten Fachtrigger sowie die übrigen
 Spalten, Indexe und Fremdschlüssel. Ein aktueller Migratorlauf endet erst nach
 `Post-migration schema verification passed` und

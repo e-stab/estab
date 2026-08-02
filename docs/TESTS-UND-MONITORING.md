@@ -298,8 +298,8 @@ ESTAB_BROWSER_TEST=required \
 tests/integration/ci.sh
 ```
 
-Der am 1. August 2026 tatsächlich vollständig beendete Abschlusslauf führte
-`bash tests/integration/ci.sh` einschließlich Migration 115 aus und endete nach
+Der am 2. August 2026 vollständig beendete Abschlusslauf führte
+`bash tests/integration/ci.sh` einschließlich Migration 116 aus und endete nach
 dem vollständigen Backup-/Restore-Roundtrip mit Exitcode 0 und
 `CI integration: OK`. Sein protokollierter Kernstand lautet:
 
@@ -393,7 +393,7 @@ Schreibgrenzen sowie die amtlichen Nachrichtenvordruckfelder aus Migration 98.
 Der Schema-Test startet Migration 98 zweimal, prüft die exakt markierten
 Spalten `11_rufnummer` und `12_betreff`, deren leere Bestandswerte und den
 unveränderten historischen Nachrichteninhalt. Readiness und `verify.sql`
-verlangen alle einundzwanzig Ledgerzeilen einschließlich Version 115, die
+verlangen alle zweiundzwanzig Ledgerzeilen einschließlich Version 116, die
 kanonische Berechtigungsmodusspalte samt Guard-/Fachtriggern sowie die exakten
 drei Such-/Listenindizes. Migration 99 wird vollständig, nach einem
 simulierten phasenweisen Abbruch und nach einer fremden Indexkollision
@@ -500,6 +500,17 @@ Der Integrationsteil prüft den unveränderten strengen Vertrag und anschließen
 den lockeren Positivfall bei weiterhin aktivem, ungesperrtem Konto sowie die
 in beiden Modi negativen Einsatz-, Zustands-, Identitäts-, Referenz- und
 Append-only-Grenzen. Ein Zweitlauf darf weder Modus noch Fachbestand ändern.
+
+Migration 116 ergänzt als zweiundzwanzigste Ledgerzeile die einmalige
+Standardbefüllung der globalen Kategorien. Der Schematest verlangt für eine
+frische und eine migrierte leere Liste exakt `Allgemein` sowie `EA1` bis
+`EA6`, bindet ihre Beschreibungen und beweist den unveränderten Zweitlauf. Ein
+Legacy-Katalog mit bereits vorhandenen eigenen Kategorien und Zuordnungen muss
+dagegen vollständig unverändert bleiben; es dürfen insbesondere keine
+scheinbar fehlenden Vorgaben ergänzt werden. Weil die Saat nur mit der
+checksumgebundenen Einmalmigration ausgeführt wird, bleiben auch spätere
+Änderungen oder Löschungen nach weiteren Migrator- und Containerstarts
+erhalten.
 
 Anschließend migriert der Hauptlauf ein leeres Schema,
 führt PHP-, Datenbank-, Rollen-, HTTP- und Administrationsnachweise aus, prüft
@@ -790,7 +801,7 @@ Datenbanktrigger jeweils positiv und negativ erreichen. Vor jedem weiteren
 rollenbezogenen Integrationstest wird der Einsatz explizit auf `STRICT`
 zurückgesetzt, damit eine lockere Fixture keine erwartete Ablehnung verdeckt.
 
-Im finalen Lauf mit Migration 115 stand kein Browser-Steuerwerkzeug zur
+Im finalen Lauf mit Migration 116 stand kein Browser-Steuerwerkzeug zur
 Verfügung. Deshalb gibt es aus diesem Lauf keinen Browsernachweis für die
 Umschaltung zwischen `STRICT` und `LOOSE`, die sichtbare Moduswarnung oder
 einen Cross-Rollen-Schreibfall. Die statischen Verträge, die echte MariaDB und
@@ -1693,6 +1704,14 @@ ersetzen nicht die von der Unterlage vorausgesetzte formale Freigabe des
 elektronischen ETB/TBB durch die THW-Leitung.
 
 ### Kategorien-HTTP-Integration
+
+Die Vorbedingung für den HTTP-Test kommt aus dem Schema-Migratortest: Nur eine
+vollständig leere globale Kategorienliste wird einmalig mit `Allgemein` sowie
+`EA1` bis `EA6` vorbelegt. Eine bereits gepflegte Liste, ihre Zuordnungen sowie
+spätere Bearbeitungen und Löschungen bleiben unverändert. Der HTTP-Test prüft
+darauf aufbauend die normalen, weiterhin editier- und löschbaren Kategorien;
+die Vorgaben besitzen keine Sonderrechte und werden von keinem Laufzeitpfad
+erneut angelegt.
 
 Der Kategorien-Test baut auf der S1-Nachricht des HTTP-Smoke-Tests und dem
 S2-Benutzer des Logbuchtests auf. Zusätzlich registriert er eine isolierte

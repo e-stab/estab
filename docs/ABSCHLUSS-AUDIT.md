@@ -1,8 +1,8 @@
-# Abschluss-Audit vom 1. August 2026
+# Abschluss-Audit vom 2. August 2026
 
-> Aktueller Nachweisstand: Am 1. August 2026 endete der vollständige
+> Aktueller Nachweisstand: Am 2. August 2026 endete der vollständige
 > server-, datenbank-, HTTP-, Container- und Wiederherstellungslauf von
-> `tests/integration/ci.sh` einschließlich Migration 115 mit Exitcode 0 und
+> `tests/integration/ci.sh` einschließlich Migration 116 mit Exitcode 0 und
 > `CI integration: OK`. Die anschließend erneut ausgeführte vollständige
 > statische Suite endete ebenfalls mit Exitcode 0.
 
@@ -13,8 +13,8 @@
 > manuellen Fachabnahme. Statische, MariaDB- und authentifizierte HTTP-Nachweise
 > für den Modus waren dagegen Teil des erfolgreichen Laufs.
 
-Dieses Audit beschreibt den am 1. August 2026 geprüften Arbeitsstand mit allen
-21 Migrationen bis einschließlich Migration 115. Es trennt automatisiert
+Dieses Audit beschreibt den am 2. August 2026 geprüften Arbeitsstand mit allen
+22 Migrationen bis einschließlich Migration 116. Es trennt automatisiert
 nachgewiesene Eigenschaften von noch ausstehenden externen Freigaben und
 manuellen Abnahmen.
 
@@ -49,8 +49,9 @@ Kontofunktion; eine persönliche Schichtannahme ist keine Betriebsbedingung.
 | Kontrollierte Selbstregistrierung | Die Administration kann die öffentliche Kontoanlage sofort deaktivieren, dauerhaft aktivieren oder ab jetzt für 15 Minuten bis 24 Stunden freigeben. Befristungen enden ohne Hintergrunddienst exakt nach Datenbank-UTC. Ein globaler Lock, Revisionen und der atomische Konto-INSERT verhindern, dass ein bereits geöffnetes Formular eine Deaktivierung oder Ablaufgrenze überholt. Bestehende Konten, Anmeldungen und Sitzungen bleiben unabhängig. | 31 echte MariaDB-Assertions, 28 Handler-Assertions und erfolgreicher Basic-Auth-/CSRF-geschützter HTTP-Lauf; aktuelle Browserabnahme offen |
 | Belastbare Präsenzanzeige | Echte Browserinteraktion hält die Fachsitzung aktiv; nach 15 Minuten erscheint sie inaktiv, nach 12 Stunden wird sie serverseitig widerrufen. Statuspolls und automatische Refreshes zählen nicht. Der Aktivitätsendpunkt verlangt POST, gültige SID und Session-CSRF; PHP-GC ist auf 43.200 Sekunden angeglichen. HTTP Basic Auth bleibt separat. | Grenzwertmatrix in `tests/php/auth_security.php`; Monitorvertrag in `tests/php/session_ui_security.php`; Aktiv-/Inaktivdarstellung in `tests/php/sidebar_ui_security.php`; Endpoint- und Sitzungsablauf in `tests/integration/http_surface_http.sh` und `tests/integration/http_smoke.sh` |
 | Einsatzbezogene Daten und Exporte | ETB, TTB, Nachrichten, Anhänge, Vordrucke, Tabellenexport und PDF-Dossier bleiben einsatzgebunden | HTTP-, Export-, PDF- und Restore-Integrationen; Incident-Export 35 Assertions |
+| Einsatzbereite globale Kategorien | Eine vollständig leere globale Liste erhält einmalig die editier- und löschbaren Vorgaben `Allgemein` sowie `EA1` bis `EA6`. Bereits vorhandene Betreiberkataloge werden nicht ergänzt oder überschrieben; spätere Änderungen und Löschungen werden nicht wiederhergestellt. | Migration 116 im Schema-Migratortest für frische und leere Legacy-Bestände, nichtleeren Betreiberkatalog sowie idempotenten Zweitlauf; Kategorien-HTTP-Integration |
 | Reproduzierbare Herkunft | 13 Git-Ref-Snapshots und ein separater Dokument-r85-Baum sind selbsttragend gebunden | `migration/verify_provenance.py --self-test`: 14 Subjects sowie beide Manipulationsfälle grün |
-| Sicherer Containerstart | Gepinnte PHP-/MariaDB-Basen, erweiterte Schema-Prüfungen, 21 checksumgebundene Migrationen, Health-Gates und getrennte Netze | vollständiger server-/containerseitiger CI-Lauf, 42 Schema-Prüfungen und PHP-8.5-Suite |
+| Sicherer Containerstart | Gepinnte PHP-/MariaDB-Basen, erweiterte Schema-Prüfungen, 22 checksumgebundene Migrationen, Health-Gates und getrennte Netze | vollständiger server-/containerseitiger CI-Lauf, 42 Schema-Prüfungen und PHP-8.5-Suite |
 | Isoliertes Admin-Kennwort | Nur der netzlose One-shot `admin-auth-init` liest das Klartextsecret. Die App erhält ausschließlich eine bcrypt-Datei mit Kostenfaktor 12 schreibgeschützt. | 11 Secret-Isolationsassertionen sowie Container-Inspect und HTTP 401/200 |
 | NAS-/Registry-Betrieb | Pull-only Compose, digestgebundene Releaseidentität, private Konfigurations-/Secret-Snapshots, bestehende und getrennte Speicherquellen, engine-weite Wartungssperre sowie fail-closed Backup/Restore | Registry-Deployment-Vertrag 57 Assertions; Release-, Backup- und Restore-Operator-Tests; echter Named-Volume- und Bind-Mount-Lauf |
 | Wiederherstellbarkeit | Logischer MariaDB-Dump und beide Dateibereiche werden im aktuellen Format 3 verifiziert und kontrolliert wiederhergestellt. Archivdaten werden über interaktive Standardeingabe in netzlose Hilfscontainer übertragen; Format 2 bleibt nur für den exakten Same-Host-Kompatibilitätsfall lesbar. | Format-3-Bind-Restore, anschließender vollständiger benannter Volume-Roundtrip, Marker-/SHA-256-, Login-, Export- und Schemanachweis |
@@ -70,7 +71,7 @@ protokollierte Kernstand lautet:
 
 | Teilnachweis | Ergebnis |
 | --- | --- |
-| Migration und Schema | Migration 115 angewendet; 42 Schema-Prüfungen |
+| Migration und Schema | Migration 116 angewendet; 42 Schema-Prüfungen |
 | Einsatzdomäne | 55 Assertions |
 | DV-Evidenz | 51 Assertions |
 | DV-Operations einschließlich STRICT/LOOSE | 145 Assertions, 80 Ereignisse |
@@ -128,7 +129,7 @@ Lokal vorhanden, aber noch zu veröffentlichen, sind:
 Beim letzten Remote-Abruf waren keine dieser Tags auf `origin` vorhanden.
 Die öffentlich sichtbaren GitHub-Actions gehörten beim damaligen Abruf noch
 zum älteren `origin/main` und waren rot. Der aktuelle lokale Stand bis
-Migration 115 besitzt den oben dokumentierten erfolgreichen CI- und
+Migration 116 besitzt den oben dokumentierten erfolgreichen CI- und
 statischen Nachweis; daraus folgt weiterhin keine Aussage über einen noch
 nicht gelaufenen Remote-Workflow. Ohne GitHub-/SSH-Anmeldung wurden weder
 Commits noch Tags gepusht und keine Issues manuell geschlossen.
@@ -155,6 +156,6 @@ Vor einer öffentlichen oder produktiven Freigabe bleiben zwingend:
    fachkundigen Anwendern vollständig abnehmen.
 
 Bis diese Punkte einschließlich der manuellen Browser-Modusabnahme erledigt
-sind, ist der technisch bis Migration 115 erfolgreich geprüfte Stand weder als
+sind, ist der technisch bis Migration 116 erfolgreich geprüfte Stand weder als
 öffentliches Containerrelease noch als abschließend fachlich
 produktionsfreigegeben zu bezeichnen.

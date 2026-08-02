@@ -76,6 +76,9 @@ $passwordPolicyMigration = $read(
 $selfRegistrationMigration = $read(
     $root . '/docker/db/migrations/114-self-registration-policy.sql'
 );
+$standardCategoriesMigration = $read(
+    $root . '/docker/db/migrations/116-standard-categories.sql'
+);
 $baseline = $read($root . '/docker/db/init/10-schema.sql');
 $verify = $read($root . '/docker/db/verify.sql');
 $health = $read($root . '/health.php');
@@ -101,6 +104,7 @@ $logbookShiftSql = $normaliseSql($logbookShiftMigration);
 $optionalAccessShiftSql = $normaliseSql($optionalAccessShiftMigration);
 $passwordPolicySql = $normaliseSql($passwordPolicyMigration);
 $selfRegistrationSql = $normaliseSql($selfRegistrationMigration);
+$standardCategoriesSql = $normaliseSql($standardCategoriesMigration);
 $baselineSql = $normaliseSql($baseline);
 $verifySql = $normaliseSql($verify);
 $readinessSql = $normaliseSql(estab_readiness_schema_query());
@@ -400,6 +404,93 @@ $assert(
             'standard recipient matrix differs from the historical 20-cell fixture'
         ),
     'Schema integration omits collision and exact standard-matrix evidence'
+);
+$standardCategoryNames = [
+    'Allgemein',
+    'EA1',
+    'EA2',
+    'EA3',
+    'EA4',
+    'EA5',
+    'EA6',
+];
+foreach ($standardCategoryNames as $standardCategoryName) {
+    $assert(
+        str_contains(
+            $standardCategoriesMigration,
+            "'" . $standardCategoryName . "'"
+        ),
+        'Standard-category migration omits ' . $standardCategoryName
+    );
+}
+$assert(
+    !str_contains($baseline, "'Allgemein'")
+        && !str_contains($baseline, "'EA1'")
+        && str_contains(
+            $standardCategoriesMigration,
+            'INSERT INTO `nv_masterkatego`'
+        )
+        && str_contains($standardCategoriesMigration, 'START TRANSACTION')
+        && str_contains($standardCategoriesMigration, 'COMMIT')
+        && (
+            (
+                str_contains($standardCategoriesSql, 'COUNT(*)')
+                && str_contains($standardCategoriesSql, 'nv_masterkatego')
+                && preg_match(
+                    '/(?:IF|WHERE).*?(?:= 0|=0).*?INSERT INTO `nv_masterkatego`/s',
+                    $standardCategoriesSql
+                ) === 1
+            )
+            || preg_match(
+                '/INSERT INTO `nv_masterkatego`.*?WHERE NOT EXISTS '
+                    . '\(SELECT 1 FROM `nv_masterkatego`\)/s',
+                $standardCategoriesSql
+            ) === 1
+            || (
+                str_contains(
+                    $standardCategoriesSql,
+                    'SET @estab_migrate_116_catalogue_was_empty := '
+                        . '(SELECT COUNT(*) = 0 FROM `nv_masterkatego`)'
+                )
+                && str_contains(
+                    $standardCategoriesSql,
+                    'WHERE @estab_migrate_116_catalogue_was_empty = 1'
+                )
+            )
+        )
+        && !preg_match(
+            '/\b(?:DELETE\s+FROM|UPDATE|REPLACE\s+INTO|TRUNCATE\s+TABLE)\s+'
+                . '`?nv_masterkatego`?/i',
+            $standardCategoriesMigration
+        ),
+    'Standard categories are not seeded additively and only into a completely empty global catalogue'
+);
+$assert(
+    str_contains(
+        $schemaIntegration,
+        'fresh installation did not receive exact standard categories'
+    )
+        && str_contains(
+            $schemaIntegration,
+            'empty legacy category table did not receive exact standard categories'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'upgrade changed a nonempty global category catalogue or its links'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'upgrade partially filled a nonempty global category catalogue'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'second fresh migration run duplicated or changed standard categories'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'second legacy-upgrade run duplicated or changed standard categories'
+        ),
+    'Schema integration omits fresh, upgrade-preservation, or standard-category idempotence evidence'
 );
 foreach ([
     'idx_benutzer_funktion_aktiv',
@@ -1730,6 +1821,7 @@ foreach ([
         'estab_permission_mode',
         'estab:migration:115:incident-permission-mode:v1',
         '115-incident-permission-mode.sql',
+        '116-standard-categories.sql',
     ] as $fragment) {
         $assert(
             str_contains($runtimeSchemaContract, $fragment),
@@ -2267,6 +2359,7 @@ foreach ([
     '113-password-policy.sql',
     '114-self-registration-policy.sql',
     '115-incident-permission-mode.sql',
+    '116-standard-categories.sql',
     'historical logbook rows did not retain unknown shift provenance',
     'partial logbook and optional access-shift migrations did not resume canonically',
     'blocked logbook shift collision was changed or recorded',
@@ -2299,7 +2392,7 @@ foreach ([
     'blocked self-registration table collision was changed or recorded',
     'self-registration migration did not recover after removing the collision',
     'incident permission mode was not migrated fail-closed and canonically',
-    'migration 114 rewrote one of the existing twenty ledger rows',
+    'migration 114 rewrote one of the existing twenty-one ledger rows',
     'Manual ETB/TBB entries without a duty shift were accepted by account function',
     'Two access groups can be active and membership re-addition preserves its history',
     'withdrawn ETB assignee rejection was not explicit',
@@ -2317,7 +2410,7 @@ foreach ([
     'missing ETB head was not rejected explicitly',
     'missing TTB head was not rejected explicitly',
     'MariaDB default snapshot isolation is not enabled for concurrency tests',
-    'assert_equal "21"',
+    'assert_equal "22"',
 ] as $marker) {
     $assert(
         str_contains($schemaIntegration, $marker),
@@ -2384,7 +2477,7 @@ $assert(
         && str_contains($verifySql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $verifySql,
-            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 21'
+            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 22'
         )
         && str_contains($verifySql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -2412,7 +2505,8 @@ $assert(
             $verifySql,
             "'115-incident-permission-mode.sql'"
         )
-        && str_contains($verifySql, ") = 21) AS `schema_migrations_ok`"),
+        && str_contains($verifySql, "'116-standard-categories.sql'")
+        && str_contains($verifySql, ") = 22) AS `schema_migrations_ok`"),
     'verify.sql does not require the exact final ETB catalogue and ledger'
 );
 $assert(
@@ -2435,7 +2529,7 @@ $assert(
         && str_contains($readinessSql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $readinessSql,
-            '(SELECT COUNT(*) FROM estab_schema_migrations) = 21'
+            '(SELECT COUNT(*) FROM estab_schema_migrations) = 22'
         )
         && str_contains($readinessSql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -2471,7 +2565,11 @@ $assert(
         )
         && str_contains(
             $readinessSql,
-            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 21"
+            "'116-standard-categories.sql'"
+        )
+        && str_contains(
+            $readinessSql,
+            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 22"
         ),
     'Runtime readiness does not require the exact final ETB catalogue and ledger'
 );
@@ -2497,6 +2595,7 @@ $releaseMigrationFiles = [
     '113-password-policy.sql',
     '114-self-registration-policy.sql',
     '115-incident-permission-mode.sql',
+    '116-standard-categories.sql',
 ];
 foreach ([
     'verify.sql' => $verifySql,
@@ -2656,6 +2755,10 @@ $assert(
             $readiness,
             "'115-incident-permission-mode.sql'"
         )
+        && str_contains(
+            $readiness,
+            "'116-standard-categories.sql'"
+        )
         && str_contains($verify, "'50-global-incidents.sql'")
         && str_contains($verify, "'45-global-incidents-prepare.sql'")
         && str_contains($verify, "'55-global-incidents-finish.sql'")
@@ -2674,9 +2777,10 @@ $assert(
         && str_contains($verify, "'113-password-policy.sql'")
         && str_contains($verify, "'114-self-registration-policy.sql'")
         && str_contains($verify, "'115-incident-permission-mode.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 21')
-        && str_contains($readiness, 'estab_schema_migrations) = 21'),
-    'Migration ledger/readiness does not require all twenty-one release migrations'
+        && str_contains($verify, "'116-standard-categories.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 22')
+        && str_contains($readiness, 'estab_schema_migrations) = 22'),
+    'Migration ledger/readiness does not require all twenty-two release migrations'
 );
 $assert(
     str_contains($readiness, "require_once __DIR__ . '/bootstrap.php'")

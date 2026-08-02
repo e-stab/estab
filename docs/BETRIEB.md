@@ -446,8 +446,8 @@ ihn anschließend wieder her.
 podman compose run --rm migrate
 ```
 
-Ein bereits aktueller Bestand meldet alle einundzwanzig Migrationen
-einschließlich `115-incident-permission-mode.sql` als vorhanden und
+Ein bereits aktueller Bestand meldet alle zweiundzwanzig Migrationen
+einschließlich `116-standard-categories.sql` als vorhanden und
 führt trotzdem den vollständigen Read-only-Schematest aus. Die Ausgabe muss
 `Post-migration schema verification passed` und anschließend
 `All schema migrations are applied` enthalten. Erst danach sollte der Stack
@@ -1176,6 +1176,13 @@ Kategorie und Beschreibung dürfen Quotes, Ampersands und internationalen Text
 enthalten und werden als UTF-8 gespeichert. Sie dürfen nicht vorab als
 HTML-Entities eingegeben oder importiert werden; die Anwendung escaped erst
 bei der Ausgabe. Eine gelöschte Kategorie verliert ihre Zuordnungen atomar.
+
+Ist die globale Kategorienliste beim Einspielen der Standardkategorien noch
+vollständig leer, wird sie einmalig mit `Allgemein` sowie `EA1` bis `EA6`
+vorbelegt. Die Einsatzabschnitte sind eine Grundstruktur: Ihre Beschreibungen
+werden an die konkrete Einsatzorganisation angepasst. Eine bereits gepflegte
+Liste bleibt beim Upgrade vollständig unverändert. Auch spätere Änderungen
+oder Löschungen werden bei einem Containerneustart nicht zurückgesetzt.
 
 ## Reverse Proxy und TLS
 

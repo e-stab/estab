@@ -259,6 +259,21 @@ assert_body_absent()
     fi
 }
 
+assert_standard_master_categories_visible()
+{
+    category_rows=$(grep -o 'data-label="Kategorie"><strong>' "$body" |
+        wc -l | tr -d ' ')
+    if [ "$category_rows" != 7 ]; then
+        printf 'Category HTTP: expected seven initial global categories, got %s\n' \
+            "$category_rows" >&2
+        sed -n '1,160p' "$body" >&2
+        exit 1
+    fi
+    for standard_category in Allgemein EA1 EA2 EA3 EA4 EA5 EA6; do
+        assert_body ">$standard_category</strong>"
+    done
+}
+
 assert_session_identity()
 {
     expected_name=$1
@@ -702,8 +717,10 @@ assert_body 'Aktion nicht erlaubt.'
 assert_session_identity "$s2_name" "$s2_code" S2 Stab
 load_manager "$s2_cookies" master "$redcopy_message_id"
 assert_session_identity "$s2_name" "$s2_code" S2 Stab
+assert_standard_master_categories_visible
 load_manager "$si_cookies" master "$message_id"
 assert_session_identity "$si_name" "$si_code" Si Stab
+assert_standard_master_categories_visible
 
 # Historic GET mutation parameters are display-only and cannot create a row.
 assert_status 200 --cookie "$s1_cookies" \
