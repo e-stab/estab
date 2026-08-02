@@ -2158,6 +2158,25 @@ assert_body 'Aktive Filter' 'S2 active filter chips'
 assert_body 'Seite 1 von ' 'S2 server-side pager'
 assert_body "$incoming_marker" 'S2 filtered message overview result'
 
+# Search by a value that only exists in the official form heading. This proves
+# both that headings participate in search and that the complete result row
+# exposes the persisted heading instead of only the message excerpt.
+assert_status 200 'find S2 message overview by form heading' \
+    --cookie "$s2_cookies" --cookie-jar "$s2_cookies" \
+    --get \
+    --data-urlencode "ml_q=$incoming_subject" \
+    "$base_url/4fueltg/ue_ltg.php"
+assert_no_runtime_error 'S2 message overview heading search'
+assert_body '1–1 von 1 Nachrichten' 'S2 heading-only result count'
+assert_body 'data-estab-message-list-heading ' 'S2 heading marker'
+assert_body 'data-estab-message-list-heading-empty="false"' \
+    'S2 persisted heading state'
+assert_body 'Vordruck-Überschrift' 'S2 visible heading label'
+assert_body \
+    "data-estab-message-list-heading-empty=\"false\">${incoming_subject}</strong>" \
+    'S2 complete form heading'
+assert_body "$incoming_marker" 'S2 heading-only result row'
+
 assert_status 200 'empty S2 message overview search' \
     --cookie "$s2_cookies" --cookie-jar "$s2_cookies" \
     --get \
@@ -2206,6 +2225,24 @@ assert_no_runtime_error 'filtered A/W second-review list'
 assert_body 'Aktive Filter' 'A/W active filter chips'
 assert_body 'Seite 1 von ' 'A/W server-side pager'
 assert_body "$incoming_marker" 'A/W filtered second-review result'
+
+admin_csrf=$(csrf_from_body)
+assert_status 200 'find A/W second-review message by form heading' \
+    --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$admin_csrf" \
+    --data-urlencode 'fm_admin_x=1' \
+    --data-urlencode "ml_q=$incoming_subject" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'A/W second-review heading search'
+assert_body '1–1 von 1 Nachrichten' 'A/W heading-only result count'
+assert_body 'data-estab-message-list-heading-empty="false"' \
+    'A/W persisted heading state'
+assert_body 'Vordruck-Überschrift' 'A/W visible heading label'
+assert_body \
+    "data-estab-message-list-heading-empty=\"false\">${incoming_subject}</strong>" \
+    'A/W complete form heading'
+assert_body "$incoming_marker" 'A/W heading-only result row'
 
 admin_csrf=$(csrf_from_body)
 assert_status 200 'empty A/W second-review search' \
@@ -2329,6 +2366,24 @@ assert_no_runtime_error 'filtered Si second-review list'
 assert_body 'Aktive Filter' 'Si active filter chips'
 assert_body 'Seite 1 von ' 'Si server-side pager'
 assert_body "$incoming_marker" 'Si filtered second-review result'
+
+si_admin_csrf=$(csrf_from_body)
+assert_status 200 'find Si second-review message by form heading' \
+    --cookie "$si_cookies" --cookie-jar "$si_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$si_admin_csrf" \
+    --data-urlencode 'si_admin_x=1' \
+    --data-urlencode "ml_q=$incoming_subject" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'Si second-review heading search'
+assert_body '1–1 von 1 Nachrichten' 'Si heading-only result count'
+assert_body 'data-estab-message-list-heading-empty="false"' \
+    'Si persisted heading state'
+assert_body 'Vordruck-Überschrift' 'Si visible heading label'
+assert_body \
+    "data-estab-message-list-heading-empty=\"false\">${incoming_subject}</strong>" \
+    'Si complete form heading'
+assert_body "$incoming_marker" 'Si heading-only result row'
 
 si_admin_csrf=$(csrf_from_body)
 assert_status 200 'empty Si second-review search' \

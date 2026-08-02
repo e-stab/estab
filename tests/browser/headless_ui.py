@@ -175,6 +175,7 @@ class TestConfig:
     login_password: str = dataclasses.field(repr=False)
     workflow_marker: str | None = None
     message_suggestion_marker: str | None = None
+    message_overview_subject: str | None = None
     admin_user: str | None = None
     admin_password: str | None = dataclasses.field(default=None, repr=False)
     timeout: float = 25.0
@@ -254,6 +255,27 @@ class TestConfig:
                 "ESTAB_TEST_MESSAGE_SUGGESTION_MARKER ist ungültig."
             )
 
+        message_overview_subject = os.environ.get(
+            "ESTAB_TEST_MESSAGE_OVERVIEW_SUBJECT"
+        )
+        if message_overview_subject is not None:
+            if re.search(r"[\x00-\x1F\x7F]", message_overview_subject):
+                raise TestFailure(
+                    "ESTAB_TEST_MESSAGE_OVERVIEW_SUBJECT darf keine "
+                    "Steuerzeichen enthalten."
+                )
+            message_overview_subject = re.sub(
+                r"\s+", " ", message_overview_subject
+            ).strip()
+            if (
+                not message_overview_subject
+                or len(message_overview_subject) > 120
+            ):
+                raise TestFailure(
+                    "ESTAB_TEST_MESSAGE_OVERVIEW_SUBJECT muss eine "
+                    "nichtleere, höchstens 120 Zeichen lange Überschrift sein."
+                )
+
         admin_user = os.environ.get("ESTAB_TEST_ADMIN_USER")
         admin_password = os.environ.get("ESTAB_TEST_ADMIN_PASSWORD")
         admin_password_file = os.environ.get("ESTAB_TEST_ADMIN_PASSWORD_FILE")
@@ -283,6 +305,7 @@ class TestConfig:
             login_password=password,
             workflow_marker=workflow_marker,
             message_suggestion_marker=message_suggestion_marker,
+            message_overview_subject=message_overview_subject,
             admin_user=admin_user,
             admin_password=admin_password,
             timeout=timeout,
@@ -1324,6 +1347,448 @@ class BrowserAcceptance:
             location = f"öffentliche Mobilansicht „{title}“"
             self._open_bos_document(href, title, location)
             self._assert_mobile_bos_navigation(location)
+
+    def run_message_overview(self) -> None:
+        """Check the real S2 message overview and its responsive headings."""
+        if self.config.login_function != "S2":
+            raise TestFailure(
+                "--message-overview benötigt ein fest provisioniertes S2-Konto."
+            )
+
+        self.cdp.call("Page.enable")
+        self.cdp.call("Runtime.enable")
+        self.cdp.call("Network.enable")
+        self.cdp.call(
+            "Emulation.setDeviceMetricsOverride",
+            {
+                "width": 1280,
+                "height": 900,
+                "deviceScaleFactor": 1,
+                "mobile": False,
+                "screenWidth": 1280,
+                "screenHeight": 900,
+            },
+        )
+
+        print("[1/3] Meldungsübersicht direkt aufrufen und als S2 anmelden")
+        navigation = self.cdp.call(
+            "Page.navigate",
+            {"url": self.config.base_url + "/4fueltg/ue_ltg.php"},
+        )
+        if navigation.get("errorText"):
+            raise TestFailure(
+                "Chrome konnte den direkten Aufruf der "
+                "Meldungsübersicht nicht starten."
+            )
+        self.cdp.wait_for(
+            """
+            document.readyState === "complete" &&
+            location.pathname.endsWith("/4fach/index.php") &&
+            new URLSearchParams(location.search).get("login_flow") ===
+                "existing" &&
+            new URLSearchParams(location.search).get("next") ===
+                "message-overview"
+            """,
+            "Direktaufruf der Meldungsübersicht führte nicht zum "
+            "Bestandslogin",
+        )
+        self._wait_for_frame("mainframe")
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                const query = new target.URLSearchParams(
+                    target.location.search
+                );
+                return target.location.pathname.endsWith(
+                        "/4fach/mainindex.php"
+                    ) &&
+                    query.get("login_flow") === "existing" &&
+                    query.get("next") === "message-overview" &&
+                    Boolean(doc.querySelector('input[name="benutzer"]')) &&
+                    Boolean(doc.querySelector('input[name="kuerzel"]')) &&
+                    Boolean(doc.querySelector('select[name="funktion"]')) &&
+                    Boolean(doc.querySelector('input[name="kennwort1"]'));
+                """,
+            ),
+            "Bestandskonto-Formular für die Meldungsübersicht fehlt",
+        )
+        self.cdp.set_value(
+            "mainframe",
+            'input[name="benutzer"]',
+            self.config.login_name,
+            "S2-Benutzername",
+        )
+        self.cdp.set_value(
+            "mainframe",
+            'input[name="kuerzel"]',
+            self.config.login_code,
+            "S2-Kürzel",
+        )
+        self.cdp.set_value(
+            "mainframe",
+            'select[name="funktion"]',
+            self.config.login_function,
+            "S2-Funktion",
+            select=True,
+        )
+        self.cdp.set_value(
+            "mainframe",
+            'input[name="kennwort1"]',
+            self.config.login_password,
+            "S2-Kennwort",
+        )
+        self.cdp.click(
+            "mainframe",
+            'button.estab-button-primary[type="submit"]',
+            "S2-Bestandskonto anmelden",
+        )
+        self._wait_for_top_level_path(
+            "/4fueltg/ue_ltg.php",
+            "Meldungsübersicht wurde nach dem S2-Login nicht geöffnet",
+        )
+        self.cdp.wait_for(
+            """
+            Boolean(document.querySelector(
+                "[data-estab-message-overview]" +
+                "[data-estab-message-list]"
+            )) &&
+            Boolean(document.querySelector(
+                "[data-estab-message-list-controls]"
+            )) &&
+            Boolean(document.querySelector(
+                ".estab-message-list-resultbar"
+            )) &&
+            Boolean(document.querySelector(
+                ".estab-message-list-table, " +
+                "[data-estab-message-list-empty]"
+            ))
+            """,
+            "Meldungsliste wurde nach dem S2-Login nicht vollständig geladen",
+        )
+
+        expected_subject = self.config.message_overview_subject
+        if expected_subject is not None:
+            print("[2/3] Explizit bekannten Betreff über die echte Suche filtern")
+            self.cdp.set_value(
+                None,
+                '.estab-message-list-search-row input[name="ml_q"]',
+                expected_subject,
+                "bekannten Vordruck-Betreff suchen",
+            )
+            self.cdp.click(
+                None,
+                '.estab-message-list-search-row '
+                'button[name="ml_apply"][value="1"]',
+                "Suche nach bekanntem Vordruck-Betreff absenden",
+            )
+            subject_literal = json.dumps(expected_subject)
+            self.cdp.wait_for(
+                f"""
+                document.readyState === "complete" &&
+                location.pathname.endsWith("/4fueltg/ue_ltg.php") &&
+                new URLSearchParams(location.search).get("ml_q") ===
+                    {subject_literal} &&
+                Boolean(document.querySelector(
+                    "[data-estab-message-overview]" +
+                    "[data-estab-message-list]"
+                ))
+                """,
+                "Betreffsuche in der Meldungsübersicht wurde nicht angewendet",
+            )
+        else:
+            print("[2/3] Vorhandene Betreffmarker oder den Leerzustand prüfen")
+
+        self._assert_session_bar(
+            None,
+            "S2-Meldungsübersicht",
+            "message-overview",
+        )
+
+        print("[3/3] Betreffdarstellung auf Desktop und bei 390 px vermessen")
+        for width, height, mobile in (
+            (1280, 900, False),
+            (390, 844, True),
+        ):
+            self.cdp.call(
+                "Emulation.setDeviceMetricsOverride",
+                {
+                    "width": width,
+                    "height": height,
+                    "deviceScaleFactor": 1,
+                    "mobile": False,
+                    "screenWidth": width,
+                    "screenHeight": height,
+                },
+            )
+            expected_table_display = "block" if mobile else "table"
+            display_literal = json.dumps(expected_table_display)
+            self.cdp.wait_for(
+                f"""
+                innerWidth === {width} && (() => {{
+                    const table = document.querySelector(
+                        ".estab-message-list-table"
+                    );
+                    return !table || getComputedStyle(table).display ===
+                        {display_literal};
+                }})()
+                """,
+                f"Responsive Meldungsliste bei {width}×{height} px "
+                "wurde nicht berechnet",
+            )
+            self._assert_message_overview_layout(
+                f"Meldungsübersicht bei {width}×{height} px",
+                mobile=mobile,
+            )
+
+    def _assert_message_overview_layout(
+        self,
+        description: str,
+        *,
+        mobile: bool,
+    ) -> None:
+        expected_subject = json.dumps(self.config.message_overview_subject)
+        state = self.cdp.evaluate(
+            """
+            (() => {
+                const expectedSubject = __EXPECTED_SUBJECT__;
+                const normalize = value => value.replace(/\\s+/g, " ").trim();
+                const visible = element => {
+                    if (!element) return false;
+                    const style = getComputedStyle(element);
+                    const rect = element.getBoundingClientRect();
+                    return style.display !== "none" &&
+                        style.visibility !== "hidden" &&
+                        rect.width > 0 && rect.height > 0;
+                };
+                const overlaps = (first, second) => {
+                    const a = first.getBoundingClientRect();
+                    const b = second.getBoundingClientRect();
+                    return Math.min(a.right, b.right) -
+                            Math.max(a.left, b.left) > 0.5 &&
+                        Math.min(a.bottom, b.bottom) -
+                            Math.max(a.top, b.top) > 0.5;
+                };
+                const overlapPairs = elements => {
+                    const pairs = [];
+                    for (let left = 0; left < elements.length; left += 1) {
+                        for (
+                            let right = left + 1;
+                            right < elements.length;
+                            right += 1
+                        ) {
+                            if (overlaps(elements[left], elements[right])) {
+                                pairs.push([left, right]);
+                            }
+                        }
+                    }
+                    return pairs;
+                };
+                const fitsViewport = element => {
+                    const rect = element.getBoundingClientRect();
+                    return rect.left >= -0.5 &&
+                        rect.right <= innerWidth + 0.5;
+                };
+                const containedBy = (element, container) => {
+                    const rect = element.getBoundingClientRect();
+                    const outer = container.getBoundingClientRect();
+                    return rect.left >= outer.left - 0.5 &&
+                        rect.right <= outer.right + 0.5 &&
+                        rect.top >= outer.top - 0.5 &&
+                        rect.bottom <= outer.bottom + 0.5;
+                };
+
+                const root = document.querySelector(
+                    "[data-estab-message-overview]" +
+                    "[data-estab-message-list]"
+                );
+                const controls = document.querySelector(
+                    "[data-estab-message-list-controls]"
+                );
+                const search = controls?.querySelector(
+                    '.estab-message-list-search-row input[name="ml_q"]'
+                );
+                const searchRow = controls?.querySelector(
+                    ".estab-message-list-search-row"
+                );
+                const resultbar = document.querySelector(
+                    ".estab-message-list-resultbar"
+                );
+                const wrapper = document.querySelector(
+                    ".estab-message-list-table-wrap"
+                );
+                const table = document.querySelector(
+                    ".estab-message-list-table"
+                );
+                const empty = document.querySelector(
+                    "[data-estab-message-list-empty]"
+                );
+                const pager = document.querySelector(
+                    ".estab-message-list-pager"
+                );
+                const rows = table
+                    ? Array.from(table.querySelectorAll(
+                        "tbody > .estab-message-list-row"
+                    ))
+                    : [];
+                const headings = Array.from(document.querySelectorAll(
+                    "[data-estab-message-list-heading]"
+                ));
+                const searchChildren = searchRow
+                    ? Array.from(searchRow.children).filter(visible)
+                    : [];
+                const resultChildren = resultbar
+                    ? Array.from(resultbar.children).filter(visible)
+                    : [];
+                const horizontalSections = [
+                    root,
+                    controls,
+                    resultbar,
+                    wrapper,
+                    empty,
+                    pager,
+                ].filter(visible);
+                const headingContentOverlaps = headings.flatMap(
+                    (heading, index) => {
+                        const summary = heading.closest(
+                            ".estab-message-list-summary"
+                        );
+                        const excerpt = summary?.querySelector(
+                            ".estab-message-list-excerpt"
+                        );
+                        return excerpt && visible(excerpt) &&
+                            overlaps(heading, excerpt)
+                            ? [index]
+                            : [];
+                    }
+                );
+                const exactHeadingCount = expectedSubject === null
+                    ? null
+                    : headings.filter(
+                        heading => normalize(heading.textContent || "") ===
+                            expectedSubject
+                    ).length;
+                const emptyVisible = visible(empty);
+                const tablePresent = Boolean(table);
+                const tableDisplay = table
+                    ? getComputedStyle(table).display
+                    : null;
+                const wrapperOverflow = wrapper
+                    ? getComputedStyle(wrapper).overflowX
+                    : null;
+
+                return {
+                    rootVisible: visible(root),
+                    controlsVisible: visible(controls),
+                    searchVisible: visible(search),
+                    resultbarVisible: visible(resultbar),
+                    resultModeValid:
+                        (tablePresent && rows.length > 0 && !emptyVisible) ||
+                        (!tablePresent && rows.length === 0 && emptyVisible),
+                    rowCount: rows.length,
+                    headingCount: headings.length,
+                    headingsVisible: headings.every(visible),
+                    oneHeadingPerRow: rows.every(
+                        row => row.querySelectorAll(
+                            "[data-estab-message-list-heading]"
+                        ).length === 1
+                    ),
+                    headingSemanticsExact: headings.every(heading => {
+                        const text = normalize(heading.textContent || "");
+                        const emptyMarker = heading.getAttribute(
+                            "data-estab-message-list-heading-empty"
+                        );
+                        return emptyMarker === "true"
+                            ? text === "Keine Überschrift angegeben"
+                            : emptyMarker === "false" &&
+                                text.length > 0 &&
+                                text !== "Keine Überschrift angegeben";
+                    }),
+                    headingsContained: headings.every(heading => {
+                        const summary = heading.closest(
+                            ".estab-message-list-summary"
+                        );
+                        return Boolean(summary) &&
+                            containedBy(heading, summary);
+                    }),
+                    headingsWrap: headings.every(
+                        heading => heading.scrollWidth <=
+                            heading.clientWidth + 1
+                    ),
+                    exactHeadingCount,
+                    queryValue: search ? search.value : null,
+                    pageFits: document.documentElement.scrollWidth <=
+                        innerWidth + 1,
+                    sectionsFit: horizontalSections.every(fitsViewport),
+                    controlsScrollFree: Boolean(controls) &&
+                        controls.scrollWidth <= controls.clientWidth + 1,
+                    mobileRowsScrollFree: !__MOBILE__ || rows.every(
+                        row => row.scrollWidth <= row.clientWidth + 1
+                    ),
+                    searchOverlaps: overlapPairs(searchChildren),
+                    resultOverlaps: overlapPairs(resultChildren),
+                    rowOverlaps: overlapPairs(rows),
+                    headingContentOverlaps,
+                    responsiveMode: !tablePresent || (__MOBILE__
+                        ? tableDisplay === "block" &&
+                            wrapperOverflow === "visible" &&
+                            rows.every(
+                                row => getComputedStyle(row).display ===
+                                    "block"
+                            )
+                        : tableDisplay === "table" &&
+                            ["auto", "scroll"].includes(wrapperOverflow)),
+                };
+            })()
+            """
+            .replace("__EXPECTED_SUBJECT__", expected_subject)
+            .replace("__MOBILE__", "true" if mobile else "false")
+        )
+        self._truth(
+            isinstance(state, dict)
+            and state.get("rootVisible") is True
+            and state.get("controlsVisible") is True
+            and state.get("searchVisible") is True
+            and state.get("resultbarVisible") is True
+            and state.get("resultModeValid") is True,
+            f"{description}: Arbeitsbereich, Suche oder Ergebniszustand fehlt: "
+            f"{state!r}",
+        )
+        self._truth(
+            state.get("headingCount") == state.get("rowCount")
+            and state.get("headingsVisible") is True
+            and state.get("oneHeadingPerRow") is True
+            and state.get("headingSemanticsExact") is True,
+            f"{description}: Betreffmarker sind nicht sichtbar, eindeutig oder "
+            f"semantisch exakt: {state!r}",
+        )
+        if self.config.message_overview_subject is not None:
+            self._truth(
+                int(state.get("exactHeadingCount") or 0) >= 1
+                and state.get("queryValue")
+                == self.config.message_overview_subject,
+                f"{description}: Der explizit bekannte Vordruck-Betreff wird "
+                f"nicht exakt angezeigt: {state!r}",
+            )
+        self._truth(
+            state.get("pageFits") is True
+            and state.get("sectionsFit") is True
+            and state.get("controlsScrollFree") is True
+            and state.get("mobileRowsScrollFree") is True
+            and state.get("headingsContained") is True
+            and state.get("headingsWrap") is True,
+            f"{description}: Seite, Bedienelemente oder Betreff laufen "
+            f"horizontal über: {state!r}",
+        )
+        self._truth(
+            state.get("searchOverlaps") == []
+            and state.get("resultOverlaps") == []
+            and state.get("rowOverlaps") == []
+            and state.get("headingContentOverlaps") == []
+            and state.get("responsiveMode") is True,
+            f"{description}: Suchfelder, Trefferkarten oder Betreff/Inhalt "
+            f"überlappen: {state!r}",
+        )
 
     def run_message_suggestions(self) -> None:
         marker = self.config.message_suggestion_marker
@@ -9001,6 +9466,14 @@ def parse_arguments() -> argparse.Namespace:
             "Fokus und Tastaturbedienung testen"
         ),
     )
+    parser.add_argument(
+        "--message-overview",
+        action="store_true",
+        help=(
+            "nur die S2-Meldungsübersicht, exakte Betreffdarstellung und "
+            "responsives Layout testen"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -9024,12 +9497,13 @@ def main() -> int:
                 arguments.bos_only,
                 arguments.handbook_only,
                 arguments.message_suggestions,
+                arguments.message_overview,
             )
         ) > 1:
             raise TestFailure(
                 "--overview-only, --auth-recovery-only, --export-only, "
                 "--bos-only, --handbook-only und "
-                "--message-suggestions "
+                "--message-suggestions sowie --message-overview "
                 "können nicht kombiniert werden."
             )
         config = TestConfig.from_environment(
@@ -9058,6 +9532,8 @@ def main() -> int:
             acceptance.run_handbook()
         elif arguments.message_suggestions:
             acceptance.run_message_suggestions()
+        elif arguments.message_overview:
+            acceptance.run_message_overview()
         elif arguments.export_only:
             if not config.admin_user or not config.admin_password:
                 raise TestFailure(

@@ -315,8 +315,10 @@ Der Bedienablauf ist bewusst direkt:
    sichtbares Badge. Jede Karte zeigt Originaldateiname, optionale
    Beschreibung, soweit belegten Zeitpunkt und Größe sowie die interne
    Anlagen-ID.
-   Meldungsübersicht, zweite Sichtung und operative Warteschlangen zeigen
-   dieselbe kanonische Anzahl als Hinweis-Badge.
+   Meldungsübersicht und zweite Sichtung zeigen zusätzlich die im Vordruck
+   erfasste Überschrift deutlich vor dem gekürzten Nachrichtentext. Beide sowie
+   die operativen Warteschlangen zeigen dieselbe kanonische Anlagenzahl als
+   Hinweis-Badge.
 4. JPEG-, PNG-, GIF- und BMP-Bilder erhalten innerhalb der unten beschriebenen
    Grenzen eine Miniatur; andernfalls erscheint ein neutraler Platzhalter.
    PDF-Dateien lassen sich innerhalb der Karte aufklappen und laden dann erst

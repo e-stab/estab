@@ -234,6 +234,23 @@ ESTAB_TEST_BASE_URL=http://127.0.0.1:8080 \
 python3 -B tests/browser/headless_ui.py --handbook-only
 ```
 
+Die Darstellung der Vordruck-Überschriften besitzt einen fokussierten Lauf
+mit einem fest provisionierten S2-Testkonto. Ist der erwartete Betreff gesetzt,
+sucht Chrome danach und prüft ihn in genau der gerenderten Trefferzeile. Bei
+`1280x900` und `390x844` CSS-Pixeln werden außerdem vollständiger Umbruch,
+fehlende Überschneidungen und fehlendes horizontales Dokument-Scrolling
+vermessen:
+
+```sh
+ESTAB_TEST_BASE_URL=http://127.0.0.1:8080 \
+ESTAB_TEST_LOGIN_NAME='Browser Meldungsübersicht' \
+ESTAB_TEST_LOGIN_CODE=brw002 \
+ESTAB_TEST_LOGIN_FUNCTION=S2 \
+ESTAB_TEST_LOGIN_PASSWORD_FILE=secrets/test_login_password.txt \
+ESTAB_TEST_MESSAGE_OVERVIEW_SUBJECT='Erwartete Überschrift' \
+python3 -B tests/browser/headless_ui.py --message-overview
+```
+
 Der vollständige zustandsverändernde Akzeptanzlauf benötigt dagegen ein
 eigens dafür provisioniertes Testkonto:
 
@@ -293,6 +310,7 @@ Weitere Einstellungen:
 | `ESTAB_TEST_LOGIN_FUNCTION` | `S1` | Im Formular vorhandene Funktion |
 | `ESTAB_TEST_LOGIN_PASSWORD` | nicht gesetzt | Kennwort des Testkontos; für den vollständigen Lauf erforderlich, sofern keine Datei gesetzt ist |
 | `ESTAB_TEST_LOGIN_PASSWORD_FILE` | nicht gesetzt | Bevorzugte Datei mit dem Kennwort des Testkontos |
+| `ESTAB_TEST_MESSAGE_OVERVIEW_SUBJECT` | nicht gesetzt | Optionaler exakter Betreff für die Suche und Sichtprüfung im Modus `--message-overview` |
 | `ESTAB_TEST_ADMIN_USER` | nicht gesetzt | Optionaler Admin-Benutzer des isolierten Test-Stacks; aktiviert zusammen mit einem Kennwort den Administrations-Browsertest |
 | `ESTAB_TEST_ADMIN_PASSWORD` | nicht gesetzt | Optionales ephemeres Admin-Testkennwort |
 | `ESTAB_TEST_ADMIN_PASSWORD_FILE` | nicht gesetzt | Bevorzugte Secret-Datei mit dem ephemeren Admin-Testkennwort |

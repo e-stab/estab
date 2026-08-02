@@ -256,11 +256,11 @@ function estab_message_list_render_controls(
     echo '<input id="' . $domPrefix . '-q" type="search" name="ml_q" '
         . 'value="' . estab_auth_html((string) ($filters['q'] ?? '')) . '" '
         . 'maxlength="120" autocomplete="off" enterkeyhint="search" '
-        . 'placeholder="z. B. 142 (TBB-Nachweis), Betreff oder Rufname" '
+        . 'placeholder="z. B. Überschrift, TBB-Nachweis 142 oder Rufname" '
         . 'aria-describedby="' . $helpId . '">';
-    echo '<small id="' . $helpId . '">Durchsucht TBB-Nachweisnummer, Betreff, '
-        . 'Rufname, Rufnummer, Von, An, Verfasserfunktion und '
-        . 'Nachrichtentext.</small>';
+    echo '<small id="' . $helpId . '">Durchsucht Vordruck-Überschrift '
+        . '(Betreff), TBB-Nachweisnummer, Rufname, Rufnummer, Von, An, '
+        . 'Verfasserfunktion und Nachrichtentext.</small>';
     echo '</label>';
     echo '<button class="estab-button estab-button-primary" type="submit" '
         . 'name="ml_apply" value="1">Suchen</button>';
@@ -476,7 +476,7 @@ function estab_message_list_render_table(array $rows, callable $openControl): vo
         . 'des aktiven Einsatzes</caption>';
     echo '<thead><tr>';
     foreach ([
-        'TBB-Nachweis', 'Zeitpunkt', 'Von und An', 'Betreff und Inhalt',
+        'TBB-Nachweis', 'Zeitpunkt', 'Von und An', 'Überschrift und Inhalt',
         'Bearbeitungsstand', 'Verteilung', 'Aktion',
     ] as $heading) {
         echo '<th scope="col">' . estab_auth_html($heading) . '</th>';
@@ -497,7 +497,10 @@ function estab_message_list_render_table(array $rows, callable $openControl): vo
         $to = trim((string) ($row['10_anschrift'] ?? ''));
         $to = $to !== '' ? $to : 'Nicht angegeben';
         $subject = trim(estab_message_plain_text($row['12_betreff'] ?? ''));
-        $subject = $subject !== '' ? $subject : 'Ohne Betreff';
+        $subjectMissing = $subject === '';
+        $subject = $subjectMissing
+            ? 'Keine Überschrift angegeben'
+            : $subject;
         $content = estab_message_excerpt($row['12_inhalt'] ?? '', 180);
         $priorityLabel = estab_message_priority_label(
             $row['09_vorrangstufe'] ?? null
@@ -534,9 +537,19 @@ function estab_message_list_render_table(array $rows, callable $openControl): vo
             . '<strong>Von:</strong> '
             . estab_message_html($from) . '</span><span><strong>An:</strong> '
             . estab_message_html($to) . '</span></span></td>';
-        echo '<td data-label="Betreff und Inhalt"><strong '
-            . 'class="estab-message-list-subject">' . estab_message_html($subject)
-            . '</strong><span class="estab-message-list-excerpt">'
+        echo '<td data-label="Überschrift und Inhalt" '
+            . 'class="estab-message-list-summary">'
+            . '<span class="estab-message-list-field-label">'
+            . 'Vordruck-Überschrift</span><strong '
+            . 'class="estab-message-list-subject'
+            . ($subjectMissing ? ' estab-message-list-subject--empty' : '')
+            . '" data-estab-message-list-heading '
+            . 'data-estab-message-list-heading-empty="'
+            . ($subjectMissing ? 'true' : 'false') . '">'
+            . estab_message_html($subject)
+            . '</strong><span class="estab-message-list-field-label '
+            . 'estab-message-list-content-label">Nachrichteninhalt</span>'
+            . '<span class="estab-message-list-excerpt">'
             . estab_message_html($content) . '</span>';
         if ($attachmentCount > 0) {
             $attachmentLabel = estab_message_list_attachment_label(

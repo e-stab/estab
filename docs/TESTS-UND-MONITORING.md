@@ -1453,6 +1453,26 @@ python3 -B tests/browser/headless_ui.py --handbook-only
 Bei aktiviertem Browser-Gate führt `tests/integration/ci.sh` auch diesen Lauf
 mit einem eigenen Zeitlimit von drei Minuten automatisch aus.
 
+Die Meldungsübersicht wird zusätzlich mit einem fest provisionierten
+S2-Testkonto geprüft. Der fokussierte Lauf sucht einen bekannten, nur als
+Betreff gespeicherten UTF-8-Wert und verlangt ihn als sichtbare
+Vordruck-Überschrift in der Trefferzeile. Chrome vermisst die Liste bei
+Desktop- und Mobilbreite auf Überlauf und Überschneidungen:
+
+```console
+ESTAB_TEST_BASE_URL=http://127.0.0.1:18080 \
+ESTAB_TEST_LOGIN_NAME='Browser Meldungsübersicht' \
+ESTAB_TEST_LOGIN_CODE=brw002 \
+ESTAB_TEST_LOGIN_FUNCTION=S2 \
+ESTAB_TEST_LOGIN_PASSWORD_FILE=secrets/test_login_password.txt \
+ESTAB_TEST_MESSAGE_OVERVIEW_SUBJECT='Erwartete Überschrift' \
+python3 -B tests/browser/headless_ui.py --message-overview
+```
+
+Im vollständigen CI-Gate stammt der bekannte Betreff aus dem zuvor angelegten
+HTTP-Sicherheitsvordruck. Der Browsertest verändert weder Nachricht noch
+Einsatz.
+
 Der vollständige Akzeptanzlauf verwendet anschließend das eigens
 provisionierte Testkonto:
 

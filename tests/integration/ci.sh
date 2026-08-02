@@ -796,6 +796,28 @@ run_browser_acceptance() {
         fi
         run_timed 4m python3 -B tests/browser/headless_ui.py
 
+        echo "CI integration: running real-browser message heading acceptance"
+        overview_login_name='Message Overview S2'
+        overview_login_code=e2m002
+        browser_login_password=$(tr -d '\r\n' <"$ESTAB_TEST_LOGIN_PASSWORD_FILE")
+        sh tests/integration/provision_user.sh \
+            "$overview_login_name" \
+            "$overview_login_code" \
+            S2 \
+            "$browser_login_password"
+        unset browser_login_password
+        export ESTAB_TEST_LOGIN_NAME=$overview_login_name
+        export ESTAB_TEST_LOGIN_CODE=$overview_login_code
+        export ESTAB_TEST_LOGIN_FUNCTION=S2
+        export ESTAB_TEST_MESSAGE_OVERVIEW_SUBJECT='Sicherer UTF-8-Betreff äöü'
+        if [[ -n ${ESTAB_CI_LOG_DIR:-} ]]; then
+            export \
+                ESTAB_BROWSER_ARTIFACT_DIR="$ESTAB_CI_LOG_DIR/browser-message-overview"
+        fi
+        run_timed 3m python3 -B tests/browser/headless_ui.py \
+            --message-overview
+        unset ESTAB_TEST_MESSAGE_OVERVIEW_SUBJECT
+
         echo "CI integration: running real-browser message suggestion acceptance"
         suggestion_login_name=${ESTAB_TEST_TBB_NAME:-Logbook Integration A-W}
         suggestion_login_code=${ESTAB_TEST_TBB_CODE:-e2l001}

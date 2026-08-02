@@ -6092,12 +6092,33 @@ a.estab-message-list-chip:hover {
     min-width: 0;
 }
 
+.estab-message-list-field-label {
+    color: #52657a;
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.045em;
+    line-height: 1.35;
+    margin-bottom: 0.12rem;
+    text-transform: uppercase;
+}
+
 .estab-message-list-subject {
     color: #153c64;
     display: block;
     font-weight: 800;
-    margin-bottom: 0.18rem;
+    line-height: 1.35;
     overflow-wrap: anywhere;
+}
+
+.estab-message-list-subject--empty {
+    color: #607086;
+    font-style: italic;
+    font-weight: 650;
+}
+
+.estab-message-list-content-label {
+    margin-top: 0.55rem;
 }
 
 .estab-message-list-excerpt {
@@ -6365,6 +6386,15 @@ a.estab-message-list-chip:hover {
     .estab-message-list-table td > * {
         grid-column: 2;
         min-width: 0;
+    }
+
+    .estab-message-list-table td.estab-message-list-summary {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .estab-message-list-table td.estab-message-list-summary::before,
+    .estab-message-list-table td.estab-message-list-summary > * {
+        grid-column: 1 / -1;
     }
 
     .estab-message-list-subject,

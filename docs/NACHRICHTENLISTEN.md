@@ -8,8 +8,9 @@ rollenabhängigen Leserechte bleiben dabei unverändert.
 ## Bedienung
 
 Die Suche ist immer sichtbar. Ein Suchbegriff kann eine vollständige lokale
-TBB-Nachweisnummer oder Text aus Rufname, Von, An, Rufnummer, Betreff,
-Nachrichtentext und Verfasserfunktion sein. Die historische technische
+TBB-Nachweisnummer oder Text aus Rufname, Von, An, Rufnummer,
+Vordruck-Überschrift (dem Feld **Betreff**), Nachrichtentext und
+Verfasserfunktion sein. Die historische technische
 Nachrichtennummer und der globale Datenbankschlüssel werden weder als
 Nachweisnummer angezeigt noch über die Nummernsuche ersatzweise gefunden.
 Mehrere normale Wörter werden gemeinsam gesucht; Wortanfänge genügen. Kurze
@@ -35,9 +36,13 @@ Gesamtanzahl, Sortierung und aktuelle Ergebnisseite sind immer ausgeschrieben
 und werden nicht nur über Farbe vermittelt.
 
 Jede Ergebniszeile enthält genau eine eindeutige Aktion zum Öffnen des
-Vordrucks. Sind kanonische Anlagenreferenzen vorhanden, steht direkt bei
-Betreff und Inhalt ein Hinweis „1 Anlage“ beziehungsweise die entsprechende
-Anzahl. Der Hinweis ist keine zweite Detailaktion; nach dem Öffnen zeigt der
+Vordrucks. Die im Nachrichtenvordruck erfasste Überschrift wird vollständig
+und deutlich beschriftet vor dem gekürzten Nachrichtentext angezeigt. Bei
+älteren Datensätzen ohne Betreff steht stattdessen „Keine Überschrift
+angegeben“. Auf schmalen Bildschirmen nutzt dieser Zusammenfassungsbereich die
+gesamte Kartenbreite. Sind kanonische Anlagenreferenzen vorhanden, steht dort
+zusätzlich ein Hinweis „1 Anlage“ beziehungsweise die entsprechende Anzahl.
+Der Hinweis ist keine zweite Detailaktion; nach dem Öffnen zeigt der
 Vordruck die autorisierten Anlagenkarten mit Vorschau- und Downloadaktionen.
 Ungültige oder doppelte Legacy-Fragmente werden weder mitgezählt noch als
 HTML ausgegeben. Auf breiten Bildschirmen bleibt der Tabellenkopf beim

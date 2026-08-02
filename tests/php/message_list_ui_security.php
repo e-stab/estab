@@ -176,8 +176,9 @@ foreach ([
             && str_contains($controls, 'aria-describedby="')
             && str_contains(
                 $controls,
-                'Durchsucht TBB-Nachweisnummer, Betreff, Rufname, Rufnummer, '
-                    . 'Von, An, Verfasserfunktion und Nachrichtentext.'
+                'Durchsucht Vordruck-Überschrift (Betreff), '
+                    . 'TBB-Nachweisnummer, Rufname, Rufnummer, Von, An, '
+                    . 'Verfasserfunktion und Nachrichtentext.'
             ),
         $surface . ' search label or scope help is incomplete'
     );
@@ -348,6 +349,7 @@ $assert(
     'Attachment badge does not use an understandable singular/plural label'
 );
 
+$longSubject = str_repeat('Ü', 255);
 $rows = [
     [
         '00_lfd' => 41,
@@ -393,7 +395,7 @@ $rows = [
         '09_vorrangstufe' => 'eee',
         '10_anschrift' => 'Einsatzabschnitt Süd',
         '12_anhang' => '',
-        '12_betreff' => 'Ohne Anlage',
+        '12_betreff' => $longSubject,
         '12_inhalt' => 'Regulärer Inhalt ohne Anlage',
         '12_abfzeit' => '2026-07-31 12:36:00',
         '13_abseinheit' => 'Abschnitt Süd',
@@ -431,6 +433,39 @@ foreach ([
             && substr_count($table, '<th scope="col">') === 7
             && substr_count($table, 'data-label=') === 21,
         $surface . ' result table lacks semantic or responsive labels'
+    );
+    $assert(
+        str_contains($table, '<th scope="col">Überschrift und Inhalt</th>')
+            && substr_count(
+                $table,
+                'data-estab-message-list-heading '
+            ) === 3
+            && substr_count(
+                $table,
+                'data-estab-message-list-heading-empty="true"'
+            ) === 1
+            && substr_count(
+                $table,
+                'data-estab-message-list-heading-empty="false"'
+            ) === 2
+            && str_contains($table, 'Keine Überschrift angegeben')
+            && str_contains($table, $longSubject)
+            && substr_count(
+                $table,
+                '<span class="estab-message-list-field-label">'
+                    . 'Vordruck-Überschrift</span>'
+            ) === 3,
+        $surface . ' does not expose each complete message-form heading'
+    );
+    $assert(
+        preg_match(
+            '/data-message-id="41".*?data-estab-message-list-heading '
+                . 'data-estab-message-list-heading-empty="false">'
+                . 'Gefahr &lt;\/strong&gt;&lt;script&gt;alert\(&quot;subject&quot;\)'
+                . '&lt;\/script&gt;<\/strong>.*?estab-message-list-excerpt/s',
+            $table
+        ) === 1,
+        $surface . ' heading is missing, misplaced, or not safely escaped'
     );
     $assert(
         str_contains($table, 'TBB-Nachweis 142')
@@ -524,12 +559,41 @@ $listSource = file_get_contents($root . '/4fach/liste.php');
 $mainSource = file_get_contents($root . '/4fach/mainindex.php');
 $toolsSource = file_get_contents($root . '/4fach/tools.php');
 $stylesheet = file_get_contents($root . '/estab-ui.css');
+$browserSource = file_get_contents($root . '/tests/browser/headless_ui.py');
+$ciSource = file_get_contents($root . '/tests/integration/ci.sh');
 foreach (
-    [$overviewSource, $listSource, $mainSource, $toolsSource, $stylesheet]
+    [
+        $overviewSource,
+        $listSource,
+        $mainSource,
+        $toolsSource,
+        $stylesheet,
+        $browserSource,
+        $ciSource,
+    ]
     as $source
 ) {
     $assert(is_string($source), 'Message-list source is unreadable');
 }
+
+$assert(
+    str_contains($browserSource, '--message-overview')
+        && str_contains(
+            $browserSource,
+            'ESTAB_TEST_MESSAGE_OVERVIEW_SUBJECT'
+        )
+        && str_contains($browserSource, 'data-estab-message-list-heading')
+        && str_contains($ciSource, '--message-overview')
+        && str_contains(
+            $ciSource,
+            "ESTAB_TEST_LOGIN_FUNCTION=S2"
+        )
+        && str_contains(
+            $ciSource,
+            "ESTAB_TEST_MESSAGE_OVERVIEW_SUBJECT='Sicherer UTF-8-Betreff äöü'"
+        ),
+    'Real-browser heading acceptance is not wired into the S2 CI gate'
+);
 
 /** Remove migration-reference comments before inspecting executable branches. */
 $withoutPhpComments = static function (string $source): string {
@@ -609,7 +673,8 @@ $assert(
             $overviewGetList,
             'estab_message_list_tbb_number_select_sql ("m")'
         )
-        && str_contains($overviewGetList, 'm.`12_anhang`'),
+        && str_contains($overviewGetList, 'm.`12_anhang`')
+        && str_contains($overviewGetList, 'm.`12_betreff`'),
     'Overview list method uses table configuration outside its method scope'
 );
 
@@ -624,8 +689,9 @@ $adminListSource = (
 ) ? substr($listSource, $adminListStart, $adminListEnd - $adminListStart) : '';
 $assert(
     $adminListSource !== ''
-        && str_contains($adminListSource, 'm.`12_anhang`'),
-    'Second-sighting query does not supply attachment data to the shared renderer'
+        && str_contains($adminListSource, 'm.`12_anhang`')
+        && str_contains($adminListSource, 'm.`12_betreff`'),
+    'Second-sighting query omits heading or attachment data from the shared renderer'
 );
 
 $assert(
@@ -838,7 +904,8 @@ $cssClasses = [
     'controls', 'search-form', 'search-row', 'query', 'quick-filters',
     'more', 'filter-grid', 'active', 'chip', 'resultbar', 'resultcount',
     'sort-summary', 'table-wrap', 'table', 'row', 'priority', 'status',
-    'route', 'correspondents', 'subject', 'excerpt', 'recipients', 'open', 'pager',
+    'route', 'correspondents', 'field-label', 'subject', 'summary', 'excerpt',
+    'recipients', 'open', 'pager',
     'page-status', 'empty', 'updated',
 ];
 foreach ($cssClasses as $class) {
@@ -860,6 +927,13 @@ $assert(
             '.estab-message-list-table td > * {'
         )
         && str_contains($stylesheet, 'grid-column: 2;')
+        && str_contains(
+            $stylesheet,
+            '.estab-message-list-table td.estab-message-list-summary::before,'
+        )
+        && str_contains($stylesheet, 'grid-column: 1 / -1;')
+        && str_contains($stylesheet, '.estab-message-list-subject--empty')
+        && str_contains($stylesheet, 'overflow-wrap: anywhere;')
         && str_contains($stylesheet, '@media (prefers-reduced-motion: reduce)')
         && str_contains($stylesheet, '@media print')
         && str_contains($stylesheet, 'min-height: 2.75rem'),

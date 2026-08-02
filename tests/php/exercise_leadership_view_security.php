@@ -188,7 +188,8 @@ $assert(
 );
 $assert(
     str_contains($tableSource, "'TBB-Nachweis'")
-        && str_contains($tableSource, "'Betreff und Inhalt'")
+        && str_contains($tableSource, "'Überschrift und Inhalt'")
+        && str_contains($tableSource, 'data-estab-message-list-heading')
         && str_contains(
             $tableSource,
             'estab_message_priority_requires_attention'
