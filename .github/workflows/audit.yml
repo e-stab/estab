@@ -511,23 +511,28 @@ jobs:
           fi
 
 
-  workflow-lint:
-    name: GitHub Actions lint
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+workflow-lint:
+  name: GitHub Actions lint
+  runs-on: ubuntu-latest
+  timeout-minutes: 10
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
+  permissions:
+    contents: read
 
-      - name: Run actionlint
-        shell: bash
-        run: |
-          version="1.7.7"
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
 
-          curl --fail --silent --show-error --location \
-            "https://github.com/rhysd/actionlint/releases/download/v${version}/actionlint_${version}_linux_x86_64.tar.gz" \
-            --output actionlint.tar.gz
+    - name: Install and run actionlint
+      shell: bash
+      env:
+        ACTIONLINT_VERSION: "1.7.12"
+      run: |
+        set -euo pipefail
 
-          tar -xzf actionlint.tar.gz actionlint
-          ./actionlint -color
+        bash <(
+          curl -fsSL \
+            https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash
+        ) "${ACTIONLINT_VERSION}"
+
+        ./actionlint -color
