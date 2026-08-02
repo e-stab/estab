@@ -837,6 +837,9 @@ try {
         'accepted S3 hat did not receive all six legacy state/category tables'
     );
 
+    // Compatibility contract for historical/imported E/8 conversation notes.
+    // Newly authored notes use the regular A/4 → Si → LdF → A/W path and gain
+    // their TTB evidence only when that outgoing transport is completed.
     $conversationTtbBefore = (string) $scalar(
         $connection,
         "SELECT CONCAT("
@@ -915,7 +918,7 @@ try {
                 $conversationMessageId,
                 $incidentId
             )['estab_ttb_lfd'] ?? null) === null,
-        'conversation note consumed a TTB number or exposed a message TTB reference'
+        'legacy E/8 conversation note consumed a TTB number or exposed a message TTB reference'
     );
     $stateTimestamp = date('Y-m-d H:i:s');
     $assert(

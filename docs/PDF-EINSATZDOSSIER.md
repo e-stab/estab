@@ -173,8 +173,19 @@ Die Nachweisnummer des Vordrucks stammt in Einzelgenerator, Detailansicht und
 Dossier ausschließlich aus dem ersten verknüpften TBB-Eintrag mit dem exakten
 Typ `nachricht`. Ein späterer append-only LdF-Nachtrag des Typs `korrektur`
 ersetzt diese ursprüngliche Nummer nicht.
-Eine interne Gesprächsnotiz ohne TBB-Nachweis lässt dieses Formularfeld leer,
-statt eine fachlich andere Nummer vorzutäuschen. Davon getrennt verwendet der
+Eine neu erfasste Gesprächsnotiz durchläuft zunächst Si, LdF und Fernmelder.
+Die vom Verfasser festgehaltene ursprüngliche Gesprächsart bleibt dabei vom
+Rufnamen und dem aktiven S6-Beförderungsweg der LdF-Disposition getrennt. Vor
+dem abschließenden Beförderungsnachweis des Fernmelders wird weder ein
+TBB-Eintrag des Typs `nachricht` noch ein generierter PDF-Vordruck erzeugt.
+Erst der Abschluss in Status `8` erzeugt beides und stellt dadurch auch die
+reguläre TBB-Nachweisnummer für Einzelvordruck und Dossier bereit.
+
+Historische Gesprächsnotizen, die bereits als Richtung `E` in Status `8` ohne
+TBB-Nachweis gespeichert sind, bleiben unverändert les- und exportierbar. Bei
+ihnen bleibt das TBB-Formularfeld leer, statt eine fachlich andere Nummer
+vorzutäuschen; es wird weder rückwirkend ein TBB-Eintrag erzeugt noch der
+Datensatz in den neuen Ausgangslauf verschoben. Davon getrennt verwendet der
 kanonische Archivdateiname stets die positive einsatzlokale Nachrichtennummer
 als technische Identität. Diese Nummer wird nicht ersatzweise in das sichtbare
 Nachweisfeld gedruckt; dadurch bleiben Download, Archiv und Neu-Rendering auch

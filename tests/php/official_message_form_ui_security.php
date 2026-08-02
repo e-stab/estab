@@ -158,7 +158,10 @@ $requiredGuideContent = [
     9 => ['Vorrangstufe', 'Sofort', 'Blitz', 'Staatsnot'],
     10 => ['Immer ausfüllen', 'Dienststellen-', 'Eigennamen'],
     11 => ['Rufnummer', 'Gesprächsnotizen'],
-    12 => ['eigenständig', 'übermittelt', 'aufgenommen', 'notiert'],
+    12 => [
+        'eigenständig', 'übermittelt', 'aufgenommen', 'notiert',
+        'ursprüngliche', 'LdF', 'Rufname', 'Beförderungsweg', 'Fernmelder',
+    ],
     13 => ['Inhalt ist immer auszufüllen', 'Betreff'],
     14 => ['Inhalt ist immer auszufüllen', 'so kurz wie möglich', 'Blockschrift', 'Nachrichtentext'],
     15 => ['Immer ausfüllen', 'Absender', 'Eigennamen'],
@@ -700,11 +703,14 @@ $assert(
 $assert(
     str_contains($view, 'data-estab-conversation-medium')
         && str_contains($view, 'data-estab-conversation-medium-status')
+        && str_contains($view, 'data-estab-conversation-next-steps')
+        && str_contains($view, 'Gesprächsnotiz zur Sichtung geben')
+        && str_contains($view, 'Zur Sichtung geben')
         && str_contains(
             $view,
             'document.getElementById("f_11_gesprnotiz")'
         ),
-    'The initial staff form lacks the stable conversation-medium toggle contract'
+    'The conversation-note UI lacks its medium or downstream-workflow contract'
 );
 $conversationAccessStart = strpos(
     $controller,
@@ -731,6 +737,10 @@ $assert(
             $conversationAccess
         ) === 1,
     'The dedicated conversation-note task does not enable transport field 1 server-side'
+);
+$assert(
+    str_contains($controller, '"Stab_gesprnoti" => "01_datum"'),
+    'The editable original-conversation time is not visibly prefilled'
 );
 $assert(
     str_contains($view, 'official_message_ttb_evidence_text()')

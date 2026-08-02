@@ -1277,8 +1277,9 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
 - bedingte Übermittlungsart im Stab: Ohne aktivierte **Gesprächsnotiz** müssen
   Telefon, Funk, Telefax, DFÜ und Kurier/Melder gesperrt bleiben. Nach dem
   Aktivieren sind sie direkt im Vordruck auswählbar; genau eine Auswahl ist
-  für den Abschluss Pflicht und bleibt über Gesprächsnotiz- sowie
-  Anlagenrückwege erhalten,
+  für das Speichern als offene Ausgangsnachricht Pflicht und bleibt über
+  Gesprächsnotiz- sowie Anlagenrückwege erhalten. Das Formular erklärt den
+  anschließenden Weg über Si, LdF und Fernmelder sichtbar,
 - direkter Upload über **Datei hochladen** und Upload mit der regulären
   **Absenden**-Aktion; dabei müssen Formularkopf, Aktionsleiste und Listen die
   kanonische Anlagenzahl anzeigen, Karten Bildminiatur beziehungsweise lazy
@@ -1313,17 +1314,26 @@ Falls `ESTAB_ADMIN_USER` in `.env` geändert wurde, muss
   Nachricht, freie Anhänge bleiben auf Uploader, S2, Si und LdF begrenzt;
   fremde Liste, Vorschau, Download, Auswahl und ein manipuliertes finales
   Speichern müssen geschlossen scheitern,
-- Abschluss einer echten Gesprächsnotiz über den historischen Controller,
-  anschließende Erzeugung durch den produktiven Vordruckgenerator, Auffinden in
-  der geschützten Liste, aktuellen In-Memory-Download mit gemeinsamem
-  Dossierrenderer und eigenem Layout-Header sowie getrennten Archivdownload
-  mit PDF-Header/-Trailer und MIME-Headern; danach ersetzt der Test
-  ausschließlich in seinem Wegwerfstack das Archiv durch ein gültiges,
-  absichtlich veraltetes Marker-PDF. Der aktuelle Abzug darf diesen Marker
-  nicht enthalten, der parameterlose Archivdownload muss ihn enthalten und
-  dessen SHA-256 muss nach Backup und Restore unverändert sein. Leere,
-  unbekannte, nichtskalare oder für Anhänge gesetzte Layoutparameter werden
-  abgewiesen,
+- Anlage einer echten Gesprächsnotiz über den produktiven Controller als
+  offener Ausgang in Status 4. Der Rollenlauf beweist anschließend die formale
+  Si-Prüfung einschließlich Rückgabe und typwahrender Korrektur, die
+  LdF-Auswahl von Rufname und aktivem S6-Beförderungsweg sowie den
+  Beförderungsnachweis durch den Fernmelder. Fehlender Rufname oder fehlender
+  Weg liefert HTTP 422 und darf auch keine Teilwerte persistieren.
+  Ursprüngliche Gesprächsart und disponierter Weg werden absichtlich
+  verschieden gewählt und bleiben getrennt; TTB-Eintrag und generierter
+  Vordruck dürfen erst beim Abschluss in Status 8 entstehen. Eine daraus
+  abgeleitete Antwort muss als frische gewöhnliche Nachricht ohne geerbte
+  Aufnahme- oder Rollenbelege beginnen,
+- unabhängiger PDF-Archivnachweis über eine plausible terminale
+  Wegwerfstack-Fixture: geschützte Liste, aktueller In-Memory-Download mit
+  gemeinsamem Dossierrenderer und eigenem Layout-Header sowie getrennter
+  Archivdownload mit PDF-Header/-Trailer und MIME-Headern. Danach ersetzt der
+  Test ausschließlich sein Archiv durch ein gültiges, absichtlich veraltetes
+  Marker-PDF. Der aktuelle Abzug darf diesen Marker nicht enthalten, der
+  parameterlose Archivdownload muss ihn enthalten und dessen SHA-256 muss nach
+  Backup und Restore unverändert sein. Leere, unbekannte, nichtskalare oder für
+  Anhänge gesetzte Layoutparameter werden abgewiesen,
 - Basic-Auth-Adminseite mit escaped technischem Benutzernamen, ausdrücklicher
   Trennung vom eStab-Funktionskonto; der Einsatzabschluss prüft einen
   unmittelbar zuvor gleichlang manipulierten Pflichtanhang und liefert HTTP

@@ -101,6 +101,21 @@ $newFollowup = estab_message_followup_new_record([
     'msglfd' => '73',
     'estab_ttb_lfd' => '142',
     '04_nummer' => '9142',
+    '01_medium' => 'Fe',
+    '01_datum' => '2026-08-02 10:18:00',
+    '01_zeichen' => 'source',
+    '11_gesprnotiz' => 't',
+    '02_zeit' => '2026-08-02 10:20:00',
+    '02_zeichen' => 'ldf001',
+    '03_datum' => '2026-08-02 10:21:00',
+    '03_zeichen' => 'aw0001',
+    '05_gegenstelle' => 'Florian Quelle',
+    '06_befweg' => 'Quellweg',
+    '06_befwegausw' => 'Fu',
+    'estab_fernmeldeplan_eintrag_id' => '44',
+    'transportweg_bestaetigt' => '1',
+    '15_quitdatum' => '2026-08-02 10:19:00',
+    '15_quitzeichen' => 'si0001',
     '12_betreff' => 'AW: Lage Süd',
 ]);
 $assert(
@@ -108,8 +123,24 @@ $assert(
         && !array_key_exists('msglfd', $newFollowup)
         && !array_key_exists('estab_ttb_lfd', $newFollowup)
         && $newFollowup['04_nummer'] === '9142'
+        && $newFollowup['01_medium'] === ''
+        && $newFollowup['01_datum'] === ''
+        && $newFollowup['01_zeichen'] === ''
+        && $newFollowup['11_gesprnotiz'] === 'f'
+        && $newFollowup['02_zeit'] === ''
+        && $newFollowup['02_zeichen'] === ''
+        && $newFollowup['03_datum'] === ''
+        && $newFollowup['03_zeichen'] === ''
+        && $newFollowup['05_gegenstelle'] === ''
+        && $newFollowup['06_befweg'] === ''
+        && $newFollowup['06_befwegausw'] === ''
+        && $newFollowup['estab_fernmeldeplan_eintrag_id'] === null
+        && $newFollowup['fernmeldeplan_eintrag_id'] === ''
+        && $newFollowup['transportweg_bestaetigt'] === ''
+        && $newFollowup['15_quitdatum'] === ''
+        && $newFollowup['15_quitzeichen'] === ''
         && $newFollowup['12_betreff'] === 'AW: Lage Süd',
-    'Derived follow-up retained source record or visible TBB identity'
+    'Derived follow-up retained source identity or completed workflow evidence'
 );
 try {
     estab_message_derived_subject('Lage', 'XX');

@@ -465,6 +465,25 @@ function estab_message_followup_new_record(array $draft): array
 {
     $draft = estab_message_new_record_fields($draft);
     $draft['00_lfd'] = '';
+    // A reply/forward is a new object. It may inherit quoted content and
+    // contact suggestions, but never the source capture, message type,
+    // acceptance, LdF disposition or actual transport evidence. This is also
+    // the safe boundary when the author deliberately turns the new draft into
+    // a conversation note: every role supplies fresh evidence for that object.
+    foreach ([
+        '01_medium', '01_datum', '01_zeichen', '11_gesprnotiz',
+        '02_zeit', '02_zeichen', '03_datum', '03_zeichen',
+        '05_gegenstelle', '06_befweg', '06_befwegausw',
+        'transportweg_bestaetigt', 'transport_rueckgabegrund',
+        'incoming_transport_confirmed',
+        'incoming_transport_correction_reason',
+        '15_quitdatum', '15_quitzeichen',
+    ] as $evidenceField) {
+        $draft[$evidenceField] = '';
+    }
+    $draft['11_gesprnotiz'] = 'f';
+    $draft['estab_fernmeldeplan_eintrag_id'] = null;
+    $draft['fernmeldeplan_eintrag_id'] = '';
     // A reply/forward is not linked to a TBB row until its own transport is
     // documented. Never carry the source message's visible evidence number.
     unset($draft['msglfd'], $draft['estab_ttb_lfd']);
@@ -1081,9 +1100,10 @@ function estab_message_insert_numbered(
                     $recordId,
                     $event
                 );
-                // Internal Gesprächsnotizen share the legacy incoming-message
-                // storage shape but are not received radio/telephone traffic
-                // and therefore must not consume a TBB number.
+                // Historical/imported Gesprächsnotizen can still use the old
+                // incoming-message shape. They are not received transport and
+                // therefore must not retroactively consume a TBB number. New
+                // notes use the regular outgoing Si/LdF/A-W workflow.
                 if (
                     $direction === 'E'
                     && ($event['event_type'] ?? null)
@@ -1693,6 +1713,18 @@ function estab_message_update_locked_operator_stage(
                 ];
             }
             if ($direction === 'A' && $status === 1) {
+                $remoteCallsign = estab_message_single_line_value(
+                    $fields['05_gegenstelle'] ?? null,
+                    128,
+                    false
+                );
+                if ($remoteCallsign === null) {
+                    throw new EstabDvInputException(
+                        'LdF muss einen gültigen Rufnamen der Gegenstelle angeben.'
+                    );
+                }
+                $fields['05_gegenstelle'] = $remoteCallsign;
+                $event['snapshot']['remote_callsign'] = $remoteCallsign;
                 $previousRouteStatement = estab_message_execute(
                     $connection,
                     'SELECT `estab_fernmeldeplan_eintrag_id`,'

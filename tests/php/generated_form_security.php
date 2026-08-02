@@ -36,7 +36,7 @@ $untrackedMessageForm = new vordruckaspdf([
 $assert(
     $untrackedMessageForm->messageNumber === 42
         && $untrackedMessageForm->db_dataset['04_nummer'] === '',
-    'conversation note conflates its archive identity with a TBB number'
+    'legacy untracked form conflates its archive identity with a TBB number'
 );
 $trackedMessageForm = new vordruckaspdf([
     'einsatz_id' => 17,

@@ -137,16 +137,16 @@ $assert(
         && $boundIncoming['13_abseinheit'] === 'Leitstelle Gegenstelle',
     'repository did not authoritatively address an incoming message locally'
 );
-$boundConversationNote = estab_message_bind_command_post([
+$boundLegacyConversationNote = estab_message_bind_command_post([
     '04_richtung' => 'E',
     '10_anschrift' => 'vom Browser gefälscht',
     '11_gesprnotiz' => 't',
     '13_abseinheit' => 'vom Browser gefälscht',
 ], $commandPostIncident);
 $assert(
-    $boundConversationNote['10_anschrift'] === 'FüSt Einsatz 7'
-        && $boundConversationNote['13_abseinheit'] === 'FüSt Einsatz 7',
-    'repository did not bind both sides of an internal conversation note'
+    $boundLegacyConversationNote['10_anschrift'] === 'FüSt Einsatz 7'
+        && $boundLegacyConversationNote['13_abseinheit'] === 'FüSt Einsatz 7',
+    'repository did not preserve command-post binding for a legacy incoming conversation note'
 );
 $boundOutgoing = estab_message_bind_command_post([
     '04_richtung' => 'A',

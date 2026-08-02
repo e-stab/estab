@@ -3115,11 +3115,10 @@ assert_body_absent 'Anmeldung erforderlich'
 assert_body 'href="./stabetb/etb.php"'
 assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 
-# A completed staff conversation note must first exercise the real application
-# generator and publish a downloadable PDF. The test then replaces only this
-# disposable archive with a valid, deliberately stale marker PDF: the current
-# layout must ignore that marker while the archive's exact byte sequence is
-# carried through the later backup/restore roundtrip.
+# A staff conversation note must first exercise its real two-step authoring
+# form and persist as an open outgoing message for formal review. A separate
+# terminal fixture below keeps the generated-PDF archive/restore regression
+# independent from the deliberately unfinished workflow.
 vordruck_marker="${workflow_marker}_VORDRUCK"
 forged_vordruck_marker="${workflow_marker}_FORGED_NOTE"
 vordruck_subject='HTTP Gesprächsnotiz'
@@ -3553,7 +3552,7 @@ staged_note_return_attachment_request_token=$(
     message_attachment_request_token_from_body
 )
 
-submit_completed_conversation_note() {
+submit_open_conversation_note() {
     expected_status=$1
     assert_status "$expected_status" \
         --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
@@ -3590,19 +3589,28 @@ submit_completed_conversation_note() {
         --data-urlencode '17_vermerke=Backup-Restore-Nachweis' \
         "$base_url/4fach/mainindex.php"
 }
-submit_completed_conversation_note 200
+submit_open_conversation_note 200
 if grep -Eq 'Fatal error|Uncaught (Error|TypeError)|Warning:' "$body"; then
     printf 'HTTP smoke: PHP runtime error leaked while generating a form\n' >&2
     exit 1
 fi
-submit_completed_conversation_note 303
+submit_open_conversation_note 303
 conversation_evidence_count=$(
-    printf "SELECT COUNT(*) FROM nv_nachrichten n JOIN nv_nachrichten_ereignisse e ON e.message_id = n.\`00_lfd\` AND e.einsatz_id = n.einsatz_id WHERE n.\`12_inhalt\` = '%s' AND n.\`01_zeichen\` = '%s' AND n.\`14_zeichen\` = '%s' AND n.\`14_funktion\` = '%s' AND COALESCE(n.\`15_quitzeichen\`, '') = '' AND COALESCE(n.\`15_quitdatum\`, '') = '' AND e.event_type = 'conversation_note_created' AND e.actor_code = '%s' AND e.actor_function = '%s' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.object_type')) = 'conversation_note' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.author_code')) = '%s' AND JSON_EXTRACT(e.field_snapshot, '$.review_required') = FALSE;\n" \
+    printf "SELECT COUNT(*) FROM nv_nachrichten n JOIN nv_nachrichten_ereignisse e ON e.message_id = n.\`00_lfd\` AND e.einsatz_id = n.einsatz_id WHERE n.\`12_inhalt\` = '%s' AND n.\`04_richtung\` = 'A' AND n.\`x00_status\` = 4 AND n.\`x01_abschluss\` = 'f' AND n.\`01_zeichen\` = '%s' AND n.\`14_zeichen\` = '%s' AND n.\`14_funktion\` = '%s' AND n.\`02_zeit\` IS NULL AND COALESCE(n.\`02_zeichen\`, '') = '' AND n.\`03_datum\` IS NULL AND COALESCE(n.\`03_zeichen\`, '') = '' AND COALESCE(n.\`15_quitzeichen\`, '') = '' AND n.\`15_quitdatum\` IS NULL AND e.event_type = 'conversation_note_created' AND e.from_status IS NULL AND e.to_status = 4 AND e.actor_code = '%s' AND e.actor_function = '%s' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.direction')) = 'A' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.object_type')) = 'conversation_note' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.author_code')) = '%s' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.review_required')) = 'true' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.ldf_disposition_required')) = 'true' AND JSON_UNQUOTE(JSON_EXTRACT(e.field_snapshot, '$.transport_evidence_required')) = 'true';\n" \
         "$vordruck_marker" "$test_code" "$test_code" "$test_function" \
         "$test_code" "$test_function" "$test_code" | db_sql
 )
 if [ "$conversation_evidence_count" != 1 ]; then
-    printf 'HTTP smoke: conversation-note actor/mark evidence is inconsistent\n' >&2
+    printf 'HTTP smoke: open conversation-note workflow evidence is inconsistent\n' >&2
+    exit 1
+fi
+conversation_initial_state=$(
+    printf "SELECT CONCAT(\`04_richtung\`, '|', \`x00_status\`, '|', \`x01_abschluss\`, '|', IF(\`05_gegenstelle\` IS NULL OR \`05_gegenstelle\` = '', 'unset', 'set'), '|', IF(\`06_befweg\` IS NULL OR \`06_befweg\` = '', 'unset', 'set'), '|', COALESCE(\`estab_fernmeldeplan_eintrag_id\`, 0), '|', \`x04_druck\`) FROM nv_nachrichten WHERE \`12_inhalt\` = '%s';\n" \
+        "$vordruck_marker" | db_sql
+)
+if [ "$conversation_initial_state" != 'A|4|f|unset|unset|0|f' ]; then
+    printf 'HTTP smoke: conversation note bypassed Si/LdF/A-W: %s\n' \
+        "$conversation_initial_state" >&2
     exit 1
 fi
 conversation_medium_stored=$(
@@ -3649,26 +3657,93 @@ printf '%s\n' \
     db_sql >/dev/null
 conversation_matrix_fixture_changed=0
 
-stored_vordruck=$(vordruck_name_for_marker "$vordruck_marker")
-if ! printf '%s' "$stored_vordruck" |
-    grep -Eq '^[A-Za-z0-9_]+ Einsatz-[1-9][0-9]* [1-9][0-9]* [EA][.]pdf$'; then
-    printf 'HTTP smoke: completed workflow produced no safe generated-form name\n' >&2
+# The conversation note deliberately remains open for Si. Keep the generic
+# archive/download/restore regression independent by publishing a separate,
+# terminal renderer fixture with its own canonical TTB link. Workflow evidence
+# is tested through the role-complete integration suite, not fabricated here.
+pdf_archive_marker="${workflow_marker}_PDF_ARCHIVE"
+db_sql >/dev/null <<SQL
+START TRANSACTION;
+INSERT INTO nv_nachrichten (
+  einsatz_id, 01_medium, 01_datum, 01_zeichen,
+  02_zeit, 02_zeichen, 03_datum, 03_zeichen,
+  04_richtung, 04_nummer, 05_gegenstelle,
+  07_durchspruch, 09_vorrangstufe, 10_anschrift,
+  11_rufnummer, 11_gesprnotiz, 12_anhang, 12_betreff,
+  12_inhalt, 12_abfzeit, 13_abseinheit,
+  14_zeichen, 14_funktion, 15_quitdatum, 15_quitzeichen,
+  16_empf, 17_vermerke,
+  x00_status, x01_abschluss, x02_sperre, x03_sperruser,
+  x04_druck, x05_druck_d
+)
+SELECT
+  source.einsatz_id, 'Fu', CURRENT_TIMESTAMP, '${legacy_registration_code}',
+  CURRENT_TIMESTAMP, '${account_ldf_code}', NULL, '',
+  'E', (
+    SELECT COALESCE(MAX(numbered.\`04_nummer\`), 0) + 1
+      FROM nv_nachrichten AS numbered
+     WHERE numbered.einsatz_id = source.einsatz_id
+  ), 'HTTP-PDF-Gegenstelle',
+  'D', 'eee', source.\`13_abseinheit\`,
+  '', 'f', '', 'PDF-Archiv- und Layoutnachweis',
+  '${pdf_archive_marker}', CURRENT_TIMESTAMP, 'HTTP-PDF-Absender',
+  '', '', CURRENT_TIMESTAMP, '${account_si_code}',
+  '${test_function}_bl,S2_rt,', 'Technische PDF-Testfixture',
+  8, 't', 'f', '', 't', CURRENT_TIMESTAMP
+FROM nv_nachrichten AS source
+WHERE source.\`12_inhalt\` = '${vordruck_marker}'
+LIMIT 1;
+SET @estab_pdf_archive_message_id = LAST_INSERT_ID();
+INSERT INTO nv_tbb (
+  einsatz_id, estab_shift_id, tbb_time, tbb_aktion, tbb_bemerk,
+  tbb_funktion, tbb_kuerzel, tbb_benutzer,
+  estab_event_time, estab_entry_type, estab_message_id,
+  estab_correction_of, estab_personnel_duty, estab_channel,
+  estab_message_route, estab_operations, estab_receipt
+)
+SELECT
+  message_row.einsatz_id, NULL, CURRENT_TIMESTAMP,
+  'Betriebsablauf / Ereignis / Störung: Nachricht aufgenommen',
+  'Technische, terminale PDF-Rendererfixture',
+  '', 'system', 'eStab-System', CURRENT_TIMESTAMP, 'nachricht',
+  message_row.\`00_lfd\`, NULL, '', 'Fu',
+  'von HTTP-PDF-Absender an Führungsstelle',
+  'Nachricht aufgenommen. Betreff: PDF-Archiv- und Layoutnachweis',
+  'bearbeitet durch ${legacy_registration_code}'
+FROM nv_nachrichten AS message_row
+WHERE message_row.\`00_lfd\` = @estab_pdf_archive_message_id;
+SET @estab_pdf_archive_message_id = NULL;
+COMMIT;
+SQL
+pdf_archive_ttb_count=$(
+    printf "SELECT COUNT(*) FROM nv_tbb AS t JOIN nv_nachrichten AS n ON n.\`00_lfd\` = t.estab_message_id AND n.einsatz_id = t.einsatz_id WHERE n.\`12_inhalt\` = '%s' AND t.estab_entry_type = 'nachricht';\n" \
+        "$pdf_archive_marker" | db_sql
+)
+if [ "$pdf_archive_ttb_count" != 1 ]; then
+    printf 'HTTP smoke: terminal PDF fixture has no unique TTB link\n' >&2
     exit 1
 fi
+stored_vordruck=$(vordruck_name_for_marker "$pdf_archive_marker")
+if ! printf '%s' "$stored_vordruck" |
+    grep -Eq '^[A-Za-z0-9_]+ Einsatz-[1-9][0-9]* [1-9][0-9]* [EA][.]pdf$'; then
+    printf 'HTTP smoke: PDF archive fixture produced no safe generated-form name\n' >&2
+    exit 1
+fi
+stage_stale_vordruck_archive "$stored_vordruck"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/vordrucke.php"
 assert_body "$stored_vordruck"
 assert_body 'layout=current'
 assert_body 'PDF im aktuellen Layout öffnen'
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
-    --get \
-    --data-urlencode 'area=vordruck' \
-    --data-urlencode "file=$stored_vordruck" \
+    --get --data-urlencode 'area=vordruck' \
+    --data-urlencode "file=$stored_vordruck" --data-urlencode 'layout=current' \
     "$base_url/4fach/download.php"
 assert_pdf_body
 for header_pattern in \
     '^Content-Type: application/pdf' \
-    '^Content-Disposition: inline;'
+    '^Content-Disposition: inline;' \
+    '^X-eStab-PDF-Layout: current'
 do
     if ! grep -Eiq "$header_pattern" "$headers"; then
         printf 'HTTP smoke: generated-form header missing: %s\n' \
@@ -3677,7 +3752,6 @@ do
     fi
 done
 generated_vordruck_sha256=$(file_sha256 "$body")
-stage_stale_vordruck_archive "$stored_vordruck"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     --get \
     --data-urlencode 'area=vordruck' \

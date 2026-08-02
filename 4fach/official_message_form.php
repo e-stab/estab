@@ -577,7 +577,7 @@ HTML;
             ],
             12 => [
                 'title' => 'Gesprächsnotiz',
-                'text' => 'Kreuzen Sie Gesprächsnotiz an, wenn Sie die Nachricht eigenständig übermittelt, aufgenommen oder notiert haben.',
+                'text' => 'Kreuzen Sie Gesprächsnotiz an, wenn Sie ein Gespräch eigenständig übermittelt, aufgenommen oder notiert haben. Die oben gewählte Übermittlungsart dokumentiert dieses ursprüngliche Gespräch. Nach der formalen Sichtung ergänzt LdF Rufname und Beförderungsweg; der Fernmelder übernimmt anschließend den Beförderungsnachweis.',
             ],
             13 => [
                 'title' => 'Inhalt – Betreff',
@@ -1397,7 +1397,11 @@ HTML;
                         : 'Anlage hinzufügen')
                     . '</a>';
                 echo '<button type="submit" name="absenden_x" value="1" '
-                    . 'class="estab-button estab-button-primary">Absenden</button>';
+                    . 'class="estab-button estab-button-primary">'
+                    . ($this->task === 'Stab_gesprnoti'
+                        ? 'Zur Sichtung geben'
+                        : 'Absenden')
+                    . '</button>';
                 echo '<button type="submit" name="abbrechen_x" value="1" '
                     . 'class="estab-button estab-button-ghost" formnovalidate>'
                     . 'Abbrechen</button>';
@@ -1525,7 +1529,7 @@ HTML;
     {
         $hasTransport = in_array(
             $this->task,
-            ['LdF-Eingang', 'LdF-Ausgang', 'FM-Ausgang'],
+            ['Stab_gesprnoti', 'LdF-Eingang', 'LdF-Ausgang', 'FM-Ausgang'],
             true
         ) || (bool)($this->feld[6] ?? false);
         if (!$hasTransport) {
@@ -1533,11 +1537,29 @@ HTML;
         }
         echo '<section class="estab-message-workflow-panel" '
             . 'aria-labelledby="estab-message-workflow-title">';
-        echo '<div><span class="estab-section-kicker">Digitale Bearbeitung</span>'
-            . '<h2 id="estab-message-workflow-title">Betriebliche Ergänzungen</h2>'
-            . '<p>Diese Angaben steuern den digitalen Ablauf und liegen deshalb '
-            . 'außerhalb des unveränderten amtlichen Rasters.</p></div>';
+        if ($this->task === 'Stab_gesprnoti') {
+            echo '<div><span class="estab-section-kicker">Weiterer Nachrichtenlauf</span>'
+                . '<h2 id="estab-message-workflow-title">Gesprächsnotiz zur Sichtung geben</h2>'
+                . '<p>Die im Vordruck ausgewählte Übermittlungsart beschreibt das '
+                . 'ursprüngliche Gespräch. Rufname und Beförderungsweg werden erst '
+                . 'in den folgenden Bearbeitungsschritten ergänzt.</p></div>';
+        } else {
+            echo '<div><span class="estab-section-kicker">Digitale Bearbeitung</span>'
+                . '<h2 id="estab-message-workflow-title">Betriebliche Ergänzungen</h2>'
+                . '<p>Diese Angaben steuern den digitalen Ablauf und liegen deshalb '
+                . 'außerhalb des unveränderten amtlichen Rasters.</p></div>';
+        }
         echo '<div class="estab-message-workflow-fields">';
+        if ($this->task === 'Stab_gesprnoti') {
+            echo '<fieldset data-estab-conversation-next-steps>'
+                . '<legend>Nächste Schritte</legend><ol>'
+                . '<li><strong>Si</strong> prüft die Gesprächsnotiz formal.</li>'
+                . '<li><strong>LdF</strong> wählt Rufname und freigegebenen '
+                . 'S6-Beförderungsweg.</li>'
+                . '<li><strong>Fernmelder</strong> übernimmt die Nachricht und '
+                . 'führt den Beförderungsnachweis.</li>'
+                . '</ol></fieldset>';
+        }
         if ($this->task === 'LdF-Eingang') {
             $original = (string)(
                 $this->formdata['incoming_transport_original_medium'] ?? ''

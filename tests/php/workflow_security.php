@@ -930,12 +930,21 @@ foreach ([
     ['14_funktion' => 'S6'],
     ['15_quitdatum' => '30122000'],
     ['15_quitzeichen' => 'si0001'],
+    ['02_zeit' => '1015'],
+    ['02_zeichen' => 'ldf001'],
+    ['03_datum' => '1016'],
+    ['03_zeichen' => 'aw0001'],
+    ['05_gegenstelle' => 'Gefälschter Rufname'],
+    ['06_befweg' => 'Gefälschter Beförderungsweg'],
+    ['06_befwegausw' => 'Fu'],
+    ['fernmeldeplan_eintrag_id' => '17'],
+    ['transportweg_bestaetigt' => '1'],
 ] as $forgedConversationMark) {
     $assert(!estab_workflow_route_allowed(
         $staff,
         'POST',
         ['task' => 'Stab_gesprnoti'] + $forgedConversationMark
-    ), 'forged conversation-note identity or review mark accepted');
+    ), 'forged conversation-note identity, review or disposition mark accepted');
 }
 $assert(estab_workflow_route_allowed(
     $staff,

@@ -1410,6 +1410,59 @@ try {
         'A/W saved before the LdF stage was complete'
     );
 
+    $missingCallsignRejected = false;
+    try {
+        estab_message_update_locked_operator_stage(
+            $connection,
+            $messageTable,
+            $raceMessageId,
+            $ldfIdentity,
+            'A',
+            1,
+            [
+                '02_zeit' => '2026-07-23 12:29:00',
+                '02_zeichen' => 'ldf001',
+                '05_gegenstelle' => '',
+                'estab_fernmeldeplan_eintrag_id' => $telecomEntryId,
+                'x00_status' => 2,
+                'x01_abschluss' => 'f',
+                'x02_sperre' => 'f',
+                'x03_sperruser' => '',
+            ],
+            message_db_event(
+                'ldf_dispatched',
+                'Concurrency LdF',
+                'ldf001',
+                'LdF',
+                'Fernmelder',
+                1,
+                2,
+                ['probe' => 'missing-callsign']
+            )
+        );
+    } catch (EstabDvInputException) {
+        $missingCallsignRejected = true;
+    }
+    $afterMissingCallsign = estab_message_fetch_by_id(
+        $connection,
+        $messageTable,
+        $raceMessageId
+    );
+    message_db_assert(
+        $missingCallsignRejected
+            && is_array($afterMissingCallsign)
+            && (int) $afterMissingCallsign['x00_status'] === 1
+            && estab_datetime_is_unset($afterMissingCallsign['02_zeit'])
+            && (string) $afterMissingCallsign['02_zeichen'] === ''
+            && (string) $afterMissingCallsign['05_gegenstelle'] === ''
+            && (int) ($afterMissingCallsign[
+                'estab_fernmeldeplan_eintrag_id'
+            ] ?? 0) === 0
+            && (string) $afterMissingCallsign['x02_sperre'] === 't'
+            && (string) $afterMissingCallsign['x03_sperruser'] === 'ldf001',
+        'Repository accepted or partially persisted an empty LdF callsign'
+    );
+
     // Both parallel LdF requests carry the same once-valid lock and form data.
     // The first one advances to status 2; the second must become a stale save.
     $ldfRaceBarrier = sys_get_temp_dir() . '/estab-message-ldf-race-' . $token;
@@ -1495,6 +1548,7 @@ try {
             [
                 '02_zeit' => '2026-07-23 12:31:00',
                 '02_zeichen' => 'ldf001',
+                '05_gegenstelle' => 'Florian 1',
                 'x00_status' => 2,
             ],
             message_db_event(

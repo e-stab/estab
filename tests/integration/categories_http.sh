@@ -481,13 +481,13 @@ SQL
 )
 assert_numeric 'workflow message' "$message_id"
 
-# The main workflow marker is an outgoing draft still waiting for mandatory
-# formal Si review. S2 receives its red copy only at terminal status 8 and must
-# therefore use the completed conversation-note fixture for master-category
-# management instead of bypassing the message object boundary.
+# The main workflow marker and the conversation note are both still waiting for
+# mandatory review. S2 therefore uses the independent terminal PDF/archive
+# fixture, whose red copy exercises the real message-object boundary without
+# fabricating a completed conversation workflow in this category-only test.
 redcopy_message_id=$(db_sql <<SQL
 SELECT \`00_lfd\` FROM \`nv_nachrichten\`
- WHERE \`12_inhalt\` = '${workflow_marker}_VORDRUCK'
+ WHERE \`12_inhalt\` = '${workflow_marker}_PDF_ARCHIVE'
    AND \`x00_status\` = 8
    AND FIND_IN_SET('S2_rt', \`16_empf\`) > 0
  ORDER BY \`00_lfd\` DESC LIMIT 1;

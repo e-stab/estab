@@ -117,6 +117,7 @@ class nachrichten4fach {
       $editableTimestampField = array (
         "FM-Eingang" => "01_datum",
         "FM-Eingang_Anhang" => "01_datum",
+        "Stab_gesprnoti" => "01_datum",
         "LdF-Eingang" => "02_zeit",
         "LdF-Ausgang" => "02_zeit",
         "FM-Ausgang" => "03_datum"

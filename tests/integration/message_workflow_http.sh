@@ -98,6 +98,9 @@ incoming_phone="+49 711 ${identity_seed}"
 incoming_subject="E2E Eingang ${identity_seed}"
 outgoing_marker="E2EOUT_${identity_seed}_dv"
 outgoing_subject="E2E Ausgang ${identity_seed}"
+conversation_marker="E2ECONV_${identity_seed}_dv"
+conversation_subject="E2E Gesprächsnotiz ${identity_seed}"
+conversation_callsign="E2E-Gespräch-Rufname"
 mapping_incoming_marker="E2EMAPIN_${identity_seed}_dv"
 mapping_outgoing_marker="E2EMAPOUT_${identity_seed}_dv"
 reply_marker="E2EREPLY_${identity_seed}_dv"
@@ -116,6 +119,7 @@ do
 done
 for marker in \
     "$incoming_marker" "$outgoing_marker" \
+    "$conversation_marker" \
     "$mapping_incoming_marker" "$mapping_outgoing_marker" \
     "$reply_marker" "$forward_marker"
 do
@@ -141,6 +145,8 @@ incoming_id=0
 incoming_number=0
 outgoing_id=0
 outgoing_number=0
+conversation_id=0
+conversation_number=0
 telecom_route_id=0
 telecom_route_b_id=0
 telecom_replaced_route_id=0
@@ -1001,7 +1007,7 @@ SQL
     # A browser-required checkbox is repeated server-side: omitting it keeps
     # the exact locked record at status 1 without appending evidence.
     ldf_csrf=$(csrf_from_body)
-    ldf_time=$(date '+%H%M')
+    ldf_time=$(app_tactical_clock)
     assert_status 422 "keep LdF incoming open without confirmation for $ldf_marker" \
         --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
         --request POST \
@@ -1211,7 +1217,7 @@ finish_ldf_outgoing()
         'id="f_03_datum" maxlength=' \
         'LdF must not write transport completion time'
     ldf_csrf=$(csrf_from_body)
-    ldf_time=$(date '+%H%M')
+    ldf_time=$(app_tactical_clock)
     assert_status 200 "save LdF outgoing for $ldf_marker" \
         --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
         --request POST \
@@ -1231,6 +1237,51 @@ finish_ldf_outgoing()
         "2|${ldf_code}|${ldf_callsign}|Fu|${ldf_route_text}|${ldf_route_id}" \
         "LdF-authored outgoing disposition for $ldf_marker" \
         "SELECT CONCAT(\`x00_status\`, '|', \`02_zeichen\`, '|', \`05_gegenstelle\`, '|', \`06_befwegausw\`, '|', \`06_befweg\`, '|', \`estab_fernmeldeplan_eintrag_id\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${ldf_record_id};"
+}
+
+finish_fm_outgoing()
+{
+    fm_marker=$1
+    fm_record_id=$2
+    fm_callsign=$3
+    fm_route_text=$4
+
+    load_dashboard "$aw_cookies" "A/W queue for $fm_marker"
+    assert_body "$fm_marker" "A/W queue for $fm_marker"
+    assert_route_control fm meldung "$fm_record_id" \
+        "A/W outgoing detail for $fm_marker"
+    fm_csrf=$(csrf_from_body)
+    assert_status 200 "open A/W outgoing for $fm_marker" \
+        --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+        --request POST \
+        --data-urlencode "csrf_token=$fm_csrf" \
+        --data-urlencode 'fm=meldung' \
+        --data-urlencode "00_lfd=$fm_record_id" \
+        "$base_url/4fach/mainindex.php"
+    assert_no_runtime_error "A/W outgoing form for $fm_marker"
+    assert_body 'name="task" value="FM-Ausgang"' \
+        "A/W outgoing task for $fm_marker"
+    assert_body "$fm_callsign" "A/W sees LdF callsign for $fm_marker"
+    assert_body "Disponierter S6-Weg:</strong> Fu · ${fm_route_text}" \
+        "A/W sees LdF route for $fm_marker"
+    assert_body_absent 'id="f_05_gegenstelle" maxlength=' \
+        "A/W cannot rewrite LdF callsign for $fm_marker"
+    assert_body_absent 'id="f_06_befweg" maxlength=' \
+        "A/W cannot rewrite LdF route for $fm_marker"
+    fm_csrf=$(csrf_from_body)
+    fm_time=$(app_tactical_clock)
+    assert_status 200 "complete A/W outgoing for $fm_marker" \
+        --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
+        --request POST \
+        --data-urlencode "csrf_token=$fm_csrf" \
+        --data-urlencode 'absenden_x=1' \
+        --data-urlencode 'task=FM-Ausgang' \
+        --data-urlencode "00_lfd=$fm_record_id" \
+        --data-urlencode "03_datum=$fm_time" \
+        --data-urlencode "03_zeichen=$aw_code" \
+        --data-urlencode 'transportweg_bestaetigt=1' \
+        "$base_url/4fach/mainindex.php"
+    assert_no_runtime_error "completed A/W outgoing for $fm_marker"
 }
 
 open_viewer_message()
@@ -1410,6 +1461,7 @@ SELECT CONCAT(
   (SELECT COUNT(*) FROM \`nv_nachrichten\`
     WHERE \`12_inhalt\` IN (
       '${incoming_marker}', '${outgoing_marker}',
+      '${conversation_marker}',
       '${mapping_incoming_marker}', '${mapping_outgoing_marker}'
     )
        OR \`12_inhalt\` LIKE '%${reply_marker}%'
@@ -3303,6 +3355,394 @@ assert_body "$outgoing_marker" 'S2 list after outgoing completion'
 load_dashboard "$s3_cookies" 'S3 list after outgoing completion'
 assert_body_absent "$outgoing_marker" 'S3 non-recipient outgoing list'
 
+# Conversation note: the staff member records how the original conversation
+# took place. It remains a regular outgoing form afterwards: Si checks it,
+# LdF adds the remote callsign and active S6 route, and A/W records the
+# transport before the row, TTB evidence and generated form become terminal.
+load_dashboard "$s1_cookies" 'S1 dashboard before conversation note'
+conversation_csrf=$(csrf_from_body)
+assert_status 200 'open S1 conversation-note draft' \
+    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$conversation_csrf" \
+    --data-urlencode 'stab_schreiben_x=1' \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'S1 conversation-note draft'
+assert_body 'name="task" value="Stab_schreiben"' \
+    'initial conversation-note task'
+conversation_csrf=$(csrf_from_body)
+conversation_matrix_revision=$(recipient_matrix_revision_from_body)
+conversation_attachment_token=$(message_attachment_request_token_from_body)
+assert_status 200 'enter dedicated conversation-note stage' \
+    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$conversation_csrf" \
+    --data-urlencode \
+        "recipient_matrix_revision=$conversation_matrix_revision" \
+    --data-urlencode \
+        "message_attachment_request_token=$conversation_attachment_token" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=Stab_schreiben' \
+    --data-urlencode '01_medium=Fe' \
+    --data-urlencode '11_gesprnotiz=on' \
+    --data-urlencode '10_anschrift=E2E-Gesprächsziel' \
+    --data-urlencode "12_betreff=$conversation_subject" \
+    --data-urlencode "12_inhalt=$conversation_marker" \
+    --data-urlencode "14_zeichen=$s1_code" \
+    --data-urlencode '14_funktion=S1' \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'dedicated conversation-note stage'
+assert_body 'name="task" value="Stab_gesprnoti"' \
+    'dedicated conversation-note task'
+assert_body 'id="f_01_medium_fe" name="01_medium" value="Fe" type="radio" checked="checked"' \
+    'original conversation medium retained in dedicated stage'
+assert_body_absent 'id="f_05_gegenstelle" maxlength=' \
+    'conversation author cannot enter LdF callsign'
+assert_body_absent 'id="f_fernmeldeplan_eintrag_id"' \
+    'conversation author cannot select an S6 route'
+assert_body 'Nach der formalen Sichtung ergänzt LdF Rufname und Beförderungsweg' \
+    'conversation-note help explains the next responsibility'
+assert_body 'data-estab-conversation-next-steps' \
+    'conversation-note stage shows its downstream responsibilities'
+assert_body '>Zur Sichtung geben</button>' \
+    'conversation-note action names its actual next stage'
+conversation_csrf=$(csrf_from_body)
+conversation_matrix_revision=$(recipient_matrix_revision_from_body)
+conversation_attachment_token=$(message_attachment_request_token_from_body)
+
+assert_status 403 'reject author-forged conversation disposition' \
+    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$conversation_csrf" \
+    --data-urlencode \
+        "recipient_matrix_revision=$conversation_matrix_revision" \
+    --data-urlencode \
+        "message_attachment_request_token=$conversation_attachment_token" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=Stab_gesprnoti' \
+    --data-urlencode '01_medium=Fe' \
+    --data-urlencode '05_gegenstelle=Vom Verfasser gefälscht' \
+    --data-urlencode '10_anschrift=E2E-Gesprächsziel' \
+    --data-urlencode "12_betreff=$conversation_subject" \
+    --data-urlencode "12_inhalt=$conversation_marker" \
+    --data-urlencode "14_zeichen=$s1_code" \
+    --data-urlencode '14_funktion=S1' \
+    "$base_url/4fach/mainindex.php"
+assert_db_equals 0 'forged conversation disposition created no message' \
+    "SELECT COUNT(*) FROM \`nv_nachrichten\` WHERE \`12_inhalt\`='${conversation_marker}';"
+
+assert_status 200 'save open conversation note for Si' \
+    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$conversation_csrf" \
+    --data-urlencode \
+        "recipient_matrix_revision=$conversation_matrix_revision" \
+    --data-urlencode \
+        "message_attachment_request_token=$conversation_attachment_token" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=Stab_gesprnoti' \
+    --data-urlencode '01_medium=Fe' \
+    --data-urlencode '01_datum=' \
+    --data-urlencode "01_zeichen=$s1_code" \
+    --data-urlencode '02_zeit=' \
+    --data-urlencode '02_zeichen=' \
+    --data-urlencode '03_datum=' \
+    --data-urlencode '03_zeichen=' \
+    --data-urlencode '07_durchspruch=D' \
+    --data-urlencode '09_vorrangstufe=eee' \
+    --data-urlencode '10_anschrift=E2E-Gesprächsziel' \
+    --data-urlencode '11_rufnummer=' \
+    --data-urlencode '11_gesprnotiz=t' \
+    --data-urlencode '12_anhang=' \
+    --data-urlencode "12_betreff=$conversation_subject" \
+    --data-urlencode "12_inhalt=$conversation_marker" \
+    --data-urlencode '12_abfzeit=' \
+    --data-urlencode "13_abseinheit=$authoritative_sender" \
+    --data-urlencode "14_zeichen=$s1_code" \
+    --data-urlencode '14_funktion=S1' \
+    --data-urlencode '15_quitdatum=' \
+    --data-urlencode '15_quitzeichen=' \
+    --data-urlencode '17_vermerke=Ursprüngliches Gespräch dokumentiert' \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'saved open conversation note'
+conversation_id=$(db_sql <<SQL
+SELECT \`00_lfd\` FROM \`nv_nachrichten\`
+ WHERE \`12_inhalt\` = '${conversation_marker}';
+SQL
+)
+conversation_number=$(db_sql <<SQL
+SELECT \`04_nummer\` FROM \`nv_nachrichten\`
+ WHERE \`12_inhalt\` = '${conversation_marker}';
+SQL
+)
+assert_numeric 'conversation-note message ID' "$conversation_id"
+assert_numeric 'conversation-note evidence number' "$conversation_number"
+assert_message_state "$conversation_marker" \
+    'A|4|f|null||S2_rt,S1_gn,|f||f' \
+    'conversation note awaiting formal Si review'
+assert_db_equals \
+    "t|Fe|${s1_code}|${authoritative_sender}|unset|unset|0|unset|unset" \
+    'conversation author cannot pre-fill Si/LdF/A-W evidence' \
+    "SELECT CONCAT(\`11_gesprnotiz\`, '|', \`01_medium\`, '|', \`01_zeichen\`, '|', \`13_abseinheit\`, '|', IF(\`05_gegenstelle\` IS NULL OR \`05_gegenstelle\`='', 'unset', 'set'), '|', IF(\`06_befweg\` IS NULL OR \`06_befweg\`='', 'unset', 'set'), '|', COALESCE(\`estab_fernmeldeplan_eintrag_id\`, 0), '|', IF(\`02_zeit\` IS NULL, 'unset', 'set'), '|', IF(\`03_datum\` IS NULL, 'unset', 'set')) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${conversation_id};"
+assert_db_equals \
+    'A|4|true|true|true|Fe' \
+    'conversation creation event requires all later stages' \
+    "SELECT CONCAT(JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.direction')), '|', \`to_status\`, '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.review_required')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.ldf_disposition_required')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.transport_evidence_required')), '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.original_conversation_medium'))) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${conversation_id} AND \`event_type\`='conversation_note_created';"
+assert_db_equals 0 'conversation note has no TTB evidence before transport' \
+    "SELECT COUNT(*) FROM \`nv_tbb\` WHERE \`einsatz_id\`=${active_incident_id} AND \`estab_message_id\`=${conversation_id};"
+if ! generated_form_check absent A "$conversation_number"; then
+    echo 'Message workflow HTTP: conversation form existed before transport' >&2
+    exit 1
+fi
+load_dashboard "$ldf_cookies" 'LdF queue before conversation Si review'
+assert_body_absent "$conversation_marker" \
+    'unreviewed conversation hidden from LdF'
+load_dashboard "$aw_cookies" 'A/W queue before conversation Si review'
+assert_body_absent "$conversation_marker" \
+    'unreviewed conversation hidden from A/W'
+
+# A formal return must not silently turn the conversation note into an
+# ordinary outgoing message. Its author may correct content, but its type is
+# immutable and remains visible in the read-only official field.
+return_viewer_outgoing \
+    "$conversation_marker" "$conversation_id" \
+    'Gesprächsnotiz bitte präzisieren'
+assert_message_state "$conversation_marker" \
+    "A|10|f|set|${si_code}|S2_rt,S1_gn,|f||f" \
+    'Si-returned conversation note'
+assert_db_equals 't' 'Si return preserves conversation-note type' \
+    "SELECT \`11_gesprnotiz\` FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${conversation_id};"
+load_dashboard "$s1_cookies" 'conversation author queue after Si return'
+assert_body "$conversation_marker" 'returned conversation in author queue'
+assert_route_control stab meldung "$conversation_id" \
+    'returned conversation author detail'
+conversation_csrf=$(csrf_from_body)
+assert_status 200 'open returned conversation as original author' \
+    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$conversation_csrf" \
+    --data-urlencode 'stab=meldung' \
+    --data-urlencode "00_lfd=$conversation_id" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'returned conversation correction form'
+assert_body 'name="task" value="Stab_korrigieren"' \
+    'returned conversation correction task'
+assert_body 'id="f_11_gesprnotiz" class="estab-official-box-choice" type="checkbox" disabled checked' \
+    'returned conversation marker remains visibly checked'
+assert_body_absent 'name="11_gesprnotiz"' \
+    'returned conversation type cannot be rewritten by its author'
+conversation_csrf=$(csrf_from_body)
+conversation_correction_token=$(message_attachment_request_token_from_body)
+conversation_correction_time=$(app_tactical_clock)
+assert_status 200 'resubmit corrected conversation note' \
+    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$conversation_csrf" \
+    --data-urlencode \
+        "message_attachment_request_token=$conversation_correction_token" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=Stab_korrigieren' \
+    --data-urlencode "00_lfd=$conversation_id" \
+    --data-urlencode '07_durchspruch=D' \
+    --data-urlencode '09_vorrangstufe=eee' \
+    --data-urlencode '10_anschrift=E2E-Gesprächsziel präzisiert' \
+    --data-urlencode '11_rufnummer=' \
+    --data-urlencode '12_anhang=' \
+    --data-urlencode "12_betreff=$conversation_subject" \
+    --data-urlencode "12_inhalt=$conversation_marker" \
+    --data-urlencode "12_abfzeit=$conversation_correction_time" \
+    --data-urlencode "13_abseinheit=$authoritative_sender" \
+    --data-urlencode "14_zeichen=$s1_code" \
+    --data-urlencode '14_funktion=S1' \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'resubmitted corrected conversation note'
+assert_message_state "$conversation_marker" \
+    'A|4|f|null||S2_rt,S1_gn,|f||f' \
+    'corrected conversation returned to Si queue'
+assert_db_equals 't|Fe' \
+    'correction preserves conversation type and original medium' \
+    "SELECT CONCAT(\`11_gesprnotiz\`, '|', \`01_medium\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${conversation_id};"
+assert_db_equals \
+    'conversation_note_created,si_returned,author_resubmitted' \
+    'conversation correction event order' \
+    "SELECT GROUP_CONCAT(\`event_type\` ORDER BY \`event_id\` SEPARATOR ',') FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${conversation_id};"
+
+finish_viewer_outgoing \
+    "$conversation_marker" "$conversation_id" \
+    'Gesprächsnotiz formal geprüft'
+assert_message_state "$conversation_marker" \
+    "A|1|f|set|${si_code}|S2_rt,S1_gn,|f||f" \
+    'Si-approved conversation awaiting LdF'
+load_dashboard "$aw_cookies" 'A/W queue before conversation LdF disposition'
+assert_body_absent "$conversation_marker" \
+    'undisposed conversation hidden from A/W'
+
+# Rufname and the active S6 route are both genuine LdF decisions. Omitting
+# either one must keep the message at status 1 and out of the A/W queue.
+load_dashboard "$ldf_cookies" 'LdF queue for incomplete conversation disposition'
+assert_body "$conversation_marker" 'conversation visible to LdF after Si review'
+assert_route_control ldf meldung "$conversation_id" \
+    'conversation LdF disposition detail'
+conversation_ldf_csrf=$(csrf_from_body)
+assert_status 200 'open conversation LdF disposition' \
+    --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$conversation_ldf_csrf" \
+    --data-urlencode 'ldf=meldung' \
+    --data-urlencode "00_lfd=$conversation_id" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'conversation LdF disposition form'
+conversation_ldf_csrf=$(csrf_from_body)
+conversation_ldf_time=$(app_tactical_clock)
+assert_status 422 'reject conversation disposition without callsign' \
+    --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$conversation_ldf_csrf" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=LdF-Ausgang' \
+    --data-urlencode "00_lfd=$conversation_id" \
+    --data-urlencode "02_zeit=$conversation_ldf_time" \
+    --data-urlencode "02_zeichen=$ldf_code" \
+    --data-urlencode '05_gegenstelle=' \
+    --data-urlencode "fernmeldeplan_eintrag_id=$telecom_route_b_id" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'missing conversation callsign validation'
+assert_body 'name="task" value="LdF-Ausgang"' \
+    'missing callsign keeps LdF form open'
+assert_message_state "$conversation_marker" \
+    "A|1|f|set|${si_code}|S2_rt,S1_gn,|t|${ldf_code}|f" \
+    'missing callsign keeps conversation at LdF'
+assert_db_equals 0 'missing callsign creates no LdF evidence' \
+    "SELECT COUNT(*) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${conversation_id} AND \`event_type\`='ldf_dispatched';"
+assert_db_equals 'unset|unset|0|unset|unset' \
+    'missing callsign persists no partial LdF disposition' \
+    "SELECT CONCAT(IF(\`05_gegenstelle\` IS NULL OR \`05_gegenstelle\`='', 'unset', 'set'), '|', IF(\`06_befweg\` IS NULL OR \`06_befweg\`='', 'unset', 'set'), '|', COALESCE(\`estab_fernmeldeplan_eintrag_id\`, 0), '|', IF(\`02_zeit\` IS NULL, 'unset', 'set'), '|', IF(COALESCE(\`02_zeichen\`, '')='', 'unset', 'set')) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${conversation_id};"
+conversation_ldf_csrf=$(csrf_from_body)
+assert_status 422 'reject conversation disposition without S6 route' \
+    --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$conversation_ldf_csrf" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=LdF-Ausgang' \
+    --data-urlencode "00_lfd=$conversation_id" \
+    --data-urlencode "02_zeit=$conversation_ldf_time" \
+    --data-urlencode "02_zeichen=$ldf_code" \
+    --data-urlencode "05_gegenstelle=$conversation_callsign" \
+    --data-urlencode 'fernmeldeplan_eintrag_id=' \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'missing conversation route validation'
+assert_body 'name="task" value="LdF-Ausgang"' \
+    'missing S6 route keeps LdF form open'
+assert_message_state "$conversation_marker" \
+    "A|1|f|set|${si_code}|S2_rt,S1_gn,|t|${ldf_code}|f" \
+    'missing route keeps conversation at LdF'
+assert_db_equals 0 'missing route creates no LdF evidence' \
+    "SELECT COUNT(*) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${conversation_id} AND \`event_type\`='ldf_dispatched';"
+assert_db_equals 'unset|unset|0|unset|unset' \
+    'missing route persists no partial LdF disposition' \
+    "SELECT CONCAT(IF(\`05_gegenstelle\` IS NULL OR \`05_gegenstelle\`='', 'unset', 'set'), '|', IF(\`06_befweg\` IS NULL OR \`06_befweg\`='', 'unset', 'set'), '|', COALESCE(\`estab_fernmeldeplan_eintrag_id\`, 0), '|', IF(\`02_zeit\` IS NULL, 'unset', 'set'), '|', IF(COALESCE(\`02_zeichen\`, '')='', 'unset', 'set')) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${conversation_id};"
+conversation_ldf_csrf=$(csrf_from_body)
+assert_status 200 'cancel incomplete conversation LdF disposition' \
+    --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$conversation_ldf_csrf" \
+    --data-urlencode 'abbrechen_x=1' \
+    --data-urlencode 'task=LdF-Ausgang' \
+    --data-urlencode "00_lfd=$conversation_id" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'cancelled incomplete conversation LdF disposition'
+assert_message_state "$conversation_marker" \
+    "A|1|f|set|${si_code}|S2_rt,S1_gn,|f||f" \
+    'cancel releases incomplete conversation LdF lock'
+load_dashboard "$aw_cookies" 'A/W queue after incomplete conversation disposition'
+assert_body_absent "$conversation_marker" \
+    'incompletely disposed conversation hidden from A/W'
+
+finish_ldf_outgoing \
+    "$conversation_marker" "$conversation_id" "$conversation_callsign" \
+    'Gesprächsnotiz-Nachweisweg' "$telecom_route_b_id" \
+    "$telecom_route_b_text"
+assert_message_state "$conversation_marker" \
+    "A|2|f|set|${si_code}|S2_rt,S1_gn,|f||f" \
+    'LdF-disposed conversation awaiting A/W'
+assert_db_equals \
+    "Fe|${conversation_callsign}|Fu|${telecom_route_b_text}|${telecom_route_b_id}" \
+    'original conversation medium remains distinct from LdF route' \
+    "SELECT CONCAT(\`01_medium\`, '|', \`05_gegenstelle\`, '|', \`06_befwegausw\`, '|', \`06_befweg\`, '|', \`estab_fernmeldeplan_eintrag_id\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${conversation_id};"
+assert_db_equals 0 'LdF disposition creates no premature TTB evidence' \
+    "SELECT COUNT(*) FROM \`nv_tbb\` WHERE \`einsatz_id\`=${active_incident_id} AND \`estab_message_id\`=${conversation_id};"
+
+finish_fm_outgoing \
+    "$conversation_marker" "$conversation_id" "$conversation_callsign" \
+    "$telecom_route_b_text"
+assert_message_state "$conversation_marker" \
+    "A|8|t|set|${si_code}|S2_rt,S1_gn,|f||t" \
+    'A/W-completed conversation note'
+assert_db_equals 1 'conversation transport creates exactly one TTB entry' \
+    "SELECT COUNT(*) FROM \`nv_tbb\` WHERE \`einsatz_id\`=${active_incident_id} AND \`estab_message_id\`=${conversation_id} AND BINARY \`estab_entry_type\`=BINARY 'nachricht';"
+assert_db_equals \
+    'conversation_note_created,si_returned,author_resubmitted,si_approved,ldf_dispatched,aw_transported' \
+    'conversation-note DV transition event order' \
+    "SELECT GROUP_CONCAT(\`event_type\` ORDER BY \`event_id\` SEPARATOR ',') FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${conversation_id};"
+assert_db_equals \
+    "Fe|Fu|${telecom_route_b_id}|${aw_code}" \
+    'conversation completion preserves original medium and route evidence' \
+    "SELECT CONCAT(\`01_medium\`, '|', \`06_befwegausw\`, '|', \`estab_fernmeldeplan_eintrag_id\`, '|', \`03_zeichen\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${conversation_id};"
+if ! generated_form_check present A "$conversation_number"; then
+    echo 'Message workflow HTTP: conversation completion generated no form' >&2
+    exit 1
+fi
+load_dashboard "$ldf_cookies" 'LdF queue after conversation completion'
+assert_body_absent "$conversation_marker" \
+    'completed conversation absent from LdF queue'
+load_dashboard "$aw_cookies" 'A/W queue after conversation completion'
+assert_body_absent "$conversation_marker" \
+    'completed conversation absent from A/W queue'
+
+# A reply is a genuinely new message. It may quote the completed note, but it
+# must not silently inherit the Gesprächsnotiz marker, original medium or any
+# completed role evidence from its source.
+load_dashboard "$s1_cookies" 'conversation author list before reply derivation'
+assert_body "$conversation_marker" 'completed conversation visible to author'
+assert_route_control stab meldung "$conversation_id" \
+    'completed conversation author detail'
+conversation_reply_csrf=$(csrf_from_body)
+assert_status 200 'open completed conversation for reply derivation' \
+    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$conversation_reply_csrf" \
+    --data-urlencode 'stab=meldung' \
+    --data-urlencode "00_lfd=$conversation_id" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'completed conversation read form for reply'
+assert_body 'name="task" value="Stab_lesen"' \
+    'completed conversation read task'
+conversation_reply_csrf=$(csrf_from_body)
+assert_status 200 'derive reply from completed conversation' \
+    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$conversation_reply_csrf" \
+    --data-urlencode 'antwort_x=1' \
+    --data-urlencode 'task=Stab_lesen' \
+    --data-urlencode "00_lfd=$conversation_id" \
+    --data-urlencode '01_medium=Me' \
+    --data-urlencode '11_gesprnotiz=t' \
+    --data-urlencode '05_gegenstelle=Browser-Manipulation' \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'derived reply from completed conversation'
+assert_body 'name="task" value="Stab_schreiben"' \
+    'conversation reply starts as ordinary outgoing draft'
+if grep -Eq 'id="f_11_gesprnotiz"[^>]*checked' "$body"; then
+    echo 'Message workflow HTTP: reply inherited conversation-note marker' >&2
+    exit 1
+fi
+if grep -Eq 'id="f_01_medium_(fu|fe|fax|fs|at|me)"[^>]*checked' "$body"; then
+    echo 'Message workflow HTTP: reply inherited source conversation medium' >&2
+    exit 1
+fi
+assert_body_absent 'Browser-Manipulation' \
+    'conversation reply ignored browser-forged source evidence'
+
 assert_status 200 'open combined transmission tracking' \
     --cookie "$aw_cookies" --cookie-jar "$aw_cookies" \
     "$base_url/4fach/nachwea.php?nwalle=1"
@@ -3322,4 +3762,4 @@ if [ -n "$account_restore_state_file" ]; then
 fi
 
 printf '%s\n' \
-    'Message workflow HTTP integration: OK; incoming 1 -> 4 -> 8, outgoing 4 -> 10 -> 4 -> 1 -> 2 -> 1 -> 2 -> 8; LdF, S6 route A/B redisposition, Si return/correction, A/W confirmation, immutable archive, Nachweisung, POL/FB, answer and forwarding verified'
+    'Message workflow HTTP integration: OK; incoming 1 -> 4 -> 8, outgoing 4 -> 10 -> 4 -> 1 -> 2 -> 1 -> 2 -> 8, conversation note 4 -> 10 -> 4 -> 1 -> 2 -> 8; LdF callsign/S6 disposition, Si return/correction, A/W confirmation, TTB/PDF, immutable archive, Nachweisung, POL/FB, answer and forwarding verified'

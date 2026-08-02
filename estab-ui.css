@@ -3465,6 +3465,13 @@ body.estab-message-form-body {
     gap: 0.7rem;
 }
 
+.estab-message-workflow-fields ol {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0;
+    padding-left: 1.3rem;
+}
+
 .estab-message-workflow-fields fieldset {
     background: #f4f7fa;
     border: 1px solid #c5d1dd;

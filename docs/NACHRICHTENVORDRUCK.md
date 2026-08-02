@@ -78,19 +78,46 @@ eindeutigen zugänglichen Namen angezeigt. Wurde eine früher verwendete
 Funktion inzwischen aus der Matrix entfernt, bleibt sie im historischen
 Nachweis sichtbar, ohne wieder auswählbar zu werden.
 
-Für Gesprächsnotizen gilt die fachliche Ausnahme aus dem Nachrichtenlauf:
-Der Server ergänzt die erforderliche Autoren- und
+Bei einer Gesprächsnotiz ergänzt der Server die Autoren- und
 Lage-/Dokumentationszuordnung aus der angemeldeten Identität. Dafür erscheint
 keine zusätzliche Empfängerauswahl; ein Browserwert kann weder den Verfasser
-ersetzen noch eine weitere Zuordnung erzeugen.
+ersetzen noch eine weitere Zuordnung erzeugen. Die Gesprächsnotiz bleibt
+anschließend ein regulärer Ausgang und durchläuft ohne Abkürzung die formale
+Sichtung, die Disposition durch LdF und den Beförderungsnachweis durch den
+Fernmelder.
 
 Aktiviert ein Mitglied des Stabs im Vordruck **Gesprächsnotiz**, wird dort
-unmittelbar auch das tatsächlich verwendete Übermittlungsmittel freigeschaltet.
-Zur Auswahl stehen **Telefon**, **Funk**, **Telefax**, **DFÜ** und
-**Kurier/Melder**. Für den Abschluss der Gesprächsnotiz ist genau eine dieser
-Angaben erforderlich. Solange **Gesprächsnotiz** nicht aktiviert ist, bleibt
-die Auswahl gesperrt und kann nicht als Angabe einer gewöhnlichen
-Ausgangsnachricht übermittelt werden.
+unmittelbar auch die ursprüngliche Gesprächsart freigeschaltet. Sie hält fest,
+wie das dokumentierte Gespräch tatsächlich stattfand. Zur Auswahl stehen
+**Telefon**, **Funk**, **Telefax**, **DFÜ** und **Kurier/Melder**. Für das
+Einreichen der Gesprächsnotiz ist genau eine dieser Angaben erforderlich.
+Solange **Gesprächsnotiz** nicht aktiviert ist, bleibt die Auswahl gesperrt und
+kann nicht als Angabe einer gewöhnlichen Ausgangsnachricht übermittelt werden.
+
+Die ursprüngliche Gesprächsart ist ausdrücklich vom anschließenden
+Beförderungsweg getrennt. Der Verfasser kann weder den Rufnamen der Gegenstelle
+noch einen S6-Planweg oder einen Beförderungsvermerk vorwegnehmen. Zuerst prüft
+Si den Vordruck formal. Danach trägt LdF den Rufnamen der Gegenstelle ein und
+wählt einen zu diesem Zeitpunkt aktiven, veröffentlichten
+S6-Beförderungsweg. Erst der Fernmelder weist die Beförderung mit Zeit und
+eigenem Zeichen nach. Bis zu diesem letzten Schritt bleiben Nachricht und
+Gesprächsart erhalten, es entsteht aber weder ein TBB-Nachrichteneintrag noch
+ein generierter PDF-Vordruck. Beides wird erst mit dem Abschluss in Status 8
+erzeugt.
+
+Historische Gesprächsnotizen, die bereits als Richtung `E` in Status `8`
+gespeichert wurden, bleiben unverändert les- und exportierbar. Sie werden
+weder in den neuen Ausgangslauf verschoben noch rückwirkend um einen
+TBB-Eintrag ergänzt. Diese Kompatibilitätsregel ist kein zulässiger Kurzweg
+für neu erfasste Gesprächsnotizen.
+
+Gibt Si eine neue Gesprächsnotiz zur Korrektur zurück, bleiben Kennzeichnung
+und ursprüngliche Gesprächsart erhalten; der Verfasser kann sie bei der
+Korrektur nicht in eine gewöhnliche Nachricht umdeuten. **Antwort** und
+**Weiterleitung** erzeugen dagegen immer eine neue Nachricht. Sie übernehmen
+zwar das gekennzeichnete Zitat und dafür geeignete Kontaktdaten, aber weder das
+Gesprächsnotiz-Häkchen noch Aufnahmezeit, Gesprächsart, Sichtung,
+LdF-Disposition oder Beförderungsnachweis der Quelle.
 
 Das Blatt wird auf kleinen Bildschirmen nicht umsortiert. Stattdessen bleibt
 das amtliche Raster unverändert und kann innerhalb eines ausdrücklich
@@ -464,9 +491,13 @@ Vordruck hoch, prüft Datenbank- und Dateiintegrität, erhält den Entwurf und
 weist nach, dass Entfernen die Archivdatei nicht löscht.
 Er deckt außerdem Upload plus reguläres Absenden, einen Validierungsfehler mit
 anschließendem Retry ohne erneut gesendete Datei, den sicheren Hinweis bei
-uneindeutigem Nachrichtenabschluss, den wiederholbaren Gesprächsnotizübergang
-ohne Doppelnachricht/-datei sowie Bild-, PDF- und E-Mail-Karten mitsamt
-Browseransicht ab. Die E-Mail-Fixture enthält codierte Unicode-Kopfzeilen,
+uneindeutigem Nachrichtenabschluss sowie den vollständigen
+Gesprächsnotizlauf ab: getrennte ursprüngliche Gesprächsart, formale
+Si-Prüfung, Rufname und aktiver S6-Weg durch LdF, Beförderungsnachweis durch
+den Fernmelder und erst danach genau ein TBB- und PDF-Ergebnis. Wiederholungen
+dürfen dabei weder eine Doppelnachricht noch eine doppelte Datei erzeugen.
+Außerdem werden Bild-, PDF- und E-Mail-Karten mitsamt Browseransicht geprüft.
+Die E-Mail-Fixture enthält codierte Unicode-Kopfzeilen,
 verschachtelte MIME-Teile, interne Anlagen und absichtlich aktive HTML-Inhalte.
 Parser-, HTTP- und Browsernachweise verlangen die decodierte passive
 Textdarstellung, reine Metadaten der internen Anlagen und die Abwesenheit von

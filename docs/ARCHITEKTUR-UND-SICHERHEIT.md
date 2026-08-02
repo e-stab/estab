@@ -870,11 +870,24 @@ Nachrichteninhalt.
 Beim Anlegen und bei den betroffenen Übergängen sperrt dieselbe
 Schreibtransaktion den aktiven Einsatz und bindet die lokale
 Nachrichtenidentität an dessen Führungsstellennamen: Ein Eingang erhält ihn
-als Anschrift, ein Ausgang als Absendereinheit; eine interne Gesprächsnotiz
-wird entsprechend lokal gebunden. Manipulierte Formfelder, ein veralteter
+als Anschrift, ein Ausgang einschließlich einer neu angelegten Gesprächsnotiz
+als Absendereinheit. Manipulierte Formfelder, ein veralteter
 Formularstandard oder eine Prozessumgebung können diese Werte nicht
 überschreiben. Fehlt der Name, bricht der gesamte fachliche Schreibvorgang
 ohne Teilcommit ab.
+
+Gesprächsnotizen entstehen als offene Ausgänge. Der Verfasser kann keine
+Sichter-, LdF- oder Fernmelderwerte vorgeben: Si ergänzt die formale Prüfung,
+LdF Rufname und freigegebenen S6-Weg, der Fernmelder den tatsächlichen
+Beförderungsnachweis. Erst der letzte Übergang erzeugt TTB-Verknüpfung und
+PDF-Vordruck. Historische/importierte Gesprächsnotizen in der alten
+Eingangsform bleiben lesbar, erhalten aber keinen rückwirkend erfundenen
+Transportnachweis.
+
+Rufname und aktive S6-Plan-ID sind nicht nur Formularpflichtfelder. Die
+Repository-Transaktion validiert beide erneut, normalisiert den Rufnamen als
+einzeiligen UTF-8-Wert und bricht bei einem fehlenden oder ungültigen Wert ohne
+Statuswechsel oder Teilpersistenz ab.
 
 Bestandsdaten aus älteren Releases können bereits HTML-Entities enthalten.
 Die Ausgabeschicht decodiert diese Kompatibilitätsdarstellung genau einmal und

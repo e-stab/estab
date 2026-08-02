@@ -1439,8 +1439,8 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
                 '01_zeichen' => (string) ($identity['kuerzel'] ?? ''),
                 '14_zeichen' => (string) ($identity['kuerzel'] ?? ''),
                 '14_funktion' => (string) ($identity['funktion'] ?? ''),
-                // A conversation note is a self-recorded staff object, not a
-                // fictitious Si/LdF review. The field remains empty.
+                // At creation the note contains only the author's evidence.
+                // The real Si review is recorded in the following stage.
                 '15_quitzeichen' => '',
                 '15_quitdatum' => '',
             ],
@@ -1464,6 +1464,25 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
                 )
             ) {
                 return false;
+            }
+        }
+        if ($task === 'Stab_gesprnoti') {
+            foreach ([
+                '02_zeit', '02_zeichen', '03_datum', '03_zeichen',
+                '05_gegenstelle', '06_befweg', '06_befwegausw',
+                'fernmeldeplan_eintrag_id', 'transportweg_bestaetigt',
+            ] as $dispositionField) {
+                if (
+                    array_key_exists($dispositionField, $request)
+                    && (
+                        !is_string($request[$dispositionField])
+                        || trim($request[$dispositionField]) !== ''
+                    )
+                ) {
+                    // Rufname, S6-Weg and transport evidence belong only to
+                    // LdF and A/W in their later authenticated stages.
+                    return false;
+                }
             }
         }
         if (

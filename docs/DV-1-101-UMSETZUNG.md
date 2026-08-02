@@ -73,6 +73,7 @@ Softwareeinstellung nicht.
 | S. 4-59/4-60 | S6 plant und führt den Telekommunikationseinsatz und stellt die Führbarkeit über geeignete Verbindungen sicher. | Im strengen Modus darf nur ein Konto mit der festen Funktion `S6` versionierte Fernmeldepläne erstellen und veröffentlichen. LdF kann nur einen aktuell gültigen, veröffentlichten Planweg disponieren; veröffentlichte Fassungen bleiben in beiden Modi unveränderlich. | `tests/integration/dv_operations.php`, `tests/integration/message_workflow_http.sh` |
 | S. 4-63 | Der Sichter analysiert Eingänge inhaltlich und leitet sie an zuständige Bearbeiter weiter. | Eingänge laufen zwingend `Fernmelder → LdF → Si`; Si setzt Empfänger und Abschluss. Der Fernmelder darf den Absender nicht schreiben, LdF übersetzt den aufgenommenen Rufnamen und bestätigt den vom Fernmelder erfassten Eingangsweg. Eine Änderung verlangt eine Begründung und wird mit Alt-/Neuwert und LdF-Identität nachgewiesen; Aufnahmezeit und -zeichen des Fernmelders bleiben unverändert. | `tests/php/workflow_security.php`, `tests/php/ldf_validation_security.php`, `tests/php/ldf_ui_flow_security.php`, `tests/integration/message_workflow_http.sh` |
 | S. 4-63 | Bei Ausgängen prüft Si nur Anschrift, Unterschrift/Zeichen und Funktion, nicht den Inhalt. | Ausgänge laufen zwingend `Verfasser → Si → LdF → Fernmelder`. Si kann formal freigeben oder mit Pflichtgrund zurückgeben, aber keine Inhaltsfelder verändern. Nach Korrektur folgt die Sichtung erneut. | `tests/php/message_security.php`, `tests/integration/message_concurrency.php`, `tests/integration/message_workflow_http.sh` |
+| Nachrichtenvordruck-Unterlagen sowie S. 4-63/4-64 | Eine Gesprächsnotiz dokumentiert die ursprüngliche Gesprächsart, bleibt aber als Ausgang im geordneten Informations- und Fernmeldeweg. | Von den fernmeldespezifischen Angaben erfasst der Verfasser ausschließlich die ursprüngliche Gesprächsart. Si prüft formal; danach setzt LdF den Rufnamen der Gegenstelle und disponiert einen aktiven, veröffentlichten S6-Beförderungsweg. Der Fernmelder weist die Beförderung nach. Erst dieser Abschluss erzeugt TBB-Nachweis und PDF-Vordruck. | `tests/integration/message_workflow_http.sh`, `tests/integration/http_smoke.sh` |
 | S. 4-64 | Der Melder darf den Inhalt nicht ändern, muss schnell zustellen, Rücknachrichten feststellen, zurückkehren, sich zurückmelden und den tatsächlichen Empfänger nennen. | Das Medium `Me` verlangt einen LdF-Auftrag und die Zustandskette Beauftragung, persönliche Übernahme, Übergabe mit Empfänger, Rückweg mit explizitem Rücknachrichtenvermerk und Rückkehr. Danach bestätigt in `STRICT` ausschließlich ein Konto mit der festen Funktion `LdF` die Rückmeldung an die FmZt; in `LOOSE` bleibt dieser Zustandsschritt zwingend und nur die Funktion des bestätigenden Kontos wird nicht erzwungen. Der Nachrichtenabschluss wartet auf die vollständige Kette. | `tests/integration/dv_operations.php`, `tests/integration/message_workflow_http.sh` |
 | S. 4-64 | Bis zur Rückkehr darf der Melder keine anderen Aufträge annehmen; in einer FüSt mit Stab gehört er zur FmZt und wird durch LdF eingesetzt. | Nur ein aktives, ungesperrtes Konto mit der Funktion `Fernmelder` ist als Melder wählbar. Im strengen Modus darf ausschließlich LdF es beauftragen; im lockeren Modus bleibt die Melder-Eignung bestehen, nur die Funktionsprüfung des disponierenden Kontos entfällt. Während Übernahme, Übergabe und Rückweg sperrt eine zentrale Request-Grenze alle fremden operativen Schreibvorgänge dieses Kontos. | `tests/php/dv_operations_security.php`, `tests/integration/dv_operations.php` |
 | S. 4-64 | LdF verantwortet den Fernmeldebetrieb und unterweist, unterstützt und überwacht das Betriebspersonal. | LdF ist eine gesonderte feste Kontofunktion. Im strengen Modus ist sie technisch exklusiv für Rufnamenübersetzung, Planwegentscheidung, Melderbeauftragung und Bestätigung der Rückkehr gebunden. Im lockeren Modus bleibt diese organisatorische Zuständigkeit bestehen, wird bei Schreibschritten aber nicht durch die Kontofunktion erzwungen. | `tests/integration/message_workflow_http.sh`, `tests/integration/dv_operations.php` |
@@ -117,6 +118,23 @@ Damit gelten zwei feste Abläufe:
 Ausgang: Verfasser → Si → LdF → Fernmelder → abgeschlossen
 Eingang: Fernmelder → LdF → Si → Empfänger/abgeschlossen
 ```
+
+Eine neu erfasste Gesprächsnotiz ist als Nachrichtenart gekennzeichnet, aber
+keine Ausnahme vom Ausgangslauf. Der Verfasser hält die ursprüngliche
+Gesprächsart fest; diese bleibt ein eigenständiger Nachweis und wird durch die
+spätere Disposition nicht überschrieben. Si prüft den Vordruck formal. LdF
+ergänzt anschließend den Rufnamen der Gegenstelle und wählt ausschließlich
+einen aktuell gültigen, veröffentlichten S6-Beförderungsweg. Der Fernmelder
+übernimmt die Nachricht erst in Status `2` und weist die Beförderung mit Zeit
+und eigenem Zeichen nach. Erst dieser Schritt schließt die Gesprächsnotiz in
+Status `8` ab und erzeugt ihren TBB-Nachrichteneintrag sowie den generierten
+PDF-Vordruck.
+
+Bereits vorhandene Gesprächsnotizen mit Richtung `E` und Status `8` bleiben
+als historische Bestandsdaten unverändert les- und exportierbar. Die
+Anwendung öffnet sie nicht erneut, verschiebt sie nicht in den Ausgangslauf
+und erzeugt keinen rückwirkenden TBB-Nachweis. Dieser reine
+Kompatibilitätsfall darf bei einer Neuanlage nicht entstehen.
 
 Für Ausgänge prüft Si ausschließlich die formalen Merkmale, insbesondere
 Anschrift, Verfasserzeichen und Verfasserfunktion. Inhaltliche Änderungen sind
@@ -371,6 +389,15 @@ Nachrichtendetail und Dossier suchen ausdrücklich nur nach diesem
 automatischen Typ `nachricht`; die zuerst vergebene lokale TBB-Nummer erscheint
 anschließend auf dem Nachrichtenvordruck.
 
+Gesprächsnotizen folgen derselben Ausgangsregel. Ihre ursprüngliche
+Gesprächsart ist kein Ersatz für den von LdF gewählten S6-Beförderungsweg und
+löst weder einen vorzeitigen TBB-Eintrag noch einen PDF-Vordruck aus. Erst der
+Beförderungsnachweis des Fernmelders erzeugt atomar den TBB-Eintrag und macht
+den abgeschlossenen Vordruck für die PDF-Ausgabe verfügbar. Historische
+Gesprächsnotizen in Richtung `E` und Status `8` ohne verknüpften
+TBB-Nachrichteneintrag werden weiterhin unverändert dargestellt; aus ihrem
+Fehlen wird kein Nachweis rekonstruiert.
+
 Ändert LdF bei einem Eingang den vom Fernmelder erfassten Weg oder übersetzt den
 aufgenommenen Rufnamen in einen abweichenden Absender, bleibt der ursprüngliche
 TBB-Nachrichtennachweis unverändert. Innerhalb derselben
@@ -542,6 +569,13 @@ Fehlt der Führungsstellenname in einem historischen Einsatz, lautet die
 Kennzeichnung ausdrücklich „historisch nicht erfasst“; Bedarfsträger,
 Einsatzleitung und Umgebung werden nicht als Ersatz ausgegeben.
 
+Eine neue Gesprächsnotiz steht den Generatoren erst nach der formalen
+Si-Prüfung, der LdF-Disposition von Rufname und aktivem S6-Weg sowie dem
+Beförderungsnachweis des Fernmelders zur Verfügung. TBB-Nachweis und
+PDF-Vordruck entstehen gemeinsam mit diesem terminalen Abschluss. Historische
+Gesprächsnotizen der Richtung `E` in Status `8` bleiben ohne erfundenen
+TBB-Nachtrag exportierbar.
+
 Die Anlagensektion stellt JPEG, PNG, GIF und BMP direkt dar und rastert jede
 Seite einer PDF-Anlage samt Anmerkungen in Originalreihenfolge. Text wird nur
 bei verlustfreier Windows-1252-Darstellbarkeit ausgegeben. TIFF, ZIP, Office,
@@ -600,7 +634,12 @@ sein:
 
 1. Fresh-Install-Migration und Schema-Readiness.
 2. Vollständiger Ausgang mit Freigabe sowie ein Ausgang mit Rückgabe,
-   Korrektur und erneuter Freigabe.
+   Korrektur und erneuter Freigabe. Zusätzlich eine Gesprächsnotiz mit
+   getrennter ursprünglicher Gesprächsart, formaler Si-Prüfung, Rufname und
+   aktivem S6-Beförderungsweg durch LdF, Beförderungsnachweis durch den
+   Fernmelder und nachweislich erst dann erzeugtem TBB-Eintrag und PDF-Vordruck
+   prüfen; historische Bestandsnotizen in Richtung `E` und Status `8` müssen
+   unverändert les- und exportierbar bleiben.
 3. Vollständiger Eingang mit Rufnamenübersetzung und Empfängerzuordnung.
 4. Manipulationsversuche gegen Identitätsvermerke, Statusfolge,
    Rollenrechte, Berechtigungsmodus und Einsatzgrenze.

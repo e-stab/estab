@@ -454,6 +454,18 @@ $assert(
         && !str_contains($conversationBlock, '16_gncopy'),
     'the save boundary accepts or reconstructs the retired green-copy field'
 );
+$assert(
+    str_contains(
+        $controller,
+        '"11_gesprnotiz" => (string) ($message ["11_gesprnotiz"] ?? "f")'
+    )
+        && !str_contains(
+            $controller,
+            '"11_gesprnotiz" => "f",' . "\n"
+                . '          "12_anhang"'
+        ),
+    'a returned conversation note can lose its immutable type on resubmission'
+);
 
 printf(
     "Workflow form rehydration security: OK (%d assertions)\n",

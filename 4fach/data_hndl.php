@@ -687,7 +687,9 @@ function estab_rehydrate_staff_correction_form (
     $submitted,
     "Stab_korrigieren",
     array (
-      "11_gesprnotiz" => "f",
+      // The type is immutable during a correction, but a returned
+      // conversation note must keep its original marker.
+      "11_gesprnotiz" => (string) ($message ["11_gesprnotiz"] ?? "f"),
       "13_abseinheit" => $commandPostName,
       "14_zeichen" => (string) ($actor ["kuerzel"] ?? ""),
       "14_funktion" => (string) ($actor ["funktion"] ?? ""),
@@ -838,9 +840,8 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
     break;
 
     case "Stab_gesprnoti":
-      // A conversation note is completed by its author without pretending
-      // that Si or LdF reviewed it. All persisted local identity fields are
-      // derived from the fixed account function, never from the browser.
+      // The author records the original conversation. Si, LdF and A/W add
+      // their own evidence only in the following outgoing workflow stages.
       $data ["01_zeichen"] = $sessionCode;
       $data ["13_abseinheit"] = $activeCommandPostName;
       $data ["14_zeichen"] = $sessionCode;
@@ -1176,7 +1177,6 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
           "09_vorrangstufe" => $data ["09_vorrangstufe"],
           "10_anschrift" => $data ["10_anschrift"],
           "11_rufnummer" => $data ["11_rufnummer"],
-          "11_gesprnotiz" => "f",
           "12_anhang" => $data ["12_anhang"],
           "12_betreff" => $data ["12_betreff"],
           "12_inhalt" => $data ["12_inhalt"],
@@ -1337,10 +1337,6 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
          /*----------------------------------------------------*/
       }
 
-      if ($data ["02_zeit"] == "" ) {
-        $data ["02_zeit"] = convtodatetime ( date ("dm"),   date ("Hi") )  ;
-      }
-
        $data ["16_empf"] = estab_workflow_distribution_tokens (
          $browserData,
          $empf_matrix,
@@ -1357,12 +1353,18 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
          $messageConnection,
          $conf_4f_db ["datenbank"],
          $conf_4f_tbl ["nachrichten"],
-         "E",
+         "A",
          Nachweisung === "getrennt",
          estab_message_new_record_fields (array (
            "01_medium" => $data ["01_medium"],
            "01_datum" => konv_taktime_datetime ($data ["01_datum"]),
            "01_zeichen" => $data ["01_zeichen"],
+           // Acceptance, disposition and transport belong to Si, LdF and
+           // A/W. Creating the note must not pre-populate their evidence.
+           "02_zeit" => null,
+           "02_zeichen" => "",
+           "03_datum" => null,
+           "03_zeichen" => "",
            "07_durchspruch" => $data ["07_durchspruch"],
            "09_vorrangstufe" => $data ["09_vorrangstufe"],
            "10_anschrift" => $data ["10_anschrift"],
@@ -1377,8 +1379,8 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
            "14_funktion" => $data ["14_funktion"],
            "16_empf" => $data ["16_empf"],
            "17_vermerke" => $data ["17_vermerke"],
-           "x00_status" => 8,
-           "x01_abschluss" => "t",
+           "x00_status" => 4,
+           "x01_abschluss" => "f",
            "x02_sperre" => "f",
            "x03_sperruser" => "",
          )),
@@ -1387,15 +1389,18 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
            "event_type" => "conversation_note_created",
            "actor" => $messageActor,
            "from_status" => null,
-           "to_status" => 8,
+           "to_status" => 4,
            "snapshot" => estab_message_action_evidence_snapshot (
              array (
-               "direction" => "E",
+               "direction" => "A",
                "object_type" => "conversation_note",
                "conversation_note" => true,
                "author_code" => $sessionCode,
                "author_function" => $sessionFunction,
-               "review_required" => false,
+               "original_conversation_medium" => $data ["01_medium"],
+               "review_required" => true,
+               "ldf_disposition_required" => true,
+               "transport_evidence_required" => true,
                "content_sha256" => hash ("sha256", $data ["12_inhalt"]),
              ),
              $messageActionToken,
