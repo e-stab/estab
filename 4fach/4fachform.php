@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . "/../app/csrf.php";
 require_once __DIR__ . "/../app/message_repository.php";
+require_once __DIR__ . "/../app/message_timeline.php";
 require_once __DIR__ . "/../app/message_transport.php";
 require_once __DIR__ . "/../app/read_authorization.php";
 require_once __DIR__ . "/../app/attachment_upload.php";
@@ -59,6 +60,7 @@ class nachrichten4fach {
         "05_gegenstelle", "06_befweg", "06_befwegausw",
         "fernmeldeplan_eintrag_id", "transportweg_bestaetigt",
         "transport_rueckgabegrund",
+        "ldf_rueckgabegrund",
         "incoming_transport_confirmed",
         "incoming_transport_original_medium",
         "incoming_transport_correction_reason",
@@ -149,6 +151,7 @@ class nachrichten4fach {
       }
       $this->load_message_suggestions ();
       $this->load_attachment_previews ();
+      $this->load_message_timeline ();
       $this->plot_form () ;
     }
 
@@ -163,6 +166,139 @@ class nachrichten4fach {
     var $messageSuggestionMetadata = array ();
     var $messageMappingContext = "";
     var $attachmentPreviews = array ();
+    var $messageTimelineHtml = "";
+
+    /** Render a planned route or the verified history of this exact message. */
+    function load_message_timeline () {
+      global $conf_4f_db, $conf_4f_tbl;
+
+      $messageId = null;
+      try {
+        $messageId = estab_message_positive_id (
+          $this->formdata ["00_lfd"] ?? null
+        );
+      } catch (Throwable $exception) {
+        $messageId = null;
+      }
+
+      if ($messageId === null) {
+        $direction = in_array (
+          $this->task,
+          array (
+            "FM-Eingang",
+            "FM-Eingang_Anhang",
+            "FM-Eingang_Sichter",
+          ),
+          true
+        ) ? "E" : "A";
+        $conversationNote = $this->task === "Stab_gesprnoti"
+          || ($this->formdata ["11_gesprnotiz"] ?? false) === true;
+        try {
+          $this->messageTimelineHtml = estab_message_timeline_render (
+            estab_message_timeline_for_draft (
+              $direction,
+              $conversationNote
+            ),
+            "message-timeline-draft"
+          );
+        } catch (Throwable $exception) {
+          error_log ("eStab draft message timeline rendering failed");
+          $this->messageTimelineHtml = $this->message_timeline_unavailable ();
+        }
+        return;
+      }
+
+      $identity = estab_read_session_identity ($_SESSION);
+      $incidentId = $GLOBALS ["workflowIncidentId"] ?? null;
+      if (!is_array ($identity) || !is_int ($incidentId) || $incidentId < 1) {
+        $this->messageTimelineHtml = $this->message_timeline_unavailable ();
+        return;
+      }
+
+      $connection = null;
+      try {
+        $connection = estab_message_connect ($conf_4f_db);
+        $incident = estab_incident_active ($connection);
+        if (
+          !is_array ($incident)
+          || (int) ($incident ["active_einsatz_id"] ?? 0) !== $incidentId
+        ) {
+          throw new EstabIncidentConflictException (
+            "Der aktive Einsatz hat sich geändert."
+          );
+        }
+        estab_permission_context_set_from_incident ($incident);
+        $selectedIdentity = estab_read_require_identity_scope (
+          $connection,
+          $incidentId,
+          $identity
+        );
+        $message = estab_message_fetch_for_incident_by_id (
+          $connection,
+          (string) $conf_4f_tbl ["nachrichten"],
+          $messageId,
+          $incidentId
+        );
+        if (!is_array ($message)) {
+          throw new EstabReadPermissionException (
+            "Der Nachrichtenvordruck ist nicht verfügbar."
+          );
+        }
+
+        $operation = array (
+          "Stab_lesen" => "staff-read",
+          "Stab_korrigieren" => "staff-correction",
+          "Stab_sichten" => "viewer-review",
+          "LdF-Eingang" => "telecommunications-lead-edit",
+          "LdF-Ausgang" => "telecommunications-lead-edit",
+          "FM-Ausgang" => "telecommunications-edit",
+        ) [$this->task] ?? null;
+        $readAllowed = estab_read_message_allowed (
+          $selectedIdentity,
+          $message
+        );
+        $writeAllowed = is_string ($operation)
+          && estab_message_object_allowed (
+            $selectedIdentity,
+            $operation,
+            $message,
+            true
+          );
+        $looseWriteView = is_string ($operation)
+          && estab_message_operation_relaxes_write_role ($operation)
+          && !estab_permission_role_checks_enforced ();
+        if (!$readAllowed && !($writeAllowed && $looseWriteView)) {
+          throw new EstabReadPermissionException (
+            "Der Nachrichtenverlauf ist nicht freigegeben."
+          );
+        }
+
+        $this->messageTimelineHtml = estab_message_timeline_render (
+          estab_message_timeline_for_message ($connection, $message),
+          "message-timeline-".$messageId
+        );
+      } catch (Throwable $exception) {
+        error_log ("eStab verified message timeline is unavailable");
+        $this->messageTimelineHtml = $this->message_timeline_unavailable ();
+      } finally {
+        if ($connection instanceof mysqli) {
+          estab_auth_close ($connection);
+        }
+      }
+    }
+
+    /** Keep a failed evidence read navigable without pretending a route. */
+    function message_timeline_unavailable () {
+      return '<section class="estab-message-timeline" '
+        . 'data-estab-message-timeline aria-labelledby="message-timeline-error-title">'
+        . '<header class="estab-message-timeline__header">'
+        . '<h2 id="message-timeline-error-title">Bearbeitungsweg der Meldung</h2>'
+        . '<p class="estab-message-timeline__summary">Die Stationen werden '
+        . 'aus dem unveränderlichen Ereignisnachweis ermittelt.</p></header>'
+        . '<p class="estab-message-timeline__notice" role="status">'
+        . 'Der Bearbeitungsweg kann derzeit nicht sicher angezeigt werden. '
+        . 'Der Nachrichtenvordruck bleibt verfügbar.</p></section>';
+    }
 
     function load_attachment_previews () {
       global $conf_4f_db, $conf_4f_tbl;

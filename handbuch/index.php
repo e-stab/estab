@@ -372,7 +372,7 @@ $handbookUpdated = '2. August 2026';
 
         <article id="vordruck" class="estab-handbook-chapter"
           data-estab-handbook-section
-          data-handbook-keywords="Formular Ausfüllhilfe Infoblase amtlich Betreff Rufnummer Zeit Zeichen Vorrang Sofort Blitz Staatsnot Antwort Weiterleitung Gesprächsnotiz Druck Anlage Anhang Badge">
+          data-handbook-keywords="Formular Ausfüllhilfe Infoblase amtlich Betreff Rufnummer Zeit Zeichen Vorrang Sofort Blitz Staatsnot Antwort Weiterleitung Gesprächsnotiz Druck Anlage Anhang Badge Stationsleiste Laufzeit">
           <header><span>06</span><div><p>Das digitale amtliche Blatt</p><h2>Nachrichtenvordruck bedienen</h2></div></header>
           <p>Der Bildschirmvordruck folgt dem aktuellen dreiteiligen Raster:
             Fm-Zentrale, Nachricht und Sichter. Zwanzig mit „i“ markierte
@@ -396,6 +396,12 @@ $handbookUpdated = '2. August 2026';
             <li><strong>Identität:</strong> Aufnahme-, LdF-, Beförderungs-,
               Verfasser- und Sichterzeichen stammen aus der Sitzung und sind
               keine frei einschleusbaren Browserwerte.</li>
+            <li><strong>Bearbeitungsweg:</strong> Das Band oberhalb des
+              Vordrucks markiert die aktuelle Station, zeigt für jede
+              abgeschlossene Station die Laufzeit bis zum nächsten Übergang
+              und bildet Rückgaben samt Grund als zusätzliche Runde ab. Bei
+              einem neuen Entwurf erscheinen nur die geplanten Stationen ohne
+              erfundene Zeiten.</li>
             <li><strong>Vorschläge:</strong> Rufname der Gegenstelle und - nur
               bei LdF-Eingangsbearbeitung - Absender verwenden frühere Werte
               desselben Einsatzes als auswählbare Vorschläge. Freie Eingaben
@@ -415,7 +421,7 @@ $handbookUpdated = '2. August 2026';
 
         <article id="nachrichtenlauf" class="estab-handbook-chapter"
           data-estab-handbook-section
-          data-handbook-keywords="Eingang Ausgang Workflow Verfasser Sichter Rückgabe Freigabe LdF disponieren Fernmelder befördern Absender Weg korrigieren Berechtigungsmodus Streng Locker Übernahme">
+          data-handbook-keywords="Eingang Ausgang Workflow Verfasser Sichter Rückgabe Freigabe LdF disponieren Fernmelder befördern Absender Weg korrigieren Berechtigungsmodus Streng Locker Übernahme Stationsleiste Laufzeit Runde">
           <header><span>07</span><div><p>Die zuständige Stelle ist immer eindeutig</p><h2>Nachrichtenlauf nach Rolle</h2></div></header>
           <section class="estab-handbook-workflow" aria-labelledby="outgoing-title">
             <h3 id="outgoing-title">Ausgang</h3>
@@ -426,7 +432,10 @@ $handbookUpdated = '2. August 2026';
                 formal prüfen. Freigeben oder mit Pflichtgrund zurückgeben;
                 der Verfasser reicht die Korrektur erneut bei Si ein.</li>
               <li><strong>LdF:</strong> Gegenstellenrufname und vorgesehenen,
-                im freigegebenen S6-Plan gültigen Beförderungsweg festlegen.</li>
+                im freigegebenen S6-Plan gültigen Beförderungsweg festlegen.
+                Ist der Vordruck fachlich nicht disponierbar, geht er mit
+                Pflichtgrund an den Verfasser zurück und durchläuft danach Si
+                und LdF erneut.</li>
               <li><strong>Fernmelder:</strong> Nachricht tatsächlich übermitteln und
                 wirklichen Weg, Beförderungszeit und Zeichen dokumentieren.
                 Ist der Weg nicht nutzbar, geht die Nachricht mit Grund zu LdF
@@ -463,6 +472,12 @@ $handbookUpdated = '2. August 2026';
               erneut eingereicht werden; der Nachweis hält ursprüngliche und
               neu verantwortliche Funktion auseinander.</p>
           </div>
+          <p>Die Stationsleiste jedes geöffneten Nachrichtenvordrucks wird aus
+            der unveränderbaren Ereigniskette aufgebaut. Die Laufzeit verwendet
+            die serverseitige Erfassungszeit eines Übergangs; bewusst
+            korrigierte fachliche Zeitangaben verändern diese Messung nicht.
+            Wiederholte Besuche bei Verfasser, Si, LdF oder Fernmelder bleiben
+            einzeln sichtbar.</p>
         </article>
 
         <article id="anhaenge" class="estab-handbook-chapter"

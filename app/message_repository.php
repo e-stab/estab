@@ -2019,6 +2019,147 @@ function estab_message_update_locked_operator_stage(
     );
 }
 
+/**
+ * Return one formally reviewed outgoing message from LdF to its author.
+ *
+ * The message remains inside the established status-10 correction path. Its
+ * next submission therefore has to pass Si and LdF again. The transition,
+ * mandatory reason and authenticated LdF identity are committed atomically
+ * with the unlocked message row and become part of the immutable event chain.
+ */
+function estab_message_ldf_return_outgoing(
+    mysqli $connection,
+    string $table,
+    mixed $recordId,
+    array $actor,
+    mixed $reason,
+    mixed $expectedIncidentId = null
+): bool {
+    $recordId = estab_message_positive_id($recordId);
+    if (!is_string($reason) || preg_match('//u', $reason) !== 1) {
+        throw new EstabDvInputException(
+            'Für die Rückgabe an den Verfasser ist ein gültiger Grund erforderlich.'
+        );
+    }
+    $reason = trim($reason);
+    $reasonLength = function_exists('mb_strlen')
+        ? mb_strlen($reason, 'UTF-8')
+        : strlen($reason);
+    $reasonWithoutAllowedWhitespace = str_replace(
+        ["\t", "\r", "\n"],
+        '',
+        $reason
+    );
+    if (
+        $reason === ''
+        || $reasonLength > 2000
+        || preg_match('/\p{C}/u', $reasonWithoutAllowedWhitespace) === 1
+    ) {
+        throw new EstabDvInputException(
+            'Für die Rückgabe an den Verfasser ist ein Grund erforderlich.'
+        );
+    }
+
+    $stageSql = estab_message_operator_stage_predicate('A', 1);
+    $stageParameters = estab_message_operator_stage_parameters('A', 1);
+    return estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
+            $connection,
+            $table,
+            $recordId,
+            $actor,
+            $reason,
+            $expectedIncidentId,
+            $stageSql,
+            $stageParameters
+        ): bool {
+            $incidentId = estab_message_transaction_incident_id(
+                $incident,
+                $expectedIncidentId
+            );
+            $operationalActor = estab_message_require_operator_stage_actor(
+                $connection,
+                $incident,
+                $actor,
+                'A',
+                1
+            );
+            $operatorCode = (string) $operationalActor['kuerzel'];
+            $messageStatement = estab_message_execute(
+                $connection,
+                'SELECT `15_quitdatum`, `15_quitzeichen`, `17_vermerke`'
+                    . ' FROM ' . estab_message_table($table)
+                    . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
+                    . $stageSql
+                    . " AND `x02_sperre` = 't'"
+                    . ' AND BINARY `x03_sperruser` = BINARY ? FOR UPDATE',
+                array_merge(
+                    [$recordId, $incidentId],
+                    $stageParameters,
+                    [$operatorCode]
+                )
+            );
+            try {
+                $message = $messageStatement->get_result()->fetch_assoc();
+            } finally {
+                $messageStatement->close();
+            }
+            if (!is_array($message)) {
+                return false;
+            }
+
+            $updateStatement = estab_message_execute(
+                $connection,
+                'UPDATE ' . estab_message_table($table)
+                    . ' SET `17_vermerke` = ?, `x00_status` = 10,'
+                    . " `x01_abschluss` = 'f', `x02_sperre` = 'f',"
+                    . " `x03_sperruser` = ''"
+                    . ' WHERE `00_lfd` = ? AND `einsatz_id` = ?'
+                    . $stageSql
+                    . " AND `x02_sperre` = 't'"
+                    . ' AND BINARY `x03_sperruser` = BINARY ?',
+                array_merge(
+                    [$reason, $recordId, $incidentId],
+                    $stageParameters,
+                    [$operatorCode]
+                )
+            );
+            try {
+                if ($updateStatement->affected_rows !== 1) {
+                    return false;
+                }
+            } finally {
+                $updateStatement->close();
+            }
+
+            estab_message_append_transition_evidence(
+                $connection,
+                $incidentId,
+                $recordId,
+                [
+                    'event_type' => 'ldf_returned',
+                    'actor' => $operationalActor,
+                    'from_status' => 1,
+                    'to_status' => 10,
+                    'snapshot' => [
+                        'direction' => 'A',
+                        'returned_by' => $operatorCode,
+                        'return_reason' => $reason,
+                        'reviewed_at' =>
+                            (string) ($message['15_quitdatum'] ?? ''),
+                        'reviewed_by' =>
+                            (string) ($message['15_quitzeichen'] ?? ''),
+                        'previous_note' =>
+                            (string) ($message['17_vermerke'] ?? ''),
+                    ],
+                ]
+            );
+            return true;
+        }
+    );
+}
+
 /** Release one exact LdF/A-W stage; force is reserved for an explicit reset. */
 function estab_message_release_operator_stage_lock(
     mysqli $connection,

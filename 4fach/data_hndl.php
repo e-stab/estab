@@ -555,6 +555,7 @@ function estab_rehydrate_authoritative_message_form (
       "02_zeit",
       "05_gegenstelle",
       "fernmeldeplan_eintrag_id",
+      "ldf_rueckgabegrund",
       "estab_route_error",
     ),
     "FM-Ausgang" => array (
@@ -743,6 +744,7 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
     "fernmeldeplan_eintrag_id",
     "transportweg_bestaetigt",
     "transport_rueckgabegrund",
+    "ldf_rueckgabegrund",
     "incoming_transport_confirmed",
     "incoming_transport_correction_reason",
     "07_durchspruch", "08_befhinweis", "08_befhinwausw",
@@ -1421,6 +1423,73 @@ function check_and_save ($data, $activeCommandPostName, $expectedIncidentId){
         ? "LdF-Eingang"
         : "LdF-Ausgang";
       $ldfDirection = $ldfTask === "LdF-Eingang" ? "E" : "A";
+      $ldfReturnRequested = $ldfTask === "LdF-Ausgang"
+        && (
+          isset ($data ["ldf_zurueckweisen_x"])
+          || isset ($data ["ldf_zurueckweisen_y"])
+        );
+      if ($ldfReturnRequested) {
+        try {
+          $ldfReturned = estab_message_ldf_return_outgoing (
+            $messageConnection,
+            (string) $conf_4f_tbl ["nachrichten"],
+            $data ["00_lfd"],
+            $messageActor,
+            $data ["ldf_rueckgabegrund"],
+            $expectedIncidentId
+          );
+        } catch (EstabDvInputException $exception) {
+          http_response_code (422);
+          $data ["estab_route_error"] = $exception->getMessage ();
+          $rehydratedLead = estab_rehydrate_locked_operator_form (
+            $messageConnection,
+            (string) $conf_4f_tbl ["nachrichten"],
+            (string) $_SESSION ["vStab_kuerzel"],
+            $ldfTask,
+            $data
+          );
+          if (!is_array ($rehydratedLead)) {
+            estab_render_ldf_stage_conflict ();
+          }
+          $form = new nachrichten4fach (
+            $rehydratedLead,
+            $ldfTask,
+            ""
+          );
+          exit;
+        } catch (
+          EstabIncidentConflictException|
+          EstabDvPermissionException|
+          EstabDvConflictException $exception
+        ) {
+          http_response_code (409);
+          $data ["estab_route_error"] = $exception->getMessage ();
+          $rehydratedLead = estab_rehydrate_locked_operator_form (
+            $messageConnection,
+            (string) $conf_4f_tbl ["nachrichten"],
+            (string) $_SESSION ["vStab_kuerzel"],
+            $ldfTask,
+            $data
+          );
+          if (!is_array ($rehydratedLead)) {
+            estab_render_ldf_stage_conflict ();
+          }
+          $form = new nachrichten4fach (
+            $rehydratedLead,
+            $ldfTask,
+            ""
+          );
+          exit;
+        }
+        if (!$ldfReturned) {
+          estab_render_ldf_stage_conflict ();
+        }
+        protokolleintrag (
+          "LdF-Ausgang-zurueckgewiesen",
+          "message_id=".estab_message_positive_id ($data ["00_lfd"])
+        );
+        break;
+      }
       if ($ldfDirection === "E") {
         // Receipt time and A/W mark are immutable evidence. Discard forged
         // overposting before the legacy validator can parse or reflect it;

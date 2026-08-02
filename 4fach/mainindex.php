@@ -392,6 +392,8 @@ function estab_workflow_require_active_incident_for_post (
     && (
       isset ($request ["absenden_x"])
       || isset ($request ["zurueckweisen_x"])
+      || isset ($request ["ldf_zurueckweisen_x"])
+      || isset ($request ["ldf_zurueckweisen_y"])
       || isset ($request ["transport_nicht_moeglich_x"])
       || isset ($request ["transport_nicht_moeglich_y"])
       || isset ($request ["antwort_x"])
@@ -2057,6 +2059,8 @@ ANTWORT % WEITERLEITUNG
 
   $workflowTaskSubmitted = isset ($returnValue ["absenden_x"])
     || isset ($returnValue ["zurueckweisen_x"])
+    || isset ($returnValue ["ldf_zurueckweisen_x"])
+    || isset ($returnValue ["ldf_zurueckweisen_y"])
     || isset ($returnValue ["transport_nicht_moeglich_x"])
     || isset ($returnValue ["transport_nicht_moeglich_y"])
     || isset ($returnValue ["antwort_x"])

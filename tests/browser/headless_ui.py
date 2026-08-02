@@ -6015,6 +6015,10 @@ class BrowserAcceptance:
             ),
             "Anlagenbereich der gespeicherten Nachricht wurde nicht geladen",
         )
+        self._assert_message_timeline_layout(
+            mobile=False,
+            description="gespeicherter Nachrichtenvordruck mit Anlagen",
+        )
         preview_state = self.cdp.wait_for(
             _frame_expression(
                 "mainframe",
@@ -6839,7 +6843,248 @@ class BrowserAcceptance:
         click_overview_and_handle_dialog(True, "Bestätigen")
         self._assert_official_message_form_print(official_form_document)
 
+    def _assert_message_timeline_layout(
+        self,
+        *,
+        mobile: bool,
+        description: str,
+    ) -> None:
+        expected_mobile = str(mobile).lower()
+        state = self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                f"""
+                const expectedMobile = {expected_mobile};
+                const timeline = doc.querySelector(
+                    "section.estab-message-timeline" +
+                    "[data-estab-message-timeline]"
+                );
+                const track = timeline?.querySelector(
+                    ":scope > ol.estab-message-timeline__track"
+                );
+                const officialForm = doc.querySelector(
+                    "[data-estab-official-message-form]"
+                );
+                const page = timeline?.closest(
+                    ".estab-message-form-page"
+                );
+                if (
+                    doc.readyState !== "complete" ||
+                    !timeline || !track || !officialForm || !page
+                ) return false;
+
+                const timelineStyle = target.getComputedStyle(timeline);
+                const trackStyle = target.getComputedStyle(track);
+                const expectedDisplay = expectedMobile ? "grid" : "flex";
+                if (trackStyle.display !== expectedDisplay) return false;
+
+                const steps = Array.from(
+                    track.querySelectorAll(
+                        ":scope > li.estab-message-timeline__step"
+                    )
+                );
+                if (steps.length < 2) return false;
+                const rects = steps.map(step => step.getBoundingClientRect());
+                const timelineRect = timeline.getBoundingClientRect();
+                const formRect = officialForm.getBoundingClientRect();
+                const pageStyle = target.getComputedStyle(page);
+                const pageContentWidth = page.clientWidth
+                    - parseFloat(pageStyle.paddingLeft || "0")
+                    - parseFloat(pageStyle.paddingRight || "0");
+                const current = steps.filter(step =>
+                    step.getAttribute("aria-current") === "step"
+                    && step.getAttribute("data-estab-timeline-state")
+                        === "current"
+                    && step.classList.contains(
+                        "estab-message-timeline__step--current"
+                    )
+                );
+                const stateLabels = steps.map(step =>
+                    step.querySelector(".estab-message-timeline__state")
+                );
+                const stateSemantics = steps.every((step, index) => {{
+                    const stateName = step.getAttribute(
+                        "data-estab-timeline-state"
+                    );
+                    const stateLabel = stateLabels[index];
+                    if (
+                        !["completed", "current", "pending"].includes(
+                            stateName
+                        ) ||
+                        !step.classList.contains(
+                            "estab-message-timeline__step--" + stateName
+                        ) ||
+                        !stateLabel?.textContent.trim()
+                    ) return false;
+                    const symbol = target.getComputedStyle(
+                        stateLabel,
+                        "::before"
+                    ).content;
+                    return !["", "none", "normal", '\"\"'].includes(
+                        symbol
+                    );
+                }});
+                const overlapPairs = [];
+                for (let left = 0; left < rects.length; left += 1) {{
+                    for (
+                        let right = left + 1;
+                        right < rects.length;
+                        right += 1
+                    ) {{
+                        const horizontalOverlap =
+                            Math.min(rects[left].right, rects[right].right)
+                            - Math.max(rects[left].left, rects[right].left);
+                        const verticalOverlap =
+                            Math.min(rects[left].bottom, rects[right].bottom)
+                            - Math.max(rects[left].top, rects[right].top);
+                        if (
+                            horizontalOverlap > 0.5
+                            && verticalOverlap > 0.5
+                        ) overlapPairs.push([left, right]);
+                    }}
+                }}
+                const horizontalOrder = rects.every((rect, index) =>
+                    index === 0 || (
+                        Math.abs(rect.top - rects[0].top) <= 1
+                        && rect.left >= rects[index - 1].right - 1
+                    )
+                );
+                const verticalOrder = rects.every((rect, index) =>
+                    index === 0 || (
+                        Math.abs(rect.left - rects[0].left) <= 1
+                        && Math.abs(rect.width - rects[0].width) <= 1
+                        && rect.top >= rects[index - 1].bottom - 1
+                    )
+                );
+                const returnSteps = steps.filter(step =>
+                    step.hasAttribute("data-estab-timeline-return")
+                );
+                const stationCounts = new Map();
+                steps.forEach(step => {{
+                    const station = step.getAttribute(
+                        "data-estab-timeline-station"
+                    );
+                    stationCounts.set(
+                        station,
+                        (stationCounts.get(station) || 0) + 1
+                    );
+                }});
+                const returnEvidenceValid = returnSteps.length === 0 || (
+                    returnSteps.every(step => {{
+                        const reason = step.querySelector(
+                            ".estab-message-timeline__reason"
+                        );
+                        return step.classList.contains(
+                            "estab-message-timeline__step--returned"
+                        ) && Boolean(
+                            reason?.textContent.includes("Grund:")
+                        );
+                    }})
+                    && Array.from(stationCounts.values()).some(
+                        count => count > 1
+                    )
+                );
+                const headingId = timeline.getAttribute("aria-labelledby");
+                const heading = headingId
+                    ? doc.getElementById(headingId)
+                    : null;
+                const precedesForm = Boolean(
+                    timeline.compareDocumentPosition(officialForm)
+                    & target.Node.DOCUMENT_POSITION_FOLLOWING
+                );
+                return {{
+                    timelineVisible: timelineStyle.display !== "none"
+                        && timelineStyle.visibility !== "hidden"
+                        && timelineRect.width > 0
+                        && timelineRect.height > 0,
+                    aboveForm: precedesForm
+                        && timelineRect.bottom <= formRect.top + 1,
+                    fullWidth: Math.abs(
+                        timelineRect.width - pageContentWidth
+                    ) <= 2,
+                    semanticStructure: timeline.tagName === "SECTION"
+                        && track.tagName === "OL"
+                        && track.tabIndex === 0
+                        && Boolean(track.getAttribute("aria-label"))
+                        && Boolean(heading?.textContent.trim())
+                        && steps.length === track.children.length,
+                    stepCount: steps.length,
+                    currentCount: current.length,
+                    stateSemantics,
+                    overlapPairs,
+                    horizontalOrder,
+                    verticalOrder,
+                    trackDisplay: trackStyle.display,
+                    overflowX: trackStyle.overflowX,
+                    overflowY: trackStyle.overflowY,
+                    maxHeight: trackStyle.maxHeight,
+                    trackClientWidth: track.clientWidth,
+                    trackScrollWidth: track.scrollWidth,
+                    trackClientHeight: track.clientHeight,
+                    trackScrollHeight: track.scrollHeight,
+                    noInternalVerticalScroller:
+                        track.scrollHeight <= track.clientHeight + 1,
+                    noInternalHorizontalScroller:
+                        track.scrollWidth <= track.clientWidth + 1,
+                    fitsMobileViewport:
+                        doc.body.scrollWidth
+                            <= doc.documentElement.clientWidth + 1
+                        && timelineRect.left >= -0.5
+                        && timelineRect.right
+                            <= doc.documentElement.clientWidth + 0.5,
+                    returnCount: returnSteps.length,
+                    returnEvidenceValid
+                }};
+                """,
+            ),
+            f"Stationsleiste in {description} wurde nicht aufgebaut",
+        )
+        common_valid = (
+            isinstance(state, dict)
+            and state.get("timelineVisible") is True
+            and state.get("aboveForm") is True
+            and state.get("fullWidth") is True
+            and state.get("semanticStructure") is True
+            and state.get("stepCount", 0) >= 2
+            and state.get("currentCount") == 1
+            and state.get("stateSemantics") is True
+            and state.get("overlapPairs") == []
+            and state.get("returnEvidenceValid") is True
+        )
+        if mobile:
+            layout_valid = (
+                state.get("trackDisplay") == "grid"
+                and state.get("verticalOrder") is True
+                and state.get("overflowX") == "visible"
+                and state.get("overflowY") == "visible"
+                and state.get("maxHeight") == "none"
+                and state.get("noInternalVerticalScroller") is True
+                and state.get("noInternalHorizontalScroller") is True
+                and state.get("fitsMobileViewport") is True
+            )
+        else:
+            layout_valid = (
+                state.get("trackDisplay") == "flex"
+                and state.get("horizontalOrder") is True
+                and state.get("overflowX") in {"auto", "scroll"}
+                and state.get("overflowY") == "hidden"
+                and state.get("maxHeight") == "none"
+                and state.get("noInternalVerticalScroller") is True
+                and state.get("trackScrollWidth", 0)
+                    >= state.get("trackClientWidth", 0)
+            )
+        self._truth(
+            common_valid and layout_valid,
+            "Stationsleiste ist nicht sichtbar oberhalb des Vordrucks oder "
+            f"nicht überlappungsfrei responsiv ({description}): "
+            + json.dumps(state, ensure_ascii=False, sort_keys=True),
+        )
+
     def _assert_official_message_form(self) -> str:
+        self._assert_message_timeline_layout(
+            mobile=False,
+            description="neuem Nachrichtenvordruck bei 1440 px",
+        )
         desktop_state = self.cdp.evaluate(
             _frame_expression(
                 "mainframe",
@@ -7755,6 +8000,10 @@ class BrowserAcceptance:
                 "screenWidth": 390,
                 "screenHeight": 844,
             },
+        )
+        self._assert_message_timeline_layout(
+            mobile=True,
+            description="neuem Nachrichtenvordruck bei 390 px",
         )
         mobile_state = self.cdp.wait_for(
             _frame_expression(

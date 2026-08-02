@@ -3563,6 +3563,323 @@ body.estab-message-form-body {
     font-size: 0.9rem;
 }
 
+/* Chronological station band for one Nachrichtenvordruck. Repeated stations
+ * deliberately stay visible so review and transport return loops remain
+ * understandable instead of being collapsed into a linear progress meter. */
+section.estab-message-timeline[data-estab-message-timeline] {
+    --estab-timeline-blue: #173a5e;
+    --estab-timeline-gold: #e4b443;
+    --estab-timeline-green: #246b43;
+    --estab-timeline-red: #9b2634;
+    --estab-timeline-muted: #5c6d80;
+    background: #ffffff;
+    border: 1px solid #b9c8d7;
+    border-left: 6px solid var(--estab-timeline-gold);
+    border-radius: 10px;
+    box-shadow: 0 6px 20px rgba(31, 58, 86, 0.11);
+    color: #172033;
+    margin: 0 0 1rem;
+    max-width: 100%;
+    padding: clamp(0.9rem, 2vw, 1.25rem);
+    width: 100%;
+}
+
+section.estab-message-timeline[data-estab-message-timeline],
+section.estab-message-timeline[data-estab-message-timeline] * {
+    box-sizing: border-box;
+}
+
+.estab-message-timeline__header {
+    align-items: end;
+    display: grid;
+    gap: 0.35rem 1rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    margin-bottom: 0.85rem;
+}
+
+.estab-message-timeline__header > div {
+    min-width: 0;
+}
+
+.estab-message-timeline__header h2 {
+    color: var(--estab-timeline-blue);
+    font-size: 1.2rem;
+    line-height: 1.25;
+    margin: 0;
+}
+
+.estab-message-timeline__summary {
+    color: #445b72;
+    line-height: 1.45;
+    margin: 0;
+    max-width: 65rem;
+    overflow-wrap: anywhere;
+}
+
+.estab-message-timeline__track {
+    align-items: stretch;
+    display: flex;
+    gap: 2.6rem;
+    list-style: none;
+    margin: 0;
+    max-height: none;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-inline: contain;
+    padding: 0.25rem 0.25rem 1rem;
+    scroll-padding-inline: 0.25rem;
+    scroll-snap-type: inline proximity;
+    scrollbar-color: #527394 #e5ecf3;
+    scrollbar-gutter: stable;
+    scrollbar-width: auto;
+    touch-action: pan-x;
+    -webkit-overflow-scrolling: touch;
+}
+
+.estab-message-timeline__track::-webkit-scrollbar {
+    height: 0.8rem;
+}
+
+.estab-message-timeline__track::-webkit-scrollbar-track {
+    background: #e5ecf3;
+    border-radius: 999px;
+}
+
+.estab-message-timeline__track::-webkit-scrollbar-thumb {
+    background: #527394;
+    border: 2px solid #e5ecf3;
+    border-radius: 999px;
+}
+
+.estab-message-timeline__track:focus-visible {
+    outline: 3px solid var(--estab-timeline-gold);
+    outline-offset: 2px;
+}
+
+.estab-message-timeline__step {
+    align-content: start;
+    background: #f7f9fb;
+    border: 2px solid #9aabbd;
+    border-radius: 9px;
+    display: grid;
+    flex: 0 0 clamp(11rem, 18vw, 14rem);
+    gap: 0.35rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    padding: 0.75rem 0.8rem;
+    position: relative;
+    scroll-snap-align: start;
+}
+
+/* The line is decorative; station order and duration remain explicit text. */
+.estab-message-timeline__step:not(:last-child)::after {
+    background: #7f93a7;
+    content: "";
+    height: 3px;
+    left: calc(100% + 0.3rem);
+    position: absolute;
+    top: 1.45rem;
+    width: 2rem;
+}
+
+.estab-message-timeline__step--completed {
+    background: #eef8f2;
+    border-color: var(--estab-timeline-green);
+}
+
+.estab-message-timeline__step--current,
+.estab-message-timeline__step[aria-current="step"] {
+    background: #eaf3fb;
+    border-color: var(--estab-timeline-blue);
+    box-shadow:
+        inset 0 0.3rem 0 var(--estab-timeline-gold),
+        0 0 0 3px rgba(23, 58, 94, 0.14);
+}
+
+.estab-message-timeline__step--pending {
+    background: #f6f7f9;
+    border-color: #8998a8;
+    border-style: dashed;
+}
+
+.estab-message-timeline__step--returned {
+    background: #fff0f2;
+    border-color: var(--estab-timeline-red);
+    border-style: double;
+    border-width: 3px;
+}
+
+.estab-message-timeline__step--returned:not(:last-child)::after {
+    background: var(--estab-timeline-red);
+}
+
+.estab-message-timeline__step--terminal {
+    background: #e4f5ea;
+    border-color: var(--estab-timeline-green);
+    border-style: double;
+    border-width: 3px;
+    box-shadow: inset 0 0.3rem 0 var(--estab-timeline-green);
+}
+
+.estab-message-timeline__step--legacy {
+    background-color: #f4f1e8;
+    background-image: repeating-linear-gradient(
+        135deg,
+        rgba(102, 89, 57, 0.06) 0,
+        rgba(102, 89, 57, 0.06) 0.35rem,
+        transparent 0.35rem,
+        transparent 0.7rem
+    );
+    border-color: #776c50;
+    border-style: dotted;
+}
+
+.estab-message-timeline__station {
+    color: var(--estab-timeline-blue);
+    display: block;
+    font-size: 1rem;
+    font-weight: 900;
+    line-height: 1.25;
+}
+
+.estab-message-timeline__state {
+    align-items: center;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    color: var(--estab-timeline-muted);
+    display: inline-flex;
+    font-size: 0.75rem;
+    font-weight: 800;
+    gap: 0.3rem;
+    justify-self: start;
+    line-height: 1.2;
+    max-width: 100%;
+    padding: 0.22rem 0.5rem;
+}
+
+.estab-message-timeline__state::before {
+    display: inline-block;
+    font-weight: 900;
+    line-height: 1;
+}
+
+.estab-message-timeline__step--completed .estab-message-timeline__state,
+.estab-message-timeline__step--terminal .estab-message-timeline__state {
+    color: var(--estab-timeline-green);
+}
+
+.estab-message-timeline__step--completed .estab-message-timeline__state::before,
+.estab-message-timeline__step--terminal .estab-message-timeline__state::before {
+    content: "\2713";
+}
+
+.estab-message-timeline__step--current .estab-message-timeline__state,
+.estab-message-timeline__step[aria-current="step"] .estab-message-timeline__state {
+    background: var(--estab-timeline-blue);
+    color: #ffffff;
+}
+
+.estab-message-timeline__step--current .estab-message-timeline__state::before,
+.estab-message-timeline__step[aria-current="step"] .estab-message-timeline__state::before {
+    content: "\25cf";
+}
+
+.estab-message-timeline__step--pending .estab-message-timeline__state::before {
+    content: "\25cb";
+}
+
+.estab-message-timeline__step--returned .estab-message-timeline__state {
+    color: var(--estab-timeline-red);
+}
+
+.estab-message-timeline__step--returned .estab-message-timeline__state::before {
+    content: "\21a9";
+}
+
+.estab-message-timeline__step--legacy .estab-message-timeline__state::before {
+    content: "?";
+}
+
+.estab-message-timeline__time,
+.estab-message-timeline__duration {
+    color: #4a5e73;
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.35;
+}
+
+.estab-message-timeline__time {
+    display: block;
+}
+
+.estab-message-timeline__duration {
+    background: #edf2f7;
+    border-radius: 5px;
+    display: inline-block;
+    font-weight: 800;
+    justify-self: start;
+    padding: 0.2rem 0.4rem;
+}
+
+.estab-message-timeline__connector {
+    align-items: center;
+    border-top: 1px dashed #9aabbd;
+    color: #52657a;
+    display: flex;
+    flex-wrap: wrap;
+    font-size: 0.78rem;
+    gap: 0.3rem;
+    margin-top: 0.2rem;
+    min-width: 0;
+    padding-top: 0.4rem;
+}
+
+.estab-message-timeline__reason {
+    background: #fff7f8;
+    border-left: 4px solid var(--estab-timeline-red);
+    color: #6f1e29;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    margin: 0.15rem 0 0;
+    overflow-wrap: anywhere;
+    padding: 0.45rem 0.55rem;
+}
+
+.estab-message-timeline__cycle {
+    background: #fff0c7;
+    border: 1px solid #b98512;
+    border-radius: 999px;
+    color: #654600;
+    font-size: 0.7rem;
+    font-weight: 900;
+    justify-self: start;
+    letter-spacing: 0.035em;
+    padding: 0.2rem 0.45rem;
+    text-transform: uppercase;
+}
+
+.estab-message-timeline__notice {
+    background: #eef4fa;
+    border: 1px solid #8faac4;
+    border-left: 4px solid #2b6397;
+    border-radius: 7px;
+    color: #29435f;
+    line-height: 1.45;
+    margin: 0.75rem 0 0;
+    overflow-wrap: anywhere;
+    padding: 0.65rem 0.75rem;
+}
+
+.estab-message-timeline__notice > :first-child,
+.estab-message-timeline__notice > :last-child {
+    margin-top: 0;
+}
+
+.estab-message-timeline__notice > :last-child {
+    margin-bottom: 0;
+}
+
 .estab-message-form-scroll {
     background: #cfd8e1;
     border: 1px solid #a6b5c4;
@@ -5135,6 +5452,33 @@ body.estab-message-form-body {
         grid-template-columns: 1fr;
     }
 
+    .estab-message-timeline__header {
+        align-items: start;
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .estab-message-timeline__track {
+        display: grid;
+        gap: 1.8rem;
+        max-width: none;
+        overflow: visible;
+        padding: 0.2rem 0;
+        scroll-snap-type: none;
+        touch-action: auto;
+    }
+
+    .estab-message-timeline__step {
+        flex-basis: auto;
+        width: 100%;
+    }
+
+    .estab-message-timeline__step:not(:last-child)::after {
+        height: 1.2rem;
+        left: 1.35rem;
+        top: calc(100% + 0.3rem);
+        width: 3px;
+    }
+
     .estab-message-form-scroll::before {
         color: #34495e;
         content: "Zum vollständigen Vordruck horizontal wischen";
@@ -5189,6 +5533,7 @@ body.estab-message-form-body {
     .estab-message-actionbar,
     .estab-message-categories,
     .estab-message-workflow-panel,
+    .estab-message-timeline,
     .estab-message-distribution-extras,
     .estab-message-attachment-list,
     .estab-message-attachments,
@@ -5324,8 +5669,54 @@ body.estab-message-form-body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .estab-sidebar-status-notification {
+    .estab-sidebar-status-notification,
+    .estab-message-timeline__step {
         animation: none;
+        transition: none;
+    }
+
+    .estab-message-timeline__track {
+        scroll-behavior: auto;
+        scroll-snap-type: none;
+    }
+}
+
+@media (forced-colors: active) {
+    section.estab-message-timeline[data-estab-message-timeline],
+    .estab-message-timeline__step,
+    .estab-message-timeline__state,
+    .estab-message-timeline__duration,
+    .estab-message-timeline__reason,
+    .estab-message-timeline__cycle,
+    .estab-message-timeline__notice {
+        border-color: CanvasText;
+        forced-color-adjust: auto;
+    }
+
+    .estab-message-timeline__step--pending,
+    .estab-message-timeline__step--legacy {
+        border-style: dashed;
+    }
+
+    .estab-message-timeline__step--returned,
+    .estab-message-timeline__step--terminal {
+        border-style: double;
+    }
+
+    .estab-message-timeline__step--current,
+    .estab-message-timeline__step[aria-current="step"] {
+        outline: 3px solid Highlight;
+        outline-offset: 2px;
+    }
+
+    .estab-message-timeline__step--current .estab-message-timeline__state,
+    .estab-message-timeline__step[aria-current="step"] .estab-message-timeline__state {
+        background: Highlight;
+        color: HighlightText;
+    }
+
+    .estab-message-timeline__step:not(:last-child)::after {
+        background: CanvasText;
     }
 }
 

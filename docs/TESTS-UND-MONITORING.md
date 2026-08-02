@@ -1803,7 +1803,28 @@ Der Test belegt die beiden nicht konfigurierbaren Abläufe:
   mit Status 8 ab.
 - Rückgabe: Si gibt einen formal fehlerhaften Ausgang mit Pflichtgrund in
   Status 10 an den Verfasser zurück. Nur dieser korrigiert ihn und reicht
-  erneut vollständig in Status 4 ein.
+  erneut vollständig in Status 4 ein. LdF kann einen fachlich nicht
+  disponierbaren Ausgang ebenfalls nur mit Pflichtgrund in Status 10
+  zurückgeben; nach der Korrektur werden Si und LdF erneut durchlaufen. Ein
+  nicht nutzbarer disponierter Weg führt vom Fernmelder mit Pflichtgrund zu
+  LdF zurück, ohne die vorherige Runde zu überschreiben.
+
+`tests/php/message_timeline_security.php` baut gerade und wiederholte Ein- und
+Ausgangswege als reines Modell nach. Der Test belegt insbesondere, dass die
+Reihenfolge aus `event_id` und jede Laufzeit ausschließlich aus der
+serverseitigen Datenbankzeit `recorded_at` stammen; rückdatierte fachliche
+`occurred_at`-Werte verändern die Messung nicht. Sichter-, LdF- und
+Fernmelder-Rückgaben erscheinen als eigene Stationsbesuche mit HTML-sicherem
+Grund. Entwürfe zeigen nur den geplanten Weg, Legacy-Nachrichten benennen eine
+nicht rekonstruierbare Vorgeschichte und negative oder widersprüchliche
+Nachweise werden nicht als plausibler Verlauf ausgegeben.
+
+`tests/php/message_timeline_integration_security.php` bindet denselben Renderer
+an den gemeinsamen Nachrichtenvordruck und die Meldungsübersichts-Detailseite.
+Damit bleibt die Stationsleiste auch bei Validierungsrückwegen oberhalb des
+Formulars erhalten, verwendet in beiden Ansichten das gemeinsame responsive
+Layout und fällt bei einem nicht sicher prüfbaren Ereignisnachweis auf einen
+gestalteten Hinweis zurück, ohne den übrigen Vordruck unbedienbar zu machen.
 
 Die Vorschlagsfunktion besitzt zusätzlich drei aufeinander abgestimmte
 Nachweise. `tests/php/message_suggestion_security.php` prüft den

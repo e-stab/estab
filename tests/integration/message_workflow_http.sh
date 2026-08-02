@@ -399,6 +399,63 @@ assert_body_absent()
     fi
 }
 
+assert_timeline_numeric_durations()
+{
+    label=${1:-message timeline}
+    duration_attributes=$(
+        grep -Eo 'data-estab-timeline-duration-seconds="[^"]*"' "$body" \
+            || true
+    )
+    if [ -z "$duration_attributes" ]; then
+        printf 'Message workflow HTTP: %s has no measured duration attribute\n' \
+            "$label" >&2
+        sed -n '1,160p' "$body" >&2
+        exit 1
+    fi
+    if printf '%s\n' "$duration_attributes" |
+        grep -Ev '^data-estab-timeline-duration-seconds="[0-9]+"$' \
+            >/dev/null
+    then
+        printf 'Message workflow HTTP: %s has a non-numeric duration attribute\n' \
+            "$label" >&2
+        printf '%s\n' "$duration_attributes" >&2
+        exit 1
+    fi
+}
+
+assert_timeline_station_count()
+{
+    station=$1
+    minimum=$2
+    label=${3:-message timeline}
+    case "$minimum" in
+        '' | *[!0-9]*)
+            echo 'Message workflow HTTP: invalid timeline station minimum' >&2
+            exit 1
+            ;;
+    esac
+    station_count=$(grep -Eo \
+        "data-estab-timeline-station=\"${station}\"" "$body" |
+        wc -l | tr -d ' ')
+    if [ "$station_count" -lt "$minimum" ]; then
+        printf 'Message workflow HTTP: %s expected at least %s visits to %s, got %s\n' \
+            "$label" "$minimum" "$station" "$station_count" >&2
+        sed -n '1,160p' "$body" >&2
+        exit 1
+    fi
+}
+
+assert_outgoing_timeline()
+{
+    label=${1:-outgoing message timeline}
+    assert_body 'data-estab-message-timeline' "$label root"
+    assert_body 'data-estab-timeline-kind="outgoing"' "$label kind"
+    assert_body \
+        'aria-label="Stationen und Laufzeiten der Meldung"' \
+        "$label accessible station track"
+    assert_timeline_numeric_durations "$label"
+}
+
 assert_no_runtime_error()
 {
     label=${1:-response}
@@ -2736,8 +2793,9 @@ assert_body "$reply_marker" 'POL/FB answer in normal A/W outgoing queue'
 assert_body "$forward_marker" 'POL/FB forwarding in normal A/W outgoing queue'
 
 # Outgoing message: S1 writes a draft for mandatory formal Si review. Si
-# returns it once, the original author corrects it, Si approves it, LdF
-# disposes the current S6 route and A/W confirms the actual transport.
+# returns it once, the original author corrects it and Si approves it. LdF
+# returns it with a mandatory reason, so author, Si and LdF run again before
+# LdF disposes the current S6 route and A/W confirms the actual transport.
 load_dashboard "$s1_cookies" 'S1 dashboard before outgoing message'
 outgoing_csrf=$(csrf_from_body)
 assert_status 200 'open S1 outgoing form' \
@@ -3021,6 +3079,173 @@ assert_message_state "$outgoing_marker" \
     "A|1|f|set|${si_code}|S2_rt,S1_gn|f||f" \
     'tokenless LdF request left outgoing unlocked'
 
+# LdF can return a formally reviewed outgoing message only from its locked
+# status-1 stage and only with an explicit reason. The author correction then
+# has to pass Si and LdF again; the immutable timeline must retain both loops.
+load_dashboard "$ldf_cookies" 'LdF queue before outgoing return to author'
+ldf_return_csrf=$(csrf_from_body)
+assert_status 200 'open outgoing for LdF return to author' \
+    --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$ldf_return_csrf" \
+    --data-urlencode 'ldf=meldung' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'LdF return-to-author form'
+assert_body 'name="task" value="LdF-Ausgang"' \
+    'LdF return-to-author task'
+assert_body 'name="ldf_zurueckweisen_x"' \
+    'LdF return-to-author action'
+assert_body 'name="ldf_rueckgabegrund" maxlength="2000"' \
+    'LdF bounded return-to-author reason'
+assert_outgoing_timeline 'LdF timeline before return to author'
+assert_timeline_station_count review 2 \
+    'LdF timeline retains both Si rounds before its return'
+assert_body 'data-estab-timeline-return="si_returned"' \
+    'LdF timeline retains the earlier Si return'
+assert_body 'Anschrift fachlich präzisieren' \
+    'LdF timeline retains the earlier Si return reason'
+assert_body \
+    'data-estab-timeline-station="ldf" data-estab-timeline-state="current"' \
+    'LdF timeline marks the current status-1 station'
+assert_message_state "$outgoing_marker" \
+    "A|1|f|set|${si_code}|S2_rt,S1_gn|t|${ldf_code}|f" \
+    'LdF owns outgoing before return to author'
+
+ldf_return_csrf=$(csrf_from_body)
+assert_status 422 'reject LdF return without mandatory reason' \
+    --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$ldf_return_csrf" \
+    --data-urlencode 'ldf_zurueckweisen_x=1' \
+    --data-urlencode 'task=LdF-Ausgang' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'missing LdF return reason rejection'
+assert_body \
+    'Für die Rückgabe an den Verfasser ist ein Grund erforderlich' \
+    'mandatory LdF return reason error'
+assert_body 'name="ldf_rueckgabegrund" maxlength="2000"' \
+    'LdF return reason rehydrated after validation error'
+assert_body 'name="ldf_zurueckweisen_x"' \
+    'LdF return action rehydrated after validation error'
+assert_outgoing_timeline 'rehydrated LdF return timeline'
+assert_body \
+    'data-estab-timeline-station="ldf" data-estab-timeline-state="current"' \
+    'rehydrated timeline retains the current LdF station'
+assert_message_state "$outgoing_marker" \
+    "A|1|f|set|${si_code}|S2_rt,S1_gn|t|${ldf_code}|f" \
+    'missing LdF return reason preserved stage-one ownership'
+
+ldf_return_csrf=$(csrf_from_body)
+ldf_return_reason='Rufname und Anschrift sind für die Beförderung nicht eindeutig'
+assert_status 200 'return outgoing from LdF to author with reason' \
+    --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$ldf_return_csrf" \
+    --data-urlencode 'ldf_zurueckweisen_x=1' \
+    --data-urlencode 'task=LdF-Ausgang' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    --data-urlencode "ldf_rueckgabegrund=$ldf_return_reason" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'LdF returned outgoing to author'
+assert_message_state "$outgoing_marker" \
+    "A|10|f|set|${si_code}|S2_rt,S1_gn|f||f" \
+    'LdF return moved outgoing to unlocked author correction'
+assert_db_equals \
+    "1|10|${ldf_code}|${ldf_return_reason}" \
+    'LdF return event records transition, actor and mandatory reason' \
+    "SELECT CONCAT(\`from_status\`, '|', \`to_status\`, '|', \`actor_code\`, '|', JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.return_reason'))) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${outgoing_id} AND \`event_type\`='ldf_returned' ORDER BY \`event_id\` DESC LIMIT 1;"
+assert_db_equals 1 'LdF return appended exactly one transition event' \
+    "SELECT COUNT(*) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${outgoing_id} AND \`event_type\`='ldf_returned';"
+assert_db_equals "$ldf_return_reason" \
+    'LdF return reason became the authoritative correction note' \
+    "SELECT \`17_vermerke\` FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
+
+load_dashboard "$s1_cookies" 'author queue after LdF return'
+assert_body "$outgoing_marker" 'LdF-returned outgoing in author queue'
+assert_route_control stab meldung "$outgoing_id" \
+    'LdF-returned outgoing author detail'
+s1_ldf_return_csrf=$(csrf_from_body)
+assert_status 200 'open LdF-returned outgoing as original author' \
+    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$s1_ldf_return_csrf" \
+    --data-urlencode 'stab=meldung' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'LdF-returned outgoing correction form'
+assert_body 'name="task" value="Stab_korrigieren"' \
+    'LdF-returned outgoing correction task'
+assert_body "$ldf_return_reason" \
+    'LdF return reason visible to original author'
+assert_body_absent 'name="17_vermerke"' \
+    'LdF return reason is not author-editable'
+assert_outgoing_timeline 'author timeline after LdF return'
+assert_timeline_station_count author-correction 2 \
+    'author timeline contains both correction rounds'
+assert_timeline_station_count review 2 \
+    'author timeline contains both completed Si rounds'
+assert_body 'data-estab-timeline-return="si_returned"' \
+    'author timeline retains the Si return'
+assert_body 'data-estab-timeline-return="ldf_returned"' \
+    'author timeline marks the LdF return'
+assert_body \
+    'data-estab-timeline-station="author-correction" data-estab-timeline-state="current"' \
+    'author timeline marks the second correction round current'
+
+s1_ldf_return_csrf=$(csrf_from_body)
+ldf_correction_attachment_request_token=$(
+    message_attachment_request_token_from_body
+)
+tactical_time=$(date '+%H%M')
+assert_status 200 'resubmit outgoing after LdF return' \
+    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$s1_ldf_return_csrf" \
+    --data-urlencode \
+        "message_attachment_request_token=$ldf_correction_attachment_request_token" \
+    --data-urlencode 'absenden_x=1' \
+    --data-urlencode 'task=Stab_korrigieren' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    --data-urlencode '07_durchspruch=D' \
+    --data-urlencode '08_befhinweis=' \
+    --data-urlencode '08_befhinwausw=' \
+    --data-urlencode '09_vorrangstufe=eee' \
+    --data-urlencode '10_anschrift=E2E-Zielstelle korrigiert' \
+    --data-urlencode '11_rufnummer=+49 711 7654321' \
+    --data-urlencode '12_anhang=' \
+    --data-urlencode "12_betreff=$outgoing_subject" \
+    --data-urlencode "12_inhalt=$outgoing_marker" \
+    --data-urlencode "12_abfzeit=$tactical_time" \
+    --data-urlencode '13_abseinheit=Gefälschter Absender' \
+    --data-urlencode "14_zeichen=$s1_code" \
+    --data-urlencode '14_funktion=S1' \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'resubmitted outgoing after LdF return'
+assert_message_state "$outgoing_marker" \
+    'A|4|f|null||S2_rt,S1_gn|f||f' \
+    'LdF-corrected outgoing returned to formal Si queue'
+assert_db_equals \
+    "E2E-Zielstelle korrigiert|+49 711 7654321|${authoritative_sender}|${s1_code}|S1" \
+    'LdF correction added routing contact data and preserved authenticated author and local sender' \
+    "SELECT CONCAT(\`10_anschrift\`, '|', \`11_rufnummer\`, '|', \`13_abseinheit\`, '|', \`14_zeichen\`, '|', \`14_funktion\`) FROM \`nv_nachrichten\` WHERE \`00_lfd\`=${outgoing_id};"
+assert_db_equals "$ldf_return_reason" \
+    'second author resubmission retained the LdF return reason' \
+    "SELECT JSON_UNQUOTE(JSON_EXTRACT(\`field_snapshot\`, '$.correction_note')) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${outgoing_id} AND \`event_type\`='author_resubmitted' ORDER BY \`event_id\` DESC LIMIT 1;"
+assert_db_equals 2 'outgoing contains both author resubmission rounds' \
+    "SELECT COUNT(*) FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${outgoing_id} AND \`event_type\`='author_resubmitted';"
+
+finish_viewer_outgoing \
+    "$outgoing_marker" "$outgoing_id" 'Nach LdF-Rückgabe formal vollständig'
+assert_message_state "$outgoing_marker" \
+    "A|1|f|set|${si_code}|S2_rt,S1_gn|f||f" \
+    'Si re-approved outgoing after LdF correction'
+assert_db_equals \
+    'created,si_returned,author_resubmitted,si_approved,ldf_returned,author_resubmitted,si_approved' \
+    'outgoing event order through the complete LdF return loop' \
+    "SELECT GROUP_CONCAT(\`event_type\` ORDER BY \`event_id\` SEPARATOR ',') FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${outgoing_id};"
+
 load_dashboard "$ldf_cookies" 'LdF queue before outgoing cancel'
 ldf_cancel_csrf=$(csrf_from_body)
 assert_status 200 'lock LdF outgoing message before cancel' \
@@ -3032,6 +3257,22 @@ assert_status 200 'lock LdF outgoing message before cancel' \
     "$base_url/4fach/mainindex.php"
 assert_no_runtime_error 'LdF outgoing form before cancel'
 assert_body 'name="task" value="LdF-Ausgang"' 'LdF outgoing cancel form'
+assert_outgoing_timeline 'LdF timeline after author and Si rerun'
+assert_timeline_station_count review 3 \
+    'LdF timeline contains every Si visit'
+assert_timeline_station_count author-correction 2 \
+    'LdF timeline contains both author correction visits'
+assert_timeline_station_count ldf 2 \
+    'LdF timeline contains the returned and current LdF visits'
+assert_body 'data-estab-timeline-return="si_returned"' \
+    'rerun timeline retains the Si return marker'
+assert_body 'data-estab-timeline-return="ldf_returned"' \
+    'rerun timeline retains the LdF return marker'
+assert_body "$ldf_return_reason" \
+    'rerun timeline retains the LdF return reason'
+assert_body \
+    'data-estab-timeline-station="ldf" data-estab-timeline-state="current"' \
+    'rerun timeline marks the second LdF visit current'
 ldf_cancel_csrf=$(csrf_from_body)
 assert_status 200 'cancel LdF outgoing disposition' \
     --cookie "$ldf_cookies" --cookie-jar "$ldf_cookies" \
@@ -3390,7 +3631,7 @@ assert_message_state "$outgoing_marker" \
     "A|8|t|set|${si_code}|S2_rt,S1_gn|f||t" \
     'A/W-completed outgoing status 8'
 assert_db_equals \
-    'created,si_returned,author_resubmitted,si_approved,ldf_dispatched,aw_transport_returned,ldf_dispatched,aw_transported' \
+    'created,si_returned,author_resubmitted,si_approved,ldf_returned,author_resubmitted,si_approved,ldf_dispatched,aw_transport_returned,ldf_dispatched,aw_transported' \
     'outgoing mandatory DV transition event order' \
     "SELECT GROUP_CONCAT(\`event_type\` ORDER BY \`event_id\` SEPARATOR ',') FROM \`nv_nachrichten_ereignisse\` WHERE \`message_id\`=${outgoing_id};"
 load_dashboard "$si_cookies" 'Si queue after outgoing completion'
@@ -3405,6 +3646,39 @@ assert_body_absent "$outgoing_marker" 'A/W queue after outgoing completion'
 load_dashboard "$s1_cookies" 'S1 list after outgoing completion'
 assert_body "$outgoing_marker" 'S1 list after outgoing completion'
 assert_body 'alt="Transport abgeschlossen!"' 'S1 completed-transport indicator'
+completed_outgoing_csrf=$(csrf_from_body)
+assert_status 200 'open completed outgoing with full timeline' \
+    --cookie "$s1_cookies" --cookie-jar "$s1_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$completed_outgoing_csrf" \
+    --data-urlencode 'stab=meldung' \
+    --data-urlencode "00_lfd=$outgoing_id" \
+    "$base_url/4fach/mainindex.php"
+assert_no_runtime_error 'completed outgoing full timeline'
+assert_body 'name="task" value="Stab_lesen"' \
+    'completed outgoing read task'
+assert_outgoing_timeline 'completed outgoing timeline'
+assert_timeline_station_count review 3 \
+    'completed timeline contains three Si visits'
+assert_timeline_station_count author-correction 2 \
+    'completed timeline contains two author corrections'
+assert_timeline_station_count ldf 3 \
+    'completed timeline contains LdF return and redisposition visits'
+assert_timeline_station_count telecommunications 2 \
+    'completed timeline contains both Fernmelder transport visits'
+assert_body 'data-estab-timeline-return="si_returned"' \
+    'completed timeline retains the Si return'
+assert_body 'data-estab-timeline-return="ldf_returned"' \
+    'completed timeline retains the LdF return'
+assert_body 'data-estab-timeline-return="aw_transport_returned"' \
+    'completed timeline retains the A/W return'
+assert_body "$ldf_return_reason" \
+    'completed timeline retains the LdF return reason'
+assert_body "$transport_return_reason" \
+    'completed timeline retains the A/W return reason'
+assert_body \
+    'data-estab-timeline-station="completed" data-estab-timeline-state="current"' \
+    'completed timeline marks the terminal station current'
 load_dashboard "$s2_cookies" 'S2 list after outgoing completion'
 assert_body "$outgoing_marker" 'S2 list after outgoing completion'
 load_dashboard "$s3_cookies" 'S3 list after outgoing completion'
@@ -3817,4 +4091,4 @@ if [ -n "$account_restore_state_file" ]; then
 fi
 
 printf '%s\n' \
-    'Message workflow HTTP integration: OK; incoming 1 -> 4 -> 8, outgoing 4 -> 10 -> 4 -> 1 -> 2 -> 1 -> 2 -> 8, conversation note 4 -> 10 -> 4 -> 1 -> 2 -> 8; LdF callsign/S6 disposition, Si return/correction, A/W confirmation, TTB/PDF, immutable archive, Nachweisung, POL/FB, answer and forwarding verified'
+    'Message workflow HTTP integration: OK; incoming 1 -> 4 -> 8, outgoing 4 -> 10 -> 4 -> 1 -> 10 -> 4 -> 1 -> 2 -> 1 -> 2 -> 8, conversation note 4 -> 10 -> 4 -> 1 -> 2 -> 8; timeline loops/durations, LdF return/correction, LdF callsign/S6 disposition, Si return/correction, A/W confirmation, TTB/PDF, immutable archive, Nachweisung, POL/FB, answer and forwarding verified'

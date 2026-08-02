@@ -1414,6 +1414,12 @@ HTML;
                 echo '<button type="submit" name="abbrechen_x" value="1" '
                     . 'class="estab-button estab-button-ghost" formnovalidate>'
                     . 'Abbrechen</button>';
+                if ($this->task === 'LdF-Ausgang') {
+                    echo '<button type="submit" '
+                        . 'name="ldf_zurueckweisen_x" value="1" '
+                        . 'class="estab-button estab-button-danger" formnovalidate>'
+                        . 'An Verfasser zurückgeben</button>';
+                }
                 if ($this->task === 'FM-Ausgang') {
                     echo '<button type="submit" '
                         . 'name="transport_nicht_moeglich_x" value="1" '
@@ -1618,7 +1624,17 @@ HTML;
                 echo '<p class="estab-field-error">Kein aktuell gültiger, '
                     . 'freigegebener S6-Fernmeldeplan verfügbar.</p>';
             }
-            echo '</fieldset>';
+            echo '</fieldset>'
+                . '<fieldset data-estab-ldf-return>'
+                . '<legend>Begründete Rückgabe</legend>'
+                . '<p>Wenn Rufname, Anschrift oder Inhalt fachlich nicht '
+                . 'beförderbar sind, geht die Meldung zur Korrektur an den '
+                . 'Verfasser und anschließend erneut über Sichter und LdF.</p>'
+                . '<label for="f_ldf_rueckgabegrund">Rückgabegrund</label>'
+                . '<textarea id="f_ldf_rueckgabegrund" '
+                . 'name="ldf_rueckgabegrund" maxlength="2000" rows="3">'
+                . $this->safe_message_value('ldf_rueckgabegrund')
+                . '</textarea></fieldset>';
         } elseif ((bool)($this->feld[6] ?? false)) {
             echo '<fieldset><legend>Beförderungsweg</legend>';
             $this->official_message_text_input(
@@ -2050,6 +2066,7 @@ HTML;
                 . estab_message_html($this->formdata['estab_route_error'])
                 . '</div>';
         }
+        echo (string)$this->messageTimelineHtml;
         include_once __DIR__ . '/katego.php';
         $dirtyInitial = $this->hasUnsavedValidationData
             ? ' data-estab-dirty-initial'

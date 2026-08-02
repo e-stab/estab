@@ -35,6 +35,12 @@ Kontosperre und Kennwortreset. `password_policy.php` lädt, validiert und
 ändert die revisionsgesicherte globale Kennwortrichtlinie für
 Funktionskonten. `message_evidence.php` speichert und prüft die
 append-only Nachrichtenereigniskette einschließlich Terminalbindung.
+`message_timeline.php` liest diese Kette begrenzt für genau einen Einsatz und
+eine Nachricht, prüft Hashverkettung und Nachweiskopf erneut und erzeugt daraus
+die gemeinsame Stationsleiste für Bearbeitung und Detailansicht. Wiederholte
+Stationen bleiben als einzelne Besuche erhalten. Laufzeiten verwenden
+ausschließlich die unveränderbare Datenbankzeit `recorded_at`; die fachlich
+korrigierbare Ereigniszeit `occurred_at` ist ausdrücklich keine Stoppuhr.
 `shift_access.php` bildet optionale einsatzgebundene Zugangsschichten und
 Kontenzuordnungen ab. `dv_operations.php` bildet S6-Planung, Melderlauf sowie
 historische Dienstbetriebs- und Betriebsereignisdaten ab. `operational_guard.php` ist die
@@ -168,10 +174,17 @@ gemeinsame fail-closed Grenze für authentifizierte operative Schreibrequests.
   Status 2
   zum Abschluss in Status 8. Der feste Regellauf ist deshalb
   `4 → 1 → 2 → 8`; Autosichtung und ein konfigurierbarer Sichtungs-Bypass
-  existieren nicht. Ist der disponierte Weg tatsächlich nicht verfügbar,
+  existieren nicht. Erkennt LdF vor der Disposition einen fachlichen Fehler,
+  kann er die Nachricht nur mit Pflichtgrund in Status 10 an den Verfasser
+  zurückgeben. Nach dessen Korrektur sind Si und LdF erneut zu durchlaufen.
+  Ist der disponierte Weg tatsächlich nicht verfügbar,
   gibt der Fernmelder die Nachricht mit Pflichtgrund an LdF zurück; eine neue
   Planwegentscheidung ist erforderlich und beide Dispositionen bleiben im
-  Ereignisnachweis erhalten.
+  Ereignisnachweis erhalten. Oberhalb jedes Nachrichtenvordrucks zeigt die
+  Stationsleiste den aktuellen Ort, alle bisherigen Übergänge, die jeweilige
+  Verweildauer und jede Sichter-, LdF- oder Fernmelder-Rückgabe samt Grund.
+  Neue Entwürfe zeigen nur den geplanten Weg ohne erfundene Zeiten;
+  Legacy-Bestand kennzeichnet nicht rekonstruierbare Abschnitte ausdrücklich.
 - `message_transport.php` normalisiert die schreibbaren SET-Werte und übersetzt
   `Fe`, `Fu`, `Me`, `FAX`/`Fax`, `FS`, `@` und `DFÜ` für die Anzeige in
   verständliche Langformen. Die Nachweisung zeigt bei Eingängen dieses

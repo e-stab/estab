@@ -300,6 +300,7 @@ function estab_workflow_existing_operational_post(array $post): bool
         'antwort',
         'weiterleiten',
         'zurueckweisen',
+        'ldf_zurueckweisen',
         'transport_nicht_moeglich',
         'gelesen',
         'anhang_plus',
@@ -399,6 +400,7 @@ function estab_workflow_existing_operational_post(array $post): bool
         'antwort',
         'weiterleiten',
         'zurueckweisen',
+        'ldf_zurueckweisen',
         'transport_nicht_moeglich',
         'gelesen',
         'anhang_plus',
@@ -452,7 +454,9 @@ function estab_workflow_existing_operational_post(array $post): bool
                 'absenden', 'zurueckweisen', 'abbrechen',
             ],
             'LdF-Eingang' => ['absenden', 'abbrechen'],
-            'LdF-Ausgang' => ['absenden', 'abbrechen'],
+            'LdF-Ausgang' => [
+                'absenden', 'ldf_zurueckweisen', 'abbrechen',
+            ],
             'FM-Ausgang' => [
                 'absenden', 'abbrechen', 'transport_nicht_moeglich', 'antwort',
             ],
@@ -814,6 +818,7 @@ function estab_workflow_action_keys_allowed(array $request): bool
         'antwort_x', 'antwort_y',
         'weiterleiten_x', 'weiterleiten_y',
         'zurueckweisen_x', 'zurueckweisen_y',
+        'ldf_zurueckweisen_x', 'ldf_zurueckweisen_y',
         'transport_nicht_moeglich_x', 'transport_nicht_moeglich_y',
         'gelesen_x', 'gelesen_y',
         'anhang_plus_x', 'anhang_plus_y',
@@ -1521,6 +1526,24 @@ function estab_workflow_route_allowed(array $identity, string $method, array $re
             && $task !== 'Stab_sichten'
         ) {
             return false;
+        }
+        $ldfReturnRequested =
+            isset($request['ldf_zurueckweisen_x'])
+            || isset($request['ldf_zurueckweisen_y']);
+        if ($ldfReturnRequested && $task !== 'LdF-Ausgang') {
+            return false;
+        }
+        if (array_key_exists('ldf_rueckgabegrund', $request)) {
+            $returnReason = $request['ldf_rueckgabegrund'];
+            if (
+                $task !== 'LdF-Ausgang'
+                || !is_string($returnReason)
+                || preg_match('//u', $returnReason) !== 1
+                || estab_auth_text_length($returnReason) > 2000
+                || str_contains($returnReason, "\0")
+            ) {
+                return false;
+            }
         }
         if (
             (isset($request['transport_nicht_moeglich_x'])

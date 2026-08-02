@@ -72,7 +72,7 @@ Softwareeinstellung nicht.
 | S. 4-45 sowie Handbuch ETB/TBB S. 6 und 26 | Die Einsatzdokumentation wird durch S2 sichergestellt; das ETB ist urkundlicher Nachweis. Die DV-Fassung nennt ein Jahr, die spätere ETB-/TBB-Unterlage zehn Jahre für ETB und TBB. | S2 bleibt alleinige Lage-/Rotkopiefunktion. Die Anwendung setzt die strengere Mindestaufbewahrung von zehn Jahren ab formalem Abschluss um. ETB und TBB sind nur anhängbar; eine Berichtigung ist ein neuer Eintrag mit Gegenreferenz. Ein Legal Hold kann die Frist verlängern, aber nicht verkürzen. | `tests/php/logbook_security.php`, `tests/php/schema_migration_contract.php`, `tests/integration/schema_migrator.sh`, `tests/integration/dv_evidence.php` |
 | S. 4-59/4-60 | S6 plant und führt den Telekommunikationseinsatz und stellt die Führbarkeit über geeignete Verbindungen sicher. | Im strengen Modus darf nur ein Konto mit der festen Funktion `S6` versionierte Fernmeldepläne erstellen und veröffentlichen. LdF kann nur einen aktuell gültigen, veröffentlichten Planweg disponieren; veröffentlichte Fassungen bleiben in beiden Modi unveränderlich. | `tests/integration/dv_operations.php`, `tests/integration/message_workflow_http.sh` |
 | S. 4-63 | Der Sichter analysiert Eingänge inhaltlich und leitet sie an zuständige Bearbeiter weiter. | Eingänge laufen zwingend `Fernmelder → LdF → Si`; Si setzt Empfänger und Abschluss. Der Fernmelder darf den Absender nicht schreiben, LdF übersetzt den aufgenommenen Rufnamen und bestätigt den vom Fernmelder erfassten Eingangsweg. Eine Änderung verlangt eine Begründung und wird mit Alt-/Neuwert und LdF-Identität nachgewiesen; Aufnahmezeit und -zeichen des Fernmelders bleiben unverändert. | `tests/php/workflow_security.php`, `tests/php/ldf_validation_security.php`, `tests/php/ldf_ui_flow_security.php`, `tests/integration/message_workflow_http.sh` |
-| S. 4-63 | Bei Ausgängen prüft Si nur Anschrift, Unterschrift/Zeichen und Funktion, nicht den Inhalt. | Ausgänge laufen zwingend `Verfasser → Si → LdF → Fernmelder`. Si kann formal freigeben oder mit Pflichtgrund zurückgeben, aber keine Inhaltsfelder verändern. Nach Korrektur folgt die Sichtung erneut. | `tests/php/message_security.php`, `tests/integration/message_concurrency.php`, `tests/integration/message_workflow_http.sh` |
+| S. 4-63 | Bei Ausgängen prüft Si nur Anschrift, Unterschrift/Zeichen und Funktion, nicht den Inhalt. | Ausgänge laufen zwingend `Verfasser → Si → LdF → Fernmelder`. Si kann formal freigeben oder mit Pflichtgrund zurückgeben, aber keine Inhaltsfelder verändern. Auch LdF kann einen fachlich nicht disponierbaren Vordruck nur begründet an den Verfasser zurückgeben. Nach jeder Korrektur folgen Si und LdF erneut. | `tests/php/message_security.php`, `tests/php/ldf_return_security.php`, `tests/php/message_timeline_security.php`, `tests/integration/message_concurrency.php`, `tests/integration/message_workflow_http.sh` |
 | Nachrichtenvordruck-Unterlagen sowie S. 4-63/4-64 | Eine Gesprächsnotiz dokumentiert die ursprüngliche Gesprächsart, bleibt aber als Ausgang im geordneten Informations- und Fernmeldeweg. | Von den fernmeldespezifischen Angaben erfasst der Verfasser ausschließlich die ursprüngliche Gesprächsart. Si prüft formal; danach setzt LdF den Rufnamen der Gegenstelle und disponiert einen aktiven, veröffentlichten S6-Beförderungsweg. Der Fernmelder weist die Beförderung nach. Erst dieser Abschluss erzeugt TBB-Nachweis und PDF-Vordruck. | `tests/integration/message_workflow_http.sh`, `tests/integration/http_smoke.sh` |
 | S. 4-64 | Der Melder darf den Inhalt nicht ändern, muss schnell zustellen, Rücknachrichten feststellen, zurückkehren, sich zurückmelden und den tatsächlichen Empfänger nennen. | Das Medium `Me` verlangt einen LdF-Auftrag und die Zustandskette Beauftragung, persönliche Übernahme, Übergabe mit Empfänger, Rückweg mit explizitem Rücknachrichtenvermerk und Rückkehr. Danach bestätigt in `STRICT` ausschließlich ein Konto mit der festen Funktion `LdF` die Rückmeldung an die FmZt; in `LOOSE` bleibt dieser Zustandsschritt zwingend und nur die Funktion des bestätigenden Kontos wird nicht erzwungen. Der Nachrichtenabschluss wartet auf die vollständige Kette. | `tests/integration/dv_operations.php`, `tests/integration/message_workflow_http.sh` |
 | S. 4-64 | Bis zur Rückkehr darf der Melder keine anderen Aufträge annehmen; in einer FüSt mit Stab gehört er zur FmZt und wird durch LdF eingesetzt. | Nur ein aktives, ungesperrtes Konto mit der Funktion `Fernmelder` ist als Melder wählbar. Im strengen Modus darf ausschließlich LdF es beauftragen; im lockeren Modus bleibt die Melder-Eignung bestehen, nur die Funktionsprüfung des disponierenden Kontos entfällt. Während Übernahme, Übergabe und Rückweg sperrt eine zentrale Request-Grenze alle fremden operativen Schreibvorgänge dieses Kontos. | `tests/php/dv_operations_security.php`, `tests/integration/dv_operations.php` |
@@ -106,7 +106,7 @@ Darstellungsmerkmal:
 | --- | --- | --- | --- |
 | `4` | Ausgang | Si | formale Freigabe an LdF oder begründete Rückgabe an den Verfasser |
 | `10` | Ausgang | Verfasser | korrigieren und erneut vollständig zur Sichtung einreichen |
-| `1` | Ausgang | LdF | Rufname der Gegenstelle übersetzen und vorgesehenen Beförderungsweg entscheiden |
+| `1` | Ausgang | LdF | Rufname der Gegenstelle übersetzen und vorgesehenen Beförderungsweg entscheiden oder mit Pflichtgrund an den Verfasser zurückgeben |
 | `2` | Ausgang | Fernmelder | Nachricht tatsächlich befördern und Zeit sowie realen Weg nachweisen |
 | `1` | Eingang | LdF | aufgenommenen Rufnamen übersetzen, Absender festlegen und den vom Fernmelder erfassten Eingangsweg bestätigen oder begründet korrigieren |
 | `4` | Eingang | Si | Inhalt auswerten, Empfänger festlegen und weitergeben |
@@ -118,6 +118,12 @@ Damit gelten zwei feste Abläufe:
 Ausgang: Verfasser → Si → LdF → Fernmelder → abgeschlossen
 Eingang: Fernmelder → LdF → Si → Empfänger/abgeschlossen
 ```
+
+Rückgaben verkürzen diesen Lauf nicht. Si oder LdF geben einen Ausgang mit
+Pflichtgrund in Status `10` an den Verfasser zurück; danach folgen erneut
+`Verfasser → Si → LdF`. Kann der Fernmelder den disponierten Weg nicht nutzen,
+führt die Nachricht von Status `2` zurück zu LdF in Status `1`. Jede Runde
+bleibt als eigener Übergang in der Nachrichtenereigniskette erhalten.
 
 Eine neu erfasste Gesprächsnotiz ist als Nachrichtenart gekennzeichnet, aber
 keine Ausnahme vom Ausgangslauf. Der Verfasser hält die ursprüngliche
@@ -140,6 +146,10 @@ Für Ausgänge prüft Si ausschließlich die formalen Merkmale, insbesondere
 Anschrift, Verfasserzeichen und Verfasserfunktion. Inhaltliche Änderungen sind
 in dieser Rolle technisch gesperrt. Eine Rückgabe verlangt einen Grund und
 erzeugt keine Abkürzung: Nach der Korrektur beginnt die formale Prüfung erneut.
+Auch LdF verändert einen nicht disponierbaren Vordruck nicht stellvertretend,
+sondern gibt ihn begründet an den Verfasser zurück. Nach der Korrektur prüft Si
+erneut, bevor LdF erneut disponiert. Der Rückgabegrund, die handelnde Identität
+und der Übergang `1 → 10` werden atomar mit der Nachricht hashverkettet.
 Für Eingänge bleibt die inhaltliche Auswertung und Empfängerzuordnung Aufgabe
 des Sichters. Der Fernmelder erfasst Medium, Aufnahmezeit und Aufnahmezeichen. LdF muss
 das Medium vor der Weitergabe ausdrücklich bestätigen. Eine Korrektur ohne
@@ -191,6 +201,15 @@ Funktionen nicht durch manipulierte Formularwerte ersetzen. Zeiten dürfen im
 fachlich vorgesehenen Formular bewusst korrigiert werden; der tatsächlich
 speichernde Zeitpunkt und die handelnde Identität bleiben zusätzlich im
 Ereignisnachweis erhalten.
+
+Die gemeinsame Stationsleiste oberhalb des Vordrucks visualisiert genau diesen
+Nachweis. Sie zeigt den aktuellen Bearbeitungsort, abgeschlossene und geplante
+Stationen sowie jede tatsächlich durchlaufene Rückgabeschleife. Die angezeigte
+Verweildauer zwischen zwei Übergängen wird ausschließlich aus der
+serverseitigen Datenbankzeit `recorded_at` berechnet. Fachlich zurückdatierbare
+Zeitfelder und `occurred_at` verändern diese Laufzeit nicht. Bei historischem
+Bestand werden unbekannte Abschnitte als nicht rekonstruierbar bezeichnet,
+statt einen Ablauf oder eine Dauer zu erfinden.
 
 Ist ein von LdF disponierter Weg beim Fernmelder tatsächlich nicht verfügbar,
 darf der Fernmelder keinen erfundenen Beförderungsnachweis eintragen. Die Nachricht geht mit

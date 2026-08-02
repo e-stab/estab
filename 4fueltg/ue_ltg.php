@@ -6,6 +6,7 @@ require_once __DIR__ . "/../app/auth.php";
 require_once __DIR__ . "/../app/message_priority.php";
 require_once __DIR__ . "/../app/message_list.php";
 require_once __DIR__ . "/../app/message_list_ui.php";
+require_once __DIR__ . "/../app/message_timeline.php";
 require_once __DIR__ . "/../app/navigation.php";
 require_once __DIR__ . "/../app/read_authorization.php";
 require_once __DIR__ . "/../app/session_ui.php";
@@ -728,17 +729,35 @@ SELECT lfd FROM `nv_masterkatego` WHERE `kategorie` = "2m"));
 \*****************************************************************************/
 class nachrichten4fach {
 
-    function __construct ($formulardaten, $task, $errorselect){
-      $this->nachrichten4fach ($formulardaten, $task, $errorselect);
+    function __construct (
+      $formulardaten,
+      $task,
+      $errorselect,
+      $messageTimelineHtml = ""
+    ){
+      $this->nachrichten4fach (
+        $formulardaten,
+        $task,
+        $errorselect,
+        $messageTimelineHtml
+      );
     }
 
     function safe_message_value ($field) {
       return estab_message_html ($this->formdata[$field] ?? "");
     }
 
-    function nachrichten4fach ($formulardaten, $task, $errorselect){
+    function nachrichten4fach (
+      $formulardaten,
+      $task,
+      $errorselect,
+      $messageTimelineHtml = ""
+    ){
       $this->task = $task ;
       $this->formdata = $formulardaten ;
+      $this->messageTimelineHtml = is_string ($messageTimelineHtml)
+        ? $messageTimelineHtml
+        : "";
       $this->lfd = $this->formdata ["00_lfd"];
       foreach (array ("01_datum", "02_zeit", "03_datum", "12_abfzeit", "15_quitdatum") as $dateField) {
         if (estab_datetime_is_unset ($this->formdata [$dateField] ?? null)) {
@@ -763,6 +782,7 @@ var_dump ($this->formdata); echo "<br>";
     var $formdata ;   // array, Formulardaten
     var $lfd ;        // integer, laufende Nummer der Nachricht
     var $errorselect; // array, Felder die falsch eingegeben wurden.
+    var $messageTimelineHtml = "";
 
   // aktive und Inaktive Darstellungsfarben
 
@@ -1091,7 +1111,12 @@ var_dump ($this->formdata); echo "<br>";
     $this->feldbgcolor ();
     $this->get_access_by_task ($this->task);
 
-    pre_html ("N","Formular ".$this->task." ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"], ""); // Normaler Seitenaufbau ohne Auffrischung
+    pre_html (
+      "N",
+      "Formular ".$this->task." ".$conf_4f ["Titelkurz"]." ".$conf_4f ["Version"],
+      "",
+      true
+    ); // Normaler Seitenaufbau ohne Auffrischung
 
     switch ($this->task){
       case "FM-Eingang"         : $ueberschrift = "* * *   A N N A H M E  * * *"; break;
@@ -1114,6 +1139,7 @@ var_dump ($this->formdata); echo "<br>";
     echo "<p>Vollständiger Nachrichtenvordruck des aktiven Einsatzes. ";
     echo "Farbkennzeichnungen innerhalb des Vordrucks bleiben fachlich erhalten.</p>\n";
     echo "</header>\n";
+    echo $this->messageTimelineHtml;
     echo "<section class=\"estab-tool-panel\" ";
     echo "aria-labelledby=\"message-detail-title\">\n";
     echo "<header class=\"estab-tool-panel-heading\">\n";
@@ -2091,6 +2117,7 @@ if (count($_POST)>0) { $returnValue = $_POST; }  // POST Daten, wenn vorhanden s
       } catch (Throwable $exception) {
         estab_overview_forbid ();
       }
+      $messageTimelineHtml = "";
       $messageConnection = estab_message_connect ($conf_4f_db);
       try {
         $formdata = estab_message_fetch_for_incident_by_id (
@@ -2099,13 +2126,47 @@ if (count($_POST)>0) { $returnValue = $_POST; }  // POST Daten, wenn vorhanden s
           $overviewRecordId,
           $overviewIncidentId
         );
+        if (is_array ($formdata)) {
+          try {
+            $messageTimelineHtml = estab_message_timeline_render (
+              estab_message_timeline_for_message (
+                $messageConnection,
+                $formdata
+              ),
+              "overview-message-timeline-".$overviewRecordId
+            );
+          } catch (Throwable $exception) {
+            error_log (
+              "eStab overview message timeline is unavailable"
+            );
+            $messageTimelineHtml = '<section '
+              . 'class="estab-message-timeline" '
+              . 'data-estab-message-timeline '
+              . 'aria-labelledby="overview-message-timeline-error-title">'
+              . '<header class="estab-message-timeline__header">'
+              . '<h2 id="overview-message-timeline-error-title">'
+              . 'Bearbeitungsweg der Meldung</h2>'
+              . '<p class="estab-message-timeline__summary">Die Stationen '
+              . 'werden aus dem unveränderlichen Ereignisnachweis '
+              . 'ermittelt.</p></header>'
+              . '<p class="estab-message-timeline__notice" role="status">'
+              . 'Der Bearbeitungsweg kann derzeit nicht sicher angezeigt '
+              . 'werden. Der Nachrichtenvordruck bleibt verfügbar.'
+              . '</p></section>';
+          }
+        }
       } finally {
         estab_auth_close ($messageConnection);
       }
       if (!is_array ($formdata)) {
         estab_overview_forbid ();
       }
-      $form = new nachrichten4fach ($formdata, "Stab_lesen", "");
+      $form = new nachrichten4fach (
+        $formdata,
+        "Stab_lesen",
+        "",
+        $messageTimelineHtml
+      );
    }
 
 
