@@ -39,6 +39,8 @@ jobs:
         run: |
           set -euo pipefail
 
+          mkdir -p audit-results
+
           git ls-files -z |
           while IFS= read -r -d '' file; do
             if [[ -f "$file" ]]; then
@@ -46,9 +48,10 @@ jobs:
               printf '%12d %s\n' "$size" "$file"
             fi
           done |
-          sort -rn |
-          head -200 |
-          tee audit-results/largest-tracked-files.txt
+          sort -rn > audit-results/largest-tracked-files.txt
+
+          echo "Largest tracked files:"
+          sed -n '1,200p' audit-results/largest-tracked-files.txt
 
       - name: Reject very large tracked files
         shell: bash
