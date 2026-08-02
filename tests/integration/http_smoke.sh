@@ -3890,10 +3890,32 @@ assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
 # it does not inherit LdF/A-W transport rights or the S2 Lageübersicht.
 assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fach/nachwea.php?nwalle=1"
+assert_header_fixed 'Content-Type: text/html; charset=UTF-8'
+assert_header_fixed 'Cache-Control: private, no-store, max-age=0'
+assert_header_fixed 'X-Content-Type-Options: nosniff'
+assert_header_fixed 'X-Robots-Tag: noindex, nofollow'
+assert_body 'data-estab-error-page'
+assert_body 'data-estab-error-status="403"'
+assert_body 'data-estab-error-context="tracking"'
+assert_body 'Keine Berechtigung für die Nachweisung'
+assert_body 'Die Nachweisung ist nur für eine aktive LdF- oder Fernmelder-Funktion verfügbar.'
+assert_body 'role="alert"'
+assert_body 'data-estab-error-recovery'
+assert_body '>Zur eStab-Übersicht</a>'
+assert_body_absent 'data-estab-nav-key="tracking"'
 assert_body_absent 'Nachweisung Eingang / Ausgang'
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 assert_status 403 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/4fueltg/ue_ltg.php"
+assert_header_fixed 'Content-Type: text/html; charset=UTF-8'
+assert_header_fixed 'Cache-Control: private, no-store, max-age=0'
+assert_body 'data-estab-error-page'
+assert_body 'data-estab-error-context="message-overview"'
+assert_body 'Keine Berechtigung für die Meldungsübersicht'
+assert_body 'Die Meldungsübersicht ist der aktiven Lage/Dokumentation vorbehalten.'
+assert_body_absent 'data-estab-nav-key="message-overview"'
 assert_body_absent "$workflow_marker"
+assert_session_bar "$test_name" "$test_code" "$test_function" "$test_role"
 assert_status 200 --cookie "$cookie_jar" --cookie-jar "$cookie_jar" \
     "$base_url/stabetb/etb.php"
 assert_body 'Ihre Funktion hat lesenden Zugriff.'

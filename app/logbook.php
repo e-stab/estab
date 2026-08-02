@@ -7,6 +7,7 @@ require_once __DIR__ . '/csrf.php';
 require_once __DIR__ . '/dv_operations.php';
 require_once __DIR__ . '/incident.php';
 require_once __DIR__ . '/logbook_numbering.php';
+require_once __DIR__ . '/session_ui.php';
 
 const ESTAB_LOGBOOK_TITLE_MAX_LENGTH = 255;
 const ESTAB_LOGBOOK_TEXT_MAX_LENGTH = 10000;
@@ -1577,17 +1578,27 @@ function estab_logbook_redcopy_function(array $databaseConfig, string $matrixTab
     }
 }
 
-/** Emit a deliberately small error response and stop request processing. */
+/** Emit a persistent browser error while keeping the fail-closed status. */
 function estab_logbook_abort(int $status, string $message): never
 {
     if (ob_get_level() > 0) {
         @ob_clean();
     }
-    http_response_code($status);
-    header('Content-Type: text/plain; charset=UTF-8');
-    header('Cache-Control: no-store');
-    echo $message;
-    exit;
+    $context = estab_navigation_active_key($_SERVER) ?? 'logbook';
+    $title = match ($status) {
+        403 => 'Keine Berechtigung',
+        409 => 'Vorgang derzeit nicht möglich',
+        422 => 'Eingabe konnte nicht gespeichert werden',
+        503 => 'Bereich vorübergehend nicht verfügbar',
+        default => 'Aktion nicht möglich',
+    };
+    estab_session_ui_abort(
+        isset($_SESSION) && is_array($_SESSION) ? $_SESSION : [],
+        $status,
+        $title,
+        $message,
+        $context
+    );
 }
 
 function estab_logbook_require_csrf(array $server, array $post): void

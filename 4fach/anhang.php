@@ -44,6 +44,7 @@ function estab_attachment_release_message_flow_reservation (
   require ("../4fcfg/dbcfg.inc.php");
   require ("../4fcfg/e_cfg.inc.php");
   $connection = null;
+  $cleanupFailed = false;
   try {
     $connection = estab_attachment_connection ($conf_4f_db);
     estab_attachment_release_origin_reservation (
@@ -56,16 +57,21 @@ function estab_attachment_release_message_flow_reservation (
     error_log (
       "eStab attachment flow cleanup failed: ".$exception->getMessage ()
     );
-    http_response_code (503);
-    header ("Content-Type: text/plain; charset=UTF-8");
-    header ("Cache-Control: no-store");
-    echo "Der Anhangvorgang konnte nicht sicher abgeschlossen werden. ".
-         "Bitte versuchen Sie es erneut.";
-    exit;
+    $cleanupFailed = true;
   } finally {
     if ($connection instanceof mysqli) {
       estab_attachment_close ($connection);
     }
+  }
+  if ($cleanupFailed) {
+    estab_session_ui_abort (
+      isset ($_SESSION) && is_array ($_SESSION) ? $_SESSION : array (),
+      503,
+      "Anhangvorgang vorübergehend nicht verfügbar",
+      "Der Anhangvorgang konnte nicht sicher abgeschlossen werden. ".
+        "Bitte versuchen Sie es erneut.",
+      "messages"
+    );
   }
 }
 
@@ -545,12 +551,14 @@ foreach (array ("ah_auswahl_x", "ah_abbrechen_x", "ah_upload_x") as $key) {
     $attachmentGetActionRequested || isset ($_GET [$key]);
 }
 if ($attachmentGetActionRequested) {
-  http_response_code (405);
   header ("Allow: POST");
-  header ("Content-Type: text/plain; charset=UTF-8");
-  header ("Cache-Control: no-store");
-  echo "Diese Anhang-Aktion ist nur per Formular möglich.";
-  exit;
+  estab_session_ui_abort (
+    $_SESSION,
+    405,
+    "Anhang-Aktion nicht möglich",
+    "Diese Anhang-Aktion ist nur per Formular möglich.",
+    "messages"
+  );
 }
 // Every direct or internally included POST has a CSRF field. Validate it
 // before looking up, replacing or deleting any flow-owned session state.
@@ -558,21 +566,24 @@ if ($attachmentRequestMethod === "POST") {
   try {
     estab_csrf_require_post ($_SERVER, $_POST);
   } catch (RuntimeException $exception) {
-    http_response_code (403);
-    header ("Content-Type: text/plain; charset=UTF-8");
-    header ("Cache-Control: no-store");
     error_log (
       "eStab attachment CSRF validation failed: ".
       $exception->getMessage ()
     );
-    echo "Die Anhang-Aktion ist ungültig oder abgelaufen.";
-    exit;
+    estab_session_ui_abort (
+      $_SESSION,
+      403,
+      "Anhang-Aktion nicht erlaubt",
+      "Die Anhang-Aktion ist ungültig oder abgelaufen.",
+      "messages"
+    );
   }
 }
 $attachmentPageConnection = null;
 $attachmentOriginContext = null;
 $attachmentOriginMessage = null;
 $attachmentRequestFlowToken = null;
+$attachmentPageError = null;
 try {
   if (
     !$attachmentInternalRequest
@@ -708,44 +719,53 @@ try {
   error_log (
     "eStab attachment context rejected: ".$exception->getMessage ()
   );
-  http_response_code (403);
-  header ("Content-Type: text/plain; charset=UTF-8");
-  header ("Cache-Control: no-store");
-  echo "Der Anhangvorgang ist ungültig oder nicht mehr autorisiert. ".
-       "Öffnen Sie den Nachrichtenvordruck erneut.";
-  exit;
+  $attachmentPageError = array (
+    403,
+    "Anhangvorgang nicht erlaubt",
+    "Der Anhangvorgang ist ungültig oder nicht mehr autorisiert. ".
+      "Öffnen Sie den Nachrichtenvordruck erneut.",
+  );
 } catch (EstabNoActiveIncidentException) {
-  http_response_code (409);
-  header ("Content-Type: text/plain; charset=UTF-8");
-  header ("Cache-Control: no-store");
-  echo "Kein Einsatz aktiv.";
-  exit;
+  $attachmentPageError = array (
+    409,
+    "Kein aktiver Einsatz",
+    "Kein Einsatz aktiv.",
+  );
 } catch (EstabReadPermissionException) {
-  http_response_code (403);
-  header ("Content-Type: text/plain; charset=UTF-8");
-  header ("Cache-Control: no-store");
-  echo "Ihre angemeldete Funktion darf die Anhangverwaltung nicht ".
-       "öffnen oder ist nicht mehr aktiv.";
-  exit;
+  $attachmentPageError = array (
+    403,
+    "Keine Berechtigung für die Anhangverwaltung",
+    "Ihre angemeldete Funktion darf die Anhangverwaltung nicht ".
+      "öffnen oder ist nicht mehr aktiv.",
+  );
 } catch (EstabIncidentConfigurationException) {
-  http_response_code (409);
-  header ("Content-Type: text/plain; charset=UTF-8");
-  header ("Cache-Control: no-store");
-  echo "Für den aktiven Einsatz fehlt der Führungsstellenname.";
-  exit;
+  $attachmentPageError = array (
+    409,
+    "Einsatz noch nicht vollständig eingerichtet",
+    "Für den aktiven Einsatz fehlt der Führungsstellenname.",
+  );
 } catch (Throwable $exception) {
   error_log (
     "eStab attachment page authorization failed: ".$exception->getMessage ()
   );
-  http_response_code (503);
-  header ("Content-Type: text/plain; charset=UTF-8");
-  header ("Cache-Control: no-store");
-  echo "Die Anhangberechtigung kann derzeit nicht geprüft werden.";
-  exit;
+  $attachmentPageError = array (
+    503,
+    "Anhangverwaltung vorübergehend nicht verfügbar",
+    "Die Anhangberechtigung kann derzeit nicht geprüft werden.",
+  );
 } finally {
   if ($attachmentPageConnection instanceof mysqli) {
     estab_attachment_close ($attachmentPageConnection);
   }
+}
+if (is_array ($attachmentPageError)) {
+  estab_session_ui_abort (
+    $_SESSION,
+    $attachmentPageError [0],
+    $attachmentPageError [1],
+    $attachmentPageError [2],
+    "messages"
+  );
 }
 estab_session_ui_start ($_SESSION);
 
@@ -1355,12 +1375,14 @@ require_once ("./db_operation.php");  // Datenbank operationen
         "eStab attachment recipient restore rejected: ".
         $exception->getMessage ()
       );
-      http_response_code (409);
-      header ("Content-Type: text/plain; charset=UTF-8");
-      header ("Cache-Control: no-store");
-      echo "Die Empfängermatrix wurde während des Anhangvorgangs geändert. ".
-           "Öffnen Sie den Nachrichtenvordruck erneut.";
-      exit;
+      estab_session_ui_abort (
+        $_SESSION,
+        409,
+        "Empfängermatrix wurde geändert",
+        "Die Empfängermatrix wurde während des Anhangvorgangs geändert. ".
+          "Öffnen Sie den Nachrichtenvordruck erneut.",
+        "messages"
+      );
     }
     if ($originTask === "Stab_korrigieren") {
       if (!is_array ($originMessage)) {

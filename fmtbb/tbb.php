@@ -592,6 +592,8 @@ estab_session_ui_start ($_SESSION);
 $berechtigt = false;
 $hasTbbCapability = false;
 $istTbbFuehrung = false;
+$readConnection = null;
+$readError = null;
 try {
   $readConnection = estab_auth_connect ($conf_4f_db);
   $readScope = estab_read_require_operational_scope (
@@ -614,16 +616,16 @@ try {
   );
   $berechtigt = $hasTbbCapability && $istTbbFuehrung;
 } catch (EstabNoActiveIncidentException $exception) {
-  estab_logbook_abort (
+  $readError = array (
     409,
     "Kein Einsatz ist aktiv. Das technische Betriebsbuch enthält derzeit ".
     "keine freigegebenen Einsatzdaten."
   );
 } catch (EstabReadPermissionException $exception) {
-  estab_logbook_abort (403, $exception->getMessage ());
+  $readError = array (403, $exception->getMessage ());
 } catch (Throwable $exception) {
   error_log ("TBB read authorization failed: ".$exception->getMessage ());
-  estab_logbook_abort (
+  $readError = array (
     503,
     "Die Leseberechtigung für das technische Betriebsbuch kann derzeit nicht ".
     "geprüft werden."
@@ -632,6 +634,9 @@ try {
   if (isset ($readConnection) && $readConnection instanceof mysqli) {
     estab_auth_close ($readConnection);
   }
+}
+if (is_array ($readError)) {
+  estab_logbook_abort ($readError [0], $readError [1]);
 }
 
 $requestMethod = isset ($_SERVER ["REQUEST_METHOD"]) && is_string ($_SERVER ["REQUEST_METHOD"])

@@ -389,6 +389,23 @@ eStab-Fachsitzung. Der vom Webserver gesetzte `REMOTE_USER` wird auf
 Administrationsrouten ausschließlich escaped als technischer Kontext
 angezeigt und nie in eine Fachrolle übersetzt.
 
+Dieselbe Grenze stellt `estab_session_ui_abort()` für fachlich abgewiesene
+Browserseiten bereit. Ein fehlender Einsatz, eine unzulässige Kontofunktion,
+ein abgelaufener Formularvorgang oder eine vorübergehend nicht mögliche
+Berechtigungsprüfung behält seinen echten HTTP-Status 4xx beziehungsweise 5xx
+und den begrenzten fachlichen Meldungstext. Statt einer ungestalteten
+`text/plain`-Sackgasse erscheint jedoch eine responsive Werkzeugseite mit
+persistenter `role="alert"`-Meldung, bei bestehender Fachsitzung deren
+Identität, Abmeldung und erlaubten Bereichslinks sowie einem festen
+Top-Level-Rückweg zur Übersicht. Der Rückweg stammt ausschließlich aus einem
+symbolischen Eintrag
+des Navigationsmanifests; Request-URL und Referer werden weder reflektiert noch
+als Redirectziel übernommen. Innerhalb des Nachrichten-`mainframe` bleibt die
+äußere Sidebar maßgeblich und die dort redundante Leiste wird wie bei normalen
+Inhaltsseiten unterdrückt. API-, Statusfragment-, Bild-, Download- und andere
+Binärendpunkte behalten bewusst ihre knappen maschinenlesbaren
+Antwortverträge.
+
 Der Login nennt ein erlaubtes vorgemerktes Fachziel, hält es in jedem
 Loginformular tablokal und sendet alle Formulare mit `target="_self"` im
 aktuellen Browsing-Kontext ab. Unabhängig vom Zustand bietet er den

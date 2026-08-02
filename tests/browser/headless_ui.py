@@ -1955,6 +1955,9 @@ class BrowserAcceptance:
             "incident-log",
         )
 
+        if self.config.login_function not in ("LdF", "A/W"):
+            self._assert_tracking_access_denied_page()
+
         self.cdp.click(
             None,
             '[data-estab-navigation] a[data-estab-nav-key="messages"]',
@@ -8493,6 +8496,160 @@ class BrowserAcceptance:
                 )
             time.sleep(0.1)
         raise TestFailure("Timeout: Konto wurde nicht angelegt und angemeldet.")
+
+    def _assert_tracking_access_denied_page(self) -> None:
+        """Prove a denied specialist view remains a usable application page."""
+        print("      gestaltete, navigierbare Berechtigungsseite prüfen")
+        self.cdp.navigate(
+            self.config.base_url + "/4fach/nachwea.php?nwalle=1"
+        )
+        self.cdp.wait_for(
+            """
+            document.readyState === "complete" &&
+            location.pathname.endsWith("/4fach/nachwea.php") &&
+            Boolean(document.querySelector(
+                '[data-estab-error-page][data-estab-error-status="403"]'
+            )) &&
+            document.body.innerText.includes(
+                "Die Nachweisung ist nur für eine aktive LdF- oder " +
+                "Fernmelder-Funktion verfügbar."
+            )
+            """,
+            "Berechtigungsfehler der Nachweisung blieb keine gestaltete Seite",
+        )
+        self._equal(
+            self.cdp.evaluate(
+                _visible_count_expression(None, "aside[data-estab-session-bar]")
+            ),
+            1,
+            "sichtbare Session-Leiste auf der Berechtigungsseite",
+        )
+        details = self.cdp.evaluate(
+            """
+            (() => {
+                const page = document.querySelector("[data-estab-error-page]");
+                const bar = document.querySelector("aside[data-estab-session-bar]");
+                const identity = bar && bar.querySelector("[data-estab-user-code]");
+                const navigation = bar && bar.querySelector(
+                    "[data-estab-navigation]"
+                );
+                const recovery = document.querySelector(
+                    "[data-estab-error-recovery] a"
+                );
+                const recoveryUrl = recovery
+                    ? new URL(recovery.href, location.href)
+                    : null;
+                return {
+                    context: page && page.getAttribute(
+                        "data-estab-error-context"
+                    ),
+                    code: identity && identity.getAttribute(
+                        "data-estab-user-code"
+                    ),
+                    navigationKeys: navigation
+                        ? Array.from(navigation.querySelectorAll(
+                            "a[data-estab-nav-key]"
+                        )).map(link => link.getAttribute("data-estab-nav-key"))
+                        : [],
+                    currentKeys: navigation
+                        ? Array.from(navigation.querySelectorAll(
+                            '[aria-current="page"]'
+                        )).map(link => link.getAttribute("data-estab-nav-key"))
+                        : [],
+                    hasLogout: Boolean(bar && bar.querySelector(
+                        "[data-estab-logout-form]"
+                    )),
+                    hasProtectedContent: Boolean(document.querySelector(
+                        "[data-estab-tracking-overview]"
+                    )),
+                    recoveryPath: recoveryUrl && recoveryUrl.pathname,
+                    recoverySearch: recoveryUrl && recoveryUrl.search,
+                    recoveryTarget: recovery && recovery.target
+                };
+            })()
+            """
+        )
+        self._truth(
+            isinstance(details, dict)
+            and details.get("context") == "tracking"
+            and details.get("code") == self.config.login_code
+            and details.get("hasLogout") is True
+            and details.get("hasProtectedContent") is False
+            and details.get("currentKeys") == []
+            and "overview" in details.get("navigationKeys", [])
+            and "messages" in details.get("navigationKeys", [])
+            and "tracking" not in details.get("navigationKeys", [])
+            and str(details.get("recoveryPath", "")).endswith("/")
+            and details.get("recoverySearch") == ""
+            and details.get("recoveryTarget") == "_top",
+            "Berechtigungsseite zeigt keine sichere Identität, Navigation "
+            "oder Rückkehraktion.",
+        )
+
+        for width, height in ((1440, 1000), (390, 844)):
+            self.cdp.call(
+                "Emulation.setDeviceMetricsOverride",
+                {
+                    "width": width,
+                    "height": height,
+                    "deviceScaleFactor": 1,
+                    "mobile": False,
+                    "screenWidth": width,
+                    "screenHeight": height,
+                },
+            )
+            layout = self.cdp.evaluate(
+                """
+                (() => {
+                    const page = document.querySelector(
+                        "[data-estab-error-page]"
+                    );
+                    const action = document.querySelector(
+                        "[data-estab-error-recovery] a"
+                    );
+                    if (!page || !action) return null;
+                    const pageRect = page.getBoundingClientRect();
+                    const actionRect = action.getBoundingClientRect();
+                    return {
+                        noOverflow: document.documentElement.scrollWidth <=
+                            window.innerWidth + 1,
+                        pageInside: pageRect.left >= -1 &&
+                            pageRect.right <= window.innerWidth + 1,
+                        actionWidth: actionRect.width,
+                        actionHeight: actionRect.height
+                    };
+                })()
+                """
+            )
+            self._truth(
+                isinstance(layout, dict)
+                and layout.get("noOverflow") is True
+                and layout.get("pageInside") is True
+                and float(layout.get("actionWidth", 0)) > 0
+                and float(layout.get("actionHeight", 0)) >= 44,
+                f"Berechtigungsseite ist bei {width}×{height} px nicht "
+                "überlauffrei oder bedienbar.",
+            )
+
+        self.cdp.call(
+            "Emulation.setDeviceMetricsOverride",
+            {
+                "width": 1440,
+                "height": 1000,
+                "deviceScaleFactor": 1,
+                "mobile": False,
+                "screenWidth": 1440,
+                "screenHeight": 1000,
+            },
+        )
+        self.cdp.click(
+            None,
+            "[data-estab-error-recovery] a",
+            "Rückkehr aus der Berechtigungsseite",
+        )
+        self._wait_for_authenticated_overview(
+            "Berechtigungsseite führte nicht zurück zur eStab-Übersicht"
+        )
 
     def _assert_session_bar(
         self,

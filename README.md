@@ -824,6 +824,14 @@ gescrollt; sie erzeugen kein horizontales Scrollen des gesamten Dokuments.
 Historische interne Generatoren und Installer besitzen keine direkte
 Weboberfläche und werden vom Webserver abgewiesen.
 
+Fachlich abgewiesene Browseraufrufe enden ebenfalls nicht als ungestalteter
+Rohtext. HTTP-Status und begrenzte Fehlermeldung bleiben erhalten, erscheinen
+aber in einer gemeinsamen, responsiven Fehlerseite mit Sitzungsidentität,
+Abmeldung und allen für das Konto erlaubten Bereichen, sofern eine
+Fachsitzung besteht, sowie einem festen Rückweg zur Übersicht. Statusfragmente,
+Bilder, Downloads und andere Maschinenendpunkte
+behalten dagegen ihre jeweiligen Datenformate.
+
 Nach erfolgreicher Anmeldung zeigen der Einstieg, der
 Nachrichtenarbeitsbereich, die Administrationsseiten und alle geschützten
 eigenständigen HTML-Module die gemeinsame Leiste mit Name, Kürzel, Funktion und

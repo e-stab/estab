@@ -2335,7 +2335,8 @@ $assert(
             'method=\\"post\\"'
         )
         && str_contains($controllerSource, '$attachmentGetActionRequested')
-        && str_contains($controllerSource, 'http_response_code (405)')
+        && str_contains($controllerSource, '405,')
+        && str_contains($controllerSource, 'estab_session_ui_abort (')
         && !str_contains($controllerSource, 'isset ($_GET ["ah_upload_x"])')
         && !str_contains($controllerSource, 'isset ($_GET["ah_auswahl_x"])')
         && !str_contains(
@@ -2961,12 +2962,12 @@ $assert(
 $assert(
     preg_match(
         '/catch \(InvalidArgumentException \$exception\) \{.*?'
-            . 'http_response_code \(409\);.*?'
+            . 'estab_session_ui_abort \(.*?409,.*?'
             . 'Die Empfängermatrix wurde während des Anhangvorgangs geändert\..*?'
-            . 'exit;/s',
+            . '"messages".*?\);/s',
         $legacyRestoreSource
     ) === 1,
-    'legacy attachment return does not stop stale matrix drafts with an explicit 409 response'
+    'legacy attachment return does not stop stale matrix drafts with a styled 409 response'
 );
 $assert(
     !str_contains($draftFormDataSource, "'08_befhinweis'")

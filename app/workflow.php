@@ -11,6 +11,7 @@
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/navigation.php';
 require_once __DIR__ . '/permission_mode.php';
+require_once __DIR__ . '/session_ui.php';
 
 /** Return true only for the exact anonymous requests used by the login UI. */
 function estab_workflow_public_login_request(array $server, array $get, array $post): bool
@@ -703,14 +704,16 @@ function estab_workflow_legacy_login_without_csrf_allowed(array $server, array $
         && estab_workflow_login_metadata_same_site($server);
 }
 
-/** Send the same non-disclosing denial used by data-bearing endpoints. */
+/** Keep a rejected browser workflow navigable without disclosing internals. */
 function estab_workflow_forbid(): never
 {
-    http_response_code(403);
-    header('Content-Type: text/plain; charset=UTF-8');
-    header('Cache-Control: no-store');
-    echo 'Aktion nicht erlaubt.';
-    exit;
+    estab_session_ui_abort(
+        isset($_SESSION) && is_array($_SESSION) ? $_SESSION : [],
+        403,
+        'Aktion nicht erlaubt',
+        'Aktion nicht erlaubt.',
+        estab_navigation_active_key($_SERVER) ?? 'messages'
+    );
 }
 
 /** Parse a positive SQL record identifier without coercion. */

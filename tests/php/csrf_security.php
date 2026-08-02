@@ -111,6 +111,7 @@ foreach ($expectedControllers as $relativePath) {
             || str_contains($handler, 'http_response_code (403)')
             || str_contains($handler, 'http_response_code (400)')
             || str_contains($handler, 'estab_workflow_forbid')
+            || str_contains($handler, 'estab_session_ui_abort')
             || (
                 $hasSpecificHandler
                 && (

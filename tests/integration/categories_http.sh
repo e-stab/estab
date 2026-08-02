@@ -678,17 +678,28 @@ assert_body "$workflow_marker"
 assert_status 422 \
     --cookie "$s1_cookies" \
     "$base_url/4fach/katgoedt.php?dbtyp=fkt&msgno=0"
-assert_body_absent 'data-estab-session-bar'
+assert_body 'data-estab-error-page'
+assert_body 'data-estab-error-status="422"'
+assert_body 'data-estab-error-context="messages"'
+assert_body 'role="alert"'
+assert_body 'data-estab-error-recovery'
+assert_session_identity "$s1_name" "$s1_code" "$s1_function" Stab
 load_manager "$s1_cookies" fkt "$message_id"
 assert_session_identity "$s1_name" "$s1_code" "$s1_function" Stab
 load_manager "$s1_cookies" user "$message_id"
 assert_session_identity "$s1_name" "$s1_code" "$s1_function" Stab
 assert_status 403 --cookie "$s1_cookies" \
     "$base_url/4fach/katgoedt.php?dbtyp=master&msgno=$message_id"
-assert_body_absent 'data-estab-session-bar'
+assert_body 'data-estab-error-page'
+assert_body 'data-estab-error-status="403"'
+assert_body 'Aktion nicht erlaubt.'
+assert_session_identity "$s1_name" "$s1_code" "$s1_function" Stab
 assert_status 403 --cookie "$s2_cookies" \
     "$base_url/4fach/katgoedt.php?dbtyp=master&msgno=$message_id"
-assert_body_absent 'data-estab-session-bar'
+assert_body 'data-estab-error-page'
+assert_body 'data-estab-error-status="403"'
+assert_body 'Aktion nicht erlaubt.'
+assert_session_identity "$s2_name" "$s2_code" S2 Stab
 load_manager "$s2_cookies" master "$redcopy_message_id"
 assert_session_identity "$s2_name" "$s2_code" S2 Stab
 load_manager "$si_cookies" master "$message_id"

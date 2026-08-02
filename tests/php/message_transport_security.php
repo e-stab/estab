@@ -240,15 +240,16 @@ $assert(
             'catch (EstabIncidentConfigurationException)'
         ) >= 2
         && str_contains($trackingPageSource, '@ob_clean ();')
-        && str_contains(
+        && substr_count(
             $trackingPageSource,
-            'http_response_code (409);'
-        )
+            'estab_session_ui_abort ('
+        ) >= 2
+        && str_contains($trackingPageSource, '"tracking"')
         && str_contains(
             $trackingPageSource,
             'Für den aktiven Einsatz fehlt der Führungsstellenname.'
         ),
-    'Tracking page does not report an incomplete incident as HTTP 409'
+    'Tracking page does not report an incomplete incident in the shared error UI'
 );
 
 echo 'Message transport/tracking security: OK (' . $assertions

@@ -494,6 +494,72 @@ $assert(
     'frameset embedding hint is not strict'
 );
 
+$errorDocument = estab_session_ui_error_document(
+    403,
+    'Keine Berechtigung <Test>',
+    'Nicht erlaubt: <script>alert("x")</script>',
+    'tracking'
+);
+$assert(
+    str_starts_with($errorDocument, '<!doctype html><html lang="de">')
+        && str_contains($errorDocument, 'data-estab-error-page')
+        && str_contains($errorDocument, 'data-estab-error-status="403"')
+        && str_contains($errorDocument, 'data-estab-error-context="tracking"')
+        && str_contains($errorDocument, 'role="alert"')
+        && str_contains($errorDocument, 'estab-tool-feedback-error')
+        && str_contains($errorDocument, 'target="_top"')
+        && str_contains($errorDocument, '>Zur eStab-Übersicht</a>')
+        && str_contains(
+            $errorDocument,
+            'Über die Navigation können Sie direkt weiterarbeiten.'
+        )
+        && !str_contains($errorDocument, 'Ihre Anmeldung bleibt erhalten')
+        && str_contains($errorDocument, 'Keine Berechtigung &lt;Test&gt;')
+        && str_contains(
+            $errorDocument,
+            '&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;'
+        )
+        && !str_contains($errorDocument, '<script>alert("x")</script>'),
+    'shared UI error document is not escaped, accessible, or navigable'
+);
+$errorWithChrome = estab_session_ui_inject_document($errorDocument, $markup);
+$assert(
+    substr_count($errorWithChrome, 'data-estab-error-page') === 1
+        && substr_count($errorWithChrome, 'data-estab-session-bar') === 1
+        && substr_count($errorWithChrome, 'data-estab-logout-form') === 1
+        && strpos($errorWithChrome, 'data-estab-session-bar')
+            < strpos($errorWithChrome, 'data-estab-error-page'),
+    'styled UI error did not retain exactly one session chrome and recovery page'
+);
+$assertThrows(
+    static fn (): string => estab_session_ui_error_document(
+        200,
+        'Fehler',
+        'Meldung',
+        'tracking'
+    ),
+    'UI error renderer accepted a successful HTTP status'
+);
+$assertThrows(
+    static fn (): string => estab_session_ui_error_document(
+        403,
+        'Fehler',
+        'Meldung',
+        '../tracking'
+    ),
+    'UI error renderer accepted an unsafe context key'
+);
+$assertThrows(
+    static fn (): string => estab_session_ui_error_document(
+        403,
+        'Fehler',
+        'Meldung',
+        'tracking',
+        'messages'
+    ),
+    'UI error renderer accepted a protected recovery target'
+);
+
 $invalidTokenRejected = false;
 try {
     estab_session_ui_markup($identity, 'not-a-token');

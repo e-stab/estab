@@ -40,6 +40,12 @@ Geprüft werden:
   Anmeldung jedoch nur die für die feste Kontofunktion freigegebenen
   Bereiche, sowie genau ein zum geöffneten Bereich passendes
   `aria-current="page"` und Top-Level-Ziele für alle sichtbaren Kernlinks;
+- den direkten Aufruf der für S1 gesperrten Nachweisung: Der Server behält
+  HTTP 403 und zeigt den unveränderten Berechtigungshinweis, aber als
+  vollständige eStab-Fehlerseite mit Identität, Abmeldung, erlaubter
+  Bereichsnavigation und sicherer Rückkehr zur Übersicht; die Seite enthält
+  keine Nachweisungsdaten und bleibt bei `1440x1000` sowie `390x844`
+  CSS-Pixeln ohne horizontales Überlaufen bedienbar;
 - alle funktionsabhängig sichtbaren Bereichs- und Dienstlinks dauerhaft und
   mit mindestens 44 × 44 CSS-Pixeln Bedienfläche, ohne
   „Bereich wechseln“-Disclosure und ohne eigene Scrollfläche; für die im

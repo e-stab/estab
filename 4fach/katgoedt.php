@@ -44,13 +44,27 @@ estab_session_ui_start($_SESSION, false, true);
 /** @var array<string,string> $conf_4f_tbl */
 $connection = null;
 
-/** Send a non-disclosing endpoint error. */
+/** Keep category failures inside the styled application popup. */
 function estab_category_endpoint_error(int $status, string $message): never
 {
-    http_response_code($status);
-    header('Content-Type: text/plain; charset=UTF-8');
-    echo $message;
-    exit;
+    if (ob_get_level() > 0) {
+        @ob_clean();
+    }
+    $title = match ($status) {
+        403 => 'Aktion nicht erlaubt',
+        404 => 'Kategorie nicht gefunden',
+        409, 423 => 'Vorgang derzeit nicht möglich',
+        422 => 'Eingabe konnte nicht verarbeitet werden',
+        default => 'Kategorien vorübergehend nicht verfügbar',
+    };
+    estab_session_ui_abort(
+        $_SESSION,
+        $status,
+        $title,
+        $message,
+        'messages',
+        true
+    );
 }
 
 /** Redirect only to a fixed application route. */
@@ -215,6 +229,8 @@ function estab_category_render_manager(
     echo '</footer></main></body></html>';
 }
 
+$categoryEndpointError = null;
+$categoryRedirect = null;
 try {
     $connection = estab_auth_connect($conf_4f_db);
     $readScope = estab_read_require_operational_scope(
@@ -231,8 +247,11 @@ try {
     if ($method === 'POST') {
         try {
             estab_csrf_require_post($_SERVER, $_POST);
-        } catch (Throwable) {
-            estab_workflow_forbid();
+        } catch (EstabCsrfException) {
+            http_response_code(403);
+            throw new EstabCategoryAuthorizationException(
+                'Aktion nicht erlaubt.'
+            );
         }
         $activeIncident = estab_incident_active($connection);
         if ($activeIncident === null) {
@@ -308,13 +327,62 @@ try {
                 $assignments,
                 (string) $conf_4f_tbl['empfmtx']
             );
-            estab_category_endpoint_redirect(
-                'mainindex.php'
+            $categoryRedirect = 'mainindex.php';
+        } else {
+            $type = estab_category_validate_type($_POST['dbtyp'] ?? null);
+            $messageId = estab_category_positive_id(
+                $_POST['msgno'] ?? null,
+                'Meldungs-ID'
+            );
+            if (
+                estab_read_message(
+                    $connection,
+                    (string) $conf_4f_tbl['nachrichten'],
+                    $messageId,
+                    $identity
+                ) === null
+            ) {
+                throw new EstabCategoryAuthorizationException(
+                    'Keine Berechtigung für diese Meldung.'
+                );
+            }
+            estab_category_require_management($type, $identity, $redcopy);
+            $scope = estab_category_scope($type, $identity, $conf_4f_tbl);
+            $status = '';
+            if ($action === 'create') {
+                estab_category_create($connection, $scope, $_POST);
+                $status = 'created';
+            } elseif ($action === 'update') {
+                $categoryId = estab_category_positive_id(
+                    $_POST['category_id'] ?? null,
+                    'Kategorie-ID'
+                );
+                estab_category_update($connection, $scope, $categoryId, $_POST);
+                $status = 'updated';
+            } else {
+                $categoryId = estab_category_positive_id(
+                    $_POST['category_id'] ?? null,
+                    'Kategorie-ID'
+                );
+                estab_category_delete($connection, $scope, $categoryId);
+                estab_category_clear_session_filter($_SESSION, $type);
+                $status = 'deleted';
+            }
+            $categoryRedirect = estab_category_manager_url(
+                $type,
+                $messageId,
+                $status
             );
         }
-
-        $type = estab_category_validate_type($_POST['dbtyp'] ?? null);
-        $messageId = estab_category_positive_id($_POST['msgno'] ?? null, 'Meldungs-ID');
+    } elseif ($method !== 'GET') {
+        header('Allow: GET, POST');
+        $categoryEndpointError = [405, 'Methode nicht erlaubt.'];
+    } else {
+        $type = estab_category_validate_type($_GET['dbtyp'] ?? null);
+        $messageId = estab_category_positive_id(
+            $_GET['msgno'] ?? null,
+            'Meldungs-ID'
+        );
         if (
             estab_read_message(
                 $connection,
@@ -329,77 +397,60 @@ try {
         }
         estab_category_require_management($type, $identity, $redcopy);
         $scope = estab_category_scope($type, $identity, $conf_4f_tbl);
-        $status = '';
-        if ($action === 'create') {
-            estab_category_create($connection, $scope, $_POST);
-            $status = 'created';
-        } elseif ($action === 'update') {
+        $editing = null;
+        if (array_key_exists('edit_id', $_GET)) {
             $categoryId = estab_category_positive_id(
-                $_POST['category_id'] ?? null,
+                $_GET['edit_id'],
                 'Kategorie-ID'
             );
-            estab_category_update($connection, $scope, $categoryId, $_POST);
-            $status = 'updated';
-        } else {
-            $categoryId = estab_category_positive_id(
-                $_POST['category_id'] ?? null,
-                'Kategorie-ID'
+            $editing = estab_category_fetch_one(
+                $connection,
+                $scope,
+                $categoryId
             );
-            estab_category_delete($connection, $scope, $categoryId);
-            estab_category_clear_session_filter($_SESSION, $type);
-            $status = 'deleted';
+            if ($editing === null) {
+                throw new EstabCategoryNotFoundException(
+                    'Kategorie wurde nicht gefunden.'
+                );
+            }
         }
-        estab_category_endpoint_redirect(estab_category_manager_url($type, $messageId, $status));
-    }
-
-    if ($method !== 'GET') {
-        header('Allow: GET, POST');
-        estab_category_endpoint_error(405, 'Methode nicht erlaubt.');
-    }
-
-    $type = estab_category_validate_type($_GET['dbtyp'] ?? null);
-    $messageId = estab_category_positive_id($_GET['msgno'] ?? null, 'Meldungs-ID');
-    if (
-        estab_read_message(
+        $status = isset($_GET['status']) && is_string($_GET['status'])
+            ? $_GET['status']
+            : '';
+        estab_category_render_manager(
             $connection,
-            (string) $conf_4f_tbl['nachrichten'],
+            $scope,
             $messageId,
-            $identity
-        ) === null
-    ) {
-        throw new EstabCategoryAuthorizationException(
-            'Keine Berechtigung für diese Meldung.'
+            $editing,
+            $status
         );
     }
-    estab_category_require_management($type, $identity, $redcopy);
-    $scope = estab_category_scope($type, $identity, $conf_4f_tbl);
-    $editing = null;
-    if (array_key_exists('edit_id', $_GET)) {
-        $categoryId = estab_category_positive_id($_GET['edit_id'], 'Kategorie-ID');
-        $editing = estab_category_fetch_one($connection, $scope, $categoryId);
-        if ($editing === null) {
-            throw new EstabCategoryNotFoundException('Kategorie wurde nicht gefunden.');
-        }
-    }
-    $status = isset($_GET['status']) && is_string($_GET['status']) ? $_GET['status'] : '';
-    estab_category_render_manager($connection, $scope, $messageId, $editing, $status);
 } catch (EstabCategoryAuthorizationException $exception) {
-    estab_category_endpoint_error(403, 'Aktion nicht erlaubt.');
+    $categoryEndpointError = [403, 'Aktion nicht erlaubt.'];
 } catch (EstabReadPermissionException $exception) {
-    estab_category_endpoint_error(403, 'Aktion nicht erlaubt.');
+    $categoryEndpointError = [403, 'Aktion nicht erlaubt.'];
 } catch (EstabNoActiveIncidentException $exception) {
-    estab_category_endpoint_error(409, 'Kein Einsatz ist aktiv.');
+    $categoryEndpointError = [409, 'Kein Einsatz ist aktiv.'];
 } catch (EstabDvPermissionException $exception) {
-    estab_category_endpoint_error(423, $exception->getMessage());
+    $categoryEndpointError = [423, $exception->getMessage()];
 } catch (EstabCategoryNotFoundException $exception) {
-    estab_category_endpoint_error(404, $exception->getMessage());
+    $categoryEndpointError = [404, $exception->getMessage()];
 } catch (EstabCategoryInputException|EstabCategoryConflictException $exception) {
-    estab_category_endpoint_error(422, $exception->getMessage());
+    $categoryEndpointError = [422, $exception->getMessage()];
 } catch (Throwable $exception) {
     error_log('Category endpoint failure: ' . $exception->getMessage());
-    estab_category_endpoint_error(500, 'Kategorien konnten nicht verarbeitet werden.');
+    $categoryEndpointError = [500, 'Kategorien konnten nicht verarbeitet werden.'];
 } finally {
     if ($connection instanceof mysqli) {
         estab_auth_close($connection);
     }
+}
+if (is_array($categoryEndpointError)) {
+    estab_category_endpoint_error(
+        $categoryEndpointError[0],
+        $categoryEndpointError[1]
+    );
+}
+if (is_string($categoryRedirect)) {
+    estab_category_endpoint_redirect($categoryRedirect);
 }

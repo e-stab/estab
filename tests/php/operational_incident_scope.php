@@ -187,7 +187,8 @@ $assert(
         'function estab_workflow_require_active_incident_for_post ('
     )
         && str_contains($main, 'isset ($request ["m2_abmelden_x"])')
-        && str_contains($main, 'http_response_code (409)'),
+        && str_contains($main, 'estab_session_ui_abort (')
+        && str_contains($main, '409,'),
     'central operational POST gate is missing or blocks logout'
 );
 $assert(

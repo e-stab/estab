@@ -38,18 +38,14 @@ if (estab_attachment_upload_post_body_exceeded (
   $_POST,
   $_FILES
 )) {
-  http_response_code (413);
-  header ("Content-Type: text/html; charset=UTF-8");
-  header ("Cache-Control: private, no-store, max-age=0");
-  echo "<!doctype html><html lang=\"de\"><meta charset=\"UTF-8\">";
-  echo "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">";
-  echo "<title>Upload zu groß</title><body><main>";
-  echo "<h1>Die ausgewählte Datei ist zu groß</h1>";
-  echo "<p>PHP hat den gesamten Upload vor der Verarbeitung abgewiesen. ";
-  echo "Öffnen Sie den Nachrichtenvordruck erneut und wählen Sie eine kleinere Datei.</p>";
-  echo "<p><a href=\"".estab_auth_html ((string) ($_SERVER ["PHP_SELF"] ?? "mainindex.php"))."\">";
-  echo "Zum Nachrichtenbereich</a></p></main></body></html>";
-  exit;
+  estab_session_ui_abort (
+    $_SESSION,
+    413,
+    "Die ausgewählte Datei ist zu groß",
+    "PHP hat den gesamten Upload vor der Verarbeitung abgewiesen. Öffnen Sie den ".
+      "Nachrichtenvordruck erneut und wählen Sie eine kleinere Datei.",
+    "messages"
+  );
 }
 
 $returnValue = array (); // no request data is a valid, warning-free state
@@ -420,31 +416,43 @@ function estab_workflow_require_active_incident_for_post (
   }
 
   $connection = null;
+  $incidentGateError = null;
   try {
     $connection = estab_message_connect ($databaseConfig);
     $incident = estab_incident_active ($connection);
   } catch (Throwable $exception) {
     error_log ("eStab incident input gate unavailable: ".$exception->getMessage ());
-    http_response_code (503);
-    header ("Content-Type: text/plain; charset=UTF-8");
-    header ("Cache-Control: no-store");
-    echo "Der Einsatzstatus kann derzeit nicht geprüft werden.";
-    exit;
+    $incidentGateError = array (
+      503,
+      "Einsatzstatus vorübergehend nicht verfügbar",
+      "Der Einsatzstatus kann derzeit nicht geprüft werden.",
+    );
   } finally {
     if ($connection instanceof mysqli) {
       estab_auth_close ($connection);
     }
   }
+  if (is_array ($incidentGateError)) {
+    estab_session_ui_abort (
+      $_SESSION,
+      $incidentGateError [0],
+      $incidentGateError [1],
+      $incidentGateError [2],
+      "messages"
+    );
+  }
   if ($incident !== null) {
     return;
   }
 
-  http_response_code (409);
-  header ("Content-Type: text/plain; charset=UTF-8");
-  header ("Cache-Control: no-store");
-  echo "Kein Einsatz ist aktiv. Eingaben sind gesperrt. Aktivieren Sie zuerst ".
-       "einen Einsatz in der Administration.";
-  exit;
+  estab_session_ui_abort (
+    $_SESSION,
+    409,
+    "Kein aktiver Einsatz",
+    "Kein Einsatz ist aktiv. Eingaben sind gesperrt. Aktivieren Sie zuerst ".
+      "einen Einsatz in der Administration.",
+    "messages"
+  );
 }
 
 estab_workflow_require_active_incident_for_post (
@@ -1377,11 +1385,14 @@ if ($messageAttachmentAction) {
       $messageAttachmentRequestToken
     );
     error_log ("eStab direct attachment incident changed: ".$exception->getMessage ());
-    http_response_code (409);
-    header ("Content-Type: text/plain; charset=UTF-8");
-    header ("Cache-Control: no-store");
-    echo "Der aktive Einsatz hat sich geändert. Öffnen Sie den Nachrichtenvordruck erneut.";
-    exit;
+    estab_session_ui_abort (
+      $_SESSION,
+      409,
+      "Anhangvorgang nicht fortgesetzt",
+      "Der aktive Einsatz hat sich geändert. Öffnen Sie den ".
+        "Nachrichtenvordruck erneut.",
+      "messages"
+    );
   } catch (Throwable $exception) {
     estab_message_attachment_abandon_direct_action (
       $messageAttachmentRequestToken
@@ -1411,11 +1422,13 @@ if ($messageAttachmentAction) {
         // Fall through to the minimal fail-closed response.
       }
     }
-    http_response_code (503);
-    header ("Content-Type: text/plain; charset=UTF-8");
-    header ("Cache-Control: no-store");
-    echo "Der Anhang kann derzeit nicht sicher gespeichert werden.";
-    exit;
+    estab_session_ui_abort (
+      $_SESSION,
+      503,
+      "Anhang vorübergehend nicht verfügbar",
+      "Der Anhang kann derzeit nicht sicher gespeichert werden.",
+      "messages"
+    );
   }
 }
 
@@ -1779,11 +1792,13 @@ ANTWORT % WEITERLEITUNG
       error_log (
         "eStab attachment flow cleanup failed: ".$exception->getMessage ()
       );
-      http_response_code (503);
-      header ("Content-Type: text/plain; charset=UTF-8");
-      header ("Cache-Control: no-store");
-      echo "Der Anhangvorgang kann derzeit nicht sicher geöffnet werden.";
-      exit;
+      estab_session_ui_abort (
+        $_SESSION,
+        503,
+        "Anhang vorübergehend nicht verfügbar",
+        "Der Anhangvorgang kann derzeit nicht sicher geöffnet werden.",
+        "messages"
+      );
     }
     $_SESSION ["anhang_menue"] = "100";
     include ("anhang.php");

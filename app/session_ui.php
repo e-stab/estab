@@ -582,6 +582,107 @@ function estab_session_ui_is_embedded_frame(array $query): bool
 }
 
 /**
+ * Render one persistent, navigable error document for a browser-facing page.
+ *
+ * The real HTTP status remains authoritative. Only fixed symbolic navigation
+ * keys become recovery links, so an error can never reflect a request URL or
+ * turn Referer into an open redirect. Resource, JSON and download endpoints
+ * deliberately keep their own machine-readable error contracts.
+ */
+function estab_session_ui_error_document(
+    int $status,
+    string $title,
+    string $message,
+    string $contextKey,
+    string $recoveryKey = 'overview'
+): string {
+    if ($status < 400 || $status > 599) {
+        throw new InvalidArgumentException('Invalid UI error status');
+    }
+    if (
+        preg_match('/\A[a-z][a-z0-9-]*\z/D', $contextKey) !== 1
+        || trim($title) === ''
+        || trim($message) === ''
+    ) {
+        throw new InvalidArgumentException('Invalid UI error content');
+    }
+    $recoveryItem = estab_navigation_item_for_key($recoveryKey);
+    if ($recoveryItem === null || $recoveryItem['access'] !== 'public') {
+        throw new InvalidArgumentException('Invalid UI error recovery target');
+    }
+
+    $safeTitle = estab_auth_html(trim($title));
+    $safeMessage = estab_auth_html(trim($message));
+    $safeContext = estab_auth_html($contextKey);
+    $recoveryUrl = estab_navigation_item_url($recoveryItem);
+    $recoveryLabel = $recoveryItem['key'] === 'overview'
+        ? 'Zur eStab-Übersicht'
+        : 'Zu ' . $recoveryItem['label'];
+
+    return '<!doctype html><html lang="de"><head>'
+        . '<meta charset="UTF-8">'
+        . '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        . '<title>' . $safeTitle . ' · eStab</title>'
+        . estab_session_ui_stylesheet()
+        . '</head><body class="estab-tool-page">'
+        . '<main class="estab-tool-main estab-tool-main-narrow estab-error-page"'
+        . ' data-estab-error-page data-estab-error-status="' . $status . '"'
+        . ' data-estab-error-context="' . $safeContext . '">'
+        . '<header class="estab-tool-hero estab-error-hero">'
+        . '<p class="estab-tool-eyebrow">eStab · Hinweis</p>'
+        . '<h1>' . $safeTitle . '</h1>'
+        . '<p>Sie bleiben in der Anwendung und können direkt in einen anderen '
+        . 'verfügbaren Bereich wechseln.</p>'
+        . '</header>'
+        . '<section class="estab-tool-panel estab-error-panel"'
+        . ' aria-labelledby="estab-error-title">'
+        . '<div class="estab-tool-feedback estab-tool-feedback-error estab-error-message"'
+        . ' role="alert" aria-live="assertive">'
+        . '<strong id="estab-error-title">Die Aktion wurde nicht ausgeführt.</strong>'
+        . '<p>' . $safeMessage . '</p>'
+        . '</div>'
+        . '<p class="estab-error-guidance">Nutzen Sie die Bereichsnavigation '
+        . 'oder kehren Sie zur Übersicht zurück.</p>'
+        . '<div class="estab-tool-actions estab-error-actions"'
+        . ' data-estab-error-recovery>'
+        . '<a class="estab-button estab-button-primary" href="'
+        . estab_auth_html($recoveryUrl) . '" target="_top">'
+        . estab_auth_html($recoveryLabel) . '</a>'
+        . '</div></section>'
+        . '<footer class="estab-tool-footer">'
+        . '<span>Über die Navigation können Sie direkt weiterarbeiten.</span>'
+        . '<span>Die für diesen Zugriff verfügbaren Funktionen bleiben erreichbar.</span>'
+        . '</footer></main></body></html>';
+}
+
+/** Emit a styled browser error without weakening or redirecting its status. */
+function estab_session_ui_abort(
+    array $session,
+    int $status,
+    string $title,
+    string $message,
+    string $contextKey,
+    bool $popup = false
+): never {
+    http_response_code($status);
+    header('Content-Type: text/html; charset=UTF-8');
+    header('Cache-Control: private, no-store, max-age=0');
+    header('X-Content-Type-Options: nosniff');
+    header('X-Robots-Tag: noindex, nofollow');
+    if (strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')) === 'HEAD') {
+        exit;
+    }
+    estab_session_ui_start($session, false, $popup);
+    echo estab_session_ui_error_document(
+        $status,
+        $title,
+        $message,
+        $contextKey
+    );
+    exit;
+}
+
+/**
  * Insert one bar into a complete document, or wrap a legacy HTML fragment.
  *
  * The last opening body tag is intentional: two historical form renderers

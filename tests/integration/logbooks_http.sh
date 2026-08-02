@@ -220,13 +220,29 @@ assert_status 403 \
     --data-urlencode 'logbook_action=save_entry' \
     --data-urlencode 'event=cross-role-etb-must-not-be-written' \
     "$base_url/stabetb/etb.php"
-assert_body_absent 'data-estab-session-bar'
+assert_body 'data-estab-error-page'
+assert_body 'data-estab-error-status="403"'
+assert_body 'data-estab-error-context="incident-log"'
+assert_body 'role="alert"'
+assert_body 'Dieses Konto darf im aktuellen Einsatz keine ETB-Einträge schreiben.'
+assert_body 'data-estab-error-recovery'
+assert_body_absent 'cross-role-etb-must-not-be-written'
+assert_body_absent 'value="save_entry"'
+assert_session_identity "$aw_name" "$aw_code" A/W Fernmelder
 assert_status 403 \
     --cookie "$s2_cookies" --request POST \
     --data-urlencode 'logbook_action=save_entry' \
     --data-urlencode 'event=cross-role-tbb-must-not-be-written' \
     "$base_url/fmtbb/tbb.php"
-assert_body_absent 'data-estab-session-bar'
+assert_body 'data-estab-error-page'
+assert_body 'data-estab-error-status="403"'
+assert_body 'data-estab-error-context="technical-log"'
+assert_body 'role="alert"'
+assert_body 'Dieses Konto darf im aktuellen Einsatz keine TTB-Einträge schreiben.'
+assert_body 'data-estab-error-recovery'
+assert_body_absent 'cross-role-tbb-must-not-be-written'
+assert_body_absent 'value="save_entry"'
+assert_session_identity "$s2_name" "$s2_code" S2 Stab
 
 # A write without a session-bound token remains forbidden even for the writer.
 assert_status 403 \

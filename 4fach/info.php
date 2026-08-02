@@ -6,14 +6,17 @@ session_start();
 require_once __DIR__ . '/../app/session_ui.php';
 estab_session_ui_start($_SESSION, false, true);
 
-/** Send a bounded error response without reflecting request data. */
-function estab_info_error(int $status, string $message): void
+/** Show a bounded popup error without reflecting request data. */
+function estab_info_error(int $status, string $message): never
 {
-    http_response_code($status);
-    header('Content-Type: text/plain; charset=UTF-8');
-    header('Cache-Control: no-store');
-    echo $message;
-    exit;
+    estab_session_ui_abort(
+        $_SESSION,
+        $status,
+        $status === 405 ? 'Anfragemethode nicht unterstützt' : 'Ungültige Anfrage',
+        $message,
+        'messages',
+        true
+    );
 }
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';

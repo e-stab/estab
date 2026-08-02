@@ -185,6 +185,25 @@ function estab_operational_write_request(array $server): bool
 /** Emit one stable response before any reachable Fachschreibpfad can run. */
 function estab_operational_write_abort(int $status, string $message): never
 {
+    $context = function_exists('estab_navigation_active_key')
+        ? estab_navigation_active_key($_SERVER)
+        : null;
+    if (
+        is_string($context)
+        && function_exists('estab_session_ui_abort')
+        && isset($_SESSION)
+        && is_array($_SESSION)
+    ) {
+        estab_session_ui_abort(
+            $_SESSION,
+            $status,
+            $status === 503
+                ? 'Berechtigungsprüfung vorübergehend nicht verfügbar'
+                : 'Eingabe derzeit nicht möglich',
+            $message,
+            $context
+        );
+    }
     http_response_code($status);
     header('Content-Type: text/plain; charset=UTF-8');
     header('Cache-Control: no-store');
@@ -282,6 +301,7 @@ function estab_operational_write_enforce(
     }
 
     $connection = null;
+    $writeError = null;
     try {
         $connection = estab_auth_connect($databaseConfig);
         $incident = estab_incident_active($connection);
@@ -299,27 +319,30 @@ function estab_operational_write_enforce(
             $identity
         );
     } catch (EstabIncidentConfigurationException) {
-        estab_operational_write_abort(
+        $writeError = [
             423,
             'Operative Eingaben sind gesperrt, weil für den aktiven Einsatz '
             . 'noch kein Name der Führungsstelle festgelegt wurde. Ergänzen '
             . 'Sie ihn zuerst in der Einsatzverwaltung.'
-        );
+        ];
     } catch (EstabDvPermissionException $exception) {
-        estab_operational_write_abort(423, $exception->getMessage());
+        $writeError = [423, $exception->getMessage()];
     } catch (Throwable $exception) {
         error_log(
             'eStab operational write guard unavailable: '
             . $exception->getMessage()
         );
-        estab_operational_write_abort(
+        $writeError = [
             503,
             'Die operative Schreibberechtigung kann derzeit nicht geprüft '
             . 'werden. Es wurden keine Eingaben übernommen.'
-        );
+        ];
     } finally {
         if ($connection instanceof mysqli) {
             estab_auth_close($connection);
         }
+    }
+    if (is_array($writeError)) {
+        estab_operational_write_abort($writeError[0], $writeError[1]);
     }
 }

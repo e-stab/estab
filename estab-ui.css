@@ -2428,6 +2428,43 @@ form[data-estab-incident-disabled="true"]::before {
     color: #5b430e;
 }
 
+.estab-error-page {
+    align-content: start;
+}
+
+.estab-error-hero {
+    background:
+        linear-gradient(135deg, rgba(68, 28, 35, 0.98), rgba(139, 43, 46, 0.94));
+}
+
+.estab-error-panel {
+    display: grid;
+    gap: 1rem;
+}
+
+.estab-error-message {
+    font-weight: 400;
+}
+
+.estab-error-message strong {
+    display: block;
+    font-size: 1.08rem;
+    margin-bottom: 0.35rem;
+}
+
+.estab-error-message p,
+.estab-error-guidance {
+    margin: 0;
+}
+
+.estab-error-guidance {
+    color: #435970;
+}
+
+.estab-error-actions {
+    margin-top: 0.1rem;
+}
+
 .estab-password-policy-summary {
     color: #183454;
     font-size: 1.08rem;

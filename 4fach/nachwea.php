@@ -14,6 +14,7 @@ include ("data_hndl.php");      // propritÃ¤re  Datenbankoperationen
 
 $trackingReadIdentity = estab_read_session_identity ($_SESSION);
 $trackingAccessConnection = null;
+$trackingError = null;
 try {
     $trackingAccessConnection = estab_auth_connect ($conf_4f_db);
     $trackingScope = estab_read_require_area (
@@ -26,37 +27,47 @@ try {
     );
     estab_incident_command_post_name ($trackingScope ["incident"]);
 } catch (EstabNoActiveIncidentException) {
-    http_response_code (409);
-    header ("Content-Type: text/plain; charset=UTF-8");
-    header ("Cache-Control: no-store");
-    echo "Kein Einsatz aktiv.";
-    exit;
+    $trackingError = array (
+        409,
+        "Kein aktiver Einsatz",
+        "Kein Einsatz aktiv.",
+    );
 } catch (EstabIncidentConfigurationException) {
-    http_response_code (409);
-    header ("Content-Type: text/plain; charset=UTF-8");
-    header ("Cache-Control: no-store");
-    echo "Für den aktiven Einsatz fehlt der Führungsstellenname. "
-        ."Legen Sie ihn zuerst in der Einsatzverwaltung fest.";
-    exit;
+    $trackingError = array (
+        409,
+        "Einsatz noch nicht vollständig eingerichtet",
+        "Für den aktiven Einsatz fehlt der Führungsstellenname. "
+            ."Legen Sie ihn zuerst in der Einsatzverwaltung fest.",
+    );
 } catch (EstabReadPermissionException) {
-    http_response_code (403);
-    header ("Content-Type: text/plain; charset=UTF-8");
-    header ("Cache-Control: no-store");
-    echo "Die Nachweisung ist nur für eine aktive LdF- oder Fernmelder-Funktion verfügbar.";
-    exit;
+    $trackingError = array (
+        403,
+        "Keine Berechtigung für die Nachweisung",
+        "Die Nachweisung ist nur für eine aktive LdF- oder "
+            ."Fernmelder-Funktion verfügbar.",
+    );
 } catch (Throwable $exception) {
     error_log (
         "eStab tracking authorization failed: ".$exception->getMessage ()
     );
-    http_response_code (503);
-    header ("Content-Type: text/plain; charset=UTF-8");
-    header ("Cache-Control: no-store");
-    echo "Die Leseberechtigung kann derzeit nicht geprüft werden.";
-    exit;
+    $trackingError = array (
+        503,
+        "Nachweisung vorübergehend nicht verfügbar",
+        "Die Leseberechtigung kann derzeit nicht geprüft werden.",
+    );
 } finally {
     if ($trackingAccessConnection instanceof mysqli) {
         estab_auth_close ($trackingAccessConnection);
     }
+}
+if (is_array ($trackingError)) {
+    estab_session_ui_abort (
+        $_SESSION,
+        $trackingError [0],
+        $trackingError [1],
+        $trackingError [2],
+        "tracking"
+    );
 }
 estab_session_ui_start ($_SESSION);
 
@@ -109,12 +120,14 @@ try {
   if (ob_get_level () > 0) {
     @ob_clean ();
   }
-  http_response_code (409);
-  header ("Content-Type: text/plain; charset=UTF-8");
-  header ("Cache-Control: no-store");
-  echo "Für den aktiven Einsatz fehlt der Führungsstellenname. "
-      ."Legen Sie ihn zuerst in der Einsatzverwaltung fest.";
-  exit;
+  estab_session_ui_abort (
+    $_SESSION,
+    409,
+    "Einsatz noch nicht vollständig eingerichtet",
+    "Für den aktiven Einsatz fehlt der Führungsstellenname. ".
+      "Legen Sie ihn zuerst in der Einsatzverwaltung fest.",
+    "tracking"
+  );
 }
 
 echo "</div>\n</section>\n";

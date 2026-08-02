@@ -61,6 +61,18 @@ Anmelde-Audit erzeugt, während Bestandslogin und Sitzungen unberührt bleiben.
 | Fachabnahme | kompletter Nachrichten-, Anhang-, PDF-, ETB-/TBB- und Restore-Ablauf |
 | Betrieb | kontinuierliche Readiness, Logs, Restarts, Kapazität und Backup-Alter |
 
+Der HTTP- und Browsernachweis unterscheidet ausdrücklich drei Zustände:
+Anonyme Fachaufrufe führen per 303 zum Bestandslogin, ein authentifiziertes
+Konto ohne Fachberechtigung erhält weiterhin den echten Status 403 und ein
+berechtigtes Konto die Fachseite. Für den mittleren Fall prüft das S1-Konto
+die Nachweisung als vollständige, datenfreie Fehlerseite. Exakter
+Berechtigungstext, `role="alert"`, genau eine Sitzungsleiste mit Logout, das
+funktionsgefilterte Menü, der feste Übersichtslink sowie ein überlauffreies
+Layout bei 1440 × 1000 und 390 × 844 CSS-Pixeln werden automatisiert geprüft;
+ein echter Klick muss anschließend wieder zur angemeldeten Übersicht führen.
+Maschinenantworten von Status-, Bild- und Downloadendpunkten bleiben davon
+getrennt und werden weiterhin gegen ihre jeweiligen Protokolltypen geprüft.
+
 ## Statische Tests
 
 Die Workflow-Prüfung läuft im CI vor den übrigen Quelltests mit dem

@@ -959,6 +959,15 @@ Top-Level-Login öffnet.
 Übersicht und BOS-Info bleiben öffentlich; die Administration ist als
 separater technischer Zugang markiert.
 
+Bei einem browserseitigen HTML-Dokument bedeutet eine solche 4xx-/5xx-Grenze
+keine Sackgasse: Die unveränderte fachliche Meldung erscheint in der
+gemeinsamen Fehleroberfläche mit Anmeldungskontext, Logout, erlaubtem Menü und
+festem Übersichtslink, sofern eine Fachsitzung besteht; ohne Fachsitzung bleibt
+der öffentliche Rückweg erreichbar. Der Server antwortet weiterhin mit dem
+korrekten Fehlerstatus und liefert keine Daten des gesperrten Bereichs. Statusfragment,
+Bildvorschau, Download und andere Maschinenendpunkte behalten dagegen bewusst
+ihre knappen nicht-HTML-Antworten.
+
 Nach erfolgreicher Anmeldung erscheint auf der Übersicht, im
 Nachrichtenarbeitsbereich, auf den Administrationsseiten und auf allen
 ausgewählten eigenständigen HTML-Modulen die Sitzungsleiste. Sie nennt Name,

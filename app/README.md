@@ -5,7 +5,14 @@ benötigten Legacy-Kompatibilitätsfunktionen bereit. `auth.php` bildet die
 Sicherheitsgrenze der Benutzeranmeldung. `navigation.php` definiert Bereiche,
 Reihenfolge, Zugriffsklassen, aktive Routen und sichere Anmeldeziele zentral.
 `session_ui.php` injiziert die gemeinsame, escaped Navigation und
-Sitzungsanzeige ausschließlich in ausgewählte HTML-Controller; `logout.php`
+Sitzungsanzeige ausschließlich in ausgewählte HTML-Controller. Seine zentrale
+Fehleransicht bewahrt 4xx-/5xx-Status und fachlichen Meldungstext, ergänzt bei
+browserseitigen Seitenaufrufen aber das gemeinsame Werkzeuggestell, einen
+persistenten `role="alert"`, bei bestehender Fachsitzung deren Identität und
+erlaubte Navigation sowie einen ausschließlich über das kanonische
+Navigationsmanifest gebauten Rückweg zur Übersicht.
+Maschinen-, Fragment-, Bild- und Downloadantworten werden davon nicht in HTML
+umgewandelt. `logout.php`
 kapselt das Beenden und Auditieren der Sitzung. `sidebar.php` rendert die
 zusammengefasste Status-, Belegungs- und Hinweistonkarte des
 Nachrichtenarbeitsbereichs. `image_button.php` validiert und rendert die

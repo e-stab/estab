@@ -28,6 +28,7 @@ include ("../4fcfg/fkt_rolle.inc.php");
 $overviewReadIdentity = estab_read_session_identity ($_SESSION);
 $overviewAccessConnection = null;
 $overviewIncidentId = null;
+$overviewAccessError = null;
 try {
   $overviewAccessConnection = estab_auth_connect ($conf_4f_db);
   $overviewReadScope = estab_read_require_area (
@@ -39,30 +40,39 @@ try {
     $overviewReadScope ["incident"]["active_einsatz_id"]
   );
 } catch (EstabNoActiveIncidentException) {
-  http_response_code (409);
-  header ("Content-Type: text/plain; charset=UTF-8");
-  header ("Cache-Control: no-store");
-  echo "Kein Einsatz aktiv.";
-  exit;
+  $overviewAccessError = array (
+    409,
+    "Kein aktiver Einsatz",
+    "Kein Einsatz aktiv.",
+  );
 } catch (EstabReadPermissionException) {
-  http_response_code (403);
-  header ("Content-Type: text/plain; charset=UTF-8");
-  header ("Cache-Control: no-store");
-  echo "Die Meldungsübersicht ist der aktiven Lage/Dokumentation vorbehalten.";
-  exit;
+  $overviewAccessError = array (
+    403,
+    "Keine Berechtigung für die Meldungsübersicht",
+    "Die Meldungsübersicht ist der aktiven Lage/Dokumentation vorbehalten.",
+  );
 } catch (Throwable $exception) {
   error_log (
     "eStab message overview authorization failed: ".$exception->getMessage ()
   );
-  http_response_code (503);
-  header ("Content-Type: text/plain; charset=UTF-8");
-  header ("Cache-Control: no-store");
-  echo "Die Leseberechtigung kann derzeit nicht geprüft werden.";
-  exit;
+  $overviewAccessError = array (
+    503,
+    "Meldungsübersicht vorübergehend nicht verfügbar",
+    "Die Leseberechtigung kann derzeit nicht geprüft werden.",
+  );
 } finally {
   if ($overviewAccessConnection instanceof mysqli) {
     estab_auth_close ($overviewAccessConnection);
   }
+}
+if (is_array ($overviewAccessError)) {
+  estab_session_ui_abort (
+    $_SESSION,
+    $overviewAccessError [0],
+    $overviewAccessError [1],
+    $overviewAccessError [2],
+    "message-overview"
+  );
 }
 estab_session_ui_start ($_SESSION);
 
@@ -113,11 +123,13 @@ function estab_overview_empty_row ($columnCount) {
 }
 
 function estab_overview_forbid () {
-  http_response_code (403);
-  header ("Content-Type: text/plain; charset=UTF-8");
-  header ("Cache-Control: no-store");
-  echo "Aktion nicht erlaubt.";
-  exit;
+  estab_session_ui_abort (
+    $_SESSION,
+    403,
+    "Aktion nicht erlaubt",
+    "Aktion nicht erlaubt.",
+    "message-overview"
+  );
 }
 
 /*****************************************************************************\

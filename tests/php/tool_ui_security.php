@@ -102,6 +102,9 @@ foreach ([
     '.estab-tool-panel',
     '.estab-tool-feedback-error',
     '.estab-tool-feedback-success',
+    '.estab-error-page',
+    '.estab-error-message',
+    '.estab-error-actions',
     '.estab-tool-form-grid',
     '.estab-tool-field',
     '.estab-tool-actions',
@@ -294,12 +297,16 @@ $overview = str_replace(
 $assert(
     str_contains($tracking, 'data-estab-tracking-overview')
         && str_contains($tracking, 'estab-tool-legacy-content')
+        && str_contains($tracking, 'estab_session_ui_abort (')
+        && !str_contains($tracking, 'Content-Type: text/plain')
         && str_contains($overview, 'data-estab-message-overview')
         && str_contains($overview, 'data-estab-message-detail')
         && str_contains($overview, 'data-estab-message-list')
         && str_contains($overview, 'estab_message_list_render_controls')
+        && str_contains($overview, 'estab_session_ui_abort (')
+        && !str_contains($overview, 'Content-Type: text/plain')
         && substr_count($overview, 'estab-tool-legacy-content') >= 1,
-    'reporting surfaces are not contained by the shared page shell'
+    'reporting surfaces or their access errors escape the shared page shell'
 );
 
 foreach ([
