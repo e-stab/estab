@@ -244,20 +244,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    permissions:
+      contents: read
+
     steps:
-      - name: Checkout complete history
+      - name: Checkout repository
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    permissions:
-      contents: read
-      pull-requests: read
+        uses: docker://ghcr.io/gitleaks/gitleaks:latest
+        with:
+          args: detect \
+            --source=. \
+            --verbose \
+            --redact \
+            --exit-code=1
 
 
   php:
