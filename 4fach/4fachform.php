@@ -1719,7 +1719,8 @@ HTML;
           trim ((string) ($route ["verkehrsform"] ?? "")),
         ), static fn ($part) => $part !== ""));
         $routeLabel = "Plan v".(int) $route ["plan_version"]." · ".
-          (string) $route ["medium"]." · ".implode (" · ", $routeParts);
+          estab_dv_telecom_medium_label ($route ["medium"] ?? null)." · ".
+          implode (" · ", $routeParts);
         echo "<option value=\"".estab_message_html ($routeId)."\"".
           ($selectedRoute === $routeId ? " selected" : "").">".
           estab_message_html ($routeLabel)."</option>\n";

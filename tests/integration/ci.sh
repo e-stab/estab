@@ -796,6 +796,36 @@ run_browser_acceptance() {
         fi
         run_timed 4m python3 -B tests/browser/headless_ui.py
 
+        echo "CI integration: running real-browser S6 plan versioning acceptance"
+        telecom_login_name='Telecommunications Browser S6'
+        telecom_login_code=e2t006
+        telecom_browser_token="browser-${roundtrip_token}"
+        browser_login_password=$(tr -d '\r\n' <"$ESTAB_TEST_LOGIN_PASSWORD_FILE")
+        sh tests/integration/provision_user.sh \
+            "$telecom_login_name" \
+            "$telecom_login_code" \
+            S6 \
+            "$browser_login_password"
+        unset browser_login_password
+        run_timed 3m "$container_cli" compose run --rm --no-deps -T \
+            --env "COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME" \
+            --env ESTAB_TEST_TELECOM_ALLOW_MUTATION=true \
+            --env ESTAB_TEST_TELECOM_MODE=initial \
+            --env "ESTAB_TEST_TELECOM_S6_CODE=$telecom_login_code" \
+            --env "ESTAB_TEST_TELECOM_TOKEN=$telecom_browser_token" \
+            --volume "$repo_root:/workspace:ro" \
+            --workdir /workspace \
+            app php -d auto_prepend_file= \
+            tests/integration/create_http_telecom_fixture.php >/dev/null
+        export ESTAB_TEST_LOGIN_NAME=$telecom_login_name
+        export ESTAB_TEST_LOGIN_CODE=$telecom_login_code
+        export ESTAB_TEST_LOGIN_FUNCTION=S6
+        if [[ -n ${ESTAB_CI_LOG_DIR:-} ]]; then
+            export \
+                ESTAB_BROWSER_ARTIFACT_DIR="$ESTAB_CI_LOG_DIR/browser-telecom-plan"
+        fi
+        run_timed 4m python3 -B tests/browser/headless_ui.py --telecom-plan
+
         echo "CI integration: running real-browser message heading acceptance"
         overview_login_name='Message Overview S2'
         overview_login_code=e2m002
@@ -909,10 +939,6 @@ if [[ ! $restore_export_sha256 =~ ^[a-f0-9]{64}$ ]]; then
     exit 1
 fi
 
-# The authenticated smoke has provisioned the fixed S1 account and active
-# incident used by the mutating browser acceptance.
-run_browser_acceptance
-
 echo "CI integration: proving the isolated tokenless legacy-login opt-in"
 export ESTAB_ALLOW_LEGACY_LOGIN_WITHOUT_CSRF=true
 run_timed 5m "$container_cli" compose up --detach --no-deps --force-recreate app
@@ -965,6 +991,13 @@ if [[ ! $restore_login_name =~ ^Workflow\ S1\ [a-f0-9]{5}$ \
     echo "CI integration: active-duty restore identity is invalid" >&2
     exit 1
 fi
+
+# Run the mutating browser acceptance only after the HTTP workflow has proved
+# the genuinely empty-plan create path. The S6 browser fixture deliberately
+# versions an existing active plan when one is present, whereas the HTTP
+# controller test must begin without a plan to exercise create_plan itself.
+# Keeping this order makes both tests independent of optional browser support.
+run_browser_acceptance
 
 echo "CI integration: running administrative workflow HTTP integration"
 export ESTAB_ADMIN_HTTP_TEST_ALLOW_MUTATION=true

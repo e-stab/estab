@@ -149,6 +149,18 @@ Geprüft werden:
   44 × 44 Pixel groß; anschließend im Matrixeditor die beiden verständlichen
   Bestätigungsdialoge für „Standard laden“ und „Standard ersetzen“ sowie den
   unveränderten Editorwert und Seitenzustand nach ihrer Ablehnung.
+- den S6-Fernmeldeplan in einem eigenen Weg: eine aktive Fassung bleibt beim
+  Bearbeitungsstart sichtbar, alle sichtbaren Kopfwerte und sämtliche Wege
+  erscheinen im Entwurf identisch vorbefüllt, und ein unberührter
+  Medien-Platzhalter löst keine falsche Verlustwarnung aus. Alle sechs Medien
+  sind ausgeschrieben, Funk blendet Kanal oder Rufgruppe und Bandlage ein,
+  Melder blendet diese Felder aus. Der Browser ändert Kopf und Weg gleichzeitig,
+  prüft die blockierende Inline-Meldung und setzt danach genau die gewählte
+  Wegeaktion über den ausdrücklich verlustbewussten Auflösungsweg fort. Die
+  bearbeitete Folgefassung lässt sich bei 1280 × 800 sowie 390 × 844 Pixeln
+  ohne horizontalen Seitenüberlauf veröffentlichen; aktive Kopfbemerkung sowie
+  Wege-Vermerke und -Bemerkungen bleiben anschließend in der nur lesbaren
+  Versionshistorie sichtbar.
 
 Die stabile Reihenfolge der Navigationsbereiche lautet:
 
@@ -184,6 +196,20 @@ produktiven Zugangsdaten.
 
 Chrome wird über `ESTAB_BROWSER_BINARY` oder automatisch an den üblichen
 macOS- und Linux-Pfaden gesucht.
+
+Der isolierte Fernmeldeplanlauf benötigt ein festes S6-Testkonto und einen
+bereits aktiven Testplan. `tests/integration/ci.sh` provisioniert beides über
+die Produktionsschnittstellen und veröffentlicht den Browserentwurf, sodass
+kein offener Entwurf als Abschlussblocker zurückbleibt:
+
+```sh
+ESTAB_TEST_BASE_URL=http://127.0.0.1:8080 \
+ESTAB_TEST_LOGIN_NAME='Telecommunications Browser S6' \
+ESTAB_TEST_LOGIN_CODE=e2t006 \
+ESTAB_TEST_LOGIN_FUNCTION=S6 \
+ESTAB_TEST_LOGIN_PASSWORD_FILE=/sicherer/pfad/test-passwort.txt \
+python3 tests/browser/headless_ui.py --telecom-plan
+```
 
 ## Ausführen
 

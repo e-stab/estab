@@ -70,7 +70,7 @@ Softwareeinstellung nicht.
 | --- | --- | --- | --- |
 | S. 4-44/4-45 | S2 muss ständig in den Informationsfluss eingebunden sein und alle Ein- und Ausgänge als roten Durchschlag erhalten. | S2/Stab ist die einzige Fähigkeit `LAGE_DOKUMENTATION`; jede abgeschlossene Nachricht enthält die S2-Rotkopie, eine beliebige Umkonfiguration oder Autosichtung ist gesperrt. | `tests/php/admin_operations_security.php`, `tests/integration/message_workflow_http.sh`, Schema-Verifikation |
 | S. 4-45 sowie Handbuch ETB/TBB S. 6 und 26 | Die Einsatzdokumentation wird durch S2 sichergestellt; das ETB ist urkundlicher Nachweis. Die DV-Fassung nennt ein Jahr, die spätere ETB-/TBB-Unterlage zehn Jahre für ETB und TBB. | S2 bleibt alleinige Lage-/Rotkopiefunktion. Die Anwendung setzt die strengere Mindestaufbewahrung von zehn Jahren ab formalem Abschluss um. ETB und TBB sind nur anhängbar; eine Berichtigung ist ein neuer Eintrag mit Gegenreferenz. Ein Legal Hold kann die Frist verlängern, aber nicht verkürzen. | `tests/php/logbook_security.php`, `tests/php/schema_migration_contract.php`, `tests/integration/schema_migrator.sh`, `tests/integration/dv_evidence.php` |
-| S. 4-59/4-60 | S6 plant und führt den Telekommunikationseinsatz und stellt die Führbarkeit über geeignete Verbindungen sicher. | Im strengen Modus darf nur ein Konto mit der festen Funktion `S6` versionierte Fernmeldepläne erstellen und veröffentlichen. LdF kann nur einen aktuell gültigen, veröffentlichten Planweg disponieren; veröffentlichte Fassungen bleiben in beiden Modi unveränderlich. | `tests/integration/dv_operations.php`, `tests/integration/message_workflow_http.sh` |
+| S. 4-59/4-60 | S6 plant und führt den Telekommunikationseinsatz und stellt die Führbarkeit über geeignete Verbindungen sicher. | Im strengen Modus darf nur ein Konto mit der festen Funktion `S6` versionierte Fernmeldepläne erstellen und veröffentlichen. Eine Fassung kann nur innerhalb ihres gespeicherten Gültigkeitsfensters aktiviert werden; bei einer verfrühten oder abgelaufenen Freigabe bleibt der bisherige Plan aktiv. Initiale und geänderte Kopfdaten sind in der Ereigniskette nachvollziehbar. LdF kann nur einen aktuell gültigen, veröffentlichten Planweg disponieren; veröffentlichte Fassungen bleiben in beiden Modi unveränderlich. | `tests/integration/dv_operations.php`, `tests/integration/message_workflow_http.sh`, `tests/integration/schema_migrator.sh` |
 | S. 4-63 | Der Sichter analysiert Eingänge inhaltlich und leitet sie an zuständige Bearbeiter weiter. | Eingänge laufen zwingend `Fernmelder → LdF → Si`; Si setzt Empfänger und Abschluss. Der Fernmelder darf den Absender nicht schreiben, LdF übersetzt den aufgenommenen Rufnamen und bestätigt den vom Fernmelder erfassten Eingangsweg. Eine Änderung verlangt eine Begründung und wird mit Alt-/Neuwert und LdF-Identität nachgewiesen; Aufnahmezeit und -zeichen des Fernmelders bleiben unverändert. | `tests/php/workflow_security.php`, `tests/php/ldf_validation_security.php`, `tests/php/ldf_ui_flow_security.php`, `tests/integration/message_workflow_http.sh` |
 | S. 4-63 | Bei Ausgängen prüft Si nur Anschrift, Unterschrift/Zeichen und Funktion, nicht den Inhalt. | Ausgänge laufen zwingend `Verfasser → Si → LdF → Fernmelder`. Si kann formal freigeben oder mit Pflichtgrund zurückgeben, aber keine Inhaltsfelder verändern. Auch LdF kann einen fachlich nicht disponierbaren Vordruck nur begründet an den Verfasser zurückgeben. Nach jeder Korrektur folgen Si und LdF erneut. | `tests/php/message_security.php`, `tests/php/ldf_return_security.php`, `tests/php/message_timeline_security.php`, `tests/integration/message_concurrency.php`, `tests/integration/message_workflow_http.sh` |
 | Nachrichtenvordruck-Unterlagen sowie S. 4-63/4-64 | Eine Gesprächsnotiz dokumentiert die ursprüngliche Gesprächsart, bleibt aber als Ausgang im geordneten Informations- und Fernmeldeweg. | Von den fernmeldespezifischen Angaben erfasst der Verfasser ausschließlich die ursprüngliche Gesprächsart. Si prüft formal; danach setzt LdF den Rufnamen der Gegenstelle und disponiert einen aktiven, veröffentlichten S6-Beförderungsweg. Der Fernmelder weist die Beförderung nach. Erst dieser Abschluss erzeugt TBB-Nachweis und PDF-Vordruck. | `tests/integration/message_workflow_http.sh`, `tests/integration/http_smoke.sh` |
@@ -536,7 +536,27 @@ operative Eingaben noch den formalen Einsatzabschluss.
 Kommunikationspläne sind einsatzgebunden und versioniert. Plan-ID, Einsatz,
 Version, Erstellungszeit und Ersteller sind ab Anlage unveränderlich. Nur der
 Inhalt eines Entwurfs darf bearbeitet werden; Freigabefelder bleiben bis zur
-Veröffentlichung leer. Die Veröffentlichung verlangt ein aktives,
+Veröffentlichung leer. Nach der Erstanlage beginnt eine Änderung immer als
+atomare Kopie des zu diesem Zeitpunkt aktiven Plans. Kopf und sämtliche Wege
+werden übernommen, die Wege erhalten neue Identitäten und die Quellfassung
+bleibt bis zur Veröffentlichung aktiv. Es kann pro Einsatz nur ein offener
+Entwurf über den Anwendungsweg bestehen. Ein kryptografischer Zustandswert
+verhindert stille Überschreibungen durch veraltete Browser-Tabs; die
+Veröffentlichung prüft zusätzlich, dass die kopierte Quellfassung noch aktiv
+ist. Auch sichtbare, noch nicht gespeicherte Änderungen in einem Teilformular
+blockieren die Veröffentlichung und andere Aktionen mit Seitenwechsel. Der
+Bedienweg führt zum betroffenen Formular. Bei mehreren gleichzeitig geänderten
+Bereichen kann nur eine ausdrücklich als Verlust der anderen Browserwerte
+gekennzeichnete Fortsetzung die Sackgasse auflösen; ein stilles Verwerfen ist
+nicht möglich. Ein aufgegebener oder veralteter Entwurf kann mit
+Zustandsprüfung bewusst verworfen werden. Dabei werden Kopf und Wege nicht
+gelöscht, sondern als unveränderliche Evidenz archiviert; ein eigenes
+`plan_draft_discarded`-Ereignis unterscheidet ihn von einer veröffentlichten,
+später ersetzten Version. Die nur lesbare Versionshistorie enthält die
+vollständigen Kopfdaten und Wege einschließlich besonderer Vermerke und
+Bemerkungen sowie Anlage- und Freigabeidentität mit Zeitpunkt. Danach kann
+wieder eine vollständige Kopie des aktiven Plans begonnen werden. Die
+Veröffentlichung verlangt ein aktives,
 ungesperrtes Konto mit der festen Funktion `S6` sowie mindestens einen
 Planweg. Eine
 veröffentlichte Version bleibt vollständig unverändert; Änderungen erzeugen
@@ -551,6 +571,15 @@ aus:
 - Verkehrsform oder besondere Behandlung,
 - Bemerkung und Betriebsleitung,
 - erstellende, freigebende und veröffentlichende Identität.
+
+Die internen, historisch kompatiblen Mediencodes werden im Bedienweg als
+Fernsprecher, Funk, Melder, Telefax, Fernschreiber und Datenübertragung
+ausgeschrieben. Kanal beziehungsweise Rufgruppe und Bandlage werden nur für
+Funk verlangt und bei anderen Medien serverseitig leer normalisiert.
+Verkehrsform oder besondere Behandlung bleibt für jeden Weg verpflichtend.
+Sehr große zulässige Vermerke bleiben vollständig im hashverketteten
+Betriebsereignis erhalten; das größenbegrenzte Legacy-Protokoll enthält dann
+einen prüfbaren Verweis mit Sequenz, Ereignishash, Nutzlast-Hash und Bytezahl.
 
 Nur ein dafür berechtigtes S6-Konto darf Planinhalte pflegen. Andere
 Funktionen erhalten die freigegebene Fassung lesend.

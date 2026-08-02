@@ -28,10 +28,21 @@ header('Content-Type: text/html; charset=UTF-8');
 header('Cache-Control: private, no-store, max-age=0');
 header('X-Robots-Tag: noindex, nofollow');
 
-function dv_operations_redirect(string $result): never
+function dv_operations_redirect(
+    string $result,
+    string $fragment = '',
+    array $parameters = []
+): never
 {
+    $query = http_build_query(
+        ['result' => $result] + $parameters,
+        '',
+        '&',
+        PHP_QUERY_RFC3986
+    );
     header(
-        'Location: fuehrungsstelle.php?result=' . rawurlencode($result),
+        'Location: fuehrungsstelle.php?' . $query
+            . ($fragment === '' ? '' : '#' . rawurlencode($fragment)),
         true,
         303
     );
@@ -43,8 +54,218 @@ function dv_operations_html(mixed $value): string
     return estab_auth_html($value);
 }
 
+function dv_operations_datetime_input(mixed $value): string
+{
+    if (!is_string($value) || $value === '') {
+        return '';
+    }
+    return str_replace(' ', 'T', substr($value, 0, 16));
+}
+
+function dv_operations_datetime_display(mixed $value): string
+{
+    if (!is_string($value) || trim($value) === '') {
+        return 'Nicht dokumentiert';
+    }
+    try {
+        return (new DateTimeImmutable($value))->format('d.m.Y · H:i') . ' Uhr';
+    } catch (Throwable) {
+        return $value;
+    }
+}
+
+function dv_operations_is_telecom_revision_action(mixed $action): bool
+{
+    return is_string($action) && in_array(
+        $action,
+        [
+            'update_plan',
+            'add_plan_entry',
+            'update_plan_entry',
+            'delete_plan_entry',
+            'discard_plan',
+            'activate_plan',
+        ],
+        true
+    );
+}
+
+/** @param list<array<string, mixed>> $plans */
+function dv_operations_posted_telecom_revision_is_stale(array $plans): bool
+{
+    global $error, $requestMethod;
+    if (
+        $requestMethod !== 'POST'
+        || $error === null
+        || !dv_operations_is_telecom_revision_action(
+            $_POST['operation_action'] ?? null
+        )
+    ) {
+        return false;
+    }
+    $postedPlanId = filter_var(
+        $_POST['fernmeldeplan_id'] ?? null,
+        FILTER_VALIDATE_INT,
+        ['options' => ['min_range' => 1]]
+    );
+    $postedRevision = $_POST['plan_revision'] ?? null;
+    if (!is_int($postedPlanId) || !is_string($postedRevision)) {
+        return true;
+    }
+    foreach ($plans as $plan) {
+        if ((int) ($plan['fernmeldeplan_id'] ?? 0) !== $postedPlanId) {
+            continue;
+        }
+        $currentRevision = $plan['revision'] ?? null;
+        return ($plan['status'] ?? null) !== 'ENTWURF'
+            || !is_string($currentRevision)
+            || !hash_equals($currentRevision, $postedRevision);
+    }
+    return true;
+}
+
+function dv_operations_failed_post(
+    string $action,
+    ?int $planId = null,
+    ?int $entryId = null
+): bool {
+    global $error, $requestMethod, $telecomRevisionConflict;
+    if (
+        $requestMethod !== 'POST'
+        || $error === null
+        || $telecomRevisionConflict
+        || ($_POST['operation_action'] ?? null) !== $action
+    ) {
+        return false;
+    }
+    if (
+        $planId !== null
+        && (string) ($_POST['fernmeldeplan_id'] ?? '') !== (string) $planId
+    ) {
+        return false;
+    }
+    return $entryId === null
+        || (string) ($_POST['fernmeldeplan_eintrag_id'] ?? '')
+            === (string) $entryId;
+}
+
+function dv_operations_post_value(
+    string $action,
+    string $name,
+    mixed $fallback,
+    ?int $planId = null,
+    ?int $entryId = null
+): mixed {
+    if (!dv_operations_failed_post($action, $planId, $entryId)) {
+        return $fallback;
+    }
+    $value = $_POST[$name] ?? null;
+    return is_string($value) ? $value : $fallback;
+}
+
+/** @param array<string, mixed> $values */
+function dv_operations_render_telecom_entry_fields(array $values): void
+{
+    $medium = is_string($values['medium'] ?? null)
+        && isset(ESTAB_DV_MEDIA_DEFINITIONS[$values['medium']])
+        ? $values['medium']
+        : '';
+    $definition = $medium === ''
+        ? null
+        : ESTAB_DV_MEDIA_DEFINITIONS[$medium];
+    $channelVisible = $definition === null
+        || $definition['kanal'] !== null;
+    $bandVisible = $definition === null
+        || $definition['bandlage'] !== null;
+    $channelRequired = $definition !== null
+        && $definition['kanal'] !== null;
+    $bandRequired = $definition !== null
+        && $definition['bandlage'] !== null;
+    ?>
+    <div class="estab-tool-form-grid">
+      <label>Betriebsstellen-Klarbezeichnung
+        <input name="betriebsstelle" maxlength="255" required
+          value="<?= dv_operations_html($values['betriebsstelle'] ?? '') ?>">
+      </label>
+      <label>Rufname
+        <input name="rufname" maxlength="128" required
+          value="<?= dv_operations_html($values['rufname'] ?? '') ?>">
+      </label>
+      <label>Übertragungsmedium
+        <select name="medium" required data-estab-telecom-medium>
+          <option value="" <?= $medium === '' ? 'selected' : '' ?>>
+            Medium auswählen
+          </option>
+          <?php foreach (ESTAB_DV_MEDIA as $candidate): ?>
+            <option value="<?= dv_operations_html($candidate) ?>"
+              <?= $candidate === $medium ? 'selected' : '' ?>>
+              <?= dv_operations_html(
+                  estab_dv_telecom_medium_label($candidate)
+              ) ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+      <label data-estab-telecom-field="kanal"
+        <?= $channelVisible ? '' : 'hidden' ?>>
+        <span data-estab-telecom-field-label="kanal"><?= dv_operations_html(
+            $definition['kanal'] ?? 'Kanal oder Rufgruppe'
+        ) ?></span>
+        <input name="kanal" maxlength="64"
+          value="<?= dv_operations_html($values['kanal'] ?? '') ?>"
+          <?= $channelVisible
+              ? ($channelRequired ? 'required' : '')
+              : 'disabled' ?>>
+      </label>
+      <label data-estab-telecom-field="bandlage"
+        <?= $bandVisible ? '' : 'hidden' ?>>
+        <span data-estab-telecom-field-label="bandlage"><?= dv_operations_html(
+            $definition['bandlage'] ?? 'Bandlage'
+        ) ?></span>
+        <input name="bandlage" maxlength="64"
+          value="<?= dv_operations_html($values['bandlage'] ?? '') ?>"
+          <?= $bandVisible
+              ? ($bandRequired ? 'required' : '')
+              : 'disabled' ?>>
+      </label>
+      <label data-estab-telecom-field="verkehrsform">
+        <span data-estab-telecom-field-label="verkehrsform">
+          Verkehrsform oder besondere Behandlung
+        </span>
+        <input name="verkehrsform" maxlength="128" required
+          value="<?= dv_operations_html($values['verkehrsform'] ?? '') ?>">
+      </label>
+    </div>
+    <?php if (
+        $medium !== 'Fu'
+        && (
+            trim((string) ($values['kanal'] ?? '')) !== ''
+            || trim((string) ($values['bandlage'] ?? '')) !== ''
+        )
+    ): ?>
+      <p class="estab-tool-notice estab-telecom-legacy-note">
+        Dieser übernommene Weg enthält technische Altangaben. Für das
+        gewählte Medium sind Kanal und Bandlage nicht vorgesehen; beim
+        Speichern dieses Wegs werden sie entfernt.
+      </p>
+    <?php endif; ?>
+    <label>Besondere Vermerke
+      <textarea name="besondere_vermerke"
+        maxlength="10000"><?= dv_operations_html(
+            $values['besondere_vermerke'] ?? ''
+        ) ?></textarea>
+    </label>
+    <label>Bemerkungen
+      <textarea name="bemerkungen" maxlength="10000"><?=
+        dv_operations_html($values['bemerkungen'] ?? '')
+      ?></textarea>
+    </label>
+    <?php
+}
+
 $requestMethod = $_SERVER['REQUEST_METHOD'] ?? '';
 $error = null;
+$telecomRevisionConflict = false;
 $connection = null;
 
 if ($requestMethod === 'POST') {
@@ -66,7 +287,40 @@ if ($requestMethod === 'POST') {
                 $_POST,
                 $conf_4f_tbl['protokoll']
             );
-            dv_operations_redirect('plan_created');
+            dv_operations_redirect('plan_created', 'fernmeldeplan-entwurf');
+        }
+        if ($action === 'start_plan_revision') {
+            estab_dv_start_telecom_plan_revision(
+                $connection,
+                $incidentId,
+                estab_dv_positive_id(
+                    $_POST['fernmeldeplan_id'] ?? null,
+                    'Aktiver Fernmeldeplan'
+                ),
+                $operationIdentity,
+                $conf_4f_tbl['protokoll']
+            );
+            dv_operations_redirect(
+                'plan_revision_started',
+                'fernmeldeplan-entwurf'
+            );
+        }
+        if ($action === 'update_plan') {
+            estab_dv_update_telecom_plan_draft(
+                $connection,
+                $incidentId,
+                estab_dv_positive_id(
+                    $_POST['fernmeldeplan_id'] ?? null,
+                    'Fernmeldeplan'
+                ),
+                $operationIdentity,
+                $_POST,
+                estab_dv_telecom_revision_token(
+                    $_POST['plan_revision'] ?? null
+                ),
+                $conf_4f_tbl['protokoll']
+            );
+            dv_operations_redirect('plan_updated', 'fernmeldeplan-entwurf');
         }
         if ($action === 'add_plan_entry') {
             estab_dv_add_telecom_entry(
@@ -78,9 +332,84 @@ if ($requestMethod === 'POST') {
                 ),
                 $operationIdentity,
                 $_POST,
+                $conf_4f_tbl['protokoll'],
+                estab_dv_telecom_revision_token(
+                    $_POST['plan_revision'] ?? null
+                )
+            );
+            dv_operations_redirect(
+                'plan_entry_added',
+                'fernmeldeplan-entwurf'
+            );
+        }
+        if ($action === 'update_plan_entry') {
+            $planId = estab_dv_positive_id(
+                $_POST['fernmeldeplan_id'] ?? null,
+                'Fernmeldeplan'
+            );
+            $entryId = estab_dv_positive_id(
+                $_POST['fernmeldeplan_eintrag_id'] ?? null,
+                'Fernmeldeweg'
+            );
+            estab_dv_update_telecom_entry(
+                $connection,
+                $incidentId,
+                $planId,
+                $entryId,
+                $operationIdentity,
+                $_POST,
+                estab_dv_telecom_revision_token(
+                    $_POST['plan_revision'] ?? null
+                ),
                 $conf_4f_tbl['protokoll']
             );
-            dv_operations_redirect('plan_entry_added');
+            dv_operations_redirect(
+                'plan_entry_updated',
+                'fernmeldeweg-' . $entryId,
+                ['entry' => $entryId]
+            );
+        }
+        if ($action === 'delete_plan_entry') {
+            estab_dv_delete_telecom_entry(
+                $connection,
+                $incidentId,
+                estab_dv_positive_id(
+                    $_POST['fernmeldeplan_id'] ?? null,
+                    'Fernmeldeplan'
+                ),
+                estab_dv_positive_id(
+                    $_POST['fernmeldeplan_eintrag_id'] ?? null,
+                    'Fernmeldeweg'
+                ),
+                $operationIdentity,
+                estab_dv_telecom_revision_token(
+                    $_POST['plan_revision'] ?? null
+                ),
+                $conf_4f_tbl['protokoll']
+            );
+            dv_operations_redirect(
+                'plan_entry_deleted',
+                'fernmeldeplan-entwurf'
+            );
+        }
+        if ($action === 'discard_plan') {
+            estab_dv_discard_telecom_plan_draft(
+                $connection,
+                $incidentId,
+                estab_dv_positive_id(
+                    $_POST['fernmeldeplan_id'] ?? null,
+                    'Fernmeldeplan'
+                ),
+                $operationIdentity,
+                estab_dv_telecom_revision_token(
+                    $_POST['plan_revision'] ?? null
+                ),
+                $conf_4f_tbl['protokoll']
+            );
+            dv_operations_redirect(
+                'plan_draft_discarded',
+                'fernmeldeplan-entwurf'
+            );
         }
         if ($action === 'activate_plan') {
             estab_dv_activate_telecom_plan(
@@ -91,7 +420,10 @@ if ($requestMethod === 'POST') {
                     'Fernmeldeplan'
                 ),
                 $operationIdentity,
-                $conf_4f_tbl['protokoll']
+                $conf_4f_tbl['protokoll'],
+                estab_dv_telecom_revision_token(
+                    $_POST['plan_revision'] ?? null
+                )
             );
             dv_operations_redirect('plan_activated');
         }
@@ -140,9 +472,11 @@ if ($requestMethod === 'POST') {
     } catch (EstabDvPermissionException $exception) {
         http_response_code(403);
         $error = $exception->getMessage();
+    } catch (EstabDvConflictException $exception) {
+        http_response_code(409);
+        $error = $exception->getMessage();
     } catch (
-        EstabDvConflictException
-        | EstabIncidentConfigurationException
+        EstabIncidentConfigurationException
         | EstabNoActiveIncidentException $exception
     ) {
         http_response_code(409);
@@ -171,6 +505,7 @@ $isS6 = false;
 $isLdf = false;
 $isAw = false;
 $selectedIdentity = null;
+$plansLoaded = false;
 try {
     $connection = estab_auth_connect($conf_4f_db);
     $status = estab_incident_status($connection);
@@ -206,6 +541,7 @@ try {
             false
         );
         $plans = estab_dv_telecom_plans($connection, $incidentId);
+        $plansLoaded = true;
         $jobs = estab_dv_messenger_jobs(
             $connection,
             $incidentId,
@@ -261,20 +597,55 @@ try {
     }
 }
 
+if (
+    $plansLoaded
+    && dv_operations_posted_telecom_revision_is_stale($plans)
+) {
+    $telecomRevisionConflict = true;
+    $error .= ' Der aktuelle gespeicherte Stand wurde neu geladen. '
+        . 'Veraltete Eingaben aus diesem Browser-Tab wurden nicht in die '
+        . 'Formulare übernommen.';
+}
+
 $flashMessages = [
-    'plan_created' => 'Ein neuer Fernmeldeplanentwurf wurde angelegt.',
+    'plan_created' => 'Der erste Fernmeldeplanentwurf wurde angelegt.',
+    'plan_revision_started' => 'Der aktive Fernmeldeplan wurde vollständig '
+        . 'in einen bearbeitbaren Entwurf kopiert.',
+    'plan_updated' => 'Die Kopfdaten des Entwurfs wurden gespeichert.',
     'plan_entry_added' => 'Der Fernmeldeweg wurde dem Entwurf hinzugefügt.',
+    'plan_entry_updated' => 'Der Fernmeldeweg wurde im Entwurf gespeichert.',
+    'plan_entry_deleted' => 'Der Fernmeldeweg wurde aus dem Entwurf entfernt.',
+    'plan_draft_discarded' => 'Der gespeicherte Entwurf wurde verworfen und '
+        . 'in die Versionshistorie übernommen. Sie können jetzt eine neue '
+        . 'Bearbeitung auf Basis des aktiven Plans starten.',
     'plan_activated' => 'Der Fernmeldeplan wurde freigegeben und versioniert.',
     'messenger_assigned' => 'Der Melderauftrag wurde verbindlich erteilt.',
     'messenger_updated' => 'Der Melderstatus wurde nachgewiesen.',
 ];
 $result = $_GET['result'] ?? null;
 $flash = is_string($result) ? ($flashMessages[$result] ?? null) : null;
+$highlightEntryId = null;
+$entryResult = $_GET['entry'] ?? null;
+if (is_string($entryResult)) {
+    $validatedEntry = filter_var(
+        $entryResult,
+        FILTER_VALIDATE_INT,
+        ['options' => ['min_range' => 1]]
+    );
+    if (is_int($validatedEntry)) {
+        $highlightEntryId = $validatedEntry;
+    }
+}
 $activePlan = null;
+$draftPlans = [];
+$archivedPlans = [];
 foreach ($plans as $plan) {
     if (($plan['status'] ?? null) === 'AKTIV') {
         $activePlan = $plan;
-        break;
+    } elseif (($plan['status'] ?? null) === 'ENTWURF') {
+        $draftPlans[] = $plan;
+    } elseif (($plan['status'] ?? null) === 'ERSETZT') {
+        $archivedPlans[] = $plan;
     }
 }
 
@@ -354,23 +725,48 @@ foreach ($plans as $plan) {
       </a>
     </section>
   <?php else: ?>
-    <section class="estab-tool-panel">
+    <section class="estab-tool-panel" data-estab-active-telecom-plan>
       <header class="estab-tool-panel-heading">
         <h2>Aktiver Fernmeldeplan</h2>
-        <p>Für jede Route werden Betriebsstelle, Rufname, Medium, Kanal,
-          Bandlage und Verkehrsform aus dem von S6 freigegebenen Plan
-          angezeigt.</p>
+        <p>Diese freigegebene Fassung bleibt während einer Bearbeitung gültig.
+          Erst die bewusste Veröffentlichung des Entwurfs ersetzt sie.</p>
       </header>
       <?php if ($activePlan === null): ?>
         <p class="estab-tool-feedback estab-tool-feedback-error" role="alert">
           Noch kein gültiger Fernmeldeplan freigegeben.
         </p>
       <?php else: ?>
-        <p><strong>Version <?= (int) $activePlan['version'] ?></strong> ·
-          <?= dv_operations_html($activePlan['herkunft']) ?> · gültig ab
-          <?= dv_operations_html($activePlan['gueltig_ab']) ?> ·
-          Betriebsleitung
-          <?= dv_operations_html($activePlan['betriebsleitung']) ?></p>
+        <dl class="estab-telecom-plan-meta">
+          <div><dt>Status</dt><dd>Aktiv · Version
+            <?= (int) $activePlan['version'] ?></dd></div>
+          <div><dt>Herkunft</dt><dd data-estab-telecom-header-origin><?=
+            dv_operations_html(
+              $activePlan['herkunft']
+          ) ?></dd></div>
+          <div><dt>Gültigkeit</dt><dd data-estab-telecom-header-validity
+            data-estab-valid-from="<?= dv_operations_html(
+                dv_operations_datetime_input($activePlan['gueltig_ab'])
+            ) ?>" data-estab-valid-until="<?= dv_operations_html(
+                dv_operations_datetime_input($activePlan['gueltig_bis'])
+            ) ?>">ab <?= dv_operations_html(
+                $activePlan['gueltig_ab']
+            ) ?><?= $activePlan['gueltig_bis'] === null
+              ? ''
+              : ' bis ' . dv_operations_html($activePlan['gueltig_bis'])
+          ?></dd></div>
+          <div><dt>Betriebsleitung</dt><dd
+            data-estab-telecom-header-lead><?= dv_operations_html(
+              $activePlan['betriebsleitung']
+          ) ?></dd></div>
+        </dl>
+        <?php if (trim((string) $activePlan['bemerkungen']) !== ''): ?>
+          <p class="estab-telecom-plan-note">
+            <strong>Bemerkungen:</strong>
+            <span data-estab-telecom-header-remarks><?= dv_operations_html(
+                $activePlan['bemerkungen']
+            ) ?></span>
+          </p>
+        <?php endif; ?>
         <div class="estab-tool-table-wrap estab-tool-table-responsive">
           <table class="estab-tool-table">
             <caption class="estab-visually-hidden">
@@ -379,12 +775,17 @@ foreach ($plans as $plan) {
             <thead><tr>
               <th scope="col">Betriebsstelle</th>
               <th scope="col">Rufname</th>
-              <th scope="col">Weg</th>
+              <th scope="col">Medium und technische Angaben</th>
               <th scope="col">Verkehrsform</th>
               <th scope="col">Vermerke</th>
             </tr></thead>
             <tbody>
             <?php foreach ($activePlan['eintraege'] as $entry): ?>
+              <?php $routeParts = array_values(array_filter([
+                  estab_dv_telecom_medium_label($entry['medium']),
+                  trim((string) $entry['kanal']),
+                  trim((string) $entry['bandlage']),
+              ], static fn (string $part): bool => $part !== '')); ?>
               <tr>
                 <td data-label="Betriebsstelle"><?= dv_operations_html(
                     $entry['betriebsstelle']
@@ -392,10 +793,9 @@ foreach ($plans as $plan) {
                 <td data-label="Rufname"><?= dv_operations_html(
                     $entry['rufname']
                 ) ?></td>
-                <td data-label="Weg"><?= dv_operations_html(
-                    $entry['medium'] . ' · ' . $entry['kanal']
-                    . ' · ' . $entry['bandlage']
-                ) ?></td>
+                <td data-label="Medium und technische Angaben"><?=
+                  dv_operations_html(implode(' · ', $routeParts))
+                ?></td>
                 <td data-label="Verkehrsform"><?= dv_operations_html(
                     $entry['verkehrsform']
                 ) ?></td>
@@ -414,97 +814,550 @@ foreach ($plans as $plan) {
     </section>
 
     <?php if ($isS6): ?>
-      <section class="estab-tool-panel">
+      <section id="fernmeldeplan-entwurf" class="estab-tool-panel"
+        data-estab-telecom-editor>
         <header class="estab-tool-panel-heading">
-          <h2>S6 · Fernmeldeplan versionieren</h2>
-          <p>Ein freigegebener Plan ist unveränderlich. Änderungen beginnen
-            immer als neue Version und ersetzen den bisherigen Plan erst nach
-            Ihrer Freigabe.</p>
+          <h2>S6 · Fernmeldeplan bearbeiten und versionieren</h2>
+          <p>Beim Bearbeitungsstart werden Kopfdaten und sämtliche Wege des
+            aktiven Plans übernommen. Sie ändern nur den Entwurf; der aktive
+            Plan bleibt bis zur Veröffentlichung unverändert verfügbar.</p>
         </header>
-        <form class="estab-tool-form" method="post"
-          action="fuehrungsstelle.php">
-          <?= estab_csrf_field() ?>
-          <input type="hidden" name="operation_action" value="create_plan">
-          <label>Herkunft
-            <input name="herkunft" maxlength="255" required>
-          </label>
-          <label>Gültig ab
-            <input type="datetime-local" name="gueltig_ab"
-              value="<?= date('Y-m-d\TH:i') ?>" required>
-          </label>
-          <label>Gültig bis
-            <input type="datetime-local" name="gueltig_bis">
-          </label>
-          <label>Betriebsleitung
-            <input name="betriebsleitung" maxlength="255" required>
-          </label>
-          <label>Bemerkungen
-            <textarea name="bemerkungen" maxlength="10000"></textarea>
-          </label>
-          <button class="estab-button estab-button-primary" type="submit">
-            Neue Planversion anlegen
-          </button>
-        </form>
 
-        <?php foreach ($plans as $plan): ?>
-          <?php if ($plan['status'] === 'ENTWURF'): ?>
-            <section class="estab-tool-panel">
-              <h3>Entwurf Version <?= (int) $plan['version'] ?></h3>
+        <?php if ($draftPlans === [] && $activePlan !== null): ?>
+          <form class="estab-tool-form estab-telecom-start-form" method="post"
+            action="fuehrungsstelle.php">
+            <?= estab_csrf_field() ?>
+            <input type="hidden" name="operation_action"
+              value="start_plan_revision">
+            <input type="hidden" name="fernmeldeplan_id"
+              value="<?= (int) $activePlan['fernmeldeplan_id'] ?>">
+            <p><strong>Version <?= (int) $activePlan['version'] ?> bearbeiten</strong><br>
+              Es entsteht ein vollständig vorbefüllter Entwurf für die nächste
+              Version. Die aktive Fassung wird dabei nicht verändert.</p>
+            <button class="estab-button estab-button-primary" type="submit">
+              Bearbeitung starten
+            </button>
+          </form>
+        <?php elseif ($draftPlans === []): ?>
+          <h3>Ersten Fernmeldeplan vorbereiten</h3>
+          <p class="estab-tool-notice">Nur bei der Erstanlage werden die
+            Kopfdaten einmalig erfasst. Jede spätere Bearbeitung übernimmt den
+            dann aktiven Plan vollständig.</p>
+          <form class="estab-tool-form" method="post"
+            action="fuehrungsstelle.php" data-estab-dirty-guard
+            <?= dv_operations_failed_post('create_plan')
+                ? 'data-estab-dirty-initial="true"'
+                : '' ?>>
+            <?= estab_csrf_field() ?>
+            <input type="hidden" name="operation_action" value="create_plan">
+            <div class="estab-tool-form-grid">
+              <label>Herkunft
+                <input name="herkunft" maxlength="255" required value="<?=
+                  dv_operations_html(dv_operations_post_value(
+                      'create_plan',
+                      'herkunft',
+                      ''
+                  ))
+                ?>">
+              </label>
+              <label>Gültig ab
+                <input type="datetime-local" name="gueltig_ab" required
+                  value="<?= dv_operations_html(dv_operations_post_value(
+                      'create_plan',
+                      'gueltig_ab',
+                      date('Y-m-d\TH:i')
+                  )) ?>">
+              </label>
+              <label>Gültig bis
+                <input type="datetime-local" name="gueltig_bis" value="<?=
+                  dv_operations_html(dv_operations_post_value(
+                      'create_plan',
+                      'gueltig_bis',
+                      ''
+                  ))
+                ?>">
+              </label>
+              <label>Betriebsleitung
+                <input name="betriebsleitung" maxlength="255" required
+                  value="<?= dv_operations_html(dv_operations_post_value(
+                      'create_plan',
+                      'betriebsleitung',
+                      ''
+                  )) ?>">
+              </label>
+            </div>
+            <label>Bemerkungen
+              <textarea name="bemerkungen" maxlength="10000"><?=
+                dv_operations_html(dv_operations_post_value(
+                    'create_plan',
+                    'bemerkungen',
+                    ''
+                ))
+              ?></textarea>
+            </label>
+            <button class="estab-button estab-button-primary" type="submit">
+              Ersten Entwurf anlegen
+            </button>
+          </form>
+        <?php else: ?>
+          <p class="estab-tool-notice" role="status">
+            Ein Entwurf ist vorhanden. Bearbeiten Sie ihn weiter und
+            veröffentlichen Sie ihn anschließend; ein zweiter paralleler
+            Entwurf wird bewusst nicht angelegt.
+          </p>
+        <?php endif; ?>
+
+        <?php foreach ($draftPlans as $plan): ?>
+          <?php
+            $planId = (int) $plan['fernmeldeplan_id'];
+            $revision = (string) $plan['revision'];
+          ?>
+          <article class="estab-telecom-draft" data-estab-telecom-draft
+            data-estab-plan-version="<?= (int) $plan['version'] ?>">
+            <header class="estab-telecom-draft-heading">
+              <div>
+                <p class="estab-tool-eyebrow">Bearbeitbarer Entwurf</p>
+                <h3>Vorgesehene Version <?= (int) $plan['version'] ?></h3>
+              </div>
+              <span class="estab-tool-badge estab-tool-badge-warning">
+                Noch nicht aktiv
+              </span>
+            </header>
+            <div class="estab-tool-feedback estab-tool-feedback-error
+              estab-telecom-draft-warning" role="alert" tabindex="-1" hidden
+              data-estab-telecom-draft-warning
+              data-estab-telecom-publish-warning>
+              <p><strong>Aktion noch nicht ausgeführt.</strong>
+                Im Bereich <strong
+                  data-estab-telecom-dirty-context>dieses Entwurfs</strong>
+                gibt es ungespeicherte Änderungen.</p>
+              <p>Speichern Sie diesen Bereich zuerst. Falls diese anderen
+                Browser-Eingaben bewusst verloren gehen dürfen, können Sie die
+                ursprünglich gewählte Aktion
+                „<strong data-estab-telecom-pending-action>fortsetzen</strong>“
+                ausdrücklich trotzdem ausführen.</p>
+              <div class="estab-tool-actions estab-telecom-warning-actions">
+                <button class="estab-button" type="button"
+                  data-estab-telecom-focus-unsaved>
+                  Ungespeicherten Bereich prüfen
+                </button>
+                <button class="estab-button estab-button-danger-outline"
+                  type="button" data-estab-telecom-continue-action>
+                  Andere Eingaben verwerfen und Aktion fortsetzen
+                </button>
+              </div>
+            </div>
+
+            <details class="estab-tool-details estab-telecom-section" open>
+              <summary>Kopfdaten bearbeiten</summary>
               <form class="estab-tool-form" method="post"
-                action="fuehrungsstelle.php">
+                action="fuehrungsstelle.php" data-estab-dirty-guard
+                data-estab-telecom-form-label="Kopfdaten"
+                <?= dv_operations_failed_post('update_plan', $planId)
+                    ? 'data-estab-dirty-initial="true"'
+                    : '' ?>>
+                <?= estab_csrf_field() ?>
+                <input type="hidden" name="operation_action"
+                  value="update_plan">
+                <input type="hidden" name="fernmeldeplan_id"
+                  value="<?= $planId ?>">
+                <input type="hidden" name="plan_revision"
+                  value="<?= dv_operations_html($revision) ?>">
+                <div class="estab-tool-form-grid">
+                  <label>Herkunft
+                    <input name="herkunft" maxlength="255" required
+                      value="<?= dv_operations_html(
+                          dv_operations_post_value(
+                              'update_plan',
+                              'herkunft',
+                              $plan['herkunft'],
+                              $planId
+                          )
+                      ) ?>">
+                  </label>
+                  <label>Gültig ab
+                    <input type="datetime-local" name="gueltig_ab" required
+                      value="<?= dv_operations_html(
+                          dv_operations_post_value(
+                              'update_plan',
+                              'gueltig_ab',
+                              dv_operations_datetime_input($plan['gueltig_ab']),
+                              $planId
+                          )
+                      ) ?>">
+                  </label>
+                  <label>Gültig bis
+                    <input type="datetime-local" name="gueltig_bis"
+                      value="<?= dv_operations_html(
+                          dv_operations_post_value(
+                              'update_plan',
+                              'gueltig_bis',
+                              dv_operations_datetime_input(
+                                  $plan['gueltig_bis']
+                              ),
+                              $planId
+                          )
+                      ) ?>">
+                  </label>
+                  <label>Betriebsleitung
+                    <input name="betriebsleitung" maxlength="255" required
+                      value="<?= dv_operations_html(
+                          dv_operations_post_value(
+                              'update_plan',
+                              'betriebsleitung',
+                              $plan['betriebsleitung'],
+                              $planId
+                          )
+                      ) ?>">
+                  </label>
+                </div>
+                <label>Bemerkungen
+                  <textarea name="bemerkungen" maxlength="10000"><?=
+                    dv_operations_html(dv_operations_post_value(
+                        'update_plan',
+                        'bemerkungen',
+                        (string) $plan['bemerkungen'],
+                        $planId
+                    ))
+                  ?></textarea>
+                </label>
+                <button class="estab-button" type="submit">
+                  Kopfdaten speichern
+                </button>
+              </form>
+            </details>
+
+            <section class="estab-telecom-routes" aria-labelledby="<?=
+              'telecom-routes-' . $planId
+            ?>">
+              <header class="estab-telecom-routes-heading">
+                <div>
+                  <h3 id="<?= 'telecom-routes-' . $planId ?>">
+                    Übernommene Fernmeldewege
+                  </h3>
+                  <p>Jeder Weg kann einzeln angepasst oder entfernt werden.</p>
+                </div>
+                <span><?= count($plan['eintraege']) ?> Wege</span>
+              </header>
+              <?php if ($plan['eintraege'] === []): ?>
+                <p class="estab-tool-empty">Noch kein Fernmeldeweg vorhanden.</p>
+              <?php endif; ?>
+              <div class="estab-telecom-route-list">
+              <?php foreach ($plan['eintraege'] as $entry): ?>
+                <?php
+                  $entryId = (int) $entry['fernmeldeplan_eintrag_id'];
+                  $entryValues = $entry;
+                  foreach (array_keys($entryValues) as $field) {
+                      $entryValues[$field] = dv_operations_post_value(
+                          'update_plan_entry',
+                          (string) $field,
+                          $entryValues[$field],
+                          $planId,
+                          $entryId
+                      );
+                  }
+                  $entryHasError = dv_operations_failed_post(
+                      'update_plan_entry',
+                      $planId,
+                      $entryId
+                  );
+                  $entryHasConflict = $telecomRevisionConflict
+                      && ($_POST['operation_action'] ?? null)
+                          === 'update_plan_entry'
+                      && (string) ($_POST['fernmeldeplan_id'] ?? '')
+                          === (string) $planId
+                      && (string) ($_POST['fernmeldeplan_eintrag_id'] ?? '')
+                          === (string) $entryId;
+                ?>
+                <details class="estab-tool-details estab-telecom-route"
+                  id="<?= 'fernmeldeweg-' . $entryId ?>"
+                  data-estab-telecom-entry-id="<?= $entryId ?>"
+                  <?= $entryHasError || $entryHasConflict
+                      || $highlightEntryId === $entryId
+                      ? 'open'
+                      : '' ?>>
+                  <summary>
+                    <span><strong><?= dv_operations_html(
+                        $entry['betriebsstelle']
+                    ) ?></strong> · <?= dv_operations_html(
+                        $entry['rufname']
+                    ) ?></span>
+                    <span><?= dv_operations_html(
+                        estab_dv_telecom_medium_label($entry['medium'])
+                    ) ?></span>
+                  </summary>
+                  <form class="estab-tool-form" method="post"
+                    action="fuehrungsstelle.php"
+                    data-estab-telecom-entry-form
+                    data-estab-telecom-entry-mode="edit"
+                    data-estab-dirty-guard
+                    data-estab-telecom-form-label="<?= dv_operations_html(
+                        'Fernmeldeweg ' . $entry['betriebsstelle']
+                            . ' / ' . $entry['rufname']
+                    ) ?>"
+                    <?= $entryHasError
+                        ? 'data-estab-dirty-initial="true"'
+                        : '' ?>>
+                    <?= estab_csrf_field() ?>
+                    <input type="hidden" name="operation_action"
+                      value="update_plan_entry">
+                    <input type="hidden" name="fernmeldeplan_id"
+                      value="<?= $planId ?>">
+                    <input type="hidden" name="fernmeldeplan_eintrag_id"
+                      value="<?= $entryId ?>">
+                    <input type="hidden" name="plan_revision"
+                      value="<?= dv_operations_html($revision) ?>">
+                    <?php dv_operations_render_telecom_entry_fields(
+                        $entryValues
+                    ); ?>
+                    <button class="estab-button" type="submit">
+                      Änderungen am Weg speichern
+                    </button>
+                  </form>
+                  <form class="estab-telecom-delete-form" method="post"
+                    action="fuehrungsstelle.php">
+                    <?= estab_csrf_field() ?>
+                    <input type="hidden" name="operation_action"
+                      value="delete_plan_entry">
+                    <input type="hidden" name="fernmeldeplan_id"
+                      value="<?= $planId ?>">
+                    <input type="hidden" name="fernmeldeplan_eintrag_id"
+                      value="<?= $entryId ?>">
+                    <input type="hidden" name="plan_revision"
+                      value="<?= dv_operations_html($revision) ?>">
+                    <button class="estab-button estab-button-danger-outline"
+                      type="submit" data-estab-confirm="delete-telecom-entry">
+                      Weg aus dem Entwurf entfernen
+                    </button>
+                  </form>
+                </details>
+              <?php endforeach; ?>
+              </div>
+            </section>
+
+            <?php
+              $addValues = [];
+              foreach (
+                  [
+                      'betriebsstelle', 'rufname', 'medium', 'kanal',
+                      'bandlage', 'verkehrsform', 'besondere_vermerke',
+                      'bemerkungen',
+                  ] as $field
+              ) {
+                  $addValues[$field] = dv_operations_post_value(
+                      'add_plan_entry',
+                      $field,
+                      '',
+                      $planId
+                  );
+              }
+            ?>
+            <details class="estab-tool-details estab-telecom-section"
+              <?= $error !== null
+                  && ($_POST['operation_action'] ?? null) === 'add_plan_entry'
+                  && (string) ($_POST['fernmeldeplan_id'] ?? '')
+                      === (string) $planId ? 'open' : '' ?>>
+              <summary>Weiteren Fernmeldeweg hinzufügen</summary>
+              <form class="estab-tool-form" method="post"
+                action="fuehrungsstelle.php" data-estab-telecom-entry-form
+                data-estab-telecom-entry-mode="add"
+                data-estab-dirty-guard
+                data-estab-telecom-form-label="Neuer Fernmeldeweg"
+                <?= dv_operations_failed_post(
+                    'add_plan_entry',
+                    $planId
+                ) ? 'data-estab-dirty-initial="true"' : '' ?>>
                 <?= estab_csrf_field() ?>
                 <input type="hidden" name="operation_action"
                   value="add_plan_entry">
                 <input type="hidden" name="fernmeldeplan_id"
-                  value="<?= (int) $plan['fernmeldeplan_id'] ?>">
-                <label>Betriebsstellen-Klarbezeichnung
-                  <input name="betriebsstelle" maxlength="255" required>
-                </label>
-                <label>Rufname
-                  <input name="rufname" maxlength="128" required>
-                </label>
-                <label>Medium
-                  <select name="medium" required>
-                    <?php foreach (ESTAB_DV_MEDIA as $medium): ?>
-                      <option value="<?= dv_operations_html($medium) ?>">
-                        <?= dv_operations_html($medium) ?>
-                      </option>
-                    <?php endforeach; ?>
-                  </select>
-                </label>
-                <label>Kanal
-                  <input name="kanal" maxlength="64" required>
-                </label>
-                <label>Bandlage
-                  <input name="bandlage" maxlength="64" required>
-                </label>
-                <label>Verkehrsform
-                  <input name="verkehrsform" maxlength="128" required>
-                </label>
-                <label>Besondere Vermerke
-                  <textarea name="besondere_vermerke"
-                    maxlength="10000"></textarea>
-                </label>
-                <label>Bemerkungen
-                  <textarea name="bemerkungen" maxlength="10000"></textarea>
-                </label>
+                  value="<?= $planId ?>">
+                <input type="hidden" name="plan_revision"
+                  value="<?= dv_operations_html($revision) ?>">
+                <?php dv_operations_render_telecom_entry_fields($addValues); ?>
                 <button class="estab-button" type="submit">
-                  Weg hinzufügen
+                  Weg zum Entwurf hinzufügen
                 </button>
               </form>
-              <form method="post" action="fuehrungsstelle.php">
-                <?= estab_csrf_field() ?>
-                <input type="hidden" name="operation_action"
-                  value="activate_plan">
-                <input type="hidden" name="fernmeldeplan_id"
-                  value="<?= (int) $plan['fernmeldeplan_id'] ?>">
-                <button class="estab-button estab-button-primary" type="submit">
-                  Version unveränderlich freigeben
-                </button>
-              </form>
+            </details>
+
+            <section class="estab-telecom-publish" aria-labelledby="<?=
+              'telecom-publish-' . $planId
+            ?>">
+              <div>
+                <h3 id="<?= 'telecom-publish-' . $planId ?>">
+                  Entwurf veröffentlichen
+                </h3>
+                <p>Prüfen Sie alle Angaben. Danach wird Version
+                  <?= (int) $plan['version'] ?> aktiv und die bisher aktive
+                  Version unveränderlich als ersetzt archiviert.</p>
+              </div>
+              <div class="estab-telecom-publish-actions">
+                <form method="post" action="fuehrungsstelle.php"
+                  data-estab-telecom-publish-form>
+                  <?= estab_csrf_field() ?>
+                  <input type="hidden" name="operation_action"
+                    value="activate_plan">
+                  <input type="hidden" name="fernmeldeplan_id"
+                    value="<?= $planId ?>">
+                  <input type="hidden" name="plan_revision"
+                    value="<?= dv_operations_html($revision) ?>">
+                  <button class="estab-button estab-button-primary" type="submit"
+                    <?= $plan['eintraege'] === [] ? 'disabled' : '' ?>>
+                    Als Version <?= (int) $plan['version'] ?> aktiv schalten
+                  </button>
+                </form>
+                <form method="post" action="fuehrungsstelle.php"
+                  data-estab-telecom-discard-form>
+                  <?= estab_csrf_field() ?>
+                  <input type="hidden" name="operation_action"
+                    value="discard_plan">
+                  <input type="hidden" name="fernmeldeplan_id"
+                    value="<?= $planId ?>">
+                  <input type="hidden" name="plan_revision"
+                    value="<?= dv_operations_html($revision) ?>">
+                  <button class="estab-button estab-button-danger-outline"
+                    type="submit" data-estab-confirm="discard-telecom-draft">
+                    Entwurf verwerfen
+                  </button>
+                </form>
+              </div>
             </section>
-          <?php endif; ?>
+          </article>
         <?php endforeach; ?>
+      </section>
+    <?php endif; ?>
+
+    <?php if ($archivedPlans !== []): ?>
+      <section class="estab-tool-panel estab-telecom-history"
+        data-estab-telecom-history>
+        <header class="estab-tool-panel-heading">
+          <h2>Versionshistorie Fernmeldeplan</h2>
+          <p>Frühere und verworfene Fassungen bleiben als unveränderlicher
+            Nachweis lesbar. Zum Arbeiten gilt ausschließlich die oben als
+            aktiv gekennzeichnete Version.</p>
+        </header>
+        <div class="estab-telecom-history-list">
+          <?php foreach ($archivedPlans as $plan): ?>
+            <?php
+              $historyWasReleased = is_string($plan['freigegeben_von'])
+                  && trim($plan['freigegeben_von']) !== '';
+              $historyState = $historyWasReleased ? 'Ersetzt' : 'Verworfen';
+              $historyStateKey = $historyWasReleased
+                  ? 'replaced'
+                  : 'discarded';
+              $historyRouteCount = count($plan['eintraege']);
+            ?>
+            <details class="estab-tool-details estab-telecom-history-item"
+              data-estab-telecom-history-version="<?=
+                (int) $plan['version']
+              ?>" data-estab-telecom-history-state="<?= $historyStateKey ?>">
+              <summary>
+                <span>
+                  <strong>Version <?= (int) $plan['version'] ?></strong>
+                  <small><?= dv_operations_html($plan['herkunft']) ?></small>
+                </span>
+                <span class="estab-telecom-history-summary-meta">
+                  <span class="estab-tool-badge <?= $historyWasReleased
+                      ? 'estab-tool-badge-neutral'
+                      : 'estab-tool-badge-warning'
+                  ?>"><?= $historyState ?></span>
+                  <span><?= $historyRouteCount ?> <?= $historyRouteCount === 1
+                      ? 'Weg'
+                      : 'Wege'
+                  ?></span>
+                </span>
+              </summary>
+              <div class="estab-telecom-history-content">
+                <dl class="estab-telecom-plan-meta">
+                  <div><dt>Gültigkeit</dt><dd>ab <?= dv_operations_html(
+                      $plan['gueltig_ab']
+                  ) ?><?= $plan['gueltig_bis'] === null
+                      ? ''
+                      : ' bis ' . dv_operations_html($plan['gueltig_bis'])
+                  ?></dd></div>
+                  <div><dt>Betriebsleitung</dt><dd><?= dv_operations_html(
+                      $plan['betriebsleitung']
+                  ) ?></dd></div>
+                  <div><dt>Angelegt</dt><dd><?= dv_operations_html(
+                      $plan['erstellt_von']
+                  ) ?> · <?= dv_operations_html(
+                      dv_operations_datetime_display($plan['erstellt_am'])
+                  ) ?></dd></div>
+                  <div><dt>Freigegeben</dt><dd><?= $historyWasReleased
+                      ? dv_operations_html($plan['freigegeben_von'])
+                          . ' · ' . dv_operations_html(
+                              dv_operations_datetime_display(
+                                  $plan['freigegeben_am']
+                              )
+                          )
+                      : 'Nicht freigegeben'
+                  ?></dd></div>
+                </dl>
+                <?php if (trim((string) $plan['bemerkungen']) !== ''): ?>
+                  <p class="estab-telecom-history-note">
+                    <strong>Bemerkungen:</strong>
+                    <span><?= dv_operations_html(
+                        $plan['bemerkungen']
+                    ) ?></span>
+                  </p>
+                <?php endif; ?>
+                <?php if ($plan['eintraege'] === []): ?>
+                  <p class="estab-tool-empty">Diese Fassung enthält keine
+                    Fernmeldewege.</p>
+                <?php else: ?>
+                  <ul class="estab-telecom-history-routes">
+                    <?php foreach ($plan['eintraege'] as $entry): ?>
+                      <?php
+                        $historyRouteParts = array_values(array_filter([
+                            estab_dv_telecom_medium_label($entry['medium']),
+                            trim((string) $entry['kanal']),
+                            trim((string) $entry['bandlage']),
+                            trim((string) $entry['verkehrsform']),
+                        ], static fn (string $part): bool => $part !== ''));
+                        $historySpecialNotes = trim(
+                            (string) $entry['besondere_vermerke']
+                        );
+                        $historyRouteNotes = trim(
+                            (string) $entry['bemerkungen']
+                        );
+                      ?>
+                      <li>
+                        <span><strong><?= dv_operations_html(
+                            $entry['betriebsstelle']
+                        ) ?></strong><small><?= dv_operations_html(
+                            $entry['rufname']
+                        ) ?></small></span>
+                        <span><?= dv_operations_html(
+                            implode(' · ', $historyRouteParts)
+                        ) ?></span>
+                        <?php if (
+                            $historySpecialNotes !== ''
+                            || $historyRouteNotes !== ''
+                        ): ?>
+                          <div class="estab-telecom-history-route-notes">
+                            <?php if ($historySpecialNotes !== ''): ?>
+                              <p><strong>Besondere Vermerke:</strong>
+                                <span><?= dv_operations_html(
+                                    $historySpecialNotes
+                                ) ?></span></p>
+                            <?php endif; ?>
+                            <?php if ($historyRouteNotes !== ''): ?>
+                              <p><strong>Bemerkungen zum Weg:</strong>
+                                <span><?= dv_operations_html(
+                                    $historyRouteNotes
+                                ) ?></span></p>
+                            <?php endif; ?>
+                          </div>
+                        <?php endif; ?>
+                      </li>
+                    <?php endforeach; ?>
+                  </ul>
+                <?php endif; ?>
+              </div>
+            </details>
+          <?php endforeach; ?>
+        </div>
       </section>
     <?php endif; ?>
 
@@ -521,7 +1374,7 @@ foreach ($plans as $plan) {
           <?= estab_csrf_field() ?>
           <input type="hidden" name="operation_action"
             value="assign_messenger">
-          <label>Ausgangsnachricht mit Weg „Me“
+          <label>Ausgangsnachricht mit Weg „Melder“
             <select name="nachricht_id" required>
               <?php foreach ($eligibleMessages as $message): ?>
                 <option value="<?= (int) $message['00_lfd'] ?>">
@@ -663,5 +1516,214 @@ foreach ($plans as $plan) {
     <span>Alle Änderungen sind einsatzgebunden und hashverkettet.</span>
   </footer>
 </main>
+<script data-estab-telecom-media-fields>
+(function () {
+  'use strict';
+  var media = <?= json_encode(
+      ESTAB_DV_MEDIA_DEFINITIONS,
+      JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE
+          | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP
+  ) ?>;
+  function update(form) {
+    var select = form.querySelector('[data-estab-telecom-medium]');
+    if (!select) return;
+    var definition = media[select.value] || null;
+    ['kanal', 'bandlage', 'verkehrsform'].forEach(function (fieldName) {
+      var wrapper = form.querySelector(
+        '[data-estab-telecom-field="' + fieldName + '"]'
+      );
+      if (!wrapper) return;
+      var input = wrapper.querySelector('input, select, textarea');
+      var label = wrapper.querySelector(
+        '[data-estab-telecom-field-label="' + fieldName + '"]'
+      );
+      var fieldLabel = definition ? definition[fieldName] : null;
+      var visible = typeof fieldLabel === 'string' && fieldLabel !== '';
+      wrapper.hidden = !visible;
+      if (input) {
+        input.disabled = !visible;
+        input.required = visible;
+      }
+      if (label && visible) label.textContent = fieldLabel;
+    });
+  }
+  document.querySelectorAll('[data-estab-telecom-entry-form]')
+    .forEach(function (form) {
+      update(form);
+      var select = form.querySelector('[data-estab-telecom-medium]');
+      if (select) select.addEventListener('change', function () {
+        update(form);
+      });
+    });
+  function changed(form) {
+    if (form.hasAttribute('data-estab-dirty-initial')) return true;
+    var controls = form.elements;
+    for (var index = 0; index < controls.length; index += 1) {
+      var field = controls[index];
+      if (!field || field.disabled) continue;
+      var tag = String(field.tagName || '').toLowerCase();
+      var type = String(field.type || '').toLowerCase();
+      if (['hidden', 'submit', 'button', 'image', 'reset'].includes(type)) {
+        continue;
+      }
+      if (type === 'checkbox' || type === 'radio') {
+        if (field.checked !== field.defaultChecked) return true;
+      } else if (tag === 'select') {
+        for (var optionIndex = 0;
+          optionIndex < field.options.length;
+          optionIndex += 1
+        ) {
+          if (
+            field.options[optionIndex].selected
+              !== field.options[optionIndex].defaultSelected
+          ) return true;
+        }
+      } else if (type === 'file') {
+        if (field.files && field.files.length > 0) return true;
+      } else if (field.value !== field.defaultValue) {
+        return true;
+      }
+    }
+    return false;
+  }
+  function reveal(form, focusControl) {
+    var disclosure = form && form.closest('details');
+    if (disclosure) disclosure.open = true;
+    if (!form) return;
+    form.scrollIntoView({block: 'center', behavior: 'smooth'});
+    if (!focusControl) return;
+    var control = Array.from(form.elements).find(function (field) {
+      if (!field || field.disabled) return false;
+      var type = String(field.type || '').toLowerCase();
+      return !['hidden', 'submit', 'button', 'image', 'reset'].includes(type);
+    });
+    if (control && typeof control.focus === 'function') control.focus();
+  }
+  document.querySelectorAll('[data-estab-telecom-draft]')
+    .forEach(function (draft) {
+      var warning = draft.querySelector('[data-estab-telecom-draft-warning]');
+      var focusUnsaved = warning && warning.querySelector(
+        '[data-estab-telecom-focus-unsaved]'
+      );
+      var continueAction = warning && warning.querySelector(
+        '[data-estab-telecom-continue-action]'
+      );
+      var pendingForm = null;
+      var pendingSubmitter = null;
+      var pendingDirtyForm = null;
+      var bypassForm = null;
+      var bypassSubmitter = null;
+      function clearHighlight() {
+        draft.querySelectorAll('.estab-telecom-unsaved')
+          .forEach(function (form) {
+            form.classList.remove('estab-telecom-unsaved');
+          });
+      }
+      function clearPending(hideWarning) {
+        pendingForm = null;
+        pendingSubmitter = null;
+        pendingDirtyForm = null;
+        if (hideWarning && warning) warning.hidden = true;
+        clearHighlight();
+      }
+      draft.addEventListener('submit', function (event) {
+        var submittedForm = event.target;
+        if (!(submittedForm instanceof HTMLFormElement)) return;
+        if (
+          submittedForm === bypassForm
+          && (
+            bypassSubmitter === null
+            || event.submitter === bypassSubmitter
+          )
+        ) {
+          bypassForm = null;
+          bypassSubmitter = null;
+          clearPending(true);
+          return;
+        }
+        bypassForm = null;
+        bypassSubmitter = null;
+        var dirtyForm = Array.from(draft.querySelectorAll(
+          'form[data-estab-dirty-guard]'
+        )).find(function (form) {
+          return form !== submittedForm && changed(form);
+        });
+        if (!dirtyForm) {
+          clearPending(true);
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        pendingForm = submittedForm;
+        pendingSubmitter = event.submitter || null;
+        pendingDirtyForm = dirtyForm;
+        clearHighlight();
+        dirtyForm.classList.add('estab-telecom-unsaved');
+        reveal(dirtyForm, false);
+        if (warning) {
+          var dirtyAction = dirtyForm.querySelector(
+            'input[name="operation_action"]'
+          );
+          var dirtyContext = warning.querySelector(
+            '[data-estab-telecom-dirty-context]'
+          );
+          if (dirtyContext) {
+            dirtyContext.textContent = dirtyForm.dataset.estabTelecomFormLabel
+              || 'dieses Entwurfs';
+          }
+          var pendingAction = warning.querySelector(
+            '[data-estab-telecom-pending-action]'
+          );
+          if (pendingAction) {
+            var submitterLabel = pendingSubmitter
+              ? String(
+                  pendingSubmitter.textContent || pendingSubmitter.value || ''
+                ).trim()
+              : '';
+            pendingAction.textContent = submitterLabel || 'fortsetzen';
+          }
+          warning.dataset.estabTelecomDirtyAction = dirtyAction
+            ? dirtyAction.value
+            : 'unknown';
+          warning.hidden = false;
+          warning.focus();
+          warning.scrollIntoView({block: 'center', behavior: 'smooth'});
+        }
+      });
+      if (focusUnsaved) {
+        focusUnsaved.addEventListener('click', function () {
+          if (!pendingDirtyForm || !pendingDirtyForm.isConnected) return;
+          reveal(pendingDirtyForm, true);
+        });
+      }
+      if (continueAction) {
+        continueAction.addEventListener('click', function () {
+          if (!pendingForm || !pendingForm.isConnected) {
+            clearPending(true);
+            return;
+          }
+          if (!pendingForm.reportValidity()) return;
+          var form = pendingForm;
+          var submitter = pendingSubmitter;
+          bypassForm = form;
+          bypassSubmitter = submitter;
+          clearPending(true);
+          if (submitter && submitter.form === form) {
+            form.requestSubmit(submitter);
+          } else {
+            form.requestSubmit();
+          }
+        });
+      }
+      function cancelPendingAction() {
+        bypassForm = null;
+        bypassSubmitter = null;
+        clearPending(true);
+      }
+      draft.addEventListener('input', cancelPendingAction);
+      draft.addEventListener('change', cancelPendingAction);
+    });
+}());
+</script>
 </body>
 </html>

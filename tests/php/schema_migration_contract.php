@@ -79,6 +79,9 @@ $selfRegistrationMigration = $read(
 $standardCategoriesMigration = $read(
     $root . '/docker/db/migrations/116-standard-categories.sql'
 );
+$telecomDraftDiscardMigration = $read(
+    $root . '/docker/db/migrations/117-telecom-draft-discard.sql'
+);
 $baseline = $read($root . '/docker/db/init/10-schema.sql');
 $verify = $read($root . '/docker/db/verify.sql');
 $health = $read($root . '/health.php');
@@ -105,6 +108,7 @@ $optionalAccessShiftSql = $normaliseSql($optionalAccessShiftMigration);
 $passwordPolicySql = $normaliseSql($passwordPolicyMigration);
 $selfRegistrationSql = $normaliseSql($selfRegistrationMigration);
 $standardCategoriesSql = $normaliseSql($standardCategoriesMigration);
+$telecomDraftDiscardSql = $normaliseSql($telecomDraftDiscardMigration);
 $baselineSql = $normaliseSql($baseline);
 $verifySql = $normaliseSql($verify);
 $readinessSql = $normaliseSql(estab_readiness_schema_query());
@@ -491,6 +495,126 @@ $assert(
             'second legacy-upgrade run duplicated or changed standard categories'
         ),
     'Schema integration omits fresh, upgrade-preservation, or standard-category idempotence evidence'
+);
+
+$discardTransitionStart = strpos(
+    $telecomDraftDiscardSql,
+    "ELSEIF OLD.`status` = 'ENTWURF' AND NEW.`status` = 'ERSETZT' THEN"
+);
+$activeReplacementStart = strpos(
+    $telecomDraftDiscardSql,
+    "ELSEIF OLD.`status` = 'AKTIV' AND NEW.`status` = 'ERSETZT' THEN",
+    is_int($discardTransitionStart) ? $discardTransitionStart : 0
+);
+$discardTransitionSql = is_int($discardTransitionStart)
+    && is_int($activeReplacementStart)
+    ? substr(
+        $telecomDraftDiscardSql,
+        $discardTransitionStart,
+        $activeReplacementStart - $discardTransitionStart
+    )
+    : '';
+$assert(
+    substr_count(
+        $telecomDraftDiscardMigration,
+        'CREATE TRIGGER `estab_dv94_fernmeldeplan_immutable`'
+    ) === 1
+        && str_contains(
+            $telecomDraftDiscardSql,
+            'BEFORE UPDATE ON `nv_fernmeldeplaene` FOR EACH ROW'
+        )
+        && str_contains(
+            $telecomDraftDiscardSql,
+            "incident.`estab_status` = 'open'"
+        )
+        && str_contains(
+            $telecomDraftDiscardSql,
+            "incident.`estab_permission_mode` = BINARY 'LOOSE'"
+        ),
+    'Migration 117 does not canonically replace the mode-aware plan update trigger'
+);
+foreach ([
+    'NOT (BINARY OLD.`einsatzbezeichnung` <=>',
+    'NOT (BINARY OLD.`herkunft` <=> BINARY NEW.`herkunft`)',
+    'NOT (OLD.`gueltig_ab` <=> NEW.`gueltig_ab`)',
+    'NOT (OLD.`gueltig_bis` <=> NEW.`gueltig_bis`)',
+    'NOT (BINARY OLD.`betriebsleitung` <=>',
+    'NOT (BINARY OLD.`bemerkungen` <=> BINARY NEW.`bemerkungen`)',
+    'OLD.`freigegeben_am` IS NOT NULL',
+    'OLD.`freigegeben_von` IS NOT NULL',
+    'NEW.`freigegeben_am` IS NOT NULL',
+    'NEW.`freigegeben_von` IS NOT NULL',
+    'Discarded telecommunications drafts are immutable evidence',
+] as $discardInvariant) {
+    $assert(
+        str_contains($discardTransitionSql, $discardInvariant),
+        'Migration 117 draft-discard transition omits invariant: '
+            . $discardInvariant
+    );
+}
+$assert(
+    str_contains(
+        $telecomDraftDiscardSql,
+        'NOT (BINARY OLD.`freigegeben_von` <=>'
+    )
+        && substr_count(
+            $telecomDraftDiscardSql,
+            'NOT (BINARY OLD.`bemerkungen` <=> BINARY NEW.`bemerkungen`)'
+        ) === 3
+        && str_contains(
+            $telecomDraftDiscardSql,
+            'OLD.`gueltig_ab` > CURRENT_TIMESTAMP'
+        )
+        && str_contains(
+            $telecomDraftDiscardSql,
+            'OLD.`gueltig_bis` < CURRENT_TIMESTAMP'
+        ),
+    'Migration 117 is collation-/NULL-unsafe or ignores its validity window'
+);
+$assert(
+    str_contains($dvOperationsMigration, '`gueltig_ab` DATETIME NOT NULL')
+        && str_contains(
+            $dvOperationsMigration,
+            '`gueltig_bis` DATETIME NULL'
+        )
+        && !str_contains(
+            $telecomDraftDiscardSql,
+            'CURRENT_TIMESTAMP(6)'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'exact stored telecommunications end second was rejected'
+        ),
+    'Telecommunications validity checks ignore DATETIME(0) end-second precision'
+);
+$assert(
+    $discardTransitionSql !== ''
+        && !str_contains($discardTransitionSql, 'release_account')
+        && str_contains(
+            $telecomDraftDiscardSql,
+            "ELSE SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = "
+                . "'Invalid telecommunications plan status transition'"
+        ),
+    'Migration 117 either requires release evidence for discard or leaves discarded plans mutable'
+);
+$assert(
+    str_contains(
+        $schemaIntegration,
+        'migration 117 did not archive an unchanged unreleased draft'
+    )
+        && str_contains(
+            $schemaIntegration,
+            'mutating draft discard was accepted'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'discarded telecommunications plan was mutable'
+        )
+        && str_contains(
+            $schemaIntegration,
+            'telecommunications draft-discard migration was not recorded'
+        ),
+    'Schema integration omits migration-117 transition or immutability evidence'
 );
 foreach ([
     'idx_benutzer_funktion_aktiv',
@@ -1822,6 +1946,8 @@ foreach ([
         'estab:migration:115:incident-permission-mode:v1',
         '115-incident-permission-mode.sql',
         '116-standard-categories.sql',
+        '117-telecom-draft-discard.sql',
+        'Discarded telecommunications drafts are immutable evidence',
     ] as $fragment) {
         $assert(
             str_contains($runtimeSchemaContract, $fragment),
@@ -2360,6 +2486,7 @@ foreach ([
     '114-self-registration-policy.sql',
     '115-incident-permission-mode.sql',
     '116-standard-categories.sql',
+    '117-telecom-draft-discard.sql',
     'historical logbook rows did not retain unknown shift provenance',
     'partial logbook and optional access-shift migrations did not resume canonically',
     'blocked logbook shift collision was changed or recorded',
@@ -2392,7 +2519,7 @@ foreach ([
     'blocked self-registration table collision was changed or recorded',
     'self-registration migration did not recover after removing the collision',
     'incident permission mode was not migrated fail-closed and canonically',
-    'migration 114 rewrote one of the existing twenty-one ledger rows',
+    'migration 114 rewrote one of the existing twenty-two ledger rows',
     'Manual ETB/TBB entries without a duty shift were accepted by account function',
     'Two access groups can be active and membership re-addition preserves its history',
     'withdrawn ETB assignee rejection was not explicit',
@@ -2410,7 +2537,7 @@ foreach ([
     'missing ETB head was not rejected explicitly',
     'missing TTB head was not rejected explicitly',
     'MariaDB default snapshot isolation is not enabled for concurrency tests',
-    'assert_equal "22"',
+    'assert_equal "23"',
 ] as $marker) {
     $assert(
         str_contains($schemaIntegration, $marker),
@@ -2477,7 +2604,7 @@ $assert(
         && str_contains($verifySql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $verifySql,
-            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 22'
+            '(SELECT COUNT(*) FROM `estab_schema_migrations`) = 23'
         )
         && str_contains($verifySql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -2506,7 +2633,12 @@ $assert(
             "'115-incident-permission-mode.sql'"
         )
         && str_contains($verifySql, "'116-standard-categories.sql'")
-        && str_contains($verifySql, ") = 22) AS `schema_migrations_ok`"),
+        && str_contains($verifySql, "'117-telecom-draft-discard.sql'")
+        && str_contains($verifySql, ") = 23) AS `schema_migrations_ok`")
+        && str_contains(
+            $verifySql,
+            'Discarded telecommunications drafts are immutable evidence'
+        ),
     'verify.sql does not require the exact final ETB catalogue and ledger'
 );
 $assert(
@@ -2529,7 +2661,7 @@ $assert(
         && str_contains($readinessSql, "index_name <> 'PRIMARY') = 0")
         && str_contains(
             $readinessSql,
-            '(SELECT COUNT(*) FROM estab_schema_migrations) = 22'
+            '(SELECT COUNT(*) FROM estab_schema_migrations) = 23'
         )
         && str_contains($readinessSql, "'96-etb-duty-function.sql'")
         && str_contains(
@@ -2569,10 +2701,33 @@ $assert(
         )
         && str_contains(
             $readinessSql,
-            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 22"
+            "'117-telecom-draft-discard.sql'"
+        )
+        && str_contains(
+            $readinessSql,
+            "checksum REGEXP BINARY '^[0-9a-f]{64}$') = 23"
         ),
     'Runtime readiness does not require the exact final ETB catalogue and ledger'
 );
+foreach ([
+    'verify.sql' => $verifySql,
+    'runtime readiness' => $readinessSql,
+] as $contractName => $runtimeSchemaContract) {
+    $assert(
+        preg_match(
+            "/trigger_name = 'estab_dv94_fernmeldeplan_immutable' "
+                . ".*?event_object_table = 'nv_fernmeldeplaene' "
+                . ".*?action_timing = 'BEFORE' "
+                . ".*?event_manipulation = 'UPDATE' "
+                . ".*?OLD\..*?ENTWURF.*?NEW\..*?ERSETZT.*?"
+                . "Discarded telecommunications drafts are immutable evidence"
+                . ".*?\) = 1/s",
+            $runtimeSchemaContract
+        ) === 1,
+        $contractName
+            . ' does not require exactly one canonical migration-117 trigger'
+    );
+}
 $releaseMigrationFiles = [
     '20-nullable-dates.sql',
     '30-runtime-schema.sql',
@@ -2596,6 +2751,7 @@ $releaseMigrationFiles = [
     '114-self-registration-policy.sql',
     '115-incident-permission-mode.sql',
     '116-standard-categories.sql',
+    '117-telecom-draft-discard.sql',
 ];
 foreach ([
     'verify.sql' => $verifySql,
@@ -2759,6 +2915,10 @@ $assert(
             $readiness,
             "'116-standard-categories.sql'"
         )
+        && str_contains(
+            $readiness,
+            "'117-telecom-draft-discard.sql'"
+        )
         && str_contains($verify, "'50-global-incidents.sql'")
         && str_contains($verify, "'45-global-incidents-prepare.sql'")
         && str_contains($verify, "'55-global-incidents-finish.sql'")
@@ -2778,9 +2938,10 @@ $assert(
         && str_contains($verify, "'114-self-registration-policy.sql'")
         && str_contains($verify, "'115-incident-permission-mode.sql'")
         && str_contains($verify, "'116-standard-categories.sql'")
-        && str_contains($verify, 'estab_schema_migrations`) = 22')
-        && str_contains($readiness, 'estab_schema_migrations) = 22'),
-    'Migration ledger/readiness does not require all twenty-two release migrations'
+        && str_contains($verify, "'117-telecom-draft-discard.sql'")
+        && str_contains($verify, 'estab_schema_migrations`) = 23')
+        && str_contains($readiness, 'estab_schema_migrations) = 23'),
+    'Migration ledger/readiness does not require all twenty-three release migrations'
 );
 $assert(
     str_contains($readiness, "require_once __DIR__ . '/bootstrap.php'")

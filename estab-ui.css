@@ -2582,7 +2582,8 @@ form[data-estab-incident-disabled="true"]::before {
 }
 
 .estab-tool-field,
-.estab-tool-form > label {
+.estab-tool-form > label,
+.estab-tool-form-grid > label {
     display: grid;
     gap: 0.35rem;
     min-width: 0;
@@ -2596,6 +2597,7 @@ form[data-estab-incident-disabled="true"]::before {
 .estab-tool-field > span:first-child,
 .estab-tool-field legend,
 .estab-tool-form > label,
+.estab-tool-form-grid > label,
 .estab-tool-form > fieldset > legend {
     color: #183454;
     font-weight: 800;
@@ -2607,6 +2609,9 @@ form[data-estab-incident-disabled="true"]::before {
 .estab-tool-form > label > input:not([type="checkbox"]):not([type="radio"]),
 .estab-tool-form > label > textarea,
 .estab-tool-form > label > select,
+.estab-tool-form-grid > label > input:not([type="checkbox"]):not([type="radio"]),
+.estab-tool-form-grid > label > textarea,
+.estab-tool-form-grid > label > select,
 .estab-tool-action-stack input[type="password"] {
     background: #ffffff;
     border: 1px solid #7d91a7;
@@ -2623,7 +2628,8 @@ form[data-estab-incident-disabled="true"]::before {
     resize: vertical;
 }
 
-.estab-tool-form > label > textarea {
+.estab-tool-form > label > textarea,
+.estab-tool-form-grid > label > textarea {
     min-height: 7rem;
     resize: vertical;
 }
@@ -2652,6 +2658,9 @@ form[data-estab-incident-disabled="true"]::before {
 .estab-tool-form > label > input:focus-visible,
 .estab-tool-form > label > textarea:focus-visible,
 .estab-tool-form > label > select:focus-visible,
+.estab-tool-form-grid > label > input:focus-visible,
+.estab-tool-form-grid > label > textarea:focus-visible,
+.estab-tool-form-grid > label > select:focus-visible,
 .estab-tool-action-stack input:focus-visible {
     outline: 3px solid #e5b247;
     outline-offset: 2px;
@@ -2694,6 +2703,299 @@ form[data-estab-incident-disabled="true"]::before {
     display: flex;
     flex-wrap: wrap;
     gap: 0.75rem;
+}
+
+.estab-telecom-plan-meta {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin: 0 0 1rem;
+}
+
+.estab-telecom-plan-meta > div {
+    background: #f1f5f9;
+    border: 1px solid #c5d1dd;
+    border-radius: 9px;
+    min-width: 0;
+    padding: 0.8rem;
+}
+
+.estab-telecom-plan-meta dt {
+    color: #52657a;
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.25rem;
+    text-transform: uppercase;
+}
+
+.estab-telecom-plan-meta dd {
+    color: #183454;
+    font-weight: 800;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.estab-telecom-start-form {
+    align-items: center;
+    background: #eef4fa;
+    border: 1px solid #7d9bbb;
+    border-radius: 10px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 1rem;
+}
+
+.estab-telecom-start-form p {
+    margin: 0;
+}
+
+.estab-telecom-draft {
+    background: #f8fafc;
+    border: 2px solid #d5b45a;
+    border-radius: 12px;
+    display: grid;
+    gap: 1rem;
+    margin-top: 1.25rem;
+    padding: clamp(0.85rem, 2vw, 1.25rem);
+}
+
+.estab-telecom-draft-heading,
+.estab-telecom-routes-heading,
+.estab-telecom-publish {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1rem;
+    justify-content: space-between;
+}
+
+.estab-telecom-draft-heading h3,
+.estab-telecom-routes-heading h3,
+.estab-telecom-publish h3,
+.estab-telecom-routes-heading p,
+.estab-telecom-publish p {
+    margin: 0;
+}
+
+.estab-telecom-section > .estab-tool-form,
+.estab-telecom-route > .estab-tool-form {
+    border-top: 1px solid #c5d1dd;
+    margin-top: 0.25rem;
+    padding: 1rem 0.25rem 0.5rem;
+}
+
+.estab-telecom-route-list {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+}
+
+.estab-telecom-route > summary {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1rem;
+    list-style: none;
+}
+
+.estab-telecom-route > summary::-webkit-details-marker {
+    display: none;
+}
+
+.estab-telecom-route > summary::before {
+    border-bottom: 0.32rem solid transparent;
+    border-left: 0.48rem solid #214f7d;
+    border-top: 0.32rem solid transparent;
+    content: "";
+    flex: 0 0 auto;
+    transition: transform 160ms ease;
+}
+
+.estab-telecom-route[open] > summary::before {
+    transform: rotate(90deg);
+}
+
+.estab-telecom-route > summary > span:first-child {
+    flex: 1 1 18rem;
+}
+
+.estab-telecom-route > summary > span:last-child {
+    color: #52657a;
+    font-size: 0.9rem;
+    margin-left: auto;
+}
+
+.estab-telecom-delete-form {
+    border-top: 1px solid #d9e1e8;
+    margin: 0.5rem 0 0;
+    padding: 0.75rem 0.25rem 0.25rem;
+}
+
+.estab-telecom-legacy-note {
+    font-size: 0.92rem;
+}
+
+.estab-telecom-publish {
+    background: #eef4fa;
+    border: 1px solid #7d9bbb;
+    border-left: 6px solid #2b6397;
+    border-radius: 10px;
+    padding: 1rem;
+}
+
+.estab-telecom-publish > div {
+    flex: 1 1 28rem;
+}
+
+.estab-telecom-publish form {
+    margin: 0;
+}
+
+.estab-telecom-publish-actions {
+    align-items: flex-end;
+    display: grid;
+    gap: 0.65rem;
+    justify-items: stretch;
+}
+
+.estab-telecom-publish-actions form,
+.estab-telecom-publish-actions .estab-button {
+    width: 100%;
+}
+
+[data-estab-telecom-entry-form] [hidden] {
+    display: none !important;
+}
+
+.estab-telecom-draft-warning {
+    margin: 0;
+}
+
+.estab-telecom-draft-warning p {
+    margin: 0;
+}
+
+.estab-telecom-draft-warning p + p,
+.estab-telecom-warning-actions {
+    margin-top: 0.65rem;
+}
+
+.estab-telecom-unsaved {
+    background: #fff8e5;
+    border-radius: 8px;
+    outline: 3px solid #d39b20;
+    outline-offset: 3px;
+}
+
+.estab-telecom-history-list {
+    display: grid;
+    gap: 0.7rem;
+}
+
+.estab-telecom-history-item {
+    background: #f8fafc;
+    border: 1px solid #c5d1dd;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.estab-telecom-history-item > summary {
+    align-items: center;
+    display: flex;
+    gap: 0.75rem 1rem;
+    justify-content: space-between;
+    list-style-position: inside;
+    padding: 0.8rem 1rem;
+}
+
+.estab-telecom-history-item > summary > span:first-child {
+    display: grid;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.estab-telecom-history-item > summary small {
+    color: #52657a;
+    font-size: 0.86rem;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.estab-telecom-history-summary-meta {
+    align-items: center;
+    color: #52657a;
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    font-size: 0.9rem;
+    gap: 0.5rem;
+    justify-content: flex-end;
+}
+
+.estab-telecom-history-content {
+    border-top: 1px solid #c5d1dd;
+    padding: 1rem;
+}
+
+.estab-telecom-history-content .estab-telecom-plan-meta {
+    margin-bottom: 0.75rem;
+}
+
+.estab-telecom-plan-note,
+.estab-telecom-history-note {
+    background: #eef4fa;
+    border-left: 4px solid #7d9bbb;
+    margin: 0.75rem 0;
+    padding: 0.7rem 0.8rem;
+}
+
+.estab-telecom-plan-note span,
+.estab-telecom-history-note span,
+.estab-telecom-history-route-notes span {
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.estab-telecom-history-routes {
+    display: grid;
+    gap: 0;
+    list-style: none;
+    margin: 0.75rem 0 0;
+    padding: 0;
+}
+
+.estab-telecom-history-routes li {
+    align-items: start;
+    border-top: 1px solid #d9e1e8;
+    display: grid;
+    gap: 0.35rem 1rem;
+    grid-template-columns: minmax(12rem, 0.8fr) minmax(0, 1.2fr);
+    padding: 0.65rem 0;
+}
+
+.estab-telecom-history-routes li > span:first-child {
+    display: grid;
+    gap: 0.1rem;
+}
+
+.estab-telecom-history-routes small,
+.estab-telecom-history-routes li > span:last-child {
+    color: #52657a;
+}
+
+.estab-telecom-history-route-notes {
+    background: #eef4fa;
+    border-radius: 8px;
+    display: grid;
+    gap: 0.4rem;
+    grid-column: 1 / -1;
+    padding: 0.65rem 0.75rem;
+}
+
+.estab-telecom-history-route-notes p {
+    display: grid;
+    gap: 0.15rem;
+    margin: 0;
 }
 
 .estab-tool-check {
@@ -3171,7 +3473,34 @@ form[data-estab-incident-disabled="true"]::before {
     .estab-tool-status,
     .estab-tool-card,
     .estab-password-policy-options,
-    .estab-password-policy-comparison {
+    .estab-password-policy-comparison,
+    .estab-telecom-plan-meta,
+    .estab-telecom-start-form {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .estab-telecom-start-form .estab-button,
+    .estab-telecom-publish .estab-button,
+    .estab-telecom-delete-form .estab-button {
+        width: 100%;
+    }
+
+    .estab-telecom-publish,
+    .estab-telecom-publish form {
+        align-items: stretch;
+        width: 100%;
+    }
+
+    .estab-telecom-history-item > summary {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .estab-telecom-history-summary-meta {
+        justify-content: flex-start;
+    }
+
+    .estab-telecom-history-routes li {
         grid-template-columns: minmax(0, 1fr);
     }
 

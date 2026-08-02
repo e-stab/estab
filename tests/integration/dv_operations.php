@@ -45,6 +45,72 @@ mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 $connection = estab_auth_connect($databaseConfig);
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
+if (($argv[1] ?? '') === '--telecom-revision-worker') {
+    $incidentId = filter_var($argv[2] ?? null, FILTER_VALIDATE_INT);
+    $sourcePlanId = filter_var($argv[3] ?? null, FILTER_VALIDATE_INT);
+    $identityJson = $argv[4] ?? '';
+    $readyFile = $argv[5] ?? '';
+    try {
+        $identity = json_decode(
+            (string) $identityJson,
+            true,
+            8,
+            JSON_THROW_ON_ERROR
+        );
+    } catch (JsonException) {
+        $identity = null;
+    }
+    if (
+        !is_int($incidentId)
+        || $incidentId < 1
+        || !is_int($sourcePlanId)
+        || $sourcePlanId < 1
+        || !is_array($identity)
+        || !is_string($readyFile)
+        || $readyFile === ''
+        || !touch($readyFile)
+    ) {
+        fwrite(STDERR, "Invalid telecommunications contender arguments\n");
+        estab_auth_close($connection);
+        exit(2);
+    }
+    $startedAt = hrtime(true);
+    $status = 'error';
+    $result = null;
+    $errorClass = null;
+    $errorMessage = null;
+    try {
+        $result = estab_dv_start_telecom_plan_revision(
+            $connection,
+            $incidentId,
+            $sourcePlanId,
+            $identity
+        );
+        $status = 'success';
+    } catch (EstabDvConflictException $exception) {
+        $status = 'conflict';
+        $errorClass = $exception::class;
+        $errorMessage = $exception->getMessage();
+    } catch (Throwable $exception) {
+        $errorClass = $exception::class;
+        $errorMessage = $exception->getMessage();
+    } finally {
+        estab_auth_close($connection);
+    }
+    echo json_encode(
+        [
+            'status' => $status,
+            'elapsed_ms' => (hrtime(true) - $startedAt) / 1_000_000,
+            'result' => $result,
+            'error_class' => $errorClass,
+            'error_message' => $errorMessage,
+        ],
+        JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE
+            | JSON_UNESCAPED_SLASHES
+    ) . "\n";
+    exit($status === 'error' ? 1 : 0);
+}
+
 $assertions = 0;
 $assert = static function (bool $condition, string $message) use (&$assertions): void {
     $assertions++;
@@ -89,6 +155,349 @@ $scalar = static function (
     } finally {
         $statement->close();
     }
+};
+$startTelecomRevisionWorker = static function (
+    int $incidentId,
+    int $sourcePlanId,
+    array $identity,
+    string $readyFile
+): array {
+    $command = [
+        PHP_BINARY,
+        '-d',
+        'auto_prepend_file=',
+        __FILE__,
+        '--telecom-revision-worker',
+        (string) $incidentId,
+        (string) $sourcePlanId,
+        json_encode(
+            $identity,
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE
+                | JSON_UNESCAPED_SLASHES
+        ),
+        $readyFile,
+    ];
+    $descriptors = [
+        0 => ['file', '/dev/null', 'r'],
+        1 => ['pipe', 'w'],
+        2 => ['pipe', 'w'],
+    ];
+    $process = proc_open($command, $descriptors, $pipes);
+    if (!is_resource($process)) {
+        throw new RuntimeException(
+            'Telecommunications contender could not be started'
+        );
+    }
+    return [
+        'process' => $process,
+        'pipes' => $pipes,
+        'ready_file' => $readyFile,
+    ];
+};
+$finishTelecomRevisionWorker = static function (array $worker): array {
+    $stdout = stream_get_contents($worker['pipes'][1]);
+    $stderr = stream_get_contents($worker['pipes'][2]);
+    foreach ($worker['pipes'] as $pipe) {
+        if (is_resource($pipe)) {
+            fclose($pipe);
+        }
+    }
+    $exitCode = proc_close($worker['process']);
+    if ($exitCode !== 0) {
+        throw new RuntimeException(
+            'Telecommunications contender failed: '
+            . trim((string) $stderr)
+        );
+    }
+    try {
+        $result = json_decode(
+            trim((string) $stdout),
+            true,
+            16,
+            JSON_THROW_ON_ERROR
+        );
+    } catch (JsonException $exception) {
+        throw new RuntimeException(
+            'Telecommunications contender returned invalid evidence: '
+            . trim((string) $stdout),
+            0,
+            $exception
+        );
+    }
+    if (!is_array($result)) {
+        throw new RuntimeException(
+            'Telecommunications contender returned no evidence'
+        );
+    }
+    return $result;
+};
+$telecomPlanById = static function (
+    mysqli $connection,
+    int $incidentId,
+    int $planId
+): array {
+    foreach (estab_dv_telecom_plans($connection, $incidentId) as $plan) {
+        if ((int) ($plan['fernmeldeplan_id'] ?? 0) === $planId) {
+            return $plan;
+        }
+    }
+    throw new RuntimeException(
+        'Telecommunications plan fixture could not be read: ' . $planId
+    );
+};
+$createLegacyTelecomDraft = static function (
+    mysqli $connection,
+    int $incidentId,
+    array $identity,
+    string $label
+): array {
+    return estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
+            $connection,
+            $incidentId,
+            $identity,
+            $label
+        ): array {
+            if ((int) ($incident['active_einsatz_id'] ?? 0) !== $incidentId) {
+                throw new RuntimeException(
+                    'Legacy telecommunications fixture lost its active incident'
+                );
+            }
+            $selected = estab_dv_require_write_capability(
+                $connection,
+                $incidentId,
+                $identity,
+                'FERNMELDEPLANUNG'
+            );
+            $versionResult = $connection->query(
+                'SELECT COALESCE(MAX(`version`), 0) + 1 AS `version`'
+                    . ' FROM `nv_fernmeldeplaene`'
+                    . ' WHERE `einsatz_id` = ' . $incidentId
+                    . ' FOR UPDATE'
+            );
+            if (!$versionResult) {
+                throw new RuntimeException(
+                    'Legacy telecommunications version could not be reserved'
+                );
+            }
+            try {
+                $version = (int) (
+                    $versionResult->fetch_assoc()['version'] ?? 0
+                );
+            } finally {
+                $versionResult->free();
+            }
+            $insertPlan = $connection->prepare(
+                'INSERT INTO `nv_fernmeldeplaene`'
+                    . ' (`einsatz_id`, `version`, `einsatzbezeichnung`,'
+                    . ' `herkunft`, `gueltig_ab`, `gueltig_bis`,'
+                    . ' `betriebsleitung`, `bemerkungen`, `erstellt_von`)'
+                    . ' VALUES (?, ?, ?, ?, DATE_SUB(NOW(), INTERVAL 1 MINUTE),'
+                    . ' DATE_ADD(NOW(), INTERVAL 1 DAY), ?, ?, ?)'
+            );
+            if (!$insertPlan) {
+                throw new RuntimeException(
+                    'Legacy telecommunications plan could not be prepared'
+                );
+            }
+            $incidentLabel = 'Legacy · ' . $label;
+            $origin = 'Vor Versionsworkflow · ' . $label;
+            $operationsLead = 'LdF Legacy';
+            $notes = 'Absichtlich mit dem früheren plan_created-Nachweis erzeugt.';
+            $actor = (string) $selected['kuerzel'];
+            try {
+                $insertPlan->bind_param(
+                    'iisssss',
+                    $incidentId,
+                    $version,
+                    $incidentLabel,
+                    $origin,
+                    $operationsLead,
+                    $notes,
+                    $actor
+                );
+                $insertPlan->execute();
+                $planId = (int) $connection->insert_id;
+            } finally {
+                $insertPlan->close();
+            }
+            $insertEntry = $connection->prepare(
+                'INSERT INTO `nv_fernmeldeplan_eintraege`'
+                    . ' (`fernmeldeplan_id`, `sortierung`, `betriebsstelle`,'
+                    . ' `rufname`, `medium`, `kanal`, `bandlage`,'
+                    . ' `verkehrsform`, `besondere_vermerke`, `bemerkungen`)'
+                    . " VALUES (?, 1, ?, ?, 'Fu', 'TMO 401', 'G/U',"
+                    . " 'Gegenverkehr', '', '')"
+            );
+            if (!$insertEntry) {
+                throw new RuntimeException(
+                    'Legacy telecommunications entry could not be prepared'
+                );
+            }
+            $station = 'Legacy-Gegenstelle ' . $label;
+            $callSign = 'Legacy ' . $version;
+            try {
+                $insertEntry->bind_param('iss', $planId, $station, $callSign);
+                $insertEntry->execute();
+                $entryId = (int) $connection->insert_id;
+            } finally {
+                $insertEntry->close();
+            }
+            // This is intentionally the exact evidence shape emitted by the
+            // pre-versioning application: no source_plan_id was recorded.
+            estab_dv_audit(
+                $connection,
+                'nv_protokoll',
+                $incidentId,
+                'DV Fernmeldeplan',
+                [
+                    'action' => 'plan_created',
+                    'plan_id' => $planId,
+                    'plan_version' => $version,
+                    'actor' => $actor,
+                ]
+            );
+            return [
+                'fernmeldeplan_id' => $planId,
+                'fernmeldeplan_eintrag_id' => $entryId,
+                'version' => $version,
+            ];
+        }
+    );
+};
+$telecomPlanEvent = static function (
+    mysqli $connection,
+    int $incidentId,
+    int $planId,
+    string $action
+): array {
+    $statement = $connection->prepare(
+        'SELECT `sequenz`, `ereignis_hash`,'
+            . ' CAST(`details` AS CHAR) AS `details_json`'
+            . ' FROM `nv_betriebsereignisse`'
+            . ' WHERE `einsatz_id` = ?'
+            . " AND `objekttyp` = 'FERNMELDEPLAN'"
+            . ' AND `objekt_id` = ? AND BINARY `aktion` = BINARY ?'
+            . ' ORDER BY `sequenz` DESC LIMIT 1'
+    );
+    if (!$statement) {
+        throw new RuntimeException(
+            'Telecommunications plan event could not be prepared'
+        );
+    }
+    try {
+        $statement->bind_param('iis', $incidentId, $planId, $action);
+        $statement->execute();
+        $row = $statement->get_result()->fetch_assoc();
+    } finally {
+        $statement->close();
+    }
+    if (!is_array($row) || !is_string($row['details_json'] ?? null)) {
+        throw new RuntimeException(
+            'Telecommunications plan event could not be read: ' . $action
+        );
+    }
+    $details = json_decode(
+        $row['details_json'],
+        true,
+        32,
+        JSON_THROW_ON_ERROR
+    );
+    if (!is_array($details)) {
+        throw new RuntimeException(
+            'Telecommunications plan event details are invalid: ' . $action
+        );
+    }
+    return [
+        'sequence' => (int) $row['sequenz'],
+        'event_hash' => (string) $row['ereignis_hash'],
+        'details' => $details,
+    ];
+};
+$telecomEntryEvent = static function (
+    mysqli $connection,
+    int $incidentId,
+    int $planId,
+    int $entryId,
+    string $action
+): array {
+    $statement = $connection->prepare(
+        'SELECT `sequenz`, `ereignis_hash`,'
+            . ' CAST(`details` AS CHAR) AS `details_json`'
+            . ' FROM `nv_betriebsereignisse`'
+            . ' WHERE `einsatz_id` = ?'
+            . " AND `objekttyp` = 'FERNMELDEPLAN'"
+            . ' AND `objekt_id` = ? AND BINARY `aktion` = BINARY ?'
+            . ' AND CAST(JSON_UNQUOTE(JSON_EXTRACT('
+            . " `details`, '$.entry_id')) AS UNSIGNED) = ?"
+            . ' ORDER BY `sequenz` DESC LIMIT 1'
+    );
+    if (!$statement) {
+        throw new RuntimeException(
+            'Telecommunications entry event could not be prepared'
+        );
+    }
+    try {
+        $statement->bind_param(
+            'iisi',
+            $incidentId,
+            $planId,
+            $action,
+            $entryId
+        );
+        $statement->execute();
+        $row = $statement->get_result()->fetch_assoc();
+    } finally {
+        $statement->close();
+    }
+    if (!is_array($row) || !is_string($row['details_json'] ?? null)) {
+        throw new RuntimeException(
+            'Telecommunications entry event could not be read: ' . $action
+        );
+    }
+    $details = json_decode(
+        $row['details_json'],
+        true,
+        32,
+        JSON_THROW_ON_ERROR
+    );
+    if (!is_array($details)) {
+        throw new RuntimeException(
+            'Telecommunications entry event details are invalid: ' . $action
+        );
+    }
+    return [
+        'sequence' => (int) $row['sequenz'],
+        'event_hash' => (string) $row['ereignis_hash'],
+        'details' => $details,
+    ];
+};
+$latestTelecomProtocol = static function (
+    mysqli $connection,
+    int $incidentId
+) use ($scalar): array {
+    $payload = $scalar(
+        $connection,
+        'SELECT `p_ereignis` FROM `nv_protokoll`'
+            . ' WHERE `einsatz_id` = ?'
+            . " AND `p_was` = 'DV Fernmeldeplan'"
+            . ' ORDER BY `p_lfd` DESC LIMIT 1',
+        'i',
+        $incidentId
+    );
+    if (!is_string($payload)) {
+        throw new RuntimeException(
+            'Latest legacy telecommunications audit could not be read'
+        );
+    }
+    $decoded = json_decode($payload, true, 32, JSON_THROW_ON_ERROR);
+    if (!is_array($decoded)) {
+        throw new RuntimeException(
+            'Latest legacy telecommunications audit is invalid'
+        );
+    }
+    return ['payload' => $payload, 'details' => $decoded];
 };
 $logbookEvidenceSnapshot = static function (
     mysqli $connection,
@@ -1218,6 +1627,23 @@ try {
         ]
     );
     $planId = (int) $plan['fernmeldeplan_id'];
+    $createdPlan = $telecomPlanById($connection, $incidentId, $planId);
+    $createdPlanEvent = $telecomPlanEvent(
+        $connection,
+        $incidentId,
+        $planId,
+        'plan_created'
+    );
+    $assert(
+        ($createdPlanEvent['details']['initial_state'] ?? null)
+            === estab_dv_telecom_plan_header_audit_state($createdPlan)
+            && preg_match(
+                '/\A\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{6}\z/D',
+                (string) ($createdPlan['erstellt_am'] ?? '')
+            ) === 1
+            && ($createdPlan['freigegeben_am'] ?? null) === null,
+        'new telecommunications plan lacks its exact initial header snapshot'
+    );
     $routeId = estab_dv_add_telecom_entry(
         $connection,
         $incidentId,
@@ -1232,6 +1658,22 @@ try {
             'verkehrsform' => 'Melderbeförderung',
             'besondere_vermerke' => 'Identität am Ziel feststellen',
             'bemerkungen' => 'Rückweg über FmZt',
+        ]
+    );
+    $secondaryRouteId = estab_dv_add_telecom_entry(
+        $connection,
+        $incidentId,
+        $planId,
+        $s6Identity,
+        [
+            'betriebsstelle' => 'Funk-Gegenstelle Integration',
+            'rufname' => 'Integration Funk 02',
+            'medium' => 'Fu',
+            'kanal' => 'TMO 402',
+            'bandlage' => 'G/U',
+            'verkehrsform' => 'Gegenverkehr',
+            'besondere_vermerke' => 'Priorisierte Führungsverbindung',
+            'bemerkungen' => 'Rückfallebene über Fernsprecher',
         ]
     );
     mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
@@ -1293,6 +1735,7 @@ try {
         $planId,
         $s6Identity
     );
+    $activatedPlan = $telecomPlanById($connection, $incidentId, $planId);
     $route = estab_dv_resolve_active_route(
         $connection,
         $incidentId,
@@ -1301,7 +1744,11 @@ try {
     );
     $assert(
         (int) $route['fernmeldeplan_eintrag_id'] === $routeId
-            && (int) $route['version'] === 1,
+            && (int) $route['version'] === 1
+            && preg_match(
+                '/\A\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{6}\z/D',
+                (string) ($activatedPlan['freigegeben_am'] ?? '')
+            ) === 1,
         'active S6 route was not resolved with its immutable version'
     );
 
@@ -1500,6 +1947,51 @@ try {
             $codes['messenger'],
             'Gegenstelle Integration',
             $s3Identity
+        );
+        $loosePlanRevision = estab_dv_start_telecom_plan_revision(
+            $connection,
+            $incidentId,
+            $planId,
+            $s3Identity
+        );
+        $loosePlanId = (int) $loosePlanRevision['fernmeldeplan_id'];
+        $loosePlan = $telecomPlanById(
+            $connection,
+            $incidentId,
+            $loosePlanId
+        );
+        estab_dv_discard_telecom_plan_draft(
+            $connection,
+            $incidentId,
+            $loosePlanId,
+            $s3Identity,
+            (string) $loosePlan['revision']
+        );
+        $assert(
+            (string) $scalar(
+                $connection,
+                'SELECT CONCAT(COUNT(*), ?, COUNT(DISTINCT `akteur_funktion`),'
+                    . ' ?, MIN(`akteur_funktion`), ?, MAX(`akteur_funktion`))'
+                    . ' FROM `nv_betriebsereignisse`'
+                    . ' WHERE `einsatz_id` = ?'
+                    . " AND `objekttyp` = 'FERNMELDEPLAN'"
+                    . ' AND `objekt_id` = ?'
+                    . " AND `aktion` IN ('plan_revision_started',"
+                    . " 'plan_draft_discarded')"
+                    . ' AND BINARY `akteur_kuerzel` = BINARY ?'
+                    . ' AND BINARY JSON_UNQUOTE(JSON_EXTRACT('
+                    . " `details`, '$.actor_function')) = BINARY ?",
+                'sssiiss',
+                '|',
+                '|',
+                '|',
+                $incidentId,
+                $loosePlanId,
+                $s3Identity['kuerzel'],
+                $s3Identity['funktion']
+            ) === '2|1|' . $s3Identity['funktion'] . '|'
+                . $s3Identity['funktion'],
+            'LOOSE telecommunications audit replaced the real S3 function with S6'
         );
         $assert(
             $looseEtbId > 0
@@ -2634,6 +3126,842 @@ try {
             }
         },
         'the disposed message route was mutable'
+    );
+
+    $barrierBase = tempnam(
+        sys_get_temp_dir(),
+        'estab-telecom-revision-contenders-'
+    );
+    if (!is_string($barrierBase)) {
+        throw new RuntimeException(
+            'Telecommunications contender barrier could not be allocated'
+        );
+    }
+    unlink($barrierBase);
+    $readyFiles = [$barrierBase . '.one', $barrierBase . '.two'];
+    $revisionWorkers = [];
+    $incidentLockHeld = false;
+    try {
+        $connection->begin_transaction();
+        $incidentLockHeld = true;
+        $incidentLock = $connection->query(
+            'SELECT `revision` FROM `nv_einsatz_status`'
+                . ' WHERE `singleton_id` = 1 FOR UPDATE'
+        );
+        if (!$incidentLock) {
+            throw new RuntimeException(
+                'Telecommunications contender lock could not be acquired'
+            );
+        }
+        $incidentLock->free();
+        foreach ($readyFiles as $readyFile) {
+            $revisionWorkers[] = $startTelecomRevisionWorker(
+                $incidentId,
+                $planId,
+                $s6Identity,
+                $readyFile
+            );
+        }
+        $readyDeadline = microtime(true) + 10.0;
+        foreach ($readyFiles as $readyFile) {
+            while (!is_file($readyFile)) {
+                if (microtime(true) >= $readyDeadline) {
+                    throw new RuntimeException(
+                        'Telecommunications contenders did not become ready'
+                    );
+                }
+                usleep(10_000);
+            }
+        }
+        // Both workers have connected and entered the domain operation. Keep
+        // the singleton lock briefly so measured wait evidence cannot be a
+        // merely sequential pair of calls.
+        usleep(250_000);
+        $connection->commit();
+        $incidentLockHeld = false;
+    } catch (Throwable $exception) {
+        if ($incidentLockHeld) {
+            $connection->rollback();
+        }
+        foreach ($revisionWorkers as $worker) {
+            if (is_resource($worker['process'] ?? null)) {
+                proc_terminate($worker['process']);
+            }
+        }
+        throw $exception;
+    } finally {
+        foreach ($readyFiles as $readyFile) {
+            if (is_file($readyFile)) {
+                unlink($readyFile);
+            }
+        }
+    }
+    $revisionRace = array_map(
+        $finishTelecomRevisionWorker,
+        $revisionWorkers
+    );
+    $successfulRevisions = array_values(array_filter(
+        $revisionRace,
+        static fn (array $candidate): bool =>
+            ($candidate['status'] ?? null) === 'success'
+    ));
+    $conflictingRevisions = array_values(array_filter(
+        $revisionRace,
+        static fn (array $candidate): bool =>
+            ($candidate['status'] ?? null) === 'conflict'
+    ));
+    $assert(
+        count($successfulRevisions) === 1
+            && count($conflictingRevisions) === 1
+            && min(array_map(
+                static fn (array $candidate): float =>
+                    (float) ($candidate['elapsed_ms'] ?? 0.0),
+                $revisionRace
+            )) >= 150.0
+            && (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_fernmeldeplaene`'
+                    . " WHERE `einsatz_id` = ? AND `status` = 'ENTWURF'",
+                'i',
+                $incidentId
+            ) === 1,
+        'two real revision contenders did not wait and serialize to one draft'
+    );
+    $revision = $successfulRevisions[0]['result'] ?? null;
+    if (!is_array($revision)) {
+        throw new RuntimeException(
+            'Winning telecommunications contender returned no plan'
+        );
+    }
+    $revisionPlanId = (int) $revision['fernmeldeplan_id'];
+    $assert(
+        $revisionPlanId > 0
+            && $revisionPlanId !== $planId
+            && (int) $revision['version'] === 3
+            && (int) $revision['source_plan_id'] === $planId
+            && (int) $revision['copied_entries'] === 2,
+        'active telecommunications plan was not cloned as complete version 3'
+    );
+    $plansAfterClone = estab_dv_telecom_plans($connection, $incidentId);
+    $sourceAfterClone = null;
+    $draftAfterClone = null;
+    foreach ($plansAfterClone as $candidate) {
+        if ((int) $candidate['fernmeldeplan_id'] === $planId) {
+            $sourceAfterClone = $candidate;
+        }
+        if ((int) $candidate['fernmeldeplan_id'] === $revisionPlanId) {
+            $draftAfterClone = $candidate;
+        }
+    }
+    $assert(
+        is_array($sourceAfterClone)
+            && $sourceAfterClone['status'] === 'AKTIV'
+            && is_array($draftAfterClone)
+            && $draftAfterClone['status'] === 'ENTWURF',
+        'cloned plan changed its active source or draft state'
+    );
+    $sourceEntryIds = array_map(
+        static fn (array $entry): int =>
+            (int) $entry['fernmeldeplan_eintrag_id'],
+        $sourceAfterClone['eintraege']
+    );
+    $draftEntryIds = array_map(
+        static fn (array $entry): int =>
+            (int) $entry['fernmeldeplan_eintrag_id'],
+        $draftAfterClone['eintraege']
+    );
+    $copiedEntryFields = array_fill_keys(
+        [
+            'sortierung',
+            'betriebsstelle',
+            'rufname',
+            'medium',
+            'kanal',
+            'bandlage',
+            'verkehrsform',
+            'besondere_vermerke',
+            'bemerkungen',
+        ],
+        true
+    );
+    $entryCopyState = static fn (array $entry): array =>
+        array_intersect_key($entry, $copiedEntryFields);
+    $sourceEntryStates = array_map(
+        $entryCopyState,
+        $sourceAfterClone['eintraege']
+    );
+    $draftEntryStates = array_map(
+        $entryCopyState,
+        $draftAfterClone['eintraege']
+    );
+    $assert(
+        estab_dv_telecom_plan_header_audit_state($draftAfterClone)
+            === estab_dv_telecom_plan_header_audit_state($sourceAfterClone)
+            && $sourceEntryIds === [$routeId, $secondaryRouteId]
+            && count($draftEntryIds) === 2
+            && min($draftEntryIds) > 0
+            && count(array_unique($draftEntryIds)) === 2
+            && array_intersect($sourceEntryIds, $draftEntryIds) === []
+            && $draftEntryStates === $sourceEntryStates
+            && $sourceEntryStates[0]['besondere_vermerke']
+                === 'Identität am Ziel feststellen'
+            && $sourceEntryStates[0]['bemerkungen']
+                === 'Rückweg über FmZt'
+            && $sourceEntryStates[1]['besondere_vermerke']
+                === 'Priorisierte Führungsverbindung'
+            && $sourceEntryStates[1]['bemerkungen']
+                === 'Rückfallebene über Fernsprecher',
+        'clone changed complete header or route fields, optional notes, or IDs'
+    );
+    $revisionStartedEvent = $telecomPlanEvent(
+        $connection,
+        $incidentId,
+        $revisionPlanId,
+        'plan_revision_started'
+    );
+    $assert(
+        ($revisionStartedEvent['details']['initial_state'] ?? null)
+            === estab_dv_telecom_plan_header_audit_state($sourceAfterClone),
+        'cloned telecommunications draft lacks its initial header snapshot'
+    );
+    $expect(
+        EstabDvConflictException::class,
+        static fn (): array => estab_dv_start_telecom_plan_revision(
+            $connection,
+            $incidentId,
+            $planId,
+            $s6Identity
+        ),
+        'a second parallel telecommunications draft was admitted'
+    );
+    $initialDraftRevision = (string) $draftAfterClone['revision'];
+    $futureHeader = [
+        'herkunft' => 'S6 Führungsstelle · zukünftige Folgefassung',
+        'gueltig_ab' => date('Y-m-d H:i:s', time() + 3600),
+        'gueltig_bis' => date('Y-m-d H:i:s', time() + 7200),
+        'betriebsleitung' => 'LdF zukünftige Folgeversion',
+        'bemerkungen' => 'Noch nicht gültiger Planentwurf',
+    ];
+    estab_dv_update_telecom_plan_draft(
+        $connection,
+        $incidentId,
+        $revisionPlanId,
+        $s6Identity,
+        $futureHeader,
+        $initialDraftRevision
+    );
+    $futureDraft = $telecomPlanById(
+        $connection,
+        $incidentId,
+        $revisionPlanId
+    );
+    $futureUpdateEvent = $telecomPlanEvent(
+        $connection,
+        $incidentId,
+        $revisionPlanId,
+        'plan_draft_updated'
+    );
+    $assert(
+        ($futureUpdateEvent['details']['before'] ?? null)
+            === estab_dv_telecom_plan_header_audit_state($draftAfterClone)
+            && ($futureUpdateEvent['details']['after'] ?? null)
+                === estab_dv_telecom_plan_header_audit_state($futureDraft),
+        'plan header update lacks exact before/after audit snapshots'
+    );
+    $invalidValidityMessage = '';
+    try {
+        estab_dv_activate_telecom_plan(
+            $connection,
+            $incidentId,
+            $revisionPlanId,
+            $s6Identity,
+            'nv_protokoll',
+            (string) $futureDraft['revision']
+        );
+    } catch (EstabDvConflictException $exception) {
+        $invalidValidityMessage = $exception->getMessage();
+    }
+    $assert(
+        str_contains($invalidValidityMessage, 'aktuellen Zeitpunkt nicht gültig')
+            && (string) $scalar(
+                $connection,
+                'SELECT CONCAT(source_plan.`status`, ?, draft.`status`)'
+                    . ' FROM `nv_fernmeldeplaene` AS source_plan'
+                    . ' JOIN `nv_fernmeldeplaene` AS draft'
+                    . ' ON draft.`fernmeldeplan_id` = ?'
+                    . ' WHERE source_plan.`fernmeldeplan_id` = ?',
+                'sii',
+                '|',
+                $revisionPlanId,
+                $planId
+            ) === 'AKTIV|ENTWURF',
+        'future plan activation replaced the active plan or lacked guidance'
+    );
+    estab_dv_update_telecom_plan_draft(
+        $connection,
+        $incidentId,
+        $revisionPlanId,
+        $s6Identity,
+        [
+            'herkunft' => 'S6 Führungsstelle · Folgefassung',
+            'gueltig_ab' => date('Y-m-d H:i:s', time() - 30),
+            'gueltig_bis' => date('Y-m-d H:i:s', time() + 7200),
+            'betriebsleitung' => 'LdF Folgeversion',
+            'bemerkungen' => 'Bearbeiteter, vollständig kopierter Plan',
+        ],
+        (string) $futureDraft['revision']
+    );
+    $expect(
+        EstabDvConflictException::class,
+        static function () use (
+            $connection,
+            $incidentId,
+            $revisionPlanId,
+            $draftAfterClone,
+            $s6Identity,
+            $initialDraftRevision
+        ): void {
+            estab_dv_update_telecom_entry(
+                $connection,
+                $incidentId,
+                $revisionPlanId,
+                (int) $draftAfterClone['eintraege'][0]
+                    ['fernmeldeplan_eintrag_id'],
+                $s6Identity,
+                [
+                    'betriebsstelle' => 'Veraltete Änderung',
+                    'rufname' => 'Veraltet 01',
+                    'medium' => 'Fu',
+                    'kanal' => '99',
+                    'bandlage' => 'O/U',
+                    'verkehrsform' => 'Gegenverkehr',
+                    'besondere_vermerke' => '',
+                    'bemerkungen' => '',
+                ],
+                $initialDraftRevision
+            );
+        },
+        'a stale telecommunications editor overwrote a newer draft state'
+    );
+    $currentDraft = null;
+    foreach (estab_dv_telecom_plans($connection, $incidentId) as $candidate) {
+        if ((int) $candidate['fernmeldeplan_id'] === $revisionPlanId) {
+            $currentDraft = $candidate;
+            break;
+        }
+    }
+    if (!is_array($currentDraft)) {
+        throw new RuntimeException('Updated telecommunications draft missing');
+    }
+    $revisionEntryId = (int) $currentDraft['eintraege'][0]
+        ['fernmeldeplan_eintrag_id'];
+    estab_dv_update_telecom_entry(
+        $connection,
+        $incidentId,
+        $revisionPlanId,
+        $revisionEntryId,
+        $s6Identity,
+        [
+            'betriebsstelle' => 'Gegenstelle Folgeversion',
+            'rufname' => 'Integration 02',
+            'medium' => 'Fu',
+            'kanal' => 'TMO 404',
+            'bandlage' => 'G/U',
+            'verkehrsform' => 'Gegenverkehr',
+            'besondere_vermerke' => 'Nur im Folgeplan',
+            'bemerkungen' => 'Bearbeiteter übernommener Weg',
+        ],
+        (string) $currentDraft['revision']
+    );
+    $currentDraft = null;
+    foreach (estab_dv_telecom_plans($connection, $incidentId) as $candidate) {
+        if ((int) $candidate['fernmeldeplan_id'] === $revisionPlanId) {
+            $currentDraft = $candidate;
+            break;
+        }
+    }
+    if (!is_array($currentDraft)) {
+        throw new RuntimeException('Edited telecommunications draft missing');
+    }
+    $temporaryRouteId = estab_dv_add_telecom_entry(
+        $connection,
+        $incidentId,
+        $revisionPlanId,
+        $s6Identity,
+        [
+            'betriebsstelle' => 'Temporärer Fernsprecherweg',
+            'rufname' => 'Integration Telefon',
+            'medium' => 'Fe',
+            'kanal' => 'Browser-Manipulation',
+            'bandlage' => 'Browser-Manipulation',
+            'verkehrsform' => 'Fernsprechverbindung',
+            'besondere_vermerke' => '',
+            'bemerkungen' => '',
+        ],
+        'nv_protokoll',
+        (string) $currentDraft['revision']
+    );
+    $assert(
+        (string) $scalar(
+            $connection,
+            'SELECT CONCAT(`medium`, ?, `kanal`, ?, `bandlage`, ?,'
+                . ' `verkehrsform`)'
+                . ' FROM `nv_fernmeldeplan_eintraege`'
+                . ' WHERE `fernmeldeplan_eintrag_id` = ?',
+            'sssi',
+            '|',
+            '|',
+            '|',
+            $temporaryRouteId
+        ) === 'Fe|||Fernsprechverbindung',
+        'medium-inapplicable channel or band values survived server validation'
+    );
+    $currentDraft = $telecomPlanById(
+        $connection,
+        $incidentId,
+        $revisionPlanId
+    );
+    $largeUtf8 = str_repeat('🚒', 10000);
+    estab_dv_update_telecom_entry(
+        $connection,
+        $incidentId,
+        $revisionPlanId,
+        $temporaryRouteId,
+        $s6Identity,
+        [
+            'betriebsstelle' => 'Temporärer Fernsprecherweg mit Langtext',
+            'rufname' => 'Integration Langtext',
+            'medium' => 'Fe',
+            'verkehrsform' => 'Fernsprechverbindung',
+            'besondere_vermerke' => $largeUtf8,
+            'bemerkungen' => $largeUtf8,
+        ],
+        (string) $currentDraft['revision']
+    );
+    $largeUpdateEvent = $telecomEntryEvent(
+        $connection,
+        $incidentId,
+        $revisionPlanId,
+        $temporaryRouteId,
+        'plan_entry_updated'
+    );
+    $largeUpdateProtocol = $latestTelecomProtocol(
+        $connection,
+        $incidentId
+    );
+    $largeUpdatePayload = json_encode(
+        ['version' => 1] + $largeUpdateEvent['details'],
+        JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE
+            | JSON_UNESCAPED_SLASHES
+    );
+    $assert(
+        is_string($largeUpdatePayload)
+            && ($largeUpdateEvent['details']['after']['besondere_vermerke']
+                ?? null) === $largeUtf8
+            && ($largeUpdateEvent['details']['after']['bemerkungen'] ?? null)
+                === $largeUtf8
+            && strlen($largeUpdatePayload) > 65535
+            && strlen($largeUpdateProtocol['payload']) < 65535
+            && ($largeUpdateProtocol['details']['full_details'] ?? null)
+                === 'nv_betriebsereignisse'
+            && ($largeUpdateProtocol['details']['action'] ?? null)
+                === 'plan_entry_updated'
+            && (int) ($largeUpdateProtocol['details']['object_id'] ?? 0)
+                === $revisionPlanId
+            && (int) ($largeUpdateProtocol['details']['event_sequence'] ?? 0)
+                === $largeUpdateEvent['sequence']
+            && ($largeUpdateProtocol['details']['event_hash'] ?? null)
+                === $largeUpdateEvent['event_hash']
+            && (int) ($largeUpdateProtocol['details']['details_bytes'] ?? 0)
+                === strlen($largeUpdatePayload)
+            && hash_equals(
+                hash('sha256', $largeUpdatePayload),
+                (string) (
+                    $largeUpdateProtocol['details']['details_sha256'] ?? ''
+                )
+            ),
+        'large UTF-8 update was truncated or lacked a compact legacy audit link'
+    );
+    $currentDraft = $telecomPlanById(
+        $connection,
+        $incidentId,
+        $revisionPlanId
+    );
+    estab_dv_delete_telecom_entry(
+        $connection,
+        $incidentId,
+        $revisionPlanId,
+        $temporaryRouteId,
+        $s6Identity,
+        (string) $currentDraft['revision']
+    );
+    $largeDeleteEvent = $telecomEntryEvent(
+        $connection,
+        $incidentId,
+        $revisionPlanId,
+        $temporaryRouteId,
+        'plan_entry_deleted'
+    );
+    $largeDeleteProtocol = $latestTelecomProtocol(
+        $connection,
+        $incidentId
+    );
+    $largeDeletePayload = json_encode(
+        ['version' => 1] + $largeDeleteEvent['details'],
+        JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE
+            | JSON_UNESCAPED_SLASHES
+    );
+    $assert(
+        is_string($largeDeletePayload)
+            && ($largeDeleteEvent['details']['before']['besondere_vermerke']
+                ?? null) === $largeUtf8
+            && ($largeDeleteEvent['details']['before']['bemerkungen'] ?? null)
+                === $largeUtf8
+            && strlen($largeDeletePayload) > 65535
+            && strlen($largeDeleteProtocol['payload']) < 65535
+            && ($largeDeleteProtocol['details']['full_details'] ?? null)
+                === 'nv_betriebsereignisse'
+            && ($largeDeleteProtocol['details']['action'] ?? null)
+                === 'plan_entry_deleted'
+            && (int) ($largeDeleteProtocol['details']['object_id'] ?? 0)
+                === $revisionPlanId
+            && (int) ($largeDeleteProtocol['details']['event_sequence'] ?? 0)
+                === $largeDeleteEvent['sequence']
+            && ($largeDeleteProtocol['details']['event_hash'] ?? null)
+                === $largeDeleteEvent['event_hash']
+            && (int) ($largeDeleteProtocol['details']['details_bytes'] ?? 0)
+                === strlen($largeDeletePayload)
+            && hash_equals(
+                hash('sha256', $largeDeletePayload),
+                (string) (
+                    $largeDeleteProtocol['details']['details_sha256'] ?? ''
+                )
+            ),
+        'large UTF-8 delete was truncated or lacked a compact legacy audit link'
+    );
+    unset($largeUtf8, $largeUpdatePayload, $largeDeletePayload);
+    $currentDraft = null;
+    foreach (estab_dv_telecom_plans($connection, $incidentId) as $candidate) {
+        if ((int) $candidate['fernmeldeplan_id'] === $revisionPlanId) {
+            $currentDraft = $candidate;
+            break;
+        }
+    }
+    if (!is_array($currentDraft)) {
+        throw new RuntimeException('Final telecommunications draft missing');
+    }
+    // Simulate a fully valid draft created by the former blank-plan workflow
+    // while version 1 was still active. Once the cloned successor below is
+    // activated, this older basis must be rejected rather than replacing it.
+    $staleLegacyDraft = $createLegacyTelecomDraft(
+        $connection,
+        $incidentId,
+        $s6Identity,
+        'vor aktueller Aktivierung'
+    );
+    estab_dv_activate_telecom_plan(
+        $connection,
+        $incidentId,
+        $revisionPlanId,
+        $s6Identity,
+        'nv_protokoll',
+        (string) $currentDraft['revision']
+    );
+    $assert(
+        (string) $scalar(
+            $connection,
+            'SELECT CONCAT(source_plan.`status`, ?, successor.`status`, ?,'
+                . ' source_entry.`betriebsstelle`, ?, source_entry.`medium`, ?,'
+                . ' source_entry.`kanal`, ?, source_entry.`bandlage`, ?,'
+                . ' source_entry.`verkehrsform`)'
+                . ' FROM `nv_fernmeldeplaene` AS source_plan'
+                . ' JOIN `nv_fernmeldeplan_eintraege` AS source_entry'
+                . ' ON source_entry.`fernmeldeplan_id` ='
+                . ' source_plan.`fernmeldeplan_id`'
+                . ' JOIN `nv_fernmeldeplaene` AS successor'
+                . ' ON successor.`fernmeldeplan_id` = ?'
+                . ' WHERE source_plan.`fernmeldeplan_id` = ?'
+                . ' AND source_entry.`fernmeldeplan_eintrag_id` = ?',
+            'ssssssiii',
+            '|',
+            '|',
+            '|',
+            '|',
+            '|',
+            '|',
+            $revisionPlanId,
+            $planId,
+            $routeId
+        ) === 'ERSETZT|AKTIV|Gegenstelle Integration|Me|||Melderbeförderung',
+        'publishing the edited successor changed its immutable source version'
+    );
+    $expect(
+        EstabDvConflictException::class,
+        static fn (): array => estab_dv_resolve_active_route(
+            $connection,
+            $incidentId,
+            $routeId,
+            'Me'
+        ),
+        'a superseded route remained selectable for new dispositions'
+    );
+    $resolvedSuccessor = estab_dv_resolve_active_route(
+        $connection,
+        $incidentId,
+        $revisionEntryId,
+        'Fu'
+    );
+    $assert(
+        (int) $resolvedSuccessor['version'] === 3
+            && $resolvedSuccessor['rufname'] === 'Integration 02',
+        'edited successor route was not selected from active version 3'
+    );
+
+    $successorActivationSequence = (int) $scalar(
+        $connection,
+        'SELECT `sequenz` FROM `nv_betriebsereignisse`'
+            . ' WHERE `einsatz_id` = ?'
+            . " AND `objekttyp` = 'FERNMELDEPLAN'"
+            . ' AND `objekt_id` = ?'
+            . " AND `aktion` = 'plan_activated'"
+            . ' ORDER BY `sequenz` DESC LIMIT 1',
+        'ii',
+        $incidentId,
+        $revisionPlanId
+    );
+    $staleLegacyPlanId = (int) $staleLegacyDraft['fernmeldeplan_id'];
+    $staleLegacyEntryId = (int) $staleLegacyDraft[
+        'fernmeldeplan_eintrag_id'
+    ];
+    $staleLegacyCreationSequence = (int) $scalar(
+        $connection,
+        'SELECT `sequenz` FROM `nv_betriebsereignisse`'
+            . ' WHERE `einsatz_id` = ?'
+            . " AND `objekttyp` = 'FERNMELDEPLAN'"
+            . ' AND `objekt_id` = ?'
+            . " AND `aktion` = 'plan_created'"
+            . ' ORDER BY `sequenz` LIMIT 1',
+        'ii',
+        $incidentId,
+        $staleLegacyPlanId
+    );
+    $staleLegacyPlan = $telecomPlanById(
+        $connection,
+        $incidentId,
+        $staleLegacyPlanId
+    );
+    $assert(
+        (int) $staleLegacyDraft['version'] === 4
+            && $staleLegacyCreationSequence > 0
+            && $staleLegacyCreationSequence < $successorActivationSequence,
+        'stale legacy draft fixture was not created before current activation'
+    );
+    $expect(
+        EstabDvConflictException::class,
+        static function () use (
+            $connection,
+            $incidentId,
+            $staleLegacyPlanId,
+            $s6Identity,
+            $staleLegacyPlan
+        ): void {
+            estab_dv_activate_telecom_plan(
+                $connection,
+                $incidentId,
+                $staleLegacyPlanId,
+                $s6Identity,
+                'nv_protokoll',
+                (string) $staleLegacyPlan['revision']
+            );
+        },
+        'legacy draft created before the current activation replaced that plan'
+    );
+    estab_dv_discard_telecom_plan_draft(
+        $connection,
+        $incidentId,
+        $staleLegacyPlanId,
+        $s6Identity,
+        (string) $staleLegacyPlan['revision']
+    );
+    $assert(
+        (string) $scalar(
+            $connection,
+            'SELECT CONCAT(p.`status`, ?, p.`freigegeben_am` IS NULL, ?, '
+                . 'p.`freigegeben_von` IS NULL, ?, COUNT(e.`fernmeldeplan_eintrag_id`))'
+                . ' FROM `nv_fernmeldeplaene` AS p'
+                . ' LEFT JOIN `nv_fernmeldeplan_eintraege` AS e'
+                . ' ON e.`fernmeldeplan_id` = p.`fernmeldeplan_id`'
+                . ' WHERE p.`fernmeldeplan_id` = ?'
+                . ' GROUP BY p.`fernmeldeplan_id`, p.`status`,'
+                . ' p.`freigegeben_am`, p.`freigegeben_von`',
+            'sssi',
+            '|',
+            '|',
+            '|',
+            $staleLegacyPlanId
+        ) === 'ERSETZT|1|1|1'
+            && (int) $scalar(
+                $connection,
+                'SELECT COUNT(*) FROM `nv_betriebsereignisse`'
+                    . ' WHERE `einsatz_id` = ?'
+                    . " AND `objekttyp` = 'FERNMELDEPLAN'"
+                    . ' AND `objekt_id` = ?'
+                    . " AND `aktion` = 'plan_draft_discarded'"
+                    . ' AND BINARY `akteur_kuerzel` = BINARY ?'
+                    . ' AND BINARY `akteur_funktion` = BINARY ?'
+                    . ' AND CAST(JSON_UNQUOTE(JSON_EXTRACT('
+                    . " `details`, '$.preserved_entries')) AS UNSIGNED) = 1"
+                    . ' AND CAST(JSON_UNQUOTE(JSON_EXTRACT('
+                    . " `details`, '$.plan_version')) AS UNSIGNED) = 4",
+                'iiss',
+                $incidentId,
+                $staleLegacyPlanId,
+                $s6Identity['kuerzel'],
+                $s6Identity['funktion']
+            ) === 1,
+        'discarded draft lost its entries, release state or immutable audit'
+    );
+    $expect(
+        mysqli_sql_exception::class,
+        static function () use ($connection, $staleLegacyPlanId): void {
+            $statement = $connection->prepare(
+                'UPDATE `nv_fernmeldeplaene` SET `bemerkungen` = ?'
+                    . ' WHERE `fernmeldeplan_id` = ?'
+            );
+            try {
+                $forgedNotes = 'Verworfenen Plan nachträglich verändert';
+                $statement->bind_param(
+                    'si',
+                    $forgedNotes,
+                    $staleLegacyPlanId
+                );
+                $statement->execute();
+            } finally {
+                $statement->close();
+            }
+        },
+        'discarded telecommunications plan remained mutable'
+    );
+    $expect(
+        mysqli_sql_exception::class,
+        static function () use ($connection, $staleLegacyEntryId): void {
+            $statement = $connection->prepare(
+                'UPDATE `nv_fernmeldeplan_eintraege` SET `rufname` = ?'
+                    . ' WHERE `fernmeldeplan_eintrag_id` = ?'
+            );
+            try {
+                $forgedCallSign = 'Verworfen manipuliert';
+                $statement->bind_param(
+                    'si',
+                    $forgedCallSign,
+                    $staleLegacyEntryId
+                );
+                $statement->execute();
+            } finally {
+                $statement->close();
+            }
+        },
+        'entry of a discarded telecommunications plan remained mutable'
+    );
+    $expect(
+        mysqli_sql_exception::class,
+        static function () use ($connection, $staleLegacyEntryId): void {
+            $statement = $connection->prepare(
+                'DELETE FROM `nv_fernmeldeplan_eintraege`'
+                    . ' WHERE `fernmeldeplan_eintrag_id` = ?'
+            );
+            try {
+                $statement->bind_param('i', $staleLegacyEntryId);
+                $statement->execute();
+            } finally {
+                $statement->close();
+            }
+        },
+        'entry of a discarded telecommunications plan could be deleted'
+    );
+
+    $replacementDraft = estab_dv_start_telecom_plan_revision(
+        $connection,
+        $incidentId,
+        $revisionPlanId,
+        $s6Identity
+    );
+    $replacementDraftId = (int) $replacementDraft['fernmeldeplan_id'];
+    $replacementDraftPlan = $telecomPlanById(
+        $connection,
+        $incidentId,
+        $replacementDraftId
+    );
+    $assert(
+        (int) $replacementDraft['version'] === 5
+            && (int) $replacementDraft['source_plan_id'] === $revisionPlanId
+            && (int) $replacementDraft['copied_entries'] === 2
+            && $replacementDraftPlan['status'] === 'ENTWURF',
+        'discarded draft continued to block a fresh clone of the active plan'
+    );
+    estab_dv_discard_telecom_plan_draft(
+        $connection,
+        $incidentId,
+        $replacementDraftId,
+        $s6Identity,
+        (string) $replacementDraftPlan['revision']
+    );
+
+    $currentLegacyDraft = $createLegacyTelecomDraft(
+        $connection,
+        $incidentId,
+        $s6Identity,
+        'nach aktueller Aktivierung'
+    );
+    $currentLegacyPlanId = (int) $currentLegacyDraft['fernmeldeplan_id'];
+    $currentLegacyPlan = $telecomPlanById(
+        $connection,
+        $incidentId,
+        $currentLegacyPlanId
+    );
+    $currentLegacyCreationSequence = (int) $scalar(
+        $connection,
+        'SELECT `sequenz` FROM `nv_betriebsereignisse`'
+            . ' WHERE `einsatz_id` = ?'
+            . " AND `objekttyp` = 'FERNMELDEPLAN'"
+            . ' AND `objekt_id` = ?'
+            . " AND `aktion` = 'plan_created'"
+            . ' ORDER BY `sequenz` LIMIT 1',
+        'ii',
+        $incidentId,
+        $currentLegacyPlanId
+    );
+    $assert(
+        (int) $currentLegacyDraft['version'] === 6
+            && $currentLegacyCreationSequence > $successorActivationSequence,
+        'current legacy draft fixture was not created after active-plan release'
+    );
+    estab_dv_activate_telecom_plan(
+        $connection,
+        $incidentId,
+        $currentLegacyPlanId,
+        $s6Identity,
+        'nv_protokoll',
+        (string) $currentLegacyPlan['revision']
+    );
+    $currentLegacyRoute = estab_dv_resolve_active_route(
+        $connection,
+        $incidentId,
+        (int) $currentLegacyDraft['fernmeldeplan_eintrag_id'],
+        'Fu'
+    );
+    $assert(
+        (int) $currentLegacyRoute['version'] === 6
+            && (int) $currentLegacyRoute['fernmeldeplan_id']
+                === $currentLegacyPlanId
+            && (string) $scalar(
+                $connection,
+                'SELECT `status` FROM `nv_fernmeldeplaene`'
+                    . ' WHERE `fernmeldeplan_id` = ?',
+                'i',
+                $revisionPlanId
+            ) === 'ERSETZT',
+        'eligible post-activation legacy draft could not become the successor'
     );
 
     $storedS2 = estab_auth_fetch_session_user(

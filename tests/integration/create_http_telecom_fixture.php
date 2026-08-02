@@ -68,6 +68,7 @@ $config = [
 ];
 
 $connection = estab_auth_connect($config);
+$fixtureSessionId = null;
 try {
     $incident = estab_incident_status($connection);
     $incidentId = $incident['active_einsatz_id'] ?? null;
@@ -77,11 +78,13 @@ try {
         );
     }
     $accountStatement = $connection->prepare(
-        'SELECT account.`benutzer` FROM `nv_benutzer` AS account'
+        'SELECT account.`benutzer`, account.`kuerzel`, account.`funktion`,'
+        . ' account.`rolle`, account.`sid`, account.`ip`, account.`fwdip`,'
+        . ' account.`aktiv`, account.`estab_gesperrt`, account.`password`'
+        . ' FROM `nv_benutzer` AS account'
         . ' WHERE BINARY account.`kuerzel` = BINARY ?'
         . " AND BINARY account.`funktion` = BINARY 'S6'"
         . " AND BINARY account.`rolle` = BINARY 'Stab'"
-        . ' AND account.`aktiv` = 1'
         . ' AND account.`estab_gesperrt` = 0'
         . ' LIMIT 1'
     );
@@ -99,8 +102,44 @@ try {
     }
     if (!is_array($account)) {
         throw new RuntimeException(
-            'HTTP telecommunications fixture requires an active S6 account'
+            'HTTP telecommunications fixture requires an unblocked S6 account'
         );
+    }
+    $accountActive = (int) ($account['aktiv'] ?? 0);
+    $accountSessionId = is_string($account['sid'] ?? null)
+        ? (string) $account['sid']
+        : '';
+    $hasActiveSession = $accountActive === 1
+        && estab_auth_session_id_is_valid($accountSessionId);
+    $isSignedOut = $accountActive === 0 && $accountSessionId === '';
+    if (!$hasActiveSession && !$isSignedOut) {
+        throw new RuntimeException(
+            'HTTP telecommunications fixture found an inconsistent S6 session'
+        );
+    }
+    if ($isSignedOut) {
+        // Administrative provisioning deliberately creates an inactive
+        // account. Give only this guarded, disposable fixture a bounded
+        // synthetic session so the production domain API still proves its
+        // normal active-account boundary. A genuine existing session is never
+        // replaced. The exact synthetic SID is revoked in finally before the
+        // browser logs in itself.
+        $syntheticSessionId = 'fixture-' . bin2hex(random_bytes(16));
+        estab_auth_update_user(
+            $connection,
+            'nv_benutzer',
+            [
+                'benutzer' => (string) $account['benutzer'],
+                'kuerzel' => (string) $account['kuerzel'],
+                'funktion' => (string) $account['funktion'],
+                'rolle' => (string) $account['rolle'],
+                'sid' => $syntheticSessionId,
+                'ip' => '127.0.0.1',
+                'fwdip' => '',
+                'password' => (string) $account['password'],
+            ]
+        );
+        $fixtureSessionId = $syntheticSessionId;
     }
     $identity = [
         'benutzer' => (string) $account['benutzer'],
@@ -119,6 +158,7 @@ try {
         string $channel,
         string $band,
         string $traffic,
+        string $specialNote,
         string $note
     ) use (
         $connection,
@@ -127,19 +167,69 @@ try {
         $validFrom,
         $validUntil
     ): array {
-        $plan = estab_dv_create_telecom_plan(
-            $connection,
-            $incidentId,
-            $identity,
-            [
-                'herkunft' => $origin,
-                'gueltig_ab' => $validFrom,
-                'gueltig_bis' => $validUntil,
-                'betriebsleitung' => 'S6 CI',
-                'bemerkungen' => $note,
-            ]
-        );
+        $activePlan = null;
+        foreach (estab_dv_telecom_plans($connection, $incidentId) as $candidate) {
+            if ($candidate['status'] === 'AKTIV') {
+                $activePlan = $candidate;
+                break;
+            }
+        }
+        $header = [
+            'herkunft' => $origin,
+            'gueltig_ab' => $validFrom,
+            'gueltig_bis' => $validUntil,
+            'betriebsleitung' => 'S6 CI',
+            'bemerkungen' => $note,
+        ];
+        if (is_array($activePlan)) {
+            $plan = estab_dv_start_telecom_plan_revision(
+                $connection,
+                $incidentId,
+                (int) $activePlan['fernmeldeplan_id'],
+                $identity
+            );
+            $draft = null;
+            foreach (
+                estab_dv_telecom_plans($connection, $incidentId) as $candidate
+            ) {
+                if (
+                    (int) $candidate['fernmeldeplan_id']
+                        === (int) $plan['fernmeldeplan_id']
+                ) {
+                    $draft = $candidate;
+                    break;
+                }
+            }
+            if (!is_array($draft)) {
+                throw new RuntimeException('Cloned plan draft was not readable');
+            }
+            estab_dv_update_telecom_plan_draft(
+                $connection,
+                $incidentId,
+                (int) $plan['fernmeldeplan_id'],
+                $identity,
+                $header,
+                (string) $draft['revision']
+            );
+        } else {
+            $plan = estab_dv_create_telecom_plan(
+                $connection,
+                $incidentId,
+                $identity,
+                $header
+            );
+        }
         $planId = (int) $plan['fernmeldeplan_id'];
+        $draft = null;
+        foreach (estab_dv_telecom_plans($connection, $incidentId) as $candidate) {
+            if ((int) $candidate['fernmeldeplan_id'] === $planId) {
+                $draft = $candidate;
+                break;
+            }
+        }
+        if (!is_array($draft)) {
+            throw new RuntimeException('Plan draft was not readable');
+        }
         $routeId = estab_dv_add_telecom_entry(
             $connection,
             $incidentId,
@@ -152,15 +242,29 @@ try {
                 'kanal' => $channel,
                 'bandlage' => $band,
                 'verkehrsform' => $traffic,
-                'besondere_vermerke' => '',
+                'besondere_vermerke' => $specialNote,
                 'bemerkungen' => $note,
-            ]
+            ],
+            'nv_protokoll',
+            (string) $draft['revision']
         );
+        $draft = null;
+        foreach (estab_dv_telecom_plans($connection, $incidentId) as $candidate) {
+            if ((int) $candidate['fernmeldeplan_id'] === $planId) {
+                $draft = $candidate;
+                break;
+            }
+        }
+        if (!is_array($draft)) {
+            throw new RuntimeException('Updated plan draft was not readable');
+        }
         estab_dv_activate_telecom_plan(
             $connection,
             $incidentId,
             $planId,
-            $identity
+            $identity,
+            'nv_protokoll',
+            (string) $draft['revision']
         );
         return [
             'route_id' => $routeId,
@@ -177,6 +281,7 @@ try {
             'ALT',
             'alt',
             'alt',
+            'Ersetzter besonderer Vermerk',
             'Ersetzter Manipulations-Fixpunkt'
         );
         $active = $publish(
@@ -187,6 +292,7 @@ try {
             'Kanal 404',
             'G/U',
             'Gegenverkehr',
+            'Aktiver besonderer Vermerk',
             'Aktiver Workflow-Fixpunkt'
         );
         printf(
@@ -204,10 +310,27 @@ try {
             'Kanal 505',
             'O/U',
             'Wechselverkehr',
+            'Redisposition besonderer Vermerk',
             'Redisposition Route B'
         );
         printf("%d|%d\n", $active['route_id'], $active['version']);
     }
 } finally {
-    estab_auth_close($connection);
+    try {
+        if (
+            is_string($fixtureSessionId)
+            && !estab_auth_mark_logged_out(
+                $connection,
+                'nv_benutzer',
+                $s6Code,
+                $fixtureSessionId
+            )
+        ) {
+            throw new RuntimeException(
+                'HTTP telecommunications fixture session cleanup failed'
+            );
+        }
+    } finally {
+        estab_auth_close($connection);
+    }
 }

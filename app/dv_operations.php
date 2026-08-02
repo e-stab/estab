@@ -19,6 +19,45 @@ require_once __DIR__ . '/logbook_lifecycle.php';
 
 const ESTAB_DV_REQUIRED_HATS = ['S2', 'Si', 'S6', 'LdF', 'A/W'];
 const ESTAB_DV_MEDIA = ['Fe', 'Fu', 'Me', 'FAX', 'FS', '@'];
+const ESTAB_DV_LEGACY_AUDIT_MAX_BYTES = 60000;
+const ESTAB_DV_MEDIA_DEFINITIONS = [
+    'Fe' => [
+        'label' => 'Fernsprecher',
+        'kanal' => null,
+        'bandlage' => null,
+        'verkehrsform' => 'Verkehrsform oder besondere Behandlung',
+    ],
+    'Fu' => [
+        'label' => 'Funk',
+        'kanal' => 'Kanal oder Rufgruppe',
+        'bandlage' => 'Bandlage',
+        'verkehrsform' => 'Verkehrsform',
+    ],
+    'Me' => [
+        'label' => 'Melder',
+        'kanal' => null,
+        'bandlage' => null,
+        'verkehrsform' => 'Verkehrsform oder besondere Behandlung',
+    ],
+    'FAX' => [
+        'label' => 'Telefax',
+        'kanal' => null,
+        'bandlage' => null,
+        'verkehrsform' => 'Verkehrsform oder besondere Behandlung',
+    ],
+    'FS' => [
+        'label' => 'Fernschreiber',
+        'kanal' => null,
+        'bandlage' => null,
+        'verkehrsform' => 'Verkehrsform oder besondere Behandlung',
+    ],
+    '@' => [
+        'label' => 'Datenübertragung',
+        'kanal' => null,
+        'bandlage' => null,
+        'verkehrsform' => 'Verkehrsform oder besondere Behandlung',
+    ],
+];
 
 final class EstabDvInputException extends InvalidArgumentException
 {
@@ -30,6 +69,29 @@ final class EstabDvConflictException extends RuntimeException
 
 final class EstabDvPermissionException extends RuntimeException
 {
+}
+
+/** @return array{label:string,kanal:?string,bandlage:?string,verkehrsform:?string} */
+function estab_dv_telecom_medium_definition(mixed $medium): array
+{
+    if (
+        !is_string($medium)
+        || !isset(ESTAB_DV_MEDIA_DEFINITIONS[$medium])
+    ) {
+        throw new EstabDvInputException('Medium ist ungültig.');
+    }
+    return ESTAB_DV_MEDIA_DEFINITIONS[$medium];
+}
+
+function estab_dv_telecom_medium_label(mixed $medium): string
+{
+    if (!is_string($medium)) {
+        return 'Unbekannt';
+    }
+    $definition = ESTAB_DV_MEDIA_DEFINITIONS[$medium] ?? null;
+    return is_array($definition)
+        ? (string) $definition['label']
+        : 'Unbekannt (' . $medium . ')';
 }
 
 function estab_dv_positive_id(mixed $value, string $label): int
@@ -371,11 +433,9 @@ function estab_dv_audit(
         ?? $details['target']
         ?? 'system';
     $actorFunction = $details['actor_function']
-        ?? (
-            $objectType === 'FERNMELDEPLAN'
-                ? 'S6'
-                : ($details['function'] ?? $details['new_function'] ?? null)
-        );
+        ?? $details['function']
+        ?? $details['new_function']
+        ?? null;
     if (
         !is_int($objectId)
         || $objectId < 1
@@ -385,7 +445,7 @@ function estab_dv_audit(
     ) {
         throw new RuntimeException('DV-Audit enthält keinen eindeutigen Objektbezug.');
     }
-    estab_dv_event_append(
+    $storedEvent = estab_dv_event_append(
         $connection,
         $incidentId,
         $objectType,
@@ -395,6 +455,33 @@ function estab_dv_audit(
         is_string($actorFunction) ? $actorFunction : null,
         $details
     );
+    $protocolPayload = $payload;
+    if (strlen($protocolPayload) > ESTAB_DV_LEGACY_AUDIT_MAX_BYTES) {
+        $protocolPayload = json_encode(
+            [
+                'version' => 1,
+                'action' => $action,
+                'actor' => $actor,
+                'actor_function' => is_string($actorFunction)
+                    ? $actorFunction
+                    : null,
+                'object_type' => $objectType,
+                'object_id' => $objectId,
+                'full_details' => 'nv_betriebsereignisse',
+                'event_sequence' => (int) $storedEvent['sequenz'],
+                'event_hash' => (string) $storedEvent['ereignis_hash'],
+                'details_sha256' => hash('sha256', $payload),
+                'details_bytes' => strlen($payload),
+            ],
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE
+                | JSON_UNESCAPED_SLASHES
+        );
+        if (!is_string($protocolPayload)) {
+            throw new RuntimeException(
+                'Kompakter DV-Auditverweis konnte nicht erzeugt werden.'
+            );
+        }
+    }
     $statement = $connection->prepare(
         'INSERT INTO ' . estab_auth_table($protocolTable)
         . ' (`einsatz_id`, `p_was`, `p_ereignis`) VALUES (?, ?, ?)'
@@ -403,7 +490,12 @@ function estab_dv_audit(
         throw new RuntimeException('DV-Audit konnte nicht vorbereitet werden.');
     }
     try {
-        $statement->bind_param('iss', $incidentId, $event, $payload);
+        $statement->bind_param(
+            'iss',
+            $incidentId,
+            $event,
+            $protocolPayload
+        );
         if (!$statement->execute()) {
             throw new RuntimeException('DV-Audit konnte nicht gespeichert werden.');
         }
@@ -2993,16 +3085,13 @@ function estab_dv_has_account_capability(
     }
 }
 
-function estab_dv_create_telecom_plan(
-    mysqli $connection,
-    int $incidentId,
-    array $identity,
-    array $input,
-    string $protocolTable = 'nv_protokoll'
-): array {
-    $incidentId = estab_incident_positive_id($incidentId);
-    $origin = estab_dv_text($input['herkunft'] ?? null, 'Herkunft', 255);
-    $validFrom = estab_dv_datetime($input['gueltig_ab'] ?? null, 'Gültigkeitsbeginn');
+/** @return array{herkunft:string,gueltig_ab:string,gueltig_bis:?string,betriebsleitung:string,bemerkungen:string} */
+function estab_dv_telecom_plan_header_values(array $input): array
+{
+    $validFrom = estab_dv_datetime(
+        $input['gueltig_ab'] ?? null,
+        'Gültigkeitsbeginn'
+    );
     $validUntil = estab_dv_datetime(
         $input['gueltig_bis'] ?? null,
         'Gültigkeitsende',
@@ -3013,28 +3102,285 @@ function estab_dv_create_telecom_plan(
             'Das Gültigkeitsende muss nach dem Gültigkeitsbeginn liegen.'
         );
     }
-    $operationsLead = estab_dv_text(
-        $input['betriebsleitung'] ?? null,
-        'Betriebsleitung',
-        255
+    return [
+        'herkunft' => estab_dv_text(
+            $input['herkunft'] ?? null,
+            'Herkunft',
+            255
+        ),
+        'gueltig_ab' => $validFrom,
+        'gueltig_bis' => $validUntil,
+        'betriebsleitung' => estab_dv_text(
+            $input['betriebsleitung'] ?? null,
+            'Betriebsleitung',
+            255
+        ),
+        'bemerkungen' => estab_dv_text(
+            $input['bemerkungen'] ?? '',
+            'Bemerkungen',
+            10000,
+            true
+        ),
+    ];
+}
+
+/**
+ * Return the purpose-limited plan header snapshot stored in the audit chain.
+ *
+ * Routes are audited by their own events and are deliberately not duplicated
+ * here. The snapshot contains only operational plan data already persisted in
+ * the incident; credentials and session data never enter the audit payload.
+ *
+ * @return array{einsatzbezeichnung:string,herkunft:string,gueltig_ab:string,gueltig_bis:?string,betriebsleitung:string,bemerkungen:?string}
+ */
+function estab_dv_telecom_plan_header_audit_state(array $plan): array
+{
+    return [
+        'einsatzbezeichnung' =>
+            (string) ($plan['einsatzbezeichnung'] ?? ''),
+        'herkunft' => (string) ($plan['herkunft'] ?? ''),
+        'gueltig_ab' => (string) ($plan['gueltig_ab'] ?? ''),
+        'gueltig_bis' => ($plan['gueltig_bis'] ?? null) === null
+            ? null
+            : (string) $plan['gueltig_bis'],
+        'betriebsleitung' => (string) ($plan['betriebsleitung'] ?? ''),
+        'bemerkungen' => ($plan['bemerkungen'] ?? null) === null
+            ? null
+            : (string) $plan['bemerkungen'],
+    ];
+}
+
+/** @return array{betriebsstelle:string,rufname:string,medium:string,kanal:string,bandlage:string,verkehrsform:string,besondere_vermerke:string,bemerkungen:string} */
+function estab_dv_telecom_entry_values(array $input): array
+{
+    $medium = $input['medium'] ?? null;
+    $definition = estab_dv_telecom_medium_definition($medium);
+    $technicalValue = static function (
+        array $source,
+        string $name,
+        ?string $label,
+        int $maximum
+    ): string {
+        if ($label === null) {
+            return '';
+        }
+        return estab_dv_text($source[$name] ?? null, $label, $maximum);
+    };
+    return [
+        'betriebsstelle' => estab_dv_text(
+            $input['betriebsstelle'] ?? null,
+            'Betriebsstelle',
+            255
+        ),
+        'rufname' => estab_dv_text(
+            $input['rufname'] ?? null,
+            'Rufname',
+            128
+        ),
+        'medium' => $medium,
+        'kanal' => $technicalValue(
+            $input,
+            'kanal',
+            $definition['kanal'],
+            64
+        ),
+        'bandlage' => $technicalValue(
+            $input,
+            'bandlage',
+            $definition['bandlage'],
+            64
+        ),
+        'verkehrsform' => $technicalValue(
+            $input,
+            'verkehrsform',
+            $definition['verkehrsform'],
+            128
+        ),
+        'besondere_vermerke' => estab_dv_text(
+            $input['besondere_vermerke'] ?? '',
+            'Besondere Vermerke',
+            10000,
+            true
+        ),
+        'bemerkungen' => estab_dv_text(
+            $input['bemerkungen'] ?? '',
+            'Bemerkungen',
+            10000,
+            true
+        ),
+    ];
+}
+
+/**
+ * @return array{status:string,version:int,einsatzbezeichnung:string,herkunft:string,gueltig_ab:string,gueltig_bis:?string,betriebsleitung:string,bemerkungen:?string}
+ */
+function estab_dv_lock_telecom_draft(
+    mysqli $connection,
+    int $incidentId,
+    int $planId
+): array {
+    $statement = $connection->prepare(
+        'SELECT `status`, `version`, `einsatzbezeichnung`, `herkunft`,'
+        . ' `gueltig_ab`, `gueltig_bis`, `betriebsleitung`, `bemerkungen`'
+        . ' FROM `nv_fernmeldeplaene`'
+        . ' WHERE `fernmeldeplan_id` = ? AND `einsatz_id` = ? FOR UPDATE'
     );
-    $notes = estab_dv_text(
-        $input['bemerkungen'] ?? '',
-        'Bemerkungen',
-        10000,
-        true
+    if (!$statement) {
+        throw new RuntimeException('Fernmeldeplan konnte nicht geprüft werden.');
+    }
+    try {
+        $statement->bind_param('ii', $planId, $incidentId);
+        $statement->execute();
+        $row = $statement->get_result()->fetch_assoc();
+    } finally {
+        $statement->close();
+    }
+    if (!is_array($row) || $row['status'] !== 'ENTWURF') {
+        throw new EstabDvConflictException(
+            'Nur ein Planentwurf darf bearbeitet werden.'
+        );
+    }
+    return [
+        'status' => (string) $row['status'],
+        'version' => (int) $row['version'],
+        'einsatzbezeichnung' => (string) $row['einsatzbezeichnung'],
+        'herkunft' => (string) $row['herkunft'],
+        'gueltig_ab' => (string) $row['gueltig_ab'],
+        'gueltig_bis' => $row['gueltig_bis'] === null
+            ? null
+            : (string) $row['gueltig_bis'],
+        'betriebsleitung' => (string) $row['betriebsleitung'],
+        'bemerkungen' => $row['bemerkungen'] === null
+            ? null
+            : (string) $row['bemerkungen'],
+    ];
+}
+
+function estab_dv_require_no_telecom_draft(
+    mysqli $connection,
+    int $incidentId
+): void {
+    $statement = $connection->prepare(
+        'SELECT `version` FROM `nv_fernmeldeplaene`'
+        . " WHERE `einsatz_id` = ? AND `status` = 'ENTWURF'"
+        . ' ORDER BY `version` DESC LIMIT 1 FOR UPDATE'
     );
+    if (!$statement) {
+        throw new RuntimeException('Planentwürfe konnten nicht geprüft werden.');
+    }
+    try {
+        $statement->bind_param('i', $incidentId);
+        $statement->execute();
+        $draft = $statement->get_result()->fetch_assoc();
+    } finally {
+        $statement->close();
+    }
+    if (is_array($draft)) {
+        throw new EstabDvConflictException(
+            'Der Entwurf für Version ' . (int) $draft['version']
+            . ' muss zuerst veröffentlicht oder verworfen werden.'
+        );
+    }
+}
+
+function estab_dv_telecom_revision_token(mixed $value): string
+{
+    if (
+        !is_string($value)
+        || preg_match('/\A[a-f0-9]{64}\z/D', $value) !== 1
+    ) {
+        throw new EstabDvInputException(
+            'Der Entwurf wurde ohne gültigen Bearbeitungsstand übermittelt.'
+        );
+    }
+    return $value;
+}
+
+function estab_dv_telecom_plan_revision(array $plan): string
+{
+    $entries = [];
+    foreach (($plan['eintraege'] ?? []) as $entry) {
+        if (!is_array($entry)) {
+            continue;
+        }
+        $entries[] = [
+            'id' => (int) ($entry['fernmeldeplan_eintrag_id'] ?? 0),
+            'sortierung' => (int) ($entry['sortierung'] ?? 0),
+            'betriebsstelle' => (string) ($entry['betriebsstelle'] ?? ''),
+            'rufname' => (string) ($entry['rufname'] ?? ''),
+            'medium' => (string) ($entry['medium'] ?? ''),
+            'kanal' => (string) ($entry['kanal'] ?? ''),
+            'bandlage' => (string) ($entry['bandlage'] ?? ''),
+            'verkehrsform' => (string) ($entry['verkehrsform'] ?? ''),
+            'besondere_vermerke' =>
+                (string) ($entry['besondere_vermerke'] ?? ''),
+            'bemerkungen' => (string) ($entry['bemerkungen'] ?? ''),
+        ];
+    }
+    $payload = json_encode(
+        [
+            'id' => (int) ($plan['fernmeldeplan_id'] ?? 0),
+            'version' => (int) ($plan['version'] ?? 0),
+            'status' => (string) ($plan['status'] ?? ''),
+            'einsatzbezeichnung' =>
+                (string) ($plan['einsatzbezeichnung'] ?? ''),
+            'herkunft' => (string) ($plan['herkunft'] ?? ''),
+            'gueltig_ab' => (string) ($plan['gueltig_ab'] ?? ''),
+            'gueltig_bis' => $plan['gueltig_bis'] ?? null,
+            'betriebsleitung' =>
+                (string) ($plan['betriebsleitung'] ?? ''),
+            'bemerkungen' => (string) ($plan['bemerkungen'] ?? ''),
+            'eintraege' => $entries,
+        ],
+        JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE
+            | JSON_UNESCAPED_SLASHES
+    );
+    return hash('sha256', $payload);
+}
+
+function estab_dv_require_telecom_plan_revision(
+    mysqli $connection,
+    int $incidentId,
+    int $planId,
+    string $expectedRevision
+): void {
+    $current = null;
+    foreach (estab_dv_telecom_plans($connection, $incidentId) as $plan) {
+        if ((int) $plan['fernmeldeplan_id'] === $planId) {
+            $current = $plan;
+            break;
+        }
+    }
+    if (
+        !is_array($current)
+        || !hash_equals(
+            $expectedRevision,
+            estab_dv_telecom_plan_revision($current)
+        )
+    ) {
+        throw new EstabDvConflictException(
+            'Der Entwurf wurde zwischenzeitlich geändert. Bitte prüfen Sie '
+            . 'den aktuellen Stand und wiederholen Sie Ihre Änderung.'
+        );
+    }
+}
+
+function estab_dv_create_telecom_plan(
+    mysqli $connection,
+    int $incidentId,
+    array $identity,
+    array $input,
+    string $protocolTable = 'nv_protokoll'
+): array {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $header = estab_dv_telecom_plan_header_values($input);
     return estab_incident_with_active_write(
         $connection,
         static function (array $incident) use (
             $connection,
             $incidentId,
             $identity,
-            $origin,
-            $validFrom,
-            $validUntil,
-            $operationsLead,
-            $notes,
+            $header,
             $protocolTable
         ): array {
             if ((int) $incident['active_einsatz_id'] !== $incidentId) {
@@ -3047,6 +3393,25 @@ function estab_dv_create_telecom_plan(
                 'FERNMELDEPLANUNG'
             );
             $userCode = $selected['kuerzel'];
+            estab_dv_require_no_telecom_draft($connection, $incidentId);
+            $activeResult = $connection->query(
+                'SELECT `fernmeldeplan_id` FROM `nv_fernmeldeplaene`'
+                . ' WHERE `einsatz_id` = ' . $incidentId
+                . " AND `status` = 'AKTIV' FOR UPDATE"
+            );
+            if (!$activeResult) {
+                throw new RuntimeException(
+                    'Aktiver Fernmeldeplan konnte nicht geprüft werden.'
+                );
+            }
+            $hasActivePlan = $activeResult->fetch_row() !== null;
+            $activeResult->free();
+            if ($hasActivePlan) {
+                throw new EstabDvConflictException(
+                    'Ein bestehender Fernmeldeplan wird über „Plan bearbeiten“ '
+                    . 'als vollständig vorbefüllter Entwurf fortgeschrieben.'
+                );
+            }
             $versionResult = $connection->query(
                 'SELECT COALESCE(MAX(`version`), 0) + 1 AS `version`'
                 . ' FROM `nv_fernmeldeplaene`'
@@ -3078,11 +3443,11 @@ function estab_dv_create_telecom_plan(
                     $incidentId,
                     $version,
                     $incidentLabel,
-                    $origin,
-                    $validFrom,
-                    $validUntil,
-                    $operationsLead,
-                    $notes,
+                    $header['herkunft'],
+                    $header['gueltig_ab'],
+                    $header['gueltig_bis'],
+                    $header['betriebsleitung'],
+                    $header['bemerkungen'],
                     $userCode
                 );
                 if (!$insert->execute()) {
@@ -3102,9 +3467,278 @@ function estab_dv_create_telecom_plan(
                     'plan_id' => $planId,
                     'plan_version' => $version,
                     'actor' => $userCode,
+                    'actor_function' => (string) $selected['funktion'],
+                    'initial_state' =>
+                        estab_dv_telecom_plan_header_audit_state(
+                            ['einsatzbezeichnung' => $incidentLabel] + $header
+                        ),
                 ]
             );
             return ['fernmeldeplan_id' => $planId, 'version' => $version];
+        }
+    );
+}
+
+function estab_dv_start_telecom_plan_revision(
+    mysqli $connection,
+    int $incidentId,
+    int $sourcePlanId,
+    array $identity,
+    string $protocolTable = 'nv_protokoll'
+): array {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $sourcePlanId = estab_dv_positive_id(
+        $sourcePlanId,
+        'Aktiver Fernmeldeplan'
+    );
+    return estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
+            $connection,
+            $incidentId,
+            $sourcePlanId,
+            $identity,
+            $protocolTable
+        ): array {
+            if ((int) $incident['active_einsatz_id'] !== $incidentId) {
+                throw new EstabDvConflictException(
+                    'Der Einsatz ist nicht mehr aktiv.'
+                );
+            }
+            $selected = estab_dv_require_write_capability(
+                $connection,
+                $incidentId,
+                $identity,
+                'FERNMELDEPLANUNG'
+            );
+            estab_dv_require_no_telecom_draft($connection, $incidentId);
+            $sourceStatement = $connection->prepare(
+                'SELECT `version`, `einsatzbezeichnung`, `herkunft`,'
+                . ' `gueltig_ab`, `gueltig_bis`, `betriebsleitung`,'
+                . ' `bemerkungen` FROM `nv_fernmeldeplaene`'
+                . ' WHERE `fernmeldeplan_id` = ? AND `einsatz_id` = ?'
+                . " AND `status` = 'AKTIV' FOR UPDATE"
+            );
+            if (!$sourceStatement) {
+                throw new RuntimeException(
+                    'Aktiver Fernmeldeplan konnte nicht vorbereitet werden.'
+                );
+            }
+            try {
+                $sourceStatement->bind_param(
+                    'ii',
+                    $sourcePlanId,
+                    $incidentId
+                );
+                $sourceStatement->execute();
+                $source = $sourceStatement->get_result()->fetch_assoc();
+            } finally {
+                $sourceStatement->close();
+            }
+            if (!is_array($source)) {
+                throw new EstabDvConflictException(
+                    'Nur der aktuell aktive Fernmeldeplan kann bearbeitet werden.'
+                );
+            }
+            $versionResult = $connection->query(
+                'SELECT COALESCE(MAX(`version`), 0) + 1 AS `version`'
+                . ' FROM `nv_fernmeldeplaene`'
+                . ' WHERE `einsatz_id` = ' . $incidentId
+                . ' FOR UPDATE'
+            );
+            if (!$versionResult) {
+                throw new RuntimeException(
+                    'Planversion konnte nicht reserviert werden.'
+                );
+            }
+            $version = (int) ($versionResult->fetch_assoc()['version'] ?? 0);
+            $versionResult->free();
+            $insertPlan = $connection->prepare(
+                'INSERT INTO `nv_fernmeldeplaene`'
+                . ' (`einsatz_id`, `version`, `einsatzbezeichnung`, `herkunft`,'
+                . ' `gueltig_ab`, `gueltig_bis`, `betriebsleitung`,'
+                . ' `bemerkungen`, `erstellt_von`)'
+                . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            );
+            if (!$insertPlan) {
+                throw new RuntimeException(
+                    'Planentwurf konnte nicht vorbereitet werden.'
+                );
+            }
+            $userCode = (string) $selected['kuerzel'];
+            try {
+                $insertPlan->bind_param(
+                    'iisssssss',
+                    $incidentId,
+                    $version,
+                    $source['einsatzbezeichnung'],
+                    $source['herkunft'],
+                    $source['gueltig_ab'],
+                    $source['gueltig_bis'],
+                    $source['betriebsleitung'],
+                    $source['bemerkungen'],
+                    $userCode
+                );
+                if (!$insertPlan->execute()) {
+                    throw new RuntimeException(
+                        'Planentwurf konnte nicht angelegt werden.'
+                    );
+                }
+                $planId = (int) $connection->insert_id;
+            } finally {
+                $insertPlan->close();
+            }
+            $copyEntries = $connection->prepare(
+                'INSERT INTO `nv_fernmeldeplan_eintraege`'
+                . ' (`fernmeldeplan_id`, `sortierung`, `betriebsstelle`,'
+                . ' `rufname`, `medium`, `kanal`, `bandlage`, `verkehrsform`,'
+                . ' `besondere_vermerke`, `bemerkungen`)'
+                . ' SELECT ?, `sortierung`, `betriebsstelle`, `rufname`,'
+                . ' `medium`, `kanal`, `bandlage`, `verkehrsform`,'
+                . ' `besondere_vermerke`, `bemerkungen`'
+                . ' FROM `nv_fernmeldeplan_eintraege`'
+                . ' WHERE `fernmeldeplan_id` = ? ORDER BY `sortierung`'
+            );
+            if (!$copyEntries) {
+                throw new RuntimeException(
+                    'Planwege konnten nicht zum Entwurf kopiert werden.'
+                );
+            }
+            try {
+                $copyEntries->bind_param('ii', $planId, $sourcePlanId);
+                if (!$copyEntries->execute()) {
+                    throw new RuntimeException(
+                        'Planwege konnten nicht zum Entwurf kopiert werden.'
+                    );
+                }
+                $copiedEntries = $copyEntries->affected_rows;
+            } finally {
+                $copyEntries->close();
+            }
+            estab_dv_audit(
+                $connection,
+                $protocolTable,
+                $incidentId,
+                'DV Fernmeldeplan',
+                [
+                    'action' => 'plan_revision_started',
+                    'plan_id' => $planId,
+                    'plan_version' => $version,
+                    'source_plan_id' => $sourcePlanId,
+                    'source_plan_version' => (int) $source['version'],
+                    'copied_entries' => $copiedEntries,
+                    'actor' => $userCode,
+                    'actor_function' => (string) $selected['funktion'],
+                    'initial_state' =>
+                        estab_dv_telecom_plan_header_audit_state($source),
+                ]
+            );
+            return [
+                'fernmeldeplan_id' => $planId,
+                'version' => $version,
+                'source_plan_id' => $sourcePlanId,
+                'copied_entries' => $copiedEntries,
+            ];
+        }
+    );
+}
+
+function estab_dv_update_telecom_plan_draft(
+    mysqli $connection,
+    int $incidentId,
+    int $planId,
+    array $identity,
+    array $input,
+    string $expectedRevision,
+    string $protocolTable = 'nv_protokoll'
+): void {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $planId = estab_dv_positive_id($planId, 'Fernmeldeplan');
+    $header = estab_dv_telecom_plan_header_values($input);
+    $expectedRevision = estab_dv_telecom_revision_token($expectedRevision);
+    estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
+            $connection,
+            $incidentId,
+            $planId,
+            $identity,
+            $header,
+            $expectedRevision,
+            $protocolTable
+        ): void {
+            if ((int) $incident['active_einsatz_id'] !== $incidentId) {
+                throw new EstabDvConflictException(
+                    'Der Einsatz ist nicht mehr aktiv.'
+                );
+            }
+            $selected = estab_dv_require_write_capability(
+                $connection,
+                $incidentId,
+                $identity,
+                'FERNMELDEPLANUNG'
+            );
+            $draft = estab_dv_lock_telecom_draft(
+                $connection,
+                $incidentId,
+                $planId
+            );
+            estab_dv_require_telecom_plan_revision(
+                $connection,
+                $incidentId,
+                $planId,
+                $expectedRevision
+            );
+            $update = $connection->prepare(
+                'UPDATE `nv_fernmeldeplaene` SET `herkunft` = ?,'
+                . ' `gueltig_ab` = ?, `gueltig_bis` = ?,'
+                . ' `betriebsleitung` = ?, `bemerkungen` = ?'
+                . ' WHERE `fernmeldeplan_id` = ? AND `einsatz_id` = ?'
+                . " AND `status` = 'ENTWURF'"
+            );
+            if (!$update) {
+                throw new RuntimeException(
+                    'Planentwurf konnte nicht vorbereitet werden.'
+                );
+            }
+            try {
+                $update->bind_param(
+                    'sssssii',
+                    $header['herkunft'],
+                    $header['gueltig_ab'],
+                    $header['gueltig_bis'],
+                    $header['betriebsleitung'],
+                    $header['bemerkungen'],
+                    $planId,
+                    $incidentId
+                );
+                if (!$update->execute()) {
+                    throw new RuntimeException(
+                        'Planentwurf konnte nicht gespeichert werden.'
+                    );
+                }
+            } finally {
+                $update->close();
+            }
+            estab_dv_audit(
+                $connection,
+                $protocolTable,
+                $incidentId,
+                'DV Fernmeldeplan',
+                [
+                    'action' => 'plan_draft_updated',
+                    'plan_id' => $planId,
+                    'plan_version' => $draft['version'],
+                    'actor' => (string) $selected['kuerzel'],
+                    'actor_function' => (string) $selected['funktion'],
+                    'before' =>
+                        estab_dv_telecom_plan_header_audit_state($draft),
+                    'after' => estab_dv_telecom_plan_header_audit_state(
+                        ['einsatzbezeichnung' =>
+                            $draft['einsatzbezeichnung']] + $header
+                    ),
+                ]
+            );
         }
     );
 }
@@ -3115,26 +3749,15 @@ function estab_dv_add_telecom_entry(
     int $planId,
     array $identity,
     array $input,
-    string $protocolTable = 'nv_protokoll'
+    string $protocolTable = 'nv_protokoll',
+    ?string $expectedRevision = null
 ): int {
     $incidentId = estab_incident_positive_id($incidentId);
     $planId = estab_dv_positive_id($planId, 'Fernmeldeplan');
-    $station = estab_dv_text($input['betriebsstelle'] ?? null, 'Betriebsstelle', 255);
-    $callSign = estab_dv_text($input['rufname'] ?? null, 'Rufname', 128);
-    $mediumValue = $input['medium'] ?? null;
-    if (!is_string($mediumValue) || !in_array($mediumValue, ESTAB_DV_MEDIA, true)) {
-        throw new EstabDvInputException('Medium ist ungültig.');
+    $values = estab_dv_telecom_entry_values($input);
+    if ($expectedRevision !== null) {
+        $expectedRevision = estab_dv_telecom_revision_token($expectedRevision);
     }
-    $channel = estab_dv_text($input['kanal'] ?? null, 'Kanal', 64);
-    $band = estab_dv_text($input['bandlage'] ?? null, 'Bandlage', 64);
-    $traffic = estab_dv_text($input['verkehrsform'] ?? null, 'Verkehrsform', 128);
-    $special = estab_dv_text(
-        $input['besondere_vermerke'] ?? '',
-        'Besondere Vermerke',
-        10000,
-        true
-    );
-    $notes = estab_dv_text($input['bemerkungen'] ?? '', 'Bemerkungen', 10000, true);
     return estab_incident_with_active_write(
         $connection,
         static function (array $incident) use (
@@ -3142,15 +3765,9 @@ function estab_dv_add_telecom_entry(
             $incidentId,
             $planId,
             $identity,
-            $station,
-            $callSign,
-            $mediumValue,
-            $channel,
-            $band,
-            $traffic,
-            $special,
-            $notes,
-            $protocolTable
+            $values,
+            $protocolTable,
+            $expectedRevision
         ): int {
             $selected = estab_dv_require_write_capability(
                 $connection,
@@ -3164,24 +3781,17 @@ function estab_dv_add_telecom_entry(
                 );
             }
             $userCode = $selected['kuerzel'];
-            $plan = $connection->prepare(
-                'SELECT `status` FROM `nv_fernmeldeplaene`'
-                . ' WHERE `fernmeldeplan_id` = ? AND `einsatz_id` = ?'
-                . ' FOR UPDATE'
+            estab_dv_lock_telecom_draft(
+                $connection,
+                $incidentId,
+                $planId
             );
-            if (!$plan) {
-                throw new RuntimeException('Fernmeldeplan konnte nicht geprüft werden.');
-            }
-            try {
-                $plan->bind_param('ii', $planId, $incidentId);
-                $plan->execute();
-                $planRow = $plan->get_result()->fetch_assoc();
-            } finally {
-                $plan->close();
-            }
-            if (!is_array($planRow) || $planRow['status'] !== 'ENTWURF') {
-                throw new EstabDvConflictException(
-                    'Nur ein Planentwurf darf ergänzt werden.'
+            if ($expectedRevision !== null) {
+                estab_dv_require_telecom_plan_revision(
+                    $connection,
+                    $incidentId,
+                    $planId,
+                    $expectedRevision
                 );
             }
             $next = $connection->prepare(
@@ -3214,14 +3824,14 @@ function estab_dv_add_telecom_entry(
                     'iissssssss',
                     $planId,
                     $sort,
-                    $station,
-                    $callSign,
-                    $mediumValue,
-                    $channel,
-                    $band,
-                    $traffic,
-                    $special,
-                    $notes
+                    $values['betriebsstelle'],
+                    $values['rufname'],
+                    $values['medium'],
+                    $values['kanal'],
+                    $values['bandlage'],
+                    $values['verkehrsform'],
+                    $values['besondere_vermerke'],
+                    $values['bemerkungen']
                 );
                 if (!$insert->execute()) {
                     throw new RuntimeException('Planposition konnte nicht gespeichert werden.');
@@ -3240,9 +3850,355 @@ function estab_dv_add_telecom_entry(
                     'plan_id' => $planId,
                     'entry_id' => $entryId,
                     'actor' => $userCode,
+                    'actor_function' => (string) $selected['funktion'],
                 ]
             );
             return $entryId;
+        }
+    );
+}
+
+function estab_dv_update_telecom_entry(
+    mysqli $connection,
+    int $incidentId,
+    int $planId,
+    int $entryId,
+    array $identity,
+    array $input,
+    string $expectedRevision,
+    string $protocolTable = 'nv_protokoll'
+): void {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $planId = estab_dv_positive_id($planId, 'Fernmeldeplan');
+    $entryId = estab_dv_positive_id($entryId, 'Fernmeldeweg');
+    $values = estab_dv_telecom_entry_values($input);
+    $expectedRevision = estab_dv_telecom_revision_token($expectedRevision);
+    estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
+            $connection,
+            $incidentId,
+            $planId,
+            $entryId,
+            $identity,
+            $values,
+            $expectedRevision,
+            $protocolTable
+        ): void {
+            if ((int) $incident['active_einsatz_id'] !== $incidentId) {
+                throw new EstabDvConflictException(
+                    'Der Einsatz ist nicht mehr aktiv.'
+                );
+            }
+            $selected = estab_dv_require_write_capability(
+                $connection,
+                $incidentId,
+                $identity,
+                'FERNMELDEPLANUNG'
+            );
+            estab_dv_lock_telecom_draft(
+                $connection,
+                $incidentId,
+                $planId
+            );
+            estab_dv_require_telecom_plan_revision(
+                $connection,
+                $incidentId,
+                $planId,
+                $expectedRevision
+            );
+            $select = $connection->prepare(
+                'SELECT `sortierung`, `betriebsstelle`, `rufname`, `medium`,'
+                . ' `kanal`, `bandlage`, `verkehrsform`,'
+                . ' `besondere_vermerke`, `bemerkungen`'
+                . ' FROM `nv_fernmeldeplan_eintraege`'
+                . ' WHERE `fernmeldeplan_eintrag_id` = ?'
+                . ' AND `fernmeldeplan_id` = ? FOR UPDATE'
+            );
+            if (!$select) {
+                throw new RuntimeException(
+                    'Fernmeldeweg konnte nicht geprüft werden.'
+                );
+            }
+            try {
+                $select->bind_param('ii', $entryId, $planId);
+                $select->execute();
+                $before = $select->get_result()->fetch_assoc();
+            } finally {
+                $select->close();
+            }
+            if (!is_array($before)) {
+                throw new EstabDvConflictException(
+                    'Der Fernmeldeweg gehört nicht zu diesem Entwurf.'
+                );
+            }
+            $update = $connection->prepare(
+                'UPDATE `nv_fernmeldeplan_eintraege`'
+                . ' SET `betriebsstelle` = ?, `rufname` = ?, `medium` = ?,'
+                . ' `kanal` = ?, `bandlage` = ?, `verkehrsform` = ?,'
+                . ' `besondere_vermerke` = ?, `bemerkungen` = ?'
+                . ' WHERE `fernmeldeplan_eintrag_id` = ?'
+                . ' AND `fernmeldeplan_id` = ?'
+            );
+            if (!$update) {
+                throw new RuntimeException(
+                    'Fernmeldeweg konnte nicht vorbereitet werden.'
+                );
+            }
+            try {
+                $update->bind_param(
+                    'ssssssssii',
+                    $values['betriebsstelle'],
+                    $values['rufname'],
+                    $values['medium'],
+                    $values['kanal'],
+                    $values['bandlage'],
+                    $values['verkehrsform'],
+                    $values['besondere_vermerke'],
+                    $values['bemerkungen'],
+                    $entryId,
+                    $planId
+                );
+                if (!$update->execute() || $update->affected_rows > 1) {
+                    throw new RuntimeException(
+                        'Fernmeldeweg konnte nicht gespeichert werden.'
+                    );
+                }
+            } finally {
+                $update->close();
+            }
+            estab_dv_audit(
+                $connection,
+                $protocolTable,
+                $incidentId,
+                'DV Fernmeldeplan',
+                [
+                    'action' => 'plan_entry_updated',
+                    'plan_id' => $planId,
+                    'entry_id' => $entryId,
+                    'before' => $before,
+                    'after' => $values,
+                    'actor' => (string) $selected['kuerzel'],
+                    'actor_function' => (string) $selected['funktion'],
+                ]
+            );
+        }
+    );
+}
+
+function estab_dv_delete_telecom_entry(
+    mysqli $connection,
+    int $incidentId,
+    int $planId,
+    int $entryId,
+    array $identity,
+    string $expectedRevision,
+    string $protocolTable = 'nv_protokoll'
+): void {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $planId = estab_dv_positive_id($planId, 'Fernmeldeplan');
+    $entryId = estab_dv_positive_id($entryId, 'Fernmeldeweg');
+    $expectedRevision = estab_dv_telecom_revision_token($expectedRevision);
+    estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
+            $connection,
+            $incidentId,
+            $planId,
+            $entryId,
+            $identity,
+            $expectedRevision,
+            $protocolTable
+        ): void {
+            if ((int) $incident['active_einsatz_id'] !== $incidentId) {
+                throw new EstabDvConflictException(
+                    'Der Einsatz ist nicht mehr aktiv.'
+                );
+            }
+            $selected = estab_dv_require_write_capability(
+                $connection,
+                $incidentId,
+                $identity,
+                'FERNMELDEPLANUNG'
+            );
+            estab_dv_lock_telecom_draft(
+                $connection,
+                $incidentId,
+                $planId
+            );
+            estab_dv_require_telecom_plan_revision(
+                $connection,
+                $incidentId,
+                $planId,
+                $expectedRevision
+            );
+            $select = $connection->prepare(
+                'SELECT `sortierung`, `betriebsstelle`, `rufname`, `medium`,'
+                . ' `kanal`, `bandlage`, `verkehrsform`,'
+                . ' `besondere_vermerke`, `bemerkungen`'
+                . ' FROM `nv_fernmeldeplan_eintraege`'
+                . ' WHERE `fernmeldeplan_eintrag_id` = ?'
+                . ' AND `fernmeldeplan_id` = ? FOR UPDATE'
+            );
+            if (!$select) {
+                throw new RuntimeException(
+                    'Fernmeldeweg konnte nicht geprüft werden.'
+                );
+            }
+            try {
+                $select->bind_param('ii', $entryId, $planId);
+                $select->execute();
+                $before = $select->get_result()->fetch_assoc();
+            } finally {
+                $select->close();
+            }
+            if (!is_array($before)) {
+                throw new EstabDvConflictException(
+                    'Der Fernmeldeweg gehört nicht zu diesem Entwurf.'
+                );
+            }
+            $delete = $connection->prepare(
+                'DELETE FROM `nv_fernmeldeplan_eintraege`'
+                . ' WHERE `fernmeldeplan_eintrag_id` = ?'
+                . ' AND `fernmeldeplan_id` = ?'
+            );
+            if (!$delete) {
+                throw new RuntimeException(
+                    'Fernmeldeweg konnte nicht zum Entfernen vorbereitet werden.'
+                );
+            }
+            try {
+                $delete->bind_param('ii', $entryId, $planId);
+                if (!$delete->execute() || $delete->affected_rows !== 1) {
+                    throw new EstabDvConflictException(
+                        'Der Fernmeldeweg wurde zwischenzeitlich geändert.'
+                    );
+                }
+            } finally {
+                $delete->close();
+            }
+            estab_dv_audit(
+                $connection,
+                $protocolTable,
+                $incidentId,
+                'DV Fernmeldeplan',
+                [
+                    'action' => 'plan_entry_deleted',
+                    'plan_id' => $planId,
+                    'entry_id' => $entryId,
+                    'before' => $before,
+                    'actor' => (string) $selected['kuerzel'],
+                    'actor_function' => (string) $selected['funktion'],
+                ]
+            );
+        }
+    );
+}
+
+/**
+ * Archive an abandoned draft without deleting its routes or audit evidence.
+ *
+ * ERSETZT is intentionally reused as the immutable terminal state. The
+ * plan_draft_discarded event distinguishes an abandoned draft from an active
+ * version that was replaced by a successor.
+ */
+function estab_dv_discard_telecom_plan_draft(
+    mysqli $connection,
+    int $incidentId,
+    int $planId,
+    array $identity,
+    string $expectedRevision,
+    string $protocolTable = 'nv_protokoll'
+): void {
+    $incidentId = estab_incident_positive_id($incidentId);
+    $planId = estab_dv_positive_id($planId, 'Fernmeldeplan');
+    $expectedRevision = estab_dv_telecom_revision_token($expectedRevision);
+    estab_incident_with_active_write(
+        $connection,
+        static function (array $incident) use (
+            $connection,
+            $incidentId,
+            $planId,
+            $identity,
+            $expectedRevision,
+            $protocolTable
+        ): void {
+            if ((int) $incident['active_einsatz_id'] !== $incidentId) {
+                throw new EstabDvConflictException(
+                    'Der Einsatz ist nicht mehr aktiv.'
+                );
+            }
+            $selected = estab_dv_require_write_capability(
+                $connection,
+                $incidentId,
+                $identity,
+                'FERNMELDEPLANUNG'
+            );
+            $draft = estab_dv_lock_telecom_draft(
+                $connection,
+                $incidentId,
+                $planId
+            );
+            estab_dv_require_telecom_plan_revision(
+                $connection,
+                $incidentId,
+                $planId,
+                $expectedRevision
+            );
+            $entryCountStatement = $connection->prepare(
+                'SELECT COUNT(*) AS `entry_count`'
+                . ' FROM `nv_fernmeldeplan_eintraege`'
+                . ' WHERE `fernmeldeplan_id` = ? FOR UPDATE'
+            );
+            if (!$entryCountStatement) {
+                throw new RuntimeException(
+                    'Fernmeldewege konnten nicht geprüft werden.'
+                );
+            }
+            try {
+                $entryCountStatement->bind_param('i', $planId);
+                $entryCountStatement->execute();
+                $entryCount = (int) (
+                    $entryCountStatement->get_result()->fetch_assoc()['entry_count']
+                    ?? 0
+                );
+            } finally {
+                $entryCountStatement->close();
+            }
+            $discard = $connection->prepare(
+                "UPDATE `nv_fernmeldeplaene` SET `status` = 'ERSETZT'"
+                . ' WHERE `fernmeldeplan_id` = ? AND `einsatz_id` = ?'
+                . " AND `status` = 'ENTWURF'"
+            );
+            if (!$discard) {
+                throw new RuntimeException(
+                    'Planentwurf konnte nicht zum Verwerfen vorbereitet werden.'
+                );
+            }
+            try {
+                $discard->bind_param('ii', $planId, $incidentId);
+                if (!$discard->execute() || $discard->affected_rows !== 1) {
+                    throw new EstabDvConflictException(
+                        'Der Planentwurf wurde zwischenzeitlich geändert.'
+                    );
+                }
+            } finally {
+                $discard->close();
+            }
+            estab_dv_audit(
+                $connection,
+                $protocolTable,
+                $incidentId,
+                'DV Fernmeldeplan',
+                [
+                    'action' => 'plan_draft_discarded',
+                    'plan_id' => $planId,
+                    'plan_version' => $draft['version'],
+                    'preserved_entries' => $entryCount,
+                    'actor' => (string) $selected['kuerzel'],
+                    'actor_function' => (string) $selected['funktion'],
+                ]
+            );
         }
     );
 }
@@ -3252,10 +4208,14 @@ function estab_dv_activate_telecom_plan(
     int $incidentId,
     int $planId,
     array $identity,
-    string $protocolTable = 'nv_protokoll'
+    string $protocolTable = 'nv_protokoll',
+    ?string $expectedRevision = null
 ): void {
     $incidentId = estab_incident_positive_id($incidentId);
     $planId = estab_dv_positive_id($planId, 'Fernmeldeplan');
+    if ($expectedRevision !== null) {
+        $expectedRevision = estab_dv_telecom_revision_token($expectedRevision);
+    }
     estab_incident_with_active_write(
         $connection,
         static function (array $incident) use (
@@ -3263,7 +4223,8 @@ function estab_dv_activate_telecom_plan(
             $incidentId,
             $planId,
             $identity,
-            $protocolTable
+            $protocolTable,
+            $expectedRevision
         ): void {
             $selected = estab_dv_require_write_capability(
                 $connection,
@@ -3278,12 +4239,20 @@ function estab_dv_activate_telecom_plan(
             }
             $userCode = $selected['kuerzel'];
             $select = $connection->prepare(
-                'SELECT p.`status`, COUNT(e.`fernmeldeplan_eintrag_id`) AS `eintraege`'
+                'SELECT p.`status`, p.`version`, p.`gueltig_ab`,'
+                . ' p.`gueltig_bis`,'
+                . ' CASE WHEN p.`gueltig_ab` <= NOW()'
+                . ' AND (p.`gueltig_bis` IS NULL'
+                . ' OR p.`gueltig_bis` >= NOW()) THEN 1 ELSE 0 END'
+                . ' AS `aktuell_gueltig`,'
+                . ' COUNT(e.`fernmeldeplan_eintrag_id`) AS `eintraege`'
                 . ' FROM `nv_fernmeldeplaene` AS p'
                 . ' LEFT JOIN `nv_fernmeldeplan_eintraege` AS e'
                 . ' ON e.`fernmeldeplan_id` = p.`fernmeldeplan_id`'
                 . ' WHERE p.`fernmeldeplan_id` = ? AND p.`einsatz_id` = ?'
-                . ' GROUP BY p.`fernmeldeplan_id`, p.`status` FOR UPDATE'
+                . ' GROUP BY p.`fernmeldeplan_id`, p.`status`, p.`version`,'
+                . ' p.`gueltig_ab`, p.`gueltig_bis`'
+                . ' FOR UPDATE'
             );
             if (!$select) {
                 throw new RuntimeException('Fernmeldeplan konnte nicht geprüft werden.');
@@ -3304,6 +4273,22 @@ function estab_dv_activate_telecom_plan(
                     'Nur ein nicht leerer Planentwurf kann freigegeben werden.'
                 );
             }
+            if ((int) $row['aktuell_gueltig'] !== 1) {
+                throw new EstabDvConflictException(
+                    'Der Fernmeldeplan ist zum aktuellen Zeitpunkt nicht '
+                    . 'gültig. Passen Sie Gültigkeitsbeginn oder '
+                    . 'Gültigkeitsende im Entwurf an und speichern Sie ihn '
+                    . 'erneut.'
+                );
+            }
+            if ($expectedRevision !== null) {
+                estab_dv_require_telecom_plan_revision(
+                    $connection,
+                    $incidentId,
+                    $planId,
+                    $expectedRevision
+                );
+            }
             $previousPlanStatement = $connection->prepare(
                 'SELECT `fernmeldeplan_id`, `version`, `erstellt_von`'
                 . ' FROM `nv_fernmeldeplaene`'
@@ -3320,6 +4305,125 @@ function estab_dv_activate_telecom_plan(
                     ->fetch_assoc();
             } finally {
                 $previousPlanStatement->close();
+            }
+            $creationEventStatement = $connection->prepare(
+                'SELECT `sequenz`, `aktion`,'
+                . ' CAST(`details` AS CHAR) AS `details_json`'
+                . ' FROM `nv_betriebsereignisse`'
+                . " WHERE `einsatz_id` = ? AND `objekttyp` = 'FERNMELDEPLAN'"
+                . ' AND `objekt_id` = ?'
+                . " AND `aktion` IN ('plan_created','plan_revision_started')"
+                . ' ORDER BY `sequenz` LIMIT 1 FOR UPDATE'
+            );
+            if (!$creationEventStatement) {
+                throw new RuntimeException(
+                    'Entwurfsbasis konnte nicht geprüft werden.'
+                );
+            }
+            try {
+                $creationEventStatement->bind_param(
+                    'ii',
+                    $incidentId,
+                    $planId
+                );
+                $creationEventStatement->execute();
+                $creationEvent = $creationEventStatement
+                    ->get_result()
+                    ->fetch_assoc();
+            } finally {
+                $creationEventStatement->close();
+            }
+            $creationDetails = null;
+            if (
+                is_array($creationEvent)
+                && is_string($creationEvent['details_json'] ?? null)
+            ) {
+                try {
+                    $decoded = json_decode(
+                        $creationEvent['details_json'],
+                        true,
+                        16,
+                        JSON_THROW_ON_ERROR
+                    );
+                    $creationDetails = is_array($decoded) ? $decoded : null;
+                } catch (JsonException) {
+                    $creationDetails = null;
+                }
+            }
+            $previousPlanId = is_array($previousPlan)
+                ? (int) $previousPlan['fernmeldeplan_id']
+                : null;
+            $sourcePlanId = is_array($creationDetails)
+                && is_int($creationDetails['source_plan_id'] ?? null)
+                ? $creationDetails['source_plan_id']
+                : null;
+            $creationAction = is_array($creationEvent)
+                ? (string) ($creationEvent['aktion'] ?? '')
+                : '';
+            $creationSequence = is_array($creationEvent)
+                ? (int) ($creationEvent['sequenz'] ?? 0)
+                : 0;
+            $legacySourcePlanId = null;
+            if (
+                $creationAction === 'plan_created'
+                && $previousPlanId !== null
+                && $creationSequence > 0
+            ) {
+                $legacySourceStatement = $connection->prepare(
+                    'SELECT `objekt_id` FROM `nv_betriebsereignisse`'
+                    . ' WHERE `einsatz_id` = ?'
+                    . " AND `objekttyp` = 'FERNMELDEPLAN'"
+                    . " AND `aktion` = 'plan_activated'"
+                    . ' AND `sequenz` < ?'
+                    . ' ORDER BY `sequenz` DESC LIMIT 1 FOR UPDATE'
+                );
+                if (!$legacySourceStatement) {
+                    throw new RuntimeException(
+                        'Historische Entwurfsbasis konnte nicht geprüft werden.'
+                    );
+                }
+                try {
+                    $legacySourceStatement->bind_param(
+                        'ii',
+                        $incidentId,
+                        $creationSequence
+                    );
+                    $legacySourceStatement->execute();
+                    $legacySource = $legacySourceStatement
+                        ->get_result()
+                        ->fetch_assoc();
+                    $legacySourcePlanId = is_array($legacySource)
+                        ? (int) $legacySource['objekt_id']
+                        : null;
+                } finally {
+                    $legacySourceStatement->close();
+                }
+            }
+            $legacyDraftMatchesActive = $creationAction === 'plan_created'
+                && $previousPlanId !== null
+                && $legacySourcePlanId === $previousPlanId
+                && (int) $row['version'] > (int) $previousPlan['version'];
+            if (
+                (
+                    $creationAction === 'plan_created'
+                    && $previousPlanId !== null
+                    && !$legacyDraftMatchesActive
+                )
+                || (
+                    $creationAction === 'plan_revision_started'
+                    && $sourcePlanId !== $previousPlanId
+                )
+                || !in_array(
+                    $creationAction,
+                    ['plan_created', 'plan_revision_started'],
+                    true
+                )
+            ) {
+                throw new EstabDvConflictException(
+                    'Die aktive Fernmeldeplanversion hat sich seit Beginn der '
+                    . 'Bearbeitung geändert. Bitte starten Sie einen neuen '
+                    . 'Entwurf auf Basis des aktuellen Plans.'
+                );
             }
             $supersede = $connection->prepare(
                 "UPDATE `nv_fernmeldeplaene` SET `status` = 'ERSETZT'"
@@ -3363,7 +4467,7 @@ function estab_dv_activate_telecom_plan(
                         'plan_id' => (int) $previousPlan['fernmeldeplan_id'],
                         'plan_version' => (int) $previousPlan['version'],
                         'actor' => $userCode,
-                        'actor_function' => 'S6',
+                        'actor_function' => (string) $selected['funktion'],
                         'replacement_plan_id' => $planId,
                     ]
                 );
@@ -3377,6 +4481,7 @@ function estab_dv_activate_telecom_plan(
                     'action' => 'plan_activated',
                     'plan_id' => $planId,
                     'actor' => $userCode,
+                    'actor_function' => (string) $selected['funktion'],
                 ]
             );
         }
@@ -3419,7 +4524,11 @@ function estab_dv_telecom_plans(mysqli $connection, int $incidentId): array
                     'gueltig_bis' => $row['gueltig_bis'],
                     'betriebsleitung' => (string) $row['betriebsleitung'],
                     'bemerkungen' => $row['bemerkungen'],
+                    'erstellt_am' => (string) $row['erstellt_am'],
                     'erstellt_von' => (string) $row['erstellt_von'],
+                    'freigegeben_am' => $row['freigegeben_am'] === null
+                        ? null
+                        : (string) $row['freigegeben_am'],
                     'freigegeben_von' => $row['freigegeben_von'],
                     'eintraege' => [],
                 ];
@@ -3441,6 +4550,10 @@ function estab_dv_telecom_plans(mysqli $connection, int $incidentId): array
             }
         }
         $result->free();
+        foreach ($plans as &$plan) {
+            $plan['revision'] = estab_dv_telecom_plan_revision($plan);
+        }
+        unset($plan);
         return array_values($plans);
     } finally {
         $statement->close();

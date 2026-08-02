@@ -46,7 +46,7 @@ Während einer erstmaligen oder aus `applying` wiederaufgenommenen Baseline
 entsteht zusätzlich der Datensatz
 `114-self-registration-fresh-default` in `estab_schema_baselines`. Sein
 Checksum ist exakt die SHA-256 der unveränderten Migration 114. Der Marker
-bleibt bis hinter allen zweiundzwanzig Migrationen auf `applying`. Dann setzt ein
+bleibt bis hinter allen dreiundzwanzig Migrationen auf `applying`. Dann setzt ein
 einziges atomisches InnoDB-Multi-Table-Update ausschließlich die noch pristine
 Richtlinienzeile `ENVIRONMENT/NULL/0/migration-114` auf
 `DISABLED/NULL/1/fresh-install` und gleichzeitig den Marker auf `applied`.
@@ -104,6 +104,7 @@ Derzeit sind folgende explizite Migrationen vorhanden:
 | `docker/db/migrations/114-self-registration-policy.sql` | ergänzt die revisionsgesicherte Singleton-Freigabe für öffentliche Kontoanlage mit `DISABLED`, `PERMANENT` und DB-UTC-befristetem `UNTIL`; die unveränderte SQL-Datei setzt aus Upgrade-Kompatibilität zunächst `ENVIRONMENT`; nur ein im selben neuen Baseline-Lauf checksumgebunden angelegter Fresh-Marker autorisiert anschließend die atomare Umstellung der pristine Zeile auf `DISABLED/NULL/1/fresh-install`; echte Upgrades und frühere markerlose Neuinstallationen behalten `ENVIRONMENT`, bis die erste administrative Auswahl die Datenbank autoritativ macht; bestehende Konten, Kennwörter und Sitzungen bleiben unverändert |
 | `docker/db/migrations/115-incident-permission-mode.sql` | ergänzt den pro Einsatz gespeicherten Modus `STRICT`/`LOOSE` mit `STRICT` als Default für Bestand und Neuanlage; Guard-Trigger erkennen unmarkierte Legacy-DML und kombinierte Einsatzänderungen, während der bestätigte Anwendungsweg Revision und Audit bindet; sechs modebewusste Fachtrigger bewahren in `STRICT` die bisherigen Funktions-/Rollengrenzen und lockern in `LOOSE` ausschließlich diese Schreibprüfungen, während konkrete aktive und ungesperrte Kontenidentität, aktiver offener Einsatz, Zustands-, Beziehungs-, Integritäts- und Append-only-Regeln bestehen bleiben |
 | `docker/db/migrations/116-standard-categories.sql` | ergänzt ausschließlich bei einer vollständig leeren globalen Kategorienliste die editier- und löschbaren Vorgaben `Allgemein` sowie `EA1` bis `EA6`; ein bereits vorhandener Betreiberkatalog bleibt vollständig unverändert |
+| `docker/db/migrations/117-telecom-draft-discard.sql` | erweitert den Fernmeldeplan-Zustandsautomaten um das kontrollierte Archivieren eines inhaltlich unveränderten Entwurfs als `ERSETZT`; Freigabedaten bleiben leer und vorhandene Wege werden nicht gelöscht; unveränderliche Felder werden NULL-sicher verglichen und eine Planfreigabe ist nur im gespeicherten Gültigkeitsfenster zulässig |
 
 Migration 95 klassifiziert vorhandene Zeilen bereits beim Hinzufügen der
 Spalte mit dem einmaligen Anfangswert `integrity_required=0` und stellt danach
@@ -139,8 +140,8 @@ eigenen Zwischenstände. Gemischte Katalogdaten, ein abweichender
 Primärschlüssel oder fremde Indizes blockieren vor der nächsten Änderung und
 bleiben zur Untersuchung erhalten. `verify.sql` und die Laufzeit-Readiness
 verlangen danach exakt sieben Katalogzeilen, das vollständige neue ENUM,
-ausschließlich den zweispaltigen Primärschlüssel und alle zweiundzwanzig
-angewendeten Migrationen einschließlich Version 116.
+ausschließlich den zweispaltigen Primärschlüssel und alle dreiundzwanzig
+angewendeten Migrationen einschließlich Version 117.
 
 Migration 97 fügt `nv_einsaetze.fuehrungsstellenname` als
 `VARCHAR(128) NULL` unmittelbar hinter `organisation` und
@@ -350,7 +351,7 @@ Migration 114 ergänzt entsprechend die eigene, kollisionsgeprüfte Tabelle
 ausdrücklich geöffnete Installation beim Upgrade. Nach der ersten Adminaktion
 sind nur `DISABLED`, `PERMANENT` oder `UNTIL` samt UTC-Endzeit, Revision und
 Audit-Akteur maßgeblich. `verify.sql` und die Laufzeit-Readiness prüfen beide
-Singleton-Tabellen und alle zweiundzwanzig Ledgerzeilen gemeinsam.
+Singleton-Tabellen und alle dreiundzwanzig Ledgerzeilen gemeinsam.
 
 Bei einer vom aktuellen Runner selbst begonnenen Neuinstallation ist dagegen
 der checksumgebundene Baseline-Marker maßgeblich: Solange Migration 114 noch
@@ -401,6 +402,29 @@ normale globale Kategorien und können von den dafür berechtigten Funktionen
 geändert oder gelöscht werden. Da die Saat nur in der checksumgebundenen
 Einmalmigration liegt, werden gelöschte Vorgaben weder bei einer
 Einsatzanlage noch bei Anmeldung oder Seitenaufruf erneut erzeugt.
+
+Migration 117 ersetzt ausschließlich den geschützten Update-Trigger des
+Fernmeldeplankopfs. Sie erlaubt zusätzlich `ENTWURF -> ERSETZT`, jedoch nur wenn
+sämtliche fachlichen Kopf- und Freigabefelder unverändert bleiben. Die
+Anwendung schreibt dazu ein hashverkettetes `plan_draft_discarded`-Ereignis;
+die bestehenden Eintragstrigger verhindern anschließend jede Änderung oder
+Löschung der archivierten Wege. So blockiert ein aufgegebener oder sicher als
+veraltet erkannter Entwurf keine neue Bearbeitung des aktiven Plans. Alle
+Unveränderlichkeitsvergleiche verwenden NULL-sichere Gleichheit; insbesondere
+kann ein gesetztes `freigegeben_von` beim Ersetzen einer aktiven Fassung nicht
+durch `NULL` aus der Evidenz entfernt werden. Nullable Bemerkungen werden dabei
+binär statt mit der sprachabhängigen Tabellencollation verglichen, sodass auch
+eine reine Änderung von Groß-/Kleinschreibung oder Akzenten scheitert. Auch eine direkte
+`ENTWURF -> AKTIV`-Änderung scheitert vor dem Zustandswechsel, wenn die
+Datenbankzeit vor `gueltig_ab` oder nach `gueltig_bis`
+liegt. Der Anwendungsweg prüft dieselbe Grenze vor dem Ersetzen der bisherigen
+Fassung und gibt einen korrigierbaren deutschen Hinweis aus. Weil beide
+Gültigkeitsspalten `DATETIME(0)` sind, vergleichen Anwendung und Trigger mit
+derselben vollen Datenbanksekunde; die gespeicherte Endsekunde bleibt damit
+vollständig inklusive. Plananlage und
+Kopfdatenänderung protokollieren ausschließlich die bereits einsatzbezogen
+gespeicherten Kopfdaten als Initial- beziehungsweise Vorher-/Nachher-Snapshot;
+Zugangsdaten und Sitzungswerte werden nicht in die Ereignisdetails übernommen.
 
 Sechs Fachtrigger werden modebewusst ersetzt: ETB- und TBB-Insert,
 Fernmeldeplan-Insert/-Freigabe sowie Melderauftrag-Insert/-Update. `STRICT`

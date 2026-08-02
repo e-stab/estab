@@ -202,11 +202,34 @@ unten dokumentiert.
 4. Die Personen melden sich mit ihren vorhandenen Konten an. Im empfohlenen
    strengen Regelbetrieb schreiben Konten mit `ETB/Stab` oder `S2/Stab` das
    ETB; das TTB führen Konten mit der festen Funktion `Fernmelder`.
-5. Im strengen Regelbetrieb erstellt S6 einen Fernmeldeplan mit den
-   vorgesehenen Wegen und veröffentlicht ihn. Erst danach kann die LdF-Stufe
-   einen Ausgang auf einen verbindlichen Weg disponieren. Im lockeren Modus
-   dürfen andere gültige Konten diese ausdrücklich angebotenen Schreibstufen
-   übernehmen; Plan- und Workflowzustand bleiben unverändert verbindlich.
+5. Im strengen Regelbetrieb erstellt S6 einmalig den ersten Fernmeldeplan mit
+   den vorgesehenen Wegen und veröffentlicht ihn. Für jede spätere Änderung
+   erzeugt **Bearbeitung starten** eine vollständig vorbefüllte Kopie der
+   aktiven Fassung. Kopfdaten und einzelne Wege lassen sich im Entwurf ändern,
+   ergänzen oder entfernen; der bisherige Plan bleibt bis **Als Version … aktiv
+   schalten** unverändert gültig. Freigegeben wird nur, wenn der aktuelle
+   Datenbankzeitpunkt innerhalb des im Entwurf gespeicherten Gültigkeitsfensters
+   liegt; andernfalls bleibt die bisherige Fassung aktiv und der Entwurf kann
+   korrigiert werden. Anlage und jede Kopfdatenänderung werden mit initialem
+   Zustand beziehungsweise Vorher-/Nachher-Snapshot in der einsatzgebundenen
+   Auditkette nachgewiesen. Sichtbare, noch nicht gespeicherte Änderungen
+   blockieren die Aktivierung und jede andere Aktion, die diese Browserwerte
+   durch einen Seitenwechsel verlieren würde. Der Hinweis führt zum betroffenen
+   Bereich. Sind mehrere Teilformulare geändert, kann die ursprünglich gewählte
+   Aktion nur über die ausdrücklich als Datenverlust gekennzeichnete Schaltfläche
+   fortgesetzt werden; ein stilles Verwerfen findet nicht statt. Ersetzte und
+   verworfene Fassungen bleiben mit vollständigen Kopf- und Wegeangaben in der
+   nur lesbaren Versionshistorie sichtbar. Ein nicht mehr benötigter oder
+   veralteter Entwurf kann bewusst verworfen werden; er bleibt mit seinen Wegen
+   unveränderlich nachgewiesen, blockiert aber keine neue Bearbeitung der aktiven
+   Fassung. Die Medien werden als Fernsprecher, Funk,
+   Melder, Telefax, Fernschreiber und Datenübertragung ausgeschrieben. Kanal
+   beziehungsweise Rufgruppe und Bandlage erscheinen nur bei Funk; eine
+   Verkehrsform oder besondere Behandlung gehört zu jedem Weg. Erst nach der
+   Veröffentlichung kann die LdF-Stufe einen Ausgang auf den neuen
+   verbindlichen Weg disponieren. Im lockeren Modus dürfen andere gültige
+   Konten diese ausdrücklich angebotenen Schreibstufen übernehmen; Plan- und
+   Workflowzustand bleiben unverändert verbindlich.
 
 Der Modus gehört zum Einsatz und ist weder eine `.env`-Option noch eine
 Eigenschaft des Kontos oder einer Zugangsschicht. Bestehende Einsätze erhalten

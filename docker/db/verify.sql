@@ -1053,6 +1053,8 @@ SELECT
          OR (trigger_name = 'estab_dv94_fernmeldeplan_immutable'
           AND action_statement LIKE
             '%Telecommunications plan release account is invalid%'
+          AND action_statement LIKE
+            '%Discarded telecommunications drafts are immutable evidence%'
           AND action_statement NOT LIKE '%release_shift%')
          OR (trigger_name = 'estab_dv94_messenger_insert'
           AND action_statement LIKE
@@ -1062,7 +1064,31 @@ SELECT
           AND action_statement LIKE
             '%Messenger report account function is invalid%'
           AND action_statement NOT LIKE '%report_shift%')
-       )) = 4)
+       )) = 4
+   AND
+   (SELECT COUNT(*)
+      FROM information_schema.triggers
+     WHERE trigger_schema = DATABASE()
+       AND trigger_name = 'estab_dv94_fernmeldeplan_immutable'
+       AND event_object_table = 'nv_fernmeldeplaene'
+       AND action_timing = 'BEFORE'
+       AND event_manipulation = 'UPDATE'
+       AND action_statement LIKE
+         '%OLD.`status` = ''ENTWURF'' AND NEW.`status` = ''ERSETZT''%'
+       AND action_statement LIKE
+         '%OLD.`freigegeben_am` IS NOT NULL%'
+       AND action_statement LIKE
+         '%NEW.`freigegeben_am` IS NOT NULL%'
+       AND action_statement LIKE
+         '%OLD.`freigegeben_von` <=>%NEW.`freigegeben_von`%'
+       AND LOWER(action_statement) LIKE
+         '%current_timestamp%'
+       AND LOWER(action_statement) NOT LIKE
+         '%current_timestamp(6)%'
+       AND action_statement LIKE
+         '%Discarded telecommunications drafts are immutable evidence%'
+       AND action_statement LIKE
+         '%Invalid telecommunications plan status transition%') = 1)
        AS `optional_access_shifts_ok`,
   ((SELECT COUNT(*)
       FROM information_schema.columns
@@ -1738,7 +1764,7 @@ SELECT
        BINARY 'STRICT', BINARY 'LOOSE'
      )) = 0)
        AS `incident_permission_mode_ok`,
-  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 22
+  ((SELECT COUNT(*) FROM `estab_schema_migrations`) = 23
    AND
    (SELECT COUNT(*)
       FROM `estab_schema_migrations`
@@ -1764,10 +1790,11 @@ SELECT
        '113-password-policy.sql',
        '114-self-registration-policy.sql',
        '115-incident-permission-mode.sql',
-       '116-standard-categories.sql'
+       '116-standard-categories.sql',
+       '117-telecom-draft-discard.sql'
      )
        AND `state` = 'applied'
-       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 22)
+       AND `checksum` REGEXP BINARY '^[0-9a-f]{64}$') = 23)
        AS `schema_migrations_ok`;
 
 SELECT `table_name`, `engine`, `table_collation`

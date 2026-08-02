@@ -836,8 +836,35 @@ class CDP:
                 rect.width <= 0 || rect.height <= 0) return null;
             element.scrollIntoView({{block: "center", inline: "center"}});
             const updated = element.getBoundingClientRect();
-            let x = updated.left + updated.width / 2;
-            let y = updated.top + updated.height / 2;
+            const left = Math.max(0, updated.left);
+            const right = Math.min(target.innerWidth, updated.right);
+            const top = Math.max(0, updated.top);
+            const bottom = Math.min(target.innerHeight, updated.bottom);
+            if (right <= left || bottom <= top) return null;
+            const xCandidates = [
+                left + (right - left) / 2,
+                left + Math.min(4, (right - left) / 2),
+                right - Math.min(4, (right - left) / 2)
+            ];
+            const yCandidates = [
+                bottom - Math.min(4, (bottom - top) / 2),
+                top + (bottom - top) / 2,
+                top + Math.min(4, (bottom - top) / 2)
+            ];
+            let x = null;
+            let y = null;
+            for (const candidateY of yCandidates) {{
+                for (const candidateX of xCandidates) {{
+                    const hit = doc.elementFromPoint(candidateX, candidateY);
+                    if (hit && (hit === element || element.contains(hit))) {{
+                        x = candidateX;
+                        y = candidateY;
+                        break;
+                    }}
+                }}
+                if (x !== null) break;
+            }}
+            if (x === null || y === null) return null;
             let current = target;
             while (current !== current.top) {{
                 const frame = current.frameElement;
@@ -2060,6 +2087,854 @@ class BrowserAcceptance:
                 """,
             ),
             "anonyme Anmeldung nach dem A/W-Vorschlagstest fehlt",
+        )
+
+    def run_telecom_plan(self) -> None:
+        """Edit and publish a cloned S6 plan in the real browser."""
+        if self.config.login_function != "S6":
+            raise TestFailure(
+                "--telecom-plan benötigt ein fest provisioniertes S6-Konto."
+            )
+
+        self.cdp.call("Page.enable")
+        self.cdp.call("Runtime.enable")
+        self.cdp.call("Network.enable")
+        self.cdp.navigate(self.config.base_url + "/4fach/index.php?next=command-post")
+        self._wait_for_frame("mainframe")
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                return Boolean(doc.querySelector(
+                    'button[name="login_flow"][value="existing"]'
+                ));
+                """,
+            ),
+            "Bestandskonto-Auswahl für den Fernmeldeplantest fehlt",
+        )
+        self.cdp.click(
+            "mainframe",
+            'button[name="login_flow"][value="existing"]',
+            "S6-Bestandskonto anmelden",
+        )
+        self.cdp.wait_for(
+            _frame_expression(
+                "mainframe",
+                """
+                return Boolean(
+                    doc.querySelector('input[name="benutzer"]')
+                    && doc.querySelector('input[name="kuerzel"]')
+                    && doc.querySelector('select[name="funktion"]')
+                    && doc.querySelector('input[name="kennwort1"]')
+                );
+                """,
+            ),
+            "Bestandskonto-Formular für den Fernmeldeplantest fehlt",
+        )
+        for selector, value, label, select in (
+            ('input[name="benutzer"]', self.config.login_name, "S6-Name", False),
+            ('input[name="kuerzel"]', self.config.login_code, "S6-Kürzel", False),
+            ('select[name="funktion"]', self.config.login_function, "S6-Funktion", True),
+            ('input[name="kennwort1"]', self.config.login_password, "S6-Kennwort", False),
+        ):
+            self.cdp.set_value(
+                "mainframe", selector, value, label, select=select
+            )
+        self.cdp.click(
+            "mainframe",
+            'button.estab-button-primary[type="submit"]',
+            "S6-Bestandskonto absenden",
+        )
+        operations_url = self.config.base_url + "/4fach/fuehrungsstelle.php"
+        operations_path = urllib.parse.urlsplit(operations_url).path
+        operations_path_literal = json.dumps(operations_path)
+        self.cdp.wait_for(
+            f"""
+            document.readyState === "complete" &&
+            window === window.top &&
+            location.pathname === {operations_path_literal} &&
+            Boolean(document.querySelector("[data-estab-telecom-editor]")) &&
+            Boolean(document.querySelector("[data-estab-active-telecom-plan]")) &&
+            Boolean(document.querySelector(".estab-telecom-start-form"))
+            """,
+            "Command-Post wurde nach Anmeldung nicht als Top-Level-Seite geöffnet",
+        )
+        labels = self.cdp.evaluate(
+            """
+            Array.from(document.querySelectorAll(
+                '[data-estab-telecom-entry-form] select[name="medium"] option'
+            )).map(option => option.textContent.trim()).filter(Boolean)
+            """
+        )
+        # The entry editor exists only after cloning, so the active page first
+        # proves the explicit clone action and immutable source presentation.
+        self._truth(
+            labels == [],
+            "aktiver Fernmeldeplan zeigte unerwartet einen direkten Wegeeditor.",
+        )
+        active_plan_state = self.cdp.evaluate(
+            """
+            (() => {
+                const active = document.querySelector(
+                    '[data-estab-active-telecom-plan]'
+                );
+                const validity = active?.querySelector(
+                    '[data-estab-telecom-header-validity]'
+                );
+                const normalize = value => String(value || "")
+                    .replace(/\\s+/g, " ").trim();
+                const routes = Array.from(active?.querySelectorAll(
+                    '.estab-tool-table tbody tr'
+                ) || []).map(row => ({
+                    station: normalize(row.querySelector(
+                        '[data-label="Betriebsstelle"]'
+                    )?.textContent),
+                    callsign: normalize(row.querySelector(
+                        '[data-label="Rufname"]'
+                    )?.textContent),
+                    technical: normalize(row.querySelector(
+                        '[data-label="Medium und technische Angaben"]'
+                    )?.textContent),
+                    traffic: normalize(row.querySelector(
+                        '[data-label="Verkehrsform"]'
+                    )?.textContent),
+                    notes: normalize(row.querySelector(
+                        '[data-label="Vermerke"]'
+                    )?.textContent)
+                }));
+                return active ? {
+                    origin: normalize(active.querySelector(
+                        '[data-estab-telecom-header-origin]'
+                    )?.textContent),
+                    validFrom: validity?.dataset.estabValidFrom || "",
+                    validUntil: validity?.dataset.estabValidUntil || "",
+                    lead: normalize(active.querySelector(
+                        '[data-estab-telecom-header-lead]'
+                    )?.textContent),
+                    remarks: normalize(active.querySelector(
+                        '[data-estab-telecom-header-remarks]'
+                    )?.textContent),
+                    routes
+                } : null;
+            })()
+            """
+        )
+        self._truth(
+            isinstance(active_plan_state, dict)
+            and bool(active_plan_state.get("origin"))
+            and bool(active_plan_state.get("validFrom"))
+            and bool(active_plan_state.get("lead"))
+            and bool(active_plan_state.get("remarks"))
+            and isinstance(active_plan_state.get("routes"), list)
+            and len(active_plan_state["routes"]) >= 1,
+            "aktive Fernmeldeplanfassung war vor dem Klonen nicht vollständig lesbar.",
+        )
+        self._assert_tool_page_layout(
+            "aktiver S6-Fernmeldeplan bei 1280×800 px",
+            "[data-estab-dv-operations]",
+            mobile=False,
+            require_responsive_table=True,
+        )
+        self.cdp.click(
+            None,
+            ".estab-telecom-start-form button.estab-button-primary",
+            "Bearbeitung des aktiven Fernmeldeplans starten",
+        )
+        self.cdp.wait_for(
+            """
+            document.readyState === "complete" &&
+            Boolean(document.querySelector("[data-estab-telecom-draft]")) &&
+            Boolean(document.querySelector(
+                '[data-estab-telecom-entry-mode="edit"]'
+            )) &&
+            !document.querySelector(".estab-telecom-start-form")
+            """,
+            "vollständig kopierter Fernmeldeplanentwurf fehlt",
+        )
+        cloned_plan_state = self.cdp.evaluate(
+            """
+            (() => {
+                const header = document.querySelector(
+                    'form:has(input[name="operation_action"]'
+                    + '[value="update_plan"])'
+                );
+                const normalize = value => String(value || "")
+                    .replace(/\\s+/g, " ").trim();
+                const routes = Array.from(document.querySelectorAll(
+                    '[data-estab-telecom-entry-mode="edit"]'
+                )).map(form => {
+                    const medium = form.elements.medium;
+                    const technical = [
+                        medium?.selectedOptions[0]?.textContent,
+                        form.elements.kanal?.value,
+                        form.elements.bandlage?.value
+                    ].map(normalize).filter(Boolean).join(" · ");
+                    return {
+                        station: normalize(form.elements.betriebsstelle?.value),
+                        callsign: normalize(form.elements.rufname?.value),
+                        technical,
+                        traffic: normalize(form.elements.verkehrsform?.value),
+                        notes: [
+                            form.elements.besondere_vermerke?.value,
+                            form.elements.bemerkungen?.value
+                        ].map(normalize).filter(Boolean).join(" ")
+                    };
+                });
+                return header ? {
+                    origin: normalize(header.elements.herkunft?.value),
+                    validFrom: header.elements.gueltig_ab?.value || "",
+                    validUntil: header.elements.gueltig_bis?.value || "",
+                    lead: normalize(header.elements.betriebsleitung?.value),
+                    remarks: normalize(header.elements.bemerkungen?.value),
+                    routes
+                } : null;
+            })()
+            """
+        )
+        self._equal(
+            cloned_plan_state,
+            active_plan_state,
+            "vollständige Vorbelegung aller sichtbaren Kopfwerte und Fernmeldewege",
+        )
+        pristine_guard_state = self.cdp.evaluate(
+            """
+            (() => {
+                const addForm = document.querySelector(
+                    '[data-estab-telecom-entry-mode="add"]'
+                );
+                const placeholder = addForm?.querySelector(
+                    'select[name="medium"] option[value=""]'
+                );
+                const navigation = document.createElement("nav");
+                navigation.setAttribute("data-estab-navigation", "");
+                const link = document.createElement("a");
+                link.href = location.href;
+                link.textContent = "Dirty-Guard-Prüfung";
+                link.addEventListener("click", event => event.preventDefault());
+                navigation.append(link);
+                document.body.append(navigation);
+                const originalConfirm = window.confirm;
+                let confirms = 0;
+                try {
+                    window.confirm = () => { confirms += 1; return false; };
+                    link.dispatchEvent(new MouseEvent("click", {
+                        bubbles: true, cancelable: true
+                    }));
+                } finally {
+                    window.confirm = originalConfirm;
+                    navigation.remove();
+                }
+                return {
+                    selected: placeholder?.selected === true,
+                    defaultSelected: placeholder?.defaultSelected === true,
+                    confirms
+                };
+            })()
+            """
+        )
+        self._equal(
+            pristine_guard_state,
+            {"selected": True, "defaultSelected": True, "confirms": 0},
+            "frischer Entwurf ohne falsche Verlustwarnung durch Medien-Platzhalter",
+        )
+        inherited_route = self.cdp.evaluate(
+            """
+            (() => {
+                const details = document.querySelector(
+                    '.estab-telecom-route[data-estab-telecom-entry-id]'
+                );
+                const form = details?.querySelector(
+                    '[data-estab-telecom-entry-mode="edit"]'
+                );
+                const summary = details?.querySelector(':scope > summary');
+                const marker = summary
+                    ? getComputedStyle(summary, '::before')
+                    : null;
+                return details && form && summary ? {
+                    id: details.id,
+                    entryId: details.dataset.estabTelecomEntryId,
+                    station: form.elements.betriebsstelle.value,
+                    callsign: form.elements.rufname.value,
+                    medium: form.elements.medium.value,
+                    disclosureWidth: marker?.borderLeftWidth,
+                    disclosureStyle: marker?.borderLeftStyle
+                } : null;
+            })()
+            """
+        )
+        self._truth(
+            isinstance(inherited_route, dict)
+            and bool(inherited_route.get("id"))
+            and bool(inherited_route.get("entryId"))
+            and bool(inherited_route.get("station"))
+            and bool(inherited_route.get("callsign"))
+            and bool(inherited_route.get("medium"))
+            and inherited_route.get("disclosureWidth") not in (None, "0px")
+            and inherited_route.get("disclosureStyle") == "solid",
+            "übernommener Fernmeldeweg oder sichtbare Aufklappmarkierung fehlt.",
+        )
+        inherited_route_id = str(inherited_route["id"])
+        inherited_entry_id = str(inherited_route["entryId"])
+        inherited_selector = "#" + inherited_route_id
+        self.cdp.click(
+            None,
+            inherited_selector + " > summary",
+            "übernommenen Fernmeldeweg sichtbar aufklappen",
+        )
+        inherited_selector_literal = json.dumps(inherited_selector)
+        self.cdp.wait_for(
+            f"""
+            (() => {{
+                const details = document.querySelector(
+                    {inherited_selector_literal}
+                );
+                const input = details?.querySelector(
+                    'input[name="rufname"]'
+                );
+                const rect = input?.getBoundingClientRect();
+                return Boolean(details?.open && rect && rect.width > 0 &&
+                    rect.height > 0 && rect.bottom > 0 && rect.top < innerHeight);
+            }})()
+            """,
+            "aufgeklappter Fernmeldeweg wurde nicht sichtbar bedienbar",
+        )
+
+        edited_callsign = "Browser-geprüfter Rufname"
+        self.cdp.set_value(
+            None,
+            inherited_selector + ' input[name="rufname"]',
+            edited_callsign,
+            "Rufname des übernommenen Fernmeldewegs",
+        )
+        self.cdp.click(
+            None,
+            inherited_selector
+            + ' form[data-estab-telecom-entry-mode="edit"] '
+            + 'button[type="submit"]',
+            "Änderungen am übernommenen Fernmeldeweg speichern",
+        )
+        inherited_entry_literal = json.dumps(inherited_entry_id)
+        inherited_hash_literal = json.dumps("#" + inherited_route_id)
+        edited_callsign_literal = json.dumps(edited_callsign)
+        self.cdp.wait_for(
+            f"""
+            (() => {{
+                const details = document.querySelector(
+                    {inherited_selector_literal}
+                );
+                const rect = details?.getBoundingClientRect();
+                const params = new URLSearchParams(location.search);
+                return document.readyState === "complete" &&
+                    params.get("result") === "plan_entry_updated" &&
+                    params.get("entry") === {inherited_entry_literal} &&
+                    location.hash === {inherited_hash_literal} &&
+                    details?.open === true && rect && rect.bottom > 0 &&
+                    rect.top < innerHeight &&
+                    details.querySelector('input[name="rufname"]')?.value ===
+                        {edited_callsign_literal} &&
+                    details.querySelector(':scope > summary')?.textContent
+                        .includes({edited_callsign_literal}) &&
+                    Boolean(document.querySelector(
+                        '.estab-tool-feedback-success[role="status"]'
+                    ));
+            }})()
+            """,
+            "gespeicherter Fernmeldeweg kehrte nicht geöffnet an seine Position zurück",
+        )
+
+        labels = self.cdp.evaluate(
+            """
+            Array.from(document.querySelectorAll(
+                '[data-estab-telecom-entry-mode="add"] '
+                + 'select[name="medium"] option'
+            )).map(option => option.textContent.trim()).filter(Boolean)
+            """
+        )
+        self._equal(
+            labels,
+            [
+                "Medium auswählen",
+                "Fernsprecher",
+                "Funk",
+                "Melder",
+                "Telefax",
+                "Fernschreiber",
+                "Datenübertragung",
+            ],
+            "ausgeschriebene Medien im Fernmeldeplanentwurf",
+        )
+        add_details_selector = (
+            'details.estab-telecom-section:has('
+            + 'form[data-estab-telecom-entry-mode="add"])'
+        )
+        self.cdp.click(
+            None,
+            add_details_selector + " > summary",
+            "Formular für einen weiteren Fernmeldeweg sichtbar öffnen",
+        )
+        add_select = (
+            '[data-estab-telecom-entry-mode="add"] select[name="medium"]'
+        )
+        self.cdp.wait_for(
+            f"""
+            (() => {{
+                const details = document.querySelector(
+                    {json.dumps(add_details_selector)}
+                );
+                const select = details?.querySelector('select[name="medium"]');
+                const rect = select?.getBoundingClientRect();
+                return Boolean(details?.open && rect && rect.width > 0 &&
+                    rect.height > 0 && rect.bottom > 0 && rect.top < innerHeight);
+            }})()
+            """,
+            "Formular für den neuen Fernmeldeweg ist nicht sichtbar",
+        )
+        self.cdp.set_value(None, add_select, "Fu", "Medium Funk", select=True)
+        radio_fields = self.cdp.evaluate(
+            """
+            (() => {
+                const form = document.querySelector(
+                    '[data-estab-telecom-entry-mode="add"]'
+                );
+                const state = name => {
+                    const wrapper = form.querySelector(
+                        '[data-estab-telecom-field="' + name + '"]'
+                    );
+                    const input = wrapper.querySelector('input');
+                    return {hidden: wrapper.hidden, disabled: input.disabled,
+                        required: input.required};
+                };
+                return {channel: state('kanal'), band: state('bandlage'),
+                    traffic: state('verkehrsform')};
+            })()
+            """
+        )
+        self._truth(
+            isinstance(radio_fields, dict)
+            and radio_fields.get("channel") == {
+                "hidden": False, "disabled": False, "required": True
+            }
+            and radio_fields.get("band") == {
+                "hidden": False, "disabled": False, "required": True
+            }
+            and radio_fields.get("traffic") == {
+                "hidden": False, "disabled": False, "required": True
+            },
+            "Funk blendet Kanal, Bandlage oder Verkehrsform nicht korrekt ein.",
+        )
+        self.cdp.set_value(None, add_select, "Me", "Medium Melder", select=True)
+        messenger_fields = self.cdp.evaluate(
+            """
+            (() => {
+                const form = document.querySelector(
+                    '[data-estab-telecom-entry-mode="add"]'
+                );
+                const state = name => {
+                    const wrapper = form.querySelector(
+                        '[data-estab-telecom-field="' + name + '"]'
+                    );
+                    const input = wrapper.querySelector('input');
+                    return {hidden: wrapper.hidden, disabled: input.disabled,
+                        required: input.required};
+                };
+                return {channel: state('kanal'), band: state('bandlage'),
+                    traffic: state('verkehrsform')};
+            })()
+            """
+        )
+        self._truth(
+            isinstance(messenger_fields, dict)
+            and messenger_fields.get("channel") == {
+                "hidden": True, "disabled": True, "required": False
+            }
+            and messenger_fields.get("band") == {
+                "hidden": True, "disabled": True, "required": False
+            }
+            and messenger_fields.get("traffic") == {
+                "hidden": False, "disabled": False, "required": True
+            },
+            "Melder blendet unpassende Funkfelder nicht korrekt aus.",
+        )
+
+        messenger_station = "Browser-Melderziel"
+        messenger_callsign = "Browser-Melderrufname"
+        messenger_traffic = "Persönliche Beförderung"
+        add_form_selector = '[data-estab-telecom-entry-mode="add"]'
+        for selector, value, description in (
+            (
+                add_form_selector + ' input[name="betriebsstelle"]',
+                messenger_station,
+                "Betriebsstelle des neuen Melderwegs",
+            ),
+            (
+                add_form_selector + ' input[name="rufname"]',
+                messenger_callsign,
+                "Rufname des neuen Melderwegs",
+            ),
+            (
+                add_form_selector + ' input[name="verkehrsform"]',
+                messenger_traffic,
+                "Verkehrsform des neuen Melderwegs",
+            ),
+        ):
+            self.cdp.set_value(None, selector, value, description)
+        self.cdp.click(
+            None,
+            add_form_selector + ' button[type="submit"]',
+            "sichtbar ausgefüllten Melderweg hinzufügen",
+        )
+        messenger_station_literal = json.dumps(messenger_station)
+        messenger_callsign_literal = json.dumps(messenger_callsign)
+        added_route_id = self.cdp.wait_for(
+            f"""
+            (() => {{
+                if (document.readyState !== "complete") return "";
+                const params = new URLSearchParams(location.search);
+                if (params.get("result") !== "plan_entry_added") return "";
+                const details = Array.from(document.querySelectorAll(
+                    '.estab-telecom-route[data-estab-telecom-entry-id]'
+                )).find(candidate => {{
+                    const form = candidate.querySelector(
+                        '[data-estab-telecom-entry-mode="edit"]'
+                    );
+                    return form?.elements.betriebsstelle.value ===
+                        {messenger_station_literal} &&
+                        form?.elements.rufname.value ===
+                            {messenger_callsign_literal} &&
+                        form?.elements.medium.value === "Me";
+                }});
+                return details?.id || "";
+            }})()
+            """,
+            "neu angelegter Melderweg wurde nicht dargestellt",
+        )
+        self._truth(
+            isinstance(added_route_id, str) and added_route_id.startswith(
+                "fernmeldeweg-"
+            ),
+            "neu angelegter Melderweg besitzt keine stabile UI-Identität.",
+        )
+        added_selector = "#" + added_route_id
+        self.cdp.click(
+            None,
+            added_selector + " > summary",
+            "neu angelegten Melderweg sichtbar öffnen",
+        )
+        self.cdp.wait_for(
+            f"""
+            (() => {{
+                const details = document.querySelector(
+                    {json.dumps(added_selector)}
+                );
+                const summary = details?.querySelector(':scope > summary');
+                return Boolean(details?.open && summary &&
+                    summary.textContent.includes({messenger_station_literal}) &&
+                    summary.textContent.includes({messenger_callsign_literal}) &&
+                    summary.textContent.includes("Melder"));
+            }})()
+            """,
+            "neu angelegter Melderweg ist nicht sichtbar und vollständig",
+        )
+        delete_dialog = self.cdp.click(
+            None,
+            added_selector
+            + ' button[data-estab-confirm="delete-telecom-entry"]',
+            "neu angelegten Melderweg löschen",
+            dialog_accept=True,
+        )
+        self._truth(
+            isinstance(delete_dialog, dict)
+            and delete_dialog.get("type") == "confirm"
+            and "wirklich" in str(delete_dialog.get("message", "")),
+            "Löschen eines Fernmeldewegs wurde nicht verständlich bestätigt.",
+        )
+        self.cdp.wait_for(
+            f"""
+            document.readyState === "complete" &&
+            new URLSearchParams(location.search).get("result") ===
+                "plan_entry_deleted" &&
+            !document.querySelector({json.dumps(added_selector)}) &&
+            !Array.from(document.querySelectorAll(
+                '[data-estab-telecom-entry-mode="edit"] '
+                + 'input[name="betriebsstelle"]'
+            )).some(input => input.value === {messenger_station_literal}) &&
+            Boolean(document.querySelector(
+                '.estab-tool-feedback-success[role="status"]'
+            ))
+            """,
+            "bestätigt gelöschter Melderweg blieb im Entwurf sichtbar",
+        )
+
+        discarded_header_value = "Browser-verwerfbare Kopfänderung"
+        self.cdp.set_value(
+            None,
+            'form:has(input[name="operation_action"][value="update_plan"]) '
+            + 'input[name="herkunft"]',
+            discarded_header_value,
+            "vorübergehend geänderte Herkunft der Folgeversion",
+        )
+        location_before_block = self.cdp.evaluate("location.href")
+        self.cdp.click(
+            None,
+            ".estab-telecom-publish button.estab-button-primary",
+            "Aktivierung mit ungespeicherten Kopfdaten versuchen",
+        )
+        self.cdp.wait_for(
+            f"""
+            (() => {{
+                const warning = document.querySelector(
+                    '[data-estab-telecom-publish-warning]'
+                );
+                const style = warning && getComputedStyle(warning);
+                return location.href === {json.dumps(location_before_block)} &&
+                    Boolean(document.querySelector(
+                        '[data-estab-telecom-draft]'
+                    )) && warning && !warning.hidden &&
+                    style.display !== "none" && style.visibility !== "hidden" &&
+                    warning.textContent.includes("ungespeicherte Änderungen") &&
+                    warning.dataset.estabTelecomDirtyAction === "update_plan" &&
+                    document.activeElement === warning;
+            }})()
+            """,
+            "ungespeicherte Änderungen blockierten die Aktivierung nicht inline",
+        )
+        self.cdp.click(
+            None,
+            inherited_selector + " > summary",
+            "übernommenen Fernmeldeweg für teilformularübergreifenden Schutz öffnen",
+        )
+        resolved_callsign = "Browser-geprüfter Mehrfachentwurf"
+        self.cdp.set_value(
+            None,
+            inherited_selector + ' input[name="rufname"]',
+            resolved_callsign,
+            "gleichzeitig geänderter Rufname des Fernmeldewegs",
+        )
+        location_before_cross_form_block = self.cdp.evaluate("location.href")
+        self.cdp.click(
+            None,
+            inherited_selector
+            + ' form[data-estab-telecom-entry-mode="edit"] '
+            + 'button[type="submit"]',
+            "Weg speichern während andere Kopfdaten ungespeichert sind",
+        )
+        self.cdp.wait_for(
+            f"""
+            (() => {{
+                const warning = document.querySelector(
+                    '[data-estab-telecom-draft-warning]'
+                );
+                const headerForm = document.querySelector(
+                    'form:has(input[name="operation_action"]'
+                    + '[value="update_plan"])'
+                );
+                return location.href ===
+                        {json.dumps(location_before_cross_form_block)} &&
+                    warning && !warning.hidden &&
+                    warning.dataset.estabTelecomDirtyAction === "update_plan" &&
+                    warning.textContent.includes("Kopfdaten") &&
+                    warning.querySelector(
+                        '[data-estab-telecom-pending-action]'
+                    )?.textContent.includes("Änderungen am Weg speichern") &&
+                    headerForm?.classList.contains("estab-telecom-unsaved") &&
+                    document.activeElement === warning;
+            }})()
+            """,
+            "andere ungespeicherte Teilformulare blockierten die Wegeaktion nicht",
+        )
+        self.cdp.click(
+            None,
+            "[data-estab-telecom-continue-action]",
+            "andere Kopfdaten bewusst verwerfen und Wegeaktion fortsetzen",
+        )
+        resolved_callsign_literal = json.dumps(resolved_callsign)
+        authoritative_origin_literal = json.dumps(active_plan_state["origin"])
+        self.cdp.wait_for(
+            f"""
+            (() => {{
+                const params = new URLSearchParams(location.search);
+                const route = document.querySelector(
+                    {inherited_selector_literal}
+                );
+                const routeCallsign = route?.querySelector(
+                    'input[name="rufname"]'
+                );
+                const headerOrigin = document.querySelector(
+                    'form:has(input[name="operation_action"]'
+                    + '[value="update_plan"]) input[name="herkunft"]'
+                );
+                return document.readyState === "complete" &&
+                    params.get("result") === "plan_entry_updated" &&
+                    params.get("entry") === {inherited_entry_literal} &&
+                    routeCallsign?.value === {resolved_callsign_literal} &&
+                    routeCallsign?.defaultValue ===
+                        {resolved_callsign_literal} &&
+                    headerOrigin?.value === {authoritative_origin_literal} &&
+                    headerOrigin?.defaultValue ===
+                        {authoritative_origin_literal} &&
+                    headerOrigin?.value !== {json.dumps(discarded_header_value)} &&
+                    Boolean(document.querySelector(
+                        '.estab-tool-feedback-success[role="status"]'
+                    ));
+            }})()
+            """,
+            "explizit fortgesetzte Wegeaktion verwarf nur die anderen Browserwerte",
+        )
+
+        header_value = "Browser-geprüfte Fernmeldeplanfolge"
+        self.cdp.set_value(
+            None,
+            'form:has(input[name="operation_action"][value="update_plan"]) '
+            + 'input[name="herkunft"]',
+            header_value,
+            "endgültige Herkunft der Folgeversion",
+        )
+        self.cdp.click(
+            None,
+            'form:has(input[name="operation_action"][value="update_plan"]) '
+            + 'button[type="submit"]',
+            "Kopfdaten des Entwurfs speichern",
+        )
+        header_literal = json.dumps(header_value)
+        self.cdp.wait_for(
+            f"""
+            document.readyState === "complete" &&
+            new URLSearchParams(location.search).get("result") ===
+                "plan_updated" &&
+            Boolean(document.querySelector(
+                '.estab-tool-feedback-success[role="status"]'
+            )) &&
+            document.querySelector(
+                'form:has(input[value="update_plan"]) input[name="herkunft"]'
+            )?.value === {header_literal} &&
+            document.querySelector(
+                'form:has(input[value="update_plan"]) input[name="herkunft"]'
+            )?.defaultValue === {header_literal}
+            """,
+            "bearbeitete Kopfdaten wurden nicht im Entwurf gespeichert",
+        )
+
+        self.cdp.call(
+            "Emulation.setDeviceMetricsOverride",
+            {
+                "width": 390,
+                "height": 844,
+                "deviceScaleFactor": 1,
+                "mobile": False,
+                "screenWidth": 390,
+                "screenHeight": 844,
+            },
+        )
+        self._assert_tool_page_layout(
+            "S6-Fernmeldeplanentwurf bei 390×844 px",
+            "[data-estab-dv-operations]",
+            mobile=True,
+            require_responsive_table=True,
+        )
+        self.cdp.click(
+            None,
+            ".estab-telecom-publish button.estab-button-primary",
+            "bearbeiteten Fernmeldeplan aktiv schalten",
+        )
+        activation_outcome = self.cdp.wait_for(
+            """
+            (() => {
+                const result = new URLSearchParams(location.search).get(
+                    "result"
+                );
+                if (result === "plan_activated") return "activated";
+                const warning = document.querySelector(
+                    '[data-estab-telecom-publish-warning]'
+                );
+                if (warning && !warning.hidden) {
+                    return "blocked:" + (
+                        warning.dataset.estabTelecomDirtyAction || "unknown"
+                    );
+                }
+                return "";
+            })()
+            """,
+            "Aktivierung löste weder Navigation noch eine Inlinewarnung aus",
+        )
+        self._equal(
+            activation_outcome,
+            "activated",
+            "Ergebnis der Aktivierung des gespeicherten Entwurfs",
+        )
+        self.cdp.wait_for(
+            f"""
+            document.readyState === "complete" &&
+            !document.querySelector("[data-estab-telecom-draft]") &&
+            Boolean(document.querySelector(".estab-telecom-start-form")) &&
+            document.querySelector("[data-estab-active-telecom-plan]")
+                ?.textContent.includes({header_literal}) &&
+            Boolean(document.querySelector(
+                '[data-estab-telecom-history-state="replaced"]'
+            ))
+            """,
+            "bearbeitete Folgeversion wurde nicht zum aktiven Plan",
+        )
+        history_state = self.cdp.evaluate(
+            """
+            (() => {
+                const history = document.querySelector(
+                    '[data-estab-telecom-history]'
+                );
+                const active = document.querySelector(
+                    '[data-estab-active-telecom-plan]'
+                );
+                return history ? {
+                    versions: history.querySelectorAll(
+                        '[data-estab-telecom-history-version]'
+                    ).length,
+                    replaced: history.querySelectorAll(
+                        '[data-estab-telecom-history-state="replaced"]'
+                    ).length,
+                    editableControls: history.querySelectorAll(
+                        'form, input, select, textarea, button'
+                    ).length,
+                    hasRoute: history.textContent.includes("CI Betriebsstelle"),
+                    hasHeading: history.textContent.includes(
+                        "Versionshistorie Fernmeldeplan"
+                    ),
+                    hasSpecialNote: history.textContent.includes(
+                        "Aktiver besonderer Vermerk"
+                    ),
+                    hasRouteNote: history.textContent.includes(
+                        "Aktiver Workflow-Fixpunkt"
+                    ),
+                    hasSpecialLabel: history.textContent.includes(
+                        "Besondere Vermerke:"
+                    ),
+                    hasRouteNoteLabel: history.textContent.includes(
+                        "Bemerkungen zum Weg:"
+                    ),
+                    activeHeaderNote: active?.querySelector(
+                        '[data-estab-telecom-header-remarks]'
+                    )?.textContent.trim() || ""
+                } : null;
+            })()
+            """
+        )
+        self._truth(
+            isinstance(history_state, dict)
+            and int(history_state.get("versions", 0)) >= 2
+            and int(history_state.get("replaced", 0)) >= 2
+            and history_state.get("editableControls") == 0
+            and history_state.get("hasRoute") is True
+            and history_state.get("hasHeading") is True
+            and history_state.get("hasSpecialNote") is True
+            and history_state.get("hasRouteNote") is True
+            and history_state.get("hasSpecialLabel") is True
+            and history_state.get("hasRouteNoteLabel") is True
+            and history_state.get("activeHeaderNote")
+            == "Aktiver Workflow-Fixpunkt",
+            "Kopf- oder Wegehinweise fehlen in der kompakten Read-only-Historie.",
+        )
+        self.cdp.click(
+            None,
+            "[data-estab-logout-form] button",
+            "S6 nach dem Fernmeldeplantest abmelden",
         )
 
     def run(self, auth_recovery_only: bool = False) -> None:
@@ -9723,6 +10598,14 @@ def parse_arguments() -> argparse.Namespace:
             "responsives Layout testen"
         ),
     )
+    parser.add_argument(
+        "--telecom-plan",
+        action="store_true",
+        help=(
+            "nur den versionierten S6-Fernmeldeplan mit Klonen, "
+            "Medienfeldern und Veröffentlichung testen"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -9747,12 +10630,14 @@ def main() -> int:
                 arguments.handbook_only,
                 arguments.message_suggestions,
                 arguments.message_overview,
+                arguments.telecom_plan,
             )
         ) > 1:
             raise TestFailure(
                 "--overview-only, --auth-recovery-only, --export-only, "
                 "--bos-only, --handbook-only und "
-                "--message-suggestions sowie --message-overview "
+                "--message-suggestions, --message-overview sowie "
+                "--telecom-plan "
                 "können nicht kombiniert werden."
             )
         config = TestConfig.from_environment(
@@ -9783,6 +10668,8 @@ def main() -> int:
             acceptance.run_message_suggestions()
         elif arguments.message_overview:
             acceptance.run_message_overview()
+        elif arguments.telecom_plan:
+            acceptance.run_telecom_plan()
         elif arguments.export_only:
             if not config.admin_user or not config.admin_password:
                 raise TestFailure(

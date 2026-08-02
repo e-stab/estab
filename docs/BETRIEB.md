@@ -446,12 +446,27 @@ ihn anschließend wieder her.
 podman compose run --rm migrate
 ```
 
-Ein bereits aktueller Bestand meldet alle zweiundzwanzig Migrationen
-einschließlich `116-standard-categories.sql` als vorhanden und
+Ein bereits aktueller Bestand meldet alle dreiundzwanzig Migrationen
+einschließlich `117-telecom-draft-discard.sql` als vorhanden und
 führt trotzdem den vollständigen Read-only-Schematest aus. Die Ausgabe muss
 `Post-migration schema verification passed` und anschließend
 `All schema migrations are applied` enthalten. Erst danach sollte der Stack
 fachlich freigegeben werden.
+
+Migration 117 ermöglicht es, einen nicht mehr benötigten Fernmeldeplanentwurf
+kontrolliert zu verwerfen. Kopf und Wege bleiben dabei als unveränderlicher
+Nachweis erhalten; anschließend kann S6 wieder einen vollständigen Entwurf aus
+dem weiterhin aktiven Plan erzeugen. Der Trigger vergleicht auch nullable
+Freigabefelder NULL-sicher und lässt `ENTWURF -> AKTIV` nur innerhalb des
+gespeicherten, am Endzeitpunkt inklusiven Gültigkeitsfensters zu. Der
+Vergleich verwendet wie die beiden `DATETIME(0)`-Spalten volle
+Datenbanksekunden; Nachkommastellen dürfen die gespeicherte Endsekunde nicht
+vorzeitig abschneiden. Nullable Bemerkungen werden zusätzlich binär verglichen,
+damit auch reine Groß-/Kleinschreibungs- oder Akzentänderungen die historische
+Evidenz nicht unbemerkt verändern. Der
+Anwendungsweg prüft dies vor dem Ersetzen der laufenden Version; Anlage und
+Kopfdatenänderungen bleiben als zweckgebundener Initial- beziehungsweise
+Vorher-/Nachher-Snapshot in der Ereigniskette nachvollziehbar.
 
 Migration 100 ergänzt den UTC-Zeitstempel und Index für die
 Aktivitätsübersicht. Da vor dem Upgrade bereits aktive SIDs keine verlässliche

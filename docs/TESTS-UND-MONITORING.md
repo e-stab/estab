@@ -122,7 +122,7 @@ administrativen Synology-/Docker-Aufruf vorgesehene Rootpfad
 `/var/lib/estab-deploy` bleibt zusätzlich im statischen Vertrag gebunden; die
 Tests schreiben dafür nicht in das `/var/lib` des Testcontainers.
 
-Die Suite lintet alle 269 aktiven PHP-Dateien und führt die Prüfungen unter
+Die Suite lintet derzeit 274 aktive PHP-Dateien und führt die Prüfungen unter
 `tests/php/` aus. Dazu gehören unter anderem:
 
 - die versiegelten, deterministischen Provenienzmanifeste für 13
@@ -299,16 +299,16 @@ tests/integration/ci.sh
 ```
 
 Der am 2. August 2026 vollständig beendete Abschlusslauf führte
-`bash tests/integration/ci.sh` einschließlich Migration 116 aus und endete nach
-dem vollständigen Backup-/Restore-Roundtrip mit Exitcode 0 und
-`CI integration: OK`. Sein protokollierter Kernstand lautet:
+`bash tests/integration/ci.sh` mit allen 23 Migrationen bis einschließlich
+Migration 117 aus und endete nach dem vollständigen Backup-/Restore-Roundtrip
+mit Exitcode 0 und `CI integration: OK`. Sein protokollierter Kernstand lautet:
 
 | Teilnachweis | Ergebnis |
 | --- | --- |
 | Schema | 42 Prüfungen |
 | Einsatzdomäne | 55 Assertions |
 | DV-Evidenz | 51 Assertions |
-| DV-Operations einschließlich `STRICT`/`LOOSE` | 145 Assertions, 80 Ereignisse |
+| DV-Operations einschließlich `STRICT`/`LOOSE` und Fernmeldeplan | 171 Assertions, 99 Ereignisse |
 | Optionale Zugangsschichten | 25 Assertions |
 | Benutzerverwaltung | 98 Assertions |
 | Kennwortrichtlinie gegen MariaDB | 66 Assertions |
@@ -318,20 +318,22 @@ dem vollständigen Backup-/Restore-Roundtrip mit Exitcode 0 und
 | Sichtbare Anhangdarstellung | 11 Assertions |
 | Einsatzbezogene Nachrichtenvorschläge | 29 Assertions |
 | Nachrichtensuche mit 10.000 Zielzeilen | 145 Assertions |
+| Echter Browser | Chrome 150: allgemeiner UI-Lauf und S6-Fernmeldeplan-Versionierung erfolgreich; Fernmeldeplan zusätzlich bei `390 × 844` CSS-Pixeln geprüft |
 
 HTTP-Surface, Selbstregistrierung, Auth-Smoke, Logbücher, Kategorien,
 Nachrichtenworkflow, Administrationsworkflow sowie Backup und Restore endeten
-ebenfalls erfolgreich. Ein Browser-Steuerwerkzeug war in diesem Lauf nicht
-verfügbar. Deshalb wurde weder ein Pflicht-Browser-Gate ausgeführt noch die
-Bedienung der `STRICT`/`LOOSE`-Umschaltung, ihre Warnanzeige oder ein
-Cross-Rollen-Schreibweg im echten Browser als bestanden gewertet. Diese
-Modusabnahme bleibt manuell offen.
+ebenfalls erfolgreich. Das verpflichtende Browser-Gate lief in Chrome 150 und
+bestand die allgemeine UI sowie den vollständigen S6-Fernmeldeplan-Ablauf.
+Ein dediziertes Szenario für die Bedienung der `STRICT`/`LOOSE`-Umschaltung,
+ihre Warnanzeige oder einen Cross-Rollen-Schreibweg enthält es nicht. Diese
+Modusabnahme bleibt manuell beziehungsweise als eigene Automatisierung offen.
 
-Die unmittelbar danach ausgeführte vollständige statische Suite endete mit
-Exitcode 0, lintete alle 269 aktiven PHP-Dateien und bestätigte insbesondere
-80 Assertions zum Berechtigungsmodus, 29 Assertions zum exakten
-LOOSE-Anhang-Scope und 222 Assertions zum Single-Dispatch-Vertrag. Dieser
-lokale Podman-Lauf fand nicht auf einem
+Die anschließend separat mit der festgelegten unprivilegierten
+Containeridentität ausgeführte statische Suite endete mit Exitcode 0, lintete
+274 aktive PHP-Dateien und bestätigte insbesondere 80 Assertions zum
+Berechtigungsmodus, 29 Assertions zum exakten LOOSE-Anhang-Scope und 222
+Assertions zum Single-Dispatch-Vertrag. Dieser lokale Podman-Lauf fand nicht
+auf einem
 nachgewiesenen SELinux-Enforcing-System statt und gilt daher ausdrücklich nicht
 als SELinux-Relabel-Nachweis.
 
@@ -393,7 +395,7 @@ Schreibgrenzen sowie die amtlichen Nachrichtenvordruckfelder aus Migration 98.
 Der Schema-Test startet Migration 98 zweimal, prüft die exakt markierten
 Spalten `11_rufnummer` und `12_betreff`, deren leere Bestandswerte und den
 unveränderten historischen Nachrichteninhalt. Readiness und `verify.sql`
-verlangen alle zweiundzwanzig Ledgerzeilen einschließlich Version 116, die
+verlangen alle dreiundzwanzig Ledgerzeilen einschließlich Version 117, die
 kanonische Berechtigungsmodusspalte samt Guard-/Fachtriggern sowie die exakten
 drei Such-/Listenindizes. Migration 99 wird vollständig, nach einem
 simulierten phasenweisen Abbruch und nach einer fremden Indexkollision
@@ -511,6 +513,13 @@ scheinbar fehlenden Vorgaben ergänzt werden. Weil die Saat nur mit der
 checksumgebundenen Einmalmigration ausgeführt wird, bleiben auch spätere
 Änderungen oder Löschungen nach weiteren Migrator- und Containerstarts
 erhalten.
+
+Migration 117 ergänzt als dreiundzwanzigste Ledgerzeile die ausschließlich
+inhaltserhaltende Transition `ENTWURF -> ERSETZT` für Fernmeldepläne. Der
+Schematest verlangt unveränderte Kopf- und leere Freigabefelder, weist jede
+kombinierte Mutation ab und prüft, dass die vorhandenen Eintragstrigger die
+archivierten Wege anschließend weder ändern noch löschen lassen. Zweitlauf,
+Readiness und `verify.sql` müssen denselben Trigger- und Ledgerstand bestätigen.
 
 Anschließend migriert der Hauptlauf ein leeres Schema,
 führt PHP-, Datenbank-, Rollen-, HTTP- und Administrationsnachweise aus, prüft
@@ -801,11 +810,12 @@ Datenbanktrigger jeweils positiv und negativ erreichen. Vor jedem weiteren
 rollenbezogenen Integrationstest wird der Einsatz explizit auf `STRICT`
 zurückgesetzt, damit eine lockere Fixture keine erwartete Ablehnung verdeckt.
 
-Im finalen Lauf mit Migration 116 stand kein Browser-Steuerwerkzeug zur
-Verfügung. Deshalb gibt es aus diesem Lauf keinen Browsernachweis für die
-Umschaltung zwischen `STRICT` und `LOOSE`, die sichtbare Moduswarnung oder
-einen Cross-Rollen-Schreibfall. Die statischen Verträge, die echte MariaDB und
-authentifizierte HTTP-Anforderungen waren erfolgreich; die Browserbedienung
+Im finalen Lauf bis Migration 117 stand Chrome 150 zur Verfügung und bestand
+den allgemeinen UI-Lauf sowie den S6-Fernmeldeplan-Ablauf. Dieser Lauf enthält
+jedoch keinen dedizierten Browsernachweis für die Umschaltung zwischen
+`STRICT` und `LOOSE`, die sichtbare Moduswarnung oder einen
+Cross-Rollen-Schreibfall. Die statischen Verträge, die echte MariaDB und
+authentifizierte HTTP-Anforderungen waren erfolgreich; die Modusbedienung
 gehört bis zu einem eigenen automatisierten Szenario in die manuelle
 Fachabnahme.
 
@@ -1856,6 +1866,46 @@ meldet ein echtes Fernmelderkonto an und beweist mit einem kurzlebigen,
 einsatzgebundenen Marker Fokusöffnung, Filterung, Pfeiltaste/Eingabetaste,
 Übernahme, freie Eingabe und Logout im echten Chrome; das Fixture wird auch
 bei einem Testabbruch entfernt.
+
+Der versionierte Fernmeldeplan hat einen eigenen mehrstufigen Nachweis.
+`tests/php/telecom_plan_security.php` fixiert die sechs ausgeschriebenen
+Medien, die Funk-spezifischen Kanal-/Bandlagefelder, die allgemeine
+Verkehrsform sowie die serverseitige Normalisierung manipulierter, für das
+Medium unpassender Felder. Der Test prüft außerdem die Controlleraktionen,
+CSRF-Reihenfolge, HTML-sichere Ausgabe, Zustandswert, Entwurfsdarstellung und
+Langtexte in beiden Nachrichteneditoren. Die UI-Abnahme
+`tests/browser/headless_ui.py --telecom-plan` lief erfolgreich in Chrome 150.
+Sie vergleicht nach dem Bearbeitungsstart alle sichtbaren Kopfwerte und
+sämtliche Wege mit der aktiven Quelle, weist für den unberührten
+Medien-Platzhalter eine ausbleibende falsche Verlustwarnung nach, öffnet einen
+übernommenen Weg sichtbar, speichert ihn mit Positionsrückkehr, legt einen
+weiteren Weg an und entfernt ihn nach Bestätigung. Sie schaltet zwischen Funk
+und Melder um und prüft, dass Kanal/Gruppe und Bandlage nur für Funk erscheinen.
+Eine Aktivierung bei ungespeicherten Teilformularen bleibt mit einer Meldung
+im Entwurf stehen. Sind Kopf und Weg gleichzeitig geändert, belegt der Browser
+zusätzlich den ausdrücklich bestätigten Auflösungsweg: nur die gewählte
+Wegeaktion wird gespeichert und der anderswo ungespeicherte Browserwert
+bewusst verworfen. Nach der Veröffentlichung bleiben Kopf- und
+Wegebemerkungen in aktiver Fassung und nur lesbarer Historie sichtbar. Bei
+`390 × 844` CSS-Pixeln bleiben Editor und Historie bedienbar und ohne
+horizontalen Seitenüberlauf.
+`tests/integration/dv_operations.php`
+veröffentlicht eine erste Fassung mit zwei verschiedenartigen Wegen, kopiert
+alle Kopf- und Wegefelder in neue IDs, ändert Kopf
+und Weg, ergänzt und entfernt einen Weg, weist einen veralteten Zustandswert
+ab und veröffentlicht die Folgefassung. Dabei bleiben die alte Plan- und
+Nachrichtenzuordnung unverändert; nur Wege der neuen aktiven Version sind für
+neue Dispositionen wählbar. Ein aufgegebener Entwurf wird samt Wegen
+unveränderlich archiviert und blockiert danach keinen neuen Klon. Sichere
+Legacy-Entwürfe benötigen eine eindeutige Ereignisreihenfolge zur noch aktiven
+Quelle. Zulässige große UTF-8-Vermerke bleiben vollständig im verketteten
+Betriebsereignis; das Legacy-Protokoll enthält bei Überschreitung seiner
+TEXT-Grenze einen prüfbaren kompakten Verweis. Im Modus `LOOSE` wird die
+tatsächliche Kontofunktion statt einer S6-Vorgabe auditiert. Der erfolgreiche
+Lauf umfasst 171 Assertions und 99 verkettete Betriebsereignisse.
+`tests/integration/message_workflow_http.sh`
+belegt denselben Ablauf über echte CSRF-geschützte HTTP-Formulare einschließlich
+Vorbelegung, 409-Konfliktseite und Erhalt der nicht gespeicherten Eingabe.
 
 Der Lauf registriert isolierte LdF-, Fernmelder-, Si-, S1-, S2-, S3- und
 POL/FB-Konten über

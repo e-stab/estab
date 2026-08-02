@@ -551,6 +551,23 @@ csrf_from_body()
     printf '%s' "$token"
 }
 
+telecom_revision_from_body()
+{
+    revision=$(grep -A1 -m1 'name="plan_revision"' "$body" | sed -n \
+        's/.*name="plan_revision"[[:space:]]*value="\([a-f0-9][a-f0-9]*\)".*/\1/p' \
+        | head -n 1)
+    if [ -z "$revision" ]; then
+        revision=$(grep -A1 -m1 'name="plan_revision"' "$body" | sed -n \
+            's/.*value="\([a-f0-9][a-f0-9]*\)".*/\1/p' | head -n 1)
+    fi
+    if ! printf '%s' "$revision" | grep -Eq '^[a-f0-9]{64}$'; then
+        echo 'Message workflow HTTP: telecommunications revision missing' >&2
+        sed -n '1,180p' "$body" >&2
+        exit 1
+    fi
+    printf '%s' "$revision"
+}
+
 recipient_matrix_revision_from_body()
 {
     revision=$(sed -n \
@@ -1776,13 +1793,23 @@ assert_status 200 'load Führungsstellen page for S6 route creation' \
     --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
     "$base_url/4fach/fuehrungsstelle.php"
 assert_no_runtime_error 'S6 Führungsstellen page before route creation'
+for telecom_medium_label in \
+    Fernsprecher Funk Melder Telefax Fernschreiber Datenübertragung
+do
+    assert_body "$telecom_medium_label" \
+        "expanded telecommunications medium $telecom_medium_label"
+done
+assert_body 'data-estab-telecom-medium' \
+    'medium-dependent telecommunications editor'
 s6_operations_csrf=$(csrf_from_body)
+s6_plan_revision=$(telecom_revision_from_body)
 assert_status 303 'add S6 route through Führungsstellen HTTP controller' \
     --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
     --request POST \
     --data-urlencode "csrf_token=$s6_operations_csrf" \
     --data-urlencode 'operation_action=add_plan_entry' \
     --data-urlencode "fernmeldeplan_id=$http_plan_id" \
+    --data-urlencode "plan_revision=$s6_plan_revision" \
     --data-urlencode 'betriebsstelle=HTTP Betriebsstelle' \
     --data-urlencode 'rufname=HTTP Rufname' \
     --data-urlencode 'medium=Fu' \
@@ -1807,12 +1834,14 @@ assert_status 200 'load Führungsstellen page for S6 plan activation' \
     "$base_url/4fach/fuehrungsstelle.php"
 assert_no_runtime_error 'S6 Führungsstellen page before plan activation'
 s6_operations_csrf=$(csrf_from_body)
+s6_plan_revision=$(telecom_revision_from_body)
 assert_status 303 'activate S6 plan through Führungsstellen HTTP controller' \
     --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
     --request POST \
     --data-urlencode "csrf_token=$s6_operations_csrf" \
     --data-urlencode 'operation_action=activate_plan' \
     --data-urlencode "fernmeldeplan_id=$http_plan_id" \
+    --data-urlencode "plan_revision=$s6_plan_revision" \
     "$base_url/4fach/fuehrungsstelle.php"
 assert_db_equals \
     "AKTIV|${s6_code}|${s6_code}|HTTP Betriebsstelle|HTTP Rufname|Fu|HTTP-1|G/U|Gegenverkehr" \
@@ -1820,6 +1849,236 @@ assert_db_equals \
     "SELECT CONCAT(p.\`status\`, '|', p.\`erstellt_von\`, '|', p.\`freigegeben_von\`, '|', e.\`betriebsstelle\`, '|', e.\`rufname\`, '|', e.\`medium\`, '|', e.\`kanal\`, '|', e.\`bandlage\`, '|', e.\`verkehrsform\`) FROM \`nv_fernmeldeplaene\` AS p JOIN \`nv_fernmeldeplan_eintraege\` AS e ON e.\`fernmeldeplan_id\`=p.\`fernmeldeplan_id\` WHERE p.\`fernmeldeplan_id\`=${http_plan_id} AND e.\`fernmeldeplan_eintrag_id\`=${http_plan_entry_id};"
 assert_db_equals '3|3|3' 'HTTP-created S6 plan immutable audit trail' \
     "SELECT CONCAT(COUNT(*), '|', COUNT(DISTINCT \`aktion\`), '|', SUM(BINARY \`akteur_kuerzel\`=BINARY '${s6_code}')) FROM \`nv_betriebsereignisse\` WHERE \`einsatz_id\`=${active_incident_id} AND \`objekttyp\`='FERNMELDEPLAN' AND \`objekt_id\`=${http_plan_id} AND \`aktion\` IN ('plan_created','plan_entry_added','plan_activated');"
+
+# Editing an active plan must clone the complete immutable version, retain
+# validation-failed input, reject stale tabs without rehydrating their values,
+# normalize medium-inapplicable fields and publish only the resulting successor.
+assert_status 200 'load active S6 plan for revision start' \
+    --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
+    "$base_url/4fach/fuehrungsstelle.php"
+assert_body 'Bearbeitung starten' 'active S6 revision action'
+assert_body 'HTTP Betriebsstelle' 'active S6 route before revision'
+s6_operations_csrf=$(csrf_from_body)
+assert_status 303 'clone active S6 plan into editable draft' \
+    --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$s6_operations_csrf" \
+    --data-urlencode 'operation_action=start_plan_revision' \
+    --data-urlencode "fernmeldeplan_id=$http_plan_id" \
+    "$base_url/4fach/fuehrungsstelle.php"
+http_revision_plan_id=$(db_sql <<SQL
+SELECT \`fernmeldeplan_id\`
+  FROM \`nv_fernmeldeplaene\`
+ WHERE \`einsatz_id\` = ${active_incident_id}
+   AND \`status\` = 'ENTWURF'
+ ORDER BY \`version\` DESC
+ LIMIT 1;
+SQL
+)
+assert_numeric 'cloned HTTP S6 draft' "$http_revision_plan_id"
+http_revision_entry_id=$(db_sql <<SQL
+SELECT \`fernmeldeplan_eintrag_id\`
+  FROM \`nv_fernmeldeplan_eintraege\`
+ WHERE \`fernmeldeplan_id\` = ${http_revision_plan_id}
+ ORDER BY \`sortierung\`
+ LIMIT 1;
+SQL
+)
+assert_numeric 'cloned HTTP S6 route' "$http_revision_entry_id"
+if [ "$http_revision_entry_id" = "$http_plan_entry_id" ]; then
+    echo 'Message workflow HTTP: cloned route reused immutable source ID' >&2
+    exit 1
+fi
+assert_db_equals \
+    "AKTIV|ENTWURF|HTTP Betriebsstelle|HTTP Rufname|Fu|HTTP-1|G/U|Gegenverkehr" \
+    'active S6 plan cloned without mutating its source' \
+    "SELECT CONCAT(source_plan.\`status\`, '|', draft.\`status\`, '|', entry.\`betriebsstelle\`, '|', entry.\`rufname\`, '|', entry.\`medium\`, '|', entry.\`kanal\`, '|', entry.\`bandlage\`, '|', entry.\`verkehrsform\`) FROM \`nv_fernmeldeplaene\` AS source_plan JOIN \`nv_fernmeldeplaene\` AS draft ON draft.\`fernmeldeplan_id\`=${http_revision_plan_id} JOIN \`nv_fernmeldeplan_eintraege\` AS entry ON entry.\`fernmeldeplan_id\`=draft.\`fernmeldeplan_id\` WHERE source_plan.\`fernmeldeplan_id\`=${http_plan_id} AND entry.\`fernmeldeplan_eintrag_id\`=${http_revision_entry_id};"
+
+assert_status 200 'load prefilled S6 draft' \
+    --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
+    "$base_url/4fach/fuehrungsstelle.php"
+assert_body 'value="HTTP Betriebsstelle"' 'prefilled cloned station'
+assert_body 'value="HTTP Rufname"' 'prefilled cloned callsign'
+assert_body 'value="HTTP-1"' 'prefilled cloned channel'
+s6_operations_csrf=$(csrf_from_body)
+s6_plan_revision=$(telecom_revision_from_body)
+http_revision_origin="CI_HTTP_REVISION_${identity_seed}"
+assert_status 303 'update cloned S6 plan header' \
+    --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$s6_operations_csrf" \
+    --data-urlencode 'operation_action=update_plan' \
+    --data-urlencode "fernmeldeplan_id=$http_revision_plan_id" \
+    --data-urlencode "plan_revision=$s6_plan_revision" \
+    --data-urlencode "herkunft=$http_revision_origin" \
+    --data-urlencode 'gueltig_ab=2026-01-01T00:00' \
+    --data-urlencode 'gueltig_bis=2099-12-31T23:59' \
+    --data-urlencode 'betriebsleitung=S6 HTTP Folgeversion' \
+    --data-urlencode 'bemerkungen=Vollständig vorbefüllt und bearbeitet' \
+    "$base_url/4fach/fuehrungsstelle.php"
+
+assert_status 200 'load S6 draft for route update' \
+    --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
+    "$base_url/4fach/fuehrungsstelle.php"
+s6_operations_csrf=$(csrf_from_body)
+s6_stale_revision=$(telecom_revision_from_body)
+valid_revision_invalid_origin="CI_HTTP_INVALID_${identity_seed}"
+assert_status 422 'retain invalid S6 header values at current revision' \
+    --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$s6_operations_csrf" \
+    --data-urlencode 'operation_action=update_plan' \
+    --data-urlencode "fernmeldeplan_id=$http_revision_plan_id" \
+    --data-urlencode "plan_revision=$s6_stale_revision" \
+    --data-urlencode "herkunft=$valid_revision_invalid_origin" \
+    --data-urlencode 'gueltig_ab=2099-12-31T23:59' \
+    --data-urlencode 'gueltig_bis=2026-01-01T00:00' \
+    --data-urlencode 'betriebsleitung=Echte Validierungsrückmeldung' \
+    --data-urlencode 'bemerkungen=Noch nicht gespeichert' \
+    "$base_url/4fach/fuehrungsstelle.php"
+assert_body 'Gültigkeitsende muss nach dem Gültigkeitsbeginn liegen' \
+    'current-revision S6 validation explanation'
+assert_body "value=\"${valid_revision_invalid_origin}\"" \
+    'current-revision invalid S6 value retention'
+assert_body 'data-estab-dirty-initial="true"' \
+    'current-revision invalid S6 form remains visibly unsaved'
+assert_body_absent 'Der aktuelle gespeicherte Stand wurde neu geladen' \
+    'current-revision validation was not mislabeled stale'
+
+assert_status 200 'reload S6 draft after retained validation error' \
+    --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
+    "$base_url/4fach/fuehrungsstelle.php"
+assert_no_runtime_error 'clean S6 draft after retained validation error'
+s6_operations_csrf=$(csrf_from_body)
+s6_stale_revision=$(telecom_revision_from_body)
+assert_status 303 'update cloned S6 route with medium normalization' \
+    --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$s6_operations_csrf" \
+    --data-urlencode 'operation_action=update_plan_entry' \
+    --data-urlencode "fernmeldeplan_id=$http_revision_plan_id" \
+    --data-urlencode "fernmeldeplan_eintrag_id=$http_revision_entry_id" \
+    --data-urlencode "plan_revision=$s6_stale_revision" \
+    --data-urlencode 'betriebsstelle=HTTP Melderziel' \
+    --data-urlencode 'rufname=HTTP Melderrufname' \
+    --data-urlencode 'medium=Me' \
+    --data-urlencode 'kanal=Browser-Manipulation-Kanal' \
+    --data-urlencode 'bandlage=Browser-Manipulation-Band' \
+    --data-urlencode 'verkehrsform=Melderbeförderung' \
+    --data-urlencode 'besondere_vermerke=Persönlich übergeben' \
+    --data-urlencode 'bemerkungen=Folgeweg' \
+    "$base_url/4fach/fuehrungsstelle.php"
+assert_db_equals 'Me|||Melderbeförderung' \
+    'non-radio route normalized inapplicable technical fields' \
+    "SELECT CONCAT(\`medium\`, '|', \`kanal\`, '|', \`bandlage\`, '|', \`verkehrsform\`) FROM \`nv_fernmeldeplan_eintraege\` WHERE \`fernmeldeplan_eintrag_id\`=${http_revision_entry_id} AND \`fernmeldeplan_id\`=${http_revision_plan_id};"
+
+assert_status 422 'discard stale S6 values even when validation fails first' \
+    --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$s6_operations_csrf" \
+    --data-urlencode 'operation_action=update_plan' \
+    --data-urlencode "fernmeldeplan_id=$http_revision_plan_id" \
+    --data-urlencode "plan_revision=$s6_stale_revision" \
+    --data-urlencode 'herkunft=Veraltete Validierung' \
+    --data-urlencode 'gueltig_ab=2099-12-31T23:59' \
+    --data-urlencode 'gueltig_bis=2026-01-01T00:00' \
+    --data-urlencode 'betriebsleitung=Veraltete Validierungswerte' \
+    --data-urlencode 'bemerkungen=Nicht erneut übernehmbar' \
+    "$base_url/4fach/fuehrungsstelle.php"
+assert_body 'Gültigkeitsende muss nach dem Gültigkeitsbeginn liegen' \
+    'stale validation keeps its original explanation'
+assert_body 'Der aktuelle gespeicherte Stand wurde neu geladen' \
+    'stale validation also explains the authoritative reload'
+assert_body_absent 'value="Veraltete Validierung"' \
+    'stale validation origin was not rehydrated'
+assert_body_absent 'Veraltete Validierungswerte' \
+    'stale validation lead was not rehydrated'
+assert_body_absent 'Nicht erneut übernehmbar' \
+    'stale validation remarks were not rehydrated'
+assert_body_absent 'data-estab-dirty-initial="true"' \
+    'stale validation is not presented as current unsaved input'
+
+assert_status 409 'reject stale S6 draft update' \
+    --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$s6_operations_csrf" \
+    --data-urlencode 'operation_action=update_plan' \
+    --data-urlencode "fernmeldeplan_id=$http_revision_plan_id" \
+    --data-urlencode "plan_revision=$s6_stale_revision" \
+    --data-urlencode 'herkunft=Nicht still überschreiben' \
+    --data-urlencode 'gueltig_ab=2026-01-01T00:00' \
+    --data-urlencode 'gueltig_bis=2099-12-31T23:59' \
+    --data-urlencode 'betriebsleitung=Veralteter Browser-Tab' \
+    --data-urlencode 'bemerkungen=Diese Eingabe muss sichtbar bleiben' \
+    "$base_url/4fach/fuehrungsstelle.php"
+assert_no_runtime_error 'styled stale S6 draft conflict'
+assert_body 'zwischenzeitlich geändert' 'stale S6 conflict explanation'
+assert_body 'Der aktuelle gespeicherte Stand wurde neu geladen' \
+    'stale S6 conflict reload explanation'
+assert_body "value=\"${http_revision_origin}\"" \
+    'authoritative S6 draft after stale conflict'
+assert_body_absent 'value="Nicht still überschreiben"' \
+    'stale S6 origin was not rehydrated'
+assert_body_absent 'Veralteter Browser-Tab' \
+    'stale S6 lead was not rehydrated'
+assert_body_absent 'Diese Eingabe muss sichtbar bleiben' \
+    'stale S6 remarks were not rehydrated'
+assert_body_absent 'data-estab-dirty-initial="true"' \
+    'stale S6 conflict is not presented as unsaved current input'
+current_s6_plan_revision=$(telecom_revision_from_body)
+if [ "$current_s6_plan_revision" = "$s6_stale_revision" ]; then
+    echo 'Message workflow HTTP: stale response reused its old revision token' >&2
+    exit 1
+fi
+assert_body 'data-estab-dv-operations' 'stale S6 navigable page'
+assert_db_equals "$http_revision_origin" \
+    'stale S6 update did not overwrite current draft' \
+    "SELECT \`herkunft\` FROM \`nv_fernmeldeplaene\` WHERE \`fernmeldeplan_id\`=${http_revision_plan_id};"
+
+assert_status 200 'load S6 successor for activation' \
+    --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
+    "$base_url/4fach/fuehrungsstelle.php"
+s6_operations_csrf=$(csrf_from_body)
+s6_plan_revision=$(telecom_revision_from_body)
+assert_status 303 'activate edited S6 successor' \
+    --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
+    --request POST \
+    --data-urlencode "csrf_token=$s6_operations_csrf" \
+    --data-urlencode 'operation_action=activate_plan' \
+    --data-urlencode "fernmeldeplan_id=$http_revision_plan_id" \
+    --data-urlencode "plan_revision=$s6_plan_revision" \
+    "$base_url/4fach/fuehrungsstelle.php"
+assert_db_equals 'ERSETZT|AKTIV|1' \
+    'edited S6 successor atomically replaced its exact source' \
+    "SELECT CONCAT(source_plan.\`status\`, '|', successor.\`status\`, '|', (SELECT COUNT(*) FROM \`nv_fernmeldeplaene\` WHERE \`einsatz_id\`=${active_incident_id} AND \`status\`='AKTIV')) FROM \`nv_fernmeldeplaene\` AS source_plan JOIN \`nv_fernmeldeplaene\` AS successor ON successor.\`fernmeldeplan_id\`=${http_revision_plan_id} WHERE source_plan.\`fernmeldeplan_id\`=${http_plan_id};"
+assert_status 200 'load S6 telecommunications version history' \
+    --cookie "$s6_cookies" --cookie-jar "$s6_cookies" \
+    "$base_url/4fach/fuehrungsstelle.php"
+assert_no_runtime_error 'S6 telecommunications version history'
+assert_body 'data-estab-telecom-history' \
+    'telecommunications version history section'
+assert_body 'data-estab-telecom-history-state="replaced"' \
+    'replaced telecommunications version history state'
+assert_body '<dt>Angelegt</dt>' \
+    'telecommunications history creation evidence'
+assert_body '<dt>Freigegeben</dt>' \
+    'telecommunications history release evidence'
+assert_body "$http_plan_origin" \
+    'replaced telecommunications version history origin'
+assert_body 'HTTP Betriebsstelle' \
+    'replaced telecommunications version route details'
+assert_body 'data-estab-telecom-header-remarks' \
+    'active telecommunications header remarks marker'
+assert_body 'Vollständig vorbefüllt und bearbeitet' \
+    'active telecommunications header remarks'
+assert_body 'Besondere Vermerke:' \
+    'telecommunications history special-note label'
+assert_body 'Nur Integrationsprüfung' \
+    'telecommunications history special-note value'
+assert_body 'Bemerkungen zum Weg:' \
+    'telecommunications history route-note label'
+assert_body 'Über den echten Controller gespeichert' \
+    'telecommunications history route-note value'
 
 # Publish both versions through the production S6 domain. Activating the
 # second version creates the immutable ERSETZT predecessor used by the stale

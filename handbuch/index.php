@@ -683,11 +683,35 @@ $handbookUpdated = '2. August 2026';
           <header><span>12</span><div><p>Verbindliche Wege statt Freitext</p><h2>S6-Fernmeldeplan</h2></div></header>
           <p>Im Modus „Streng“ erstellt S6 im
             <a href="<?= $href('command_post') ?>">Führungsstellenbetrieb</a>
-            eine Planversion, beschreibt die vorgesehenen Wege und gibt den
-            Plan bewusst frei. Im Modus „Locker“ darf ein anderes gültiges
-            Funktionskonto diese operativen Schreibschritte übernehmen.
-            Freigegebene Versionen bleiben in beiden Fällen unveränderlich;
-            Änderungen erfolgen über eine neue Version.</p>
+            einmalig den ersten Plan, beschreibt die vorgesehenen Wege und gibt
+            ihn bewusst frei. Bei jeder späteren Änderung kopiert
+            „Bearbeitung starten“ die vollständigen Kopfdaten und alle Wege der
+            aktiven Fassung in einen Entwurf. Dort lassen sich der Kopf sowie
+            jeder einzelne Weg ändern, ergänzen oder entfernen, ohne den
+            laufenden Betrieb zu unterbrechen. Erst „Als Version … aktiv
+            schalten“ ersetzt die bisherige Fassung. Ungespeicherte Änderungen
+            in einem der Teilformulare stoppen die Aktivierung und andere
+            Seitenwechsel-Aktionen und zeigen den betroffenen Bereich wieder an.
+            Wurden mehrere Bereiche gleichzeitig geändert, lässt sich die
+            gewählte Aktion nur über die deutlich als Datenverlust
+            gekennzeichnete Schaltfläche fortsetzen; die anderen noch nicht
+            gespeicherten Browserwerte werden dann bewusst verworfen. Ein
+            veralteter Browser-Tab und ein zweiter paralleler Entwurf werden
+            abgewiesen. Über „Entwurf
+            verwerfen“ lässt sich ein nicht mehr benötigter oder veralteter
+            Stand nachvollziehbar archivieren; danach kann erneut von der
+            unveränderten aktiven Version begonnen werden. Im Modus
+            „Locker“ darf ein anderes gültiges Funktionskonto diese operativen
+            Schreibschritte übernehmen. Freigegebene Versionen bleiben in
+            beiden Fällen unveränderlich. Die Versionshistorie zeigt ersetzte
+            und verworfene Fassungen einschließlich Kopfdaten, sämtlicher Wege,
+            Vermerke sowie Anlage- und Freigabezeit nur lesend an.</p>
+          <p>Die Auswahl nennt die Medien vollständig: Fernsprecher, Funk,
+            Melder, Telefax, Fernschreiber und Datenübertragung. Betriebsstelle,
+            Rufname sowie Verkehrsform oder besondere Behandlung werden immer
+            erfasst. Kanal beziehungsweise Rufgruppe und Bandlage sind
+            Funkangaben und werden deshalb nur für das Medium Funk angeboten.
+            Vermerke und Bemerkungen bleiben optional.</p>
           <p>Alle aktiven Funktionen können den gültigen Plan lesen. LdF darf
             einen Ausgang nur auf einen zum Zeitpunkt der Disposition gültigen
             Planweg legen. Die spätere tatsächliche Beförderung durch den

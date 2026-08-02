@@ -714,11 +714,13 @@ $assert(
         && str_contains($readiness, "'115-incident-permission-mode.sql'")
         && str_contains($verify, "'116-standard-categories.sql'")
         && str_contains($readiness, "'116-standard-categories.sql'")
+        && str_contains($verify, "'117-telecom-draft-discard.sql'")
+        && str_contains($readiness, "'117-telecom-draft-discard.sql'")
         && str_contains($verify, 'estab_permission_mode')
         && str_contains($readiness, 'estab_permission_mode')
-        && str_contains($verify, 'estab_schema_migrations`) = 22')
-        && str_contains($readiness, 'estab_schema_migrations) = 22'),
-    'Migrations 115/116 and exact ledger are outside verify/readiness gates'
+        && str_contains($verify, 'estab_schema_migrations`) = 23')
+        && str_contains($readiness, 'estab_schema_migrations) = 23'),
+    'Migrations 115-117 and exact ledger are outside verify/readiness gates'
 );
 $assert(
     str_contains($permissionSource, 'Missing context is fail-closed')

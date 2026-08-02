@@ -869,7 +869,8 @@ try {
     $assert(
         $fails(
             static fn (): bool => $connection->query(
-                "UPDATE `nv_fernmeldeplaene` SET `status` = 'ERSETZT'"
+                "UPDATE `nv_fernmeldeplaene` SET `status` = 'ERSETZT',"
+                    . " `bemerkungen` = 'unzulässige gleichzeitige Änderung'"
                     . ' WHERE `fernmeldeplan_id` = ' . $planId
             )
         ) instanceof mysqli_sql_exception

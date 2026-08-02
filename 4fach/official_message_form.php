@@ -1613,7 +1613,9 @@ HTML;
                 ], static fn(string $part): bool => $part !== ''));
                 $routeId = (string)$route['fernmeldeplan_eintrag_id'];
                 $routeLabel = 'Plan v' . (int)$route['plan_version']
-                    . ' · ' . (string)$route['medium']
+                    . ' · ' . estab_dv_telecom_medium_label(
+                        $route['medium'] ?? null
+                    )
                     . ' · ' . implode(' · ', $parts);
                 echo '<option value="' . estab_message_html($routeId) . '"'
                     . ($selected === $routeId ? ' selected' : '') . '>'

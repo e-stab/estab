@@ -61,6 +61,7 @@ if [ ! -r "$fixture" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/114-self-registration-policy.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/115-incident-permission-mode.sql" ] \
     || [ ! -r "$ESTAB_MIGRATIONS_DIR/116-standard-categories.sql" ] \
+    || [ ! -r "$ESTAB_MIGRATIONS_DIR/117-telecom-draft-discard.sql" ] \
     || [ ! -x "$ESTAB_MIGRATOR_BIN" ]; then
     echo "schema migrator test: fixture, baseline, or migrator is unavailable" >&2
     exit 1
@@ -78,7 +79,7 @@ pre_110_migrations=$(mktemp -d "${TMPDIR:-/tmp}/estab-pre-110-migrations.XXXXXX"
 
 for migration_path in "$ESTAB_MIGRATIONS_DIR"/*.sql; do
     case "$(basename "$migration_path")" in
-        110-etb-tbb-rules.sql|111-logbook-shift-assignment.sql|112-optional-access-shifts.sql|113-password-policy.sql|114-self-registration-policy.sql|115-incident-permission-mode.sql|116-standard-categories.sql)
+        110-etb-tbb-rules.sql|111-logbook-shift-assignment.sql|112-optional-access-shifts.sql|113-password-policy.sql|114-self-registration-policy.sql|115-incident-permission-mode.sql|116-standard-categories.sql|117-telecom-draft-discard.sql)
             continue
             ;;
     esac
@@ -352,11 +353,11 @@ SELECT GROUP_CONCAT(CONCAT(version, ':', checksum, ':', state)
    '110-etb-tbb-rules.sql', '111-logbook-shift-assignment.sql',
    '112-optional-access-shifts.sql', '113-password-policy.sql',
    '114-self-registration-policy.sql', '115-incident-permission-mode.sql',
-   '116-standard-categories.sql'
+   '116-standard-categories.sql', '117-telecom-draft-discard.sql'
  )"
 )" \
     "migration 110 upgrade rewrote a released migration ledger row"
-assert_equal "1|1|1|1|1|1|1|1|3|1|2|1" "$(database_query "$logbook_upgrade_database" "
+assert_equal "1|1|1|1|1|1|1|1|1|3|1|2|1" "$(database_query "$logbook_upgrade_database" "
 SELECT CONCAT(
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '110-etb-tbb-rules.sql' AND state = 'applied'), '|',
@@ -377,6 +378,9 @@ SELECT CONCAT(
              AND state = 'applied'), '|',
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '116-standard-categories.sql'
+             AND state = 'applied'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '117-telecom-draft-discard.sql'
              AND state = 'applied'), '|',
          (SELECT COUNT(*) FROM information_schema.statistics
            WHERE table_schema = DATABASE() AND table_name = 'nv_etb'
@@ -562,11 +566,15 @@ SELECT GROUP_CONCAT(kategorie ORDER BY BINARY kategorie SEPARATOR ',')
   FROM nv_masterkatego"
 )" \
     "fresh installation did not receive exact standard categories"
-assert_equal "7|7|1|22" "$(database_query "$fresh_database" "
+assert_equal "7|7|1|1|23" "$(database_query "$fresh_database" "
 SELECT CONCAT(
          COUNT(*), '|', COUNT(DISTINCT BINARY kategorie), '|',
          (SELECT COUNT(*) FROM estab_schema_migrations
            WHERE version = '116-standard-categories.sql'
+             AND state = 'applied'
+             AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
+         (SELECT COUNT(*) FROM estab_schema_migrations
+           WHERE version = '117-telecom-draft-discard.sql'
              AND state = 'applied'
              AND checksum REGEXP BINARY '^[0-9a-f]{64}$'), '|',
          (SELECT COUNT(*) FROM estab_schema_migrations
@@ -586,6 +594,295 @@ SELECT GROUP_CONCAT(
   FROM nv_masterkatego"
 )" \
     "second fresh migration run duplicated or changed standard categories"
+
+# Migration 117 deliberately opens exactly one additional state transition:
+# an unreleased draft may be archived without changing any of its evidence.
+# The archived row remains terminal and immutable afterwards.
+database_query "$fresh_database" "
+INSERT INTO nv_benutzer
+  (benutzer, kuerzel, funktion, rolle, aktiv, password, estab_gesperrt)
+VALUES
+  ('Migration 117 S6', 's6117', 'S6', 'Stab', 1, '', 0);
+INSERT INTO nv_einsaetze
+  (kennung, name, beginn, ende, ort, organisation, fuehrungsstellenname,
+   einsatzleitung, beschreibung, metadaten, erstellt_am, erstellt_von)
+VALUES
+  ('SCHEMA-TELECOM-DISCARD', 'Migration 117 telecom discard', NOW(), NULL,
+   '', '', 'Migration 117 command post', '',
+   'Schema fixture for immutable draft disposal.', '{}', NOW(6),
+   'schema-migrator-test');
+SET @discard_incident_id = LAST_INSERT_ID();
+UPDATE nv_einsatz_status
+   SET active_einsatz_id = @discard_incident_id,
+       revision = revision + 1,
+       geaendert_am = NOW(6),
+       geaendert_von = 'schema-migrator-test'
+ WHERE singleton_id = 1;
+INSERT INTO nv_fernmeldeplaene
+  (einsatz_id, version, einsatzbezeichnung, herkunft, gueltig_ab,
+   gueltig_bis, betriebsleitung, bemerkungen, erstellt_von)
+VALUES
+  (@discard_incident_id, 1, 'Migration 117 telecom discard',
+   'Schema migration integration', '2026-01-02 03:04:05',
+   '2026-01-03 03:04:05', 'S6 migration fixture',
+   'Immutable draft evidence', 's6117')"
+
+if database_query "$fresh_database" "
+UPDATE nv_fernmeldeplaene
+   SET status = 'ERSETZT', bemerkungen = 'Mutated while discarding'
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze
+    WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+ )" >"$failure_log" 2>&1; then
+    echo "schema migrator test: mutating draft discard was accepted" >&2
+    exit 1
+fi
+if ! grep -q \
+    'Discarded telecommunications drafts are immutable evidence' \
+    "$failure_log"; then
+    echo "schema migrator test: mutating draft discard failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "ENTWURF|Immutable draft evidence|1|1" "$(
+    database_query "$fresh_database" "
+SELECT CONCAT(
+         status, '|', bemerkungen, '|', freigegeben_am IS NULL, '|',
+         freigegeben_von IS NULL
+       )
+  FROM nv_fernmeldeplaene
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze
+    WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+ )"
+)" \
+    "rejected mutating draft discard changed telecommunications evidence"
+
+database_query "$fresh_database" "
+UPDATE nv_fernmeldeplaene
+   SET status = 'ERSETZT'
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze
+    WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+ )"
+assert_equal "ERSETZT|Immutable draft evidence|1|1" "$(
+    database_query "$fresh_database" "
+SELECT CONCAT(
+         status, '|', bemerkungen, '|', freigegeben_am IS NULL, '|',
+         freigegeben_von IS NULL
+       )
+  FROM nv_fernmeldeplaene
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze
+    WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+ )"
+)" \
+    "migration 117 did not archive an unchanged unreleased draft"
+
+if database_query "$fresh_database" "
+UPDATE nv_fernmeldeplaene
+   SET bemerkungen = 'Mutation after discard'
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze
+    WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+ )" >"$failure_log" 2>&1; then
+    echo "schema migrator test: discarded telecommunications plan was mutable" >&2
+    exit 1
+fi
+if ! grep -q 'Invalid telecommunications plan status transition' \
+    "$failure_log"; then
+    echo "schema migrator test: discarded plan mutation failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "ERSETZT|Immutable draft evidence|1|1" "$(
+    database_query "$fresh_database" "
+SELECT CONCAT(
+         status, '|', bemerkungen, '|', freigegeben_am IS NULL, '|',
+         freigegeben_von IS NULL
+       )
+  FROM nv_fernmeldeplaene
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze
+    WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+ )"
+)" \
+    "rejected archived-plan mutation changed telecommunications evidence"
+
+# A release must be current at the database boundary. Once released, changing
+# an immutable nullable release field to NULL must not bypass SQL three-valued
+# comparison semantics.
+database_query "$fresh_database" "
+INSERT INTO nv_fernmeldeplaene
+  (einsatz_id, version, einsatzbezeichnung, herkunft, gueltig_ab,
+   gueltig_bis, betriebsleitung, bemerkungen, erstellt_von)
+VALUES
+  ((SELECT einsatz_id FROM nv_einsaetze
+     WHERE kennung = 'SCHEMA-TELECOM-DISCARD'),
+   2, 'Migration 117 telecom release',
+   'Schema migration integration', DATE_ADD(NOW(), INTERVAL 1 HOUR),
+   DATE_ADD(NOW(), INTERVAL 2 HOUR), 'S6 migration fixture',
+   'ABC', 's6117');
+SET @release_plan_id = LAST_INSERT_ID();
+INSERT INTO nv_fernmeldeplan_eintraege
+  (fernmeldeplan_id, sortierung, betriebsstelle, rufname, medium,
+   kanal, bandlage, verkehrsform, besondere_vermerke, bemerkungen)
+VALUES
+  (@release_plan_id, 1, 'Migration test station', 'Schema 117', 'Fu',
+   'TMO 117', 'G/U', 'Gegenverkehr', '', '')"
+if database_query "$fresh_database" "
+UPDATE nv_fernmeldeplaene
+   SET status = 'AKTIV', freigegeben_am = NOW(6),
+       freigegeben_von = 's6117'
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze
+    WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+ ) AND version = 2" >"$failure_log" 2>&1; then
+    echo "schema migrator test: future telecommunications plan was activated" >&2
+    exit 1
+fi
+assert_equal "ENTWURF|1|1" "$(
+    database_query "$fresh_database" "
+SELECT CONCAT(status, '|', freigegeben_am IS NULL, '|',
+              freigegeben_von IS NULL)
+  FROM nv_fernmeldeplaene
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze
+    WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+ ) AND version = 2"
+)" \
+    "rejected future plan activation changed release evidence"
+
+database_query "$fresh_database" "
+UPDATE nv_fernmeldeplaene
+   SET gueltig_ab = DATE_SUB(NOW(), INTERVAL 1 HOUR),
+       gueltig_bis = DATE_ADD(NOW(), INTERVAL 1 HOUR)
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze
+    WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+ ) AND version = 2;
+UPDATE nv_fernmeldeplaene
+   SET status = 'AKTIV', freigegeben_am = NOW(6),
+       freigegeben_von = 's6117'
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze
+    WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+ ) AND version = 2"
+if database_query "$fresh_database" "
+UPDATE nv_fernmeldeplaene
+   SET status = 'ERSETZT', freigegeben_von = NULL
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze
+    WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+ ) AND version = 2" >"$failure_log" 2>&1; then
+    echo "schema migrator test: NULL release identity bypassed immutability" >&2
+    exit 1
+fi
+if ! grep -q 'Activated telecommunications plans are immutable' \
+    "$failure_log"; then
+    echo "schema migrator test: NULL-safe release failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "AKTIV|s6117|1" "$(
+    database_query "$fresh_database" "
+SELECT CONCAT(status, '|', freigegeben_von, '|',
+              freigegeben_am IS NOT NULL)
+  FROM nv_fernmeldeplaene
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze
+    WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+ ) AND version = 2"
+)" \
+    "rejected NULL release mutation changed the active plan"
+
+if database_query "$fresh_database" "
+UPDATE nv_fernmeldeplaene
+   SET status = 'ERSETZT', bemerkungen = 'abc'
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze
+    WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+ ) AND version = 2" >"$failure_log" 2>&1; then
+    echo "schema migrator test: case-only plan evidence mutation was accepted" >&2
+    exit 1
+fi
+if ! grep -q 'Activated telecommunications plans are immutable' \
+    "$failure_log"; then
+    echo "schema migrator test: binary remarks failure was not explicit" >&2
+    sed -n '1,120p' "$failure_log" >&2
+    exit 1
+fi
+assert_equal "AKTIV|ABC" "$(
+    database_query "$fresh_database" "
+SELECT CONCAT(status, '|', bemerkungen)
+  FROM nv_fernmeldeplaene
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze
+    WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+ ) AND version = 2"
+)" \
+    "rejected case-only mutation changed active plan evidence"
+
+# gueltig_ab/gueltig_bis are DATETIME(0). Release roughly 100 ms after the
+# stored end instant but still inside that same database second: NOW() must
+# therefore compare equal to the inclusive end second. NOW(6) would reject it.
+database_query "$fresh_database" "
+UPDATE nv_fernmeldeplaene
+   SET status = 'ERSETZT'
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze
+    WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+ ) AND version = 2;
+SET @end_second = DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 2 SECOND);
+INSERT INTO nv_fernmeldeplaene
+  (einsatz_id, version, einsatzbezeichnung, herkunft, gueltig_ab,
+   gueltig_bis, betriebsleitung, bemerkungen, erstellt_von)
+VALUES
+  ((SELECT einsatz_id FROM nv_einsaetze
+     WHERE kennung = 'SCHEMA-TELECOM-DISCARD'),
+   3, 'Migration 117 inclusive end second',
+   'Schema migration integration', DATE_SUB(@end_second, INTERVAL 1 HOUR),
+   @end_second, 'S6 migration fixture',
+   'DATETIME(0) inclusive end-second evidence', 's6117');
+SET @end_second_plan_id = LAST_INSERT_ID();
+INSERT INTO nv_fernmeldeplan_eintraege
+  (fernmeldeplan_id, sortierung, betriebsstelle, rufname, medium,
+   kanal, bandlage, verkehrsform, besondere_vermerke, bemerkungen)
+VALUES
+  (@end_second_plan_id, 1, 'End-second station', 'Schema end second',
+   'Fu', 'TMO 117', 'G/U', 'Gegenverkehr', '', '');
+SET @wait_for_end_second = GREATEST(
+  0,
+  TIMESTAMPDIFF(
+    MICROSECOND,
+    CURRENT_TIMESTAMP(6),
+    CAST(@end_second AS DATETIME(6))
+  ) / 1000000 + 0.1
+);
+DO SLEEP(@wait_for_end_second);
+UPDATE nv_fernmeldeplaene
+   SET status = 'AKTIV', freigegeben_am = CURRENT_TIMESTAMP(6),
+       freigegeben_von = 's6117'
+ WHERE fernmeldeplan_id = @end_second_plan_id;
+UPDATE nv_fernmeldeplaene
+   SET status = 'ERSETZT'
+ WHERE fernmeldeplan_id = @end_second_plan_id"
+assert_equal "ERSETZT|s6117|1|1" "$(
+    database_query "$fresh_database" "
+SELECT CONCAT(
+         status, '|', freigegeben_von, '|',
+         freigegeben_am > CAST(gueltig_bis AS DATETIME(6)), '|',
+         TIMESTAMPDIFF(MICROSECOND, gueltig_bis, freigegeben_am)
+           BETWEEN 1 AND 999999
+       )
+  FROM nv_fernmeldeplaene
+ WHERE einsatz_id = (
+   SELECT einsatz_id FROM nv_einsaetze
+    WHERE kennung = 'SCHEMA-TELECOM-DISCARD'
+ ) AND version = 3"
+)" \
+    "exact stored telecommunications end second was rejected"
+
 assert_equal "2|1|1|1|DISABLED|1|1|fresh-install" "$(
     database_query "$fresh_database" "
 SELECT CONCAT(
@@ -1525,7 +1822,7 @@ finish_checksum=$(
         awk '{print $1}'
 )
 assert_equal \
-    "22|22|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
+    "23|23|$prepare_checksum|$incident_predecessor_checksum|$finish_checksum" \
     "$(database_query "$predecessor_database" "
 SELECT CONCAT(
          COUNT(*), '|',
@@ -1765,7 +2062,7 @@ SELECT CONCAT(
        )")" \
     "second upgrade run changed existing global categories or links"
 
-assert_equal "22" "$(fixture_query "
+assert_equal "23" "$(fixture_query "
 SELECT COUNT(*) FROM estab_schema_migrations
  WHERE state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
@@ -1782,6 +2079,12 @@ SELECT COUNT(*) FROM estab_schema_migrations
    AND state = 'applied'
    AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
     "standard category migration was not recorded"
+assert_equal "1" "$(fixture_query "
+SELECT COUNT(*) FROM estab_schema_migrations
+ WHERE version = '117-telecom-draft-discard.sql'
+   AND state = 'applied'
+   AND checksum REGEXP BINARY '^[0-9a-f]{64}$'")" \
+    "telecommunications draft-discard migration was not recorded"
 assert_equal "1|1|1|1|1|1|1|1|1|1|1|1|1|1|1|11" "$(fixture_query "
 SELECT CONCAT(
          (SELECT COUNT(*) FROM estab_schema_migrations
@@ -2588,7 +2891,7 @@ SELECT CONCAT(
     "password-policy migration did not recover after removing the collision"
 
 # Migration 114 must only ever replace its own missing ledger acknowledgement.
-# Snapshot every field of the existing twenty-one records so retries and rejected
+# Snapshot every field of the existing twenty-two records so retries and rejected
 # collisions prove that the released history remains byte-for-byte unchanged.
 pre_114_ledger_snapshot="$(fixture_query "
 SELECT GROUP_CONCAT(
@@ -2605,7 +2908,7 @@ SELECT GROUP_CONCAT(
        )
   FROM estab_schema_migrations
  WHERE version <> '114-self-registration-policy.sql'")"
-assert_equal "21|21" "$(fixture_query "
+assert_equal "22|22" "$(fixture_query "
 SELECT CONCAT(
          COUNT(*), '|',
          SUM(state = 'applied' AND checksum REGEXP BINARY '^[0-9a-f]{64}$')
@@ -2759,7 +3062,7 @@ SELECT GROUP_CONCAT(
        )
   FROM estab_schema_migrations
  WHERE version <> '114-self-registration-policy.sql'")" \
-    "migration 114 rewrote one of the existing twenty-one ledger rows"
+    "migration 114 rewrote one of the existing twenty-two ledger rows"
 
 fixture_query "
 ALTER TABLE nv_selbstregistrierung
@@ -2866,7 +3169,7 @@ SELECT GROUP_CONCAT(
        )
   FROM estab_schema_migrations
  WHERE version <> '114-self-registration-policy.sql'")" \
-    "migration 114 rewrote one of the existing twenty-one ledger rows"
+    "migration 114 rewrote one of the existing twenty-two ledger rows"
 
 # Reproduce interruption after some autocommitted migration-99 phases. The
 # canonical status/time index remains, the direction/number index is missing,
