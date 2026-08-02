@@ -1,0 +1,82 @@
+rules:
+  - id: php-dangerous-dynamic-exec
+    message: Dynamic value is passed to a command execution function.
+    severity: ERROR
+    languages:
+      - php
+    patterns:
+      - pattern-either:
+          - pattern: exec($CMD, ...)
+          - pattern: system($CMD, ...)
+          - pattern: shell_exec($CMD)
+          - pattern: passthru($CMD, ...)
+          - pattern: popen($CMD, ...)
+          - pattern: proc_open($CMD, ...)
+      - pattern-not: exec("...", ...)
+      - pattern-not: system("...", ...)
+      - pattern-not: shell_exec("...")
+      - pattern-not: passthru("...", ...)
+      - pattern-not: popen("...", ...)
+      - pattern-not: proc_open("...", ...)
+
+  - id: php-eval-use
+    message: PHP eval() executes dynamically generated PHP code.
+    severity: ERROR
+    languages:
+      - php
+    pattern: eval(...)
+
+  - id: php-unserialize-untrusted
+    message: Review unserialize(). Untrusted serialized data can lead to object injection.
+    severity: WARNING
+    languages:
+      - php
+    pattern: unserialize(...)
+
+  - id: php-disabled-tls-verification
+    message: TLS certificate verification appears to be disabled.
+    severity: ERROR
+    languages:
+      - php
+    pattern-either:
+      - pattern: curl_setopt($CURL, CURLOPT_SSL_VERIFYPEER, false)
+      - pattern: curl_setopt($CURL, CURLOPT_SSL_VERIFYHOST, 0)
+      - pattern: |
+          stream_context_create([
+            ...,
+            "ssl" => [
+              ...,
+              "verify_peer" => false,
+              ...
+            ],
+            ...
+          ])
+
+  - id: python-shell-true
+    message: subprocess is invoked with shell=True.
+    severity: WARNING
+    languages:
+      - python
+    pattern-either:
+      - pattern: subprocess.run(..., shell=True, ...)
+      - pattern: subprocess.call(..., shell=True, ...)
+      - pattern: subprocess.Popen(..., shell=True, ...)
+
+  - id: javascript-eval-use
+    message: JavaScript eval() executes dynamically generated code.
+    severity: ERROR
+    languages:
+      - javascript
+      - typescript
+    pattern: eval(...)
+
+  - id: shell-download-pipe-shell
+    message: Downloaded content is piped directly into a shell.
+    severity: ERROR
+    languages:
+      - bash
+    pattern-either:
+      - pattern: curl ... | sh
+      - pattern: curl ... | bash
+      - pattern: wget ... | sh
+      - pattern: wget ... | bash

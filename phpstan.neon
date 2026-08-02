@@ -1,0 +1,19 @@
+parameters:
+    level: 5
+
+    paths:
+        - .
+
+    excludePaths:
+        analyse:
+            - vendor/*
+            - node_modules/*
+            - cache/*
+            - var/cache/*
+            - storage/*
+            - tests/fixtures/*
+
+    tmpDir: var/phpstan
+
+    reportUnmatchedIgnoredErrors: true
+    checkMissingIterableValueType: false
