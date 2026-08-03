@@ -335,15 +335,27 @@ if ($method === 'HEAD') {
 
 echo '<!doctype html><html lang="de"><head><meta charset="UTF-8">'
     . '<meta name="viewport" content="width=device-width,initial-scale=1">'
-    . '<title>' . estab_email_view_escape($subject) . '</title>'
+    . '<title>' . htmlspecialchars(
+        $subject,
+        ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5,
+        'UTF-8'
+    ) . '</title>'
     . '<link rel="stylesheet" href="../estab-ui.css"></head>'
     . '<body class="estab-email-preview-page"><main '
     . 'class="estab-email-preview" data-estab-email-preview '
     . 'data-estab-email-rendering="passive-text">'
     . '<header class="estab-email-preview-header">'
     . '<p class="estab-section-kicker">Passive E-Mail-Ansicht</p>'
-    . '<h1 data-estab-email-subject>' . estab_email_view_escape($subject)
-    . '</h1><p>' . estab_email_view_escape($originalName) . '</p></header>'
+    . '<h1 data-estab-email-subject>' . htmlspecialchars(
+        $subject,
+        ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5,
+        'UTF-8'
+    )
+    . '</h1><p>' . htmlspecialchars(
+        $originalName,
+        ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5,
+        'UTF-8'
+    ) . '</p></header>'
     . '<div class="estab-email-preview-trust" role="note">'
     . '<strong>Absenderangaben nicht verifiziert:</strong> Von, Datum und '
     . 'Betreff stammen aus der Datei. eStab prüft hier weder die Identität '
@@ -355,7 +367,11 @@ if (!$parseOk) {
         : 'Die E-Mail-Struktur konnte nicht sicher ausgewertet werden.';
     echo '<div class="estab-alert estab-alert--danger" role="alert">'
         . '<strong>Keine Webdarstellung möglich.</strong> '
-        . estab_email_view_escape($parseError) . '</div>';
+        . htmlspecialchars(
+            $parseError,
+            ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5,
+            'UTF-8'
+        ) . '</div>';
 } else {
     echo '<dl class="estab-email-preview-headers" data-estab-email-headers>';
     foreach ([
@@ -368,26 +384,46 @@ if (!$parseOk) {
         if (!is_string($value) || trim($value) === '') {
             continue;
         }
-        echo '<div><dt>' . estab_email_view_escape($label) . '</dt><dd>'
-            . estab_email_view_escape(trim($value)) . '</dd></div>';
+        echo '<div><dt>' . htmlspecialchars(
+            $label,
+            ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5,
+            'UTF-8'
+        ) . '</dt><dd>'
+            . htmlspecialchars(
+                trim($value),
+                ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5,
+                'UTF-8'
+            ) . '</dd></div>';
     }
     echo '</dl>'
         . '<section class="estab-email-preview-body" '
         . 'data-estab-email-body data-estab-email-body-source="'
-        . estab_email_view_escape($bodySource) . '"><h2>Nachricht</h2>';
+        . htmlspecialchars(
+            $bodySource,
+            ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5,
+            'UTF-8'
+        ) . '"><h2>Nachricht</h2>';
     if ($body === '') {
         echo '<p class="estab-email-preview-empty">'
             . 'Die E-Mail enthält keinen darstellbaren Nachrichtentext.</p>';
     } else {
         echo '<div class="estab-email-preview-text">'
-            . estab_email_view_escape($body) . '</div>';
+            . htmlspecialchars(
+                $body,
+                ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5,
+                'UTF-8'
+            ) . '</div>';
     }
     echo '</section>';
 
     if ($containedAttachments !== []) {
         echo '<section class="estab-email-preview-contained" '
             . 'data-estab-email-contained-attachments><h2>In der E-Mail enthaltene '
-            . 'Dateien (' . count($containedAttachments) . ')</h2><ul>';
+            . 'Dateien (' . htmlspecialchars(
+                (string) count($containedAttachments),
+                ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5,
+                'UTF-8'
+            ) . ')</h2><ul>';
         foreach ($containedAttachments as $contained) {
             if (!is_array($contained)) {
                 continue;
@@ -399,10 +435,20 @@ if (!$parseOk) {
             $type = is_string($contained['content_type'] ?? null)
                 ? trim($contained['content_type'])
                 : 'application/octet-stream';
-            echo '<li><strong>' . estab_email_view_escape($name) . '</strong>'
-                . '<span>' . estab_email_view_escape($type) . ' · '
-                . estab_email_view_escape(
-                    estab_email_view_size($contained['size'] ?? null)
+            echo '<li><strong>' . htmlspecialchars(
+                $name,
+                ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5,
+                'UTF-8'
+            ) . '</strong>'
+                . '<span>' . htmlspecialchars(
+                    $type,
+                    ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5,
+                    'UTF-8'
+                ) . ' · '
+                . htmlspecialchars(
+                    estab_email_view_size($contained['size'] ?? null),
+                    ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5,
+                    'UTF-8'
                 ) . '</span></li>';
         }
         echo '</ul><p>Einzelne eingebettete Dateien werden nicht aktiv geöffnet. '
@@ -424,6 +470,14 @@ echo '<footer class="estab-email-preview-footer">'
     . 'E-Mail-Programm gelten dessen Sicherheitsregeln; enthaltene Dateien '
     . 'werden von eStab nicht als schadfrei bestätigt.</p>'
     . '<a class="estab-button estab-button-primary" href="'
-    . estab_email_view_escape($downloadUrl) . '" download="'
-    . estab_email_view_escape($originalName)
+    . htmlspecialchars(
+        $downloadUrl,
+        ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5,
+        'UTF-8'
+    ) . '" download="'
+    . htmlspecialchars(
+        $originalName,
+        ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5,
+        'UTF-8'
+    )
     . '">Originaldatei herunterladen</a></footer></main></body></html>';
