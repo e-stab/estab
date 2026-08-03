@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Compare each imported Git ref byte-for-byte with the local SVN snapshot."""
 
 from __future__ import annotations
@@ -6,11 +5,10 @@ from __future__ import annotations
 import hashlib
 import io
 import os
-from pathlib import Path
 import subprocess
 import sys
 import tarfile
-
+from pathlib import Path
 
 REFS = {
     "trunk": "svn-r85",
@@ -91,4 +89,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
