@@ -131,28 +131,26 @@ if ($requestMethod === 'POST') {
     $error = 'Diese Seite unterstützt nur GET und POST.';
 }
 
-if (!is_array($policy)) {
-    $connection = null;
-    try {
-        $connection = estab_auth_connect($conf_4f_db);
-        $policy = estab_self_registration_status(
-            estab_self_registration_load($connection)
-        );
-    } catch (Throwable $exception) {
-        error_log(
-            'eStab self-registration policy load failed: '
-            . $exception->getMessage()
-        );
-        if ($error === null) {
-            http_response_code(503);
-            $error = 'Der aktuelle Zustand der Selbstregistrierung konnte '
-                . 'nicht geladen werden. Die öffentliche Kontoanlage bleibt '
-                . 'aus Sicherheitsgründen geschlossen.';
-        }
-    } finally {
-        if ($connection instanceof mysqli) {
-            estab_auth_close($connection);
-        }
+$connection = null;
+try {
+    $connection = estab_auth_connect($conf_4f_db);
+    $policy = estab_self_registration_status(
+        estab_self_registration_load($connection)
+    );
+} catch (Throwable $exception) {
+    error_log(
+        'eStab self-registration policy load failed: '
+        . $exception->getMessage()
+    );
+    if ($error === null) {
+        http_response_code(503);
+        $error = 'Der aktuelle Zustand der Selbstregistrierung konnte '
+            . 'nicht geladen werden. Die öffentliche Kontoanlage bleibt '
+            . 'aus Sicherheitsgründen geschlossen.';
+    }
+} finally {
+    if ($connection instanceof mysqli) {
+        estab_auth_close($connection);
     }
 }
 
