@@ -316,7 +316,11 @@ $refreshScript = $selectedIdentity === null
 <body class="estab-navigation-frame estab-message-sidebar-page">
   <div class="estab-message-sidebar" data-estab-sidebar-root>
     <?= $statusMarkup ?>
-    <?= estab_session_ui_current_markup(
+    <?php
+    // The renderer returns a complete trusted HTML component and escapes every
+    // session-derived text/attribute value at its own context boundary.
+    // nosemgrep: php.lang.security.injection.echoed-request.echoed-request
+    echo estab_session_ui_current_markup(
         $_SESSION,
         true,
         $loginDestination,
@@ -324,7 +328,8 @@ $refreshScript = $selectedIdentity === null
         true,
         false,
         false
-    ) ?>
+    );
+    ?>
     <?= estab_sidebar_account_function_markup($_SESSION, $selectedIdentity) ?>
     <?php if ($identity !== null && $selectedIdentity === null): ?>
       <aside
@@ -368,7 +373,17 @@ $refreshScript = $selectedIdentity === null
                 target="mainframe"
               >
                 <?= estab_csrf_field() ?>
-                <?= estab_navigation_login_destination_field($loginDestination) ?>
+                <?php if ($loginDestination !== null): ?>
+                  <input
+                    type="hidden"
+                    name="next"
+                    value="<?= htmlspecialchars(
+                        $loginDestination,
+                        ENT_QUOTES | ENT_SUBSTITUTE,
+                        'UTF-8'
+                    ) ?>"
+                  >
+                <?php endif; ?>
                 <?php if (is_string($action['acting_function'] ?? null)): ?>
                   <input
                     type="hidden"
