@@ -706,8 +706,6 @@ if ($requestMethod === "POST") {
     }
   } catch (EstabDvPermissionException $exception) {
     estab_logbook_abort (403, $exception->getMessage ());
-  } catch (EstabIncidentConflictException|EstabDvConflictException $exception) {
-    estab_logbook_abort (409, $exception->getMessage ());
   } catch (EstabIncidentConfigurationException $exception) {
     error_log ("TBB write blocked by incident configuration: ".
       $exception->getMessage ());
@@ -716,6 +714,8 @@ if ($requestMethod === "POST") {
       "Der aktive Einsatz ist unvollständig. TBB-Eingaben sind gesperrt; ".
       "ergänzen Sie zuerst den Namen der Führungsstelle in der Administration."
     );
+  } catch (EstabIncidentConflictException|EstabDvConflictException $exception) {
+    estab_logbook_abort (409, $exception->getMessage ());
   } catch (EstabNoActiveIncidentException $exception) {
     error_log ("TBB write blocked: ".$exception->getMessage ());
     estab_logbook_abort (
