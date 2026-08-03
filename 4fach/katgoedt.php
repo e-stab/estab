@@ -107,7 +107,7 @@ function estab_category_render_manager(
     string $status
 ): void {
     $rows = estab_category_fetch_all($connection, $scope);
-    $type = (string) $scope['type'];
+    $type = estab_category_validate_type($scope['type'] ?? null);
     $actingFunction = (string) ($scope['acting_function'] ?? '');
     $statusMessages = [
         'created' => 'Kategorie wurde angelegt.',

@@ -122,7 +122,11 @@ function estab_category_route_identity(
     return $selected;
 }
 
-/** Accept only one of the three application-owned category scopes. */
+/**
+ * Accept only one of the three application-owned category scopes.
+ *
+ * @return 'master'|'fkt'|'user'
+ */
 function estab_category_validate_type(mixed $value): string
 {
     if (!is_string($value) || !in_array($value, ESTAB_CATEGORY_TYPES, true)) {
