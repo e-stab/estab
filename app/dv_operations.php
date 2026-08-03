@@ -2968,7 +2968,17 @@ function estab_dv_require_active_hat_for_operational_write(
  * personal additional functions. Optional access shifts may disable a group
  * of accounts only in LOOSE; they never grant a capability or change a role.
  *
- * @return array{benutzer:string,kuerzel:string,funktion:string,rolle:string}
+ * @return array{
+ *     benutzer:string,
+ *     kuerzel:string,
+ *     funktion:string,
+ *     rolle:string,
+ *     estab_permission_mode:'STRICT'|'LOOSE',
+ *     duty_assignment_id?:int,
+ *     estab_additional_functions?:list<array{funktion:string,rolle:string}>,
+ *     authorization_account_function?:string,
+ *     authorization_account_role?:string
+ * }
  */
 function estab_dv_require_operational_account(
     mysqli $connection,
